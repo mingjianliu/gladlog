@@ -223,7 +223,9 @@ export function effectAuraViaName(
  * `classOwned` keeps only effects DB2 gives a class (`SpellClassOptions`): a
  * reader with no logged aura to confirm the effect drops the legacy and
  * creature namesakes (Arcane Torrent 28730 → the TBC silence 33390 — codex
- * 20-F15-36). */
+ * 20-F15-36). A nomination only by "talent" (every cast of a class one of
+ * whose talents triggers a control — a candidate for the corpus scan, F20)
+ * is no reading of what this cast does and is left out. */
 export function nominatedEffectAurasOfCast(
   castSpellId: string,
   opts: { classOwned?: boolean } = {},
@@ -231,10 +233,14 @@ export function nominatedEffectAurasOfCast(
   return (
     (
       nominations as unknown as {
-        nominations: Record<string, { aura: string; cls?: number }[]>;
+        nominations: Record<
+          string,
+          { aura: string; via: string; cls?: number }[]
+        >;
       }
     ).nominations[castSpellId] ?? []
   )
+    .filter((r) => r.via !== "talent")
     .filter((r) => !opts.classOwned || r.cls !== undefined)
     .map((r) => r.aura);
 }

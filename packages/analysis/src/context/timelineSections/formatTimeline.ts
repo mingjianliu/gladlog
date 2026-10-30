@@ -19,6 +19,7 @@ import {
   HP_SAMPLE_RADIUS_MS,
   HP_TROUGH_MIN_DROP_PTS,
 } from "../../utils/cooldowns";
+import { PURGE_PRESS_REMOVALS_TEXT } from "../../utils/dispelAnalysis";
 import {
   ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
@@ -493,8 +494,7 @@ export function formatTimeline(
     "    to this window. `(runs past window)` = that sub-window ends after the offensive window; it can also begin before it — read",
     `    the printed bounds. \`${NO_CREDITED_SPIKE_CLAUSE}\` = none of this timeline's [DMG SPIKE] lines overlaps the window, or the`,
     "    one that does overlaps another window longer — a statement about the listed lines, not that no damage landed.",
-    "    The full [RES] row under an [OFFENSIVE WINDOW] header = what your team had ready at the whole second the window opened (a press of your team's inside that second is already spent on it);",
-    "    the opener itself, pressed inside that second, is on the header's `CDs:` list and may be missing from that row's `enemy:` column.",
+    "    The full [RES] row under an [OFFENSIVE WINDOW] header = what your team had ready at the whole second the window opened (a press of your team's inside that second is already spent on it).",
     ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"
       ? [
           "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction (with the",
@@ -616,10 +616,11 @@ export function formatTimeline(
       : []),
     ...(purgeableCountRendered
       ? [
-          "  `N purgeable buffs on it then` / `1 of N purgeable buffs on it` (purge and missed-purge lines) = how many Magic buffs a",
-          "    purge could remove were on that enemy at that moment, the named one included (raid buffs count). A purge removes",
-          "    ONE of them and the player does not pick which: with N on the target, one press takes a given buff about 1 time",
-          "    in N. Read a missed purge, and a purge that took the buff you wanted, with that in mind.",
+          "  `N purgeable buffs on it then` / `k of N purgeable buffs on it` (purge and missed-purge lines) = how many Magic buffs a",
+          "    purge could remove were on that enemy at that moment, the named one included (raid buffs count); k = how many of them",
+          `    that press removed. One press removes a fixed number of them (${PURGE_PRESS_REMOVALS_TEXT}) and the player does`,
+          "    not pick which: with N on the target, a press that removes r takes a given buff about r times in N. Read a missed",
+          "    purge, and a purge that took the buff you wanted, with that in mind.",
         ]
       : []),
     ...(karmaFeedRendered
@@ -637,7 +638,7 @@ export function formatTimeline(
       ? [
           "  [ENEMY TRINKET] = an enemy used PvP trinket; `out of <spell> (by <source>)` indicates breaking out of that CC.",
           "    `used <ability>` in place of `PvP trinket` = a racial press (Will to Survive, Will of the Forsaken, Stoneform and",
-          "    Fireblood also lock the trinket for 30–60 s; Escape Artist locks nothing) or a class ability (Blink, Berserker",
+          "    Fireblood also lock the trinket for 30–90 s; Escape Artist locks nothing) or a class ability (Blink, Berserker",
           "    Shout, Icebound Fortitude …) that removed that CC.",
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at the instant of the press.",
           "    `(target at N% HP)` reflects the target's HP at the press, not the [STATE] reading of that second.",
@@ -646,7 +647,7 @@ export function formatTimeline(
     // F-C2 (triage res-readiness): the cast ordinal has its own notation
     ...(enemyCdRender.ordinalRendered
       ? [
-          "  `(cast k of N)` on [ENEMY CD] / [ENEMY HEAL CD] / [ENEMY UTILITY] = the k-th of N casts of that spell this round (not charges).",
+          "  `(cast k of N)` on [ENEMY CD] / [ENEMY HEAL CD] / [ENEMY UTILITY] = the k-th of N casts of that spell this round (not charges); a variant sharing its cooldown counts with it under its own name (The Hunt / Predator's Wake).",
         ]
       : []),
     // FT-T06: an effect a talent triggers is not a cast

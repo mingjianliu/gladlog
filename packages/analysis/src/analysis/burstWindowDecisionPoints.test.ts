@@ -1289,6 +1289,77 @@ describe("burstExtrasLabel", () => {
   });
 });
 
+describe("controlLandedResponses — a pet's control (fact6 D11)", () => {
+  // e7608d97 1:10: the Abomination's Monstrous Blow stun landed 0.9 s after
+  // the opener; the owner's untargeted Gladiator's Medallion 1.9 s before the
+  // aura timed it ("1.0s before it opened").
+  const MONSTROUS_BLOW = "91797";
+  const MEDALLION = "336126";
+  const auraFrom = (src: string, spellId: string, tMs: number) => ({
+    id: "E1",
+    auraEvents: [
+      {
+        timestamp: tMs,
+        spellId,
+        srcUnitId: src,
+        logLine: { event: "SPELL_AURA_APPLIED" },
+      },
+    ],
+  });
+  const ownerOf = (id: string) =>
+    id === "F1" || id.includes("-F1") ? "F1" : undefined;
+  const PET = "Pet-0-F1";
+  const press = [
+    { unitId: "F1", spellId: MEDALLION, dest: undefined, tMs: 10_000 },
+  ];
+  const run = (
+    src: string,
+    petCasts: Array<{ spellId: string; tMs: number }>,
+  ) =>
+    controlLandedResponses(
+      [auraFrom(src, MONSTROUS_BLOW, 11_900)],
+      new Set(["E1"]),
+      ownerOf,
+      press,
+      0,
+      40_000,
+      () => petCasts,
+    );
+
+  it("a pet's aura is timed by the pet's own cast, never by another press of the owner", () => {
+    expect(run(PET, [{ spellId: MONSTROUS_BLOW, tMs: 11_850 }])).toMatchObject([
+      { unitId: "F1", spellId: MONSTROUS_BLOW, tMs: 11_850 },
+    ]);
+  });
+
+  it("with no cast of its own in the log, the aura's own instant", () => {
+    expect(run(PET, [])).toMatchObject([{ tMs: 11_900 }]);
+  });
+
+  it("an owner press that made the control (a command of the same spell) times it first", () => {
+    const out = controlLandedResponses(
+      [auraFrom(PET, MONSTROUS_BLOW, 11_900)],
+      new Set(["E1"]),
+      ownerOf,
+      [
+        ...press,
+        { unitId: "F1", spellId: MONSTROUS_BLOW, dest: undefined, tMs: 11_400 },
+      ],
+      0,
+      40_000,
+      () => [{ spellId: MONSTROUS_BLOW, tMs: 11_850 }],
+    );
+    expect(out).toMatchObject([{ tMs: 11_400 }]);
+    // (a press aimed at the holder is the cast-side response, counted there)
+  });
+
+  it("a totem or guardian keeps the owner's untargeted press", () => {
+    expect(
+      run("Creature-0-F1", [{ spellId: MONSTROUS_BLOW, tMs: 11_850 }]),
+    ).toMatchObject([{ tMs: 10_000 }]);
+  });
+});
+
 describe("controlLandedResponses — which cast times a landed control (F-B8)", () => {
   const LASSO_CAST = "305483";
   const LASSO_AURA = "305485";

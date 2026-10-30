@@ -126,6 +126,8 @@ function timelineOf(opts: {
   isHealer?: boolean;
   ownerCDs?: BuildMatchTimelineParams["ownerCDs"];
   enemyCCSummaries?: unknown;
+  /** more units (an owner's pet) */
+  extra?: ICombatUnit[];
 }): string[] {
   const owner = mkUnit("o", NAME.o!, opts.owner);
   const mate = mkUnit("m", NAME.m!, opts.mate);
@@ -160,7 +162,7 @@ function timelineOf(opts: {
     healingGaps: [],
     friends: [owner, mate],
     enemies: [enemy, enemy2],
-    allUnits: [owner, mate, enemy, enemy2],
+    allUnits: [owner, mate, enemy, enemy2, ...(opts.extra ?? [])],
     matchStartMs: 0,
     matchEndMs: END_MS,
     isHealer: opts.isHealer ?? false,
@@ -436,5 +438,145 @@ describe("[CC NOT LANDED] — a failed control no other line states", () => {
     expect(
       CONTROL_FAILED_MISS_TYPES.has(line!.match(/logged (\S+)/)![1]!),
     ).toBe(true);
+  });
+});
+
+describe("[CC NOT LANDED] — a pet command prints once, as the pet's (fact6 D30)", () => {
+  // bbd5e632 0:37 + 0:38: the warlock's Command Demon Seduction (119909) and
+  // the Sayaad's own Seduction (6358) each logged IMMUNE under a Cyclone and
+  // each printed a line; 944d21b0 01:37:04: the Felguard's Axe Toss (89766)
+  // logged IMMUNE 440 ms after the warlock's 119914 with no cast row of its own.
+  const PET = "Pet-0-1-1-1-1-0000000001";
+  const pet = (overrides: Partial<ICombatUnit>) =>
+    mkUnit(PET, "Sayaad", {
+      ownerId: "o",
+      type: CombatUnitType.Pet,
+      ...overrides,
+    });
+  const SED_CMD = "119909";
+  const SED_PET = "6358";
+  const AXE_CMD = "119914";
+  const AXE_PET = "89766";
+  const lineBy = (l: string) => /\(by ([^)]*\)?[^)]*)\) — logged/.exec(l)?.[1];
+
+  it("a command the pet carried out (its cast and its own miss) is one line, the pet's", () => {
+    const lines = notLanded(
+      timelineOf({
+        owner: {
+          spellCastEvents: [cast(SED_CMD, "Seduction", 37_000, "o", "e")],
+          missesOut: [miss(SED_CMD, "Seduction", 37_000, "o", "e")],
+        } as never,
+        extra: [
+          pet({
+            spellCastEvents: [cast(SED_PET, "Seduction", 37_001, PET, "e")],
+            missesOut: [miss(SED_PET, "Seduction", 37_900, PET, "e")],
+          } as never),
+        ],
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lineBy(lines[0]!)).toMatch(/pet/);
+  });
+
+  it("a pet's own miss with no cast row of its own still carries the press out", () => {
+    const lines = notLanded(
+      timelineOf({
+        owner: {
+          spellCastEvents: [cast(AXE_CMD, "Axe Toss", 30_000, "o", "e")],
+          missesOut: [miss(AXE_CMD, "Axe Toss", 30_000, "o", "e")],
+        } as never,
+        extra: [
+          pet({
+            missesOut: [miss(AXE_PET, "Axe Toss", 30_440, PET, "e")],
+          } as never),
+        ],
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lineBy(lines[0]!)).toMatch(/pet/);
+  });
+
+  it("a command no summon row carried out prints once, as the pet's", () => {
+    const lines = notLanded(
+      timelineOf({
+        owner: {
+          spellCastEvents: [
+            // an earlier command the Sayaad carried out makes 119909 a command
+            cast(SED_CMD, "Seduction", 10_000, "o", "e2"),
+            cast(SED_CMD, "Seduction", 37_000, "o", "e"),
+          ],
+          missesOut: [miss(SED_CMD, "Seduction", 37_000, "o", "e")],
+        } as never,
+        extra: [
+          pet({
+            spellCastEvents: [cast(SED_PET, "Seduction", 10_001, PET, "e2")],
+          } as never),
+        ],
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lineBy(lines[0]!)).toMatch(/pet/);
+  });
+});
+
+describe("[KICK] … missed — IMMUNE: a pet command prints once, as the pet's (fact6 D30)", () => {
+  // the enemy warlock's Command Demon Spell Lock (119910) and the Felhunter's
+  // own Spell Lock (19647) both logged IMMUNE on our player: one kick
+  const EPET = "Pet-0-1-1-1-1-0000000002";
+  const felhunter = (overrides: Partial<ICombatUnit>) =>
+    mkUnit(EPET, "Felhunter", {
+      ownerId: "e",
+      type: CombatUnitType.Pet,
+      reaction: CombatUnitReaction.Hostile,
+      ...overrides,
+    });
+  const immune = (spellId: string, t: number, src: string, name: string) => ({
+    ...miss(spellId, "Spell Lock", t, src, "o"),
+    srcUnitName: name,
+  });
+  const kickLines = (lines: string[]) =>
+    lines.filter((l) => l.includes("missed — IMMUNE"));
+
+  it("the owner's command row beside the pet's own row is one line, the pet's", () => {
+    const lines = kickLines(
+      timelineOf({
+        owner: {
+          missesIn: [
+            immune("119910", 50_000, "e", NAME.e!),
+            immune("19647", 50_002, EPET, "Felhunter"),
+          ],
+        } as never,
+        enemy: {
+          spellCastEvents: [cast("119910", "Spell Lock", 50_000, "e", "o")],
+        } as never,
+        extra: [
+          felhunter({
+            spellCastEvents: [cast("19647", "Spell Lock", 50_001, EPET, "o")],
+          } as never),
+        ],
+      }),
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/'s pet's Spell Lock on /);
+  });
+});
+
+describe("[CC NOT LANDED] — a control a talent triggers keeps its own name (F20 dr residual)", () => {
+  // 457e197f r0 0:21: Deep Breath 433874 (untargeted) → its talent's stun
+  // Terror of the Skies 372245 logged IMMUNE. The cast → effect table links
+  // the two (for the recast test), but only through the class's talent, so
+  // the line names the stun, not the breath
+  it("Terror of the Skies after a Deep Breath", () => {
+    const lines = timelineOf({
+      mate: {
+        spellCastEvents: [
+          cast("433874", "Deep Breath", 20_000, "m", "0000000000000000"),
+        ],
+        missesOut: [miss("372245", "Terror of the Skies", 21_200, "m", "e")],
+      } as never,
+    });
+    const got = notLanded(lines);
+    expect(got).toHaveLength(1);
+    expect(got[0]).toContain("← Terror of the Skies (by ");
   });
 });

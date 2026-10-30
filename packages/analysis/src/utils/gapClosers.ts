@@ -60,7 +60,10 @@ export const GAP_CLOSER_BUTTONS: ReadonlyArray<readonly string[]> = [
   ["6544", "52174"], // Heroic Leap (Warrior)
   ["3411"], // Intervene (Warrior: charges to an ally, 11 casts in that scan)
   ["195072"], // Fel Rush (Demon Hunter)
-  ["370965", "1246167"], // The Hunt (Demon Hunter; 12.1 second cast id)
+  // The Hunt (Demon Hunter; 12.1 second cast id). Predator's Wake 1259431 is
+  // its button under Demonsurge — DB2 Category 2427 (one 90 s cooldown) and
+  // the same Effect 96 CHARGE → 1246169 (F20 D23)
+  ["370965", "1246167", "1259431"],
   ["232893"], // Felblade (Demon Hunter)
   // Metamorphosis: 191427 carries the cooldown, the logged cast is 200166
   // (the same scan: 191427 x0, 200166 x6)

@@ -783,7 +783,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // enemy-def F-E18: a press that broke a disarm (a loss of control the CC
   // windows do not hold) — the CC binder, asked of the disarm windows only
   // when no CC took the press (a CC-bound press says so on its [CC ON TEAM]
-  // line). One reading for the [TRINKET] line and the [DISARM] tail (F-DA1).
+  // line). The [TRINKET] line's reading; the [DISARM] tail asks every disarm
+  // the press ended (`disarmsRemovedByPress`, F20 D9).
   const trinketBrokenDisarm = (summary: IPlayerCCTrinketSummary, t: number) => {
     const rawCastMs = matchStartMs + Math.round(t * 1000);
     return findBrokenCC(summary.ccInstances, matchStartMs, rawCastMs)

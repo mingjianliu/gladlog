@@ -14,8 +14,8 @@ import {
   ccRecastBetween,
   ccRecastSplitsResend,
   drDurationFactor,
+  drLevelAtLanding,
   getDRCategory,
-  getDRLevelAtTime,
   matchPendingCcKey,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
@@ -115,7 +115,8 @@ export function ccRemainingSeconds(p: {
   caster: ICombatUnit | undefined;
   applyMs: number;
   endMs: number;
-  opponentIds: Set<string>;
+  /** the application's source (its identity in the DR history) */
+  srcUnitId?: string;
   matchStartMs: number;
   roarAtApply: boolean;
   /** the CC's possible casters, for the DR history's recast test */
@@ -130,19 +131,21 @@ export function ccRemainingSeconds(p: {
   const category = getDRCategory(p.spellId);
   let factor = 1;
   if (category) {
+    // the DR this application landed at (Q1, `drLevelAtLanding`) over the
+    // holder's whole DR history — fact6 D29: a Sleep Walk reflected back
+    // onto the holder was no history while the history read opponents
+    // only, and a 50 % Fear printed `5.3s of CC wasted` for 2.3
     const history = buildCcCategoryHistory(
       p.holder,
       category,
-      p.opponentIds,
       p.matchStartMs,
       p.unitById,
     );
-    const level = getDRLevelAtTime(
-      history,
-      category,
-      (p.applyMs - p.matchStartMs) / 1000,
-      p.matchStartMs,
-    );
+    const level = drLevelAtLanding(history, {
+      applyMs: p.applyMs,
+      spellId: p.spellId,
+      ...(p.srcUnitId !== undefined ? { srcUnitId: p.srcUnitId } : {}),
+    });
     factor = drDurationFactor(level);
   }
   return Math.max(0, tableDuration * factor - (p.endMs - p.applyMs) / 1000);
@@ -234,7 +237,6 @@ export function analyzeCcBreaks(
   enemyPets: ICombatUnit[] = [],
 ): ICcBreakStats {
   const friendlyIds = new Set(friends.map((u) => u.id));
-  const enemyIds = new Set(enemies.map((u) => u.id));
   const friendlyPetById = new Map(friendlyPets.map((u) => [u.id, u]));
   const enemyPetById = new Map(enemyPets.map((u) => [u.id, u]));
   const playerById = new Map([...friends, ...enemies].map((u) => [u.id, u]));
@@ -254,9 +256,6 @@ export function analyzeCcBreaks(
 
   for (const holder of [...friends, ...enemies]) {
     const holderIsFriendly = friendlyIds.has(holder.id);
-    // The holder's DR history is taken as "applied by the opposing side"
-    // (same semantics as the timeline's [DR] annotation)
-    const opponentIds = holderIsFriendly ? enemyIds : friendlyIds;
 
     const pending = new Map<
       string,
@@ -383,7 +382,7 @@ export function analyzeCcBreaks(
           caster: playerById.get(entry.casterId),
           applyMs: entry.applyMs,
           endMs: aura.timestamp,
-          opponentIds,
+          srcUnitId: entry.casterId,
           matchStartMs: combat.startTime,
           roarAtApply: entry.roarAtApply,
           unitById,

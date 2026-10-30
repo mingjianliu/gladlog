@@ -84,6 +84,7 @@ import { ENEMY_AREA_SAVE_IDS } from "../data/spellIdLists";
 import { TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
+import { pressRefusedImmuneOn } from "./castMissRows";
 import {
   analyzePlayerCCAndTrinket,
   breakAbilityPresses,
@@ -727,6 +728,9 @@ export function extractKillAttempts(
       /** the cast row's dest unit (fact2: the anchor names a press that
        * went into the target) */
       destId?: string;
+      /** the cast row's own ms (else the timeline's), for the press's miss
+       * rows (`pressRefusedImmuneOn`) */
+      castMs: number;
     };
     const teamCasts: TeamCast[] = [];
     for (const f of friendlies) {
@@ -749,6 +753,7 @@ export function extractKillAttempts(
           spellId: cd.spellId,
           caster: f,
           ...(row?.destUnitId ? { destId: row.destUnitId } : {}),
+          castMs: row?.logLine.timestamp ?? castMs,
         });
       }
     }
@@ -784,8 +789,29 @@ export function extractKillAttempts(
       toMs: number,
     ): string => {
       const hitTarget = (c: TeamCast) => {
-        if (c.destId !== undefined && c.destId !== "0000000000000000")
-          return c.destId === target.id;
+        if (c.destId !== undefined && c.destId !== "0000000000000000") {
+          if (c.destId !== target.id) return false;
+          // fact6 D14 (2b3fba97-r0 2:27): a press the game refused as IMMUNE
+          // on the target (Deathmark into Time Stop) did not go into it —
+          // it anchors only by a hit of its own that landed anyway
+          if (
+            !pressRefusedImmuneOn(
+              c.caster.missesOut,
+              c.spellId,
+              (c.caster.spellCastEvents ?? [])
+                .filter(
+                  (e) =>
+                    e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                    e.spellId === c.spellId,
+                )
+                .map((e) => e.logLine.timestamp),
+              c.castMs,
+              target.id,
+              c.caster.spellCastEvents ?? [],
+            )
+          )
+            return true;
+        }
         const ids = castAndEffectIds(c.spellId);
         return (c.caster.damageOut ?? []).some(
           (d) =>

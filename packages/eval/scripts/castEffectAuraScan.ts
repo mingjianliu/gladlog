@@ -34,7 +34,13 @@
  * → 189). A trap still passes (Freezing Trap → 3355: 66 % within 3 s). The
  * forward rate (hits / casts) is reported, not required: a talent variant
  * fires for few casts (Diamond Ice's 203337 on Freezing Trap, 5 %). Both
- * thresholds are printed into the table's meta.
+ * thresholds are printed into the table's meta. A cast that applies the aura
+ * only sometimes (a Rake from stealth stuns, one out of it does not) has its
+ * hits mostly slow — every Rake of the minute before a stun is one — so the
+ * fast test also passes on the aura's side: ≥ MIN_NEAR_FAST_SHARE of the
+ * aura's applications with that cast in the window come within FAST_S of
+ * its NEAREST one (F20 dr residual). A "talent" nomination (every cast of
+ * the class whose talent triggers the aura) must pass that aura-side test.
  *
  * Usage:
  *   npx tsx packages/eval/scripts/castEffectAuraScan.ts --manifest <m> [--every N] [--emit]
@@ -50,18 +56,21 @@ const FAST_S = 3;
 const MIN_HITS = 10;
 const MIN_SHARE = 0.5;
 const MIN_FAST_SHARE = 0.5;
+/** the aura side of the fast test (`nearFast` / `nearAny`) */
+const MIN_NEAR_FAST_SHARE = 0.9;
 
 function parseArgs() {
   const a = process.argv.slice(2);
-  const out = { manifest: "", every: 1, emit: false };
+  const out = { manifest: "", every: 1, emit: false, keep: "" };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === "--manifest") out.manifest = a[++i] ?? "";
     else if (a[i] === "--every") out.every = Number(a[++i]);
     else if (a[i] === "--emit") out.emit = true;
+    else if (a[i] === "--keep") out.keep = a[++i] ?? "";
   }
   if (!out.manifest || !Number.isFinite(out.every) || out.every < 1) {
     console.error(
-      "usage: castEffectAuraScan.ts --manifest <path> [--every N] [--emit]",
+      "usage: castEffectAuraScan.ts --manifest <path> [--every N] [--emit] [--keep <table.json>]",
     );
     process.exit(1);
   }
@@ -106,6 +115,11 @@ const pairHits = new Map<string, number>();
 const pairFast = new Map<string, number>();
 const pairDelays = new Map<string, number[]>();
 const auraApps = new Map<string, number>();
+// per pair, over the aura's applications: one with a cast of C before it in
+// the window (`nearAny`), and one whose NEAREST cast of C is within FAST_S
+// (`nearFast`) — the aura side of "applied BY the cast"
+const nearAny = new Map<string, number>();
+const nearFast = new Map<string, number>();
 const auraCovered = new Map<string, number>();
 const inc = (m: Map<string, number>, k: string) =>
   m.set(k, (m.get(k) ?? 0) + 1);
@@ -137,12 +151,18 @@ for (const f of files) {
       const list = recent.get(who);
       if (!list) continue;
       let covered = false;
+      const nearestSeen = new Set<string>();
       for (let i = list.length - 1; i >= 0; i--) {
         const r = list[i]!;
         if (r.t > t + 100) continue;
         if (r.t < t - WINDOW_S * 1000) break;
         if (!noms.has(r.c)) continue;
         covered = true;
+        if (!nearestSeen.has(r.c)) {
+          nearestSeen.add(r.c);
+          inc(nearAny, `${r.c}|${e}`);
+          if (t - r.t <= FAST_S * 1000) inc(nearFast, `${r.c}|${e}`);
+        }
         if (r.hit.has(e)) continue;
         r.hit.add(e);
         const k = `${r.c}|${e}`;
@@ -220,6 +240,11 @@ type Row = {
   medianDelayS: number;
   coveredShare: number;
   via: string;
+  /** the aura side of the fast test: the aura's applications with a cast of
+   * C in the window before them, and those whose nearest one is within
+   * FAST_S (written when the pair is kept on it) */
+  nearApps?: number;
+  nearWithin3s?: number;
 };
 const rows: Record<string, Row[]> = {};
 let kept = 0;
@@ -236,14 +261,35 @@ for (const [k, hits] of pairHits) {
     coveredShare: Math.round(share * 1000) / 1000,
     via: nominations[c]!.find((n) => n.aura === e)?.via ?? "?",
   };
+  // fast: most hits come within FAST_S of the cast — or, for a cast that
+  // applies the aura only sometimes, most of the aura's applications come
+  // within FAST_S of the nearest such cast (F20 dr residual: a stealth Rake
+  // 1822 stuns with 163505, a Rake out of stealth does not; every Rake in
+  // the 60 s before a stun was a slow hit, 163505 was dropped, and a
+  // stealth-Rake recast whose stun logged only a REFRESH read as no recast)
+  const nearShare = (nearFast.get(k) ?? 0) / Math.max(1, nearAny.get(k) ?? 0);
+  // a "talent" nomination (any cast of a class whose talent triggers the
+  // aura) names no particular cast, so it needs the aura-side test itself:
+  // Oppressing Roar 372048 rides with Deep Breath (29 of 55 hits fast) but
+  // only 62 of 162 Terror of the Skies stuns come within 3 s of one
+  // (the aura's own applications are the evidence here, so they need the
+  // MIN_HITS floor too: one Blighted Arrow 1239385 read as 15 cast hits)
+  const nearOk =
+    (nearAny.get(k) ?? 0) >= MIN_HITS && nearShare >= MIN_NEAR_FAST_SHARE;
   const ok =
     hits >= MIN_HITS &&
     share >= MIN_SHARE &&
-    row.hitsWithin3s / hits >= MIN_FAST_SHARE;
+    (row.via === "talent"
+      ? nearOk
+      : row.hitsWithin3s / hits >= MIN_FAST_SHARE || nearOk);
   report.push(
-    `${ok ? "KEEP" : "drop"} ${c} -> ${e} casts=${row.casts} hits=${hits} (${((100 * hits) / Math.max(1, row.casts)).toFixed(0)}%) fast=${row.hitsWithin3s} p50=${row.medianDelayS}s share=${row.coveredShare} apps=${auraApps.get(e)} via=${row.via}`,
+    `${ok ? "KEEP" : "drop"} ${c} -> ${e} casts=${row.casts} hits=${hits} (${((100 * hits) / Math.max(1, row.casts)).toFixed(0)}%) fast=${row.hitsWithin3s} near=${nearFast.get(k) ?? 0}/${nearAny.get(k) ?? 0} p50=${row.medianDelayS}s share=${row.coveredShare} apps=${auraApps.get(e)} via=${row.via}`,
   );
   if (!ok) continue;
+  if (!(row.via !== "talent" && row.hitsWithin3s / hits >= MIN_FAST_SHARE)) {
+    row.nearApps = nearAny.get(k) ?? 0;
+    row.nearWithin3s = nearFast.get(k) ?? 0;
+  }
   kept++;
   (rows[c] ??= []).push(row);
 }
@@ -259,6 +305,39 @@ if (args.emit) {
     import.meta.dirname,
     "../../analysis/src/data/castEffectAuraGenerated.json",
   );
+  // --keep <table>: an additive emit — every pair of that earlier table stays
+  // as it was, and this run only adds the pairs it keeps that the table
+  // lacks. For a rule change measured on a sample of a corpus that has since
+  // lost files (2026-10-28: 1,429 of the manifest's every-5th 3,627 left), so
+  // a pair is not dropped for want of a sample; a season refresh runs without
+  // it (docs/commands/update-wow-data.md).
+  let keepNote = "";
+  if (args.keep) {
+    let carried = 0;
+    let added = 0;
+    const prev = JSON.parse(readFileSync(args.keep, "utf8")) as {
+      meta: { generatedAt?: string; filesRead?: number; nominations?: string };
+      casts: Record<string, Row[]>;
+    };
+    const fresh = rows;
+    const merged: Record<string, Row[]> = {};
+    for (const [c, list] of Object.entries(prev.casts)) {
+      merged[c] = [...list];
+      carried += list.length;
+    }
+    for (const [c, list] of Object.entries(fresh))
+      for (const r of list)
+        if (!merged[c]?.some((x) => x.aura === r.aura)) {
+          (merged[c] ??= []).push(r);
+          added++;
+        }
+    for (const k of Object.keys(rows)) delete rows[k];
+    Object.assign(rows, merged);
+    for (const list of Object.values(rows))
+      list.sort((a, b) => b.hits - a.hits);
+    kept = carried + added;
+    keepNote = `additive: the ${carried} pairs of the table generated ${prev.meta.generatedAt} (${prev.meta.filesRead} files, ${prev.meta.nominations}) kept as they were; ${added} added by this run`;
+  }
   const sorted = Object.fromEntries(
     Object.entries(rows).sort((a, b) => Number(a[0]) - Number(b[0])),
   );
@@ -272,7 +351,8 @@ if (args.emit) {
           manifest: args.manifest,
           every: args.every,
           filesRead: read,
-          rule: `a cast hits a nominated aura when the same root caster (summons resolved) applies it within ${WINDOW_S} s after the cast (once per cast); a pair is kept when hits >= ${MIN_HITS} the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= ${MIN_SHARE}, and >= ${MIN_FAST_SHARE} of the hits come within ${FAST_S} s of the cast`,
+          rule: `a cast hits a nominated aura when the same root caster (summons resolved) applies it within ${WINDOW_S} s after the cast (once per cast); a pair is kept when hits >= ${MIN_HITS} the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= ${MIN_SHARE}, and >= ${MIN_FAST_SHARE} of the hits come within ${FAST_S} s of the cast or >= ${MIN_NEAR_FAST_SHARE} of the aura's applications with that cast in the window before them come within ${FAST_S} s of its nearest one (a talent-only nomination needs the latter)`,
+          ...(keepNote ? { keep: keepNote } : {}),
           generatedAt: new Date().toISOString(),
         },
         casts: sorted,

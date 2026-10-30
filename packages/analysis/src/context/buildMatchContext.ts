@@ -530,6 +530,7 @@ export function buildMatchContext(
         ownerCCSummary?.ccInstances ?? [],
         enemyHealerCCSummary?.ccInstances ?? [],
         ownerPurgeTimes,
+        enemyHealerCCSummary?.drHistoryOnly ?? [],
       )
     : null;
 
@@ -792,8 +793,10 @@ export function buildMatchContext(
       // ready Alter Time and an unpressed kit defensive are in hand. fact2 C1
       // (user ruling 4, 2026-10-20): the floor the span applies to an ally's
       // external (`isBelowWallFloorExternal`) is said.
+      // User ruling 1 (2026-10-28, fact6 F20): an own shield counts when a press
+      // put it up (`ownPressedShieldSpansMs`); a passive talent absorb does not.
       tLines.push(
-        `  \`defenseless a–b\` = nothing of these was up on the target: its own wall, immunity or absorb shield (a Power Word: Shield / Void Shield it put on itself too), an ally's external on it, an Intervene, Roar of Sacrifice, Mass Invisibility or Phase Shift on it while its aura was up (not one under the ${MITIGATION_AURA_MIN_PCT}% wall floor — ${allyCopyLegendPhrase()} does not count), an area save it carried; and every major defensive it held was on cooldown — each one it pressed this round, a rewind (Alter Time) counting while it is back. A unit whose kit holds a major defensive it never pressed ([UNUSED]) — not a heal, not one it can only give an ally — has it in hand all round and is never defenseless. A heal is not counted.`,
+        `  \`defenseless a–b\` = nothing of these was up on the target: its own wall, immunity or absorb shield (a Power Word: Shield / Void Shield it put on itself too, and a talent's shield that came with one of its presses — not a passive talent absorb such as Divine Aegis or Soul Leech), an ally's external on it, an Intervene, Roar of Sacrifice, Mass Invisibility or Phase Shift on it while its aura was up (not one under the ${MITIGATION_AURA_MIN_PCT}% wall floor — ${allyCopyLegendPhrase()} does not count), an area save it carried; and every major defensive it held was on cooldown — each one it pressed this round, a rewind (Alter Time) counting while it is back. A unit whose kit holds a major defensive it never pressed ([UNUSED]) — not a heal, not one it can only give an ally — has it in hand all round and is never defenseless. A heal is not counted.`,
       );
       if (kwLines.some(hasTeamAbsorbedClause))
         tLines.push(TEAM_DAMAGE_ABSORBED_LEGEND);

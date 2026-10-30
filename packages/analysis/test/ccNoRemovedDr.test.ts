@@ -153,3 +153,50 @@ describe("a CC with no REMOVED — fact3 D33", () => {
     expect(lateKidney.durationSeconds).toBeGreaterThan(3);
   });
 });
+
+describe("F20 wide residual — two controls landing on one ms keep the log's order", () => {
+  it("2d4d9d9d r3 0:49: Maim then Cheap Shot on one ms, the Cheap Shot removed first — Maim Full, Cheap Shot 50 %", () => {
+    const MAIM_STUN = "203123";
+    const CHEAP_SHOT = "1833";
+    const druid = makeUnit("druid-1", {
+      name: "Druid",
+      spec: CombatUnitSpec.Druid_Feral,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const rogue = makeUnit("rogue-1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const ev = (e: LogEvent, id: string, t: number, src: string) =>
+      makeAuraEvent(e, id, T0 + t, src);
+    const evoker = makeUnit("player-1", {
+      name: "Evoker",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        // the log's order on 49.009: the Maim's APPLIED first
+        ev(LogEvent.SPELL_AURA_APPLIED, MAIM_STUN, 49_009, "druid-1"),
+        ev(LogEvent.SPELL_AURA_APPLIED, CHEAP_SHOT, 49_009, "rogue-1"),
+        ev(LogEvent.SPELL_AURA_REMOVED, CHEAP_SHOT, 51_026, "rogue-1"),
+        ev(LogEvent.SPELL_AURA_REMOVED, MAIM_STUN, 51_262, "druid-1"),
+      ],
+    });
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 120_000,
+      startInfo: { zoneId: "1672" },
+      units: { [evoker.id]: evoker, [druid.id]: druid, [rogue.id]: rogue },
+    };
+    const { ccInstances } = analyzePlayerCCAndTrinket(
+      evoker,
+      [druid, rogue],
+      combat as never,
+      [],
+    );
+    const level = (id: string) =>
+      ccInstances.find((c) => c.spellId === id)?.drInfo?.level;
+    expect(level(MAIM_STUN)).toBe("Full");
+    expect(level(CHEAP_SHOT)).toBe("50%");
+  });
+});

@@ -3,7 +3,8 @@
  * source cast for starts a new instance (ruling A51, F-RF1); one with no
  * cast of its id behind it stays inside the instance — and is now carried
  * on it (`refreshedAtSeconds`), so the line can say the length printed runs
- * across a refresh. No window is cut and no DR level moves.
+ * across a refresh. No window is cut; since F20 dr the DR walk counts the
+ * refresh as an application (`ccRefreshIsNewApplication`, measured).
  */
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -48,7 +49,9 @@ const evoker = (castId: string, castAtS: number[]) =>
   });
 // 5c48e842 r6: APPLIED, REFRESH 2.935 s in, REMOVED 1.503 s after that; the
 // evoker's Deep Breath rows 3.03 s before the APPLIED and 1.23 s before the
-// REFRESH
+// REFRESH — the second breath IS a recast (F20 dr residual, codex re-review
+// of c7304a60a: the cast → effect table now links Deep Breath to its
+// talent's stun), so the bare-REFRESH cases below keep only the first
 const refreshed = [
   aura(LogEvent.SPELL_AURA_APPLIED, TERROR, 95.9),
   aura(LogEvent.SPELL_AURA_REFRESH, TERROR, 98.835),
@@ -57,10 +60,7 @@ const refreshed = [
   aura(LogEvent.SPELL_AURA_APPLIED, TERROR, 110),
   aura(LogEvent.SPELL_AURA_REMOVED, TERROR, 111.5),
 ];
-const ccOf = (
-  auraEvents: unknown[],
-  caster = evoker(DEEP_BREATH, [92.87, 97.6]),
-) =>
+const ccOf = (auraEvents: unknown[], caster = evoker(DEEP_BREATH, [92.87])) =>
   analyzePlayerCCAndTrinket(
     makeUnit("v", { auraEvents: auraEvents as never }),
     [caster],
@@ -76,15 +76,37 @@ describe("a refresh with no cast of its id behind it stays inside the instance, 
     expect(cc[1]!.refreshedAtSeconds).toBeUndefined();
   });
 
-  it("DR accounting is what it was: the same instances and levels as with the REFRESH row taken out", () => {
+  it("the window is what it was, but the REFRESH is a DR step (F20 dr, measured): the next stun reads Immune", () => {
+    // the fixture itself is the evidence: refreshed 2.935 s in, gone 1.503 s
+    // later — the 50 % of 3 s, re-timed at the next tier (605 corpus: 29 of
+    // 32 bare REFRESHes that ran out did the same, none ended at the first
+    // landing's end)
     const withRow = ccOf(refreshed);
     const withoutRow = ccOf(
       refreshed.filter((a) => a.event !== LogEvent.SPELL_AURA_REFRESH),
     );
-    const view = (cs: typeof withRow) =>
-      cs.map((c) => [c.atSeconds, c.durationSeconds, c.drInfo?.level]);
-    expect(view(withRow)).toEqual(view(withoutRow));
-    expect(withRow.map((c) => c.drInfo?.level)).toEqual(["Full", "50%"]);
+    const windows = (cs: typeof withRow) =>
+      cs.map((c) => [c.atSeconds, c.durationSeconds]);
+    expect(windows(withRow)).toEqual(windows(withoutRow));
+    expect(withoutRow.map((c) => c.drInfo?.level)).toEqual(["Full", "50%"]);
+    expect(withRow.map((c) => c.drInfo?.level)).toEqual(["Full", "Immune"]);
+  });
+
+  it("a REFRESH on the landing's own ms: the window lands at Full, the stun after it reads Immune (2-1-19 r1 43.140 Bull Rush)", () => {
+    // one press double-applying (605: Bull Rush APPLIED + REFRESH ≤ 50 ms
+    // apart, 4/4 re-timed at 50 %); the first landing is the window, the
+    // REFRESH's application follows it — it printed Immune before the fix
+    const cc = ccOf(
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, TERROR, 95.9),
+        aura(LogEvent.SPELL_AURA_REFRESH, TERROR, 95.9),
+        aura(LogEvent.SPELL_AURA_REMOVED, TERROR, 97.4),
+        aura(LogEvent.SPELL_AURA_APPLIED, TERROR, 110),
+        aura(LogEvent.SPELL_AURA_REMOVED, TERROR, 111.5),
+      ],
+      evoker(DEEP_BREATH, [92.87]),
+    );
+    expect(cc.map((c) => c.drInfo?.level)).toEqual(["Full", "Immune"]);
   });
 
   it("a refresh the source cast its own id for still starts a new instance (A51) — and neither part carries a refresh", () => {
@@ -92,6 +114,15 @@ describe("a refresh with no cast of its id behind it stays inside the instance, 
     expect(cc.map((c) => Math.round(c.durationSeconds * 10) / 10)).toEqual([
       2.9, 1.5, 1.5,
     ]);
+    expect(cc.every((c) => c.refreshedAtSeconds === undefined)).toBe(true);
+  });
+
+  it("a Deep Breath before the refresh is a recast: a new stun, the next DR tier (5c48e842 r6)", () => {
+    const cc = ccOf(refreshed, evoker(DEEP_BREATH, [92.87, 97.6]));
+    expect(cc.map((c) => Math.round(c.durationSeconds * 10) / 10)).toEqual([
+      2.9, 1.5, 1.5,
+    ]);
+    expect(cc.map((c) => c.drInfo?.level).slice(0, 2)).toEqual(["Full", "50%"]);
     expect(cc.every((c) => c.refreshedAtSeconds === undefined)).toBe(true);
   });
 

@@ -119,6 +119,7 @@ import {
   drResetMsAt,
 } from "@gladlog/analysis/src/utils/drAnalysis";
 import { DEFERRAL_SHIELD_DAMAGE_IDS } from "@gladlog/analysis/src/utils/incomingPressure";
+import { pvpTrinketUses } from "@gladlog/analysis/src/utils/pvpTrinketUses";
 
 import {
   APPLIED,
@@ -165,9 +166,10 @@ const CC_MECHANICS = new Set([1, 2, 5, 10, 12, 13, 14, 17, 20, 24, 30]);
 const CC_DR = new Set(["Stun", "Incapacitate", "Disorient"]);
 const DISARM_MECHANIC = 3;
 const ROOT_MECHANIC = 7;
-const MEDALLION = "336126";
-/** F20 residual: how far from the Medallion's cast row a control it removed
- * may be logged — the product's own predicate (`castEndedCcWindow`), one fact.
+/** F20 residual: how far from the Medallion's press instant (its buff row,
+ * `pvpTrinketUses`) a control it removed may be logged — the product's own
+ * predicate (`castEndedCcWindow`), one fact. The measurement below read the
+ * cast row; the buff row sits 0–3 ms before it in 2,735 of 2,773 presses.
  * Measured 2026-10-28 on the 605 raw logs (2,773 Medallion presses): the
  * press's removals are logged in the ms of its own buff row (336126 APPLIED),
  * and that row sits 0–3 ms before the cast row in 2,735 presses. Of the
@@ -739,8 +741,7 @@ function reflectDotRun(ctx: IRoundCtx): void {
         // one ms (c5c7e005 r4 0:13 Agony) — there is one copy, and the line
         // naming the other reflector states it
         !lines.some(
-          (x) =>
-            x.cp === cp && x.spell === sName && Math.abs(x.sec - sec) <= 1,
+          (x) => x.cp === cp && x.spell === sName && Math.abs(x.sec - sec) <= 1,
         )
       )
         ctx.violate(
@@ -896,9 +897,14 @@ function pressMultiBreak(ctx: IRoundCtx): void {
     if (u.reaction !== ctx.owner.reaction) continue;
     const pid = ctx.pidOf(u.name);
     if (!pid) continue;
-    const presses = successesOf(u)
-      .filter((c) => String(c.spellId) === MEDALLION)
-      .map(tsOf)
+    // the press instant is the Medallion's own buff row (`pvpTrinketUses`,
+    // the product's anchor), not its cast row: a press logs its removals
+    // just before that row and the cast row up to 300 ms after it (605
+    // s1/53-1 0:19: Dismantle REMOVED 8 ms before the buff row, 11 ms before
+    // the cast row, read as a false credit off the cast row)
+    const presses = pvpTrinketUses(u)
+      .filter((x) => x.kind === "medallion")
+      .map((x) => x.atMs)
       .filter((t) => t >= ctx.start && t <= ctx.roundEndAt);
     const runs = controlRuns(ctx, u);
     const auras = (u.auraEvents ?? []) as any[];

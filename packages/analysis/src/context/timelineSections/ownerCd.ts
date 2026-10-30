@@ -17,6 +17,7 @@ import { reachesAlly } from "../../data/spellTargeting";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import { isControlCast } from "../../utils/castMissRows";
 import {
+  castSpellName,
   cdIsProcOnly,
   cdRoleTag,
   findCheaperDefensiveAlternatives,
@@ -308,7 +309,7 @@ export function emitOwnerCdEntries(
       // led the model to transfer the semantics of enemy lines onto its own.
       // Outgoing DR is already computed (drInfo on outgoingCCChains); align the
       // rendering here.
-      const outgoingDrNote = isCC ? outgoingDrTag(cd.spellId, cast) : "";
+      const outgoingDrNote = isCC ? outgoingDrTag(cd.spellId, cast, named) : "";
       // enemy-def F-E25a: a non-CC press into an immunity (Grapple Weapon
       // into Bladestorm, a Freezing Trap the roster does not class as CC) is
       // tagged too; the MISS / REFLECT tag stays a CC tag. A proc-only
@@ -333,10 +334,12 @@ export function emitOwnerCdEntries(
             : // round-1 retest idx 34: a non-control press with no target is
               // not aimed at anyone — a stray IMMUNE on a player standing in
               // our own Imprison is no immunity it was pressed into
-              // (26bfd4f3 0:39 Summon Darkglare `[IMMUNE]`)
+              // (26bfd4f3 0:39 Summon Darkglare `[IMMUNE]`); fact6 D14: a
+              // line that names nobody asks the press's own cast-row target,
+              // when it is an enemy
               named.size > 0
               ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds, named)
-              : "";
+              : ownerCcImmuneTag(cd.spellId, cast.timeSeconds, undefined, true);
       // cc-dr F-NE1 (wording ruling A55): an aimed CC cast that left no CC
       // aura on its target and no miss either is said to have no logged
       // effect — an absence of evidence, never "it missed". Probe p12's rule:
@@ -558,7 +561,7 @@ export function emitOwnerCdEntries(
       // a mechanic (e.g. "Restoral breaks stuns") for a CD it otherwise sees only as a [YOU] [CD] cast.
       const ownerRole = cdRoleTag(cd.spellId);
       const roleSuffix = ownerRole ? ` [${ownerRole}]` : "";
-      const displayNameWithChannel = `${cd.spellName}${roleSuffix}${channelSuffix}`;
+      const displayNameWithChannel = `${castSpellName(cd, cast)}${roleSuffix}${channelSuffix}`;
 
       // B128: for the owner's CHANNELED CDs, state whether any enemy had an interrupt available at the
       // cast — so the model can decide "was this a lockout reaction" and "would this have been kicked"

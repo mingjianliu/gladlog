@@ -16,8 +16,8 @@ import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import { ccFullDurationForCaster } from "../../utils/ccDuration";
 import {
   CC_FROM_OWN_TEAM_TAG,
-  ccAvoidedCastTag,
   ccAvoidedAvoidanceState,
+  ccAvoidedCastTag,
   ccAvoidedOutcomeText,
   ccAvoidedRecastTag,
   ccEndedByCasterInterrupt,
@@ -25,6 +25,7 @@ import {
   ccEndedByOwnPress,
   ccLoggedEnd,
   ccUnloggedEarlyEnd,
+  disarmsRemovedByPress,
   formatCcLoggedEnd,
   formatCcRefreshed,
   formatCcUnloggedEnd,
@@ -160,10 +161,17 @@ export function emitTrinketCcOnTeamEntries(
 
     // cc-dr F-DA1 (ruling A54 = A): a disarm on any player of our team gets
     // a line in the [SILENCE] format (it was only a [RES] `cc:` token); a
-    // trinket press that broke it (`trinketBrokenDisarm`) takes the tail.
+    // trinket press that broke it takes the tail — asked per disarm
+    // (`disarmsRemovedByPress`), not through the [TRINKET] line's CC-first
+    // reading: one press can end a stun and a disarm (F20 D9)
     for (const d of summary.disarmInstances) {
-      const brokeAt = summary.trinketUseTimes.find(
-        (t) => trinketBrokenDisarm(summary, t) === d,
+      const brokeAt = summary.trinketUseTimes.find((t) =>
+        disarmsRemovedByPress(
+          summary.disarmInstances,
+          matchStartMs,
+          matchStartMs + Math.round(t * 1000),
+          summary.ccInstances,
+        ).includes(d),
       );
       const tail =
         brokeAt !== undefined
@@ -416,7 +424,11 @@ export function emitTrinketCcOnTeamEntries(
       else {
         const category = getDRCategory(imm.spellId);
         if (!category.startsWith("spell:") && category !== "Unknown") {
-          const history = summary.ccInstances
+          // the whole DR history (fact6 F20: `drHistoryOnly` too)
+          const history = [
+            ...summary.ccInstances,
+            ...(summary.drHistoryOnly ?? []),
+          ]
             .filter((c) => getDRCategory(c.spellId) === category)
             .map((c) => ({
               applyMs: matchStartMs + c.atSeconds * 1000,

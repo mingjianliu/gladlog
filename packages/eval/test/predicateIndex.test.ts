@@ -60,6 +60,7 @@ import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stacked
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
 import * as timelineCastStopped from "@gladlog/analysis/src/context/timelineSections/castStopped";
 import * as enemyCd from "@gladlog/analysis/src/context/timelineSections/enemyCd";
+import * as healerCastGapFiller from "@gladlog/analysis/src/context/timelineSections/healerCastGapFiller";
 import * as timelineSetup from "@gladlog/analysis/src/context/timelineSections/setup";
 import * as unitLabel from "@gladlog/analysis/src/context/unitLabel";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
@@ -85,6 +86,9 @@ import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
 import * as mitigationData from "@gladlog/analysis/src/data/mitigationData";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
+import * as overrideVariantsGenerated from "@gladlog/analysis/src/data/overrideVariantsGenerated";
+import * as ownShieldLinks from "@gladlog/analysis/src/data/ownShieldLinks";
+import * as purgeRemovalsGenerated from "@gladlog/analysis/src/data/purgeRemovalsGenerated";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
 import * as scopedPurges from "@gladlog/analysis/src/data/scopedPurges";
@@ -141,6 +145,7 @@ import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
 import * as externalDamage from "@gladlog/analysis/src/utils/externalDamage";
 import * as forcedDisplacement from "@gladlog/analysis/src/utils/forcedDisplacement";
 import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
+import * as groundingRedirects from "@gladlog/analysis/src/utils/groundingRedirects";
 import * as healerExposureAnalysis from "@gladlog/analysis/src/utils/healerExposureAnalysis";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as hiddenPress from "@gladlog/analysis/src/utils/hiddenPress";
@@ -149,6 +154,7 @@ import * as karmaFeed from "@gladlog/analysis/src/utils/karmaFeed";
 import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
 import * as kickLockout from "@gladlog/analysis/src/utils/kickLockout";
 import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
+import * as killingBlowMod from "@gladlog/analysis/src/utils/killingBlow";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
 import * as killWindowTargetSelection from "@gladlog/analysis/src/utils/killWindowTargetSelection";
 import * as localizedText from "@gladlog/analysis/src/utils/localizedText";
@@ -412,6 +418,22 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/castMissRows.ts`,
     symbol: "CC_MISS_TAG_WORD",
+    mod: castMissRows,
+  },
+  // fact6 D14 (F20): was this press refused as IMMUNE
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "pressImmuneMissRows",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "pressRefusedImmuneOn",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "pressFollowUpCastRows",
     mod: castMissRows,
   },
   // HP sampling
@@ -745,6 +767,42 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/drAnalysis.ts`,
     symbol: "drCategoryOfCast",
+    mod: drAnalysis,
+  },
+  // fact6 F20 (D10 D29): one DR walk, two queries, one history-source predicate
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "getDRLevel",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "drResetMsAt",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "drLevelAtLanding",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "drLevelNextAt",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "isDrHistorySource",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "buildCcCategoryHistory",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "ccRefreshIsNewApplication",
     mod: drAnalysis,
   },
   {
@@ -1301,6 +1359,17 @@ const INDEX: PredicateRow[] = [
     symbol: "nonPlayerUnitKill",
     mod: summonLife,
   },
+  // fact6 D22: a final blow is an attacker's (a DAMAGE_SPLIT row never is)
+  {
+    file: `${A}/utils/killingBlow.ts`,
+    symbol: "attackerBlowFor",
+    mod: killingBlowMod,
+  },
+  {
+    file: `${A}/utils/killingBlow.ts`,
+    symbol: "isAttackerDamageRow",
+    mod: killingBlowMod,
+  },
   {
     file: `${A}/context/timelineHelpers.ts`,
     symbol: "CONTESTABLE_ENEMY_SUMMON_NPC_IDS",
@@ -1383,6 +1452,12 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "cdCanHelpAnotherUnit",
+    mod: cooldowns,
+  },
+  // F20 D1: a save for its holder or for another unit
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdHelpsRecipient",
     mod: cooldowns,
   },
   {
@@ -1480,6 +1555,12 @@ const INDEX: PredicateRow[] = [
     symbol: "checkPetCreditSide",
     mod: promptQualityCheck,
   },
+  // fact6 D22: a single final blow is never credited to the dead unit's side
+  {
+    file: "packages/eval/src/quality/promptQualityCheck.ts",
+    symbol: "checkKillCreditNotOwnSide",
+    mod: promptQualityCheck,
+  },
   {
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkBurstAnsweredBottomConsistency",
@@ -1526,6 +1607,38 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/dispelKind.ts`,
     symbol: "classifyDispel",
     mod: dispelKind,
+  },
+  // F20 D31: buffs one purge press removed / removes per tool
+  {
+    file: `${A}/context/timelineSections/healerCastGapFiller.ts`,
+    symbol: "purgePressRemovals",
+    mod: healerCastGapFiller,
+  },
+  {
+    file: `${A}/context/timelineSections/healerCastGapFiller.ts`,
+    symbol: "purgePressRemovalCount",
+    mod: healerCastGapFiller,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "isPurgeableMagicBuff",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "PURGE_PRESS_REMOVALS_TEXT",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/data/purgeRemovalsGenerated.ts`,
+    symbol: "PURGE_REMOVALS_PER_TARGET",
+    mod: purgeRemovalsGenerated,
+  },
+  // F20 D26: what a Grounding Totem ate
+  {
+    file: `${A}/utils/groundingRedirects.ts`,
+    symbol: "groundingEatenRedirects",
+    mod: groundingRedirects,
   },
   // N3 (F11): a rider that came with its own cast; a form cooldown's press
   {
@@ -2828,6 +2941,21 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ownPressedShieldSpansMs",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/ownShieldLinks.ts`,
+    symbol: "ownShieldPressCastIds",
+    mod: ownShieldLinks,
+  },
+  {
+    file: `${A}/data/ownShieldLinks.ts`,
+    symbol: "OWN_SHIELD_RULING_FAMILY_IDS",
+    mod: ownShieldLinks,
+  },
+  {
     file: `${A}/utils/castMissRows.ts`,
     symbol: "isControlCast",
     mod: castMissRows,
@@ -2835,6 +2963,17 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/castMissRows.ts`,
     symbol: "castControlsIn",
+    mod: castMissRows,
+  },
+  // fact6 F20 D19 / D20: a control the game never puts on a player
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "controlReachesPlayers",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "NO_PLAYER_CONTROL_IDS",
     mod: castMissRows,
   },
   {
@@ -3177,6 +3316,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/spellDanger.ts`,
     symbol: "offensiveEffectCdId",
     mod: spellDanger,
+  },
+  {
+    file: `${A}/data/overrideVariantsGenerated.ts`,
+    symbol: "OVERRIDE_VARIANTS_GENERATED",
+    mod: overrideVariantsGenerated,
   },
   {
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,
@@ -3728,6 +3872,23 @@ const INDEX: PredicateRow[] = [
     symbol: "checkCcNotLandedLines",
     mod: promptQualityCheck,
   },
+  // fact6 F20 D4 / D5: [hit no enemy player] vs the press's reach
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "OWNER_AOE_CC_NO_PLAYER_TAG",
+    mod: drAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkHitNoPlayerContradiction",
+    mod: promptQualityCheck,
+  },
+  // fact6 D30: a pet-command miss prints once, as the pet's
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkPetCommandMissPrintedOnce",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "kitSpellReadyAt",
@@ -3767,6 +3928,39 @@ const INDEX: PredicateRow[] = [
     file: `${A}/context/spellOutcomeLines.ts`,
     symbol: "REFLECT_CHAIN_GAP_MS",
     mod: spellOutcomeLines,
+  },
+  // F20 D6: the fallback window, only without a reflected copy's aura
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REFLECT_DAMAGE_WINDOW_S",
+    mod: spellOutcomeLines,
+  },
+  // F20 wide residual: the 5 % floor's max-HP reading
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "maxHpNear",
+    mod: spellOutcomeLines,
+  },
+  // F20 D9 / D13: what one trinket press removed; the [DEATH] trinket tag
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "disarmsRemovedByPress",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "breakableCcBeforeDeath",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "deathCutCcBeforeDeath",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "DEATH_CUT_CC_TAG_RE_SRC",
+    mod: ccTrinketAnalysis,
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
@@ -3827,6 +4021,25 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/ccTargetState.ts`,
     symbol: "pvpTrinketReadyAtSecond",
     mod: ccTargetState,
+  },
+  // F20 immunity residual: one target-blocker reading for the sampler and
+  // the healer-offense lines
+  {
+    file: `${A}/utils/ccTargetState.ts`,
+    symbol: "ccTargetBlockerIntervals",
+    mod: ccTargetState,
+  },
+  // fact6 D8 (F20): the immunity form; a control suggestion inside a
+  // printed full immunity
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "auraIsImmunityForm",
+    mod: combatStates,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcSuggestionInsideImmunity",
+    mod: promptQualityCheck,
   },
   {
     file: `${A}/context/ccUse.ts`,
@@ -3902,6 +4115,12 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkJukedKickNotAfterInterrupt",
+    mod: promptQualityCheck,
+  },
+  // fact6 D3: the owner's "hit nothing" kick beside its own interrupt line
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkOwnKickNotContradictedByInterrupt",
     mod: promptQualityCheck,
   },
   // 2026-10-11 (FT I11): a cancel is a stop inside the round with nothing

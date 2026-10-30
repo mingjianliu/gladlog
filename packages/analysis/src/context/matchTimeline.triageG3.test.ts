@@ -217,6 +217,89 @@ describe("F-E25a — a non-CC press into an immunity is tagged", () => {
   });
 });
 
+describe("fact6 D14 (F20) — a hostile press whose line names nobody is asked on its own cast row's target", () => {
+  const DEATHMARK = "360194";
+  const rogue = (o: Partial<ICombatUnit>) =>
+    mkUnit(MATE[0], MATE[1], {
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Assassination,
+      ...o,
+    });
+  const run = (mate: ICombatUnit) => {
+    const owner = mkUnit(ME[0], ME[1]);
+    return buildMatchTimeline(
+      params(owner, [hostile(ENEMY), hostile(OTHER)], {
+        friends: [owner, mate],
+        teammateCDs: [
+          {
+            player: mate,
+            spec: "Assassination Rogue",
+            // an offensive cooldown: the ledger keeps no target for it
+            cds: [ledger(DEATHMARK, "Deathmark", "Offensive", 30)] as never,
+          },
+        ],
+      }),
+    );
+  };
+  const castRow = (dest?: [string, string]) =>
+    ev(
+      LogEvent.SPELL_CAST_SUCCESS,
+      DEATHMARK,
+      30_000,
+      MATE,
+      dest ?? ["0000000000000000", "nil"],
+    );
+
+  it("2b3fba97-r0 2:27: Deathmark refused IMMUNE on the enemy it was cast at is tagged", () => {
+    const t = run(
+      rogue({
+        spellCastEvents: [castRow(ENEMY)] as never,
+        missesOut: [miss(DEATHMARK, 30_004, MATE, ENEMY)] as never,
+      }),
+    );
+    expect(lineWith(t, "Deathmark")).toContain("[TEAM] [CD]");
+    expect(lineWith(t, "Deathmark")).toContain("[IMMUNE]");
+  });
+
+  it("an IMMUNE on another enemy is not this press's (only the aimed unit counts)", () => {
+    const t = run(
+      rogue({
+        spellCastEvents: [castRow(ENEMY)] as never,
+        missesOut: [miss(DEATHMARK, 30_004, MATE, OTHER)] as never,
+      }),
+    );
+    expect(lineWith(t, "Deathmark")).not.toContain("[IMMUNE");
+  });
+
+  it("a press with no aimed dest says nothing (round-1 idx 34, Summon Darkglare)", () => {
+    const t = run(
+      rogue({
+        spellCastEvents: [castRow()] as never,
+        missesOut: [miss(DEATHMARK, 30_004, MATE, ENEMY)] as never,
+      }),
+    );
+    expect(lineWith(t, "Deathmark")).not.toContain("[IMMUNE");
+  });
+
+  it("a later DoT tick's IMMUNE is not the press going into an immunity", () => {
+    const tick = {
+      ...miss(DEATHMARK, 31_000, MATE, ENEMY),
+      logLine: {
+        event: LogEvent.SPELL_PERIODIC_MISSED,
+        timestamp: 31_000,
+        parameters: [],
+      },
+    };
+    const t = run(
+      rogue({
+        spellCastEvents: [castRow(ENEMY)] as never,
+        missesOut: [tick] as never,
+      }),
+    );
+    expect(lineWith(t, "Deathmark")).not.toContain("[IMMUNE");
+  });
+});
+
 describe("F-TM1 / F-T1 — teammate lines", () => {
   it("a teammate's CC that MISSed says so (95127ab4 Maim; the MISS is logged under the stun 203123)", () => {
     const owner = mkUnit(ME[0], ME[1]);
@@ -554,6 +637,114 @@ describe("FT-T14 — an un-aimed area control that hit no enemy player says so",
     expect(
       lineWith(render({}, [hostile(ENEMY), hostile(OTHER)], cdSw), "Shockwave"),
     ).toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
+  });
+
+  it("fact6 D4/D5 (a400c9d8 0:38): Dragon's Breath 的伤害打到了 disorient DR 免疫的玩家、没光环没 miss → 说打到了谁、DR 免疫", () => {
+    const fear = (at: number) => ({
+      atSeconds: at,
+      durationSeconds: 2,
+      spellId: "5782",
+      spellName: "Fear",
+      casterName: MATE[1],
+      casterSpec: "Affliction Warlock",
+      drInfo: { category: "Disorient", level: "100%", sequenceIndex: 0 },
+    });
+    // the DR walk reads the target's own aura history since F20 dr
+    // (`buildCcCategoryHistory`), not the credited chains: two Fear auras
+    // (118699; 5782 is the cast) logged
+    const fearAura = (event: LogEvent, ms: number) =>
+      ev(event, "118699", ms, MATE, ENEMY, { auraType: "DEBUFF" });
+    const breathed = hostile(ENEMY, {
+      damageIn: [
+        ev(LogEvent.SPELL_DAMAGE, DRAGONS_BREATH, 69_600, ME, ENEMY, {
+          amount: -20_000,
+        }),
+      ] as never,
+      auraEvents: [
+        fearAura(LogEvent.SPELL_AURA_APPLIED, 62_000),
+        fearAura(LogEvent.SPELL_AURA_REMOVED, 64_000),
+        fearAura(LogEvent.SPELL_AURA_APPLIED, 65_000),
+        fearAura(LogEvent.SPELL_AURA_REMOVED, 66_000),
+      ] as never,
+    });
+    const t = buildMatchTimeline(
+      params(
+        mkUnit(ME[0], ME[1], {
+          spellCastEvents: [
+            ev(LogEvent.SPELL_CAST_SUCCESS, DRAGONS_BREATH, 69_537, ME, [
+              "",
+              "",
+            ]),
+          ] as never,
+        }),
+        [breathed, hostile(OTHER)],
+        {
+          ownerCDs: [
+            {
+              ...ledger(DRAGONS_BREATH, "Dragon's Breath", "CC", 30),
+              casts: [{ timeSeconds: 69.537 }],
+            },
+          ] as never,
+          outgoingCCChains: [
+            {
+              targetName: ENEMY[1],
+              targetSpec: "Havoc Demon Hunter",
+              applications: [fear(62), fear(65)],
+            },
+          ] as never,
+        },
+      ),
+    );
+    const line = lineWith(t, "Dragon's Breath");
+    expect(line).not.toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
+    expect(line).toMatch(
+      /\[no CC aura logged — hit [^\];]+; DR: Disorient Immune\]/,
+    );
+    // no DR history → the hit list alone
+    const bare = lineWith(
+      render(
+        {},
+        [{ ...breathed, auraEvents: [] }, hostile(OTHER)],
+        ledger(DRAGONS_BREATH, "Dragon's Breath", "CC", 30),
+      ),
+      "Dragon's Breath",
+    );
+    expect(bare).toMatch(/\[no CC aura logged — hit [^\];]+\]/);
+    expect(bare).not.toContain("DR:");
+  });
+
+  it("fact6 (7eba4054 1:28): Capacitor Totem 的 IMMUNE 记在图腾名下 —— 碰到了玩家,不是 [hit no enemy player]", () => {
+    const TOTEM: [string, string] = ["Creature-0-1-1-1-61245-00000000AB", "T"];
+    const immune = hostile(OTHER, {
+      missesIn: [miss("118905", 69_537 + 2_010, TOTEM, OTHER)] as never,
+    });
+    const t = buildMatchTimeline(
+      params(
+        mkUnit(ME[0], ME[1], {
+          spellCastEvents: [
+            ev(LogEvent.SPELL_CAST_SUCCESS, "192058", 69_537, ME, ["", ""]),
+          ] as never,
+        }),
+        [hostile(ENEMY), immune],
+        {
+          ownerCDs: [
+            {
+              ...ledger("192058", "Capacitor Totem", "CC", 30),
+              casts: [{ timeSeconds: 69.537 }],
+            },
+          ] as never,
+          allUnits: [
+            mkUnit(TOTEM[0], TOTEM[1], {
+              ownerId: ME[0],
+              type: CombatUnitType.Guardian,
+            }),
+          ] as never,
+        },
+      ),
+    );
+    const line = lineWith(t, "Capacitor Totem");
+    expect(line).not.toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
+    expect(line).toMatch(/\[no CC aura logged — hit [^\]]+\]/);
   });
 });
 

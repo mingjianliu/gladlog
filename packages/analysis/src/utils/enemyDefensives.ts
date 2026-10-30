@@ -26,6 +26,12 @@ import {
   NO_MITIGATION_IDS,
   SELF_WALL_AURA_TO_CAST_ID,
 } from "../data/mitigationData";
+import {
+  OWN_SHIELD_RULING_FAMILY_IDS,
+  ownShieldPressCastIds,
+  riderCastsOfShield,
+  riderStandsForUnloggedPress,
+} from "../data/ownShieldLinks";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdListsData, {
   ENEMY_ALLY_SAVE_IDS,
@@ -33,6 +39,7 @@ import spellIdListsData, {
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
+  ENEMY_IMMUNITY_TEAM_PROC_AURAS,
   ENEMY_ONLY_SAVE_IDS,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
@@ -64,6 +71,7 @@ import {
   type SelfDefensiveMechanism,
   selfDefensiveMechanism,
 } from "./selfDefensiveMechanism";
+import { TALENT_BEHAVIORS } from "./talentBehaviors";
 
 const ALL_SCHOOLS = 0x7f;
 
@@ -181,6 +189,11 @@ export const KW_OWN_ROTATIONAL_ABSORB_AURA_IDS: ReadonlySet<string> = new Set([
   // shield by name (corpusFactScan2 E6; 148-2-818 2:08)
   "1246768",
   "1253593",
+  // …and the rest of their DB2 class-mask family (user ruling 1, 2026-10-28):
+  // Unfolding Vision's copies 1300008 / 1300009, which go up on the priest
+  // when one of her own shields ends (fact6 D15 D16 D18: 3b2585b5 0:38.8
+  // Void Shield (Unfolding Vision) ate 83k inside `defenseless 0:41–0:50`)
+  ...OWN_SHIELD_RULING_FAMILY_IDS,
 ]);
 export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
   "147833",
@@ -205,7 +218,14 @@ export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
  * buff, Reversion's echo 367364, Darkness's pulses — b41: 22 spans whose run
  * started with no press beside it); a talent's passive absorb (Frost Shield,
  * Will of the Necropolis, Fel Armor, Soul Leech, Danger Sense) has no press
- * at all and is no shield it applied on itself.
+ * at all and is no shield it applied on itself. A talent's shield that
+ * rides a press of another spell is pressed with it (`riderCastsOfShield`,
+ * user ruling 1 2026-10-28; fact6 D21 114a4df7: Chi Cocoon 406220 with
+ * Invoke Chi-Ji at 2:33.07, 1260681 with each Enveloping Mist, 318k eaten
+ * inside `defenseless 2:02–3:02`); Divine Aegis — a heal crit's proc — is not.
+ * When the holder logged no cast of any of a rider's carrying presses that
+ * round, its application stands for the unlogged press (the Devourer's
+ * Shift → First In, Last Out).
  * corpusFactScan2 defenselessSaveUp ownAbsorb (2026-10-22): 134 kill windows
  * / [VULNERABLE] spans ran over a pressed own shield that ate hits — first
  * shield PW:S 1246768 79, Holy Bulwark 21, Blazing Barrier 18, Prismatic
@@ -221,7 +241,8 @@ export const OWN_SHIELD_PRESS_LOOKBACK_MS = 60_000;
  * pressed absorb shield: the whole run for ruling (1)'s ids; for any other
  * DB2 absorb the log shows absorbing as the unit's own shield, the run ∩
  * [press, press + `OWN_SHIELD_PRESS_LOOKBACK_MS`] for each own press of it
- * (its id, a cast it is the effect of, or one of its name) — the scan's own
+ * (`ownShieldPressCastIds`: its id, a cast it is the effect of, a press that
+ * carries it; or one of its name) — the scan's own
  * per-absorb-row reading, so a run kept up by REFRESH far past its press
  * (b42: Holy Bulwark 432607 6:33–6:43, Reversion's echo, Darkness) stops
  * counting where the scan stops. [] when none.
@@ -242,7 +263,7 @@ export function ownPressedShieldSpansMs(
   )
     return [];
   const name = getEnglishSpellName(spellId, "");
-  const castIds = new Set([spellId, ...castsOfEffectAura(spellId)]);
+  const castIds = ownShieldPressCastIds(spellId);
   const out: Array<{ fromMs: number; toMs: number }> = [];
   for (const c of holder.spellCastEvents ?? []) {
     if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !c.spellId) continue;
@@ -260,6 +281,28 @@ export function ownPressedShieldSpansMs(
     );
     if (fromMs < toMs) out.push({ fromMs, toMs });
   }
+  // A rider whose holder logged no cast of any of its carrying presses this
+  // round: the log cannot show the press, so the rider's own application
+  // stands for it — the table's own denominator (the Devourer's Shift puts
+  // First In, Last Out up and writes no cast row; codex 20-F20-12 P2,
+  // 20c23c12 r1: FILO 2:14.4–2:16.3 ate 49k inside `defenseless 2:02–2:19`).
+  // A passive absorb is no rider and never gets here; nor does a rider whose
+  // own id is a logged press (Ice Barrier: `riderStandsForUnloggedPress`).
+  const carriers = riderCastsOfShield(spellId);
+  if (
+    out.length === 0 &&
+    riderStandsForUnloggedPress(spellId) &&
+    !(holder.spellCastEvents ?? []).some(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!c.spellId &&
+        carriers.includes(c.spellId),
+    )
+  )
+    out.push({
+      fromMs: runStartMs,
+      toMs: Math.min(runEndMs, runStartMs + OWN_SHIELD_PRESS_LOOKBACK_MS),
+    });
   return out;
 }
 
@@ -465,7 +508,11 @@ export function immunityLastsItsAura(spellId: string): boolean {
       // the pressed Spirit of Redemption form (fact2, user ruling 5): its
       // carrier stays in sight, so it is not on the unseen-carrier list
       PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS.has(spellId) ||
-      ((immunitySchoolMask(spellId) ?? 0) & ALL_SCHOOLS) === ALL_SCHOOLS)
+      // DB2's SCHOOL_IMMUNITY on the aura itself — every school (Time Stop,
+      // Guardian of the Forgotten Queen) or some (Peaceweaver 126, fact6
+      // D17: which schools it covers is `limitedImmunitySchoolMask`'s, as
+      // for Blessing of Spellwarding's table row)
+      (immunitySchoolMask(spellId) ?? 0) !== 0)
   );
 }
 
@@ -776,6 +823,9 @@ export function schoolLimitedImmunityNames(): ReadonlySet<string> {
       const name = getEnglishSpellName(id, "");
       if (name) out.add(name);
     }
+  // …and the immunity-kind saves, by the name their line prints (fact6 D17)
+  for (const [id, name] of IMMUNITY_SAVE_AURA_NAMES)
+    if (limitedImmunitySchoolMask(id) !== undefined) out.add(name);
   return out;
 }
 
@@ -908,15 +958,23 @@ export function ownWallLineNames(): ReadonlySet<string> {
 
 /** A school-limited IMMUNITY's mask: a pct-100 `MITIGATION_TABLE` row that
  * does not cover every school (Blessing of Protection 0x1, Spellwarding and
- * Cloak of Shadows 0x7e). KILL ATTEMPTS calls it a full immunity only when
- * the team's damage was mostly in those schools (ruling A30). Undefined = a
- * full immunity, an immunity-kind save, or no immunity at all. */
+ * Cloak of Shadows 0x7e), or an immunity-kind save (`IMMUNITY_SAVE_AURA_NAMES`,
+ * no table row) whose DB2 SCHOOL_IMMUNITY covers only some (Peaceweaver
+ * 353319, 126 — fact6 D17). KILL ATTEMPTS calls it a full immunity only when
+ * the team's damage was mostly in those schools (ruling A30), and the
+ * `[ENEMY DEF]` label names them (`immunitySchoolWords`). Undefined = a full
+ * immunity, an immunity-kind save with no partial DB2 mask, or no immunity
+ * at all. */
 export function limitedImmunitySchoolMask(spellId: string): number | undefined {
   const row = MITIGATION_TABLE[spellId];
-  if (!row || row.pct < 100) return undefined;
-  return (row.schoolMask & ALL_SCHOOLS) === ALL_SCHOOLS
-    ? undefined
-    : row.schoolMask;
+  const mask =
+    row && row.pct >= 100
+      ? row.schoolMask
+      : !row && IMMUNITY_SAVE_AURA_NAMES.has(spellId)
+        ? immunitySchoolMask(spellId)
+        : undefined;
+  if (mask === undefined || mask === 0) return undefined;
+  return (mask & ALL_SCHOOLS) === ALL_SCHOOLS ? undefined : mask;
 }
 
 /** F15 / fact1215 C2 (2026-10-17): the words a school-limited immunity's
@@ -1957,7 +2015,18 @@ export function enemyDefensiveEvents(
       (ms) => Math.round(ms - combat.startTime) === Math.round(iv.fromS * 1000),
     );
   for (const iv of intervalsOf(enemy)) {
-    if (!isIntervalFrom(iv, enemy)) continue;
+    // fact6 D17 (F20 ruling 3): a teammate's proc immunity (Peaceweaver) is
+    // each carrier's own line — its source is the monk on the carrier's team
+    // — and its press is the source's trigger cast (Revival / Restoral)
+    const teamProcTriggers = ENEMY_IMMUNITY_TEAM_PROC_AURAS.has(iv.spellId)
+      ? (TALENT_BEHAVIORS.find((b) => b.buffSpellId === iv.spellId)
+          ?.triggerSpellIds ?? [])
+      : undefined;
+    if (
+      !isIntervalFrom(iv, enemy) &&
+      !(teamProcTriggers && enemies.some((e) => isIntervalFrom(iv, e)))
+    )
+      continue;
     const immune = isImmunitySaveAura(iv.spellId);
     const tableId = wallTableIdOfAura(iv.spellId);
     if (!immune && !MITIGATION_AURA_IDS.has(tableId)) continue;
@@ -1970,6 +2039,9 @@ export function enemyDefensiveEvents(
       ...castsOfEffectAura(iv.spellId)
         .filter((id) => id !== tableId && id !== iv.spellId)
         .flatMap((id) => castSecondsOf(enemy.name, id)),
+      ...(teamProcTriggers ?? []).flatMap((id) =>
+        castSecondsOf(iv.srcUnitName, id),
+      ),
     ]
       // the cast line can also be logged a few ms AFTER its aura (review of
       // F-E11, 2026-10-03: aura 10.000 s, SUCCESS 10.020 s); the nearest

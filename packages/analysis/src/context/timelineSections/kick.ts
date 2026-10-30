@@ -29,6 +29,7 @@ import {
   jukedByStoppedChannelText,
   kickMissTag,
 } from "../../utils/kickAudit";
+import { petCommands } from "../../utils/petCommands";
 import { fmtTime } from "../../utils/renderGrid";
 import {
   auraBlocksMechanic,
@@ -272,15 +273,35 @@ export function emitKickEntries(
         (a.logLine.lineIndex ?? 0) > (m.logLine.lineIndex ?? 0),
     );
   const seenImmuneKicks: Array<{ key: string; ms: number }> = [];
+  const commandsOf = new Map<string, ReturnType<typeof petCommands>>();
   for (const friend of friends) {
     for (const m of friend.missesIn ?? []) {
       if (m.missType !== "IMMUNE" || !m.spellId) continue;
       if (!kickKitIds.has(m.spellId)) continue;
-      if (!enemyKickerUnit(m.srcUnitName, m.srcUnitId)) continue;
+      const kickerPlayer = enemyKickerUnit(m.srcUnitName, m.srcUnitId);
+      if (!kickerPlayer) continue;
       const atSeconds = (m.timestamp - matchStartMs) / 1000;
       if (atSeconds < 0) continue;
+      // fact6 D30's reading for kicks: the owner's command (Command Demon:
+      // Spell Lock 119910) is the pet's kick — the Felhunter's own IMMUNE row
+      // states it; a command no summon row carried out prints once, as the
+      // pet's (`petCommands`)
+      let kicker = { name: m.srcUnitName, id: m.srcUnitId };
+      if (kickerPlayer.id === m.srcUnitId) {
+        let cmd = commandsOf.get(kickerPlayer.id);
+        if (!cmd) {
+          cmd = petCommands(kickerPlayer, { units: _allUnits });
+          commandsOf.set(kickerPlayer.id, cmd);
+        }
+        const name = getEnglishSpellName(m.spellId, m.spellName ?? "");
+        if (cmd.carriedOutBy(m.timestamp, name)) continue;
+        if (cmd.isCommandRow(m.spellId, m.timestamp, IMMUNE_KICK_DEDUPE_MS)) {
+          const pet = cmd.commandPet(name);
+          if (pet) kicker = { name: pet.name, id: pet.id };
+        }
+      }
       // one kick, one line: Skull Bash logs its two ids 1 ms apart
-      const key = `${m.srcUnitId}|${friend.id}|${kickCastSpellId(m.spellId)}`;
+      const key = `${kicker.id}|${friend.id}|${kickCastSpellId(m.spellId)}`;
       if (
         seenImmuneKicks.some(
           (s) =>
@@ -309,7 +330,7 @@ export function emitKickEntries(
       ].join(" + ");
       addEntry(
         atSeconds,
-        `${fmtTime(atSeconds)}  [KICK]   ${resolveKicker(m.srcUnitName, m.srcUnitId)}'s ${getEnglishSpellName(
+        `${fmtTime(atSeconds)}  [KICK]   ${resolveKicker(kicker.name, kicker.id)}'s ${getEnglishSpellName(
           m.spellId,
           m.spellName ?? "interrupt",
         )} on ${pid(friend.name)} missed — IMMUNE${why ? ` (${why})` : ""}`,

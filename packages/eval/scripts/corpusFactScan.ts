@@ -75,9 +75,10 @@
  *  - `reflectReturn` — every REFLECT miss row (spell S, caster C, reflector
  *    R), rows of the same S / C / R within 3 s folded into one reflect. What
  *    came back: damage (landed + absorbed) on C under S (matched by English
- *    name: one spell logs its cast and its hit under two ids) — from R, R's
- *    pet or C itself (the log often writes the reflected hit C → C) within
- *    [−0.5 s, +3 s] of the reflect, or a periodic row of an S aura on C
+ *    name: one spell logs its cast and its hit under two ids) — from R or
+ *    R's pet within [−0.5 s, +3 s] of the reflect, from C itself (the log
+ *    often writes the reflected hit C → C) within the product's 20 s
+ *    (`REFLECT_DAMAGE_WINDOW_S`), or a periodic row of an S aura on C
  *    applied at or after it (a reflected DoT is logged as C's own aura on
  *    itself, ticking C → C; a same-ms REMOVED + APPLIED continues it); R's
  *    own earlier DoT of S on C is excluded (round 3 D15 / D40) — plus rows
@@ -91,7 +92,14 @@
  *    differs from the recomputed figure by > max(2k, 10 %); (b)
  *    `nonDamaging`: such a line for an S that deals no damage (Spellsteal, a
  *    control — round 3 D6 / D25); (c) `noLine`: a damaging S whose return is
- *    ≥ 5 % of C's max HP (the line's own floor) with no line.
+ *    ≥ 5 % of C's max HP (the line's own floor, read by the product's
+ *    `maxHpNear`) with no line. A row of S counts for ONE reflect, the
+ *    latest it qualifies for; a copy's periodic row counts only while a run
+ *    of ITS OWN source is up, and a later reflect whose window holds a
+ *    REFRESH / dose / re-APPLIED of that run owns the run's rest (F20 wide
+ *    residual). (d) `unsupportedLine`: a `[REFLECTED]` line no counted
+ *    REFLECT row of that caster, spell and reflector explains — a REFLECT
+ *    row aimed at its own caster is not counted (`isCountedReflectRow`).
  *
  *   npx tsx packages/eval/scripts/corpusFactScan.ts <captureDir> [--examples N]
  *     [--archive-dir <dir>] [--json <violations.json>]
@@ -102,8 +110,12 @@ import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
 import {
+  isCountedReflectRow,
+  maxHpNear,
   REFLECT_CHAIN_GAP_MS,
+  REFLECT_DAMAGE_WINDOW_S,
   REFLECT_DIRECT_RETURN_MS,
+  REFLECT_MIN_DAMAGE_PCT,
   REFLECT_OWN_ID_LEAD_MS,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
@@ -186,6 +198,7 @@ const tsOf = (a: any): number => a.logLine?.timestamp ?? a.timestamp;
 const APPLIED = LogEvent.SPELL_AURA_APPLIED as string;
 const REMOVED = LogEvent.SPELL_AURA_REMOVED as string;
 const REFRESH = LogEvent.SPELL_AURA_REFRESH as string;
+const DOSE = LogEvent.SPELL_AURA_APPLIED_DOSE as string;
 const SUCCESS = LogEvent.SPELL_CAST_SUCCESS as string;
 const PERIODIC = LogEvent.SPELL_PERIODIC_DAMAGE as string;
 
@@ -574,8 +587,7 @@ for (const f of files) {
             upUntil = ownEnd
               ? Infinity
               : tsOf(b) + hiddenAuraLifeMs(b.spellId, u, tsOf(b));
-          }
-          else if (ev(b) === REMOVED) {
+          } else if (ev(b) === REMOVED) {
             upUntil = -Infinity;
             if (ta - tsOf(b) <= 50) reapply = true;
           }
@@ -1011,7 +1023,7 @@ for (const f of files) {
     const cp = pidOf.get(caster.name);
     if (!cp) continue;
     const reflects = ((caster.missesOut ?? []) as any[])
-      .filter((m) => m.missType === "REFLECT" && m.spellId)
+      .filter(isCountedReflectRow)
       .sort((x, y) => tsOf(x) - tsOf(y));
     const groups: Array<{
       first: any;
@@ -1034,6 +1046,16 @@ for (const f of files) {
       } else groups.push({ first: m, last: tsOf(m), rows: [tsOf(m)] });
     }
     const myGroups: IReflectGroup[] = [];
+    /** per reflect: its spell test and its row test — each row of S on C is
+     * the return of the LATEST reflect it counts for (the product's
+     * `owning`), never of two (F20 wide residual: a re-reflect's first 3 s
+     * were summed into both lines) */
+    const claims: Array<{
+      t0: number;
+      rg: IReflectGroup;
+      isS: (id: string | undefined, fallback?: string) => boolean;
+      counts: (src: string, ts: number, periodic: boolean | null) => boolean;
+    }> = [];
     for (const g of groups) {
       const t0 = tsOf(g.first);
       if (!inRound(t0)) continue;
@@ -1057,8 +1079,12 @@ for (const f of files) {
       // S auras on C: [applied, removed, source]. A reflected DoT is logged
       // as the CASTER's own aura on itself (c5b55e06 r2 0:17: Flame Shock
       // 188389 APPLIED Jarona → Jarona 5 ms after the REFLECT row, its ticks
-      // Jarona → Jarona); R's own earlier DoT of S is R's
-      const sAuras: Array<[number, number, string]> = [];
+      // Jarona → Jarona); R's own earlier DoT of S is R's. The 4th field:
+      // the run's APPLIED / REFRESH / dose rows — a later reflect of S that
+      // refreshes the caster's own copy stands behind the rest of the run (F20 wide
+      // residual, d6d8a412 r1 2:07 / 2:17: one Shadow Word: Pain copy
+      // refreshed by a second reflect)
+      const sAuras: Array<[number, number, string, number[]]> = [];
       const cRows = auraIn(caster);
       for (let k = 0; k < cRows.length; k++) {
         const a = cRows[k];
@@ -1077,39 +1103,75 @@ for (const f of files) {
         const prev = sAuras.find(
           ([, to, src]) => to === tsOf(a) && src === a.srcUnitId,
         );
-        if (prev) prev[1] = rmv ? tsOf(rmv) : Infinity;
-        else sAuras.push([tsOf(a), rmv ? tsOf(rmv) : Infinity, a.srcUnitId]);
+        if (prev) {
+          prev[1] = rmv ? tsOf(rmv) : Infinity;
+          if (a.srcUnitId === caster.id) prev[3].push(tsOf(a));
+        } else
+          sAuras.push([
+            tsOf(a),
+            rmv ? tsOf(rmv) : Infinity,
+            a.srcUnitId,
+            [tsOf(a)],
+          ]);
       }
-      const ownDot = (ts: number) =>
+      // (the caster's own copy only: the reflector's own stacks and
+      // refreshes by itself — cb7fe23f r1 0:20 Wither doses)
+      for (const run of sAuras)
+        for (const b of cRows)
+          if (
+            run[2] === caster.id &&
+            (ev(b) === REFRESH || ev(b) === DOSE) &&
+            isS(b.spellId, b.spellName) &&
+            b.srcUnitId === run[2] &&
+            tsOf(b) >= run[0] &&
+            tsOf(b) <= run[1]
+          )
+            run[3].push(tsOf(b));
+      // both keyed on the row's own source: the reflector's fresh DoT of S
+      // cast after the reflect is its own damage, not the copy's (675d1b83
+      // r1 0:11: Doomballz's Unstable Affliction on Zezaki from 0:18, summed
+      // while Zezaki's reflected copy ran — the product's `owning` reads the
+      // run of the row's source)
+      const ownDot = (ts: number, src: string) =>
         sAuras.some(
-          ([a, b, src]) =>
-            src !== caster.id &&
+          ([a, b, s]) =>
+            s === src &&
+            s !== caster.id &&
             a < t0 - REFLECT_OWN_ID_LEAD_MS &&
             ts >= a &&
             ts <= b,
         );
-      const reflectedDot = (ts: number) =>
+      const reflectedDot = (ts: number, src: string) =>
         sAuras.some(
-          ([a, b]) =>
-            a >= t0 - REFLECT_OWN_ID_LEAD_MS &&
-            a <= g.last + REFLECT_DIRECT_RETURN_MS &&
+          ([a, b, s, touches]) =>
+            s === src &&
+            touches.some(
+              (t) =>
+                t >= t0 - REFLECT_OWN_ID_LEAD_MS &&
+                t <= g.last + REFLECT_DIRECT_RETURN_MS,
+            ) &&
             ts >= a &&
             ts <= b,
         );
       /** a row of S on C from `src` at `ts` that is the reflect's return */
       const counts = (src: string, ts: number, periodic: boolean | null) => {
-        if (ts < t0 - REFLECT_OWN_ID_LEAD_MS || ts > g.last + 20_000)
-          return false;
-        if (srcs.has(src) && ownDot(ts)) return false;
-        const inDot = reflectedDot(ts);
+        if (ts < t0 - REFLECT_OWN_ID_LEAD_MS) return false;
+        if (srcs.has(src) && ownDot(ts, src)) return false;
+        const inDot = reflectedDot(ts, src);
+        // the reflected copy counts for its whole aura run; the product's
+        // fixed window only for a row no copy stands behind (F20 D6 — the
+        // scan's own `g.last + 20_000` literal agreed with the 20 s cap)
+        if (!inDot && ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000) return false;
         // the caster's own row of S on itself: a reflected DoT's ticks, or
         // the reflected hit itself logged caster → caster (111-1-621 8:15:
         // a Frostbolt row Pholipholi → Pholipholi 28 ms after the REFLECT)
-        // within [−0.5 s, +3 s]
         // (a channel's ticks carry no aura on the caster: Disintegrate
-        // 356995 C → C periodic rows 175-1-946 0:15 — inside the 3 s too)
-        if (src === caster.id)
-          return inDot || ts <= g.last + REFLECT_DIRECT_RETURN_MS;
+        // 356995 C → C periodic rows 175-1-946 0:15) — within the product's
+        // REFLECT_DAMAGE_WINDOW_S, not only 3 s: nothing but a reflect puts
+        // C's spell on C (e86fb7f6 r1 5:19: the reflected Vampiric Touch's
+        // copy REMOVED at +13.925 s and re-APPLIED 1 ms later — its ticks to
+        // +20 s are the return; the scan's 3 s dropped 23.8k of 112k)
+        if (src === caster.id) return true;
         if (!srcs.has(src)) return false;
         if (periodic === true) return inDot;
         // a direct hit (an absorb row carries no periodic flag: either)
@@ -1118,30 +1180,6 @@ for (const f of files) {
           (periodic === null && inDot)
         );
       };
-      let direct = 0;
-      for (const d of (caster.damageIn ?? []) as any[])
-        if (
-          isS(d.spellId, d.spellName) &&
-          counts(d.srcUnitId, tsOf(d), ev(d) === PERIODIC)
-        )
-          direct += Math.abs(d.effectiveAmount);
-      for (const a of (caster.absorbsIn ?? []) as any[])
-        if (
-          isS(a.attackSpellId, a.attackSpellName) &&
-          !DEFERRAL_SHIELDS.has(String(a.spellId)) &&
-          counts(a.attackerId, tsOf(a), null)
-        )
-          direct += Math.abs(a.absorbedAmount);
-      const acts = ((caster.advancedActions ?? []) as any[]).filter(
-        (x) => x.advancedActorId === caster.id && x.advancedActorMaxHp > 0,
-      );
-      const near = acts.reduce(
-        (best: any, x: any) =>
-          !best || Math.abs(tsOf(x) - t0) < Math.abs(tsOf(best) - t0)
-            ? x
-            : best,
-        undefined,
-      );
       const rg: IReflectGroup = {
         where,
         archive,
@@ -1154,12 +1192,15 @@ for (const f of files) {
         reflectorName: reflector.name,
         spellId: S,
         spellName: sName,
-        direct,
-        maxHp: near?.advancedActorMaxHp ?? 0,
+        direct: 0, // summed below, once every reflect's test is built
+        // the product's own reading (`maxHpNear`): a hand pick of the
+        // nearest row took the first of a ms's rows, the product the last
+        maxHp: maxHpNear(caster, t0) ?? 0,
         own: 0,
       };
       g.g = rg;
       myGroups.push(rg);
+      claims.push({ t0, rg, isS, counts });
       const sec = Math.floor((t0 - start) / 1000);
       const line = reflectLines.find(
         (x) =>
@@ -1174,6 +1215,44 @@ for (const f of files) {
         rg.line = { text: line.text, back: line.back };
       }
       reflectGroups.push(rg);
+    }
+    const claimant = (
+      id: string | undefined,
+      name: string | undefined,
+      src: string,
+      ts: number,
+      periodic: boolean | null,
+    ) => {
+      let best: (typeof claims)[number] | undefined;
+      for (const c of claims)
+        if (
+          (!best || c.t0 > best.t0) &&
+          c.isS(id, name) &&
+          c.counts(src, ts, periodic)
+        )
+          best = c;
+      return best?.rg;
+    };
+    for (const d of (caster.damageIn ?? []) as any[]) {
+      const rg = claimant(
+        d.spellId,
+        d.spellName,
+        d.srcUnitId,
+        tsOf(d),
+        ev(d) === PERIODIC,
+      );
+      if (rg) rg.direct += Math.abs(d.effectiveAmount);
+    }
+    for (const a of (caster.absorbsIn ?? []) as any[]) {
+      if (DEFERRAL_SHIELDS.has(String(a.spellId))) continue;
+      const rg = claimant(
+        a.attackSpellId,
+        a.attackSpellName,
+        a.attackerId,
+        tsOf(a),
+        null,
+      );
+      if (rg) rg.direct += Math.abs(a.absorbedAmount);
     }
     // the reflector's own-id rows on C → candidate reflects (nearest damaging
     // one decided at the end)
@@ -1219,9 +1298,21 @@ for (const f of files) {
     void myGroups;
   }
   // a [REFLECTED] line no reflect row explains
+  // — a violation, not just a count (codex F20-23: a "reflected by" the
+  // caster itself, left unmatched once self rows stopped counting, read 0)
+  // A pet's reflected cast (`…'s pet's Seduction reflected by …`) is out of
+  // this matcher's reach (it walks roster casters only; codex F20-24) — 0
+  // such lines on the 605 or the wide captures, so it is left unchecked
   for (const x of reflectLines)
-    if (!x.used) {
-      bump("reflectReturn:lineUnmatched");
+    if (!x.used && x.spell.startsWith("pet's ")) bump("reflectPetLineUnchecked");
+    else if (!x.used) {
+      bump("reflectReturn");
+      violate(
+        "reflectReturn",
+        "unsupportedLine",
+        start + x.sec * 1000,
+        `no counted REFLECT row of ${x.cp}'s ${x.spell} by ${x.rp} near it: ${x.text}`,
+      );
     }
 }
 
@@ -1397,7 +1488,11 @@ for (const g of reflectGroups) {
         ...base,
         detail: `${who}: printed ${g.line.back}k, recomputed ${(total / 1000).toFixed(1)}k (direct ${(g.direct / 1000).toFixed(1)}k + own-id ${(g.own / 1000).toFixed(1)}k)`,
       });
-  } else if (damaging && g.maxHp > 0 && total >= 0.05 * g.maxHp) {
+  } else if (
+    damaging &&
+    g.maxHp > 0 &&
+    (total / g.maxHp) * 100 >= REFLECT_MIN_DAMAGE_PCT
+  ) {
     bump("reflectReturn");
     if (!g.line)
       violations.push({

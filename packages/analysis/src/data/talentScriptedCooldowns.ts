@@ -593,7 +593,11 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // Collapsing Star resets its cooldown" (The Hunt) — dummy rows only. All 4
   // impossible Hunt recasts (44.7 / 39.0 / 41.2 / 55.2 s on 90) have a
   // Collapsing Star 1221150 cast between; 26 other gaps in 12 files are all
-  // ≥ 90 s. Predator's Wake 1259431 has its own cooldown — not a target.
+  // ≥ 90 s. Predator's Wake 1259431 shares The Hunt's cooldown (DB2
+  // SpellCategories Category 2427 on 1246167 and 1259431, both 90 s; the
+  // aura-332 button swap under Demonsurge — 1263fff6 recasts it 7.4 s apart
+  // across a Collapsing Star): it is a press of 1246167 through
+  // `SPELL_CANONICAL_IDS` (F20 D23), so this one target covers it.
   "452415": {
     targets: ["1246167"],
     triggerCastIds: ["1221150"],

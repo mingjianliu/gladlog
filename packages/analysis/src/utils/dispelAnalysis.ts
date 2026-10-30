@@ -7,6 +7,10 @@ import {
 } from "../data/dispelVerdicts";
 import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "../data/occupancyAuras";
 import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
+import {
+  PURGE_REMOVALS_PER_TARGET,
+  PURGE_TOOL_NAMES,
+} from "../data/purgeRemovalsGenerated";
 import { racialName } from "../data/racialAbilities";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import {
@@ -62,8 +66,8 @@ import {
   ccRecastBetween,
   ccRecastSplitsResend,
   DR_CATEGORY_MAP,
+  drLevelAtLanding,
   getDRCategory,
-  getDRLevelAtTime,
   matchPendingCcKey,
   PATCH_121_GOLIVE_EPOCH_MS,
   reAppliedIsSameApplication,
@@ -968,13 +972,54 @@ export function purgeableBuffIntervals(
     const type = getAuraType(a);
     if (type === "DEBUFF") return false;
     if (type === null && !sameSideIds.has(a.srcUnitId)) return false;
-    return (
-      getDispelType(a.spellId) === "Magic" &&
-      !UNPURGEABLE_MAGIC_AURAS.has(a.spellId)
-    );
+    return isPurgeableMagicBuff(a.spellId);
   });
   return buildAuraIntervals({ ...unit, auraEvents }, combat);
 }
+
+/** B13e: an aura that counts as one of the `N purgeable buffs` — official
+ * dispel type Magic and not `UNPURGEABLE_MAGIC_AURAS`. One predicate for N
+ * (`purgeableBuffIntervals`, which removals carry `purgeableOnTarget`) and
+ * for k (`purgePressRemovalCount`: an Enrage a Tranquilizing Shot took with
+ * the Magic buff is not one of them — F20 wide residual, "2 of 1"). */
+export function isPurgeableMagicBuff(spellId: string): boolean {
+  return (
+    getDispelType(spellId) === "Magic" && !UNPURGEABLE_MAGIC_AURAS.has(spellId)
+  );
+}
+
+/** How many Magic buffs one press removes from one target, in words, from
+ * DB2 Effect 38 base points (`PURGE_REMOVALS_PER_TARGET`), for the purge
+ * legend and the missed-purge menu definition (one wording, two readers).
+ * F20 D31 (2026-10-28): Greater Purge 378773 and Fire Breath 357209
+ * (Scouring Flame) remove 2; the B13e model "a purge removes ONE" was
+ * wrong for both. Reads `1 for most purges, 2 for Greater Purge and Fire
+ * Breath`. A count of 99+
+ * is a "remove all" (Mass Dispel, the friendly cleanses) — not a purge a
+ * player aims at one buff with — and is left out. */
+export const PURGE_PRESS_REMOVALS_TEXT: string = (() => {
+  const byCount = new Map<number, string[]>();
+  for (const [id, n] of Object.entries(PURGE_REMOVALS_PER_TARGET)) {
+    if (n < 2 || n >= 99) continue;
+    // the generated official name: the spell-name table loads in the
+    // background, so at module load a name lookup falls back to the id
+    const name = PURGE_TOOL_NAMES[id];
+    if (!name) continue;
+    const names = byCount.get(n) ?? [];
+    if (!names.includes(name)) names.push(name);
+    byCount.set(n, names);
+  }
+  const join = (xs: string[]) =>
+    xs.length <= 1
+      ? (xs[0] ?? "")
+      : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  return [
+    "1 for most purges",
+    ...[...byCount.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([n, names]) => `${n} for ${join(names)}`),
+  ].join(", ");
+})();
 
 /** `4 purgeable buffs` — the count's one wording (the timeline lines and
  * their legend); "" for an absent count. */
@@ -2600,7 +2645,7 @@ export const DR_CHAIN_LOOKAHEAD_S = 10;
 
 /**
  * Value gate d: at applyTs the target's DR category for this CC was **fully
- * fresh** (getDRLevelAtTime is the single source; do not write a second copy
+ * fresh** (`drLevelAtLanding`, the one DR walk; do not write a second copy
  * of the chain-level math), AND within DR_CHAIN_LOOKAHEAD_S after the window
  * ended the enemy applied another CC of the same category. When both hold,
  * dispelling this window could have traded into a full-duration chain, so the
@@ -2609,8 +2654,9 @@ export const DR_CHAIN_LOOKAHEAD_S = 10;
 /**
  * DR level of THIS CC application (Full / 50% / Immune) — the 裁定册's
  * `afterDR` axis. Same single-source machinery as `computeDrChainRisk` right
- * below: buildCcCategoryHistory + getDRLevelAtTime, never a second copy of
- * the chain math. Root-category ids fall back to self-DR (`spell:<id>`)
+ * below: buildCcCategoryHistory (every DR source — fact6 F20: a control
+ * reflected back onto the target and a pet's count) + `drLevelAtLanding`,
+ * never a second copy of the chain math. Root-category ids fall back to self-DR (`spell:<id>`)
  * because of #24's ruling, but every signed root row has `afterDR: null`, so
  * the gate never consults this for them.
  */
@@ -2618,24 +2664,17 @@ function drLevelAtApply(
   target: ICombatUnit,
   ccSpellId: string,
   applyTs: number,
-  enemyIds: Set<string>,
   matchStartMs: number,
   unitById?: ReadonlyMap<string, ICombatUnit>,
 ): "Full" | "50%" | "25%" | "Immune" {
   const category = getDRCategory(ccSpellId);
-  const instances = buildCcCategoryHistory(
+  const history = buildCcCategoryHistory(
     target,
     category,
-    enemyIds,
     matchStartMs,
     unitById,
   );
-  return getDRLevelAtTime(
-    instances,
-    category,
-    (applyTs - matchStartMs) / 1000,
-    matchStartMs,
-  );
+  return drLevelAtLanding(history, { applyMs: applyTs, spellId: ccSpellId });
 }
 
 export function computeDrChainRisk(
@@ -2660,19 +2699,16 @@ export function computeDrChainRisk(
   // Single source for instance history: buildCcCategoryHistory (drAnalysis) —
   // it shares the same pairing logic ccBreakAnalysis uses for remaining-
   // duration math. Two separate copies would be a breeding ground for drift.
-  const instances = buildCcCategoryHistory(
+  const history = buildCcCategoryHistory(
     target,
     category,
-    enemyIds,
     matchStartMs,
     unitById,
   );
-  const level = getDRLevelAtTime(
-    instances,
-    category,
-    (applyTs - matchStartMs) / 1000,
-    matchStartMs,
-  );
+  const level = drLevelAtLanding(history, {
+    applyMs: applyTs,
+    spellId: ccSpellId,
+  });
   if (level !== "Full") return false;
 
   // Re-CC evidence: within the lookahead after the window ends, an enemy
@@ -3584,7 +3620,6 @@ export function reconstructDispelSummary(
                   unit,
                   spellId,
                   applyTs,
-                  enemyIds,
                   combat.startTime,
                   rosterUnitById,
                 ) !== "Full"
@@ -3746,7 +3781,6 @@ export function reconstructDispelSummary(
                 unit,
                 spellId,
                 applyTs,
-                enemyIds,
                 combat.startTime,
                 rosterUnitById,
               ) !== "Full"
@@ -4486,8 +4520,10 @@ export function reconstructDispelSummary(
     scopedMissedPurgeWindows.sort((a, b) => a.timeSeconds - b.timeSeconds);
   }
 
-  // B13e: a purge takes ONE of the purgeable buffs on its target, so every
-  // purge of ours and every missed-purge window says how many were there.
+  // B13e: a purge takes some of the purgeable buffs on its target — one, or
+  // `purgeRemovalsPerPress` (Greater Purge / Fire Breath: 2, F20 D31) — and
+  // not the ones the player picks, so every purge of ours and every
+  // missed-purge window says how many were there.
   {
     const span = { startTime: combat.startTime, endTime: combat.endTime };
     // a pet's buff on its owner's team is theirs too (Master's Call)
@@ -4507,16 +4543,13 @@ export function reconstructDispelSummary(
       }
       return purgeableBuffCountAt(ivs, atSeconds);
     };
-    const isCounted = (spellId: string) =>
-      getDispelType(spellId) === "Magic" &&
-      !UNPURGEABLE_MAGIC_AURAS.has(spellId);
     for (const p of ourPurges) {
-      if (!isCounted(p.removedSpellId)) continue;
+      if (!isPurgeableMagicBuff(p.removedSpellId)) continue;
       const n = countOn(p.targetName, p.timeSeconds);
       if (n > 0) p.purgeableOnTarget = n;
     }
     for (const w of [...missedPurgeWindows, ...scopedMissedPurgeWindows]) {
-      if (!isCounted(w.spellId)) continue;
+      if (!isPurgeableMagicBuff(w.spellId)) continue;
       const n = countOn(w.enemyName, w.timeSeconds);
       if (n > 0) w.purgeableOnTarget = n;
     }

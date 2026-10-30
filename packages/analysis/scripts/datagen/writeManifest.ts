@@ -188,6 +188,23 @@ export async function main(): Promise<void> {
           ) ?? []
         ).length,
       },
+      // F20 D23 / D31 (2026-10-28): override variants on one cooldown, and
+      // Magic buffs one purge press removes — count the rows, not every
+      // quoted id (each variant row quotes its overridden id too).
+      "overrideVariantsGenerated.ts": {
+        pairs: (
+          readFileSync(dataDir + "overrideVariantsGenerated.ts", "utf-8").match(
+            /"\d+": "\d+"/g,
+          ) ?? []
+        ).length,
+      },
+      "purgeRemovalsGenerated.ts": {
+        entries: (
+          readFileSync(dataDir + "purgeRemovalsGenerated.ts", "utf-8").match(
+            /"\d+": \d+/g,
+          ) ?? []
+        ).length,
+      },
       // GH #28 (2026-08-22): official "does this spell reach a friendly unit
       // other than the caster" flags. `reaching` is tracked next to `entries`
       // because the interesting failure is one-sided — a decode regression

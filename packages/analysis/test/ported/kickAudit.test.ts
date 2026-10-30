@@ -840,3 +840,63 @@ describe("kickAudit — the bait is the last bar before the kick (FT F12)", () =
     });
   });
 });
+
+describe("kickAudit — a kick on an enemy summon (fact6 D3)", () => {
+  // 4caab013 2:41: a Rebuke interrupted the enemy Sayaad's Seduction; the
+  // SPELL_INTERRUPT is on the pet, which the audit did not read, and the
+  // kick printed "hit nothing" beside the `[KICK] … interrupted` line.
+  const SEDUCTION = "6358";
+  const run = (petRows: Record<string, unknown>) => {
+    const kickTs = MATCH_START + 20_000;
+    const player = makeKicker(kickTs, "ep1");
+    // the log carries cast bars (one of the player's, long before the kick)
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [castStart("116", MATCH_START + 1_000, "e1")],
+    } as any);
+    const sayaad = makeUnit("ep1", {
+      name: "Sayaad",
+      ownerId: "e1",
+      ...petRows,
+    } as any);
+    const combat = {
+      ...makeCombat(),
+      units: { p1: player, e1: enemy, ep1: sayaad },
+    };
+    return { kickTs, entries: analyzeKickAudit(player, [enemy], combat) };
+  };
+
+  it("an interrupt row on the pet is a landed kick", () => {
+    const kickTs = MATCH_START + 20_000;
+    const { entries } = run({
+      actionIn: [
+        makeInterruptEvent(
+          WIND_SHEAR,
+          "Wind Shear",
+          SEDUCTION,
+          "Seduction",
+          kickTs,
+          "p1",
+          "Shaman",
+        ),
+      ],
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.result).toBe("landed");
+    expect(entries[0]!.interruptedSpellName).toBe("Seduction");
+  });
+
+  it("a pet's cast stopped just before the kick is a juke, like any target's", () => {
+    const kickTs = MATCH_START + 20_000;
+    const { entries } = run({
+      castStartEvents: [castStart(SEDUCTION, kickTs - 1_000, "ep1")],
+    });
+    expect(entries[0]!.result).toBe("juked");
+  });
+
+  it("no interrupt row and no stopped bar stays hit nothing", () => {
+    const { entries } = run({});
+    expect(entries[0]!.result).toBe("missed");
+  });
+});

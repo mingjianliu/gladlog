@@ -68,6 +68,7 @@ import { castBarOutcomesOf, completedBarMedianS } from "./castBarOutcomes";
 import {
   CAST_MISS_WINDOW_MS,
   CONTROL_FAILED_MISS_TYPES,
+  controlReachesPlayers,
   isControlCast,
   missBelongsToCast,
 } from "./castMissRows";
@@ -88,11 +89,14 @@ import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
 import {
   AOE_CC_LANDING_WINDOW_S,
+  buildCcCategoryHistory,
   ccRecastBetween,
   ccRecastSplitsResend,
   computeIncomingDR,
   drDurationFactor,
+  getDRCategory,
   IDRInfo,
+  isDrHistorySource,
   matchPendingCcKey,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
@@ -135,6 +139,7 @@ import {
 } from "./spellMechanics";
 import {
   RANGE_HITBOX_SLACK_YD,
+  spellRadiusForCaster,
   spellRangeForCaster,
   spellReachForCaster,
 } from "./spellRange";
@@ -651,8 +656,9 @@ export const GROUND_CC_SPELL_IDS = new Set<string>([
  */
 export const isGroundCc = (spellId: string): boolean =>
   GROUND_CC_FAMILY.has(spellId);
-const GROUND_CC_FAMILY: ReadonlySet<string> = (() => {
-  const out = new Set<string>(GROUND_CC_SPELL_IDS);
+/** A listed id plus its same-named casts / effect auras. */
+const groundCcFamilyOf = (ids: Iterable<string>): ReadonlySet<string> => {
+  const out = new Set<string>(ids);
   // two hops: a listed aura → its casts → their other same-named effects
   // (Freezing Trap 3355 → 187650 → 203337, the Diamond Ice trap)
   for (let hop = 0; hop < 2; hop++)
@@ -663,7 +669,24 @@ const GROUND_CC_FAMILY: ReadonlySet<string> = (() => {
         if (effectAuraViaName(c, id)) out.add(c);
     }
   return out;
-})();
+};
+const GROUND_CC_FAMILY = groundCcFamilyOf(GROUND_CC_SPELL_IDS);
+
+/**
+ * F20 D28 follow-up (coordinator ruling 2026-10-28): ground controls that go
+ * off on their FIRST victim and are spent — a trap triggers where that
+ * victim stood, so nobody farther than radius + slack from the victim could
+ * have been caught by it. DB2 does not encode this (no
+ * SpellTargetRestrictions MaxTargets row for 3355 / 187650 / 203337); the
+ * other `GROUND_CC_SPELL_IDS` hit every unit in the area, with no logged
+ * centre.
+ */
+export const SINGLE_VICTIM_GROUND_CC_IDS = new Set<string>([
+  "3355", // Freezing Trap (Hunter)
+]);
+const SINGLE_VICTIM_GROUND_CC_FAMILY = groundCcFamilyOf(
+  SINGLE_VICTIM_GROUND_CC_IDS,
+);
 
 // Magic-only immunities block magic-school effects but NOT physical CC. Don't credit them for a
 // physical CC (Kidney/Cheap Shot/Blind/etc.) they could not have prevented. (Phase Shift and
@@ -719,6 +742,11 @@ export const PHYSICAL_CC_IDS = new Set<string>([
 // redirects closer than 6 s into one [CC AVOIDED] line. No predicate or candidate
 // reads it; editorial, not measured.
 const GROUNDING_DEDUPE_SECONDS = 6;
+
+/** F20 D28 (default ruling 2026-10-28: "credit only within DB2 radius +
+ *  2 yd"): the slack past a ground control's radius inside which a player
+ *  who was not caught still counts as having avoided it. */
+export const GROUND_CC_AVOID_SLACK_YD = 2;
 
 /**
  * Mobility that works on its CAST TARGET, not on the caster: Blessing of
@@ -1410,6 +1438,77 @@ export function findBrokenDisarm(
   return bindBreakToWindow(breakable, castTsMs)?.d;
 }
 
+/**
+ * F20 D9: every disarm a break press removed — the one the binder names
+ * (`findBrokenDisarm`) and any other that ended at the press
+ * (`castEndedCcWindow`), minus one the log gives another cause for or that
+ * ran its full length (`ccsRemovedByPress`' rules). The `[DISARM]` tail asks
+ * this per disarm, whatever CC the same press broke: c992ce75 0:14, one
+ * Medallion ended a Shockwave and a Disarm in one ms, the CC-first
+ * `[TRINKET]` reading named only the stun and the `[DISARM]` line printed a
+ * bare `| 3s`. The binder's wider window is asked only when no CC took the
+ * press (`findBrokenCC` over `ccInstances`, the `[TRINKET]` line's order);
+ * every other disarm is the press's when it came off within
+ * `PRESS_ENDED_CC_LAG_MS` of the press instant (`pvpTrinketUses`: the
+ * Medallion's buff row), CC or not. A Medallion logs its removals just
+ * before its buff row: 605 s1/53-1 0:19 Dismantle 8 ms, Crippling Poison
+ * 7 ms, Howl of Terror 0 ms before it; s0/4-6 2:23 Sticky Tar Bomb 1 ms;
+ * s0/53-1 6:03 Leg Sweep 3 ms, Grapple Weapon 1 ms — each disarm cut far
+ * short (an earlier CC-first rule that took only the CC's own ms dropped
+ * all three tails). A disarm that came off in the bound CC's own logged ms
+ * is the press's too, however far the press instant sits (no buff row: the
+ * cast row stands in; codex 20-F20-40). Only a logged removal counts, the
+ * disarm's and the CC's: an end estimated from the official length or cut
+ * at the round's end is no removal (codex 20-F20-37 / 38).
+ */
+export function disarmsRemovedByPress(
+  instances: IRootInstance[],
+  matchStartMs: number,
+  castTsMs: number,
+  ccInstances: ICCInstance[],
+): IRootInstance[] {
+  const cc = findBrokenCC(ccInstances, matchStartMs, castTsMs);
+  // the bound CC's own logged removal: a disarm that came off in that ms went
+  // with it, even when the press instant is the cast row (no buff row logged,
+  // `pvpTrinketUses`' fallback) and sits past the lag (codex 20-F20-40)
+  const ccRemoveMs =
+    cc && !cc.stillOnAtRoundEnd && !cc.noRemoved
+      ? matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000)
+      : undefined;
+  const bound = cc
+    ? undefined
+    : findBrokenDisarm(instances, matchStartMs, castTsMs);
+  const out = bound ? [bound] : [];
+  for (const d of instances) {
+    if (d === bound) continue;
+    const applyMs = matchStartMs + Math.round(d.atSeconds * 1000);
+    const removeMs =
+      matchStartMs + Math.round((d.atSeconds + d.durationSeconds) * 1000);
+    if (d.endedByLoggedCause && castTsMs >= removeMs) continue;
+    const official = d.fullDurationSeconds ?? ccFullDurationSeconds(d.spellId);
+    if (
+      ranFullLength({
+        applyMs,
+        removeMs,
+        ...(d.stillOnAtRoundEnd ? { noRemoved: true } : {}),
+        ...(official !== undefined
+          ? { officialEndMs: applyMs + official * 1000 }
+          : {}),
+      })
+    )
+      continue;
+    // an end the log did not write (no REMOVED, or the round's end) is no
+    // removal a press made
+    if (d.noRemoved || d.stillOnAtRoundEnd) continue;
+    if (
+      castEndedCcWindow({ applyMs, removeMs }, castTsMs) ||
+      (removeMs === ccRemoveMs && castTsMs >= applyMs)
+    )
+      out.push(d);
+  }
+  return out;
+}
+
 /** fact5 retest r1 10299a17 / d64022ad: the root a PvP trinket press broke
  * (a Medallion removes movement impairments too) — the disarm binder over
  * the root windows, asked after the CC and the disarm ones. 10299a17 0:12:
@@ -1445,6 +1544,9 @@ export interface IRootInstance {
    * rule — F02b; a root too since A2, 2026-10-24): `durationSeconds` is
    * then landing → round end. */
   stillOnAtRoundEnd?: true;
+  /** The log has no REMOVED for it: its end is an estimate, not a removal
+   * (`ICCInstance.noRemoved`) */
+  noRemoved?: true;
   /** a root the log shows another cause ending (a dispel of it, a break —
    * `ccEndedByLoggedCause`, the CC instances' reading): no trinket press
    * after it removed it (codex 20-F18-07 #1) */
@@ -2655,6 +2757,18 @@ export interface IPlayerCCTrinketSummary {
   /** CC avoidance/mitigation/breaks. Always populated by analyzePlayerCCAndTrinket
    * (empty array when none) — part of the summary contract. */
   ccAvoidedInstances: ICCAvoidedInstance[];
+  /** Controls that are DR history on this player but none of its
+   * `ccInstances` (fact6 F20: its own control reflected back onto an enemy,
+   * any other source no window admits) — `drInfo.category` is the family,
+   * the level a placeholder. The point DR queries read
+   * `ccInstances` + these (`[HEALER EXPOSURE]`, the enemy-healer DR).
+   * Optional for hand-built fixtures. */
+  drHistoryOnly?: Array<{
+    atSeconds: number;
+    durationSeconds: number;
+    spellId: string;
+    drInfo: IDRInfo;
+  }>;
   /** An enemy control the log wrote IMMUNE on this player with no avoidance
    * the sweep could credit — the `[CC AVOIDED?]` line still states the miss
    * (corpusFactScan2 immunityTableForward noLine, 2026-10-22: 427 distinct
@@ -2732,8 +2846,8 @@ function getTrinketUses(
  * Two independent locks apply and the later one wins: the trinket's own
  * cooldown after the player pressed it, and the shared lockout a
  * category-1166 racial imposes (2026-08-12) — press Will of the Forsaken and
- * the medallion is locked for TRINKET_RACIAL_SHARED_LOCKOUT_MS (Will to
- * Survive: WILL_TO_SURVIVE_TRINKET_LOCKOUT_MS), which the ledger used to
+ * the medallion is locked for `racialTrinketLockoutMs` (30 s; Will to
+ * Survive 90 s, a healer's 60 s — fact6 F20), which the ledger used to
  * ignore entirely, so 57 of 2695 "trinket in hand, sat in it" windows across
  * 120 local matches blamed the player for a button the game had taken away.
  * Returning the remaining time keeps `on_cooldown`'s "Ns left" honest for
@@ -2920,6 +3034,43 @@ export function breakableCcBeforeDeath(
   });
 }
 
+/** F20 D13 (user ruling 4, 2026-10-28: keep A28, wording only): a
+ *  `[CC ON TEAM]` control on the dying player that the death cut short —
+ *  its logged end is the holder's death (`ccLoggedEnd` → `death`, the line's
+ *  `| ended at their death`) — too short on the grid for A28's
+ *  `DEATH_BREAKABLE_CC_MIN_S`, inside the same lookback. The `[DEATH]` tag
+ *  names it instead of claiming "no breakable CC" (1263fff6 2:35: a Psychic
+ *  Scream landed 0.5 s before the death printed `| 1s`). The latest-landed
+ *  one; `leadSeconds` = death − landing, one decimal. */
+export const DEATH_CUT_CC_TAG_RE_SRC = String.raw`(.+?) landed (\d+\.\d) s before the death`;
+export function deathCutCcBeforeDeath(
+  summary: Pick<IPlayerCCTrinketSummary, "ccInstances">,
+  holder: ICombatUnit,
+  matchStartMs: number,
+  deathAtSeconds: number,
+): { spellName: string; leadSeconds: string } | undefined {
+  const deathS = Math.floor(deathAtSeconds);
+  const cut = summary.ccInstances
+    .filter((cc) => {
+      if (!rendersCcOnTeamLine(cc)) return false;
+      const n = renderedCcSeconds(cc);
+      const startS = Math.floor(cc.atSeconds);
+      return (
+        n < DEATH_BREAKABLE_CC_MIN_S &&
+        startS <= deathS &&
+        startS + n >= deathS - DEATH_BREAKABLE_CC_LOOKBACK_S &&
+        ccLoggedEnd(holder, cc, matchStartMs)?.kind === "death"
+      );
+    })
+    .sort((a, b) => b.atSeconds - a.atSeconds)[0];
+  return cut
+    ? {
+        spellName: cut.spellName,
+        leadSeconds: Math.max(0, deathAtSeconds - cut.atSeconds).toFixed(1),
+      }
+    : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Main analysis
 // ---------------------------------------------------------------------------
@@ -2986,6 +3137,11 @@ export function analyzePlayerCCAndTrinket(
     /** Oppressing Roar was on the player as this application landed
      * (`oppressingRoarOnAt`) — it runs 30 % longer (FT-T07) */
     roarAtApply: boolean;
+    /** the order of the row that opened it on the holder's aura stream:
+     * landings on one ms keep the log's order (F20 wide residual — a Maim
+     * and a Cheap Shot on 2d4d9d9d r3 49.009, closed in removal order,
+     * read the Cheap Shot first and swapped their DR) */
+    applySeq: number;
     /** closed here with no REMOVED in the log */
     noRemoved?: true;
     /** REFRESH rows of this aura from its source that did not start a new
@@ -3001,6 +3157,7 @@ export function analyzePlayerCCAndTrinket(
       srcName: string;
       srcUnitId: string;
       roarAtApply: boolean;
+      applySeq: number;
       refreshesMs?: number[];
     }
   >();
@@ -3090,7 +3247,9 @@ export function analyzePlayerCCAndTrinket(
   const recastAt = ccRecastSplitsResend(player.id, player.auraEvents, (id) =>
     castersById.get(id),
   );
+  let auraSeq = 0;
   for (const aura of dropAuraRebroadcasts(player.auraEvents, recastAt)) {
+    const seq = auraSeq++;
     const spellId = aura.spellId;
     if (!spellId) continue;
     if (notTheEnd.has(aura)) continue;
@@ -3108,12 +3267,14 @@ export function analyzePlayerCCAndTrinket(
     // Reflection) and is a CC on it. Friendly holders only: the enemy side's
     // reflected CC already has its `[REFLECTED]` line, and `[CC ON ENEMY]`
     // would name the enemy as its own source. Roots keep their self-root
-    // guard (`rootIntervalsOf`), so the exception is the CC set alone.
+    // guard (`rootIntervalsOf`), so the exception is the CC set alone —
+    // a DEBUFF (`isDrHistorySource`; F20 residual: the Demon Hunter's own
+    // Illidan's Grasp BUFF read as a Grasp reflected back onto it).
     const reflectedOntoHolder =
       !isRemovalEvent &&
       aura.srcUnitId === player.id &&
       player.reaction === CombatUnitReaction.Friendly &&
-      ccSpellIds.has(spellId);
+      isDrHistorySource(player.id, aura.srcUnitId, spellId, aura.auraType);
     // fact2 (2026-10-20): a dispel backlash (`BACKLASH_AURA_CC_TYPE`: Sin
     // and Punishment's horror) is logged with the dispelled DoT's caster as
     // its source — a TEAMMATE when the DoT was a teammate's (e49b7c3b 1:28:
@@ -3266,6 +3427,7 @@ export function analyzePlayerCCAndTrinket(
             pendingEnd(spellId, openCc.srcUnitId, openCc.applyMs),
           ),
           roarAtApply: openCc.roarAtApply,
+          applySeq: openCc.applySeq,
           noRemoved: true,
           ...(openCc.refreshesMs ? { refreshesMs: openCc.refreshesMs } : {}),
         });
@@ -3275,6 +3437,7 @@ export function analyzePlayerCCAndTrinket(
         srcName: aura.srcUnitName,
         srcUnitId: aura.srcUnitId,
         roarAtApply: oppressingRoarOnAt(player, aura),
+        applySeq: seq,
       });
     } else if (isRemovalEvent) {
       const matchKey = matchPendingCcKey(pendingCC, spellId, ccKey);
@@ -3288,6 +3451,7 @@ export function analyzePlayerCCAndTrinket(
           applyMs: pending.applyMs,
           removeMs: aura.timestamp,
           roarAtApply: pending.roarAtApply,
+          applySeq: pending.applySeq,
           ...(pending.refreshesMs ? { refreshesMs: pending.refreshesMs } : {}),
         });
         pendingCC.delete(matchKey);
@@ -3329,6 +3493,7 @@ export function analyzePlayerCCAndTrinket(
         applyMs: pending.applyMs,
         removeMs: aura.timestamp,
         roarAtApply: pending.roarAtApply,
+        applySeq: pending.applySeq,
       });
       pendingCC.set(ccKey, {
         applyMs: aura.timestamp,
@@ -3337,6 +3502,7 @@ export function analyzePlayerCCAndTrinket(
         srcUnitId: aura.srcUnitId,
         // the re-cast is a new application: the Roar is read again
         roarAtApply: oppressingRoarOnAt(player, aura),
+        applySeq: seq,
       });
     }
   }
@@ -3352,6 +3518,7 @@ export function analyzePlayerCCAndTrinket(
       applyMs: pending.applyMs,
       removeMs: pendingEnd(pendingSpellId, pending.srcUnitId, pending.applyMs),
       roarAtApply: pending.roarAtApply,
+      applySeq: pending.applySeq,
       noRemoved: true,
       ...(pending.refreshesMs ? { refreshesMs: pending.refreshesMs } : {}),
     });
@@ -3415,7 +3582,10 @@ export function analyzePlayerCCAndTrinket(
       stillOnAtRoundEnd(w.removeMs, w.noRemoved, roundEnd)
         ? { ...w, removeMs: roundEnd, stillOnAtRoundEnd: true as const }
         : w,
-    );
+    )
+    // landing order, ties in the log's row order (`applySeq`): every walk
+    // below sorts by `applyMs` alone, stably, and so keeps it
+    .sort((a, b) => a.applyMs - b.applyMs || a.applySeq - b.applySeq);
 
   // B111: bind each trinket cast to the SINGLE CC it actually broke, instead of tagging
   // every CC that landed within 5s of the cast. An active PvP trinket (Gladiator's Medallion
@@ -3434,44 +3604,64 @@ export function analyzePlayerCCAndTrinket(
   // DR history on it — the outgoing chains' walk reads it the same way, and
   // so do both walks here: the expected-length one below (the duration cap,
   // the trinket binder — codex 20-F17-08 #1, 2742ff5d 62.3 s: Sleep Walk at
-  // 50 % logged 3.0 s, expected 6) and the annotation
-  const reflectedHistory: Array<{
+  // 50 % logged 3.0 s, expected 6) and the annotation.
+  // fact6 F20: every control that is DR history on the player
+  // (`buildCcCategoryHistory`, `isDrHistorySource` — one source test) and is
+  // none of its windows joins as history only: the reflected one on either
+  // side, any other source no window admits, and the application a REFRESH
+  // inside a window began (`ccRefreshIsNewApplication`: the window keeps one
+  // line across it, the DR walk counts it — F20 dr). A history entry is a
+  // window when that spell from that source overlaps it and did not start
+  // at one of its refreshes. The application the window opened with is the
+  // window even when a REFRESH on its own ms closed it at zero length (a
+  // press that double-applies — 2-1-19 r1 43.140 Bull Rush: APPLIED and
+  // REFRESH on one ms read as two history entries before the window and
+  // printed Immune); the one that REFRESH began counts after the window
+  // (`afterLandingAtSameMs`), never before it.
+  const historyOnly: Array<{
     applyMs: number;
     removeMs: number;
     spellId: string;
+    afterLandingAtSameMs?: true;
   }> = [];
-  if (player.reaction !== CombatUnitReaction.Friendly) {
-    const open = new Map<string, number>();
-    for (const a of dropAuraRebroadcasts(player.auraEvents)) {
-      if (!a.spellId || !ccSpellIds.has(a.spellId)) continue;
-      const ev = a.logLine.event;
-      if (ev === LogEvent.SPELL_AURA_APPLIED && a.srcUnitId === player.id) {
-        if (!open.has(a.spellId)) open.set(a.spellId, a.timestamp);
-      } else if (
-        (ev === LogEvent.SPELL_AURA_REMOVED ||
-          ev === LogEvent.SPELL_AURA_BROKEN ||
-          ev === LogEvent.SPELL_AURA_BROKEN_SPELL) &&
-        open.has(a.spellId)
-      ) {
-        reflectedHistory.push({
-          applyMs: open.get(a.spellId)!,
-          removeMs: a.timestamp,
-          spellId: a.spellId,
+  {
+    const drCats = new Set<string>();
+    for (const a of player.auraEvents)
+      if (a.spellId && ccSpellIds.has(a.spellId))
+        drCats.add(getDRCategory(a.spellId));
+    const opened = new Set<(typeof ccWindows)[number]>();
+    for (const cat of drCats)
+      for (const h of buildCcCategoryHistory(
+        player,
+        cat,
+        matchStartMs,
+        castersById,
+      )
+        .slice()
+        .sort((x, y) => x.applyMs - y.applyMs || x.removeMs - y.removeMs)) {
+        if (!ccSpellIds.has(h.spellId)) continue;
+        let refreshStart = false;
+        const own = ccWindows.find((w) => {
+          if (w.spellId !== h.spellId || w.srcUnitId !== h.srcUnitId)
+            return false;
+          if (h.applyMs === w.applyMs && !opened.has(w)) return true;
+          if ((w.refreshesMs ?? []).includes(h.applyMs)) {
+            refreshStart = true;
+            return false;
+          }
+          return w.applyMs < h.removeMs && h.applyMs < w.removeMs;
         });
-        open.delete(a.spellId);
+        if (own) {
+          if (h.applyMs === own.applyMs) opened.add(own);
+          continue;
+        }
+        historyOnly.push({
+          applyMs: h.applyMs,
+          removeMs: Math.min(h.removeMs, combat.endTime),
+          spellId: h.spellId,
+          ...(refreshStart ? { afterLandingAtSameMs: true as const } : {}),
+        });
       }
-    }
-    for (const [spellId, applyMs] of open) {
-      const full = ccFullDurationForCaster(spellId, player);
-      reflectedHistory.push({
-        applyMs,
-        removeMs:
-          full === undefined
-            ? combat.endTime
-            : Math.min(combat.endTime, applyMs + full * 1000),
-        spellId,
-      });
-    }
   }
   const drLevelOfIdx = new Map<number, IDRInfo | null>();
   const walkDr = () => {
@@ -3486,7 +3676,7 @@ export function analyzePlayerCCAndTrinket(
         spellId: w.spellId,
       })),
       matchStartMs,
-      reflectedHistory,
+      historyOnly,
     ).forEach((dr, k) => drLevelOfIdx.set(byApply[k]!.idx, dr));
   };
   walkDr();
@@ -3584,11 +3774,21 @@ export function analyzePlayerCCAndTrinket(
   // (Stoneform, Fireblood) is read from that buff — `breakAbilityPresses`.
   const breakPresses = breakAbilityPresses(player);
   const breakUseWindowIdx = new Map<number, number>(); // press index → CC idx
+  // An Adaptation holder's trinket is no press the racial can lock: its
+  // 283167 proc fires through it (fact6 F20 wide residual, 377a6252 r2: Will
+  // to Survive at 0:16, the Adaptation proc at 0:36.9 while the 90 s lock
+  // read "ON CD (83s left)"; 1,333 605 + wide files: 8 of 9 Will to Survive
+  // → 283167 gaps are 3.0–50.6 s, though DB2 puts 283167 in the Medallion's
+  // category 1182 — a triggered spell. The lock's evidence is Medallion
+  // presses only.)
+  const adaptationHolder =
+    trinketType === "Adaptation" ||
+    trinketUses.some((u) => u.kind === "adaptation");
   breakPresses.forEach((press, k) => {
-    if (SHARED_CD_RACIAL_SPELL_IDS.has(press.spellId))
+    if (SHARED_CD_RACIAL_SPELL_IDS.has(press.spellId) && !adaptationHolder)
       racialLocks.push({
         ts: press.ts,
-        lockMs: racialTrinketLockoutMs(press.spellId),
+        lockMs: racialTrinketLockoutMs(press.spellId, isHealer),
       });
     // A break other than the trinket must END the CC at the press
     // (`castEndedCcWindow`, the predicate F-E20 reads for an immunity press:
@@ -3789,7 +3989,7 @@ export function analyzePlayerCCAndTrinket(
           // recovered" at +46.7 s)
           readyMs = Math.max(
             readyMs,
-            ts + racialTrinketLockoutMs(ownedTrinketRacialId),
+            ts + racialTrinketLockoutMs(ownedTrinketRacialId, isHealer),
           );
         }
         const leftMs = readyMs - w.applyMs;
@@ -3843,11 +4043,7 @@ export function analyzePlayerCCAndTrinket(
   const sorted = [...ccInstancesUnsorted].sort(
     (a, b) => a.atSeconds - b.atSeconds,
   );
-  const drAnnotations = computeIncomingDR(
-    sorted,
-    matchStartMs,
-    reflectedHistory,
-  );
+  const drAnnotations = computeIncomingDR(sorted, matchStartMs, historyOnly);
   const ccInstances: ICCInstance[] = sorted.map((cc, i) => ({
     ...cc,
     drInfo: drAnnotations[i] ?? null,
@@ -3902,6 +4098,7 @@ export function analyzePlayerCCAndTrinket(
       ...(stillOnAtRoundEnd(w.removeMs, w.noRemoved, roundEnd)
         ? { stillOnAtRoundEnd: true as const }
         : {}),
+      ...(w.noRemoved ? { noRemoved: true as const } : {}),
       // its full length as it landed — the caster's talents and an
       // Oppressing Roar on the holder (codex 20-F16-08 #2: a Roar-lengthened
       // 6.5 s Dismantle trinketed at 5.5 s read as having run out)
@@ -4902,6 +5099,9 @@ export function analyzePlayerCCAndTrinket(
         // D51 / D56: Metamorphosis' 247121, DB2 mechanic 11, IMMUNE on a
         // paladin while its stun 200166 went on pets only)
         ccMechanicOf(m.spellId) !== SNARED_MECHANIC &&
+        // …nor one of a control the game never puts on a player (fact6
+        // D19 / D20: the 200166 landing's IMMUNE row is its damage)
+        controlReachesPlayers(m.spellId) &&
         fromCaster(m.srcUnitId) &&
         missBelongsToCast(
           sameSpellCastMs,
@@ -4910,6 +5110,30 @@ export function analyzePlayerCCAndTrinket(
           afterMs,
         ),
     );
+  };
+
+  /** F20 D28 residual (605 cap-int, 2026-10-28): a go-off belongs to this
+   * press only until the caster presses the control again — a Freezing
+   * Trap's 60.5 s landing window reached the NEXT trap's landing (90c01e7f
+   * r3: the 1:17 trap caught the priest 47 yd from the paladin; the 2:15
+   * trap's landing 4.4 yd from him credited his Blessing of Freedom). The
+   * caster's own press row (`COPY_CAST_IDS` excluded); a summon's pulse
+   * (Capacitor Totem 118905) is the press's effect, no new press. */
+  const nextPressOfControlMs = (
+    enemy: ICombatUnit,
+    cast: ICombatUnit["spellCastEvents"][number],
+    family: ReadonlySet<string>,
+  ): number => {
+    const castMs = cast.logLine.timestamp;
+    let next = Infinity;
+    for (const e of enemy.spellCastEvents) {
+      if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+      if (!e.spellId || !family.has(e.spellId)) continue;
+      if (COPY_CAST_IDS.has(e.spellId)) continue;
+      const t = e.logLine.timestamp;
+      if (t > castMs && t < next) next = t;
+    }
+    return next;
   };
 
   /**
@@ -4944,6 +5168,8 @@ export function analyzePlayerCCAndTrinket(
     const castMs = cast.logLine.timestamp;
     const toMs =
       castMs + (AOE_CC_LANDING_WINDOW_S[cast.spellId]?.toS ?? 12) * 1000;
+    // … and this press's, not another's (`goOffBelongsToCast`)
+    const ours = (ms: number) => goOffBelongsToCast(enemy, cast, family, ms);
     let first: number | undefined;
     for (const u of unitsById.values())
       for (const r of [
@@ -4957,6 +5183,7 @@ export function analyzePlayerCCAndTrinket(
         if (!r.spellId || !family.has(r.spellId)) continue;
         if (!fromCaster(r.srcUnitId)) continue;
         if (r.timestamp < castMs || r.timestamp > toMs) continue;
+        if (!ours(r.timestamp)) continue;
         if (first === undefined || r.timestamp < first) first = r.timestamp;
       }
     // …or the summon's own pulse row: a Capacitor Totem's 118905 is written
@@ -4970,6 +5197,7 @@ export function analyzePlayerCCAndTrinket(
           if (!c.spellId || !family.has(c.spellId)) continue;
           const t = c.logLine.timestamp;
           if (t < castMs || t > toMs) continue;
+          if (!ours(t)) continue;
           if (first === undefined || t < first) first = t;
         }
     return first;
@@ -4978,6 +5206,73 @@ export function analyzePlayerCCAndTrinket(
     string,
     Map<number, { ms: number; line: number | undefined }>
   >();
+  /** Each press's own pulse, for a delayed control (a landing window that
+   * opens after the cast, `AOE_CC_LANDING_WINDOW_S` `fromS` > 0): the casts
+   * of the spell, in order, each take the earliest landing (an APPLIED or a
+   * miss row of its family, from the caster or its summons) inside its own
+   * window that an earlier cast has not taken (codex 20-F15-21: totems at
+   * 10 s and 12 s both read the 12 s pulse; 20-F15-28 / 34: a window cut at
+   * the next cast lost the first totem's own pulse). Keyed by cast ms; the
+   * one pulse-ownership reading — `controlHitInstant` reads its instant from
+   * it and the go-off readers (`goOffBelongsToCast`) its owner. */
+  const pulseAssignment = (
+    enemy: ICombatUnit,
+    cast: ICombatUnit["spellCastEvents"][number],
+  ): Map<number, { ms: number; line: number | undefined }> => {
+    const landing = cast.spellId
+      ? AOE_CC_LANDING_WINDOW_S[cast.spellId]
+      : undefined;
+    if (!cast.spellId || !landing || landing.fromS <= 0) return new Map();
+    const key = `${enemy.id}:${cast.spellId}`;
+    let assigned = pulseByCast.get(key);
+    if (assigned) return assigned;
+    assigned = new Map();
+    const family = castAndEffectIds(cast.spellId);
+    const fromCaster = (srcId: string) =>
+      srcId === enemy.id ||
+      srcId === cast.srcUnitId ||
+      enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
+    const casts = [
+      ...enemy.spellCastEvents,
+      ...(enemy.petSpellCastEvents ?? []),
+    ]
+      .filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.spellId === cast.spellId,
+      )
+      .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+    const landings: Array<{ ms: number; line: number | undefined }> = [];
+    for (const u of unitsById.values())
+      for (const r of [
+        ...(u.auraEvents ?? []).filter(
+          (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+        ),
+        ...(u.missesIn ?? []),
+      ]) {
+        if (!r.spellId || !family.has(r.spellId)) continue;
+        if (!fromCaster(r.srcUnitId)) continue;
+        landings.push({ ms: r.timestamp, line: r.logLine?.lineIndex });
+      }
+    landings.sort((a, b) => a.ms - b.ms);
+    let takenUpTo = -Infinity;
+    for (const c of casts) {
+      const cMs = c.logLine.timestamp;
+      const hit = landings.find(
+        (l) =>
+          l.ms > takenUpTo &&
+          l.ms >= cMs + landing.fromS * 1000 &&
+          l.ms <= cMs + landing.toS * 1000,
+      );
+      if (hit) {
+        assigned.set(cMs, hit);
+        // one pulse lands on several units in one ms: all of it is taken
+        takenUpTo = hit.ms;
+      }
+    }
+    pulseByCast.set(key, assigned);
+    return assigned;
+  };
   const controlHitInstant = (
     enemy: ICombatUnit,
     cast: ICombatUnit["spellCastEvents"][number],
@@ -4992,61 +5287,27 @@ export function analyzePlayerCCAndTrinket(
       return { ms: missRow.timestamp, line: missRow.logLine?.lineIndex };
     const atCast = { ms: cast.logLine.timestamp, line: cast.logLine.lineIndex };
     if (landing.fromS <= 0) return atCast;
-    const family = castAndEffectIds(cast.spellId!);
-    const fromCaster = (srcId: string) =>
-      srcId === enemy.id ||
-      srcId === cast.srcUnitId ||
-      enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
-    // each cast's own pulse: the casts of the spell, in order, each take
-    // the earliest landing inside its own window that an earlier cast has
-    // not taken (codex 20-F15-21: totems at 10 s and 12 s both read the
-    // 12 s pulse; 20-F15-28 / 34: a window cut at the next cast lost the
-    // first totem's own pulse)
-    const key = `${enemy.id}:${cast.spellId}`;
-    let assigned = pulseByCast.get(key);
-    if (!assigned) {
-      assigned = new Map();
-      const casts = [
-        ...enemy.spellCastEvents,
-        ...(enemy.petSpellCastEvents ?? []),
-      ]
-        .filter(
-          (e) =>
-            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            e.spellId === cast.spellId,
-        )
-        .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
-      const landings: Array<{ ms: number; line: number | undefined }> = [];
-      for (const u of unitsById.values())
-        for (const r of [
-          ...(u.auraEvents ?? []).filter(
-            (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
-          ),
-          ...(u.missesIn ?? []),
-        ]) {
-          if (!r.spellId || !family.has(r.spellId)) continue;
-          if (!fromCaster(r.srcUnitId)) continue;
-          landings.push({ ms: r.timestamp, line: r.logLine?.lineIndex });
-        }
-      landings.sort((a, b) => a.ms - b.ms);
-      let takenUpTo = -Infinity;
-      for (const c of casts) {
-        const cMs = c.logLine.timestamp;
-        const hit = landings.find(
-          (l) =>
-            l.ms > takenUpTo &&
-            l.ms >= cMs + landing.fromS * 1000 &&
-            l.ms <= cMs + landing.toS * 1000,
-        );
-        if (hit) {
-          assigned.set(cMs, hit);
-          // one pulse lands on several units in one ms: all of it is taken
-          takenUpTo = hit.ms;
-        }
-      }
-      pulseByCast.set(key, assigned);
-    }
-    return assigned.get(cast.logLine.timestamp) ?? atCast;
+    return pulseAssignment(enemy, cast).get(cast.logLine.timestamp) ?? atCast;
+  };
+
+  /** Does a go-off row at `rowMs` (of `family`, from the caster or its
+   * summons) belong to this press? A pulse `pulseAssignment` gives to a
+   * press is that press's — this one's or another's (codex 20-F20-15 P2:
+   * totems at 10 s / 12 s, the first one's 12 s pulse logged in the second
+   * press's ms; cut at that press, the first totem "never went off"). Any
+   * other row is this press's only until the caster presses the control
+   * again (`nextPressOfControlMs`, F20 D28 residual: a trap's 60.5 s window
+   * reached the next trap's landing). */
+  const goOffBelongsToCast = (
+    enemy: ICombatUnit,
+    cast: ICombatUnit["spellCastEvents"][number],
+    family: ReadonlySet<string>,
+    rowMs: number,
+  ): boolean => {
+    const castMs = cast.logLine.timestamp;
+    for (const [ownerMs, pulse] of pulseAssignment(enemy, cast))
+      if (pulse.ms === rowMs) return ownerMs === castMs;
+    return rowMs < nextPressOfControlMs(enemy, cast, family);
   };
 
   /** The summon this cast put down (its SPELL_SUMMON within the cast's
@@ -5074,12 +5335,15 @@ export function analyzePlayerCCAndTrinket(
 
   /** The cast's control (its own id or an effect aura of it, from the
    * caster or its summons) went on a unit other than the player inside the
-   * cast's landing match window (`ccLandedMatchWindowMs`). */
-  const landedOnAnotherUnit = (
+   * cast's landing match window (`ccLandedMatchWindowMs`) that is this
+   * press's own (`goOffBelongsToCast`): each such unit and the instant it
+   * went on. */
+  const landingsOnOtherUnits = (
     enemy: ICombatUnit,
     cast: ICombatUnit["spellCastEvents"][number],
-  ): boolean => {
-    if (!cast.spellId) return false;
+  ): Array<{ unit: ICombatUnit; ms: number }> => {
+    const out: Array<{ unit: ICombatUnit; ms: number }> = [];
+    if (!cast.spellId) return out;
     const family = castAndEffectIds(cast.spellId);
     const castMs = cast.logLine.timestamp;
     const { beforeMs, afterMs } = ccLandedMatchWindowMs(
@@ -5106,10 +5370,51 @@ export function analyzePlayerCCAndTrinket(
         if (!a.spellId || !family.has(a.spellId)) continue;
         if (!fromCaster(a.srcUnitId)) continue;
         const d = a.timestamp - castMs;
-        if (d >= -beforeMs && d <= afterMs) return true;
+        if (
+          d >= -beforeMs &&
+          d <= afterMs &&
+          goOffBelongsToCast(enemy, cast, family, a.timestamp)
+        )
+          out.push({ unit: u, ms: a.timestamp });
       }
     }
-    return false;
+    return out;
+  };
+  const landedOnAnotherUnit = (
+    enemy: ICombatUnit,
+    cast: ICombatUnit["spellCastEvents"][number],
+  ): boolean => landingsOnOtherUnits(enemy, cast).length > 0;
+  /** F20 D28 (fact6, 2026-10-28; ruling: credit only within the DB2
+   * radius + 2 yd): could the control that went off on another unit have
+   * caught the player at all? A single-victim trap
+   * (`SINGLE_VICTIM_GROUND_CC_IDS`) went off where its victim stood, so the
+   * reach is radius + slack from the victim. For an area control the centre
+   * is not logged; a victim stood inside its radius, so a player inside
+   * radius + slack of the same spot is within 2 × radius + slack of a victim
+   * at that victim's landing. 4caab013 3:14: a Freezing Trap (radius 3)
+   * caught the healer 14.5 yd from the paladin, and the paladin's Divine
+   * Steed was credited with dodging it. No radius or no position sample ⇒
+   * no credit. */
+  const inReachOfALanding = (
+    enemy: ICombatUnit,
+    cast: ICombatUnit["spellCastEvents"][number],
+  ): boolean => {
+    const radius = cast.spellId
+      ? spellRadiusForCaster(enemy, cast.spellId)
+      : null;
+    if (radius === null) return false;
+    const limit =
+      (SINGLE_VICTIM_GROUND_CC_FAMILY.has(cast.spellId!) ? 1 : 2) * radius +
+      GROUND_CC_AVOID_SLACK_YD;
+    return landingsOnOtherUnits(enemy, cast).some(({ unit, ms }) => {
+      const at = getUnitPositionAtTime(player, ms, INTERP_MAX_GAP_MS);
+      const victimAt = getUnitPositionAtTime(unit, ms, INTERP_MAX_GAP_MS);
+      return (
+        at !== null &&
+        victimAt !== null &&
+        distanceBetween(at, victimAt) <= limit
+      );
+    });
   };
 
   // 1. Unified Buff & Mobility CC Avoidance (targeted and ground CCs)
@@ -5224,6 +5529,9 @@ export function analyzePlayerCCAndTrinket(
           // (`ccAvoidedLandingDelay.test`).
           const wentOffElsewhere =
             !isTargeted && !missRow && landedOnAnotherUnit(enemy, cast);
+          // F20 D28: … and only a player it could have caught avoided it
+          // (buff and mobility credit alike)
+          if (wentOffElsewhere && !inReachOfALanding(enemy, cast)) continue;
           // A. Buff-Based Avoidance — read at the instant the control hit
           // the player (`controlHitInstant`), not at a delayed control's cast
           const hit = controlHitInstant(enemy, cast, missRow);
@@ -5378,6 +5686,9 @@ export function analyzePlayerCCAndTrinket(
       ccMechanicOf(m.spellId) !== 9
     )
       continue;
+    // a control the game never puts on a player (fact6 D20: the
+    // Metamorphosis landing 200166, in `ccSpellIds` for its NPC stun)
+    if (!controlReachesPlayers(m.spellId)) continue;
     const enemy = ownerEnemyOf(m.srcUnitId);
     if (!enemy || !enemyIdSet.has(enemy.id)) continue;
     if (m.timestamp < combat.startTime) continue;
@@ -5557,6 +5868,16 @@ export function analyzePlayerCCAndTrinket(
     interruptInstances,
     ccAvoidedInstances,
     ccImmuneUncredited,
+    drHistoryOnly: historyOnly.map((h) => ({
+      atSeconds: (h.applyMs - matchStartMs) / 1000,
+      durationSeconds: (h.removeMs - h.applyMs) / 1000,
+      spellId: h.spellId,
+      drInfo: {
+        category: getDRCategory(h.spellId),
+        level: "Full" as const,
+        sequenceIndex: 0,
+      },
+    })),
   };
 }
 

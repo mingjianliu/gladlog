@@ -43,7 +43,7 @@ import {
   type NamedCannotCastInterval,
 } from "../utils/cannotCastIntervals";
 import {
-  cdCanHelpAnotherUnit,
+  cdHelpsRecipient,
   cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
@@ -51,7 +51,6 @@ import {
   hpTroughInWindow,
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
 } from "../utils/cooldowns";
 import { roundEndMs } from "../utils/roundEnd";
 import {
@@ -407,9 +406,7 @@ export function cdPriorHoldEpisodes(
         continue;
       }
       const minIsOwner = min.unit.id === owner.id;
-      const helps = minIsOwner
-        ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
-        : cdCanHelpAnotherUnit(cd);
+      const helps = cdHelpsRecipient(cd, minIsOwner);
       if (!helps) {
         skipTo();
         continue;

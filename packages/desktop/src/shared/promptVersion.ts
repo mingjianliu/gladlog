@@ -642,4 +642,29 @@
  *  unchanged on 605, wide 7 classes (49 lines) → 0; corpusFactScan4
  *  mechanicImmunityLanded 13 → 0 / 61 → 0.
  */
-export const PROMPT_VERSION = 463;
+/*
+ * v464 (2026-10-29, fact6 F20 — the round-6 double audit's 30 fact items,
+ *  fixed by fact class, user rulings 2026-10-28): an own talent shield that
+ *  came with a press ends `defenseless` (passive absorbs do not); an area
+ *  control that reached enemy players and put no control on them says
+ *  `[no CC aura logged — hit X; DR: <family> Immune]`; Havoc's landing stun
+ *  200166 is no control on a player; Peaceweaver is an `[ENEMY DEF]` line on
+ *  each carrier and ends `defenseless`; Will to Survive locks the PvP
+ *  trinket for 90 s (60 s for a healer), a racial locks no Adaptation; kicks
+ *  on summons land; a pet's control times by the pet; a kill credits the
+ *  side that dealt the blow (Roar of Sacrifice's share is a transfer, an
+ *  overkill row the player lived through is no killing blow, a summon's
+ *  side is its owner's roster side); one pet command prints once; one DR
+ *  chain walk, same-ms landings in log order; Spirit of Redemption and
+ *  refused presses (a press's follow-up impact row too) read as immunity;
+ *  ally-only saves are not self-saves; reflected DoTs count their whole run
+ *  (a self-reflect row is no reflect); one press can end several disarms
+ *  (logged removals within 10 ms of the press); a death-cut breakable control says
+ *  when it landed; override variants count with their base spell; one
+ *  [RES] window per enemy press; Grounding's eaten redirects; a purge
+ *  press's `k of N` counts the distinct buffs it removed; Reversion riding
+ *  Merithra's Blessing is an own shield. 605 / wide (PV463 base → batch):
+ *  failing gate lines 228 → 0 / 528 → 15; corpusFactScan5 8,697 → 16 /
+ *  30,661 → 24. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 464;

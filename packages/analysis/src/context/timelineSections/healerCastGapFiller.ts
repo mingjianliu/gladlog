@@ -12,6 +12,7 @@
 import { CombatUnitType, getUnitType, LogEvent } from "@gladlog/parser-compat";
 
 import { fmtFactNum } from "../../analysis/factFormat";
+import { PURGE_REMOVALS_PER_TARGET } from "../../data/purgeRemovalsGenerated";
 import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
@@ -31,12 +32,14 @@ import {
 } from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
 import { cdRoleTag, hpAtPress, rendersOnCaster } from "../../utils/cooldowns";
-import { purgeableCountText } from "../../utils/dispelAnalysis";
+import {
+  isPurgeableMagicBuff,
+  purgeableCountText,
+} from "../../utils/dispelAnalysis";
 import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
+import { isGroundingTotemTarget } from "../../utils/groundingRedirects";
 import { fmtTime } from "../../utils/renderGrid";
 import {
-  getNpcIdFromGuid,
-  GROUNDING_TOTEM_NPC_ID,
   HEALER_CAST_SPELL_ID_TO_NAME,
   isPassiveProcCast,
   landingCutChannel,
@@ -83,6 +86,69 @@ export function purgeMatchesCast(
     Math.abs(purge.timeSeconds - cast.timeSeconds) <=
       PURGE_MATCH_TOLERANCE_SECONDS
   );
+}
+
+/** The removals ONE purge press made on one target: the same source (and
+ *  pet-or-not, when the press says), and `purgeMatchesCast` against the press's target, instant
+ *  and dispel spell. F20 D31: one predicate for "how many buffs that press
+ *  took" — the owner cast line's `[removed: … — k of N on the target]` and
+ *  `[PURGE]`'s `(k of N purgeable buffs on it)`, which printed 1 for every
+ *  removal (Greater Purge / Fire Breath remove 2). Every removal counts,
+ *  the low-priority ones `[PURGE]` folds away included. */
+export function purgePressRemovals<
+  T extends {
+    sourceName: string;
+    isPetDispel?: boolean;
+    targetName: string;
+    timeSeconds: number;
+    dispelSpellId?: string;
+  },
+>(
+  purges: readonly T[],
+  press: {
+    sourceName: string;
+    isPetDispel?: boolean;
+    destUnitName?: string | null;
+    timeSeconds: number;
+    spellId?: string | null;
+  },
+): T[] {
+  return purges.filter(
+    (p) =>
+      p.sourceName === press.sourceName &&
+      (press.isPetDispel === undefined ||
+        !!p.isPetDispel === press.isPetDispel) &&
+      purgeMatchesCast(p, press),
+  );
+}
+
+/** `k` of `k of N purgeable buffs`: how many of the purgeable buffs N
+ *  counts (`isPurgeableMagicBuff`, N's own predicate) one press took from
+ *  its target — `purgePressRemovals`' rows, at most the tool's DB2 per-target
+ *  count (`PURGE_REMOVALS_PER_TARGET`, when every row's tool has one), at
+ *  least 1. F20 wide residual (2026-10-29): a Tranquilizing Shot that took an
+ *  Enrage with the Magic buff printed `2 of 1`; Improved Spellsteal's delayed
+ *  repeat of the previous press, landing 10–14 ms after the next press's own
+ *  steal, printed that press as `2 of N`. */
+export function purgePressRemovalCount(
+  removals: readonly { removedSpellId: string; dispelSpellId?: string }[],
+): number {
+  // distinct buffs, as N counts them (`purgeableBuffCountAt`'s id set):
+  // a repeated removal row of one buff is one buff (codex F20-27)
+  const counted = new Set(
+    removals
+      .filter((r) => isPurgeableMagicBuff(r.removedSpellId))
+      .map((r) => r.removedSpellId),
+  ).size;
+  const caps = removals.map((r) =>
+    r.dispelSpellId === undefined
+      ? undefined
+      : PURGE_REMOVALS_PER_TARGET[r.dispelSpellId],
+  );
+  const cap = caps.every((c): c is number => c !== undefined)
+    ? Math.max(...caps)
+    : Infinity;
+  return Math.max(1, Math.min(cap, counted));
 }
 
 export function emitHealerCastGapFillerEntries(
@@ -549,9 +615,10 @@ export function emitHealerCastGapFillerEntries(
       // targets. Detect by npcId from the dest GUID (locale-independent — the unit NAME
       // is client-localized and the English substring check misses on non-EN logs),
       // keeping the name check as fallback for GUID-less events.
-      const destIsGroundingTotem =
-        getNpcIdFromGuid(e.destUnitId ?? "") === GROUNDING_TOTEM_NPC_ID ||
-        (e.destUnitName?.toLowerCase().includes("grounding totem") ?? false);
+      const destIsGroundingTotem = isGroundingTotemTarget(
+        e.destUnitId,
+        e.destUnitName,
+      );
       totemNote = destIsGroundingTotem
         ? " [absorbed: Grounding Totem]"
         : " [totem/pet]";
@@ -566,13 +633,12 @@ export function emitHealerCastGapFillerEntries(
     // same instant on the same target is attached. join(', ') then only fires when one
     // cast genuinely removed multiple buffs at once.
     let purgeNote = "";
-    const matchingPurges = ownerPurges.filter((p) =>
-      purgeMatchesCast(p, {
-        destUnitName: e.destUnitName,
-        timeSeconds,
-        spellId: e.spellId,
-      }),
-    );
+    const matchingPurges = purgePressRemovals(ownerPurges, {
+      sourceName: owner.name,
+      destUnitName: e.destUnitName,
+      timeSeconds,
+      spellId: e.spellId,
+    });
     if (matchingPurges.length > 0) {
       const removedNames = matchingPurges
         .map((p) => getEnglishSpellName(p.removedSpellId, p.removedSpellName))
@@ -584,7 +650,7 @@ export function emitHealerCastGapFillerEntries(
       )?.purgeableOnTarget;
       const countNote =
         onTarget !== undefined
-          ? ` — ${matchingPurges.length} of ${purgeableCountText(onTarget)} on the target`
+          ? ` — ${purgePressRemovalCount(matchingPurges)} of ${purgeableCountText(onTarget)} on the target`
           : "";
       purgeNote = ` [removed: ${removedNames}${countNote}]`;
     }
@@ -688,11 +754,26 @@ export function emitHealerCastGapFillerEntries(
       continue;
     }
 
+    // F20 immunity residual (user ruling 2026-10-28): a plain cast the
+    // unit it was cast on refused as IMMUNE carries the press lines' tag —
+    // the same reading and wording as the promoted [YOU] [CD] line above
+    // (s0/30-3 1:05 Holy Fire into Ice Block rendered bare). The tag is an
+    // annotation: the cast prints on its own line, never inside a fold.
+    const refusedNote =
+      e.destUnitName && e.destUnitName !== "nil"
+        ? ownerCcImmuneTag(
+            e.spellId,
+            timeSeconds,
+            new Set([e.destUnitName]),
+            true,
+          )
+        : "";
     const hasAnnotation =
       totemNote !== "" ||
       orderNote !== "" ||
       purgeNote !== "" ||
-      empowerNote !== "";
+      empowerNote !== "" ||
+      refusedNote !== "";
 
     // Spam-spell windowed fold: high-frequency fillers fold across
     // interleaved entries AND inside critical windows — per-cast lines for
@@ -806,7 +887,7 @@ export function emitHealerCastGapFillerEntries(
           : "";
       addEntry(
         timeSeconds,
-        `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${windowHpTag}${totemNote}${orderNote}${purgeNote}${empowerNote}`,
+        `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${windowHpTag}${refusedNote}${totemNote}${orderNote}${purgeNote}${empowerNote}`,
       );
       // an annotated cast of a spam-folded spell prints on its own line and
       // the fold still counts it (F16 retest idx 22: 0deb726b's 1:08 Riptide

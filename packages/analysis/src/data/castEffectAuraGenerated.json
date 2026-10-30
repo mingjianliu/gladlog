@@ -1,12 +1,13 @@
 {
  "meta": {
   "producer": "packages/eval/scripts/castEffectAuraScan.ts",
-  "nominations": "castEffectNominationsGenerated.json (build 12.1.0.69587)",
+  "nominations": "castEffectNominationsGenerated.json (build 12.1.5.70391)",
   "manifest": "/Users/mingjianliu/code/gladlog-eval-private/corpus/manifest-archive-2026-08-28-newseason.txt",
-  "every": 10,
-  "filesRead": 1814,
-  "rule": "a cast hits a nominated aura when the same root caster (summons resolved) applies it within 60 s after the cast (once per cast); a pair is kept when hits >= 10 the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= 0.5, and >= 0.5 of the hits come within 3 s of the cast",
-  "generatedAt": "2026-10-03T04:36:40.752Z"
+  "every": 5,
+  "filesRead": 1429,
+  "rule": "a cast hits a nominated aura when the same root caster (summons resolved) applies it within 60 s after the cast (once per cast); a pair is kept when hits >= 10 the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= 0.5, and >= 0.5 of the hits come within 3 s of the cast or >= 0.9 of the aura's applications with that cast in the window before them come within 3 s of its nearest one (a talent-only nomination needs the latter)",
+  "keep": "additive: the 258 pairs of the table generated 2026-10-03T04:36:40.752Z (1814 files, castEffectNominationsGenerated.json (build 12.1.0.69587)) kept as they were; 17 added by this run",
+  "generatedAt": "2026-10-28T23:05:02.469Z"
  },
  "casts": {
   "66": [
@@ -115,6 +116,15 @@
     "medianDelayS": 0,
     "coveredShare": 0.957,
     "via": "name+trigger"
+   },
+   {
+    "aura": "163505",
+    "casts": 5757,
+    "hits": 2615,
+    "hitsWithin3s": 1409,
+    "medianDelayS": 0,
+    "coveredShare": 0.784,
+    "via": "name"
    }
   ],
   "1856": [
@@ -181,6 +191,19 @@
     "medianDelayS": 0,
     "coveredShare": 0.995,
     "via": "name"
+   }
+  ],
+  "12294": [
+   {
+    "aura": "198819",
+    "casts": 21717,
+    "hits": 16971,
+    "hitsWithin3s": 3164,
+    "medianDelayS": 20.26,
+    "coveredShare": 1,
+    "via": "name",
+    "nearApps": 4220,
+    "nearWithin3s": 4214
    }
   ],
   "16979": [
@@ -289,6 +312,19 @@
     "via": "name+trigger"
    }
   ],
+  "24275": [
+   {
+    "aura": "1291678",
+    "casts": 7729,
+    "hits": 3501,
+    "hitsWithin3s": 1377,
+    "medianDelayS": 6.27,
+    "coveredShare": 1,
+    "via": "name",
+    "nearApps": 1193,
+    "nearWithin3s": 1193
+   }
+  ],
   "26573": [
    {
     "aura": "188370",
@@ -366,6 +402,17 @@
     "via": "name"
    }
   ],
+  "49028": [
+   {
+    "aura": "81256",
+    "casts": 18,
+    "hits": 18,
+    "hitsWithin3s": 18,
+    "medianDelayS": 0,
+    "coveredShare": 0.985,
+    "via": "name"
+   }
+  ],
   "49376": [
    {
     "aura": "50259",
@@ -375,6 +422,19 @@
     "medianDelayS": 0,
     "coveredShare": 0.936,
     "via": "trigger"
+   }
+  ],
+  "49576": [
+   {
+    "aura": "1233502",
+    "casts": 2053,
+    "hits": 36,
+    "hitsWithin3s": 11,
+    "medianDelayS": 14.35,
+    "coveredShare": 1,
+    "via": "name",
+    "nearApps": 11,
+    "nearWithin3s": 11
    }
   ],
   "53271": [
@@ -394,6 +454,17 @@
     "hitsWithin3s": 586,
     "medianDelayS": 0.01,
     "coveredShare": 0.999,
+    "via": "name"
+   }
+  ],
+  "53600": [
+   {
+    "aura": "132403",
+    "casts": 56,
+    "hits": 53,
+    "hitsWithin3s": 41,
+    "medianDelayS": 0,
+    "coveredShare": 0.976,
     "via": "name"
    }
   ],
@@ -532,6 +603,19 @@
     "medianDelayS": 0,
     "coveredShare": 0.999,
     "via": "name"
+   }
+  ],
+  "89753": [
+   {
+    "aura": "89751",
+    "casts": 3504,
+    "hits": 2946,
+    "hitsWithin3s": 510,
+    "medianDelayS": 24.8,
+    "coveredShare": 0.941,
+    "via": "name",
+    "nearApps": 510,
+    "nearWithin3s": 510
    }
   ],
   "89808": [
@@ -1078,6 +1162,28 @@
     "via": "name"
    }
   ],
+  "192081": [
+   {
+    "aura": "1251877",
+    "casts": 29,
+    "hits": 25,
+    "hitsWithin3s": 13,
+    "medianDelayS": 0.01,
+    "coveredShare": 1,
+    "via": "trigger"
+   }
+  ],
+  "195292": [
+   {
+    "aura": "55078",
+    "casts": 42,
+    "hits": 42,
+    "hitsWithin3s": 41,
+    "medianDelayS": 0.36,
+    "coveredShare": 0.943,
+    "via": "trigger"
+   }
+  ],
   "198137": [
    {
     "aura": "1236942",
@@ -1087,6 +1193,17 @@
     "medianDelayS": 0.73,
     "coveredShare": 0.997,
     "via": "name"
+   },
+   {
+    "aura": "198034",
+    "casts": 2444,
+    "hits": 1585,
+    "hitsWithin3s": 502,
+    "medianDelayS": 26.96,
+    "coveredShare": 0.998,
+    "via": "name",
+    "nearApps": 504,
+    "nearWithin3s": 502
    }
   ],
   "198533": [
@@ -1186,6 +1303,19 @@
     "medianDelayS": 0.02,
     "coveredShare": 1,
     "via": "name"
+   }
+  ],
+  "206930": [
+   {
+    "aura": "228645",
+    "casts": 52,
+    "hits": 42,
+    "hitsWithin3s": 19,
+    "medianDelayS": 6.68,
+    "coveredShare": 1,
+    "via": "name",
+    "nearApps": 45,
+    "nearWithin3s": 45
    }
   ],
   "207684": [
@@ -1369,6 +1499,19 @@
     "medianDelayS": 0,
     "coveredShare": 1,
     "via": "name"
+   }
+  ],
+  "264178": [
+   {
+    "aura": "460553",
+    "casts": 2021,
+    "hits": 533,
+    "hitsWithin3s": 258,
+    "medianDelayS": 3.84,
+    "coveredShare": 1,
+    "via": "trigger",
+    "nearApps": 251,
+    "nearWithin3s": 240
    }
   ],
   "271877": [
@@ -1658,6 +1801,17 @@
     "medianDelayS": 0.77,
     "coveredShare": 1,
     "via": "name"
+   },
+   {
+    "aura": "372245",
+    "casts": 206,
+    "hits": 196,
+    "hitsWithin3s": 196,
+    "medianDelayS": 0.78,
+    "coveredShare": 1,
+    "via": "talent",
+    "nearApps": 546,
+    "nearWithin3s": 544
    }
   ],
   "358385": [
@@ -2330,6 +2484,17 @@
     "medianDelayS": 1.02,
     "coveredShare": 1,
     "via": "name"
+   },
+   {
+    "aura": "372245",
+    "casts": 460,
+    "hits": 439,
+    "hitsWithin3s": 410,
+    "medianDelayS": 1.2,
+    "coveredShare": 1,
+    "via": "talent",
+    "nearApps": 1146,
+    "nearWithin3s": 1116
    }
   ],
   "433895": [
@@ -2377,6 +2542,17 @@
    }
   ],
   "442204": [
+   {
+    "aura": "372245",
+    "casts": 43,
+    "hits": 38,
+    "hitsWithin3s": 38,
+    "medianDelayS": 1.21,
+    "coveredShare": 1,
+    "via": "talent",
+    "nearApps": 100,
+    "nearWithin3s": 96
+   },
    {
     "aura": "409560",
     "casts": 38,
@@ -2482,6 +2658,17 @@
     "medianDelayS": 1.01,
     "coveredShare": 1,
     "via": "name"
+   },
+   {
+    "aura": "372245",
+    "casts": 1004,
+    "hits": 954,
+    "hitsWithin3s": 896,
+    "medianDelayS": 1.19,
+    "coveredShare": 1,
+    "via": "talent",
+    "nearApps": 1246,
+    "nearWithin3s": 1218
    }
   ],
   "1237885": [
@@ -2639,6 +2826,19 @@
     "medianDelayS": 0.01,
     "coveredShare": 1,
     "via": "name"
+   }
+  ],
+  "1264659": [
+   {
+    "aura": "1264623",
+    "casts": 13075,
+    "hits": 7988,
+    "hitsWithin3s": 2855,
+    "medianDelayS": 10.21,
+    "coveredShare": 1,
+    "via": "name",
+    "nearApps": 5501,
+    "nearWithin3s": 5501
    }
   ],
   "1265384": [

@@ -21,6 +21,7 @@ import {
 import { getSortedAdvancedActions } from "./advancedActions";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
+  cdHelpsRecipient,
   chargesAvailableAt,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -259,6 +260,9 @@ function getDefensiveStateAtTime(
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     const { spellId } = cast;
     if (!spellId || !countsAsKillWindowDefensiveInHand(spellId)) continue;
+    // F20 D1: an external that cannot target its caster is never its
+    // holder's save in hand — the span's reading (`computeOffensiveWindows`)
+    if (!cdHelpsRecipient({ spellId }, true)) continue;
 
     const castSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
     if (castSeconds >= windowStartSeconds) continue; // after our snapshot time

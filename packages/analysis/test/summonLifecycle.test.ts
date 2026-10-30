@@ -160,6 +160,61 @@ describe("summonLifetimeAtKillS — how long a summon stood before the killing b
     expect(line).not.toMatch(/expected/i);
     expect(line).not.toContain("暗影魔");
   });
+
+  it("记录者被 Mind Control 时己方图腾的 flags 是 hostile:阵营按召唤者的名册(wide 1c294041 r2 1:42)", () => {
+    const owner = unit({ id: "P1", name: "OwnerPlayer" });
+    const shaman = unit({
+      id: "P2",
+      name: "OurShaman",
+      spec: CombatUnitSpec.Shaman_Restoration,
+    });
+    const enemyMage = unit({
+      id: "E1",
+      name: "EnemyMage",
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Mage_Frost,
+    });
+    // summoned while the recorder was charmed: the totem's own flags hostile
+    const totem = unit({
+      id: "Creature-0-1-1-1-5925-0001",
+      name: "Grounding Totem",
+      reaction: CombatUnitReaction.Hostile,
+      ownerId: "P2",
+      actionIn: [summonAt(T0 + 101_600)],
+      damageIn: [blowAt(T0 + 102_000, "E1")],
+    });
+    const timeline = buildMatchTimeline({
+      owner,
+      ownerSpec: "Arms Warrior",
+      friends: [owner, shaman],
+      enemies: [enemyMage],
+      allUnits: [owner, shaman, enemyMage, totem],
+      playerIdMap: new Map([
+        ["OwnerPlayer", 0],
+        ["OurShaman", 1],
+      ]),
+      enemyIdMap: new Map([["EnemyMage", 2]]),
+      matchStartMs: T0,
+      matchEndMs: T0 + 120_000,
+      isHealer: false,
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      ccTrinketSummaries: [],
+      dispelSummary: emptyDispel as never,
+      enemyDispelSummary: emptyDispel as never,
+      pressureWindows: [],
+      healingGaps: [],
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      criticalWindowSeconds: new Set(),
+      outgoingCCChains: [],
+    });
+    const line = timeline
+      .split("\n")
+      .find((l) => l.includes("[UNIT DESTROYED]"));
+    expect(line).toContain("Grounding Totem (Friendly)");
+  });
 });
 
 describe("[UNIT DESTROYED] — a hunter's or warlock's permanent pet being killed (user ruling 2026-10-09)", () => {

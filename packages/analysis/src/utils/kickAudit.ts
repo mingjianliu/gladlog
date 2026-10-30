@@ -13,6 +13,7 @@ import {
 import { isKickSpellId } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { enemySourceIds } from "./cannotCastIntervals";
 import {
   CAST_QUEUE_TOLERANCE_MS,
   type CastBarOutcome,
@@ -229,15 +230,29 @@ export function analyzeKickAudit(
 ): IKickAuditEntry[] {
   const matchStartMs = combat.startTime;
   const enemyPlayers = enemies.filter((e) => e.info);
+  // fact6 D3 (4caab013 2:41): the opposing side is its players AND their
+  // summons (`enemySourceIds`, the one definition — GH #99 summon-GUID
+  // attribution). A Rebuke that interrupted the Sayaad's Seduction read
+  // "hit nothing": its SPELL_INTERRUPT is on the pet, and only the players'
+  // rows were read. Every target-side reading below takes this set; the
+  // cast-start presence test stays on the players.
+  const allUnits = Object.values(
+    (combat as { units?: Record<string, ICombatUnit> }).units ?? {},
+  );
+  const enemySide = enemySourceIds(enemyPlayers, allUnits);
+  const enemyUnits: ICombatUnit[] = [
+    ...enemyPlayers,
+    ...allUnits.filter(
+      (u) => enemySide.has(u.id) && !enemyPlayers.some((p) => p.id === u.id),
+    ),
+  ];
   // For interrupts performed by a pet (Warlock Spell Lock, etc.) the
   // SPELL_INTERRUPT src is the pet's id — so landed detection must accept the
   // owner's pets as well (~5 matches mislabeled in the 2026-07-16 DPS
   // baseline).
   const kickerIds = new Set<string>([player.id]);
   const kickerUnits: ICombatUnit[] = [player];
-  for (const u of Object.values(
-    (combat as { units?: Record<string, ICombatUnit> }).units ?? {},
-  )) {
+  for (const u of allUnits) {
     if (u.ownerId === player.id) {
       kickerIds.add(u.id);
       kickerUnits.push(u);
@@ -297,10 +312,11 @@ export function analyzeKickAudit(
     kicks.push(k);
   }
 
-  // Landed evidence: every SPELL_INTERRUPT on any enemy sourced by this player
-  // (or their pet). ALL interrupt events are also kept: a cast-start that ended
-  // because ANYONE kicked it is not a fake cast.
-  const allInterrupts = enemyPlayers.flatMap((enemy) =>
+  // Landed evidence: every SPELL_INTERRUPT on any enemy unit (a player or a
+  // summon of one) sourced by this player (or their pet). ALL interrupt
+  // events are also kept: a cast-start that ended because ANYONE kicked it is
+  // not a fake cast.
+  const allInterrupts = enemyUnits.flatMap((enemy) =>
     enemy.actionIn.filter((a) => a.logLine.event === LogEvent.SPELL_INTERRUPT),
   );
   const landedEvents = allInterrupts.filter((a) => kickerIds.has(a.srcUnitId));
@@ -489,7 +505,7 @@ export function analyzeKickAudit(
         m.missType !== "ABSORB" &&
         !!m.destUnitId &&
         (m.destUnitId === kick.destUnitId ||
-          enemyPlayers.some((e) => e.id === m.destUnitId)),
+          enemyUnits.some((e) => e.id === m.destUnitId)),
     );
     const missLine =
       missLines.find((m) => m.destUnitId === kick.destUnitId) ?? missLines[0];
@@ -524,7 +540,7 @@ export function analyzeKickAudit(
     // The unit the kick was aimed at first: an aura that goes onto several
     // enemies under one id (Avenger's Shield 31935 bounces) would otherwise
     // name whichever of them the unit list holds first.
-    const aimed = enemyPlayers.find((e) => e.id === kick.destUnitId);
+    const aimed = enemyUnits.find((e) => e.id === kick.destUnitId);
     const silenced = !hasCastStartData
       ? undefined
       : aimed && carriesKickAura(aimed)
@@ -554,7 +570,7 @@ export function analyzeKickAudit(
     // just before the kick, or left the last cast bar it began in the
     // lookback window unfinished.
     const candidates = kick.destUnitId
-      ? enemyPlayers.filter((e) => e.id === kick.destUnitId)
+      ? enemyUnits.filter((e) => e.id === kick.destUnitId)
       : enemyPlayers;
     const stopped = candidates
       .map((enemy) => stoppedChannelOf(enemy, kickMs))

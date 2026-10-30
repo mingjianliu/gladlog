@@ -376,7 +376,28 @@ export const ENEMY_IMMUNITY_SAVE_AURAS: Readonly<Record<string, string>> = {
   // 17b44099 0:33: 26 hits IMMUNE in the form). The on-death form 27827 is
   // no press and stays out.
   "215769": "Spirit of Redemption",
+  // fact6 D17 (F20 ruling 3, 2026-10-28): Peaceweaver, the Mistweaver
+  // talent's 2 s proc of Revival / Restoral on every healed ally. DB2: aura
+  // 39 mask 126 (every school but physical — `immunitySchoolMask`), so it is
+  // school-limited: `limitedImmunitySchoolMask` reads the DB2 mask for it and
+  // the line prints `immune to magic`. Corpus, the fact6 15 rounds: 90
+  // non-periodic IMMUNE misses under it, all magic; 17 physical / 1 magic
+  // direct hit landed ≥ 1 s in. Its source is the monk, never the carrier
+  // (`ENEMY_IMMUNITY_TEAM_PROC_AURAS`).
+  "353319": "Peaceweaver",
 };
+
+/** fact6 D17 (F20): the `ENEMY_IMMUNITY_SAVE_AURAS` a teammate's PROC puts on
+ * each carrier — no press of the carrier's own, no cast aimed at it (the
+ * external path pairs a cast with its recipient's aura and sees none). The
+ * `[ENEMY DEF]` aura loop takes such an aura on every carrier whose source is
+ * on the carrier's team, and its press is the source's trigger cast
+ * (`TALENT_BEHAVIORS`' `triggerSpellIds`: Revival 115310 / Restoral 388615).
+ * 4caab013 1:38 and 114a4df7-r0 1:12: Peaceweaver on three enemies, no
+ * `[ENEMY DEF]` line. */
+export const ENEMY_IMMUNITY_TEAM_PROC_AURAS: ReadonlySet<string> = new Set([
+  "353319", // Peaceweaver
+]);
 
 /** What a proc save does, as its `[ENEMY DEF]` line says it. */
 export type EnemyProcSaveEffect = "heal proc" | "cheat-death proc";

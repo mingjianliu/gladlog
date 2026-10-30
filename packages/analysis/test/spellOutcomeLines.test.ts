@@ -117,6 +117,59 @@ describe("groundedControls (7d1f)", () => {
   });
 });
 
+describe("reflectedSpells — a pet command is the pet's (fact6 D30)", () => {
+  // the warlock's Command Demon Seduction (119909) and the Sayaad's own
+  // Seduction (6358) reflected by one Spell Reflection: one reflect, the pet's
+  const PET = "Pet-0-1-1-1-1-0000000001";
+  const reflect = (spellId: string, tS: number) => ({
+    spellId,
+    spellName: "Seduction",
+    missType: "REFLECT",
+    destUnitId: "Player-W",
+    logLine: { timestamp: T0 + tS * 1000 },
+  });
+  const warlock = (over: Record<string, unknown>) =>
+    unit("Player-P", { info: {}, ...over });
+  const sayaad = (over: Record<string, unknown>) =>
+    unit(PET, { name: "Sayaad", ownerId: "Player-P", ...over });
+
+  it("the owner's command row beside the pet's own reflect is not a second reflect", () => {
+    const out = reflectedSpells(
+      [
+        warlock({
+          spellCastEvents: [cast("119909", 5, "Player-W")],
+          missesOut: [reflect("119909", 5)],
+        }),
+        sayaad({
+          spellCastEvents: [cast("6358", 5.001, "Player-W")],
+          missesOut: [reflect("6358", 5.2)],
+        }),
+        unit("Player-W"),
+      ],
+      T0,
+    );
+    expect(out.map((r) => r.casterId)).toEqual([PET]);
+  });
+
+  it("a command no summon row carried out is reflected once, as the pet's", () => {
+    const out = reflectedSpells(
+      [
+        warlock({
+          spellCastEvents: [
+            cast("119909", 2, "Player-X"),
+            cast("119909", 5, "Player-W"),
+          ],
+          missesOut: [reflect("119909", 5)],
+        }),
+        sayaad({ spellCastEvents: [cast("6358", 2.001, "Player-X")] }),
+        unit("Player-W"),
+      ],
+      T0,
+    );
+    expect(out.map((r) => r.casterId)).toEqual([PET]);
+  });
+});
+
 describe("reflectedSpells (0051f0c9)", () => {
   const advanced = (maxHp: number) =>
     [0, 10_000, 20_000].map((ms) => ({

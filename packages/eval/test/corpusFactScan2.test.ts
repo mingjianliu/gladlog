@@ -56,18 +56,6 @@ const aura = (
   timestamp: ms,
   logLine: { event, timestamp: ms, lineIndex: line++ },
 });
-const cast = (ms: number, spellId: string, src: string, dst: string) => ({
-  spellId,
-  spellName: "",
-  srcUnitId: src,
-  destUnitId: dst,
-  timestamp: ms,
-  logLine: {
-    event: LogEvent.SPELL_CAST_SUCCESS as string,
-    timestamp: ms,
-    lineIndex: line++,
-  },
-});
 const APPLIED = LogEvent.SPELL_AURA_APPLIED as string;
 const REMOVED = LogEvent.SPELL_AURA_REMOVED as string;
 const REFRESH = LogEvent.SPELL_AURA_REFRESH as string;
@@ -215,40 +203,47 @@ describe("codex 30-RV-04 #2 — a dose row neither restarts an application's cap
   });
 });
 
-describe("codex 21-R12-c #3 — a cast-backed REFRESH is a new control application", () => {
-  const mageCasts = [cast(1000, POLYMORPH, M, T), cast(4000, POLYMORPH, M, T)];
-  const castsOf = (id: string) => (id === M ? mageCasts : []);
+describe("codex 21-R12-c #3 — a REFRESH is a new control application (recast or not since F20 dr, measured)", () => {
   const rows = [
     aura(APPLIED, 1000, POLYMORPH, M, T, "DEBUFF"),
     aura(REFRESH, 4000, POLYMORPH, M, T, "DEBUFF"),
   ];
-  it("Polymorph at 1 s, recast with a logged REFRESH at 4 s: two applications, the first ending at the recast", () => {
-    const apps = controlApplications(rows, T, castsOf);
+  it("Polymorph at 1 s, REFRESH at 4 s: two applications, the first ending at the REFRESH", () => {
+    const apps = controlApplications(rows, T);
     expect(apps.map((a) => a.ts)).toEqual([1000, 4000]);
     expect(apps[0]!.end).toBe(4000);
     expect(apps[1]!.refresh).toBe(true);
+    expect(apps[1]!.replaces).toBe(apps[0]);
   });
   it("the REFRESH application is the 2nd of its family, never closed, and a printed (6s) breaks the 50 % bound", () => {
-    const apps = controlApplications(rows, T, castsOf);
+    const apps = controlApplications(rows, T);
     const second = apps[1]!;
     expect(isUnclosedApp(rows, second)).toBe(true);
     expect(isUnclosedApp(rows, apps[0]!)).toBe(false);
-    const prior = drChain(apps, second.cat, second.ts, second.src);
+    const prior = drChain(apps, second.cat, second.ts, second.src, second);
     expect(prior).toHaveLength(1);
     const base = ccFullDurationSeconds(POLYMORPH)!;
     expect(6).toBeGreaterThan(diminishedBoundS(base, prior.length));
   });
-  it("a bare REFRESH (no recast for it) is the same application", () => {
-    const apps = controlApplications(rows, T, (id) =>
-      id === M ? [mageCasts[0]!] : [],
-    );
-    expect(apps.map((a) => a.ts)).toEqual([1000]);
-  });
-  it("a recast by another unit does not back the source's REFRESH", () => {
-    const apps = controlApplications(rows, T, (id) =>
-      id === P ? [cast(4000, POLYMORPH, P, T)] : [mageCasts[0]!],
-    );
-    expect(apps).toHaveLength(1);
+  it("codex 20-F20-16 (f01274b6 r0): Bull Rush APPLIED 45.058, REFRESH 45.158 — two stuns, the second at 50 %, a stun at 57.425 Immune", () => {
+    const BULL_RUSH = "255723";
+    const D = "Player-1-0000000D"; // the tauren
+    const br = [
+      aura(APPLIED, 45_058, BULL_RUSH, D, T, "DEBUFF"),
+      aura(REFRESH, 45_158, BULL_RUSH, D, T, "DEBUFF"),
+      aura(REMOVED, 45_917, BULL_RUSH, D, T, "DEBUFF"),
+    ];
+    const apps = controlApplications(br, T);
+    expect(apps.map((a) => [a.ts, a.end])).toEqual([
+      [45_058, 45_158],
+      [45_158, 45_917],
+    ]);
+    // the REFRESH's own DR: the application it replaced, 100 ms before
+    expect(drChain(apps, apps[1]!.cat, 45_158, D, apps[1])).toHaveLength(1);
+    // without `self`, the same-source ≤ 300 ms guard still holds
+    expect(drChain(apps, apps[1]!.cat, 45_158, D)).toHaveLength(0);
+    // another source's stun 12 s later: both count — DR-immune
+    expect(drChain(apps, apps[0]!.cat, 57_425, P)).toHaveLength(2);
   });
 });
 

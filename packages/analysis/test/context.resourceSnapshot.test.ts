@@ -777,3 +777,116 @@ describe("[RES] rdy: (no mana a/b) on an unaffordable owner cooldown (res-readin
     expect(snapshot(owner([]))).toContain("rdy:Restoral,Fortifying Brew");
   });
 });
+
+describe("F20 D24 / D25 — the [RES] enemy: column", () => {
+  const press = (
+    spellId: string,
+    spellName: string,
+    castTimeSeconds: number,
+    buffEndSeconds: number,
+  ) => ({
+    spellId,
+    spellName,
+    castTimeSeconds,
+    cooldownSeconds: 120,
+    availableAgainAtSeconds: castTimeSeconds + 120,
+    dangerWeight: 1,
+    buffEndSeconds,
+  });
+  const row = (
+    timeSeconds: number,
+    offensiveCDs: ReturnType<typeof press>[],
+  ): string =>
+    buildResourceSnapshot({
+      timeSeconds,
+      ownerCDs: [],
+      ownerName: "Owner-Realm",
+      ownerSpec: "Holy Priest",
+      teammateCDs: [],
+      ccTrinketSummaries: [],
+      enemyCDTimeline: {
+        players: [
+          {
+            playerName: "Dh-Realm",
+            specName: "Devourer Demon Hunter",
+            offensiveCDs,
+          },
+        ],
+        alignedBurstWindows: [],
+      } as unknown as IEnemyCDTimeline,
+    });
+
+  it("D24: a re-press that refreshes the running aura is one window with the latest end (1263fff6 1:41 + 1:45 Soul Immolation)", () => {
+    const line = row(106.6, [
+      press("1241937", "Soul Immolation", 101.75, 110.77),
+      press("1241937", "Soul Immolation", 105.26, 110.77),
+    ]);
+    expect(line).toContain(
+      "enemy:Soul Immolation/Devourer Demon Hunter(5s left)",
+    );
+    expect(line.match(/Soul Immolation/g)).toHaveLength(1);
+  });
+
+  it("D25: a press inside the row's own second is spent by it (pressSpentBy), not dropped by the floored row time (1263fff6 0:11 Avenging Wrath)", () => {
+    // row at 11.85 floors to 11; the press at 11.10 is in that second
+    const line = row(11.85, [press("454351", "Avenging Wrath", 11.1, 35.1)]);
+    expect(line).toContain("enemy:Avenging Wrath/Devourer Demon Hunter(24s left)");
+    // a press in the next second is not
+    expect(row(10.9, [press("454351", "Avenging Wrath", 11.1, 35.1)])).not.toContain(
+      "enemy:",
+    );
+  });
+});
+
+describe("F20 D23 — an override variant is its kit row's button in the enemy loadout", () => {
+  it("Predator's Wake pressed under its own name adds no second entry beside The Hunt", () => {
+    const owner = makeUnit("player-1", { name: "Player1" });
+    const dh = makeUnit("enemy-1", {
+      name: "Dh",
+      spec: CombatUnitSpec.DemonHunter_Devourer,
+    });
+    const res = buildPlayerLoadout(
+      owner,
+      "Holy Priest",
+      [],
+      [],
+      {
+        players: [
+          {
+            playerName: "Dh",
+            specName: "Devourer Demon Hunter",
+            offensiveCDs: [
+              {
+                spellId: "1259431",
+                spellName: "Predator's Wake",
+                cooldownSeconds: 90,
+                castTimeSeconds: 146,
+                buffEndSeconds: 148,
+                availableAgainAtSeconds: 236,
+              },
+            ],
+          },
+        ],
+        alignedBurstWindows: [],
+      } as unknown as IEnemyCDTimeline,
+      [dh],
+      [
+        {
+          player: dh,
+          cds: [
+            {
+              spellId: "1246167",
+              spellName: "The Hunt",
+              cooldownSeconds: 90,
+              maxChargesDetected: 1,
+              casts: [],
+              neverUsed: false,
+            } as unknown as IMajorCooldownInfo,
+          ],
+        },
+      ],
+    );
+    expect(res.text).toContain("The Hunt");
+    expect(res.text).not.toContain("Predator's Wake");
+  });
+});

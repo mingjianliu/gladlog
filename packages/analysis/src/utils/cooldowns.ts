@@ -32,6 +32,7 @@ import {
   healerSaveCdRoster,
   healerSaveCdStripDefensive,
 } from "../data/healerSaveCd";
+import { OVERRIDE_VARIANTS_GENERATED } from "../data/overrideVariantsGenerated";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { SHARED_CHARGE_CATEGORY } from "../data/sharedChargeGenerated";
@@ -383,6 +384,22 @@ export function cdCanHelpAnotherUnit(cd: {
 }): boolean {
   if (cd.allyReach === true) return true;
   return cd.allyReach !== false && canHelpAnotherUnit(cd.spellId, cd.tag);
+}
+
+/** F20 D1: can this cooldown save the unit in danger? Its holder
+ * (`recipientIsHolder`) unless it is an external that cannot target its
+ * caster (`SELF_CAST_NOOP_EXTERNAL_IDS` — Blessing of Sacrifice offered to the
+ * dying paladin himself, 002d2573 1:22); another unit when
+ * `cdCanHelpAnotherUnit`. The one predicate for every "a save X could have
+ * pressed for Y" reader (kill sequence, cd-hoarded, [CD PRIOR], burst
+ * decision points, [DEATH] Unused). */
+export function cdHelpsRecipient(
+  cd: { spellId: string; tag?: string; allyReach?: boolean },
+  recipientIsHolder: boolean,
+): boolean {
+  return recipientIsHolder
+    ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
+    : cdCanHelpAnotherUnit(cd);
 }
 
 /**
@@ -1553,6 +1570,14 @@ export type DefensiveTimingLabel =
 
 export interface ICooldownCast {
   timeSeconds: number;
+  /** The name of the spell this press logged, when it is a DB2 override
+   * variant sharing the entry's cooldown (`OVERRIDE_VARIANTS_GENERATED`)
+   * and its name differs from the entry's `spellName` — Predator's Wake
+   * 1259431 counted on a The Hunt 1246167 row, or the reverse. The ledger
+   * key and the counter stay the entry's; every line anchored on the press
+   * prints this name (user 2026-10-28: a shared-cooldown variant counts with
+   * its base spell under its own name). Read it through `castSpellName`. */
+  pressedName?: string;
   /**
    * Per-cast cooldown in seconds, when THIS press recovers differently from
    * the entry's `cooldownSeconds`. Only Guardian Angel needs it today: the
@@ -1603,6 +1628,35 @@ export interface ICooldownCast {
    * never re-implement the window geometry).
    */
   nearestBurstGapS?: number;
+}
+
+/** `ICooldownCast.pressedName` for a press logged as `pressId` on the entry
+ * `spell`: the press's own name when the two ids are distinct DB2 override
+ * variants of one cooldown and the names differ, else undefined. */
+function overrideVariantPressName(
+  pressId: string | null | undefined,
+  spell: { spellId: string; name: string },
+): string | undefined {
+  if (!pressId || pressId === spell.spellId) return undefined;
+  if (
+    !(pressId in OVERRIDE_VARIANTS_GENERATED) &&
+    !(spell.spellId in OVERRIDE_VARIANTS_GENERATED)
+  )
+    return undefined;
+  if (canonicalSpellId(pressId) !== canonicalSpellId(spell.spellId))
+    return undefined;
+  const name = getEnglishSpellName(pressId, "");
+  return name && name !== spell.name ? name : undefined;
+}
+
+/** The name a line anchored on `cast` prints: the press's own name when it
+ * logged a shared-cooldown variant of the entry (`pressedName`), else the
+ * entry's. */
+export function castSpellName(
+  cd: { spellName: string },
+  cast: Pick<ICooldownCast, "pressedName">,
+): string {
+  return cast.pressedName ?? cd.spellName;
 }
 
 /**
@@ -3324,7 +3378,9 @@ export const PVP_TALENT_REPLACES: Record<string, string[]> =
  * Registered in `curatedIdRegistry.ts` (kind "mixed"); a cast under any alias
  * still counts as evidence for the one kit entry.
  */
-export const SPELL_CANONICAL_IDS: Record<string, string> = {
+/** The hand layer of `SPELL_CANONICAL_IDS` (the curated-id registry lists
+ *  only this layer; the generated variants are datagen's). */
+export const HAND_CANONICAL_IDS: Readonly<Record<string, string>> = {
   "633": "471195", // Lay on Hands: 633 is the pre-12.x id, 471195 the live cast id
   "432496": "432459", // Holy Bulwark: buff aura ID -> 432459 cast ID
   "432607": "432459", // Holy Bulwark: buff aura ID -> 432459 cast ID
@@ -3350,6 +3406,29 @@ export const SPELL_CANONICAL_IDS: Record<string, string> = {
   // no kit row, no [TEAM] / [YOU] [CD] line and no [RES] entry (26bfd4f3).
   "200166": "191427",
 };
+
+/**
+ * F20 D23 (fact6, 2026-10-28): plus every DB2 override variant
+ * (`OVERRIDE_VARIANTS_GENERATED`: an aura-332 button swap onto a spell that
+ * draws on the same cooldown) — Predator's Wake 1259431 is the The Hunt
+ * 1246167 button under Demonsurge (Category 2427, both 90 s); 1263fff6's two
+ * presses were no The Hunt press anywhere. The hand rows win: a variant that
+ * is already a hand key or target keeps the hand direction (Bladestorm
+ * 446035 is the live id the hand table maps 227847 to), and a variant of a
+ * hand alias resolves through it.
+ */
+export const SPELL_CANONICAL_IDS: Record<string, string> = (() => {
+  const handTargets = new Set(Object.values(HAND_CANONICAL_IDS));
+  const out: Record<string, string> = {};
+  for (const [variant, overridden] of Object.entries(
+    OVERRIDE_VARIANTS_GENERATED,
+  )) {
+    if (variant in HAND_CANONICAL_IDS || handTargets.has(variant)) continue;
+    const canon = HAND_CANONICAL_IDS[overridden] ?? overridden;
+    if (canon !== variant) out[variant] = canon;
+  }
+  return { ...out, ...HAND_CANONICAL_IDS };
+})();
 
 export function canonicalSpellId(spellId: string): string {
   return SPELL_CANONICAL_IDS[spellId] ?? spellId;
@@ -4723,7 +4802,27 @@ function extractMajorCooldownsAll(
   // unpressed. Which of the twelve is worth an accusation is the offensive
   // registration's call (offensiveCdGapScan), not this path's.
   const pressOnlyOffensiveIds = new Set<string>();
-  for (const spellId of castSpellIds) {
+  for (const castId of castSpellIds) {
+    // F20 D23 residual (605 cap-int: 4 friendly presses in 2 rounds): a
+    // press of a DB2 override variant (`OVERRIDE_VARIANTS_GENERATED`) of an
+    // offensive member is that member's press — a Devourer who pressed only
+    // Predator's Wake 1259431 in a round had no The Hunt 1246167 row, so no
+    // [YOU] / [TEAM] [CD] line (a round that also pressed 1246167 had both,
+    // counted on one row through `canonicalSpellId`). The row is the
+    // member's, as it is when both ids are pressed — its ledger key and its
+    // counter. Its NAME is what the unit pressed (user 2026-10-28, a variant
+    // sharing a cooldown counts with its base spell under its own name): the
+    // variant's when only the variant was pressed this round, the member's
+    // when the member was pressed too (one row, as the dedupe below keeps
+    // it); each press line names its own press (`ICooldownCast.pressedAs`).
+    const canonOfVariant =
+      castId in OVERRIDE_VARIANTS_GENERATED ? canonicalSpellId(castId) : castId;
+    const spellId =
+      canonOfVariant !== castId &&
+      !OFFENSIVE_CD_SPELL_IDS.has(castId) &&
+      OFFENSIVE_CD_SPELL_IDS.has(canonOfVariant)
+        ? canonOfVariant
+        : castId;
     if (seen.has(spellId) || replacedByTalent.has(spellId)) continue;
     const offensive = OFFENSIVE_CD_SPELL_IDS.has(spellId);
     // fact4 D38 (4dee936a 0:18): the immunity-kind saves the enemy side
@@ -4749,7 +4848,10 @@ function extractMajorCooldownsAll(
       continue;
     majorSpells.push({
       spellId,
-      name: effectData.name,
+      name:
+        spellId !== castId && !castSpellIds.has(spellId)
+          ? getEnglishSpellName(castId, "") || effectData.name
+          : effectData.name,
       tags: [SpellTag.Utility],
     });
     seen.add(spellId);
@@ -5051,6 +5153,8 @@ function buildCooldownEntry(
     .map((e) => {
       const timeSeconds = (e.logLine.timestamp - matchStartMs) / 1000;
       const cast: ICooldownCast = { timeSeconds };
+      const pressedName = overrideVariantPressName(e.spellId, spell);
+      if (pressedName) cast.pressedName = pressedName;
       if (
         (isDefOrExternal || isControl || reachesSomeoneElse) &&
         e.destUnitId &&
@@ -5568,6 +5672,13 @@ export const NON_SUBSTITUTE_DEFENSIVE_IDS = new Set<string>([
  */
 export const SELF_CAST_NOOP_EXTERNAL_IDS: ReadonlySet<string> = new Set([
   "6940", // Blessing of Sacrifice (Paladin) — damage-redirect-to-caster
+  // F20 residual: the id Ultimate Sacrifice swaps in (alias of 6940,
+  // `CANONICAL_SPELL_ID`). A Holy Paladin who pressed it carries 199448 as
+  // his roster row's id, so 6940 alone let "(Unused: …, Blessing of
+  // Sacrifice, …)" print at his own death (cap-int s1/81-1-445 2:20). Same
+  // evidence as 6940: DB2 SpellMisc Attributes_1 bit 19 (Exclude Caster),
+  // 0 of 35 logged casts on the caster.
+  "199448",
 ]);
 
 /**

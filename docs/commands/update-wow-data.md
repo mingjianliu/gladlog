@@ -298,6 +298,15 @@ npx tsx packages/analysis/scripts/datagen/genChanneled.ts
 #      Blessing of Protection ↔ Spellwarding, Holy Bulwark ↔ Sacred Weapon …). A press of one spends the
 #      other's charge in the ledger (spendsSharedChargeOf, reliability round 2 W1e).
 npx tsx packages/analysis/scripts/datagen/genSharedCharges.ts
+# 6f1b2. override variants (SpellEffect aura 332 OVERRIDE_ACTIONBAR_SPELLS: variant → overridden spell that
+#      draws on the same cooldown — same Category with a category cooldown, or the same charged ChargeCategory;
+#      both observed; not a stage / cancel of the spell's own aura). Merged into SPELL_CANONICAL_IDS and
+#      offensiveEffectCdId (F20 D23: Predator's Wake 1259431 → The Hunt 1246167). A form / hidden-aura
+#      override is in no talent-replace table — this is the completeness check for that shape.
+npx tsx packages/analysis/scripts/datagen/genOverrideVariants.ts
+# 6f1b3. buffs one dispel press removes per target (SpellEffect Effect 38, Magic: base points — Greater Purge
+#      378773 and Fire Breath 357209 = 2). Read by the purge legend and the missed-purge menu definition (F20 D31).
+npx tsx packages/analysis/scripts/datagen/genPurgeRemovals.ts
 # 6f1c. summon spells (SpellEffect 28 SUMMON on the spell or one EffectTriggerSpell hop). CD_OUT_OF_RANGE
 #      abstains on them — the payoff is a pet, not the owner's position (reliability round 2 W1f).
 npx tsx packages/analysis/scripts/datagen/genSummonSpells.ts
@@ -307,14 +316,30 @@ npx tsx packages/analysis/scripts/datagen/genRootAuras.ts
 # 6f1e. cast → effect-aura table (triage G3, ruling A10 = both: DB2 nominates, the corpus verifies). Two
 #      stages; the second is a corpus scan (raw lines, one process, a few minutes per ~1,800 files):
 #      (1) nominations: same SpellName or an EffectTriggerSpell chain (≤ 3 hops) to an aura-bearing spell,
-#          the cast end in the observed universe → castEffectNominationsGenerated.json;
+#          the cast end in the observed universe — plus every observed cast of a class one of whose talents
+#          triggers a control (SpellCategories DiminishType; Deep Breath → Terror of the Skies 372245, F20)
+#          → castEffectNominationsGenerated.json;
 #      (2) verification: a pair is kept when the cast's caster (summons resolved) applies the aura after
 #          the cast ≥ 10 times, ≥ 50 % of the aura's applications follow a nominating cast, and ≥ 50 % of
-#          the hits come within 3 s → castEffectAuraGenerated.json (read by data/castEffectAuras.ts).
+#          the hits come within 3 s — or ≥ 90 % of (≥ 10) aura applications with that cast in the 60 s before
+#          them come within 3 s of its nearest one (a cast that applies it only sometimes: a stealth Rake's
+#          stun 163505); a talent-only nomination needs the latter → castEffectAuraGenerated.json (read by
+#          data/castEffectAuras.ts). `--keep <old table>` makes an emit additive (the old pairs stay as they
+#          were): for a rule change measured on a corpus that has lost files since — not for a season refresh.
 #      test/castEffectAuras.test.ts pins the former hand rows (CC_CAST_EFFECT_AURA) — a row that fails the
 #      new season's verification is a renumbered spell: find its live id, do not loosen the rule.
 npx tsx packages/analysis/scripts/datagen/genCastEffectNominations.ts
 npx tsx packages/eval/scripts/castEffectAuraScan.ts \
+  --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-2026-08-28-newseason.txt --every 10 --emit
+# 6f1f. Own absorb shields a press put up (fact6 F20, user ruling 1 2026-10-28) → ownShieldLinksGenerated.json
+#      (read by data/ownShieldLinks.ts → the kill windows' `defenseless`): the Power Word: Shield family by
+#      SpellClassOptions mask (DB2 only), and the riders — class-owned DB2 absorbs (a talent aura with no
+#      SpellClassOptions row takes its carrying press's class) that ≥ 90 % of the time go up within ±150 ms of
+#      their holder's press of another spell (Chi Cocoon with Invoke Chi-Ji; the rate counts only holders whose
+#      carrying press is logged that round — the Devourer's Shift writes no cast row) and absorb; passive procs,
+#      deferrals and never-absorbing auras stay out. Emitted 2026-10-28 on the 605 files (90 % kept); cross-check
+#      the threshold with corpusFactScan5's `absorb` report() inventory.
+npx tsx packages/eval/scripts/ownShieldLinkScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-2026-08-28-newseason.txt --every 10 --emit
 # 6f2. Spell mechanic facts (GH #77, 2026-09-24): CC mechanic (SpellCategories / SpellEffect, one
 #      EffectTriggerSpell hop, else the unique loss-of-control mechanic among same-named observed spells),
@@ -540,10 +565,13 @@ npx tsx packages/eval/scripts/offensiveCdGapScan.ts scan \
   --out $GLADLOG_EVAL_HOME/reports/offensive-cd-gap-<date>/cells.json
 npx tsx packages/eval/scripts/offensiveCdGapScan.ts report \
   --in $GLADLOG_EVAL_HOME/reports/offensive-cd-gap-<date>/cells.json --min-n 50 --min-share 0.1
-# 6. Racial → PvP trinket lock (2026-09-25, reliability round 3 W1j): racialTrinketLockoutMs (Will to
-#    Survive 60 s, the rest 30 s) is corpus-measured, not DB2. Successes bound the lock from above,
-#    rejections ("Item is not ready yet", the trinket's own cooldown excluded) from below; a success
-#    well under the table or a rejection well over it is a FLAG to adjudicate. ~5 min on every 5th file.
+# 6. Racial ↔ PvP trinket lock (2026-09-25 W1j; by role since fact6 F20, 2026-10-28):
+#    racialTrinketLockoutMs(id, isHealer) — Will to Survive 90 s DPS / tank, 60 s healer; the rest 30 s
+#    (DB2 CategoryRecoveryTime of category 1166, healer cap = trigger 1228476's 60 s; the corpus chose
+#    them). Cells per racial × role, racial → trinket split by whether the trinket's own cooldown was
+#    still running, plus trinket → racial. Successes bound the lock from above, refusals
+#    (ITEM_NOT_READY_REASONS, any locale) from below. FLAG = a press the table contradicts under
+#    max(own cooldown end, press + lock); adjudicate every one. ~5 min on every 5th file.
 npx tsx packages/eval/scripts/racialTrinketLockScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 5
 # 7. Major-cooldown ledger roster (2026-09-26, reliability round 2 W1g): forward — every cast with an

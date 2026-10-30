@@ -59,7 +59,6 @@ describe("2a — DR history: one application per re-send, a lost REMOVED capped"
     buildCcCategoryHistory(
       { id: "v", auraEvents: events } as unknown as ICombatUnit,
       cat(),
-      new Set(["mage"]),
       T0,
     ).map((i) => [i.atSeconds, i.durationSeconds]);
 
@@ -104,7 +103,6 @@ describe("2a — DR history: one application per re-send, a lost REMOVED capped"
       buildCcCategoryHistory(
         { id: "v", auraEvents: events } as unknown as ICombatUnit,
         cat(),
-        new Set(["mage"]),
         T0,
         new Map([["mage", mage as unknown as ICombatUnit]]),
       ).map((i) => [i.atSeconds, i.durationSeconds]),

@@ -2173,8 +2173,9 @@ describe("CC-break abilities other than the trinket (F-E21 / A′15)", () => {
         spellCastEvents: casts,
       });
     // Will to Survive at 10 s (180 s cooldown → back at 190 s); the trinket
-    // at 180 s holds it until 240 s — Will to Survive's lock is 60 s both
-    // ways (codex 62-POSTHOC-13d #1)
+    // at 180 s holds it until 270 s — Will to Survive's lock is 90 s both
+    // ways for a DPS (codex 62-POSTHOC-13d #1; fact6 F20: 60 s is the
+    // healer's)
     const r = analyzePlayerCCAndTrinket(
       human([
         makeSpellCastEvent(
@@ -2193,11 +2194,11 @@ describe("CC-break abilities other than the trinket (F-E21 / A′15)", () => {
     );
     expect(r.ccInstances[1]?.breakRacialOnCd).toEqual({
       name: "Will to Survive",
-      secondsLeft: 45,
+      secondsLeft: 75,
     });
     expect(r.ccInstances[2]?.breakRacialOnCd).toEqual({
       name: "Will to Survive",
-      secondsLeft: 25,
+      secondsLeft: 55,
     });
     // the racial is the player's whenever it is seen pressed this round —
     // here only after the CC
@@ -2219,7 +2220,7 @@ describe("CC-break abilities other than the trinket (F-E21 / A′15)", () => {
     );
     expect(later.ccInstances[1]?.breakRacialOnCd).toEqual({
       name: "Will to Survive",
-      secondsLeft: 45,
+      secondsLeft: 75,
     });
     // no racial ever pressed → nothing is claimed about one
     const none = analyzePlayerCCAndTrinket(

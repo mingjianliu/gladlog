@@ -22,6 +22,7 @@ import {
 } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
+  canonicalSpellId,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
   isEnemyCdWindowSpell,
@@ -50,6 +51,7 @@ import {
 } from "./offensiveAuraOccurrences";
 import {
   dangerLabel,
+  OFFENSIVE_EFFECT_ACTIVATION_IDS,
   offensiveDangerWeight,
   offensiveEffectCdId,
 } from "./spellDanger";
@@ -437,14 +439,18 @@ export function reconstructEnemyCDTimeline(
       if (!isEnemyCdWindowSpell(spellId)) continue;
       const effectData = spellEffectData[spellId]!;
       // an activation of another cooldown's effect (GH #115) has no button:
-      // no cooldown of its own, nothing to come "available again"
-      const isActivation = offensiveEffectCdId(spellId) !== spellId;
+      // no cooldown of its own, nothing to come "available again". An
+      // override variant (F20 D23: Predator's Wake 1259431 on The Hunt's
+      // button) IS that button: priced on the cooldown it presses, under the
+      // log's own id and name.
+      const isActivation = OFFENSIVE_EFFECT_ACTIVATION_IDS.has(spellId);
+      const cdId = offensiveEffectCdId(spellId) ?? spellId;
       // the enemy's own talent-resolved cooldown (`unitCooldownOf`: Summon
       // Infernal 90 with Inferno, not 120) — talent impact audit 2026-09-26
       const cooldownSeconds = isActivation
         ? 0
-        : (unitCooldownOf(enemy, spellId)?.cooldownSeconds ??
-          effectiveCooldownSeconds(spellId) ??
+        : (unitCooldownOf(enemy, cdId)?.cooldownSeconds ??
+          effectiveCooldownSeconds(cdId) ??
           0);
 
       const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
@@ -470,7 +476,7 @@ export function reconstructEnemyCDTimeline(
       // the static sum only for a cast the model does not count as a press
       const entry = isActivation
         ? undefined
-        : unitCooldownEntry(enemy, combat, spellId);
+        : unitCooldownEntry(enemy, combat, cdId);
       offensiveCDs.push({
         spellId,
         spellName: effectData.name,
@@ -495,7 +501,8 @@ export function reconstructEnemyCDTimeline(
     for (const cd of offensiveCDs) {
       const next = offensiveCDs.find(
         (c) =>
-          c.spellId === cd.spellId && c.castTimeSeconds > cd.castTimeSeconds,
+          canonicalSpellId(c.spellId) === canonicalSpellId(cd.spellId) &&
+          c.castTimeSeconds > cd.castTimeSeconds,
       );
       const end = observedEffectEndSeconds(
         enemy,

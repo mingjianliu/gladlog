@@ -25,6 +25,7 @@ import {
 import { ccRecastSplitsResend } from "../utils/drAnalysis";
 import { groundingRedirects } from "../utils/groundingRedirects";
 import { isDeferralAbsorb } from "../utils/incomingPressure";
+import { petCommands } from "../utils/petCommands";
 import type { CastFailedEvent } from "../utils/rawStreams";
 import { sanctuaryRemovalPairs } from "../utils/sanctuaryRemovals";
 import {
@@ -94,7 +95,10 @@ export function groundedControls(
  *  Firebolt, Pestilence …); a reflected Shadow Bolt came back for ~300k. */
 export const REFLECT_MIN_DAMAGE_PCT = 5;
 /** How long after the reflect the spell's damage on its caster is summed
- *  (a reflected DoT ticks on the caster). */
+ *  when no reflected copy's aura stands behind it (a channel's caster →
+ *  caster ticks). A reflected DoT's copy is summed over its own aura run,
+ *  however long (F20 D6, c5ae2200 0:19: a Flame Shock copy up 47 s printed
+ *  143k of 255k at a 20 s cap). */
 export const REFLECT_DAMAGE_WINDOW_S = 20;
 
 export interface IReflected {
@@ -172,7 +176,12 @@ export function reflectCount(
   return n;
 }
 
-function maxHpNear(unit: ICombatUnit, tMs: number): number | null {
+/** The unit's max HP at its advanced row nearest `tMs` (null when that row
+ *  is not its own). Exported for corpusFactScan `reflectReturn`'s 5 % floor —
+ *  its own nearest-row pick read the first of three rows in one ms (971,080
+ *  before Desperate Prayer's +35 %) where this reads the last (1,310,958):
+ *  0c2f3878 r1 1:30 Void Volley, 62.1k = 6.4 % vs 4.7 %. */
+export function maxHpNear(unit: ICombatUnit, tMs: number): number | null {
   const a = binarySearchClosest(
     getSortedAdvancedActions(unit),
     tMs,
@@ -181,6 +190,27 @@ function maxHpNear(unit: ICombatUnit, tMs: number): number | null {
   if (!a || a.advancedActorId !== unit.id || a.advancedActorMaxHp <= 0)
     return null;
   return a.advancedActorMaxHp;
+}
+
+/** A REFLECT row this reflect reader counts: not one whose target is its own
+ * caster. 4eea3cc5 r1 1:11: two warlocks with Nether Ward up; the log wrote
+ * `SPELL_MISSED Cybermooke→Cybermooke 445474 REFLECT` in the same ms as the
+ * enemy's real reflect of that Wither, the self row's chain took the return
+ * and the prompt read "6(DWarlock)'s Wither reflected by 6(DWarlock) (came
+ * back for 166k)" while the real 172k reflect printed nothing (F20 wide
+ * residual, 4 facts). A unit cannot reflect its own spell at itself; the
+ * row is the copy's bounce, not a reflect of a spell it aimed. */
+export function isCountedReflectRow(m: {
+  missType?: string;
+  spellId?: string;
+  srcUnitId?: string;
+  destUnitId?: string;
+}): boolean {
+  return (
+    m.missType === "REFLECT" &&
+    !!m.spellId &&
+    !(m.srcUnitId && m.srcUnitId === m.destUnitId)
+  );
 }
 
 /** Reflects of one caster's spell by one reflector this close together are
@@ -219,9 +249,42 @@ export function reflectedSpells(
 ): IReflected[] {
   const byId = new Map(units.map((u) => [u.id, u]));
   const out: IReflected[] = [];
+  // fact6 D30's reading: an owner's command to its pet (Command Demon) is the
+  // pet's cast — the pet's own REFLECT row states it; a command row no
+  // summon row carried out is the pet's, once (`petCommands`)
+  type MissRow = NonNullable<ICombatUnit["missesOut"]>[number];
+  const commandReflects = new Set<MissRow>();
+  const reflectsMovedTo = new Map<string, MissRow[]>();
+  for (const u of units) {
+    if (!u.info) continue;
+    const rows = (u.missesOut ?? []).filter(isCountedReflectRow);
+    if (rows.length === 0) continue;
+    const cmd = petCommands(u, { units });
+    for (const m of rows) {
+      const name = getEnglishSpellName(m.spellId!, m.spellName ?? "");
+      if (cmd.carriedOutBy(m.logLine.timestamp, name)) {
+        commandReflects.add(m);
+        continue;
+      }
+      if (
+        !cmd.isCommandRow(m.spellId!, m.logLine.timestamp, REFLECT_CAST_LEAD_MS)
+      )
+        continue;
+      commandReflects.add(m);
+      const pet = cmd.commandPet(name);
+      if (pet)
+        reflectsMovedTo.set(pet.id, [
+          ...(reflectsMovedTo.get(pet.id) ?? []),
+          m,
+        ]);
+    }
+  }
   for (const caster of units) {
-    const reflects = (caster.missesOut ?? [])
-      .filter((m) => m.missType === "REFLECT" && !!m.spellId)
+    const reflects = [
+      ...(caster.missesOut ?? []).filter((m) => !commandReflects.has(m)),
+      ...(reflectsMovedTo.get(caster.id) ?? []),
+    ]
+      .filter(isCountedReflectRow)
       .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
     // chains: same spell, same reflector, ≤ REFLECT_CHAIN_GAP_MS apart (this
     // also folds one reflect logged once per effect at the same ms)
@@ -230,6 +293,9 @@ export function reflectedSpells(
       last: number;
       /** every REFLECT row's ms in the chain */
       rows: number[];
+      /** every REFLECT row's spell id in the chain (a cast id and its
+       *  damage id: Death Coil 47541 / 47632) */
+      ids: Set<string>;
     }> = [];
     for (const m of reflects) {
       const c = [...chains].reverse().find(
@@ -249,11 +315,13 @@ export function reflectedSpells(
       if (c && m.logLine.timestamp - c.last <= REFLECT_CHAIN_GAP_MS) {
         c.last = m.logLine.timestamp;
         c.rows.push(m.logLine.timestamp);
+        c.ids.add(m.spellId!);
       } else
         chains.push({
           first: m,
           last: m.logLine.timestamp,
           rows: [m.logLine.timestamp],
+          ids: new Set([m.spellId!]),
         });
     }
     // Each hit of the spell on its caster goes to ONE chain (codex reviews
@@ -283,8 +351,10 @@ export function reflectedSpells(
       for (const a of caster.auraEvents ?? []) {
         if (a.logLine.timestamp > ts) break;
         if (a.spellId !== spellId || a.srcUnitId !== reflectorId) continue;
-        if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) since = undefined;
-        else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED)
+        // a tick logged in its run's removal ms is still the run's
+        if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
+          if (a.logLine.timestamp < ts) since = undefined;
+        } else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED)
           since ??= a.logLine.timestamp;
         else since ??= a.logLine.timestamp; // a REFRESH / dose: up
       }
@@ -303,24 +373,73 @@ export function reflectedSpells(
     // a run of the hit's aura that started with the reflect (from
     // `REFLECT_OWN_ID_LEAD_MS` before its first row to the projectile's
     // flight after its last) and is up at `ts`
+    // F20 D6: the copy can be the caster's own (caster → caster, the
+    // reflected Flame Shock of c5ae2200 0:19) as well as the reflector's,
+    // and a REMOVED + APPLIED in one ms is the same copy re-applied — it
+    // keeps the run it continues (scan1 `reflectReturn`'s join)
+    // F20 wide residual: a later reflect of the spell that refreshes the
+    // caster's own copy (REFRESH / a dose / a re-APPLIED in its window) stands behind the
+    // rest of the run — the run is that reflect's from the refresh on, to its
+    // end (d6d8a412 r1 2:07: a Shadow Word: Pain reflected at 2:07 and again
+    // at 2:17 into the same copy; the 2:17 line kept only its first 20 s and
+    // the copy's last 6 s went back to the 2:07 line). `owning` gives a tick
+    // to the latest chain standing behind it.
     const reflectedCopyUp = (
       spellId: string,
-      reflectorId: string,
+      srcId: string,
       ts: number,
       firstMs: number,
       lastMs: number,
     ): boolean => {
       let since: number | undefined;
+      /** the run's APPLIED, REFRESH and dose rows */
+      let touches: number[] = [];
+      let cut: { at: number; since: number; touches: number[] } | undefined;
+      let reappliedAt: number | undefined;
       for (const a of caster.auraEvents ?? []) {
         if (a.logLine.timestamp > ts) break;
-        if (a.spellId !== spellId || a.srcUnitId !== reflectorId) continue;
-        if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) since = undefined;
-        else since ??= a.logLine.timestamp;
+        if (a.spellId !== spellId || a.srcUnitId !== srcId) continue;
+        const at = a.logLine.timestamp;
+        const ev = a.logLine.event;
+        if (ev === LogEvent.SPELL_AURA_REMOVED) {
+          // …in either order: an APPLIED logged first in that ms
+          if (reappliedAt === at) continue;
+          // the run's last tick can share its removal ms (c5ae2200 1:06.732:
+          // a 2,429 Flame Shock tick, then the REMOVED) — it is the run's
+          if (at === ts) continue;
+          cut = since === undefined ? undefined : { at, since, touches };
+          since = undefined;
+          touches = [];
+          continue;
+        }
+        if (since === undefined && cut?.at === at) {
+          since = cut.since;
+          touches = cut.touches;
+        } else if (since === undefined) {
+          since = at;
+          touches = [at];
+          continue;
+        } else if (ev === LogEvent.SPELL_AURA_APPLIED) reappliedAt = at;
+        // only the caster's own copy: no one but a reflect puts the
+        // caster's spell on the caster, while the reflector's own copy
+        // stacks and refreshes by itself (cb7fe23f r1 0:20: Ilovearýanne's
+        // Wither doses on Cybermooke 2.4 s after a reflect claimed her whole
+        // run, 167k printed for 5.8k)
+        if (
+          srcId === caster.id &&
+          (ev === LogEvent.SPELL_AURA_APPLIED ||
+            ev === LogEvent.SPELL_AURA_REFRESH ||
+            ev === LogEvent.SPELL_AURA_APPLIED_DOSE)
+        )
+          touches.push(at);
       }
       return (
         since !== undefined &&
-        since >= firstMs - REFLECT_OWN_ID_LEAD_MS &&
-        since <= lastMs + REFLECT_DIRECT_RETURN_MS
+        touches.some(
+          (t) =>
+            t >= firstMs - REFLECT_OWN_ID_LEAD_MS &&
+            t <= lastMs + REFLECT_DIRECT_RETURN_MS,
+        )
       );
     };
     const sameSpell = (reflected: string, hit: string) =>
@@ -337,9 +456,15 @@ export function reflectedSpells(
         // caster's own (105-3 0:17: a reflected Frostfire Bolt's 106k under
         // 468655, caster → caster, 23 ms before the REFLECT row)
         const lead = REFLECT_OWN_ID_LEAD_MS;
-        if (t0 - lead > ts || ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000)
-          continue;
+        if (t0 - lead > ts) continue;
         if (src !== caster.id && src !== c.first.destUnitId) continue;
+        // the reflected copy's ticks count for as long as its aura runs; the
+        // fixed window only for a return no copy stands behind (F20 D6)
+        if (
+          ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000 &&
+          !(src !== undefined && reflectedCopyUp(spellId, src, ts, t0, c.last))
+        )
+          continue;
         if (
           src === c.first.destUnitId &&
           src !== caster.id &&
@@ -405,8 +530,12 @@ export function reflectedSpells(
         // a reflected spell that deals no damage owns no damage return —
         // a control (codex 20-F16-03 #3) or anything else (fact3 D6 / D25:
         // a Spellsteal reflected 0.6 s after a Pyroblast took its 145k)
-        const id = c.first.spellId ?? "";
-        if (!dealsDamage(id)) continue;
+        // …by any of the chain's ids: a Death Coil reflected as its cast id
+        // 47541 (no damage effect of its own) and its damage id 47632 is one
+        // damaging chain (F20 wide residual, d59fd620 r1 1:01: a 43.7k
+        // Nether Ward row 0.32 s after the Death Coil went to a Pestilence
+        // reflected 0.49 s before it — printed 62k for 19k of ticks)
+        if (![...c.ids].some(dealsDamage)) continue;
         const gap = rowGap;
         if (gap < bestGap) {
           best = c;
@@ -552,9 +681,6 @@ function heldAndLeft(
     }
   }
   if (!spellId || !applied) return {};
-  const opponentIds = new Set(
-    units.filter((u) => u.reaction !== target.reaction).map((u) => u.id),
-  );
   return {
     heldSeconds: (removedMs - applied.timestamp) / 1000,
     leftSeconds: ccRemainingSeconds({
@@ -563,7 +689,7 @@ function heldAndLeft(
       caster: units.find((u) => u.id === srcId),
       applyMs: applied.timestamp,
       endMs: removedMs,
-      opponentIds,
+      srcUnitId: srcId,
       matchStartMs,
       roarAtApply: oppressingRoarOnAt(target, applied),
       unitById,
@@ -696,6 +822,24 @@ export const REJECT_WHY_UNWORDED = "client reason not translated";
  *  did not refuse the press. */
 export const REJECT_WHY_BAR_STOPPED = "its cast bar began and was stopped";
 
+/** SPELL_FAILED_ITEM_NOT_READY ("Item is not ready yet") in every client
+ * locale the corpus carries — an item's own cooldown, the Gladiator's
+ * Medallion's included. ru and ko added 2026-10-28 (fact6 F20, Curated-List
+ * forward check on the reasons of 336126 SPELL_CAST_FAILED rows over the 605
+ * + wide captures: ru 7 rows, ko 1, both unworded before). One list: the
+ * refusal wording below and the trinket-lock scans
+ * (`racialTrinketLockScan.ts`, `scan5/trinketLock.ts`) read it. */
+export const ITEM_NOT_READY_REASONS: readonly string[] = [
+  "Item is not ready yet",
+  "物品还没有准备好",
+  "物品還沒有準備好",
+  "El objeto aún no está listo",
+  "Gegenstand ist noch nicht bereit.",
+  "L'objet n'est pas encore prêt",
+  "Предмет еще не готов.",
+  "아직 사용할 준비가 안 됐습니다.",
+];
+
 /**
  * More SPELL_CAST_FAILED reason texts `refusalWhy` words — product wording →
  * the client's texts, every locale the corpus carries them in (work order
@@ -781,14 +925,7 @@ export const OTHER_REFUSAL_REASONS: Readonly<
     "지금 당장은 할 수 없습니다.",
   ],
   "in combat": ["You are in combat", "你正处于交战状态"],
-  "item not ready yet": [
-    "Item is not ready yet",
-    "物品还没有准备好",
-    "物品還沒有準備好",
-    "El objeto aún no está listo",
-    "Gegenstand ist noch nicht bereit.",
-    "L'objet n'est pas encore prêt",
-  ],
+  "item not ready yet": ITEM_NOT_READY_REASONS,
   "not enough mana": ["Not enough mana", "法力值不足", "Pas assez de mana"],
   "not enough energy": ["Not enough energy", "能量值不足"],
   "not enough rage": ["Not enough rage", "Pas assez de rage"],

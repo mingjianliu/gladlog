@@ -251,7 +251,11 @@ export interface TimelineCtx {
   friendlyPid: (name: string) => string | undefined;
   /** enemy player name -> short id (+ spec tag) */
   enemyPid: (name: string) => string;
-  outgoingDrTag: (spellId: string, cast: { timeSeconds: number }) => string;
+  outgoingDrTag: (
+    spellId: string,
+    cast: { timeSeconds: number },
+    named?: ReadonlySet<string>,
+  ) => string;
   /** `named`: the unit names the line names (enemy-def F-E26) */
   ccImmuneTagFor: (
     unit: ICombatUnit,
@@ -293,7 +297,9 @@ export interface TimelineCtx {
   ) => string;
   ownerCcMissTag: (spellId: string, castTimeSeconds: number) => string;
   /** FT-T14: ` [hit no enemy player]` for an un-aimed area control
-   * (`AOE_CC_SPELL_IDS`) with no aura and no miss on any enemy player;
+   * (`AOE_CC_SPELL_IDS`) with no aura, damage or miss row on any enemy
+   * player, ` [no CC aura logged — hit …]` when it reached one and
+   * controlled nobody (fact6 ruling 2);
    * cc-dr F-NE1: ` [no CC aura logged]` for an aimed owner CC with no aura
    * and no miss on its target (shared by both owner-CC emitters) */
   ownerNoCcAuraTag: (spellId: string, castTimeSeconds: number) => string;

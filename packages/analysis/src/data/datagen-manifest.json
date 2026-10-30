@@ -70,11 +70,17 @@
       "entries": 28
     },
     "castEffectNominationsGenerated.json": {
-      "casts": 3830,
-      "pairs": 40689
+      "casts": 4012,
+      "pairs": 42120
     },
     "sharedChargeGenerated.ts": {
       "entries": 92
+    },
+    "overrideVariantsGenerated.ts": {
+      "pairs": 25
+    },
+    "purgeRemovalsGenerated.ts": {
+      "entries": 35
     },
     "abilityEffectsGenerated.ts": {
       "entries": 2231,
@@ -125,9 +131,13 @@
       "producer": "packages/eval/scripts/behaviorPriorScan.ts emit-table"
     },
     "castEffectAuraGenerated.json": {
-      "casts": 199,
-      "pairs": 258,
+      "casts": 210,
+      "pairs": 275,
       "producer": "packages/eval/scripts/castEffectAuraScan.ts --emit"
+    },
+    "ownShieldLinksGenerated.json": {
+      "riders": 15,
+      "producer": "packages/eval/scripts/ownShieldLinkScan.ts --manifest <605 S2 every-30 raw logs> --build <build> --emit"
     },
     "burstWindowPriorGenerated.json": {
       "entries": 163,

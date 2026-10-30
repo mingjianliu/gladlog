@@ -4529,3 +4529,41 @@ corpusFactScan4 mechanicImmunityLanded 13 → 0 / 61 → 0. Review follow-ups on
 (candidates, gates, scans and body lines unchanged): 44 `[REFLECTED]` lines
 recounted (×N lines 75 → 81), 40 ground-control `[CC AVOIDED?]` lines `pressed
 +N.Ns` → `active`.
+
+v464 (2026-10-29, fact6 F20 — the round-6 double audit's 30 fact items, fixed
+by fact class, user rulings of 2026-10-28): each class got a corpus-wide count
+check first (`corpusFactScan5`, one module per class, and six new
+`promptQualityCheck` hard failures), then every reader of the fact. Own
+absorbs: a talent shield that came with one of the unit's presses (Void
+Shield from Unfolding Vision, Chi Cocoon, Reversion riding Merithra's
+Blessing — `ownShieldLinksGenerated.json`, DB2 trigger edges) ends
+`defenseless`; a passive talent absorb does not. Trinket lock: Will to
+Survive locks the PvP trinket for 90 s (60 s for a healer, by role), a racial
+locks no Adaptation holder's trinket. Area controls: one that reached enemy
+players and put no control on them says `[no CC aura logged — hit X; DR:
+<family> Immune]`, never `hit no enemy player`; Havoc Metamorphosis' landing
+stun 200166 is no control on a player (players are Dazed, 247121). Pets: a
+kick on a summon lands; a pet's control times by the pet's own row; a kill
+credits the side that dealt the blow (Roar of Sacrifice's share is a
+transfer; an overkill row the player lived through is no killing blow; a
+summon's side is its owner's roster side, so a Mind Controlled recorder's
+totems stay friendly); a pet command prints once. Immunity: Spirit of
+Redemption and refused presses read as immunity on the bookmark, burst-anchor
+and press-tag readers; Peaceweaver is an `[ENEMY DEF]` line on each carrier
+and ends `defenseless`. DR: one chain walk for every reader
+(`buildCcCategoryHistory`), same-ms landings in the log's order; a press's
+follow-up impact row carries the press's IMMUNE (charge-trigger edges from
+DB2). Singles: an ally-only save is no self-save; a reflected DoT counts its
+whole run; one break press can end several disarms (`[DISARM] … trinket
+broke this disarm`, only on a logged removal within 10 ms of the press); a death-cut
+breakable control says when it landed; an override variant counts with its
+base spell under its own name (The Hunt / Predator's Wake); one `[RES]`
+window per enemy press; Grounding's eaten redirects are named; a purge
+press's `k of N` counts the distinct buffs it removed.
+605 (cap-base d760bad3d → batch, 3519 owner files): the 8 failing gate
+classes (228 lines) → 0; corpusFactScan5 27 classes 8,697 violations → 16
+(immunityBurstAnchor 11 needs new wording, Phase Shift 3 and Ice Cold 2 to
+GH #167); corpusFactScan reflectReturn 64 → 0. Wide (cap-m463 c027aef94 →
+batch, 10039 owner files): gate failures 528 → 15 (all checkDisarmTrinketTail,
+gate-side: the disarm ended 0.25–2.0 s before the press, the same rendered
+second); corpusFactScan5 30,661 → 24; reflectReturn 285 → 0.

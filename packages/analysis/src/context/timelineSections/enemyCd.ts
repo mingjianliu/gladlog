@@ -17,7 +17,7 @@ import { getEnglishSpellName } from "../../data/spellEffectData";
 import { SpellTag } from "../../data/spellTypes";
 import { AURA_REBROADCAST_GAP_MS } from "../../utils/auraIntervals";
 import { isFormReshiftCast } from "../../utils/castPress";
-import { specToString } from "../../utils/cooldowns";
+import { canonicalSpellId, specToString } from "../../utils/cooldowns";
 import {
   AURA_BEFORE_CAST_MAX_S,
   ENEMY_DEF_UNSEEN_PRESS_TAG,
@@ -199,15 +199,27 @@ export function emitEnemyCdEntries(
       ...player.offensiveCDs,
       ...(player.offensiveFacts ?? []),
     ].sort((x, y) => x.castTimeSeconds - y.castTimeSeconds);
-    const totalBySpell = new Map<string, number>();
-    for (const cd of shown) {
-      totalBySpell.set(cd.spellName, (totalBySpell.get(cd.spellName) ?? 0) + 1);
-    }
     const enemyUnit = (ctx.enemies ?? []).find(
       (e) => e.name === player.playerName,
     );
     const isActivationCd = (cd: (typeof shown)[number]) =>
       cd.availableAgainAtSeconds === null && !cd.availabilityUnknown;
+    // F20 D23 follow-up (coordinator ruling 2026-10-28): a press of a
+    // variant that shares the button's cooldown (Predator's Wake 1259431
+    // for The Hunt 370965, category 2427) is the k-th use of THAT cooldown —
+    // one counter, each line under the log's own name. An activation has
+    // no cooldown and keeps its own name's counter.
+    const ordinalKey = (cd: (typeof shown)[number]): string => {
+      const canon = canonicalSpellId(cd.spellId);
+      return canon === cd.spellId || isActivationCd(cd)
+        ? cd.spellName
+        : getEnglishSpellName(canon);
+    };
+    const totalBySpell = new Map<string, number>();
+    for (const cd of shown) {
+      const key = ordinalKey(cd);
+      totalBySpell.set(key, (totalBySpell.get(key) ?? 0) + 1);
+    }
     /** activation spell id → what it comes with this round, if anything */
     const triggerBySpell = new Map<string, string | undefined>();
     for (const cd of shown) {
@@ -227,9 +239,10 @@ export function emitEnemyCdEntries(
     }
     const seqBySpell = new Map<string, number>();
     for (const cd of shown) {
-      const total = totalBySpell.get(cd.spellName) ?? 1;
-      const seq = (seqBySpell.get(cd.spellName) ?? 0) + 1;
-      seqBySpell.set(cd.spellName, seq);
+      const key = ordinalKey(cd);
+      const total = totalBySpell.get(key) ?? 1;
+      const seq = (seqBySpell.get(key) ?? 0) + 1;
+      seqBySpell.set(key, seq);
       const isActivation = isActivationCd(cd);
       // an application with no press at all (`(no press)` / `(source
       // unknown)`: no button the log shows, no known trigger) is no k-th

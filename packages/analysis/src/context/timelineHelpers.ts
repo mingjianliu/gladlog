@@ -31,7 +31,7 @@ import {
   freeMsBefore,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
-import { missBelongsToCast } from "../utils/castMissRows";
+import { pressImmuneMissRows } from "../utils/castMissRows";
 import {
   auraBreakAtRemoval,
   IPlayerCCTrinketSummary,
@@ -39,7 +39,7 @@ import {
 import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
   allyReachTalentNote,
-  cdCanHelpAnotherUnit,
+  cdHelpsRecipient,
   cdReadyInTimeAt,
   IMajorCooldownInfo,
   isHealerSpec,
@@ -794,17 +794,31 @@ export function extractOwnerCDBuffExpiry(
       } else {
         // fact4 D1 (190bbc57 2:41): a press whose own row MISSED (IMMUNE —
         // Time Stop) and whose aura never went up put no buff anywhere —
-        // no fade to estimate. Asked of the log: the owner's miss of this
-        // spell for the press (`missBelongsToCast`) and no application of
-        // its aura by the owner from the press to its length.
+        // no fade to estimate. Asked of the log: the press's own IMMUNE row
+        // (`pressImmuneMissRows`, the one "was this press refused" reading)
+        // and no application of its aura by the owner from the press to its
+        // length.
         const sameSpellCastMs = cd.casts.map(
           (c) => matchStartMs + c.timeSeconds * 1000,
         );
-        const missed = (owner?.missesOut ?? []).some(
-          (m) =>
-            m.spellId === cd.spellId &&
-            missBelongsToCast(sameSpellCastMs, castMs, m.timestamp),
-        );
+        // the press's own cast row: its target, for a follow-up impact
+        // row's IMMUNE (`pressFollowUpCastRows`)
+        const pressDest = (owner?.spellCastEvents ?? []).find(
+          (e) =>
+            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            e.spellId === cd.spellId &&
+            Math.abs(e.timestamp - castMs) <= 100,
+        )?.destUnitId;
+        const missed =
+          pressImmuneMissRows(
+            owner?.missesOut,
+            cd.spellId,
+            sameSpellCastMs,
+            castMs,
+            owner && pressDest
+              ? { casts: owner.spellCastEvents ?? [], destUnitId: pressDest }
+              : undefined,
+          ).length > 0;
         const applied = friends.some((f) =>
           f.auraEvents.some(
             (a) =>
@@ -2361,8 +2375,11 @@ export function buildKillSequenceBlock(params: {
             // intent of the dead `isExternal` branch: a DPS teammate's Rallying
             // Cry / Anti-Magic Zone now qualifies, which the healer-only rule
             // silently dropped).
+            // F20 D1: and never the dying player's own ally-only external
+            // (Blessing of Sacrifice cannot target its caster) — one
+            // predicate with cd-hoarded / [DEATH] Unused.
             const isDyingPlayer = player.name === dyingUnit.name;
-            if (!isDyingPlayer && !cdCanHelpAnotherUnit(cd)) return false;
+            if (!cdHelpsRecipient(cd, isDyingPlayer)) return false;
             // a row owned on the spec baseline alone (never pressed this
             // round) is cd-hoarded's only (ruling P-W6) — not "available but
             // unused" here, where no CC / usability gate stands behind it
@@ -2506,9 +2523,12 @@ export function buildKillSequenceBlock(params: {
         // (a 93k Scorch 2 s earlier) while the last half second was DK + pets.
         // The killing blow is the overkill hit — the same evidence
         // `nonPlayerUnitKill` reads — and the largest source is named as such.
+        // a split overkill row's attacker is the hit on its link holder,
+        // a player of either side (`attackerBlowFor`)
         const blow = playerKillingBlow(
           dyingUnit,
           matchStartMs + deathTime * 1000,
+          (id) => [...friends, ...enemies].find((u) => u.id === id),
         );
         if (topSources.length > 0) {
           const blowPart = blow

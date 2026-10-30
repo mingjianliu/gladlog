@@ -136,9 +136,11 @@ import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "@gladlog/analysis/src/data/druidF
 import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
 import {
+  ccFullDurationSeconds,
   getEnglishSpellName,
   spellEffectData,
 } from "@gladlog/analysis/src/data/spellEffectData";
+import { disarmSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
   lookupSyncWindowPrior,
   SYNC_REF_MIN_CONTRAST_PP,
@@ -175,11 +177,13 @@ import {
   ccLandedMatchWindowMs,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
   DEATH_BREAKABLE_CC_MIN_S,
+  DEATH_CUT_CC_TAG_RE_SRC,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { spanHoldsGhostSecond } from "@gladlog/analysis/src/utils/combatStates";
 import {
   allyReachTalentNote,
   canHelpAnotherUnit,
+  cdHelpsRecipient,
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
   isTickBelowTrough,
@@ -189,6 +193,7 @@ import {
   sharesChargePool,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
+import { OWNER_AOE_CC_NO_PLAYER_TAG } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   deflectionNames,
   ENEMY_DEF_DEFLECTS_WORDS,
@@ -832,6 +837,8 @@ const DEFENSIVE_AVAILABLE =
   /\[DEFENSIVE AVAILABLE\]\s+(\S+?):\s+(.+?) available but unused/;
 /** `1:11  [KILL]  2(WMonk) (Windwalker Monk) dead` */
 const KILL_LINE = /\[KILL\]\s+(\S+)\s.*dead/;
+/** `3:48  [DEATH]  1(RPaladin) (… — friendly) (Unused: Divine Protection) …` */
+const DEATH_UNUSED = /\[DEATH\]\s+(\S+)\s.*?\(Unused: ([^)]+)\)/;
 /** 技能名 → id(prompt 里印的是 classMetadata 的英文名) */
 const DEFENSIVE_ID_BY_NAME = new Map<string, string>(
   classMetadata.flatMap((c) =>
@@ -2359,6 +2366,13 @@ export function checkCcAvoidedMissType(lines: string[]): string[] {
  * [death − DEATH_BREAKABLE_CC_LOOKBACK_S, death] with N ≥
  * DEATH_BREAKABLE_CC_MIN_S — the producer's `breakableCcBeforeDeath`, same
  * constants, read back from the text.
+ *
+ * F20 D13 (user ruling 4, 2026-10-28: A28 stands, wording only): a shorter
+ * control on that player whose line says `| ended at their death` is not "no
+ * breakable CC" — the tag names it, `(PvP Trinket available; <Spell> landed
+ * N.N s before the death)` (`deathCutCcBeforeDeath`). The "no breakable CC"
+ * form beside such a line fails, and the naming form must match one: same
+ * spell, its m:ss start no more than a second off death − N.N.
  */
 // FT-T09: a CC the round ended on prints its landing → round-end time behind
 // `CC_STILL_ON_AT_ROUND_END`; a sub-second CC prints `<1s` and is never
@@ -2366,18 +2380,33 @@ export function checkCcAvoidedMissType(lines: string[]): string[] {
 const CC_ON_TEAM_RENDERED_S = new RegExp(
   String.raw`\) \| (?:${CC_STILL_ON_AT_ROUND_END}, )?(\d+)s\b|after (\d+)s \(cut short`,
 );
-const DEATH_TRINKET_TAG =
-  /\(PvP Trinket available(; no breakable CC in the last (\d+) s)?\)/;
+const DEATH_TRINKET_TAG = new RegExp(
+  String.raw`\(PvP Trinket available(?:(; no breakable CC in the last (\d+) s)|; ${DEATH_CUT_CC_TAG_RE_SRC})?\)`,
+);
+/** A `[CC ON TEAM]` line's sub-second span (`| <1s`): never breakable, but a
+ *  control the death can have cut */
+const CC_ON_TEAM_SUBSECOND = /\) \| <1s\b/;
 export function checkDeathTrinketCcConsistency(lines: string[]): string[] {
-  const ccByVictim = new Map<string, Array<{ at: number; n: number }>>();
+  const ccByVictim = new Map<
+    string,
+    Array<{ at: number; n: number; spell: string; deathCut: boolean }>
+  >();
   for (const line of lines) {
     const m = line.match(CC_ON_TEAM_LINE);
     if (!m) continue;
     const d = line.match(CC_ON_TEAM_RENDERED_S);
-    if (!d) continue;
+    if (!d && !CC_ON_TEAM_SUBSECOND.test(line)) continue;
     const at = Number(m[1]) * 60 + Number(m[2]);
-    const n = Number(d[1] ?? d[2]);
-    ccByVictim.set(m[3]!, [...(ccByVictim.get(m[3]!) ?? []), { at, n }]);
+    const n = d ? Number(d[1] ?? d[2]) : 0;
+    ccByVictim.set(m[3]!, [
+      ...(ccByVictim.get(m[3]!) ?? []),
+      {
+        at,
+        n,
+        spell: m[4]!,
+        deathCut: line.includes("| ended at their death"),
+      },
+    ]);
   }
   const failures: string[] = [];
   lines.forEach((line, i) => {
@@ -2386,13 +2415,31 @@ export function checkDeathTrinketCcConsistency(lines: string[]): string[] {
     const tag = line.match(DEATH_TRINKET_TAG);
     if (!tag) return;
     const death = Number(m[1]) * 60 + Number(m[2]);
-    const breakable = (ccByVictim.get(m[3]!) ?? []).some(
-      (c) =>
-        c.n >= DEATH_BREAKABLE_CC_MIN_S &&
-        c.at <= death &&
-        c.at + c.n >= death - DEATH_BREAKABLE_CC_LOOKBACK_S,
+    const inLookback = (c: { at: number; n: number }) =>
+      c.at <= death && c.at + c.n >= death - DEATH_BREAKABLE_CC_LOOKBACK_S;
+    const ccs = ccByVictim.get(m[3]!) ?? [];
+    const breakable = ccs.some(
+      (c) => c.n >= DEATH_BREAKABLE_CC_MIN_S && inLookback(c),
     );
+    const deathCut = ccs.filter(
+      (c) => c.n < DEATH_BREAKABLE_CC_MIN_S && c.deathCut && inLookback(c),
+    );
+    if (tag[3] !== undefined) {
+      const lead = Number(tag[4]);
+      const named = deathCut.some(
+        (c) => c.spell === tag[3] && Math.abs(c.at - (death - lead)) <= 1,
+      );
+      if (breakable || !named)
+        failures.push(
+          `line ${i + 1}: [DEATH] 的饰品标签点名 ${tag[3]} 在死前 ${tag[4]} s 落地,但${breakable ? "[CC ON TEAM] 已有渲染 ≥ " + DEATH_BREAKABLE_CC_MIN_S + " s 的可解控制(应为裸标签)" : "没有这条被死亡截断(ended at their death)、起点对得上的 [CC ON TEAM] 行"} —— ${line.trim().slice(0, 140)}`,
+        );
+      return;
+    }
     const saysNone = tag[1] !== undefined;
+    if (saysNone && deathCut.length > 0)
+      failures.push(
+        `line ${i + 1}: [DEATH] 说死前 10 s 没有可解控制,但 ${deathCut.map((c) => c.spell).join("/")} 被死亡截断(ended at their death)仍在身上,标签应点名它 —— ${line.trim().slice(0, 140)}`,
+      );
     if (saysNone && Number(tag[2]) !== DEATH_BREAKABLE_CC_LOOKBACK_S)
       failures.push(
         `line ${i + 1}: [DEATH] 的饰品标签写 last ${tag[2]} s,口径是 ${DEATH_BREAKABLE_CC_LOOKBACK_S} s —— ${line.trim().slice(0, 140)}`,
@@ -2400,6 +2447,76 @@ export function checkDeathTrinketCcConsistency(lines: string[]): string[] {
     if (saysNone === breakable)
       failures.push(
         `line ${i + 1}: [DEATH] 说${saysNone ? "死前 10 s 没有" : "死前 10 s 有"}可解控制,但 [CC ON TEAM] 行${breakable ? "有" : "没有"}(渲染时长 ≥ ${DEATH_BREAKABLE_CC_MIN_S} s 且与 [死亡 − ${DEATH_BREAKABLE_CC_LOOKBACK_S} s, 死亡] 相交) —— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
+/**
+ * F20 D9: a `[DISARM]` line whose disarm a PvP trinket press ended must say
+ * so (`| trinket broke this disarm after Ns`), whatever CC the same press
+ * broke — the producer asks `disarmsRemovedByPress` per disarm. c992ce75
+ * 0:14: one Medallion ended a Shockwave and a Disarm in one ms; the
+ * `[CC ON TEAM]` line took the press and the `[DISARM]` line printed a bare
+ * `| 3s`. Read back from the text: a `[TRINKET] P used PvP trinket` at
+ * second s, and a `[DISARM] P` line printing a bare `| Ns` whose rendered end
+ * (m:ss + N) is within a second of s, cut short of the disarm's official
+ * length undiminished (the producer's `ranFullLength` reading,
+ * `ccFullDurationSeconds`) by more than a second. A `[TRINKET]` line that
+ * names another disarm is that disarm's press.
+ */
+const DISARM_LINE =
+  /^\s*(\d+):(\d{2})\s+\[DISARM\]\s+(\S+) ← (.+?) \(by .*?\) \| (.*)$/;
+const TRINKET_USE_LINE =
+  /^\s*(\d+):(\d{2})\s+\[TRINKET\]\s+(\S+) used PvP trinket(?: out of (.+?) \(by )?/;
+let disarmOfficialByName: Map<string, number> | undefined;
+function disarmOfficialSeconds(name: string): number | undefined {
+  if (!disarmOfficialByName?.size) {
+    // built once the analysis data is loaded (an empty build is not kept)
+    const byName = new Map<string, number>();
+    for (const id of disarmSpellIds) {
+      const n = getEnglishSpellName(id, "");
+      const d = ccFullDurationSeconds(id);
+      if (n === "" || d === undefined) continue;
+      byName.set(n, Math.max(byName.get(n) ?? 0, d));
+    }
+    disarmOfficialByName = byName;
+  }
+  return disarmOfficialByName.get(name);
+}
+export function checkDisarmTrinketTail(lines: string[]): string[] {
+  const presses = new Map<string, Array<{ s: number; outOf?: string }>>();
+  for (const line of lines) {
+    const t = line.match(TRINKET_USE_LINE);
+    if (!t) continue;
+    presses.set(t[3]!, [
+      ...(presses.get(t[3]!) ?? []),
+      { s: Number(t[1]) * 60 + Number(t[2]), outOf: t[4] },
+    ]);
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const d = line.match(DISARM_LINE);
+    if (!d) return;
+    const tail = d[5]!;
+    if (/^trinket broke this disarm\b/.test(tail)) return;
+    const span = tail.match(/^(<1|\d+)s\b/);
+    if (!span) return; // still on at the round end: nothing cut it
+    const at = Number(d[1]) * 60 + Number(d[2]);
+    const n = span[1] === "<1" ? 0 : Number(span[1]);
+    const official = disarmOfficialSeconds(d[4]!);
+    if (official === undefined || official <= n + 1) return;
+    const press = (presses.get(d[3]!) ?? []).find(
+      (p) =>
+        p.s >= at &&
+        Math.abs(p.s - (at + n)) <= 1 &&
+        (p.outOf === undefined ||
+          p.outOf === d[4] ||
+          disarmOfficialSeconds(p.outOf) === undefined),
+    );
+    if (press)
+      failures.push(
+        `line ${i + 1}: [DISARM] ${d[4]} 渲染 ${n}s 就结束(官方 ${official}s),同一秒 ${fmtTime(press.s)} 有 [TRINKET] ${d[3]} 按下,行尾却没写 trinket broke this disarm —— ${line.trim().slice(0, 140)}`,
       );
   });
   return failures;
@@ -2928,6 +3045,76 @@ export function checkCcBookmarkConsistency(lines: string[]): string[] {
   return failures;
 }
 
+/** An `[ENEMY DEF]` full-immunity line of the unit's own:
+ * `m:ss  [ENEMY DEF]   <pid> (<spec>): <name> (immune, N.Ns…` — the bare
+ * `immune` label only (a school-limited one names its schools and may let a
+ * control of another school through). */
+const ENEMY_DEF_FULL_IMMUNE_SPAN =
+  /^\s*(\d+):(\d{2})\s+\[ENEMY DEF\]\s+(\S+) \([^)]*\): (.+?) \(immune, (\d+(?:\.\d+)?)s\b/;
+
+/**
+ * HardFailure class (fact6 D8, F20): a `[CC BOOKMARK]` or `[PEEL OPTION]`
+ * says its target was "not immune" on every second of its span (the
+ * producers' `ccSamplerFor`), so no second of the span may lie wholly inside
+ * a full immunity the same prompt prints on that target — an `[ENEMY DEF]`
+ * `<pid> …: X (immune, Ns)` line. c992ce75 P:416: `0:47–0:55 [CC BOOKMARK] …
+ * → 4(HPriest)` under `0:45 [ENEMY DEF] 4(HPriest) …: Spirit of Redemption
+ * (immune, 9.0s)`.
+ *
+ * Read off the rendered grid only: the aura began somewhere in its printed
+ * second `a` and lasted N s, so the seconds it covers WHOLLY whatever the
+ * fraction are `a+1 … a+⌊N−0.05⌋−1` (N is printed to 0.1 s; the render-floor
+ * convention — a span opening
+ * in the second an immunity ended is no contradiction). Left out:
+ *  - school-limited labels (`immune to magic` stops no physical control) and
+ *    `end not logged` (no length to read);
+ *  - the stealth-kind saves whose end the log does not show
+ *    (`SAVE_AURA_END_UNSEEN_NAMES`: Burrow, Vanish, Mass Invisibility,
+ *    Greater Invisibility — the sampler reads Mass Invisibility to the
+ *    holder's first action, and Burrow / Vanish carry no control ruling).
+ */
+export function checkCcSuggestionInsideImmunity(lines: string[]): string[] {
+  const spans = new Map<
+    string,
+    Array<{ name: string; from: number; to: number }>
+  >();
+  for (const line of lines) {
+    const m = line.match(ENEMY_DEF_FULL_IMMUNE_SPAN);
+    if (!m || SAVE_AURA_END_UNSEEN_NAMES.has(m[4]!)) continue;
+    const a = Number(m[1]) * 60 + Number(m[2]);
+    // the length is printed to 0.1 s: the shortest it can have been
+    const minLen = Number(m[5]) - 0.05;
+    const covered = {
+      name: m[4]!,
+      from: a + 1,
+      to: a + Math.floor(minLen) - 1,
+    };
+    if (covered.to < covered.from) continue;
+    spans.set(m[3]!, [...(spans.get(m[3]!) ?? []), covered]);
+  }
+  if (spans.size === 0) return [];
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const b = CC_BOOKMARK_DATA_LINE.test(line)
+      ? line.match(CC_BOOKMARK_LINE)
+      : null;
+    const p = !b && PEEL_DATA_LINE.test(line) ? line.match(PEEL_LINE) : null;
+    const m = b ?? p;
+    if (!m) return;
+    const from = Number(m[1]) * 60 + Number(m[2]);
+    const to = Number(m[3]) * 60 + Number(m[4]);
+    const target = b ? b[6]! : p![7]!;
+    const hit = (spans.get(target) ?? []).find(
+      (s) => s.from <= to && s.to >= from,
+    );
+    if (hit)
+      failures.push(
+        `line ${i + 1}: ${b ? "[CC BOOKMARK]" : "[PEEL OPTION]"} ${fmtTime(from)}–${fmtTime(to)} 说 ${target} 不免疫,但 ${fmtTime(Math.max(from, hit.from))} 起它在 [ENEMY DEF] 的 ${hit.name}(完全免疫)里 —— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
 /**
  * CC USE `<spell> cast bar started N×, went off M×[ (first m:ss)]` (FT-T16
  * D15 "2c", user approval 2026-10-10). The producer (`context/ccUse.ts` →
@@ -3309,6 +3496,61 @@ export function checkJukedKickNotAfterInterrupt(lines: string[]): string[] {
   return failures;
 }
 
+/** 1 = m:ss, 2 = the owner's kick; the audit said it stopped nothing. */
+const KICK_OWN_NOT_LANDED_LINE =
+  /^\s*(\d+:\d{2})\s+\[KICK\]\s+your (.+?)(?: on .+?)? — (?:hit nothing|JUKED)/;
+/** One `Kicks:` entry (burst ledger) whose verdict is "stopped nothing". */
+const KICKS_ENTRY_NOT_LANDED = /^(\d+:\d{2}) (.+?) → (?:hit nothing|JUKED)/;
+
+/**
+ * The owner's kick the audit calls "hit nothing" / "JUKED" (the timeline's
+ * `[KICK] your K … — hit nothing|JUKED …` line and the burst ledger's
+ * `Kicks: m:ss K → hit nothing|JUKED …` entry) must not have, in the same
+ * rendered second, a `[KICK] <owner> interrupted … (K)` line — the
+ * SPELL_INTERRUPT row that line prints is the log saying the kick landed.
+ *
+ * fact6 D3 (4caab013 2:41): the owner's Rebuke interrupted the enemy
+ * Sayaad's Seduction, and the audit — which read enemy players only — found
+ * no interrupt row and printed `[KICK] your Rebuke on 5(AWarlock)'s pet —
+ * hit nothing` right above `[KICK] 1(RPaladin) interrupted 5(AWarlock)'s
+ * pet's Seduction (Rebuke)`. A kick has a cooldown far above one second, so
+ * one owner kick of one spell in one second is one press.
+ */
+export function checkOwnKickNotContradictedByInterrupt(
+  lines: string[],
+): string[] {
+  const ownerId = lines
+    .map((l) => OWNER_ROSTER_ID.exec(l)?.[1])
+    .find((x) => x !== undefined);
+  if (ownerId === undefined) return [];
+  const landed = new Map<string, string>();
+  for (const line of lines) {
+    const m = line.match(KICK_INTERRUPTED_LINE);
+    if (!m || !m[2]!.startsWith(`${ownerId}(`)) continue;
+    landed.set(`${m[1]}|${m[4]!.split(";")[0]!.trim()}`, line.trim());
+  }
+  if (landed.size === 0) return [];
+  const failures: string[] = [];
+  const fail = (i: number, at: string, kick: string, shown: string) => {
+    const twin = landed.get(`${at}|${kick}`);
+    if (twin)
+      failures.push(
+        `line ${i + 1}: 自己的 ${kick} 写成没打到(hit nothing / JUKED),但同一秒有「${twin.slice(0, 120)}」—— 日志的 SPELL_INTERRUPT 说它打断了 —— ${shown.slice(0, 160)}`,
+      );
+  };
+  lines.forEach((line, i) => {
+    const own = line.match(KICK_OWN_NOT_LANDED_LINE);
+    if (own) fail(i, own[1]!, own[2]!, line.trim());
+    const kicks = /^\s*Kicks: (.*)$/.exec(line);
+    if (!kicks) return;
+    for (const part of kicks[1]!.split(" | ")) {
+      const e = KICKS_ENTRY_NOT_LANDED.exec(part);
+      if (e) fail(i, e[1]!, e[2]!, part);
+    }
+  });
+  return failures;
+}
+
 const CC_NOT_LANDED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CC NOT LANDED\]/;
 /** 1–2 = m:ss, 3 = the enemy, 4 = the spell, 5 = the caster's label (a
  * roster label, a summon's `N(Spec)'s pet`, or a bare name — nothing more
@@ -3401,6 +3643,123 @@ export function checkCcNotLandedLines(lines: string[]): string[] {
         `line ${i + 1}: [CC NOT LANDED] 的这次 ${type} 已经写在同一秒的施法行上(${twin.trim().slice(0, 90)})—— ${show}`,
       );
   });
+  return failures;
+}
+
+/**
+ * `[hit no enemy player]` against the prompt's own landing / miss lines
+ * (fact6 F20, D4 / D5 class; the summon-miss siblings 7eba4054 1:28,
+ * 4caab013 2:10 / 3:21). The producer (`noCcAuraTagFor` in
+ * `context/timelineSections/setup.ts`) prints the tag on an un-aimed area
+ * control's cast line only when no aura, damage or miss row of the press —
+ * the caster's or its summons' — sits on an enemy player; `[CC NOT LANDED]`
+ * (`ccNotLandedLines`) prints the caster's and its summons' failed-control
+ * miss rows, `[CC ON ENEMY]` its landings. It fails a tagged cast line of
+ * caster C (`[YOU]` = the log owner, `[TEAM] N(…)`) and spell S at rendered
+ * second t when a `[CC NOT LANDED] … ← S (by C[’s …])` or `[CC ON ENEMY] … ←
+ * S (by C[’s …])` line sits at a rendered second d in [t, t + ⌈afterMs⌉ + 1]
+ * — the spell's own landing window, `ccLandedMatchWindowMs(S).afterMs` (a
+ * Capacitor Totem pulses ~2 s after the cast): the press reached that enemy.
+ * Before the fix, the 605-file capture had 77 such Capacitor Totem pairs.
+ */
+export function checkHitNoPlayerContradiction(lines: string[]): string[] {
+  const failures: string[] = [];
+  const { ownerId } = ownerKitOf(lines);
+  const tagged =
+    /^\s*(\d+):(\d{2})\s+\[(YOU|TEAM)\] \[(?:CC|CD)\]\s+(?:(\d+)\([^)]*\) \([^)]*\)(?: cast|:) )?(.+?)(?= →| \[|$)/;
+  const reach =
+    /^\s*(\d+):(\d{2})\s+\[(CC NOT LANDED|CC ON ENEMY)\]\s+\S+ ← (.+?) \(by (\d+)\(/;
+  const others = lines
+    .map((l) => l.match(reach))
+    .filter((m): m is RegExpMatchArray => m !== null)
+    .map((m) => ({
+      at: Number(m[1]) * 60 + Number(m[2]),
+      tag: m[3]!,
+      spell: m[4]!,
+      casterId: m[5]!,
+    }));
+  lines.forEach((line, i) => {
+    if (!line.includes(OWNER_AOE_CC_NO_PLAYER_TAG)) return;
+    const m = line.match(tagged);
+    if (!m) return;
+    const casterId = m[3] === "YOU" ? ownerId : m[4]!;
+    if (!casterId) return;
+    const at = Number(m[1]) * 60 + Number(m[2]);
+    const spell = m[5]!.trim();
+    const maxD = Math.ceil(ccLandedMatchWindowMs(spell).afterMs / 1000) + 1;
+    const hit = others.find(
+      (o) =>
+        o.spell === spell &&
+        o.casterId === casterId &&
+        o.at >= at &&
+        o.at - at <= maxD,
+    );
+    if (hit)
+      failures.push(
+        `line ${i + 1}: ${OWNER_AOE_CC_NO_PLAYER_TAG} 但 ${fmtTime(hit.at)} 有同一施法者 ${spell} 的 [${hit.tag}] 行 —— 这次施放碰到了敌方玩家 —— ${line.trim().slice(0, 160)}`,
+      );
+  });
+  return failures;
+}
+
+/** The friend-side IMMUNE kick line (`timelineSections/kick.ts`): 1–2 =
+ * m:ss, 3 = the kicker's label (a summon's `N(Spec)'s pet` included), 4 =
+ * the kick, 5 = the target. */
+const KICK_IMMUNE_LINE = new RegExp(
+  String.raw`^\s*(\d+):(\d{2})\s+\[KICK\]\s+(\d+\([^()]*\)(?:'s ${SUMMON_KIND_RE_SRC})?)'s (.+?) on (\S+) missed — IMMUNE`,
+);
+/** How far apart, in rendered seconds, a command press and its pet's cast
+ * can print (`PET_COMMAND_MS` is 0.5 s; the floor to whole seconds adds 1). */
+const PET_COMMAND_DOUBLE_S = 3;
+
+/**
+ * One pet-command miss is one line (fact6 D30; user ruling 2026-10-28: a
+ * pet-command press and the pet's own cast print once, as the pet's). A
+ * warlock's Seduction / Spell Lock or a hunter's command is a press of the
+ * owner (`petCommands`'s `commandRows`) AND, half a second later, the
+ * pet's own cast; the log can carry a SPELL_MISSED row for each. Fails two
+ * `[CC NOT LANDED]` lines — or two IMMUNE `[KICK] … missed` lines — of one
+ * spell on one target with one miss type, one by `P` and one by `P's pet`,
+ * within `PET_COMMAND_DOUBLE_S` rendered seconds (bbd5e632 0:37 + 0:38:
+ * `5(HDHunter) ← Seduction (by 2(DWarlock))` and `(by 2(DWarlock)'s pet)`,
+ * both IMMUNE under the same Cyclone).
+ */
+export function checkPetCommandMissPrintedOnce(lines: string[]): string[] {
+  type Miss = {
+    i: number;
+    s: number;
+    key: string;
+    player: string;
+    pet: boolean;
+  };
+  const misses: Miss[] = [];
+  lines.forEach((line, i) => {
+    const cc = line.match(CC_NOT_LANDED_LINE);
+    const kick = cc ? null : line.match(KICK_IMMUNE_LINE);
+    if (!cc && !kick) return;
+    const s = Number((cc ?? kick)![1]) * 60 + Number((cc ?? kick)![2]);
+    const label = cc ? cc[5]! : kick![3]!;
+    const key = cc
+      ? `cc|${cc[3]}|${cc[4]}|${cc[6]}`
+      : `kick|${kick![5]}|${kick![4]}`;
+    const player = playerOfLabel(label);
+    misses.push({ i, s, key, player, pet: player !== label });
+  });
+  const failures: string[] = [];
+  for (const a of misses) {
+    if (!a.pet) continue;
+    const press = misses.find(
+      (b) =>
+        !b.pet &&
+        b.key === a.key &&
+        b.player === a.player &&
+        Math.abs(b.s - a.s) <= PET_COMMAND_DOUBLE_S,
+    );
+    if (press)
+      failures.push(
+        `line ${a.i + 1}: 宠物命令的同一次落空写了两行 —— 主人按键(line ${press.i + 1}「${lines[press.i]!.trim().slice(0, 100)}」)和宠物自己的施法各一行;按 10-28 裁决只算宠物的一次 —— ${lines[a.i]!.trim().slice(0, 160)}`,
+      );
+  }
   return failures;
 }
 
@@ -4143,6 +4502,62 @@ export function checkPetCreditSide(lines: string[]): string[] {
         );
       }
     }
+  });
+  return failures;
+}
+
+/** `[UNIT DESTROYED]   <unit> (Enemy|Friendly) killed by: <credit>` — 1 =
+ * the dead unit's side, 2 = the credit (one final blow, or the top-sources
+ * list). */
+const UNIT_DESTROYED_KILLED_BY =
+  /^\s*\d+:\d{2}\s+\[UNIT DESTROYED\]\s+.+? \((Enemy|Friendly)\) killed by: (.+)$/;
+/** `[KILL]   N(Spec) (…) dead (killing blow: <credit>; …` — 1 = the dead
+ * player's id, 2 = the credit. */
+const KILL_KILLING_BLOW =
+  /^\s*\d+:\d{2}\s+\[KILL\]\s+(\d+)\([^()]*\) .*?\(killing blow: (.+?)(?:;|\)$)/;
+
+/**
+ * A single final blow is an attacker's (fact6 D22): `killingBlow.ts`'s
+ * `attackerBlowFor` never credits a DAMAGE_SPLIT row, whose source is the
+ * link holder (a warlock's Soul Link, a Blessing of Sacrifice), not an
+ * attacker. In arena an attacker is on the other side, so a single-blow
+ * credit (`killed by: N(X) — Spell`, `killing blow: N(X) — Spell`, no
+ * `(Nk)` amount) naming a player of the dead unit's own side is the split
+ * row printed as the kill (114a4df7-r0 1:02: `5(DWarlock)'s Sayaad (Enemy)
+ * killed by: 5(DWarlock) — Soul Link`; the same for a hunter pet's Roar
+ * of Sacrifice on a teammate). A Mind-Controlled player's hit is a real
+ * same-side kill and `damageEventParts` marks it `(mind-controlled)`; that
+ * credit is not read (2 such lines on the 3,519-prompt cap-base capture),
+ * nor is a player's `[KILL]` credited to that player itself: a self-damage
+ * tick (Cauterize's burn, Refraction) is the real blow.
+ */
+export function checkKillCreditNotOwnSide(lines: string[]): string[] {
+  const side = new Map<string, string>();
+  for (const line of lines) {
+    const m = line.match(UNIT_ROLE_LINE);
+    if (m) side.set(m[1]!, m[2] === "enemy" ? "Enemy" : "Friendly");
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const ud = line.match(UNIT_DESTROYED_KILLED_BY);
+    const kill = ud ? null : line.match(KILL_KILLING_BLOW);
+    if (!ud && !kill) return;
+    const deadSide = ud ? ud[1]! : side.get(kill![1]!);
+    const credit = (ud ? ud[2]! : kill![2]!).replace(
+      /, [\d.]+ s after it was summoned$/,
+      "",
+    );
+    if (deadSide === undefined || /\(\d+(?:\.\d+)?[kM]\)/.test(credit)) return;
+    const by = /^(\d+)\([^()]*\)/.exec(credit)?.[1];
+    if (by === undefined || side.get(by) !== deadSide) return;
+    if (/^\d+\([^()]*\) \(mind-controlled\)/.test(credit)) return;
+    // the dead player's own damage is a real blow, not a link (F20 wide
+    // capture: a Fire Mage's Cauterize burn, 6 lines; an Arcane Mage's
+    // Refraction 1309786 self-tick, 3 — both self → self overkill rows)
+    if (kill && by === kill[1]) return;
+    failures.push(
+      `line ${i + 1}: 击杀被记到死者自己一方的 ${credit.split(" — ")[0]} —— 竞技场里攻击者在对面;这多半是 DAMAGE_SPLIT(灵魂链接/牺牲祝福)行,来源是链接持有者 —— ${line.trim().slice(0, 160)}`,
+    );
   });
   return failures;
 }
@@ -7761,7 +8176,19 @@ export function checkSelfOnlyDefensiveClaims(lines: string[]): string[] {
         break;
       }
     }
-    if (!dyingPid || dyingPid === whoPid) return; // 自己的死:自保 CD 合理
+    if (!dyingPid) return;
+    if (dyingPid === whoPid) {
+      // F20 D1 — the reverse direction: at the holder's OWN death, an
+      // external that cannot target its caster (Blessing of Sacrifice) is no
+      // save it had (`cdHelpsRecipient`, the producer's predicate)
+      const ownId = DEFENSIVE_ID_BY_NAME.get(spellName.trim());
+      if (ownId && !cdHelpsRecipient({ spellId: ownId }, true))
+        violations.push(
+          `ally-only defensive offered for its holder's own death: "${line.trim()}" ` +
+            `(${spellName.trim()}/${ownId} cannot target its caster)`,
+        );
+      return; // 自己的死:自保 CD 合理
+    }
     // `X (on an ally — Talent)`: the holder's talent puts this self-only
     // wall on an ally (`allyReachTalentNote`, user ruling 2026-10-27) — the
     // note must be the one that spell's talent prints
@@ -7779,6 +8206,20 @@ export function checkSelfOnlyDefensiveClaims(lines: string[]): string[] {
       `self-only defensive offered for another unit's death: "${line.trim()}" ` +
         `(${spellName.trim()}/${spellId} 够不着 ${dyingPid})`,
     );
+  });
+  // …and the `[DEATH] P … (Unused: X, Y)` list is the dying unit's own
+  // saves: never one that cannot target its caster
+  lines.forEach((line) => {
+    const m = DEATH_UNUSED.exec(line);
+    if (!m) return;
+    for (const name of m[2]!.split(", ")) {
+      const id = DEFENSIVE_ID_BY_NAME.get(name.trim());
+      if (id && !cdHelpsRecipient({ spellId: id }, true))
+        violations.push(
+          `ally-only defensive listed unused at its holder's own death: "${line.trim()}" ` +
+            `(${name.trim()}/${id} cannot target its caster)`,
+        );
+    }
   });
   return violations;
 }
@@ -8053,6 +8494,7 @@ export function checkMatch(
   hardFailures.push(...checkBrokeOutRefConsistency(lines));
   hardFailures.push(...checkFactsBlockIntegrity(lines));
   hardFailures.push(...checkPetCreditSide(lines));
+  hardFailures.push(...checkKillCreditNotOwnSide(lines));
   hardFailures.push(...checkHeaderHpPromise(lines));
   hardFailures.push(...checkDampeningStartConsistency(lines));
   hardFailures.push(...checkKillAttemptFraming(lines));
@@ -8063,6 +8505,7 @@ export function checkMatch(
   hardFailures.push(...checkCcAvoidedMissType(lines));
   hardFailures.push(...checkWarlockPurgeFollowsPet(lines));
   hardFailures.push(...checkDeathTrinketCcConsistency(lines));
+  hardFailures.push(...checkDisarmTrinketTail(lines));
   hardFailures.push(...checkPressedDuringControlNote(lines));
   hardFailures.push(...checkKitUnusedNote(lines));
   hardFailures.push(...checkBurstAnsweredBottomConsistency(lines));
@@ -8071,12 +8514,16 @@ export function checkMatch(
   hardFailures.push(...checkFreeOfWindowConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));
+  hardFailures.push(...checkCcSuggestionInsideImmunity(lines));
   hardFailures.push(...checkCcUseStartedCounts(lines));
   hardFailures.push(...checkCastStoppedLines(lines));
   hardFailures.push(...checkKickEatenCancelsCoverCastStopped(lines));
   hardFailures.push(...checkJukedKickNotAfterInterrupt(lines));
+  hardFailures.push(...checkOwnKickNotContradictedByInterrupt(lines));
   hardFailures.push(...checkCastStoppedWithinRound(lines));
   hardFailures.push(...checkCcNotLandedLines(lines));
+  hardFailures.push(...checkHitNoPlayerContradiction(lines));
+  hardFailures.push(...checkPetCommandMissPrintedOnce(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
   hardFailures.push(...checkBacklashSilenceFamily(lines));
   hardFailures.push(...checkTopSourcesOneEntryPerAbility(lines));

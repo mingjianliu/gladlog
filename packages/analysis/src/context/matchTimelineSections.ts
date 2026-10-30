@@ -7,6 +7,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   breakableCcBeforeDeath,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
+  deathCutCcBeforeDeath,
   IPlayerCCTrinketSummary,
   pvpTrinketRemainingSecondsAt,
   renderedCcDuration,
@@ -14,6 +15,7 @@ import {
 } from "../utils/ccTrinketAnalysis";
 import {
   cdCanHelpAnotherUnit,
+  cdHelpsRecipient,
   cdIsProcOnly,
   cdNeverSpent,
   cdReadyInTimeAt,
@@ -29,7 +31,6 @@ import {
   isSpikeHealedThrough,
   lockoutDebuffStopsPressAtDeath,
   PRESSURE_WINDOWS_TOP_N,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
   specToBenchmarkKey,
   specToString,
   usableWhileStunned,
@@ -1085,7 +1086,7 @@ export function emitFriendlyDeathEntries<S>(params: {
         // an Unused list across 80 local matches were exactly this. The same set
         // already guards the "cheaper available" advice in cooldowns.ts; both
         // sides import it rather than each keeping a list.
-        .filter((cd) => !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId))
+        .filter((cd) => cdHelpsRecipient(cd, true))
         // A defensive pressed ON AN ENEMY (Touch of Karma) only with a living
         // enemy in its reach — cd-hoarded's and the kill sequence's predicate
         // (codex review of F-W6, round 7: a Windwalker with no Karma cast
@@ -1124,12 +1125,28 @@ export function emitFriendlyDeathEntries<S>(params: {
     const trinketSummary = ccTrinketSummaries.find(
       (s) => s.playerName === death.name,
     );
+    // F20 D13 (user ruling 4, 2026-10-28): a control the death cut short of
+    // A28's length is named, not denied (`deathCutCcBeforeDeath`)
+    const deathCut =
+      trinketAvailable &&
+      trinketSummary &&
+      dyingUnit &&
+      !breakableCcBeforeDeath(trinketSummary, death.atSeconds)
+        ? deathCutCcBeforeDeath(
+            trinketSummary,
+            dyingUnit,
+            matchStartMs,
+            death.atSeconds,
+          )
+        : undefined;
     const trinketPart = !trinketAvailable
       ? ""
       : trinketSummary &&
           breakableCcBeforeDeath(trinketSummary, death.atSeconds)
         ? " (PvP Trinket available)"
-        : ` (PvP Trinket available; no breakable CC in the last ${DEATH_BREAKABLE_CC_LOOKBACK_S} s)`;
+        : deathCut
+          ? ` (PvP Trinket available; ${deathCut.spellName} landed ${deathCut.leadSeconds} s before the death)`
+          : ` (PvP Trinket available; no breakable CC in the last ${DEATH_BREAKABLE_CC_LOOKBACK_S} s)`;
     const notePart = death.note ? ` [${death.note}]` : "";
     const deathLines: (string | S)[] = [
       `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}${dampeningSuffix(params.dampeningAt, death.atSeconds, unitsByName.get(death.name))}`,
@@ -1238,7 +1255,9 @@ export function emitFriendlyDeathEntries<S>(params: {
         }
       }
       // B15c-U11: the killing blow, only when it was an execute
-      const execute = executeKillingBlowOf(dyingUnit, deathMs);
+      const execute = executeKillingBlowOf(dyingUnit, deathMs, (id) =>
+        allUnitsById.get(id),
+      );
       if (execute) {
         deathLines.push(
           `               Killing blow: ${damageEventLabel(execute, playerIdMap, enemyIdMap, summonOwners)} (an execute)`,

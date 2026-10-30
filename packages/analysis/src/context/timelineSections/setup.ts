@@ -19,7 +19,10 @@ import {
 } from "@gladlog/parser-compat";
 
 import { damageImmuneControlUpAt } from "../../analysis/candidates/massDispel";
-import { castAndEffectIds } from "../../data/castEffectAuras";
+import {
+  castAndEffectIds,
+  nominatedEffectAurasOfCast,
+} from "../../data/castEffectAuras";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
@@ -34,6 +37,7 @@ import {
   isControlCast,
   missBelongsToCast as missRowBelongsToCast,
   missReportsControl,
+  pressImmuneMissRows,
 } from "../../utils/castMissRows";
 import { ccFullDurationForCaster } from "../../utils/ccDuration";
 import {
@@ -53,18 +57,22 @@ import {
 import {
   AOE_CC_SPELL_IDS,
   aoeCcLandingWindowFor,
+  buildCcCategoryHistory,
+  drLevelNextAt,
   getDRCategory,
-  getDRLevel,
   OWNER_AOE_CC_NO_PLAYER_TAG,
 } from "../../utils/drAnalysis";
 import { observedCastEndMs } from "../../utils/enemyCDs";
+import { groundingEatenRedirects } from "../../utils/groundingRedirects";
 import { sumIncomingPressure } from "../../utils/incomingPressure";
+import { PET_COMMAND_MS, petCommands } from "../../utils/petCommands";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import { resourceDeltaPct } from "../../utils/resourceAt";
 import { buildRosterSides } from "../../utils/rosterSide";
 import { roundEndMs } from "../../utils/roundEnd";
 import { buildResourceSnapshot } from "../resourceSnapshot";
 import { ownerResUtilityCds } from "../resUtilityCds";
+import { isCountedReflectRow } from "../spellOutcomeLines";
 import {
   buildSummonOwnerNames,
   CRITICAL_NON_PLAYER_NPC_NAMES,
@@ -92,7 +100,7 @@ export const CC_NOT_LANDED_TAG = "[CC NOT LANDED]";
  * ruling 2026-10-27: the tag had no legend). */
 export const NO_CC_AURA_LOGGED_TAG = "[no CC aura logged";
 export const NO_CC_AURA_LOGGED_LEGEND = [
-  "  `[no CC aura logged]` = your team's aimed control went off, but the log shows no control aura and no miss row on that target; `— X was up` names an avoidance aura the target had at the cast.",
+  "  `[no CC aura logged]` = your team's aimed control went off, but the log shows no control aura and no miss row on that target; `— X was up` names an avoidance aura the target had at the cast. `— hit X` = an area control that reached those enemy players (its damage, or a miss row of it) and put no control on anyone; `DR: <family> Immune` = they were at immune diminishing returns for it.",
 ];
 
 /** Printed once, when a `[CC NOT LANDED]` line rendered. */
@@ -214,6 +222,39 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
             ...(spellName ? { spellName } : {}),
             totemOwnerId: unit.ownerId,
           });
+        }
+        // F20 D26: what went into the totem with no damage to absorb — a
+        // root, a grip, a trap (`groundingEatenRedirects`, the one redirect
+        // predicate) — is eaten too, in the same list (default ruling,
+        // 2026-10-28). A spell that then DAMAGED the totem was an attack on
+        // it (the `[UNIT DESTROYED]` fact), not a redirect.
+        const totemSide = rosterSides.get(unit.id);
+        for (const caster of allUnits) {
+          const side = rosterSides.get(caster.id);
+          if (
+            caster.id === unit.id ||
+            side === undefined ||
+            totemSide === undefined ||
+            side === totemSide
+          )
+            continue;
+          for (const g of groundingEatenRedirects(caster)) {
+            if (g.totemId !== unit.id) continue;
+            const spellName = getEnglishSpellName(g.spellId, g.spellName);
+            const attacked = unit.damageIn.some(
+              (d) =>
+                d.srcUnitId === caster.id &&
+                !!d.spellId &&
+                getEnglishSpellName(d.spellId, d.spellName ?? "") === spellName,
+            );
+            if (attacked) continue;
+            groundingAbsorbs.push({
+              timeSeconds: (g.timestampMs - matchStartMs) / 1000,
+              attackerId: caster.id,
+              ...(spellName ? { spellName } : {}),
+              totemOwnerId: unit.ownerId,
+            });
+          }
         }
       }
     }
@@ -504,18 +545,38 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   function outgoingDrTag(
     spellId: string,
     cast: { timeSeconds: number },
+    named?: ReadonlySet<string>,
   ): string {
     // cc-dr F-AO1: every application of this spell by the OWNER at the
     // line's render second (an AoE lands on several enemies at different DR
     // levels; any caster's same spell used to match). One level → as before;
     // several → per target, labelled with `enemyPid` (the chain's targets are
     // enemies — codex c2 10-02).
+    // F20 residual: when the line names units, the landings ON them that
+    // belong to this press (`missBelongsToCast`'s window — a missile lands
+    // after the press second) — 9fa2e09d r2 2:07 `Mortal Coil →
+    // 6(HPaladin) [DR: Incapacitate 50%]` carried the 50 % of the coil's
+    // second target (5, landed 127.573, the press second); the paladin's own
+    // landing (128.092) is Full.
     const t = toRenderSecond(cast.timeSeconds);
+    const castMs = matchStartMs + cast.timeSeconds * 1000;
+    const byName = named !== undefined && named.size > 0;
     const hits: Array<{ target: string; category: string; level: string }> = [];
     for (const chain of outgoingCCChains ?? []) {
+      if (byName && !named.has(chain.targetName)) continue;
       for (const app of chain.applications) {
         if (app.spellId !== spellId) continue;
-        if (toRenderSecond(app.atSeconds) !== t) continue;
+        if (
+          byName
+            ? !missBelongsToCast(
+                owner,
+                spellId,
+                castMs,
+                matchStartMs + app.atSeconds * 1000,
+              )
+            : toRenderSecond(app.atSeconds) !== t
+        )
+          continue;
         if (!app.drInfo || app.casterName !== owner.name) continue;
         if (!isDrFamilyCategory(app.drInfo.category)) continue;
         hits.push({
@@ -619,11 +680,17 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   //    (Intervene, an external): only an IMMUNE on the unit the line names
   //    is the press's — the game refused it on that ally (a2e71187 2:27:
   //    Intervene IMMUNE on an Evoker in Time Stop, the line said nothing)
+  //  - fact6 D14 (F20): `onlyNamed` on a line that names NOBODY = a hostile
+  //    press the ledger keeps no target for (an offensive cooldown): the
+  //    unit its own cast row was aimed at is the one named, when that unit
+  //    is on the other side — 2b3fba97-r0 2:27 Deathmark into Time Stop
+  //    rendered bare. A press with no aimed dest says nothing (round-1
+  //    retest idx 34, 26bfd4f3 0:39 Summon Darkglare).
   function ccImmuneTagFor(
     unit: ICombatUnit,
     spellId: string,
     castTimeSeconds: number,
-    named?: ReadonlySet<string>,
+    lineNamed?: ReadonlySet<string>,
     onlyNamed = false,
   ): string {
     const misses = unit.missesOut;
@@ -636,29 +703,62 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     // (605 files): 818 Psychic Scream lines carried a bare [IMMUNE] that way,
     // e.g. 5dc8b136 0:53 "[DR: Disorient Full] [IMMUNE]" with all three
     // player targets feared.
-    const aimedAt = (unit.spellCastEvents ?? []).find(
-      (e) =>
-        e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
-        e.spellId === spellId &&
-        Math.abs(e.timestamp - castMs) <= 100,
-    )?.destUnitId;
+    // the press's own cast row: its id, else a skin variant of the same
+    // English name (F20 immunity residual: the ledger keys Hex 51514 /
+    // Imprison 217832 while the press logs 210873 / 221527, and its IMMUNE
+    // row under the variant left the line bare — s0/1-1 0:25 Hex into Cloak
+    // of Shadows, `[CC NOT LANDED]` said it instead)
+    const nearPress = (e: {
+      logLine?: { event?: unknown };
+      timestamp: number;
+    }) =>
+      e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
+      Math.abs(e.timestamp - castMs) <= 100;
+    const pressName = getEnglishSpellName(spellId, "");
+    const pressRow =
+      (unit.spellCastEvents ?? []).find(
+        (e) => nearPress(e) && e.spellId === spellId,
+      ) ??
+      (pressName
+        ? (unit.spellCastEvents ?? []).find(
+            (e) =>
+              nearPress(e) &&
+              !!e.spellId &&
+              getEnglishSpellName(e.spellId, e.spellName) === pressName,
+          )
+        : undefined);
+    const rowSpellId = pressRow?.spellId ?? spellId;
+    const aimedAt = pressRow?.destUnitId;
+    let aimedNamed: ReadonlySet<string> | undefined;
+    if (onlyNamed && (!lineNamed || lineNamed.size === 0)) {
+      const decided = (r: CombatUnitReaction | undefined) =>
+        r === CombatUnitReaction.Friendly || r === CombatUnitReaction.Hostile;
+      const side = rosterSides.get(unit.id);
+      const aimedSide = aimedAt ? rosterSides.get(aimedAt) : undefined;
+      if (
+        !aimedAt ||
+        !decided(side) ||
+        !decided(aimedSide) ||
+        aimedSide === side
+      )
+        return "";
+      aimedNamed = new Set([aimedAt]);
+    }
+    const named = aimedNamed ?? lineNamed;
     const counts = (destId: string | undefined) =>
       !!destId &&
       (destId === aimedAt || allPlayers.some((p) => p.id === destId));
-    const family = castAndEffectIds(spellId);
-    const candidates = misses.filter(
-      (m) =>
-        m.missType === "IMMUNE" &&
-        m.spellId !== undefined &&
-        family.has(m.spellId) &&
-        counts(m.destUnitId) &&
-        // fact2 (2026-10-20): a later DoT tick's IMMUNE is not the press
-        // going into an immunity (15c06404 1:54: Kingsbane's own hit
-        // landed; its ticks at +2.0 s met a Spellwarding thrown 1.7 s later)
-        (m.logLine?.event as string) !== LogEvent.SPELL_PERIODIC_MISSED &&
-        !consumedImmuneMisses.has(m) &&
-        missBelongsToCast(unit, spellId, castMs, m.timestamp),
-    );
+    // the press's own IMMUNE rows (`pressImmuneMissRows`, the one "was this
+    // press refused" reading — shared with the KILL ATTEMPTS burst anchor)
+    const candidates = pressImmuneMissRows(
+      misses,
+      rowSpellId,
+      castMsBySpellOf(unit).get(rowSpellId) ?? [],
+      castMs,
+      aimedAt
+        ? { casts: unit.spellCastEvents ?? [], destUnitId: aimedAt }
+        : undefined,
+    ).filter((m) => counts(m.destUnitId) && !consumedImmuneMisses.has(m));
     let miss: (typeof candidates)[number] | undefined = candidates[0];
     let unnamedLabel = "";
     if (miss && named && named.size > 0) {
@@ -771,8 +871,8 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   }
 
   /** B17a: the target's diminishing returns for this control's family were
-   * already at immune — the DR engine's own chain walk (`getDRLevel`) over
-   * the applications `outgoingCCChains` holds for that target and family
+   * already at immune — the DR engine's own walk (`drLevelNextAt`) over the
+   * target's history in that family (`buildCcCategoryHistory`)
    * (ba8c0510 0:22: Freezing Trap after two Saps). Nothing is said for a
    * family the DR table does not know. */
   function ccImmuneByDr(
@@ -783,17 +883,16 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     const category = getDRCategory(missSpellId);
     if (category.startsWith("spell:") || category === "Unknown")
       return undefined;
-    const history = (outgoingCCChains ?? [])
-      .filter((chain) => chain.targetName === target.name)
-      .flatMap((chain) => chain.applications)
-      .filter((app) => app.drInfo?.category === category)
-      .map((app) => ({
-        applyMs: matchStartMs + app.atSeconds * 1000,
-        removeMs: matchStartMs + (app.atSeconds + app.durationSeconds) * 1000,
-        spellId: app.spellId,
-      }))
-      .sort((a, b) => a.applyMs - b.applyMs);
-    return getDRLevel(history, missMs).level === "Immune"
+    // the target's whole DR history (fact6 F20: every source but a
+    // holder-self non-control — a control reflected back onto them, an enemy
+    // pet's — not only the applications we are credited with)
+    const history = buildCcCategoryHistory(
+      target,
+      category,
+      matchStartMs,
+      new Map(_allUnits.map((u) => [u.id, u])),
+    );
+    return drLevelNextAt(history, missMs) === "Immune"
       ? `DR: ${category} Immune`
       : undefined;
   }
@@ -924,20 +1023,67 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // bare that way.
       const ownIn = (id: string | undefined, ms: number) =>
         id !== undefined && own.has(id) && inLanding(ms);
-      const touched = players.some(
-        (u) =>
-          (u.auraEvents ?? []).some(
-            (x) =>
-              ownCcSources.has(x.srcUnitId) &&
-              (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-                x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-              ownIn(x.spellId, x.timestamp),
-          ) ||
-          (caster.missesOut ?? []).some(
-            (m) => m.destUnitId === u.id && ownIn(m.spellId, m.timestamp),
-          ),
+      // the press's own control aura on an enemy player: a landing (the
+      // cast line's landing list states it)
+      const landedOnPlayer = players.some((u) =>
+        (u.auraEvents ?? []).some(
+          (x) =>
+            ownCcSources.has(x.srcUnitId) &&
+            (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+              x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+            ownIn(x.spellId, x.timestamp),
+        ),
       );
-      return touched ? "" : ` ${OWNER_AOE_CC_NO_PLAYER_TAG}`;
+      if (landedOnPlayer) return "";
+      // a failed-control miss of the caster's own: the cast line's fail
+      // tag (`[IMMUNE …]` / `[MISSED on …]`) states it
+      if (
+        players.some((u) =>
+          (caster.missesOut ?? []).some(
+            (m) =>
+              m.destUnitId === u.id &&
+              m.missType !== "ABSORB" &&
+              ownIn(m.spellId, m.timestamp),
+          ),
+        )
+      )
+        return "";
+      // fact6 D4 / D5 (a400c9d8 0:38 / 1:26, ruling 2 of 2026-10-28): the
+      // press REACHED an enemy player and put no control on anyone — its
+      // own damage (Dragon's Breath on a disorient-DR-immune DH: the game
+      // writes the damage and no aura, no miss), a shield eating that
+      // damage, or a miss row of the caster's summon (a Capacitor Totem's
+      // IMMUNE pulse is logged under the totem — 7eba4054 1:28, 4caab013
+      // 2:10 / 3:21: read from the caster only, the line said "hit no enemy
+      // player" beside a `[CC NOT LANDED]` of that pulse). The units it
+      // reached are named; the DR engine's Immune reading (`ccImmuneByDr`)
+      // is added only when it holds for every one of them.
+      const reached: Array<{ u: ICombatUnit; ms: number }> = [];
+      for (const u of players) {
+        const rows = [
+          ...(u.damageIn ?? []).filter((d) => ownCcSources.has(d.srcUnitId)),
+          ...(u.missesIn ?? []).filter(
+            (m) =>
+              ownCcSources.has(m.srcUnitId) &&
+              (m.srcUnitId !== caster.id || m.missType === "ABSORB"),
+          ),
+        ]
+          .filter((r) => ownIn(r.spellId, r.timestamp))
+          .sort((a, b) => a.timestamp - b.timestamp);
+        if (rows.length > 0) reached.push({ u, ms: rows[0]!.timestamp });
+      }
+      if (reached.length === 0) return ` ${OWNER_AOE_CC_NO_PLAYER_TAG}`;
+      const drId = [...own].find(
+        (id) => !getDRCategory(id).startsWith("spell:"),
+      );
+      const drs = reached.map(({ u, ms }) =>
+        drId ? ccImmuneByDr(u, drId, ms) : undefined,
+      );
+      const dr =
+        drs[0] !== undefined && drs.every((d) => d === drs[0]) ? drs[0] : "";
+      return ` ${NO_CC_AURA_LOGGED_TAG} — hit ${reached
+        .map(({ u }) => enemyPid(u.name))
+        .join(", ")}${dr ? `; ${dr}` : ""}]`;
     }
     // an aimed cast at an enemy player
     if (landedOn(dest)) return "";
@@ -1010,6 +1156,9 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         !word ||
         m.spellId === undefined ||
         !family.has(m.spellId) ||
+        // a REFLECT row aimed at its own caster is no reflect
+        // (`isCountedReflectRow`; codex F20-23: "[REFLECTED by Me]")
+        (m.missType === "REFLECT" && !isCountedReflectRow(m)) ||
         consumedCcMisses.has(m) ||
         !missBelongsToCast(unit, spellId, castMs, m.timestamp)
       )
@@ -1112,6 +1261,14 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       ),
     ];
     for (const caster of casters) {
+      // fact6 D30 (bbd5e632 0:37): an owner's command to its pet (Command
+      // Demon: Seduction 119909 → the Sayaad's 6358) is no control of its
+      // own — the pet's row is (`petCommands`, the [CC AVOIDED?] / CC USE
+      // reading). A command the pet carried out is stated by the pet's own
+      // row; one no summon row carried out prints once, as the pet's.
+      const cmd = friendIds.has(caster.id)
+        ? petCommands(caster, { units: allUnits ?? [] })
+        : undefined;
       for (const m of caster.missesOut ?? []) {
         if (m.logLine?.event !== LogEvent.SPELL_MISSED) continue;
         if (!m.spellId || !CONTROL_FAILED_MISS_TYPES.has(m.missType)) continue;
@@ -1133,10 +1290,33 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
             missBelongsToCast(caster, e.spellId, e.timestamp, m.timestamp),
         );
         const family = castAndEffectIds(cast?.spellId ?? m.spellId);
+        // the line names the press — unless DB2 links the control to it only
+        // through a talent of its class (`nominatedEffectAurasOfCast` leaves
+        // those out): Terror of the Skies keeps its own name, not the Deep
+        // Breath it rode in on (F20 dr residual)
+        const named =
+          cast &&
+          (cast.spellId === m.spellId ||
+            nominatedEffectAurasOfCast(cast.spellId!).includes(m.spellId))
+            ? cast
+            : undefined;
         const name = getEnglishSpellName(
-          cast?.spellId ?? m.spellId,
-          cast?.spellName ?? m.spellName ?? "",
+          named?.spellId ?? m.spellId,
+          named?.spellName ?? m.spellName ?? "",
         );
+        let shown = caster;
+        if (cmd) {
+          if (
+            cmd.carriedOutBy(m.timestamp, name) ||
+            (cast && cmd.carriedOutBy(cast.timestamp, name))
+          )
+            continue;
+          const at = cast ?? m;
+          if (
+            cmd.isCommandRow(at.spellId!, at.timestamp, cast ? 0 : PET_COMMAND_MS)
+          )
+            shown = cmd.commandPet(name) ?? caster;
+        }
         const landed = enemyCCSummaries
           ?.find((x) => x.playerName === target.name)
           ?.ccInstances.some(
@@ -1150,7 +1330,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
           );
         if (landed) continue;
         // the same failure logged under the cast id and the effect id
-        const key = `${caster.id}|${target.id}|${name}|${toRenderSecond(atSeconds)}|${m.missType}`;
+        const key = `${shown.id}|${target.id}|${name}|${toRenderSecond(atSeconds)}|${m.missType}`;
         if (seen.has(key)) continue;
         seen.add(key);
         const cause =
@@ -1166,7 +1346,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
               : "";
         out.push({
           atSeconds,
-          line: `${fmtTime(atSeconds)}  ${CC_NOT_LANDED_TAG}   ${enemyPid(target.name)} ← ${name} (by ${actorLabel(caster.name, "friendly", caster.id)}) — logged ${m.missType}${cause ? ` (${cause})` : ""}`,
+          line: `${fmtTime(atSeconds)}  ${CC_NOT_LANDED_TAG}   ${enemyPid(target.name)} ← ${name} (by ${actorLabel(shown.name, "friendly", shown.id)}) — logged ${m.missType}${cause ? ` (${cause})` : ""}`,
         });
       }
     }

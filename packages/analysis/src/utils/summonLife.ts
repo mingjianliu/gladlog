@@ -5,6 +5,8 @@
  */
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { attackerBlowFor, type UnitById } from "./killingBlow";
+
 /** When the unit was summoned (its own SPELL_SUMMON), or null. */
 export function summonedAtMs(unit: ICombatUnit): number | null {
   const e = unit.actionIn.find(
@@ -34,14 +36,22 @@ export interface INonPlayerUnitKill {
  *    ATTACKED; a spell a Grounding Totem eats is a separate SPELL_ABSORBED and
  *    is not a kill;
  *  - a `UNIT_DIED` death record, still honoured for the units that get one.
+ * `finalBlow` is the attacker blow behind the overkill row (`attackerBlowFor`:
+ * a DAMAGE_SPLIT row is no attacker's — the hit on its link holder is, read
+ * through `unitById`), absent when none is in the log.
  */
 export function nonPlayerUnitKill(
   unit: ICombatUnit,
+  unitById?: UnitById,
 ): INonPlayerUnitKill | null {
-  const finalBlow = unit.damageIn.find((d) => (d.overkill ?? 0) > 0);
+  const overkill = unit.damageIn.find((d) => (d.overkill ?? 0) > 0);
+  // the instant is the overkill row's whatever it is; who dealt it is the
+  // attacker behind it — a DAMAGE_SPLIT row's source is the link holder,
+  // never the killer (`attackerBlowFor`, fact6 D22)
+  const finalBlow = overkill && attackerBlowFor(overkill, unitById);
   const died = unit.deathRecords?.[0]?.timestamp;
-  if (finalBlow && (died === undefined || finalBlow.timestamp <= died))
-    return { timestamp: finalBlow.timestamp, finalBlow };
+  if (overkill && (died === undefined || overkill.timestamp <= died))
+    return { timestamp: overkill.timestamp, ...(finalBlow ? { finalBlow } : {}) };
   if (died !== undefined)
     return { timestamp: died, ...(finalBlow ? { finalBlow } : {}) };
   return null;

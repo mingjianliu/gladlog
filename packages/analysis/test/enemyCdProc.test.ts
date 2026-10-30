@@ -111,4 +111,36 @@ describe("FT-T06 — [ENEMY CD] proc", () => {
       "0:06  [ENEMY CD]   4(Ret) (Retribution Paladin): Avenging Wrath (proc)",
     ]);
   });
+
+  // F20 D23 follow-up: Predator's Wake 1259431 overrides The Hunt 370965 and
+  // shares its cooldown (category 2427) — one counter, each press under the
+  // log's own name
+  it("共用冷却的变体与原技能一起计数,各按日志里的名字印", () => {
+    const lines: string[] = [];
+    emitEnemyCdEntries({
+      enemyCDTimeline: {
+        players: [
+          {
+            playerName: "DH",
+            specName: "Havoc Demon Hunter",
+            offensiveCDs: [
+              cd("370965", "The Hunt", 20, false),
+              cd("1259431", "Predator's Wake", 146, false),
+              cd("1259431", "Predator's Wake", 153, false),
+            ],
+          },
+        ],
+      },
+      cdPurgeAnnotations: new Map(),
+      addEntry: (_t: number, l: string) => lines.push(l),
+      enemyPid: (n: string) => `4(${n})`,
+      enemies: [],
+      matchStartMs: T0,
+    } as never);
+    expect(lines).toEqual([
+      "0:20  [ENEMY CD]   4(DH) (Havoc Demon Hunter): The Hunt (cast 1 of 3)",
+      "2:26  [ENEMY CD]   4(DH) (Havoc Demon Hunter): Predator's Wake (cast 2 of 3)",
+      "2:33  [ENEMY CD]   4(DH) (Havoc Demon Hunter): Predator's Wake (cast 3 of 3)",
+    ]);
+  });
 });

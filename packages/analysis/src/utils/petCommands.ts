@@ -35,6 +35,19 @@ export function petCommands(
   /** the summons' rows that carried a command out */
   summons: ICombatUnit[];
   petRow: (u: ICombatUnit, ms: number, name: string) => boolean;
+  /** an owner row of `spellId` within `tolMs` of `ms` is a command */
+  isCommandRow: (spellId: string, ms: number, tolMs?: number) => boolean;
+  /** the summon that carried out an owner row of `name` at `ms`: its
+   * same-named START / SUCCESS row, or its same-named SPELL_MISSED row (the
+   * pet's own attempt, logged with no cast row — 944d21b0 01:37:05: the
+   * Felguard's Axe Toss IMMUNE 440 ms after the warlock's), within
+   * `PET_COMMAND_MS`; else undefined */
+  carriedOutBy: (ms: number, name: string) => ICombatUnit | undefined;
+  /** the summon a command of `name` is the control of when no row of a
+   * summon carried that press out (fact6 D30, default 2026-10-28: a command
+   * prints once, as the pet's) — the one that carried out such a command in
+   * the round, else the owner's first pet */
+  commandPet: (name: string) => ICombatUnit | undefined;
 } {
   // a PET (`Pet-` GUID) carries out a command; a totem or guardian logging
   // its summoning spell's name (Capacitor Totem) is the owner's press itself
@@ -56,6 +69,18 @@ export function petCommands(
         name: getEnglishSpellName(e.spellId ?? "", e.spellName),
       })),
   );
+  // read only by `carriedOutBy` — never a command's evidence (commandIds)
+  let missRows: typeof petRows | undefined;
+  const petMissRows = (): typeof petRows =>
+    (missRows ??= summons.flatMap((u) =>
+      (u.missesOut ?? [])
+        .filter((e) => e.logLine?.event === "SPELL_MISSED")
+        .map((e) => ({
+          u,
+          ms: e.logLine.timestamp,
+          name: getEnglishSpellName(e.spellId ?? "", e.spellName),
+        })),
+    ));
   const ownerRows = [
     ...(owner.castStartEvents ?? []),
     ...(owner.spellCastEvents ?? []),
@@ -90,6 +115,18 @@ export function petCommands(
     summons,
     // a pet's row of a commanded spell is the owner's control
     petRow: (_u, _ms, name) => commandNames.has(name),
+    isCommandRow: (spellId, ms, tolMs = 0) =>
+      commandIds.has(spellId) &&
+      ownerRows.some(
+        (e) =>
+          e.spellId === spellId && Math.abs(e.logLine.timestamp - ms) <= tolMs,
+      ),
+    carriedOutBy: (ms, name) =>
+      [...petRows, ...petMissRows()].find(
+        (r) => r.name === name && Math.abs(r.ms - ms) <= PET_COMMAND_MS,
+      )?.u,
+    commandPet: (name) =>
+      petRows.find((r) => r.name === name)?.u ?? summons[0],
   };
 }
 

@@ -12,6 +12,7 @@ import {
 import { castBarsOfCooldown, castBarStartsInRound } from "../utils/castCancels";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
+  canonicalSpellId,
   cdAvailableAt,
   cdChargesReadyAt,
   cdIsProcOnly,
@@ -381,10 +382,19 @@ export function buildPlayerLoadout(
     // value wins (the talent-adjusted cooldown), so the same spell never shows
     // two different cooldown numbers (the lesson of class D, 2026-07-20).
     const kitNames = new Set((kit ?? []).map((c) => c.spellName));
+    // F20 D23: an override variant pressed under its own name (Predator's
+    // Wake) is the kit row's button (The Hunt) — one cooldown, one entry
+    const kitIds = new Set((kit ?? []).map((c) => canonicalSpellId(c.spellId)));
     const observedOnly: string[] = [];
     const seen = new Set<string>();
     for (const cd of player.offensiveCDs) {
-      if (kitNames.has(cd.spellName) || seen.has(cd.spellName)) continue;
+      if (
+        kitNames.has(cd.spellName) ||
+        (canonicalSpellId(cd.spellId) !== cd.spellId &&
+          kitIds.has(canonicalSpellId(cd.spellId))) ||
+        seen.has(cd.spellName)
+      )
+        continue;
       seen.add(cd.spellName);
       // an activation of another cooldown's effect has no cooldown of its
       // own to print (Radiant Glory's Avenging Wrath, GH #115)
@@ -1057,6 +1067,13 @@ function buildResourceSnapshotOnce({
   // friendly cd: field, where (Ns) means "N seconds until the CD is READY again".
   const enemyActiveParts: string[] = [];
   for (const player of enemyCDTimeline.players) {
+    // F20 D24: one window per (enemy, cooldown). A re-press that REFRESHes
+    // the running aura (1263fff6 1:41 + 1:45 Soul Immolation, one aura
+    // instance APPLIED…REMOVED) is not a second window — the entry keeps the
+    // latest end of the presses that are running (on a tie the first one's
+    // name: a press before a cast-less `(no press)` occurrence of the same
+    // chain — 4caab013 0:55 Volley), in first-press order.
+    const windows = new Map<string, { spellName: string; end: number }>();
     for (const cd of player.offensiveCDs) {
       // Shown until its effect ends — `buffEndSeconds`, the burst span's own
       // end (the observed aura chain, else the official duration; triage
@@ -1064,18 +1081,22 @@ function buildResourceSnapshotOnce({
       // "5s left" at 35 s (codex review): no cap. If duration is 0 (instant
       // cast), show it for 8 seconds to ensure AI has context.
       const buffDuration = cd.buffEndSeconds - cd.castTimeSeconds;
-      const displayWindowSeconds = buffDuration > 0 ? buffDuration : 8;
-
-      const agoSeconds = timeSeconds - cd.castTimeSeconds;
-      if (agoSeconds >= 0 && agoSeconds <= displayWindowSeconds) {
-        const remainingSeconds = Math.max(
-          1,
-          Math.round(displayWindowSeconds - agoSeconds),
-        );
-        enemyActiveParts.push(
-          `${cd.spellName}/${player.specName}(${remainingSeconds}s left)`,
-        );
-      }
+      const end = cd.castTimeSeconds + (buffDuration > 0 ? buffDuration : 8);
+      // F20 D25: spent by the row's second on the friendly half's predicate
+      // (`pressSpentBy` — the rendered second, A45), not `ago >= 0` against
+      // the floored row time, which dropped every press at s + 0.xxx.
+      if (!pressSpentBy(cd.castTimeSeconds, timeSeconds)) continue;
+      if (timeSeconds > end) continue;
+      const key = canonicalSpellId(cd.spellId);
+      const prev = windows.get(key);
+      if (prev === undefined || end > prev.end)
+        windows.set(key, { spellName: cd.spellName, end });
+    }
+    for (const w of windows.values()) {
+      const remainingSeconds = Math.max(1, Math.round(w.end - timeSeconds));
+      enemyActiveParts.push(
+        `${w.spellName}/${player.specName}(${remainingSeconds}s left)`,
+      );
     }
   }
 

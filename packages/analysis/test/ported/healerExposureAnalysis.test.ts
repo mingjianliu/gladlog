@@ -161,7 +161,9 @@ describe('healerExposureAnalysis — exposure calculation', () => {
       trinketUseTimes: [],
       trinketCooldownSeconds: 120,
       ccInstances: [
-        { atSeconds: -20, durationSeconds: 4, spellId: '118', drInfo: { category: 'Incapacitate' } }, // Recently Poly'd
+        // Recently Poly'd: ended 15 s before the window (fact6 F20: a gap of
+        // exactly the reset window resets — `getDRLevel`, ≥)
+        { atSeconds: -19, durationSeconds: 4, spellId: '118', drInfo: { category: 'Incapacitate' } },
       ],
     };
 

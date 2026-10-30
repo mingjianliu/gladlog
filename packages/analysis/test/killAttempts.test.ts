@@ -629,6 +629,51 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
     expect(attempts[0]!.openingDrLevel).toBeUndefined();
   });
 
+  it("fact6 D14 (F20): a press the game refused IMMUNE on the target does not name the burst", () => {
+    // 2b3fba97-r0 2:27: Deathmark into Time Stop was named `Deathmark burst`
+    const aimed = (spellId: string, spellName: string, atS: number): any => ({
+      ...offensiveCast(atS),
+      spellId,
+      spellName,
+      destUnitId: "e1",
+      destUnitName: "e1",
+    });
+    const run = (missesOut: any[]) => {
+      const e1 = unit("e1");
+      const f1 = unit("f1", {
+        reaction: 1,
+        spec: "71", // Arms Warrior
+        spellCastEvents: [
+          aimed("1719", "Recklessness", 40),
+          aimed("107574", "Avatar", 40.5),
+        ],
+        damageOut: [dmg("f1", "e1", 42, 60_000)],
+        missesOut,
+      });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    };
+    const refused = {
+      spellId: "1719",
+      missType: "IMMUNE",
+      destUnitId: "e1",
+      timestamp: ms(40.01),
+      logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(40.01) },
+    };
+    // control: nothing refused — the first press into the target names it
+    expect(run([])[0]!.anchorSpellName).toBe("Recklessness");
+    expect(run([refused])[0]!.anchorSpellName).toBe("Avatar");
+    // a later DoT tick meeting an immunity is not the press refused
+    expect(
+      run([
+        {
+          ...refused,
+          timestamp: ms(41),
+          logLine: { event: LogEvent.SPELL_PERIODIC_MISSED, timestamp: ms(41) },
+        },
+      ])[0]!.anchorSpellName,
+    ).toBe("Recklessness");
+  });
+
   it("同目标已有重叠晕锚尝试 → 不再另立 burst 尝试(晕锚优先,去重)", () => {
     const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 40, 5) });
     const f1 = unit("f1", {

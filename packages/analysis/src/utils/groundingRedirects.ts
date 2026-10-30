@@ -107,3 +107,36 @@ export function groundingRedirects(
   }
   return out.sort((a, b) => a.timestampMs - b.timestampMs);
 }
+
+/**
+ * F20 D26 (fact6, 2026-10-28): the redirects the totem ATE — what the
+ * `[ABSORBED: …]` note on a Grounding Totem line lists beside the damage it
+ * absorbed (457e197f 0:19: Chains of Ice and Death Grip went into it, no
+ * SPELL_ABSORBED row — the line said nothing). A cast aimed at the totem is
+ * one; an IMMUNE miss only when the caster put that spell on the ground (a
+ * cast with no destination, same spell) `GROUNDING_MISS_AFTER_CAST_MS`
+ * before it — the trap shape. Any other IMMUNE row is a proc or an area
+ * effect the totem stood in (457e197f 1:05: Searing Light 1280134,
+ * Obliterate's Chains of Ice 444826; Brittle 374557 behind a redirected
+ * Chains of Ice), not something it took in a player's place.
+ */
+export function groundingEatenRedirects(
+  unit: ICombatUnit,
+): IGroundingRedirect[] {
+  const groundCasts = (unit.spellCastEvents ?? []).filter(
+    (c) =>
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      !!c.spellId &&
+      (!c.destUnitId || /^0+$/.test(c.destUnitId)),
+  );
+  return groundingRedirects(unit).filter(
+    (g) =>
+      g.via === "cast" ||
+      groundCasts.some(
+        (c) =>
+          sameSpell(c.spellId!, g.spellId) &&
+          g.timestampMs >= c.logLine.timestamp &&
+          g.timestampMs - c.logLine.timestamp <= GROUNDING_MISS_AFTER_CAST_MS,
+      ),
+  );
+}

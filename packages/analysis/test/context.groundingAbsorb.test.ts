@@ -80,7 +80,10 @@ describe("Grounding Totem absorb note (W0a)", () => {
           spellId: GROUNDING_TOTEM_SPELL_ID,
           spellName: "Grounding Totem",
           timestamp: T0 + 10_000,
-          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + 10_000 },
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 10_000,
+          },
         } as any,
       ],
     });
@@ -134,7 +137,10 @@ describe("Grounding Totem absorb note (W0a)", () => {
           spellId: GROUNDING_TOTEM_SPELL_ID,
           spellName: "Grounding Totem",
           timestamp: T0 + 10_000,
-          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + 10_000 },
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 10_000,
+          },
         } as any,
       ],
     });
@@ -185,7 +191,10 @@ describe("Grounding Totem absorb note (W0a)", () => {
           spellId: GROUNDING_TOTEM_SPELL_ID,
           spellName: "Grounding Totem",
           timestamp: T0 + 10_000,
-          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + 10_000 },
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 10_000,
+          },
         } as any,
       ],
     });
@@ -223,5 +232,81 @@ describe("Grounding Totem absorb note (W0a)", () => {
     });
 
     expect(timeline).toContain("[ABSORBED spells from: 2(FMage)]");
+  });
+
+  it("F20 D26: a redirected cast with no damage (Chains of Ice, Death Grip) is in the list; a proc / area IMMUNE row is not (457e197f 0:19 / 1:05)", () => {
+    const owner = makeUnit({
+      id: "Player-1",
+      name: "ShamanOwner",
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [
+        {
+          spellId: GROUNDING_TOTEM_SPELL_ID,
+          spellName: "Grounding Totem",
+          timestamp: T0 + 10_000,
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 10_000,
+          },
+        } as never,
+      ],
+    });
+    const totemId = `Creature-0-0-0-0-${GROUNDING_TOTEM_NPC_ID}-0000000004`;
+    const castInto = (spellId: string, spellName: string, at: number) =>
+      ({
+        spellId,
+        spellName,
+        timestamp: T0 + at,
+        srcUnitId: "Player-2",
+        destUnitId: totemId,
+        destUnitName: "Grounding Totem",
+        logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + at },
+      }) as never;
+    const enemy = makeUnit({
+      id: "Player-2",
+      name: "EnemyDk",
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.DeathKnight_Frost,
+      spellCastEvents: [
+        castInto("45524", "Chains of Ice", 11_000),
+        castInto("49576", "Death Grip", 12_000),
+      ],
+      missesOut: [
+        // an IMMUNE row with no cast of it: a proc, not a redirect
+        {
+          spellId: "1280134",
+          spellName: "Searing Light",
+          missType: "IMMUNE",
+          timestamp: T0 + 12_500,
+          srcUnitId: "Player-2",
+          destUnitId: totemId,
+          destUnitName: "Grounding Totem",
+          logLine: { event: LogEvent.SPELL_MISSED, timestamp: T0 + 12_500 },
+        } as never,
+      ],
+    });
+    const totem = makeUnit({
+      id: totemId,
+      name: "Grounding Totem",
+      type: CombatUnitType.NPC,
+      ownerId: owner.id,
+      reaction: CombatUnitReaction.Friendly,
+    });
+
+    const timeline = buildMatchTimeline({
+      owner,
+      allUnits: [owner, enemy, totem],
+      friends: [owner],
+      enemies: [enemy],
+      matchStartMs: T0,
+      matchEndMs: T0 + 60_000,
+      ...defaultTimelineParams,
+      enemyIdMap: new Map([["EnemyDk", 2]]),
+    });
+
+    expect(timeline).toContain(
+      "[ABSORBED: Chains of Ice (2(FDKnight)), Death Grip (2(FDKnight))]",
+    );
+    expect(timeline).not.toContain("Searing Light");
   });
 });

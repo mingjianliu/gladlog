@@ -23,7 +23,11 @@ import {
   avoidanceExplainsMissType,
   ccAvoidanceBuffsUpAt,
 } from "../src/utils/ccTrinketAnalysis";
-import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
+import {
+  makeAdvancedAction,
+  makeSpellCastEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 const T0 = 1_000_000;
 const SHROUD = "378464"; // Nullifying Shroud, 3 s
@@ -311,10 +315,16 @@ describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-
       spellCastEvents: [cast(10_000), cast(12_000)],
     });
     const totem = makeUnit("totem-1", { name: "Totem", ownerId: "enemy-1" });
+    // F20 D28: the player stood 3 yd from the mate the pulses hit
+    const at = (x: number) =>
+      Array.from({ length: 15 }, (_, i) =>
+        makeAdvancedAction(T0 + 9_000 + i * 500, x, 0),
+      );
     const player = makeUnit("player-1", {
       name: "Player",
       spec: CombatUnitSpec.Evoker_Preservation,
       reaction: CombatUnitReaction.Friendly,
+      advancedActions: at(0),
       spellCastEvents: [
         makeSpellCastEvent(HOVER, T0 + 11_500, "0000000000000000", "nil", "player-1", "Player", 0, "Hover"),
       ],
@@ -331,7 +341,7 @@ describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-
       timestamp: T0 + atMs,
       logLine: { event: LogEvent.SPELL_MISSED, timestamp: T0 + atMs, lineIndex: line },
     });
-    const mate = makeUnit("mate-1", { name: "Mate" });
+    const mate = makeUnit("mate-1", { name: "Mate", advancedActions: at(3) });
     (mate as { missesIn?: unknown[] }).missesIn = [pulse(12_000, 500), pulse(14_000, 700)];
     const combat = {
       startTime: T0,

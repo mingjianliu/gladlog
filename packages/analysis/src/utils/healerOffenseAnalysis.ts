@@ -20,7 +20,7 @@ import {
   enemySourceIds,
 } from "./cannotCastIntervals";
 import { isControlCast } from "./castMissRows";
-import { ccReachAt } from "./ccTargetState";
+import { ccReachAt, ccTargetBlockerIntervals } from "./ccTargetState";
 import {
   cdAvailableAt,
   chargesAvailableAt,
@@ -611,8 +611,16 @@ export function computeContestedTradeFacts(
   contestedSegments: IContestedSegment[],
   offensiveWindows: IOffensiveWindow[],
   enemyHealerCCInstances: CCWithDR,
+  /** the enemy healer's DR history beyond `enemyHealerCCInstances` — its
+   * `drHistoryOnly` (fact6 F20: a control reflected back onto it) */
+  enemyHealerDrHistoryOnly: CCWithDR = [],
 ): IContestedTradeFact[] {
   const matchStartMs = combat.startTime;
+  // the DR point queries read the whole history (fact6 F20)
+  const enemyHealerDrHistory = [
+    ...enemyHealerCCInstances,
+    ...enemyHealerDrHistoryOnly,
+  ];
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec));
   if (!enemyHealer) return [];
   const ccSpells = collectOwnerCCSpells(owner, matchStartMs, [], combat);
@@ -656,7 +664,7 @@ export function computeContestedTradeFacts(
         drCategoryKnown(s.spellId, ownerApplied) &&
         // the line states the DR at the segment's start
         getDRLevelAtTime(
-          enemyHealerCCInstances,
+          enemyHealerDrHistory,
           drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
@@ -670,7 +678,7 @@ export function computeContestedTradeFacts(
           (t) =>
             isCCReadyAt(s, t) &&
             getDRLevelAtTime(
-              enemyHealerCCInstances,
+              enemyHealerDrHistory,
               drCategoryOfCast(s.spellId, ownerApplied),
               t,
               matchStartMs,
@@ -727,7 +735,12 @@ function ccReachesInSpan(
   owner: ICombatUnit,
   healer: ICombatUnit,
   spellId: string,
-  combat: { startTime: number; startInfo?: { zoneId?: unknown } },
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Readonly<Record<string, ICombatUnit>>;
+    startInfo?: { zoneId?: unknown };
+  },
   seg: { fromSeconds: number; toSeconds: number },
   /** the CC usable at that second as far as readiness / DR go — reach and
    * usability have to hold in the same second */
@@ -736,9 +749,17 @@ function ccReachesInSpan(
   const reach = ccThreatReachYards(owner, spellId);
   if (reach === null) return false;
   const zone = String(combat.startInfo?.zoneId ?? "");
+  // …and the healer could take it then: no aura that stops this control on
+  // the whole rendered second (`ccTargetBlockerIntervals`, the CC sampler's
+  // reading — F20 immunity residual: 3 `[CONTESTED] … ready on enemy healer`
+  // spans on a priest in Spirit of Redemption, s0/72-1 3:01–3:05)
+  const blockers = ccTargetBlockerIntervals(healer, combat, spellId);
+  const immuneAt = (t: number) =>
+    blockers.some((iv) => iv.fromS < t + 1 && t < iv.toS);
   for (let t = Math.floor(seg.fromSeconds); t < seg.toSeconds; t++)
     if (
       usableAt(Math.max(t, seg.fromSeconds)) &&
+      !immuneAt(t) &&
       ccReachAt(owner, healer, reach, zone, combat.startTime + t * 1000).ok
     )
       return true;
@@ -926,8 +947,16 @@ export function computeWindowContributions(
   ownerCannotCast: ReadonlyArray<{ from: number; to: number }>,
   enemyHealerCCInstances: CCWithDR,
   factsComputer: IKillWindowFactsComputer,
+  /** the enemy healer's DR history beyond `enemyHealerCCInstances` — its
+   * `drHistoryOnly` (fact6 F20: a control reflected back onto it) */
+  enemyHealerDrHistoryOnly: CCWithDR = [],
 ): IWindowContribution[] {
   const matchStartMs = combat.startTime;
+  // the DR point queries read the whole history (fact6 F20)
+  const enemyHealerDrHistory = [
+    ...enemyHealerCCInstances,
+    ...enemyHealerDrHistoryOnly,
+  ];
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec)) ?? null;
   // the kit's controls, when the caller handed a combat with its units (the
   // ledger needs one); a bare clock keeps the cast-history reading
@@ -974,7 +1003,7 @@ export function computeWindowContributions(
         enemyHealerDR:
           enemyHealer && drCategoryKnown(s.spellId, ownerApplied)
             ? getDRLevelAtTime(
-                enemyHealerCCInstances,
+                enemyHealerDrHistory,
                 drCategoryOfCast(s.spellId, ownerApplied),
                 fromSeconds,
                 matchStartMs,
@@ -1138,8 +1167,16 @@ export function computeWindowCreationFacts(
   slackSegments: ISlackSegment[],
   offensiveWindows: IOffensiveWindow[],
   enemyHealerCCInstances: CCWithDR,
+  /** the enemy healer's DR history beyond `enemyHealerCCInstances` — its
+   * `drHistoryOnly` (fact6 F20: a control reflected back onto it) */
+  enemyHealerDrHistoryOnly: CCWithDR = [],
 ): IWindowCreationFact[] {
   const matchStartMs = combat.startTime;
+  // the DR point queries read the whole history (fact6 F20)
+  const enemyHealerDrHistory = [
+    ...enemyHealerCCInstances,
+    ...enemyHealerDrHistoryOnly,
+  ];
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec));
   if (!enemyHealer) return [];
   const ccSpells = collectOwnerCCSpells(
@@ -1173,7 +1210,7 @@ export function computeWindowCreationFacts(
         drCategoryKnown(s.spellId, ownerApplied) &&
         // the line states the DR at the segment's start
         getDRLevelAtTime(
-          enemyHealerCCInstances,
+          enemyHealerDrHistory,
           drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
@@ -1187,7 +1224,7 @@ export function computeWindowCreationFacts(
           (t) =>
             isCCReadyAt(s, t) &&
             getDRLevelAtTime(
-              enemyHealerCCInstances,
+              enemyHealerDrHistory,
               drCategoryOfCast(s.spellId, ownerApplied),
               t,
               matchStartMs,
@@ -1263,6 +1300,8 @@ export function buildHealerOffenseSummary(
   ownerCCInstances: CCInterval,
   enemyHealerCCInstances: CCWithDR,
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
+  /** the enemy healer summary's `drHistoryOnly` (fact6 F20) */
+  enemyHealerDrHistoryOnly: CCWithDR = [],
 ): IHealerOffenseSummary {
   const { advancedLoggingAvailable, segments } = computeSlackSegments(
     combat,
@@ -1299,6 +1338,7 @@ export function buildHealerOffenseSummary(
     ).segments,
     offensiveWindows,
     enemyHealerCCInstances,
+    enemyHealerDrHistoryOnly,
   );
 
   return {
@@ -1320,6 +1360,7 @@ export function buildHealerOffenseSummary(
       ),
       enemyHealerCCInstances,
       createKillWindowFactsComputer(combat, friends, enemies),
+      enemyHealerDrHistoryOnly,
     ),
     windowCreationFacts: computeWindowCreationFacts(
       combat,
@@ -1328,6 +1369,7 @@ export function buildHealerOffenseSummary(
       segments,
       offensiveWindows,
       enemyHealerCCInstances,
+      enemyHealerDrHistoryOnly,
     ),
     contestedTradeFacts,
     ownerCCSpellsObserved: collectOwnerCCSpells(

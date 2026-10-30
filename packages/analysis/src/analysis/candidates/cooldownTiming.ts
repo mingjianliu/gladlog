@@ -45,6 +45,7 @@ import {
   cdAvailableAt,
   cdCanHelpAnotherUnit,
   cdChargeStateAt,
+  cdHelpsRecipient,
   cdIsProcOnly,
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
@@ -53,7 +54,6 @@ import {
   type IMajorCooldownInfo,
   isHealerSpec,
   lockCastsOf,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
 import {
@@ -1964,10 +1964,7 @@ export function cdHoardedEvents(
       // against a player who had answered — 8 new accusations on the S2
       // archive every-30 before the split, 0 after (the 1 remaining addition is a
       // CD_HOARD_CAP substitution).
-      const helps = (cd: CdHoardCandidateCd) =>
-        src.own
-          ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
-          : cdCanHelpAnotherUnit(cd);
+      const helps = (cd: CdHoardCandidateCd) => cdHelpsRecipient(cd, src.own);
       const offCooldown = readyDefensiveCds(ownerCds, p.tSec, helps);
       // The ACCUSATION set: a response-only save (Barkskin / Frenzied
       // Regeneration, user ruling 2026-09-25 「不指控」) is never named as
@@ -2473,7 +2470,8 @@ export function cdHoardedEvents(
             .filter(
               (cd) =>
                 isSpendableDefensiveCd(cd) &&
-                (own || cdCanHelpAnotherUnit(cd)) &&
+                // F20 D1: not the owner's own ally-only external
+                cdHelpsRecipient(cd, own) &&
                 !readyIds.has(cd.spellId),
             )
             .map((cd) => {

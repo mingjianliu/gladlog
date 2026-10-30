@@ -84,6 +84,10 @@ describe("castEffectAuras — the generated cast → effect table", () => {
   });
 
   it("every row clears the rule stated in the file's meta (hits ≥ 10, mostly fast)", () => {
+    // fast on the cast's side (≥ 50 % of hits within 3 s) or, for a cast that
+    // applies the aura only sometimes, on the aura's side (≥ 90 % of ≥ 10
+    // applications within 3 s of the nearest cast — a stealth Rake's stun,
+    // Deep Breath's Terror of the Skies; F20 dr residual)
     const meta = (generated as { meta: { rule: string } }).meta;
     expect(meta.rule).toContain("covered share");
     for (const rows of Object.values(
@@ -91,7 +95,14 @@ describe("castEffectAuras — the generated cast → effect table", () => {
         generated as unknown as {
           casts: Record<
             string,
-            Array<{ hits: number; hitsWithin3s: number; coveredShare: number }>
+            Array<{
+              hits: number;
+              hitsWithin3s: number;
+              coveredShare: number;
+              via?: string;
+              nearApps?: number;
+              nearWithin3s?: number;
+            }>
           >;
         }
       ).casts,
@@ -99,7 +110,11 @@ describe("castEffectAuras — the generated cast → effect table", () => {
       for (const r of rows) {
         expect(r.hits).toBeGreaterThanOrEqual(10);
         expect(r.coveredShare).toBeGreaterThanOrEqual(0.5);
-        expect(r.hitsWithin3s / r.hits).toBeGreaterThanOrEqual(0.5);
+        const castSide = r.via !== "talent" && r.hitsWithin3s / r.hits >= 0.5;
+        const auraSide =
+          (r.nearApps ?? 0) >= 10 &&
+          (r.nearWithin3s ?? 0) / (r.nearApps ?? 1) >= 0.9;
+        expect(castSide || auraSide).toBe(true);
       }
   });
 });

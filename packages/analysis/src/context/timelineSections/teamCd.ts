@@ -17,6 +17,7 @@
 import { reachesAlly } from "../../data/spellTargeting";
 import { isControlCast } from "../../utils/castMissRows";
 import {
+  castSpellName,
   cdIsProcOnly,
   gridHpPct,
   guardianSpiritSaveClause,
@@ -177,7 +178,15 @@ export function emitTeamCdEntries(
                 : ""
               : named.size > 0
                 ? ccImmuneTagFor(player, cd.spellId, cast.timeSeconds, named)
-                : "";
+                : // fact6 D14: a line that names nobody — the press's own
+                  // cast-row target, when it is an enemy
+                  ccImmuneTagFor(
+                    player,
+                    cd.spellId,
+                    cast.timeSeconds,
+                    undefined,
+                    true,
+                  );
           // B18: a Guardian Spirit whose save triggered says so (the same
           // heal the ledger's recovery reads)
           const saveNote = isProc
@@ -191,7 +200,7 @@ export function emitTeamCdEntries(
                   ? cast.targetName
                   : player.name,
               );
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${castProcWith ? ` (with ${castProcWith})` : ""}${recipientPart}${groundingNote}${immunePart}${saveNote}${unnecessaryNote}`;
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${castSpellName(cd, cast)}${castProcWith ? ` (with ${castProcWith})` : ""}${recipientPart}${groundingNote}${immunePart}${saveNote}${unnecessaryNote}`;
         }
         addEntry(
           cast.timeSeconds,

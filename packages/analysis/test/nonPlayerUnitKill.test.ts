@@ -12,6 +12,12 @@ import {
   opposingHitsOnUnit,
   summonedAtMs,
 } from "../src/context/timelineHelpers";
+import {
+  attackerBlowFor,
+  isAttackerDamageRow,
+  playerKillingBlow,
+  SPLIT_TRANSFER_SLACK_MS,
+} from "../src/utils/killingBlow";
 
 type Hit = ICombatUnit["damageIn"][number];
 const hit = (timestamp: number, overkill?: number): Hit =>
@@ -53,6 +59,114 @@ describe("nonPlayerUnitKill (GH #100: 12.x logs write no UNIT_DIED for totems)",
     const late = nonPlayerUnitKill(unit([hit(9000, 40)], [5000]));
     expect(late?.timestamp).toBe(5000);
     expect(late?.finalBlow?.timestamp).toBe(9000);
+  });
+});
+
+describe("the final blow is an attacker's (fact6 D22)", () => {
+  // 114a4df7-r0 1:02: the Sayaad's overkill row was its warlock's Soul Link
+  // DAMAGE_SPLIT and the line read "killed by: 5(DWarlock) — Soul Link".
+  const row = (
+    timestamp: number,
+    event: LogEvent,
+    srcUnitId: string,
+    spellName: string,
+    overkill?: number,
+  ): Hit =>
+    ({
+      logLine: { event, timestamp },
+      timestamp,
+      srcUnitId,
+      spellName,
+      amount: -100,
+      effectiveAmount: -0,
+      ...(overkill ? { overkill } : {}),
+    }) as unknown as Hit;
+  // codex F20-07: Shooting Stars left the Sayaad alive (9 000); the
+  // Starsurge on its warlock (9 400) moved the lethal damage through Soul
+  // Link in that same millisecond — the split's attacker is that hit
+  const own = row(9_000, LogEvent.SPELL_DAMAGE, "druid", "Shooting Stars");
+  const split = row(9_400, LogEvent.DAMAGE_SPLIT, "warlock", "Soul Link", 30);
+  const onHolder = row(9_400, LogEvent.SPELL_DAMAGE, "druid", "Starsurge");
+  const holders =
+    (rows: Hit[]) =>
+    (id: string): Pick<ICombatUnit, "damageIn"> | undefined =>
+      id === "warlock" ? { damageIn: rows } : undefined;
+
+  it("a split overkill row keeps its instant and credits the hit on its link holder", () => {
+    const k = nonPlayerUnitKill(unit([own, split]), holders([onHolder]));
+    expect(k?.timestamp).toBe(9_400);
+    expect(k?.finalBlow?.spellName).toBe("Starsurge");
+    expect(attackerBlowFor(split, holders([onHolder]))).toBe(onHolder);
+  });
+
+  it("the victim's own earlier hit is no evidence: no holder hit, no final blow", () => {
+    expect(nonPlayerUnitKill(unit([own, split]))?.finalBlow).toBeUndefined();
+    const late = row(
+      9_400 - SPLIT_TRANSFER_SLACK_MS - 1,
+      LogEvent.SPELL_DAMAGE,
+      "druid",
+      "Starsurge",
+    );
+    const k = nonPlayerUnitKill(unit([own, split]), holders([late]));
+    expect(k?.timestamp).toBe(9_400);
+    expect(k?.finalBlow).toBeUndefined();
+  });
+
+  it("a player's killing blow reads the same predicate", () => {
+    const sac = row(
+      9_300,
+      LogEvent.DAMAGE_SPLIT,
+      "ally",
+      "Blessing of Sacrifice",
+      50,
+    );
+    const shot = row(9_300, LogEvent.SPELL_DAMAGE, "druid", "Starsurge");
+    const byId = (id: string) =>
+      id === "ally" ? { damageIn: [shot] } : undefined;
+    expect(playerKillingBlow(unit([sac]), 9_300, byId)?.spellName).toBe(
+      "Starsurge",
+    );
+    expect(playerKillingBlow(unit([sac]), 9_300)).toBeUndefined();
+    // codex F20-21 (d8a6e7cb): an overkill row the unit lived through — a
+    // later reading above 0 HP — is no killing blow
+    const tick = row(
+      9_000,
+      LogEvent.SPELL_PERIODIC_DAMAGE,
+      "mage",
+      "Refraction",
+      6,
+    );
+    const reading = (ms: number, hp: number) => ({
+      advancedActorCurrentHp: hp,
+      logLine: { timestamp: ms },
+    });
+    const lived = {
+      ...unit([tick]),
+      advancedActions: [reading(9_000, 1), reading(9_329, 1_141)],
+    } as never;
+    expect(playerKillingBlow(lived, 9_400)).toBeUndefined();
+    const died = {
+      ...unit([tick]),
+      advancedActions: [reading(9_000, 0), reading(9_200, 0)],
+    } as never;
+    expect(playerKillingBlow(died, 9_028)?.spellName).toBe("Refraction");
+    expect(isAttackerDamageRow(sac)).toBe(false);
+    expect(isAttackerDamageRow(shot)).toBe(true);
+  });
+
+  it("Roar of Sacrifice's share is a transfer logged as SPELL_DAMAGE (bdce91c4 3:02)", () => {
+    // the pet's overkill row comes from the Paladin its Roar sits on; the
+    // enemy's Lunar Storm on the Paladin 24 ms earlier moved it
+    const roar = {
+      ...row(34_559, LogEvent.SPELL_DAMAGE, "paladin", "Roar of Sacrifice", 20),
+      spellId: "67481",
+    } as Hit;
+    const storm = row(34_535, LogEvent.SPELL_DAMAGE, "hunter", "Lunar Storm");
+    const byId = (id: string) =>
+      id === "paladin" ? { damageIn: [storm] } : undefined;
+    expect(isAttackerDamageRow(roar)).toBe(false);
+    expect(nonPlayerUnitKill(unit([roar]), byId)?.finalBlow).toBe(storm);
+    expect(nonPlayerUnitKill(unit([roar]))?.finalBlow).toBeUndefined();
   });
 });
 

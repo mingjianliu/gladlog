@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { NOT_READY_REASONS } from "../src/analysis/candidates/shared";
 import {
+  ITEM_NOT_READY_REASONS,
   OTHER_REFUSAL_REASONS,
   REFUSAL_WHY_WORDS,
   refusalWhy,
@@ -28,6 +29,12 @@ describe("refusalWhy — the common client refusals", () => {
     expect(refusalWhy("Another action is in progress")).toBe(
       "another action in progress",
     );
+  });
+  it("item not ready yet in every locale, ru and ko included (fact6 F20)", () => {
+    for (const t of ITEM_NOT_READY_REASONS)
+      expect(refusalWhy(t), t).toBe("item not ready yet");
+    expect(ITEM_NOT_READY_REASONS).toContain("Предмет еще не готов.");
+    expect(ITEM_NOT_READY_REASONS).toContain("아직 사용할 준비가 안 됐습니다.");
   });
   it("a text none of the tables has stays unworded", () => {
     expect(refusalWhy("Must be in Stealth")).toBe(REJECT_WHY_UNWORDED);

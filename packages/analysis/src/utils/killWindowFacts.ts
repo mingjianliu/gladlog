@@ -25,6 +25,7 @@ import { CombatUnitClass, type ICombatUnit } from "@gladlog/parser-compat";
 
 import { enemyHealerCcWindows } from "../analysis/candidates/cooldownTiming";
 import {
+  castSpellName,
   cdAvailableAt,
   cdIsProcOnly,
   cdLatestRemainingSeconds,
@@ -241,7 +242,10 @@ export function createKillWindowFactsComputer(
               (c) =>
                 c.timeSeconds >= readyAtSecond && c.timeSeconds <= toSeconds,
             )
-            .map((c) => ({ name: cd.spellName, atSeconds: c.timeSeconds })),
+            .map((c) => ({
+              name: castSpellName(cd, c),
+              atSeconds: c.timeSeconds,
+            })),
         )
         .sort((a, b) => a.atSeconds - b.atSeconds);
       const pressedAtStart = presses.filter(

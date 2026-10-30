@@ -54,7 +54,7 @@ import {
 import { COPY_CAST_IDS } from "../utils/castPress";
 import {
   canHelpAnotherUnit,
-  cdCanHelpAnotherUnit,
+  cdHelpsRecipient,
   cdIsProcOnly,
   cdReadyInTimeAt,
   extractMajorCooldowns,
@@ -63,7 +63,6 @@ import {
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
   RESPONSE_ONLY_DEFENSIVE_IDS,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
   specToString,
   TEAM_HEAL_CD_IDS,
 } from "../utils/cooldowns";
@@ -826,6 +825,11 @@ export function controlLandedResponses(
   }>,
   w0: number,
   w1: number,
+  /** a summon's own SPELL_CAST_SUCCESS rows (its id, its instant) — what
+   * times a control a `Pet-` unit landed when no press of its owner made it */
+  summonCastsOf: (
+    summonId: string,
+  ) => ReadonlyArray<{ spellId: string; tMs: number }> = () => [],
 ): LandedControlResponse[] {
   const out: LandedControlResponse[] = [];
   for (const caster of casters)
@@ -860,6 +864,14 @@ export function controlLandedResponses(
         [...castAndEffectIds(castId)].some(
           (id) => ccSpellIds.has(id) || rootSpellIds.has(id),
         );
+      // fact6 D11 (e7608d97 1:10): a PET (`Pet-` GUID) acts on its own —
+      // its control is timed by a press of the owner that made it (a command,
+      // Intimidation), else by the pet's own cast row, else by the aura; never
+      // by another press of the owner (a Gladiator's Medallion 1.9 s before
+      // the Abomination's Monstrous Blow read "1.0s before it opened", the
+      // stun landed 0.9 s after). A totem or guardian keeps the owner's
+      // untargeted press (its summon or its relocation is that press).
+      const fromPet = a.srcUnitId !== unitId && a.srcUnitId.startsWith("Pet-");
       let family: (typeof friendlyCasts)[number] | undefined;
       let aimedControl: (typeof friendlyCasts)[number] | undefined;
       let untargeted: (typeof friendlyCasts)[number] | undefined;
@@ -868,6 +880,7 @@ export function controlLandedResponses(
         if (c.unitId !== unitId || c.tMs < a.timestamp - GROUND_CONTROL_FUSE_MS)
           continue;
         if (producesAura(c.spellId)) family = c;
+        else if (fromPet) continue;
         else if (
           caster.id !== undefined &&
           c.dest === caster.id &&
@@ -879,7 +892,17 @@ export function controlLandedResponses(
         else if (isNoDest(c.dest) && !producesAControl(c.spellId))
           untargeted = c;
       }
-      const cast = family ?? aimedControl ?? untargeted;
+      let petOwn: { tMs: number } | undefined;
+      if (fromPet && !family)
+        for (const c of summonCastsOf(a.srcUnitId))
+          if (
+            c.tMs <= a.timestamp &&
+            c.tMs >= a.timestamp - GROUND_CONTROL_FUSE_MS &&
+            producesAura(c.spellId) &&
+            (!petOwn || c.tMs > petOwn.tMs)
+          )
+            petOwn = c;
+      const cast = family ?? petOwn ?? aimedControl ?? untargeted;
       // the cast-side test already counted an aimed control from this
       // friendly that could be this aura's cause — one that produces THIS
       // aura and was aimed at THIS aura's holder, the only case where the
@@ -1280,11 +1303,11 @@ export function burstWindowDecisionPoints(
     );
     selfCdsByUnit.set(
       u.id,
-      answers.filter((cd) => !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)),
+      answers.filter((cd) => cdHelpsRecipient(cd, true)),
     );
     allyCdsByUnit.set(
       u.id,
-      answers.filter((cd) => cdCanHelpAnotherUnit(cd)),
+      answers.filter((cd) => cdHelpsRecipient(cd, false)),
     );
     ccByUnit.set(u.id, buildFilteredAuraIntervals(u, ccSpellIds, combat));
     if (opts.collectSpend)
@@ -1584,6 +1607,21 @@ export function burstWindowDecisionPoints(
         friendlyCasts,
         w0,
         w1,
+        (summonId) => {
+          const rows: ReadonlyArray<{
+            spellId?: string;
+            timestamp?: number;
+            logLine?: { event?: string; timestamp?: number };
+          }> = units.find((u) => u.id === summonId)?.spellCastEvents ?? [];
+          return rows
+            .filter(
+              (c) => c.logLine?.event === "SPELL_CAST_SUCCESS" && !!c.spellId,
+            )
+            .map((c) => ({
+              spellId: String(c.spellId),
+              tMs: c.timestamp ?? c.logLine?.timestamp ?? 0,
+            }));
+        },
       )) {
         const holder = units.find((u) => u.id === r.holderId);
         const response: BurstResponseCast = {

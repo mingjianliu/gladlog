@@ -244,6 +244,20 @@ export function isCasterCentredSpell(spellId: string): boolean {
   return !!e && !(e.rangeYards > 0) && e.radiusYards > 0;
 }
 
+/** The spell's effect radius in yards with the caster's radius talents
+ * applied (DB2 SpellEffect radius — Freezing Trap 3, Capacitor Totem 8,
+ * Ring of Frost 8), or null when the table has none / only the placeholder.
+ * F20 D28: how far from where it went off a ground control could reach. */
+export function spellRadiusForCaster(
+  caster: Caster | null | undefined,
+  spellId: string,
+): number | null {
+  const e = SPELLS[spellId];
+  if (!e || !(e.radiusYards > 0) || e.radiusYards >= PLACEHOLDER_RANGE_YD)
+    return null;
+  return modified(e.radiusYards, e.radiusMods, caster);
+}
+
 /** How far from the caster the spell can take effect: range for a targeted
  * spell, range + radius for a placed area, radius for a caster-centred one —
  * the `reachYards` semantics of the generated table, with the caster's range

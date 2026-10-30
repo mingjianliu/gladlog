@@ -37,6 +37,7 @@ import {
   officialDurationS,
   supersededAuraBreaks,
 } from "./auraIntervals";
+import { CAST_ROW_LAG_MAX_MS } from "./castRowLag";
 import { ccFullDurationForCaster } from "./ccDuration";
 import { specToString } from "./cooldowns";
 import { logIsFrom } from "./logEra";
@@ -313,9 +314,11 @@ export const AOE_CC_LANDING_WINDOW_S: Readonly<
   "389794": { fromS: 0, toS: 6.5 },
 };
 
-/** What the owner's cast line says when one of these, cast un-aimed, put its
- * aura on no enemy player and logged no miss on one (FT-T14; written by
- * `ownerNoCcAuraTag`). An absence the log states, not a verdict. */
+/** What the owner's cast line says when one of these, cast un-aimed, reached
+ * no enemy player: no aura, no damage and no miss row of it — its caster's
+ * or its summons' — on one (FT-T14; written by `ownerNoCcAuraTag`; one that
+ * reached a player and controlled nobody says `[no CC aura logged — hit …]`,
+ * fact6 ruling 2). An absence the log states, not a verdict. */
 export const OWNER_AOE_CC_NO_PLAYER_TAG = "[hit no enemy player]";
 
 export interface IAoeCCEvent {
@@ -388,10 +391,42 @@ export function isStunCcInstance(cc: {
   );
 }
 
-interface CCEntry {
+export interface CCEntry {
   applyMs: number;
   removeMs: number;
   spellId: string;
+  /** the aura's source (Q1's identity test, `drLevelAtLanding`) */
+  srcUnitId?: string;
+  /** the opening row's place on the holder's aura stream
+   * (`buildCcCategoryHistory`): of two landings on one ms, the one logged
+   * later did not diminish the one logged first (codex 20-F20-28 #1) */
+  applySeq?: number;
+}
+
+/**
+ * fact6 F20 (D10 D29): is an aura on `holderId` from `srcUnitId` DR history
+ * on the holder? Every source counts — an opponent, its pet or summon, a
+ * teammate while the holder is charmed, and the holder ITSELF when the aura
+ * is a control (`ccSpellIds`: its own control reflected back onto it — the
+ * game DRs it like any other); only a holder-self aura that is not a control
+ * does not (user default 2026-10-28). A reflected control is a DEBUFF: the
+ * holder's own BUFF under a control's id is the caster's side of its own
+ * channel, not a control on it (F20 residual: Illidan's Grasp 205630 is a
+ * BUFF on the Demon Hunter channelling it — 321d51ac 1:48 rendered
+ * `[CC ON TEAM] … ← Illidan's Grasp (reflected back)` and put the next
+ * Chastise at Stun Immune for Full). The one source test of every DR
+ * history: `buildCcCategoryHistory`, the outgoing chains' DR-only entries,
+ * the CC summaries' history-only entries and their reflected windows.
+ */
+export function isDrHistorySource(
+  holderId: string,
+  srcUnitId: string,
+  spellId: string,
+  auraType: string | undefined,
+): boolean {
+  return (
+    srcUnitId !== holderId || (ccSpellIds.has(spellId) && auraType === "DEBUFF")
+  );
 }
 
 /**
@@ -435,7 +470,10 @@ export const OPENING_CAST_SKEW_MS = 250;
  * Did one of `casters` (the aura's source, and its owner for a pet) CAST this
  * CC — its aura id or a cast whose effect aura it is (`castsOfEffectAura`) —
  * at `targetId` or untargeted, after the open application began
- * (`OPENING_CAST_SKEW_MS`) and at most `CAST_BACKED_REFRESH_MS` before `atMs`?
+ * (`OPENING_CAST_SKEW_MS`) and at most `CAST_BACKED_REFRESH_MS` before `atMs`
+ * — or up to `CAST_ROW_LAG_MAX_MS` after it: the press's row can be logged
+ * after the aura it caused (F20 dr residual: a stealth Rake's stun REFRESH
+ * 19.0498, its cast row 19.0508).
  * The one reading of "this re-application is a recast" for the CC pairings
  * (`analyzePlayerCCAndTrinket`, `analyzeOutgoingCCChains`, `analyzeCcBreaks`).
  */
@@ -457,10 +495,32 @@ export function ccRecastBetween(
           /^0+$/.test(e.destUnitId) ||
           e.destUnitId === targetId) &&
         e.timestamp > openedAtMs + OPENING_CAST_SKEW_MS &&
-        e.timestamp <= atMs &&
+        e.timestamp <= atMs + CAST_ROW_LAG_MAX_MS &&
         e.timestamp >= atMs - CAST_BACKED_REFRESH_MS,
     ),
   );
+}
+
+/**
+ * F20 dr (coordinator 2026-10-28, measured): a REFRESH of a control from the
+ * source whose application is open is a NEW DR application — recast or not.
+ * The game re-times the aura at the next DR tier. 605 corpus, every control
+ * REFRESH on a player with no recast (`ccRecastBetween`) whose aura then
+ * ended with no break, dispel or holder press logged: 29 of 32 ended at
+ * REFRESH + the next tier's length ± 150 ms (Δ = REFRESH − APPLIED ≤ 50 ms:
+ * 4 / 4 — Bull Rush 1.5 s → 0.75 s three times, c5ae2200 r3's double-apply
+ * of its kind; > 50 ms: 25 / 28 — Bull Rush, Sap, Song of Chi-Ji, Rake,
+ * Terror of the Skies; the other 3 a Sap / Song gone early with no BROKEN
+ * row), 0 at the original APPLIED + its length; the next same-family
+ * control within 20 s was IMMUNE 7 / 7. The
+ * one reading for the shared history walk (`buildCcCategoryHistory`), the
+ * outgoing chains (`analyzeOutgoingCCChains`) and the re-send split's
+ * opening (`ccRecastSplitsResend`). Supersedes F06c's and c7304a60a's "a
+ * bare REFRESH is the same application" for DR; the CC windows keep one
+ * line across it (`refreshedAtSeconds`, the DR shown is the first landing's).
+ */
+export function ccRefreshIsNewApplication(spellId: string): boolean {
+  return ccSpellIds.has(spellId) || DR_CATEGORY_MAP[spellId] !== undefined;
 }
 
 /**
@@ -496,10 +556,11 @@ export function ccRecastSplitsResend<
     const recast = (fromMs: number, atMs: number) =>
       ccRecastBetween([src, owner], sid, holderId, fromMs, atMs);
     // the opening of the application `removed` closes: its APPLIED, moved
-    // only by a new application — an APPLIED after a real end, or a
-    // REFRESH / re-send its source recast for. A re-send with no recast or
-    // a bare REFRESH is the same application (codex 20-F15-35: a re-send at
-    // 11.000 moved the opening past the 11.120 recast's skew guard)
+    // only by a new application — an APPLIED after a real end, a re-send
+    // its source recast for, or any REFRESH (`ccRefreshIsNewApplication`).
+    // A re-send with no recast is the same application (codex 20-F15-35: a
+    // re-send at 11.000 moved the opening past the 11.120 recast's skew
+    // guard)
     let openedAtMs = -Infinity;
     let lastRemovedMs: number | undefined;
     for (const x of holderAuras) {
@@ -523,7 +584,8 @@ export function ccRecastSplitsResend<
         lastRemovedMs = undefined;
       } else if (
         ev === LogEvent.SPELL_AURA_REFRESH &&
-        recast(openedAtMs, x.timestamp)
+        openedAtMs !== -Infinity &&
+        ccRefreshIsNewApplication(sid)
       )
         openedAtMs = x.timestamp;
     }
@@ -561,16 +623,18 @@ export function reAppliedIsSameApplication(
 /**
  * History of CC instances of a given DR category taken by one unit
  * (apply->removal pairing; unpaired ones are skipped -- conservative: fewer
- * instances biases toward Full). This is the single-source predicate feeding
- * getDRLevelAtTime: dispelAnalysis's drChainRisk gate and ccBreakAnalysis's
- * remaining-duration discount both consume it, and writing the pairing loop
- * twice would be a breeding ground for drift. srcUnitIds is normally the set
- * of enemy ids (count only enemy-applied CC).
+ * instances biases toward Full). The single-source DR history of the
+ * point queries (`drLevelAtLanding`, `drLevelNextAt`): dispelAnalysis's
+ * `afterDR` / drChainRisk gate and ccBreakAnalysis's remaining-duration
+ * discount consume it, and writing the pairing loop twice would be a
+ * breeding ground for drift. Its sources are `isDrHistorySource`'s — every
+ * source but a holder-self aura that is not a control (fact6 D29: a Sleep
+ * Walk reflected back onto its caster was no history here, and `[CC BROKEN]`
+ * read a 50 % Fear as Full; a pet's control was none either).
  */
 export function buildCcCategoryHistory(
   unit: ICombatUnit,
   category: string,
-  srcUnitIds: ReadonlySet<string>,
   matchStartMs: number,
   // agy 40-FT-94 #4: the units that can have cast the CC (and their pets'
   // owners) — a re-APPLIED its source recast is a new application
@@ -579,11 +643,13 @@ export function buildCcCategoryHistory(
     string,
     Pick<ICombatUnit, "spellCastEvents" | "ownerId">
   >,
-): Array<{
-  atSeconds: number;
-  durationSeconds: number;
-  drInfo: IDRInfo | null;
-}> {
+): Array<
+  CCEntry & {
+    atSeconds: number;
+    durationSeconds: number;
+    drInfo: IDRInfo | null;
+  }
+> {
   // a REMOVED→APPLIED re-broadcast (`AURA_REBROADCAST_GAP_MS`) is one application, not two DR
   // steps (cc-dr F-RB1, ruling A50 = A: the shared `dropAuraRebroadcasts`).
   // Filter BEFORE the re-broadcast pass: this runs once per CC break / dispel
@@ -595,23 +661,38 @@ export function buildCcCategoryHistory(
   const relevant = unit.auraEvents.filter(
     (aura) =>
       !!aura.spellId &&
-      srcUnitIds.has(aura.srcUnitId) &&
+      isDrHistorySource(unit.id, aura.srcUnitId, aura.spellId, aura.auraType) &&
       getDRCategory(aura.spellId) === category,
   );
   // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08) —
   // read off the unit's whole stream, where the REMOVED is
   const notTheEnd = supersededAuraBreaks(unit.auraEvents);
-  const instances: Array<{
-    atSeconds: number;
-    durationSeconds: number;
-    drInfo: IDRInfo | null;
-  }> = [];
-  // getDRLevelAtTime only reads drInfo.category; level/sequenceIndex are
+  const instances: Array<
+    CCEntry & {
+      atSeconds: number;
+      durationSeconds: number;
+      drInfo: IDRInfo | null;
+    }
+  > = [];
+  // the DR walk reads only drInfo.category; level/sequenceIndex are
   // placeholders.
-  const close = (applyMs: number, removeMs: number) =>
+  const close = (
+    open: {
+      applyMs: number;
+      spellId: string;
+      srcUnitId: string;
+      applySeq: number;
+    },
+    removeMs: number,
+  ) =>
     instances.push({
-      atSeconds: (applyMs - matchStartMs) / 1000,
-      durationSeconds: (removeMs - applyMs) / 1000,
+      applyMs: open.applyMs,
+      removeMs,
+      spellId: open.spellId,
+      srcUnitId: open.srcUnitId,
+      applySeq: open.applySeq,
+      atSeconds: (open.applyMs - matchStartMs) / 1000,
+      durationSeconds: (removeMs - open.applyMs) / 1000,
       drInfo: { category, level: "Full", sequenceIndex: 0 },
     });
   // work order 2026-10-15 Part 2 (user 「好」): the CC pairings' reading —
@@ -622,13 +703,18 @@ export function buildCcCategoryHistory(
   // length. It used to pair every APPLIED with the next removal of the
   // spell: a re-send was a second DR step, a lost REMOVED ran to a later
   // application's removal, an application never removed was skipped.
-  const pending = new Map<string, { applyMs: number; spellId: string }>();
+  const pending = new Map<
+    string,
+    { applyMs: number; spellId: string; srcUnitId: string; applySeq: number }
+  >();
+  let auraSeq = 0;
   for (const aura of dropAuraRebroadcasts(
     relevant,
     unitById
       ? ccRecastSplitsResend(unit.id, relevant, (id) => unitById.get(id))
       : undefined,
   )) {
+    const seq = auraSeq++;
     const sid = aura.spellId;
     if (!sid) continue;
     if (notTheEnd.has(aura)) continue;
@@ -655,12 +741,28 @@ export function buildCcCategoryHistory(
           )
         )
           continue;
-        close(
-          open.applyMs,
-          Math.min(aura.timestamp, open.applyMs + officialS! * 1000),
-        );
+        close(open, Math.min(aura.timestamp, open.applyMs + officialS! * 1000));
       }
-      pending.set(key, { applyMs: aura.timestamp, spellId: sid });
+      pending.set(key, {
+        applyMs: aura.timestamp,
+        spellId: sid,
+        srcUnitId: aura.srcUnitId,
+        applySeq: seq,
+      });
+    } else if (aura.logLine.event === LogEvent.SPELL_AURA_REFRESH) {
+      // a REFRESH is a new application and so a DR step, recast or not
+      // (`ccRefreshIsNewApplication`). a400c9d8-r0 1:51: a Fear recast on a
+      // target still in Fear logged only a REFRESH, ran 3.0 s (50 %), and
+      // the Howl of Terror after it was logged IMMUNE — read as one Full Fear
+      const open = pending.get(key);
+      if (!open || !ccRefreshIsNewApplication(sid)) continue;
+      close(open, aura.timestamp);
+      pending.set(key, {
+        applyMs: aura.timestamp,
+        spellId: sid,
+        srcUnitId: aura.srcUnitId,
+        applySeq: seq,
+      });
     } else if (
       aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
@@ -670,15 +772,16 @@ export function buildCcCategoryHistory(
       const open = k ? pending.get(k) : undefined;
       if (!k || !open) continue;
       pending.delete(k);
-      close(open.applyMs, aura.timestamp);
+      close(open, aura.timestamp);
     }
   }
   for (const open of pending.values()) {
     const officialS = ccFullDurationSeconds(open.spellId);
-    if (officialS !== undefined)
-      close(open.applyMs, open.applyMs + officialS * 1000);
+    if (officialS !== undefined) close(open, open.applyMs + officialS * 1000);
   }
-  instances.sort((a, b) => a.atSeconds - b.atSeconds);
+  instances.sort(
+    (a, b) => a.atSeconds - b.atSeconds || a.applySeq! - b.applySeq!,
+  );
   return instances;
 }
 
@@ -789,47 +892,46 @@ export function auraIdsAppliedBy(
 }
 
 /**
- * Given the history of previous CC applications (same category, same target),
- * compute the DR level AND sequence index for a new application at `newApplyMs`.
+ * THE DR walk (fact6 F20: one walk, two queries). Given a unit's history of
+ * applications of ONE category, the DR level AND sequence index a control
+ * landing at `newApplyMs` gets: the applications that landed at or before it
+ * (`applyMs <= newApplyMs` — one landing on that very ms is already on; a
+ * caller asking about an application in the history removes it first,
+ * `drLevelAtLanding`), walked in landing order. An application joins the
+ * running chain when it lands before the chain's end — the LATEST end of its
+ * members (a short control inside a long one does not end the chain) — plus
+ * the reset window (`drResetMsAt`; a gap of exactly the window resets); the
+ * new control's level is Full / 50% / Immune for 0 / 1 / ≥ 2 members.
  *
- * Both values are derived from the same backward-walking chain algorithm so they
- * are always mathematically consistent. Callers must NOT compute sequenceIndex
- * independently (e.g. via a flat 18s window filter) — that diverges for long chains.
+ * Both values come from the same walk, so they are always consistent.
+ * Callers must NOT compute sequenceIndex independently (e.g. via a flat
+ * window filter) — that diverges for long chains.
  *
- * Note on 'Immune': this function can return Immune mathematically (≥3 prior in chain),
- * but in practice WoW does not create an aura event for immune casts. Callers working
- * from auraEvents will never receive an Immune result in the outgoing-CC path.
- * The type is kept for correctness in the incoming-CC path (duration already recorded).
+ * Note on 'Immune': this can return Immune (≥ 2 in the chain), but WoW
+ * writes no aura for an immune control, so the outgoing path never sees it on
+ * a landed one; it is kept for the point queries (`[CC NOT LANDED]`'s cause).
  */
 export function getDRLevel(
-  history: CCEntry[],
+  history: readonly CCEntry[],
   newApplyMs: number,
 ): { level: DRLevel; sequenceIndex: number } {
-  let chainLength = 0;
-  let checkTime = newApplyMs;
   // newApplyMs is a wall-clock epoch (callers add matchStartMs), so the era
   // is derivable from the timestamp itself — no signature change needed.
   const resetMs = drResetMsAt(newApplyMs);
-
-  for (let i = history.length - 1; i >= 0; i--) {
-    const entry = history[i];
-    // Only a CC applied BEFORE this one can diminish it (reliability audit
-    // B3iv, 2026-09-25): the outgoing path used to feed entries in REMOVAL
-    // order, so a later-applied, earlier-removed CC counted as a predecessor.
-    if (entry.applyMs > newApplyMs) continue;
-    if (entry.removeMs > newApplyMs) {
-      // CC was still active when the new one was applied — still counts toward DR
-      chainLength++;
-      checkTime = entry.applyMs;
-    } else if (checkTime - entry.removeMs < resetMs) {
-      // Within reset window — part of the chain
-      chainLength++;
-      checkTime = entry.applyMs;
-    } else {
-      break; // DR chain reset
-    }
+  // Only a CC applied at or BEFORE this one can diminish it (reliability
+  // audit B3iv, 2026-09-25: the outgoing path used to feed entries in
+  // REMOVAL order, so a later-applied, earlier-removed CC counted)
+  const prior = history
+    .filter((e) => e.applyMs <= newApplyMs)
+    .sort((x, y) => x.applyMs - y.applyMs);
+  let chainLength = 0;
+  let chainEnd = -Infinity;
+  for (const e of prior) {
+    if (chainLength > 0 && e.applyMs - chainEnd >= resetMs) chainLength = 0;
+    chainEnd = chainLength === 0 ? e.removeMs : Math.max(chainEnd, e.removeMs);
+    chainLength++;
   }
-
+  if (chainLength > 0 && newApplyMs - chainEnd >= resetMs) chainLength = 0;
   // WoW 12.0: Full → 50% → Immune (25% tier removed)
   const level: DRLevel =
     chainLength === 0 ? "Full" : chainLength === 1 ? "50%" : "Immune";
@@ -837,10 +939,64 @@ export function getDRLevel(
 }
 
 /**
- * Point-in-time DR query: given a unit's incoming CC history, returns the DR
- * level that the NEXT CC of `category` would land at if applied at `atSeconds`.
- *
- * Used by healer exposure analysis to know how much a CC would hurt at burst start.
+ * Q1 — the DR level an application IN `history` landed at: the walk over
+ * every other entry, the application itself taken out by identity (its
+ * spell, its source and its landing ms; failing an exact landing, the entry
+ * of that spell and source whose span holds the landing — two pairings of
+ * one aura can differ by a re-send). Never by time: a control of the same
+ * family landing on the same ms from another source still counts when the
+ * log wrote it first (`applySeq`); one written after it does not (codex
+ * 20-F20-28 #1 — the order the CC windows and the outgoing chains read).
+ * Readers: `[CC BROKEN]` / `[CC REMOVED]` (`ccRemainingSeconds`), the
+ * missed-cleanse `afterDR` cell and `drChainRisk` (dispelAnalysis).
+ */
+export function drLevelAtLanding(
+  history: readonly CCEntry[],
+  landing: { applyMs: number; spellId: string; srcUnitId?: string },
+): DRLevel {
+  const same = (e: CCEntry) =>
+    e.spellId === landing.spellId &&
+    (landing.srcUnitId === undefined || e.srcUnitId === landing.srcUnitId);
+  const self =
+    history.find((e) => same(e) && e.applyMs === landing.applyMs) ??
+    history.find(
+      (e) =>
+        same(e) && e.applyMs <= landing.applyMs && landing.applyMs < e.removeMs,
+    );
+  // nor one landing on its ms that the log wrote after it (codex 20-F20-28
+  // #1: a Fear then a Blind on one ms — the Fear landed Full, and its
+  // remainder at its break read the Blind's 50 %)
+  const after = (e: CCEntry) =>
+    self?.applySeq !== undefined &&
+    e.applySeq !== undefined &&
+    e.applyMs === self.applyMs &&
+    e.applySeq > self.applySeq;
+  return getDRLevel(
+    history.filter((e) => e !== self && !after(e)),
+    landing.applyMs,
+  ).level;
+}
+
+/**
+ * Q2 — the DR level a control of `category` would land at at `atMs`:
+ * every application of the family that landed at or before `atMs` (one
+ * landing at that very ms is on — fact6 D10: the burst window opened on the
+ * Cyclone's own ms, `[HEALER EXPOSURE]` said "already in Cyclone … the DR
+ * levels count it" and printed Full DR).
+ */
+export function drLevelNextAt(
+  history: readonly CCEntry[],
+  atMs: number,
+): DRLevel {
+  return getDRLevel(history, atMs).level;
+}
+
+/**
+ * Q2 over a CC summary's instances (`atSeconds` / `durationSeconds` /
+ * `drInfo.category`): `drLevelNextAt` on the instances of `category`. Used
+ * by `[HEALER EXPOSURE]` and the enemy-healer DR of `[KILL WINDOW]` /
+ * `[VULNERABLE]`; pass the summary's history-only entries too
+ * (`IPlayerCCTrinketSummary.drHistoryOnly`).
  */
 export function getDRLevelAtTime(
   ccInstances: ReadonlyArray<{
@@ -850,27 +1006,18 @@ export function getDRLevelAtTime(
   }>,
   category: string,
   atSeconds: number,
-  // Wall-clock epoch of match start — selects the era's reset window
-  // (16s pre-12.1, 20s from 12.1). Required so no caller silently defaults.
+  // Wall-clock epoch of match start. Required so no caller silently defaults.
   matchStartMs: number,
 ): DRLevel {
-  const DR_RESET_S = drResetMsAt(matchStartMs) / 1000;
-
-  let chainLength = 0;
-  let lastExpiredAt = -Infinity;
-
-  for (const cc of ccInstances) {
-    if (cc.drInfo?.category === category && cc.atSeconds < atSeconds) {
-      if (cc.atSeconds - lastExpiredAt > DR_RESET_S) {
-        chainLength = 0;
-      }
-      chainLength++;
-      lastExpiredAt = cc.atSeconds + cc.durationSeconds;
-    }
-  }
-
-  if (atSeconds - lastExpiredAt > DR_RESET_S) return "Full";
-  return chainLength === 1 ? "50%" : "Immune";
+  const history: CCEntry[] = [];
+  for (const cc of ccInstances)
+    if (cc.drInfo?.category === category)
+      history.push({
+        applyMs: matchStartMs + cc.atSeconds * 1000,
+        removeMs: matchStartMs + (cc.atSeconds + cc.durationSeconds) * 1000,
+        spellId: "",
+      });
+  return drLevelNextAt(history, matchStartMs + atSeconds * 1000);
 }
 
 // ── Incoming CC DR annotation ─────────────────────────────────────────────────
@@ -888,11 +1035,14 @@ export function computeIncomingDR(
   }>,
   matchStartMs: number,
   /** controls that are DR history on the unit but none of its instances
-   * (its own control reflected back onto it — fact4 D7), epoch ms */
+   * (its own control reflected back onto it — fact4 D7), epoch ms;
+   * `afterLandingAtSameMs`: one an instance's own REFRESH began, which an
+   * instance landing on that same ms (the one it refreshed) does not count */
   historyOnly: ReadonlyArray<{
     applyMs: number;
     removeMs: number;
     spellId: string;
+    afterLandingAtSameMs?: true;
   }> = [],
 ): Array<IDRInfo | null> {
   // Per DR-category history: list of resolved {applyMs, removeMs}
@@ -900,12 +1050,23 @@ export function computeIncomingDR(
   let nextExtra = 0;
   const extras = [...historyOnly]
     .filter((h) => ccSpellIds.has(h.spellId))
-    .sort((a, b) => a.applyMs - b.applyMs);
+    .sort(
+      (a, b) =>
+        a.applyMs - b.applyMs ||
+        Number(!!a.afterLandingAtSameMs) - Number(!!b.afterLandingAtSameMs),
+    );
 
   return ccInstances.map((cc) => {
-    // the history-only applications that landed before this one join first
+    // the history-only applications that landed at or before this one join
+    // first (`getDRLevel` counts a landing on the same ms) — save one a
+    // REFRESH of an instance on that ms began, which follows it
     const atMs = matchStartMs + cc.atSeconds * 1000;
-    while (nextExtra < extras.length && extras[nextExtra]!.applyMs < atMs) {
+    while (
+      nextExtra < extras.length &&
+      (extras[nextExtra]!.afterLandingAtSameMs
+        ? extras[nextExtra]!.applyMs < atMs
+        : extras[nextExtra]!.applyMs <= atMs)
+    ) {
       const h = extras[nextExtra++]!;
       const hc = getDRCategory(h.spellId);
       const list = history.get(hc) ?? [];
@@ -954,6 +1115,13 @@ export interface IOutgoingCCChain {
   targetName: string;
   targetSpec: string;
   applications: IOutgoingCCApplication[];
+  /** every control that is DR history on the target, in landing order: the
+   * applications above plus the DR-only ones (`drOnly`) — a control of the
+   * target's own reflected back onto it, a control from any other source the
+   * chain credits to no friendly (`isDrHistorySource`). The history the
+   * point queries on this target read (`[CC NOT LANDED]`'s DR cause, the
+   * `[DR CLASH]` predecessor). */
+  drHistory?: Array<IOutgoingCCApplication & { drOnly?: true }>;
   // hasWastedApplications 已删除(GH #17,2026-08-20):它按 {25%, Immune}
   // 判「浪费」,而 25% 档 12.0 已从游戏移除、Immune 档按本文件 :325 的契约
   // 不该出现在 outgoing 路径 —— 实测出现的全是链窗模型与服务器 DR 窗口
@@ -1017,14 +1185,27 @@ export function analyzeOutgoingCCChains(
     .map((enemy) => {
       const pending: Map<
         string,
-        { applyMs: number; spellName: string; srcId: string; srcName: string }
+        {
+          applyMs: number;
+          spellName: string;
+          srcId: string;
+          srcName: string;
+          drOnly: boolean;
+          /** the opening row's place on the target's aura stream: landings
+           * on one ms keep the log's order (`ccTrinketAnalysis`' windows
+           * read the same, F20 wide residual) */
+          applySeq: number;
+        }
       > = new Map();
       const applications: IOutgoingCCApplication[] = [];
+      const applySeqOf = new Map<IOutgoingCCApplication, number>();
       // fact4 D7 (2742ff5d 0:59–1:05): a control of the target's own,
       // reflected back onto it (its source is the target — the Fear a Spell
       // Reflection sent back), is DR history on it but no CC of ours: it
       // feeds the DR walk below and leaves no application (the incoming
-      // path's reading, ruling A52 — `reflectedOntoHolder`)
+      // path's reading, ruling A52 — `reflectedOntoHolder`). fact6 F20: so is
+      // a control from any other source no friendly is credited with
+      // (`isDrHistorySource` — the one DR-history source test)
       const drOnly = new Set<IOutgoingCCApplication>();
 
       // Helper: close a pending CC entry and push it to applications + history
@@ -1036,7 +1217,6 @@ export function analyzeOutgoingCCChains(
         const p = pending.get(key);
         if (!p) return;
         pending.delete(key);
-        const reflected = p.srcId === enemy.id;
 
         const spellId = key.split(":")[0];
         if (!spellId) return;
@@ -1061,7 +1241,8 @@ export function analyzeOutgoingCCChains(
           ...(cutByRoundEnd ? { cutByRoundEnd: true as const } : {}),
         };
         applications.push(app);
-        if (reflected) drOnly.add(app);
+        applySeqOf.set(app, p.applySeq);
+        if (p.drOnly) drOnly.add(app);
       };
 
       // cc-dr F-RB1 (ruling A50 = A): a same-ms REMOVED→APPLIED re-broadcast
@@ -1076,12 +1257,14 @@ export function analyzeOutgoingCCChains(
       const ccAuras = enemy.auraEvents.filter(
         (a) => !!a.spellId && ccSpellIds.has(a.spellId),
       );
+      let auraSeq = 0;
       for (const aura of dropAuraRebroadcasts(
         ccAuras,
         ccRecastSplitsResend(enemy.id, ccAuras, (id) =>
           allUnits.find((u) => u.id === id),
         ),
       )) {
+        const seq = auraSeq++;
         const { spellId } = aura;
         if (!spellId || !ccSpellIds.has(spellId)) continue;
         // a BROKEN line its aura's own REMOVED follows is not the end
@@ -1097,11 +1280,22 @@ export function analyzeOutgoingCCChains(
         // (especially BROKEN, where src = the breaker) must not be discarded
         // by src -- otherwise a broken CC never closes (the inflated-duration
         // fix).
-        const caster = isRemovalEvent
+        const credited = isRemovalEvent
           ? undefined
-          : aura.srcUnitId === enemy.id
-            ? enemy
-            : creditedCaster(aura.srcUnitId);
+          : creditedCaster(aura.srcUnitId);
+        const caster =
+          isRemovalEvent || credited
+            ? credited
+            : isDrHistorySource(
+                  enemy.id,
+                  aura.srcUnitId,
+                  spellId,
+                  aura.auraType,
+                )
+              ? aura.srcUnitId === enemy.id
+                ? enemy
+                : allUnits.find((u) => u.id === aura.srcUnitId)
+              : undefined;
         if (!isRemovalEvent && !caster) continue;
 
         const key = `${spellId}:${aura.srcUnitId}`;
@@ -1158,11 +1352,18 @@ export function analyzeOutgoingCCChains(
             srcName: friendlyIds.has(aura.srcUnitId)
               ? aura.srcUnitName
               : caster!.name,
+            drOnly: !credited,
+            applySeq: seq,
           });
         } else if (event === LogEvent.SPELL_AURA_REFRESH) {
-          // A refresh means the caster re-applied the CC while it was still active.
-          // This immediately burns the next DR tier. Close the prior application and
-          // open a new pending entry at the refresh timestamp.
+          // A REFRESH is a new application and burns the next DR tier,
+          // recast or not — the shared history's reading
+          // (`ccRefreshIsNewApplication`). c5ae2200 r3 109.852 s: a Bull
+          // Rush and its REFRESH 1 ms later are two stuns, the second
+          // re-timed to 0.75 s (codex F20-05 read it as one; the 605
+          // corpus's Bull Rush double-applies end at REFRESH + 0.75 s, 3 / 3)
+          const prior = pending.get(key);
+          if (!prior || !ccRefreshIsNewApplication(spellId)) continue;
           closePending(key, aura.timestamp);
           pending.set(key, {
             applyMs: aura.timestamp,
@@ -1171,6 +1372,8 @@ export function analyzeOutgoingCCChains(
             srcName: friendlyIds.has(aura.srcUnitId)
               ? aura.srcUnitName
               : caster!.name,
+            drOnly: !credited,
+            applySeq: seq,
           });
         } else if (isRemovalEvent) {
           const matchKey = matchPendingCcKey(pending, spellId, key);
@@ -1209,7 +1412,11 @@ export function analyzeOutgoingCCChains(
         );
       }
 
-      applications.sort((a, b) => a.atSeconds - b.atSeconds);
+      applications.sort(
+        (a, b) =>
+          a.atSeconds - b.atSeconds ||
+          (applySeqOf.get(a) ?? 0) - (applySeqOf.get(b) ?? 0),
+      );
       // Reliability audit B3iv (2026-09-25): DR levels in APPLY order, through
       // the same algorithm the incoming path uses (`computeIncomingDR`, which
       // walks instances in time order). They used to be computed at REMOVAL
@@ -1232,6 +1439,9 @@ export function analyzeOutgoingCCChains(
         targetName: enemy.name,
         targetSpec: specToString(enemy.spec),
         applications: applications.filter((a) => !drOnly.has(a)),
+        drHistory: applications.map((a) =>
+          drOnly.has(a) ? { ...a, drOnly: true as const } : a,
+        ),
       };
     })
     .filter((chain) => chain.applications.length > 0);
@@ -1275,8 +1485,15 @@ export function detectTeammateDrClashes(
   const resetS = drResetMsAt(matchStartMs) / 1000;
 
   for (const chain of chains) {
-    const byCat = new Map<string, IOutgoingCCApplication[]>();
-    for (const a of chain.applications) {
+    // the whole DR history: a 50 % landing's predecessor can be a DR-only
+    // control (fact6 F20 — one reflected back onto the target, or from a
+    // source no friendly is credited with); then no teammate put them on DR
+    // and nothing is printed
+    const byCat = new Map<
+      string,
+      Array<IOutgoingCCApplication & { drOnly?: true }>
+    >();
+    for (const a of chain.drHistory ?? chain.applications) {
       const c = a.drInfo?.category;
       if (!c || c === "Unknown" || c.startsWith("spell:")) continue;
       byCat.set(c, [...(byCat.get(c) ?? []), a]);
@@ -1289,10 +1506,11 @@ export function detectTeammateDrClashes(
         // Only real diminished tier in outgoing chains: 25% was removed in 12.0,
         // and Immune in outgoing chains is a reconstruction artifact (landed aura
         // events never hit true immunity; see IOutgoingCCChain comment).
-        if (a.drInfo.level !== "50%") continue;
+        if (a.drOnly || a.drInfo.level !== "50%") continue;
         const prev = ordered[i - 1]!;
+        if (prev.drOnly) continue;
         // Chain semantics: the reset clock runs from the previous CC's END.
-        if (a.atSeconds - (prev.atSeconds + prev.durationSeconds) > resetS) {
+        if (a.atSeconds - (prev.atSeconds + prev.durationSeconds) >= resetS) {
           continue;
         }
         if (prev.casterName !== a.casterName) {

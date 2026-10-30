@@ -195,7 +195,7 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "91797": cc(), // Monstrous Blow (Unholy DK transformed ghoul stun)
   "91800": cc(), // Gnaw (Unholy DK ghoul stun)
   "118345": cc(), // Pulverize (Guardian Druid stun)
-  "200166": cc(), // Metamorphosis (Havoc DH landing stun)
+  "200166": cc(), // Metamorphosis (Havoc DH landing) — stuns NPCs only; players are Dazed (247121) instead: no press / miss of it is a control on a player (castMissRows NO_PLAYER_CONTROL_IDS)
   "200200": cc(), // Holy Word: Chastise (Priest Censure stun talent aura)
   "202244": cc(), // Overrun (Brewmaster Monk PvP talent stun)
   "202346": cc(), // Double Barrel (Outlaw Rogue PvP talent stun)

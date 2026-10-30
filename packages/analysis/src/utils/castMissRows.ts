@@ -11,11 +11,15 @@
  * Extracted from `setup.ts` when the second reader arrived (Shared-Predicate
  * Rule); the windows, the attribution rule and the type table are unchanged.
  */
+import { LogEvent } from "@gladlog/parser-compat";
+
 import {
+  castAndEffectIds,
   effectAuraHitShare,
   effectAurasOfCast,
   effectAuraViaName,
 } from "../data/castEffectAuras";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 
 /** How often a cast's control effect must follow the cast for a miss of the
@@ -59,6 +63,36 @@ export function isControlCast(castSpellId: string): boolean {
   return castControlsIn(castSpellId, ccSpellIds);
 }
 
+/**
+ * Control ids whose control the game never puts on a PLAYER (fact6 D19 /
+ * D20, 2026-10-28): the press reaches players with its damage or another
+ * effect, and its control aura lands on NPCs only. The aura stays a control
+ * (`ccSpellIds` keeps it: a stunned pet is stunned — DR, dispel priority and
+ * `isCastBlockingAuraType` read the aura); a PRESS or a MISS ROW of one is no
+ * control aimed at a player (`castControlsIn`, `controlReachesPlayers`).
+ * Game-Behaviour evidence per entry:
+ *  - 200166 Metamorphosis (Havoc landing). DB2 `Spell.Description_lang` of
+ *    191427 (12.1.5.70391): "…并使其昏迷$200166d。如果是玩家则改为眩晕
+ *    $247121d。" — players are Dazed (247121, mechanic 11) instead. The
+ *    SpellEffect rows (aura 12 stun, targets 22/15) carry no player
+ *    exclusion; the tooltip is the official statement. Corpus (605
+ *    every-30, 155 files): 200166 applied on players 0, on NPCs 36; its
+ *    SPELL_DAMAGE on players 72. Before: a400c9d8 2:26 / cb851d66 0:38
+ *    `[CC AVOIDED?] … Metamorphosis … logged IMMUNE` (the damage and daze
+ *    bouncing off Ice Block / Cyclone), and friendly DHs' `[CC NOT LANDED]
+ *    … Metamorphosis — logged MISS`.
+ * Not listed: Wake of Ashes' 255941 ("demons and undead"; no player row in
+ * the 155 files — its cast 255937 already fails the hit-share rule).
+ * Completeness: `controlNoPlayerEffect`'s forward inventory
+ * (`packages/eval/scripts/scan5/ccLanded.ts`).
+ */
+export const NO_PLAYER_CONTROL_IDS: ReadonlySet<string> = new Set(["200166"]);
+
+/** Can a press / miss row of this id be a control on a player? */
+export function controlReachesPlayers(spellId: string): boolean {
+  return !NO_PLAYER_CONTROL_IDS.has(spellId);
+}
+
 /** `isControlCast` over another aura-keyed control set (the crisis answers'
  * hard CC ∪ roots ∪ interrupts): the cast's own id is in it, or its own
  * same-named effect aura is, after at least `CONTROL_EFFECT_MIN_HIT_SHARE`
@@ -67,6 +101,7 @@ export function castControlsIn(
   castSpellId: string,
   auraIds: ReadonlySet<string>,
 ): boolean {
+  if (!controlReachesPlayers(castSpellId)) return false;
   if (auraIds.has(castSpellId)) return true;
   return effectAurasOfCast(castSpellId).some(
     (aura) =>
@@ -107,6 +142,197 @@ export function missBelongsToCast(
   return !sameSpellCastMs.some(
     (t) => t > castMs + 5 && t <= missMs + CAST_MISS_LEAD_MS,
   );
+}
+
+/** The fields of a `SPELL_MISSED` row the press-refused reading asks. */
+export interface IPressMissRow {
+  spellId?: string;
+  missType: string;
+  destUnitId?: string;
+  timestamp: number;
+  logLine?: { event?: unknown };
+}
+
+/**
+ * The IMMUNE rows that are ONE press's own refusal: a non-periodic
+ * `missType IMMUNE` row of the cast's id or one of its effect auras
+ * (`castAndEffectIds` — Storm Bolt's IMMUNE is logged under its stun 132169)
+ * that belongs to the press by the cast window (`missBelongsToCast`). A later
+ * DoT tick's IMMUNE is not the press going into an immunity (fact2,
+ * 2026-10-20, 15c06404 1:54: Kingsbane's own hit landed; its ticks at +2.0 s
+ * met a Spellwarding thrown 1.7 s later).
+ *
+ * The one "did the game refuse this press" reading (fact6 D14, F20): the cast
+ * line's `[IMMUNE …]` tag (`setup.ts ccImmuneTagFor`), the KILL ATTEMPTS burst
+ * anchor (`killAttempts.ts anchorNameOf` — a press refused on the target is
+ * not the burst that hit it: 2b3fba97-r0 2:27 Deathmark into Time Stop), and
+ * the buff-fade estimate's "this press put no buff anywhere"
+ * (`timelineHelpers.ts`, fact4 D1).
+ *
+ * @param misses the caster's `missesOut`.
+ * @param sameSpellCastMs every SPELL_CAST_SUCCESS time of that spell by that
+ *   caster (`missBelongsToCast`).
+ * @param followUp the caster's cast rows and the press's target: the IMMUNE
+ *   rows of the press's follow-up impact rows count too
+ *   (`pressFollowUpCastRows` — The Hunt's 1246169).
+ */
+export function pressImmuneMissRows<T extends IPressMissRow>(
+  misses: readonly T[] | undefined,
+  spellId: string,
+  sameSpellCastMs: readonly number[],
+  castMs: number,
+  followUp?: IPressFollowUp,
+): T[] {
+  if (!misses || misses.length === 0) return [];
+  const ownRows = (id: string, castTimes: readonly number[], atMs: number) => {
+    const family = castAndEffectIds(id);
+    return misses.filter(
+      (m) =>
+        m.missType === "IMMUNE" &&
+        m.spellId !== undefined &&
+        family.has(m.spellId) &&
+        m.logLine?.event !== LogEvent.SPELL_PERIODIC_MISSED &&
+        missBelongsToCast(castTimes, atMs, m.timestamp),
+    );
+  };
+  const out = ownRows(spellId, sameSpellCastMs, castMs);
+  if (!followUp) return out;
+  for (const row of pressFollowUpCastRows(
+    followUp.casts,
+    spellId,
+    sameSpellCastMs,
+    castMs,
+    followUp.destUnitId,
+  )) {
+    const id = row.spellId!;
+    const times = followUp.casts
+      .filter(
+        (c) =>
+          c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS && c.spellId === id,
+      )
+      .map((c) => c.timestamp);
+    for (const m of ownRows(id, times, row.timestamp))
+      if (!out.includes(m)) out.push(m);
+  }
+  return out;
+}
+
+/** The fields of a `SPELL_CAST_SUCCESS` row the follow-up reading asks. */
+export interface IPressCastRow {
+  spellId?: string;
+  spellName?: string;
+  destUnitId?: string;
+  timestamp: number;
+  logLine?: { event?: unknown };
+}
+
+/** The caster's cast rows and the unit its press was aimed at, for
+ * `pressImmuneMissRows`' follow-up rows. */
+export interface IPressFollowUp {
+  casts: readonly IPressCastRow[];
+  destUnitId: string;
+}
+
+/**
+ * Press id → the ids its own effect triggers as a second `SPELL_CAST_SUCCESS`
+ * at the press's target: every DB2 charge effect (SpellEffect Effect 96
+ * CHARGE / 149 CHARGE_DEST) with an EffectTriggerSpell — the impact — whose
+ * two ends are both observed ids (`observedSpellIdsGenerated.json`):
+ *  - The Hunt 370965 → 370966, 1246167 → 1246169 (row 1247652);
+ *  - Predator's Wake 1259431 → 1246169 (row 1268534);
+ *  - Charge 432113 → Wicked Cleave 432120; Interpose 1244088 → 1244091.
+ * The DB2 link is the evidence a row is the press's impact and not a press of
+ * its own; a shared English name is not (codex 20-F20-28: Moonfire 8921 and
+ * Lunar Inspiration's Moonfire 155625 share the name and no link).
+ * Completeness (codex 20-F20-33, which found 370965 missing from a hand
+ * pick): all 437 SpellEffect trigger edges between observed ids
+ * (12.1.5.70575), read against the 605 files' casts — a triggered id cast by
+ * the presser at the press's target within 2.5 s — leave exactly these as
+ * impacts: 370965 → 370966 followed 457 of 477 presses (100 % of 370966's
+ * rows), 1259431 → 1246169 118 / 123, 1246167 → 1246169 74 / 74, 1244088 →
+ * 1244091 6 / 7; the other followed edges are effect 64 / 6 procs and ticks
+ * (Mutilate's off-hand, Throw Glaive's bounce, Odyn's Fury's hits, Divine
+ * Hymn). Hand-kept from that DB2 query, registered in curatedIdRegistry.
+ */
+export const PRESS_TRIGGERED_CAST_IDS: ReadonlyMap<string, readonly string[]> =
+  new Map([
+    ["370965", ["370966"]],
+    ["432113", ["432120"]],
+    ["1244088", ["1244091"]],
+    ["1246167", ["1246169"]],
+    ["1259431", ["1246169"]],
+  ]);
+
+/**
+ * A press whose impact is logged as a SECOND `SPELL_CAST_SUCCESS` of an id
+ * its effect triggers (`PRESS_TRIGGERED_CAST_IDS`), at the same target (F20
+ * wide residual, 0373256a r1 2:14: The Hunt is pressed as 1246167 and lands
+ * as 1246169; the impact's IMMUNE row on a Blessing of Spellwarding paladin
+ * was the press's refusal, and the line said nothing). The follow-up rows:
+ * the caster's casts of a triggered id, aimed at the press's target, in
+ * (cast, cast + `CAST_MISS_WINDOW_MS`], with no other press between the two
+ * that could own the row — the press's own id, an id of its English name, or
+ * another press that triggers the same id.
+ */
+export function pressFollowUpCastRows<T extends IPressCastRow>(
+  casts: readonly T[],
+  spellId: string,
+  sameSpellCastMs: readonly number[],
+  castMs: number,
+  destUnitId: string,
+): T[] {
+  const triggered = PRESS_TRIGGERED_CAST_IDS.get(spellId);
+  if (!triggered) return [];
+  const name = getEnglishSpellName(spellId, "");
+  const nextOwn = Math.min(
+    Infinity,
+    ...sameSpellCastMs.filter((t) => t > castMs + 5),
+  );
+  const success = casts.filter(
+    (c) => c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS && !!c.spellId,
+  );
+  // another press between the two that could own a row of `id`
+  const ownerBetween = (id: string, from: number, to: number) =>
+    success.some(
+      (c) =>
+        c.timestamp > from + 5 &&
+        c.timestamp < to &&
+        !triggered.includes(c.spellId!) &&
+        (c.spellId === spellId ||
+          (!!name &&
+            getEnglishSpellName(c.spellId!, c.spellName ?? "") === name) ||
+          !!PRESS_TRIGGERED_CAST_IDS.get(c.spellId!)?.includes(id)),
+    );
+  return success.filter(
+    (c) =>
+      triggered.includes(c.spellId!) &&
+      c.destUnitId === destUnitId &&
+      c.timestamp > castMs &&
+      c.timestamp <= castMs + CAST_MISS_WINDOW_MS &&
+      c.timestamp < nextOwn &&
+      !ownerBetween(c.spellId!, castMs, c.timestamp),
+  );
+}
+
+/** Was this press refused as IMMUNE on `destId` (`pressImmuneMissRows` with
+ * a miss on that unit)? */
+export function pressRefusedImmuneOn(
+  misses: readonly IPressMissRow[] | undefined,
+  spellId: string,
+  sameSpellCastMs: readonly number[],
+  castMs: number,
+  destId: string,
+  /** the caster's cast rows: a follow-up impact row's IMMUNE counts
+   * (`pressFollowUpCastRows`) */
+  casts?: readonly IPressCastRow[],
+): boolean {
+  return pressImmuneMissRows(
+    misses,
+    spellId,
+    sameSpellCastMs,
+    castMs,
+    casts ? { casts, destUnitId: destId } : undefined,
+  ).some((m) => m.destUnitId === destId);
 }
 
 /**

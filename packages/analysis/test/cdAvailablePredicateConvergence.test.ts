@@ -149,8 +149,8 @@ describe("cdAvailableAt 消费点防漂移一致性(BACKLOG #18 Minor #3 + 追�
  * 基线:本机 80 场里带 Unused 清单的死亡行 9 条,其中 4 条含牺牲祝福。
  */
 describe("死亡未用清单:自施放空操作的外减不算本人的减伤", () => {
-  const bos = (): IMajorCooldownInfo => ({
-    spellId: "6940",
+  const bos = (spellId = "6940"): IMajorCooldownInfo => ({
+    spellId,
     spellName: "Blessing of Sacrifice",
     tag: "Defensive",
     cooldownSeconds: 120,
@@ -160,7 +160,9 @@ describe("死亡未用清单:自施放空操作的外减不算本人的减伤", 
     neverUsed: true,
   });
 
-  it("prompt 死亡行不列牺牲祝福", () => {
+  // F20 残差:按过 199448(终极牺牲替换的 id)的神圣骑士,名册行的 id 就是
+  // 199448 —— 只认 6940 时死亡行照样列出(cap-int s1/81-1-445 2:20)
+  it.each(["6940", "199448"])("prompt 死亡行不列牺牲祝福(%s)", (id) => {
     const dyingUnit = makeUnit("Player1", {
       name: "Player1",
       spec: CombatUnitSpec.Paladin_Holy,
@@ -174,7 +176,7 @@ describe("死亡未用清单:自施放空操作的外减不算本人的减伤", 
       unitsByName: new Map([["Player1", dyingUnit]]),
       ccTrinketSummaries: [],
       owner: dyingUnit,
-      ownerCDs: [bos()],
+      ownerCDs: [bos(id)],
       teammateCDs: [],
       matchStartMs: 0,
       pid: (n) => n,

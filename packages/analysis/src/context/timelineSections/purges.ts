@@ -19,7 +19,11 @@ import { isRiderDispel } from "../../utils/dispelKind";
 import { fmtTime } from "../../utils/renderGrid";
 import { dispelActorLabel } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
-import { purgeMatchesCast } from "./healerCastGapFiller";
+import {
+  purgeMatchesCast,
+  purgePressRemovalCount,
+  purgePressRemovals,
+} from "./healerCastGapFiller";
 
 export function emitPurgeEntries(
   ctx: Pick<
@@ -62,6 +66,17 @@ export function emitPurgeEntries(
   const onOwnerCastLine = (purge: IDispelEvent): boolean =>
     isHealer && ownerCastTimes.some((c) => purgeMatchesCast(purge, c));
 
+  const pressRemovalCount = (c: IDispelEvent): number =>
+    purgePressRemovalCount(
+      purgePressRemovals(dispelSummary.ourPurges, {
+        sourceName: c.sourceName,
+        isPetDispel: c.isPetDispel,
+        destUnitName: c.targetName,
+        timeSeconds: c.timeSeconds,
+        spellId: c.dispelSpellId,
+      }),
+    );
+
   const purgeGroups = new Map<string, IDispelEvent[]>();
   for (const purge of dispelSummary.ourPurges) {
     // Pet-cast dispels (Devour Magic, …) have no owner cast line to annotate,
@@ -85,8 +100,10 @@ export function emitPurgeEntries(
     const effects = group
       .map(
         (c) =>
-          // B13e: a purge takes one of the purgeable buffs on the target
-          `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}${c.purgeableOnTarget !== undefined ? ` (1 of ${purgeableCountText(c.purgeableOnTarget)} on it)` : ""}`,
+          // B13e: a press takes k of the purgeable buffs on the target —
+          // k counted from the press's own removal rows (F20 D31: Greater
+          // Purge / Fire Breath take 2), the folded low-priority ones included
+          `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}${c.purgeableOnTarget !== undefined ? ` (${pressRemovalCount(c)} of ${purgeableCountText(c.purgeableOnTarget)} on it)` : ""}`,
       )
       .join(", ");
     addEntry(

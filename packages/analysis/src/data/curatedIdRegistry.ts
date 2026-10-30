@@ -52,6 +52,10 @@ import {
   UNRELENTING_ONSLAUGHT_TALENT_ID,
   USABLE_IN_BLADESTORM_WITH_TALENT,
 } from "../utils/castingLocks";
+import {
+  NO_PLAYER_CONTROL_IDS,
+  PRESS_TRIGGERED_CAST_IDS,
+} from "../utils/castMissRows";
 import { COMPANION_CAST_ROWS, COPY_CAST_IDS } from "../utils/castPress";
 import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
 import {
@@ -66,6 +70,7 @@ import {
   PRE_TELEPORT_POSITION_SPELL_IDS,
   REFLECT_ONLY_AVOIDANCE_IDS,
   REPOSITIONING_SPELL_IDS,
+  SINGLE_VICTIM_GROUND_CC_IDS,
   TARGET_BOUND_MOBILITY_IDS,
   TARGETED_CC_DODGE_SPELLS,
   TREMOR_BREAKABLE_CC_IDS,
@@ -85,6 +90,7 @@ import {
   CD_ROLE_TAGS,
   ENEMY_TARGET_DEFENSIVE_IDS,
   FORBEARANCE_GATED_IDS,
+  HAND_CANONICAL_IDS,
   HYPOTHERMIA_AURA_ID,
   HYPOTHERMIA_GATED_IDS,
   NON_SUBSTITUTE_DEFENSIVE_IDS,
@@ -94,7 +100,6 @@ import {
   RESPONSE_ONLY_DEFENSIVE_IDS,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   SPEC_EXCLUSIVE_SPELLS,
-  SPELL_CANONICAL_IDS,
   STUN_PURGE_WITHHELD_IDS,
   TEAM_HEAL_CD_IDS,
   TEAM_SAVE_CD_IDS,
@@ -151,7 +156,10 @@ import {
   KICK_LOCKOUT_VICTIM_MODIFIERS,
 } from "../utils/kickLockout";
 import { KILL_ATTEMPT_NON_ANCHOR_CDS } from "../utils/killAttempts";
-import { EXECUTE_KILLING_BLOW_IDS } from "../utils/killingBlow";
+import {
+  DAMAGE_TRANSFER_ROW_IDS,
+  EXECUTE_KILLING_BLOW_IDS,
+} from "../utils/killingBlow";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import {
   ASCENDANCE_ENH_ID,
@@ -219,6 +227,7 @@ import {
   DRINK_AURA_IDS,
   OWN_FLIGHT_AURA_IDS,
 } from "./occupancyAuras";
+import { riderShieldPairs } from "./ownShieldLinks";
 import {
   HIGH_VALUE_PURGEABLE_BUFFS,
   PURGE_WHITELIST_DATA_BLOCKED,
@@ -226,6 +235,7 @@ import {
 import {
   OFFENSIVE_RACIAL_WINDOW_IDS,
   RACIAL_ABILITIES,
+  RACIAL_TRINKET_LOCK_MS,
   SHARED_CD_RACIAL_SPELL_IDS,
 } from "./racialAbilities";
 import {
@@ -256,6 +266,7 @@ import spellIdLists, {
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
+  ENEMY_IMMUNITY_TEAM_PROC_AURAS,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
@@ -392,6 +403,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "aura",
     () => keys(ENEMY_IMMUNITY_SAVE_AURAS),
   ),
+  // fact6 D17: the immunity-kind saves a teammate's proc puts on each carrier
+  t(
+    "spellIdLists.ENEMY_IMMUNITY_TEAM_PROC_AURAS",
+    "data/spellIdLists.ts",
+    "aura",
+    () => set(ENEMY_IMMUNITY_TEAM_PROC_AURAS),
+  ),
   // user ruling U-KA3: the immunity-kind auras that hold while they are up
   t(
     "spellIdLists.ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS",
@@ -496,6 +514,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "aura",
     () => set(KW_OWN_ROTATIONAL_ABSORB_AURA_IDS),
   ),
+  // F20 用户裁决 1(10-28):随别的按键出现的自身吸收盾也算「自己按出来的」
+  // (Chi Cocoon 跟 Invoke Chi-Ji / Enveloping Mist)。语料选出的表,10-28 在
+  // 605 上重量(阈值沿用 90 %),wide 未跑。
+  t("OWN_SHIELD_RIDERS", "data/ownShieldLinks.ts", "mixed", () =>
+    riderShieldPairs().flatMap(([aura, cast]) => [aura, cast]),
+  ),
   t("KW_UNTARGETABLE_AURA_IDS", "utils/enemyDefensives.ts", "aura", () =>
     set(KW_UNTARGETABLE_AURA_IDS),
   ),
@@ -531,6 +555,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("SHARED_CD_RACIAL_SPELL_IDS", "data/racialAbilities.ts", "cast", () =>
     set(SHARED_CD_RACIAL_SPELL_IDS),
+  ),
+  t("RACIAL_TRINKET_LOCK_MS", "data/racialAbilities.ts", "cast", () =>
+    keys(RACIAL_TRINKET_LOCK_MS),
   ),
   t("MITIGATION_OVERRIDES", "data/mitigationData.ts", "cast", () =>
     keys(MITIGATION_OVERRIDES),
@@ -632,9 +659,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("USABLE_WHILE_CC_CONDITIONAL", "utils/cooldowns.ts", "cast", () =>
     keys(USABLE_WHILE_CC_CONDITIONAL),
   ),
+  // the hand layer only: F20 D23 merged the generated override variants
+  // (overrideVariantsGenerated.ts, DB2 aura 332) into the table itself
   t("SPELL_CANONICAL_IDS", "utils/cooldowns.ts", "mixed", () => [
-    ...keys(SPELL_CANONICAL_IDS),
-    ...Object.values(SPELL_CANONICAL_IDS),
+    ...keys(HAND_CANONICAL_IDS),
+    ...Object.values(HAND_CANONICAL_IDS),
   ]),
   t("FORBEARANCE_GATED_IDS", "utils/cooldowns.ts", "cast", () =>
     set(FORBEARANCE_GATED_IDS),
@@ -857,6 +886,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("GROUND_CC_SPELL_IDS", "utils/ccTrinketAnalysis.ts", "cast", () =>
     set(GROUND_CC_SPELL_IDS),
   ),
+  t("SINGLE_VICTIM_GROUND_CC_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
+    set(SINGLE_VICTIM_GROUND_CC_IDS),
+  ),
   t("MAGIC_ONLY_IMMUNITY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(MAGIC_ONLY_IMMUNITY_IDS),
   ),
@@ -912,6 +944,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // [DEATH] block names as an execute.
   t("EXECUTE_KILLING_BLOW_IDS", "utils/killingBlow.ts", "cast", () =>
     set(EXECUTE_KILLING_BLOW_IDS),
+  ),
+  // F20 (fact6 D22 residual): damage transfers logged as SPELL_DAMAGE whose
+  // source is the protected unit, never the killer.
+  t("DAMAGE_TRANSFER_ROW_IDS", "utils/killingBlow.ts", "cast", () =>
+    set(DAMAGE_TRANSFER_ROW_IDS),
   ),
   t("PHYSICAL_CC_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(PHYSICAL_CC_IDS),
@@ -990,6 +1027,19 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("AOE_CC_LANDING_WINDOW_S", "utils/drAnalysis.ts", "cast", () =>
     keys(AOE_CC_LANDING_WINDOW_S),
   ),
+  // fact6 D19 / D20 (2026-10-28): control ids whose control never reaches a
+  // player (DB2 tooltip: players get another effect) — a press / miss row of
+  // one is no control on a player. Aura ids that are also logged as the press.
+  t("NO_PLAYER_CONTROL_IDS", "utils/castMissRows.ts", "mixed", () =>
+    set(NO_PLAYER_CONTROL_IDS),
+  ),
+  // codex 20-F20-28 (2026-10-29): press → the id its effect triggers as a
+  // second SPELL_CAST_SUCCESS at the target (DB2 SpellEffect EffectTriggerSpell)
+  // — the evidence a follow-up row's IMMUNE is the press's refusal.
+  t("PRESS_TRIGGERED_CAST_IDS", "utils/castMissRows.ts", "cast", () => [
+    ...PRESS_TRIGGERED_CAST_IDS.keys(),
+    ...[...PRESS_TRIGGERED_CAST_IDS.values()].flat(),
+  ]),
   // Triage G3 (2026-10-02, ruling A10 = both): the one cast id → effect aura
   // table, which absorbed GH #111's hand list `CC_CAST_EFFECT_AURA`. Generated
   // — but from a CORPUS measurement over DB2 nominations, so its pairs are a

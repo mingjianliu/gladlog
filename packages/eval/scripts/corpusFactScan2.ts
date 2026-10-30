@@ -29,7 +29,7 @@
  *     `cannotCause:listed:<reason>`. A same-ms miss row of the line's name
  *     from the same source counts too (Metamorphosis 247121 beside its stun
  *     200166: Icebound Fortitude stops the stun).
- *  Printed for the record: `dr:castBackedRefreshApps`,
+ *  Printed for the record: `dr:refreshApps`,
  *  `immunityTableForward:capDroppedTableAura`, and `fixExamples` in the
  *  JSON.
  *  #2 (1a, 1c, 6) an application with no REMOVED used to hold forever (a
@@ -39,23 +39,24 @@
  *     at its official length + 1 s (`CAPPED_UNCLOSED`; unknown length → no
  *     cap), as production `ccAvoidanceBuffsUpAt` does. Check 3 keeps its own
  *     cap reading.
- *  #3 (1c, 2, 6) a SPELL_AURA_REFRESH its source (or the source's owner)
- *     cast for — the aura id or a cast of it, at the holder or untargeted,
- *     > 250 ms after the open application began and ≤ 3 s before the row
- *     (`OPENING_CAST_SKEW_MS` / `CAST_BACKED_REFRESH_MS`, ruling A51) — is a
- *     new control application, and the one it replaces ends there; a bare
- *     REFRESH stays the same application (Polymorph 0:01, recast with a
- *     logged REFRESH 0:04: the diminished second was never judged).
+ *  #3 (1c, 2, 6) a SPELL_AURA_REFRESH of a control is a new control
+ *     application, and the one it replaces ends there (Polymorph 0:01,
+ *     recast with a logged REFRESH 0:04: the diminished second was never
+ *     judged). F20 dr (2026-10-28, measured on the 605 raw logs): recast or
+ *     not — production's `ccRefreshIsNewApplication`, imported; this read
+ *     only a cast-backed one (ruling A51's window) and dropped the bare
+ *     ones (codex 20-F20-16: f01274b6 r0 Bull Rush APPLIED 45.058, REFRESH
+ *     45.158, gone 45.917 — the Chastise IMMUNE at 57.425 read unexplained).
  *
  * DR, read from the log (checks 1c, 2, 6): the unit's control applications
- * — DEBUFF APPLIED rows (and cast-backed REFRESH rows, #3) from another
+ * — DEBUFF APPLIED rows (and REFRESH rows, #3) from another
  * unit whose id has a DR family
  * (`getDRCategory`, a lookup), each ending at its REMOVED (capped at the
  * official length + 1 s) — walked back from the instant as a chain: a
- * predecessor joins while it ended less than 18 s (the brief's window) before
- * the chain's earliest start, or still ran then. Every capture log is from
- * 2026-08-13 on, the 12.1 era whose reset is 20 s, so the reading can only
- * under-count. A re-broadcast (REMOVED → APPLIED of the same id / source
+ * predecessor joins while it ended less than the era's reset window
+ * (`drResetMsAt`; fact6 F20 — it read a hard-coded 18 s) before the chain's
+ * earliest start, or still ran then. A control of the unit's own reflected
+ * back onto it counts (`isDrHistorySource`). A re-broadcast (REMOVED → APPLIED of the same id / source
  * ≤ 50 ms) and a re-APPLIED of an id / source still inside its official
  * length are one application; a predecessor of the same source ≤ 300 ms
  * before is the same cast. A control whose cast has effect auras in two
@@ -90,10 +91,13 @@
  *  E6 (3ii) a passive / proc absorb (Danger Sense, Fel Armor, Soul Leech,
  *     Tempted Fate, …) is no "shield it applied on itself": the shield must
  *     have an own press (a SUCCESS of its id, a cast `castsOfEffectAura`
- *     lists, or one of its name) in the 60 s before the absorb row — except
- *     the two shields the ruling names (Power Word: Shield, Void Shield),
- *     which count pressed or not (a Holy Priest's proc PW:S 1246768 has no
- *     cast row). Passive ones are counted as `ownAbsorb:passive`, out of the
+ *     lists, a press that carries it — `riderCastsOfShield`, Chi Cocoon with
+ *     Invoke Chi-Ji, user ruling 1 2026-10-28 — or one of its name) in the
+ *     60 s before the absorb row — except the two shields the ruling names
+ *     (Power Word: Shield, Void Shield) and their DB2 family
+ *     (`OWN_SHIELD_RULING_FAMILY_IDS`, Unfolding Vision's copies), which
+ *     count pressed or not (a Holy Priest's proc PW:S 1246768 has no cast
+ *     row). Passive ones are counted as `ownAbsorb:passive`, out of the
  *     total.
  *  E7 (1a) Grounding Totem is a summon, not an aura on its owner: "up" = the
  *     control's cast went into a Grounding Totem the target owns (± 1.5 s),
@@ -210,6 +214,10 @@ import {
   effectAurasOfCast,
 } from "@gladlog/analysis/src/data/castEffectAuras";
 import {
+  OWN_SHIELD_RULING_FAMILY_IDS,
+  ownShieldPressCastIds,
+} from "@gladlog/analysis/src/data/ownShieldLinks";
+import {
   ccFullDurationSeconds,
   getEnglishSpellName,
 } from "@gladlog/analysis/src/data/spellEffectData";
@@ -227,10 +235,11 @@ import {
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { IMMUNITY_SPELLS } from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
 import {
-  CAST_BACKED_REFRESH_MS,
+  ccRefreshIsNewApplication,
   drCategoryOfCast,
+  drResetMsAt,
   getDRCategory,
-  OPENING_CAST_SKEW_MS,
+  isDrHistorySource,
 } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   FULL_IMMUNITY_IDS,
@@ -255,7 +264,9 @@ const OUT_OF_TOTAL = new Set([
   "defenselessSaveUp|massInvis",
   "defenselessSaveUp|ownAbsorb:passive",
 ]);
-/** user ruling 10-21 「算」 names these two */
+/** user ruling 10-21 「算」 names these two — and ruling 1 (2026-10-28) their
+ * DB2 class-mask family (`OWN_SHIELD_RULING_FAMILY_IDS`: Unfolding Vision's
+ * `Void Shield (Unfolding Vision)` 1300009 is no name match) */
 const RULED_OWN_SHIELDS = new Set(["Power Word: Shield", "Void Shield"]);
 interface IViolation {
   check: Check;
@@ -322,8 +333,6 @@ const DOSE_EVENTS = new Set([
 ]);
 const UP_EVENTS = new Set([APPLIED, REFRESH, ...DOSE_EVENTS]);
 
-/** the brief's DR window */
-const DR_WINDOW_MS = 18_000;
 /** controls counted for DR — the DR families of `getDRCategory` (roots are
  * no family there) */
 const DR_FAMILIES = new Set([
@@ -532,41 +541,11 @@ export interface IControlApp {
   end: number;
   cat: string;
   src: string;
-  /** a cast-backed SPELL_AURA_REFRESH (codex 21-R12-c #3) */
+  /** a SPELL_AURA_REFRESH (codex 21-R12-c #3; every one since F20 dr) */
   refresh?: boolean;
-}
-
-/**
- * Did the aura's source (or its owner) CAST this control for the row —
- * the aura id or a cast whose effect aura it is, at the holder or
- * untargeted, after the open application began (+ `OPENING_CAST_SKEW_MS`)
- * and at most `CAST_BACKED_REFRESH_MS` before the row? Re-derived here
- * (the window constants are shared with production's `ccRecastBetween`,
- * ruling A51): `castsOf` gives the SUCCESS rows of the source and its
- * owner.
- */
-export function castBackedAt(
-  row: any,
-  holderId: string,
-  openedAtMs: number,
-  castsOf: (srcUnitId: string) => readonly any[],
-): boolean {
-  const castIds = new Set<string>([
-    row.spellId,
-    ...castsOfEffectAura(row.spellId),
-  ]);
-  const at = tsOf(row);
-  return castsOf(row.srcUnitId).some(
-    (c) =>
-      ev(c) === SUCCESS &&
-      castIds.has(c.spellId) &&
-      (!c.destUnitId ||
-        /^0+$/.test(c.destUnitId) ||
-        c.destUnitId === holderId) &&
-      tsOf(c) > openedAtMs + OPENING_CAST_SKEW_MS &&
-      tsOf(c) <= at &&
-      tsOf(c) >= at - CAST_BACKED_REFRESH_MS,
-  );
+  /** the application that REFRESH replaced — a DR step before it however
+   * close (Bull Rush APPLIED + REFRESH 1–100 ms apart: re-timed at 50 %) */
+  replaces?: IControlApp;
 }
 
 /**
@@ -574,17 +553,16 @@ export function castBackedAt(
  * (`rows`: the rows ON it, log order) — DEBUFF APPLIED rows from another
  * unit whose id has a DR family. A re-broadcast (REMOVED → APPLIED ≤ 50 ms)
  * and a re-APPLIED inside the official length are the same application. A
- * SPELL_AURA_REFRESH its source cast for (`castBackedAt`) is a NEW one
- * (codex 21-R12-c #3: Polymorph 0:01, recast with a logged REFRESH 0:04 —
- * the second, diminished application was invisible to checks 1, 2 and 6);
- * the application it replaces ends there. A bare REFRESH is the same
- * application. Each ends at its REMOVED (not followed within 50 ms by a
- * re-APPLIED), capped at the official length + 1 s.
+ * SPELL_AURA_REFRESH is a NEW one (codex 21-R12-c #3: Polymorph 0:01,
+ * recast with a logged REFRESH 0:04 — the second, diminished application
+ * was invisible to checks 1, 2 and 6), recast or not
+ * (`ccRefreshIsNewApplication`, F20 dr measured); the application it
+ * replaces ends there. Each ends at its REMOVED (not followed within 50 ms
+ * by a re-APPLIED), capped at the official length + 1 s.
  */
 export function controlApplications(
   rows: readonly any[],
   unitId: string,
-  castsOf: (srcUnitId: string) => readonly any[],
 ): IControlApp[] {
   const apps: IControlApp[] = [];
   const lastByKey = new Map<string, any>();
@@ -596,12 +574,15 @@ export function controlApplications(
     lastByKey.set(k, a);
     const e = ev(a);
     if ((e !== APPLIED && e !== REFRESH) || a.auraType !== "DEBUFF") continue;
-    if (a.srcUnitId === unitId) continue;
+    // fact6 F20: a control of the unit's own reflected back onto it is DR
+    // history (`isDrHistorySource`, the product's one source test)
+    if (!isDrHistorySource(unitId, a.srcUnitId, String(a.spellId), a.auraType))
+      continue;
     const cat = drCatOf(a.spellId);
     if (!cat) continue;
     const open = openByKey.get(k);
     if (e === REFRESH) {
-      if (!castBackedAt(a, unitId, open?.ts ?? -Infinity, castsOf)) continue;
+      if (!open || !ccRefreshIsNewApplication(String(a.spellId))) continue;
     } else if (prev) {
       if (ev(prev) === REMOVED && tsOf(a) - tsOf(prev) <= 50) continue;
       if (
@@ -640,8 +621,11 @@ export function controlApplications(
       src: a.srcUnitId as string,
       ...(e === REFRESH ? { refresh: true } : {}),
     };
-    // the recast replaced the open application
-    if (e === REFRESH && open && open.end > app.ts) open.end = app.ts;
+    // the REFRESH replaced the open application
+    if (e === REFRESH && open) {
+      if (open.end > app.ts) open.end = app.ts;
+      app.replaces = open;
+    }
     openByKey.set(k, app);
     apps.push(app);
   }
@@ -649,29 +633,33 @@ export function controlApplications(
 }
 
 /** the chain of same-family applications before `ts`, walked back from it:
- * a predecessor joins while it ended less than 18 s before the chain's
- * earliest start (or still ran then) — the brief's 18 s, below the 12.1
- * era's 20 s reset (every capture log is from 2026-08-13 on), so the
- * reading can only under-count. Not the same cast: a predecessor of the
- * same source ≤ 300 ms before. */
+ * a predecessor joins while it ended less than the era's reset window
+ * (`drResetMsAt` — fact6 F20: this read a hard-coded 18 s against the
+ * product's 20 s) before the chain's earliest start (or still ran then).
+ * Not the same cast: a predecessor of the same source ≤ 300 ms before —
+ * save the application a REFRESH (`self`) replaced, which is a DR step
+ * (F20 dr, measured). */
 export function drChain(
   apps: readonly IControlApp[],
   cat: string,
   ts: number,
   src?: string,
+  self?: IControlApp,
 ): IControlApp[] {
   const prior = apps
     .filter(
       (x) =>
         x.cat === cat &&
-        x.ts < ts - 50 &&
-        !(src !== undefined && x.src === src && ts - x.ts <= 300),
+        (x === self?.replaces ||
+          (x.ts < ts - 50 &&
+            !(src !== undefined && x.src === src && ts - x.ts <= 300))),
     )
     .sort((a, b) => b.ts - a.ts);
   const chain: IControlApp[] = [];
+  const resetMs = drResetMsAt(ts);
   let head = ts;
   for (const p of prior) {
-    if (p.end >= head || head - p.end < DR_WINDOW_MS) {
+    if (p.end >= head || head - p.end < resetMs) {
       chain.push(p);
       head = Math.min(head, p.ts);
     } else break;
@@ -870,7 +858,7 @@ async function main(): Promise<void> {
   /** codex 21-R12-c #2 / #3, for the record: cast-backed REFRESH
    * applications, and IMMUNE rows a table aura explained only uncapped */
   const fixExamples: Record<string, Array<Record<string, unknown>>> = {
-    castBackedRefresh: [],
+    refresh: [],
     capDroppedTableAura: [],
   };
   const keepExample = (k: string, e: Record<string, unknown>) => {
@@ -1012,17 +1000,11 @@ async function main(): Promise<void> {
 
     // ── DR from the log ──
     const appsCache = new Map<string, IControlApp[]>();
-    /** the SUCCESS rows of a unit and of its owner (a pet's control) */
-    const castsOfSrc = (srcId: string): any[] => {
-      const s = byId.get(srcId);
-      const o = s?.ownerId ? byId.get(s.ownerId) : undefined;
-      return [s, o].flatMap((x) => (x ? successes(x) : []));
-    };
     /** the unit's control applications (`controlApplications`) */
     const ccApps = (u: any): IControlApp[] => {
       let apps = appsCache.get(u.id);
       if (!apps) {
-        apps = controlApplications(auraIn(u), u.id, castsOfSrc);
+        apps = controlApplications(auraIn(u), u.id);
         appsCache.set(u.id, apps);
       }
       return apps;
@@ -1033,7 +1015,8 @@ async function main(): Promise<void> {
       cat: string,
       ts: number,
       src?: string,
-    ): IControlApp[] => drChain(ccApps(u), cat, ts, src);
+      self?: IControlApp,
+    ): IControlApp[] => drChain(ccApps(u), cat, ts, src, self);
     /** the DR families a control row can count in: its own id's, its effect
      * auras' (Holy Word: Chastise 88625 → a stun or an incapacitate) */
     const drPriorAny = (u: any, id: string, ts: number): any[] => {
@@ -1056,11 +1039,11 @@ async function main(): Promise<void> {
         const rows = auraIn(u);
         for (const x of ccApps(u)) {
           if (!inRound(x.ts)) continue;
-          const k = drPrior(u, x.cat, x.ts, x.src).length;
+          const k = drPrior(u, x.cat, x.ts, x.src, x).length;
           landedByPrior[Math.min(2, k)]!++;
           if (x.refresh) {
-            bump("dr:castBackedRefreshApps");
-            keepExample("castBackedRefresh", {
+            bump("dr:refreshApps");
+            keepExample("refresh", {
               where,
               offMs: x.ts - start,
               unit: u.name,
@@ -1569,7 +1552,7 @@ async function main(): Promise<void> {
               "drImmune",
               ts,
               factId,
-              `${fmtS(c.sec)} ${c.targetPid}(${T.name}) ${c.spell} IMMUNE at ${cat} DR immune (before it in 18 s: ${prior.map((x) => `${nameOf(x.row.spellId)} ${((x.ts - ts) / 1000).toFixed(1)}s`).join(", ")}), line names "${X}"`,
+              `${fmtS(c.sec)} ${c.targetPid}(${T.name}) ${c.spell} IMMUNE at ${cat} DR immune (before it in its reset window: ${prior.map((x) => `${nameOf(x.row.spellId)} ${((x.ts - ts) / 1000).toFixed(1)}s`).join(", ")}), line names "${X}"`,
               {
                 line: c.line.slice(0, 240),
                 raw: [...rawMiss, ...prior.map((x) => rawOf(x.row))],
@@ -1628,7 +1611,7 @@ async function main(): Promise<void> {
           continue;
         }
         const L = Number(lm[1] ?? lm[2]);
-        const prior = drPrior(u, x.cat, x.ts, x.src);
+        const prior = drPrior(u, x.cat, x.ts, x.src, x);
         bump("ccEndUndiminished");
         if (prior.length === 0) continue;
         endCands.push({
@@ -1722,9 +1705,12 @@ async function main(): Promise<void> {
             ),
         );
         // E6: a shield it APPLIED = one it pressed (an own cast of the shield,
-        // by id / cast ↔ effect / name, in the 60 s before the absorb row) — a
-        // talent's passive absorb (Danger Sense, First In Last Out, Don't Look
-        // Back, Saved by the Light …) is no "shield it applied on itself"
+        // by id / cast ↔ effect / a press that carries it / name, in the 60 s
+        // before the absorb row) — a talent's passive absorb (Danger Sense,
+        // First In Last Out, Don't Look Back, Saved by the Light …) is no
+        // "shield it applied on itself". The press lookup is the product's
+        // (`ownShieldPressCastIds`, F20: a lookup table, shared like
+        // `castsOfEffectAura` was); the timing is this scan's own.
         const pressed = (a: any) => {
           const sid = String(a.spellId);
           const nm = nameOf(sid, a.spellName);
@@ -1732,8 +1718,7 @@ async function main(): Promise<void> {
             (cc) =>
               tsOf(cc) <= tsOf(a) &&
               tsOf(cc) >= tsOf(a) - E6_OWN_SHIELD_PRESS_WINDOW_MS &&
-              (cc.spellId === sid ||
-                castsOfEffectAura(sid).includes(cc.spellId) ||
+              (ownShieldPressCastIds(sid).has(cc.spellId) ||
                 nameOf(cc.spellId, cc.spellName) === nm),
           );
         };
@@ -1742,6 +1727,7 @@ async function main(): Promise<void> {
         const ab = abs.find(
           (a) =>
             RULED_OWN_SHIELDS.has(nameOf(String(a.spellId), a.spellName)) ||
+            OWN_SHIELD_RULING_FAMILY_IDS.has(String(a.spellId)) ||
             pressed(a),
         );
         const abP = ab ? undefined : abs[0];
@@ -1996,7 +1982,7 @@ async function main(): Promise<void> {
         atMs: c.ts,
         offMs: c.ts - c.startMs,
         fact: `${c.archive}#${c.round}#ccEndUndiminished#${c.unitName}|${c.auraId}|${c.ts}`,
-        detail: `${nameOf(c.auraId)} ${c.auraId} on ${c.unitName}, never closed, application ${c.prior + 1} of its family in 18 s: printed ${c.L}s > ${base.toFixed(1)}s × ${factor} + 0.5 (official ${off ?? "?"}s, Full-DR p90 ${runs.length >= 5 ? p90(runs).toFixed(1) : "n<5"})`,
+        detail: `${nameOf(c.auraId)} ${c.auraId} on ${c.unitName}, never closed, application ${c.prior + 1} of its family in its reset window: printed ${c.L}s > ${base.toFixed(1)}s × ${factor} + 0.5 (official ${off ?? "?"}s, Full-DR p90 ${runs.length >= 5 ? p90(runs).toFixed(1) : "n<5"})`,
         line: c.line,
         raw: c.raw,
       });
@@ -2011,7 +1997,7 @@ async function main(): Promise<void> {
   say(`capture: ${resolve(dir)}`);
   say(`contexts: ${contexts}  rounds measured: ${measuredRounds.size}`);
   say(
-    `DR reading (18 s, from the log) on LANDED controls: prior 0 → ${landedByPrior[0]}, 1 → ${landedByPrior[1]}, ≥ 2 → ${landedByPrior[2]} (a landed 3rd is impossible in 12.x: ${((landedByPrior[2]! / Math.max(1, landedByPrior[0]! + landedByPrior[1]! + landedByPrior[2]!)) * 100).toFixed(2)} % is the reading's over-count)`,
+    `DR reading (drResetMsAt, from the log) on LANDED controls: prior 0 → ${landedByPrior[0]}, 1 → ${landedByPrior[1]}, ≥ 2 → ${landedByPrior[2]} (a landed 3rd is impossible in 12.x: ${((landedByPrior[2]! / Math.max(1, landedByPrior[0]! + landedByPrior[1]! + landedByPrior[2]!)) * 100).toFixed(2)} % is the reading's over-count)`,
   );
   for (const c of CHECKS) {
     const all = violations.filter((v) => v.check === c);

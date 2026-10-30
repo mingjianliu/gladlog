@@ -32,6 +32,19 @@
  * the TBC silence 33390, while the racial today only dispels and restores
  * (codex 20-F15-36). Readers that take a nomination as the effect itself, with
  * no logged aura to confirm it, keep only class-owned ones.
+ *
+ * - talent:  E is a CONTROL (`SpellCategories.DiminishType` ≠ 0) that a
+ *   talent spell (`TraitDefinition.SpellID`) of C's class
+ *   (`SpellClassOptions.SpellClassSet`) triggers (`EffectTriggerSpell`).
+ *   F20 dr residual (codex 20-F20-10): Terror of the Skies 371032 triggers
+ *   the stun 372245 when Deep Breath 433874 / 357210 lands — a scripted
+ *   link no name and no trigger chain from the cast carries, so a Deep
+ *   Breath recast whose stun logged only a REFRESH (114a4df7 r4 15.323 →
+ *   16.343, the second stun 1.5 s = half of 3 s) read as no recast. The
+ *   class match nominates the talent's control for every cast of that
+ *   class; the corpus scan keeps only a cast the control follows within
+ *   3 s nearly every time (its aura-side test, `castEffectAuraScan.ts`),
+ *   and `nominatedEffectAurasOfCast` never reads a talent-only nomination.
  */
 import fs from "fs-extra";
 
@@ -77,6 +90,26 @@ async function main() {
     ["SpellID", "SpellClassSet"],
     "SpellClassOptions",
   );
+  const cats = parseCsv(await fetchTable("SpellCategories", build, cacheDir));
+  assertColumns(
+    cats.header,
+    ["SpellID", "DifficultyID", "DiminishType"],
+    "SpellCategories",
+  );
+  const isControl = new Set<string>();
+  for (const r of cats.rows)
+    if (
+      r.SpellID &&
+      r.DifficultyID === "0" &&
+      r.DiminishType &&
+      r.DiminishType !== "0"
+    )
+      isControl.add(r.SpellID);
+  const traits = parseCsv(await fetchTable("TraitDefinition", build, cacheDir));
+  assertColumns(traits.header, ["SpellID"], "TraitDefinition");
+  const talentSpells = new Set<string>();
+  for (const r of traits.rows)
+    if (r.SpellID && r.SpellID !== "0") talentSpells.add(r.SpellID);
   const classSetOf = new Map<string, number>();
   for (const r of classOpts.rows)
     if (r.SpellID && r.SpellClassSet && r.SpellClassSet !== "0")
@@ -91,6 +124,18 @@ async function main() {
     if (t && t !== "0" && t !== r.SpellID) {
       if (!triggers.has(r.SpellID)) triggers.set(r.SpellID, new Set());
       triggers.get(r.SpellID)!.add(t);
+    }
+  }
+  // class set → the controls its talents trigger (the `talent` path)
+  const talentControlsOfClass = new Map<number, Set<string>>();
+  for (const t of talentSpells) {
+    const cls = classSetOf.get(t);
+    if (cls === undefined) continue;
+    for (const e of triggers.get(t) ?? []) {
+      if (!auraBearing.has(e) || !isControl.has(e)) continue;
+      if (!talentControlsOfClass.has(cls))
+        talentControlsOfClass.set(cls, new Set());
+      talentControlsOfClass.get(cls)!.add(e);
     }
   }
   const nameOf = new Map<string, string>();
@@ -132,6 +177,9 @@ async function main() {
     }
     const n = nameOf.get(c);
     if (n) for (const e of auraByName.get(n) ?? []) add(e, "name");
+    const cls = classSetOf.get(c);
+    if (cls !== undefined)
+      for (const e of talentControlsOfClass.get(cls) ?? []) add(e, "talent");
     if (via.size === 0) continue;
     nominations[c] = [...via.entries()]
       .sort((a, b) => Number(a[0]) - Number(b[0]))
@@ -154,7 +202,7 @@ async function main() {
         build,
         generatedAt: new Date().toISOString(),
         source:
-          "SpellEffect.EffectTriggerSpell (<= 3 hops) or same SpellName.Name_lang, to an aura-bearing spell (EffectAura != 0); the cast end in observedSpellIdsGenerated.json; cls = the effect's SpellClassOptions.SpellClassSet",
+          "SpellEffect.EffectTriggerSpell (<= 3 hops) or same SpellName.Name_lang, to an aura-bearing spell (EffectAura != 0); or (talent) a control (SpellCategories.DiminishType != 0) a TraitDefinition spell of the cast's SpellClassSet triggers; the cast end in observedSpellIdsGenerated.json; cls = the effect's SpellClassOptions.SpellClassSet",
         casts: Object.keys(nominations).length,
         pairs,
         nominations,

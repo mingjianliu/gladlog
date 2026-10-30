@@ -270,6 +270,39 @@ describe("[IMMUNE] on the owner's CC casts", () => {
     expect(onPlayer).toMatch(/\[IMMUNE: \S+\]/);
   });
 
+  it("F20 residual: a skin-variant cast id is the ledger press's own row (s0/1-1 0:25 Hex 210873 into Cloak)", () => {
+    // the ledger keys Hex as 51514; the log casts (and misses) the
+    // variant 210873. The press line takes the tag; no separate
+    // [CC NOT LANDED] line restates it.
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const owner = mkUnit("o", "Me-Realm", {
+      spellCastEvents: [cast("210873", "Hex", 25_000)] as never,
+      missesOut: [missImmune("210873", "Hex", 25_050)] as never,
+    });
+    const timeline = buildMatchTimeline(
+      baseParams(owner, enemy, [
+        {
+          spellId: "51514",
+          spellName: "Hex",
+          tag: "CC",
+          cooldownSeconds: 30,
+          maxChargesDetected: 1,
+          casts: [{ timeSeconds: 25 }],
+          availableWindows: [],
+          neverUsed: false,
+        },
+      ]),
+    );
+    const line = timeline
+      .split("\n")
+      .find((l) => l.includes("[YOU] [CC]") && l.includes("Hex"));
+    expect(line).toBeDefined();
+    expect(line).toContain("[IMMUNE");
+    expect(timeline).not.toContain("[CC NOT LANDED]");
+  });
+
   it("a single-target CC aimed at a pet keeps its IMMUNE tag", () => {
     const enemy = mkUnit("e", "Enemy-Realm", {
       reaction: CombatUnitReaction.Hostile,
@@ -284,6 +317,61 @@ describe("[IMMUNE] on the owner's CC casts", () => {
       ] as never,
     });
     expect(buildMatchTimeline(baseParams(owner, enemy))).toContain("[IMMUNE]");
+  });
+});
+
+describe("[IMMUNE] on the owner's plain [YOU] [CAST] lines (F20 immunity residual, user ruling 2026-10-28)", () => {
+  const iceBlock = [
+    aura("45438", "Ice Block", LogEvent.SPELL_AURA_APPLIED, 64_000),
+    aura("45438", "Ice Block", LogEvent.SPELL_AURA_REMOVED, 70_000),
+  ];
+  const castLines = (owner: ICombatUnit, enemy: ICombatUnit) =>
+    buildMatchTimeline(baseParams(owner, enemy))
+      .split("\n")
+      .filter((l) => /^\d+:\d{2} {2}\[YOU\] \[CAST\]/.test(l));
+
+  it("s0/30-3 1:05: a Holy Fire into Ice Block carries the press lines' tag", () => {
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: iceBlock as never,
+    });
+    const owner = mkUnit("o", "Me-Realm", {
+      spellCastEvents: [cast("14914", "Holy Fire", 65_000)] as never,
+      missesOut: [missImmune("14914", "Holy Fire", 65_050)] as never,
+    });
+    const lines = castLines(owner, enemy);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(
+      /^1:05 {2}\[YOU\] \[CAST\] {3}Holy Fire → \S+ \[IMMUNE — Ice Block was up\]$/,
+    );
+    // control: the same cast with no IMMUNE row is bare
+    const landed = castLines(
+      mkUnit("o", "Me-Realm", {
+        spellCastEvents: [cast("14914", "Holy Fire", 65_000)] as never,
+      }),
+      enemy,
+    );
+    expect(landed[0]).not.toContain("[IMMUNE");
+  });
+
+  it("a refused cast of a spam-folded spell leaves the fold and prints with its tag", () => {
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: iceBlock as never,
+    });
+    const casts = Array.from({ length: 14 }, (_, i) =>
+      cast("585", "Smite", 40_000 + i * 2_000),
+    );
+    const owner = mkUnit("o", "Me-Realm", {
+      spellCastEvents: casts as never,
+      missesOut: [missImmune("585", "Smite", 66_020)] as never,
+    });
+    const lines = castLines(owner, enemy);
+    const tagged = lines.filter((l) => l.includes("[IMMUNE"));
+    expect(tagged).toHaveLength(1);
+    expect(tagged[0]).toMatch(
+      /^1:06 {2}\[YOU\] \[CAST\] {3}Smite → \S+ \[IMMUNE — Ice Block was up\]$/,
+    );
   });
 });
 
@@ -351,6 +439,28 @@ describe("[MISSED on …] / [REFLECTED by …] on the owner's CC casts (2026-09-
     expect(run("REFLECT", true)[0]).toMatch(/ \[REFLECTED by \S+\]$/);
     expect(run("PARRY", true)[0]).toMatch(/ \[PARRIED by \S+\]$/);
     expect(run("DODGE", false)[0]).toMatch(/ \[DODGED by \S+\]$/);
+  });
+
+  it("a REFLECT row aimed at the caster itself names no reflector (codex F20-23)", () => {
+    const enemy = mkUnit("e", "Enemy-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const owner = mkUnit("o", "Me-Realm", {
+      spellCastEvents: [cast(POLYMORPH, "Polymorph", 30_000)] as never,
+      missesOut: [
+        miss(POLYMORPH, "Polymorph", 30_050, "REFLECT"),
+        {
+          ...miss(POLYMORPH, "Polymorph", 30_050, "REFLECT"),
+          destUnitId: "o",
+          destUnitName: "Me-Realm",
+        },
+      ] as never,
+    });
+    const lines = buildMatchTimeline(baseParams(owner, enemy))
+      .split("\n")
+      .filter((l) => l.includes("[YOU] [CC]"));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.match(/REFLECTED by/g)).toHaveLength(1);
   });
 
   it("ignores ABSORB — on its own it does not establish a failed control", () => {

@@ -21,6 +21,7 @@ import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { extractSpiritOfRedemptionIntervals } from "./combatStates";
 import {
+  cdHelpsRecipient,
   chargeAvailabilityTransitions,
   entryAvailabilityTransitions,
   extractMajorCooldowns,
@@ -625,6 +626,12 @@ export function computeOffensiveWindows(
         )
       )
         continue;
+      // F20 D1 (the legend: "not one it can only give an ally"): an external
+      // that cannot target its caster (Blessing of Sacrifice) is no save in
+      // hand for its holder, pressed or not — its press neither protects
+      // nor spends the holder's defence, and its return is no `CD_READY`.
+      // The unpressed half is `KW_UNPRESSED_NOT_IN_HAND_IDS`.
+      if (!cdHelpsRecipient({ spellId }, true)) continue;
       const list = castsBySpell.get(spellId) ?? [];
       list.push((cast.logLine.timestamp - matchStartMs) / 1000);
       castsBySpell.set(spellId, list);

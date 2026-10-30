@@ -66,12 +66,32 @@ export function emitUnitDestroyedEntries(
     unitNames,
     rosterSides,
   } = ctx;
+  // a split kill's attacker is the hit on its link holder (`attackerBlowFor`)
+  const unitOfId = (id: string) => allUnits?.find((u) => u.id === id);
+  // a summon's side: its summoner's roster side (`buildRosterSides`), its
+  // own flags only as the fallback — flags are relative to the recorder, and
+  // a recorder under Mind Control logs its own team as hostile (wide
+  // 1c294041 r2 1:42: our shaman's Grounding Totem, summoned during the
+  // recorder's Mind Control, read "(Enemy)", killed by the enemy mage); a
+  // totem whose own flags are neutral takes its summoner's
+  const summonSide = (unit: NonNullable<typeof allUnits>[number]) => {
+    const roster = rosterSides?.get(unit.id);
+    if (
+      roster === CombatUnitReaction.Friendly ||
+      roster === CombatUnitReaction.Hostile
+    )
+      return roster;
+    return unit.reaction === CombatUnitReaction.Friendly ||
+      unit.reaction === CombatUnitReaction.Hostile
+      ? unit.reaction
+      : allUnits?.find((u) => u.id === unit.ownerId)?.reaction;
+  };
 
   if (allUnits) {
     const durationS = (matchEndMs - matchStartMs) / 1000;
     for (const unit of allUnits) {
       if (!isCriticalNonPlayerUnit(unit)) continue;
-      const kill = nonPlayerUnitKill(unit);
+      const kill = nonPlayerUnitKill(unit, unitOfId);
       if (!kill) {
         // GH #100 / BACKLOG #51 (user ruling 2026-09-20): an ENEMY summon a
         // team is expected to kill, that was NOT killed — say how much the
@@ -79,14 +99,7 @@ export function emitUnitDestroyedEntries(
         // despawn event) and nothing here says anyone should have done more.
         const npcId = getNpcIdFromGuid(unit.id) ?? "";
         if (!CONTESTABLE_ENEMY_SUMMON_NPC_IDS.has(npcId)) continue;
-        const summonerSide = allUnits.find(
-          (u) => u.id === unit.ownerId,
-        )?.reaction;
-        const unitSide =
-          unit.reaction === CombatUnitReaction.Hostile ||
-          unit.reaction === CombatUnitReaction.Friendly
-            ? unit.reaction
-            : summonerSide;
+        const unitSide = summonSide(unit);
         if (unitSide !== CombatUnitReaction.Hostile) continue;
         const summonMs = summonedAtMs(unit);
         if (summonMs === null) continue;
@@ -154,11 +167,7 @@ export function emitUnitDestroyedEntries(
       if (atSeconds < 0 || atSeconds > durationS) continue; // Match End cleanup suppression
       // A totem's own flags are sometimes neutral (20 of 3,076 lines rendered
       // "Unknown" on the 605-match acceptance set); its summoner's side is not.
-      const side =
-        unit.reaction === CombatUnitReaction.Friendly ||
-        unit.reaction === CombatUnitReaction.Hostile
-          ? unit.reaction
-          : allUnits.find((u) => u.id === unit.ownerId)?.reaction;
+      const side = summonSide(unit);
       const reactionStr =
         side === CombatUnitReaction.Friendly
           ? "Friendly"
@@ -208,7 +217,7 @@ export function emitUnitDestroyedEntries(
       const ownerUnit = roster.find((p) => p.id === unit.ownerId);
       if (!ownerUnit || !PET_DEATH_OWNER_CLASSES.has(Number(ownerUnit.class)))
         continue;
-      const kill = nonPlayerUnitKill(unit);
+      const kill = nonPlayerUnitKill(unit, unitOfId);
       if (!kill) continue;
       const atSeconds = (kill.timestamp - matchStartMs) / 1000;
       if (atSeconds < 0 || atSeconds > durationS) continue;

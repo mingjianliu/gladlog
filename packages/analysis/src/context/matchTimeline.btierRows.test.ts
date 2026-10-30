@@ -146,21 +146,19 @@ const polyImmuneOwner = (over: Partial<ICombatUnit> = {}) =>
     ] as never,
     ...over,
   });
-const sapChain = (seconds: number[]): any => [
-  {
-    targetName: "Enemy-Realm",
-    targetSpec: "x",
-    applications: seconds.map((s) => ({
-      atSeconds: s,
-      durationSeconds: 3,
-      spellId: "6770",
-      spellName: "Sap",
-      casterName: "Rogue-Realm",
-      casterSpec: "Subtlety Rogue",
-      drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
-    })),
-  },
-];
+/** the enemy's DR history: a control APPLIED at each second, 3 s long
+ * (fact6 F20: the reason reads the target's own history,
+ * `buildCcCategoryHistory`, not the chains credited to our team) */
+const ROGUE: [string, string] = ["r", "Rogue-Realm"];
+const ccAuras = (seconds: number[], spellId = "6770", name = "Sap"): any[] =>
+  seconds.flatMap((s) => [
+    ev(LogEvent.SPELL_AURA_APPLIED, spellId, name, s, ROGUE, FOE, {
+      auraType: "DEBUFF",
+    }),
+    ev(LogEvent.SPELL_AURA_REMOVED, spellId, name, s + 3, ROGUE, FOE, {
+      auraType: "DEBUFF",
+    }),
+  ]);
 const immuneLine = (timeline: string) =>
   timeline.split("\n").find((l) => l.includes("[IMMUNE")) ?? "";
 
@@ -174,9 +172,32 @@ describe("[IMMUNE] says why (B17a)", () => {
   it("diminishing returns: two controls of the family in an unbroken chain before it (ba8c0510 0:22)", () => {
     const line = immuneLine(
       buildMatchTimeline(
-        params(polyImmuneOwner(), enemy(), {
-          outgoingCCChains: sapChain([10, 16]),
-        }),
+        params(
+          polyImmuneOwner(),
+          enemy({ auraEvents: ccAuras([10, 16]) as never }),
+        ),
+      ),
+    );
+    expect(line).toContain("[IMMUNE — DR: Incapacitate Immune]");
+  });
+
+  it("a control reflected back onto the target is DR history too (fact6 F20)", () => {
+    // a Polymorph the target reflected onto itself at 10 s (source = the
+    // target), then a Sap at 16 s: the 22 s Polymorph is immune
+    const reflected = [
+      ev(LogEvent.SPELL_AURA_APPLIED, POLYMORPH, "Polymorph", 10, FOE, FOE, {
+        auraType: "DEBUFF",
+      }),
+      ev(LogEvent.SPELL_AURA_REMOVED, POLYMORPH, "Polymorph", 13, FOE, FOE, {
+        auraType: "DEBUFF",
+      }),
+    ];
+    const line = immuneLine(
+      buildMatchTimeline(
+        params(
+          polyImmuneOwner(),
+          enemy({ auraEvents: [...reflected, ...ccAuras([16])] as never }),
+        ),
       ),
     );
     expect(line).toContain("[IMMUNE — DR: Incapacitate Immune]");
@@ -185,9 +206,7 @@ describe("[IMMUNE] says why (B17a)", () => {
   it("one earlier control (the next would land at 50 %), or a chain the reset broke: no reason is claimed", () => {
     const one = immuneLine(
       buildMatchTimeline(
-        params(polyImmuneOwner(), enemy(), {
-          outgoingCCChains: sapChain([16]),
-        }),
+        params(polyImmuneOwner(), enemy({ auraEvents: ccAuras([16]) as never })),
       ),
     );
     expect(one).toContain("[IMMUNE]");
@@ -214,8 +233,7 @@ describe("[IMMUNE] says why (B17a)", () => {
               }),
             ] as never,
           }),
-          enemy(),
-          { outgoingCCChains: sapChain([10, 16]) },
+          enemy({ auraEvents: ccAuras([10, 16]) as never }),
         ),
       ),
     );
@@ -224,12 +242,11 @@ describe("[IMMUNE] says why (B17a)", () => {
   });
 
   it("another family's chain does not count", () => {
-    const stuns = sapChain([10, 16]);
-    for (const a of stuns[0].applications)
-      a.drInfo = { category: "Stun", level: "Full", sequenceIndex: 0 };
+    // Cheap Shot: Stun family
+    const stuns = ccAuras([10, 16], "1833", "Cheap Shot");
     const line = immuneLine(
       buildMatchTimeline(
-        params(polyImmuneOwner(), enemy(), { outgoingCCChains: stuns }),
+        params(polyImmuneOwner(), enemy({ auraEvents: stuns as never })),
       ),
     );
     expect(line).not.toContain("DR:");
@@ -242,6 +259,7 @@ describe("[IMMUNE] says why (B17a)", () => {
     });
     const cycloned = enemy({
       auraEvents: [
+        ...ccAuras([10, 16]),
         ev(
           LogEvent.SPELL_AURA_APPLIED,
           CYCLONE,
@@ -267,7 +285,6 @@ describe("[IMMUNE] says why (B17a)", () => {
       buildMatchTimeline(
         params(owner, cycloned, {
           friends: [owner, druid],
-          outgoingCCChains: sapChain([10, 16]),
         }),
       ),
     );

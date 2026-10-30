@@ -80,6 +80,24 @@ export const PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS: ReadonlySet<string> =
   new Set(["215769"]);
 
 /**
+ * Is this aura an immunity FORM — a state DB2 does not encode as an immunity
+ * (215769 carries aura 77 mechanic 9 only, 27827 nothing) that the game
+ * nevertheless treats as immune to everything: the Spirit of Redemption
+ * forms, both the pressed PvP talent (215769) and the on-death proc (27827)
+ * (user ruling 2026-10-20, fact2 ruling 5; F20 phase 3 ruling: both forms are
+ * full immunity for control too). One predicate for every reader that asks
+ * "is the carrier immune because of a form": the interrupt test below and
+ * the control-feasibility sampler (`ccSamplerFor`, read by `[CC BOOKMARK]`
+ * and `[PEEL OPTION]`). fact6 D8 (c992ce75 P:416): the bookmark offered
+ * 0:47–0:55 on a priest in the form 0:45.6–0:54.7.
+ * Burrow / Vanish are deliberately NOT forms here (immune for damage per
+ * U-KA3, no ruling for control).
+ */
+export function auraIsImmunityForm(auraId: string): boolean {
+  return SPIRIT_OF_REDEMPTION_AURA_IDS.has(auraId);
+}
+
+/**
  * Does this aura make its carrier's casts unkickable — an official interrupt
  * immunity (DB2 aura 77 mechanic 26, or every school: `auraBlocksMechanic`),
  * or the Spirit of Redemption form, which DB2 does not encode that way.
@@ -91,7 +109,7 @@ export const PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS: ReadonlySet<string> =
  */
 export function auraBlocksInterrupt(auraId: string): boolean {
   return (
-    SPIRIT_OF_REDEMPTION_AURA_IDS.has(auraId) ||
+    auraIsImmunityForm(auraId) ||
     auraBlocksMechanic(auraId, INTERRUPT_MECHANIC) === true
   );
 }

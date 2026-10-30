@@ -315,6 +315,10 @@ export function analyzeHealerExposureAtBurst(
         if (a.srcUnitId && !enemyIds.has(a.srcUnitId))
           ourSideIds.add(a.srcUnitId);
 
+  const healerDrHistory = [
+    ...healerCCSummary.ccInstances,
+    ...(healerCCSummary.drHistoryOnly ?? []),
+  ];
   for (const window of burstWindows) {
     const windowMs = matchStartMs + window.fromSeconds * 1000;
 
@@ -424,8 +428,12 @@ export function analyzeHealerExposureAtBurst(
         if (!stealthControlUsableAt(enemy, spellId, windowMs)) continue;
         listedCategories.add(category);
         if (distance > ccThreatRadiusYards(enemy, spellId)) continue;
+        // Q2 at the window's instant — a control landing on that very ms is
+        // on (fact6 D10: the window opened on the Cyclone's own ms; the line
+        // said "already in Cyclone … the DR levels count it" and printed
+        // Full DR) — over the healer's whole DR history
         const healerDRLevel = getDRLevelAtTime(
-          healerCCSummary.ccInstances,
+          healerDrHistory,
           category,
           window.fromSeconds,
           matchStartMs,

@@ -41,6 +41,7 @@ import {
   checkCcAvoidedMissType,
   checkCcBookmarkConsistency,
   checkCcNotLandedLines,
+  checkCcSuggestionInsideImmunity,
   checkCcUseStartedCounts,
   checkDeathTrinketCcConsistency,
   checkDmgSpikeListCap,
@@ -48,6 +49,7 @@ import {
   checkForcedTrinketConsistency,
   checkFreeOfWindowConsistency,
   checkHeaderHpPromise,
+  checkHitNoPlayerContradiction,
   checkKickEatenCancelsCoverCastStopped,
   checkKitUnusedNote,
   checkMatch,
@@ -840,6 +842,44 @@ describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the tri
   });
 });
 
+describe("checkCcSuggestionInsideImmunity — no control suggestion inside a printed full immunity (fact6 D8, F20)", () => {
+  // c992ce75 P:416: the old rendered shape
+  const sor =
+    "0:45  [ENEMY DEF]   4(HPriest) (Holy Priest): Spirit of Redemption (immune, 9.0s) [friendly offensive CD active] (at 83% HP)";
+  const bookmark =
+    "0:47–0:55  [CC BOOKMARK]  Incapacitating Roar → 4(HPriest): during your Burst #2 (0:42–1:01) on 5(AWarrior), their healer was not CC'd | at 0:47: 2.7yd, DR Full, 4(HPriest) PvP trinket on cooldown";
+  const peel =
+    "0:50–0:56  [PEEL OPTION]  1(RPaladin) Hammer of Justice → 4(HPriest): usable 7 s, not used | 4(HPriest) did 71% of 3(FDKnight)'s damage taken in the 10 s before dying at 0:56 | at 0:50: 4.0yd, DR Full, 4(HPriest) PvP trinket on cooldown";
+  it("fails the old shape: a bookmark / peel second inside the form", () => {
+    expect(checkCcSuggestionInsideImmunity([sor, bookmark])).toHaveLength(1);
+    expect(checkCcSuggestionInsideImmunity([sor, peel])).toHaveLength(1);
+  });
+  it("passes the new shape (no bookmark), and spans outside the covered seconds", () => {
+    expect(checkCcSuggestionInsideImmunity([sor])).toEqual([]);
+    // covered wholly: 0:46 … 0:52 (began inside 0:45, at least 8.95 s);
+    // a span from 0:53 on, or one ending at 0:45, is no contradiction
+    for (const span of ["0:53–0:59", "0:40–0:45"])
+      expect(
+        checkCcSuggestionInsideImmunity([
+          sor,
+          bookmark
+            .replace("0:47–0:55", span)
+            .replace("at 0:47", `at ${span.slice(0, 4)}`),
+        ]),
+        span,
+      ).toEqual([]);
+  });
+  it("another unit's immunity, a school-limited one, a stealth kind and an end not logged say nothing", () => {
+    for (const def of [
+      sor.replace("4(HPriest)", "5(AWarrior)"),
+      sor.replace("(immune, 9.0s)", "(immune to magic, 9.0s)"),
+      sor.replace("Spirit of Redemption", "Vanish"),
+      sor.replace("(immune, 9.0s)", "(immune, end not logged)"),
+    ])
+      expect(checkCcSuggestionInsideImmunity([def, bookmark]), def).toEqual([]);
+  });
+});
+
 describe("checkCcBookmarkConsistency — [CC BOOKMARK] lines agree with the burst / spike / cast lines (GH #77 part 2)", () => {
   const burst = "  Burst #1 — 0:33–0:50 | Kingsbane + Deathmark";
   const spike =
@@ -1484,6 +1524,56 @@ describe("checkKickEatenCancelsCoverCastStopped — kick-eaten's yourCancels cou
     expect(
       checkKickEatenCancelsCoverCastStopped([
         kickEaten("yourCancels=0, baitedKicks=0"),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkHitNoPlayerContradiction — [hit no enemy player] against the press's own [CC NOT LANDED] / [CC ON ENEMY] lines (fact6 F20)", () => {
+  const unit = [
+    '  <unit id="1" name="Henblinked-WyrmrestAccord-US" spec="Arcane Mage" role="log owner">',
+  ];
+  // 4caab013 2:10 / 2:12, as rendered before the fix: the totem's IMMUNE
+  // pulse on the warlock under the cast line that says it hit nobody
+  const totemOld =
+    "2:10  [TEAM] [CC]   3(RShaman) (Restoration Shaman) cast Capacitor Totem [hit no enemy player]";
+  const totemNew =
+    "2:10  [TEAM] [CC]   3(RShaman) (Restoration Shaman) cast Capacitor Totem [no CC aura logged — hit 5(AWarlock)]";
+  const pulse =
+    "2:12  [CC NOT LANDED]   5(AWarlock) ← Capacitor Totem (by 3(RShaman)'s totem) — logged IMMUNE (Precognition was up)";
+
+  it("fails the old shape: the tag beside a miss line of that press", () => {
+    const out = checkHitNoPlayerContradiction([...unit, totemOld, pulse]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("Capacitor Totem");
+  });
+
+  it("passes the new shape, and a tag with no line of that press", () => {
+    expect(checkHitNoPlayerContradiction([...unit, totemNew, pulse])).toEqual(
+      [],
+    );
+    expect(checkHitNoPlayerContradiction([...unit, totemOld])).toEqual([]);
+  });
+
+  it("an owner's tag against an owner's landing; another caster's or a later second's line is no contradiction", () => {
+    const breath = "0:38  [YOU] [CC]   Dragon's Breath [hit no enemy player]";
+    const landed =
+      "0:38  [CC ON ENEMY]   5(HDHunter) ← Dragon's Breath (by 1(AMage)) (3s) [DR: Disorient Full]";
+    expect(checkHitNoPlayerContradiction([...unit, breath, landed])).toHaveLength(
+      1,
+    );
+    expect(
+      checkHitNoPlayerContradiction([
+        ...unit,
+        breath,
+        landed.replace("(by 1(AMage))", "(by 2(FMage))"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkHitNoPlayerContradiction([
+        ...unit,
+        breath,
+        landed.replace("0:38", "0:45"),
       ]),
     ).toEqual([]);
   });

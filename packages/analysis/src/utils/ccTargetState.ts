@@ -27,8 +27,8 @@
  *  - geometry: both positions known, distance ≤ the owner's single-target
  *    reach (`ccThreatReachYards` — cast range, else a caster-centred radius),
  *    LoS not falsified;
- *  - DR for the CC's category not Immune (`getDRLevel` over the target's
- *    recorded CC history);
+ *  - DR for the CC's category not Immune (`drLevelNextAt` over the target's
+ *    DR history, `buildCcCategoryHistory`);
  *  - the target holds no ready breaker of its own for that mechanic
  *    (`kitSpellReadyAt`): a designed breaker (the mechanic is on its own DB2
  *    aura 77 — corpus-confirmed pressed from inside that CC) or a full-school
@@ -39,6 +39,7 @@ import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 import { abilityProfile } from "../data/abilityProfile";
 import { effectAurasOfCast, effectAuraViaName } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
@@ -48,6 +49,7 @@ import {
   CC_AVOIDANCE_BUFF_SPELLS,
   pvpTrinketRemainingSecondsAt,
 } from "./ccTrinketAnalysis";
+import { auraIsImmunityForm } from "./combatStates";
 import {
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
@@ -59,12 +61,17 @@ import {
 } from "./cooldowns";
 import {
   auraIdsAppliedBy,
+  buildCcCategoryHistory,
+  type CCEntry,
   drCategoryKnown,
   drCategoryOfCast,
-  getDRCategory,
-  getDRLevel,
+  drLevelNextAt,
 } from "./drAnalysis";
-import { KW_UNTARGETABLE_AURA_IDS, untargetableEndS } from "./enemyDefensives";
+import {
+  KW_UNTARGETABLE_AURA_IDS,
+  limitedImmunitySchoolMask,
+  untargetableEndS,
+} from "./enemyDefensives";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -188,6 +195,95 @@ export function ccReachAt(
 }
 
 /**
+ * When `target` could not take this control because of an aura on it — the
+ * "not immune" half of every "this CC could land on that unit" claim. One
+ * predicate for `ccSamplerFor` (`[CC BOOKMARK]`, `[PEEL OPTION]`, CC USE)
+ * and the healer-offense "X ready on enemy healer" lines (`[CONTESTED]`,
+ * `[OPPORTUNITY]`). An aura blocks when:
+ *  - DB2 gives it an immunity to the control's mechanic (aura 77 / all);
+ *  - it is an immunity form DB2 does not encode (`auraIsImmunityForm`,
+ *    Spirit of Redemption — fact6 D8; F20 residual: 3 `[CONTESTED] … ready
+ *    on enemy healer` spans on a priest in the form, e.g. s0/72-1 3:01–3:05);
+ *  - it is a listed avoidance the press line's `[IMMUNE — X was up]` names
+ *    for this control (`applicableCCAvoidanceIds`, fact4 D3);
+ *  - it is a school-limited full immunity (`limitedImmunitySchoolMask`: a
+ *    `MITIGATION_TABLE` 100 % row) covering the school of what the control
+ *    puts on the target — its own control aura(s), else the cast (F20
+ *    residual: Cloak of Shadows, in no avoidance list, read "not immune" to
+ *    Binding Shot's arcane stun 117526 — s0/76-1 0:26–0:35 bookmark across a
+ *    Cloak 0:32.6–0:37.6);
+ *  - the unit is no target at all (`KW_UNTARGETABLE_AURA_IDS`: Mass
+ *    Invisibility, Phase Shift), to the end the kill windows read.
+ * Intervals in seconds from the round's start.
+ */
+export function ccTargetBlockerIntervals(
+  target: ICombatUnit,
+  combat: Parameters<typeof buildAuraIntervals>[1],
+  castSpellId: string,
+  castSpellName?: string,
+): IAuraInterval[] {
+  const mech = ccMechanicOf(castSpellId);
+  const controlIds = [
+    castSpellId,
+    ...effectAurasOfCast(castSpellId).filter(
+      (a) => ccSpellIds.has(a) && effectAuraViaName(castSpellId, a),
+    ),
+  ];
+  // keyed by the cast AND the control aura it applies: Freezing Trap's
+  // cast 187650 is physical in DB2, its aura 3355 frost — the IMMUNE row
+  // names the aura
+  const avoidance = new Set<string>();
+  for (const id of controlIds)
+    for (const b of applicableCCAvoidanceIds(
+      id,
+      getEnglishSpellName(castSpellId, castSpellName ?? ""),
+    ))
+      avoidance.add(b);
+  const landing =
+    controlIds.length > 1 ? controlIds.slice(1) : controlIds.slice(0, 1);
+  const landingSchools = landing.map((id) => spellSchoolMask(id));
+  const schoolBlocked = (auraId: string) => {
+    const mask = limitedImmunitySchoolMask(auraId);
+    return (
+      mask !== undefined &&
+      landingSchools.every(
+        (s) => s !== undefined && s !== 0 && (s & ~mask) === 0,
+      )
+    );
+  };
+  const auras = buildAuraIntervals(target, combat);
+  return (
+    auras
+      .filter(
+        (iv) =>
+          (mech !== undefined &&
+            auraBlocksMechanic(iv.spellId, mech) !== false) ||
+          // an immunity form DB2 does not encode (Spirit of
+          // Redemption, both forms): fact6 D8 (c992ce75 0:47–0:55)
+          auraIsImmunityForm(iv.spellId) ||
+          // …or one the press line's `[IMMUNE — X was up]` names for this
+          // control (`applicableCCAvoidanceIds`, by school): fact4 D3
+          // (190bbc57 0:26–0:31) — Anti-Magic Shell blocks no freeze by
+          // mechanic, yet a Freezing Trap into it logged IMMUNE, and the
+          // bookmark counted those seconds "not immune"
+          (CC_AVOIDANCE_BUFF_SPELLS.has(iv.spellId) &&
+            avoidance.has(iv.spellId)) ||
+          schoolBlocked(iv.spellId),
+      )
+      // not a target at all: Mass Invisibility / Phase Shift, to the
+      // end the kill windows read (`untargetableEndS`)
+      .concat(
+        auras
+          .filter((iv) => KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
+          .map((iv) => ({
+            ...iv,
+            toS: untargetableEndS(target, iv, combat.startTime),
+          })),
+      )
+  );
+}
+
+/**
  * A sampler for one owner's one CC, or null when its mechanic or reach is
  * unknown (no line may be built on it). Per-target facts are computed once
  * and cached.
@@ -260,26 +356,11 @@ export function ccSamplerFor(params: {
       cc: IAuraInterval[];
       renderedCc: Array<{ fromS: number; toS: number }>;
       blockers: IAuraInterval[];
-      drHistory: Array<{ applyMs: number; removeMs: number; spellId: string }>;
+      drHistory: CCEntry[];
       tools: string[];
       talents: ReturnType<typeof playerTalentIdSets>;
     }
   >();
-  // keyed by the cast AND the control aura it applies: Freezing Trap's
-  // cast 187650 is physical in DB2, its aura 3355 frost — the IMMUNE row
-  // names the aura
-  const avoidance = new Set<string>();
-  for (const id of [
-    cd.spellId,
-    ...effectAurasOfCast(cd.spellId).filter(
-      (a) => ccSpellIds.has(a) && effectAuraViaName(cd.spellId, a),
-    ),
-  ])
-    for (const b of applicableCCAvoidanceIds(
-      id,
-      getEnglishSpellName(cd.spellId, cd.spellName),
-    ))
-      avoidance.add(b);
   const factsOf = (t: ICombatUnit) => {
     let f = perTarget.get(t.id);
     if (!f) {
@@ -293,32 +374,18 @@ export function ccSamplerFor(params: {
         death: deathS(t),
         cc,
         renderedCc: rendered,
-        // …or one the press line's `[IMMUNE — X was up]` names for this
-        // control (`applicableCCAvoidanceIds`, by school): fact4 D3
-        // (190bbc57 0:26–0:31) — Anti-Magic Shell blocks no freeze by
-        // mechanic, yet a Freezing Trap into it logged IMMUNE, and the
-        // bookmark counted those seconds "not immune"
-        blockers: auras
-          .filter(
-            (iv) =>
-              auraBlocksMechanic(iv.spellId, mech) !== false ||
-              (CC_AVOIDANCE_BUFF_SPELLS.has(iv.spellId) &&
-                avoidance.has(iv.spellId)),
-          )
-          // not a target at all: Mass Invisibility / Phase Shift, to the
-          // end the kill windows read (`untargetableEndS`)
-          .concat(
-            auras
-              .filter((iv) => KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
-              .map((iv) => ({ ...iv, toS: untargetableEndS(t, iv, start) })),
-          ),
-        drHistory: cc
-          .filter((iv) => getDRCategory(iv.spellId) === cat)
-          .map((iv) => ({
-            applyMs: start + iv.fromS * 1000,
-            removeMs: start + iv.toS * 1000,
-            spellId: iv.spellId,
-          })),
+        // the one "could not take this control" reading
+        // (`ccTargetBlockerIntervals`)
+        blockers: ccTargetBlockerIntervals(t, combat, cd.spellId, cd.spellName),
+        // the target's DR history — the one builder (fact6 F20,
+        // `buildCcCategoryHistory`: every source, a control reflected back
+        // onto it included)
+        drHistory: buildCcCategoryHistory(
+          t,
+          cat,
+          start,
+          new Map(Object.values(combat.units ?? {}).map((u) => [u.id, u])),
+        ),
         tools: breakToolsFor(t, mech),
         talents: playerTalentIdSets(t),
       };
@@ -357,10 +424,7 @@ export function ccSamplerFor(params: {
       if (!geo.ok) return { ok: false, reason: geo.reason };
       const dist = geo.distanceYards;
       const dr = catKnown
-        ? getDRLevel(
-            f.drHistory.filter((h) => h.applyMs < ms),
-            ms,
-          ).level
+        ? drLevelNextAt(f.drHistory, ms)
         : "n/a";
       if (dr === "Immune") return { ok: false, reason: "dr-immune" };
       if (
