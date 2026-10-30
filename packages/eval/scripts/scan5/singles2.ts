@@ -949,6 +949,10 @@ interface IPress {
   /** the distinct purgeable buffs removed (k counts buffs, not rows —
    * codex F20-30) */
   countedIds: Set<string>;
+  /** …of them, the BUFFs (the row's auraType): what a purge takes — a
+   * cleanse of a debuff, a charmed ally's included, is none (codex
+   * 20-G167-07) */
+  buffIds: Set<string>;
   /** an Improved Spellsteal repeat: its own removal, never merged with a
    * direct one in either order (codex F20-30) */
   repeat: boolean;
@@ -1016,6 +1020,7 @@ function pressesOf(ctx: IRoundCtx): IPress[] {
     ) {
       last.buffs.push(buff);
       if (purgeable) last.countedIds.add(r.f[12] ?? "");
+      if (purgeable && r.f[15] === "BUFF") last.buffIds.add(r.f[12] ?? "");
       last.counted = last.countedIds.size;
     } else
       list.push({
@@ -1026,6 +1031,9 @@ function pressesOf(ctx: IRoundCtx): IPress[] {
         buffs: [buff],
         counted: purgeable ? 1 : 0,
         countedIds: new Set(purgeable ? [r.f[12] ?? ""] : []),
+        buffIds: new Set(
+          purgeable && r.f[15] === "BUFF" ? [r.f[12] ?? ""] : [],
+        ),
         repeat,
       });
     groups.set(k, list);
@@ -1151,18 +1159,17 @@ function purgeRemovalCount(ctx: IRoundCtx): void {
   // corpus); the definition prints `PURGE_PRESS_REMOVALS_TEXT`, so with
   // the type on the menu that is the text read — every tool a purger of
   // the owner's team removed ≥ 2 with in one press must be named in it.
-  // A purge is an enemy's buffs taken: a cleanse of the purger's own side
-  // (Purify off a teammate) is no purge press (codex 20-G167-03).
+  // A purge takes buffs: a cleanse of debuffs (Purify off a teammate, codex
+  // 20-G167-03, or off a charmed enemy, 20-G167-07) is no purge press —
+  // read on the removal rows' own auraType, whoever the target is.
   if (/"missed-purge"/.test(ctx.menu)) {
     ctx.bump("purgeRemovalCount");
     const team = String(ctx.owner.info?.teamId);
     const multi = presses.find(
       (p) =>
-        p.counted >= 2 &&
+        p.buffIds.size >= 2 &&
         !REMOVE_ALL_TOOLS.has(p.tool) &&
         teamOf(ctx, ownerOrSelf(ctx, p.src)) === team &&
-        teamOf(ctx, p.dest) !== undefined &&
-        teamOf(ctx, p.dest) !== team &&
         !purgeTextNames(p.tool),
     );
     if (multi)
