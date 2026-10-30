@@ -465,6 +465,19 @@ describe("F16 retest — a ground control's press and its summon's pulse are one
     // the first pulse caught the teammate (no position: no reach, no line);
     // the second caught no one and is the one Bladestorm answered
     expect(r.map((a) => [a.castAtSeconds, a.atSeconds])).toEqual([[61.5, 64.504]]);
+    // codex 20-G167-13: the same stun written with the owner as its source
+    (mate.auraEvents[0] as { srcUnitId: string }).srcUnitId = "enemy-1";
+    expect(
+      analyzePlayerCCAndTrinket(
+        player,
+        [enemy],
+        {
+          ...combat,
+          units: { "enemy-1": enemy, "mate-1": mate, "player-1": player, "totem-1": totems[0], "totem-2": totems[1] },
+        } as never,
+        totems,
+      ).ccAvoidedInstances.map((a) => [a.castAtSeconds, a.atSeconds]),
+    ).toEqual([[61.5, 64.504]]);
   });
   it("codex 20-G167-05 #2: a move after the totem's pulse row did not dodge it — the row is the go-off", () => {
     const ROLL = "109132";

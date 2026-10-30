@@ -5233,15 +5233,19 @@ export function analyzePlayerCCAndTrinket(
    * one pulse-ownership reading — `controlHitInstant` reads its instant from
    * it and the go-off readers (`goOffBelongsToCast`) its owner. */
   /** Is a row (its ms, its source) part of this pulse? Its own ms, or its
-   * own source's rows up to PULSE_ROWS_SPREAD_MS after it. */
+   * own source's rows up to PULSE_ROWS_SPREAD_MS after it — or the
+   * caster's own: a row written with the owner as source names no summon,
+   * so it is the pulse it trails (codex 20-G167-13; every Static Charge row
+   * in a 40-file sample carries the totem's GUID). */
   const inPulse = (
     pulse: IPulse,
     rowMs: number,
     rowSrc: string | undefined,
+    ownerId: string,
   ): boolean =>
     rowMs === pulse.ms ||
     (rowSrc !== undefined &&
-      rowSrc === pulse.src &&
+      (rowSrc === pulse.src || rowSrc === ownerId) &&
       rowMs > pulse.ms &&
       rowMs <= pulse.ms + PULSE_ROWS_SPREAD_MS);
   const pulseAssignment = (
@@ -5326,7 +5330,8 @@ export function analyzePlayerCCAndTrinket(
         // summon's go-off, then the auras / misses it put on each unit
         // (`inPulse`, codex 20-G167-05 #1); another source's rows in that
         // span are another pulse (20-G167-10 #1)
-        for (const l of landings) if (inPulse(hit, l.ms, l.src)) taken.add(l);
+        for (const l of landings)
+          if (inPulse(hit, l.ms, l.src, enemy.id)) taken.add(l);
       }
     }
     pulseByCast.set(key, assigned);
@@ -5366,7 +5371,7 @@ export function analyzePlayerCCAndTrinket(
   ): boolean => {
     const castMs = cast.logLine.timestamp;
     for (const [ownerMs, pulse] of pulseAssignment(enemy, cast))
-      if (inPulse(pulse, rowMs, rowSrc)) return ownerMs === castMs;
+      if (inPulse(pulse, rowMs, rowSrc, enemy.id)) return ownerMs === castMs;
     return rowMs < nextPressOfControlMs(enemy, cast, family);
   };
 
