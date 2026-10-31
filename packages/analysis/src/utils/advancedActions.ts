@@ -44,6 +44,12 @@ const STALE_MAX_HP_CURRENT_SLACK = 0.05;
  * must sit to the reading before it, in HP points. */
 const STALE_MAX_HP_MIN_DIP_PCT = 3;
 const STALE_MAX_HP_RECOVERED_PCT = 5;
+/** The step's own row must give back this share of the dip: a dip it keeps is
+ * HP that went (a hit, then a proportional shift). The gap in current cannot
+ * tell the two: on the 605 raw logs it runs to 5 % of the new max on both, the
+ * 4,711 rows the step recovers (p99 4.5 %) and the 816 it does not (p99 4.8 %),
+ * which read as stale before (fact7 r6, codex 03-2). */
+const STALE_MAX_HP_STEP_RECOVERS = 0.5;
 
 const staleMaxHpRowsCache = new WeakMap<
   IAdvancedAction[],
@@ -97,10 +103,12 @@ export function staleMaxHpRows(
     if (i === j || i === 0) continue;
     const before = pct(rows[i - 1]!);
     const first = rows[i]!;
+    const dip = before - pct(first);
     if (
-      before - pct(first) >= STALE_MAX_HP_MIN_DIP_PCT &&
+      dip >= STALE_MAX_HP_MIN_DIP_PCT &&
       Math.abs((100 * first.advancedActorCurrentHp) / m1 - before) <=
-        STALE_MAX_HP_RECOVERED_PCT
+        STALE_MAX_HP_RECOVERED_PCT &&
+      pct(after) - pct(first) >= STALE_MAX_HP_STEP_RECOVERS * dip
     )
       for (let k = i; k < j; k++) out.add(rows[k]!);
   }

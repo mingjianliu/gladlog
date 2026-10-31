@@ -552,4 +552,14 @@ describe("D60 — a form shift's row: fresh current over a stale max", () => {
     ]);
     expect(staleMaxHpRows(hit).size).toBe(0);
   });
+
+  it("a hit, then a proportional shift: the step keeps the dip, so the row stands (codex 03-2)", () => {
+    const u = unitOf([
+      row(10, 180_000, 1_300_000), // 13.8 %
+      row(10.1, 100_000, 1_300_000), // 7.7 %: an 80,000 hit
+      row(10.3, 76_923, 1_000_000), // 7.7 %: the form, proportionally
+    ]);
+    expect(staleMaxHpRows(u).size).toBe(0);
+    expect(hpTroughInWindow(u as never, T, 10, 11)?.pct).toBe(8);
+  });
 });
