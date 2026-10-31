@@ -445,6 +445,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cooldowns.ts`,
+    symbol: "overhealPct",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
     symbol: "getUnitHpAtTimestamp",
     mod: cooldowns,
   },
@@ -1764,6 +1769,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "intervalBlocksSpell",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "healerLockIntervals",
     mod: cannotCastIntervals,
   },
   {
