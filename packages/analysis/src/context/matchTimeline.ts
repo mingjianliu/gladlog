@@ -99,7 +99,10 @@ import { emitEnemyCdEntries } from "./timelineSections/enemyCd";
 import { emitEnemyDefEntries } from "./timelineSections/enemyDef";
 import { emitEnemyHardCastEntries } from "./timelineSections/enemyHardCast";
 import { formatTimeline } from "./timelineSections/formatTimeline";
-import { emitFriendlyCheatDeathEntries } from "./timelineSections/friendlyCheatDeath";
+import {
+  emitFriendlyCheatDeathEntries,
+  emitFriendlyFormEntries,
+} from "./timelineSections/friendlyCheatDeath";
 import { emitGripEntries } from "./timelineSections/grip";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
 import { emitHealerInactivityEntries } from "./timelineSections/healerInactivity";
@@ -668,6 +671,20 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // WO3 #17: a friendly cheat-death proc (Cauterize / Cheat Death)
   if (
     emitFriendlyCheatDeathEntries({
+      owner,
+      friends,
+      matchStartMs,
+      matchEndSeconds,
+      roundEndAtMs,
+      pid,
+      addEntry,
+    })
+  )
+    procLinesEmitted = true;
+
+  // fact7 class 3: an offensive form with no button (Void Metamorphosis)
+  if (
+    emitFriendlyFormEntries({
       owner,
       friends,
       matchStartMs,

@@ -72,6 +72,19 @@ export const OFFENSIVE_AURA_EVIDENCE: ReadonlyMap<
   // `(no press)` occurrence — weight 0, never a window on its own.
   ["454351", { cooldownId: "454351", name: "Avenging Wrath", twin: true }],
 ]);
+/**
+ * fact7 class 3 (D69): offensive forms with no button at all — a timeline
+ * fact, never a burst (`burstRole: "fact"`, the `offensiveFacts` line).
+ * Void Metamorphosis 1217607: the Devourer enters it when the 1225789 stacks
+ * fill, on no cast (6ac699c9: 0:40.7–1:09.3 and 1:54.4–2:20.3, the
+ * [ENEMY CD] timeline silent, the form's spells leading both spikes). DB2 has
+ * no cooldown for it. Friendly side: `emitFriendlyFormEntries`. Registered in
+ * `curatedIdRegistry.ts`.
+ */
+export const OFFENSIVE_FORM_FACT_AURAS: ReadonlyMap<string, string> = new Map([
+  ["1217607", "Void Metamorphosis"],
+]);
+
 /** A twin's cast is logged at most this long before its aura (Infernal:
  * ≈ 1.0 s, the summon landing — p90 1.02 s on 207 pairs) or 0.5 s after
  * (log order). Not widened for lag: the only cast-less applications in 605
@@ -234,6 +247,7 @@ export function auraOffensiveOccurrences(
     (a) =>
       a.spellId !== undefined &&
       (OFFENSIVE_AURA_EVIDENCE.has(a.spellId) ||
+        OFFENSIVE_FORM_FACT_AURAS.has(a.spellId) ||
         // a generic one: the unit's own buff on itself
         (a.destUnitId === unit.id &&
           genericCdOfAura(a.spellId) !== undefined)) &&
@@ -299,6 +313,25 @@ export function auraOffensiveOccurrences(
     const auraFull = buffFullDurationForCaster(iv.spellId, unit);
     const auraOfficialEndMs =
       auraFull === undefined ? undefined : startMs + auraFull * 1000;
+
+    const formName = OFFENSIVE_FORM_FACT_AURAS.get(iv.spellId);
+    if (formName !== undefined) {
+      if (iv.inferredStart) continue;
+      result.occurrences.push({
+        spellId: iv.spellId,
+        spellName: `${formName} (no press)`,
+        startMs,
+        endMs,
+        endObserved,
+        cooldownSeconds: 0,
+        availableAgainAtMs: null,
+        availabilityUnknown: true,
+        dangerWeight: 0,
+        burstRole: "fact",
+        provenance: "unresolved",
+      });
+      continue;
+    }
 
     const genericCd = genericCdOfAura(iv.spellId);
     if (genericCd !== undefined) {

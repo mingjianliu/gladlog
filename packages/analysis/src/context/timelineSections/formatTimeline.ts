@@ -674,7 +674,7 @@ export function formatTimeline(
     // F-E8 (A26 = A): the healer throughput tag, outside the burst windows
     ...(enemyCdRender.healCdRendered
       ? [
-          "  [ENEMY HEAL CD] = an enemy healer pressed a major healing / throughput cooldown (Divine Hymn, Apotheosis,",
+          "  [ENEMY HEAL CD] = an enemy pressed a major healing / throughput cooldown (Divine Hymn, Apotheosis,",
           "    Avenging Crusader, …); it is not an offensive burst and opens no [OFFENSIVE WINDOW].",
         ]
       : []),

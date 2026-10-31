@@ -14,6 +14,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CRISIS_PROC_ANSWERS } from "../../analysis/crisisDecisionPoints";
 import { specToString } from "../../utils/cooldowns";
+import { OFFENSIVE_FORM_FACT_AURAS } from "../../utils/offensiveAuraOccurrences";
 import { fmtTime } from "../../utils/renderGrid";
 
 /** The words the line closes on — `[ENEMY DEF]`'s label for the same proc. */
@@ -74,6 +75,48 @@ export function emitFriendlyCheatDeathEntries(ctx: {
         u.id === owner.id
           ? `${fmtTime(t)}  [YOU] [PROC]   ${name} ${CHEAT_DEATH_PROC_LABEL}`
           : `${fmtTime(t)}  [TEAM] [PROC]   ${pid(u.name)} (${specToString(u.spec)}): ${name} ${CHEAT_DEATH_PROC_LABEL}`,
+      );
+      emitted = true;
+    }
+  }
+  return emitted;
+}
+
+/**
+ * fact7 class 3 (D69, every reader): an offensive form with no button
+ * (`OFFENSIVE_FORM_FACT_AURAS`) on the owner or a teammate — the `[PROC]`
+ * legend's "an automatically applied effect", the enemy side's `(no press)`
+ * [ENEMY CD] line. Nothing was pressed; the line prints no HP.
+ */
+export function emitFriendlyFormEntries(ctx: {
+  owner: ICombatUnit;
+  friends: readonly ICombatUnit[];
+  matchStartMs: number;
+  matchEndSeconds: number;
+  roundEndAtMs?: number;
+  pid: (name: string) => string;
+  addEntry: (atSeconds: number, line: string) => void;
+}): boolean {
+  const { owner, friends, matchStartMs, matchEndSeconds, pid, addEntry } = ctx;
+  const endMs = Math.min(
+    ctx.roundEndAtMs ?? Infinity,
+    matchStartMs + matchEndSeconds * 1000,
+  );
+  let emitted = false;
+  for (const u of [owner, ...friends.filter((f) => f.id !== owner.id)]) {
+    for (const a of u.auraEvents ?? []) {
+      if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      if (a.srcUnitId !== u.id || a.destUnitId !== u.id) continue;
+      const name = OFFENSIVE_FORM_FACT_AURAS.get(a.spellId ?? "");
+      if (name === undefined) continue;
+      if (a.logLine.timestamp < matchStartMs || a.logLine.timestamp > endMs)
+        continue;
+      const t = (a.logLine.timestamp - matchStartMs) / 1000;
+      addEntry(
+        t,
+        u.id === owner.id
+          ? `${fmtTime(t)}  [YOU] [PROC]   ${name}`
+          : `${fmtTime(t)}  [TEAM] [PROC]   ${pid(u.name)} (${specToString(u.spec)}): ${name}`,
       );
       emitted = true;
     }

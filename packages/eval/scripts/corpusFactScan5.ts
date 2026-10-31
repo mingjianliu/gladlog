@@ -61,6 +61,8 @@ const MODULE_FILES = [
   "silenceKick",
   "damageBasis",
   "pressFiling",
+  "listGap",
+  "talentWall",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

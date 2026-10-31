@@ -9,9 +9,11 @@ import {
   castAndEffectIds,
   triggeredEffectAurasOfCast,
 } from "../data/castEffectAuras";
+import { isOffensivePressFactFor } from "../data/enemyHealCds";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
+  getEnglishSpellName,
   spellEffectData,
 } from "../data/spellEffectData";
 import {
@@ -119,7 +121,8 @@ export interface IEnemyPlayerTimeline {
   /** GH #119: occurrences shown on the timeline but never a burst anywhere
    * (a Demonic Metamorphosis form under OFFENSIVE_AURA_FLAGS.demonic
    * "fact"). Kept OUT of offensiveCDs so no reader of the burst list can
-   * pick one up by accident; only the [ENEMY CD] renderer reads this. */
+   * pick one up by accident; only the [ENEMY CD] renderer reads this, and
+   * the [RES] `enemy:` column for a row with an effect span (fact7 class 3). */
   readonly offensiveFacts?: readonly IEnemyCDCast[];
 }
 
@@ -528,6 +531,53 @@ export function observedCastEndMs(
   return end === null ? null : matchStartMs + end * 1000;
 }
 
+/** how far around a press an aura of its name still belongs to that press */
+const PRESS_EFFECT_AURA_LEAD_MS = 1000;
+const PRESS_EFFECT_AURA_LAG_MS = 2000;
+
+/**
+ * fact7 class 3: when a press fact's effect ended, as the log shows it — the
+ * latest close of the caster's auras of the button's name that opened around
+ * the press, on any target (Odyn's Fury and Deep Breath land on their victims,
+ * Tip the Scales on the caster). `undefined` when the log shows none closing:
+ * the caller falls back to the official duration, and a button with neither
+ * has no running effect to state.
+ */
+function pressEffectEndSeconds(
+  unit: ICombatUnit,
+  allUnits: readonly ICombatUnit[],
+  spellName: string,
+  pressMs: number,
+  matchStartMs: number,
+): number | undefined {
+  // an aura's rows sit on the unit wearing it, not on its caster
+  const own = allUnits.flatMap((u) =>
+    (u.auraEvents ?? []).filter(
+      (a) =>
+        a.srcUnitId === unit.id &&
+        a.spellId !== undefined &&
+        a.logLine.timestamp >= pressMs - PRESS_EFFECT_AURA_LEAD_MS &&
+        getEnglishSpellName(a.spellId, a.spellName ?? "") === spellName,
+    ),
+  );
+  let endMs: number | undefined;
+  for (const opened of own) {
+    if (opened.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+    const at = opened.logLine.timestamp;
+    if (at > pressMs + PRESS_EFFECT_AURA_LAG_MS) continue;
+    const closed = own.find(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+        a.spellId === opened.spellId &&
+        a.destUnitId === opened.destUnitId &&
+        a.logLine.timestamp >= at,
+    );
+    if (closed && (endMs === undefined || closed.logLine.timestamp > endMs))
+      endMs = closed.logLine.timestamp;
+  }
+  return endMs === undefined ? undefined : (endMs - matchStartMs) / 1000;
+}
+
 export function reconstructEnemyCDTimeline(
   enemies: ICombatUnit[],
   combat: AtomicArenaCombat,
@@ -787,6 +837,51 @@ export function reconstructEnemyCDTimeline(
         dangerWeight: o.dangerWeight,
         ...(o.burstRole === "fact" ? { burstRole: "fact" as const } : {}),
         ...(o.availabilityUnknown ? { availabilityUnknown: true } : {}),
+      });
+    }
+
+    // fact7 class 3: an offensive button whose press is a fact — the
+    // [ENEMY CD] line and nothing else (`OFFENSIVE_PRESS_FACT_IDS`)
+    const isPressFact = (id: string) => isOffensivePressFactFor(id, enemy.spec);
+    for (const cast of pressRowsWithHidden(enemy, isPressFact, matchStartMs)) {
+      if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+      const { spellId } = cast;
+      if (!spellId || !isPressFact(spellId)) continue;
+      const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
+      const name = getEnglishSpellName(spellId, cast.spellName ?? "");
+      if (
+        offensiveFacts.some(
+          (f) =>
+            f.spellName === name &&
+            Math.abs(castTimeSeconds - f.castTimeSeconds) < 1,
+        )
+      )
+        continue;
+      const cooldownSeconds =
+        unitCooldownOf(enemy, spellId)?.cooldownSeconds ??
+        effectiveCooldownSeconds(spellId) ??
+        0;
+      const entry = unitCooldownEntry(enemy, combat, spellId);
+      offensiveFacts.push({
+        spellId,
+        spellName: name,
+        castTimeSeconds,
+        cooldownSeconds,
+        availableAgainAtSeconds:
+          (entry && pressReadyAgainAtSeconds(entry, castTimeSeconds)) ??
+          castTimeSeconds + cooldownSeconds,
+        buffEndSeconds:
+          pressEffectEndSeconds(
+            enemy,
+            Object.values(combat.units ?? {}),
+            name,
+            cast.logLine.timestamp,
+            matchStartMs,
+          ) ??
+          castTimeSeconds + (spellEffectData[spellId]?.durationSeconds ?? 0),
+        ...(cast.unseenPress ? { unseenPress: true as const } : {}),
+        dangerWeight: 0,
+        burstRole: "fact",
       });
     }
 

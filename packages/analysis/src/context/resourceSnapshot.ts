@@ -1077,7 +1077,16 @@ function buildResourceSnapshotOnce({
       string,
       { spellName: string; end: number; leftEnd: number }
     >();
-    for (const cd of player.offensiveCDs) {
+    // fact7 class 3: a fact row runs too, the [ENEMY CD] line beside this row
+    // says so — but only one with an effect span: the 8 s below is the burst
+    // member's fallback and would state a window Divine Toll never had
+    const running = [
+      ...player.offensiveCDs,
+      ...(player.offensiveFacts ?? []).filter(
+        (f) => f.buffEndSeconds > f.castTimeSeconds,
+      ),
+    ].sort((a, b) => a.castTimeSeconds - b.castTimeSeconds);
+    for (const cd of running) {
       // Shown until its effect ends — `buffEndSeconds`, the burst span's own
       // end (the observed aura chain, else the official duration; triage
       // G16). The old 30 s cap made a chain the log shows running 52 s read

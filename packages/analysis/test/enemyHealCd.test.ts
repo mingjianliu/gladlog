@@ -98,7 +98,10 @@ describe("G7-P3", () => {
           // Incarnation: Tree of Life 33891 — a form, so the official
           // profile carries no heal / absorb / throughput flag; it is here
           // on the signed list ("树肯定算,是大技能", ruling 2026-09-14)
-          CRISIS_PROTECTIVE_ANSWER_IDS.has(id),
+          CRISIS_PROTECTIVE_ANSWER_IDS.has(id) ||
+          // Vampiric Embrace 15286 — aura 226 dummy on the cast; the heal the
+          // log writes is the triggered 15290 (fact7 D51 / D55)
+          (id === "15286" && abilityProfile("15290").healsOthers),
         id,
       ).toBe(true);
     }

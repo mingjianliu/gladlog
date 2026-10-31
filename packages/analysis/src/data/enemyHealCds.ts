@@ -25,6 +25,7 @@
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 
 import { TEAM_HEAL_CD_IDS } from "../utils/cooldowns";
+import { OFFENSIVE_PRESS_FACT_IDS } from "../utils/spellDanger";
 
 export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   ...TEAM_HEAL_CD_IDS,
@@ -66,6 +67,12 @@ export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   "375576", // Divine Toll — Holy Paladin
   "443028", // Celestial Conduit — Mistweaver Monk
   "22842", // Frenzied Regeneration — Restoration Druid (signed 2026-09-24)
+  // fact7 class 3 (D51 / D55): Vampiric Embrace — Shadow Priest, 120 s, 12 s.
+  // No healer's, and no burst: 7acbefeb 0:14, 276,526 effective healing
+  // across three enemies off the priest's own damage, no line at all. DB2's
+  // healing sits on the triggered 15290, so the official profile reads
+  // nothing and the roster never named it.
+  "15286",
 ]);
 
 /** Ids that are a healing major only for one spec — the press of another
@@ -79,6 +86,7 @@ const ENEMY_HEAL_CD_SPEC: Readonly<Record<string, string>> = {
   "375576": CombatUnitSpec.Paladin_Holy,
   "443028": CombatUnitSpec.Monk_Mistweaver,
   "22842": CombatUnitSpec.Druid_Restoration,
+  "15286": CombatUnitSpec.Priest_Shadow,
 };
 
 /**
@@ -98,4 +106,16 @@ export function isEnemyHealCdFor(spellId: string, spec: unknown): boolean {
   if (!ENEMY_HEAL_CD_IDS.has(spellId)) return false;
   const only = ENEMY_HEAL_CD_SPEC[spellId];
   return only === undefined || String(spec) === String(only);
+}
+
+/** Is this enemy press an offensive press fact (`OFFENSIVE_PRESS_FACT_IDS`)
+ * in this spec's hands: an `[ENEMY HEAL CD]` of the spec keeps its own line
+ * (Divine Toll: Holy, not Retribution). */
+export function isOffensivePressFactFor(
+  spellId: string,
+  spec: unknown,
+): boolean {
+  return (
+    OFFENSIVE_PRESS_FACT_IDS.has(spellId) && !isEnemyHealCdFor(spellId, spec)
+  );
 }

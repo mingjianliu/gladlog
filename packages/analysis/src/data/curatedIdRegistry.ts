@@ -167,6 +167,7 @@ import {
   EYE_BEAM_ID,
   METAMORPHOSIS_PRESS_CAST_IDS,
   OFFENSIVE_AURA_EVIDENCE,
+  OFFENSIVE_FORM_FACT_AURAS,
 } from "../utils/offensiveAuraOccurrences";
 import {
   ADAPTATION_LOCKOUT_AURA_ID,
@@ -176,6 +177,7 @@ import { FREE_CAST_AURA_IDS } from "../utils/resourceAt";
 import {
   OFFENSIVE_CD_SPELL_IDS,
   OFFENSIVE_EFFECT_ACTIVATION_IDS,
+  OFFENSIVE_PRESS_FACT_IDS,
   SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
 } from "../utils/spellDanger";
 import { HEALER_REACH_SPELLS } from "../utils/spellRange";
@@ -1094,6 +1096,17 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // dead-id exclusion layer is new hand curation.
   t("OFFENSIVE_CD_SPELL_IDS", "utils/spellDanger.ts", "mixed", () =>
     set(OFFENSIVE_CD_SPELL_IDS),
+  ),
+  // fact7 class 3 (2026-10-30): offensive buttons whose press is a fact
+  // line, no window; found forward by scan5/listGap.ts.
+  t("OFFENSIVE_PRESS_FACT_IDS", "utils/spellDanger.ts", "cast", () =>
+    set(OFFENSIVE_PRESS_FACT_IDS),
+  ),
+  t(
+    "OFFENSIVE_FORM_FACT_AURAS",
+    "utils/offensiveAuraOccurrences.ts",
+    "aura",
+    () => [...OFFENSIVE_FORM_FACT_AURAS.keys()],
   ),
   // GH #115 (2026-09-26): activations of an offensive cooldown's EFFECT that
   // arrive under another id (Radiant Glory's Avenging Wrath 454351 → 31884).

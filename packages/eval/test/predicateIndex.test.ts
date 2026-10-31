@@ -60,6 +60,7 @@ import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stacked
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
 import * as timelineCastStopped from "@gladlog/analysis/src/context/timelineSections/castStopped";
 import * as enemyCd from "@gladlog/analysis/src/context/timelineSections/enemyCd";
+import * as friendlyCheatDeath from "@gladlog/analysis/src/context/timelineSections/friendlyCheatDeath";
 import * as healerCastGapFiller from "@gladlog/analysis/src/context/timelineSections/healerCastGapFiller";
 import * as timelineSetup from "@gladlog/analysis/src/context/timelineSections/setup";
 import * as unitLabel from "@gladlog/analysis/src/context/unitLabel";
@@ -3354,6 +3355,26 @@ const INDEX: PredicateRow[] = [
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,
     symbol: "isBurstWindowOffensiveCd",
     mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/utils/spellDanger.ts`,
+    symbol: "OFFENSIVE_PRESS_FACT_IDS",
+    mod: spellDanger,
+  },
+  {
+    file: `${A}/data/enemyHealCds.ts`,
+    symbol: "isOffensivePressFactFor",
+    mod: enemyHealCds,
+  },
+  {
+    file: `${A}/utils/offensiveAuraOccurrences.ts`,
+    symbol: "OFFENSIVE_FORM_FACT_AURAS",
+    mod: offensiveAuraOccurrences,
+  },
+  {
+    file: `${A}/context/timelineSections/friendlyCheatDeath.ts`,
+    symbol: "emitFriendlyFormEntries",
+    mod: friendlyCheatDeath,
   },
   {
     file: `${A}/utils/spellDanger.ts`,

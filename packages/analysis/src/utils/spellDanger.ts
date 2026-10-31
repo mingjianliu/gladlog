@@ -160,6 +160,42 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
 );
 
 /**
+ * fact7 class 3 (F21, 2026-10-30; D7 D8 D16 D45 D75 D78): offensive buttons
+ * whose PRESS is a fact and that open nothing. Each has an official cooldown
+ * of 45 s or more (the shape floor of user ruling 2026-09-18) and a press the
+ * prompt had no line for, the Curated-List forward check `listGapPress`
+ * (`packages/eval/scripts/scan5/listGap.ts`): the ids come from the log. They
+ * are NOT `OFFENSIVE_CD_SPELL_IDS` members: who opens a burst window is the
+ * registration's call, on `offensiveCdGapScan`'s printed list (the
+ * "deliberately NOT added" notes above stand), and `[ENEMY UTILITY]` says the
+ * press "is not an offensive burst". So: a `SpellTag.Utility` roster row on
+ * the friendly side (press line, loadout, [RES]), and on the enemy side an
+ * `[ENEMY CD]` line through `offensiveFacts`, which no burst reader reads
+ * (`isOffensivePressFactFor`). Weight 0: no window, no threat. The [RES]
+ * `enemy:` column lists one only while an effect it has runs (the row's
+ * `buffEndSeconds`). Registered in `curatedIdRegistry.ts`.
+ */
+export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
+  '228920', // Ravager — Warrior, 90 s recharge (D16)
+  '385059', // Odyn's Fury — Fury, 45 s (D8, D45); lift 1.70, coPressed 0.50
+  '1257052', // Dark Harvest — Affliction, 60 s (D7)
+  '357210', // Deep Breath, 120 s recharge (D78)
+  '433874', // Deep Breath, the Scalecommander override (D78)
+  '375576', // Divine Toll — 60 s, a Holy Paladin's is [ENEMY HEAL CD] (D75)
+  // The same class in the notes above: live, printed nowhere.
+  '153561', // Meteor — Fire, 45 s
+  '279302', // Frostwyrm's Fury — Frost, 90 s
+  '439843', // Reaper's Mark — 45 s
+  '426591', // Goremaw's Bite — Subtlety, 45 s
+  '343527', // Execution Sentence — 60 s
+  '370553', // Tip the Scales — 120 s, a Preservation's is [ENEMY HEAL CD]
+  '391528', // Convoke the Spirits — 120 s, a Restoration's is [ENEMY HEAL CD]
+  // In `SPELL_EFFECT_OVERRIDES` only, which keys a weight and prints nothing.
+  '322109', // Touch of Death — 180 s
+  '375901', // Mindgames — 45 s
+]);
+
+/**
  * GH #115: offensive-cooldown EFFECTS that some builds receive under another
  * spell id — activation id → the canonical cooldown in `OFFENSIVE_CD_SPELL_IDS`.
  *

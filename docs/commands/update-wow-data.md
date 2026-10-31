@@ -585,6 +585,9 @@ npx tsx packages/eval/scripts/racialTrinketLockScan.ts \
 #    a missing defensive; offensive rows belong to the offensive-set owners.
 npx tsx packages/eval/scripts/ledgerGapScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 30
+#    The same forward pass against the RENDERED prompt (fact7 class 3): every press with an official
+#    cooldown ≥ 30 s that no press line names, ranked by id at the end of the report; `offList` = on no roster key.
+npx tsx packages/eval/scripts/corpusFactScan5.ts <capture> --only listGapPress
 # 8. Talent replacement pairs (2026-09-26, reliability audit C1): TALENT_REPLACES is a hand table for the
 #    CONDITIONAL replacements neither PvpTalent/TraitDefinition.OverridesSpellID nor the aura-332
 #    replace_spell rows encode (Ancestral Swiftness 448861 → Nature's Swiftness 378081). Reverse — every

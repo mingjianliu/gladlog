@@ -12,7 +12,10 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { castAndEffectIds } from "../../data/castEffectAuras";
 import { classMetadata } from "../../data/classSpells";
-import { isEnemyHealCdFor } from "../../data/enemyHealCds";
+import {
+  isEnemyHealCdFor,
+  isOffensivePressFactFor,
+} from "../../data/enemyHealCds";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { SpellTag } from "../../data/spellTypes";
 import { AURA_REBROADCAST_GAP_MS } from "../../utils/auraIntervals";
@@ -329,7 +332,9 @@ export function emitEnemyCdEntries(
           // a healing major of THIS unit's spec has its own line (a Feral's
           // Convoke is no healer's)
           !isEnemyHealCdFor(ab.spellId, enemy.spec) &&
-          !OFFENSIVE_CD_SPELL_IDS.has(ab.spellId),
+          !OFFENSIVE_CD_SPELL_IDS.has(ab.spellId) &&
+          // an offensive press fact is an [ENEMY CD] line (`offensiveFacts`)
+          !isOffensivePressFactFor(ab.spellId, enemy.spec),
       );
     if (!rows || rows.length === 0) continue;
     const ids = new Set(rows.map((ab) => ab.spellId));

@@ -192,6 +192,7 @@
     "test/f20Singles1.test.ts",
     "test/fact4Batch2Data.test.ts",
     "test/fact6DrOnePredicate.test.ts",
+    "test/fact7ListGap.test.ts",
     "test/forbearance.test.ts",
     "test/formReshiftCast.test.ts",
     "test/friendlyCheatDeath.test.ts",

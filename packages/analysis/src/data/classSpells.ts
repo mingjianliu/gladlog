@@ -59,6 +59,11 @@ export const classMetadata: IClassSpellMetadata[] = [
       // loadout and [RES], out of every role reader. What it sent back is
       // the `[REFLECTED]` line's (`reflectedSpells`).
       a("23920", "Spell Reflection", U),
+      // fact7 class 3 (F21, 2026-10-30): a press on OFFENSIVE_PRESS_FACT_IDS
+      // (spellDanger.ts) — a press line, the loadout and [RES], out of every
+      // role reader.
+      a("228920", "Ravager", U), // D16: 69276401, 2 owner presses, no line
+      a("385059", "Odyn's Fury", U), // D8 / D45: 96fb4d42, ba5e59c6, no line
       a("871", "Shield Wall", D),
       a("118038", "Die by the Sword", D),
       a("184364", "Enraged Regeneration", D),
@@ -86,6 +91,11 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("471195", "Lay on Hands", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 244 rounds; 633 is its pre-12.x alias)
       a("216331", "Avenging Crusader", D),
       a("31821", "Aura Mastery", D),
+      // fact7 class 3 (D75): Holy's press of this id is the healer save
+      // roster's and `[ENEMY HEAL CD]`; a Retribution press is a fact line
+      // (OFFENSIVE_PRESS_FACT_IDS). 4206b8a9: 2 teammate presses, no line.
+      a("375576", "Divine Toll", U),
+      a("343527", "Execution Sentence", U), // fact7 class 3
       a("31884", "Avenging Wrath", O),
       a("231895", "Crusade", O),
       a("853", "Hammer of Justice", C),
@@ -158,6 +168,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       // Smoke Bomb rule: a press line, the loadout and [RES]; never a ready
       // defensive (it drops targeting as often as it saves).
       a("1856", "Vanish", U),
+      a("426591", "Goremaw's Bite", U), // fact7 class 3
       a("207777", "Dismantle", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
@@ -176,6 +187,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("64843", "Divine Hymn", D),
       a("200183", "Apotheosis", D),
       a("10060", "Power Infusion", O),
+      // fact7 class 3 (D51 / D55): a Shadow Priest's 120 s group heal, no
+      // healer's. 7acbefeb: 276,526 effective healing on three enemies with
+      // no line. A press line, the loadout and [RES]; the enemy side prints
+      // it `[ENEMY HEAL CD]` (enemyHealCds.ts).
+      a("15286", "Vampiric Embrace", U),
+      a("375901", "Mindgames", U), // fact7 class 3
       a("391109", "Dark Ascension", O),
       a("8122", "Psychic Scream", C),
       // fact2 C6 (2026-10-20): Holy Word: Chastise (DB2 60 s; incapacitate /
@@ -225,6 +242,8 @@ export const classMetadata: IClassSpellMetadata[] = [
       // Defensive it had produced 5 cd-hoarded rows on the 605 files.
       a("49039", "Lichborne", U),
       a("42650", "Army of the Dead", O),
+      a("279302", "Frostwyrm's Fury", U), // fact7 class 3
+      a("439843", "Reaper's Mark", U), // fact7 class 3
       a("1233448", "Dark Transformation", O),
       a("207289", "Unholy Assault", O),
       a("221562", "Asphyxiate", C),
@@ -283,6 +302,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("414664", "Mass Invisibility", D),
       a("190319", "Combustion", O),
       a("365350", "Arcane Surge", O),
+      a("153561", "Meteor", U), // fact7 class 3
       a("118", "Polymorph", C),
       a("31661", "Dragon's Breath", C),
       a("113724", "Ring of Frost", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)
@@ -299,6 +319,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("108416", "Dark Pact", D),
       a("205180", "Summon Darkglare", O),
       a("265187", "Summon Demonic Tyrant", O),
+      a("1257052", "Dark Harvest", U), // fact7 class 3 (D7): 96fb4d42, no line
       a("5782", "Fear", C),
       a("30283", "Shadowfury", C),
       a("6789", "Mortal Coil", C),
@@ -322,6 +343,7 @@ export const classMetadata: IClassSpellMetadata[] = [
       // 306 SPELL_AURA_APPLIED on 1249625, 0 events on 137639. DB2: 15 s,
       // 2 charges, 90 s recharge.
       a("1249625", "Zenith", O),
+      a("322109", "Touch of Death", U), // fact7 class 3
       a("119381", "Leg Sweep", C),
       a("115078", "Paralysis", C),
       a("233759", "Grapple Weapon", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
@@ -353,9 +375,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("106951", "Berserk", O),
       a("102560", "Incarnation: Chosen of Elune", O),
       a("194223", "Celestial Alignment", O),
-      // Convoke the Spirits 391528 deliberately excluded: no spec gate in
-      // OFFENSIVE_CD_SPELL_IDS, and Restoration Druids cast the same id as
-      // a healing channel (same reason as Divine Toll 375576).
+      // Convoke the Spirits 391528 deliberately out of the offensive table:
+      // no spec gate in OFFENSIVE_CD_SPELL_IDS, and Restoration Druids cast
+      // the same id as a healing channel (same reason as Divine Toll
+      // 375576). A Utility row (fact7 class 3): Restoration's is the healer
+      // save roster's, a Feral's or a Balance's press is a fact line.
+      a("391528", "Convoke the Spirits", U),
       a("33786", "Cyclone", C),
       a("99", "Incapacitating Roar", C),
       a("5211", "Mighty Bash", C),
@@ -394,6 +419,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("378441", "Time Stop", D),
       a("374227", "Zephyr", D),
       a("375087", "Dragonrage", O),
+      // fact7 class 3 (D78): 831c3fd5, five presses, no line. 433874 is the
+      // Scalecommander override of 357210 (`OVERRIDE_VARIANTS_GENERATED`):
+      // one row per unit, the id it pressed.
+      a("357210", "Deep Breath", U),
+      a("433874", "Deep Breath", U),
+      a("370553", "Tip the Scales", U), // fact7 class 3
       a("360806", "Sleep Walk", C),
     ],
   },
