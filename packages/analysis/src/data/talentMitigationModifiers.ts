@@ -147,9 +147,9 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
       talentSpellId: "449191",
       schoolMask: 127,
       modPct: 10,
-      validation: "promoted",
+      validation: "unvalidated",
       evidence:
-        "Survival Instincts + Oakskin: holders 0.401 (0.400–0.405), 103 units / 80 players, expected 0.40; new-season archive every 10 (1,814 files), talent impact audit 2026-09-26",
+        "Survival Instincts + Oakskin: holders 0.401 (0.400–0.405), 103 units / 80 players, expected 0.40; new-season archive every 10 (1,814 files), talent impact audit 2026-09-26; Feral alone 0.400 (24 units, 2026-10-27, same archive). DEMOTED 2026-10-30 (fact7 D39 / D57): DB2 and the tooltip still say -10 on 50322 (build 12.1.5.70575, op 3, no hotfix row), but the 2026-10-29 logs measure 0.50, not 0.40: holders 0.500 (0.495–0.548), 5 units / 2 players, every unit a Feral holder, same scan on the 15 fact7 logs; per hit, same form, 0.376 / 0.743 in Bear, 0.383 / 0.767 in Cat, with Barkskin + Oakskin on the same druids still 0.70 (0.537 / 0.767). The 12.1.0 archive and the 12.1.5 logs disagree and no mechanism is known yet, so no claim rests on the extra 10 points. Corpus split by build: `mitigationTalentScan --only 61336 --split-spec`.",
     },
     {
       auraSpellId: "186265",
