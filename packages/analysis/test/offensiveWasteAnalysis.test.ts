@@ -12,6 +12,7 @@ import {
   buildOffensiveWasteSummary,
   formatOffensiveWasteForContext,
   getHighValueSpellIds,
+  pressLandingsMs,
 } from "../src/utils/offensiveWasteAnalysis";
 import {
   makeAdvancedAction,
@@ -827,5 +828,99 @@ describe("offensiveWasteAnalysis — a hold never released is no cast (codex 20-
       ],
     });
     expect(buildOffensiveWasteSummary(combat, [evoker], [enemy]).events).toEqual([]);
+  });
+});
+
+describe("offensiveWasteAnalysis — a travelling spell counts where it landed (fact7 D52)", () => {
+  const matchStart = 1_000_000;
+  const combat = makeCombat(matchStart, matchStart + 60_000);
+  const PYROBLAST = "11366";
+  const press = (dt: number) =>
+    makeSpellCastEvent(PYROBLAST, matchStart + dt, "enemy-1", "EnemyPriest", "mage-1", "Mage", 0, "Pyroblast");
+  const hit = (dt: number, event = LogEvent.SPELL_DAMAGE) => {
+    const row = makeDamageEvent(matchStart + dt, 100_000, "enemy-1");
+    return {
+      ...row,
+      spellId: PYROBLAST,
+      spellName: "Pyroblast",
+      logLine: { ...(row.logLine as object), event },
+    };
+  };
+  const mage = (presses: number[], hits: unknown[], misses: unknown[] = []) =>
+    Object.assign(
+      makeUnit("mage-1", {
+        name: "Mage",
+        spec: CombatUnitSpec.Mage_Fire,
+        class: CombatUnitClass.Mage,
+        reaction: CombatUnitReaction.Friendly,
+        spellCastEvents: presses.map(press),
+        damageOut: hits as never,
+      }),
+      { missesOut: misses as never },
+    );
+  // Pain Suppression, 10 s .. 18 s
+  const priest = makeUnit("enemy-1", {
+    name: "EnemyPriest",
+    spec: CombatUnitSpec.Priest_Discipline,
+    class: CombatUnitClass.Priest,
+    reaction: CombatUnitReaction.Hostile,
+    auraEvents: [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "33206", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
+      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "33206", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+    ],
+  });
+  const countOf = (unit: ReturnType<typeof mage>) =>
+    buildOffensiveWasteSummary(combat, [unit], [priest]).events[0]?.wasteCasts.length ?? 0;
+
+  it("7e7b1e51 0:41:按下在减伤前、落地在减伤内的一发算进去", () => {
+    expect(
+      countOf(mage([9_700, 11_000, 12_000], [hit(10_100), hit(11_400), hit(12_400)])),
+    ).toBe(3);
+  });
+
+  it("按下在减伤内、落地在减伤结束后的一发不算", () => {
+    expect(
+      countOf(mage([11_000, 12_000, 13_000, 17_800], [hit(11_400), hit(12_400), hit(13_400), hit(18_200)])),
+    ).toBe(3);
+  });
+
+  it("同一毫秒两次按下是两发,各吃一行命中(7e7b1e51 0:44)", () => {
+    expect(
+      countOf(mage([11_000, 11_000, 12_000], [hit(11_500), hit(11_500), hit(12_400)])),
+    ).toBe(3);
+  });
+
+  it("整发被吸收:落地行是 SPELL_MISSED,同刻的 SPELL_ABSORBED 不再占一行", () => {
+    const miss = {
+      spellId: PYROBLAST,
+      spellName: "Pyroblast",
+      destUnitId: "enemy-1",
+      missType: "ABSORB",
+      timestamp: matchStart + 10_100,
+    };
+    expect(
+      countOf(mage([9_700, 11_000, 12_000], [hit(10_100, LogEvent.SPELL_ABSORBED), hit(11_400), hit(12_400)], [miss])),
+    ).toBe(3);
+  });
+
+  it("日志里没有落地行的按下,仍取按下时刻", () => {
+    expect(
+      countOf(mage([9_700, 11_000, 12_000, 13_000], [hit(11_400), hit(12_400), hit(13_400)])),
+    ).toBe(3);
+  });
+
+  it("频道后面的跳不算下一发的落地:一行只属一发,且从下一发自己的时刻往后找", () => {
+    const presses = [1_000, 4_000].map((atMs) => ({
+      spellId: PYROBLAST,
+      spellName: "Pyroblast",
+      destUnitId: "enemy-1",
+      atMs,
+    }));
+    const damageOut = [100, 1_200, 2_000, 4_300].map((t) => ({
+      ...hit(0),
+      logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: t },
+    }));
+    const landed = pressLandingsMs(presses, (p) => p.atMs, { id: "mage-1", damageOut } as never, []);
+    expect(presses.map((p) => landed.get(p))).toEqual([1_200, 4_300]);
   });
 });

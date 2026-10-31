@@ -23,6 +23,7 @@ import { applicableCCAvoidanceIds } from "./ccTrinketAnalysis";
 import {
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
+  PRESS_EFFECT_LEAD_MS,
   specToString,
 } from "./cooldowns";
 import { spellNameKey } from "./damagePress";
@@ -326,6 +327,15 @@ export function buildOffensiveWasteSummary(
         ),
     );
 
+    // the section counts what LANDED inside the defensive, and a travelling
+    // spell lands after its press (fact7 D52, 7e7b1e51 0:41)
+    const landedAtMs = pressLandingsMs(
+      castEvents,
+      (e) => castAtMs(e)!,
+      friend,
+      enemies,
+    );
+
     for (const whole of defenseWindows) {
       // a wall whose verdict for spells differs (Die by the Sword's parry):
       // its melee casts and its other casts are two readings of it
@@ -354,7 +364,7 @@ export function buildOffensiveWasteSummary(
           .filter((e) => {
             if (e.destUnitId !== window.unitId) return false;
             if (e.spellId && !takes(e.spellId)) return false;
-            const t = (castAtMs(e)! - matchStartMs) / 1000;
+            const t = (landedAtMs.get(e)! - matchStartMs) / 1000;
             if (t < window.fromSeconds || t > window.toSeconds) return false;
             if (e.spellId === null) return false;
             // round-1 retest (fact1215 idx 107): a cast the target REFLECTED
@@ -396,7 +406,7 @@ export function buildOffensiveWasteSummary(
           .map((e) => ({
             spellId: e.spellId ?? "",
             spellName: e.spellName ?? "",
-            atSeconds: (castAtMs(e)! - matchStartMs) / 1000,
+            atSeconds: (landedAtMs.get(e)! - matchStartMs) / 1000,
           }));
 
         if (wasteCasts.length < threshold) continue;
@@ -429,7 +439,89 @@ export function buildOffensiveWasteSummary(
 
 /** The cast's own REFLECT miss on `targetId` (its id or an effect aura of
  * it, logged up to `REFLECT_ROW_LAG_MS` after the press). */
-const REFLECT_ROW_LAG_MS = 1500;
+export const REFLECT_ROW_LAG_MS = 1500;
+
+/** One press of a spell, as `pressLandingsMs` needs it. */
+type LandingPress = {
+  spellId: string | null;
+  spellName: string | null;
+  destUnitId: string;
+};
+
+/**
+ * When each press landed: its own row on the target — a direct hit, a miss
+ * (immune, absorbed whole, parried, …) or the caster's aura of the spell going
+ * on — else the press itself: a spell that writes no row of its own landed at
+ * no instant the log has (fact7 D52).
+ *
+ * The log ties no row to a cast, so presses take rows in order, per target and
+ * spell (`spellNameKey`): each takes the first row not yet taken from
+ * `PRESS_EFFECT_LEAD_MS` before it to `REFLECT_ROW_LAG_MS` after it. One row
+ * per press, and two presses of one instant are two presses (7e7b1e51: two
+ * SUCCESS at 44.286, two hits at 44.882). A channel's later ticks are nobody's:
+ * the next press starts past them. Left out, so one hit is one row: periodic
+ * ticks, and SPELL_ABSORBED (a hit eaten whole also writes its SPELL_MISSED,
+ * and a part-absorbed one its damage row).
+ */
+export function pressLandingsMs<T extends LandingPress>(
+  presses: readonly T[],
+  atMsOf: (press: T) => number,
+  caster: Pick<ICombatUnit, "id" | "damageOut"> &
+    Partial<Pick<ICombatUnit, "missesOut">>,
+  targets: readonly Pick<ICombatUnit, "id" | "auraEvents">[],
+): Map<T, number> {
+  const rowsByKey = new Map<string, number[]>();
+  const add = (
+    destUnitId: string,
+    spellId: string | null | undefined,
+    spellName: string | null | undefined,
+    atMs: number,
+  ) => {
+    const key = `${destUnitId}|${spellNameKey(spellId, spellName)}`;
+    const rows = rowsByKey.get(key);
+    if (rows) rows.push(atMs);
+    else rowsByKey.set(key, [atMs]);
+  };
+  for (const d of caster.damageOut) {
+    const event = d.logLine?.event as string | undefined;
+    if (event === LogEvent.SPELL_ABSORBED) continue;
+    if (event === LogEvent.SPELL_PERIODIC_DAMAGE) continue;
+    add(d.destUnitId, d.spellId, d.spellName, d.logLine.timestamp);
+  }
+  for (const m of caster.missesOut ?? [])
+    add(m.destUnitId, m.spellId, m.spellName, m.timestamp);
+  for (const unit of targets)
+    for (const a of unit.auraEvents ?? []) {
+      if (a.srcUnitId !== caster.id) continue;
+      const event = a.logLine?.event;
+      if (
+        event === LogEvent.SPELL_AURA_APPLIED ||
+        event === LogEvent.SPELL_AURA_REFRESH
+      )
+        add(unit.id, a.spellId, a.spellName, a.logLine.timestamp);
+    }
+  for (const rows of rowsByKey.values()) rows.sort((a, b) => a - b);
+
+  const taken = new Map<string, number>();
+  const landed = new Map<T, number>();
+  const inOrder = [...presses].sort((a, b) => atMsOf(a) - atMsOf(b));
+  for (const press of inOrder) {
+    const atMs = atMsOf(press);
+    const key = `${press.destUnitId}|${spellNameKey(press.spellId, press.spellName)}`;
+    const rows = rowsByKey.get(key) ?? [];
+    let next = taken.get(key) ?? 0;
+    while (next < rows.length && rows[next]! < atMs - PRESS_EFFECT_LEAD_MS)
+      next++;
+    const row = rows[next];
+    if (row !== undefined && row <= atMs + REFLECT_ROW_LAG_MS) {
+      landed.set(press, row);
+      next++;
+    } else landed.set(press, atMs);
+    taken.set(key, next);
+  }
+  return landed;
+}
+
 function reflectedBack(
   caster: ICombatUnit,
   spellId: string,
