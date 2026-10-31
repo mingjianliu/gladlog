@@ -249,6 +249,7 @@ import * as swingTwins from "../../parser/src/l3/swingTwins";
 // (GH #76): the script is import-safe (its main() runs only when invoked as
 // argv[1]) and pulls nothing beyond storeAccess + analysis.
 import * as candidateDiagnostics from "../scripts/candidateDiagnostics";
+import * as dispelKindOfRow from "../scripts/dispelKindOfRow";
 import * as abCompareStats from "../src/ab/abCompareStats";
 import * as appCandidates from "../src/corpus/appCandidates";
 import * as baselineFindings from "../src/explore/baselineFindings";
@@ -1742,6 +1743,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/dispelKind.ts`,
     symbol: "dispelPressedBy",
     mod: dispelKind,
+  },
+  {
+    file: "packages/eval/scripts/dispelKindOfRow.ts",
+    symbol: "dispelKindOfRow",
+    mod: dispelKindOfRow,
   },
   {
     file: `${A}/utils/castPress.ts`,

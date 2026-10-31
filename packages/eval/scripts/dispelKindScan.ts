@@ -12,10 +12,12 @@
  *    patch renumbered (expected: empty).
  *
  * Runs over raw.txt of every match in the local library with the SAME
- * predicate the product uses: `classifyDispel` over a `CastMatchIndex` built
- * from SPELL_CAST_SUCCESS lines keyed by the raw source GUID. Raw-line
- * splitting / timestamp parsing go through `@gladlog/analysis`'s rawStreams
- * (BACKLOG #26's single source), same as uwcObserved.ts.
+ * reading the product uses: `dispelKindOfRow` (the actor rewrite, then
+ * `classifyDispel`) over a `CastMatchIndex` built from SPELL_CAST_SUCCESS and
+ * SPELL_EMPOWER_END lines keyed by the raw source GUID, a pet's owner read off
+ * its own cast rows and a side off the rows' reaction flags. Raw-line splitting
+ * / timestamp parsing go through `@gladlog/analysis`'s rawStreams (BACKLOG #26's
+ * single source), same as uwcObserved.ts.
  *
  *   npx tsx packages/eval/scripts/dispelKindScan.ts [--limit N] [--store DIR]
  *
@@ -29,7 +31,6 @@ import { parseArgs } from "node:util";
 
 import {
   addCastToIndex,
-  classifyDispel,
   createCastMatchIndex,
   type DispelKind,
   MOVEMENT_ROOT_BREAK_DISPEL_IDS,
@@ -38,6 +39,7 @@ import {
 } from "@gladlog/analysis";
 
 import { DEFAULT_MATCH_DIR } from "../src/explore/storeAccess";
+import { dispelKindOfRow } from "./dispelKindOfRow";
 
 const { values } = parseArgs({
   options: {
@@ -58,8 +60,14 @@ const totals: Record<DispelKind, number> = {
 };
 const perMatchPassiveShare: number[] = [];
 
+/** the reaction bits of a raw unit-flags field: friendly / neutral / hostile */
+const reactionOf = (flags: string | undefined): number =>
+  Number.parseInt(flags ?? "0", 16) & 0xf0;
+const NO_UNIT = /^0+$/;
+
 // params after splitRawLine strip the event name: [0]=srcGUID, [1]=srcName,
-// [2]=srcFlags, [3]=srcRaidFlags, [4]=destGUID, …, [8]=spellId, [9]=spellName.
+// [2]=srcFlags, [3]=srcRaidFlags, [4]=destGUID, …, [8]=spellId, [9]=spellName;
+// on a SPELL_CAST_SUCCESS [11]=infoGUID, [12]=ownerGUID.
 async function scanMatch(path: string): Promise<void> {
   const idx = createCastMatchIndex();
   const dispels: Array<{
@@ -68,6 +76,8 @@ async function scanMatch(path: string): Promise<void> {
     spellName: string;
     timestamp: number;
   }> = [];
+  const sides = new Map<string, number>();
+  const owners = new Map<string, string>();
   const rl = createInterface({
     input: createReadStream(path, { encoding: "utf8" }),
   });
@@ -76,14 +86,21 @@ async function scanMatch(path: string): Promise<void> {
     if (!split) continue;
     if (
       split.eventName !== "SPELL_CAST_SUCCESS" &&
+      split.eventName !== "SPELL_EMPOWER_END" &&
       split.eventName !== "SPELL_DISPEL"
     )
       continue;
     const ts = parseRawTimestamp(split.datePart);
     if (ts == null) continue;
     const p = split.params;
-    if (split.eventName === "SPELL_CAST_SUCCESS") {
+    sides.set(p[0] ?? "", reactionOf(p[2]));
+    if (split.eventName === "SPELL_EMPOWER_END") {
+      // the release acts, as in `buildCastMatchIndex`
       addCastToIndex(idx, p[0] ?? "", p[8], p[9], ts);
+    } else if (split.eventName === "SPELL_CAST_SUCCESS") {
+      addCastToIndex(idx, p[0] ?? "", p[8], p[9], ts, p[4]);
+      if (p[11] === p[0] && p[12] && !NO_UNIT.test(p[12]))
+        owners.set(p[0] ?? "", p[12]);
     } else {
       dispels.push({
         srcUnitId: p[0] ?? "",
@@ -95,7 +112,11 @@ async function scanMatch(path: string): Promise<void> {
   }
   let passive = 0;
   for (const d of dispels) {
-    const kind = classifyDispel(idx, d);
+    const kind = dispelKindOfRow(
+      idx,
+      { ...d, srcOwnerId: owners.get(d.srcUnitId) },
+      (presser) => sides.get(presser) === sides.get(d.srcUnitId),
+    );
     total++;
     totals[kind]++;
     if (kind !== "deliberate") passive++;

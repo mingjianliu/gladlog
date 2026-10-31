@@ -1,14 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- fake legacy parse objects, the checks read them untyped */
-import { ensureAnalysisData } from "@gladlog/analysis";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import {
+  addCastToIndex,
+  buildCastMatchIndex,
+  createCastMatchIndex,
+  ensureAnalysisData,
+  reconstructDispelSummary,
+} from "@gladlog/analysis";
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { makeUnit } from "../../analysis/test/ported/testHelpers";
+import { dispelKindOfRow } from "../scripts/dispelKindOfRow";
 import { run as runCastThroughStun } from "../scripts/scan5/castThroughStun";
 import { run as runDamageBasis } from "../scripts/scan5/damageBasis";
 import { run as runFriendlyOffensiveTag } from "../scripts/scan5/friendlyOffensiveTag";
 import { run as runKillAttemptFacts } from "../scripts/scan5/killAttemptFacts";
+import { run as runListGap } from "../scripts/scan5/listGap";
 import { run as runOverrideVariant } from "../scripts/scan5/overrideVariant";
 import { run as runPressFiling } from "../scripts/scan5/pressFiling";
+import { run as runSilenceKick } from "../scripts/scan5/silenceKick";
 import { run as runSingles14b } from "../scripts/scan5/singles14b";
 import { run as runSpanFacts } from "../scripts/scan5/spanFacts";
 
@@ -429,6 +443,74 @@ describe("abilityIntoWallShare", () => {
         ),
       ).toEqual([]);
     });
+
+    const parryRow = (src: string, id: string, name: string) =>
+      `10/28/2026 16:54:36.317-7  SPELL_MISSED,${src},"${src}",0x511,0x80000000,Target,"Target",0x10548,0x80000000,${id},"${name}",0x1,PARRY,nil,ST`;
+
+    it("flags a spell the log parried, whatever the tables say of it (Lightning Bolt, unparryable in DB2)", () => {
+      expect(
+        of(
+          scan(runDamageBasis, players("188196", "Lightning Bolt"), lines, "", [
+            parryRow("Ally", "188196", "Lightning Bolt"),
+          ]),
+          "abilityIntoWallShare",
+        ),
+      ).toHaveLength(1);
+    });
+
+    it("a PARRY row of the id speaks whoever cast it", () => {
+      expect(
+        of(
+          scan(runDamageBasis, players("188196", "Lightning Bolt"), lines, "", [
+            parryRow("Someone", "188196", "Lightning Bolt"),
+          ]),
+          "abilityIntoWallShare",
+        ),
+      ).toHaveLength(1);
+    });
+
+    it("a pet's PARRY row under another id speaks for its owner's press of that name", () => {
+      const pet = { ...unit("Pet", "9", 1), ownerId: "Ally" };
+      expect(
+        of(
+          scan(
+            runDamageBasis,
+            [...players("188196", "Lightning Bolt"), pet],
+            lines,
+            "",
+            [parryRow("Pet", "999991", "Lightning Bolt")],
+          ),
+          "abilityIntoWallShare",
+        ),
+      ).toHaveLength(1);
+    });
+
+    it("another player's PARRY row of a same-named id says nothing of this press", () => {
+      expect(
+        of(
+          scan(runDamageBasis, players("188196", "Lightning Bolt"), lines, "", [
+            parryRow("Someone", "999991", "Lightning Bolt"),
+          ]),
+          "abilityIntoWallShare",
+        ),
+      ).toEqual([]);
+    });
+
+    it("with no PARRY row, DB2 reads the row a press landed as (Kill Command: press 34026, row 83381)", () => {
+      const roster = team(
+        {
+          damageOut: [
+            dmg("12294", "Mortal Strike", 500),
+            dmg("83381", "Kill Command", 500),
+          ],
+          spellCastEvents: presses("34026", "Kill Command"),
+        },
+        low,
+      );
+      expect(
+        of(scan(runDamageBasis, roster, lines), "abilityIntoWallShare"),
+      ).toHaveLength(1);
+    });
   });
 
   it("flags a high-value spell cast into the wall and left off the line (D53)", () => {
@@ -755,6 +837,104 @@ describe("killOwnAreaSaveUncredited", () => {
       ),
     ).toHaveLength(1);
   });
+
+  const immune = "forced a full immunity (a win — re-open after it drops)";
+  const onTarget = (event: string, ms: number, id: string, name: string) => ({
+    ...aura(event, ms, id, name),
+    destUnitId: "Target",
+  });
+
+  it("flags an immunity the rows do not hold", () => {
+    expect(
+      of(
+        scan(runKillAttemptFacts, team(), [line(immune)]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("flags an immunity that ended before the bracket", () => {
+    const over = [
+      onTarget(APPLIED_ROW, 1_000, "642", "Divine Shield"),
+      onTarget(REMOVED_ROW, 8_000, "642", "Divine Shield"),
+    ];
+    expect(
+      of(
+        scan(runKillAttemptFacts, team(over), [line(immune)]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("a non-immunity aura is no immunity's row", () => {
+    expect(
+      of(
+        scan(runKillAttemptFacts, team([suppression]), [line(immune)]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("the immunity's rows hold: inside the bracket, or already up from before it", () => {
+    for (const rows of [
+      [onTarget(APPLIED_ROW, 30_000, "642", "Divine Shield")],
+      [
+        onTarget(APPLIED_ROW, 5_000, "45438", "Ice Block"),
+        onTarget(REMOVED_ROW, 15_000, "45438", "Ice Block"),
+      ],
+      // the five seconds after the bracket the product gives an immunity
+      [onTarget(APPLIED_ROW, 42_000, "11327", "Vanish")],
+    ])
+      expect(
+        of(
+          scan(runKillAttemptFacts, team(rows), [line(immune)]),
+          "killOwnAreaSaveUncredited",
+        ),
+      ).toEqual([]);
+  });
+
+  it("flags a wall that ended before the bracket", () => {
+    const over = [
+      onTarget(APPLIED_ROW, 1_000, "33206", "Pain Suppression"),
+      onTarget(REMOVED_ROW, 8_000, "33206", "Pain Suppression"),
+    ];
+    expect(
+      of(
+        scan(runKillAttemptFacts, team(over), [
+          line("popped Pain Suppression"),
+        ]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("`target trinketed out` needs the trinket's own row", () => {
+    const players = team();
+    expect(
+      of(
+        scan(runKillAttemptFacts, players, [line("target trinketed out")]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toHaveLength(1);
+    (players[1] as any).spellCastEvents.push(
+      cast(20_000, "Target", "336126", "Gladiator's Medallion"),
+    );
+    expect(
+      of(
+        scan(runKillAttemptFacts, players, [line("target trinketed out")]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toEqual([]);
+    const adaptation = team([
+      onTarget(APPLIED_ROW, 20_000, "283167", "PvP Trinket"),
+    ]);
+    expect(
+      of(
+        scan(runKillAttemptFacts, adaptation, [line("target trinketed out")]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("killAnchorSkippedOpener", () => {
@@ -802,6 +982,19 @@ describe("killAnchorSkippedOpener", () => {
       team({
         ...wings,
         damageOut: [hit(86_000, "Target", 100), hit(87_000, "Other", 900)],
+      }),
+      [line("Ultimate Penitence")],
+    );
+    expect(of(seen, "killAnchorSkippedOpener")).toEqual([]);
+  });
+
+  it("a Holy Paladin's Avenging Wrath opens no attempt (signed), a Retribution's does", () => {
+    const seen = scan(
+      runKillAttemptFacts,
+      team({
+        ...wings,
+        spec: CombatUnitSpec.Paladin_Holy,
+        damageOut: [hit(86_000, "Target", 100)],
       }),
       [line("Ultimate Penitence")],
     );
@@ -924,6 +1117,27 @@ describe("freeToPressBelowLog", () => {
 
   it("flags the stun counted against a spell that goes out through it (D21)", () => {
     expect(checked({}, "0.0")).toHaveLength(1);
+  });
+
+  const flashHeal = (ms: number) => ({
+    ...cast(ms, "Priest", "2061", "Flash Heal"),
+  });
+  const flashHealLine =
+    "[1:14] Dead died — Priest had Flash Heal available, caster's longest stretch free to cast it 0.0s of the last 5s";
+  const flashChecked = (ms: number) =>
+    of(
+      scan(runCastThroughStun, team({ spellCastEvents: [flashHeal(ms)] }), [
+        flashHealLine,
+      ]),
+      "freeToPressBelowLog",
+    );
+
+  it("a SUCCESS inside a stun says the spell goes out through it, whatever the attribute says", () => {
+    expect(flashChecked(61_000)).toHaveLength(1);
+  });
+
+  it("a SUCCESS on the stun's edge says nothing: it may be logged across it", () => {
+    expect(flashChecked(60_050)).toEqual([]);
   });
 });
 
@@ -1094,6 +1308,58 @@ describe("intoDefenseLanded", () => {
       ],
     };
     expect(seen(ally, "Pyroblast")).toHaveLength(1);
+  });
+});
+
+describe("intoDefenseLanded: the wall's span is its own rows", () => {
+  const rows = (...pairs: Array<[string, number]>) =>
+    pairs.map(([event, ms]) => ({
+      ...aura(event, ms, "22812", "Barkskin"),
+      destUnitId: "Target",
+      srcUnitId: "Target",
+    }));
+  const press = (ms: number) => cast(ms, "Ally", "1329", "Mutilate", "Target");
+  const hit = (ms: number) =>
+    rowOf(LogEvent.SPELL_DAMAGE, ms, {
+      spellId: "1329",
+      spellName: "Mutilate",
+      destUnitId: "Target",
+    });
+  const seen = (wall: any[], list: string) =>
+    of(
+      scan(
+        runSingles14b,
+        [
+          unit("Ally", "1", 1, {
+            spellCastEvents: [press(31_000), press(36_000)],
+            damageOut: [hit(31_100), hit(36_100)],
+          }),
+          unit("Target", "2", 2, { auraEvents: wall }),
+        ],
+        [`  [0:30] Assassination Rogue (Ally): ${list} into Target's Barkskin`],
+      ),
+      "intoDefenseLanded",
+    );
+
+  it("a REMOVED and APPLIED a millisecond apart are one wall", () => {
+    const wall = rows(
+      [APPLIED_ROW, 30_000],
+      [REMOVED_ROW, 33_000],
+      [APPLIED_ROW, 33_001],
+      [REMOVED_ROW, 40_000],
+    );
+    expect(seen(wall, "Mutilate ×2")).toEqual([]);
+  });
+
+  it("a real end and a later application are two: the second's hit is no hit into the first", () => {
+    const wall = rows(
+      [APPLIED_ROW, 30_000],
+      [REMOVED_ROW, 33_000],
+      [APPLIED_ROW, 35_000],
+      [REMOVED_ROW, 40_000],
+    );
+    expect(seen(wall, "Mutilate ×2")).toHaveLength(1);
+    expect(seen(wall, "Mutilate")).toEqual([]);
   });
 });
 
@@ -1278,5 +1544,240 @@ describe("kitRangeBelowSeen", () => {
         ],
       }),
     ).toHaveLength(1);
+  });
+});
+
+describe("listGapPress", () => {
+  // Ravager: 90 s, on the roster
+  const pressAt = (who: string, ms: number) =>
+    cast(ms, who, "228920", "Ravager");
+  const players = () => [
+    unit("Owner", "1", 1, {
+      info: { teamId: "0" },
+      spec: CombatUnitSpec.Warrior_Arms,
+      spellCastEvents: [pressAt("Owner", 10_200)],
+    }),
+    unit("Enemy", "4", 2, {
+      info: { teamId: "1" },
+      spec: CombatUnitSpec.Warrior_Fury,
+      spellCastEvents: [pressAt("Enemy", 10_400)],
+    }),
+  ];
+  const gaps = (lines: string[], roster = players()) =>
+    of(scan(runListGap, roster, lines), "listGapPress");
+  const youLine = "  0:10  [YOU] [CD]   Ravager (self: 91% HP, +1%/s, 26k DPS)";
+  const enemyLine = "  0:10  [ENEMY CD]   4(FWarrior) (Fury Warrior): Ravager";
+
+  it("flags a press hidden behind another player's line of the same spell", () => {
+    const seen = gaps([enemyLine]);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatch(/^Owner /);
+  });
+
+  it("each press its own line", () => {
+    expect(gaps([youLine, enemyLine])).toEqual([]);
+  });
+
+  it("`(by N)` names the caster, not the line's first unit", () => {
+    const cc = (by: string) =>
+      `  0:10  [CC ON ENEMY]   4(FWarrior) ← Ravager (by ${by}) (2s) [DR: Stun Full]`;
+    expect(gaps([cc("1(AWarrior)"), enemyLine])).toEqual([]);
+    expect(gaps([cc("4(FWarrior)")])).toHaveLength(1);
+  });
+
+  it("`your X` is the owner's", () => {
+    expect(
+      gaps([
+        "  0:10  [KICK]   your Ravager on 4(FWarrior) — hit nothing",
+        enemyLine,
+      ]),
+    ).toEqual([]);
+  });
+
+  it("`N's X` names the caster, wherever N stands in the line", () => {
+    const broken = (by: string) =>
+      `  0:10  [CC ON ENEMY]   4(FWarrior) ← Hammer of Justice (by 2(RPaladin)) (2s) | broken by ${by}'s Ravager`;
+    expect(gaps([broken("1(AWarrior)"), enemyLine])).toEqual([]);
+    expect(gaps([broken("4(FWarrior)")])).toHaveLength(1);
+  });
+
+  it("a removal naming a debuff is no line of the debuff's press (Mass Entanglement)", () => {
+    expect(
+      gaps([
+        "  0:10  [CLEANSE]   1(AWarrior) dispelled Ravager off 1(AWarrior) (Purify)",
+        youLine,
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("a trinket line is its own subject's", () => {
+    const roster = [
+      unit("Owner", "1", 1, {
+        info: { teamId: "0" },
+        spec: CombatUnitSpec.Warrior_Arms,
+        spellCastEvents: [cast(10_200, "Owner", "336126", "Medallion")],
+      }),
+      unit("Enemy", "4", 2, {
+        info: { teamId: "1" },
+        spec: CombatUnitSpec.Warrior_Fury,
+      }),
+    ];
+    expect(
+      gaps(["  0:10  [ENEMY TRINKET]   4(FWarrior) used PvP trinket"], roster),
+    ).toHaveLength(1);
+    expect(
+      gaps(["  0:10  [TRINKET]   1(AWarrior) used PvP trinket"], roster),
+    ).toEqual([]);
+  });
+});
+
+describe("silenceFiledAsKick", () => {
+  // the check reads SpellEffect from the datagen cache, which CI has not got:
+  // a two-row table of its own. Silence has aura 27 and no effect 68.
+  beforeAll(() => {
+    const dir = mkdtempSync(join(tmpdir(), "silence-kick-"));
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "SpellEffect-12.1.5.1.csv"),
+      "SpellID,Effect,EffectAura\n15487,6,27\n47528,68,0\n",
+    );
+    process.env.DATAGEN_CACHE = dir;
+  });
+
+  const players = () => [
+    unit("Owner", "1", 1, {
+      info: { teamId: "0" },
+      spec: CombatUnitSpec.Mage_Frost,
+    }),
+    unit("Priest", "2", 2, {
+      info: { teamId: "1" },
+      spec: CombatUnitSpec.Priest_Shadow,
+      spellCastEvents: [cast(10_000, "Priest", "15487", "Silence", "Owner")],
+    }),
+  ];
+  const row = (yd: number) =>
+    `- id=kick-eaten:1 type=kick-eaten t=10.0s units=Owner facts={maxKickRangeYd=${yd}}`;
+
+  it("flags a silence's own range read as a kicker's, from the DB2 rows and the casts alone", () => {
+    expect(
+      scan(runSilenceKick, players(), [], row(40)).map((v) => v.kind),
+    ).toEqual(["kickersInRange"]);
+  });
+
+  it("reads a range no silence of the round has", () => {
+    expect(scan(runSilenceKick, players(), [], row(25))).toEqual([]);
+  });
+
+  it("flags a `[KICK] … missed` line of a silence", () => {
+    expect(
+      scan(runSilenceKick, players(), [
+        "  0:10  [KICK]   2(SPriest)'s Silence on 1(FMage) missed — IMMUNE",
+      ]).map((v) => v.kind),
+    ).toEqual(["[KICK] miss"]);
+  });
+});
+
+describe("dispelKindOfRow: the audit readers' kind is the product's", () => {
+  const BANDAGE = "212640";
+  const T = 1_026_200;
+  const dispelCast = (srcUnitId: string, ms: number, destUnitId?: string) => ({
+    spellId: BANDAGE,
+    spellName: "Mending Bandage",
+    srcUnitId,
+    destUnitId,
+    timestamp: ms,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: ms,
+      parameters: [],
+    },
+  });
+  /** one SPELL_DISPEL, source `lock`, in the fixture of each D18 shape */
+  const shape = (casts: Record<string, any[]>) => {
+    const fill = (id: string) => {
+      const u = makeUnit(id, {
+        name: id,
+        spec: CombatUnitSpec.Warlock_Affliction,
+        spellCastEvents: casts[id] ?? [],
+      } as any) as any;
+      return u;
+    };
+    const hunter = fill("hunter");
+    const lock = fill("lock");
+    const foe = fill("foe");
+    foe.reaction = 2;
+    hunter.reaction = lock.reaction = 1;
+    lock.actionOut = [
+      {
+        timestamp: T,
+        logLine: { event: LogEvent.SPELL_DISPEL, timestamp: T, parameters: [] },
+        spellId: BANDAGE,
+        spellName: "Mending Bandage",
+        extraSpellId: "8122",
+        extraSpellName: "Psychic Scream",
+        srcUnitId: "lock",
+        destUnitId: "lock",
+        destUnitName: "lock",
+      },
+    ];
+    const product = reconstructDispelSummary(
+      [hunter, lock] as any,
+      [foe] as any,
+      { startTime: 1_000_000, endTime: 1_100_000 },
+    ).allyCleanse[0]!.dispelKind;
+    const units = [hunter, lock, foe];
+    const audit = dispelKindOfRow(
+      buildCastMatchIndex(units),
+      {
+        srcUnitId: "lock",
+        spellId: BANDAGE,
+        spellName: "Mending Bandage",
+        timestamp: T,
+      },
+      (id) => units.find((u) => u.id === id)?.reaction === lock.reaction,
+    );
+    return { product, audit };
+  };
+
+  it("a teammate's press logged self → self (D18): deliberate on both", () => {
+    expect(shape({ hunter: [dispelCast("hunter", T - 100, "lock")] })).toEqual({
+      product: "deliberate",
+      audit: "deliberate",
+    });
+  });
+
+  it("the source's own press: deliberate on both", () => {
+    expect(shape({ lock: [dispelCast("lock", T - 100, "lock")] })).toEqual({
+      product: "deliberate",
+      audit: "deliberate",
+    });
+  });
+
+  it("an enemy's press aimed at the source: proc on both, the actor stays", () => {
+    expect(shape({ foe: [dispelCast("foe", T - 100, "lock")] })).toEqual({
+      product: "proc",
+      audit: "proc",
+    });
+  });
+
+  it("no press at all: proc on both", () => {
+    expect(shape({})).toEqual({ product: "proc", audit: "proc" });
+  });
+
+  it("a press outside the window: proc", () => {
+    const i = createCastMatchIndex();
+    addCastToIndex(i, "hunter", BANDAGE, "Mending Bandage", T - 5_000, "lock");
+    expect(
+      dispelKindOfRow(
+        i,
+        {
+          srcUnitId: "lock",
+          spellId: BANDAGE,
+          spellName: "Mending Bandage",
+          timestamp: T,
+        },
+        () => true,
+      ),
+    ).toBe("proc");
   });
 });

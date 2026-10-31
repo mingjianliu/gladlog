@@ -10,8 +10,9 @@
  * whose official cooldown (DB2, `effectiveCooldownSeconds`, ≥ 30 s) makes it a
  * major button. Rendered truth, the context text only:
  *  - `pressLine`: a timeline line of a press tag within 1 s of the press that
- *    names the spell (a damage / CC tag naming it — `[CC BROKEN] … ← Odyn's
- *    Fury` — is no press line);
+ *    names the spell with this caster behind it (a damage / CC tag naming it —
+ *    `[CC BROKEN] … ← Odyn's Fury` — is no press line, and another player's
+ *    line of the same spell is no line of this press);
  *  - `kit`: the caster's `<cooldowns>` row names it.
  *
  * Kinds: `<filled|listed|offList>/<side>/<noLine|kitOnly>`. `offList` is what
@@ -43,6 +44,9 @@ const PRESS_TAG =
   /\[(YOU|TEAM)\] \[(CD|CC|PROC|CAST)\]|\[ENEMY (CD|DEF|UTILITY|HEAL CD|TRINKET|HARD CAST|PURGE|CLEANSE)\]|\[TRINKET\]|\[(CLEANSE|PURGE|GRIP|KICK|DISARM|SILENCE|SHIELD|ROOT|DISPEL|MINOR DISPELS|CC ON ENEMY|CC ON TEAM|CC NOT LANDED|ENEMY SUMMON)\]/;
 const LINE_AT = /^\s*(\d+):(\d\d)\s+(.*)$/;
 const TRINKET_TAG = /\[(ENEMY )?TRINKET\]/;
+const FIRST_UNIT = /(?:^|[\s(])(\d+)\(/;
+const BY_UNIT = /^ \((?:by|from) (\d+)\(/;
+const OWNED_BY_UNIT = /(\d+)\([^)]*\)'s (?:\w+'s )?$/;
 /** Gladiator's Medallion, Adaptation's activation, the two racials that share
  * the PvP trinket's lock: printed by `[TRINKET]` / `[ENEMY TRINKET]` */
 const TRINKET_IDS = new Set(["336126", "336135", "59752", "7744"]);
@@ -84,7 +88,33 @@ function kitOf(lines: string[], name: string): string {
   return "";
 }
 
+/**
+ * Whose press a line's mention of `spell` states: the unit its own `(by N)` /
+ * `(from N)` names (`← Dragon's Breath (by 3(FMage))`) or `N's` claims
+ * (`interrupted 5(SPriest)'s Void Torrent`), the owner on a `[YOU]` line or a
+ * `your X`, else the line's first unit (`[TEAM] [CD] 3(AWarrior) …`, `[PURGE]
+ * 1(FMage) purged … (Spellsteal)`). `spell` undefined: the line's own subject,
+ * a trinket line naming no spell.
+ */
+function lineCaster(
+  text: string,
+  spell: string | undefined,
+  ownerPid: string | undefined,
+): string | undefined {
+  const at = spell === undefined ? -1 : text.indexOf(spell);
+  if (at >= 0) {
+    const by = BY_UNIT.exec(text.slice(at + spell!.length));
+    if (by) return by[1];
+    const owns = OWNED_BY_UNIT.exec(text.slice(0, at));
+    if (owns) return owns[1];
+  }
+  if (/\[YOU\]|\byour /.test(at >= 0 ? text.slice(0, at) : text))
+    return ownerPid;
+  return FIRST_UNIT.exec(text)?.[1];
+}
+
 export function run(ctx: IRoundCtx): void {
+  const ownerPid = ctx.pidOf(ctx.owner.name);
   const friendly = new Set(
     ctx.players
       .filter((u) => u.info?.teamId === ctx.owner.info?.teamId)
@@ -98,6 +128,7 @@ export function run(ctx: IRoundCtx): void {
     .filter((x): x is { t: number; text: string } => x !== undefined);
   for (const unit of ctx.players) {
     const kit = kitOf(ctx.lines, unit.name);
+    const pid = ctx.pidOf(unit.name);
     const side =
       unit.id === ctx.owner.id
         ? "owner"
@@ -118,7 +149,8 @@ export function run(ctx: IRoundCtx): void {
           (l) =>
             Math.abs(l.t - sec) <= 1 &&
             l.text.includes(name) &&
-            /\[PROC\]|\[ENEMY CD\]/.test(l.text),
+            /\[PROC\]|\[ENEMY CD\]/.test(l.text) &&
+            lineCaster(l.text, name, ownerPid) === pid,
         )
       )
         continue;
@@ -143,8 +175,12 @@ export function run(ctx: IRoundCtx): void {
       const pressLine = timed.some(
         (l) =>
           Math.abs(l.t - sec) <= 1 &&
-          ((l.text.includes(name) && PRESS_TAG.test(l.text)) ||
-            (TRINKET_IDS.has(id) && TRINKET_TAG.test(l.text))),
+          ((l.text.includes(name) &&
+            PRESS_TAG.test(l.text) &&
+            lineCaster(l.text, name, ownerPid) === pid) ||
+            (TRINKET_IDS.has(id) &&
+              TRINKET_TAG.test(l.text) &&
+              lineCaster(l.text, undefined, ownerPid) === pid)),
       );
       if (pressLine) continue;
       const inKit = kit.includes(name);

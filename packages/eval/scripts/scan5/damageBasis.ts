@@ -37,10 +37,18 @@
  *    spell, deferral rows out. One wall's list is all its lines (Die by the
  *    Sword prints two), and a cast the wall does not stop is no cast into it:
  *    a school the immunity leaves out, or a wall's kill-live-gated part with
- *    the target at or below the gate. What a parry stops is the product's own
- *    predicate (`parryStopsAttack`, DB2), so Final Verdict at 12 yd into Die
- *    by the Sword stays flagged. 59978653 r1 0:30 stayed flagged until Void
- *    Blast left the product's not-a-press list.
+ *    the target at or below the gate. What a parry stops is read off the
+ *    log's own PARRY rows first: a spell with one this round (any caster's by
+ *    id, the caster's or its pet's by name: Kill Command's press 34026, its
+ *    row 83381) is a spell a parry stops, whatever the tables say. Where the
+ *    round holds no PARRY row of it the expected side is DB2 alone, the
+ *    generated tables on the rows the spell landed as, then the press, so
+ *    Final Verdict at 12 yd into Die by the Sword stays flagged with none.
+ *    What the check can no longer see: a wrong DB2 row on a spell nobody
+ *    parried this round. The tables are the product's too, so the check and
+ *    the product then agree in error; reach no longer speaks for them. Only a
+ *    PARRY row catches that. 59978653 r1 0:30 stayed flagged until Void Blast
+ *    left the product's not-a-press list.
  *  - `postCcAbsorbedUnsaid` (D70): a missed-cleanse row whose 5 s after the
  *    control held ≥ 1k absorbed with no absorbed fact beside `postCcDamageK`.
  *    6ac699c9 0:25: 272k.
@@ -60,12 +68,15 @@ import {
   mitigationVerdictOf,
   nonMeleeMitigationVerdictOf,
 } from "@gladlog/analysis/src/data/mitigationVerdicts";
-import { parryStopsAttack } from "@gladlog/analysis/src/data/spellParry";
-import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
 import {
-  pressLandingCaster,
-  pressLandingRows,
-} from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
+  PARRYABLE_SPELL_IDS,
+  UNPARRYABLE_SPELL_IDS,
+} from "@gladlog/analysis/src/data/spellParryGenerated";
+import {
+  MELEE_RANGE_YD,
+  spellRangeYards,
+} from "@gladlog/analysis/src/data/spellReach";
+import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
 
 import {
   ABSORBED,
@@ -90,7 +101,7 @@ export const CHECKS = [
   "stackedWallPrice",
 ] as const;
 
-const DEFERRAL_SHIELDS = new Set(["357170", "410355", "386124"]);
+export const DEFERRAL_SHIELDS = new Set(["357170", "410355", "386124"]);
 const REDISTRIBUTION_IDS = new Set(["98021", "451963", "469704"]);
 const REDISTRIBUTION_NAMES = [
   "Spirit Link",
@@ -359,7 +370,44 @@ function readHpAtOrBelow(
   );
 }
 
+const PARRY_ROW =
+  /\bSPELL_MISSED,([^,]+),.*?,(\d+),"([^"]*)",0x[0-9a-fA-F]+,PARRY\b/;
+
+/** the round's PARRY rows: `ids` whoever cast them, `named` as `caster|spell`
+ * with a pet's rows under its owner */
+function parriedThisRound(ctx: IRoundCtx): {
+  ids: Set<string>;
+  named: Set<string>;
+} {
+  const ids = new Set<string>();
+  const named = new Set<string>();
+  for (const l of ctx.rawLines) {
+    const m = PARRY_ROW.exec(l);
+    if (!m) continue;
+    ids.add(m[2]!);
+    const owner = ctx.units.find((u) => u.id === m[1])?.ownerId;
+    const caster = owner && !/^0+$/.test(owner) ? owner : m[1]!;
+    named.add(`${caster}|${nameOf(m[2]!, m[3]!)}`);
+  }
+  return { ids, named };
+}
+
+/** DB2's word on a press, for a spell the round holds no PARRY row of: any row
+ * it landed as, then the press; an id in neither table falls to the press's
+ * reach, an unknown reach reads as melee */
+function db2Parryable(
+  pressId: string,
+  rowIds: Set<string> | undefined,
+): boolean {
+  const ids = [...(rowIds ?? []), pressId];
+  if (ids.some((id) => PARRYABLE_SPELL_IDS.has(id))) return true;
+  if (ids.some((id) => UNPARRYABLE_SPELL_IDS.has(id))) return false;
+  const reach = spellRangeYards(pressId);
+  return reach === null || reach <= MELEE_RANGE_YD;
+}
+
 function abilityIntoWallShare(ctx: IRoundCtx): void {
+  const parried = parriedThisRound(ctx);
   const friendIds = new Set(
     ctx.players
       .filter((p) => p.reaction === ctx.owner.reaction)
@@ -389,6 +437,8 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
         ? nameOf(d.attackSpellId, d.attackSpellName) || "melee"
         : nameOf(d.spellId, d.spellName) || "melee";
     const totals = new Map<string, number>();
+    // the ids a spell's rows are logged under, for DB2's reading of it
+    const rowIdsOf = new Map<string, Set<string>>();
     let all = 0;
     for (const d of (friend.damageOut ?? []) as any[]) {
       if (friendIds.has(d.destUnitId)) continue;
@@ -397,6 +447,12 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
       const a = Math.abs(d.effectiveAmount ?? 0);
       totals.set(name(d), (totals.get(name(d)) ?? 0) + a);
       all += a;
+      const rowId = ev(d) === ABSORBED ? d.attackSpellId : d.spellId;
+      if (rowId)
+        rowIdsOf.set(
+          name(d),
+          (rowIdsOf.get(name(d)) ?? new Set<string>()).add(String(rowId)),
+        );
     }
     const lo = ctx.start + secOfTag(m[1]!, m[2]!) * 1000;
     const auras = ((target.auraEvents ?? []) as any[]).filter(
@@ -409,23 +465,18 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
     const down = auras.find((a) => ev(a) === REMOVED && tsOf(a) > tsOf(up));
     const toMs = down ? tsOf(down) : ctx.end;
     const listed = listedOf.get(intoKey(m))!;
-    // the wall's verdict for what a parry cannot stop can be a gated one, read
-    // on the attack each press landed as, like the product's two lines
+    // the wall's verdict for what a parry cannot stop can be a gated one
     const wallKey = String(up.spellId);
     const rangedGated =
       nonMeleeMitigationVerdictOf(wallKey) === "kill-live-gated" &&
       mitigationVerdictOf(wallKey) !== "kill-live-gated" &&
       readHpAtOrBelow(ctx, target, tsOf(up), toMs, KILL_LIVE_HP_PCT);
-    const landings = rangedGated
-      ? pressLandingRows(
-          successesOf(friend).filter((c: any) => c.destUnitId === target.id),
-          tsOf,
-          pressLandingCaster(friend, ctx.units),
-          [target],
-        )
-      : null;
     for (const [spell, v] of totals) {
       if (v < all * HIGH_VALUE_SHARE || listed.includes(spell)) continue;
+      const parryStops = (id: string) =>
+        parried.ids.has(id) ||
+        parried.named.has(`${friend.id}|${spell}`) ||
+        db2Parryable(id, rowIdsOf.get(spell));
       const casts = successesOf(friend).filter(
         (c) =>
           tsOf(c) >= tsOf(up) &&
@@ -435,10 +486,7 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
           // a school the immunity does not stop (DB2 masks) goes through it:
           // Crusading Strikes (Physical) into Spellwarding (Magic)
           immunityCoversSpell(wallKey, c.spellId) !== false &&
-          !(
-            landings &&
-            !parryStopsAttack(String(c.spellId), landings.get(c)?.spellId)
-          ),
+          !(rangedGated && !parryStops(String(c.spellId))),
       );
       if (casts.length < WALL_MIN_CASTS) continue;
       ctx.violate(

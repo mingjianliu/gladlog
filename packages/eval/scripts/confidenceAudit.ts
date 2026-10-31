@@ -23,7 +23,6 @@
  */
 import {
   buildCastMatchIndex,
-  classifyDispel,
   type DispelKind,
   ensureAnalysisData,
   extractCandidateFindings,
@@ -37,6 +36,8 @@ import {
 } from "@gladlog/parser-compat";
 import { readFileSync } from "fs";
 import { gunzipSync } from "zlib";
+
+import { dispelKindOfRow } from "./dispelKindOfRow";
 
 // Prompt builders read the background-loaded talent / spell-name tables
 // (data/ensure.ts contract) — without this the first combats are degraded.
@@ -102,15 +103,21 @@ for (const f of files) {
             continue;
           const removed = (a as { extraSpellId?: string }).extraSpellId;
           if (!removed) continue;
-          const kind = classifyDispel(castIndex, {
-            srcUnitId: a.srcUnitId,
-            srcOwnerId: (legacy.units as Record<string, { ownerId?: string }>)[
-              a.srcUnitId
-            ]?.ownerId,
-            spellId: a.spellId,
-            spellName: a.spellName,
-            timestamp: a.timestamp,
-          });
+          const roster = legacy.units as Record<
+            string,
+            { ownerId?: string; reaction?: number }
+          >;
+          const kind = dispelKindOfRow(
+            castIndex,
+            {
+              srcUnitId: a.srcUnitId,
+              srcOwnerId: roster[a.srcUnitId]?.ownerId,
+              spellId: a.spellId,
+              spellName: a.spellName,
+              timestamp: a.timestamp,
+            },
+            (presser) => roster[presser]?.reaction === u.reaction,
+          );
           kindTally[kind]++;
           if (kind === "rider") {
             riderOnlyIds.set(removed, (riderOnlyIds.get(removed) ?? 0) + 1);
