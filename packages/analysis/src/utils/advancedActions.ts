@@ -44,12 +44,14 @@ const STALE_MAX_HP_CURRENT_SLACK = 0.05;
  * must sit to the reading before it, in HP points. */
 const STALE_MAX_HP_MIN_DIP_PCT = 3;
 const STALE_MAX_HP_RECOVERED_PCT = 5;
-/** The step's own row must give back this share of the dip: a dip it keeps is
- * HP that went (a hit, then a proportional shift). The gap in current cannot
- * tell the two: on the 605 raw logs it runs to 5 % of the new max on both, the
- * 4,711 rows the step recovers (p99 4.5 %) and the 816 it does not (p99 4.8 %),
- * which read as stale before (fact7 r6, codex 03-2). */
-const STALE_MAX_HP_STEP_RECOVERS = 0.5;
+/** Across the step the current must be carried, not rescaled with the max: the
+ * step's row is read against the row just before it, 0 = current rescaled by
+ * new max / old max (a hit, then a proportional shift: the dip was HP), 1 =
+ * current carried (a stale max). Only this pair decides: hits inside the run
+ * move its first row (1-5-13 2:14, Rallying Cry ending, 0.5 s of hits on it).
+ * 2,590 runs on the 605 raw logs: 2,333 sit in 0.75–1.25 and 109 below this
+ * (fact7 r6, codex 03-2). */
+const STALE_MAX_HP_STEP_CARRIES = 0.5;
 
 const staleMaxHpRowsCache = new WeakMap<
   IAdvancedAction[],
@@ -103,12 +105,14 @@ export function staleMaxHpRows(
     if (i === j || i === 0) continue;
     const before = pct(rows[i - 1]!);
     const first = rows[i]!;
-    const dip = before - pct(first);
+    const last = rows[j - 1]!.advancedActorCurrentHp;
+    const rescaled = (last * m1) / m0;
     if (
-      dip >= STALE_MAX_HP_MIN_DIP_PCT &&
+      before - pct(first) >= STALE_MAX_HP_MIN_DIP_PCT &&
       Math.abs((100 * first.advancedActorCurrentHp) / m1 - before) <=
         STALE_MAX_HP_RECOVERED_PCT &&
-      pct(after) - pct(first) >= STALE_MAX_HP_STEP_RECOVERS * dip
+      after.advancedActorCurrentHp - rescaled >=
+        STALE_MAX_HP_STEP_CARRIES * (last - rescaled)
     )
       for (let k = i; k < j; k++) out.add(rows[k]!);
   }

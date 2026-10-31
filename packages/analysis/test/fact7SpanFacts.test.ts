@@ -562,4 +562,15 @@ describe("D60 — a form shift's row: fresh current over a stale max", () => {
     expect(staleMaxHpRows(u).size).toBe(0);
     expect(hpTroughInWindow(u as never, T, 10, 11)?.pct).toBe(8);
   });
+
+  it("real hits inside the run do not hide it: the step's own pair decides (1-5-13 2:14, Rallying Cry ends)", () => {
+    const u = unitOf([
+      row(10, 649_816, 914_167), // 71.1 %
+      row(10.016, 516_366, 914_167), // 56.5 %: the buff's HP gone, its max not
+      row(10.333, 494_678, 914_167), // 54.1 %: two more hits
+      row(10.51, 491_679, 781_340), // 62.9 %: current carried over the step
+    ]);
+    expect(staleMaxHpRows(u).size).toBe(2);
+    expect(hpTroughInWindow(u as never, T, 10, 11)?.pct).toBe(63);
+  });
 });
