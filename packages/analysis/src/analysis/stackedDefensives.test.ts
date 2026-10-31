@@ -36,6 +36,13 @@ const aura = (
   destUnitId: "M",
   logLine: { event, timestamp: T0 + t },
 });
+/** a damage row as the compat layer writes it (negative, with its log line) */
+const hit = (t: number, amount: number) => ({
+  timestamp: T0 + t,
+  amount: -amount,
+  effectiveAmount: -amount,
+  logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: T0 + t },
+});
 const unit = (
   id: string,
   name: string,
@@ -80,10 +87,7 @@ describe("stackedDefensivePairs", () => {
         aura(15_000, LogEvent.SPELL_AURA_REMOVED, personal, "M", "Mate-R"),
         aura(20_000, LogEvent.SPELL_AURA_REMOVED, PS, "H", "Heals-R"),
       ],
-      damageIn: [
-        { timestamp: T0 + 13_000, amount: -30, effectiveAmount: -30 },
-        { timestamp: T0 + 18_000, amount: -30, effectiveAmount: -30 },
-      ],
+      damageIn: [hit(13_000, 30), hit(18_000, 30)],
     });
     const pairs = stackedDefensivePairs(owner, combat([owner, mate]));
     expect(pairs).toHaveLength(1);
@@ -109,6 +113,34 @@ describe("stackedDefensivePairs", () => {
     );
   });
 
+  it("a percentage comes off before an absorb: what the shields ate is priced too (fact7 D77)", () => {
+    const owner = unit("H", "Heals-R", {
+      spec: CombatUnitSpec.Priest_Discipline,
+    });
+    const mate = unit("M", "Mate-R", {
+      auraEvents: [
+        aura(10_000, LogEvent.SPELL_AURA_APPLIED, personal, "M", "Mate-R"),
+        aura(12_000, LogEvent.SPELL_AURA_APPLIED, PS, "H", "Heals-R"),
+        aura(15_000, LogEvent.SPELL_AURA_REMOVED, personal, "M", "Mate-R"),
+        aura(20_000, LogEvent.SPELL_AURA_REMOVED, PS, "H", "Heals-R"),
+      ],
+      damageIn: [hit(13_000, 10)],
+      absorbsIn: [
+        {
+          timestamp: T0 + 13_000,
+          spellId: "385787", // Matted Fur
+          attackerId: "E",
+          attackSpellId: "12294",
+          absorbedAmount: 20,
+          logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: T0 + 13_000 },
+        },
+      ],
+    });
+    const [p] = stackedDefensivePairs(owner, combat([owner, mate]));
+    // (10 landed + 20 absorbed) × 0.4 / 0.6 = 20 % of 100
+    expect(p!.blockedOverlapPct).toBe(20);
+  });
+
   it("a friendly totem's wall is its owner's: Spirit Link Totem names the shaman, not the totem (codex R6C-05 #3; F19 605 diff)", () => {
     const SLT = "325174";
     const owner = unit("S", "Sham-R", {
@@ -129,7 +161,7 @@ describe("stackedDefensivePairs", () => {
         aura(15_000, LogEvent.SPELL_AURA_REMOVED, personal, "M", "Mate-R"),
         aura(18_000, LogEvent.SPELL_AURA_REMOVED, SLT, "T", "Spirit Link Totem"),
       ],
-      damageIn: [{ timestamp: T0 + 13_000, amount: -30, effectiveAmount: -30 }],
+      damageIn: [hit(13_000, 30)],
     });
     const pairs = stackedDefensivePairs(owner, combat([owner, mate, totem]));
     expect(pairs).toHaveLength(1);
@@ -168,9 +200,7 @@ describe("stackedDefensivePairs", () => {
       ],
       // the delayed half landing as the unit's own damage (361029) — what the
       // back-computation read as damage Time Dilation then "blocked"
-      damageIn: [
-        { timestamp: T0 + 13_000, amount: -40, effectiveAmount: -40, spellId: "361029" },
-      ],
+      damageIn: [{ ...hit(13_000, 40), spellId: "361029" }],
       absorbsIn: [held(12_500, 10), held(14_000, 5), held(18_000, 20)],
     });
     const priest = unit("P", "Priest-R");

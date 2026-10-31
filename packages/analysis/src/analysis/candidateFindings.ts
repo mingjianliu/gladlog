@@ -1176,6 +1176,7 @@ export function missedCleanseEvents(
     | "spellId"
     | "priority"
     | "postCcDamage"
+    | "postCcAbsorbed"
     | "cleanseWasOnCD"
     | "dispellersLockedOut"
     | "dispellersBlockedS"
@@ -1387,6 +1388,9 @@ export function missedCleanseEvents(
             ? { worth: w.worth }
             : { priority: w.priority, verdict: "unsigned" }),
           postCcDamageK: (w.postCcDamage / 1000).toFixed(0),
+          ...(Math.round((w.postCcAbsorbed ?? 0) / 1000) > 0
+            ? { postCcAbsorbedK: ((w.postCcAbsorbed ?? 0) / 1000).toFixed(0) }
+            : {}),
           // Value gate d: DR was fully fresh and the target did get re-CC'd
           // afterwards — the coach must phrase this as a cautious suggestion,
           // not as blame for a mistake (the timeline row carries the same

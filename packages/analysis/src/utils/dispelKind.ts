@@ -83,10 +83,18 @@ export interface CastMatchIndex {
   byName: Map<string, number[]>;
   /** `srcUnitId` → every press's timestamp, any spell (fact2 C5) */
   bySource: Map<string, number[]>;
+  /** `${destUnitId}|${spellName}` → the presses aimed at that unit (fact7
+   * D18, `dispelPressedBy`) */
+  aimedAt: Map<string, Array<{ srcUnitId: string; timestamp: number }>>;
 }
 
 export function createCastMatchIndex(): CastMatchIndex {
-  return { byId: new Map(), byName: new Map(), bySource: new Map() };
+  return {
+    byId: new Map(),
+    byName: new Map(),
+    bySource: new Map(),
+    aimedAt: new Map(),
+  };
 }
 
 export function addCastToIndex(
@@ -95,7 +103,14 @@ export function addCastToIndex(
   spellId: string | null | undefined,
   spellName: string | null | undefined,
   timestamp: number,
+  destUnitId?: string,
 ): void {
+  if (destUnitId && spellName) {
+    const k = `${destUnitId}|${spellName}`;
+    const list = index.aimedAt.get(k) ?? [];
+    list.push({ srcUnitId, timestamp });
+    index.aimedAt.set(k, list);
+  }
   if (spellId) {
     const k = `${srcUnitId}|${spellId}`;
     const list = index.byId.get(k) ?? [];
@@ -149,6 +164,7 @@ export function buildCastMatchIndex(
     spellCastEvents: ReadonlyArray<{
       logLine: { event: string };
       srcUnitId?: string;
+      destUnitId?: string;
       spellId?: string | null;
       spellName?: string | null;
       timestamp: number;
@@ -171,6 +187,7 @@ export function buildCastMatchIndex(
         c.spellId,
         c.spellName,
         c.timestamp,
+        c.destUnitId,
       );
     }
     // an empowered cast logs its SUCCESS when the hold starts and acts at
@@ -232,6 +249,28 @@ export function dispelCameWithOwnCast(
     !!d.spellName &&
     within(index.byName.get(`${owner}|${d.spellName}`), d.timestamp);
   return idHit || nameHit || ownerHit;
+}
+
+/**
+ * Who pressed a dispel whose SPELL_DISPEL rows name its RECIPIENT as source:
+ * the unit whose same-named cast was aimed at that source inside the match
+ * window, when the source itself logged none. Mending Bandage writes its
+ * cast row from the hunter and its dispel rows self → self on the unit it was
+ * put on (d2e6e70b 0:26, fact7 D18: the warlock's "passive"). Undefined for
+ * every other dispel. The caller checks the presser is on the source's team.
+ */
+export function dispelPressedBy(
+  index: CastMatchIndex,
+  d: IDispelToClassify,
+): string | undefined {
+  if (!d.spellName || dispelCameWithOwnCast(index, d)) return undefined;
+  return index.aimedAt
+    .get(`${d.srcUnitId}|${d.spellName}`)
+    ?.find(
+      (c) =>
+        c.srcUnitId !== d.srcUnitId &&
+        Math.abs(c.timestamp - d.timestamp) <= DISPEL_CAST_MATCH_WINDOW_MS,
+    )?.srcUnitId;
 }
 
 export function classifyDispel(

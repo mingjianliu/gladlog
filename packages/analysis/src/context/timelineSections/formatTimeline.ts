@@ -525,7 +525,7 @@ export function formatTimeline(
           "    Mk = everything X took while it ran; `(its cast row names Y)` = the cast row's target was someone else — the log",
           "    shows where the damage went, not whether the channel was re-aimed;",
           "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
-          "    redirect (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call); `(area)` = an area save pressed at that",
+          "    redirect (Leap of Faith, Intervene, Roar of Sacrifice); `(area)` = an area save pressed at that",
           "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",
           // User ruling 2026-10-11: a label says what the ability DOES, never
           // why it was pressed (it read `(self-save)`); each label form is
@@ -546,7 +546,7 @@ export function formatTimeline(
             ? [
                 "    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each",
                 "    friendly who had hit that unit in the 3 s before the external kept doing while it was up — from the aura going up to its removal (damage on it, share of",
-                "    their damage on enemy players, seconds with damage; `(+Ak absorbed)` = eaten by the target's shields;",
+                "    their damage on enemy players — what landed, what shields absorbed and what was held back, on both sides of the share — seconds with damage; `(+Ak absorbed)` = eaten by the target's shields;",
                 "    `+Dk deferred` = held back by a Time Dilation / Stretch Time on the target — it lands later as that unit's",
                 "    own damage; for a school-limited wall, how much of it was in the wall's school; `N hits immune` = hits the",
                 "    target was immune to).",

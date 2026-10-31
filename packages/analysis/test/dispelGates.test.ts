@@ -152,6 +152,26 @@ describe("postCcDamage — a teammate's redistribution is not damage taken (tria
     expect(w.postCcDamage).toBe(27_400);
   });
 
+  it("fact7 D70: what its shields ate in the 5 s is carried beside it, never inside it (6ac699c9 0:25: 0 landed, 272k absorbed)", () => {
+    const t1 = targetWithBinding(10, 16);
+    (t1 as any).absorbsIn = [11, 12, 16.5].map((tS) => ({
+      timestamp: S(tS),
+      attackerId: "e1",
+      attackSpellId: "19434",
+      attackSpellName: "Aimed Shot",
+      spellId: "17",
+      absorbedAmount: 100_000,
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: S(tS) },
+    }));
+    const w = reconstructDispelSummary(
+      [t1, discPriest("h1")] as any,
+      [hostile()] as any,
+      COMBAT,
+    ).missedCleanseWindows[0]!;
+    expect(w.postCcDamage).toBe(0);
+    expect(w.postCcAbsorbed).toBe(200_000);
+  });
+
   it("a Void Leech from the other roster (a charmed victim's drain) is a hit", () => {
     const w = window([row(11, 5_000, "451963", "e1", HOSTILE)]);
     expect(w.postCcDamage).toBe(5_000);

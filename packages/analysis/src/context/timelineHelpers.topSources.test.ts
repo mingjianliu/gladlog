@@ -93,6 +93,29 @@ describe("getTopDamageSourcesInWindow — absorbed parts of hits (round 3 N13, b
     expect(out).toEqual(["5 — Starsurge (151k; 108k of it absorbed)"]);
   });
 
+  it("fact7 D54: the unit's own Tempered in Battle is moved health, not a source (7e7b1e51 0:28)", () => {
+    const row = (spellId: string, spellName: string, amount: number, src: string, flags: number) => ({
+      logLine: { timestamp: T0 + 5_000 },
+      effectiveAmount: -amount,
+      srcUnitId: src,
+      srcUnitName: src,
+      srcUnitFlags: flags,
+      spellId,
+      spellName,
+    });
+    const unit = {
+      id: "Player-V",
+      reaction: CombatUnitReaction.Friendly,
+      damageIn: [
+        row("469704", "Tempered in Battle", 79_000, "Player-V", 0x511),
+        row("78674", "Starsurge", 43_000, "Boomy-Illidan-US", HOSTILE_PLAYER),
+      ],
+      absorbsIn: [],
+    } as never;
+    const out = getTopDamageSourcesInWindow(unit, T0 + 10_000, 10_000, 3, new Map(), new Map([["Boomy-Illidan-US", 5]]));
+    expect(out).toEqual(["5 — Starsurge (43k)"]);
+  });
+
   it("FT-T02b: what Time Dilation only delayed is not \"absorbed\" — it is the deferred row when it lands", () => {
     const hit = {
       logLine: { timestamp: T0 + 5_000 },

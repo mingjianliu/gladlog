@@ -155,6 +155,33 @@ describe("computeMitigationAudit(A 形态)", () => {
     expect(td[0]!.blockedAmount).toBeUndefined();
   });
 
+  test("百分比减伤按「落地 + 被盾吃掉」定价:百分比先于吸收结算(fact7 D77)", () => {
+    const priced = (absorbed: boolean) => {
+      const victim = mkVictim(
+        "v1",
+        [{ atS: 55, amount: 100_000, school: "0x1" }],
+        [{ spellId: "22812", spellName: "Barkskin", fromS: 52, toS: 58 }],
+      );
+      (victim as { absorbsIn: unknown[] }).absorbsIn = absorbed
+        ? [
+            {
+              spellId: "17",
+              spellName: "Power Word: Shield",
+              attackSpellId: "1",
+              attackSpellSchool: "0x1",
+              absorbedAmount: 100_000,
+              timestamp: 55_000,
+              logLine: { event: "SPELL_ABSORBED", timestamp: 55_000 },
+            },
+          ]
+        : [];
+      return computeMitigationAudit(victim, combatOf(), 60).rows.find(
+        (r) => r.spellId === "22812",
+      )!.blockedAmount;
+    };
+    expect(priced(true)).toBe(2 * priced(false)!);
+  });
+
   test("deferred(FT-T02b):减伤表里没有的延迟盾(Stretch Time)绝不落进 absorb 类", () => {
     const victim = mkVictim(
       "v1",

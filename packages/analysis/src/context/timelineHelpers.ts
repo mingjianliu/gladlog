@@ -64,12 +64,13 @@ import {
   AURA_BEFORE_CAST_MAX_S,
   SAVE_CAST_AURA_PAIR_S,
 } from "../utils/enemyDefensives";
-import { documentRecordsAttackSpell } from "../utils/incomingPressure";
 import {
   absorbedHitSchoolMask,
   DEFERRAL_SHIELD_DAMAGE_IDS,
+  documentRecordsAttackSpell,
   hitSchoolId,
   isDeferralAbsorb,
+  isRedistributionRow,
 } from "../utils/incomingPressure";
 import {
   TOUCH_OF_KARMA_ABSORB_ID,
@@ -1964,6 +1965,20 @@ export function getTopDamageSourcesInWindow(
     // the enemy's damage as "same team" (ba8c0510: 113k of a 199k Ray of
     // Frost; 17 of the 60 triage rounds carry flipped rows).
     const self = !!d.srcUnitId && d.srcUnitId === unit.id;
+    // moved health is no source of damage, the unit's own included (fact7
+    // D54, 7e7b1e51 0:28: `Tempered in Battle (own) (79k)` beside a total
+    // that leaves it out)
+    if (
+      isRedistributionRow(
+        unit,
+        d.spellId,
+        d.srcUnitId,
+        d.srcUnitFlags,
+        d.destUnitFlags,
+        sides,
+      )
+    )
+      continue;
     if (
       !self &&
       isSameSideSource(
@@ -2006,6 +2021,17 @@ export function getTopDamageSourcesInWindow(
   for (const a of unit.absorbsIn ?? []) {
     if (a.timestamp < startMs || a.timestamp > endMs) continue;
     if (!a.attackerId) continue;
+    if (
+      isRedistributionRow(
+        unit,
+        a.attackSpellId,
+        a.attackerId,
+        a.srcUnitFlags,
+        a.destUnitFlags,
+        sides,
+      )
+    )
+      continue;
     // round-1 retest idx 32: the unit's own damage a shield of its ate is
     // part of its `(own)` entry, as the hits that landed are (15b4d4ec: a
     // Refraction 100k landed + 41k eaten by its own Prismatic Barrier read

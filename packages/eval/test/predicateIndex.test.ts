@@ -869,6 +869,17 @@ const INDEX: PredicateRow[] = [
     symbol: "isDeferralAbsorb",
     mod: incomingPressure,
   },
+  // fact7 D22 / D54: an attacker-side deferral row; moved health
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "isDeferralDamageRow",
+    mod: incomingPressure,
+  },
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "isRedistributionRow",
+    mod: incomingPressure,
+  },
   {
     file: `${A}/utils/damagePress.ts`,
     symbol: "isSameSpell",
@@ -1670,6 +1681,12 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/dispelKind.ts`,
     symbol: "dispelCameWithOwnCast",
+    mod: dispelKind,
+  },
+  // fact7 D18: a press on a teammate logged as the recipient's dispel
+  {
+    file: `${A}/utils/dispelKind.ts`,
+    symbol: "dispelPressedBy",
     mod: dispelKind,
   },
   {
@@ -3899,6 +3916,12 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/externalDamage.ts`,
     symbol: "DURING_ABSORBED_TAG_RE_SRC",
+    mod: externalDamage,
+  },
+  // fact7 D29: the share field of a unit with nothing dealt
+  {
+    file: `${A}/utils/externalDamage.ts`,
+    symbol: "DURING_NO_SHARE",
     mod: externalDamage,
   },
   {

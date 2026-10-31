@@ -26,6 +26,7 @@ import {
   specToString,
 } from "./cooldowns";
 import { spellNameKey } from "./damagePress";
+import { isDeferralDamageRow } from "./incomingPressure";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 
@@ -170,6 +171,13 @@ function buildDefenseWindows(
  * Shift was listed as "Rend + Charge + Hamstring" while three Mortal Strikes
  * were dropped.
  *
+ * The share is of what the player dealt to the other side (fact7 D53,
+ * 7e7b1e51 0:43: a mage's self-inflicted rows in the denominator left Fire
+ * Blast out): rows on the player's own team are left out, an ally's Tempered
+ * in Battle with them, and a hit a shield ate counts under its own attack
+ * spell (`attackSpellId`; none = a swing), a deferral shield's row under
+ * nothing.
+ *
  * Keyed by the spell, not the row's id (`spellNameKey`): the log writes many
  * a spell's damage under another id than its cast, and the casts below are
  * matched by the same key (fact5 D7 / D8: Execute's cast 281000 lands as
@@ -178,16 +186,33 @@ function buildDefenseWindows(
  */
 export function getHighValueSpellIds(
   unit: Pick<ICombatUnit, "damageOut">,
+  /** the player's team, itself included */
+  ownTeamIds: ReadonlySet<string> = new Set(),
 ): Set<string> {
   const totals: Record<string, number> = {};
   let grandTotal = 0;
+  type AbsorbedRow = { attackSpellId?: string; attackSpellName?: string };
+  // a stored document from before the attack spell was recorded cannot name
+  // an absorbed hit's spell at all (`documentRecordsAttackSpell`'s reading)
+  const recordsAttackSpell = unit.damageOut.some(
+    (d) => (d as AbsorbedRow).attackSpellId !== undefined,
+  );
 
   for (const dmg of unit.damageOut) {
+    if (ownTeamIds.has(dmg.destUnitId) || isDeferralDamageRow(dmg)) continue;
     // An absorbed hit is a row of its own in damageOut, keyed by the SHIELD's
-    // spell id (convert.ts) — not a spell of this unit. The share is of landed
-    // damage, spell by spell.
-    if ((dmg.logLine?.event as string) === LogEvent.SPELL_ABSORBED) continue;
-    const id = dmg.spellId ? spellNameKey(dmg.spellId, dmg.spellName) : "melee";
+    // spell id (convert.ts) — not a spell of this unit.
+    const absorbed = (dmg.logLine?.event as string) === LogEvent.SPELL_ABSORBED;
+    if (absorbed && !recordsAttackSpell) continue;
+    const hit = absorbed
+      ? {
+          spellId: (dmg as AbsorbedRow).attackSpellId,
+          spellName: (dmg as AbsorbedRow).attackSpellName,
+        }
+      : dmg;
+    const id = hit.spellId
+      ? spellNameKey(hit.spellId, hit.spellName ?? "")
+      : "melee";
     const amount = Math.abs(dmg.effectiveAmount ?? 0);
     totals[id] = (totals[id] ?? 0) + amount;
     grandTotal += amount;
@@ -235,6 +260,7 @@ export function buildOffensiveWasteSummary(
   const matchStartMs = combat.startTime;
   const defenseWindows = buildDefenseWindows(enemies, combat);
   const events: IOffensiveWasteEvent[] = [];
+  const ownTeamIds = new Set(friends.map((f) => f.id));
   // the round's casts only (`roundEndMs`: a Solo Shuffle round is over at its
   // ending death — codex 60-POSTHOC-09h #1: a cast in the log's tail opened
   // an ABILITIES INTO IMMUNITY row)
@@ -244,7 +270,7 @@ export function buildOffensiveWasteSummary(
   } as never);
 
   for (const friend of friends) {
-    const highValueIds = getHighValueSpellIds(friend);
+    const highValueIds = getHighValueSpellIds(friend, ownTeamIds);
     const successRows = friend.spellCastEvents.filter(
       (e) =>
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&

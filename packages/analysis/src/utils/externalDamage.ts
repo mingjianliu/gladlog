@@ -47,17 +47,25 @@
  *   inside W · X = 100·N/D (undefined when D = 0) · direct / periodic
  *   reported separately · K/M = 1 s bins with damage / |W| · G = longest
  *   empty gap · legacy damage is NEGATIVE, SPELL_ABSORBED rows POSITIVE and
- *   excluded from N and D · pets already merged into the owner by
- *   mergePetEvents
+ *   excluded from N · pets already merged into the owner by mergePetEvents
  *   absorbed (2026-09-22 amendment, recorded on the issue): what the target's
  *   shields ate from this ally inside W — read from the TARGET's victim-keyed
  *   `absorbsIn` (attacker = the ally; the attacker's own damage rows carry only
  *   the health the hit removed — ≈ 0 for a fully absorbed hit — never the
  *   absorbed amount) — is reported SEPARATELY as `(+Ak absorbed)`, and a
- *   second with an absorbed hit counts in K. N / D / X are unchanged. Without
- *   it a Feral Druid hitting a shielded Havoc DH under Time Dilation rendered
- *   as `0k on target · damage in 6 of 8 s` (match 83bdf41e), which reads as
- *   a contradiction; the shape recurs under Touch of Karma.
+ *   second with an absorbed hit counts in K. N is unchanged. Without it a
+ *   Feral Druid hitting a shielded Havoc DH under Time Dilation rendered as
+ *   `0k on target · damage in 6 of 8 s` (match 83bdf41e), which reads as a
+ *   contradiction; the shape recurs under Touch of Karma.
+ *   share (fact7 D6 / D29, 2026-10-30, amends the 2026-09-22 note): X asks
+ *   where the ally's damage went, so D and X's numerator hold what landed,
+ *   what shields ate and what a deferral shield held back. Landed alone
+ *   printed 100 % for a paladin with 117k in another enemy's shields
+ *   (96fb4d42 0:55, 73 %), and 0 % beside `+70k absorbed` for one whose whole
+ *   70k was on the target (163de8f1 1:37). A held-back hit stays in: as for
+ *   the per-school reading (`incomingPressureBySchool`), the fact is what was
+ *   thrown, and the tick that lands later is self-sourced, so it has no
+ *   attacker to be counted under. Signed, so a Fel Armor correction nets out.
  *
  * No accusatory verb anywhere: the line states numbers, the model decides.
  */
@@ -158,15 +166,16 @@ export interface IExternalDamageObservation {
   G: number;
   nDirect: number;
   nPeriodic: number;
-  /** The ally's damage on ALL enemy players inside W. */
+  /** The ally's damage on ALL enemy players inside W: landed, absorbed and
+   * held back by a deferral shield. */
   dAll: number;
-  /** SPELL_ABSORBED amounts the ally put on the target inside W (not in N or D). */
+  /** SPELL_ABSORBED amounts the ally put on the target inside W (not in N). */
   absorbed: number;
   /** The part a deferral shield (Time Dilation, Stretch Time) only DELAYED —
    * it lands later as the target's own deferred damage, so it is not
-   * "absorbed" (`isDeferralAbsorb`, FT-T02b). Not in N, D or `absorbed`. */
+   * "absorbed" (`isDeferralAbsorb`, FT-T02b). Not in N or `absorbed`. */
   deferred: number;
-  /** 100·(nDirect+nPeriodic)/dAll, null when dAll = 0. */
+  /** 100·(nDirect+nPeriodic+absorbed+deferred)/dAll, null when dAll = 0. */
   X: number | null;
   /** Direct damage on the target in the PRE_HIT_S before the application. */
   preDirect: number;
@@ -277,11 +286,21 @@ export function externalDamageForApplication(
       else absorbed += a.absorbedAmount;
       bins.add(Math.floor(tS));
     }
+    // what shields ate or held back on the other enemies, for the share
+    let absorbedElsewhere = 0;
+    for (const e of enemies) {
+      if (e.id === target.id) continue;
+      for (const a of e.absorbsIn ?? []) {
+        if (!a.attackerId || !attackers.has(a.attackerId)) continue;
+        const tS = (a.logLine.timestamp - startMs) / 1000;
+        if (tS >= wFrom && tS < wTo) absorbedElsewhere += a.absorbedAmount;
+      }
+    }
     for (const d of ally.damageOut) {
       const ev = d.logLine.event as string;
-      if (ev === LogEvent.SPELL_ABSORBED || d.effectiveAmount >= 0) continue;
       if (!enemyIds.has(d.destUnitId)) continue;
       const tS = (d.logLine.timestamp - startMs) / 1000;
+      if (ev === LogEvent.SPELL_ABSORBED || d.effectiveAmount >= 0) continue;
       const amt = -d.effectiveAmount;
       const onTarget = d.destUnitId === target.id;
       if (
@@ -313,6 +332,9 @@ export function externalDamageForApplication(
       if (bins.has(s)) run = 0;
       else G = Math.max(G, ++run);
     }
+    // a Fel Armor correction nets out inside `deferred`; nothing below zero
+    const dealtOnTarget = Math.max(0, nDirect + nPeriodic + absorbed + deferred);
+    dAll += absorbed + deferred + absorbedElsewhere;
     const base = {
       allyId: ally.id,
       allyName: ally.name,
@@ -338,7 +360,7 @@ export function externalDamageForApplication(
       dAll,
       absorbed,
       deferred,
-      X: dAll > 0 ? (100 * (nDirect + nPeriodic)) / dAll : null,
+      X: dAll > 0 ? Math.min(100, (100 * dealtOnTarget) / dAll) : null,
       preDirect,
       prePeriodic,
     };
@@ -389,6 +411,13 @@ const round2Tags = (o: IExternalDamageObservation): string => {
 };
 const isEmpty = (o: IExternalDamageObservation): boolean =>
   o.dAll <= 0 && o.absorbed <= 0 && o.deferred <= 0 && o.immuneHits === 0;
+/** The share field. A unit with nothing dealt has no share (fact7 D29: only
+ * immune hits printed `0%`); the gate reads this form back (`DURING_SEG`). */
+export const DURING_NO_SHARE = "no enemy-player damage";
+const shareField = (o: IExternalDamageObservation, whose: string): string =>
+  o.X === null
+    ? DURING_NO_SHARE
+    : `${Math.round(o.X)}% of ${whose} enemy-player damage`;
 
 /**
  * The rendered fact for one observation, appended to the `[ENEMY DEF]`
@@ -406,8 +435,7 @@ export function formatDuringExternal(
   const onTarget = o.nDirect + o.nPeriodic;
   if (isEmpty(o))
     return `${who} 0k on target · no damage on any enemy player · 0 of ${o.M} s`;
-  const share = o.X === null ? "0%" : `${Math.round(o.X)}%`;
-  return `${who} ${k(onTarget)} on target${absorbedTag(o)} · ${share} of their enemy-player damage · direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)}${round2Tags(o)} · damage in ${o.K} of ${o.M} s · longest gap ${o.G} s`;
+  return `${who} ${k(onTarget)} on target${absorbedTag(o)} · ${shareField(o, "their")} · direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)}${round2Tags(o)} · damage in ${o.K} of ${o.M} s · longest gap ${o.G} s`;
 }
 
 /** Same fact from the OWNER's own point of view (the candidate facts block). */
@@ -417,6 +445,5 @@ export function formatDuringExternalForOwner(
   const onTarget = o.nDirect + o.nPeriodic;
   if (isEmpty(o))
     return `0k on target · no damage on any enemy player · 0 of ${o.M} s`;
-  const share = o.X === null ? "0%" : `${Math.round(o.X)}%`;
-  return `${k(onTarget)} on target${absorbedTag(o)} · ${share} of your enemy-player damage · direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)}${round2Tags(o)} · damage in ${o.K} of ${o.M} s`;
+  return `${k(onTarget)} on target${absorbedTag(o)} · ${shareField(o, "your")} · direct ${k(o.nDirect)} / periodic ${k(o.nPeriodic)}${round2Tags(o)} · damage in ${o.K} of ${o.M} s`;
 }

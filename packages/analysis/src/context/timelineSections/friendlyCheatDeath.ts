@@ -5,10 +5,10 @@
  * `[ENEMY DEF] … (cheat-death proc)`. Nothing was pressed; the line prints no
  * HP (the proc sets it).
  *
- * The ids are the `kind: "cheatDeath"` aura markers of `CRISIS_PROC_ANSWERS`
- * (crisisDecisionPoints.ts: Cauterize 87023 aura 251/251 self, Cheat Death
- * 45182 25/25) — the same reading the crisis layer credits, applied on the
- * unit by the unit itself.
+ * The ids are the `kind: "cheatDeath"` markers of `CRISIS_PROC_ANSWERS`
+ * (crisisDecisionPoints.ts: Cauterize's aura 87023 251/251 self and heal
+ * 1286444, Cheat Death 45182 25/25) — the same reading the crisis layer
+ * credits, applied on the unit by the unit itself.
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
@@ -18,6 +18,10 @@ import { fmtTime } from "../../utils/renderGrid";
 
 /** The words the line closes on — `[ENEMY DEF]`'s label for the same proc. */
 export const CHEAT_DEATH_PROC_LABEL = "(cheat-death proc)";
+
+/** Cauterize's aura and heal stand within a second of each other, as
+ * `effectSaves` joins them for `[ENEMY DEF]`. */
+const CHEAT_DEATH_MARKERS_MS = 1000;
 
 export function emitFriendlyCheatDeathEntries(ctx: {
   owner: ICombatUnit;
@@ -36,14 +40,32 @@ export function emitFriendlyCheatDeathEntries(ctx: {
   let emitted = false;
   const units = [owner, ...friends.filter((f) => f.id !== owner.id)];
   for (const u of units) {
-    for (const a of u.auraEvents ?? []) {
-      if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-      if (a.srcUnitId !== u.id || a.destUnitId !== u.id) continue;
-      const def = CRISIS_PROC_ANSWERS.get(a.spellId ?? "");
+    // the unit's own markers of a proc: its aura, and its heal — the aura is
+    // not always written (fact7 D46, 7acbefeb 1:09: heal 1286444 and the
+    // Cauterized debuff, no 87023)
+    const marks = [
+      ...(u.auraEvents ?? [])
+        .filter(
+          (a) =>
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.srcUnitId === u.id &&
+            a.destUnitId === u.id,
+        )
+        .map((a) => ({ id: a.spellId, ms: a.logLine.timestamp })),
+      ...(u.healIn ?? [])
+        .filter((h) => h.srcUnitId === u.id)
+        .map((h) => ({ id: h.spellId, ms: h.logLine.timestamp })),
+    ].sort((a, b) => a.ms - b.ms);
+    const lastOf = new Map<string, number>();
+    for (const m of marks) {
+      const def = CRISIS_PROC_ANSWERS.get(m.id ?? "");
       if (def?.kind !== "cheatDeath") continue;
-      if (a.logLine.timestamp < matchStartMs || a.logLine.timestamp > endMs)
-        continue;
-      const t = (a.logLine.timestamp - matchStartMs) / 1000;
+      if (m.ms < matchStartMs || m.ms > endMs) continue;
+      // one proc's two markers name it once
+      const last = lastOf.get(def.name);
+      lastOf.set(def.name, m.ms);
+      if (last !== undefined && m.ms - last <= CHEAT_DEATH_MARKERS_MS) continue;
+      const t = (m.ms - matchStartMs) / 1000;
       // the talent's name, as [ENEMY DEF] prints it (45182's aura is
       // "Cheating Death")
       const name = def.name;

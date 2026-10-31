@@ -68,6 +68,7 @@ import {
 import { type ManaFallback, manaReadingAt } from "../utils/resourceAt";
 import type { RosterSides } from "../utils/rosterSide";
 import { benchmarks } from "../utils/specBaselines";
+import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import {
   damageEventLabel,
   DMG_SPIKE_THRESHOLD,
@@ -569,10 +570,11 @@ export function emitDmgSpikeEntries(params: {
       ? sumAbsorbedPressure(targetUnit, fromMs, toMs, rosterSides)
       : 0;
 
-    const absorbStr =
-      totalAbsorbed > 100_000
-        ? ` (${(totalAbsorbed / 1_000_000).toFixed(2)}M absorbed)`
-        : "";
+    // printed whenever it has a figure, as the burst ledger's `(A of it
+    // absorbed)`: the legend defines the part with no floor (fact7 D49,
+    // 7acbefeb 1:05: 85k of a 1.77M spike unsaid)
+    const absorbedM = (totalAbsorbed / 1_000_000).toFixed(2);
+    const absorbStr = absorbedM === "0.00" ? "" : ` (${absorbedM}M absorbed)`;
 
     const topSources = targetUnit
       ? getTopDamageSourcesInWindow(
@@ -820,6 +822,10 @@ export function lowPressureUnusedDefensiveNote(
       !cd.isThroughput &&
       (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)) &&
       !cdCanHelpAnotherUnit(cd) &&
+      // a cooldown that is also an offensive one is no self-only defensive
+      // (fact7 D62, 6ab51f91: Ultimate Penitence, whose bolts hit and heal
+      // other units; `OFFENSIVE_CD_SPELL_IDS`, user ruling 2026-10-20)
+      !OFFENSIVE_CD_SPELL_IDS.has(cd.spellId) &&
       (barsStarted?.(cd) ?? 0) === 0,
   );
   if (held.length === 0) return null;

@@ -636,6 +636,28 @@ describe("① c — a [DMG SPIKE] bucket closes at its victim's death / the roun
     expect(lines.join("\n")).not.toContain("100% HP");
   });
 
+  it("fact7 D49: the absorbed part prints whenever it has a figure, as the ledger's does (85k of a 0.60M spike)", () => {
+    const shielded = (absorbedAmount: number) => {
+      const u = victim({ hitsAt: [39.2, 40.5, 41.7, 42.9, 44.1, 45.2] });
+      (u as { absorbsIn: unknown[] }).absorbsIn = [
+        {
+          timestamp: at(41),
+          attackerId: "e1",
+          attackSpellId: "1",
+          attackSpellName: "x",
+          spellId: "17",
+          absorbedAmount,
+          logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: at(41) },
+        },
+      ];
+      return u;
+    };
+    const line = (u: ReturnType<typeof shielded>) =>
+      render(u, combatOf(300, [u]))[0]!;
+    expect(line(shielded(85_000))).toContain("(0.09M absorbed)");
+    expect(line(shielded(4_000))).not.toContain("M absorbed");
+  });
+
   it("a full bucket still reads `in 10s` with endpoints 10 apart", () => {
     const alive = victim({
       hitsAt: [39.2, 40.5, 41.7, 42.9, 44.1, 45.2],

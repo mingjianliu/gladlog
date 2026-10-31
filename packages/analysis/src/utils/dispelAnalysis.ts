@@ -72,7 +72,7 @@ import {
   PATCH_121_GOLIVE_EPOCH_MS,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
-import { sumLandedPressure } from "./incomingPressure";
+import { sumAbsorbedPressure, sumLandedPressure } from "./incomingPressure";
 import { logIsFrom } from "./logEra";
 import {
   distanceBetween,
@@ -102,6 +102,7 @@ import {
   buildCastMatchIndex,
   classifyDispel,
   dispelCameWithOwnCast,
+  dispelPressedBy,
   type DispelKind,
   dispelRodeOwnPress,
   isRiderDispel,
@@ -1493,6 +1494,10 @@ export interface IMissedCleanseWindow {
   /** Damage the target took in the first POST_CC_PRESSURE_WINDOW_S seconds after CC was applied
    * (`sumLandedPressure`: landed hits, same-side redistribution left out) */
   postCcDamage: number;
+  /** What its shields ate in that same window (`sumAbsorbedPressure`). A
+   * separate figure beside `postCcDamage`, which stays landed for #39's
+   * consequence gate (fact7 D70, 6ac699c9 0:25: 0 landed, 272k absorbed). */
+  postCcAbsorbed?: number;
   /** BACKLOG #39 (user ruling A, 2026-08-25): true when this window's a-priori
    * tier said Critical but the measured consequence was zero (no damage in the
    * pressure window, target survived) and it was therefore demoted to High.
@@ -3174,13 +3179,22 @@ export function reconstructDispelSummary(
       // missed-cleanse (the signed verdict matrix has no disarm row).
       const priority = removedDispelPriority(removedSpellId);
       const destUnit = unitMap.get(action.destUnitId);
-      const dispelToClassify = {
+      const loggedDispel = {
         srcUnitId: action.srcUnitId,
         srcOwnerId: unitMap.get(action.srcUnitId)?.ownerId,
         spellId: action.spellId,
         spellName: action.spellName,
         timestamp: action.timestamp,
       };
+      // a press on a teammate logged as the recipient's own dispel: the
+      // presser is the actor and it is a deliberate press
+      const presserId = dispelPressedBy(castIndex, loggedDispel);
+      const presser = presserId ? unitMap.get(presserId) : undefined;
+      const pressedByAlly =
+        presser && presser.reaction === unit.reaction ? presser : undefined;
+      const dispelToClassify = pressedByAlly
+        ? { ...loggedDispel, srcUnitId: pressedByAlly.id }
+        : loggedDispel;
       const dispelKind = classifyDispel(castIndex, dispelToClassify);
 
       // Treat a pet owned by a friendly player as a friendly source
@@ -3202,10 +3216,9 @@ export function reconstructDispelSummary(
 
       // B45: pet dispels are attributed to the owner player; source name shows the player
       // so Claude sees "[CLEANSE] Warlock dispelled X (pet)" rather than "[CLEANSE] Imp dispelled X"
-      const sourceName = ownerPlayer ? ownerPlayer.name : unit.name;
-      const sourceSpec = ownerPlayer
-        ? specToString(ownerPlayer.spec)
-        : specToString(unit.spec);
+      const actor = pressedByAlly ?? ownerPlayer ?? unit;
+      const sourceName = actor.name;
+      const sourceSpec = specToString(actor.spec);
 
       const event: IDispelEvent = {
         timeSeconds: (action.timestamp - combat.startTime) / 1000,
@@ -3672,6 +3685,12 @@ export function reconstructDispelSummary(
                 lateGate.consequenceDemoted || (lateW?.demoted ?? false),
               dispelType: windowDispelType,
               postCcDamage,
+              postCcAbsorbed: sumAbsorbedPressure(
+                unit,
+                applyTs,
+                windowEndMs,
+                rosterSides,
+              ),
               cleanseWasOnCD: false,
               // Reliability round 2 W1a (2026-09-25): was hard-coded false —
               // "a dispel landed, so nobody was locked out" — which charged a
@@ -3990,6 +4009,12 @@ export function reconstructDispelSummary(
               missGate.consequenceDemoted || (missW?.demoted ?? false),
             dispelType: windowDispelType,
             postCcDamage,
+            postCcAbsorbed: sumAbsorbedPressure(
+              unit,
+              applyTs,
+              windowEndMs,
+              rosterSides,
+            ),
             cleanseWasOnCD,
             cdBurnedOn,
             ...(() => {

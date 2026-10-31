@@ -1654,6 +1654,9 @@ export interface IEnemyDefensiveEvent {
   absorbedAmount?: number;
   /** official mitigation pct (self / immune; an ally copy's 15 % — F15 C1); undefined for other externals and for an immunity-kind save, which has no table row */
   pct?: number;
+  /** A team proc on a carrier that is not its source (F20 ruling 3,
+   * Peaceweaver): the monk whose press put it up, and that press's spell. */
+  procSource?: { unitName: string; spellName?: string };
   /** who received an external */
   recipientName?: string;
   recipientId?: string;
@@ -2180,6 +2183,25 @@ export function enemyDefensiveEvents(
     if (!immune && !MITIGATION_AURA_IDS.has(tableId)) continue;
     const observed = iv.toS - iv.fromS;
     const saveName = IMMUNITY_SAVE_AURA_NAMES.get(iv.spellId);
+    // the source of a teammate's proc is that teammate (fact7 D44): the
+    // line is the carrier's, the press is not
+    const procTrigger =
+      teamProcTriggers && !isIntervalFrom(iv, enemy)
+        ? teamProcTriggers.find((id) =>
+            castSecondsOf(iv.srcUnitName, id).some(
+              (t) => Math.abs(t - iv.fromS) <= PRESS_TO_AURA_MAX_S,
+            ),
+          )
+        : undefined;
+    const procSource =
+      teamProcTriggers && !isIntervalFrom(iv, enemy)
+        ? {
+            unitName: iv.srcUnitName,
+            ...(procTrigger
+              ? { spellName: getEnglishSpellName(procTrigger, "") }
+              : {}),
+          }
+        : undefined;
     const press = [
       ...castSecondsOf(enemy.name, tableId),
       ...(tableId === iv.spellId ? [] : castSecondsOf(enemy.name, iv.spellId)),
@@ -2216,6 +2238,7 @@ export function enemyDefensiveEvents(
       spellName: saveName ?? getEnglishSpellName(iv.spellId, iv.spellName),
       casterName: enemy.name,
       casterId: enemy.id,
+      ...(procSource ? { procSource } : {}),
       kind: immune ? "immune" : "self",
       // Priced through the one pricing path (predicate index: "the mitigation
       // % an aura is worth on the unit that carries it"), with the caster's

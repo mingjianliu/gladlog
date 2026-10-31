@@ -46,7 +46,7 @@ import {
   computeEnemyInterruptAvailability,
   isInterruptUsable,
 } from "./enemyInterrupts";
-import { isDeferralAbsorb } from "./incomingPressure";
+import { isDeferralAbsorb, isDeferralDamageRow } from "./incomingPressure";
 import {
   createKillWindowFactsComputer,
   hasPressOnlyTag,
@@ -276,7 +276,12 @@ export function computeSlackSegments(
         return t >= s.fromSeconds && t < s.toSeconds;
       };
       const ownerDamage = owner.damageOut
-        .filter((d) => inSeg(d.logLine.timestamp) && enemyIds.has(d.destUnitId))
+        .filter(
+          (d) =>
+            inSeg(d.logLine.timestamp) &&
+            enemyIds.has(d.destUnitId) &&
+            !isDeferralDamageRow(d),
+        )
         // Damage events carry NEGATIVE effectiveAmount (absorbs positive);
         // max(0,·) counted absorbed-only damage — "your damage 0k" while
         // Starsurges landed (invariant sweep, raw-log verified 2026-07-16).
@@ -412,7 +417,12 @@ export function computeContestedSegments(
         return t >= s.fromSeconds && t < s.toSeconds;
       };
       const ownerDamage = owner.damageOut
-        .filter((d) => inSeg(d.logLine.timestamp) && enemyIds.has(d.destUnitId))
+        .filter(
+          (d) =>
+            inSeg(d.logLine.timestamp) &&
+            enemyIds.has(d.destUnitId) &&
+            !isDeferralDamageRow(d),
+        )
         // Damage events carry NEGATIVE effectiveAmount (absorbs positive);
         // max(0,·) counted absorbed-only damage — "your damage 0k" while
         // Starsurges landed (invariant sweep, raw-log verified 2026-07-16).

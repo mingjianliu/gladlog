@@ -454,12 +454,12 @@ function unit(id: string, over: Record<string, unknown> = {}): any {
     ...over,
   };
 }
-function render(enemy: any): string[] {
+function render(enemy: any, enemies: any[] = [enemy]): string[] {
   const lines: string[] = [];
   emitEnemyDefEntries({
     matchStartMs: ms(0),
     matchEndSeconds: 300,
-    enemies: [enemy],
+    enemies,
     enemyPid: (n: string) => `E:${n}`,
     friends: [unit("f1")],
     roundBounds: undefined,
@@ -467,7 +467,7 @@ function render(enemy: any): string[] {
     actorLabel: (n: string, side: "friendly" | "enemy") =>
       side === "friendly" ? `F:${n}` : `E:${n}`,
     addEntry: (_t: number, line: string) => lines.push(line),
-    _allUnits: [enemy],
+    _allUnits: enemies,
   } as never);
   return lines;
 }
@@ -537,6 +537,29 @@ describe("[ENEMY DEF] — a pressed self defensive prints what it does (2026-10-
       "Guardian Spirit (+60% healing received)",
       "Lay on Hands (heal)",
     ]);
+  });
+
+  it("fact7 D33 (163de8f1 0:43): Master's Call on an ally says what it did, not a duration", () => {
+    const hunter = unit("e1", {
+      spellCastEvents: [cast("272682", 43, "e2")],
+    });
+    const mate = unit("e2", {
+      name: "e2",
+      auraEvents: [
+        {
+          ...aura(LogEvent.SPELL_AURA_APPLIED, "1224810", 43),
+          destUnitId: "e2",
+          destUnitName: "e2",
+        },
+        {
+          ...aura(LogEvent.SPELL_AURA_REMOVED, "1224810", 47),
+          destUnitId: "e2",
+          destUnitName: "e2",
+        },
+      ],
+    });
+    const lines = render(hunter, [hunter, mate]).map(body);
+    expect(lines).toEqual(["Master's Call → E:e2 (removes roots / snares)"]);
   });
 
   it("Roar of Sacrifice on oneself: the official reduction and the aura's observed length", () => {

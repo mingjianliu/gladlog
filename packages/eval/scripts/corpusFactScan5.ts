@@ -59,6 +59,8 @@ const MODULE_FILES = [
   "lockoutHeal",
   "effectEnd",
   "silenceKick",
+  "damageBasis",
+  "pressFiling",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

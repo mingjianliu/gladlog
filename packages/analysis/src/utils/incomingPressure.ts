@@ -1,4 +1,4 @@
-import { ICombatUnit } from "@gladlog/parser-compat";
+import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { SCHOOL_PHYSICAL, spellSchoolMask } from "../data/spellSchools";
 import { isSameSideSource, type RosterSides } from "./rosterSide";
@@ -113,6 +113,25 @@ export function isDeferralAbsorb(a: { spellId?: string | null }): boolean {
   return !!a.spellId && a.spellId in DEFERRAL_SHIELD_DAMAGE_IDS;
 }
 
+/**
+ * A row of an attacker's `damageOut` that is a deferral shield's own absorb
+ * row: the hit counts when it lands, not here, and a Fel Armor correction is
+ * negative, so summed by magnitude it counted twice over. The one test of
+ * every reader that sums what an attacker dealt (`burstLedger`,
+ * `killAttempts`, `healerOffenseAnalysis`, `positionAnalysis`; fact7 D22,
+ * d2e6e70b: `their top target in it: 1.29M` for 1,278,729 plus 8,476 of Fel
+ * Armor rows).
+ */
+export function isDeferralDamageRow(d: {
+  spellId?: string | null;
+  logLine?: { event: string };
+}): boolean {
+  return (
+    (d.logLine?.event as string) === LogEvent.SPELL_ABSORBED &&
+    isDeferralAbsorb(d)
+  );
+}
+
 /** A deferral shield's delayed damage landing (or being eaten by a real
  * shield): the attacking spell is one of the deferred ids. */
 export function isDeferredTickId(spellId: string | null | undefined): boolean {
@@ -121,8 +140,9 @@ export function isDeferredTickId(spellId: string | null | undefined): boolean {
 
 /** A `REDISTRIBUTION_DAMAGE_IDS` row from the unit's own side — moved
  * health, not an enemy hitting it. The one test every reader of incoming
- * damage applies (`incomingPressureEvents`, `incomingPressureBySchool`). */
-function isRedistributionRow(
+ * damage applies (`incomingPressureEvents`, `incomingPressureBySchool`,
+ * `getTopDamageSourcesInWindow`). */
+export function isRedistributionRow(
   unit: Pick<ICombatUnit, "id" | "reaction">,
   spellId: string | undefined,
   srcUnitId: string | undefined,

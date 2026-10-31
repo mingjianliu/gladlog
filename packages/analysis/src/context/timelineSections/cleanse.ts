@@ -69,13 +69,15 @@ export function emitCleanseEntries(
     // retold as "took 247k during the 16 s" (reliability round 2, 539f: the
     // real 16 s figure was 568k).
     const dmgK = Math.round(miss.postCcDamage / 1000);
+    const absorbedK = Math.round((miss.postCcAbsorbed ?? 0) / 1000);
+    const absorbedPart = absorbedK > 0 ? ` (+${absorbedK}k absorbed)` : "";
     const spellName = getEnglishSpellName(miss.spellId, miss.spellName);
     addEntry(
       miss.timeSeconds,
       // Exemption context (Fix 5): a missed cleanse while the cleanse was on CD
       // is still rendered (the fact layer hides nothing), but carries a context
       // suffix so the model stops blaming an infeasible dispel as a mistake.
-      `${fmtTime(miss.timeSeconds)}  [UNCLEANSED DEBUFF]   ${spellName} on ${pid(miss.targetName)} | ${miss.durationSeconds.toFixed(0)}s | ${dmgK}k taken in the ${POST_CC_PRESSURE_WINDOW_S}s after it landed | dispel: ${miss.dispelType}${formatMissedCleanseExemption(miss)}`,
+      `${fmtTime(miss.timeSeconds)}  [UNCLEANSED DEBUFF]   ${spellName} on ${pid(miss.targetName)} | ${miss.durationSeconds.toFixed(0)}s | ${dmgK}k taken${absorbedPart} in the ${POST_CC_PRESSURE_WINDOW_S}s after it landed | dispel: ${miss.dispelType}${formatMissedCleanseExemption(miss)}`,
     );
   }
 

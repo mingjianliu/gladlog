@@ -15,6 +15,7 @@
 import { CombatUnitClass, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { emitEnemyDefEntries } from "../src/context/timelineSections/enemyDef";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   ENEMY_IMMUNITY_SAVE_AURAS,
@@ -346,6 +347,47 @@ describe("D17 — Peaceweaver is an immunity-kind save with its DB2 mask (ruling
       expect(evs[0]!.noPressLogged).toBeUndefined();
       expect(ownSaveSpanS(evs[0]!, false)).toBeDefined();
     }
+  });
+
+  it("fact7 D44 (ba5e59c6 2:02): on a carrier that did not press it, the event keeps whose press it was", () => {
+    const peace = (dest: string, from: number, to: number) => [
+      auraRow(LogEvent.SPELL_AURA_APPLIED, PEACEWEAVER, "monk", dest, from),
+      auraRow(LogEvent.SPELL_AURA_REMOVED, PEACEWEAVER, "monk", dest, to),
+    ];
+    const monk = unit("monk", {
+      spellCastEvents: [castRow(RESTORAL, "0000000000000000", 98.25)],
+      auraEvents: peace("monk", 98.28, 100.3),
+    });
+    const ally = unit("ally", { auraEvents: peace("ally", 98.3, 100.32) });
+    const enemies = [monk, ally];
+    const combat = { startTime: T0, endTime: ms(180) };
+    const event = (u: any) =>
+      enemyDefensiveEvents(u, enemies, combat).find(
+        (e) => e.spellId === PEACEWEAVER,
+      )!;
+    expect(event(ally).procSource).toEqual({
+      unitName: "monk",
+      spellName: "Restoral",
+    });
+    expect(event(monk).procSource).toBeUndefined();
+
+    const lines: string[] = [];
+    emitEnemyDefEntries({
+      matchStartMs: T0,
+      matchEndSeconds: 180,
+      enemies,
+      enemyPid: (n: string) => `E:${n}`,
+      friends: [],
+      roundBounds: undefined,
+      pid: (n: string) => `F:${n}`,
+      actorLabel: (n: string) => `E:${n}`,
+      addEntry: (_t: number, line: string) => lines.push(line),
+      _allUnits: enemies,
+    } as never);
+    expect(lines.find((l) => l.includes("E:ally"))).toContain(
+      "from E:monk's Restoral",
+    );
+    expect(lines.find((l) => l.includes("E:monk ("))).not.toContain(" from ");
   });
 
   it("an aura the OTHER side put on the unit is not its save", () => {

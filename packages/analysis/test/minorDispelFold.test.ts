@@ -20,6 +20,7 @@ import {
   classifyDispel,
   createCastMatchIndex,
   dispelCameWithOwnCast,
+  dispelPressedBy,
 } from "../src/utils/dispelKind";
 
 beforeAll(async () => {
@@ -230,5 +231,33 @@ describe("purgeMatchesCast — the cast must be the dispel (5677ba13 Holy Fire)"
         spellId: "999999901",
       }),
     ).toBe(true);
+  });
+});
+
+describe("dispelPressedBy — a press on a teammate logged as the recipient's dispel (fact7 D18)", () => {
+  const BANDAGE = "212640";
+  const index = () => {
+    const i = createCastMatchIndex();
+    addCastToIndex(i, "hunter", BANDAGE, "Mending Bandage", 26_100, "warlock");
+    return i;
+  };
+  const row = (timestamp: number, srcUnitId = "warlock") => ({
+    srcUnitId,
+    spellId: BANDAGE,
+    spellName: "Mending Bandage",
+    timestamp,
+  });
+
+  it("d2e6e70b 0:26: the hunter's cast aimed at the warlock explains the warlock's self rows", () => {
+    expect(dispelPressedBy(index(), row(26_200))).toBe("hunter");
+  });
+  it("out of the match window, or a cast of the unit's own, names nobody", () => {
+    expect(dispelPressedBy(index(), row(40_000))).toBeUndefined();
+    const own = index();
+    addCastToIndex(own, "warlock", BANDAGE, "Mending Bandage", 26_100);
+    expect(dispelPressedBy(own, row(26_200))).toBeUndefined();
+  });
+  it("a cast aimed at another unit is not this unit's press", () => {
+    expect(dispelPressedBy(index(), row(26_200, "priest"))).toBeUndefined();
   });
 });

@@ -978,6 +978,31 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
   // dispelType "Magic" leave this owner's capability gate untouched — this
   // fixture exercises the pre-existing priority/CD/cap behavior only.
   const dispelOwner = { id: "owner", spec: "256" };
+  it("missed-cleanse:盾吃掉的量是 postCcDamageK 旁边的一条事实,0 时不出现(fact7 D70)", () => {
+    const w = (postCcAbsorbed?: number) => ({
+      timeSeconds: 30,
+      durationSeconds: 5,
+      targetName: "Ally",
+      spellName: "Fear",
+      spellId: "5782",
+      priority: "Critical" as never,
+      postCcDamage: 0,
+      ...(postCcAbsorbed === undefined ? {} : { postCcAbsorbed }),
+      cleanseWasOnCD: false,
+      dispellersLockedOut: false,
+      losReachable: null,
+      drChainRisk: false,
+      dispelType: "Magic" as const,
+    });
+    const fact = (absorbed?: number) =>
+      missedCleanseEvents([w(absorbed)], dispelOwner, [dispelOwner], false)[0]!
+        .facts;
+    expect(fact(272_000)["postCcAbsorbedK"]).toBe("272");
+    expect(fact(272_000)["postCcDamageK"]).toBe("0");
+    expect(fact(0)["postCcAbsorbedK"]).toBeUndefined();
+    expect(fact()["postCcAbsorbedK"]).toBeUndefined();
+  });
+
   it("missed-cleanse:只报 Critical/High 且解控可用;按承伤排序截 2(TEMPORARY 上限,BACKLOG #22)", () => {
     const w = (p: string, dmg: number, onCD = false) => ({
       timeSeconds: 30,

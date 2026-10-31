@@ -511,6 +511,61 @@ describe("burstLedger — burst grouping and audit", () => {
     expect(entries[0].dominantTarget?.died).toBe(true);
   });
 
+  it("fact7 D22: a Fel Armor row (held back, then its correction) puts no ally on a target", () => {
+    const felArmorRow = (timestamp: number, amount: number, dest: string) => ({
+      ...dmgOut(timestamp, amount, dest),
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp, parameters: [] },
+      spellId: "386124",
+      spellName: "Fel Armor",
+    });
+    const player = makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "31884",
+          MATCH_START + 10_000,
+          "p1",
+          "Self",
+          "p1",
+          "Ret",
+          0,
+          "Avenging Wrath",
+        ),
+      ],
+      damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+    } as any);
+    const ally = makeUnit("f2", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Fire,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "190319",
+          MATCH_START + 13_000,
+          "f2",
+          "Self",
+          "f2",
+          "Mage",
+          0,
+          "Combustion",
+        ),
+      ],
+      damageOut: [
+        dmgOut(MATCH_START + 14_000, -10_000, "e1"),
+        felArmorRow(MATCH_START + 15_000, 900_000, "e2"),
+        felArmorRow(MATCH_START + 16_000, -900_000, "e2"),
+      ],
+    } as any);
+    const e1 = makeUnit("e1", { name: "Victim", info } as any);
+    const e2 = makeUnit("e2", { name: "Warlock", info } as any);
+    const entries = analyzeBurstLedger(player, [ally], [e1, e2], makeCombat());
+    expect(entries[0]!.allyCDsOverlapping[0]!.topTarget).toMatchObject({
+      unitId: "e1",
+    });
+  });
+
   it("samples dominant-target HP at burst edges when advanced data exists (D1-B5)", () => {
     const player = makeUnit("p1", {
       name: "Ret",

@@ -59,6 +59,40 @@ describe("offensiveWasteAnalysis — getHighValueSpellIds (FT-T02a)", () => {
     expect([...ids]).toEqual(["Mortal Strike"]);
   });
 
+  it("自伤和打在队友身上的行不进分母(fact7 D53:自伤行把 Fire Blast 压到 5% 以下)", () => {
+    const row = (spellId: string, amount: number, destUnitId: string) =>
+      ({ ...(hit(spellId, -amount) as object), destUnitId }) as never;
+    const damageOut = [
+      row("11366", 900_000, "enemy"), // Pyroblast
+      row("108853", 50_000, "enemy"), // Fire Blast — 5.0 % on enemies
+      row("87023", 100_000, "me"), // the mage's own burn
+    ];
+    expect(getHighValueSpellIds({ damageOut }).has("Fire Blast")).toBe(false);
+    expect(
+      getHighValueSpellIds({ damageOut }, new Set(["me"])).has("Fire Blast"),
+    ).toBe(true);
+  });
+
+  it("被吸收的命中按它自己的攻击技能计(attackSpellId);延迟盾的行不算(fact7 D53)", () => {
+    const row = (attackSpellId: string, amount: number, shield = "17") =>
+      ({
+        spellId: shield,
+        attackSpellId,
+        attackSpellName: "",
+        effectiveAmount: amount,
+        logLine: { event: "SPELL_ABSORBED" },
+      }) as never;
+    const ids = getHighValueSpellIds({
+      damageOut: [
+        hit("11366", -900_000), // Pyroblast
+        row("108853", 60_000), // Fire Blast, 6.2 %, all of it absorbed
+        row("133", 900_000, "386124"), // a Fel Armor row: no damage yet
+      ],
+    });
+    expect(ids.has("Fire Blast")).toBe(true);
+    expect(ids.has("Fireball")).toBe(false);
+  });
+
   it("被吸收的部分在 damageOut 里是按盾的法术 id 记的正数行:不进占比,也不抬高门槛", () => {
     const absorbed = (shieldId: string, amount: number) =>
       ({

@@ -28,8 +28,7 @@ import {
 import { TIME_DILATION_ID, timeDilationPendingAt } from "./deferralShield";
 import {
   DEFERRAL_SHIELD_DAMAGE_IDS,
-  hitSchoolId,
-  logSchoolMask,
+  incomingPressureBySchool,
 } from "./incomingPressure";
 
 /**
@@ -163,8 +162,12 @@ function windowNetDamageAndMaxHp(
 }
 
 /**
- * Total observed damage in the window matching schoolMask (absolute value;
- * `effectiveAmount` is already the post-mitigation amount actually taken).
+ * Total damage that reached the unit in the window, matching schoolMask: what
+ * landed plus what its shields then ate (`incomingPressureBySchool`). A
+ * percentage comes off a hit before any absorb, so landed alone priced a wall
+ * on what got past the shields too (fact7 D77, the `[STACKED DEFENSIVES]`
+ * reading of the same arithmetic). The same reading for a real shield and a
+ * deferral shield: the hit under its own school, at the time it was thrown.
  */
 export function windowDamage(
   unit: ICombatUnit,
@@ -173,16 +176,14 @@ export function windowDamage(
   schoolMask: number,
   matchStartMs: number,
 ): number {
-  const fromMs = matchStartMs + fromS * 1000;
-  const toMs = matchStartMs + toS * 1000;
+  const bySchool = incomingPressureBySchool(
+    unit,
+    matchStartMs + fromS * 1000,
+    matchStartMs + toS * 1000,
+  );
   let sum = 0;
-  for (const d of unit.damageIn) {
-    const ts = d.logLine.timestamp;
-    if (ts < fromMs || ts > toMs) continue;
-    const school = logSchoolMask(hitSchoolId(d));
-    if ((school & schoolMask) === 0) continue;
-    sum += Math.abs(d.effectiveAmount);
-  }
+  for (const [mask, amount] of Object.entries(bySchool))
+    if ((Number(mask) & schoolMask) !== 0) sum += amount;
   return sum;
 }
 

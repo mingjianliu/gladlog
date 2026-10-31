@@ -44,7 +44,10 @@ import {
 } from "../../utils/karmaFeed";
 import { fmtTime } from "../../utils/renderGrid";
 import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
-import { selfDefensiveLabelWords } from "../../utils/selfDefensiveMechanism";
+import {
+  selfDefensiveLabelWords,
+  selfDefensiveMechanism,
+} from "../../utils/selfDefensiveMechanism";
 import type { TimelineCtx } from "./ctx";
 
 export function emitEnemyDefEntries(
@@ -235,7 +238,14 @@ export function emitEnemyDefEntries(
             matchStartMs,
             targetUnit?.name,
           );
-          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}${saveStr}${duringStr}`;
+          // fact7 D33: a control removal on an ally is no grip / redirect;
+          // the label its own press carries (user ruling 2026-10-27)
+          const mechanism = selfDefensiveMechanism(d.spellId);
+          const what =
+            mechanism?.kind === "control removal"
+              ? selfDefensiveLabelWords(mechanism)
+              : dur;
+          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${what ? ` (${what})` : ""}${burstStr}${hpStr}${saveStr}${duringStr}`;
         } else if (d.kind === "area") {
           // Ruling A15 (2026-09-30): who pressed it and when — no %, no
           // recipients, no duration, no HP (nobody is "the target"). fact2
@@ -355,7 +365,11 @@ export function emitEnemyDefEntries(
             : d.unseenPress
               ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}`
               : "";
-          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${noPress}${burstStr}${hpStr}`;
+          // fact7 D44: a teammate's proc says whose press it came from
+          const fromStr = d.procSource
+            ? ` from ${enemyPid(d.procSource.unitName)}${d.procSource.spellName ? `'s ${d.procSource.spellName}` : ""}`
+            : "";
+          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${fromStr}${noPress}${burstStr}${hpStr}`;
         }
         addEntry(
           d.atSeconds,

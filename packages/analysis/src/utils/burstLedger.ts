@@ -26,7 +26,7 @@ import {
   pressSecondsOfAura,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "./enemyDefensives";
-import { isDeferralAbsorb } from "./incomingPressure";
+import { isDeferralDamageRow } from "./incomingPressure";
 import {
   type IKickAuditEntry,
   jukedByFakeText,
@@ -395,11 +395,7 @@ export function analyzeBurstLedger(
       // a deferral shield's row is no absorb (FT-T02b, `isDeferralAbsorb`;
       // F16 retest idx 2: 0457a45e's `0.40M of it absorbed` was two-thirds
       // Time Dilation — the other burst readers already skip it)
-      if (
-        (d.logLine.event as string) === LogEvent.SPELL_ABSORBED &&
-        isDeferralAbsorb(d)
-      )
-        continue;
+      if (isDeferralDamageRow(d)) continue;
       const amount = Math.abs(d.effectiveAmount);
       damageMap.set(d.destUnitId, (damageMap.get(d.destUnitId) ?? 0) + amount);
       if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED)
@@ -586,7 +582,7 @@ export function analyzeBurstLedger(
         for (const d of s.ally.damageOut ?? []) {
           const ts = d.logLine.timestamp;
           if (ts < oFromMs || ts > oToMs) continue;
-          if (!enemyById.has(d.destUnitId)) continue;
+          if (!enemyById.has(d.destUnitId) || isDeferralDamageRow(d)) continue;
           byEnemy.set(
             d.destUnitId,
             (byEnemy.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
@@ -699,7 +695,7 @@ export function auditWindowTargeting(
     const damageMap = new Map<string, number>();
     for (const d of player.damageOut) {
       if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs) continue;
-      if (!enemyById.has(d.destUnitId)) continue;
+      if (!enemyById.has(d.destUnitId) || isDeferralDamageRow(d)) continue;
       damageMap.set(
         d.destUnitId,
         (damageMap.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
@@ -728,7 +724,7 @@ export function auditWindowTargeting(
       for (const d of u.damageOut ?? []) {
         if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs)
           continue;
-        if (!enemyById.has(d.destUnitId)) continue;
+        if (!enemyById.has(d.destUnitId) || isDeferralDamageRow(d)) continue;
         teamDamage.set(
           d.destUnitId,
           (teamDamage.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),

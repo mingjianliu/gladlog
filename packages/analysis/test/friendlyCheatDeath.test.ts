@@ -29,6 +29,34 @@ const unit = (id: string, auraEvents: unknown[]): any => ({
 });
 
 describe("emitFriendlyCheatDeathEntries", () => {
+  it("fact7 D46: a proc logged only as its heal gets its line; the heal and the debuff of one proc are one line (7acbefeb 1:09)", () => {
+    const heal = (s: number) => ({
+      spellId: "87023",
+      spellName: "Cauterize",
+      srcUnitId: "o",
+      destUnitId: "o",
+      logLine: { event: LogEvent.SPELL_HEAL, timestamp: T0 + s * 1000 },
+    });
+    const owner = {
+      ...unit("o", [aura("87023", "o", "o", 100.2)]),
+      healIn: [heal(69.4), heal(100.2)],
+    };
+    const lines: string[] = [];
+    emitFriendlyCheatDeathEntries({
+      owner,
+      friends: [owner],
+      matchStartMs: T0,
+      matchEndSeconds: 200,
+      roundEndAtMs: T0 + 180_000,
+      pid: (n) => `[${n}]`,
+      addEntry: (_t, l) => lines.push(l),
+    });
+    expect(lines).toEqual([
+      "1:09  [YOU] [PROC]   Cauterize (cheat-death proc)",
+      "1:40  [YOU] [PROC]   Cauterize (cheat-death proc)",
+    ]);
+  });
+
   it("[YOU] / [TEAM] lines, round-clipped, own aura only", () => {
     const owner = unit("o", [aura("87023", "o", "o", 166.88)]);
     const mate = unit("m", [

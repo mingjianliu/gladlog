@@ -41,7 +41,7 @@ import {
   HealerExposureLabel,
   IHealerBurstExposure,
 } from "./healerExposureAnalysis";
-import { sumIncomingPressure } from "./incomingPressure";
+import { isDeferralDamageRow, sumIncomingPressure } from "./incomingPressure";
 import { distanceBetween, getUnitPositionAtTime } from "./losAnalysis";
 import {
   HEALER_TRAINED_YARDS,
@@ -1560,6 +1560,7 @@ export function computeOwnerPositionEvents(params: {
         for (const d of trainer.damageOut ?? []) {
           if (d.timestamp < fromMs || d.timestamp > toMs) continue;
           if (!d.destUnitId || !friendIds.has(d.destUnitId)) continue;
+          if (isDeferralDamageRow(d)) continue;
           byTarget.set(
             d.destUnitId,
             (byTarget.get(d.destUnitId) ?? 0) + Math.abs(d.amount),

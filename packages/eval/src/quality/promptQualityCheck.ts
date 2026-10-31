@@ -210,7 +210,10 @@ import {
   selfSaveMechanismOfName,
   spanHoldsOwnWallSecond,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
-import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
+import {
+  DURING_ABSORBED_TAG_RE_SRC,
+  DURING_NO_SHARE,
+} from "@gladlog/analysis/src/utils/externalDamage";
 import { FORCED_MOVE_TEXT } from "@gladlog/analysis/src/utils/forcedDisplacement";
 import { parseEnemyCcKitLine } from "@gladlog/analysis/src/utils/healerExposureAnalysis";
 import {
@@ -4349,7 +4352,7 @@ const ENEMY_DEF_EXTERNAL_DUR =
   /\[ENEMY DEF\]\s+.*?→\s*\S+\s*\((\d+(?:\.\d+)?)s/;
 /** One `during it:` segment (segments are `; `-joined; fields ` · `-joined). */
 const DURING_SEG = new RegExp(
-  String.raw`^(\S+) (\d+)k on target${DURING_ABSORBED_TAG_RE_SRC} · (\d+)% of their enemy-player damage · direct (\d+)k \/ periodic (\d+)k(?: · (\d+)k \((\d+)%\) of it in the wall's school)?(?: · (\d+) hits? immune)? · damage in (\d+) of (\d+) s · longest gap (\d+) s$`,
+  String.raw`^(\S+) (\d+)k on target${DURING_ABSORBED_TAG_RE_SRC} · (?:(\d+)% of their enemy-player damage|${DURING_NO_SHARE}) · direct (\d+)k \/ periodic (\d+)k(?: · (\d+)k \((\d+)%\) of it in the wall's school)?(?: · (\d+) hits? immune)? · damage in (\d+) of (\d+) s · longest gap (\d+) s$`,
 );
 const DURING_EMPTY_SEG =
   /^(\S+) 0k on target · no damage on any enemy player · 0 of (\d+) s$/;
@@ -4397,7 +4400,10 @@ export function checkDuringExternalConsistency(lines: string[]): string[] {
       const num = (i: number) =>
         m[i] === undefined ? undefined : Number(m[i]);
       const total = num(2)!;
-      const x = num(3)!;
+      // no share at all: nothing landed, absorbed or held back anywhere
+      const x = num(3);
+      if (x === undefined && (total > 0 || / \(\+\d+k /.test(seg)))
+        fail(`有伤害却写 ${DURING_NO_SHARE}`);
       const direct = num(4)!;
       const periodic = num(5)!;
       const inSchool = num(6);
@@ -4408,7 +4414,7 @@ export function checkDuringExternalConsistency(lines: string[]): string[] {
         fail(`direct ${direct}k + periodic ${periodic}k ≠ ${total}k`);
       if (inSchool !== undefined && inSchool > total + 1)
         fail(`本学派 ${inSchool}k > 总量 ${total}k`);
-      if (x < 0 || x > 100) fail(`份额 ${x}% 越界`);
+      if (x !== undefined && (x < 0 || x > 100)) fail(`份额 ${x}% 越界`);
       if (K > M) fail(`有伤害秒数 ${K} > 窗口 ${M}`);
       if (G > M - K) fail(`最长空档 ${G} > ${M - K}`);
       if (maxM !== null && M > maxM)

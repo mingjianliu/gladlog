@@ -134,7 +134,7 @@ import {
 import {
   documentRecordsAttackSpell,
   incomingPressureBySchool,
-  isDeferralAbsorb,
+  isDeferralDamageRow,
 } from "./incomingPressure";
 import {
   getHpPercentAtTime,
@@ -658,12 +658,8 @@ export function extractKillAttempts(
           if (ts < spanFromMs || ts > spanToMs) continue;
           if (!enemyIds.has(d.destUnitId)) continue;
           // a deferral shield's SPELL_ABSORBED row only delayed the hit: it
-          // is counted when it lands (FT-T02b, `isDeferralAbsorb`)
-          if (
-            (d.logLine.event as string) === LogEvent.SPELL_ABSORBED &&
-            isDeferralAbsorb(d)
-          )
-            continue;
+          // is counted when it lands (FT-T02b, `isDeferralDamageRow`)
+          if (isDeferralDamageRow(d)) continue;
           const amount = Math.abs(d.effectiveAmount);
           teamDamageTotal += amount;
           if (d.destUnitId === target.id) teamDamageToTarget += amount;
@@ -856,11 +852,7 @@ export function extractKillAttempts(
           if (!enemyIds.has(d.destUnitId)) continue;
           // the burst floor's measure, as the bracket sum above reads it: a
           // deferral shield's row is no damage yet (codex 20-F16-08 #1)
-          if (
-            (d.logLine.event as string) === LogEvent.SPELL_ABSORBED &&
-            isDeferralAbsorb(d)
-          )
-            continue;
+          if (isDeferralDamageRow(d)) continue;
           const amount = Math.abs(d.effectiveAmount);
           total += amount;
           byEnemy.set(d.destUnitId, (byEnemy.get(d.destUnitId) ?? 0) + amount);
@@ -1045,11 +1037,7 @@ export function extractKillAttempts(
         // same events as `teamDamageToTarget`: no deferral row (codex
         // 20-F16-08 #1: `0.07M on target inside it, 0.04M incl. the 5 s
         // after`)
-        if (
-          (d.logLine.event as string) === LogEvent.SPELL_ABSORBED &&
-          isDeferralAbsorb(d)
-        )
-          continue;
+        if (isDeferralDamageRow(d)) continue;
         if (d.destUnitId === a.targetUnitId)
           inBracket += Math.abs(d.effectiveAmount);
       }

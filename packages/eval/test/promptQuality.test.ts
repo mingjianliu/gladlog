@@ -2388,6 +2388,19 @@ describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotatio
   it("passes a consistent annotation", () => {
     expect(checkDuringExternalConsistency([ok])).toEqual([]);
   });
+  it("fact7 D29: the no-share form reads back, and cannot carry a figure", () => {
+    const none =
+      "0:54  [ENEMY DEF]   6(RDruid) (Restoration Druid): Ironbark → 5(DDHunter) (11.0s) (target at 21% HP) | during it: 3(SHunter) 0k on target · no enemy-player damage · direct 0k / periodic 0k · 3 hits immune · damage in 3 of 11 s · longest gap 6 s";
+    expect(checkDuringExternalConsistency([none])).toEqual([]);
+    expect(
+      checkDuringExternalConsistency([
+        none.replace(
+          "0k on target · no enemy-player",
+          "0k on target (+5k absorbed) · no enemy-player",
+        ),
+      ]),
+    ).toHaveLength(1);
+  });
   it("flags direct + periodic ≠ total, K > M, and a window longer than the observed aura", () => {
     expect(
       checkDuringExternalConsistency([

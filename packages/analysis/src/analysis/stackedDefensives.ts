@@ -13,8 +13,11 @@
  *
  * Pricing mirrors the product's mitigation arithmetic (`resolveMitigation`,
  * talent- and carrier-aware; multiplicative stacking, measured 2026-09-13):
- *  - percentage aura: D × b / (1 − b) with D = damage the target actually
- *    took while both were up, b = pctMin of B; the same over B's full run;
+ *  - percentage aura: D × b / (1 − b) with D = the damage that reached the
+ *    target while both were up, landed plus what its shields then absorbed
+ *    (`sumIncomingPressure`: a percentage comes off before an absorb; fact7
+ *    D77, 831c3fd5 0:23: 96k landed + 234k into Matted Fur priced ~6 % on the
+ *    96k alone), b = pctMin of B; the same over B's full run;
  *  - deferral shield (`DEFERRAL_SHIELD_DAMAGE_IDS`: Time Dilation, Stretch
  *    Time): what the log records it held back (its own SPELL_ABSORBED rows,
  *    `isDeferralAbsorb`) — the 50 % the mitigation table prices Time
@@ -38,7 +41,8 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
 import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
-import { isDeferralAbsorb } from "../utils/incomingPressure";
+import { isDeferralAbsorb, sumIncomingPressure } from "../utils/incomingPressure";
+import { buildRosterSides } from "../utils/rosterSide";
 import { roundEndMs } from "../utils/roundEnd";
 
 /** external ∪ big-personal defensives — the two lists the product already
@@ -155,6 +159,7 @@ export function stackedDefensivePairs(
   const byName = new Map<string, any>(players.map((u) => [u.name, u]));
   const byId = new Map<string, any>(players.map((u) => [u.id, u]));
   const nameOf = (id: string) => getEnglishSpellName(id, "") || id;
+  const sides = buildRosterSides(Object.values(combat?.units ?? {}) as any[]);
   const out: StackedDefensivePair[] = [];
   // the round's end (`roundEndMs`): an aura still up at a Solo Shuffle
   // round's deciding death is cut there, and the hits after it are not the
@@ -210,12 +215,7 @@ export function stackedDefensivePairs(
         const toMs = combat.startTime + oTo * 1000;
         const bEndMs = combat.startTime + second.toS * 1000;
         const dmgBetween = (a: number, b: number) =>
-          ((target.damageIn ?? []) as any[])
-            .filter((d) => d.timestamp >= a && d.timestamp <= b)
-            .reduce(
-              (n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0),
-              0,
-            );
+          sumIncomingPressure(target, a, b, sides);
         const absorbedBetween = (a: number, b: number) =>
           ((target.absorbsIn ?? []) as any[])
             .filter(

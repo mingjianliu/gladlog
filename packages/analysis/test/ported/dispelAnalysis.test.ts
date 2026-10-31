@@ -120,6 +120,54 @@ describe("dispelAnalysis — summary reconstruction", () => {
     expect(res.allyCleanse[0].isPetDispel).toBe(true);
   });
 
+  it("fact7 D18 (d2e6e70b 0:26): a press on a teammate logged self → self is the presser's, and deliberate", () => {
+    const BANDAGE = "212640";
+    const hunter = makeUnit("hunter", {
+      name: "Hunter",
+      spec: CombatUnitSpec.Hunter_Survival,
+      spellCastEvents: [
+        {
+          spellId: BANDAGE,
+          spellName: "Mending Bandage",
+          srcUnitId: "hunter",
+          srcUnitName: "Hunter",
+          destUnitId: "lock",
+          destUnitName: "Warlock",
+          timestamp: MATCH_START + 26_100,
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: MATCH_START + 26_100,
+            parameters: [],
+          },
+        },
+      ],
+    } as any);
+    const lock = makeUnit("lock", {
+      name: "Warlock",
+      spec: CombatUnitSpec.Warlock_Affliction,
+    });
+    (lock as any).actionOut = [
+      makeExtraAction(MATCH_START + 26_200, LogEvent.SPELL_DISPEL, {
+        spellId: BANDAGE,
+        spellName: "Mending Bandage",
+        extraSpellId: "8122",
+        srcUnitId: "lock",
+        destUnitId: "lock",
+        destUnitName: "Warlock",
+      }),
+    ];
+    const res = reconstructDispelSummary(
+      [hunter, lock] as any,
+      [],
+      makeCombat(),
+    );
+    expect(res.allyCleanse).toHaveLength(1);
+    expect(res.allyCleanse[0]).toMatchObject({
+      sourceName: "Hunter",
+      dispelKind: "deliberate",
+    });
+  });
+
   it("handles hostile purges (B96)", () => {
     const friend = makeUnit("f1", {
       name: "Friend",

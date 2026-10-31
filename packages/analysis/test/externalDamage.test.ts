@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  DURING_NO_SHARE,
   eligibleExternalMitigation,
   EXTERNAL_DAMAGE_PRE_HIT_S,
   externalDamageForApplication,
@@ -106,6 +107,72 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     );
   });
 
+  it("fact7 D6 / D29: the share holds what shields ate, on the target and on any other enemy; a Fel Armor row nets out", () => {
+    const shield = (atS: number, amount: number, spellId = "17"): any => ({
+      attackerId: "A1",
+      spellId,
+      absorbedAmount: amount,
+      timestamp: ms(atS),
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: ms(atS), parameters: [] },
+    });
+    const shielded = (id: string, rows: any[], over: any[] = psOn(id)) => ({
+      ...enemy(id, over),
+      absorbsIn: rows,
+    });
+    const preHit = dmg(LogEvent.SPELL_DAMAGE, 18.5, "E1", 50_000); // qualifies the ally
+    const e1 = shielded("E1", [shield(21, 20_000)]);
+    const e3 = shielded("E3", [shield(23, 30_000)], []);
+    const a1 = ally("A1", [
+      preHit,
+      dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 30_000),
+      dmg(LogEvent.SPELL_DAMAGE, 22, "E3", 20_000),
+    ]);
+    const [o] = externalDamageObservations(e1, [a1], [e1, e3], combat);
+    // 50k of 100k (30 + 20 on the target, 20 + 30 on the other enemy): landed
+    // alone read 60 %
+    expect(o).toMatchObject({ nDirect: 30_000, absorbed: 20_000, dAll: 100_000 });
+    expect(o!.X).toBeCloseTo(50, 5);
+
+    const e1Whole = shielded("E1", [shield(21, 70_000)]);
+    const [whole] = externalDamageObservations(e1Whole, [ally("A1", [preHit])], [e1Whole], combat);
+    expect(formatDuringExternal(whole!, (n) => n)).toContain(
+      "0k on target (+70k absorbed) · 100% of their enemy-player damage",
+    );
+
+    const FEL_ARMOR = "386124";
+    const e1Net = shielded("E1", [shield(21, 40_000, FEL_ARMOR), shield(21.5, -40_000, FEL_ARMOR)]);
+    const [net] = externalDamageObservations(
+      e1Net,
+      [
+        ally("A1", [
+          preHit,
+          dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 10_000),
+          dmg(LogEvent.SPELL_DAMAGE, 22, "E3", 10_000),
+        ]),
+      ],
+      [e1Net, enemy("E3")],
+      combat,
+    );
+    expect(net!.X).toBeCloseTo(50, 5);
+  });
+
+  it("fact7 D29: a unit with nothing dealt has no share, not `0%`", () => {
+    const BOP = "1022";
+    const bop = enemy("E1", [
+      aura(BOP, "Blessing of Protection", "E2", "E1", 20, LogEvent.SPELL_AURA_APPLIED),
+      aura(BOP, "Blessing of Protection", "E2", "E1", 28, LogEvent.SPELL_AURA_REMOVED),
+    ]);
+    const miss: any = {
+      spellId: "1", spellName: "x", destUnitId: "E1", destUnitName: "E1", missType: "IMMUNE", amount: 0,
+      timestamp: ms(21), logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(21), parameters: [] },
+    };
+    const warrior = ally("A1", [dmg(LogEvent.SWING_DAMAGE, 19, "E1", 40_000)]);
+    const [o] = externalDamageObservations(bop, [{ ...warrior, missesOut: [miss, { ...miss, timestamp: ms(22) }, { ...miss, timestamp: ms(23) }] }], [bop], combat);
+    expect(o!.X).toBeNull();
+    expect(formatDuringExternal(o!, (n) => n)).toContain(`· ${DURING_NO_SHARE} ·`);
+    expect(formatDuringExternalForOwner(o!)).toContain(`· ${DURING_NO_SHARE} ·`);
+  });
+
   it("computes N / D / X / K / M / G on the render grid for a qualifying ally", () => {
     const e1 = enemy("E1", psOn("E1"));
     const e3 = enemy("E3");
@@ -173,7 +240,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     expect(formatDuringExternal(o!, (n) => n)).toBe("A1 0k on target · no damage on any enemy player · 0 of 8 s");
   });
 
-  it("absorbed hits are reported separately and count as seconds with damage; N / D / X unchanged", () => {
+  it("absorbed hits are reported separately, count as seconds with damage and in the share (fact7 D6 / D29)", () => {
     // Victim-keyed absorbs on the TARGET: attackerId names the ally.
     const absorbedRow = (atS: number, amt: number, attacker: string): any => ({
       spellId: "17",
@@ -201,9 +268,9 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     const [o] = externalDamageObservations(e1, [a1], [e1, enemy("E3")], combat);
     // The effective −1 residual at 21 s does not make a bin by itself (EXTERNAL_DAMAGE_BIN_MIN_HIT);
     // the two absorbed hits do → K = 2.
-    expect(o).toMatchObject({ nDirect: 1, nPeriodic: 0, dAll: 20_001, absorbed: 55_000, K: 2, M: 8, kind: "stops" });
+    expect(o).toMatchObject({ nDirect: 1, nPeriodic: 0, dAll: 75_001, absorbed: 55_000, K: 2, M: 8, kind: "stops" });
     expect(formatDuringExternal(o!, (n) => n)).toBe(
-      "A1 0k on target (+55k absorbed) · 0% of their enemy-player damage · direct 0k / periodic 0k · damage in 2 of 8 s · longest gap 4 s",
+      "A1 0k on target (+55k absorbed) · 73% of their enemy-player damage · direct 0k / periodic 0k · damage in 2 of 8 s · longest gap 4 s",
     );
   });
 

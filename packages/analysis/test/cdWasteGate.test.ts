@@ -155,6 +155,20 @@ describe("lowPressureUnusedDefensiveNote", () => {
     expect(lowPressureUnusedDefensiveNote([rewind], 96)).toBeNull();
   });
 
+  it("fact7 D62: an offensive cooldown is no self-only defensive (Ultimate Penitence, 6ab51f91)", () => {
+    const up = {
+      spellId: "421453",
+      spellName: "Ultimate Penitence",
+      neverUsed: true,
+      isThroughput: false,
+      tag: "Defensive" as const,
+    };
+    expect(lowPressureUnusedDefensiveNote([up], 96)).toBeNull();
+    expect(lowPressureUnusedDefensiveNote([DP, up], 96)).not.toContain(
+      "Ultimate Penitence",
+    );
+  });
+
   it("a proc-only entry (Renewing Blaze, [PASSIVE]) is never 'held'", () => {
     const blaze = {
       spellId: "374348",
