@@ -89,6 +89,7 @@ import * as mitigationData from "@gladlog/analysis/src/data/mitigationData";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as overrideVariantsGenerated from "@gladlog/analysis/src/data/overrideVariantsGenerated";
 import * as ownShieldLinks from "@gladlog/analysis/src/data/ownShieldLinks";
+import * as periodicAuraGenerated from "@gladlog/analysis/src/data/periodicAuraGenerated";
 import * as purgeRemovalsGenerated from "@gladlog/analysis/src/data/purgeRemovalsGenerated";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
@@ -126,6 +127,7 @@ import * as castMissRows from "@gladlog/analysis/src/utils/castMissRows";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as castPress from "@gladlog/analysis/src/utils/castPress";
 import * as castRowLag from "@gladlog/analysis/src/utils/castRowLag";
+import * as castStopEvidence from "@gladlog/analysis/src/utils/castStopEvidence";
 import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import * as ccDuration from "@gladlog/analysis/src/utils/ccDuration";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
@@ -164,6 +166,7 @@ import * as localizedText from "@gladlog/analysis/src/utils/localizedText";
 import * as logEra from "@gladlog/analysis/src/utils/logEra";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
+import * as offensiveWasteAnalysis from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
 import * as petCommandsMod from "@gladlog/analysis/src/utils/petCommands";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
@@ -449,6 +452,31 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/cooldowns.ts`,
     symbol: "overhealPct",
     mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/castStopEvidence.ts`,
+    symbol: "feignDeathInstantsMs",
+    mod: castStopEvidence,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "isDotAura",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/data/periodicAuraGenerated.ts`,
+    symbol: "PERIODIC_DAMAGE_AURA_IDS",
+    mod: periodicAuraGenerated,
+  },
+  {
+    file: `${A}/utils/offensiveWasteAnalysis.ts`,
+    symbol: "pressLandingsMs",
+    mod: offensiveWasteAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "reachFacts",
+    mod: dispelAnalysis,
   },
   {
     file: `${A}/utils/cooldowns.ts`,

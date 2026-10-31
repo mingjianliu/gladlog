@@ -2,6 +2,7 @@ import {
   annotateMissedPurgesWithKillWindows,
   blockedSecondsText,
   computeOffensiveWindows,
+  fmtTime,
   type ICCEfficiencyStat,
   type IDispelEvent,
   type IMissedPurgeWindow,
@@ -86,6 +87,18 @@ const EMPTY: DispelDash = {
 const fmtName = (id: string, fallback: string): string =>
   displaySpellName(id, fallback);
 
+/** The reach note of a missed window, the prompt's exemption in the panel's
+ * words: `reachFromSeconds` = a dispeller came in reach later (fact7 D66, the
+ * gate read the reaction window). */
+function noReachNote(
+  w: Pick<IMissedPurgeWindow, "losReachable" | "reachFromSeconds">,
+): string {
+  if (w.losReachable !== false) return "";
+  return w.reachFromSeconds === undefined
+    ? "(无视线/超射程)"
+    : `(${fmtTime(w.reachFromSeconds)} 前无视线/超射程)`;
+}
+
 /**
  * B-tier X1 (user ruling 2026-10-06): the windows only a SCOPED removal could
  * have answered (Shattering Throw on an immunity shield), one row per
@@ -116,14 +129,16 @@ export function scopedMissedPurgeInstances(
       if (!w.viaScopedTool || !tInRange(w.timeSeconds, range)) continue;
       const why = missedPurgeNotActionable(w);
       const notActionable =
-        why.lockedOut || why.noReach || why.onCooldownThroughout;
+        why.lockedOut ||
+        (why.noReach && !why.reachedInTime) ||
+        why.onCooldownThroughout;
       out.push({
         tS: w.timeSeconds,
         label: `${fmtName(w.spellId, w.spellName)} 挂在 ${w.enemyName} 身上 ${Math.round(
           w.durationSeconds,
         )}s 未被打掉 · 可用 ${w.viaScopedTool.name}(${f.name})${
           why.lockedOut ? `(持有者被控/被锁${lockedSecondsSuffix(w.purgersBlockedS)})` : ""
-        }${why.noReach ? "(无视线/超射程)" : ""}${
+        }${noReachNote(w)}${
           why.onCooldownThroughout ? "(技能全程在 CD)" : ""
         }${notActionable ? " · 当时做不到" : ""}`,
         unitName: w.enemyName,
@@ -239,7 +254,7 @@ export function deriveDispelDash(
         )}s 未被驱散${w.duringKillWindow ? "(我方击杀窗口内)" : ""}${
           w.purgeWasOnCD ? "(驱散在 CD)" : ""
         }${w.purgersLockedOut ? `(驱散者被控/被锁${lockedSecondsSuffix(w.purgersBlockedS)})` : ""}${
-          w.losReachable === false ? "(无视线/超射程)" : ""
+          noReachNote(w)
         }`,
         unitName: w.enemyName,
         passive: false,
@@ -264,7 +279,7 @@ export function deriveDispelDash(
           w.dispellersLockedOut
             ? `(驱散者被控/被锁${lockedSecondsSuffix(w.dispellersBlockedS)})`
             : ""
-        }${w.losReachable === false ? "(无视线/超射程)" : ""}${
+        }${noReachNote(w)}${
           w.drChainRisk ? "(对方 DR 未递减,解了易被续控)" : ""
         }`,
         unitName: w.targetName,

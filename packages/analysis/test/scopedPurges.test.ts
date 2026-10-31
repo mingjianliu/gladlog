@@ -464,7 +464,9 @@ describe("missedPurgeNotActionable — the formatter's three 'not actionable' co
     const text = formatMissedPurgeExemption(w(over));
     // the predicate says "not actionable" exactly when the suffix does
     expect(
-      why.lockedOut || why.noReach || why.onCooldownThroughout,
+      why.lockedOut ||
+        (why.noReach && !why.reachedInTime) ||
+        why.onCooldownThroughout,
     ).toBe(text.includes("not actionable"));
     return why;
   };
@@ -473,11 +475,19 @@ describe("missedPurgeNotActionable — the formatter's three 'not actionable' co
     expect(agree({})).toEqual({
       lockedOut: false,
       noReach: false,
+      reachedInTime: false,
       onCooldownThroughout: false,
     });
     expect(agree({ purgersLockedOut: true }).lockedOut).toBe(true);
     expect(agree({ losReachable: false }).noReach).toBe(true);
     expect(agree({ losReachable: null }).noReach).toBe(false);
+    // fact7 D66: in reach at 101 s, 7 s left ≥ 3 s + 1.5 s; at 104.5 s, 3.5 s left
+    expect(
+      agree({ losReachable: false, reachFromSeconds: 101 }).reachedInTime,
+    ).toBe(true);
+    expect(
+      agree({ losReachable: false, reachFromSeconds: 104.5 }).reachedInTime,
+    ).toBe(false);
     // 4.4 s of the buff left < 3 s reaction + 1.5 s cast
     expect(agree({ purgeReadyAtSeconds: 103.6 }).onCooldownThroughout).toBe(
       true,

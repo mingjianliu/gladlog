@@ -35,6 +35,7 @@ import {
   dispelTypesRemovedBy,
   formatMissedCleanseExemption,
   formatMissedPurgeExemption,
+  missedPurgeNotActionable,
   purgePriorityForTest,
   reconstructDispelSummary,
 } from "../src/utils/dispelAnalysis";
@@ -403,6 +404,8 @@ describe("豁免后缀与 purge 侧", () => {
       dispellersLockedOut: false,
       losReachable: null as boolean | null,
       drChainRisk: false,
+      timeSeconds: 0,
+      durationSeconds: 5,
     };
     expect(formatMissedCleanseExemption(base)).toBe("");
     expect(
@@ -436,6 +439,108 @@ describe("豁免后缀与 purge 侧", () => {
     expect(missedPurgeEvents([{ ...base, losReachable: false }])).toHaveLength(
       0,
     );
+  });
+
+  describe("fact7 D66:门量反应窗口,行只说它量到的", () => {
+    const purge = {
+      purgersLockedOut: false,
+      losReachable: false as boolean | null,
+      timeSeconds: 30,
+      durationSeconds: 15,
+    };
+    const cleanse = {
+      cleanseWasOnCD: false,
+      cdBurnedOn: undefined,
+      dispellersLockedOut: false,
+      losReachable: false as boolean | null,
+      drChainRisk: false,
+      timeSeconds: 30,
+      durationSeconds: 15,
+    };
+
+    it("整段都够不到:原话不变", () => {
+      expect(formatMissedPurgeExemption(purge)).toBe(
+        " | no purger had range/line of sight — not actionable",
+      );
+      expect(formatMissedCleanseExemption(cleanse)).toBe(
+        " | no dispeller had range/line of sight — not actionable",
+      );
+    });
+
+    it("6ab51f91 0:30:反应窗口后才够到:说到几时、还剩多少,不说 not actionable", () => {
+      expect(
+        formatMissedPurgeExemption({ ...purge, reachFromSeconds: 38 }),
+      ).toBe(" | no purger had range/line of sight until 0:38 (7s of the buff left)");
+      expect(
+        formatMissedCleanseExemption({ ...cleanse, reachFromSeconds: 38 }),
+      ).toBe(
+        " | no dispeller had range/line of sight until 0:38 (7s of the debuff left)",
+      );
+    });
+
+    it("够到时剩下的不足反应门槛:仍是 not actionable", () => {
+      expect(
+        formatMissedPurgeExemption({ ...purge, reachFromSeconds: 43 }),
+      ).toBe(
+        " | no purger had range/line of sight until 0:43 (2s of the buff left) — not actionable",
+      );
+    });
+
+    it("reachFromSeconds 不动判据:noReach 仍真(候选门与桌面卡片读它),只多一个 reachedInTime", () => {
+      const why = missedPurgeNotActionable({
+        ...purge,
+        reachFromSeconds: 38,
+        purgersLockedOut: false,
+      });
+      expect(why.noReach).toBe(true);
+      expect(why.reachedInTime).toBe(true);
+      expect(
+        missedPurgeEvents([
+          {
+            enemyName: "E",
+            spellName: "Power Infusion",
+            spellId: "10060",
+            priority: "High" as const,
+            purgeWasOnCD: false,
+            duringKillWindow: false,
+            ...purge,
+            reachFromSeconds: 38,
+          },
+        ] as never),
+      ).toHaveLength(0);
+    });
+
+    it("同一网格同一判据继续扫到窗口尾:反应窗口后走进射程的 purger 记下第一秒", () => {
+      const e1 = makeUnit("e1", {
+        spec: CombatUnitSpec.Paladin_Holy,
+        auraEvents: [
+          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1044", S(20), "e1", "e1", "BUFF"),
+          makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "1044", S(28), "e1", "e1", "BUFF"),
+        ],
+        advancedActions: [
+          makeAdvancedAction(S(19), 60, 0),
+          makeAdvancedAction(S(28), 60, 0),
+        ],
+      });
+      (e1 as any).advancedActions = (e1 as any).advancedActions.map((a: any) => ({
+        ...a,
+        advancedActorId: "e1",
+      }));
+      const samples = [19, 20, 21, 22, 23, 24, 25, 26, 27, 28];
+      const purger = discPriest("h1", {
+        advancedActions: samples.map((t) =>
+          makeAdvancedAction(S(t), t >= 25 ? 40 : 0, 0),
+        ),
+      });
+      const kiter = makeUnit("h2", { spec: CombatUnitSpec.Mage_Frost });
+      const ds = reconstructDispelSummary([purger, kiter] as any, [e1] as any, {
+        ...COMBAT,
+        zoneId: "0",
+      });
+      expect(ds.missedPurgeWindows).toHaveLength(1);
+      expect(ds.missedPurgeWindows[0].losReachable).toBe(false);
+      expect(ds.missedPurgeWindows[0].reachFromSeconds).toBe(S(25) / 1000 - COMBAT.startTime / 1000);
+    });
   });
 
   it("purge 集成:purger 超射程 → losReachable=false", () => {

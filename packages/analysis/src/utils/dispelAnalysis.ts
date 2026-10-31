@@ -1544,6 +1544,10 @@ export interface IMissedCleanseWindow {
    * **do not change the verdict** (treating "no data" as infeasible would
    * swallow all coaching on non-advanced corpus logs). */
   losReachable: boolean | null;
+  /** fact7 D66: with `losReachable` false, the first second a dispeller was
+   * in reach later in the window. The gate stays the reaction window's; this
+   * is what the line says of the rest (`laterReachSeconds`). */
+  reachFromSeconds?: number;
   /** Value gate d: the target's DR category was fully fresh at the time, and
    * within DR_CHAIN_LOOKAHEAD_S after the window ended they ate another CC of
    * the same category — dispelling here likely trades into a full-duration
@@ -1619,6 +1623,8 @@ export interface IMissedPurgeWindow {
   purgersBlockedS?: number;
   /** Feasibility gate a (tri-state, same semantics as the cleanse side). */
   losReachable: boolean | null;
+  /** Same as the cleanse side's. */
+  reachFromSeconds?: number;
   /**
    * P-P5b = C: friends whose SCOPED removal answers this buff (Shattering
    * Throw on an immunity shield) and who were
@@ -1647,6 +1653,7 @@ export interface IScopedPurgerFacts {
    * and its tool alone) */
   blockedS?: number;
   losReachable: boolean | null;
+  reachFromSeconds?: number;
 }
 
 /**
@@ -1679,6 +1686,7 @@ export function missedPurgesFor(
         purgeReadyAtSeconds: _teamReadyAt,
         cdBurnedOn: _teamBurn,
         purgersBlockedS: _teamBlocked,
+        reachFromSeconds: _teamReachFrom,
         ...rest
       } = w;
       return [
@@ -1693,6 +1701,9 @@ export function missedPurgesFor(
             ? { purgersBlockedS: mine.blockedS }
             : {}),
           losReachable: mine.losReachable,
+          ...(mine.reachFromSeconds !== undefined
+            ? { reachFromSeconds: mine.reachFromSeconds }
+            : {}),
           viaScopedTool: mine.tool,
         },
       ];
@@ -2575,30 +2586,24 @@ function intersectIntervalSets(
 }
 
 /**
- * Feasibility gate a (tri-state): sample the reaction window
- * [applyTs, applyTs+reactMs] on the whole-second grid. If at any second some
- * dispeller and the target both have a position, are within that
- * dispeller's `reachOf` (its dispel spell's range, talents included), and LoS is not false (no geometry → null → judge on
- * range alone) → true (reachable, the criticism stands). If the full sweep
- * yields samples but never a reachable pair → false (exempt). If no sample
- * pair exists at all → null (do not change the verdict; the tri-state rule —
- * see the losAnalysis / ccTrinketAnalysis precedents).
+ * The sweep behind feasibility gate a: the whole-second grid from the sweep's
+ * start (`dispelReachSweepStartMs`) to `toMs`, stopping at the first second
+ * some dispeller and the target both have a position, are within that
+ * dispeller's `reachOf`, and LoS is not false (no geometry → null → range
+ * alone). `sawSamplePair` = some second had a position pair at all.
  */
-export function anyDispellerReachable(
+function firstDispellerReachMs(
   dispellers: ICombatUnit[],
   target: ICombatUnit,
   applyTs: number,
-  reactMs: number,
+  toMs: number,
   zoneId: string | undefined,
-  /** this dispeller's reach for the removal in question (GH #83) */
   reachOf: (dispeller: ICombatUnit) => number,
-  /** the round's start (absolute ms) — the render grid is round-relative */
   matchStartMs: number,
-): boolean | null {
-  if (dispellers.length === 0) return null;
+): { atMs: number | null; sawSamplePair: boolean } {
   const t0 = dispelReachSweepStartMs(applyTs, matchStartMs);
   let sawSamplePair = false;
-  for (let t = t0; t <= applyTs + reactMs; t += 1000) {
+  for (let t = t0; t <= toMs; t += 1000) {
     const targetPos = getUnitPositionAtTime(target, t, LOS_SWEEP_GAP_MS);
     if (!targetPos) continue;
     for (const d of dispellers) {
@@ -2621,10 +2626,110 @@ export function anyDispellerReachable(
         zoneId && dRaw && targetRaw
           ? hasLineOfSight(zoneId, dRaw, targetRaw)
           : null;
-      if (los !== false) return true; // in range and LoS not disproven
+      if (los !== false) return { atMs: t, sawSamplePair }; // in range and LoS not disproven
     }
   }
-  return sawSamplePair ? false : null;
+  return { atMs: null, sawSamplePair };
+}
+
+/**
+ * Feasibility gate a (tri-state): sample the reaction window
+ * [applyTs, applyTs+reactMs]. A reachable pair at any second → true
+ * (reachable, the criticism stands). If the full sweep yields samples but
+ * never a reachable pair → false (exempt). If no sample pair exists at all →
+ * null (do not change the verdict; the tri-state rule — see the losAnalysis /
+ * ccTrinketAnalysis precedents).
+ */
+export function anyDispellerReachable(
+  dispellers: ICombatUnit[],
+  target: ICombatUnit,
+  applyTs: number,
+  reactMs: number,
+  zoneId: string | undefined,
+  /** this dispeller's reach for the removal in question (GH #83) */
+  reachOf: (dispeller: ICombatUnit) => number,
+  /** the round's start (absolute ms) — the render grid is round-relative */
+  matchStartMs: number,
+): boolean | null {
+  if (dispellers.length === 0) return null;
+  const { atMs, sawSamplePair } = firstDispellerReachMs(
+    dispellers,
+    target,
+    applyTs,
+    applyTs + reactMs,
+    zoneId,
+    reachOf,
+    matchStartMs,
+  );
+  return atMs !== null ? true : sawSamplePair ? false : null;
+}
+
+/**
+ * Gate a's reading plus what its exemption can truthfully say. The gate
+ * measures the reaction window and only that; a line that states it for the
+ * whole buff claims more (fact7 D66, 6ab51f91 0:30: "no purger had range/line
+ * of sight" for a 15 s Power Infusion, the owner in reach from 0:38). So an
+ * exempt window is swept on to its end, on the gate's own grid and test:
+ * `reachFromSeconds` is the first second in reach, whole on the render grid.
+ * It moves no verdict: `losReachable` stays the reaction window's.
+ */
+export function reachFacts(
+  dispellers: ICombatUnit[],
+  target: ICombatUnit,
+  applyTs: number,
+  reactMs: number,
+  windowEndMs: number,
+  zoneId: string | undefined,
+  reachOf: (dispeller: ICombatUnit) => number,
+  matchStartMs: number,
+): { losReachable: boolean | null; reachFromSeconds?: number } {
+  const losReachable = anyDispellerReachable(
+    dispellers,
+    target,
+    applyTs,
+    reactMs,
+    zoneId,
+    reachOf,
+    matchStartMs,
+  );
+  if (losReachable !== false) return { losReachable };
+  const { atMs } = firstDispellerReachMs(
+    dispellers,
+    target,
+    applyTs,
+    windowEndMs,
+    zoneId,
+    reachOf,
+    matchStartMs,
+  );
+  return atMs === null
+    ? { losReachable }
+    : { losReachable, reachFromSeconds: (atMs - matchStartMs) / 1000 };
+}
+
+/**
+ * The reach exemption of a window, as a line says it: ` | no <who> had
+ * range/line of sight`, then
+ *  - ` — not actionable` when none was in reach to the window's end;
+ *  - ` until m:ss (Ns of the <what> left)` when one was later, with the same
+ *    closing only if what was left is under the reaction bar (`barS`).
+ */
+function noReachText(
+  w: Pick<
+    IMissedCleanseWindow,
+    "losReachable" | "reachFromSeconds" | "timeSeconds" | "durationSeconds"
+  >,
+  who: "purger" | "dispeller",
+  what: "buff" | "debuff",
+  barS: number,
+): string {
+  if (w.losReachable !== false) return "";
+  const out = ` | no ${who} had range/line of sight`;
+  if (w.reachFromSeconds === undefined) return `${out} — not actionable`;
+  const left = w.timeSeconds + w.durationSeconds - w.reachFromSeconds;
+  return `${out} until ${fmtTime(w.reachFromSeconds)} (${Math.round(left)}s of the ${what} left)${
+    left < barS ? " — not actionable" : ""
+  }`;
 }
 
 /**
@@ -2833,6 +2938,9 @@ export function formatMissedCleanseExemption(
     | "dispellersLockedOut"
     | "dispellersBlockedS"
     | "losReachable"
+    | "reachFromSeconds"
+    | "timeSeconds"
+    | "durationSeconds"
     | "drChainRisk"
   >,
 ): string {
@@ -2848,8 +2956,7 @@ export function formatMissedCleanseExemption(
   // model stops calling an impossible dispel a mistake.
   if (w.dispellersLockedOut)
     out += ` | dispellers were CC'd/locked out${blockedForText(w.dispellersBlockedS)} — not actionable`;
-  if (w.losReachable === false)
-    out += " | no dispeller had range/line of sight — not actionable";
+  out += noReachText(w, "dispeller", "debuff", MISSED_CLEANSE_THRESHOLD_S);
   if (w.drChainRisk)
     out +=
       " | target's DR was fresh and the enemy re-CC'd right after — a dispel here likely trades into a full-duration chain; advise cautiously, not as a mistake";
@@ -2927,8 +3034,12 @@ const AURA_SOURCE_SLACK_MS = 100;
  * rows (B-tier X1), so the panel cannot label a window differently from the
  * prompt.
  *  - lockedOut: every purger was CC'd / locked out for the window;
- *  - noReach: no purger had range / line of sight (`false` only — unknown is
- *    not a reason);
+ *  - noReach: no purger had range / line of sight in the reaction window
+ *    (`false` only — unknown is not a reason);
+ *  - reachedInTime: of those, one came in reach later with the reaction bar
+ *    still left of the buff (fact7 D66): no verdict moves, `noReach` stays
+ *    what the gates and the desktop's card read, but the lines do not say
+ *    "not actionable" of it;
  *  - onCooldownThroughout: the removal came back with less of the buff left
  *    than the reaction threshold plus its own cast time.
  */
@@ -2937,20 +3048,36 @@ export function missedPurgeNotActionable(
     IMissedPurgeWindow,
     | "purgersLockedOut"
     | "losReachable"
+    | "reachFromSeconds"
     | "purgeReadyAtSeconds"
     | "timeSeconds"
     | "durationSeconds"
     | "viaScopedTool"
   >,
-): { lockedOut: boolean; noReach: boolean; onCooldownThroughout: boolean } {
+): {
+  lockedOut: boolean;
+  noReach: boolean;
+  reachedInTime: boolean;
+  onCooldownThroughout: boolean;
+} {
+  const barS = missedPurgeBarS(w);
   return {
     lockedOut: w.purgersLockedOut,
     noReach: w.losReachable === false,
+    reachedInTime:
+      w.losReachable === false &&
+      w.reachFromSeconds !== undefined &&
+      w.timeSeconds + w.durationSeconds - w.reachFromSeconds >= barS,
     onCooldownThroughout:
       w.purgeReadyAtSeconds !== undefined &&
-      w.timeSeconds + w.durationSeconds - w.purgeReadyAtSeconds <
-        MISSED_PURGE_THRESHOLD_S + (w.viaScopedTool?.castSeconds ?? 0),
+      w.timeSeconds + w.durationSeconds - w.purgeReadyAtSeconds < barS,
   };
+}
+
+/** The buff that must be left for a purge to be answerable: the reaction
+ * threshold plus the removal's own cast time. */
+function missedPurgeBarS(w: Pick<IMissedPurgeWindow, "viaScopedTool">): number {
+  return MISSED_PURGE_THRESHOLD_S + (w.viaScopedTool?.castSeconds ?? 0);
 }
 
 /** fact2 (2026-10-20): the measured share behind a "CC'd/locked out"
@@ -2979,6 +3106,7 @@ export function formatMissedPurgeExemption(
     | "purgersLockedOut"
     | "purgersBlockedS"
     | "losReachable"
+    | "reachFromSeconds"
     | "purgeReadyAtSeconds"
     | "timeSeconds"
     | "durationSeconds"
@@ -2993,8 +3121,7 @@ export function formatMissedPurgeExemption(
   const why = missedPurgeNotActionable(w);
   if (why.lockedOut)
     out += ` | purgers were CC'd/locked out${blockedForText(w.purgersBlockedS)} — not actionable`;
-  if (why.noReach)
-    out += " | no purger had range/line of sight — not actionable";
+  out += noReachText(w, "purger", "buff", missedPurgeBarS(w));
   // F-P7 (codex r2 09-30): say WHEN the purge came back — "on cooldown at
   // application" alone hides 9 s of a buff that was purgeable after.
   if (w.purgeReadyAtSeconds !== undefined) {
@@ -4073,11 +4200,12 @@ export function reconstructDispelSummary(
               removal.ts,
               cannotCastSrc,
             ),
-            losReachable: anyDispellerReachable(
+            ...reachFacts(
               capableDispellers,
               unit,
               applyTs,
               MISSED_CLEANSE_THRESHOLD_S * 1000,
+              removal.ts,
               zoneId,
               (d) =>
                 dispelReachYards(
@@ -4473,11 +4601,12 @@ export function reconstructDispelSummary(
                         () => [tool.castSpellId],
                       ),
                     ),
-                losReachable: anyDispellerReachable(
+                ...reachFacts(
                   eligiblePurgers,
                   enemy,
                   applyTs,
                   MISSED_PURGE_THRESHOLD_S * 1000,
+                  windowEndMs,
                   zoneId,
                   reachOf,
                   combat.startTime,
@@ -4521,11 +4650,12 @@ export function reconstructDispelSummary(
                             );
                             return b === null ? {} : { blockedS: b / 1000 };
                           })(),
-                          losReachable: anyDispellerReachable(
+                          ...reachFacts(
                             [unit],
                             enemy,
                             applyTs,
                             MISSED_PURGE_THRESHOLD_S * 1000,
+                            windowEndMs,
                             zoneId,
                             () => scopedToolReachYards(unit, tool),
                             combat.startTime,

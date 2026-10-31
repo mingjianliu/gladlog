@@ -210,6 +210,14 @@ describe("dispel panel: scoped missed removals (X1)", () => {
     expect(flagged({ losReachable: false }).label).toContain(
       "(无视线/超射程) · 当时做不到",
     );
+    // fact7 D66: in reach from 1:43 with 6.2 s left: said, and no "could not"
+    const later = flagged({ losReachable: false, reachFromSeconds: 103 });
+    expect(later.label).toContain("(1:43 前无视线/超射程)");
+    expect(later.notActionable).toBeUndefined();
+    // … from 1:48, 1.2 s left: under the bar
+    expect(
+      flagged({ losReachable: false, reachFromSeconds: 108 }).label,
+    ).toContain("(1:48 前无视线/超射程) · 当时做不到");
     // back with 3 s of the buff left: under the 3 s reaction + 1.5 s cast
     const onCd = flagged({ purgeReadyAtSeconds: 106.2 });
     expect(onCd.label).toContain("(技能全程在 CD) · 当时做不到");
