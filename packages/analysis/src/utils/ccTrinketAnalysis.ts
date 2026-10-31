@@ -130,7 +130,7 @@ import {
 import type { CastFailedEvent } from "./rawStreams";
 import { fmtTime, fmtWholeSeconds } from "./renderGrid";
 import { rootIntervalsOf } from "./rootReachability";
-import { roundEndMs, stillOnAtRoundEnd } from "./roundEnd";
+import { playableEndMs, roundEndMs, stillOnAtRoundEnd } from "./roundEnd";
 import {
   baseCastSeconds,
   ccMechanicOf,
@@ -4798,13 +4798,16 @@ export function analyzePlayerCCAndTrinket(
         // fact7 D25 (db5b6b6a 1:39): the window ends at the round's end or the
         // player's death, as the press readings below do (`after`,
         // `diedAfterKickS`): 2.4 s printed from a Leg Sweep landed 4 ms after
-        // the round's deciding death.
+        // the round's deciding death. In 3v3 that death is the first friendly
+        // one (`playableEndMs`; bd473d94 1:34: a Fear 0.43 s after the mate's
+        // death printed 0.1 s).
         const ccMs = coveredMsWithin(
           [...cannotCast, ...silenced],
           kickMs,
           Math.min(
             kickMs + POST_KICK_WINDOW_S * 1000,
             matchStartMs + roundEndS * 1000,
+            playableEndMs(combat, roundUnitList) ?? Infinity,
             deathS >= inst.atSeconds ? matchStartMs + deathS * 1000 : Infinity,
           ),
         );

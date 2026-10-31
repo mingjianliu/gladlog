@@ -175,6 +175,21 @@ describe("D25 — the post-kick window ends with the round", () => {
       } as never).interruptInstances[0]!.ccInWindowS ?? 0;
     expect(read(60)).toBeCloseTo(3, 1); // 12 → 15
     expect(read(12)).toBe(0); // the stun landed at the round's end
+    // 3v3 (bd473d94 1:34): the first friendly death decides the match, the log
+    // runs on past it
+    const mate = makeUnit("player-2", {
+      name: "Mate",
+      reaction: CombatUnitReaction.Friendly,
+      info: { pvpTalents: [], talents: [] } as never,
+      deathRecords: [{ timestamp: at(11) } as never],
+    });
+    const threes = analyzePlayerCCAndTrinket(priest, [hunter], {
+      startTime: T,
+      endTime: at(60),
+      startInfo: { zoneId: "1672", bracket: "3v3" },
+      units: { "player-1": priest, "player-2": mate, e1: hunter },
+    } as never);
+    expect(threes.interruptInstances[0]!.ccInWindowS ?? 0).toBe(0);
   });
 });
 
@@ -255,6 +270,87 @@ describe("kill attempts", () => {
     expect(a.map((x) => x.anchorSpellName)).not.toContain(
       "Recklessness (cast into e1)",
     );
+  });
+
+  it("D4: a self-buff's hit a shield ate on the target went into the target", () => {
+    const e1 = unit("e1");
+    const e2 = unit("e2");
+    // 1405c83e 0:48: Bestial Wrath's 344572 landed on the other enemy, and
+    // every hit on the target was absorbed: `spellId` is the shield
+    const absorbed = {
+      ...hit("e1", 40.1, 35_000),
+      spellId: "11426",
+      spellName: "Ice Barrier",
+      attackSpellId: "344572",
+      attackSpellName: "Bestial Wrath",
+    };
+    const f1 = unit("f1", {
+      reaction: 1,
+      spec: "253",
+      spellCastEvents: [
+        press("19574", "Bestial Wrath", 40),
+        press("107574", "Avatar", 45, "e1"),
+      ],
+      damageOut: [
+        {
+          ...hit("e2", 40.1, 1_000),
+          spellId: "344572",
+          spellName: "Bestial Wrath",
+        },
+        absorbed,
+        hit("e1", 42),
+      ],
+    });
+    const a = extractKillAttempts([f1], [e1, e2], combat([f1, e1, e2]));
+    expect(a[0]!.anchorSpellName).toBe("Bestial Wrath");
+  });
+
+  it("D4: a splash of the press elsewhere does not aim it: its caster's damage does", () => {
+    const e1 = unit("e1");
+    const e2 = unit("e2");
+    // 90c01e7f 2:28: Ascendance's 344548 hit the healer, 83 % of the shaman's
+    // bracket went into the target
+    const f1 = unit("f1", {
+      reaction: 1,
+      spec: "263",
+      spellCastEvents: [
+        press("114051", "Ascendance", 40),
+        press("107574", "Avatar", 44, "e1"),
+      ],
+      damageOut: [
+        { ...hit("e2", 40, 5_000), spellId: "344548", spellName: "Ascendance" },
+        hit("e1", 42, 200_000),
+      ],
+    });
+    const a = extractKillAttempts([f1], [e1, e2], combat([f1, e1, e2]));
+    expect(a[0]!.anchorSpellName).toBe("Ascendance");
+  });
+
+  it("D4: a splash whose caster stayed on the other enemy leaves the press out", () => {
+    const e1 = unit("e1");
+    const e2 = unit("e2");
+    const f1 = unit("f1", {
+      reaction: 1,
+      spec: "265",
+      spellCastEvents: [press("442726", "Malevolence", 40)],
+      damageOut: [
+        {
+          ...hit("e2", 40, 5_000),
+          spellId: "446285",
+          spellName: "Malevolence",
+        },
+        hit("e2", 41, 300_000),
+        hit("e1", 42, 1_000),
+      ],
+    });
+    const f2 = unit("f2", {
+      reaction: 1,
+      spec: "71",
+      spellCastEvents: [press("107574", "Avatar", 41, "e1")],
+      damageOut: [hit("e1", 42, 400_000)],
+    });
+    const a = extractKillAttempts([f1, f2], [e1, e2], combat([f1, f2, e1, e2]));
+    expect(a[0]!.anchorSpellName).toBe("Avatar");
   });
 
   it("D10: the target's own area save, its aura on it, is a press of its own", () => {

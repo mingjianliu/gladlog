@@ -23,11 +23,20 @@ import {
   isCastBlockingAuraType,
   SPELL_CATEGORIES,
 } from "@gladlog/analysis/src/data/spellCategories";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  getEnglishSpellName,
+  kickLockoutSeconds,
+} from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  schoolLockedBy,
+  spellSchoolMask,
+} from "@gladlog/analysis/src/data/spellSchools";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { SpellTag } from "@gladlog/analysis/src/data/spellTypes";
 import { usableWhileStunned } from "@gladlog/analysis/src/utils/cooldowns";
 import { isStunDrAura } from "@gladlog/analysis/src/utils/drAnalysis";
+import { unaffordableIntervals } from "@gladlog/analysis/src/utils/resourceAt";
+import { isUnsilenceableCast } from "@gladlog/analysis/src/utils/spellMechanics";
 import { LogEvent } from "@gladlog/parser-compat";
 
 import {
@@ -85,6 +94,62 @@ function controlsOn(ctx: IRoundCtx, unit: any): ISpan[] {
   return out;
 }
 
+/** every stretch that is no stretch free to press `spellId` beside a stun: the
+ * rows' controls and silences on `unit` (one still on it at the end of its rows
+ * runs on: b81efd46 1:33, a Polymorph the death ended, no REMOVED), the school
+ * lockouts of its kicks, and the stretches it could not pay (fact3 D12, the
+ * mana reading is not this check's fact). */
+function blocksOn(ctx: IRoundCtx, unit: any, spellId: string): ISpan[] {
+  const open = new Map<string, number>();
+  const out: ISpan[] = [];
+  const ours = new Set(
+    ctx.units.filter((u) => u.reaction === unit.reaction).map((u) => u.id),
+  );
+  for (const a of unit.auraEvents ?? []) {
+    const id = String(a.spellId ?? "");
+    const type = SPELL_CATEGORIES[id]?.type;
+    if (!type || !isCastBlockingAuraType(type)) continue;
+    if (!ccSpellIds.has(id) && isUnsilenceableCast(spellId)) continue;
+    const e = ev(a);
+    if (e === APPLIED) {
+      if (!ours.has(a.srcUnitId) && !open.has(id)) open.set(id, tsOf(a));
+    } else if (e === REMOVED || e?.startsWith("SPELL_AURA_BROKEN")) {
+      const from = open.get(id);
+      if (from !== undefined) out.push({ from, to: tsOf(a), spellId: id });
+      open.delete(id);
+    }
+  }
+  for (const [id, from] of open) out.push({ from, to: Infinity, spellId: id });
+  const school = spellSchoolMask(spellId);
+  for (const k of unit.actionIn ?? []) {
+    if (k.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
+    const was = spellSchoolMask(String(k.extraSpellId ?? ""));
+    if (
+      school !== undefined &&
+      was !== undefined &&
+      !schoolLockedBy(school, was)
+    )
+      continue;
+    if (isUnsilenceableCast(spellId)) continue;
+    const kick = String(k.spellId ?? "");
+    out.push({
+      from: k.timestamp,
+      to: k.timestamp + kickLockoutSeconds(kick) * 1000,
+      spellId: kick,
+    });
+  }
+  for (const u of unaffordableIntervals(
+    unit,
+    spellId,
+    ctx.start,
+    ctx.end,
+    undefined,
+    { startTime: ctx.start, endTime: ctx.end },
+  ))
+    out.push({ ...u, spellId: "mana" });
+  return out;
+}
+
 function spellIdByName(unit: any, name: string): string | undefined {
   for (const c of successesOf(unit))
     if (getEnglishSpellName(c.spellId, c.spellName ?? "") === name)
@@ -111,7 +176,9 @@ function freeToPress(ctx: IRoundCtx): void {
     const all = controlsOn(ctx, unit).filter((c) => c.from < deathAt);
     if (!all.some((c) => isStunDrAura(c.spellId))) return;
     ctx.bump("freeToPressBelowLog");
-    const hard = all.filter((c) => !isStunDrAura(c.spellId));
+    const hard = blocksOn(ctx, unit, id).filter(
+      (c) => c.from < deathAt && !isStunDrAura(c.spellId),
+    );
     const lastHard = Math.max(-Infinity, ...hard.map((c) => c.to));
     if (lastHard >= deathAt) return;
     const lo = windowed ? deathAt - 5000 : -Infinity;
