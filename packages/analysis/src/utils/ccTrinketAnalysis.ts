@@ -5689,6 +5689,14 @@ export function analyzePlayerCCAndTrinket(
           // A. Buff-Based Avoidance — read at the instant the control hit
           // the player (`controlHitInstant`), not at a delayed control's cast
           const hit = controlHitInstant(enemy, cast, missRow);
+          // fact7 D65: a control with no target and no miss row on the
+          // player says nothing of them, and all the sweep can credit then
+          // is a move — which a player held by a hard control did not make
+          // (6ab51f91 0:10: a trap that landed on nobody, credited to the
+          // Divine Steed of a paladin inside Cyclone). Its line stays for a
+          // player who could move (`ccAvoidedLandingDelay.test`).
+          if (!isTargeted && !missRow && hardCcAuraAt(player, enemyIds, hit.ms))
+            continue;
           const activeBuff = avoidanceBuffsAt(hit.ms, hit.line).find(
             (b) =>
               applicableIds.has(b.spellId) &&

@@ -43,6 +43,8 @@ const SIGIL_OF_MISERY_AURA = "207685";
 const RING_OF_FROST = "113724";
 const RING_OF_FROST_AURA = "82691";
 const POLYMORPH = "118";
+const FREEZING_TRAP = "187650";
+const FREEZING_TRAP_AURA = "3355";
 
 /** An enemy casts `castId` un-aimed at CAST_AT while the player has Bladestorm
  *  up; `landsAfterMs` = when `auraId` starts on the player (undefined: never). */
@@ -51,6 +53,7 @@ function analyze(
   auraId: string,
   landsAfterMs: number | undefined,
   aimed = false,
+  heldBy?: { id: string; from: number; to: number },
 ) {
   const enemy = makeUnit("enemy-1", {
     name: "Enemy",
@@ -102,6 +105,24 @@ function analyze(
         "BUFF",
       ),
       ...landing,
+      ...(heldBy
+        ? [
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_APPLIED,
+              heldBy.id,
+              CAST_AT + heldBy.from,
+              "enemy-1",
+              "player-1",
+            ),
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_REMOVED,
+              heldBy.id,
+              CAST_AT + heldBy.to,
+              "enemy-1",
+              "player-1",
+            ),
+          ]
+        : []),
       makeAuraEvent(
         LogEvent.SPELL_AURA_REMOVED,
         BLADESTORM,
@@ -185,6 +206,21 @@ describe("[CC AVOIDED?] — a delayed control that landed is not an avoidance", 
     expect(analyze(CAPACITOR_TOTEM, STATIC_CHARGE, 5_000).avoided).toEqual([
       "Capacitor Totem",
     ]);
+  });
+
+  it("fact7 D65 6ab51f91 0:10: a control with no target that landed on nobody is no avoidance by a player held by a hard control", () => {
+    const CYCLONE = "33786";
+    const held = { id: CYCLONE, from: -1_000, to: 4_000 };
+    expect(
+      analyze(FREEZING_TRAP, FREEZING_TRAP_AURA, undefined, false, held).avoided,
+    ).toEqual([]);
+    // the same trap on a player free again by the time it was placed
+    expect(
+      analyze(FREEZING_TRAP, FREEZING_TRAP_AURA, undefined, false, {
+        ...held,
+        to: -100,
+      }).avoided,
+    ).toEqual(["Freezing Trap"]);
   });
 
   it("74f541c0: Sigil of Misery triggers 2.093 s after the cast — landed; 3.5 s is past its window", () => {
