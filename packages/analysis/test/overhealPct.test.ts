@@ -8,12 +8,13 @@ const heal = (
   amount: number,
   effectiveAmount: number,
   petDest?: true,
-): any => ({
-  amount,
-  effectiveAmount,
-  ...(petDest ? { petDest } : {}),
-  logLine: { timestamp: ms },
-});
+): never =>
+  ({
+    amount,
+    effectiveAmount,
+    ...(petDest ? { petDest } : {}),
+    logLine: { timestamp: ms },
+  }) as never;
 
 describe("fact7 D9: overheal share leaves pet heals out of both sides", () => {
   it("a pet row's zeroed effective amount is not overheal", () => {
