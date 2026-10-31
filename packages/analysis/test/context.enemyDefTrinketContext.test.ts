@@ -99,14 +99,14 @@ function makeCCTrinketSummary(
 
 describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichment (GH #69 / C2)", () => {
   it("1. [ENEMY TRINKET] breaking hard CC with friendly offensive CD active and target HP", () => {
-    // Owner with offensive CD active at 42s (Shadow Dance 185313 from 40s to 48s)
+    // Owner with offensive CD active at 42s (Shadow Blades 121471 from 40s to 48s)
     const owner = makeUnit({
       id: "P1",
       name: "OwnerPlayer",
       spec: CombatUnitSpec.Rogue_Subtlety,
       auraEvents: [
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
           logLine: {
@@ -115,7 +115,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           },
         },
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 48_000,
           logLine: {
@@ -185,7 +185,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "OwnerPlayer",
       auraEvents: [
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
           logLine: {
@@ -194,7 +194,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           },
         },
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 48_000,
           logLine: {
@@ -334,7 +334,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "OwnerPlayer",
       auraEvents: [
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 41_000,
           logLine: {
@@ -343,7 +343,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           },
         },
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 42_200,
           logLine: {
@@ -484,7 +484,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "OwnerPlayer",
       auraEvents: [
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
           logLine: {
@@ -493,7 +493,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           },
         },
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 50_000,
           logLine: {
@@ -600,7 +600,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "OwnerPlayer",
       auraEvents: [
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
           logLine: {
@@ -609,7 +609,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           },
         },
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 50_000,
           logLine: {
@@ -722,7 +722,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "OwnerPlayer",
       auraEvents: [
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 40_000,
           logLine: {
@@ -731,7 +731,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           },
         },
         {
-          spellId: "185313",
+          spellId: "121471",
           srcUnitId: "P1",
           timestamp: T0 + 50_000,
           logLine: {
@@ -897,6 +897,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           logLine: {
             event: LogEvent.SPELL_AURA_APPLIED,
             timestamp: T0 + 10_000,
+            parameters: [],
           },
         },
         {
@@ -906,6 +907,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           logLine: {
             event: LogEvent.SPELL_AURA_REMOVED,
             timestamp: T0 + 26_000,
+            parameters: [],
           },
         },
       ] as any,
@@ -997,6 +999,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           logLine: {
             event: LogEvent.SPELL_AURA_APPLIED,
             timestamp: T0 + 10_000,
+            parameters: [],
           },
         },
         {
@@ -1006,6 +1009,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
           logLine: {
             event: LogEvent.SPELL_AURA_REMOVED,
             timestamp: T0 + 26_000,
+            parameters: [],
           },
         },
         {

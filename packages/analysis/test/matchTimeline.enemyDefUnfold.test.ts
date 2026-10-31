@@ -356,6 +356,7 @@ describe("GH #97 timeline flags", () => {
       startTime: START,
       endTime: ms(300),
       units: { f1, e1 },
+      startInfo: { zoneId: "1672" },
     };
     const attempts = () => extractKillAttempts([f1], [e1], combat);
     TIMELINE_LINE_FLAGS.enemyDef = "stamp";

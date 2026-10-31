@@ -189,6 +189,7 @@ export function makeUnit(
     advancedActions?: AnyObj[];
     petSpellCastEvents?: AnyObj[];
     deathRecords?: AnyObj[];
+    unconsciousRecords?: AnyObj[];
     info?: AnyObj | undefined;
     ownerId?: string;
   } = {},
@@ -225,6 +226,8 @@ export function makeUnit(
     petSpellCastEvents: (overrides.petSpellCastEvents ??
       []) as ICombatUnit["petSpellCastEvents"],
     deathRecords: (overrides.deathRecords ?? []) as ICombatUnit["deathRecords"],
+    unconsciousRecords: (overrides.unconsciousRecords ??
+      []) as ICombatUnit["unconsciousRecords"],
     // Stamp advancedActorId like production convert.ts does (unit.id) — the shared HP
     // sampler (getUnitHpAtTimestamp) rejects samples whose actor id doesn't match.
     advancedActions: (overrides.advancedActions ?? []).map((a) => ({
