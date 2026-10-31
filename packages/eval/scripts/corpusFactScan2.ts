@@ -1367,9 +1367,14 @@ async function main(): Promise<void> {
       // casts of that name (a lookup: `REPOSITIONING_SPELL_IDS`) and their
       // effect auras (Angel's Feather 121536 → Angelic Feather 121557)
       const xCastIds = new Set<string>(REPOSITION_IDS_BY_NAME.get(X) ?? []);
-      const xEffectIds = new Set<string>(
-        [...xCastIds].flatMap((id) => [...effectAurasOfCast(id)]),
-      );
+      // and the avoidance table's own ids of the name: the aura the log writes
+      // as "Divine Shield" is the table's Guardian of the Forgotten Queen 228050
+      const xEffectIds = new Set<string>([
+        ...[...xCastIds].flatMap((id) => [...effectAurasOfCast(id)]),
+        ...[...CC_AVOIDANCE_BUFF_SPELLS]
+          .filter(([, name]) => name === X)
+          .map(([id]) => id),
+      ]);
       const isXAura = (a: any) =>
         (isX(a) || xEffectIds.has(a.spellId)) &&
         (auraSrc === undefined || auraSrcOk(a.srcUnitId));

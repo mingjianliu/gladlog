@@ -10,7 +10,10 @@
  * Log truth, rows only, per enemy and control NAME: a use is a
  * SPELL_CAST_SUCCESS of the name by the enemy or a summon of theirs, or a
  * SPELL_AURA_APPLIED of the name from them on a player. A landing within
- * `SAME_USE_S` after a use is that use. The cooldown is the context's kit row
+ * `sameUseMs` after a use is that use: `SAME_USE_S`, or the cast's own landing
+ * window where it is longer (a trap walked into 14 s after it was set); a
+ * summon's row inside that window is the press too (Capacitor Totem's own row
+ * 2 s after the shaman's). The cooldown is the context's kit row
  * for the unit (`Name [40s]`, the low end of `[a–Ns]`); a kit row with charges
  * or without a number is skipped.
  *
@@ -22,6 +25,7 @@
  *    the burst opened (the first press of the [OFFENSIVE WINDOW] line's CDs).
  */
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { AOE_CC_LANDING_WINDOW_S } from "@gladlog/analysis/src/utils/drAnalysis";
 
 import { APPLIED, ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
@@ -41,7 +45,13 @@ interface IUse {
   ms: number;
   row: boolean;
   auraId?: string;
+  castId?: string;
+  summon?: boolean;
 }
+
+const sameUseMs = (u: IUse): number =>
+  Math.max(SAME_USE_S, AOE_CC_LANDING_WINDOW_S[u.castId ?? ""]?.toS ?? 0) *
+  1000;
 
 function usesOf(ctx: IRoundCtx, enemy: any, name: string): IUse[] {
   const own = new Set([
@@ -51,8 +61,18 @@ function usesOf(ctx: IRoundCtx, enemy: any, name: string): IUse[] {
   const rows: IUse[] = [...own].flatMap((id) =>
     successesOf(ctx.units.find((u) => u.id === id) ?? {})
       .filter((c) => nameOf(c.spellId, c.spellName) === name)
-      .map((c) => ({ ms: tsOf(c), row: true })),
+      .map((c) => ({
+        ms: tsOf(c),
+        row: true,
+        castId: String(c.spellId),
+        summon: id !== enemy.id,
+      })),
   );
+  const isPressRow = (r: IUse) =>
+    !r.summon ||
+    !rows.some(
+      (p) => !p.summon && r.ms >= p.ms && r.ms - p.ms <= sameUseMs(p),
+    );
   const landings: IUse[] = ctx.players
     .flatMap((p) => (p.auraEvents ?? []) as any[])
     .filter(
@@ -63,9 +83,9 @@ function usesOf(ctx: IRoundCtx, enemy: any, name: string): IUse[] {
         getEnglishSpellName(a.spellId, a.spellName ?? "") === name,
     )
     .map((a) => ({ ms: tsOf(a), row: false, auraId: String(a.spellId) }));
-  const out = [...rows].sort((a, b) => a.ms - b.ms);
+  const out = rows.filter(isPressRow).sort((a, b) => a.ms - b.ms);
   for (const l of landings.sort((a, b) => a.ms - b.ms))
-    if (!out.some((u) => l.ms >= u.ms && l.ms - u.ms <= SAME_USE_S * 1000)) {
+    if (!out.some((u) => l.ms >= u.ms && l.ms - u.ms <= sameUseMs(u))) {
       out.push(l);
       out.sort((a, b) => a.ms - b.ms);
     }

@@ -217,6 +217,7 @@ import castEffectAuraGenerated from "@gladlog/analysis/src/data/castEffectAuraGe
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import talentDurationTooltips from "@gladlog/analysis/src/data/talentDurationTooltipsGenerated.json";
+import { hpReadingRows } from "@gladlog/analysis/src/utils/advancedActions";
 import {
   CONTROL_FAILED_MISS_TYPES,
   isControlCast,
@@ -1188,7 +1189,7 @@ for (const f of files) {
     for (const pm of sm[2]!.matchAll(/(\d+)\([^)]*\):(\d+)/g)) {
       const unit = byName.get(pidName.get(pm[1]!) ?? "");
       if (!unit) continue;
-      const acts = ((unit.advancedActions ?? []) as any[])
+      const acts = (hpReadingRows(unit) as any[])
         .filter(
           (a) => a.advancedActorId === unit.id && a.advancedActorMaxHp > 0,
         )
@@ -1444,7 +1445,8 @@ for (const f of files) {
               enemy.spec,
               cd.cooldownSeconds,
             ) ?? cd.cooldownSeconds;
-          if (last.logLine.timestamp + certainS * 1000 > tMs)
+          // the printed second is the window's floor: spent to its end
+          if (last.logLine.timestamp + certainS * 1000 > tMs + 999)
             miss(
               "exposureOnCd",
               `${where} ${em[1]} ${enemy.name} ${name}: pressed ${fmtS((last.logLine.timestamp - start) / 1000)}, cd ${cd.cooldownSeconds}s`,

@@ -67,7 +67,10 @@ import {
   MITIGATION_TABLE,
   NO_MITIGATION_IDS,
 } from "@gladlog/analysis/src/data/mitigationData";
-import { mitigationVerdictOf } from "@gladlog/analysis/src/data/mitigationVerdicts";
+import {
+  mitigationVerdictOf,
+  nonMeleeMitigationVerdictOf,
+} from "@gladlog/analysis/src/data/mitigationVerdicts";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
@@ -79,6 +82,7 @@ import {
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { charmedAt } from "@gladlog/analysis/src/utils/charmedPlayer";
 import { isEnemyCdWindowSpell } from "@gladlog/analysis/src/utils/cooldowns";
+import { spellNameKey } from "@gladlog/analysis/src/utils/damagePress";
 import {
   isExternalSaveId,
   KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
@@ -94,6 +98,11 @@ import {
   distanceBetween,
   getUnitPositionAtTime,
 } from "@gladlog/analysis/src/utils/losAnalysis";
+import {
+  getHighValueSpellIds,
+  pressLandingCaster,
+  pressLandingRows,
+} from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import { parseRawStreams } from "@gladlog/analysis/src/utils/rawStreams";
 import { playableEndMs, roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
@@ -459,29 +468,26 @@ for (const f of files) {
         line: l,
       });
     }
-    // the player's ≥ 5 % landed-damage spells by English name, and the ids
-    // its damage rows carry
+    // the player's ≥ 5 % spells, the section's own basis, and the ids its
+    // damage rows carry
     const hvCache = new Map<string, { names: Set<string>; ids: Set<string> }>();
     const hvOf = (u: any) => {
       let h = hvCache.get(u.id);
       if (!h) {
-        const tot = new Map<string, number>();
         const ids = new Set<string>();
-        let all = 0;
         for (const d of (u.damageOut ?? []) as any[]) {
           if (ev(d) === ABSORBED) continue;
           const id = d.spellId ? String(d.spellId) : "";
           if (id) ids.add(id);
-          const n = id ? nameOf(id, d.spellName ?? "") : "melee";
-          const a = Math.abs(d.effectiveAmount ?? 0);
-          tot.set(n, (tot.get(n) ?? 0) + a);
-          all += a;
         }
         h = {
-          names: new Set(
-            [...tot]
-              .filter(([, v]) => all > 0 && v >= all * 0.05)
-              .map(([k]) => k),
+          names: getHighValueSpellIds(
+            u,
+            new Set(
+              players
+                .filter((x) => x.reaction === u.reaction)
+                .map((x) => x.id),
+            ),
           ),
           ids,
         };
@@ -520,7 +526,7 @@ for (const f of files) {
           tsOf(c) >= run.from - 6000 &&
           tsOf(c) <= run.to &&
           tsOf(c) < end &&
-          hv.names.has(nameOf(String(c.spellId), c.spellName ?? "")) &&
+          hv.names.has(spellNameKey(String(c.spellId), c.spellName ?? "")) &&
           // a copy / tick / later stage of another press is no cast (the
           // product's table: Mutilate's 27576, Penance's bolts)
           !COPY_CAST_IDS.has(String(c.spellId)) &&
@@ -545,9 +551,17 @@ for (const f of files) {
         );
         return e ? e.ms : null;
       };
-      rows = rows.filter((c) => {
-        const at = firedAt(c);
-        return at !== null && at >= run.from && at <= run.to;
+      // the section counts what landed inside the defensive
+      const fired = rows.filter((c) => firedAt(c) !== null);
+      const landings = pressLandingRows(
+        fired,
+        (c) => firedAt(c)!,
+        pressLandingCaster(player, units),
+        players.filter((x) => x.reaction !== player.reaction),
+      );
+      rows = fired.filter((c) => {
+        const at = landings.get(c)!.atMs;
+        return at >= run.from && at <= run.to;
       });
       // one press written under two ids of the spell in one instant (Flame
       // Shock 470411 + 188389) is one cast
@@ -574,9 +588,17 @@ for (const f of files) {
         players: Set<string>;
       }
     >();
+    // a wall with a melee and a non-melee reading counts each apart: its
+    // line is `intoDefenseLanded`'s (scan5)
+    const twoReadings = (auraId: string) => {
+      const key =
+        castKeyOfAura(auraId, (id) => mitigationVerdictOf(id) !== null) ??
+        auraId;
+      return nonMeleeMitigationVerdictOf(key) !== mitigationVerdictOf(key);
+    };
     for (const p of printed) {
       const run = runOf(p.target, p.defense, p.sec);
-      if (!run) continue;
+      if (!run || twoReadings(run.auraId)) continue;
       const rk = `${p.target.id}|${p.defense}|${p.sec}`;
       if (!runs.has(rk))
         runs.set(rk, {

@@ -77,6 +77,7 @@ import {
   spellRangeYards,
 } from "@gladlog/analysis/src/data/spellReach";
 import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
+import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
 
 import {
   ABSORBED,
@@ -147,6 +148,7 @@ const deferredOn = (v: any, a: number, b: number, src?: Set<string>): number =>
 
 const ENEMY_DEF_EXTERNAL =
   /^\s*(\d+):(\d\d)\s+\[ENEMY DEF\]\s+\d+\([^)]*\)(?: \([^)]*\))?: (.+?) → (\d+)\([^)]*\) \((\d+(?:\.\d+)?)s/;
+const ENEMY_DEF_CASTER = /\[ENEMY DEF\]\s+(\d+)\(/;
 const DURING_SHARE =
   /^(\d+)\([^)]*\) \d+k on target(?: \([^)]*\))? · (\d+)% of their enemy-player damage/;
 
@@ -164,14 +166,29 @@ function duringExternalShare(ctx: IRoundCtx): void {
     // that second (45e12c2b r3 2:01: cast 22:33:14.786, Pain Suppression on the
     // target at 15.571), and a press on a unit already holding the aura opens
     // no APPLIED, only a REFRESH (cb6f3e66 r5 0:35: Time Dilation up from 0:27,
-    // the second press and its 10.4 s from the REFRESH at 35.871)
-    const applied = ((target.auraEvents ?? []) as any[]).find(
+    // the second press and its 10.4 s from the REFRESH at 35.871). The row is
+    // the line's caster's, nearest its press: the target's own copy of the
+    // name, or a re-broadcast, can open first (55-3 0:24: own Obsidian Scales
+    // 24.647, the ally's 24.976)
+    const caster = ctx.unitOfPid(ENEMY_DEF_CASTER.exec(line)?.[1]);
+    const press = successesOf(caster ?? {}).find(
+      (c) =>
+        tsOf(c) >= lo &&
+        tsOf(c) < lo + 1000 &&
+        nameOf(c.spellId, c.spellName) === m[3],
+    );
+    const anchor = press ? tsOf(press) : lo;
+    const named = ((target.auraEvents ?? []) as any[]).filter(
       (a) =>
         (ev(a) === APPLIED || ev(a) === REFRESH) &&
         tsOf(a) >= lo - 1000 &&
         tsOf(a) < lo + AURA_AFTER_PRESS_MS &&
         nameOf(a.spellId, a.spellName) === m[3],
     );
+    const fromCaster = named.filter((a) => a.srcUnitId === caster?.id);
+    const applied = (fromCaster.length > 0 ? fromCaster : named).sort(
+      (a, b) => Math.abs(tsOf(a) - anchor) - Math.abs(tsOf(b) - anchor),
+    )[0];
     const fromMs = applied ? tsOf(applied) : lo;
     const printedTo = fromMs + +m[5]! * 1000;
     // the aura's own end, read from its row (a re-broadcast's REMOVED sits
@@ -477,12 +494,16 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
         parried.ids.has(id) ||
         parried.named.has(`${friend.id}|${spell}`) ||
         db2Parryable(id, rowIdsOf.get(spell));
-      const casts = successesOf(friend).filter(
+      const friendRows = successesOf(friend);
+      const casts = friendRows.filter(
         (c) =>
           tsOf(c) >= tsOf(up) &&
           tsOf(c) <= toMs &&
           c.destUnitId === target.id &&
           nameOf(c.spellId, c.spellName) === spell &&
+          // a copy row of another press is no cast (Twin Flame 1265980, a set
+          // proc in Disintegrate's instant)
+          !isNoPressRow(c, friendRows) &&
           // a school the immunity does not stop (DB2 masks) goes through it:
           // Crusading Strikes (Physical) into Spellwarding (Magic)
           immunityCoversSpell(wallKey, c.spellId) !== false &&
@@ -538,6 +559,7 @@ function postCcAbsorbedUnsaid(ctx: IRoundCtx): void {
   }
 }
 
+const STACKED_LATER_FROM = /\(from (you|\d+\([^)]*\))\) up together \d/;
 const STACKED =
   /^\s*(\d+):(\d\d)\s+\[STACKED DEFENSIVES\]\s+\d+\([^)]*\)(?: \(you\))? had .+? up together (\d+):(\d\d)–(\d+):(\d\d) \([\d.]+s\); the later one, (.+?), blocked ~(\d+)% of their max HP during the overlap/;
 
@@ -548,9 +570,17 @@ function stackedWallPrice(ctx: IRoundCtx): void {
     const pid = /\[STACKED DEFENSIVES\]\s+(\d+)\(/.exec(line)?.[1];
     const unit = ctx.unitOfPid(pid);
     if (!unit) continue;
-    const carrierAura = ((unit.auraEvents ?? []) as any[]).find(
-      (a) => nameOf(a.spellId, a.spellName) === m[7],
-    );
+    // the later one's own copy: two of one name are priced apart (Obsidian
+    // Scales 40 % on the evoker, 15 % from an ally, 55-2 0:52)
+    const fromTag = STACKED_LATER_FROM.exec(line)?.[1];
+    const laterFrom =
+      fromTag === "you"
+        ? ctx.owner
+        : ctx.unitOfPid(/^\d+/.exec(fromTag ?? "")?.[0]);
+    const ofLater = (a: any) =>
+      nameOf(a.spellId, a.spellName) === m[7] &&
+      (!laterFrom || a.srcUnitId === laterFrom.id);
+    const carrierAura = ((unit.auraEvents ?? []) as any[]).find(ofLater);
     if (!carrierAura) continue;
     const res = resolveMitigation(String(carrierAura.spellId), {
       carrierIsCaster: carrierAura.srcUnitId === unit.id,
@@ -563,7 +593,7 @@ function stackedWallPrice(ctx: IRoundCtx): void {
     if (DEFERRAL_SHIELDS.has(String(carrierAura.spellId))) continue;
     const b = pct.pctMin / 100;
     const auras = ((unit.auraEvents ?? []) as any[]).filter(
-      (a) => a.spellId === carrierAura.spellId,
+      (a) => a.spellId === carrierAura.spellId && ofLater(a),
     );
     const lo = ctx.start + secOfTag(m[3]!, m[4]!) * 1000;
     // the printed end is floored: the overlap ended inside that second

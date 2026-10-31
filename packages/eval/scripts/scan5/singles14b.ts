@@ -46,7 +46,10 @@ import {
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { CAST_INTERRUPTED_REASONS } from "@gladlog/analysis/src/utils/castBarOutcomes";
-import { COMPANION_CAST_ROW_MS } from "@gladlog/analysis/src/utils/castPress";
+import {
+  COMPANION_CAST_ROW_MS,
+  COPY_CAST_IDS,
+} from "@gladlog/analysis/src/utils/castPress";
 import { selectPressureWindows } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   canDefensiveCleanse,
@@ -400,7 +403,8 @@ function checkIntoDefense(ctx: IRoundCtx): void {
             (c: any) =>
               c.destUnitId === target.id &&
               tsOf(c) < roundEndAt &&
-              same(c.spellId, c.spellName),
+              same(c.spellId, c.spellName) &&
+              !COPY_CAST_IDS.has(String(c.spellId)),
           )
           .sort((a: any, b: any) => tsOf(a) - tsOf(b));
         const presses = rowsOfSpell
@@ -557,15 +561,26 @@ function checkAvoided(ctx: IRoundCtx, enemies: any[]): void {
       if (ev(a) === REMOVED) up.delete(a.spellId);
       else if (ev(a) === APPLIED) up.set(a.spellId, tsOf(a));
     }
-    const through = [...up.keys()].find((id) =>
-      ((unit.auraEvents ?? []) as any[]).some(
-        (a) =>
-          a.spellId === id &&
-          ev(a) === REMOVED &&
-          tsOf(a) >= lo &&
-          tsOf(a) > hi,
-      ),
+    // the run up at `lo` is over at its first REMOVED; a later one is another
+    // run's. A credit pressed before the control was already there to take it
+    // (51-1 0:07: the trap's MISSED row is on the totem set 1 s before the fear)
+    const lastCredit = Math.max(
+      -Infinity,
+      ...successesOf(unit)
+        .filter(
+          (c: any) =>
+            getEnglishSpellName(String(c.spellId), c.spellName ?? "") ===
+              m[4] && tsOf(c) <= lo,
+        )
+        .map(tsOf),
     );
+    const through = [...up.keys()].find((id) => {
+      const end = ((unit.auraEvents ?? []) as any[]).find(
+        (a) => a.spellId === id && ev(a) === REMOVED && tsOf(a) >= lo,
+      );
+      const pressedBefore = lastCredit > -Infinity && lastCredit < up.get(id)!;
+      return !!end && tsOf(end) > hi && !pressedBefore;
+    });
     if (!through) continue;
     ctx.violate(
       "avoidedWhileControlled",

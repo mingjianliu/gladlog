@@ -9,11 +9,18 @@
  * target inside the span, from a shield of a same-side other unit, with a
  * SPELL_CAST_SUCCESS of that unit at the target that names the shield or makes
  * it (the riders' table lookup is fine: it is a lookup), from a second before
- * the run's APPLIED to the row. A proc shield with no such press is no
- * violation.
+ * the run's start to the row, and at most a minute before the row. A run starts
+ * at an APPLIED, or at a REFRESH its source's press sits beside (a re-press on
+ * somebody else that carries the aura here: Reversion's echo, 19-1 4:39). A
+ * proc shield with no such press is no violation.
  */
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { riderCastsOfShield } from "@gladlog/analysis/src/data/ownShieldLinks";
+import {
+  ALLY_SHIELD_PRESS_PAIR_MS,
+  OWN_SHIELD_PRESS_LOOKBACK_MS,
+  SAVE_CAST_AURA_PAIR_S,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 
 import {
   ABSORBED,
@@ -21,6 +28,7 @@ import {
   ev,
   type IRoundCtx,
   nameOf,
+  REFRESH,
   secOf,
   successesOf,
   tsOf,
@@ -30,7 +38,6 @@ export const CHECKS = ["allyShieldDefenseless"] as const;
 
 const SPAN =
   /^\s+\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+ \(([^()]+(?:\([^()]*\)[^()]*)*)\):(.*)$/;
-const PRESS_PAIR_MS = 1000;
 
 export function run(ctx: IRoundCtx): void {
   const seen = new Set<string>();
@@ -62,12 +69,20 @@ export function run(ctx: IRoundCtx): void {
       if (!caster) continue;
       const id = String(r.spellId);
       const name = nameOf(id, id);
+      const makers = new Set([id, ...castsOfEffectAura(id)]);
+      const pressedRefresh = (a: any) =>
+        ev(a) === REFRESH &&
+        successesOf(caster).some(
+          (c: any) =>
+            makers.has(String(c.spellId)) &&
+            Math.abs(tsOf(c) - tsOf(a)) <= SAVE_CAST_AURA_PAIR_S * 1000,
+        );
       const runStart = ((u.auraEvents ?? []) as any[])
         .filter(
           (a) =>
             String(a.spellId) === id &&
             a.srcUnitId === caster.id &&
-            ev(a) === APPLIED &&
+            (ev(a) === APPLIED || pressedRefresh(a)) &&
             tsOf(a) <= t,
         )
         .pop();
@@ -75,7 +90,8 @@ export function run(ctx: IRoundCtx): void {
       const press = successesOf(caster).find(
         (c: any) =>
           tsOf(c) <= t &&
-          tsOf(c) >= tsOf(runStart) - PRESS_PAIR_MS &&
+          tsOf(c) >= tsOf(runStart) - ALLY_SHIELD_PRESS_PAIR_MS &&
+          tsOf(c) >= t - OWN_SHIELD_PRESS_LOOKBACK_MS &&
           c.destUnitId === u.id &&
           (String(c.spellId) === id ||
             nameOf(String(c.spellId), c.spellName ?? "") === name ||

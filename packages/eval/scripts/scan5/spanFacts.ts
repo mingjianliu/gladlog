@@ -78,7 +78,7 @@ const STAYED_NONE =
 const CC_LINE =
   /^\s*(\d+):(\d\d)\s+\[CC ON (?:TEAM|ENEMY)\]\s+(\d+)\([^)]*\) ← (.+?) \(by (?:\d+\([^)]*\)|[^)]*)\)(?: \([^)]*\))*(?: \[DR: (\w+) (Full|50%|Immune)\])?/;
 const CONSEQ_AT =
-  /^\s*(\d+):(\d\d)\s+\[CONSEQ\]\s+\w+ healer (\d+)\([^)]*\) in (.+?) for /;
+  /^\s*(\d+):(\d\d)\s+\[CONSEQ\]\s+\w+ healer (\d+)\([^)]*\) in (.+?)(?: \(silence\))? for /;
 const BURST_HEAD = /^\s*Burst #\d+ — (\d+):(\d\d)–(\d+):(\d\d) \|/;
 const BURST_TARGET = /^\s*Target: (\S.*?) \d+%/;
 const LOW = /(\d+)\([^)]*\) \d+% → low (\d+)% at (\d+):(\d\d)/g;
@@ -283,7 +283,8 @@ function ledger(ctx: IRoundCtx): void {
         );
         const onS = (tsOf(on) - ctx.start) / 1000;
         const offS = off ? (tsOf(off) - ctx.start) / 1000 : onS + 2;
-        const overlap = Math.min(offS, to + 1) - Math.max(onS, from);
+        // the burst's bounds are floored seconds: the overlap it surely had
+        const overlap = Math.min(offS, to) - Math.max(onS, from + 1);
         if (overlap < 0.5) continue;
         ctx.bump("ledgerProcImmunityMissing");
         const name = getEnglishSpellName(on.spellId, on.spellName ?? "");
