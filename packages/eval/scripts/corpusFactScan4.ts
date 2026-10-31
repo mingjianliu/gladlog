@@ -74,6 +74,7 @@ import {
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
+import { parryStopsAttack } from "@gladlog/analysis/src/data/spellParry";
 import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
 import { COPY_CAST_IDS } from "@gladlog/analysis/src/utils/castPress";
 import {
@@ -635,13 +636,19 @@ for (const f of files) {
         const ids = hvOf(pl).ids;
         const split = casts.filter((c) => !ids.has(String(c.spellId)));
         // the section's own door: 2 casts into an unconditional defensive,
-        // 3 into a kill-live-gated wall (the verdict table, as data)
-        const verdict = mitigationVerdictOf(
+        // 3 into a kill-live-gated wall (the verdict table, as data), each
+        // reading of a two-reading wall over its own casts
+        const key =
           castKeyOfAura(r.auraId, (id) => mitigationVerdictOf(id) !== null) ??
-            r.auraId,
-        );
-        const door = verdict === "unconditional" ? 2 : 3;
-        if (casts.length >= door && split.length > 0)
+          r.auraId;
+        const doorOf = (v: unknown) => (v === "unconditional" ? 2 : 3);
+        const reachesDoor = twoReadings(r.auraId)
+          ? casts.filter((c) => parryStopsAttack(String(c.spellId))).length >=
+              doorOf(mitigationVerdictOf(key)) ||
+            casts.filter((c) => !parryStopsAttack(String(c.spellId))).length >=
+              doorOf(nonMeleeMitigationVerdictOf(key))
+          : casts.length >= doorOf(mitigationVerdictOf(key));
+        if (reachesDoor && split.length > 0)
           violate(
             "castDamageIdSplit",
             `noLine:${nameOf(String(split[0].spellId))}`,
