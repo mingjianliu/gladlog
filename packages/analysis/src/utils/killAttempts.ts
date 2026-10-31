@@ -855,29 +855,32 @@ export function extractKillAttempts(
       toMs: number,
     ): string => {
       const hitTarget = (c: TeamCast) => {
-        if (c.destId !== undefined && c.destId !== "0000000000000000") {
-          if (c.destId !== target.id) return false;
-          // fact6 D14 (2b3fba97-r0 2:27): a press the game refused as IMMUNE
-          // on the target (Deathmark into Time Stop) did not go into it —
-          // it anchors only by a hit of its own that landed anyway
-          if (
-            !pressRefusedImmuneOn(
-              c.caster.missesOut,
-              c.spellId,
-              (c.caster.spellCastEvents ?? [])
-                .filter(
-                  (e) =>
-                    e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-                    e.spellId === c.spellId,
-                )
-                .map((e) => e.logLine.timestamp),
-              c.castMs,
-              target.id,
-              c.caster.spellCastEvents ?? [],
-            )
+        // a press on nobody is `selfBuffInto`'s, its caster's most-hit enemy
+        // (codex 06-1): a splash on the target aims it no more than one
+        // elsewhere does
+        if (c.destId === undefined || c.destId === "0000000000000000")
+          return false;
+        if (c.destId !== target.id) return false;
+        // fact6 D14 (2b3fba97-r0 2:27): a press the game refused as IMMUNE
+        // on the target (Deathmark into Time Stop) did not go into it —
+        // it anchors only by a hit of its own that landed anyway
+        if (
+          !pressRefusedImmuneOn(
+            c.caster.missesOut,
+            c.spellId,
+            (c.caster.spellCastEvents ?? [])
+              .filter(
+                (e) =>
+                  e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                  e.spellId === c.spellId,
+              )
+              .map((e) => e.logLine.timestamp),
+            c.castMs,
+            target.id,
+            c.caster.spellCastEvents ?? [],
           )
-            return true;
-        }
+        )
+          return true;
         return (c.caster.damageOut ?? []).some(
           (d) =>
             d.destUnitId === target.id &&

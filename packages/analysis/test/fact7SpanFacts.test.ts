@@ -353,6 +353,40 @@ describe("kill attempts", () => {
     expect(a[0]!.anchorSpellName).toBe("Avatar");
   });
 
+  it("D4: an absorbed splash on the target does not aim the press either (codex 06-1)", () => {
+    const e1 = unit("e1");
+    const e2 = unit("e2");
+    const absorbed = {
+      ...hit("e1", 40.1, 1_000),
+      spellId: "11426",
+      spellName: "Ice Barrier",
+      attackSpellId: "446285",
+      attackSpellName: "Malevolence",
+    };
+    const f1 = unit("f1", {
+      reaction: 1,
+      spec: "265",
+      spellCastEvents: [press("442726", "Malevolence", 40)],
+      damageOut: [
+        {
+          ...hit("e2", 40, 5_000),
+          spellId: "446285",
+          spellName: "Malevolence",
+        },
+        absorbed,
+        hit("e2", 41, 300_000),
+      ],
+    });
+    const f2 = unit("f2", {
+      reaction: 1,
+      spec: "71",
+      spellCastEvents: [press("107574", "Avatar", 41, "e1")],
+      damageOut: [hit("e1", 42, 400_000)],
+    });
+    const a = extractKillAttempts([f1, f2], [e1, e2], combat([f1, f2, e1, e2]));
+    expect(a[0]!.anchorSpellName).toBe("Avatar");
+  });
+
   it("D10: the target's own area save, its aura on it, is a press of its own", () => {
     const e1 = unit("e1", {
       spec: "71",
