@@ -248,6 +248,33 @@ describe("hiddenPressMs — the bounds no test pinned", () => {
     ]);
     expect(hiddenPressMs(u, "102543", T0)).toEqual([]);
   });
+  it("a run a talent took past its length: the re-listing near its end is no press", () => {
+    const first = T0 + 6_000;
+    const life = hiddenAuraLifeMs(EVASION);
+    const listedAt = first + life + 1;
+    const batchAt = (ms: number) =>
+      Array.from({ length: RESYNC_BATCH_MIN_APPLIED }, (_, i) =>
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          i === 0 ? EVASION : String(930_000 + i),
+          ms,
+          i === 0 ? "rogue" : "x",
+        ),
+      );
+    const relisted = rogue([
+      aura(LogEvent.SPELL_AURA_APPLIED, EVASION, first),
+      ...batchAt(listedAt),
+      aura(LogEvent.SPELL_AURA_REMOVED, EVASION, listedAt + 400),
+    ]);
+    expect(hiddenPressMs(relisted, EVASION, T0)).toEqual([]);
+    // the same rows with the second run at full length: its own press
+    const pressed = rogue([
+      aura(LogEvent.SPELL_AURA_APPLIED, EVASION, first),
+      ...batchAt(listedAt),
+      aura(LogEvent.SPELL_AURA_REMOVED, EVASION, listedAt + life),
+    ]);
+    expect(hiddenPressMs(pressed, EVASION, T0)).toEqual([listedAt]);
+  });
   it("both of a press's auras down: a batch that lists one of them is a press", () => {
     const first = T0 + 6_000;
     const listedAt = first + 40_000;

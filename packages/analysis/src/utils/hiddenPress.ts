@@ -33,10 +33,7 @@ import {
   ownEffectAurasOfCast,
 } from "../data/castEffectAuras";
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "../data/druidForms";
-import {
-  getEnglishSpellName,
-  spellEffectData,
-} from "../data/spellEffectData";
+import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import { dropAuraRebroadcasts } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 
@@ -66,6 +63,8 @@ const AVENGING_WRATH_AURA_IDS = new Set(["31884", "454351"]);
  * one. */
 const PRESS_ROW_PAIR_MS = 1000;
 
+const HIDDEN_AURA_LIFE_SLACK_MS = 1000;
+
 /** How long an own aura whose REMOVED the log lost is still read as up
  * after its last (re)application: its official length + 1 s, else for good
  * (codex 21-R12-a #3). The corpus scan's `hiddenPressUnused` reads it too. */
@@ -84,7 +83,9 @@ export function hiddenAuraLifeMs(
       ? buffFullDurationForCaster(spellId, caster as never, atMs)
       : null;
   const d = talented ?? spellEffectData[spellId]?.durationSeconds;
-  return typeof d === "number" && d > 0 ? (d + 1) * 1000 : Infinity;
+  return typeof d === "number" && d > 0
+    ? d * 1000 + HIDDEN_AURA_LIFE_SLACK_MS
+    : Infinity;
 }
 
 /** A same-named id that is a press of its own — the form variants of one
@@ -221,13 +222,33 @@ export function hiddenPressMs(
   // up to its own REMOVED when the log has one (before another APPLIED of
   // it) — even past the official length (an extended Voidform); the
   // length caps only a run whose REMOVED was lost
+  // An APPLIED with no REMOVED before it whose own REMOVED comes sooner than a
+  // press would have run is a re-listing of the run under way, which a talent
+  // had taken past the official length (d510865c r5: Arcane Surge APPLIED
+  // 122.2 s, re-listed 139.2 s, REMOVED 139.6 s; 15 facts on the 605 capture,
+  // Combustion, Recklessness, Malevolence, each 11–22 s after its press).
+  const relisting = (j: number): boolean => {
+    const at = own[j]!.logLine.timestamp;
+    const id = own[j]!.spellId!;
+    for (let k = j + 1; k < own.length; k++) {
+      const b = own[k]!;
+      if (b.spellId !== id || !kept.has(b)) continue;
+      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) return false;
+      if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+        return (
+          b.logLine.timestamp - at < lifeMs(id, at) - HIDDEN_AURA_LIFE_SLACK_MS
+        );
+    }
+    return false;
+  };
   const untilOf = (i: number, ms: number): number => {
     const id = own[i]!.spellId;
     for (let j = i + 1; j < own.length; j++) {
       const b = own[j]!;
       if (b.spellId !== id || !kept.has(b)) continue;
       if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED) return Infinity;
-      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) break;
+      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED && !relisting(j))
+        break;
     }
     return ms + lifeMs(id!, ms);
   };
