@@ -588,8 +588,8 @@ for (const f of files) {
         players: Set<string>;
       }
     >();
-    // a wall with a melee and a non-melee reading counts each apart: its
-    // line is `intoDefenseLanded`'s (scan5)
+    // a wall with a melee and a non-melee reading counts each apart: a
+    // printed line's count is `intoDefenseLanded`'s (scan5)
     const twoReadings = (auraId: string) => {
       const key =
         castKeyOfAura(auraId, (id) => mitigationVerdictOf(id) !== null) ??
@@ -598,7 +598,7 @@ for (const f of files) {
     };
     for (const p of printed) {
       const run = runOf(p.target, p.defense, p.sec);
-      if (!run || twoReadings(run.auraId)) continue;
+      if (!run) continue;
       const rk = `${p.target.id}|${p.defense}|${p.sec}`;
       if (!runs.has(rk))
         runs.set(rk, {
@@ -612,7 +612,11 @@ for (const f of files) {
       const casts = castsIn(p.player, p.target, run);
       const ids = hvOf(p.player).ids;
       const split = casts.filter((c) => !ids.has(String(c.spellId)));
-      if (casts.length > p.count && split.length > 0)
+      if (
+        casts.length > p.count &&
+        split.length > 0 &&
+        !twoReadings(run.auraId)
+      )
         violate(
           "castDamageIdSplit",
           `short:${nameOf(String(split[0].spellId))}`,

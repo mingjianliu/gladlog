@@ -11,7 +11,9 @@
  * SPELL_CAST_SUCCESS of the name by the enemy or a summon of theirs, or a
  * SPELL_AURA_APPLIED of the name from them on a player. A landing within
  * `sameUseMs` after a use is that use: `SAME_USE_S`, or the cast's own landing
- * window where it is longer (a trap walked into 14 s after it was set); a
+ * window where it is longer (a trap walked into 14 s after it was set; Freezing
+ * Trap's window outlasts its cooldown and it springs once, so its use is its
+ * first landing and `SAME_USE_S` after, a later landing a second use); a
  * summon's row inside that window is the press too (Capacitor Totem's own row
  * 2 s after the shaman's). The cooldown is the context's kit row
  * for the unit (`Name [40s]`, the low end of `[a–Ns]`); a kit row with charges
@@ -32,6 +34,7 @@ import { APPLIED, ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 export const CHECKS = ["controlListedWhileSpent"] as const;
 
 const SAME_USE_S = 5;
+const SPRINGS_ONCE_CAST_IDS: ReadonlySet<string> = new Set(["187650"]);
 const EXPOSURE =
   /^\s*(\d+):(\d\d)\s+\[HEALER EXPOSURE\].*\| IN LoS: (.*?)(?: \| |$)/;
 const ENTRY = /^(.+?) (?:Full|50%|25%|Immune)(?: DR)?$/;
@@ -47,6 +50,7 @@ interface IUse {
   auraId?: string;
   castId?: string;
   summon?: boolean;
+  firstLandingMs?: number;
 }
 
 const sameUseMs = (u: IUse): number =>
@@ -84,11 +88,22 @@ function usesOf(ctx: IRoundCtx, enemy: any, name: string): IUse[] {
     )
     .map((a) => ({ ms: tsOf(a), row: false, auraId: String(a.spellId) }));
   const out = rows.filter(isPressRow).sort((a, b) => a.ms - b.ms);
-  for (const l of landings.sort((a, b) => a.ms - b.ms))
-    if (!out.some((u) => l.ms >= u.ms && l.ms - u.ms <= sameUseMs(u))) {
-      out.push(l);
-      out.sort((a, b) => a.ms - b.ms);
+  for (const l of landings.sort((a, b) => a.ms - b.ms)) {
+    const use = out.find(
+      (u) =>
+        l.ms >= u.ms &&
+        l.ms - u.ms <= sameUseMs(u) &&
+        (!SPRINGS_ONCE_CAST_IDS.has(u.castId ?? "") ||
+          u.firstLandingMs === undefined ||
+          l.ms - u.firstLandingMs <= SAME_USE_S * 1000),
+    );
+    if (use) {
+      use.firstLandingMs ??= l.ms;
+      continue;
     }
+    out.push(l);
+    out.sort((a, b) => a.ms - b.ms);
+  }
   return out;
 }
 

@@ -562,16 +562,21 @@ function checkAvoided(ctx: IRoundCtx, enemies: any[]): void {
       else if (ev(a) === APPLIED) up.set(a.spellId, tsOf(a));
     }
     // the run up at `lo` is over at its first REMOVED; a later one is another
-    // run's. A credit pressed before the control was already there to take it
-    // (51-1 0:07: the trap's MISSED row is on the totem set 1 s before the fear)
+    // run's. A credit pressed before the control, still inside its own DB2
+    // length at the line, was already there to take it (51-1 0:07: the trap's
+    // MISSED row is on the totem set 1 s before the fear)
     const lastCredit = Math.max(
       -Infinity,
       ...successesOf(unit)
-        .filter(
-          (c: any) =>
+        .filter((c: any) => {
+          const s = spellEffectData[String(c.spellId)]?.durationSeconds ?? 0;
+          return (
             getEnglishSpellName(String(c.spellId), c.spellName ?? "") ===
-              m[4] && tsOf(c) <= lo,
-        )
+              m[4] &&
+            tsOf(c) <= lo &&
+            lo - tsOf(c) <= s * 1000
+          );
+        })
         .map(tsOf),
     );
     const through = [...up.keys()].find((id) => {
