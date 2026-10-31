@@ -138,15 +138,23 @@ function extractPlayerDotIntervals(
         openDots.set(stateKey, ts);
       }
     } else if (event.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
-      const startMs = openDots.get(stateKey);
-      if (startMs !== undefined) {
+      // the source's own run, else the spell's oldest (`buildAuraIntervals`
+      // closes the same way): a DoT a Mind-Controlled unit put on writes its
+      // APPLIED under that unit and its ticks and REMOVED under the controller,
+      // and left open it counted to the round's end (87ba9256: Vampiric Touch
+      // 94.7–115.6 s still one of the DoTs at 4:33)
+      const key = openDots.has(stateKey)
+        ? stateKey
+        : [...openDots.keys()].find((k) => k.startsWith(`${spellId}:`));
+      const startMs = key === undefined ? undefined : openDots.get(key);
+      if (key !== undefined && startMs !== undefined) {
         intervals.push({
           spellId,
           spellName,
           startMs,
           endMs: ts,
         });
-        openDots.delete(stateKey);
+        openDots.delete(key);
       }
     }
   }
