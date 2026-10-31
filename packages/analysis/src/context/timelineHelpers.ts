@@ -17,7 +17,6 @@ import {
   DEATH_CASCADE_MS,
   type IAuraEndFromLog,
 } from "../utils/auraEndCause";
-import { removedByDeath } from "../utils/unitDeath";
 import {
   AURA_REBROADCAST_GAP_MS,
   dropAuraRebroadcasts,
@@ -30,8 +29,8 @@ import {
   enemySourceIds,
   freeMsBefore,
   healerLockIntervals,
-  pressBlockedIntervalsForSpells,
   namedCannotCastIntervals,
+  pressBlockedIntervalsForSpells,
 } from "../utils/cannotCastIntervals";
 import { pressImmuneMissRows } from "../utils/castMissRows";
 import {
@@ -89,6 +88,7 @@ import {
   summonedAtMs,
 } from "../utils/summonLife";
 import { summonOwnerById } from "../utils/summonOwner";
+import { removedByDeath } from "../utils/unitDeath";
 import {
   ALTER_TIME_CAST_ID,
   ALTER_TIME_RETURN_ID,

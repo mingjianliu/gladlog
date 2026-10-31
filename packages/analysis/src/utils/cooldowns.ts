@@ -33,7 +33,6 @@ import {
   healerSaveCdStripDefensive,
 } from "../data/healerSaveCd";
 import { OVERRIDE_VARIANTS_GENERATED } from "../data/overrideVariantsGenerated";
-import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { SHARED_CHARGE_CATEGORY } from "../data/sharedChargeGenerated";
@@ -51,6 +50,7 @@ import { spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
 import { hasOfficialTargeting, reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
+import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { replacedSpellIds } from "../data/talentReplaces";
 import {
   eventReducedCooldownSeconds,

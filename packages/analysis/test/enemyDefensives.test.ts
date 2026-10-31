@@ -47,7 +47,6 @@ import {
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   pressSecondsOfAura,
-  selfSaveCasts,
   REMOVED_EARLY_SLACK_S,
   RIDER_ABSORB_SAVE_AURAS,
   SAVE_AURA_END_UNSEEN_IDS,
@@ -55,6 +54,7 @@ import {
   saveAuraCountsWhenAlreadyUp,
   saveAuraIntervals,
   SELF_SAVE_IDS,
+  selfSaveCasts,
   splitAtRepressRefresh,
   wallTableIdOfAura,
 } from "../src/utils/enemyDefensives";

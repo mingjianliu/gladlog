@@ -7,8 +7,8 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import { auraEndFromLog, DEATH_CASCADE_MS } from "../src/utils/auraEndCause";
-import { removedByDeath } from "../src/utils/unitDeath";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "../src/utils/dispelAnalysis";
+import { removedByDeath } from "../src/utils/unitDeath";
 
 const T0 = 1_000_000;
 const aura = (

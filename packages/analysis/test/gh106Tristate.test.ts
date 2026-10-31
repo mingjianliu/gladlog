@@ -15,9 +15,9 @@ import {
   cdAvailableAt,
   cdMaybeAvailableAt,
   cdSecondsUntilReady,
-  readyAfterReductions,
   earliestCooldownSecondsFor,
   type IMajorCooldownInfo,
+  readyAfterReductions,
 } from "../src/utils/cooldowns";
 
 const avatar = {

@@ -6,8 +6,8 @@ import {
   castBlockingAuraIntervals,
   coveredMsWithin,
   deathLockChain,
-  healerLockIntervals,
   enemySourceIds,
+  healerLockIntervals,
   silenceIntervals,
 } from "../src/utils/cannotCastIntervals";
 

@@ -132,6 +132,10 @@ import { fmtTime, fmtWholeSeconds } from "./renderGrid";
 import { rootIntervalsOf } from "./rootReachability";
 import { playableEndMs, roundEndMs, stillOnAtRoundEnd } from "./roundEnd";
 import {
+  BLESSING_OF_SANCTUARY_ID,
+  sanctuaryRemovalPairs,
+} from "./sanctuaryRemovals";
+import {
   baseCastSeconds,
   ccMechanicOf,
   isSilenceableCast,
@@ -143,10 +147,6 @@ import {
   spellRangeForCaster,
   spellReachForCaster,
 } from "./spellRange";
-import {
-  BLESSING_OF_SANCTUARY_ID,
-  sanctuaryRemovalPairs,
-} from "./sanctuaryRemovals";
 import { summonKindWord } from "./summonKind";
 import { nonPlayerUnitKill, summonedAtMs } from "./summonLife";
 import { interruptImmuneWindows } from "./talentBehaviors";

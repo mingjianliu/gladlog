@@ -21,6 +21,7 @@ import {
 } from "./cannotCastIntervals";
 import { isControlCast } from "./castMissRows";
 import { ccReachAt, ccTargetBlockerIntervals } from "./ccTargetState";
+import { hasPressablePvpTrinket } from "./ccTrinketAnalysis";
 import {
   cdAvailableAt,
   chargesAvailableAt,
@@ -33,7 +34,6 @@ import {
   unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
-import { hasPressablePvpTrinket } from "./ccTrinketAnalysis";
 import {
   auraIdsAppliedBy,
   drCategoryKnown,

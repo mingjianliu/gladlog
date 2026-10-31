@@ -33,7 +33,6 @@ import {
   riderStandsForUnloggedPress,
 } from "../data/ownShieldLinks";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
-import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "../data/spellStateAttrsGenerated";
 import spellIdListsData, {
   ENEMY_ALLY_SAVE_IDS,
   ENEMY_AREA_SAVE_IDS,
@@ -48,6 +47,7 @@ import spellIdListsData, {
   type EnemyProcSaveEffect,
 } from "../data/spellIdLists";
 import { immunitySchoolMask } from "../data/spellSchools";
+import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "../data/spellStateAttrsGenerated";
 import { allyCopyRecipient } from "./allyCopyWall";
 import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
 import {

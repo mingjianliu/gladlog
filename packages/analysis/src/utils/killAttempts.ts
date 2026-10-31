@@ -89,9 +89,9 @@ import {
   analyzePlayerCCAndTrinket,
   breakAbilityPresses,
   ccsRemovedByPress,
+  hasPressablePvpTrinket,
   type ICCInstance,
   type IPlayerCCTrinketSummary,
-  hasPressablePvpTrinket,
   pvpTrinketRemainingSecondsAt,
   renderedCcSeconds,
 } from "./ccTrinketAnalysis";

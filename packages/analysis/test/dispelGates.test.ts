@@ -155,7 +155,7 @@ describe("postCcDamage — a teammate's redistribution is not damage taken (tria
 
   it("fact7 D70: what its shields ate in the 5 s is carried beside it, never inside it (6ac699c9 0:25: 0 landed, 272k absorbed)", () => {
     const t1 = targetWithBinding(10, 16);
-    (t1 as any).absorbsIn = [11, 12, 16.5].map((tS) => ({
+    (t1 as unknown as { absorbsIn: unknown }).absorbsIn = [11, 12, 16.5].map((tS) => ({
       timestamp: S(tS),
       attackerId: "e1",
       attackSpellId: "19434",
@@ -165,8 +165,8 @@ describe("postCcDamage — a teammate's redistribution is not damage taken (tria
       logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: S(tS) },
     }));
     const w = reconstructDispelSummary(
-      [t1, discPriest("h1")] as any,
-      [hostile()] as any,
+      [t1, discPriest("h1")] as never,
+      [hostile()] as never,
       COMBAT,
     ).missedCleanseWindows[0]!;
     expect(w.postCcDamage).toBe(0);
@@ -537,7 +537,10 @@ describe("豁免后缀与 purge 侧", () => {
           makeAdvancedAction(S(28), 60, 0),
         ],
       });
-      (e1 as any).advancedActions = (e1 as any).advancedActions.map((a: any) => ({
+      const positioned = e1 as unknown as {
+      advancedActions: Array<Record<string, unknown>>;
+    };
+    positioned.advancedActions = positioned.advancedActions.map((a) => ({
         ...a,
         advancedActorId: "e1",
       }));
@@ -548,7 +551,7 @@ describe("豁免后缀与 purge 侧", () => {
         ),
       });
       const kiter = makeUnit("h2", { spec: CombatUnitSpec.Mage_Frost });
-      const ds = reconstructDispelSummary([purger, kiter] as any, [e1] as any, {
+      const ds = reconstructDispelSummary([purger, kiter] as never, [e1] as never, {
         ...COMBAT,
         zoneId: "0",
       });

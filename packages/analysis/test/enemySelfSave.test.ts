@@ -45,8 +45,8 @@ describe("fact7 D36: a save aimed at an enemy that logged its own miss", () => {
       name: "Monk-R",
       spellCastEvents: [press(T0 + 20_307)],
     });
-    (missed as any).missesOut = [miss];
-    expect(selfSaveCasts(missed as any, T0)).toEqual([]);
+    (missed as unknown as { missesOut: unknown }).missesOut = [miss];
+    expect(selfSaveCasts(missed as never, T0)).toEqual([]);
     const landed = makeUnit("m", {
       name: "Monk-R",
       spellCastEvents: [press(T0 + 20_307)],
@@ -60,8 +60,8 @@ describe("fact7 D36: a save aimed at an enemy that logged its own miss", () => {
         },
       ],
     });
-    (landed as any).missesOut = [miss];
-    expect(selfSaveCasts(landed as any, T0).map((c) => c.spellId)).toEqual([
+    (landed as unknown as { missesOut: unknown }).missesOut = [miss];
+    expect(selfSaveCasts(landed as never, T0).map((c) => c.spellId)).toEqual([
       KARMA,
     ]);
   });

@@ -11,7 +11,7 @@
  * printed differs from that share by more than `SLACK_PCT` (the window's edge
  * rows; the line prints whole percent).
  */
-import { nameOf, type IRoundCtx, successesOf, tsOf } from "./ctx";
+import { type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = ["overhealPrinted"] as const;
 
