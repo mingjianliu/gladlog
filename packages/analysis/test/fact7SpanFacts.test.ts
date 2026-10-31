@@ -387,6 +387,38 @@ describe("kill attempts", () => {
     expect(a[0]!.anchorSpellName).toBe("Avatar");
   });
 
+  it("D4: the most-hit enemy is read over the printed bracket, not its slack", () => {
+    const e1 = unit("e1");
+    const e2 = unit("e2");
+    const inBracket = [
+      {
+        ...hit("e2", 40, 5_000),
+        spellId: "446285",
+        spellName: "Malevolence",
+      },
+      hit("e1", 42, 300_000),
+    ];
+    const warlock = (damageOut: unknown[]) =>
+      unit("f1", {
+        reaction: 1,
+        spec: "265",
+        spellCastEvents: [press("442726", "Malevolence", 40)],
+        damageOut,
+      });
+    const f2 = unit("f2", {
+      reaction: 1,
+      spec: "71",
+      spellCastEvents: [press("107574", "Avatar", 41, "e1")],
+      damageOut: [hit("e1", 42, 400_000)],
+    });
+    const attemptOf = (f1: ReturnType<typeof warlock>) =>
+      extractKillAttempts([f1, f2], [e1, e2], combat([f1, f2, e1, e2]))[0]!;
+    const toS = attemptOf(warlock(inBracket)).toSeconds;
+    const a = attemptOf(warlock([...inBracket, hit("e2", toS + 2, 450_000)]));
+    expect(a.toSeconds).toBe(toS);
+    expect(a.anchorSpellName).toBe("Malevolence");
+  });
+
   it("D10: the target's own area save, its aura on it, is a press of its own", () => {
     const e1 = unit("e1", {
       spec: "71",

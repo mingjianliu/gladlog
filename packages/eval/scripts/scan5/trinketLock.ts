@@ -93,7 +93,7 @@
  * row on a unit the slots say has none, i.e. the item list is stale.
  *
  * Check `killRacialLockWords` (fact7 r6, codex 03-1): a KILL ATTEMPTS line
- * printing `opportunity: trinket locked by a racial (back B)` needs a
+ * printing `opportunity: trinket locked by a racial (back B; …)` needs a
  * category-1166 racial press of that unit in the rows, before the end of the
  * printed second (the attempt's raw start lies inside it) and with its lock
  * still running at T. Kind `no racial press`: none; `back second`: a press,
@@ -119,8 +119,6 @@ export const CHECKS = [
   "killRacialLockWords",
 ] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
-  "killTrinketUpNoTrinket|None: break racial ready",
-  "killTrinketUpNoTrinket|Relentless: break racial ready",
   "trinketPressVsModel|refusal while model ready",
   "trinketPressVsModel|success while model ON CD",
 ]);
@@ -247,7 +245,7 @@ const KILL_TRINKET_UP =
   /^\s*\[(\d+):(\d{2})–\d+:\d{2}\] on (\S+?) — .*\| opportunity: trinket up\b/;
 
 const KILL_RACIAL_LOCK =
-  /^\s*\[(\d+):(\d{2})–\d+:\d{2}\] on (\S+?) — .*\| opportunity: trinket locked by a racial \(back (\d+):(\d{2})\)/;
+  /^\s*\[(\d+):(\d{2})–\d+:\d{2}\] on (\S+?) — .*\| opportunity: trinket locked by a racial \(back (\d+):(\d{2})[;)]/;
 
 function killRacialLockWords(ctx: IRoundCtx, line: string): void {
   const m = KILL_RACIAL_LOCK.exec(line);
@@ -334,7 +332,8 @@ function killTierClaims(ctx: IRoundCtx): void {
         (n) => RACIAL_BY_NAME[n] === id,
       )!;
       const lock = racialTrinketLockoutMs(id, healer);
-      const p = presses.filter((t) => t < T && T < t + lock).pop();
+      // the printed second is floored: the lock has to outlast its end
+      const p = presses.filter((t) => t < T && T + 999 < t + lock).pop();
       if (p === undefined || S.some((s) => s > p && s < T)) continue;
       ctx.violate(
         C,

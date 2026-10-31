@@ -541,7 +541,9 @@ describe("formatKillAttemptsForContext — 徽章在手不是失误(用户裁决
     const attempts = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
     expect(attempts[0]!.opportunity.tier).toBe("locked");
     const text = formatKillAttemptsForContext(attempts).join("\n");
-    expect(text).toContain("opportunity: trinket locked by a racial (back 0:32)");
+    expect(text).toContain(
+      "opportunity: trinket locked by a racial (back 0:32; ",
+    );
     expect(text).not.toContain("opportunity: trinket up");
   });
   it("开场同一秒按的徽章不是种族锁:没按种族就不写 locked(codex 03-1)", () => {

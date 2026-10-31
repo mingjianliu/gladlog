@@ -411,7 +411,7 @@ export const TRINKET_RACIAL_LOCK_WORDS = "trinket locked by a racial";
  * (`hasPressablePvpTrinket`): the same tier, printed true. */
 export const NO_PRESSABLE_TRINKET_WORDS = "no pressable PvP trinket";
 export const KILL_ATTEMPTS_NO_TRINKET_LEGEND = `  \`${NO_PRESSABLE_TRINKET_WORDS}\` = the target's trinket slots hold no PvP trinket it can press: the same reading as \`trinket up\` for the attempt's tier, but there is no trinket to bait.`;
-export const KILL_ATTEMPTS_RACIAL_LOCK_LEGEND = `  \`${TRINKET_RACIAL_LOCK_WORDS} (back m:ss)\` = the target pressed a racial that shares the trinket's lock: the same reading as \`trinket up\` for the attempt's tier, but the trinket itself could not be pressed before m:ss.`;
+export const KILL_ATTEMPTS_RACIAL_LOCK_LEGEND = `  \`${TRINKET_RACIAL_LOCK_WORDS} (back m:ss; …)\` = the target pressed a racial that shares the trinket's lock: the same reading as \`trinket up\` for the attempt's tier, but the trinket itself could not be pressed before m:ss.`;
 export const KILL_ATTEMPTS_OWN_CONTROL_LEGEND = `  \`| target in your team's Cyclone a–b\` at the end of a line = your own team's Cyclone was on that target from a to b (its [CC ON ENEMY] line), and those seconds meet this attempt's bracket or the ${KILL_CREDIT_SLACK_S} s after it — the span the outcome is read over (a Cyclone that began after the bracket's last second is one of those). A cycloned unit takes no damage from anyone while it lasts. It is a fact beside the outcome: \`FAILED:\` still names what its fixed order picked, and does not weigh the Cyclone.`;
 
 interface StunApp {
@@ -820,6 +820,7 @@ export function extractKillAttempts(
       c: TeamCast,
       target: ICombatUnit,
       toMs: number,
+      bracketToMs: number,
     ): boolean => {
       if (
         c.destId !== undefined &&
@@ -834,8 +835,12 @@ export function extractKillAttempts(
       if (!inIt.some((d) => d.destUnitId === target.id)) return false;
       if (!inIt.some((d) => isHitOf(c, d))) return true;
       const onEnemy = new Map<string, number>();
+      // the bracket the line prints: the slack is past the attempt
       for (const d of inIt)
-        if (enemies.some((e) => e.id === d.destUnitId))
+        if (
+          d.logLine.timestamp <= bracketToMs &&
+          enemies.some((e) => e.id === d.destUnitId)
+        )
           onEnemy.set(
             d.destUnitId,
             (onEnemy.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
@@ -853,6 +858,7 @@ export function extractKillAttempts(
       cl: (typeof clusters)[number],
       target: ICombatUnit,
       toMs: number,
+      bracketToMs: number,
     ): string => {
       const hitTarget = (c: TeamCast) => {
         // a press on nobody is `selfBuffInto`'s, its caster's most-hit enemy
@@ -890,7 +896,7 @@ export function extractKillAttempts(
         );
       };
       const into = cl.casts.find(
-        (c) => hitTarget(c) || selfBuffInto(c, target, toMs),
+        (c) => hitTarget(c) || selfBuffInto(c, target, toMs, bracketToMs),
       );
       if (into) return into.spellName;
       const first = cl.casts[0]!;
@@ -1012,7 +1018,12 @@ export function extractKillAttempts(
         targetUnitId: target.id,
         targetName: target.name,
         anchor: "burst",
-        anchorSpellName: anchorNameOf(cl, target, spanToMs),
+        anchorSpellName: anchorNameOf(
+          cl,
+          target,
+          spanToMs,
+          matchStartMs + toSeconds * 1000,
+        ),
         fromSeconds,
         toSeconds,
         stuns: [],
@@ -1541,13 +1552,11 @@ export function formatKillAttemptsForContext(
         ? `PRIME (${["no trinket, no 20-99% wall in hand", ...up].join("; ")})`
         : a.opportunity.tier === "gated"
           ? `gated (${[`${a.opportunity.wallsInHand.join("/")} in hand`, ...up, softer].join("; ")})`
-          : `${
-              a.noPressableTrinket
-                ? NO_PRESSABLE_TRINKET_WORDS
-                : a.trinketRacialLockUntilSeconds === undefined
-                  ? "trinket up"
-                  : `${TRINKET_RACIAL_LOCK_WORDS} (back ${fmtTime(a.trinketRacialLockUntilSeconds)})`
-            } (${[...up, softer].join("; ")})`;
+          : a.noPressableTrinket
+            ? `${NO_PRESSABLE_TRINKET_WORDS} (${[...up, softer].join("; ")})`
+            : a.trinketRacialLockUntilSeconds === undefined
+              ? `trinket up (${[...up, softer].join("; ")})`
+              : `${TRINKET_RACIAL_LOCK_WORDS} (${[`back ${fmtTime(a.trinketRacialLockUntilSeconds)}`, ...up, softer].join("; ")})`;
     const outcome = failure ? `FAILED: ${failure.text}` : "KILL";
     const opener =
       a.anchor === "stun"

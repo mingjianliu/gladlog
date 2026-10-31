@@ -46,6 +46,18 @@ describe("checkKillAttemptAlreadyUpStated", () => {
     ).toEqual([]);
   });
 
+  it("passes: `back m:ss` sits inside the tier's one parenthesis, beside the fact", () => {
+    expect(
+      checkKillAttemptAlreadyUpStated([
+        KILL_ATTEMPTS_ALREADY_UP_LEGEND,
+        line(
+          "trinket locked by a racial (back 2:46; Rallying Cry already up since 2:27; no softer target)",
+          "FAILED: popped Rallying Cry [up since 2:27]",
+        ),
+      ]),
+    ).toEqual([]);
+  });
+
   it("fails: the line the packet quoted — `no wall in hand` beside `popped Barkskin [up since 0:59]`", () => {
     const fails = checkKillAttemptAlreadyUpStated([
       KILL_ATTEMPTS_ALREADY_UP_LEGEND,

@@ -970,6 +970,9 @@ describe("parryStopsAttack — what a parry can stop (fact7 r5)", () => {
 
   it("a type-0 press reads its landing row: Penance 47540 lands as magic 47666", () => {
     expect(parryStopsAttack("47540", "47666")).toBe(false);
+    // a melee press landing as a magic row: the log parries the press's id
+    expect(parryStopsAttack("49143", "325464")).toBe(true);
+    expect(parryStopsAttack("1242174", "1242172")).toBe(true);
   });
 
   it("an id in neither table falls to reach; an unknown reach reads as melee", () => {
