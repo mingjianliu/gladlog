@@ -555,3 +555,10 @@ export const ENEMY_AREA_SAVE_IDS: ReadonlySet<string> = new Set([
   "98008", // Spirit Link Totem — 158 casts / 76 files
   "62618", // Power Word: Barrier — 1 cast / 1 file
 ]);
+
+/** Friendly utility buttons under `MIN_CD_SECONDS` that print a press line and
+ * nothing else: no ledger row, no loadout entry, no [RES] (user ruling
+ * 2026-10-30, fact7 D19 / D26). Registered in `curatedIdRegistry.ts`. */
+export const FRIENDLY_PRESS_LINE_ONLY_IDS: ReadonlySet<string> = new Set([
+  "23920", // Spell Reflection
+]);

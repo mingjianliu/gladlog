@@ -29,16 +29,6 @@
       "talent": {},
       "pet": false
     },
-    "15487": {
-      "name": "Silence",
-      "classBaseline": [],
-      "specBaseline": [
-        258
-      ],
-      "talent": {},
-      "pet": false,
-      "silenceOnly": true
-    },
     "19647": {
       "name": "Spell Lock",
       "classBaseline": [],

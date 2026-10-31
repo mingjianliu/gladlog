@@ -11,28 +11,23 @@
  *  - `kickersInRange`: a kick-eaten row whose `maxKickRangeYd` is above every
  *    real interrupt of the enemy side and equals a silence's range (the
  *    silence's own range read as a kicker's);
- *  - measured only, out of the total — readers left on the kit on purpose
- *    (docs/predicate-index.md "Not yet unified"): `[KICK] own audit line`
- *    (the owner's press: ruling 2026-10-27, the Silence kick audit is by
- *    design), `enemy interrupts UP` (what a channel can be stopped by).
+ *  - `[KICK] own audit line`, `enemy interrupts UP`: the readers the user
+ *    moved with ruling 2026-10-30, counted like the others;
+ *  - `inKit`: a silence still in the interrupt kit.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
+  INTERRUPT_SPELL_IDS,
   interruptForUnit,
-  isSilenceOnlyKitSpell,
 } from "@gladlog/analysis/src/utils/enemyInterrupts";
 import { spellRangeForCaster } from "@gladlog/analysis/src/utils/spellRange";
 
 import { type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = ["silenceFiledAsKick"] as const;
-export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
-  "silenceFiledAsKick|[KICK] own audit line",
-  "silenceFiledAsKick|enemy interrupts UP",
-]);
 
 let silenceIds: Set<string> | undefined;
 function silenceOnlyIds(ctx: IRoundCtx): Set<string> {
@@ -143,12 +138,25 @@ export function run(ctx: IRoundCtx): void {
     const d = interruptForUnit(e as never);
     return d ? [{ e, d }] : [];
   });
-  const silences = defs.filter((x) => isSilenceOnlyKitSpell(x.d.spellId));
+  for (const id of INTERRUPT_SPELL_IDS)
+    if (ids.has(id))
+      ctx.violate(
+        "silenceFiledAsKick",
+        "inKit",
+        ctx.start,
+        id,
+        `${nameOf(id, id)} is in the interrupt kit`,
+      );
+  const silences = enemies.flatMap((e) =>
+    [...new Set(successesOf(e).map((c: any) => String(c.spellId)))]
+      .filter((id) => ids.has(id))
+      .map((id) => ({ e, id })),
+  );
   if (silences.length === 0) return;
   const realMax = Math.max(
     0,
     ...defs
-      .filter((x) => !isSilenceOnlyKitSpell(x.d.spellId))
+      .filter((x) => !ids.has(x.d.spellId))
       .map((x) => spellRangeForCaster(x.e as never, x.d.spellId) ?? 0),
   );
   for (const row of ctx.menu.split("\n")) {
@@ -162,8 +170,7 @@ export function run(ctx: IRoundCtx): void {
       yd > realMax &&
       silences.some(
         (s) =>
-          Math.round(spellRangeForCaster(s.e as never, s.d.spellId) ?? 0) ===
-          yd,
+          Math.round(spellRangeForCaster(s.e as never, s.id) ?? 0) === yd,
       )
     )
       ctx.violate(

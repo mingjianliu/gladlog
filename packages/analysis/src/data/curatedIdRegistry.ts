@@ -274,6 +274,7 @@ import spellIdLists, {
   ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
   ENEMY_SELF_SAVE_ONLY_IDS,
   ENEMY_STEALTH_WALL_AURAS,
+  FRIENDLY_PRESS_LINE_ONLY_IDS,
   MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS,
 } from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
@@ -1101,6 +1102,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // line, no window; found forward by scan5/listGap.ts.
   t("OFFENSIVE_PRESS_FACT_IDS", "utils/spellDanger.ts", "cast", () =>
     set(OFFENSIVE_PRESS_FACT_IDS),
+  ),
+  // user ruling 2026-10-30 (fact7 D19 / D26): a line, nothing else.
+  t(
+    "spellIdLists.FRIENDLY_PRESS_LINE_ONLY_IDS",
+    "data/spellIdLists.ts",
+    "cast",
+    () => set(FRIENDLY_PRESS_LINE_ONLY_IDS),
   ),
   t(
     "OFFENSIVE_FORM_FACT_AURAS",

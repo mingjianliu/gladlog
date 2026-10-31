@@ -903,3 +903,32 @@ describe("[OFFENSIVE WINDOW] is followed by a full [RES] row (B14b)", () => {
     );
   });
 });
+
+describe("a friendly press under MIN_CD_SECONDS keeps its line (fact7 D19 / D26, user ruling 2026-10-30)", () => {
+  const reflect = (id: string, name: string, s: number) =>
+    ev(LogEvent.SPELL_CAST_SUCCESS, "23920", "Spell Reflection", s, [id, name], [id, name]);
+
+  it("the owner's and a teammate's Spell Reflection print, and nothing else does", () => {
+    const owner = mkUnit("o", "Me-Realm", {
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [reflect("o", "Me-Realm", 21)],
+    });
+    const mate = mkUnit("m", "Mate-Realm", {
+      reaction: CombatUnitReaction.Friendly,
+      spec: CombatUnitSpec.Warrior_Fury,
+      spellCastEvents: [reflect("m", "Mate-Realm", 40)],
+    });
+    const text = buildMatchTimeline(
+      params(
+        owner,
+        mkUnit("e", "Enemy-Realm", { reaction: CombatUnitReaction.Hostile }),
+        { friends: [owner, mate], isHealer: false, matchEndMs: at(60) },
+      ),
+    );
+    const lines = text.split("\n").filter((l) => l.includes("Spell Reflection"));
+    expect(lines).toEqual([
+      expect.stringMatching(/^0:21 {2}\[YOU\] \[CD\] {3}Spell Reflection$/),
+      expect.stringMatching(/^0:40 {2}\[TEAM\] \[CD\] {3}.+ \(Fury Warrior\): Spell Reflection$/),
+    ]);
+  });
+});

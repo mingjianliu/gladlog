@@ -221,7 +221,7 @@
       "producer": "packages/eval/scripts/backlashDispelOutcomeProbe.ts emit-table"
     },
     "interruptKitGenerated.json": {
-      "entries": 23,
+      "entries": 22,
       "producer": "packages/analysis/scripts/datagen/genInterruptKit.ts"
     },
     "baselineDefensivesGenerated.json": {

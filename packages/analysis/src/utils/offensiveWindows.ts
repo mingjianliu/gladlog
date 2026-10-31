@@ -537,7 +537,8 @@ export function computeOffensiveWindows(
   // (`KW_OWN_ROTATIONAL_ABSORB_AURA_IDS`, `KW_REDIRECT_PROTECTION_AURA_IDS`)
   // …and every other own absorb shield it pressed that the log shows
   // absorbing for it, within a minute of a press of it
-  // (`ownPressedShieldSpansMs`, corpusFactScan2 defenselessSaveUp / E6)
+  // (`ownPressedShieldSpansMs`, corpusFactScan2 defenselessSaveUp / E6),
+  // and one an ally pressed on it (user ruling 2026-10-30, fact7 D37)
   for (const holder of enemies) {
     for (const iv of holderIntervals(holder)) {
       if (KW_REDIRECT_PROTECTION_AURA_IDS.has(iv.spellId)) {
@@ -565,7 +566,7 @@ export function computeOffensiveWindows(
               .filter(
                 (a) =>
                   a.spellId === iv.spellId &&
-                  a.srcUnitId === holder.id &&
+                  a.srcUnitId === iv.srcUnitId &&
                   a.timestamp > matchStartMs + iv.toS * 1000 &&
                   a.timestamp < nextApplicationMs,
               )
@@ -573,15 +574,16 @@ export function computeOffensiveWindows(
           )
         : -Infinity;
       const runEndMs = Math.max(matchStartMs + iv.toS * 1000, lastOwnAbsorbMs);
-      const shieldSpans =
-        iv.srcUnitId === holder.id
-          ? ownPressedShieldSpansMs(
-              holder,
-              iv.spellId,
-              matchStartMs + iv.fromS * 1000,
-              runEndMs,
-            )
-          : [];
+      const shieldCaster = enemies.find((u) => u.id === iv.srcUnitId);
+      const shieldSpans = shieldCaster
+        ? ownPressedShieldSpansMs(
+            holder,
+            iv.spellId,
+            matchStartMs + iv.fromS * 1000,
+            runEndMs,
+            shieldCaster,
+          )
+        : [];
       for (const sp of shieldSpans)
         addSave(holder.id, {
           from: (sp.fromMs - matchStartMs) / 1000,

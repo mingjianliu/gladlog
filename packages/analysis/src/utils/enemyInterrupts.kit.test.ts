@@ -76,12 +76,12 @@ describe("interruptForUnit — official kit (GH #78, user correction 2026-09-12)
       )?.name,
     ).toBe("Disrupt");
   });
-  it("spec baseline (SpecializationSpells): Shadow Priest Silence", () => {
+  it("Shadow Priest has no kick: Silence is a silence (user ruling 2026-10-30)", () => {
     expect(
       interruptForUnit(
         unit(CombatUnitClass.Priest, CombatUnitSpec.Priest_Shadow),
-      )?.name,
-    ).toBe("Silence");
+      ),
+    ).toBeNull();
   });
   it("talent-tree interrupts count only when the player took the node; no talent list → tree availability", () => {
     const ret = CombatUnitSpec.Paladin_Retribution;
@@ -150,9 +150,8 @@ describe("interruptForUnit — `confirmed` provenance (codex round-1, 2026-09-12
       )?.confirmed,
     ).toBe(true);
     expect(
-      interruptForUnit(
-        unit(CombatUnitClass.Priest, CombatUnitSpec.Priest_Shadow),
-      )?.confirmed,
+      interruptForUnit(unit(CombatUnitClass.Mage, CombatUnitSpec.Mage_Frost))
+        ?.confirmed,
     ).toBe(true);
     const ret = CombatUnitSpec.Paladin_Retribution;
     expect(

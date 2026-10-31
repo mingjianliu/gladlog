@@ -66,8 +66,8 @@ export interface IKickAuditEntry {
   /**
    * landed   — SPELL_INTERRUPT confirms the kick stopped a cast;
    * silenced — no SPELL_INTERRUPT, but the kick's own silence aura went onto
-   *            the target (Silence 15487; Strangulate left the kick set on
-   *            2026-10-16 — `isKickSpellId`): it landed — not
+   *            the target (Strangulate and Silence 15487 left the kick set,
+   *            2026-10-16 and 2026-10-30 — `isKickSpellId`): it landed — not
    *            a miss. Only in a match with cast-start data: without it every
    *            other kick that interrupted nothing is `unknown` and outside
    *            the landed rate, and a lone `silenced` would be the only one

@@ -447,13 +447,13 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
  * 2026-10-16: 「沉默本身其实是一种控制。打断的话，实际上主要是一个 cooldown
  * trade-off 的问题」). Kept out because the 12.1.5 refresh would otherwise have
  * printed their misses as `[KICK] … missed — IMMUNE` (605 files: 403 lines).
- * Priest Silence 15487 is the same shape but has been Shadow's kick since
- * GH #78 — deliberately not listed here (open question for the user); the
- * kit marks it `silenceOnly`, which `[KICK] … missed` and `kickersInRange`
- * read (`isSilenceOnlyKitSpell`, fact7 D47 / D48 / D74).
+ * Priest Silence 15487 was Shadow's kick from GH #78 until the user settled it
+ * (ruling 2026-10-30, fact7 D47 / D48 / D74: silence is not a kick, for every
+ * reader).
  */
 export const SILENCE_AURAS_NOT_KICKS: ReadonlySet<string> = new Set([
   "1330", // Garrote - Silence (rides on Garrote)
+  "15487", // Silence
   "47476", // Strangulate
   "356727", // Spider Venom (rides on Chimaeral Sting 356719)
   "374776", // Tightening Grasp (rides on Gorefiend's Grasp)

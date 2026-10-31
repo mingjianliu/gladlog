@@ -5,7 +5,7 @@
  *   class baseline  DB2 SkillLineAbility.ClassMask (bit n = class id n+1):
  *                   Pummel → Warrior, Kick → Rogue, Counterspell → Mage,
  *                   Disrupt → Demon Hunter
- *   spec baseline   DB2 SpecializationSpells (Silence → Shadow 258)
+ *   spec baseline   DB2 SpecializationSpells
  *   talent          the spec's own talent tree (talentIdMap.json, Raidbots'
  *                   export of the DB2 trait tables): Rebuke is a class-tree
  *                   node that only Protection / Retribution can see, Quell a
@@ -18,12 +18,12 @@
  *   pet             SkillLineAbility rows on a pet skill line (ClassMask 0):
  *                   Spell Lock 19647 (Felhunter), Axe Toss 89766 (Felguard) —
  *                   possession is OBSERVED (the pet cast it), never assumed.
- *   silenceOnly     DB2 SpellEffect: an aura-27 silence row and no effect-68
- *                   INTERRUPT_CAST on the spell. A button a kit can hold
- *                   (Silence 15487 → Shadow) that is no kick: it never
- *                   writes a SPELL_INTERRUPT and opens no school lockout. A
- *                   press row that only triggers the kick (Solar Beam 78675,
- *                   Skull Bash 106839) has no aura 27 and is not one.
+ *   no silences     DB2 SpellEffect: an aura-27 silence row and no effect-68
+ *                   INTERRUPT_CAST on the spell is no kick (it never writes
+ *                   a SPELL_INTERRUPT and opens no school lockout), so such
+ *                   an id fails this script. A press row that only triggers
+ *                   the kick (Solar Beam 78675, Skull Bash 106839) has no
+ *                   aura 27 and is not one.
  *
  * Id universe = `isKickSpellId` — SPELL_CATEGORIES type "interrupts" minus
  * the silence auras with no school lockout (control, not a kick; user ruling
@@ -81,7 +81,6 @@ async function main() {
       specBaseline: number[];
       talent: Record<string, { nodeId: number; entryId: number }>;
       pet: boolean;
-      silenceOnly?: true;
     }
   > = {};
   for (const [id, name] of roster)
@@ -149,8 +148,11 @@ async function main() {
     if (r["Effect"] === "68") hasInterruptCast.add(id);
     if (r["Effect"] === "6" && r["EffectAura"] === "27") hasSilenceAura.add(id);
   }
+  // a silence is no kick (user rulings 2026-10-16, 2026-10-30): the id belongs
+  // in SILENCE_AURAS_NOT_KICKS, and nothing here may offer it as an interrupt
   for (const id of hasSilenceAura)
-    if (!hasInterruptCast.has(id)) out[id]!.silenceOnly = true;
+    if (!hasInterruptCast.has(id))
+      throw new Error(`${id}: a silence with no INTERRUPT_CAST in the kit`);
   const outPath = new URL(
     "../../src/data/interruptKitGenerated.json",
     import.meta.url,

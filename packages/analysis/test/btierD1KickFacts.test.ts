@@ -180,7 +180,7 @@ describe("kickAudit: the miss line the log wrote for the kick (FT-T11)", () => {
   });
 
   it("codex 40-FT-38 P2: 瞄准的目标免疫、沉默落在另一个人身上 —— silenced 的条目也带着那条免疫", () => {
-    const SILENCE = "15487";
+    const SILENCE = "31935";
     const silencer = makeUnit("p1", {
       name: "Knight",
       info,

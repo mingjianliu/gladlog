@@ -63,29 +63,12 @@ interface KitEntry {
   specBaseline: number[];
   talent: Record<string, { nodeId: number; entryId: number }>;
   pet: boolean;
-  /** DB2: a silence aura and no INTERRUPT_CAST effect (`isSilenceOnlyKitSpell`) */
-  silenceOnly?: boolean;
 }
 const KIT = (kitRaw as unknown as { interrupts: Record<string, KitEntry> })
   .interrupts;
 /** Every interrupt id the kit can assign — the id universe genSpellReach.ts
  * resolves official cast ranges for. */
 export const INTERRUPT_SPELL_IDS: readonly string[] = Object.keys(KIT);
-
-/**
- * A kit button that is a silence and no interrupt — official data (DB2 aura
- * 27 and no effect 68, `genInterruptKit`): Silence 15487. It stops a cast by
- * silencing the caster, writes no SPELL_INTERRUPT and opens no school
- * lockout, so it is not a kick (user ruling 2026-10-16: 「沉默本身其实是一种
- * 控制。打断的话，实际上主要是一个 cooldown trade-off 的问题」). The
- * `[KICK] … missed` line and kick-eaten's `kickersInRange` read this. It stays
- * in the kit, as the button it is: kick-priority, the owner's kick audit and
- * `enemy interrupts UP` still read it (fact7 D47 / D48 / D74 — their
- * reasons in docs/predicate-index.md, "Not yet unified").
- */
-export function isSilenceOnlyKitSpell(spellId: string): boolean {
-  return KIT[spellId]?.silenceOnly === true;
-}
 
 const castable = (e: KitEntry): boolean =>
   e.classBaseline.length > 0 ||

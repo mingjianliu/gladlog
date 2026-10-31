@@ -65,6 +65,8 @@ const MODULE_FILES = [
   "talentWall",
   "overrideVariant",
   "friendlyOffensiveTag",
+  "allyShield",
+  "friendlyUtilityPress",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

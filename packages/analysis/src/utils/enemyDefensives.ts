@@ -254,20 +254,24 @@ export function ownPressedShieldSpansMs(
   spellId: string,
   runStartMs: number,
   runEndMs: number,
+  /** who put the shield up, when it is not `holder`: an ally's pressed shield
+   * reads the same, on the ally's presses and the ally's absorb rows (user
+   * ruling 2026-10-30, fact7 D37: Enveloping Mist's Chi Cocoon on the Feral) */
+  caster: Pick<ICombatUnit, "id" | "spellCastEvents"> = holder,
 ): Array<{ fromMs: number; toMs: number }> {
   if (KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(spellId))
     return [{ fromMs: runStartMs, toMs: runEndMs }];
   if (!abilityProfile(spellId).absorbs) return [];
   if (
     !(holder.absorbsIn ?? []).some(
-      (a) => a.spellId === spellId && a.srcUnitId === holder.id,
+      (a) => a.spellId === spellId && a.srcUnitId === caster.id,
     )
   )
     return [];
   const name = getEnglishSpellName(spellId, "");
   const castIds = ownShieldPressCastIds(spellId);
   const out: Array<{ fromMs: number; toMs: number }> = [];
-  for (const c of holder.spellCastEvents ?? []) {
+  for (const c of caster.spellCastEvents ?? []) {
     if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !c.spellId) continue;
     if (
       !castIds.has(c.spellId) &&
@@ -294,7 +298,7 @@ export function ownPressedShieldSpansMs(
   if (
     out.length === 0 &&
     riderStandsForUnloggedPress(spellId) &&
-    !(holder.spellCastEvents ?? []).some(
+    !(caster.spellCastEvents ?? []).some(
       (c) =>
         c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
         !!c.spellId &&

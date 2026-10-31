@@ -91,9 +91,8 @@ describe("computeEnemyInterruptAvailability (B128)", () => {
       CombatUnitSpec.Priest_Shadow,
     );
     expect(computeEnemyInterruptAvailability([disc], 10_000)).toHaveLength(0);
-    expect(
-      computeEnemyInterruptAvailability([shadow], 10_000)[0].spellName,
-    ).toBe("Silence");
+    // Silence is a silence, not a kick (user ruling 2026-10-30)
+    expect(computeEnemyInterruptAvailability([shadow], 10_000)).toHaveLength(0);
   });
 
   it("picks the spec-correct Monk interrupt (Mistweaver has none, Windwalker/Brewmaster have Spear Hand Strike)", () => {

@@ -519,6 +519,31 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
 });
 
 describe("formatKillAttemptsForContext — 徽章在手不是失误(用户裁决 2026-09-22)", () => {
+  it("种族技能共享锁内:档位不动,字写 trinket locked(fact7 D17 / D43,用户裁决 2026-10-30)", () => {
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 5, 5),
+      spellCastEvents: [
+        {
+          spellId: "7744", // Will of the Forsaken: 30 s
+          spellName: "Will of the Forsaken",
+          destUnitId: "e1",
+          srcUnitId: "e1",
+          timestamp: ms(2),
+          logLine: { event: "SPELL_CAST_SUCCESS", timestamp: ms(2) },
+        },
+      ],
+    });
+    const e2 = unit("e2");
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 7, 50_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+    expect(attempts[0]!.opportunity.tier).toBe("locked");
+    const text = formatKillAttemptsForContext(attempts).join("\n");
+    expect(text).toContain("opportunity: trinket locked by a racial (back 0:32)");
+    expect(text).not.toContain("opportunity: trinket up");
+  });
   it("全员徽章在手(开场形状)→ 行写 no softer target、不出现 locked、汇总计 0", () => {
     const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 5, 5) });
     const e2 = unit("e2"); // 徽章还在

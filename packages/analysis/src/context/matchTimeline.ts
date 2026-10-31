@@ -103,6 +103,7 @@ import {
   emitFriendlyCheatDeathEntries,
   emitFriendlyFormEntries,
 } from "./timelineSections/friendlyCheatDeath";
+import { emitFriendlyUtilityPressEntries } from "./timelineSections/friendlyUtilityPress";
 import { emitGripEntries } from "./timelineSections/grip";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
 import { emitHealerInactivityEntries } from "./timelineSections/healerInactivity";
@@ -667,6 +668,14 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     requestSnapshotPlaceholder,
     matchStartMs,
   }));
+
+  emitFriendlyUtilityPressEntries({
+    owner,
+    friends,
+    pid,
+    addEntry,
+    matchStartMs,
+  });
 
   // WO3 #17: a friendly cheat-death proc (Cauterize / Cheat Death)
   if (

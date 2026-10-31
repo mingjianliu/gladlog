@@ -74,12 +74,11 @@
  * (`refusal while model ready`). It audits the predicate itself, including
  * the lock lengths no rendered line happens to sit on; once per round.
  *
- * Check `killTrinketUpLocked` (fact7 D17 / D43; measured only, out of the
- * total until the user reads it against P-b7): a KILL ATTEMPTS line printing
- * `opportunity: trinket up` on a unit whose category-1166 racial press lies
- * before the attempt's printed start, inside `racialTrinketLockoutMs`. The
- * tier is the ruling's; the two words printed beside it are what the audit
- * read as false. Kind = the racial.
+ * Check `killTrinketUpLocked` (fact7 D17 / D43; user ruling 2026-10-30): a
+ * KILL ATTEMPTS line printing `opportunity: trinket up` on a unit whose
+ * category-1166 racial press lies before the attempt's printed start, inside
+ * `racialTrinketLockoutMs`. The tier is ruling P-b7's; the printed words must
+ * be true. Kind = the racial.
  */
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import { OTHER_REFUSAL_REASONS } from "@gladlog/analysis/src/context/spellOutcomeLines";
@@ -98,10 +97,6 @@ export const CHECKS = [
   "killTrinketUpLocked",
 ] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
-  "killTrinketUpLocked|Will to Survive",
-  "killTrinketUpLocked|Will of the Forsaken",
-  "killTrinketUpLocked|Stoneform",
-  "killTrinketUpLocked|Fireblood",
   "trinketPressVsModel|refusal while model ready",
   "trinketPressVsModel|success while model ON CD",
 ]);

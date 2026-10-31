@@ -359,12 +359,12 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
   });
 
   it("F-L6: a Silence that put its own aura on a target who was not casting is 'silenced', not missed", () => {
-    const player = kicker([cast("15487", kickTs)]);
+    const player = kicker([cast("31935", kickTs)]);
     const enemy = makeUnit("e1", {
       name: "Enemy",
       info,
       castStartEvents: [castStart("116", kickTs - 30_000, "e1")],
-      auraEvents: [applied("15487", kickTs + 2)],
+      auraEvents: [applied("31935", kickTs + 2)],
     } as any);
     const [e] = analyzeKickAudit(player, [enemy], makeCombat());
     expect(e!.result).toBe("silenced");
@@ -374,13 +374,13 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
   });
 
   it("F-L6: a Silence that landed on a target mid-cast names the cast that never finished — a silence stops a bar with no SPELL_INTERRUPT row, so 'no cast interrupted' would be a guess (pre-review)", () => {
-    const player = kicker([cast("15487", kickTs)]);
+    const player = kicker([cast("31935", kickTs)]);
     const enemy = makeUnit("e1", {
       name: "Enemy",
       info,
       // Frostbolt started 1 s before the Silence and never succeeded
       castStartEvents: [castStart("116", kickTs - 1_000, "e1")],
-      auraEvents: [applied("15487", kickTs + 2)],
+      auraEvents: [applied("31935", kickTs + 2)],
     } as any);
     const [e] = analyzeKickAudit(player, [enemy], makeCombat());
     expect(e!.result).toBe("silenced");
@@ -388,7 +388,7 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
   });
 
   it("F-L6: the cast a silenced entry names is the one still open at the kick, not an earlier bar the next cast start had ended (Fable review)", () => {
-    const player = kicker([cast("15487", kickTs)]);
+    const player = kicker([cast("31935", kickTs)]);
     const enemy = makeUnit("e1", {
       name: "Enemy",
       info,
@@ -398,7 +398,7 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
         castStart("116", kickTs - 3_000, "e1"),
         castStart("118", kickTs - 500, "e1"),
       ],
-      auraEvents: [applied("15487", kickTs + 2)],
+      auraEvents: [applied("31935", kickTs + 2)],
     } as any);
     const [e] = analyzeKickAudit(player, [enemy], makeCombat());
     expect(e!.result).toBe("silenced");
@@ -406,7 +406,7 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
   });
 
   it("F-L6: a bar that was over before the kick is not named — the target was not casting (Fable review)", () => {
-    const player = kicker([cast("15487", kickTs)]);
+    const player = kicker([cast("31935", kickTs)]);
     const enemy = makeUnit("e1", {
       name: "Enemy",
       info,
@@ -427,7 +427,7 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
           "118",
         ),
       ],
-      auraEvents: [applied("15487", kickTs + 2)],
+      auraEvents: [applied("31935", kickTs + 2)],
     } as any);
     const [e] = analyzeKickAudit(player, [enemy], makeCombat());
     expect(e!.result).toBe("silenced");
@@ -477,11 +477,11 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
   });
 
   it("F-L6: without cast-start data a silence that landed stays 'unknown', outside the landed rate like the match's other kicks (Fable review)", () => {
-    const player = kicker([cast("15487", kickTs)]);
+    const player = kicker([cast("31935", kickTs)]);
     const enemy = makeUnit("e1", {
       name: "Enemy",
       info,
-      auraEvents: [applied("15487", kickTs + 2)],
+      auraEvents: [applied("31935", kickTs + 2)],
     } as any);
     expect(analyzeKickAudit(player, [enemy], makeCombat())[0]!.result).toBe(
       "unknown",
@@ -535,7 +535,7 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
         [
           {
             atSeconds: 20,
-            kickSpellId: "15487",
+            kickSpellId: "31935",
             kickSpellName: "Silence",
             result: "silenced",
             silencedTargetName: "Enemy",
@@ -569,16 +569,16 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
 
   // Found on d692582c with Strangulate @51.3; Strangulate left the kick set on
   // 2026-10-16 (a silence aura with no school lockout is control — user
-  // ruling, `isKickSpellId`), so the precedence is pinned on Priest Silence,
-  // the silencing kick that stays.
+  // ruling, `isKickSpellId`), so the precedence was pinned on Priest Silence,
+  // the silencing kick that stays until 2026-10-30; now Avenger's Shield.
   it("precedence: a kick that silenced its target is decided before the juke test (d692582c, Silence)", () => {
-    const player = kicker([cast("15487", kickTs)]);
+    const player = kicker([cast("31935", kickTs)]);
     const enemy = makeUnit("e1", {
       name: "Enemy",
       info,
       // a cast the target stopped 1.5 s earlier — a juke under F-B1 alone
       castStartEvents: [castStart("116", kickTs - 1_500, "e1")],
-      auraEvents: [applied("15487", kickTs + 1)],
+      auraEvents: [applied("31935", kickTs + 1)],
     } as any);
     expect(analyzeKickAudit(player, [enemy], makeCombat())[0]!.result).toBe(
       "silenced",

@@ -251,3 +251,29 @@ describe("ownShieldLinks (generated: ownShieldLinkScan.ts)", () => {
       ).toBe(true);
   });
 });
+
+describe("an ally's pressed shield reads as the holder's own (fact7 D37, user ruling 2026-10-30)", () => {
+  const CHI_COCOON = "1260681"; // rides Enveloping Mist 124682
+  const holder = {
+    id: "u",
+    absorbsIn: [absorb(CHI_COCOON, "ally")],
+    spellCastEvents: [],
+  } as never;
+  const ally = (casts: ReturnType<typeof cast>[]) =>
+    ({ id: "ally", spellCastEvents: casts }) as never;
+
+  it("the ally's press of its carrier makes the run a pressed shield", () => {
+    const spans = ownPressedShieldSpansMs(
+      holder,
+      CHI_COCOON,
+      T,
+      T + 9000,
+      ally([cast("124682", T)]),
+    );
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.toMs).toBe(T + 9000);
+  });
+  it("read on the holder alone it is none: the rows are the ally's", () => {
+    expect(ownPressedShieldSpansMs(holder, CHI_COCOON, T, T + 9000)).toEqual([]);
+  });
+});
