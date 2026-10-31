@@ -489,6 +489,7 @@ function convertUnit(
       destUnitName: event.destName,
       amount: event.amount,
       effectiveAmount: isPetDest ? 0 : event.effectiveAmount,
+      ...(isPetDest ? { petDest: true as const } : {}),
       logLine: {
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,

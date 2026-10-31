@@ -21,6 +21,52 @@ beforeAll(async () => {
   await ensureAnalysisData();
 });
 
+describe("fact7 D36: a save aimed at an enemy that logged its own miss", () => {
+  const KARMA = "122470";
+  const press = (ms: number) =>
+    makeSpellCastEvent(
+      KARMA,
+      ms,
+      "m",
+      "Monk-R",
+      "w",
+      "War-R",
+      0,
+      "Touch of Karma",
+    );
+  it("is no save when no aura of it went up; with the aura it stands", () => {
+    const miss = {
+      spellId: KARMA,
+      missType: "MISS",
+      timestamp: T0 + 20_308,
+      destUnitId: "w",
+    };
+    const missed = makeUnit("m", {
+      name: "Monk-R",
+      spellCastEvents: [press(T0 + 20_307)],
+    });
+    (missed as any).missesOut = [miss];
+    expect(selfSaveCasts(missed as any, T0)).toEqual([]);
+    const landed = makeUnit("m", {
+      name: "Monk-R",
+      spellCastEvents: [press(T0 + 20_307)],
+      auraEvents: [
+        {
+          spellId: KARMA,
+          spellName: "Touch of Karma",
+          srcUnitId: "m",
+          destUnitId: "m",
+          logLine: { event: "SPELL_AURA_APPLIED", timestamp: T0 + 20_307 },
+        },
+      ],
+    });
+    (landed as any).missesOut = [miss];
+    expect(selfSaveCasts(landed as any, T0).map((c) => c.spellId)).toEqual([
+      KARMA,
+    ]);
+  });
+});
+
 describe("F10: an enemy's Ultimate Penitence is its own absorb save", () => {
   const ENEMY_OF_PRIEST = "x";
   const up = (ts: number, event?: string) => {

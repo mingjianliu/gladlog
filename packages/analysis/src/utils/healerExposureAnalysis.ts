@@ -22,7 +22,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
-import { effectAuraViaName } from "../data/castEffectAuras";
+import { castsOfEffectAura, effectAuraViaName } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { hardCcAuraAt } from "./cannotCastIntervals";
 import {
@@ -409,7 +409,6 @@ export function analyzeHealerExposureAtBurst(
       const ccSources =
         observedCCs.length > 0 ? observedCCs : primaryCC ? [primaryCC] : [];
 
-      const renderedSecond = Math.floor(window.fromSeconds);
       const listedCategories = new Set<string>();
       for (const { spellName, spellId, category } of ccSources) {
         if (listedCategories.has(category)) continue;
@@ -418,7 +417,7 @@ export function analyzeHealerExposureAtBurst(
             enemy,
             spellId,
             matchStartMs,
-            renderedSecond,
+            window.fromSeconds,
             allUnits ?? [healer],
           )
         )
@@ -1062,22 +1061,36 @@ export const TALENT_TRIGGERED_CONTROL_BUTTONS: Readonly<
   "372245": ["433874", "357210", "403631"], // Terror of the Skies ← Deep Breath / Breath of Eons
 };
 /** A landing within this of a press (or of an earlier landing) is that
- * press's: 3.6 s measured max, one flight stunning several units. */
+ * press's: 3.6 s measured max, one flight stunning several units. Read for
+ * every control: a landing with no press beside it is a press the log lost
+ * (fact7 D63: Intimidation's stun at 0:08 with no cast row, listed IN LoS 4 s
+ * and 22 s into its 40 s cooldown). */
 const TRIGGERED_CONTROL_LANDING_S = 5;
 
-/** Match seconds of `auraId` APPLIED rows from `enemy` on `units`. */
+/** Match seconds of the APPLIED rows of `auraId`, or a same-named harmful
+ * aura, from `enemy` or a summon of theirs on `units`. */
 function auraLandingsFrom(
   enemy: ICombatUnit,
   auraId: string,
   units: Iterable<ICombatUnit>,
   matchStartMs: number,
 ): number[] {
-  return [...units]
+  const list = [...units];
+  const sources = new Set([
+    enemy.id,
+    ...list.filter((u) => u.ownerId === enemy.id).map((u) => u.id),
+  ]);
+  const name = getEnglishSpellName(auraId, "");
+  return list
     .flatMap((u) => u.auraEvents ?? [])
     .filter(
       (a) =>
-        a.spellId === auraId &&
-        a.srcUnitId === enemy.id &&
+        (a.spellId === auraId ||
+          (name !== "" &&
+            !!a.spellId &&
+            a.auraType === "DEBUFF" &&
+            getEnglishSpellName(a.spellId, "") === name)) &&
+        sources.has(a.srcUnitId) &&
         a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
     )
     .map((a) => (a.logLine.timestamp - matchStartMs) / 1000)
@@ -1087,15 +1100,16 @@ function auraLandingsFrom(
 /**
  * fact2 (2026-10-20): whether the enemy's control `ccSpellId` (the landed
  * aura id, or the spec template's) is certainly on cooldown at the window's
- * rendered second — the threat list named Mighty Bash 4 s after a press with
+ * opening instant — the threat list named Mighty Bash 4 s after a press with
  * a 60 s cooldown, and Sigil of Misery 33 s into its 120 s. The press is the
  * enemy's own SPELL_CAST_SUCCESS of that id or of a cast whose effect the
  * aura is by the cast's own DB2 name (`effectAuraViaName`: Sigil of Misery
  * 207684 → 207685, Ring of Frost 113724 → 82691);
  * the cooldown and charges are the enemy's talent-resolved ones
  * (`unitCooldownOf`) and the charge timeline is the shared one
- * (`inHandSince`). A press inside the rendered second itself still counts as
- * a threat (it is the control being thrown); without talents the base
+ * (`inHandSince`). A press from the opening on still counts as a threat (it
+ * is the control being thrown); one earlier in that second is spent (fact7
+ * D23: Paralysis 0.9 s before Volley); without talents the base
  * cooldown could overstate the wait, so nothing is dropped then. A summon's
  * control pressed by the summon is never on the owner's cast list → kept.
  */
@@ -1103,8 +1117,9 @@ function enemyCcOnCooldownAt(
   enemy: ICombatUnit,
   ccSpellId: string,
   matchStartMs: number,
-  renderedSecond: number,
-  /** the units a triggered control can have landed on */
+  /** the window's opening instant, seconds since the match began */
+  atSeconds: number,
+  /** the units the control can have landed on */
   landingUnits: Iterable<ICombatUnit>,
 ): boolean {
   // the casts this enemy pressed that ARE this control's button: its own
@@ -1137,34 +1152,35 @@ function enemyCcOnCooldownAt(
     )
       castIds.add(e.spellId);
   const castPresses = [...castIds].flatMap((id) =>
-    avoidanceCastSeconds(enemy, id, matchStartMs, renderedSecond),
+    avoidanceCastSeconds(enemy, id, matchStartMs, atSeconds),
   );
   const landingPresses: number[] = [];
-  if (buttons.length > 0) {
-    const landings = auraLandingsFrom(
-      enemy,
-      ccSpellId,
-      landingUnits,
-      matchStartMs,
-    );
-    for (const t of landings)
-      if (
-        ![...castPresses, ...landingPresses].some(
-          (p) => t >= p && t - p <= TRIGGERED_CONTROL_LANDING_S,
-        )
+  for (const t of auraLandingsFrom(
+    enemy,
+    ccSpellId,
+    landingUnits,
+    matchStartMs,
+  ))
+    if (
+      ![...castPresses, ...landingPresses].some(
+        (p) => t >= p && t - p <= TRIGGERED_CONTROL_LANDING_S,
       )
-        landingPresses.push(t);
-  }
+    )
+      landingPresses.push(t);
   const presses = [...castPresses, ...landingPresses]
-    .filter((t) => t < renderedSecond)
+    .filter((t) => t < atSeconds)
     .sort((a, b) => a - b);
   if (presses.length === 0) return false;
   // the button's cooldown: a pressed id's first, else the control's own —
   // the first that has one (Maim's stun aura 203123 has a row with no
-  // cooldown; its button 22570 carries the 30 s)
-  const cdId = [...castIds, ...buttons, ccSpellId].find(
-    (id) => (unitCooldownOf(enemy, id)?.cooldownSeconds ?? 0) > 0,
-  );
+  // cooldown; its button 22570 carries the 30 s), else a cast whose effect
+  // the aura is (no press row of it at all in the round)
+  const cdId = [
+    ...castIds,
+    ...buttons,
+    ccSpellId,
+    ...castsOfEffectAura(ccSpellId),
+  ].find((id) => (unitCooldownOf(enemy, id)?.cooldownSeconds ?? 0) > 0);
   const cd = cdId === undefined ? undefined : unitCooldownOf(enemy, cdId);
   if (!cd || !cd.talentsKnown || !(cd.cooldownSeconds > 0)) return false;
   // a cooldown the game shortens on the fly (Holy Words by Smite) is
@@ -1173,7 +1189,7 @@ function enemyCcOnCooldownAt(
   const certainS =
     earliestCooldownSecondsFor(cdId!, enemy.spec, cd.cooldownSeconds) ??
     cd.cooldownSeconds;
-  return inHandSince(presses, certainS, cd.charges, renderedSecond) === null;
+  return inHandSince(presses, certainS, cd.charges, atSeconds) === null;
 }
 
 /** Since when a tool has had a charge in hand at `atSeconds` (0 = since the

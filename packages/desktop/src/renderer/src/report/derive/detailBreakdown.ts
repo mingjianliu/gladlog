@@ -26,6 +26,7 @@ interface HpEventLike {
   srcName?: string;
   amount?: number;
   effectiveAmount?: number;
+  petDest?: true;
   crit?: boolean;
   params?: string[];
 }
@@ -81,7 +82,9 @@ const acc = (
 function addHp(a: Acc, e: HpEventLike): void {
   const eff = e.effectiveAmount ?? 0;
   a.total += eff;
-  a.totalRaw += e.amount ?? eff;
+  // a heal on a pet: `effectiveAmount` zeroed, `amount` kept — the share's
+  // denominator leaves it out, the reading of analysis `overhealPct`
+  if (!e.petDest) a.totalRaw += e.amount ?? eff;
   a.hits += 1;
   a.maxHit = Math.max(a.maxHit, eff);
   // Single source for crits: prefer the materialized crit field (after the

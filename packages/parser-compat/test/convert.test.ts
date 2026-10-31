@@ -436,6 +436,7 @@ describe("pet-target zeroing (adjudication #17: old zeroes eff for rows onto pet
   it("heal onto pet: row kept, effectiveAmount zeroed, amount kept", () => {
     const a = legacy.units["Player-1-A"]!;
     const h = a.healOut.filter((e) => e.destUnitId?.startsWith("Pet-"));
+    expect(h.every((e) => e.petDest === true)).toBe(true);
     expect(h).toHaveLength(1);
     expect(h[0]!.effectiveAmount).toBe(0);
     expect(Math.abs(h[0]!.amount)).toBe(149504);

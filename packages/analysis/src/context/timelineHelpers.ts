@@ -46,6 +46,7 @@ import {
   isHealerSpec,
   isPassiveProcCast,
   lockoutDebuffStopsPressAtDeath,
+  overhealPct,
   PASSIVE_SPELL_BLOCKLIST,
   pressSpentBy,
   rendersOnCaster,
@@ -1523,13 +1524,6 @@ export function computeHealingInWindow(
   );
   if (events.length === 0) return null;
 
-  let totalAmount = 0;
-  let totalEffective = 0;
-  for (const h of events) {
-    totalAmount += h.amount;
-    totalEffective += h.effectiveAmount;
-  }
-
   const windowSeconds = (toMs - fromMs) / 1000;
   const BUCKET_SIZE = HEALING_BUCKET_S;
   const buckets: Array<{
@@ -1566,11 +1560,7 @@ export function computeHealingInWindow(
     });
   }
 
-  const overhealPct =
-    totalAmount > 0
-      ? Math.round(((totalAmount - totalEffective) / totalAmount) * 100)
-      : 0;
-  return { buckets, overhealPct };
+  return { buckets, overhealPct: overhealPct(events) };
 }
 
 /**

@@ -261,6 +261,75 @@ describe('healerExposureAnalysis — exposure calculation', () => {
     expect(run(62).flatMap((r) => r.threats.map((t) => t.ccSpellName))).toEqual(['Mighty Bash']);
   });
 
+  it('fact7 D63: a landing with no press row spends the control (Intimidation 24394, the press 474421 logged only later)', () => {
+    const healer = makeUnit('h', {
+      advancedActions: [makeAdvancedAction(MATCH_START + 12_000, 0, 0), makeAdvancedAction(MATCH_START + 69_000, 0, 0)],
+      auraEvents: [
+        {
+          spellId: '24394',
+          spellName: 'Intimidation',
+          srcUnitId: 'e',
+          destUnitId: 'h',
+          auraType: 'DEBUFF',
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: MATCH_START + 8_041 },
+        } as any,
+      ],
+    });
+    for (const a of healer.advancedActions) (a as any).advancedActorId = 'h';
+    const enemy = makeUnit('e', {
+      name: 'E1',
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      info: { talents: [], pvpTalents: [] },
+      spellCastEvents: [makeSpellCastEvent('474421', MATCH_START + 69_307, 'x', 'X', 'e', 'E1')],
+      advancedActions: [makeAdvancedAction(MATCH_START + 12_000, 5, 0), makeAdvancedAction(MATCH_START + 69_000, 5, 0)],
+    });
+    for (const a of enemy.advancedActions) (a as any).advancedActorId = 'e';
+    const friendCCSummary: any = {
+      ccInstances: [{ sourceName: 'E1', sourceId: 'e', spellId: '24394', spellName: 'Intimidation' }],
+    };
+    const run = (fromSeconds: number) =>
+      analyzeHealerExposureAtBurst(
+        [{ fromSeconds }] as any,
+        [enemy],
+        healer,
+        { trinketUseTimes: [], ccInstances: [] } as any,
+        [friendCCSummary],
+        '1505',
+        MATCH_START,
+        [healer, enemy],
+      ).flatMap((r) => r.threats.map((t) => t.ccSpellName));
+    expect(run(12)).toEqual([]);
+    expect(run(69)).toEqual(['Intimidation']);
+  });
+
+  it('fact7 D23: a press earlier in the window\'s own second is spent; one from the opening on is the control being thrown', () => {
+    const run = (pressMs: number) => {
+      const healer = makeUnit('h', {
+        advancedActions: [makeAdvancedAction(MATCH_START + 23_000, 0, 0), makeAdvancedAction(MATCH_START + 24_000, 0, 0)],
+      });
+      for (const a of healer.advancedActions) (a as any).advancedActorId = 'h';
+      const enemy = makeUnit('e', {
+        name: 'E1',
+        spec: CombatUnitSpec.Druid_Feral,
+        info: { talents: [], pvpTalents: [] },
+        spellCastEvents: [makeSpellCastEvent('5211', MATCH_START + pressMs, 'x', 'X', 'e', 'E1')],
+        advancedActions: [makeAdvancedAction(MATCH_START + 23_000, 5, 0), makeAdvancedAction(MATCH_START + 24_000, 5, 0)],
+      });
+      for (const a of enemy.advancedActions) (a as any).advancedActorId = 'e';
+      return analyzeHealerExposureAtBurst(
+        [{ fromSeconds: 23.9 }] as any,
+        [enemy],
+        healer,
+        { trinketUseTimes: [], ccInstances: [] } as any,
+        [{ ccInstances: [{ sourceName: 'E1', sourceId: 'e', spellId: '5211', spellName: 'Mighty Bash' }] }] as any,
+        '1505',
+        MATCH_START,
+      ).flatMap((r) => r.threats.map((t) => t.ccSpellName));
+    };
+    expect(run(23_041)).toEqual([]);
+    expect(run(23_950)).toEqual(['Mighty Bash']);
+  });
+
   it('fact2 605: a same-named variant is the same button (Hex 269352 pressed, Hex 51514 landed)', () => {
     const healer = makeUnit('h', {
       advancedActions: [makeAdvancedAction(MATCH_START + 4_000, 0, 0), makeAdvancedAction(MATCH_START + 40_000, 0, 0)],

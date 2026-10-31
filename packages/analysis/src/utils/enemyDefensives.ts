@@ -1099,6 +1099,37 @@ export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>([
   ...ENEMY_ONLY_SAVE_IDS,
 ]);
 
+/** A press's own SPELL_MISSED row lies within this of it. */
+const SAVE_PRESS_MISS_MS = 200;
+
+/**
+ * Did this press of a save aimed at an enemy miss, so that no save went up?
+ * Its own SPELL_MISSED row beside it, and no aura of the save on the unit
+ * around it (fact7 D36, 9121b496 0:20: Touch of Karma logged MISS on the
+ * warrior 1 ms later, and no Karma aura was up before 1:53). The press still
+ * spent the cooldown; it just protected nobody.
+ */
+function savePressMissed(
+  enemy: Pick<ICombatUnit, "id" | "auraEvents" | "missesOut">,
+  spellId: string,
+  ms: number,
+): boolean {
+  const missed = (enemy.missesOut ?? []).some(
+    (m) =>
+      m.spellId === spellId && Math.abs(m.timestamp - ms) <= SAVE_PRESS_MISS_MS,
+  );
+  if (!missed) return false;
+  const ids = new Set([spellId, ...effectAurasOfCast(spellId)]);
+  return !(enemy.auraEvents ?? []).some(
+    (a) =>
+      !!a.spellId &&
+      ids.has(a.spellId) &&
+      a.destUnitId === enemy.id &&
+      a.logLine.event !== LogEvent.SPELL_AURA_REMOVED &&
+      Math.abs(a.logLine.timestamp - ms) <= SAVE_CAST_AURA_PAIR_S * 1000,
+  );
+}
+
 /** The enemy's own presses of a `SELF_SAVE_IDS` save on itself, in cast
  * order (seconds from match start). An external-capable one (Guardian
  * Spirit, Life Cocoon, Lay on Hands, Roar of Sacrifice) counts only when its
@@ -1129,6 +1160,7 @@ export function selfSaveCasts(
     if (!cast.spellId || !SELF_SAVE_IDS.has(cast.spellId)) continue;
     if (isExternalSaveId(cast.spellId) && cast.destUnitId !== enemy.id)
       continue;
+    if (savePressMissed(enemy, cast.spellId, cast.logLine.timestamp)) continue;
     out.push({
       atSeconds: (cast.logLine.timestamp - matchStartMs) / 1000,
       spellId: cast.spellId,
@@ -1645,6 +1677,33 @@ export function saveAuraIntervals(
   });
 }
 
+/** A cast row and the REFRESH it makes share a millisecond or so. */
+const PRESS_REFRESH_PAIR_MS = 20;
+
+/**
+ * Is the cast at `pressS` a press landing on a copy of the aura that was
+ * already up — after the aura's start, inside the span `splitAtRepressRefresh`
+ * does not cut, with the REFRESH it made beside it? fact7 D27 (163de8f1 1:00):
+ * Exhilaration's Survival of the Fittest went up at .584 and the hunter's own
+ * press at .932 refreshed it, which is why it ran 8.3 s and not the copy's 3.
+ */
+function pressRefreshedCopy(
+  unit: Pick<ICombatUnit, "auraEvents">,
+  iv: Pick<IAuraInterval, "spellId" | "fromS">,
+  pressS: number,
+  startTime: number,
+): boolean {
+  if (pressS <= iv.fromS || pressS > iv.fromS + SAVE_CAST_AURA_PAIR_S)
+    return false;
+  const pressMs = startTime + pressS * 1000;
+  return (unit.auraEvents ?? []).some(
+    (a) =>
+      a.spellId === iv.spellId &&
+      a.logLine.event === LogEvent.SPELL_AURA_REFRESH &&
+      Math.abs(a.logLine.timestamp - pressMs) <= PRESS_REFRESH_PAIR_MS,
+  );
+}
+
 /**
  * Round-1 retest (fact1215 idx 55, R8 family): a SPELL_AURA_REFRESH its
  * source logged with a cast of that spell (within `SAVE_CAST_AURA_PAIR_S`)
@@ -2075,8 +2134,9 @@ export function enemyDefensiveEvents(
       .filter((t) => {
         const dMs = Math.round(t * 1000) - Math.round(iv.fromS * 1000);
         return (
-          dMs <= AURA_BEFORE_CAST_MAX_S * 1000 &&
-          -dMs <= PRESS_TO_AURA_MAX_S * 1000
+          (dMs <= AURA_BEFORE_CAST_MAX_S * 1000 &&
+            -dMs <= PRESS_TO_AURA_MAX_S * 1000) ||
+          pressRefreshedCopy(enemy, iv, t, combat.startTime)
         );
       })
       .reduce(

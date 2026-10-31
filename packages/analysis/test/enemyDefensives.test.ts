@@ -314,6 +314,34 @@ describe("enemyDefensiveEvents", () => {
     expect(at(0.2).noPressLogged).toBe(true);
   });
 
+  it("fact7 D27: a press that refreshes a copy already up is the span's press, past the 150 ms lag", () => {
+    const SOTF = "264735";
+    const refreshed = (atS: number) => ({
+      ...applied(SOTF, "e1", "e1", atS),
+      logLine: {
+        ...applied(SOTF, "e1", "e1", atS).logLine,
+        event: LogEvent.SPELL_AURA_REFRESH,
+      },
+    });
+    const at = (auraEvents: any[]) =>
+      enemyDefensiveEvents(
+        unit("e1", {
+          auraEvents: [
+            applied(SOTF, "e1", "e1", 60.584),
+            ...auraEvents,
+            removed(SOTF, "e1", "e1", 68.918),
+          ],
+          spellCastEvents: [cast(SOTF, "e1", 60.932)],
+        }),
+        [],
+        combat,
+      )[0]!;
+    expect(at([refreshed(60.932)])).toMatchObject({ pressSeconds: 60.932 });
+    expect(at([refreshed(60.932)]).noPressLogged).toBeUndefined();
+    // no REFRESH beside the cast: that cast put up nothing of this span
+    expect(at([]).noPressLogged).toBe(true);
+  });
+
   it("removedEarly needs a real REMOVED event and more than the slack short", () => {
     // no REMOVED → the interval end is inferred (round end) → never "early"
     const inferred = unit("e1", {

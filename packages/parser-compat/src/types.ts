@@ -50,6 +50,12 @@ export interface IHpEvent extends ICombatEvent {
    * totems/guardians (GH #100, docs/log-observability-audit.md direction 4).
    */
   overkill?: number;
+  /**
+   * The row healed a pet / guardian, whose `effectiveAmount` is zeroed while
+   * `amount` stays. Read through analysis `overhealPct`: read together the
+   * two make the whole heal look overhealed (fact7 D9).
+   */
+  petDest?: true;
 }
 
 export interface IAbsorbEvent extends ICombatEvent {

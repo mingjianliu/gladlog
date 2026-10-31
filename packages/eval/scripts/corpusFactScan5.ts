@@ -52,6 +52,9 @@ const MODULE_FILES = [
   "singles1",
   "singles2",
   "unseenPress",
+  "overheal",
+  "controlCooldown",
+  "pressEffect",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

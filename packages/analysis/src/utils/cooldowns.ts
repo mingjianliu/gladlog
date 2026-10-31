@@ -2413,6 +2413,32 @@ export function gridEndpointHpPct(
 }
 
 /**
+ * The share of `rows` that was overheal, whole percent. A heal on a pet is
+ * left out of both sides: its `effectiveAmount` is zeroed and its `amount`
+ * kept (`petDest`), so counted it reads as all overheal (fact7 D9: `Overheal:
+ * 66%` over a window the log gives 43 %, with 954k of pet healing in it).
+ */
+export function overhealPct(
+  rows: Iterable<
+    Pick<
+      ICombatUnit["healOut"][number],
+      "amount" | "effectiveAmount" | "petDest"
+    >
+  >,
+): number {
+  let totalAmount = 0;
+  let totalEffective = 0;
+  for (const h of rows) {
+    if (h.petDest) continue;
+    totalAmount += h.amount;
+    totalEffective += h.effectiveAmount;
+  }
+  return totalAmount > 0
+    ? Math.round(((totalAmount - totalEffective) / totalAmount) * 100)
+    : 0;
+}
+
+/**
  * Computes overall healing metrics (HPS and Overheal %) for a unit across a given duration.
  */
 export function computeOverallHealingMetrics(
@@ -2423,24 +2449,15 @@ export function computeOverallHealingMetrics(
   const durationSeconds = (matchEndMs - matchStartMs) / 1000;
   if (durationSeconds <= 0) return { hps: 0, overhealPct: 0 };
 
-  let totalAmount = 0;
-  let totalEffective = 0;
-  for (const h of unit.healOut) {
-    if (
-      h.logLine.timestamp >= matchStartMs &&
-      h.logLine.timestamp <= matchEndMs
-    ) {
-      totalAmount += h.amount;
-      totalEffective += h.effectiveAmount;
-    }
-  }
-
-  const hps = totalEffective / durationSeconds;
-  const overhealPct =
-    totalAmount > 0
-      ? Math.round(((totalAmount - totalEffective) / totalAmount) * 100)
-      : 0;
-  return { hps, overhealPct };
+  const rows = unit.healOut.filter(
+    (h) =>
+      h.logLine.timestamp >= matchStartMs && h.logLine.timestamp <= matchEndMs,
+  );
+  const totalEffective = rows.reduce((n, h) => n + h.effectiveAmount, 0);
+  return {
+    hps: totalEffective / durationSeconds,
+    overhealPct: overhealPct(rows),
+  };
 }
 
 export interface IAvailableWindow {
