@@ -690,4 +690,9 @@
  *  relabelled, 9 counterfactual lines (3 deaths) gone;
  *  checkEnemyDefSaveEffect 27 → 0. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 466;
+/*
+ * v467 (2026-10-31): the round-7 fact fixes (F21) — effect ends, press filing,
+ *  absorbed hits, kill windows, the 2026-10-30 / 31 user rulings. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 467;
