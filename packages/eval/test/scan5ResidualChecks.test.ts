@@ -4,7 +4,10 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { run as runDamageBasis } from "../scripts/scan5/damageBasis";
+import { run as runFriendlyOffensiveTag } from "../scripts/scan5/friendlyOffensiveTag";
+import { run as runOverrideVariant } from "../scripts/scan5/overrideVariant";
 import { run as runPressFiling } from "../scripts/scan5/pressFiling";
+import { run as runSingles14b } from "../scripts/scan5/singles14b";
 
 // fact7 r1: six corpus checks that kept firing after their 15-round fixes hit 0.
 // Each `reads` case is a shape the raw log proved right while the check flagged
@@ -74,6 +77,12 @@ function scan(
     lines,
     menu,
     rawLines,
+    legacy: {
+      startTime: START,
+      endTime: at(600_000),
+      units: Object.fromEntries(players.map((p) => [p.id, p])),
+      startInfo: players[0]?.startInfo,
+    },
     players,
     units: players,
     byName,
@@ -561,6 +570,330 @@ describe("selfOnlyHeldDualRole", () => {
         scan(runPressFiling, players, [note("Ultimate Penitence")]),
         "selfOnlyHeldDualRole",
       ),
+    ).toHaveLength(1);
+  });
+});
+
+// fact7 r4: the four checks that still fired on the 605 capture after the 15
+// rounds reached 0.
+
+describe("intoDefenseLanded", () => {
+  const wallRows = (from: number, to: number) =>
+    [
+      [LogEvent.SPELL_AURA_APPLIED, from],
+      [LogEvent.SPELL_AURA_REMOVED, to],
+    ].map(([event, ms]) => ({
+      ...aura(event as string, ms as number, "22812", "Barkskin"),
+      destUnitId: "Target",
+      srcUnitId: "Target",
+      srcUnitName: "Target",
+    }));
+  const hitOn = (ms: number, spellId: string, spellName: string) =>
+    rowOf(LogEvent.SPELL_DAMAGE, ms, {
+      spellId,
+      spellName,
+      destUnitId: "Target",
+    });
+  const line = (list: string) =>
+    `  [0:30] Assassination Rogue (Ally): ${list} into Target's Barkskin`;
+  const players = (ally: any, wall = wallRows(30_000, 40_000)) => [
+    unit("Ally", "1", 1, ally),
+    unit("Target", "2", 2, { auraEvents: wall }),
+  ];
+  const seen = (ally: any, list: string, wall?: any[]) =>
+    of(
+      scan(runSingles14b, players(ally, wall), [line(list)]),
+      "intoDefenseLanded",
+    );
+
+  it("one press under two ids in one instant is one press (Mutilate 1329 + 27576, 0a7d35e2 r1)", () => {
+    const ally = {
+      spellCastEvents: [
+        cast(31_000, "Ally", "27576", "Mutilate", "Target"),
+        cast(31_000, "Ally", "1329", "Mutilate", "Target"),
+      ],
+      damageOut: [
+        hitOn(31_001, "5374", "Mutilate"),
+        hitOn(31_001, "27576", "Mutilate"),
+      ],
+    };
+    expect(seen(ally, "Mutilate")).toEqual([]);
+  });
+
+  it("a reflected cast landed on nobody here (Fire Blast into Time Dilation, 8-1 0:32)", () => {
+    const ally = {
+      spellCastEvents: [
+        cast(31_000, "Ally", "108853", "Fire Blast", "Target"),
+        cast(33_000, "Ally", "108853", "Fire Blast", "Target"),
+      ],
+      damageOut: [hitOn(33_100, "108853", "Fire Blast")],
+      missesOut: [
+        rowOf(LogEvent.SPELL_MISSED, 31_080, {
+          spellId: "108853",
+          spellName: "Fire Blast",
+          destUnitId: "Target",
+          missType: "REFLECT",
+        }),
+      ],
+    };
+    expect(seen(ally, "Fire Blast")).toEqual([]);
+  });
+
+  it("a DoT lands as its aura, and an eaten tick is nobody's press (Drain Soul 60.5 s, the wall to 60.8 s)", () => {
+    const ally = {
+      spellCastEvents: [cast(39_700, "Ally", "198590", "Drain Soul", "Target")],
+      damageOut: [],
+      missesOut: [
+        rowOf(LogEvent.SPELL_PERIODIC_MISSED, 40_400, {
+          spellId: "198590",
+          spellName: "Drain Soul",
+          destUnitId: "Target",
+          missType: "ABSORB",
+        }),
+      ],
+    };
+    const target = [
+      ...wallRows(30_000, 40_000),
+      {
+        ...aura(LogEvent.SPELL_AURA_APPLIED, 39_702, "198590", "Drain Soul"),
+        destUnitId: "Target",
+        srcUnitId: "Ally",
+      },
+    ].sort((a, b) => a.timestamp - b.timestamp);
+    expect(seen(ally, "Drain Soul", target)).toEqual([]);
+  });
+
+  it("a press after the round's ending death is in the log's tail, not the round (Rake 104.8 s, 34-5)", () => {
+    const ally = {
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      spellCastEvents: [31_000, 36_000].map((t) =>
+        cast(t, "Ally", "1822", "Rake", "Target"),
+      ),
+      damageOut: [hitOn(31_001, "1822", "Rake"), hitOn(36_001, "1822", "Rake")],
+    };
+    const seenAfterDeath = of(
+      scan(
+        runSingles14b,
+        [
+          unit("Ally", "1", 1, ally),
+          unit("Target", "2", 2, {
+            info: {},
+            auraEvents: wallRows(30_000, 40_000),
+            deathRecords: [{ timestamp: at(35_000) }],
+          }),
+        ],
+        [line("Rake")],
+      ),
+      "intoDefenseLanded",
+    );
+    expect(seenAfterDeath).toEqual([]);
+  });
+
+  it("a wall the log re-applied inside its second is two intervals, the line one of them (4-1 0:19)", () => {
+    const ally = {
+      spellCastEvents: [31_000, 33_000].map((t) =>
+        cast(t, "Ally", "34026", "Kill Command", "Target"),
+      ),
+      damageOut: [],
+    };
+    const wall = [...wallRows(30_100, 30_700), ...wallRows(30_800, 40_000)];
+    expect(seen(ally, "Kill Command ×2", wall)).toEqual([]);
+  });
+
+  it("flags a cast that landed inside and was left off (D52)", () => {
+    const ally = {
+      spellCastEvents: [31_000, 33_000].map((t) =>
+        cast(t, "Ally", "11366", "Pyroblast", "Target"),
+      ),
+      damageOut: [
+        hitOn(31_500, "11366", "Pyroblast"),
+        hitOn(33_500, "11366", "Pyroblast"),
+      ],
+    };
+    expect(seen(ally, "Pyroblast")).toHaveLength(1);
+  });
+});
+
+describe("offensiveTagWrong", () => {
+  const line =
+    "0:27  [ENEMY DEF]   2(RPaladin) (Retribution Paladin): Divine Protection (20%, 8.0s) [friendly offensive CD active] (at 71% HP)";
+  const up = (spellId: string) =>
+    rowOf(LogEvent.SPELL_AURA_APPLIED, 12_000, {
+      spellId,
+      spellName: "x",
+      srcUnitId: "Ally",
+    });
+  const seen = (allyAuras: string[], enemyAuras: string[]) =>
+    of(
+      scan(
+        runFriendlyOffensiveTag,
+        [
+          unit("Ally", "1", 1, { info: {}, auraEvents: allyAuras.map(up) }),
+          unit("Enemy", "2", 2, { info: {}, auraEvents: enemyAuras.map(up) }),
+        ],
+        [line],
+      ),
+      "offensiveTagWrong",
+    );
+
+  it("an aura whose cast is logged apart is its cooldown (Arcane Surge 365362, 4-2 0:27)", () => {
+    expect(seen(["365362"], ["12654"])).toEqual([]);
+  });
+  it("a recharge is a cooldown (Ray of Frost 205021, 60 s charge)", () => {
+    expect(seen([], ["205021"])).toEqual([]);
+  });
+  it("an activation has its cooldown's (Radiant Glory 454351 → 31884)", () => {
+    expect(seen(["454351"], [])).toEqual([]);
+  });
+  it("flags a tag only Curse of Tongues stands behind", () => {
+    expect(seen([], ["1714"])).toHaveLength(1);
+  });
+});
+
+describe("rotDotCount", () => {
+  const debuff = (event: string, ms: number, spellId: string, src: string) => ({
+    ...aura(event, ms, spellId, "x"),
+    srcUnitId: src,
+    logLine: {
+      event,
+      timestamp: at(ms),
+      parameters: { 11: "DEBUFF" },
+    },
+  });
+  const tick = (ms: number, spellId: string, src: string) =>
+    rowOf(LogEvent.SPELL_PERIODIC_DAMAGE, ms, { spellId, srcUnitId: src });
+  const line = (n: number) =>
+    `0:40  [ROT PRESSURE]   1(FMage) (Fire Mage) at 22% HP with ${n} active DoTs`;
+  const seen = (more: any, n: number, rawLines: string[] = []) =>
+    of(
+      scan(
+        runSingles14b,
+        [unit("Mage", "1", 1, more)],
+        [line(n)],
+        "",
+        rawLines,
+      ),
+      "rotDotCount",
+    );
+
+  it("a tick eaten whole is a tick (Expurgation, every row SPELL_PERIODIC_MISSED, 10-6 0:18)", () => {
+    const raw =
+      '8/22/2026 15:18:05.000-4  SPELL_PERIODIC_MISSED,Ret,"Ret",0x0,0x0,Mage,"Mage",0x0,0x0,383346,"Expurgation",0x6,ABSORB,nil,4639,3041,1,ST';
+    expect(
+      seen(
+        {
+          auraEvents: [
+            debuff(LogEvent.SPELL_AURA_APPLIED, 12_000, "383346", "Ret"),
+          ],
+          damageIn: [],
+        },
+        1,
+        [raw],
+      ),
+    ).toEqual([]);
+  });
+
+  it("a DB2 DoT gone before its first tick was on the unit (Moonfire up 1 s, 5-3 0:33)", () => {
+    expect(
+      seen(
+        {
+          auraEvents: [
+            debuff(LogEvent.SPELL_AURA_APPLIED, 39_600, "164812", "Druid"),
+            debuff(LogEvent.SPELL_AURA_REMOVED, 40_600, "164812", "Druid"),
+          ],
+          damageIn: [],
+        },
+        1,
+      ),
+    ).toEqual([]);
+  });
+
+  it("a DoT that ends on the grid's own millisecond is still on at that second (Shared Fate, 3-6-36 r6 1:33)", () => {
+    expect(
+      seen(
+        {
+          auraEvents: [
+            debuff(LogEvent.SPELL_AURA_APPLIED, 30_000, "450591", "Warlock"),
+            debuff(LogEvent.SPELL_AURA_REMOVED, 40_000, "450591", "Warlock"),
+            debuff(LogEvent.SPELL_AURA_APPLIED, 40_335, "450591", "Warlock"),
+          ],
+          damageIn: [tick(32_000, "450591", "Warlock")],
+        },
+        1,
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags a DoT ended a millisecond before the second and still counted", () => {
+    expect(
+      seen(
+        {
+          auraEvents: [
+            debuff(LogEvent.SPELL_AURA_APPLIED, 30_000, "450591", "Warlock"),
+            debuff(LogEvent.SPELL_AURA_REMOVED, 39_999, "450591", "Warlock"),
+          ],
+          damageIn: [tick(32_000, "450591", "Warlock")],
+        },
+        1,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("flags a DoT ended under the controller's name and still counted (D32, 87ba9256 4:33)", () => {
+    expect(
+      seen(
+        {
+          auraEvents: [
+            debuff(LogEvent.SPELL_AURA_APPLIED, 5_000, "34914", "Controlled"),
+            debuff(LogEvent.SPELL_AURA_REMOVED, 26_000, "34914", "Controller"),
+          ],
+          damageIn: [tick(7_000, "34914", "Controller")],
+        },
+        1,
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+describe("kitRangeBelowSeen", () => {
+  const lines = [
+    '  <unit id="1" name="Priest" spec="Holy Priest" role="enemy">',
+    "    <cooldowns>Holy Word: Chastise [0–40s], Fade [30s]</cooldowns>",
+  ];
+  const seen = (more: any) =>
+    of(
+      scan(runOverrideVariant, [unit("Priest", "1", 1, more)], lines),
+      "kitRangeBelowSeen",
+    );
+  const press = cast(157_543, "Priest", "88625", "Holy Word: Chastise");
+
+  it("a reset inside the press's own second is a true 0 (Apotheosis 0.95 s on, d5f35ce9 r6)", () => {
+    expect(
+      seen({
+        spellCastEvents: [press],
+        auraEvents: [
+          rowOf(LogEvent.SPELL_AURA_APPLIED, 158_490, {
+            spellId: "200183",
+            spellName: "Apotheosis",
+            srcUnitId: "Priest",
+          }),
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("flags a 0 with no reset under a second after a press (D71)", () => {
+    expect(
+      seen({
+        spellCastEvents: [press],
+        auraEvents: [
+          rowOf(LogEvent.SPELL_AURA_APPLIED, 170_000, {
+            spellId: "200183",
+            spellName: "Apotheosis",
+            srcUnitId: "Priest",
+          }),
+        ],
+      }),
     ).toHaveLength(1);
   });
 });

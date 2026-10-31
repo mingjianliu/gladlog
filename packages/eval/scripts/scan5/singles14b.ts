@@ -11,17 +11,21 @@
  *    stopped is not a cast the player stopped.
  *  - `rotDotCount` (D32): `[ROT PRESSURE] … with K active DoTs` against the
  *    debuffs of the unit open at the printed second that ticked (a
- *    SPELL_PERIODIC_DAMAGE row of the id, or an absorbed tick, from the same
- *    source) in the round. Kinds `undercount` / `overcount`.
+ *    SPELL_PERIODIC_DAMAGE row of the id, or a SPELL_PERIODIC_MISSED one, from
+ *    the same source) in the round, or that DB2 calls a DoT and whose run
+ *    ended too soon for a tick. Kinds `undercount` / `overcount`.
  *  - `nextSpikeNotNearest` (D50): `next spike in Ns on X` against the nearest
  *    window of the whole walk (`selectPressureWindows` with its unlisted
  *    windows, read as a lookup: the audited fact is which of them the line
  *    searched). Kinds `later` (a nearer window existed) / `absent` (no note
  *    while one existed).
- *  - `intoDefenseLanded` (D52): `Spell ×n into X's Defense` against the presses
- *    whose own hit row fell inside the aura, each press taking the first
- *    unclaimed non-periodic row of the spell on the target within 1.5 s.
- *    Kinds `undercount` / `overcount`.
+ *  - `intoDefenseLanded` (D52): `Spell ×n into X's Defense` against the round's
+ *    presses whose own row fell inside the aura, each press taking the first
+ *    unclaimed non-periodic row of the spell on the target within 1.5 s: a
+ *    hit, a miss, or the caster's aura of it going on. One press under two
+ *    ids in one instant is one press; a reflected one landed on nobody here;
+ *    a wall re-applied inside its second is two intervals, the line one of
+ *    them. Kinds `undercount` / `overcount`.
  *  - `avoidedWhileControlled` (D65): `[CC AVOIDED?] P: X (by C) did not land;
  *    Y …` for a control with no destination that landed on nobody and logged
  *    no miss, with a hard control on P through the second.
@@ -39,6 +43,7 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import { CAST_INTERRUPTED_REASONS } from "@gladlog/analysis/src/utils/castBarOutcomes";
+import { COMPANION_CAST_ROW_MS } from "@gladlog/analysis/src/utils/castPress";
 import { selectPressureWindows } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   canDefensiveCleanse,
@@ -54,6 +59,7 @@ import {
   hasLineOfSight,
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
   ABSORBED,
@@ -61,6 +67,7 @@ import {
   ev,
   type IRoundCtx,
   nameOf,
+  REFRESH,
   REMOVED,
   secOf,
   successesOf,
@@ -160,6 +167,25 @@ function checkFeign(ctx: IRoundCtx, enemies: any[]): void {
   }
 }
 
+/** a run shorter than this can end before its first tick: the slowest DoT
+ * cadence seen is 3 s */
+const NO_TICK_RUN_MS = 3000;
+
+/** `${src}|${dest}|${spellId}` of the round's SPELL_PERIODIC_MISSED rows */
+const periodicMissedCache = new WeakMap<object, Set<string>>();
+function periodicMissedRows(ctx: IRoundCtx): Set<string> {
+  let out = periodicMissedCache.get(ctx.rawLines);
+  if (out) return out;
+  out = new Set<string>();
+  for (const l of ctx.rawLines) {
+    if (!l.includes("SPELL_PERIODIC_MISSED,")) continue;
+    const f = l.split(",");
+    out.add(`${f[1]}|${f[5]}|${f[9]}`);
+  }
+  periodicMissedCache.set(ctx.rawLines, out);
+  return out;
+}
+
 function checkRotDots(ctx: IRoundCtx): void {
   for (const line of ctx.lines) {
     const m =
@@ -175,13 +201,25 @@ function checkRotDots(ctx: IRoundCtx): void {
     const unit = name;
     const atMs = ctx.start + secOf(m[1]!) * 1000;
     const open = new Map<string, number>();
-    for (const a of (unit.auraEvents ?? []) as any[]) {
+    const debuffRows = ((unit.auraEvents ?? []) as any[]).filter(
+      (a) => a.logLine?.parameters?.[11] !== "BUFF",
+    );
+    for (const a of debuffRows) {
       if (tsOf(a) > atMs) break;
-      if (a.logLine?.parameters?.[11] === "BUFF") continue;
       const key = `${a.spellId}|${a.srcUnitId}`;
-      if (ev(a) === REMOVED) open.delete(key);
-      else if (ev(a) === APPLIED) open.set(key, tsOf(a));
+      // the product's `floor(end)` counts a run through its last millisecond:
+      // 3-6-36 r6, Shared Fate REMOVED at exactly 1:33.000, back at 1:33.335
+      if (ev(a) === REMOVED && tsOf(a) === atMs) continue;
+      if (ev(a) === REMOVED) {
+        // a Mind-Controlled caster's DoT: APPLIED under the controlled unit,
+        // its ticks and REMOVED under the controller
+        const run = open.has(key)
+          ? key
+          : [...open.keys()].find((k) => k.startsWith(`${a.spellId}|`));
+        if (run !== undefined) open.delete(run);
+      } else if (ev(a) === APPLIED) open.set(key, tsOf(a));
     }
+    const eaten = periodicMissedRows(ctx);
     const ticked = (id: string, src: string): boolean =>
       ((unit.damageIn ?? []) as any[]).some(
         (d) =>
@@ -189,13 +227,24 @@ function checkRotDots(ctx: IRoundCtx): void {
           d.srcUnitId === src &&
           (ev(d) as string).startsWith("SPELL_PERIODIC_DAMAGE"),
       ) ||
-      ((unit.absorbsIn ?? []) as any[]).some(
-        (d) =>
-          d.attackSpellId === id && (d.attackerUnitId ?? d.srcUnitId) === src,
+      // a tick eaten whole, or into an immunity, is a tick: its row is on the
+      // attacker's side of the parse, so it is read off the raw rows
+      eaten.has(`${src}|${unit.id}|${id}`);
+    // a DB2 DoT gone before its first tick could land (a 1 s Moonfire, a 1.3 s
+    // Cauterize) was on the unit at the second: only the table can say what it
+    // is, and only for a run too short for the log to say
+    const tooShortToTick = (id: string, from: number): boolean => {
+      const end = debuffRows.find(
+        (a) => a.spellId === id && ev(a) === REMOVED && tsOf(a) > from,
       );
+      return (
+        isDotAura(id) &&
+        (end === undefined ? ctx.end : tsOf(end)) - from < NO_TICK_RUN_MS
+      );
+    };
     const truth = [...open.keys()].filter((k) => {
       const [id, src] = k.split("|");
-      return ticked(id!, src!);
+      return ticked(id!, src!) || tooShortToTick(id!, open.get(k)!);
     });
     const printed = Number(m[3]);
     if (printed === truth.length) continue;
@@ -263,6 +312,9 @@ function checkNextSpike(ctx: IRoundCtx, friends: any[]): void {
 }
 
 function checkIntoDefense(ctx: IRoundCtx): void {
+  // the section reads the round's own casts: the ones after its ending death
+  // are in the log's tail
+  const roundEndAt = roundEndMs({ ...ctx.legacy, units: ctx.legacy.units });
   for (const line of ctx.lines) {
     const m =
       /^\s*\[(\d+:\d\d)\] (.+?) \((.+?)\): (.+) into (.+?)'s (.+)$/.exec(line);
@@ -271,62 +323,104 @@ function checkIntoDefense(ctx: IRoundCtx): void {
     const target = ctx.byName.get(m[5]!);
     if (!caster || !target) continue;
     const startS = secOf(m[1]!);
-    const iv = buildAuraIntervals(target, ctx.legacy).find(
+    // a wall the log re-applied inside its printed second is two intervals of
+    // that second, and the line is one of them
+    const ivs = buildAuraIntervals(target, ctx.legacy).filter(
       (i) =>
         getEnglishSpellName(i.spellId, i.spellId) === m[6] &&
         Math.floor(i.fromS) === startS,
     );
-    if (!iv) continue;
+    if (ivs.length === 0) continue;
     const printedOf = new Map<string, number>();
     for (const part of m[4]!.split(" + ")) {
       const p = /^(.+?)(?: ×(\d+))?$/.exec(part);
       if (p)
         printedOf.set(p[1]!, (printedOf.get(p[1]!) ?? 0) + Number(p[2] ?? 1));
     }
-    const fromMs = ctx.start + iv.fromS * 1000;
-    const toMs = ctx.start + iv.toS * 1000;
-    for (const [spell, printed] of printedOf) {
-      ctx.bump("intoDefenseLanded");
-      const same = (id: any, nm: any) =>
-        !!id && getEnglishSpellName(String(id), nm ?? "") === spell;
-      const presses = successesOf(caster)
-        .filter(
-          (c: any) =>
-            c.destUnitId === target.id && same(c.spellId, c.spellName),
-        )
-        .map((c: any) => tsOf(c) as number)
-        .sort((a: number, b: number) => a - b);
-      // one row per hit: a hit eaten whole writes SPELL_MISSED and SPELL_ABSORBED
-      const rows: number[] = [
-        ...((caster.damageOut ?? []) as any[])
+    ctx.bump("intoDefenseLanded", printedOf.size);
+    const countsOf = (iv: (typeof ivs)[number]) => {
+      const fromMs = ctx.start + iv.fromS * 1000;
+      const toMs = ctx.start + iv.toS * 1000;
+      return [...printedOf].map(([spell, printed]) => {
+        const same = (id: any, nm: any) =>
+          !!id && getEnglishSpellName(String(id), nm ?? "") === spell;
+        // one press of a spell the log writes under two ids in one instant
+        // (Mutilate 1329 + 27576, Flame Shock 470411 + 188389) is one press
+        const rowsOfSpell = successesOf(caster)
           .filter(
-            (d) =>
-              d.destUnitId === target.id &&
-              ev(d) !== ABSORBED &&
-              !(ev(d) as string).startsWith("SPELL_PERIODIC") &&
-              same(d.spellId, d.spellName),
+            (c: any) =>
+              c.destUnitId === target.id &&
+              tsOf(c) < roundEndAt &&
+              same(c.spellId, c.spellName),
           )
-          .map((d) => tsOf(d) as number),
-        ...((caster.missesOut ?? []) as any[])
+          .sort((a: any, b: any) => tsOf(a) - tsOf(b));
+        const presses = rowsOfSpell
           .filter(
-            (d) => d.destUnitId === target.id && same(d.spellId, d.spellName),
+            (c: any, i: number) =>
+              !rowsOfSpell.some(
+                (o: any, j: number) =>
+                  j < i &&
+                  o.spellId !== c.spellId &&
+                  Math.abs(tsOf(o) - tsOf(c)) <= COMPANION_CAST_ROW_MS,
+              ),
           )
-          .map((d) => tsOf(d) as number),
-      ].sort((a, b) => a - b);
-      let next = 0;
-      let inside = 0;
-      for (const t of presses) {
-        while (next < rows.length && rows[next]! < t - 50) next++;
-        const row = rows[next];
-        const at = row !== undefined && row <= t + 1500 ? row : t;
-        if (at === row) next++;
-        if (at >= fromMs && at <= toMs) inside++;
-      }
+          .map((c: any) => tsOf(c) as number);
+        // one row per hit: a hit eaten whole writes SPELL_MISSED and
+        // SPELL_ABSORBED; a DoT or a channel lands as its aura going on, and
+        // its later ticks, eaten or not, are nobody's press
+        const missed = ((caster.missesOut ?? []) as any[]).filter(
+          (d) =>
+            d.destUnitId === target.id &&
+            !(ev(d) as string).startsWith("SPELL_PERIODIC") &&
+            same(d.spellId, d.spellName),
+        );
+        const reflected = missed
+          .filter((d) => d.missType === "REFLECT")
+          .map((d) => tsOf(d) as number);
+        const rows: number[] = [
+          ...((caster.damageOut ?? []) as any[])
+            .filter(
+              (d) =>
+                d.destUnitId === target.id &&
+                ev(d) !== ABSORBED &&
+                !(ev(d) as string).startsWith("SPELL_PERIODIC") &&
+                same(d.spellId, d.spellName),
+            )
+            .map((d) => tsOf(d) as number),
+          ...missed.map((d) => tsOf(d) as number),
+          ...((target.auraEvents ?? []) as any[])
+            .filter(
+              (a) =>
+                a.srcUnitId === caster.id &&
+                (ev(a) === APPLIED || ev(a) === REFRESH) &&
+                same(a.spellId, a.spellName),
+            )
+            .map((a) => tsOf(a) as number),
+        ].sort((a, b) => a - b);
+        let next = 0;
+        let inside = 0;
+        for (const t of presses) {
+          while (next < rows.length && rows[next]! < t - 50) next++;
+          const row = rows[next];
+          const at = row !== undefined && row <= t + 1500 ? row : t;
+          if (at === row) next++;
+          // reflected: it went back at the caster and landed on nobody here
+          if (reflected.some((r) => r >= t && r <= t + 1500)) continue;
+          if (at >= fromMs && at <= toMs) inside++;
+        }
+        return { spell, printed, inside, iv };
+      });
+    };
+    const perWindow = ivs.map(countsOf);
+    const worst =
+      perWindow.find((w) => w.every((c) => c.printed === c.inside)) ??
+      perWindow[perWindow.length - 1]!;
+    for (const { spell, printed, inside, iv } of worst) {
       if (inside === printed) continue;
       ctx.violate(
         "intoDefenseLanded",
         printed < inside ? "undercount" : "overcount",
-        fromMs,
+        ctx.start + iv.fromS * 1000,
         `${caster.name}#${spell}#${m[1]}#${m[6]}`,
         `${spell} printed ×${printed}, landed inside ${inside} (${m[6]} on ${iv.fromS.toFixed(1)}–${iv.toS.toFixed(1)})`,
         line,

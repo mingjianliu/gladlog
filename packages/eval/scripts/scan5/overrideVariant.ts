@@ -9,12 +9,17 @@
  * and the generated variant table, not the occurrence builder.
  *
  * `kitRangeBelowSeen`: a kit `[a–Ns]` printing a = 0. Nothing comes back 0 s
- * after its press; a full reset summed as a number of seconds did it.
+ * after its press; a full reset summed as a number of seconds did it. The one
+ * true 0 is a reset that really landed inside the press's own second (Apotheosis
+ * 0.95 s after a Chastise, d5f35ce9 r6: pressed again 1.9 s after the first),
+ * and the rows say so: a press of the spell, then within a second the
+ * trigger's row of a full reset of it (`EVENT_COOLDOWN_REDUCTIONS`, a lookup).
  */
 import { OVERRIDE_VARIANTS_GENERATED } from "@gladlog/analysis/src/data/overrideVariantsGenerated";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { EVENT_COOLDOWN_REDUCTIONS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 
-import { type IRoundCtx, successesOf, tsOf } from "./ctx";
+import { APPLIED, ev, type IRoundCtx, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = ["noPressOfOwnVariant", "kitRangeBelowSeen"] as const;
 
@@ -38,6 +43,36 @@ function variantIds(name: string): Set<string> {
   return ids;
 }
 
+/** a full reset of `name`'s cooldown under a second after one of its presses */
+function resetInsideItsPress(unit: any, name: string): boolean {
+  if (!unit) return false;
+  const presses = successesOf(unit).filter(
+    (c: any) =>
+      getEnglishSpellName(String(c.spellId), c.spellName ?? "") === name,
+  );
+  const ids = new Set(presses.map((c: any) => String(c.spellId)));
+  for (const r of Object.values(EVENT_COOLDOWN_REDUCTIONS)) {
+    if (r.seconds !== Infinity || !r.targets.some((t) => ids.has(t))) continue;
+    const auras = new Set<string>(r.triggerSelfAuraAppliedIds ?? []);
+    const casts = new Set<string>(r.triggerCastIds);
+    const triggers = [
+      ...((unit.auraEvents ?? []) as any[])
+        .filter((a) => ev(a) === APPLIED && auras.has(a.spellId))
+        .map(tsOf),
+      ...successesOf(unit)
+        .filter((c: any) => casts.has(String(c.spellId)))
+        .map(tsOf),
+    ];
+    if (
+      presses.some((c: any) =>
+        triggers.some((t) => t > tsOf(c) && t - tsOf(c) < 1000),
+      )
+    )
+      return true;
+  }
+  return false;
+}
+
 export function run(ctx: IRoundCtx): void {
   let pid: string | undefined;
   for (const line of ctx.lines) {
@@ -47,6 +82,7 @@ export function run(ctx: IRoundCtx): void {
       for (const m of line.matchAll(KIT_ZERO)) {
         ctx.bump("kitRangeBelowSeen");
         const name = m[1]!.replace(/^.*<cooldowns>/, "").trim();
+        if (resetInsideItsPress(ctx.unitOfPid(pid), name)) continue;
         ctx.violate(
           "kitRangeBelowSeen",
           "zero",
