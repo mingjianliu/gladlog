@@ -13,12 +13,11 @@ import { MITIGATION_TABLE } from "../../data/mitigationData";
 import { TIMELINE_LINE_FLAGS } from "../../data/timelineLineFlags";
 import { absorbContributionsInWindow } from "../../utils/absorbShields";
 import {
+  friendlyOffensiveCdActiveAt,
   guardianSpiritSaveClause,
-  hasOffensiveSpellActive,
   hpAtPress,
   specToString,
 } from "../../utils/cooldowns";
-import { isEnemyCdWindowSpell } from "../../utils/enemyCDs";
 import {
   ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
@@ -161,25 +160,13 @@ export function emitEnemyDefEntries(
         // Obsidian Scales in the same second)
         const pressMs =
           matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000);
-        const hasBurst =
-          friends.some((f) =>
-            hasOffensiveSpellActive(
-              f,
-              pressMs,
-              friendlyIds,
-              undefined,
-              roundBounds,
-            ),
-          ) ||
-          (enemies ?? []).some((e) =>
-            hasOffensiveSpellActive(
-              e,
-              pressMs,
-              friendlyIds,
-              isEnemyCdWindowSpell,
-              roundBounds,
-            ),
-          );
+        const hasBurst = friendlyOffensiveCdActiveAt(
+          friends,
+          enemies ?? [],
+          friendlyIds,
+          pressMs,
+          roundBounds,
+        );
         const burstStr = hasBurst ? " [friendly offensive CD active]" : "";
         const targetUnit =
           d.kind === "external"

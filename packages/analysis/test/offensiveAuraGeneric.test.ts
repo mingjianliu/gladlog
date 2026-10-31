@@ -8,6 +8,7 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
+import { friendlyOffensiveCdActiveAt } from "../src/utils/cooldowns";
 import { auraOffensiveOccurrences } from "../src/utils/offensiveAuraOccurrences";
 import { makeAuraEvent, makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
@@ -42,7 +43,49 @@ describe("auraOffensiveOccurrences — a cast-less offensive aura (D16)", () => 
     const [o] = auraOffensiveOccurrences(unitWith("1719", [18]), bounds).occurrences;
     expect(o!.endMs).toBe(at(18));
   });
+  it("a press of a DB2 override variant is the press of its own buff (fact7 D68)", () => {
+    // Predator's Wake 1259431 on The Hunt's button; the caster died before
+    // the The Hunt row that would have paired it
+    expect(auraOffensiveOccurrences(unitWith("1259431", [10]), bounds).occurrences).toEqual([]);
+  });
   it("an id with no enemy-CD cooldown is none (#2: Archangel 81700)", () => {
     expect(auraOffensiveOccurrences(unitWith("81700"), bounds).occurrences).toEqual([]);
+  });
+});
+
+describe("friendlyOffensiveCdActiveAt — [friendly offensive CD active] (fact7 D11 / D72 / D79)", () => {
+  const round = { startTime: T0, endTime: at(120) };
+  const friendly = (over: object) => makeUnit("f1", over) as never;
+  const ask = (unit: never, s: number) =>
+    friendlyOffensiveCdActiveAt([unit], [], new Set(["f1"]), at(s), round);
+
+  it("a healing buff with no cooldown is no offensive cooldown (Archangel 81700)", () => {
+    const unit = friendly({
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "81700", at(10), "f1", "f1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "81700", at(28), "f1", "f1", "BUFF"),
+      ],
+    });
+    expect(ask(unit, 15)).toBe(false);
+  });
+  it("an offensive summon counts for its own length (Force of Nature 205636, 10 s)", () => {
+    const unit = friendly({
+      spellCastEvents: [makeSpellCastEvent("205636", at(10), "f1", "F", "f1", "F")],
+    });
+    expect([ask(unit, 9), ask(unit, 10), ask(unit, 19.9), ask(unit, 20.5)]).toEqual([
+      false,
+      true,
+      true,
+      false,
+    ]);
+  });
+  it("a cooldown's own aura still counts (Recklessness 1719)", () => {
+    const unit = friendly({
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1719", at(10), "f1", "f1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "1719", at(22), "f1", "f1", "BUFF"),
+      ],
+    });
+    expect([ask(unit, 15), ask(unit, 23)]).toEqual([true, false]);
   });
 });

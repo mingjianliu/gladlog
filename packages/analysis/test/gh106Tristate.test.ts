@@ -15,6 +15,7 @@ import {
   cdAvailableAt,
   cdMaybeAvailableAt,
   cdSecondsUntilReady,
+  readyAfterReductions,
   earliestCooldownSecondsFor,
   type IMajorCooldownInfo,
 } from "../src/utils/cooldowns";
@@ -140,6 +141,24 @@ describe("[RES] rendering of the three states", () => {
     });
     expect(cdMaybeAvailableAt(gs, 40)).toBe(false);
     expect(res([gs], 40)).toContain("cd:Avatar(30s)");
+  });
+});
+
+describe("readyAfterReductions (fact7 D71)", () => {
+  it("a full reset brings it back at the reset's instant, not at 0", () => {
+    const reset = [{ atSeconds: 19, seconds: Number.POSITIVE_INFINITY }];
+    expect(readyAfterReductions(90, reset)).toBe(19);
+  });
+  it("a reduction reaches no further back than its own instant", () => {
+    const cuts = [
+      { atSeconds: 10, seconds: 5 },
+      { atSeconds: 80, seconds: 30 },
+      { atSeconds: 81, seconds: 30 },
+    ];
+    expect(readyAfterReductions(90, cuts)).toBe(80);
+  });
+  it("a reduction after `untilSeconds` has not happened yet", () => {
+    expect(readyAfterReductions(90, [{ atSeconds: 40, seconds: 20 }], 30)).toBe(90);
   });
 });
 

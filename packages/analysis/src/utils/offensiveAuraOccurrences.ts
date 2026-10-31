@@ -8,7 +8,11 @@ import {
 import { buildAuraIntervals } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 // call-time only (cooldowns reads this module's table the same way)
-import { isEnemyCdWindowSpell, offensiveCdOfAura } from "./cooldowns";
+import {
+  canonicalSpellId,
+  isEnemyCdWindowSpell,
+  offensiveCdOfAura,
+} from "./cooldowns";
 import { offensiveDangerWeight } from "./spellDanger";
 
 /**
@@ -337,11 +341,20 @@ export function auraOffensiveOccurrences(
     if (genericCd !== undefined) {
       if (iv.inferredStart) continue;
       const name = getEnglishSpellName(genericCd, iv.spellName);
+      // a press of this button: under its name, as a cast that makes this
+      // aura, or as a DB2 override variant of it (fact7 D68: Predator's Wake
+      // 1259431's own buff, its The Hunt row lost to the caster's death)
+      const isThisButton = (c: {
+        spellId?: string | null;
+        spellName?: string;
+      }) =>
+        getEnglishSpellName(c.spellId!, c.spellName ?? "") === name ||
+        canonicalSpellId(c.spellId!) === canonicalSpellId(genericCd);
       const pressed = successes.some(
         (c) =>
           c.logLine.timestamp >= startMs - TWIN_CAST_BEFORE_S * 1000 &&
           c.logLine.timestamp <= startMs + GENERIC_PRESS_AFTER_MS &&
-          (getEnglishSpellName(c.spellId!, c.spellName ?? "") === name ||
+          (isThisButton(c) ||
             effectAurasOfCast(c.spellId!).includes(iv.spellId)),
       );
       if (pressed) continue;
@@ -353,7 +366,7 @@ export function auraOffensiveOccurrences(
           (c) =>
             c.logLine.timestamp > startMs + GENERIC_PRESS_AFTER_MS &&
             c.logLine.timestamp < endMs &&
-            getEnglishSpellName(c.spellId!, c.spellName ?? "") === name,
+            isThisButton(c),
         )
         .map((c) => c.logLine.timestamp)
         .sort((a, b) => a - b)[0];

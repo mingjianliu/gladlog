@@ -63,6 +63,8 @@ const MODULE_FILES = [
   "pressFiling",
   "listGap",
   "talentWall",
+  "overrideVariant",
+  "friendlyOffensiveTag",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

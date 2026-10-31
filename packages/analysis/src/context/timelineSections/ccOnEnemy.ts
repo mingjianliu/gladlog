@@ -43,9 +43,8 @@ import {
   tremorTotemBreak,
   TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "../../utils/ccTrinketAnalysis";
-import { hasOffensiveSpellActive, hpAtPress } from "../../utils/cooldowns";
+import { friendlyOffensiveCdActiveAt, hpAtPress } from "../../utils/cooldowns";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
-import { isEnemyCdWindowSpell } from "../../utils/enemyCDs";
 import { MEDALLION_SPELL_ID } from "../../utils/pvpTrinketUses";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
@@ -129,25 +128,13 @@ export function emitCcOnEnemyEntries(
         // user left to us: fact3 D8 — read at m:ss.0 it missed a burst
         // started earlier in the same second, and kept one that had ended)
         const pressMs = matchStartMs + Math.round(t * 1000);
-        const hasBurst =
-          friends.some((f) =>
-            hasOffensiveSpellActive(
-              f,
-              pressMs,
-              friendlyIds,
-              undefined,
-              roundBounds,
-            ),
-          ) ||
-          (enemies ?? []).some((e) =>
-            hasOffensiveSpellActive(
-              e,
-              pressMs,
-              friendlyIds,
-              isEnemyCdWindowSpell,
-              roundBounds,
-            ),
-          );
+        const hasBurst = friendlyOffensiveCdActiveAt(
+          friends,
+          enemies ?? [],
+          friendlyIds,
+          pressMs,
+          roundBounds,
+        );
         const burstPart = hasBurst ? " [friendly offensive CD active]" : "";
         const hpPct = enemyUnit
           ? hpAtPress(enemyUnit, matchStartMs + Math.round(t * 1000), {

@@ -33,6 +33,7 @@ import {
   healerSaveCdStripDefensive,
 } from "../data/healerSaveCd";
 import { OVERRIDE_VARIANTS_GENERATED } from "../data/overrideVariantsGenerated";
+import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { SHARED_CHARGE_CATEGORY } from "../data/sharedChargeGenerated";
@@ -1635,6 +1636,23 @@ export interface ICooldownCast {
   nearestBurstGapS?: number;
 }
 
+/** A press's ready instant once the event reductions up to `untilSeconds`
+ * happened, in order, each at its own instant: none reaches past the moment it
+ * happened, so a full reset (`seconds` Infinity) brings the cooldown back at
+ * the reset, not at 0. */
+export function readyAfterReductions(
+  readySeconds: number,
+  reductions: ReadonlyArray<{ atSeconds: number; seconds: number }>,
+  untilSeconds = Infinity,
+): number {
+  let ready = readySeconds;
+  for (const r of reductions) {
+    if (r.atSeconds > untilSeconds || r.atSeconds >= ready) break;
+    ready = Math.max(r.atSeconds, ready - r.seconds);
+  }
+  return ready;
+}
+
 /** `ICooldownCast.pressedId` for a press logged as `pressId` on the entry
  * `spell`: the press's id when the two ids are distinct DB2 override variants
  * of one cooldown, else undefined. */
@@ -2987,13 +3005,12 @@ function cdSecondsUntilReadyConsumed(
   if (last.reductions?.length) {
     // event-reduced press: only the reductions that happened by t count
     // (an idle credit was known at the press — never past the given bound)
-    let ready =
+    const ready = readyAfterReductions(
       last.timeSeconds +
-      Math.min(cooldown, cd.cooldownSeconds - (last.idleCreditSeconds ?? 0));
-    for (const r of last.reductions) {
-      if (r.atSeconds > tSeconds || r.atSeconds >= ready) break;
-      ready = Math.max(r.atSeconds, ready - r.seconds);
-    }
+        Math.min(cooldown, cd.cooldownSeconds - (last.idleCreditSeconds ?? 0)),
+      last.reductions,
+      tSeconds,
+    );
     return Math.max(0, ready - tSeconds);
   }
   // an idle-credited press with no event reduction (Control of the Dream
@@ -6683,6 +6700,70 @@ export interface IPanicDefensive {
   spellId: string;
   targetName: string;
   targetSpec: string;
+}
+
+/** A press of an offensive summon of `unit` still running at `timestampMs`:
+ * the summon has no aura for `hasOffensiveSpellActive` to read, so the run is
+ * the press plus the spell's own length (fact7 D72 / D79: Force of Nature,
+ * filed as a cooldown by the burst ledger, was no `[friendly offensive CD
+ * active]`). */
+function offensiveSummonActiveAt(
+  unit: ICombatUnit,
+  timestampMs: number,
+): boolean {
+  return (unit.spellCastEvents ?? []).some((c) => {
+    const id = c.spellId;
+    if (
+      !id ||
+      c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+      !SUMMON_SPELL_IDS.has(id) ||
+      !isEnemyCdWindowSpell(id)
+    )
+      return false;
+    const pressMs = c.logLine.timestamp;
+    const seconds =
+      buffFullDurationForCaster(id, unit, pressMs) ??
+      spellEffectData[id]?.durationSeconds ??
+      0;
+    return pressMs <= timestampMs && timestampMs <= pressMs + seconds * 1000;
+  });
+}
+
+/**
+ * `[friendly offensive CD active]` at a press instant: a cooldown of the
+ * owner's side running, on the friends or as their debuff on an enemy. The one
+ * reading of the tag ([ENEMY DEF], [CC ON ENEMY]): both sides ask the enemy-CD
+ * window test, so a buff with no cooldown is no cooldown (fact7 D11: Archangel,
+ * a healing buff), and a summon counts for its run.
+ */
+export function friendlyOffensiveCdActiveAt(
+  friends: readonly ICombatUnit[],
+  enemies: readonly ICombatUnit[],
+  friendlyIds: Set<string>,
+  timestampMs: number,
+  round: { startTime: number; endTime: number },
+): boolean {
+  return (
+    friends.some(
+      (f) =>
+        hasOffensiveSpellActive(
+          f,
+          timestampMs,
+          friendlyIds,
+          isEnemyCdWindowSpell,
+          round,
+        ) || offensiveSummonActiveAt(f, timestampMs),
+    ) ||
+    enemies.some((e) =>
+      hasOffensiveSpellActive(
+        e,
+        timestampMs,
+        friendlyIds,
+        isEnemyCdWindowSpell,
+        round,
+      ),
+    )
+  );
 }
 
 /**

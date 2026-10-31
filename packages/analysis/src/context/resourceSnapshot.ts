@@ -29,6 +29,7 @@ import {
   type PressLockoutDebuff,
   pressSpentBy,
   specToString,
+  readyAfterReductions,
   warpClock,
 } from "../utils/cooldowns";
 import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
@@ -247,11 +248,19 @@ export function buildPlayerLoadout(
     // (0b72c44e)
     // … and so does one whose presses this round came back early by events
     // (`reductions`, Storm Conduit's bolts — the [RES] rows' realised
-    // reading): the most any press was shortened
+    // reading): the most any press was shortened, walked at the reductions'
+    // own instants — a full reset is Infinity seconds, and summed it floored
+    // `[0–90s]` on a Predator's Wake seen back after 21 s (fact7 D71)
     const eventShortest = Math.max(
       0,
-      ...(cd.casts ?? []).map((c) =>
-        (c.reductions ?? []).reduce((sum, r) => sum + r.seconds, 0),
+      ...(cd.casts ?? []).map(
+        (c) =>
+          c.timeSeconds +
+          cd.cooldownSeconds -
+          readyAfterReductions(
+            c.timeSeconds + cd.cooldownSeconds,
+            c.reductions ?? [],
+          ),
       ),
     );
     // … and one whose recovery a buff of the unit's own sped up this round
