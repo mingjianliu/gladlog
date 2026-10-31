@@ -447,6 +447,8 @@ export interface ICcAvoidanceBuffUp {
  *    length → no cap (as before).
  *  - `logStartMs`: the auras the log lists as up at its start
  *    (`interestingAurasJSON`) begin there.
+ *  - `also`: read these auras too, under their English name, outside the
+ *    listed tables (`ccImmuneCauseOf`'s DB2 mechanic reading).
  */
 export function ccAvoidanceBuffsUpAt(
   unit: Pick<ICombatUnit, "auraEvents"> & Partial<Pick<ICombatUnit, "info">>,
@@ -456,11 +458,13 @@ export function ccAvoidanceBuffsUpAt(
     withForms?: boolean;
     logStartMs?: number;
     casterOf?: (unitId: string) => ICombatUnit | undefined;
+    also?: (spellId: string) => boolean;
   } = {},
 ): ICcAvoidanceBuffUp[] {
-  const nameOf = (id: string): string | undefined =>
+  const nameOf = (id: string, rowName = ""): string | undefined =>
     CC_AVOIDANCE_BUFF_SPELLS.get(id) ??
-    (opts.withForms ? DRUID_FORM_BUFFS.get(id) : undefined);
+    (opts.withForms ? DRUID_FORM_BUFFS.get(id) : undefined) ??
+    (opts.also?.(id) ? getEnglishSpellName(id, rowName) : undefined);
   const rows = unit.auraEvents ?? [];
   const up = new Map<
     string,
@@ -527,7 +531,7 @@ export function ccAvoidanceBuffsUpAt(
     )
       break;
     const id = a.spellId;
-    const name = id ? nameOf(id) : undefined;
+    const name = id ? nameOf(id, a.spellName ?? "") : undefined;
     if (!id || !name) continue;
     const ev = a.logLine.event;
     if (

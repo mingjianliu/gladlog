@@ -547,6 +547,7 @@ export function emitOwnerCdEntries(
             cast.timeSeconds,
             expiry.expiresAtSeconds,
             matchStartMs,
+            cd.spellName,
           );
           const actualDuration = channelEndS - cast.timeSeconds;
           // GH #34 ① (2026-08-29): channel length is haste-dependent (Divine Hymn

@@ -121,8 +121,9 @@ export async function main(): Promise<void> {
       // modifiers (genConditionalCooldowns.ts). `modifiers` beside `entries`:
       // a decode regression can drop one kind while the targets stay.
       "conditionalCooldownsGenerated.json": {
-        entries: Object.keys(readJson("conditionalCooldownsGenerated.json").byTarget)
-          .length,
+        entries: Object.keys(
+          readJson("conditionalCooldownsGenerated.json").byTarget,
+        ).length,
         modifiers: Object.values(
           readJson("conditionalCooldownsGenerated.json").byTarget as Record<
             string,
@@ -156,7 +157,8 @@ export async function main(): Promise<void> {
       // GH #155: talent duration extensions read off the tooltips; the
       // unparsed sentences tracked like talentMitigation's pendingRuling
       "talentDurationTooltipsGenerated.json": {
-        entries: readJson("talentDurationTooltipsGenerated.json").entries.length,
+        entries: readJson("talentDurationTooltipsGenerated.json").entries
+          .length,
         unparsed: readJson("talentDurationTooltipsGenerated.json").unparsed
           .length,
         bytes: statSync(dataDir + "talentDurationTooltipsGenerated.json").size,
@@ -166,6 +168,9 @@ export async function main(): Promise<void> {
       },
       "channeledGenerated.ts": {
         entries: countQuotedIds("channeledGenerated.ts"),
+      },
+      "spellStateAttrsGenerated.ts": {
+        entries: countQuotedIds("spellStateAttrsGenerated.ts"),
       },
       // GH #167: the forward check of SELF_CAST_NOOP_EXTERNAL_IDS
       "excludeCasterGenerated.ts": {

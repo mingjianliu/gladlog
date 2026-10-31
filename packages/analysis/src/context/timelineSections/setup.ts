@@ -24,6 +24,7 @@ import {
   nominatedEffectAurasOfCast,
 } from "../../data/castEffectAuras";
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { immunityMechanics } from "../../data/spellSchools";
 import { ccSpellIds } from "../../data/spellTags";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import {
@@ -70,6 +71,7 @@ import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import { resourceDeltaPct } from "../../utils/resourceAt";
 import { buildRosterSides } from "../../utils/rosterSide";
 import { roundEndMs } from "../../utils/roundEnd";
+import { ccMechanicOf } from "../../utils/spellMechanics";
 import { buildResourceSnapshot } from "../resourceSnapshot";
 import { ownerResUtilityCds } from "../resUtilityCds";
 import { isCountedReflectRow } from "../spellOutcomeLines";
@@ -812,6 +814,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   function ccImmuneCauseOf(miss: OutgoingMiss): string {
     // Which listed immunity was up on the target at impact.
     let immunityName = "";
+    let mechanicAuraName = "";
     const target =
       allUnits?.find((u) => u.id === miss.destUnitId) ??
       allPlayers.find((u) => u.id === miss.destUnitId);
@@ -828,22 +831,32 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // physical Shockwave at stun DR Immune)
       const ccName = getEnglishSpellName(miss.spellId ?? "", miss.spellName);
       const applicable = applicableCCAvoidanceIds(miss.spellId ?? "", ccName);
-      immunityName =
-        ccAvoidanceBuffsUpAt(target, miss.timestamp, {
-          atLine: miss.logLine.lineIndex,
-          // a shapeshifted druid is immune to Polymorph / Hex (DB2 aura 77,
-          // mechanic 17 on all four forms; fact7 `immuneCauseUnnamed`:
-          // ba5e59c6 2:07, a Polymorph IMMUNE on a Cat Form feral); the
-          // applicability below keeps them to those two controls
-          withForms: true,
-          casterOf: (id) =>
-            allUnits?.find((u) => u.id === id) ??
-            allPlayers.find((u) => u.id === id),
-        }).find(
-          (b) =>
-            applicable.has(b.spellId) &&
-            avoidanceExplainsMissType(b.spellId, miss.missType),
-        )?.name ?? "";
+      // Last of all, after the two reasons below: an aura outside the tables
+      // whose own DB2 aura 77 lists this control's mechanic, named as a fact
+      // only. fact7 `immuneCauseUnnamed`:
+      // Blessing of Freedom [7, 11] (d8d0bc1b 0:27, Snowdrift's slow stage),
+      // Incarnation: Tree of Life [17] (7a4d43c8 3:21, a Polymorph). Not into
+      // the tables: Freedom is a mobility id there, every ground control
+      // reads it as applicable (a Capacitor Totem IMMUNE named it over the
+      // Precognition that stopped it), and they decide what cc-avoidable
+      // offers.
+      const mech = ccMechanicOf(miss.spellId ?? "");
+      const stopsIt = (id: string) =>
+        mech !== undefined && !!immunityMechanics(id)?.includes(mech);
+      const up = ccAvoidanceBuffsUpAt(target, miss.timestamp, {
+        atLine: miss.logLine.lineIndex,
+        // a shapeshifted druid is immune to Polymorph / Hex (DB2 aura 77,
+        // mechanic 17 on all four forms; fact7 `immuneCauseUnnamed`:
+        // ba5e59c6 2:07, a Polymorph IMMUNE on a Cat Form feral); the
+        // applicability below keeps them to those two controls
+        withForms: true,
+        casterOf: (id) =>
+          allUnits?.find((u) => u.id === id) ??
+          allPlayers.find((u) => u.id === id),
+        also: stopsIt,
+      }).filter((b) => avoidanceExplainsMissType(b.spellId, miss.missType));
+      immunityName = up.find((b) => applicable.has(b.spellId))?.name ?? "";
+      mechanicAuraName = up.find((b) => stopsIt(b.spellId))?.name ?? "";
     }
     if (immunityName) return `${immunityName} was up`;
     // B-tier B17a (user ruling 2026-10-06, "三种都写；找不到原因不加注"): the
@@ -853,7 +866,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       ? (ccImmuneByOwnCyclone(target, miss.timestamp) ??
         ccImmuneByDr(target, miss.spellId!, miss.timestamp))
       : undefined;
-    return why ?? "";
+    return why ?? (mechanicAuraName ? `${mechanicAuraName} was up` : "");
   }
 
   /** B17a: a friendly Druid's Cyclone was on the target at the miss — a

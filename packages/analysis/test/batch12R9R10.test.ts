@@ -271,7 +271,10 @@ describe("fact7 D12 — a channel ends at the press that ended it, not with its 
     }) as never;
   it("07367f6e 0:40: Ultimate Penitence's aura ran 6.5 s, Penance went off 5.93 s in", () => {
     const unit = {
+      id: "h",
       spellCastEvents: [row("421453", 34.874), row("47540", 40.803)],
+      damageOut: [],
+      healOut: [],
     };
     expect(channelEndSeconds(unit, "421453", 34.874, 41.374, T0)).toBeCloseTo(
       40.803,
@@ -281,7 +284,12 @@ describe("fact7 D12 — a channel ends at the press that ended it, not with its 
   it("no press after it: the aura's end", () => {
     expect(
       channelEndSeconds(
-        { spellCastEvents: [row("421453", 34.874)] },
+        {
+          id: "h",
+          spellCastEvents: [row("421453", 34.874)],
+          damageOut: [],
+          healOut: [],
+        },
         "421453",
         34.874,
         41.374,

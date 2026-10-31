@@ -33,6 +33,7 @@ import {
   riderStandsForUnloggedPress,
 } from "../data/ownShieldLinks";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "../data/spellStateAttrsGenerated";
 import spellIdListsData, {
   ENEMY_ALLY_SAVE_IDS,
   ENEMY_AREA_SAVE_IDS,
@@ -72,7 +73,7 @@ import {
   type SelfDefensiveMechanism,
   selfDefensiveMechanism,
 } from "./selfDefensiveMechanism";
-import { ccMechanicOf } from "./spellMechanics";
+import { ccMechanicOf, SNARED_MECHANIC } from "./spellMechanics";
 import { TALENT_BEHAVIORS } from "./talentBehaviors";
 
 const ALL_SCHOOLS = 0x7f;
@@ -393,6 +394,21 @@ export function untargetableEndS(
 }
 
 /**
+ * The unseen-end stealth a press allowed while stealthed leaves running
+ * (`ALLOWED_WHILE_STEALTHED_SPELL_IDS`, DB2): Vanish 11327, DB2 aura 16
+ * (MOD_STEALTH); Greater Invisibility and Mass Invisibility are aura 18 and
+ * end at any action. fact7 `unseenEndOpener`, the visible runs of 24 archives:
+ * presses with the attribute 34 left the run going, 1 sat at its end; Sap
+ * 12 / 12 and Blind 2 / 2 survived as debuffs, every opener without it (Cheap
+ * Shot, Garrote, Gouge, Kidney Shot) ended the run in its own instant. Prowl
+ * and Shadowmeld are not in this set: nobody measured them. Registered in
+ * curatedIdRegistry.
+ */
+export const STEALTH_KEPT_BY_ALLOWED_PRESS_IDS: ReadonlySet<string> = new Set([
+  "11327",
+]);
+
+/**
  * The holder's first own action strictly after `afterMs` (log ms; Infinity
  * when none): a successful press, or a direct hit the holder itself dealt.
  * What ends an unseen-end invisibility / stealth (`untargetableEndS`, the
@@ -404,7 +420,8 @@ export function untargetableEndS(
  * that went up at `afterMs`, its own press's cast row logged up to
  * `AURA_BEFORE_CAST_ROW_MAX_MS` after it (the measured aura-before-cast lag:
  * a Greater Invisibility 110960 whose 110959 row came 120 ms later ended at
- * its own press — found by the log-shape matrix, castRowLag).
+ * its own press — found by the log-shape matrix, castRowLag). Nor, on a
+ * `STEALTH_KEPT_BY_ALLOWED_PRESS_IDS` aura, a press stealth allows.
  *
  * With `units`, also a debuff the holder put on another unit
  * (`holderOpenerDebuffAfterMs`): an unseen unit's cast row is not always
@@ -420,6 +437,7 @@ export function holderFirstOwnActionAfterMs(
   const ownPress = auraId
     ? new Set([auraId, ...castsOfEffectAura(auraId)])
     : undefined;
+  const allowed = stealthAllowsPress(auraId);
   let first = Infinity;
   for (const c of holder.spellCastEvents ?? [])
     if (c.logLine.event === LogEvent.SPELL_CAST_SUCCESS) {
@@ -429,6 +447,7 @@ export function holderFirstOwnActionAfterMs(
         t <= afterMs + AURA_BEFORE_CAST_ROW_MAX_MS
       )
         continue;
+      if (allowed(c.spellId ?? "")) continue;
       if (t > afterMs && t < first) first = t;
     }
   // a tick a shield ate is logged as a SPELL_ABSORBED row with no periodic
@@ -468,9 +487,16 @@ export function holderFirstOwnActionAfterMs(
     if (t > afterMs && t < first) first = t;
   }
   return units
-    ? holderOpenerDebuffAfterMs(holder, afterMs, first, units)
+    ? holderOpenerDebuffAfterMs(holder, afterMs, first, units, allowed)
     : first;
 }
+
+const stealthAllowsPress =
+  (auraId: string | undefined) =>
+  (spellId: string): boolean =>
+    !!auraId &&
+    STEALTH_KEPT_BY_ALLOWED_PRESS_IDS.has(auraId) &&
+    ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(spellId);
 
 /**
  * The first debuff the holder landed on another unit after `afterMs` that
@@ -483,15 +509,23 @@ export function holderFirstOwnActionAfterMs(
  *
  * What counts: a debuff with a DB2 mechanic (`ccMechanicOf`) — a passive's
  * rows have none (Ignite, a Rune of Reverberation rider: both land through
- * an invisibility). What does not: a row a standing effect of an earlier
- * press wrote, within that press's official length (Ring of Frost, Smoke
- * Bomb: an enemy walked in).
+ * an invisibility). What does not: a snare, which is a press's rider (Chilled:
+ * 3 of 3 runs survived it; a Hamstring has its cast row); a debuff of a press
+ * the stealth allows (`stealthAllows`: Sap, Blind); a row a standing effect
+ * of an earlier press wrote, within that press's official length (Ring of
+ * Frost, Smoke Bomb: an enemy walked in) — a press with no unit on its row,
+ * which is what a standing effect is: a Garrote pressed 15.5 s earlier on a
+ * player stands nowhere (fact7 `unseenEndOpener`, a7c8de4c r1: its 703 aura
+ * 0.34 s into a Vanish was read as such a row, the Vanish printed 1.0 s).
  */
+const NO_UNIT_ID = "0000000000000000";
+
 function holderOpenerDebuffAfterMs(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents">,
   afterMs: number,
   firstMs: number,
   units: readonly ICombatUnit[],
+  stealthAllows: (spellId: string) => boolean,
 ): number {
   let first = firstMs;
   for (const u of units) {
@@ -503,16 +537,19 @@ function holderOpenerDebuffAfterMs(
         a.logLine.event !== LogEvent.SPELL_AURA_APPLIED ||
         a.srcUnitId !== holder.id ||
         a.auraType !== "DEBUFF" ||
-        !a.spellId ||
-        ccMechanicOf(a.spellId) === undefined
+        !a.spellId
       )
         continue;
+      const mechanic = ccMechanicOf(a.spellId);
+      if (mechanic === undefined || mechanic === SNARED_MECHANIC) continue;
       const pressIds = new Set([a.spellId, ...castsOfEffectAura(a.spellId)]);
+      if ([...pressIds].some(stealthAllows)) continue;
       const standing = (holder.spellCastEvents ?? []).some(
         (c) =>
           c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
           !!c.spellId &&
           pressIds.has(c.spellId) &&
+          (!c.destUnitId || c.destUnitId === NO_UNIT_ID) &&
           c.logLine.timestamp <= afterMs &&
           c.logLine.timestamp +
             (spellEffectData[c.spellId]?.durationSeconds ?? 0) * 1000 >=

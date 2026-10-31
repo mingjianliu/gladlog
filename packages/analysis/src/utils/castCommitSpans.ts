@@ -3,6 +3,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
 import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { CAST_WHILE_CHANNELING_SPELL_IDS } from "../data/spellStateAttrsGenerated";
 import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
@@ -140,10 +141,19 @@ export interface IChannelSpan {
  * at `afterMs` (Infinity when none): a tick that lands after it is no
  * channelling (codex 20-F15-24: 0284fcd9 r3, Arcane Missiles 163.491, Arcane
  * Barrage 164.869, a Missiles hit at 165.441 read as 572 ms more channelling)
- * — an off-GCD press excepted: Shimmer mid-Missiles leaves the channel
+ * — a press DB2 lets through excepted: Shimmer mid-Missiles leaves the channel
  * running (codex 20-F15-28: its ticks went on through 11.9 s) — unless that
  * press is a channel of its own, which replaces this one (codex 20-F15-34:
  * Breath of Jan'alai 1308728).
+ *
+ * "Lets through" is off the global cooldown AND Allow Cast While Channeling
+ * (`CAST_WHILE_CHANNELING_SPELL_IDS`). Off-GCD alone read too wide: 24
+ * archives of the 605 sample, off-GCD presses inside a channel its own aura
+ * measures, no bit: 39 ended it within 100 ms, 0 left it running (fact7
+ * `channelOutlived`, 33-5-238: Pain Suppression 3.47 s into an Ultimate
+ * Penitence stopped it at 19 of its 25 bolts). On-GCD presses with the bit
+ * still end it here, as before (Soothing Mist, which allows them, is
+ * measured by its aura and never reaches this reading).
  */
 export function nextPressEndingChannelMs(
   unit: Pick<ICombatUnit, "spellCastEvents">,
@@ -162,30 +172,70 @@ export function nextPressEndingChannelMs(
         !(
           e.spellId &&
           OFF_GCD_SPELL_IDS.has(e.spellId) &&
+          CAST_WHILE_CHANNELING_SPELL_IDS.has(e.spellId) &&
           !CHANNELED_SPELL_IDS.has(e.spellId)
         ),
     )
     .reduce((m, e) => Math.min(m, e.timestamp), Infinity);
 }
 
+/** The caster's own last row of a channel's effect after `afterMs`, up to
+ * `untilMs` (undefined when none): a damage / heal row with the channel's
+ * English name (a tick's id is not the cast's, its name is). */
+function lastChannelEffectMs(
+  unit: Pick<ICombatUnit, "id" | "damageOut" | "healOut">,
+  name: string,
+  afterMs: number,
+  untilMs: number,
+): number | undefined {
+  let last: number | undefined;
+  for (const r of [...(unit.damageOut ?? []), ...(unit.healOut ?? [])]) {
+    if (r.srcUnitId !== unit.id) continue;
+    const t = r.logLine.timestamp;
+    if (t <= afterMs || t > untilMs) continue;
+    if (getEnglishSpellName(r.spellId, r.spellName) !== name) continue;
+    if (last === undefined || t > last) last = t;
+  }
+  return last;
+}
+
 /**
  * Where a channel ended, for the `[YOU] [CD]` channel suffix: its aura's end,
  * or the next press that ended it while the aura ran on (fact7 D12, 07367f6e
  * 0:40: Ultimate Penitence's 421453 ran 6.5 s, Penance went off 5.93 s in).
+ *
+ * A pressed spell DB2 does not call a channel has an aura that does not
+ * measure one. Ultimate Penitence's 421453 is the 6.5 s shield (DB2 duration
+ * index 589, a damage absorb that ignores haste); the channel is 421434, 6 s before haste, and
+ * leaves no aura. It writes its bolts, 25 when it runs out, so there the end
+ * is also the last bolt (fact7 `channelOutlived`, 45-1-267: bolts to 5.05 s,
+ * Fade at 5.25 s, printed 6.5 s). A bolt can land after the press that
+ * stopped the channel, still in the air: the press wins then.
  */
 export function channelEndSeconds(
-  unit: Pick<ICombatUnit, "spellCastEvents">,
+  unit: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut" | "healOut">,
   spellId: string,
   castSeconds: number,
   auraEndSeconds: number,
   matchStartMs: number,
+  spellName = "",
 ): number {
-  const nextPressMs = nextPressEndingChannelMs(
-    unit,
-    spellId,
-    matchStartMs + castSeconds * 1000,
+  const castMs = matchStartMs + castSeconds * 1000;
+  const toSeconds = (ms: number) => (ms - matchStartMs) / 1000;
+  const end = Math.min(
+    auraEndSeconds,
+    toSeconds(nextPressEndingChannelMs(unit, spellId, castMs)),
   );
-  return Math.min(auraEndSeconds, (nextPressMs - matchStartMs) / 1000);
+  if (CHANNELED_SPELL_IDS.has(spellId)) return end;
+  const lastEffectMs = lastChannelEffectMs(
+    unit,
+    getEnglishSpellName(spellId, spellName),
+    castMs,
+    matchStartMs + auraEndSeconds * 1000,
+  );
+  return lastEffectMs === undefined
+    ? end
+    : Math.min(end, toSeconds(lastEffectMs));
 }
 
 /**
@@ -386,14 +436,7 @@ export function tickEndedChannelSpans(
     );
     const name = getEnglishSpellName(c.spellId, c.spellName);
     const endBy = kick?.logLine.timestamp ?? capMs;
-    let lastTick: number | undefined;
-    for (const r of [...(unit.damageOut ?? []), ...(unit.healOut ?? [])]) {
-      if (r.srcUnitId !== unit.id) continue;
-      const t = r.logLine.timestamp;
-      if (t <= c.timestamp || t > endBy) continue;
-      if (getEnglishSpellName(r.spellId, r.spellName) !== name) continue;
-      if (lastTick === undefined || t > lastTick) lastTick = t;
-    }
+    const lastTick = lastChannelEffectMs(unit, name, c.timestamp, endBy);
     const endMs = kick?.logLine.timestamp ?? lastTick;
     if (endMs === undefined || endMs <= c.timestamp) continue;
     out.push({

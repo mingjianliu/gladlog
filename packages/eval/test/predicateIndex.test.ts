@@ -101,6 +101,7 @@ import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
 import * as spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
+import * as spellStateAttrs from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
 import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
@@ -2064,6 +2065,16 @@ const INDEX: PredicateRow[] = [
     mod: enemyDefensives,
   },
   {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "STEALTH_KEPT_BY_ALLOWED_PRESS_IDS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/spellStateAttrsGenerated.ts`,
+    symbol: "ALLOWED_WHILE_STEALTHED_SPELL_IDS",
+    mod: spellStateAttrs,
+  },
+  {
     file: `${A}/utils/localizedText.ts`,
     symbol: "CJK_LEAK",
     mod: localizedText,
@@ -3857,6 +3868,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/castCommitSpans.ts`,
     symbol: "nextPressEndingChannelMs",
     mod: castCommitSpans,
+  },
+  {
+    file: `${A}/data/spellStateAttrsGenerated.ts`,
+    symbol: "CAST_WHILE_CHANNELING_SPELL_IDS",
+    mod: spellStateAttrs,
+  },
+  {
+    file: `${A}/utils/enemyInterrupts.ts`,
+    symbol: "interruptBackAtMs",
+    mod: enemyInterrupts,
   },
   {
     file: `${A}/utils/unitDeath.ts`,

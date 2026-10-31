@@ -211,6 +211,12 @@ const NO_UNIT_GUID = "0000000000000000";
  * interrupt line. No cast found (a pet's kick, a cast outside the round) →
  * the interrupt's own time, as before. `[KICK] … back m:ss` reads this, so
  * the line and `interruptCooldownRemainingMs` cannot name different seconds.
+ *
+ * The realised instant: every event reduction the kicker went on to earn
+ * counts (`singleChargeReadyMs`, the ledger's `applyEventReductions`), since
+ * the line says when the kick came back, not what was known at the kick.
+ * fact7 `kickBackVsNextPress` (18703d63 1:50: a Storm Conduit Restoration
+ * Shaman's Wind Shear printed back 2:20, pressed again 2:16).
  */
 export function interruptBackAtMs(
   unit: ICombatUnit,
@@ -227,9 +233,7 @@ export function interruptBackAtMs(
   );
   const last = casts.length ? casts[casts.length - 1]! : undefined;
   const backOf = (pressMs: number) =>
-    pressMs +
-    interruptPressCooldownSeconds(unit, castId, pressMs, cooldownSeconds) *
-      1000;
+    singleChargeReadyMs(unit, castId, pressMs, Infinity, cooldownSeconds);
   // a press that had already come back before this interrupt is not the
   // press behind it
   return last !== undefined && backOf(last) > interruptMs

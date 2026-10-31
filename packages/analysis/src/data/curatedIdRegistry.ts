@@ -135,6 +135,7 @@ import {
   KW_REDIRECT_PROTECTION_AURA_IDS,
   KW_UNTARGETABLE_AURA_IDS,
   RIDER_ABSORB_SAVE_AURAS,
+  STEALTH_KEPT_BY_ALLOWED_PRESS_IDS,
 } from "../utils/enemyDefensives";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
@@ -865,6 +866,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("CC_AVOIDANCE_FACT_ONLY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(CC_AVOIDANCE_FACT_ONLY_IDS),
+  ),
+  t(
+    "STEALTH_KEPT_BY_ALLOWED_PRESS_IDS",
+    "utils/enemyDefensives.ts",
+    "aura",
+    () => set(STEALTH_KEPT_BY_ALLOWED_PRESS_IDS),
   ),
   // weekly review 2026-10-24: three hand tables that had not registered
   t("REFLECT_ONLY_AVOIDANCE_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>

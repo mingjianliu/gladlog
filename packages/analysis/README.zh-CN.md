@@ -70,6 +70,7 @@ export function buildMatchContext(
 | `spellNamesZhGenerated.json`               | `scripts/datagen/genSpellNamesZh.ts`                                                  |
 | `drCategoriesGenerated.ts`                 | `scripts/datagen/genDrCategories.ts`                                                  |
 | `offGcdGenerated.ts`                       | `scripts/datagen/genOffGcd.ts`                                                        |
+| `spellStateAttrsGenerated.ts`              | `scripts/datagen/genSpellStateAttrs.ts`                                               |
 | `pvpTalentReplacesGenerated.ts`            | `scripts/datagen/genPvpTalentReplaces.ts`                                             |
 | `specIconsGenerated.ts`                    | `scripts/datagen/genSpecIcons.ts`                                                     |
 | `mitigationGenerated.json`                 | `scripts/datagen/genMitigation.ts`                                                    |

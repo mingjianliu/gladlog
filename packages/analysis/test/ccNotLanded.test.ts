@@ -210,6 +210,51 @@ describe("[CC NOT LANDED] — a failed control no other line states", () => {
     ).toEqual([
       "0:30  [CC NOT LANDED]   Enemy ← Polymorph (by Me) — logged IMMUNE (Cat Form was up)",
     ]);
+    // fact7 `immuneCauseUnnamed` (7a4d43c8 3:21): DB2 aura 77 mechanic 17
+    expect(
+      notLanded(
+        timelineOf({
+          owner: miss_(POLYMORPH, "Polymorph") as never,
+          enemy: up("33891", "Incarnation: Tree of Life") as never,
+        }),
+      ),
+    ).toEqual([
+      "0:30  [CC NOT LANDED]   Enemy ← Polymorph (by Me) — logged IMMUNE (Incarnation: Tree of Life was up)",
+    ]);
+    // …and d8d0bc1b 0:27: DB2 aura 77 mechanics 7, 11, Snowdrift's slow stage
+    expect(
+      notLanded(
+        timelineOf({
+          owner: miss_("389823", "Snowdrift") as never,
+          enemy: up("1044", "Blessing of Freedom") as never,
+        }),
+      ),
+    ).toEqual([
+      "0:30  [CC NOT LANDED]   Enemy ← Snowdrift (by Me) — logged IMMUNE (Blessing of Freedom was up)",
+    ]);
+    // the mechanic decides: a stun goes through Freedom
+    expect(
+      notLanded(
+        timelineOf({
+          owner: miss_("408", "Kidney Shot") as never,
+          enemy: up("1044", "Blessing of Freedom") as never,
+        }),
+      ),
+    ).toEqual([
+      "0:30  [CC NOT LANDED]   Enemy ← Kidney Shot (by Me) — logged IMMUNE",
+    ]);
+    // …a ground control included: being a mobility id does not make Freedom
+    // a cause (a Capacitor Totem IMMUNE named it over Precognition)
+    expect(
+      notLanded(
+        timelineOf({
+          owner: miss_("118905", "Static Charge") as never,
+          enemy: up("1044", "Blessing of Freedom") as never,
+        }),
+      ),
+    ).toEqual([
+      "0:30  [CC NOT LANDED]   Enemy ← Capacitor Totem (by Me) — logged IMMUNE",
+    ]);
     expect(
       notLanded(
         timelineOf({

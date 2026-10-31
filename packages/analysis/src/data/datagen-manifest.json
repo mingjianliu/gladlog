@@ -63,6 +63,9 @@
     "channeledGenerated.ts": {
       "entries": 83
     },
+    "spellStateAttrsGenerated.ts": {
+      "entries": 1026
+    },
     "excludeCasterGenerated.ts": {
       "entries": 45
     },
