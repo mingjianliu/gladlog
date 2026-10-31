@@ -15,7 +15,10 @@
 import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
 import { reachesAlly } from "../../data/spellTargeting";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
-import { channelEndSeconds } from "../../utils/castCommitSpans";
+import {
+  channelEndSeconds,
+  channelOverBeforeRoundEnd,
+} from "../../utils/castCommitSpans";
 import { isControlCast } from "../../utils/castMissRows";
 import {
   castSpellName,
@@ -558,7 +561,17 @@ export function emitOwnerCdEntries(
           // length and its end; "interrupted" only on kick/CC evidence.
           if (expiry.isEstimated) {
             channelSuffix = ` (channel end not logged)`;
-          } else if (expiry.cause === "round_end") {
+          } else if (
+            expiry.cause === "round_end" &&
+            !channelOverBeforeRoundEnd(
+              owner,
+              cd.spellId,
+              cast.timeSeconds,
+              expiry.expiresAtSeconds,
+              matchStartMs,
+              cd.spellName,
+            )
+          ) {
             // F02b: the round's end is not the channel's (the wording of a
             // control the round ended on, `CC_STILL_ON_AT_ROUND_END`)
             channelSuffix = ` (still channeling when the round ended, ${actualDuration.toFixed(1)}s in)`;

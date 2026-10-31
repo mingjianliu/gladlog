@@ -384,9 +384,7 @@ describe("the rendered timeline of a Solo Shuffle round", () => {
       shift(106),
       [],
     );
-    expect(timed(text).filter((l) => l.includes("Astral Shift"))).toEqual(
-      [],
-    );
+    expect(timed(text).filter((l) => l.includes("Astral Shift"))).toEqual([]);
     // the round's end is still stated where it was
     expect(text).toContain("[MATCH END]");
   });
@@ -455,5 +453,59 @@ describe("the rendered timeline of a Solo Shuffle round", () => {
     );
     expect(buffLines(text)).toEqual([]);
     expect(hasRoundEndLegend(text)).toBe(true);
+  });
+
+  it("a channel a press ended before the round's end is no channel the round ended on (codex 01-3)", () => {
+    const HYMN = "64843";
+    const priest = makeUnit("player-1", {
+      name: "You",
+      class: CombatUnitClass.Priest,
+      spec: CombatUnitSpec.Priest_Holy,
+      info: {},
+      spellCastEvents: [
+        makeSpellCastEvent(HYMN, at(103), "player-1"),
+        makeSpellCastEvent("2061", at(104.2), "player-1"),
+      ],
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          HYMN,
+          at(103),
+          "player-1",
+          "player-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          HYMN,
+          at(STRIP_S),
+          "player-1",
+          "player-1",
+          "BUFF",
+        ),
+      ],
+    });
+    const text = render(
+      priest,
+      "Holy Priest",
+      [
+        {
+          spellId: HYMN,
+          spellName: "Divine Hymn",
+          tag: "Defensive",
+          casts: [{ timeSeconds: 103 }],
+          cooldownSeconds: 180,
+          neverUsed: false,
+          availableWindows: [],
+        },
+      ],
+      [],
+    );
+    expect(timed(text).filter((l) => l.includes(ROUND_ENDED_WORDS))).toEqual(
+      [],
+    );
+    expect(text).toContain(
+      "1:43  [YOU] [CD]   Divine Hymn (channeled 1.2s, ended 1:44)",
+    );
   });
 });

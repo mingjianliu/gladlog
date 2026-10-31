@@ -254,6 +254,43 @@ export function channelEndSeconds(
     : Math.min(end, toSeconds(lastEffectMs));
 }
 
+/** Ultimate Penitence's 25 bolts in 6 s before haste: the last bolt of a
+ * running channel lies less than this before any instant. */
+const CHANNEL_EFFECT_GAP_S = 0.3;
+
+/**
+ * Was the channel over before `roundEndSeconds`, the instant its aura was cut
+ * at? A press ended it there, or its own effect stopped more than a bolt
+ * before (`channelEndSeconds`). The status beside the duration: of 16 `still
+ * channeling when the round ended` lines on the 605 capture, 44-6-278's
+ * Ultimate Penitence was ended by Shadow Word: Death 0.4 s before the round,
+ * and 93-4-657's last bolt came 1.9 s before it (fact7 r6, codex 01-3).
+ */
+export function channelOverBeforeRoundEnd(
+  unit: Parameters<typeof channelEndSeconds>[0],
+  spellId: string,
+  castSeconds: number,
+  roundEndSeconds: number,
+  matchStartMs: number,
+  spellName = "",
+): boolean {
+  const castMs = matchStartMs + castSeconds * 1000;
+  if (
+    nextPressEndingChannelMs(unit, spellId, castMs) <
+    matchStartMs + roundEndSeconds * 1000
+  )
+    return true;
+  const end = channelEndSeconds(
+    unit,
+    spellId,
+    castSeconds,
+    roundEndSeconds,
+    matchStartMs,
+    spellName,
+  );
+  return roundEndSeconds - end > CHANNEL_EFFECT_GAP_S;
+}
+
 /**
  * Every channel whose length the log records: a SPELL_CAST_SUCCESS of an
  * officially channelled spell (`CHANNELED_SPELL_IDS`, DB2 "Is Channelled")

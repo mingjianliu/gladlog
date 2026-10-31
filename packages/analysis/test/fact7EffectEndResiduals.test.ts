@@ -14,6 +14,7 @@ import {
 } from "../src/data/spellStateAttrsGenerated";
 import {
   channelEndSeconds,
+  channelOverBeforeRoundEnd,
   nextPressEndingChannelMs,
 } from "../src/utils/castCommitSpans";
 import { holderFirstOwnActionAfterMs } from "../src/utils/enemyDefensives";
@@ -141,6 +142,45 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
         "Ultimate Penitence",
       ),
     ).toBe(5.05);
+  });
+  it("over before the round's end: a press that stopped it, or a last bolt more than a bolt before (codex 01-3)", () => {
+    const pressed = {
+      id: "h",
+      // 44-6-278's shape: Shadow Word: Death 4.14 s in, the round ends 0.4 s on
+      spellCastEvents: [press(UP, 0), press("32379", 4.14)],
+      damageOut: [bolt(4)],
+      healOut: [],
+    };
+    expect(
+      channelOverBeforeRoundEnd(pressed, UP, 0, 4.5, T0, "Ultimate Penitence"),
+    ).toBe(true);
+    const lastBolt = (s: number) => ({
+      id: "h",
+      spellCastEvents: [press(UP, 0)],
+      damageOut: [bolt(s)],
+      healOut: [],
+    });
+    // 93-4-657's shape: the last bolt 1.9 s before the round's end
+    expect(
+      channelOverBeforeRoundEnd(
+        lastBolt(3.3),
+        UP,
+        0,
+        5.2,
+        T0,
+        "Ultimate Penitence",
+      ),
+    ).toBe(true);
+    expect(
+      channelOverBeforeRoundEnd(
+        lastBolt(5.05),
+        UP,
+        0,
+        5.2,
+        T0,
+        "Ultimate Penitence",
+      ),
+    ).toBe(false);
   });
   it("a spell DB2 calls a channel keeps its aura's end", () => {
     const unit = { id: "h", spellCastEvents: [], damageOut: [], healOut: [] };
