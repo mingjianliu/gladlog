@@ -85,6 +85,7 @@ export function emitOwnerCdEntries(
     | "_allUnits"
     | "dampeningAt"
     | "pressureWindows"
+    | "pressureWindowsNotListed"
     | "pid"
     | "cdExpiryEvents"
     | "ownerCCSummary"
@@ -118,6 +119,7 @@ export function emitOwnerCdEntries(
     _allUnits,
     dampeningAt,
     pressureWindows,
+    pressureWindowsNotListed,
     pid,
     cdExpiryEvents,
     ownerCCSummary,
@@ -382,7 +384,14 @@ export function emitOwnerCdEntries(
         // pressureWindows is sorted by totalDamage descending (see computePressureWindows),
         // so Array.find() would return the biggest future spike rather than the nearest one.
         // Select by minimum fromSeconds among qualifying spikes instead of relying on order.
-        const qualifyingSpikes = pressureWindows.filter(
+        // The next spike of the round is not always a listed one: the top-5
+        // cap chooses what `[DMG SPIKE]` prints, not when the next spike was
+        // (fact7 D50, 7acbefeb 0:31: 24 s named over one 3 s ahead), so the search
+        // also takes the windows the cap dropped.
+        const qualifyingSpikes = [
+          ...pressureWindows,
+          ...(pressureWindowsNotListed ?? []),
+        ].filter(
           (pw) =>
             pw.fromSeconds >= cast.timeSeconds &&
             pw.totalDamage >= DMG_SPIKE_THRESHOLD,

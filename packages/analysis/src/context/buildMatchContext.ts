@@ -332,8 +332,9 @@ export function buildMatchContext(
   // D4 (user ruling 2026-10-10): `pressureWindows` is the list every reader
   // below gets — `computePressureWindows`'s own return, the first five of
   // the walk — and `pressureWindowsNotListed` the windows of the listing
-  // threshold or more that the same walk kept past the cap. Only the
-  // timeline's legend reads the second (one line counting them).
+  // threshold or more that the same walk kept past the cap. The timeline
+  // alone reads the second: its legend (one line counting them) and `next
+  // spike in Ns` (fact7 D50, which window is next is not a question of size).
   const { listed: pressureWindows, notListed: pressureWindowsNotListed } =
     selectPressureWindows(friends, combat, {
       notListedMinDamage: DMG_SPIKE_THRESHOLD,

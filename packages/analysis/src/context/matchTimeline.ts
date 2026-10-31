@@ -170,7 +170,8 @@ export interface BuildMatchTimelineParams {
   pressureWindows: IDamageBucket[];
   /** The `[DMG SPIKE]` candidates the top-N cap dropped
    * (`selectPressureWindows(...).notListed`, at `DMG_SPIKE_THRESHOLD`) — D4:
-   * the timeline counts them in one line under the legend. Absent = none. */
+   * the timeline counts them in one line under the legend, and `next spike
+   * in Ns` searches them with the listed ones (fact7 D50). Absent = none. */
   pressureWindowsNotListed?: IDamageBucket[];
   healingGaps: IHealingGap[];
   friends: ICombatUnit[];
@@ -601,6 +602,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     dampeningAt: (atSeconds: number, unit?: ICombatUnit) =>
       dampeningAt(atSeconds, "friendly", unit),
     pressureWindows,
+    pressureWindowsNotListed: params.pressureWindowsNotListed,
     pid,
     cdExpiryEvents,
     ownerCCSummary,

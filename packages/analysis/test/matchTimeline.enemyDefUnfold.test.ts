@@ -94,6 +94,7 @@ function render(
     isHealer?: boolean;
     ownerCDs?: any[];
     pressureWindows?: any[];
+    pressureWindowsNotListed?: any[];
     /** advanced samples of the owner (mana readings for the F-C3 legend) */
     ownerAdvancedActions?: any[];
     ccTrinketSummaries?: any[];
@@ -169,6 +170,7 @@ function render(
     ],
     enemyDeaths: [],
     pressureWindows: over.pressureWindows ?? [],
+    pressureWindowsNotListed: over.pressureWindowsNotListed,
     healingGaps: [],
     friends: [owner, alice],
     enemies: [enemy],
@@ -398,6 +400,24 @@ describe("legends follow the lines they explain (F-C16 / F-C17)", () => {
       expect(render({ isHealer: true })).toContain(legend);
       expect(render({ isHealer: false })).not.toContain(legend);
     }
+  });
+
+  it("fact7 D50: the next spike is the nearest window of the walk, listed or not", () => {
+    const spike = (fromSeconds: number, totalDamage: number) => ({
+      fromSeconds,
+      toSeconds: fromSeconds + 10,
+      totalDamage,
+      targetName: "Alice",
+      targetSpec: "Beast Mastery Hunter",
+    });
+    const text = render({
+      ownerCDs: [astralShift],
+      pressureWindows: [spike(44, 2_000_000)],
+      pressureWindowsNotListed: [spike(23, 400_000)],
+    });
+    expect(text).toMatch(
+      /0:20 {2}\[YOU\] \[CD\] .*Astral Shift.*, next spike in 3s on 2/,
+    );
   });
 
   it("F-C16: the hindsight legend appears exactly when a [YOU] [CD] line carries `next spike in`", () => {
