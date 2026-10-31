@@ -70,6 +70,7 @@ import {
 import {
   CANCEL_CC_NEAR_S,
   DISPLACEMENT_EVIDENCE_IDS,
+  feignDeathInstantsMs,
 } from "./castStopEvidence";
 import { TARGETED_CC_DODGE_SPELLS } from "./ccTrinketAnalysis";
 import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
@@ -181,22 +182,30 @@ export function ownerCastBarOutcomes(params: {
   owner: ICombatUnit;
   startMs: number;
   rawStreams?: RawStreams;
-  /** the other side: their target-dropping presses (`dodgeMs`) */
+  /** the other side: their target-dropping presses (`dodgeMs`), Feign Death
+   * included */
   enemies?: readonly ICombatUnit[];
 }): CastBarOutcome[] | null {
   const { owner, startMs, rawStreams } = params;
   if (!rawStreams?.available) return null;
   const failed = rawStreams.castFailed.filter((e) => e.unitGuid === owner.id);
   if (failed.length === 0) return null; // not the recorder
-  const dodgeMs = (params.enemies ?? []).flatMap((e) =>
-    (e.spellCastEvents ?? [])
+  // fact7 D31 (163de8f1 1:48): a Cyclone bar stopped in the millisecond the
+  // hunter's Survival Tactics went up, and counted as a cancel. Feign Death
+  // drops a target like Shadowmeld does, and its press is no cast row.
+  // Forward check, 1,925 interruption rows of the 91 fact7 files: within
+  // ±100 ms of one 4.8 % of feigns and 5.7 % of Shadowmelds, against 2.4 %
+  // by chance; Vanish 2.3 %, invisibility 1.4 %, so neither joins them.
+  const dodgeMs = (params.enemies ?? []).flatMap((e) => [
+    ...(e.spellCastEvents ?? [])
       .filter(
         (c) =>
           c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
           TARGETED_CC_DODGE_SPELLS.has(c.spellId ?? ""),
       )
       .map((c) => c.logLine.timestamp),
-  );
+    ...feignDeathInstantsMs(e),
+  ]);
   return castBarOutcomesOf({ unit: owner, startMs, failed, dodgeMs });
 }
 

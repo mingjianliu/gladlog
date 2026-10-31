@@ -36,6 +36,7 @@ describe("toLegacyMatch", () => {
     CI("Player-1-A", 0, 257, 2400),
     CI("Player-2-B", 1, 71, 2380),
     DMG("Player-1-A", "Alice-X", "Player-2-B", "Bob-Y"),
+    `UNIT_DIED,0000000000000000,nil,0x80000000,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,1`,
     `UNIT_DIED,0000000000000000,nil,0x80000000,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,0`,
     "ARENA_MATCH_END,0,30,1500,1501",
   ]);
@@ -85,6 +86,12 @@ describe("toLegacyMatch", () => {
   it("death records: legacy deathRecords carries real deaths only", () => {
     const b = legacy.units["Player-2-B"]!;
     expect(b.deathRecords).toHaveLength(1);
+  });
+
+  it("an unconscious UNIT_DIED row is kept apart from the deaths (fact7 D31: Feign Death)", () => {
+    const b = legacy.units["Player-2-B"]!;
+    expect(b.unconsciousRecords).toHaveLength(1);
+    expect(legacy.units["Player-1-A"]!.unconsciousRecords).toEqual([]);
   });
 });
 

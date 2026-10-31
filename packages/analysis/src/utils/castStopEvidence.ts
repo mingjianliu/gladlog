@@ -11,6 +11,7 @@
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { AURA_ONLY_ACTIVATION_IDS } from "../data/auraActivation";
 import { spellClassMap } from "../data/drCategories";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 
@@ -70,4 +71,32 @@ export function forcedStopInstantsMs(
       ),
     ].map((e) => e.timestamp),
   };
+}
+
+/** Feign Death's cast id, which the log never writes as a SUCCESS. */
+const FEIGN_DEATH_CAST_ID = "5384";
+
+/**
+ * The instants (epoch ms) `unit` went into Feign Death, off the two rows the
+ * log writes for it: `UNIT_DIED … unconscious=1` for every feign, and the
+ * Survival Tactics aura (`AURA_ONLY_ACTIVATION_IDS`, the table
+ * `FEIGN_DEATH_ABSORB_AURA_IDS` reads) for a hunter with the talent. No
+ * reader of cast rows can see one. 91 fact7 files: 456 such UNIT_DIED rows,
+ * all on 39 hunters, 28 of them with no aura beside them (fact7 D31).
+ */
+export function feignDeathInstantsMs(
+  unit: Pick<ICombatUnit, "auraEvents" | "unconsciousRecords">,
+): number[] {
+  const auras = AURA_ONLY_ACTIVATION_IDS[FEIGN_DEATH_CAST_ID] ?? [];
+  return [
+    ...(unit.unconsciousRecords ?? []).map((r) => r.timestamp),
+    ...(unit.auraEvents ?? [])
+      .filter(
+        (a) =>
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+          !!a.spellId &&
+          auras.includes(a.spellId),
+      )
+      .map((a) => a.timestamp),
+  ];
 }

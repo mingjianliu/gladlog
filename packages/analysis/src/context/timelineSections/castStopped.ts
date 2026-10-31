@@ -79,7 +79,7 @@ export const CAST_STOPPED_NEAR_TEXT = {
   cc: " as a control or silence landed on you",
   displaced: " as an enemy knockback or pull landed on you",
   dodged:
-    "; not kicked; an enemy pressed Shadowmeld or Transcendence: Transfer then",
+    "; not kicked; an enemy pressed Shadowmeld, Transcendence: Transfer or Feign Death then",
 } as const;
 
 /** Printed once, when a `[CAST STOPPED]` line rendered. */
@@ -87,8 +87,8 @@ export const CAST_STOPPED_LEGEND = [
   `  ${CAST_STOPPED_TAG} = you began a cast bar of that control at that second and it did not go off, and no enemy kick ended it (a`,
   "    kicked cast is on its [KICK] line). `cast bar stopped after Ns` = the log shows the bar interrupted N s in, with no kick:",
   "    you stopped it or you moved — the log cannot tell which, so claim neither. `as a control or silence landed on you` /",
-  `    \`as an enemy knockback or pull landed on you\` = one landed within ${CANCEL_CC_NEAR_S} s of the stop; \`an enemy pressed Shadowmeld or`,
-  `    Transcendence: Transfer then\` = one of those, which drop a targeted cast, was pressed within ${CANCEL_CC_NEAR_S} s of it; \`no control, silence or knockback`,
+  `    \`as an enemy knockback or pull landed on you\` = one landed within ${CANCEL_CC_NEAR_S} s of the stop; \`an enemy pressed Shadowmeld,`,
+  `    Transcendence: Transfer or Feign Death then\` = one of those, which drop a targeted cast, was pressed within ${CANCEL_CC_NEAR_S} s of it; \`no control, silence or knockback`,
   "    landed on you then` = none did. `refused Ns in: <reason>` = the client failed the cast N s in for that reason",
   `    (\`${CAST_REFUSED_OTHER_REASON}\` = for another reason, which is not printed). \`no end logged; the round ended …\` = the round ended`,
   "    before the log showed how the bar ended. The log names no target for a cast bar, so the line has none. These bars are",

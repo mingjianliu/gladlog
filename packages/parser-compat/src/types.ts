@@ -208,6 +208,11 @@ export interface ICombatUnit {
   actionIn: ISpellEvent[];
   actionOut: ISpellEvent[];
   deathRecords: ILogLine[];
+  /** UNIT_DIED rows with unconscious = 1: every Feign Death writes one, with
+   * or without its Survival Tactics aura, and no other corpus unit has any
+   * (fact7 D31: 456 rows on 91 files, 39 units, all hunters). Not deaths.
+   * Absent on a document the converter did not write. */
+  unconsciousRecords?: ILogLine[];
   advancedActions: IAdvancedAction[];
   /** Healing on this unit that a heal-absorb debuff ate. Absent on archived
    * docs written before 2026-08-23 (the event was discarded by the parser), so

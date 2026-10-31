@@ -172,8 +172,9 @@ export function castBarOutcomesOf(params: {
   startMs: number;
   failed: readonly CastFailedEvent[];
   /** epoch ms of the other side's presses that drop a target
-   * (`TARGETED_CC_DODGE_SPELLS`: Shadowmeld, Transcendence: Transfer) —
-   * `near` = "dodged" for a stop one of them sits next to */
+   * (`TARGETED_CC_DODGE_SPELLS`: Shadowmeld, Transcendence: Transfer; and
+   * Feign Death, `feignDeathInstantsMs`) — `near` = "dodged" for a stop one of
+   * them sits next to */
   dodgeMs?: readonly number[];
 }): CastBarOutcome[] {
   const { unit, startMs, failed } = params;

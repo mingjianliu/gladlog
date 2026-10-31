@@ -132,7 +132,8 @@ export const SCHOOL_LIMITED_IMMUNITY_IDS: ReadonlySet<string> = new Set(
  * press from the aura(s) `AURA_ONLY_ACTIVATION_IDS` lists for it (Survival
  * Tactics 202748), and so does this file — one table for "a Feign Death
  * happened". Hunters without that PvP talent leave only `UNIT_DIED …
- * unconscious=1`, which parser-compat does not carry to the analysis units. */
+ * unconscious=1` (`unconsciousRecords`; `castStopEvidence.ts` →
+ * `feignDeathInstantsMs` reads both rows). */
 const FEIGN_DEATH_CAST_ID = "5384";
 
 /**

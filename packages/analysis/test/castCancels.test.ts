@@ -210,6 +210,98 @@ describe("ownerCastCancels", () => {
     ).toHaveLength(1);
   });
 
+  describe("a bar stopped by an enemy's Feign Death is no cancel (fact7 D31)", () => {
+    const FEIGN_AURA = "202748";
+    const CYCLONE = "33786";
+    const run = (enemyOverrides: Record<string, unknown>) => {
+      const me = makeUnit("p1", {
+        name: "Me",
+        reaction: CombatUnitReaction.Friendly,
+        info: {},
+        castStartEvents: [start(CYCLONE, 10)],
+      });
+      const hunter = Object.assign(
+        makeUnit("e1", {
+          name: "Hunter",
+          reaction: CombatUnitReaction.Hostile,
+          info: {},
+        }),
+        enemyOverrides,
+      );
+      return ownerCastCancels({
+        owner: me,
+        friends: [me],
+        enemies: [hunter],
+        combat: {
+          startTime: T0,
+          endTime: at(120),
+          units: { p1: me, e1: hunter },
+        } as never,
+        rawStreams: {
+          available: true,
+          manaSamples: [],
+          castFailed: [fail(CYCLONE, 10.9, "Interrupted")],
+        },
+      })!;
+    };
+
+    it("163de8f1 1:48: the Survival Tactics aura in the stop's millisecond", () => {
+      expect(
+        run({
+          auraEvents: [
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_APPLIED,
+              FEIGN_AURA,
+              at(10.9),
+              "e1",
+              "e1",
+            ),
+          ],
+        }).cancels,
+      ).toEqual([]);
+    });
+
+    it("a hunter without the talent: only the unconscious UNIT_DIED row", () => {
+      expect(
+        run({
+          unconsciousRecords: [
+            {
+              event: LogEvent.UNIT_DIED,
+              timestamp: at(10.92),
+              parameters: [],
+            },
+          ],
+        }).cancels,
+      ).toEqual([]);
+    });
+
+    it("a feign farther off than CANCEL_CC_NEAR_S leaves the cancel alone", () => {
+      expect(
+        run({
+          unconsciousRecords: [
+            { event: LogEvent.UNIT_DIED, timestamp: at(11.3), parameters: [] },
+          ],
+        }).cancels.map((c) => c.spellId),
+      ).toEqual([CYCLONE]);
+    });
+
+    it("the aura's REMOVED is no feign", () => {
+      expect(
+        run({
+          auraEvents: [
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_REMOVED,
+              FEIGN_AURA,
+              at(10.9),
+              "e1",
+              "e1",
+            ),
+          ],
+        }).cancels.map((c) => c.spellId),
+      ).toEqual([CYCLONE]);
+    });
+  });
+
   it("pairs a success only inside its own start window", () => {
     // Starts at 0 and 1 s, one success at 2 s: only the 1 s start completed
     // (1.0 s), so a 0.5 s cancel at 10 s is 50 % — not 25 % (the old lookup

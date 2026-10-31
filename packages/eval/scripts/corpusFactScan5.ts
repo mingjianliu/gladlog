@@ -70,6 +70,7 @@ const MODULE_FILES = [
   "castThroughStun",
   "killAttemptFacts",
   "spanFacts",
+  "singles14b",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

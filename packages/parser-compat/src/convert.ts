@@ -353,6 +353,14 @@ function convertUnit(
     parameters: convertParams(death.params),
     lineIndex: death.lineIndex,
   }));
+  const unconsciousRecords: ILogLine[] = (unit.unconsciousEvents ?? []).map(
+    (row) => ({
+      event: LogEvent.UNIT_DIED,
+      timestamp: row.timestamp,
+      parameters: convertParams(row.params),
+      lineIndex: row.lineIndex,
+    }),
+  );
 
   // a max HP the log writes late after a max-HP change (fact4 D13 / D14 /
   // D50: a bear form exit read 75 % for a druid at 98 %) — the one reading
@@ -805,6 +813,7 @@ function convertUnit(
     actionIn,
     actionOut,
     deathRecords,
+    unconsciousRecords,
     advancedActions,
     healAbsorbsIn,
     missesOut,
