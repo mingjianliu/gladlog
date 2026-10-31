@@ -316,6 +316,9 @@ npx tsx packages/analysis/scripts/datagen/genSummonSpells.ts
 # 6f1d. root auras (SpellEffect aura 26 / 455 on the spell itself). ROOT_SPELL_IDS = the root DR class ∪
 #      these — the DR class misses roots with no DR (Ice Nova); read by [ROOT] and the kick run budget.
 npx tsx packages/analysis/scripts/datagen/genRootAuras.ts
+# 6f1d2. periodic damage auras (SpellEffect aura 3 / 53 / 89 on the spell itself, every id). What [ROT PRESSURE]
+#      calls a DoT; `corpusFactScan5` `dotTableForward` checks both directions against the log's ticks.
+npx tsx packages/analysis/scripts/datagen/genPeriodicAuras.ts
 # 6f1e. cast → effect-aura table (triage G3, ruling A10 = both: DB2 nominates, the corpus verifies). Two
 #      stages; the second is a corpus scan (raw lines, one process, a few minutes per ~1,800 files):
 #      (1) nominations: same SpellName or an EffectTriggerSpell chain (≤ 3 hops) to an aura-bearing spell,

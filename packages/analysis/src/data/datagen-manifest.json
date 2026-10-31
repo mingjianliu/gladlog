@@ -72,6 +72,9 @@
     "rootAuraGenerated.ts": {
       "entries": 28
     },
+    "periodicAuraGenerated.ts": {
+      "entries": 11615
+    },
     "castEffectNominationsGenerated.json": {
       "casts": 4012,
       "pairs": 42120

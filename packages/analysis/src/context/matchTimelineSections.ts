@@ -3,6 +3,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { CD_WASTE_PRESSURE_HP_PCT } from "../analysis/candidateFindings";
 import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
+import { PERIODIC_DAMAGE_AURA_IDS } from "../data/periodicAuraGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   breakableCcBeforeDeath,
@@ -77,76 +78,31 @@ import {
 
 // ── Rot Pressure (F147) ─────────────────────────────────────────────────────
 
-/** @internal exported for data/curatedIdRegistry (corpus rot scan) */
-export const DOT_SPELL_IDS = new Set<string>([
-  "980",
-  "172",
-  "31117",
-  "196364",
-  "461531",
-  "63106",
-  "205179",
-  "361695", // Warlock
-  "589",
-  "34914",
-  "335467",
-  "390978", // Priest
-  "164812",
-  "8921",
-  "164815",
-  "93402",
-  "202347",
-  "1079",
-  "155722",
-  "1822",
-  "192090",
-  "106830", // Druid
-  "1943",
-  "703",
-  "2818",
-  "122233",
-  "121411", // Rogue
-  "191587",
-  "55078",
-  "55095", // DK
-  "188389", // Shaman
-  "269747",
-  "271788",
-  "118253",
-  "217200", // Hunter
-  "12654", // Mage
-  "262115",
-  "84617", // Warrior
-  "357209", // Evoker
+/**
+ * Auras DB2 gives a periodic damage effect that the log never ticks on a
+ * player: applied in 31, 21 and 18 of the 91 fact7 files, no
+ * SPELL_PERIODIC_DAMAGE row of any of them. A root is no DoT.
+ * @internal exported for data/curatedIdRegistry (corpus rot scan)
+ */
+export const DOT_AURA_NEVER_TICKS_IDS: ReadonlySet<string> = new Set([
+  "339", // Entangling Roots
+  "102359", // Mass Entanglement
+  "460614", // Entangling Roots (the 3 s variant)
 ]);
 
-const DOT_SPELL_NAMES = new Set<string>([
-  "agony",
-  "corruption",
-  "unstable affliction",
-  "wither",
-  "shadow word: pain",
-  "vampiric touch",
-  "devouring plague",
-  "sunfire",
-  "moonfire",
-  "stellar flare",
-  "rip",
-  "rake",
-  "thrash",
-  "rupture",
-  "garrote",
-  "deadly poison",
-  "crimson tempest",
-  "virulent plague",
-  "blood plague",
-  "frost fever",
-  "flame shock",
-  "serpent sting",
-  "ignite",
-  "deep wounds",
-  "fire breath",
-]);
+/**
+ * Is this aura a damage-over-time: DB2 says it deals periodic damage
+ * (`PERIODIC_DAMAGE_AURA_IDS`, aura 3 / 53 / 89), and the log does tick it.
+ * Replaced a hand list of ids and name substrings (fact7 D32, F21): see
+ * `scripts/datagen/genPeriodicAuras.ts` for what the forward check found.
+ * Re-runnable: `corpusFactScan5` `dotTableForward`.
+ */
+export function isDotAura(spellId: string): boolean {
+  return (
+    PERIODIC_DAMAGE_AURA_IDS.has(spellId) &&
+    !DOT_AURA_NEVER_TICKS_IDS.has(spellId)
+  );
+}
 
 interface IDotInterval {
   spellId: string;
@@ -170,13 +126,8 @@ function extractPlayerDotIntervals(
     if (ts > matchEndMs) continue;
 
     const spellId = event.spellId ?? "";
+    if (!isDotAura(spellId)) continue;
     const spellName = getEnglishSpellName(spellId, event.spellName);
-    const spellNameLower = spellName.toLowerCase();
-
-    const isDot =
-      DOT_SPELL_IDS.has(spellId) ||
-      [...DOT_SPELL_NAMES].some((name) => spellNameLower.includes(name));
-    if (!isDot) continue;
 
     const auraType = event.logLine.parameters[11];
     if (auraType === "BUFF") continue;

@@ -27,7 +27,7 @@ import {
   CRISIS_PROC_ANSWERS,
   CRISIS_PROTECTIVE_ANSWER_IDS,
 } from "../analysis/crisisDecisionPoints";
-import { DOT_SPELL_IDS } from "../context/matchTimelineSections";
+import { DOT_AURA_NEVER_TICKS_IDS } from "../context/matchTimelineSections";
 import { REFLECT_OWN_DAMAGE_IDS } from "../context/spellOutcomeLines";
 import {
   DEFERRED_DAMAGE_SPELL_IDS,
@@ -1001,8 +1001,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("COPY_CAST_IDS", "utils/castPress.ts", "cast", () => [
     ...COPY_CAST_IDS.keys(),
   ]),
-  t("DOT_SPELL_IDS", "context/matchTimelineSections.ts", "aura", () =>
-    set(DOT_SPELL_IDS),
+  t(
+    "DOT_AURA_NEVER_TICKS_IDS",
+    "context/matchTimelineSections.ts",
+    "aura",
+    () => set(DOT_AURA_NEVER_TICKS_IDS),
   ),
   t("UNUSED_SELF_COVERAGE_UNMODELLED", "utils/counterfactual.ts", "cast", () =>
     set(UNUSED_SELF_COVERAGE_UNMODELLED),

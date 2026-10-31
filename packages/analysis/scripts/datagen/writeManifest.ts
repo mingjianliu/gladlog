@@ -177,6 +177,9 @@ export async function main(): Promise<void> {
       "rootAuraGenerated.ts": {
         entries: countQuotedIds("rootAuraGenerated.ts"),
       },
+      "periodicAuraGenerated.ts": {
+        entries: countQuotedIds("periodicAuraGenerated.ts"),
+      },
       // Triage G3 (2026-10-02, ruling A10): the DB2 half of the cast → effect
       // table — nominations only; the corpus half follows below.
       "castEffectNominationsGenerated.json": {

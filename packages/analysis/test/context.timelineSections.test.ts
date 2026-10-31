@@ -74,7 +74,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            "172",
+            "146739",
             0,
             "enemy-1",
             "player-1",
@@ -82,7 +82,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            "30108",
+            "1259790",
             0,
             "enemy-1",
             "player-1",
@@ -160,6 +160,62 @@ describe("context.timelineSections.test.ts", () => {
       );
     });
 
+    // fact7 D32 (163de8f1 2:34): a hand list missed Black Arrow, so four ticking
+    // debuffs printed "3 active DoTs". Official periodic-damage data decides;
+    // a debuff with no ticks (Crippling Poison) and a root that DB2 files as
+    // periodic but that never ticks in a log (Entangling Roots) are not DoTs.
+    const lowHpSamples = () =>
+      [50, 50, 30, 30, 30, 30, 50].map((pct, i) => ({
+        ...makeAdvancedAction(i * 1000, 0, 0, 1000, pct * 10),
+        advancedActorId: "player-1",
+      }));
+    const dotLine = (ids: string[]) => {
+      const player = makeUnit("player-1", {
+        name: "Player1",
+        spec: CombatUnitSpec.Rogue_Subtlety,
+        reaction: CombatUnitReaction.Friendly,
+        auraEvents: ids.map((id) =>
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            id,
+            0,
+            "enemy-1",
+            "player-1",
+            "DEBUFF",
+          ),
+        ),
+        advancedActions: lowHpSamples(),
+        damageIn: [],
+      });
+      const lines: string[] = [];
+      emitRotPressureEntries({
+        allPlayers: [player],
+        matchStartMs: 0,
+        matchEndMs: 6000,
+        matchDurationS: 6,
+        pid: (n) => `p-${n}`,
+        addEntry: (_t, ...l) => {
+          lines.push(...l);
+        },
+      });
+      return lines.join("\n");
+    };
+
+    it("a periodic debuff the old hand list missed counts (Black Arrow, Astral Smolder)", () => {
+      expect(dotLine(["589", "164812", "164815", "468572"])).toContain(
+        "with 4 active DoTs",
+      );
+      expect(dotLine(["589", "164812", "1263250"])).toContain(
+        "with 3 active DoTs",
+      );
+    });
+
+    it("a debuff that does not tick never counts (Crippling Poison, Entangling Roots, Rake's stun)", () => {
+      expect(dotLine(["589", "164812", "3409"])).toBe("");
+      expect(dotLine(["589", "164812", "339"])).toBe("");
+      expect(dotLine(["589", "164812", "163505"])).toBe("");
+    });
+
     it("threshold boundaries for consecutive seconds / dot counts / HP / damage ratio", () => {
       // 3 consecutive seconds of low HP -> no emission
       const playerShortHp = makeUnit("player-1", {
@@ -176,7 +232,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            "172",
+            "146739",
             0,
             "enemy-1",
             "player-1",
@@ -184,7 +240,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            "30108",
+            "1259790",
             0,
             "enemy-1",
             "player-1",
@@ -269,7 +325,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            "172",
+            "146739",
             0,
             "enemy-1",
             "player-1",
@@ -353,7 +409,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            "172",
+            "146739",
             0,
             "enemy-1",
             "player-1",
@@ -361,7 +417,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            "30108",
+            "1259790",
             0,
             "enemy-1",
             "player-1",
@@ -445,7 +501,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            "172",
+            "146739",
             0,
             "enemy-1",
             "player-1",
@@ -453,7 +509,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
           makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
-            "30108",
+            "1259790",
             0,
             "enemy-1",
             "player-1",

@@ -34,6 +34,7 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | `sharedChargeGenerated.ts` | 2 KB | datagen output (SpellCategories.ChargeCategory shared by ≥ 2 observed spells — one charge pool) |
 | `summonGenerated.ts` | 2 KB | datagen output (SpellEffect 28 SUMMON on the spell or one trigger hop) |
 | `rootAuraGenerated.ts` | 1 KB | datagen output (SpellEffect aura 26 / 455 — the aura roots its carrier) |
+| `periodicAuraGenerated.ts` | 104 KB | datagen output (SpellEffect aura 3 / 53 / 89 — the aura deals periodic damage; every id) |
 | `pvpTalentPoolGenerated.ts` | 11 KB | datagen output |
 | `pvpTalentReplacesGenerated.ts` | 861 B | datagen output |
 | `specIconsGenerated.ts` | 2 KB | GENERATED — do not hand-edit. Produced by |

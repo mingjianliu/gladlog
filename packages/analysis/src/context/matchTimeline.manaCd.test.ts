@@ -403,7 +403,7 @@ describe("[HEALING] / [ROT PRESSURE] legends print only with their line family",
   /** Three DoTs on from the first second, under 40 % HP from 0:10 to 0:14. */
   const rotting = (id: string): Partial<ICombatUnit> => ({
     // Agony / Corruption / Unstable Affliction
-    auraEvents: [debuff("980"), debuff("146739"), debuff("30108")],
+    auraEvents: [debuff("980"), debuff("146739"), debuff("1259790")],
     advancedActions: [
       hpAt(id, 8, 80),
       hpAt(id, 10, 30),
