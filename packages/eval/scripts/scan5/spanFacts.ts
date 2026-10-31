@@ -11,9 +11,9 @@
  *    the rows show inside the kick's 5 s, cut at the round's end. db5b6b6a 1:39:
  *    2.4 from a Leg Sweep landed 4 ms after the deciding death.
  *  - `conseqDroppedWithReadings` (D20): a healer's control printed `[CC ON …]`
- *    for ≥ 2 s with no `[CONSEQ]` line, every living teammate having rows inside
- *    it. d2e6e70b 0:16: Freezing Trap on the enemy healer, its hunter unread
- *    from 0:04 to 0:20 and read inside.
+ *    for ≥ 2 s of the round with no `[CONSEQ]` line, every living teammate
+ *    having rows inside it. d2e6e70b 0:16: Freezing Trap on the enemy healer,
+ *    its hunter unread from 0:04 to 0:20 and read inside.
  *  - `drHalfLengthFull` (D14): `[CC ON …] … [DR: Cat Full]` on a control whose
  *    aura ran out on its own at half its full length, landed 20.0–20.4 s after
  *    the family's last end on that unit. 69276401 1:32: Shockwave 1.50 s, 20.27 s
@@ -27,12 +27,18 @@
  *    then 151771 / 1047640 = 14 %.
  */
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  getEnglishSpellName,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import { ENEMY_IMMUNITY_TEAM_PROC_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { SpellTag } from "@gladlog/analysis/src/data/spellTypes";
 import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
-import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  isHealerSpec,
+  MIN_CD_SECONDS,
+} from "@gladlog/analysis/src/utils/cooldowns";
 import { DR_CATEGORY_MAP } from "@gladlog/analysis/src/utils/drAnalysis";
 
 import {
@@ -41,6 +47,7 @@ import {
   ev,
   fmtS,
   type IRoundCtx,
+  REFRESH,
   REMOVED,
   secOf,
   successesOf,
@@ -55,6 +62,10 @@ export const CHECKS = [
   "ledgerProcImmunityMissing",
   "troughOnStaleMaxRow",
 ] as const;
+
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "noDefensiveButPressed|edgeSecond",
+]);
 
 const DEFENSIVE_IDS = new Set(
   classMetadata
@@ -84,11 +95,18 @@ function noDefensive(ctx: IRoundCtx): void {
       if (tsOf(c) < from || tsOf(c) >= to) continue;
       const name = getEnglishSpellName(c.spellId, c.spellName ?? "");
       const t = fmtS((tsOf(c) - ctx.start) / 1000);
-      const isDefensive = DEFENSIVE_IDS.has(String(c.spellId));
+      // the sentence's "defensive CD" is the owner's tracked kit, ≥
+      // `MIN_CD_SECONDS`: a 15 s Feint is no row of it
+      const isDefensive =
+        DEFENSIVE_IDS.has(String(c.spellId)) &&
+        (effectiveCooldownSeconds(String(c.spellId)) ?? 0) >= MIN_CD_SECONDS;
+      // the printed ends are floored: a press in either end second can lie
+      // outside the span (a Dark Pact 0.2 s before it): shown, not counted
+      const edge = tsOf(c) < from + 1000 || tsOf(c) >= to - 1000;
       if (isDefensive)
         ctx.violate(
           "noDefensiveButPressed",
-          "pressInSpan",
+          edge ? "edgeSecond" : "pressInSpan",
           tsOf(c),
           `${m[1]}:${m[2]}|${name}`,
           `${name} pressed ${t}`,
@@ -155,8 +173,15 @@ function conseqDropped(ctx: IRoundCtx): void {
         ev(a) === APPLIED && tsOf(a) >= secFrom && tsOf(a) < secFrom + 1000,
     );
     if (!on) continue;
-    const off = rows.find((a) => ev(a) === REMOVED && tsOf(a) > tsOf(on));
-    if (!off || tsOf(off) - tsOf(on) < 2000) continue;
+    // the instance the line printed: a re-application (a second Sap, REFRESH)
+    // is the next `[CC ON …]` line, and the round's end cuts the span —
+    // `[CONSEQ]` reads HP inside the round only
+    const off = rows.find(
+      (a) => (ev(a) === REMOVED || ev(a) === REFRESH) && tsOf(a) > tsOf(on),
+    );
+    if (!off) continue;
+    const offMs = Math.min(tsOf(off), ctx.roundEndAt);
+    if (offMs - tsOf(on) < 2000) continue;
     ctx.bump("conseqDroppedWithReadings");
     if (printed.has(`${sec}|${m[3]}|${spell}`)) continue;
     const mates = ctx.players.filter(
@@ -167,8 +192,7 @@ function conseqDropped(ctx: IRoundCtx): void {
     );
     const allRead = mates.every((u) =>
       ownRows(u).some(
-        (a) =>
-          a.logLine.timestamp >= tsOf(on) && a.logLine.timestamp <= tsOf(off),
+        (a) => a.logLine.timestamp >= tsOf(on) && a.logLine.timestamp <= offMs,
       ),
     );
     if (mates.length > 0 && allRead)
@@ -177,7 +201,7 @@ function conseqDropped(ctx: IRoundCtx): void {
         "noLine",
         tsOf(on),
         `${m[3]}|${spell}|${sec}`,
-        `${spell} on ${unit.name}: ${((tsOf(off) - tsOf(on)) / 1000).toFixed(1)}s`,
+        `${spell} on ${unit.name}: ${((offMs - tsOf(on)) / 1000).toFixed(1)}s`,
         line,
       );
   }
@@ -246,7 +270,17 @@ function ledger(ctx: IRoundCtx): void {
       );
       for (const on of auras) {
         if (ev(on) !== APPLIED) continue;
-        const off = auras.find((a) => ev(a) === REMOVED && tsOf(a) > tsOf(on));
+        // its own end, before the next application: a REMOVED the log lost
+        // (12c701da: 32.2 unclosed, the next pair 153.5–155.5) is the proc's 2 s
+        const nextOn = auras.find(
+          (a) => ev(a) === APPLIED && tsOf(a) > tsOf(on),
+        );
+        const off = auras.find(
+          (a) =>
+            ev(a) === REMOVED &&
+            tsOf(a) > tsOf(on) &&
+            (!nextOn || tsOf(a) < tsOf(nextOn)),
+        );
         const onS = (tsOf(on) - ctx.start) / 1000;
         const offS = off ? (tsOf(off) - ctx.start) / 1000 : onS + 2;
         const overlap = Math.min(offS, to + 1) - Math.max(onS, from);

@@ -1,10 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- fake legacy parse objects, the checks read them untyped */
 import { ensureAnalysisData } from "@gladlog/analysis";
-import { LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { run as runCastThroughStun } from "../scripts/scan5/castThroughStun";
 import { run as runDamageBasis } from "../scripts/scan5/damageBasis";
+import { run as runKillAttemptFacts } from "../scripts/scan5/killAttemptFacts";
 import { run as runPressFiling } from "../scripts/scan5/pressFiling";
+import { run as runSpanFacts } from "../scripts/scan5/spanFacts";
 
 // fact7 r1: six corpus checks that kept firing after their 15-round fixes hit 0.
 // Each `reads` case is a shape the raw log proved right while the check flagged
@@ -58,6 +61,7 @@ const cast = (
 
 interface IViolation {
   check: string;
+  kind: string;
   detail: string;
 }
 
@@ -67,6 +71,7 @@ function scan(
   lines: string[],
   menu = "",
   rawLines: string[] = [],
+  roundEndAt = at(600_000),
 ): IViolation[] {
   const seen: IViolation[] = [];
   const byName = new Map(players.map((p) => [p.name, p]));
@@ -82,14 +87,14 @@ function scan(
     pidOf: (name: string) => players.find((p) => p.name === name)?.pid,
     start: START,
     end: at(600_000),
-    roundEndAt: at(600_000),
+    roundEndAt,
     violate: (
       check: string,
-      _k: string,
+      kind: string,
       _t: number,
       _f: string,
       detail: string,
-    ) => seen.push({ check, detail }),
+    ) => seen.push({ check, kind, detail }),
     bump: () => {},
   });
   return seen;
@@ -562,5 +567,383 @@ describe("selfOnlyHeldDualRole", () => {
         "selfOnlyHeldDualRole",
       ),
     ).toHaveLength(1);
+  });
+});
+
+// fact7 r3: the eight checks the 605 capture still fired on. Same split: `reads`
+// is the shape the raw log proved right, `flags` the audited defect.
+const APPLIED_ROW = LogEvent.SPELL_AURA_APPLIED;
+const REMOVED_ROW = LogEvent.SPELL_AURA_REMOVED;
+const onUnit = (
+  event: string,
+  ms: number,
+  spellId: string,
+  spellName: string,
+) => ({ ...aura(event, ms, spellId, spellName), srcUnitId: "foe" });
+const readAt = (name: string, ms: number) =>
+  rowOf(LogEvent.SPELL_HEAL, ms, {
+    advancedActorId: name,
+    advancedActorMaxHp: 100,
+  });
+
+describe("conseqDroppedWithReadings", () => {
+  const LINE =
+    "0:39  [CC ON ENEMY]   2(HPriest) ← Cheap Shot (by 9(SRogue)) (still on them when the round ended, 1s in) [DR: Stun 50%]";
+  const team = (auraEvents: any[], readMs: number) => [
+    unit("Owner", "1", 1),
+    unit("Healer", "2", 2, { spec: CombatUnitSpec.Priest_Holy, auraEvents }),
+    unit("Mate", "3", 2, { advancedActions: [readAt("Mate", readMs)] }),
+  ];
+  const span = [
+    onUnit(APPLIED_ROW, 39_273, "1833", "Cheap Shot"),
+    onUnit(REMOVED_ROW, 41_289, "1833", "Cheap Shot"),
+  ];
+
+  it("a control the round's end cut under 2 s has no line to drop (f0a10402 r1, 0.7 s of 2.0 s)", () => {
+    const seen = scan(
+      runSpanFacts,
+      team(span, 39_500),
+      [LINE],
+      "",
+      [],
+      at(39_966),
+    );
+    expect(of(seen, "conseqDroppedWithReadings")).toEqual([]);
+  });
+
+  it("a re-application ends the instance the line printed (05b762f1 r5, the second Sap)", () => {
+    const sap = [
+      onUnit(APPLIED_ROW, 6_268, "6770", "Sap"),
+      onUnit(LogEvent.SPELL_AURA_REFRESH, 11_790, "6770", "Sap"),
+      onUnit(REMOVED_ROW, 14_801, "6770", "Sap"),
+    ];
+    const line =
+      "0:06  [CC ON ENEMY]   2(HPriest) ← Sap (by 9(ARogue)) (6s) [DR: Incapacitate Full]";
+    expect(
+      of(
+        scan(runSpanFacts, team(sap, 13_000), [line]),
+        "conseqDroppedWithReadings",
+      ),
+    ).toEqual([]);
+    expect(
+      of(
+        scan(runSpanFacts, team(sap, 8_000), [line]),
+        "conseqDroppedWithReadings",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("flags 2 s of the round with every teammate read and no line (D20)", () => {
+    const seen = scan(runSpanFacts, team(span, 39_500), [LINE]);
+    expect(of(seen, "conseqDroppedWithReadings")).toHaveLength(1);
+  });
+});
+
+describe("killFocusOverSpan", () => {
+  const line = (focus: number) =>
+    `  [1:53–1:55] on Target — Stun opener (Full DR), 1 stun | opportunity: PRIME | team focus ${focus}% (0.1M on target inside it, 0.1M incl. the 5 s after) | KILL`;
+  const hit = (ms: number, dest: string, amount: number, more = {}) =>
+    rowOf(LogEvent.SPELL_DAMAGE, ms, {
+      destUnitId: dest,
+      effectiveAmount: -amount,
+      ...more,
+    });
+  const rows = [
+    hit(113_100, "Target", 30),
+    hit(113_700, "Other", 20),
+    hit(114_500, "Target", 60),
+    hit(115_000, "Other", 10),
+  ];
+  const team = (damageOut: any[]) => [
+    unit("Owner", "1", 1, { info: {}, damageOut }),
+    unit("Target", "2", 2, {
+      info: {},
+      deathRecords: [{ timestamp: at(115_142) }],
+    }),
+    unit("Other", "3", 2, { info: {} }),
+  ];
+
+  it("a start inside the printed second is neither end's share (ec7bd3f5 1:53: 81 / 84 at the ends, 78 printed)", () => {
+    expect(
+      of(
+        scan(runKillAttemptFacts, team(rows), [line(67)]),
+        "killFocusOverSpan",
+      ),
+    ).toEqual([]);
+  });
+
+  it("a deferral shield's row is no damage yet (5c48e842 1:09, Stretch Time)", () => {
+    const held = rowOf(LogEvent.SPELL_ABSORBED, 114_600, {
+      destUnitId: "Target",
+      effectiveAmount: 400,
+      spellId: "410355",
+    });
+    expect(
+      of(
+        scan(runKillAttemptFacts, team([...rows, held]), [line(75)]),
+        "killFocusOverSpan",
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags a figure no span of those seconds reaches (D67)", () => {
+    expect(
+      of(
+        scan(runKillAttemptFacts, team(rows), [line(40)]),
+        "killFocusOverSpan",
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+describe("killOwnAreaSaveUncredited", () => {
+  const line = (clause: string) =>
+    `  [0:09–0:39] on Target — Stun opener (Full DR), 1 stun | opportunity: PRIME | team focus 0% (0.1M on target inside it, 0.1M incl. the 5 s after) | FAILED: ${clause}`;
+  const team = (auraEvents: any[] = []) => [
+    unit("Owner", "1", 1, { info: {} }),
+    unit("Target", "2", 2, {
+      info: {},
+      spellCastEvents: [cast(27_584, "Target", "97462", "Rallying Cry")],
+      auraEvents: [
+        {
+          ...aura(APPLIED_ROW, 27_590, "97463", "Rallying Cry"),
+          destUnitId: "Target",
+        },
+        ...auraEvents,
+      ],
+    }),
+  ];
+  const suppression = {
+    ...aura(APPLIED_ROW, 26_000, "33206", "Pain Suppression"),
+    destUnitId: "Target",
+  };
+
+  it("the clause is the first cause, not a list: a wall in the rows outranks an own save (287ee68f r3)", () => {
+    expect(
+      of(
+        scan(runKillAttemptFacts, team([suppression]), [
+          line("popped Pain Suppression"),
+        ]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags a wall the rows do not hold", () => {
+    expect(
+      of(
+        scan(runKillAttemptFacts, team(), [line("popped Pain Suppression")]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("flags the save read as pressure (D10)", () => {
+    expect(
+      of(
+        scan(runKillAttemptFacts, team(), [line("not enough damage")]),
+        "killOwnAreaSaveUncredited",
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+describe("killAnchorSkippedOpener", () => {
+  const line = (name: string, ends = "1:25–1:37") =>
+    `  [${ends}] on Target — ${name} burst (no stun) | opportunity: PRIME | team focus 0% (0.1M on target inside it, 0.1M incl. the 5 s after) | KILL`;
+  const selfAura = (ms: number, spellId: string, spellName: string) => ({
+    ...aura(APPLIED_ROW, ms, spellId, spellName),
+    destUnitId: "F",
+    auraType: "BUFF",
+  });
+  const hit = (ms: number, dest: string, amount: number) =>
+    rowOf(LogEvent.SPELL_DAMAGE, ms, {
+      destUnitId: dest,
+      effectiveAmount: -amount,
+    });
+  const team = (over: any) => [
+    unit("F", "1", 1, {
+      info: {},
+      spec: CombatUnitSpec.Paladin_Retribution,
+      ...over,
+    }),
+    unit("Target", "2", 2, { info: {} }),
+    unit("Other", "3", 2, { info: {} }),
+  ];
+  const wings = {
+    spellCastEvents: [
+      cast(85_276, "F", "31884", "Avenging Wrath"),
+      cast(90_855, "F", "421453", "Ultimate Penitence", "Target"),
+    ],
+    auraEvents: [selfAura(85_277, "31884", "Avenging Wrath")],
+  };
+
+  it("flags an offensive self-buff skipped for a later press (D4)", () => {
+    const seen = scan(
+      runKillAttemptFacts,
+      team({ ...wings, damageOut: [hit(86_000, "Target", 100)] }),
+      [line("Ultimate Penitence")],
+    );
+    expect(of(seen, "killAnchorSkippedOpener")).toHaveLength(1);
+  });
+
+  it("a caster who hit another enemy more did not open it on this target", () => {
+    const seen = scan(
+      runKillAttemptFacts,
+      team({
+        ...wings,
+        damageOut: [hit(86_000, "Target", 100), hit(87_000, "Other", 900)],
+      }),
+      [line("Ultimate Penitence")],
+    );
+    expect(of(seen, "killAnchorSkippedOpener")).toEqual([]);
+  });
+
+  it("a press outside the offensive table opens no bracket (a Blink in its first second)", () => {
+    const seen = scan(
+      runKillAttemptFacts,
+      team({
+        spellCastEvents: [
+          cast(85_276, "F", "1953", "Blink"),
+          cast(90_855, "F", "421453", "Ultimate Penitence", "Target"),
+        ],
+        auraEvents: [selfAura(85_277, "1953", "Blink")],
+        damageOut: [hit(86_000, "Target", 100)],
+      }),
+      [line("Ultimate Penitence")],
+    );
+    expect(of(seen, "killAnchorSkippedOpener")).toEqual([]);
+  });
+
+  it("an occurrence no press carries is named by its aura (Eye Beam's Metamorphosis (Demonic))", () => {
+    const seen = scan(
+      runKillAttemptFacts,
+      team({
+        spec: CombatUnitSpec.DemonHunter_Havoc,
+        spellCastEvents: [cast(34_200, "F", "31884", "Avenging Wrath")],
+        auraEvents: [
+          selfAura(34_210, "31884", "Avenging Wrath"),
+          selfAura(34_300, "162264", "Metamorphosis"),
+        ],
+        damageOut: [hit(35_000, "Target", 100)],
+      }),
+      [line("Metamorphosis (Demonic)", "0:34–0:41")],
+    );
+    expect(of(seen, "killAnchorSkippedOpener")).toEqual([]);
+  });
+});
+
+describe("noDefensiveButPressed", () => {
+  const LINE =
+    "1:49–1:59 [Critical burst] 6.9→7.3yd from X — no defensive CD available";
+  const seenWith = (id: string, name: string, ms: number) =>
+    scan(
+      runSpanFacts,
+      [
+        unit("Owner", "1", 1, {
+          spellCastEvents: [cast(ms, "Owner", id, name)],
+        }),
+      ],
+      [LINE],
+    ).filter((v) => v.check === "noDefensiveButPressed");
+
+  it("the sentence's CD is the tracked kit: a 15 s Feint is no row of it (0a6f0b0c r6)", () => {
+    expect(seenWith("1966", "Feint", 115_237)).toEqual([]);
+  });
+
+  it("a press in an end second is shown, not counted: the span's ends are floored", () => {
+    expect(seenWith("48707", "Anti-Magic Shell", 109_100)[0]?.kind).toBe(
+      "edgeSecond",
+    );
+  });
+
+  it("flags a tracked defensive pressed inside the span (D2)", () => {
+    expect(seenWith("48707", "Anti-Magic Shell", 115_413)[0]?.kind).toBe(
+      "pressInSpan",
+    );
+  });
+});
+
+describe("freeToPressBelowLog", () => {
+  const line = (free: string) =>
+    `[1:14] Dead died — Priest had Guardian Spirit available, caster's longest stretch free to cast it ${free}s of the last 5s`;
+  const stun = [
+    onUnit(APPLIED_ROW, 60_000, "853", "Hammer of Justice"),
+    onUnit(REMOVED_ROW, 63_000, "853", "Hammer of Justice"),
+  ];
+  const team = (more: any) => [
+    unit("Owner", "1", 1),
+    unit("Priest", "2", 2, {
+      info: { pvpTalents: [] },
+      auraEvents: stun,
+      ...more,
+    }),
+    unit("Dead", "3", 2, { deathRecords: [{ timestamp: at(74_245) }] }),
+  ];
+  const checked = (more: any, free: string) =>
+    of(
+      scan(runCastThroughStun, team(more), [line(free)]),
+      "freeToPressBelowLog",
+    );
+
+  it("a school lockout is no free time (3035741a r2, Wind Shear)", () => {
+    const kick = {
+      timestamp: at(72_192),
+      spellId: "57994",
+      extraSpellId: "2061",
+      logLine: { event: LogEvent.SPELL_INTERRUPT, timestamp: at(72_192) },
+    };
+    expect(checked({ actionIn: [kick] }, "2.9")).toEqual([]);
+  });
+
+  it("a control the death ended has no REMOVED and still runs (b81efd46 r6, Polymorph)", () => {
+    const auraEvents = [
+      ...stun,
+      onUnit(APPLIED_ROW, 70_500, "118", "Polymorph"),
+    ];
+    expect(checked({ auraEvents }, "0.0")).toEqual([]);
+  });
+
+  it("a silence is no free time (4fb9ee24 r3, Garrote - Silence)", () => {
+    const auraEvents = [
+      ...stun,
+      onUnit(APPLIED_ROW, 72_000, "1330", "Garrote - Silence"),
+      onUnit(REMOVED_ROW, 75_000, "1330", "Garrote - Silence"),
+    ];
+    expect(checked({ auraEvents }, "0.0")).toEqual([]);
+  });
+
+  it("flags the stun counted against a spell that goes out through it (D21)", () => {
+    expect(checked({}, "0.0")).toHaveLength(1);
+  });
+});
+
+describe("ledgerProcImmunityMissing", () => {
+  const lines = ["  Burst #2 — 1:48–2:02 | x", "    Target: Holder 40%"];
+  const team = (auraEvents: any[]) => [unit("Holder", "1", 1, { auraEvents })];
+
+  it("an APPLIED whose REMOVED the log lost is not closed by the next proc's (12c701da r1)", () => {
+    const seen = scan(
+      runSpanFacts,
+      team([
+        onUnit(APPLIED_ROW, 32_198, "353319", "Peaceweaver"),
+        onUnit(APPLIED_ROW, 153_515, "353319", "Peaceweaver"),
+        onUnit(REMOVED_ROW, 155_536, "353319", "Peaceweaver"),
+      ]),
+      lines,
+    );
+    expect(of(seen, "ledgerProcImmunityMissing")).toEqual([]);
+  });
+
+  it("flags the proc on the burst's target, unnamed (D40)", () => {
+    const seen = scan(
+      runSpanFacts,
+      team([
+        onUnit(APPLIED_ROW, 110_000, "353319", "Peaceweaver"),
+        onUnit(REMOVED_ROW, 112_000, "353319", "Peaceweaver"),
+      ]),
+      lines,
+    );
+    expect(of(seen, "ledgerProcImmunityMissing")).toHaveLength(1);
   });
 });
