@@ -8,7 +8,9 @@ import {
 } from "../data/spellCategories";
 import {
   ccFullDurationSeconds,
+  effectiveCooldownSeconds,
   getEnglishSpellName,
+  spellEffectData,
 } from "../data/spellEffectData";
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import {
@@ -291,47 +293,86 @@ export function intervalBlocksSpell(
 }
 
 /**
- * The unit's own heals this round: the spells it pressed whose name is on one
- * of its heal or absorb rows (a press and its heal can differ in id: Penance
- * 47540 heals as 47750).
+ * The unit's own heals this round, with their presses: the spells it pressed
+ * whose name is on a heal or absorb row of its own that reached another unit
+ * (a press and its heal can differ in id: Penance 47540 heals as 47750).
+ *
+ * Two kinds of row are not a heal the lock left it (fact7 r6, codex 01-2, on
+ * the 1,884 interrupts of a healer in the 605 raw logs, of which 1,400 went
+ * here before and 696 now):
+ *  - one that only ever healed its caster: Healthstone, Frenzied Regeneration.
+ *    A healer who can heal itself can still not heal the mate (66 lockouts
+ *    erased by nothing else: Frenzied Regeneration 47, Healthstone 12);
+ *  - a triggered row: no silence bit and no cooldown of its own, so DB2 cannot
+ *    say a lock stops it, and nobody pressed it. Divine Hymn's tick 64844 logs
+ *    a SPELL_CAST_SUCCESS with the name of its heal: one Divine Hymn in a round
+ *    erased every other lockout of that priest (555 lockouts).
  */
-function pressedHealSpellIds(
-  unit: Pick<ICombatUnit, "spellCastEvents" | "healOut" | "absorbsOut">,
-): string[] {
+function pressedHeals(
+  unit: Pick<ICombatUnit, "id" | "spellCastEvents" | "healOut" | "absorbsOut">,
+): Map<string, number[]> {
   const healNames = new Set(
     [...(unit.healOut ?? []), ...(unit.absorbsOut ?? [])]
+      .filter((r) => r.destUnitId !== unit.id)
       .map((r) => getEnglishSpellName(r.spellId ?? "", ""))
       .filter((n) => n !== ""),
   );
-  const ids = new Set<string>();
-  for (const c of unit.spellCastEvents ?? [])
-    if (
-      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-      c.spellId &&
-      healNames.has(getEnglishSpellName(c.spellId, ""))
-    )
-      ids.add(c.spellId);
-  return [...ids];
+  const presses = new Map<string, number[]>();
+  for (const c of unit.spellCastEvents ?? []) {
+    const id = c.spellId;
+    if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !id) continue;
+    if (!healNames.has(getEnglishSpellName(id, ""))) continue;
+    if (isUnsilenceableCast(id) && effectiveCooldownSeconds(id) === undefined)
+      continue;
+    presses.set(id, [...(presses.get(id) ?? []), c.logLine.timestamp]);
+  }
+  return presses;
+}
+
+/**
+ * Was this single-charge heal spent for the whole of `iv`? A press before it
+ * whose DB2 cooldown outlasts it, and no press inside it (the press is the
+ * proof, whatever a talent took off the cooldown). A charge spell is not read:
+ * nothing here counts its charges. 51 lockouts of the 605 raw logs had only such
+ * a heal left (Rushing Wind Kick 43).
+ */
+function healSpentAcross(
+  spellId: string,
+  presses: readonly number[],
+  iv: Pick<NamedCannotCastInterval, "from" | "to">,
+): boolean {
+  const cd = effectiveCooldownSeconds(spellId);
+  if (cd === undefined || (spellEffectData[spellId]?.charges?.charges ?? 1) > 1)
+    return false;
+  if (presses.some((t) => t >= iv.from && t <= iv.to)) return false;
+  return presses.some((t) => t < iv.from && t + cd * 1000 >= iv.to);
 }
 
 /**
  * The intervals that stopped a healer from healing: all of `named` but a kick
  * lockout that leaves one of the heals the unit pressed this round
- * (`intervalBlocksSpell`). fact7 D1 (96fb4d42 1:55): Spell Lock on Mind Blast
- * locked Shadow alone, the priest went on to cast Penance, Power Word: Shield
- * and Radiance inside it, and death-setup read `lockedS=7.3`,
- * `freeBeforeDeathS=0`. Read by the two readers of the lock before a death:
- * death-setup's facts and the `[HEALER CC]` line.
+ * (`intervalBlocksSpell`) in hand across it (`healSpentAcross`). fact7 D1
+ * (96fb4d42 1:55): Spell Lock on Mind Blast locked Shadow alone, the priest
+ * went on to cast Penance, Power Word: Shield and Radiance inside it, and
+ * death-setup read `lockedS=7.3`, `freeBeforeDeathS=0`. Read by the two
+ * readers of the lock before a death: death-setup's facts and the
+ * `[HEALER CC]` line.
  */
 export function healerLockIntervals<
-  T extends Parameters<typeof intervalBlocksSpell>[0],
+  T extends Parameters<typeof intervalBlocksSpell>[0] &
+    Pick<NamedCannotCastInterval, "from" | "to">,
 >(
-  unit: Pick<ICombatUnit, "spellCastEvents" | "healOut" | "absorbsOut">,
+  unit: Pick<ICombatUnit, "id" | "spellCastEvents" | "healOut" | "absorbsOut">,
   named: readonly T[],
 ): T[] {
-  const heals = pressedHealSpellIds(unit);
+  const heals = [...pressedHeals(unit)];
   return named.filter(
-    (iv) => !iv.lockout || heals.every((id) => intervalBlocksSpell(iv, id)),
+    (iv) =>
+      !iv.lockout ||
+      heals.every(
+        ([id, presses]) =>
+          intervalBlocksSpell(iv, id) || healSpentAcross(id, presses, iv),
+      ),
   );
 }
 

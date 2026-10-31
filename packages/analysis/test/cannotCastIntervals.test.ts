@@ -545,7 +545,8 @@ describe("fact7 D1: a lockout that leaves a heal is no lock on the healer", () =
         logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: 1 },
       },
     ],
-    healOut: [{ spellId: healId }],
+    id: "priest",
+    healOut: [{ spellId: healId, destUnitId: "mate" }],
     absorbsOut: [],
   });
   const lock = (mask: number) => ({
@@ -569,5 +570,104 @@ describe("fact7 D1: a lockout that leaves a heal is no lock on the healer", () =
     expect(
       healerLockIntervals(priest("589", "47750"), [lock(SHADOW)]),
     ).toHaveLength(1);
+  });
+
+  const NATURE = 8;
+  const press = (spellId: string, timestamp: number) => ({
+    spellId,
+    logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp },
+  });
+  const healer = (
+    casts: ReadonlyArray<[string, number]>,
+    healOut: ReadonlyArray<{ spellId: string; destUnitId: string }>,
+  ): any => ({
+    id: "healer",
+    spellCastEvents: casts.map(([id, t]) => press(id, t)),
+    healOut,
+    absorbsOut: [],
+  });
+  const lockAt = (mask: number, from: number, to: number) => ({
+    from,
+    to,
+    spellId: "1766",
+    lockout: true,
+    lockedSchoolMask: mask,
+  });
+
+  it("Healthstone on the druid is no heal the Nature lock left it (codex 01-2)", () => {
+    const u = healer(
+      [
+        ["6262", 1_000],
+        ["8936", 2_000],
+      ],
+      [
+        { spellId: "6262", destUnitId: "healer" },
+        { spellId: "8936", destUnitId: "mate" },
+      ],
+    );
+    expect(
+      healerLockIntervals(u, [lockAt(NATURE, 10_000, 14_000)]),
+    ).toHaveLength(1);
+  });
+  it("Frenzied Regeneration only ever on the druid: the lock stays", () => {
+    const u = healer(
+      [
+        ["22842", 1_000],
+        ["8936", 2_000],
+      ],
+      [
+        { spellId: "22842", destUnitId: "healer" },
+        { spellId: "8936", destUnitId: "mate" },
+      ],
+    );
+    expect(
+      healerLockIntervals(u, [lockAt(NATURE, 100_000, 104_000)]),
+    ).toHaveLength(1);
+  });
+  it("Divine Hymn's tick row 64844 is no press: a Holy lock stays (555 lockouts of the 605 raw logs)", () => {
+    const u = healer(
+      [
+        ["2061", 1_000],
+        ["64843", 2_000],
+        ["64844", 2_100],
+      ],
+      [
+        { spellId: "2061", destUnitId: "mate" },
+        { spellId: "64844", destUnitId: "mate" },
+      ],
+    );
+    expect(healerLockIntervals(u, [lockAt(HOLY, 50_000, 54_000)])).toHaveLength(
+      1,
+    );
+  });
+  it("an unsilenceable heal with a cooldown of its own is a press: it leaves a heal while it is ready", () => {
+    const u = healer(
+      [["467307", 1_000]],
+      [{ spellId: "467307", destUnitId: "mate" }],
+    );
+    expect(
+      healerLockIntervals(u, [lockAt(NATURE, 100_000, 104_000)]),
+    ).toHaveLength(0);
+  });
+  it("... and is spent across a lockout inside its cooldown: the lock stays", () => {
+    const u = healer(
+      [["467307", 1_000]],
+      [{ spellId: "467307", destUnitId: "mate" }],
+    );
+    expect(healerLockIntervals(u, [lockAt(NATURE, 2_000, 6_000)])).toHaveLength(
+      1,
+    );
+  });
+  it("a press inside the lockout proves the heal was there, whatever the cooldown says", () => {
+    const u = healer(
+      [
+        ["467307", 1_000],
+        ["467307", 4_000],
+      ],
+      [{ spellId: "467307", destUnitId: "mate" }],
+    );
+    expect(healerLockIntervals(u, [lockAt(NATURE, 2_000, 6_000)])).toHaveLength(
+      0,
+    );
   });
 });
