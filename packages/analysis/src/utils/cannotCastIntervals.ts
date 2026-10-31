@@ -254,7 +254,7 @@ export function petCastersOf(
  * budget, cc-avoidable, [CD PRIOR], burst-window feasibility, the death
  * block's option tags — `cannotCastIntervalsForSpells`); a reader with no
  * single spell to ask about (healing gaps, HEALER OFFENSE free seconds,
- * death-setup healer-locked, `ccInWindowS`, [RES], CONSEQ) still takes a
+ * `ccInWindowS`, [RES], CONSEQ) still takes a
  * lockout as locking everything — predicate-index "Not yet unified".
  */
 export function intervalBlocksSpell(
@@ -284,6 +284,51 @@ export function intervalBlocksSpell(
   const m = spellSchoolMask(spellId);
   if (m === undefined || iv.lockedSchoolMask === undefined) return true;
   return schoolLockedBy(m, iv.lockedSchoolMask);
+}
+
+/**
+ * The unit's own heals this round: the spells it pressed whose name is on one
+ * of its heal or absorb rows (a press and its heal can differ in id: Penance
+ * 47540 heals as 47750).
+ */
+function pressedHealSpellIds(
+  unit: Pick<ICombatUnit, "spellCastEvents" | "healOut" | "absorbsOut">,
+): string[] {
+  const healNames = new Set(
+    [...(unit.healOut ?? []), ...(unit.absorbsOut ?? [])]
+      .map((r) => getEnglishSpellName(r.spellId ?? "", ""))
+      .filter((n) => n !== ""),
+  );
+  const ids = new Set<string>();
+  for (const c of unit.spellCastEvents ?? [])
+    if (
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      c.spellId &&
+      healNames.has(getEnglishSpellName(c.spellId, ""))
+    )
+      ids.add(c.spellId);
+  return [...ids];
+}
+
+/**
+ * The intervals that stopped a healer from healing: all of `named` but a kick
+ * lockout that leaves one of the heals the unit pressed this round
+ * (`intervalBlocksSpell`). fact7 D1 (96fb4d42 1:55): Spell Lock on Mind Blast
+ * locked Shadow alone, the priest went on to cast Penance, Power Word: Shield
+ * and Radiance inside it, and death-setup read `lockedS=7.3`,
+ * `freeBeforeDeathS=0`. Read by the two readers of the lock before a death:
+ * death-setup's facts and the `[HEALER CC]` line.
+ */
+export function healerLockIntervals<
+  T extends Parameters<typeof intervalBlocksSpell>[0],
+>(
+  unit: Pick<ICombatUnit, "spellCastEvents" | "healOut" | "absorbsOut">,
+  named: readonly T[],
+): T[] {
+  const heals = pressedHealSpellIds(unit);
+  return named.filter(
+    (iv) => !iv.lockout || heals.every((id) => intervalBlocksSpell(iv, id)),
+  );
 }
 
 /**
@@ -1256,7 +1301,7 @@ export function deathLockChainText<T extends { from: number }>(
  * Triage G5: death-setup `freeBeforeDeathS` (crisis-external F-D2) and the
  * `[DEFENSIVE AVAILABLE]` "free to press it for the last Ns before the death"
  * (cc-dr F-KS1) — one helper. The interval lists differ since FT-T10:
- * death-setup asks about any cast (every lockout counts), the
+ * death-setup asks about any heal (`healerLockIntervals`), the
  * `[DEFENSIVE AVAILABLE]` line about the spell it names (a lockout on another
  * school does not) — hence the line's "to press it".
  */

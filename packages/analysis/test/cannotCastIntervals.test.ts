@@ -6,6 +6,7 @@ import {
   castBlockingAuraIntervals,
   coveredMsWithin,
   deathLockChain,
+  healerLockIntervals,
   enemySourceIds,
   silenceIntervals,
 } from "../src/utils/cannotCastIntervals";
@@ -531,5 +532,42 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
     expect(buildCannotCastIntervals(unit, src)).toEqual([
       { from: 28_231, to: 29_596 },
     ]);
+  });
+});
+
+describe("fact7 D1: a lockout that leaves a heal is no lock on the healer", () => {
+  const SHADOW = 32;
+  const HOLY = 2;
+  const priest = (castId: string, healId: string): any => ({
+    spellCastEvents: [
+      {
+        spellId: castId,
+        logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: 1 },
+      },
+    ],
+    healOut: [{ spellId: healId }],
+    absorbsOut: [],
+  });
+  const lock = (mask: number) => ({
+    from: 0,
+    to: 5_000,
+    spellId: "19244",
+    lockout: true,
+    lockedSchoolMask: mask,
+  });
+  const stun = { from: 0, to: 3_000, spellId: "853", lockout: false };
+
+  it("Shadow locked, Penance (47540, heals as 47750) still castable: the lockout drops, a stun stays", () => {
+    const u = priest("47540", "47750");
+    expect(healerLockIntervals(u, [lock(SHADOW), stun])).toEqual([stun]);
+  });
+  it("the heals' own school locked: it stays", () => {
+    const u = priest("47540", "47750");
+    expect(healerLockIntervals(u, [lock(HOLY)])).toHaveLength(1);
+  });
+  it("no heal pressed this round: nothing says it left one", () => {
+    expect(
+      healerLockIntervals(priest("589", "47750"), [lock(SHADOW)]),
+    ).toHaveLength(1);
   });
 });

@@ -57,7 +57,7 @@ const aura = (
   destUnitName: dest,
 });
 
-describe("2a — hit by the burst: landed damage or an IMMUNE miss", () => {
+describe("2a — hit by the burst: landed or absorbed damage, or an IMMUNE miss", () => {
   const hit = (sec: number, src: string, amount: number) => ({
     timestamp: S(sec),
     srcUnitId: src,
@@ -85,6 +85,27 @@ describe("2a — hit by the burst: landed damage or an IMMUNE miss", () => {
     expect(hitByAttackers(iceBlocked, [war], fromWar, S(10), S(20))).toBe(true);
     // hit only by someone else
     expect(hitByAttackers(lock, [war], fromWar, S(10), S(20))).toBe(false);
+  });
+
+  it("fact7 D58: a hit a shield ate wholly is a hit", () => {
+    const shielded = {
+      id: "mage",
+      name: "Mage",
+      damageIn: [],
+      absorbsIn: [
+        {
+          attackerId: "war",
+          absorbedAmount: 194,
+          timestamp: S(12),
+          logLine: { timestamp: S(12) },
+        },
+      ],
+    };
+    expect(damageTakenBetween(shielded, S(10), S(20), fromWar)).toBe(194);
+    expect(hitByAttackers(shielded, [war], fromWar, S(10), S(20))).toBe(true);
+    // the shield's owner is no attacker: only `attackerId` decides
+    const fromLock = (src: string) => src === "lock";
+    expect(hitByAttackers(shielded, [], fromLock, S(10), S(20))).toBe(false);
   });
 
   it("mostPressuredInSpan with the burst filter: the most-hit friendly the burst's casters reached", () => {

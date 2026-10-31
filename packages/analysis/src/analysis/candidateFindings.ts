@@ -49,6 +49,7 @@ import {
   actWindowFor,
   cannotCastIntervalsForSpells,
   enemySourceIds,
+  healerLockIntervals,
   namedCannotCastIntervals,
   stunLetsPress,
 } from "../utils/cannotCastIntervals";
@@ -4685,10 +4686,13 @@ function extractDeathSetups(
             healerName: healer.name,
             ccInstances: healerSummary.ccInstances,
             // triage G5: the lock chain / free time facts (death.ts)
-            cannotCast: namedCannotCastIntervals(
+            cannotCast: healerLockIntervals(
               healer,
-              enemySourceIds(enemies, units),
-              units,
+              namedCannotCastIntervals(
+                healer,
+                enemySourceIds(enemies, units),
+                units,
+              ),
             ),
             roots: healerSummary.rootInstances,
             matchStartMs: start,

@@ -8,26 +8,33 @@
  * one the burst's casters hit — 4 same-burst disagreements on the 60
  * re-eval prompts.
  *
- * Hit = landed damage > 0 from them, or a SPELL_MISSED IMMUNE they logged on
- * the unit (an immunity pressed at the opening is still the answer to it —
- * user 2026-10-14, G6 option B).
+ * Hit = damage > 0 from them, landed or absorbed (`incomingPressureEvents`;
+ * fact7 D58: a burst whose hits a barrier ate read as no hit, and POSITIONING
+ * named the teammate beside the mage who was taking it — user ruling R7:
+ * absorbed damage is burst), or a SPELL_MISSED IMMUNE they logged on the unit
+ * (an immunity pressed at the opening is still the answer to it — user
+ * 2026-10-14, G6 option B).
  */
+import { incomingPressureEvents } from "./incomingPressure";
+import type { RosterSides } from "./rosterSide";
 
-/** Landed damage `unit` took in [fromMs, toMs] (both ends included), from
- * the sources `fromSource` admits (all when omitted). */
+/** Damage `unit` took in [fromMs, toMs] (both ends included), landed or
+ * absorbed, from the sources `fromSource` admits (all when omitted). */
 export function damageTakenBetween(
   unit: any,
   fromMs: number,
   toMs: number,
   fromSource?: (srcUnitId: string) => boolean,
+  sides?: RosterSides,
 ): number {
-  return ((unit.damageIn ?? []) as any[])
-    .filter((d) => {
-      const ts = d.timestamp ?? d.logLine?.timestamp;
-      if (fromSource && !(d.srcUnitId && fromSource(d.srcUnitId))) return false;
-      return ts != null && ts >= fromMs && ts <= toMs;
-    })
-    .reduce((n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0), 0);
+  return incomingPressureEvents(unit, sides)
+    .filter(
+      (e) =>
+        e.timestamp >= fromMs &&
+        e.timestamp <= toMs &&
+        (!fromSource || (e.srcUnitId !== "" && fromSource(e.srcUnitId))),
+    )
+    .reduce((n, e) => n + e.amount, 0);
 }
 
 /** The unit ids an attacker `fromSource` admits logged an IMMUNE miss on in
@@ -73,8 +80,8 @@ export function hitByAttackers(
  * CONTROL an answer to an enemy burst. The control's target — the unit an
  * aimed control was cast at, or the holder a ground / untargeted control
  * landed on (`BurstResponseCast.destId`) — or that target's pets / summons
- * must have dealt landed damage > 0 to the PRESSURED friendly inside the
- * burst window [fromMs, toMs] (the engine's `tMs` … `outcomeLastMs`, the span
+ * must have dealt damage > 0, landed or absorbed, to the PRESSURED friendly
+ * inside the burst window [fromMs, toMs] (the engine's `tMs` … `outcomeLastMs`, the span
  * and amounts `damageTakenBetween` reads for the window itself). No
  * threshold: one point of damage is "was hitting them".
  *

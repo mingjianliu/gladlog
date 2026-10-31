@@ -55,6 +55,8 @@ const MODULE_FILES = [
   "overheal",
   "controlCooldown",
   "pressEffect",
+  "burstTarget",
+  "lockoutHeal",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];
