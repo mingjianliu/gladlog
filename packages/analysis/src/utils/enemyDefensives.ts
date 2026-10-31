@@ -32,7 +32,7 @@ import {
   riderCastsOfShield,
   riderStandsForUnloggedPress,
 } from "../data/ownShieldLinks";
-import { getEnglishSpellName } from "../data/spellEffectData";
+import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import spellIdListsData, {
   ENEMY_ALLY_SAVE_IDS,
   ENEMY_AREA_SAVE_IDS,
@@ -72,6 +72,7 @@ import {
   type SelfDefensiveMechanism,
   selfDefensiveMechanism,
 } from "./selfDefensiveMechanism";
+import { ccMechanicOf } from "./spellMechanics";
 import { TALENT_BEHAVIORS } from "./talentBehaviors";
 
 const ALL_SCHOOLS = 0x7f;
@@ -355,12 +356,15 @@ export function untargetableEndS(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
   iv: { spellId?: string; fromS: number; toS: number; inferredEnd?: boolean },
   matchStartMs: number,
+  /** the round's units (`holderFirstOwnActionAfterMs`'s stealth opener) */
+  units?: readonly ICombatUnit[],
 ): number {
   if (!iv.inferredEnd) return iv.toS;
   const first = holderFirstOwnActionAfterMs(
     holder,
     matchStartMs + iv.fromS * 1000,
     iv.spellId,
+    units,
   );
   return Math.min(iv.toS, (first - matchStartMs) / 1000);
 }
@@ -378,12 +382,17 @@ export function untargetableEndS(
  * `AURA_BEFORE_CAST_ROW_MAX_MS` after it (the measured aura-before-cast lag:
  * a Greater Invisibility 110960 whose 110959 row came 120 ms later ended at
  * its own press — found by the log-shape matrix, castRowLag).
+ *
+ * With `units`, also a debuff the holder put on another unit
+ * (`holderOpenerDebuffAfterMs`): an unseen unit's cast row is not always
+ * written, and its opener then shows only as the aura it landed (fact7 D59).
  */
 export function holderFirstOwnActionAfterMs(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut"> &
     Partial<Pick<ICombatUnit, "missesOut">>,
   afterMs: number,
   auraId?: string,
+  units?: readonly ICombatUnit[],
 ): number {
   const ownPress = auraId
     ? new Set([auraId, ...castsOfEffectAura(auraId)])
@@ -434,6 +443,60 @@ export function holderFirstOwnActionAfterMs(
       continue;
     const t = d.logLine.timestamp;
     if (t > afterMs && t < first) first = t;
+  }
+  return units
+    ? holderOpenerDebuffAfterMs(holder, afterMs, first, units)
+    : first;
+}
+
+/**
+ * The first debuff the holder landed on another unit after `afterMs` that
+ * says it acted, if that comes before `firstMs`; else `firstMs`. fact7 D59
+ * (4f8a5947 0:26): a Vanish at 25.934, Cheap Shot's aura on the target at
+ * 26.404 with no cast row of the rogue's, and the burst ledger read the
+ * Vanish as up for its full 1.5 s. 15 rounds, 30 auras with no end row: 10
+ * first show their holder through such a row (Cheap Shot, Garrote, Garrote -
+ * Silence, Frost Nova, Dragon's Breath).
+ *
+ * What counts: a debuff with a DB2 mechanic (`ccMechanicOf`) — a passive's
+ * rows have none (Ignite, a Rune of Reverberation rider: both land through
+ * an invisibility). What does not: a row a standing effect of an earlier
+ * press wrote, within that press's official length (Ring of Frost, Smoke
+ * Bomb: an enemy walked in).
+ */
+function holderOpenerDebuffAfterMs(
+  holder: Pick<ICombatUnit, "id" | "spellCastEvents">,
+  afterMs: number,
+  firstMs: number,
+  units: readonly ICombatUnit[],
+): number {
+  let first = firstMs;
+  for (const u of units) {
+    if (u.id === holder.id) continue;
+    for (const a of u.auraEvents ?? []) {
+      const t = a.logLine.timestamp;
+      if (!(t > afterMs && t < first)) continue;
+      if (
+        a.logLine.event !== LogEvent.SPELL_AURA_APPLIED ||
+        a.srcUnitId !== holder.id ||
+        a.auraType !== "DEBUFF" ||
+        !a.spellId ||
+        ccMechanicOf(a.spellId) === undefined
+      )
+        continue;
+      const pressIds = new Set([a.spellId, ...castsOfEffectAura(a.spellId)]);
+      const standing = (holder.spellCastEvents ?? []).some(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          !!c.spellId &&
+          pressIds.has(c.spellId) &&
+          c.logLine.timestamp <= afterMs &&
+          c.logLine.timestamp +
+            (spellEffectData[c.spellId]?.durationSeconds ?? 0) * 1000 >=
+            t,
+      );
+      if (!standing) first = t;
+    }
   }
   return first;
 }
@@ -2021,6 +2084,8 @@ export function enemyDefensiveEvents(
         {
           fromMs: Math.round(combat.startTime + iv.fromS * 1000),
           removedMs: endMs,
+          naturalEndMs:
+            Math.round(combat.startTime + iv.fromS * 1000) + full * 1000,
         },
         iv.srcUnitId,
       );

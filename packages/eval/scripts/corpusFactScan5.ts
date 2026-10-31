@@ -57,6 +57,7 @@ const MODULE_FILES = [
   "pressEffect",
   "burstTarget",
   "lockoutHeal",
+  "effectEnd",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

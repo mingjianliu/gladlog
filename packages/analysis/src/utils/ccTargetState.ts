@@ -277,7 +277,12 @@ export function ccTargetBlockerIntervals(
           .filter((iv) => KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
           .map((iv) => ({
             ...iv,
-            toS: untargetableEndS(target, iv, combat.startTime),
+            toS: untargetableEndS(
+              target,
+              iv,
+              combat.startTime,
+              Object.values(combat.units ?? {}),
+            ),
           })),
       )
   );
@@ -423,9 +428,7 @@ export function ccSamplerFor(params: {
       const geo = ccReachAt(owner, target, reach, zone, ms);
       if (!geo.ok) return { ok: false, reason: geo.reason };
       const dist = geo.distanceYards;
-      const dr = catKnown
-        ? drLevelNextAt(f.drHistory, ms)
-        : "n/a";
+      const dr = catKnown ? drLevelNextAt(f.drHistory, ms) : "n/a";
       if (dr === "Immune") return { ok: false, reason: "dr-immune" };
       if (
         f.tools.some((id) =>

@@ -17,7 +17,10 @@ import {
   ownerPressesRejectedDuring,
 } from "../src/context/controlRejectedPresses";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { tickEndedChannelSpans } from "../src/utils/castCommitSpans";
+import {
+  channelEndSeconds,
+  tickEndedChannelSpans,
+} from "../src/utils/castCommitSpans";
 import {
   ccEndedByCasterInterrupt,
   formatCcLoggedEnd,
@@ -255,5 +258,35 @@ describe("R9 — a channelled control ended by a kick on its caster", () => {
         { actionIn: [] } as any,
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("fact7 D12 — a channel ends at the press that ended it, not with its aura", () => {
+  const T0 = 1_000_000;
+  const row = (spellId: string, atS: number) =>
+    ({
+      spellId,
+      timestamp: T0 + atS * 1000,
+      logLine: { event: "SPELL_CAST_SUCCESS", timestamp: T0 + atS * 1000 },
+    }) as never;
+  it("07367f6e 0:40: Ultimate Penitence's aura ran 6.5 s, Penance went off 5.93 s in", () => {
+    const unit = {
+      spellCastEvents: [row("421453", 34.874), row("47540", 40.803)],
+    };
+    expect(channelEndSeconds(unit, "421453", 34.874, 41.374, T0)).toBeCloseTo(
+      40.803,
+      3,
+    );
+  });
+  it("no press after it: the aura's end", () => {
+    expect(
+      channelEndSeconds(
+        { spellCastEvents: [row("421453", 34.874)] },
+        "421453",
+        34.874,
+        41.374,
+        T0,
+      ),
+    ).toBe(41.374);
   });
 });

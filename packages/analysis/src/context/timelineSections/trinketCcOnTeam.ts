@@ -22,6 +22,7 @@ import {
   ccAvoidedRecastTag,
   ccEndedByCasterInterrupt,
   ccEndedByImmunityAura,
+  ccEndedBySanctuary,
   ccEndedByOwnPress,
   ccLoggedEnd,
   ccUnloggedEarlyEnd,
@@ -97,6 +98,8 @@ export function emitTrinketCcOnTeamEntries(
       ? undefined
       : ((allUnits ?? []).find((u) => u.id === id) ??
         (enemies ?? []).find((e) => e.id === id));
+  // the units `[CC REMOVED]`'s Sanctuary pairing reads
+  const sanctuaryUnits = allUnits ?? [...friends, ...(enemies ?? [])];
   // threaded: read from ctx, returned to the caller (GH #116)
   let { disarmLineCount, trinketLastUsedCount, silenceLineCount } = ctx;
 
@@ -290,7 +293,9 @@ export function emitTrinketCcOnTeamEntries(
             ) ??
             // …or a control immunity that went up on them in the removal's
             // millisecond (a Slayer's Bladestorm: no press to read)
-            ccEndedByImmunityAura(ccdUnit, cc, matchStartMs))
+            ccEndedByImmunityAura(ccdUnit, cc, matchStartMs) ??
+            // …or an ally's Blessing of Sanctuary (the `[CC REMOVED]` pairing)
+            ccEndedBySanctuary(ccdUnit, cc, matchStartMs, sanctuaryUnits))
           : undefined;
       // F06b / F08: gone within half a second with nothing in the log to
       // say why — said, not left as a bare `<1s` (`ccUnloggedEarlyEnd`)

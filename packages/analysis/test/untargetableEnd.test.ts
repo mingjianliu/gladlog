@@ -1,7 +1,12 @@
 import { LogEvent } from "@gladlog/parser-compat";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
+import { ensureAnalysisData } from "../src/data/ensure";
 import { untargetableEndS } from "../src/utils/enemyDefensives";
+
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
 // weekly review 2026-10-24: the unseen-end reading ended a Mass Invisibility
 // at the holder's pet hit or DoT tick (parser-compat folds pet damage into
@@ -41,7 +46,10 @@ describe("untargetableEndS — the holder's own action ends an unseen end", () =
         srcUnitId: "e1",
         spellId: "367364",
         ...(attackSpellId ? { attackSpellId } : {}),
-        logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: START + atS * 1000 },
+        logLine: {
+          event: LogEvent.SPELL_ABSORBED,
+          timestamp: START + atS * 1000,
+        },
       }) as never;
     const tick = {
       srcUnitId: "e1",
@@ -75,5 +83,40 @@ describe("untargetableEndS — the holder's own action ends an unseen end", () =
         START,
       ),
     ).toBe(17);
+  });
+});
+
+describe("fact7 D59 — an opener whose cast row the log lost", () => {
+  const debuff = (spellId: string, atS: number, src = "e1") =>
+    ({
+      spellId,
+      srcUnitId: src,
+      auraType: "DEBUFF",
+      logLine: {
+        event: LogEvent.SPELL_AURA_APPLIED,
+        timestamp: START + atS * 1000,
+      },
+    }) as never;
+  const CHEAP_SHOT = "1833";
+  const IGNITE = "12654";
+  const victim = (auraEvents: never[]) => ({ id: "t1", auraEvents }) as never;
+  const vanish = { fromS: 5, toS: 6.5, inferredEnd: true };
+
+  it("4f8a5947 0:26: Cheap Shot's aura on the target ends the Vanish (a mechanic of its own)", () => {
+    expect(
+      untargetableEndS(mage([]), vanish, START, [
+        victim([debuff(CHEAP_SHOT, 5.47)]),
+      ]),
+    ).toBeCloseTo(5.47, 3);
+  });
+  it("a passive's rider has no mechanic and ends nothing; nor does another unit's control", () => {
+    expect(
+      untargetableEndS(mage([]), vanish, START, [
+        victim([debuff(IGNITE, 5.47), debuff(CHEAP_SHOT, 5.47, "e2")]),
+      ]),
+    ).toBe(6.5);
+  });
+  it("without the round's units the reading is what it was", () => {
+    expect(untargetableEndS(mage([]), vanish, START)).toBe(6.5);
   });
 });

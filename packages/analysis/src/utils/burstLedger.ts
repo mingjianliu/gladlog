@@ -478,7 +478,12 @@ export function analyzeBurstLedger(
           iv.inferredEnd && SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)
             ? Math.min(
                 iv.endMs,
-                holderFirstOwnActionAfterMs(target, iv.startMs, iv.spellId),
+                holderFirstOwnActionAfterMs(
+                  target,
+                  iv.startMs,
+                  iv.spellId,
+                  Object.values(combat.units ?? {}),
+                ),
               )
             : iv.endMs;
         const overlapMs = Math.min(endMs, toMs) - Math.max(iv.startMs, fromMs);

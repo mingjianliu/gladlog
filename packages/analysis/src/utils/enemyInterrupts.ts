@@ -9,6 +9,7 @@ import {
 } from "../data/talentScriptedCooldowns";
 import { castBlockingAuraAt, enemySourceIds } from "./cannotCastIntervals";
 import {
+  CD_INSTANT_SLACK_S,
   chargeStateAt,
   playerTalentIdSets,
   specToString,
@@ -169,13 +170,33 @@ export function interruptPressCooldownSeconds(
       (aimedAt === undefined || a.destUnitId === aimedAt) &&
       Math.abs(a.logLine.timestamp - pressMs) <= LANDED_PAIR_MS,
   );
-  if (!landed) return cooldownSeconds;
   const sets = playerTalentIdSets(unit);
   const back = onInterruptReductionFor(
     kickId,
     (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
   );
-  return Math.max(0, cooldownSeconds - back);
+  if (landed) return Math.max(0, cooldownSeconds - back);
+  // …or the unit's own next press proves the talent paid: Light of the Sun
+  // refunds on an interrupt the log can leave unwritten (fact7 D28, 163de8f1
+  // 1:26: `your Solar Beam — hit nothing`, no SPELL_INTERRUPT, the next press
+  // 48.6 s later on a 60 s cooldown, where the [RES] rows read 55 s and 29 s
+  // past it). The refund is shortened on evidence, as above: only when no
+  // longer cooldown fits that gap, and never below the talent's own number.
+  if (back <= 0) return cooldownSeconds;
+  const nextPressMs = [
+    ...unit.spellCastEvents,
+    ...(unit.petSpellCastEvents ?? []),
+  ]
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        kickCastSpellId(e.spellId ?? "") === kickId &&
+        e.logLine.timestamp > pressMs + PRESS_ROW_PAIR_MS,
+    )
+    .reduce((lo, e) => Math.min(lo, e.logLine.timestamp), Infinity);
+  return (nextPressMs - pressMs) / 1000 < cooldownSeconds - CD_INSTANT_SLACK_S
+    ? Math.max(0, cooldownSeconds - back)
+    : cooldownSeconds;
 }
 /** Two SPELL_CAST_SUCCESS rows of one press sit this close (Skull Bash logs
  * its cast and effect ids a millisecond apart). */

@@ -35,7 +35,11 @@ import {
 import { pressRowsWithHidden } from "./hiddenPress";
 import { fmtTime } from "./renderGrid";
 import { shuffleRoundEndMs } from "./roundEnd";
-import { DEATH_CASCADE_MS, firstDeathMs } from "./unitDeath";
+import {
+  AURA_NATURAL_END_JITTER_S,
+  DEATH_CASCADE_MS,
+  firstDeathMs,
+} from "./unitDeath";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -458,13 +462,6 @@ function observedEffectEnd(
  * time left (121afd91 r6 1:55: `Dark Transformation (5s left)` counted down
  * to a death 5 s later). Undefined otherwise.
  */
-/** Editorial, not measured: a natural expiry is logged on its official
- * end, so a gap this small is timer jitter, not a cut — and small enough
- * that a cut it drops cannot move a rounded "(Ns left)" by more than the
- * jitter itself (codex 20-G167-11 #2: 0.5 s dropped a 0.3 s cut that
- * moved the number). */
-const DEATH_CUT_MIN_GAP_S = 0.1;
-
 function deathCutOfficialEnd(
   holder: ICombatUnit | undefined,
   endS: number,
@@ -473,8 +470,8 @@ function deathCutOfficialEnd(
 ): number | undefined {
   // the official end is read from the aura's own application (a press
   // logged after its aura, codex 20-G167-06 #3, is no cut); less than
-  // DEATH_CUT_MIN_GAP_S short is jitter
-  if (!(officialEndS - endS > DEATH_CUT_MIN_GAP_S)) return undefined;
+  // AURA_NATURAL_END_JITTER_S short is jitter
+  if (!(officialEndS - endS > AURA_NATURAL_END_JITTER_S)) return undefined;
   const endMs = combat.startTime + endS * 1000;
   const near = (ms: number | undefined) =>
     ms !== undefined && Math.abs(ms - endMs) <= DEATH_CASCADE_MS;

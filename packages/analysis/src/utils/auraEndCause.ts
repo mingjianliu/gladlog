@@ -3,7 +3,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { AURA_REBROADCAST_GAP_MS, dropAuraRebroadcasts } from "./auraIntervals";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
-import { DEATH_CASCADE_MS } from "./unitDeath";
+import { removedByDeath } from "./unitDeath";
 
 // `DEATH_CASCADE_MS` lives in the leaf `unitDeath.ts` (cooldowns.ts reads it
 // too, and this module sits downstream of cooldowns.ts through
@@ -25,7 +25,8 @@ export interface IAuraEndFromLog {
    * sources' copies came off together, fewer take lines than removals or
    * different takers). Never set together with `takenBy`. */
   takeUnclear?: true;
-  /** The holder died within `DEATH_CASCADE_MS` after the removal. */
+  /** The holder died within `DEATH_CASCADE_MS` after the removal, and the
+   * removal was not the aura's natural end (`removedByDeath`). */
   holderDied: boolean;
   /**
    * What this application absorbed: the sum of the SPELL_ABSORBED lines that
@@ -186,7 +187,14 @@ export function auraEndFromLog(
   holder: Pick<ICombatUnit, "auraEvents"> &
     Partial<Pick<ICombatUnit, "actionIn" | "deathRecords" | "absorbsIn">>,
   spellId: string,
-  span: { fromMs: number; removedMs: number },
+  span: {
+    fromMs: number;
+    removedMs: number;
+    /** where this application was due to end, when the caller knows: a
+     * removal on it is the aura's own end, not its holder's death
+     * (`removedByDeath`) */
+    naturalEndMs?: number;
+  },
   srcUnitId?: string,
 ): IAuraEndFromLog {
   const { fromMs, removedMs } = span;
@@ -331,10 +339,11 @@ export function auraEndFromLog(
     (taken.some((t) => t !== undefined) ||
       oursRemoved.some((r) => pairing.unclear.has(r)));
 
-  const holderDied = (holder.deathRecords ?? []).some((d) => {
-    const gap = (d.timestamp as number) - removedMs;
-    return gap >= 0 && gap <= DEATH_CASCADE_MS;
-  });
+  const holderDied = removedByDeath(
+    (holder.deathRecords ?? []).map((d) => d.timestamp as number),
+    removedMs,
+    span.naturalEndMs,
+  );
 
   return {
     ...(takenBy ? { takenBy } : {}),

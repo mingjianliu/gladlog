@@ -57,8 +57,9 @@
  *    an F at f ≥ B with no L in [T, f];
  *  - `ON CD overstated` — an S at T+1 ≤ s < T+N−1 (B for HEALER EXPOSURE);
  *  - `racial …` — the same three on the racial evidence.
- * Not read: the KILL ATTEMPTS tier (`trinket up` / PRIME) — enemy, and by
- * user ruling P-b7 (2026-10-01) it deliberately ignores the racial lock;
+ * Not read here: the KILL ATTEMPTS tier (`trinket up` / PRIME) — enemy, and
+ * by user ruling P-b7 (2026-10-01) it deliberately ignores the racial lock,
+ * which `killTrinketUpLocked` below measures, out of the total;
  * `PvP trinket on cooldown` (PEEL / BOOKMARK) — no row can show an enemy's
  * trinket was ready at an instant without pressing it. Fact identity =
  * unit, printed second, reader, test: one per falsified line, the same in
@@ -72,9 +73,17 @@
  * (`success while model ON CD`), an F while the model says ready
  * (`refusal while model ready`). It audits the predicate itself, including
  * the lock lengths no rendered line happens to sit on; once per round.
+ *
+ * Check `killTrinketUpLocked` (fact7 D17 / D43; measured only, out of the
+ * total until the user reads it against P-b7): a KILL ATTEMPTS line printing
+ * `opportunity: trinket up` on a unit whose category-1166 racial press lies
+ * before the attempt's printed start, inside `racialTrinketLockoutMs`. The
+ * tier is the ruling's; the two words printed beside it are what the audit
+ * read as false. Kind = the racial.
  */
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import { OTHER_REFUSAL_REASONS } from "@gladlog/analysis/src/context/spellOutcomeLines";
+import { racialTrinketLockoutMs } from "@gladlog/analysis/src/data/racialAbilities";
 import {
   analyzePlayerCCAndTrinket,
   pvpTrinketRemainingSecondsAt,
@@ -83,8 +92,16 @@ import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 
 import { APPLIED, ev, fmtS, type IRoundCtx, successesOf, tsOf } from "./ctx";
 
-export const CHECKS = ["trinketReadyVsPress", "trinketPressVsModel"] as const;
+export const CHECKS = [
+  "trinketReadyVsPress",
+  "trinketPressVsModel",
+  "killTrinketUpLocked",
+] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "killTrinketUpLocked|Will to Survive",
+  "killTrinketUpLocked|Will of the Forsaken",
+  "killTrinketUpLocked|Stoneform",
+  "killTrinketUpLocked|Fireblood",
   "trinketPressVsModel|refusal while model ready",
   "trinketPressVsModel|success while model ON CD",
 ]);
@@ -203,7 +220,41 @@ const fmtMs = (ctx: IRoundCtx, t: number) => {
 
 export function run(ctx: IRoundCtx): void {
   claims(ctx);
+  killTierClaims(ctx);
   if (ctx.firstOwnerOfRound) pressVsModel(ctx);
+}
+
+const KILL_TRINKET_UP =
+  /^\s*\[(\d+):(\d{2})–\d+:\d{2}\] on (\S+?) — .*\| opportunity: trinket up\b/;
+
+function killTierClaims(ctx: IRoundCtx): void {
+  const C = "killTrinketUpLocked";
+  for (const line of ctx.lines) {
+    const m = KILL_TRINKET_UP.exec(line);
+    if (!m) continue;
+    const u = ctx.players.find((p) => p.name === m[3]);
+    if (!u) continue;
+    ctx.bump(C);
+    const T = ctx.start + (Number(m[1]) * 60 + Number(m[2])) * 1000;
+    const { Sr, S } = evidenceOf(ctx, u);
+    const healer = isHealerSpec(u.spec);
+    for (const [id, presses] of Sr) {
+      const name = Object.keys(RACIAL_BY_NAME).find(
+        (n) => RACIAL_BY_NAME[n] === id,
+      )!;
+      const lock = racialTrinketLockoutMs(id, healer);
+      const p = presses.filter((t) => t < T && T < t + lock).pop();
+      if (p === undefined || S.some((s) => s > p && s < T)) continue;
+      ctx.violate(
+        C,
+        name,
+        T,
+        `${u.name}#${m[1]}:${m[2]}`,
+        `${name} at ${fmtMs(ctx, p)} locks the trinket ${lock / 1000}s`,
+        line,
+      );
+    }
+  }
 }
 
 function claims(ctx: IRoundCtx): void {

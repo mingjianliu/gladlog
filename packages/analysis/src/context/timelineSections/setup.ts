@@ -831,6 +831,11 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       immunityName =
         ccAvoidanceBuffsUpAt(target, miss.timestamp, {
           atLine: miss.logLine.lineIndex,
+          // a shapeshifted druid is immune to Polymorph / Hex (DB2 aura 77,
+          // mechanic 17 on all four forms; fact7 `immuneCauseUnnamed`:
+          // ba5e59c6 2:07, a Polymorph IMMUNE on a Cat Form feral); the
+          // applicability below keeps them to those two controls
+          withForms: true,
           casterOf: (id) =>
             allUnits?.find((u) => u.id === id) ??
             allPlayers.find((u) => u.id === id),
@@ -1313,7 +1318,11 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
             continue;
           const at = cast ?? m;
           if (
-            cmd.isCommandRow(at.spellId!, at.timestamp, cast ? 0 : PET_COMMAND_MS)
+            cmd.isCommandRow(
+              at.spellId!,
+              at.timestamp,
+              cast ? 0 : PET_COMMAND_MS,
+            )
           )
             shown = cmd.commandPet(name) ?? caster;
         }

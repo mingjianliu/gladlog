@@ -25,6 +25,7 @@ import {
   CC_FROM_OWN_TEAM_TAG,
   ccEndedByCasterInterrupt,
   ccEndedByImmunityAura,
+  ccEndedBySanctuary,
   ccEndedByOwnPress,
   ccLoggedEnd,
   ccUnloggedEarlyEnd,
@@ -88,6 +89,8 @@ export function emitCcOnEnemyEntries(
     enemyCcDrTag,
     rosterSides,
   } = ctx;
+  // the units `[CC REMOVED]`'s Sanctuary pairing reads
+  const sanctuaryUnits = allUnits ?? [...friends, ...(enemies ?? [])];
   // threaded: read from ctx, returned to the caller (GH #116)
   let { enemyTrinketCount, silenceLineCount } = ctx;
 
@@ -374,7 +377,14 @@ export function emitCcOnEnemyEntries(
                       ) ??
                       // …or a control immunity that went up on them in the
                       // removal's millisecond (a Slayer's Bladestorm: no press)
-                      ccEndedByImmunityAura(enemyUnit, cc, matchStartMs)),
+                      ccEndedByImmunityAura(enemyUnit, cc, matchStartMs) ??
+                      // …or an ally's Blessing of Sanctuary
+                      ccEndedBySanctuary(
+                        enemyUnit,
+                        cc,
+                        matchStartMs,
+                        sanctuaryUnits,
+                      )),
                 (name, id) => {
                   // a player is labelled by the roster's name for that id —
                   // the log can spell one player two ways (138e632d)

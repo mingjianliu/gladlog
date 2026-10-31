@@ -15,12 +15,17 @@ import {
   CC_END_CAUSE_NOT_LOGGED,
   CC_LOGGED_END_NOTE_RE_SRC,
   ccEndedByImmunityAura,
+  ccEndedBySanctuary,
   ccUnloggedEarlyEnd,
   formatCcLoggedEnd,
   formatCcRemovalCause,
   formatCcUnloggedEnd,
 } from "../src/utils/ccTrinketAnalysis";
-import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
+import {
+  makeAuraEvent,
+  makeSpellCastEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 const T0 = 1_700_000_000_000;
 const FEAR = "5782";
@@ -280,5 +285,58 @@ describe("formatCcRemovalCause — a damage break names the breaking hit as that
       "p1",
     );
     expect(withComma).not.toContain(", ");
+  });
+});
+
+describe("fact7 — a control that ran its length; a Sanctuary is a logged end", () => {
+  it("D38 (9121b496 1:37): a 1 s Gnaw at 50 % DR gone in 0.485 s ran its length, whatever `<1s` reads", () => {
+    const holder = holderWith(20.485);
+    expect(
+      ccUnloggedEarlyEnd(
+        holder,
+        cc(0.485, { expectedDurationSeconds: 0.5 }),
+        T0,
+      ),
+    ).toBeUndefined();
+    // control: the same row against a full 6 s stays an early end
+    expect(ccUnloggedEarlyEnd(holder, cc(0.485), T0)).toBeDefined();
+  });
+
+  it("D3 (96fb4d42 1:40): the Fear a Blessing of Sanctuary took off names it, on the [CC REMOVED] pairing", () => {
+    const paladin = makeUnit("friend-2", {
+      name: "Paladin",
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "210256",
+          T0 + 20_400,
+          "player-1",
+          "Holder",
+          "friend-2",
+          "Paladin",
+          0,
+          "Blessing of Sanctuary",
+        ),
+      ],
+    }) as ICombatUnit;
+    const holder = holderWith(20.41);
+    holder.auraEvents = [
+      ...holder.auraEvents,
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        "210256",
+        T0 + 20_400,
+        "friend-2",
+      ),
+    ].sort((a, b) => a.timestamp - b.timestamp) as never;
+    const units = [holder, paladin];
+    expect(ccEndedBySanctuary(holder, cc(0.41), T0, units)).toMatchObject({
+      kind: "immunity",
+      byName: "Paladin",
+      spellName: "Blessing of Sanctuary",
+    });
+    // another instance of the same control is not that removal
+    expect(ccEndedBySanctuary(holder, cc(0.9), T0, units)).toBeUndefined();
+    // no Sanctuary press in the round: nothing to name
+    expect(ccEndedBySanctuary(holder, cc(0.41), T0, [holder])).toBeUndefined();
   });
 });

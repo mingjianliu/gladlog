@@ -136,6 +136,59 @@ export interface IChannelSpan {
 }
 
 /**
+ * The instant the caster's next press of anything else ended a channel begun
+ * at `afterMs` (Infinity when none): a tick that lands after it is no
+ * channelling (codex 20-F15-24: 0284fcd9 r3, Arcane Missiles 163.491, Arcane
+ * Barrage 164.869, a Missiles hit at 165.441 read as 572 ms more channelling)
+ * — an off-GCD press excepted: Shimmer mid-Missiles leaves the channel
+ * running (codex 20-F15-28: its ticks went on through 11.9 s) — unless that
+ * press is a channel of its own, which replaces this one (codex 20-F15-34:
+ * Breath of Jan'alai 1308728).
+ */
+export function nextPressEndingChannelMs(
+  unit: Pick<ICombatUnit, "spellCastEvents">,
+  spellId: string,
+  afterMs: number,
+): number {
+  return [
+    ...(unit.spellCastEvents ?? []),
+    ...((unit as { castStartEvents?: typeof unit.spellCastEvents })
+      .castStartEvents ?? []),
+  ]
+    .filter(
+      (e) =>
+        e.spellId !== spellId &&
+        e.timestamp > afterMs &&
+        !(
+          e.spellId &&
+          OFF_GCD_SPELL_IDS.has(e.spellId) &&
+          !CHANNELED_SPELL_IDS.has(e.spellId)
+        ),
+    )
+    .reduce((m, e) => Math.min(m, e.timestamp), Infinity);
+}
+
+/**
+ * Where a channel ended, for the `[YOU] [CD]` channel suffix: its aura's end,
+ * or the next press that ended it while the aura ran on (fact7 D12, 07367f6e
+ * 0:40: Ultimate Penitence's 421453 ran 6.5 s, Penance went off 5.93 s in).
+ */
+export function channelEndSeconds(
+  unit: Pick<ICombatUnit, "spellCastEvents">,
+  spellId: string,
+  castSeconds: number,
+  auraEndSeconds: number,
+  matchStartMs: number,
+): number {
+  const nextPressMs = nextPressEndingChannelMs(
+    unit,
+    spellId,
+    matchStartMs + castSeconds * 1000,
+  );
+  return Math.min(auraEndSeconds, (nextPressMs - matchStartMs) / 1000);
+}
+
+/**
  * Every channel whose length the log records: a SPELL_CAST_SUCCESS of an
  * officially channelled spell (`CHANNELED_SPELL_IDS`, DB2 "Is Channelled")
  * paired with the caster's own same-id aura starting within
@@ -318,34 +371,10 @@ export function tickEndedChannelSpans(
     );
     if (fullS === undefined || !(fullS > 0)) continue;
     const nextSame = casts.slice(i + 1).find((n) => n.spellId === c.spellId);
-    // the caster's next press of anything else ends the channel: a tick that
-    // lands after it is no channelling (codex 20-F15-24: 0284fcd9 r3,
-    // Arcane Missiles 163.491, Arcane Barrage 164.869, a Missiles hit at
-    // 165.441 read as 572 ms more channelling)
-    // — an off-GCD press excepted: Shimmer mid-Missiles leaves the channel
-    // running (codex 20-F15-28: its ticks went on through 11.9 s) — unless
-    // that press is a channel of its own, which replaces this one (codex
-    // 20-F15-34: Breath of Jan'alai 1308728)
-    const nextOther = [
-      ...(unit.spellCastEvents ?? []),
-      ...((unit as { castStartEvents?: typeof unit.spellCastEvents })
-        .castStartEvents ?? []),
-    ]
-      .filter(
-        (e) =>
-          e.spellId !== c.spellId &&
-          e.timestamp > c.timestamp &&
-          !(
-            e.spellId &&
-            OFF_GCD_SPELL_IDS.has(e.spellId) &&
-            !CHANNELED_SPELL_IDS.has(e.spellId)
-          ),
-      )
-      .reduce((m, e) => Math.min(m, e.timestamp), Infinity);
     const capMs = Math.min(
       c.timestamp + fullS * 1000,
       nextSame?.timestamp ?? Infinity,
-      nextOther,
+      nextPressEndingChannelMs(unit, c.spellId, c.timestamp),
     );
     const kick = (unit.actionIn ?? []).find(
       (a) =>

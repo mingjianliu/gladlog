@@ -3741,6 +3741,41 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccEndedBySanctuary",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "AURA_BREAK_AFTER_REMOVED_MS",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "channelEndSeconds",
+    mod: castCommitSpans,
+  },
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "nextPressEndingChannelMs",
+    mod: castCommitSpans,
+  },
+  {
+    file: `${A}/utils/unitDeath.ts`,
+    symbol: "removedByDeath",
+    mod: unitDeath,
+  },
+  {
+    file: `${A}/utils/unitDeath.ts`,
+    symbol: "auraRanItsLength",
+    mod: unitDeath,
+  },
+  {
+    file: `${A}/utils/unitDeath.ts`,
+    symbol: "AURA_NATURAL_END_JITTER_S",
+    mod: unitDeath,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "channelStoppedAtRemoval",
     mod: ccTrinketAnalysis,
   },

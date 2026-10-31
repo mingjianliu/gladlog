@@ -178,6 +178,48 @@ beforeAll(async () => {
 });
 
 describe("[CC NOT LANDED] — a failed control no other line states", () => {
+  it("fact7 D61: Cloak of Shadows (no aura 39 of its own) and a druid form are named as the cause; Cloak not for a physical control", () => {
+    const up = (id: string, name: string) => ({
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, id, name, 28_000, "e", "e"),
+      ],
+    });
+    const miss_ = (id: string, name: string) => ({
+      spellCastEvents: [cast(id, name, 30_000, "o", "e")],
+      missesOut: [miss(id, name, 30_400, "o", "e")],
+    });
+    // 4f8a5947 1:57
+    expect(
+      notLanded(
+        timelineOf({
+          owner: miss_(POLYMORPH, "Polymorph") as never,
+          enemy: up("31224", "Cloak of Shadows") as never,
+        }),
+      ),
+    ).toEqual([
+      "0:30  [CC NOT LANDED]   Enemy ← Polymorph (by Me) — logged IMMUNE (Cloak of Shadows was up)",
+    ]);
+    // ba5e59c6 2:07
+    expect(
+      notLanded(
+        timelineOf({
+          owner: miss_(POLYMORPH, "Polymorph") as never,
+          enemy: up("768", "Cat Form") as never,
+        }),
+      ),
+    ).toEqual([
+      "0:30  [CC NOT LANDED]   Enemy ← Polymorph (by Me) — logged IMMUNE (Cat Form was up)",
+    ]);
+    expect(
+      notLanded(
+        timelineOf({
+          owner: miss_("408", "Kidney Shot") as never,
+          enemy: up("31224", "Cloak of Shadows") as never,
+        }),
+      ).join(),
+    ).not.toContain("Cloak of Shadows");
+  });
+
   it("the owner's control with no cast line: the log's type, and the cause when the log shows one", () => {
     // a DPS owner's Polymorph is on no cooldown ledger and has no cast line
     const lines = timelineOf({

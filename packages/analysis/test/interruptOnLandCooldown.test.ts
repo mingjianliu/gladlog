@@ -165,6 +165,27 @@ describe("FT-T11c — on-interrupt cooldown talents", () => {
       );
     });
 
+    it("fact7 D28(163de8f1 1:27):按键没有 SPELL_INTERRUPT 行,但下一次按键早于静态冷却:减的证据是那次按键", () => {
+      const press = (s: number): any =>
+        makeSpellCastEvent(SOLAR_BEAM, T0 + s * 1000, "e1", "A", "p1", "Druid");
+      const u = druid([]);
+      u.spellCastEvents = [press(30), press(78.6)];
+      const base = interruptCooldownSeconds(SOLAR_BEAM, u)!;
+      expect(
+        interruptPressCooldownSeconds(u, SOLAR_BEAM, T0 + 30_000, base),
+      ).toBe(base - 15);
+      // 下一次按键在静态冷却之后:没有证据,不减
+      u.spellCastEvents = [press(30), press(30 + base + 1)];
+      expect(
+        interruptPressCooldownSeconds(u, SOLAR_BEAM, T0 + 30_000, base),
+      ).toBe(base);
+      // 配对的第二行不算「下一次按键」
+      u.spellCastEvents = [press(30), press(30.001)];
+      expect(
+        interruptPressCooldownSeconds(u, SOLAR_BEAM, T0 + 30_000, base),
+      ).toBe(base);
+    });
+
     it("主目标没在读条,另一个人半秒后走进光束被打断:不减", () => {
       const u = druid([beam(30.5, "e2")]);
       const base = interruptCooldownSeconds(SOLAR_BEAM, u)!;

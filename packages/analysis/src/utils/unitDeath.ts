@@ -43,3 +43,44 @@ export function isDeadAt(unit: Partial<WithDeaths>, tMs: number): boolean {
  * (0e0663e6 Pillar of Frost).
  */
 export const DEATH_CASCADE_MS = 100;
+
+/** Editorial, not measured: a natural expiry is logged on its official end,
+ * so a gap this small either way is timer jitter, not a cut — and small
+ * enough that a cut it drops cannot move a rounded "(Ns left)" by more than
+ * the jitter itself (codex 20-G167-11 #2: 0.5 s dropped a 0.3 s cut that
+ * moved the number). */
+export const AURA_NATURAL_END_JITTER_S = 0.1;
+
+/** Did this aura run out on its own: its removal sits on its natural end,
+ * within `AURA_NATURAL_END_JITTER_S` either side? Two-sided on purpose: a run
+ * well past the modelled end says the model is short for this press (a
+ * Combustion extended to 12.95 s of 10 s), not that the aura ran out. Unknown
+ * natural end → no claim. */
+export function auraRanItsLength(
+  removedMs: number,
+  naturalEndMs: number | undefined,
+): boolean {
+  return (
+    naturalEndMs !== undefined &&
+    Math.abs(naturalEndMs - removedMs) <= AURA_NATURAL_END_JITTER_S * 1000
+  );
+}
+
+/**
+ * Was this removal the holder's death cascade: a `deathMs` within
+ * `DEATH_CASCADE_MS` after it, and not the aura's own natural end (fact7 D15,
+ * 69276401 2:56: Rallying Cry ran its full 15.6 s, 82 ms before the killing
+ * tick, and left a surviving ally in the same millisecond). One reading for
+ * every line that blames a death for an end.
+ */
+export function removedByDeath(
+  deathsMs: readonly number[],
+  removedMs: number,
+  naturalEndMs?: number,
+): boolean {
+  if (auraRanItsLength(removedMs, naturalEndMs)) return false;
+  return deathsMs.some((d) => {
+    const gap = d - removedMs;
+    return gap >= 0 && gap <= DEATH_CASCADE_MS;
+  });
+}

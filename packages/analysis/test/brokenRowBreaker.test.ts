@@ -29,6 +29,9 @@ const WRATH = "1278047"; // Wrath of Nathreza (Desperate Soul)
 const BOS = "6940";
 const SOUL_LINK = "108446";
 const SCREAM = "8122";
+const BLINDING_LIGHT = "105421";
+const SW_DEATH = "32409";
+const PALADIN: [string, string] = ["P", "Paladin"];
 
 let line = 0;
 const row = (
@@ -279,6 +282,31 @@ describe("the two readers", () => {
     spec: CombatUnitSpec.Monk_Mistweaver,
     info: {},
   };
+  it("fact7 D73 (4206b8a9 1:42): a BROKEN row 1 ms after the REMOVED is that removal's cause; 3 ms after, it is not", () => {
+    const unit = (gapMs: number) =>
+      ({
+        id: "T",
+        auraEvents: [
+          row("SPELL_AURA_APPLIED", 1000, BLINDING_LIGHT, PALADIN, "T"),
+          row("SPELL_AURA_REMOVED", 2000, BLINDING_LIGHT, PALADIN, "T"),
+          row(
+            "SPELL_AURA_BROKEN_SPELL",
+            2000 + gapMs,
+            BLINDING_LIGHT,
+            ["", ""],
+            "T",
+            [SW_DEATH, "Shadow Word: Death"],
+          ),
+        ],
+      }) as any;
+    expect(
+      auraBreakAtRemoval(unit(1), BLINDING_LIGHT, T0 + 1000, T0 + 2000),
+    ).toMatchObject({ kind: "broken", spellName: "Shadow Word: Death" });
+    expect(
+      auraBreakAtRemoval(unit(3), BLINDING_LIGHT, T0 + 1000, T0 + 2000),
+    ).toBeNull();
+  });
+
   it("auraBreakAtRemoval names the guardian", () => {
     expect(auraBreakAtRemoval(holder, HOWL, T0, T0 + 5012)).toMatchObject({
       kind: "broken",

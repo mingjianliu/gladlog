@@ -17,6 +17,7 @@ import {
   DEATH_CASCADE_MS,
   type IAuraEndFromLog,
 } from "../utils/auraEndCause";
+import { removedByDeath } from "../utils/unitDeath";
 import {
   AURA_REBROADCAST_GAP_MS,
   dropAuraRebroadcasts,
@@ -930,17 +931,16 @@ export function extractOwnerCDBuffExpiry(
         channelStoppedAfterS = expiresAtSeconds - cast.timeSeconds;
       }
       // F-B1 (triage death-kill): removed from the owner and the owner died
-      // within DEATH_CASCADE_MS after — the death stripped it. Checked before
-      // the shapeshift reading.
+      // within DEATH_CASCADE_MS after — the death stripped it, unless that
+      // removal is the buff's own natural end (`removedByDeath`). Checked
+      // before the shapeshift reading.
       const removedMsForDeath = matchStartMs + expiresAtSeconds * 1000;
+      const naturalEndMs = matchStartMs + naturalEndSeconds * 1000;
       if (
         !isEstimated &&
         removedFromId !== undefined &&
         removedFromId === (owner?.id ?? ownerId) &&
-        ownerDeathsMs.some(
-          (d) =>
-            d >= removedMsForDeath && d - removedMsForDeath <= DEATH_CASCADE_MS,
-        )
+        removedByDeath(ownerDeathsMs, removedMsForDeath, naturalEndMs)
       )
         cause = "death";
       // Only a form-bound buff on the owner: the removal must be in the
@@ -995,6 +995,7 @@ export function extractOwnerCDBuffExpiry(
           fromMs: Math.round(castMs - AURA_BEFORE_CAST_MAX_S * 1000),
           // … back to the REMOVED line's own millisecond
           removedMs: Math.round(matchStartMs + expiresAtSeconds * 1000),
+          naturalEndMs,
         };
         // the absorb lines name the cast id as the shield; a dispel line
         // would name the aura that came off
@@ -1043,10 +1044,11 @@ export function extractOwnerCDBuffExpiry(
           if (emptiedByHit && absorb) {
             cause = "absorbed";
           } else if (target) {
-            const died = (target.deathRecords ?? []).some((d) => {
-              const gap = (d.timestamp as number) - span.removedMs;
-              return gap >= 0 && gap <= DEATH_CASCADE_MS;
-            });
+            const died = removedByDeath(
+              (target.deathRecords ?? []).map((d) => d.timestamp as number),
+              span.removedMs,
+              naturalEndMs,
+            );
             cause = died ? "target_death" : "target_debuff_off";
             if (!died) lostOn = { unitId: target.id, unitName: target.name };
           }

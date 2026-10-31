@@ -7,6 +7,7 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import { auraEndFromLog, DEATH_CASCADE_MS } from "../src/utils/auraEndCause";
+import { removedByDeath } from "../src/utils/unitDeath";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "../src/utils/dispelAnalysis";
 
 const T0 = 1_000_000;
@@ -428,5 +429,19 @@ describe("auraEndFromLog", () => {
       absorbed: 100_000,
       left: 0,
     });
+  });
+});
+
+describe("fact7 D15 — an aura that ran out in a death's millisecond", () => {
+  it("69276401 2:56: Rallying Cry at its full 15.6 s, 82 ms before the killing tick, ran out; cut short it died", () => {
+    const applied = T0;
+    const natural = applied + 15_600;
+    // the same removal, with and without the aura's length to read
+    expect(removedByDeath([natural + 82], natural)).toBe(true);
+    expect(removedByDeath([natural + 82], natural, natural)).toBe(false);
+    expect(removedByDeath([natural + 82], natural + 9, natural)).toBe(false);
+    expect(removedByDeath([T0 + 8_000], T0 + 8_000, natural)).toBe(true);
+    // outran its official length: that length says nothing of this end
+    expect(removedByDeath([T0 + 20_000], T0 + 20_000, natural)).toBe(true);
   });
 });

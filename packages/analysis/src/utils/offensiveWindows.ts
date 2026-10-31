@@ -593,7 +593,7 @@ export function computeOffensiveWindows(
         // the log never showed is the holder's first action after it
         addSave(holder.id, {
           from: iv.fromS,
-          to: untargetableEndS(holder, iv, matchStartMs),
+          to: untargetableEndS(holder, iv, matchStartMs, allUnits),
         });
     }
   }

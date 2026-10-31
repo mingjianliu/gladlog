@@ -15,6 +15,7 @@
 import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
 import { reachesAlly } from "../../data/spellTargeting";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
+import { channelEndSeconds } from "../../utils/castCommitSpans";
 import { isControlCast } from "../../utils/castMissRows";
 import {
   castSpellName,
@@ -531,7 +532,14 @@ export function emitOwnerCdEntries(
             Math.abs(e.castAtSeconds - cast.timeSeconds) < 0.01,
         );
         if (expiry) {
-          const actualDuration = expiry.expiresAtSeconds - cast.timeSeconds;
+          const channelEndS = channelEndSeconds(
+            owner,
+            cd.spellId,
+            cast.timeSeconds,
+            expiry.expiresAtSeconds,
+            matchStartMs,
+          );
+          const actualDuration = channelEndS - cast.timeSeconds;
           // GH #34 ① (2026-08-29): channel length is haste-dependent (Divine Hymn
           // 2.3–4.6 s, p50 3.8, n=190; Tranquility 0.5–5.2 s) and the hand table
           // said 8 s, so every channel read "channeled 3.8s of 8.0s" — an
@@ -548,7 +556,7 @@ export function emitOwnerCdEntries(
             const interrupted = channelWasInterrupted(
               ownerCCSummary,
               cast.timeSeconds,
-              expiry.expiresAtSeconds,
+              channelEndS,
             );
             const channelEnd = fmtTime(cast.timeSeconds + actualDuration);
             channelSuffix = interrupted

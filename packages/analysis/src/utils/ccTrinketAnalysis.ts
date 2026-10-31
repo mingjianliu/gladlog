@@ -143,12 +143,16 @@ import {
   spellRangeForCaster,
   spellReachForCaster,
 } from "./spellRange";
+import {
+  BLESSING_OF_SANCTUARY_ID,
+  sanctuaryRemovalPairs,
+} from "./sanctuaryRemovals";
 import { summonKindWord } from "./summonKind";
 import { nonPlayerUnitKill, summonedAtMs } from "./summonLife";
 import { interruptImmuneWindows } from "./talentBehaviors";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
-import { firstDeathMs } from "./unitDeath";
+import { AURA_NATURAL_END_JITTER_S, firstDeathMs } from "./unitDeath";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -304,6 +308,17 @@ export const CC_AVOIDANCE_BUFF_SPELLS = new Map<string, string>([
   ["203337", "Freezing Trap"],
   ["221527", "Imprison"],
   ["378441", "Time Stop"],
+  // fact7 D61 (4f8a5947 1:57: Polymorph logged IMMUNE into Cloak of Shadows,
+  // no cause on its line). The list's blind spot: Cloak carries no aura 39
+  // of its own — DB2 aura 186 (spells miss the holder), school mask 126,
+  // plus a 1 s trigger 35729. Forward check on DB2 (aura 186 or aura 39,
+  // mask 126 / 127) × observedSpellIdsGenerated, unlisted then: this id,
+  // Guardian of the Forgotten Queen 228050, Burrow 409293, Banish 710, and
+  // Cyclone 33786 (`ccImmuneCauseOf` reads our own Cyclone by itself).
+  ["31224", "Cloak of Shadows"],
+  ["228050", "Guardian of the Forgotten Queen"],
+  ["409293", "Burrow"],
+  ["710", "Banish"],
 ]);
 /**
  * Round-1 retest idx 51 (2026-10-20): avoidance buffs that stop only some
@@ -381,6 +396,12 @@ export const CC_AVOIDANCE_FACT_ONLY_IDS: ReadonlySet<string> = new Set([
   "378078",
   "289655",
   "165961",
+  // fact7 D61's forward check: named as a cause; whether Cloak of Shadows
+  // and Burrow are offered as buttons is a ruling nobody has asked for yet
+  "31224",
+  "228050",
+  "409293",
+  "710",
 ]);
 
 // B139: merge the talent-granted CC/magic-immunity avoidance buffs from the behavioral catalog. Self-gating
@@ -706,6 +727,7 @@ export const MAGIC_ONLY_IMMUNITY_IDS = new Set<string>([
   "444741", // Anti-Magic Shell (variant id — same magic-only semantics)
   "410358", // Anti-Magic Shell (Spellwarden ally-cast — same magic-only semantics)
   "23920", // Spell Reflection
+  "31224", // Cloak of Shadows (DB2 aura 186, school mask 126: magic only)
 ]);
 /**
  * fact3 D3 (2026-10-21): avoidances that turn a spell back — the miss row they
@@ -2150,11 +2172,17 @@ export interface ICcRemovalCause {
   byName?: string;
 }
 
+/** The BROKEN row the log writes right after its REMOVED can fall into the
+ * next millisecond (fact7 D73, 4206b8a9 1:42: Blinding Light REMOVED at
+ * .068, its Shadow Word: Death break at .069, read `cause not logged`). */
+export const AURA_BREAK_AFTER_REMOVED_MS = 2;
+
 /**
  * The break that ended an aura application on `holder` removed at
  * `removeMs`: the `SPELL_AURA_BROKEN_SPELL` / `SPELL_AURA_BROKEN` line its
- * REMOVED superseded, or the one right after it in the same ms, or a BROKEN
- * line that is the removal itself. `null` = no break line ended it;
+ * REMOVED superseded, or the one right after it (the same ms, or
+ * `AURA_BREAK_AFTER_REMOVED_MS` on), or a BROKEN line that is the removal
+ * itself. `null` = no break line ended it;
  * `undefined` = a BROKEN_SPELL line did, naming no spell. One reader for a
  * CC (`ccRemovalCause`) and for a buff (`extractOwnerCDBuffExpiry`, WO6 #3:
  * Mass Invisibility broken by enemy damage).
@@ -2199,7 +2227,7 @@ export function auraBreakAtRemoval(
     const out: Array<(typeof auras)[number]> = [];
     for (let k = auras.indexOf(removed) + 1; k < auras.length; k++) {
       const a = auras[k]!;
-      if (a.logLine.timestamp !== removeMs) break;
+      if (a.logLine.timestamp > removeMs + AURA_BREAK_AFTER_REMOVED_MS) break;
       if (a.spellId !== spellId) continue;
       if (!isBreak(a.logLine.event as string) || superseded.has(a)) break;
       out.push(a);
@@ -2394,7 +2422,7 @@ export type ICcLoggedEnd =
 export function ccLoggedEnd(
   holder: ICombatUnit,
   cc: Pick<ICCInstance, "spellId" | "atSeconds" | "durationSeconds"> &
-    Partial<Pick<ICCInstance, "sourceId">>,
+    Partial<Pick<ICCInstance, "sourceId" | "expectedDurationSeconds">>,
   matchStartMs: number,
 ): ICcLoggedEnd | undefined {
   const applyMs = matchStartMs + Math.round(cc.atSeconds * 1000);
@@ -2432,7 +2460,14 @@ export function ccLoggedEnd(
   const end = auraEndFromLog(
     holder,
     cc.spellId,
-    { fromMs: applyMs, removedMs: removeMs },
+    {
+      fromMs: applyMs,
+      removedMs: removeMs,
+      naturalEndMs:
+        cc.expectedDurationSeconds === undefined
+          ? undefined
+          : applyMs + cc.expectedDurationSeconds * 1000,
+    },
     cc.sourceId,
   );
   if (end.takenBy)
@@ -2557,6 +2592,44 @@ export function ccEndedByImmunityAura(
       };
 }
 
+/**
+ * The Blessing of Sanctuary that took this control off its holder
+ * (`sanctuaryRemovalPairs`, the `[CC REMOVED]` line's pairing): a cause the
+ * log gives, which the control's own line called `cause not logged` beside
+ * that `[CC REMOVED]` line (fact7 D3, 96fb4d42 1:40). Same shape as an
+ * immunity someone else put up, as the two end notes read the same; the
+ * instance's end must be a REMOVED row of this aura from this caster.
+ */
+export function ccEndedBySanctuary(
+  holder: Pick<ICombatUnit, "id">,
+  cc: Pick<ICCInstance, "spellId" | "atSeconds" | "durationSeconds"> &
+    Partial<Pick<ICCInstance, "sourceId" | "stillOnAtRoundEnd">>,
+  matchStartMs: number,
+  units: readonly ICombatUnit[],
+): Extract<ICcLoggedEnd, { kind: "immunity" }> | undefined {
+  if (cc.stillOnAtRoundEnd) return undefined;
+  const removeMs =
+    matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+  const pair = sanctuaryRemovalPairs(units).find(
+    (r) =>
+      r.target.id === holder.id &&
+      r.removed.spellId === cc.spellId &&
+      r.removed.logLine.timestamp === removeMs &&
+      (cc.sourceId === undefined || r.removed.srcUnitId === cc.sourceId),
+  );
+  return pair
+    ? {
+        kind: "immunity",
+        spellName: getEnglishSpellName(
+          BLESSING_OF_SANCTUARY_ID,
+          "Blessing of Sanctuary",
+        ),
+        byUnitId: pair.paladin.id,
+        byName: pair.paladin.name,
+      }
+    : undefined;
+}
+
 /** A control gone within half a second with no cause in the log: what its
  * line says (`ccUnloggedEarlyEnd`). */
 export const CC_END_CAUSE_NOT_LOGGED = "ended early — cause not logged";
@@ -2573,7 +2646,10 @@ export const CC_END_CAUSE_NOT_LOGGED = "ended early — cause not logged";
  * while the control's own length at its DR level prints a whole second or
  * more (`expectedDurationSeconds`, both through `renderedCcSeconds`). And
  * its end is a REMOVED line of the log — an instance closed at its official
- * length has no end to speak of.
+ * length has no end to speak of. The grid is the printed claim, not the
+ * test of "early": a control that ran its length ran its length, whichever
+ * way the two round (fact7 D38, 9121b496 1:37: a 1 s Gnaw at 50 % DR gone
+ * in 0.485 s printed `<1s` beside a length that rounds to 1 s).
  *
  * On the 605-file capture 208 distinct control lines read a bare `<1s`; on
  * the five logs with the most of them (27 applications,
@@ -2614,6 +2690,11 @@ export function ccUnloggedEarlyEnd(
     return undefined;
   if (renderedCcSeconds(cc) !== 0) return undefined;
   if (renderedCcSeconds({ durationSeconds: cc.expectedDurationSeconds }) < 1)
+    return undefined;
+  if (
+    cc.durationSeconds >=
+    cc.expectedDurationSeconds - AURA_NATURAL_END_JITTER_S
+  )
     return undefined;
   const removeMs =
     matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
