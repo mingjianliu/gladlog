@@ -65,6 +65,13 @@ const PRESS_ROW_PAIR_MS = 1000;
 
 const HIDDEN_AURA_LIFE_SLACK_MS = 1000;
 
+/** A talent lengthens a run, not without end: an APPLIED re-lists the run under
+ * way only this many of its lives (`hiddenAuraLifeMs`) after the run's last
+ * row. The re-listings on the 605 raw logs reach 1.7 (Recklessness 21.7 s after
+ * its APPLIED, 12 s + 1; Combustion 15.3 s, Malevolence 28.3 s, Arcane Surge
+ * 17.0 s). */
+const RELISTED_RUN_MAX_LIVES = 2;
+
 /** How long an own aura whose REMOVED the log lost is still read as up
  * after its last (re)application: its official length + 1 s, else for good
  * (codex 21-R12-a #3). The corpus scan's `hiddenPressUnused` reads it too. */
@@ -227,9 +234,13 @@ export function hiddenPressMs(
   // had taken past the official length (d510865c r5: Arcane Surge APPLIED
   // 122.2 s, re-listed 139.2 s, REMOVED 139.6 s; 15 facts on the 605 capture,
   // Combustion, Recklessness, Malevolence, each 11–22 s after its press).
-  const relisting = (j: number): boolean => {
+  // Past RELISTED_RUN_MAX_LIVES of the run's last row it is a new press first
+  // seen late, whatever its own REMOVED says (codex 04-1).
+  const relisting = (i: number, j: number): boolean => {
     const at = own[j]!.logLine.timestamp;
     const id = own[j]!.spellId!;
+    const runAt = own[i]!.logLine.timestamp;
+    if (at - runAt > RELISTED_RUN_MAX_LIVES * lifeMs(id, runAt)) return false;
     for (let k = j + 1; k < own.length; k++) {
       const b = own[k]!;
       if (b.spellId !== id || !kept.has(b)) continue;
@@ -247,7 +258,7 @@ export function hiddenPressMs(
       const b = own[j]!;
       if (b.spellId !== id || !kept.has(b)) continue;
       if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED) return Infinity;
-      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED && !relisting(j))
+      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED && !relisting(i, j))
         break;
     }
     return ms + lifeMs(id!, ms);

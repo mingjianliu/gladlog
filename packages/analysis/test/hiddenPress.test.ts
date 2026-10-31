@@ -294,6 +294,14 @@ describe("hiddenPressMs — the bounds no test pinned", () => {
     ]);
     expect(hiddenPressMs(u, "102543", T0)).toEqual([listedAt]);
   });
+  it("a run's REMOVED lost, a new press first seen late: the gap from the last row says it (codex 04-1)", () => {
+    const u = rogue([
+      aura(LogEvent.SPELL_AURA_APPLIED, EVASION, T0 + 1_000),
+      ...batch(30),
+      aura(LogEvent.SPELL_AURA_REMOVED, EVASION, BATCH_MS + 9_000),
+    ]);
+    expect(hiddenPressMs(u, EVASION, T0)).toEqual([BATCH_MS]);
+  });
   it("a press of two same-named auras: one's logged REMOVED keeps the press up across the other's re-listing (Alter Time 342245 / 342246)", () => {
     // untilOf's "up to its own REMOVED" is only visible here: the run of
     // 342246 is searched past the other id's rows to its REMOVED, so a
