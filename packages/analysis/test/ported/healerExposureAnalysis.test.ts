@@ -302,6 +302,47 @@ describe('healerExposureAnalysis — exposure calculation', () => {
     expect(run(69)).toEqual(['Intimidation']);
   });
 
+  it('codex 01-1: a walker-in on Ring of Frost 8 s after the press is that press, not a new one', () => {
+    const healer = makeUnit('h', {
+      advancedActions: [makeAdvancedAction(MATCH_START + 12_000, 0, 0), makeAdvancedAction(MATCH_START + 46_000, 0, 0)],
+      auraEvents: [
+        {
+          spellId: '82691',
+          spellName: 'Ring of Frost',
+          srcUnitId: 'e',
+          destUnitId: 'h',
+          auraType: 'DEBUFF',
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: MATCH_START + 8_000 },
+        } as any,
+      ],
+    });
+    for (const a of healer.advancedActions) (a as any).advancedActorId = 'h';
+    const enemy = makeUnit('e', {
+      name: 'E1',
+      spec: CombatUnitSpec.Mage_Frost,
+      info: { talents: [], pvpTalents: [] },
+      spellCastEvents: [makeSpellCastEvent('113724', MATCH_START, 'x', 'X', 'e', 'E1')],
+      advancedActions: [makeAdvancedAction(MATCH_START + 12_000, 5, 0), makeAdvancedAction(MATCH_START + 46_000, 5, 0)],
+    });
+    for (const a of enemy.advancedActions) (a as any).advancedActorId = 'e';
+    const friendCCSummary: any = {
+      ccInstances: [{ sourceName: 'E1', sourceId: 'e', spellId: '82691', spellName: 'Ring of Frost' }],
+    };
+    const run = (fromSeconds: number) =>
+      analyzeHealerExposureAtBurst(
+        [{ fromSeconds }] as any,
+        [enemy],
+        healer,
+        { trinketUseTimes: [], ccInstances: [] } as any,
+        [friendCCSummary],
+        '1505',
+        MATCH_START,
+        [healer, enemy],
+      ).flatMap((r) => r.threats.map((t) => t.ccSpellName));
+    expect(run(12)).toEqual([]);
+    expect(run(46)).toEqual(['Ring of Frost']);
+  });
+
   it('fact7 D23: a press earlier in the window\'s own second is spent; one from the opening on is the control being thrown', () => {
     const run = (pressMs: number) => {
       const healer = makeUnit('h', {

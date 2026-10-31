@@ -38,7 +38,12 @@ import {
   specToString,
   unitCooldownOf,
 } from "./cooldowns";
-import { DR_CATEGORY_MAP, DRLevel, getDRLevelAtTime } from "./drAnalysis";
+import {
+  AOE_CC_LANDING_WINDOW_S,
+  DR_CATEGORY_MAP,
+  DRLevel,
+  getDRLevelAtTime,
+} from "./drAnalysis";
 import { IAlignedBurstWindow, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   distanceBetween,
@@ -1154,6 +1159,14 @@ function enemyCcOnCooldownAt(
   const castPresses = [...castIds].flatMap((id) =>
     avoidanceCastSeconds(enemy, id, matchStartMs, atSeconds),
   );
+  // a ground control lands over its area's life, not at its press (fact7 r6,
+  // codex 01-1; 605 raw logs: 122 Ring of Frost and 116 Freezing Trap landings
+  // past the 5 s, up to 10.0 s and 46.6 s after a press): the walker-in is
+  // that press, and did not restart the cooldown
+  const pressLandingS = Math.max(
+    TRIGGERED_CONTROL_LANDING_S,
+    ...[...castIds].map((id) => AOE_CC_LANDING_WINDOW_S[id]?.toS ?? 0),
+  );
   const landingPresses: number[] = [];
   for (const t of auraLandingsFrom(
     enemy,
@@ -1162,7 +1175,8 @@ function enemyCcOnCooldownAt(
     matchStartMs,
   ))
     if (
-      ![...castPresses, ...landingPresses].some(
+      !castPresses.some((p) => t >= p && t - p <= pressLandingS) &&
+      !landingPresses.some(
         (p) => t >= p && t - p <= TRIGGERED_CONTROL_LANDING_S,
       )
     )
