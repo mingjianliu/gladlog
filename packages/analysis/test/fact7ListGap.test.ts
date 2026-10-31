@@ -108,6 +108,25 @@ describe("OFFENSIVE_PRESS_FACT_IDS", () => {
     expect(t.players[0]!.offensiveCDs).toEqual([]);
     expect(t.alignedBurstWindows).toEqual([]);
   });
+  it("Odyn's Fury's effect runs through a rebroadcast of its aura (codex 02-1)", () => {
+    const enemy = unit(
+      CombatUnitClass.Warrior,
+      CombatUnitSpec.Warrior_Fury,
+      [cast("385059", 40.77)],
+      [
+        aura("385059", 40.9, LogEvent.SPELL_AURA_APPLIED),
+        aura("385059", 43.0, LogEvent.SPELL_AURA_REMOVED),
+        aura("385059", 43.001, LogEvent.SPELL_AURA_APPLIED),
+        aura("385059", 44.9, LogEvent.SPELL_AURA_REMOVED),
+      ],
+    );
+    const round = { startTime: T0, endTime: END, units: { u: enemy } } as never;
+    const t = reconstructEnemyCDTimeline([enemy], round);
+    expect(t.players[0]!.offensiveFacts?.[0]?.buffEndSeconds).toBeCloseTo(
+      44.9,
+      3,
+    );
+  });
   it("D75: Divine Toll by spec — Retribution's [ENEMY CD], Holy's [ENEMY HEAL CD]", () => {
     const ret = unit(
       CombatUnitClass.Paladin,
@@ -256,5 +275,31 @@ describe("Void Metamorphosis (D69): a form with no button", () => {
     expect(lines).toEqual([
       "0:40  [TEAM] [PROC]   2(DDH) (Devourer Demon Hunter): Void Metamorphosis",
     ]);
+  });
+  it("friendly: a REMOVED/APPLIED rebroadcast is one form, one line (codex 02-2)", () => {
+    const lines: string[] = [];
+    emitFriendlyFormEntries({
+      owner: { id: "me", auraEvents: [] } as never,
+      friends: [
+        unit(
+          CombatUnitClass.DemonHunter,
+          CombatUnitSpec.DemonHunter_Devourer,
+          [],
+          [
+            aura("1217607", 40.7, LogEvent.SPELL_AURA_APPLIED),
+            aura("1217607", 50.0, LogEvent.SPELL_AURA_REMOVED),
+            aura("1217607", 50.001, LogEvent.SPELL_AURA_APPLIED),
+            aura("1217607", 69.3, LogEvent.SPELL_AURA_REMOVED),
+          ],
+        ),
+      ] as never,
+      matchStartMs: T0,
+      matchEndSeconds: 300,
+      pid: () => "2(DDH)",
+      addEntry: (_t, l) => {
+        lines.push(l);
+      },
+    });
+    expect(lines).toHaveLength(1);
   });
 });

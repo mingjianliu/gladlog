@@ -552,12 +552,14 @@ function pressEffectEndSeconds(
 ): number | undefined {
   // an aura's rows sit on the unit wearing it, not on its caster
   const own = allUnits.flatMap((u) =>
-    (u.auraEvents ?? []).filter(
-      (a) =>
-        a.srcUnitId === unit.id &&
-        a.spellId !== undefined &&
-        a.logLine.timestamp >= pressMs - PRESS_EFFECT_AURA_LEAD_MS &&
-        getEnglishSpellName(a.spellId, a.spellName ?? "") === spellName,
+    dropAuraRebroadcasts(
+      (u.auraEvents ?? []).filter(
+        (a) =>
+          a.srcUnitId === unit.id &&
+          a.spellId !== undefined &&
+          a.logLine.timestamp >= pressMs - PRESS_EFFECT_AURA_LEAD_MS &&
+          getEnglishSpellName(a.spellId, a.spellName ?? "") === spellName,
+      ),
     ),
   );
   let endMs: number | undefined;

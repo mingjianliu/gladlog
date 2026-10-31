@@ -13,6 +13,7 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CRISIS_PROC_ANSWERS } from "../../analysis/crisisDecisionPoints";
+import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { specToString } from "../../utils/cooldowns";
 import { OFFENSIVE_FORM_FACT_AURAS } from "../../utils/offensiveAuraOccurrences";
 import { fmtTime } from "../../utils/renderGrid";
@@ -104,7 +105,7 @@ export function emitFriendlyFormEntries(ctx: {
   );
   let emitted = false;
   for (const u of [owner, ...friends.filter((f) => f.id !== owner.id)]) {
-    for (const a of u.auraEvents ?? []) {
+    for (const a of dropAuraRebroadcasts(u.auraEvents ?? [])) {
       if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
       if (a.srcUnitId !== u.id || a.destUnitId !== u.id) continue;
       const name = OFFENSIVE_FORM_FACT_AURAS.get(a.spellId ?? "");
