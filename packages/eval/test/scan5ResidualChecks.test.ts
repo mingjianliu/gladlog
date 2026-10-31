@@ -412,22 +412,22 @@ describe("abilityIntoWallShare", () => {
       ).toEqual([]);
     });
 
-    it("flags a spell the log shows parried, whatever its reach (Final Verdict, 12 yd)", () => {
-      const parry =
-        '10/30/2026 12:00:32.000-4  SPELL_MISSED,Player-1-A,"Ally",0x511,0x0,Player-1-B,"Target",0x548,0x0,383328,"Final Verdict",0x2,PARRY,nil';
-      const seen = (raw: string[]) =>
+    it("flags a spell a parry can stop, whatever its reach and with no PARRY row this round (Final Verdict, 12 yd)", () => {
+      expect(
         of(
-          scan(
-            runDamageBasis,
-            players("383328", "Final Verdict"),
-            lines,
-            "",
-            raw,
-          ),
+          scan(runDamageBasis, players("383328", "Final Verdict"), lines),
           "abilityIntoWallShare",
-        );
-      expect(seen([])).toEqual([]);
-      expect(seen([parry])).toHaveLength(1);
+        ),
+      ).toHaveLength(1);
+    });
+
+    it("leaves out a melee-range attack a parry cannot stop (Garrote, 5 yd)", () => {
+      expect(
+        of(
+          scan(runDamageBasis, players("703", "Garrote"), lines),
+          "abilityIntoWallShare",
+        ),
+      ).toEqual([]);
     });
   });
 

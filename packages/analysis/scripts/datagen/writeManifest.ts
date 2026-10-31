@@ -172,6 +172,9 @@ export async function main(): Promise<void> {
       "spellStateAttrsGenerated.ts": {
         entries: countQuotedIds("spellStateAttrsGenerated.ts"),
       },
+      "spellParryGenerated.ts": {
+        entries: countQuotedIds("spellParryGenerated.ts"),
+      },
       // GH #167: the forward check of SELF_CAST_NOOP_EXTERNAL_IDS
       "excludeCasterGenerated.ts": {
         entries: countQuotedIds("excludeCasterGenerated.ts"),

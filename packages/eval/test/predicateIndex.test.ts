@@ -99,6 +99,8 @@ import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeG
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
 import * as spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
+import * as spellParry from "@gladlog/analysis/src/data/spellParry";
+import * as spellParryGenerated from "@gladlog/analysis/src/data/spellParryGenerated";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellStateAttrs from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
@@ -468,6 +470,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/periodicAuraGenerated.ts`,
     symbol: "PERIODIC_DAMAGE_AURA_IDS",
     mod: periodicAuraGenerated,
+  },
+  {
+    file: `${A}/data/spellParry.ts`,
+    symbol: "parryStopsAttack",
+    mod: spellParry,
+  },
+  {
+    file: `${A}/data/spellParryGenerated.ts`,
+    symbol: "PARRYABLE_SPELL_IDS",
+    mod: spellParryGenerated,
   },
   {
     file: `${A}/utils/offensiveWasteAnalysis.ts`,

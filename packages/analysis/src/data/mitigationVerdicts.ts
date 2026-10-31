@@ -41,8 +41,9 @@ interface IMitigationVerdict {
   /** 必须是 `YYYY-MM-DD user`,由 CI 校验。 */
   approved: string;
   /** 只对非近战攻击(法术、远程)适用的裁定:招架型的墙对近战近乎免疫,对法术
-   * 只是它的百分比墙(用户 2026-10-26:剑在人在对法术只算 30% 墙)。缺省 =
-   * 与 `verdict` 相同。 */
+   * 只是它的百分比墙(用户 2026-10-26:剑在人在对法术只算 30% 墙)。「近战」
+   * 指招架能挡(`parryStopsAttack`,DB2 官方字段,不看射程)。缺省 = 与
+   * `verdict` 相同。 */
   nonMeleeVerdict?: MitigationVerdict;
 }
 

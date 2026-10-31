@@ -8,10 +8,17 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { KILL_LIVE_HP_PCT } from "../src/data/mitigationVerdicts";
+import { parryStopsAttack } from "../src/data/spellParry";
+import {
+  PARRYABLE_SPELL_IDS,
+  UNPARRYABLE_SPELL_IDS,
+} from "../src/data/spellParryGenerated";
 import {
   buildOffensiveWasteSummary,
   formatOffensiveWasteForContext,
   getHighValueSpellIds,
+  pressLandingCaster,
+  pressLandingRows,
   pressLandingsMs,
 } from "../src/utils/offensiveWasteAnalysis";
 import {
@@ -943,5 +950,140 @@ describe("offensiveWasteAnalysis — a travelling spell counts where it landed (
       [],
     );
     expect(landed.get(presses[0]!)).toBe(1_000);
+  });
+});
+
+describe("parryStopsAttack — what a parry can stop (fact7 r5)", () => {
+  it("Final Verdict (12 yd) reads parried-class, reach does not decide it", () => {
+    expect(parryStopsAttack("383328")).toBe(true);
+  });
+
+  it("Kill Command reads by the row it landed as: the press 34026 is type 0, the pet's 83381 is melee", () => {
+    expect(parryStopsAttack("34026", "83381")).toBe(true);
+    expect(parryStopsAttack("34026", "1232922")).toBe(true);
+  });
+
+  it("Hammer of Wrath (a missile) and Garrote (No Active Defense) do not", () => {
+    expect(parryStopsAttack("24275")).toBe(false);
+    expect(parryStopsAttack("703")).toBe(false);
+  });
+
+  it("a type-0 press reads its landing row: Penance 47540 lands as magic 47666", () => {
+    expect(parryStopsAttack("47540", "47666")).toBe(false);
+  });
+
+  it("an id in neither table falls to reach; an unknown reach reads as melee", () => {
+    for (const id of ["34026", "264735", "47540"]) {
+      expect(PARRYABLE_SPELL_IDS.has(id)).toBe(false);
+      expect(UNPARRYABLE_SPELL_IDS.has(id)).toBe(false);
+    }
+    expect(parryStopsAttack("264735")).toBe(false); // Survival of the Fittest
+    expect(parryStopsAttack("no-such-spell")).toBe(true);
+  });
+});
+
+describe("Die by the Sword's two readings (fact7 r5)", () => {
+  const start = 1_000_000;
+  const run = (spellId: string, spellName: string) => {
+    const friend = makeUnit("friend-1", {
+      name: "Friend",
+      reaction: CombatUnitReaction.Friendly,
+      damageOut: [
+        {
+          ...makeDamageEvent(start + 5_000, 100_000, "warrior-1"),
+          spellId,
+          spellName,
+        },
+      ],
+      spellCastEvents: [11_000, 13_000].map((t) =>
+        makeSpellCastEvent(
+          spellId,
+          start + t,
+          "warrior-1",
+          "Warrior",
+          "friend-1",
+          "Friend",
+          0,
+          spellName,
+        ),
+      ),
+    });
+    const enemy = makeUnit("warrior-1", {
+      name: "Warrior",
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: (
+        [
+          [LogEvent.SPELL_AURA_APPLIED, 10_000],
+          [LogEvent.SPELL_AURA_REMOVED, 18_000],
+        ] as const
+      ).map(([event, t]) =>
+        makeAuraEvent(
+          event,
+          "118038",
+          start + t,
+          "warrior-1",
+          "warrior-1",
+          "BUFF",
+        ),
+      ),
+    });
+    return buildOffensiveWasteSummary(
+      makeCombat(start, start + 60_000),
+      [friend],
+      [enemy],
+    ).events;
+  };
+
+  it("two Final Verdicts are the parry line, not the spell line's three-cast gate", () => {
+    const events = run("383328", "Final Verdict");
+    expect(events).toHaveLength(1);
+    expect(events[0]!.verdict).toBe("unconditional");
+  });
+
+  it("two Hammers of Wrath stay on the gated line, under its three casts", () => {
+    expect(run("24275", "Hammer of Wrath")).toEqual([]);
+  });
+});
+
+describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
+  const press = {
+    spellId: "34026",
+    spellName: "Kill Command",
+    destUnitId: "enemy-1",
+    atMs: 1_000,
+  };
+  const miss = {
+    spellId: "83381",
+    spellName: "Kill Command",
+    destUnitId: "enemy-1",
+    missType: "PARRY",
+    timestamp: 1_100,
+    logLine: { event: LogEvent.SPELL_MISSED, timestamp: 1_100 },
+  };
+  const hunter = { id: "hunter-1", damageOut: [] } as never;
+
+  it("reads a pet's parried row through the owner", () => {
+    const caster = pressLandingCaster(hunter, [
+      { ownerId: "hunter-1", missesOut: [miss] },
+      { ownerId: "other", missesOut: [{ ...miss, destUnitId: "x" }] },
+    ] as never);
+    const rows = pressLandingRows([press], (p) => p.atMs, caster, []);
+    expect(rows.get(press)).toEqual({ atMs: 1_100, spellId: "83381" });
+  });
+
+  it("a press that landed as an aura has no attack row", () => {
+    const aura = {
+      srcUnitId: "hunter-1",
+      spellId: "34026",
+      spellName: "Kill Command",
+      logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 1_050 },
+    };
+    const rows = pressLandingRows(
+      [press],
+      (p) => p.atMs,
+      hunter,
+      [{ id: "enemy-1", auraEvents: [aura] }] as never,
+    );
+    expect(rows.get(press)).toEqual({ atMs: 1_050, spellId: null });
   });
 });

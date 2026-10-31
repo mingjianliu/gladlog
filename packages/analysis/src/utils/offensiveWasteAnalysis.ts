@@ -12,7 +12,7 @@ import {
   nonMeleeMitigationVerdictOf,
 } from "../data/mitigationVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { MELEE_RANGE_YD, spellRangeYards } from "../data/spellReach";
+import { parryStopsAttack } from "../data/spellParry";
 import { immunityCoversSpell } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
@@ -38,14 +38,6 @@ import { roundEndMs } from "./roundEnd";
  * 虚空行走),砸进去一声不吭;而「大减伤」5 条里有 3 条只有 20%(树皮术/圣佑术/
  * 铁木树皮),80% 的伤害照样打进去了却被判「浪费」。
  */
-
-/** An attack a parry cannot stop: a spell with an official reach beyond
- * melee (`spellRangeYards` > `MELEE_RANGE_YD`). Unknown reach reads as melee
- * — the wall keeps its signed verdict. */
-function isNonMeleeAttack(spellId: string): boolean {
-  const r = spellRangeYards(spellId);
-  return r !== null && r > MELEE_RANGE_YD;
-}
 
 /** How many counted casts into a defensive make a line, by its verdict. */
 const WASTE_MIN_CASTS: Record<IDefenseWindow["verdict"], number> = {
@@ -329,30 +321,30 @@ export function buildOffensiveWasteSummary(
 
     // the section counts what LANDED inside the defensive, and a travelling
     // spell lands after its press (fact7 D52, 7e7b1e51 0:41)
-    const landedAtMs = pressLandingsMs(
+    const landings = pressLandingRows(
       castEvents,
       (e) => castAtMs(e)!,
-      friend,
+      pressLandingCaster(friend, Object.values(combat.units ?? {})),
       enemies,
     );
 
     for (const whole of defenseWindows) {
       // a wall whose verdict for spells differs (Die by the Sword's parry):
-      // its melee casts and its other casts are two readings of it
+      // what a parry can stop and the rest are two readings of it
       const parts: Array<{
         window: IDefenseWindow;
-        takes: (spellId: string) => boolean;
+        takes: (spellId: string, landingSpellId: string | null) => boolean;
       }> =
         whole.nonMeleeVerdict === whole.verdict
           ? [{ window: whole, takes: () => true }]
           : [
-              { window: whole, takes: (id) => !isNonMeleeAttack(id) },
+              { window: whole, takes: parryStopsAttack },
               ...(whole.nonMeleeVerdict === "unconditional" ||
               whole.nonMeleeVerdict === "kill-live-gated"
                 ? [
                     {
                       window: { ...whole, verdict: whole.nonMeleeVerdict },
-                      takes: isNonMeleeAttack,
+                      takes: (id, row) => !parryStopsAttack(id, row),
                     },
                   ]
                 : []),
@@ -363,8 +355,9 @@ export function buildOffensiveWasteSummary(
         const wasteCasts: IOffensiveWasteCast[] = castEvents
           .filter((e) => {
             if (e.destUnitId !== window.unitId) return false;
-            if (e.spellId && !takes(e.spellId)) return false;
-            const t = (landedAtMs.get(e)! - matchStartMs) / 1000;
+            if (e.spellId && !takes(e.spellId, landings.get(e)!.spellId))
+              return false;
+            const t = (landings.get(e)!.atMs - matchStartMs) / 1000;
             if (t < window.fromSeconds || t > window.toSeconds) return false;
             if (e.spellId === null) return false;
             // round-1 retest (fact1215 idx 107): a cast the target REFLECTED
@@ -406,7 +399,7 @@ export function buildOffensiveWasteSummary(
           .map((e) => ({
             spellId: e.spellId ?? "",
             spellName: e.spellName ?? "",
-            atSeconds: (landedAtMs.get(e)! - matchStartMs) / 1000,
+            atSeconds: (landings.get(e)!.atMs - matchStartMs) / 1000,
           }));
 
         if (wasteCasts.length < threshold) continue;
@@ -441,6 +434,10 @@ export function buildOffensiveWasteSummary(
  * it, logged up to `REFLECT_ROW_LAG_MS` after the press). */
 export const REFLECT_ROW_LAG_MS = 1500;
 
+/** The caster's rows `pressLandingsMs` reads. */
+type LandingCaster = Pick<ICombatUnit, "id" | "damageOut"> &
+  Partial<Pick<ICombatUnit, "missesOut">>;
+
 /** One press of a spell, as `pressLandingsMs` needs it. */
 type LandingPress = {
   spellId: string | null;
@@ -467,31 +464,74 @@ type LandingPress = {
 export function pressLandingsMs<T extends LandingPress>(
   presses: readonly T[],
   atMsOf: (press: T) => number,
-  caster: Pick<ICombatUnit, "id" | "damageOut"> &
-    Partial<Pick<ICombatUnit, "missesOut">>,
+  caster: LandingCaster,
   targets: readonly Pick<ICombatUnit, "id" | "auraEvents">[],
 ): Map<T, number> {
-  const rowsByKey = new Map<string, number[]>();
+  const landed = new Map<T, number>();
+  for (const [press, row] of pressLandingRows(
+    presses,
+    atMsOf,
+    caster,
+    targets,
+  ))
+    landed.set(press, row.atMs);
+  return landed;
+}
+
+/** The caster as `pressLandingRows` reads it, with its pets' misses: a pet's
+ * hits are merged into its owner's `damageOut`, its misses are not, and a
+ * press can land as the pet's row alone (Kill Command 34026, the pet's 83381,
+ * parried or not). */
+export function pressLandingCaster(
+  caster: LandingCaster,
+  units: readonly Pick<ICombatUnit, "ownerId" | "missesOut">[],
+): LandingCaster {
+  const petMisses = units
+    .filter((u) => u.ownerId === caster.id)
+    .flatMap((u) => u.missesOut ?? []);
+  return petMisses.length === 0
+    ? caster
+    : {
+        ...caster,
+        missesOut: [...(caster.missesOut ?? []), ...petMisses],
+      };
+}
+
+/** `pressLandingsMs` with the attack each press landed as: `spellId` is the
+ * spell of its hit or miss row, null when it landed as an aura or wrote no row
+ * (an aura is no attack: Colossus Smash's debuff is not the strike). */
+export function pressLandingRows<T extends LandingPress>(
+  presses: readonly T[],
+  atMsOf: (press: T) => number,
+  caster: LandingCaster,
+  targets: readonly Pick<ICombatUnit, "id" | "auraEvents">[],
+): Map<T, { atMs: number; spellId: string | null }> {
+  const rowsByKey = new Map<
+    string,
+    { atMs: number; spellId: string | null }[]
+  >();
   const add = (
     destUnitId: string,
     spellId: string | null | undefined,
     spellName: string | null | undefined,
     atMs: number,
+    attack: boolean,
   ) => {
     const key = `${destUnitId}|${spellNameKey(spellId, spellName)}`;
+    const row = { atMs, spellId: attack ? (spellId ?? null) : null };
     const rows = rowsByKey.get(key);
-    if (rows) rows.push(atMs);
-    else rowsByKey.set(key, [atMs]);
+    if (rows) rows.push(row);
+    else rowsByKey.set(key, [row]);
   };
   for (const d of caster.damageOut) {
     const event = d.logLine?.event as string | undefined;
     if (event === LogEvent.SPELL_ABSORBED) continue;
     if (event === LogEvent.SPELL_PERIODIC_DAMAGE) continue;
-    add(d.destUnitId, d.spellId, d.spellName, d.logLine.timestamp);
+    add(d.destUnitId, d.spellId, d.spellName, d.logLine.timestamp, true);
   }
   for (const m of caster.missesOut ?? []) {
     if (m.logLine?.event === LogEvent.SPELL_PERIODIC_MISSED) continue;
-    add(m.destUnitId, m.spellId, m.spellName, m.timestamp);
+    add(m.destUnitId, m.spellId, m.spellName, m.timestamp, true);
   }
   for (const unit of targets)
     for (const a of unit.auraEvents ?? []) {
@@ -501,25 +541,28 @@ export function pressLandingsMs<T extends LandingPress>(
         event === LogEvent.SPELL_AURA_APPLIED ||
         event === LogEvent.SPELL_AURA_REFRESH
       )
-        add(unit.id, a.spellId, a.spellName, a.logLine.timestamp);
+        add(unit.id, a.spellId, a.spellName, a.logLine.timestamp, false);
     }
-  for (const rows of rowsByKey.values()) rows.sort((a, b) => a - b);
+  for (const rows of rowsByKey.values()) rows.sort((a, b) => a.atMs - b.atMs);
 
   const taken = new Map<string, number>();
-  const landed = new Map<T, number>();
+  const landed = new Map<T, { atMs: number; spellId: string | null }>();
   const inOrder = [...presses].sort((a, b) => atMsOf(a) - atMsOf(b));
   for (const press of inOrder) {
     const atMs = atMsOf(press);
     const key = `${press.destUnitId}|${spellNameKey(press.spellId, press.spellName)}`;
     const rows = rowsByKey.get(key) ?? [];
     let next = taken.get(key) ?? 0;
-    while (next < rows.length && rows[next]! < atMs - PRESS_EFFECT_LEAD_MS)
+    while (
+      next < rows.length &&
+      rows[next]!.atMs < atMs - PRESS_EFFECT_LEAD_MS
+    )
       next++;
     const row = rows[next];
-    if (row !== undefined && row <= atMs + REFLECT_ROW_LAG_MS) {
+    if (row !== undefined && row.atMs <= atMs + REFLECT_ROW_LAG_MS) {
       landed.set(press, row);
       next++;
-    } else landed.set(press, atMs);
+    } else landed.set(press, { atMs, spellId: null });
     taken.set(key, next);
   }
   return landed;

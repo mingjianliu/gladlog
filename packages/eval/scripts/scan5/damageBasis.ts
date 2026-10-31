@@ -37,11 +37,10 @@
  *    spell, deferral rows out. One wall's list is all its lines (Die by the
  *    Sword prints two), and a cast the wall does not stop is no cast into it:
  *    a school the immunity leaves out, or a wall's kill-live-gated part with
- *    the target at or below the gate. That part is read from the rows, never
- *    from reach alone: a spell a parry stopped this round is melee whatever
- *    its reach (`parriedThisRound`), so Final Verdict at 12 yd into Die by the
- *    Sword stays flagged. 59978653 r1 0:30 stayed flagged until Void Blast
- *    left the product's not-a-press list.
+ *    the target at or below the gate. What a parry stops is the product's own
+ *    predicate (`parryStopsAttack`, DB2), so Final Verdict at 12 yd into Die
+ *    by the Sword stays flagged. 59978653 r1 0:30 stayed flagged until Void
+ *    Blast left the product's not-a-press list.
  *  - `postCcAbsorbedUnsaid` (D70): a missed-cleanse row whose 5 s after the
  *    control held ≥ 1k absorbed with no absorbed fact beside `postCcDamageK`.
  *    6ac699c9 0:25: 272k.
@@ -61,11 +60,12 @@ import {
   mitigationVerdictOf,
   nonMeleeMitigationVerdictOf,
 } from "@gladlog/analysis/src/data/mitigationVerdicts";
-import {
-  MELEE_RANGE_YD,
-  spellRangeYards,
-} from "@gladlog/analysis/src/data/spellReach";
+import { parryStopsAttack } from "@gladlog/analysis/src/data/spellParry";
 import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
+import {
+  pressLandingCaster,
+  pressLandingRows,
+} from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 
 import {
   ABSORBED,
@@ -359,20 +359,7 @@ function readHpAtOrBelow(
   );
 }
 
-const PARRY_ROW = /\bSPELL_MISSED,.*?,(\d+),"[^"]*",0x[0-9a-fA-F]+,PARRY\b/;
-
-/** the spells of this round with a PARRY row, whoever cast them */
-function parriedThisRound(ctx: IRoundCtx): Set<string> {
-  const ids = new Set<string>();
-  for (const l of ctx.rawLines) {
-    const m = PARRY_ROW.exec(l);
-    if (m) ids.add(m[1]!);
-  }
-  return ids;
-}
-
 function abilityIntoWallShare(ctx: IRoundCtx): void {
-  const parried = parriedThisRound(ctx);
   const friendIds = new Set(
     ctx.players
       .filter((p) => p.reaction === ctx.owner.reaction)
@@ -422,14 +409,21 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
     const down = auras.find((a) => ev(a) === REMOVED && tsOf(a) > tsOf(up));
     const toMs = down ? tsOf(down) : ctx.end;
     const listed = listedOf.get(intoKey(m))!;
-    // the wall's verdict for what a parry cannot stop can be a gated one. The
-    // log, not reach, says what a parry stops: 45 logs into Die by the Sword,
-    // Final Verdict (12 yd) 17 parried of 29, Empyrean Hammer 29 of 36
+    // the wall's verdict for what a parry cannot stop can be a gated one, read
+    // on the attack each press landed as, like the product's two lines
     const wallKey = String(up.spellId);
     const rangedGated =
       nonMeleeMitigationVerdictOf(wallKey) === "kill-live-gated" &&
       mitigationVerdictOf(wallKey) !== "kill-live-gated" &&
       readHpAtOrBelow(ctx, target, tsOf(up), toMs, KILL_LIVE_HP_PCT);
+    const landings = rangedGated
+      ? pressLandingRows(
+          successesOf(friend).filter((c: any) => c.destUnitId === target.id),
+          tsOf,
+          pressLandingCaster(friend, ctx.units),
+          [target],
+        )
+      : null;
     for (const [spell, v] of totals) {
       if (v < all * HIGH_VALUE_SHARE || listed.includes(spell)) continue;
       const casts = successesOf(friend).filter(
@@ -442,9 +436,8 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
           // Crusading Strikes (Physical) into Spellwarding (Magic)
           immunityCoversSpell(wallKey, c.spellId) !== false &&
           !(
-            rangedGated &&
-            !parried.has(String(c.spellId)) &&
-            (spellRangeYards(c.spellId) ?? 0) > MELEE_RANGE_YD
+            landings &&
+            !parryStopsAttack(String(c.spellId), landings.get(c)?.spellId)
           ),
       );
       if (casts.length < WALL_MIN_CASTS) continue;
