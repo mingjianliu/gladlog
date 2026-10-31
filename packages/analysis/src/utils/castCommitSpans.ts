@@ -181,19 +181,34 @@ export function nextPressEndingChannelMs(
 
 /** The caster's own last row of a channel's effect after `afterMs`, up to
  * `untilMs` (undefined when none): a damage / heal row with the channel's
- * English name (a tick's id is not the cast's, its name is). */
+ * English name (a tick's id is not the cast's, its name is), a hit a shield
+ * ate (SPELL_ABSORBED: `spellId` the shield, `attackSpellId` the hit) or one
+ * that missed (7a404f6a 1:01: Ultimate Penitence's bolts into a Grounding
+ * Totem, MISSED from 3.0 s to 5.05 s). */
 function lastChannelEffectMs(
-  unit: Pick<ICombatUnit, "id" | "damageOut" | "healOut">,
+  unit: Pick<ICombatUnit, "id" | "damageOut" | "healOut"> &
+    Partial<Pick<ICombatUnit, "missesOut">>,
   name: string,
   afterMs: number,
   untilMs: number,
 ): number | undefined {
   let last: number | undefined;
-  for (const r of [...(unit.damageOut ?? []), ...(unit.healOut ?? [])]) {
+  for (const r of [
+    ...(unit.damageOut ?? []),
+    ...(unit.healOut ?? []),
+    ...(unit.missesOut ?? []),
+  ]) {
     if (r.srcUnitId !== unit.id) continue;
     const t = r.logLine.timestamp;
     if (t <= afterMs || t > untilMs) continue;
-    if (getEnglishSpellName(r.spellId, r.spellName) !== name) continue;
+    const { attackSpellId, attackSpellName } = r as {
+      attackSpellId?: string;
+      attackSpellName?: string;
+    };
+    const english = attackSpellId
+      ? getEnglishSpellName(attackSpellId, attackSpellName ?? "")
+      : getEnglishSpellName(r.spellId, r.spellName);
+    if (english !== name) continue;
     if (last === undefined || t > last) last = t;
   }
   return last;
@@ -213,7 +228,8 @@ function lastChannelEffectMs(
  * stopped the channel, still in the air: the press wins then.
  */
 export function channelEndSeconds(
-  unit: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut" | "healOut">,
+  unit: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut" | "healOut"> &
+    Partial<Pick<ICombatUnit, "missesOut">>,
   spellId: string,
   castSeconds: number,
   auraEndSeconds: number,

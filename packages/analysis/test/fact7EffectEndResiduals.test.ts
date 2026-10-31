@@ -107,6 +107,41 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
       5.05,
     );
   });
+  it("a bolt that missed or that a shield ate is a bolt (7a404f6a 1:01: into a Grounding Totem from 3.0 s)", () => {
+    const missed = {
+      spellId: "421543",
+      spellName: "Ultimate Penitence",
+      srcUnitId: "h",
+      logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(5.05) },
+    } as never;
+    const absorbed = {
+      spellId: "17",
+      spellName: "Power Word: Shield",
+      attackSpellId: "421543",
+      attackSpellName: "Ultimate Penitence",
+      srcUnitId: "h",
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: ms(4.4) },
+    } as never;
+    const unit = {
+      id: "h",
+      spellCastEvents: [press(UP, 0), press("586", 5.25)],
+      damageOut: [bolt(3), absorbed],
+      healOut: [],
+    };
+    expect(channelEndSeconds(unit, UP, 0, 6.5, T0, "Ultimate Penitence")).toBe(
+      4.4,
+    );
+    expect(
+      channelEndSeconds(
+        { ...unit, missesOut: [missed] },
+        UP,
+        0,
+        6.5,
+        T0,
+        "Ultimate Penitence",
+      ),
+    ).toBe(5.05);
+  });
   it("a spell DB2 calls a channel keeps its aura's end", () => {
     const unit = { id: "h", spellCastEvents: [], damageOut: [], healOut: [] };
     expect(channelEndSeconds(unit, "47540", 0, 2, T0, "Penance")).toBe(2);
