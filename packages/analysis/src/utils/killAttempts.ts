@@ -738,6 +738,8 @@ export function extractKillAttempts(
        * rows (`pressRefusedImmuneOn`) */
       castMs: number;
     };
+    /** a `damageOut` row a shield ate: `spellId` is the shield */
+    type HitRow = { attackSpellId?: string; attackSpellName?: string };
     const teamCasts: TeamCast[] = [];
     for (const f of friendlies) {
       const cds =
@@ -783,12 +785,30 @@ export function extractKillAttempts(
       }
       if (cur) clusters.push(cur);
     }
+    /** Is this `damageOut` row a hit of the press: an effect aura of the cast,
+     * or its damage under another id (`isSameSpell`: Execute 281000 → 260798).
+     * A hit a shield ate is such a row too, with the shield in `spellId` and
+     * the hit in `attackSpellId` (`HitRow`; 1405c83e 0:48: Bestial Wrath's
+     * 344572 into Onlyfansgeno, every hit on it absorbed). */
+    const isHitOf = (c: TeamCast, d: ICombatUnit["damageOut"][number]) => {
+      const { attackSpellId, attackSpellName } = d as HitRow;
+      const id = attackSpellId ?? d.spellId;
+      const name = attackSpellId ? attackSpellName : d.spellName;
+      return (
+        !!id &&
+        (castAndEffectIds(c.spellId).has(id) ||
+          isSameSpell(id, name, c.spellId, c.spellName))
+      );
+    };
     /** fact7 D4 (96fb4d42 1:25): a press on nobody — its caster's own buff,
      * no dest but its caster — goes where its caster's damage went. Avenging
      * Wrath opened the bracket and was skipped for an Ultimate Penitence 5.6 s
-     * later, the first press with a target of its own. A press that hit an
-     * enemy other than the target did go somewhere else: its own hits decide,
-     * as for any aimed press. */
+     * later, the first press with a target of its own. A splash of the press
+     * on another enemy aims it nowhere: the caster's own damage still decides
+     * (90c01e7f 2:28: Ascendance's 344548 hit the healer and two pets, 83 % of
+     * the shaman's bracket went into the target; 1ceeafbe 1:28: Malevolence's
+     * splash on the other two, the target still the warlock's most-hit enemy).
+     * A caster who hit another enemy more stays out of it. */
     const selfBuffInto = (
       c: TeamCast,
       target: ICombatUnit,
@@ -804,15 +824,17 @@ export function extractKillAttempts(
       const inIt = (c.caster.damageOut ?? []).filter(
         (d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= toMs,
       );
-      const ids = castAndEffectIds(c.spellId);
-      return (
-        !inIt.some(
-          (d) =>
-            !!d.spellId &&
-            (ids.has(d.spellId) ||
-              isSameSpell(d.spellId, d.spellName, c.spellId, c.spellName)),
-        ) && inIt.some((d) => d.destUnitId === target.id)
-      );
+      if (!inIt.some((d) => d.destUnitId === target.id)) return false;
+      if (!inIt.some((d) => isHitOf(c, d))) return true;
+      const onEnemy = new Map<string, number>();
+      for (const d of inIt)
+        if (enemies.some((e) => e.id === d.destUnitId))
+          onEnemy.set(
+            d.destUnitId,
+            (onEnemy.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
+          );
+      const onTarget = onEnemy.get(target.id) ?? 0;
+      return [...onEnemy.values()].every((v) => v <= onTarget);
     };
     /** fact2 (2026-10-20, kill-attempt anchor): the press the line names —
      * the first of the cluster that went into the target (its cast row's
@@ -849,15 +871,10 @@ export function extractKillAttempts(
           )
             return true;
         }
-        const ids = castAndEffectIds(c.spellId);
         return (c.caster.damageOut ?? []).some(
           (d) =>
             d.destUnitId === target.id &&
-            !!d.spellId &&
-            // an effect aura of the cast, or its damage under another id
-            // (`isSameSpell`: Execute 281000 → 260798)
-            (ids.has(d.spellId) ||
-              isSameSpell(d.spellId, d.spellName, c.spellId, c.spellName)) &&
+            isHitOf(c, d) &&
             d.logLine.timestamp >= matchStartMs + c.cast * 1000 &&
             d.logLine.timestamp <= toMs,
         );
