@@ -268,10 +268,49 @@ describe("an ally's pressed shield reads as the holder's own (fact7 D37, user ru
       CHI_COCOON,
       T,
       T + 9000,
-      ally([cast("124682", T)]),
+      ally([{ ...cast("124682", T), destUnitId: "u" }]),
     );
     expect(spans).toHaveLength(1);
     expect(spans[0]!.toMs).toBe(T + 9000);
+  });
+  it("only a press at the holder counts: a proc shield and a press on somebody else do not", () => {
+    const PROC_PWS = "1246768";
+    const onHolder = {
+      id: "u",
+      absorbsIn: [absorb(PROC_PWS, "ally")],
+      spellCastEvents: [],
+    } as never;
+    expect(
+      ownPressedShieldSpansMs(onHolder, PROC_PWS, T, T + 9000, ally([])),
+    ).toEqual([]);
+    expect(
+      ownPressedShieldSpansMs(
+        onHolder,
+        PROC_PWS,
+        T,
+        T + 9000,
+        ally([{ ...cast("17", T), destUnitId: "other" }]),
+      ),
+    ).toEqual([]);
+    expect(
+      ownPressedShieldSpansMs(
+        holder,
+        CHI_COCOON,
+        T,
+        T + 9000,
+        ally([{ ...cast("124682", T), destUnitId: "other" }]),
+      ),
+    ).toEqual([]);
+    // a press of the carrier a while before the run did not put it up
+    expect(
+      ownPressedShieldSpansMs(
+        holder,
+        CHI_COCOON,
+        T,
+        T + 9000,
+        ally([{ ...cast("124682", T - 5000), destUnitId: "u" }]),
+      ),
+    ).toEqual([]);
   });
   it("read on the holder alone it is none: the rows are the ally's", () => {
     expect(ownPressedShieldSpansMs(holder, CHI_COCOON, T, T + 9000)).toEqual([]);

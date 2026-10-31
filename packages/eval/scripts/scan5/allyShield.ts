@@ -7,14 +7,17 @@
  * `allyShieldDefenseless`: every `[KILL WINDOW] … (defenseless a–b)` and
  * `[VULNERABLE] … no major defensives` span. Log truth: an absorb row on the
  * target inside the span, from a shield of a same-side other unit, with a
- * SPELL_CAST_SUCCESS of that unit in the minute before the row that names the
- * shield or makes it (the riders' table lookup is fine: it is a lookup).
+ * SPELL_CAST_SUCCESS of that unit at the target that names the shield or makes
+ * it (the riders' table lookup is fine: it is a lookup), from a second before
+ * the run's APPLIED to the row. A proc shield with no such press is no
+ * violation.
  */
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { riderCastsOfShield } from "@gladlog/analysis/src/data/ownShieldLinks";
 
 import {
   ABSORBED,
+  APPLIED,
   ev,
   type IRoundCtx,
   nameOf,
@@ -27,7 +30,7 @@ export const CHECKS = ["allyShieldDefenseless"] as const;
 
 const SPAN =
   /^\s+\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+ \(([^()]+(?:\([^()]*\)[^()]*)*)\):(.*)$/;
-const PRESS_LOOKBACK_MS = 60_000;
+const PRESS_PAIR_MS = 1000;
 
 export function run(ctx: IRoundCtx): void {
   const seen = new Set<string>();
@@ -59,10 +62,21 @@ export function run(ctx: IRoundCtx): void {
       if (!caster) continue;
       const id = String(r.spellId);
       const name = nameOf(id, id);
+      const runStart = ((u.auraEvents ?? []) as any[])
+        .filter(
+          (a) =>
+            String(a.spellId) === id &&
+            a.srcUnitId === caster.id &&
+            ev(a) === APPLIED &&
+            tsOf(a) <= t,
+        )
+        .pop();
+      if (!runStart) continue;
       const press = successesOf(caster).find(
         (c: any) =>
           tsOf(c) <= t &&
-          tsOf(c) + PRESS_LOOKBACK_MS >= t &&
+          tsOf(c) >= tsOf(runStart) - PRESS_PAIR_MS &&
+          c.destUnitId === u.id &&
           (String(c.spellId) === id ||
             nameOf(String(c.spellId), c.spellName ?? "") === name ||
             castsOfEffectAura(id).includes(String(c.spellId)) ||

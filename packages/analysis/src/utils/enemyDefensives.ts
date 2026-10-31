@@ -238,6 +238,8 @@ export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
 /** How long after its press an own absorb shield still counts as the one
  * it applied — the corpusFactScan2 E6 window (60 s before the absorb row). */
 export const OWN_SHIELD_PRESS_LOOKBACK_MS = 60_000;
+/** How far before an ally's shield's run its press may lie to have put it up. */
+export const ALLY_SHIELD_PRESS_PAIR_MS = 1000;
 
 /**
  * The parts of one run of an aura on `holder` (ms) during which it is an own
@@ -256,11 +258,14 @@ export function ownPressedShieldSpansMs(
   runStartMs: number,
   runEndMs: number,
   /** who put the shield up, when it is not `holder`: an ally's pressed shield
-   * reads the same, on the ally's presses and the ally's absorb rows (user
-   * ruling 2026-10-30, fact7 D37: Enveloping Mist's Chi Cocoon on the Feral) */
+   * reads the same, on the ally's presses at the holder and the ally's absorb
+   * rows; only a press counts, so ruling (1)'s whole-run ids and the unlogged
+   * rider do not apply (user ruling 2026-10-30, fact7 D37: Enveloping Mist's
+   * Chi Cocoon on the Feral) */
   caster: Pick<ICombatUnit, "id" | "spellCastEvents"> = holder,
 ): Array<{ fromMs: number; toMs: number }> {
-  if (KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(spellId))
+  const own = caster.id === holder.id;
+  if (own && KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(spellId))
     return [{ fromMs: runStartMs, toMs: runEndMs }];
   if (!abilityProfile(spellId).absorbs) return [];
   if (
@@ -274,6 +279,18 @@ export function ownPressedShieldSpansMs(
   const out: Array<{ fromMs: number; toMs: number }> = [];
   for (const c of caster.spellCastEvents ?? []) {
     if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !c.spellId) continue;
+    // an ally's press counts when it was aimed at the holder and put this run
+    // up: one on somebody else, or a minute old, is not it. On the 91 audited
+    // logs an ally's shield pairs ≤ 0.2 s with its press 1,721 of 1,792 (PW:S
+    // 17), 1,903 of 1,942 (Prayer of Mending's PW:S 1246768), 157 of 263 (Chi
+    // Cocoon 1260681)
+    if (
+      !own &&
+      (c.destUnitId !== holder.id ||
+        c.logLine.timestamp < runStartMs - ALLY_SHIELD_PRESS_PAIR_MS ||
+        c.logLine.timestamp > runEndMs)
+    )
+      continue;
     if (
       !castIds.has(c.spellId) &&
       !(name !== "" && getEnglishSpellName(c.spellId, "") === name)
@@ -297,6 +314,7 @@ export function ownPressedShieldSpansMs(
   // own id is a logged press (Ice Barrier: `riderStandsForUnloggedPress`).
   const carriers = riderCastsOfShield(spellId);
   if (
+    own &&
     out.length === 0 &&
     riderStandsForUnloggedPress(spellId) &&
     !(caster.spellCastEvents ?? []).some(
