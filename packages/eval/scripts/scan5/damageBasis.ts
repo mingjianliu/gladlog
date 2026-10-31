@@ -13,12 +13,18 @@
  *
  *  - `duringExternalShare` (D6, D29): the `X% of their enemy-player damage` of
  *    a `| during it:` segment, against landed + absorbed + deferred on all
- *    enemy players inside the aura's span. 96fb4d42 0:55: 100 % printed, 73 %
- *    with the 117k put into another enemy's shields; 163de8f1 1:37: 0 %
- *    printed for 70k all absorbed on the target.
+ *    enemy players inside the aura's span, up to its own REMOVED row (the
+ *    printed length is rounded: a hit logged after that row sat past the wall
+ *    and inside a span read as apply + `0.2s`, 7b07c1de r6 0:35, 160 ms). 96fb4d42
+ *    0:55: 100 % printed, 73 % with the 117k put into another enemy's shields;
+ *    163de8f1 1:37: 0 % printed for 70k all absorbed on the target.
  *  - `allyOverlapDeferral` (D22): a burst ledger `their top target in it: T
  *    N.NNM` that only matches with the deferral rows summed by magnitude.
  *    d2e6e70b: 1.29M printed, 1.28M true.
+ *    The line does not say which span it summed, so a span that reads the
+ *    figure with no deferral row clears the item: `toB − seconds` matched by
+ *    magnitude while the press's own span read it clean (ms-exact on five
+ *    rounds, 67 of 67 items landed + absorbed).
  *  - `spikeAbsorbedPart` (D49): a `[DMG SPIKE]` whose absorbed part prints as
  *    at least 0.01M with no `(X absorbed)`. 7acbefeb 1:05: 85k.
  *  - `topSourceRedistribution` (D54): a `Top sources:` entry that names a
@@ -27,9 +33,21 @@
  *  - `abilityIntoWallShare` (D53): a spell of ≥ 5 % of the player's damage on
  *    enemies, cast ≥ 3 times inside a listed wall, absent from the line.
  *    7e7b1e51 0:43: Fire Blast.
+ *    The 5 % is the legend's: a hit a shield ate counts under its attack
+ *    spell, deferral rows out. One wall's list is all its lines (Die by the
+ *    Sword prints two), and a cast the wall does not stop is no cast into it:
+ *    a school the immunity leaves out, or a wall's kill-live-gated part with
+ *    the target at or below the gate. That part is read from the rows, never
+ *    from reach alone: a spell a parry stopped this round is melee whatever
+ *    its reach (`parriedThisRound`), so Final Verdict at 12 yd into Die by the
+ *    Sword stays flagged. 59978653 r1 0:30 stayed flagged until Void Blast
+ *    left the product's not-a-press list.
  *  - `postCcAbsorbedUnsaid` (D70): a missed-cleanse row whose 5 s after the
  *    control held ≥ 1k absorbed with no absorbed fact beside `postCcDamageK`.
  *    6ac699c9 0:25: 272k.
+ *    The 5 s run from the aura the row's `cc=` names, not from the first aura
+ *    of that second (b9aae137 r1 0:07: Predatory Swiftness 78 ms before the
+ *    Hammer of Justice, 145k against the printed 157k).
  *  - `stackedWallPrice` (D77): a `[STACKED DEFENSIVES]` percentage price
  *    against (landed + absorbed) × b / (1 − b). 831c3fd5 0:23: ~6 % printed,
  *    ~20 % true.
@@ -38,13 +56,25 @@ import {
   resolveMitigation,
   strongestComponentPct,
 } from "@gladlog/analysis/src/data/mitigationComponents";
+import {
+  KILL_LIVE_HP_PCT,
+  mitigationVerdictOf,
+  nonMeleeMitigationVerdictOf,
+} from "@gladlog/analysis/src/data/mitigationVerdicts";
+import {
+  MELEE_RANGE_YD,
+  spellRangeYards,
+} from "@gladlog/analysis/src/data/spellReach";
+import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
 
 import {
   ABSORBED,
   APPLIED,
+  deathMs,
   ev,
   type IRoundCtx,
   nameOf,
+  REFRESH,
   REMOVED,
   successesOf,
   tsOf,
@@ -69,6 +99,9 @@ const REDISTRIBUTION_NAMES = [
 ];
 
 const SLACK_PCT = 2;
+/** the printed length is a tenth of a second, its end within this of the row */
+const PRINTED_LENGTH_MS = 150;
+const AURA_AFTER_PRESS_MS = 3000;
 const fmtLedger = (n: number): string => (n / 1e6).toFixed(2);
 const POST_CC_S = 5;
 const MIN_ABSORBED = 1000;
@@ -116,25 +149,54 @@ function duringExternalShare(ctx: IRoundCtx): void {
     const target = ctx.unitOfPid(m[4]);
     if (!target) continue;
     const lo = ctx.start + secOfTag(m[1]!, m[2]!) * 1000;
+    // the line prints the press's second; its aura can follow by more than
+    // that second (45e12c2b r3 2:01: cast 22:33:14.786, Pain Suppression on the
+    // target at 15.571), and a press on a unit already holding the aura opens
+    // no APPLIED, only a REFRESH (cb6f3e66 r5 0:35: Time Dilation up from 0:27,
+    // the second press and its 10.4 s from the REFRESH at 35.871)
     const applied = ((target.auraEvents ?? []) as any[]).find(
       (a) =>
-        ev(a) === APPLIED &&
+        (ev(a) === APPLIED || ev(a) === REFRESH) &&
         tsOf(a) >= lo - 1000 &&
-        tsOf(a) < lo + 1000 &&
+        tsOf(a) < lo + AURA_AFTER_PRESS_MS &&
         nameOf(a.spellId, a.spellName) === m[3],
     );
     const fromMs = applied ? tsOf(applied) : lo;
-    const toMs = fromMs + +m[5]! * 1000;
+    const printedTo = fromMs + +m[5]! * 1000;
+    // the aura's own end, read from its row (a re-broadcast's REMOVED sits
+    // mid-span, so the one the printed length points at)
+    const removed = ((target.auraEvents ?? []) as any[])
+      .filter(
+        (a) =>
+          ev(a) === REMOVED &&
+          tsOf(a) >= fromMs &&
+          nameOf(a.spellId, a.spellName) === m[3],
+      )
+      .map(tsOf)
+      .sort((a, b) => Math.abs(a - printedTo) - Math.abs(b - printedTo))[0];
+    const auraTo =
+      removed !== undefined &&
+      Math.abs(removed - printedTo) <= PRINTED_LENGTH_MS
+        ? removed
+        : printedTo;
+    const wallTo = Math.min(auraTo, deathMs(target), ctx.end);
     for (const seg of line.slice(at + "| during it: ".length).split("; ")) {
       const s = DURING_SHARE.exec(seg);
       if (!s) continue;
       const ally = ctx.unitOfPid(s[1]);
       if (!ally) continue;
       const src = attackersOf(ctx, ally);
+      const toMs = Math.min(wallTo, deathMs(ally));
+      // signed: a negative Fel Armor row is the other half of a shield's
+      // overstated row on one hit (7308d15a r2 1:16: a 350 tick logged Fel Armor
+      // -1480 + Saved by the Light 1458 + Soul Leech 247 = its 225 absorbed)
       const onUnit = (v: any) =>
-        landedOn(v, fromMs, toMs, src) +
-        absorbedOn(v, fromMs, toMs, src) +
-        Math.max(0, deferredOn(v, fromMs, toMs, src));
+        Math.max(
+          0,
+          landedOn(v, fromMs, toMs, src) +
+            absorbedOn(v, fromMs, toMs, src) +
+            deferredOn(v, fromMs, toMs, src),
+        );
       const all = enemies.reduce((n, e) => n + onUnit(e), 0);
       ctx.bump("duringExternalShare");
       if (all <= 0) continue;
@@ -176,18 +238,27 @@ function allyOverlapDeferral(ctx: IRoundCtx): void {
       const seconds = +m[3]!;
       const fromB = ctx.start + burst[0] * 1000;
       const toB = ctx.start + burst[1] * 1000;
+      // the header's seconds are floored: the burst opened at the owner's press
+      const opened = successesOf(ctx.owner)
+        .map(tsOf)
+        .filter((t) => t >= fromB && t < fromB + 1000);
       const press = successesOf(ally)
         .filter(
           (c) =>
             nameOf(c.spellId, c.spellName) === m[2] && tsOf(c) <= toB + 1000,
         )
         .map(tsOf);
-      // the overlap opens at the burst or at the press, closes at either end
-      const opens = [fromB, ...press.filter((t) => t >= fromB)];
+      // the overlap opens at the burst or at the press, closes at either end;
+      // which of them is the real one the line does not say, so a span that
+      // reads the printed figure with no deferral row clears the item
+      const opens = [fromB, ...opened, ...press.filter((t) => t >= fromB)];
       const spans = [
         ...opens.map((a) => [a, a + seconds * 1000] as const),
         [toB - seconds * 1000, toB] as const,
       ];
+      const cleanOf = (a: number, b: number): number =>
+        landedOn(target, a, b + 1, src) + absorbedOn(target, a, b + 1, src);
+      if (spans.some(([a, b]) => fmtLedger(cleanOf(a, b)) === m[5])) continue;
       const abs = (a: number, b: number): number =>
         ((target.absorbsIn ?? []) as any[])
           .filter(
@@ -199,12 +270,9 @@ function allyOverlapDeferral(ctx: IRoundCtx): void {
           )
           .reduce((n, r) => n + Math.abs(r.absorbedAmount ?? 0), 0);
       for (const [a, b] of spans) {
-        const clean =
-          landedOn(target, a, b + 1, src) + absorbedOn(target, a, b + 1, src);
-        const withDeferral = clean + abs(a, b);
+        const clean = cleanOf(a, b);
         if (abs(a, b) < MIN_ABSORBED) continue;
-        if (fmtLedger(clean) === m[5]) continue;
-        if (fmtLedger(withDeferral) !== m[5]) continue;
+        if (fmtLedger(clean + abs(a, b)) !== m[5]) continue;
         ctx.violate(
           "allyOverlapDeferral",
           "summedByMagnitude",
@@ -270,12 +338,56 @@ function topSourceRedistribution(ctx: IRoundCtx): void {
 const INTO_LINE =
   /^\s*\[(\d+):(\d\d)\] [^(]+\((\S+)\): (.+) into (\S+)'s (.+)$/;
 
+/** did a logged HP reading of the unit inside the span sit at or below `pct` */
+function readHpAtOrBelow(
+  ctx: IRoundCtx,
+  unit: any,
+  fromMs: number,
+  toMs: number,
+  pct: number,
+): boolean {
+  const rows = ((unit.advancedActions ?? []) as any[]).filter(
+    (a) => a.advancedActorId === unit.id && a.advancedActorMaxHp > 0,
+  );
+  const lo = fromMs - ctx.start;
+  const hi = toMs - ctx.start;
+  return rows.some(
+    (a) =>
+      tsOf(a) - ctx.start >= Math.floor(lo / 1000) * 1000 &&
+      tsOf(a) - ctx.start <= Math.ceil(hi / 1000) * 1000 &&
+      (100 * a.advancedActorCurrentHp) / a.advancedActorMaxHp <= pct,
+  );
+}
+
+const PARRY_ROW = /\bSPELL_MISSED,.*?,(\d+),"[^"]*",0x[0-9a-fA-F]+,PARRY\b/;
+
+/** the spells of this round with a PARRY row, whoever cast them */
+function parriedThisRound(ctx: IRoundCtx): Set<string> {
+  const ids = new Set<string>();
+  for (const l of ctx.rawLines) {
+    const m = PARRY_ROW.exec(l);
+    if (m) ids.add(m[1]!);
+  }
+  return ids;
+}
+
 function abilityIntoWallShare(ctx: IRoundCtx): void {
+  const parried = parriedThisRound(ctx);
   const friendIds = new Set(
     ctx.players
       .filter((p) => p.reaction === ctx.owner.reaction)
       .map((p) => p.id),
   );
+  // a wall read by two verdicts prints two lines (Die by the Sword: melee
+  // casts, the rest), and one wall's list is both
+  const intoKey = (m: RegExpExecArray): string =>
+    [m[1], m[2], m[3], m[5], m[6]].join("#");
+  const listedOf = new Map<string, string>();
+  for (const line of ctx.lines) {
+    const m = INTO_LINE.exec(line);
+    if (m)
+      listedOf.set(intoKey(m), `${listedOf.get(intoKey(m)) ?? ""} + ${m[4]!}`);
+  }
   for (const line of ctx.lines) {
     const m = INTO_LINE.exec(line);
     if (!m) continue;
@@ -283,11 +395,18 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
     const target = ctx.byName.get(m[5]!);
     if (!friend || !target) continue;
     ctx.bump("abilityIntoWallShare");
-    const name = (d: any) => nameOf(d.spellId, d.spellName) || "melee";
+    // what the legend's 5 % is of (D53): a hit a shield ate counts under its
+    // own attack spell (`spellId` is the shield), a swing's has none
+    const name = (d: any) =>
+      ev(d) === ABSORBED
+        ? nameOf(d.attackSpellId, d.attackSpellName) || "melee"
+        : nameOf(d.spellId, d.spellName) || "melee";
     const totals = new Map<string, number>();
     let all = 0;
     for (const d of (friend.damageOut ?? []) as any[]) {
-      if (ev(d) === ABSORBED || friendIds.has(d.destUnitId)) continue;
+      if (friendIds.has(d.destUnitId)) continue;
+      if (ev(d) === ABSORBED && DEFERRAL_SHIELDS.has(String(d.spellId)))
+        continue;
       const a = Math.abs(d.effectiveAmount ?? 0);
       totals.set(name(d), (totals.get(name(d)) ?? 0) + a);
       all += a;
@@ -302,7 +421,15 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
     if (!up) continue;
     const down = auras.find((a) => ev(a) === REMOVED && tsOf(a) > tsOf(up));
     const toMs = down ? tsOf(down) : ctx.end;
-    const listed = m[4]!;
+    const listed = listedOf.get(intoKey(m))!;
+    // the wall's verdict for what a parry cannot stop can be a gated one. The
+    // log, not reach, says what a parry stops: 45 logs into Die by the Sword,
+    // Final Verdict (12 yd) 17 parried of 29, Empyrean Hammer 29 of 36
+    const wallKey = String(up.spellId);
+    const rangedGated =
+      nonMeleeMitigationVerdictOf(wallKey) === "kill-live-gated" &&
+      mitigationVerdictOf(wallKey) !== "kill-live-gated" &&
+      readHpAtOrBelow(ctx, target, tsOf(up), toMs, KILL_LIVE_HP_PCT);
     for (const [spell, v] of totals) {
       if (v < all * HIGH_VALUE_SHARE || listed.includes(spell)) continue;
       const casts = successesOf(friend).filter(
@@ -310,7 +437,15 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
           tsOf(c) >= tsOf(up) &&
           tsOf(c) <= toMs &&
           c.destUnitId === target.id &&
-          nameOf(c.spellId, c.spellName) === spell,
+          nameOf(c.spellId, c.spellName) === spell &&
+          // a school the immunity does not stop (DB2 masks) goes through it:
+          // Crusading Strikes (Physical) into Spellwarding (Magic)
+          immunityCoversSpell(wallKey, c.spellId) !== false &&
+          !(
+            rangedGated &&
+            !parried.has(String(c.spellId)) &&
+            (spellRangeYards(c.spellId) ?? 0) > MELEE_RANGE_YD
+          ),
       );
       if (casts.length < WALL_MIN_CASTS) continue;
       ctx.violate(
@@ -333,12 +468,18 @@ function postCcAbsorbedUnsaid(ctx: IRoundCtx): void {
     const unit = ctx.byName.get(m[2]!);
     if (!unit) continue;
     ctx.bump("postCcAbsorbedUnsaid");
-    // the control's own landing: the menu's `t` is cut to a tenth
+    // the control's own landing, not the first aura of that second: the
+    // menu's `t` is cut to a tenth
     const lo = ctx.start + +m[1]! * 1000 - 100;
+    const cc = /[{ ]cc=([^,}]+)/.exec(m[0])?.[1];
     const landing =
       ((unit.auraEvents ?? []) as any[])
         .filter(
-          (a) => ev(a) === APPLIED && tsOf(a) >= lo && tsOf(a) < lo + 1100,
+          (a) =>
+            ev(a) === APPLIED &&
+            tsOf(a) >= lo &&
+            tsOf(a) < lo + 1100 &&
+            nameOf(a.spellId, a.spellName) === cc,
         )
         .map(tsOf)[0] ?? lo;
     const absorbed = absorbedOn(unit, landing, landing + POST_CC_S * 1000 + 1);

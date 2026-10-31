@@ -4,9 +4,14 @@
  * it: whose press a line files an effect under, against the rows.
  *
  *  - `dispelPressOnAlly` (D18): `X (passive)` in `[MINOR DISPELS]` under a unit
- *    a teammate's SPELL_CAST_SUCCESS of X was aimed at, in that second. The
- *    SPELL_DISPEL rows of a press on an ally name the recipient as source.
- *    d2e6e70b 0:26: the hunter's Mending Bandage, on the warlock.
+ *    a teammate's SPELL_CAST_SUCCESS of X was aimed at, in the second of one of
+ *    that unit's own X rows. The SPELL_DISPEL rows of a press on an ally name
+ *    the recipient as source. d2e6e70b 0:26: the hunter's Mending Bandage, on
+ *    the warlock. An enemy's press aimed at the unit is no press on an ally,
+ *    and one at another moment is not behind this row: 30846f8e r2 printed
+ *    `Spellsteal (passive)` for Jdmx's own row at 07:53:08.509, the repeat of
+ *    his press 4.0 s before (Improved Spellsteal 1270827), and read Aschoni's
+ *    press on him at 07:52:52 as the cause.
  *  - `teamProcSourceDropped` (D44): an `[ENEMY DEF]` line for an aura another
  *    unit applied and a press of that unit put up, not naming that unit.
  *    ba5e59c6 2:02: Sshero's Peaceweaver on the warrior and the druid.
@@ -15,8 +20,12 @@
  *  - `controlRemovalFiled` (D33): a Master's Call on an ally that does not say
  *    what it did, or a legend that lists it as a grip / redirect. 163de8f1 0:43.
  *  - `selfOnlyHeldDualRole` (D62): the `self-only defensive` NOTE naming a
- *    spell whose press in this round was aimed at another unit. 6ab51f91:
- *    Ultimate Penitence, the enemy priest's copy aimed at a teammate.
+ *    spell whose press in this round reached another unit: aimed at it, with
+ *    a row of the spell from the presser on it. 6ab51f91: Ultimate Penitence,
+ *    the enemy priest's copy aimed at a teammate. The aim alone is no reach: a
+ *    self-buff's cast row names whatever the presser had targeted, and
+ *    Survival of the Fittest 264735 went on presser + pet only with that row
+ *    naming an enemy and a teammate in one log (ec7bd3f5 r3).
  */
 import { APPLIED, ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
@@ -29,6 +38,7 @@ export const CHECKS = [
 ] as const;
 
 const SECOND = 1000;
+const DISPEL_ROWS = new Set(["SPELL_DISPEL", "SPELL_STOLEN"]);
 const CAUTERIZE_MARKERS = new Set(["1286444", "87023", "87024"]);
 const PROC_LINE =
   /^\s*(\d+):(\d\d)\s+\[(?:YOU|TEAM)\] \[PROC\]\s+(?:(\d+)\([^)]*\) \([^)]*\): )?(.+?) \(cheat-death proc\)/;
@@ -47,12 +57,27 @@ function dispelPressOnAlly(ctx: IRoundCtx): void {
     for (const p of m[4]!.matchAll(PASSIVE_PART)) {
       const name = p[1]!.trim();
       ctx.bump("dispelPressOnAlly");
+      const rows = ((unit.actionOut ?? []) as any[])
+        .filter(
+          (r) =>
+            DISPEL_ROWS.has(ev(r)) && nameOf(r.spellId, r.spellName) === name,
+        )
+        .map(tsOf);
+      const ownPress = successesOf(unit)
+        .filter((c) => nameOf(c.spellId, c.spellName) === name)
+        .map(tsOf);
       const press = all
-        .filter((u) => u.id !== unit.id)
+        .filter((u) => u.id !== unit.id && u.reaction === unit.reaction)
         .flatMap((u) => successesOf(u))
         .find(
           (c) =>
-            c.destUnitId === unit.id && nameOf(c.spellId, c.spellName) === name,
+            c.destUnitId === unit.id &&
+            nameOf(c.spellId, c.spellName) === name &&
+            rows.some(
+              (t) =>
+                Math.abs(t - tsOf(c)) <= SECOND &&
+                !ownPress.some((o) => Math.abs(t - o) <= SECOND),
+            ),
         );
       if (!press) continue;
       ctx.violate(
@@ -165,6 +190,19 @@ function controlRemovalFiled(ctx: IRoundCtx): void {
 const HELD_NOTE =
   /self-only defensive cooldowns \(([^)]*)\) were correctly HELD/;
 
+/** a row of this press's spell from its presser on the unit it was aimed at */
+function pressReachedDest(ctx: IRoundCtx, c: any, name: string): boolean {
+  const dest = ctx.units.find((u) => u.id === c.destUnitId);
+  if (!dest) return false;
+  const mine = (r: any) =>
+    r.srcUnitId === c.srcUnitId && nameOf(r.spellId, r.spellName) === name;
+  return [
+    ...((dest.auraEvents ?? []) as any[]).filter((a) => ev(a) === APPLIED),
+    ...((dest.damageIn ?? []) as any[]),
+    ...((dest.healIn ?? []) as any[]),
+  ].some(mine);
+}
+
 function selfOnlyHeldDualRole(ctx: IRoundCtx): void {
   for (const line of ctx.lines) {
     const m = HELD_NOTE.exec(line);
@@ -178,7 +216,8 @@ function selfOnlyHeldDualRole(ctx: IRoundCtx): void {
             nameOf(c.spellId, c.spellName) === name &&
             c.destUnitId &&
             !/^0+$/.test(c.destUnitId) &&
-            c.destUnitId !== c.srcUnitId,
+            c.destUnitId !== c.srcUnitId &&
+            pressReachedDest(ctx, c, name),
         );
       if (!aimed) continue;
       ctx.violate(
