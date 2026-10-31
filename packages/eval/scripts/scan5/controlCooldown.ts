@@ -138,7 +138,8 @@ export function run(ctx: IRoundCtx): void {
       );
       return;
     }
-    if (!last || lo - last.ms >= cd * 1000) return;
+    // the printed second is floored: spent means spent to that second's end
+    if (!last || lo + 999 - last.ms >= cd * 1000) return;
     if (!last.row && last.auraId)
       landingOnlyByAura.set(
         last.auraId,
