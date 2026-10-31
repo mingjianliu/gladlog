@@ -928,6 +928,7 @@
 - **`reflectedBack` 仍按按键时刻**(D52):它自己的延迟从按键算起,`REFLECT_ROW_LAG_MS` 与 `pressLandingsMs` 共用。
 - **没有目标、又没落到任何人身上的控制的 `[CC AVOIDED?]`**(D65):只有被硬控住的玩家失去这一行(`hardCcAuraAt`,移动口径)。能动、又有位移增益的玩家保留这一行,尽管没有东西能证明他在陷阱附近(`ccAvoidedLandingDelay.test` 钉着,「a totem that stunned nobody」);要不要去掉是另一回事,由用户决定。
 - **`missedPurgeNotActionable.noReach` 仍是反应窗口的读数**(D66):候选门(`losReachable !== false`)和 `derive/mistakes.ts` 的卡片读它,所以指控没有扩大。prompt 行和驱散面板用 `reachedInTime`,对有人在门槛还够时够到的窗口不再说「not actionable」,所以这种窗口上卡片和行可以不一致。
+- **`[ROT PRESSURE]` 的 `extractPlayerDotIntervals` 保留自己的配对**(D32)。它的收尾方式与 `buildAuraIntervals` 相同,先收该来源自己的一段,否则收该法术最早的一段(被精神控制的单位挂上的 DoT,APPLIED 记在该单位名下,跳和 REMOVED 记在控制者名下:87ba9256),但不建在它之上:权威构建器把没收尾的一段封顶到官方时长,而这一行数的是每一秒打开着的,对日志丢了 REMOVED 的情况是另一个问题。
 
 **记录于 2026-10-30(fact7 F21 第 4、5 类)** —— 哪些读数有意保留另一种伤害口径。这一类问的是:同窗口的吸收算没算、转移有没有排除、延迟盾的修正有没有按绝对值加。
 

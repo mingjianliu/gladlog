@@ -923,4 +923,25 @@ describe("offensiveWasteAnalysis — a travelling spell counts where it landed (
     const landed = pressLandingsMs(presses, (p) => p.atMs, { id: "mage-1", damageOut } as never, []);
     expect(presses.map((p) => landed.get(p))).toEqual([1_200, 4_300]);
   });
+
+  it("被吸收干净的一跳(SPELL_PERIODIC_MISSED)也是跳,不是这一发的落地行", () => {
+    const presses = [
+      { spellId: PYROBLAST, spellName: "Pyroblast", destUnitId: "enemy-1", atMs: 1_000 },
+    ];
+    const tick = {
+      spellId: PYROBLAST,
+      spellName: "Pyroblast",
+      destUnitId: "enemy-1",
+      missType: "ABSORB",
+      timestamp: 1_600,
+      logLine: { event: LogEvent.SPELL_PERIODIC_MISSED, timestamp: 1_600 },
+    };
+    const landed = pressLandingsMs(
+      presses,
+      (p) => p.atMs,
+      { id: "mage-1", damageOut: [], missesOut: [tick] } as never,
+      [],
+    );
+    expect(landed.get(presses[0]!)).toBe(1_000);
+  });
 });

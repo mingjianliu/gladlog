@@ -460,8 +460,9 @@ type LandingPress = {
  * per press, and two presses of one instant are two presses (7e7b1e51: two
  * SUCCESS at 44.286, two hits at 44.882). A channel's later ticks are nobody's:
  * the next press starts past them. Left out, so one hit is one row: periodic
- * ticks, and SPELL_ABSORBED (a hit eaten whole also writes its SPELL_MISSED,
- * and a part-absorbed one its damage row).
+ * ticks, an eaten one's SPELL_PERIODIC_MISSED with them, and SPELL_ABSORBED (a
+ * hit eaten whole also writes its SPELL_MISSED, and a part-absorbed one its
+ * damage row).
  */
 export function pressLandingsMs<T extends LandingPress>(
   presses: readonly T[],
@@ -488,8 +489,10 @@ export function pressLandingsMs<T extends LandingPress>(
     if (event === LogEvent.SPELL_PERIODIC_DAMAGE) continue;
     add(d.destUnitId, d.spellId, d.spellName, d.logLine.timestamp);
   }
-  for (const m of caster.missesOut ?? [])
+  for (const m of caster.missesOut ?? []) {
+    if (m.logLine?.event === LogEvent.SPELL_PERIODIC_MISSED) continue;
     add(m.destUnitId, m.spellId, m.spellName, m.timestamp);
+  }
   for (const unit of targets)
     for (const a of unit.auraEvents ?? []) {
       if (a.srcUnitId !== caster.id) continue;

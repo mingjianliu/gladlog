@@ -57,6 +57,48 @@ describe("context.timelineSections.test.ts", () => {
       expect(entries).toEqual([]);
     });
 
+    it("a DoT APPLIED under a Mind-Controlled unit ends at the controller's REMOVED", () => {
+      // 87ba9256: Vampiric Touch APPLIED by the controlled priest, its ticks
+      // and REMOVED under the priest who controlled them
+      const dot = (
+        event: LogEvent,
+        spellId: string,
+        ms: number,
+        src: string,
+      ) => makeAuraEvent(event, spellId, ms, src, "player-1", "DEBUFF");
+      const player = makeUnit("player-1", {
+        name: "Player1",
+        spec: CombatUnitSpec.Druid_Restoration,
+        reaction: CombatUnitReaction.Friendly,
+        auraEvents: [
+          dot(LogEvent.SPELL_AURA_APPLIED, "980", 0, "enemy-1"),
+          dot(LogEvent.SPELL_AURA_APPLIED, "146739", 0, "enemy-1"),
+          dot(LogEvent.SPELL_AURA_APPLIED, "1259790", 0, "enemy-1"),
+          dot(LogEvent.SPELL_AURA_APPLIED, "34914", 0, "mind-controlled"),
+          dot(LogEvent.SPELL_AURA_REMOVED, "34914", 2500, "controller"),
+        ],
+        advancedActions: [0, 1000, 2000, 3000, 4000, 5000].map((ms) => ({
+          ...makeAdvancedAction(ms, 0, 0, 1000, 300),
+          advancedActorId: "player-1",
+        })),
+        damageIn: [],
+      });
+      const entries: [number, string[]][] = [];
+      emitRotPressureEntries({
+        allPlayers: [player],
+        matchStartMs: 0,
+        matchEndMs: 10000,
+        matchDurationS: 10,
+        pid: (n) => `p-${n}`,
+        addEntry: (t, ...lines) => {
+          entries.push([t, lines]);
+        },
+      });
+      expect(entries).toHaveLength(1);
+      // printed at the fourth second (t = 3): the fourth DoT ended at 2.5 s
+      expect(entries[0]![1][0]).toContain("with 3 active DoTs");
+    });
+
     it("single event -> match Rot Pressure line structure and specific values", () => {
       // Setup player with 3 active DoTs from t=0
       const player = makeUnit("player-1", {

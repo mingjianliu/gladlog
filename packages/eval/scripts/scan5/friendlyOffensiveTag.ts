@@ -12,10 +12,17 @@
  *    has no official cooldown (Archangel) is what is up: no friendly offensive
  *    aura WITH a cooldown, no summon, no debuff of theirs on an enemy.
  */
-import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  spellEffectData,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import { SUMMON_SPELL_IDS } from "@gladlog/analysis/src/data/summonGenerated";
 import { offensiveCdOfAura } from "@gladlog/analysis/src/utils/cooldowns";
-import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
+import { OFFENSIVE_AURA_EVIDENCE } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
+import {
+  OFFENSIVE_CD_SPELL_IDS,
+  offensiveEffectCdId,
+} from "@gladlog/analysis/src/utils/spellDanger";
 
 import { APPLIED, ev, type IRoundCtx, REMOVED, successesOf, tsOf } from "./ctx";
 
@@ -48,8 +55,15 @@ function offensiveAurasUp(unit: any, ms: number, side: Set<string>): string[] {
     if (ev(a) === REMOVED) up.delete(key);
     else if (ev(a) === APPLIED) up.set(key, tsOf(a));
   }
+  // an aura whose cast is logged apart (Arcane Surge 365362, Ascendance
+  // 1219480, Summon Infernal 111685, Doom Winds 466772) is that cooldown's
+  // effect: `offensiveCdOfAura` leaves those to their own table
   return [...up.keys()]
-    .map((k) => offensiveCdOfAura(k.split("|")[0]!))
+    .map((k) => k.split("|")[0]!)
+    .map(
+      (id) =>
+        OFFENSIVE_AURA_EVIDENCE.get(id)?.cooldownId ?? offensiveCdOfAura(id),
+    )
     .filter((id): id is string => id !== undefined);
 }
 
@@ -95,7 +109,11 @@ export function run(ctx: IRoundCtx): void {
       ),
     );
     if (pressedInSecond) continue;
-    if (up.every((id) => !spellEffectData[id]?.cooldownSeconds))
+    // a charge's recharge is a cooldown (Ray of Frost, Soul Immolation, 60 s),
+    // and an activation has its cooldown's (Radiant Glory's Avenging Wrath)
+    if (
+      up.every((id) => !effectiveCooldownSeconds(offensiveEffectCdId(id) ?? id))
+    )
       ctx.violate(
         "offensiveTagWrong",
         "cdLessOnly",
