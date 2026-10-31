@@ -78,13 +78,26 @@
  * KILL ATTEMPTS line printing `opportunity: trinket up` on a unit whose
  * category-1166 racial press lies before the attempt's printed start, inside
  * `racialTrinketLockoutMs`. The tier is ruling P-b7's; the printed words must
- * be true. Kind = the racial.
+ * be true. Kind = the racial. Measured on a Gladiator's trinket (or an
+ * unread slot) only: an Adaptation proc fires through the racial's lock
+ * (`adaptationHolder`, the F20 wide measurement), and a unit with no pressable
+ * trinket has nothing to lock — `killTrinketUpNoTrinket`.
+ *
+ * Check `killTrinketUpNoTrinket` (fact7 r5): the same line on a unit whose
+ * COMBATANT_INFO slots hold no pressable PvP trinket (`detectTrinketType`
+ * None / Relentless). Kind = `<type>: <racial state>`, the racial read from the
+ * round's rows: `break racial spent` (a category-1166 press inside its own
+ * lock), `break racial ready` (Will to Survive / Will of the Forsaken pressed
+ * in the round, the log's only proof of the race, not yet at this line), `no
+ * break` (anything else: no press proves a race). `use logged` = a trinket
+ * row on a unit the slots say has none, i.e. the item list is stale.
  */
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import { OTHER_REFUSAL_REASONS } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { racialTrinketLockoutMs } from "@gladlog/analysis/src/data/racialAbilities";
 import {
   analyzePlayerCCAndTrinket,
+  detectTrinketType,
   pvpTrinketRemainingSecondsAt,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
@@ -95,8 +108,11 @@ export const CHECKS = [
   "trinketReadyVsPress",
   "trinketPressVsModel",
   "killTrinketUpLocked",
+  "killTrinketUpNoTrinket",
 ] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "killTrinketUpNoTrinket|None: break racial ready",
+  "killTrinketUpNoTrinket|Relentless: break racial ready",
   "trinketPressVsModel|refusal while model ready",
   "trinketPressVsModel|success while model ON CD",
 ]);
@@ -233,6 +249,38 @@ function killTierClaims(ctx: IRoundCtx): void {
     const T = ctx.start + (Number(m[1]) * 60 + Number(m[2])) * 1000;
     const { Sr, S } = evidenceOf(ctx, u);
     const healer = isHealerSpec(u.spec);
+    const type = detectTrinketType(u);
+    if (type === "None" || type === "Relentless") {
+      const N = "killTrinketUpNoTrinket";
+      ctx.bump(N);
+      const spent = [...Sr].some(([id, presses]) => {
+        const lock = racialTrinketLockoutMs(id, healer);
+        return presses.some((t) => t < T && T < t + lock);
+      });
+      const breakOwner = [...Sr.keys()].some((id) => LOCK_RACIAL_CASTS.has(id));
+      const state =
+        S.length > 0
+          ? "use logged"
+          : spent
+            ? "break racial spent"
+            : breakOwner
+              ? "break racial ready"
+              : "no break";
+      const slots = ((u.info?.equipment ?? []) as any[])
+        .filter((_, i) => i === 12 || i === 13)
+        .map((e) => e.id)
+        .join("+");
+      ctx.violate(
+        N,
+        `${type}: ${state}`,
+        T,
+        `${u.name}#${m[1]}:${m[2]}`,
+        `${u.name} slots ${slots}`,
+        line,
+      );
+      continue;
+    }
+    if (type === "Adaptation") continue;
     for (const [id, presses] of Sr) {
       const name = Object.keys(RACIAL_BY_NAME).find(
         (n) => RACIAL_BY_NAME[n] === id,

@@ -4,7 +4,7 @@
  * user ruling 2026-10-30): every friendly SPELL_CAST_SUCCESS of Spell
  * Reflection 23920 has a press line in its printed second.
  */
-import { fmtS, type IRoundCtx, successesOf, tsOf } from "./ctx";
+import { fmtS, type IRoundCtx, secOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = ["friendlyReflectLine"] as const;
 
@@ -12,9 +12,15 @@ export function run(ctx: IRoundCtx): void {
   const friends = ctx.players.filter(
     (u: any) => u.reaction === ctx.owner?.reaction,
   );
+  // the timeline stops at the first death: a press after it has no line
+  const death = ctx.lines
+    .map((l) => /^(\d+:\d\d)\s+\[DEATH\]/.exec(l))
+    .find(Boolean);
+  const lastSecond = death ? secOf(death[1]!) : Infinity;
   for (const u of friends)
     for (const c of successesOf(u)) {
       if (String(c.spellId) !== "23920") continue;
+      if ((tsOf(c) - ctx.start) / 1000 >= lastSecond + 1) continue;
       ctx.bump("friendlyReflectLine");
       const t = fmtS((tsOf(c) - ctx.start) / 1000);
       const pid = ctx.pidOf(u.name);
