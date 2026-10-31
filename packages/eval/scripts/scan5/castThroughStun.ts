@@ -5,7 +5,8 @@
  *
  *  - `freeToPressBelowLog` (D21): `[DEFENSIVE AVAILABLE] … free to press it for
  *    the last Fs` and the missed-options `longest stretch free to cast it Fs`
- *    about a usable-while-stunned spell (DB2's attribute, a lookup): the rows'
+ *    about a usable-while-stunned spell (DB2's attribute, a lookup, or the
+ *    round's own SUCCESS of it under a stun, `pressedUnderStun`): the rows'
  *    last control on the holder that is not a stun ended before the death, so
  *    the spell was free from there. d2e6e70b 0:33: Psychic Scream ended 0.29 s
  *    before the death, only Chastise's stun remained, the lines said 0.0.
@@ -150,6 +151,24 @@ function blocksOn(ctx: IRoundCtx, unit: any, spellId: string): ISpan[] {
   return out;
 }
 
+/** a SUCCESS this far inside a stun's rows is no press logged across its edge */
+const STUN_EDGE_MS = 200;
+
+/** the log's own word that `spellId` goes out through a stun: a SUCCESS of it
+ * inside a stun on its caster, this round */
+function pressedUnderStun(ctx: IRoundCtx, spellId: string): boolean {
+  return ctx.players.some((u) => {
+    const presses = successesOf(u).filter((c) => String(c.spellId) === spellId);
+    if (presses.length === 0) return false;
+    const stuns = controlsOn(ctx, u).filter((c) => isStunDrAura(c.spellId));
+    return presses.some((c) =>
+      stuns.some(
+        (s) => tsOf(c) > s.from + STUN_EDGE_MS && tsOf(c) < s.to - STUN_EDGE_MS,
+      ),
+    );
+  });
+}
+
 function spellIdByName(unit: any, name: string): string | undefined {
   for (const c of successesOf(unit))
     if (getEnglishSpellName(c.spellId, c.spellName ?? "") === name)
@@ -172,7 +191,7 @@ function freeToPress(ctx: IRoundCtx): void {
     const id = spellIdByName(unit, name);
     if (!id) return;
     const talents = new Set<string>((unit.info?.pvpTalents ?? []).map(String));
-    if (!usableWhileStunned(id, talents)) return;
+    if (!usableWhileStunned(id, talents) && !pressedUnderStun(ctx, id)) return;
     const all = controlsOn(ctx, unit).filter((c) => c.from < deathAt);
     if (!all.some((c) => isStunDrAura(c.spellId))) return;
     ctx.bump("freeToPressBelowLog");

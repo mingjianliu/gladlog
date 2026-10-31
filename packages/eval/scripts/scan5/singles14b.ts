@@ -25,7 +25,8 @@
  *    hit, a miss, or the caster's aura of it going on. One press under two
  *    ids in one instant is one press; a reflected one landed on nobody here;
  *    a wall re-applied inside its second is two intervals, the line one of
- *    them. Kinds `undercount` / `overcount`.
+ *    them. The wall's span is its own aura rows (`wallRuns`), not the
+ *    product's interval reader. Kinds `undercount` / `overcount`.
  *  - `avoidedWhileControlled` (D65): `[CC AVOIDED?] P: X (by C) did not land;
  *    Y …` for a control with no destination that landed on nobody and logged
  *    no miss, with a hard control on P through the second.
@@ -39,9 +40,11 @@
  *    / `cleanse` / `purgeUntilLate` / `cleanseUntilLate`.
  */
 import { isDotAura } from "@gladlog/analysis/src/context/matchTimelineSections";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  getEnglishSpellName,
+  spellEffectData,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
-import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import { CAST_INTERRUPTED_REASONS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { COMPANION_CAST_ROW_MS } from "@gladlog/analysis/src/utils/castPress";
 import { selectPressureWindows } from "@gladlog/analysis/src/utils/cooldowns";
@@ -312,6 +315,54 @@ function checkNextSpike(ctx: IRoundCtx, friends: any[]): void {
   }
 }
 
+/** a REMOVED and an APPLIED this close, same spell and source, are the game
+ * re-broadcasting one aura, not an end and a new wall */
+const REBROADCAST_MS = 1;
+
+interface IWallRun {
+  key: string;
+  fromMs: number;
+  toMs: number;
+}
+
+/** A wall's runs on `target`, its own rows only: APPLIED → REMOVED per spell and
+ * source; one the log lost the REMOVED of stops at DB2's length. */
+function wallRuns(ctx: IRoundCtx, target: any, spell: string): IWallRun[] {
+  const open = new Map<string, number>();
+  const runs: IWallRun[] = [];
+  const closeLostEnd = (key: string, fromMs: number) => {
+    const d = spellEffectData[key.split("|")[0]!]?.durationSeconds ?? 0;
+    runs.push({
+      key,
+      fromMs,
+      toMs: d > 0 ? Math.min(fromMs + d * 1000, ctx.end) : ctx.end,
+    });
+  };
+  for (const a of (target.auraEvents ?? []) as any[]) {
+    if (getEnglishSpellName(a.spellId, a.spellName ?? "") !== spell) continue;
+    const key = `${a.spellId}|${a.srcUnitId}`;
+    if (ev(a) === APPLIED) {
+      const prev = runs.findIndex(
+        (r) =>
+          r.key === key &&
+          tsOf(a) >= r.toMs &&
+          tsOf(a) - r.toMs <= REBROADCAST_MS,
+      );
+      if (prev >= 0) open.set(key, runs.splice(prev, 1)[0]!.fromMs);
+      else if (!open.has(key)) open.set(key, tsOf(a));
+    } else if (ev(a) === REMOVED) {
+      const k = open.has(key)
+        ? key
+        : [...open.keys()].find((o) => o.startsWith(`${a.spellId}|`));
+      if (k === undefined) continue;
+      runs.push({ key: k, fromMs: open.get(k)!, toMs: tsOf(a) });
+      open.delete(k);
+    }
+  }
+  for (const [key, fromMs] of open) closeLostEnd(key, fromMs);
+  return runs;
+}
+
 function checkIntoDefense(ctx: IRoundCtx): void {
   // the section reads the round's own casts: the ones after its ending death
   // are in the log's tail
@@ -326,10 +377,8 @@ function checkIntoDefense(ctx: IRoundCtx): void {
     const startS = secOf(m[1]!);
     // a wall the log re-applied inside its printed second is two intervals of
     // that second, and the line is one of them
-    const ivs = buildAuraIntervals(target, ctx.legacy).filter(
-      (i) =>
-        getEnglishSpellName(i.spellId, i.spellId) === m[6] &&
-        Math.floor(i.fromS) === startS,
+    const ivs = wallRuns(ctx, target, m[6]!).filter(
+      (r) => Math.floor((r.fromMs - ctx.start) / 1000) === startS,
     );
     if (ivs.length === 0) continue;
     const printedOf = new Map<string, number>();
@@ -340,8 +389,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
     }
     ctx.bump("intoDefenseLanded", printedOf.size);
     const countsOf = (iv: (typeof ivs)[number]) => {
-      const fromMs = ctx.start + iv.fromS * 1000;
-      const toMs = ctx.start + iv.toS * 1000;
+      const { fromMs, toMs } = iv;
       return [...printedOf].map(([spell, printed]) => {
         const same = (id: any, nm: any) =>
           !!id && getEnglishSpellName(String(id), nm ?? "") === spell;
@@ -421,9 +469,9 @@ function checkIntoDefense(ctx: IRoundCtx): void {
       ctx.violate(
         "intoDefenseLanded",
         printed < inside ? "undercount" : "overcount",
-        ctx.start + iv.fromS * 1000,
+        iv.fromMs,
         `${caster.name}#${spell}#${m[1]}#${m[6]}`,
-        `${spell} printed ×${printed}, landed inside ${inside} (${m[6]} on ${iv.fromS.toFixed(1)}–${iv.toS.toFixed(1)})`,
+        `${spell} printed ×${printed}, landed inside ${inside} (${m[6]} on ${((iv.fromMs - ctx.start) / 1000).toFixed(1)}–${((iv.toMs - ctx.start) / 1000).toFixed(1)})`,
         line,
       );
     }

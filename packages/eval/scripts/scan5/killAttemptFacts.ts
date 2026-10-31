@@ -18,13 +18,29 @@
  */
 import { effectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
-import { ENEMY_AREA_SAVE_IDS } from "@gladlog/analysis/src/data/spellIdLists";
-import { isDeferralDamageRow } from "@gladlog/analysis/src/utils/incomingPressure";
-import { anchorsKillAttempt } from "@gladlog/analysis/src/utils/killAttempts";
-import { pvpTrinketUses } from "@gladlog/analysis/src/utils/pvpTrinketUses";
-import { isOffensiveSpell } from "@gladlog/analysis/src/utils/spellDanger";
+import {
+  ENEMY_AREA_SAVE_IDS,
+  ENEMY_IMMUNITY_SAVE_AURAS,
+} from "@gladlog/analysis/src/data/spellIdLists";
+import { IMMUNITY_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  isOffensiveSpell,
+  offensiveEffectCdId,
+} from "@gladlog/analysis/src/utils/spellDanger";
+import { CombatUnitSpec } from "@gladlog/parser-compat";
 
-import { deathMs, ev, type IRoundCtx, secOf, successesOf, tsOf } from "./ctx";
+import {
+  ABSORBED,
+  APPLIED,
+  deathMs,
+  ev,
+  type IRoundCtx,
+  REMOVED,
+  secOf,
+  successesOf,
+  tsOf,
+} from "./ctx";
+import { DEFERRAL_SHIELDS } from "./damageBasis";
 
 export const CHECKS = [
   "killAnchorSkippedOpener",
@@ -41,9 +57,42 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
 const LINE =
   /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S.*?) — (.+?)(?: opener \([^)]*\), \d+ stuns?| burst \(no stun\)) \| .*team focus (\d+)% .*\| (.*)$/;
 const NIL = "0000000000000000";
+/** Gladiator's Medallion's press, Adaptation's logged trigger aura */
+const MEDALLION = "336126";
+const ADAPTATION_TRIGGER = "283167";
+/** a press no burst-anchored attempt opens on: a Holy Paladin's Avenging Wrath
+ * (signed, `KILL_ATTEMPT_NON_ANCHOR_CDS`). No row can say so; written here
+ * again on purpose, so an entry added to the product's table shows up here
+ * instead of quieting the check. */
+const NOT_AN_OPENER = (f: any, id: string): boolean =>
+  f.spec === CombatUnitSpec.Paladin_Holy &&
+  (offensiveEffectCdId(id) ?? id) === "31884";
+
+/** was an aura `pick` takes on `target` up at some point in [from, to): its own
+ * APPLIED → REMOVED rows, the next REMOVED ending that run */
+function auraUpIn(
+  target: any,
+  pick: (a: any) => boolean,
+  fromMs: number,
+  toMs: number,
+): boolean {
+  const rows = ((target.auraEvents ?? []) as any[]).filter(
+    (a) => a.destUnitId === target.id && pick(a),
+  );
+  return rows.some((a) => {
+    if (ev(a) === REMOVED) return tsOf(a) >= fromMs && tsOf(a) < toMs;
+    if (ev(a) !== APPLIED || tsOf(a) >= toMs) return false;
+    const end = rows.find(
+      (r) => ev(r) === REMOVED && r.spellId === a.spellId && tsOf(r) > tsOf(a),
+    );
+    return end === undefined || tsOf(end) >= fromMs;
+  });
+}
 
 /** does the clause open with a cause `primary` ranks above a self-save, and do
- * the target's rows hold it inside the bracket (or, `[up since]`, before it)? */
+ * the target's rows hold it inside the bracket (or, `[up since]`, still up from
+ * before it)? Which auras are an immunity is a lookup; that one was on the
+ * target is the rows' to say. */
 function causeOutranksInRows(
   target: any,
   tail: string,
@@ -51,32 +100,50 @@ function causeOutranksInRows(
   toMs: number,
 ): boolean {
   const clause = tail.replace(/^FAILED: /, "");
-  const pressedIn = (test: (name: string) => boolean) =>
+  const pressedIn = (test: (name: string, id: string) => boolean) =>
     successesOf(target).some(
       (c) =>
         tsOf(c) >= fromMs &&
         tsOf(c) < toMs + 5000 &&
-        test(getEnglishSpellName(c.spellId, c.spellName ?? "")),
+        test(
+          getEnglishSpellName(c.spellId, c.spellName ?? ""),
+          String(c.spellId),
+        ),
     );
   if (clause.startsWith("target trinketed out"))
-    return pvpTrinketUses(target).some(
-      (u) => u.atMs >= fromMs && u.atMs < toMs + 5000,
+    return (
+      pressedIn((_n, id) => id === MEDALLION) ||
+      ((target.auraEvents ?? []) as any[]).some(
+        (a) =>
+          a.spellId === ADAPTATION_TRIGGER &&
+          ev(a) === APPLIED &&
+          tsOf(a) >= fromMs &&
+          tsOf(a) < toMs + 5000,
+      )
     );
   const broke = /^broke out \(([^)]*)\)/.exec(clause);
   if (broke) {
     const names = broke[1]!.split("/");
     return pressedIn((n) => names.includes(n));
   }
-  if (clause.startsWith("forced a full immunity")) return true;
+  if (clause.startsWith("forced a full immunity"))
+    return auraUpIn(
+      target,
+      (a) =>
+        IMMUNITY_IDS.has(String(a.spellId)) ||
+        String(a.spellId) in ENEMY_IMMUNITY_SAVE_AURAS,
+      fromMs,
+      toMs + 5000,
+    );
   const popped = /^popped ([^;|]*)/.exec(clause);
   if (!popped) return false;
   return popped[1]!.split("/").every((raw) => {
     const name = raw.replace(/ \[[^\]]*\]/, "").trim();
-    return ((target.auraEvents ?? []) as any[]).some(
-      (a) =>
-        a.destUnitId === target.id &&
-        getEnglishSpellName(a.spellId, a.spellName ?? "") === name &&
-        tsOf(a) < toMs,
+    return auraUpIn(
+      target,
+      (a) => getEnglishSpellName(a.spellId, a.spellName ?? "") === name,
+      fromMs,
+      toMs,
     );
   });
 }
@@ -130,7 +197,7 @@ function run1(ctx: IRoundCtx, line: string): void {
           // in its first second is not what the line could have named
           if (
             !isOffensiveSpell(String(c.spellId)) ||
-            !anchorsKillAttempt(f, String(c.spellId))
+            NOT_AN_OPENER(f, String(c.spellId))
           )
             continue;
           const dest = c.destUnitId;
@@ -205,7 +272,7 @@ function run1(ctx: IRoundCtx, line: string): void {
         // a deferral shield held the hit back: it counts when it lands, not
         // here (FT-T02b; 5c48e842 1:09: 0.41M of Stretch Time rows, 50 % with
         // them out, 62 % in)
-        !isDeferralDamageRow(d),
+        !(ev(d) === ABSORBED && DEFERRAL_SHIELDS.has(String(d.spellId))),
     )
     .map((d) => ({
       t: d.logLine.timestamp as number,
