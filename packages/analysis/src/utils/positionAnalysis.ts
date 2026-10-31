@@ -16,9 +16,9 @@ import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { buildAuraIntervals } from "./auraIntervals";
 import { hitByAttackers } from "./burstHit";
 import {
-  buildCannotCastIntervals,
   coveredMsWithin,
   enemySourceIds,
+  pressBlockedIntervalsForSpells,
 } from "./cannotCastIntervals";
 import { ICCInstance } from "./ccTrinketAnalysis";
 import {
@@ -259,9 +259,10 @@ export interface IPositionEvent {
    *  slow whose mechanic sits on an effect, Thunder Clap, is not read).
    *  `undefined` = no aura stream. Facts only. */
   ownerSnaredSeconds?: number;
-  /** STAYED_IN (F-S5): merged seconds of the span the owner could not cast
-   *  (`buildCannotCastIntervals` — CC, silence, kick lockout: the one
-   *  feasibility predicate), read beside "a defensive CD was available". */
+  /** STAYED_IN (F-S5): merged seconds of the span the owner could press none
+   *  of the defensives ready at its start (`pressBlockedIntervalsForSpells`:
+   *  CC, silence and a kick lockout per spell, a stun not against what a
+   *  stunned player can press), read beside "a defensive CD was available". */
   ownerCannotCastSeconds?: number;
   /** STAYED_IN: the enemy `endDistanceYards` is measured to, and — when it
    *  is not `nearestEnemyName` — that start enemy's own distance at the end.
@@ -745,6 +746,14 @@ function isAvailableAt(cd: IMajorCooldownInfo, atSeconds: number): boolean {
   );
 }
 
+/** A ready stretch of any length (`readyWindows`, fact7 D2): the question is
+ * this instant, not whether it sat ready for a while. */
+function isReadyAt(cd: IMajorCooldownInfo, atSeconds: number): boolean {
+  return (cd.readyWindows ?? cd.availableWindows).some(
+    (w) => atSeconds >= w.fromSeconds && atSeconds <= w.toSeconds,
+  );
+}
+
 export function computeOwnerPositionEvents(params: {
   owner: ICombatUnit;
   enemies: ICombatUnit[];
@@ -853,11 +862,6 @@ export function computeOwnerPositionEvents(params: {
   const rosterSides: RosterSides | undefined = combatUnits.length
     ? buildRosterSides(combatUnits)
     : undefined;
-  const ownerCannotCast = buildCannotCastIntervals(
-    owner,
-    enemySourceIds(enemies, combatUnits),
-    combatUnits,
-  );
   // baseline-only rows are cd-hoarded's alone (ruling P-W6): "a defensive CD
   // was available" reads only buttons the owner showed this round
   const defensiveCDs = ownerCooldowns.filter(
@@ -1236,20 +1240,27 @@ export function computeOwnerPositionEvents(params: {
         dampeningPct: w.dampeningPct,
         ownerDefensiveAvailable:
           defensiveCDs.length > 0
-            ? defensiveCDs.some((cd) => isAvailableAt(cd, w.fromSeconds))
+            ? defensiveCDs.some((cd) => isReadyAt(cd, w.fromSeconds))
             : undefined,
         ...(() => {
-          if (defensiveCDs.some((cd) => isAvailableAt(cd, w.fromSeconds)))
+          if (defensiveCDs.some((cd) => isReadyAt(cd, w.fromSeconds)))
             return {};
           let back: { spellName: string; atSeconds: number } | undefined;
+          // the first stretch ready inside the span, and a press inside it
+          // (the log's own word that it was ready, whatever the model says)
           for (const cd of defensiveCDs)
-            for (const aw of cd.availableWindows)
+            for (const atSeconds of [
+              ...(cd.readyWindows ?? cd.availableWindows).map(
+                (aw) => aw.fromSeconds,
+              ),
+              ...cd.casts.map((c) => c.timeSeconds),
+            ])
               if (
-                aw.fromSeconds > w.fromSeconds &&
-                aw.fromSeconds <= evalEnd &&
-                (!back || aw.fromSeconds < back.atSeconds)
+                atSeconds > w.fromSeconds &&
+                atSeconds <= evalEnd &&
+                (!back || atSeconds < back.atSeconds)
               )
-                back = { spellName: cd.spellName, atSeconds: aw.fromSeconds };
+                back = { spellName: cd.spellName, atSeconds };
           return back ? { ownerDefensiveBack: back } : {};
         })(),
         burstTargetsOwner,
@@ -1294,9 +1305,19 @@ export function computeOwnerPositionEvents(params: {
               ),
             }
           : {}),
+        // fact7 D30: the sentence is about "a defensive CD": the time no
+        // defensive that was ready at the span's start could be pressed
         ownerCannotCastSeconds:
           coveredMsWithin(
-            ownerCannotCast,
+            pressBlockedIntervalsForSpells(
+              owner,
+              enemySourceIds(enemies, combatUnits),
+              defensiveCDs
+                .filter((cd) => isReadyAt(cd, w.fromSeconds))
+                .map((cd) => cd.spellId),
+              combatUnits,
+              true,
+            ),
             matchStartMs + w.fromSeconds * 1000,
             matchStartMs + evalEnd * 1000,
           ) / 1000,

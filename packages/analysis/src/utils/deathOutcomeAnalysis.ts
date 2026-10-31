@@ -8,10 +8,16 @@ import {
 import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
+import {
+  cannotCastIntervalsForSpells,
+  pressBlockedIntervalsForSpells,
+} from "./cannotCastIntervals";
 import { isFormReshiftCast } from "./castPress";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
-import { lockoutDebuffStopsPressAtDeath, playerTalentIdSets } from "./cooldowns";
+import {
+  lockoutDebuffStopsPressAtDeath,
+  playerTalentIdSets,
+} from "./cooldowns";
 import {
   auraOnlyActivationSeconds,
   castRecovery,
@@ -772,15 +778,24 @@ export function deathWindowFreedom(
   // under Innervate read Guardian Spirit as unaffordable; the [RES] row and
   // external-unused pass them)
   combatBounds?: { startTime: number; endTime: number },
+  // the option would land on `unit` itself (a school-limited purge counts
+  // only then, `stunLetsPress`)
+  optionOnSelf = false,
 ): IDeathWindowFreedom | null {
   const windowStart = Math.max(0, deathSeconds - windowSeconds);
   if (deathSeconds <= windowStart) return null;
-  const named = cannotCastIntervalsForSpells(
-    unit,
-    hostileIds,
-    optionSpellId === undefined ? undefined : [optionSpellId],
-    roundUnits,
-  );
+  // fact7 D21: an option named by the line is asked as a press — a stun
+  // counts only against what the game does not let a stunned player press
+  const named =
+    optionSpellId === undefined
+      ? cannotCastIntervalsForSpells(unit, hostileIds, undefined, roundUnits)
+      : pressBlockedIntervalsForSpells(
+          unit,
+          hostileIds,
+          [optionSpellId],
+          roundUnits,
+          optionOnSelf,
+        );
   // fact3 D12 (20e0f243 5:57): a stretch the unit could not pay for the
   // option is no stretch free to cast it (`unaffordableIntervals`, the
   // [RES] row's `no mana` reading)
@@ -1063,6 +1078,8 @@ export function buildDeathOutcomeSummary(
     atSeconds: number,
     // FT-T10: the immunity / external the line names
     optionSpellId: string,
+    // the option lands on the holder itself (the unit's own immunity)
+    optionOnSelf: boolean,
   ): { locked: boolean; freedom?: IDeathWindowFreedom } => {
     if (cannotCastSourceIds) {
       const freedom = deathWindowFreedom(
@@ -1076,6 +1093,7 @@ export function buildDeathOutcomeSummary(
         typeof combat.endTime === "number"
           ? { startTime: combat.startTime, endTime: combat.endTime }
           : undefined,
+        optionOnSelf,
       );
       return freedom
         ? {
@@ -1183,7 +1201,7 @@ export function buildDeathOutcomeSummary(
           spellId,
           spellName: spell.name,
           ...(() => {
-            const l = lockAt(unit, ccSummary, atSeconds, spellId);
+            const l = lockAt(unit, ccSummary, atSeconds, spellId, true);
             return {
               wasInCC: l.locked,
               ...(l.freedom ? { freedom: l.freedom } : {}),
@@ -1309,7 +1327,13 @@ export function buildDeathOutcomeSummary(
             spellId,
             spellName: spell.name,
             ...(() => {
-              const l = lockAt(teammate, teammateCCSummary, atSeconds, spellId);
+              const l = lockAt(
+                teammate,
+                teammateCCSummary,
+                atSeconds,
+                spellId,
+                false,
+              );
               // controlled = control and lockout alone; a stretch the
               // caster could not pay for is its own fact (07c #3)
               const controlled = l.freedom

@@ -47,6 +47,7 @@ import {
   renderedCcSeconds,
 } from "../utils/ccTrinketAnalysis";
 import {
+  firstHpReadingInSpanPct,
   gridHpMinInWindow,
   gridHpPct,
   hpTroughInEventSpan,
@@ -63,7 +64,7 @@ export const HEALER_CC_MIN_S = 2;
 export const CONSEQ_DROP_MIN_PCT = 10;
 
 export const CONSEQ_SECTION_HEADER =
-  "OBSERVED CONSEQUENCES — what the log shows happened to a team's HP while its healer was kicked (inside the school lockout) or CC'd. `A% → low B% at m:ss` = that unit's HP when the kick or control landed (the last reading at or before that instant — it can differ from the [STATE] tick of that second, which may be read before it), and the lowest HP the log shows for it inside the span, at the second it happened (the true minimum between the ticks: it can sit below every [STATE] number of the span). `no teammate dropped 10% or more (…)` lists those readings for every teammate. Measurements, not verdicts: they say what happened, not why the round went the way it did.";
+  "OBSERVED CONSEQUENCES — what the log shows happened to a team's HP while its healer was kicked (inside the school lockout) or CC'd. `A% → low B% at m:ss` = that unit's HP when the kick or control landed (the last reading at or before that instant — it can differ from the [STATE] tick of that second, which may be read before it; for a unit the log did not read near that instant, its first reading inside the span), and the lowest HP the log shows for it inside the span, at the second it happened (the true minimum between the ticks: it can sit below every [STATE] number of the span). `no teammate dropped 10% or more (…)` lists those readings for every teammate. Measurements, not verdicts: they say what happened, not why the round went the way it did.";
 
 interface Labels {
   friendly: (name: string) => string;
@@ -165,7 +166,15 @@ function teamDrops(
     // read the druid at 47 %, Radiance had lifted it to 64 % by the Blind's
     // landing 0.8 s later, and it fell to 38 % inside — "no teammate dropped
     // 10% or more". The DECISION (`mateHitDuringCc`) stays on the grid.
-    const h0 = gridHpPct(mate, matchStartMs + Math.round(fromS * 1000));
+    // With no reading near the landing (a unit the log did not write for
+    // over the radius), the span's own first reading (fact7 D20).
+    const h0 =
+      gridHpPct(mate, matchStartMs + Math.round(fromS * 1000)) ??
+      firstHpReadingInSpanPct(
+        mate,
+        matchStartMs + Math.round(fromS * 1000),
+        matchStartMs + Math.round(toS * 1000),
+      );
     if (h0 === null) {
       // no reading at all is no measurement either (codex 20-F15-10)
       unmeasured++;

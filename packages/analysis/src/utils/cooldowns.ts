@@ -63,7 +63,11 @@ import {
   STUN_PURGE_GENERATED,
   USABLE_WHILE_CC_GENERATED,
 } from "../data/usableWhileCcGenerated";
-import { getSortedAdvancedActions } from "./advancedActions";
+import {
+  getSortedAdvancedActions,
+  hpReadingRows,
+  staleMaxHpRows,
+} from "./advancedActions";
 import { allyCopyRecipient } from "./allyCopyWall";
 import {
   buildAuraIntervals,
@@ -1787,7 +1791,7 @@ export function unitHpSampleAt(
   // 0:31.021; 280d1cbb 0:28 printed 82 (0:28.545) beside the same
   // second's `self: 100% HP` press line. With no reading before it inside
   // the radius, the first one after it stands, as before.
-  const actions = getSortedAdvancedActions(unit);
+  const actions = hpReadingRows(unit);
   const closestAction =
     lastAtOrBefore(actions, timestampMs, maxDtMs) ??
     binarySearchClosest(actions, timestampMs, (a) => a.logLine.timestamp);
@@ -1991,6 +1995,7 @@ export function hpAtPress(
     // must not let a sample older than the radius stand for the press
     if (pressMs - a.logLine.timestamp > HP_SAMPLE_RADIUS_MS) return null;
     if (a.advancedActorId !== unit.id || !(a.advancedActorMaxHp > 0)) continue;
+    if (staleMaxHpRows(unit).has(a)) continue;
     const pct = Math.round(
       (a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100,
     );
@@ -2209,6 +2214,7 @@ export function hpTroughInWindow(
   const endMs = toDeath ? deathMs + 1 : matchStartMs + (lastSec + 1) * 1000; // exclusive
   const spanToMs = span?.toMs ?? Infinity; // inclusive
   const actions = getSortedAdvancedActions(unit);
+  const staleRows = staleMaxHpRows(unit);
   // first index at or after `fromMs`
   let lo = 0;
   let hi = actions.length;
@@ -2227,6 +2233,8 @@ export function hpTroughInWindow(
     // a printed 43 %). The last-line rule stays the POINT reading's
     // (`unitHpSampleAt`, GH #100 / 2026-09-23).
     if (a.advancedActorId !== unit.id || a.advancedActorMaxHp <= 0) continue;
+    // a percentage over two scales is no state the unit was in (fact7 D60)
+    if (staleRows.has(a)) continue;
     // the killing blow's own row reads 0: not a live reading
     if (a.advancedActorCurrentHp <= 0) continue;
     const sec = toRenderSecond((ts - matchStartMs) / 1000);
@@ -2289,6 +2297,34 @@ export function lowestHpTroughInEventSpan(
       best = { pct: t.pct, atSec: t.atSec, unitName: u.name };
   }
   return best;
+}
+
+/**
+ * The first HP the log shows for `unit` inside an event's own span, on
+ * `gridHpPct`'s scale (whole percent, clamped to 100). For the unit with no
+ * reading near the event's instant: `unitHpSampleAt`'s "the first one after it
+ * stands", bounded by the span instead of the radius (fact7 D20, d2e6e70b
+ * 0:16: a hunter unread from 0:04 to 0:20, 100 % → 90 % inside a 6 s Freezing
+ * Trap, no [CONSEQ] line).
+ */
+export function firstHpReadingInSpanPct(
+  unit: ICombatUnit,
+  fromMs: number,
+  toMs: number,
+): number | null {
+  const stale = staleMaxHpRows(unit);
+  for (const a of getSortedAdvancedActions(unit)) {
+    const ts = a.logLine.timestamp;
+    if (ts < fromMs) continue;
+    if (ts > toMs) break;
+    if (a.advancedActorId !== unit.id || !(a.advancedActorMaxHp > 0)) continue;
+    if (stale.has(a) || a.advancedActorCurrentHp <= 0) continue;
+    return Math.min(
+      100,
+      Math.round((a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100),
+    );
+  }
+  return null;
 }
 
 /**
@@ -2503,6 +2539,13 @@ export interface IMajorCooldownInfo {
   sharedCasts?: ICooldownCast[];
   /** Periods when the CD was available but the player did not use it */
   availableWindows: IAvailableWindow[];
+  /** `availableWindows` before the `GRACE_SECONDS` trim: every stretch the
+   * cooldown was ready, however short. A reader asking "was it ready at this
+   * instant / did it come back inside this span" reads these (fact7 D2,
+   * 96fb4d42 1:54: Anti-Magic Shell back 0.8 s before its press, under STAYED
+   * IN's `no defensive CD available`); the trim serves "sat ready for a
+   * while". Absent on a hand-built entry. */
+  readyWindows?: IAvailableWindow[];
   neverUsed: boolean;
   /** True when the spell is also tagged Offensive (a throughput/burst CD such as Power
    * Infusion), i.e. not a pure survival defensive. Used to keep throughput CDs out of
@@ -5526,6 +5569,7 @@ function buildCooldownEntry(
   };
 
   const availableWindows: IAvailableWindow[] = [];
+  const readyWindows: IAvailableWindow[] = [];
   const procOnly =
     PROC_ONLY_ACTIVATION_IDS.has(spell.spellId) ||
     procOnlyForUnit.has(spell.spellId);
@@ -5535,14 +5579,10 @@ function buildCooldownEntry(
     // No button → never an "available" window (agy review of GH #106 step
     // 2: findCheaperDefensiveAlternatives, offensiveWindows and
     // positionAnalysis read these windows directly).
-    if (procOnly) return;
-    if (duration > GRACE_SECONDS) {
-      availableWindows.push({
-        fromSeconds: from,
-        toSeconds: to,
-        durationSeconds: duration,
-      });
-    }
+    if (procOnly || duration <= 0) return;
+    const w = { fromSeconds: from, toSeconds: to, durationSeconds: duration };
+    readyWindows.push(w);
+    if (duration > GRACE_SECONDS) availableWindows.push(w);
   };
 
   // A shared-pool press closes X's window like X's own press would.
@@ -5552,9 +5592,7 @@ function buildCooldownEntry(
     pushWindow(0, matchDurationSeconds);
   } else {
     // Window before first cast
-    if (lockCasts[0]!.timeSeconds > GRACE_SECONDS) {
-      pushWindow(0, lockCasts[0]!.timeSeconds);
-    }
+    pushWindow(0, lockCasts[0]!.timeSeconds);
     // Windows between casts (and from last cast to match end)
     for (let i = 0; i < lockCasts.length; i++) {
       const cdReadyAt = readyAfter(lockCasts[i]!);
@@ -5562,9 +5600,7 @@ function buildCooldownEntry(
         i + 1 < lockCasts.length
           ? lockCasts[i + 1]!.timeSeconds
           : matchDurationSeconds;
-      if (cdReadyAt < matchDurationSeconds - GRACE_SECONDS) {
-        pushWindow(cdReadyAt, nextCastAt);
-      }
+      pushWindow(cdReadyAt, nextCastAt);
     }
   }
 
@@ -5601,6 +5637,7 @@ function buildCooldownEntry(
       ...(chargeEffects ? { chargeEffects } : {}),
     } as CdAvailabilityInput;
     availableWindows.length = 0;
+    readyWindows.length = 0;
     let from: number | undefined;
     for (let t = 0; t <= matchDurationSeconds; t += CHARGE_WINDOW_STEP_S) {
       const ready = cdAvailableAt(view, t);
@@ -5624,6 +5661,7 @@ function buildCooldownEntry(
       casts,
       ...(sharedCasts.length > 0 ? { sharedCasts } : {}),
       availableWindows,
+      readyWindows,
       ...(rateWindows ? { rateWindows } : {}),
       ...(chargeEffects ? { chargeEffects } : {}),
       neverUsed: casts.length === 0,

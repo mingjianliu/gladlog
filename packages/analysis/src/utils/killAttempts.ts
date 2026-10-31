@@ -783,12 +783,43 @@ export function extractKillAttempts(
       }
       if (cur) clusters.push(cur);
     }
+    /** fact7 D4 (96fb4d42 1:25): a press on nobody — its caster's own buff,
+     * no dest but its caster — goes where its caster's damage went. Avenging
+     * Wrath opened the bracket and was skipped for an Ultimate Penitence 5.6 s
+     * later, the first press with a target of its own. A press that hit an
+     * enemy other than the target did go somewhere else: its own hits decide,
+     * as for any aimed press. */
+    const selfBuffInto = (
+      c: TeamCast,
+      target: ICombatUnit,
+      toMs: number,
+    ): boolean => {
+      if (
+        c.destId !== undefined &&
+        c.destId !== "0000000000000000" &&
+        c.destId !== c.caster.id
+      )
+        return false;
+      const fromMs = matchStartMs + c.cast * 1000;
+      const inIt = (c.caster.damageOut ?? []).filter(
+        (d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= toMs,
+      );
+      const ids = castAndEffectIds(c.spellId);
+      return (
+        !inIt.some(
+          (d) =>
+            !!d.spellId &&
+            (ids.has(d.spellId) ||
+              isSameSpell(d.spellId, d.spellName, c.spellId, c.spellName)),
+        ) && inIt.some((d) => d.destUnitId === target.id)
+      );
+    };
     /** fact2 (2026-10-20, kill-attempt anchor): the press the line names —
      * the first of the cluster that went into the target (its cast row's
      * dest, else a hit of it — or of its effect — on the target inside the
-     * bracket and the slack). 0d08dd90 1:26: `Feral Frenzy burst` on Kalshi
-     * for a Feral Frenzy cast into Calculator. With none, the opener, and
-     * where it went. */
+     * bracket and the slack; a self-buff, `selfBuffInto`). 0d08dd90 1:26:
+     * `Feral Frenzy burst` on Kalshi for a Feral Frenzy cast into Calculator.
+     * With none, the opener, and where it went. */
     const anchorNameOf = (
       cl: (typeof clusters)[number],
       target: ICombatUnit,
@@ -831,7 +862,9 @@ export function extractKillAttempts(
             d.logLine.timestamp <= toMs,
         );
       };
-      const into = cl.casts.find(hitTarget);
+      const into = cl.casts.find(
+        (c) => hitTarget(c) || selfBuffInto(c, target, toMs),
+      );
       if (into) return into.spellName;
       const first = cl.casts[0]!;
       // an enemy player or any unit of theirs (a pet: 691a7f31 1:13, a Ray
@@ -983,6 +1016,28 @@ export function extractKillAttempts(
     }
   }
 
+  /** The sums an attempt prints, over its bracket + the kill-credit slack:
+   * every friendly's non-deferral damage on the enemy players. */
+  const teamDamageOverSpan = (a: IKillAttempt) => {
+    const fromMs = matchStartMs + a.fromSeconds * 1000;
+    const toMs = matchStartMs + (a.toSeconds + KILL_CREDIT_SLACK_S) * 1000;
+    const enemyIds = new Set(enemies.map((e) => e.id));
+    let onTarget = 0;
+    let total = 0;
+    for (const f of friendlies)
+      for (const d of f.damageOut) {
+        const ts = d.logLine.timestamp;
+        if (ts < fromMs || ts > toMs || !enemyIds.has(d.destUnitId)) continue;
+        if (isDeferralDamageRow(d)) continue;
+        const amount = Math.abs(d.effectiveAmount);
+        total += amount;
+        if (d.destUnitId === a.targetUnitId) onTarget += amount;
+      }
+    return { onTarget, total };
+  };
+  const onTargetPct = (s: { onTarget: number; total: number }) =>
+    s.total > 0 ? Math.round((100 * s.onTarget) / s.total) : 0;
+
   // One death, one KILL (from the T2 session; 605 files: 44 (owner, target)
   // pairs with two or more KILL rows). Attempts credit a death anywhere in
   // [from, to + KILL_CREDIT_SLACK_S], so a burst cluster opened after a stun
@@ -1026,7 +1081,17 @@ export function extractKillAttempts(
       // cluster under a stun attempt, built only when that stun attempt has
       // no kill (F-K2). It is a go of its own that ended before the target
       // died, and it prints as one: FAILED.
-      a.toSeconds = Math.min(a.toSeconds, deathS);
+      const cut = Math.min(a.toSeconds, deathS);
+      if (cut === a.toSeconds) continue;
+      a.toSeconds = cut;
+      // fact7 D67 (6ac699c9 2:05–2:12): the sums were read over the uncut
+      // span, so `team focus` held 8 s of damage on other enemies after the
+      // target was dead: 50 % printed, 71 % over the bracket + 5 s the legend
+      // names. Re-read over the bracket as printed, the builders' span.
+      const sums = teamDamageOverSpan(a);
+      a.teamDamageToTarget = sums.onTarget;
+      a.teamDamageTotal = sums.total;
+      a.teamOnTargetPct = onTargetPct(sums);
     }
   }
   // T12 ④ (user ruling 2026-10-10: print both numbers): the line printed
@@ -1570,9 +1635,9 @@ interface ITargetReadings {
    * lines render them (`enemyDefensiveEvents` of its teammates) — a cast on
    * it, or an aura on it whose cast the log missed. */
   externalsReceived: () => IEnemyDefensiveEvent[];
-  /** a teammate's area saves (Spirit Link Totem, Anti-Magic Zone, Darkness,
-   * Rallying Cry, Power Word: Barrier) and their spans on this target — the
-   * kill windows' reading (`areaSaveSpansOnS`) */
+  /** the area saves (Spirit Link Totem, Anti-Magic Zone, Darkness, Rallying
+   * Cry, Power Word: Barrier) of the target's side and their spans on this
+   * target — the kill windows' reading (`areaSaveSpansOnS`) */
   areaSavesOn: () => Array<{
     d: IEnemyDefensiveEvent;
     spans: Array<{ from: number; to: number }>;
@@ -1628,7 +1693,6 @@ function targetReadingsFactory(
       const units = Object.values(combat.units ?? {}) as ICombatUnit[];
       const ivs = saveAuraIntervals(target, enemies, combat);
       return areas
-        .filter((d) => d.casterId !== target.id)
         .map((d) => {
           const caster = enemies.find((e) => e.id === d.casterId);
           const fromCaster = (src: string | undefined) =>
@@ -2049,17 +2113,19 @@ function attributeFailure(
   // or up on it when the span began (user ruling 2026-10-26, fact5 retest r4
   // 4accb068 2:08: a Spirit Link Totem took the druid from 3.9 % to 49 % and
   // the attempt read `popped Frenzied Regeneration` alone)
-  for (const { d, spans } of readings.areaSavesOn()) {
-    // the span on the target that met the attempt — its own start is the
-    // save's time here, not the caster's press (codex 20-F18-09 #2: a
-    // target entering the totem's link after the attempt opened read
-    // "[up since]" the press)
-    const met = spans.find(
+  // the span on the target that met the attempt — its own start is the save's
+  // time here, not the caster's press (codex 20-F18-09 #2: a target entering
+  // the totem's link after the attempt opened read "[up since]" the press)
+  const areaSpanMeeting = (spans: Array<{ from: number; to: number }>) =>
+    spans.find(
       (sp) =>
         inSave(matchStartMs + sp.from * 1000) ||
         (matchStartMs + sp.from * 1000 < fromMs &&
           matchStartMs + sp.to * 1000 > fromMs),
     );
+  for (const { d, spans } of readings.areaSavesOn()) {
+    if (d.casterId === target.id) continue; // its own, below
+    const met = areaSpanMeeting(spans);
     if (!met || externalReceived.includes(d.spellName)) continue;
     externalReceived.push(d.spellName);
     externalReceivedAtS.push(met.from);
@@ -2122,6 +2188,25 @@ function attributeFailure(
     if (!absorbCovers(s.spellId)) continue;
     selfSaved.push(s.spellName);
     selfSavedAtS.push(s.atSeconds);
+    effectSaved = true;
+  }
+  // fact7 D10 (07367f6e 1:13, 96fb4d42 2:27): the target's own area save, its
+  // aura on it. `selfSaveCasts` leaves the area family out (the `(area)`
+  // [ENEMY DEF] line is that family's) and a teammate's went through the loop
+  // above alone, so a warrior's Rallying Cry inside the attempt read `not
+  // enough damage`. An own area save that is a wall is already `popped`.
+  for (const { d, spans } of readings.areaSavesOn()) {
+    if (d.casterId !== target.id) continue;
+    const met = areaSpanMeeting(spans);
+    if (!met || poppedIds.has(d.spellId)) continue;
+    if (
+      defensivePopped.includes(d.spellName) ||
+      selfSaved.includes(d.spellName) ||
+      !absorbCovers(d.spellId)
+    )
+      continue;
+    selfSaved.push(d.spellName);
+    selfSavedAtS.push(met.from);
     effectSaved = true;
   }
   // one list in log order (the casts above already are)

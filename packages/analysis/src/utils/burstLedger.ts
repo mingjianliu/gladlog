@@ -8,6 +8,7 @@ import { ownEffectAurasKeyedBy } from "../data/castEffectAuras";
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { ENEMY_IMMUNITY_TEAM_PROC_AURAS } from "../data/spellIdLists";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
@@ -70,6 +71,11 @@ const DEF_OR_IMMUNE_IDS = new Set<string>([
   ...Object.keys(
     ownEffectAurasKeyedBy((id) => DEF_OR_IMMUNE_CAST_IDS.has(id)),
   ).filter((aura) => !isHealOnlyAura(aura)),
+  // fact7 D40: an immunity a teammate's proc puts on the carrier has no cast
+  // of its own to enter by. `[ENEMY DEF]` and KILL ATTEMPTS read Peaceweaver
+  // (F20 ruling); the ledger read Revival's on-target minute as nothing up.
+  // Aura-only, so it stays `viaLoggedAura` and out of the cast-keyed vectors.
+  ...ENEMY_IMMUNITY_TEAM_PROC_AURAS,
 ]);
 
 /** fact3 D59 (fe64d179): an effect aura whose official profile only heals

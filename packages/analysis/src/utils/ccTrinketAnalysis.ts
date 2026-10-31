@@ -4791,10 +4791,18 @@ export function analyzePlayerCCAndTrinket(
         const silenced = castBlockingAuraIntervals(player, enemyIds).filter(
           (a) => isSilenceOnlyAura(a.spellId),
         );
+        // fact7 D25 (db5b6b6a 1:39): the window ends at the round's end or the
+        // player's death, as the press readings below do (`after`,
+        // `diedAfterKickS`): 2.4 s printed from a Leg Sweep landed 4 ms after
+        // the round's deciding death.
         const ccMs = coveredMsWithin(
           [...cannotCast, ...silenced],
           kickMs,
-          kickMs + POST_KICK_WINDOW_S * 1000,
+          Math.min(
+            kickMs + POST_KICK_WINDOW_S * 1000,
+            matchStartMs + roundEndS * 1000,
+            deathS >= inst.atSeconds ? matchStartMs + deathS * 1000 : Infinity,
+          ),
         );
         inst.ccInWindowS = Math.round(ccMs / 100) / 10;
       } catch {

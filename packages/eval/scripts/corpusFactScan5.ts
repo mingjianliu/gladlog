@@ -67,6 +67,9 @@ const MODULE_FILES = [
   "friendlyOffensiveTag",
   "allyShield",
   "friendlyUtilityPress",
+  "castThroughStun",
+  "killAttemptFacts",
+  "spanFacts",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

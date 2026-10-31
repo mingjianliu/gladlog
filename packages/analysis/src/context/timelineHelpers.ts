@@ -25,12 +25,12 @@ import {
 } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import {
-  cannotCastIntervalsForSpells,
   deathLockChain,
   deathLockChainText,
   enemySourceIds,
   freeMsBefore,
   healerLockIntervals,
+  pressBlockedIntervalsForSpells,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
 import { pressImmuneMissRows } from "../utils/castMissRows";
@@ -2520,12 +2520,15 @@ export function buildKillSequenceBlock(params: {
               // kick lockout counts only when it locks that spell's school,
               // and a defensive the holder's pet casts is asked of the pet
               // ("free to press it" is the spell's own free time either way)
+              // fact7 D21: a stun counts only against what the game does not
+              // let a stunned player press
               const freeMs = freeMsBefore(
-                cannotCastIntervalsForSpells(
+                pressBlockedIntervalsForSpells(
                   u.player as ICombatUnit,
                   enemySourceIds(enemies, params.allUnits ?? []),
                   [u.cd.spellId],
                   params.allUnits as ICombatUnit[] | undefined,
+                  u.player.name === dyingUnit.name,
                 ),
                 matchStartMs + Math.round(deathTime * 1000),
               );

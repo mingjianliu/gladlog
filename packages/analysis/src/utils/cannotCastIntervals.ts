@@ -20,7 +20,11 @@ import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { castingLockIntervalsOf } from "./castingLocks";
 import { charmedAt } from "./charmedPlayer";
-import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
+import {
+  playerTalentIdSets,
+  REACTION_WINDOW_S,
+  usableWhileStunned,
+} from "./cooldowns";
 import {
   getDRCategory,
   isStunDrAura,
@@ -419,6 +423,42 @@ export function cannotCastIntervalsForSpells(
     spellIds?.length ? [...own, ...disarmIntervals(unit, enemyIds)] : own,
     petBlockLists(enemyIds, spellIds, petCastersBySpell(unit, units), units),
     spellIds,
+  );
+}
+
+/**
+ * `cannotCastIntervalsForSpells` for a reader that says whether the named
+ * spell could be PRESSED: a stun also lets through what the game lets a
+ * stunned player press (`stunLetsPress`, read per spell, and `actWindowFor`'s
+ * `stunPressable` for a reader that has no window to cut). fact7 D21
+ * (d2e6e70b 0:33): Pain Suppression is usable while stunned; Psychic Scream
+ * ended 0.29 s before the death, Chastise's stun ran on, and both lines said
+ * `free … 0.0s` / `then in Holy Word: Chastise`. fact7 D30 (163de8f1 0:57):
+ * Barkskin went out under the stun that STAYED IN counted as `could not
+ * cast`. `onSelf`: the press would land on the unit itself, the one case a
+ * school-limited purge counts.
+ *
+ * A stun still stops every spell of a set the game does not let through it:
+ * time is free only while one of the spells is (`blockedForEverySpell`).
+ */
+export function pressBlockedIntervalsForSpells(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  spellIds: readonly string[],
+  units: RoundUnits,
+  onSelf: boolean,
+): NamedCannotCastInterval[] {
+  const { pvpTalentIds } = playerTalentIdSets(unit);
+  return intervalsForSpells(
+    [
+      ...namedCannotCastIntervals(unit, enemyIds, units),
+      ...disarmIntervals(unit, enemyIds),
+    ],
+    petBlockLists(enemyIds, spellIds, petCastersBySpell(unit, units), units),
+    spellIds,
+    (iv, spellId) =>
+      intervalBlocksSpell(iv, spellId) &&
+      !stunLetsPress(iv, spellId, { pvpTalentIds, onSelf }),
   );
 }
 

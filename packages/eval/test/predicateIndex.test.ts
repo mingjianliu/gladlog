@@ -108,6 +108,7 @@ import * as talentScriptedCooldowns from "@gladlog/analysis/src/data/talentScrip
 import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
+import * as advancedActions from "@gladlog/analysis/src/utils/advancedActions";
 import * as allyCopyWall from "@gladlog/analysis/src/utils/allyCopyWall";
 import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
@@ -1866,6 +1867,22 @@ const INDEX: PredicateRow[] = [
     symbol: "isTickBelowTrough",
     mod: cooldowns,
   },
+  // fact7 D20 / D60: a span's first reading; the rows a percentage stands on
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "firstHpReadingInSpanPct",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/advancedActions.ts`,
+    symbol: "staleMaxHpRows",
+    mod: advancedActions,
+  },
+  {
+    file: `${A}/utils/advancedActions.ts`,
+    symbol: "hpReadingRows",
+    mod: advancedActions,
+  },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "crisisHpProbeMismatch",
@@ -2545,6 +2562,12 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "blockedForEverySpell",
+    mod: cannotCastIntervals,
+  },
+  // fact7 D21 / D30: the time one button could not be pressed
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "pressBlockedIntervalsForSpells",
     mod: cannotCastIntervals,
   },
   // the backlash horror is hard CC for the castability questions (60-POSTHOC-02)
