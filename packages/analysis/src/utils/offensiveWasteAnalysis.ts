@@ -344,7 +344,8 @@ export function buildOffensiveWasteSummary(
                 ? [
                     {
                       window: { ...whole, verdict: whole.nonMeleeVerdict },
-                      takes: (id, row) => !parryStopsAttack(id, row),
+                      takes: (id: string, row: string | null) =>
+                        !parryStopsAttack(id, row),
                     },
                   ]
                 : []),
