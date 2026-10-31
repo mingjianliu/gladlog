@@ -1,4 +1,4 @@
-import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitSpec, ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -10,6 +10,7 @@ import {
   healerLockIntervals,
   silenceIntervals,
 } from "../src/utils/cannotCastIntervals";
+import { unitCooldownOf } from "../src/utils/cooldowns";
 
 describe("cannotCastIntervals — buildCannotCastIntervals", () => {
   const enemyIds = new Set(["Enemy-1"]);
@@ -607,6 +608,25 @@ describe("fact7 D1: a lockout that leaves a heal is no lock on the healer", () =
     );
     expect(
       healerLockIntervals(u, [lockAt(NATURE, 10_000, 14_000)]),
+    ).toHaveLength(1);
+  });
+  it("a heal on cooldown reads the unit's own cooldown, not the base (codex 20-F21-07)", () => {
+    const u = {
+      ...healer(
+        [
+          ["467307", 1_000],
+          ["116670", 2_000],
+        ],
+        [
+          { spellId: "467307", destUnitId: "mate" },
+          { spellId: "116670", destUnitId: "mate" },
+        ],
+      ),
+      spec: CombatUnitSpec.Monk_Mistweaver,
+    };
+    expect(unitCooldownOf(u, "467307")?.cooldownSeconds).toBeGreaterThan(10.5);
+    expect(
+      healerLockIntervals(u, [lockAt(NATURE, 9_000, 12_000)]),
     ).toHaveLength(1);
   });
   it("Frenzied Regeneration only ever on the druid: the lock stays", () => {

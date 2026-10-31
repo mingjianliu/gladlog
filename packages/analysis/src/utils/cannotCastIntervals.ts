@@ -10,7 +10,6 @@ import {
   ccFullDurationSeconds,
   effectiveCooldownSeconds,
   getEnglishSpellName,
-  spellEffectData,
 } from "../data/spellEffectData";
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import {
@@ -25,6 +24,7 @@ import { charmedAt } from "./charmedPlayer";
 import {
   playerTalentIdSets,
   REACTION_WINDOW_S,
+  unitCooldownOf,
   usableWhileStunned,
 } from "./cooldowns";
 import {
@@ -331,21 +331,24 @@ function pressedHeals(
 
 /**
  * Was this single-charge heal spent for the whole of `iv`? A press before it
- * whose DB2 cooldown outlasts it, and no press inside it (the press is the
- * proof, whatever a talent took off the cooldown). A charge spell is not read:
- * nothing here counts its charges. 51 lockouts of the 605 raw logs had only such
- * a heal left (Rushing Wind Kick 43).
+ * whose cooldown on this unit (`unitCooldownOf`: Rushing Wind Kick is 12 s on a
+ * Mistweaver, 10 s in DB2; codex 20-F21-07) outlasts it, and no press inside it
+ * (the press is the proof, whatever a talent took off the cooldown). A charge
+ * spell is not read: nothing here counts its charges. 51 lockouts of the 605 raw
+ * logs had only such a heal left (Rushing Wind Kick 43).
  */
 function healSpentAcross(
+  unit: ICombatUnit,
   spellId: string,
   presses: readonly number[],
   iv: Pick<NamedCannotCastInterval, "from" | "to">,
 ): boolean {
-  const cd = effectiveCooldownSeconds(spellId);
-  if (cd === undefined || (spellEffectData[spellId]?.charges?.charges ?? 1) > 1)
-    return false;
+  const cd = unitCooldownOf(unit, spellId);
+  if (!cd || cd.charges > 1) return false;
   if (presses.some((t) => t >= iv.from && t <= iv.to)) return false;
-  return presses.some((t) => t < iv.from && t + cd * 1000 >= iv.to);
+  return presses.some(
+    (t) => t < iv.from && t + cd.cooldownSeconds * 1000 >= iv.to,
+  );
 }
 
 /**
@@ -361,17 +364,15 @@ function healSpentAcross(
 export function healerLockIntervals<
   T extends Parameters<typeof intervalBlocksSpell>[0] &
     Pick<NamedCannotCastInterval, "from" | "to">,
->(
-  unit: Pick<ICombatUnit, "id" | "spellCastEvents" | "healOut" | "absorbsOut">,
-  named: readonly T[],
-): T[] {
+>(unit: ICombatUnit, named: readonly T[]): T[] {
   const heals = [...pressedHeals(unit)];
   return named.filter(
     (iv) =>
       !iv.lockout ||
       heals.every(
         ([id, presses]) =>
-          intervalBlocksSpell(iv, id) || healSpentAcross(id, presses, iv),
+          intervalBlocksSpell(iv, id) ||
+          healSpentAcross(unit, id, presses, iv),
       ),
   );
 }
