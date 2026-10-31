@@ -13,9 +13,14 @@
  *    reached the official length at the printed DR step, less `JITTER_MS`).
  *  - `naturalEndAtDeath` (D15): a line blaming a death for an end —
  *    `removed at your death`, `ended at their death`, `ended at death`, `its
- *    target died` — whose run reached the aura's full length for its caster.
- *    Kinds `full length`, `left a survivor` (the same aura left a unit that
- *    lived on, in the same millisecond).
+ *    target died` — whose run reached the aura's full length for its caster
+ *    (× the printed DR step). The run is the line's own: `removed at your
+ *    death` the owner's copy, `its target died` a dead unit's copy of that
+ *    source, a control or `[ENEMY DEF]` line the named unit's copy applied in
+ *    the printed second (those lines stand at the start). Another caster's
+ *    copy on another unit says nothing about this one. Kinds `full length`,
+ *    `left a survivor` (the same source's aura left a unit that lived on, in
+ *    the same millisecond).
  *  - `channelOutlived` (D12): `[YOU] [CD] X (channeled Ns, ended m:ss)` with
  *    a cast row of the owner's inside the printed length: a channel does not
  *    run through the caster's next cast. Off-GCD and castable-while-casting
@@ -26,18 +31,25 @@
  *  - `unseenEndOpener` (D59): `X active ON THE TARGET Ns` of a stealth /
  *    invisibility aura with no end row, printed longer than the gap to the
  *    first debuff its holder put on a player (a stealth opener whose cast row
- *    the log lost): the gap + 0.1 s.
+ *    the log lost): the gap + 0.1 s. The run is the line's own: the holder's
+ *    run applied `pressed Ns after` the burst head's start, or the last one
+ *    before that start for `already up`. A debuff that opens nothing is no
+ *    end: a snare (a press's rider, DB2 mechanic 11), one the state allows
+ *    (DB2 Allow While Stealthed, on Vanish), a press with no unit on its row
+ *    still inside its official length (Ring of Frost: a ground effect).
  *  - `immuneCauseUnnamed` (D61): `[CC NOT LANDED] … — logged IMMUNE` with no
  *    cause, while an aura with a DB2 school immunity covering the control's
  *    school, or a mechanic immunity for its mechanic, was up on the target.
  *  - `kickBackVsNextPress` (D28): a `[RES]` `cd:` entry or `[KICK] … back m:ss`
  *    of an interrupt putting it back later than its unit's next press of it.
  */
+import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   immunityCoversSpell,
   spellSchoolMask,
 } from "@gladlog/analysis/src/data/spellSchools";
+import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { SAVE_AURA_END_UNSEEN_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { INTERRUPT_SPELL_IDS } from "@gladlog/analysis/src/utils/enemyInterrupts";
@@ -169,65 +181,102 @@ function naturalEndAtDeath(ctx: IRoundCtx, line: string): void {
   if (!DEATH_WORDS.test(line)) return;
   const m = DEATH_LINE.exec(line);
   if (!m) return;
-  // BUFF FADED: the owner's press of X; the rest name their unit
-  const pid = /^(\d+)\(/.exec(m[3]!)?.[1];
-  const unit = m[2] === "BUFF FADED" || !pid ? ctx.owner : ctx.unitOfPid(pid);
-  const name =
-    m[2] === "BUFF FADED"
-      ? /^(.+?) \(/.exec(m[3]!)?.[1]
-      : (/← (.+?) \(by /.exec(m[3]!)?.[1] ?? /: (.+?) \(/.exec(m[3]!)?.[1]);
-  if (!unit || !name) return;
+  const faded = m[2] === "BUFF FADED";
+  const rest = m[3]!;
+  const named = faded
+    ? undefined
+    : ctx.unitOfPid(/^(\d+)\(/.exec(rest)?.[1] ?? "");
+  const name = faded
+    ? /^(.+?) \(/.exec(rest)?.[1]
+    : (/← (.+?) \(by /.exec(rest)?.[1] ?? /: (.+?) \(/.exec(rest)?.[1]);
+  if ((!faded && !named) || !name) return;
   ctx.bump("naturalEndAtDeath");
-  const t = secOf(m[1]!);
-  const lo = ctx.start + t * 1000;
-  for (const holder of ctx.players)
-    for (const id of idsNamed(holder, name)) {
-      const rows = rowsOf(holder, id);
-      const rm = rows.find(
-        (a) => ev(a) === REMOVED && tsOf(a) >= lo - 1000 && tsOf(a) < lo + 2000,
+  const targetDied = /its target died/.test(rest);
+  // whose copy the line talks about, and from whom
+  const first = faded ? ctx.owner : named;
+  const holders = targetDied ? ctx.players.filter((p) => p !== first) : [first];
+  const by = /\(by (\d+)\(/.exec(rest)?.[1];
+  const source = targetDied ? first : by ? ctx.unitOfPid(by) : undefined;
+  const share =
+    DR_SHARE[/\[DR: \S+ (Full|50%|25%)\]/.exec(rest)?.[1] ?? "Full"]!;
+  const lo = ctx.start + secOf(m[1]!) * 1000;
+  const dies = (u: any, at: number) =>
+    ((u.deathRecords ?? []) as any[]).some(
+      (d) => d.timestamp >= at - 200 && d.timestamp - at <= 200,
+    );
+  for (const holder of holders) {
+    // one aura name can be two ids: the line's run is the one that went on
+    // to the death (Snowdrift's 2 s slow beside its 4 s stun, Berserker
+    // Shout's 0.1 s 384102 beside its 6 s 384100)
+    const run = idsNamed(holder, name)
+      .flatMap((id) => {
+        const rows = rowsOf(holder, id).filter(
+          (a) => !source || a.srcUnitId === source.id,
+        );
+        // a [BUFF FADED] line stands at the end, the rest at the start
+        const started = faded
+          ? undefined
+          : rows.find(
+              (a) =>
+                ev(a) === APPLIED && tsOf(a) >= lo - 200 && tsOf(a) < lo + 1000,
+            );
+        if (!faded && !started) return [];
+        const rm = rows.find(
+          (a) =>
+            ev(a) === REMOVED &&
+            (started
+              ? tsOf(a) >= tsOf(started)
+              : tsOf(a) >= lo - 1000 && tsOf(a) < lo + 2000),
+        );
+        if (!rm) return [];
+        const apply =
+          started ??
+          rows
+            .filter(
+              (a) =>
+                (ev(a) === APPLIED || ev(a) === REFRESH) && tsOf(a) <= tsOf(rm),
+            )
+            .pop();
+        return apply ? [{ id, rm, apply, at: tsOf(rm) as number }] : [];
+      })
+      .sort((x, y) => y.at - x.at)[0];
+    if (!run) continue;
+    const { id, rm, apply, at } = run;
+    if (targetDied && !dies(holder, at)) continue;
+    const caster = ctx.units.find((u) => u.id === apply.srcUnitId);
+    const full = buffFullDurationForCaster(id, caster, tsOf(apply));
+    const fact = `${name}#${at}`;
+    if (full && Math.abs(at - tsOf(apply) - full * share * 1000) <= JITTER_MS)
+      ctx.violate(
+        "naturalEndAtDeath",
+        "full length",
+        at,
+        fact,
+        `${name} on ${holder.name}: ran ${((at - tsOf(apply)) / 1000).toFixed(3)}s of ${full}s × ${share}`,
+        line,
       );
-      if (!rm) continue;
-      const at = tsOf(rm);
-      const apply = rows
-        .filter(
-          (a) => (ev(a) === APPLIED || ev(a) === REFRESH) && tsOf(a) <= at,
-        )
-        .pop();
-      if (!apply) continue;
-      const caster = ctx.units.find((u) => u.id === apply.srcUnitId);
-      const full = buffFullDurationForCaster(id, caster, tsOf(apply));
-      const dies = (u: any) =>
-        ((u.deathRecords ?? []) as any[]).some(
-          (d) => d.timestamp >= at - 200 && d.timestamp - at <= 200,
-        );
-      const fact = `${name}#${at}`;
-      if (full && Math.abs(at - tsOf(apply) - full * 1000) <= JITTER_MS)
-        ctx.violate(
-          "naturalEndAtDeath",
-          "full length",
-          at,
-          fact,
-          `${name} on ${holder.name}: ran ${((at - tsOf(apply)) / 1000).toFixed(3)}s of ${full}s`,
-          line,
-        );
-      else if (
-        !dies(holder) &&
-        ctx.players.some(
-          (o) =>
-            o !== holder &&
-            dies(o) &&
-            rowsOf(o, id).some((a) => tsOf(a) === at),
-        )
+    else if (
+      ctx.players.some(
+        (o) =>
+          o !== holder &&
+          !dies(o, at) &&
+          rowsOf(o, id).some(
+            (a) =>
+              ev(a) === REMOVED &&
+              tsOf(a) === at &&
+              a.srcUnitId === rm.srcUnitId,
+          ),
       )
-        ctx.violate(
-          "naturalEndAtDeath",
-          "left a survivor",
-          at,
-          fact,
-          `${name} left ${holder.name}, who lived on, in that ms`,
-          line,
-        );
-    }
+    )
+      ctx.violate(
+        "naturalEndAtDeath",
+        "left a survivor",
+        at,
+        fact,
+        `${name} left a unit that lived on in the ms it left ${holder.name}`,
+        line,
+      );
+  }
 }
 
 const CHANNEL_LINE =
@@ -317,55 +366,99 @@ function wallHeldPastHold(ctx: IRoundCtx): void {
   }
 }
 
-const UNSEEN_LINE = /(.+?) active ON THE TARGET (\d+\.\d)s of this burst/;
+const BURST_HEAD = /^\s*Burst #\d+ — (\d+:\d\d)–/;
+const UNSEEN_LINE =
+  /(.+?) active ON THE TARGET (\d+\.\d)s of this burst(?: \((already up|pressed (<?\d+\.\d)s after))?/;
+const VANISH = "11327";
+const NO_UNIT = "0000000000000000";
+
+/** The first debuff `u` put on a player after `t` that opens something. */
+function firstOpener(
+  ctx: IRoundCtx,
+  u: any,
+  id: string,
+  t: number,
+): any | undefined {
+  const opens = (r: any): boolean => {
+    const mech = ccMechanicOf(r.spellId);
+    if (mech === undefined || mech === 11) return false;
+    const presses = new Set<string>([
+      r.spellId,
+      ...castsOfEffectAura(r.spellId),
+    ]);
+    if (
+      id === VANISH &&
+      [...presses].some((p) => ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(p))
+    )
+      return false;
+    return !successesOf(u).some(
+      (c) =>
+        presses.has(c.spellId) &&
+        (!c.destUnitId || c.destUnitId === NO_UNIT) &&
+        tsOf(c) <= t &&
+        tsOf(c) + (spellEffectData[c.spellId]?.durationSeconds ?? 0) * 1000 >=
+          tsOf(r),
+    );
+  };
+  return ctx.players
+    .flatMap((p) =>
+      ((p.auraEvents ?? []) as any[]).filter(
+        (r) =>
+          p.id !== u.id &&
+          r.destUnitId === p.id &&
+          r.srcUnitId === u.id &&
+          ev(r) === APPLIED &&
+          r.auraType === "DEBUFF" &&
+          r.spellId &&
+          tsOf(r) > t &&
+          opens(r),
+      ),
+    )
+    .sort((x, y) => tsOf(x) - tsOf(y))[0];
+}
 
 function unseenEndOpener(ctx: IRoundCtx): void {
   // the ledger's sentence names the aura; its row sits under the burst head
-  for (let i = 0; i < ctx.lines.length; i++) {
-    const line = ctx.lines[i]!;
+  let burstAt: number | undefined;
+  for (const line of ctx.lines) {
+    const h = BURST_HEAD.exec(line);
+    if (h) burstAt = ctx.start + secOf(h[1]!) * 1000;
     const m = UNSEEN_LINE.exec(line);
-    if (!m) continue;
+    if (!m || burstAt === undefined) continue;
     const name = m[1]!.replace(/^.*: /, "").trim();
     const s = Number(m[2]);
-    // the holder: whoever has a run of this aura with no end row
+    const after = m[4] ? Number(m[4].replace("<", "")) * 1000 : undefined;
+    // the holder: whoever has a run of this aura with no end row, applied
+    // where the line says
     for (const u of ctx.players) {
       for (const id of idsNamed(u, name)) {
         if (!SAVE_AURA_END_UNSEEN_IDS.has(id)) continue;
         const rows = rowsOf(u, id);
-        for (let k = 0; k < rows.length; k++) {
-          const a = rows[k]!;
-          if (ev(a) !== APPLIED) continue;
-          const nextRow = rows[k + 1];
-          if (nextRow && ev(nextRow) === REMOVED) continue;
-          ctx.bump("unseenEndOpener");
-          const t = tsOf(a);
-          const first = ctx.players
-            .flatMap((p) =>
-              ((p.auraEvents ?? []) as any[]).filter(
-                (r) =>
-                  p.id !== u.id &&
-                  r.destUnitId === p.id &&
-                  r.srcUnitId === u.id &&
-                  ev(r) === APPLIED &&
-                  r.auraType === "DEBUFF" &&
-                  r.spellId &&
-                  ccMechanicOf(r.spellId) !== undefined &&
-                  tsOf(r) > t,
-              ),
-            )
-            .sort((x, y) => tsOf(x) - tsOf(y))[0];
-          if (!first) continue;
-          const gap = (tsOf(first) - t) / 1000;
-          if (s > gap + 0.1)
-            ctx.violate(
-              "unseenEndOpener",
-              name,
-              t,
-              `${u.name}#${id}#${t}`,
-              `${name} on ${u.name}: printed ${s}s, ${nameOf(first.spellId, first.spellName ?? "")} of theirs landed ${gap.toFixed(3)}s in`,
-              line,
-            );
-        }
+        const runs = rows.flatMap((a, k) => {
+          const next = rows[k + 1];
+          return ev(a) === APPLIED && !(next && ev(next) === REMOVED)
+            ? [tsOf(a) as number]
+            : [];
+        });
+        // the head and the offset are both printed: a second either way
+        const t =
+          after !== undefined
+            ? runs.find((x) => Math.abs(x - burstAt! - after) <= 1200)
+            : runs.filter((x) => x <= burstAt! + 1000).pop();
+        if (t === undefined) continue;
+        ctx.bump("unseenEndOpener");
+        const first = firstOpener(ctx, u, id, t);
+        if (!first) continue;
+        const gap = (tsOf(first) - t) / 1000;
+        if (s > gap + 0.1)
+          ctx.violate(
+            "unseenEndOpener",
+            name,
+            t,
+            `${u.name}#${id}#${t}`,
+            `${name} on ${u.name}: printed ${s}s, ${nameOf(first.spellId, first.spellName ?? "")} of theirs landed ${gap.toFixed(3)}s in`,
+            line,
+          );
       }
     }
   }
@@ -428,6 +521,11 @@ function immuneCauseUnnamed(ctx: IRoundCtx, line: string): void {
   }
 }
 
+/** Grimoire of Sacrifice's own Spell Lock: a cooldown of its own beside the
+ * pet's 19647 (be070452 r3, 23:07: 132409 at 11.486, the pet's 19647 at
+ * 13.616, the next 132409 at 58.219). A [KICK] line's back is its button's. */
+const SPELL_LOCK_OWN = "132409";
+
 const KICK_BACK =
   /^\s*(\d+:\d\d)\s+\[KICK\]\s+(?:(\d+)\([^)]*\)|your) .*\(([^;)]+); back (\d+:\d\d)\)/;
 const RES_CD = /(?:^|[ ,])(?:(\d+):)?([A-Z][^,()[\]]*?)\((\d+)s\)/g;
@@ -436,14 +534,25 @@ function kickBack(ctx: IRoundCtx): void {
   const kickNames = new Set(
     INTERRUPT_SPELL_IDS.map((id) => nameOf(id)).filter(Boolean),
   );
-  const pressesOf = (u: any, name: string): number[] =>
+  const rowsNamed = (u: any, name: string): any[] =>
     [...successesOf(u), ...((u.petSpellCastEvents ?? []) as any[])]
       .filter(
         (c) =>
           ev(c) === SUCCESS && nameOf(c.spellId, c.spellName ?? "") === name,
       )
-      .map(tsOf)
-      .sort((x, y) => x - y);
+      .sort((x, y) => tsOf(x) - tsOf(y));
+  const pressesOf = (u: any, name: string): number[] =>
+    rowsNamed(u, name).map(tsOf);
+  /** the presses of the button the kick in this second came from */
+  const buttonPressesOf = (u: any, name: string, at: number): number[] => {
+    const rows = rowsNamed(u, name);
+    const own = rows.find((c) => tsOf(c) >= at && tsOf(c) < at + 1000);
+    if (!own) return rows.map(tsOf);
+    const isOwn = own.spellId === SPELL_LOCK_OWN;
+    return rows
+      .filter((c) => (c.spellId === SPELL_LOCK_OWN) === isOwn)
+      .map(tsOf);
+  };
   let t = 0;
   for (const line of ctx.lines) {
     const head = /^\s*(\d+:\d\d)\s/.exec(line);
@@ -455,7 +564,9 @@ function kickBack(ctx: IRoundCtx): void {
         const at = ctx.start + secOf(k[1]!) * 1000;
         const back = ctx.start + secOf(k[4]!) * 1000;
         ctx.bump("kickBackVsNextPress");
-        const next = pressesOf(unit, k[3]!).find((p) => p >= at + 1000);
+        const next = buttonPressesOf(unit, k[3]!, at).find(
+          (p) => p >= at + 1000,
+        );
         if (next !== undefined && next < back - 1000)
           ctx.violate(
             "kickBackVsNextPress",
