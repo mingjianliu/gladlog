@@ -157,6 +157,10 @@ describe("buildMatchContext on real fixture", () => {
       expect(lines()[0]).toMatch(
         /^0:10 {2}\[KICK\] {3}.+'s Skull Bash on .+ missed — IMMUNE$/,
       );
+      // fact7 D47 / D74: Priest Silence is in the interrupt kit, and DB2 has
+      // no interrupt on it (aura 27 only): no [KICK] line
+      victim.missesIn = [miss("15487", at)];
+      expect(lines()).toHaveLength(0);
       // Spiritwalker's Aegis 378078 (DB2 aura 77, mechanic 26) up at the miss
       victim.missesIn = [miss("47528", at)]; // Mind Freeze
       victim.auraEvents = [

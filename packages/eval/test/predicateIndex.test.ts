@@ -3760,6 +3760,11 @@ const INDEX: PredicateRow[] = [
     mod: castCommitSpans,
   },
   {
+    file: `${A}/utils/enemyInterrupts.ts`,
+    symbol: "isSilenceOnlyKitSpell",
+    mod: enemyInterrupts,
+  },
+  {
     file: `${A}/utils/unitDeath.ts`,
     symbol: "removedByDeath",
     mod: unitDeath,

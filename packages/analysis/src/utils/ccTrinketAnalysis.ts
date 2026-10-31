@@ -104,6 +104,7 @@ import { IMMUNITY_IDS } from "./enemyDefensives";
 import {
   interruptCooldownRemainingMs,
   interruptForUnit,
+  isSilenceOnlyKitSpell,
   kickCastSpellId,
 } from "./enemyInterrupts";
 import { type GapCloserState, gapCloserStateOver } from "./gapClosers";
@@ -4498,7 +4499,10 @@ export function analyzePlayerCCAndTrinket(
         }
         for (const enemy of enemies) {
           const kit = interruptForUnit(enemy);
-          if (!kit) continue;
+          // a silence is no kicker (`isSilenceOnlyKitSpell`, fact7 D48:
+          // 7acbefeb 0:12 printed maxKickRangeYd=46, Silence's range, where
+          // the only ready kick was Disrupt at 10 yd)
+          if (!kit || isSilenceOnlyKitSpell(kit.spellId)) continue;
           // Codex review P2: pet interrupts (Spell Lock, Axe Toss) come from the pet,
           // not the owner; unconfirmed kits (kit.confirmed === false) are pet abilities
           // or unobserved fallbacks whose range cannot be reliably judged from owner pos.

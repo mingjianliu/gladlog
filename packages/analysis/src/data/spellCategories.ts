@@ -448,7 +448,9 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
  * trade-off 的问题」). Kept out because the 12.1.5 refresh would otherwise have
  * printed their misses as `[KICK] … missed — IMMUNE` (605 files: 403 lines).
  * Priest Silence 15487 is the same shape but has been Shadow's kick since
- * GH #78 — deliberately not listed here (open question for the user).
+ * GH #78 — deliberately not listed here (open question for the user); the
+ * kit marks it `silenceOnly`, which `[KICK] … missed` and `kickersInRange`
+ * read (`isSilenceOnlyKitSpell`, fact7 D47 / D48 / D74).
  */
 export const SILENCE_AURAS_NOT_KICKS: ReadonlySet<string> = new Set([
   "1330", // Garrote - Silence (rides on Garrote)

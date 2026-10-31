@@ -45,6 +45,50 @@ const at = (ms: number, x: number, y: number) =>
     { timestamp: ms, advancedActorPositionX: x, advancedActorPositionY: y },
   ] as never;
 
+describe("fact7 D48 — a silence in the kit is no kicker", () => {
+  it("7acbefeb 0:12: a Shadow Priest's Silence at 8 yd is not a kicker in range; the Rogue's Kick still is", () => {
+    const CAST = START + 12_000;
+    const owner = makeUnit("player-1", {
+      actionIn: [
+        makeInterruptEvent(
+          "1766",
+          "Kick",
+          "77472",
+          "Healing Wave",
+          CAST + 1_000,
+          "enemy-1",
+          "Rogue",
+        ),
+      ],
+      castStartEvents: [
+        {
+          spellId: "77472",
+          logLine: { event: LogEvent.SPELL_CAST_START, timestamp: CAST },
+        },
+      ] as never,
+      advancedActions: at(CAST, 0, 0),
+    });
+    const rogue = makeUnit("enemy-1", {
+      name: "Rogue",
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Assassination,
+      advancedActions: at(CAST, 0, 30),
+    });
+    const priest = makeUnit("enemy-2", {
+      name: "Priest",
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Priest,
+      spec: CombatUnitSpec.Priest_Shadow,
+      advancedActions: at(CAST, 0, 8),
+    });
+    const inst = analyzePlayerCCAndTrinket(owner, [rogue, priest], combat)
+      .interruptInstances[0]!;
+    expect(inst.kickersInRange).toBe(0);
+    expect(inst.maxKickRangeYd).toBeNull();
+  });
+});
+
 describe("kick-eaten F-K5c — a kick in the cast-start millisecond was ready at cast start", () => {
   const CAST_START = START + 157_283;
   /** The owner starts Healing Wave at 157.283; the Rogue 2 yd away

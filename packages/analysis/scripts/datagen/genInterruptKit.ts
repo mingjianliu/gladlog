@@ -18,6 +18,12 @@
  *   pet             SkillLineAbility rows on a pet skill line (ClassMask 0):
  *                   Spell Lock 19647 (Felhunter), Axe Toss 89766 (Felguard) —
  *                   possession is OBSERVED (the pet cast it), never assumed.
+ *   silenceOnly     DB2 SpellEffect: an aura-27 silence row and no effect-68
+ *                   INTERRUPT_CAST on the spell. A button a kit can hold
+ *                   (Silence 15487 → Shadow) that is no kick: it never
+ *                   writes a SPELL_INTERRUPT and opens no school lockout. A
+ *                   press row that only triggers the kick (Solar Beam 78675,
+ *                   Skull Bash 106839) has no aura 27 and is not one.
  *
  * Id universe = `isKickSpellId` — SPELL_CATEGORIES type "interrupts" minus
  * the silence auras with no school lockout (control, not a kick; user ruling
@@ -75,6 +81,7 @@ async function main() {
       specBaseline: number[];
       talent: Record<string, { nodeId: number; entryId: number }>;
       pet: boolean;
+      silenceOnly?: true;
     }
   > = {};
   for (const [id, name] of roster)
@@ -128,6 +135,22 @@ async function main() {
           };
         }
   }
+  const effects = parseCsv(await fetchTable("SpellEffect", build, cacheDir));
+  assertColumns(
+    effects.header,
+    ["SpellID", "Effect", "EffectAura"],
+    "SpellEffect",
+  );
+  const hasSilenceAura = new Set<string>();
+  const hasInterruptCast = new Set<string>();
+  for (const r of effects.rows as unknown as Array<Record<string, string>>) {
+    const id = String(r["SpellID"]);
+    if (!rosterIds.has(id)) continue;
+    if (r["Effect"] === "68") hasInterruptCast.add(id);
+    if (r["Effect"] === "6" && r["EffectAura"] === "27") hasSilenceAura.add(id);
+  }
+  for (const id of hasSilenceAura)
+    if (!hasInterruptCast.has(id)) out[id]!.silenceOnly = true;
   const outPath = new URL(
     "../../src/data/interruptKitGenerated.json",
     import.meta.url,

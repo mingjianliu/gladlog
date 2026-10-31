@@ -21,6 +21,7 @@ import {
   interruptBackAtMs,
   interruptCooldownSeconds,
   interruptForUnit,
+  isSilenceOnlyKitSpell,
   kickCastSpellId,
 } from "../../utils/enemyInterrupts";
 import {
@@ -215,7 +216,12 @@ export function emitKickEntries(
   // when an aura on the victim is officially interrupt-immune (DB2 aura 77
   // mechanic 26, `auraBlocksMechanic`); otherwise bare IMMUNE, never a
   // guess.
-  const kickKitIds = new Set(INTERRUPT_SPELL_IDS);
+  // A silence in the kit is no kick (`isSilenceOnlyKitSpell`, fact7 D47 /
+  // D74): Priest Silence into an immunity has its `[CC AVOIDED?]` line and
+  // read as a kick only when it missed — landed, it is a `[SILENCE]` line.
+  const kickKitIds = new Set(
+    INTERRUPT_SPELL_IDS.filter((id) => !isSilenceOnlyKitSpell(id)),
+  );
   const castersById = new Map(_allUnits.map((u) => [u.id, u]));
   const immuneAuraCache = new Map<
     string,

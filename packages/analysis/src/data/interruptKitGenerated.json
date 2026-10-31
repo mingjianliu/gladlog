@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T18:04:13.608Z",
+  "generatedAt": "2026-10-31T00:33:07.230Z",
   "build": "12.1.5.70391",
   "interrupts": {
     "1766": {
@@ -36,7 +36,8 @@
         258
       ],
       "talent": {},
-      "pet": false
+      "pet": false,
+      "silenceOnly": true
     },
     "19647": {
       "name": "Spell Lock",
