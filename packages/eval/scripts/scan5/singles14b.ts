@@ -50,6 +50,7 @@ import {
   canOffensivePurge,
   dispelReachYards,
   getDispelType,
+  isCdGatedPurger,
   PURGE_SPELLS_BY_SPEC,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import {
@@ -561,11 +562,11 @@ function checkReach(ctx: IRoundCtx, friends: any[]): void {
   };
   for (const line of ctx.lines) {
     const stated =
-      /no (purger|dispeller) had range\/line of sight(?: until (\d+:\d\d) \(\d+s of the (?:de)?buff left\))?/.exec(
+      /no (purger(?: without a cooldown)?|dispeller) had range\/line of sight(?: until (\d+:\d\d) \(\d+s of the (?:de)?buff left\))?/.exec(
         line,
       );
     if (!stated) continue;
-    const purge = stated[1] === "purger";
+    const purge = stated[1] !== "dispeller";
     // `until m:ss` claims no reach before that second; the plain line claims
     // none for the whole window
     const untilS = stated[2] === undefined ? undefined : secOf(stated[2]);
@@ -593,7 +594,11 @@ function checkReach(ctx: IRoundCtx, friends: any[]): void {
           tsOf(a) < ctx.start + (s + 1) * 1000,
       );
       if (!on) continue;
-      const who = friends.filter((f: any) => canOffensivePurge(f, ctx.units));
+      const who = friends.filter(
+        (f: any) =>
+          canOffensivePurge(f, ctx.units) &&
+          (stated[1] === "purger" || !isCdGatedPurger(f)),
+      );
       const hit = reached(
         who,
         target,

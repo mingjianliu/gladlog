@@ -560,6 +560,26 @@ describe("formatKillAttemptsForContext — 徽章在手不是失误(用户裁决
     expect(text).toContain("opportunity: trinket up (no softer target)");
     expect(text).not.toContain("locked");
     expect(text).toContain("0 opened while a softer target existed.");
+  });
+
+  it("槽位没有能按的 PvP 饰品:档位不变,只把字印成真话(裁决 2026-10-31)", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 5, 5),
+      info: { equipment: Array.from({ length: 16 }, () => ({ id: "1" })) },
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 7, 50_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts[0].opportunity.tier).toBe("locked");
+    const text = formatKillAttemptsForContext(attempts).join("\n");
+    expect(text).toContain(
+      "opportunity: no pressable PvP trinket (no softer target)",
+    );
+    expect(text).not.toContain("opportunity: trinket up");
+    expect(text).toContain("`no pressable PvP trinket` = the target's");
     expect(text).toContain("not a targeting error");
   });
 

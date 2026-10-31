@@ -2990,6 +2990,19 @@ export function pvpTrinketRemainingSecondsAt(
 }
 
 /**
+ * Does the unit hold a PvP trinket it can press — the `null` of
+ * `pvpTrinketRemainingSecondsAt`, read off the unit alone: Relentless is
+ * passive, "None" holds two other trinkets (user ruling 2026-10-31, fact7 r5:
+ * 705 of 17,232 `trinket up` lines on the 605, 36 units, 247 with no break
+ * racial seen). The kill tier still treats such a unit as `locked` — P-b7's
+ * tier is not this fact — and only what the line says changes.
+ */
+export function hasPressablePvpTrinket(unit: ICombatUnit): boolean {
+  const type = detectTrinketType(unit);
+  return type !== "Relentless" && type !== "None";
+}
+
+/**
  * B-tier B4a (user ruling 2026-10-06): the PvP trinket press whose own
  * cooldown is still running at round second `atS`, and what it removed —
  * the `last used m:ss on X` clause of a `trinket: ON CD` note. Read off the

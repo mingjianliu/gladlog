@@ -3008,6 +3008,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "hasPressablePvpTrinket",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "detectTrinketType",
     mod: ccTrinketAnalysis,
   },

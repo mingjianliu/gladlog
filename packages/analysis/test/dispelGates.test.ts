@@ -478,6 +478,21 @@ describe("豁免后缀与 purge 侧", () => {
       );
     });
 
+    it("D66 裁决 10-31:带冷却的驱散者没被问,主语收窄,判据不动", () => {
+      const left = { ...purge, cdGatedPurgerLeftOut: true };
+      expect(formatMissedPurgeExemption(left)).toBe(
+        " | no purger without a cooldown had range/line of sight — not actionable",
+      );
+      expect(
+        formatMissedPurgeExemption({ ...left, reachFromSeconds: 38 }),
+      ).toBe(
+        " | no purger without a cooldown had range/line of sight until 0:38 (7s of the buff left)",
+      );
+      expect(missedPurgeNotActionable(left)).toEqual(
+        missedPurgeNotActionable(purge),
+      );
+    });
+
     it("够到时剩下的不足反应门槛:仍是 not actionable", () => {
       expect(
         formatMissedPurgeExemption({ ...purge, reachFromSeconds: 43 }),

@@ -91,6 +91,7 @@ import {
   ccsRemovedByPress,
   type ICCInstance,
   type IPlayerCCTrinketSummary,
+  hasPressablePvpTrinket,
   pvpTrinketRemainingSecondsAt,
   renderedCcSeconds,
 } from "./ccTrinketAnalysis";
@@ -245,6 +246,8 @@ export interface IKillAttempt {
    * stays (ruling P-b7: a racial press does not make the target PRIME); only
    * the words beside it say so (user ruling 2026-10-30, fact7 D17 / D43). */
   trinketRacialLockUntilSeconds?: number;
+  /** the target holds no PvP trinket to press (`hasPressablePvpTrinket`) */
+  noPressableTrinket?: boolean;
   /** The softest OTHER enemy alive at the attempt start, present only when
    * its tier was strictly softer than the target's (see softerTargetAt).
    * Absent = nobody was a softer target, which at a match opener is the
@@ -404,6 +407,10 @@ export function killAttemptOwnControlClause(
 /** The tier `trinket up` when the racial's shared lock holds the trinket:
  * the same tier, printed true (fact7 D17 / D43). */
 export const TRINKET_RACIAL_LOCK_WORDS = "trinket locked by a racial";
+/** The tier `trinket up` on a unit with no PvP trinket to press
+ * (`hasPressablePvpTrinket`): the same tier, printed true. */
+export const NO_PRESSABLE_TRINKET_WORDS = "no pressable PvP trinket";
+export const KILL_ATTEMPTS_NO_TRINKET_LEGEND = `  \`${NO_PRESSABLE_TRINKET_WORDS}\` = the target's trinket slots hold no PvP trinket it can press: the same reading as \`trinket up\` for the attempt's tier, but there is no trinket to bait.`;
 export const KILL_ATTEMPTS_RACIAL_LOCK_LEGEND = `  \`${TRINKET_RACIAL_LOCK_WORDS} (back m:ss)\` = the target pressed a racial that shares the trinket's lock: the same reading as \`trinket up\` for the attempt's tier, but the trinket itself could not be pressed before m:ss.`;
 export const KILL_ATTEMPTS_OWN_CONTROL_LEGEND = `  \`| target in your team's Cyclone a–b\` at the end of a line = your own team's Cyclone was on that target from a to b (its [CC ON ENEMY] line), and those seconds meet this attempt's bracket or the ${KILL_CREDIT_SLACK_S} s after it — the span the outcome is read over (a Cyclone that began after the bracket's last second is one of those). A cycloned unit takes no damage from anyone while it lasts. It is a fact beside the outcome: \`FAILED:\` still names what its fixed order picked, and does not weigh the Cyclone.`;
 
@@ -1130,6 +1137,7 @@ export function extractKillAttempts(
         );
       if (left)
         a.trinketRacialLockUntilSeconds = Math.floor(a.fromSeconds) + left;
+      if (unit && !hasPressablePvpTrinket(unit)) a.noPressableTrinket = true;
     }
     const fromMs = matchStartMs + a.fromSeconds * 1000;
     const toMs = matchStartMs + a.toSeconds * 1000;
@@ -1500,6 +1508,8 @@ export function formatKillAttemptsForContext(
   // I10: the trailing clause, explained only when a line carries it.
   if (attempts.some((a) => a.ownImmuneControl?.length))
     lines.push(KILL_ATTEMPTS_OWN_CONTROL_LEGEND);
+  if (attempts.some((a) => a.noPressableTrinket))
+    lines.push(KILL_ATTEMPTS_NO_TRINKET_LEGEND);
   if (attempts.some((a) => a.trinketRacialLockUntilSeconds !== undefined))
     lines.push(KILL_ATTEMPTS_RACIAL_LOCK_LEGEND);
   let kills = 0;
@@ -1531,9 +1541,11 @@ export function formatKillAttemptsForContext(
         : a.opportunity.tier === "gated"
           ? `gated (${[`${a.opportunity.wallsInHand.join("/")} in hand`, ...up, softer].join("; ")})`
           : `${
-              a.trinketRacialLockUntilSeconds === undefined
-                ? "trinket up"
-                : `${TRINKET_RACIAL_LOCK_WORDS} (back ${fmtTime(a.trinketRacialLockUntilSeconds)})`
+              a.noPressableTrinket
+                ? NO_PRESSABLE_TRINKET_WORDS
+                : a.trinketRacialLockUntilSeconds === undefined
+                  ? "trinket up"
+                  : `${TRINKET_RACIAL_LOCK_WORDS} (back ${fmtTime(a.trinketRacialLockUntilSeconds)})`
             } (${[...up, softer].join("; ")})`;
     const outcome = failure ? `FAILED: ${failure.text}` : "KILL";
     const opener =

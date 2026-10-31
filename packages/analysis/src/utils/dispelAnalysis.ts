@@ -1625,6 +1625,11 @@ export interface IMissedPurgeWindow {
   losReachable: boolean | null;
   /** Same as the cleanse side's. */
   reachFromSeconds?: number;
+  /** The reach facts leave a CD-gated purger out (`isCdGatedPurger`: below
+   * Critical it is not asked, on any fact of the window), so the line's subject
+   * is the purgers without a cooldown (user ruling 2026-10-31, D66: 233
+   * `no purger had…` lines on the 605, a Hunter in reach of the buff). */
+  cdGatedPurgerLeftOut?: boolean;
   /**
    * P-P5b = C: friends whose SCOPED removal answers this buff (Shattering
    * Throw on an immunity shield) and who were
@@ -2719,7 +2724,7 @@ function noReachText(
     IMissedCleanseWindow,
     "losReachable" | "reachFromSeconds" | "timeSeconds" | "durationSeconds"
   >,
-  who: "purger" | "dispeller",
+  who: "purger" | "purger without a cooldown" | "dispeller",
   what: "buff" | "debuff",
   barS: number,
 ): string {
@@ -3111,6 +3116,7 @@ export function formatMissedPurgeExemption(
     | "timeSeconds"
     | "durationSeconds"
     | "viaScopedTool"
+    | "cdGatedPurgerLeftOut"
   >,
 ): string {
   let out = "";
@@ -3121,7 +3127,12 @@ export function formatMissedPurgeExemption(
   const why = missedPurgeNotActionable(w);
   if (why.lockedOut)
     out += ` | purgers were CC'd/locked out${blockedForText(w.purgersBlockedS)} — not actionable`;
-  out += noReachText(w, "purger", "buff", missedPurgeBarS(w));
+  out += noReachText(
+    w,
+    w.cdGatedPurgerLeftOut ? "purger without a cooldown" : "purger",
+    "buff",
+    missedPurgeBarS(w),
+  );
   // F-P7 (codex r2 09-30): say WHEN the purge came back — "on cooldown at
   // application" alone hides 9 s of a buff that was purgeable after.
   if (w.purgeReadyAtSeconds !== undefined) {
@@ -4601,6 +4612,11 @@ export function reconstructDispelSummary(
                         () => [tool.castSpellId],
                       ),
                     ),
+                ...(friendlyPurgers.some(
+                  (p) => isCdGatedPurger(p) && !eligiblePurgers.includes(p),
+                )
+                  ? { cdGatedPurgerLeftOut: true }
+                  : {}),
                 ...reachFacts(
                   eligiblePurgers,
                   enemy,

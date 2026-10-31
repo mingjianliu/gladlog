@@ -20,6 +20,7 @@ import {
 } from "../data/spellEffectData";
 import { getSortedAdvancedActions } from "./advancedActions";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { hasPressablePvpTrinket } from "./ccTrinketAnalysis";
 import {
   cdHelpsRecipient,
   chargesAvailableAt,
@@ -102,6 +103,9 @@ export interface IEnemySnapshot {
   /** true = trinket off cooldown (including never observed being used — the
    * start-of-match reset means it is ready), false = on cooldown. */
   trinketAvailable: boolean;
+  /** the slots hold no PvP trinket to press (`hasPressablePvpTrinket`); the
+   * tier does not read it (ruling 2026-10-31) */
+  noPressableTrinket?: boolean;
   /**
    * Kill-opportunity tier (user-ruled model, 2026-08-18; door re-ruled
    * 2026-09-04 to "any 20–99 % wall in hand" — 10s kill conversion per tier,
@@ -454,6 +458,7 @@ function snapshotEnemy(
     defensivesAvailable: available,
     defensivesUnavailable: unavailable,
     trinketAvailable,
+    noPressableTrinket: !hasPressablePvpTrinket(enemy),
     tier,
     wallsInHand,
   };
@@ -733,7 +738,13 @@ function fmtDefensives(snap: IEnemySnapshot): string {
   } else if (snap.defensivesAvailable.length > 0) {
     parts.push(`defensives up: ${snap.defensivesAvailable.join(", ")}`);
   }
-  parts.push(snap.trinketAvailable ? "trinket available" : "trinket on CD");
+  parts.push(
+    snap.noPressableTrinket
+      ? "no pressable PvP trinket"
+      : snap.trinketAvailable
+        ? "trinket available"
+        : "trinket on CD",
+  );
   return parts.join(", ");
 }
 
@@ -789,6 +800,8 @@ function fmtTier(snap: IEnemySnapshot): string {
     case "gated":
       return `[kill-opportunity: gated — ${snap.wallsInHand.join("/")} in hand]`;
     case "locked":
-      return "[kill-opportunity: locked — trinket up]";
+      return snap.noPressableTrinket
+        ? "[kill-opportunity: locked — no pressable PvP trinket]"
+        : "[kill-opportunity: locked — trinket up]";
   }
 }

@@ -33,6 +33,7 @@ import {
   unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
+import { hasPressablePvpTrinket } from "./ccTrinketAnalysis";
 import {
   auraIdsAppliedBy,
   drCategoryKnown,
@@ -703,7 +704,11 @@ export function computeContestedTradeFacts(
       matchStartMs,
       true,
     );
-    const enemyHealerTrinket = trinketAvailable ? "available" : "on CD";
+    const enemyHealerTrinket = !hasPressablePvpTrinket(enemyHealer)
+      ? "none to press"
+      : trinketAvailable
+        ? "available"
+        : "on CD";
 
     const interrupts = computeEnemyInterruptAvailability(
       enemies,
