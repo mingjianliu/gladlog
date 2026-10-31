@@ -259,7 +259,7 @@ describe("an ally's pressed shield reads as the holder's own (fact7 D37, user ru
     absorbsIn: [absorb(CHI_COCOON, "ally")],
     spellCastEvents: [],
   } as never;
-  const ally = (casts: ReturnType<typeof cast>[]) =>
+  const ally = (casts: object[]) =>
     ({ id: "ally", spellCastEvents: casts }) as never;
 
   it("the ally's press of its carrier makes the run a pressed shield", () => {

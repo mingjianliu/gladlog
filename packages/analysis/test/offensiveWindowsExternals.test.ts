@@ -534,20 +534,27 @@ describe("computeOffensiveWindows — the target's own 20–99 % wall cuts the s
     ).toBeUndefined();
   });
 
-  it("a press the state machine times keeps its reading (ruling D6): the aura is not read, only the gap to a cast line logged after it", () => {
+  it("a press the state machine times keeps its hold, and a logged end past it counts (ruling D6, user ruling 2026-10-31 D76)", () => {
     const [[fromSeconds, toSeconds]] = spans(hunter()) as [[number, number]];
     // the same Barkskin press with its aura logged, running past the
-    // official length the machine holds: the span opens where it did
+    // official length the machine holds: the span opens where the aura ended
     expect(spans(hunter(up(BARKSKIN, 2, fromSeconds + 6)))).toEqual([
-      [fromSeconds, toSeconds],
+      [fromSeconds + 6, toSeconds],
     ]);
     const d = { kind: "self" as const, atSeconds: 99.98, observedSeconds: 8 };
     // no press behind the aura: the whole aura, roster wall or not
     expect(ownWallSpanS(d, true)).toEqual({ from: 99.98, to: 107.98 });
-    // a timed press logged before its aura: the machine already ended the span
-    expect(ownWallSpanS({ ...d, pressSeconds: 99.9 }, true)).toBeUndefined();
-    // …logged 40 ms after it: the span ends with the aura, not the cast line
-    expect(ownWallSpanS({ ...d, pressSeconds: 100.02 }, true)).toEqual({
+    // a timed press: the aura is cut on top of the machine's hold, so a logged
+    // end past the official length counts and an earlier one changes nothing
+    expect(ownWallSpanS({ ...d, pressSeconds: 99.9 }, true)).toEqual({
+      from: 99.98,
+      to: 107.98,
+    });
+    const noEnd = { kind: "self" as const, atSeconds: 99.98 };
+    // no logged end: nothing past the machine's hold
+    expect(ownWallSpanS({ ...noEnd, pressSeconds: 99.9 }, true)).toBeUndefined();
+    // …logged 40 ms after the aura: the span ends with the aura, not the cast line
+    expect(ownWallSpanS({ ...noEnd, pressSeconds: 100.02 }, true)).toEqual({
       from: 99.98,
       to: 100.02,
     });

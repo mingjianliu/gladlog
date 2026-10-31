@@ -1509,11 +1509,14 @@ export function renderedExternalSpanS(
  *    aura may still be up, and that cannot be read as gone (ruling D6, as
  *    for an external);
  *  - a press the state machine times (`pressIsTimed`) keeps that reading —
- *    "not defenseless" from its CAST line for the official length, never the
- *    aura interval (ruling D6, unchanged on purpose). Only the gap between
- *    the aura and a cast line logged AFTER it (`AURA_BEFORE_CAST_MAX_S` at
- *    most) is cut: the span ends with the aura, in the second its line
- *    prints.
+ *    "not defenseless" from its CAST line for the official length (ruling
+ *    D6), however early the aura ended. What is cut on top of that hold is
+ *    the aura itself: the gap to a cast line logged AFTER it
+ *    (`AURA_BEFORE_CAST_MAX_S` at most), so the span ends with the aura in the
+ *    second its line prints, and a logged end past the official length (user
+ *    ruling 2026-10-31, fact7 D76: 831c3fd5, Obsidian Scales paused 5 s by
+ *    Time Stop, 12 s official, REMOVED 17 s after the press). With no logged
+ *    end there is only the gap.
  *
  * Raw instants, as the Spirit of Redemption cut (step 2d), not the rendered
  * pair of an external (`renderedExternalSpanS`): floored to the line's
@@ -1530,12 +1533,13 @@ export function ownWallSpanS(
   pressIsTimed: boolean,
 ): { from: number; to: number } | undefined {
   if (d.kind !== "self") return undefined;
-  if (pressIsTimed && d.pressSeconds !== undefined)
-    return d.pressSeconds > d.atSeconds
-      ? { from: d.atSeconds, to: d.pressSeconds }
-      : undefined;
-  if (d.observedSeconds === undefined) return undefined;
-  return { from: d.atSeconds, to: d.atSeconds + d.observedSeconds };
+  if (d.observedSeconds !== undefined)
+    return { from: d.atSeconds, to: d.atSeconds + d.observedSeconds };
+  return pressIsTimed &&
+    d.pressSeconds !== undefined &&
+    d.pressSeconds > d.atSeconds
+    ? { from: d.atSeconds, to: d.pressSeconds }
+    : undefined;
 }
 
 /**
@@ -1548,8 +1552,8 @@ export function ownWallSpanS(
  * heal or cheat-death proc is no defense that was up (the 1215 verification:
  * Crimson Vial / Healthstone, Alter Time) and cuts nothing. The same reading
  * as `ownWallSpanS` (a press the state machine times keeps its
- * official-length hold; an end the log never showed is the interval
- * builder's official-length cap).
+ * official-length hold, past which a logged end counts; an end the log never
+ * showed is the interval builder's official-length cap).
  */
 export function ownSaveSpanS(
   d: Pick<

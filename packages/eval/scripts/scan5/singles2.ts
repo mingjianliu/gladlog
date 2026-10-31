@@ -21,7 +21,9 @@
  *    the press second ±1 names X or Y (Predator's Wake 1259431 → The Hunt
  *    1246167); `windowList:<X>` — an enemy press inside an `[OFFENSIVE
  *    WINDOW] a–b | … | CDs: …` header whose list has no `X@` / `Y@` at the
- *    press second ±1. `sameUse` (measured): X pressed while Y's own aura
+ *    press second ±1 (`pressFactOnly`, measured: an `OFFENSIVE_PRESS_FACT_IDS`
+ *    press stays off that list, user ruling 2026-10-31 on fact7 D78). `sameUse`
+ *    (measured): X pressed while Y's own aura
  *    from the caster is up or ended ≤ 500 ms before — the same use (Time
  *    Stop's cancel button 383332), not a new press.
  *  - `resEnemyDuplicateWindow` (D24): a `[RES]` row whose `enemy:` field
@@ -92,7 +94,10 @@ import {
   getUnitPositionAtTime,
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
-import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
+import {
+  OFFENSIVE_CD_SPELL_IDS,
+  OFFENSIVE_PRESS_FACT_IDS,
+} from "@gladlog/analysis/src/utils/spellDanger";
 
 import { fmtS, type IRoundCtx, nameOf, secOf } from "./ctx";
 
@@ -108,6 +113,7 @@ export const CHECKS = [
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "overrideVariantPressMissing|sameUse",
   "overrideVariantPressMissing|windowEndSecond",
+  "overrideVariantPressMissing|pressFactOnly",
   "resEnemySameSecondPressMissing|windowHeaderRow",
   "resEnemySameSecondPressMissing|noAura",
   "groundingAteOmitted|namesUnknown",
@@ -427,7 +433,11 @@ function overrideVariantPressMissing(ctx: IRoundCtx, infos: IUnitInfo[]): void {
               // buff's end) and open nothing — 3 of 3 cap-int facts
               // (121afd91 r1 3:03: Avatar 10:38:03.27 + 20 s ends 0.21 s
               // before the Bladestorm press). Not readable off the render.
-              s === w.b ? "windowEndSecond" : `windowList:${xName}`,
+              s === w.b
+                ? "windowEndSecond"
+                : OFFENSIVE_PRESS_FACT_IDS.has(c.spellId)
+                  ? "pressFactOnly"
+                  : `windowList:${xName}`,
               ms,
               `${fact}:w${w.a}`,
               `${xName} at ${fmtS(s)} inside [OFFENSIVE WINDOW] ${fmtS(w.a)}–${fmtS(w.b)}, not on its CDs: list`,

@@ -20,11 +20,9 @@
  *    a cast row of the owner's inside the printed length: a channel does not
  *    run through the caster's next cast. Off-GCD and castable-while-casting
  *    spells are what `kind` names, one kind per spell, so an exception shows.
- *  - `wallHeldPastHold` (D76; measured only, out of the total: gap (1c) of
- *    docs/predicate-index.md, kept by user ruling D10 of 2026-10-24 at the
- *    official length): `defenseless a–b` on a unit whose own wall aura, the
- *    one its `[ENEMY DEF]` line prints with a length, ran into the span: the
- *    aura's logged REMOVED lies after a + 1 s.
+ *  - `wallHeldPastHold` (D76, user ruling 2026-10-31): `defenseless a–b` on a
+ *    unit whose own wall aura, the one its `[ENEMY DEF]` line prints with a
+ *    length, ran into the span: the aura's logged REMOVED lies after a + 1 s.
  *  - `unseenEndOpener` (D59): `X active ON THE TARGET Ns` of a stealth /
  *    invisibility aura with no end row, printed longer than the gap to the
  *    first debuff its holder put on a player (a stealth opener whose cast row
@@ -73,7 +71,6 @@ export const CHECKS = [
 ] as const;
 
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
-  "wallHeldPastHold|aura outlasted the hold",
 ]);
 
 const NEAR_MS = 50;
