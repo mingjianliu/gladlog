@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COPY_CAST_IDS,
   filterRealPresses,
   FORM_COOLDOWN_BUFF_PAIR_MS,
   isCompanionCastRow,
   isFormReshiftCast,
   isNoPressRow,
 } from "./castPress";
+import { isInstantCast } from "./spellMechanics";
 
 const ev = (spellId: string, t: number) => ({
   spellId,
@@ -125,6 +127,18 @@ describe("castPress — the lines no test pinned", () => {
     expect(isNoPressRow(ordinary, [ordinary])).toBe(false);
     const copy = row("1271980", T);
     expect(isNoPressRow(copy, [copy])).toBe(true);
+  });
+  // fact7 r1, 59978653 r1 0:30: 450215 sat in the table as a channel tick for
+  // its 1 s spacing, and its four casts into Pain Suppression left ABILITIES
+  // INTO. Chained hard casts under haste space like ticks; a tick has no bar.
+  it("Void Blast is a press: a hard cast chained at tick spacing is no tick", () => {
+    const voidBlast = row("450215", T);
+    expect(isNoPressRow(voidBlast, [voidBlast])).toBe(false);
+  });
+  it("no not-a-press row carries a cast time of its own (DB2)", () => {
+    expect(
+      [...COPY_CAST_IDS.keys()].filter((id) => !isInstantCast(id)),
+    ).toEqual([]);
   });
   it("two casts of one spell exactly 1.05 s apart are two presses", () => {
     expect(filterRealPresses([ev("1", 0), ev("1", 1050)])).toHaveLength(2);

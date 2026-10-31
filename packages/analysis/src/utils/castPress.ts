@@ -132,7 +132,13 @@ export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
   ["1265991", "Twin Flames set proc (0.1% standalone)"],
   ["157982", "Tranquility channel tick (0.80s spacing; the press is 740)"],
   ["64844", "Divine Hymn channel tick (1.00s spacing; the press is 64843)"],
-  ["450215", "Void Blast channel tick (1.00s spacing)"],
+  // Void Blast 450215 stood here as a "channel tick (1.00s spacing)" until
+  // 2026-10-30. It is a hard cast (DB2 cast time 1,500 ms, the only id of this
+  // list with one; Entropic Rift's upgrade of Discipline's Smite): 97 of 97
+  // SUCCESS rows over 45 logs have their own CAST_START, 0.7–1.3 s before or
+  // instant, and the 1 s spacing is casts chained under haste. As a tick its
+  // presses left every press reader (59978653 r1 0:30: ×4 into Pain
+  // Suppression, 14.1 % of the priest's damage, absent from ABILITIES INTO).
   // fact4 D16 / batch 2 (2026-10-22): Snowdrift's per-target rows. The press
   // is 389794 (no target; DB2 a 6 s area, aura 395); the channel then logs a
   // SPELL_CAST_SUCCESS per target per pulse — 389823 (DB2 a 2 s slow, aura
