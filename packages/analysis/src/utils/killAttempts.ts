@@ -91,7 +91,7 @@ import {
   ccsRemovedByPress,
   type ICCInstance,
   type IPlayerCCTrinketSummary,
-  pvpTrinketRemainingSecondsAt,
+  racialTrinketLockUntilSeconds,
   renderedCcSeconds,
 } from "./ccTrinketAnalysis";
 import {
@@ -1128,15 +1128,13 @@ export function extractKillAttempts(
   for (const a of attempts) {
     if (a.opportunity.tier === "locked") {
       const unit = enemies.find((e) => e.id === a.targetUnitId);
-      const left =
+      const lockUntil =
         unit &&
-        pvpTrinketRemainingSecondsAt(
+        racialTrinketLockUntilSeconds(
           readingsOf(unit).ccSummary(),
-          Math.floor(a.fromSeconds),
-          { renderGrid: true },
+          a.fromSeconds,
         );
-      if (left)
-        a.trinketRacialLockUntilSeconds = Math.floor(a.fromSeconds) + left;
+      if (lockUntil !== undefined) a.trinketRacialLockUntilSeconds = lockUntil;
       if (unit && !hasPressablePvpTrinket(unit)) a.noPressableTrinket = true;
     }
     const fromMs = matchStartMs + a.fromSeconds * 1000;

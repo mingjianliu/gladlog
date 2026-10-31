@@ -2954,6 +2954,29 @@ export function pvpTrinketRemainingSecondsAt(
 }
 
 /**
+ * The round second a category-1166 racial's shared lock holds the PvP trinket
+ * until, at the raw instant `atS`; undefined when no racial press is locking it
+ * then. The racial alone, not `pvpTrinketRemainingSecondsAt`: the KILL ATTEMPTS
+ * label names a racial, and its tier reads the same raw instant (fact7 r6,
+ * codex 03-1, measured on the 605 capture: 276 of 759 lines named a racial
+ * nobody pressed, 250 of them a Medallion pressed at or after the opener on
+ * its floored second, the rest the last fraction of a spent cooldown or an
+ * Adaptation proc).
+ */
+export function racialTrinketLockUntilSeconds(
+  summary: Pick<IPlayerCCTrinketSummary, "racialTrinketLocks">,
+  atS: number,
+): number | undefined {
+  let until: number | undefined;
+  for (const l of summary.racialTrinketLocks ?? []) {
+    const end = l.atSeconds + l.lockSeconds;
+    if (l.atSeconds <= atS && end > atS && (until === undefined || end > until))
+      until = end;
+  }
+  return until;
+}
+
+/**
  * B-tier B4a (user ruling 2026-10-06): the PvP trinket press whose own
  * cooldown is still running at round second `atS`, and what it removed —
  * the `last used m:ss on X` clause of a `trinket: ON CD` note. Read off the

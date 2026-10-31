@@ -91,6 +91,13 @@
  * in the round, the log's only proof of the race, not yet at this line), `no
  * break` (anything else: no press proves a race). `use logged` = a trinket
  * row on a unit the slots say has none, i.e. the item list is stale.
+ *
+ * Check `killRacialLockWords` (fact7 r6, codex 03-1): a KILL ATTEMPTS line
+ * printing `opportunity: trinket locked by a racial (back B)` needs a
+ * category-1166 racial press of that unit in the rows, before the end of the
+ * printed second (the attempt's raw start lies inside it) and with its lock
+ * still running at T. Kind `no racial press`: none; `back second`: a press,
+ * but no press whose lock ends in the printed second B.
  */
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import { OTHER_REFUSAL_REASONS } from "@gladlog/analysis/src/context/spellOutcomeLines";
@@ -109,6 +116,7 @@ export const CHECKS = [
   "trinketPressVsModel",
   "killTrinketUpLocked",
   "killTrinketUpNoTrinket",
+  "killRacialLockWords",
 ] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "killTrinketUpNoTrinket|None: break racial ready",
@@ -238,9 +246,49 @@ export function run(ctx: IRoundCtx): void {
 const KILL_TRINKET_UP =
   /^\s*\[(\d+):(\d{2})–\d+:\d{2}\] on (\S+?) — .*\| opportunity: trinket up\b/;
 
+const KILL_RACIAL_LOCK =
+  /^\s*\[(\d+):(\d{2})–\d+:\d{2}\] on (\S+?) — .*\| opportunity: trinket locked by a racial \(back (\d+):(\d{2})\)/;
+
+function killRacialLockWords(ctx: IRoundCtx, line: string): void {
+  const m = KILL_RACIAL_LOCK.exec(line);
+  if (!m) return;
+  const u = ctx.players.find((p) => p.name === m[3]);
+  if (!u) return;
+  const C = "killRacialLockWords";
+  ctx.bump(C);
+  const T = ctx.start + (Number(m[1]) * 60 + Number(m[2])) * 1000;
+  const B = Number(m[4]) * 60 + Number(m[5]);
+  const id = `${u.name}#${m[1]}:${m[2]}`;
+  const healer = isHealerSpec(u.spec);
+  const running = [...evidenceOf(ctx, u).Sr].flatMap(([racial, presses]) =>
+    presses
+      .map((t) => t + racialTrinketLockoutMs(racial, healer))
+      .filter((end, i) => presses[i]! < T + 1000 && end > T),
+  );
+  if (running.length === 0)
+    ctx.violate(
+      C,
+      "no racial press",
+      T,
+      id,
+      `${u.name}: no racial in the rows`,
+      line,
+    );
+  else if (!running.some((end) => Math.floor((end - ctx.start) / 1000) === B))
+    ctx.violate(
+      C,
+      "back second",
+      T,
+      id,
+      `${u.name}: printed back ${fmtS(B)}`,
+      line,
+    );
+}
+
 function killTierClaims(ctx: IRoundCtx): void {
   const C = "killTrinketUpLocked";
   for (const line of ctx.lines) {
+    killRacialLockWords(ctx, line);
     const m = KILL_TRINKET_UP.exec(line);
     if (!m) continue;
     const u = ctx.players.find((p) => p.name === m[3]);

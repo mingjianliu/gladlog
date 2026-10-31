@@ -544,6 +544,54 @@ describe("formatKillAttemptsForContext — 徽章在手不是失误(用户裁决
     expect(text).toContain("opportunity: trinket locked by a racial (back 0:32)");
     expect(text).not.toContain("opportunity: trinket up");
   });
+  it("开场同一秒按的徽章不是种族锁:没按种族就不写 locked(codex 03-1)", () => {
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 5.2, 5),
+      spellCastEvents: [
+        {
+          spellId: "336126", // Medallion, 5.8 s: the printed second of the 5.2 s opener
+          spellName: "Gladiator's Medallion",
+          destUnitId: "e1",
+          srcUnitId: "e1",
+          timestamp: ms(5.8),
+          logLine: { event: "SPELL_CAST_SUCCESS", timestamp: ms(5.8) },
+        },
+      ],
+    });
+    const e2 = unit("e2");
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 7, 50_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+    expect(attempts[0]!.opportunity.tier).toBe("locked");
+    const text = formatKillAttemptsForContext(attempts).join("\n");
+    expect(text).not.toContain("trinket locked by a racial");
+    expect(text).toContain("opportunity: trinket up");
+  });
+  it("开场之后才按的种族不锁开场:按原始时刻读(codex 03-1)", () => {
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 5.2, 5),
+      spellCastEvents: [
+        {
+          spellId: "7744",
+          spellName: "Will of the Forsaken",
+          destUnitId: "e1",
+          srcUnitId: "e1",
+          timestamp: ms(5.8),
+          logLine: { event: "SPELL_CAST_SUCCESS", timestamp: ms(5.8) },
+        },
+      ],
+    });
+    const e2 = unit("e2");
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 7, 50_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+    const text = formatKillAttemptsForContext(attempts).join("\n");
+    expect(text).not.toContain("trinket locked by a racial");
+  });
   it("全员徽章在手(开场形状)→ 行写 no softer target、不出现 locked、汇总计 0", () => {
     const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 5, 5) });
     const e2 = unit("e2"); // 徽章还在
