@@ -197,6 +197,7 @@ import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
 import * as talents from "@gladlog/analysis/src/utils/talents";
 import * as threatAssessment from "@gladlog/analysis/src/utils/threatAssessment";
 import * as trinketCooldown from "@gladlog/analysis/src/utils/trinketCooldown";
+import * as trinketTypeMod from "@gladlog/analysis/src/utils/trinketType";
 import * as unitDeath from "@gladlog/analysis/src/utils/unitDeath";
 import * as warlockPet from "@gladlog/analysis/src/utils/warlockPet";
 import {
@@ -3019,9 +3020,9 @@ const INDEX: PredicateRow[] = [
     mod: ccTrinketAnalysis,
   },
   {
-    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    file: `${A}/utils/trinketType.ts`,
     symbol: "hasPressablePvpTrinket",
-    mod: ccTrinketAnalysis,
+    mod: trinketTypeMod,
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,

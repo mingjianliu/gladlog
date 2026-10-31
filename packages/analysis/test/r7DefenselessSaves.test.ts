@@ -48,13 +48,18 @@ describe("ownSaveSpanS", () => {
         undefined,
       );
   });
-  it("a press the state machine times keeps its hold: only an aura that came before the cast line is cut", () => {
+  it("a timed press with a logged end reads the aura (D76, 2026-10-31); with none, only what came before the cast line", () => {
     expect(
       ownSaveSpanS(ev({ kind: "immune", pressSeconds: 111.2 }), true),
-    ).toEqual({ from: 110.9, to: 111.2 });
-    expect(
-      ownSaveSpanS(ev({ kind: "immune", pressSeconds: 110.9 }), true),
-    ).toBe(undefined);
+    ).toEqual({ from: 110.9, to: 113.9 });
+    const noEnd = { kind: "immune", observedSeconds: undefined };
+    expect(ownSaveSpanS(ev({ ...noEnd, pressSeconds: 111.2 }), true)).toEqual({
+      from: 110.9,
+      to: 111.2,
+    });
+    expect(ownSaveSpanS(ev({ ...noEnd, pressSeconds: 110.9 }), true)).toBe(
+      undefined,
+    );
   });
 });
 

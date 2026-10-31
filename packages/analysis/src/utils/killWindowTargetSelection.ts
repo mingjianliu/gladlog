@@ -20,7 +20,6 @@ import {
 } from "../data/spellEffectData";
 import { getSortedAdvancedActions } from "./advancedActions";
 import { buffFullDurationForCaster } from "./buffDuration";
-import { hasPressablePvpTrinket } from "./ccTrinketAnalysis";
 import {
   cdHelpsRecipient,
   chargesAvailableAt,
@@ -36,6 +35,7 @@ import { pvpTrinketUses, trinketUseRemainingSeconds } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
+import { hasPressablePvpTrinket } from "./trinketType";
 import { unusedKitRows } from "./unusedKitRows";
 
 /** PvP trinket spell IDs that break CC / grant freedom. Exported 2026-08-18:

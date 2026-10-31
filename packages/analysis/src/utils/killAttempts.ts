@@ -89,7 +89,6 @@ import {
   analyzePlayerCCAndTrinket,
   breakAbilityPresses,
   ccsRemovedByPress,
-  hasPressablePvpTrinket,
   type ICCInstance,
   type IPlayerCCTrinketSummary,
   pvpTrinketRemainingSecondsAt,
@@ -155,6 +154,7 @@ import {
   sanctuaryRemovalPairs,
 } from "./sanctuaryRemovals";
 import { offensiveEffectCdId } from "./spellDanger";
+import { hasPressablePvpTrinket } from "./trinketType";
 
 // The defensive sets live in enemyDefensives.ts since GH #97 (2026-09-15):
 // the timeline's [ENEMY DEF] line and this attribution must agree on what a

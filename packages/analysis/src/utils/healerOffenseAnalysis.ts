@@ -21,7 +21,6 @@ import {
 } from "./cannotCastIntervals";
 import { isControlCast } from "./castMissRows";
 import { ccReachAt, ccTargetBlockerIntervals } from "./ccTargetState";
-import { hasPressablePvpTrinket } from "./ccTrinketAnalysis";
 import {
   cdAvailableAt,
   chargesAvailableAt,
@@ -71,6 +70,7 @@ import {
 import { roundEndMs } from "./roundEnd";
 import { type InterruptibleCast, interruptibleCastOf } from "./spellMechanics";
 import { ccThreatReachYards } from "./spellRange";
+import { hasPressablePvpTrinket } from "./trinketType";
 import { firstDeathMs } from "./unitDeath";
 
 /**
