@@ -31,6 +31,10 @@ describe("avoidance table — DB2-explained forward additions", () => {
     expect(applicableCCAvoidanceIds("118", "Polymorph").has("31224")).toBe(
       true,
     );
+    // the tether 117405 is physical, the stun 117526 Arcane (codex 20-F21-11)
+    expect(
+      applicableCCAvoidanceIds("109248", "Binding Shot").has("31224"),
+    ).toBe(true);
   });
   it("Lichborne explains a fear; Sanctified Ground a silence (Garrote – Silence)", () => {
     expect(

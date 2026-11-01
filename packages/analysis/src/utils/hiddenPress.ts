@@ -235,28 +235,16 @@ export function hiddenPressMs(
   // 122.2 s, re-listed 139.2 s, REMOVED 139.6 s; 15 facts on the 605 capture,
   // Combustion, Recklessness, Malevolence, each 11–22 s after its press).
   // Past RELISTED_RUN_MAX_LIVES of the run's last row it is a new press first
-  // seen late, whatever its own REMOVED says (codex 04-1). A further APPLIED
-  // inside that span with no press of its own is the same run re-listed again
-  // (68-1-1208: Combustion pressed 68.4 s, re-listed 81.9 s and 82.8 s,
-  // REMOVED 83.8 s; 2 facts on the wide capture).
+  // seen late, whatever its own REMOVED says (codex 04-1).
   const relisting = (i: number, j: number): boolean => {
     const at = own[j]!.logLine.timestamp;
     const id = own[j]!.spellId!;
     const runAt = own[i]!.logLine.timestamp;
-    const maxAt = runAt + RELISTED_RUN_MAX_LIVES * lifeMs(id, runAt);
-    if (at > maxAt) return false;
+    if (at - runAt > RELISTED_RUN_MAX_LIVES * lifeMs(id, runAt)) return false;
     for (let k = j + 1; k < own.length; k++) {
       const b = own[k]!;
       if (b.spellId !== id || !kept.has(b)) continue;
-      const bAt = b.logLine.timestamp;
-      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-        if (
-          bAt > maxAt ||
-          pressMs.some((p) => Math.abs(p - bAt) <= PRESS_ROW_PAIR_MS)
-        )
-          return false;
-        continue;
-      }
+      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) return false;
       if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED)
         return (
           b.logLine.timestamp - at < lifeMs(id, at) - HIDDEN_AURA_LIFE_SLACK_MS

@@ -228,6 +228,23 @@ describe("[RES] enemy: lists a press fact while its effect runs", () => {
     const row = reconstructEnemyCDTimeline([rogue], round).players[0]!
       .offensiveFacts![0]!;
     expect(row.buffEndSeconds).toBeCloseTo(164.129, 3);
+    // 72-1-407: its wearer dead, the effect is over
+    const dead = {
+      startTime: T0,
+      endTime: END,
+      units: {
+        u: rogue,
+        v: {
+          id: "v",
+          auraEvents: [goremaw],
+          deathRecords: [{ timestamp: T0 + 151_000 }],
+        },
+      },
+    } as never;
+    expect(
+      reconstructEnemyCDTimeline([rogue], dead).players[0]!.offensiveFacts![0]!
+        .buffEndSeconds,
+    ).toBeCloseTo(151, 3);
   });
 
   it("a button with no effect span states no window: no 8 s fallback", () => {

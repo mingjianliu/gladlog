@@ -28,6 +28,7 @@ import {
   racialTrinketLockoutMs,
   SHARED_CD_RACIAL_SPELL_IDS,
 } from "../data/racialAbilities";
+import { SPELL_CATEGORIES } from "../data/spellCategories";
 import {
   ccFullDurationSeconds,
   effectiveCooldownSeconds,
@@ -1074,14 +1075,17 @@ export function applicableCCAvoidanceIds(
     if (covers === false) continue; // 官方判定:挡不住
     if (covers === undefined) {
       // 官方缺这个免疫的 aura39 行(反魔法护罩/法术反射/剑刃风暴/龟盾…)
-      // the effect is what the shield would stop, and its school can differ
+      // the control is what the shield would stop, and its school can differ
       // from the button's: Intimidation 19577 is Nature, its stun 24394
-      // Physical (226-3-3158 0:52: Cloak of Shadows named against it)
-      const ccIsPhysical =
-        [...castAndEffectIds(ccSpellId)].some(
-          (id) => isPhysicalSpell(id) === true,
-        ) ||
-        (isPhysicalSpell(ccSpellId) ?? PHYSICAL_CC_IDS.has(ccSpellId));
+      // Physical (226-3-3158 0:52: Cloak of Shadows named against it), while
+      // Binding Shot's physical tether 117405 is no control, its stun 117526
+      // Arcane
+      const controls = [...castAndEffectIds(ccSpellId)].filter(
+        (id) => SPELL_CATEGORIES[id]?.type === "cc",
+      );
+      const ccIsPhysical = (controls.length > 0 ? controls : [ccSpellId]).every(
+        (id) => isPhysicalSpell(id) ?? PHYSICAL_CC_IDS.has(id),
+      );
       if (MAGIC_ONLY_IMMUNITY_IDS.has(buffId) && ccIsPhysical) continue;
     }
     out.add(buffId);

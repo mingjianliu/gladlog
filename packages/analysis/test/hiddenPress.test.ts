@@ -275,40 +275,6 @@ describe("hiddenPressMs — the bounds no test pinned", () => {
     ]);
     expect(hiddenPressMs(pressed, EVASION, T0)).toEqual([listedAt]);
   });
-  it("68-1-1208: a run re-listed twice before its REMOVED is one press; a logged press in between is not the run", () => {
-    const first = T0 + 68_400;
-    const life = hiddenAuraLifeMs(EVASION);
-    const listedAt = first + life + 3_000;
-    const batchAt = (ms: number) =>
-      Array.from({ length: RESYNC_BATCH_MIN_APPLIED }, (_, i) =>
-        aura(
-          LogEvent.SPELL_AURA_APPLIED,
-          i === 0 ? EVASION : String(940_000 + i),
-          ms,
-          i === 0 ? "rogue" : "x",
-        ),
-      );
-    const rows = [
-      aura(LogEvent.SPELL_AURA_APPLIED, EVASION, first),
-      ...batchAt(listedAt),
-      ...batchAt(listedAt + 1_500),
-      aura(LogEvent.SPELL_AURA_REMOVED, EVASION, listedAt + 2_500),
-    ];
-    expect(hiddenPressMs(rogue(rows), EVASION, T0)).toEqual([]);
-    const press = {
-      spellId: EVASION,
-      spellName: EVASION,
-      srcUnitId: "rogue",
-      timestamp: listedAt + 1_500,
-      logLine: {
-        event: LogEvent.SPELL_CAST_SUCCESS,
-        timestamp: listedAt + 1_500,
-      },
-    };
-    expect(hiddenPressMs(rogue(rows, [press]), EVASION, T0)).toEqual([
-      listedAt,
-    ]);
-  });
   it("both of a press's auras down: a batch that lists one of them is a press", () => {
     const first = T0 + 6_000;
     const listedAt = first + 40_000;
