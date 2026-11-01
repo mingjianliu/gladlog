@@ -4671,3 +4671,28 @@ and kill-live walls, with 4 no-line cases unverified. talentWallPrinted 849 →
 867 / 2596 → 2533 is a per-round reading, not a defect count. Review: twelve
 batches, each fixed or moved to GitHub; five defects of this round's own
 batches found at the final run were fixed and rechecked.
+
+v468 (2026-11-01, F22 — a spell a talent replaced is not in the kit). User report:
+the coach blamed a Lightsmith Holy Paladin for not pressing Divine Toll, which
+that build does not have: Holy Armaments takes the button. DB2 does not say so on
+the talent. TraitDefinition 141558 has OverridesSpellID 0 and its tooltip has no
+replacement sentence; the edge sits on aura-332 carriers (1289890 over Divine
+Toll, 1289892 over Holy Prism) joined to the talent by name alone. Ancestral
+Swiftness has the same shape and was a hand row. `genTalentReplaces` now joins the
+carriers, so the generated table holds both and the hand row is gone. Corpus, in
+player-rounds: Lightsmith with the node taken 0 Divine Toll in 306 (605) and 292
+(wide), Herald 110/117 and 178/187.
+
+605 base (PV467): cd-waste 1032 → 983 (49 gone, all Divine Toll), cd-hoarded 19
+gone, 39 lose Divine Toll from readyCds, 2 appear in the freed CD_HOARD_CAP slot.
+Wide: cd-waste 109 gone, cd-hoarded 36 gone, 49 changed, 5 appear. Candidates 7630
+→ 7564 / 23440 → 23300. Context lines, 605: 659 kit, 1552 [RES], 535 `cheaper
+available`, 44 [DEATH], 41 [CD PRIOR], 15 [DEFENSIVE AVAILABLE]; 4 rounds now have
+an empty menu. Gates unchanged.
+
+Class check `replacedSpellListed`, base → after on the 605: 2318 (419) → 0 (kit
+659, [RES] 1552, menu 107). Scans 1–5 and the nets moved only where a removed row
+was the denominator. Wide stopped early by user decision: candidates, gates and
+scans 1–5 only; the class check and two nets did not finish there. Spellsteal
+under Kleptomania stays off the ledger: synthetic, 0 on the 605, GH #174. Review:
+three rounds, the last APPROVE.

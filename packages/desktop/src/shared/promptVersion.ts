@@ -696,4 +696,11 @@
  *  605 7639 → 7630 (D37), wide 23474 → 23440; gates unchanged against the
  *  PV465 base. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 467;
+/*
+ * v468 (2026-11-01, F22): a spell a talent replaced is not in the kit. Holy
+ *  Armaments takes Divine Toll's / Holy Prism's button on a Lightsmith Holy
+ *  Paladin, an edge DB2 keeps on aura-332 carriers the talent has no link to
+ *  (`genTalentReplaces`'s carrier join). Candidates 605 7630 → 7564, wide
+ *  23440 → 23300; gates unchanged. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 468;

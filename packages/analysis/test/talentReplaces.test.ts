@@ -15,6 +15,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { replacedSpellIds, TALENT_REPLACES } from "../src/data/talentReplaces";
+import { TALENT_REPLACES_GENERATED } from "../src/data/talentReplacesGenerated";
 import { extractMajorCooldowns } from "../src/utils/cooldowns";
 import { talentOwnershipOf } from "../src/utils/talentOwnership";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
@@ -129,5 +130,68 @@ describe("TALENT_REPLACES_GENERATED (official TraitDefinition.OverridesSpellID)"
     const iceBlock = cds.find((c) => c.spellName === "Ice Block");
     expect(iceBlock, "official override lists Ice Cold → Ice Block, but pressedAs owns the pair").toBeDefined();
     expect(iceBlock?.casts).toHaveLength(1);
+  });
+});
+
+/**
+ * F22 (2026-11-01): Holy Armaments stands where Divine Toll / Holy Prism stood.
+ * 1289728 has OverridesSpellID 0 and no edge to the aura-332 carriers 1289890 /
+ * 1289892 that state it; the generator reads them through the carrier's name.
+ * Corpus: Lightsmith 306 rounds, 0 Divine Toll (605); Herald 110 of 117 rounds.
+ * Node / entry ids from talentIdMap.json (Holy Paladin, spec 65).
+ */
+describe("Holy Armaments replaces the Divine Toll / Holy Prism node", () => {
+  const DIVINE_TOLL = "375576";
+  const HOLY_PRISM = "114165";
+  const ARMAMENTS_TALENT = "1289728";
+  const TOLL_NODE = { id1: 81496, id2: 102465, count: 1 };
+  const PRISM_NODE = { id1: 81496, id2: 133480, count: 1 };
+  const ARMAMENTS_NODE = { id1: 110257, id2: 136795, count: 1 };
+
+  function holyPaladin(talents: object[], casts: string[] = []) {
+    return makeUnit("player-1", {
+      class: CombatUnitClass.Paladin,
+      spec: CombatUnitSpec.Paladin_Holy,
+      spellCastEvents: casts.map((id, i) =>
+        makeSpellCastEvent(id, T0 + 20_000 + i * 10_000, "player-1"),
+      ),
+      info: { talents, pvpTalents: [] } as any,
+    });
+  }
+  const ledgerOf = (u: ReturnType<typeof makeUnit>) =>
+    extractMajorCooldowns(u, combatOf(u)).map((c) => c.spellId);
+
+  it("the generated table holds both pairs, keyed on Holy's talent and not Protection's", () => {
+    expect(TALENT_REPLACES_GENERATED[ARMAMENTS_TALENT]).toEqual([
+      HOLY_PRISM,
+      DIVINE_TOLL,
+    ]);
+    // Protection's Holy Bulwark (432459) is another definition: it keeps the toll
+    expect(TALENT_REPLACES_GENERATED["432459"]).not.toContain(DIVINE_TOLL);
+    // the same join carries Ancestral Swiftness, no longer a hand row
+    expect(TALENT_REPLACES_GENERATED[AS_TALENT]).toEqual([NS]);
+  });
+
+  it("Lightsmith: Divine Toll is out of the ledger and ownership is no", () => {
+    const u = holyPaladin([TOLL_NODE, ARMAMENTS_NODE]);
+    expect(ledgerOf(u)).not.toContain(DIVINE_TOLL);
+    expect(talentOwnershipOf(u, DIVINE_TOLL)).toBe("no");
+  });
+
+  it("Lightsmith on the other side of the choice: Holy Prism goes the same way", () => {
+    const u = holyPaladin([PRISM_NODE, ARMAMENTS_NODE]);
+    expect(ledgerOf(u)).not.toContain(HOLY_PRISM);
+    expect(talentOwnershipOf(u, HOLY_PRISM)).toBe("no");
+  });
+
+  it("Herald (no Armaments node) keeps Divine Toll", () => {
+    const u = holyPaladin([TOLL_NODE]);
+    expect(ledgerOf(u)).toContain(DIVINE_TOLL);
+    expect(talentOwnershipOf(u, DIVINE_TOLL)).toBe("yes");
+  });
+
+  it("a real cast beats the table", () => {
+    const u = holyPaladin([TOLL_NODE, ARMAMENTS_NODE], [DIVINE_TOLL]);
+    expect(ledgerOf(u)).toContain(DIVINE_TOLL);
   });
 });

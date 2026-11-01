@@ -188,7 +188,6 @@
     "test/externalDamage.test.ts",
     "test/externalReach.test.ts",
     "test/f20Immunity.test.ts",
-
     "test/f20Singles1.test.ts",
     "test/fact4Batch2Data.test.ts",
     "test/fact6DrOnePredicate.test.ts",
@@ -267,6 +266,7 @@
     "test/rawStreams.test.ts",
     "test/reactionWindow.test.ts",
     "test/refusalWhyWords.test.ts",
+    "test/replacedSpellReaders.test.ts",
     "test/resLedgerPrune.test.ts",
     "test/resLedgerT04.test.ts",
     "test/rootIntervals.test.ts",

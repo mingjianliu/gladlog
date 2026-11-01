@@ -71,6 +71,7 @@ const MODULE_FILES = [
   "killAttemptFacts",
   "spanFacts",
   "singles14b",
+  "replacedKit",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

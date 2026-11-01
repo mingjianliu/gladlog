@@ -3,6 +3,11 @@
  * pairs (talent X taken → spell Y no longer exists for that player), and the
  * reverse check of the pairs already registered in `TALENT_REPLACES`.
  *
+ * Correction 2026-11-01 (F22): the paragraph below was wrong about DB2. The
+ * override IS there, on an aura-332 carrier (448866) the talent has no edge
+ * to; `genTalentReplaces.ts` reads that join now, and the scan stays what it
+ * was, the corpus side of the evidence.
+ *
  * Why it exists (reliability audit C1, 2026-09-26): Restoration Shaman
  * Ancestral Swiftness 443454 (Farseer talent 448861) replaces Nature's
  * Swiftness 378081 — the tooltip says so ("If you know Nature's Swiftness, it

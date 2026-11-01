@@ -41,6 +41,7 @@ import {
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMitigationModifiers";
 import { TALENT_REPLACES } from "@gladlog/analysis/src/data/talentReplaces";
+import { TALENT_REPLACES_GENERATED } from "@gladlog/analysis/src/data/talentReplacesGenerated";
 import { CD_TALENT_MODIFIERS } from "@gladlog/analysis/src/utils/talentModifiers";
 
 const arg = (k: string, d: string) => {
@@ -441,11 +442,13 @@ async function main(): Promise<void> {
           ),
         )
         .map(([k]) => k);
-      u.status =
-        targets.length || TALENT_REPLACES[u.talent] ? "consumed" : "gap";
+      const replaced = [
+        ...(TALENT_REPLACES[u.talent] ?? []),
+        ...(TALENT_REPLACES_GENERATED[u.talent] ?? []),
+      ];
+      u.status = targets.length || replaced.length ? "consumed" : "gap";
       if (u.status === "consumed")
-        u.target =
-          targets.join(",") || (TALENT_REPLACES[u.talent] ?? []).join(",");
+        u.target = targets.join(",") || replaced.join(",");
     }
 
   mkdirSync(OUT, { recursive: true });

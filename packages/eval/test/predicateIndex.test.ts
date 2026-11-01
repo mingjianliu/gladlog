@@ -91,6 +91,7 @@ import * as overrideVariantsGenerated from "@gladlog/analysis/src/data/overrideV
 import * as ownShieldLinks from "@gladlog/analysis/src/data/ownShieldLinks";
 import * as periodicAuraGenerated from "@gladlog/analysis/src/data/periodicAuraGenerated";
 import * as purgeRemovalsGenerated from "@gladlog/analysis/src/data/purgeRemovalsGenerated";
+import * as pvpTalentReplacesGenerated from "@gladlog/analysis/src/data/pvpTalentReplacesGenerated";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
 import * as scopedPurges from "@gladlog/analysis/src/data/scopedPurges";
@@ -108,6 +109,8 @@ import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
 import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
 import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
+import * as talentReplaces from "@gladlog/analysis/src/data/talentReplaces";
+import * as talentReplacesGenerated from "@gladlog/analysis/src/data/talentReplacesGenerated";
 import * as talentScriptedCooldowns from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
@@ -4761,6 +4764,26 @@ const INDEX: PredicateRow[] = [
     file: "packages/desktop/src/renderer/src/components/dashboard.ts",
     symbol: "rateDisplay",
     mod: dashboard,
+  },
+  {
+    file: "packages/analysis/src/data/talentReplaces.ts",
+    symbol: "replacedSpellIds",
+    mod: talentReplaces,
+  },
+  {
+    file: "packages/analysis/src/data/talentReplaces.ts",
+    symbol: "TALENT_REPLACES",
+    mod: talentReplaces,
+  },
+  {
+    file: "packages/analysis/src/data/talentReplacesGenerated.ts",
+    symbol: "TALENT_REPLACES_GENERATED",
+    mod: talentReplacesGenerated,
+  },
+  {
+    file: "packages/analysis/src/data/pvpTalentReplacesGenerated.ts",
+    symbol: "PVP_TALENT_REPLACES_GENERATED",
+    mod: pvpTalentReplacesGenerated,
   },
 ];
 
