@@ -312,10 +312,10 @@ describe("reconstructDispelSummary — a pet's press on its owner is the owner's
       ],
     });
     return reconstructDispelSummary(
-      [hunter] as any,
-      [] as any,
+      [hunter] as never,
+      [] as never,
       { startTime: T0, endTime: T0 + 120_000 },
-      [pet] as any,
+      [pet] as never,
     ).allyCleanse;
   };
 
