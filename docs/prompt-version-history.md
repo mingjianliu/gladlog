@@ -4618,3 +4618,56 @@ findings, then readiness over the whole 10 s window
 (`offCooldownForLastSecondsBy`, `IMissedExternal.offCooldownSinceS`, slack-aware;
 the [DEATH] line's own 5 s walk unchanged) and the unused-self path — all
 fixed here, context unchanged by them on the 605.
+
+v467 (2026-11-01, the round-7 fact fixes). Audit of 15 fresh rounds at PV465
+found 79 defects (11 high, 41 medium, 27 low; 9 regressions). Each was fixed by
+fact class with every reader, after a `corpusFactScan5` check for the class ran
+on the base capture. Wording, coaching rules and open rulings are on GitHub and
+unchanged. The class groups: when an effect ended and why (channels, charges,
+walls by the later REMOVED, a death-cut effect keeping its official end for
+earlier countdowns); hidden presses and full resets; override and pet presses;
+absorbed hits counted as hits; kill-attempt openers, `trinket up` and reach
+subjects; control and silence filing; spike and burst windows; a press's own
+landing in ABILITIES INTO; rot DoTs from DB2; a parry's reach from DB2
+DefenseType with the melee-speed clause. User rulings 2026-10-30 / 31: Spell
+Reflection gets friendly press lines and stays Utility; a shield an ally pressed
+ends defenseless (shown on the 605 first); Silence 15487 is no kick in any
+reader; `trinket up` inside a shared lock and for a target with no PvP trinket
+change only the printed words; a wall holds to the later REMOVED; Deep Breath
+keeps the fact line only; D66's reach words name who they speak for.
+
+Candidates: 605 7639 → 7630 (kick-priority-team −6, kick-priority-missed −3,
+the D37 span cut, previewed and kept); wide 23474 → 23440 (kick-priority-team
+−23 +3, kick-priority-missed −14 +1, crisis-no-response −1). Gates against the
+PV465 base: every class unchanged (605 checkCjkLeak 12; wide checkCjkLeak 38,
+checkDisarmTrinketTail 15 from #167); checkFindingsCountFollowsMenu holds its
+per-file count. Base numbers include PV466's Time Dilation relabelling.
+
+Scan 5, base → after, violations (distinct facts), 605 / wide:
+nextSpikeNotNearest 15861 → 0 / 47417 → 0; duringExternalShare 2885 (1024) → 0 /
+23765 (7917) → 24 (8); spikeAbsorbedPart 6008 → 0 / 13767 → 0;
+controlRemovalFiled 3598 → 0 / 10270 → 0; friendlyReflectLine 1799 → 0 / 6726 →
+3 (2); kitRangeBelowSeen 1340 → 0 / 2319 → 0; allyShieldDefenseless 1052 (588) →
+4 (2) / 3621 (1811) → 12 (6); rotDotCount 1000 → 0 / 3092 → 6 (2);
+killAnchorSkippedOpener 805 → 3 (1) / 2235 → 0; killTrinketUpNoTrinket 705 → 0 /
+1224 → 0; intoDefenseLanded 546 → 0 / 1910 (637) → 21 (7); killTrinketUpLocked
+456 → 0 / 1089 → 0; controlListedWhileSpent 444 → 0 / 1293 → 0;
+reachStatedWholeBuff 380 → 1 / 1153 → 8; overhealPrinted 374 → 0 / 764 → 0;
+offensiveTagWrong 356 → 0 / 2982 → 3 (1); teamProcSourceDropped 284 → 0 / 1533 →
+0; allyOverlapDeferral 231 → 4 / 1166 → 23; troughOnStaleMaxRow 200 → 0 / 489 →
+0; stackedWallPrice 182 → 0 / 798 → 0; postCcAbsorbedUnsaid 159 → 0 / 394 → 0;
+killFocusOverSpan 136 → 0 / 149 → 0; unseenPressStillUp 116 (40) → 0 / 474 (158)
+→ 12 (4); channelOutlived 101 → 0 / 594 → 0; conseqDroppedWithReadings 95 → 0 /
+195 → 0; listGapPress 140048 → 129558 / 434556 → 400106 (the rest is the list's
+own gap classes, on GitHub). Unchanged by decision: drHalfLengthFull 88, the
+accepted cost of the 2026-10-27 ruling; immunityBurstAnchor 11 (4), #167.
+
+Rises, each read against the raw log: overrideVariantPressMissing 2 → 8 (3) /
+0 → 15 (5) is the check's reading of Deep Breath's two ids (one Ice Cold row is
+unclassified, on GitHub); noPressCopy 3 → 12 / 9 → 12 is a real press on a copy
+applied just before it. castDamageIdSplit fell, 72 (25) → 17 (6) / 165 (53) →
+96 (32); what is left is reflected bolts under another id, post-round presses
+and kill-live walls, with 4 no-line cases unverified. talentWallPrinted 849 →
+867 / 2596 → 2533 is a per-round reading, not a defect count. Review: twelve
+batches, each fixed or moved to GitHub; five defects of this round's own
+batches found at the final run were fixed and rechecked.

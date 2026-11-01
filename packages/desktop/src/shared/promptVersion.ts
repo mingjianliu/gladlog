@@ -691,8 +691,9 @@
  *  checkEnemyDefSaveEffect 27 → 0. See docs/prompt-version-history.md.
  */
 /*
- * v467 (2026-10-31): the round-7 fact fixes (F21) — effect ends, press filing,
- *  absorbed hits, kill windows, the 2026-10-30 / 31 user rulings. See
- *  docs/prompt-version-history.md.
+ * v467 (2026-11-01): the round-7 fact fixes — effect ends, press filing,
+ *  absorbed hits, kill windows, the 2026-10-30 / 31 user rulings. Candidates
+ *  605 7639 → 7630 (D37), wide 23474 → 23440; gates unchanged against the
+ *  PV465 base. See docs/prompt-version-history.md.
  */
 export const PROMPT_VERSION = 467;
