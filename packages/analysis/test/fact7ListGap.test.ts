@@ -241,10 +241,28 @@ describe("[RES] enemy: lists a press fact while its effect runs", () => {
         },
       },
     } as never;
+    const cut = reconstructEnemyCDTimeline([rogue], dead).players[0]!
+      .offensiveFacts![0]!;
+    expect(cut.buffEndSeconds).toBeCloseTo(151, 3);
+    // a row before the death states the official time left (codex 20-F21-12)
+    expect(cut.deathCutOfficialEndSeconds).toBeCloseTo(164.129, 3);
+    // a death past the round's end is no end of it
+    const later = {
+      startTime: T0,
+      endTime: T0 + 159_000,
+      units: {
+        u: rogue,
+        v: {
+          id: "v",
+          auraEvents: [goremaw],
+          deathRecords: [{ timestamp: T0 + 161_000 }],
+        },
+      },
+    } as never;
     expect(
-      reconstructEnemyCDTimeline([rogue], dead).players[0]!.offensiveFacts![0]!
+      reconstructEnemyCDTimeline([rogue], later).players[0]!.offensiveFacts![0]!
         .buffEndSeconds,
-    ).toBeCloseTo(151, 3);
+    ).toBeCloseTo(164.129, 3);
   });
 
   it("a button with no effect span states no window: no 8 s fallback", () => {

@@ -553,7 +553,8 @@ function pressEffectEndSeconds(
   spellName: string,
   pressMs: number,
   matchStartMs: number,
-): number | undefined {
+  roundEndMs: number,
+): { endSeconds: number; officialEndSeconds?: number } | undefined {
   // an aura's rows sit on the unit wearing it, not on its caster
   const own = allUnits.flatMap((u) =>
     dropAuraRebroadcasts(
@@ -567,6 +568,7 @@ function pressEffectEndSeconds(
     ),
   );
   let endMs: number | undefined;
+  let cutOfficialMs: number | undefined;
   for (const opened of own) {
     if (opened.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
     const at = opened.logLine.timestamp;
@@ -581,20 +583,32 @@ function pressEffectEndSeconds(
     const officialS = closed
       ? undefined
       : spellEffectData[opened.spellId!]?.durationSeconds;
-    const end =
-      closed?.logLine.timestamp ??
-      (officialS === undefined
+    const officialEnd =
+      officialS === undefined ? undefined : at + officialS * 1000;
+    const diedMs =
+      officialEnd === undefined
         ? undefined
-        : Math.min(
-            at + officialS * 1000,
-            allUnits
-              .find((u) => u.id === opened.destUnitId)
-              ?.deathRecords?.find((d) => d.timestamp >= at)?.timestamp ??
-              Infinity,
-          ));
-    if (end !== undefined && (endMs === undefined || end > endMs)) endMs = end;
+        : allUnits
+            .find((u) => u.id === opened.destUnitId)
+            ?.deathRecords?.find(
+              (d) =>
+                d.timestamp >= at &&
+                d.timestamp < officialEnd &&
+                d.timestamp <= roundEndMs,
+            )?.timestamp;
+    const end = closed?.logLine.timestamp ?? diedMs ?? officialEnd;
+    if (end !== undefined && (endMs === undefined || end > endMs)) {
+      endMs = end;
+      cutOfficialMs = diedMs === undefined ? undefined : officialEnd;
+    }
   }
-  return endMs === undefined ? undefined : (endMs - matchStartMs) / 1000;
+  if (endMs === undefined) return undefined;
+  return {
+    endSeconds: (endMs - matchStartMs) / 1000,
+    ...(cutOfficialMs === undefined
+      ? {}
+      : { officialEndSeconds: (cutOfficialMs - matchStartMs) / 1000 }),
+  };
 }
 
 export function reconstructEnemyCDTimeline(
@@ -881,6 +895,14 @@ export function reconstructEnemyCDTimeline(
         effectiveCooldownSeconds(spellId) ??
         0;
       const entry = unitCooldownEntry(enemy, combat, spellId);
+      const effectEnd = pressEffectEndSeconds(
+        enemy,
+        Object.values(combat.units ?? {}),
+        name,
+        cast.logLine.timestamp,
+        matchStartMs,
+        combat.endTime,
+      );
       offensiveFacts.push({
         spellId,
         spellName: name,
@@ -890,14 +912,11 @@ export function reconstructEnemyCDTimeline(
           (entry && pressReadyAgainAtSeconds(entry, castTimeSeconds)) ??
           castTimeSeconds + cooldownSeconds,
         buffEndSeconds:
-          pressEffectEndSeconds(
-            enemy,
-            Object.values(combat.units ?? {}),
-            name,
-            cast.logLine.timestamp,
-            matchStartMs,
-          ) ??
+          effectEnd?.endSeconds ??
           castTimeSeconds + (spellEffectData[spellId]?.durationSeconds ?? 0),
+        ...(effectEnd?.officialEndSeconds === undefined
+          ? {}
+          : { deathCutOfficialEndSeconds: effectEnd.officialEndSeconds }),
         ...(cast.unseenPress ? { unseenPress: true as const } : {}),
         dangerWeight: 0,
         burstRole: "fact",
