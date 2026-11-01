@@ -3,6 +3,7 @@
  * the [MINOR DISPELS] fold lists casts with what they removed; the owner's
  * purge skip uses the gap filler's own match predicate.
  */
+import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { purgeMatchesCast } from "../src/context/timelineSections/healerCastGapFiller";
@@ -14,7 +15,10 @@ import {
   minorDispelPartTag,
 } from "../src/context/timelineSections/minorDispels";
 import { ensureAnalysisData } from "../src/data/ensure";
-import type { IDispelEvent } from "../src/utils/dispelAnalysis";
+import {
+  type IDispelEvent,
+  reconstructDispelSummary,
+} from "../src/utils/dispelAnalysis";
 import {
   addCastToIndex,
   classifyDispel,
@@ -22,6 +26,11 @@ import {
   dispelCameWithOwnCast,
   dispelPressedBy,
 } from "../src/utils/dispelKind";
+import {
+  makeDispelAction,
+  makeSpellCastEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -259,5 +268,63 @@ describe("dispelPressedBy — a press on a teammate logged as the recipient's di
   });
   it("a cast aimed at another unit is not this unit's press", () => {
     expect(dispelPressedBy(index(), row(26_200, "priest"))).toBeUndefined();
+  });
+});
+
+describe("reconstructDispelSummary — a pet's press on its owner is the owner's dispel", () => {
+  const T0 = 1_000_000;
+  const CHILLED = "205708";
+  const MASTERS_CALL = "Master's Call";
+  const summary = (ownerId: string) => {
+    const hunter = makeUnit("hunter", {
+      name: "Hunter-R-US",
+      reaction: CombatUnitReaction.Friendly,
+      actionOut: [
+        {
+          ...makeDispelAction(
+            T0 + 23_000,
+            "hunter",
+            "hunter",
+            "357148",
+            CHILLED,
+            "Chilled",
+          ),
+          spellName: MASTERS_CALL,
+        },
+      ],
+    });
+    const pet = makeUnit("pet", {
+      name: "Raptor",
+      ownerId,
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [
+        {
+          ...makeSpellCastEvent(
+            "53271",
+            T0 + 23_000,
+            "hunter",
+            "Hunter-R-US",
+            "pet",
+            "Raptor",
+          ),
+          spellName: MASTERS_CALL,
+        },
+      ],
+    });
+    return reconstructDispelSummary(
+      [hunter] as any,
+      [] as any,
+      { startTime: T0, endTime: T0 + 120_000 },
+      [pet] as any,
+    ).allyCleanse;
+  };
+
+  it("85a6cad9 0:23: the pet's cast is the hunter's press, filed under the hunter", () => {
+    const [e] = summary("hunter");
+    expect(e?.sourceName).toBe("Hunter-R-US");
+    expect(e?.dispelKind).toBe("deliberate");
+  });
+  it("a pet with no owner on the log stays the actor", () => {
+    expect(summary("0000000000000000")[0]?.sourceName).toBe("Raptor");
   });
 });

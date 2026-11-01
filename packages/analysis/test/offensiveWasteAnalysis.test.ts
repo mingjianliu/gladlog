@@ -119,9 +119,9 @@ describe("offensiveWasteAnalysis — getHighValueSpellIds (FT-T02a)", () => {
   });
 
   it("没有任何伤害时不过滤:返回全部技能", () => {
-    expect([...getHighValueSpellIds({ damageOut: [hit("12294", 0)] })]).toEqual([
-      "Mortal Strike",
-    ]);
+    expect([...getHighValueSpellIds({ damageOut: [hit("12294", 0)] })]).toEqual(
+      ["Mortal Strike"],
+    );
   });
 });
 
@@ -301,8 +301,22 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       class: CombatUnitClass.Paladin,
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "642",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "642",
+          matchStart + 18_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
     const summary = buildOffensiveWasteSummary(combat, [friend], [enemy]);
@@ -375,78 +389,86 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
     ).toHaveLength(0);
   });
 
-  it("round-1 retest idx 107: a cast the target REFLECTED did not land inside the window", () => {
-    const friend = makeUnit("warrior-1", {
-      name: "Ares",
-      spec: CombatUnitSpec.Warrior_Arms,
-      class: CombatUnitClass.Warrior,
-      reaction: CombatUnitReaction.Friendly,
-      spellCastEvents: [
-        makeSpellCastEvent(
-          "12294",
-          matchStart + 11_000,
-          "enemy-1",
-          "EnemyPaladin",
-          "warrior-1",
-          "Ares",
-          0,
-          "Mortal Strike",
-        ),
-        makeSpellCastEvent(
-          "12294",
-          matchStart + 13_000,
-          "enemy-1",
-          "EnemyPaladin",
-          "warrior-1",
-          "Ares",
-          0,
-          "Mortal Strike",
-        ),
-      ],
-    });
-    friend.damageOut = [
-      {
-        ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"),
-        spellId: "12294",
-      },
-    ] as never;
-    (friend as { missesOut?: unknown[] }).missesOut = [
-      {
-        spellId: "12294",
-        destUnitId: "enemy-1",
-        missType: "REFLECT",
-        timestamp: matchStart + 13_050,
-      },
-    ];
-    const enemy = makeUnit("enemy-1", {
-      name: "EnemyPaladin",
-      spec: CombatUnitSpec.Paladin_Holy,
-      class: CombatUnitClass.Paladin,
-      reaction: CombatUnitReaction.Hostile,
-      auraEvents: [
-        makeAuraEvent(
-          LogEvent.SPELL_AURA_APPLIED,
-          "642",
-          matchStart + 10_000,
-          "enemy-1",
-          "enemy-1",
-          "BUFF",
-        ),
-        makeAuraEvent(
-          LogEvent.SPELL_AURA_REMOVED,
-          "642",
-          matchStart + 18_000,
-          "enemy-1",
-          "enemy-1",
-          "BUFF",
-        ),
-      ],
-    });
-    // one of the two presses bounced: below the 2-cast threshold
-    expect(
-      buildOffensiveWasteSummary(combat, [friend], [enemy]).events,
-    ).toHaveLength(0);
-  });
+  it.each([
+    ["12294", "12294", "Mortal Strike"],
+    // the bolt's row is another id of the name (Lava Burst 285452)
+    ["51505", "285452", "Lava Burst"],
+  ])(
+    "round-1 retest idx 107: a cast the target REFLECTED did not land inside the window (%s)",
+    (pressId, rowId, name) => {
+      const friend = makeUnit("warrior-1", {
+        name: "Ares",
+        spec: CombatUnitSpec.Warrior_Arms,
+        class: CombatUnitClass.Warrior,
+        reaction: CombatUnitReaction.Friendly,
+        spellCastEvents: [
+          makeSpellCastEvent(
+            pressId,
+            matchStart + 11_000,
+            "enemy-1",
+            "EnemyPaladin",
+            "warrior-1",
+            "Ares",
+            0,
+            name,
+          ),
+          makeSpellCastEvent(
+            pressId,
+            matchStart + 13_000,
+            "enemy-1",
+            "EnemyPaladin",
+            "warrior-1",
+            "Ares",
+            0,
+            name,
+          ),
+        ],
+      });
+      friend.damageOut = [
+        {
+          ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"),
+          spellId: pressId,
+        },
+      ] as never;
+      (friend as { missesOut?: unknown[] }).missesOut = [
+        {
+          spellId: rowId,
+          spellName: name,
+          destUnitId: "enemy-1",
+          missType: "REFLECT",
+          timestamp: matchStart + 13_050,
+        },
+      ];
+      const enemy = makeUnit("enemy-1", {
+        name: "EnemyPaladin",
+        spec: CombatUnitSpec.Paladin_Holy,
+        class: CombatUnitClass.Paladin,
+        reaction: CombatUnitReaction.Hostile,
+        auraEvents: [
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "642",
+            matchStart + 10_000,
+            "enemy-1",
+            "enemy-1",
+            "BUFF",
+          ),
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            "642",
+            matchStart + 18_000,
+            "enemy-1",
+            "enemy-1",
+            "BUFF",
+          ),
+        ],
+      });
+      // one of the two presses bounced: below the 2-cast threshold
+      expect(
+        buildOffensiveWasteSummary(combat, [friend], [enemy]).events,
+      ).toHaveLength(0);
+    },
+  );
 
   it("does NOT flag unconditional immunity if only 1 cast was pressed (threshold is 2)", () => {
     const friend = makeUnit("warrior-1", {
@@ -776,17 +798,36 @@ describe("offensiveWasteAnalysis — an empowered cast goes off at its release (
       class: CombatUnitClass.Evoker,
       reaction: CombatUnitReaction.Friendly,
       spellCastEvents: [11_000, 12_000].map((dt) =>
-        makeSpellCastEvent("359073", matchStart + dt, "enemy-1", "EnemyPaladin", "ev-1", "Ev", 0, "Eternity Surge"),
+        makeSpellCastEvent(
+          "359073",
+          matchStart + dt,
+          "enemy-1",
+          "EnemyPaladin",
+          "ev-1",
+          "Ev",
+          0,
+          "Eternity Surge",
+        ),
       ),
     });
     Object.assign(evoker, {
-      empowerStarts: [hold("SPELL_EMPOWER_START", 11_000), hold("SPELL_EMPOWER_START", 12_000)],
+      empowerStarts: [
+        hold("SPELL_EMPOWER_START", 11_000),
+        hold("SPELL_EMPOWER_START", 12_000),
+      ],
       // released at 19 s and 19.5 s — after the wall's 18 s end
-      empowerEnds: [hold("SPELL_EMPOWER_END", 19_000), hold("SPELL_EMPOWER_END", 19_500)],
+      empowerEnds: [
+        hold("SPELL_EMPOWER_END", 19_000),
+        hold("SPELL_EMPOWER_END", 19_500),
+      ],
       empowerInterrupts: [],
     });
     evoker.damageOut = [
-      { ...makeDamageEvent(matchStart + 19_100, 100_000, "enemy-1"), spellId: "359077", spellName: "Eternity Surge" },
+      {
+        ...makeDamageEvent(matchStart + 19_100, 100_000, "enemy-1"),
+        spellId: "359077",
+        spellName: "Eternity Surge",
+      },
     ] as never;
     const enemy = makeUnit("enemy-1", {
       name: "EnemyPaladin",
@@ -794,11 +835,27 @@ describe("offensiveWasteAnalysis — an empowered cast goes off at its release (
       class: CombatUnitClass.Paladin,
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "642",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "642",
+          matchStart + 18_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
-    expect(buildOffensiveWasteSummary(combat, [evoker], [enemy]).events).toEqual([]);
+    expect(
+      buildOffensiveWasteSummary(combat, [evoker], [enemy]).events,
+    ).toEqual([]);
   });
 });
 
@@ -810,7 +867,16 @@ describe("offensiveWasteAnalysis — a hold never released is no cast (codex 20-
       name: "Ev",
       reaction: CombatUnitReaction.Friendly,
       spellCastEvents: [11_000, 17_800].map((dt) =>
-        makeSpellCastEvent("359073", matchStart + dt, "enemy-1", "EnemyPaladin", "ev-1", "Ev", 0, "Eternity Surge"),
+        makeSpellCastEvent(
+          "359073",
+          matchStart + dt,
+          "enemy-1",
+          "EnemyPaladin",
+          "ev-1",
+          "Ev",
+          0,
+          "Eternity Surge",
+        ),
       ),
     });
     Object.assign(evoker, {
@@ -818,23 +884,47 @@ describe("offensiveWasteAnalysis — a hold never released is no cast (codex 20-
         spellId: "359073",
         spellName: "Eternity Surge",
         timestamp: matchStart + t,
-        logLine: { event: "SPELL_EMPOWER_START", timestamp: matchStart + t, parameters: [] },
+        logLine: {
+          event: "SPELL_EMPOWER_START",
+          timestamp: matchStart + t,
+          parameters: [],
+        },
       })),
       empowerEnds: [],
       empowerInterrupts: [],
     });
     evoker.damageOut = [
-      { ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"), spellId: "359077", spellName: "Eternity Surge" },
+      {
+        ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"),
+        spellId: "359077",
+        spellName: "Eternity Surge",
+      },
     ] as never;
     const enemy = makeUnit("enemy-1", {
       name: "EnemyPaladin",
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "642",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "642",
+          matchStart + 18_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
-    expect(buildOffensiveWasteSummary(combat, [evoker], [enemy]).events).toEqual([]);
+    expect(
+      buildOffensiveWasteSummary(combat, [evoker], [enemy]).events,
+    ).toEqual([]);
   });
 });
 
@@ -843,7 +933,16 @@ describe("offensiveWasteAnalysis — a travelling spell counts where it landed (
   const combat = makeCombat(matchStart, matchStart + 60_000);
   const PYROBLAST = "11366";
   const press = (dt: number) =>
-    makeSpellCastEvent(PYROBLAST, matchStart + dt, "enemy-1", "EnemyPriest", "mage-1", "Mage", 0, "Pyroblast");
+    makeSpellCastEvent(
+      PYROBLAST,
+      matchStart + dt,
+      "enemy-1",
+      "EnemyPriest",
+      "mage-1",
+      "Mage",
+      0,
+      "Pyroblast",
+    );
   const hit = (dt: number, event = LogEvent.SPELL_DAMAGE) => {
     const row = makeDamageEvent(matchStart + dt, 100_000, "enemy-1");
     return {
@@ -872,28 +971,52 @@ describe("offensiveWasteAnalysis — a travelling spell counts where it landed (
     class: CombatUnitClass.Priest,
     reaction: CombatUnitReaction.Hostile,
     auraEvents: [
-      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "33206", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "33206", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        "33206",
+        matchStart + 10_000,
+        "enemy-1",
+        "enemy-1",
+        "BUFF",
+      ),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        "33206",
+        matchStart + 18_000,
+        "enemy-1",
+        "enemy-1",
+        "BUFF",
+      ),
     ],
   });
   const countOf = (unit: ReturnType<typeof mage>) =>
-    buildOffensiveWasteSummary(combat, [unit], [priest]).events[0]?.wasteCasts.length ?? 0;
+    buildOffensiveWasteSummary(combat, [unit], [priest]).events[0]?.wasteCasts
+      .length ?? 0;
 
   it("7e7b1e51 0:41:按下在减伤前、落地在减伤内的一发算进去", () => {
     expect(
-      countOf(mage([9_700, 11_000, 12_000], [hit(10_100), hit(11_400), hit(12_400)])),
+      countOf(
+        mage([9_700, 11_000, 12_000], [hit(10_100), hit(11_400), hit(12_400)]),
+      ),
     ).toBe(3);
   });
 
   it("按下在减伤内、落地在减伤结束后的一发不算", () => {
     expect(
-      countOf(mage([11_000, 12_000, 13_000, 17_800], [hit(11_400), hit(12_400), hit(13_400), hit(18_200)])),
+      countOf(
+        mage(
+          [11_000, 12_000, 13_000, 17_800],
+          [hit(11_400), hit(12_400), hit(13_400), hit(18_200)],
+        ),
+      ),
     ).toBe(3);
   });
 
   it("同一毫秒两次按下是两发,各吃一行命中(7e7b1e51 0:44)", () => {
     expect(
-      countOf(mage([11_000, 11_000, 12_000], [hit(11_500), hit(11_500), hit(12_400)])),
+      countOf(
+        mage([11_000, 11_000, 12_000], [hit(11_500), hit(11_500), hit(12_400)]),
+      ),
     ).toBe(3);
   });
 
@@ -906,13 +1029,24 @@ describe("offensiveWasteAnalysis — a travelling spell counts where it landed (
       timestamp: matchStart + 10_100,
     };
     expect(
-      countOf(mage([9_700, 11_000, 12_000], [hit(10_100, LogEvent.SPELL_ABSORBED), hit(11_400), hit(12_400)], [miss])),
+      countOf(
+        mage(
+          [9_700, 11_000, 12_000],
+          [hit(10_100, LogEvent.SPELL_ABSORBED), hit(11_400), hit(12_400)],
+          [miss],
+        ),
+      ),
     ).toBe(3);
   });
 
   it("日志里没有落地行的按下,仍取按下时刻", () => {
     expect(
-      countOf(mage([9_700, 11_000, 12_000, 13_000], [hit(11_400), hit(12_400), hit(13_400)])),
+      countOf(
+        mage(
+          [9_700, 11_000, 12_000, 13_000],
+          [hit(11_400), hit(12_400), hit(13_400)],
+        ),
+      ),
     ).toBe(3);
   });
 
@@ -927,13 +1061,23 @@ describe("offensiveWasteAnalysis — a travelling spell counts where it landed (
       ...hit(0),
       logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: t },
     }));
-    const landed = pressLandingsMs(presses, (p) => p.atMs, { id: "mage-1", damageOut } as never, []);
+    const landed = pressLandingsMs(
+      presses,
+      (p) => p.atMs,
+      { id: "mage-1", damageOut } as never,
+      [],
+    );
     expect(presses.map((p) => landed.get(p))).toEqual([1_200, 4_300]);
   });
 
   it("被吸收干净的一跳(SPELL_PERIODIC_MISSED)也是跳,不是这一发的落地行", () => {
     const presses = [
-      { spellId: PYROBLAST, spellName: "Pyroblast", destUnitId: "enemy-1", atMs: 1_000 },
+      {
+        spellId: PYROBLAST,
+        spellName: "Pyroblast",
+        destUnitId: "enemy-1",
+        atMs: 1_000,
+      },
     ];
     const tick = {
       spellId: PYROBLAST,
@@ -1067,11 +1211,23 @@ describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
 
   it("reads a pet's parried row through the owner", () => {
     const caster = pressLandingCaster(hunter, [
-      { ownerId: "hunter-1", missesOut: [miss] },
-      { ownerId: "other", missesOut: [{ ...miss, destUnitId: "x" }] },
+      { id: "Pet-1", ownerId: "hunter-1", missesOut: [miss] },
+      {
+        id: "Pet-2",
+        ownerId: "other",
+        missesOut: [{ ...miss, destUnitId: "x" }],
+      },
     ] as never);
     const rows = pressLandingRows([press], (p) => p.atMs, caster, []);
     expect(rows.get(press)).toEqual({ atMs: 1_100, spellId: "83381" });
+  });
+
+  it("a guardian's same-named row is not the press landing (a Dryad's Starsurge)", () => {
+    const caster = pressLandingCaster(hunter, [
+      { id: "Creature-1", ownerId: "hunter-1", missesOut: [miss] },
+    ] as never);
+    const rows = pressLandingRows([press], (p) => p.atMs, caster, []);
+    expect(rows.get(press)).toEqual({ atMs: 1_000, spellId: null });
   });
 
   it("a press that landed as an aura has no attack row", () => {
@@ -1081,12 +1237,9 @@ describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
       spellName: "Kill Command",
       logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 1_050 },
     };
-    const rows = pressLandingRows(
-      [press],
-      (p) => p.atMs,
-      hunter,
-      [{ id: "enemy-1", auraEvents: [aura] }] as never,
-    );
+    const rows = pressLandingRows([press], (p) => p.atMs, hunter, [
+      { id: "enemy-1", auraEvents: [aura] },
+    ] as never);
     expect(rows.get(press)).toEqual({ atMs: 1_050, spellId: null });
   });
 });

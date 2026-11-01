@@ -247,3 +247,55 @@ describe("[BUFF FADED] of a shared-cooldown variant press is the variant's own",
     ]);
   });
 });
+
+// final2 (fact7): spells F21 put in the tables end on their own terms. A Deep
+// Breath's aura ends at the landing (918 of 1256 lines on the wide capture
+// read "ended early"), Dark Harvest is a channel, Predator's Wake a charge.
+describe("[BUFF FADED] of a run that ends with the action", () => {
+  const OWN: [
+    string,
+    string,
+    number,
+    number,
+    CombatUnitClass,
+    CombatUnitSpec,
+  ][] = [
+    [
+      "357210",
+      "Deep Breath",
+      11.557,
+      13.253,
+      CombatUnitClass.Evoker,
+      CombatUnitSpec.Evoker_Devastation,
+    ],
+    [
+      "1257052",
+      "Dark Harvest",
+      20,
+      21.7,
+      CombatUnitClass.Warlock,
+      CombatUnitSpec.Warlock_Affliction,
+    ],
+    [
+      "1246167",
+      "The Hunt",
+      41.295,
+      41.824,
+      CombatUnitClass.DemonHunter,
+      CombatUnitSpec.DemonHunter_Devourer,
+    ],
+  ];
+  it.each(OWN)("%s %s", (id, name, castS, removedS, cls, spec) => {
+    const u = owner(cls, spec, id, castS, removedS);
+    const [e] = extractOwnerCDBuffExpiry(
+      cdOf(id, name, castS) as never,
+      u.id,
+      [u],
+      T0,
+      u,
+      [],
+      at(300),
+    );
+    expect(e?.cause).toBe("expired");
+  });
+});

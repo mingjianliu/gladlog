@@ -465,6 +465,8 @@ export const CHANNELED_CD_SPELL_IDS = new Set<string>([
   "64843", // Divine Hymn (Priest)
   "370960", // Emerald Communion (Evoker)
   "421453", // Ultimate Penitence (Priest)
+  "1257052", // Dark Harvest (Warlock): 1.7–2.1 s runs; the kick lands after its
+  // SUCCESS row (129-5-742 0:22), 77 of 283 read "ended early" on the 605
 ]);
 
 // M-b: a real aura removal arrives at ~nominal duration plus minor server-tick/latency slack;
@@ -495,9 +497,16 @@ const BUFF_EXPIRY_PAIRING_TOLERANCE_S = 2;
  * lands, so its removal is never "ended early" on length. The Hunt 370965:
  * APPLIED at the press, REMOVED 2 ms after the impact (8888b780 r0 0:14:
  * 0.155 s; 1:18: 0.044 s), against a 6 s hand override that is the DoT's.
+ * Predator's Wake the same (134-6-787: 0.5–0.8 s), and a Deep Breath's aura
+ * ends at the landing (48-4-857: 1.70 s of 6 s; 918 of 1256 lines on the wide
+ * capture read "ended early").
  */
 export const ENDS_WITH_ITS_CHARGE_IDS: ReadonlySet<string> = new Set([
   "370965", // The Hunt
+  "1246167", // The Hunt (Devourer)
+  "1259431", // Predator's Wake
+  "357210", // Deep Breath
+  "433874", // Deep Breath (Flameshaper)
 ]);
 
 // B129: a removal within this slack of the natural end still counts as a normal expiry (server-tick

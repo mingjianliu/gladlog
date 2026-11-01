@@ -539,9 +539,12 @@ const PRESS_EFFECT_AURA_LAG_MS = 2000;
  * fact7 class 3: when a press fact's effect ended, as the log shows it — the
  * latest close of the caster's auras of the button's name that opened around
  * the press, on any target (Odyn's Fury and Deep Breath land on their victims,
- * Tip the Scales on the caster). `undefined` when the log shows none closing:
- * the caller falls back to the official duration, and a button with neither
- * has no running effect to state.
+ * Tip the Scales on the caster). An aura the log never closes runs its own
+ * official length: the round can end first, and the button's cast id may carry
+ * no duration (Goremaw's Bite: cast 426591, aura 426593 of 14 s; 75-1-523,
+ * pressed at 2:30 of a round ending 2:39). `undefined` when no aura says: the
+ * caller falls back to the button's official duration, and a button with
+ * neither has no running effect to state.
  */
 function pressEffectEndSeconds(
   unit: ICombatUnit,
@@ -574,8 +577,13 @@ function pressEffectEndSeconds(
         a.destUnitId === opened.destUnitId &&
         a.logLine.timestamp >= at,
     );
-    if (closed && (endMs === undefined || closed.logLine.timestamp > endMs))
-      endMs = closed.logLine.timestamp;
+    const officialS = closed
+      ? undefined
+      : spellEffectData[opened.spellId!]?.durationSeconds;
+    const end =
+      closed?.logLine.timestamp ??
+      (officialS === undefined ? undefined : at + officialS * 1000);
+    if (end !== undefined && (endMs === undefined || end > endMs)) endMs = end;
   }
   return endMs === undefined ? undefined : (endMs - matchStartMs) / 1000;
 }

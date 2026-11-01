@@ -1074,8 +1074,14 @@ export function applicableCCAvoidanceIds(
     if (covers === false) continue; // 官方判定:挡不住
     if (covers === undefined) {
       // 官方缺这个免疫的 aura39 行(反魔法护罩/法术反射/剑刃风暴/龟盾…)
+      // the effect is what the shield would stop, and its school can differ
+      // from the button's: Intimidation 19577 is Nature, its stun 24394
+      // Physical (226-3-3158 0:52: Cloak of Shadows named against it)
       const ccIsPhysical =
-        isPhysicalSpell(ccSpellId) ?? PHYSICAL_CC_IDS.has(ccSpellId);
+        [...castAndEffectIds(ccSpellId)].some(
+          (id) => isPhysicalSpell(id) === true,
+        ) ||
+        (isPhysicalSpell(ccSpellId) ?? PHYSICAL_CC_IDS.has(ccSpellId));
       if (MAGIC_ONLY_IMMUNITY_IDS.has(buffId) && ccIsPhysical) continue;
     }
     out.add(buffId);

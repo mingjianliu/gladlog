@@ -482,13 +482,15 @@ export function pressLandingsMs<T extends LandingPress>(
 /** The caster as `pressLandingRows` reads it, with its pets' misses: a pet's
  * hits are merged into its owner's `damageOut`, its misses are not, and a
  * press can land as the pet's row alone (Kill Command 34026, the pet's 83381,
- * parried or not). */
+ * parried or not). A guardian's same-named spell is no landing of the press:
+ * a Dryad's Starsurge 1264677, Whitemane's Death Coil, an Arcane Phoenix's
+ * Pyroblast. */
 export function pressLandingCaster(
   caster: LandingCaster,
-  units: readonly Pick<ICombatUnit, "ownerId" | "missesOut">[],
+  units: readonly Pick<ICombatUnit, "id" | "ownerId" | "missesOut">[],
 ): LandingCaster {
   const petMisses = units
-    .filter((u) => u.ownerId === caster.id)
+    .filter((u) => u.ownerId === caster.id && u.id.startsWith("Pet-"))
     .flatMap((u) => u.missesOut ?? []);
   return petMisses.length === 0
     ? caster
@@ -575,13 +577,17 @@ function reflectedBack(
   targetId: string,
   castMs: number,
 ): boolean {
+  // a hit can log under another id of the spell's name (Lava Burst 51505,
+  // its bolt 285452)
   const family = castAndEffectIds(spellId);
+  const name = spellNameKey(spellId);
   return (caster.missesOut ?? []).some(
     (m) =>
       m.missType === "REFLECT" &&
       m.destUnitId === targetId &&
       !!m.spellId &&
-      family.has(m.spellId) &&
+      (family.has(m.spellId) ||
+        spellNameKey(m.spellId, m.spellName) === name) &&
       m.timestamp >= castMs &&
       m.timestamp <= castMs + REFLECT_ROW_LAG_MS,
   );

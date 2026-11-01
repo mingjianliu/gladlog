@@ -24,6 +24,14 @@ describe("avoidance table — DB2-explained forward additions", () => {
       applicableCCAvoidanceIds("8122", "Psychic Scream").has("48792"),
     ).toBe(false);
   });
+  it("226-3-3158: a magic-only shield reads the effect's school, not the button's", () => {
+    expect(applicableCCAvoidanceIds("19577", "Intimidation").has("31224")).toBe(
+      false,
+    );
+    expect(applicableCCAvoidanceIds("118", "Polymorph").has("31224")).toBe(
+      true,
+    );
+  });
   it("Lichborne explains a fear; Sanctified Ground a silence (Garrote – Silence)", () => {
     expect(
       applicableCCAvoidanceIds("8122", "Psychic Scream").has("49039"),

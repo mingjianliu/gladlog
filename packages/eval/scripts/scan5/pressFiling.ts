@@ -31,6 +31,7 @@ import { APPLIED, ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = [
   "dispelPressOnAlly",
+  "dispelActorOffRoster",
   "teamProcSourceDropped",
   "cheatDeathProcUnsaid",
   "controlRemovalFiled",
@@ -89,6 +90,29 @@ function dispelPressOnAlly(ctx: IRoundCtx): void {
         line.trim().slice(0, 200),
       );
     }
+  }
+}
+
+/** The acting unit of a dispel line is a roster token; a pet's own name is not
+ * one (`Raptor: Master's Call ×1`, the D18 fix naming the pet that pressed). */
+const DISPEL_LINE =
+  /^\s*\d+:\d\d\s+\[(?:MINOR DISPELS|CLEANSE|PURGE|ENEMY CLEANSE|ENEMY PURGE)\]\s+(.+)$/;
+
+function dispelActorOffRoster(ctx: IRoundCtx): void {
+  for (const line of ctx.lines) {
+    const m = DISPEL_LINE.exec(line);
+    if (!m) continue;
+    ctx.bump("dispelActorOffRoster");
+    if (/^\d+\(/.test(m[1]!)) continue;
+    const label = m[1]!.split(":")[0]!;
+    ctx.violate(
+      "dispelActorOffRoster",
+      "actorNotAToken",
+      ctx.start,
+      `${label}#${m[1]!.slice(0, 60)}`,
+      `the line's actor is ${label}, not a roster token`,
+      line.trim().slice(0, 200),
+    );
   }
 }
 
@@ -232,8 +256,37 @@ function selfOnlyHeldDualRole(ctx: IRoundCtx): void {
   }
 }
 
+/** Measurement, not a verdict: per spell, how many of its `[BUFF FADED]` lines
+ * say `ended early — no dispel logged`. A spell at most of its lines is a run
+ * that ends with the action, not early (Deep Breath, Predator's Wake). */
+const FADE_LINE = /\[BUFF FADED\]\s+(?:\d+\([^)]*\)[^:]*: )?(.+?) \(/;
+const fades = new Map<string, { all: number; early: number }>();
+
+function fadeEarlyShare(ctx: IRoundCtx): void {
+  for (const line of ctx.lines) {
+    const name = FADE_LINE.exec(line)?.[1];
+    if (!name) continue;
+    const f = fades.get(name) ?? { all: 0, early: 0 };
+    f.all++;
+    if (line.includes("(ended early — no dispel logged)")) f.early++;
+    fades.set(name, f);
+  }
+}
+
+export function report(): string[] {
+  return [...fades]
+    .filter(([, f]) => f.all >= 12 && f.early / f.all >= 0.2)
+    .sort((a, b) => b[1].early / b[1].all - a[1].early / a[1].all)
+    .map(
+      ([name, f]) =>
+        `fadeEarlyShare ${name}: ${f.early} / ${f.all} (${((100 * f.early) / f.all).toFixed(0)} %)`,
+    );
+}
+
 export function run(ctx: IRoundCtx): void {
+  fadeEarlyShare(ctx);
   dispelPressOnAlly(ctx);
+  dispelActorOffRoster(ctx);
   teamProcSourceDropped(ctx);
   cheatDeathProcUnsaid(ctx);
   controlRemovalFiled(ctx);

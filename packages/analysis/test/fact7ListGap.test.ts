@@ -211,6 +211,25 @@ describe("[RES] enemy: lists a press fact while its effect runs", () => {
     expect(enemyField(t, 45)).toBeUndefined();
   });
 
+  it("an aura the log never closes runs its own official length (Goremaw's Bite 75-1-523)", () => {
+    const goremaw = {
+      ...aura("426593", 150.129, LogEvent.SPELL_AURA_APPLIED),
+      spellName: "Goremaw's Bite",
+      destUnitId: "v",
+    };
+    const rogue = unit(CombatUnitClass.Rogue, CombatUnitSpec.Rogue_Subtlety, [
+      cast("426591", 150.128),
+    ]);
+    const round = {
+      startTime: T0,
+      endTime: END,
+      units: { u: rogue, v: { id: "v", auraEvents: [goremaw] } },
+    } as never;
+    const row = reconstructEnemyCDTimeline([rogue], round).players[0]!
+      .offensiveFacts![0]!;
+    expect(row.buffEndSeconds).toBeCloseTo(164.129, 3);
+  });
+
   it("a button with no effect span states no window: no 8 s fallback", () => {
     const t = reconstructEnemyCDTimeline([fury], combat);
     expect(t.players[0]!.offensiveFacts![0]!.buffEndSeconds).toBeCloseTo(

@@ -3354,7 +3354,10 @@ export function reconstructDispelSummary(
 
       // B45: pet dispels are attributed to the owner player; source name shows the player
       // so Claude sees "[CLEANSE] Warlock dispelled X (pet)" rather than "[CLEANSE] Imp dispelled X"
-      const actor = pressedByAlly ?? ownerPlayer ?? unit;
+      // A presser that is a pet is its owner's press: Master's Call from the
+      // pet bar logs only the pet's cast, aimed at the hunter (85a6cad9 0:23).
+      const pressOwner = pressedByAlly && unitMap.get(pressedByAlly.ownerId);
+      const actor = pressOwner ?? pressedByAlly ?? ownerPlayer ?? unit;
       const sourceName = actor.name;
       const sourceSpec = specToString(actor.spec);
 
