@@ -18,8 +18,10 @@ const DAILY_QUOTA = 30;
 export const DAILY_SHUFFLE_SHARE = 20;
 /** Highest filter tier the server indexes (1400/1800/2100/2400; 2400 is empty this season). */
 export const DAILY_MIN_RATING = 2100;
-/** Feed pages per step at most — one page (50 stubs) normally covers a step. */
-export const DAILY_MAX_PAGES = 3;
+/** Feed pages per step at most. Spec balancing (2026-11-02) pools candidates
+ * before taking any and stops paging at 3 per log wanted; a 2100+ shuffle
+ * page dedupes to ~10 logs, so the shuffle step reads ~6 pages, 3v3 one. */
+export const DAILY_MAX_PAGES = 6;
 /** fetchPvpLogs exit code for "no usable Battle.net session" (missing/stale cookie). */
 export const EXIT_AUTH = 3;
 

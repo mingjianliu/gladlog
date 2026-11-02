@@ -1,6 +1,8 @@
 // Daily quota pull driver: 20 Solo Shuffle objects, then 3v3 for the rest of
-// the day's 30, all at 2100+, any spec, any uploader (user rulings 2026-09-15,
-// split doubled with the quota 2026-10-24).
+// the day's 30, all at 2100+, any uploader (user rulings 2026-09-15, split
+// doubled with the quota 2026-10-24). Any spec, but spec-balanced since
+// 2026-11-02: each step takes the recorder specs the patch's stored downloads
+// hold least of first, tanks last (src/specBalance.ts).
 // Runs fetchPvpLogs.ts once per step, records every run to
 // downloads/daily-pull/runs.jsonl, and raises a macOS notification when the
 // Battle.net session has expired so the operator knows to re-login. Every run
@@ -90,6 +92,7 @@ function runStep(bracket: string, limit: number) {
       MIN_RATING: String(DAILY_MIN_RATING),
       LIMIT: String(limit),
       MAX_PAGES: String(DAILY_MAX_PAGES),
+      SPEC_BALANCE: "1",
     },
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],

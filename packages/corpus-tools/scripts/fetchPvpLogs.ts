@@ -6,6 +6,7 @@
 // this is a targeted-sampling tool, not a corpus collector.
 // See .claude/skills/fetch-pvp-logs for usage; typical invocation:
 //   WAL_COOKIE=<session token> SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
+import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis";
 import fs from "fs-extra";
 import os from "os";
 import path from "path";
@@ -13,6 +14,7 @@ import path from "path";
 import { EXIT_AUTH, fetchErrorExitCode } from "../src/dailyPull";
 import {
   decodeRawPayload,
+  type DetailedMatchStub,
   downloadRaw,
   fetchDetailedStubs,
   type LogDownloadGrant,
@@ -43,6 +45,11 @@ import {
   upsertManifestEntry,
   utcDayKey,
 } from "../src/pvpLogFetch";
+import {
+  orderBySpecBalance,
+  recorderSpecOf,
+  storedRecorderSpecCounts,
+} from "../src/specBalance";
 
 const BRACKET = process.env.BRACKET ?? "3v3"; // "2v2" | "3v3" | "Rated Solo Shuffle"
 // Server-side only four tiers take effect: 1400/1800/2100/2400 (by average
@@ -56,6 +63,17 @@ const LIMIT = Number(process.env.LIMIT ?? 30);
 // The feed only keeps the last ~7 days, and deep paging bills their Firestore
 // -- a backstop so we do not page forever
 const MAX_PAGES = Number(process.env.MAX_PAGES ?? 40);
+// SPEC_BALANCE=1 (the daily pull sets it): read up to MAX_PAGES pages into a
+// pool first, then take the recorder specs the patch's stored downloads hold
+// least of (src/specBalance.ts). Off: take the feed in order, as before.
+const SPEC_BALANCE = process.env.SPEC_BALANCE === "1";
+// Paging stops once the pool holds this many candidates per log wanted. A
+// 2100+ shuffle page dedupes to ~10 logs, so 20 shuffle logs read ~6 pages and
+// 10 3v3 logs one.
+const SPEC_BALANCE_POOL_FACTOR = 3;
+// DRY_RUN=1 with SPEC_BALANCE=1: page the feed, print the balanced order and
+// stop before any grant — no quota is charged (search is not metered).
+const DRY_RUN = process.env.DRY_RUN === "1";
 // The Firestore/GCS bill of a volunteer project (wowarenalogs) is not ours --
 // so throttle politely: always pause between pages. See the "polite request
 // rate" item in .claude/skills/fetch-pvp-logs: they impose no rate limit, but
@@ -135,6 +153,17 @@ async function saveQuotaState(state: QuotaState): Promise<void> {
   await fs.writeJson(QUOTA_STATE, state, { spaces: 2 });
 }
 
+/** Every manifest under downloads/ — the stored history spec balancing counts. */
+async function loadStoredSpecCounts(): Promise<Map<string, number>> {
+  const root = path.join(EVAL_HOME, "downloads");
+  const entries: ManifestEntry[] = [];
+  for (const dir of await fs.readdir(root).catch(() => [] as string[])) {
+    const file = path.join(root, dir, "manifest.json");
+    if (await fs.pathExists(file)) entries.push(...(await fs.readJson(file)));
+  }
+  return storedRecorderSpecCounts(entries, PATCH_121_GOLIVE_EPOCH_MS);
+}
+
 async function downloadWithMeta(
   url: string,
   id: string,
@@ -164,7 +193,13 @@ async function main() {
   const prior: QuotaState | undefined = (await fs.pathExists(QUOTA_STATE))
     ? await fs.readJson(QUOTA_STATE)
     : undefined;
-  if (quotaAlreadySpent(prior)) {
+  if (DRY_RUN && !SPEC_BALANCE) {
+    console.error(
+      "DRY_RUN=1 needs SPEC_BALANCE=1 (feed order downloads as it pages)",
+    );
+    process.exit(1);
+  }
+  if (!DRY_RUN && quotaAlreadySpent(prior)) {
     console.log(
       `today's upstream quota is already spent (${prior!.downloadsUsedToday}/${prior!.downloadsQuota}, UTC ${prior!.utcDay}); no request made. Resets ${nextUtcMidnight().toISOString()}.`,
     );
@@ -184,8 +219,12 @@ async function main() {
     manifest.filter((e) => have.has(e.id)).map((e) => e.logObjectUrl),
   );
 
+  // Spec balancing: the patch's stored downloads per recorder spec, read
+  // from every manifest under downloads/ (all brackets, all filters).
+  const stored = SPEC_BALANCE ? await loadStoredSpecCounts() : undefined;
+
   console.log(
-    `bracket=${BRACKET} minRating=${MIN_RATING || "off"} spec=${specIds.join(",") || "all"} role=${SPEC_ROLE} limit=${LIMIT}`,
+    `bracket=${BRACKET} minRating=${MIN_RATING || "off"} spec=${specIds.join(",") || "all"} role=${SPEC_ROLE} limit=${LIMIT}${SPEC_BALANCE ? " specBalance=on" : ""}`,
   );
   console.log(`out: ${OUT_DIR} (resume: ${have.size} already downloaded)`);
 
@@ -197,7 +236,89 @@ async function main() {
   let quotaHit: LogQuotaExceededError | undefined;
   // Either way the day is over: the server refused, or its counter reached the quota.
   const quotaReached = () =>
-    quotaHit !== undefined || (lastGrant !== undefined && grantsRemaining(lastGrant) === 0);
+    quotaHit !== undefined ||
+    (lastGrant !== undefined && grantsRemaining(lastGrant) === 0);
+  // Downloads one candidate. "quota" ends the run; "skip" leaves the stub for
+  // a later run (incomplete payload).
+  async function take(
+    stub: DetailedMatchStub,
+  ): Promise<"ok" | "skip" | "quota"> {
+    const fileName = `${stub.id}.txt`;
+    // Count **attempts** rather than successes: an incomplete download has
+    // already consumed their egress bandwidth, and should not be exempted
+    // from the interval just because we threw the result away.
+    if (shouldSleepBeforeDownload(downloadsAttempted))
+      await sleep(DOWNLOAD_SLEEP_MS);
+    // The grant is charged against the daily quota *here*; request it
+    // right before the download so the 10-minute URL is never left to age.
+    const objectId = logObjectIdFromUrl(stub.logObjectUrl);
+    let grant: LogDownloadGrant;
+    try {
+      grant = await requestLogGrant({ matchId: objectId, cookie });
+    } catch (e) {
+      if (e instanceof LogQuotaExceededError) {
+        quotaHit = e;
+        await saveQuotaState({
+          utcDay: utcDayKey(),
+          downloadsUsedToday: e.usedToday,
+          downloadsQuota: e.quota,
+        });
+        return "quota";
+      }
+      throw e;
+    }
+    lastGrant = grant;
+    await saveQuotaState({
+      utcDay: utcDayKey(),
+      downloadsUsedToday: grant.downloadsUsedToday,
+      downloadsQuota: grant.downloadsQuota,
+    });
+    downloadsAttempted++;
+    const { text, meta, rawCheck } = await downloadWithMeta(
+      grant.url,
+      objectId,
+    );
+    const completeness = rawCheck.ok
+      ? checkDecompressedPayload(text)
+      : rawCheck;
+    if (!completeness.ok) {
+      // Do not write the file, do not enter the manifest, do not enter the
+      // dedupe sets: the feed only keeps ~7 days, so leave it to be retried
+      // on the next run; recording it early means it is skipped forever, and
+      // once the stub expires it can never be recovered.
+      console.warn(
+        `  skip ${stub.id}: incomplete download (${completeness.reason})`,
+      );
+      return "skip";
+    }
+    await fs.writeFile(path.join(OUT_DIR, fileName), text);
+    upsertManifestEntry(manifest, {
+      ...stubToManifestEntry(stub, fileName),
+      gcsMeta: meta,
+    });
+    // Write the manifest once per match: an interruption then loses no
+    // metadata for matches already downloaded
+    await fs.writeJson(MANIFEST, manifest, { spaces: 2 });
+    have.add(stub.id);
+    haveLogs.add(stub.logObjectUrl);
+    fresh++;
+    const spec = recorderSpecOf(stub);
+    console.log(
+      `  [${fresh}/${LIMIT}] ${stub.id} ${stub.bracket} teamRating=${stub.playerTeamRating} recorderSpec=${spec || "?"}${stored ? ` (held ${stored.get(spec) ?? 0})` : ""} ${Math.round(text.length / 1024)}KB  quota ${grant.downloadsUsedToday}/${grant.downloadsQuota}`,
+    );
+    if (stored) stored.set(spec, (stored.get(spec) ?? 0) + 1);
+    if (grantsRemaining(grant) === 0) {
+      console.log(
+        `  daily quota reached (${grant.downloadsUsedToday}/${grant.downloadsQuota}); resets ${nextUtcMidnight().toISOString()}`,
+      );
+      return "quota";
+    }
+    return "ok";
+  }
+
+  // Spec balancing reads the whole page budget into a pool before taking
+  // anything; feed order takes candidates as each page arrives.
+  const pool: DetailedMatchStub[] = [];
   pages: for (let page = 0; page < MAX_PAGES && fresh < LIMIT; page++) {
     // No need to wait before the first page (there is no earlier request to
     // space out from); every page after that sleeps PAGE_SLEEP_MS first.
@@ -225,85 +346,59 @@ async function main() {
     pagesFetched++;
     scanned += stubs.length;
     // A shuffle's 6 rounds share one log object: dedupe within the page and
-    // against what has already been downloaded
+    // against what has already been downloaded (and, when pooling, against
+    // earlier pages: a shuffle's rounds can straddle a page boundary)
+    const pooled = new Set(pool.map((s) => s.logObjectUrl));
     const candidates = dedupeByLogObject(stubs).filter(
       (s) =>
         !have.has(s.id) &&
         !haveLogs.has(s.logObjectUrl) &&
+        !pooled.has(s.logObjectUrl) &&
         matchesSpecFilter(s, specIds, SPEC_ROLE),
     );
-    for (const stub of candidates) {
-      if (fresh >= LIMIT) break;
-      const fileName = `${stub.id}.txt`;
-      // Count **attempts** rather than successes: an incomplete download has
-      // already consumed their egress bandwidth, and should not be exempted
-      // from the interval just because we threw the result away.
-      if (shouldSleepBeforeDownload(downloadsAttempted))
-        await sleep(DOWNLOAD_SLEEP_MS);
-      // The grant is charged against the daily quota *here*; request it
-      // right before the download so the 10-minute URL is never left to age.
-      const objectId = logObjectIdFromUrl(stub.logObjectUrl);
-      let grant: LogDownloadGrant;
-      try {
-        grant = await requestLogGrant({ matchId: objectId, cookie });
-      } catch (e) {
-        if (e instanceof LogQuotaExceededError) {
-          quotaHit = e;
-          await saveQuotaState({
-            utcDay: utcDayKey(),
-            downloadsUsedToday: e.usedToday,
-            downloadsQuota: e.quota,
-          });
-          break pages;
-        }
-        throw e;
-      }
-      lastGrant = grant;
-      await saveQuotaState({
-        utcDay: utcDayKey(),
-        downloadsUsedToday: grant.downloadsUsedToday,
-        downloadsQuota: grant.downloadsQuota,
-      });
-      downloadsAttempted++;
-      const { text, meta, rawCheck } = await downloadWithMeta(
-        grant.url,
-        objectId,
-      );
-      const completeness = rawCheck.ok
-        ? checkDecompressedPayload(text)
-        : rawCheck;
-      if (!completeness.ok) {
-        // Do not write the file, do not enter the manifest, do not enter the
-        // dedupe sets: the feed only keeps ~7 days, so leave it to be retried
-        // on the next run; recording it early means it is skipped forever, and
-        // once the stub expires it can never be recovered.
-        console.warn(
-          `  skip ${stub.id}: incomplete download (${completeness.reason})`,
-        );
-        continue;
-      }
-      await fs.writeFile(path.join(OUT_DIR, fileName), text);
-      upsertManifestEntry(manifest, {
-        ...stubToManifestEntry(stub, fileName),
-        gcsMeta: meta,
-      });
-      // Write the manifest once per match: an interruption then loses no
-      // metadata for matches already downloaded
-      await fs.writeJson(MANIFEST, manifest, { spaces: 2 });
-      have.add(stub.id);
-      haveLogs.add(stub.logObjectUrl);
-      fresh++;
-      console.log(
-        `  [${fresh}/${LIMIT}] ${stub.id} ${stub.bracket} teamRating=${stub.playerTeamRating} recorderSpec=${stub.units.find((u) => u.id === stub.playerId)?.spec ?? "?"} ${Math.round(text.length / 1024)}KB  quota ${grant.downloadsUsedToday}/${grant.downloadsQuota}`,
-      );
-      if (grantsRemaining(grant) === 0) {
-        console.log(
-          `  daily quota reached (${grant.downloadsUsedToday}/${grant.downloadsQuota}); resets ${nextUtcMidnight().toISOString()}`,
-        );
-        break pages;
+    if (stored) {
+      pool.push(...candidates);
+      // Enough choice: stop paging (page reads are the volunteer project's bill)
+      if (pool.length >= SPEC_BALANCE_POOL_FACTOR * LIMIT) break;
+    } else {
+      for (const stub of candidates) {
+        if (fresh >= LIMIT) break;
+        if ((await take(stub)) === "quota") break pages;
       }
     }
     if (stubs.length < 50) break; // A short page = end of the feed
+  }
+  if (stored) {
+    const ordered = orderBySpecBalance(pool, stored);
+    console.log(
+      `spec balance: pool ${pool.length} candidates; order ${ordered
+        .slice(0, LIMIT)
+        .map((s) => recorderSpecOf(s) || "?")
+        .join(",")}`,
+    );
+    if (DRY_RUN) {
+      console.log(
+        `feed order would take ${pool
+          .slice(0, LIMIT)
+          .map((st) => recorderSpecOf(st) || "?")
+          .join(",")}`,
+      );
+      for (const st of ordered.slice(0, LIMIT)) {
+        const spec = recorderSpecOf(st);
+        console.log(
+          `  would take ${st.id} recorderSpec=${spec || "?"} (held ${stored.get(spec) ?? 0})`,
+        );
+        stored.set(spec, (stored.get(spec) ?? 0) + 1);
+      }
+      console.log(
+        `dry run: scanned ${scanned} stubs over ${pagesFetched} pages; nothing requested`,
+      );
+      return;
+    }
+    for (const stub of ordered) {
+      if (fresh >= LIMIT) break;
+      if ((await take(stub)) === "quota") break;
+    }
   }
 
   console.log(

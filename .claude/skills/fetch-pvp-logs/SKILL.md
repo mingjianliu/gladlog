@@ -54,6 +54,8 @@ SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 | `LIMIT`           | 30                                                        | 本次运行**新下**的场数上限;真正的硬闸是服务端计数,到了就停;同日已满则零请求退出                                   |
 | `OUT_DIR`         | `$GLADLOG_EVAL_HOME/downloads/<bracket>-<rating>-<spec>/` | 落盘目录                                                                                                          |
 | `MAX_PAGES`       | 40                                                        | 翻页兜底(spec 的 recorder 细筛在客户端,冷门条件别无限翻——翻页读费记在志愿者项目账上)                              |
+| `SPEC_BALANCE`    | 空(关)                                                    | `1`=专精均衡:先攒候选池(到 3×LIMIT 或 MAX_PAGES 为止),按 downloads/ 下全部 manifest 里本版本(`PATCH_121_GOLIVE_EPOCH_MS` 之后)录制者专精的已存场数从少到多拿,坦克排最后(`src/specBalance.ts`)。每日拉取默认开 |
+| `DRY_RUN`         | 空                                                        | `1` 且 `SPEC_BALANCE=1`:只翻页、打印均衡顺序和 feed 原顺序,不申请任何下载、不花额度                             |
 
 产物:每场 `<matchId>.txt` + `manifest.json`(bracket、`playerTeamRating`、双方 MMR、
 胜负、时长、记录者与全员的 spec/个人 CR、GCS meta 时区/年份——log 内时间戳无年份
@@ -71,6 +73,14 @@ SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 10-20..24 五天因为 `DAILY_QUOTA` 还写 15、单排份额还是 10,多出的 15 全给了 3v3,实际是 10/20)。
 专精抓取时不筛,事后按 manifest 的 `players[].spec` 筛(用户不用 wowarenalogs,
 `SPEC_ROLE` 的 recorder 语义与用户本人无关)。
+
+**专精均衡(用户 2026-11-02)**:「根据之前整个版本存储的所有专精数量,做一个相对更有偏好的搜索」。
+每日拉取带 `SPEC_BALANCE=1`:每步先攒候选池(每个名额 3 个候选,单排约翻 6 页、3v3 1 页,
+`DAILY_MAX_PAGES` 3→6),再按本版本已存下载的录制者专精场数从少到多拿,每拿一场计数 +1(不会一口气
+全拿同一个冷门专精,除非池里只有它);同数按 feed 顺序(新的先)。坦克排在所有非坦克之后
+(用户同日:坦克「没人玩」,不值得追)。11-02 当时 920 场里奶德 111、戒律 96,恶魔术 5、生存 7;
+同一天的 feed 预览:单排原顺序拿 Shadow/BM/Ret/Disc,均衡后先拿 Havoc/Enh/Devourer/Shadow。
+看效果:`SPEC_BALANCE=1 DRY_RUN=1 BRACKET=... LIMIT=... OUT_DIR=<对应目录> npx tsx scripts/fetchPvpLogs.ts`。
 
 ```bash
 cd packages/corpus-tools
