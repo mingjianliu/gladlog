@@ -733,4 +733,13 @@
  *  under 0.5 s left the line gives the enemy kicks instead. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 472;
+/*
+ * v473 (2026-11-02, GH #176, user ruling): a `[PRESS]` line for every press
+ *  of an official >= 45 s cooldown no other line names, with the unit's
+ *  talented cooldown, charges, when it was back and the aura's talented
+ *  length. The cooldown model gains Time Spiral free presses, Death's
+ *  Arrival, Stasis replays, two Gladiator's Badges and Restless Blades'
+ *  Triple Threat / Jackpot boost. Findings unchanged. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 473;

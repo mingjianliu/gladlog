@@ -107,8 +107,13 @@ export function buffFullDurationForCaster(
     | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster)
     | undefined,
   atMs?: number,
+  /** `pressed`: the length of a hard cast — a `replaceSeconds` row prices
+   * the proc a talent produces, not the press (GH #176: Restoration's
+   * pressed Ascendance runs its DB2 15 s, the Deeply Rooted Elements proc
+   * 6 s) */
+  opts?: { pressed?: boolean },
 ): number | undefined {
-  const talented = talentedDuration(spellId, caster, atMs);
+  const talented = talentedDuration(spellId, caster, atMs, opts?.pressed);
   // fact8 D15: a class set bonus, on top of everything the talents give
   return talented === undefined
     ? undefined
@@ -121,6 +126,7 @@ function talentedDuration(
     | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster)
     | undefined,
   atMs?: number,
+  pressed = false,
 ): number | undefined {
   if (NO_FIXED_DURATION_IDS.has(spellId)) return undefined;
   const noCasterValue =
@@ -184,6 +190,8 @@ function talentedDuration(
     // talent as baseline "yes", whose rank-0 path below then returns early and
     // skips this caster's own later modifiers
     if (talentModifierOwnershipOf(caster, m.talentSpellId) === "no") continue;
+    // a hard cast is not the proc the row prices
+    if (pressed && m.replaceSeconds !== undefined) continue;
     const rank = talentRankOf(caster, m.talentSpellId);
     // Cannot price this talent. Fall back to the most specific thing still
     // known: this spec's own base when the spell has one (a Retribution

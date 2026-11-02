@@ -150,6 +150,8 @@ const LITERAL_TOKEN = (tok: string): boolean =>
   tok.length >= 3 &&
   !tok.includes("<") &&
   !tok.includes("…") &&
+  // a time placeholder (`back m:ss`, `at m:ss`): the body prints `1:00`
+  !/\bm:ss\b/i.test(tok) &&
   // a placeholder: one capital, alone or with a unit (`N`, `Ns`, `T`, `N%`)
   !/\b[A-Z][a-z]?\b/.test(tok.replace(/[A-Z][a-z]{2,}/g, "")) &&
   /[a-z]/.test(tok);

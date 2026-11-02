@@ -58,6 +58,9 @@ import {
   eventTriggersFor,
   freeRecastWindowFor,
   idleCreditCapFor,
+  onInterruptReductionFor,
+  timeSpiralEchoMs,
+  timeSpiralFreePressMs,
 } from "../data/talentScriptedCooldowns";
 import {
   STUN_PURGE_GENERATED,
@@ -80,6 +83,8 @@ import { buffFullDurationForCaster } from "./buffDuration";
 import { CONTROL_EFFECT_MIN_HIT_SHARE, isControlCast } from "./castMissRows";
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
+import { isStasisReplayCast } from "./combatStates";
+import { interruptPressCooldownSeconds } from "./enemyInterrupts";
 import { hiddenPressMs } from "./hiddenPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import { logDatedNumberAt } from "./logEra";
@@ -110,6 +115,7 @@ import {
   talentsOf,
   unitLogEpochMs,
 } from "./talents";
+import { equippedBadgeCount, GLADIATOR_BADGE_SPELL_ID } from "./trinketType";
 import { DEATH_CASCADE_MS, firstDeathMs } from "./unitDeath";
 
 export const MAJOR_DEFENSIVE_IDS = new Set<string>(
@@ -1611,7 +1617,13 @@ export interface ICooldownCast {
    * R − press, right for "available at t" (R ≤ t); "seconds until ready" at t
    * must subtract only the reductions that had happened by t (agy review
    * 2026-09-26 — the override alone counts later bolts early). */
-  reductions?: ReadonlyArray<{ atSeconds: number; seconds: number }>;
+  reductions?: ReadonlyArray<{
+    atSeconds: number;
+    seconds: number;
+    /** `seconds: Infinity` gives back one charge, the running recharge
+     * kept, not every charge */
+    oneCharge?: true;
+  }>;
   /** Seconds the spell sat ready before this press that came off its
    * cooldown (`IDLE_COOLDOWN_CREDITS`, Control of the Dream). Already in
    * `cooldownSecondsOverride`; with `reductions`, "seconds until ready"
@@ -2878,6 +2890,16 @@ export function lockCastsOf(
   );
 }
 
+/** The presses that spend a charge, in time order: `lockCastsOf` without a
+ * free press (`freeRecast` — Time Spiral, GH #176), which takes no charge. */
+export function chargeSpendTimesOf(
+  cd: Pick<IMajorCooldownInfo, "casts" | "sharedCasts">,
+): number[] {
+  return lockCastsOf(cd)
+    .filter((c) => !c.freeRecast)
+    .map((c) => c.timeSeconds);
+}
+
 /**
  * "Never spent all round": no press of the cooldown's own spell AND none of
  * its shared DB2 charge pool (`sharedCasts`, e.g. Spellwarding ↔ Blessing of
@@ -2945,7 +2967,7 @@ function cdAvailableAtConsumed(
   if ((cd.charges ?? 1) > 1) {
     return (
       chargesAvailableAt(
-        lock.map((c) => c.timeSeconds),
+        chargeSpendTimesOf(cd),
         cd.cooldownSeconds,
         cd.charges as number,
         t,
@@ -3086,7 +3108,7 @@ function cdSecondsUntilReadyConsumed(
   const lock = lockCastsOf(cd);
   if ((cd.charges ?? 1) > 1) {
     const { nextRecharge } = chargeStateAt(
-      lock.map((c) => c.timeSeconds),
+      chargeSpendTimesOf(cd),
       cooldown,
       cd.charges as number,
       t,
@@ -3306,7 +3328,7 @@ function cdChargesReadyAtConsumed(
     );
   }
   return chargesAvailableAt(
-    lockCastsOf(cd).map((c) => c.timeSeconds),
+    chargeSpendTimesOf(cd),
     cooldown,
     cd.charges ?? 1,
     tSeconds + CD_INSTANT_SLACK_S,
@@ -4159,7 +4181,13 @@ export function chargesAvailableAt(
 export interface IChargeEffects {
   /** a trigger at `atSeconds` takes `seconds` off the charge recharging
    * then (none recharging → nothing) */
-  reductions?: ReadonlyArray<{ atSeconds: number; seconds: number }>;
+  reductions?: ReadonlyArray<{
+    atSeconds: number;
+    seconds: number;
+    /** `seconds: Infinity` gives back one charge, the running recharge
+     * kept, not every charge */
+    oneCharge?: true;
+  }>;
   /** the time spent at full charges before a press, up to this cap, comes
    * off the recharge that press starts (a round starts full) */
   idleCapSeconds?: number;
@@ -4216,6 +4244,17 @@ function simulateCharges(
       const r = reductions[ri++]!;
       advanceTo(r.atSeconds);
       if (charges >= cap) continue;
+      if (r.seconds === Number.POSITIVE_INFINITY && r.oneCharge) {
+        // one charge back; the recharge under way keeps its progress
+        if (charges === 0)
+          flips.push({ atSeconds: r.atSeconds, available: true });
+        charges++;
+        if (charges >= cap) {
+          fullSince = r.atSeconds;
+          nextRecharge = Number.POSITIVE_INFINITY;
+        }
+        continue;
+      }
       if (r.seconds === Number.POSITIVE_INFINITY) {
         // a reset: every charge back at once
         if (charges === 0)
@@ -4225,7 +4264,28 @@ function simulateCharges(
         nextRecharge = Number.POSITIVE_INFINITY;
         continue;
       }
-      nextRecharge = Math.max(r.atSeconds, nextRecharge - r.seconds);
+      // A give-back larger than what is left on the charge recharging now
+      // carries into the next one (GH #176: Holy Word: Serenity under
+      // Serendipity, 501 presses the model called impossible on 605 files →
+      // 8 with the carry; dropped, the spill was lost whenever two give-backs
+      // landed close to a recharge). Only at full charges is it lost.
+      let left = r.seconds;
+      while (left > 0 && charges < cap) {
+        const remaining = nextRecharge - r.atSeconds;
+        if (left < remaining) {
+          nextRecharge -= left;
+          break;
+        }
+        left -= remaining;
+        if (charges === 0)
+          flips.push({ atSeconds: r.atSeconds, available: true });
+        charges++;
+        if (charges < cap) nextRecharge = r.atSeconds + rechargeSeconds;
+        else {
+          fullSince = r.atSeconds;
+          nextRecharge = Number.POSITIVE_INFINITY;
+        }
+      }
     }
   };
   for (const c of casts) {
@@ -5175,12 +5235,15 @@ export function entryAvailabilityTransitions(
     .filter((t) => t <= untilSeconds)
     .sort((a, b) => a - b);
   if ((entry.charges ?? 1) > 1) {
+    const spends = chargeSpendTimesOf(entry)
+      .filter((t) => t <= untilSeconds)
+      .sort((a, b) => a - b);
     // on the rate windows' warped clock, like `cdAvailableAt`, and back
     if (entry.rateWindows?.length) {
       const { tau, inverse } = warpClock(entry.rateWindows);
       const view = warpedView(entry, tau);
       return chargeAvailabilityTransitions(
-        presses.map(tau),
+        spends.map(tau),
         view.cooldownSeconds,
         view.charges ?? 1,
         tau(untilSeconds),
@@ -5188,7 +5251,7 @@ export function entryAvailabilityTransitions(
       ).map((f) => ({ ...f, atSeconds: inverse(f.atSeconds) }));
     }
     return chargeAvailabilityTransitions(
-      presses,
+      spends,
       entry.cooldownSeconds,
       entry.charges ?? 1,
       untilSeconds,
@@ -5293,12 +5356,25 @@ function buildCooldownEntry(
   // 补成第三个分支即可,对原有两类逐字节无影响(纯增补)。
   const reachesSomeoneElse = reachesAlly(spell.spellId);
 
+  const spiralEchoMs = new Set(
+    timeSpiralEchoMs(
+      unit,
+      spell.spellId,
+      castEvents.map((e) => e.logLine.timestamp),
+    ),
+  );
   const castRawCasts: ICooldownCast[] = castEvents
     .filter((e) => !isPassiveProcCast(e))
     // #36(a): an echo copy (Dream Breath 355941 etc.) is not a press — as a
     // ledger cast it would fabricate cooldown usage and corrupt
     // cdAvailableAt/chargesAvailableAt for the real spell's variants.
     .filter((e) => !COPY_CAST_IDS.has(String(e.spellId ?? "")))
+    // Stasis replaying a stored spell is its copy, not a press (GH #176)
+    .filter(
+      (e) => !isStasisReplayCast(unit, e.spellId ?? "", e.logLine.timestamp),
+    )
+    // nor is the row echoing a Time Spiral free press (`timeSpiralEchoMs`)
+    .filter((e) => !spiralEchoMs.has(e.logLine.timestamp))
     .map((e) => {
       const timeSeconds = (e.logLine.timestamp - matchStartMs) / 1000;
       const cast: ICooldownCast = { timeSeconds };
@@ -5439,6 +5515,42 @@ function buildCooldownEntry(
         choiceSelectionResolved(specIdNum, talentsOf(unit)!, t))) ||
     pvpTalentIds.has(t);
   const freeWindow = freeRecastWindowFor(spell.spellId, holds);
+  const ranks = playerTalentIdSets(unit).talentRanks;
+  const rankOf = (t: string) => ranks?.get(t) ?? (holds(t) ? 1 : 0);
+  // Scripted event effects on this cooldown, read here already: a reset
+  // between two presses makes the second one genuine however close (GH
+  // #176: Ace Up Your Sleeve's Between the Eyes pressed again 0.8 s after
+  // the press that reset it — folded into one, the reset had no press to
+  // give back to)
+  const reductions = eventReductionsFor(
+    spell.spellId,
+    holds,
+    String(specIdNum),
+  );
+  const resetAtSeconds = eventTriggersFor(
+    unit,
+    reductions.filter((r) => r.seconds === Number.POSITIVE_INFINITY),
+    holds,
+    rankOf,
+  )
+    .filter((g) => g.seconds === Number.POSITIVE_INFINITY && !g.oneCharge)
+    .map((g) => (g.atMs - matchStartMs) / 1000);
+  const resetBetween = (from: number, to: number) =>
+    resetAtSeconds.some((r) => r >= from && r <= to);
+  // Time Spiral (GH #176): the cast rows that consumed the unit's aura — a
+  // press that neither spends a charge nor restarts the cooldown
+  const spiralMs = timeSpiralFreePressMs(
+    unit,
+    spell.spellId,
+    castRawCasts.map((c) => matchStartMs + c.timeSeconds * 1000),
+  );
+  const spiralFree = new Set<ICooldownCast>(
+    castRawCasts.filter((c) =>
+      spiralMs.some(
+        (ms) => Math.abs(matchStartMs + c.timeSeconds * 1000 - ms) < 1,
+      ),
+    ),
+  );
   const pressed = new Set<ICooldownCast>(castRawCasts);
   const casts: ICooldownCast[] = [];
   for (const c of rawCasts) {
@@ -5447,8 +5559,13 @@ function buildCooldownEntry(
       casts.push(c);
       continue;
     }
+    // a Time Spiral free press spends no charge: not one of the window's
+    // (codex review round 2: Hover 39.06 / free 40 / 40.94 s is two spends)
     const pressesInWindow = casts.filter(
-      (k) => pressed.has(k) && c.timeSeconds - k.timeSeconds <= 2,
+      (k) =>
+        pressed.has(k) &&
+        !spiralFree.has(k) &&
+        c.timeSeconds - k.timeSeconds <= 2,
     ).length;
     // A duplicate line at the same instant is one press, not two charges
     // (codex astra review): a human's second press lands ≥ 0.485 s later
@@ -5463,7 +5580,11 @@ function buildCooldownEntry(
       pressed.has(last) &&
       c.timeSeconds - last.timeSeconds >= MULTI_CHARGE_MIN_GAP_S &&
       ((baselineCharges > 1 && pressesInWindow < baselineCharges) ||
-        (freeWindow !== undefined && pressesInWindow < 2))
+        (freeWindow !== undefined && pressesInWindow < 2) ||
+        resetBetween(last.timeSeconds, c.timeSeconds) ||
+        // a Time Spiral free press after an ordinary one is its own press
+        // (the row echoing one is out already, `timeSpiralEchoMs`)
+        spiralFree.has(c))
     )
       casts.push(c);
   }
@@ -5480,6 +5601,42 @@ function buildCooldownEntry(
         c.timeSeconds <= matchDurationSeconds &&
         !casts.some((k) => Math.abs(k.timeSeconds - c.timeSeconds) < 0.05),
     );
+
+  // An on-interrupt give-back (Light of the Sun: Solar Beam −15 s when it
+  // interrupts): each press's own cooldown, the number the [KICK] line and
+  // the kick readiness already read (`interruptPressCooldownSeconds`). GH
+  // #176: the model had none of it — 605 files, 19 Solar Beam presses it
+  // called impossible, every one by a Light of the Sun holder.
+  if (baselineCharges <= 1 && onInterruptReductionFor(spell.spellId, holds) > 0)
+    for (const c of casts) {
+      if (c.cooldownSecondsOverride !== undefined) continue;
+      const own = interruptPressCooldownSeconds(
+        unit,
+        spell.spellId,
+        matchStartMs + c.timeSeconds * 1000,
+        cooldownSeconds,
+      );
+      if (own < cooldownSeconds) c.cooldownSecondsOverride = own;
+    }
+
+  // Two Gladiator's Badges (GH #176): two items, a cooldown each. A press
+  // takes the badge that has been ready longest; it is back when either is
+  // (`equippedBadgeCount`).
+  if (
+    spell.spellId === GLADIATOR_BADGE_SPELL_ID &&
+    baselineCharges <= 1 &&
+    equippedBadgeCount(unit) >= 2
+  ) {
+    const ready = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
+    for (const c of casts) {
+      const slot = ready[0]! <= ready[1]! ? 0 : 1;
+      ready[slot] = c.timeSeconds + cooldownSeconds;
+      c.cooldownSecondsOverride = Math.max(
+        0,
+        Math.min(ready[0]!, ready[1]!) - c.timeSeconds,
+      );
+    }
+  }
 
   // Guardian Angel (see CUSTOM_TALENT_MODIFIERS["47788"]): every press gets
   // its own cooldown — the saved one the untouched official value, the
@@ -5507,14 +5664,7 @@ function buildCooldownEntry(
   // on the date of the log). Single-charge spells only — a charge
   // simulation takes no per-press override.
   // Control of the Dream's idle credit rides the same per-press pass.
-  const reductions = eventReductionsFor(
-    spell.spellId,
-    holds,
-    String(specIdNum),
-  );
   const idleCap = idleCreditCapFor(spell.spellId, holds);
-  const ranks = playerTalentIdSets(unit).talentRanks;
-  const rankOf = (t: string) => ranks?.get(t) ?? (holds(t) ? 1 : 0);
   // Batch C rate rows (conditionalCooldownsGenerated.json): a buff of the
   // unit's own that speeds the recovery warps the clock — read before the
   // event reductions, which act on that clock
@@ -5539,7 +5689,7 @@ function buildCooldownEntry(
   let chargeEffects: IChargeEffects | undefined;
   if ((reductions.length || idleCap > 0) && baselineCharges <= 1) {
     applyEventReductions(
-      casts,
+      casts.filter((c) => !spiralFree.has(c)),
       cooldownSeconds,
       eventTriggersFor(unit, reductions, holds, rankOf).map((g) => ({
         atSeconds: (g.atMs - matchStartMs) / 1000,
@@ -5557,11 +5707,38 @@ function buildCooldownEntry(
         (g) => ({
           atSeconds: (g.atMs - matchStartMs) / 1000,
           seconds: g.seconds,
+          ...(g.oneCharge ? { oneCharge: g.oneCharge } : {}),
         }),
       ),
       ...(idleCap > 0 ? { idleCapSeconds: idleCap } : {}),
     };
   }
+  // Time Spiral's free press stands on the cooldown of the last press that
+  // started one (on none: ready again at once); a charge spell's simulation
+  // leaves it out (`chargeSpendTimesOf`).
+  if (spiralFree.size) {
+    let anchor: ICooldownCast | undefined;
+    for (const c of casts) {
+      if (!spiralFree.has(c)) {
+        anchor = c;
+        continue;
+      }
+      c.freeRecast = true;
+      if (!anchor) {
+        c.cooldownSecondsOverride = 0;
+        continue;
+      }
+      c.cooldownSecondsOverride = Math.max(
+        0,
+        anchor.timeSeconds +
+          (anchor.cooldownSecondsOverride ?? cooldownSeconds) -
+          c.timeSeconds,
+      );
+      if (anchor.reductions) c.reductions = anchor.reductions;
+      c.freeRecastOf = anchor.timeSeconds;
+    }
+  }
+
   // Free recast (Escape from Reality): the press that opens the window
   // carries it; a press inside an unused window is free and stays anchored
   // on the opener's cooldown.

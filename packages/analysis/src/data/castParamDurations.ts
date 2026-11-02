@@ -48,6 +48,13 @@ export const CAST_PARAM_DURATIONS: Record<string, ICastParamDuration> = {
     perUnitSeconds: 1,
     note: "Envenom — 1 s per CP: CP1 1 s ×12/12, CP2 2 ×23/25, CP3 3 ×15/18, CP4 4 ×34/38, CP5 5 ×85/107, CP6 6 ×176/224, CP7 7 ×473/605; the CP7 second tier 5 s ×111 is Unstable Toxin −2 s (talent layer). DB2 carries no duration for it.",
   },
+  "315341": {
+    param: "combo",
+    castIds: ["315341"],
+    baseSeconds: 2,
+    perUnitSeconds: 2,
+    note: "Between the Eyes — its own tooltip (12.1.7 zhCN): 1 CP 4 s, 2 6 s, 3 8 s, 4 10 s, 5 12 s, 6 14 s, 7 16 s = 2 + 2 × CP (GH #176, 2026-11-02; 605 file 0284fcd9: lived 16.0 s at 7 CP and 14.0 s at 6 CP). DB2's 2 s is the 0-point base. Applications stack (「多次施加可以重叠生效」).",
+  },
   "355941": {
     param: "empower",
     castIds: ["355936", "382614"],

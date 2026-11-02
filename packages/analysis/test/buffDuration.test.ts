@@ -157,6 +157,43 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(buffFullDurationForCaster("114052", undefined)).toBe(15);
   });
 
+  it("GH #176:主动按的升腾按 DB2 15s + Preeminence 3s;触发的仍是 6s", () => {
+    const DRE = { id1: 81051, id2: 101937, count: 1 };
+    const PREEMINENCE = { id1: 81033, id2: 135485, count: 1 };
+    const resto = makeUnit("s1", {
+      spec: CombatUnitSpec.Shaman_Restoration,
+      info: { talents: [DRE, PREEMINENCE], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("114052", resto)).toBe(6);
+    expect(
+      buffFullDurationForCaster("114052", resto, undefined, { pressed: true }),
+    ).toBe(18);
+    // Healing Tide Totem: 10 + 3
+    expect(buffFullDurationForCaster("108280", resto)).toBe(13);
+    const plain = makeUnit("s2", {
+      spec: CombatUnitSpec.Shaman_Restoration,
+      info: { talents: [DRE], pvpTalents: [] },
+    });
+    expect(
+      buffFullDurationForCaster("114052", plain, undefined, { pressed: true }),
+    ).toBe(15);
+    expect(buffFullDurationForCaster("108280", plain)).toBe(10);
+  });
+
+  it("GH #176:Catlike Reflexes 让猎豹守护的第一段 3s → 5s", () => {
+    const CATLIKE = { id1: 109486, id2: 135709, count: 1 };
+    const holder = makeUnit("h1", {
+      spec: CombatUnitSpec.Hunter_Survival,
+      info: { talents: [CATLIKE], pvpTalents: [] },
+    });
+    const plain = makeUnit("h2", {
+      spec: CombatUnitSpec.Hunter_Survival,
+      info: { talents: [], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("186257", holder)).toBe(5);
+    expect(buffFullDurationForCaster("186257", plain)).toBe(3);
+  });
+
   it("专精门:同一个法术,神骑走 ×1.5、惩戒走 +4s,互不串台", () => {
     // 没有专精门时,惩戒骑会在 Sanctified Wrath 那条上走到「yes 但读不到级数」
     // 的提前返回,拿不到自己的 Divine Wrath +4s。

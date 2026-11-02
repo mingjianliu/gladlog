@@ -15,59 +15,39 @@
  *    line of the same spell is no line of this press);
  *  - `kit`: the caster's `<cooldowns>` row names it.
  *
- * Kinds: `<filled|listed|offList>/<side>/<noLine|kitOnly>`. `offList` is what
- * the class is about: on none of the roster keys. `filled` labels the ids the
+ * Kinds: `<filled|listed|offList|offListUnder45>/<side>/<noLine|kitOnly>`.
+ * `offList` is what the class is about: on none of the roster keys, with an
+ * official cooldown of `PRESS_LINE_MIN_CD_SECONDS` or more — the `[PRESS]`
+ * line's (GH #176, user ruling 2026-11-02), so it must reach 0;
+ * `offListUnder45` waits for the whitelist of important buttons under it. `filled` labels the ids the
  * class fix answers for, which must reach 0. `form/<side>/noLine` is a
  * no-button form's APPLIED row (Void Metamorphosis 1217607, D69) no `[PROC]` /
  * `[ENEMY CD]` line names. `report()` prints the ranked gap list, one row per
  * id. A press some other family carries (a press tag of its own) is no gap:
- * `PRESS_TAG` lists them; a PvP trinket's line names no spell, its tag does.
+ * `PRESS_LINE_TAG` lists them; a PvP trinket's line names no spell, its tag
+ * does. The rosters, the tags and the caster reading are the renderer's own
+ * (`utils/offListPress.ts`: `isRosterPressId`, `lineStatesPress`).
  */
-import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
+import { MIN_CD_SECONDS } from "@gladlog/analysis/src/utils/cooldowns";
 import {
-  canonicalSpellId,
-  MIN_CD_SECONDS,
-} from "@gladlog/analysis/src/utils/cooldowns";
-import {
-  OFFENSIVE_CD_SPELL_IDS,
-  OFFENSIVE_PRESS_FACT_IDS,
-  SPELL_EFFECT_OVERRIDES,
-} from "@gladlog/analysis/src/utils/spellDanger";
+  FILLED_HEAL_IDS,
+  isOffListPressId,
+  isRosterPressId,
+  lineStatesPress,
+  pressLineCaster,
+  TRINKET_LINE_IDS,
+} from "@gladlog/analysis/src/utils/offListPress";
+import { OFFENSIVE_PRESS_FACT_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 
 import { ev, type IRoundCtx, nameOf, tsOf } from "./ctx";
 
 export const CHECKS = ["listGapPress"] as const;
 
-/** a printed `[tag]` that states a press of the spell it names */
-const PRESS_TAG =
-  /\[(YOU|TEAM)\] \[(CD|CC|PROC|CAST)\]|\[ENEMY (CD|DEF|UTILITY|HEAL CD|TRINKET|HARD CAST|PURGE|CLEANSE)\]|\[TRINKET\]|\[(CLEANSE|PURGE|GRIP|KICK|DISARM|SILENCE|SHIELD|ROOT|DISPEL|MINOR DISPELS|CC ON ENEMY|CC ON TEAM|CC NOT LANDED|ENEMY SUMMON)\]/;
 const LINE_AT = /^\s*(\d+):(\d\d)\s+(.*)$/;
 const TRINKET_TAG = /\[(ENEMY )?TRINKET\]/;
-const FIRST_UNIT = /(?:^|[\s(])(\d+)\(/;
-const BY_UNIT = /^ \((?:by|from) (\d+)\(/;
-const OWNED_BY_UNIT = /(\d+)\([^)]*\)'s (?:\w+'s )?$/;
-/** Gladiator's Medallion, Adaptation's activation, the two racials that share
- * the PvP trinket's lock: printed by `[TRINKET]` / `[ENEMY TRINKET]` */
-const TRINKET_IDS = new Set(["336126", "336135", "59752", "7744"]);
 /** a form with no button: nothing presses it (D69) */
 const FORM_AURAS = new Set(["1217607"]);
-/** the group heal of the class (D51, D55), printed `[ENEMY HEAL CD]` */
-const FILLED_HEAL = new Set(["15286"]);
-
-const rosterIds = new Set(
-  classMetadata.flatMap((c) => c.abilities.map((a) => a.spellId)),
-);
-const listed = (id: string): boolean => {
-  const canon = canonicalSpellId(id);
-  return (
-    rosterIds.has(id) ||
-    rosterIds.has(canon) ||
-    OFFENSIVE_CD_SPELL_IDS.has(id) ||
-    OFFENSIVE_CD_SPELL_IDS.has(canon) ||
-    id in SPELL_EFFECT_OVERRIDES
-  );
-};
 
 interface IGapRow {
   name: string;
@@ -86,31 +66,6 @@ function kitOf(lines: string[], name: string): string {
   for (let j = i; j < Math.min(i + 6, lines.length); j++)
     if (lines[j]!.includes("<cooldowns>")) return lines[j]!;
   return "";
-}
-
-/**
- * Whose press a line's mention of `spell` states: the unit its own `(by N)` /
- * `(from N)` names (`← Dragon's Breath (by 3(FMage))`) or `N's` claims
- * (`interrupted 5(SPriest)'s Void Torrent`), the owner on a `[YOU]` line or a
- * `your X`, else the line's first unit (`[TEAM] [CD] 3(AWarrior) …`, `[PURGE]
- * 1(FMage) purged … (Spellsteal)`). `spell` undefined: the line's own subject,
- * a trinket line naming no spell.
- */
-function lineCaster(
-  text: string,
-  spell: string | undefined,
-  ownerPid: string | undefined,
-): string | undefined {
-  const at = spell === undefined ? -1 : text.indexOf(spell);
-  if (at >= 0) {
-    const by = BY_UNIT.exec(text.slice(at + spell!.length));
-    if (by) return by[1];
-    const owns = OWNED_BY_UNIT.exec(text.slice(0, at));
-    if (owns) return owns[1];
-  }
-  if (/\[YOU\]|\byour /.test(at >= 0 ? text.slice(0, at) : text))
-    return ownerPid;
-  return FIRST_UNIT.exec(text)?.[1];
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -150,7 +105,7 @@ export function run(ctx: IRoundCtx): void {
             Math.abs(l.t - sec) <= 1 &&
             l.text.includes(name) &&
             /\[PROC\]|\[ENEMY CD\]/.test(l.text) &&
-            lineCaster(l.text, name, ownerPid) === pid,
+            pressLineCaster(l.text, name, ownerPid) === pid,
         )
       )
         continue;
@@ -175,21 +130,21 @@ export function run(ctx: IRoundCtx): void {
       const pressLine = timed.some(
         (l) =>
           Math.abs(l.t - sec) <= 1 &&
-          ((l.text.includes(name) &&
-            PRESS_TAG.test(l.text) &&
-            lineCaster(l.text, name, ownerPid) === pid) ||
-            (TRINKET_IDS.has(id) &&
+          (lineStatesPress(l.text, name, pid, ownerPid) ||
+            (TRINKET_LINE_IDS.has(id) &&
               TRINKET_TAG.test(l.text) &&
-              lineCaster(l.text, undefined, ownerPid) === pid)),
+              pressLineCaster(l.text, undefined, ownerPid) === pid)),
       );
       if (pressLine) continue;
       const inKit = kit.includes(name);
       const off =
-        OFFENSIVE_PRESS_FACT_IDS.has(id) || FILLED_HEAL.has(id)
+        OFFENSIVE_PRESS_FACT_IDS.has(id) || FILLED_HEAL_IDS.has(id)
           ? "filled"
-          : listed(id)
+          : isRosterPressId(id)
             ? "listed"
-            : "offList";
+            : isOffListPressId(id)
+              ? "offList"
+              : "offListUnder45";
       const kind = `${off}/${side}/${inKit ? "kitOnly" : "noLine"}`;
       ctx.violate(
         "listGapPress",

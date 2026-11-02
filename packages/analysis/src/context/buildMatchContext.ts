@@ -98,6 +98,7 @@ import {
   formatOffensiveWasteForContext,
 } from "../utils/offensiveWasteAnalysis";
 import { computeOffensiveWindows } from "../utils/offensiveWindows";
+import { extractOffListPresses } from "../utils/offListPress";
 import {
   computeOwnerPositionEvents,
   formatPositionEventsForContext,
@@ -1094,6 +1095,12 @@ export function buildMatchContext(
     cdPriorEpisodes,
     cdPriorCohort,
     stackedDefensives,
+    // GH #176: the presses no list names, on the shared cooldown model
+    offListPresses: extractOffListPresses(
+      [...friends, ...enemies] as ICombatUnit[],
+      combat,
+      roundEndMs(combat),
+    ),
   } as BuildMatchTimelineParams);
   const { timelineText, positionLines: positionLinesXref } =
     applyLegendCrossRefs(timelineTextRaw, positionLines);

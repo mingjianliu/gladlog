@@ -4791,3 +4791,37 @@ contexts change: 354 notes gain the seconds, 8 lines give the kicks instead
 (two of them are Dark Harvests interrupted at 1.3 s and 1.6 s, after the
 immunity ran out) and 7 prompts gain the kick-note legend. Findings
 unchanged; gates identical; 208 of 209 rise-ledger checks unchanged, 1 fell.
+
+v473 (2026-11-02, GH #176, user rulings 「先用 45 秒的…把所有天赋的时间、持续时间、
+缩短这些东西先算清楚…再去把它打印出来」 and, after the one-match preview,
+「可以，按你说的这样做」). A press of an official cooldown of 45 s or more that no
+hand roster names and no other press family prints gets a `[PRESS]` line
+(`[YOU] [PRESS]` for the owner): `Sprint (lasts 12s, 60s cd, back 1:00)`,
+`Holy Word: Serenity (2 charges, 40s cd, a charge left)`. The numbers are the
+shared cooldown ledger's (`unitCooldownEntry`, `pressReadyAgainAtSeconds`) and
+the caster's talented duration (`buffFullDurationForCaster`, `pressed`).
+Before the line was printed the model was checked against the corpus
+(`offListPressScan`: `back` after the unit's next press, `lasts` shorter than
+the logged life) and gained Light of the Sun / Coldthirst on-interrupt
+cooldowns, Time Spiral free presses, Death's Arrival, Stasis replays, two
+Gladiator's Badges, Restless Blades' Triple Threat / Jackpot boost, charge
+give-back carry-over, Preeminence, Catlike Reflexes, pressed vs proc
+Ascendance, no `lasts` on a refresh, and no press for a Stasis replay
+(`isStasisReplayCast`: helpful casts only, one replay per stored cast) or a
+row echoing a Time Spiral free press (`timeSpiralEchoMs`, ≤ 0.5 s):
+backAfterNextPress 787 / 17,700 → 83 / 17,633, lastsBeyond 305 / 14,467 →
+53 / 14,092, notAPress 5 → 2. The rest is GH #179.
+
+605 set, base f4009b807 → after: 3,494 of 3,519 contexts change; body lines
+1,656,238 → 1,710,479 (+48,569 `[PRESS]`, +5,672 `[YOU] [PRESS]`, nothing
+else), one `[RES]` line re-reads Ice Barrier's charges. Findings
+byte-identical. Gates identical; 207 of 210 rise-ledger checks unchanged,
+listGapPress 129,287 → 78,671 / 445,496 and resCdBeforeNextPress 398 → 386
+fell, the new scan5 `offListPressLine` 0 → 169 / 50,748 (66 facts, all GH #179
+model gaps) signed. The codex review's fixes (Stasis replay predicate, the
+echo row, the gate's per-press free reading and its Stasis exclusion) were
+measured on the 132 files of the set that log a Time Spiral or Stasis aura —
+every file they can touch — against the pre-review commit: 6 echo lines
+gone, nothing else in 1,716 contexts changes, findings identical,
+offListPressLine 50 → 47 (3 Stasis replays no longer read as the next
+press).

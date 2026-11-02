@@ -177,6 +177,7 @@ import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as offensiveWasteAnalysis from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
+import * as offListPress from "@gladlog/analysis/src/utils/offListPress";
 import * as petCommandsMod from "@gladlog/analysis/src/utils/petCommands";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
@@ -1289,6 +1290,31 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/talentBehaviors.ts`,
     symbol: "INTERRUPT_IMMUNE_MIN_LEFT_S",
     mod: talentBehaviors,
+  },
+  {
+    file: `${A}/utils/offListPress.ts`,
+    symbol: "isOffListPressId",
+    mod: offListPress,
+  },
+  {
+    file: `${A}/utils/offListPress.ts`,
+    symbol: "lineStatesPress",
+    mod: offListPress,
+  },
+  {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "timeSpiralFreePressMs",
+    mod: talentScriptedCooldowns,
+  },
+  {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "timeSpiralEchoMs",
+    mod: talentScriptedCooldowns,
+  },
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "isStasisReplayCast",
+    mod: combatStates,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,

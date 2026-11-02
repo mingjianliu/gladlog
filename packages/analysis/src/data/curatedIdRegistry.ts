@@ -288,9 +288,11 @@ import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { TALENT_REPLACES } from "./talentReplaces";
 import {
   EVENT_COOLDOWN_REDUCTIONS,
+  eventReductionOwner,
   FREE_RECAST_WINDOWS,
   IDLE_COOLDOWN_CREDITS,
   ON_INTERRUPT_COOLDOWN_REDUCTIONS,
+  TIME_SPIRAL_FREE_PRESSES,
 } from "./talentScriptedCooldowns";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
 
@@ -1194,13 +1196,28 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     ...Object.keys(FREE_RECAST_WINDOWS),
     ...Object.values(FREE_RECAST_WINDOWS).map((w) => w.spellId),
   ]),
+  // GH #176: Time Spiral's per-class auras (vouched by aura rows) and the
+  // movement spells each frees (vouched by casts)
+  t(
+    "TIME_SPIRAL_FREE_PRESSES",
+    "data/talentScriptedCooldowns.ts",
+    "mixed",
+    () => [
+      ...Object.keys(TIME_SPIRAL_FREE_PRESSES),
+      ...Object.values(TIME_SPIRAL_FREE_PRESSES).flatMap((r) => r.spellIds),
+    ],
+  ),
   t(
     "EVENT_COOLDOWN_REDUCTIONS",
     "data/talentScriptedCooldowns.ts",
     "mixed",
     () => [
-      ...Object.keys(EVENT_COOLDOWN_REDUCTIONS),
+      ...Object.entries(EVENT_COOLDOWN_REDUCTIONS).map(([k, r]) =>
+        eventReductionOwner(k, r),
+      ),
       ...Object.values(EVENT_COOLDOWN_REDUCTIONS).flatMap((r) => [
+        ...(r.requiresTalentId ? [r.requiresTalentId] : []),
+        ...(r.unlessTalentId ? [r.unlessTalentId] : []),
         ...r.targets,
         ...r.triggerCastIds,
         ...(r.triggerHitIds ?? []),
@@ -1210,6 +1227,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         ...(r.triggerInterruptIds ?? []),
         ...(r.triggerOwnAuraEndIds ?? []),
         ...(r.triggerSelfAuraAppliedIds ?? []),
+        ...(r.triggerEnergizeIds ?? []),
         // weekly review 2026-10-24: the id fields 5dcd31c added — a
         // renumbered Sudden Death aura silently dropped Unrelenting
         // Onslaught's reductions with no scan seeing it

@@ -8,6 +8,7 @@ import {
   EVENT_HIT_SAME_USE_MS,
   eventReducedCooldownSeconds,
   eventReductionSecondsAt,
+  eventReductionsFor,
   eventTriggersFor,
   eventTriggerTimesMs,
   IDLE_COOLDOWN_CREDITS,
@@ -876,6 +877,23 @@ describe("charge simulation with per-press effects (IChargeEffects)", () => {
     ).toBe(80);
   });
 
+  it("a give-back past the charge recharging carries into the next one (GH #176)", () => {
+    // 2 charges / 30 s, both spent at 0 and 1: the first recharges until 30.
+    // At 25, a 10 s give-back: 5 s finishes the first charge, the other 5 s
+    // come off the second, which runs 25 → 55 − 5 = 50.
+    const s = chargeStateAt([0, 1], 30, 2, 25, {
+      reductions: [{ atSeconds: 25, seconds: 10 }],
+    });
+    expect(s.charges).toBe(1);
+    expect(s.nextRecharge).toBe(50);
+    // a give-back that fills both: the rest is lost, full at 25
+    expect(
+      chargeStateAt([0, 1], 30, 2, 25, {
+        reductions: [{ atSeconds: 25, seconds: 60 }],
+      }),
+    ).toEqual({ charges: 2, nextRecharge: Number.POSITIVE_INFINITY });
+  });
+
   it("idle credit: the time at full charges (from the round's start) comes off the recharge a press starts, ≤ cap", () => {
     // full since the start: a press at 40 gets the whole 15
     expect(
@@ -1001,5 +1019,150 @@ describe("credit bonuses: Apotheosis ×3, Light of the Naaru +10 % a rank", () =
         (g) => Math.round(g.seconds * 100) / 100,
       ),
     ).toEqual([4.8, 12.8]);
+  });
+});
+
+// GH #176 (2026-11-02): Holy Word: Serenity / Sanctify get the give-backs
+// their tooltips state — an off-list press line needs their cooldown
+describe("Holy Word: Serenity / Sanctify give-backs (GH #176)", () => {
+  const T0 = 1_000_000;
+  const ev = (event: string, spellId: string, atMs: number) => ({
+    spellId,
+    logLine: { event, timestamp: T0 + atMs },
+  });
+  const holding =
+    (...talents: string[]) =>
+    (t: string) =>
+      talents.includes(t);
+  const owners = (spellId: string, holds: (t: string) => boolean) =>
+    eventReductionsFor(spellId, holds, "257").map((r) => r.note);
+
+  it("Serendipity is a Holy passive: Flash Heal → Serenity, Prayer of Healing → Sanctify", () => {
+    expect(owners("2050", holding())).toEqual([
+      expect.stringContaining("Flash Heal / Benediction"),
+    ]);
+    expect(owners("34861", holding())).toEqual([
+      expect.stringContaining("Prayer of Healing"),
+    ]);
+    expect(eventReductionsFor("2050", holding(), "256")).toEqual([]);
+  });
+
+  it("Ultimate Serenity moves Prayer of Healing, Halo and Energy Cycle to Serenity", () => {
+    const all = holding("390994", "453828", "1246517");
+    expect(owners("34861", all)).toEqual([]);
+    expect(owners("2050", all)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Prayer of Healing: Holy Word: Serenity"),
+        expect.stringContaining("Halo: Holy Word: Serenity"),
+        expect.stringContaining("Surge of Light spent: Holy Word: Serenity"),
+        expect.stringContaining("Prayer of Mending"),
+      ]),
+    );
+    const none = holding("390994", "453828");
+    expect(owners("34861", none)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Halo: Holy Word: Sanctify"),
+        expect.stringContaining("Surge of Light spent: Holy Word: Sanctify"),
+      ]),
+    );
+  });
+
+  it("a Flash Heal gives Serenity 6 s, 18 s under Apotheosis", () => {
+    const u = {
+      spec: "257",
+      spellCastEvents: [
+        ev("SPELL_CAST_SUCCESS", "2061", 1000),
+        ev("SPELL_CAST_SUCCESS", "1262763", 6000),
+      ],
+      damageOut: [],
+      auraEvents: [
+        ev("SPELL_AURA_APPLIED", "200183", 5000),
+        ev("SPELL_AURA_REMOVED", "200183", 25_000),
+      ],
+    } as never;
+    const r = eventReductionsFor("2050", holding(), "257");
+    expect(eventTriggersFor(u, r).map((g) => g.seconds)).toEqual([6, 18]);
+  });
+
+  it("Apotheosis gives one charge back, the recharge under way kept", () => {
+    const apo = EVENT_COOLDOWN_REDUCTIONS["200183"]!;
+    expect(apo.targets).toEqual(["88625", "2050", "34861"]);
+    expect(apo.oneCharge).toBe(true);
+    // two charges, 60 s recharge: both spent at 0 and 1 s → the first
+    // recharges at 60; one charge back at 10 s keeps that timer
+    const one = chargeStateAt([0, 1], 60, 2, 10, {
+      reductions: [
+        { atSeconds: 10, seconds: Number.POSITIVE_INFINITY, oneCharge: true },
+      ],
+    });
+    expect(one).toEqual({ charges: 1, nextRecharge: 60 });
+    // a reset gives both back
+    const all = chargeStateAt([0, 1], 60, 2, 10, {
+      reductions: [{ atSeconds: 10, seconds: Number.POSITIVE_INFINITY }],
+    });
+    expect(all.charges).toBe(2);
+  });
+});
+
+describe("tooltip resets and give-backs found by the #176 catalog", () => {
+  it("Preparation resets the five spells its tooltip names", () => {
+    expect(EVENT_COOLDOWN_REDUCTIONS["1277933"]!.targets).toEqual([
+      "13750",
+      "315341",
+      "13877",
+      "271877",
+      "51690",
+    ]);
+  });
+  it("Summon Doomguard: −3 s a Demonic Core spent by a Demonbolt", () => {
+    const T0 = 1_000_000;
+    const ev = (event: string, spellId: string, atMs: number) => ({
+      spellId,
+      logLine: { event, timestamp: T0 + atMs },
+    });
+    const u = {
+      id: "w",
+      spec: "266",
+      spellCastEvents: [ev("SPELL_CAST_SUCCESS", "264178", 1000)],
+      damageOut: [],
+      auraEvents: [
+        { ...ev("SPELL_AURA_REMOVED", "264173", 1100), srcUnitId: "w", destUnitId: "w" },
+      ],
+    } as never;
+    const r = [EVENT_COOLDOWN_REDUCTIONS["1276672"]!];
+    expect(eventTriggersFor(u, r).map((g) => g.seconds)).toEqual([3]);
+  });
+  it("Ace Up Your Sleeve / Gravedigger: the unit's own energize row resets Between the Eyes", () => {
+    const T0 = 1_000_000;
+    const row = (event: string, spellId: string, atMs: number) => ({
+      spellId,
+      srcUnitId: "r",
+      destUnitId: "r",
+      logLine: { event, timestamp: T0 + atMs },
+    });
+    const u = {
+      id: "r",
+      spec: "260",
+      spellCastEvents: [row("SPELL_CAST_SUCCESS", "315341", 1000)],
+      damageOut: [],
+      missesOut: [],
+      actionOut: [
+        row("SPELL_ENERGIZE", "394120", 1000),
+        row("SPELL_ENERGIZE", "1279356", 5000),
+        // a periodic energize of the id is no proc of it
+        row("SPELL_PERIODIC_ENERGIZE", "394120", 7000),
+      ],
+    } as never;
+    for (const [key, at] of [
+      ["381828", 1],
+      ["1265863", 5],
+    ] as const) {
+      const r = EVENT_COOLDOWN_REDUCTIONS[key]!;
+      expect(r.targets).toEqual(["315341"]);
+      expect(r.seconds).toBe(Number.POSITIVE_INFINITY);
+      expect(eventTriggerTimesMs(u, r).map((t) => (t - T0) / 1000)).toEqual([
+        at,
+      ]);
+    }
   });
 });

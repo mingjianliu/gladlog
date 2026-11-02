@@ -14,6 +14,9 @@ export const TRINKET_INVENTORY_TYPE = "12";
  * match (reliability round 3 W1j: a player with no Medallion equipped was
  * rendered "PvP Trinket available"). */
 export const GLADIATOR_MEDALLION_SPELL_ID = "336126";
+/** Gladiator's Badge on-use spell (GH #176: a player can wear two badges —
+ * two items, two cooldowns). Found the same way as the Medallion. */
+export const GLADIATOR_BADGE_SPELL_ID = "345228";
 
 /** Item ids whose on-use effect is `spellId`. */
 export function extractItemsWithOnUse(
@@ -101,6 +104,12 @@ export async function main(): Promise<void> {
     GLADIATOR_MEDALLION_SPELL_ID,
   );
 
+  const badgeItemIds = extractItemsWithOnUse(
+    itemEffect.rows,
+    itemXItemEffect.rows,
+    GLADIATOR_BADGE_SPELL_ID,
+  );
+
   const output = {
     generatedAt: new Date().toISOString(),
     sources: {
@@ -120,6 +129,8 @@ export async function main(): Promise<void> {
     relentlessItemIds,
     gladiatorMedallionSpellId: GLADIATOR_MEDALLION_SPELL_ID,
     gladiatorItemIds,
+    gladiatorBadgeSpellId: GLADIATOR_BADGE_SPELL_ID,
+    badgeItemIds,
   };
 
   const outPath = new URL("../../src/data/trinketItemIds.json", import.meta.url)

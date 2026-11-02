@@ -504,12 +504,38 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Invigorating Fury — DB2 aura 107 +3000 ms, Fury spec tree, maxRanks 1; corpus 11.0 s in 27 caster-cells holding it 100 % vs 0 % of the 14 cells at 8.0 s; 8 + 3 = 11",
     },
   ],
+  // GH #176: Preeminence on Healing Tide Totem (see its 114052 row)
+  "108280": [
+    {
+      talentSpellId: "462443",
+      specs: ["264"], // Shaman_Restoration
+      untalentedBaseSeconds: 10,
+      addSeconds: 3,
+      note: "Preeminence (Farseer) — DB2 aura 107 +3000 ms, mask covers Healing Tide Totem (word 3 131072); corpus, 605 files: holders' totem 13.0 s ×3, non-holders' 10.0 s in 218 of 252",
+    },
+  ],
+  // GH #176: Catlike Reflexes on Aspect of the Cheetah's first burst
+  "186257": [
+    {
+      talentSpellId: "1258404",
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Catlike Reflexes — DB2 aura 107 misc 1 +2000 ms, mask 0/256/0/0 covering Aspect of the Cheetah (2097152/256); tooltip 'initial burst of speed is increased by 2 sec' (the tooltip's ${$s2/1000} reads the one effect). Corpus, 605 files: holders 5.0 s ×5 (all three specs), non-holders 3.0 s in 381 of 388",
+    },
+  ],
   "114052": [
     {
       talentSpellId: "378270",
       untalentedBaseSeconds: 15,
       replaceSeconds: 6,
       note: "Deeply Rooted Elements — NOT a duration modifier: the Restoration Shaman capstone PROCS Ascendance, and the proc carries its own length, so the spell's DB2 15 s (SpellMisc DurationIndex 8, no PvP variant) describes only the hard cast. Corpus: 1,684 aura applications against 18 casts of 114052, i.e. ~99 % are procs; 1,614 of 1,667 proc lifetimes are exactly 6.0 s; 162 of 162 caster-cells hold the talent. DRE's own DB2 effects carry dummy base points 6000 / 11.6 / 6 / 7 — the 6 is Restoration's (Enhancement 114051 is a normal cast, 672 casts vs 695 applications, 15.0 s, and stays on the base value).",
+    },
+    {
+      talentSpellId: "462443",
+      specs: ["264"], // Shaman_Restoration
+      untalentedBaseSeconds: 15,
+      addSeconds: 3,
+      note: "Preeminence (Farseer, GH #176) — DB2 aura 107 misc 1 +3000 ms, class-mask word 3 131136 covering Ascendance (64) and Healing Tide Totem (131072); tooltip: 'while Ascendance or Healing Tide Totem is active … their durations are increased by 3 sec'. Corpus, 605 files: a PRESSED Ascendance by a holder lived 18.0 s ×2, a non-holder's 15.7 s ×1. Reached only by a press (`pressed`): the Deeply Rooted Elements row above returns the proc's 6 s first. Elemental (114050) holds it too in DB2 but no corpus holder: not priced",
     },
   ],
   "31884": [
@@ -802,6 +828,114 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 3,
       specBaseSeconds: 6,
       note: "Divine Steed mount-model variant — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "254471": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant (GH #176: missing from this table, so its presses read the DB2 3 s; 605 samples run Retribution 6.0 s and Holy 5.0 s on it) — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "254473": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant (GH #176: missing from this table, so its presses read the DB2 3 s; 605 samples run Retribution 6.0 s and Holy 5.0 s on it) — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "294133": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant (GH #176: missing from this table, so its presses read the DB2 3 s; 605 samples run Retribution 6.0 s and Holy 5.0 s on it) — measurement on 221883.",
+    },
+    {
+      specs: ["65", "66"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 5,
+      note: "Divine Steed — Holy/Protection run 5 s (162 caster-cells at 0 % modifier holding).",
+    },
+    {
+      talentSpellId: "469409",
+      untalentedBaseSeconds: 3,
+      pct: -40,
+      note: "Divine Spurs — the 3.5 s tier buffDurationScan FLAGged. DB2 aura 108 −40 %, Paladin class tree all three specs (maxRanks 1), mask covers the spell; corpus separates it 100 %/0 % on every tier that has it: Retribution 3.5 s ×3 (6 × 0.6 = 3.6), Holy 3.0 s ×2 and Protection 3.0 s ×1 (5 × 0.6 = 3.0), Protection 4.0 s ×1 with Unrelenting Charger too ((5 + 2) × 0.6 = 4.2) — and 0 % across the 254 + 162 + 11 cells of the untouched tiers. Small n per tier, but the split is exact and one-sided.",
+    },
+    {
+      talentSpellId: "432990",
+      specs: ["70", "66"],
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Unrelenting Charger — DB2 aura 107 +2000 ms, Paladin hero tree (maxRanks 1), mask covers the spell; 11 caster-cells at 8.0 s hold it at rank 1 on top of the Retribution 6 s base (91 %) against 0 % of the 254 at 6.0 s.",
+    },
+  ],
+  "363608": [
+    {
+      specs: ["70"],
+      untalentedBaseSeconds: 3,
+      specBaseSeconds: 6,
+      note: "Divine Steed mount-model variant (GH #176: missing from this table, so its presses read the DB2 3 s; 605 samples run Retribution 6.0 s and Holy 5.0 s on it) — measurement on 221883.",
     },
     {
       specs: ["65", "66"],

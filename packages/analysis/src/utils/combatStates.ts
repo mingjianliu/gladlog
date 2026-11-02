@@ -384,6 +384,107 @@ function stasisReadyLives(unit: ICombatUnit): StasisReadyLife[] {
   return lives;
 }
 
+/**
+ * A cast row that is Stasis replaying a stored spell, not a press (GH #176):
+ * within `STASIS_REPLAY_WINDOW_S` after a ready aura (370562) came off, and
+ * the same spell was cast while that Stasis was storing (its 370537 aura up
+ * to the ready aura's APPLIED). The stored cast went out and is the press;
+ * the replay is its copy. 605 files: Cauterizing Flame stored at 21:30:12.0,
+ * released 22.879, its SUCCESS again at 23.292 — read as a second press 11 s
+ * into a 60 s cooldown. A ready aura up before the log began (no APPLIED)
+ * has no storing window to check: not a replay. Stasis stores *helpful*
+ * spells only, and each stored cast replays once (codex review: a Quell
+ * pressed while storing, and again for real 0.2 s after the release, is
+ * a press): a cast aimed at a unit hostile to the caster is not stored, and
+ * the n-th cast of the spell after the release is a replay only while the
+ * window stored n or more.
+ */
+export function isStasisReplayCast(
+  unit: ICombatUnit,
+  spellId: string,
+  castMs: number,
+): boolean {
+  for (const w of stasisReplayWindowsOf(unit)) {
+    if (castMs < w.fromMs || castMs > w.toMs) continue;
+    const casts = (unit.spellCastEvents ?? []).filter(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.spellId === spellId,
+    );
+    const stored = casts.filter(
+      (c) =>
+        c.logLine.timestamp >= w.storeFromMs &&
+        c.logLine.timestamp <= w.storeToMs &&
+        !aimedAtHostile(c),
+    ).length;
+    const before = casts.filter(
+      (c) => c.logLine.timestamp >= w.fromMs && c.logLine.timestamp < castMs,
+    ).length;
+    if (before < stored) return true;
+  }
+  return false;
+}
+
+/** COMBATLOG_OBJECT_REACTION_HOSTILE — relative to the recorder, so a cast is
+ * aimed at the caster's enemy when its target's bit differs from the caster's */
+const REACTION_HOSTILE = 0x40;
+const NO_TARGET = "0000000000000000";
+function aimedAtHostile(c: {
+  srcUnitFlags: number;
+  destUnitFlags: number;
+  destUnitId: string;
+}): boolean {
+  if (!c.destUnitId || c.destUnitId === NO_TARGET) return false;
+  return (
+    (c.srcUnitFlags & REACTION_HOSTILE) !== (c.destUnitFlags & REACTION_HOSTILE)
+  );
+}
+
+const stasisReplayWindowsCache = new WeakMap<
+  ICombatUnit,
+  Array<{
+    fromMs: number;
+    toMs: number;
+    storeFromMs: number;
+    storeToMs: number;
+  }>
+>();
+/** Per ready-aura life: where its replays fall and its storing window. */
+function stasisReplayWindowsOf(unit: ICombatUnit) {
+  const hit = stasisReplayWindowsCache.get(unit);
+  if (hit) return hit;
+  const out: Array<{
+    fromMs: number;
+    toMs: number;
+    storeFromMs: number;
+    storeToMs: number;
+  }> = [];
+  const auras = dropAuraRebroadcasts(unit.auraEvents ?? []);
+  if (auras.some((a) => a.spellId === STASIS_READY_AURA_ID))
+    for (const life of stasisReadyLives(unit)) {
+      if (life.appliedMs === undefined || life.removedMs === undefined)
+        continue;
+      const applied = life.appliedMs;
+      const storeFromMs = auras
+        .filter(
+          (a) =>
+            a.spellId === STASIS_SPELL_ID &&
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.logLine.timestamp <= applied,
+        )
+        .reduce((lo, a) => Math.max(lo, a.logLine.timestamp), -Infinity);
+      if (!Number.isFinite(storeFromMs)) continue;
+      out.push({
+        fromMs: life.removedMs,
+        toMs: life.removedMs + STASIS_REPLAY_WINDOW_S * 1000,
+        storeFromMs,
+        storeToMs: applied + STASIS_READY_AFTER_STORED_MS,
+      });
+    }
+  stasisReplayWindowsCache.set(unit, out);
+  return out;
+}
+
 /** The Evoker's casts right after a ready aura came off — the replays. */
 function stasisReplayCasts(unit: ICombatUnit, removedMs: number) {
   return (unit.spellCastEvents ?? []).filter(
@@ -621,8 +722,7 @@ export function extractStasisEvents(
       life.appliedMs === undefined
         ? 0
         : Math.max(0, (life.appliedMs - combat.startTime) / 1000);
-    const held =
-      life.removedMs === undefined || life.removedMs > endMs;
+    const held = life.removedMs === undefined || life.removedMs > endMs;
     // came off with nothing cast after it: the Evoker died holding it
     if (!held && stasisReplayCasts(unit, life.removedMs!).length === 0)
       continue;

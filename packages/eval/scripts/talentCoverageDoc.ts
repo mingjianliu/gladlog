@@ -33,6 +33,7 @@ import {
 import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMitigationModifiers";
 import {
   EVENT_COOLDOWN_REDUCTIONS,
+  eventReductionOwner,
   FREE_RECAST_WINDOWS,
   IDLE_COOLDOWN_CREDITS,
   ON_INTERRUPT_COOLDOWN_REDUCTIONS,
@@ -209,10 +210,11 @@ async function main(): Promise<void> {
   const scriptedCarried = (talent: string, ids: string[]) =>
     (FREE_RECAST_WINDOWS[talent] &&
       ids.includes(FREE_RECAST_WINDOWS[talent]!.spellId)) ||
-    (EVENT_COOLDOWN_REDUCTIONS[talent] &&
-      ids.some((i) =>
-        EVENT_COOLDOWN_REDUCTIONS[talent]!.targets.includes(i),
-      )) ||
+    Object.entries(EVENT_COOLDOWN_REDUCTIONS).some(
+      ([k, r]) =>
+        eventReductionOwner(k, r) === talent &&
+        ids.some((i) => r.targets.includes(i)),
+    ) ||
     (ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent] &&
       ids.includes(ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent]!.spellId)) ||
     (IDLE_COOLDOWN_CREDITS[talent] &&

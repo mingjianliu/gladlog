@@ -8,7 +8,10 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import { emitStasisEntries } from "../src/context/timelineSections/stasis";
-import { extractStasisEvents } from "../src/utils/combatStates";
+import {
+  extractStasisEvents,
+  isStasisReplayCast,
+} from "../src/utils/combatStates";
 
 const combat = { startTime: 0, endTime: 200_000 } as never;
 const aura = (event: LogEvent, spellId: string, ms: number): any => ({
@@ -75,16 +78,27 @@ describe("FT-T06 — Stasis release", () => {
 
   it("回合结束时还存着 / 掉了但什么都没重放 → 不印 RELEASE,在储存时刻说明", () => {
     const held = extractStasisEvents(unit(storing, storedCasts), combat);
-    expect(held[0]).toMatchObject({ releaseSeconds: undefined, unreleased: "held" });
+    expect(held[0]).toMatchObject({
+      releaseSeconds: undefined,
+      unreleased: "held",
+    });
     expect(render(held)).toEqual([
       "1:42  [YOU] [STASIS STORED] → Reversion, Dream Breath, Echo (not released before the round ended)",
     ]);
     const lost = extractStasisEvents(
-      unit([...storing, aura(LogEvent.SPELL_AURA_REMOVED, "370562", 108_000)], storedCasts),
+      unit(
+        [...storing, aura(LogEvent.SPELL_AURA_REMOVED, "370562", 108_000)],
+        storedCasts,
+      ),
       combat,
     );
-    expect(lost[0]).toMatchObject({ releaseSeconds: undefined, unreleased: "lost" });
-    expect(render(lost)[0]).toContain("(never released: it came off with nothing replayed)");
+    expect(lost[0]).toMatchObject({
+      releaseSeconds: undefined,
+      unreleased: "lost",
+    });
+    expect(render(lost)[0]).toContain(
+      "(never released: it came off with nothing replayed)",
+    );
   });
 
   it("开场前存好的:释放时刻在日志里,内容不在 —— 不从重放去猜(codex 审查)", () => {
@@ -94,11 +108,20 @@ describe("FT-T06 — Stasis release", () => {
         aura(LogEvent.SPELL_AURA_REMOVED, "370562", 21_000),
       ],
       // replays use their own ids and real presses land between them
-      [cast("355941", "Dream Breath", 21_000), cast("364343", "Echo", 21_289), cast("355941", "Dream Breath", 21_361)],
+      [
+        cast("355941", "Dream Breath", 21_000),
+        cast("364343", "Echo", 21_289),
+        cast("355941", "Dream Breath", 21_361),
+      ],
     );
     const events = extractStasisEvents(u, combat);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ releaseSeconds: 21, storedBeforeRound: true, spells: [], storedCount: 0 });
+    expect(events[0]).toMatchObject({
+      releaseSeconds: 21,
+      storedBeforeRound: true,
+      spells: [],
+      storedCount: 0,
+    });
     expect(render(events)).toEqual([
       "0:21  [YOU] [STASIS RELEASE] → stored before this round (its contents are not in this round's log)",
     ]);
@@ -115,23 +138,40 @@ describe("FT-T06 — Stasis release", () => {
           aura(LogEvent.SPELL_AURA_APPLIED, "370562", 93_813),
           aura(LogEvent.SPELL_AURA_REMOVED, "370562", 103_920),
         ],
-        [cast("370537", "Stasis", 90_000), cast("366155", "Reversion", 91_000), cast("364343", "Echo", 93_813), ...replays(103_920)],
+        [
+          cast("370537", "Stasis", 90_000),
+          cast("366155", "Reversion", 91_000),
+          cast("364343", "Echo", 93_813),
+          ...replays(103_920),
+        ],
       ),
       round,
     );
-    expect(stored[0]).toMatchObject({ releaseSeconds: undefined, unreleased: "held" });
+    expect(stored[0]).toMatchObject({
+      releaseSeconds: undefined,
+      unreleased: "held",
+    });
     expect(render(stored)).toEqual([
       "1:33  [YOU] [STASIS STORED] → Reversion, Echo (not released before the round ended)",
     ]);
     const before = extractStasisEvents(
       unit(
-        [aura(LogEvent.SPELL_AURA_APPLIED, "370562", 80_000), aura(LogEvent.SPELL_AURA_REMOVED, "370562", 110_000)],
+        [
+          aura(LogEvent.SPELL_AURA_APPLIED, "370562", 80_000),
+          aura(LogEvent.SPELL_AURA_REMOVED, "370562", 110_000),
+        ],
         replays(110_000),
       ),
       round,
     );
-    expect(before[0]).toMatchObject({ releaseSeconds: undefined, unreleased: "held", storedBeforeRound: true });
-    expect(render(before)[0]).toContain("[YOU] [STASIS STORED] → stored before this round (not released before the round ended");
+    expect(before[0]).toMatchObject({
+      releaseSeconds: undefined,
+      unreleased: "held",
+      storedBeforeRound: true,
+    });
+    expect(render(before)[0]).toContain(
+      "[YOU] [STASIS STORED] → stored before this round (not released before the round ended",
+    );
   });
 
   it("A4 (user 2026-10-24): Solo Shuffle — a release in the log's tail after the round's deciding death is not the round's", () => {
@@ -151,7 +191,10 @@ describe("FT-T06 — Stasis release", () => {
       unreleased: "held",
     });
     // the same release in a 3v3 (the round ends with the log) is one
-    const threes = { ...(shuffle as object), startInfo: { bracket: "3v3" } } as never;
+    const threes = {
+      ...(shuffle as object),
+      startInfo: { bracket: "3v3" },
+    } as never;
     expect(extractStasisEvents(u, threes)[0]!.releaseSeconds).toBe(106);
   });
 
@@ -232,11 +275,68 @@ describe("round-1 retest idx 18 — an unreleased empower stores nothing", () =>
           ...replays(111_900),
         ],
       ),
-      empowerStarts: [empower("SPELL_EMPOWER_START", 100_500), empower("SPELL_EMPOWER_START", 101_800)],
+      empowerStarts: [
+        empower("SPELL_EMPOWER_START", 100_500),
+        empower("SPELL_EMPOWER_START", 101_800),
+      ],
       empowerInterrupts: [empower("SPELL_EMPOWER_INTERRUPT", 100_700)],
       empowerEnds: [empower("SPELL_EMPOWER_END", 102_000)],
     };
     const [e] = extractStasisEvents(u, combat);
     expect(e!.spells).toEqual(["Reversion", "Dream Breath", "Echo"]);
+  });
+});
+
+describe("GH #176 — a replayed stored spell is not a press", () => {
+  const u = () =>
+    unit(
+      [...storing, aura(LogEvent.SPELL_AURA_REMOVED, "370562", 111_900)],
+      [
+        ...storedCasts,
+        ...replays(111_900),
+        cast("366155", "Reversion", 140_000),
+      ],
+    );
+  it("the row after the release of a spell stored in it is a replay", () => {
+    expect(isStasisReplayCast(u(), "366155", 111_910)).toBe(true);
+    expect(isStasisReplayCast(u(), "364343", 112_610)).toBe(true);
+  });
+  it("the stored cast itself, a later press and an unstored spell are not", () => {
+    expect(isStasisReplayCast(u(), "366155", 101_300)).toBe(false);
+    expect(isStasisReplayCast(u(), "366155", 140_000)).toBe(false);
+    expect(isStasisReplayCast(u(), "374251", 111_950)).toBe(false);
+  });
+  it("a hostile-aimed cast while storing is not stored: its press after the release is a press", () => {
+    const quell = (ms: number): any => ({
+      ...cast("351338", "Quell", ms),
+      srcUnitFlags: 0x511,
+      destUnitFlags: 0x548,
+      destUnitId: "Player-1-0000000A",
+    });
+    const v = unit(
+      [...storing, aura(LogEvent.SPELL_AURA_REMOVED, "370562", 111_900)],
+      [...storedCasts, quell(100_000), ...replays(111_900), quell(112_100)],
+    );
+    expect(isStasisReplayCast(v, "351338", 112_100)).toBe(false);
+    expect(isStasisReplayCast(v, "366155", 111_910)).toBe(true);
+  });
+  it("each stored cast replays once: a second cast of it after the release is a press", () => {
+    const v = unit(
+      [...storing, aura(LogEvent.SPELL_AURA_REMOVED, "370562", 111_900)],
+      [
+        ...storedCasts,
+        ...replays(111_900),
+        cast("366155", "Reversion", 112_300),
+      ],
+    );
+    expect(isStasisReplayCast(v, "366155", 111_910)).toBe(true);
+    expect(isStasisReplayCast(v, "366155", 112_300)).toBe(false);
+  });
+  it("a ready aura up before the log (no APPLIED) has no storing to check", () => {
+    const v = unit(
+      [aura(LogEvent.SPELL_AURA_REMOVED, "370562", 111_900)],
+      [cast("366155", "Reversion", 111_910)],
+    );
+    expect(isStasisReplayCast(v, "366155", 111_910)).toBe(false);
   });
 });

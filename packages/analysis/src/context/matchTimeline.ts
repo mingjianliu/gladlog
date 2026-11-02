@@ -55,6 +55,7 @@ import { IDispelSummary } from "../utils/dispelAnalysis";
 import { IOutgoingCCChain } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { IHealingGap } from "../utils/healingGaps";
+import type { IOffListPress } from "../utils/offListPress";
 import type { CastFailedEvent, RawStreams } from "../utils/rawStreams";
 import { roundEndMs } from "../utils/roundEnd";
 import type { IControlCastBar } from "./ccUse";
@@ -112,6 +113,7 @@ import { emitKickEntries } from "./timelineSections/kick";
 import { emitManaContextEntries } from "./timelineSections/manaContext";
 import { emitMinorDispelEntries } from "./timelineSections/minorDispels";
 import { emitOffensiveWindowEntries } from "./timelineSections/offensiveWindow";
+import { emitOffListPressEntries } from "./timelineSections/offListPress";
 import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
 import { prepareOwnerCdContext } from "./timelineSections/ownerCdSetup";
 import { foldMissedPurges } from "./timelineSections/purgeFolding";
@@ -289,6 +291,10 @@ export interface BuildMatchTimelineParams {
    * computed in buildMatchContext, rendered here into the time-sorted
    * stream; absent ⇒ no such lines and no legend. */
   stackedDefensives?: StackedDefensivePair[];
+  /** GH #176 `[PRESS]` presses (utils/offListPress.ts) — computed in
+   * buildMatchContext (the cooldown model needs `combat`); absent ⇒ no such
+   * lines and no legend. */
+  offListPresses?: IOffListPress[];
 }
 
 // The purge whitelist and its data-blocked twin live in data/purgeWhitelist.ts
@@ -1168,6 +1174,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   emitStasisEntries({
     stasisEvents,
     addEntry,
+  });
+
+  // GH #176: after every other emitter, so a press another line already
+  // states is not printed twice
+  emitOffListPressEntries({
+    owner,
+    friends,
+    pid,
+    enemyPid,
+    addEntry,
+    entries,
+    presses: params.offListPresses ?? [],
   });
 
   // Precompute snapshots chronologically, then mutate entries in-place

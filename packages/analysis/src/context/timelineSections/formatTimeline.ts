@@ -61,6 +61,7 @@ import {
 import { CAST_STOPPED_LEGEND, CAST_STOPPED_TAG } from "./castStopped";
 import { DR_CLASH_LEGEND } from "./contextFacts";
 import type { TimelineCtx } from "./ctx";
+import { OFF_LIST_PRESS_LEGEND, OFF_LIST_PRESS_TAG } from "./offListPress";
 import {
   CC_NOT_LANDED_LEGEND,
   CC_NOT_LANDED_TAG,
@@ -317,6 +318,11 @@ export function formatTimeline(
   );
   // FT-T16 D15 "2b" / "3b": the two tags are legended only when a line of
   // the family rendered.
+  const offListPressRendered = entries.some((e) =>
+    e.lines.some(
+      (l) => typeof l === "string" && l.includes(OFF_LIST_PRESS_TAG),
+    ),
+  );
   const castStoppedRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes(CAST_STOPPED_TAG)),
   );
@@ -616,6 +622,7 @@ export function formatTimeline(
     // one definition of "the round ended" for every line that says it
     ...(roundEndStatedRendered ? roundEndLegend(bracket) : []),
     ...(castStoppedRendered ? CAST_STOPPED_LEGEND : []),
+    ...(offListPressRendered ? OFF_LIST_PRESS_LEGEND : []),
     ...(ccNotLandedRendered ? CC_NOT_LANDED_LEGEND : []),
     ...(noCcAuraRendered ? NO_CC_AURA_LOGGED_LEGEND : []),
     ...(guardianSaveRendered

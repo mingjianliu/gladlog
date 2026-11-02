@@ -57,3 +57,21 @@ export function hasPressablePvpTrinket(unit: ICombatUnit): boolean {
   const type = detectTrinketType(unit);
   return type !== "Relentless" && type !== "None";
 }
+
+/** Gladiator's Badge on-use spell (`trinketItemIds.json`). */
+export const GLADIATOR_BADGE_SPELL_ID =
+  trinketItemIdsData.gladiatorBadgeSpellId;
+/** Item IDs whose on-use is Gladiator's Badge (ItemEffect.SpellID 345228). */
+const BADGE_ITEM_IDS = new Set<string>(trinketItemIdsData.badgeItemIds);
+
+/**
+ * How many Gladiator's Badges the unit wears (trinket slots 12 / 13; 0 when
+ * the equipment is unknown). GH #176: two badges are two items with a
+ * cooldown each — 605 files: 787 one-badge players, 876 recast gaps, none
+ * under 59 s; 6 two-badge players, 19 gaps, all of them 26.7–49.7 s.
+ */
+export function equippedBadgeCount(unit: ICombatUnit): number {
+  return (unit.info?.equipment ?? []).filter(
+    (e, i) => [12, 13].includes(i) && BADGE_ITEM_IDS.has(e.id),
+  ).length;
+}

@@ -13,6 +13,7 @@ import {
   ON_INTERRUPT_COOLDOWN_REDUCTIONS,
   onInterruptReductionFor,
 } from "../src/data/talentScriptedCooldowns";
+import { unitCooldownEntry } from "../src/utils/cooldowns";
 import {
   interruptBackAtMs,
   interruptCooldownRemainingMs,
@@ -241,5 +242,29 @@ describe("FT-T11c — on-interrupt cooldown talents", () => {
         T0 + (30 + base - 1) * 1000,
       ),
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("the cooldown ledger reads the same per-press number (GH #176)", () => {
+  const combatOf = (u: any): any => ({
+    startTime: T0,
+    endTime: T0 + 300_000,
+    units: { [u.id]: u },
+  });
+  it("持有者打断成功的那一下,账本里这一下的冷却就是减过的", () => {
+    const holder = knight([30, 60], [COLDTHIRST_NODE], [30.02]);
+    const base = interruptCooldownSeconds(MIND_FREEZE, holder)!;
+    const entry = unitCooldownEntry(holder, combatOf(holder), MIND_FREEZE)!;
+    expect(entry.casts[0]!.cooldownSecondsOverride).toBe(
+      interruptPressCooldownSeconds(holder, MIND_FREEZE, T0 + 30_000, base),
+    );
+    expect(entry.casts[0]!.cooldownSecondsOverride).toBe(base - 3);
+    // the press that hit nothing keeps the talent-resolved cooldown
+    expect(entry.casts[1]!.cooldownSecondsOverride).toBeUndefined();
+  });
+  it("没点天赋:账本不动", () => {
+    const plain = knight([30], [], [30.02]);
+    const entry = unitCooldownEntry(plain, combatOf(plain), MIND_FREEZE)!;
+    expect(entry.casts[0]!.cooldownSecondsOverride).toBeUndefined();
   });
 });

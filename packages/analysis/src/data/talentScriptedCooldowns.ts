@@ -83,6 +83,18 @@ export const FREE_RECAST_WINDOWS: Readonly<Record<string, IFreeRecastWindow>> =
       windowS: 18,
       note: "Strafing Run — Deep Breath again within 18 s",
     },
+    // Death's Arrival (Rogue, GH #176): "[Shadowstep][Grappling Hook] may be
+    // used a second time within 3 sec (457333, DB2 3 s) with no cooldown, but
+    // its total cooldown is increased by 5 sec" (aura 453, PvP multiplier 2:
+    // the +10 s the model already prints, 55 s). Grappling Hook only — the
+    // Shadowstep branch (Assassination) is a sub-45 s button. Corpus, 605
+    // files: holders' gaps 0.87 / 1.03 / 1.18 / 2.09 / 2.20 / 3.09 s (6 of 19),
+    // then 4.84 s on; 5 holder presses the model called impossible.
+    "454433": {
+      spellId: "195457",
+      windowS: 3,
+      note: "Death's Arrival — Grappling Hook again within 3 s",
+    },
   };
 
 export interface IEventCooldownReduction {
@@ -110,6 +122,10 @@ export interface IEventCooldownReduction {
   triggerOwnAuraEndIds?: readonly string[];
   /** "Entering X": the unit's own buff of these ids applied on itself. */
   triggerSelfAuraAppliedIds?: readonly string[];
+  /** A proc the log shows only as the unit's own SPELL_ENERGIZE row of these
+   * ids (Ace Up Your Sleeve 394120: the 4 combo points and the reset are one
+   * effect, logged as the energize on the press's own millisecond). */
+  triggerEnergizeIds?: readonly string[];
   /** "Being attacked": a direct hit, a miss or a debuff applied on the unit
    * by anyone else (arena has no friendly fire) — periodic ticks excluded —
    * at most one trigger per `internalCooldownMs`, none while the unit's own
@@ -142,6 +158,22 @@ export interface IEventCooldownReduction {
   /** A baseline passive of these specs, owned without a talent (Restless
    * Blades, Outlaw). */
   ownedBySpecIds?: readonly string[];
+  /** The talent that owns this row when its key is not that talent's id —
+   * one talent with give-backs to several spells (Serendipity: Smite →
+   * Chastise, Flash Heal → Serenity, Prayer of Healing → Sanctify). The
+   * holder check, the registry and the coverage doc read
+   * `eventReductionOwner`. */
+  talentSpellId?: string;
+  /** The row applies only to a holder of this talent as well (Ultimate
+   * Serenity moves Sanctify's give-backs to Serenity). */
+  requiresTalentId?: string;
+  /** The row does not apply to a holder of this talent. */
+  unlessTalentId?: string;
+  /** With `seconds: Infinity`: the trigger gives back ONE charge — the
+   * recharge under way keeps its progress — not every charge (Apotheosis
+   * with Miracle Worker: 「获得一次圣言术的使用次数」). On a one-charge spell
+   * it is the reset it says without the talent. */
+  oneCharge?: true;
   /** "Using Sudden Death": the unit's own buff of `auraIds` removed (or a
    * dose of it) within `withinMs` of its own cast of `byCastIds` — an
    * expiry or a cast without the removal is no use. With `perStackOfAuraId`
@@ -185,6 +217,10 @@ export interface IPowerSpendTrigger {
    * gives back what was spent. A reduction applies to `castIds`, while the
    * caster's `whileAuraId` buff is up and / or for a holder of `talentId`
    * (holder unknown → applied: the smaller give-back). */
+  /** While one of the caster's own `whileAuraIds` buffs is up at the spend,
+   * the give-back is `pct` % larger (DB2 aura 108 on the talent's own class
+   * mask: Triple Threat / Jackpot +30 % on Restless Blades). */
+  boosts?: ReadonlyArray<{ whileAuraIds: readonly string[]; pct: number }>;
   costReductions?: ReadonlyArray<{
     castIds: readonly string[];
     pct?: number;
@@ -477,8 +513,11 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // of recasts under the 60 s model, shortest gap 22.0 s; replay (8 files,
   // 180 recasts): 165 early → 2 at 0.29 s → 0 at 0.30 s, every round's
   // tightest needs ≤ 0.295 s.
+  // GH #176: Concentrated Coolness turns Frozen Orb into 198149, which the
+  // row missed (605: 7 presses of 198149 the model called impossible, each
+  // inside 60 − 0.3 × its hits).
   "444986": {
-    targets: ["84714"],
+    targets: ["84714", "198149"],
     triggerCastIds: [],
     triggerHitIds: ["443722"],
     hitsCountEachRow: true,
@@ -638,20 +677,152 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   },
   // (Both carry Apotheosis's "increasing the cooldown reductions to your Holy
   // Words by 200 %" while its buff 200183 is up — +100 % leaves 125 early
-  // presses, +200 % 13 — and Light of the Naaru's +10 % a rank, added to it.
-  // Serenity / Sanctify's give-backs — Flash Heal / Benediction, Prayer of
-  // Mending, Halo, Energy Cycle — change target with Ultimate Serenity and
-  // are not modelled yet: neither spell is on the ledger.)
+  // presses, +200 % 13 — and Light of the Naaru's +10 % a rank, added to it.)
+  //
+  // HOLY WORD: SERENITY 2050 / SANCTIFY 34861 (GH #176, 2026-11-02: an
+  // off-list press line needs their cooldown; research/holyword.md M2–M7,
+  // the 21-file replay: Serenity 944 → 12 of 1,235 presses early, Sanctify
+  // 58 → 0 of 166). Tooltips, 12.1.5.70575 zhCN:
+  //  - Serendipity 63733 「快速治疗会使圣言术：静的冷却时间缩短$2050s2秒。
+  //    治疗祷言会使圣言术：灵的冷却时间缩短$34861s3秒」, 6 s each; Serenity's
+  //    own 「快速治疗$?a1246517[或治疗祷言][]」 — Ultimate Serenity 1246517
+  //    「原本影响圣言术：灵的天赋效果现在改为影响圣言术：静」 sends Prayer of
+  //    Healing's to Serenity (a holder never presses Sanctify: 262 of 340
+  //    mapped "US only" August units did, the era swap, research §1).
+  //    Benediction 1262763 is the upgraded Flash Heal (M2).
+  //  - Voice of Harmony 390994 「愈合祷言$?S120517&?a1246517[和施放光晕][]会
+  //    使圣言术：静的冷却时间缩短$s2秒。$?S120517&!?a1246517[光晕会使圣言术：灵
+  //    的冷却时间缩短$s1秒。][]」, 4 s each (PvpMultiplier 1); a Halo is the
+  //    holder's own 120517 APPLIED (M6).
+  //  - Energy Cycle 453828 (Archon) 「消耗圣光涌动使得圣言术：静 / 灵的冷却时间
+  //    降低4秒」 by Ultimate Serenity; Surge of Light 114255 spent by a Flash
+  //    Heal / Benediction / Prayer of Healing (M7, 37 holder rows).
+  // Each carries Apotheosis's +200 % and Light of the Naaru's +10 % a rank
+  // (M9 / M10, the Chastise rows' bonus).
+  "63733:2050": {
+    talentSpellId: "63733",
+    targets: ["2050"],
+    triggerCastIds: ["2061", "1262763"],
+    ownedBySpecIds: ["257"],
+    seconds: 6,
+    creditBonus: {
+      whileSelfAura: { auraId: "200183", pct: 200 },
+      perRank: { talentId: "196985", pctPerRank: 10 },
+    },
+    note: "Serendipity — Flash Heal / Benediction: Holy Word: Serenity −6 s",
+  },
+  "63733:34861": {
+    talentSpellId: "63733",
+    targets: ["34861"],
+    triggerCastIds: ["596"],
+    ownedBySpecIds: ["257"],
+    unlessTalentId: "1246517",
+    seconds: 6,
+    creditBonus: {
+      whileSelfAura: { auraId: "200183", pct: 200 },
+      perRank: { talentId: "196985", pctPerRank: 10 },
+    },
+    note: "Serendipity — Prayer of Healing: Holy Word: Sanctify −6 s",
+  },
+  "63733:2050:us": {
+    talentSpellId: "63733",
+    targets: ["2050"],
+    triggerCastIds: ["596"],
+    ownedBySpecIds: ["257"],
+    requiresTalentId: "1246517",
+    seconds: 6,
+    creditBonus: {
+      whileSelfAura: { auraId: "200183", pct: 200 },
+      perRank: { talentId: "196985", pctPerRank: 10 },
+    },
+    note: "Serendipity + Ultimate Serenity — Prayer of Healing: Holy Word: Serenity −6 s",
+  },
+  "390994:2050": {
+    talentSpellId: "390994",
+    targets: ["2050"],
+    triggerCastIds: ["33076"],
+    seconds: 4,
+    creditBonus: {
+      whileSelfAura: { auraId: "200183", pct: 200 },
+      perRank: { talentId: "196985", pctPerRank: 10 },
+    },
+    note: "Voice of Harmony — Prayer of Mending: Holy Word: Serenity −4 s",
+  },
+  "390994:34861:halo": {
+    talentSpellId: "390994",
+    targets: ["34861"],
+    triggerCastIds: [],
+    triggerSelfAuraAppliedIds: ["120517"],
+    unlessTalentId: "1246517",
+    seconds: 4,
+    creditBonus: {
+      whileSelfAura: { auraId: "200183", pct: 200 },
+      perRank: { talentId: "196985", pctPerRank: 10 },
+    },
+    note: "Voice of Harmony — Halo: Holy Word: Sanctify −4 s",
+  },
+  "390994:2050:halo": {
+    talentSpellId: "390994",
+    targets: ["2050"],
+    triggerCastIds: [],
+    triggerSelfAuraAppliedIds: ["120517"],
+    requiresTalentId: "1246517",
+    seconds: 4,
+    creditBonus: {
+      whileSelfAura: { auraId: "200183", pct: 200 },
+      perRank: { talentId: "196985", pctPerRank: 10 },
+    },
+    note: "Voice of Harmony + Ultimate Serenity — Halo: Holy Word: Serenity −4 s",
+  },
+  "453828": {
+    targets: ["34861"],
+    triggerCastIds: [],
+    triggerAuraConsumed: {
+      auraIds: ["114255"],
+      byCastIds: ["2061", "1262763", "596"],
+      withinMs: 300,
+    },
+    unlessTalentId: "1246517",
+    seconds: 4,
+    creditBonus: {
+      whileSelfAura: { auraId: "200183", pct: 200 },
+      perRank: { talentId: "196985", pctPerRank: 10 },
+    },
+    note: "Energy Cycle — Surge of Light spent: Holy Word: Sanctify −4 s",
+  },
+  "453828:2050": {
+    talentSpellId: "453828",
+    targets: ["2050"],
+    triggerCastIds: [],
+    triggerAuraConsumed: {
+      auraIds: ["114255"],
+      byCastIds: ["2061", "1262763", "596"],
+      withinMs: 300,
+    },
+    requiresTalentId: "1246517",
+    seconds: 4,
+    creditBonus: {
+      whileSelfAura: { auraId: "200183", pct: 200 },
+      perRank: { talentId: "196985", pctPerRank: 10 },
+    },
+    note: "Energy Cycle + Ultimate Serenity — Surge of Light spent: Holy Word: Serenity −4 s",
+  },
   // RESETS (seconds: Infinity — back at the trigger, every charge).
   //
-  // Apotheosis (Holy, 200183): resets Holy Word: Chastise. Its buff can land
-  // with no cast (out of Shadowmeld), so the trigger is the buff applied.
+  // Apotheosis (Holy, 200183): 「$?s235587[获得一次圣言术的使用次数]
+  // [重置圣言术的冷却时间]」 — one charge of each Holy Word with Miracle
+  // Worker 235587 (Serenity, and Sanctify without Ultimate Serenity, hold two),
+  // a reset without it: one charge back either way (`oneCharge`; a full reset
+  // of a two-charge Serenity over-credits, research §6 (c)). Its buff can
+  // land with no cast (out of Shadowmeld), so the trigger is the buff
+  // applied.
   "200183": {
-    targets: ["88625"],
+    targets: ["88625", "2050", "34861"],
     triggerCastIds: [],
     triggerSelfAuraAppliedIds: ["200183"],
     seconds: Number.POSITIVE_INFINITY,
-    note: "Apotheosis — resets Holy Word: Chastise",
+    oneCharge: true,
+    note: "Apotheosis — a charge of each Holy Word back (a reset of one that holds one)",
   },
   //
   // Demonic Intensity (Aldrachi / Devourer, 452415): "… and casting
@@ -694,14 +865,83 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     seconds: Number.POSITIVE_INFINITY,
     note: "Cold Snap — resets Ice Block and Ice Barrier",
   },
-  // Preparation (Outlaw, 1277933): an active talent that resets Adrenaline
-  // Rush — SPELL_CAST_SUCCESS 1277933 (140 of 147 Outlaw rounds take it).
-  // Replay (1 file): static 4 impossible → 1 with the reset.
+  // Preparation (Outlaw, 1277933): an active talent — SPELL_CAST_SUCCESS
+  // 1277933 (140 of 147 Outlaw rounds take it). Replay (1 file): Adrenaline
+  // Rush static 4 impossible → 1 with the reset. Its tooltip names four more
+  // (GH #176, 2026-11-02, 12.1.5.70575 zhCN): 「立即重置冲动、正中眉心、剑刃
+  // 乱舞、刀锋冲刺和影舞步的冷却时间」 — Between the Eyes 315341, Blade Flurry
+  // 13877, Blade Rush 271877, Killing Spree 51690.
   "1277933": {
-    targets: ["13750"],
+    targets: ["13750", "315341", "13877", "271877", "51690"],
     triggerCastIds: ["1277933"],
     seconds: Number.POSITIVE_INFINITY,
-    note: "Preparation — resets Adrenaline Rush",
+    note: "Preparation — resets Adrenaline Rush, Between the Eyes, Blade Flurry, Blade Rush and Killing Spree",
+  },
+  // Valiance (Paladin Lightsmith, 432919; GH #176): "Consuming Infusion of
+  // Light / Shining Light reduces the cooldown of Holy Armaments by 3.0 s"
+  // (DB2 effect bp 3000, PvP ×1). Holy Bulwark 432459 and Sacred Weapon
+  // 432472 are one charge pool (category 2220). Spent by Flash of Light,
+  // Holy Light, Judgment, Hammer of Wrath (Holy: 54149) and Word of Glory
+  // (Protection: 327510). 605 files: 265 of 265 holders take it (no control
+  // group); the replay at 3 s takes the 537 presses the model called
+  // impossible to 2, against 112 at 2.5 s and 19 at 2.9 s.
+  "432919": {
+    targets: ["432459", "432472"],
+    triggerCastIds: [],
+    triggerAuraConsumed: {
+      auraIds: ["54149", "327510"],
+      byCastIds: ["19750", "82326", "275773", "1241413", "85673"],
+      withinMs: 150,
+    },
+    seconds: 3,
+    note: "Valiance — Infusion of Light / Shining Light spent: Holy Armaments −3 s",
+  },
+  // Ace Up Your Sleeve (Outlaw, 381828; GH #176): 「正中眉心每消耗一个连击
+  // 点数，便有3%的几率获得4个连击点数并重置其冷却时间」. The proc is logged
+  // only as its energize 394120 on the press's own millisecond (605 file
+  // 0284fcd9: 21:47:41.978 Between the Eyes + energize, pressed again 0.8 s
+  // later).
+  "381828": {
+    targets: ["315341"],
+    triggerCastIds: [],
+    triggerEnergizeIds: ["394120"],
+    seconds: Number.POSITIVE_INFINITY,
+    note: "Ace Up Your Sleeve — the proc (energize 394120) resets Between the Eyes",
+  },
+  // Gravedigger (Outlaw, 1265863; GH #176): 「当你藏了6颗子弹时，你的下一次
+  // 正中眉心不再消耗能量，而是消耗这些子弹，产生6个连击点数，并立即重置其冷却
+  // 时间」 — logged as its energize 1279356 on that press's millisecond.
+  "1265863": {
+    targets: ["315341"],
+    triggerCastIds: [],
+    triggerEnergizeIds: ["1279356"],
+    seconds: Number.POSITIVE_INFINITY,
+    note: "Gravedigger — the bullet-fed Between the Eyes (energize 1279356) resets its own cooldown",
+  },
+  // Summon Doomguard (Demonology, 1276672; GH #176): its own tooltip
+  // 「消耗一个恶魔之核可使召唤末日守卫的冷却时间缩短$s2秒」, s2 = 3 s (PvP
+  // 1). A Demonic Core 264173 is spent by a Demonbolt 264178.
+  "1276672": {
+    targets: ["1276672"],
+    triggerCastIds: [],
+    triggerAuraConsumed: {
+      auraIds: ["264173"],
+      byCastIds: ["264178"],
+      withinMs: 300,
+    },
+    seconds: 3,
+    note: "Summon Doomguard — each Demonic Core spent: −3 s",
+  },
+  // White Out (Frost, 1281638; GH #176): 「冰枪术使寒冰宝珠的冷却时间缩短
+  // ${$s1/1000}.1秒，每粉碎一层冻结额外缩短${$s2/1000}.1秒」 — 0.5 s an Ice
+  // Lance 30455, plus 0.1 s a shattered stack. Only the per-cast half is
+  // read: the stacks are not in the log row, and the smaller give-back keeps
+  // Frozen Orb "not ready" longer, never "ready" sooner.
+  "1281638": {
+    targets: ["84714", "198149"],
+    triggerCastIds: ["30455"],
+    seconds: 0.5,
+    note: "White Out — Ice Lance: Frozen Orb −0.5 s (the per-stack 0.1 s not read)",
   },
   // Red Thirst (Blood): "Every 10 Runic Power spent reduces the cooldown of
   // Vampiric Blood by 2.0 sec" — s1 2 000, s2 10. Runic Power is ×10 in the
@@ -734,7 +974,13 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     ],
     triggerCastIds: [],
     ownedBySpecIds: ["260"],
-    triggerPowerSpend: { powerType: 4, unitsPerSecond: { base: 1.25 } },
+    triggerPowerSpend: {
+      powerType: 4,
+      unitsPerSecond: { base: 1.25 },
+      // Triple Threat 1214935 / Jackpot 1214937 (Roll the Bones outcomes,
+      // GH #176): aura 108 +30 % on mask 0/0/8192/0 — Restless Blades' own
+      boosts: [{ whileAuraIds: ["1214935", "1214937"], pct: 30 }],
+    },
     seconds: 0,
     note: "Restless Blades — Outlaw finishers: −0.8 s per combo point on Adrenaline Rush and the Outlaw kit",
   },
@@ -777,6 +1023,7 @@ export function eventTriggerTimesMs(
     | "triggerInterruptIds"
     | "triggerOwnAuraEndIds"
     | "triggerSelfAuraAppliedIds"
+    | "triggerEnergizeIds"
     | "triggerCastSchoolMask"
     | "hitsCountEachRow"
     | "minHitsPerUse"
@@ -799,6 +1046,14 @@ export function eventTriggerTimesMs(
         e.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
         e.destUnitId === e.srcUnitId &&
         appliedIds.includes(String(e.spellId))
+      )
+        out.push(e.logLine.timestamp);
+  const energizeIds = r.triggerEnergizeIds;
+  if (energizeIds?.length)
+    for (const e of unit.actionOut ?? [])
+      if (
+        e.logLine.event === LogEvent.SPELL_ENERGIZE &&
+        energizeIds.includes(String(e.spellId))
       )
         out.push(e.logLine.timestamp);
   const auraEndIds = r.triggerOwnAuraEndIds;
@@ -926,6 +1181,8 @@ export function eventReductionSecondsAt(
 export interface IEventTrigger {
   atMs: number;
   seconds: number;
+  /** one charge back, not every one (`IEventCooldownReduction.oneCharge`) */
+  oneCharge?: true;
 }
 
 /**
@@ -973,20 +1230,30 @@ export function eventTriggersFor(
         : { ...g, seconds: g.seconds * (1 + (rankPct + auraPct) / 100) };
     });
   };
+  const charged = (
+    r: IEventCooldownReduction,
+    gs: IEventTrigger[],
+  ): IEventTrigger[] =>
+    r.oneCharge ? gs.map((g) => ({ ...g, oneCharge: true as const })) : gs;
   return reductions
     .flatMap((r) =>
-      bonused(r, [
-        ...eventTriggerTimesMs(unit, r).map((atMs) => ({
-          atMs,
-          seconds: eventReductionSecondsAt(r, holderSpec, atMs),
-        })),
-        ...(r.triggerPowerSpend
-          ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
-          : []),
-        ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
-        ...(r.triggerBuffedUseTargets ? buffedUseTargetTriggers(unit, r) : []),
-        ...(r.triggerHostileTaken ? hostileTakenTriggers(unit, r) : []),
-      ]),
+      charged(
+        r,
+        bonused(r, [
+          ...eventTriggerTimesMs(unit, r).map((atMs) => ({
+            atMs,
+            seconds: eventReductionSecondsAt(r, holderSpec, atMs),
+          })),
+          ...(r.triggerPowerSpend
+            ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
+            : []),
+          ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
+          ...(r.triggerBuffedUseTargets
+            ? buffedUseTargetTriggers(unit, r)
+            : []),
+          ...(r.triggerHostileTaken ? hostileTakenTriggers(unit, r) : []),
+        ]),
+      ),
     )
     .sort((a, b) => a.atMs - b.atMs);
 }
@@ -1237,8 +1504,14 @@ export function powerSpendTriggers(
       if (red.pct !== undefined) cost *= 1 - red.pct / 100;
       if (red.flat !== undefined) cost -= red.flat;
     }
+    let mult = 1;
+    for (const b of p.boosts ?? [])
+      if (
+        b.whileAuraIds.some((a) => selfAuraUpAt(unit, a, e.logLine.timestamp))
+      )
+        mult *= 1 + b.pct / 100;
     if (cost > 0)
-      out.push({ atMs: e.logLine.timestamp, seconds: cost / units });
+      out.push({ atMs: e.logLine.timestamp, seconds: (cost / units) * mult });
   }
   return out;
 }
@@ -1300,6 +1573,125 @@ export function onInterruptReductionFor(
   for (const [talent, r] of Object.entries(ON_INTERRUPT_COOLDOWN_REDUCTIONS))
     if (r.spellId === spellId && holds(talent)) seconds += r.seconds;
   return seconds;
+}
+
+/**
+ * Time Spiral (Evoker 374968, GH #176): "allowing you and your allies within
+ * 40 yds to cast their major movement ability once in the next 10 sec, even
+ * if it is on cooldown". Each class gets its own 10 s aura; the press that
+ * consumes it neither spends a charge nor restarts the cooldown. Keyed by the
+ * aura; the spells are DB2's own: the aura's effect is either aura 383
+ * (ignore cooldown) with a class mask, or aura 411 / 500 on a charge
+ * category, resolved here to the spells of that category (SpellCategories,
+ * 12.1.5.70575) — only the ids the corpus has seen (observedSpellIds; DB2's
+ * other members of those categories — Infernal Strike 189110, Displacer
+ * Beast 137452, the 1294067/8 Blink and Shimmer rows, 361138 Roll, 430762
+ * Hover, 433693 Steed, 336471 Leap of Faith — have no row). The press is
+ * the cast row the aura's REMOVED follows by at most `TIME_SPIRAL_PAIR_MS` — 605 files: 143 of 145 movement presses paired
+ * with a REMOVED at +0…16 ms (the two others 287 / 468 ms BEFORE the row: an
+ * aura that ran out, not a consumed one).
+ */
+export const TIME_SPIRAL_FREE_PRESSES: Readonly<
+  Record<string, { spellIds: readonly string[]; note: string }>
+> = {
+  // aura 411/500, charge category 1941
+  "375226": {
+    spellIds: ["48265", "444347"],
+    note: "Death Knight — Death's Advance / Death Charge",
+  },
+  // charge categories 1545 / 2448
+  "375229": {
+    spellIds: ["195072", "344865", "1234796"],
+    note: "Demon Hunter — Fel Rush / Shift",
+  },
+  // aura 383, class mask
+  "375230": {
+    spellIds: ["1850", "252216"],
+    note: "Druid — Dash / Tiger Dash",
+  },
+  // charge category 1948
+  "375234": { spellIds: ["358267"], note: "Evoker — Hover" },
+  // aura 383, class mask
+  "375238": { spellIds: ["186257"], note: "Hunter — Aspect of the Cheetah" },
+  // charge categories 1446 / 1632
+  "375240": {
+    spellIds: ["1953", "212653"],
+    note: "Mage — Blink / Shimmer",
+  },
+  // charge category 1365
+  "375252": {
+    spellIds: ["109132", "115008"],
+    note: "Monk — Roll / Chi Torpedo",
+  },
+  // charge category 1662
+  "375253": { spellIds: ["190784"], note: "Paladin — Divine Steed" },
+  // charge category 2308
+  "375254": { spellIds: ["73325"], note: "Priest — Leap of Faith" },
+  // aura 383, class mask
+  "375255": { spellIds: ["2983"], note: "Rogue — Sprint" },
+  // aura 383, class mask
+  "375256": {
+    spellIds: ["79206", "58875", "192063"],
+    note: "Shaman — Spiritwalker's Grace / Spirit Walk / Gust of Wind",
+  },
+  // charge category 1211
+  "375258": { spellIds: ["6544"], note: "Warrior — Heroic Leap" },
+};
+/** a Time Spiral aura's REMOVED this long after a cast row is that press */
+export const TIME_SPIRAL_PAIR_MS = 50;
+
+/** The instants (ms) `unit` pressed `spellId` for free under Time Spiral:
+ * a cast row of the spell followed within `TIME_SPIRAL_PAIR_MS` by the
+ * REMOVED of the unit's own Time Spiral aura that lists it. */
+export function timeSpiralFreePressMs(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  castMs: readonly number[],
+): number[] {
+  const auras = Object.entries(TIME_SPIRAL_FREE_PRESSES)
+    .filter(([, r]) => r.spellIds.includes(spellId))
+    .map(([a]) => a);
+  if (!auras.length || !castMs.length) return [];
+  const removed = (unit.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+        a.destUnitId === unit.id &&
+        auras.includes(a.spellId ?? ""),
+    )
+    .map((a) => a.logLine.timestamp);
+  const out: number[] = [];
+  for (const r of removed) {
+    const press = castMs
+      .filter((c) => c <= r && r - c <= TIME_SPIRAL_PAIR_MS)
+      .reduce((best, c) => Math.max(best, c), Number.NEGATIVE_INFINITY);
+    if (Number.isFinite(press) && !out.includes(press)) out.push(press);
+  }
+  return out;
+}
+
+/**
+ * A cast row of the same spell this soon after a Time Spiral free press is
+ * the free press's echo, not a press (GH #176 codex review): on the 132
+ * Time Spiral / Stasis files of the 605 set, 2 of 143 free presses have one,
+ * 0.255 s and 0.258 s later (Subtlety Sprint, Marksmanship Aspect of the
+ * Cheetah), both 2.7 s / 8.6 s before the cooldown could be back and neither
+ * putting its aura up. The next-nearest row is an Evoker's Hover charge
+ * 0.94 s later, a press of its own.
+ */
+export const TIME_SPIRAL_ECHO_MS = 500;
+
+/** The rows of `castMs` that echo a Time Spiral free press of `spellId`. */
+export function timeSpiralEchoMs(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  castMs: readonly number[],
+): number[] {
+  const free = timeSpiralFreePressMs(unit, spellId, castMs);
+  if (!free.length) return [];
+  return castMs.filter((c) =>
+    free.some((f) => c > f && c - f <= TIME_SPIRAL_ECHO_MS),
+  );
 }
 
 export interface IIdleCooldownCredit {
@@ -1380,6 +1772,15 @@ export function freeRecastWindowFor(
 }
 
 /** Event reductions on `spellId` for a holder, flattened. */
+/** The talent a row of `EVENT_COOLDOWN_REDUCTIONS` belongs to: its key, or
+ * `talentSpellId` for a talent's second row. */
+export function eventReductionOwner(
+  key: string,
+  r: Pick<IEventCooldownReduction, "talentSpellId">,
+): string {
+  return r.talentSpellId ?? key;
+}
+
 export function eventReductionsFor(
   spellId: string,
   holds: (talentSpellId: string) => boolean,
@@ -1388,10 +1789,12 @@ export function eventReductionsFor(
 ): IEventCooldownReduction[] {
   return Object.entries(EVENT_COOLDOWN_REDUCTIONS)
     .filter(
-      ([talent, r]) =>
+      ([key, r]) =>
         r.targets.includes(spellId) &&
-        (holds(talent) ||
-          (specId !== undefined && !!r.ownedBySpecIds?.includes(specId))),
+        (holds(eventReductionOwner(key, r)) ||
+          (specId !== undefined && !!r.ownedBySpecIds?.includes(specId))) &&
+        (r.requiresTalentId === undefined || holds(r.requiresTalentId)) &&
+        (r.unlessTalentId === undefined || !holds(r.unlessTalentId)),
     )
     .map(([, r]) => r);
 }
