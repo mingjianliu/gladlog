@@ -92,7 +92,9 @@ const WORKER = argOf("--worker");
 const ARCHIVE_DIR = argOf("--archive-dir") ?? "";
 const FREEZE = process.argv.includes("--freeze");
 const COVERAGE = process.argv.includes("--coverage");
-const WORKERS = Number(argOf("--workers") ?? 6);
+/** Three, not six: the desktop stays usable and a run costs minutes more.
+ * Reports do not depend on the count. */
+const WORKERS = Number(argOf("--workers") ?? 3);
 const FILES = argOf("--files");
 const STATE = argOf("--state");
 const only = argOf("--scans")?.split(",");

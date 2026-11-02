@@ -4,7 +4,7 @@
  *   npx tsx packages/eval/scripts/verify/cycle.ts --out <dir>
  *     (--manifest <file> | --from <existing capture>)
  *     [--base <dir of an earlier pass>] [--ledger <file>]
- *     [--shards 3] [--workers 6] [--archive-dir <dir>]
+ *     [--shards 3] [--workers 3] [--archive-dir <dir>]
  *
  * capture → gates → family diff against the base → every scan → the check by
  * check comparison with its rise ledger. Writes `<out>/cap` and `<out>/scan`,
@@ -81,7 +81,7 @@ if (MANIFEST)
     argOf("--shards") ?? "3",
     ...archiveArgs,
   ]);
-const workers = ["--workers", argOf("--workers") ?? "6"];
+const workers = ["--workers", argOf("--workers") ?? "3"];
 step("gates", "run.ts", [cap, "--out", scan, "--scans", "gates", ...workers]);
 if (BASE)
   step(
