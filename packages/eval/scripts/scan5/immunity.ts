@@ -382,7 +382,7 @@ const coversControl = (c: ICover, f: { school?: number; mech?: number }) =>
   c.mechs === "all" ||
   (f.mech !== undefined && c.mechs.includes(f.mech));
 
-const derivedInventory = new Map<string, { n: number; rounds: number }>();
+let derivedInventory = new Map<string, { n: number; rounds: number }>();
 
 export function run(ctx: IRoundCtx): void {
   const truth = deriveTruth(ctx);
@@ -807,3 +807,8 @@ export function report(): string[] {
       ),
   ];
 }
+
+export const state = () => ({ derivedInventory });
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ derivedInventory } = s);
+};

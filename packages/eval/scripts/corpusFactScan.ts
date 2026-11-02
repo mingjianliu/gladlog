@@ -104,9 +104,8 @@
  *   npx tsx packages/eval/scripts/corpusFactScan.ts <captureDir> [--examples N]
  *     [--archive-dir <dir>] [--json <violations.json>]
  */
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
 import {
@@ -136,24 +135,19 @@ import {
   hiddenAuraLifeMs,
 } from "@gladlog/analysis/src/utils/hiddenPress";
 import { DEFERRAL_SHIELD_DAMAGE_IDS } from "@gladlog/analysis/src/utils/incomingPressure";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
+import { LogEvent } from "@gladlog/parser-compat";
 
-const dir = process.argv[2];
-if (!dir) {
-  console.error(
-    "usage: corpusFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]",
-  );
-  process.exit(2);
-}
-const argOf = (flag: string): string | undefined => {
-  const i = process.argv.indexOf(flag);
-  return i > 0 ? process.argv[i + 1] : undefined;
-};
-const ARCHIVE_DIR = argOf("--archive-dir") ?? "";
-const EXAMPLES = Number(argOf("--examples") ?? 5);
-const JSON_OUT = argOf("--json");
-const unmapped: string[] = [];
+import {
+  type IContext,
+  type IScan,
+  type IScanOpts,
+  isMainScan,
+  runScanCli,
+} from "./verify/scan";
+
+let dir = "";
+let EXAMPLES = 5;
+let JSON_OUT: string | undefined;
 
 const CHECKS = [
   "hiddenPressUnused",
@@ -174,8 +168,8 @@ interface IViolation {
   offMs: number;
   detail: string;
 }
-const checked = new Map<string, number>();
-const violations: IViolation[] = [];
+let checked = new Map<string, number>();
+let violations: IViolation[] = [];
 const bump = (c: string) => checked.set(c, (checked.get(c) ?? 0) + 1);
 
 const official = spellEffectGenerated as Record<
@@ -217,44 +211,16 @@ const REFLECT_OWN_IDS = new Set(["23920", "212295"]);
  * ruling FT-T02b): a hand copy here missed Fel Armor when it joined (F18) */
 const DEFERRAL_SHIELDS = new Set(Object.keys(DEFERRAL_SHIELD_DAMAGE_IDS));
 
-function parseFile(path: string): GladMatch[] {
-  const raw = readFileSync(path);
-  const text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-  const parser = new GladLogParser();
-  const items: GladMatch[] = [];
-  parser.on("match", (m) => items.push(m));
-  parser.on("shuffle", (s) => items.push(...(s.rounds as never[])));
-  for (const line of text.split("\n")) parser.push(line);
-  parser.end();
-  return items;
-}
-
 await ensureAnalysisData();
-const files: Array<{
-  shard: string;
-  name: string;
-  fileNo: number;
-  round: number;
-}> = [];
-for (const shard of readdirSync(dir).filter((d) => /^s\d+$/.test(d))) {
-  const cdir = join(dir, shard, "context");
-  for (const name of readdirSync(cdir)) {
-    const m = /^(\d+)-(\d+)-(\d+)\.txt$/.exec(name);
-    if (m) files.push({ shard, name, fileNo: +m[1]!, round: +m[2]! });
-  }
-}
-files.sort((a, b) =>
-  a.shard === b.shard ? a.fileNo - b.fileNo : a.shard < b.shard ? -1 : 1,
-);
 
 // ── round-level measurements (each round once, whatever its owner count) ──
-const measuredRounds = new Set<string>();
+let measuredRounds = new Set<string>();
 /** auraCastGap: spell id → gaps (ms) */
-const gapBySpell = new Map<string, number[]>();
+let gapBySpell = new Map<string, number[]>();
 /** fullRunEndedEarly: aura id → clean run lengths (s) */
-const runsById = new Map<string, number[]>();
+let runsById = new Map<string, number[]>();
 /** spell ids the corpus logs a damage or absorb row under */
-const damagingIds = new Set<string>();
+let damagingIds = new Set<string>();
 
 // ── deferred checks (need the corpus-wide measurement first) ──
 interface IEarlyClaim {
@@ -269,7 +235,7 @@ interface IEarlyClaim {
   talentedS?: number;
   line: string;
 }
-const earlyClaims: IEarlyClaim[] = [];
+let earlyClaims: IEarlyClaim[] = [];
 interface IHiddenCand {
   where: string;
   archive: string;
@@ -286,14 +252,14 @@ interface IHiddenCand {
   relisting: boolean;
   what: string;
 }
-const hiddenCands: IHiddenCand[] = [];
+let hiddenCands: IHiddenCand[] = [];
 /** `side|name` → logged presses of a kit cooldown, and how many got a line */
-const pressLineRate = new Map<string, { n: number; lined: number }>();
+let pressLineRate = new Map<string, { n: number; lined: number }>();
 /** aura id → fresh self-APPLIED by a player, and how many had no own cast */
-const castlessById = new Map<string, { n: number; castless: number }>();
+let castlessById = new Map<string, { n: number; castless: number }>();
 /** hiddenPressUnused: aura id → clean run lengths (s) of a self-aura whose
  * own cast row is logged within [−1 s, +0.5 s] (the pressed length) */
-const pressedRunsById = new Map<string, number[]>();
+let pressedRunsById = new Map<string, number[]>();
 interface IReflectGroup {
   where: string;
   archive: string;
@@ -316,43 +282,12 @@ interface IOwnRow {
   amt: number;
   groups: IReflectGroup[];
 }
-const reflectGroups: IReflectGroup[] = [];
-const ownRows: IOwnRow[] = [];
-
-let cacheKey = "";
-let cacheItems: GladMatch[] = [];
+let reflectGroups: IReflectGroup[] = [];
+let ownRows: IOwnRow[] = [];
 let contexts = 0;
-for (const f of files) {
-  const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
-  const [archive, ownerName] = text.split("\n", 2);
-  if (!archive || !ownerName) continue;
-  const key = `${f.shard}:${archive}`;
-  if (key !== cacheKey) {
-    try {
-      cacheItems = parseFile(
-        archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
-      );
-    } catch {
-      cacheItems = [];
-    }
-    cacheKey = key;
-  }
-  const item = cacheItems[f.round - 1];
-  if (!item) {
-    unmapped.push(`${f.shard}/${f.name} (${archive})`);
-    continue;
-  }
-  let legacy: ReturnType<typeof toLegacyMatch>;
-  try {
-    legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
-  } catch {
-    unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
-    continue;
-  }
+function runRound(ctx: IContext): void {
+  const { f, archive, ownerName, legacy, lines, units, byName } = ctx;
   contexts++;
-  const lines = text.split("\n");
-  const units = Object.values(legacy.units ?? {}) as any[];
-  const byName = new Map(units.map((u) => [u.name, u]));
   const byId = new Map(units.map((u) => [u.id as string, u]));
   const pidName = new Map<string, string>();
   for (const l of lines) {
@@ -364,7 +299,7 @@ for (const f of files) {
   const unitOfPid = (pid: string | undefined): any =>
     pid ? byName.get(pidName.get(pid) ?? "") : undefined;
   const owner = byName.get(ownerName);
-  if (!owner) continue;
+  if (!owner) return;
   const start: number = legacy.startTime;
   const end: number = legacy.endTime;
   const inRound = (ms: number) => ms >= start && ms <= end;
@@ -1289,11 +1224,8 @@ for (const f of files) {
       }
       return pairs;
     };
-    const rowGap = (
-      g: (typeof groups)[number],
-      ownId: string,
-      ts: number,
-    ) => reflectOwnIdRowGap(ownId, ts, g.rows, wardPairsOf(g.first.destUnitId));
+    const rowGap = (g: (typeof groups)[number], ownId: string, ts: number) =>
+      reflectOwnIdRowGap(ownId, ts, g.rows, wardPairsOf(g.first.destUnitId));
     const ownCands = (ownId: string, src: string, ts: number) =>
       groups
         .filter(
@@ -1334,7 +1266,8 @@ for (const f of files) {
   // this matcher's reach (it walks roster casters only; codex F20-24) — 0
   // such lines on the 605 or the wide captures, so it is left unchecked
   for (const x of reflectLines)
-    if (!x.used && x.spell.startsWith("pet's ")) bump("reflectPetLineUnchecked");
+    if (!x.used && x.spell.startsWith("pet's "))
+      bump("reflectPetLineUnchecked");
     else if (!x.used) {
       bump("reflectReturn");
       violate(
@@ -1346,290 +1279,339 @@ for (const f of files) {
     }
 }
 
-// ── corpus-wide resolution ──
-// 3. the runs that end at one value V ≠ official
-interface IVRow {
-  id: string;
-  name: string;
-  n: number;
-  v: number;
-  share: number;
-  official: number;
-}
-const vList: IVRow[] = [];
-for (const [id, runs] of runsById) {
-  if (runs.length < 20) continue;
-  const off = officialS(id);
-  if (off === undefined) continue;
-  const s = [...runs].sort((a, b) => a - b);
-  let best = 0;
-  let bi = 0;
-  let j = 0;
-  for (let i = 0; i < s.length; i++) {
-    while (s[j]! < s[i]! - 0.2) j++;
-    if (i - j + 1 > best) {
-      best = i - j + 1;
-      bi = j;
+function report(): void {
+  // ── corpus-wide resolution ──
+  // 3. the runs that end at one value V ≠ official
+  interface IVRow {
+    id: string;
+    name: string;
+    n: number;
+    v: number;
+    share: number;
+    official: number;
+  }
+  const vList: IVRow[] = [];
+  for (const [id, runs] of runsById) {
+    if (runs.length < 20) continue;
+    const off = officialS(id);
+    if (off === undefined) continue;
+    const s = [...runs].sort((a, b) => a - b);
+    let best = 0;
+    let bi = 0;
+    let j = 0;
+    for (let i = 0; i < s.length; i++) {
+      while (s[j]! < s[i]! - 0.2) j++;
+      if (i - j + 1 > best) {
+        best = i - j + 1;
+        bi = j;
+      }
+    }
+    const win = s.slice(bi, bi + best);
+    const v = win[Math.floor(win.length / 2)]!;
+    const inV = s.filter((x) => Math.abs(x - v) <= 0.1).length;
+    if (inV / s.length < 0.8 || Math.abs(v - off) <= 0.5) continue;
+    vList.push({
+      id,
+      name: nameOf(id),
+      n: s.length,
+      v,
+      share: inV / s.length,
+      official: off,
+    });
+  }
+  vList.sort((a, b) => b.n - a.n);
+  const vOf = new Map(vList.map((r) => [r.id, r.v]));
+  for (const c of earlyClaims) {
+    const v = vOf.get(c.auraId);
+    const off = officialS(c.auraId);
+    const base = {
+      where: c.where,
+      archive: c.archive,
+      round: c.round,
+      atMs: c.atMs,
+      offMs: c.atMs - c.startMs,
+    };
+    if (v !== undefined && c.runS >= v - 0.1)
+      violations.push({
+        check: "fullRunEndedEarly",
+        kind: "atV",
+        ...base,
+        detail: `${nameOf(c.auraId)} ${c.auraId} ran ${c.runS.toFixed(2)}s (corpus V ${v.toFixed(2)}s, official ${off}s): ${c.line}`,
+      });
+    // an id whose runs settle ABOVE the official duration (a talent extends
+    // it: Avenging Wrath 12 s vs 8 s) is judged at V only — a run past the
+    // official length but short of V did end early
+    // …and against the caster's own talented length when it differs from
+    // the official one (codex 21-R12-a #5): Rallying Cry 10 s official, a
+    // talented 15.6 s cancelled at 12 s ended early
+    else if (
+      off !== undefined &&
+      !(v !== undefined && v > off) &&
+      c.runS >= Math.max(off, c.talentedS ?? off) - 0.1
+    )
+      violations.push({
+        check: "fullRunEndedEarly",
+        kind: "fullOfficial",
+        ...base,
+        detail: `${nameOf(c.auraId)} ${c.auraId} ran ${c.runS.toFixed(2)}s ≥ official ${off}s: ${c.line}`,
+      });
+  }
+  // 1. hidden presses: a copy shorter than 60 % of the pressed length (the
+  // corpus median of the aura's pressed clean runs, ≥ 5 of them; else the
+  // official duration) is a talent / proc copy, not a press
+  const median = (xs: number[]) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)]!;
+  };
+  for (const c of hiddenCands) {
+    const pr = pressedRunsById.get(c.auraId) ?? [];
+    const ref = pr.length >= 5 ? median(pr) : officialS(c.auraId);
+    if (!c.endsWithRound && ref !== undefined && (c.runS ?? 0) < 0.6 * ref)
+      continue;
+    // an aura that goes up castless in > 15 % of its fresh applications
+    // corpus-wide is a mechanic (Summon Infernal, Malevolence, a talent's
+    // Recklessness): its castless copy proves no press
+    const cl = castlessById.get(c.auraId);
+    if (cl && cl.n >= 10 && cl.castless > 0.15 * cl.n) {
+      bump("hiddenPressUnused:castlessAuraSkipped");
+      continue;
+    }
+    bump("hiddenPressUnused");
+    const base = {
+      check: "hiddenPressUnused" as const,
+      where: c.where,
+      archive: c.archive,
+      round: c.round,
+      atMs: c.ta,
+      offMs: c.ta - c.startMs,
+    };
+    const clS = cl ? ` castless ${cl.castless}/${cl.n}` : "";
+    const refS =
+      ref === undefined
+        ? "?"
+        : `${ref.toFixed(1)}s${pr.length >= 5 ? " pressed median" : " official"}${clS}`;
+    if (c.unused)
+      violations.push({
+        ...base,
+        kind: `kit:${c.side}`,
+        detail: `${c.what} (ref ${refS}): kit tags it [UNUSED]`,
+      });
+    // `noLine` only where the product prints this cooldown for this side
+    // when its press IS logged (≥ 10 such presses, ≥ 80 % with a line)
+    const rate = pressLineRate.get(`${c.side}|${c.name}`);
+    // — and only for a press hidden by the unit being out of view (its auras
+    // re-listed in that ms): an aura-only copy that is not a re-listing is
+    // too often a delayed own buff or a talent's copy whose trigger is more
+    // than 100 ms away (Kingsbane 394095 1.4 s after its cast row 385627;
+    // Avatar 264 ms after Thunder Blast) for a missing line to prove a miss
+    if (
+      c.relisting &&
+      !c.hasLine &&
+      rate &&
+      rate.n >= 10 &&
+      rate.lined >= 0.8 * rate.n
+    )
+      violations.push({
+        ...base,
+        kind: `noLine:${c.side}`,
+        detail: `${c.what} (ref ${refS}): no line at its second names it (logged presses of it lined ${rate.lined}/${rate.n})`,
+      });
+  }
+  // 4. own-id rows → the nearest damaging reflect
+  const damagingNames = new Set([...damagingIds].map((id) => nameOf(id)));
+  const isDamaging = (g: IReflectGroup) =>
+    damagingIds.has(g.spellId) || damagingNames.has(g.spellName);
+  for (const r of ownRows) {
+    const g = r.groups.find(isDamaging);
+    if (g) g.own += r.amt;
+  }
+  for (const g of reflectGroups) {
+    const damaging = isDamaging(g);
+    const total = damaging ? g.direct + g.own : 0;
+    const base = {
+      where: g.where,
+      archive: g.archive,
+      round: g.round,
+      atMs: g.t0,
+      offMs: g.t0 - g.startMs,
+    };
+    const who = `${g.casterPid}(${g.casterName})'s ${g.spellName} ${g.spellId} by ${g.reflectorPid}(${g.reflectorName})`;
+    if (g.line && g.line.back !== null) {
+      bump("reflectReturn");
+      if (!damaging)
+        violations.push({
+          check: "reflectReturn",
+          kind: "nonDamaging",
+          ...base,
+          detail: `${who}: the corpus logs no damage under it; line says ${g.line.back}k`,
+        });
+      else if (
+        Math.abs(g.line.back * 1000 - total) > Math.max(2000, 0.1 * total)
+      )
+        violations.push({
+          check: "reflectReturn",
+          kind: "amount",
+          ...base,
+          detail: `${who}: printed ${g.line.back}k, recomputed ${(total / 1000).toFixed(1)}k (direct ${(g.direct / 1000).toFixed(1)}k + own-id ${(g.own / 1000).toFixed(1)}k)`,
+        });
+    } else if (
+      damaging &&
+      g.maxHp > 0 &&
+      (total / g.maxHp) * 100 >= REFLECT_MIN_DAMAGE_PCT
+    ) {
+      bump("reflectReturn");
+      if (!g.line)
+        violations.push({
+          check: "reflectReturn",
+          kind: "noLine",
+          ...base,
+          detail: `${who}: ${(total / 1000).toFixed(1)}k back (${((total / g.maxHp) * 100).toFixed(1)}% of max HP ${g.maxHp}), no [REFLECTED] line`,
+        });
     }
   }
-  const win = s.slice(bi, bi + best);
-  const v = win[Math.floor(win.length / 2)]!;
-  const inV = s.filter((x) => Math.abs(x - v) <= 0.1).length;
-  if (inV / s.length < 0.8 || Math.abs(v - off) <= 0.5) continue;
-  vList.push({
-    id,
-    name: nameOf(id),
-    n: s.length,
-    v,
-    share: inV / s.length,
-    official: off,
-  });
-}
-vList.sort((a, b) => b.n - a.n);
-const vOf = new Map(vList.map((r) => [r.id, r.v]));
-for (const c of earlyClaims) {
-  const v = vOf.get(c.auraId);
-  const off = officialS(c.auraId);
-  const base = {
-    where: c.where,
-    archive: c.archive,
-    round: c.round,
-    atMs: c.atMs,
-    offMs: c.atMs - c.startMs,
+
+  // ── report ──
+  const out: string[] = [];
+  const say = (s: string) => {
+    out.push(s);
+    console.log(s);
   };
-  if (v !== undefined && c.runS >= v - 0.1)
-    violations.push({
-      check: "fullRunEndedEarly",
-      kind: "atV",
-      ...base,
-      detail: `${nameOf(c.auraId)} ${c.auraId} ran ${c.runS.toFixed(2)}s (corpus V ${v.toFixed(2)}s, official ${off}s): ${c.line}`,
-    });
-  // an id whose runs settle ABOVE the official duration (a talent extends
-  // it: Avenging Wrath 12 s vs 8 s) is judged at V only — a run past the
-  // official length but short of V did end early
-  // …and against the caster's own talented length when it differs from
-  // the official one (codex 21-R12-a #5): Rallying Cry 10 s official, a
-  // talented 15.6 s cancelled at 12 s ended early
-  else if (
-    off !== undefined &&
-    !(v !== undefined && v > off) &&
-    c.runS >= Math.max(off, c.talentedS ?? off) - 0.1
-  )
-    violations.push({
-      check: "fullRunEndedEarly",
-      kind: "fullOfficial",
-      ...base,
-      detail: `${nameOf(c.auraId)} ${c.auraId} ran ${c.runS.toFixed(2)}s ≥ official ${off}s: ${c.line}`,
-    });
+  say(`contexts: ${contexts}  rounds measured: ${measuredRounds.size}`);
+  for (const c of CHECKS) {
+    const vs = violations.filter((v) => v.check === c);
+    const rounds = new Set(
+      vs.map((v) => `${v.archive}#${v.round}#${v.detail}`),
+    );
+    say(
+      `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct by round+fact ${rounds.size})`,
+    );
+    const kinds = [...new Set(vs.map((v) => v.kind))];
+    for (const k of kinds) {
+      const ks = vs.filter((v) => v.kind === k);
+      say(`  ${k}: ${ks.length}`);
+      for (const v of ks.slice(0, EXAMPLES))
+        say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
+    }
+  }
+  for (const [k, n] of checked) if (k.includes(":")) say(`(${k}: ${n})`);
+
+  // 2. measurement
+  say("");
+  say(
+    "auraCastGap measurement — self-applied aura → own cast row within 0–300 ms (no own cast in the 1 s before)",
+  );
+  const allGaps = [...gapBySpell.values()].flat().sort((a, b) => a - b);
+  const pct = (s: number[], p: number) =>
+    s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0;
+  const buckets: Array<[string, number, number]> = [
+    ["0", 0, 0],
+    ["1–10", 1, 10],
+    ["11–25", 11, 25],
+    ["26–50", 26, 50],
+    ["51–100", 51, 100],
+    ["101–200", 101, 200],
+    ["201–300", 201, 300],
+  ];
+  say(
+    `  pairs ${allGaps.length}; > 50 ms ${allGaps.filter((g) => g > 50).length}; p50 ${pct(allGaps, 0.5)} p99 ${pct(allGaps, 0.99)} max ${allGaps.at(-1) ?? 0} ms`,
+  );
+  for (const [label, lo, hi] of buckets)
+    say(
+      `  ${label.padStart(8)} ms: ${allGaps.filter((g) => g >= lo && g <= hi).length}`,
+    );
+  say("  per spell (n ≥ 20, or any pair > 50 ms), by n:");
+  const spellRows = [...gapBySpell]
+    .map(([id, g]) => {
+      const s = [...g].sort((a, b) => a - b);
+      return {
+        id,
+        n: s.length,
+        over: s.filter((x) => x > 50).length,
+        p99: pct(s, 0.99),
+        max: s.at(-1) ?? 0,
+      };
+    })
+    .filter((r) => r.n >= 20 || r.over > 0)
+    .sort((a, b) => b.n - a.n);
+  for (const r of spellRows.slice(0, 60))
+    say(
+      `    ${r.id.padStart(7)} ${nameOf(r.id).padEnd(28)} n ${String(r.n).padStart(5)}  >50ms ${String(r.over).padStart(4)}  p99 ${String(r.p99).padStart(3)}  max ${r.max}`,
+    );
+
+  // 3. measurement
+  say("");
+  say(
+    "fullRunEndedEarly measurement — ids with ≥ 20 clean runs, ≥ 80 % within ±0.1 s of V, |V − official| > 0.5 s",
+  );
+  for (const r of vList)
+    say(
+      `  ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(5)}  V ${r.v.toFixed(2)}s (${(r.share * 100).toFixed(0)}%)  official ${r.official}s`,
+    );
+
+  if (JSON_OUT) {
+    writeFileSync(
+      JSON_OUT,
+      JSON.stringify(
+        {
+          capture: resolve(dir),
+          contexts,
+          checked: Object.fromEntries(checked),
+          vList,
+          gapBySpell: spellRows,
+          violations,
+        },
+        null,
+        1,
+      ),
+    );
+    say(`wrote ${JSON_OUT}`);
+  }
 }
-// 1. hidden presses: a copy shorter than 60 % of the pressed length (the
-// corpus median of the aura's pressed clean runs, ≥ 5 of them; else the
-// official duration) is a talent / proc copy, not a press
-const median = (xs: number[]) => {
-  const s = [...xs].sort((a, b) => a - b);
-  return s[Math.floor(s.length / 2)]!;
+
+const state = () => ({
+  contexts,
+  checked,
+  violations,
+  measuredRounds,
+  gapBySpell,
+  runsById,
+  damagingIds,
+  earlyClaims,
+  hiddenCands,
+  pressLineRate,
+  castlessById,
+  pressedRunsById,
+  reflectGroups,
+  ownRows,
+});
+export const scan: IScan<ReturnType<typeof state>> = {
+  name: "corpusFactScan",
+  configure(o: IScanOpts) {
+    dir = o.dir;
+    EXAMPLES = o.examples;
+    JSON_OUT = o.json;
+  },
+  run: runRound,
+  report,
+  state,
+  load(s: ReturnType<typeof state>) {
+    ({
+      contexts,
+      checked,
+      violations,
+      measuredRounds,
+      gapBySpell,
+      runsById,
+      damagingIds,
+      earlyClaims,
+      hiddenCands,
+      pressLineRate,
+      castlessById,
+      pressedRunsById,
+      reflectGroups,
+      ownRows,
+    } = s);
+  },
 };
-for (const c of hiddenCands) {
-  const pr = pressedRunsById.get(c.auraId) ?? [];
-  const ref = pr.length >= 5 ? median(pr) : officialS(c.auraId);
-  if (!c.endsWithRound && ref !== undefined && (c.runS ?? 0) < 0.6 * ref)
-    continue;
-  // an aura that goes up castless in > 15 % of its fresh applications
-  // corpus-wide is a mechanic (Summon Infernal, Malevolence, a talent's
-  // Recklessness): its castless copy proves no press
-  const cl = castlessById.get(c.auraId);
-  if (cl && cl.n >= 10 && cl.castless > 0.15 * cl.n) {
-    bump("hiddenPressUnused:castlessAuraSkipped");
-    continue;
-  }
-  bump("hiddenPressUnused");
-  const base = {
-    check: "hiddenPressUnused" as const,
-    where: c.where,
-    archive: c.archive,
-    round: c.round,
-    atMs: c.ta,
-    offMs: c.ta - c.startMs,
-  };
-  const clS = cl ? ` castless ${cl.castless}/${cl.n}` : "";
-  const refS =
-    ref === undefined
-      ? "?"
-      : `${ref.toFixed(1)}s${pr.length >= 5 ? " pressed median" : " official"}${clS}`;
-  if (c.unused)
-    violations.push({
-      ...base,
-      kind: `kit:${c.side}`,
-      detail: `${c.what} (ref ${refS}): kit tags it [UNUSED]`,
-    });
-  // `noLine` only where the product prints this cooldown for this side
-  // when its press IS logged (≥ 10 such presses, ≥ 80 % with a line)
-  const rate = pressLineRate.get(`${c.side}|${c.name}`);
-  // — and only for a press hidden by the unit being out of view (its auras
-  // re-listed in that ms): an aura-only copy that is not a re-listing is
-  // too often a delayed own buff or a talent's copy whose trigger is more
-  // than 100 ms away (Kingsbane 394095 1.4 s after its cast row 385627;
-  // Avatar 264 ms after Thunder Blast) for a missing line to prove a miss
-  if (
-    c.relisting &&
-    !c.hasLine &&
-    rate &&
-    rate.n >= 10 &&
-    rate.lined >= 0.8 * rate.n
-  )
-    violations.push({
-      ...base,
-      kind: `noLine:${c.side}`,
-      detail: `${c.what} (ref ${refS}): no line at its second names it (logged presses of it lined ${rate.lined}/${rate.n})`,
-    });
-}
-// 4. own-id rows → the nearest damaging reflect
-const damagingNames = new Set([...damagingIds].map((id) => nameOf(id)));
-const isDamaging = (g: IReflectGroup) =>
-  damagingIds.has(g.spellId) || damagingNames.has(g.spellName);
-for (const r of ownRows) {
-  const g = r.groups.find(isDamaging);
-  if (g) g.own += r.amt;
-}
-for (const g of reflectGroups) {
-  const damaging = isDamaging(g);
-  const total = damaging ? g.direct + g.own : 0;
-  const base = {
-    where: g.where,
-    archive: g.archive,
-    round: g.round,
-    atMs: g.t0,
-    offMs: g.t0 - g.startMs,
-  };
-  const who = `${g.casterPid}(${g.casterName})'s ${g.spellName} ${g.spellId} by ${g.reflectorPid}(${g.reflectorName})`;
-  if (g.line && g.line.back !== null) {
-    bump("reflectReturn");
-    if (!damaging)
-      violations.push({
-        check: "reflectReturn",
-        kind: "nonDamaging",
-        ...base,
-        detail: `${who}: the corpus logs no damage under it; line says ${g.line.back}k`,
-      });
-    else if (Math.abs(g.line.back * 1000 - total) > Math.max(2000, 0.1 * total))
-      violations.push({
-        check: "reflectReturn",
-        kind: "amount",
-        ...base,
-        detail: `${who}: printed ${g.line.back}k, recomputed ${(total / 1000).toFixed(1)}k (direct ${(g.direct / 1000).toFixed(1)}k + own-id ${(g.own / 1000).toFixed(1)}k)`,
-      });
-  } else if (
-    damaging &&
-    g.maxHp > 0 &&
-    (total / g.maxHp) * 100 >= REFLECT_MIN_DAMAGE_PCT
-  ) {
-    bump("reflectReturn");
-    if (!g.line)
-      violations.push({
-        check: "reflectReturn",
-        kind: "noLine",
-        ...base,
-        detail: `${who}: ${(total / 1000).toFixed(1)}k back (${((total / g.maxHp) * 100).toFixed(1)}% of max HP ${g.maxHp}), no [REFLECTED] line`,
-      });
-  }
-}
 
-// ── report ──
-const out: string[] = [];
-const say = (s: string) => {
-  out.push(s);
-  console.log(s);
-};
-say(`contexts: ${contexts}  rounds measured: ${measuredRounds.size}`);
-for (const c of CHECKS) {
-  const vs = violations.filter((v) => v.check === c);
-  const rounds = new Set(vs.map((v) => `${v.archive}#${v.round}#${v.detail}`));
-  say(
-    `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct by round+fact ${rounds.size})`,
-  );
-  const kinds = [...new Set(vs.map((v) => v.kind))];
-  for (const k of kinds) {
-    const ks = vs.filter((v) => v.kind === k);
-    say(`  ${k}: ${ks.length}`);
-    for (const v of ks.slice(0, EXAMPLES))
-      say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
-  }
-}
-for (const [k, n] of checked) if (k.includes(":")) say(`(${k}: ${n})`);
-
-// 2. measurement
-say("");
-say(
-  "auraCastGap measurement — self-applied aura → own cast row within 0–300 ms (no own cast in the 1 s before)",
-);
-const allGaps = [...gapBySpell.values()].flat().sort((a, b) => a - b);
-const pct = (s: number[], p: number) =>
-  s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0;
-const buckets: Array<[string, number, number]> = [
-  ["0", 0, 0],
-  ["1–10", 1, 10],
-  ["11–25", 11, 25],
-  ["26–50", 26, 50],
-  ["51–100", 51, 100],
-  ["101–200", 101, 200],
-  ["201–300", 201, 300],
-];
-say(
-  `  pairs ${allGaps.length}; > 50 ms ${allGaps.filter((g) => g > 50).length}; p50 ${pct(allGaps, 0.5)} p99 ${pct(allGaps, 0.99)} max ${allGaps.at(-1) ?? 0} ms`,
-);
-for (const [label, lo, hi] of buckets)
-  say(
-    `  ${label.padStart(8)} ms: ${allGaps.filter((g) => g >= lo && g <= hi).length}`,
-  );
-say("  per spell (n ≥ 20, or any pair > 50 ms), by n:");
-const spellRows = [...gapBySpell]
-  .map(([id, g]) => {
-    const s = [...g].sort((a, b) => a - b);
-    return {
-      id,
-      n: s.length,
-      over: s.filter((x) => x > 50).length,
-      p99: pct(s, 0.99),
-      max: s.at(-1) ?? 0,
-    };
-  })
-  .filter((r) => r.n >= 20 || r.over > 0)
-  .sort((a, b) => b.n - a.n);
-for (const r of spellRows.slice(0, 60))
-  say(
-    `    ${r.id.padStart(7)} ${nameOf(r.id).padEnd(28)} n ${String(r.n).padStart(5)}  >50ms ${String(r.over).padStart(4)}  p99 ${String(r.p99).padStart(3)}  max ${r.max}`,
-  );
-
-// 3. measurement
-say("");
-say(
-  "fullRunEndedEarly measurement — ids with ≥ 20 clean runs, ≥ 80 % within ±0.1 s of V, |V − official| > 0.5 s",
-);
-for (const r of vList)
-  say(
-    `  ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(5)}  V ${r.v.toFixed(2)}s (${(r.share * 100).toFixed(0)}%)  official ${r.official}s`,
-  );
-
-if (JSON_OUT) {
-  writeFileSync(
-    JSON_OUT,
-    JSON.stringify(
-      {
-        capture: resolve(dir),
-        contexts,
-        checked: Object.fromEntries(checked),
-        vList,
-        gapBySpell: spellRows,
-        violations,
-      },
-      null,
-      1,
-    ),
-  );
-  say(`wrote ${JSON_OUT}`);
-}
-if (unmapped.length > 0) {
-  console.error(`UNMAPPED contexts: ${unmapped.length}`);
-  for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
-  process.exit(1);
-}
+if (isMainScan(import.meta.url)) await runScanCli(scan);

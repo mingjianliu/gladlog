@@ -52,9 +52,8 @@
  *
  *   npx tsx packages/eval/scripts/corpusFactScan4.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
@@ -106,28 +105,26 @@ import {
 } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import { parseRawStreams } from "@gladlog/analysis/src/utils/rawStreams";
-import { playableEndMs, roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
+import {
+  playableEndMs,
+  roundEndMs,
+} from "@gladlog/analysis/src/utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { ccThreatReachYards } from "@gladlog/analysis/src/utils/spellRange";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
+import { LogEvent } from "@gladlog/parser-compat";
 
-const dir = process.argv[2];
-if (!dir) {
-  console.error(
-    "usage: corpusFactScan4.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]",
-  );
-  process.exit(2);
-}
-const argOf = (flag: string): string | undefined => {
-  const i = process.argv.indexOf(flag);
-  return i > 0 ? process.argv[i + 1] : undefined;
-};
-const ARCHIVE_DIR = argOf("--archive-dir") ?? "";
-const EXAMPLES = Number(argOf("--examples") ?? 5);
-const JSON_OUT = argOf("--json");
-const unmapped: string[] = [];
+import {
+  type IContext,
+  type IScan,
+  type IScanOpts,
+  isMainScan,
+  runScanCli,
+} from "./verify/scan";
+
+let dir = "";
+let EXAMPLES = 5;
+let JSON_OUT: string | undefined;
 
 const CHECKS = [
   "castDamageIdSplit",
@@ -177,13 +174,13 @@ interface IViolation {
   detail: string;
   line?: string;
 }
-const checked = new Map<string, number>();
-const violations: IViolation[] = [];
+let checked = new Map<string, number>();
+let violations: IViolation[] = [];
 const bump = (c: string, n = 1) => checked.set(c, (checked.get(c) ?? 0) + n);
 /** inventory (not a check): negative SPELL_ABSORBED rows by shield, and
  * teammate-sourced damage on a unit by spell, over every round */
-const negShield = new Map<string, { rows: number; sum: number }>();
-const mateDamage = new Map<string, { rows: number; sum: number }>();
+let negShield = new Map<string, { rows: number; sum: number }>();
+let mateDamage = new Map<string, { rows: number; sum: number }>();
 const tally = (
   m: Map<string, { rows: number; sum: number }>,
   k: string,
@@ -198,7 +195,7 @@ const inventoried = new Set<string>();
 /** per shield name: its positive / negative SPELL_ABSORBED rows and the
  * same-named periodic damage its holder took (landed + absorbed) — a
  * deferral shield's ticks (Time Dilation's shape) */
-const deferral = new Map<
+let deferral = new Map<
   string,
   { pos: number; neg: number; ticks: number; units: number }
 >();
@@ -231,18 +228,6 @@ function amountOf(s: string): { v: number; half: number } | undefined {
   return { v: Number(m[1]) * mul, half: (mul / 10 ** dec) * 0.5 };
 }
 
-function parseFile(path: string): GladMatch[] {
-  const raw = readFileSync(path);
-  const text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-  const parser = new GladLogParser();
-  const items: GladMatch[] = [];
-  parser.on("match", (m) => items.push(m));
-  parser.on("shuffle", (s) => items.push(...(s.rounds as never[])));
-  for (const line of text.split("\n")) parser.push(line);
-  parser.end();
-  return items;
-}
-
 await ensureAnalysisData();
 /** the offensive cooldowns' casts and their same-named effect auras — the
  * enemy-CD timeline's membership (corpusFactScan3's `OFFENSIVE_AURA_IDS`) */
@@ -260,62 +245,20 @@ const official = spellEffectGenerated as Record<
 const idsByName = new Map<string, string[]>();
 for (const [id, r] of Object.entries(official))
   if (r?.name) idsByName.set(r.name, [...(idsByName.get(r.name) ?? []), id]);
-const files: Array<{
-  shard: string;
-  name: string;
-  fileNo: number;
-  round: number;
-}> = [];
-for (const shard of readdirSync(dir).filter((d) => /^s\d+$/.test(d))) {
-  const cdir = join(dir, shard, "context");
-  for (const name of readdirSync(cdir)) {
-    const m = /^(\d+)-(\d+)-(\d+)\.txt$/.exec(name);
-    if (m) files.push({ shard, name, fileNo: +m[1]!, round: +m[2]! });
-  }
-}
-files.sort((a, b) =>
-  a.shard === b.shard ? a.fileNo - b.fileNo : a.shard < b.shard ? -1 : 1,
-);
-
-let cacheKey = "";
-let cacheItems: GladMatch[] = [];
 let contexts = 0;
-for (const f of files) {
-  const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
-  const findingsPath = join(dir, f.shard, "findings", f.name);
-  const menu = existsSync(findingsPath)
-    ? readFileSync(findingsPath, "utf8")
-    : "";
-  const [archive, ownerName] = text.split("\n", 2);
-  if (!archive || !ownerName) continue;
-  const key = `${f.shard}:${archive}`;
-  if (key !== cacheKey) {
-    try {
-      cacheItems = parseFile(
-        archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
-      );
-    } catch {
-      cacheItems = [];
-    }
-    cacheKey = key;
-  }
-  const item = cacheItems[f.round - 1];
-  if (!item) {
-    unmapped.push(`${f.shard}/${f.name} (${archive})`);
-    continue;
-  }
-  const rawLines: string[] = ((item as any).rawLines ?? []) as string[];
-  let legacy: ReturnType<typeof toLegacyMatch>;
-  try {
-    legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
-  } catch {
-    unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
-    continue;
-  }
+function runRound(ctx: IContext): void {
+  const {
+    f,
+    menu,
+    archive,
+    ownerName,
+    rawLines,
+    legacy,
+    lines,
+    units,
+    byName,
+  } = ctx;
   contexts++;
-  const lines = text.split("\n");
-  const units = Object.values(legacy.units ?? {}) as any[];
-  const byName = new Map(units.map((u) => [u.name, u]));
   const pidName = new Map<string, string>();
   for (const l of lines) {
     const u = /<unit id="(\d+)" name="([^"]+)"/.exec(l);
@@ -324,7 +267,7 @@ for (const f of files) {
   const unitOfPid = (pid: string | undefined): any =>
     pid ? byName.get(pidName.get(pid) ?? "") : undefined;
   const owner = byName.get(ownerName);
-  if (!owner) continue;
+  if (!owner) return;
   const start: number = legacy.startTime;
   const end: number = legacy.endTime;
   const where = `${f.shard}/${f.name}`;
@@ -485,9 +428,7 @@ for (const f of files) {
           names: getHighValueSpellIds(
             u,
             new Set(
-              players
-                .filter((x) => x.reaction === u.reaction)
-                .map((x) => x.id),
+              players.filter((x) => x.reaction === u.reaction).map((x) => x.id),
             ),
           ),
           ids,
@@ -513,7 +454,11 @@ for (const f of files) {
           a.spellId === app.spellId &&
           tsOf(a) >= tsOf(app),
       );
-      return { from: tsOf(app), to: rem ? tsOf(rem) : end, auraId: String(app.spellId) };
+      return {
+        from: tsOf(app),
+        to: rem ? tsOf(rem) : end,
+        auraId: String(app.spellId),
+      };
     };
     const castsIn = (
       player: any,
@@ -731,7 +676,8 @@ for (const f of files) {
         byId.set(id, (byId.get(id) ?? 0) + Math.abs(d.effectiveAmount ?? 0));
       }
       for (const r of absRows) {
-        if (!mates.has(r.attackerId) || charmed(r.attackerId, tsOf(r))) continue;
+        if (!mates.has(r.attackerId) || charmed(r.attackerId, tsOf(r)))
+          continue;
         const id = String(r.attackSpellId ?? "melee");
         byId.set(
           id,
@@ -827,7 +773,9 @@ for (const f of files) {
       const sec = Math.floor((ts - start) / 1000);
       const ok = linesNear(sec, 1).some(
         (l) =>
-          l.includes("[ENEMY CD]") && l.includes(` ${pid}(`) && l.includes(name),
+          l.includes("[ENEMY CD]") &&
+          l.includes(` ${pid}(`) &&
+          l.includes(name),
       );
       if (!ok)
         violate(
@@ -885,7 +833,9 @@ for (const f of files) {
         const sec = Math.floor((ts - start) / 1000);
         const ok = linesNear(sec, 1).some(
           (l) =>
-            l.includes("[ENEMY DEF]") && l.includes(` ${pid}(`) && l.includes(name),
+            l.includes("[ENEMY DEF]") &&
+            l.includes(` ${pid}(`) &&
+            l.includes(name),
         );
         if (!ok)
           violate(
@@ -907,16 +857,18 @@ for (const f of files) {
     for (const l of lines) {
       const m = /^(\d+:\d\d)\s/.exec(l);
       if (m) rowSec = secOf(m[1]!);
-      else if (/^\s+\[RES\]/.test(l) && rowSec >= 0) resAt.push({ sec: rowSec, l });
+      else if (/^\s+\[RES\]/.test(l) && rowSec >= 0)
+        resAt.push({ sec: rowSec, l });
     }
     for (const e of enemiesOfOwner) {
       if (deathMs(e) <= end) continue;
       const evs = ((e.auraEvents ?? []) as any[])
         .filter((a) => a.srcUnitId === e.id && a.destUnitId === e.id)
         .sort((a, b) => tsOf(a) - tsOf(b));
-      const visibleLate = [...castsOf(e), ...((e.damageOut ?? []) as any[])].some(
-        (c) => tsOf(c) >= end - 5000 && tsOf(c) <= end,
-      );
+      const visibleLate = [
+        ...castsOf(e),
+        ...((e.damageOut ?? []) as any[]),
+      ].some((c) => tsOf(c) >= end - 5000 && tsOf(c) <= end);
       if (!visibleLate) continue;
       for (const id of new Set(evs.map((a) => String(a.spellId ?? "")))) {
         if (!OFFENSIVE_AURA_IDS.has(id)) continue;
@@ -1016,13 +968,16 @@ for (const f of files) {
       // span opened, none in its cooldown before it
       bump("defenselessImmunityInHand");
       const ownAura = ((u.auraEvents ?? []) as any[]).filter(
-        (x) => ev(x) === APPLIED && x.srcUnitId === u.id && x.destUnitId === u.id,
+        (x) =>
+          ev(x) === APPLIED && x.srcUnitId === u.id && x.destUnitId === u.id,
       );
       for (const id of Object.keys(ENEMY_IMMUNITY_SAVE_AURAS)) {
         const cd = official[id] as { cooldownSeconds?: number } | undefined;
         const cdS = cd?.cooldownSeconds ?? 0;
         if (cdS <= 0) continue;
-        const presses = ownAura.filter((x) => String(x.spellId) === id).map(tsOf);
+        const presses = ownAura
+          .filter((x) => String(x.spellId) === id)
+          .map(tsOf);
         if (presses.length === 0) continue;
         const before = presses.some((t) => t <= aMs && t >= aMs - cdS * 1000);
         const insideOrAfter = presses.some((t) => t > aMs && t <= bMs + 1000);
@@ -1052,7 +1007,8 @@ for (const f of files) {
       // unit's own last protection (a wall / immunity / external received,
       // official ≥ 20 %) had ended ≥ 2 s before that
       const extEnd =
-        tsOf(ext) + (official[String(ext.spellId)]?.durationSeconds ?? 0) * 1000;
+        tsOf(ext) +
+        (official[String(ext.spellId)]?.durationSeconds ?? 0) * 1000;
       if (Math.abs(extEnd - aMs) > 1500) continue;
       let lastProtEnd = -Infinity;
       for (const x of (u.auraEvents ?? []) as any[]) {
@@ -1072,7 +1028,8 @@ for (const f of files) {
         )
           continue;
         const rem = ((u.auraEvents ?? []) as any[]).find(
-          (y) => ev(y) === REMOVED && String(y.spellId) === id && tsOf(y) >= tsOf(x),
+          (y) =>
+            ev(y) === REMOVED && String(y.spellId) === id && tsOf(y) >= tsOf(x),
         );
         const to = rem ? tsOf(rem) : tsOf(x);
         if (to <= aMs + 500) lastProtEnd = Math.max(lastProtEnd, to);
@@ -1111,7 +1068,8 @@ for (const f of files) {
     for (const l of lines) {
       const m = /^(\d+:\d\d)\s/.exec(l);
       if (m) rowSec = secOf(m[1]!);
-      else if (/^\s+\[RES\]/.test(l) && rowSec >= 0) resAt.push({ sec: rowSec, l });
+      else if (/^\s+\[RES\]/.test(l) && rowSec >= 0)
+        resAt.push({ sec: rowSec, l });
     }
     // the defensive kit as data: the mitigation table and its absorb /
     // heal / transfer whitelist (Dark Pact)
@@ -1174,7 +1132,12 @@ for (const f of files) {
   // enemies — an enemy Frost Mage filed as a teammate)
   {
     const roles = lines
-      .map((l) => /<unit id="\d+" name="[^"]+" spec="[^"]*" role="([^"]+)">/.exec(l)?.[1])
+      .map(
+        (l) =>
+          /<unit id="\d+" name="[^"]+" spec="[^"]*" role="([^"]+)">/.exec(
+            l,
+          )?.[1],
+      )
       .filter((r): r is string => !!r);
     if (roles.length === 6) {
       bump("rosterSides");
@@ -1224,7 +1187,10 @@ for (const f of files) {
         const sec = Math.floor((tsOf(c) - start) / 1000);
         const name = nameOf(String(c.spellId), c.spellName ?? "");
         const ok = linesNear(sec, 1).some(
-          (l) => /\[ENEMY [A-Z ]+\]/.test(l) && l.includes(` ${pid}(`) && l.includes(name),
+          (l) =>
+            /\[ENEMY [A-Z ]+\]/.test(l) &&
+            l.includes(` ${pid}(`) &&
+            l.includes(name),
         );
         if (!ok)
           violate(
@@ -1263,7 +1229,12 @@ for (const f of files) {
         .sort((x, y) => tsOf(x) - tsOf(y));
       for (const x of rows) {
         if (ev(x) !== APPLIED) continue;
-        const rem = rows.find((y) => ev(y) === REMOVED && String(y.spellId) === String(x.spellId) && tsOf(y) >= tsOf(x));
+        const rem = rows.find(
+          (y) =>
+            ev(y) === REMOVED &&
+            String(y.spellId) === String(x.spellId) &&
+            tsOf(y) >= tsOf(x),
+        );
         const to = rem ? tsOf(rem) : tsOf(x) + 3000;
         const overlap = Math.min(b, to) - Math.max(a, tsOf(x));
         if (overlap >= 2000) {
@@ -1365,7 +1336,7 @@ for (const f of files) {
         m[4]!.split(" / ").flatMap((w) => (MECH[w] ? [MECH[w]] : [])),
       );
       const sec = secOf(m[1]!);
-      const rows = ((u.auraEvents ?? []) as any[]).sort(
+      const rows = [...((u.auraEvents ?? []) as any[])].sort(
         (x, y) => tsOf(x) - tsOf(y),
       );
       const on = rows.find(
@@ -1414,10 +1385,18 @@ for (const f of files) {
     for (const u of players) {
       const ticking = new Set<string>();
       for (const d of (u.damageOut ?? []) as any[])
-        if (d.srcUnitId === u.id && ev(d) === "SPELL_PERIODIC_DAMAGE" && d.spellId)
+        if (
+          d.srcUnitId === u.id &&
+          ev(d) === "SPELL_PERIODIC_DAMAGE" &&
+          d.spellId
+        )
           ticking.add(String(d.spellId));
       for (const m of (u.missesOut ?? []) as any[])
-        if (m.srcUnitId === u.id && ev(m) === "SPELL_PERIODIC_MISSED" && m.spellId)
+        if (
+          m.srcUnitId === u.id &&
+          ev(m) === "SPELL_PERIODIC_MISSED" &&
+          m.spellId
+        )
           ticking.add(String(m.spellId));
       const tickRows = ((u.damageOut ?? []) as any[]).filter(
         (d) =>
@@ -1483,7 +1462,8 @@ for (const f of files) {
   // Bestial Wrath that opened it). Second-grained: a press in the opening
   // second may still precede the attempt's exact start
   {
-    const KA_RE = /^\s+\[(\d+:\d\d)–(\d+:\d\d)\] on ([^ ]+) — .*\| opportunity: PRIME/;
+    const KA_RE =
+      /^\s+\[(\d+:\d\d)–(\d+:\d\d)\] on ([^ ]+) — .*\| opportunity: PRIME/;
     for (const l of lines) {
       const m = KA_RE.exec(l);
       if (!m) continue;
@@ -1545,8 +1525,7 @@ for (const f of files) {
           // autocast Singe Magic on the same line still trips this —
           // the residual is read by hand)
           const bad = passiveLines.find(
-            (l) =>
-              l.includes(`${pid}(`) && l.includes(`${nm} (passive)`),
+            (l) => l.includes(`${pid}(`) && l.includes(`${nm} (passive)`),
           );
           if (bad)
             violate(
@@ -1580,7 +1559,7 @@ for (const f of files) {
       // the external's own aura on the target (codex 20-F18-07 #2: the
       // rendered second + length is not its window)
       const sec = secOf(m[1]!);
-      const rows = ((target.auraEvents ?? []) as any[]).sort(
+      const rows = [...((target.auraEvents ?? []) as any[])].sort(
         (x, y) => tsOf(x) - tsOf(y),
       );
       const on = rows.find(
@@ -1602,7 +1581,10 @@ for (const f of files) {
       const a = tsOf(on);
       const b = off ? tsOf(off) : a + Number(m[4]) * 1000;
       for (const part of m[5]!.split("; ")) {
-        const p = /^(\d+)\([^)]*\) [\d.]+[kM] on target(?: \(\+([\d.]+[kM]) absorbed)?/.exec(part);
+        const p =
+          /^(\d+)\([^)]*\) [\d.]+[kM] on target(?: \(\+([\d.]+[kM]) absorbed)?/.exec(
+            part,
+          );
         if (!p) continue;
         const ally = unitOfPid(p[1]);
         if (!ally) continue;
@@ -1703,7 +1685,7 @@ for (const f of files) {
       bump("deathOptionLocked");
       if (FORB_GATED.has(ext)) {
         let on = false;
-        for (const a of ((victim.auraEvents ?? []) as any[]).sort(
+        for (const a of [...((victim.auraEvents ?? []) as any[])].sort(
           (x, y) => tsOf(x) - tsOf(y),
         )) {
           if (String(a.spellId) !== "25771" || a.destUnitId !== victim.id)
@@ -1803,7 +1785,10 @@ for (const f of files) {
       ];
       // the line states the refusal: the spell, or the intent guard's own
       // `pressed but rejected (…)` wording
-      if (names.some((n) => l.includes(n)) || l.includes("pressed but rejected ("))
+      if (
+        names.some((n) => l.includes(n)) ||
+        l.includes("pressed but rejected (")
+      )
         continue;
       violate(
         "inactivityRefused",
@@ -1817,64 +1802,88 @@ for (const f of files) {
   }
 }
 
-// ── report ──
-const say = (s: string) => console.log(s);
-say(`corpusFactScan4 ${resolve(dir)}: ${contexts} contexts`);
-for (const c of CHECKS) {
-  const all = violations.filter((v) => v.check === c);
-  const vs = all.filter(
-    (v) => !MEASURED_ONLY.has(c) && !OUT_OF_TOTAL.has(`${c}|${v.kind}`),
-  );
-  const distinct = new Set(vs.map((v) => v.fact));
-  say(
-    `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size})`,
-  );
-  const kinds = new Map<string, IViolation[]>();
-  for (const v of all) kinds.set(v.kind, [...(kinds.get(v.kind) ?? []), v]);
-  for (const [k, ks] of [...kinds].sort((a, b) => b[1].length - a[1].length)) {
-    const kd = new Set(ks.map((v) => v.fact)).size;
-    say(
-      `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+function report(): void {
+  // ── report ──
+  const say = (s: string) => console.log(s);
+  say(`corpusFactScan4 ${resolve(dir)}: ${contexts} contexts`);
+  for (const c of CHECKS) {
+    const all = violations.filter((v) => v.check === c);
+    const vs = all.filter(
+      (v) => !MEASURED_ONLY.has(c) && !OUT_OF_TOTAL.has(`${c}|${v.kind}`),
     );
-    for (const v of ks.slice(0, EXAMPLES))
-      say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
+    const distinct = new Set(vs.map((v) => v.fact));
+    say(
+      `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size})`,
+    );
+    const kinds = new Map<string, IViolation[]>();
+    for (const v of all) kinds.set(v.kind, [...(kinds.get(v.kind) ?? []), v]);
+    for (const [k, ks] of [...kinds].sort(
+      (a, b) => b[1].length - a[1].length,
+    )) {
+      const kd = new Set(ks.map((v) => v.fact)).size;
+      say(
+        `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+      );
+      for (const v of ks.slice(0, EXAMPLES))
+        say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
+    }
+  }
+  for (const [title, m] of [
+    ["inventory: negative SPELL_ABSORBED rows by shield", negShield],
+    ["inventory: damage on a unit from a teammate, by spell", mateDamage],
+  ] as const) {
+    say(title);
+    for (const [k, v] of [...m]
+      .sort((a, b) => Math.abs(b[1].sum) - Math.abs(a[1].sum))
+      .slice(0, 25))
+      say(`  ${k}: ${v.rows} rows, ${Math.round(v.sum / 1000)}k`);
+  }
+  say(
+    "inventory: shields with negative rows — positive / negative / same-named self periodic damage (unit-rounds)",
+  );
+  for (const [n, y] of deferral)
+    say(
+      `  ${n}: +${Math.round(y.pos / 1000)}k / ${Math.round(y.neg / 1000)}k / ticks ${Math.round(y.ticks / 1000)}k (${y.units})`,
+    );
+  if (JSON_OUT) {
+    writeFileSync(
+      JSON_OUT,
+      JSON.stringify(
+        {
+          capture: resolve(dir),
+          contexts,
+          checked: Object.fromEntries(checked),
+          violations,
+        },
+        null,
+        1,
+      ),
+    );
+    say(`wrote ${JSON_OUT}`);
   }
 }
-for (const [title, m] of [
-  ["inventory: negative SPELL_ABSORBED rows by shield", negShield],
-  ["inventory: damage on a unit from a teammate, by spell", mateDamage],
-] as const) {
-  say(title);
-  for (const [k, v] of [...m]
-    .sort((a, b) => Math.abs(b[1].sum) - Math.abs(a[1].sum))
-    .slice(0, 25))
-    say(`  ${k}: ${v.rows} rows, ${Math.round(v.sum / 1000)}k`);
-}
-say(
-  "inventory: shields with negative rows — positive / negative / same-named self periodic damage (unit-rounds)",
-);
-for (const [n, y] of deferral)
-  say(
-    `  ${n}: +${Math.round(y.pos / 1000)}k / ${Math.round(y.neg / 1000)}k / ticks ${Math.round(y.ticks / 1000)}k (${y.units})`,
-  );
-if (JSON_OUT) {
-  writeFileSync(
-    JSON_OUT,
-    JSON.stringify(
-      {
-        capture: resolve(dir),
-        contexts,
-        checked: Object.fromEntries(checked),
-        violations,
-      },
-      null,
-      1,
-    ),
-  );
-  say(`wrote ${JSON_OUT}`);
-}
-if (unmapped.length > 0) {
-  console.error(`UNMAPPED contexts: ${unmapped.length}`);
-  for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
-  process.exit(1);
-}
+
+const state = () => ({
+  contexts,
+  checked,
+  violations,
+  negShield,
+  mateDamage,
+  deferral,
+});
+export const scan: IScan<ReturnType<typeof state>> = {
+  name: "corpusFactScan4",
+  configure(o: IScanOpts) {
+    dir = o.dir;
+    EXAMPLES = o.examples;
+    JSON_OUT = o.json;
+  },
+  run: runRound,
+  report,
+  state,
+  load(s: ReturnType<typeof state>) {
+    ({ contexts, checked, violations, negShield, mateDamage, deferral } = s);
+  },
+};
+
+if (isMainScan(import.meta.url)) await runScanCli(scan);

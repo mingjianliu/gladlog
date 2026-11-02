@@ -77,7 +77,7 @@ interface IGapRow {
   specs: Map<string, number>;
   kinds: Map<string, number>;
 }
-const gaps = new Map<string, IGapRow>();
+let gaps = new Map<string, IGapRow>();
 
 /** a unit's kit row: the text of the `<cooldowns>` after its `<unit>` tag */
 function kitOf(lines: string[], name: string): string {
@@ -227,3 +227,25 @@ export function report(): string[] {
     ),
   ];
 }
+
+export const state = () => ({ gaps });
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ gaps } = s);
+};
+/** one row per id: the numbers that add, and the name and cooldown as read */
+export const merge = {
+  gaps: (a: Map<string, IGapRow>, b: Map<string, IGapRow>) => {
+    for (const [id, r] of b) {
+      const x = a.get(id);
+      if (!x) {
+        a.set(id, r);
+        continue;
+      }
+      x.casts += r.casts;
+      for (const k of r.rounds) x.rounds.add(k);
+      for (const [k, n] of r.specs) x.specs.set(k, (x.specs.get(k) ?? 0) + n);
+      for (const [k, n] of r.kinds) x.kinds.set(k, (x.kinds.get(k) ?? 0) + n);
+    }
+    return a;
+  },
+};

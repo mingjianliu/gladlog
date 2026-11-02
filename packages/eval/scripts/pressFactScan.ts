@@ -47,10 +47,6 @@
  *
  *   npx tsx packages/eval/scripts/pressFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>]
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
-
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { PROC_TRIGGER_LEAD_MS } from "@gladlog/analysis/src/context/timelineSections/enemyCd";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
@@ -64,30 +60,21 @@ import {
   wallTableIdOfAura,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { hiddenPressMs } from "@gladlog/analysis/src/utils/hiddenPress";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import {
   type IAuraEvent,
   type ISpellEvent,
   LogEvent,
-  toLegacyMatch,
 } from "@gladlog/parser-compat";
 
-const dir = process.argv[2];
-if (!dir) {
-  console.error(
-    "usage: pressFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>]",
-  );
-  process.exit(2);
-}
-const exIdx = process.argv.indexOf("--examples");
-// relative manifest paths are written as given: resolve them the way
-// acceptanceCapture.ts did (`--archive-dir`)
-const adIdx = process.argv.indexOf("--archive-dir");
-const ARCHIVE_DIR = adIdx > 0 ? (process.argv[adIdx + 1] ?? "") : "";
-/** contexts that could not be mapped back to a parsed round — any one fails
- * the run (codex review 20-F15-01: a silent skip read as "0 missing") */
-const unmapped: string[] = [];
-const EXAMPLES = exIdx > 0 ? Number(process.argv[exIdx + 1]) : 5;
+import {
+  type IContext,
+  type IScan,
+  type IScanOpts,
+  isMainScan,
+  runScanCli,
+} from "./verify/scan";
+
+let EXAMPLES = 5;
 const ALLY_COPY_MS = 500;
 const FORM_BUFF_MS = 50;
 
@@ -110,26 +97,14 @@ type Check =
   | "procWith"
   | "auraOnlyAW"
   | "enemyUtilityPress";
-const expected = new Map<Check, number>();
-const missing = new Map<Check, string[]>();
+let expected = new Map<Check, number>();
+let missing = new Map<Check, string[]>();
 const bump = (c: Check) => expected.set(c, (expected.get(c) ?? 0) + 1);
 const miss = (c: Check, s: string) => {
   const l = missing.get(c) ?? [];
   l.push(s);
   missing.set(c, l);
 };
-
-function parseFile(path: string): GladMatch[] {
-  const raw = readFileSync(path);
-  const text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-  const parser = new GladLogParser();
-  const items: GladMatch[] = [];
-  parser.on("match", (m) => items.push(m));
-  parser.on("shuffle", (s) => items.push(...(s.rounds as never[])));
-  for (const line of text.split("\n")) parser.push(line);
-  parser.end();
-  return items;
-}
 
 /** a trigger press up to `PROC_TRIGGER_LEAD_MS` before the activation, or
  * in its ms */
@@ -138,61 +113,15 @@ const besideProc = (triggerMs: number, actMs: number): boolean =>
   triggerMs <= actMs + AURA_REBROADCAST_GAP_MS;
 
 await ensureAnalysisData();
-const files: Array<{
-  shard: string;
-  name: string;
-  fileNo: number;
-  round: number;
-}> = [];
-for (const shard of readdirSync(dir).filter((d) => /^s\d+$/.test(d))) {
-  const cdir = join(dir, shard, "context");
-  for (const name of readdirSync(cdir)) {
-    const m = /^(\d+)-(\d+)-(\d+)\.txt$/.exec(name);
-    if (m) files.push({ shard, name, fileNo: +m[1]!, round: +m[2]! });
-  }
-}
-files.sort((a, b) =>
-  a.shard === b.shard ? a.fileNo - b.fileNo : a.shard < b.shard ? -1 : 1,
-);
-
-let cacheKey = "";
-let cacheItems: GladMatch[] = [];
 let contexts = 0;
-for (const f of files) {
-  const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
-  const [archive, ownerName] = text.split("\n", 2);
-  if (!archive || !ownerName) continue;
-  const key = `${f.shard}:${archive}`;
-  if (key !== cacheKey) {
-    try {
-      cacheItems = parseFile(
-        archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
-      );
-    } catch {
-      cacheItems = [];
-    }
-    cacheKey = key;
-  }
-  const item = cacheItems[f.round - 1];
-  if (!item) {
-    unmapped.push(`${f.shard}/${f.name} (${archive})`);
-    continue;
-  }
-  let legacy: ReturnType<typeof toLegacyMatch>;
-  try {
-    legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
-  } catch {
-    unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
-    continue;
-  }
+function runRound(ctx: IContext): void {
+  const { f, ownerName, legacy, lines, units } = ctx;
   contexts++;
-  const lines = text.split("\n");
   const pidOf = new Map<string, { pid: string; role: string }>();
   for (const l of lines) {
     const u = /<unit id="(\d+)" name="([^"]+)"[^>]*role="([^"]+)"/.exec(l);
     if (u) pidOf.set(u[2]!, { pid: u[1]!, role: u[3]! });
   }
-  const units = Object.values(legacy.units ?? {}) as any[];
   const byId = new Map(units.map((u) => [u.id, u]));
   const start = legacy.startTime;
   const at = (ts: number) => fmt((ts - start) / 1000);
@@ -530,25 +459,38 @@ for (const f of files) {
   }
 }
 
-console.log(`contexts: ${contexts}`);
-for (const c of [
-  "allyScales",
-  "timeStop",
-  "treeOfLife",
-  "havocMeta",
-  "noPressCopy",
-  "pressedNotTagged",
-  "unseenPressTagged",
-  "procWith",
-  "auraOnlyAW",
-  "enemyUtilityPress",
-] as Check[]) {
-  const m = missing.get(c) ?? [];
-  console.log(`${c}: expected ${expected.get(c) ?? 0}, missing ${m.length}`);
-  for (const s of m.slice(0, EXAMPLES)) console.log(`    ${s}`);
+function report(): void {
+  console.log(`contexts: ${contexts}`);
+  for (const c of [
+    "allyScales",
+    "timeStop",
+    "treeOfLife",
+    "havocMeta",
+    "noPressCopy",
+    "pressedNotTagged",
+    "unseenPressTagged",
+    "procWith",
+    "auraOnlyAW",
+    "enemyUtilityPress",
+  ] as Check[]) {
+    const m = missing.get(c) ?? [];
+    console.log(`${c}: expected ${expected.get(c) ?? 0}, missing ${m.length}`);
+    for (const s of m.slice(0, EXAMPLES)) console.log(`    ${s}`);
+  }
 }
-if (unmapped.length > 0) {
-  console.error(`UNMAPPED contexts: ${unmapped.length}`);
-  for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
-  process.exit(1);
-}
+
+const state = () => ({ contexts, expected, missing });
+export const scan: IScan<ReturnType<typeof state>> = {
+  name: "pressFactScan",
+  configure(o: IScanOpts) {
+    EXAMPLES = o.examples;
+  },
+  run: runRound,
+  report,
+  state,
+  load(s: ReturnType<typeof state>) {
+    ({ contexts, expected, missing } = s);
+  },
+};
+
+if (isMainScan(import.meta.url)) await runScanCli(scan);

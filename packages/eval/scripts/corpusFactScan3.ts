@@ -44,9 +44,8 @@
  *
  *   npx tsx packages/eval/scripts/corpusFactScan3.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
 import {
@@ -70,24 +69,19 @@ import {
 } from "@gladlog/analysis/src/utils/drAnalysis";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
+import { LogEvent } from "@gladlog/parser-compat";
 
-const dir = process.argv[2];
-if (!dir) {
-  console.error(
-    "usage: corpusFactScan3.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]",
-  );
-  process.exit(2);
-}
-const argOf = (flag: string): string | undefined => {
-  const i = process.argv.indexOf(flag);
-  return i > 0 ? process.argv[i + 1] : undefined;
-};
-const ARCHIVE_DIR = argOf("--archive-dir") ?? "";
-const EXAMPLES = Number(argOf("--examples") ?? 5);
-const JSON_OUT = argOf("--json");
-const unmapped: string[] = [];
+import {
+  type IContext,
+  type IScan,
+  type IScanOpts,
+  isMainScan,
+  runScanCli,
+} from "./verify/scan";
+
+let dir = "";
+let EXAMPLES = 5;
+let JSON_OUT: string | undefined;
 
 const CHECKS = [
   "enemyDefForward",
@@ -116,8 +110,8 @@ interface IViolation {
   detail: string;
   line?: string;
 }
-const checked = new Map<string, number>();
-const violations: IViolation[] = [];
+let checked = new Map<string, number>();
+let violations: IViolation[] = [];
 const bump = (c: string, n = 1) => checked.set(c, (checked.get(c) ?? 0) + n);
 
 const nameOf = (id: string | undefined, fallback = ""): string =>
@@ -194,18 +188,6 @@ function fillOffensiveAuraIds(): void {
   }
 }
 
-function parseFile(path: string): GladMatch[] {
-  const raw = readFileSync(path);
-  const text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-  const parser = new GladLogParser();
-  const items: GladMatch[] = [];
-  parser.on("match", (m) => items.push(m));
-  parser.on("shuffle", (s) => items.push(...(s.rounds as never[])));
-  for (const line of text.split("\n")) parser.push(line);
-  parser.end();
-  return items;
-}
-
 /** [from, to] ms intervals of `rows` (APPLIED → the next REMOVED of the same
  * id and source; unclosed → capped) */
 function intervalsOf(
@@ -258,61 +240,10 @@ function coveredMs(
 
 await ensureAnalysisData();
 fillOffensiveAuraIds();
-const files: Array<{
-  shard: string;
-  name: string;
-  fileNo: number;
-  round: number;
-}> = [];
-for (const shard of readdirSync(dir).filter((d) => /^s\d+$/.test(d))) {
-  const cdir = join(dir, shard, "context");
-  for (const name of readdirSync(cdir)) {
-    const m = /^(\d+)-(\d+)-(\d+)\.txt$/.exec(name);
-    if (m) files.push({ shard, name, fileNo: +m[1]!, round: +m[2]! });
-  }
-}
-files.sort((a, b) =>
-  a.shard === b.shard ? a.fileNo - b.fileNo : a.shard < b.shard ? -1 : 1,
-);
-
-let cacheKey = "";
-let cacheItems: GladMatch[] = [];
 let contexts = 0;
-for (const f of files) {
-  const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
-  const findingsPath = join(dir, f.shard, "findings", f.name);
-  const menu = existsSync(findingsPath)
-    ? readFileSync(findingsPath, "utf8")
-    : "";
-  const [archive, ownerName] = text.split("\n", 2);
-  if (!archive || !ownerName) continue;
-  const key = `${f.shard}:${archive}`;
-  if (key !== cacheKey) {
-    try {
-      cacheItems = parseFile(
-        archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
-      );
-    } catch {
-      cacheItems = [];
-    }
-    cacheKey = key;
-  }
-  const item = cacheItems[f.round - 1];
-  if (!item) {
-    unmapped.push(`${f.shard}/${f.name} (${archive})`);
-    continue;
-  }
-  let legacy: ReturnType<typeof toLegacyMatch>;
-  try {
-    legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
-  } catch {
-    unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
-    continue;
-  }
+function runRound(ctx: IContext): void {
+  const { f, menu, archive, ownerName, legacy, lines, units, byName } = ctx;
   contexts++;
-  const lines = text.split("\n");
-  const units = Object.values(legacy.units ?? {}) as any[];
-  const byName = new Map(units.map((u) => [u.name, u]));
   const pidName = new Map<string, string>();
   for (const l of lines) {
     const u = /<unit id="(\d+)" name="([^"]+)"/.exec(l);
@@ -323,7 +254,7 @@ for (const f of files) {
   const unitOfPid = (pid: string | undefined): any =>
     pid ? byName.get(pidName.get(pid) ?? "") : undefined;
   const owner = byName.get(ownerName);
-  if (!owner) continue;
+  if (!owner) return;
   const start: number = legacy.startTime;
   const end: number = legacy.endTime;
   const where = `${f.shard}/${f.name}`;
@@ -596,7 +527,10 @@ for (const f of files) {
       ((player.missesIn ?? []) as any[]).filter(
         (r) =>
           nameOf(String(r.spellId ?? ""), r.spellName) === spell &&
-          ownedBy(unitById.get(r.srcUnitId) ?? { id: r.srcUnitId }, caster.id) &&
+          ownedBy(
+            unitById.get(r.srcUnitId) ?? { id: r.srcUnitId },
+            caster.id,
+          ) &&
           pred(r),
       );
     if (m[7] === "logged IMMUNE") {
@@ -653,7 +587,10 @@ for (const f of files) {
           ev(a) === APPLIED &&
           a.destUnitId === player.id &&
           nameOf(String(a.spellId ?? ""), a.spellName) === spell &&
-          ownedBy(unitById.get(a.srcUnitId) ?? { id: a.srcUnitId }, caster.id) &&
+          ownedBy(
+            unitById.get(a.srcUnitId) ?? { id: a.srcUnitId },
+            caster.id,
+          ) &&
           (tsOf(a) - start) / 1000 >= castS &&
           (tsOf(a) - start) / 1000 <= castS + 1 + life &&
           // no later cast of the spell by the caster before it (that one's)
@@ -701,7 +638,12 @@ for (const f of files) {
   // Blessing of Sanctuary removals: a control of mechanic 5 / 9 / 12 / 24
   // (DB2 210256's aura-232 rows) REMOVED ≤ 50 ms after the Sanctuary on its
   // holder, no trinket of the holder in that ms
-  const sanct: Array<{ ms: number; holder: any; id: string; appliedMs: number }> = [];
+  const sanct: Array<{
+    ms: number;
+    holder: any;
+    id: string;
+    appliedMs: number;
+  }> = [];
   for (const pal of players)
     for (const c of ((pal.spellCastEvents ?? []) as any[]).filter(
       (x) => ev(x) === SUCCESS && String(x.spellId) === "210256",
@@ -788,45 +730,62 @@ for (const f of files) {
   }
 }
 
-// ── report ──
-const say = (s: string) => console.log(s);
-say(`corpusFactScan3 ${resolve(dir)}: ${contexts} contexts`);
-for (const c of CHECKS) {
-  const all = violations.filter((v) => v.check === c);
-  const vs = all.filter((v) => !OUT_OF_TOTAL.has(`${c}|${v.kind}`));
-  const distinct = new Set(vs.map((v) => v.fact));
-  say(
-    `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size})`,
-  );
-  const kinds = new Map<string, IViolation[]>();
-  for (const v of all) kinds.set(v.kind, [...(kinds.get(v.kind) ?? []), v]);
-  for (const [k, ks] of [...kinds].sort((a, b) => b[1].length - a[1].length)) {
-    const kd = new Set(ks.map((v) => v.fact)).size;
+function report(): void {
+  // ── report ──
+  const say = (s: string) => console.log(s);
+  say(`corpusFactScan3 ${resolve(dir)}: ${contexts} contexts`);
+  for (const c of CHECKS) {
+    const all = violations.filter((v) => v.check === c);
+    const vs = all.filter((v) => !OUT_OF_TOTAL.has(`${c}|${v.kind}`));
+    const distinct = new Set(vs.map((v) => v.fact));
     say(
-      `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+      `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size})`,
     );
-    for (const v of ks.slice(0, EXAMPLES))
-      say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
+    const kinds = new Map<string, IViolation[]>();
+    for (const v of all) kinds.set(v.kind, [...(kinds.get(v.kind) ?? []), v]);
+    for (const [k, ks] of [...kinds].sort(
+      (a, b) => b[1].length - a[1].length,
+    )) {
+      const kd = new Set(ks.map((v) => v.fact)).size;
+      say(
+        `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+      );
+      for (const v of ks.slice(0, EXAMPLES))
+        say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
+    }
+  }
+  if (JSON_OUT) {
+    writeFileSync(
+      JSON_OUT,
+      JSON.stringify(
+        {
+          capture: resolve(dir),
+          contexts,
+          checked: Object.fromEntries(checked),
+          violations,
+        },
+        null,
+        1,
+      ),
+    );
+    say(`wrote ${JSON_OUT}`);
   }
 }
-if (JSON_OUT) {
-  writeFileSync(
-    JSON_OUT,
-    JSON.stringify(
-      {
-        capture: resolve(dir),
-        contexts,
-        checked: Object.fromEntries(checked),
-        violations,
-      },
-      null,
-      1,
-    ),
-  );
-  say(`wrote ${JSON_OUT}`);
-}
-if (unmapped.length > 0) {
-  console.error(`UNMAPPED contexts: ${unmapped.length}`);
-  for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
-  process.exit(1);
-}
+
+const state = () => ({ contexts, checked, violations });
+export const scan: IScan<ReturnType<typeof state>> = {
+  name: "corpusFactScan3",
+  configure(o: IScanOpts) {
+    dir = o.dir;
+    EXAMPLES = o.examples;
+    JSON_OUT = o.json;
+  },
+  run: runRound,
+  report,
+  state,
+  load(s: ReturnType<typeof state>) {
+    ({ contexts, checked, violations } = s);
+  },
+};
+
+if (isMainScan(import.meta.url)) await runScanCli(scan);

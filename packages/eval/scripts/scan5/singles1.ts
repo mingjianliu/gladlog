@@ -102,7 +102,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { gunzipSync } from "node:zlib";
 
 import { countsAsKillWindowDefensiveInHand } from "@gladlog/analysis/src/data/abilityProfile";
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
@@ -127,7 +126,9 @@ import {
   ev,
   fmtS,
   type IRoundCtx,
+  type IViolationRef,
   nameOf,
+  type RecordViolation,
   REFRESH,
   REMOVED,
   secOf,
@@ -256,16 +257,25 @@ interface ITally {
   none: number;
   ally: number;
 }
-const tally = new Map<string, ITally>();
-const tallied = new Set<string>();
-const idsByName = new Map<string, Set<string>>();
-function tallyArchive(path: string): void {
-  if (tallied.has(path)) return;
-  tallied.add(path);
-  if (!existsSync(path)) return;
-  const buf = readFileSync(path);
-  const text = (path.endsWith(".gz") ? gunzipSync(buf) : buf).toString("utf8");
-  for (const line of text.split("\n")) {
+let tally = new Map<string, ITally>();
+let tallied = new Set<string>();
+let idsByName = new Map<string, Set<string>>();
+/** a claim to judge once every archive of the run is tallied: the verdict is
+ * the whole corpus's, not the prefix read so far */
+interface IPending {
+  ref: IViolationRef;
+  kind: string;
+  spell: string;
+  atMs: number;
+  fact: string;
+  detail: string;
+  line: string;
+}
+let pending: IPending[] = [];
+function tallyArchive(ctx: IRoundCtx): void {
+  if (tallied.has(ctx.archive)) return;
+  tallied.add(ctx.archive);
+  for (const line of ctx.fileText().split("\n")) {
     const i = line.indexOf("  SPELL_CAST_SUCCESS,");
     if (i < 0) continue;
     const p = line.slice(i + 2).split(",");
@@ -275,13 +285,14 @@ function tallyArchive(path: string): void {
     const destFlags = Number(p[7]);
     const id = p[9];
     if (!id || !src || !src.startsWith("Player-")) continue;
+    const firstOfId = !tally.has(id);
     const t = tally.get(id) ?? { self: 0, none: 0, ally: 0 };
     if (!dest || /^0+$/.test(dest)) t.none++;
     else if (dest === src) t.self++;
     // the same reaction bits as the caster (0x10 friendly … 0x40 hostile)
     else if ((srcFlags & 0xf0) === (destFlags & 0xf0)) t.ally++;
     tally.set(id, t);
-    if (!idsByName.has(id)) {
+    if (firstOfId) {
       const n = nameOf(id, "");
       if (n) idsByName.set(n, (idsByName.get(n) ?? new Set()).add(id));
     }
@@ -326,7 +337,7 @@ function allyOnlyByName(name: string): boolean | undefined {
 
 function allyOnlySelfSave(ctx: IRoundCtx): void {
   const C = "allyOnlySelfSave";
-  tallyArchive(ctx.archive);
+  tallyArchive(ctx);
   const judge = (
     kind: string,
     spell: string,
@@ -336,25 +347,7 @@ function allyOnlySelfSave(ctx: IRoundCtx): void {
     line: string,
   ) => {
     ctx.bump(C);
-    const a = allyOnlyByName(spell);
-    if (a === undefined)
-      ctx.violate(
-        C,
-        "unknownTarget",
-        atMs,
-        `${fact}:${spell}`,
-        `${spell}: no logged cast on a unit to read the target rule from — ${detail}`,
-        line,
-      );
-    else if (a)
-      ctx.violate(
-        C,
-        kind,
-        atMs,
-        `${fact}:${spell}`,
-        `${spell} cannot target its caster (logged casts: ${[...(idsByName.get(spell) ?? [])].map((id) => `${id} ally ${tally.get(id)?.ally ?? 0}/self ${tally.get(id)?.self ?? 0}`).join(", ")}) — ${detail}`,
-        line,
-      );
+    pending.push({ ref: ctx.ref, kind, spell, atMs, fact, detail, line });
   };
   // (a) KILL SEQUENCE
   const L = ctx.lines;
@@ -1119,6 +1112,34 @@ export function run(ctx: IRoundCtx): void {
 }
 
 /** the ally-only names the log showed (every archive read) */
+/** the claims against the merged tally */
+export function finalize(record: RecordViolation): void {
+  const C = "allyOnlySelfSave";
+  for (const { ref, kind, spell, atMs, fact, detail, line } of pending) {
+    const a = allyOnlyByName(spell);
+    if (a === undefined)
+      record(
+        ref,
+        C,
+        "unknownTarget",
+        atMs,
+        `${fact}:${spell}`,
+        `${spell}: no logged cast on a unit to read the target rule from — ${detail}`,
+        line,
+      );
+    else if (a)
+      record(
+        ref,
+        C,
+        kind,
+        atMs,
+        `${fact}:${spell}`,
+        `${spell} cannot target its caster (logged casts: ${[...(idsByName.get(spell) ?? [])].map((id) => `${id} ally ${tally.get(id)?.ally ?? 0}/self ${tally.get(id)?.self ?? 0}`).join(", ")}) — ${detail}`,
+        line,
+      );
+  }
+}
+
 export function report(): string[] {
   const names = [...idsByName.keys()]
     .filter((n) => allyOnlyByName(n) === true)
@@ -1132,3 +1153,8 @@ export function report(): string[] {
     `  ${names.slice(0, 60).join(", ")}`,
   ];
 }
+
+export const state = () => ({ tally, tallied, idsByName, pending });
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ tally, tallied, idsByName, pending } = s);
+};

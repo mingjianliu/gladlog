@@ -540,8 +540,8 @@ function checkIntoDefense(ctx: IRoundCtx): void {
  * `isDotAura`, and `report()` lists the `isDotAura` debuffs that never ticked
  * in the capture — a rule the DB2 table cannot state.
  */
-const dotAuraNoTick = new Map<string, number>();
-const dotAuraTicked = new Set<string>();
+let dotAuraNoTick = new Map<string, number>();
+let dotAuraTicked = new Set<string>();
 function checkDotTable(ctx: IRoundCtx): void {
   if (!ctx.firstOwnerOfRound) return;
   for (const u of ctx.players) {
@@ -787,3 +787,8 @@ export function run(ctx: IRoundCtx): void {
   checkReach(ctx, friends);
   checkDotTable(ctx);
 }
+
+export const state = () => ({ dotAuraNoTick, dotAuraTicked });
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ dotAuraNoTick, dotAuraTicked } = s);
+};

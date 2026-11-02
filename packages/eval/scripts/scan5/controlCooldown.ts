@@ -42,7 +42,7 @@ const WINDOW = /^\s*(\d+):(\d\d)\s+\[OFFENSIVE WINDOW\].*\| CDs: (.*)$/;
 const TIMED = /^\s*(\d+):(\d\d)\s/;
 const RES = /^\s+\[RES\] rdy:(\S.*?)(?:\s+cd:|$)/;
 
-const landingOnlyByAura = new Map<string, number>();
+let landingOnlyByAura = new Map<string, number>();
 
 interface IUse {
   ms: number;
@@ -74,9 +74,7 @@ function usesOf(ctx: IRoundCtx, enemy: any, name: string): IUse[] {
   );
   const isPressRow = (r: IUse) =>
     !r.summon ||
-    !rows.some(
-      (p) => !p.summon && r.ms >= p.ms && r.ms - p.ms <= sameUseMs(p),
-    );
+    !rows.some((p) => !p.summon && r.ms >= p.ms && r.ms - p.ms <= sameUseMs(p));
   const landings: IUse[] = ctx.players
     .flatMap((p) => (p.auraEvents ?? []) as any[])
     .filter(
@@ -257,3 +255,8 @@ export function report(): string[] {
     }`,
   ];
 }
+
+export const state = () => ({ landingOnlyByAura });
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ landingOnlyByAura } = s);
+};

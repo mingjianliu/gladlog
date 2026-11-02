@@ -1215,3 +1215,8 @@ export function run(ctx: IRoundCtx): void {
 export function report(): string[] {
   return variantSource ? [`singles2 override variants: ${variantSource}`] : [];
 }
+
+export const state = () => ({ variantSource });
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ variantSource } = s);
+};

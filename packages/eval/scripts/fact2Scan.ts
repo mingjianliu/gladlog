@@ -203,10 +203,6 @@
  *
  *   npx tsx packages/eval/scripts/fact2Scan.ts <captureDir> [--examples N] [--archive-dir <dir>]
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
-
 import { ensureAnalysisData } from "@gladlog/analysis";
 import {
   KW_IN_HAND_ONLY_DEFENSIVE_IDS,
@@ -245,27 +241,17 @@ import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { talentRankOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { isDeadAt } from "@gladlog/analysis/src/utils/unitDeath";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import {
-  CombatUnitReaction,
-  LogEvent,
-  toLegacyMatch,
-} from "@gladlog/parser-compat";
+import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
-const dir = process.argv[2];
-if (!dir) {
-  console.error(
-    "usage: fact2Scan.ts <captureDir> [--examples N] [--archive-dir <dir>]",
-  );
-  process.exit(2);
-}
-const exIdx = process.argv.indexOf("--examples");
-const adIdx = process.argv.indexOf("--archive-dir");
-const ARCHIVE_DIR = adIdx > 0 ? (process.argv[adIdx + 1] ?? "") : "";
-const EXAMPLES = exIdx > 0 ? Number(process.argv[exIdx + 1]) : 5;
-/** contexts that could not be mapped back to a parsed round — any one fails
- * the run (a silent skip reads as "0 missing") */
-const unmapped: string[] = [];
+import {
+  type IContext,
+  type IScan,
+  type IScanOpts,
+  isMainScan,
+  runScanCli,
+} from "./verify/scan";
+
+let EXAMPLES = 5;
 
 const CHECKS = [
   "vulnAbsorbed",
@@ -327,8 +313,8 @@ for (const [cast, rows] of Object.entries(
     if (r.aura !== cast && r.via?.includes("name") && r.hits >= 0.9 * r.casts)
       OWN_SPLIT.set(cast, [...(OWN_SPLIT.get(cast) ?? []), r.aura]);
 type Check = (typeof CHECKS)[number];
-const expected = new Map<Check, number>();
-const missing = new Map<Check, string[]>();
+let expected = new Map<Check, number>();
+let missing = new Map<Check, string[]>();
 const bump = (c: Check) => expected.set(c, (expected.get(c) ?? 0) + 1);
 const miss = (c: Check, s: string) => {
   const l = missing.get(c) ?? [];
@@ -402,82 +388,23 @@ const secOf = (mss: string): number => {
   return Number(m) * 60 + Number(s);
 };
 
-function parseFile(path: string): GladMatch[] {
-  const raw = readFileSync(path);
-  const text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-  const parser = new GladLogParser();
-  const items: GladMatch[] = [];
-  parser.on("match", (m) => items.push(m));
-  parser.on("shuffle", (s) => items.push(...(s.rounds as never[])));
-  for (const line of text.split("\n")) parser.push(line);
-  parser.end();
-  return items;
-}
-
 await ensureAnalysisData();
-const files: Array<{
-  shard: string;
-  name: string;
-  fileNo: number;
-  round: number;
-}> = [];
-for (const shard of readdirSync(dir).filter((d) => /^s\d+$/.test(d))) {
-  const cdir = join(dir, shard, "context");
-  for (const name of readdirSync(cdir)) {
-    const m = /^(\d+)-(\d+)-(\d+)\.txt$/.exec(name);
-    if (m) files.push({ shard, name, fileNo: +m[1]!, round: +m[2]! });
-  }
-}
-files.sort((a, b) =>
-  a.shard === b.shard ? a.fileNo - b.fileNo : a.shard < b.shard ? -1 : 1,
-);
 
 const VULN =
   /^ {2}\[VULNERABLE\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\): .*?\(team damage (\d+)k total(?:, \+(\d+)k absorbed)?\)/;
 const BURST =
   /^ {2}\[KILL WINDOW\] (\d+:\d\d)–(\d+:\d\d) on [^(]+\(([^)]+)\): team burst (\d+)k(?: \(\+(\d+)k absorbed\))?/;
-
-let cacheKey = "";
-let cacheItems: GladMatch[] = [];
 let contexts = 0;
-for (const f of files) {
-  const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
-  const [archive, ownerName] = text.split("\n", 2);
-  if (!archive || !ownerName) continue;
-  const key = `${f.shard}:${archive}`;
-  if (key !== cacheKey) {
-    try {
-      cacheItems = parseFile(
-        archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
-      );
-    } catch {
-      cacheItems = [];
-    }
-    cacheKey = key;
-  }
-  const item = cacheItems[f.round - 1];
-  if (!item) {
-    unmapped.push(`${f.shard}/${f.name} (${archive})`);
-    continue;
-  }
-  let legacy: ReturnType<typeof toLegacyMatch>;
-  try {
-    legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
-  } catch {
-    unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
-    continue;
-  }
+function runRound(ctx: IContext): void {
+  const { f, ownerName, legacy, lines, units, byName } = ctx;
   contexts++;
-  const lines = text.split("\n");
-  const units = Object.values(legacy.units ?? {}) as any[];
-  const byName = new Map(units.map((u) => [u.name, u]));
   const pidName = new Map<string, string>();
   for (const l of lines) {
     const u = /<unit id="(\d+)" name="([^"]+)"/.exec(l);
     if (u) pidName.set(u[1]!, u[2]!);
   }
   const owner = byName.get(ownerName);
-  if (!owner) continue;
+  if (!owner) return;
   // the owner's side, by the log's own reaction flags (summons carry theirs)
   const ourSide = new Set(
     units
@@ -648,7 +575,9 @@ for (const f of files) {
           (l.includes("[YOU] [CD]") ||
             l.includes(`[TEAM] [CD]   ${me}(`) ||
             l.includes(`[ENEMY DEF]   ${me}(`)) &&
-          pids.some((p) => new RegExp(`Obsidian Scales.*(?:copy )?→ ${p}\\(`).test(l)),
+          pids.some((p) =>
+            new RegExp(`Obsidian Scales.*(?:copy )?→ ${p}\\(`).test(l),
+          ),
       );
       if (!ok)
         miss(
@@ -2242,14 +2171,27 @@ for (const f of files) {
   }
 }
 
-console.log(`contexts: ${contexts}`);
-for (const c of CHECKS) {
-  const m = missing.get(c) ?? [];
-  console.log(`${c}: expected ${expected.get(c) ?? 0}, wrong ${m.length}`);
-  for (const s of m.slice(0, EXAMPLES)) console.log(`    ${s}`);
+function report(): void {
+  console.log(`contexts: ${contexts}`);
+  for (const c of CHECKS) {
+    const m = missing.get(c) ?? [];
+    console.log(`${c}: expected ${expected.get(c) ?? 0}, wrong ${m.length}`);
+    for (const s of m.slice(0, EXAMPLES)) console.log(`    ${s}`);
+  }
 }
-if (unmapped.length > 0) {
-  console.error(`UNMAPPED contexts: ${unmapped.length}`);
-  for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
-  process.exit(1);
-}
+
+const state = () => ({ contexts, expected, missing });
+export const scan: IScan<ReturnType<typeof state>> = {
+  name: "fact2Scan",
+  configure(o: IScanOpts) {
+    EXAMPLES = o.examples;
+  },
+  run: runRound,
+  report,
+  state,
+  load(s: ReturnType<typeof state>) {
+    ({ contexts, expected, missing } = s);
+  },
+};
+
+if (isMainScan(import.meta.url)) await runScanCli(scan);

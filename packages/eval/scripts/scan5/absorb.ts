@@ -162,7 +162,7 @@ const SPAN_RE =
   /^\s+\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+ \(([^()]+(?:\([^()]*\)[^()]*)*)\):(.*)$/;
 
 // ── capture-wide inventory (each round once) ──
-const inv = new Map<
+let inv = new Map<
   string,
   {
     apps: number;
@@ -175,7 +175,7 @@ const inv = new Map<
   }
 >();
 /** rider facts by shield id (distinct), for the re-bucketing in report() */
-const riderFacts = new Map<string, Set<string>>();
+let riderFacts = new Map<string, Set<string>>();
 
 interface IRun {
   fromMs: number;
@@ -410,12 +410,10 @@ export function run(ctx: IRoundCtx): void {
       // inside the run links it too, codex F20-25) or an absorbed row — the
       // product's run ∩ [press, press + 60 s] (`ownPressedShieldSpansMs`)
       const segments: Array<[number, number]> = [
-        ...[...linked].map(
-          (r): [number, number] => [
-            Math.max(r.fromMs, fromMs),
-            Math.min(r.toMs, toMs),
-          ],
-        ),
+        ...[...linked].map((r): [number, number] => [
+          Math.max(r.fromMs, fromMs),
+          Math.min(r.toMs, toMs),
+        ]),
         ...(ab?.at ?? []).map((t): [number, number] => [t, t]),
       ].filter(([a, b]) => a <= b);
       const linkedPress = (isLink: (cid: string, c: any) => boolean) =>
@@ -586,3 +584,8 @@ export function report(): string[] {
   }
   return out;
 }
+
+export const state = () => ({ inv, riderFacts });
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ inv, riderFacts } = s);
+};

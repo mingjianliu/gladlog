@@ -127,13 +127,13 @@ const DB2_NO_PLAYER_CONTROL: Readonly<Record<string, string>> = {
 
 /** spell name → was an aura of that name with a control mechanic ever seen
  * on a player in the run (run-wide evidence for the report) */
-const runControlOnPlayer = new Map<string, boolean>();
-const flaggedSpells = new Map<string, number>();
+let runControlOnPlayer = new Map<string, boolean>();
+let flaggedSpells = new Map<string, number>();
 /** forward inventory, each round once: control-mechanic aura ids applied by
  * another unit on players / on non-players, and their rows reaching players */
-const invOnPlayer = new Map<string, number>();
-const invOnNpc = new Map<string, number>();
-const invReach = new Map<string, number>();
+let invOnPlayer = new Map<string, number>();
+let invOnNpc = new Map<string, number>();
+let invReach = new Map<string, number>();
 const inc = (m: Map<string, number>, k: string) =>
   m.set(k, (m.get(k) ?? 0) + 1);
 function inventory(ctx: IRoundCtx): void {
@@ -614,3 +614,14 @@ export function report(): string[] {
     ),
   ];
 }
+
+export const state = () => ({
+  runControlOnPlayer,
+  flaggedSpells,
+  invOnPlayer,
+  invOnNpc,
+  invReach,
+});
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ runControlOnPlayer, flaggedSpells, invOnPlayer, invOnNpc, invReach } = s);
+};

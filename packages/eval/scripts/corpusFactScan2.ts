@@ -204,11 +204,9 @@
  *   npx tsx packages/eval/scripts/corpusFactScan2.ts <captureDir> [--examples N]
  *     [--archive-dir <dir>] [--json <violations.json>]
  */
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-import { ensureAnalysisData } from "@gladlog/analysis";
 import {
   castsOfEffectAura,
   effectAurasOfCast,
@@ -246,8 +244,16 @@ import {
   IMMUNITY_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
+import { LogEvent } from "@gladlog/parser-compat";
+
+import { addEach, type MergeRule } from "./verify/merge";
+import {
+  type IContext,
+  type IScan,
+  type IScanOpts,
+  isMainScan,
+  runScanCli,
+} from "./verify/scan";
 
 const CHECKS = [
   "immuneCause",
@@ -408,18 +414,6 @@ const db2Immunity = (id: string): "all" | "mask" | number[] | undefined => {
   if (e.immuneMech && e.immuneMech.length > 0) return e.immuneMech;
   return undefined;
 };
-
-function parseFile(path: string): GladMatch[] {
-  const raw = readFileSync(path);
-  const text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-  const parser = new GladLogParser();
-  const items: GladMatch[] = [];
-  parser.on("match", (m) => items.push(m));
-  parser.on("shuffle", (s) => items.push(...(s.rounds as never[])));
-  for (const line of text.split("\n")) parser.push(line);
-  parser.end();
-  return items;
-}
 
 // ── pure readers (exported: test/corpusFactScan2.test.ts drives them on
 // synthetic rows; codex 21-R12-c #1–#3) ──
@@ -783,61 +777,40 @@ export function cannotCauseOf(
   return undefined;
 }
 
-async function main(): Promise<void> {
-  const dir = process.argv[2];
-  if (!dir) {
-    console.error(
-      "usage: corpusFactScan2.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]",
-    );
-    process.exit(2);
-  }
-  const argOf = (flag: string): string | undefined => {
-    const i = process.argv.indexOf(flag);
-    return i > 0 ? process.argv[i + 1] : undefined;
-  };
-  const ARCHIVE_DIR = argOf("--archive-dir") ?? "";
-  const EXAMPLES = Number(argOf("--examples") ?? 5);
-  const JSON_OUT = argOf("--json");
-  const unmapped: string[] = [];
+/** `fixExamples` keeps its first ten of each kind, whatever the run cut */
+const firstTen: MergeRule = (
+  a: Record<string, unknown[]>,
+  b: Record<string, unknown[]>,
+) => {
+  for (const k of Object.keys(b)) a[k] = [...a[k]!, ...b[k]!].slice(0, 10);
+  return a;
+};
+
+function createScan(): IScan<any> {
+  let dir = "";
+  let EXAMPLES = 5;
+  let JSON_OUT: string | undefined;
   /** E6: passive own absorbs inside a defenseless span, by shield name */
-  const passiveAbsorbNames = new Map<string, number>();
-  const pressedAbsorbNames = new Map<string, number>();
-  const checked = new Map<string, number>();
-  const violations: IViolation[] = [];
+  let passiveAbsorbNames = new Map<string, number>();
+  let pressedAbsorbNames = new Map<string, number>();
+  let checked = new Map<string, number>();
+  let violations: IViolation[] = [];
   const bump = (c: string, n = 1) => checked.set(c, (checked.get(c) ?? 0) + n);
 
-  await ensureAnalysisData();
-  const files: Array<{
-    shard: string;
-    name: string;
-    fileNo: number;
-    round: number;
-  }> = [];
-  for (const shard of readdirSync(dir).filter((d) => /^s\d+$/.test(d))) {
-    const cdir = join(dir, shard, "context");
-    for (const name of readdirSync(cdir)) {
-      const m = /^(\d+)-(\d+)-(\d+)\.txt$/.exec(name);
-      if (m) files.push({ shard, name, fileNo: +m[1]!, round: +m[2]! });
-    }
-  }
-  files.sort((a, b) =>
-    a.shard === b.shard ? a.fileNo - b.fileNo : a.shard < b.shard ? -1 : 1,
-  );
-
   // ── round-level measurements (each round once) ──
-  const measuredRounds = new Set<string>();
+  let measuredRounds = new Set<string>();
   /** DR reading's own FP rate: landed controls by prior count */
-  const landedByPrior = [0, 0, 0];
+  let landedByPrior = [0, 0, 0];
   /** check 2: aura id → clean run lengths (s) at Full DR */
-  const fullRunsById = new Map<string, number[]>();
+  let fullRunsById = new Map<string, number[]>();
   /** check 6: aura id → [immune cases with it up, landed controls with it up] */
-  const fwdAura = new Map<string, { immune: number; landed: number }>();
-  const fwdSeen = new Set<string>();
+  let fwdAura = new Map<string, { immune: number; landed: number }>();
+  let fwdSeen = new Set<string>();
   let fwdCases = 0;
   let fwdImmuneRows = 0;
   let fwdTableExplained = 0;
   let fwdDrExplained = 0;
-  const fwdBySpell = new Map<string, number>();
+  let fwdBySpell = new Map<string, number>();
 
   interface IEndCand {
     where: string;
@@ -852,12 +825,12 @@ async function main(): Promise<void> {
     line: string;
     raw: string[];
   }
-  const endCands: IEndCand[] = [];
+  let endCands: IEndCand[] = [];
   /** every judged (diminished) unclosed control, for the record */
-  const ccEndJudged: Array<Record<string, unknown>> = [];
+  let ccEndJudged: Array<Record<string, unknown>> = [];
   /** codex 21-R12-c #2 / #3, for the record: cast-backed REFRESH
    * applications, and IMMUNE rows a table aura explained only uncapped */
-  const fixExamples: Record<string, Array<Record<string, unknown>>> = {
+  let fixExamples: Record<string, Array<Record<string, unknown>>> = {
     refresh: [],
     capDroppedTableAura: [],
   };
@@ -865,43 +838,12 @@ async function main(): Promise<void> {
     if (fixExamples[k]!.length < 10) fixExamples[k]!.push(e);
   };
   /** check 4 control: own kicks of players, with / without a line */
-  const playerKick = { n: 0, lined: 0 };
-
-  let cacheKey = "";
-  let cacheItems: GladMatch[] = [];
+  let playerKick = { n: 0, lined: 0 };
   let contexts = 0;
-  for (const f of files) {
-    const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
-    const [archive, ownerName] = text.split("\n", 2);
-    if (!archive || !ownerName) continue;
-    const key = `${f.shard}:${archive}`;
-    if (key !== cacheKey) {
-      try {
-        cacheItems = parseFile(
-          archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
-        );
-      } catch {
-        cacheItems = [];
-      }
-      cacheKey = key;
-    }
-    const item = cacheItems[f.round - 1];
-    if (!item) {
-      unmapped.push(`${f.shard}/${f.name} (${archive})`);
-      continue;
-    }
-    const rawLines: string[] = ((item as any).rawLines ?? []) as string[];
-    let legacy: ReturnType<typeof toLegacyMatch>;
-    try {
-      legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
-    } catch {
-      unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
-      continue;
-    }
+  function runRound(ctx: IContext): void {
+    const { f, archive, ownerName, rawLines, legacy, lines, units, byName } =
+      ctx;
     contexts++;
-    const lines = text.split("\n");
-    const units = Object.values(legacy.units ?? {}) as any[];
-    const byName = new Map(units.map((u) => [u.name, u]));
     const byId = new Map(units.map((u) => [u.id as string, u]));
     const pidName = new Map<string, string>();
     for (const l of lines) {
@@ -913,7 +855,7 @@ async function main(): Promise<void> {
     const unitOfPid = (pid: string | undefined): any =>
       pid ? byName.get(pidName.get(pid) ?? "") : undefined;
     const owner = byName.get(ownerName);
-    if (!owner) continue;
+    if (!owner) return;
     const start: number = legacy.startTime;
     const end: number = legacy.endTime;
     const inRound = (ms: number) => ms >= start && ms <= end;
@@ -1952,183 +1894,239 @@ async function main(): Promise<void> {
     }
   }
 
-  // ── corpus-wide resolution ──
-  // 2. the printed length of an unclosed control at a diminished step
-  const p90 = (xs: number[]) => {
-    const s = [...xs].sort((a, b) => a - b);
-    return s[Math.min(s.length - 1, Math.floor(0.9 * s.length))]!;
-  };
-  for (const c of endCands) {
-    const off = ccFullDurationSeconds(c.auraId) ?? officialS(c.auraId);
-    const runs = fullRunsById.get(c.auraId) ?? [];
-    const base = Math.max(off ?? 0, runs.length >= 5 ? p90(runs) : 0);
-    if (!base) {
-      bump("ccEndUndiminished:noBase");
-      continue;
-    }
-    const factor = c.prior >= 2 ? 0.25 : 0.5;
-    bump("ccEndUndiminished:diminishedJudged");
-    ccEndJudged.push({
-      where: c.where,
-      offMs: c.ts - c.startMs,
-      aura: `${nameOf(c.auraId)} ${c.auraId}`,
-      prior: c.prior,
-      L: c.L,
-      bound: diminishedBoundS(base, c.prior),
-      line: c.line,
-    });
-    if (c.L > diminishedBoundS(base, c.prior))
-      violations.push({
-        check: "ccEndUndiminished",
-        kind: c.prior >= 2 ? "third" : "second",
+  function report(): void {
+    // ── corpus-wide resolution ──
+    // 2. the printed length of an unclosed control at a diminished step
+    const p90 = (xs: number[]) => {
+      const s = [...xs].sort((a, b) => a - b);
+      return s[Math.min(s.length - 1, Math.floor(0.9 * s.length))]!;
+    };
+    for (const c of endCands) {
+      const off = ccFullDurationSeconds(c.auraId) ?? officialS(c.auraId);
+      const runs = fullRunsById.get(c.auraId) ?? [];
+      const base = Math.max(off ?? 0, runs.length >= 5 ? p90(runs) : 0);
+      if (!base) {
+        bump("ccEndUndiminished:noBase");
+        continue;
+      }
+      const factor = c.prior >= 2 ? 0.25 : 0.5;
+      bump("ccEndUndiminished:diminishedJudged");
+      ccEndJudged.push({
         where: c.where,
-        archive: c.archive,
-        round: c.round,
-        atMs: c.ts,
         offMs: c.ts - c.startMs,
-        fact: `${c.archive}#${c.round}#ccEndUndiminished#${c.unitName}|${c.auraId}|${c.ts}`,
-        detail: `${nameOf(c.auraId)} ${c.auraId} on ${c.unitName}, never closed, application ${c.prior + 1} of its family in its reset window: printed ${c.L}s > ${base.toFixed(1)}s × ${factor} + 0.5 (official ${off ?? "?"}s, Full-DR p90 ${runs.length >= 5 ? p90(runs).toFixed(1) : "n<5"})`,
+        aura: `${nameOf(c.auraId)} ${c.auraId}`,
+        prior: c.prior,
+        L: c.L,
+        bound: diminishedBoundS(base, c.prior),
         line: c.line,
-        raw: c.raw,
       });
-  }
+      if (c.L > diminishedBoundS(base, c.prior))
+        violations.push({
+          check: "ccEndUndiminished",
+          kind: c.prior >= 2 ? "third" : "second",
+          where: c.where,
+          archive: c.archive,
+          round: c.round,
+          atMs: c.ts,
+          offMs: c.ts - c.startMs,
+          fact: `${c.archive}#${c.round}#ccEndUndiminished#${c.unitName}|${c.auraId}|${c.ts}`,
+          detail: `${nameOf(c.auraId)} ${c.auraId} on ${c.unitName}, never closed, application ${c.prior + 1} of its family in its reset window: printed ${c.L}s > ${base.toFixed(1)}s × ${factor} + 0.5 (official ${off ?? "?"}s, Full-DR p90 ${runs.length >= 5 ? p90(runs).toFixed(1) : "n<5"})`,
+          line: c.line,
+          raw: c.raw,
+        });
+    }
 
-  // ── report ──
-  const out: string[] = [];
-  const say = (s: string) => {
-    out.push(s);
-    console.log(s);
-  };
-  say(`capture: ${resolve(dir)}`);
-  say(`contexts: ${contexts}  rounds measured: ${measuredRounds.size}`);
-  say(
-    `DR reading (drResetMsAt, from the log) on LANDED controls: prior 0 → ${landedByPrior[0]}, 1 → ${landedByPrior[1]}, ≥ 2 → ${landedByPrior[2]} (a landed 3rd is impossible in 12.x: ${((landedByPrior[2]! / Math.max(1, landedByPrior[0]! + landedByPrior[1]! + landedByPrior[2]!)) * 100).toFixed(2)} % is the reading's over-count)`,
-  );
-  for (const c of CHECKS) {
-    const all = violations.filter((v) => v.check === c);
-    const vs = all.filter((v) => !OUT_OF_TOTAL.has(`${c}|${v.kind}`));
-    const distinct = new Set(vs.map((v) => v.fact));
-    const factLines = new Set(
-      vs.map((v) => v.fact.replace(/#[^#]*#([^#]*)$/, "#$1")),
+    // ── report ──
+    const out: string[] = [];
+    const say = (s: string) => {
+      out.push(s);
+      console.log(s);
+    };
+    say(`capture: ${resolve(dir)}`);
+    say(`contexts: ${contexts}  rounds measured: ${measuredRounds.size}`);
+    say(
+      `DR reading (drResetMsAt, from the log) on LANDED controls: prior 0 → ${landedByPrior[0]}, 1 → ${landedByPrior[1]}, ≥ 2 → ${landedByPrior[2]} (a landed 3rd is impossible in 12.x: ${((landedByPrior[2]! / Math.max(1, landedByPrior[0]! + landedByPrior[1]! + landedByPrior[2]!)) * 100).toFixed(2)} % is the reading's over-count)`,
+    );
+    for (const c of CHECKS) {
+      const all = violations.filter((v) => v.check === c);
+      const vs = all.filter((v) => !OUT_OF_TOTAL.has(`${c}|${v.kind}`));
+      const distinct = new Set(vs.map((v) => v.fact));
+      const factLines = new Set(
+        vs.map((v) => v.fact.replace(/#[^#]*#([^#]*)$/, "#$1")),
+      );
+      say(
+        `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size}, distinct by fact ignoring kind ${factLines.size})`,
+      );
+      const kinds = [...new Set(all.map((v) => v.kind))].sort();
+      for (const k of kinds) {
+        const ks = all.filter((v) => v.kind === k);
+        const kd = new Set(ks.map((v) => v.fact)).size;
+        say(
+          `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+        );
+        for (const v of ks.slice(0, EXAMPLES))
+          say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
+      }
+    }
+    for (const [k, n] of [...checked].sort())
+      if (k.includes(":")) say(`(${k}: ${n})`);
+    say(
+      `defenselessSaveUp counted own absorbs (span-seconds, by shield): ${[
+        ...pressedAbsorbNames,
+      ]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(([n, k]) => `${n} ${k}`)
+        .join(", ")}`,
     );
     say(
-      `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size}, distinct by fact ignoring kind ${factLines.size})`,
+      `defenselessSaveUp E6 passive own absorbs (span-seconds, by shield): ${[
+        ...passiveAbsorbNames,
+      ]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(([n, k]) => `${n} ${k}`)
+        .join(", ")}`,
     );
-    const kinds = [...new Set(all.map((v) => v.kind))].sort();
-    for (const k of kinds) {
-      const ks = all.filter((v) => v.kind === k);
-      const kd = new Set(ks.map((v) => v.fact)).size;
+    say(
+      `petInterrupt control — players' own kicks with a crediting [KICK] line: ${playerKick.lined}/${playerKick.n}`,
+    );
+
+    say("");
+    say(
+      `immunityTableForward measurement — IMMUNE rows of a control on a player (per round): ${fwdImmuneRows}; a table aura up ${fwdTableExplained}; DR-immune by the log ${fwdDrExplained}; unexplained ${fwdCases}`,
+    );
+    say(
+      `  unexplained by control: ${[...fwdBySpell]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(([n, k]) => `${n} ${k}`)
+        .join(", ")}`,
+    );
+    say(
+      "  auras up on the target in the unexplained cases (n ≥ 3, top 30 by n; landed = controls that LANDED on a player under it; rate = n / (n + landed)):",
+    );
+    const fwdRows = [...fwdAura]
+      .filter(([, t]) => t.immune >= 3)
+      .map(([id, t]) => ({
+        id,
+        name: nameOf(id),
+        n: t.immune,
+        landed: t.landed,
+        rate: t.immune / (t.immune + t.landed),
+        share: t.immune / Math.max(1, fwdCases),
+      }))
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 30);
+    for (const r of fwdRows)
       say(
-        `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+        `    ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(4)} (${(r.share * 100).toFixed(0).padStart(3)}% of cases)  landed ${String(r.landed).padStart(5)}  rate ${(r.rate * 100).toFixed(1)}%`,
       );
-      for (const v of ks.slice(0, EXAMPLES))
-        say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
+    const fwdByRate = [...fwdAura]
+      .filter(([, t]) => t.immune >= 3)
+      .map(([id, t]) => ({
+        id,
+        name: nameOf(id),
+        n: t.immune,
+        landed: t.landed,
+        rate: t.immune / (t.immune + t.landed),
+      }))
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 30);
+    say("  the same, n ≥ 3, top 30 by rate:");
+    for (const r of fwdByRate)
+      say(
+        `    ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(4)}  landed ${String(r.landed).padStart(5)}  rate ${(r.rate * 100).toFixed(1)}%`,
+      );
+
+    if (JSON_OUT) {
+      writeFileSync(
+        JSON_OUT,
+        JSON.stringify(
+          {
+            capture: resolve(dir),
+            contexts,
+            checked: Object.fromEntries(checked),
+            landedByPrior,
+            playerKick,
+            ccEndJudged,
+            fixExamples,
+            immunityTableForward: {
+              immuneRows: fwdImmuneRows,
+              tableExplained: fwdTableExplained,
+              drExplained: fwdDrExplained,
+              unexplained: fwdCases,
+              byN: fwdRows,
+              byRate: fwdByRate,
+            },
+            violations,
+          },
+          null,
+          1,
+        ),
+      );
+      say(`wrote ${JSON_OUT}`);
     }
   }
-  for (const [k, n] of [...checked].sort())
-    if (k.includes(":")) say(`(${k}: ${n})`);
-  say(
-    `defenselessSaveUp counted own absorbs (span-seconds, by shield): ${[
-      ...pressedAbsorbNames,
-    ]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([n, k]) => `${n} ${k}`)
-      .join(", ")}`,
-  );
-  say(
-    `defenselessSaveUp E6 passive own absorbs (span-seconds, by shield): ${[
-      ...passiveAbsorbNames,
-    ]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([n, k]) => `${n} ${k}`)
-      .join(", ")}`,
-  );
-  say(
-    `petInterrupt control — players' own kicks with a crediting [KICK] line: ${playerKick.lined}/${playerKick.n}`,
-  );
 
-  say("");
-  say(
-    `immunityTableForward measurement — IMMUNE rows of a control on a player (per round): ${fwdImmuneRows}; a table aura up ${fwdTableExplained}; DR-immune by the log ${fwdDrExplained}; unexplained ${fwdCases}`,
-  );
-  say(
-    `  unexplained by control: ${[...fwdBySpell]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([n, k]) => `${n} ${k}`)
-      .join(", ")}`,
-  );
-  say(
-    "  auras up on the target in the unexplained cases (n ≥ 3, top 30 by n; landed = controls that LANDED on a player under it; rate = n / (n + landed)):",
-  );
-  const fwdRows = [...fwdAura]
-    .filter(([, t]) => t.immune >= 3)
-    .map(([id, t]) => ({
-      id,
-      name: nameOf(id),
-      n: t.immune,
-      landed: t.landed,
-      rate: t.immune / (t.immune + t.landed),
-      share: t.immune / Math.max(1, fwdCases),
-    }))
-    .sort((a, b) => b.n - a.n)
-    .slice(0, 30);
-  for (const r of fwdRows)
-    say(
-      `    ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(4)} (${(r.share * 100).toFixed(0).padStart(3)}% of cases)  landed ${String(r.landed).padStart(5)}  rate ${(r.rate * 100).toFixed(1)}%`,
-    );
-  const fwdByRate = [...fwdAura]
-    .filter(([, t]) => t.immune >= 3)
-    .map(([id, t]) => ({
-      id,
-      name: nameOf(id),
-      n: t.immune,
-      landed: t.landed,
-      rate: t.immune / (t.immune + t.landed),
-    }))
-    .sort((a, b) => b.rate - a.rate)
-    .slice(0, 30);
-  say("  the same, n ≥ 3, top 30 by rate:");
-  for (const r of fwdByRate)
-    say(
-      `    ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(4)}  landed ${String(r.landed).padStart(5)}  rate ${(r.rate * 100).toFixed(1)}%`,
-    );
-
-  if (JSON_OUT) {
-    writeFileSync(
-      JSON_OUT,
-      JSON.stringify(
-        {
-          capture: resolve(dir),
-          contexts,
-          checked: Object.fromEntries(checked),
-          landedByPrior,
-          playerKick,
-          ccEndJudged,
-          fixExamples,
-          immunityTableForward: {
-            immuneRows: fwdImmuneRows,
-            tableExplained: fwdTableExplained,
-            drExplained: fwdDrExplained,
-            unexplained: fwdCases,
-            byN: fwdRows,
-            byRate: fwdByRate,
-          },
-          violations,
-        },
-        null,
-        1,
-      ),
-    );
-    say(`wrote ${JSON_OUT}`);
-  }
-  if (unmapped.length > 0) {
-    console.error(`UNMAPPED contexts: ${unmapped.length}`);
-    for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
-    process.exit(1);
-  }
+  const state = () => ({
+    contexts,
+    checked,
+    violations,
+    passiveAbsorbNames,
+    pressedAbsorbNames,
+    measuredRounds,
+    landedByPrior,
+    fullRunsById,
+    fwdAura,
+    fwdSeen,
+    fwdCases,
+    fwdImmuneRows,
+    fwdTableExplained,
+    fwdDrExplained,
+    fwdBySpell,
+    endCands,
+    ccEndJudged,
+    fixExamples,
+    playerKick,
+  });
+  return {
+    name: "corpusFactScan2",
+    configure(o: IScanOpts) {
+      dir = o.dir;
+      EXAMPLES = o.examples;
+      JSON_OUT = o.json;
+    },
+    run: runRound,
+    report,
+    state,
+    load(s: ReturnType<typeof state>) {
+      ({
+        contexts,
+        checked,
+        violations,
+        passiveAbsorbNames,
+        pressedAbsorbNames,
+        measuredRounds,
+        landedByPrior,
+        fullRunsById,
+        fwdAura,
+        fwdSeen,
+        fwdCases,
+        fwdImmuneRows,
+        fwdTableExplained,
+        fwdDrExplained,
+        fwdBySpell,
+        endCands,
+        ccEndJudged,
+        fixExamples,
+        playerKick,
+      } = s);
+    },
+    merge: { landedByPrior: addEach, fixExamples: firstTen },
+  };
 }
 
-if (process.argv[1]?.includes("corpusFactScan2")) await main();
+export const scan: IScan<any> = createScan();
+
+if (isMainScan(import.meta.url)) await runScanCli(scan);

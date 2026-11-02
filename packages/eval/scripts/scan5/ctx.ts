@@ -8,39 +8,31 @@
  * category maps — are fine).
  */
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
-import type { parseRawStreams } from "@gladlog/analysis/src/utils/rawStreams";
 import { LogEvent } from "@gladlog/parser-compat";
 
-export interface IRoundCtx {
-  /** `<shard>/<file>` of the capture */
+import type { MergeRule } from "../verify/merge";
+import type { IContext } from "../verify/rounds";
+
+/** where a violation was seen, kept for one that is judged after the walk */
+export interface IViolationRef {
   where: string;
-  /** the round's raw archive path (line 1 of the context file) */
   archive: string;
-  /** 1-based round in the archive (Solo Shuffle) */
   round: number;
-  /** `${archive}#${round}` — owner-independent round identity */
   roundKey: string;
-  /** the context's timeline lines (prompt text the gates read) */
-  lines: string[];
-  /** the findings menu text (`- id=… type=… facts={…}` rows + legend) */
-  menu: string;
-  /** the round's raw combat-log lines */
-  rawLines: string[];
-  legacy: any;
-  units: any[];
-  /** units with `info` (players) */
-  players: any[];
-  byName: Map<string, any>;
-  /** the context's `<unit id="N" name="…">` pid → unit */
-  unitOfPid: (pid: string | undefined) => any;
-  pidOf: (unitName: string) => string | undefined;
-  owner: any;
   start: number;
-  end: number;
-  /** the product's end of play (playableEndMs), ≤ end */
-  roundEndAt: number;
-  /** lazily parsed raw streams of the round (castFailed, …) */
-  rawStreams: () => ReturnType<typeof parseRawStreams>;
+}
+export type RecordViolation = (
+  ref: IViolationRef,
+  check: string,
+  kind: string,
+  atMs: number,
+  factId: string,
+  detail: string,
+  line?: string,
+) => void;
+
+export interface IRoundCtx extends IContext {
+  ref: IViolationRef;
   violate: (
     check: string,
     kind: string,
@@ -54,8 +46,13 @@ export interface IRoundCtx {
   firstOwnerOfRound: boolean;
 }
 
-export const nameOf = (id: string | number | undefined, fallback = ""): string =>
-  id === undefined || id === "" ? fallback : getEnglishSpellName(String(id), fallback);
+export const nameOf = (
+  id: string | number | undefined,
+  fallback = "",
+): string =>
+  id === undefined || id === ""
+    ? fallback
+    : getEnglishSpellName(String(id), fallback);
 export const fmtS = (sec: number): string => {
   const t = Math.max(0, Math.floor(sec));
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
@@ -74,7 +71,10 @@ export const ABSORBED = LogEvent.SPELL_ABSORBED as string;
 export const successesOf = (u: any): any[] =>
   ((u.spellCastEvents ?? []) as any[]).filter((c) => ev(c) === SUCCESS);
 export const deathMs = (u: any): number =>
-  Math.min(Infinity, ...((u.deathRecords ?? []) as any[]).map((d) => d.timestamp));
+  Math.min(
+    Infinity,
+    ...((u.deathRecords ?? []) as any[]).map((d) => d.timestamp),
+  );
 /** "0.87M" / "110k" / "950" → its value and half its last printed digit */
 export function amountOf(s: string): { v: number; half: number } | undefined {
   const m = /^([\d.]+)([kM]?)$/.exec(s);
@@ -91,4 +91,10 @@ export interface IScanModule {
   run: (ctx: IRoundCtx) => void;
   /** optional lines printed after the checks (inventories) */
   report?: () => string[];
+  /** the accumulators `report` and `finalize` read, across processes */
+  state?: () => object;
+  load?: (s: never) => void;
+  merge?: Record<string, MergeRule>;
+  /** violations that need the whole run: judged once, on the merged state */
+  finalize?: (record: RecordViolation) => void;
 }

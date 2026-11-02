@@ -260,7 +260,7 @@ function selfOnlyHeldDualRole(ctx: IRoundCtx): void {
  * say `ended early — no dispel logged`. A spell at most of its lines is a run
  * that ends with the action, not early (Deep Breath, Predator's Wake). */
 const FADE_LINE = /\[BUFF FADED\]\s+(?:\d+\([^)]*\)[^:]*: )?(.+?) \(/;
-const fades = new Map<string, { all: number; early: number }>();
+let fades = new Map<string, { all: number; early: number }>();
 
 function fadeEarlyShare(ctx: IRoundCtx): void {
   for (const line of ctx.lines) {
@@ -292,3 +292,8 @@ export function run(ctx: IRoundCtx): void {
   controlRemovalFiled(ctx);
   selfOnlyHeldDualRole(ctx);
 }
+
+export const state = () => ({ fades });
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ fades } = s);
+};

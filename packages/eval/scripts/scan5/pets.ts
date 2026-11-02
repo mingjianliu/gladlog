@@ -509,3 +509,8 @@ export function report(): string[] {
     `pets inventory: command attempts (player press + its pet's same-named row ≤ ${COMMAND_PAIR_MS} ms) ${commandPairs}; PARTY_KILL rows ${partyKillRows}; DAMAGE_SPLIT rows with overkill ${splitOverkillRows}`,
   ];
 }
+
+export const state = () => ({ commandPairs, partyKillRows, splitOverkillRows });
+export const load = (s: ReturnType<typeof state>): void => {
+  ({ commandPairs, partyKillRows, splitOverkillRows } = s);
+};

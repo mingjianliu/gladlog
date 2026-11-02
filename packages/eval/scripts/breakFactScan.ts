@@ -77,10 +77,6 @@
  *   npx tsx packages/eval/scripts/breakFactScan.ts <captureDir>
  *     [--examples N] [--archive-dir <dir>]
  */
-import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
-
 import { ensureAnalysisData } from "@gladlog/analysis";
 import {
   CONTROL_REJECT_MECHANIC,
@@ -117,32 +113,27 @@ import {
   ccRecastSplitsResend,
 } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
-  parseRawStreamsAbsolute,
   type RawStreamsAbsolute,
   rawStreamsForRound,
 } from "@gladlog/analysis/src/utils/rawStreams";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import {
   type IAuraEvent,
   type IMissEvent,
   type ISpellEvent,
   LogEvent,
-  toLegacyMatch,
 } from "@gladlog/parser-compat";
 
-const dir = process.argv[2];
-if (!dir) {
-  console.error(
-    "usage: breakFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>]",
-  );
-  process.exit(2);
-}
-const exIdx = process.argv.indexOf("--examples");
-const EXAMPLES = exIdx > 0 ? Number(process.argv[exIdx + 1]) : 5;
-const adIdx = process.argv.indexOf("--archive-dir");
-const ARCHIVE_DIR = adIdx > 0 ? (process.argv[adIdx + 1] ?? "") : "";
+import {
+  type IContext,
+  type IScan,
+  type IScanOpts,
+  isMainScan,
+  runScanCli,
+} from "./verify/scan";
+
+let EXAMPLES = 5;
 const MEDALLION = "336126";
 const CONTROL_REASONS = new Set<string>(CONTROL_REJECT_REASONS.control);
 
@@ -163,9 +154,8 @@ type Check =
   | "conditionalControlMiss"
   | "recastResend"
   | "solarBeamSilence";
-const expected = new Map<Check, number>();
-const bad = new Map<Check, string[]>();
-const unmapped: string[] = [];
+let expected = new Map<Check, number>();
+let bad = new Map<Check, string[]>();
 const bump = (c: Check) => expected.set(c, (expected.get(c) ?? 0) + 1);
 const fail = (c: Check, s: string) => {
   const l = bad.get(c) ?? [];
@@ -173,75 +163,16 @@ const fail = (c: Check, s: string) => {
   bad.set(c, l);
 };
 
-let cacheRaw: RawStreamsAbsolute | null = null;
-function parseFile(path: string): GladMatch[] {
-  const raw = readFileSync(path);
-  const text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
-  cacheRaw = parseRawStreamsAbsolute(text);
-  const parser = new GladLogParser();
-  const items: GladMatch[] = [];
-  parser.on("match", (m) => items.push(m));
-  parser.on("shuffle", (s) => items.push(...(s.rounds as never[])));
-  for (const line of text.split("\n")) parser.push(line);
-  parser.end();
-  return items;
-}
-
 await ensureAnalysisData();
-const files: Array<{
-  shard: string;
-  name: string;
-  fileNo: number;
-  round: number;
-}> = [];
-for (const shard of readdirSync(dir).filter((d) => /^s\d+$/.test(d))) {
-  for (const name of readdirSync(join(dir, shard, "context"))) {
-    const m = /^(\d+)-(\d+)-(\d+)\.txt$/.exec(name);
-    if (m) files.push({ shard, name, fileNo: +m[1]!, round: +m[2]! });
-  }
-}
-files.sort((a, b) =>
-  a.shard === b.shard ? a.fileNo - b.fileNo : a.shard < b.shard ? -1 : 1,
-);
 
 const isRemoved = (a: any) => a.logLine.event === LogEvent.SPELL_AURA_REMOVED;
 const isBroken = (a: any) =>
   a.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
   a.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL;
-
-let cacheKey = "";
-let cacheItems: GladMatch[] = [];
 let contexts = 0;
-for (const f of files) {
-  const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
-  const [archive] = text.split("\n", 1);
-  if (!archive) continue;
-  const key = `${f.shard}:${archive}`;
-  if (key !== cacheKey) {
-    try {
-      cacheItems = parseFile(
-        archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
-      );
-    } catch {
-      cacheItems = [];
-    }
-    cacheKey = key;
-  }
-  const item = cacheItems[f.round - 1];
-  if (!item) {
-    unmapped.push(`${f.shard}/${f.name} (${archive})`);
-    continue;
-  }
-  let legacy: ReturnType<typeof toLegacyMatch>;
-  try {
-    legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
-  } catch {
-    unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
-    continue;
-  }
+function runRound(ctx: IContext): void {
+  const { f, legacy, lines, units } = ctx;
   contexts++;
-  const lines = text.split("\n");
-  const units = Object.values(legacy.units ?? {}) as any[];
   const pidOf = new Map<string, { pid: string; enemy: boolean }>();
   for (const l of lines) {
     const u = /<unit id="(\d+)" name="([^"]+)"[^>]*role="([^"]+)"/.exec(l);
@@ -559,7 +490,8 @@ for (const f of files) {
             x.spellId === r.spellId &&
             x.srcUnitId === r.srcUnitId &&
             x.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-            x.logLine.timestamp - r.logLine.timestamp <= AURA_REBROADCAST_GAP_MS,
+            x.logLine.timestamp - r.logLine.timestamp <=
+              AURA_REBROADCAST_GAP_MS,
         );
       if (!re) return;
       // the application it closes: the last APPLIED, or a REFRESH (a
@@ -609,7 +541,7 @@ for (const f of files) {
   // Beam 78675: a `[SILENCE] … ← Solar Beam … no aura logged` line at the
   // Beam's second must say it.
   {
-    const raw = cacheRaw as RawStreamsAbsolute | null;
+    const raw = ctx.rawAbsolute() as RawStreamsAbsolute | null;
     const ownerRow = lines.find((l) =>
       /<unit id="\d+" name="[^"]+"[^>]*role="log owner"/.test(l),
     );
@@ -623,7 +555,8 @@ for (const f of files) {
         (legacy.endTime - start) / 1000,
       ).castFailed.filter(
         (x) =>
-          x.unitGuid === owner.id && controlRejectKindOf(x.reason) === "silence",
+          x.unitGuid === owner.id &&
+          controlRejectKindOf(x.reason) === "silence",
       );
       const beams = units
         .filter((u) => pidOf.get(u.name)?.enemy)
@@ -818,7 +751,7 @@ for (const f of files) {
   // (`CONTROL_REJECT_MECHANIC` × `ccMechanicOf`), else the earliest-started.
   // Only the log owner's presses of their printed `<cooldowns>` kit; each of
   // the owner's lines must list exactly the re-assignment's counts.
-  const raw = cacheRaw as RawStreamsAbsolute | null;
+  const raw = ctx.rawAbsolute() as RawStreamsAbsolute | null;
   if (raw?.available) {
     const failed = rawStreamsForRound(
       raw,
@@ -833,7 +766,10 @@ for (const f of files) {
     );
     const ownerName = /name="([^"]+)"/.exec(lines[ownerRow] ?? "")?.[1];
     const kit = new Set(
-      (/<cooldowns>(.*)<\/cooldowns>/.exec(lines[ownerRow + 1] ?? "")?.[1] ?? "")
+      (
+        /<cooldowns>(.*)<\/cooldowns>/.exec(lines[ownerRow + 1] ?? "")?.[1] ??
+        ""
+      )
         // an entry ends at its last `[…]` tag; a name may hold a comma
         // (`Invoke Chi-Ji, the Red Crane`)
         .split(/(?<=\]), /)
@@ -890,7 +826,12 @@ for (const f of files) {
         // cut at the round's end, as the line is (`still on them when the
         // round ended`)
         if (line)
-          wins.push({ id: o.id, from: o.from, to: Math.min(to, roundEnd), line });
+          wins.push({
+            id: o.id,
+            from: o.from,
+            to: Math.min(to, roundEnd),
+            line,
+          });
       };
       // one control per spell and source, as the producer keys it; a
       // REFRESH its source cast for is a new control (ruling A51 — codex
@@ -909,7 +850,13 @@ for (const f of files) {
           const src = byId.get(a.srcUnitId);
           const owner = src?.ownerId ? byId.get(src.ownerId) : undefined;
           if (
-            ccRecastBetween([src, owner], a.spellId, u.id, open.get(key)!.from, ts)
+            ccRecastBetween(
+              [src, owner],
+              a.spellId,
+              u.id,
+              open.get(key)!.from,
+              ts,
+            )
           ) {
             close(key, ts);
             open.set(key, { id: a.spellId, src: a.srcUnitId, from: ts });
@@ -1067,27 +1014,40 @@ for (const f of files) {
   }
 }
 
-console.log(`contexts: ${contexts}`);
-for (const c of [
-  "petDispel",
-  "enemyTrinketOutOf",
-  "trinketAfterCause",
-  "brokenByHolder",
-  "brokenBySplitAlly",
-  "immuneCauseConsumed",
-  "delayedAvoidAtHit",
-  "casterKickEnd",
-  "refusedPressMechanic",
-  "conditionalControlMiss",
-  "recastResend",
-  "solarBeamSilence",
-] as Check[]) {
-  const b = bad.get(c) ?? [];
-  console.log(`${c}: expected ${expected.get(c) ?? 0}, wrong ${b.length}`);
-  for (const s of b.slice(0, EXAMPLES)) console.log(`    ${s}`);
+function report(): void {
+  console.log(`contexts: ${contexts}`);
+  for (const c of [
+    "petDispel",
+    "enemyTrinketOutOf",
+    "trinketAfterCause",
+    "brokenByHolder",
+    "brokenBySplitAlly",
+    "immuneCauseConsumed",
+    "delayedAvoidAtHit",
+    "casterKickEnd",
+    "refusedPressMechanic",
+    "conditionalControlMiss",
+    "recastResend",
+    "solarBeamSilence",
+  ] as Check[]) {
+    const b = bad.get(c) ?? [];
+    console.log(`${c}: expected ${expected.get(c) ?? 0}, wrong ${b.length}`);
+    for (const s of b.slice(0, EXAMPLES)) console.log(`    ${s}`);
+  }
 }
-if (unmapped.length > 0) {
-  console.error(`UNMAPPED contexts: ${unmapped.length}`);
-  for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
-  process.exit(1);
-}
+
+const state = () => ({ contexts, expected, bad });
+export const scan: IScan<ReturnType<typeof state>> = {
+  name: "breakFactScan",
+  configure(o: IScanOpts) {
+    EXAMPLES = o.examples;
+  },
+  run: runRound,
+  report,
+  state,
+  load(s: ReturnType<typeof state>) {
+    ({ contexts, expected, bad } = s);
+  },
+};
+
+if (isMainScan(import.meta.url)) await runScanCli(scan);
