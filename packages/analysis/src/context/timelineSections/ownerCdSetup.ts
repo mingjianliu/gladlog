@@ -14,7 +14,10 @@ import { castEndedCcWindow } from "../../utils/ccTrinketAnalysis";
 import { cdIsProcOnly } from "../../utils/cooldowns";
 import { isStunCcInstance } from "../../utils/drAnalysis";
 import { observedCastEndMs } from "../../utils/enemyCDs";
-import { interruptImmuneWindows as interruptImmuneWindowsOf } from "../../utils/talentBehaviors";
+import {
+  interruptImmuneWindowAt,
+  interruptImmuneWindows as interruptImmuneWindowsOf,
+} from "../../utils/talentBehaviors";
 import {
   computeHealingInWindow,
   extractOwnerCDBuffExpiry,
@@ -176,18 +179,21 @@ export function prepareOwnerCdContext(
     return ownerStunIdsAtCast(timeSeconds).length > 0;
   }
 
-  // B139: interrupt/silence-immunity windows granted by the owner's PvP talents (Obsidian Mettle → Obsidian
-  // Scales, Zen Focus Tea → Thunder Focus Tea). Each is a passive with no marker aura gated on a normal CD
-  // aura, so it's driven by the talentBehaviors catalog (gated on pvpTalents). Used to correct the "enemy
-  // interrupts UP" note on the owner's channels — a kick that cannot land is not a risk.
-  const interruptImmuneWindows = interruptImmuneWindowsOf(owner, matchEndMs);
+  // B139: when a kick could not land on the owner (`unitAuraBlocksInterrupt`: DB2's interrupt immunities,
+  // Obsidian Scales only with Obsidian Mettle). Used to correct the "enemy interrupts UP" note on the owner's
+  // channels — a kick that cannot land is not a risk.
+  const interruptImmuneWindows = interruptImmuneWindowsOf(
+    owner,
+    { startTime: matchStartMs, endTime: matchEndMs },
+    new Map(roundPlayers.map((u) => [u.id, u])),
+  );
   function ownerInterruptImmuneReasonAt(
     timeSeconds: number,
   ): string | undefined {
-    if (interruptImmuneWindows.length === 0) return undefined;
-    const ms = matchStartMs + timeSeconds * 1000;
-    return interruptImmuneWindows.find((w) => ms >= w.from && ms <= w.to)
-      ?.reason;
+    return interruptImmuneWindowAt(
+      interruptImmuneWindows,
+      matchStartMs + timeSeconds * 1000,
+    )?.reason;
   }
 
   // exported: returned to the caller (GH #116)

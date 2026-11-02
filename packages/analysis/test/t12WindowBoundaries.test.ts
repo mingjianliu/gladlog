@@ -332,6 +332,49 @@ describe("① a — a kill window ends at its target's death (computeOffensiveWi
         ),
       ).toEqual([]);
     });
+
+    // GH #168: Obsidian Scales carries the immunity row in every state and is
+    // an immunity only with Obsidian Mettle (605 files: 15 kicks landed inside
+    // it, 10 refused)
+    it("a heal cast under Obsidian Scales is a point unless the healer holds Obsidian Mettle", () => {
+      const underScales = (pvpTalents: string[]) => {
+        const enemies = [druid(50, 77.08, hp), healerWithCast(70)];
+        const healer = enemies[1]!;
+        healer.info = { pvpTalents } as never;
+        healer.auraEvents.push(
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "363916",
+            at(69.5),
+            "e2",
+            "e2",
+            "BUFF",
+          ) as never,
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            "363916",
+            at(78),
+            "e2",
+            "e2",
+            "BUFF",
+          ) as never,
+        );
+        return kickPriorityDecisionPoints(
+          [friend],
+          enemies,
+          {
+            startTime: T0,
+            endTime: at(107),
+            units: Object.fromEntries(
+              [friend, ...enemies].map((u) => [u.id, u]),
+            ),
+          },
+          { eligibility: "bootstrap" },
+        );
+      };
+      expect(underScales([])).toHaveLength(1);
+      expect(underScales(["378444"])).toEqual([]);
+    });
   });
 });
 

@@ -4235,7 +4235,12 @@ export function analyzePlayerCCAndTrinket(
 
   const ownerInterruptImmuneWindows = interruptImmuneWindows(
     player,
-    combat.endTime,
+    { startTime: combat.startTime, endTime: combat.endTime },
+    new Map(
+      [player, ...(Object.values(combat.units ?? {}) as ICombatUnit[])].map(
+        (u) => [u.id, u],
+      ),
+    ),
   );
 
   const interruptInstances: IInterruptInstance[] = [];

@@ -711,4 +711,13 @@
  *  defenseless (user ruling after the preview); every ready control that
  *  reaches is listed. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 469;
+/*
+ * v470 (2026-11-02, G1: GH #168 / #126 row 243 / #166 / #162): a channel's
+ *  interrupt-immune note reads one window builder (`interruptImmuneWindows`):
+ *  DB2's interrupt immunities on the shared aura lifecycle, Obsidian Scales
+ *  only on its holder's own press with Obsidian Mettle, Zen Focus Tea's 5 s
+ *  buff instead of Thunder Focus Tea; Divine Favor and Spiritwalker's Aegis
+ *  rows retired. 605: kickImmuneNote 358 → 0, 360 channel lines change,
+ *  candidates unchanged. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 470;

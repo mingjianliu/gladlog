@@ -20,6 +20,7 @@ import { buildAuraIntervals } from "../src/utils/auraIntervals";
 import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
 import { unitCooldownAvailableAt } from "../src/utils/cooldowns";
 import { untargetableEndS } from "../src/utils/enemyDefensives";
+import { interruptImmuneWindows } from "../src/utils/talentBehaviors";
 import {
   makeAuraEvent,
   makeDamageEvent,
@@ -38,6 +39,7 @@ const POLYMORPH = "118";
 const BARKSKIN = "22812";
 const GREATER_INVIS = "110960";
 const CYCLONE = "33786";
+const UNENDING_RESOLVE = "104773";
 
 /** A Restoration Druid (the owner), an enemy Frost Mage and Balance Druid:
  * a Polymorph on the owner 10–14 s, the owner's Barkskin 20–28 s, the
@@ -73,6 +75,22 @@ function scenario(): ICombatUnit[] {
         LogEvent.SPELL_AURA_REMOVED,
         BARKSKIN,
         ms(28),
+        "p1",
+        "p1",
+        "BUFF",
+      ),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        UNENDING_RESOLVE,
+        ms(34),
+        "p1",
+        "p1",
+        "BUFF",
+      ),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        UNENDING_RESOLVE,
+        ms(42),
         "p1",
         "p1",
         "BUFF",
@@ -156,6 +174,22 @@ describe("log-shape matrix", () => {
         if (full !== undefined)
           expect(iv.toS - iv.fromS, iv.spellId).toBeLessThanOrEqual(full + 1);
       }
+    });
+  });
+
+  describe("interruptImmuneWindows — the owner's Unending Resolve", () => {
+    const read = (units: ICombatUnit[]) =>
+      interruptImmuneWindows(byId(units, "p1"), combatOf(units)).map(
+        (w) =>
+          `${w.reason} ${r2((w.from - T0) / 1000)}–${r2((w.to - T0) / 1000)}`,
+      );
+    it("is indifferent to the neutral shapes", () => expectIndifferent(read));
+    it("a lost REMOVED ends no later than the aura's official length", () => {
+      const [w] = interruptImmuneWindows(
+        byId(lostRemoved().apply(scenario()), "p1"),
+        combatOf(scenario()),
+      );
+      expect(w!.to - w!.from).toBeLessThanOrEqual(8_000);
     });
   });
 

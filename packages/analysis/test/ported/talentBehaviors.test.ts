@@ -1,7 +1,8 @@
 import {
-  getInterruptImmunityConditions,
   getPvpToolkit,
   getTalentAvoidanceBuffs,
+  TALENT_BEHAVIORS,
+  unitAuraBlocksInterrupt,
 } from "../../src/utils/talentBehaviors";
 
 describe("talentBehaviors — getTalentAvoidanceBuffs", () => {
@@ -27,28 +28,41 @@ describe("talentBehaviors — getTalentAvoidanceBuffs", () => {
   });
 });
 
-describe("talentBehaviors — getInterruptImmunityConditions", () => {
-  it("returns the condition only when the owner has the talent (self-gating passives)", () => {
-    const withMettle = getInterruptImmunityConditions(["378444"]);
-    expect(withMettle).toHaveLength(1);
-    expect(withMettle[0].conditionAuraId).toBe("363916");
-    expect(withMettle[0].name).toBe("Obsidian Mettle");
-    expect(withMettle[0].conditionName).toBe("Obsidian Scales");
+describe("talentBehaviors — unitAuraBlocksInterrupt", () => {
+  const withMettle = { info: { pvpTalents: ["378444"] } };
+  const without = { info: { pvpTalents: [] } };
 
-    const withDivineFavor = getInterruptImmunityConditions(["210294"]);
-    expect(withDivineFavor).toHaveLength(1);
-    expect(withDivineFavor[0].conditionAuraId).toBe("210294");
-    expect(withDivineFavor[0].name).toBe("Divine Favor");
-
-    const withAegis = getInterruptImmunityConditions(["378078"]);
-    expect(withAegis).toHaveLength(1);
-    expect(withAegis[0].conditionAuraId).toBe("378078");
-    expect(withAegis[0].name).toBe("Spiritwalker's Aegis");
+  it("Obsidian Scales stops a kick only with Obsidian Mettle, whatever DB2's row says", () => {
+    expect(unitAuraBlocksInterrupt(withMettle, "363916")).toBe(true);
+    expect(unitAuraBlocksInterrupt(without, "363916")).toBe(false);
+    expect(unitAuraBlocksInterrupt({}, "363916")).toBe(false);
   });
 
-  it("returns nothing when the owner lacks the talent", () => {
-    expect(getInterruptImmunityConditions(["999999"])).toHaveLength(0);
-    expect(getInterruptImmunityConditions(undefined)).toHaveLength(0);
+  it("DB2's immunities need no talent row, the aura is the proof (tree talents included)", () => {
+    for (const aura of [
+      "209584", // Zen Focus Tea
+      "378078", // Spiritwalker's Aegis, a tree talent
+      "104773", // Unending Resolve
+      "289655", // Sanctified Ground
+      "317929", // Aura Mastery
+      "377362", // Precognition
+    ])
+      expect(unitAuraBlocksInterrupt(without, aura)).toBe(true);
+  });
+
+  it("Thunder Focus Tea is not an immunity, with or without Zen Focus Tea", () => {
+    expect(
+      unitAuraBlocksInterrupt({ info: { pvpTalents: ["468430"] } }, "116680"),
+    ).toBe(false);
+  });
+
+  it("no row keeps a Divine Favor aura the tooltips no longer make an immunity", () => {
+    const ids = TALENT_BEHAVIORS.flatMap((b) => [
+      b.talentSpellId,
+      b.conditionAuraId,
+    ]);
+    for (const id of ["210294", "210303", "460422", "1270916"])
+      expect(ids).not.toContain(id);
   });
 });
 

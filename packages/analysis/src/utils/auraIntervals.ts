@@ -70,6 +70,7 @@ export interface IAuraInterval {
    * the raw log text. */
   spellName: string;
   srcUnitName: string;
+  srcUnitId?: string;
   fromS: number;
   toS: number;
   inferredStart: boolean;
@@ -368,6 +369,7 @@ export function buildAuraIntervalsUncached(
     inferredStart: boolean;
     spellName: string;
     srcUnitName: string;
+    srcUnitId?: string;
   }
   const open = new Map<string, Open>();
   const keyOf = (spellId: string, srcUnitId: string) =>
@@ -436,6 +438,7 @@ export function buildAuraIntervalsUncached(
           spellId: id,
           spellName: existing.spellName,
           srcUnitName: existing.srcUnitName,
+          srcUnitId: existing.srcUnitId,
           fromS: existing.fromS,
           toS: d === null ? t : Math.min(t, existing.lastSeenS + d),
           inferredStart: existing.inferredStart,
@@ -447,6 +450,7 @@ export function buildAuraIntervalsUncached(
           inferredStart: false,
           spellName: a.spellName ?? existing.spellName,
           srcUnitName: a.srcUnitName,
+          srcUnitId: a.srcUnitId,
         });
       } else if (existing) {
         existing.lastSeenS = t; // DOSE 叠层:活动证据,只挪封顶锚
@@ -457,6 +461,7 @@ export function buildAuraIntervalsUncached(
           inferredStart: false,
           spellName: a.spellName ?? "",
           srcUnitName: a.srcUnitName,
+          srcUnitId: a.srcUnitId,
         });
       }
     } else if (ev === LogEvent.SPELL_AURA_REFRESH) {
@@ -474,6 +479,7 @@ export function buildAuraIntervalsUncached(
           inferredStart: true,
           spellName: a.spellName ?? "",
           srcUnitName: a.srcUnitName,
+          srcUnitId: a.srcUnitId,
         });
       }
     } else if (CLOSE_EVENTS.has(ev)) {
@@ -496,6 +502,7 @@ export function buildAuraIntervalsUncached(
           spellId: id,
           spellName: o.spellName,
           srcUnitName: o.srcUnitName,
+          srcUnitId: o.srcUnitId,
           fromS: o.fromS,
           toS,
           inferredStart: o.inferredStart,
@@ -524,6 +531,7 @@ export function buildAuraIntervalsUncached(
             spellId: id,
             spellName: a.spellName ?? "",
             srcUnitName: a.srcUnitName,
+            srcUnitId: a.srcUnitId,
             fromS: d === null ? 0 : Math.max(0, t - d),
             toS: t,
             inferredStart: true,
@@ -550,6 +558,7 @@ export function buildAuraIntervalsUncached(
       spellId: id,
       spellName: o.spellName,
       srcUnitName: o.srcUnitName,
+      srcUnitId: o.srcUnitId,
       fromS: o.fromS,
       toS: d === null ? durationS : Math.min(durationS, o.lastSeenS + d),
       inferredStart: o.inferredStart,

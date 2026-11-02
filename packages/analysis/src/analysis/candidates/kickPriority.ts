@@ -27,13 +27,11 @@
 import { hardcastHealSpell } from "../../data/kickPriorityHealSpells";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { MELEE_RANGE_YD, spellRangeYards } from "../../data/spellReach";
-import { buildAuraIntervals } from "../../utils/auraIntervals";
 import {
   cannotCastIntervalsForSpells,
   enemySourceIds,
 } from "../../utils/cannotCastIntervals";
 import { castingLockIntervalsOf } from "../../utils/castingLocks";
-import { auraBlocksInterrupt } from "../../utils/combatStates";
 import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
 import {
   interruptCooldownRemainingMs,
@@ -56,6 +54,10 @@ import {
   RANGE_HITBOX_SLACK_YD,
   spellRangeForCaster,
 } from "../../utils/spellRange";
+import {
+  interruptImmuneWindowAt,
+  interruptImmuneWindows,
+} from "../../utils/talentBehaviors";
 import { firstDeathMs } from "../../utils/unitDeath";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
@@ -331,26 +333,25 @@ export function kickPriorityDecisionPoints(
   // aura (official DB2 aura 77 mechanic 26, or a full school immunity —
   // Spiritwalker's Aegis 378078, Zen Focus Tea, Precognition, Obsidian
   // Mettle's Obsidian Scales, Unending Resolve …) cannot be kicked, so no
-  // one "could have kicked" that cast. `auraBlocksInterrupt` reads the same
-  // official table the CC-immunity predicates read, plus the Spirit of
-  // Redemption form (F16 retest idx 42).
-  const immuneCache = new Map<string, Array<{ from: number; to: number }>>();
+  // one "could have kicked" that cast. `interruptImmuneWindows` reads the
+  // same official table the CC-immunity predicates read, plus the Spirit of
+  // Redemption form (F16 retest idx 42); Obsidian Scales needs Obsidian
+  // Mettle (GH #168).
+  const immuneCache = new Map<
+    string,
+    ReturnType<typeof interruptImmuneWindows>
+  >();
   const interruptImmuneAt = (u: UnitLike, ms: number): boolean => {
     let iv = immuneCache.get(u.id);
     if (!iv) {
       try {
-        iv = buildAuraIntervals(u as never, combat)
-          .filter((a) => auraBlocksInterrupt(a.spellId))
-          .map((a) => ({
-            from: startMs + a.fromS * 1000,
-            to: startMs + a.toS * 1000,
-          }));
+        iv = interruptImmuneWindows(u as never, combat);
       } catch {
         iv = [];
       }
       immuneCache.set(u.id, iv);
     }
-    return iv.some((x) => x.from <= ms && ms <= x.to);
+    return interruptImmuneWindowAt(iv, ms) !== undefined;
   };
   const cannotCastOf = (f: UnitLike) => {
     let iv = lockedCache.get(f.id);

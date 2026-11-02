@@ -137,6 +137,26 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
     );
   });
 
+  // GH #166: Life Cocoon's +50 % is aura 259, periodic healing only; Guardian
+  // Spirit's +60 % is aura 118, every heal
+  it("a periodic-only healing-received figure says so", () => {
+    expect(db2("116849").some((r) => r.aura === 259)).toBe(true);
+    expect(db2("116849").some((r) => r.aura === 118)).toBe(false);
+    expect(abilityProfile("116849")?.healingReceivedPeriodicOnly).toBe(true);
+    expect(abilityProfile("47788")?.healingReceivedPeriodicOnly).toBe(false);
+    const words = selfDefensiveLabelWords({
+      kind: "healing received",
+      pct: 50,
+      periodicOnly: true,
+    });
+    expect(words).toBe("+50% periodic healing received");
+    expect(
+      selfDefensiveLabelLegends([
+        `0:42  [ENEMY DEF]   X (${words}) (at 60% HP)`,
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("the official rows behind the derived labels (DB2, re-read)", () => {
     // Roar of Sacrifice: aura 87 on the target, −15 × PvpMultiplier 1.66666
     // — the number the label prints; its corpus split (0.750 on every

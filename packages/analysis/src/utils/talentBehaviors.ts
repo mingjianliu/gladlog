@@ -12,14 +12,18 @@
  * CC_AVOIDANCE_BUFF_SPELLS and CD_TALENT_MODIFIERS.
  */
 
-import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
+import type { ICombatUnit } from "@gladlog/parser-compat";
+
+import { getEnglishSpellName } from "../data/spellEffectData";
+import { buildAuraIntervals } from "./auraIntervals";
+import { auraBlocksInterrupt } from "./combatStates";
 
 export type TalentEffectKind =
   /** while buffSpellId is active, immune to magic damage/effects → credit a magic CC/damage avoidance */
   | "magic_immunity"
   /** while buffSpellId is active, immune to (the next) full CC → credit a CC avoidance */
   | "cc_immunity"
-  /** while conditionAuraId (a normal CD) is active, immune to interrupt/silence → suppress "interrupts UP" */
+  /** while conditionAuraId (a normal CD) or the talent's own buffSpellId is active, immune to interrupt/silence → suppress "interrupts UP" */
   | "interrupt_immunity"
   /** an offensive CC / peel tool the talent grants (surfaced in the toolkit for usage coaching) */
   | "offensive_cc"
@@ -140,7 +144,16 @@ export const TALENT_BEHAVIORS: ITalentBehavior[] = [
     toolCategory: "immunity",
     note: "Psychic Scream prevents the next CC on you",
   },
-  // C. Interrupt / silence immunity — condition-gated passive (MUST check pvpTalents)
+  // C. Interrupt / silence immunity. What a kick can do is read from DB2, not
+  // listed here (`unitAuraBlocksInterrupt`); a row is needed only for the one
+  // aura DB2 gets wrong by itself, or for the toolkit line.
+  //
+  // Not here on purpose (12.1.5.70575 tooltips, GH #168): Divine Favor
+  // 210294 / 210303 / 460422 / 1270916 read as heal and mana riders and grant
+  // no immunity, none is logged on the new-season corpus. Spiritwalker's Aegis
+  // 378077 is a tree talent of all three Shaman specs, which `pvpTalents`
+  // never carries, so its row never fired (GH #126 row 243); its own aura
+  // 378078 proves it (363 applications, 0 kicks landed, 24 refused on 605).
   {
     talentSpellId: "378444",
     name: "Obsidian Mettle",
@@ -154,87 +167,18 @@ export const TALENT_BEHAVIORS: ITalentBehavior[] = [
     note: "immune to interrupt/silence/pushback while Obsidian Scales is active",
   },
   {
+    // Its own 5 s aura, tooltip "for $209584d": not Thunder Focus Tea 116680,
+    // which the two empowerments consume (median 2.4 s). 605 files: 20 kicks
+    // landed under 116680, 0 under 209584 (GH #168).
     talentSpellId: "468430",
     name: "Zen Focus Tea",
     specs: ["Mistweaver Monk"],
     kind: "interrupt_immunity",
-    conditionAuraId: "116680",
-    conditionName: "Thunder Focus Tea",
+    buffSpellId: "209584",
     toolLabel:
-      "Zen Focus Tea (interrupt/silence immunity while Thunder Focus Tea up)",
+      "Zen Focus Tea (5s interrupt/silence immunity after Thunder Focus Tea)",
     toolCategory: "immunity",
-    note: "immune to silence/interrupt while Thunder Focus Tea is active (5s)",
-  },
-  {
-    talentSpellId: "210294",
-    name: "Divine Favor",
-    specs: ["Holy Paladin"],
-    kind: "interrupt_immunity",
-    conditionAuraId: "210294",
-    conditionName: "Divine Favor",
-    toolLabel: "Divine Favor (interrupt/silence immunity on next heal)",
-    toolCategory: "immunity",
-    note: "next cast is immune to interrupt/silence",
-  },
-  {
-    talentSpellId: "210303",
-    name: "Divine Favor",
-    specs: ["Holy Paladin"],
-    kind: "interrupt_immunity",
-    conditionAuraId: "210294",
-    conditionName: "Divine Favor",
-    toolLabel: "Divine Favor (interrupt/silence immunity on next heal)",
-    toolCategory: "immunity",
-    note: "next cast is immune to interrupt/silence",
-  },
-  {
-    talentSpellId: "460422",
-    name: "Divine Favor",
-    specs: ["Holy Paladin"],
-    kind: "interrupt_immunity",
-    conditionAuraId: "460422",
-    conditionName: "Divine Favor",
-    toolLabel:
-      "Divine Favor (interrupt/silence/pushback immunity on next heal)",
-    toolCategory: "immunity",
-    note: "next cast is immune to interrupt/silence",
-  },
-  {
-    talentSpellId: "1270916",
-    name: "Divine Favor",
-    specs: ["Holy Paladin"],
-    kind: "interrupt_immunity",
-    conditionAuraId: "1270916",
-    conditionName: "Divine Favor",
-    toolLabel: "Divine Favor (interrupt/silence immunity on next heal)",
-    toolCategory: "immunity",
-    note: "next cast is immune to interrupt/silence",
-  },
-  {
-    // 355584 / 131558 were pre-12.x ids with zero corpus occurrences (talent
-    // impact audit 2026-09-26); the live talent is 378077, its aura 378078
-    talentSpellId: "378077",
-    name: "Spiritwalker's Aegis",
-    specs: ["Restoration Shaman"],
-    kind: "interrupt_immunity",
-    conditionAuraId: "378078",
-    conditionName: "Spiritwalker's Aegis",
-    toolLabel:
-      "Spiritwalker's Aegis (interrupt/silence immunity during Spiritwalker's Grace)",
-    toolCategory: "immunity",
-    note: "immune to silence/interrupt while Spiritwalker's Aegis is active",
-  },
-  {
-    talentSpellId: "378078",
-    name: "Spiritwalker's Aegis",
-    specs: ["Restoration Shaman"],
-    kind: "interrupt_immunity",
-    conditionAuraId: "378078",
-    conditionName: "Spiritwalker's Aegis",
-    toolLabel:
-      "Spiritwalker's Aegis (interrupt/silence immunity during Spiritwalker's Grace)",
-    toolCategory: "immunity",
-    note: "immune to silence/interrupt while Spiritwalker's Aegis is active",
+    note: "immune to silence/interrupt for 5 s after Thunder Focus Tea",
   },
 
   // D. Offensive CC / peel tools — surfaced in the toolkit; usage checked via abilitySpellId
@@ -389,97 +333,108 @@ export function getTalentAvoidanceBuffs(): Array<[string, string]> {
 }
 
 /**
- * The interrupt/silence-immunity conditions the owner's talents grant: while any returned conditionAuraId
- * is active on the owner, they are interrupt-immune. Gated on the owner's pvpTalents.
+ * Auras that are an interrupt immunity only with a talent: DB2 carries the
+ * row in every state, so `auraBlocksInterrupt` cannot tell. Obsidian Scales
+ * 363916 without Obsidian Mettle took 15 of its 25 kicks on 605 files.
  */
-export function getInterruptImmunityConditions(
-  pvpTalentIds: string[] | undefined,
-): Array<{ conditionAuraId: string; name: string; conditionName: string }> {
-  const talents = new Set(pvpTalentIds ?? []);
-  return TALENT_BEHAVIORS.filter(
-    (b) =>
-      b.kind === "interrupt_immunity" &&
-      b.conditionAuraId &&
-      talents.has(b.talentSpellId),
-  ).map((b) => ({
-    conditionAuraId: b.conditionAuraId as string,
-    name: b.name,
-    conditionName: b.conditionName ?? "",
-  }));
+const TALENT_GATED_INTERRUPT_IMMUNITY = new Map(
+  TALENT_BEHAVIORS.flatMap((b) =>
+    b.kind === "interrupt_immunity" && b.conditionAuraId
+      ? [[b.conditionAuraId, b] as const]
+      : [],
+  ),
+);
+
+/**
+ * Does this aura stop a kick landing on this unit — the one reading for the
+ * "enemy interrupts UP" correction, kick-eaten, kick-priority and `[KICK]`.
+ * DB2 (`auraBlocksInterrupt`) unless a talent decides it. 605 files: 0 kicks
+ * landed on 12,000+ applications of those auras (Sanctified Ground 289655,
+ * Precognition 377362, Unending Resolve 104773, Aura Mastery 317929 …).
+ */
+export function unitAuraBlocksInterrupt(
+  unit: { info?: { pvpTalents?: string[] } | null },
+  auraId: string,
+): boolean {
+  const gate = TALENT_GATED_INTERRUPT_IMMUNITY.get(auraId);
+  if (gate) return !!unit.info?.pvpTalents?.includes(gate.talentSpellId);
+  return auraBlocksInterrupt(auraId);
+}
+
+export interface IInterruptImmuneWindow {
+  spellId: string;
+  /** epoch ms */
+  from: number;
+  to: number;
+  reason: string;
+  auraName: string;
 }
 
 /**
- * When the owner was interrupt-immune through a PvP talent
- * (`getInterruptImmunityConditions`): the condition aura's APPLIED / REFRESH
- * to its REMOVED on the owner, epoch ms; an aura still up at the end closes
- * at `endMs`. One builder for the timeline's "enemy interrupts UP" correction
- * (B139) and kick-eaten's `kickImmunityEnded` fact (triage F-K14b).
+ * When a kick could not land on this unit (`unitAuraBlocksInterrupt`), one
+ * window per aura interval, in the order applied, epoch ms. Through the shared
+ * pairing (`buildAuraIntervals`: BROKEN closes too, an aura with no REMOVED
+ * ends at its official duration, a re-broadcast is no end — codex G1 #1: a
+ * pairing of its own kept a duplicate APPLIED's Unending Resolve 4 s long).
+ * The pairing clamps every event to its `startTime`, so an aura put up in the
+ * prep room and never REMOVED would restart its official duration at 0:00 and
+ * read as up for the first seconds of the round; the origin is therefore moved
+ * back to the unit's earliest aura event. One builder for the "enemy
+ * interrupts UP" correction (B139), kick-eaten's `kickImmunityEnded` (triage
+ * F-K14b), kick-priority and `[KICK]`.
  */
 export function interruptImmuneWindows(
-  owner: {
-    info?: { pvpTalents?: string[] } | null;
-    auraEvents?: ReadonlyArray<{
-      spellId?: string | null;
-      timestamp: number;
-      logLine: { event: string };
-    }>;
+  unit: ICombatUnit,
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Readonly<Record<string, ICombatUnit>>;
   },
-  endMs: number,
-): Array<{ from: number; to: number; reason: string; auraName: string }> {
-  const out: Array<{
-    from: number;
-    to: number;
-    reason: string;
-    auraName: string;
-  }> = [];
-  for (const cond of getInterruptImmunityConditions(owner.info?.pvpTalents)) {
-    const reason = cond.conditionName
-      ? `${cond.name} + ${cond.conditionName}`
-      : cond.name;
-    const auraName = cond.conditionName || cond.name;
-    let openFrom: number | null = null;
-    // the aura's lost REMOVED ends it at its official length after its last
-    // (re)application — the `buildAuraIntervals` cap (codex 60-POSTHOC-09f
-    // #2: an Obsidian Scales with no REMOVED kept Obsidian Mettle's
-    // interrupt immunity to 180 s, 22 s official)
-    let lastSeen = 0;
-    const capAt = (endAt: number) => {
-      const d = officialDurationS(
-        cond.conditionAuraId,
-        (owner as { spellCastEvents?: unknown }).spellCastEvents
-          ? (owner as never)
-          : undefined,
-        lastSeen,
-      );
-      return d === null ? endAt : Math.min(endAt, lastSeen + d * 1000);
-    };
-    // a re-broadcast's REMOVED is not the window's end (work order
-    // 2026-10-14d #9 — `dropAuraRebroadcasts`)
-    for (const a of dropAuraRebroadcasts(owner.auraEvents ?? [])) {
-      if (a.spellId !== cond.conditionAuraId) continue;
-      if (
-        a.logLine.event === "SPELL_AURA_APPLIED" ||
-        a.logLine.event === "SPELL_AURA_REFRESH"
-      ) {
-        if (openFrom !== null && a.timestamp > capAt(Infinity)) {
-          // the open run's REMOVED was lost: it ended at its length
-          out.push({ from: openFrom, to: capAt(a.timestamp), reason, auraName });
-          openFrom = null;
-        }
-        if (openFrom === null) openFrom = a.timestamp;
-        lastSeen = a.timestamp;
-      } else if (
-        a.logLine.event === "SPELL_AURA_REMOVED" &&
-        openFrom !== null
-      ) {
-        out.push({ from: openFrom, to: a.timestamp, reason, auraName });
-        openFrom = null;
-      }
-    }
-    if (openFrom !== null)
-      out.push({ from: openFrom, to: capAt(endMs), reason, auraName });
-  }
-  return out;
+  castersById?: Parameters<typeof buildAuraIntervals>[2],
+): IInterruptImmuneWindow[] {
+  if (!unit.auraEvents?.length) return [];
+  const originMs = unit.auraEvents.reduce(
+    (lo, a) => Math.min(lo, a.timestamp),
+    combat.startTime,
+  );
+  // 0.1 ms grid: the rows' own precision, so a window's edge is its row's ms
+  const toMs = (s: number) => originMs + Math.round(s * 1e7) / 1e4;
+  return buildAuraIntervals(
+    unit,
+    { ...combat, startTime: originMs },
+    castersById,
+  )
+    .filter(
+      (i) =>
+        unitAuraBlocksInterrupt(unit, i.spellId) &&
+        // a talent's immunity is on the holder's own press: an ally's copy
+        // of Obsidian Scales took 17 kicks of 17, Mettle on either side;
+        // the holder's own took 0 of 6 (six files, wide + 605)
+        (!TALENT_GATED_INTERRUPT_IMMUNITY.has(i.spellId) ||
+          i.srcUnitId === unit.id),
+    )
+    .sort((a, b) => a.fromS - b.fromS)
+    .map((i) => {
+      const gate = TALENT_GATED_INTERRUPT_IMMUNITY.get(i.spellId);
+      const auraName =
+        gate?.conditionName ?? getEnglishSpellName(i.spellId, i.spellName);
+      return {
+        spellId: i.spellId,
+        from: toMs(i.fromS),
+        to: toMs(i.toS),
+        reason: gate ? `${gate.name} + ${auraName}` : auraName,
+        auraName,
+      };
+    });
+}
+
+/** The window `ms` lies in. Its end is out: a press logged in the millisecond
+ * the aura went (a Cyclone's REMOVED, codex G1 #2) has no immunity left. */
+export function interruptImmuneWindowAt<W extends { from: number; to: number }>(
+  windows: readonly W[],
+  ms: number,
+): W | undefined {
+  return windows.find((w) => w.from <= ms && ms < w.to);
 }
 
 /** PvP talents that grant an OFFENSIVE purge (dispelling beneficial effects from ENEMIES). */

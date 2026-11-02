@@ -4725,3 +4725,28 @@ immunity names no cause). Three rose as check lag: reflectDotRun, castDamageIdSp
 allyScales. No independent rerun: both sides read by the same check code, every
 rise signed. Review: eight rounds, the last APPROVE, then a ninth for the last check
 edit.
+
+v470 (2026-11-02, G1 — GH #168, #126 row 243, #166, #162). A channel's
+`interrupt-immune (X)` note, kick-priority, the kick lines and the CC/trinket
+reader read one window builder, `interruptImmuneWindows` (talentBehaviors.ts):
+DB2's interrupt immunities (`auraBlocksInterrupt`) on the shared aura lifecycle
+(`buildAuraIntervals`: BROKEN closes, official length caps a lost REMOVED,
+half-open end). Obsidian Scales is an immunity only on its holder's own press
+with Obsidian Mettle: on six files, 28 kicks — own copy with Mettle 0 landed / 6
+refused, own copy without 5 / 0, an ally's copy 17 / 0. Zen Focus Tea reads its
+own 5 s buff 209584 instead of Thunder Focus Tea (#168); the Divine Favor and
+Spiritwalker's Aegis rows go (#126 row 243). Life Cocoon's periodic-only healing
+bonus is flagged in the ability profile (#166; 0 printed lines change, it is
+read first as an absorb). The SimC hotfix map gains fields 9 and 25 (#162; the
+overlay is not regenerated, no live row uses them).
+
+Base → after, same check code (scan5 `kickImmune`), 605 / wide: kickImmuneNote
+358 → 0 / 406 → 0 (checked 5,843 → 5,847 / 16,250 → 16,246; upWhileImmune 356 → 0 / 393 → 0, kickInsideWindow 2 →
+0 / 13 → 0). 605: 302 of 3,519 contexts change — 360 channel lines (Spirit
+of Redemption 316, Precognition 23, Unending Resolve 12, Sanctified Ground 9), the
+`enemy interrupts UP` legend leaves 243 prompts that no longer print it, 19
+toolkit rows reword Zen Focus Tea; every other scan and the regression nets are
+identical. Wide: 383 of 10,039 contexts change, the same families plus 9 kick
+lines that no longer name a talentless Obsidian Scales. Candidates unchanged per
+class on both. Wide scans 1–4 were stopped for memory and not rerun (605 showed
+them identical). Review: three rounds, the last two APPROVE.

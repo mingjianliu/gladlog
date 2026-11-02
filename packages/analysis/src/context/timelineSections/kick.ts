@@ -15,7 +15,6 @@ import {
 } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import { buildAuraIntervals } from "../../utils/auraIntervals";
 import {
   INTERRUPT_SPELL_IDS,
   interruptBackAtMs,
@@ -31,10 +30,7 @@ import {
 } from "../../utils/kickAudit";
 import { petCommands } from "../../utils/petCommands";
 import { fmtTime } from "../../utils/renderGrid";
-import {
-  auraBlocksMechanic,
-  INTERRUPT_MECHANIC,
-} from "../../utils/spellMechanics";
+import { interruptImmuneWindows } from "../../utils/talentBehaviors";
 import { resolveSummonOwner, summonKindOf } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
 
@@ -213,43 +209,22 @@ export function emitKickEntries(
   // the interrupt kit (`INTERRUPT_SPELL_IDS`), the same ids the "enemy
   // interrupts UP" ledger calls an interrupt. The immunity is named only
   // when an aura on the victim is officially interrupt-immune (DB2 aura 77
-  // mechanic 26, `auraBlocksMechanic`); otherwise bare IMMUNE, never a
+  // mechanic 26, `interruptImmuneWindows`); otherwise bare IMMUNE, never a
   // guess.
   const kickKitIds = new Set(INTERRUPT_SPELL_IDS);
   const castersById = new Map(_allUnits.map((u) => [u.id, u]));
   const immuneAuraCache = new Map<
     string,
-    Array<{ spellId: string; fromMs: number; toMs: number; name: string }>
+    ReturnType<typeof interruptImmuneWindows>
   >();
-  /** The unit's interrupt-immune auras as [fromMs, toMs], through the shared
-   * pairing (`buildAuraIntervals`: BROKEN closes too, an aura with no
-   * REMOVED ends at its official duration, events are sorted). The pairing
-   * clamps every event to its `startTime`, so an aura put up in the prep
-   * room and never REMOVED would restart its official duration at 0:00 and
-   * read as up for the first seconds of the round; the origin is therefore
-   * moved back to the unit's earliest aura event and the result is kept in
-   * absolute milliseconds. */
   const immuneAurasOf = (unit: ICombatUnit) => {
     let hit = immuneAuraCache.get(unit.id);
     if (!hit) {
-      const originMs = (unit.auraEvents ?? []).reduce(
-        (lo, a) => Math.min(lo, a.timestamp),
-        matchStartMs,
-      );
-      hit = buildAuraIntervals(
+      hit = interruptImmuneWindows(
         unit,
-        { startTime: originMs, endTime: matchEndMs },
+        { startTime: matchStartMs, endTime: matchEndMs },
         castersById,
-      )
-        .filter(
-          (i) => auraBlocksMechanic(i.spellId, INTERRUPT_MECHANIC) === true,
-        )
-        .map((i) => ({
-          spellId: i.spellId,
-          fromMs: originMs + i.fromS * 1000,
-          toMs: originMs + i.toS * 1000,
-          name: getEnglishSpellName(i.spellId, i.spellName),
-        }));
+      );
       immuneAuraCache.set(unit.id, hit);
     }
     return hit;
@@ -261,10 +236,10 @@ export function emitKickEntries(
   // triggered it again with no miss)
   const appliedAfterMissRow = (
     unit: ICombatUnit,
-    i: { spellId: string; fromMs: number },
+    i: { spellId: string; from: number },
     m: { timestamp: number; logLine: { lineIndex?: number } },
   ) =>
-    Math.abs(i.fromMs - m.timestamp) <= 0.5 &&
+    Math.abs(i.from - m.timestamp) <= 0.5 &&
     (unit.auraEvents ?? []).some(
       (a) =>
         a.spellId === i.spellId &&
@@ -320,12 +295,12 @@ export function emitKickEntries(
           immuneAurasOf(friend)
             .filter(
               (i) =>
-                i.fromMs - 0.5 <= m.timestamp &&
-                m.timestamp <= i.toMs + 0.5 &&
+                i.from - 0.5 <= m.timestamp &&
+                m.timestamp <= i.to + 0.5 &&
                 !appliedAfterMissRow(friend, i, m),
             )
-            .sort((a, b) => a.fromMs - b.fromMs)
-            .map((i) => i.name),
+            .sort((a, b) => a.from - b.from)
+            .map((i) => i.auraName),
         ),
       ].join(" + ");
       addEntry(

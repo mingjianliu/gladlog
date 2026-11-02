@@ -62,6 +62,8 @@ export interface AbilityProfile {
   healsOthers: boolean;
   /** 提高**受到**的治疗量 %(守护之魂 60、复苏之茧 50)。 */
   healingReceivedPct?: number;
+  /** `healingReceivedPct` 只作用于周期性治疗(aura 259,无 118 行):复苏之茧。 */
+  healingReceivedPeriodicOnly: boolean;
   /** 加速 %。 */
   /** % movement-speed increase (aura 31 = A_MOD_INCREASE_SPEED; called hastePct until 2026-09-04 — it never was haste). */
   moveSpeedPct?: number;
@@ -112,6 +114,7 @@ export function abilityProfile(spellId: string): AbilityProfile {
     healsSelf: effects?.healsSelf === true,
     healsOthers: effects?.healsOthers === true,
     healingReceivedPct: effects?.healingReceivedPct,
+    healingReceivedPeriodicOnly: effects?.healingReceivedPeriodicOnly === true,
     moveSpeedPct: effects?.moveSpeedPct,
     hitsEnemy: effects?.hitsEnemy === true,
     enemyAoE: effects?.enemyAoE === true,

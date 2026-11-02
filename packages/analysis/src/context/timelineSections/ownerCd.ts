@@ -609,7 +609,7 @@ export function emitOwnerCdEntries(
       ) {
         const immuneReason = ownerInterruptImmuneReasonAt(cast.timeSeconds);
         if (immuneReason) {
-          // B139: kicks can't land — a PvP talent grants interrupt/silence immunity here.
+          // B139: kicks can't land — an interrupt immunity is up here.
           interruptNote = ` | interrupt-immune (${immuneReason})`;
         } else {
           // F-C5 / F-C5b (ruling A′16): UP = usable at this instant — the

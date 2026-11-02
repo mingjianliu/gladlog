@@ -25,9 +25,11 @@
  * other 2 are build deltas), 14 → EffectBasePointsF (61/73), 24 →
  * ImplicitTarget_0 (4/4), 29 → EffectAttributes (4/4), 5 → EffectAura (1/1),
  * 10 → BonusCoefficientFromAP (10/16 — SimC's `_m_coeff`; the rest are
- * spell-power rows this column does not hold). Fields with one ambiguous
- * sample (15, 16) stay unmapped and are kept verbatim in `unmapped` so nothing
- * is silently dropped. `fetchSimcHotfixes.ts` re-verifies the mapping on every
+ * spell-power rows this column does not hold). GH #162 added two on
+ * sc_spell_data.inc at SimC 8f0e7d6 against the 69497 CSV: 9 →
+ * EffectBonusCoefficient (23/23), 25 → ImplicitTarget_1 (2/2). Fields with one
+ * ambiguous sample (15, 16) stay unmapped and are kept verbatim in `unmapped`
+ * so nothing is silently dropped. `fetchSimcHotfixes.ts` re-verifies the mapping on every
  * run (old-value match rate per field) and fails if the two fields the product
  * consumes — PvpMultiplier and EffectBasePointsF — drift below 50 %.
  *
@@ -41,9 +43,11 @@ import path from "path";
 /** SimC spelleffect_data_t field id → DB2 SpellEffect CSV column. */
 export const SIMC_EFFECT_FIELD_COLUMNS: Readonly<Record<number, string>> = {
   5: "EffectAura",
+  9: "EffectBonusCoefficient",
   10: "BonusCoefficientFromAP",
   14: "EffectBasePointsF",
   24: "ImplicitTarget_0",
+  25: "ImplicitTarget_1",
   27: "PvpMultiplier",
   29: "EffectAttributes",
 };

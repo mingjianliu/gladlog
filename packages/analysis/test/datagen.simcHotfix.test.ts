@@ -78,6 +78,8 @@ describe("simcHotfix — 解析与叠加", () => {
   test("field 27 → PvpMultiplier、14 → EffectBasePointsF;未知 field 原样保留在 unmapped", () => {
     expect(SIMC_EFFECT_FIELD_COLUMNS[27]).toBe("PvpMultiplier");
     expect(SIMC_EFFECT_FIELD_COLUMNS[14]).toBe("EffectBasePointsF");
+    expect(SIMC_EFFECT_FIELD_COLUMNS[9]).toBe("EffectBonusCoefficient");
+    expect(SIMC_EFFECT_FIELD_COLUMNS[25]).toBe("ImplicitTarget_1");
     expect(overlay.effects["13"]).toEqual({
       spellId: 17,
       columns: { PvpMultiplier: 1.15 },

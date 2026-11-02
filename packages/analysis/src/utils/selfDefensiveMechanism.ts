@@ -55,7 +55,7 @@ export type SelfDefensiveMechanism =
   /** a heal of the caster; `healAbsorb` = it also puts a heal absorb on them */
   | { kind: "heal"; healAbsorb: boolean }
   /** more healing received, by an official percentage */
-  | { kind: "healing received"; pct: number }
+  | { kind: "healing received"; pct: number; periodicOnly: boolean }
   /** immunity to the named control mechanics while it is up */
   | { kind: "mechanic immunity"; mechanics: readonly string[] }
   /** the named controls removed at the press, no immunity claimed
@@ -152,7 +152,11 @@ export function selfDefensiveMechanism(
   if (profile.healsSelf || profile.healsOthers)
     return { kind: "heal", healAbsorb: HEAL_ABSORB_SELF_SAVE_IDS.has(spellId) };
   if (profile.healingReceivedPct !== undefined)
-    return { kind: "healing received", pct: profile.healingReceivedPct };
+    return {
+      kind: "healing received",
+      pct: profile.healingReceivedPct,
+      periodicOnly: profile.healingReceivedPeriodicOnly,
+    };
   // the cast's own aura, or the aura the log shows the cast applying
   // (Master's Call 272682 → 54216 / 62305, 1241871 → 1224810)
   const mechanics = [
@@ -189,7 +193,7 @@ export function selfDefensiveLabelWords(m: SelfDefensiveMechanism): string {
     case "heal":
       return m.healAbsorb ? "heal + heal absorb" : "heal";
     case "healing received":
-      return `+${m.pct}% healing received`;
+      return `+${m.pct}% ${m.periodicOnly ? "periodic " : ""}healing received`;
     case "mechanic immunity":
       return `${m.mechanics.join(" / ")} immunity`;
     case "control removal":
@@ -281,7 +285,7 @@ const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
       "`(heal + heal absorb)` = a heal, then a debuff that swallows the next healing aimed at the unit;",
   },
   {
-    carried: / \(\+\d+% healing received\)/,
+    carried: / \(\+\d+% (?:periodic )?healing received\)/,
     legend:
       "`(+N% healing received)` = the unit takes that much more healing while it is up (Guardian Spirit also refuses one killing blow — `| save triggered` says when it did);",
   },

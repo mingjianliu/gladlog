@@ -33,7 +33,10 @@ import {
   ccRecastBetween,
   reAppliedIsSameApplication,
 } from "../src/utils/drAnalysis";
-import { interruptImmuneWindows } from "../src/utils/talentBehaviors";
+import {
+  interruptImmuneWindowAt,
+  interruptImmuneWindows,
+} from "../src/utils/talentBehaviors";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
 beforeAll(async () => {
@@ -250,16 +253,18 @@ describe("#3 — an aura the opposing side applied is not the victim's mitigatio
 describe("#9 — an interrupt-immunity window reads through a re-broadcast", () => {
   it("a REMOVED + APPLIED of the condition aura 1 ms apart does not end the window", () => {
     // Obsidian Mettle 378444: interrupt-immune while Obsidian Scales 363916
-    const owner = (events: any[]) => ({
-      info: { pvpTalents: ["378444"] },
-      auraEvents: events,
-    });
+    const owner = (events: any[]) =>
+      ({
+        id: "o",
+        info: { pvpTalents: ["378444"] },
+        auraEvents: events,
+      }) as never;
     const base = interruptImmuneWindows(
       owner([
         aura(LogEvent.SPELL_AURA_APPLIED, "363916", 10, "o", "o", "BUFF"),
         aura(LogEvent.SPELL_AURA_REMOVED, "363916", 18, "o", "o", "BUFF"),
       ]),
-      S(300),
+      combat,
     );
     expect(base.map((w) => [w.from, w.to])).toEqual([[S(10), S(18)]]);
     const split = interruptImmuneWindows(
@@ -269,11 +274,109 @@ describe("#9 — an interrupt-immunity window reads through a re-broadcast", () 
         aura(LogEvent.SPELL_AURA_APPLIED, "363916", 13.0005, "o", "o", "BUFF"),
         aura(LogEvent.SPELL_AURA_REMOVED, "363916", 18, "o", "o", "BUFF"),
       ]),
-      S(300),
+      combat,
     );
     expect(split.map((w) => [w.from, w.to])).toEqual(
       base.map((w) => [w.from, w.to]),
     );
+  });
+});
+
+describe("GH #168 — interrupt-immune windows read DB2, not a talent list", () => {
+  const windows = (auraId: string, pvpTalents: string[]) =>
+    interruptImmuneWindows(
+      {
+        id: "o",
+        info: { pvpTalents },
+        auraEvents: [
+          aura(LogEvent.SPELL_AURA_APPLIED, auraId, 10, "o", "o", "BUFF"),
+          aura(LogEvent.SPELL_AURA_REMOVED, auraId, 15, "o", "o", "BUFF"),
+        ],
+      } as never,
+      combat,
+    );
+
+  it("Zen Focus Tea is its own 5 s aura; Thunder Focus Tea opens nothing", () => {
+    const zen = windows("209584", ["468430"]);
+    expect(zen.map((w) => [w.from, w.to])).toEqual([[S(10), S(15)]]);
+    expect(zen[0]!.reason).toBe("Zen Focus Tea");
+    expect(zen[0]!.auraName).toBe("Zen Focus Tea");
+    expect(windows("116680", ["468430"])).toEqual([]);
+  });
+
+  it("a tree talent's aura opens a window with no PvP talent (Spiritwalker's Aegis)", () => {
+    expect(windows("378078", []).map((w) => w.reason)).toEqual([
+      "Spiritwalker's Aegis",
+    ]);
+  });
+
+  it("a baseline immunity opens a window (Unending Resolve)", () => {
+    expect(windows("104773", []).map((w) => w.auraName)).toEqual([
+      "Unending Resolve",
+    ]);
+  });
+
+  it("Obsidian Scales keeps the talent gate and its two-part reason", () => {
+    expect(windows("363916", [])).toEqual([]);
+    const w = windows("363916", ["378444"]);
+    expect(w.map((x) => x.reason)).toEqual([
+      "Obsidian Mettle + Obsidian Scales",
+    ]);
+    expect(w.map((x) => x.auraName)).toEqual(["Obsidian Scales"]);
+  });
+
+  // fact from the base scan: 2 / 13 kicks landed inside "Obsidian Mettle +
+  // Obsidian Scales" windows, every one on an ally's copy
+  it("Obsidian Mettle covers the holder's own Scales, not an ally's copy", () => {
+    const windowsOf = (src: string) =>
+      interruptImmuneWindows(
+        {
+          id: "o",
+          info: { pvpTalents: ["378444"] },
+          auraEvents: [
+            aura(LogEvent.SPELL_AURA_APPLIED, "363916", 10, src, "o", "BUFF"),
+            aura(LogEvent.SPELL_AURA_REMOVED, "363916", 15, src, "o", "BUFF"),
+          ],
+        } as never,
+        combat,
+      );
+    expect(windowsOf("o")).toHaveLength(1);
+    expect(windowsOf("ally")).toEqual([]);
+  });
+
+  // codex G1 #1: the shared pairing, not one of its own
+  it("a duplicate APPLIED does not lengthen a window with no REMOVED, and BROKEN ends one", () => {
+    const windowsOf = (rows: any[]) => {
+      const owner: any = {
+        id: "o",
+        info: {},
+        auraEvents: rows,
+        spellCastEvents: [],
+      };
+      return interruptImmuneWindows(owner, combat, new Map([["o", owner]])).map(
+        (w) => [w.from, w.to],
+      );
+    };
+    expect(
+      windowsOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, "104773", 10, "o", "o", "BUFF"),
+        aura(LogEvent.SPELL_AURA_APPLIED, "104773", 14, "o", "o", "BUFF"),
+      ]),
+    ).toEqual([[S(10), S(18)]]);
+    expect(
+      windowsOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, "33786", 10, "e", "o", "DEBUFF"),
+        aura(LogEvent.SPELL_AURA_BROKEN, "33786", 12, "e", "o", "DEBUFF"),
+      ]),
+    ).toEqual([[S(10), S(12)]]);
+  });
+
+  // codex G1 #2: a press logged in the REMOVED's millisecond
+  it("a window's last millisecond is out, its first in", () => {
+    const w = [{ from: S(10), to: S(15) }];
+    expect(interruptImmuneWindowAt(w, S(10))).toBe(w[0]);
+    expect(interruptImmuneWindowAt(w, S(15) - 1)).toBe(w[0]);
+    expect(interruptImmuneWindowAt(w, S(15))).toBeUndefined();
   });
 });
 

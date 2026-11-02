@@ -1,5 +1,5 @@
 /**
- * Generated at: 2026-10-16T15:39:45.053Z
+ * Generated at: 2026-11-01T17:48:17.231Z
  * Build: 12.1.5.70391
  * Source: DB2 SpellEffect — aura 69 (absorb, school mask = MiscValue_0), Effect 10/136 + aura 8/20
  *   (healing, split self vs ally by ImplicitTarget), aura 118/259
@@ -28,6 +28,8 @@ export type AbilityEffectFacts = {
   healsSelf?: true;
   healsOthers?: true;
   healingReceivedPct?: number;
+  /** The figure is aura 259 only: periodic healing. */
+  healingReceivedPeriodicOnly?: true;
   moveSpeedPct?: number;
   hitsEnemy?: true;
   enemyAoE?: true;

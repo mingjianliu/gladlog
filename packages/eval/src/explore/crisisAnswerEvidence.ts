@@ -183,7 +183,9 @@ function functionOf(spellId: string): string[] {
     f.push(`mechanic immunity (ids ${p.immuneMechanics!.join(", ")})`);
   if (p.absorbs) f.push("absorb");
   if (p.healingReceivedPct !== undefined)
-    f.push(`+${p.healingReceivedPct}% healing received`);
+    f.push(
+      `+${p.healingReceivedPct}% ${p.healingReceivedPeriodicOnly ? "periodic " : ""}healing received`,
+    );
   if (p.healsSelf || p.healsOthers) f.push("heals");
   if (isControlCast(spellId)) f.push("crowd control");
   if (p.dealsDamage) f.push("damage");
@@ -345,7 +347,7 @@ export function buildCrisisAnswerEvidence(
         ...base,
         kind: "healing-received-modifier",
         amount: prof.healingReceivedPct,
-        text: `${nm} (+${prof.healingReceivedPct}% healing received) from ${who}, applied ${relS(atT.round, appliedMs)}`,
+        text: `${nm} (+${prof.healingReceivedPct}% ${prof.healingReceivedPeriodicOnly ? "periodic " : ""}healing received) from ${who}, applied ${relS(atT.round, appliedMs)}`,
         source: "abilityProfile.healingReceivedPct",
       });
       continue;

@@ -69,6 +69,7 @@ const MODULE_FILES = [
   "singles14b",
   "replacedKit",
   "fact8",
+  "kickImmune",
 ];
 await ensureAnalysisData();
 const modules: Array<IScanModule & { file: string }> = [];

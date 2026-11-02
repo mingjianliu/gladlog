@@ -83,7 +83,8 @@ const HEAL_EFFECTS = new Set(["10", "136"]);
 /** Auras that heal over time / keep health topped up. */
 const HEAL_AURAS = new Set(["8", "20"]);
 const AURA_ABSORB = "69";
-const AURA_HEALING_RECEIVED = new Set(["118", "259"]);
+const AURA_PERIODIC_HEALING_RECEIVED = "259";
+const AURA_HEALING_RECEIVED = new Set(["118", AURA_PERIODIC_HEALING_RECEIVED]);
 /** A_MOD_INCREASE_SPEED — movement speed (was mislabelled haste until 2026-09-04). */
 const AURA_MOVE_SPEED = "31";
 /** Effect = 2 SCHOOL_DAMAGE(直接伤害);aura 3 = PERIODIC_DAMAGE。 */
@@ -120,6 +121,8 @@ export type AbilityEffectFacts = {
   healsOthers?: true;
   /** % increase to healing RECEIVED (Guardian Spirit 60, Life Cocoon 50). */
   healingReceivedPct?: number;
+  /** The figure is aura 259 only, no 118 row: periodic healing (GH #166). */
+  healingReceivedPeriodicOnly?: true;
   /** % movement-speed increase (Dispersion 50, Zephyr 30) — aura 31 = A_MOD_INCREASE_SPEED. */
   moveSpeedPct?: number;
 };
@@ -287,6 +290,8 @@ async function main(): Promise<void> {
 
   const factsFor = (id: string, hop = true): AbilityEffectFacts => {
     const facts: AbilityEffectFacts = {};
+    let periodicOnly = false;
+    let allHealing = false;
     for (const row of considered(bySpell.get(id) ?? [])) {
       if (row.aura === AURA_ABSORB) {
         facts.absorbs = true;
@@ -297,11 +302,14 @@ async function main(): Promise<void> {
         if (hitsAlly(row)) facts.healsOthers = true;
         else if (hitsSelf(row)) facts.healsSelf = true;
       }
-      if (AURA_HEALING_RECEIVED.has(row.aura) && row.points > 0)
+      if (AURA_HEALING_RECEIVED.has(row.aura) && row.points > 0) {
         facts.healingReceivedPct = Math.max(
           facts.healingReceivedPct ?? 0,
           Math.round(row.points),
         );
+        if (row.aura === AURA_PERIODIC_HEALING_RECEIVED) periodicOnly = true;
+        else allHealing = true;
+      }
       if (row.aura === AURA_MOVE_SPEED && row.points > 0)
         facts.moveSpeedPct = Math.max(
           facts.moveSpeedPct ?? 0,
@@ -325,13 +333,17 @@ async function main(): Promise<void> {
         if (deep.hitsEnemy) facts.hitsEnemy = true;
         if (deep.enemyAoE) facts.enemyAoE = true;
         if (deep.dealsDamage) facts.dealsDamage = true;
-        if (deep.healingReceivedPct !== undefined)
+        if (deep.healingReceivedPct !== undefined) {
           facts.healingReceivedPct = Math.max(
             facts.healingReceivedPct ?? 0,
             deep.healingReceivedPct,
           );
+          if (deep.healingReceivedPeriodicOnly) periodicOnly = true;
+          else allHealing = true;
+        }
       }
     }
+    if (periodicOnly && !allHealing) facts.healingReceivedPeriodicOnly = true;
     return facts;
   };
 
@@ -403,6 +415,8 @@ async function main(): Promise<void> {
       `  healsSelf?: true;\n` +
       `  healsOthers?: true;\n` +
       `  healingReceivedPct?: number;\n` +
+      `  /** The figure is aura 259 only: periodic healing. */\n` +
+      `  healingReceivedPeriodicOnly?: true;\n` +
       `  moveSpeedPct?: number;\n` +
       `  hitsEnemy?: true;\n` +
       `  enemyAoE?: true;\n` +
