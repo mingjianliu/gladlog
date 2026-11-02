@@ -91,6 +91,24 @@ A root-cause pass over three weeks of fixes (299, none caught by a unit test, 86
 - **Helpers that look like the app's events.** `test/ported/testHelpers.ts` writes damage in the production sign, a `logLine.lineIndex`, and no field a real event lacks; `testHelpersContract.test.ts` holds them to the converted real fixtures. A local helper in a test file should match the same shape.
 - **Teeth.** `npx tsx packages/eval/scripts/mutationProbe.ts <src file>` mutates the file one operator at a time and lists the mutants no test kills. Run it on a predicate before calling its tests done. `packages/eval/test/gateWiring.test.ts` keeps every `check*` gate wired into `checkMatch`.
 
+## Corpus verification (`packages/eval/scripts/verify/`)
+
+A fix to the fact layer is measured over two corpora: the 605 (605 logs, 3,519 owner views) and the wide corpus (728 logs, 10,039 views). `verify/cycle.ts` is the one command: capture, gates, family diff against a base, every scan, the check-by-check comparison.
+
+```
+npx tsx packages/eval/scripts/verify/cycle.ts --manifest <list> --out <dir> [--base <earlier pass>] [--ledger <file>]
+```
+
+Before it existed each scan was its own process that parsed the whole corpus: nine parses per run, the legacy match rebuilt per owner, 94 minutes on the 605 and 5.5 hours on the wide corpus. The same nine scans now take 6 and 17 minutes. `verify/run.ts` walks a capture once and hands each owner's context to every scan. Worker processes each read a contiguous run of the contexts, never cutting an archive; their accumulators are merged in order, so the reports equal a serial run check for check, in a fixed order (archive, round, owner). What keeps that true:
+
+- **A scan is `{ run, report, state, load }`** (`verify/scan.ts`). Everything `report` reads must be in `state()`: `test/verifyRunner.test.ts` fails on an accumulator that does not cross the merge. A field that does not simply add (a capped list, a fixed-length array, an id's name) names its own rule in `merge`.
+- **Rows are shared.** One legacy match per round serves every owner and every scan, so a check must never write to one: no in-place `.sort` on `auraEvents`. `--freeze` deep-freezes the rows and proves it.
+- **A verdict cannot depend on what was read so far.** Across runs there is no "so far"; a corpus-wide verdict is judged in `finalize`, on the merged state (`scan5/singles1.ts`).
+- **It fails closed.** Reports go to a staging directory and are published only after the context count, the unmapped list and every scan's own exit pass; the previous run's reports are removed first. A dead worker, a truncated state file, a gate that throws, an empty capture or a signal leaves no report, no worker and no temp file. `verify/capture.ts` refuses a directory in use, an unreadable archive and a manifest listing one twice, and writes `capture.sha256` only for a capture that passed. `verify/compare.ts` fails on an unsigned rise with or without `--ledger`, and on a report or a check missing from one side. Each worker is capped at a 4 GB heap, and below 20 % free memory the workers are stopped.
+- **Memory stays flat.** Past 1 GB of heap a worker writes its accumulators to disk at the next archive boundary and starts them over. Serializing copies the strings, so a kept fragment of a line stops pinning its archive's text. Without this the wide corpus ran the machine down to 15 % free; with it the lowest reading is 46 %, and the merge reads the parts in order.
+
+The three sizes of a pass differ only in the list: the **cover set** for each small change (`verify/run.ts --coverage` then `verify/coverSet.ts`: 116 of the two corpora's 1,332 archives, about 7 % of the raw bytes, exercise every live check and every failing one, except the few judged only after the merge, which `coverage-gaps.json` lists and the 605 pass reads), the 605 for each batch, the wide corpus before pushing. Every check whose failure count rose must be signed `real` or `lag` in the ledger (`verify/compare.ts`); an unsigned rise fails the pass. `capture.sha256` hashes the rendered prompts independently of the shard count, so two passes of one tree can be compared directly: that replaces rerunning the whole chain to check determinism.
+
 ## The eval system (prompt/response quality)
 
 The eval runbooks live in `docs/commands/` (the full list of ten runbooks, one line each, is in [`docs/README.md`](README.md)); output lands in the private repo at `$GLADLOG_EVAL_HOME`. The three you will use most:

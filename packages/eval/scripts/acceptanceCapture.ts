@@ -98,6 +98,10 @@ let rounds = 0;
 let owners = 0;
 let needleLines = 0;
 const out: string[] = [];
+// what the walk below leaves out, said in the summary: `verify/capture.ts`
+// fails on an archive it could not read
+const unreadable: string[] = [];
+const skipped = { legacy: 0, candidates: 0, context: 0 };
 
 let fileNo = 0;
 for (const f of files) {
@@ -112,6 +116,7 @@ for (const f of files) {
     const raw = readFileSync(p);
     text = (p.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
   } catch {
+    unreadable.push(f);
     continue;
   }
   for (const line of text.split("\n")) parser.push(line);
@@ -123,6 +128,7 @@ for (const f of files) {
     try {
       legacy = toLegacyMatch({ ...m, rawLines: [] } as GladMatch);
     } catch {
+      skipped.legacy++;
       continue;
     }
     rounds++;
@@ -137,6 +143,7 @@ for (const f of files) {
           args.rawStreams ? text : null,
         );
       } catch {
+        skipped.candidates++;
         continue;
       }
       const role = isHealerSpec(owner.spec) ? "healer" : "dps";
@@ -172,6 +179,7 @@ for (const f of files) {
           rawStreams: roundRawStreams(legacy, args.rawStreams ? text : null),
         });
       } catch {
+        skipped.context++;
         continue;
       }
       contextHash.update(`${f}:${idx}:${owner.id}\n`);
@@ -198,6 +206,10 @@ for (const f of files) {
 
 if (args.linesOut) writeFileSync(args.linesOut, out.join("\n") + "\n");
 console.log(`files=${files.length} rounds=${rounds} owners=${owners}`);
+for (const f of unreadable) console.log(`unreadable: ${f}`);
+console.log(
+  `skipped: legacy=${skipped.legacy} candidates=${skipped.candidates} context=${skipped.context}`,
+);
 console.log(`findings-prompt SHA256: ${findingsHash.digest("hex")}`);
 console.log(`match-context SHA256: ${contextHash.digest("hex")}`);
 if (args.needle)

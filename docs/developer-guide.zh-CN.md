@@ -95,6 +95,24 @@ lint 警告数有棘轮：`npm run lint` 带着当前计数跑 `--max-warnings`�
 - **像真事件的 helper。** `test/ported/testHelpers.ts` 按生产约定写伤害符号、带 `logLine.lineIndex`,不带真实事件没有的字段;`testHelpersContract.test.ts` 用转换后的真实 fixture 把它们钉住。测试文件里自己写的 helper 也应当符合同样的形状。
 - **测试的牙齿。** `npx tsx packages/eval/scripts/mutationProbe.ts <源文件>` 对文件逐个变异运算符,列出没有任何测试杀掉的变异。说一个谓词的测试"写完了"之前先跑一遍。`packages/eval/test/gateWiring.test.ts` 保证每个 `check*` gate 都接进了 `checkMatch`。
 
+## 语料验证(`packages/eval/scripts/verify/`)
+
+事实层的修复在两份语料上量:605(605 个日志、3,519 个视角)和 wide(728 个日志、10,039 个视角)。`verify/cycle.ts` 是唯一入口:采集、门规、对基线的 family diff、全部扫描、逐条检查对比。
+
+```
+npx tsx packages/eval/scripts/verify/cycle.ts --manifest <list> --out <dir> [--base <earlier pass>] [--ledger <file>]
+```
+
+在它之前,每个扫描都是独立进程,各自解析整份语料:一次跑解析九遍,每个视角重建一次 legacy 对局,605 要 94 分钟,wide 要 5.5 小时。同样九个扫描现在分别是 6 分钟和 17 分钟。`verify/run.ts` 只走一遍采集,把每个视角的上下文交给所有扫描。工作进程各读一段连续的上下文,从不切开一个归档;累加器按顺序合并,所以报告和串行跑逐条检查相同,顺序固定(归档、回合、视角)。保持这一点靠的是:
+
+- **一个扫描是 `{ run, report, state, load }`**(`verify/scan.ts`)。`report` 读到的一切都必须在 `state()` 里:`test/verifyRunner.test.ts` 会让没跨过合并的累加器变红。不是简单相加的字段(有上限的列表、定长数组、id 的名字)在 `merge` 里写自己的规则。
+- **行是共享的。** 每回合一份 legacy 对局服务所有视角和所有扫描,检查绝不能写它:不能对 `auraEvents` 原地 `.sort`。`--freeze` 深冻结这些行来证明这一点。
+- **判定不能依赖「已经读到哪」。** 分段之后没有「到目前为止」;全语料级的判定放在 `finalize` 里,在合并后的状态上做(`scan5/singles1.ts`)。
+- **失败即停。** 报告先写到暂存目录,上下文数、未映射清单和每个扫描自己的退出状态都通过后才发布;上一轮的报告在开始时就删掉。工作进程死掉、状态文件截断、门规抛错、采集为空或收到信号,都不留报告、不留工作进程、不留临时文件。`verify/capture.ts` 拒绝已有内容的目录、读不了的归档和列了两次的归档,`capture.sha256` 只在采集通过时写出。`verify/compare.ts` 在有未签的上涨时失败,带不带 `--ledger` 都一样;报告或检查只出现在一侧也失败。每个工作进程的堆上限 4 GB,空闲内存低于 20 % 时停掉工作进程。
+- **内存保持平稳。** 堆超过 1 GB 后,工作进程在下一个归档边界把累加器写到磁盘并从头开始。序列化会复制字符串,保留下来的行片段不再钉住整个归档的文本。没有这一步时 wide 把机器压到只剩 15 % 空闲;有了它最低读数是 46 %,合并时按顺序读各段。
+
+三种规模只差一份清单:每个小改动跑**覆盖集**(`verify/run.ts --coverage` 再 `verify/coverSet.ts`:两份语料 1,332 个归档里的 116 个、约 7 % 的原始字节,跑到每一条在用检查和每一条失败的检查,只有少数在合并后才判定的除外:它们列在 `coverage-gaps.json` 里,由 605 那一轮读到),每批跑 605,推送前跑 wide。失败数上涨的检查必须在台账里签 `real` 或 `lag`(`verify/compare.ts`);未签的上涨让这一轮失败。`capture.sha256` 对渲染出的 prompt 取哈希,与分片数无关,同一棵树的两轮可以直接比:这取代了为验证确定性而重跑整条链。
+
 ## eval 体系(prompt/回复质量)
 
 eval 的 runbook 在 `docs/commands/`(全部十条、每条一句话的清单见 [`docs/README.zh-CN.md`](README.zh-CN.md)),产物落私有仓 `$GLADLOG_EVAL_HOME`。最常用的三条:
