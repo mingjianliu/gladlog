@@ -271,7 +271,8 @@ export interface TimelineCtx {
     spellId: string,
     castTimeSeconds: number,
   ) => string;
-  ownerInterruptImmuneReasonAt: (timeSeconds: number) => string | undefined;
+  /** `interrupt-immune (X, N.Ns left)` at a press, or undefined (`interruptImmuneNoteAt`) */
+  ownerInterruptImmuneNoteAt: (timeSeconds: number) => string | undefined;
   /** false when the entry was dropped (past match end, B103) — a legend that
    * counts lines counts only the ones that print */
   addEntry: (

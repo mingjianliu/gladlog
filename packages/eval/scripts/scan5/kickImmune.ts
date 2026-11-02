@@ -13,12 +13,17 @@
  * itself, the gate's predicate: a rendered note must agree with it, including
  * the aura's end at its official length when its REMOVED is lost):
  *  - `upWhileImmune`: `[YOU] [CD]` channel line with an enemy-interrupt note
- *    pressed under such an aura;
- *  - `immuneNotUp`: `interrupt-immune (…)` pressed with no such aura up;
+ *    pressed under such an aura with `INTERRUPT_IMMUNE_MIN_LEFT_S` or more
+ *    left;
+ *  - `immuneNotUp`: `interrupt-immune (…)` pressed with no such aura up, or
+ *    with less than that left;
+ *  - `immuneLeftWrong`: the note's reason or seconds left are not
+ *    `interruptImmuneNoteAt`'s (user 2026-11-02: the note says how long);
  *  - `kickInsideWindow`: the log's truth against the windows, a SPELL_INTERRUPT
  *    landed inside one (Thunder Focus Tea 116680 read as the immunity).
  */
 import {
+  interruptImmuneNoteAt,
   interruptImmuneWindowAt,
   interruptImmuneWindows,
 } from "@gladlog/analysis/src/utils/talentBehaviors";
@@ -36,7 +41,7 @@ import {
 export const CHECKS = ["kickImmuneNote"] as const;
 
 const NOTE =
-  /^(\d+:\d\d)\s+\[YOU\] \[CD\]\s+(.+?)(?: →| \(| \[| \|).*\| (enemy interrupts UP|no enemy interrupt|interrupt-immune)/;
+  /^(\d+:\d\d)\s+\[YOU\] \[CD\]\s+(.+?)(?: →| \(| \[| \|).*\| (enemy interrupts UP|no enemy interrupt|interrupt-immune \((?:[^()]|\([^()]*\))*\))/;
 
 export function run(ctx: IRoundCtx): void {
   const combat = { startTime: ctx.start, endTime: ctx.end };
@@ -56,7 +61,9 @@ export function run(ctx: IRoundCtx): void {
     ctx.bump("kickImmuneNote");
     const at = tsOf(press);
     const up = interruptImmuneWindowAt(ownerWindows, at);
-    if (up && m[3] !== "interrupt-immune")
+    const note = interruptImmuneNoteAt(ownerWindows, at);
+    const printedImmune = m[3]!.startsWith("interrupt-immune");
+    if (up && note && !printedImmune)
       ctx.violate(
         "kickImmuneNote",
         "upWhileImmune",
@@ -65,7 +72,16 @@ export function run(ctx: IRoundCtx): void {
         `${m[2]} at ${fmtS(second)} under ${up.auraName} ${up.spellId}`,
         line,
       );
-    if (!up && m[3] === "interrupt-immune")
+    if (printedImmune && note && m[3] !== note)
+      ctx.violate(
+        "kickImmuneNote",
+        "immuneLeftWrong",
+        at,
+        `${ctx.roundKey}|left|${ctx.owner.id}|${m[1]}`,
+        `${m[2]} at ${fmtS(second)}: printed ${m[3]}, expected ${note}`,
+        line,
+      );
+    if (!note && printedImmune)
       ctx.violate(
         "kickImmuneNote",
         "immuneNotUp",

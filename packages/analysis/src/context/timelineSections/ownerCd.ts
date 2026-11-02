@@ -96,7 +96,7 @@ export function emitOwnerCdEntries(
     | "enemies"
     | "friends"
     | "summonOwners"
-    | "ownerInterruptImmuneReasonAt"
+    | "ownerInterruptImmuneNoteAt"
     | "addEntry"
     | "ownerHardCcTagAt"
     | "ownerStunnedAtCast"
@@ -130,7 +130,7 @@ export function emitOwnerCdEntries(
     enemies,
     friends,
     summonOwners,
-    ownerInterruptImmuneReasonAt,
+    ownerInterruptImmuneNoteAt,
     addEntry,
     ownerHardCcTagAt,
     ownerStunnedAtCast,
@@ -607,10 +607,11 @@ export function emitOwnerCdEntries(
         enemies &&
         enemies.length > 0
       ) {
-        const immuneReason = ownerInterruptImmuneReasonAt(cast.timeSeconds);
-        if (immuneReason) {
-          // B139: kicks can't land — an interrupt immunity is up here.
-          interruptNote = ` | interrupt-immune (${immuneReason})`;
+        const immunityNote = ownerInterruptImmuneNoteAt(cast.timeSeconds);
+        if (immunityNote) {
+          // B139: kicks can't land — an interrupt immunity is up here, with
+          // the seconds it has left (under half a second reads the kicks)
+          interruptNote = ` | ${immunityNote}`;
         } else {
           // F-C5 / F-C5b (ruling A′16): UP = usable at this instant — the
           // kicker alive and not in a cast-blocking CC, not merely off

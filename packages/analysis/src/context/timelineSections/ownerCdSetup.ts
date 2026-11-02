@@ -15,7 +15,7 @@ import { cdIsProcOnly } from "../../utils/cooldowns";
 import { isStunCcInstance } from "../../utils/drAnalysis";
 import { observedCastEndMs } from "../../utils/enemyCDs";
 import {
-  interruptImmuneWindowAt,
+  interruptImmuneNoteAt,
   interruptImmuneWindows as interruptImmuneWindowsOf,
 } from "../../utils/talentBehaviors";
 import {
@@ -187,13 +187,11 @@ export function prepareOwnerCdContext(
     { startTime: matchStartMs, endTime: matchEndMs },
     new Map(roundPlayers.map((u) => [u.id, u])),
   );
-  function ownerInterruptImmuneReasonAt(
-    timeSeconds: number,
-  ): string | undefined {
-    return interruptImmuneWindowAt(
+  function ownerInterruptImmuneNoteAt(timeSeconds: number): string | undefined {
+    return interruptImmuneNoteAt(
       interruptImmuneWindows,
       matchStartMs + timeSeconds * 1000,
-    )?.reason;
+    );
   }
 
   // exported: returned to the caller (GH #116)
@@ -204,6 +202,6 @@ export function prepareOwnerCdContext(
     ownerHardCcTagAt,
     ownerStunnedAtCast,
     ownerStunIdsAtCast,
-    ownerInterruptImmuneReasonAt,
+    ownerInterruptImmuneNoteAt,
   };
 }

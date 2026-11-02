@@ -34,6 +34,9 @@ import {
   reAppliedIsSameApplication,
 } from "../src/utils/drAnalysis";
 import {
+  INTERRUPT_IMMUNE_MIN_LEFT_S,
+  interruptImmuneLeftS,
+  interruptImmuneNoteAt,
   interruptImmuneWindowAt,
   interruptImmuneWindows,
 } from "../src/utils/talentBehaviors";
@@ -377,6 +380,33 @@ describe("GH #168 — interrupt-immune windows read DB2, not a talent list", () 
     expect(interruptImmuneWindowAt(w, S(10))).toBe(w[0]);
     expect(interruptImmuneWindowAt(w, S(15) - 1)).toBe(w[0]);
     expect(interruptImmuneWindowAt(w, S(15))).toBeUndefined();
+  });
+
+  // user 2026-11-02: the channel line says how long the immunity has left
+  describe("the channel note's seconds left", () => {
+    const w = [
+      { from: S(10), to: S(15), reason: "Precognition" },
+      { from: S(14), to: S(18), reason: "Unending Resolve" },
+      { from: S(30), to: S(30.4), reason: "Sanctified Ground" },
+    ];
+    it("runs through an immunity that starts before the first ends", () => {
+      expect(interruptImmuneLeftS(w, S(12))).toBeCloseTo(6, 6);
+      expect(interruptImmuneNoteAt(w, S(12))).toBe(
+        "interrupt-immune (Precognition, 6.0s left)",
+      );
+    });
+    it("is undefined with no immunity up", () => {
+      expect(interruptImmuneLeftS(w, S(20))).toBeUndefined();
+      expect(interruptImmuneNoteAt(w, S(20))).toBeUndefined();
+    });
+    it("gives way to the kicks under half a second left", () => {
+      expect(INTERRUPT_IMMUNE_MIN_LEFT_S).toBe(0.5);
+      expect(interruptImmuneLeftS(w, S(30))).toBeCloseTo(0.4, 6);
+      expect(interruptImmuneNoteAt(w, S(30))).toBeUndefined();
+      expect(interruptImmuneNoteAt(w, S(17.5))).toBe(
+        "interrupt-immune (Unending Resolve, 0.5s left)",
+      );
+    });
   });
 });
 

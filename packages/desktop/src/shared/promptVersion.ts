@@ -727,4 +727,10 @@
  *  cooldown governs a holder's purge readiness. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 471;
+/*
+ * v472 (2026-11-02, GH #176 follow-up, user ruling): a channel's
+ *  `interrupt-immune (X, N.Ns left)` says how long the immunity has left;
+ *  under 0.5 s left the line gives the enemy kicks instead. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 472;

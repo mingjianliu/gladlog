@@ -437,6 +437,47 @@ export function interruptImmuneWindowAt<W extends { from: number; to: number }>(
   return windows.find((w) => w.from <= ms && ms < w.to);
 }
 
+/**
+ * Below this many seconds of immunity left at a channel's press, the owner's
+ * channel line gives the enemy-interrupt state instead of the immunity (user
+ * 2026-11-02, after the 605 preview: 27 of 362 immunities ran out mid-channel,
+ * 0.05–0.23 s left on the shortest — Sanctified Ground on a 1 s Divine Hymn —
+ * and none of the 23 read was kicked in the tail).
+ */
+export const INTERRUPT_IMMUNE_MIN_LEFT_S = 0.5;
+
+/**
+ * Seconds the unit stays kick-immune from `ms`: through the window up at `ms`
+ * and every window that starts before the cover so far ends (back-to-back or
+ * overlapping immunities are one stretch). undefined when none is up.
+ */
+export function interruptImmuneLeftS<W extends { from: number; to: number }>(
+  windows: readonly W[],
+  ms: number,
+): number | undefined {
+  if (!interruptImmuneWindowAt(windows, ms)) return undefined;
+  let end = ms;
+  for (const w of [...windows].sort((a, b) => a.from - b.from))
+    if (w.from <= end && w.to > end) end = w.to;
+  return (end - ms) / 1000;
+}
+
+/**
+ * The owner channel line's immunity note at `ms` — the reason up at `ms` and
+ * the seconds left, printed to 0.1 s — or undefined when no immunity is up or
+ * less than `INTERRUPT_IMMUNE_MIN_LEFT_S` is left. The line and scan5
+ * `kickImmuneNote` both read it.
+ */
+export function interruptImmuneNoteAt<
+  W extends { from: number; to: number; reason: string },
+>(windows: readonly W[], ms: number): string | undefined {
+  const up = interruptImmuneWindowAt(windows, ms);
+  const left = interruptImmuneLeftS(windows, ms);
+  if (!up || left == null || left < INTERRUPT_IMMUNE_MIN_LEFT_S)
+    return undefined;
+  return `interrupt-immune (${up.reason}, ${left.toFixed(1)}s left)`;
+}
+
 /** PvP talents that grant an OFFENSIVE purge (dispelling beneficial effects from ENEMIES). */
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 export const OFFENSIVE_PURGE_TALENT_IDS = new Set([

@@ -4773,3 +4773,21 @@ re-reading the larger share. 464 of 3,519 contexts change; one menu gains a
 `burst-into-mitigation` candidate (mitPct 30 crosses its threshold), every other
 menu is unchanged. Gates identical; 205 of 209 rise-ledger checks unchanged, 1
 fell, 0 rose. Review: three codex rounds, the last APPROVE.
+
+v472 (2026-11-02, user ruling after the 605 preview: 「直接写免疫还剩多久、读条多长」,
+then 「照你建议的来做」). The owner's channel line writes the seconds its
+interrupt immunity has left, through back-to-back immunities:
+`interrupt-immune (Spirit of Redemption, 8.5s left)` (the channel's own length
+is already on the line). Under 0.5 s left (`INTERRUPT_IMMUNE_MIN_LEFT_S`) the
+line gives the enemy interrupt state instead, as on a channel with no
+immunity. Analysis and scan5 `kickImmuneNote` read one predicate,
+`interruptImmuneNoteAt` (talentBehaviors.ts); the check's new kind
+`immuneLeftWrong` compares the printed note with it.
+
+Base → after on the 152 files of the 605 set whose prompts print the note
+(the only lines that can change), same check code: kickImmuneNote 362 / 2,821
+→ 0 / 2,821 (354 notes without the seconds, 8 under 0.5 s). 285 of 1,343
+contexts change: 354 notes gain the seconds, 8 lines give the kicks instead
+(two of them are Dark Harvests interrupted at 1.3 s and 1.6 s, after the
+immunity ran out) and 7 prompts gain the kick-note legend. Findings
+unchanged; gates identical; 208 of 209 rise-ledger checks unchanged, 1 fell.

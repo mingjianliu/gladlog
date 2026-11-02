@@ -1281,6 +1281,16 @@ const INDEX: PredicateRow[] = [
     mod: talentBehaviors,
   },
   {
+    file: `${A}/utils/talentBehaviors.ts`,
+    symbol: "interruptImmuneNoteAt",
+    mod: talentBehaviors,
+  },
+  {
+    file: `${A}/utils/talentBehaviors.ts`,
+    symbol: "INTERRUPT_IMMUNE_MIN_LEFT_S",
+    mod: talentBehaviors,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKickWaitedOutConsistency",
     mod: promptQualityCheck,

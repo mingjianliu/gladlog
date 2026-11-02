@@ -569,7 +569,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ownerHardCcTagAt,
     ownerStunnedAtCast,
     ownerStunIdsAtCast,
-    ownerInterruptImmuneReasonAt,
+    ownerInterruptImmuneNoteAt,
   } = prepareOwnerCdContext({
     ownerCDs,
     owner,
@@ -610,7 +610,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemies,
     friends,
     summonOwners,
-    ownerInterruptImmuneReasonAt,
+    ownerInterruptImmuneNoteAt,
     addEntry,
     ownerHardCcTagAt,
     ownerStunnedAtCast,
