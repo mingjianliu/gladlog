@@ -5,6 +5,7 @@ import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { PERIODIC_DAMAGE_AURA_IDS } from "../data/periodicAuraGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
 import {
   breakableCcBeforeDeath,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
@@ -115,62 +116,77 @@ function extractPlayerDotIntervals(
   player: ICombatUnit,
   matchStartMs: number,
   matchEndMs: number,
+  casters: ReadonlyMap<string, ICombatUnit>,
 ): IDotInterval[] {
-  const intervals: IDotInterval[] = [];
-  const openDots = new Map<string, number>();
-
-  const sortedEvents = player.auraEvents ?? [];
-
-  for (const event of sortedEvents) {
-    const ts = event.logLine.timestamp;
-    if (ts > matchEndMs) continue;
-
-    const spellId = event.spellId ?? "";
-    if (!isDotAura(spellId)) continue;
-    const spellName = getEnglishSpellName(spellId, event.spellName);
-
-    const auraType = event.logLine.parameters[11];
-    if (auraType === "BUFF") continue;
-
-    const stateKey = `${spellId}:${event.srcUnitId}`;
-    if (event.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      if (!openDots.has(stateKey)) {
-        openDots.set(stateKey, ts);
-      }
-    } else if (event.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
-      // the source's own run, else the spell's oldest (`buildAuraIntervals`
-      // closes the same way): a DoT a Mind-Controlled unit put on writes its
-      // APPLIED under that unit and its ticks and REMOVED under the controller,
-      // and left open it counted to the round's end (87ba9256: Vampiric Touch
-      // 94.7–115.6 s still one of the DoTs at 4:33)
-      const key = openDots.has(stateKey)
-        ? stateKey
-        : [...openDots.keys()].find((k) => k.startsWith(`${spellId}:`));
-      const startMs = key === undefined ? undefined : openDots.get(key);
-      if (key !== undefined && startMs !== undefined) {
-        intervals.push({
-          spellId,
-          spellName,
-          startMs,
-          endMs: ts,
-        });
-        openDots.delete(key);
-      }
-    }
-  }
-
-  for (const [stateKey, startMs] of openDots) {
-    const spellId = stateKey.split(":")[0];
-    const spellName = getEnglishSpellName(spellId, "");
-    intervals.push({
-      spellId,
-      spellName,
+  // fact8 D19: `buildAuraIntervals`' runs, not a reading of its own: a run
+  // whose REMOVED the log lost ends at its official length and a later
+  // APPLIED opens its own (34d5e5bc: the first Deathmark stayed open from
+  // 27.8 s to the second one's REMOVED at 202.7 s, one DoT too many at 2:36).
+  // A DoT a Mind-Controlled unit put on, its REMOVED under the controller,
+  // closes there too (87ba9256).
+  const dots = (player.auraEvents ?? []).filter(
+    (e) =>
+      e.logLine.timestamp <= matchEndMs &&
+      isDotAura(e.spellId ?? "") &&
+      e.logLine.parameters[11] !== "BUFF",
+  );
+  const runs = buildAuraIntervals(
+    { ...player, auraEvents: dots } as ICombatUnit,
+    { startTime: matchStartMs, endTime: matchEndMs },
+    casters,
+  );
+  return runs.map((iv) => {
+    const startMs = matchStartMs + Math.round(iv.fromS * 1000);
+    const cappedEndMs = matchStartMs + Math.round(iv.toS * 1000);
+    return {
+      spellId: iv.spellId,
+      spellName: getEnglishSpellName(iv.spellId, iv.spellName),
       startMs,
-      endMs: matchEndMs,
-    });
-  }
+      // An official-length cap is a guess the ticks can overrule: Deadly
+      // Poison re-applied writes no REFRESH, so a run the round's end left
+      // open read 12 s from its APPLIED while it ticked on (0a7d35e2: 264.3 s,
+      // capped at 276.3, last tick 281.5).
+      endMs: iv.inferredEnd
+        ? Math.max(cappedEndMs, lastDotTickMs(player, iv, runs, matchStartMs))
+        : cappedEndMs,
+    };
+  });
+}
 
-  return intervals;
+/** The run's last periodic tick on the unit, bounded by that source's next
+ * run of the spell; 0 with none. */
+function lastDotTickMs(
+  player: ICombatUnit,
+  run: IAuraInterval,
+  runs: readonly IAuraInterval[],
+  matchStartMs: number,
+): number {
+  const fromMs = matchStartMs + run.fromS * 1000;
+  const nextFromS = Math.min(
+    Infinity,
+    ...runs
+      .filter(
+        (r) =>
+          r.spellId === run.spellId &&
+          r.srcUnitName === run.srcUnitName &&
+          r.fromS > run.fromS,
+      )
+      .map((r) => r.fromS),
+  );
+  const untilMs = matchStartMs + nextFromS * 1000;
+  let last = 0;
+  for (const d of player.damageIn ?? []) {
+    const ts = d.logLine.timestamp;
+    if (
+      d.spellId === run.spellId &&
+      d.srcUnitName === run.srcUnitName &&
+      d.logLine.event === LogEvent.SPELL_PERIODIC_DAMAGE &&
+      ts >= fromMs &&
+      ts < untilMs
+    )
+      last = Math.max(last, ts);
+  }
+  return last;
 }
 
 /** [ROT PRESSURE]'s four numbers — the predicate below and the legend that
@@ -220,11 +236,13 @@ export function emitRotPressureEntries(params: {
     addEntry,
   } = params;
 
+  const casters = new Map(allPlayers.map((u) => [u.id, u]));
   for (const player of allPlayers) {
     const dotIntervals = extractPlayerDotIntervals(
       player,
       matchStartMs,
       matchEndMs,
+      casters,
     );
     const durationSeconds = Math.floor(matchDurationS);
     const dotCounts = new Array(durationSeconds + 1).fill(0);

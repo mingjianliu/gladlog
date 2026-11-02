@@ -22,6 +22,7 @@ import {
 } from "../src/data/ownShieldLinks";
 import {
   isOwnPressedShieldRun,
+  NO_TARGET_GUID,
   ownPressedShieldSpansMs,
 } from "../src/utils/enemyDefensives";
 
@@ -272,6 +273,28 @@ describe("an ally's pressed shield reads as the holder's own (fact7 D37, user ru
     );
     expect(spans).toHaveLength(1);
     expect(spans[0]!.toMs).toBe(T + 9000);
+  });
+  it("a multi-target press logs no target: the run beside it is its own, a live run is not (fact8 D10)", () => {
+    const VOID_SHIELD = "1253593";
+    const onHolder = {
+      id: "u",
+      absorbsIn: [absorb(VOID_SHIELD, "ally")],
+      spellCastEvents: [],
+    } as never;
+    const noTarget = { ...cast(VOID_SHIELD, T), destUnitId: NO_TARGET_GUID };
+    expect(
+      ownPressedShieldSpansMs(onHolder, VOID_SHIELD, T, T + 4000, ally([noTarget])),
+    ).toHaveLength(1);
+    // the same press, a run that began 3 s earlier: it says nothing of that run
+    expect(
+      ownPressedShieldSpansMs(
+        onHolder,
+        VOID_SHIELD,
+        T - 3000,
+        T + 4000,
+        ally([noTarget]),
+      ),
+    ).toEqual([]);
   });
   it("only a press at the holder counts: a proc shield and a press on somebody else do not", () => {
     const PROC_PWS = "1246768";

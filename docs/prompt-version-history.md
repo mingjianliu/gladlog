@@ -4696,3 +4696,32 @@ was the denominator. Wide stopped early by user decision: candidates, gates and
 scans 1–5 only; the class check and two nets did not finish there. Spellsteal
 under Kleptomania stays off the ledger: synthetic, 0 on the 605, GH #174. Review:
 three rounds, the last APPROVE.
+
+v469 (2026-11-01, F23 — round-8 fact fixes). Round 8 of the fact audit, run on
+PV467, confirmed 51 defects; 41 are fixed here across 11 classes and 10 stay on
+GitHub. Strafing Run's free Deep Breath and Wingleader reach the ledger, the kit
+and [RES]; Cull the Weak and the 12.1 tier sets read by `classSetBonuses` join the
+cooldown model. A major aura with no press row gets a `(no press)` line; `[RES]`
+writes `~X[k/N]` for a charge spell partly back. An external on a unit is filed by
+source GUID, and the wall of a talent-shared cast is written on its caster plus the
+copy (user ruling). Six self-saves join `KW_MAJOR_DEFENSIVE_IDS` (user ruling after
+the 605 preview). `hpAtPress` cuts at the press's own direct heal; a first periodic
+tick keeps the sample before its millisecond. DoT spans read `buildAuraIntervals`.
+`[HEALER EXPOSURE]` lists every ready control that reaches.
+
+Base → after, same check code on both, 605 / wide: resCdBeforeNextPress 1156 → 398
+/ 3857 → 1066, auraActivationNoLine 4283 → 52 / 11458 → 186, externalFiledAsPopped
+692 → 0 / 4381 → 0, allyShieldDefenseless 254 → 4 / 2189 → 12, racialPressNoLine 631
+→ 0 / 2054 → 3, silenceImmuneNoLine 444 → 0 / 1056 → 0, reflectReturn 39 → 3 / 243
+→ 15, ledgerOnePressTwice 52 → 0 / 142 → 1, kitInHand 140 → 0 / 185 → 0. Gates
+unchanged. Candidates 7564 → 7547 / 23300 → 23271: kick-priority rows from the
+self-saves (-18 / -30, previewed and approved), +1 missed-cleanse from a lost
+REMOVED on each corpus.
+
+Two checks rose for real, both from the new silence IMMUNE lines and open on GitHub:
+drReaderAgreement 0 → 6 / 0 → 3 (Garrote - Silence, the DR note and the check's
+reader disagree) and immuneCauseUnnamed 0 → 3 / 3 → 6 (Spider Venom under a full
+immunity names no cause). Three rose as check lag: reflectDotRun, castDamageIdSplit,
+allyScales. No independent rerun: both sides read by the same check code, every
+rise signed. Review: eight rounds, the last APPROVE, then a ninth for the last check
+edit.

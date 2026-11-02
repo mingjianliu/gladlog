@@ -112,6 +112,9 @@ export const TWIN_CAST_AFTER_S = 0.5;
  * an interval whose start the log did not see is no new application.
  * Undefined for the ids `OFFENSIVE_AURA_EVIDENCE` answers for.
  */
+/** The words an occurrence no press backs closes on. */
+export const NO_PRESS_SUFFIX = " (no press)";
+
 /** A press of the same cooldown up to this long after a cast-less
  * application is that press: the two print in one rendered second, and the
  * log can write the aura half a second before its press row (605 s2/38-3
@@ -323,7 +326,7 @@ export function auraOffensiveOccurrences(
       if (iv.inferredStart) continue;
       result.occurrences.push({
         spellId: iv.spellId,
-        spellName: `${formName} (no press)`,
+        spellName: `${formName}${NO_PRESS_SUFFIX}`,
         startMs,
         endMs,
         endObserved,
@@ -372,7 +375,7 @@ export function auraOffensiveOccurrences(
         .sort((a, b) => a - b)[0];
       result.occurrences.push({
         spellId: genericCd,
-        spellName: `${name} (no press)`,
+        spellName: `${name}${NO_PRESS_SUFFIX}`,
         startMs,
         endMs: laterPress ?? endMs,
         endObserved: laterPress !== undefined ? true : endObserved,
@@ -532,7 +535,7 @@ export function auraOffensiveOccurrences(
           // the COOLDOWN id, like the pressed twin — every id filter
           // (isEnemyCdWindowSpell) reads the same id for both (agy review)
           spellId: cdId,
-          spellName: `${twin.name} (no press)`,
+          spellName: `${twin.name}${NO_PRESS_SUFFIX}`,
           startMs,
           endMs,
           endObserved,

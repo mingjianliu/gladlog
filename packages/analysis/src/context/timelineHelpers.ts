@@ -10,6 +10,7 @@ import {
 import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
 import { ownEffectAurasOfCast } from "../data/castEffectAuras";
+import { HASTE_DURATION_SPELL_IDS } from "../data/channeledGenerated";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
@@ -469,6 +470,21 @@ export const CHANNELED_CD_SPELL_IDS = new Set<string>([
   // SUCCESS row (129-5-742 0:22), 77 of 283 read "ended early" on the 605
 ]);
 
+/** A buff whose length moves with haste: a channel, or an aura DB2 marks so
+ * (`HASTE_DURATION_SPELL_IDS`; fact8 D38, a39539f2 2:26: a full Bladestorm
+ * under Bloodlust ran 4.16 s of 6, ten ticks, and read "ended early"). The
+ * official length is no bound on it; `CHANNEL_STOPPED_MAX_SHARE` is. */
+function runsWithHaste(spellId: string): boolean {
+  return (
+    CHANNELED_CD_SPELL_IDS.has(spellId) || HASTE_DURATION_SPELL_IDS.has(spellId)
+  );
+}
+
+/** How close to a buff's removal the holder's own press counts as taking it,
+ * and how far before the natural end it must be (`cdExpiry`, fact8 D35). */
+const OWN_ACTION_TOOK_BUFF_MS = 5;
+const OWN_ACTION_MIN_EARLY_S = 0.25;
+
 // M-b: a real aura removal arrives at ~nominal duration plus minor server-tick/latency slack;
 // a removal more than a couple seconds past nominal duration almost certainly belongs to a
 // different (later) cast, not this one.
@@ -899,7 +915,7 @@ export function extractOwnerCDBuffExpiry(
         duration / 2,
       );
       let cause: ICDExpiryEvent["cause"] =
-        !CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
+        !runsWithHaste(cd.spellId) &&
         !ENDS_WITH_ITS_CHARGE_IDS.has(cd.spellId) &&
         !isEstimated &&
         expiresAtSeconds < naturalEndSeconds - earlyToleranceS
@@ -931,9 +947,31 @@ export function extractOwnerCDBuffExpiry(
       // ended early; above it the haste-dependent length keeps "expired"
       // (GH #34 ①)
       let channelStoppedAfterS: number | undefined;
+      // fact8 D35 (a07baece 2:08): the holder's own action in the removal's
+      // millisecond took the buff — a Vanish broken by its Cheap Shot 0.98 s
+      // into 1.5 s sits inside the tolerance above and read "(expired)". The
+      // log says what ended it; only a removal well before the natural end
+      // reads so, a buff running out beside a cast is not one.
       if (
         !isEstimated &&
-        CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
+        cause === "expired" &&
+        !runsWithHaste(cd.spellId) &&
+        !ENDS_WITH_ITS_CHARGE_IDS.has(cd.spellId) &&
+        expiresAtSeconds < naturalEndSeconds - OWN_ACTION_MIN_EARLY_S &&
+        (owner?.spellCastEvents ?? []).some(
+          (c) =>
+            (c.logLine.event as LogEvent) === LogEvent.SPELL_CAST_SUCCESS &&
+            c.spellId !== cd.spellId &&
+            Math.abs(
+              (c.logLine.timestamp as number) -
+                (matchStartMs + expiresAtSeconds * 1000),
+            ) <= OWN_ACTION_TOOK_BUFF_MS,
+        )
+      )
+        cause = "ended_early";
+      if (
+        !isEstimated &&
+        runsWithHaste(cd.spellId) &&
         expiresAtSeconds - cast.timeSeconds <
           duration * CHANNEL_STOPPED_MAX_SHARE
       ) {

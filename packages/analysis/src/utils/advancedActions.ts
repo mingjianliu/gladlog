@@ -72,9 +72,16 @@ const staleMaxHpRowsCache = new WeakMap<
  * real loss of a buff) are not flagged. The rows stay for every non-HP reader
  * (resources, positions): this is a filter on the HP percentage alone, read by
  * `unitHpSampleAt`, `hpTroughInWindow` and `hpAtPress`.
+ *
+ * fact8 D16 (21caf35a 1:42, a Warlock): damage the log itself wrote is no scale
+ * artefact. A Ferocious Bite took 88,826 off 1,163,505, 0.3 s later the max
+ * stepped down 3 % with the current carried, and all six rows of the hit went
+ * as stale: `[STATE]` printed 98 for a real 89.3. Only the part of the dip the
+ * hits between the two rows do not explain counts towards it.
  */
 export function staleMaxHpRows(
-  unit: Pick<ICombatUnit, "advancedActions" | "id">,
+  unit: Pick<ICombatUnit, "advancedActions" | "id"> &
+    Partial<Pick<ICombatUnit, "damageIn">>,
 ): ReadonlySet<IAdvancedAction> {
   const sorted = getSortedAdvancedActions(unit);
   const cached = staleMaxHpRowsCache.get(sorted);
@@ -107,8 +114,18 @@ export function staleMaxHpRows(
     const first = rows[i]!;
     const last = rows[j - 1]!.advancedActorCurrentHp;
     const rescaled = (last * m1) / m0;
+    const priorMs = rows[i - 1]!.logLine.timestamp;
+    const hitsInDip = (unit.damageIn ?? []).reduce(
+      (sum, d) =>
+        d.logLine.timestamp > priorMs &&
+        d.logLine.timestamp <= first.logLine.timestamp
+          ? sum + Math.abs(d.effectiveAmount)
+          : sum,
+      0,
+    );
     if (
-      before - pct(first) >= STALE_MAX_HP_MIN_DIP_PCT &&
+      before - pct(first) - (100 * hitsInDip) / m0 >=
+        STALE_MAX_HP_MIN_DIP_PCT &&
       Math.abs((100 * first.advancedActorCurrentHp) / m1 - before) <=
         STALE_MAX_HP_RECOVERED_PCT &&
       after.advancedActorCurrentHp - rescaled >=

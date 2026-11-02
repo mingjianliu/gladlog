@@ -65,6 +65,22 @@ describe("checkSpells — an event is covered by its logged OR its English name"
 
 describe("checkTrinkets — use annotations against the manifest's cast count", () => {
   const manifest = manifestOf({ counts: { trinketCasts: 2 } as never });
+  it("a racial on the trinket's tag is not a trinket cast", () => {
+    expect(
+      checkTrinkets(
+        [
+          "0:12  [TRINKET]   1(DPriest) used Will of the Forsaken",
+          "0:40  [ENEMY TRINKET]   4(UDK) used Will of the Forsaken out of Fear",
+          "0:50  [TRINKET]   2(RDruid) used PvP trinket",
+        ],
+        manifest,
+      ),
+    ).toEqual({
+      present: 1,
+      total: 2,
+      missing: ["1 of 2 trinket casts have no use annotation"],
+    });
+  });
   it("'trinketed', 'trinket broke', [TRINKET] / [ENEMY TRINKET] and 'trinket: used' are uses; 'trinket: ON CD' is not", () => {
     expect(
       checkTrinkets(

@@ -14,8 +14,15 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CRISIS_PROC_ANSWERS } from "../../analysis/crisisDecisionPoints";
 import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
-import { specToString } from "../../utils/cooldowns";
-import { OFFENSIVE_FORM_FACT_AURAS } from "../../utils/offensiveAuraOccurrences";
+import { auraOnlyActivations } from "../../utils/auraOnlyActivations";
+import {
+  type IMajorCooldownInfo,
+  specToString,
+} from "../../utils/cooldowns";
+import {
+  NO_PRESS_SUFFIX,
+  OFFENSIVE_FORM_FACT_AURAS,
+} from "../../utils/offensiveAuraOccurrences";
 import { fmtTime } from "../../utils/renderGrid";
 
 /** The words the line closes on — `[ENEMY DEF]`'s label for the same proc. */
@@ -118,6 +125,65 @@ export function emitFriendlyFormEntries(ctx: {
         u.id === owner.id
           ? `${fmtTime(t)}  [YOU] [PROC]   ${name}`
           : `${fmtTime(t)}  [TEAM] [PROC]   ${pid(u.name)} (${specToString(u.spec)}): ${name}`,
+      );
+      emitted = true;
+    }
+  }
+  return emitted;
+}
+
+/** A ledger row this near an activation is the same fact: the ledger's own
+ * aura-only rows (`auraOnlyActivationSeconds`) already print a line. */
+const LEDGER_ROW_NEAR_S = 1;
+
+/**
+ * fact8 class 5 (D11 D17 D22 D26 D40; every family of `auraOnlyActivations`):
+ * a tracked cooldown's aura that went up on the owner or a teammate with no
+ * press of it. The enemy side's `[no press logged]` / `(no press)` lines, on
+ * the `[PROC]` tag. Nothing was pressed; the line prints no HP, and it reads
+ * no cooldown: the button is not spent.
+ */
+export function emitFriendlyAuraOnlyEntries(ctx: {
+  owner: ICombatUnit;
+  friends: readonly ICombatUnit[];
+  ownerCDs: readonly IMajorCooldownInfo[];
+  teammateCDs: ReadonlyArray<{
+    player: ICombatUnit;
+    cds: readonly IMajorCooldownInfo[];
+  }>;
+  matchStartMs: number;
+  matchEndSeconds: number;
+  roundEndAtMs?: number;
+  pid: (name: string) => string;
+  addEntry: (atSeconds: number, line: string) => void;
+}): boolean {
+  const { owner, friends, matchStartMs, pid, addEntry } = ctx;
+  const endMs = Math.min(
+    ctx.roundEndAtMs ?? Infinity,
+    matchStartMs + ctx.matchEndSeconds * 1000,
+  );
+  const units = [owner, ...friends.filter((f) => f.id !== owner.id)];
+  let emitted = false;
+  for (const u of units) {
+    const ledger =
+      u.id === owner.id
+        ? ctx.ownerCDs
+        : (ctx.teammateCDs.find((t) => t.player.id === u.id)?.cds ?? []);
+    for (const a of auraOnlyActivations(u, units, matchStartMs, endMs)) {
+      const inLedger = ledger.some(
+        (cd) =>
+          (cd.spellId === a.spellId || cd.spellName === a.spellName) &&
+          cd.casts.some(
+            (c) => Math.abs(c.timeSeconds - a.atSeconds) <= LEDGER_ROW_NEAR_S,
+          ),
+      );
+      if (inLedger) continue;
+      const t = a.atSeconds;
+      addEntry(
+        t,
+        u.id === owner.id
+          ? `${fmtTime(t)}  [YOU] [PROC]   ${a.spellName}${NO_PRESS_SUFFIX}`
+          : `${fmtTime(t)}  [TEAM] [PROC]   ${pid(u.name)} (${specToString(u.spec)}): ${a.spellName}${NO_PRESS_SUFFIX}`,
       );
       emitted = true;
     }

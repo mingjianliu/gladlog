@@ -73,6 +73,7 @@ describe("G7-P3", () => {
     expect(out).toEqual({
       ordinalRendered: true,
       healCdRendered: true,
+      healCdNoPressRendered: false,
       procRendered: false,
       utilityRendered: false,
       unseenRendered: false,

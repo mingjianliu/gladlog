@@ -2096,11 +2096,12 @@ export function cdHoardedEvents(
       // owner's own crisis.
       const reachedThisUnit = (
         cd: CdHoardCandidateCd,
-        c: { targetName?: string },
+        c: { targetName?: string; allyCopyOn?: string },
       ) =>
         !cdCanHelpAnotherUnit(cd) ||
         c.targetName === undefined ||
         c.targetName === src.crisisUnit.name ||
+        c.allyCopyOn === src.crisisUnit.name ||
         // a talent-shared wall put on an ally lands on its caster too (the
         // log: an APPLIED on each, one instant — `MITIGATION_TABLE`'s
         // `pctOnOthers` note), so it answers the caster's own crisis
@@ -2246,7 +2247,7 @@ export function cdHoardedEvents(
         cd: CdHoardCandidateCd,
         c: { targetName?: string; allyCopyOn?: string },
       ): string | undefined =>
-        cdCanHelpAnotherUnit(cd) ? c.targetName : c.allyCopyOn;
+        c.allyCopyOn ?? (cdCanHelpAnotherUnit(cd) ? c.targetName : undefined);
       const spentElsewhere = ownerCds
         .filter(
           (cd) =>

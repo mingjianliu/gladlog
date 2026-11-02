@@ -16,4 +16,8 @@ describe("CHANNELED_SPELL_IDS — self-channelled spells", () => {
     for (const id of ["357208", "382266", "355936", "382614"])
       expect(CHANNELED_SPELL_IDS.has(id), id).toBe(false);
   });
+  it("nor when it also carries the Is Channelled bit (Eternity Surge ×2, Upheaval, fact8 D4)", () => {
+    for (const id of ["359073", "382411", "396286"])
+      expect(CHANNELED_SPELL_IDS.has(id), id).toBe(false);
+  });
 });

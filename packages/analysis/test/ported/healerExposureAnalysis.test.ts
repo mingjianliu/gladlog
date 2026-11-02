@@ -228,6 +228,35 @@ describe('healerExposureAnalysis — exposure calculation', () => {
     expect(res[0].threats[0].ccCategory).toBe('Incapacitate');
   });
 
+  it('fact8 D25: every ready control that reaches is listed, not one per DR family', () => {
+    const healer = makeUnit('h', { advancedActions: [makeAdvancedAction(MATCH_START, 0, 0)] });
+    (healer.advancedActions[0] as any).advancedActorId = 'h';
+    const enemy = makeUnit('e', {
+      name: 'E1',
+      spec: CombatUnitSpec.Warrior_Arms,
+      advancedActions: [makeAdvancedAction(MATCH_START, 5, 0)],
+    });
+    (enemy.advancedActions[0] as any).advancedActorId = 'e';
+    const res = analyzeHealerExposureAtBurst(
+      [{ fromSeconds: 0 }] as any,
+      [enemy],
+      healer,
+      { trinketUseTimes: [], ccInstances: [] } as any,
+      [
+        {
+          ccInstances: [
+            { sourceName: 'E1', sourceId: 'e', spellId: '132168', spellName: 'Shockwave' },
+            { sourceName: 'E1', sourceId: 'e', spellId: '107570', spellName: 'Storm Bolt' },
+          ],
+        } as any,
+      ],
+      '1505',
+      MATCH_START,
+    );
+    expect(res[0].threats.map((t) => t.ccSpellName)).toEqual(['Shockwave', 'Storm Bolt']);
+    expect(res[0].threats.map((t) => t.ccCategory)).toEqual(['Stun', 'Stun']);
+  });
+
   it('fact2: an enemy control on cooldown at the window is no threat; off cooldown it is', () => {
     const healer = makeUnit('h', {
       advancedActions: [makeAdvancedAction(MATCH_START + 6_000, 0, 0), makeAdvancedAction(MATCH_START + 62_000, 0, 0)],

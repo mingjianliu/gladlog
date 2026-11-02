@@ -14,6 +14,7 @@
 
 import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
 import { reachesAlly } from "../../data/spellTargeting";
+import { allyCopyClause } from "../../utils/allyCopyWall";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import {
   channelEndSeconds,
@@ -201,9 +202,9 @@ export function emitOwnerCdEntries(
         Math.round(matchStartMs + cast.timeSeconds * 1000),
         procWith,
       );
-      // F15 C1: a talent-shared wall's press that put its copy on an ally
-      // (Flameshaper Obsidian Scales) keeps that ally as its target.
-      const forceSelf = selfOnlyId && !cast.allyCopyOn;
+      // fact8 D23: a talent-shared wall stays on its caster, the copy is
+      // stated beside it (`allyCopyClause`).
+      const forceSelf = selfOnlyId;
       // No `cast.targetHpPct` override (hp-state F-R8): the helper reads
       // `hpAtPress` itself. The ledger field is the same press reading since
       // the A21 extension (2026-10-01) — one sampler for the line, the
@@ -292,7 +293,9 @@ export function emitOwnerCdEntries(
         : isControlCast(cd.spellId)
           ? "[YOU] [CC]"
           : "[YOU] [CD]";
-      let effectiveTargetPart = targetPart;
+      let effectiveTargetPart = cast.allyCopyOn
+        ? `${targetPart}${allyCopyClause(cd.spellId, pid(cast.allyCopyOn))}`
+        : targetPart;
       // enemy-def F-E26: the units this line names, for the IMMUNE tag
       const named = new Set<string>(
         cast.targetName && cast.targetName !== "nil" ? [cast.targetName] : [],

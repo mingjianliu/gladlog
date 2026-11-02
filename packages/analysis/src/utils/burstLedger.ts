@@ -4,7 +4,10 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { ownEffectAurasKeyedBy } from "../data/castEffectAuras";
+import {
+  castsOfEffectAura,
+  ownEffectAurasKeyedBy,
+} from "../data/castEffectAuras";
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -20,6 +23,7 @@ import {
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
+  ALIAS_PRESS_TWIN_MS,
   FULL_IMMUNITY_IDS,
   holderFirstOwnActionAfterMs,
   joinReappliedIntervals,
@@ -312,6 +316,31 @@ export function burstCastSpan(
  * CD detection shares the enemy-side predicate (reconstructEnemyCDTimeline);
  * casts group while their effect spans overlap (`burstCastSpan`).
  */
+/**
+ * One press that puts up its cast-id aura and its own-effect aura is one
+ * defensive (fact8 D1, 0272f81c 0:28: Touch of Karma's 122470 and 125174 at
+ * 1 ms apart read as two identical "major defensive up" lines). Same caster,
+ * starting within `ALIAS_PRESS_TWIN_MS`, a cast and its effect
+ * (`castsOfEffectAura`): the longer overlap stands, under the cast's id —
+ * the id the press-keyed readers count (`viaLoggedAura` skips them).
+ */
+export function dropOnePressAuraTwins(hits: IBurstDefensiveHit[]): void {
+  for (let i = hits.length - 1; i >= 0; i--) {
+    const effect = hits[i];
+    const cast = hits.find(
+      (x) =>
+        x !== effect &&
+        x.casterName === effect.casterName &&
+        Math.abs((x.startOffsetMs ?? 0) - (effect.startOffsetMs ?? 0)) <=
+          ALIAS_PRESS_TWIN_MS &&
+        castsOfEffectAura(effect.spellId).includes(x.spellId),
+    );
+    if (!cast) continue;
+    cast.overlapSeconds = Math.max(cast.overlapSeconds, effect.overlapSeconds);
+    hits.splice(i, 1);
+  }
+}
+
 export function analyzeBurstLedger(
   player: ICombatUnit,
   allies: ICombatUnit[],
@@ -512,6 +541,7 @@ export function analyzeBurstLedger(
         });
       }
       defensivesHit.sort((a, b) => b.overlapSeconds - a.overlapSeconds);
+      dropOnePressAuraTwins(defensivesHit);
 
       const died = target.deathRecords.some(
         (dr) =>

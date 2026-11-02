@@ -22,7 +22,7 @@ import {
   DEATH_WINDOW_UNFOLD_CAP,
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
-import { allyCopyRecipient } from "../../utils/allyCopyWall";
+import { allyCopyClause, allyCopyRecipient } from "../../utils/allyCopyWall";
 import { channelSpans } from "../../utils/castCommitSpans";
 import { isControlCast } from "../../utils/castMissRows";
 import {
@@ -171,6 +171,7 @@ export function emitHealerCastGapFillerEntries(
     | "ownerNoCcAuraTag"
     | "requestSnapshotPlaceholder"
     | "getCDTargetAndVelocityPart"
+    | "pid"
     | "manaCooldownNote"
     | "groundingAbsorbNote"
     | "ownerHardCcTagAt"
@@ -197,6 +198,7 @@ export function emitHealerCastGapFillerEntries(
     ownerNoCcAuraTag,
     requestSnapshotPlaceholder,
     getCDTargetAndVelocityPart,
+    pid,
     manaCooldownNote,
     groundingAbsorbNote,
     ownerHardCcTagAt,
@@ -702,15 +704,14 @@ export function emitHealerCastGapFillerEntries(
       flushFold();
       // B112/B127: apply the same self-only override here (this promotion path is where MW/Evoker
       // throughput CDs render). B113/B130: append the role tag so the model does not invent mechanics.
-      // F15 C1 / fact2 C1: a press whose copy the log shows on an ally is
-      // that ally's, whatever unit the cast's dest named
       const promotedCopy = allyCopyRecipient(owner.id, e, _allUnits);
-      const promotedTargetPart = getCDTargetAndVelocityPart(
+      // fact8 D23: the wall stayed on the caster, the copy is stated beside it
+      const promotedTargetPart = `${getCDTargetAndVelocityPart(
         e.spellId,
         timeSeconds,
-        promotedCopy?.name ?? e.destUnitName,
-        rendersOnCaster(e.spellId) && !promotedCopy,
-      );
+        e.destUnitName,
+        rendersOnCaster(e.spellId) || !!promotedCopy,
+      )}${promotedCopy ? allyCopyClause(e.spellId, pid(promotedCopy.name)) : ""}`;
       const promotedRole = cdRoleTag(e.spellId);
       const promotedDisplayName = promotedRole
         ? `${displayName} [${promotedRole}]`

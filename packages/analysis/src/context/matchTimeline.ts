@@ -100,6 +100,7 @@ import { emitEnemyDefEntries } from "./timelineSections/enemyDef";
 import { emitEnemyHardCastEntries } from "./timelineSections/enemyHardCast";
 import { formatTimeline } from "./timelineSections/formatTimeline";
 import {
+  emitFriendlyAuraOnlyEntries,
   emitFriendlyCheatDeathEntries,
   emitFriendlyFormEntries,
 } from "./timelineSections/friendlyCheatDeath";
@@ -627,6 +628,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   if (isHealer)
     emitHealerCastGapFillerEntries({
+      pid,
       ownerCDs,
       matchStartMs,
       ccTrinketSummaries,
@@ -698,6 +700,22 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     emitFriendlyFormEntries({
       owner,
       friends,
+      matchStartMs,
+      matchEndSeconds,
+      roundEndAtMs,
+      pid,
+      addEntry,
+    })
+  )
+    procLinesEmitted = true;
+
+  // fact8 class 5: a tracked cooldown's aura with no press of it
+  if (
+    emitFriendlyAuraOnlyEntries({
+      owner,
+      friends,
+      ownerCDs,
+      teammateCDs,
       matchStartMs,
       matchEndSeconds,
       roundEndAtMs,

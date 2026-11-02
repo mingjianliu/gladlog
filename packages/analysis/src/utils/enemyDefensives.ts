@@ -17,6 +17,7 @@ import {
   castsOfEffectAura,
   effectAurasOfCast,
 } from "../data/castEffectAuras";
+import { HASTE_DURATION_SPELL_IDS } from "../data/channeledGenerated";
 import { wallDoorPct } from "../data/mitigationComponents";
 import {
   DEFLECTION_IDS,
@@ -68,6 +69,7 @@ import {
 } from "./hiddenPress";
 import { isDeferralAbsorb } from "./incomingPressure";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
+import { CHANNEL_STOPPED_MAX_SHARE } from "./kickAudit";
 import { toRenderSecond } from "./renderGrid";
 import {
   type SelfDefensiveMechanism,
@@ -241,6 +243,8 @@ export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
 export const OWN_SHIELD_PRESS_LOOKBACK_MS = 60_000;
 /** How far before an ally's shield's run its press may lie to have put it up. */
 export const ALLY_SHIELD_PRESS_PAIR_MS = 1000;
+/** The destination GUID of a cast row with no target. */
+export const NO_TARGET_GUID = "0000000000000000";
 
 /**
  * The parts of one run of an aura on `holder` (ms) during which it is an own
@@ -284,14 +288,21 @@ export function ownPressedShieldSpansMs(
     // up: one on somebody else, or a minute old, is not it. On the 91 audited
     // logs an ally's shield pairs ≤ 0.2 s with its press 1,721 of 1,792 (PW:S
     // 17), 1,903 of 1,942 (Prayer of Mending's PW:S 1246768), 157 of 263 (Chi
-    // Cocoon 1260681)
-    if (
-      !own &&
-      (c.destUnitId !== holder.id ||
+    // Cocoon 1260681). A multi-target press logs no target at all (fact8 D10,
+    // 040cec7c 1:17: Void Shield, the caster and two allies in one ms, 617k
+    // eaten inside `defenseless 1:13–1:40`): the run it put up is the one that
+    // starts beside it, so a press with no target says nothing of a live run.
+    if (!own) {
+      const noTarget = !c.destUnitId || c.destUnitId === NO_TARGET_GUID;
+      if (
+        (!noTarget && c.destUnitId !== holder.id) ||
+        (noTarget &&
+          c.logLine.timestamp > runStartMs + ALLY_SHIELD_PRESS_PAIR_MS) ||
         c.logLine.timestamp < runStartMs - ALLY_SHIELD_PRESS_PAIR_MS ||
-        c.logLine.timestamp > runEndMs)
-    )
-      continue;
+        c.logLine.timestamp > runEndMs
+      )
+        continue;
+    }
     if (
       !castIds.has(c.spellId) &&
       !(name !== "" && getEnglishSpellName(c.spellId, "") === name)
@@ -518,7 +529,6 @@ const stealthAllowsPress =
  * player stands nowhere (fact7 `unseenEndOpener`, a7c8de4c r1: its 703 aura
  * 0.34 s into a Vanish was read as such a row, the Vanish printed 1.0 s).
  */
-const NO_UNIT_ID = "0000000000000000";
 
 function holderOpenerDebuffAfterMs(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents">,
@@ -549,7 +559,7 @@ function holderOpenerDebuffAfterMs(
           c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
           !!c.spellId &&
           pressIds.has(c.spellId) &&
-          (!c.destUnitId || c.destUnitId === NO_UNIT_ID) &&
+          (!c.destUnitId || c.destUnitId === NO_TARGET_GUID) &&
           c.logLine.timestamp <= afterMs &&
           c.logLine.timestamp +
             (spellEffectData[c.spellId]?.durationSeconds ?? 0) * 1000 >=
@@ -2064,7 +2074,12 @@ export function enemyDefensiveEvents(
   };
   const removedEarly = (spellId: string, observed: number): boolean => {
     const full = buffFullDurationForCaster(spellId, enemy);
-    return full !== undefined && observed < full - REMOVED_EARLY_SLACK_S;
+    if (full === undefined) return false;
+    // a length that moves with haste has no fixed end to be early of (fact8
+    // D38, `runsWithHaste` in timelineHelpers); the channel bound stands in
+    if (HASTE_DURATION_SPELL_IDS.has(spellId))
+      return observed < full * CHANNEL_STOPPED_MAX_SHARE;
+    return observed < full - REMOVED_EARLY_SLACK_S;
   };
   /** `removedEarly` with the cause the log gives for that interval's end —
    * read off the aura's HOLDER (the recipient of an external). */

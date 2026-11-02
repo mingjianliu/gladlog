@@ -27,6 +27,13 @@ export function allyCopyLegendPhrase(): string {
     .join(", ");
 }
 
+/** ` + 15% copy → 3(UDKnight)`: the copy on a press line whose wall stayed on
+ * its caster (fact8 D23). */
+export function allyCopyClause(spellId: string, allyLabel: string): string {
+  const pct = MITIGATION_TABLE[spellId]?.pctOnOthers;
+  return pct === undefined ? "" : ` + ${pct}% copy → ${allyLabel}`;
+}
+
 /** The ally's copy is applied in the same instant as the cast (2026-09-12
  * corpus note on the 363916 row: SPELL_CAST_SUCCESS with the ally as dest,
  * APPLIED on the caster and on the ally at the same ms). 0.5 s covers log

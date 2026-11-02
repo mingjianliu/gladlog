@@ -25,6 +25,7 @@ import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { castsOfEffectAura, effectAuraViaName } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { hardCcAuraAt } from "./cannotCastIntervals";
+import { CONTROL_FAILED_MISS_TYPES, missReportsControl } from "./castMissRows";
 import {
   analyzePlayerCCAndTrinket,
   IPlayerCCTrinketSummary,
@@ -268,10 +269,8 @@ export function buildEnemyCCHistory(
         summonOwnerById(allUnits, cc.sourceId, enemies);
       if (!owner) continue;
       const existing = result.get(owner.name) ?? [];
-      // every distinct control, in landing order: the threat list keeps the
-      // first of each DR category that is off cooldown at the window
-      // (`enemyCcOnCooldownAt`, fact2), so a second stun of the same enemy
-      // stands in when the first is spent
+      // every distinct control, in landing order: the threat list reads each
+      // one that is off cooldown at the window (`enemyCcOnCooldownAt`, fact2)
       if (!existing.some((e) => e.spellId === cc.spellId)) {
         existing.push({
           spellName: cc.spellName,
@@ -414,9 +413,7 @@ export function analyzeHealerExposureAtBurst(
       const ccSources =
         observedCCs.length > 0 ? observedCCs : primaryCC ? [primaryCC] : [];
 
-      const listedCategories = new Set<string>();
       for (const { spellName, spellId, category } of ccSources) {
-        if (listedCategories.has(category)) continue;
         if (
           enemyCcOnCooldownAt(
             enemy,
@@ -430,7 +427,10 @@ export function analyzeHealerExposureAtBurst(
         // a stealth-only control (Rake's stun) only with stealth up or a
         // means to it in hand (user ruling 2026-10-26)
         if (!stealthControlUsableAt(enemy, spellId, windowMs)) continue;
-        listedCategories.add(category);
+        // every ready control that reaches, not one per DR family: a ready
+        // Shockwave kept a ready Storm Bolt off every list and out of the kit
+        // (fact8 D25, 969a6b07: cast 8×, 0 listed). A second control of a
+        // family carries the same DR, so the exposure label cannot move.
         if (distance > ccThreatRadiusYards(enemy, spellId)) continue;
         // Q2 at the window's instant — a control landing on that very ms is
         // on (fact6 D10: the window opened on the Cyclone's own ms; the line
@@ -642,6 +642,8 @@ const KIT_SPEC_DEFAULT_MARK = "(spec default, not seen)";
 /** …and the same default the enemy did press, never landing it (#9) */
 const kitPressedMark = (count: number) =>
   `(spec default, pressed ${count}×, never landed)`;
+const kitAimedMark = (count: number, at: "you" | "them") =>
+  `(aimed at ${at} ${count}×, never landed)`;
 const kitLandedMark = (count: number) => `(landed ${count}×)`;
 /** What the header says once the landed controls are on the line. */
 const kitLandedClause = (who: "you" | "them") =>
@@ -662,6 +664,50 @@ const kitLandedClause = (who: "you" | "them") =>
  * states what could reach the healer at that window, not what an enemy has
  * landed.
  */
+/**
+ * Controls the enemy aimed at the kit's unit that the log writes as failing on
+ * it (`CONTROL_FAILED_MISS_TYPES`, `missReportsControl` — the `[CC NOT LANDED]`
+ * / `[CC AVOIDED?]` reading of the same row), per enemy player and control.
+ * fact8 D42 (b71edaa9 r0): a hunter's Intimidation MISS and Freezing Trap
+ * IMMUNE at the owner, and a Howl of Terror IMMUNE, on no entry of a list
+ * headed "threats to you".
+ */
+export function aimedControlsForKit(
+  unit: Pick<ICombatUnit, "missesIn">,
+  enemies: readonly ICombatUnit[],
+  fromMs: number,
+  toMs: number,
+  allUnits?: Iterable<ICombatUnit>,
+): IKitLandedControl[] {
+  const out: IKitLandedControl[] = [];
+  const units = allUnits ? [...allUnits] : undefined;
+  for (const m of unit.missesIn ?? []) {
+    if (!m.spellId || !CONTROL_FAILED_MISS_TYPES.has(m.missType)) continue;
+    if (!missReportsControl(m.spellId)) continue;
+    if (m.timestamp < fromMs || m.timestamp > toMs) continue;
+    const enemy =
+      enemies.find((e) => e.id === m.srcUnitId) ??
+      summonOwnerById(units, m.srcUnitId, enemies);
+    if (!enemy) continue;
+    const spellName = getEnglishSpellName(m.spellId, m.spellName);
+    const seen = out.find(
+      (l) => l.enemyName === enemy.name && l.spellName === spellName,
+    );
+    if (seen) seen.count++;
+    else {
+      const category = DR_CATEGORY_MAP[m.spellId];
+      out.push({
+        enemyName: enemy.name,
+        enemySpec: specToString(enemy.spec),
+        spellName,
+        ...(category ? { category } : {}),
+        count: 1,
+      });
+    }
+  }
+  return out;
+}
+
 export function formatEnemyCCKitHeader(
   exposures: IHealerBurstExposure[],
   /** cc-dr F-KT1 (ruling A17, cc-dr R3 = A): the healer's roster label when
@@ -672,6 +718,8 @@ export function formatEnemyCCKitHeader(
   /** `landedControlsForKit` of that unit; absent = the burst-window list
    * alone, under the header that promises no more */
   landed?: readonly IKitLandedControl[],
+  /** `aimedControlsForKit` of that unit */
+  aimed?: readonly IKitLandedControl[],
 ): string[] {
   const enemyOrder: string[] = [];
   const kits = new Map<
@@ -684,6 +732,7 @@ export function formatEnemyCCKitHeader(
         fromTemplate?: boolean;
         pressedCount?: number;
         landed?: number;
+        aimed?: number;
       }>;
     }
   >();
@@ -732,6 +781,24 @@ export function formatEnemyCCKitHeader(
       });
   }
 
+  for (const a of aimed ?? []) {
+    let kit = kits.get(a.enemyName);
+    if (!kit) {
+      kit = { spec: a.enemySpec, spells: [] };
+      kits.set(a.enemyName, kit);
+      enemyOrder.push(a.enemyName);
+    }
+    const entry = kit.spells.find((s) => s.spellName === a.spellName);
+    if (entry) entry.aimed = a.count;
+    else
+      kit.spells.push({
+        spellName: a.spellName,
+        ...(a.category ? { category: a.category } : {}),
+        aimed: a.count,
+      });
+  }
+
+  const aimedAt = healerLabel ? "them" : "you";
   const parts = enemyOrder.map((name) => {
     const kit = kits.get(name)!;
     // cc-dr F-KT1: a spec default the enemy was never seen landing says so;
@@ -739,7 +806,7 @@ export function formatEnemyCCKitHeader(
     const spellsStr = kit.spells
       .map(
         (s) =>
-          `${s.spellName}${s.category ? ` [${s.category}]` : ""}${s.landed ? ` ${kitLandedMark(s.landed)}` : s.fromTemplate ? ` ${s.pressedCount ? kitPressedMark(s.pressedCount) : KIT_SPEC_DEFAULT_MARK}` : ""}`,
+          `${s.spellName}${s.category ? ` [${s.category}]` : ""}${s.landed ? ` ${kitLandedMark(s.landed)}` : s.aimed ? ` ${kitAimedMark(s.aimed, aimedAt)}` : s.fromTemplate ? ` ${s.pressedCount ? kitPressedMark(s.pressedCount) : KIT_SPEC_DEFAULT_MARK}` : ""}`,
       )
       .join(", ");
     return `${kit.spec} (${name}): ${spellsStr}`;
@@ -779,7 +846,7 @@ const KIT_ENEMY_RE = /^(.+?) \((\S+)\): (.+)$/;
  * Read entry by entry — the spec-default mark has a `, ` of its own, so the
  * list cannot be split on it. */
 const KIT_ENTRY_RE =
-  /(.+?)(?: \[([^\]]+)\])?(?: \((?:landed (\d+)×|(spec default, (?:not seen|pressed \d+×, never landed)))\))?(?:, |$)/y;
+  /(.+?)(?: \[([^\]]+)\])?(?: \((?:landed (\d+)×|aimed at (?:you|them) \d+×, never landed|(spec default, (?:not seen|pressed \d+×, never landed)))\))?(?:, |$)/y;
 
 /** `formatEnemyCCKitHeader`'s line read back to its end — the gate's reader
  * (`checkEnemyCcKitLanded`). Null when the line is not in the generated

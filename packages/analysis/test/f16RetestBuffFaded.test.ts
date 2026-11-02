@@ -81,6 +81,46 @@ const causeOf = (u: ReturnType<typeof owner>, cds: ReturnType<typeof cdOf>) =>
   );
 
 describe("F16 retest — [BUFF FADED] cause of a short buff and a form-bound one", () => {
+  // fact8 D35 (a07baece 2:08): Cheap Shot in the removal's own ms took a Vanish
+  // 0.4 s before its end, inside the early slack, and the line read "(expired)"
+  it("the holder's own other press in the removal's ms ended it, inside the slack too", () => {
+    const V = "11327";
+    const u = owner(
+      CombatUnitClass.Rogue,
+      CombatUnitSpec.Rogue_Subtlety,
+      V,
+      100,
+      101.1,
+    );
+    expect(causeOf(u, cdOf(V, "Vanish", 100))).toEqual(["expired"]);
+    u.spellCastEvents.push(
+      makeSpellCastEvent("1833", at(101.1), "enemy-1") as never,
+    );
+    expect(causeOf(u, cdOf(V, "Vanish", 100))).toEqual(["ended_early"]);
+  });
+
+  // fact8 D38 (a39539f2 2:26): Bladestorm's aura shortens with haste
+  // (Attributes_8 bit 17, not a channel): 4.16 s of 6 under Bloodlust was all
+  // ten ticks. Only a cut under `CHANNEL_STOPPED_MAX_SHARE` of it is a stop.
+  it("a hasted aura's full run reads expired; a real cut still ends early", () => {
+    const B = "227847";
+    const cd = cdOf(B, "Bladestorm", 100);
+    const run = (removedS: number) =>
+      causeOf(
+        owner(
+          CombatUnitClass.Warrior,
+          CombatUnitSpec.Warrior_Arms,
+          B,
+          100,
+          removedS,
+        ),
+        cd,
+      );
+    expect(spellEffectData[B]?.durationSeconds).toBe(6);
+    expect(run(104.16)).toEqual(["expired"]);
+    expect(run(101.5)).toEqual(["ended_early"]);
+  });
+
   it("Vanish (1.5 s) removed 0.39 s in ended early; removed at 1.45 s it expired", () => {
     const V = "11327";
     expect(

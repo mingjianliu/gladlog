@@ -429,8 +429,8 @@ describe("occupancyWithin counts empowered holds and channels", () => {
     expect(occ.spellNames).toEqual(["Chrono Flames", "Disintegrate"]);
   });
 
-  it("an empower that is also in the channelled table is one entry, not a hold plus a channel", () => {
-    expect(CHANNELED_SPELL_IDS.has(ETERNITY_SURGE)).toBe(true);
+  it("an empower is one entry, its hold, whatever DB2's channel bits say (fact8 D4)", () => {
+    expect(CHANNELED_SPELL_IDS.has(ETERNITY_SURGE)).toBe(false);
     const u = evoker({
       starts: [emp(ETERNITY_SURGE, 1_000)],
       ends: [emp(ETERNITY_SURGE, 2_500, 2)],

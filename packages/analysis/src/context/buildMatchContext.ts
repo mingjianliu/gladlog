@@ -67,6 +67,7 @@ import { analyzeOutgoingCCChains } from "../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { MITIGATION_AURA_MIN_PCT } from "../utils/enemyDefensives";
 import {
+  aimedControlsForKit,
   computeHealerExposureEvents,
   formatEnemyCCKitHeader,
   formatHealerExposureEntries,
@@ -888,6 +889,15 @@ export function buildMatchContext(
       ? landedControlsForKit(
           kitHealerSummary,
           enemies as ICombatUnit[],
+          Object.values(combat.units) as ICombatUnit[],
+        )
+      : undefined,
+    healerUnit
+      ? aimedControlsForKit(
+          healerUnit,
+          enemies as ICombatUnit[],
+          combat.startTime,
+          roundEndMs(combat),
           Object.values(combat.units) as ICombatUnit[],
         )
       : undefined,

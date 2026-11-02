@@ -238,6 +238,7 @@ import {
 } from "@gladlog/analysis/src/utils/killAttempts";
 import { wallInHandKitNames } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
 import { CJK_LEAK } from "@gladlog/analysis/src/utils/localizedText";
+import { NO_PRESS_SUFFIX } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import {
@@ -368,13 +369,18 @@ export function checkSpells(
  * use-annotation lines against the manifest's cast count. */
 const TRINKET_USE =
   /trinketed|trinket broke|\[(ENEMY )?TRINKET\]|trinket:\s*used/i;
+/** A racial that shares the trinket's lock prints on the same tag (fact8 D49);
+ * the manifest counts trinket casts, so that line is not one of them. */
+const RACIAL_ON_TRINKET_TAG = /\[(?:ENEMY )?TRINKET\].* used (?!PvP trinket)/;
 
 export function checkTrinkets(
   promptLines: string[],
   manifest: CoverageManifest,
 ): CoverageResult {
   const total = manifest.counts.trinketCasts;
-  const mentions = promptLines.filter((l) => TRINKET_USE.test(l)).length;
+  const mentions = promptLines.filter(
+    (l) => TRINKET_USE.test(l) && !RACIAL_ON_TRINKET_TAG.test(l),
+  ).length;
   const present = Math.min(mentions, total);
   const missing =
     total > present
@@ -4305,7 +4311,8 @@ export function checkResReturnAnnounced(lines: string[]): string[] {
       for (const tok of rdy
         .slice(1)
         .trim()
-        .split(/ (?=[+-])/)) {
+        // `~X[k/N]` = X stays ready on another charge count: no change here
+        .split(/ (?=[+~-])/)) {
         if (tok.startsWith("+")) ready.add(resLedgerName(tok.slice(1)));
         else if (tok.startsWith("-")) ready.delete(resLedgerName(tok.slice(1)));
       }
@@ -5411,7 +5418,9 @@ export function checkFormCooldownPressSpacing(lines: string[]): string[] {
   const last = new Map<string, { t: number; line: number }>();
   lines.forEach((line, i) => {
     const m = FORM_COOLDOWN_PRESS_LINE.exec(line);
-    if (!m) return;
+    // `X (no press)` is its aura without its button (fact8 class 5): the
+    // form a Swiftmend's Reforestation put up, no press to space
+    if (!m || m[5]!.endsWith(NO_PRESS_SUFFIX)) return;
     const rest = m[5]!;
     const form = forms.find(
       (f) =>

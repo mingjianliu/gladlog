@@ -224,6 +224,7 @@ export interface TimelineCtx {
   avoidanceSourceTag: (
     sourceName: string | undefined,
     targetName: string,
+    sourceId?: string,
   ) => string;
   /** enemy-def F-E18: the disarm a trinket press at `t` broke, when no CC took it */
   trinketBrokenDisarm: (

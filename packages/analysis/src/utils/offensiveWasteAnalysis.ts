@@ -21,14 +21,13 @@ import { isControlCast } from "./castMissRows";
 import { COMPANION_CAST_ROW_MS, isNoPressRow } from "./castPress";
 import { applicableCCAvoidanceIds } from "./ccTrinketAnalysis";
 import {
-  getUnitHpAtTimestamp,
-  HP_SAMPLE_RADIUS_MS,
+  hpTroughInEventSpan,
   PRESS_EFFECT_LEAD_MS,
   specToString,
 } from "./cooldowns";
 import { spellNameKey } from "./damagePress";
 import { isDeferralDamageRow } from "./incomingPressure";
-import { fmtTime, toRenderSecond } from "./renderGrid";
+import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 
 /**
@@ -227,21 +226,20 @@ export function getHighValueSpellIds(
  * 继续打」被认定为正确操作、不产出浪费。审计结论是本系统整体过度指责
  * (docs/coaching-grounding-audit.md),这个方向是有意选的。
  *
- * 采样走共享谓词(`getUnitHpAtTimestamp` + `HP_SAMPLE_RADIUS_MS`,时刻先归
- * `toRenderSecond` 渲染网格),与 prompt 里其他 HP 声明同源。
+ * 读的是光环在身期间的真实最低值(`hpTroughInEventSpan`)。
  */
 function killWasLive(w: IDefenseWindow, matchStartMs: number): boolean {
-  const from = Math.floor(w.fromSeconds);
-  const to = Math.ceil(w.toSeconds);
-  for (let t = from; t <= to; t += 1) {
-    const hp = getUnitHpAtTimestamp(
-      w.unit,
-      matchStartMs + toRenderSecond(t) * 1000,
-      HP_SAMPLE_RADIUS_MS,
-    );
-    if (hp !== null && hp <= KILL_LIVE_HP_PCT) return true;
-  }
-  return false;
+  // fact8 D31: the span's true minimum (`hpTroughInEventSpan`), the reading
+  // every other "lowest while up" number takes — the legend says "never read
+  // 20 % HP or lower while it was up", and a druid at 16 % between two
+  // whole-second samples kept its Barkskin row (980d8143 r0 2:34.6)
+  const low = hpTroughInEventSpan(
+    w.unit,
+    matchStartMs,
+    w.fromSeconds,
+    w.toSeconds,
+  );
+  return low !== null && low.pct <= KILL_LIVE_HP_PCT;
 }
 
 export function buildOffensiveWasteSummary(

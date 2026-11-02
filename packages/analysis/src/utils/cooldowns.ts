@@ -1597,6 +1597,8 @@ export interface ICooldownCast {
    * consumers fall back to the entry-level value (`castRecovery`).
    */
   cooldownSecondsOverride?: number;
+  /** A free press (`freeRecast`): the press whose cooldown it stands on. */
+  freeRecastOf?: number;
   /** A press that opened a free-recast window (`FREE_RECAST_WINDOWS`,
    * Escape from Reality): until this instant the spell can be pressed again
    * ignoring its cooldown, so it is available while the window is unused. */
@@ -1862,7 +1864,10 @@ export const PRESS_HP_LINE_TAGS: readonly string[] = [
  * the `PRESS_EFFECT_LEAD_MS` before the cast line, before the earliest such
  * heal. With no heal of anyone's on the unit in that lead, a sample of the
  * press's own ms logged before its cast row counts too (user ruling
- * 2026-10-23, fact4 D31 — needs the samples' `lineIndex`). NOT the nearest
+ * 2026-10-23, fact4 D31 — needs the samples' `lineIndex`), and with the
+ * press's own heal identified, a sample of that heal's ms logged before it
+ * counts whatever else healed the unit around it (user ruling 2026-11-01,
+ * fact8 D14). NOT the nearest
  * sample at the press ms: an instant heal's healed
  * sample sits a millisecond before its own SUCCESS line, so the nearest
  * sample is the press's own effect (06bb9860 Lay on Hands 32 % → would read
@@ -1875,6 +1880,29 @@ export function hpAtPress(
   cast: { spellId: string; srcUnitId: string },
 ): number | null {
   let cutMs = pressMs;
+  /** the line of the press's earliest own direct heal */
+  let cutLine: number | undefined;
+  let tickAtCut = false;
+  // the press's own heal may carry its effect's id (fact2 C10: Dream
+  // Breath is pressed as 355936 and heals as 355941, its DB2-named effect)
+  // or a heal of the press's own name (Holy Prism 114165 heals as 114871,
+  // no aura of it in the cast→effect table)
+  const isOwnEffect = (h: { spellId?: string | null }) =>
+    h.spellId === cast.spellId ||
+    (!!h.spellId &&
+      (effectAuraViaName(cast.spellId, h.spellId) ||
+        getEnglishSpellName(h.spellId, "") ===
+          getEnglishSpellName(cast.spellId, "")));
+  // …a heal under the press's own id in its ms names the press's heal: a
+  // trigger guess (below) stands down — fact8 D14, an Embrace the Shadow proc
+  // logged before Desperate Prayer's aura read as the prayer's own heal
+  const ownHealAtPress = (unit.healIn ?? []).some(
+    (h) =>
+      h.logLine.timestamp === pressMs &&
+      h.srcUnitId === cast.srcUnitId &&
+      h.logLine.event !== LogEvent.SPELL_PERIODIC_HEAL &&
+      isOwnEffect(h),
+  );
   for (const h of unit.healIn ?? []) {
     const t = h.logLine.timestamp;
     // a press's first HoT tick rides its aura, which can lead the cast row
@@ -1887,22 +1915,14 @@ export function hpAtPress(
       ? AURA_BEFORE_CAST_ROW_MAX_MS
       : PRESS_EFFECT_LEAD_MS;
     if (t < pressMs - leadMs || t > pressMs) continue;
-    // the press's own heal may carry its effect's id (fact2 C10: Dream
-    // Breath is pressed as 355936 and heals as 355941, its DB2-named effect)
-    // or a heal of the press's own name (Holy Prism 114165 heals as 114871,
-    // no aura of it in the cast→effect table)
-    const ownEffect =
-      h.spellId === cast.spellId ||
-      (!!h.spellId &&
-        (effectAuraViaName(cast.spellId, h.spellId) ||
-          getEnglishSpellName(h.spellId, "") ===
-            getEnglishSpellName(cast.spellId, "")));
+    const ownEffect = isOwnEffect(h);
     // …or a direct heal its own aura's row follows in the same ms (a heal
     // the press triggers under another id: Enraged Regeneration's
     // Invigorating Fury 385174, logged in the same ms just before the
     // 184364 APPLIED — fact4 D59, bb7e1d9f 1:57 read 66 % for a 59 % press)
     const triggeredByPress =
       !periodic &&
+      !ownHealAtPress &&
       h.srcUnitId === cast.srcUnitId &&
       (unit.auraEvents ?? []).some(
         (a) =>
@@ -1943,7 +1963,22 @@ export function hpAtPress(
       )
     )
       continue;
-    if (t < cutMs) cutMs = t;
+    // only a DIRECT heal is a line to cut at: a first tick rides a same-ms
+    // burst of the caster's other heals (Frenzied Regeneration behind
+    // Verdancy and a Lifebloom bloom, 67 % → 91 % before the tick), so a tick
+    // keeps the sample before its ms
+    if (t < cutMs) {
+      cutMs = t;
+      tickAtCut = periodic;
+      cutLine = periodic ? undefined : h.logLine.lineIndex;
+    } else if (t === cutMs && periodic) {
+      tickAtCut = true;
+      cutLine = undefined;
+    } else if (t === cutMs && !tickAtCut) {
+      const line = h.logLine.lineIndex;
+      if (line !== undefined && (cutLine === undefined || line < cutLine))
+        cutLine = line;
+    }
   }
   const actions = getSortedAdvancedActions(unit);
   // user ruling 2026-10-23 (fact4 D31, 4accb068 r0 0:07.98): with no heal
@@ -1977,6 +2012,17 @@ export function hpAtPress(
         h.logLine.timestamp >= pressMs - PRESS_EFFECT_LEAD_MS &&
         h.logLine.timestamp <= pressMs,
     );
+  // user ruling 2026-11-01 (fact8 D14, 21caf35a r0 1:14.73): the rule above
+  // stood down for ANY heal in the lead; an Embrace the Shadow proc 30 ms
+  // before Desperate Prayer sent the line to the sample before the press's ms
+  // (61 %), past an Unstable Affliction tick logged in it (55 %, the HP the
+  // prayer's own heal starts from). The press's own heal found, its row is the
+  // cut — another heal around it changes nothing, its reading is simply older.
+  const loggedBeforeOwnHeal = (a: (typeof actions)[number]) =>
+    cutLine !== undefined &&
+    a.logLine.timestamp === cutMs &&
+    a.logLine.lineIndex !== undefined &&
+    a.logLine.lineIndex < cutLine;
   // last index with timestamp < cutMs, or at it and logged before the press
   let lo = 0;
   let hi = actions.length - 1;
@@ -1990,7 +2036,12 @@ export function hpAtPress(
   }
   for (let j = k; j >= 0; j--) {
     const a = actions[j]!;
-    if (a.logLine.timestamp >= cutMs && !loggedBeforePress(a)) continue;
+    if (
+      a.logLine.timestamp >= cutMs &&
+      !loggedBeforePress(a) &&
+      !loggedBeforeOwnHeal(a)
+    )
+      continue;
     // freshness is measured from the press, not from the heal cut: a cut
     // must not let a sample older than the radius stand for the press
     if (pressMs - a.logLine.timestamp > HP_SAMPLE_RADIUS_MS) return null;
@@ -2664,6 +2715,9 @@ function warpedView<
     ...(c.freeRecastUntil !== undefined
       ? { freeRecastUntil: tau(c.freeRecastUntil) }
       : {}),
+    ...(c.freeRecastOf !== undefined
+      ? { freeRecastOf: tau(c.freeRecastOf) }
+      : {}),
     // a press's reductions and resets happen at real instants too (codex
     // 59-POSTHOC-11e #5: a Preparation at 40 s, compared unwarped with a
     // warped clock already past 40, reset Adrenaline Rush at 31 s)
@@ -3049,7 +3103,7 @@ function cdSecondsUntilReadyConsumed(
     // event-reduced press: only the reductions that happened by t count
     // (an idle credit was known at the press — never past the given bound)
     const ready = readyAfterReductions(
-      last.timeSeconds +
+      (last.freeRecastOf ?? last.timeSeconds) +
         Math.min(cooldown, cd.cooldownSeconds - (last.idleCreditSeconds ?? 0)),
       last.reductions,
       tSeconds,
@@ -5290,19 +5344,18 @@ function buildCooldownEntry(
       );
       if (allyCopy) {
         cast.allyCopyOn = allyCopy.name;
-        // fact2 C1: the press reached the unit its copy is on, whatever the
-        // cast's dest named (the caster itself, or an enemy it had
-        // targeted — 0457a45e 0:48, 691a7f31 2:21); its target and the
-        // press's HP are that unit's
-        if (cast.targetName !== allyCopy.name) {
-          cast.targetName = allyCopy.name;
-          const hp = hpAtPress(allyCopy, e.logLine.timestamp, {
-            spellId: String(e.spellId ?? spell.spellId),
-            srcUnitId: unit.id,
-          });
-          if (hp !== null) cast.targetHpPct = hp;
-          else delete cast.targetHpPct;
-        }
+        // fact8 D23 (user ruling 2026-11-01): the wall stays on its caster
+        // and the ally takes the talent's copy, whatever the cast's dest
+        // named. The press's target and HP are the caster's; the copy is
+        // `allyCopyOn`. It read `→ ally` with the ally's HP, an external:
+        // 4b4e7442 0:19, a 29 % evoker's own 30 % wall nowhere on the page.
+        cast.targetName = unit.name;
+        const hp = hpAtPress(unit, e.logLine.timestamp, {
+          spellId: String(e.spellId ?? spell.spellId),
+          srcUnitId: unit.id,
+        });
+        if (hp !== null) cast.targetHpPct = hp;
+        else delete cast.targetHpPct;
       }
       return cast;
     });
@@ -5526,6 +5579,11 @@ function buildCooldownEntry(
           opener.timeSeconds +
           (opener.cooldownSecondsOverride ?? cooldownSeconds) -
           c.timeSeconds;
+        // the opener's clock, not one of its own: event reductions of the
+        // cooldown it never restarted stay the opener's (fact8 class 1: Deep
+        // Breath read `(39–60s)` under a free press, 8 s into a 60 s cooldown)
+        c.reductions = opener.reductions;
+        c.freeRecastOf = opener.timeSeconds;
         used = true;
         continue;
       }
@@ -6892,11 +6950,16 @@ export function hasOffensiveSpellActive(
     const refreshes = refreshed.get(runKey) ?? [];
     for (const applyTs of applications) {
       if (applyTs > timestampMs) continue;
+      // fact8 D18: a REMOVED past the next APPLIED is that later run's
+      // (34d5e5bc: the first Deathmark, its REMOVED lost, stayed "up" to the
+      // second one's end 175 s later), as `buildAuraIntervals` splits a run
+      const nextApply = applications.find((a) => a > applyTs) ?? Infinity;
       const removeTs = removals.find((r) => r > applyTs);
-      if (removeTs !== undefined) {
+      if (removeTs !== undefined && removeTs <= nextApply) {
         if (removeTs > timestampMs) return true;
         continue;
       }
+      if (timestampMs >= nextApply) continue;
       // a REMOVED the log never wrote: up for its official length (+1 s)
       // from its last (re)application, not for the rest of the round (codex
       // R6C-12 #2: a Colossus Smash applied at 2:26 with no REMOVED tagged a

@@ -15,6 +15,7 @@
  * is pinned by the 605-file acceptanceCapture context hash.
  */
 import { reachesAlly } from "../../data/spellTargeting";
+import { allyCopyClause } from "../../utils/allyCopyWall";
 import { isControlCast } from "../../utils/castMissRows";
 import {
   castSpellName,
@@ -151,13 +152,20 @@ export function emitTeamCdEntries(
           // (F15 C1: or a talent-shared wall's press the log shows landing
           // a copy on the ally — `allyCopyOn`, Flameshaper Obsidian Scales)
           const recipient =
-            (reachesAlly(cd.spellId) || !!cast.allyCopyOn) &&
+            reachesAlly(cd.spellId) &&
+            !cast.allyCopyOn &&
             cast.targetName &&
             cast.targetName !== "nil" &&
             cast.targetName !== player.name
               ? friendlyPid(cast.targetName)
               : undefined;
-          const recipientPart = recipient ? ` → ${recipient}` : "";
+          // fact8 D23: a talent-shared wall stayed on the caster; the ally
+          // took its copy (HP: the caster's at the press)
+          const recipientPart = cast.allyCopyOn
+            ? `${cast.targetHpPct !== undefined ? ` (self, ${cast.targetHpPct}% HP)` : " (self)"}${allyCopyClause(cd.spellId, friendlyPid(cast.allyCopyOn) ?? cast.allyCopyOn)}`
+            : recipient
+              ? ` → ${recipient}`
+              : "";
           // F-E25a: a hostile press into an immunity. A proc-only activation
           // is not a press, and a spell that reaches allies is not aimed at
           // the enemy its stray miss names (Mass Invisibility logs IMMUNE on

@@ -224,17 +224,65 @@ export const REFLECT_CHAIN_GAP_MS = 3000;
  * reflector within 3 s (the other 5 none) — 238 logged after it (up to
  * 2.9 s: the projectile's flight), the rest before it, at most 487 ms
  * (median 7 ms). */
+export const NETHER_WARD_ID = "212295";
 export const REFLECT_OWN_DAMAGE_IDS: ReadonlySet<string> = new Set([
   "23920", // Spell Reflection
   // Nether Ward (F16 retest 2026-10-21, idx 0): 01502819 2:42 — the second
   // reflected Smite landed 51,390 under 212295 and only the absorbed parts
   // (kept under the Smite's id) were counted; at 5:57 a fully landed
   // 58,770 under 212295 left no [REFLECTED] line at all
-  "212295",
+  NETHER_WARD_ID,
 ]);
 /** How far ahead of its REFLECT row such a row can be logged (measured max
  * 487 ms, above). */
 export const REFLECT_OWN_ID_LEAD_MS = 500;
+/**
+ * Nether Ward's own-id rows paired to REFLECT rows: its return is a projectile
+ * that lands after its REFLECT row, one row per reflect, in order — each row
+ * takes the latest REFLECT row behind it no earlier row took. Two rows of one
+ * millisecond (two reflects' returns, or a return's landed and absorbed parts)
+ * share it. fact8 D30 (980d8143 1:20): Eternity Surge reflected 1:20.229, its
+ * 57k back at 1:20.430, 71 ms before two Shattering Stars were reflected; and
+ * 50-1 2:17: a row 415 ms after a Wicked Reaping whose return had landed in
+ * its own ms is the Demonbolt's reflected 750 ms before it.
+ */
+export function pairNetherWardReturns(
+  reflectRows: readonly number[],
+  ownRows: readonly number[],
+): Map<number, number> {
+  const free = [...reflectRows].sort((a, b) => a - b);
+  const out = new Map<number, number>();
+  for (const ts of [...ownRows].sort((a, b) => a - b)) {
+    let at = free.length - 1;
+    while (at >= 0 && free[at]! > ts) at--;
+    if (at < 0) continue;
+    const [row] = free.splice(at, 1);
+    if (!out.has(ts)) out.set(ts, row!);
+  }
+  return out;
+}
+
+/**
+ * The gap that decides which reflect a row under the reflector's own id came
+ * back from, by the chain's REFLECT rows: the nearest one (Spell Reflection's
+ * rows lead theirs), or for Nether Ward the chain holding the row it paired
+ * with (`pairNetherWardReturns`).
+ */
+export function reflectOwnIdRowGap(
+  ownId: string | null | undefined,
+  ts: number,
+  rows: readonly number[],
+  netherWardPairs?: ReadonlyMap<number, number>,
+): number {
+  const gap = Math.min(
+    ...rows
+      .filter((r) => ts >= r - REFLECT_OWN_ID_LEAD_MS)
+      .map((r) => Math.abs(ts - r)),
+  );
+  const paired = ownId === NETHER_WARD_ID ? netherWardPairs?.get(ts) : undefined;
+  if (paired === undefined) return gap;
+  return rows.includes(paired) ? 0 : REFLECT_DAMAGE_WINDOW_S * 1000 + gap;
+}
 /** How long after its REFLECT row a reflected hit can land: the projectile's
  * flight (measured up to 2.9 s, above). A hit of the spell the reflector
  * sends later is its own cast or proc — unless it ticks inside the copy the
@@ -510,7 +558,43 @@ export function reflectedSpells(
         ),
       );
     };
-    const creditOwnId = (src: string | undefined, ts: number, amt: number) => {
+    const wardPairs = new Map<string, Map<number, number>>();
+    const wardPairsOf = (src: string | undefined) => {
+      const key = src ?? "";
+      let pairs = wardPairs.get(key);
+      if (!pairs) {
+        const landed = (caster.damageIn ?? [])
+          .filter((d) => d.spellId === NETHER_WARD_ID && d.srcUnitId === src)
+          .map((d) => d.logLine.timestamp);
+        // a return fully absorbed has no damage row of its own
+        const absorbed = (caster.absorbsIn ?? [])
+          .filter(
+            (a) =>
+              a.attackSpellId === NETHER_WARD_ID &&
+              a.attackerId === src &&
+              !isDeferralAbsorb(a) &&
+              !landed.includes(a.timestamp),
+          )
+          .map((a) => a.timestamp);
+        pairs = pairNetherWardReturns(
+          chains
+            .filter(
+              (c) =>
+                c.first.destUnitId === src && [...c.ids].some(dealsDamage),
+            )
+            .flatMap((c) => c.rows),
+          [...landed, ...absorbed],
+        );
+        wardPairs.set(key, pairs);
+      }
+      return pairs;
+    };
+    const creditOwnId = (
+      ownId: string | null | undefined,
+      src: string | undefined,
+      ts: number,
+      amt: number,
+    ) => {
       let best: (typeof chains)[number] | undefined;
       let bestGap = Infinity;
       for (const c of chains) {
@@ -522,11 +606,7 @@ export function reflectedSpells(
         // Wicked Reapings reflected 1.1 s apart are one chain, and the
         // second's 59.5k under Nether Ward in its own row's ms went to a
         // Demonbolt reflected 335 ms before it (50-1 2:17)
-        const rowGap = Math.min(
-          ...c.rows
-            .filter((r) => ts >= r - REFLECT_OWN_ID_LEAD_MS)
-            .map((r) => Math.abs(ts - r)),
-        );
+        const rowGap = reflectOwnIdRowGap(ownId, ts, c.rows, wardPairsOf(src));
         // a reflected spell that deals no damage owns no damage return —
         // a control (codex 20-F16-03 #3) or anything else (fact3 D6 / D25:
         // a Spellsteal reflected 0.6 s after a Pyroblast took its 145k)
@@ -553,6 +633,7 @@ export function reflectedSpells(
       // `REFLECT_OWN_ID_LEAD_MS` of it owns it
       if (d.spellId && REFLECT_OWN_DAMAGE_IDS.has(d.spellId)) {
         creditOwnId(
+          d.spellId,
           d.srcUnitId,
           d.logLine.timestamp,
           Math.abs(d.effectiveAmount),
@@ -571,7 +652,12 @@ export function reflectedSpells(
       // the shield caster's own damage (FT-T02b; codex 20-F16-08 #1)
       if (isDeferralAbsorb(a)) continue;
       else if (a.attackSpellId && REFLECT_OWN_DAMAGE_IDS.has(a.attackSpellId))
-        creditOwnId(a.attackerId, a.timestamp, Math.abs(a.absorbedAmount));
+        creditOwnId(
+          a.attackSpellId,
+          a.attackerId,
+          a.timestamp,
+          Math.abs(a.absorbedAmount),
+        );
       else
         credit(
           a.attackSpellId,
@@ -1065,6 +1151,25 @@ export function ownerRejectRuns(
       cur.toSeconds = h.tSeconds;
       cur.count++;
       continue;
+    }
+    // fact8 D39 (a39539f2 5:10): one refusal of another kind inside a run is
+    // no end of it — a line-of-sight refusal after the first of six Execute
+    // "out of range" presses read `×5` and dropped that first press. The run
+    // carries on when this spell's next refusal is of the run's kind, in its
+    // gap; the stray one is not counted, as any run below `REJECT_RUN_MIN`.
+    if (cur && cur.kind !== kind) {
+      const next = hits.find(
+        (x) =>
+          x.tSeconds > h.tSeconds &&
+          String(x.spellId) === id &&
+          !RUN_TRANSPARENT_REASONS.has(x.reason),
+      );
+      if (
+        next &&
+        KIND_OF.get(next.reason) === cur.kind &&
+        next.tSeconds - cur.toSeconds <= REJECT_RUN_GAP_S
+      )
+        continue;
     }
     flush(id);
     open.set(id, {

@@ -1354,10 +1354,8 @@ function failureText(
       const popped = attr.defensivePopped.length
         ? `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS, spanFromSeconds, poppedUp)}`
         : "";
-      // An external that carries a % reduction (Pain Suppression, Ironbark)
-      // is already on the wall list — `defensivePopped` names every wall
-      // aura on the target, whoever put it there — so it is not named a
-      // second time as the external beside it.
+      // One spell the target also put on itself (two Barkskins are one name)
+      // is not named a second time as the external beside it.
       const extra = attr.externalReceived
         .map((_, i) => i)
         .filter(
@@ -1444,7 +1442,7 @@ const KILL_ATTEMPT_PROC_WORD = "self-saved (";
  * keeps `self-saved (X)`, its names read from the predicate's own set.
  */
 export const KILL_ATTEMPTS_POPPED_LEGEND =
-  "  `popped X` = X went up on the target: a wall (a percentage damage reduction), or another defensive it pressed on itself — a shield, a heal, a dodge, a control immunity … (the timeline line of that press, where there is one, says which; a wall a talent or proc put up with no press of it reads `[no press logged]` on its [ENEMY DEF] line). The word states that it went up — not why, and not that it saved anyone.";
+  "  `popped X` = X went up on the target from the target itself: a wall (a percentage damage reduction), or another defensive it pressed on itself — a shield, a heal, a dodge, a control immunity … (the timeline line of that press, where there is one, says which; a wall a talent or proc put up with no press of it reads `[no press logged]` on its [ENEMY DEF] line). The word states that it went up — not why, and not that it saved anyone.";
 export const KILL_ATTEMPTS_PROC_LEGEND = `  \`self-saved (X)\` = a passive of the target fired (${[...ENEMY_PROC_SAVE_NAMES].join(" / ")}) — nobody pressed it.`;
 
 /**
@@ -1491,7 +1489,7 @@ export function formatKillAttemptsForContext(
   // cause — the legend states that order and no longer says "cause" /
   // "reason". The selection itself is untouched (A29 / A′4 / B16b).
   lines.push(
-    "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall, an external, another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external under the " +
+    "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall of its own, an external (an ally's wall on it counts here), another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external under the " +
       MITIGATION_AURA_MIN_PCT +
       "% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. A teammate's area save whose aura was on the target (Spirit Link Totem, Anti-Magic Zone, Darkness, Rallying Cry, Power Word: Barrier) is named as an external. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).",
   );
@@ -1966,6 +1964,8 @@ function attributeFailure(
   let immunityUpSinceS: number | undefined;
   const defensivePopped: string[] = [];
   const defensivePoppedAtS: number[] = [];
+  /** a wall aura another unit of the target's side put on it */
+  const allyWalls: Array<{ name: string; atS: number }> = [];
   const selfSaved: string[] = [];
   const selfSavedAtS: number[] = [];
   // One name per spell: a shapeshift-type defensive re-applies its aura
@@ -2050,8 +2050,15 @@ function attributeFailure(
       // renderer does. 2026-09-15 Opus baseline: 230/309 prompts carried a
       // CJK name, 328 of the runs came from this line and 93 from the
       // external one below.
-      defensivePopped.push(getEnglishSpellName(iv.spellId, iv.spellName));
-      defensivePoppedAtS.push(iv.fromS);
+      const wallName = getEnglishSpellName(iv.spellId, iv.spellName);
+      // fact8 D2 / D20: the source GUID files it. A wall an ally put on the
+      // target is that ally's external (0272f81c 0:26 Ironbark, 3d066aaf 1:05
+      // Time Dilation, which is no percentage wall at all): `popped X` would
+      // say the target pressed it, and hid the target's own Touch of Karma.
+      if (bySelf) {
+        defensivePopped.push(wallName);
+        defensivePoppedAtS.push(iv.fromS);
+      } else allyWalls.push({ name: wallName, atS: iv.fromS });
     }
   }
 
@@ -2168,6 +2175,13 @@ function attributeFailure(
     if (!met || externalReceived.includes(d.spellName)) continue;
     externalReceived.push(d.spellName);
     externalReceivedAtS.push(met.from);
+  }
+  // …and an ally's wall the `[ENEMY DEF]` readings above did not carry: the
+  // aura stands, as it did in the wall loop
+  for (const w of allyWalls) {
+    if (externalReceived.includes(w.name)) continue;
+    externalReceived.push(w.name);
+    externalReceivedAtS.push(w.atS);
   }
 
   // The target's own no-%-mitigation saves: pressed inside the span, or

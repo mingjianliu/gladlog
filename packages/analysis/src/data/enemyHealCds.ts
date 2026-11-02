@@ -66,7 +66,6 @@ export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   "378081", // Nature's Swiftness — Restoration Shaman
   "375576", // Divine Toll — Holy Paladin
   "443028", // Celestial Conduit — Mistweaver Monk
-  "22842", // Frenzied Regeneration — Restoration Druid (signed 2026-09-24)
   // fact7 class 3 (D51 / D55): Vampiric Embrace — Shadow Priest, 120 s, 12 s.
   // No healer's, and no burst: 7acbefeb 0:14, 276,526 effective healing
   // across three enemies off the priest's own damage, no line at all. DB2's
@@ -85,7 +84,6 @@ const ENEMY_HEAL_CD_SPEC: Readonly<Record<string, string>> = {
   "378081": CombatUnitSpec.Shaman_Restoration,
   "375576": CombatUnitSpec.Paladin_Holy,
   "443028": CombatUnitSpec.Monk_Mistweaver,
-  "22842": CombatUnitSpec.Druid_Restoration,
   "15286": CombatUnitSpec.Priest_Shadow,
 };
 
@@ -98,6 +96,9 @@ export const ENEMY_HEAL_CD_ROSTER_ELSEWHERE: Readonly<Record<string, string>> =
     "31884": "Avenging Wrath — an [ENEMY CD] (the offensive roster)",
     "421453": "Ultimate Penitence — an [ENEMY DEF] self-save (absorb)",
     "19236": "Desperate Prayer — an [ENEMY DEF] self-save (self-heal)",
+    // fact8 D37 (a39539f2 1:19): the user's 2026-09-24 ruling is a save for
+    // herself; it also printed as a throughput cooldown, one press two kinds
+    "22842": "Frenzied Regeneration — an [ENEMY DEF] self-save (self-heal)",
   };
 
 /** Is this press an enemy healer's healing major — the set, and its spec

@@ -1,7 +1,9 @@
+import { LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import {
   auraConsumedTriggers,
+  buffedUseTargetTriggers,
   EVENT_COOLDOWN_REDUCTIONS,
   EVENT_HIT_SAME_USE_MS,
   eventReducedCooldownSeconds,
@@ -240,6 +242,104 @@ describe("cdAvailableAt — 免费再施放窗口(Escape from Reality)", () => {
     };
     expect(cdAvailableAt(cd, 105)).toBe(false);
     expect(cdAvailableAt(cd, 145)).toBe(true);
+  });
+});
+
+describe("Wingleader — a Mass Disintegrate's targets take Deep Breath's cooldown down (fact8 class 1)", () => {
+  const T = 1_000_000;
+  const cast = (id: string, s: number) => ({
+    spellId: id,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: T + s * 1000,
+    },
+  });
+  const aura = (event: LogEvent, s: number) => ({
+    spellId: "436336",
+    logLine: { event, timestamp: T + s * 1000 },
+  });
+  const dmg = (dest: string, s: number) => ({
+    spellId: "356995",
+    destUnitId: dest,
+    logLine: {
+      event: LogEvent.SPELL_PERIODIC_DAMAGE,
+      timestamp: T + s * 1000,
+    },
+  });
+  const wingleader = EVENT_COOLDOWN_REDUCTIONS["441206"]!;
+  const unit = (over: object = {}) =>
+    ({
+      spellCastEvents: [cast("356995", 10), cast("356995", 20)],
+      auraEvents: [aura(LogEvent.SPELL_AURA_REMOVED, 10.01)],
+      damageOut: [
+        dmg("a", 10.5),
+        dmg("a", 11),
+        dmg("b", 11),
+        dmg("pet", 11.5),
+        dmg("a", 20.5), // the next, plain Disintegrate
+      ],
+      missesOut: [],
+      ...over,
+    }) as never;
+
+  it("one trigger per distinct unit of the buffed use, none for a plain one", () => {
+    expect(
+      buffedUseTargetTriggers(unit(), wingleader).map((g) => g.atMs),
+    ).toEqual([T + 10_500, T + 11_000, T + 11_500]);
+  });
+  it("a miss on another unit is a target struck, a row with no destination is not", () => {
+    expect(
+      buffedUseTargetTriggers(
+        unit({
+          damageOut: [dmg("a", 10.5), dmg("", 10.6)],
+          missesOut: [dmg("b", 11)],
+        }),
+        wingleader,
+      ).map((g) => g.atMs),
+    ).toEqual([T + 10_500, T + 11_000]);
+  });
+  it("an expired buff is no use: nothing was consumed beside the cast", () => {
+    expect(
+      buffedUseTargetTriggers(
+        unit({ auraEvents: [aura(LogEvent.SPELL_AURA_REMOVED, 15)] }),
+        wingleader,
+      ),
+    ).toEqual([]);
+  });
+  it("the use ends at the next cast of the channel", () => {
+    expect(
+      buffedUseTargetTriggers(
+        unit({
+          spellCastEvents: [cast("356995", 10), cast("356995", 11)],
+          damageOut: [dmg("a", 10.5), dmg("b", 11.4)],
+        }),
+        wingleader,
+      ).map((g) => g.atMs),
+    ).toEqual([T + 10_500]);
+  });
+});
+
+describe("a free press with event reductions stands on the opener's clock", () => {
+  it("the static reading counts from the opener, its triggers included (Deep Breath)", () => {
+    const reductions = [{ atSeconds: 105, seconds: 5 }];
+    const cd = {
+      casts: [
+        { timeSeconds: 100, freeRecastUntil: 118, reductions },
+        {
+          timeSeconds: 108,
+          freeRecast: true,
+          freeRecastOf: 100,
+          cooldownSecondsOverride: 47,
+          reductions,
+        },
+      ],
+      cooldownSeconds: 60,
+      neverUsed: false,
+    };
+    // back at 160 − 5 = 155: 47 s from the free press, not 60 − 5
+    expect(cdSecondsUntilReady(cd, 108)).toBe(47);
+    expect(cdAvailableAt(cd, 154)).toBe(false);
+    expect(cdAvailableAt(cd, 156)).toBe(true);
   });
 });
 

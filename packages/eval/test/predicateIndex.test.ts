@@ -75,6 +75,8 @@ import * as candidateTypeRegistry from "@gladlog/analysis/src/data/candidateType
 import * as castEffectAuras from "@gladlog/analysis/src/data/castEffectAuras";
 import * as ccBreakAbilities from "@gladlog/analysis/src/data/ccBreakAbilities";
 import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
+import * as channeledGenerated from "@gladlog/analysis/src/data/channeledGenerated";
+import * as classSetBonuses from "@gladlog/analysis/src/data/classSetBonuses";
 import * as curatedAbilityFacts from "@gladlog/analysis/src/data/curatedAbilityFacts";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
@@ -119,6 +121,7 @@ import * as advancedActions from "@gladlog/analysis/src/utils/advancedActions";
 import * as allyCopyWall from "@gladlog/analysis/src/utils/allyCopyWall";
 import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
+import * as auraOnlyActivationsMod from "@gladlog/analysis/src/utils/auraOnlyActivations";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as brokenRowBreaker from "@gladlog/analysis/src/utils/brokenRowBreaker";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
@@ -1549,6 +1552,41 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/allyCopyWall.ts`,
     symbol: "allyCopyRecipient",
     mod: allyCopyWall,
+  },
+  {
+    file: `${A}/utils/allyCopyWall.ts`,
+    symbol: "allyCopyClause",
+    mod: allyCopyWall,
+  },
+  {
+    file: `${A}/utils/auraOnlyActivations.ts`,
+    symbol: "auraOnlyActivations",
+    mod: auraOnlyActivationsMod,
+  },
+  {
+    file: `${A}/utils/offensiveAuraOccurrences.ts`,
+    symbol: "NO_PRESS_SUFFIX",
+    mod: offensiveAuraOccurrences,
+  },
+  {
+    file: `${A}/data/classSetBonuses.ts`,
+    symbol: "setBonusDurationSeconds",
+    mod: classSetBonuses,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "pairNetherWardReturns",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/data/channeledGenerated.ts`,
+    symbol: "HASTE_DURATION_SPELL_IDS",
+    mod: channeledGenerated,
+  },
+  {
+    file: `${A}/utils/healerExposureAnalysis.ts`,
+    symbol: "aimedControlsForKit",
+    mod: healerExposureAnalysis,
   },
   {
     file: `${A}/utils/enemyDefensives.ts`,

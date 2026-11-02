@@ -1021,6 +1021,38 @@ describe("extractKillAttempts — enemy-only saves are failure causes", () => {
     ]);
   });
 
+  it("a wall an ally put on the target is an external, by the aura's source (fact8 D2 / D20)", async () => {
+    await ensureAnalysisData();
+    const IRONBARK = "102342";
+    const TIME_DILATION = "357170";
+    const auraEv = (id: string, atS: number, event: LogEvent): any => ({
+      spellId: id,
+      spellName: `S${id}`,
+      srcUnitId: "e2",
+      srcUnitName: "e2",
+      destUnitId: "e1",
+      destUnitName: "e1",
+      timestamp: ms(atS),
+      logLine: { event, timestamp: ms(atS), parameters: [] },
+      auraType: "BUFF",
+    });
+    for (const id of [IRONBARK, TIME_DILATION]) {
+      const e1 = unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraEv(id, 11, LogEvent.SPELL_AURA_APPLIED),
+          auraEv(id, 14, LogEvent.SPELL_AURA_REMOVED),
+        ],
+      });
+      const e2 = unit("e2");
+      const f1 = attacker();
+      const [a] = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+      expect(a.attribution?.primary, id).toBe("external");
+      expect(a.attribution?.defensivePopped, id).toEqual([]);
+      expect(a.attribution?.externalReceived, id).toHaveLength(1);
+    }
+  });
+
   it("Roar of Sacrifice the target cast on ITSELF is its self-save; cast on a teammate it is not this target's save", async () => {
     await ensureAnalysisData();
     const onSelf = unit("e1", {
@@ -2209,10 +2241,11 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
     );
   });
 
-  it("an external that is itself the wall on the list (Pain Suppression, Ironbark) is named once", () => {
+  it("a spell on both lists is named once", () => {
     // 605 S2 files: the first cut printed `popped Pain Suppression; saved by
-    // external (Pain Suppression)` on 113 lines — the wall list names every
-    // wall aura on the target, whoever put it there
+    // external (Pain Suppression)` on 113 lines, when the wall list still
+    // named every wall aura on the target. Since fact8 D2 only a name the
+    // target itself put up can sit on both.
     expect(
       failed({
         primary: "defensive",

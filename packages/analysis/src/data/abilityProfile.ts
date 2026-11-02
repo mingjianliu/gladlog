@@ -205,6 +205,16 @@ export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
     // P-b8; Guardian of the Forgotten Queen goes on an ally). 0c56ee06:
     // `defenseless 0:49–1:04` on a Holy Priest who pressed it at 1:04.8.
     "215769", // Spirit of Redemption (pressed) — 120 s
+    // fact8 D9 (F23, user 2026-11-01 「做，先看预览」): self-saves the span
+    // never timed, so `defenseless` ran on while they were up or ready.
+    // Anti-Magic Shell stops magic only: the span times it whatever the
+    // damage, and KILL ATTEMPTS credits it through `limitedAbsorbSchoolMask`.
+    "48707", // Anti-Magic Shell — 60 s
+    "48743", // Death Pact — 120 s
+    "49039", // Lichborne — 120 s
+    "5277", // Evasion — 120 s
+    "212295", // Nether Ward — 45 s
+    "109304", // Exhilaration — 120 s
   ].filter((id) => id !== "200183"),
 ); // Apotheosis dropped
 

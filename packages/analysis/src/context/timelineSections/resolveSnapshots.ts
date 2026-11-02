@@ -11,6 +11,7 @@
  */
 import { toRenderSecond } from "../../utils/renderGrid";
 import {
+  computeChargeSuffixes,
   computeOnCDDisplayNames,
   computeReadyNames,
   positionalOutOfReachNames,
@@ -81,6 +82,7 @@ export function resolveDeferredSnapshots(
   let resOutOfReachRows = 0;
   let prevReadyNamesState: string[] | null = null;
   let prevOnCDNamesState: string[] | null = null;
+  let prevChargesState: ReadonlyMap<string, string> | null = null;
   let lastSnapshotTime = -100;
   // B14b: the last offensive-window row — a request at the same instant is
   // the same row, but the 2 s debounce does not count from it
@@ -134,6 +136,12 @@ export function resolveDeferredSnapshots(
       teammateCDsWithLabel,
       resDeaths,
     );
+    const currentCharges = computeChargeSuffixes(
+      stateSeconds,
+      resOwnerCDs,
+      teammateCDsWithLabel,
+      resDeaths,
+    );
     const forceFullRefresh =
       forceFull ||
       timeSeconds - lastFullSnapshotTime >= FULL_SNAPSHOT_REFRESH_SECONDS;
@@ -146,15 +154,18 @@ export function resolveDeferredSnapshots(
     const stateBefore: {
       ready: string[] | null;
       onCd: string[] | null;
+      charges: ReadonlyMap<string, string> | null;
       full: number;
     } = {
       ready: prevReadyNamesState,
       onCd: prevOnCDNamesState,
+      charges: prevChargesState,
       full: lastFullSnapshotTime,
     };
     if (forceFullRefresh) lastFullSnapshotTime = timeSeconds;
     prevReadyNamesState = currentReadyNames;
     prevOnCDNamesState = currentOnCDNames;
+    prevChargesState = currentCharges;
 
     const deathVictim = req.deathOfUnitId
       ? [owner, ...teammateCDs.map((t) => t.player)].find(
@@ -180,6 +191,9 @@ export function resolveDeferredSnapshots(
       enemyCDTimeline,
       playerIdMap,
       prevReadyNames,
+      ...(stateBefore.charges
+        ? { prevChargeSuffixes: stateBefore.charges }
+        : {}),
       prevOnCDNames,
       matchStartMs,
       ownerUnit: owner,
@@ -211,6 +225,7 @@ export function resolveDeferredSnapshots(
     if (snapshotStr === "") {
       prevReadyNamesState = stateBefore.ready;
       prevOnCDNamesState = stateBefore.onCd;
+      prevChargesState = stateBefore.charges;
     }
     // fact2: a first-5-s row that printed lists the never-pressed cooldowns
     // as ready (the builder's second pass) — so does the delta state

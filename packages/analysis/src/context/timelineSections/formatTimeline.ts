@@ -404,7 +404,7 @@ export function formatTimeline(
     "    `cc:N/<spell>-Rs` = friendly N was under that control then, about R s of it left (`[stun]` a stun, `[trinketed]` a stun",
     "    they pressed a PvP trinket within 1 s of, `[root]` a root — they could still cast, `[disarm]` a disarm, `[kick]` a school",
     "    lockout); several are comma-separated.",
-    "  [RES] rdy: = abilities READY then. `rdy:Δ` = unchanged since the previous [RES];",
+    "  [RES] rdy: = abilities READY then. `rdy:Δ` = unchanged since the previous [RES], but for its tokens (`~X[k/N]` = X is still ready, now k of N charges);",
     // res-readiness F-C3 (ruling res R2 = A): off cooldown, but not payable —
     // legended only when a row carries the tag (the F-C16 convention)
     ...(noManaRendered
@@ -524,6 +524,7 @@ export function formatTimeline(
           "    player X (Ultimate Penitence; several units, largest first): Nk = what the channel dealt X, landed plus absorbed;",
           "    Mk = everything X took while it ran; `(its cast row names Y)` = the cast row's target was someone else — the log",
           "    shows where the damage went, not whether the channel was re-aimed;",
+          "    `X + N% copy → unit` = X stayed on its caster at full strength; a talent put an N% copy on that ally.",
           "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
           "    redirect (Leap of Faith, Intervene, Roar of Sacrifice); `(area)` = an area save pressed at that",
           "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",
@@ -676,6 +677,11 @@ export function formatTimeline(
       ? [
           "  [ENEMY HEAL CD] = an enemy pressed a major healing / throughput cooldown (Divine Hymn, Apotheosis,",
           "    Avenging Crusader, …); it is not an offensive burst and opens no [OFFENSIVE WINDOW].",
+          ...(enemyCdRender.healCdNoPressRendered
+            ? [
+                "    `(no press)` = its aura went up with no press of it (a talent's proc): the button was not spent.",
+              ]
+            : []),
         ]
       : []),
     ...(nextSpikeRendered
@@ -721,7 +727,7 @@ export function formatTimeline(
     ...(drClashEntries.length > 0 ? DR_CLASH_LEGEND : []),
     ...(procLinesEmitted
       ? [
-          "[PROC] = an automatically applied effect (a passive or a talent-replaced button); no button of ITS OWN was pressed at that second. `(with X)` = it went out in the same millisecond as that player's press of X, as it did again and again this round (Radiant Glory's Avenging Wrath with Wake of Ashes) — its timing is X's press; without it, it is never a timing or choice to judge. `(cheat-death proc)` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.",
+          "[PROC] = an automatically applied effect (a passive or a talent-replaced button; `(no press)` = a cooldown's aura a talent or another spell put up, the button not spent); no button of ITS OWN was pressed at that second. `(with X)` = it went out in the same millisecond as that player's press of X, as it did again and again this round (Radiant Glory's Avenging Wrath with Wake of Ashes) — its timing is X's press; without it, it is never a timing or choice to judge. `(cheat-death proc)` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.",
         ]
       : []),
     "",

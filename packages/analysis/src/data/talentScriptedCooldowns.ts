@@ -69,6 +69,20 @@ export const FREE_RECAST_WINDOWS: Readonly<Record<string, IFreeRecastWindow>> =
       windowS: 6,
       note: "Save the Day — Leap of Faith again within 6 s",
     },
+    // Strafing Run (fact8 class 1, D5–8, D28–29): "Deep Breath … can be cast
+    // again within 18 sec of being used"; its buff 1266165 (18 s, DB2) reads
+    // "Deep Breath can be cast for free". Scalecommander hero tree, so the
+    // press is the override 433874 (OVERRIDE_VARIANTS_GENERATED) — no holder
+    // press of 357210 in the wide sample. Corpus, 1-in-5 of the wide manifest:
+    // 11 holder rounds, 56 presses all with a buff edge in the same ms, 27
+    // free presses 1.71–9.19 s after the opener; a free press → next opener
+    // gap as short as 39.45 s, so the cooldown stays on the opener, this
+    // table's shape.
+    "1266151": {
+      spellId: "433874",
+      windowS: 18,
+      note: "Strafing Run — Deep Breath again within 18 s",
+    },
   };
 
 export interface IEventCooldownReduction {
@@ -137,6 +151,18 @@ export interface IEventCooldownReduction {
     byCastIds: readonly string[];
     withinMs: number;
     perStackOfAuraId?: string;
+  };
+  /** "Mass Disintegrate … for each target struck": a use is the unit's own
+   * cast of `byCastIds` that consumed `auraIds` within `withinMs` of it. One
+   * trigger per distinct unit its rows of `hitIds` reached — damage, periodic
+   * damage or a miss, from the cast to the next cast of `byCastIds` or
+   * `windowMs`, at that unit's first row. */
+  triggerBuffedUseTargets?: {
+    auraIds: readonly string[];
+    byCastIds: readonly string[];
+    hitIds: readonly string[];
+    withinMs: number;
+    windowMs: number;
   };
   /** What one trigger gives back. Not always one number, so no reader takes
    * it from here: `eventTriggersFor` hands every trigger out with its own
@@ -304,6 +330,45 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
       },
     },
     note: "Storm Conduit — Lightning Bolt / Chain Lightning −1 s; Restoration −4 s before the 2026-08-18 hotfix, −2 s since (corpus + community date, FLAG)",
+  },
+  // Cull the Weak (fact8 class 6, D21 / D48): "Casting Unstable Affliction or
+  // Seed of Corruption reduces the cooldown of Dark Harvest by 1.5 sec." DB2
+  // 12.1.5.70575: 1259886 effect 0, aura 4 (a dummy, no mask), base 1500 ms,
+  // PvpMultiplier 1. Corpus, every 4th file of the wide manifest, press gaps of
+  // one unit in one round: 38 on holders, lowest 47.14 s, 13 below 59.5 s on
+  // the bare 60; next press − (press + 60 − 1.5 × casts) lowest 0.0 / 0.1 /
+  // 0.41 s, 0 of 38 below −0.5 s. 22 gaps on non-holders, lowest 59.98 s: the
+  // talent is what splits them. No Seed cast fell inside a holder's gap in
+  // that sample; Seed is the tooltip's half.
+  "1259886": {
+    targets: ["1257052"],
+    triggerCastIds: ["1259790", "27243"],
+    seconds: 1.5,
+    note: "Cull the Weak — Unstable Affliction / Seed of Corruption −1.5 s",
+  },
+  // Wingleader (fact8 class 1, D7 / D8 / D28 / D29): "Mass Disintegrate reduces
+  // the remaining cooldown of Deep Breath by 1.0 sec for each target struck."
+  // DB2 12.1.5.70391: SpellEffect 1135533 (aura 4, a dummy, no mask) base
+  // 1000 ms; 1135534 base 1500 ms is the Breath of Eons half, not modelled
+  // here. Ranks from COMBATANT_INFO: every Strafing Run holder in the wide
+  // manifest took it (57 distinct rounds, 106 opener pairs), so there is no
+  // control group and none is required. R = opener
+  // + 60 − #targets of its buffed Disintegrates: 0 of 106 next openers come
+  // more than 0.5 s before R, the tightest 0.0 / 0.0 / 0.17 / 0.36 s after it.
+  // Every other reading fails: 1 s per use 60 of 106, players only 30, a cap
+  // of 3 targets per use 12. A miss counts (shields, immunities).
+  "441206": {
+    targets: ["433874"],
+    triggerCastIds: [],
+    triggerBuffedUseTargets: {
+      auraIds: ["436336"], // Mass Disintegrate
+      byCastIds: ["356995"], // Disintegrate
+      hitIds: ["356995"],
+      withinMs: 250,
+      windowMs: 3600,
+    },
+    seconds: 1,
+    note: "Wingleader — Deep Breath −1 s per target struck by a Mass Disintegrate",
   },
   // Lethal Calibration (Survival, FT F20 2026-10-11): "Each enemy hit by
   // Wildfire Bomb reduces the cooldown of Boomstick by 2.0 sec, up to 10
@@ -919,6 +984,7 @@ export function eventTriggersFor(
           ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
           : []),
         ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
+        ...(r.triggerBuffedUseTargets ? buffedUseTargetTriggers(unit, r) : []),
         ...(r.triggerHostileTaken ? hostileTakenTriggers(unit, r) : []),
       ]),
     )
@@ -1028,6 +1094,58 @@ export function auraConsumedTriggers(
   }
   return out;
 }
+
+/** The per-target triggers of a buffed use (`triggerBuffedUseTargets`). */
+export function buffedUseTargetTriggers(
+  unit: Pick<ICombatUnit, "spellCastEvents" | "damageOut"> &
+    Partial<Pick<ICombatUnit, "auraEvents" | "missesOut">>,
+  r: Pick<IEventCooldownReduction, "triggerBuffedUseTargets" | "seconds">,
+): IEventTrigger[] {
+  const c = r.triggerBuffedUseTargets;
+  if (!c) return [];
+  const per = typeof r.seconds === "number" ? r.seconds : r.seconds.base;
+  const casts = unit.spellCastEvents
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.byCastIds.includes(String(e.spellId)),
+    )
+    .map((e) => e.logLine.timestamp)
+    .sort((a, b) => a - b);
+  const consumed = (unit.auraEvents ?? [])
+    .filter(
+      (e) =>
+        (e.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+          e.logLine.event === LogEvent.SPELL_AURA_REMOVED_DOSE) &&
+        c.auraIds.includes(String(e.spellId)),
+    )
+    .map((e) => e.logLine.timestamp);
+  const rows = [
+    ...unit.damageOut.filter((e) => c.hitIds.includes(String(e.spellId))),
+    ...(unit.missesOut ?? []).filter((e) =>
+      c.hitIds.includes(String(e.spellId)),
+    ),
+  ]
+    .map((e) => ({ t: e.logLine.timestamp, dest: e.destUnitId }))
+    .sort((a, b) => a.t - b.t);
+  const out: IEventTrigger[] = [];
+  casts.forEach((t, i) => {
+    if (!consumed.some((x) => Math.abs(x - t) <= c.withinMs)) return;
+    const endMs = Math.min(casts[i + 1] ?? Infinity, t + c.windowMs);
+    const seen = new Set<string>();
+    for (const h of rows) {
+      if (h.t < t - BUFFED_USE_ROW_LEAD_MS || h.t > endMs) continue;
+      // a row that names no destination is not evidence of another enemy
+      if (!h.dest || seen.has(h.dest)) continue;
+      seen.add(h.dest);
+      out.push({ atMs: h.t, seconds: per });
+    }
+  });
+  return out;
+}
+
+/** A hit row can sit a few ms before its cast row in the log. */
+const BUFFED_USE_ROW_LEAD_MS = 50;
 
 /** Is the unit's own buff `auraId` up at `atMs` (a removal at that very
  * instant still counts — a cost reduction is consumed by the cast it

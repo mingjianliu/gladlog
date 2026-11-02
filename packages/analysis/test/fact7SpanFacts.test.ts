@@ -595,6 +595,23 @@ describe("D60 — a form shift's row: fresh current over a stale max", () => {
     expect(hpTroughInWindow(u as never, T, 10, 11)?.pct).toBe(8);
   });
 
+  it("a dip the log's own damage explains is no stale row (fact8 D16, 21caf35a 1:42)", () => {
+    const rows = [
+      row(10, 1_135_635, 1_163_505), // 97.6 %
+      row(10.163, 1_046_809, 1_163_505), // 90.0 %: Ferocious Bite, 88,826
+      row(10.361, 1_039_209, 1_163_505), // 89.3 %
+      row(10.496, 1_041_370, 1_128_600), // the step: current carried
+    ];
+    const hit = {
+      logLine: { timestamp: at(10.163) },
+      effectiveAmount: -88_826,
+    };
+    expect(staleMaxHpRows(unitOf(rows)).size).toBe(2);
+    expect(
+      staleMaxHpRows(makeUnit("unit-1", { advancedActions: rows, damageIn: [hit] })),
+    ).toEqual(new Set());
+  });
+
   it("real hits inside the run do not hide it: the step's own pair decides (1-5-13 2:14, Rallying Cry ends)", () => {
     const u = unitOf([
       row(10, 649_816, 914_167), // 71.1 %

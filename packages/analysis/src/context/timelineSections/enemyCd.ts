@@ -19,6 +19,7 @@ import {
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { SpellTag } from "../../data/spellTypes";
 import { AURA_REBROADCAST_GAP_MS } from "../../utils/auraIntervals";
+import { castlessHealCdAuras } from "../../utils/auraOnlyActivations";
 import { isFormReshiftCast } from "../../utils/castPress";
 import { canonicalSpellId, specToString } from "../../utils/cooldowns";
 import {
@@ -28,6 +29,7 @@ import {
   PRESS_TO_AURA_MAX_S,
 } from "../../utils/enemyDefensives";
 import { pressRowsWithHidden } from "../../utils/hiddenPress";
+import { NO_PRESS_SUFFIX } from "../../utils/offensiveAuraOccurrences";
 import { fmtTime } from "../../utils/renderGrid";
 import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import type { TimelineCtx } from "./ctx";
@@ -185,6 +187,7 @@ export function emitEnemyCdEntries(
 ): {
   ordinalRendered: boolean;
   healCdRendered: boolean;
+  healCdNoPressRendered: boolean;
   procRendered: boolean;
   /** a line carries `[pressed while unseen]` */
   unseenRendered: boolean;
@@ -282,6 +285,7 @@ export function emitEnemyCdEntries(
   // Crusader by A27 = B): an enemy healer's throughput majors on their own
   // tag — they never reach the burst-window builder.
   let healCdRendered = false;
+  let healCdNoPressRendered = false;
   for (const enemy of ctx.enemies ?? []) {
     // corpusFactScan hiddenPressUnused: and the presses made while unseen
     // (`pressRowsWithHidden` — 0284fcd9 r1 0:12, a Tranquility with no row)
@@ -312,6 +316,17 @@ export function emitEnemyCdEntries(
       addEntry(
         t,
         `${fmtTime(t)}  [ENEMY HEAL CD]   ${enemyPid(enemy.name)} (${specToString(enemy.spec)}): ${getEnglishSpellName(c.spellId, c.spellName)}${ordinal}${c.unseenPress ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}` : ""}`,
+      );
+    }
+    // fact8 class 5 (D26): a healing major's aura with no press of it — no
+    // k-th cast of anything, as `(no press)` on [ENEMY CD]
+    const endMs = ctx.matchStartMs + ctx.matchEndSeconds * 1000;
+    for (const a of castlessHealCdAuras(enemy, ctx.matchStartMs, endMs)) {
+      healCdRendered = true;
+      healCdNoPressRendered = true;
+      addEntry(
+        a.atSeconds,
+        `${fmtTime(a.atSeconds)}  [ENEMY HEAL CD]   ${enemyPid(enemy.name)} (${specToString(enemy.spec)}): ${a.spellName}${NO_PRESS_SUFFIX}`,
       );
     }
   }
@@ -384,6 +399,7 @@ export function emitEnemyCdEntries(
   return {
     ordinalRendered,
     healCdRendered,
+    healCdNoPressRendered,
     procRendered,
     utilityRendered,
     unseenRendered,

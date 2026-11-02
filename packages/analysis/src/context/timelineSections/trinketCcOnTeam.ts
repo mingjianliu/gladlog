@@ -161,6 +161,20 @@ export function emitTrinketCcOnTeamEntries(
         `${fmtTime(t)}  [TRINKET]   ${pid(summary.playerName)} used PvP trinket${disarmPart}`,
       );
     }
+    // fact8 D49 (d8157120 0:36): a racial that shares the trinket's lock is
+    // the same press in another button, and `[ENEMY TRINKET]` already prints
+    // it — on our side a Will of the Forsaken had no line, only the `trinket:
+    // ON CD` it caused. A control it broke is named as the trinket's is.
+    for (const u of summary.breakAbilityUses ?? []) {
+      if (!u.sharesTrinketLock) continue;
+      const outOf = u.brokenCc
+        ? ` out of ${u.brokenCc.spellName} (by ${actorLabel(u.brokenCc.sourceName, "enemy", u.brokenCc.sourceId)})`
+        : "";
+      addEntry(
+        u.atSeconds,
+        `${fmtTime(u.atSeconds)}  [TRINKET]   ${pid(summary.playerName)} used ${u.name}${outOf}`,
+      );
+    }
 
     // cc-dr F-DA1 (ruling A54 = A): a disarm on any player of our team gets
     // a line in the [SILENCE] format (it was only a [RES] `cc:` token); a
@@ -193,6 +207,10 @@ export function emitTrinketCcOnTeamEntries(
 
     for (const cc of summary.ccInstances) {
       if (!rendersCcOnTeamLine(cc)) continue;
+      // a dispel backlash that is a silence prints as a [SILENCE] line
+      // (below): its break note names a silence, as that family's does
+      const brokeWhat =
+        BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence" ? "silence" : "CC";
       let trinketNote = "";
       if (cc.trinketState === "used") {
         // B111: with the active-at-cast attribution fix, 'used' means the trinket was pressed while this
@@ -201,11 +219,11 @@ export function emitTrinketCcOnTeamEntries(
         // suppressed below and this note states how long the player endured and that the CC had NOT
         // expired on its own — otherwise the coach misreads a trinket-shortened "1s" as a trivial CC
         // that was not worth trinketing (see 294 Finding "trinketed a 1-second Hammer").
-        trinketNote = ` | trinket broke this CC after ${renderedCcDuration(cc)} (cut short — it had not expired)`;
+        trinketNote = ` | trinket broke this ${brokeWhat} after ${renderedCcDuration(cc)} (cut short — it had not expired)`;
       } else if (cc.trinketState === "racial_break") {
         // Same truncated-duration semantics as the trinket break, but state
         // what actually happened: the racial was pressed, not the trinket.
-        trinketNote = ` | ${cc.breakRacialName ?? "racial"} broke this CC after ${renderedCcDuration(cc)} (cut short — it had not expired); PvP trinket NOT used`;
+        trinketNote = ` | ${cc.breakRacialName ?? "racial"} broke this ${brokeWhat} after ${renderedCcDuration(cc)} (cut short — it had not expired); PvP trinket NOT used`;
       } else if (cc.trinketState === "on_cooldown") {
         const cdLeft =
           cc.trinketCDSecondsLeft !== undefined
@@ -376,10 +394,12 @@ export function emitTrinketCcOnTeamEntries(
       // player, not hard CC — the [SILENCE] line, with the backlash tag, and
       // the presses it refused (D5: Divine Toll "can't do that while
       // silenced" at 2:27, stated nowhere)
+      // (fact8 D33, 980d8143 0:46: a Medallion 0.76 s into the 4 s silence
+      // read as a plain `| 1s` — the same break note as any other control)
       if (backlashType === "silence" && !tremor) {
         addEntry(
           cc.atSeconds,
-          `${fmtTime(cc.atSeconds)}  [SILENCE]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr} | ${renderedCcSpan(cc)}${backlashStr}${endNote}${cleansedNote}${formatPressedDuringNote(pressedDuringSilence?.get(cc))}`,
+          `${fmtTime(cc.atSeconds)}  [SILENCE]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${trinketBroke ? trinketNote : ` | ${renderedCcSpan(cc)}`}${backlashStr}${endNote}${cleansedNote}${formatPressedDuringNote(pressedDuringSilence?.get(cc))}`,
         );
         silenceLineCount++;
         continue;
@@ -401,7 +421,7 @@ export function emitTrinketCcOnTeamEntries(
           // FT-T16 D15 "3c": with a SPELL_MISSED row of the cast on this
           // player, the first half is the log's own miss type; the second
           // half stays a fact standing next to it, not the row's reason.
-          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy", avoided.sourceId)}${ccAvoidedCastTag(avoided)}) ${ccAvoidedOutcomeText(avoided)}; ${avoided.avoidanceSpellName}${avoidanceSourceTag(avoided.avoidanceSourceName, summary.playerName)} ${ccAvoidedAvoidanceState(avoided)}${ccAvoidedRecastTag(avoided)}`,
+          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy", avoided.sourceId)}${ccAvoidedCastTag(avoided)}) ${ccAvoidedOutcomeText(avoided)}; ${avoided.avoidanceSpellName}${avoidanceSourceTag(avoided.avoidanceSourceName, summary.playerName, avoided.avoidanceSourceId)} ${ccAvoidedAvoidanceState(avoided)}${ccAvoidedRecastTag(avoided)}`,
         );
       }
     }

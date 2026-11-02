@@ -381,18 +381,23 @@ describe("[HEALING] / [ROT PRESSURE] legends print only with their line family",
     });
   });
 
-  const debuff = (spellId: string) =>
+  const debuff = (
+    spellId: string,
+    destUnitId: string,
+    event: string = LogEvent.SPELL_AURA_APPLIED,
+    atMs = MATCH_START_MS,
+  ) =>
     ({
-      timestamp: MATCH_START_MS,
+      timestamp: atMs,
       spellId,
       spellName: spellId,
       srcUnitId: "src",
       srcUnitName: "Source",
-      destUnitId: "dest",
+      destUnitId,
       destUnitName: "Dest",
       logLine: {
-        event: LogEvent.SPELL_AURA_APPLIED,
-        timestamp: MATCH_START_MS,
+        event,
+        timestamp: atMs,
         parameters: Object.assign([], { 11: "DEBUFF" }),
       },
     }) as unknown as ICombatUnit["auraEvents"][number];
@@ -403,7 +408,16 @@ describe("[HEALING] / [ROT PRESSURE] legends print only with their line family",
   /** Three DoTs on from the first second, under 40 % HP from 0:10 to 0:14. */
   const rotting = (id: string): Partial<ICombatUnit> => ({
     // Agony / Corruption / Unstable Affliction
-    auraEvents: [debuff("980"), debuff("146739"), debuff("1259790")],
+    // (refreshed at 0:08: a DoT with no later row ends at its official length)
+    auraEvents: ["980", "146739", "1259790"].flatMap((spellId) => [
+      debuff(spellId, id),
+      debuff(
+        spellId,
+        id,
+        LogEvent.SPELL_AURA_REFRESH,
+        MATCH_START_MS + 8_000,
+      ),
+    ]),
     advancedActions: [
       hpAt(id, 8, 80),
       hpAt(id, 10, 30),

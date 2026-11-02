@@ -206,6 +206,7 @@ import {
   AURA_KEYED_BREAK_RACIALS,
   CLASS_CC_BREAK_ABILITIES,
 } from "./ccBreakAbilities";
+import { SET_BONUS_DURATION_ROWS } from "./classSetBonuses";
 import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
@@ -1108,6 +1109,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("OFFENSIVE_CD_SPELL_IDS", "utils/spellDanger.ts", "mixed", () =>
     set(OFFENSIVE_CD_SPELL_IDS),
   ),
+  // fact8 D15: auras a class set bonus lengthens (`data/classSetBonuses.ts`)
+  t("SET_BONUS_DURATION_ROWS", "data/classSetBonuses.ts", "aura", () =>
+    keys(SET_BONUS_DURATION_ROWS),
+  ),
   // fact7 class 3 (2026-10-30): offensive buttons whose press is a fact
   // line, no window; found forward by scan5/listGap.ts.
   t("OFFENSIVE_PRESS_FACT_IDS", "utils/spellDanger.ts", "cast", () =>
@@ -1200,6 +1205,8 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         ...r.triggerCastIds,
         ...(r.triggerHitIds ?? []),
         ...(r.triggerSummonIds ?? []),
+        ...(r.triggerBuffedUseTargets?.auraIds ?? []),
+        ...(r.triggerBuffedUseTargets?.byCastIds ?? []),
         ...(r.triggerInterruptIds ?? []),
         ...(r.triggerOwnAuraEndIds ?? []),
         ...(r.triggerSelfAuraAppliedIds ?? []),

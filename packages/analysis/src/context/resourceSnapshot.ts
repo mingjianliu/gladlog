@@ -805,6 +805,45 @@ export function computeOnCDDisplayNames(
   }
   return onCDNames;
 }
+/** B114: "[k/N]" per multi-charge cooldown at a second. */
+function chargeSuffixes(
+  rows: ReadonlyArray<{ displayName: string; cd: IMajorCooldownInfo }>,
+  timeSeconds: number,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const { displayName, cd } of rows) {
+    if ((cd.charges ?? 1) <= 1) continue;
+    const certain = chargesReadyCount(cd, timeSeconds);
+    // a combat-shortened cooldown may already hold more (codex astra
+    // review, GH #106 step 3: "(≤4s)[0/2]" contradicted itself)
+    const most =
+      cd.earliestCooldownSeconds === undefined
+        ? certain
+        : cdChargesReadyAt(cd, timeSeconds, cd.earliestCooldownSeconds);
+    out.set(
+      displayName,
+      most > certain
+        ? `[${certain}–${most}/${cd.charges}]`
+        : `[${certain}/${cd.charges}]`,
+    );
+  }
+  return out;
+}
+
+/** The charge reading a `[RES]` row printed — the delta state of the `~X[k/N]`
+ * token, kept beside `computeReadyNames` (`resolveSnapshots`). */
+export function computeChargeSuffixes(
+  timeSeconds: number,
+  ownerCDs: IMajorCooldownInfo[],
+  teammateCDs: ResTeammateCds[],
+  deaths?: ResHolderDeaths,
+): Map<string, string> {
+  return chargeSuffixes(
+    friendlyResCds(timeSeconds, ownerCDs, teammateCDs, deaths),
+    timeSeconds,
+  );
+}
+
 interface ResourceSnapshotParams {
   timeSeconds: number;
   ownerCDs: IMajorCooldownInfo[];
@@ -823,6 +862,10 @@ interface ResourceSnapshotParams {
    * teammates). When provided, the [RES] line emits a delta form (rdy:Δ+Added,-Removed).
    */
   prevReadyNames?: string[];
+  /** `computeChargeSuffixes` of the previous printed row: a cooldown that
+   * stays ready with fewer or more charges prints `~X[k/N]` (fact8 D34,
+   * a07baece 1:48: Vanish went 2/2 → 1/2 on a row that read as unchanged). */
+  prevChargeSuffixes?: ReadonlyMap<string, string>;
   /**
    * On-CD spell display names from the previous snapshot. When provided, [RES] only shows cd: entries
    * for CDs that are NEWLY on cooldown (not present in prevOnCDNames). B35: reduces token bloat.
@@ -882,6 +925,7 @@ function buildResourceSnapshotOnce({
   enemyCDTimeline,
   playerIdMap,
   prevReadyNames,
+  prevChargeSuffixes,
   prevOnCDNames,
   matchStartMs,
   ownerUnit,
@@ -954,24 +998,7 @@ function buildResourceSnapshotOnce({
   // B114: per-charge readiness suffix "[k/N]" for multi-charge CDs, so the model can tell a partly
   // available CD (1/2) from a fully spent one (0/2) or a fully available one (2/2). Only applied to
   // full-form lines below (delta comparison keeps the bare displayName to stay stable).
-  const chargeSuffix = new Map<string, string>();
-  for (const { displayName, cd } of allFriendlyCDs) {
-    if ((cd.charges ?? 1) > 1) {
-      const certain = chargesReadyCount(cd, timeSeconds);
-      // a combat-shortened cooldown may already hold more (codex astra
-      // review, GH #106 step 3: "(≤4s)[0/2]" contradicted itself)
-      const most =
-        cd.earliestCooldownSeconds === undefined
-          ? certain
-          : cdChargesReadyAt(cd, timeSeconds, cd.earliestCooldownSeconds);
-      chargeSuffix.set(
-        displayName,
-        most > certain
-          ? `[${certain}–${most}/${cd.charges}]`
-          : `[${certain}/${cd.charges}]`,
-      );
-    }
-  }
+  const chargeSuffix = chargeSuffixes(allFriendlyCDs, timeSeconds);
 
   const currentOnCDNames: string[] = [];
   for (const e of allFriendlyCDs) {
@@ -1043,9 +1070,19 @@ function buildResourceSnapshotOnce({
     // H1: prefix each item with its own +/- sign and space-separate them. The previous
     // `+a,b-c,d` form used a bare '-' as the added/removed boundary, which collided with
     // the hyphens inside spell names (e.g. "Anti-Magic Zone"), making the delta unparseable.
+    const recharged = prevChargeSuffixes
+      ? readyNames.filter(
+          (n) =>
+            prevSet.has(n) &&
+            chargeSuffix.has(n) &&
+            prevChargeSuffixes.has(n) &&
+            prevChargeSuffixes.get(n) !== chargeSuffix.get(n),
+        )
+      : [];
     const parts = [
       ...added.map((n) => `+${rdyDisplay(n)}`),
       ...removed.map((n) => `-${n}`),
+      ...recharged.map((n) => `~${rdyDisplay(n)}${chargeSuffix.get(n)}`),
     ];
     rdyPart = parts.length > 0 ? `rdy:Δ ${parts.join(" ")}` : "rdy:Δ";
   } else {

@@ -73,22 +73,48 @@ describe("hpAtPress", () => {
 
   it("fact2: a HoT's first tick right after its own fresh APPLIED is the press's heal (0457a45e Frenzied Regeneration)", () => {
     const FR = "22842";
-    const tick = { ...heal(FR, "P", 49.805), logLine: { timestamp: T0 + 49_805, parameters: [], event: LogEvent.SPELL_PERIODIC_HEAL } };
-    const applied = { spellId: FR, srcUnitId: "P", logLine: { timestamp: T0 + 49_804, event: LogEvent.SPELL_AURA_APPLIED } };
+    const tick = {
+      ...heal(FR, "P", 49.805),
+      logLine: {
+        timestamp: T0 + 49_805,
+        parameters: [],
+        event: LogEvent.SPELL_PERIODIC_HEAL,
+      },
+    };
+    const applied = {
+      spellId: FR,
+      srcUnitId: "P",
+      logLine: { timestamp: T0 + 49_804, event: LogEvent.SPELL_AURA_APPLIED },
+    };
     const mk = (withApplied: boolean) => ({
       ...unit([sample("P", 49.7, 587), sample("P", 49.805, 620)], [tick]),
       auraEvents: (withApplied ? [applied] : []) as never,
     });
-    expect(hpAtPress(mk(true), T0 + 49_806, { spellId: FR, srcUnitId: "P" })).toBe(59);
+    expect(
+      hpAtPress(mk(true), T0 + 49_806, { spellId: FR, srcUnitId: "P" }),
+    ).toBe(59);
     // control: a tick of an earlier application is not this press
-    expect(hpAtPress(mk(false), T0 + 49_806, { spellId: FR, srcUnitId: "P" })).toBe(62);
+    expect(
+      hpAtPress(mk(false), T0 + 49_806, { spellId: FR, srcUnitId: "P" }),
+    ).toBe(62);
   });
 
   it("fact2-retest idx 6: the first tick rides its aura up to the aura-before-cast lag ahead of the cast row (Frenzied Regeneration 55 ms)", () => {
     const FR = "22842";
-    const at = (ms: number, event: LogEvent) => ({ timestamp: T0 + ms, parameters: [], event });
-    const tick = { ...heal(FR, "P", 31.49), logLine: at(31_490, LogEvent.SPELL_PERIODIC_HEAL) };
-    const applied = { spellId: FR, srcUnitId: "P", logLine: at(31_490, LogEvent.SPELL_AURA_APPLIED) };
+    const at = (ms: number, event: LogEvent) => ({
+      timestamp: T0 + ms,
+      parameters: [],
+      event,
+    });
+    const tick = {
+      ...heal(FR, "P", 31.49),
+      logLine: at(31_490, LogEvent.SPELL_PERIODIC_HEAL),
+    };
+    const applied = {
+      spellId: FR,
+      srcUnitId: "P",
+      logLine: at(31_490, LogEvent.SPELL_AURA_APPLIED),
+    };
     const u = {
       ...unit([sample("P", 31.3, 337), sample("P", 31.49, 424)], [tick]),
       auraEvents: [applied] as never,
@@ -97,7 +123,9 @@ describe("hpAtPress", () => {
     // cast row 55 ms after the tick: the press read before its own heal
     expect(hpAtPress(u, T0 + 31_545, fr)).toBe(34);
     // past the lag the tick is no longer this press's
-    expect(hpAtPress(u, T0 + 31_490 + AURA_BEFORE_CAST_ROW_MAX_MS + 1, fr)).toBe(42);
+    expect(
+      hpAtPress(u, T0 + 31_490 + AURA_BEFORE_CAST_ROW_MAX_MS + 1, fr),
+    ).toBe(42);
   });
 
   it("fact2: a second charge refreshes the HoT — the REFRESH and its tick in the press's lead are the press's (7-2 1:56)", () => {
@@ -105,21 +133,49 @@ describe("hpAtPress", () => {
     const u = {
       ...unit(
         [sample("P", 57.5, 204), sample("P", 57.644, 243)],
-        [{ ...heal(FR, "P", 57.644), logLine: { timestamp: T0 + 57_644, parameters: [], event: LogEvent.SPELL_PERIODIC_HEAL } }],
+        [
+          {
+            ...heal(FR, "P", 57.644),
+            logLine: {
+              timestamp: T0 + 57_644,
+              parameters: [],
+              event: LogEvent.SPELL_PERIODIC_HEAL,
+            },
+          },
+        ],
       ),
-      auraEvents: [{ spellId: FR, srcUnitId: "P", logLine: { timestamp: T0 + 57_644, event: LogEvent.SPELL_AURA_REFRESH } }] as never,
+      auraEvents: [
+        {
+          spellId: FR,
+          srcUnitId: "P",
+          logLine: {
+            timestamp: T0 + 57_644,
+            event: LogEvent.SPELL_AURA_REFRESH,
+          },
+        },
+      ] as never,
     };
     expect(hpAtPress(u, T0 + 57_647, { spellId: FR, srcUnitId: "P" })).toBe(20);
   });
 
   it("fact2: a direct heal of the press's own name (Holy Prism 114165 heals as 114871)", () => {
-    const u = unit([sample("P", 21.9, 731), sample("P", 22.0, 800)], [heal("114871", "P", 22.0)]);
-    expect(hpAtPress(u, T0 + 22_001, { spellId: "114165", srcUnitId: "P" })).toBe(73);
+    const u = unit(
+      [sample("P", 21.9, 731), sample("P", 22.0, 800)],
+      [heal("114871", "P", 22.0)],
+    );
+    expect(
+      hpAtPress(u, T0 + 22_001, { spellId: "114165", srcUnitId: "P" }),
+    ).toBe(73);
   });
 
   it("fact2 C10: the press's heal under its effect id (Dream Breath 355936 heals as 355941)", () => {
-    const u = unit([sample("P", 10.9, 860), sample("P", 11.0, 910)], [heal("355941", "P", 11.0)]);
-    expect(hpAtPress(u, T0 + 11_001, { spellId: "355936", srcUnitId: "P" })).toBe(86);
+    const u = unit(
+      [sample("P", 10.9, 860), sample("P", 11.0, 910)],
+      [heal("355941", "P", 11.0)],
+    );
+    expect(
+      hpAtPress(u, T0 + 11_001, { spellId: "355936", srcUnitId: "P" }),
+    ).toBe(86);
   });
 
   describe("用户裁决 2026-10-23（fact4 D31）：按键那一毫秒、日志写在施法行之前的读数", () => {
@@ -167,10 +223,7 @@ describe("hpAtPress", () => {
 
     it("前置窗口里有任何人的治疗：仍取严格早于按键的样本", () => {
       const u = withCast(
-        unit(
-          [at(7.27, 10, 960), at(8.0, 20, 949)],
-          [heal("2061", "Q", 7.99)],
-        ),
+        unit([at(7.27, 10, 960), at(8.0, 20, 949)], [heal("2061", "Q", 7.99)]),
         21,
       );
       expect(hpAtPress(u, T0 + 8_000, sw)).toBe(96);
@@ -353,5 +406,76 @@ describe("cast.targetHpPct is the target's HP at the press (A21 extension)", () 
     ]);
     expect(cast.timingLabel).toBe("Unnecessary");
     expect(cast.timingContext).toContain("at 92% HP");
+  });
+});
+
+describe("hpAtPress — fact8 D14: the press's own heal is the cut", () => {
+  const row = (t: number, line: number, event = LogEvent.SPELL_HEAL) => ({
+    timestamp: T0 + t,
+    parameters: [],
+    event,
+    lineIndex: line,
+  });
+  const DP = "19236";
+  it("a reading of the press's ms before its own heal stands, past another heal in the lead", () => {
+    const hp = (t: number, cur: number, line: number) => ({
+      ...sample("P", t, cur),
+      logLine: {
+        ...sample("P", t, cur).logLine,
+        lineIndex: line,
+      },
+    });
+    const u = {
+      ...unit(
+        [
+          hp(74.351, 605, 11361),
+          hp(74.363, 667, 11366),
+          hp(74.363, 553, 11368),
+          hp(74.363, 850, 11370),
+        ],
+        [
+          { ...heal("999", "P", 74.363), logLine: row(74_363, 11366) },
+          // a proc in the press's ms, its aura row logged after it: no trigger
+          { ...heal(DP, "P", 74.363), logLine: row(74_363, 11370) },
+        ],
+      ),
+      auraEvents: [
+        {
+          spellId: DP,
+          srcUnitId: "P",
+          logLine: row(74_363, 11369, LogEvent.SPELL_AURA_APPLIED),
+        },
+      ] as never,
+    };
+    expect(hpAtPress(u, T0 + 74_363, { spellId: DP, srcUnitId: "P" })).toBe(55);
+  });
+  // 195-1 1:12: Frenzied Regeneration's first tick rides a same-ms burst of the
+  // druid's other heals; the rows before the tick read 91 % for a 67 % press
+  it("a first tick is no line to cut at: the sample before its ms", () => {
+    const FR = "22842";
+    const hp = (t: number, cur: number, line: number) => ({
+      ...sample("P", t, cur),
+      logLine: { ...sample("P", t, cur).logLine, lineIndex: line },
+    });
+    const u = {
+      ...unit(
+        [hp(71.9, 670, 4060), hp(72.0, 870, 4063), hp(72.0, 911, 4065)],
+        [
+          { ...heal("999", "P", 72.0), logLine: row(72_000, 4063) },
+          {
+            ...heal(FR, "P", 72.0),
+            logLine: row(72_000, 4066, LogEvent.SPELL_PERIODIC_HEAL),
+          },
+        ],
+      ),
+      auraEvents: [
+        {
+          spellId: FR,
+          srcUnitId: "P",
+          logLine: row(72_000, 4062, LogEvent.SPELL_AURA_APPLIED),
+        },
+      ] as never,
+    };
+    expect(hpAtPress(u, T0 + 72_002, { spellId: FR, srcUnitId: "P" })).toBe(67);
   });
 });

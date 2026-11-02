@@ -99,6 +99,59 @@ describe("context.timelineSections.test.ts", () => {
       expect(entries[0]![1][0]).toContain("with 3 active DoTs");
     });
 
+    // fact8 D19 (0a7d35e2 4:41): Deadly Poison re-applied writes no REFRESH;
+    // left open by the round's end it ticked past its official length
+    it("a run with no REMOVED counts through its last tick, past its official length", () => {
+      const rot = (id: string) =>
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          id,
+          0,
+          "enemy-1",
+          "player-1",
+          "DEBUFF",
+        );
+      const tick = (id: string, ms: number) => ({
+        spellId: id,
+        srcUnitName: "enemy-1",
+        logLine: {
+          timestamp: ms,
+          event: LogEvent.SPELL_PERIODIC_DAMAGE,
+          parameters: [],
+        },
+      });
+      const player = makeUnit("player-1", {
+        name: "Player1",
+        spec: CombatUnitSpec.Druid_Restoration,
+        reaction: CombatUnitReaction.Friendly,
+        auraEvents: [rot("2818"), rot("703"), rot("1943"), rot("980")].map(
+          (a) => ({ ...a, srcUnitName: "enemy-1" }),
+        ),
+        advancedActions: [
+          ...[0, 1000, 2000, 3000, 4000, 5000].map((ms) => ({
+            ...makeAdvancedAction(ms + 15_000, 0, 0, 1000, 300),
+            advancedActorId: "player-1",
+          })),
+        ],
+        damageIn: ["2818", "703", "1943", "980"].map((id) =>
+          tick(id, 20_000),
+        ) as never,
+      });
+      const entries: [number, string[]][] = [];
+      emitRotPressureEntries({
+        allPlayers: [player],
+        matchStartMs: 0,
+        matchEndMs: 21_000,
+        matchDurationS: 21,
+        pid: (n) => `p-${n}`,
+        addEntry: (t, ...lines) => {
+          entries.push([t, lines]);
+        },
+      });
+      expect(entries).toHaveLength(1);
+      expect(entries[0]![1][0]).toContain("with 4 active DoTs");
+    });
+
     it("single event -> match Rot Pressure line structure and specific values", () => {
       // Setup player with 3 active DoTs from t=0
       const player = makeUnit("player-1", {

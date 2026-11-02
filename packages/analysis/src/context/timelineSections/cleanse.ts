@@ -123,8 +123,25 @@ export function emitCleanseEntries(
     // round-1 retest (fact1215 idx 75): a summon's purge is named as the
     // summon's, as [MINOR DISPELS] / [PURGE] name it (`dispelActorLabel`) —
     // the Felhunter's Devour Magic read as the warlock's
+    // fact8 D32: one press can take two buffs, each its own row (980d8143
+    // 2:40: Greater Purge took Rejuvenation and Lifebloom)
+    const tookNames =
+      tookOther &&
+      [
+        ...new Set(
+          dispelSummary.ourPurges
+            .filter(
+              (p) =>
+                p.sourceName === tookOther.sourceName &&
+                p.dispelSpellId === tookOther.dispelSpellId &&
+                p.targetName === tookOther.targetName &&
+                p.timeSeconds === tookOther.timeSeconds,
+            )
+            .map((p) => p.removedSpellName),
+        ),
+      ].join(" and ");
     const tookOtherNote = tookOther
-      ? ` | ${dispelActorLabel(tookOther, pid, ctx.allUnits ?? [])}'s ${tookOther.dispelSpellName} at ${fmtTime(tookOther.timeSeconds)} took ${tookOther.removedSpellName} instead`
+      ? ` | ${dispelActorLabel(tookOther, pid, ctx.allUnits ?? [])}'s ${tookOther.dispelSpellName} at ${fmtTime(tookOther.timeSeconds)} took ${tookNames} instead`
       : "";
     addEntry(
       miss.timeSeconds,

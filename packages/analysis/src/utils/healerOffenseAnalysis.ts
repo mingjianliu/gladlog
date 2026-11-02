@@ -747,6 +747,14 @@ export function computeContestedTradeFacts(
  * CC that could land on that healer (fact5 D18 / D19).
  */
 function ccReachesInSpan(
+  ...args: Parameters<typeof ccFirstReachSecond>
+): boolean {
+  return ccFirstReachSecond(...args) !== null;
+}
+
+/** The first second of the span the control is usable and reaches the healer
+ * (`ccReachesInSpan`'s reading), null when none is. */
+function ccFirstReachSecond(
   owner: ICombatUnit,
   healer: ICombatUnit,
   spellId: string,
@@ -760,9 +768,9 @@ function ccReachesInSpan(
   /** the CC usable at that second as far as readiness / DR go — reach and
    * usability have to hold in the same second */
   usableAt: (t: number) => boolean = () => true,
-): boolean {
+): number | null {
   const reach = ccThreatReachYards(owner, spellId);
-  if (reach === null) return false;
+  if (reach === null) return null;
   const zone = String(combat.startInfo?.zoneId ?? "");
   // …and the healer could take it then: no aura that stops this control on
   // the whole rendered second (`ccTargetBlockerIntervals`, the CC sampler's
@@ -777,8 +785,8 @@ function ccReachesInSpan(
       !immuneAt(t) &&
       ccReachAt(owner, healer, reach, zone, combat.startTime + t * 1000).ok
     )
-      return true;
-  return false;
+      return Math.max(t, seg.fromSeconds);
+  return null;
 }
 
 // ── Task 2: Kill-window contribution analysis ──────────────────────────────
@@ -1220,37 +1228,42 @@ export function computeWindowCreationFacts(
     // (codex R6C-16 #1: Chastise was ready at 73–75 s and in reach only at
     // 80 s, after it had gone out at 75.8 s — never both, yet the line read
     // "ready on enemy healer")
-    const readyAtFullDR = ccSpells.find(
-      (s) =>
-        drCategoryKnown(s.spellId, ownerApplied) &&
-        // the line states the DR at the segment's start
-        getDRLevelAtTime(
-          enemyHealerDrHistory,
-          drCategoryOfCast(s.spellId, ownerApplied),
-          seg.fromSeconds,
-          matchStartMs,
-        ) === "Full" &&
-        ccReachesInSpan(
-          owner,
-          enemyHealer,
-          s.spellId,
-          combat,
-          seg,
-          (t) =>
-            isCCReadyAt(s, t) &&
-            getDRLevelAtTime(
-              enemyHealerDrHistory,
-              drCategoryOfCast(s.spellId, ownerApplied),
-              t,
-              matchStartMs,
-            ) === "Full",
-        ),
-    );
+    // fact8 D12: the line is stamped at that second, not the span's start
+    // (1d009670: Capacitor Totem back at 1:15 read `1:07 … ready`), and what
+    // else it states is read there too
+    const firstUsable = (s: (typeof ccSpells)[number]) =>
+      !drCategoryKnown(s.spellId, ownerApplied) ||
+      getDRLevelAtTime(
+        enemyHealerDrHistory,
+        drCategoryOfCast(s.spellId, ownerApplied),
+        seg.fromSeconds,
+        matchStartMs,
+      ) !== "Full"
+        ? null
+        : ccFirstReachSecond(
+            owner,
+            enemyHealer,
+            s.spellId,
+            combat,
+            seg,
+            (t) =>
+              isCCReadyAt(s, t) &&
+              getDRLevelAtTime(
+                enemyHealerDrHistory,
+                drCategoryOfCast(s.spellId, ownerApplied),
+                t,
+                matchStartMs,
+              ) === "Full",
+          );
+    const readyAtFullDR = ccSpells
+      .map((spell) => ({ spell, at: firstUsable(spell) }))
+      .filter((c): c is { spell: typeof c.spell; at: number } => c.at !== null)
+      .sort((a, b) => a.at - b.at)[0];
     if (!readyAtFullDR) continue;
 
     const trinketAvailable = getTrinketStateAtTime(
       enemyHealer,
-      seg.fromSeconds,
+      readyAtFullDR.at,
       matchStartMs,
       true,
     );
@@ -1262,9 +1275,9 @@ export function computeWindowCreationFacts(
     if (trinketAvailable) continue;
 
     facts.push({
-      atSeconds: seg.fromSeconds,
-      slackDurationSeconds: seg.durationSeconds,
-      ccSpellName: readyAtFullDR.spellName,
+      atSeconds: readyAtFullDR.at,
+      slackDurationSeconds: seg.toSeconds - readyAtFullDR.at,
+      ccSpellName: readyAtFullDR.spell.spellName,
       enemyHealerName: enemyHealer.name,
       enemyHealerSpec: specToString(enemyHealer.spec),
       enemyHealerDRLevel: "Full",

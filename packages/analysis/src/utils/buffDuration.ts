@@ -1,6 +1,7 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
 import { triggeredEffectAurasOfCast } from "../data/castEffectAuras";
+import { setBonusDurationSeconds } from "../data/classSetBonuses";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
@@ -101,6 +102,20 @@ function summonedEffectSeconds(spellId: string): number | undefined {
  * talent, ranks still add (+25 % × rank 2 = +50 %).
  */
 export function buffFullDurationForCaster(
+  spellId: string,
+  caster:
+    | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster)
+    | undefined,
+  atMs?: number,
+): number | undefined {
+  const talented = talentedDuration(spellId, caster, atMs);
+  // fact8 D15: a class set bonus, on top of everything the talents give
+  return talented === undefined
+    ? undefined
+    : talented + setBonusDurationSeconds(spellId, caster);
+}
+
+function talentedDuration(
   spellId: string,
   caster:
     | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster)

@@ -379,6 +379,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   function avoidanceSourceTag(
     sourceName: string | undefined,
     targetName: string,
+    sourceId?: string,
   ): string {
     if (!sourceName) return "";
     // a summon's buff (a Death Knight's Rider of the Apocalypse casting
@@ -386,7 +387,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     // client-locale name (605 at fact2: `(from 索拉斯·托尔贝恩国王)`, 6 lines)
     return sourceName === targetName
       ? " (own)"
-      : ` (from ${actorLabel(sourceName, "friendly")})`;
+      : ` (from ${actorLabel(sourceName, "friendly", sourceId)})`;
   }
 
   /** Returns the short numeric ID for an *enemy* player name, falling back to name. */
@@ -1146,6 +1147,11 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     spellId: string,
     castTimeSeconds: number,
     destUnitName: string,
+    /** the miss row: an avoidance up at it is the cause the sweep did not
+     * state (the sweep pairs a cast with a row near it; a delayed control's
+     * row comes seconds later — fact8 D41, b71edaa9 0:56: Binding Shot's stun
+     * logged MISS 3.2 s after the cast, inside Phase Shift, no cause) */
+    missRow?: { timestamp: number; missType?: string; logLine?: { lineIndex?: number } },
   ): string {
     const avoided = enemyCCSummaries
       ?.find((x) => x.playerName === destUnitName)
@@ -1155,7 +1161,21 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
           a.spellId === spellId &&
           Math.abs((a.castAtSeconds ?? a.atSeconds) - castTimeSeconds) < 0.01,
       );
-    return avoided ? `${avoided.avoidanceSpellName} was up` : "";
+    if (avoided) return `${avoided.avoidanceSpellName} was up`;
+    const dest = (enemies ?? []).find((e) => e.name === destUnitName);
+    if (!missRow || !dest) return "";
+    const applicable = applicableCCAvoidanceIds(
+      spellId,
+      getEnglishSpellName(spellId, ""),
+    );
+    const up = ccAvoidanceBuffsUpAt(dest, missRow.timestamp, {
+      atLine: missRow.logLine?.lineIndex,
+    }).find(
+      (b) =>
+        applicable.has(b.spellId) &&
+        avoidanceExplainsMissType(b.spellId, missRow.missType),
+    );
+    return up ? `${up.name} was up` : "";
   }
 
   function ccMissTagFor(
@@ -1185,7 +1205,13 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // By GUID: a pet target renders as "X's pet" / "[pet]", never its raw
       // (possibly localized) name (codex astra: `[MISSED on 恶魔卫士]`).
       const who = actorLabel(m.destUnitName, "enemy", m.destUnitId);
-      const why = ccMissCauseOf(unit, spellId, castTimeSeconds, m.destUnitName);
+      const why = ccMissCauseOf(
+        unit,
+        spellId,
+        castTimeSeconds,
+        m.destUnitName,
+        m,
+      );
       const cause = why ? ` — ${why}` : "";
       parts.push(
         word === "MISSED"
@@ -1291,8 +1317,15 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         if (m.logLine?.event !== LogEvent.SPELL_MISSED) continue;
         if (!m.spellId || !CONTROL_FAILED_MISS_TYPES.has(m.missType)) continue;
         // a miss that stands for a control (`missReportsControl`: not a
-        // damage miss of a cast whose control takes only some targets)
-        if (!missReportsControl(m.spellId)) continue;
+        // damage miss of a cast whose control takes only some targets), or a
+        // silence's IMMUNE row — `[CC AVOIDED?]`'s reading of the same row on
+        // our side (mechanic 9; fact8 D27, 969a6b07 0:49: a Silence logged
+        // IMMUNE under Spiritwalker's Aegis, no line)
+        if (
+          !missReportsControl(m.spellId) &&
+          !(m.missType === "IMMUNE" && ccMechanicOf(m.spellId) === 9)
+        )
+          continue;
         const target = (enemies ?? []).find((e) => e.id === m.destUnitId);
         if (!target) continue;
         const atSeconds = (m.timestamp - matchStartMs) / 1000;
@@ -1358,14 +1391,13 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         const cause =
           m.missType === "IMMUNE"
             ? ccImmuneCauseOf(m)
-            : cast
-              ? ccMissCauseOf(
-                  caster,
-                  cast.spellId!,
-                  (cast.timestamp - matchStartMs) / 1000,
-                  target.name,
-                )
-              : "";
+            : ccMissCauseOf(
+                caster,
+                cast?.spellId ?? m.spellId,
+                cast ? (cast.timestamp - matchStartMs) / 1000 : atSeconds,
+                target.name,
+                m,
+              );
         out.push({
           atSeconds,
           line: `${fmtTime(atSeconds)}  ${CC_NOT_LANDED_TAG}   ${enemyPid(target.name)} ← ${name} (by ${actorLabel(shown.name, "friendly", shown.id)}) — logged ${m.missType}${cause ? ` (${cause})` : ""}`,

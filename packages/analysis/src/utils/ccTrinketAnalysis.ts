@@ -412,6 +412,7 @@ export interface ICcAvoidanceBuffUp {
   name: string;
   /** who applied it; "" for an aura the log lists as up at its start */
   srcName: string;
+  srcId: string;
 }
 
 /**
@@ -455,7 +456,7 @@ export function ccAvoidanceBuffsUpAt(
   const rows = unit.auraEvents ?? [];
   const up = new Map<
     string,
-    ICcAvoidanceBuffUp & { untilMs: number; srcId: string }
+    ICcAvoidanceBuffUp & { untilMs: number }
   >();
   const open = (
     id: string,
@@ -580,7 +581,12 @@ export function ccAvoidanceBuffsUpAt(
         closedAtJudged.has(b.spellId) ||
         atMs <= b.untilMs,
     )
-    .map(({ spellId, name, srcName }) => ({ spellId, name, srcName }));
+    .map(({ spellId, name, srcName, srcId }) => ({
+      spellId,
+      name,
+      srcName,
+      srcId,
+    }));
 }
 
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
@@ -1908,6 +1914,8 @@ export interface ICCAvoidedInstance {
   /** Who applied the avoidance aura (a teammate's Grounding Totem vs your own);
    * absent for mobility avoidance and for auras already up at log start. */
   avoidanceSourceName?: string;
+  /** …and its GUID (fact8 D13: an enemy's Freezing Trap read as a pet) */
+  avoidanceSourceId?: string;
   sourceName: string;
   /**
    * The source unit's GUID (GH #99). `sourceName` alone cannot identify a
@@ -4983,8 +4991,10 @@ export function analyzePlayerCCAndTrinket(
         // An empower's SPELL_CAST_SUCCESS is logged when the hold BEGINS
         // (with SPELL_EMPOWER_START); its SPELL_EMPOWER_END follows at the
         // release.
+        // A kick on the hold logs SPELL_EMPOWER_INTERRUPT instead (fact8 D4):
+        // the press was an empower all the same.
         inst.switchWasEmpowered = Array.isArray(player.empowerEnds)
-          ? player.empowerEnds.some(
+          ? [...player.empowerEnds, ...(player.empowerInterrupts ?? [])].some(
               (e) =>
                 e.spellId === switchCast.spellId &&
                 e.timestamp >= switchCast.ms - EMPOWER_START_SLACK_MS &&
@@ -5720,6 +5730,7 @@ export function analyzePlayerCCAndTrinket(
               avoidanceSpellName: activeBuff.name,
               avoidanceSpellId: activeBuff.spellId,
               avoidanceSourceName: activeBuff.srcName || undefined,
+              avoidanceSourceId: activeBuff.srcId || undefined,
               sourceName: enemy.name,
               // the event's own caster (fact4 D2 / D34): a pet or guardian
               // cast — folded into its owner's sweep (F134) — resolves to
@@ -5897,6 +5908,7 @@ export function analyzePlayerCCAndTrinket(
         avoidanceSpellName: buff.name,
         avoidanceSpellId: buff.spellId,
         avoidanceSourceName: buff.srcName || undefined,
+        avoidanceSourceId: buff.srcId || undefined,
         sourceName: enemy.name,
         // fact4 D2 / D34: the event's own caster — a pet or guardian
         // resolves to "X's pet" through its GUID (`actorLabel`)

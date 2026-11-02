@@ -703,4 +703,12 @@
  *  (`genTalentReplaces`'s carrier join). Candidates 605 7630 → 7564, wide
  *  23440 → 23300; gates unchanged. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 468;
+/*
+ * v469 (2026-11-01, F23): round-8 fact fixes, 41 of 51 audit items across 11
+ *  classes. Strafing Run's free Deep Breath and Wingleader reach every reader;
+ *  a major aura with no press gets a `(no press)` line; `[RES]` writes
+ *  `~X[k/N]`; externals are filed by source GUID; six self-saves end
+ *  defenseless (user ruling after the preview); every ready control that
+ *  reaches is listed. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 469;
