@@ -395,13 +395,18 @@ async function main() {
       );
       return;
     }
-    // Re-rank before every take: a skipped (incomplete) candidate must not
-    // leave the order computed as if it had been taken.
-    let left = ordered;
-    while (fresh < LIMIT && left.length > 0) {
-      const [stub, ...rest] = left;
-      if ((await take(stub)) === "quota") break;
-      left = orderBySpecBalance(rest, stored);
+    // Re-rank before every take, from the pool in feed order (ties go to the
+    // newer candidate): a skipped (incomplete) candidate must not leave the
+    // order computed as if it had been taken.
+    const tried = new Set<DetailedMatchStub>();
+    let next: DetailedMatchStub | undefined = ordered[0];
+    while (fresh < LIMIT && next) {
+      tried.add(next);
+      if ((await take(next)) === "quota") break;
+      next = orderBySpecBalance(
+        pool.filter((s) => !tried.has(s)),
+        stored,
+      )[0];
     }
   }
 
