@@ -205,7 +205,7 @@ async function main() {
     );
     return;
   }
-  await fs.ensureDir(OUT_DIR);
+  if (!DRY_RUN) await fs.ensureDir(OUT_DIR);
   // Resume support: skip matches already in the manifest whose file is on disk
   const manifest: ManifestEntry[] = (await fs.pathExists(MANIFEST))
     ? await fs.readJson(MANIFEST)
@@ -395,9 +395,13 @@ async function main() {
       );
       return;
     }
-    for (const stub of ordered) {
-      if (fresh >= LIMIT) break;
+    // Re-rank before every take: a skipped (incomplete) candidate must not
+    // leave the order computed as if it had been taken.
+    let left = ordered;
+    while (fresh < LIMIT && left.length > 0) {
+      const [stub, ...rest] = left;
       if ((await take(stub)) === "quota") break;
+      left = orderBySpecBalance(rest, stored);
     }
   }
 

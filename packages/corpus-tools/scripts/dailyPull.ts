@@ -120,6 +120,14 @@ function runArchives(): NonNullable<RunRecord["archives"]> {
 }
 
 async function main() {
+  // A preview child exits 0, which would record its bracket as done for the
+  // day and make the real run skip it. Preview with fetchPvpLogs directly.
+  if (process.env.DRY_RUN === "1") {
+    console.error(
+      "DRY_RUN is not supported by the daily driver; run SPEC_BALANCE=1 DRY_RUN=1 npx tsx scripts/fetchPvpLogs.ts instead",
+    );
+    process.exit(1);
+  }
   const startedAt = new Date();
   const record: RunRecord = {
     startedAt: startedAt.toISOString(),
