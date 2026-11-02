@@ -1433,6 +1433,7 @@ describe("rotDotCount", () => {
         {
           auraEvents: [
             debuff(LogEvent.SPELL_AURA_APPLIED, 12_000, "383346", "Ret"),
+            debuff(LogEvent.SPELL_AURA_REMOVED, 45_000, "383346", "Ret"),
           ],
           damageIn: [],
         },
@@ -1440,6 +1441,29 @@ describe("rotDotCount", () => {
         [raw],
       ),
     ).toEqual([]);
+  });
+
+  it("a run that lost its REMOVED ends at its official length (fact8 D19, 7-1-45 0:34)", () => {
+    const rows = {
+      auraEvents: [
+        debuff(LogEvent.SPELL_AURA_APPLIED, 10_000, "589", "Priest"),
+        debuff(LogEvent.SPELL_AURA_APPLIED, 45_000, "589", "Priest"),
+      ],
+      damageIn: [tick(11_000, "589", "Priest")],
+    };
+    expect(seen(rows, 0)).toEqual([]);
+    expect(seen(rows, 1)).toHaveLength(1);
+  });
+
+  it("a REMOVED under the controller is the Mind-Controlled caster's run ending, not a lost one", () => {
+    const rows = {
+      auraEvents: [
+        debuff(LogEvent.SPELL_AURA_APPLIED, 10_000, "589", "Priest"),
+        debuff(LogEvent.SPELL_AURA_REMOVED, 45_000, "589", "Controller"),
+      ],
+      damageIn: [tick(11_000, "589", "Priest")],
+    };
+    expect(seen(rows, 1)).toEqual([]);
   });
 
   it("a DB2 DoT gone before its first tick was on the unit (Moonfire up 1 s, 5-3 0:33)", () => {

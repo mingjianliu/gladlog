@@ -12,12 +12,15 @@
  * the run's start to the row, and at most a minute before the row. A run starts
  * at an APPLIED, or at a REFRESH its source's press sits beside (a re-press on
  * somebody else that carries the aura here: Reversion's echo, 19-1 4:39). A
- * proc shield with no such press is no violation.
+ * proc shield with no such press is no violation. A press with no target
+ * (fact8 D10, multi-target Void Shield) counts when it sits beside the run's
+ * start.
  */
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { riderCastsOfShield } from "@gladlog/analysis/src/data/ownShieldLinks";
 import {
   ALLY_SHIELD_PRESS_PAIR_MS,
+  NO_TARGET_GUID,
   OWN_SHIELD_PRESS_LOOKBACK_MS,
   SAVE_CAST_AURA_PAIR_S,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -92,7 +95,10 @@ export function run(ctx: IRoundCtx): void {
           tsOf(c) <= t &&
           tsOf(c) >= tsOf(runStart) - ALLY_SHIELD_PRESS_PAIR_MS &&
           tsOf(c) >= t - OWN_SHIELD_PRESS_LOOKBACK_MS &&
-          c.destUnitId === u.id &&
+          (c.destUnitId === u.id ||
+            ((!c.destUnitId || c.destUnitId === NO_TARGET_GUID) &&
+              Math.abs(tsOf(c) - tsOf(runStart)) <=
+                ALLY_SHIELD_PRESS_PAIR_MS)) &&
           (String(c.spellId) === id ||
             nameOf(String(c.spellId), c.spellName ?? "") === name ||
             castsOfEffectAura(id).includes(String(c.spellId)) ||

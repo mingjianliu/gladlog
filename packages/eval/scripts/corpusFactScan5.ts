@@ -72,6 +72,7 @@ const MODULE_FILES = [
   "spanFacts",
   "singles14b",
   "replacedKit",
+  "fact8",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

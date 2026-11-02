@@ -45,6 +45,7 @@ import {
   spellEffectData,
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { officialDurationS } from "@gladlog/analysis/src/utils/auraIntervals";
 import { CAST_INTERRUPTED_REASONS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import {
   COMPANION_CAST_ROW_MS,
@@ -249,9 +250,60 @@ function checkRotDots(ctx: IRoundCtx): void {
         (end === undefined ? ctx.end : tsOf(end)) - from < NO_TICK_RUN_MS
       );
     };
+    // fact8 D19: a run whose REMOVED the log lost ends at its official length,
+    // not at the next REMOVED: no tick or refresh inside that length of the
+    // second means it was gone (7-1-45: Shadow Word: Pain APPLIED 9.6, next row
+    // APPLIED 38.4, no tick from 29.1 to 41.2 on any DoT, 7 "open" at 0:34)
+    const lapsed = (id: string, src: string): boolean => {
+      const from = open.get(`${id}|${src}`)!;
+      const caster = ctx.players.find((p: any) => p.id === src);
+      const d = officialDurationS(id, caster, atMs);
+      if (d === null) return false;
+      const rows = debuffRows.filter(
+        (a) => a.spellId === id && a.srcUnitId === src,
+      );
+      // a REMOVED under a unit with no run of its own is this run's, the
+      // Mind-Control shape the loop above pairs too
+      const endsRun = (a: any): boolean =>
+        ev(a) === REMOVED &&
+        a.spellId === id &&
+        (a.srcUnitId === src ||
+          !debuffRows.some(
+            (b) =>
+              b.spellId === id &&
+              b.srcUnitId === a.srcUnitId &&
+              ev(b) === APPLIED &&
+              tsOf(b) <= tsOf(a),
+          ));
+      const next = debuffRows.find(
+        (a) =>
+          tsOf(a) > atMs &&
+          (endsRun(a) ||
+            (ev(a) === APPLIED && a.spellId === id && a.srcUnitId === src)),
+      );
+      // its own REMOVED was logged: the run's end is known, not a guess
+      if (next !== undefined && ev(next) === REMOVED) return false;
+      const until = next === undefined ? ctx.end : tsOf(next);
+      const tickedPast = ((unit.damageIn ?? []) as any[]).some(
+        (t) =>
+          t.spellId === id &&
+          t.srcUnitId === src &&
+          tsOf(t) >= atMs &&
+          tsOf(t) < until,
+      );
+      if (tickedPast) return false;
+      const anchor = Math.max(
+        from,
+        ...rows.filter((a) => tsOf(a) <= atMs).map((a) => tsOf(a)),
+      );
+      return anchor + d * 1000 < atMs;
+    };
     const truth = [...open.keys()].filter((k) => {
       const [id, src] = k.split("|");
-      return ticked(id!, src!) || tooShortToTick(id!, open.get(k)!);
+      return (
+        (ticked(id!, src!) || tooShortToTick(id!, open.get(k)!)) &&
+        !lapsed(id!, src!)
+      );
     });
     const printed = Number(m[3]);
     if (printed === truth.length) continue;

@@ -60,6 +60,7 @@ import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDurat
 import {
   AURA_BEFORE_CAST_MAX_S,
   MITIGATION_AURA_IDS,
+  SAVE_CAST_AURA_PAIR_S,
   wallTableIdOfAura,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { hiddenPressMs } from "@gladlog/analysis/src/utils/hiddenPress";
@@ -232,7 +233,12 @@ for (const f of files) {
             !has(
               t,
               (l) =>
-                l.includes(tag) && l.includes(`Obsidian Scales → ${dp.pid}(`),
+                l.includes(tag) &&
+                // friendly: on its caster, with the copy named (fact8 D23);
+                // enemy: `[ENEMY DEF]` names the copy's holder
+                (l.includes(`Obsidian Scales → ${dp.pid}(`) ||
+                  (l.includes("Obsidian Scales") &&
+                    l.includes(`% copy → ${dp.pid}(`))),
             )
           )
             miss("allyScales", `${where} ${t} ${u.name} → ${d.name} (${tag})`);
@@ -361,6 +367,27 @@ for (const f of files) {
             // 150 ms since corpusFactScan batch 1)
             c.logLine.timestamp - ts <= AURA_BEFORE_CAST_MAX_S * 1000,
         );
+        // a real press landing on a copy that went up just before it: the
+        // press's REFRESH sits on its cast row (fact7 D27, `splitAtRepressRefresh`;
+        // the product drops the tag, this check had not followed — 3-3-43 2:18)
+        const refreshedByPress =
+          !pressed &&
+          casts.some(
+            (c) =>
+              ids.has(c.spellId) &&
+              c.logLine.timestamp > ts &&
+              c.logLine.timestamp - ts <= SAVE_CAST_AURA_PAIR_S * 1000 &&
+              (u.auraEvents ?? []).some(
+                (r: {
+                  spellId?: string;
+                  logLine: { event: string; timestamp: number };
+                }) =>
+                  r.spellId === a.spellId &&
+                  r.logLine.event === LogEvent.SPELL_AURA_REFRESH &&
+                  Math.abs(r.logLine.timestamp - c.logLine.timestamp) <= 20,
+              ),
+          );
+        if (refreshedByPress) continue;
         const name = getEnglishSpellName(a.spellId, a.spellName);
         const line = lines.find(
           (l) =>
@@ -392,10 +419,17 @@ for (const f of files) {
             );
         } else if (!pressed) {
           bump("noPressCopy");
+          // a healing major's aura has its own line (fact8 class 5)
+          const healLine = lines.some(
+            (l) =>
+              l.startsWith(`${t}  [ENEMY HEAL CD]   ${me.pid}(`) &&
+              l.endsWith(`: ${name} (no press)`),
+          );
           if (
-            !line ||
-            !line.includes("[no press logged]") ||
-            line.includes("— removed early")
+            !healLine &&
+            (!line ||
+              !line.includes("[no press logged]") ||
+              line.includes("— removed early"))
           )
             miss(
               "noPressCopy",

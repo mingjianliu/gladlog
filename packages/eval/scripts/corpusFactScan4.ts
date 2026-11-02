@@ -1145,7 +1145,7 @@ for (const f of files) {
         // list says what is ready, not what came back)
         if (!m2[1]) return false;
         const added = m2[2]!
-          .split(/\s+(?=[+-])/)
+          .split(/\s+(?=[+~-])/)
           .filter((t) => t.startsWith("+"))
           .map((t) => t.slice(1));
         return added.some((t) => !/^\d+:/.test(t) && wallNames.has(t.trim()));

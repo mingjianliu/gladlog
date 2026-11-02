@@ -112,11 +112,14 @@ import { ensureAnalysisData } from "@gladlog/analysis";
 import {
   isCountedReflectRow,
   maxHpNear,
+  NETHER_WARD_ID,
+  pairNetherWardReturns,
   REFLECT_CHAIN_GAP_MS,
   REFLECT_DAMAGE_WINDOW_S,
   REFLECT_DIRECT_RETURN_MS,
   REFLECT_MIN_DAMAGE_PCT,
   REFLECT_OWN_ID_LEAD_MS,
+  reflectOwnIdRowGap,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
@@ -1258,13 +1261,40 @@ for (const f of files) {
     // one decided at the end)
     // by the gap to the group's nearest REFLECT row (the product's
     // `creditOwnId`: 50-1 2:17, two Wicked Reapings around a Demonbolt)
-    const rowGap = (g: (typeof groups)[number], ts: number) =>
-      Math.min(
-        ...g.rows
-          .filter((r) => ts >= r - REFLECT_OWN_ID_LEAD_MS)
-          .map((r) => Math.abs(ts - r)),
-      );
-    const ownCands = (src: string, ts: number) =>
+    const wardPairs = new Map<string, Map<number, number>>();
+    const wardPairsOf = (src: string) => {
+      let pairs = wardPairs.get(src);
+      if (!pairs) {
+        const landed = ((caster.damageIn ?? []) as any[])
+          .filter((d) => d.spellId === NETHER_WARD_ID && d.srcUnitId === src)
+          .map(tsOf);
+        pairs = pairNetherWardReturns(
+          groups
+            .filter((g) => g.g && g.first.destUnitId === src)
+            .flatMap((g) => g.rows),
+          [
+            ...landed,
+            ...((caster.absorbsIn ?? []) as any[])
+              .filter(
+                (a) =>
+                  a.attackSpellId === NETHER_WARD_ID &&
+                  a.attackerId === src &&
+                  !DEFERRAL_SHIELDS.has(String(a.spellId)) &&
+                  !landed.includes(tsOf(a)),
+              )
+              .map(tsOf),
+          ],
+        );
+        wardPairs.set(src, pairs);
+      }
+      return pairs;
+    };
+    const rowGap = (
+      g: (typeof groups)[number],
+      ownId: string,
+      ts: number,
+    ) => reflectOwnIdRowGap(ownId, ts, g.rows, wardPairsOf(g.first.destUnitId));
+    const ownCands = (ownId: string, src: string, ts: number) =>
       groups
         .filter(
           (g) =>
@@ -1273,11 +1303,11 @@ for (const f of files) {
             ts >= tsOf(g.first) - REFLECT_OWN_ID_LEAD_MS &&
             ts <= g.last + REFLECT_DIRECT_RETURN_MS,
         )
-        .sort((x, y) => rowGap(x, ts) - rowGap(y, ts))
+        .sort((x, y) => rowGap(x, ownId, ts) - rowGap(y, ownId, ts))
         .map((g) => g.g!);
     for (const d of (caster.damageIn ?? []) as any[]) {
       if (!REFLECT_OWN_IDS.has(d.spellId)) continue;
-      const gs = ownCands(d.srcUnitId, tsOf(d));
+      const gs = ownCands(d.spellId, d.srcUnitId, tsOf(d));
       if (gs.length > 0)
         ownRows.push({
           ts: tsOf(d),
@@ -1287,7 +1317,7 @@ for (const f of files) {
     }
     for (const a of (caster.absorbsIn ?? []) as any[]) {
       if (!REFLECT_OWN_IDS.has(a.attackSpellId)) continue;
-      const gs = ownCands(a.attackerId, tsOf(a));
+      const gs = ownCands(a.attackSpellId, a.attackerId, tsOf(a));
       if (gs.length > 0)
         ownRows.push({
           ts: tsOf(a),

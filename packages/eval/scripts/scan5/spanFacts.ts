@@ -34,6 +34,7 @@ import {
 import { ENEMY_IMMUNITY_TEAM_PROC_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { SpellTag } from "@gladlog/analysis/src/data/spellTypes";
+import { staleMaxHpRows } from "@gladlog/analysis/src/utils/advancedActions";
 import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
 import {
   isHealerSpec,
@@ -315,48 +316,6 @@ function ledger(ctx: IRoundCtx): void {
   flush();
 }
 
-/** how much of the way from a rescaled current to a carried one the step's
- * row must sit, for the rows before it to be stale */
-const STEP_CARRIES = 0.5;
-
-/** the rows of a form shift, read from the rows alone: current HP has moved
- * to the next max's scale while the row still states the old max */
-function staleRows(rows: any[]): Set<any> {
-  const out = new Set<any>();
-  const pct = (a: any) =>
-    (100 * a.advancedActorCurrentHp) / a.advancedActorMaxHp;
-  for (let j = 1; j < rows.length; j++) {
-    const m0 = rows[j - 1].advancedActorMaxHp;
-    const m1 = rows[j].advancedActorMaxHp;
-    if (m1 >= m0) continue;
-    let i = j;
-    while (
-      i > 0 &&
-      rows[i - 1].advancedActorMaxHp === m0 &&
-      rows[j].logLine.timestamp - rows[i - 1].logLine.timestamp <= 500 &&
-      Math.abs(
-        rows[i - 1].advancedActorCurrentHp - rows[j].advancedActorCurrentHp,
-      ) <=
-        0.05 * m1
-    )
-      i--;
-    if (i === j || i === 0) continue;
-    const before = pct(rows[i - 1]);
-    const last = rows[j - 1].advancedActorCurrentHp;
-    const rescaled = (last * m1) / m0;
-    if (
-      before - pct(rows[i]) >= 3 &&
-      Math.abs((100 * rows[i].advancedActorCurrentHp) / m1 - before) <= 5 &&
-      // the step carried the current across: a max and current that fall
-      // together are a buff's loss, and the rows before it read true
-      rows[j].advancedActorCurrentHp - rescaled >=
-        STEP_CARRIES * (last - rescaled)
-    )
-      for (let k = i; k < j; k++) out.add(rows[k]);
-  }
-  return out;
-}
-
 function troughs(ctx: IRoundCtx): void {
   for (const line of ctx.lines) {
     for (const m of line.matchAll(LOW)) {
@@ -371,7 +330,7 @@ function troughs(ctx: IRoundCtx): void {
       );
       if (inSec.length === 0) continue;
       ctx.bump("troughOnStaleMaxRow");
-      const stale = staleRows(rows);
+      const stale = staleMaxHpRows(unit);
       const p = +m[2]!;
       const read = (a: any) =>
         Math.round((100 * a.advancedActorCurrentHp) / a.advancedActorMaxHp);

@@ -521,10 +521,18 @@ for (const f of files) {
         if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
         const ta = a.logLine.timestamp;
         if (ta < castMs - 500 || ta > castMs + 3000) continue;
+        // a REMOVED past the next APPLIED is that later run's: this one's
+        // was lost (fact8 D18, `buildAuraIntervals`)
+        const next = evs.find(
+          (b) =>
+            b.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            b.logLine.timestamp > ta,
+        );
         const rm = evs.find(
           (b) =>
             b.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-            b.logLine.timestamp >= ta,
+            b.logLine.timestamp >= ta &&
+            (!next || b.logLine.timestamp <= next.logLine.timestamp),
         );
         out.push([ta, rm ? rm.logLine.timestamp : Infinity]);
       }
@@ -640,7 +648,7 @@ for (const f of files) {
           (l.includes("[YOU] [CD]") ||
             l.includes(`[TEAM] [CD]   ${me}(`) ||
             l.includes(`[ENEMY DEF]   ${me}(`)) &&
-          pids.some((p) => l.includes(`Obsidian Scales → ${p}(`)),
+          pids.some((p) => new RegExp(`Obsidian Scales.*(?:copy )?→ ${p}\\(`).test(l)),
       );
       if (!ok)
         miss(
@@ -1673,14 +1681,29 @@ for (const f of files) {
           });
           if (heals.length > 0) {
             const hMs = Math.min(...heals.map((h) => h.logLine.timestamp));
+            // a direct heal: the press's ms up to its row (`hpAtPress`, user
+            // ruling fact8 D14); a first tick: the sample before its ms
+            const atCut = heals.filter((h) => h.logLine.timestamp === hMs);
+            const cutLine = atCut.some(
+              (h) => h.logLine.event === LogEvent.SPELL_PERIODIC_HEAL,
+            )
+              ? undefined
+              : Math.min(...atCut.map((h) => h.logLine.lineIndex ?? Infinity));
             const acts = ((owner.advancedActions ?? []) as any[])
               .filter(
                 (a) =>
                   a.advancedActorId === owner.id &&
                   a.advancedActorMaxHp > 0 &&
-                  a.logLine.timestamp < hMs,
+                  (a.logLine.timestamp < hMs ||
+                    (cutLine !== undefined &&
+                      a.logLine.timestamp === hMs &&
+                      a.logLine.lineIndex < cutLine)),
               )
-              .sort((x, y) => x.logLine.timestamp - y.logLine.timestamp);
+              .sort(
+                (x, y) =>
+                  x.logLine.timestamp - y.logLine.timestamp ||
+                  (x.logLine.lineIndex ?? 0) - (y.logLine.lineIndex ?? 0),
+              );
             const before = acts.at(-1);
             if (before) {
               const want =
