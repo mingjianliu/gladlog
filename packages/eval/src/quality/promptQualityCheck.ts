@@ -202,8 +202,10 @@ import {
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_DEF_END_NOT_LOGGED_SLOT_RE,
   ENEMY_DEF_IMMUNE_LABEL_RE_SRC,
+  ENEMY_DEF_TAG_RE_SRC,
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemySaveEffectOfNote,
+  isShieldOnEnemyCdLine,
   ownWallLineNames,
   SAVE_AURA_END_UNSEEN_NAMES,
   schoolLimitedImmunityNames,
@@ -478,7 +480,8 @@ const INLINE_HP = /^(\d+):(\d+)\s+.*?→\s*(\S+)\s*\((\d+)%\s*HP/;
 // HP at the press (analysis `hpAtPress`), the signed exception to the grid
 // (user ruling 2026-09-30, triage A21). One list, exported by the analysis side.
 const isPressHpLine = (line: string): boolean =>
-  PRESS_HP_LINE_TAGS.some((tag) => line.includes(tag));
+  PRESS_HP_LINE_TAGS.some((tag) => line.includes(tag)) ||
+  isShieldOnEnemyCdLine(line);
 // "0:21  [STATE]   friends 1(HPriest):99 2(SHunter):76 / enemies 4(AWarrior):90"
 const STATE_LINE = /^(\d+):(\d+)\s+\[STATE\]\s+(.*)$/;
 /** Benign sampling jitter allowed, in percentage points. Anything above this is
@@ -1650,7 +1653,7 @@ const CONTROL_CUT_SECONDS = new RegExp(
  * with its second (groups 1–2), the length (3) and the round-end label when
  * it follows (4). Read on the line's head, before any `| during it:`. */
 const ENEMY_DEF_PRINTED_LENGTH = new RegExp(
-  String.raw`^(\d+):(\d{2})\s+\[ENEMY DEF\][^|]*? \((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?(\d+(?:\.\d+)?)s\b( — ${AURA_STILL_UP_AT_ROUND_END})?`,
+  String.raw`^(\d+):(\d{2})\s+${ENEMY_DEF_TAG_RE_SRC}[^|]*? \((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?(\d+(?:\.\d+)?)s\b( — ${AURA_STILL_UP_AT_ROUND_END})?`,
 );
 /** The timeline's legend header — the gate asks for the round-end legend
  * only of a prompt that carries the timeline's legend at all. */
@@ -4595,12 +4598,15 @@ const KILL_ATTEMPT_DEFENSIVE = new RegExp(
 const KILL_ATTEMPT_SAVE_CLAUSE =
   /^(?:popped ([^()]+?)|saved by external \(([^()]+)\)|self-saved \(([^()]+)\))$/;
 /** `m:ss  [ENEMY DEF]   <pid> (<spec>): <Spell> (…)` / `: <Spell> → <pid> (…)` */
-const ENEMY_DEF_LINE =
-  /^(\d+):(\d\d) {2}\[ENEMY DEF\] {3}[^:]+: (.+?)(?: \(| → |$)/;
+const ENEMY_DEF_LINE = new RegExp(
+  String.raw`^(\d+):(\d\d) {2}${ENEMY_DEF_TAG_RE_SRC} {3}[^:]+: (.+?)(?: \(| → |$)`,
+);
 /** The unit a `[ENEMY DEF]` line's save is ON: the recipient of an external
  * (`… → 4(ORogue) …`), else the unit that pressed it (the line's own id). */
 const ENEMY_DEF_RECIPIENT_ID = / → (\d+)\(/;
-const ENEMY_DEF_CASTER_ID = /\[ENEMY DEF\] {3}(\d+)\(/;
+const ENEMY_DEF_CASTER_ID = new RegExp(
+  String.raw`${ENEMY_DEF_TAG_RE_SRC} {3}(\d+)\(`,
+);
 
 /** Rendered unit name → rendered id, from the roster (`<unit id="4" name=…>`).
  * KILL ATTEMPTS names its target; the timeline lines carry the id. A gate

@@ -25,6 +25,7 @@ import {
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_DEF_NO_PRESS_TAG,
   ENEMY_DEF_UNSEEN_PRESS_TAG,
+  isShieldOnEnemyCdLine,
   selfSaveReductionNames,
 } from "../../utils/enemyDefensives";
 import { ROUND_ENDED_WORDS, roundEndLegend } from "../../utils/roundEnd";
@@ -362,10 +363,13 @@ export function formatTimeline(
     ),
   );
   // The `[ENEMY DEF]` lines as rendered — which mechanism labels the legend
-  // has to explain (user ruling 2026-10-11).
+  // has to explain (user ruling 2026-10-11) — and the one `[ENEMY CD]` line
+  // that carries a shield's reading (GH #173).
   const enemyDefLines = entries.flatMap((e) =>
     e.lines.filter(
-      (l): l is string => typeof l === "string" && l.includes("[ENEMY DEF]"),
+      (l): l is string =>
+        typeof l === "string" &&
+        (l.includes("[ENEMY DEF]") || isShieldOnEnemyCdLine(l)),
     ),
   );
   const outputLines: string[] = [
@@ -506,6 +510,11 @@ export function formatTimeline(
           `    \`${ENEMY_DEF_DEFLECTS_WORDS}\` = Aspect of the Turtle: no immunity — attacks and spells aimed at the unit are deflected, damage already ticking on it lands;`,
           "    `defers Nk` = Time Dilation: it held back Nk of the damage while it was up (half of each hit) — no reduction: that damage lands on the unit later as its own `deferred Time Dilation` ticks, from about 1 s after the first hit it held, and counts when it lands;",
           "    `immune to magic` / `immune to physical` = an immunity to those schools only — the other school still hits (Cloak of Shadows, Blessing of Protection, Blessing of Spellwarding);",
+          ...(enemyDefLines.some(isShieldOnEnemyCdLine)
+            ? [
+                "    Ultimate Penitence is one [ENEMY CD] line carrying these same readings: it is an offensive cooldown that also shields the caster;",
+              ]
+            : []),
           "    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no",
           "    figure = the log shows none; a bare `(absorb)` states the mechanism only). `(heal proc)` = Nature's Guardian",
           "    healed its owner; `(cheat-death proc)` = Cheat Death / Cauterize refused a killing blow — passives nobody pressed,",

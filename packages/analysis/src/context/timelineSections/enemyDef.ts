@@ -49,6 +49,8 @@ import {
 } from "../../utils/selfDefensiveMechanism";
 import type { TimelineCtx } from "./ctx";
 
+const ULTIMATE_PENITENCE_ID = "421453";
+
 export function emitEnemyDefEntries(
   ctx: Pick<
     TimelineCtx,
@@ -65,7 +67,12 @@ export function emitEnemyDefEntries(
   > &
     // optional for the hand-built contexts of the unit tests: absent, the
     // log's end stands in
-    Partial<Pick<TimelineCtx, "roundEndAtMs">>,
+    Partial<Pick<TimelineCtx, "roundEndAtMs">> & {
+      /** Puts `text` right after `head` on the `[ENEMY CD]` line starting with
+       * it; false when there is none. Absent in the hand-built contexts of the
+       * unit tests. */
+      extendEnemyCdLine?: (head: string, text: string) => boolean;
+    },
 ): void {
   const {
     matchStartMs,
@@ -358,6 +365,15 @@ export function emitEnemyDefEntries(
             : "";
           line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${fromStr}${noPress}${burstStr}${hpStr}`;
         }
+        // Ultimate Penitence is an offensive cooldown (user 2026-10-28) that
+        // also shields its caster: one press, one line, the `[ENEMY CD]` one
+        // (user 2026-11-02, GH #173: 137 same-second pairs on 605 files)
+        const cdHead = `${fmtTime(d.atSeconds)}  [ENEMY CD]   ${who}: ${d.spellName}`;
+        if (
+          d.spellId === ULTIMATE_PENITENCE_ID &&
+          ctx.extendEnemyCdLine?.(cdHead, line.slice(d.spellName.length))
+        )
+          continue;
         addEntry(
           d.atSeconds,
           `${fmtTime(d.atSeconds)}  [ENEMY DEF]   ${who}: ${line}`,

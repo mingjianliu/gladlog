@@ -720,4 +720,11 @@
  *  rows retired. 605: kickImmuneNote 358 → 0, 360 channel lines change,
  *  candidates unchanged. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 470;
+/*
+ * v471 (2026-11-02, G2: GH #173 / #125 / #174): Ultimate Penitence prints one
+ *  `[ENEMY CD]` line carrying its shield (369 `[ENEMY DEF]` lines fold in);
+ *  Fortifying Brew reads 30 % for Ironshell Brew holders; Kleptomania's
+ *  cooldown governs a holder's purge readiness. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 471;

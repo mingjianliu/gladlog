@@ -18,6 +18,7 @@ import {
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { SUMMON_SPELL_IDS } from "@gladlog/analysis/src/data/summonGenerated";
 import { offensiveCdOfAura } from "@gladlog/analysis/src/utils/cooldowns";
+import { ENEMY_DEF_TAG_RE_SRC } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { OFFENSIVE_AURA_EVIDENCE } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import {
   OFFENSIVE_CD_SPELL_IDS,
@@ -28,7 +29,7 @@ import { APPLIED, ev, type IRoundCtx, REMOVED, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = ["offensiveTagWrong"] as const;
 
-const LINE = /^\s*(\d+):(\d\d)\s+\[ENEMY DEF\]/;
+const LINE = new RegExp(String.raw`^\s*(\d+):(\d\d)\s+${ENEMY_DEF_TAG_RE_SRC}`);
 const TAG = "[friendly offensive CD active]";
 
 const summonRunning = (unit: any, lo: number, hi: number): any =>

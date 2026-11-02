@@ -13,6 +13,7 @@
  *    it. 9121b496 0:20: Touch of Karma, MISS on the warrior, no Karma aura.
  */
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { ENEMY_DEF_TAG_RE_SRC } from "@gladlog/analysis/src/utils/enemyDefensives";
 
 import {
   APPLIED,
@@ -27,8 +28,9 @@ import {
 export const CHECKS = ["noPressButPressed", "saveThatMissed"] as const;
 
 const PRESS_AFTER_MS = 1500;
-const LINE =
-  /^\s*(\d+):(\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\)(?: \([^)]*\))?: (.+)$/;
+const LINE = new RegExp(
+  String.raw`^\s*(\d+):(\d\d)\s+${ENEMY_DEF_TAG_RE_SRC}\s+(\d+)\([^)]*\)(?: \([^)]*\))?: (.+)$`,
+);
 const spellOf = (rest: string): string =>
   /^(.+?)(?: \(| \[|$)/.exec(rest)?.[1] ?? rest;
 

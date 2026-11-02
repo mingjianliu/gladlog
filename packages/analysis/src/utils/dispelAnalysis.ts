@@ -59,6 +59,7 @@ import {
   isMeleeSpec,
   isPassiveProcCast,
   playerTalentIdSets,
+  PVP_TALENT_REPLACES,
   specToString,
 } from "./cooldowns";
 import {
@@ -600,8 +601,20 @@ export const PURGE_GATE_SPELL_BY_SPEC: Readonly<
   [CombatUnitSpec.Hunter_Marksmanship]: "19801",
   [CombatUnitSpec.Hunter_Survival]: "19801",
 };
+/** GH #174: the PvP talent that replaced this purge is the button readiness
+ *  follows (Kleptomania 198100 for Spellsteal: 20 s, where Spellsteal is free). */
+function pvpTalentReplacing(
+  unit: ICombatUnit,
+  spellId: string,
+): string | undefined {
+  return unit.info?.pvpTalents?.find((t) =>
+    PVP_TALENT_REPLACES[t]?.includes(spellId),
+  );
+}
 export function purgeSpellOf(unit: ICombatUnit): string | null {
   const base = PURGE_GATE_SPELL_BY_SPEC[unit.spec] ?? null;
+  const replacing = base === null ? undefined : pvpTalentReplacing(unit, base);
+  if (replacing !== undefined) return replacing;
   if (
     base === "370" &&
     (playerTalentIdSets(unit).talentedSpellIds?.has(GREATER_PURGE_SPELL_ID) ||
@@ -652,10 +665,14 @@ export function purgeReadyAtSeconds(
   atMs: number,
   matchStartMs: number,
 ): number {
+  // a removal the log names by the replaced id is still the talent's button
+  const held = [...extraSpellIds].filter(
+    (id) => pvpTalentReplacing(unit, id) === undefined,
+  );
   return abilitiesReadyAtSeconds(
     unit,
     purgeSpellIdsOf(unit),
-    extraSpellIds,
+    new Set(held),
     atMs,
     matchStartMs,
   );

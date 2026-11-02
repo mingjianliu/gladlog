@@ -38,7 +38,7 @@ describe("kit readers off the ledger name only the replaced ids they were judged
     expect(named(INTERRUPT_SPELL_IDS)).toEqual([]);
   });
 
-  it("the purge table: Spellsteal, known off the ledger (GH #174)", () => {
+  it("the purge table: Spellsteal, whose readiness `purgeSpellOf` moves to the talent (GH #174)", () => {
     expect(named(Object.values(PURGE_SPELLS_BY_SPEC).flat())).toEqual([
       "30449",
     ]);

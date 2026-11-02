@@ -2096,6 +2096,16 @@ const INDEX: PredicateRow[] = [
   // WP-D (FT-T07 / T15, ruling D6): an aura the log never shows end
   {
     file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_TAG_RE_SRC",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "isShieldOnEnemyCdLine",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
     symbol: "ENEMY_DEF_END_NOT_LOGGED",
     mod: enemyDefensives,
   },

@@ -34,6 +34,35 @@ const ROSTER = [
 ];
 
 describe("checkEnemyDefRefConsistency", () => {
+  it("Ultimate Penitence's shield line is its [ENEMY CD] line (GH #173)", () => {
+    const lines = (line: string) => [
+      LEGEND,
+      ...ROSTER,
+      line,
+      ATTEMPT("0:35–0:44", "popped Ultimate Penitence"),
+    ];
+    const at = "0:37  [ENEMY CD]   4(DPriest) (Discipline Priest):";
+    expect(
+      checkEnemyDefRefConsistency(
+        lines(`${at} Ultimate Penitence (absorb, 6.5s) (at 90% HP)`),
+      ),
+    ).toEqual([]);
+    // HAS TEETH: a press that printed no shield is no line of the save
+    expect(
+      checkEnemyDefRefConsistency(lines(`${at} Ultimate Penitence`)),
+    ).toHaveLength(1);
+  });
+
+  it("a wrong label on that line still fails the effect gate (GH #173)", () => {
+    const at = "0:37  [ENEMY CD]   4(DPriest) (Discipline Priest):";
+    const check = (text: string) =>
+      checkEnemyDefSaveEffect([LEGEND, `${at} Ultimate Penitence ${text}`]);
+    expect(check("(absorb, 6.5s) (at 90% HP)")).toEqual([]);
+    expect(check("(immune, 6.5s) (at 90% HP)")).toHaveLength(1);
+    // the plain press line of a repeated cast carries no shield to read
+    expect(check("(cast 2 of 2)")).toEqual([]);
+  });
+
   it("an area save reaches its target inside its lifetime after the press — the caster's kit `lasts N` (user ruling 2026-10-27, A)", () => {
     // fact5 wide 200-5: Rallying Cry pressed at 1:46, first on the cycloned
     // feral at 1:51; the warrior's kit reads `lasts 13s`

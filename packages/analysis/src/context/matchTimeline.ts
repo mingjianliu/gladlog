@@ -799,6 +799,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     actorLabel,
     addEntry,
     _allUnits,
+    extendEnemyCdLine: (head, text) => {
+      for (const e of entries) {
+        const i = e.lines.findIndex(
+          (l) => typeof l === "string" && l.startsWith(head),
+        );
+        if (i < 0) continue;
+        e.lines[i] = head + text + (e.lines[i] as string).slice(head.length);
+        return true;
+      }
+      return false;
+    },
   });
 
   // ── F170: [ENEMY HARD CAST] — hard-cast kill spells (Chaos Bolt, Pyroblast) ─

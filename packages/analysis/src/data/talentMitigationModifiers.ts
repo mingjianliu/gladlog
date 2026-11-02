@@ -160,6 +160,18 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
       evidence:
         "Aspect of the Turtle + 甲壳壁垒: 1 holder unit; S2 archive every 30, run 2 2026-09-13",
     },
+    {
+      // GH #125: keyed by the table's cast id; the buff on the monk is 120954,
+      // which is why the 2026-09-26 scan on 115203 read "no holders". A choice
+      // node against Expeditious Fortification 388813. Brewmaster unmeasured.
+      auraSpellId: "115203",
+      talentSpellId: "388814",
+      schoolMask: 127,
+      modPct: 10,
+      validation: "promoted",
+      evidence:
+        "Fortifying Brew + Ironshell Brew: Windwalker holders 0.700 (0.696–0.700), 98 units / 68 players, non-holders 0.800 (38); Mistweaver holders 0.700 (0.657–0.816), 5 units, non-holders 0.804 (54), expected 0.70; newseason every 10, 2026-11-02",
+    },
   ];
 
 const BY_AURA = new Map<string, ITalentMitigationModifier[]>();

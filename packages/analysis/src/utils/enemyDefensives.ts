@@ -999,6 +999,19 @@ export const ENEMY_DEF_END_NOT_LOGGED_SLOT_RE = new RegExp(
   String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFLECTS_WORDS}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}\)`,
 );
 
+/** GH #173 (user 2026-11-02): Ultimate Penitence prints its shield on its
+ * `[ENEMY CD]` line, so what an `[ENEMY DEF]` reader asks of a line stands
+ * there too. The tag such a reader matches, and the line's test. */
+const SHIELD_ON_ENEMY_CD_RE_SRC = String.raw`ENEMY CD(?=\] {3}[^:]+: Ultimate Penitence \((?!cast \d|proc \d|no press|source))`;
+/** The tag's name: a wrong label on that line still reaches the gates. */
+export const ENEMY_DEF_TAG_NAME_RE_SRC = String.raw`ENEMY DEF|${SHIELD_ON_ENEMY_CD_RE_SRC}`;
+export const ENEMY_DEF_TAG_RE_SRC = String.raw`\[(?:${ENEMY_DEF_TAG_NAME_RE_SRC})\]`;
+const SHIELD_ON_ENEMY_CD_LINE = new RegExp(
+  String.raw`\[${SHIELD_ON_ENEMY_CD_RE_SRC}\]`,
+);
+export const isShieldOnEnemyCdLine = (line: string): boolean =>
+  SHIELD_ON_ENEMY_CD_LINE.test(line);
+
 /** The start of `enemySaveEffectNote`'s parenthesis, as rendered. */
 const ENEMY_SAVE_EFFECT_NOTE_RE = new RegExp(
   String.raw`^\((?:(absorb)(?: (?:\d+|<1)k)?(?:, \d+\.\ds\b|, ${ENEMY_DEF_END_NOT_LOGGED}\)|\))|(heal proc)\)|(cheat-death proc)\))`,

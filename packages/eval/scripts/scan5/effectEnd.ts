@@ -51,7 +51,10 @@ import {
 } from "@gladlog/analysis/src/data/spellSchools";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
-import { SAVE_AURA_END_UNSEEN_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  ENEMY_DEF_TAG_NAME_RE_SRC,
+  SAVE_AURA_END_UNSEEN_IDS,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import { INTERRUPT_SPELL_IDS } from "@gladlog/analysis/src/utils/enemyInterrupts";
 import {
   auraBlocksMechanic,
@@ -172,8 +175,9 @@ function ccEndCause(ctx: IRoundCtx, line: string): void {
   }
 }
 
-const DEATH_LINE =
-  /^\s*(\d+:\d\d)\s+\[(BUFF FADED|CC ON TEAM|CC ON ENEMY|ENEMY DEF|SILENCE)\]\s+(.*)$/;
+const DEATH_LINE = new RegExp(
+  String.raw`^\s*(\d+:\d\d)\s+\[(BUFF FADED|CC ON TEAM|CC ON ENEMY|${ENEMY_DEF_TAG_NAME_RE_SRC}|SILENCE)\]\s+(.*)$`,
+);
 const DEATH_WORDS =
   /removed at your death|ended at their death|ended at death|its target died/;
 

@@ -203,15 +203,6 @@ const CANDIDATES: Array<{
     modPct: 8,
   },
   {
-    aura: "115203",
-    name: "Fortifying Brew",
-    talent: "388814",
-    talentName: "Ironshell Brew",
-    school: 127,
-    basePct: 20,
-    modPct: 10,
-  },
-  {
     aura: "61336",
     name: "Survival Instincts",
     talent: "449191",
@@ -240,6 +231,20 @@ const CANDIDATES: Array<{
     school: 127,
     basePct: 0,
     modPct: 20,
+  },
+  // GH #125 (2026-11-02): Ironshell Brew 388814, a choice node against
+  // Expeditious Fortification 388813: aura 107 through the class mask on
+  // 115203's −20. The buff on the monk is 120954, so the row reads that aura
+  // (keyed on 115203 it saw no holders). PvpMultiplier 1.5 does not reach the
+  // reduction: without the talent the corpus reads 0.80, not 0.70.
+  {
+    aura: "120954",
+    name: "Fortifying Brew",
+    talent: "388814",
+    talentName: "Ironshell Brew",
+    school: 127,
+    basePct: 20,
+    modPct: 10,
   },
 ];
 const TRACK = new Set([

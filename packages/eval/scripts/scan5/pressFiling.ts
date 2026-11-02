@@ -27,6 +27,8 @@
  *    Survival of the Fittest 264735 went on presser + pet only with that row
  *    naming an enemy and a teammate in one log (ec7bd3f5 r3).
  */
+import { ENEMY_DEF_TAG_RE_SRC } from "@gladlog/analysis/src/utils/enemyDefensives";
+
 import { APPLIED, ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = [
@@ -116,8 +118,9 @@ function dispelActorOffRoster(ctx: IRoundCtx): void {
   }
 }
 
-const ENEMY_DEF =
-  /^\s*(\d+):(\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\)(?: \([^)]*\))?: (.+)$/;
+const ENEMY_DEF = new RegExp(
+  String.raw`^\s*(\d+):(\d\d)\s+${ENEMY_DEF_TAG_RE_SRC}\s+(\d+)\([^)]*\)(?: \([^)]*\))?: (.+)$`,
+);
 /** auras put on a unit by a teammate's press of another spell */
 const TEAM_PROC_NAMES = new Set(["Peaceweaver"]);
 

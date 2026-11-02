@@ -4750,3 +4750,26 @@ identical. Wide: 383 of 10,039 contexts change, the same families plus 9 kick
 lines that no longer name a talentless Obsidian Scales. Candidates unchanged per
 class on both. Wide scans 1–4 were stopped for memory and not rerun (605 showed
 them identical). Review: three rounds, the last two APPROVE.
+
+v471 (2026-11-02, G2 — GH #173, #125, #174). Ultimate Penitence (user ruling
+2026-11-02: one line, named an offensive cooldown as on 2026-10-28) prints its
+shield and bolts on its `[ENEMY CD]` line, ahead of any `(cast k of N)`; the
+same-second `[ENEMY DEF]` line goes, and a legend line says the readings moved.
+The defensive readers (`checkEnemyDefRefConsistency`, the press-HP exemption,
+four scan5 selectors) read the shared `ENEMY_DEF_TAG_RE_SRC` /
+`isShieldOnEnemyCdLine`, so a mislabelled shield on the merged line still
+fails. Fortifying Brew reads 30 % for Ironshell Brew 388814 holders (promoted
+talent-mitigation row; newseason every 10: Windwalker holders 0.700 over 98
+units, non-holders 0.800; Mistweaver holders 0.700 over 5, non-holders 0.804;
+the table's 20 % is the talentless value, user's choice-node reading). A
+Kleptomania holder's purge readiness follows Kleptomania's 20 s cooldown, and an
+observed Spellsteal no longer reopens it (#174).
+
+Base → after on 605, same check code: `[ENEMY DEF]` Ultimate Penitence 369 → 0,
+`[ENEMY CD]` lines carrying the shield 0 → 369 (none left plain), legend in 366
+prompts; duplicateLine 369 / 393 → 0 / 24. Fortifying Brew 20 % lines 272 →
+144, 30 % 0 → 128, with 3 mitigation-audit and 4 stacked-defensives lines
+re-reading the larger share. 464 of 3,519 contexts change; one menu gains a
+`burst-into-mitigation` candidate (mitPct 30 crosses its threshold), every other
+menu is unchanged. Gates identical; 205 of 209 rise-ledger checks unchanged, 1
+fell, 0 rose. Review: three codex rounds, the last APPROVE.

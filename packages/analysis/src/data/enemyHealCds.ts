@@ -94,7 +94,7 @@ const ENEMY_HEAL_CD_SPEC: Readonly<Record<string, string>> = {
 export const ENEMY_HEAL_CD_ROSTER_ELSEWHERE: Readonly<Record<string, string>> =
   {
     "31884": "Avenging Wrath — an [ENEMY CD] (the offensive roster)",
-    "421453": "Ultimate Penitence — an [ENEMY DEF] self-save (absorb)",
+    "421453": "Ultimate Penitence — an [ENEMY CD] carrying its self-save (absorb)",
     "19236": "Desperate Prayer — an [ENEMY DEF] self-save (self-heal)",
     // fact8 D37 (a39539f2 1:19): the user's 2026-09-24 ruling is a save for
     // herself; it also printed as a throughput cooldown, one press two kinds
