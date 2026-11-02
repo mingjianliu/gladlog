@@ -270,6 +270,9 @@ const OUT_OF_TOTAL = new Set([
   "defenselessSaveUp|massInvis",
   "defenselessSaveUp|ownAbsorb:passive",
 ]);
+/** the report's total and the coverage rows read this one predicate */
+const inTotal = (check: string, kind: string): boolean =>
+  !OUT_OF_TOTAL.has(`${check}|${kind}`);
 /** user ruling 10-21 「算」 names these two — and ruling 1 (2026-10-28) their
  * DB2 class-mask family (`OWN_SHIELD_RULING_FAMILY_IDS`: Unfolding Vision's
  * `Void Shield (Unfolding Vision)` 1300009 is no name match) */
@@ -1949,7 +1952,7 @@ function createScan(): IScan<any> {
     );
     for (const c of CHECKS) {
       const all = violations.filter((v) => v.check === c);
-      const vs = all.filter((v) => !OUT_OF_TOTAL.has(`${c}|${v.kind}`));
+      const vs = all.filter((v) => inTotal(c, v.kind));
       const distinct = new Set(vs.map((v) => v.fact));
       const factLines = new Set(
         vs.map((v) => v.fact.replace(/#[^#]*#([^#]*)$/, "#$1")),
@@ -1962,7 +1965,7 @@ function createScan(): IScan<any> {
         const ks = all.filter((v) => v.kind === k);
         const kd = new Set(ks.map((v) => v.fact)).size;
         say(
-          `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+          `  ${k}: ${ks.length} (distinct ${kd})${inTotal(c, k) ? "" : "  [not in the total]"}`,
         );
         for (const v of ks.slice(0, EXAMPLES))
           say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
@@ -2092,6 +2095,7 @@ function createScan(): IScan<any> {
   });
   return {
     name: "corpusFactScan2",
+    inTotal,
     configure(o: IScanOpts) {
       dir = o.dir;
       EXAMPLES = o.examples;

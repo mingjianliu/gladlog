@@ -159,6 +159,9 @@ const OUT_OF_TOTAL = new Set<string>();
  * outlived its official length (fact5 D17: talent-lengthened, refreshed) —
  * every kind stays out of the total until a mechanism reading lands */
 const MEASURED_ONLY = new Set<string>(["unclosedAtRoundEnd"]);
+/** the report's total and the coverage rows read this one predicate */
+const inTotal = (check: string, kind: string): boolean =>
+  !MEASURED_ONLY.has(check) && !OUT_OF_TOTAL.has(`${check}|${kind}`);
 /** kinds that size a class (what the old reading did), not a violation of
  * the current one */
 OUT_OF_TOTAL.add("unseenEndAbsorbedTick|naive");
@@ -1808,9 +1811,7 @@ function report(): void {
   say(`corpusFactScan4 ${resolve(dir)}: ${contexts} contexts`);
   for (const c of CHECKS) {
     const all = violations.filter((v) => v.check === c);
-    const vs = all.filter(
-      (v) => !MEASURED_ONLY.has(c) && !OUT_OF_TOTAL.has(`${c}|${v.kind}`),
-    );
+    const vs = all.filter((v) => inTotal(c, v.kind));
     const distinct = new Set(vs.map((v) => v.fact));
     say(
       `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size})`,
@@ -1822,7 +1823,7 @@ function report(): void {
     )) {
       const kd = new Set(ks.map((v) => v.fact)).size;
       say(
-        `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+        `  ${k}: ${ks.length} (distinct ${kd})${inTotal(c, k) ? "" : "  [not in the total]"}`,
       );
       for (const v of ks.slice(0, EXAMPLES))
         say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
@@ -1873,6 +1874,7 @@ const state = () => ({
 });
 export const scan: IScan<ReturnType<typeof state>> = {
   name: "corpusFactScan4",
+  inTotal,
   configure(o: IScanOpts) {
     dir = o.dir;
     EXAMPLES = o.examples;

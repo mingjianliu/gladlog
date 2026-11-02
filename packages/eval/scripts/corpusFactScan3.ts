@@ -98,6 +98,9 @@ const CHECKS = [
 type Check = (typeof CHECKS)[number];
 /** kinds counted but kept out of a check's violation total */
 const OUT_OF_TOTAL = new Set(["burstAnswerPress|noRow"]);
+/** the report's total and the coverage rows read this one predicate */
+const inTotal = (check: string, kind: string): boolean =>
+  !OUT_OF_TOTAL.has(`${check}|${kind}`);
 interface IViolation {
   check: Check;
   kind: string;
@@ -736,7 +739,7 @@ function report(): void {
   say(`corpusFactScan3 ${resolve(dir)}: ${contexts} contexts`);
   for (const c of CHECKS) {
     const all = violations.filter((v) => v.check === c);
-    const vs = all.filter((v) => !OUT_OF_TOTAL.has(`${c}|${v.kind}`));
+    const vs = all.filter((v) => inTotal(c, v.kind));
     const distinct = new Set(vs.map((v) => v.fact));
     say(
       `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size})`,
@@ -748,7 +751,7 @@ function report(): void {
     )) {
       const kd = new Set(ks.map((v) => v.fact)).size;
       say(
-        `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+        `  ${k}: ${ks.length} (distinct ${kd})${inTotal(c, k) ? "" : "  [not in the total]"}`,
       );
       for (const v of ks.slice(0, EXAMPLES))
         say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
@@ -775,6 +778,7 @@ function report(): void {
 const state = () => ({ contexts, checked, violations });
 export const scan: IScan<ReturnType<typeof state>> = {
   name: "corpusFactScan3",
+  inTotal,
   configure(o: IScanOpts) {
     dir = o.dir;
     EXAMPLES = o.examples;

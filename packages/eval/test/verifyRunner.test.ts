@@ -23,10 +23,11 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { compareRuns, countsOf } from "../scripts/verify/compare";
+import { CoverageTracker } from "../scripts/verify/coverage";
 import { pickCover } from "../scripts/verify/coverSet";
 import { addEach, mergeState, mergeValue } from "../scripts/verify/merge";
 import { listContextFiles, splitContexts } from "../scripts/verify/rounds";
-import { isMainScan } from "../scripts/verify/scan";
+import { type IScan, isMainScan } from "../scripts/verify/scan";
 
 const SCRIPTS = join(__dirname, "../scripts");
 
@@ -340,6 +341,42 @@ describe("pickCover", () => {
       "small1",
       "small2",
     ]);
+  });
+});
+
+describe("CoverageTracker", () => {
+  it("files a kind kept out of the total under its kind, not as a failure of its check", () => {
+    const state = {
+      checked: new Map([["x", 2]]),
+      violations: [
+        { check: "x", kind: "info" },
+        { check: "x", kind: "real" },
+      ],
+    };
+    const scan = {
+      state: () => state,
+      inTotal: (_c: string, k: string) => k !== "info",
+    } as unknown as IScan;
+    const t = new CoverageTracker();
+    state.violations.length = 1;
+    t.step("a1", [{ name: "s", scan }]);
+    state.violations.push({ check: "x", kind: "real" });
+    state.checked.set("x", 3);
+    t.step("a2", [{ name: "s", scan }]);
+    expect(t.rows.map((r) => [r.archive, r.fail])).toEqual([
+      ["a1", ["s:x|info"]],
+      ["a2", ["s:x", "s:x|real"]],
+    ]);
+  });
+
+  it("is told the total by every scan that keeps kinds out of it", () => {
+    for (const f of readdirSync(SCRIPTS).filter((n) =>
+      /^corpusFactScan\d?\.ts$/.test(n),
+    )) {
+      const src = readFileSync(join(SCRIPTS, f), "utf8");
+      if (/OUT_OF_TOTAL|MEASURED_ONLY/.test(src))
+        expect(src, f).toMatch(/^ {2,4}inTotal,$/m);
+    }
   });
 });
 

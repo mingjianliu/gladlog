@@ -40,6 +40,11 @@ export interface IScan<S extends object = any> {
   load: (s: S) => void;
   /** fields that do not merge the default way (`verify/merge.ts`) */
   merge?: Partial<Record<keyof S, MergeRule>>;
+  /** whether a violation of this check and kind counts in the report's total
+   * (absent: every one does). `report` and `verify/coverage.ts` both read it,
+   * so a kind printed "[not in the total]" never makes the cover set pick an
+   * archive as a failure of its check */
+  inTotal?: (check: string, kind: string) => boolean;
 }
 
 /** through symlinks: argv keeps the path as typed, a module URL resolves it,

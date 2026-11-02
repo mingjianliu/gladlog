@@ -60,8 +60,10 @@ export class CoverageTracker {
         const from = this.violationsRead.get(name) ?? 0;
         const kinds = new Set<string>();
         for (let i = from; i < vs.length; i++) {
-          kinds.add(`${name}:${vs[i]!.check}`);
-          kinds.add(`${name}:${vs[i]!.check}|${vs[i]!.kind}`);
+          const { check, kind } = vs[i]!;
+          if (scan.inTotal?.(check, kind) ?? true)
+            kinds.add(`${name}:${check}`);
+          kinds.add(`${name}:${check}|${kind}`);
         }
         this.violationsRead.set(name, vs.length);
         fail.push(...kinds);

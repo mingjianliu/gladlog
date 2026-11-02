@@ -9,8 +9,9 @@
  * check that failed anywhere gets an archive it fails on (`--kinds`: every
  * kind of it, about three times the bytes). `--extra` adds archives that must
  * stay in (the audit's rounds). A check judged only after the merge has no
- * archive to pick (`coverage-gaps.json`): the run prints it, the 605 pass reads it. Both corpora at 2026-11-01: 116 of 1,332
- * archives, about 7 % of the raw bytes, 321 items.
+ * archive to pick (`coverage-gaps.json`): the run prints it, the 605 pass reads it. Both corpora at 2026-11-02: 117 of 1,332
+ * archives, about 7 % of the raw bytes, 310 items; the failing checks of the
+ * full passes it reproduces: 90 of 91 (the other is judged after the merge).
  */
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

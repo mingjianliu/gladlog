@@ -86,6 +86,9 @@ for (const m of MODULE_FILES) {
 const OUT_OF_TOTAL = new Set(
   modules.flatMap((m) => [...(m.OUT_OF_TOTAL ?? [])]),
 );
+/** the report's total and the coverage rows read this one predicate */
+const inTotal = (check: string, kind: string): boolean =>
+  !OUT_OF_TOTAL.has(`${check}|${kind}`);
 
 interface IViolation {
   check: string;
@@ -154,7 +157,7 @@ function report(): void {
   say(`corpusFactScan5 ${resolve(dir)}: ${contexts} contexts`);
   for (const c of CHECKS) {
     const all = violations.filter((v) => v.check === c);
-    const vs = all.filter((v) => !OUT_OF_TOTAL.has(`${c}|${v.kind}`));
+    const vs = all.filter((v) => inTotal(c, v.kind));
     const distinct = new Set(vs.map((v) => v.fact));
     say(
       `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size})`,
@@ -170,7 +173,7 @@ function report(): void {
     )) {
       const kd = new Set(ks.map((v) => v.fact)).size;
       say(
-        `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+        `  ${k}: ${ks.length} (distinct ${kd})${inTotal(c, k) ? "" : "  [not in the total]"}`,
       );
       for (const v of ks.slice(0, EXAMPLES))
         say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
@@ -214,6 +217,7 @@ const mergeRules: Record<
 );
 export const scan: IScan<ReturnType<typeof state>> = {
   name: "corpusFactScan5",
+  inTotal,
   configure(o: IScanOpts) {
     dir = o.dir;
     EXAMPLES = o.examples;
