@@ -4601,9 +4601,11 @@ const KILL_ATTEMPT_DEFENSIVE = new RegExp(
 );
 const KILL_ATTEMPT_SAVE_CLAUSE =
   /^(?:popped ([^()]+?)|saved by external \(([^()]+)\)|self-saved \(([^()]+)\))$/;
-/** `m:ss  [ENEMY DEF]   <pid> (<spec>): <Spell> (…)` / `: <Spell> → <pid> (…)` */
+/** `m:ss  [ENEMY DEF]   <pid> (<spec>): <Spell> (…)` / `: <Spell> → <pid> (…)`
+ * / an ally copy `: <Spell> + 15% copy → <pid> (…)` (fact9 D1) — an
+ * external's match ends in ` → ` either way */
 const ENEMY_DEF_LINE = new RegExp(
-  String.raw`^(\d+):(\d\d) {2}${ENEMY_DEF_TAG_RE_SRC} {3}[^:]+: (.+?)(?: \(| → |$)`,
+  String.raw`^(\d+):(\d\d) {2}${ENEMY_DEF_TAG_RE_SRC} {3}[^:]+: (.+?)(?: \(| → | \+ \d+% copy → |$)`,
 );
 /** The unit a `[ENEMY DEF]` line's save is ON: the recipient of an external
  * (`… → 4(ORogue) …`), else the unit that pressed it (the line's own id). */

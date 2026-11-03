@@ -238,6 +238,90 @@ describe("hpAtPress", () => {
     });
   });
 
+  it("fact9 D18：按键光环行与它触发的治疗同毫秒、光环行在前，也认这次治疗（4e8cabf7 1:10 Survival of the Fittest → Exhilaration）", () => {
+    const SOTF = "264735";
+    const row = (s: number, lineIndex: number, cur: number) => ({
+      ...sample("P", s, cur, 1_163_492),
+      logLine: {
+        timestamp: T0 + Math.round(s * 1000),
+        parameters: [],
+        lineIndex,
+      },
+    });
+    const u = {
+      ...unit(
+        [row(70.0, 5, 889_854), row(70.95, 11, 1_028_077)],
+        [
+          {
+            spellId: "109304",
+            srcUnitId: "P",
+            logLine: { timestamp: T0 + 70_950, parameters: [], lineIndex: 11 },
+          },
+          // the second press carries it too (2:14) — the pairing is the rule
+          {
+            spellId: "109304",
+            srcUnitId: "P",
+            logLine: { timestamp: T0 + 134_163, parameters: [], lineIndex: 51 },
+          },
+        ],
+      ),
+      auraEvents: [70_950, 134_163].map((ms, i) => ({
+        spellId: SOTF,
+        srcUnitId: "P",
+        destUnitId: "P",
+        logLine: {
+          event: LogEvent.SPELL_AURA_APPLIED,
+          timestamp: T0 + ms,
+          parameters: [],
+          lineIndex: 10 + 40 * i,
+        },
+      })),
+      // the press's own cast rows, 1 ms after the heal at 1:10 (as logged)
+      spellCastEvents: [70_951, 134_163].map((ms, i) => ({
+        spellId: SOTF,
+        srcUnitId: "P",
+        logLine: {
+          event: LogEvent.SPELL_CAST_SUCCESS,
+          timestamp: T0 + ms,
+          parameters: [],
+          lineIndex: 13 + 40 * i,
+        },
+      })),
+    };
+    const press = { spellId: SOTF, srcUnitId: "P" };
+    expect(hpAtPress(u as never, T0 + 70_951, press)).toBe(76); // 889,854 / 1,163,492 = 76.5 %, not the post-heal 88 %
+    // an aura row is no press (codex 20-F24-11 #1): the 2:14 heal with an
+    // aura row of the spell but no press of it (a talent copy) is no pairing
+    const copyOnly = {
+      ...u,
+      spellCastEvents: [u.spellCastEvents[0]],
+    };
+    expect(hpAtPress(copyOnly as never, T0 + 70_951, press)).toBe(88);
+    // …nor a heal whose own spell was pressed there (an Exhilaration press
+    // whose heal is its own, beside a Survival of the Fittest press)
+    const healPressed = {
+      ...u,
+      spellCastEvents: [
+        ...u.spellCastEvents,
+        {
+          spellId: "109304",
+          srcUnitId: "P",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 70_950,
+            parameters: [],
+            lineIndex: 12,
+          },
+        },
+      ],
+    };
+    expect(hpAtPress(healPressed as never, T0 + 70_951, press)).toBe(88);
+    // one coincidence is no rule (codex 20-F24-09 #1: a Nature's Guardian
+    // proc in an Astral Shift's ms): with the 2:14 heal gone the 1:10 heal
+    // is not the press's, and the cut stays at the cast row
+    const once = { ...u, healIn: [u.healIn[0]] };
+    expect(hpAtPress(once as never, T0 + 70_951, press)).toBe(88);
+  });
   it("without an own heal: the last sample strictly before the press", () => {
     const u = unit([
       sample("P", 10.0, 500),

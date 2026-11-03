@@ -2297,6 +2297,14 @@ export function enemyDefensiveEvents(
               : {}),
           }
         : undefined;
+    /** a cast that put this aura up (or was logged just after it) */
+    const putUp = (t: number): boolean => {
+      const dMs = Math.round(t * 1000) - Math.round(iv.fromS * 1000);
+      return (
+        dMs <= AURA_BEFORE_CAST_MAX_S * 1000 &&
+        -dMs <= PRESS_TO_AURA_MAX_S * 1000
+      );
+    };
     const press = [
       ...castSecondsOf(enemy.name, tableId),
       ...(tableId === iv.spellId ? [] : castSecondsOf(enemy.name, iv.spellId)),
@@ -2313,19 +2321,74 @@ export function enemyDefensiveEvents(
       // candidate is the press
       // in whole log milliseconds: 10.05 - 10 is 0.05000000000000071 in
       // floating point, which rejected a cast exactly 50 ms after its aura
-      .filter((t) => {
-        const dMs = Math.round(t * 1000) - Math.round(iv.fromS * 1000);
-        return (
-          (dMs <= AURA_BEFORE_CAST_MAX_S * 1000 &&
-            -dMs <= PRESS_TO_AURA_MAX_S * 1000) ||
-          pressRefreshedCopy(enemy, iv, t, combat.startTime)
-        );
-      })
+      .filter(
+        (t) =>
+          putUp(t) || pressRefreshedCopy(enemy, iv, t, combat.startTime),
+      )
       .reduce(
         (best, t) =>
           Math.abs(t - iv.fromS) < Math.abs(best - iv.fromS) ? t : best,
         Number.POSITIVE_INFINITY,
       );
+    // fact9 D13 (1eb4dd55 r1 0:42): the press found is one that REFRESHED a
+    // copy already up (`pressRefreshedCopy` — Exhilaration's Survival of the
+    // Fittest at 0:42.06, the hunter's own press at 0:43.17). Two lines, as
+    // the log has them: the copy at its start, `[no press logged]`, up to the
+    // press; the press at its own second with its HP and its length. One line
+    // read "pressed at 0:42 at 58 % HP" — the copy's second, the press's HP.
+    // A press after the round ended (codex 20-F24-09 #2: copy at 42.06,
+    // round end 42.5, press 43.17) is not this round's: the copy stands
+    // alone, read against the round's end like any other aura. One AT the
+    // round's end is, as the timeline keeps it (codex 20-F24-11 #2).
+    if (Number.isFinite(press) && !putUp(press) && press > roundEndS) {
+      out.push({
+        atSeconds: iv.fromS,
+        spellId: iv.spellId,
+        spellName: saveName ?? getEnglishSpellName(iv.spellId, iv.spellName),
+        casterName: enemy.name,
+        casterId: enemy.id,
+        ...(procSource ? { procSource } : {}),
+        kind: immune ? "immune" : "self",
+        pct: wallDoorPct(tableId, { carrierIsCaster: true, caster: enemy }),
+        observedSeconds: observed,
+        ...(unseenPressed(iv)
+          ? { unseenPress: true as const, ...earlyEndOf(enemy, iv, iv.spellId) }
+          : {
+              noPressLogged: true as const,
+              ...lengthFreeEnd(earlyEndOf(enemy, iv, iv.spellId)),
+            }),
+      });
+      continue;
+    }
+    if (Number.isFinite(press) && !putUp(press)) {
+      const common = {
+        spellId: iv.spellId,
+        spellName: saveName ?? getEnglishSpellName(iv.spellId, iv.spellName),
+        casterName: enemy.name,
+        casterId: enemy.id,
+        ...(procSource ? { procSource } : {}),
+        kind: immune ? ("immune" as const) : ("self" as const),
+        pct: wallDoorPct(tableId, { carrierIsCaster: true, caster: enemy }),
+      };
+      out.push({
+        ...common,
+        atSeconds: iv.fromS,
+        observedSeconds: press - iv.fromS,
+        ...(unseenPressed(iv)
+          ? { unseenPress: true as const }
+          : { noPressLogged: true as const }),
+        removedEarly: false,
+      });
+      const pressed = { ...iv, fromS: press, inferredStart: false };
+      out.push({
+        ...common,
+        atSeconds: press,
+        pressSeconds: press,
+        observedSeconds: iv.toS - press,
+        ...earlyEndOf(enemy, pressed, iv.spellId),
+      });
+      continue;
+    }
     out.push({
       atSeconds: iv.fromS,
       ...(Number.isFinite(press) ? { pressSeconds: press } : {}),

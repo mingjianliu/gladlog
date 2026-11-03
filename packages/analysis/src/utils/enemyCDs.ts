@@ -10,6 +10,7 @@ import {
   triggeredEffectAurasOfCast,
 } from "../data/castEffectAuras";
 import { isOffensivePressFactFor } from "../data/enemyHealCds";
+import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
@@ -34,6 +35,7 @@ import {
   unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
+import { channelEndSeconds } from "./castCommitSpans";
 import { pressRowsWithHidden } from "./hiddenPress";
 import { fmtTime } from "./renderGrid";
 import { shuffleRoundEndMs } from "./roundEnd";
@@ -733,7 +735,27 @@ export function reconstructEnemyCDTimeline(
         next?.castTimeSeconds ?? Infinity,
         combat,
       );
-      if (end === null) continue;
+      if (end === null) {
+        // fact9 D26 (a7e95468 r0 1:23): a channel whose effect the log shows
+        // on no player (Ray of Frost into a Grounding Totem) ends where the
+        // channel did — the press that ended it, the one reading the
+        // owner's `[YOU] [CD]` uses (`channelEndSeconds`, fact7 D12). Ice
+        // Lance at 80.64 ended a Ray of Frost pressed at 79.05; the window
+        // read `1s left` at 1:23 on the official 4 s.
+        if (CHANNELED_SPELL_IDS.has(cd.spellId))
+          cd.buffEndSeconds = Math.max(
+            cd.castTimeSeconds,
+            channelEndSeconds(
+              enemy,
+              cd.spellId,
+              cd.castTimeSeconds,
+              cd.buffEndSeconds,
+              matchStartMs,
+              cd.spellName,
+            ),
+          );
+        continue;
+      }
       // the observed aura's own official length (this caster's talents —
       // Thorim's Invocation lengthens Doom Winds' aura, not its press) from
       // its last application (codex 20-G167-06 #2 / #3, 20-G167-11 #1); the

@@ -1553,7 +1553,7 @@ function runRound(ctx: IContext): void {
   // printed M
   {
     const EXT_RE =
-      /^(\d+:\d\d)\s+\[ENEMY DEF\][^:]*\): (.+?) → (\d+)\([^)]*\) \((\d+(?:\.\d)?)s\).*?\| during it: (.*)$/;
+      /^(\d+:\d\d)\s+\[ENEMY DEF\][^:]*\): (.+?)(?: \+ \d+% copy)? → (\d+)\([^)]*\) \((\d+(?:\.\d)?)s\).*?\| during it: (.*)$/;
     for (const l of lines) {
       const m = EXT_RE.exec(l);
       if (!m) continue;

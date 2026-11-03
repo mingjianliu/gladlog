@@ -109,4 +109,31 @@ describe("laggingMaxHpCorrected — a real heal or hit is no lag (codex 20-F17-0
       1_000_000, 909_091, 909_091, 909_091,
     ]);
   });
+  it("fact9 D33：与上一行同毫秒、记在其后的治疗算这一跳的来源（按行序）", () => {
+    // f73f4f15 r0 1:11 (scaled): the cast row and a same-ms heal row, then
+    // Soulburn: Healthstone lifts the max ×1.15 and its rows lag
+    const row = (t: number, hp: number, max: number, lineIndex: number) => ({
+      timestamp: t,
+      hp,
+      maxHp: max,
+      lineIndex,
+    });
+    const rows = [
+      row(17_000, 380_477, 902_748, 10),
+      row(17_094, 380_477, 902_748, 20), // the cast row
+      row(17_094, 435_737, 902_748, 21), // the heal row (×1.1452)
+      row(17_200, 470_000, 902_748, 25),
+      row(17_368, 503_419, 902_748, 30), // Healthstone pressed
+      row(17_434, 1_000_000, 1_038_160, 40), // max moves
+    ];
+    const heal = [{ timestamp: 17_094, amount: 55_260, lineIndex: 21 }];
+    expect(laggingMaxHpCorrected(rows, heal)).toEqual([
+      902_748, 902_748, 902_748, 902_748, 902_748, 1_038_160,
+    ]);
+    // the same heal logged BEFORE the cast row is not this jump's
+    const early = [{ timestamp: 17_094, amount: 55_260, lineIndex: 19 }];
+    expect(laggingMaxHpCorrected(rows, early)).toEqual([
+      902_748, 902_748, 1_038_160, 1_038_160, 1_038_160, 1_038_160,
+    ]);
+  });
 });

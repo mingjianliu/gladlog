@@ -327,19 +327,26 @@ export function correctedAdvancedSamples<
 function hpEventsOf(
   unit: Pick<GladUnit, "id" | "healIn" | "damageIn">,
   allUnits?: Record<string, GladUnit>,
-): Array<{ timestamp: number; amount: number }> {
+): Array<{ timestamp: number; amount: number; lineIndex?: number }> {
   if (isPetOrGuardian(unit.id, allUnits)) return [];
+  const line = (e: { lineIndex?: number }) =>
+    e.lineIndex !== undefined ? { lineIndex: e.lineIndex } : {};
   return [
     // (a hand-built report fixture can carry samples without the streams)
     ...(unit.healIn ?? []).map((e) => ({
       timestamp: e.timestamp,
       amount: Math.abs(e.effectiveAmount),
+      ...line(e),
     })),
     ...(unit.damageIn ?? []).map((e) => ({
       timestamp: e.timestamp,
       amount: -Math.abs(hpLost(e)),
+      ...line(e),
     })),
-  ].sort((a, b) => a.timestamp - b.timestamp);
+  ].sort(
+    (a, b) =>
+      a.timestamp - b.timestamp || (a.lineIndex ?? 0) - (b.lineIndex ?? 0),
+  );
 }
 
 function convertUnit(

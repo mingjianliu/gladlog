@@ -12,6 +12,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { MITIGATION_TABLE } from "../../data/mitigationData";
 import { TIMELINE_LINE_FLAGS } from "../../data/timelineLineFlags";
 import { absorbContributionsInWindow } from "../../utils/absorbShields";
+import { allyCopyClause, isAllyCopyWallId } from "../../utils/allyCopyWall";
 import {
   friendlyOffensiveCdActiveAt,
   guardianSpiritSaveClause,
@@ -239,7 +240,13 @@ export function emitEnemyDefEntries(
             mechanism?.kind === "control removal"
               ? selfDefensiveLabelWords(mechanism)
               : dur;
-          line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${what ? ` (${what})` : ""}${burstStr}${hpStr}${saveStr}${duringStr}`;
+          // fact9 D1: a talent-shared wall's ally copy says it is one —
+          // the legend's `X + N% copy → unit` (F23 D23's friendly form); its
+          // caster's own line above carries the wall at full strength
+          const onWhom = isAllyCopyWallId(d.spellId)
+            ? allyCopyClause(d.spellId, enemyPid(d.recipientName ?? ""))
+            : ` → ${enemyPid(d.recipientName ?? "")}`;
+          line = `${d.spellName}${onWhom}${what ? ` (${what})` : ""}${burstStr}${hpStr}${saveStr}${duringStr}`;
         } else if (d.kind === "area") {
           // Ruling A15 (2026-09-30): who pressed it and when — no %, no
           // recipients, no duration, no HP (nobody is "the target"). fact2

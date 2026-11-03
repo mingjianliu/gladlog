@@ -147,7 +147,7 @@ const deferredOn = (v: any, a: number, b: number, src?: Set<string>): number =>
     .reduce((n, r) => n + (r.absorbedAmount ?? 0), 0);
 
 const ENEMY_DEF_EXTERNAL =
-  /^\s*(\d+):(\d\d)\s+\[ENEMY DEF\]\s+\d+\([^)]*\)(?: \([^)]*\))?: (.+?) → (\d+)\([^)]*\) \((\d+(?:\.\d+)?)s/;
+  /^\s*(\d+):(\d\d)\s+\[ENEMY DEF\]\s+\d+\([^)]*\)(?: \([^)]*\))?: (.+?)(?: \+ \d+% copy)? → (\d+)\([^)]*\) \((\d+(?:\.\d+)?)s/;
 const ENEMY_DEF_CASTER = /\[ENEMY DEF\]\s+(\d+)\(/;
 const DURING_SHARE =
   /^(\d+)\([^)]*\) \d+k on target(?: \([^)]*\))? · (\d+)% of their enemy-player damage/;
@@ -189,7 +189,25 @@ function duringExternalShare(ctx: IRoundCtx): void {
     const applied = (fromCaster.length > 0 ? fromCaster : named).sort(
       (a, b) => Math.abs(tsOf(a) - anchor) - Math.abs(tsOf(b) - anchor),
     )[0];
-    const fromMs = applied ? tsOf(applied) : lo;
+    // an APPLIED inside the target's re-stating batch (≥ 6 APPLIED rows on
+    // it within 5 ms: the target seen again) only showed an aura its press
+    // had put up (fact9 D19, 36-12 r12 1:09: Life Cocoon cast on a vanished
+    // rogue, its row 1.9 s later in the batch)
+    const restated =
+      applied !== undefined &&
+      press !== undefined &&
+      tsOf(press) < tsOf(applied) &&
+      ((target.auraEvents ?? []) as any[]).filter(
+        (x) =>
+          x.destUnitId === target.id &&
+          ev(x) === APPLIED &&
+          Math.abs(tsOf(x) - tsOf(applied)) <= 5,
+      ).length >= 6;
+    const fromMs = restated
+      ? tsOf(press)
+      : applied
+        ? tsOf(applied)
+        : lo;
     const printedTo = fromMs + +m[5]! * 1000;
     // the aura's own end, read from its row (a re-broadcast's REMOVED sits
     // mid-span, so the one the printed length points at)

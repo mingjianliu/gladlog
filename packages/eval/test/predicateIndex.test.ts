@@ -1640,6 +1640,11 @@ const INDEX: PredicateRow[] = [
     mod: channeledGenerated,
   },
   {
+    file: `${A}/data/channeledGenerated.ts`,
+    symbol: "CHANNELED_SPELL_IDS",
+    mod: channeledGenerated,
+  },
+  {
     file: `${A}/utils/healerExposureAnalysis.ts`,
     symbol: "aimedControlsForKit",
     mod: healerExposureAnalysis,
@@ -4285,6 +4290,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/hiddenPress.ts`,
     symbol: "hiddenPressMs",
+    mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "isResyncBatchAt",
     mod: hiddenPress,
   },
   {

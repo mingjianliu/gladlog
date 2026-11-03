@@ -8,6 +8,7 @@ import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import type { CastParamCaster } from "./castParam";
 import { ccFullDurationForCaster } from "./ccDuration";
+import { isResyncBatchAt } from "./hiddenPress";
 import { TOUCH_OF_KARMA_ABSORB_ID, TOUCH_OF_KARMA_ID } from "./karmaFeed";
 
 
@@ -379,6 +380,42 @@ export function buildAuraIntervalsUncached(
   // whether from a real pairing or an earlier fallback — see module header.
   const lastCloseToSBySpellId = new Map<string, number>();
 
+  /** fact9 D19: the round second of the press a re-stated APPLIED stands
+   * for — its source's SUCCESS of the aura (or its cast) on this unit,
+   * the latest before the batch, inside the aura's official length and
+   * after the spell's last close on this unit; undefined when the row is
+   * no re-statement or no such press is logged. */
+  const restatedPressS = (
+    a: NonNullable<ICombatUnit["auraEvents"]>[number],
+    t: number,
+    lastCloseS: number | undefined,
+  ): number | undefined => {
+    const id = a.spellId!;
+    const caster = casterOf(a.srcUnitId);
+    if (!caster || !isResyncBatchAt(unit, a.timestamp)) return undefined;
+    const d = officialDurationS(id, caster, a.timestamp);
+    if (d === null) return undefined;
+    let best: number | undefined;
+    for (const c of caster.spellCastEvents ?? []) {
+      if (
+        c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+        c.destUnitId !== unit.id ||
+        !c.spellId ||
+        !isCastOrEffect(c.spellId, id)
+      )
+        continue;
+      const s = rel(c.logLine.timestamp);
+      if (
+        c.logLine.timestamp < a.timestamp &&
+        s >= t - d &&
+        (lastCloseS === undefined || s >= lastCloseS) &&
+        (best === undefined || s > best)
+      )
+        best = s;
+    }
+    return best;
+  };
+
   // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
   const notTheEnd = supersededAuraBreaks(unit.auraEvents);
   const events = dropAuraRebroadcasts(unit.auraEvents)
@@ -455,9 +492,22 @@ export function buildAuraIntervalsUncached(
       } else if (existing) {
         existing.lastSeenS = t; // DOSE 叠层:活动证据,只挪封顶锚
       } else {
+        // fact9 D19 (5f992d25 1:26): an aura first shown inside a batch that
+        // re-states its holder (`isResyncBatchAt` — the holder was unseen:
+        // Vanish, stealth, out of range) went up at its source's logged
+        // press of it ON this holder, not at the batch. Life Cocoon was cast
+        // on a vanished rogue at 86.07, absorbed a hit at 87.02 and was
+        // APPLIED in the rogue's re-stating batch at 87.45; its span read
+        // 9.0 s from the batch and "pressed 4.3 s after the burst opened"
+        // (2.9 s). The press is the latest one inside the aura's official
+        // length before the batch and after this spell's last close here.
+        const fromS =
+          ev === LogEvent.SPELL_AURA_APPLIED
+            ? restatedPressS(a, t, lastCloseToSBySpellId.get(id))
+            : undefined;
         open.set(key, {
-          fromS: t,
-          lastSeenS: t,
+          fromS: fromS ?? t,
+          lastSeenS: fromS ?? t,
           inferredStart: false,
           spellName: a.spellName ?? "",
           srcUnitName: a.srcUnitName,

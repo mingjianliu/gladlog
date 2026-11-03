@@ -827,7 +827,7 @@ function runRound(ctx: IContext): void {
     let removedInSecond = false;
     const bf = /^\d+:\d\d {2}\[BUFF FADED\] {3}(.+?) \(ended early/.exec(l);
     const ed =
-      /^\d+:\d\d {2}\[ENEMY DEF\] {3}(\d+)\([^)]*\) \([^)]*\): (.+?)(?: → (\d+)\([^)]*\))? \([^)]*— removed early\)/.exec(
+      /^\d+:\d\d {2}\[ENEMY DEF\] {3}(\d+)\([^)]*\) \([^)]*\): (.+?)(?:(?: \+ \d+% copy)? → (\d+)\([^)]*\))? \([^)]*— removed early\)/.exec(
         l,
       );
     const cc =

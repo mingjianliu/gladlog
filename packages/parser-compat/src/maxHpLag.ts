@@ -41,17 +41,58 @@ export const MAX_HP_LAG_EXPLAINED_TOL = 0.02;
  * time; returns an array of the same length.
  */
 export function laggingMaxHpCorrected(
-  samples: ReadonlyArray<{ timestamp: number; hp: number; maxHp: number }>,
+  samples: ReadonlyArray<{
+    timestamp: number;
+    hp: number;
+    maxHp: number;
+    lineIndex?: number;
+  }>,
   /** the unit's heals (+) and hits (−) by effective amount, sorted by time */
-  hpEvents: ReadonlyArray<{ timestamp: number; amount: number }> = [],
+  hpEvents: ReadonlyArray<{
+    timestamp: number;
+    amount: number;
+    lineIndex?: number;
+  }> = [],
 ): number[] {
   const out = samples.map((s) => s.maxHp);
-  const explained = (fromMs: number, toMs: number, delta: number) => {
+  /** the heals / hits logged after row `from` and up to row `to`. In one
+   * millisecond the log's line order decides (fact9 D33, f73f4f15 r0 1:11:
+   * a cast row read 380,477 and the next row, a 55,260 heal logged in the
+   * same ms, 435,737 — a jump of the max's 1.145; the heal was skipped as
+   * "not after the first row" and the pre-Healthstone reading took the
+   * Soulburn maximum, 48 % for a 56 % press). With no line index a heal of
+   * the first row's ms is left out and one of the second's counts, as
+   * before. */
+  const between = (
+    e: { timestamp: number; lineIndex?: number },
+    from: { timestamp: number; lineIndex?: number },
+    to: { timestamp: number; lineIndex?: number },
+  ) => {
+    const afterFrom =
+      e.timestamp > from.timestamp ||
+      (e.timestamp === from.timestamp &&
+        e.lineIndex !== undefined &&
+        from.lineIndex !== undefined &&
+        e.lineIndex > from.lineIndex);
+    const upToTo =
+      e.timestamp < to.timestamp ||
+      (e.timestamp === to.timestamp &&
+        (e.lineIndex === undefined ||
+          to.lineIndex === undefined ||
+          e.lineIndex <= to.lineIndex));
+    return afterFrom && upToTo;
+  };
+  const explained = (
+    from: { timestamp: number; lineIndex?: number },
+    to: { timestamp: number; lineIndex?: number },
+    delta: number,
+  ) => {
     let sum = 0;
     let any = false;
     for (const e of hpEvents) {
-      if (e.timestamp <= fromMs) continue;
-      if (e.timestamp > toMs) break;
+      if (e.timestamp < from.timestamp) continue;
+      if (e.timestamp > to.timestamp) break;
+      if (!between(e, from, to)) continue;
       sum += e.amount;
       any = true;
     }
@@ -73,11 +114,7 @@ export function laggingMaxHpCorrected(
       hpBefore > 0 &&
       Math.abs(samples[k]!.hp / hpBefore - ratio) <=
         MAX_HP_LAG_RATIO_TOL * ratio &&
-      !explained(
-        samples[k - 1]!.timestamp,
-        samples[k]!.timestamp,
-        samples[k]!.hp - hpBefore,
-      )
+      !explained(samples[k - 1]!, samples[k]!, samples[k]!.hp - hpBefore)
     )
       continue;
     // walk back over the rows still on the old maximum inside the lag window
@@ -93,7 +130,7 @@ export function laggingMaxHpCorrected(
         // a real heal / hit of that size is no rescale: look further back
         // (codex 20-F17-05 #2, 0284fcd9 r3 115.453 s: a 44,302 hit matched
         // the ratio and the 115.417 s rescale was never reached)
-        if (explained(prev.timestamp, s.timestamp, s.hp - prev.hp)) continue;
+        if (explained(prev, s, s.hp - prev.hp)) continue;
         for (let j = i; j < k; j++) out[j] = newMax;
         break;
       }

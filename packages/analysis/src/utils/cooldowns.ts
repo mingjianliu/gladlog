@@ -1931,20 +1931,69 @@ export function hpAtPress(
     // …or a direct heal its own aura's row follows in the same ms (a heal
     // the press triggers under another id: Enraged Regeneration's
     // Invigorating Fury 385174, logged in the same ms just before the
-    // 184364 APPLIED — fact4 D59, bb7e1d9f 1:57 read 66 % for a 59 % press)
+    // 184364 APPLIED — fact4 D59, bb7e1d9f 1:57 read 66 % for a 59 % press).
+    // An aura row logged BEFORE the heal names it only when the log shows
+    // the pairing as a rule: a self-press, and that heal of the unit's on
+    // itself comes, at least twice this round, only inside the lead of one
+    // of the press's own SUCCESS rows, never with a press of the heal's own
+    // spell there (fact9 D18, 4e8cabf7: Survival of the Fittest's APPLIED
+    // at 1:10.950 before the Exhilaration heal, REFRESH and cast at .951 —
+    // read 88 % for 76 %; both presses carry the heal, no Exhilaration is
+    // ever pressed). One coincidence is no evidence (a Nature's Guardian
+    // proc in an Astral Shift's ms, codex 20-F24-09 #1), and an aura row is
+    // no press (an Exhilaration's own Survival of the Fittest copy, codex
+    // 20-F24-11 #1).
+    const pressAuraRows = (unit.auraEvents ?? []).filter(
+      (a) =>
+        a.spellId === cast.spellId &&
+        a.srcUnitId === cast.srcUnitId &&
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH),
+    );
+    const auraRowAfter = pressAuraRows.some(
+      (a) =>
+        a.logLine.timestamp === t &&
+        (a.logLine.lineIndex ?? 0) > (h.logLine.lineIndex ?? 0),
+    );
+    const pairedAsRule = () => {
+      if (cast.srcUnitId !== unit.id) return false;
+      const successMsOf = (spellId: string | undefined) =>
+        (unit.spellCastEvents ?? [])
+          .filter(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              c.spellId === spellId,
+          )
+          .map((c) => c.logLine.timestamp);
+      const pressMs = successMsOf(cast.spellId);
+      const healPressMs = successMsOf(h.spellId ?? undefined);
+      const same = (unit.healIn ?? []).filter(
+        (x) =>
+          x.spellId === h.spellId &&
+          x.srcUnitId === cast.srcUnitId &&
+          x.logLine.event !== LogEvent.SPELL_PERIODIC_HEAL,
+      );
+      const inLead = (healMs: number, ms: number) =>
+        ms >= healMs && ms - healMs <= PRESS_EFFECT_LEAD_MS;
+      return (
+        same.length >= 2 &&
+        same.every(
+          (x) =>
+            pressMs.some((ms) => inLead(x.logLine.timestamp, ms)) &&
+            !healPressMs.some(
+              (ms) =>
+                Math.abs(ms - x.logLine.timestamp) <= PRESS_EFFECT_LEAD_MS,
+            ),
+        )
+      );
+    };
     const triggeredByPress =
       !periodic &&
       !ownHealAtPress &&
       h.srcUnitId === cast.srcUnitId &&
-      (unit.auraEvents ?? []).some(
-        (a) =>
-          a.spellId === cast.spellId &&
-          a.srcUnitId === cast.srcUnitId &&
-          (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-            a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-          a.logLine.timestamp === t &&
-          (a.logLine.lineIndex ?? 0) > (h.logLine.lineIndex ?? 0),
-      );
+      (auraRowAfter ||
+        (pressAuraRows.some((a) => a.logLine.timestamp === t) &&
+          pairedAsRule()));
     if (!(ownEffect || triggeredByPress) || h.srcUnitId !== cast.srcUnitId)
       continue;
     // the press's OWN heal is a direct one; a periodic tick of an earlier

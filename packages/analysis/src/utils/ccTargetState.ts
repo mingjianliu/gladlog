@@ -70,6 +70,7 @@ import {
 import {
   KW_UNTARGETABLE_AURA_IDS,
   limitedImmunitySchoolMask,
+  SAVE_AURA_END_UNSEEN_IDS,
   untargetableEndS,
 } from "./enemyDefensives";
 import {
@@ -270,11 +271,18 @@ export function ccTargetBlockerIntervals(
             avoidance.has(iv.spellId)) ||
           schoolBlocked(iv.spellId),
       )
-      // not a target at all: Mass Invisibility / Phase Shift, to the
-      // end the kill windows read (`untargetableEndS`)
+      // not a target at all: Mass Invisibility / Phase Shift — and a
+      // holder gone unseen (`SAVE_AURA_END_UNSEEN_IDS`: Vanish, Burrow,
+      // Greater Invisibility; fact9 D20, 5f992d25 1:47–1:49: a Blind
+      // counted usable on a rogue 0.8 s into Vanish) — to the end the kill
+      // windows read (`untargetableEndS`)
       .concat(
         auras
-          .filter((iv) => KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
+          .filter(
+            (iv) =>
+              KW_UNTARGETABLE_AURA_IDS.has(iv.spellId) ||
+              SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId),
+          )
           .map((iv) => ({
             ...iv,
             toS: untargetableEndS(
@@ -405,7 +413,10 @@ export function ccSamplerFor(params: {
     reachYards: reach,
     stateAt(target, s) {
       const ms = start + s * 1000;
-      if (s >= ownerDeath) return { ok: false, reason: "owner-dead" };
+      // dead at any instant of the rendered second is no free second (the
+      // render-second policy below; fact9 D20: an owner dead 22 ms into
+      // 1:49 had 1:49 counted)
+      if (s + 1 > ownerDeath) return { ok: false, reason: "owner-dead" };
       if (!cdReadyInTimeAt(cd, s)) return { ok: false, reason: "not-ready" };
       // Render-second policy (codex astra round 4): a state that must be
       // ABSENT — the owner casting this CC, the owner CC'd or locked, the

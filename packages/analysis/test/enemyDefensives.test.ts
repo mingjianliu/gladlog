@@ -314,7 +314,7 @@ describe("enemyDefensiveEvents", () => {
     expect(at(0.2).noPressLogged).toBe(true);
   });
 
-  it("fact7 D27: a press that refreshes a copy already up is the span's press, past the 150 ms lag", () => {
+  it("fact7 D27 / fact9 D13: a press that refreshes a copy already up is a press of its own — the copy keeps its start, `[no press logged]`, up to the press", () => {
     const SOTF = "264735";
     const refreshed = (atS: number) => ({
       ...applied(SOTF, "e1", "e1", atS),
@@ -323,7 +323,7 @@ describe("enemyDefensiveEvents", () => {
         event: LogEvent.SPELL_AURA_REFRESH,
       },
     });
-    const at = (auraEvents: any[]) =>
+    const all = (auraEvents: any[]) =>
       enemyDefensiveEvents(
         unit("e1", {
           auraEvents: [
@@ -335,11 +335,70 @@ describe("enemyDefensiveEvents", () => {
         }),
         [],
         combat,
-      )[0]!;
-    expect(at([refreshed(60.932)])).toMatchObject({ pressSeconds: 60.932 });
-    expect(at([refreshed(60.932)]).noPressLogged).toBeUndefined();
+      );
+    const [copy, press, ...rest] = all([refreshed(60.932)]);
+    expect(rest).toEqual([]);
+    expect(copy).toMatchObject({ atSeconds: 60.584, noPressLogged: true });
+    expect(copy!.pressSeconds).toBeUndefined();
+    expect(copy!.observedSeconds).toBeCloseTo(0.348, 3);
+    expect(press).toMatchObject({ atSeconds: 60.932, pressSeconds: 60.932 });
+    expect(press!.noPressLogged).toBeUndefined();
+    expect(press!.observedSeconds).toBeCloseTo(7.986, 3);
     // no REFRESH beside the cast: that cast put up nothing of this span
-    expect(at([]).noPressLogged).toBe(true);
+    const [only, ...none] = all([]);
+    expect(none).toEqual([]);
+    expect(only!.noPressLogged).toBe(true);
+  });
+
+  it("fact9 D13 / codex 20-F24-09 #2: a refreshing press after the round ended does not split the copy — it stays up at the round's end", () => {
+    const SOTF = "264735";
+    const [copy, ...rest] = enemyDefensiveEvents(
+      unit("e1", {
+        auraEvents: [
+          applied(SOTF, "e1", "e1", 42.06),
+          {
+            ...applied(SOTF, "e1", "e1", 43.17),
+            logLine: {
+              ...applied(SOTF, "e1", "e1", 43.17).logLine,
+              event: LogEvent.SPELL_AURA_REFRESH,
+            },
+          },
+          removed(SOTF, "e1", "e1", 51.18),
+        ],
+        spellCastEvents: [cast(SOTF, "e1", 43.17)],
+      }),
+      [],
+      combat,
+      ms(42.5),
+    );
+    expect(rest).toEqual([]);
+    expect(copy).toMatchObject({ atSeconds: 42.06, noPressLogged: true });
+    expect(copy!.pressSeconds).toBeUndefined();
+    expect(copy!.observedSeconds).toBeCloseTo(0.44, 2);
+    expect(copy!.upAtRoundEnd).toBe(true);
+    // a press AT the round's end is the round's, as the timeline keeps it
+    // (codex 20-F24-11 #2): the copy and the press, as inside the round
+    const atEnd = enemyDefensiveEvents(
+      unit("e1", {
+        auraEvents: [
+          applied(SOTF, "e1", "e1", 42.06),
+          {
+            ...applied(SOTF, "e1", "e1", 43.17),
+            logLine: {
+              ...applied(SOTF, "e1", "e1", 43.17).logLine,
+              event: LogEvent.SPELL_AURA_REFRESH,
+            },
+          },
+          removed(SOTF, "e1", "e1", 51.18),
+        ],
+        spellCastEvents: [cast(SOTF, "e1", 43.17)],
+      }),
+      [],
+      combat,
+      ms(43.17),
+    );
+    expect(atEnd.map((e) => e.atSeconds)).toEqual([42.06, 43.17]);
+    expect(atEnd[1]!.pressSeconds).toBeCloseTo(43.17, 3);
   });
 
   it("removedEarly needs a real REMOVED event and more than the slack short", () => {
