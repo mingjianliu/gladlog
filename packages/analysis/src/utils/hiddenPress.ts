@@ -123,16 +123,85 @@ export function isResyncBatchAt(
   unit: Pick<ICombatUnit, "id" | "auraEvents">,
   ms: number,
 ): boolean {
+  const rows = unit.auraEvents;
+  if (!rows || rows.length < RESYNC_BATCH_MIN_APPLIED) return false;
+  // a non-finite instant never satisfies |t − ms| <= span (codex 20-F24-17
+  // #1): the index holds the finite rows only
+  if (!Number.isFinite(ms)) return false;
+  const at = appliedOnSelfMs(rows, unit.id);
+  // the index only narrows the rows; each is still read by the scan's own
+  // test, so float edges (|0.2 − 5.2| is 5, 5.2 − 5 is not 0.2 — codex
+  // 20-F24-17 #3) stay where they were. The 1 ms slack covers them.
+  const hi = upperBound(at, ms + RESYNC_BATCH_SPAN_MS + 1);
   let n = 0;
-  for (const a of unit.auraEvents ?? [])
+  for (let i = lowerBound(at, ms - RESYNC_BATCH_SPAN_MS - 1); i < hi; i++)
     if (
-      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-      a.destUnitId === unit.id &&
-      Math.abs(a.logLine.timestamp - ms) <= RESYNC_BATCH_SPAN_MS &&
+      Math.abs(at[i]! - ms) <= RESYNC_BATCH_SPAN_MS &&
       ++n >= RESYNC_BATCH_MIN_APPLIED
     )
       return true;
   return false;
+}
+
+/** Performance only (the 2026-11-03 first-paint regression: a scan of the
+ * whole stream per call made the aura-interval build quadratic — ×12 report
+ * fixture, `isResyncBatchAt` 65 → 1,561 ms): the sorted instants of the
+ * APPLIED rows on the holder itself (finite ones: no other row can count),
+ * cached per stream array and holder.
+ * Rebuilt when the array's length changes; a stream is never edited in
+ * place at the same length. `test/restatedIndex.test.ts` holds it
+ * to the plain scan. */
+const appliedOnSelfCache = new WeakMap<
+  object,
+  { len: number; byId: Map<string, number[]> }
+>();
+function appliedOnSelfMs(
+  rows: NonNullable<ICombatUnit["auraEvents"]>,
+  unitId: string,
+): number[] {
+  let entry = appliedOnSelfCache.get(rows);
+  if (!entry || entry.len !== rows.length) {
+    entry = { len: rows.length, byId: new Map() };
+    appliedOnSelfCache.set(rows, entry);
+  }
+  let at = entry.byId.get(unitId);
+  if (!at) {
+    at = [];
+    for (const a of rows)
+      if (
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        a.destUnitId === unitId &&
+        Number.isFinite(a.logLine.timestamp)
+      )
+        at.push(a.logLine.timestamp);
+    at.sort((x, y) => x - y);
+    entry.byId.set(unitId, at);
+  }
+  return at;
+}
+
+/** first index whose value is >= x (sorted ascending) */
+export function lowerBound(arr: readonly number[], x: number): number {
+  let lo = 0;
+  let hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (arr[mid]! < x) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** first index whose value is > x (sorted ascending) */
+export function upperBound(arr: readonly number[], x: number): number {
+  let lo = 0;
+  let hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (arr[mid]! <= x) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 /**

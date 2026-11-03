@@ -8,7 +8,7 @@ import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import type { CastParamCaster } from "./castParam";
 import { ccFullDurationForCaster } from "./ccDuration";
-import { isResyncBatchAt } from "./hiddenPress";
+import { isResyncBatchAt, lowerBound } from "./hiddenPress";
 import { TOUCH_OF_KARMA_ABSORB_ID, TOUCH_OF_KARMA_ID } from "./karmaFeed";
 
 
@@ -349,6 +349,55 @@ export function dropSupersededAuraBreaks<
  * its press + official length and still show it went up at that press. */
 export const RESTATED_END_TOLERANCE_MS = 250;
 
+type SpellRows = ReadonlyArray<{
+  spellId?: string | null;
+  logLine: { timestamp: number };
+}>;
+type AuraRows = NonNullable<ICombatUnit["auraEvents"]>;
+
+/** Performance only (2026-11-03 first-paint regression, with
+ * `isResyncBatchAt`): `restatedAuraWasUp` scanned the holder's whole
+ * damage / heal / absorb / aura streams for every re-stated APPLIED. These
+ * index them once per array (rebuilt when its length changes);
+ * `test/restatedIndex.test.ts` holds the indexed reading to
+ * the plain scan. */
+const spellRowMsCache = new WeakMap<
+  object,
+  { len: number; bySpell: Map<string, number[]> }
+>();
+function spellRowMs(rows: SpellRows): Map<string, number[]> {
+  const hit = spellRowMsCache.get(rows);
+  if (hit && hit.len === rows.length) return hit.bySpell;
+  const bySpell = new Map<string, number[]>();
+  for (const x of rows) {
+    if (!x.spellId || !Number.isFinite(x.logLine.timestamp)) continue;
+    let at = bySpell.get(x.spellId);
+    if (!at) bySpell.set(x.spellId, (at = []));
+    at.push(x.logLine.timestamp);
+  }
+  for (const at of bySpell.values()) at.sort((a, b) => a - b);
+  spellRowMsCache.set(rows, { len: rows.length, bySpell });
+  return bySpell;
+}
+const removedRowsCache = new WeakMap<
+  object,
+  { len: number; bySpell: Map<string, AuraRows> }
+>();
+function removedRowsBySpell(rows: AuraRows): Map<string, AuraRows> {
+  const hit = removedRowsCache.get(rows);
+  if (hit && hit.len === rows.length) return hit.bySpell;
+  const bySpell = new Map<string, AuraRows>();
+  for (const x of rows) {
+    if (!x.spellId || x.logLine.event !== LogEvent.SPELL_AURA_REMOVED)
+      continue;
+    let list = bySpell.get(x.spellId);
+    if (!list) bySpell.set(x.spellId, (list = []));
+    list.push(x);
+  }
+  removedRowsCache.set(rows, { len: rows.length, bySpell });
+  return bySpell;
+}
+
 /**
  * Does the log show a re-stated aura up before its batch, from the press at
  * `pressMs`? Either a row of the aura's own spell on the holder between the
@@ -367,24 +416,35 @@ export function restatedAuraWasUp(
 ): boolean {
   const id = applied.spellId;
   if (!id) return false;
+  // a row of the spell in [pressMs, applied)
   const between = (ms: number) => ms >= pressMs && ms < applied.timestamp;
+  // the index holds finite instants only, and between finite bounds no
+  // other row can pass; non-finite bounds read the plain scan (codex
+  // 20-F24-17 #2)
+  const finite = Number.isFinite(pressMs) && Number.isFinite(applied.timestamp);
+  const rowBetween = (rows: SpellRows | undefined) => {
+    if (!rows) return false;
+    if (!finite)
+      return rows.some(
+        (x) => x.spellId === id && between(x.logLine.timestamp),
+      );
+    const at = spellRowMs(rows).get(id);
+    if (!at) return false;
+    const i = lowerBound(at, pressMs);
+    return i < at.length && between(at[i]!);
+  };
   if (
-    (unit.absorbsIn ?? []).some(
-      (x) => x.spellId === id && between(x.logLine.timestamp),
-    ) ||
-    (unit.healIn ?? []).some(
-      (x) => x.spellId === id && between(x.logLine.timestamp),
-    ) ||
-    (unit.damageIn ?? []).some(
-      (x) => x.spellId === id && between(x.logLine.timestamp),
-    )
+    rowBetween(unit.absorbsIn) ||
+    rowBetween(unit.healIn) ||
+    rowBetween(unit.damageIn)
   )
     return true;
-  const removed = (unit.auraEvents ?? []).find(
+  // the first such REMOVED in stream order, as `find` read it
+  const removed = (
+    unit.auraEvents ? removedRowsBySpell(unit.auraEvents).get(id) : undefined
+  )?.find(
     (x) =>
-      x.spellId === id &&
       x.srcUnitId === applied.srcUnitId &&
-      x.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
       x.logLine.timestamp > applied.timestamp,
   );
   return (
