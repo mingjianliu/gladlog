@@ -153,6 +153,10 @@ export interface IOffListPress {
    * effect aura's), when one went up — or was refreshed — within
    * `PRESS_AURA_LEAD_MS` */
   durationSeconds?: number;
+  /** where `durationSeconds` was read: the unit and the APPLIED row
+   * (`pressDuration`). The press scan measures the
+   * life of this row, not one of its own choosing. */
+  durationAura?: { unitId: string; spellId: string; atMs: number };
   /** the model's free press (`freeRecast` — Time Spiral, Death's Arrival,
    * Escape from Reality …): it spent no charge and restarted nothing;
    * `readyAgainAtSeconds` is the cooldown it stands on */
@@ -183,6 +187,121 @@ export const PRESS_LINE_MIN_DURATION_S = 1;
 
 /** the press's own aura is applied within this of its cast row */
 export const PRESS_AURA_LEAD_MS = 1000;
+
+/** A press's aura on its cast's target may land this long after the cast
+ * row: Holy Armaments travel (GH #179, 22 files: 370 target applications,
+ * 200 within 1 s, 360 within 2 s, the latest 3.8 s). */
+export const PRESS_TARGET_AURA_LEAD_MS = 4000;
+
+/** The aura rows a press may have put up — APPLIED / REFRESH by the caster
+ * of its own or its effect aura's id — one per unit, the cast's target's
+ * first: on the target within `PRESS_TARGET_AURA_LEAD_MS` (never at or past
+ * the caster's next press of the spell, `untilMs`), on anyone else within
+ * `PRESS_AURA_LEAD_MS`. A press that arms its target and its caster too
+ * (Holy Armaments) prints the target's: the caster's copy is stretched by
+ * later procs (GH #179, 2026-11-03: lives 26–48 s on the caster where the
+ * target's ran its 20 s). */
+export function pressAuraCandidates(
+  caster: ICombatUnit,
+  cast: {
+    spellId?: string;
+    destUnitId?: string;
+    logLine: { timestamp: number };
+  },
+  allUnits: readonly ICombatUnit[],
+  untilMs = Infinity,
+): Array<{ unit: ICombatUnit; row: ICombatUnit["auraEvents"][number] }> {
+  const at = cast.logLine.timestamp;
+  const auraIds = new Set([cast.spellId!, ...effectAurasOfCast(cast.spellId!)]);
+  const ordered = [
+    ...allUnits.filter((u) => u.id === cast.destUnitId),
+    ...allUnits.filter((u) => u.id !== cast.destUnitId),
+  ];
+  const out: Array<{
+    unit: ICombatUnit;
+    row: ICombatUnit["auraEvents"][number];
+  }> = [];
+  for (const u of ordered) {
+    const end =
+      u.id === cast.destUnitId
+        ? Math.min(at + PRESS_TARGET_AURA_LEAD_MS, untilMs - 1)
+        : at + PRESS_AURA_LEAD_MS;
+    const row = (u.auraEvents ?? []).find(
+      (a) =>
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+        a.srcUnitId === caster.id &&
+        !!a.spellId &&
+        auraIds.has(a.spellId) &&
+        a.logLine.timestamp >= at &&
+        a.logLine.timestamp <= end,
+    );
+    if (row) out.push({ unit: u, row });
+  }
+  return out;
+}
+
+/** The duration a press's line prints, and the APPLIED row it is read
+ * from: the first of `pressAuraCandidates` (bounded by the caster's next
+ * press of the spell among `casterRows`) whose talented duration is at least
+ * `PRESS_LINE_MIN_DURATION_S`; none when the first is a REFRESH. Shared by
+ * the line and its gate (`offListPressLine` lastsBeyond, scan5). */
+export function pressDuration(
+  caster: ICombatUnit,
+  cast: {
+    spellId?: string;
+    destUnitId?: string;
+    logLine: { timestamp: number };
+  },
+  allUnits: readonly ICombatUnit[],
+  casterRows: ICombatUnit["spellCastEvents"],
+):
+  | {
+      durationSeconds: number;
+      unit: ICombatUnit;
+      row: ICombatUnit["auraEvents"][number];
+    }
+  | undefined {
+  const at = cast.logLine.timestamp;
+  const nextPressMs = casterRows.find(
+    (r) =>
+      r.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      r.spellId === cast.spellId &&
+      r.logLine.timestamp > at,
+  )?.logLine.timestamp;
+  for (const { unit, row } of pressAuraCandidates(
+    caster,
+    cast,
+    allUnits,
+    nextPressMs,
+  )) {
+    // laid on an aura already up: the life is what was left plus the
+    // press's share, not the table's length (Holy Armaments: 605 files,
+    // 96 + 71 of the presses printed `lasts 20s` lived 26–48 s)
+    if (row.logLine.event === LogEvent.SPELL_AURA_REFRESH) return undefined;
+    // nor when a second copy lands on it in the same millisecond: a Holy
+    // Armament cast on oneself by a paladin it also arms — APPLIED then
+    // REFRESH, and the aura runs 40 s (GH #179: 2 of 79 self-casts in 22
+    // files, both 40.0 s)
+    if (
+      (unit.auraEvents ?? []).some(
+        (a) =>
+          a !== row &&
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH &&
+          a.srcUnitId === caster.id &&
+          a.spellId === row.spellId &&
+          a.logLine.timestamp === row.logLine.timestamp,
+      )
+    )
+      return undefined;
+    const d = buffFullDurationForCaster(row.spellId!, caster, at, {
+      pressed: true,
+    });
+    if (d !== undefined && d >= PRESS_LINE_MIN_DURATION_S)
+      return { durationSeconds: d, unit, row };
+  }
+  return undefined;
+}
 
 /** The round's off-list presses of every player, in time order. */
 export function extractOffListPresses(
@@ -221,32 +340,7 @@ export function extractOffListPresses(
       const entry = unitCooldownEntry(unit, combat, c.spellId);
       if (!entry) continue;
       const t = (at - combat.startTime) / 1000;
-      const auraIds = new Set([c.spellId, ...effectAurasOfCast(c.spellId)]);
-      let durationSeconds: number | undefined;
-      for (const u of allUnits) {
-        const applied = (u.auraEvents ?? []).find(
-          (a) =>
-            (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-              a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-            a.srcUnitId === unit.id &&
-            !!a.spellId &&
-            auraIds.has(a.spellId) &&
-            a.logLine.timestamp >= at &&
-            a.logLine.timestamp <= at + PRESS_AURA_LEAD_MS,
-        );
-        if (!applied) continue;
-        // laid on an aura already up: the life is what was left plus the
-        // press's share, not the table's length (Holy Armaments: 605 files,
-        // 96 + 71 of the presses printed `lasts 20s` lived 26–48 s)
-        if (applied.logLine.event === LogEvent.SPELL_AURA_REFRESH) break;
-        const d = buffFullDurationForCaster(applied.spellId!, unit, at, {
-          pressed: true,
-        });
-        if (d !== undefined && d >= PRESS_LINE_MIN_DURATION_S) {
-          durationSeconds = d;
-          break;
-        }
-      }
+      const dur = pressDuration(unit, c, allUnits, rows);
       out.push({
         unit,
         spellId: c.spellId,
@@ -263,7 +357,16 @@ export function extractOffListPresses(
         equippedBadgeCount(unit) >= 2
           ? { equipped: equippedBadgeCount(unit) }
           : {}),
-        ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+        ...(dur
+          ? {
+              durationSeconds: dur.durationSeconds,
+              durationAura: {
+                unitId: dur.unit.id,
+                spellId: dur.row.spellId!,
+                atMs: dur.row.logLine.timestamp,
+              },
+            }
+          : {}),
       });
     }
   }

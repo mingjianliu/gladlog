@@ -1317,6 +1317,11 @@ const INDEX: PredicateRow[] = [
     mod: combatStates,
   },
   {
+    file: `${A}/utils/offListPress.ts`,
+    symbol: "pressDuration",
+    mod: offListPress,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKickWaitedOutConsistency",
     mod: promptQualityCheck,

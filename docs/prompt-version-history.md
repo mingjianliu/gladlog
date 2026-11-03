@@ -4872,3 +4872,34 @@ after, same check code: kickedBarAsRefusal 10 → 0, pressOutsideButLocked
 38 → 0, rootAuraCastBlock 8 → 0, gripStopAsCancel 5 → 0; 218 checks: 213
 unchanged, 4 fell, 0 rose. Gates identical; body lines 553,175 → 553,175;
 no candidate row added or removed (35 kick-eaten rows reworded).
+
+v476 (2026-11-03, GH #179 — the `[PRESS]` line's model gaps left by v473).
+Ancient of Lore 473909 is the PvP talent that replaces Tree of Life (PvpTalent
+5739 OverridesSpellID 33891, the same class mask), and both of Tree of Life's
+scripts follow the slot: Cenarius' Guidance (−5 s as each Grove Guardian
+fades, 8 s after its summon) and Control of the Dream (≤ 15 s of ready time
+off the next cooldown). Restless Blades gives back 1.0 s per combo point, the
+dummy's base 10 — DB2 leaves 1.0 or 0.8 (PvpMultiplier) and the corpus picks
+1.0. The line's `lasts` and its gate read one row, `pressDuration`: the cast's
+target's copy first (within 4 s — a Holy Armament travels, 360 of 370 land
+within 2 s, the latest 3.8 s — and never past the caster's next press of the
+spell), anyone else's within 1 s; none on a REFRESH or a same-millisecond
+second copy (a Holy Armament cast on oneself that also arms the caster runs
+40 s). Before, line and gate each took the first unit holding a row, often
+the paladin's own copy that later procs stretch to 26–48 s.
+
+offListPressScan, same check code, subsets of the 605 set: Ancient of Lore
+`back` after the next press 35 → 0 (13 files); Restless Blades kit 39 → 3
+(13 Outlaw files, every 5th of the 08-28 manifest) and on a hold-out (12
+files, every 5th from the 3rd) 23 → 2; Holy Armaments `lasts` beyond the
+logged life 28 → 1 (22 files), lives checked 1,214 → 1,284.
+
+Cover set (117 archives, 1,140 contexts), clean base b7b656bdf (v475) →
+after: offListPressLine 72 → 54 / 16,479 (27 → 18 facts); 218 checks: 217
+unchanged, 1 fell, 0 rose. Gates identical; body lines 553,175 → 553,175;
+findings unchanged. 409 lines reworded: `[PRESS]` back times of the Outlaw
+kit, Adrenaline Rush's `[KILL WINDOW]` / `[VULNERABLE]` "may already be back"
+bound and `[RES]` cooldowns (Restless Blades); `lasts` moved to the target's
+copy on Holy Bulwark / Sacred Weapon, Rescue now the ally's 1 s carry
+(370665, logged ≤ 1.0 s) not the Evoker's 3 s flight (370666, logged ≤
+2.0 s), Bull Rush without a `lasts`.

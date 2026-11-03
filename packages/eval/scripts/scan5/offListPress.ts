@@ -14,19 +14,20 @@
  *    `timeSpiralFreePressMs`) needs no readiness and is not that next
  *    press, and a Stasis replay (`isStasisReplayCast`) or a row echoing a
  *    Time Spiral free press (`timeSpiralEchoMs`) is no press at all;
- *  - `lastsBeyond`: `lasts Ns`, and the aura that press put up (its id or
- *    its effect aura's, APPLIED / REFRESH by the unit within 1 s) lived to
- *    its REMOVED more than `LASTS_SLACK_S` past N (the printed duration is
- *    too short: an aura cannot outlive its duration).
+ *  - `lastsBeyond`: `lasts Ns`, and the APPLIED row the line read N from
+ *    (`pressDuration` — the cast's target's first, the line's own predicate)
+ *    lived to its REMOVED more than `LASTS_SLACK_S` past N (the printed
+ *    duration is too short: an aura cannot outlive its duration).
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
-import { effectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   timeSpiralEchoMs,
   timeSpiralFreePressMs,
 } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import { isStasisReplayCast } from "@gladlog/analysis/src/utils/combatStates";
+import { pressDuration } from "@gladlog/analysis/src/utils/offListPress";
+import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import {
   APPLIED,
@@ -49,7 +50,6 @@ const PRESS_LINE =
 const BACK_SLACK_MS = 2000;
 /** an aura's logged life this far past the printed length is beyond it */
 const LASTS_SLACK_S = 0.65;
-const AURA_LEAD_MS = 1000;
 
 export function run(ctx: IRoundCtx): void {
   // pass 1: each line's press (the k-th line of a second is its k-th press —
@@ -144,26 +144,23 @@ export function run(ctx: IRoundCtx): void {
     }
     const lasts = /lasts ([\d.]+)s/.exec(fields)?.[1];
     if (lasts) {
-      const ids = new Set([
-        String(press.spellId),
-        ...effectAurasOfCast(String(press.spellId)),
-      ]);
+      // the row the line read its duration from (`pressDuration`: the
+      // cast's target's first), to its REMOVED on that unit
+      const dur = pressDuration(
+        unit,
+        press,
+        ctx.units as ICombatUnit[],
+        unit.spellCastEvents ?? [],
+      );
       let life: number | undefined;
-      for (const d of ctx.units as any[]) {
-        const rows = ((d.auraEvents ?? []) as any[]).filter(
-          (r) => r.srcUnitId === unit.id && ids.has(String(r.spellId)),
+      if (dur) {
+        const rows = ((dur.unit.auraEvents ?? []) as any[]).filter(
+          (r) => r.srcUnitId === unit.id && r.spellId === dur.row.spellId,
         );
-        const i = rows.findIndex(
-          (r) =>
-            (ev(r) === APPLIED || ev(r) === REFRESH) &&
-            tsOf(r) >= at &&
-            tsOf(r) <= at + AURA_LEAD_MS,
-        );
-        if (i < 0) continue;
-        const start = tsOf(rows[i]);
-        for (let j = i + 1; j < rows.length; j++) {
+        const i = rows.indexOf(dur.row);
+        const start = tsOf(dur.row);
+        for (let j = i + 1; i >= 0 && j < rows.length; j++) {
           const r = rows[j];
-          if (r.spellId !== rows[i].spellId) continue;
           if (ev(r) === REMOVED) {
             life = (tsOf(r) - start) / 1000;
             break;
@@ -171,7 +168,6 @@ export function run(ctx: IRoundCtx): void {
           if ((ev(r) === APPLIED || ev(r) === REFRESH) && tsOf(r) > start)
             break;
         }
-        break;
       }
       if (life !== undefined && life > Number(lasts) + LASTS_SLACK_S)
         ctx.violate(

@@ -444,8 +444,14 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // Tree of Life recast pairs (form re-shifts dropped): the bare 180 s holds
   // for few of them; 180 − 5 × (guardians summoned in the gap) − 15 ×
   // (holds Control of the Dream, below) holds for 307, the worst miss 9.1 s.
+  // Ancient of Lore (473909) is the PvP talent that replaces Tree of Life
+  // (PvpTalent 5739 OverridesSpellID 33891, the same class mask 0x10800),
+  // and the script follows the slot (GH #179, 2026-11-03): 13 files, 59
+  // recast pairs on its own 90 s, 35 come back early by up to 31 s; with
+  // Guidance's 5 s per faded guardian and Control of the Dream's credit 2
+  // are left, at 2.7 and 3.9 s — inside a guardian killed before its 8 s.
   "393371": {
-    targets: ["33891"],
+    targets: ["33891", "473909"],
     triggerCastIds: [],
     triggerSummonIds: ["102693"],
     summonFadeMs: 8000,
@@ -955,11 +961,14 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     note: "Red Thirst — Vampiric Blood −2 s per 10 Runic Power spent",
   },
   // Restless Blades (Outlaw baseline 79096): finishers reduce "many Rogue
-  // skills" by `$<cdr>` sec per combo point — dummy 10, PvpMultiplier 0.8 →
-  // 0.8 s. Combo points are the finisher row's second cost (whole points).
-  // Replay (384 points): at 1.0 s per point 0 impossible, at 0.8 the 7.3 s
-  // a Preparation reset does not explain remain — the DB2 value is kept,
-  // the smaller give-back, and the recast floor covers the rest.
+  // skills" by `$<cdr>` sec per combo point — dummy 10 (1.0 s), PvpMultiplier
+  // 0.8. Combo points are the finisher row's second cost (whole points).
+  // DB2 leaves two readings, 1.0 s and 0.8 s; the corpus picks 1.0 — the
+  // server script reads the dummy's base, the PvP multiplier does not reach
+  // it (GH #179, 2026-11-03). Outlaw files of the 08-28 manifest, every 5th
+  // (13 files, 1,064 checked `back`s): presses the model calls impossible on
+  // the Restless Blades kit 39 at 0.8 → 3 at 1.0; hold-out, every 5th from
+  // the 3rd (12 files, 516): 23 → 2. What is left is ≤ 5.5 s, one each.
   "79096": {
     targets: [
       "13750",
@@ -976,13 +985,13 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     ownedBySpecIds: ["260"],
     triggerPowerSpend: {
       powerType: 4,
-      unitsPerSecond: { base: 1.25 },
+      unitsPerSecond: { base: 1 },
       // Triple Threat 1214935 / Jackpot 1214937 (Roll the Bones outcomes,
       // GH #176): aura 108 +30 % on mask 0/0/8192/0 — Restless Blades' own
       boosts: [{ whileAuraIds: ["1214935", "1214937"], pct: 30 }],
     },
     seconds: 0,
-    note: "Restless Blades — Outlaw finishers: −0.8 s per combo point on Adrenaline Rush and the Outlaw kit",
+    note: "Restless Blades — Outlaw finishers: −1 s per combo point on Adrenaline Rush and the Outlaw kit",
   },
 };
 
@@ -1742,7 +1751,15 @@ export const IDLE_COOLDOWN_CREDITS: Readonly<
   Record<string, IIdleCooldownCredit>
 > = {
   "434249": {
-    targets: ["132158", "33891", "391528", "205636", "102560", "194223"],
+    targets: [
+      "132158",
+      "33891",
+      "473909", // Ancient of Lore, Tree of Life's replacement (GH #179)
+      "391528",
+      "205636",
+      "102560",
+      "194223",
+    ],
     capSeconds: 15,
     note: "Control of the Dream — the time a target sat ready comes off its next cooldown, ≤ 15 s",
   },

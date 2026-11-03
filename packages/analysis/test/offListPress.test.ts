@@ -16,13 +16,19 @@ import {
   isRosterPressId,
   lineStatesPress,
   PRESS_LINE_MIN_CD_SECONDS,
+  PRESS_TARGET_AURA_LEAD_MS,
+  pressDuration,
   pressLineCaster,
 } from "../src/utils/offListPress";
 import {
   equippedBadgeCount,
   GLADIATOR_BADGE_SPELL_ID,
 } from "../src/utils/trinketType";
-import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
+import {
+  makeAuraEvent,
+  makeSpellCastEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -198,5 +204,51 @@ describe("two Gladiator's Badges — two items, a cooldown each (GH #176)", () =
       [70, undefined],
       [135, undefined],
     ]);
+  });
+});
+
+describe("[PRESS] lasts — which aura it reads (GH #179)", () => {
+  // Holy Bulwark: the cast 432459 arms its target and its caster with 432496
+  const CAST = "432459";
+  const AURA = "432496";
+  const T = 1_000_000;
+  const { SPELL_AURA_APPLIED: APPLIED, SPELL_AURA_REFRESH: REFRESH } = LogEvent;
+  const setup = (targetRows: any[], casterExtra: any[] = []) => {
+    const cast = makeSpellCastEvent(CAST, T, "ally", "Ally", "pal", "Pal");
+    const pal = makeUnit("pal", {
+      spellCastEvents: [cast, ...casterExtra],
+      auraEvents: [makeAuraEvent(APPLIED, AURA, T, "pal", "pal", "BUFF")],
+    });
+    const ally = makeUnit("ally", { auraEvents: targetRows });
+    return { cast, pal, ally };
+  };
+
+  it("the target's copy, landing 1.5 s after the cast, before the caster's own", () => {
+    const row = makeAuraEvent(APPLIED, AURA, T + 1500, "pal", "ally", "BUFF");
+    const { cast, pal, ally } = setup([row]);
+    const d = pressDuration(pal, cast as any, [pal, ally], pal.spellCastEvents);
+    expect(d?.unit.id).toBe("ally");
+    expect(d?.row).toBe(row);
+    expect(d?.durationSeconds).toBe(20);
+    expect(PRESS_TARGET_AURA_LEAD_MS).toBe(4000);
+  });
+
+  it("not past the caster's next press of the spell: then the caster's copy", () => {
+    const row = makeAuraEvent(APPLIED, AURA, T + 1500, "pal", "ally", "BUFF");
+    const next = makeSpellCastEvent(CAST, T + 1200, "x", "X", "pal", "Pal");
+    const { cast, pal, ally } = setup([row], [next]);
+    const d = pressDuration(pal, cast as any, [pal, ally], pal.spellCastEvents);
+    expect(d?.unit.id).toBe("pal");
+  });
+
+  it("a second copy in the same millisecond (APPLIED then REFRESH): no lasts", () => {
+    const rows = [
+      makeAuraEvent(APPLIED, AURA, T + 300, "pal", "ally", "BUFF"),
+      makeAuraEvent(REFRESH, AURA, T + 300, "pal", "ally", "BUFF"),
+    ];
+    const { cast, pal, ally } = setup(rows);
+    expect(
+      pressDuration(pal, cast as any, [pal, ally], pal.spellCastEvents),
+    ).toBeUndefined();
   });
 });

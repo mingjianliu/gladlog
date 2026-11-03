@@ -560,6 +560,8 @@ describe("Restoration Druid cooldown talents (GH #154)", () => {
   const CONTROL_OF_THE_DREAM = "434249";
   const NATURES_SWIFTNESS = "132158";
   const TREE_OF_LIFE = "33891";
+  // the PvP talent that replaces Tree of Life; both scripts follow the slot
+  const ANCIENT_OF_LORE = "473909";
   const holder = (t: string) => t === CONTROL_OF_THE_DREAM;
 
   it("Control of the Dream: ≤ 15 s on its targets, only for a holder", () => {
@@ -568,6 +570,7 @@ describe("Restoration Druid cooldown talents (GH #154)", () => {
     });
     expect(idleCreditCapFor(NATURES_SWIFTNESS, holder)).toBe(15);
     expect(idleCreditCapFor(TREE_OF_LIFE, holder)).toBe(15);
+    expect(idleCreditCapFor(ANCIENT_OF_LORE, holder)).toBe(15);
     expect(idleCreditCapFor(NATURES_SWIFTNESS, () => false)).toBe(0);
     expect(idleCreditCapFor("102342", holder)).toBe(0); // Ironbark
   });
@@ -610,7 +613,7 @@ describe("Restoration Druid cooldown talents (GH #154)", () => {
   it("Cenarius' Guidance: Tree of Life −5 s as each Grove Guardian fades, 8 s after its summon", () => {
     const r = EVENT_COOLDOWN_REDUCTIONS["393371"]!;
     expect(r).toMatchObject({
-      targets: [TREE_OF_LIFE],
+      targets: [TREE_OF_LIFE, ANCIENT_OF_LORE],
       triggerSummonIds: ["102693"],
       summonFadeMs: 8000,
       seconds: 5,
@@ -800,7 +803,7 @@ describe("power-spend give-backs (Anger Management, Red Thirst, Restless Blades)
     ).toBeCloseTo((300 * 0.67) / 200, 6);
   });
 
-  it("Restless Blades is an Outlaw baseline: 0.8 s per combo point", () => {
+  it("Restless Blades is an Outlaw baseline: 1.0 s per combo point (the dummy's base; the PvP multiplier does not reach the script)", () => {
     const r = EVENT_COOLDOWN_REDUCTIONS["79096"]!;
     expect(r.ownedBySpecIds).toEqual(["260"]);
     const u = {
@@ -813,7 +816,7 @@ describe("power-spend give-backs (Anger Management, Red Thirst, Restless Blades)
     } as never;
     expect(
       powerSpendTriggers(u, r.triggerPowerSpend!, "260")[0]!.seconds,
-    ).toBeCloseTo(4.8, 6);
+    ).toBeCloseTo(6, 6);
   });
 });
 
@@ -1126,7 +1129,11 @@ describe("tooltip resets and give-backs found by the #176 catalog", () => {
       spellCastEvents: [ev("SPELL_CAST_SUCCESS", "264178", 1000)],
       damageOut: [],
       auraEvents: [
-        { ...ev("SPELL_AURA_REMOVED", "264173", 1100), srcUnitId: "w", destUnitId: "w" },
+        {
+          ...ev("SPELL_AURA_REMOVED", "264173", 1100),
+          srcUnitId: "w",
+          destUnitId: "w",
+        },
       ],
     } as never;
     const r = [EVENT_COOLDOWN_REDUCTIONS["1276672"]!];

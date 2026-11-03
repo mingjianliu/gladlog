@@ -11,9 +11,9 @@
  *    before it = the model's cooldown is too LONG for that unit
  *    (`backAfterNextPress`); a row the model does not count as a press of
  *    its entry = `notAPress`.
- *  - `lasts` (`durationSeconds`, `buffFullDurationForCaster`): the aura the
- *    press put up (APPLIED / REFRESH by the unit within `PRESS_AURA_LEAD_MS`)
- *    lived until its REMOVED on that unit; a life past the printed value by
+ *  - `lasts` (`durationSeconds`, `buffFullDurationForCaster`): the APPLIED
+ *    row the line read it from (`durationAura` — `pressAuraCandidates`, the
+ *    cast's target first) lived until its REMOVED on that unit; a life past the printed value by
  *    more than `LASTS_SLACK_S` = the model's duration is too SHORT
  *    (`lastsBeyond` — an aura cannot outlive its duration, Game-Behaviour
  *    Rule 7). A life cut by another application of it before the REMOVED is
@@ -26,13 +26,9 @@
  *   npx tsx packages/eval/scripts/offListPressScan.ts --manifest <m> [--every 1] --out <violations.jsonl> > summary.json
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
-import { effectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { CD_INSTANT_SLACK_S } from "@gladlog/analysis/src/utils/cooldowns";
-import {
-  extractOffListPresses,
-  PRESS_AURA_LEAD_MS,
-} from "@gladlog/analysis/src/utils/offListPress";
+import { extractOffListPresses } from "@gladlog/analysis/src/utils/offListPress";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
@@ -179,30 +175,26 @@ for (const f of files) {
           );
         }
       }
-      // lasts: the aura instance this press put up, to its REMOVED
-      if (p.durationSeconds === undefined) continue;
-      const pressMs = legacy.startTime + p.timeSeconds * 1000;
-      const auraIds = new Set([p.spellId, ...effectAurasOfCast(p.spellId)]);
+      // lasts: the aura row the line's duration was read from
+      // (`durationAura`, `pressAuraCandidates`), to its REMOVED on that unit
+      if (p.durationSeconds === undefined || !p.durationAura) continue;
+      const da = p.durationAura;
+      const holder = units.find((d) => d.id === da.unitId);
+      const rows = (holder?.auraEvents ?? []).filter(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (r: any) => r.srcUnitId === u.id && r.spellId === da.spellId,
+      );
+      const i = rows.findIndex(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (r: any) =>
+          r.logLine.event === "SPELL_AURA_APPLIED" &&
+          r.logLine.timestamp === da.atMs,
+      );
       let life: number | undefined;
-      for (const d of units) {
-        const rows = (d.auraEvents ?? []).filter(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (r: any) =>
-            r.srcUnitId === u.id && !!r.spellId && auraIds.has(r.spellId),
-        );
-        const i = rows.findIndex(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (r: any) =>
-            (r.logLine.event === "SPELL_AURA_APPLIED" ||
-              r.logLine.event === "SPELL_AURA_REFRESH") &&
-            r.logLine.timestamp >= pressMs &&
-            r.logLine.timestamp <= pressMs + PRESS_AURA_LEAD_MS,
-        );
-        if (i < 0) continue;
+      if (i >= 0) {
         const start = rows[i].logLine.timestamp;
         for (let j = i + 1; j < rows.length; j++) {
           const r = rows[j];
-          if (r.spellId !== rows[i].spellId) continue;
           const ev = r.logLine.event;
           if (ev === "SPELL_AURA_REMOVED") {
             life = (r.logLine.timestamp - start) / 1000;
@@ -215,7 +207,6 @@ for (const f of files) {
           )
             break;
         }
-        break;
       }
       if (life === undefined) continue;
       a.durChecked++;

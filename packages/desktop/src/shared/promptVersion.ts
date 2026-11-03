@@ -758,4 +758,12 @@
  *  block; a landed Death Grip stops a cast bar; the legend's full-immunity
  *  list drops Aspect of the Turtle. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 475;
+/*
+ * v476 (2026-11-03, GH #179): the `[PRESS]` line's cooldown model gains
+ *  Ancient of Lore under Tree of Life's Cenarius' Guidance and Control of
+ *  the Dream, and Restless Blades at 1.0 s per combo point; its `lasts`
+ *  reads the cast's target's copy first (`pressDuration`, shared with the
+ *  gate), none on a same-millisecond second copy. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 476;
