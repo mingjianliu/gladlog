@@ -122,6 +122,56 @@ describe("castPress — the lines no test pinned", () => {
       false,
     );
   });
+  it("Evangelism's own Radiance row rides the Evangelism press; a lone Radiance is a press", () => {
+    const radiance = row("194509", T - 1, "t1");
+    expect(isNoPressRow(radiance, [radiance, row("472433", T, "t1")])).toBe(
+      true,
+    );
+    expect(isNoPressRow(radiance, [radiance])).toBe(false);
+    expect(
+      isNoPressRow(radiance, [radiance, row("472433", T + 2_000, "t1")]),
+    ).toBe(false);
+    // a busy log writes it up to 63 ms ahead of the Evangelism row …
+    expect(
+      isNoPressRow(radiance, [radiance, row("472433", T + 63, "t1")]),
+    ).toBe(true);
+    // … never after it, and never at another target
+    expect(
+      isNoPressRow(radiance, [radiance, row("472433", T - 20, "t1")]),
+    ).toBe(false);
+    expect(isNoPressRow(radiance, [radiance, row("472433", T, "t2")])).toBe(
+      false,
+    );
+  });
+  it("a hard-cast Radiance completed just before Evangelism stays a press (codex r1)", () => {
+    const hard = row("194509", T - 50, "t1");
+    const own = row("194509", T - 1, "t1");
+    const rows = [hard, own, row("472433", T, "t1")];
+    expect(isNoPressRow(hard, rows)).toBe(false);
+    expect(isNoPressRow(own, rows)).toBe(true);
+    expect(filterRealPresses(rows)).toHaveLength(2);
+  });
+  it("two Radiance rows at one distance: one is the companion, one a press (codex r2)", () => {
+    const a = row("194509", T - 1, "t1");
+    const b = row("194509", T - 1, "t1");
+    const rows = [a, b, row("472433", T, "t1")];
+    expect([isNoPressRow(a, rows), isNoPressRow(b, rows)]).toEqual([
+      true,
+      false,
+    ]);
+  });
+  it("Germination's companion keeps its own 5 ms both ways", () => {
+    const rejuv = row("774", T, "t1");
+    expect(isCompanionCastRow(rejuv, [rejuv, row("155777", T + 5, "t1")])).toBe(
+      true,
+    );
+    expect(
+      isCompanionCastRow(rejuv, [rejuv, row("155777", T + 20, "t1")]),
+    ).toBe(false);
+    expect(isCompanionCastRow(rejuv, [rejuv, row("155777", T - 5, "t1")])).toBe(
+      true,
+    );
+  });
   it("isNoPressRow: an ordinary cast is a press; a copy id is not", () => {
     const ordinary = row("2061", T);
     expect(isNoPressRow(ordinary, [ordinary])).toBe(false);

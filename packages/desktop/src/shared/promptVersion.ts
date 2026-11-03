@@ -776,4 +776,11 @@
  *  row; kill credit stops at the round's end. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 477;
+/*
+ * v478 (2026-11-03, GH #187): Evangelism's own Power Word: Radiance row (194509
+ *  at the Evangelism's target, up to 100 ms before it) is no press — the
+ *  `[YOU] [CAST] Power Word: Radiance` line in the Evangelism second goes
+ *  (`COMPANION_CAST_ROWS`, `COMPANION_LEAD_MS`). See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 478;

@@ -46,6 +46,9 @@ export {
 // the desktop death recap asks the same predicate as the prompt)
 export { enemySourceIds } from "./utils/cannotCastIntervals";
 export * from "./utils/castCancels";
+// the companion-row predicate (Germination's 774, Evangelism's Radiance): the
+// desktop cast lanes drop the same rows as the prompt's cast lines (GH #187)
+export { isCompanionCastRow } from "./utils/castPress";
 export * from "./utils/ccBreakAnalysis";
 export * from "./utils/ccTrinketAnalysis";
 export * from "./utils/cooldowns";

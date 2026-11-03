@@ -1,4 +1,8 @@
-import { SPELL_CATEGORIES, SPELL_ICONS_GENERATED } from "@gladlog/analysis";
+import {
+  isCompanionCastRow,
+  SPELL_CATEGORIES,
+  SPELL_ICONS_GENERATED,
+} from "@gladlog/analysis";
 
 import type { ReportSource } from "./types";
 
@@ -45,7 +49,20 @@ export function deriveCasts(m: ReportSource, unitId: string): CastRow[] {
       byPet,
       icon: SPELL_ICONS_GENERATED[String(e.spellId)],
     });
-  return [...u.casts.map(row(false)), ...u.petCasts.map(row(true))].sort(
+  // A companion row (Germination's 774 beside its 155777, Evangelism's own
+  // 194509 Radiance beside the 472433 press) is no press of its own — the
+  // prompt's cast lines drop the same rows (`isCompanionCastRow`, GH #187).
+  const asRow = (e: (typeof u.casts)[number]) => ({
+    spellId: String(e.spellId),
+    destUnitId: e.destId,
+    logLine: { timestamp: e.timestamp },
+  });
+  const ownRows = u.casts.map(asRow);
+  const own = u.casts.filter((_, i) => {
+    const r = ownRows[i];
+    return !r || !isCompanionCastRow(r, ownRows);
+  });
+  return [...own.map(row(false)), ...u.petCasts.map(row(true))].sort(
     (a, b) => a.t - b.t,
   );
 }

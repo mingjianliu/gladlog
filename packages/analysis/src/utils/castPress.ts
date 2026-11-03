@@ -193,12 +193,35 @@ export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
  */
 export const COMPANION_CAST_ROWS: ReadonlyMap<string, string> = new Map([
   ["774", "155777"],
+  // Evangelism 472433 「Immediately casts Power Word: Radiance on your target
+  // at 150% effectiveness」 (DB2 472433 #1 = 150): the triggered Radiance
+  // writes its own 194509 SPELL_CAST_SUCCESS at the Evangelism row's target
+  // just before it, read as a second press (a `[YOU] [CAST] Power Word:
+  // Radiance` line beside `[CD] Evangelism`). 30 October 2026 3v3 logs with
+  // Evangelism: of 100 rows, 85 have that Radiance 0–4 ms before, 8 more
+  // 10–63 ms before (`COMPANION_LEAD_MS`), 7 none; never two Radiance rows
+  // within 100 ms of one Evangelism, never one after it. GH #187.
+  ["194509", "472433"],
 ]);
 /** How far a companion row may sit from its press. */
 export const COMPANION_CAST_ROW_MS = 5;
+/** Companions whose row may be logged further ahead of their press than
+ * `COMPANION_CAST_ROW_MS` (ms before the press; after it the 5 ms still
+ * holds). Evangelism's Radiance lags 10–63 ms in 8 of 93 pairs (see above). */
+export const COMPANION_LEAD_MS: ReadonlyMap<string, number> = new Map([
+  ["194509", 100],
+]);
 
 /** Is this cast row the companion of another press of its unit
- * (`COMPANION_CAST_ROWS`)? `rows` are the unit's cast rows. */
+ * (`COMPANION_CAST_ROWS`)? `rows` are the unit's cast rows. A press carries
+ * one companion: of the companion-id rows at its target inside the window,
+ * only the nearest is it (a tie goes to the earlier row in `rows`) — a
+ * hard-cast Radiance completed 50 ms before an Evangelism stays a press beside
+ * the Evangelism's own Radiance (codex r1). Known limit (codex r2): when the
+ * Evangelism's own row is missing (7 of 100) a hard cast completed ≤ 100 ms
+ * before it would be taken for it — none in the 30 logs (the 8 rows 10–63 ms
+ * ahead have no SPELL_CAST_START; a START is no guard either: 23 of the 86
+ * rows ≤ 4 ms ahead follow a Radiance START cut short by the Evangelism). */
 export function isCompanionCastRow<
   T extends {
     spellId?: string;
@@ -206,15 +229,28 @@ export function isCompanionCastRow<
     logLine: { timestamp: number; event?: string };
   },
 >(e: T, rows: readonly T[]): boolean {
-  const pressId = e.spellId ? COMPANION_CAST_ROWS.get(e.spellId) : undefined;
-  if (!pressId) return false;
-  return rows.some(
-    (o) =>
-      o.spellId === pressId &&
-      o.destUnitId === e.destUnitId &&
-      Math.abs(o.logLine.timestamp - e.logLine.timestamp) <=
-        COMPANION_CAST_ROW_MS,
-  );
+  const id = e.spellId;
+  const pressId = id ? COMPANION_CAST_ROWS.get(id) : undefined;
+  if (!id || !pressId) return false;
+  const lead = Math.max(COMPANION_LEAD_MS.get(id) ?? 0, COMPANION_CAST_ROW_MS);
+  // > 0: the companion row is logged ahead of its press
+  const inWindow = (c: T, press: T): boolean => {
+    const d = press.logLine.timestamp - c.logLine.timestamp;
+    return d <= lead && d >= -COMPANION_CAST_ROW_MS;
+  };
+  return rows.some((o) => {
+    if (o.spellId !== pressId || o.destUnitId !== e.destUnitId) return false;
+    if (!inWindow(e, o)) return false;
+    const gap = Math.abs(o.logLine.timestamp - e.logLine.timestamp);
+    const at = rows.indexOf(e);
+    return !rows.some((c, ci) => {
+      if (c === e || c.spellId !== id || c.destUnitId !== e.destUnitId)
+        return false;
+      if (!inWindow(c, o)) return false;
+      const g = Math.abs(o.logLine.timestamp - c.logLine.timestamp);
+      return g < gap || (g === gap && ci < at);
+    });
+  });
 }
 
 /** Is this cast row no press of its own — a copy (`COPY_CAST_IDS`) or the
@@ -259,13 +295,7 @@ export function filterRealPresses<
   for (const { e, i } of sorted) {
     const id = String(e.spellId ?? "");
     if (COPY_CAST_IDS.has(id)) continue;
-    if (
-      isCompanionCastRow(
-        e as never,
-        events as never,
-      )
-    )
-      continue;
+    if (isCompanionCastRow(e as never, events as never)) continue;
     const t = e.logLine.timestamp;
     const prev = prevEventBySpell.get(id);
     prevEventBySpell.set(id, t);

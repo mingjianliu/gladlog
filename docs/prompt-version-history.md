@@ -4952,3 +4952,13 @@ questionable-external −3, slow-defensive-response +1, position-mistake +1,
 almost all from Dark Harvest entering the ready and burst sets. Cover set
 (117 archives, 1,140 contexts) after the last commit: 240 checks, 234
 unchanged, 1 fell, 0 rose.
+
+v478 (2026-11-03, GH #187). Fact layer only. Evangelism 472433 casts Power
+Word: Radiance at its target, and that triggered Radiance writes its own
+194509 cast row 0–63 ms before the Evangelism row; it was read as a second
+press — a `[YOU] [CAST] Power Word: Radiance` line in the Evangelism second.
+`COMPANION_CAST_ROWS` gains 194509 → 472433 (`COMPANION_LEAD_MS` 100 ms ahead,
+5 ms after, same target, the nearest row only); the desktop cast lanes drop the
+same rows. 30 October 3v3 logs with Evangelism (90 owner contexts): such lines
+60 → 0, `[YOU]` Radiance presses 169 → 96, `[CD] Evangelism` 80 → 80; no other
+context line changed; findings-prompt hash unchanged.

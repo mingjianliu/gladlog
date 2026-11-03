@@ -18,6 +18,39 @@ describe("deriveCasts", () => {
   it("未知 unitId → 空数组", () => {
     expect(deriveCasts(m, "nope")).toEqual([]);
   });
+  // GH #187: Evangelism writes its own Radiance row at its target just ahead
+  // of the press; the lane shows the Evangelism press only (the prompt's
+  // cast lines drop the same row through the same predicate)
+  it("Evangelism 自带的真言术：耀不画成第二次按键,单独的耀照画", () => {
+    const cast = (timestamp: number, spellId: number, destId = "P-2") => ({
+      timestamp,
+      spellId,
+      spellName: `S${spellId}`,
+      destId,
+      destName: destId,
+    });
+    const src = {
+      units: {
+        "P-1": {
+          casts: [
+            cast(1_000, 194509),
+            cast(1_001, 472433),
+            cast(20_000, 194509),
+            cast(40_000, 194509, "P-3"),
+            cast(40_001, 472433, "P-2"),
+          ],
+          petCasts: [],
+        },
+      },
+    };
+    const rows = deriveCasts(src as never, "P-1");
+    expect(rows.map((r) => [r.t, r.spellId])).toEqual([
+      [1_001, 472433],
+      [20_000, 194509],
+      [40_000, 194509],
+      [40_001, 472433],
+    ]);
+  });
 });
 
 describe("filterGcdNoise(GCD 泳道滤噪,2026-07-25 用户实测 44.5% 折叠)", () => {
@@ -29,9 +62,8 @@ describe("filterGcdNoise(GCD 泳道滤噪,2026-07-25 用户实测 44.5% 折叠)"
     byPet,
   });
   it("分层否决:拒绝表丢、tick 刷屏丢、表外正常节奏保留", async () => {
-    const { filterGcdNoise } = await import(
-      "../src/renderer/src/report/derive/casts"
-    );
+    const { filterGcdNoise } =
+      await import("../src/renderer/src/report/derive/casts");
     const rows = [
       // Rejection table (Devour 1217610, empirically auto-triggered in the
       // corpus) → dropped
@@ -48,9 +80,8 @@ describe("filterGcdNoise(GCD 泳道滤噪,2026-07-25 用户实测 44.5% 折叠)"
     expect(kept).toHaveLength(5);
   });
   it("双 id 交替刷屏(DH 吞噬型)按名聚合抓住", async () => {
-    const { filterGcdNoise } = await import(
-      "../src/renderer/src/report/derive/casts"
-    );
+    const { filterGcdNoise } =
+      await import("../src/renderer/src/report/derive/casts");
     const mk = (t: number, spellId: number) => ({
       t,
       spellId,
@@ -67,9 +98,8 @@ describe("filterGcdNoise(GCD 泳道滤噪,2026-07-25 用户实测 44.5% 折叠)"
   });
 
   it("宠物填充剔除;curated 分类的宠物施法保留(断法 19647)", async () => {
-    const { filterGcdNoise } = await import(
-      "../src/renderer/src/report/derive/casts"
-    );
+    const { filterGcdNoise } =
+      await import("../src/renderer/src/report/derive/casts");
     const rows = [
       row(0, 999003, true), // uncategorized pet filler
       row(1000, 19647, true), // Spell Lock, present in SPELL_CATEGORIES
