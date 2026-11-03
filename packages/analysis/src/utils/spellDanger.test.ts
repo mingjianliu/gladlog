@@ -66,8 +66,9 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2; 2026-10-20: + 9 racial window ids and Ultimate Penitence 421453, user ruling)", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(70);
+  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2; 2026-10-20: + 9 racial window ids and Ultimate Penitence 421453, user ruling; 2026-11-03: + Dark Harvest 1257052, user ruling, fact9 D7)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(71);
+    expect(OFFENSIVE_CD_SPELL_IDS.has("1257052")).toBe(true);
     // user ruling 2026-10-20: racial damage buffs and Ultimate Penitence are
     // offensive cooldowns; the racial nukes are not windows
     for (const id of ["20572", "33697", "33702", "26297", "274738", "274742", "421453"])

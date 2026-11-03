@@ -76,6 +76,21 @@ export interface IAuraInterval {
   toS: number;
   inferredStart: boolean;
   inferredEnd: boolean;
+  /** The row that closed it (REMOVED / BROKEN), when one did: what was
+   * logged in its millisecond BEFORE it happened under the aura (fact9 D2,
+   * 03cba5ac 2:09: a Shadow Word: Madness tick under Time Dilation, logged
+   * just before the removal). `externalDamageForApplication` reads it. */
+  toRow?: { ms: number; lineIndex: number };
+}
+
+/** `toRow` of an interval this row closes */
+function closeRowOf(a: {
+  logLine: { timestamp: number; lineIndex?: number };
+}): Pick<IAuraInterval, "toRow"> {
+  const ix = a.logLine.lineIndex;
+  return ix === undefined
+    ? {}
+    : { toRow: { ms: a.logLine.timestamp, lineIndex: ix } };
 }
 
 const CLOSE_EVENTS = new Set<string>([
@@ -625,6 +640,7 @@ export function buildAuraIntervalsUncached(
           toS,
           inferredStart: o.inferredStart,
           inferredEnd: false,
+          ...closeRowOf(a),
         });
         lastCloseToSBySpellId.set(id, toS);
       } else {
@@ -654,6 +670,7 @@ export function buildAuraIntervalsUncached(
             toS: t,
             inferredStart: true,
             inferredEnd: false,
+            ...closeRowOf(a),
           });
         }
         lastCloseToSBySpellId.set(id, t);
@@ -719,6 +736,8 @@ function endKarmaAtItsShield(out: IAuraInterval[]): void {
     if (!shield || shield.toS >= iv.toS) continue;
     iv.toS = shield.toS;
     iv.inferredEnd = shield.inferredEnd;
+    if (shield.toRow) iv.toRow = shield.toRow;
+    else delete iv.toRow;
   }
 }
 

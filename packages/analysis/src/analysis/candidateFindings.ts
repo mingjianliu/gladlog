@@ -200,7 +200,6 @@ import {
   enemyHealerCcWindows,
   friendlyCrisisMomentInWindow,
   isDefensiveCdResponse,
-  isSpendableDefensiveCd,
   missedSyncWindowEvents,
   syncWindowCdFor,
   unsyncedBurstEvents,

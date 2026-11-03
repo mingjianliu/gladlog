@@ -113,6 +113,7 @@ import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
 import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
 import * as talentReplaces from "@gladlog/analysis/src/data/talentReplaces";
 import * as talentReplacesGenerated from "@gladlog/analysis/src/data/talentReplacesGenerated";
+import * as talentReplaceVariants from "@gladlog/analysis/src/data/talentReplaceVariants";
 import * as talentScriptedCooldowns from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
@@ -3663,6 +3664,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/overrideVariantsGenerated.ts`,
     symbol: "OVERRIDE_VARIANTS_GENERATED",
     mod: overrideVariantsGenerated,
+  },
+  {
+    file: `${A}/data/talentReplaceVariants.ts`,
+    symbol: "TALENT_REPLACE_VARIANT_IDS",
+    mod: talentReplaceVariants,
   },
   {
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,

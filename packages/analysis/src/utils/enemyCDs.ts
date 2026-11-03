@@ -9,8 +9,8 @@ import {
   castAndEffectIds,
   triggeredEffectAurasOfCast,
 } from "../data/castEffectAuras";
-import { isOffensivePressFactFor } from "../data/enemyHealCds";
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
+import { isOffensivePressFactFor } from "../data/enemyHealCds";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
@@ -24,6 +24,7 @@ import {
   supersededAuraBreaks,
 } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { channelEndSeconds } from "./castCommitSpans";
 import {
   canonicalSpellId,
   getUnitHpAtTimestamp,
@@ -35,7 +36,6 @@ import {
   unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
-import { channelEndSeconds } from "./castCommitSpans";
 import { pressRowsWithHidden } from "./hiddenPress";
 import { fmtTime } from "./renderGrid";
 import { shuffleRoundEndMs } from "./roundEnd";

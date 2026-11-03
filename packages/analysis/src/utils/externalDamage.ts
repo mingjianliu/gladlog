@@ -243,7 +243,8 @@ export function externalDamageForApplication(
   iv: Pick<
     IAuraInterval,
     "spellId" | "spellName" | "srcUnitName" | "fromS" | "toS" | "inferredStart" | "inferredEnd"
-  >,
+  > &
+    Partial<Pick<IAuraInterval, "toRow">>,
   target: ICombatUnit,
   friends: readonly ICombatUnit[],
   enemies: readonly ICombatUnit[],
@@ -286,12 +287,31 @@ export function externalDamageForApplication(
     let inSchool = 0;
     let immuneHits = 0;
     const bins = new Set<number>();
+    // fact9 D2 (03cba5ac 2:01 Time Dilation): a row logged in the closing
+    // row's millisecond but before it happened under the aura — the end is
+    // the REMOVED row in log order, not its timestamp. Only when the window
+    // ends there (not at a death or the round's end), and only when the row
+    // IS that end: a builder that clamps `toS` (the combat's end) or a
+    // re-press split that shortens it keeps a later row (codex 20-F24-15 #2).
+    const closeRow =
+      wTo === iv.toS &&
+      iv.toRow !== undefined &&
+      Math.abs(iv.toRow.ms - (startMs + iv.toS * 1000)) < 0.5
+        ? iv.toRow
+        : undefined;
+    const inWindow = (tS: number, ll: { timestamp: number; lineIndex?: number }) =>
+      (tS >= wFrom && tS < wTo) ||
+      (closeRow !== undefined &&
+        ll.timestamp === closeRow.ms &&
+        ll.lineIndex !== undefined &&
+        ll.lineIndex < closeRow.lineIndex);
+    const binOf = (tS: number) => Math.min(Math.floor(tS), Math.ceil(wTo) - 1);
     for (const m of ally.missesOut ?? []) {
       if (!isImmuneHitRow(m) || m.destUnitId !== target.id) continue;
       const tS = (m.logLine.timestamp - startMs) / 1000;
-      if (tS < wFrom || tS >= wTo) continue;
+      if (!inWindow(tS, m.logLine)) continue;
       immuneHits++;
-      bins.add(Math.floor(tS));
+      bins.add(binOf(tS));
     }
     // the ally and its pets / guardians — the attackers its landed damage
     // counts (parser-compat folds a summon's rows into the owner's
@@ -303,10 +323,10 @@ export function externalDamageForApplication(
     for (const a of target.absorbsIn ?? []) {
       if (!a.attackerId || !attackers.has(a.attackerId)) continue;
       const tS = (a.logLine.timestamp - startMs) / 1000;
-      if (tS < wFrom || tS >= wTo) continue;
+      if (!inWindow(tS, a.logLine)) continue;
       if (isDeferralAbsorb(a)) deferred += a.absorbedAmount;
       else absorbed += a.absorbedAmount;
-      bins.add(Math.floor(tS));
+      bins.add(binOf(tS));
     }
     // what shields ate or held back on the other enemies, for the share
     let absorbedElsewhere = 0;
@@ -315,7 +335,7 @@ export function externalDamageForApplication(
       for (const a of e.absorbsIn ?? []) {
         if (!a.attackerId || !attackers.has(a.attackerId)) continue;
         const tS = (a.logLine.timestamp - startMs) / 1000;
-        if (tS >= wFrom && tS < wTo) absorbedElsewhere += a.absorbedAmount;
+        if (inWindow(tS, a.logLine)) absorbedElsewhere += a.absorbedAmount;
       }
     }
     for (const d of ally.damageOut) {
@@ -333,7 +353,7 @@ export function externalDamageForApplication(
         if (DIRECT_EVENTS.has(ev)) preDirect += amt;
         else if (ev === PERIODIC_EVENT) prePeriodic += amt;
       }
-      if (tS < wFrom || tS >= wTo) continue;
+      if (!inWindow(tS, d.logLine)) continue;
       dAll += amt;
       if (!onTarget) continue;
       if (DIRECT_EVENTS.has(ev)) nDirect += amt;
@@ -341,7 +361,7 @@ export function externalDamageForApplication(
       else continue;
       if ((logSchoolMask(hitSchoolId(d)) & mit.schoolMask) !== 0)
         inSchool += amt;
-      if (amt >= EXTERNAL_DAMAGE_BIN_MIN_HIT) bins.add(Math.floor(tS));
+      if (amt >= EXTERNAL_DAMAGE_BIN_MIN_HIT) bins.add(binOf(tS));
     }
     if (preDirect + prePeriodic <= 0) continue; // not a qualifying ally
     // the rendered seconds the window touches

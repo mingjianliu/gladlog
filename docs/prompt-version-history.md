@@ -4903,3 +4903,52 @@ bound and `[RES]` cooldowns (Restless Blades); `lasts` moved to the target's
 copy on Holy Bulwark / Sacred Weapon, Rescue now the ally's 1 s carry
 (370665, logged ≤ 1.0 s) not the Evoker's 3 s flight (370666, logged ≤
 2.0 s), Bull Rush without a `lasts`.
+
+v477 (2026-11-03, round-9 fact audit classes 2–7: D1 D2 D3 D4 D7 D13 D14
+D15 D16 D17 D18 D19 D20 D22 D23 D24 D25 D26 D27 D28 D29 D31 D33). Fact-layer
+fixes only — what the log says and which type a thing is filed under; one
+user ruling changes a candidate set (D7).
+
+- Class 2: Aspect of the Turtle is a deflection, not an immunity (audit and
+  stacked-defensive lines say "deflects direct attacks"); Tranquility, Divine
+  Hymn, Desperate Prayer, Death Pact and Exhilaration are heals, not major
+  defensives, in every reader that called them one (`isHealNotMajorDefensive`)
+  — they leave the ready sets and stay in the response sets
+  (`isDefensiveCdResponse`); Serenity leaves `[ENEMY HEAL CD]` (an enemy's
+  prints `[PRESS]`, as a friendly's did); KILL SEQUENCE lists only cooldowns
+  pressed before the death.
+- Class 3: a triggered heal belongs to a press only when paired with the
+  press's own cast rows; a press at the round's end stays in the round; a
+  split copy obeys the round-end cut.
+- Class 4: an aura first seen in its holder's re-statement batch starts at
+  the source's last press within its official length; a peel's usable
+  seconds leave out a target that vanished or a dead caster's second; a
+  channel the log shows no effect of ends at the channel's end.
+- Class 5: control-miss tags read the caster's summons' miss rows; a
+  targeted control's landing is its own id or same-named aura; grounding
+  lead, immune hits (a melee swing's `SWING_MISSED` IMMUNE counts), and
+  absorbs with a nil attacker.
+- Class 6: Snowdrift is a Frost Mage's and Void Nova a Devourer Demon
+  Hunter's (roster class); Frozen Orb 198149 (Concentrated Coolness) is a
+  Frozen Orb press on both sides (`TALENT_REPLACE_VARIANT_IDS`); Absolute
+  Zero is ready only when Frostwyrm's Fury is; Dark Harvest is a major
+  offensive cooldown (user ruling 2026-11-03: a 60 s cooldown is major).
+- Class 7: an aura's `during it` window ends at its REMOVED row in log order
+  (a hit of that millisecond logged before it is inside); the kill-credit
+  5 s after a bracket stop at the round's end.
+
+605 set (3,519 contexts), class 2 preview (base b7b656bdf): cd-waste 983 →
+862, cd-hoarded 1,162 → 1,110, 9,799 enemy Serenity lines `[ENEMY HEAL CD]`
+→ `[PRESS]`. Classes 6/7 preview (base = classes 1–5), each against its
+own deterministic scan: Snowdrift roster misses 50 → 0, Frozen Orb variant
+presses unprinted 52 → 0, Absolute Zero listed on cooldown 156 → 52, during-it
+same-ms misses 69 → 3, kill credit past the round's end 1,001 → 245. Every
+residual was the scan's scope (a 3v3 round end read as the deciding friendly
+death, a press later in the line's second, `healer already in …` read as a
+listing, a window the round's end closed first) or a second roster miss (Void
+Nova, fixed after the preview); with the scans corrected the cover set reads
+0 on all five, not re-run on the 605. Candidate rows: missed-sync-window +49, kick-eaten +1,
+questionable-external −3, slow-defensive-response +1, position-mistake +1,
+almost all from Dark Harvest entering the ready and burst sets. Cover set
+(117 archives, 1,140 contexts) after the last commit: 240 checks, 234
+unchanged, 1 fell, 0 rose.

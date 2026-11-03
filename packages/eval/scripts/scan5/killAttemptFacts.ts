@@ -13,7 +13,8 @@
  *    save's aura on the target, and names no cause that outranks a self-save.
  *    07367f6e 1:13: Rallying Cry, `FAILED: not enough damage`.
  *  - `killFocusOverSpan` (D67): `team focus P%` against the team's landed +
- *    absorbed damage on enemy players over the printed bracket + 5 s.
+ *    absorbed damage on enemy players over the printed bracket + 5 s (never
+ *    past the round's end, fact9 D16).
  *    6ac699c9 2:05–2:12: 50 % printed, 71 % over that span.
  */
 import { effectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
@@ -23,6 +24,7 @@ import {
   ENEMY_IMMUNITY_SAVE_AURAS,
 } from "@gladlog/analysis/src/data/spellIdLists";
 import { IMMUNITY_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import {
   isOffensiveSpell,
   offensiveEffectCdId,
@@ -260,8 +262,14 @@ function run1(ctx: IRoundCtx, line: string): void {
   // (ec7bd3f5 1:53: 81 % from 1:53.0, 84 % from 1:53.999, 78 % from the stun's
   // own landing): every start and end those seconds allow, one per row they hold
   const inside = dead >= fromMs && dead < toMs;
-  const endFrom = inside ? dead + 5000 : ctx.start + toSec * 1000 + 5000;
-  const endTo = inside ? dead + 5000 : toMs + 5000;
+  // the 5 s after stop at the round's end (fact9 D16: `creditEndMs`, read
+  // through the product's `roundEndMs`)
+  const roundEnd = roundEndMs(ctx.legacy);
+  const endFrom = Math.min(
+    inside ? dead + 5000 : ctx.start + toSec * 1000 + 5000,
+    roundEnd,
+  );
+  const endTo = Math.min(inside ? dead + 5000 : toMs + 5000, roundEnd);
   const rows = friends
     .flatMap((f) => (f.damageOut ?? []) as any[])
     .filter(

@@ -766,4 +766,14 @@
  *  gate), none on a same-millisecond second copy. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 476;
+/*
+ * v477 (2026-11-03, round-9 fact audit classes 2–7): Aspect of the Turtle a
+ *  deflection; five heals out of the major-defensive ready sets (kept as
+ *  responses); Serenity off [ENEMY HEAL CD]; triggered heals, re-stated
+ *  auras, summons' misses, immune swings; Snowdrift / Void Nova rosters,
+ *  Frozen Orb 198149, Absolute Zero readiness, Dark Harvest a major
+ *  offensive cooldown (user ruling); during-it windows end at the REMOVED
+ *  row; kill credit stops at the round's end. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 477;

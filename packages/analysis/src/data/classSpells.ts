@@ -202,7 +202,6 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("88625", "Holy Word: Chastise", C),
       a("605", "Mind Control", C),
       a("9484", "Shackle Undead", C),
-      a("1234195", "Void Nova", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
   {
@@ -248,7 +247,6 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("207289", "Unholy Assault", O),
       a("221562", "Asphyxiate", C),
       a("207167", "Blinding Sleet", C),
-      a("389794", "Snowdrift", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
   {
@@ -284,6 +282,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       // own dps in the cast window / rest of the round; registered yardstick
       // p25 1.76 · p50 2.05; corrected run) — user delegated the ruling ("你自己决定吧").
       a("321507", "Touch of the Magi", O), // 45 s, lift 1.76
+      // fact9 D23 (7637ad20 0:39): a Frost Mage PvP talent, filed under Death
+      // Knight since W1g 2026-09-25 (control kit a player cast in the corpus,
+      // DB2 control mechanic, ≥ 30 s cooldown) — every caster of it in the
+      // round-9 audit's 30 raw logs is spec 64 (5 of 5), so a Frost Mage's kit
+      // never listed it.
+      a("389794", "Snowdrift", C),
       a("45438", "Ice Block", D),
       a("11426", "Ice Barrier", D),
       a("110959", "Greater Invisibility", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 407 rounds)
@@ -319,7 +323,11 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("108416", "Dark Pact", D),
       a("205180", "Summon Darkglare", O),
       a("265187", "Summon Demonic Tyrant", O),
-      a("1257052", "Dark Harvest", U), // fact7 class 3 (D7): 96fb4d42, no line
+      // fact9 D7 (user ruling 2026-11-03, 「60 秒算大 CD，可以算进去」): a
+      // major offensive cooldown on both sides — it was a press fact only
+      // (fact7 class 3, 96fb4d42), so the owner's 1:59 press sat in no kill
+      // window's team offensive CDs while the enemy's was an [ENEMY CD].
+      a("1257052", "Dark Harvest", O),
       a("5782", "Fear", C),
       a("30283", "Shadowfury", C),
       a("6789", "Mortal Coil", C),
@@ -403,6 +411,11 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("217832", "Imprison", C),
       a("207684", "Sigil of Misery", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
       a("205630", "Illidan's Grasp", C),
+      // fact9 D23's class (the roster-class scan, 2026-11-03): a Devourer
+      // talent (talent tree Demon Hunter / Devourer, spec 1480), filed under
+      // Priest since W1g 2026-09-25 — every caster of it in the 605 capture
+      // is a Demon Hunter (66 of 66 casts), so a Devourer's kit never listed it.
+      a("1234195", "Void Nova", C),
     ],
   },
   {

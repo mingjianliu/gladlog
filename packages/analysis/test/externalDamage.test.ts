@@ -157,6 +157,29 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     expect(net!.X).toBeCloseTo(50, 5);
   });
 
+  it("fact9 D2: a hit logged in the removal's millisecond, before the REMOVED row, is under the aura", () => {
+    const at = (row: any, lineIndex: number) => ({ ...row, logLine: { ...row.logLine, lineIndex } });
+    const ps = [
+      at(aura(PAIN_SUPPRESSION, "Pain Suppression", "E2", "E1", 20, LogEvent.SPELL_AURA_APPLIED), 10),
+      at(aura(PAIN_SUPPRESSION, "Pain Suppression", "E2", "E1", 28, LogEvent.SPELL_AURA_REMOVED), 50),
+    ];
+    const rows = (tickIx: number) => [
+      dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000),
+      dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 10_000),
+      at(dmg(LogEvent.SPELL_PERIODIC_DAMAGE, 28, "E1", 9_000), tickIx),
+    ];
+    const [before] = externalDamageObservations(enemy("E1", ps), [ally("A1", rows(49))], [enemy("E1", ps)], combat);
+    expect(before).toMatchObject({ nDirect: 10_000, nPeriodic: 9_000 });
+    // …one logged after the REMOVED row is not
+    const [after] = externalDamageObservations(enemy("E1", ps), [ally("A1", rows(51))], [enemy("E1", ps)], combat);
+    expect(after).toMatchObject({ nDirect: 10_000, nPeriodic: 0 });
+    // a window the combat's end closed first keeps none of the later
+    // removal's millisecond (codex 20-F24-15 #2)
+    const short = { ...combat, endTime: ms(25) };
+    const [cut] = externalDamageObservations(enemy("E1", ps), [ally("A1", rows(49))], [enemy("E1", ps)], short);
+    expect(cut).toMatchObject({ nDirect: 10_000, nPeriodic: 0 });
+  });
+
   it("fact9 D15: a control the target refused is no immune hit (Binding Shot's stun into a wall)", () => {
     const BOP = "1022";
     const bop = enemy("E1", [

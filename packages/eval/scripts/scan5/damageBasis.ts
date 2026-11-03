@@ -122,27 +122,52 @@ const HIGH_VALUE_SHARE = 0.05;
 const WALL_MIN_CASTS = 3;
 
 const secOfTag = (m: string, s: string): number => +m * 60 + +s;
-const inSpan = (r: any, a: number, b: number): boolean =>
-  tsOf(r) >= a && tsOf(r) < b;
+/** an aura's REMOVED row: a row of its millisecond logged before it was
+ * still under the aura (fact9 D2, the product's `IAuraInterval.toRow`) */
+type CloseRow = { ms: number; lineIndex: number } | undefined;
+const inSpan = (r: any, a: number, b: number, close?: CloseRow): boolean =>
+  (tsOf(r) >= a && tsOf(r) < b) ||
+  (close !== undefined &&
+    tsOf(r) === close.ms &&
+    r.logLine?.lineIndex !== undefined &&
+    r.logLine.lineIndex < close.lineIndex);
 const attackersOf = (ctx: IRoundCtx, u: any): Set<string> =>
   new Set([
     u.id,
     ...ctx.units.filter((x) => x.ownerId === u.id).map((x) => x.id),
   ]);
-const landedOn = (v: any, a: number, b: number, src?: Set<string>): number =>
+const landedOn = (
+  v: any,
+  a: number,
+  b: number,
+  src?: Set<string>,
+  close?: CloseRow,
+): number =>
   ((v.damageIn ?? []) as any[])
-    .filter((d) => inSpan(d, a, b) && (!src || src.has(d.srcUnitId)))
+    .filter((d) => inSpan(d, a, b, close) && (!src || src.has(d.srcUnitId)))
     .filter((d) => !REDISTRIBUTION_IDS.has(String(d.spellId)))
     .reduce((n, d) => n + Math.abs(d.effectiveAmount ?? 0), 0);
-const absorbedOn = (v: any, a: number, b: number, src?: Set<string>): number =>
+const absorbedOn = (
+  v: any,
+  a: number,
+  b: number,
+  src?: Set<string>,
+  close?: CloseRow,
+): number =>
   ((v.absorbsIn ?? []) as any[])
-    .filter((r) => inSpan(r, a, b) && (!src || src.has(r.attackerId)))
+    .filter((r) => inSpan(r, a, b, close) && (!src || src.has(r.attackerId)))
     .filter((r) => !DEFERRAL_SHIELDS.has(String(r.spellId)))
     .filter((r) => !REDISTRIBUTION_IDS.has(String(r.attackSpellId)))
     .reduce((n, r) => n + Math.abs(r.absorbedAmount ?? 0), 0);
-const deferredOn = (v: any, a: number, b: number, src?: Set<string>): number =>
+const deferredOn = (
+  v: any,
+  a: number,
+  b: number,
+  src?: Set<string>,
+  close?: CloseRow,
+): number =>
   ((v.absorbsIn ?? []) as any[])
-    .filter((r) => inSpan(r, a, b) && (!src || src.has(r.attackerId)))
+    .filter((r) => inSpan(r, a, b, close) && (!src || src.has(r.attackerId)))
     .filter((r) => DEFERRAL_SHIELDS.has(String(r.spellId)))
     .reduce((n, r) => n + (r.absorbedAmount ?? 0), 0);
 
@@ -211,20 +236,24 @@ function duringExternalShare(ctx: IRoundCtx): void {
     const printedTo = fromMs + +m[5]! * 1000;
     // the aura's own end, read from its row (a re-broadcast's REMOVED sits
     // mid-span, so the one the printed length points at)
-    const removed = ((target.auraEvents ?? []) as any[])
+    const removedRow = ((target.auraEvents ?? []) as any[])
       .filter(
         (a) =>
           ev(a) === REMOVED &&
           tsOf(a) >= fromMs &&
           nameOf(a.spellId, a.spellName) === m[3],
       )
-      .map(tsOf)
-      .sort((a, b) => Math.abs(a - printedTo) - Math.abs(b - printedTo))[0];
+      .sort(
+        (a, b) =>
+          Math.abs(tsOf(a) - printedTo) - Math.abs(tsOf(b) - printedTo),
+      )[0];
+    const removed = removedRow === undefined ? undefined : tsOf(removedRow);
     const auraTo =
       removed !== undefined &&
       Math.abs(removed - printedTo) <= PRINTED_LENGTH_MS
         ? removed
         : printedTo;
+    const removedIx = removedRow?.logLine?.lineIndex;
     const wallTo = Math.min(auraTo, deathMs(target), ctx.end);
     for (const seg of line.slice(at + "| during it: ".length).split("; ")) {
       const s = DURING_SHARE.exec(seg);
@@ -233,15 +262,20 @@ function duringExternalShare(ctx: IRoundCtx): void {
       if (!ally) continue;
       const src = attackersOf(ctx, ally);
       const toMs = Math.min(wallTo, deathMs(ally));
+      // the window ends at the REMOVED row itself, not its millisecond
+      const close: CloseRow =
+        toMs === removed && removedIx !== undefined
+          ? { ms: removed, lineIndex: removedIx }
+          : undefined;
       // signed: a negative Fel Armor row is the other half of a shield's
       // overstated row on one hit (7308d15a r2 1:16: a 350 tick logged Fel Armor
       // -1480 + Saved by the Light 1458 + Soul Leech 247 = its 225 absorbed)
       const onUnit = (v: any) =>
         Math.max(
           0,
-          landedOn(v, fromMs, toMs, src) +
-            absorbedOn(v, fromMs, toMs, src) +
-            deferredOn(v, fromMs, toMs, src),
+          landedOn(v, fromMs, toMs, src, close) +
+            absorbedOn(v, fromMs, toMs, src, close) +
+            deferredOn(v, fromMs, toMs, src, close),
         );
       const all = enemies.reduce((n, e) => n + onUnit(e), 0);
       ctx.bump("duringExternalShare");

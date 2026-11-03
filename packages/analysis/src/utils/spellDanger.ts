@@ -3,6 +3,7 @@ import { OVERRIDE_VARIANTS_GENERATED } from '../data/overrideVariantsGenerated';
 import { OFFENSIVE_RACIAL_WINDOW_IDS } from '../data/racialAbilities';
 import { spells } from '../data/spellTags';
 import { SpellTag } from '../data/spellTypes';
+import { TALENT_REPLACE_VARIANT_IDS } from '../data/talentReplaceVariants';
 
 export enum SpellEffectType {
   DamageAmp = 'DamageAmp',
@@ -178,7 +179,8 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
 export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
   '228920', // Ravager — Warrior, 90 s recharge (D16)
   '385059', // Odyn's Fury — Fury, 45 s (D8, D45); lift 1.70, coPressed 0.50
-  '1257052', // Dark Harvest — Affliction, 60 s (D7)
+  // Dark Harvest 1257052 left 2026-11-03 (fact9 D7, user ruling): a
+  // roster Offensive row, so an `OFFENSIVE_CD_SPELL_IDS` member.
   '357210', // Deep Breath, 120 s recharge (D78)
   '433874', // Deep Breath, the Scalecommander override (D78)
   '375576', // Divine Toll — 60 s, a Holy Paladin's is [ENEMY HEAL CD] (D75)
@@ -225,12 +227,14 @@ export const OFFENSIVE_EFFECT_ACTIVATION_IDS: ReadonlyMap<string, string> =
  * (`OFFENSIVE_EFFECT_ACTIVATION_IDS`) or for a DB2 override variant of a
  * member (`OVERRIDE_VARIANTS_GENERATED` — the same button and cooldown under
  * another id, F20 D23: Predator's Wake 1259431 → The Hunt 1246167, Orbital
- * Strike's Celestial Alignment 383410 / Incarnation 390414), undefined
- * otherwise. A variant is a PRESS of the cooldown (it is in
+ * Strike's Celestial Alignment 383410 / Incarnation 390414) or of a talent's
+ * button replacement (`TALENT_REPLACE_VARIANT_IDS`, fact9 D27: Frozen Orb
+ * 198149), undefined otherwise. A variant is a PRESS of the cooldown (it is in
  * `SPELL_CANONICAL_IDS` too); an activation is not. */
 export function offensiveEffectCdId(spellId: string): string | undefined {
   if (OFFENSIVE_CD_SPELL_IDS.has(spellId)) return spellId;
-  const overridden = OVERRIDE_VARIANTS_GENERATED[spellId];
+  const overridden =
+    OVERRIDE_VARIANTS_GENERATED[spellId] ?? TALENT_REPLACE_VARIANT_IDS[spellId];
   if (overridden !== undefined && OFFENSIVE_CD_SPELL_IDS.has(overridden))
     return overridden;
   return OFFENSIVE_EFFECT_ACTIVATION_IDS.get(spellId);

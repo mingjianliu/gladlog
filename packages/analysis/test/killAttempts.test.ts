@@ -2848,6 +2848,37 @@ describe("extractKillAttempts — brackets end at the round's end and at the kil
     expect(text).not.toContain("outside every attempt window");
   });
 
+  // fact9 D16 (409d2e4e r0 [2:10–2:12]): the Solo Shuffle round ended at a
+  // teammate's death at 2:14; the team's damage in the log tail after it was
+  // read into `team focus` and the `incl. the 5 s after` figure
+  it("the kill-credit slack stops at the round's end", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5) });
+    const e2 = unit("e2");
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [
+        dmg("f1", "e1", 12, 50_000),
+        dmg("f1", "e1", 16, 20_000),
+        dmg("f1", "e1", 18, 30_000), // after the round-ending death
+        dmg("f1", "e2", 18.5, 40_000),
+      ],
+    });
+    const f2 = unit("f2", {
+      reaction: 1,
+      info: {},
+      deathRecords: [{ timestamp: ms(17) }],
+    });
+    const combat = makeCombat(f1, e1, [e2]);
+    combat.units.f2 = f2;
+    const [open] = extractKillAttempts([f1, f2], [e1, e2], combat);
+    expect(open!.teamDamageToTarget).toBe(100_000);
+    expect(open!.teamOnTargetPct).toBe(71);
+    combat.startInfo.bracket = "Rated Solo Shuffle";
+    const [cut] = extractKillAttempts([f1, f2], [e1, e2], combat);
+    expect(cut!.teamDamageToTarget).toBe(70_000);
+    expect(cut!.teamOnTargetPct).toBe(100);
+  });
+
   it("a death in the kill-credit slack after the bracket leaves the bracket alone", () => {
     const e1 = unit("e1", {
       auraEvents: stunAuras("e1", KIDNEY, 10, 5),

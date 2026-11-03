@@ -1468,6 +1468,10 @@ export function joinReappliedIntervals(
     ) {
       prev.toS = iv.toS;
       prev.inferredEnd = iv.inferredEnd;
+      // the joined interval ends at the later one's closing row (codex
+      // 20-F24-15 #3: fact9 D2's same-ms rows were lost on this path)
+      if (iv.toRow) prev.toRow = iv.toRow;
+      else delete prev.toRow;
       continue;
     }
     const copy = { ...iv };
@@ -1771,6 +1775,8 @@ export interface IEnemyDefensiveEvent {
   auraToS?: number;
   auraInferredStart?: boolean;
   auraInferredEnd?: boolean;
+  /** the paired interval's closing row (`IAuraInterval.toRow`) */
+  auraToRow?: { ms: number; lineIndex: number };
   auraSrcName?: string;
   /** observed duration fell short of the caster's full duration by more than the slack */
   removedEarly: boolean;
@@ -2548,6 +2554,7 @@ export function enemyDefensiveEvents(
             auraToS: paired.toS,
             auraInferredStart: paired.inferredStart,
             auraInferredEnd: paired.inferredEnd,
+            ...(paired.toRow ? { auraToRow: paired.toRow } : {}),
             auraSrcName: paired.srcUnitName,
           }
         : {}),
@@ -2673,6 +2680,7 @@ export function enemyDefensiveEvents(
         auraToS: iv.toS,
         auraInferredStart: iv.inferredStart,
         auraInferredEnd: iv.inferredEnd,
+        ...(iv.toRow ? { auraToRow: iv.toRow } : {}),
         auraSrcName: iv.srcUnitName,
         ...earlyEndOf(mate, iv, iv.spellId),
       });

@@ -601,6 +601,16 @@ export function extractKillAttempts(
   // 101-3-555 (Duration 2:20): `[2:18–2:21] on … Storm Bolt opener` — the
   // last stun's nominal end.
   const roundEndS = (roundEndMs(combat) - matchStartMs) / 1000;
+  // fact9 D16 (409d2e4e r0 [2:10–2:12]): the kill-credit slack after a
+  // bracket does not run past the round's end either — a Solo Shuffle log
+  // runs on after the round-ending death (2:14), and `team focus` read the
+  // team's damage in that tail: 53 % / 0.40M printed, 62 % / 0.36M up to
+  // the death. The one end of every sum, credit and attribution span.
+  const creditEndMs = (toSeconds: number) =>
+    Math.min(
+      matchStartMs + (toSeconds + KILL_CREDIT_SLACK_S) * 1000,
+      roundEndMs(combat),
+    );
 
   const attempts: IKillAttempt[] = [];
   for (const [targetName, stuns] of stunsByTarget) {
@@ -663,7 +673,7 @@ export function extractKillAttempts(
       if (!span) continue;
       const { fromSeconds, toSeconds } = span;
       const spanFromMs = matchStartMs + fromSeconds * 1000;
-      const spanToMs = matchStartMs + (toSeconds + KILL_CREDIT_SLACK_S) * 1000;
+      const spanToMs = creditEndMs(toSeconds);
 
       // 3) Team damage inside the span (target + all enemies, one pass).
       let teamDamageToTarget = 0;
@@ -939,10 +949,9 @@ export function extractKillAttempts(
     for (const cl of clusters) {
       if (cl.from >= roundEndS) continue;
       const clusterTo = Math.min(cl.to, roundEndS);
-      const slackMs = KILL_CREDIT_SLACK_S * 1000;
       const whole = damageOver(
         matchStartMs + cl.from * 1000,
-        matchStartMs + clusterTo * 1000 + slackMs,
+        creditEndMs(clusterTo),
       );
       // fact2 (2026-10-20): the target is who the team hit INSIDE the
       // bracket — the slack after it is for crediting a late kill, not for
@@ -981,7 +990,7 @@ export function extractKillAttempts(
       if (!span) continue;
       const { fromSeconds, toSeconds } = span;
       const spanFromMs = matchStartMs + fromSeconds * 1000;
-      const spanToMs = matchStartMs + toSeconds * 1000 + slackMs;
+      const spanToMs = creditEndMs(toSeconds);
       const sums =
         fromSeconds === cl.from && toSeconds === clusterTo
           ? whole
@@ -1058,7 +1067,7 @@ export function extractKillAttempts(
    * every friendly's non-deferral damage on the enemy players. */
   const teamDamageOverSpan = (a: IKillAttempt) => {
     const fromMs = matchStartMs + a.fromSeconds * 1000;
-    const toMs = matchStartMs + (a.toSeconds + KILL_CREDIT_SLACK_S) * 1000;
+    const toMs = creditEndMs(a.toSeconds);
     const enemyIds = new Set(enemies.map((e) => e.id));
     let onTarget = 0;
     let total = 0;
@@ -1481,7 +1490,7 @@ export function formatKillAttemptsForContext(
   // bracket as printed, and the bracket plus the kill-credit slack that the
   // outcome is read over (ruling A29 — the window itself is not changed).
   lines.push(
-    `  \`(A M on target inside it, B M incl. the ${KILL_CREDIT_SLACK_S} s after)\` = the team's damage on the target — what landed plus what the target's shields absorbed: A inside the printed bracket, B over the bracket and the ${KILL_CREDIT_SLACK_S} s after it. A death in those ${KILL_CREDIT_SLACK_S} s is still this attempt's KILL, and \`team focus P%\`, \`healed through\` and \`not enough damage\` are read over that longer span (B), not over the bracket alone.`,
+    `  \`(A M on target inside it, B M incl. the ${KILL_CREDIT_SLACK_S} s after)\` = the team's damage on the target — what landed plus what the target's shields absorbed: A inside the printed bracket, B over the bracket and the ${KILL_CREDIT_SLACK_S} s after it (never past the round's end). A death in those ${KILL_CREDIT_SLACK_S} s is still this attempt's KILL, and \`team focus P%\`, \`healed through\` and \`not enough damage\` are read over that longer span (B), not over the bracket alone.`,
   );
   // F-E22 / F-E22b (rulings A29, A′4): what may be named after FAILED.
   // FT-T15 ⑦ (user ruling 2026-10-10): the text after FAILED is the first

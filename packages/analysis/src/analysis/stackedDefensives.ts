@@ -32,12 +32,12 @@
  * Only pairs the OWNER took part in (cast A or B, or is the target) are
  * returned — the card is owner-anchored like every other context line.
  */
+import { isHealNotMajorDefensive } from "../data/abilityProfile";
 import { castKeyOfAura } from "../data/castEffectAuras";
 import {
   resolveMitigation,
   strongestComponentPct,
 } from "../data/mitigationComponents";
-import { isHealNotMajorDefensive } from "../data/abilityProfile";
 import { DEFLECTION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";

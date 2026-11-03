@@ -288,6 +288,7 @@ import {
 } from "./talentDurationTooltips";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { TALENT_REPLACES } from "./talentReplaces";
+import { TALENT_REPLACE_VARIANT_IDS } from "./talentReplaceVariants";
 import {
   EVENT_COOLDOWN_REDUCTIONS,
   eventReductionOwner,
@@ -1136,6 +1137,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // line, no window; found forward by scan5/listGap.ts.
   t("OFFENSIVE_PRESS_FACT_IDS", "utils/spellDanger.ts", "cast", () =>
     set(OFFENSIVE_PRESS_FACT_IDS),
+  ),
+  // fact9 D27: a talent's same-cooldown button replacement (Frozen Orb 198149)
+  t("TALENT_REPLACE_VARIANT_IDS", "data/talentReplaceVariants.ts", "cast", () =>
+    keys(TALENT_REPLACE_VARIANT_IDS),
   ),
   // user ruling 2026-10-30 (fact7 D19 / D26): a line, nothing else.
   t(

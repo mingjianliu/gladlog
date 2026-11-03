@@ -214,6 +214,7 @@ export function emitEnemyDefEntries(
                 toS: d.auraToS,
                 inferredStart: !!d.auraInferredStart,
                 inferredEnd: !!d.auraInferredEnd,
+                ...(d.auraToRow ? { toRow: d.auraToRow } : {}),
               },
               targetUnit,
               friends,

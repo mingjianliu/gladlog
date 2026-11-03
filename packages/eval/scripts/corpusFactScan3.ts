@@ -711,8 +711,28 @@ function runRound(ctx: IContext): void {
     if (/^(broke out|target trinketed out)/.test(m[6]!)) continue;
     const target = byName.get(m[5]!);
     if (!target) continue;
-    const a = start + (Number(m[1]) * 60 + Number(m[2])) * 1000;
+    let a = start + (Number(m[1]) * 60 + Number(m[2])) * 1000;
     const b = start + (Number(m[3]) * 60 + Number(m[4]) + 1) * 1000;
+    // a burst attempt opens at its press, inside the floored second: a
+    // control the Sanctuary took off before it was no control of the attempt
+    // (7686e97d r2 1:10: Psychic Scream removed 29 ms before the Dark Harvest
+    // that opened it)
+    const opener = / — (.+?) burst \(no stun\)/.exec(l)?.[1];
+    if (opener !== undefined) {
+      const press = players
+        .filter((p) => p.reaction !== target.reaction)
+        .flatMap((p) => (p.spellCastEvents ?? []) as any[])
+        .filter(
+          (c) =>
+            ev(c) === SUCCESS &&
+            nameOf(String(c.spellId ?? ""), c.spellName) === opener &&
+            tsOf(c) >= a &&
+            tsOf(c) < a + 1000,
+        )
+        .map(tsOf)
+        .sort((x, y) => x - y)[0];
+      if (press !== undefined) a = press;
+    }
     bump("sanctuaryKillAttempt");
     const hit = sanct.find(
       (x) =>

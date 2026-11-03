@@ -52,6 +52,7 @@ import { hasOfficialTargeting, reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
 import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { replacedSpellIds } from "../data/talentReplaces";
+import { TALENT_REPLACE_VARIANT_IDS } from "../data/talentReplaceVariants";
 import {
   eventReducedCooldownSeconds,
   eventReductionsFor,
@@ -3647,9 +3648,11 @@ export const HAND_CANONICAL_IDS: Readonly<Record<string, string>> = {
 export const SPELL_CANONICAL_IDS: Record<string, string> = (() => {
   const handTargets = new Set(Object.values(HAND_CANONICAL_IDS));
   const out: Record<string, string> = {};
-  for (const [variant, overridden] of Object.entries(
-    OVERRIDE_VARIANTS_GENERATED,
-  )) {
+  for (const [variant, overridden] of Object.entries({
+    ...OVERRIDE_VARIANTS_GENERATED,
+    // fact9 D27: a talent's same-cooldown button replacement
+    ...TALENT_REPLACE_VARIANT_IDS,
+  })) {
     if (variant in HAND_CANONICAL_IDS || handTargets.has(variant)) continue;
     const canon = HAND_CANONICAL_IDS[overridden] ?? overridden;
     if (canon !== variant) out[variant] = canon;
@@ -5080,8 +5083,15 @@ function extractMajorCooldownsAll(
     // variant's when only the variant was pressed this round, the member's
     // when the member was pressed too (one row, as the dedupe below keeps
     // it); each press line names its own press (`ICooldownCast.pressedAs`).
+    // A talent's same-name, same-cooldown replacement
+    // (`TALENT_REPLACE_VARIANT_IDS`, fact9 D27; codex 20-F24-15 #1:
+    // a7e95468 r0, a Frost Mage who pressed only Frozen Orb 198149 had no
+    // Frozen Orb row) is the member's press the same way.
     const canonOfVariant =
-      castId in OVERRIDE_VARIANTS_GENERATED ? canonicalSpellId(castId) : castId;
+      castId in OVERRIDE_VARIANTS_GENERATED ||
+      castId in TALENT_REPLACE_VARIANT_IDS
+        ? canonicalSpellId(castId)
+        : castId;
     const spellId =
       canonOfVariant !== castId &&
       !OFFENSIVE_CD_SPELL_IDS.has(castId) &&

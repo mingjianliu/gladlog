@@ -1113,6 +1113,17 @@ describe("a re-applied aura with no REMOVED between is one press (F-E12)", () =>
     const gap = [iv(10, 14, true), iv(15, 26, false)];
     expect(joinReappliedIntervals(gap, () => [10])).toEqual(gap);
   });
+
+  it("a joined interval ends at the later one's closing row (codex 20-F24-15 #3)", () => {
+    const row = { ms: 1_026_000, lineIndex: 50 };
+    const split = [
+      { spellId: BARKSKIN, spellName: "Barkskin", srcUnitName: "e1", fromS: 10, toS: 14, inferredStart: false, inferredEnd: true },
+      { spellId: BARKSKIN, spellName: "Barkskin", srcUnitName: "e1", fromS: 14, toS: 26, inferredStart: false, inferredEnd: false, toRow: row },
+    ];
+    expect(joinReappliedIntervals(split, () => [10])).toMatchObject([
+      { fromS: 10, toS: 26, toRow: row },
+    ]);
+  });
 });
 
 /**

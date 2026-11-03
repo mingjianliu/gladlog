@@ -1131,6 +1131,14 @@ export const TALENT_TRIGGERED_CONTROL_BUTTONS: Readonly<
   Record<string, readonly string[]>
 > = {
   "372245": ["433874", "357210", "403631"], // Terror of the Skies ← Deep Breath / Breath of Eons
+  // fact9 D22 (6f7c0839 r0 0:49 / 1:11): Absolute Zero 377048 is the stun
+  // the talent 377047 puts on Frostwyrm's Fury — DB2 has no trigger link
+  // (377047: effect 6, aura 108, misc 11, −50; 377048: aura 12), the
+  // tooltip ties it to the breath. Round-9 audit's 30 raw logs: 40 of 40
+  // landings within 2 s after a 279302 press; holders' Frostwyrm's Fury
+  // recasts ≥ 91.7 s apart (the −50 is not a cooldown change). Listed IN LoS
+  // 21 s and 43 s into the 90 s cooldown.
+  "377048": ["279302"], // Absolute Zero ← Frostwyrm's Fury
 };
 /** A landing within this of a press (or of an earlier landing) is that
  * press's: 3.6 s measured max, one flight stunning several units. Read for
