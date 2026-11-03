@@ -284,6 +284,43 @@ export const KW_UNPRESSED_NOT_IN_HAND_IDS: ReadonlySet<string> = new Set([
   "6940", // Blessing of Sacrifice — an ally only
 ]);
 
+/**
+ * Roster members that are no damage defense while UP — the burst ledger does
+ * not call them "Target had a major defensive up" (fact9 D21, user ruling
+ * 2026-11-02 「去掉治疗与仅控制免疫」). They stay in the roster: the span state
+ * machine still times them (fact8 D9, user 2026-11-01). Evidence, the
+ * official profile (`abilityProfile`, unit-tested in abilityProfile.test.ts):
+ *  - heals: Desperate Prayer 19236, Death Pact 48743, Exhilaration 109304
+ *    (`healsSelf` only); Divine Hymn 64843 (`healsOthers` + 4 % healing
+ *    received); Tranquility 740 (a channelled group heal, `healsOthers` —
+ *    its effect aura 157982 heals only; fact9 D17 files it as throughput);
+ *  - a control-only immunity: Lichborne 49039 (no mitigation, absorb or
+ *    school immunity; immune to charm / fear / sleep / turn, mechanics
+ *    1 / 5 / 10 / 23). 6f7c0839 r0 0:57: "Target had a major defensive up:
+ *    Lichborne" over Burst #2 since PV469.
+ * Kept by the same ruling: avoidance (Evasion, Nether Ward), cheat death
+ * (Guardian Spirit), max health (Rallying Cry) and the untargetable saves.
+ * Registered in curatedIdRegistry.
+ */
+export const KW_NOT_UP_AS_DEFENSE_IDS: ReadonlySet<string> = new Set([
+  "19236", // Desperate Prayer — a heal
+  "48743", // Death Pact — a heal
+  "109304", // Exhilaration — a heal
+  "64843", // Divine Hymn — a heal
+  "740", // Tranquility — a heal
+  "49039", // Lichborne — control immunity only
+]);
+
+/** Is this spell, while its aura runs on a unit, a MAJOR defensive UP in the
+ * burst ledger's sense ("Target had a major defensive up")? The kill-window
+ * roster less `KW_NOT_UP_AS_DEFENSE_IDS`. */
+export function isMajorDefenseUp(spellId: string): boolean {
+  return (
+    isKillWindowMajorDefensive(spellId) &&
+    !KW_NOT_UP_AS_DEFENSE_IDS.has(spellId)
+  );
+}
+
 /** Does a roster defensive the unit OWNS and never pressed keep it out of
  * every span (`unusedKitRows`; user rulings 2026-10-20)? */
 export function unpressedKitDefensiveInHand(spellId: string): boolean {

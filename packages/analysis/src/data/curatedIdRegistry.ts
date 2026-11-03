@@ -198,6 +198,7 @@ import {
 import {
   KW_IN_HAND_ONLY_DEFENSIVE_IDS,
   KW_MAJOR_DEFENSIVE_IDS,
+  KW_NOT_UP_AS_DEFENSE_IDS,
   KW_UNPRESSED_NOT_IN_HAND_IDS,
 } from "./abilityProfile";
 import { castEffectPairs } from "./castEffectAuras";
@@ -496,6 +497,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   // 10-20 用户裁定:没按过的治疗(Desperate Prayer、Divine Hymn、Tranquility)
   // 和只能给队友的(Blessing of Sacrifice)不算「手里有」。
+  // 11-02 用户裁定(fact9 D21):治疗与仅控制免疫的不在爆发台账里叫
+  // 「major defensive up」,span 状态机照旧计时。
+  t(
+    "abilityProfile.KW_NOT_UP_AS_DEFENSE_IDS",
+    "data/abilityProfile.ts",
+    "cast",
+    () => [...KW_NOT_UP_AS_DEFENSE_IDS],
+  ),
   t(
     "abilityProfile.KW_UNPRESSED_NOT_IN_HAND_IDS",
     "data/abilityProfile.ts",

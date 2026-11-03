@@ -51,15 +51,14 @@ const SPELLS = spellsData as Record<string, SpellEntry>;
 // GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set
 // (immunities stay — immuneSchools covers most, the category term keeps parity
 // for entries the face lacks).
-import {
-  abilityProfile,
-  isKillWindowMajorDefensive,
-} from "../data/abilityProfile";
+import { abilityProfile, isMajorDefenseUp } from "../data/abilityProfile";
 import { spellEffectData } from "../data/spellEffectData";
 const DEF_OR_IMMUNE_CAST_IDS = new Set<string>([
-  // Enumerate the official universe through the shared predicate — the same
-  // ids the span state machine reasons with, so the two can never disagree.
-  ...Object.keys(spellEffectData).filter(isKillWindowMajorDefensive),
+  // Enumerate the official universe through the shared predicate — the
+  // span state machine's roster, less the members that are no damage
+  // defense while up (fact9 D21: Lichborne read "a major defensive up"
+  // once fact8 D9 put it in the roster; `isMajorDefenseUp`).
+  ...Object.keys(spellEffectData).filter(isMajorDefenseUp),
   ...Object.keys(SPELLS).filter((id) => SPELLS[id]?.type === "immunities"),
 ]);
 /** …and the AURA a wall logs under when it is not its cast id — the ledger

@@ -4825,3 +4825,22 @@ every file they can touch — against the pre-review commit: 6 echo lines
 gone, nothing else in 1,716 contexts changes, findings identical,
 offListPressLine 50 → 47 (3 Stasis replays no longer read as the next
 press).
+
+v474 (2026-11-02, F24 batch 1 — round-9 audit fact9 D30 / D32 / D21 / D6).
+kick-eaten's kicker sweep reads a pet kick (Felhunter Spell Lock) through
+`interruptCasterAt`, the reading `enemy interrupts UP` takes: the pet out at
+cast start, its own position, range and control state, the owner's cooldown.
+Before, a ready pet counted only when it landed the kick (dcff7ebb r0 2:06: a
+Felhunter 0.5 yd away, the row named a Mage 25.1 yd off). The burst ledger's
+"Target had a major defensive up" no longer names heals or control-only
+immunity — Lichborne, Death Pact, Exhilaration, Desperate Prayer, Divine Hymn,
+Tranquility (`KW_NOT_UP_AS_DEFENSE_IDS`, user ruling 2026-11-02); the span
+state machine keeps them. A Nether Ward own-id return goes to the reflect its
+own millisecond names (`netherWardNamedSpells`; 14bb43b3 r0 2:40: the
+reflected Haunt's 92k had been added to an Agony reflected 110 ms later).
+
+Cover set (117 archives, 1,140 contexts), base f4009b807 (v472, before
+v473 landed) → after, same check code: petKickerMissed 8 → 0,
+ledgerDefNoEffect 73 → 0, wardReturnMisnamed 0 → 0 (15 audited rounds
+1 → 0); 213 checks: 210 unchanged, 2 fell, 0 rose.
+Gates identical; body lines 535,633 → 535,560.

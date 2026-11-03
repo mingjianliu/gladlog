@@ -249,16 +249,81 @@ export const REFLECT_OWN_ID_LEAD_MS = 500;
 export function pairNetherWardReturns(
   reflectRows: readonly number[],
   ownRows: readonly number[],
+  /** fact9 D6: what the log says each row is — the spell ids of the reflect
+   * a REFLECT row belongs to, and the spells an own-id row's own
+   * millisecond names (`netherWardNamedSpells`). A row that names a spell
+   * takes the latest free REFLECT row of that spell; one that names none,
+   * or none of the reflects behind it, keeps the timing rule. */
+  names?: {
+    reflectRowSpells: ReadonlyMap<number, ReadonlySet<string>>;
+    ownRowNames: ReadonlyMap<number, ReadonlySet<string>>;
+  },
 ): Map<number, number> {
   const free = [...reflectRows].sort((a, b) => a - b);
   const out = new Map<number, number>();
+  const sameName = (a: string, b: string) =>
+    a === b ||
+    (getEnglishSpellName(a, "") !== "" &&
+      getEnglishSpellName(a, "") === getEnglishSpellName(b, ""));
   for (const ts of [...ownRows].sort((a, b) => a - b)) {
     let at = free.length - 1;
     while (at >= 0 && free[at]! > ts) at--;
     if (at < 0) continue;
+    const named = names?.ownRowNames.get(ts);
+    if (named && named.size > 0) {
+      for (let i = at; i >= 0; i--) {
+        const spells = names!.reflectRowSpells.get(free[i]!);
+        if (
+          spells &&
+          [...spells].some((s) => [...named].some((n) => sameName(s, n)))
+        ) {
+          at = i;
+          break;
+        }
+      }
+    }
     const [row] = free.splice(at, 1);
     if (!out.has(ts)) out.set(ts, row!);
   }
+  return out;
+}
+
+/**
+ * The spells a Nether Ward own-id row's own millisecond names (fact9 D6,
+ * 14bb43b3 2:40.133): the reflected Haunt came back as 92k under 212295, and
+ * in that millisecond the SPELL_ABSORBED of its absorbed part names Haunt
+ * 48181 and Haunt's debuff goes up on the caster from the reflector — while
+ * a timing-only pairing gave it to an Agony reflected 110 ms later, a DoT
+ * whose reflect comes back as its copy. Read: the reflector's SPELL_ABSORBED
+ * rows on the caster in that ms under any other id (a deferral shield's
+ * book-keeping aside), and the auras the reflector put on the caster then.
+ * Shared by `reflectedSpells` and corpusFactScan `reflectReturn`.
+ */
+export function netherWardNamedSpells(
+  caster: Pick<ICombatUnit, "absorbsIn" | "auraEvents">,
+  reflectorId: string | undefined,
+  ts: number,
+): Set<string> {
+  const out = new Set<string>();
+  for (const a of caster.absorbsIn ?? [])
+    if (
+      a.timestamp === ts &&
+      a.attackerId === reflectorId &&
+      !!a.attackSpellId &&
+      a.attackSpellId !== NETHER_WARD_ID &&
+      !isDeferralAbsorb(a)
+    )
+      out.add(a.attackSpellId);
+  for (const e of caster.auraEvents ?? [])
+    if (
+      e.logLine.timestamp === ts &&
+      e.srcUnitId === reflectorId &&
+      !!e.spellId &&
+      e.spellId !== NETHER_WARD_ID &&
+      (e.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        e.logLine.event === LogEvent.SPELL_AURA_REFRESH)
+    )
+      out.add(e.spellId);
   return out;
 }
 
@@ -279,7 +344,8 @@ export function reflectOwnIdRowGap(
       .filter((r) => ts >= r - REFLECT_OWN_ID_LEAD_MS)
       .map((r) => Math.abs(ts - r)),
   );
-  const paired = ownId === NETHER_WARD_ID ? netherWardPairs?.get(ts) : undefined;
+  const paired =
+    ownId === NETHER_WARD_ID ? netherWardPairs?.get(ts) : undefined;
   if (paired === undefined) return gap;
   return rows.includes(paired) ? 0 : REFLECT_DAMAGE_WINDOW_S * 1000 + gap;
 }
@@ -576,14 +642,21 @@ export function reflectedSpells(
               !landed.includes(a.timestamp),
           )
           .map((a) => a.timestamp);
+        const wardChains = chains.filter(
+          (c) => c.first.destUnitId === src && [...c.ids].some(dealsDamage),
+        );
+        const ownRows = [...landed, ...absorbed];
         pairs = pairNetherWardReturns(
-          chains
-            .filter(
-              (c) =>
-                c.first.destUnitId === src && [...c.ids].some(dealsDamage),
-            )
-            .flatMap((c) => c.rows),
-          [...landed, ...absorbed],
+          wardChains.flatMap((c) => c.rows),
+          ownRows,
+          {
+            reflectRowSpells: new Map(
+              wardChains.flatMap((c) => c.rows.map((r) => [r, c.ids])),
+            ),
+            ownRowNames: new Map(
+              ownRows.map((ts) => [ts, netherWardNamedSpells(caster, src, ts)]),
+            ),
+          },
         );
         wardPairs.set(key, pairs);
       }

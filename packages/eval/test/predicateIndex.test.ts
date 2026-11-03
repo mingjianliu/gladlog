@@ -1625,6 +1625,11 @@ const INDEX: PredicateRow[] = [
     mod: spellOutcomeLines,
   },
   {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "netherWardNamedSpells",
+    mod: spellOutcomeLines,
+  },
+  {
     file: `${A}/data/channeledGenerated.ts`,
     symbol: "HASTE_DURATION_SPELL_IDS",
     mod: channeledGenerated,
@@ -3475,6 +3480,11 @@ const INDEX: PredicateRow[] = [
     mod: enemyInterrupts,
   },
   {
+    file: `${A}/utils/enemyInterrupts.ts`,
+    symbol: "interruptCasterAt",
+    mod: enemyInterrupts,
+  },
+  {
     file: `${A}/analysis/crisisDecisionPoints.ts`,
     symbol: "crisisDecisionPoints",
     mod: crisisDecisionPoints,
@@ -3502,6 +3512,16 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/data/abilityProfile.ts`,
     symbol: "isKillWindowMajorDefensive",
+    mod: abilityProfileMod,
+  },
+  {
+    file: `${A}/data/abilityProfile.ts`,
+    symbol: "isMajorDefenseUp",
+    mod: abilityProfileMod,
+  },
+  {
+    file: `${A}/data/abilityProfile.ts`,
+    symbol: "KW_NOT_UP_AS_DEFENSE_IDS",
     mod: abilityProfileMod,
   },
   {

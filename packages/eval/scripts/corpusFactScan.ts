@@ -112,6 +112,7 @@ import {
   isCountedReflectRow,
   maxHpNear,
   NETHER_WARD_ID,
+  netherWardNamedSpells,
   pairNetherWardReturns,
   REFLECT_CHAIN_GAP_MS,
   REFLECT_DAMAGE_WINDOW_S,
@@ -1203,22 +1204,39 @@ function runRound(ctx: IContext): void {
         const landed = ((caster.damageIn ?? []) as any[])
           .filter((d) => d.spellId === NETHER_WARD_ID && d.srcUnitId === src)
           .map(tsOf);
+        const wardGroups = groups.filter(
+          (g) => g.g && g.first.destUnitId === src,
+        );
+        const ownRows: number[] = [
+          ...landed,
+          ...((caster.absorbsIn ?? []) as any[])
+            .filter(
+              (a) =>
+                a.attackSpellId === NETHER_WARD_ID &&
+                a.attackerId === src &&
+                !DEFERRAL_SHIELDS.has(String(a.spellId)) &&
+                !landed.includes(tsOf(a)),
+            )
+            .map(tsOf),
+        ];
+        // fact9 D6: the same reading as the product — a row names its spell
+        // by its own millisecond's absorb / aura rows
         pairs = pairNetherWardReturns(
-          groups
-            .filter((g) => g.g && g.first.destUnitId === src)
-            .flatMap((g) => g.rows),
-          [
-            ...landed,
-            ...((caster.absorbsIn ?? []) as any[])
-              .filter(
-                (a) =>
-                  a.attackSpellId === NETHER_WARD_ID &&
-                  a.attackerId === src &&
-                  !DEFERRAL_SHIELDS.has(String(a.spellId)) &&
-                  !landed.includes(tsOf(a)),
-              )
-              .map(tsOf),
-          ],
+          wardGroups.flatMap((g) => g.rows),
+          ownRows,
+          {
+            reflectRowSpells: new Map(
+              wardGroups.flatMap((g) =>
+                g.rows.map((r) => [r, new Set([String(g.first.spellId)])]),
+              ),
+            ),
+            ownRowNames: new Map(
+              ownRows.map((ts) => [
+                ts,
+                netherWardNamedSpells(caster, src, ts),
+              ]),
+            ),
+          },
         );
         wardPairs.set(src, pairs);
       }

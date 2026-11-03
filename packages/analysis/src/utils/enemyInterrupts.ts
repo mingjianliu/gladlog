@@ -425,6 +425,53 @@ export function interruptForUnit(unit: ICombatUnit): InterruptDef | null {
   return talentPick ?? pet;
 }
 
+/**
+ * Who throws an enemy's kick at `atMs` — the one reading behind `enemy
+ * interrupts UP` / `[CONTESTED]` and kick-eaten's kicker sweep (fact9 D30 /
+ * D32: the sweep skipped every pet kick but the one that landed, so a ready
+ * Felhunter 0.5 yd from the caster was no kicker when a Mage's Counterspell
+ * landed). The enemy itself, unless the kick is one only its pet(s) were
+ * seen casting; then the pet out at `atMs` — alive then, and the one last
+ * seen at or before it (a pet that died earlier or was summoned later has no
+ * aura or position at `atMs`, codex review). `caster` is undefined when no
+ * such pet is out yet or the round's units were not handed in; `gone` when
+ * the pet is dead or dismissed and not yet replaced (`ownerPetGoneAt`, D7,
+ * user 2026-10-24: a pet kick goes with the pet). The cooldown stays the
+ * owner's to read (`interruptCooldownRemainingMs` counts the pets' casts).
+ */
+export function interruptCasterAt(
+  enemy: ICombatUnit,
+  spellId: string,
+  atMs: number,
+  allUnits?: ReadonlyArray<ICombatUnit>,
+): { caster: ICombatUnit | undefined; viaPet: boolean; gone: boolean } {
+  const petCasterIds = new Set(
+    (enemy.petSpellCastEvents ?? [])
+      .filter(
+        (c) =>
+          c.spellId === spellId &&
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+      )
+      .map((c) => c.srcUnitId),
+  );
+  const ownCast = (enemy.spellCastEvents ?? []).some(
+    (c) =>
+      c.spellId === spellId && c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+  );
+  if (petCasterIds.size === 0 || ownCast)
+    return { caster: enemy, viaPet: false, gone: false };
+  if (allUnits !== undefined && ownerPetGoneAt(enemy, allUnits, atMs))
+    return { caster: undefined, viaPet: true, gone: true };
+  return {
+    caster: activeUnitAt(
+      (allUnits ?? []).filter((u) => petCasterIds.has(u.id)),
+      atMs,
+    ),
+    viaPet: true,
+    gone: false,
+  };
+}
+
 export interface IEnemyInterruptState {
   enemyName: string;
   spec: string;
@@ -512,41 +559,13 @@ export function computeEnemyInterruptAvailability(
     if (isDeadAt(enemy, atMs)) continue;
     const def = interruptForUnit(enemy);
     if (!def) continue;
-    // who throws it: the enemy, or the pet(s) seen casting a pet kick
-    const petCasterIds = new Set(
-      (enemy.petSpellCastEvents ?? [])
-        .filter(
-          (c) =>
-            c.spellId === def.spellId &&
-            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
-        )
-        .map((c) => c.srcUnitId),
+    const { caster, gone } = interruptCasterAt(
+      enemy,
+      def.spellId,
+      atMs,
+      allUnits,
     );
-    const ownCast = (enemy.spellCastEvents ?? []).some(
-      (c) =>
-        c.spellId === def.spellId &&
-        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
-    );
-    // D7 (user 2026-10-24): a pet kick goes with the pet — dead or
-    // dismissed and not yet replaced (`ownerPetGoneAt`), the enemy has no
-    // interrupt at `atMs`
-    if (
-      petCasterIds.size > 0 &&
-      !ownCast &&
-      allUnits !== undefined &&
-      ownerPetGoneAt(enemy, allUnits, atMs)
-    )
-      continue;
-    // the pet out at `atMs`: alive then, and the one last seen at or before
-    // it — a pet that died earlier or was summoned later has no aura at
-    // `atMs` and must not read "free" for the active one (codex review)
-    const caster: ICombatUnit | undefined =
-      petCasterIds.size > 0 && !ownCast
-        ? activeUnitAt(
-            (allUnits ?? []).filter((u) => petCasterIds.has(u.id)),
-            atMs,
-          )
-        : enemy;
+    if (gone) continue;
     const ccd =
       hostileIds !== undefined &&
       caster !== undefined &&

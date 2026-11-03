@@ -742,4 +742,11 @@
  *  Triple Threat / Jackpot boost. Findings unchanged. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 473;
+/*
+ * v474 (2026-11-02, F24 batch 1: fact9 D30 / D32 / D21 / D6): a ready enemy
+ *  pet kicker (Spell Lock) counts on kick-eaten rows by its own position;
+ *  the burst ledger's "major defensive up" drops heals and control-only
+ *  immunity (user ruling); a Nether Ward return goes to the reflect its own
+ *  millisecond names. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 474;

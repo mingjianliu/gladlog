@@ -102,6 +102,7 @@ import {
 } from "./drAnalysis";
 import { IMMUNITY_IDS } from "./enemyDefensives";
 import {
+  interruptCasterAt,
   interruptCooldownRemainingMs,
   interruptForUnit,
   kickCastSpellId,
@@ -4233,6 +4234,10 @@ export function analyzePlayerCCAndTrinket(
       if (a.srcUnitId && !enemyIds.has(a.srcUnitId))
         hostileToEnemies.add(a.srcUnitId);
 
+  // the round's units: who throws a pet kick at cast start
+  // (`interruptCasterAt`)
+  const roundUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
+
   const ownerInterruptImmuneWindows = interruptImmuneWindows(
     player,
     { startTime: combat.startTime, endTime: combat.endTime },
@@ -4510,13 +4515,34 @@ export function analyzePlayerCCAndTrinket(
             wideSampleGapS(sourceUnit, castStartMs),
           );
         }
+        // every kicker the sweep counted, so the source-pet fallback below
+        // does not count one twice
+        const sweptKickerIds = new Set<string>();
         for (const enemy of enemies) {
           const kit = interruptForUnit(enemy);
           if (!kit) continue;
-          // Codex review P2: pet interrupts (Spell Lock, Axe Toss) come from the pet,
-          // not the owner; unconfirmed kits (kit.confirmed === false) are pet abilities
-          // or unobserved fallbacks whose range cannot be reliably judged from owner pos.
-          if (kit.confirmed === false) continue;
+          // fact9 D30 / D32: a pet kick (Spell Lock) is thrown by the pet
+          // out at cast start — its own position, range and control state
+          // (`interruptCasterAt`, the reading `enemy interrupts UP` takes);
+          // the cooldown stays the owner's, whose history holds the pets'
+          // casts. Until then every pet kick but the one that LANDED was
+          // skipped: a ready Felhunter 0.5 yd from the caster was no kicker
+          // when a Mage's Counterspell landed (dcff7ebb 2:06). Any other
+          // unconfirmed kit (a tree-availability fallback) is still skipped
+          // (codex review P2: its range cannot be judged).
+          let kicker: ICombatUnit = enemy;
+          let kickerIsPet = false;
+          if (kit.confirmed === false) {
+            const at = interruptCasterAt(
+              enemy,
+              kit.spellId,
+              castStartMs,
+              roundUnits,
+            );
+            if (!at.viaPet || !at.caster) continue;
+            kicker = at.caster;
+            kickerIsPet = true;
+          }
           const cdLeft = kickCdLeftAtCastStartMs(
             enemy,
             kit.spellId,
@@ -4540,25 +4566,28 @@ export function analyzePlayerCCAndTrinket(
           // 0.1 s into the cast says nothing about a kick that returned
           // 0.3 s in (Fable re-review of the batch).
           const heldAt = (ms: number) =>
-            castBlockingAuraAt(enemy, hostileToEnemies, ms, kit.spellId);
+            castBlockingAuraAt(kicker, hostileToEnemies, ms, kit.spellId);
           if (
             late
               ? heldAt(castStartMs + cdLeft) && heldAt(action.timestamp)
               : heldAt(castStartMs)
           )
             continue;
-          const enemyPos = getUnitPositionAtTime(
-            enemy,
+          const kickerPos = getUnitPositionAtTime(
+            kicker,
             castStartMs,
             LOS_SWEEP_GAP_MS,
           );
-          if (!enemyPos) continue;
-          const dist = distanceBetween(playerPos, enemyPos);
-          // this kicker's range, range talents included (GH #83)
-          const range = spellRangeForCaster(enemy, kit.spellId) ?? 5;
+          if (!kickerPos) continue;
+          sweptKickerIds.add(kicker.id);
+          const dist = distanceBetween(playerPos, kickerPos);
+          // this kicker's range, range talents included (GH #83); a pet's
+          // kick is a 40 yd Spell Lock when the table has no row
+          const range =
+            spellRangeForCaster(kicker, kit.spellId) ?? (kickerIsPet ? 40 : 5);
           if (late) {
             if (
-              enemy.id !== action.srcUnitId &&
+              kicker.id !== action.srcUnitId &&
               dist <= range + RANGE_HITBOX_SLACK_YD
             )
               maxKickRangeLateYd = Math.max(maxKickRangeLateYd ?? 0, range);
@@ -4566,10 +4595,14 @@ export function analyzePlayerCCAndTrinket(
           }
           if (dist < minDist) {
             minDist = dist;
-            nearestKickerName = enemy.name;
+            // a pet's own name is client-localized and in no roster
+            // (`checkCjkLeak`): name it through its owner
+            nearestKickerName = kickerIsPet
+              ? `${enemy.name}'s ${summonKindWord(kicker.id, { unit: kicker })}`
+              : enemy.name;
             nearestKickerSampleGapS = widerGapS(
               playerGapS,
-              wideSampleGapS(enemy, castStartMs),
+              wideSampleGapS(kicker, castStartMs),
             );
           }
           if (dist <= range) {
@@ -4580,11 +4613,12 @@ export function analyzePlayerCCAndTrinket(
             maxKickRangeSlackYd = Math.max(maxKickRangeSlackYd ?? 0, range);
         }
         // Round-1 rerun #3 (7c598eeb ×2): the kick came from a PET (Felhunter
-        // Spell Lock). Pets are skipped above (their kit is read off the
-        // owner, whose position is not the pet's), so "nearest kicker" named
-        // the Ret 23.8 yd away. When the actual interrupter is an enemy pet,
-        // its own position at cast start is the measurement.
-        const petKicker = enemyPets.find((p) => p.id === action.srcUnitId);
+        // Spell Lock) the sweep above did not reach — its owner is not among
+        // the enemies, or the pet's kick is not its owner's kit. Its own
+        // position at cast start is the measurement.
+        const petKicker = enemyPets.find(
+          (p) => p.id === action.srcUnitId && !sweptKickerIds.has(p.id),
+        );
         // same contract as the player kickers above: ready at cast start
         // (codex review of 8513a101)
         if (
