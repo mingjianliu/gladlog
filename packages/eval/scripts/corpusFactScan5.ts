@@ -76,6 +76,7 @@ const MODULE_FILES = [
   "fact9c",
   "fact9d",
   "fact9e",
+  "fact9f",
 ];
 await ensureAnalysisData();
 const modules: Array<IScanModule & { file: string }> = [];

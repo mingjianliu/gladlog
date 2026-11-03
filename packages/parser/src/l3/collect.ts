@@ -7,6 +7,7 @@ import type {
   GladSpellEvent,
   GladUnit,
 } from "./model";
+import { nilAttackerAbsorbSources } from "./nilAttackerAbsorbs";
 import type { RosterUnit } from "./roster";
 import { swingLandedTwins } from "./swingTwins";
 
@@ -50,6 +51,7 @@ export function collectEvents(
   }
 
   const twinnedSwings = new Set(swingLandedTwins(records).values());
+  const nilAttackerSources = nilAttackerAbsorbSources(records);
 
   for (const record of records) {
     const srcGuid = record.base?.srcGuid;
@@ -219,8 +221,11 @@ export function collectEvents(
 
     // 3. Absorbed group
     if (record.absorbed) {
-      const absorbDestGuid = record.params[0] ?? "";
-      const destNameRaw = record.params[1];
+      // a nil attacker the hit's own row names (`nilAttackerAbsorbSources`,
+      // fact9 D29 / D31): that source is the attacker
+      const named = nilAttackerSources.get(record);
+      const absorbDestGuid = named?.guid ?? record.params[0] ?? "";
+      const destNameRaw = named ? named.name : record.params[1];
       const absorbDestName =
         destNameRaw === "nil" || destNameRaw === undefined ? "" : destNameRaw;
 
@@ -238,7 +243,7 @@ export function collectEvents(
         destId: absorbDestGuid,
         destName: absorbDestName,
         absorbedAmount: record.absorbed.absorbedAmount,
-        attackerId: record.absorbed.attackerGuid,
+        attackerId: named?.guid ?? record.absorbed.attackerGuid,
         victimId: record.absorbed.victimGuid,
         ...(record.absorbed.attackSpellId !== null
           ? {

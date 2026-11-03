@@ -136,6 +136,7 @@ function extractPlayerDotIntervals(
     { ...player, auraEvents: dots } as ICombatUnit,
     { startTime: matchStartMs, endTime: matchEndMs },
     casters,
+    player.auraEvents,
   );
   return runs.map((iv) => {
     const startMs = matchStartMs + Math.round(iv.fromS * 1000);

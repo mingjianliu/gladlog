@@ -11,6 +11,7 @@ import {
   externalDamageObservations,
   formatDuringExternal,
   formatDuringExternalForOwner,
+  isImmuneHitRow,
 } from "../src/utils/externalDamage";
 import { makeUnit } from "./ported/testHelpers";
 
@@ -81,7 +82,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       aura(BOP, "Blessing of Protection", "E2", "E1", 28, LogEvent.SPELL_AURA_REMOVED),
     ]);
     const miss = (atS: number): any => ({
-      spellId: "1", spellName: "x", destUnitId: "E1", destUnitName: "E1", missType: "IMMUNE", amount: 0,
+      spellId: "12294", spellName: "Mortal Strike", destUnitId: "E1", destUnitName: "E1", missType: "IMMUNE", amount: 0,
       timestamp: ms(atS), logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(atS), parameters: [] },
     });
     const warrior = { ...ally("A1", [dmg(LogEvent.SWING_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 25, "E3", 20_000)]), missesOut: [miss(21), miss(22.5), miss(26)] };
@@ -156,6 +157,35 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     expect(net!.X).toBeCloseTo(50, 5);
   });
 
+  it("fact9 D15: a control the target refused is no immune hit (Binding Shot's stun into a wall)", () => {
+    const BOP = "1022";
+    const bop = enemy("E1", [
+      aura(BOP, "Blessing of Protection", "E2", "E1", 20, LogEvent.SPELL_AURA_APPLIED),
+      aura(BOP, "Blessing of Protection", "E2", "E1", 28, LogEvent.SPELL_AURA_REMOVED),
+    ]);
+    const miss = (spellId: string, atS: number): any => ({
+      spellId, spellName: spellId, destUnitId: "E1", destUnitName: "E1", missType: "IMMUNE", amount: 0,
+      timestamp: ms(atS), logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(atS), parameters: [] },
+    });
+    const hunter = {
+      ...ally("A1", [dmg(LogEvent.SWING_DAMAGE, 19, "E1", 40_000)]),
+      // Binding Shot's stun 117526 and Shadowy Apparition's damage-less row
+      // 341263: no hit; the apparition's hit 148859 is one
+      missesOut: [miss("117526", 21), miss("341263", 22), miss("148859", 22.2)],
+    };
+    const [o] = externalDamageObservations(bop, [hunter], [bop], combat);
+    expect(o!.immuneHits).toBe(1);
+    expect(isImmuneHitRow(miss("117526", 21))).toBe(false);
+    expect(isImmuneHitRow(miss("148859", 21))).toBe(true);
+    expect(isImmuneHitRow({ ...miss("148859", 21), missType: "ABSORB" })).toBe(false);
+    // a melee swing's SWING_MISSED row (spellId "0") is a hit
+    const swing = { ...miss("0", 23), logLine: { event: LogEvent.SWING_MISSED, timestamp: ms(23), parameters: [] } };
+    expect(isImmuneHitRow(swing)).toBe(true);
+    expect(isImmuneHitRow(miss("0", 23))).toBe(false);
+    const [o2] = externalDamageObservations(bop, [{ ...hunter, missesOut: [...hunter.missesOut, swing] }], [bop], combat);
+    expect(o2!.immuneHits).toBe(2);
+  });
+
   it("fact7 D29: a unit with nothing dealt has no share, not `0%`", () => {
     const BOP = "1022";
     const bop = enemy("E1", [
@@ -163,7 +193,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       aura(BOP, "Blessing of Protection", "E2", "E1", 28, LogEvent.SPELL_AURA_REMOVED),
     ]);
     const miss: any = {
-      spellId: "1", spellName: "x", destUnitId: "E1", destUnitName: "E1", missType: "IMMUNE", amount: 0,
+      spellId: "12294", spellName: "Mortal Strike", destUnitId: "E1", destUnitName: "E1", missType: "IMMUNE", amount: 0,
       timestamp: ms(21), logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(21), parameters: [] },
     };
     const warrior = ally("A1", [dmg(LogEvent.SWING_DAMAGE, 19, "E1", 40_000)]);

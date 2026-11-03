@@ -20,6 +20,7 @@ import {
   GROUNDING_TOTEM_NPC_ID,
 } from "../context/timelineHelpers";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { CAST_MISS_LEAD_MS } from "./castMissRows";
 
 /** A miss on the totem this soon after the caster's own cast of the same
  *  spell into that totem is the same redirect (cast → travel → immune). */
@@ -81,7 +82,10 @@ export function groundingRedirects(
         (c) =>
           sameSpell(c.spellId, m.spellId!) &&
           c.totemId === (m.destUnitId ?? "") &&
-          ts >= c.timestampMs &&
+          // fact9 D28 (dcff7ebb r0 1:56): the miss row can be logged just
+          // BEFORE its cast row (Fear's IMMUNE at .413, its cast at .414):
+          // the same instant, one redirect, not two `[GROUNDED]` lines
+          ts >= c.timestampMs - CAST_MISS_LEAD_MS &&
           ts - c.timestampMs <= GROUNDING_MISS_AFTER_CAST_MS,
       )
     )
@@ -135,7 +139,7 @@ export function groundingEatenRedirects(
       groundCasts.some(
         (c) =>
           sameSpell(c.spellId!, g.spellId) &&
-          g.timestampMs >= c.logLine.timestamp &&
+          g.timestampMs >= c.logLine.timestamp - CAST_MISS_LEAD_MS &&
           g.timestampMs - c.logLine.timestamp <= GROUNDING_MISS_AFTER_CAST_MS,
       ),
   );

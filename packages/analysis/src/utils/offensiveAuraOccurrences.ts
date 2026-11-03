@@ -270,6 +270,7 @@ export function auraOffensiveOccurrences(
     { ...unit, auraEvents: events } as ICombatUnit,
     bounds,
     new Map([[unit.id, unit]]),
+    unit.auraEvents,
   );
   const pressCasts = castTimes(unit, METAMORPHOSIS_PRESS_CAST_IDS);
   const eyeBeams = castTimes(unit, new Set([EYE_BEAM_ID]));

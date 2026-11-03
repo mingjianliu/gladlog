@@ -149,13 +149,38 @@ const AT_HP = /\(at (\d+)% HP\)/;
 const pctOf = (a: any): number =>
   (100 * a.advancedActorCurrentHp) / a.advancedActorMaxHp;
 
-function triggeredHeals(ctx: IRoundCtx): void {
+/** the owner's own cooldown press line: `[YOU] [CD]   X (self: N% HP` */
+const YOU_CD = /^(\d+:\d{2}) {2}\[YOU\] \[CD\] {3}(.+?) \(self: (\d+)% HP/;
+
+/** `[ENEMY DEF]` press lines and the owner's `[YOU] [CD]` lines (codex
+ * 20-F24-12: the regression showed on `[YOU] [CD]`) — one reading, one HP */
+function pressHpLines(
+  ctx: IRoundCtx,
+): Array<{ m: string[]; hp: string[]; u: any; kind: string; line: string }> {
+  const out: Array<{ m: string[]; hp: string[]; u: any; kind: string; line: string }> = [];
   for (const line of ctx.lines) {
     const m = ENEMY_DEF.exec(line);
     const hp = AT_HP.exec(line);
-    if (!m || !hp || m[0].endsWith(" → ")) continue;
-    const u = ctx.unitOfPid(m[2]);
-    if (!u) continue;
+    if (m && hp && !m[0].endsWith(" → ")) {
+      const u = ctx.unitOfPid(m[2]);
+      if (u) out.push({ m: [...m], hp: [...hp], u, kind: "enemyDef", line });
+      continue;
+    }
+    const y = YOU_CD.exec(line);
+    if (y && ctx.owner)
+      out.push({
+        m: [y[0], y[1]!, "you", y[2]!],
+        hp: [y[0], y[3]!],
+        u: ctx.owner,
+        kind: "youCd",
+        line,
+      });
+  }
+  return out;
+}
+
+function triggeredHeals(ctx: IRoundCtx): void {
+  for (const { m, hp, u, kind, line } of pressHpLines(ctx)) {
     const sec = secOf(m[1]!);
     const presses = successesOf(u).filter(
       (c) =>
@@ -174,14 +199,25 @@ function triggeredHeals(ctx: IRoundCtx): void {
       );
       // every press of it, all round: the heal-follows-press rule needs the
       // pairing to hold at least twice (codex 20-F24-09 #1 — one same-ms
-      // heal after the aura row can be a coincidence), against the press's
-      // own SUCCESS rows within the lead, with no press of the heal's own
-      // spell there (codex 20-F24-11 #1: an aura row is no press)
+      // heal after the aura row can be a coincidence), against the press
+      // spell's own activations within the lead — its SUCCESS rows or its
+      // aura's APPLIED / REFRESH (a proc activation: codex 20-F24-12) — with
+      // no press of the heal's own spell there (codex 20-F24-11 #1)
       const successMs = (spellId: string) =>
         successesOf(u)
           .filter((x) => x.spellId === spellId)
           .map(tsOf);
-      const pressMs = successMs(c.spellId);
+      const pressMs = [
+        ...successMs(c.spellId),
+        ...((u.auraEvents ?? []) as any[])
+          .filter(
+            (a) =>
+              a.spellId === c.spellId &&
+              a.srcUnitId === u.id &&
+              (a.logLine?.event === APPLIED || a.logLine?.event === REFRESH),
+          )
+          .map(tsOf),
+      ];
       const directHeals = (spellId: string) =>
         ((u.healIn ?? []) as any[]).filter(
           (x) =>
@@ -242,7 +278,7 @@ function triggeredHeals(ctx: IRoundCtx): void {
       if (printed <= want + 1) continue;
       ctx.violate(
         "pressHpAfterTriggeredHeal",
-        "enemyDef",
+        kind,
         cMs,
         `${m[2]}#${m[3]}@${m[1]}`,
         `${m[3]} at ${m[1]}: printed ${printed}%, ${want}% before the ${nameOf(heal.spellId, "")} heal it triggered`,

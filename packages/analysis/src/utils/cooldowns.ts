@@ -1935,14 +1935,18 @@ export function hpAtPress(
     // An aura row logged BEFORE the heal names it only when the log shows
     // the pairing as a rule: a self-press, and that heal of the unit's on
     // itself comes, at least twice this round, only inside the lead of one
-    // of the press's own SUCCESS rows, never with a press of the heal's own
+    // of the press spell's own activations — its SUCCESS row, or its aura's
+    // APPLIED / REFRESH (a proc activation logs no SUCCESS: Ascendance by
+    // Deeply Rooted Elements carries Restorative Mists too, codex 20-F24-12,
+    // 3435d009 r3 12.35 / 73.97) — never with a press of the heal's own
     // spell there (fact9 D18, 4e8cabf7: Survival of the Fittest's APPLIED
     // at 1:10.950 before the Exhilaration heal, REFRESH and cast at .951 —
     // read 88 % for 76 %; both presses carry the heal, no Exhilaration is
     // ever pressed). One coincidence is no evidence (a Nature's Guardian
-    // proc in an Astral Shift's ms, codex 20-F24-09 #1), and an aura row is
-    // no press (an Exhilaration's own Survival of the Fittest copy, codex
-    // 20-F24-11 #1).
+    // proc in an Astral Shift's ms, codex 20-F24-09 #1), and a heal whose
+    // own spell was pressed there is that press's, its aura copy no
+    // activation of ours (an Exhilaration's Survival of the Fittest copy,
+    // codex 20-F24-11 #1).
     const pressAuraRows = (unit.auraEvents ?? []).filter(
       (a) =>
         a.spellId === cast.spellId &&
@@ -1965,7 +1969,10 @@ export function hpAtPress(
               c.spellId === spellId,
           )
           .map((c) => c.logLine.timestamp);
-      const pressMs = successMsOf(cast.spellId);
+      const pressMs = [
+        ...successMsOf(cast.spellId),
+        ...pressAuraRows.map((a) => a.logLine.timestamp),
+      ];
       const healPressMs = successMsOf(h.spellId ?? undefined);
       const same = (unit.healIn ?? []).filter(
         (x) =>

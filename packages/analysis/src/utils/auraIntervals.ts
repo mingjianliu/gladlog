@@ -330,6 +330,55 @@ export function dropSupersededAuraBreaks<
 /** @internal The reading itself; exported for test/auraIntervalsMemo.test.ts,
  * which holds the memoised `buildAuraIntervals` to it. Product code calls
  * `buildAuraIntervals`. */
+/** fact9 D19 / codex 20-F24-13 #1: how far an aura's REMOVED may sit from
+ * its press + official length and still show it went up at that press. */
+export const RESTATED_END_TOLERANCE_MS = 250;
+
+/**
+ * Does the log show a re-stated aura up before its batch, from the press at
+ * `pressMs`? Either a row of the aura's own spell on the holder between the
+ * press and the batch — a hit its shield absorbed, a heal or a tick of it
+ * (Life Cocoon absorbing a hit at 87.02 before the batch at 87.45) — or its
+ * REMOVED at the press plus its official length (`d` s, within
+ * `RESTATED_END_TOLERANCE_MS`: an Obsidian Scales copy re-stated 0.36 s
+ * late, REMOVED 12.0 s after the press). A projectile's control lands after
+ * its travel and shows neither.
+ */
+export function restatedAuraWasUp(
+  unit: Pick<ICombatUnit, "absorbsIn" | "healIn" | "damageIn" | "auraEvents">,
+  applied: { spellId?: string; srcUnitId: string; timestamp: number },
+  pressMs: number,
+  d: number,
+): boolean {
+  const id = applied.spellId;
+  if (!id) return false;
+  const between = (ms: number) => ms >= pressMs && ms < applied.timestamp;
+  if (
+    (unit.absorbsIn ?? []).some(
+      (x) => x.spellId === id && between(x.logLine.timestamp),
+    ) ||
+    (unit.healIn ?? []).some(
+      (x) => x.spellId === id && between(x.logLine.timestamp),
+    ) ||
+    (unit.damageIn ?? []).some(
+      (x) => x.spellId === id && between(x.logLine.timestamp),
+    )
+  )
+    return true;
+  const removed = (unit.auraEvents ?? []).find(
+    (x) =>
+      x.spellId === id &&
+      x.srcUnitId === applied.srcUnitId &&
+      x.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      x.logLine.timestamp > applied.timestamp,
+  );
+  return (
+    !!removed &&
+    Math.abs(removed.logLine.timestamp - pressMs - d * 1000) <=
+      RESTATED_END_TOLERANCE_MS
+  );
+}
+
 export function buildAuraIntervalsUncached(
   unit: ICombatUnit,
   combat: {
@@ -350,6 +399,11 @@ export function buildAuraIntervalsUncached(
     string,
     Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster
   >,
+  /** the holder's WHOLE aura stream, when `unit.auraEvents` is a filtered
+   * one: the re-stating batch test (`isResyncBatchAt`) counts every APPLIED
+   * on the holder (codex 20-F24-13 #2: an offensive-aura or DoT stream
+   * holds too few rows to see a batch, and the two readers disagreed) */
+  resyncRows?: ICombatUnit["auraEvents"],
 ): IAuraInterval[] {
   const casters =
     castersById ??
@@ -383,8 +437,11 @@ export function buildAuraIntervalsUncached(
   /** fact9 D19: the round second of the press a re-stated APPLIED stands
    * for — its source's SUCCESS of the aura (or its cast) on this unit,
    * the latest before the batch, inside the aura's official length and
-   * after the spell's last close on this unit; undefined when the row is
-   * no re-statement or no such press is logged. */
+   * after the spell's last close on this unit — when the log shows the aura
+   * was up before the batch (`restatedAuraWasUp`); undefined when the row
+   * is no re-statement, no such press is logged, or nothing shows it up
+   * then (a projectile's effect lands late — codex 20-F24-13 #1: Storm
+   * Bolt's stun in a batch 0.8 s after the cast keeps its own instant). */
   const restatedPressS = (
     a: NonNullable<ICombatUnit["auraEvents"]>[number],
     t: number,
@@ -392,10 +449,18 @@ export function buildAuraIntervalsUncached(
   ): number | undefined => {
     const id = a.spellId!;
     const caster = casterOf(a.srcUnitId);
-    if (!caster || !isResyncBatchAt(unit, a.timestamp)) return undefined;
+    if (
+      !caster ||
+      !isResyncBatchAt(
+        { id: unit.id, auraEvents: resyncRows ?? unit.auraEvents },
+        a.timestamp,
+      )
+    )
+      return undefined;
     const d = officialDurationS(id, caster, a.timestamp);
     if (d === null) return undefined;
     let best: number | undefined;
+    let bestMs = 0;
     for (const c of caster.spellCastEvents ?? []) {
       if (
         c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
@@ -410,10 +475,13 @@ export function buildAuraIntervalsUncached(
         s >= t - d &&
         (lastCloseS === undefined || s >= lastCloseS) &&
         (best === undefined || s > best)
-      )
+      ) {
         best = s;
+        bestMs = c.logLine.timestamp;
+      }
     }
-    return best;
+    if (best === undefined) return undefined;
+    return restatedAuraWasUp(unit, a, bestMs, d) ? best : undefined;
   };
 
   // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
@@ -712,10 +780,13 @@ export function buildAuraIntervals(
     string,
     Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster
   >,
+  /** see `buildAuraIntervalsUncached`; a call that passes it is not cached
+   * (its stream is a filtered copy, never the same array twice) */
+  resyncRows?: ICombatUnit["auraEvents"],
 ): IAuraInterval[] {
   const events = unit.auraEvents;
-  if (!events || !analysisDataReady())
-    return buildAuraIntervalsUncached(unit, combat, castersById);
+  if (!events || !analysisDataReady() || resyncRows)
+    return buildAuraIntervalsUncached(unit, combat, castersById, resyncRows);
   const casters: object = castersById ?? combat.units ?? NO_CASTERS;
   let castsFp = 0;
   if (castersById)

@@ -71,6 +71,7 @@
  */
 import { type ICombatUnit,LogEvent } from "@gladlog/parser-compat";
 
+import { abilityProfile } from "../data/abilityProfile";
 import { castKeyOfAura } from "../data/castEffectAuras";
 import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -184,6 +185,27 @@ export interface IExternalDamageObservation {
   kind: ExternalDamageKind;
 }
 
+/**
+ * fact9 D15 (409d2e4e r0 0:21): one row of `N hits immune` — an IMMUNE row
+ * of a spell that deals damage (DB2 `dealsDamage`). A control the target
+ * refused is no hit: Binding Shot's stun 117526 into Icebound Fortitude
+ * printed `1 hit immune` on an Ironbark line; nor is a spell's damage-less
+ * trigger row (Shadowy Apparition 341263 beside its hit 148859). A melee
+ * swing's IMMUNE row always is. Shared with the class check.
+ */
+export function isImmuneHitRow(m: {
+  missType?: string;
+  spellId?: string;
+  logLine?: { event?: string };
+}): boolean {
+  if (m.missType !== "IMMUNE") return false;
+  // a melee swing is a hit; its SWING_MISSED row carries no spell (spellId
+  // "0") — codex 20-F24-14, 409d2e4e r2 1:45: an immune swing into Time
+  // Dilation was dropped with the spell filter
+  if (m.logLine?.event === LogEvent.SWING_MISSED) return true;
+  return !!m.spellId && abilityProfile(m.spellId).dealsDamage;
+}
+
 export function classifyExternalDamage(
   o: Pick<
     IExternalDamageObservation,
@@ -265,7 +287,7 @@ export function externalDamageForApplication(
     let immuneHits = 0;
     const bins = new Set<number>();
     for (const m of ally.missesOut ?? []) {
-      if (m.missType !== "IMMUNE" || m.destUnitId !== target.id) continue;
+      if (!isImmuneHitRow(m) || m.destUnitId !== target.id) continue;
       const tS = (m.logLine.timestamp - startMs) / 1000;
       if (tS < wFrom || tS >= wTo) continue;
       immuneHits++;

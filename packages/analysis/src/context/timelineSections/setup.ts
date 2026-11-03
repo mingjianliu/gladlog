@@ -25,7 +25,6 @@ import {
 } from "../../data/castEffectAuras";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { immunityMechanics } from "../../data/spellSchools";
-import { ccSpellIds } from "../../data/spellTags";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import {
   EMPOWER_PRESS_MATCH_MS,
@@ -621,6 +620,48 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   // Per CASTER (codex review of batch 3, 2026-09-26: a teammate's tag must
   // read the teammate's casts, not the owner's — otherwise the owner's
   // Polymorph at 31.52 s suppressed the teammate's 31.5 s tag and vice versa).
+  // cc-dr F-NE1 (codex 35-CD-07: one helper for both owner-CC emitters —
+  // the cooldown ledger (ownerCd) and the cast gap-filler): the owner and
+  // the owner's summons (a Hunter's pet applies
+  // Intimidation's stun) — whose aura on the target counts as the cast's
+  const ccSourcesCache = new Map<string, Set<string>>();
+  const ccSourcesOf = (caster: ICombatUnit): Set<string> => {
+    let s = ccSourcesCache.get(caster.id);
+    if (!s) {
+      s = new Set<string>([
+        caster.id,
+        ...(allUnits ?? [])
+          .filter((u) => u.ownerId === caster.id)
+          .map((u) => u.id),
+      ]);
+      ccSourcesCache.set(caster.id, s);
+    }
+    return s;
+  };
+  // fact9 D24 (90065607 r0 1:16 / 2:04): the miss rows of a press are the
+  // caster's AND its summons' — a Hunter's Intimidation logs its IMMUNE
+  // under the pet that carries the stun (Reptar, 24394, same ms as the cast
+  // 19577), and the cast line read the hunter's rows only: `[no CC aura
+  // logged]` beside a `[CC NOT LANDED]` printing that row. Every cast-line
+  // fail tag (`ccImmuneTagFor`, `ccMissTagFor`, `noCcAuraTagFor`) reads
+  // this one list, in log order.
+  const ccSourceMissesCache = new Map<string, NonNullable<ICombatUnit["missesOut"]>>();
+  const ccSourceMissesOf = (
+    caster: ICombatUnit,
+  ): NonNullable<ICombatUnit["missesOut"]> => {
+    let rows = ccSourceMissesCache.get(caster.id);
+    if (!rows) {
+      const sources = ccSourcesOf(caster);
+      rows = [
+        ...(caster.missesOut ?? []),
+        ...(allUnits ?? [])
+          .filter((u) => u.id !== caster.id && sources.has(u.id))
+          .flatMap((u) => u.missesOut ?? []),
+      ].sort((a, b) => a.timestamp - b.timestamp);
+      ccSourceMissesCache.set(caster.id, rows);
+    }
+    return rows;
+  };
   const castMsBySpellByUnit = new Map<string, Map<string, number[]>>();
   function castMsBySpellOf(unit: ICombatUnit): Map<string, number[]> {
     let m = castMsBySpellByUnit.get(unit.id);
@@ -696,8 +737,8 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     lineNamed?: ReadonlySet<string>,
     onlyNamed = false,
   ): string {
-    const misses = unit.missesOut;
-    if (!misses || misses.length === 0) return "";
+    const misses = ccSourceMissesOf(unit);
+    if (misses.length === 0) return "";
     const castMs = matchStartMs + castTimeSeconds * 1000;
     // Whose immunity counts: a player's, or the unit the cast itself was
     // aimed at. An AoE CC (Psychic Scream, Leg Sweep) logs an IMMUNE miss for
@@ -936,24 +977,6 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   function ownerCcMissTag(spellId: string, castTimeSeconds: number): string {
     return ccMissTagFor(owner, spellId, castTimeSeconds);
   }
-  // cc-dr F-NE1 (codex 35-CD-07: one helper for both owner-CC emitters —
-  // the cooldown ledger (ownerCd) and the cast gap-filler): the owner and
-  // the owner's summons (a Hunter's pet applies
-  // Intimidation's stun) — whose aura on the target counts as the cast's
-  const ccSourcesCache = new Map<string, Set<string>>();
-  const ccSourcesOf = (caster: ICombatUnit): Set<string> => {
-    let s = ccSourcesCache.get(caster.id);
-    if (!s) {
-      s = new Set<string>([
-        caster.id,
-        ...(allUnits ?? [])
-          .filter((u) => u.ownerId === caster.id)
-          .map((u) => u.id),
-      ]);
-      ccSourcesCache.set(caster.id, s);
-    }
-    return s;
-  };
   function ownerNoCcAuraTag(spellId: string, castTimeSeconds: number): string {
     return noCcAuraTagFor(owner, spellId, castTimeSeconds);
   }
@@ -978,12 +1001,20 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     const t0 = ev.logLine.timestamp;
     const inWindow = (ms: number) => ms >= t0 - 100 && ms <= t0 + 2500;
     const own = castAndEffectIds(spellId);
+    // fact9 D25 (90065607 r0 1:40): only THIS press's own control aura is
+    // its landing — its own ids, or an aura of the press's English name (a
+    // skin variant, as the IMMUNE tag reads it). Any control aura of the
+    // caster's took a Freezing Trap 2.4 s later as a Scatter Shot's landing
+    // into Nullifying Shroud, and the line printed bare.
+    const pressName = getEnglishSpellName(spellId, ev.spellName);
     const landedOn = (u: ICombatUnit) =>
       (u.auraEvents ?? []).some(
         (x) =>
           ownCcSources.has(x.srcUnitId) &&
           x.spellId !== undefined &&
-          (ccSpellIds.has(x.spellId) || own.has(x.spellId)) &&
+          (own.has(x.spellId) ||
+            (pressName !== "" &&
+              getEnglishSpellName(x.spellId, x.spellName) === pressName)) &&
           (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
             x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
           inWindow(x.timestamp),
@@ -993,7 +1024,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     // (fact3 D29, 46a55085 3:28: a Kidney Shot into Phase Shift, no aura
     // and no miss row of its own, printed bare)
     const missedOn = (u: ICombatUnit) =>
-      (caster.missesOut ?? []).some(
+      ccSourceMissesOf(caster).some(
         (m) =>
           m.destUnitId === u.id &&
           m.spellId !== undefined &&
@@ -1054,11 +1085,12 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         ),
       );
       if (landedOnPlayer) return "";
-      // a failed-control miss of the caster's own: the cast line's fail
-      // tag (`[IMMUNE …]` / `[MISSED on …]`) states it
+      // a failed-control miss of the caster's or its summon's (fact9 D24:
+      // the fail tags read both): the cast line's fail tag (`[IMMUNE …]` /
+      // `[MISSED on …]`) states it
       if (
         players.some((u) =>
-          (caster.missesOut ?? []).some(
+          ccSourceMissesOf(caster).some(
             (m) =>
               m.destUnitId === u.id &&
               m.missType !== "ABSORB" &&
@@ -1183,8 +1215,8 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     spellId: string,
     castTimeSeconds: number,
   ): string {
-    const misses = unit.missesOut;
-    if (!misses || misses.length === 0) return "";
+    const misses = ccSourceMissesOf(unit);
+    if (misses.length === 0) return "";
     const castMs = matchStartMs + castTimeSeconds * 1000;
     const family = castAndEffectIds(spellId);
     const parts: string[] = [];

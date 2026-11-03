@@ -29,6 +29,7 @@ import { specToString } from "@gladlog/analysis";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { OFF_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
+import { RESTATED_END_TOLERANCE_MS } from "@gladlog/analysis/src/utils/auraIntervals";
 
 import {
   APPLIED,
@@ -120,6 +121,21 @@ function restated(ctx: IRoundCtx): void {
         )
         .map(tsOf)
         .sort((x, y) => x - y)[0];
+      // the log shows it up before the batch (codex 20-F24-13 #1: a
+      // projectile's control lands after its travel): a row of its spell on
+      // the holder since the press, or its REMOVED at the press + its
+      // official length
+      const between = (x: any) =>
+        x.spellId === a.spellId && tsOf(x) >= press.ms && tsOf(x) < tsOf(a);
+      const officialMs =
+        (spellEffectData[String(a.spellId)]?.durationSeconds ?? NaN) * 1000;
+      const wasUp =
+        ((u.absorbsIn ?? []) as any[]).some(between) ||
+        ((u.healIn ?? []) as any[]).some(between) ||
+        ((u.damageIn ?? []) as any[]).some(between) ||
+        (end !== undefined &&
+          Math.abs(end - press.ms - officialMs) <= RESTATED_END_TOLERANCE_MS);
+      if (!wasUp) continue;
       late.push({ holder: u, name, batch: tsOf(a), press: press.ms, end });
     }
   }

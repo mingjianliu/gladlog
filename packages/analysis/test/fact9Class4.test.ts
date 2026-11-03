@@ -106,6 +106,10 @@ describe("fact9 D19 — a re-stated aura starts at its press", () => {
         auraRow(LogEvent.SPELL_AURA_APPLIED, COCOON, "m", "r", 87.446),
         auraRow(LogEvent.SPELL_AURA_REMOVED, COCOON, "m", "r", 96.484),
       ],
+      // the cocoon absorbed a hit at 87.02, before the batch: it was up
+      absorbsIn: [
+        { ...auraRow(LogEvent.SPELL_ABSORBED, COCOON, "m", "r", 87.02), absorbedAmount: 50_000 },
+      ],
     });
     const [iv] = buildAuraIntervals(rogue, combatOf(monk, rogue)).filter(
       (x) => x.spellId === COCOON,
@@ -113,6 +117,72 @@ describe("fact9 D19 — a re-stated aura starts at its press", () => {
     expect(iv!.fromS).toBeCloseTo(86.067, 3);
     expect(iv!.toS).toBeCloseTo(96.484, 3);
     expect(iv!.inferredStart).toBe(false);
+    // with nothing showing it up before the batch, the batch is its start
+    const unproven = unit("r", { auraEvents: rogue.auraEvents });
+    const [iv2] = buildAuraIntervals(unproven, combatOf(monk, unproven)).filter(
+      (x) => x.spellId === COCOON,
+    );
+    expect(iv2!.fromS).toBeCloseTo(87.446, 3);
+  });
+  it("…a REMOVED at the press plus the official length shows it up from the press", () => {
+    const monk = unit("m", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      class: CombatUnitClass.Monk,
+      spellCastEvents: [castRow(COCOON, "m", "r", 86.067)],
+    });
+    const rogue = unit("r", {
+      auraEvents: [
+        ...restateBatch(87.446),
+        auraRow(LogEvent.SPELL_AURA_APPLIED, COCOON, "m", "r", 87.446),
+        auraRow(LogEvent.SPELL_AURA_REMOVED, COCOON, "m", "r", 98.067),
+      ],
+    });
+    const [iv] = buildAuraIntervals(rogue, combatOf(monk, rogue)).filter(
+      (x) => x.spellId === COCOON,
+    );
+    expect(iv!.fromS).toBeCloseTo(86.067, 3);
+  });
+  it("…a projectile's control landing in a batch keeps its own instant (codex 20-F24-13 #1)", () => {
+    const warrior = unit("w", {
+      spec: CombatUnitSpec.Warrior_Arms,
+      class: CombatUnitClass.Warrior,
+      spellCastEvents: [castRow("107570", "w", "r", 10.0)],
+    });
+    const rogue = unit("r", {
+      auraEvents: [
+        ...restateBatch(10.8),
+        auraRow(LogEvent.SPELL_AURA_APPLIED, "132169", "w", "r", 10.8),
+        auraRow(LogEvent.SPELL_AURA_REMOVED, "132169", "w", "r", 13.8),
+      ],
+    });
+    const [iv] = buildAuraIntervals(rogue, combatOf(warrior, rogue)).filter(
+      (x) => x.spellId === "132169",
+    );
+    expect(iv!.fromS).toBeCloseTo(10.8, 3);
+    expect(iv!.toS).toBeCloseTo(13.8, 3);
+  });
+  it("…a filtered stream reads the batch off the holder's whole stream (codex 20-F24-13 #2)", () => {
+    const monk = unit("m", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      class: CombatUnitClass.Monk,
+      spellCastEvents: [castRow(COCOON, "m", "r", 86.067)],
+    });
+    const all = [
+      ...restateBatch(87.446),
+      auraRow(LogEvent.SPELL_AURA_APPLIED, COCOON, "m", "r", 87.446),
+      auraRow(LogEvent.SPELL_AURA_REMOVED, COCOON, "m", "r", 98.067),
+    ];
+    const rogue = unit("r", { auraEvents: all });
+    const only = all.filter((a: any) => a.spellId === COCOON);
+    const filtered = (rows?: any[]) =>
+      buildAuraIntervals(
+        { ...rogue, auraEvents: only },
+        combatOf(monk, rogue),
+        undefined,
+        rows,
+      )[0]!.fromS;
+    expect(filtered(all)).toBeCloseTo(86.067, 3);
+    expect(filtered()).toBeCloseTo(87.446, 3);
   });
   it("…an APPLIED outside a re-stating batch keeps its own instant", () => {
     const monk = unit("m", {

@@ -290,13 +290,16 @@ describe("hpAtPress", () => {
     };
     const press = { spellId: SOTF, srcUnitId: "P" };
     expect(hpAtPress(u as never, T0 + 70_951, press)).toBe(76); // 889,854 / 1,163,492 = 76.5 %, not the post-heal 88 %
-    // an aura row is no press (codex 20-F24-11 #1): the 2:14 heal with an
-    // aura row of the spell but no press of it (a talent copy) is no pairing
-    const copyOnly = {
+    // an activation with no press row (a proc: Ascendance by Deeply Rooted
+    // Elements carries Restorative Mists too — codex 20-F24-12, 3435d009 r3
+    // 12.35 / 73.97) still carries the heal: the pressed 1:10 keeps 76 %. A
+    // talent COPY is told apart by the press of the heal's own spell
+    // (`healPressed` below, codex 20-F24-11 #1)
+    const procAt214 = {
       ...u,
       spellCastEvents: [u.spellCastEvents[0]],
     };
-    expect(hpAtPress(copyOnly as never, T0 + 70_951, press)).toBe(88);
+    expect(hpAtPress(procAt214 as never, T0 + 70_951, press)).toBe(76);
     // …nor a heal whose own spell was pressed there (an Exhilaration press
     // whose heal is its own, beside a Survival of the Fittest press)
     const healPressed = {
