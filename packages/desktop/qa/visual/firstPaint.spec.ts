@@ -97,8 +97,8 @@ test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ 
   // the same test, under the same clock and isolation, interleaved with the
   // heavy reloads, cancels the runner's speed and leaves "what 12× the data
   // costs". The same min-of-reloads statistic is used on both sides for the
-  // same reason as above: noise is one-sided. Numbers and the provisional
-  // lock: budgets.ts, firstPaintRatio.
+  // same reason as above: noise is one-sided. Numbers and the lock:
+  // budgets.ts, firstPaintRatio.
   const controlFloor = controlSamples[0]!;
   reportBudget("firstPaintControl", controlFloor, controlSamples.length);
   // eslint-disable-next-line no-console
@@ -110,7 +110,11 @@ test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ 
     expect(ratio).toBeLessThan(BUDGET_MS.firstPaintRatio);
   }
   // Absolute backstop only (see budgets.ts): a fixed per-load cost raises
-  // both scenes alike and is invisible to the ratio by construction.
+  // both scenes alike and is invisible to the ratio by construction. It is
+  // read on the control, which does not grow with the analysis (2026-11-03).
+  if (BUDGET_MS.firstPaintControl !== null) {
+    expect(controlFloor).toBeLessThan(BUDGET_MS.firstPaintControl);
+  }
   if (BUDGET_MS.firstPaint !== null) {
     expect(floor).toBeLessThan(BUDGET_MS.firstPaint);
   }

@@ -6,9 +6,10 @@
  *  null = not locked yet. Loosening any value requires the reason to go into
  *  the commit message.
  *
- *  Consumers: parse           → packages/parser/test/parseBudget.test.ts
- *             firstPaint      → packages/desktop/qa/visual/firstPaint.spec.ts
- *             firstPaintRatio → packages/desktop/qa/visual/firstPaint.spec.ts
+ *  Consumers: parse             → packages/parser/test/parseBudget.test.ts
+ *             firstPaint        → packages/desktop/qa/visual/firstPaint.spec.ts
+ *             firstPaintControl → packages/desktop/qa/visual/firstPaint.spec.ts
+ *             firstPaintRatio   → packages/desktop/qa/visual/firstPaint.spec.ts
  *             coldStart       → packages/desktop/qa/e2e/import.spec.ts
  *
  *  Every entry is milliseconds except firstPaintRatio, which is a
@@ -23,6 +24,7 @@
 export const BUDGET_MS: {
   parse: number | null;
   firstPaint: number | null;
+  firstPaintControl: number | null;
   /** Dimensionless — NOT milliseconds. */
   firstPaintRatio: number | null;
   coldStart: number | null;
@@ -152,9 +154,39 @@ export const BUDGET_MS: {
   //     more — nothing measured in absolute ms can on a runner population
   //     that itself spans 2.3×; catching that class needs its own same-run
   //     normaliser (a CPU-calibration workload), which is not built.
+  //
+  // 2026-11-03 (GH #189, #145 item 1): the ratio, locked from CI; the
+  // absolute backstop moved to the control scene. 206 frontend-qa runs on
+  // main, 2026-10-06 → 11-03 (min-of-5 floors, `[budget]` lines):
+  //   - ratio, the clean population since the 10-21 perf fix (87 runs,
+  //     the 773012a74 / 3aa13674e regression excluded): p50 3.37, p95 3.84,
+  //     max 4.10. The same code reads 3.83 (39e1ba297's test run) and
+  //     4.41 (its visual-baseline run): the ratio still moves ~15 %.
+  //   - ratio, the three real regressions found so far: bf7a347b0 6.09 /
+  //     5.54 (rerun), bcd5ec8dc 5.68 (F16), 773012a74 6.92 / 6.21 (fact9
+  //     D19; 3aa13674e on top of it 6.24). The lowest is 5.54.
+  //   - control floor, all 206: min 1,521, p95 3,378, max 3,557 ms.
+  //   - heavy floor at a normal ratio: 12,999 / 13,137 / 13,192 ms on the
+  //     slow runner class (control ~3.4 s) — over the old 12800 backstop
+  //     with no regression, so main went red on runner speed alone.
+  // firstPaintRatio = 5.2, not this file's ×1.5: that headroom was sized
+  // for absolute milliseconds on a 2.3× runner spread, which the ratio
+  // divides out. ×1.5 over p95 (5.8) would have passed the F16 regression
+  // (5.68); 5.2 sits 18 % over the highest clean reading (4.41) and under
+  // all six regression readings. The ratio has also crept 2.5 → 3.8 since 10-06
+  // as the analysis grew; when a feature crosses 5.2, profile it before
+  // re-locking (the 11-03 fix took 6.9 back to 3.8 with output unchanged).
+  // firstPaintControl = 6300 (1.75 × the slowest control, the same factor
+  // 12800 had over its population): a fixed per-load cost raises the
+  // control as much as the heavy scene, and the control does not grow with
+  // the analysis — the heavy scene's absolute floor does (that growth is
+  // the ratio's job), so firstPaint itself is back to measure-only. The
+  // historical 22 s object literal still trips this 3×; a +50 % fixed cost
+  // still does not (#145 item 2, the CPU-calibrated gate, stays open).
   parse: 4900,
-  firstPaint: 12800,
-  firstPaintRatio: null, // measure-only until ≥ 10 CI samples (ruling 2026-10-06)
+  firstPaint: null, // measured only since 2026-11-03: see firstPaintControl
+  firstPaintControl: 6300,
+  firstPaintRatio: 5.2,
   coldStart: 2600,
 };
 
