@@ -42,16 +42,69 @@ export const DISPLACEMENT_EVIDENCE_IDS: ReadonlySet<string> = new Set([
   "61391", // Typhoon (daze aura)
 ]);
 
+export const DEATH_GRIP_ID = "49576";
+/** A SPELL_MISSED row of the grip sits within this of its cast row. */
+export const GRIP_MISS_PAIR_MS = 200;
+
+/** The Death Grips among `rows` that another unit cast at `victim`: a
+ * SPELL_CAST_SUCCESS of the grip naming the victim — the grip leaves nothing
+ * else on it (no aura, no damage), so the cast row is the evidence — with
+ * `missType` when a SPELL_MISSED row of the grip from the same caster sits
+ * within `GRIP_MISS_PAIR_MS` (it moved nobody). The one predicate of "a grip
+ * landed on the unit": the `[GRIP]` line hands it the opponents' cast rows
+ * (`deathGripsOn`), the cast-stop evidence below the victim's own incoming
+ * rows (`actionIn`, where the parser mirrors the same rows) — fact9 D11. */
+export interface GripOn {
+  castMs: number;
+  srcUnitId: string;
+  missType?: string;
+}
+export function gripsOn(
+  victim: Pick<ICombatUnit, "id" | "missesIn">,
+  rows: Iterable<ICombatUnit["spellCastEvents"][number]>,
+): GripOn[] {
+  const out: GripOn[] = [];
+  for (const c of rows) {
+    if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+    if (c.spellId !== DEATH_GRIP_ID || c.destUnitId !== victim.id) continue;
+    if (c.srcUnitId === victim.id) continue;
+    const castMs = c.logLine.timestamp;
+    const miss = (victim.missesIn ?? []).find(
+      (m) =>
+        m.spellId === DEATH_GRIP_ID &&
+        m.srcUnitId === c.srcUnitId &&
+        Math.abs(m.timestamp - castMs) <= GRIP_MISS_PAIR_MS,
+    );
+    out.push({
+      castMs,
+      srcUnitId: c.srcUnitId,
+      ...(miss ? { missType: miss.missType } : {}),
+    });
+  }
+  return out.sort((a, b) => a.castMs - b.castMs);
+}
+
 /** The instants (epoch ms) at which something other than the unit could
  * have stopped its cast: a control or silence aura applied on it (`cc`; a
- * silence breaks a cast bar too — codex review 2026-09-26), and a landed
+ * silence breaks a cast bar too — codex review 2026-09-26), a landed
  * enemy displacement (`displaced`: aura applied, or damage of the
- * displacement taken — F-K10b). */
+ * displacement taken — F-K10b), and a landed Death Grip (`gripped`,
+ * `gripsOn`: fact9 D11, 1d6eee5f 1:26.609 — a Pyroblast stopped 1 ms before
+ * the grip's cast row was counted as the player's own cancel). `gripped` is
+ * kept apart from `displaced` because the forced-move readers list a grip
+ * under its own name (`forcedMovesInRenderedSpan`). */
 export function forcedStopInstantsMs(
-  unit: Pick<ICombatUnit, "auraEvents" | "damageIn">,
-): { cc: number[]; displaced: number[] } {
+  unit: Pick<ICombatUnit, "auraEvents" | "damageIn"> &
+    Partial<Pick<ICombatUnit, "id" | "actionIn" | "missesIn">>,
+): { cc: number[]; displaced: number[]; gripped: number[] } {
   const auras = unit.auraEvents ?? [];
   return {
+    gripped:
+      unit.id === undefined
+        ? []
+        : gripsOn({ id: unit.id, missesIn: unit.missesIn }, unit.actionIn ?? [])
+            .filter((g) => g.missType === undefined)
+            .map((g) => g.castMs),
     cc: auras
       .filter(
         (a) =>

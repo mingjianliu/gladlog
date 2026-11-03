@@ -749,4 +749,13 @@
  *  immunity (user ruling); a Nether Ward return goes to the reflect its own
  *  millisecond names. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 474;
+/*
+ * v475 (2026-11-03, F24 batch 2: fact9 D8 / D9 / D12 / D10 / D11 / D5):
+ *  kick-eaten's postKick states a bar another enemy kick ended ("kicked
+ *  again"), presses inside another kick's school lock (later, or an earlier
+ *  one still running) and presses of the locked school no silence stops,
+ *  each in its own clause (user rulings); Shambling Rush's root is no cast
+ *  block; a landed Death Grip stops a cast bar; the legend's full-immunity
+ *  list drops Aspect of the Turtle. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 475;

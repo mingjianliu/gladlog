@@ -168,7 +168,8 @@ export function castBarOutcomesOf(params: {
     | "auraEvents"
     | "damageIn"
     | "deathRecords"
-  >;
+  > &
+    Partial<Pick<ICombatUnit, "id" | "missesIn">>;
   startMs: number;
   failed: readonly CastFailedEvent[];
   /** epoch ms of the other side's presses that drop a target
@@ -191,7 +192,8 @@ export function castBarOutcomesOf(params: {
   // displacements — the shared stop evidence
   const forced = forcedStopInstantsMs(unit);
   const ccAt = forced.cc.map(sec);
-  const displacedAt = forced.displaced.map(sec);
+  // a landed Death Grip is a displacement too (fact9 D11)
+  const displacedAt = [...forced.displaced, ...forced.gripped].map(sec);
   const diedAt = (unit.deathRecords ?? []).map((d) => sec(d.timestamp));
   const starts = castBarStartsOf(unit, startMs);
 

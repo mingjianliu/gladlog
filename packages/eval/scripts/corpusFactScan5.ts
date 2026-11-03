@@ -72,6 +72,7 @@ const MODULE_FILES = [
   "kickImmune",
   "offListPress",
   "fact9",
+  "fact9b",
 ];
 await ensureAnalysisData();
 const modules: Array<IScanModule & { file: string }> = [];

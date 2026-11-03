@@ -3485,6 +3485,36 @@ const INDEX: PredicateRow[] = [
     mod: enemyInterrupts,
   },
   {
+    file: `${A}/utils/castStopEvidence.ts`,
+    symbol: "gripsOn",
+    mod: castStopEvidence,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "blocksAsControlOrSilence",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "POST_KICK_KICKED_AGAIN_HEAD",
+    mod: candidateFindings,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "POST_KICK_LATER_LOCK_HEAD",
+    mod: candidateFindings,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "POST_KICK_EARLIER_LOCK_HEAD",
+    mod: candidateFindings,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "POST_KICK_NOT_STOPPED_HEAD",
+    mod: candidateFindings,
+  },
+  {
     file: `${A}/analysis/crisisDecisionPoints.ts`,
     symbol: "crisisDecisionPoints",
     mod: crisisDecisionPoints,

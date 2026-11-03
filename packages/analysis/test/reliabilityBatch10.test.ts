@@ -153,6 +153,7 @@ describe("STAYED IN does not call a forced move the owner's own (I13)", () => {
   });
   const gripAt = (s: number) => ({
     spellId: "49576",
+    srcUnitId: "2", // every logged cast row names its caster (`gripsOn` reads it)
     destUnitId: "1",
     logLine: { event: "SPELL_CAST_SUCCESS", timestamp: T0 + s * 1000 },
   });

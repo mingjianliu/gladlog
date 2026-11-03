@@ -264,7 +264,10 @@ describe("cannotCastIntervals — silenceIntervals (reliability round 2 W1b)", (
     );
   });
 
-  it("a kick's lockout aura (Shambling Rush 91807, mechanic interrupt) locks casting but is not a silence", () => {
+  // fact9 D10 (2026-11-02): 91807 is DB2's root (aura 26, ROOT_AURA_SPELL_IDS)
+  // and 1d6eee5f 0:54.760 cast Frost Nova under it — the kick's school
+  // lockout is the SPELL_INTERRUPT's, not this aura's
+  it("Shambling Rush's aura 91807 is a root: no cannot-cast interval and no silence", () => {
     const unit = {
       id: "Player-1",
       auraEvents: [
@@ -273,9 +276,7 @@ describe("cannotCastIntervals — silenceIntervals (reliability round 2 W1b)", (
       ],
       actionIn: [],
     } as unknown as ICombatUnit;
-    expect(buildCannotCastIntervals(unit, enemyIds)).toEqual([
-      { from: 5_000, to: 7_000 },
-    ]);
+    expect(buildCannotCastIntervals(unit, enemyIds)).toEqual([]);
     expect(silenceIntervals(unit, enemyIds)).toEqual([]);
   });
 

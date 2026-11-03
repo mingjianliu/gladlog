@@ -53,7 +53,11 @@ import {
   namedCannotCastIntervals,
   stunLetsPress,
 } from "../utils/cannotCastIntervals";
-import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
+import {
+  CAST_INTERRUPTED_REASONS,
+  type OwnerCastCancels,
+  ownerCastCancels,
+} from "../utils/castCancels";
 import { isControlCast } from "../utils/castMissRows";
 import { STOPPED_JUST_BEFORE_S } from "../utils/castStopEvidence";
 import {
@@ -1136,9 +1140,7 @@ function selfRemovalFacts(
     ? Math.min(
         ...ready.map(
           (cd) =>
-            w.targetSelfBlockedSById![cd.spellId] ??
-            w.targetSelfBlockedS ??
-            0,
+            w.targetSelfBlockedSById![cd.spellId] ?? w.targetSelfBlockedS ?? 0,
         ),
       )
     : (w.targetSelfBlockedS ?? 0);
@@ -2088,7 +2090,7 @@ export function kickEatenEvents(
         // @263: HoJ pressed 4× in the lockout rendered "pressed 1x" — three
         // were 尚未恢复 GCD presses the intent filter drops); the ranking above
         // keeps the filtered evidence set, as cd-hoarded does.
-        postKick: postKickFact(k, pressed, intent?.ownerCasts),
+        postKick: postKickFact(k, pressed, intent?.ownerCasts, instances),
         ...(p ? kickPressureFacts(p) : {}),
         ...castStartFacts(p, k.castStartS),
         ...(cancels ? castCancelFacts(cancels, k.sourceName) : {}),
@@ -2631,21 +2633,63 @@ export function postKickFact(
         | "roundEndedAfterKickS"
       >
     >,
-  everyRejected: CastFailedEvent[],
+  everyRejectedRows: CastFailedEvent[],
   /** the owner's successful casts (seconds since the round start), for the
    * own-cooldown proof below; absent ⇒ no proof is attempted */
   ownerCasts?: ReadonlyArray<{ spellId: string; tSeconds: number }>,
+  /** every enemy kick on the owner this round (this one included) — for the
+   * bars another kick ended and the schools another kick locked (fact9 D8 /
+   * D9); absent ⇒ neither is read */
+  otherKicks?: ReadonlyArray<{
+    atSeconds: number;
+    lockoutDurationSeconds: number;
+    lockEndedBySuccessS?: number | null;
+    interruptedSpellId?: string;
+    kickSpellId?: string;
+    kickSpellName: string;
+  }>,
 ): string {
   const pressed = (list: CastFailedEvent[]) =>
     `pressed ${list.length}x but rejected (${joinPressesWithOffsets(list, k.atSeconds)})`;
+  // in whole milliseconds, like the lock boundary below
+  const ms = (s: number) => Math.round(s * 1000);
+  // fact9 D8: a SPELL_CAST_FAILED row that is the end of a bar ANOTHER enemy
+  // kick ended — an interruption reason (`CAST_INTERRUPTED_REASONS`), the
+  // same spell, within `KICKED_BAR_ROW_MS` of that kick's SPELL_INTERRUPT —
+  // is no refused press: the player began that cast and was kicked again
+  // (1d6eee5f 0:58.883: Pyroblast begun 0.13 s into a Spear Hand Strike lock,
+  // Mind Freeze 1 ms after its row). One row per kick, the nearest: a
+  // re-press refused "not ready" beside it stays a press (codex 20-F24-04 #2).
+  const kickOfRow = new Map<
+    CastFailedEvent,
+    NonNullable<typeof otherKicks>[number]
+  >();
+  for (const o of otherKicks ?? []) {
+    if (ms(o.atSeconds) === ms(k.atSeconds)) continue;
+    const row = everyRejectedRows
+      .filter(
+        (h) =>
+          !kickOfRow.has(h) &&
+          CAST_INTERRUPTED_REASONS.has(h.reason) &&
+          o.interruptedSpellId === String(h.spellId) &&
+          Math.abs(ms(o.atSeconds) - ms(h.tSeconds)) <= KICKED_BAR_ROW_MS,
+      )
+      .sort(
+        (a, b) =>
+          Math.abs(ms(o.atSeconds) - ms(a.tSeconds)) -
+          Math.abs(ms(o.atSeconds) - ms(b.tSeconds)),
+      )[0];
+    if (row) kickOfRow.set(row, o);
+  }
+  const kickedBy = (h: CastFailedEvent) => kickOfRow.get(h);
+  const kickedAgain = everyRejectedRows.filter((h) => kickedBy(h));
+  const everyRejected = everyRejectedRows.filter((h) => !kickedBy(h));
   // I01: the log's own reason first. Only a "not ready" press can be the
   // lock's (or the spell's own cooldown's, or the GCD's) doing.
   const otherReason = everyRejected.filter(
     (h) => !NOT_READY_REASONS.has(h.reason),
   );
-  // …and not one of a spell that had itself gone out inside this lock: in
-  // whole milliseconds, like the lock boundary below
-  const ms = (s: number) => Math.round(s * 1000);
+  // …and not one of a spell that had itself gone out inside this lock
   const afterOwnSuccess = (h: CastFailedEvent) => {
     const wentOutS = k.wentOutInLockS?.[String(h.spellId)];
     return (
@@ -2663,6 +2707,43 @@ export function postKickFact(
   const lockedMask = k.interruptedSpellId
     ? spellSchoolMask(k.interruptedSpellId)
     : undefined;
+  // fact9 D12: a spell of the locked school that no silence stops (DB2's
+  // silence bit, `isUnsilenceableCast`) is not stopped by the lockout either
+  // — its "not ready" is its own cooldown or the GCD, as for a spell outside
+  // the school, but it is not outside the school (1eb4dd55 r1: Heart of the
+  // Wild, Nature, under a Nature Skull Bash)
+  const notStoppedInSchool = (h: CastFailedEvent) => {
+    if (lockedMask === undefined) return false;
+    if (!isUnsilenceableCast(String(h.spellId))) return false;
+    const m = spellSchoolMask(String(h.spellId));
+    return m !== undefined && schoolLockedBy(m, lockedMask);
+  };
+  // fact9 D9: a spell outside this lock that ANOTHER enemy kick on the
+  // player had locked at the press (that kick's own school lockout, read as
+  // `intervalBlocksSpell` reads one, ended early by a success in it as
+  // `textLockEndMs` ends one) — refused while that school was locked, not
+  // "its own cooldown or the GCD". A later kick (1d6eee5f r1: Pyroblast /
+  // Blazing Barrier +2.3 / +2.4 s, inside Mind Freeze's Fire lock) or an
+  // earlier one still running (1d6eee5f r5: Pyroblast 0.1 s after a Mind
+  // Freeze, inside a Rebuke's Fire lock — codex 20-F24-04 #1); the later
+  // kick wins when both cover the press.
+  const otherLockAt = (h: CastFailedEvent): "later" | "earlier" | undefined => {
+    const id = String(h.spellId);
+    if (isUnsilenceableCast(id)) return undefined;
+    const m = spellSchoolMask(id);
+    if (m === undefined) return undefined;
+    const covering = (otherKicks ?? []).filter((o) => {
+      if (ms(o.atSeconds) === ms(k.atSeconds)) return false;
+      if (ms(o.atSeconds) >= ms(h.tSeconds)) return false;
+      if (ms(h.tSeconds) >= textLockEndMs(o)) return false;
+      const lm = o.interruptedSpellId
+        ? spellSchoolMask(o.interruptedSpellId)
+        : undefined;
+      return lm !== undefined && schoolLockedBy(m, lm);
+    });
+    if (covering.some((o) => ms(o.atSeconds) > ms(k.atSeconds))) return "later";
+    return covering.length > 0 ? "earlier" : undefined;
+  };
   const isOwnCd = (h: CastFailedEvent) => {
     if (lockedMask === undefined) return false;
     // a cast no lockout prevents (DB2's silence bit, `intervalBlocksSpell`'s
@@ -2703,20 +2784,40 @@ export function postKickFact(
   };
   const ownCd = allRejected.filter((h) => isOwnCd(h) || ownCdProven(h));
   const rejected = allRejected.filter((h) => !isOwnCd(h) && !ownCdProven(h));
-  const outside = ownCd.filter(isOwnCd);
+  const ownCdLike = ownCd.filter(isOwnCd);
+  const notStopped = ownCdLike.filter(notStoppedInSchool);
+  const lockedLater = ownCdLike.filter(
+    (h) => !notStoppedInSchool(h) && otherLockAt(h) === "later",
+  );
+  const lockedEarlier = ownCdLike.filter(
+    (h) => !notStoppedInSchool(h) && otherLockAt(h) === "earlier",
+  );
+  const outside = ownCdLike.filter(
+    (h) => !notStoppedInSchool(h) && otherLockAt(h) === undefined,
+  );
   const proven = ownCd.filter((h) => !isOwnCd(h));
   const ownCdStr =
     (outside.length > 0
       ? `; outside the locked school ${outside.length}x not ready yet — its own cooldown or the GCD (${joinPressesWithOffsets(outside, k.atSeconds)})`
       : "") +
+    (notStopped.length > 0
+      ? `; ${POST_KICK_NOT_STOPPED_HEAD}${notStopped.length}x not ready yet — its own cooldown or the GCD (${joinPressesWithOffsets(notStopped, k.atSeconds)})`
+      : "") +
+    (lockedEarlier.length > 0
+      ? `; ${POST_KICK_EARLIER_LOCK_HEAD}${lockedEarlier.length}x not ready yet (${joinPressesWithOffsets(lockedEarlier, k.atSeconds)})`
+      : "") +
+    (lockedLater.length > 0
+      ? `; ${POST_KICK_LATER_LOCK_HEAD}${lockedLater.length}x not ready yet (${joinPressesWithOffsets(lockedLater, k.atSeconds)})`
+      : "") +
     (proven.length > 0
       ? `; ${OWN_COOLDOWN_PROVEN_HEAD}${proven.length}x — still not ready after the lock (${joinPressesWithOffsets(proven, k.atSeconds)})`
       : "");
-  // any press inside the lockout — the outside-school ones included — is
-  // an attempt to act, never "waited out" (codex review of batch 10: Fire
-  // Breath not ready at 11 s after a 10 s Disintegrate kick read "waited out
-  // the lockout" beside "outside the locked school 1x not ready yet")
-  const triedInLockout = everyRejected.some(
+  // any press inside the lockout — the outside-school ones included, and a
+  // bar another kick ended (codex 20-F24-04 #4) — is an attempt to act,
+  // never "waited out" (codex review of batch 10: Fire Breath not ready at
+  // 11 s after a 10 s Disintegrate kick read "waited out the lockout" beside
+  // "outside the locked school 1x not ready yet")
+  const triedInLockout = everyRejectedRows.some(
     (h) => h.tSeconds < k.atSeconds + k.lockoutDurationSeconds,
   );
   // The lock the TEXT speaks of (see `postKickCore`); the idle form lists
@@ -2726,12 +2827,52 @@ export function postKickFact(
     k.postKick === "idle"
       ? otherReason
       : otherReason.filter((h) => ms(h.tSeconds) < lockEndMs);
+  // one entry per kicking spell: "Pyroblast +1.8s by Mind Freeze"
+  const byKick = new Map<string, CastFailedEvent[]>();
+  for (const h of kickedAgain) {
+    const by = kickedBy(h)!;
+    const name = by.kickSpellId
+      ? getEnglishSpellName(by.kickSpellId, by.kickSpellName)
+      : by.kickSpellName;
+    byKick.set(name, [...(byKick.get(name) ?? []), h]);
+  }
+  const kickedAgainStr =
+    kickedAgain.length > 0
+      ? `; ${POST_KICK_KICKED_AGAIN_HEAD}${kickedAgain.length}x (${[...byKick]
+          .map(
+            ([kick, list]) =>
+              `${joinPressesWithOffsets(list, k.atSeconds)} by ${kick}`,
+          )
+          .join("、")})`
+      : "";
   return (
-    postKickCore(k, rejected, pressed, triedInLockout, otherShown.length > 0) +
+    postKickCore(
+      k,
+      rejected,
+      pressed,
+      triedInLockout,
+      // a kicked bar is a press too: "no successful cast", never "no cast"
+      otherShown.length > 0 || kickedAgain.length > 0,
+    ) +
     refusedForAnotherReasonText(otherShown, k.atSeconds) +
+    kickedAgainStr +
     ownCdStr
   );
 }
+
+/** A kicked bar's SPELL_CAST_FAILED row sits this close to its
+ * SPELL_INTERRUPT (1d6eee5f: 1 ms before it). */
+const KICKED_BAR_ROW_MS = 50;
+
+/** Heads of the `postKick` clauses fact9 D8 / D9 / D12 added (the earlier
+ * kick's lock: codex 20-F24-04 #1, user ruling 2026-11-03) — what the
+ * legend explains and the gate (`checkKickEatenRefusedForAnotherReason`)
+ * counts. */
+export const POST_KICK_KICKED_AGAIN_HEAD = "kicked again ";
+export const POST_KICK_LATER_LOCK_HEAD = "inside a later kick's lockout ";
+export const POST_KICK_EARLIER_LOCK_HEAD =
+  "still inside an earlier kick's lockout ";
+export const POST_KICK_NOT_STOPPED_HEAD = "a spell the lock does not stop ";
 
 /** The head of a `postKick` clause for in-lock "not ready" presses of an
  * off-GCD spell that was still not ready after the lock (work order
@@ -2772,7 +2913,12 @@ function refusedForAnotherReasonText(
  * instant when the subtraction was inexact (kick 0.177 s, cast 0.838 s →
  * 0.8380000000000001), so a reject logged in the cast's own millisecond read
  * as inside the lockout. */
-function textLockEndMs(k: Parameters<typeof postKickFact>[0]): number {
+function textLockEndMs(
+  k: Pick<
+    Parameters<typeof postKickFact>[0],
+    "atSeconds" | "lockoutDurationSeconds" | "lockEndedBySuccessS"
+  >,
+): number {
   return Math.round(
     (k.atSeconds +
       Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity)) *

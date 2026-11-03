@@ -4844,3 +4844,31 @@ v473 landed) → after, same check code: petKickerMissed 8 → 0,
 ledgerDefNoEffect 73 → 0, wardReturnMisnamed 0 → 0 (15 audited rounds
 1 → 0); 213 checks: 210 unchanged, 2 fell, 0 rose.
 Gates identical; body lines 535,633 → 535,560.
+
+v475 (2026-11-03, F24 batch 2 — round-9 audit fact9 class 1: D8 / D9 / D12 /
+D10 / D11 / D5). kick-eaten's `postKick` reads the round's other enemy kicks
+on the player. A SPELL_CAST_FAILED interruption row another kick ended (same
+spell, within 50 ms, one row per kick) is "kicked again Nx (<spell> +Ns by
+<kick>)", no longer "refused for another reason — its cast bar began and was
+stopped" (1d6eee5f 0:58.9: Pyroblast, Mind Freeze 1 ms after its row). A "not
+ready" press outside this lock whose school another kick still had locked is
+"inside a later kick's lockout" or "still inside an earlier kick's lockout"
+(1d6eee5f r1 Pyroblast / Blazing Barrier under Mind Freeze's Fire lock; r5
+Pyroblast under a Rebuke's), not "its own cooldown or the GCD"; that other
+lock ends early on a success in it, as this one does. An unsilenceable spell
+of the locked school is "a spell the lock does not stop", not "outside the
+locked school" (1eb4dd55 Heart of the Wild under a Nature Skull Bash). User
+rulings 2026-11-02 / 11-03 on all four wordings; the gate counts each clause.
+`castBlockingAuraIntervals` keeps an "interrupts"-typed aura only when it is
+hard control or a silence (`blocksAsControlOrSilence`): Shambling Rush's root
+91807 had read as a cast block. A landed Death Grip on the player
+(`gripsOn`, its cast row; a miss of it moves nobody) is cast-stop evidence
+(`forcedStopInstantsMs.gripped`), so the stop beside it is no self-cancel.
+The kick-eaten legend's full-immunity list is Ice Block and Divine Shield
+(FULL_IMMUNITY_IDS); Aspect of the Turtle moves to the partial list.
+
+Cover set (117 archives, 1,140 contexts), clean base 53739731c (v474) →
+after, same check code: kickedBarAsRefusal 10 → 0, pressOutsideButLocked
+38 → 0, rootAuraCastBlock 8 → 0, gripStopAsCancel 5 → 0; 218 checks: 213
+unchanged, 4 fell, 0 rose. Gates identical; body lines 553,175 → 553,175;
+no candidate row added or removed (35 kick-eaten rows reworded).

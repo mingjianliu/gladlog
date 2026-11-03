@@ -16,14 +16,15 @@
  * `DISPLACEMENT_EVIDENCE_IDS`.
  */
 import type { ICombatUnit } from "@gladlog/parser-compat";
-import { LogEvent } from "@gladlog/parser-compat";
 
-import { DEATH_GRIP_ID } from "../context/resUtilityCds";
-import { forcedStopInstantsMs } from "./castStopEvidence";
+import {
+  forcedStopInstantsMs,
+  GRIP_MISS_PAIR_MS,
+  gripsOn,
+} from "./castStopEvidence";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 
-/** A SPELL_MISSED row of the grip sits within this of its cast row. */
-export const GRIP_MISS_PAIR_MS = 200;
+export { GRIP_MISS_PAIR_MS };
 
 export interface DeathGripOn {
   castMs: number;
@@ -32,32 +33,26 @@ export interface DeathGripOn {
   missType?: string;
 }
 
-/** Every Death Grip `opponents` cast at `victim`, in cast order. */
+/** Every Death Grip `opponents` cast at `victim`, in cast order — the shared
+ * reading `gripsOn` (`castStopEvidence.ts`), which the cast-stop evidence
+ * reads too, kept to the casters among `opponents`. */
 export function deathGripsOn(
   victim: Pick<ICombatUnit, "id" | "missesIn">,
   opponents: readonly ICombatUnit[],
 ): DeathGripOn[] {
+  const byId = new Map(opponents.map((u) => [u.id, u]));
   const out: DeathGripOn[] = [];
-  for (const dk of opponents) {
-    for (const c of dk.spellCastEvents ?? []) {
-      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-      if (c.spellId !== DEATH_GRIP_ID || c.destUnitId !== victim.id) continue;
-      const castMs = c.logLine.timestamp;
-      // a grip the target was immune to (or that missed) moved nobody
-      const miss = (victim.missesIn ?? []).find(
-        (m) =>
-          m.spellId === DEATH_GRIP_ID &&
-          m.srcUnitId === dk.id &&
-          Math.abs(m.timestamp - castMs) <= GRIP_MISS_PAIR_MS,
-      );
-      out.push({
-        castMs,
-        caster: dk,
-        ...(miss ? { missType: miss.missType } : {}),
-      });
-    }
+  const rows = opponents.flatMap((u) => u.spellCastEvents ?? []);
+  for (const g of gripsOn(victim, rows)) {
+    const caster = byId.get(g.srcUnitId);
+    if (!caster) continue;
+    out.push({
+      castMs: g.castMs,
+      caster,
+      ...(g.missType !== undefined ? { missType: g.missType } : {}),
+    });
   }
-  return out.sort((a, b) => a.castMs - b.castMs);
+  return out;
 }
 
 export type ForcedMoveKind = "grip" | "displacement";

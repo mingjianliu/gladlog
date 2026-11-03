@@ -834,8 +834,7 @@ export function computeOwnerPositionEvents(params: {
 
   const ccInstances = ownerCCSummary?.ccInstances ?? [];
   const rootInstances = ownerCCSummary?.rootInstances;
-  // The owner's OWN all-school immunities (Ice Block, Divine Shield, Aspect
-  // of the Turtle): `isOwnImmunityInterval`.
+  // The owner's OWN all-school immunities (`isOwnImmunityInterval`).
   // (bare fixtures carry no aura stream)
   const ownerAuraIntervals = owner.auraEvents
     ? buildAuraIntervals(owner, combat)

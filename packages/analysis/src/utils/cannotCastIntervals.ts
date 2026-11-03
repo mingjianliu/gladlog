@@ -371,8 +371,7 @@ export function healerLockIntervals<
       !iv.lockout ||
       heals.every(
         ([id, presses]) =>
-          intervalBlocksSpell(iv, id) ||
-          healSpentAcross(unit, id, presses, iv),
+          intervalBlocksSpell(iv, id) || healSpentAcross(unit, id, presses, iv),
       ),
   );
 }
@@ -966,6 +965,17 @@ export function castBlockingAuraIntervals(
       (!spell || !isCastBlockingAuraType(spell.type))
     )
       continue;
+    // …and of the cast-blocking types, only a control or a silence blocks:
+    // a kick's own aura that is neither — Shambling Rush 91807, the ghoul's
+    // leap, whose aura is DB2's root (aura 26, `ROOT_AURA_SPELL_IDS`) — does
+    // not (fact9 D10, 1d6eee5f 0:53.861: Frost Nova went out under it and it
+    // read as 1.1 s the player "could not act at all"). The kick's school
+    // lockout is the SPELL_INTERRUPT's, read apart below.
+    if (
+      !BACKLASH_AURA_CC_TYPE.has(spellId) &&
+      !blocksAsControlOrSilence(spellId)
+    )
+      continue;
 
     const key = `${spellId}:${aura.srcUnitId}`;
     if (isApplied) {
@@ -1083,6 +1093,14 @@ export const isSilenceOnlyAura = (auraId: string): boolean =>
   !isHardCcAura(auraId) &&
   (officialSilenceIds.has(auraId) ||
     BACKLASH_AURA_CC_TYPE.get(auraId) === "silence");
+
+/** A cast-blocking-typed aura that is a control or a silence by an official
+ * reading — the aura half of every cannot-cast interval
+ * (`castBlockingAuraIntervals`). The cast-blocking TYPES also hold the
+ * kicks, and the one kick whose id is also an aura on the target, Shambling
+ * Rush 91807, is a root (fact9 D10). */
+export const blocksAsControlOrSilence = (auraId: string): boolean =>
+  isHardCcAura(auraId) || isSilenceEffectAura(auraId);
 
 /** An aura whose effect is a silence by any official reading: the silence
  * family above, or the DR Silence category — Solar Beam's 81261, which the log
@@ -1205,11 +1223,11 @@ export function castBlockingAuraAt(
 ): CastBlockingAura | undefined {
   const silenceStops = spellId === undefined || isSilenceableCast(spellId);
   // hard CC stops every cast, a silence a silenceable one. An aura of the
-  // cast-blocking TYPES that is neither — the lockout aura a kick leaves
-  // (Shambling Rush 91807: type "interrupts", not in the official silence
-  // category, not CC) — is the lockout half this predicate leaves out, and
-  // used to be read as hard CC (pre-review of the batch: a Warrior in Pummel
-  // range under 91807 dropped out of `kickersInRange`).
+  // cast-blocking TYPES that is neither — Shambling Rush 91807, a root
+  // (fact9 D10) — no longer reaches the intervals at all
+  // (`blocksAsControlOrSilence`); it used to be read as hard CC here
+  // (pre-review of the batch: a Warrior in Pummel range under 91807 dropped
+  // out of `kickersInRange`).
   const held = castBlockingAuraIntervals(unit, hostileIds).find(
     (a) =>
       a.from <= tMs &&

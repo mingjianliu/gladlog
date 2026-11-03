@@ -99,8 +99,11 @@ export const IMMUNITY_IDS = new Set<string>(
 /** Every damage school (`IMitigationEntry.schoolMask`). */
 const EVERY_SCHOOL_MASK = 0x7f;
 
-/** The pct-100 rows that stop EVERY school — Ice Block, Divine Shield, Aspect
- * of the Turtle: under one the unit takes no damage at all.
+/** The pct-100 rows that stop EVERY school — Ice Block, Divine Shield: under
+ * one the unit takes no damage at all. Aspect of the Turtle is not one: it
+ * deflects direct attacks (`deflectsDirectAttacks`, ruling 2026-10-21), so
+ * periodic damage still lands — the kick-eaten legend names it with the
+ * school-limited ones (fact9 D5).
  *
  * User ruling F-K9b-B (2026-10-02): `IMMUNITY_IDS` is split in two and a
  * reader that asks "can this unit be hurt right now" reads only this half —

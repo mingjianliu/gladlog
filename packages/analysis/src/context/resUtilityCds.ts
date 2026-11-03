@@ -22,6 +22,7 @@ import {
   eventReductionsFor,
   eventTriggersFor,
 } from "../data/talentScriptedCooldowns";
+import { DEATH_GRIP_ID } from "../utils/castStopEvidence";
 import {
   applyEventReductions,
   type IMajorCooldownInfo,
@@ -34,7 +35,7 @@ import {
   interruptPressCooldownSeconds,
 } from "../utils/enemyInterrupts";
 
-export const DEATH_GRIP_ID = "49576";
+export { DEATH_GRIP_ID };
 const DEATH_KNIGHT_CLASS_ID = 6;
 
 function castsOf(

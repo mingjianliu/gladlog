@@ -528,7 +528,7 @@ export function analyzeBurstLedger(
           spellName: getEnglishSpellName(iv.spellId, iv.spellName),
           overlapSeconds: Math.round(overlapMs / 100) / 10,
           // User ruling F-BI-full (2026-10-02, same rule as F-K9b-B): only a
-          // FULL immunity (Ice Block, Divine Shield, Aspect of the Turtle) is
+          // FULL immunity (`FULL_IMMUNITY_IDS`: Ice Block, Divine Shield) is
           // "IMMUNE". Cloak of Shadows / Blessing of Protection / Spellwarding
           // stop one kind of damage — a burst through Cloak still lands its
           // physical part — so they show as the target's defensive.

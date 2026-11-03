@@ -48,6 +48,10 @@ import {
   CD_WASTE_SHARED_COOLDOWN_NOTE,
   cdWasteSpellNames,
   distanceFact,
+  POST_KICK_EARLIER_LOCK_HEAD,
+  POST_KICK_KICKED_AGAIN_HEAD,
+  POST_KICK_LATER_LOCK_HEAD,
+  POST_KICK_NOT_STOPPED_HEAD,
   POST_KICK_OTHER_REASON_HEAD,
 } from "@gladlog/analysis/src/analysis/candidateFindings";
 import {
@@ -6399,6 +6403,11 @@ export function checkCdHoardedOwnerFree(lines: string[]): string[] {
  *   pressed Nx but rejected (…)                                   — "not ready"
  *   refused for another reason Nx — <reason> (…)                  — the log's own reason
  *   outside the locked school Nx not ready yet — its own … (…)    — a school the kick did not lock
+ *   a spell the lock does not stop Nx not ready yet — its own … (…) — in the school, no silence stops it
+ *   inside a later kick's lockout Nx not ready yet (…)            — a school a later kick locked
+ *   still inside an earlier kick's lockout Nx not ready yet (…)   — a school an earlier kick still held
+ *   kicked again Nx (… by <kick>)                                 — a bar another kick ended
+ * (the last three: fact9 D12 / D9 / D8)
  * Re-eval 2026-10-08, I01: a press the log gives another reason for (moving,
  * out of range, silenced, …) used to sit in the first list and read as
  * rejected by the lockout — 15 of the 103 presses the 60 prompts printed
@@ -6416,7 +6425,7 @@ const POST_KICK_OTHER_REASON_CLAUSE = new RegExp(
   "g",
 );
 const POST_KICK_COUNTED_CLAUSE = new RegExp(
-  `(pressed|outside the locked school) (\\d+)x (?:but rejected|not ready yet — its own cooldown or the GCD) ${POST_KICK_PRESS_LIST}`,
+  `(pressed|outside the locked school|${reEscape(POST_KICK_NOT_STOPPED_HEAD.trim())}|${reEscape(POST_KICK_LATER_LOCK_HEAD.trim())}|${reEscape(POST_KICK_EARLIER_LOCK_HEAD.trim())}|${reEscape(POST_KICK_KICKED_AGAIN_HEAD.trim())}) (\\d+)x (?:(?:but rejected|not ready yet — its own cooldown or the GCD|not ready yet) )?${POST_KICK_PRESS_LIST}`,
   "g",
 );
 const pressesListed = (list: string) => (list.match(/\+\d+\.\d/g) ?? []).length;
