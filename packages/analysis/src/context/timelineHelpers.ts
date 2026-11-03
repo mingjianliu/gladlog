@@ -9,6 +9,7 @@ import {
 
 import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
+import { isHealNotMajorDefensive } from "../data/abilityProfile";
 import { ownEffectAurasOfCast } from "../data/castEffectAuras";
 import { HASTE_DURATION_SPELL_IDS } from "../data/channeledGenerated";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
@@ -2414,7 +2415,12 @@ export function buildKillSequenceBlock(params: {
           // F-L7 (triage sync-burst): each CD at its own cast second — the
           // line is stamped at the window's first second, and a bare list read
           // as "everything popped then" (ba8c0510 0:21: Ray of Frost was 0:39).
+          // fact9 D4: only what was already pressed at the death — a member
+          // of the window cast after it is no cooldown of this kill (the
+          // fallback below clips the same way; 066572a4 1:00: Ultimate
+          // Penitence @1:02 and Volley @1:07 under a 1:00 death)
           const cdNames = activeBurst.activeCDs
+            .filter((c) => c.castSeconds <= deathTime)
             .map((c) =>
               Math.floor(c.castSeconds) === Math.floor(activeBurst.fromSeconds)
                 ? c.spellName
@@ -2459,6 +2465,8 @@ export function buildKillSequenceBlock(params: {
           ];
           const unusedDefensives = allFriendlyCDs.filter(({ player, cd }) => {
             if (cd.tag !== "Defensive") return false;
+            // fact9 D17: a heal is no defensive left unused
+            if (isHealNotMajorDefensive(cd.spellId)) return false;
 
             // Relevant if it was the dying player's OWN cooldown, or it can
             // actually reach them.

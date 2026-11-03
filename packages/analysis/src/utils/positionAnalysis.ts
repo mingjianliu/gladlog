@@ -11,7 +11,7 @@
 
 import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
-import { abilityProfile } from "../data/abilityProfile";
+import { abilityProfile, isHealNotMajorDefensive } from "../data/abilityProfile";
 import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { buildAuraIntervals } from "./auraIntervals";
 import { hitByAttackers } from "./burstHit";
@@ -864,7 +864,11 @@ export function computeOwnerPositionEvents(params: {
   // baseline-only rows are cd-hoarded's alone (ruling P-W6): "a defensive CD
   // was available" reads only buttons the owner showed this round
   const defensiveCDs = ownerCooldowns.filter(
-    (cd) => cd.tag === "Defensive" && !cd.baselineOnly,
+    (cd) =>
+      cd.tag === "Defensive" &&
+      !cd.baselineOnly &&
+      // fact9 D17: a heal is no "defensive CD available"
+      !isHealNotMajorDefensive(cd.spellId),
   );
   const offensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Offensive");
 

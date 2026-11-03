@@ -5,6 +5,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { isHealNotMajorDefensive } from "../data/abilityProfile";
 import { isControlCast } from "./castMissRows";
 import {
   analyzePlayerCCAndTrinket,
@@ -175,7 +176,10 @@ export function computeHealerMetrics(
   const myTotalDefensives = healerUnit.spellCastEvents.filter(
     (e: any) =>
       e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-      MAJOR_DEFENSIVE_IDS.has(String(e.spellId)),
+      MAJOR_DEFENSIVE_IDS.has(String(e.spellId)) &&
+      // the overlap count leaves the heals out (fact9 D17); so does its
+      // denominator (codex 20-F24-08 #3)
+      !isHealNotMajorDefensive(String(e.spellId)),
   ).length;
   const defensiveOverlapRatio = myOverlapCount / (myTotalDefensives + 1);
 

@@ -393,10 +393,11 @@ describe("countsAtThresholds — cd-hoarded wiring", () => {
     const ctx = makeCtx({
       friends: [owner, mate],
       owner,
-      // "740" Tranquility is a real ally-reaching external — qualifies for
+      // "102342" Ironbark is a real ally-reaching external (Tranquility, the
+      // old fixture, is a heal and no defensive — fact9 D17) — qualifies for
       // the mate's TEAMMATE-crisis help-gate (canHelpAnotherUnit) as well as
       // owner's own-crisis gate.
-      ownerCds: [{ ...wall, spellId: "740", spellName: "Tranquility" }],
+      ownerCds: [{ ...wall, spellId: "102342", spellName: "Ironbark" }],
       legacy: legacyOf([owner, mate, enemy]),
     });
     const counts = countsAtThresholds(ctx);

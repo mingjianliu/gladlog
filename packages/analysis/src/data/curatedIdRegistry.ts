@@ -196,6 +196,7 @@ import {
   RULED_COOLDOWN_VALUES,
 } from "../utils/talentModifiers";
 import {
+  HEAL_NOT_MAJOR_DEFENSIVE_IDS,
   KW_IN_HAND_ONLY_DEFENSIVE_IDS,
   KW_MAJOR_DEFENSIVE_IDS,
   KW_NOT_UP_AS_DEFENSE_IDS,
@@ -499,6 +500,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // 和只能给队友的(Blessing of Sacrifice)不算「手里有」。
   // 11-02 用户裁定(fact9 D21):治疗与仅控制免疫的不在爆发台账里叫
   // 「major defensive up」,span 状态机照旧计时。
+  // fact9 D17 (user 2026-11-03): heals no reader files as a major defensive
+  t(
+    "abilityProfile.HEAL_NOT_MAJOR_DEFENSIVE_IDS",
+    "data/abilityProfile.ts",
+    "cast",
+    () => [...HEAL_NOT_MAJOR_DEFENSIVE_IDS],
+  ),
   t(
     "abilityProfile.KW_NOT_UP_AS_DEFENSE_IDS",
     "data/abilityProfile.ts",

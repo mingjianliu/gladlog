@@ -30,8 +30,8 @@ const fr = (casts: number[]) => ({
   responseOnly: true,
 });
 const tranq = {
-  spellId: "740",
-  spellName: "Tranquility",
+  spellId: "102342",
+  spellName: "Ironbark",
   tag: "Defensive",
   cooldownSeconds: 180,
   casts: [] as { timeSeconds: number }[],
@@ -60,7 +60,7 @@ describe("response-only saves", () => {
     ).toEqual([]);
   });
 
-  it("pressing one still answers the crisis (Tranquility is not accused)", () => {
+  it("pressing one still answers the crisis (Ironbark is not accused)", () => {
     expect(
       cdHoardedEvents(
         [{ crisisUnit: OWNER, own: true, points: [point] }],

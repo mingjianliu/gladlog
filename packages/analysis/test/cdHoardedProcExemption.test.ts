@@ -43,8 +43,8 @@ const point = (
   ...over,
 });
 const tranq = {
-  spellId: "740",
-  spellName: "Tranquility",
+  spellId: "102342",
+  spellName: "Ironbark",
   tag: "Defensive",
   cooldownSeconds: 300,
   casts: [] as { timeSeconds: number }[],
@@ -56,7 +56,7 @@ beforeAll(async () => {
 });
 
 describe("cd-hoarded × proc exemption (BACKLOG #43)", () => {
-  it("no proc → the held Tranquility is accused as before", () => {
+  it("no proc → the held Ironbark is accused as before", () => {
     const evts = cdHoardedEvents(
       [{ crisisUnit: MATE, own: false, points: [point()] }],
       [tranq],

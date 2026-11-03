@@ -13,6 +13,7 @@ import {
   emitEnemyCdEntries,
 } from "../src/context/timelineSections/enemyCd";
 import { abilityProfile } from "../src/data/abilityProfile";
+import { CURATED_ABILITY_FACTS } from "../src/data/curatedAbilityFacts";
 import { ENEMY_HEAL_CD_IDS } from "../src/data/enemyHealCds";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { HEALER_SAVE_CD_IDS } from "../src/data/healerSaveCd";
@@ -35,7 +36,7 @@ describe("G7-P3", () => {
     expect(castOrdinal(2, 3)).toBe(" (cast 2 of 3)");
     expect(castOrdinal(1, 1)).toBe("");
   });
-  it("F-E8 / F-E10: an enemy Holy Priest's Apotheosis and Serenity ×2, a Holy Paladin's Avenging Crusader → [ENEMY HEAL CD]", () => {
+  it("F-E8 / F-E10: an enemy Holy Priest's Apotheosis ×3, a Holy Paladin's Avenging Crusader → [ENEMY HEAL CD]; Serenity none (fact9 D14)", () => {
     const lines: string[] = [];
     const out = emitEnemyCdEntries({
       enemyCDTimeline: { players: [], alignedBurstWindows: [] } as never,
@@ -52,9 +53,10 @@ describe("G7-P3", () => {
           name: "Misanthropy",
           spec: CombatUnitSpec.Priest_Holy,
           spellCastEvents: [
-            cast("2050", 12.3),
+            cast("200183", 12.3),
+            cast("2050", 20.4),
             cast("200183", 60.7),
-            cast("2050", 30.1),
+            cast("200183", 30.1),
           ],
         },
         {
@@ -65,9 +67,9 @@ describe("G7-P3", () => {
       ] as never,
     });
     expect(lines).toEqual([
-      "0:12  [ENEMY HEAL CD]   5(Misanthropy) (Holy Priest): Holy Word: Serenity (cast 1 of 2)",
-      "0:30  [ENEMY HEAL CD]   5(Misanthropy) (Holy Priest): Holy Word: Serenity (cast 2 of 2)",
-      "1:00  [ENEMY HEAL CD]   5(Misanthropy) (Holy Priest): Apotheosis",
+      "0:12  [ENEMY HEAL CD]   5(Misanthropy) (Holy Priest): Apotheosis (cast 1 of 3)",
+      "0:30  [ENEMY HEAL CD]   5(Misanthropy) (Holy Priest): Apotheosis (cast 2 of 3)",
+      "1:00  [ENEMY HEAL CD]   5(Misanthropy) (Holy Priest): Apotheosis (cast 3 of 3)",
       "1:01  [ENEMY HEAL CD]   5(Pally) (Holy Paladin): Avenging Crusader",
     ]);
     expect(out).toEqual({
@@ -78,6 +80,15 @@ describe("G7-P3", () => {
       utilityRendered: false,
       unseenRendered: false,
     });
+  });
+  // fact9 D14 (user ruling 2026-11-03): a heal the user signed out of the
+  // save roster (`not_save_role` — Holy Word: Serenity, a core rotational
+  // heal) is no major heal cooldown either
+  it("no not_save_role spell is a heal CD", () => {
+    for (const f of CURATED_ABILITY_FACTS)
+      if (f.kind === "not_save_role")
+        expect(ENEMY_HEAL_CD_IDS.has(f.id), f.id).toBe(false);
+    expect(ENEMY_HEAL_CD_IDS.has("2050")).toBe(false);
   });
   it("the heal-CD set never overlaps the burst-window set", () => {
     for (const id of ENEMY_HEAL_CD_IDS)

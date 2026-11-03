@@ -2,6 +2,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CD_WASTE_PRESSURE_HP_PCT } from "../analysis/candidateFindings";
 import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
+import { isHealNotMajorDefensive } from "../data/abilityProfile";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { PERIODIC_DAMAGE_AURA_IDS } from "../data/periodicAuraGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -50,6 +51,7 @@ import {
   wasLockedOutThroughWindow,
 } from "../utils/deathOutcomeAnalysis";
 import { TIME_DILATION_ID } from "../utils/deferralShield";
+import { ENEMY_DEF_DEFLECTS_WORDS } from "../utils/enemyDefensives";
 import {
   HEAL_ABSORB_SELF_SAVE_IDS,
   healAbsorbDeathLine,
@@ -718,8 +720,7 @@ export function emitManaMarkerEntries(params: {
  * (a 2v2 round that logged no stack; `getInitialDampening`, FT-T13 D11). */
 function dampeningSuffix(
   dampeningAt:
-    | ((atSeconds: number, unit?: ICombatUnit) => number | null)
-    | undefined,
+    ((atSeconds: number, unit?: ICombatUnit) => number | null) | undefined,
   atSeconds: number,
   unit?: ICombatUnit,
 ): string {
@@ -772,7 +773,9 @@ export function lowPressureUnusedDefensiveNote(
    * hold (fact2, 2026-10-20: 0d08dd90 Ultimate Penitence kicked at 1:41,
    * the kit `[UNUSED — started 1×, never finished]`, the NOTE "correctly
    * HELD") */
-  barsStarted?: (cd: Pick<IMajorCooldownInfo, "spellId" | "spellName">) => number,
+  barsStarted?: (
+    cd: Pick<IMajorCooldownInfo, "spellId" | "spellName">,
+  ) => number,
 ): string | null {
   if (minHpPct === null || minHpPct < CD_WASTE_PRESSURE_HP_PCT) return null;
   // 这句注印的是「他没用的 **defensive** cooldowns 是正确留着的」,所以触发它的
@@ -798,6 +801,8 @@ export function lowPressureUnusedDefensiveNote(
       !cdIsProcOnly(cd) &&
       !cd.isThroughput &&
       (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)) &&
+      // fact9 D17: a heal is no defensive "correctly HELD"
+      !isHealNotMajorDefensive(cd.spellId) &&
       !cdCanHelpAnotherUnit(cd) &&
       // a cooldown that is also an offensive one is no self-only defensive
       // (fact7 D62, 6ab51f91: Ultimate Penitence, whose bolts hit and heal
@@ -857,6 +862,12 @@ export function formatMitigationAuditLine(row: IMitigationAuditRow): string {
     const outsidePart =
       outsideK > 0 ? `; ~${outsideK}k of it outside the immunity's school` : "";
     return `Mitigation audit: ${row.spellName} immunity covered ${overlap}s ${inWindow} (still took ~${dmgK}k during it — dmg the immunity did not block${outsidePart})`;
+  }
+  if (row.kind === "deflection") {
+    // fact9 D3 (user rulings 2026-10-21 / 11-03): a deflection in the
+    // legend's own words (`ENEMY_DEF_DEFLECTS_WORDS`), never an immunity
+    const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
+    return `Mitigation audit: ${row.spellName} (${ENEMY_DEF_DEFLECTS_WORDS}) covered ${overlap}s ${inWindow} (still took ~${dmgK}k during it)`;
   }
   // other F-O5: 24 of 25 such rows were shields, dodges or heals — "redirect /
   // reflect" named one; say only what is true of all of them
@@ -1019,7 +1030,11 @@ export function emitFriendlyDeathEntries<S>(params: {
       const allUnits = Array.from(unitsByName.values());
 
       const readyAtDeath = allPlayerCDs
-        .filter((cd) => cd.tag === "Defensive")
+        // fact9 D17: a heal is no unused defensive
+        .filter(
+          (cd) =>
+            cd.tag === "Defensive" && !isHealNotMajorDefensive(cd.spellId),
+        )
         // a row owned on the spec baseline alone is cd-hoarded's only (ruling
         // P-W6): this list has no school gate for a button never shown
         // (Fable review of F-W6, round 9: an Unholy DK killed by pure

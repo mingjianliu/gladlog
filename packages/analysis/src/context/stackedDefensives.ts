@@ -12,8 +12,12 @@
  * percent is the engine's own rounded integer.
  */
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
+import { ENEMY_DEF_DEFLECTS_WORDS } from "../utils/enemyDefensives";
 import { fmtTime, renderedWindowSeconds } from "../utils/renderGrid";
 import type { ContextFactLabels } from "./burstAnswered";
+
+/** the deflection's own half of the legend's words (fact9 D3) */
+const DEFLECTS_DIRECT_ATTACKS = ENEMY_DEF_DEFLECTS_WORDS.split(";")[0]!;
 
 export const STACKED_DEFENSIVES_TAG = "[STACKED DEFENSIVES]";
 
@@ -60,7 +64,9 @@ export function formatStackedDefensiveLines(
         priced = `held back ~${s.blockedOverlapPct}% of their max HP during the overlap (~${s.blockedFullPct}% over its full ${s.secondRunSeconds}s run), which lands later as their own damage`;
       else if (s.pricing === "absorb")
         priced = `absorbed ${s.blockedOverlapPct}% of their max HP during the overlap`;
-      else priced = `is not priced here (${s.unpricedReason})`;
+      // fact9 D3: a deflection in the legend's words, not "(immunity)"
+      else
+        priced = `is not priced here (${s.unpricedReason === "deflection" ? DEFLECTS_DIRECT_ATTACKS : s.unpricedReason})`;
       // The span's duration is the difference of its RENDERED endpoints —
       // the gate re-parses "m:ss–m:ss (Ns)" (checkWindowSpanConsistency).
       // The raw 1-dp overlap ("0:34–0:38 (4.3s)") disagreed with its own

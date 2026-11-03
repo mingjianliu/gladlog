@@ -6,7 +6,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { isSurvivalWall } from "../data/abilityProfile";
+import { isHealNotMajorDefensive, isSurvivalWall } from "../data/abilityProfile";
 import {
   AURA_ACTIVATION_PROVES_BUTTON_IDS,
   AURA_IS_THE_PRESS_IDS,
@@ -6814,6 +6814,8 @@ export function detectOverlappedDefensives(
       if (action.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const spellId = action.spellId;
       if (!spellId || !ALL_MAJOR_DEFENSIVE_IDS.has(spellId)) continue;
+      // fact9 D17: a heal is no major defensive to overlap
+      if (isHealNotMajorDefensive(spellId)) continue;
 
       let targetId = action.destUnitId;
       let targetName = action.destUnitName;
@@ -7249,6 +7251,8 @@ export function detectPanicDefensives(
       if (action.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const spellId = action.spellId;
       if (!spellId || !MAJOR_DEFENSIVE_IDS.has(spellId)) continue;
+      // fact9 D17: a heal is no "major defensive used with no threat"
+      if (isHealNotMajorDefensive(spellId)) continue;
       if (!friendlyIds.has(action.destUnitId)) continue;
 
       const castMs = action.timestamp;

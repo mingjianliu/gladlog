@@ -50,6 +50,12 @@ function mitigationText(row: DeathRecap["mitigationAudit"][number]): string {
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
     return `${row.spellName} 免疫覆盖 ${overlap}s(期内观测承伤 ~${dmgK}k)`;
   }
+  if (row.kind === "deflection") {
+    // fact9 D3: Aspect of the Turtle deflects direct attacks, damage over
+    // time still lands — no immunity (user ruling 2026-10-21)
+    const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
+    return `${row.spellName} 偏转直接攻击 ${overlap}s(持续伤害照常落地;期内观测承伤 ~${dmgK}k)`;
+  }
   if (row.kind === "absorb") {
     // Absorb shields are effective HP measured from the log's own absorb
     // events, so what is stated is what the shield actually ate inside the

@@ -9,6 +9,7 @@
  * which is why the shared window predicates live here with them.
  */
 import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
+import { isHealNotMajorDefensive } from "../../data/abilityProfile";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
 import { MITIGATION_TABLE } from "../../data/mitigationData";
 import { OFF_GCD_SPELL_IDS } from "../../data/offGcdGenerated";
@@ -1657,6 +1658,27 @@ export function isSpendableDefensiveCd(
     isProcOnly?: boolean;
   },
 ): boolean {
+  return (
+    isDefensiveCdResponse(cd) &&
+    // fact9 D17: a heal is no defensive held through a crisis
+    !isHealNotMajorDefensive(cd.spellId)
+  );
+}
+
+/**
+ * "Did this press answer the crisis" — the response side of cd-hoarded
+ * (spent, spent elsewhere, pressed for the unit, a rejected attempt). Wider
+ * than the ready set: fact9 D17 took the five heals out of what a player is
+ * accused of holding (`isSpendableDefensiveCd`), not out of what counts as
+ * having answered — tightening the accusation set must not shrink the
+ * response set (605 preview 2026-11-03: shrinking both raised 33 new rows,
+ * 101-1-695 @70 a hunter's Exhilaration at 1:11 no longer an answer).
+ */
+export function isDefensiveCdResponse(
+  cd: Pick<SpendableDefensiveCd, "spellId" | "tag" | "isThroughput"> & {
+    isProcOnly?: boolean;
+  },
+): boolean {
   return cd.tag === "Defensive" && !cd.isThroughput && !cdIsProcOnly(cd);
 }
 
@@ -1725,7 +1747,8 @@ export function ownerFreeSpan(tSec: number): { fromS: number; toS: number } {
  * teammate's crisis).
  *
  * "Spent" is a press of any of the owner's save cooldowns that can help
- * this crisis unit (`isSpendableDefensiveCd` + the same help gate), inside
+ * this crisis unit (`isDefensiveCdResponse` — wider than the ready set, a
+ * heal answers too — + the same help gate), inside
  * `[tSec - RESPONSE_PRE_MS/1000, tSec + CD_HOARD_RESPONSE_S]` — a press
  * landing just before the sampled crossing still counts, the same convention
  * `crisisDecisionPoints`' own response window uses. Until 2026-09-24 the set
@@ -2113,7 +2136,7 @@ export function cdHoardedEvents(
         t <= p.tSec + CD_HOARD_RESPONSE_S;
       const spent =
         ownerCds
-          .filter((cd) => isSpendableDefensiveCd(cd) && helps(cd))
+          .filter((cd) => isDefensiveCdResponse(cd) && helps(cd))
           .some((cd) =>
             cd.casts.some(
               (c) => inWindow(c.timeSeconds) && reachedThisUnit(cd, c),
@@ -2126,7 +2149,7 @@ export function cdHoardedEvents(
         // unit 2.2 s after t and the event read "no save spent")
         (!src.own &&
           ownerCds
-            .filter((cd) => isSpendableDefensiveCd(cd))
+            .filter((cd) => isDefensiveCdResponse(cd))
             .some((cd) =>
               cd.casts.some(
                 (c) =>
@@ -2201,8 +2224,17 @@ export function cdHoardedEvents(
       // rejected cast inside the same response window — merged across every
       // ready cooldown (not just one), since the accusation now names up to
       // three (`facts.readyCds`), not a single spell.
+      // …and a rejected press of a heal the owner had up (fact9 D17: no
+      // longer in `ready`, still an answer — codex 20-F24-08 #1)
+      const heals = ownerCds.filter(
+        (cd) =>
+          isDefensiveCdResponse(cd) &&
+          isHealNotMajorDefensive(cd.spellId) &&
+          cdHelpsRecipient(cd, own) &&
+          cdAvailableAt(cd, point.tSec),
+      );
       const failedHits = rawStreams
-        ? ready.flatMap((cd) =>
+        ? [...ready, ...heals].flatMap((cd) =>
             filterIntentGuardEvidence(
               castFailedInWindow(
                 rawStreams,
@@ -2251,7 +2283,7 @@ export function cdHoardedEvents(
       const spentElsewhere = ownerCds
         .filter(
           (cd) =>
-            isSpendableDefensiveCd(cd) &&
+            isDefensiveCdResponse(cd) &&
             (cdCanHelpAnotherUnit(cd) || cd.casts.some((c) => c.allyCopyOn)),
         )
         .flatMap((cd) =>
@@ -2345,7 +2377,7 @@ export function cdHoardedEvents(
         ally: boolean,
       ): Array<{ at: number; name: string; spellId: string }> =>
         cds
-          .filter((cd) => isSpendableDefensiveCd(cd))
+          .filter((cd) => isDefensiveCdResponse(cd))
           .flatMap((cd) =>
             cd.casts
               .filter(
@@ -2470,7 +2502,7 @@ export function cdHoardedEvents(
         ? ownerCds
             .filter(
               (cd) =>
-                isSpendableDefensiveCd(cd) &&
+                isDefensiveCdResponse(cd) &&
                 // F20 D1: not the owner's own ally-only external
                 cdHelpsRecipient(cd, own) &&
                 !readyIds.has(cd.spellId),
@@ -2700,6 +2732,8 @@ export function cdSpentIdleEvents(
     (cd) =>
       DEFENSIVE_TAGS.has(cd.tag) &&
       !cd.isThroughput &&
+      // fact9 D17: a heal is no defensive spent idle
+      !isHealNotMajorDefensive(cd.spellId) &&
       // 空放/攥着不放都是「你当时的选择」,被动触发的能力没有这个选择。
       !cdIsProcOnly(cd) &&
       !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId),

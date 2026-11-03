@@ -8,8 +8,8 @@ import { matchMinHpPct } from "../src/utils/killWindowTargetSelection";
 import { makeUnit } from "./ported/testHelpers";
 
 const DP = {
-  spellId: "19236",
-  spellName: "Desperate Prayer",
+  spellId: "47585",
+  spellName: "Dispersion",
   neverUsed: true,
   isThroughput: false,
 };
@@ -28,7 +28,7 @@ describe("cd-waste 承压门", () => {
     const out = cdWasteEvents([DP], me, 40);
     expect(out.length).toBe(1);
     expect(out[0].type).toBe("cd-waste");
-    expect(out[0].spellId).toBe("19236");
+    expect(out[0].spellId).toBe("47585");
   });
 
   it("恰在阈值(=60%)→ 不发;略低(59.9%)→ 发", () => {
@@ -134,7 +134,7 @@ describe("lowPressureUnusedDefensiveNote", () => {
   it("低承压 + 有未用减伤墙 → 出注(含 floor 后的 minHP)", () => {
     const note = lowPressureUnusedDefensiveNote([DP], 82.7);
     expect(note).toContain("82%");
-    expect(note).toContain("(Desperate Prayer) were correctly HELD");
+    expect(note).toContain("(Dispersion) were correctly HELD");
     // W4 (triage 2026-09-29): no blanket "do NOT coach pressing defensives"
     expect(note).not.toContain("do NOT coach");
   });
@@ -150,7 +150,7 @@ describe("lowPressureUnusedDefensiveNote", () => {
       tag: "Defensive" as const,
     };
     const note = lowPressureUnusedDefensiveNote([DP, rewind], 96);
-    expect(note).toContain("(Desperate Prayer)");
+    expect(note).toContain("(Dispersion)");
     expect(note).not.toContain("Rewind");
     expect(lowPressureUnusedDefensiveNote([rewind], 96)).toBeNull();
   });
@@ -294,7 +294,7 @@ describe("cd-waste never names Mass Invisibility", () => {
   it("a never-pressed Mass Invisibility under pressure → no cd-waste", () => {
     expect(cdWasteEvents([mi], me, 40)).toEqual([]);
     expect(cdWasteEvents([mi, DP], me, 40).map((e) => e.spellId)).toEqual([
-      "19236",
+      "47585",
     ]);
   });
 });

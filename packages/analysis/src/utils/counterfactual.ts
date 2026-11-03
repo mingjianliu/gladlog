@@ -2,6 +2,7 @@ import { CombatUnitType, ICombatUnit } from "@gladlog/parser-compat";
 
 import { castKeyOfAura } from "../data/castEffectAuras";
 import { resolveMitigation } from "../data/mitigationComponents";
+import { DEFLECTION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
@@ -206,7 +207,11 @@ function windowStartSecondsOf(deathS: number): number {
 export interface IMitigationAuditRow {
   spellId: string;
   spellName: string;
-  kind: "arith" | "immunity" | "mechanic" | "absorb" | "deferred";
+  /** `deflection` (fact9 D3, user ruling 2026-10-21): a deflection
+   * (`DEFLECTION_IDS`, Aspect of the Turtle) is no immunity — damage over
+   * time still lands; it carries the immunity's two damage fields. */
+  kind:
+    "arith" | "immunity" | "deflection" | "mechanic" | "absorb" | "deferred";
   /** Seconds of (active interval ∩ death window), one decimal. */
   activeOverlapS: number;
   /** kind=arith: blocked amount (absolute) and its share of maxHp. */
@@ -467,7 +472,10 @@ export function computeMitigationAudit(
         rows.push({
           spellId: iv.spellId,
           spellName,
-          kind: "immunity",
+          // fact9 D3: Turtle's 100 % row is a deflection, not an immunity
+          // (066572a4 1:07: "Aspect of the Turtle immunity covered 3.0s …
+          // dmg the immunity did not block" while its DoTs ticked)
+          kind: DEFLECTION_IDS.has(iv.spellId) ? "deflection" : "immunity",
           activeOverlapS,
           damageTakenDuringImmunity: allSchools,
           damageOutsideImmunitySchool: Math.max(0, allSchools - observed),

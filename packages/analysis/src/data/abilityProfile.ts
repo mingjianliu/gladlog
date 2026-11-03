@@ -285,6 +285,40 @@ export const KW_UNPRESSED_NOT_IN_HAND_IDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Heals the class rosters tag Defensive that no reader files as a MAJOR
+ * DEFENSIVE cooldown (fact9 D17, user rulings 2026-11-03: 「五个治疗全移」,
+ * 「凡称它为防御冷却的都改」): cd-waste's "a major defensive cooldown the
+ * player never successfully cast", cd-hoarded's `readyCds` (and the [CD
+ * PRIOR] cohort that shares `isSpendableDefensiveCd`), cd-spent-idle,
+ * `[DEFENSIVE AVAILABLE]`, the `[DEATH]` "(Unused: …)" list and the NOTE's
+ * "never-used self-only defensive cooldowns … correctly HELD", the
+ * `[STACKED DEFENSIVES]` pairs (not cd-hoarded's protection record), the healer metrics' defensive overlaps,
+ * positioning's "a defensive CD was available" and the match phases' first
+ * major defensive (codex 20-F24-07) (`isHealNotMajorDefensive`). Their
+ * presses keep their lines, the cooldown ledger keeps their readiness, and a
+ * heal still answers a crisis (`BURST_HEAL_CD_IDS`; cd-hoarded's response
+ * side, `isDefensiveCdResponse`). Evidence, the official profile (unit-tested in
+ * abilityProfile.test.ts): Desperate Prayer, Death Pact, Exhilaration heal
+ * the caster only; Divine Hymn and Tranquility are group heals (4e8cabf7:
+ * "Tranquility — a major defensive cooldown never cast"). The burst ledger's
+ * `KW_NOT_UP_AS_DEFENSE_IDS` (fact9 D21) is these five plus Lichborne.
+ * Registered in curatedIdRegistry.
+ */
+export const HEAL_NOT_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
+  "19236", // Desperate Prayer — a self heal
+  "48743", // Death Pact — a self heal
+  "109304", // Exhilaration — a self heal
+  "64843", // Divine Hymn — a group heal
+  "740", // Tranquility — a group heal
+]);
+
+/** Is this Defensive-tagged cooldown a heal no reader may call a major
+ * defensive (`HEAL_NOT_MAJOR_DEFENSIVE_IDS`)? */
+export function isHealNotMajorDefensive(spellId: string): boolean {
+  return HEAL_NOT_MAJOR_DEFENSIVE_IDS.has(spellId);
+}
+
+/**
  * Roster members that are no damage defense while UP — the burst ledger does
  * not call them "Target had a major defensive up" (fact9 D21, user ruling
  * 2026-11-02 「去掉治疗与仅控制免疫」). They stay in the roster: the span state
@@ -303,11 +337,7 @@ export const KW_UNPRESSED_NOT_IN_HAND_IDS: ReadonlySet<string> = new Set([
  * Registered in curatedIdRegistry.
  */
 export const KW_NOT_UP_AS_DEFENSE_IDS: ReadonlySet<string> = new Set([
-  "19236", // Desperate Prayer — a heal
-  "48743", // Death Pact — a heal
-  "109304", // Exhilaration — a heal
-  "64843", // Divine Hymn — a heal
-  "740", // Tranquility — a heal
+  ...HEAL_NOT_MAJOR_DEFENSIVE_IDS,
   "49039", // Lichborne — control immunity only
 ]);
 

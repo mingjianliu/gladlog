@@ -37,11 +37,16 @@ import {
   resolveMitigation,
   strongestComponentPct,
 } from "../data/mitigationComponents";
+import { isHealNotMajorDefensive } from "../data/abilityProfile";
+import { DEFLECTION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
 import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
-import { isDeferralAbsorb, sumIncomingPressure } from "../utils/incomingPressure";
+import {
+  isDeferralAbsorb,
+  sumIncomingPressure,
+} from "../utils/incomingPressure";
 import { buildRosterSides } from "../utils/rosterSide";
 import { roundEndMs } from "../utils/roundEnd";
 
@@ -59,7 +64,9 @@ export const STACKED_DEFENSIVE_MAJOR_IDS: ReadonlySet<string> = new Set<string>(
  * 98008 as 325174, Greater Invisibility 110959 as 110960 — none was ever
  * "already protected"). Pricing reads the key; the line names the aura. */
 export function stackedDefensiveKeyOf(auraSpellId: string): string | undefined {
-  return castKeyOfAura(auraSpellId, (id) => STACKED_DEFENSIVE_MAJOR_IDS.has(id));
+  return castKeyOfAura(auraSpellId, (id) =>
+    STACKED_DEFENSIVE_MAJOR_IDS.has(id),
+  );
 }
 /** overlaps shorter than this are aura-refresh noise, not a stack */
 export const STACKED_DEFENSIVE_MIN_OVERLAP_S = 0.5;
@@ -87,7 +94,9 @@ export interface StackedDefensivePair {
   overlapSeconds: number;
   /** how B was priced; `unpriced` carries the reason in `unpricedReason` */
   pricing: "pct" | "absorb" | "deferred" | "unpriced";
-  unpricedReason: "immunity" | "positional" | "off-table" | null;
+  /** `deflection`: a deflection (`DEFLECTION_IDS`, Aspect of the Turtle) —
+   * no immunity (fact9 D3) */
+  unpricedReason: "immunity" | "deflection" | "positional" | "off-table" | null;
   /** B's extra blocked damage during the overlap, integer % of target max HP */
   blockedOverlapPct: number | null;
   /** B's blocked damage over its full run (from the overlap start to B's
@@ -184,6 +193,15 @@ export function stackedDefensivePairs(
     let ivs;
     try {
       ivs = majorWallIntervals(target, combat, byId, friendNames)
+        // fact9 D17 (user ruling 2026-11-03): a heal is no major defensive
+        // of a stack — but it stays in `majorWallIntervals`, the protection
+        // record cd-hoarded abstains on: narrowing that set raised new rows
+        // (k3 recheck: 28c39eb1 r1 @157, a Desperate Prayer up on the crisis
+        // unit)
+        .filter(
+          (iv) =>
+            !isHealNotMajorDefensive(stackedDefensiveKeyOf(iv.spellId) ?? ""),
+        )
         .filter((iv) => iv.fromS < roundEndS)
         .map(inRound);
     } catch {
@@ -239,7 +257,10 @@ export function stackedDefensivePairs(
             (absorbedBetween(fromMs, bEndMs) / maxHp) * 100,
           );
         } else if (res && res.positional) unpricedReason = "positional";
-        else if (pct && pct.pctMin >= 100) unpricedReason = "immunity";
+        else if (pct && pct.pctMin >= 100)
+          unpricedReason = DEFLECTION_IDS.has(second.spellId)
+            ? "deflection"
+            : "immunity";
         else if (res && pct && pct.pctMin > 0) {
           const b = pct.pctMin / 100;
           pricing = "pct";

@@ -73,6 +73,7 @@ const MODULE_FILES = [
   "offListPress",
   "fact9",
   "fact9b",
+  "fact9c",
 ];
 await ensureAnalysisData();
 const modules: Array<IScanModule & { file: string }> = [];

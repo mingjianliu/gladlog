@@ -9,6 +9,7 @@ import { mateHitDuringCc } from "../context/observedConsequences";
 import { refusalWhy } from "../context/spellOutcomeLines";
 import { dmgSpikeWindowsOf } from "../context/timelineHelpers";
 import { ALTER_TIME_RETURN_ID } from "../context/timelineSections/alterTime";
+import { isHealNotMajorDefensive } from "../data/abilityProfile";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
@@ -198,6 +199,7 @@ import {
   countsAsTeamBurst,
   enemyHealerCcWindows,
   friendlyCrisisMomentInWindow,
+  isDefensiveCdResponse,
   isSpendableDefensiveCd,
   missedSyncWindowEvents,
   syncWindowCdFor,
@@ -424,7 +426,10 @@ export function cdWasteEvents(
   const groups: (typeof cds)[] = [];
   for (const cd of cds) {
     // 指控说「防御」,就只能问防御 tag —— 不能拿「不是进攻」凑数。
-    const isDefensive = cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag);
+    // fact9 D17: a heal is no major defensive (`isHealNotMajorDefensive`)
+    const isDefensive =
+      (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)) &&
+      !isHealNotMajorDefensive(cd.spellId);
     // 「整局没交」对没有按键的能力不成立(`PROC_ONLY_ACTIVATION_IDS`)。
     if (cdIsProcOnly(cd)) continue;
     // A response-only save (Barkskin / Frenzied Regeneration, user ruling
@@ -4719,12 +4724,14 @@ function teamPlayEvents(
             ? {
                 rawStreams,
                 ownerId: owner.id,
-                // the owner's ally-reaching save tools (S1) — the same
-                // spendable ∩ help-another set cd-hoarded's teammate side uses
+                // the owner's ally-reaching save tools (S1) — what an attempt
+                // to answer is read against: the response set (fact9 D17,
+                // codex 20-F24-08 #1: a rejected Tranquility is still an
+                // attempt), help-another as cd-hoarded's teammate side
                 tools: ownerCds
                   .filter(
                     (cd: IMajorCooldownInfo) =>
-                      isSpendableDefensiveCd(cd) && cdCanHelpAnotherUnit(cd),
+                      isDefensiveCdResponse(cd) && cdCanHelpAnotherUnit(cd),
                   )
                   // ruling C1's "ready at the press", cd-hoarded's reading
                   // (the rendered-second slack taken off)

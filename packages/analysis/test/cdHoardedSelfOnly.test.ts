@@ -5,6 +5,10 @@
  * 用户原话:「我玩牧师,绝望祷言全场没用,然后我队友生命垂危的时候我应该用 ——
  * 这技能只能给自己加血。」下面第一批用例就是这句话的机制化复现。
  *
+ * fact9 D17 (user ruling 2026-11-03): Desperate Prayer and Tranquility are
+ * heals, no defensives (`isHealNotMajorDefensive`); the fixtures use
+ * Dispersion (a self-only wall) and Ironbark (an ally external) instead.
+ *
  * 2026-08-30 重写(GH #34,决策点形状):判据从 `availableWindows` 换成了
  * `crisisDecisionPoints`(与 crisis-no-response 同一谓词),owner 自己的危机
  * 和每个队友的危机各自一路 source;GH #28 的限制现在体现在
@@ -71,19 +75,19 @@ beforeAll(async () => {
 });
 
 describe("cd-hoarded × 够不着队友的技能(GH #28,2026-08-30 决策点重写)", () => {
-  it("绝望祷言 + 队友垂危 → 0 条(自愈技能救不了别人的血条)", () => {
+  it("自保墙(消散)+ 队友垂危 → 0 条(自愈技能救不了别人的血条)", () => {
     const evts = cdHoardedEvents(
       [mateCrisis(point(10, 13))],
-      [cd("19236", "Desperate Prayer")],
+      [cd("47585", "Dispersion")],
       OWNER,
     );
     expect(evts).toEqual([]);
   });
 
-  it("绝望祷言 + owner 自己垂危 → 仍然出 1 条,且危机单位是 owner 本人", () => {
+  it("自保墙(消散)+ owner 自己垂危 → 仍然出 1 条,且危机单位是 owner 本人", () => {
     const evts = cdHoardedEvents(
       [ownCrisis(point(10, 20))],
-      [cd("19236", "Desperate Prayer")],
+      [cd("47585", "Dispersion")],
       OWNER,
     );
     expect(evts).toHaveLength(1);
@@ -92,10 +96,10 @@ describe("cd-hoarded × 够不着队友的技能(GH #28,2026-08-30 决策点重�
     expect(evts[0]!.facts["own"]).toBe("yes");
   });
 
-  it("能作用到队友的 CD(宁静)+ 队友垂危 → 照常出,且引用队友、own=no", () => {
+  it("能作用到队友的 CD(铁木树皮)+ 队友垂危 → 照常出,且引用队友、own=no", () => {
     const evts = cdHoardedEvents(
       [mateCrisis(point(10, 13))],
-      [cd("740", "Tranquility")],
+      [cd("102342", "Ironbark")],
       OWNER,
     );
     expect(evts).toHaveLength(1);
@@ -293,5 +297,30 @@ describe("cd-hoarded 意图守护(BACKLOG #26 Task 2,按了被拒不算屯 —�
     );
     expect(withGuard).toEqual(without);
     expect(withGuard[0]!.facts["attempted"]).toBeUndefined();
+  });
+});
+
+describe("fact9 D17：治疗不进「攥着」的指控集，但按了照样算回应", () => {
+  it("自己垂危时按了 Desperate Prayer、Dispersion 在手 → 0 条（605 预览：收紧指控集不得缩回应集）", () => {
+    const evts = cdHoardedEvents(
+      [ownCrisis(point(10, 20))],
+      [
+        cd("47585", "Dispersion"),
+        cd("19236", "Desperate Prayer", {
+          casts: [{ timeSeconds: 11 }],
+          neverUsed: false,
+        }),
+      ],
+      OWNER,
+    );
+    expect(evts).toEqual([]);
+  });
+  it("只剩 Desperate Prayer 在手 → 0 条（它不是被攥着的防御）", () => {
+    const evts = cdHoardedEvents(
+      [ownCrisis(point(10, 20))],
+      [cd("19236", "Desperate Prayer")],
+      OWNER,
+    );
+    expect(evts).toEqual([]);
   });
 });

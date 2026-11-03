@@ -21,6 +21,13 @@
  * heal, no absorb, no throughput role — `rejectedForReview` in
  * `healerSaveCdGenerated.json`). On the 605-file capture 55 of its 96
  * `[ENEMY HEAL CD]` lines were a Devastation Evoker's.
+ *
+ * Holy Word: Serenity 2050 was listed here from the F-E8 triage (PV215) until
+ * fact9 D14 (2026-11-03, user ruling): the user signed it `not_save_role`
+ * (2026-09-04, GH #63 — a core rotational Holy Word heal, about one press per
+ * 13 s), and the A26 ruling signed only the tag, not this membership. On the
+ * 117-archive cover set it was 1,896 of the 5,302 `[ENEMY HEAL CD]` lines.
+ * `test/enemyHealCd.test.ts` keeps every `not_save_role` id out.
  */
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 
@@ -30,7 +37,6 @@ import { OFFENSIVE_PRESS_FACT_IDS } from "../utils/spellDanger";
 export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   ...TEAM_HEAL_CD_IDS,
   "200183", // Apotheosis — Holy Priest
-  "2050", // Holy Word: Serenity — Holy Priest
   "215769", // Spirit of Redemption (Spirit of the Redeemer, PvP) — Holy Priest
   "370537", // Stasis — Preservation Evoker
   "216331", // Avenging Crusader — Holy Paladin (A27 = B)

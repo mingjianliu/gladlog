@@ -330,8 +330,8 @@ describe("cdPriorHoldEpisodes (product side)", () => {
       ],
     });
     const mate = unit("M");
-    // Desperate Prayer — a self heal; helps the owner's own dip.
-    const selfWall = cd({ spellId: "19236", spellName: "Desperate Prayer" });
+    // Dispersion — a self-only wall; helps the owner's own dip (fact9 D17: Desperate Prayer, the old fixture, is a heal and no defensive).
+    const selfWall = cd({ spellId: "47585", spellName: "Dispersion" });
     const eps = cdPriorHoldEpisodes(
       me,
       combat([me, mate]),

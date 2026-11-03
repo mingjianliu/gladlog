@@ -3556,6 +3556,21 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/data/abilityProfile.ts`,
+    symbol: "isHealNotMajorDefensive",
+    mod: abilityProfileMod,
+  },
+  {
+    file: `${A}/data/abilityProfile.ts`,
+    symbol: "HEAL_NOT_MAJOR_DEFENSIVE_IDS",
+    mod: abilityProfileMod,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_DEFLECTS_WORDS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/abilityProfile.ts`,
     symbol: "KW_NOT_UP_AS_DEFENSE_IDS",
     mod: abilityProfileMod,
   },

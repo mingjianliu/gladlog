@@ -1,5 +1,6 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
+import { isHealNotMajorDefensive } from "../data/abilityProfile";
 import { IMajorCooldownInfo, specToString } from "../utils/cooldowns";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { fmtTime } from "../utils/renderGrid";
@@ -90,7 +91,13 @@ export function buildMatchArcStructured(
   let firstDefensiveName = "";
   let firstDefensiveSpec = "";
   for (const { player, cd } of allTeamCooldownsWithPlayer) {
-    if (cd.tag !== "Defensive" || cd.neverUsed || cd.casts.length === 0)
+    if (
+      cd.tag !== "Defensive" ||
+      // fact9 D17: a heal is no major defensive committed
+      isHealNotMajorDefensive(cd.spellId) ||
+      cd.neverUsed ||
+      cd.casts.length === 0
+    )
       continue;
     const cast = cd.casts[0];
     if (cast.timeSeconds < firstDefensiveSeconds) {

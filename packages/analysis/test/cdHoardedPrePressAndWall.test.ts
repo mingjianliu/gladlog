@@ -34,8 +34,8 @@ const point = (
   ...over,
 });
 const tranq = {
-  spellId: "740",
-  spellName: "Tranquility",
+  spellId: "102342",
+  spellName: "Ironbark",
   tag: "Defensive",
   cooldownSeconds: 300,
   casts: [] as { timeSeconds: number }[],
@@ -64,14 +64,14 @@ describe("cd-hoarded: pre-pressed response (A2 i)", () => {
     expect(evts).toEqual([]);
   });
 
-  it("a press 2 s before the crossing is outside the response window — Tranquility is still accused", () => {
+  it("a press 2 s before the crossing is outside the response window — Ironbark is still accused", () => {
     const evts = cdHoardedEvents(
       [{ crisisUnit: MATE, own: false, points: [point()] }],
       [tranq, ironbark([21.0])],
       OWNER,
     );
     expect(evts).toHaveLength(1);
-    expect(evts[0]!.facts["readyCds"]).toBe("Tranquility");
+    expect(evts[0]!.facts["readyCds"]).toBe("Ironbark");
   });
 });
 
