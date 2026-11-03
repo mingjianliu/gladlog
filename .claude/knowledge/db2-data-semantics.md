@@ -42,6 +42,10 @@ DB2 踢技是 Effect 68,无锁定时长。`kickLockoutSeconds` 读语料表 `kic
 - **专精 PvP 光环会通过 SpellLabel 改竞技场主属性**:恩护 PvP 光环 1256944 #5(aura 219,op 3,label 2672 = 角斗士的荣耀)在 8-12 是 −5、8-18 热修 −10、9-01 热修 −15;角斗士的荣耀本身 +15%,所以奶龙竞技场智力加成 +10% → +5% → 0%。日志里每行的法强已经含这一项,按日志法强重算的东西看不到这类热修。
 - **DB2 写「每级 x」的可能是满级合计**:时光之主 372527 每级 50(2 级),日志对得上的是满级合计 +50%(十月全是满级,FLAG)。等级一律读 COMBATANT_INFO,不从算术反推。
 
+## 角斗士的荣耀跟客户端版本走(戒律牧研究 2026-11-03)
+
+竞技场主属性加成 365043 #0(SpellEffect 905600)在 12.1.0.69382 及以前是 15、69404(8-20)起是 20,SimC 热修历史里没有任何一条碰过它;各专精的 PvP 光环再用 aura 219(SpellLabel 2672)平减它(戒律 −5 → −10 → −15)。按状态算主属性时要按每个状态的 build 读 SpellEffect,不能用常数。
+
 ## 外部数据源
 
 - wago.tools CSV **不含 hotfix**(`hotfixes=` 参数被忽略)。SimC `midnight` 分支的 `sc_spell_data.inc` 带热修数组(field 27 = PvpMultiplier),已做成叠加层 `packages/analysis/scripts/datagen/fetchSimcHotfixes.ts`。
