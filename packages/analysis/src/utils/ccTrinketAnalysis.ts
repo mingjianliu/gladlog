@@ -3784,6 +3784,15 @@ export function analyzePlayerCCAndTrinket(
       }
   }
   const drLevelOfIdx = new Map<number, IDRInfo | null>();
+  // fact10 D9: a window's full length on the player, read by the DR walk
+  // inside DR_RESET_TICK_MS — none for one with no REMOVED, one the round's
+  // end cut, or one Oppressing Roar lengthened
+  const fullSecondsOfWindow = (
+    w: (typeof filteredCCWindows)[number],
+  ): number | undefined =>
+    w.noRemoved || w.stillOnAtRoundEnd || w.roarAtApply
+      ? undefined
+      : ccFullDurationForCaster(w.spellId, castersById.get(w.srcUnitId));
   const walkDr = () => {
     const byApply = filteredCCWindows
       .map((w, idx) => ({ w, idx }))
@@ -3794,6 +3803,7 @@ export function analyzePlayerCCAndTrinket(
         atSeconds: (w.applyMs - matchStartMs) / 1000,
         durationSeconds: (w.removeMs - w.applyMs) / 1000,
         spellId: w.spellId,
+        fullSeconds: fullSecondsOfWindow(w),
       })),
       matchStartMs,
       historyOnly,
@@ -4160,10 +4170,20 @@ export function analyzePlayerCCAndTrinket(
       };
     });
 
+  const fullOfInstance = new Map(
+    ccInstancesUnsorted.map((cc, idx) => [
+      cc,
+      fullSecondsOfWindow(filteredCCWindows[idx]!),
+    ]),
+  );
   const sorted = [...ccInstancesUnsorted].sort(
     (a, b) => a.atSeconds - b.atSeconds,
   );
-  const drAnnotations = computeIncomingDR(sorted, matchStartMs, historyOnly);
+  const drAnnotations = computeIncomingDR(
+    sorted.map((cc) => ({ ...cc, fullSeconds: fullOfInstance.get(cc) })),
+    matchStartMs,
+    historyOnly,
+  );
   const ccInstances: ICCInstance[] = sorted.map((cc, i) => ({
     ...cc,
     drInfo: drAnnotations[i] ?? null,

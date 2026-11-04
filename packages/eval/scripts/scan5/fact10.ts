@@ -82,6 +82,15 @@
  *    later, printed 0.23M / 0.30M with it). Sums: the owner's damageOut (pets
  *    merged) on the Target from the first own press of the header's opening
  *    second. Counted: every entry with such a trailing tick.
+ *  - drResetBandLength (class 6, D9): a `[CC ON ENEMY]` / `[CC ON TEAM]`
+ *    line `… ← Spell (by …) … [DR: Cat Level]` whose control landed 20.0 –
+ *    20.4 s after the unit's previous control of the family ended (the 12.1
+ *    20 s reset lands on a server tick: cover set, every landing under
+ *    20.0 s read 50 %, 20.0 – 20.36 mixed, 20.37 – 20.50 all Full) and whose
+ *    printed level is not the one its logged length says — within 0.15 s of
+ *    half its full length is 50 %, of the full length Full (11890839 0:52:
+ *    Storm Bolt 20.012 s after Void Nova, 1.52 s of 3 s, printed Full).
+ *    Counted: every such landing in the band with a length that says one.
  */
 import {
   CHANNELED_SPELL_IDS,
@@ -96,8 +105,10 @@ import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutc
 import { pressRidesAlong } from "@gladlog/analysis/src/utils/castCommitSpans";
 import { PRESS_TRIGGERED_CAST_IDS } from "@gladlog/analysis/src/utils/castMissRows";
 import { STOPPED_JUST_BEFORE_S } from "@gladlog/analysis/src/utils/castStopEvidence";
+import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import { DR_CATEGORY_MAP } from "@gladlog/analysis/src/utils/drAnalysis";
 import { isDeferralDamageRow } from "@gladlog/analysis/src/utils/incomingPressure";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
@@ -125,6 +136,7 @@ export const CHECKS = [
   "unseenOrbMissing",
   "resHastedLeftUnclosed",
   "channelLastTickDropped",
+  "drResetBandLength",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -167,6 +179,7 @@ export function run(ctx: IRoundCtx): void {
   unseenOrbMissing(ctx);
   resHastedLeftUnclosed(ctx);
   channelLastTickDropped(ctx);
+  drResetBandLength(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -796,6 +809,72 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
         removedAt,
         `${from}`,
         `${fmtS(from)} printed ${printed}M = to the REMOVED (${cut.toFixed(3)}M); with the tick ${((tickEnd - removedAt) | 0)} ms later ${full.toFixed(3)}M`,
+        l.slice(0, 160),
+      );
+  }
+}
+
+const DR_LINE =
+  /^(\d+):(\d{2})\s+\[CC ON (?:ENEMY|TEAM)\]\s+(\d+)\([^)]*\) ← (.+?) \(by [^)]*\)\)?.*\[DR: \S+ (Full|50%|Immune)\]/;
+
+function drResetBandLength(ctx: IRoundCtx): void {
+  for (const l of ctx.lines) {
+    const m = DR_LINE.exec(l);
+    if (!m) continue;
+    const u = ctx.unitOfPid(m[3]);
+    if (!u) continue;
+    const sec = mss(m[1]!, m[2]!);
+    const name = m[4]!;
+    const rows = ((u.auraEvents ?? []) as any[])
+      .filter((a) => a.destUnitId === u.id && DR_CATEGORY_MAP[String(a.spellId)])
+      .sort((a, b) => tsOf(a) - tsOf(b));
+    const land = rows.find(
+      (a) =>
+        ev(a) === APPLIED &&
+        nameOf(a.spellId, a.spellName) === name &&
+        Math.floor((tsOf(a) - ctx.start) / 1000) === sec,
+    );
+    if (!land) continue;
+    const id = String(land.spellId);
+    const cat = DR_CATEGORY_MAP[id];
+    const end = rows.find(
+      (a) =>
+        ev(a) === REMOVED &&
+        String(a.spellId) === id &&
+        a.srcUnitId === land.srcUnitId &&
+        tsOf(a) > tsOf(land),
+    );
+    if (!end) continue;
+    // the family's previous control on the unit: its last REMOVED before the landing
+    let prevEnd = -Infinity;
+    for (const a of rows)
+      if (
+        ev(a) === REMOVED &&
+        DR_CATEGORY_MAP[String(a.spellId)] === cat &&
+        tsOf(a) <= tsOf(land)
+      )
+        prevEnd = Math.max(prevEnd, tsOf(a));
+    const gap = tsOf(land) - prevEnd;
+    if (!(gap >= 20_000 && gap < 20_400)) continue;
+    const caster = ctx.units.find((x) => x.id === land.srcUnitId);
+    const full = ccFullDurationForCaster(id, caster);
+    if (!full) continue;
+    const len = (tsOf(end) - tsOf(land)) / 1000;
+    const says =
+      Math.abs(len - full / 2) <= 0.15
+        ? "50%"
+        : Math.abs(len - full) <= 0.15
+          ? "Full"
+          : null;
+    if (!says) continue;
+    ctx.bump("drResetBandLength");
+    if (says !== m[5])
+      ctx.violate(
+        "drResetBandLength",
+        name,
+        tsOf(land),
+        `${u.name}:${sec}`,
+        `${fmtS(sec)} ${name} on ${u.name}: ${(gap / 1000).toFixed(3)} s after the family's last control ended, ran ${len.toFixed(2)} s of ${full} s (${says}), printed ${m[5]}`,
         l.slice(0, 160),
       );
   }

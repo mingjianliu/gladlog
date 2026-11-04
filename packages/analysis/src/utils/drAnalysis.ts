@@ -401,6 +401,52 @@ export interface CCEntry {
    * (`buildCcCategoryHistory`): of two landings on one ms, the one logged
    * later did not diminish the one logged first (codex 20-F20-28 #1) */
   applySeq?: number;
+  /** the control's full length on this unit, ms, when known
+   * (`ccFullDurationForCaster`) — what its logged length is read against
+   * inside `DR_RESET_TICK_MS` (fact10 D9) */
+  fullMs?: number;
+}
+
+/**
+ * fact10 D9 (11890839 0:52): the 12.1 reset is checked on a server tick, not
+ * at the 20 s instant. Cover set, landings 18.5–22 s after the family's last
+ * control ended: under 20.0 s 0 of 79 read Full; 20.0–20.36 s mixed (24 Full,
+ * 17 at 50 %); 20.37–20.50 s 11 of 11 Full. Inside this band after the reset
+ * window the control's own logged length says whether it was diminished
+ * (`isDiminishedLength`); without one the reset stands.
+ */
+export const DR_RESET_TICK_MS = 400;
+/** How close to half its full length a control's logged length must be to
+ * read as diminished (and to the full length to read as Full) — the probe's
+ * own bin (fact10 D9). */
+export const DR_LENGTH_TOLERANCE_MS = 150;
+
+/** Is a control that ran `lengthMs` of a `fullMs` control diminished (50 %)?
+ * Undefined when the length says neither. */
+export function isDiminishedLength(
+  lengthMs: number,
+  fullMs: number | undefined,
+): boolean | undefined {
+  if (fullMs === undefined || !(fullMs > 0)) return undefined;
+  if (Math.abs(lengthMs - fullMs / 2) <= DR_LENGTH_TOLERANCE_MS) return true;
+  if (Math.abs(lengthMs - fullMs) <= DR_LENGTH_TOLERANCE_MS) return false;
+  return undefined;
+}
+
+/** Does a landing `gapMs` after the chain's end start over? The reset
+ * window resets it, but inside `DR_RESET_TICK_MS` after it a control whose
+ * own length reads diminished was still on the chain (fact10 D9). */
+function resetsChain(
+  gapMs: number,
+  resetMs: number,
+  landing: { applyMs: number; removeMs: number; fullMs?: number } | undefined,
+): boolean {
+  if (gapMs < resetMs) return false;
+  if (gapMs >= resetMs + DR_RESET_TICK_MS || landing === undefined) return true;
+  return (
+    isDiminishedLength(landing.removeMs - landing.applyMs, landing.fullMs) !==
+    true
+  );
 }
 
 /**
@@ -641,7 +687,8 @@ export function buildCcCategoryHistory(
   // (`ccRecastBetween`); absent → no recast test
   unitById?: ReadonlyMap<
     string,
-    Pick<ICombatUnit, "spellCastEvents" | "ownerId">
+    Pick<ICombatUnit, "spellCastEvents" | "ownerId"> &
+      Partial<Pick<ICombatUnit, "spec" | "info">>
   >,
 ): Array<
   CCEntry & {
@@ -684,17 +731,27 @@ export function buildCcCategoryHistory(
       applySeq: number;
     },
     removeMs: number,
-  ) =>
+  ) => {
+    // fact10 D9: its full length on this unit, read inside DR_RESET_TICK_MS
+    const caster = unitById?.get(open.srcUnitId);
+    const fullS = ccFullDurationForCaster(
+      open.spellId,
+      caster?.spec !== undefined && caster.info !== undefined
+        ? (caster as Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">)
+        : undefined,
+    );
     instances.push({
       applyMs: open.applyMs,
       removeMs,
       spellId: open.spellId,
       srcUnitId: open.srcUnitId,
       applySeq: open.applySeq,
+      ...(fullS === undefined ? {} : { fullMs: fullS * 1000 }),
       atSeconds: (open.applyMs - matchStartMs) / 1000,
       durationSeconds: (removeMs - open.applyMs) / 1000,
       drInfo: { category, level: "Full", sequenceIndex: 0 },
     });
+  };
   // work order 2026-10-15 Part 2 (user 「好」): the CC pairings' reading —
   // keyed by spell and source (`matchPendingCcKey` for a removal), a
   // re-APPLIED inside the official length is the same application
@@ -914,6 +971,10 @@ export function auraIdsAppliedBy(
 export function getDRLevel(
   history: readonly CCEntry[],
   newApplyMs: number,
+  /** the new control itself when it landed (its logged end and full
+   * length): inside `DR_RESET_TICK_MS` after the reset window its length
+   * decides (fact10 D9) */
+  landing?: { removeMs: number; fullMs?: number; applyMs?: number },
 ): { level: DRLevel; sequenceIndex: number } {
   // newApplyMs is a wall-clock epoch (callers add matchStartMs), so the era
   // is derivable from the timestamp itself — no signature change needed.
@@ -927,11 +988,24 @@ export function getDRLevel(
   let chainLength = 0;
   let chainEnd = -Infinity;
   for (const e of prior) {
-    if (chainLength > 0 && e.applyMs - chainEnd >= resetMs) chainLength = 0;
+    if (chainLength > 0 && resetsChain(e.applyMs - chainEnd, resetMs, e))
+      chainLength = 0;
     chainEnd = chainLength === 0 ? e.removeMs : Math.max(chainEnd, e.removeMs);
     chainLength++;
   }
-  if (chainLength > 0 && newApplyMs - chainEnd >= resetMs) chainLength = 0;
+  if (
+    chainLength > 0 &&
+    resetsChain(
+      newApplyMs - chainEnd,
+      resetMs,
+      landing && {
+        removeMs: landing.removeMs,
+        fullMs: landing.fullMs,
+        applyMs: landing.applyMs ?? newApplyMs,
+      },
+    )
+  )
+    chainLength = 0;
   // WoW 12.0: Full → 50% → Immune (25% tier removed)
   const level: DRLevel =
     chainLength === 0 ? "Full" : chainLength === 1 ? "50%" : "Immune";
@@ -974,6 +1048,12 @@ export function drLevelAtLanding(
   return getDRLevel(
     history.filter((e) => e !== self && !after(e)),
     landing.applyMs,
+    // fact10 D9: inside DR_RESET_TICK_MS its own logged length decides
+    self && {
+      removeMs: self.removeMs,
+      fullMs: self.fullMs,
+      applyMs: self.applyMs,
+    },
   ).level;
 }
 
@@ -1032,6 +1112,9 @@ export function computeIncomingDR(
     atSeconds: number;
     durationSeconds: number;
     spellId: string;
+    /** its full length on this unit, when known — read inside
+     * `DR_RESET_TICK_MS` (fact10 D9) */
+    fullSeconds?: number;
   }>,
   matchStartMs: number,
   /** controls that are DR history on the unit but none of its instances
@@ -1084,9 +1167,19 @@ export function computeIncomingDR(
     const category = getDRCategory(cc.spellId);
 
     const cat = history.get(category) ?? [];
-    const { level, sequenceIndex } = getDRLevel(cat, applyMs);
+    const fullMs =
+      cc.fullSeconds === undefined ? undefined : cc.fullSeconds * 1000;
+    const { level, sequenceIndex } = getDRLevel(cat, applyMs, {
+      removeMs,
+      fullMs,
+    });
 
-    cat.push({ applyMs, removeMs, spellId: cc.spellId });
+    cat.push({
+      applyMs,
+      removeMs,
+      spellId: cc.spellId,
+      ...(fullMs === undefined ? {} : { fullMs }),
+    });
     history.set(category, cat);
 
     return { category: getDRCategory(cc.spellId), level, sequenceIndex };
@@ -1199,6 +1292,9 @@ export function analyzeOutgoingCCChains(
       > = new Map();
       const applications: IOutgoingCCApplication[] = [];
       const applySeqOf = new Map<IOutgoingCCApplication, number>();
+      // fact10 D9: each application's full length, read by the DR walk
+      // inside DR_RESET_TICK_MS (none for one the round's end cut)
+      const fullSecondsOf = new Map<IOutgoingCCApplication, number>();
       // fact4 D7 (2742ff5d 0:59–1:05): a control of the target's own,
       // reflected back onto it (its source is the target — the Fear a Spell
       // Reflection sent back), is DR history on it but no CC of ours: it
@@ -1242,6 +1338,16 @@ export function analyzeOutgoingCCChains(
         };
         applications.push(app);
         applySeqOf.set(app, p.applySeq);
+        if (!cutByRoundEnd) {
+          const caster =
+            p.srcId === enemy.id
+              ? enemy
+              : allUnits.find((u) => u.id === p.srcId);
+          const fullS =
+            officialDurationS(spellId, caster, p.applyMs) ??
+            ccFullDurationForCaster(spellId, caster);
+          if (fullS !== undefined) fullSecondsOf.set(app, fullS);
+        }
         if (p.drOnly) drOnly.add(app);
       };
 
@@ -1424,7 +1530,13 @@ export function analyzeOutgoingCCChains(
       // 53.85) came out Fear 50 % / Blind Full — inverted — and the Blind
       // [DR CLASH] was never shown; 10 of 413 applications across the five
       // audited matches were mislabelled.
-      const drs = computeIncomingDR(applications, matchStartMs);
+      const drs = computeIncomingDR(
+        applications.map((a) => ({
+          ...a,
+          fullSeconds: fullSecondsOf.get(a),
+        })),
+        matchStartMs,
+      );
       applications.forEach((app, i) => {
         const dr = drs[i];
         if (dr)
