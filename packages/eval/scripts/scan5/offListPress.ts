@@ -28,6 +28,7 @@ import {
   timeSpiralFreePressMs,
 } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import { isStasisReplayCast } from "@gladlog/analysis/src/utils/combatStates";
+import { SHARED_CHARGE_CATEGORY } from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import { unreleasedHoldMs } from "@gladlog/analysis/src/utils/cooldowns";
 import { pressDuration } from "@gladlog/analysis/src/utils/offListPress";
 import type { ICombatUnit } from "@gladlog/parser-compat";
@@ -132,15 +133,31 @@ export function run(ctx: IRoundCtx): void {
       const backMs = ctx.start + secOf(back) * 1000;
       // the row itself, not its time: another player's free press in the
       // same millisecond frees nothing of this one's (codex review round 2)
-      const next = presses
+      // …or a press of a button on the same DB2 charge pool
+      // (`sharesChargePool`: Holy Bulwark / Sacred Weapon — fact10 D7, a
+      // Sacred Weapon `back 2:41` with Holy Bulwark pressed at 2:35)
+      // — the DB2 ChargeCategory itself, also when `canonicalSpellId` reads
+      // the two as one cooldown (Sacred Weapon 432472 is Holy Bulwark
+      // 432459's, so `sharesChargePool` says no); a follow-up button with a
+      // pool of its own (Voidblade → Pierce the Veil) is no mate
+      const pool = SHARED_CHARGE_CATEGORY[String(press.spellId)];
+      const mates = successesOf(unit).filter(
+        (c) =>
+          String(c.spellId) !== String(press.spellId) &&
+          pool !== undefined &&
+          SHARED_CHARGE_CATEGORY[String(c.spellId)] === pool &&
+          !isStasisReplayCast(unit, String(c.spellId), tsOf(c)),
+      );
+      const next = [...presses, ...mates]
         .filter(
           (r) =>
             tsOf(r) > at + 50 &&
             !freeRows.has(r) &&
-            !timeSpiralFreePressMs(unit, String(press.spellId), [tsOf(r)])
+            !timeSpiralFreePressMs(unit, String(r.spellId), [tsOf(r)])
               .length,
         )
-        .map(tsOf)[0];
+        .map(tsOf)
+        .sort((x, y) => x - y)[0];
       if (next !== undefined && next < backMs - BACK_SLACK_MS)
         ctx.violate(
           "offListPressLine",

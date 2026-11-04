@@ -324,6 +324,40 @@ describe("hiddenPressMs — the bounds no test pinned", () => {
   });
 });
 
+describe("hiddenPressMs — a summon that brings the aura (fact10 D7)", () => {
+  const SACRED_WEAPON = "432472";
+  const SW_AURA = "432502";
+  const paladin = (summonMs: number | null): any => ({
+    id: "rogue",
+    name: "paladin",
+    auraEvents: [
+      ...batch(8, false),
+      aura(LogEvent.SPELL_AURA_APPLIED, SW_AURA, BATCH_MS),
+    ],
+    spellCastEvents: [],
+    actionOut:
+      summonMs === null
+        ? []
+        : [
+            {
+              spellId: "434132",
+              srcUnitId: "rogue",
+              destUnitId: "weapon",
+              logLine: { event: LogEvent.SPELL_SUMMON, timestamp: summonMs },
+            },
+          ],
+  });
+  it("070c4933 0:39.94: Blessing of the Forge's Sacred Weapon in the Avenging Crusader's bundle is no Holy Armaments press", () => {
+    expect(hiddenPressMs(paladin(BATCH_MS + 1), SACRED_WEAPON, T0)).toEqual([]);
+  });
+  it("without the summon (or one far from the aura) the batch's new aura is still a hidden press", () => {
+    expect(hiddenPressMs(paladin(null), SACRED_WEAPON, T0)).toEqual([BATCH_MS]);
+    expect(hiddenPressMs(paladin(BATCH_MS + 500), SACRED_WEAPON, T0)).toEqual([
+      BATCH_MS,
+    ]);
+  });
+});
+
 describe("hiddenPressMs — Herald of the Sun's proc bundle bound", () => {
   // the proc Avenging Wrath comes with its bundle in the same few ms: a
   // bundle row exactly SPAN ms from it still marks the proc (no press)

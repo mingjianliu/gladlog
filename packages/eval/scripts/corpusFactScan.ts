@@ -134,6 +134,7 @@ import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDurat
 import {
   HERALD_PROC_BUNDLE_IDS,
   hiddenAuraLifeMs,
+  SUMMON_BORNE_AURA_IDS,
 } from "@gladlog/analysis/src/utils/hiddenPress";
 import { DEFERRAL_SHIELD_DAMAGE_IDS } from "@gladlog/analysis/src/utils/incomingPressure";
 import { LogEvent } from "@gladlog/parser-compat";
@@ -577,6 +578,21 @@ function runRound(ctx: IContext): void {
           sameMs.some((b) => HERALD_PROC_BUNDLE_IDS.has(b.spellId));
         if (heraldProc) {
           bump("hiddenPressUnused:heraldProcSkipped");
+          continue;
+        }
+        // fact10 D7: a summon that brings the aura (Blessing of the Forge's
+        // Sacred Weapon beside an Avenging Crusader) — `SUMMON_BORNE_AURA_IDS`
+        const summonBorne = ((u.actionOut ?? []) as any[]).some(
+          (b) =>
+            ev(b) === "SPELL_SUMMON" &&
+            b.srcUnitId === u.id &&
+            (SUMMON_BORNE_AURA_IDS.get(String(b.spellId)) ?? []).includes(
+              a.spellId,
+            ) &&
+            Math.abs(tsOf(b) - ta) <= 5,
+        );
+        if (summonBorne) {
+          bump("hiddenPressUnused:summonBorneSkipped");
           continue;
         }
         const relisting = sameMs.length >= 4;

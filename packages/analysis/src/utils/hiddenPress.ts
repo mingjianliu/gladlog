@@ -59,6 +59,17 @@ export const HERALD_PROC_BUNDLE_IDS: ReadonlySet<string> = new Set([
 ]);
 const AVENGING_WRATH_AURA_IDS = new Set(["31884", "454351"]);
 
+/** A summon that brings a press's own aura with it, by summon spell → the
+ * aura ids: Blessing of the Forge 434132 ("Avenging Wrath summons an
+ * additional Sacred Weapon", talent 433011) puts Sacred Weapon 432502 on the
+ * paladin and an ally in the Avenging Crusader's own millisecond, inside its
+ * bundle of APPLIED rows — the talent's weapon, no Holy Armaments press and
+ * no charge spent (fact10 D7, 070c4933 0:39.94 / 1:59.55: SPELL_SUMMON 434132
+ * beside both, the presses alternate Holy Bulwark / Sacred Weapon around
+ * them). */
+export const SUMMON_BORNE_AURA_IDS: ReadonlyMap<string, readonly string[]> =
+  new Map([["434132", ["432502"]]]);
+
 /** A press row this close to the aura is the aura's own press, not a lost
  * one. */
 const PRESS_ROW_PAIR_MS = 1000;
@@ -213,7 +224,8 @@ export function upperBound(arr: readonly number[], x: number): number {
  * by the unit within `PRESS_ROW_PAIR_MS`.
  */
 export function hiddenPressMs(
-  unit: Pick<ICombatUnit, "id" | "auraEvents" | "spellCastEvents">,
+  unit: Pick<ICombatUnit, "id" | "auraEvents" | "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "actionOut">>,
   spellId: string,
   fromMs: number,
   toMs: number = Infinity,
@@ -277,6 +289,15 @@ export function hiddenPressMs(
         HERALD_PROC_BUNDLE_IDS.has(b.spellId) &&
         b.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
         b.destUnitId === unit.id &&
+        Math.abs(b.logLine.timestamp - ms) <= RESYNC_BATCH_SPAN_MS,
+    );
+  const summonBorne = (id: string, ms: number) =>
+    (unit.actionOut ?? []).some(
+      (b) =>
+        b.logLine.event === LogEvent.SPELL_SUMMON &&
+        b.srcUnitId === unit.id &&
+        !!b.spellId &&
+        (SUMMON_BORNE_AURA_IDS.get(b.spellId) ?? []).includes(id) &&
         Math.abs(b.logLine.timestamp - ms) <= RESYNC_BATCH_SPAN_MS,
     );
   const out: number[] = [];
@@ -369,6 +390,7 @@ export function hiddenPressMs(
         !pressMs.some((p) => Math.abs(p - ms) <= PRESS_ROW_PAIR_MS) &&
         !restated(i) &&
         !heraldProc(a.spellId!, ms) &&
+        !summonBorne(a.spellId!, ms) &&
         !formBuffUpBefore(ms)
       )
         out.push(ms);
