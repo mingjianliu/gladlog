@@ -939,6 +939,31 @@ describe("kickAudit — a bar the target left is no fake (fact10 D22 / D5)", () 
     expect(e!.jukedBySpellName).toBeTruthy();
   });
 
+  it("8919f02e: a passive Shadowy Apparition row inside a Vampiric Touch proves nothing — still a juke (codex 20-F25-01)", () => {
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [castStart("34914", kickTs - 1_020, "e1")],
+      spellCastEvents: [press("148859", kickTs - 979)],
+    } as any);
+    const [e] = analyzeKickAudit(kicker(), [enemy], makeCombat());
+    expect(e!.result).toBe("juked");
+  });
+
+  it("0bc703bc: Spell Lock's owner-side command inside a Chaos Bolt is no press that ends it — still a juke (codex 20-F25-01)", () => {
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [castStart("116858", kickTs - 1_127, "e1")],
+      spellCastEvents: [
+        press("119910", kickTs - 1_044),
+        press("445468", kickTs - 357),
+      ],
+    } as any);
+    const [e] = analyzeKickAudit(kicker(), [enemy], makeCombat());
+    expect(e!.result).toBe("juked");
+  });
+
   it("070c4933 2:25: a bar whose likely target died before the kick ended with the death — a miss", () => {
     const BENEDICTION = "1262766";
     const enemy = makeUnit("e1", {

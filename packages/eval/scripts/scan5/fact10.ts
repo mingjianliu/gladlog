@@ -50,7 +50,9 @@
  *    43.190, Penance 44.416, kick 45.309; 070c4933 2:25: Benediction begun
  *    144.495, its target dead 145.415). Counted: every juke line.
  */
+import { ON_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { ROOT_AURA_SPELL_IDS } from "@gladlog/analysis/src/data/rootAuraGenerated";
+import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { pressRidesAlong } from "@gladlog/analysis/src/utils/castCommitSpans";
 import { STOPPED_JUST_BEFORE_S } from "@gladlog/analysis/src/utils/castStopEvidence";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -426,8 +428,17 @@ function jukeBarSuperseded(ctx: IRoundCtx): void {
     const bar = starts.filter((c) => nameOf(c.spellId, c.spellName) === m[5]).at(-1);
     if (!bar) continue;
     const startMs = tsOf(bar);
+    const prevBar = ((target.castStartEvents ?? []) as any[])
+      .filter((c) => tsOf(c) < startMs)
+      .at(-1);
+    // A SUCCESS ends a bar only when it starts the GCD (DB2
+    // ON_GCD_SPELL_IDS): a passive trigger or a pet command has no
+    // SpellCooldowns row (codex 20-F25-01). A SUCCESS of the previous bar's
+    // spell inside CAST_QUEUE_TOLERANCE_MS is that bar's queued completion.
     const other = [
-      ...((target.spellCastEvents ?? []) as any[]).filter((c) => ev(c) === SUCCESS),
+      ...((target.spellCastEvents ?? []) as any[]).filter(
+        (c) => ev(c) === SUCCESS && ON_GCD_SPELL_IDS.has(String(c.spellId)),
+      ),
       ...((target.castStartEvents ?? []) as any[]),
     ].find(
       (c) =>
@@ -435,8 +446,11 @@ function jukeBarSuperseded(ctx: IRoundCtx): void {
         tsOf(c) < kickMs - STOPPED_JUST_BEFORE_S * 1000 &&
         String(c.spellId) !== String(bar.spellId) &&
         !pressRidesAlong(String(c.spellId)) &&
-        // the previous bar's queued completion
-        tsOf(c) > startMs + 150,
+        !(
+          prevBar &&
+          String(c.spellId) === String(prevBar.spellId) &&
+          tsOf(c) <= startMs + CAST_QUEUE_TOLERANCE_MS
+        ),
     );
     const died = ctx.players.find(
       (u) =>

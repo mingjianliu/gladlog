@@ -10,6 +10,7 @@ import {
   classifyKickedSpell,
   type KickedSpellCategory,
 } from "../data/kickedSpellCategories";
+import { ON_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { isKickSpellId } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -403,9 +404,13 @@ export function analyzeKickAudit(
       });
     };
     // fact10 D22 / D5: a bar with no end row was over once the unit did
-    // something a cast bar cannot outlive — any other press but one that
-    // rides along (`pressRidesAlong`: off the GCD, castable while
-    // channelling), or a cast bar of another spell (733ef717 0:45: Smite
+    // something a cast bar cannot outlive — a press that starts the global
+    // cooldown (DB2 `ON_GCD_SPELL_IDS`; a row with no SpellCooldowns entry,
+    // a passive trigger or a pet command, proves nothing: codex 20-F25-01,
+    // 8919f02e Shadowy Apparition inside a Vampiric Touch, 0bc703bc Spell
+    // Lock's command inside a Chaos Bolt) and that does not ride along
+    // (`pressRidesAlong`: off the GCD, castable while channelling), or a
+    // cast bar of another spell (733ef717 0:45: Smite
     // begun 41.415, Void Shield 43.190, Penance 44.416, Mind Freeze 45.309
     // read "JUKED by fake Smite") — or once a player other than the caster
     // died, the bar's likely target (070c4933 2:25: Benediction begun
@@ -421,22 +426,23 @@ export function analyzeKickAudit(
     const supersededInside = () => {
       const startMs = matchStartMs + Math.round(last.t * 1000);
       const prev = barsOf(enemy).filter((b) => b.t < last.t).at(-1);
-      const acted = [
-        ...(enemy.spellCastEvents ?? []),
-        ...((enemy as { castStartEvents?: typeof enemy.spellCastEvents })
-          .castStartEvents ?? []),
-      ].some(
-        (e) =>
-          e.timestamp > startMs &&
-          e.timestamp < kickMs - STOPPED_JUST_BEFORE_S * 1000 &&
-          e.spellId !== last.id &&
-          !pressRidesAlong(e.spellId) &&
-          !(
-            prev !== undefined &&
-            e.spellId === prev.id &&
-            e.timestamp <= startMs + CAST_QUEUE_TOLERANCE_MS
-          ),
-      );
+      const inside = (e: { timestamp: number; spellId?: string }) =>
+        e.timestamp > startMs &&
+        e.timestamp < kickMs - STOPPED_JUST_BEFORE_S * 1000 &&
+        e.spellId !== last.id &&
+        !pressRidesAlong(e.spellId) &&
+        !(
+          prev !== undefined &&
+          e.spellId === prev.id &&
+          e.timestamp <= startMs + CAST_QUEUE_TOLERANCE_MS
+        );
+      const acted =
+        ((enemy as { castStartEvents?: typeof enemy.spellCastEvents })
+          .castStartEvents ?? []
+        ).some(inside) ||
+        (enemy.spellCastEvents ?? []).some(
+          (e) => !!e.spellId && ON_GCD_SPELL_IDS.has(e.spellId) && inside(e),
+        );
       if (acted) return true;
       return allUnits.some(
         (u) =>
