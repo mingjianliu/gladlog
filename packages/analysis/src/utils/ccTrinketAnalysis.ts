@@ -2882,6 +2882,10 @@ export interface IPlayerCCTrinketSummary {
     durationSeconds: number;
     spellId: string;
     drInfo: IDRInfo;
+    /** its source is the holder: its own control reflected back onto it
+     * (an enemy's — a friendly holder's is a `ccInstances` window, ruling
+     * A52); `[CONSEQ]` reads it as a control on it (fact10 D21) */
+    reflectedOntoSelf?: true;
   }>;
   /** An enemy control the log wrote IMMUNE on this player with no avoidance
    * the sweep could credit — the `[CC AVOIDED?]` line still states the miss
@@ -3743,6 +3747,7 @@ export function analyzePlayerCCAndTrinket(
     removeMs: number;
     spellId: string;
     afterLandingAtSameMs?: true;
+    reflectedOntoSelf?: true;
   }> = [];
   {
     const drCats = new Set<string>();
@@ -3780,6 +3785,9 @@ export function analyzePlayerCCAndTrinket(
           removeMs: Math.min(h.removeMs, combat.endTime),
           spellId: h.spellId,
           ...(refreshStart ? { afterLandingAtSameMs: true as const } : {}),
+          ...(h.srcUnitId === player.id
+            ? { reflectedOntoSelf: true as const }
+            : {}),
         });
       }
   }
@@ -6141,6 +6149,7 @@ export function analyzePlayerCCAndTrinket(
       atSeconds: (h.applyMs - matchStartMs) / 1000,
       durationSeconds: (h.removeMs - h.applyMs) / 1000,
       spellId: h.spellId,
+      ...(h.reflectedOntoSelf ? { reflectedOntoSelf: true as const } : {}),
       drInfo: {
         category: getDRCategory(h.spellId),
         level: "Full" as const,

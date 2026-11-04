@@ -328,7 +328,22 @@ export function formatObservedConsequences(params: {
     if (!healer || !isHealerSpec(healer.spec)) continue;
     const { team, label, who } = sideOf(healer);
     const mates = team.filter((m) => m.id !== healer.id);
-    for (const cc of summary.ccInstances) {
+    // fact10 D21 (46eb2199 1:18): the healer's own control reflected back
+    // onto it is a control on it — an enemy's is DR history only (ruling
+    // A52 keeps it off `[CC ON ENEMY]`), so it is read from there, ending
+    // by the round's end
+    const reflected = (summary.drHistoryOnly ?? [])
+      .filter((h) => h.reflectedOntoSelf)
+      .map((h) => ({
+        atSeconds: h.atSeconds,
+        durationSeconds: Math.min(
+          h.durationSeconds,
+          (roundEnd - start) / 1000 - h.atSeconds,
+        ),
+        spellId: h.spellId,
+        spellName: getEnglishSpellName(h.spellId, ""),
+      }));
+    for (const cc of [...summary.ccInstances, ...reflected]) {
       if (cc.durationSeconds < HEALER_CC_MIN_S) continue;
       const drops = teamDrops(
         mates,

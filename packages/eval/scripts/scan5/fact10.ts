@@ -89,6 +89,13 @@
  *    of its own — a cast success, an aura it put on anyone, a miss — so the
  *    control never went off (11890839 1:35: a Capacitor Totem killed 1.644 s
  *    after its summon). Counted: every such line of a summon-placed press.
+ *  - reflectedHealerCcNoConseq (class 6, D21): a healer's own control
+ *    reflected back onto it (a control DEBUFF whose source is the holder)
+ *    for HEALER_CC_MIN_S or more, the round's end cutting it, with a
+ *    teammate's death inside it, and no `[CONSEQ]` line at its second
+ *    naming the control (46eb2199 1:18: the Restoration Shaman's Hex sent
+ *    back by Nether Ward, 5.4 s, Ponycopter dead inside it). Counted: every
+ *    such reflected control with a teammate death inside it.
  *  - drResetBandLength (class 6, D9): a `[CC ON ENEMY]` / `[CC ON TEAM]`
  *    line `… ← Spell (by …) … [DR: Cat Level]` whose control landed 20.0 –
  *    20.4 s after the unit's previous control of the family ended (the 12.1
@@ -99,6 +106,7 @@
  *    Storm Bolt 20.012 s after Void Nova, 1.52 s of 3 s, printed Full).
  *    Counted: every such landing in the band with a length that says one.
  */
+import { HEALER_CC_MIN_S } from "@gladlog/analysis/src/context/observedConsequences";
 import {
   CHANNELED_SPELL_IDS,
   HASTE_DURATION_SPELL_IDS,
@@ -108,6 +116,7 @@ import {
   ON_GCD_SPELL_IDS,
 } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { ROOT_AURA_SPELL_IDS } from "@gladlog/analysis/src/data/rootAuraGenerated";
+import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { pressRidesAlong } from "@gladlog/analysis/src/utils/castCommitSpans";
 import { PRESS_TRIGGERED_CAST_IDS } from "@gladlog/analysis/src/utils/castMissRows";
@@ -125,6 +134,7 @@ import {
 
 import {
   APPLIED,
+  deathMs,
   ev,
   fmtS,
   type IRoundCtx,
@@ -150,6 +160,7 @@ export const CHECKS = [
   "channelLastTickDropped",
   "drResetBandLength",
   "summonDiedBeforePulse",
+  "reflectedHealerCcNoConseq",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -194,6 +205,7 @@ export function run(ctx: IRoundCtx): void {
   channelLastTickDropped(ctx);
   drResetBandLength(ctx);
   summonDiedBeforePulse(ctx);
+  reflectedHealerCcNoConseq(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -943,6 +955,53 @@ function summonDiedBeforePulse(ctx: IRoundCtx): void {
         `${fmtS(sec)} ${name} by ${caster.name}: its summon died ${((kill.timestamp - tsOf(c)) / 1000).toFixed(2)} s after the press with no row of its own, printed "did not land"`,
         l.slice(0, 160),
       );
+    }
+  }
+}
+
+function reflectedHealerCcNoConseq(ctx: IRoundCtx): void {
+  if (!ctx.firstOwnerOfRound) return;
+  const endAt = roundEndMs(ctx.legacy);
+  for (const h of ctx.players) {
+    if (!isHealerSpec(h.spec)) continue;
+    const rows = ((h.auraEvents ?? []) as any[])
+      .filter(
+        (a) =>
+          a.destUnitId === h.id &&
+          a.srcUnitId === h.id &&
+          ccSpellIds.has(String(a.spellId)),
+      )
+      .sort((a, b) => tsOf(a) - tsOf(b));
+    for (const app of rows) {
+      if (ev(app) !== APPLIED || app.auraType !== "DEBUFF") continue;
+      const rem = rows.find(
+        (a) =>
+          ev(a) === REMOVED &&
+          String(a.spellId) === String(app.spellId) &&
+          tsOf(a) > tsOf(app),
+      );
+      const to = Math.min(rem ? tsOf(rem) : endAt, endAt);
+      if ((to - tsOf(app)) / 1000 < HEALER_CC_MIN_S) continue;
+      const mates = ctx.players.filter(
+        (u) => u.reaction === h.reaction && u.id !== h.id,
+      );
+      if (!mates.some((u) => deathMs(u) >= tsOf(app) && deathMs(u) <= to))
+        continue;
+      ctx.bump("reflectedHealerCcNoConseq");
+      const name = nameOf(app.spellId, app.spellName);
+      const sec = Math.floor((tsOf(app) - ctx.start) / 1000);
+      const has = ctx.lines.some(
+        (l) =>
+          l.startsWith(`${fmtS(sec)}  [CONSEQ]`) && l.includes(` in ${name}`),
+      );
+      if (!has)
+        ctx.violate(
+          "reflectedHealerCcNoConseq",
+          name,
+          tsOf(app),
+          `${h.name}:${sec}`,
+          `${fmtS(sec)} ${h.name}'s own ${name} reflected onto it for ${((to - tsOf(app)) / 1000).toFixed(1)} s, a teammate died inside it, no [CONSEQ] line`,
+        );
     }
   }
 }

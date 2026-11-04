@@ -188,3 +188,58 @@ describe("[CONSEQ] start = the reading at the event's own instant", () => {
     );
   });
 });
+
+// fact10 D21 (46eb2199 1:18): an enemy healer's own Hex reflected back onto
+// it is DR history only on its summary (ruling A52), and [CONSEQ] reads it
+describe("[CONSEQ] — an enemy healer's own control reflected onto it", () => {
+  const run = (reflectedOntoSelf: boolean) => {
+    const START = 1_000_000;
+    const shaman = makeUnit("e1", {
+      name: "Shaman-R",
+      spec: CombatUnitSpec.Shaman_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const hp = (t: number, pct: number) =>
+      makeAdvancedAction(START + t, 0, 0, 100_000, pct * 1000);
+    const druid = makeUnit("e2", {
+      name: "Druid-R",
+      reaction: CombatUnitReaction.Hostile,
+      advancedActions: [hp(78_000, 33), hp(80_000, 20), hp(82_000, 5)],
+    });
+    const lines = formatObservedConsequences({
+      combat: {
+        startTime: START,
+        endTime: START + 90_000,
+        units: { e1: shaman, e2: druid },
+      } as never,
+      friends: [],
+      enemies: [shaman, druid],
+      friendlyCC: [],
+      enemyCC: [
+        {
+          playerName: "Shaman-R",
+          ccInstances: [],
+          drHistoryOnly: [
+            {
+              atSeconds: 78.155,
+              durationSeconds: 5.404,
+              spellId: "51514",
+              drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+              ...(reflectedOntoSelf ? { reflectedOntoSelf: true as const } : {}),
+            },
+          ],
+        } as never,
+      ],
+      labels: { friendly: (n) => n, enemy: (n) => n },
+    });
+    return lines.filter((l) => l.includes("[CONSEQ]"));
+  };
+  it("reads it as a control on the healer", () => {
+    const [l] = run(true);
+    expect(l).toContain("enemy healer Shaman-R in Hex for 5s");
+    expect(l).toContain("Druid-R 33% → low 5%");
+  });
+  it("a DR-history entry from another source is no control line", () => {
+    expect(run(false)).toEqual([]);
+  });
+});
