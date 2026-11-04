@@ -15,8 +15,10 @@
  *    having rows inside it. d2e6e70b 0:16: Freezing Trap on the enemy healer,
  *    its hunter unread from 0:04 to 0:20 and read inside.
  *  - `drHalfLengthFull` (D14): `[CC ON …] … [DR: Cat Full]` on a control whose
- *    aura ran out on its own at half its full length, landed 20.0–20.4 s after
- *    the family's last end on that unit. 69276401 1:32: Shockwave 1.50 s, 20.27 s
+ *    aura ran out on its own at half its full length (`isDiminishedLength`,
+ *    the DR walk's own predicate), landed in the reset tick band
+ *    (`DR_RESET_MS_121` + `DR_RESET_TICK_MS`) after the family's last end on
+ *    that unit. 69276401 1:32: Shockwave 1.50 s, 20.27 s
  *    after Storm Bolt ended.
  *  - `ledgerProcImmunityMissing` (D40): a teammate's proc immunity on the burst
  *    ledger's target for ≥ 0.5 s of the burst, the burst not naming it.
@@ -43,7 +45,12 @@ import {
   isHealerSpec,
   MIN_CD_SECONDS,
 } from "@gladlog/analysis/src/utils/cooldowns";
-import { DR_CATEGORY_MAP } from "@gladlog/analysis/src/utils/drAnalysis";
+import {
+  DR_CATEGORY_MAP,
+  DR_RESET_MS_121,
+  DR_RESET_TICK_MS,
+  isDiminishedLength,
+} from "@gladlog/analysis/src/utils/drAnalysis";
 
 import {
   APPLIED,
@@ -241,13 +248,17 @@ function drHalf(ctx: IRoundCtx): void {
       ...rows.filter((a) => ev(a) === REMOVED && tsOf(a) < tsOf(on)).map(tsOf),
     );
     const gap = tsOf(on) - prevEnd;
-    if (gap < 20_000 || gap >= 20_400) continue;
+    // the 12.1 reset window and its tick band, the DR walk's own constants
+    if (gap < DR_RESET_MS_121 || gap >= DR_RESET_MS_121 + DR_RESET_TICK_MS)
+      continue;
     ctx.bump("drHalfLengthFull");
     const caster = ctx.units.find((u) => u.id === on.srcUnitId);
     const full = ccFullDurationForCaster(String(on.spellId), caster);
     if (!full) continue;
-    const r = (tsOf(off) - tsOf(on)) / 1000 / full;
-    if (r >= 0.4 && r <= 0.6)
+    // "half its length" is the walk's own predicate (fact10 D9 /
+    // F25 residual: a 0.4–0.6 ratio band called Chaos Nova's 1.25 s of 3 s
+    // — cut by a trinket and a Purify — half; the walk reads it neither)
+    if (isDiminishedLength(tsOf(off) - tsOf(on), full * 1000) === true)
       ctx.violate(
         "drHalfLengthFull",
         "halfLengthInBand",
