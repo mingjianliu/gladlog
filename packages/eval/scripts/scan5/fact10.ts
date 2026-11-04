@@ -96,6 +96,15 @@
  *    naming the control (46eb2199 1:18: the Restoration Shaman's Hex sent
  *    back by Nether Ward, 5.4 s, Ponycopter dead inside it). Counted: every
  *    such reflected control with a teammate death inside it.
+ *  - killAttemptTrinketOutMissed (class 6, D24): a `KILL ATTEMPTS` line
+ *    `[a–b] on T` whose target's `[ENEMY TRINKET] … used PvP trinket out of
+ *    X` sits in (a, b + 5) with X's aura on T up inside [a + 1, b + 1) (the
+ *    bracket's first second may start before the attempt's own ms), and
+ *    whose FAILED cause is not `target trinketed out` (733ef717
+ *    [0:09–0:14]: the Medallion at 0:16 took off the Strangulate layered into
+ *    the Hammer of Justice, the attempt read "not enough damage"). X is a
+ *    silence, a disarm or a root — not a hard control (`ccSpellIds`), which
+ *    the CC binder's own checks cover. Counted: every such attempt.
  *  - drResetBandLength (class 6, D9): a `[CC ON ENEMY]` / `[CC ON TEAM]`
  *    line `… ← Spell (by …) … [DR: Cat Level]` whose control landed 20.0 –
  *    20.4 s after the unit's previous control of the family ended (the 12.1
@@ -161,6 +170,7 @@ export const CHECKS = [
   "drResetBandLength",
   "summonDiedBeforePulse",
   "reflectedHealerCcNoConseq",
+  "killAttemptTrinketOutMissed",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -206,6 +216,7 @@ export function run(ctx: IRoundCtx): void {
   drResetBandLength(ctx);
   summonDiedBeforePulse(ctx);
   reflectedHealerCcNoConseq(ctx);
+  killAttemptTrinketOutMissed(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -1002,6 +1013,66 @@ function reflectedHealerCcNoConseq(ctx: IRoundCtx): void {
           `${h.name}:${sec}`,
           `${fmtS(sec)} ${h.name}'s own ${name} reflected onto it for ${((to - tsOf(app)) / 1000).toFixed(1)} s, a teammate died inside it, no [CONSEQ] line`,
         );
+    }
+  }
+}
+
+const KILL_ATTEMPT_LINE = /^ {2}\[(\d+):(\d{2})–(\d+):(\d{2})\] on (\S+) — .*\| (FAILED: .+|KILL)$/;
+const ENEMY_TRINKET_OUT =
+  /^(\d+):(\d{2})\s+\[ENEMY TRINKET\]\s+(\d+)\([^)]*\) used PvP trinket out of (.+?) \(by /;
+
+function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
+  const outs: Array<{ sec: number; unit: any; name: string }> = [];
+  for (const l of ctx.lines) {
+    const m = ENEMY_TRINKET_OUT.exec(l);
+    if (!m) continue;
+    const unit = ctx.unitOfPid(m[3]);
+    if (unit) outs.push({ sec: mss(m[1]!, m[2]!), unit, name: m[4]! });
+  }
+  if (!outs.length) return;
+  for (const l of ctx.lines) {
+    const m = KILL_ATTEMPT_LINE.exec(l);
+    if (!m || m[6] === "KILL") continue;
+    const a = mss(m[1]!, m[2]!);
+    const b = mss(m[3]!, m[4]!);
+    const target = ctx.byName.get(m[5]!);
+    if (!target) continue;
+    for (const o of outs) {
+      // whole seconds only: a press in the bracket's first second, or in
+      // the last one of the credit span, may sit outside the attempt's own
+      // milliseconds
+      if (o.unit.id !== target.id || o.sec <= a || o.sec >= b + 5) continue;
+      const lo = ctx.start + (a + 1) * 1000;
+      const hi = ctx.start + (b + 1) * 1000;
+      const rows = ((target.auraEvents ?? []) as any[])
+        .filter(
+          (x) =>
+            x.destUnitId === target.id && nameOf(x.spellId, x.spellName) === o.name,
+        )
+        .sort((x, y) => tsOf(x) - tsOf(y));
+      const overlaps = rows.some((app) => {
+        if (ev(app) !== APPLIED) return false;
+        // a hard control is the CC binder's (F15 R3 / F16 idx 37): the class
+        // is the rest a Medallion removes — silence, disarm, root
+        if (ccSpellIds.has(String(app.spellId))) return false;
+        const rem = rows.find(
+          (x) => ev(x) === REMOVED && tsOf(x) >= tsOf(app),
+        );
+        const to = rem ? tsOf(rem) : ctx.end;
+        return tsOf(app) < hi && to >= lo;
+      });
+      if (!overlaps) continue;
+      ctx.bump("killAttemptTrinketOutMissed");
+      if (!m[6]!.includes("target trinketed out"))
+        ctx.violate(
+          "killAttemptTrinketOutMissed",
+          o.name,
+          lo,
+          `${target.name}:${a}`,
+          `[${fmtS(a)}–${fmtS(b)}] on ${target.name}: trinket out of ${o.name} at ${fmtS(o.sec)}, printed ${m[6]}`,
+          l.slice(0, 160),
+        );
+      break;
     }
   }
 }

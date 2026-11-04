@@ -206,6 +206,38 @@ describe("extractKillAttempts", () => {
     expect(a!.attribution?.trinketed).toBe(true);
   });
 
+  it("fact10 D24 (733ef717 0:09–0:14): a trinket that took off a silence layered into the stun bracket is this attempt's trinket", () => {
+    const STRANGULATE = "47476";
+    const run = (silenceEndS: number, medallionS: number) => {
+      const e1 = unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", "853", 9.984, 5.005), // Hammer of Justice
+          ...stunAuras("e1", STRANGULATE, 14.299, silenceEndS - 14.299),
+        ],
+        spellCastEvents: [
+          {
+            spellId: "336126",
+            logLine: {
+              event: LogEvent.SPELL_CAST_SUCCESS,
+              timestamp: ms(medallionS),
+              parameters: [],
+            },
+          },
+        ],
+      });
+      const f1 = unit("f1", {
+        reaction: 1,
+        damageOut: [dmg("f1", "e1", 12, 50_000)],
+      });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1))[0]!
+        .attribution?.trinketed;
+    };
+    // the Medallion removed the Strangulate in its own ms
+    expect(run(16.352, 16.352)).toBe(true);
+    // a Medallion 2 s after the silence ran out took nothing off
+    expect(run(16.352, 18.4)).toBe(false);
+  });
+
   it("codex 20-F16-08 #1: a deferral shield's absorb row is not in the bracket figure", () => {
     const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 4) });
     const deferred = {
