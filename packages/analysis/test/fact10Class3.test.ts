@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * fact10 (F25) class 3 — duration pricing, D20: a length that moves with
  * haste whose end the round did not log runs as long as the unit's own
@@ -97,5 +98,31 @@ describe("fact10 D20 — a hasted length the round did not close", () => {
     const end = secondEnd(false);
     expect(end).toBeDefined();
     expect(end! - 79.85).toBeGreaterThan(5.5);
+  });
+});
+
+describe("codex 20-F25-03 #1 — a channel's clipped run caps nothing", () => {
+  const DARK_HARVEST = "1257052";
+  it("an earlier Dark Harvest stopped at 0.53 s leaves the open one at its official length", () => {
+    const u = warrior(true) as any;
+    u.class = CombatUnitClass.Warlock;
+    u.spec = CombatUnitSpec.Warlock_Affliction;
+    const re = (r: any) => ({
+      ...r,
+      spellId: DARK_HARVEST,
+      spellName: "Dark Harvest",
+    });
+    u.spellCastEvents = u.spellCastEvents.map(re);
+    u.auraEvents = u.auraEvents.map(re);
+    u.auraEvents[1] = re(row(LogEvent.SPELL_AURA_REMOVED, 10.53));
+    expect(
+      ownCompletedRunSeconds(u, DARK_HARVEST, T0 + 79_850, combatOf(u)),
+    ).toBeCloseTo(0.53, 6);
+    const tl = reconstructEnemyCDTimeline([u as never], combatOf(u));
+    const open = tl.players[0]?.offensiveCDs.find(
+      (c) => c.castTimeSeconds > 70,
+    );
+    expect(open).toBeDefined();
+    expect(open!.buffEndSeconds - 79.85).toBeGreaterThan(2.5);
   });
 });

@@ -65,8 +65,9 @@
  *    check's own, not `PRESS_PROOF_AURA_IDS`. Counted: every such fresh
  *    Freezing Rain with no orb row before it.
  *  - resHastedLeftUnclosed (class 3, D20): a `[RES]` enemy entry
- *    `Name/Spec(Ns left)` of a press whose length moves with haste (a
- *    channel, or DB2 SpellMisc Attributes_8 bit 17) and whose own aura the
+ *    `Name/Spec(Ns left)` of a press whose length moves with haste (DB2
+ *    SpellMisc Attributes_8 bit 17; not a channel, which its caster stops
+ *    at will — codex 20-F25-03 #1) and whose own aura the
  *    round never closes, reading past the press + the longest run of that
  *    aura the same unit completed in the round, + 1 s for the rendering
  *    (46eb2199 1:21 `Bladestorm/Arms Warrior(5s left)`: pressed 1:19.85, its
@@ -687,8 +688,9 @@ function resHastedLeftUnclosed(ctx: IRoundCtx): void {
               ev(c) === SUCCESS &&
               tsOf(c) < t &&
               nameOf(c.spellId, c.spellName) === e.name &&
-              (HASTE_DURATION_SPELL_IDS.has(String(c.spellId)) ||
-                CHANNELED_SPELL_IDS.has(String(c.spellId))),
+              // a channel ends when its caster stops it: a completed run
+              // says nothing of the next one (codex 20-F25-03 #1)
+              HASTE_DURATION_SPELL_IDS.has(String(c.spellId)),
           )
           .at(-1);
         if (!press) continue;

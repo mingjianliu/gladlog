@@ -225,10 +225,11 @@ function auraIndexOf(combat: AtomicArenaCombat) {
  * fact10 D20 (46eb2199 1:21): the longest run of `auraId` the unit put on
  * itself and the round closed before `beforeMs` — APPLIED → REMOVED, both by
  * the round's end (`roundEndMs`), no REFRESH between — in seconds, or
- * undefined when it completed none. A length that moves with haste (a
- * channel, or DB2 SpellMisc Attributes_8 bit 17, `HASTE_DURATION_SPELL_IDS`)
- * has no official end; the unit's own completed run is what the log says
- * this caster's haste made of it (Bladestorm 446035 pressed 1:19.85, its
+ * undefined when it completed none. A length that moves with haste (DB2
+ * SpellMisc Attributes_8 bit 17, `HASTE_DURATION_SPELL_IDS`) has no
+ * official end; the unit's own completed run is what the log says
+ * this caster's haste made of it — for a haste-scaled aura, not a channel
+ * its caster can stop early (Bladestorm 446035 pressed 1:19.85, its
  * REMOVED 0.2 s past the round-ending death; the round's first Bladestorm
  * ran 5.07 s of the official 6, and `[RES]` read "5s left" with 4 s left).
  * The longest run: a cancelled one is shorter, never longer.
@@ -843,11 +844,12 @@ export function reconstructEnemyCDTimeline(
       if (end === null) {
         // fact10 D20: a length that moves with haste, its end not logged by
         // the round's end, runs as long as this unit's own completed run of
-        // it did — not the official length (`ownCompletedRunSeconds`)
-        if (
-          HASTE_DURATION_SPELL_IDS.has(cd.spellId) ||
-          CHANNELED_SPELL_IDS.has(cd.spellId)
-        ) {
+        // it did — not the official length (`ownCompletedRunSeconds`). Not
+        // a channel: its caster stops it at will, so a completed run says
+        // nothing of the next (codex 20-F25-03 #1; cover set, 12 of 49
+        // channel presses read off a clipped run — Mind Flay 0.28 s of 4.5,
+        // Dark Harvest 0.53 s of 3)
+        if (HASTE_DURATION_SPELL_IDS.has(cd.spellId)) {
           const run = ownCompletedRunSeconds(
             enemy,
             cd.spellId,
