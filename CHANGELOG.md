@@ -6,6 +6,66 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.41 (2026-11-03)
+
+Four fact audits' worth of fixes, PROMPT_VERSION 466 → 478. Round 7 (79 defects in 15 fresh rounds), round 8 (51 confirmed) and round 9 (33) were each fixed by fact class with every reader of the fact, after a deterministic check for the class had been run on the base capture. Between them, the GH #168 / #173 / #176 / #179 / #187 batches: one interrupt-immunity window builder, a `[PRESS]` line for every major press no roster names, and a spell a talent replaced leaving the kit. The verification runner now re-checks a 117-archive cover set in minutes, so the round-9 batches were measured on it. Every change that adds or removes a candidate row was previewed on the 605-file capture and approved by the user before landing.
+
+Highlights:
+
+- Time Dilation says how much damage it actually held back (`defers Nk`) instead of the table's 50 %.
+- A major press of a 45 s or longer cooldown that no list names gets its own `[PRESS]` line, with the talented duration, cooldown and when it is back.
+- A spell a talent replaced is no longer in the kit: a Lightsmith Holy Paladin is no longer blamed for an unpressed Divine Toll.
+- A channel's interrupt-immunity note says how long the immunity has left.
+- Heals (Tranquility, Divine Hymn, Desperate Prayer, Death Pact, Exhilaration) are no longer counted as major defensives; Aspect of the Turtle is a deflection, not an immunity.
+- Dark Harvest counts as a major offensive cooldown (user ruling: a 60 s cooldown is major).
+- Large reports open faster again (the first-paint regression from round 9 is fixed).
+
+Review: every fact-layer batch had its cross-AI (codex) review before landing, the last round of each APPROVE. Findings that did not change a printed line are recorded on GitHub (#173, #174, #179, #180–#186).
+
+### AI coaching — what the report says about you
+
+- `a16de9a2c` **Time Dilation:** the `[ENEMY DEF]` line prints `defers Nk` — the unit's own absorbed damage while the aura was up — in place of `50%`; a missed Time Dilation's counterfactual is what it would still hold back at the death (605: 27 lines `(50%, Ts)` → `(defers 9k–696k, Ts)`; 9 counterfactual lines gone). The desktop card says 延后 Nk 伤害.
+- `7c983b936` **A spell a talent replaced is not in the kit:** Holy Armaments takes Divine Toll's button (and Holy Prism's) for a Lightsmith; the generated replacement table joins DB2's aura carriers (605: 49 cd-waste rows and 19 cd-hoarded rows gone, all Divine Toll).
+- `f86da2498` `9581b9aee` **`[PRESS]` line** (GH #176, #179): a press of an official cooldown of 45 s or more that no roster names prints `Sprint (lasts 12s, 60s cd, back 1:00)`. Before it was printed, the cooldown model was checked against the corpus and gained the missing talents (Light of the Sun, Coldthirst, Time Spiral, Stasis, Restless Blades, Ancient of Lore and more): `back` after the next press 787 → 83 of 17,700 presses.
+- `a9c16dd74` **Heals are no major defensive:** Tranquility, Divine Hymn, Desperate Prayer, Death Pact and Exhilaration leave the ready sets and stay in the response sets (605: cd-waste 983 → 862, cd-hoarded 1,162 → 1,110, previewed and approved); Aspect of the Turtle deflects, it is no immunity.
+- `773012a74` **Dark Harvest is a major offensive cooldown** on both sides (user ruling 2026-11-03); missed-sync-window +49 rows, previewed and approved.
+- `46cbaa254` `bac63152a` **Round 8:** six self-saves (Anti-Magic Shell, Death Pact, Lichborne, Evasion, Nether Ward, Exhilaration) end `defenseless` (user ruling after the 605 preview); an external is filed by who cast it; a talent-shared wall is written on its caster plus the copy; Strafing Run's free Deep Breath, Wingleader, Cull the Weak and the 12.1 tier sets reach the cooldown model.
+- `53739731c` A ready Felhunter counts as a kicker in range; the burst ledger's "Target had a major defensive up" no longer names heals.
+- `3251d8aa4` Fortifying Brew reads 30 % for Ironshell Brew holders; a Kleptomania holder's purge readiness follows Kleptomania's cooldown.
+- `2bd32d573` `2234639db` `ea5bf942e` `03ae6cb9a` `097f02d8b` `31d03a53e` `1e52b2bfa` `471071189` `e23ccc415` `73179c61b` `b2a28256e` `bf631951d` `8e9c228f8` `7178d9c57` `77d97c610` `091157909` `88c8d5e3c` `9f6467deb` `0ed7267ce` **Round 7, by fact class:** hidden presses read each same-named aura on its own clock; absorbed hits are hits; a silence in the interrupt kit is no kick; a real offensive press has a line; Spell Reflection gets friendly press lines; a shield an ally pressed ends `defenseless`; Oakskin is demoted on Survival Instincts; `[ROT PRESSURE]` counts DoTs from DB2; the next spike searches every window; ABILITIES INTO counts where a cast landed; no avoidance credit for a player held by a hard control; a bar an enemy's Feign Death stopped is no cancel.
+- `c5fe9d408` `73944fa2c` `576b9da22` `e9733014b` `66188710a` `96ce1b963` `e7726e27e` `145b48133` `99b68d93e` `db42eadc4` **Round 7, residuals:** a wall holds to its later REMOVED; a missed or absorbed bolt is a bolt; a kill attempt's opener through a shield or a splash; a 3v3's deciding death ends the kick window; no PvP trinket is not `trinket up`; what a parry stops reads DB2.
+- `47cec36f7` `1890e72d7` `5ddf0cb6d` `586d9a5ec` `8a0c1eb44` `466e51659` `a2739aa7d` `0abc8b753` `318514195` `16402a130` `49e902aba` `af0b465f7` `3e8ebf248` `0569ea89b` **Round 7, review fixes:** a racial's lock read at the attempt's raw start; a lockout is erased only by a heal the healer still had; a stale max-HP row is decided by the step's own pair; a ground control's late landing is its press; a death-cut effect keeps its official end, and only a death in the round cuts it.
+
+### AI coaching — the timeline facts
+
+- `a96a4307b` **One interrupt-immunity window** for the channel note, kick-priority, the kick lines and the CC/trinket reader (GH #168): 605 kickImmuneNote 358 → 0. Obsidian Scales is an immunity only on its holder's own press with Obsidian Mettle; Zen Focus Tea reads its own buff.
+- `f4009b807` A channel's note says how long its immunity has left: `interrupt-immune (Spirit of Redemption, 8.5s left)`; under 0.5 s it gives the enemy interrupt state instead.
+- `3251d8aa4` Ultimate Penitence is one `[ENEMY CD]` line with its shield and bolts (GH #173; 605 duplicate lines 369 → 0).
+- `b7b656bdf` **Kicks:** a bar another kick ended is "kicked again"; a press inside another kick's school lock says so; a root is no cast block; a landed Death Grip stops a bar.
+- `53739731c` A Nether Ward return is named by the reflect its own millisecond names.
+- `73e12f8ec` A triggered heal belongs to a press only when paired with its own cast rows; an aura first seen in a re-statement batch starts at the source's last press; a peel's usable seconds leave out a vanished target; a channel with no logged effect ends at the channel's end.
+- `ba08151a6` Control-miss tags read summons' miss rows; a targeted control lands under its own id or same-named aura; a melee swing's IMMUNE counts; absorbs with no attacker are read.
+- `773012a74` Snowdrift and Void Nova are filed under their real class; Frozen Orb 198149 is a Frozen Orb press; Absolute Zero is ready only when Frostwyrm's Fury is; a `during it` window ends at the REMOVED row; kill credit stops at the round's end.
+- `3aa13674e` An Evangelism's own Power Word: Radiance row is no second press (GH #187: 60 → 0 false `[CAST]` lines); the desktop cast lanes drop it too.
+
+### Desktop
+
+- `39e1ba297` Large reports open faster: two round-9 readings that rescanned the whole match for every aura interval are indexed (×12 first paint 23.7 s → 13.1 s, output byte-identical).
+- `3aa13674e` The cast lanes no longer show a second Radiance under Evangelism.
+
+### Reliability / tests / CI
+
+- `7e436621d` `6c37c76af` `54aeb4201` `2d7674f59` Verification runner: parallel workers (three by default), a rise ledger and a 117-archive cover set that reproduces the full capture's findings in minutes; every corpus scan shares one walk.
+- `433441227` `750753f35` `e2dfe78c6` `7e7e67fa5` `ca6ee8e9b` `02932b61e` `8eed60f44` `364a63726` `fe4e38310` `af9c6a969` `2d918dbc3` `8fcb2253c` `bac63152a` Round-7 and round-8 class checks read what the log and the product's own rows show, not the predicate they audit; new fixtures and predicate-index pins.
+- `4b7d79f12` First-paint gate (GH #189): the ratio is locked at 5.2 (206 CI runs), the absolute backstop moves to the control scene (6,300 ms); the replay baseline follows GH #187.
+
+### Other
+
+- `f41a0b79b` `cbab02a24` `4e350aa23` The daily log pull is spec-balanced: the fewest-held recorder specs first.
+- `0daac59e4` `516aad10d` `893972156` Lint back inside its budget.
+- `f66f6a184` `4cd52fec5` PROMPT_VERSION 467 and its history entry; later versions are carried by their own fix commits (468–478).
+- `e469a8699` `967d87bde` `c9a5f6530` `f41fc3560` Docs: Time Dilation take-back measurement, Survival Instincts and Oakskin evidence, predicate-index records, Discipline Priest study facts.
+
 ## v0.1.40 (2026-10-30)
 
 Three pieces of work. F20 fixed the fact6 round-6 double audit's 30 fact items (15 rounds, two independent auditors per round) by fact class, every reader of each fact included, after a deterministic class check per item was written first (`corpusFactScan5`). The GH #167 batch closes what F20 left: a Capacitor Totem that printed one hit twice, `[RES]` time left cut at a death the line could not know of yet, a kill window opened on a unit whose kit still held an unused defensive, and a false `The Hunt (expired, estimated)` after every Predator's Wake press. On the desktop, coach replies render as Markdown, spell icons show again, and a GUI launch finds the local CLIs. Every batch was measured on the 605-file capture and on the 10,039-context second corpus; every change that adds or removes an accusation was previewed and approved by the user before landing.

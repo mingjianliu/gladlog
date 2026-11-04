@@ -6,6 +6,66 @@
 口径,release/纯文档 commit 归入「其他」)。发版流程见
 `.claude/skills/release`。
 
+## v0.1.41(2026-11-03)
+
+本版汇集四轮事实审计的修复,PROMPT_VERSION 466 → 478。第七轮(15 个新回合查出 79 处)、第八轮(确认 51 处)、第九轮(33 处)都按事实类修,每个事实的所有读者一起修,修之前先在基线采集上跑过该类的确定性检查。中间穿插 GH #168 / #173 / #176 / #179 / #187 几批:中断免疫窗口统一成一个构造器;名单之外的大按键都有 `[PRESS]` 行;被天赋替换的技能不再算在套件里。验证运行器现在几分钟就能复查 117 份归档的覆盖集,第九轮各批都在它上面测量。每一处增删候选行的改动,都先在 605 文件采集上预览、经用户批准后才落地。
+
+要点:
+
+- Time Dilation 写它实际延后了多少伤害(`defers Nk`),不再写表里的 50 %。
+- 冷却 45 秒及以上、任何名单都没列的大按键,有自己的 `[PRESS]` 行,带天赋后的持续时间、冷却和何时转好。
+- 被天赋替换的技能不再算在套件里:不会再怪 Lightsmith 神圣骑士没按 Divine Toll。
+- 引导技能的中断免疫注记写免疫还剩几秒。
+- 治疗技能(Tranquility、Divine Hymn、Desperate Prayer、Death Pact、Exhilaration)不再算大防御;Aspect of the Turtle 是偏转,不是免疫。
+- Dark Harvest 算进攻大招(用户裁决:60 秒冷却就算大招)。
+- 大战报重新打开得快了(第九轮带进来的首渲回退已修)。
+
+审查:每一批事实层改动落地前都过了跨 AI(codex)审查,每批最后一轮都是 APPROVE。不改变印出行的意见记在 GitHub(#173、#174、#179、#180–#186)。
+
+### AI 分析——报告怎么说你
+
+- `a16de9a2c` **Time Dilation:** `[ENEMY DEF]` 行印 `defers Nk`(光环在身期间该单位自己被吸收的伤害),替代 `50%`;没按的 Time Dilation 的反事实是死亡时它还能延后多少(605:27 行 `(50%, Ts)` → `(defers 9k–696k, Ts)`;9 行反事实消失)。桌面卡片写「延后 Nk 伤害」。
+- `7c983b936` **被天赋替换的技能不在套件里:** Lightsmith 的 Holy Armaments 占了 Divine Toll(和 Holy Prism)的按钮;生成的替换表接上了 DB2 的光环载体(605:cd-waste 少 49 行、cd-hoarded 少 19 行,全是 Divine Toll)。
+- `f86da2498` `9581b9aee` **`[PRESS]` 行**(GH #176、#179):冷却 45 秒及以上、名单没列的按键印 `Sprint (lasts 12s, 60s cd, back 1:00)`。印之前先拿语料核对了冷却模型,补上缺的天赋(Light of the Sun、Coldthirst、Time Spiral、Stasis、Restless Blades、Ancient of Lore 等):`back` 晚于下一次按键 787 → 83(共 17,700 次按键)。
+- `a9c16dd74` **治疗不算大防御:** Tranquility、Divine Hymn、Desperate Prayer、Death Pact、Exhilaration 移出就绪集合、留在响应集合(605:cd-waste 983 → 862,cd-hoarded 1,162 → 1,110,先预览、经批准);Aspect of the Turtle 是偏转,不是免疫。
+- `773012a74` **Dark Harvest 算进攻大招**,两侧都认(用户裁决 2026-11-03);missed-sync-window 多 49 行,先预览、经批准。
+- `46cbaa254` `bac63152a` **第八轮:** 六个自保(Anti-Magic Shell、Death Pact、Lichborne、Evasion、Nether Ward、Exhilaration)结束 `defenseless`(用户看过 605 预览后裁决);外援按施放者归属;天赋共享的墙写在施放者身上并注明副本;Strafing Run 的免费 Deep Breath、Wingleader、Cull the Weak 和 12.1 套装进了冷却模型。
+- `53739731c` 就绪的 Felhunter 算射程内的打断者;爆发台账的「目标开着大防御」不再点名治疗技能。
+- `3251d8aa4` 带 Ironshell Brew 的 Fortifying Brew 读 30 %;带 Kleptomania 的驱散就绪跟 Kleptomania 的冷却走。
+- `2bd32d573` `2234639db` `ea5bf942e` `03ae6cb9a` `097f02d8b` `31d03a53e` `1e52b2bfa` `471071189` `e23ccc415` `73179c61b` `b2a28256e` `bf631951d` `8e9c228f8` `7178d9c57` `77d97c610` `091157909` `88c8d5e3c` `9f6467deb` `0ed7267ce` **第七轮,按事实类:** 隐藏按键按各个同名光环自己的时钟读;被吸收的命中也是命中;打断套件里的沉默不算打断;真实的进攻按键有行;Spell Reflection 有友方按键行;队友按的盾结束 `defenseless`;Survival Instincts 上的 Oakskin 降级;`[ROT PRESSURE]` 从 DB2 数 DoT;下一个伤害尖峰查遍每个窗口;ABILITIES INTO 按施法落点计;被硬控住的玩家不记躲避;被敌方 Feign Death 打断的读条不算取消。
+- `c5fe9d408` `73944fa2c` `576b9da22` `e9733014b` `66188710a` `96ce1b963` `e7726e27e` `145b48133` `99b68d93e` `db42eadc4` **第七轮,残余:** 墙按较晚的 REMOVED 结束;打空或被吸收的法术弹也算一发;击杀尝试的起手可以穿盾或是溅射;3v3 决定性死亡结束打断窗口;没有 PvP 饰品不写 `trinket up`;招架挡什么读 DB2。
+- `47cec36f7` `1890e72d7` `5ddf0cb6d` `586d9a5ec` `8a0c1eb44` `466e51659` `a2739aa7d` `0abc8b753` `318514195` `16402a130` `49e902aba` `af0b465f7` `3e8ebf248` `0569ea89b` **第七轮,审查修正:** 种族技能的锁按尝试的原始起点读;只有治疗者手里还有的治疗才能抹掉锁学派;过期的最大血量行按该步自己的一对读数判定;地面控制的迟到落地算它的按键;被死亡截短的效果保留官方结束时间,且只有本回合的死亡能截短它。
+
+### AI 分析——时间线事实
+
+- `a96a4307b` **中断免疫窗口统一成一个**,引导注记、kick-priority、打断行和控制/饰品读者都读它(GH #168):605 kickImmuneNote 358 → 0。Obsidian Scales 只有在持有者自己按、且带 Obsidian Mettle 时才算免疫;Zen Focus Tea 读它自己的增益。
+- `f4009b807` 引导技能的注记写免疫还剩几秒:`interrupt-immune (Spirit of Redemption, 8.5s left)`;不足 0.5 秒时改写敌方打断状态。
+- `3251d8aa4` Ultimate Penitence 合成一条 `[ENEMY CD]` 行,带盾和法术弹(GH #173;605 重复行 369 → 0)。
+- `b7b656bdf` **打断:** 被另一次打断结束的读条写「kicked again」;落在另一次打断学派锁里的按键照实说;定身不算读条阻断;命中的 Death Grip 会打断读条。
+- `53739731c` Nether Ward 反弹按它自己那一毫秒点名的反射归属。
+- `73e12f8ec` 触发的治疗只有和按键自己的施法行配上才归这次按键;在重新陈述批次里首次出现的光环,从来源最后一次按键开始算;peel 的可用秒数不算已消失的目标;日志里没有效果的引导在引导结束时结束。
+- `ba08151a6` 控制打空标签读召唤物的未命中行;指向性控制按自己的 id 或同名光环落地;近战平砍的 IMMUNE 计入;没有攻击者的吸收行也读。
+- `773012a74` Snowdrift 和 Void Nova 归到正确职业;Frozen Orb 198149 算 Frozen Orb 按键;Absolute Zero 只在 Frostwyrm's Fury 就绪时就绪;`during it` 窗口在 REMOVED 行结束;击杀记功在回合结束时停止。
+- `3aa13674e` Evangelism 自己带出的 Power Word: Radiance 行不算第二次按键(GH #187:假的 `[CAST]` 行 60 → 0);桌面施法泳道也去掉它。
+
+### 桌面端
+
+- `39e1ba297` 大战报打开更快:第九轮两处对每个光环区间都重扫整场的读法改成索引(×12 首渲 23.7 秒 → 13.1 秒,输出逐字节一致)。
+- `3aa13674e` 施法泳道不再在 Evangelism 下多显示一个 Radiance。
+
+### 可靠性 / 测试 / CI
+
+- `7e436621d` `6c37c76af` `54aeb4201` `2d7674f59` 验证运行器:并行 worker(默认三个)、上涨台账,以及 117 份归档的覆盖集,几分钟复现全量采集的结论;所有语料扫描共用一次遍历。
+- `433441227` `750753f35` `e2dfe78c6` `7e7e67fa5` `ca6ee8e9b` `02932b61e` `8eed60f44` `364a63726` `fe4e38310` `af9c6a969` `2d918dbc3` `8fcb2253c` `bac63152a` 第七、八轮的类检查读日志和产品自己印的行,不读它们审计的那个谓词;新增夹具和谓词索引固定项。
+- `4b7d79f12` 首渲门(GH #189):比值锁在 5.2(206 次 CI),绝对兜底改到对照场景(6,300 ms);回放基线跟上 GH #187。
+
+### 其他
+
+- `f41a0b79b` `cbab02a24` `4e350aa23` 每日日志拉取按专精均衡:持有最少的录制者专精优先。
+- `0daac59e4` `516aad10d` `893972156` lint 回到预算内。
+- `f66f6a184` `4cd52fec5` PROMPT_VERSION 467 及其历史条目;之后的版本(468–478)由各自的修复提交携带。
+- `e469a8699` `967d87bde` `c9a5f6530` `f41fc3560` 文档:Time Dilation 延后量测量、Survival Instincts 与 Oakskin 的证据、谓词索引记录、戒律牧研究事实。
+
 ## v0.1.40(2026-10-30)
 
 本版汇集三项工作。F20 修复了 fact6 第六轮双审(15 个回合、每回合两个独立审计员)的 30 处事实问题:按事实类修,每个事实的所有读者一起修,修之前先为每一项写好确定性类检查(`corpusFactScan5`)。GH #167 这一批收掉 F20 的遗留:一次 Capacitor Totem 命中印成两行;`[RES]` 剩余时间被一次该行还无从知道的死亡截短;单位的套件里还有没用的防御技能,却给它开了击杀窗口;每次按 Predator's Wake 之后都多出一行假的 `The Hunt (expired, estimated)`。桌面端:教练回复按 Markdown 渲染,技能图标恢复显示,从 Dock 启动也能找到本地 CLI。每一批都在 605 文件采集和 10,039 份上下文的第二语料上测量;每一处增删指控的改动,都先预览、经用户批准后才落地。
