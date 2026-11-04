@@ -5906,6 +5906,39 @@ function buildCooldownEntry(
       );
     }
 
+  // Batch C rate rows (conditionalCooldownsGenerated.json) are read below;
+  // snapshot rows price a press made under one of the unit's own buffs
+  // (single-charge spells): the base the event reductions start from, and
+  // with none to apply the press's override (codex 20-F25-03 #2: an Outlaw
+  // Sprint under Blessing of the Bronze lost the discount once Restless
+  // Blades' reductions set its override). The free presses below stand on
+  // the opener's priced cooldown (fact10 D6).
+  const conditional = conditionalCooldownsOf(spell.spellId);
+  const carriers = conditional.length
+    ? selfBuffIntervalsOf(unit, combat)
+    : undefined;
+  const snapshotPriced = new Set<ICooldownCast>();
+  if (carriers && baselineCharges <= 1)
+    for (const m of conditional) {
+      if (m.kind === "rate") continue;
+      const ivs = carriers.get(m.carrier) ?? [];
+      if (!ivs.length) continue;
+      for (const c of casts) {
+        if (c.cooldownSecondsOverride !== undefined || snapshotPriced.has(c))
+          continue;
+        if (
+          !ivs.some((iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS)
+        )
+          continue;
+        c.baseCooldownSeconds = Math.max(
+          0,
+          ((c.baseCooldownSeconds ?? cooldownSeconds) - (m.flatS ?? 0)) *
+            (1 - (m.pct ?? 0) / 100),
+        );
+        snapshotPriced.add(c);
+      }
+    }
+
   // Event reductions (Storm Conduit, Lethal Calibration): each press's real
   // ready instant, from the holder's triggers and what each one gave back
   // (`eventTriggersFor` — the seconds can depend on the holder's spec and
@@ -5916,10 +5949,6 @@ function buildCooldownEntry(
   // Batch C rate rows (conditionalCooldownsGenerated.json): a buff of the
   // unit's own that speeds the recovery warps the clock — read before the
   // event reductions, which act on that clock
-  const conditional = conditionalCooldownsOf(spell.spellId);
-  const carriers = conditional.length
-    ? selfBuffIntervalsOf(unit, combat)
-    : undefined;
   let rateWindows: IRateWindow[] | undefined;
   for (const m of conditional) {
     if (m.kind !== "rate") continue;
@@ -5971,35 +6000,6 @@ function buildCooldownEntry(
       c.cooldownSecondsOverride === undefined
     )
       c.cooldownSecondsOverride = c.baseCooldownSeconds;
-  // Batch C: modifiers that hold only while one of the unit's own buffs is
-  // up (conditionalCooldownsGenerated.json). Snapshot rows price a press
-  // made under the buff (single-charge spells); rate rows (read above) warp
-  // the clock. Before the free presses below: one stands on its opener's
-  // own priced cooldown (fact10 D6: a Blessing of the Bronze Sprint at 0:53,
-  // 51 s, then a Time Spiral press at 1:25 read back at 1:53, re-pressed at
-  // 1:44).
-  if (carriers) {
-    for (const m of conditional) {
-      const ivs = carriers.get(m.carrier) ?? [];
-      if (!ivs.length) continue;
-      if (m.kind === "rate") continue;
-      if (baselineCharges <= 1) {
-        for (const c of casts) {
-          if (c.cooldownSecondsOverride !== undefined) continue;
-          if (
-            !ivs.some(
-              (iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS,
-            )
-          )
-            continue;
-          c.cooldownSecondsOverride = Math.max(
-            0,
-            (cooldownSeconds - (m.flatS ?? 0)) * (1 - (m.pct ?? 0) / 100),
-          );
-        }
-      }
-    }
-  }
   // Time Spiral's free press stands on the cooldown of the last press that
   // started one (on none: ready again at once); a charge spell's simulation
   // leaves it out (`chargeSpendTimesOf`).

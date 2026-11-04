@@ -119,6 +119,39 @@ describe("Time Spiral — the free movement press", () => {
     expect(pressReadyAgainAtSeconds(entry, 40)).toBeCloseTo(10 + plain * 0.85, 6);
   });
 
+  it("Blessing of the Bronze's price is the base Restless Blades' give-back starts from (codex 20-F25-03 #2)", () => {
+    const withBronze = (finisher: boolean) => {
+      const u = rogue([10], []);
+      (u as any).info = {
+        ...(u as any).info,
+        interestingAurasJSON: JSON.stringify(["evoker-1", 381754, 1]),
+      };
+      if (finisher)
+        (u as any).spellCastEvents.push({
+          ...makeSpellCastEvent("315341", T0 + 20_000, "enemy-1"),
+          powerCosts: [
+            { type: 3, cost: 25 },
+            { type: 4, cost: 5 },
+          ],
+        });
+      return unitCooldownEntry(u, combatOf(u), SPRINT)!;
+    };
+    const plain = unitCooldownEntry(
+      rogue([10], []),
+      combatOf(rogue([10], [])),
+      SPRINT,
+    )!.cooldownSeconds;
+    expect(pressReadyAgainAtSeconds(withBronze(false), 10)).toBeCloseTo(
+      10 + plain * 0.85,
+      6,
+    );
+    // Between the Eyes at 20 s with 5 combo points: 5 s off the priced cooldown
+    expect(pressReadyAgainAtSeconds(withBronze(true), 10)).toBeCloseTo(
+      10 + plain * 0.85 - 5,
+      6,
+    );
+  });
+
   it("a row 0.26 s after a free press is its echo, not a press that restarts the cooldown", () => {
     // corpus shape (605 set, Subtlety Sprint / Marksmanship Cheetah): the
     // second row lands before the cooldown could be back and puts no aura up
