@@ -64,7 +64,20 @@
  *    batch; the line read `cast 1 of 2` from 0:43). The pairing is the
  *    check's own, not `PRESS_PROOF_AURA_IDS`. Counted: every such fresh
  *    Freezing Rain with no orb row before it.
+ *  - resHastedLeftUnclosed (class 3, D20): a `[RES]` enemy entry
+ *    `Name/Spec(Ns left)` of a press whose length moves with haste (a
+ *    channel, or DB2 SpellMisc Attributes_8 bit 17) and whose own aura the
+ *    round never closes, reading past the press + the longest run of that
+ *    aura the same unit completed in the round, + 1 s for the rendering
+ *    (46eb2199 1:21 `Bladestorm/Arms Warrior(5s left)`: pressed 1:19.85, its
+ *    REMOVED 0.2 s past the round's end; the round's first Bladestorm ran
+ *    5.07 s, so 4 s were left). Counted: every such entry with a completed
+ *    run to compare.
  */
+import {
+  CHANNELED_SPELL_IDS,
+  HASTE_DURATION_SPELL_IDS,
+} from "@gladlog/analysis/src/data/channeledGenerated";
 import { ON_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { ROOT_AURA_SPELL_IDS } from "@gladlog/analysis/src/data/rootAuraGenerated";
 import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
@@ -78,12 +91,14 @@ import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import {
   APPLIED,
   ev,
+  fmtS,
   type IRoundCtx,
   nameOf,
   REMOVED,
   SUCCESS,
   tsOf,
 } from "./ctx";
+import { resRows } from "./singles2";
 
 export const CHECKS = [
   "pressInsideLockNotEntered",
@@ -95,6 +110,7 @@ export const CHECKS = [
   "jukeBarSuperseded",
   "pressImpactCountedTwice",
   "unseenOrbMissing",
+  "resHastedLeftUnclosed",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -135,6 +151,7 @@ export function run(ctx: IRoundCtx): void {
   jukeBarSuperseded(ctx);
   pressImpactCountedTwice(ctx);
   unseenOrbMissing(ctx);
+  resHastedLeftUnclosed(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -610,4 +627,71 @@ function unseenOrbMissing(ctx: IRoundCtx): void {
       );
     }
   }
+}
+
+function resHastedLeftUnclosed(ctx: IRoundCtx): void {
+  if (!ctx.owner) return;
+  const enemies = ctx.players.filter((u) => u.reaction !== ctx.owner.reaction);
+  for (const row of resRows(ctx))
+    for (const e of row.entries) {
+      const t = ctx.start + (row.s + 1) * 1000;
+      for (const u of enemies) {
+        const press = ((u.spellCastEvents ?? []) as any[])
+          .filter(
+            (c) =>
+              ev(c) === SUCCESS &&
+              tsOf(c) < t &&
+              nameOf(c.spellId, c.spellName) === e.name &&
+              (HASTE_DURATION_SPELL_IDS.has(String(c.spellId)) ||
+                CHANNELED_SPELL_IDS.has(String(c.spellId))),
+          )
+          .at(-1);
+        if (!press) continue;
+        const id = String(press.spellId);
+        const rows = ((u.auraEvents ?? []) as any[])
+          .filter(
+            (a) =>
+              String(a.spellId) === id &&
+              a.srcUnitId === u.id &&
+              a.destUnitId === u.id,
+          )
+          .sort((a, b) => tsOf(a) - tsOf(b));
+        const p = tsOf(press);
+        const mine = rows.find(
+          (a) => ev(a) === APPLIED && Math.abs(tsOf(a) - p) <= 50,
+        );
+        if (!mine) continue;
+        const roundEnd = roundEndMs(ctx.legacy);
+        if (
+          rows.some(
+            (a) =>
+              ev(a) === REMOVED && tsOf(a) > tsOf(mine) && tsOf(a) <= roundEnd,
+          )
+        )
+          continue;
+        let open: number | null = null;
+        let longest = 0;
+        for (const a of rows) {
+          if (tsOf(a) >= tsOf(mine)) break;
+          if (ev(a) === APPLIED) open = tsOf(a);
+          else if (ev(a) === REMOVED && open !== null) {
+            longest = Math.max(longest, tsOf(a) - open);
+            open = null;
+          } else open = null;
+        }
+        if (longest <= 0) continue;
+        ctx.bump("resHastedLeftUnclosed");
+        const end = (p + longest - ctx.start) / 1000;
+        if (row.s + e.left > end + 1)
+          ctx.violate(
+            "resHastedLeftUnclosed",
+            e.name,
+            ctx.start + row.s * 1000,
+            `${u.name}:${Math.floor((p - ctx.start) / 1000)}`,
+            `${fmtS(row.s)} ${e.name} ${e.left}s left; pressed +${((p - ctx.start) / 1000).toFixed(2)}s, no REMOVED in the round, longest own run ${(longest / 1000).toFixed(2)}s → ends ${end.toFixed(2)}`,
+            row.line.slice(0, 160),
+          );
+        break;
+      }
+    }
 }

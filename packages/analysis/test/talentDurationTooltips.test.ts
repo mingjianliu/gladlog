@@ -92,6 +92,39 @@ const press = (spellId: string, s: number) => ({
   logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + s * 1000 },
 });
 
+describe("fact10 D14 / D17 — Stampeding Roar under Pack's Endurance, Time Skip under Tomorrow, Today", () => {
+  const holder = (spec: string, talent: { id1: number; id2: number } | null) =>
+    ({
+      spec,
+      info: {
+        talents: talent ? [{ ...talent, count: 1 }] : [],
+        pvpTalents: [],
+      },
+      spellCastEvents: [],
+    }) as never;
+  // COMBATANT_INFO entries read off 44942dae (Feral) and 461265d4 (Augmentation)
+  const PACKS_ENDURANCE = { id1: 94615, id2: 117215 };
+  const TOMORROW_TODAY = { id1: 93369, id2: 115687 };
+  it("44942dae 0:22: a Feral holder's Roar runs 10 s, a non-holder's 8 s", () => {
+    for (const id of ["77764", "106898"]) {
+      expect(buffFullDurationForCaster(id, holder("103", PACKS_ENDURANCE))).toBe(10);
+      expect(buffFullDurationForCaster(id, holder("103", null))).toBe(8);
+    }
+  });
+  it("461265d4 1:05: a holder's Time Skip channels 3 s, a non-holder's 2 s", () => {
+    expect(
+      buffFullDurationForCaster("404977", holder("1473", TOMORROW_TODAY), undefined, {
+        pressed: true,
+      }),
+    ).toBe(3);
+    expect(
+      buffFullDurationForCaster("404977", holder("1473", null), undefined, {
+        pressed: true,
+      }),
+    ).toBe(2);
+  });
+});
+
 describe("buffFullDurationForCaster — the tooltip rows", () => {
   // a COMBATANT_INFO loadout holding Ethereal Cloak 457022 (hero node 95106,
   // entry 117703) — a rank is needed to price a row; a "yes" with no rank

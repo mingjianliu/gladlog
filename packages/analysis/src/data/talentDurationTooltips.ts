@@ -42,6 +42,27 @@ export interface ITooltipDurationRow {
 export const TOOLTIP_DURATION_ROWS: Readonly<
   Record<string, readonly ITooltipDurationRow[]>
 > = {
+  // Stampeding Roar — Pack's Endurance 441844 「狂奔怒吼的持续时间延长25%」
+  // (fact10 D14: 44942dae 0:22 printed 8 s, the aura ran 10.0 s). Verified on
+  // the 71 downloaded / fact10-library files holding a Roar (the 605 set has
+  // no holder): 77764 h 15/0, n 73/0; 106898 h 6/0, n 18/0. The third copy
+  // 77761 has no holder logged — not priced.
+  "77764": [
+    {
+      talentSpellId: "441844",
+      untalentedBaseSeconds: 8,
+      pct: 25,
+      specs: ["103", "104"],
+    },
+  ],
+  "106898": [
+    {
+      talentSpellId: "441844",
+      untalentedBaseSeconds: 8,
+      pct: 25,
+      specs: ["103", "104"],
+    },
+  ],
   // Apotheosis — 1215245 「神圣化身的持续时间延长12秒」; h 35/1, n 633/0
   "200183": [
     {

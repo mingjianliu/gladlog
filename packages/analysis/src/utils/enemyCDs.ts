@@ -9,9 +9,12 @@ import {
   castAndEffectIds,
   triggeredEffectAurasOfCast,
 } from "../data/castEffectAuras";
-import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
-import { ROOT_AURA_SPELL_IDS } from "../data/rootAuraGenerated";
+import {
+  CHANNELED_SPELL_IDS,
+  HASTE_DURATION_SPELL_IDS,
+} from "../data/channeledGenerated";
 import { isOffensivePressFactFor } from "../data/enemyHealCds";
+import { ROOT_AURA_SPELL_IDS } from "../data/rootAuraGenerated";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
@@ -39,7 +42,7 @@ import {
 } from "./cooldowns";
 import { pressRowsWithHidden } from "./hiddenPress";
 import { fmtTime } from "./renderGrid";
-import { shuffleRoundEndMs } from "./roundEnd";
+import { roundEndMs, shuffleRoundEndMs } from "./roundEnd";
 import {
   AURA_NATURAL_END_JITTER_S,
   DEATH_CASCADE_MS,
@@ -212,6 +215,49 @@ function auraIndexOf(combat: AtomicArenaCombat) {
     AURA_INDEX.set(combat, idx);
   }
   return idx;
+}
+
+/**
+ * fact10 D20 (46eb2199 1:21): the longest run of `auraId` the unit put on
+ * itself and the round closed before `beforeMs` — APPLIED → REMOVED, both by
+ * the round's end (`roundEndMs`), no REFRESH between — in seconds, or
+ * undefined when it completed none. A length that moves with haste (a
+ * channel, or DB2 SpellMisc Attributes_8 bit 17, `HASTE_DURATION_SPELL_IDS`)
+ * has no official end; the unit's own completed run is what the log says
+ * this caster's haste made of it (Bladestorm 446035 pressed 1:19.85, its
+ * REMOVED 0.2 s past the round-ending death; the round's first Bladestorm
+ * ran 5.07 s of the official 6, and `[RES]` read "5s left" with 4 s left).
+ * The longest run: a cancelled one is shorter, never longer.
+ */
+export function ownCompletedRunSeconds(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  auraId: string,
+  beforeMs: number,
+  combat: AtomicArenaCombat,
+): number | undefined {
+  const endMs = roundEndMs(combat);
+  let open: number | null = null;
+  let longest: number | undefined;
+  const rows = (unit.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.spellId === auraId &&
+        a.srcUnitId === unit.id &&
+        a.destUnitId === unit.id &&
+        a.logLine.timestamp < beforeMs &&
+        a.logLine.timestamp <= endMs,
+    )
+    .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+  for (const a of rows) {
+    const ev = a.logLine.event as LogEvent;
+    if (ev === LogEvent.SPELL_AURA_APPLIED) open = a.logLine.timestamp;
+    else if (ev === LogEvent.SPELL_AURA_REMOVED && open !== null) {
+      const s = (a.logLine.timestamp - open) / 1000;
+      longest = Math.max(longest ?? 0, s);
+      open = null;
+    } else open = null;
+  }
+  return longest;
 }
 
 /**
@@ -746,6 +792,25 @@ export function reconstructEnemyCDTimeline(
         combat,
       );
       if (end === null) {
+        // fact10 D20: a length that moves with haste, its end not logged by
+        // the round's end, runs as long as this unit's own completed run of
+        // it did — not the official length (`ownCompletedRunSeconds`)
+        if (
+          HASTE_DURATION_SPELL_IDS.has(cd.spellId) ||
+          CHANNELED_SPELL_IDS.has(cd.spellId)
+        ) {
+          const run = ownCompletedRunSeconds(
+            enemy,
+            cd.spellId,
+            matchStartMs + cd.castTimeSeconds * 1000,
+            combat,
+          );
+          if (run !== undefined)
+            cd.buffEndSeconds = Math.min(
+              cd.buffEndSeconds,
+              cd.castTimeSeconds + run,
+            );
+        }
         // fact9 D26 (a7e95468 r0 1:23): a channel whose effect the log shows
         // on no player (Ray of Frost into a Grounding Totem) ends where the
         // channel did — the press that ended it, the one reading the

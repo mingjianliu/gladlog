@@ -1395,6 +1395,14 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Dominion of Argus: Grand Warlock Alythess — DB2 aura 219 +4000 ms keyed by SpellLabel, Warlock tiered node 110404 entry 136978 (maxRanks 1); corpus 14 s matches 10 + 4 (GH #102). Patch stays in CORPUS_DURATION_PATCHES as fallback typical value.",
     },
   ],
+  "404977": [
+    {
+      talentSpellId: "412723",
+      untalentedBaseSeconds: 2,
+      addSeconds: 1,
+      note: "Tomorrow, Today — DB2 aura 107 misc0 1 +1000 ms, mask covers Time Skip (fact10 D17: 461265d4 1:05 printed 2 s, the channel ran 3.0 s). The tooltip-duration generator does not read its 'channels for 1 sec longer'. Corpus split on the 32 files holding a Time Skip (605 set, downloads, fact10 library; clean APPLIED → REMOVED, own aura): holders 38 lifetimes, longest 3.01 s, 25 at 3 s; non-holders 7, longest 2.01 s, 5 at 2 s = DB2 (a channel can be cut short).",
+    },
+  ],
 };
 
 // Loaded in the background rather than via a top-level await: TLA would make

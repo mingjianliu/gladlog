@@ -450,13 +450,13 @@ function overrideVariantPressMissing(ctx: IRoundCtx, infos: IUnitInfo[]): void {
 
 // ── D24 / D25: the [RES] enemy column ───────────────────────────────────────
 
-interface IResRow {
+export interface IResRow {
   s: number;
   anchor: string;
   entries: Array<{ name: string; spec: string; left: number }>;
   line: string;
 }
-function resRows(ctx: IRoundCtx): IResRow[] {
+export function resRows(ctx: IRoundCtx): IResRow[] {
   const out: IResRow[] = [];
   let s: number | undefined;
   let anchor = "";
