@@ -320,6 +320,54 @@ describe("Wingleader — a Mass Disintegrate's targets take Deep Breath's cooldo
   });
 });
 
+describe("Wingleader — a Mass Eruption's targets take Breath of Eons's cooldown down (fact10 D1 / D16)", () => {
+  const T = 1_000_000;
+  const row = EVENT_COOLDOWN_REDUCTIONS["441206:eons"]!;
+  const ev = (event: LogEvent, spellId: string, s: number, dest?: string) => ({
+    spellId,
+    destUnitId: dest,
+    logLine: { event, timestamp: T + s * 1000 },
+  });
+  const unit = (over: object = {}) =>
+    ({
+      spellCastEvents: [
+        ev(LogEvent.SPELL_CAST_SUCCESS, "395160", 10),
+        ev(LogEvent.SPELL_CAST_SUCCESS, "395160", 20),
+      ],
+      auraEvents: [ev(LogEvent.SPELL_AURA_REMOVED_DOSE, "438588", 10.01)],
+      damageOut: [
+        ev(LogEvent.SPELL_DAMAGE, "395160", 10.1, "a"),
+        ev(LogEvent.SPELL_DAMAGE, "438653", 10.1, "b"),
+        ev(LogEvent.SPELL_DAMAGE, "395160", 10.3, "a"), // a later wave: same unit
+        ev(LogEvent.SPELL_DAMAGE, "438653", 10.3, "pet"),
+        ev(LogEvent.SPELL_DAMAGE, "395160", 20.1, "c"), // the next, plain Eruption
+      ],
+      missesOut: [],
+      ...over,
+    }) as never;
+
+  it("the row is Breath of Eons's, 1.5 s per target, keyed on Wingleader", () => {
+    expect(row.talentSpellId).toBe("441206");
+    expect(row.targets).toEqual(["403631"]);
+    expect(row.seconds).toBe(1.5);
+  });
+  it("one trigger per distinct unit Eruption or its extra-target row reached, none for a plain Eruption", () => {
+    expect(buffedUseTargetTriggers(unit(), row).map((g) => g.atMs)).toEqual([
+      T + 10_100,
+      T + 10_100,
+      T + 10_300,
+    ]);
+  });
+  it("an Eruption that consumed no Mass Eruption is no use", () => {
+    expect(
+      buffedUseTargetTriggers(
+        unit({ auraEvents: [ev(LogEvent.SPELL_AURA_REMOVED, "438588", 15)] }),
+        row,
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe("a free press with event reductions stands on the opener's clock", () => {
   it("the static reading counts from the opener, its triggers included (Deep Breath)", () => {
     const reductions = [{ atSeconds: 105, seconds: 5 }];

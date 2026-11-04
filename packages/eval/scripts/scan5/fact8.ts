@@ -79,7 +79,9 @@ export const CHECKS = [
 const BACKLASH_SILENCE_ID = "196364";
 /** how far after the tick a max-HP step still explains the fall before it */
 const BUFF_STEP_LOOKAHEAD_MS = 1500;
-const RES_CD = /(?:^|[ ,])(?:(\d+):)?([A-Z][^,()[\]]*?)\((\d+)s\)/g;
+// `(Ns)` or a range `(lo–his)` (an entry whose combat events may shorten it:
+// the low end is the earliest it can be back, fact10 D1 / D16)
+const RES_CD = /(?:^|[ ,])(?:(\d+):)?([A-Z][^,()[\]]*?)\((\d+)(?:–\d+)?s\)/g;
 const TIMED = /^\s*(\d+):(\d\d)\s/;
 /** the back time may sit this far past the press: a floored row, a slack */
 const BACK_SLACK_MS = 2000;

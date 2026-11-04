@@ -402,8 +402,8 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // Wingleader (fact8 class 1, D7 / D8 / D28 / D29): "Mass Disintegrate reduces
   // the remaining cooldown of Deep Breath by 1.0 sec for each target struck."
   // DB2 12.1.5.70391: SpellEffect 1135533 (aura 4, a dummy, no mask) base
-  // 1000 ms; 1135534 base 1500 ms is the Breath of Eons half, not modelled
-  // here. Ranks from COMBATANT_INFO: every Strafing Run holder in the wide
+  // 1000 ms; 1135534 base 1500 ms is the Breath of Eons half ("441206:eons"
+  // below). Ranks from COMBATANT_INFO: every Strafing Run holder in the wide
   // manifest took it (57 distinct rounds, 106 opener pairs), so there is no
   // control group and none is required. R = opener
   // + 60 − #targets of its buffed Disintegrates: 0 of 106 next openers come
@@ -422,6 +422,31 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     },
     seconds: 1,
     note: "Wingleader — Deep Breath −1 s per target struck by a Mass Disintegrate",
+  },
+  // Wingleader's Augmentation half (fact10 D1 / D16): "Mass Eruption reduces
+  // the remaining cooldown of Breath of Eons by 1.5 sec for each target
+  // struck." DB2 12.1.5.70391: SpellEffect 1135534 (aura 4, a dummy, no
+  // mask) base 1500 ms. The use is the unit's own Eruption that consumed
+  // Mass Eruption; its hits are Eruption's and the extra targets' row.
+  // Every Augmentation BoE holder in the corpus and the downloaded logs took
+  // it (37 press pairs, 18 files; ranks from COMBATANT_INFO). R = press + 120
+  // − 1.5 × #targets of its Mass Eruptions (Time Skip's rate window on the
+  // clock): 0 of 37 next presses more than 0.5 s before R, the tightest
+  // 0.55 / 1.46 / 1.70 s after it. 1 s per target fails 9, Eruption's own
+  // row without 438653 fails 13, no reduction 33.
+  "441206:eons": {
+    talentSpellId: "441206",
+    targets: ["403631"],
+    triggerCastIds: [],
+    triggerBuffedUseTargets: {
+      auraIds: ["438588"], // Mass Eruption
+      byCastIds: ["395160"], // Eruption
+      hitIds: ["395160", "438653"],
+      withinMs: 250,
+      windowMs: 3600,
+    },
+    seconds: 1.5,
+    note: "Wingleader — Breath of Eons −1.5 s per target struck by a Mass Eruption",
   },
   // Lethal Calibration (Survival, FT F20 2026-10-11): "Each enemy hit by
   // Wildfire Bomb reduces the cooldown of Boomstick by 2.0 sec, up to 10
