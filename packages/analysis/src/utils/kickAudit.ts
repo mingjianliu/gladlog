@@ -10,7 +10,7 @@ import {
   classifyKickedSpell,
   type KickedSpellCategory,
 } from "../data/kickedSpellCategories";
-import { ON_GCD_SPELL_IDS } from "../data/offGcdGenerated";
+import { OFF_GCD_SPELL_IDS, ON_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { isKickSpellId } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -39,6 +39,14 @@ import { firstDeathMs } from "./unitDeath";
 // `LANDED_PAIR_MS` (a landed kick's SPELL_INTERRUPT pairs with the cast
 // within it) lives in enemyInterrupts.ts, which also reads it for the
 // on-interrupt cooldown talents; re-exported from here, its first home.
+
+/** A press of a button: DB2 SpellCooldowns has its row, on the global
+ * cooldown or off it. A passive trigger (Shadowy Apparition 148859) or a pet
+ * command (Spell Lock 119910) has none (fact10 D22, codex 20-F25-01 / 02). */
+export function isButtonPress(spellId: string): boolean {
+  return ON_GCD_SPELL_IDS.has(spellId) || OFF_GCD_SPELL_IDS.has(spellId);
+}
+
 export { LANDED_PAIR_MS };
 /** Two SPELL_CAST_SUCCESS rows of ONE kick: Skull Bash logs its cast id
  * 106839 and its effect id 93985 a millisecond apart (58 / 58 casts in the 60
@@ -404,11 +412,13 @@ export function analyzeKickAudit(
       });
     };
     // fact10 D22 / D5: a bar with no end row was over once the unit did
-    // something a cast bar cannot outlive — a press that starts the global
-    // cooldown (DB2 `ON_GCD_SPELL_IDS`; a row with no SpellCooldowns entry,
-    // a passive trigger or a pet command, proves nothing: codex 20-F25-01,
-    // 8919f02e Shadowy Apparition inside a Vampiric Touch, 0bc703bc Spell
-    // Lock's command inside a Chaos Bolt) and that does not ride along
+    // something a cast bar cannot outlive — a press of a button, on the
+    // global cooldown or off it (DB2 SpellCooldowns has its row:
+    // `ON_GCD_SPELL_IDS` / `OFF_GCD_SPELL_IDS`; a row with none, a passive
+    // trigger or a pet command, proves nothing: codex 20-F25-01, 8919f02e
+    // Shadowy Apparition inside a Vampiric Touch, 0bc703bc Spell Lock's
+    // command inside a Chaos Bolt; an off-GCD Counterspell cast out of a
+    // Frostbolt ends it: codex 20-F25-02) that does not ride along
     // (`pressRidesAlong`: off the GCD, castable while channelling), or a
     // cast bar of another spell (733ef717 0:45: Smite
     // begun 41.415, Void Shield 43.190, Penance 44.416, Mind Freeze 45.309
@@ -441,7 +451,7 @@ export function analyzeKickAudit(
           .castStartEvents ?? []
         ).some(inside) ||
         (enemy.spellCastEvents ?? []).some(
-          (e) => !!e.spellId && ON_GCD_SPELL_IDS.has(e.spellId) && inside(e),
+          (e) => !!e.spellId && isButtonPress(e.spellId) && inside(e),
         );
       if (acted) return true;
       return allUnits.some(

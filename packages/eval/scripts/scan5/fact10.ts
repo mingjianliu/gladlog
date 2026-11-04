@@ -87,7 +87,10 @@ import {
   CHANNELED_SPELL_IDS,
   HASTE_DURATION_SPELL_IDS,
 } from "@gladlog/analysis/src/data/channeledGenerated";
-import { ON_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
+import {
+  OFF_GCD_SPELL_IDS,
+  ON_GCD_SPELL_IDS,
+} from "@gladlog/analysis/src/data/offGcdGenerated";
 import { ROOT_AURA_SPELL_IDS } from "@gladlog/analysis/src/data/rootAuraGenerated";
 import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { pressRidesAlong } from "@gladlog/analysis/src/utils/castCommitSpans";
@@ -480,13 +483,17 @@ function jukeBarSuperseded(ctx: IRoundCtx): void {
     const prevBar = ((target.castStartEvents ?? []) as any[])
       .filter((c) => tsOf(c) < startMs)
       .at(-1);
-    // A SUCCESS ends a bar only when it starts the GCD (DB2
-    // ON_GCD_SPELL_IDS): a passive trigger or a pet command has no
-    // SpellCooldowns row (codex 20-F25-01). A SUCCESS of the previous bar's
-    // spell inside CAST_QUEUE_TOLERANCE_MS is that bar's queued completion.
+    // A SUCCESS ends a bar only when it is a button's (DB2 SpellCooldowns
+    // has its row, on or off the GCD): a passive trigger or a pet command has
+    // none (codex 20-F25-01); an off-GCD Counterspell out of a Frostbolt
+    // ends it (20-F25-02). A SUCCESS of the previous bar's spell inside
+    // CAST_QUEUE_TOLERANCE_MS is that bar's queued completion.
     const other = [
       ...((target.spellCastEvents ?? []) as any[]).filter(
-        (c) => ev(c) === SUCCESS && ON_GCD_SPELL_IDS.has(String(c.spellId)),
+        (c) =>
+          ev(c) === SUCCESS &&
+          (ON_GCD_SPELL_IDS.has(String(c.spellId)) ||
+            OFF_GCD_SPELL_IDS.has(String(c.spellId))),
       ),
       ...((target.castStartEvents ?? []) as any[]),
     ].find(

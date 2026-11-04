@@ -964,6 +964,17 @@ describe("kickAudit — a bar the target left is no fake (fact10 D22 / D5)", () 
     expect(e!.result).toBe("juked");
   });
 
+  it("an off-GCD Counterspell cast out of a Frostbolt ends the bar — a miss (codex 20-F25-02)", () => {
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [castStart("116", kickTs - 2_000, "e1")],
+      spellCastEvents: [press("2139", kickTs - 1_000)],
+    } as any);
+    const [e] = analyzeKickAudit(kicker(), [enemy], makeCombat());
+    expect(e!.result).toBe("missed");
+  });
+
   it("070c4933 2:25: a bar whose likely target died before the kick ended with the death — a miss", () => {
     const BENEDICTION = "1262766";
     const enemy = makeUnit("e1", {
