@@ -41,6 +41,11 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "../data/druidForms";
+import {
+  CAST_MISS_WINDOW_MS,
+  PRESS_TRIGGERED_CAST_IDS,
+  pressFollowUpCastRows,
+} from "./castMissRows";
 
 /** How far from a cast its own aura lines are logged (the press's 117679
  * APPLIED lands 0–3 ms after the SUCCESS in the logs read). */
@@ -265,7 +270,74 @@ export function isNoPressRow<
   },
 >(e: T, rows: readonly T[]): boolean {
   return (
-    (!!e.spellId && COPY_CAST_IDS.has(e.spellId)) || isCompanionCastRow(e, rows)
+    (!!e.spellId && COPY_CAST_IDS.has(e.spellId)) ||
+    isCompanionCastRow(e, rows) ||
+    isPressImpactRow(e, rows)
+  );
+}
+
+/**
+ * The impact row of a charge press — the second `SPELL_CAST_SUCCESS` its DB2
+ * effect triggers at the press's target (`PRESS_TRIGGERED_CAST_IDS`, read
+ * through `pressFollowUpCastRows`, the rule the press's IMMUNE refusal
+ * already reads) — or undefined. `rows` are the unit's cast rows.
+ */
+export function pressImpactRow<
+  T extends {
+    spellId?: string;
+    destUnitId?: string;
+    logLine: { timestamp: number; event?: string };
+  },
+>(press: T, rows: readonly T[]): T | undefined {
+  if (
+    !press.spellId ||
+    !press.destUnitId ||
+    press.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+    !PRESS_TRIGGERED_CAST_IDS.has(press.spellId)
+  )
+    return undefined;
+  const pressId = press.spellId;
+  const pressMs = rows
+    .filter(
+      (r) =>
+        r.spellId === pressId &&
+        r.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    )
+    .map((r) => r.logLine.timestamp);
+  const [first] = pressFollowUpCastRows(
+    rows.map((r) => ({ ...r, timestamp: r.logLine.timestamp, row: r })),
+    pressId,
+    pressMs,
+    press.logLine.timestamp,
+    press.destUnitId,
+  );
+  return first?.row;
+}
+
+/**
+ * Is this cast row the impact of an earlier press of its unit
+ * (`pressImpactRow`)? fact10 D28 (915f90ae 2:48): The Hunt pressed as
+ * 1246167 and landing as 1246169 read `The Hunt ×2` in ABILITIES INTO
+ * IMMUNITY/DR.
+ */
+export function isPressImpactRow<
+  T extends {
+    spellId?: string;
+    destUnitId?: string;
+    logLine: { timestamp: number; event?: string };
+  },
+>(e: T, rows: readonly T[]): boolean {
+  if (!e.spellId || e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS)
+    return false;
+  const t = e.logLine.timestamp;
+  return rows.some(
+    (p) =>
+      p !== e &&
+      p.logLine.timestamp < t &&
+      p.logLine.timestamp >= t - CAST_MISS_WINDOW_MS &&
+      !!p.spellId &&
+      !!PRESS_TRIGGERED_CAST_IDS.get(p.spellId)?.includes(e.spellId!) &&
+      pressImpactRow(p, rows) === e,
   );
 }
 

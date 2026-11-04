@@ -49,11 +49,19 @@
  *    with a player's death (733ef717 0:45: Smite begun 41.415, Void Shield
  *    43.190, Penance 44.416, kick 45.309; 070c4933 2:25: Benediction begun
  *    144.495, its target dead 145.415). Counted: every juke line.
+ *  - pressImpactCountedTwice (class 2, D28): an ABILITIES INTO IMMUNITY/DR
+ *    line that counts a name more times than its caster's presses of it at
+ *    that target inside the defensive (its APPLIED…REMOVED on the target),
+ *    a charge press's impact row (`PRESS_TRIGGERED_CAST_IDS`, DB2 Effect
+ *    96 / 149) standing in for its press, not beside it (915f90ae 2:48
+ *    `The Hunt ×2`: 1246167 at the press, 1246169 at the impact). Counted:
+ *    every (line, name) whose window holds an impact row.
  */
 import { ON_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { ROOT_AURA_SPELL_IDS } from "@gladlog/analysis/src/data/rootAuraGenerated";
 import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { pressRidesAlong } from "@gladlog/analysis/src/utils/castCommitSpans";
+import { PRESS_TRIGGERED_CAST_IDS } from "@gladlog/analysis/src/utils/castMissRows";
 import { STOPPED_JUST_BEFORE_S } from "@gladlog/analysis/src/utils/castStopEvidence";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
@@ -77,6 +85,7 @@ export const CHECKS = [
   "talentedSaveUnseen",
   "mobilityAsDefensive",
   "jukeBarSuperseded",
+  "pressImpactCountedTwice",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -115,6 +124,7 @@ export function run(ctx: IRoundCtx): void {
   talentedSaveUnseen(ctx);
   mobilityAsDefensive(ctx);
   jukeBarSuperseded(ctx);
+  pressImpactCountedTwice(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -470,5 +480,81 @@ function jukeBarSuperseded(ctx: IRoundCtx): void {
           : `${m[5]} begun +${((startMs - ctx.start) / 1000).toFixed(3)}s, ${died.name} died before the kick +${((kickMs - ctx.start) / 1000).toFixed(3)}s`,
         l.slice(0, 160),
       );
+  }
+}
+
+const INTO =
+  /^\s*\[(\d+):(\d{2})\] [^(]+\(([^)]+)\): (.+) into (.+?)'s (.+)$/;
+const IMPACT_IDS = new Set([...PRESS_TRIGGERED_CAST_IDS.values()].flat());
+
+function pressImpactCountedTwice(ctx: IRoundCtx): void {
+  for (const l of ctx.text.split("\n")) {
+    const m = INTO.exec(l);
+    if (!m) continue;
+    const caster = ctx.byName.get(m[3]!);
+    const target = ctx.byName.get(m[5]!);
+    if (!caster || !target) continue;
+    const counts = new Map<string, number>();
+    for (const part of m[4]!.split(" + ")) {
+      const p = /^(.+?)(?: ×(\d+))?$/.exec(part.trim())!;
+      counts.set(p[1]!, (counts.get(p[1]!) ?? 0) + Number(p[2] ?? 1));
+    }
+    const fromMs = ctx.start + mss(m[1]!, m[2]!) * 1000;
+    const wall = ((target.auraEvents ?? []) as any[]).find(
+      (a) =>
+        ev(a) === APPLIED &&
+        a.destUnitId === target.id &&
+        nameOf(a.spellId, a.spellName) === m[6] &&
+        tsOf(a) >= fromMs &&
+        tsOf(a) < fromMs + 1000,
+    );
+    if (!wall) continue;
+    const endMs =
+      tsOf(
+        ((target.auraEvents ?? []) as any[]).find(
+          (a) =>
+            ev(a) === REMOVED &&
+            a.destUnitId === target.id &&
+            String(a.spellId) === String(wall.spellId) &&
+            tsOf(a) > tsOf(wall),
+        ) ?? { timestamp: Infinity },
+      ) ?? Infinity;
+    const rows = ((caster.spellCastEvents ?? []) as any[]).filter(
+      (c) => ev(c) === SUCCESS && c.destUnitId === target.id,
+    );
+    for (const [name, k] of counts) {
+      const inside = rows.filter(
+        (c) =>
+          nameOf(c.spellId, c.spellName) === name &&
+          tsOf(c) >= tsOf(wall) &&
+          tsOf(c) <= endMs,
+      );
+      const impacts = inside.filter((c) => IMPACT_IDS.has(String(c.spellId)));
+      if (impacts.length === 0) continue;
+      ctx.bump("pressImpactCountedTwice");
+      // one per press: an impact whose press row (an id that triggers it,
+      // within 2.5 s before, same target) is inside the window is that press
+      const paired = impacts.filter((i) =>
+        inside.some(
+          (p) =>
+            p !== i &&
+            PRESS_TRIGGERED_CAST_IDS.get(String(p.spellId))?.includes(
+              String(i.spellId),
+            ) &&
+            tsOf(p) < tsOf(i) &&
+            tsOf(p) >= tsOf(i) - 2500,
+        ),
+      ).length;
+      const presses = inside.length - paired;
+      if (k > presses)
+        ctx.violate(
+          "pressImpactCountedTwice",
+          name,
+          tsOf(wall),
+          `${m[1]}:${m[2]}`,
+          `${m[3]} ${name} ×${k} into ${m[6]}: ${inside.length} rows, ${paired} the impact of a press beside it`,
+          l.slice(0, 160),
+        );
+    }
   }
 }

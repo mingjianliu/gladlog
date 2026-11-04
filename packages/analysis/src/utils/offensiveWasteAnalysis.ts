@@ -18,7 +18,12 @@ import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
 import { empowerSpans, type EmpowerSpanUnit } from "./castCommitSpans";
 import { isControlCast } from "./castMissRows";
-import { COMPANION_CAST_ROW_MS, isNoPressRow } from "./castPress";
+import {
+  COMPANION_CAST_ROW_MS,
+  isNoPressRow,
+  isPressImpactRow,
+  pressImpactRow,
+} from "./castPress";
 import { applicableCCAvoidanceIds } from "./ccTrinketAnalysis";
 import {
   hpTroughInEventSpan,
@@ -300,10 +305,15 @@ export function buildOffensiveWasteSummary(
     }
     const castAtMs = (e: (typeof successRows)[number]): number | null =>
       firedAtMs.has(e) ? firedAtMs.get(e)! : e.logLine.timestamp;
+    // a charge press and its impact row are one cast, counted where it hit
+    // — the impact (fact10 D28: 915f90ae 2:48 `The Hunt ×2`; 6a545d58 0:52:
+    // Predator's Wake 1259431 does no damage itself, its impact 1246169
+    // landed inside the Obsidian Scales)
     const castEvents = successRows.filter(
       (e, i) =>
         castAtMs(e) !== null &&
-        !isNoPressRow(e, successRows) &&
+        (!isNoPressRow(e, successRows) || isPressImpactRow(e, successRows)) &&
+        pressImpactRow(e, successRows) === undefined &&
         !successRows.some(
           (o, j) =>
             j < i &&
