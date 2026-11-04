@@ -133,6 +133,12 @@ export interface IEventCooldownReduction {
   triggerHostileTaken?: {
     internalCooldownMs: number;
     notWhileSelfAuraId?: string;
+    /** "Taking direct Physical damage": only hits whose school lies inside
+     * this mask (a swing is Physical; a spell row reads the hit's own
+     * school, else its DB2 one), only ABSORB misses (a hit a shield ate
+     * whole — a dodge or an immunity is no damage taken), and no debuff
+     * applications */
+    damageSchoolMask?: number;
   };
   /** Bonuses on every give-back of this entry, added up: `pct` while the
    * unit's own `whileSelfAuraId` buff is up (Apotheosis +200 %), `pctPerRank`
@@ -144,6 +150,17 @@ export interface IEventCooldownReduction {
   /** "Your Arcane abilities": the unit's own successful casts whose DB2
    * school mask (`spellSchoolMask`) shares a bit with this mask. */
   triggerCastSchoolMask?: number;
+  /** "Each time X deals damage", for a channel: every periodic row of
+   * `tickIds` — SPELL_PERIODIC_DAMAGE, or SPELL_PERIODIC_MISSED (a tick a
+   * shield or an immunity ate) — on the TARGET of the unit's own cast of
+   * `byCastIds` it belongs to, from that cast's millisecond up to the next
+   * cast's (at most `windowMs`). A tick that also hits other units (Mass Disintegrate) is
+   * one tick: their rows do not count. */
+  triggerCastTargetTicks?: {
+    byCastIds: readonly string[];
+    tickIds: readonly string[];
+    windowMs: number;
+  };
   /** With `triggerHitIds`: every logged hit row is a trigger — separate
    * projectiles of one use, not "each enemy hit" (no one-credit-per-unit, no
    * cap). */
@@ -609,14 +626,18 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // fading on the thief — all aura rows the mage sourced. Replay (12 files,
   // 361 recasts): static 115 early, fades only 18, + refreshes 11, + the
   // stolen copy 0; at 2 s 44. Holders 29 % of recasts under the model,
-  // non-holders 0 of 188. (Blazing / Prismatic Barrier: same talent, not
-  // measured, not listed.)
+  // non-holders 0 of 188. Blazing / Prismatic Barrier, the same talent (GH
+  // #183, 2026-11-03): 52 of 52 Arcane mages hold it; Prismatic replay on
+  // 605-file subsets, dev 53 of 188 presses early → 0, hold-out 67 of 259 →
+  // 1 (a barrier with no REMOVED row); at 5 s the closest presses sit
+  // 4.99–5.01 s past it, one give-back too many. Blazing is never early
+  // there — on the tooltip alone. Each spec has its one barrier.
   "455428": {
-    targets: ["11426"],
+    targets: ["11426", "235313", "235450"],
     triggerCastIds: [],
-    triggerOwnAuraEndIds: ["11426"],
+    triggerOwnAuraEndIds: ["11426", "235313", "235450"],
     seconds: 2.5,
-    note: "Barrier Diffusion — Ice Barrier −2.5 s (PvP) each time a barrier is removed",
+    note: "Barrier Diffusion — Ice / Blazing / Prismatic Barrier −2.5 s (PvP) each time a barrier is removed",
   },
   // Protector of the Frail (Discipline, 373035): "Power Word: Shield reduces
   // the cooldown of Pain Suppression by 3 sec" — effect 1, dummy −3 000 (its
@@ -647,6 +668,87 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     },
     seconds: 3,
     note: "Driven to Madness — Voidform −3 s per attack taken (≤ 1 a second, not during Voidform)",
+  },
+  // GH #183 (2026-11-03): the [PRESS] whitelist's buttons under 45 s, each
+  // replayed on 605-file subsets (eval-private runs/g8-183-2026-11-04,
+  // research/evoker + research/cd4; dev and a disjoint hold-out, "early" =
+  // the next press > 0.5 s before the modelled ready instant).
+  //
+  // Impish Instincts (PvP, Warlock, 409835): "Taking direct Physical damage
+  // reduces the cooldown of Demonic Circle by 3 sec. Can only occur once
+  // every 5 sec." DB2: aura 42 bp −3000, ProcCategoryRecovery 5000, proc
+  // mask 680 (taken melee / ranged). Physical direct hits — swings, Physical
+  // spell rows, and the ones a shield ate whole. Holders 107 of 249 early
+  // (dev) / 91 of 207 (hold-out) under the base model, non-holders 1 of 8 /
+  // 0 of 14; replay 9 / 0. Any school / every miss type cut it further but
+  // thin the pile of presses landing right at the ready instant (13 / 9 →
+  // 1–5), so DB2's numbers.
+  "409835": {
+    targets: ["48020"],
+    triggerCastIds: [],
+    triggerHostileTaken: { internalCooldownMs: 5000, damageSchoolMask: 1 },
+    seconds: 3,
+    note: "Impish Instincts — Demonic Circle: Teleport −3 s per direct Physical hit taken (≤ 1 per 5 s)",
+  },
+  // Causality (Devastation, 375777): "Disintegrate reduces the remaining
+  // cooldown of your empower spells by 0.50 sec each time it deals damage.
+  // Pyre reduces the remaining cooldown of your empower spells by 0.40 sec
+  // per enemy struck, up to 2.0 sec." DB2: dummies bp −500 / −400,
+  // PvpMultiplier 1 (no mask or label: the tooltip is the coverage leg).
+  // 29 of 29 dev / 24 of 24 hold-out Devastation units hold it. A tick is
+  // the cast target's periodic row, absorbed or immuned ones too; a Mass
+  // Disintegrate tick on 3–4 units is one (crediting every row made a Fire
+  // Breath "ready" 4.8 s before two "Not yet recovered" failures).
+  // Replay: Eternity Surge dev 98 of 141 early → 1, hold-out 73 of 89 → 0;
+  // Fire Breath 105 of 158 → 2, 68 of 84 → 0. At 0.5 s 13 dev / 11
+  // hold-out presses land within 0.5 s of the ready instant; at 0.55 s that
+  // pile is gone, at 0.45 s 15 / 8 come early.
+  "375777": {
+    targets: ["357208", "382266", "359073", "382411"],
+    triggerCastIds: [],
+    triggerCastTargetTicks: {
+      byCastIds: ["356995"],
+      tickIds: ["356995"],
+      windowMs: 6000,
+    },
+    seconds: 0.5,
+    note: "Causality — Fire Breath / Eternity Surge −0.5 s per Disintegrate tick",
+  },
+  "375777:pyre": {
+    talentSpellId: "375777",
+    targets: ["357208", "382266", "359073", "382411"],
+    triggerCastIds: [],
+    triggerHitIds: ["357212"],
+    maxHitsPerUse: 5,
+    seconds: 0.4,
+    note: "Causality — Fire Breath / Eternity Surge −0.4 s per enemy struck by Pyre (≤ 2 s)",
+  },
+  // Chaotic Transformation (Havoc, 388112): "When you activate
+  // Metamorphosis, the cooldowns of Blade Dance and Eye Beam are
+  // immediately reset." The press is logged as the landing 200166 (191427
+  // never is); entering demon form through Demonic (Eye Beam itself) is no
+  // reset. Every Eye Beam pair under the 20 s floor has a 200166 between
+  // (dev 87, hold-out 64). Abyssal Gaze 452497 shares Eye Beam's category.
+  // Every Havoc unit holds it — no control group, none required.
+  "388112": {
+    targets: ["198013", "452497"],
+    triggerCastIds: ["200166"],
+    seconds: Number.POSITIVE_INFINITY,
+    note: "Chaotic Transformation — Metamorphosis resets Eye Beam",
+  },
+  // Time Walk (Mage, 1244087): "Alter Time resets the cooldown of Blink and
+  // Shimmer when you return." Dummy only. The return is the end of the
+  // mage's own Alter Time aura 342246 (recast or expiry; keyed on the 342247
+  // recast instead 46 dev / 17 hold-out stay early). Every charge comes
+  // back (one charge leaves 11 / 4). Shimmer holders 132 of 289 early under
+  // the base model, non-holders 1 of 29; replay dev 129 of 413 → 4,
+  // hold-out 63 of 178 → 1.
+  "1244087": {
+    targets: ["212653", "1953"],
+    triggerCastIds: [],
+    triggerOwnAuraEndIds: ["342246"],
+    seconds: Number.POSITIVE_INFINITY,
+    note: "Time Walk — Alter Time's return resets Blink / Shimmer",
   },
   // HOLY WORD: CHASTISE (Holy Priest; research/holyword.md — 21 clean raw
   // files replayed: 221 of 497 Chastise presses early → 0). Its static
@@ -1261,10 +1363,67 @@ export function eventTriggersFor(
             ? buffedUseTargetTriggers(unit, r)
             : []),
           ...(r.triggerHostileTaken ? hostileTakenTriggers(unit, r) : []),
+          ...(r.triggerCastTargetTicks
+            ? castTargetTickTriggers(unit, r, holderSpec)
+            : []),
         ]),
       ),
     )
     .sort((a, b) => a.atMs - b.atMs);
+}
+
+/** The triggers of a channel's ticks on its cast's target
+ * (`triggerCastTargetTicks`). */
+export function castTargetTickTriggers(
+  unit: Pick<ICombatUnit, "spellCastEvents" | "damageOut" | "missesOut">,
+  r: Pick<IEventCooldownReduction, "triggerCastTargetTicks" | "seconds">,
+  holderSpec: string | undefined,
+): IEventTrigger[] {
+  const c = r.triggerCastTargetTicks;
+  if (!c) return [];
+  type Row = { logLine: { timestamp: number; lineIndex?: number } };
+  // log order: the millisecond, then the line (codex review round 2: the
+  // old channel's last tick and the new cast share a millisecond)
+  const before = (a: Row, b: Row) =>
+    a.logLine.timestamp < b.logLine.timestamp ||
+    (a.logLine.timestamp === b.logLine.timestamp &&
+      (a.logLine.lineIndex ?? 0) < (b.logLine.lineIndex ?? 0));
+  const casts = unit.spellCastEvents
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.byCastIds.includes(String(e.spellId)) &&
+        !!e.destUnitId,
+    )
+    .sort((a, b) => (before(a, b) ? -1 : before(b, a) ? 1 : 0));
+  const ticks = [
+    ...unit.damageOut.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_PERIODIC_DAMAGE,
+    ),
+    ...(unit.missesOut ?? []).filter(
+      (e) => e.logLine.event === LogEvent.SPELL_PERIODIC_MISSED,
+    ),
+  ].filter((e) => c.tickIds.includes(String(e.spellId)));
+  const out: IEventTrigger[] = [];
+  for (const e of ticks) {
+    const t = e.logLine.timestamp;
+    // the first cast it belongs to: on that cast's target, from the cast's
+    // millisecond (its first tick can be logged before the cast row), and
+    // before the next cast in log order — counted once
+    const owner = casts.find((cast, i) => {
+      const from = cast.logLine.timestamp;
+      const next = casts[i + 1];
+      return (
+        e.destUnitId === cast.destUnitId &&
+        t >= from &&
+        t < from + c.windowMs &&
+        (next === undefined || before(e, next))
+      );
+    });
+    if (owner)
+      out.push({ atMs: t, seconds: eventReductionSecondsAt(r, holderSpec, t) });
+  }
+  return out.sort((a, b) => a.atMs - b.atMs);
 }
 
 /** The triggers of a "being attacked" talent (`triggerHostileTaken`). */
@@ -1279,20 +1438,37 @@ export function hostileTakenTriggers(
   const per = typeof r.seconds === "number" ? r.seconds : r.seconds.base;
   const times: number[] = [];
   const other = (src: string | undefined) => !!src && src !== unit.id;
+  const mask = h.damageSchoolMask;
+  const inMask = (e: {
+    spellId?: string;
+    logLine: { event: string };
+    spellSchoolId?: string;
+    damageSchoolId?: string;
+  }): boolean => {
+    if (mask === undefined) return true;
+    const school = e.logLine.event.startsWith("SWING_")
+      ? 1
+      : parseInt(e.damageSchoolId ?? e.spellSchoolId ?? "", 16) ||
+        (spellSchoolMask(String(e.spellId)) ?? 0);
+    return school > 0 && (school & ~mask) === 0;
+  };
   for (const e of unit.damageIn ?? [])
     if (
       e.logLine.event !== LogEvent.SPELL_PERIODIC_DAMAGE &&
-      other(e.srcUnitId)
+      other(e.srcUnitId) &&
+      inMask(e)
     )
       times.push(e.logLine.timestamp);
   for (const e of unit.missesIn ?? [])
     if (
       e.logLine.event !== LogEvent.SPELL_PERIODIC_MISSED &&
-      other(e.srcUnitId)
+      other(e.srcUnitId) &&
+      (mask === undefined || (e.missType === "ABSORB" && inMask(e)))
     )
       times.push(e.logLine.timestamp);
   for (const e of unit.auraEvents ?? [])
     if (
+      mask === undefined &&
       e.auraType === "DEBUFF" &&
       e.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
       other(e.srcUnitId)
@@ -1643,9 +1819,100 @@ export const TIME_SPIRAL_FREE_PRESSES: Readonly<
     spellIds: ["79206", "58875", "192063"],
     note: "Shaman — Spiritwalker's Grace / Spirit Walk / Gust of Wind",
   },
+  // aura 383, class mask on Demonic Circle: Teleport (GH #183: the one class
+  // without a row; a press with the aura REMOVED on its millisecond)
+  "375257": { spellIds: ["48020"], note: "Warlock — Demonic Circle: Teleport" },
   // charge category 1211
   "375258": { spellIds: ["6544"], note: "Warrior — Heroic Leap" },
 };
+/**
+ * A talent that shortens a press's OWN cooldown by the stacks of a buff the
+ * holder had up just before it (GH #183) — keyed by the spell. Cycle of
+ * Hatred 258887 (Havoc): "Activating Eye Beam reduces the cooldown of your
+ * next Eye Beam by 2.5 sec, stacking up to 10 sec." Dummy only; its stack
+ * buff 1214887 lasts the round, up to 4 stacks. Every Havoc unit holds it,
+ * so the split is by stack count: the shortest Eye Beam gaps at 0 … 4
+ * stacks are 30.01 / 27.49 / 24.99 / 22.51 / 19.99 s (n 7 / 67 / 69 / 60 /
+ * 149, 605-file subsets). A second APPLIED with no REMOVED between restates
+ * the buff and keeps its count.
+ */
+export const PER_PRESS_STACK_COOLDOWNS: Readonly<
+  Record<
+    string,
+    {
+      talentSpellId: string;
+      auraId: string;
+      secondsPerStack: number;
+      maxStacks: number;
+      note: string;
+    }
+  >
+> = {
+  "198013": {
+    talentSpellId: "258887",
+    auraId: "1214887",
+    secondsPerStack: 2.5,
+    maxStacks: 4,
+    note: "Cycle of Hatred — Eye Beam −2.5 s per stack up before the press (≤ 4)",
+  },
+};
+
+/** Stacks of `unit`'s own `auraId` strictly before `atMs`, a restated
+ * APPLIED (no REMOVED since the last one) keeping the count. */
+export function ownStacksBefore(
+  unit: Pick<ICombatUnit, "id"> & Partial<Pick<ICombatUnit, "auraEvents">>,
+  auraId: string,
+  atMs: number,
+): number {
+  let stacks = 0;
+  let up = false;
+  for (const e of unit.auraEvents ?? []) {
+    if (
+      String(e.spellId) !== auraId ||
+      e.destUnitId !== unit.id ||
+      e.logLine.timestamp >= atMs
+    )
+      continue;
+    const ev = e.logLine.event;
+    if (ev === LogEvent.SPELL_AURA_REMOVED) {
+      stacks = 0;
+      up = false;
+    } else if (
+      ev === LogEvent.SPELL_AURA_APPLIED_DOSE ||
+      ev === LogEvent.SPELL_AURA_REMOVED_DOSE
+    ) {
+      stacks = e.amount ?? stacks;
+      up = true;
+    } else if (ev === LogEvent.SPELL_AURA_APPLIED) {
+      if (!up) stacks = e.amount ?? 1;
+      up = true;
+    }
+  }
+  return stacks;
+}
+
+/**
+ * Rate carriers whose speed-up is per STACK, not per aura (GH #183): the
+ * generated rate row (`conditionalCooldownsGenerated.json`) prices one stack
+ * for as long as the buff is up; the recovery runs at 1 + `pctPerStack` % ×
+ * the stacks up at the time. The APPLIED row carries no count: it opens at
+ * `appliedStacks`, each APPLIED_DOSE / REMOVED_DOSE row then states it.
+ * Temporal Burst 431698 (Chronowarden): DB2 bp 1 × PvpMultiplier 0.5 per
+ * stack, 30 stacks, one dropping about every second (the log's REMOVED_DOSE
+ * 29, 28, … from the APPLIED). Replay on 605-file subsets with the rest of
+ * the evoker model on: Preservation Fire Breath dev 1 → 0, Dream Breath 3
+ * → 2; hold-out 3 → 0, 1 → 0.
+ */
+export const STACKED_RATE_CARRIERS: Readonly<
+  Record<string, { pctPerStack: number; appliedStacks: number; note: string }>
+> = {
+  "431698": {
+    pctPerStack: 0.5,
+    appliedStacks: 30,
+    note: "Temporal Burst — cooldowns recover 0.5 % faster per stack (PvP)",
+  },
+};
+
 /** a Time Spiral aura's REMOVED this long after a cast row is that press */
 export const TIME_SPIRAL_PAIR_MS = 50;
 

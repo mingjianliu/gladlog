@@ -4962,3 +4962,40 @@ press — a `[YOU] [CAST] Power Word: Radiance` line in the Evangelism second.
 same rows. 30 October 3v3 logs with Evangelism (90 owner contexts): such lines
 60 → 0, `[YOU]` Radiance presses 169 → 96, `[CD] Evangelism` 80 → 80; no other
 context line changed; findings-prompt hash unchanged.
+
+v479 (2026-11-04, GH #183). `[PRESS]` lines for the 33 buttons under 45 s the
+user picked (`PRESS_LINE_WHITELIST_IDS`, Pierce the Veil 1245483 and Eternity
+Surge 382411 included), and the model their numbers need — a first 605 pass
+with the whitelist alone put `offListPressLine` at 4,765, so the ids waited
+for it (user: "B"). Empowered presses: SPELL_CAST_SUCCESS is the empower
+START, a hold ending in SPELL_EMPOWER_INTERRUPT or released at level 0 spends
+nothing and prints no line (`unreleasedHoldMs`, read by the renderer and the
+gate), Tip the Scales releases at max level. Cooldowns: Causality (Disintegrate
+ticks on the cast's target, by log order; Pyre hits), Instability Matrix −6 s
+on the breaths, Temporal Burst 0.5 % per stack as it decays
+(`STACKED_RATE_CARRIERS`), Cycle of Hatred per press (`PER_PRESS_STACK_COOLDOWNS`),
+Chaotic Transformation and Time Walk resets, Barrier Diffusion on every mage
+barrier, Impish Instincts on direct Physical hits taken, Demonic Circle:
+Teleport freed by Time Spiral. Durations: Burn to Ash +2 s per own crit tick
+(the parser now reads the crit flag of an ABSORB miss, and hits' and
+misses' flags reach the legacy rows).
+
+offListPressScan, same check code, dev subsets (scan0 → final): `back` after
+the next press — evoker 439 → 22, havoc 375 → 3, mage 215 → 10, misc 315 → 24;
+`lasts` beyond the logged life — 388 → 13, 111 → 3, 44 → 0, 200 → 13.
+Hold-out subsets (never looked at while modelling): `back` 327 → 16, 443 →
+5, 299 → 7, 233 → 3; `lasts` 361 → 11, 97 → 1, 75 → 2, 70 → 4.
+
+605 files, clean base 647aa6649 (v478) → after: `offListPressLine` 90 /
+60,500 → 161 / 96,339 — the 90 unchanged, 71 rows (24 facts) on the new ids,
+signed `real` in the rise ledger and left in GH #179: Explosive Shot `lasts`
+5 (3 under the target's Time Stop, which freezes its debuffs; 2 log stalls),
+reductions not read yet on Eternity Surge 5, Demonic Circle: Teleport 5,
+Shimmer 3, Wake of Ashes 2, Dream Breath / Prismatic Barrier / Essence Break /
+Flying Serpent Kick 1. `listGapPress` 78,554 → 42,770 / 445,496 (the whitelist
+states those presses now). 239 checks: 231 unchanged, 1 fell, 1 rose (signed); gates
+identical; body lines 1,709,946 → 1,752,827 (`[PRESS]` lines and the legend
+naming the examples). Findings: one candidate's facts — a cd-hoarded at 1:37
+now lists Tip the Scales ready, the decaying Temporal Burst giving it 2.2 s
+more recovery than the flat ×1.005 did (ready 95.4 s; pressed again 106.9 s).
+`docs/talent-coverage-gaps.md` is stale until the next full talent scan.

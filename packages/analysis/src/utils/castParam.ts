@@ -47,7 +47,24 @@ export function castParamAt(
       if (dt >= 0 && dt <= CAST_PARAM_WINDOW_MS && (!best || dt < best.dt))
         best = { dt, level: e.level };
     }
-    return best && best.level >= 1 ? best.level : null;
+    if (best) return best.level >= 1 ? best.level : null;
+    // Tip the Scales: no empower at all — the cast row and its effect, no
+    // SPELL_EMPOWER_END in between, at the spell's maximum level
+    for (const c of caster.spellCastEvents ?? []) {
+      if (c.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+      const level = cfg.maxLevelByCastId?.[String(c.spellId)];
+      if (level === undefined) continue;
+      const dt = atMs - c.logLine.timestamp;
+      if (dt < 0 || dt > CAST_PARAM_WINDOW_MS) continue;
+      const released = (caster.empowerEnds ?? []).some(
+        (e) =>
+          String(e.spellId) === String(c.spellId) &&
+          e.logLine.timestamp >= c.logLine.timestamp &&
+          e.logLine.timestamp <= atMs,
+      );
+      if (!released) return level;
+    }
+    return null;
   }
   let castTs: number | null = null;
   for (const c of caster.spellCastEvents ?? []) {

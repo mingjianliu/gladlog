@@ -131,6 +131,9 @@ export interface GladEmpowerEvent extends GladEventBase {
 export interface GladMissEvent extends GladEventBase {
   missType: string;
   amount: number;
+  /** An ABSORB miss that was a critical strike; absent otherwise (and on
+   * documents stored before 2026-11-03). */
+  crit?: true;
 }
 
 export interface GladUnit {

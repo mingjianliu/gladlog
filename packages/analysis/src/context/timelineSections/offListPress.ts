@@ -1,6 +1,7 @@
 /**
  * GH #176 (user ruling 2026-11-02): `[PRESS]` — a press of a button with an
- * official cooldown of 45 s or more that no hand list names, printed when no
+ * official cooldown of 45 s or more, or one the user picked under it (GH #183,
+ * `PRESS_LINE_WHITELIST_IDS`), that no hand list names, printed when no
  * other line of the timeline already states it (`lineStatesPress`, the
  * predicate `listGapPress` counts a missing line by). The numbers come from
  * the shared cooldown model (`extractOffListPresses`).
@@ -20,8 +21,10 @@ import type { TimelineCtx } from "./ctx";
 export const OFF_LIST_PRESS_TAG = "[PRESS]";
 
 export const OFF_LIST_PRESS_LEGEND = [
-  "  [PRESS] = a player pressed a button with a cooldown of 45 s or more that no other line names (a movement,",
-  "    utility or throughput button: Divine Steed, Shadowmeld, Gladiator's Badge, Holy Word: Serenity …). `Ns cd` =",
+  "  [PRESS] = a player pressed a button that no other line names — one with a cooldown of 45 s or more, or one of",
+  "    a few shorter ones picked for what they do (Fade, Grounding Totem, Shimmer, Thunder Focus Tea, Eye Beam …): a",
+  "    movement, utility, defensive, throughput or offensive button (Divine Steed, Shadowmeld, Gladiator's Badge,",
+  "    Holy Word: Serenity …). `Ns cd` =",
   "    that player's cooldown with their talents; `back m:ss` = when it was ready again, every reduction and reset",
   "    included; `a charge left` = they still held one; `reset, ready again` = a talent reset it at that press;",
   "    `2 equipped … another in hand` = two of the item worn, a cooldown each, the other one ready;",

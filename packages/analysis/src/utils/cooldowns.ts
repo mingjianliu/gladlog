@@ -60,6 +60,9 @@ import {
   freeRecastWindowFor,
   idleCreditCapFor,
   onInterruptReductionFor,
+  ownStacksBefore,
+  PER_PRESS_STACK_COOLDOWNS,
+  STACKED_RATE_CARRIERS,
   timeSpiralEchoMs,
   timeSpiralFreePressMs,
 } from "../data/talentScriptedCooldowns";
@@ -81,6 +84,7 @@ import {
 } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { empowerSpans } from "./castCommitSpans";
 import { CONTROL_EFFECT_MIN_HIT_SHARE, isControlCast } from "./castMissRows";
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
@@ -1613,6 +1617,15 @@ export interface ICooldownCast {
   /** This press WAS the free recast: it neither spends nor restarts the
    * cooldown (its override is anchored on the press that opened the window). */
   freeRecast?: boolean;
+  /** This press's own cooldown before event reductions, when it is not the
+   * entry's (`PER_PRESS_STACK_COOLDOWNS`: Cycle of Hatred's stacks) —
+   * `applyEventReductions` starts from it. */
+  baseCooldownSeconds?: number;
+  /** An empowered hold that ended in SPELL_EMPOWER_INTERRUPT (never
+   * released): nothing fired and no cooldown started — carried as a
+   * `freeRecast` that stands on the last press that spent one, not a free
+   * press (GH #183). */
+  unreleased?: true;
   /** Event reductions that pulled this press's ready instant in (Storm
    * Conduit's Lightning Bolts): `cooldownSecondsOverride` is the final
    * R − press, right for "available at t" (R ≤ t); "seconds until ready" at t
@@ -3183,7 +3196,13 @@ function cdSecondsUntilReadyConsumed(
     // (an idle credit was known at the press — never past the given bound)
     const ready = readyAfterReductions(
       (last.freeRecastOf ?? last.timeSeconds) +
-        Math.min(cooldown, cd.cooldownSeconds - (last.idleCreditSeconds ?? 0)),
+        Math.min(
+          cooldown,
+          // the press's own base when it has one (Cycle of Hatred, GH #183
+          // codex review: a reset Eye Beam read 20 s left for 10)
+          (last.baseCooldownSeconds ?? cd.cooldownSeconds) -
+            (last.idleCreditSeconds ?? 0),
+        ),
       last.reductions,
       tSeconds,
     );
@@ -3201,7 +3220,8 @@ function cdSecondsUntilReadyConsumed(
         Math.min(
           cooldown,
           last.cooldownSecondsOverride ??
-            cd.cooldownSeconds - last.idleCreditSeconds,
+            (last.baseCooldownSeconds ?? cd.cooldownSeconds) -
+              last.idleCreditSeconds,
         ) -
         tSeconds,
     );
@@ -3238,6 +3258,7 @@ export function applyEventReductions(
       | "cooldownSecondsOverride"
       | "reductions"
       | "idleCreditSeconds"
+      | "baseCooldownSeconds"
     >
   >,
   cooldownSeconds: number,
@@ -3267,7 +3288,7 @@ export function applyEventReductions(
     const credit = Math.min(idleCapSeconds, Math.max(0, at - prevReady));
     const eff = eventReducedCooldownSeconds(
       at,
-      cooldownSeconds - credit,
+      (c.baseCooldownSeconds ?? cooldownSeconds) - credit,
       warped,
     );
     prevReady = at + eff;
@@ -4574,6 +4595,50 @@ export function unitCooldownOf(
   };
 }
 
+/** A per-stack rate carrier's intervals cut at each of the unit's own dose
+ * rows of it (`STACKED_RATE_CARRIERS`): one window per stack count, at
+ * 1 + pct × stacks. */
+function stackedRateWindows(
+  unit: ICombatUnit,
+  carrier: string,
+  ivs: readonly IAuraInterval[],
+  perStack: { pctPerStack: number; appliedStacks: number },
+  matchStartMs: number,
+): IRateWindow[] {
+  const doses = (unit.auraEvents ?? [])
+    .filter(
+      (e) =>
+        e.spellId === carrier &&
+        e.destUnitId === unit.id &&
+        (e.logLine.event === LogEvent.SPELL_AURA_APPLIED_DOSE ||
+          e.logLine.event === LogEvent.SPELL_AURA_REMOVED_DOSE) &&
+        e.amount !== undefined,
+    )
+    .map((e) => ({
+      s: (e.logLine.timestamp - matchStartMs) / 1000,
+      stacks: e.amount!,
+    }))
+    .sort((a, b) => a.s - b.s);
+  const out: IRateWindow[] = [];
+  const mult = (stacks: number) => 1 + (perStack.pctPerStack / 100) * stacks;
+  for (const iv of ivs) {
+    let from = iv.fromS;
+    let stacks = perStack.appliedStacks;
+    for (const d of doses) {
+      // a dose on the interval's own instant opens it (an APPLIED_DOSE
+      // with no APPLIED row: `buildAuraIntervals`) — its count, no window
+      if (d.s < iv.fromS || d.s >= iv.toS) continue;
+      if (d.s > from && stacks > 0)
+        out.push({ fromSeconds: from, toSeconds: d.s, mult: mult(stacks) });
+      from = d.s;
+      stacks = d.stacks;
+    }
+    if (iv.toS > from && stacks > 0)
+      out.push({ fromSeconds: from, toSeconds: iv.toS, mult: mult(stacks) });
+  }
+  return out;
+}
+
 /** Batch C table lookup (generated; see genConditionalCooldowns.ts). */
 type ConditionalMod =
   | { carrier: string; kind: "rate"; mult: number }
@@ -5238,6 +5303,50 @@ export function unitCooldownEntry(
   memo.byId.set(spellId, entry);
   return entry;
 }
+/** The unit's holds ending in SPELL_EMPOWER_INTERRUPT, or released at
+ * level 0 (`empowerSpans`). Released at level 0 is the same nothing (1
+ * corpus case, re-pressed 3.3 s later). */
+function cutHolds(unit: ICombatUnit) {
+  return (empowerSpans(unit) ?? []).filter(
+    (h) => h.interrupted || h.level === 0,
+  );
+}
+
+/** Of `ms` (cast-row timestamps of `spellId` by `unit`), the ones that are
+ * cut holds (`cutHolds`): a span of that spell starting on the row's
+ * millisecond (≤ 1 ms). None on a parse that carries no empower starts.
+ * Such a row prints no `[PRESS]` line — the renderer's exclusion, which the
+ * scan5 `offListPressLine` gate imports to pair a line with its press. */
+export function unreleasedHoldMs(
+  unit: ICombatUnit,
+  spellId: string,
+  ms: readonly number[],
+): number[] {
+  const cut = cutHolds(unit).filter((h) => String(h.spellId) === spellId);
+  if (!cut.length) return [];
+  return ms.filter((t) => cut.some((h) => Math.abs(t - h.startMs) <= 1));
+}
+
+/** The instants (s from the match start) of the cast rows in `rows` that
+ * are unreleased holds — `unreleasedHoldMs`'s reading, the spans built once. */
+function unreleasedHoldSeconds(
+  unit: ICombatUnit,
+  rows: ICombatUnit["spellCastEvents"],
+  matchStartMs: number,
+): number[] {
+  const cut = cutHolds(unit);
+  if (!cut.length) return [];
+  return rows
+    .filter((e) =>
+      cut.some(
+        (h) =>
+          String(h.spellId) === String(e.spellId) &&
+          Math.abs(e.logLine.timestamp - h.startMs) <= 1,
+      ),
+    )
+    .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
+}
+
 /**
  * When the press of `entry` at `pressSeconds` was back in hand — its
  * realised ready instant under the shared model (charges, per-press talent
@@ -5617,11 +5726,31 @@ function buildCooldownEntry(
       ),
     ),
   );
+  // An empowered press logs its SPELL_CAST_SUCCESS at the empower START; a
+  // hold that ended in SPELL_EMPOWER_INTERRUPT went out never and started no
+  // cooldown (GH #183, 605-file subsets, one-charge evokers: 0 of 872
+  // released holds re-pressed within 12 s, 58 of 63 cut at level 0 and 7 of
+  // 12 cut at level 1–3 were) — the same no-spend, no-restart path as a
+  // Time Spiral free press
+  const cutS = unreleasedHoldSeconds(unit, castEvents, matchStartMs);
+  for (const c of castRawCasts)
+    if (cutS.some((s) => Math.abs(s - c.timeSeconds) < 1e-6)) {
+      c.unreleased = true;
+      spiralFree.add(c);
+    }
   const pressed = new Set<ICooldownCast>(castRawCasts);
   const casts: ICooldownCast[] = [];
   for (const c of rawCasts) {
     const last = casts[casts.length - 1];
     if (!last || c.timeSeconds - last.timeSeconds > 2) {
+      casts.push(c);
+      continue;
+    }
+    // a released retry after a hold never released is its own press at any
+    // gap (GH #183 codex review round 5: cut 35.000, retried 35.020) — the
+    // minimum gap below folds duplicate rows of one press, and the cut row
+    // and the retry each carry an empower start of their own
+    if (last.unreleased === true && pressed.has(c) && !c.unreleased) {
       casts.push(c);
       continue;
     }
@@ -5648,6 +5777,9 @@ function buildCooldownEntry(
       ((baselineCharges > 1 && pressesInWindow < baselineCharges) ||
         (freeWindow !== undefined && pressesInWindow < 2) ||
         resetBetween(last.timeSeconds, c.timeSeconds) ||
+        // a retry after a hold never released (GH #183 codex review: Fire
+        // Breath cut at 10.3 s, pressed again at 11.5 s and released)
+        last.unreleased === true ||
         // a Time Spiral free press after an ordinary one is its own press
         // (the row echoing one is out already, `timeSpiralEchoMs`)
         spiralFree.has(c))
@@ -5724,6 +5856,28 @@ function buildCooldownEntry(
     }
   }
 
+  // A press's own cooldown set by the stacks up before it (Cycle of Hatred,
+  // `PER_PRESS_STACK_COOLDOWNS`): the base the event reductions start from;
+  // with none to apply, the press's override
+  const stackCd = PER_PRESS_STACK_COOLDOWNS[spell.spellId];
+  if (stackCd && holds(stackCd.talentSpellId) && baselineCharges <= 1)
+    for (const c of casts) {
+      if (c.cooldownSecondsOverride !== undefined) continue;
+      const stacks = Math.min(
+        stackCd.maxStacks,
+        ownStacksBefore(
+          unit,
+          stackCd.auraId,
+          matchStartMs + c.timeSeconds * 1000,
+        ),
+      );
+      if (stacks <= 0) continue;
+      c.baseCooldownSeconds = Math.max(
+        0,
+        cooldownSeconds - stackCd.secondsPerStack * stacks,
+      );
+    }
+
   // Event reductions (Storm Conduit, Lethal Calibration): each press's real
   // ready instant, from the holder's triggers and what each one gave back
   // (`eventTriggersFor` — the seconds can depend on the holder's spec and
@@ -5743,13 +5897,16 @@ function buildCooldownEntry(
     if (m.kind !== "rate") continue;
     const ivs = carriers?.get(m.carrier) ?? [];
     if (!ivs.length) continue;
+    const perStack = STACKED_RATE_CARRIERS[m.carrier];
     rateWindows = [
       ...(rateWindows ?? []),
-      ...ivs.map((iv) => ({
-        fromSeconds: iv.fromS,
-        toSeconds: iv.toS,
-        mult: m.mult,
-      })),
+      ...(perStack
+        ? stackedRateWindows(unit, m.carrier, ivs, perStack, matchStartMs)
+        : ivs.map((iv) => ({
+            fromSeconds: iv.fromS,
+            toSeconds: iv.toS,
+            mult: m.mult,
+          }))),
     ];
   }
   let chargeEffects: IChargeEffects | undefined;
@@ -5779,6 +5936,13 @@ function buildCooldownEntry(
       ...(idleCap > 0 ? { idleCapSeconds: idleCap } : {}),
     };
   }
+  // no event reduction ran: a stack-set press is its own base
+  for (const c of casts)
+    if (
+      c.baseCooldownSeconds !== undefined &&
+      c.cooldownSecondsOverride === undefined
+    )
+      c.cooldownSecondsOverride = c.baseCooldownSeconds;
   // Time Spiral's free press stands on the cooldown of the last press that
   // started one (on none: ready again at once); a charge spell's simulation
   // leaves it out (`chargeSpendTimesOf`).

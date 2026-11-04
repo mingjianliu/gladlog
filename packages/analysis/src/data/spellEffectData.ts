@@ -473,6 +473,10 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
      * application count, and the trigger's own DB2 value).
      */
     replaceSeconds?: number;
+    /** The row applies only to a caster who holds this talent as well (a
+     * definite "no" skips it): Fire Breath's +4 s shows only on holders of
+     * both Deep Exhalation and Blast Furnace (GH #183). */
+    alsoRequiresTalentId?: string;
     /** Seconds added per rank (DB2 aura 107, EffectBasePointsF in ms). */
     addSeconds?: number;
     /** Percent added per rank (DB2 aura 108). Applied AFTER `addSeconds`. */
@@ -614,6 +618,17 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 2,
       addSeconds: 6,
       note: "Deep Exhalation — DB2 aura 107 +6000 ms, Evoker HERO tree Flameshaper (Devastation + Preservation, maxRanks 1), mask covers Dream Breath; on the empower base: L1 22.0 s ×257 = 16 + 6 (castParamDurationScan); holders 23/44 at 22 on the pooled inventory scan, the rest at other levels.",
+    },
+  ],
+  // GH #183: Fire Breath's DoT, on the empower base (castParamDurations)
+  "357209": [
+    {
+      talentSpellId: "1264321",
+      alsoRequiresTalentId: "375510",
+      specs: ["1467", "1468"],
+      untalentedBaseSeconds: 2,
+      addSeconds: 4,
+      note: "Deep Exhalation + Blast Furnace — both tooltips read 「Fire Breath's damage over time lasts $s1 sec longer」 with effect 0 a dummy (aura 4) of 4, no class mask: a scripted +4 s. Corpus (89 files of the 605 set with an Evoker [PRESS] fault, lives that ran out, on the empower base 30 − 6 × level): holders of BOTH 34 lives at base + 4 (6 Devastation, 28 Preservation) and 10 at base; holders of only one 592 at base and 0 at + 4 (Blast Furnace alone 387, Deep Exhalation alone 205). The pair is what the log shows; why one alone adds nothing is not known. Closes the 28 s L1 tier castParamDurations left open.",
     },
   ],
   "376788": [

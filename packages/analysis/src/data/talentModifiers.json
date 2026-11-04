@@ -4493,6 +4493,11 @@
       "effect": "extra_charge",
       "value": 1,
       "sourceRowId": "1275513"
+    },
+    {
+      "talentSpellId": "431484",
+      "effect": "reduce_cd",
+      "value": 6
     }
   ],
   "355941": [
@@ -4597,6 +4602,11 @@
       "effect": "reduce_cd_pct",
       "value": 10,
       "sourceRowId": "1294448"
+    },
+    {
+      "talentSpellId": "431484",
+      "effect": "reduce_cd",
+      "value": 6
     }
   ],
   "357209": [
@@ -5693,6 +5703,11 @@
       "effect": "reduce_cd_pct",
       "value": 10,
       "sourceRowId": "1294448"
+    },
+    {
+      "talentSpellId": "431484",
+      "effect": "reduce_cd",
+      "value": 6
     }
   ],
   "382411": [
@@ -5747,6 +5762,11 @@
       "effect": "extra_charge",
       "value": 1,
       "sourceRowId": "1275513"
+    },
+    {
+      "talentSpellId": "431484",
+      "effect": "reduce_cd",
+      "value": 6
     }
   ],
   "383005": [

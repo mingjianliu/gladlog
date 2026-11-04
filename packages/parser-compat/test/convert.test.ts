@@ -807,3 +807,40 @@ describe("the cost a cast row states (2026-10-11)", () => {
       expect("powerCosts" in e).toBe(false);
   });
 });
+
+describe("critical strikes reach the legacy rows (GH #183)", () => {
+  const CRIT_DMG =
+    'SPELL_PERIODIC_DAMAGE,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,403695,"Truth\'s Wake",0x4,Player-2-VIC,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,100,120,-1,4,0,0,0,1,nil,nil';
+  const CRIT_MISS =
+    'SPELL_PERIODIC_MISSED,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,403695,"Truth\'s Wake",0x4,ABSORB,nil,7919,4645,1,ST';
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-ATK", 0, 70, 2000),
+    CI("Player-2-VIC", 1, 257, 2380),
+    DMG("Player-1-ATK", "Atk-X", "Player-2-VIC", "Vic-Y"),
+    CRIT_DMG,
+    CRIT_MISS,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+  const atk = legacy.units["Player-1-ATK"]!;
+
+  it("a crit damage row carries crit; a plain one does not", () => {
+    const rows = atk.damageOut.filter((e) => e.amount < 0);
+    expect(rows.map((e) => [e.spellId, e.crit ?? false])).toEqual([
+      ["50622", false],
+      ["403695", true],
+    ]);
+  });
+
+  it("a fully absorbed crit carries it on the miss row, both sides", () => {
+    expect(
+      (atk.missesOut ?? []).map((m) => [m.missType, m.crit ?? false]),
+    ).toEqual([["ABSORB", true]]);
+    expect(
+      (legacy.units["Player-2-VIC"]!.missesIn ?? []).map(
+        (m) => m.crit ?? false,
+      ),
+    ).toEqual([true]);
+  });
+});

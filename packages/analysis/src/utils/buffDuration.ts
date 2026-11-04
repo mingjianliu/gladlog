@@ -7,6 +7,7 @@ import {
   spellEffectData,
 } from "../data/spellEffectData";
 import {
+  type ITooltipPerEventDuration,
   TOOLTIP_DURATION_ROWS,
   TOOLTIP_PER_EVENT_DURATIONS,
 } from "../data/talentDurationTooltips";
@@ -111,9 +112,21 @@ export function buffFullDurationForCaster(
    * the proc a talent produces, not the press (GH #176: Restoration's
    * pressed Ascendance runs its DB2 15 s, the Deeply Rooted Elements proc
    * 6 s) */
-  opts?: { pressed?: boolean },
+  opts?: {
+    pressed?: boolean;
+    /** the unit this application is on, for a per-crit talent
+     * (`ITooltipPerCritDuration`: Burn to Ash grows each Truth's Wake copy
+     * by its own crit ticks); without it that talent adds nothing */
+    onUnitId?: string;
+  },
 ): number | undefined {
-  const talented = talentedDuration(spellId, caster, atMs, opts?.pressed);
+  const talented = talentedDuration(
+    spellId,
+    caster,
+    atMs,
+    opts?.pressed,
+    opts?.onUnitId,
+  );
   // fact8 D15: a class set bonus, on top of everything the talents give
   return talented === undefined
     ? undefined
@@ -127,6 +140,7 @@ function talentedDuration(
     | undefined,
   atMs?: number,
   pressed = false,
+  onUnitId?: string,
 ): number | undefined {
   if (NO_FIXED_DURATION_IDS.has(spellId)) return undefined;
   const noCasterValue =
@@ -149,7 +163,8 @@ function talentedDuration(
     const plain = paramBase ?? noCasterValue;
     return plain === undefined || !caster
       ? plain
-      : plain + perEventExtensionSeconds(spellId, caster, plain, atMs);
+      : plain +
+          perEventExtensionSeconds(spellId, caster, plain, atMs, onUnitId);
   }
 
   // With a caster we can price the talents exactly, so we start from the
@@ -190,6 +205,10 @@ function talentedDuration(
     // talent as baseline "yes", whose rank-0 path below then returns early and
     // skips this caster's own later modifiers
     if (talentModifierOwnershipOf(caster, m.talentSpellId) === "no") continue;
+    const also =
+      "alsoRequiresTalentId" in m ? m.alsoRequiresTalentId : undefined;
+    if (also !== undefined && talentModifierOwnershipOf(caster, also) === "no")
+      continue;
     // a hard cast is not the proc the row prices
     if (pressed && m.replaceSeconds !== undefined) continue;
     const rank = talentRankOf(caster, m.talentSpellId);
@@ -205,7 +224,9 @@ function talentedDuration(
     if (m.pct !== undefined) mult *= 1 + (m.pct / 100) * rank;
   }
   const fixed = seconds * mult;
-  return fixed + perEventExtensionSeconds(spellId, caster, fixed, atMs);
+  return (
+    fixed + perEventExtensionSeconds(spellId, caster, fixed, atMs, onUnitId)
+  );
 }
 
 /** Does `caster` hold the per-event talent on this aura (spec and talent)? */
@@ -230,13 +251,19 @@ function perEventFor(
  */
 function perEventExtensionSeconds(
   spellId: string,
-  caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
+  caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "damageOut" | "missesOut">>,
   baseSeconds: number,
   atMs: number | undefined,
+  onUnitId: string | undefined,
 ): number {
   if (atMs === undefined) return 0;
   const p = perEventFor(spellId, caster);
   if (!p) return 0;
+  if (p.event === "own-crit")
+    return onUnitId === undefined
+      ? 0
+      : perCritExtensionSeconds(p, spellId, caster, baseSeconds, atMs, onUnitId);
   let ext = 0;
   for (const c of caster.spellCastEvents ?? []) {
     const t = c.logLine.timestamp;
@@ -246,6 +273,41 @@ function perEventExtensionSeconds(
     if (!p.qualifyingSpellIds.has(c.spellId ?? "")) continue;
     ext = Math.min(p.capSeconds, ext + p.addSecondsPerEvent);
     if (ext >= p.capSeconds) break;
+  }
+  return ext;
+}
+
+/**
+ * GH #183: a per-crit talent's seconds on one application — each critical
+ * tick of the aura's own damage by `caster` on `onUnitId` inside the
+ * (growing) duration adds `addSecondsPerEvent`; a fully absorbed crit (an
+ * ABSORB miss with its crit flag) counts the same. A tick at the end
+ * millisecond still lands.
+ */
+function perCritExtensionSeconds(
+  p: ITooltipPerEventDuration,
+  spellId: string,
+  caster: Partial<Pick<ICombatUnit, "damageOut" | "missesOut">>,
+  baseSeconds: number,
+  atMs: number,
+  onUnitId: string,
+): number {
+  const crits = [
+    ...(caster.damageOut ?? []).filter((d) => d.crit),
+    ...(caster.missesOut ?? []).filter((m) => m.crit),
+  ]
+    .filter(
+      (e) =>
+        e.spellId === spellId &&
+        e.destUnitId === onUnitId &&
+        e.logLine.timestamp > atMs,
+    )
+    .map((e) => e.logLine.timestamp)
+    .sort((a, b) => a - b);
+  let ext = 0;
+  for (const t of crits) {
+    if (t > atMs + (baseSeconds + ext) * 1000) break;
+    ext += p.addSecondsPerEvent;
   }
   return ext;
 }
@@ -265,5 +327,6 @@ export function buffDurationRangeForCaster(
   const min = buffFullDurationForCaster(spellId, caster);
   if (min === undefined) return undefined;
   const p = caster ? perEventFor(spellId, caster) : undefined;
-  return { min, max: p ? min + p.capSeconds : min };
+  // a per-crit talent has no cap and no application here: the base
+  return { min, max: p?.event === "press" ? min + p.capSeconds : min };
 }

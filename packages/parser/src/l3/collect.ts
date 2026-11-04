@@ -210,6 +210,7 @@ export function collectEvents(
         spellName,
         missType: record.missed.missType,
         amount: record.missed.amount,
+        ...(record.missed.critical ? { crit: true as const } : {}),
       };
       if (srcGuid && srcGuid !== "0000000000000000") {
         gladUnits.get(srcGuid)?.missesOut.push(missEvent);

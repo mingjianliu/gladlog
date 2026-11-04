@@ -71,6 +71,7 @@ describe("TOOLTIP_DURATION_ROWS — every number is the tooltip's", () => {
 describe("TOOLTIP_PER_EVENT_DURATIONS — Spiritwalker's Momentum", () => {
   it("is the tooltip's per-event row: +1 s per press, up to 4 s", () => {
     for (const [aura, p] of Object.entries(TOOLTIP_PER_EVENT_DURATIONS)) {
+      if (p.event !== "press") continue;
       const [e] = entriesOf(p.talentSpellId, aura).filter(
         (x) => x.kind === "per-event",
       );

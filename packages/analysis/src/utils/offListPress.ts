@@ -1,8 +1,8 @@
 /**
  * GH #176 (user ruling 2026-11-02): a major press no hand list names gets a
  * `[PRESS]` line of its own. "Major" = an official cooldown (DB2,
- * `effectiveCooldownSeconds`) of at least `PRESS_LINE_MIN_CD_SECONDS`; the
- * important buttons below it wait for a whitelist of their own.
+ * `effectiveCooldownSeconds`) of at least `PRESS_LINE_MIN_CD_SECONDS`, or a
+ * button under it the user picked (`PRESS_LINE_WHITELIST_IDS`, GH #183).
  *
  * The rosters a press has to pass to be printed by another family
  * (`classMetadata`, `OFFENSIVE_CD_SPELL_IDS`, `SPELL_EFFECT_OVERRIDES`) are
@@ -35,6 +35,7 @@ import {
   type IMajorCooldownInfo,
   pressReadyAgainAtSeconds,
   unitCooldownEntry,
+  unreleasedHoldMs,
 } from "./cooldowns";
 import {
   OFFENSIVE_CD_SPELL_IDS,
@@ -46,6 +47,55 @@ import { equippedBadgeCount, GLADIATOR_BADGE_SPELL_ID } from "./trinketType";
 /** user ruling 2026-11-02 (GH #176): 45 s, not 30 s; 14.1 lines per owner
  * view on the 605 set against 33.0 at 30 s */
 export const PRESS_LINE_MIN_CD_SECONDS = 45;
+
+/**
+ * GH #183 (user picks, 2026-11-03, from the 605 set's `offListUnder45`
+ * presses): buttons under `PRESS_LINE_MIN_CD_SECONDS` that still get a
+ * `[PRESS]` line. Keyed on the cast id: a picked spell's other cast ids
+ * (an override variant, a Font of Magic id) are listed on their own, as the
+ * user picked them. Everything else a `[PRESS]` line needs (no roster, no
+ * other family's tag) still applies.
+ */
+export const PRESS_LINE_WHITELIST_IDS: ReadonlySet<string> = new Set([
+  // defensive / survival
+  "586", // Fade
+  "204336", // Grounding Totem
+  "235313", // Blazing Barrier
+  "235450", // Prismatic Barrier
+  "1244088", // Interpose
+  "3411", // Intervene
+  // control / utility
+  "51490", // Thunderstorm
+  "57934", // Tricks of the Trade
+  "15487", // Silence
+  "353753", // Bonds of Fel
+  "210873", // Hex (variant)
+  "269352", // Hex (variant)
+  "277778", // Hex (variant)
+  // mobility
+  "48020", // Demonic Circle: Teleport
+  "212653", // Shimmer
+  "101545", // Flying Serpent Kick
+  // healer throughput
+  "116680", // Thunder Focus Tea
+  "443454", // Ancestral Swiftness
+  "355936", // Dream Breath
+  // short offensive cooldowns
+  "212431", // Explosive Shot
+  "198013", // Eye Beam
+  "357208", // Fire Breath
+  "382266", // Fire Breath (Font of Magic)
+  "255937", // Wake of Ashes
+  "258860", // Essence Break
+  "80240", // Havoc
+  "1233272", // Lunar Eclipse
+  "1233346", // Solar Eclipse
+  "1245412", // Voidblade
+  "1245483", // Pierce the Veil (Voidblade's override variant)
+  "359073", // Eternity Surge
+  "382411", // Eternity Surge (Font of Magic)
+  "436358", // Demolish
+]);
 
 /** a printed `[tag]` that states a press of the spell it names */
 export const PRESS_LINE_TAG =
@@ -84,7 +134,8 @@ export function isRosterPressId(id: string): boolean {
  * another family already owns. */
 export function isOffListPressId(id: string): boolean {
   return (
-    (effectiveCooldownSeconds(id) ?? 0) >= PRESS_LINE_MIN_CD_SECONDS &&
+    ((effectiveCooldownSeconds(id) ?? 0) >= PRESS_LINE_MIN_CD_SECONDS ||
+      PRESS_LINE_WHITELIST_IDS.has(id)) &&
     !isRosterPressId(id) &&
     !TRINKET_LINE_IDS.has(id) &&
     !FILLED_HEAL_IDS.has(id) &&
@@ -193,6 +244,27 @@ export const PRESS_AURA_LEAD_MS = 1000;
  * 200 within 1 s, 360 within 2 s, the latest 3.8 s). */
 export const PRESS_TARGET_AURA_LEAD_MS = 4000;
 
+/** An empowered press logs its SPELL_CAST_SUCCESS when the empower starts;
+ * its effect goes out at the release (SPELL_EMPOWER_END), up to
+ * `EMPOWER_RELEASE_MAX_MS` later. The release of `cast`, before the caster's
+ * next press of the spell; undefined for a press with none (not empowered,
+ * or Tip the Scales' instant release). */
+export const EMPOWER_RELEASE_MAX_MS = 6000;
+export function empowerReleaseMs(
+  caster: Pick<ICombatUnit, "empowerEnds">,
+  cast: { spellId?: string; logLine: { timestamp: number } },
+  untilMs = Infinity,
+): number | undefined {
+  const at = cast.logLine.timestamp;
+  return (caster.empowerEnds ?? []).find(
+    (e) =>
+      String(e.spellId) === cast.spellId &&
+      e.logLine.timestamp >= at &&
+      e.logLine.timestamp < untilMs &&
+      e.logLine.timestamp <= at + EMPOWER_RELEASE_MAX_MS,
+  )?.logLine.timestamp;
+}
+
 /** The aura rows a press may have put up — APPLIED / REFRESH by the caster
  * of its own or its effect aura's id — one per unit, the cast's target's
  * first: on the target within `PRESS_TARGET_AURA_LEAD_MS` (never at or past
@@ -211,8 +283,17 @@ export function pressAuraCandidates(
   allUnits: readonly ICombatUnit[],
   untilMs = Infinity,
 ): Array<{ unit: ICombatUnit; row: ICombatUnit["auraEvents"][number] }> {
-  const at = cast.logLine.timestamp;
+  const release = empowerReleaseMs(caster, cast, untilMs);
+  const at = release ?? cast.logLine.timestamp;
   const auraIds = new Set([cast.spellId!, ...effectAurasOfCast(cast.spellId!)]);
+  // an empowered press's own id on the caster is the empower channel (Fire
+  // Breath's 2.5 s), not its effect — on a released press and on one the
+  // player let go of with no release (cancelled: no effect at all)
+  if (
+    release !== undefined ||
+    (caster.empowerEnds ?? []).some((e) => String(e.spellId) === cast.spellId)
+  )
+    auraIds.delete(cast.spellId!);
   const ordered = [
     ...allUnits.filter((u) => u.id === cast.destUnitId),
     ...allUnits.filter((u) => u.id !== cast.destUnitId),
@@ -294,9 +375,17 @@ export function pressDuration(
       )
     )
       return undefined;
-    const d = buffFullDurationForCaster(row.spellId!, caster, at, {
-      pressed: true,
-    });
+    // priced at the aura's own row, not the press: an empowered breath logs
+    // its SPELL_CAST_SUCCESS when the empower STARTS, so the release
+    // (SPELL_EMPOWER_END) that sets its length comes after the press and
+    // `castParamAt` (which looks back from the aura) found no level — Fire
+    // Breath / Dream Breath printed DB2's 2 s placeholder (GH #183)
+    const d = buffFullDurationForCaster(
+      row.spellId!,
+      caster,
+      row.logLine.timestamp,
+      { pressed: true, onUnitId: unit.id },
+    );
     if (d !== undefined && d >= PRESS_LINE_MIN_DURATION_S)
       return { durationSeconds: d, unit, row };
   }
@@ -337,6 +426,10 @@ export function extractOffListPresses(
         ).includes(at)
       )
         continue;
+      // a hold never released fired nothing (GH #183): no press to state —
+      // read off the row itself (`unreleasedHoldMs`, the scan5 gate's own
+      // pairing), not off the ledger, whose dedup may have kept another row
+      if (unreleasedHoldMs(unit, c.spellId, [at]).length) continue;
       const entry = unitCooldownEntry(unit, combat, c.spellId);
       if (!entry) continue;
       const t = (at - combat.startTime) / 1000;
@@ -345,11 +438,18 @@ export function extractOffListPresses(
         unit,
         spellId: c.spellId,
         timeSeconds: t,
-        cooldownSeconds: entry.cooldownSeconds,
+        // the press's own when it has one (Cycle of Hatred's stacks, GH
+        // #183 codex review: `Eye Beam (30s cd, back 1:20)` at 4 stacks)
+        // (a cut hold in the same 50 ms is not this press: codex round 5)
+        cooldownSeconds:
+          entry.casts.find(
+            (k) => !k.unreleased && Math.abs(k.timeSeconds - t) < 0.05,
+          )?.baseCooldownSeconds ?? entry.cooldownSeconds,
         charges: entry.charges ?? 1,
         readyAgainAtSeconds: pressReadyAgainAtSeconds(upToPress(entry, t), t),
         ...(entry.casts.some(
-          (k) => k.freeRecast && Math.abs(k.timeSeconds - t) < 0.05,
+          (k) =>
+            k.freeRecast && !k.unreleased && Math.abs(k.timeSeconds - t) < 0.05,
         )
           ? { free: true as const }
           : {}),

@@ -90,3 +90,34 @@ describe("parseLine family assembly", () => {
     expect(parseLine("6/30/2026 19:10:31.0000  ,,,")).toBeNull();
   });
 });
+
+describe("*_MISSED critical flag (GH #183)", () => {
+  // corpus lines (names replaced): a periodic tick a shield ate whole, crit
+  // and not, and a swing absorb
+  const missed = (tail: string, event = "SPELL_PERIODIC_MISSED") =>
+    `8/13/2026 18:22:12.099-6  ${event},Player-1-0001,"A-Realm-US",0x548,0x80000000,Player-1-0002,"B-Realm-US",0x512,0x80000020,${tail}`;
+  it("an ABSORB miss carries its own crit flag; other miss types have none", () => {
+    const crit = parseLine(
+      missed('188389,"Flame Shock",0xc,ABSORB,nil,7919,4645,1,ST'),
+      { timezone: "UTC" },
+    )!;
+    expect(crit.missed).toMatchObject({
+      missType: "ABSORB",
+      amount: 7919,
+      critical: true,
+    });
+    const plain = parseLine(
+      missed('188389,"Flame Shock",0xc,ABSORB,nil,4061,4645,nil,ST'),
+      { timezone: "UTC" },
+    )!;
+    expect(plain.missed?.critical).toBe(false);
+    const immune = parseLine(
+      missed('157375,"Stormfury",0x8,IMMUNE,nil,ST', "SPELL_MISSED"),
+      { timezone: "UTC" },
+    )!;
+    expect(immune.missed).toMatchObject({
+      missType: "IMMUNE",
+      critical: false,
+    });
+  });
+});

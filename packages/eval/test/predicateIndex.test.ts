@@ -1318,6 +1318,11 @@ const INDEX: PredicateRow[] = [
     mod: combatStates,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "unreleasedHoldMs",
+    mod: cooldowns,
+  },
+  {
     file: `${A}/utils/offListPress.ts`,
     symbol: "pressDuration",
     mod: offListPress,

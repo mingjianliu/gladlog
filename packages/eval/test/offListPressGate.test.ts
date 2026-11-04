@@ -142,4 +142,43 @@ describe("offListPressLine — the next press", () => {
       ]),
     ).toEqual([]);
   });
+
+  // GH #183: a hold ending in SPELL_EMPOWER_INTERRUPT prints no line
+  // (`unreleasedHoldMs`) — the 605 case: Fire Breath cut at 0:35.4,
+  // re-pressed at 0:35.99, and the 0:35 line was paired with the cut hold
+  const emp = (ms: number, level?: number): any => ({
+    timestamp: at(ms),
+    spellId: "357208",
+    spellName: "Fire Breath",
+    logLine: { timestamp: at(ms) },
+    ...(level === undefined ? {} : { level }),
+  });
+  const evoker = (cutMs: number, releasedMs: number[]): any => ({
+    id: "p1",
+    name: "Evoker",
+    spellCastEvents: [...releasedMs, cutMs]
+      .sort((a, b) => a - b)
+      .map((ms) => cast("357208", ms)),
+    auraEvents: [],
+    empowerStarts: [...releasedMs, cutMs].map((ms) => emp(ms)),
+    empowerEnds: releasedMs.map((ms) => emp(ms + 700, 1)),
+    empowerInterrupts: [emp(cutMs + 70, 0)],
+  });
+
+  it("a hold never released owns no line (GH #183)", () => {
+    expect(
+      scan(evoker(35_400, [10_000, 35_990]), [
+        "0:10  [PRESS]   1(DEvoker) (Devastation Evoker): Fire Breath (30s cd, back 0:30)",
+        "0:35  [PRESS]   1(DEvoker) (Devastation Evoker): Fire Breath (30s cd, back 1:05)",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("a hold never released is still a next press: it could not start on cooldown (GH #183)", () => {
+    const seen = scan(evoker(20_000, [10_000]), [
+      "0:10  [PRESS]   1(DEvoker) (Devastation Evoker): Fire Breath (30s cd, back 0:40)",
+    ]);
+    expect(seen.map((v) => v.kind)).toEqual(["backBeforeNextPress"]);
+    expect(seen[0]!.detail).toContain("pressed 0:20");
+  });
 });

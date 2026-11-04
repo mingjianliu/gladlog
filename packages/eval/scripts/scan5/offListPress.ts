@@ -13,7 +13,9 @@
  *    own `free press` on that press's line, or a Time Spiral one —
  *    `timeSpiralFreePressMs`) needs no readiness and is not that next
  *    press, and a Stasis replay (`isStasisReplayCast`) or a row echoing a
- *    Time Spiral free press (`timeSpiralEchoMs`) is no press at all;
+ *    Time Spiral free press (`timeSpiralEchoMs`) is no press at all; a
+ *    hold never released (`unreleasedHoldMs`) owns no line but still
+ *    counts as a next press (the empower could not start on cooldown);
  *  - `lastsBeyond`: `lasts Ns`, and the APPLIED row the line read N from
  *    (`pressDuration` — the cast's target's first, the line's own predicate)
  *    lived to its REMOVED more than `LASTS_SLACK_S` past N (the printed
@@ -26,6 +28,7 @@ import {
   timeSpiralFreePressMs,
 } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import { isStasisReplayCast } from "@gladlog/analysis/src/utils/combatStates";
+import { unreleasedHoldMs } from "@gladlog/analysis/src/utils/cooldowns";
 import { pressDuration } from "@gladlog/analysis/src/utils/offListPress";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
@@ -95,8 +98,14 @@ export function run(ctx: IRoundCtx): void {
     const ordKey = `${m[2] ? "you" : m[3]}|${name}|${second}`;
     const k = seenInSecond.get(ordKey) ?? 0;
     seenInSecond.set(ordKey, k + 1);
+    // a hold never released prints no line (`unreleasedHoldMs`, the
+    // renderer's own exclusion; GH #183: a cut Fire Breath at 0:35.4 took
+    // the 0:35.99 press's line) — but it stays a next press below: the
+    // empower could not start unless the spell was ready
     const press = presses.filter(
-      (c) => Math.floor((tsOf(c) - ctx.start) / 1000) === second,
+      (c) =>
+        Math.floor((tsOf(c) - ctx.start) / 1000) === second &&
+        !unreleasedHoldMs(unit, String(c.spellId), [tsOf(c)]).length,
     )[k];
     if (press && /\bfree press\b/.test(m[5]!)) freeRows.add(press);
     matched.push({ line, m, second, unit, presses, press });

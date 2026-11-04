@@ -258,7 +258,8 @@ export function buildPlayerLoadout(
           c.timeSeconds +
           cd.cooldownSeconds -
           readyAfterReductions(
-            c.timeSeconds + cd.cooldownSeconds,
+            // a press's own base (Cycle of Hatred's stacks, GH #183)
+            c.timeSeconds + (c.baseCooldownSeconds ?? cd.cooldownSeconds),
             c.reductions ?? [],
           ),
       ),

@@ -783,4 +783,13 @@
  *  (`COMPANION_CAST_ROWS`, `COMPANION_LEAD_MS`). See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 478;
+/*
+ * v479 (2026-11-04, GH #183): `[PRESS]` lines for 33 buttons under 45 s the
+ *  user picked (`PRESS_LINE_WHITELIST_IDS`), and the duration / cooldown
+ *  model they need: empowered presses priced at their release, Tip the
+ *  Scales, cut holds spending nothing, Causality, Instability Matrix,
+ *  Temporal Burst per stack, Cycle of Hatred, Chaotic Transformation, Time
+ *  Walk, Barrier Diffusion on every barrier, Impish Instincts, Burn to Ash
+ *  crit ticks. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 479;

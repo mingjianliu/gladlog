@@ -108,4 +108,45 @@ export const CUSTOM_TALENT_MODIFIERS: Record<string, ICDModifier[]> = {
       value: 30,
     },
   ],
+
+  // --- Evoker ---
+  // Instability Matrix 431484 (Chronowarden): "Each time you cast an empower
+  // spell, unstable time magic reduces its cooldown by up to 6 sec." DB2: a
+  // dummy, bp 6 — a server script, no mask. GH #183 (2026-11-03), 605-file
+  // subsets, Preservation one-charge holders vs non-holders, presses more
+  // than 0.5 s before the modelled ready instant: Dream Breath dev 48 of
+  // 155 / 1 of 191, hold-out 34 of 166 / 0 of 156 → with −6 s 1 / 0; Fire
+  // Breath 8 of 76 / 0 of 150, 24 of 116 / 0 of 123 → 0 / 0. At −4 / −5 s
+  // 8 / 4 dev and 3 / 1 hold-out stay early. FLAG: "up to" — the needed
+  // reduction spreads over 0–6 s with no pile at 6; 6 is the earliest the
+  // spell can be back. Spiritbloom 367226 / 382731, the third empower, has
+  // no corpus occurrence (a dead id only looks authoritative).
+  "357208": [
+    {
+      talentSpellId: "431484", // Instability Matrix — Fire Breath
+      effect: "reduce_cd",
+      value: 6,
+    },
+  ],
+  "382266": [
+    {
+      talentSpellId: "431484", // Instability Matrix — Fire Breath (Font of Magic)
+      effect: "reduce_cd",
+      value: 6,
+    },
+  ],
+  "355936": [
+    {
+      talentSpellId: "431484", // Instability Matrix — Dream Breath
+      effect: "reduce_cd",
+      value: 6,
+    },
+  ],
+  "382614": [
+    {
+      talentSpellId: "431484", // Instability Matrix — Dream Breath (Font of Magic)
+      effect: "reduce_cd",
+      value: 6,
+    },
+  ],
 };

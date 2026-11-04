@@ -170,17 +170,35 @@ export const TOOLTIP_DURATION_ROWS: Readonly<
   ],
 };
 
-export interface ITooltipPerEventDuration {
+interface ITooltipPerEventBase {
   talentSpellId: string;
   untalentedBaseSeconds: number;
-  /** seconds added by each qualifying press while the aura is up */
+  /** seconds added by each qualifying event while the aura is up */
   addSecondsPerEvent: number;
-  capSeconds: number;
   specs: readonly string[];
+}
+
+/** The event is one of the caster's own presses. */
+export interface ITooltipPerPressDuration extends ITooltipPerEventBase {
+  event: "press";
+  capSeconds: number;
   /** the presses that count — 「带有施法时间的法术」: the class's spells
    * whose DB2 cast time is > 0, instant or not on that press */
   qualifyingSpellIds: ReadonlySet<string>;
 }
+
+/** The event is a critical tick of the aura's own damage on the unit it is
+ * on — a fully absorbed crit (SPELL_PERIODIC_MISSED ABSORB, crit flag set)
+ * counts too. Each copy on each unit grows on its own, so it is priced only
+ * for one application on one unit (`buffFullDurationForCaster`'s
+ * `onUnitId`); a reader with neither prints the base. No cap. */
+export interface ITooltipPerCritDuration extends ITooltipPerEventBase {
+  event: "own-crit";
+}
+
+export type ITooltipPerEventDuration =
+  | ITooltipPerPressDuration
+  | ITooltipPerCritDuration;
 
 // Spiritwalker's Momentum 443425: 「使用带有施法时间的法术会使灵魂行者的恩赐和
 // 灵魂行者的神盾的持续时间延长1秒，最多可延长4秒」. 605 files, per holder
@@ -223,6 +241,7 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
   Record<string, ITooltipPerEventDuration>
 > = {
   "79206": {
+    event: "press",
     talentSpellId: "443425",
     untalentedBaseSeconds: 15,
     addSecondsPerEvent: 1,
@@ -231,11 +250,24 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
     qualifyingSpellIds: SHAMAN_CAST_TIME_SPELLS,
   },
   "378078": {
+    event: "press",
     talentSpellId: "443425",
     untalentedBaseSeconds: 5,
     addSecondsPerEvent: 1,
     capSeconds: 4,
     specs: ["262", "264"],
     qualifyingSpellIds: SHAMAN_CAST_TIME_SPELLS,
+  },
+  // Burn to Ash 446663: 「真理觉醒爆击时，其持续时间延长$s1秒」 (effect 0
+  // dummy, bp 2) on Truth's Wake 403695, Wake of Ashes' DoT (DB2 9 s). GH
+  // #183, 2026-11-03, raw ticks of 605-file subsets: non-holders 54 of 54
+  // run 9 s; holders run 9 + 2 × their crit ticks — absorbed crits
+  // included — save 1–2 (a crit at the REMOVED millisecond)
+  "403695": {
+    event: "own-crit",
+    talentSpellId: "446663",
+    untalentedBaseSeconds: 9,
+    addSecondsPerEvent: 2,
+    specs: ["70"],
   },
 };

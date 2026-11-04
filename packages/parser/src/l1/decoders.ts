@@ -321,11 +321,18 @@ export function decodeMissed(
   missType: string;
   isOffHand: boolean;
   amount: number;
+  /** An ABSORB miss's own critical flag (`ABSORB,offHand,amount,total,crit`):
+   * a fully absorbed crit is still a crit for effects keyed on crits (Burn to
+   * Ash extends Truth's Wake per critical tick, absorbed or not — GH #183).
+   * Other miss types carry no amount block, so no flag. */
+  critical: boolean;
 } {
+  const missType = params[at] ?? "";
   return {
-    missType: params[at] ?? "",
+    missType,
     isOffHand: params[at + 1] === "1",
     amount: parseInt10(params[at + 2]),
+    critical: missType === "ABSORB" && decodeCritical(params[at + 4]),
   };
 }
 

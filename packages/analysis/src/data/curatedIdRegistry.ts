@@ -170,6 +170,7 @@ import {
   OFFENSIVE_AURA_EVIDENCE,
   OFFENSIVE_FORM_FACT_AURAS,
 } from "../utils/offensiveAuraOccurrences";
+import { PRESS_LINE_WHITELIST_IDS } from "../utils/offListPress";
 import {
   ADAPTATION_LOCKOUT_AURA_ID,
   ADAPTATION_TRIGGER_AURA_ID,
@@ -295,6 +296,8 @@ import {
   FREE_RECAST_WINDOWS,
   IDLE_COOLDOWN_CREDITS,
   ON_INTERRUPT_COOLDOWN_REDUCTIONS,
+  PER_PRESS_STACK_COOLDOWNS,
+  STACKED_RATE_CARRIERS,
   TIME_SPIRAL_FREE_PRESSES,
 } from "./talentScriptedCooldowns";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
@@ -570,9 +573,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).map((p) => p.talentSpellId),
       // the casts that extend it (`SHAMAN_CAST_TIME_SPELLS`, weekly review
       // 2026-10-24: hand-kept, decides Spiritwalker's Momentum's length)
-      ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).flatMap((p) => [
-        ...p.qualifyingSpellIds,
-      ]),
+      ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).flatMap((p) =>
+        p.event === "press" ? [...p.qualifyingSpellIds] : [],
+      ),
     ],
   ),
   t("RACIAL_ABILITIES", "data/racialAbilities.ts", "cast", () =>
@@ -783,6 +786,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("PURGE_BLOCKLIST", "utils/dispelAnalysis.ts", "aura", () =>
     set(PURGE_BLOCKLIST),
+  ),
+  // GH #183 (user picks 2026-11-03): buttons under 45 s that get a [PRESS]
+  // line all the same
+  t("PRESS_LINE_WHITELIST_IDS", "utils/offListPress.ts", "cast", () =>
+    set(PRESS_LINE_WHITELIST_IDS),
   ),
   // B-tier B13e (user ruling 2026-10-07): the blocklist's subset no purge
   // can remove — what the purgeable-buff count leaves out.
@@ -1221,6 +1229,21 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // GH #176: Time Spiral's per-class auras (vouched by aura rows) and the
   // movement spells each frees (vouched by casts)
   t(
+    "PER_PRESS_STACK_COOLDOWNS",
+    "data/talentScriptedCooldowns.ts",
+    "mixed",
+    () => [
+      ...Object.keys(PER_PRESS_STACK_COOLDOWNS),
+      ...Object.values(PER_PRESS_STACK_COOLDOWNS).flatMap((r) => [
+        r.talentSpellId,
+        r.auraId,
+      ]),
+    ],
+  ),
+  t("STACKED_RATE_CARRIERS", "data/talentScriptedCooldowns.ts", "aura", () =>
+    Object.keys(STACKED_RATE_CARRIERS),
+  ),
+  t(
     "TIME_SPIRAL_FREE_PRESSES",
     "data/talentScriptedCooldowns.ts",
     "mixed",
@@ -1246,6 +1269,8 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         ...(r.triggerSummonIds ?? []),
         ...(r.triggerBuffedUseTargets?.auraIds ?? []),
         ...(r.triggerBuffedUseTargets?.byCastIds ?? []),
+        ...(r.triggerCastTargetTicks?.byCastIds ?? []),
+        ...(r.triggerCastTargetTicks?.tickIds ?? []),
         ...(r.triggerInterruptIds ?? []),
         ...(r.triggerOwnAuraEndIds ?? []),
         ...(r.triggerSelfAuraAppliedIds ?? []),

@@ -16,6 +16,7 @@ import {
   isRosterPressId,
   lineStatesPress,
   PRESS_LINE_MIN_CD_SECONDS,
+  PRESS_LINE_WHITELIST_IDS,
   PRESS_TARGET_AURA_LEAD_MS,
   pressDuration,
   pressLineCaster,
@@ -44,6 +45,20 @@ describe("[PRESS] — which presses (GH #176, user ruling 2026-11-02)", () => {
     expect(isOffListPressId("336126")).toBe(false); // Gladiator's Medallion
     expect(isRosterPressId("642")).toBe(true); // Divine Shield
     expect(isOffListPressId("642")).toBe(false);
+  });
+  it("a picked button under 45 s is the line's, its other cast ids too; an unpicked 30 s button is not (GH #183)", () => {
+    expect(isOffListPressId("586")).toBe(true); // Fade, 30 s, picked
+    expect(isOffListPressId("1245412")).toBe(true); // Voidblade
+    expect(isOffListPressId("1245483")).toBe(true); // Pierce the Veil, its variant
+    expect(isOffListPressId("382411")).toBe(true); // Eternity Surge (Font of Magic)
+    expect(isOffListPressId("122")).toBe(false); // Frost Nova, not picked
+    expect(PRESS_LINE_WHITELIST_IDS.size).toBe(33);
+  });
+  it("every picked id is on no roster and passes the press predicate (else the pick is moot)", () => {
+    for (const id of PRESS_LINE_WHITELIST_IDS) {
+      expect(isRosterPressId(id), id).toBe(false);
+      expect(isOffListPressId(id), id).toBe(true);
+    }
   });
 });
 

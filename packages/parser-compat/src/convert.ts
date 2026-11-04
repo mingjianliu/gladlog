@@ -415,6 +415,7 @@ function convertUnit(
         ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         ...damageSchoolField(event),
+        ...(event.crit ? { crit: true as const } : {}),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
@@ -481,6 +482,7 @@ function convertUnit(
         ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         ...damageSchoolField(event),
+        ...(event.crit ? { crit: true as const } : {}),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
@@ -565,6 +567,7 @@ function convertUnit(
     destName: string;
     missType: string;
     amount: number;
+    crit?: true;
     eventName: string;
     params: string[];
     lineIndex?: number;
@@ -579,6 +582,7 @@ function convertUnit(
     destUnitName: event.destName,
     missType: event.missType,
     amount: event.amount,
+    ...(event.crit ? { crit: true as const } : {}),
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,

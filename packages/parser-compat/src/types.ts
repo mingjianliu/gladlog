@@ -41,6 +41,9 @@ export interface IHpEvent extends ICombatEvent {
    * `spellSchoolId`) when the parser kept it — see `GladHpEvent.school`.
    * Read through analysis `hitSchoolId`. */
   damageSchoolId?: string;
+  /** A damage row that was a critical strike (the parser's hp-tail flag);
+   * absent on non-crits, heals and documents stored without it. */
+  crit?: true;
   /**
    * Damage past the target's remaining health (positive), present ONLY when
    * > 0 — i.e. this event is a killing blow. Needed as its own field because
@@ -105,6 +108,8 @@ export interface IMissEvent extends ICombatEvent {
   missType: string;
   /** For ABSORB misses, the absorbed amount; 0/NaN otherwise. */
   amount: number;
+  /** A fully absorbed critical strike (ABSORB misses only). */
+  crit?: true;
 }
 
 export interface ISpellEvent extends ICombatEvent {

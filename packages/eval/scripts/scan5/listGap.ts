@@ -18,8 +18,10 @@
  * Kinds: `<filled|listed|offList|offListUnder45>/<side>/<noLine|kitOnly>`.
  * `offList` is what the class is about: on none of the roster keys, with an
  * official cooldown of `PRESS_LINE_MIN_CD_SECONDS` or more — the `[PRESS]`
- * line's (GH #176, user ruling 2026-11-02), so it must reach 0;
- * `offListUnder45` waits for the whitelist of important buttons under it. `filled` labels the ids the
+ * line's (GH #176, user ruling 2026-11-02), and so is a picked button under
+ * it (`PRESS_LINE_WHITELIST_IDS`, GH #183), so it must reach 0;
+ * `offListUnder45` is every other button under it, left out by the user's
+ * picks. `filled` labels the ids the
  * class fix answers for, which must reach 0. `form/<side>/noLine` is a
  * no-button form's APPLIED row (Void Metamorphosis 1217607, D69) no `[PROC]` /
  * `[ENEMY CD]` line names. `report()` prints the ranked gap list, one row per
