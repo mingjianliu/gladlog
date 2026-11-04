@@ -322,6 +322,10 @@ export function buildOffensiveWasteSummary(
             Math.abs(o.logLine.timestamp - e.logLine.timestamp) <=
               COMPANION_CAST_ROW_MS &&
             !isNoPressRow(o, successRows) &&
+            // a press counted at its impact is no companion of that impact
+            // (codex 20-F25-03 #3: 6a545d58 r4 The Hunt 1246167 → 1246169
+            // 1 ms apart dropped both)
+            pressImpactRow(o, successRows) === undefined &&
             spellNameKey(o.spellId, o.spellName) ===
               spellNameKey(e.spellId, e.spellName),
         ),

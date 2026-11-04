@@ -1243,3 +1243,75 @@ describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
     expect(rows.get(press)).toEqual({ atMs: 1_050, spellId: null });
   });
 });
+
+describe("offensiveWasteAnalysis — a press counted at its impact (codex 20-F25-03 #3)", () => {
+  const matchStart = 1_000_000;
+  const combat = makeCombat(matchStart, matchStart + 60_000);
+  const cast = (id: string, ms: number, name: string) =>
+    makeSpellCastEvent(
+      id,
+      matchStart + ms,
+      "enemy-1",
+      "EnemyPaladin",
+      "dh-1",
+      "Hunter",
+      0,
+      name,
+    );
+  const run = (impactDelayMs: number) => {
+    const friend = makeUnit("dh-1", {
+      name: "Hunter",
+      spec: CombatUnitSpec.DemonHunter_Havoc,
+      class: CombatUnitClass.DemonHunter,
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [
+        cast("1246167", 12_000, "The Hunt"),
+        cast("1246169", 12_000 + impactDelayMs, "The Hunt"),
+        cast("162794", 14_000, "Chaos Strike"),
+      ],
+    });
+    friend.damageOut = [
+      {
+        ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"),
+        spellId: "1246169",
+        spellName: "The Hunt",
+      },
+      {
+        ...makeDamageEvent(matchStart + 6_000, 100_000, "enemy-1"),
+        spellId: "162794",
+        spellName: "Chaos Strike",
+      },
+    ] as never;
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyPaladin",
+      spec: CombatUnitSpec.Paladin_Holy,
+      class: CombatUnitClass.Paladin,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "642",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "642",
+          matchStart + 18_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+      ],
+    });
+    const summary = buildOffensiveWasteSummary(combat, [friend], [enemy]);
+    return summary.events.flatMap((ev) => ev.wasteCasts.map((c) => c.spellId));
+  };
+
+  it("6a545d58 r4: The Hunt's impact 1 ms after its press still counts once, at the impact", () => {
+    expect(run(272)).toEqual(["1246169", "162794"]);
+    expect(run(1)).toEqual(["1246169", "162794"]);
+  });
+});
