@@ -75,7 +75,10 @@ import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerate
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { parryStopsAttack } from "@gladlog/analysis/src/data/spellParry";
 import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
-import { COPY_CAST_IDS } from "@gladlog/analysis/src/utils/castPress";
+import {
+  COPY_CAST_IDS,
+  pressImpactRow,
+} from "@gladlog/analysis/src/utils/castPress";
 import {
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
@@ -479,6 +482,9 @@ function runRound(ctx: IContext): void {
           // a copy / tick / later stage of another press is no cast (the
           // product's table: Mutilate's 27576, Penance's bolts)
           !COPY_CAST_IDS.has(String(c.spellId)) &&
+          // a charge press is counted at its impact row (fact10 D28: The
+          // Hunt 1246167 → 1246169), the product's `pressImpactRow`
+          pressImpactRow(c, successesOf(player)) === undefined &&
           // a school the immunity does not cover landed (DB2 masks: a Frost
           // Strike into Blessing of Protection) — the section's own rule
           immunityCoversSpell(run.auraId, String(c.spellId)) !== false,

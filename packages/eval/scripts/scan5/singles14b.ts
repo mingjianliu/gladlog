@@ -50,6 +50,7 @@ import { CAST_INTERRUPTED_REASONS } from "@gladlog/analysis/src/utils/castBarOut
 import {
   COMPANION_CAST_ROW_MS,
   COPY_CAST_IDS,
+  pressImpactRow,
 } from "@gladlog/analysis/src/utils/castPress";
 import { selectPressureWindows } from "@gladlog/analysis/src/utils/cooldowns";
 import {
@@ -456,7 +457,10 @@ function checkIntoDefense(ctx: IRoundCtx): void {
               c.destUnitId === target.id &&
               tsOf(c) < roundEndAt &&
               same(c.spellId, c.spellName) &&
-              !COPY_CAST_IDS.has(String(c.spellId)),
+              !COPY_CAST_IDS.has(String(c.spellId)) &&
+              // a charge press is counted at its impact row (fact10 D28:
+              // The Hunt 1246167 → 1246169), the product's `pressImpactRow`
+              pressImpactRow(c, successesOf(caster)) === undefined,
           )
           .sort((a: any, b: any) => tsOf(a) - tsOf(b));
         const presses = rowsOfSpell
