@@ -5562,8 +5562,12 @@ export function analyzePlayerCCAndTrinket(
 
   /** The summon this cast put down (its SPELL_SUMMON within the cast's
    * instant, a unit the caster owns) was killed (`nonPlayerUnitKill`, the
-   * [UNIT DESTROYED] predicate) before the cast's landing window opened
-   * (`AOE_CC_LANDING_WINDOW_S`, `fromS` > 0). */
+   * [UNIT DESTROYED] predicate) before it went off: before the cast's
+   * landing window opened (`AOE_CC_LANDING_WINDOW_S`, `fromS` > 0), or
+   * before the pulse `pulseAssignment` gives the cast — with none, before
+   * the window closed (fact10 D10, 11890839 1:35: a Capacitor Totem killed
+   * 1.644 s after its summon, past the 1.5 s opening and before its ~2 s
+   * pulse, logged no row and was read as a control that did not land). */
   const summonKilledBeforeLanding = (
     enemy: ICombatUnit,
     cast: ICombatUnit["spellCastEvents"][number],
@@ -5574,12 +5578,17 @@ export function analyzePlayerCCAndTrinket(
     if (!landing || landing.fromS <= 0) return false;
     const castMs = cast.logLine.timestamp;
     const opensMs = castMs + landing.fromS * 1000;
+    const goesOffMs = Math.max(
+      opensMs,
+      pulseAssignment(enemy, cast).get(castMs)?.ms ??
+        castMs + landing.toS * 1000,
+    );
     return enemyPets.some((u) => {
       if (u.ownerId !== enemy.id) return false;
       const at = summonedAtMs(u);
       if (at === null || at < castMs - 100 || at > castMs + 500) return false;
       const kill = nonPlayerUnitKill(u);
-      return kill !== null && kill.timestamp < opensMs;
+      return kill !== null && kill.timestamp < goesOffMs;
     });
   };
 

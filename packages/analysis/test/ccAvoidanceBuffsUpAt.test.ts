@@ -100,7 +100,11 @@ describe("ccAvoidanceBuffsUpAt — Druid forms", () => {
 });
 
 describe("[CC AVOIDED?] — a delayed control is read at the instant it hit (R6, 06aa443c)", () => {
-  const run = (opts: { missAtMs?: number; pulseOnMateAtMs?: number }) => {
+  const run = (opts: {
+    missAtMs?: number;
+    pulseOnMateAtMs?: number;
+    totemKilledAtMs?: number;
+  }) => {
     const enemy = makeUnit("enemy-1", {
       name: "Shaman",
       spec: CombatUnitSpec.Shaman_Enhancement,
@@ -119,6 +123,16 @@ describe("[CC AVOIDED?] — a delayed control is read at the instant it hit (R6,
       ],
     });
     const totem = makeUnit("totem-1", { name: "Totem", ownerId: "enemy-1" });
+    if (opts.totemKilledAtMs !== undefined) {
+      (totem as any).actionIn = [
+        {
+          logLine: { event: LogEvent.SPELL_SUMMON, timestamp: T0 + 10_000 },
+        },
+      ];
+      (totem as any).deathRecords = [
+        { timestamp: T0 + 10_000 + opts.totemKilledAtMs },
+      ];
+    }
     // Shroud 9.0–11.7 s, REMOVED logged right after any miss row in its ms
     const player = makeUnit("player-1", {
       name: "Player",
@@ -206,6 +220,14 @@ describe("[CC AVOIDED?] — a delayed control is read at the instant it hit (R6,
   });
   it("a totem that stunned nobody: the cast is the only instant, as before", () => {
     expect(run({}).map((a) => a.atSeconds)).toEqual([10]);
+  });
+  it("a totem killed 1.644 s after its summon, past the 1.5 s opening, with no pulse row never went off (fact10 D10, 11890839 1:35)", () => {
+    expect(run({ totemKilledAtMs: 1_644 })).toEqual([]);
+    expect(run({ totemKilledAtMs: 1_100 })).toEqual([]);
+  });
+  it("…one killed after its own pulse went off keeps its line", () => {
+    const [a] = run({ missAtMs: 11_700, totemKilledAtMs: 2_500 });
+    expect(a).toMatchObject({ loggedMissType: "IMMUNE" });
   });
 });
 

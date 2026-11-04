@@ -14,7 +14,10 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
-import { PERIODIC_TRIGGER_SPELLS } from "../src/data/periodicAuraGenerated";
+import {
+  PERIODIC_TRIGGER_SPELLS,
+  SCRIPTED_PERIODIC_TRIGGER_AURA_IDS,
+} from "../src/data/periodicAuraGenerated";
 import {
   observedEffectEndSeconds,
   PERIODIC_LAST_TRIGGER_SLACK_MS,
@@ -104,5 +107,37 @@ describe("fact10 D29 — a periodic trigger's last tick after the REMOVED", () =
       6,
     );
     expect(endOf(121.767, "1261216")).toBeCloseTo(121.766, 6);
+  });
+});
+
+describe("fact10 D29 residual — a scripted periodic trigger reads its ticks by name", () => {
+  const VOID_RAY = "473728";
+  const TICK = "1214595";
+  const endOf = (tickName: string, tickS: number, tickId = TICK) => {
+    const { unit, combat } = combatWith(120.3);
+    const dh = unit as any;
+    dh.spellCastEvents[0] = {
+      ...dh.spellCastEvents[0],
+      spellId: VOID_RAY,
+      spellName: "Void Ray",
+    };
+    dh.auraEvents = dh.auraEvents.map((a: any) => ({
+      ...a,
+      spellId: VOID_RAY,
+      spellName: "Void Ray",
+    }));
+    dh.damageOut = [
+      { ...hit(120.3, TICK), spellName: "Void Ray" },
+      { ...hit(tickS, tickId), spellName: tickName },
+    ];
+    return observedEffectEndSeconds(dh, VOID_RAY, 119.247, Infinity, combat);
+  };
+  it("DB2: Void Ray is effect 23 with no trigger id", () => {
+    expect(PERIODIC_TRIGGER_SPELLS.has(VOID_RAY)).toBe(false);
+    expect(SCRIPTED_PERIODIC_TRIGGER_AURA_IDS.has(VOID_RAY)).toBe(true);
+  });
+  it("cover set 32-4 r4: its tick 1 ms after the REMOVED ends the effect; another name does not", () => {
+    expect(endOf("Void Ray", 121.767)).toBeCloseTo(121.767, 6);
+    expect(endOf("Eye Beam", 121.767, "198030")).toBeCloseTo(121.766, 6);
   });
 });

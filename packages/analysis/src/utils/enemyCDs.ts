@@ -14,7 +14,10 @@ import {
   HASTE_DURATION_SPELL_IDS,
 } from "../data/channeledGenerated";
 import { isOffensivePressFactFor } from "../data/enemyHealCds";
-import { PERIODIC_TRIGGER_SPELLS } from "../data/periodicAuraGenerated";
+import {
+  PERIODIC_TRIGGER_SPELLS,
+  SCRIPTED_PERIODIC_TRIGGER_AURA_IDS,
+} from "../data/periodicAuraGenerated";
 import { ROOT_AURA_SPELL_IDS } from "../data/rootAuraGenerated";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
@@ -539,14 +542,24 @@ function lastPeriodicTriggerEndS(
   combat: AtomicArenaCombat,
 ): number {
   const ids = PERIODIC_TRIGGER_SPELLS.get(auraId);
-  if (!ids) return endS;
+  // one the game scripts (`SCRIPTED_PERIODIC_TRIGGER_AURA_IDS`, no trigger
+  // id in DB2) fires a spell of its own name — Void Ray 473728's 1214595,
+  // 1 ms after its REMOVED (cover set 32-4 r4 1:05)
+  const scriptedName = SCRIPTED_PERIODIC_TRIGGER_AURA_IDS.has(auraId)
+    ? getEnglishSpellName(auraId, "")
+    : "";
+  if (!ids && !scriptedName) return endS;
+  const fires = (d: { spellId?: string; spellName?: string }) =>
+    !!d.spellId &&
+    (ids
+      ? ids.includes(d.spellId)
+      : getEnglishSpellName(d.spellId, d.spellName ?? "") === scriptedName);
   const endMs = combat.startTime + endS * 1000;
   const upTo = Math.min(endMs + PERIODIC_LAST_TRIGGER_SLACK_MS, combat.endTime);
   let last = endMs;
   for (const d of [...(caster.damageOut ?? []), ...(caster.healOut ?? [])]) {
     const t = d.logLine.timestamp;
-    if (t > last && t <= upTo && !!d.spellId && ids.includes(d.spellId))
-      last = t;
+    if (t > last && t <= upTo && fires(d)) last = t;
   }
   return (last - combat.startTime) / 1000;
 }

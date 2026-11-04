@@ -82,6 +82,12 @@
  *    later, printed 0.23M / 0.30M with it). Sums: the owner's damageOut (pets
  *    merged) on the Target from the first own press of the header's opening
  *    second. Counted: every entry with such a trailing tick.
+ *  - summonDiedBeforePulse (class 6, D10): a `[CC AVOIDED?] … did not
+ *    land` line of a press whose summon (SPELL_SUMMON within the press's
+ *    instant, owned by the caster) died (`nonPlayerUnitKill`) before any row
+ *    of its own — a cast success, an aura it put on anyone, a miss — so the
+ *    control never went off (11890839 1:35: a Capacitor Totem killed 1.644 s
+ *    after its summon). Counted: every such line of a summon-placed press.
  *  - drResetBandLength (class 6, D9): a `[CC ON ENEMY]` / `[CC ON TEAM]`
  *    line `… ← Spell (by …) … [DR: Cat Level]` whose control landed 20.0 –
  *    20.4 s after the unit's previous control of the family ended (the 12.1
@@ -111,6 +117,10 @@ import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import { DR_CATEGORY_MAP } from "@gladlog/analysis/src/utils/drAnalysis";
 import { isDeferralDamageRow } from "@gladlog/analysis/src/utils/incomingPressure";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
+import {
+  nonPlayerUnitKill,
+  summonedAtMs,
+} from "@gladlog/analysis/src/utils/summonLife";
 
 import {
   APPLIED,
@@ -120,6 +130,7 @@ import {
   nameOf,
   REMOVED,
   SUCCESS,
+  successesOf,
   tsOf,
 } from "./ctx";
 import { resRows } from "./singles2";
@@ -137,6 +148,7 @@ export const CHECKS = [
   "resHastedLeftUnclosed",
   "channelLastTickDropped",
   "drResetBandLength",
+  "summonDiedBeforePulse",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -180,6 +192,7 @@ export function run(ctx: IRoundCtx): void {
   resHastedLeftUnclosed(ctx);
   channelLastTickDropped(ctx);
   drResetBandLength(ctx);
+  summonDiedBeforePulse(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -821,6 +834,9 @@ function drResetBandLength(ctx: IRoundCtx): void {
   for (const l of ctx.lines) {
     const m = DR_LINE.exec(l);
     if (!m) continue;
+    // a length something cut (a dispel, a break, an immunity, a press) is
+    // no reading of the DR (cover set 31-2 r2 1:39: Blessing of Sanctuary)
+    if (/ended by|dispelled by|broke this|broken by|cut short/.test(l)) continue;
     const u = ctx.unitOfPid(m[3]);
     if (!u) continue;
     const sec = mss(m[1]!, m[2]!);
@@ -877,5 +893,54 @@ function drResetBandLength(ctx: IRoundCtx): void {
         `${fmtS(sec)} ${name} on ${u.name}: ${(gap / 1000).toFixed(3)} s after the family's last control ended, ran ${len.toFixed(2)} s of ${full} s (${says}), printed ${m[5]}`,
         l.slice(0, 160),
       );
+  }
+}
+
+/** `[CC AVOIDED?] <unit>: <control> (by <pid>(<label>)) did not land …` */
+const AVOIDED_NOT_LANDED =
+  /^(\d+):(\d{2})\s+\[CC AVOIDED\?\]\s+[^:]+: (.+?) \(by (\d+)\([^)]*\)\) did not land/;
+
+function summonDiedBeforePulse(ctx: IRoundCtx): void {
+  for (const l of ctx.lines) {
+    const m = AVOIDED_NOT_LANDED.exec(l);
+    if (!m) continue;
+    const caster = ctx.unitOfPid(m[4]);
+    if (!caster) continue;
+    const sec = mss(m[1]!, m[2]!);
+    const name = m[3]!;
+    for (const c of successesOf(caster)) {
+      if (nameOf(c.spellId, c.spellName) !== name) continue;
+      if (Math.floor((tsOf(c) - ctx.start) / 1000) !== sec) continue;
+      const summon = ctx.units.find((u) => {
+        if (u.ownerId !== caster.id) return false;
+        const at = summonedAtMs(u as any);
+        return at !== null && at >= tsOf(c) - 100 && at <= tsOf(c) + 500;
+      });
+      if (!summon) continue;
+      ctx.bump("summonDiedBeforePulse");
+      const kill = nonPlayerUnitKill(summon as any);
+      if (!kill) continue;
+      const by = (r: any) => r.srcUnitId === summon.id && tsOf(r) <= kill.timestamp;
+      const wentOff =
+        [
+          ...((caster.petSpellCastEvents ?? []) as any[]),
+          ...((summon.spellCastEvents ?? []) as any[]),
+        ].some((e) => ev(e) === SUCCESS && by(e)) ||
+        ctx.units.some(
+          (u) =>
+            ((u.auraEvents ?? []) as any[]).some(
+              (a) => ev(a) === APPLIED && by(a),
+            ) || ((u.missesIn ?? []) as any[]).some(by),
+        );
+      if (wentOff) continue;
+      ctx.violate(
+        "summonDiedBeforePulse",
+        name,
+        tsOf(c),
+        `${caster.name}:${sec}`,
+        `${fmtS(sec)} ${name} by ${caster.name}: its summon died ${((kill.timestamp - tsOf(c)) / 1000).toFixed(2)} s after the press with no row of its own, printed "did not land"`,
+        l.slice(0, 160),
+      );
+    }
   }
 }

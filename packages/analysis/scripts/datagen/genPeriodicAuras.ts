@@ -70,6 +70,21 @@ async function main() {
       triggers.get(r.SpellID)!.add(t);
     }
   }
+  // an observed 23 / 227 aura with no trigger id on any of its rows: the
+  // game scripts what it fires (Void Ray 473728 → 1213649 / 1214595) —
+  // its ticks are read by the aura's own name (fact10 D29 residual)
+  const scripted = new Set<string>();
+  for (const r of eff.rows) {
+    if (r.DifficultyID !== "0" || !r.SpellID) continue;
+    if (
+      PERIODIC_TRIGGER_AURAS.has(r.EffectAura ?? "") &&
+      (r.EffectTriggerSpell ?? "0") === "0" &&
+      observed.has(r.SpellID) &&
+      !triggers.has(r.SpellID)
+    )
+      scripted.add(r.SpellID);
+  }
+  const scriptedIds = [...scripted].sort((a, b) => Number(a) - Number(b));
   const triggerRows = [...triggers.entries()]
     .sort((a, b) => Number(a[0]) - Number(b[0]))
     .map(([a, ts]) => [a, [...ts].sort((x, y) => Number(x) - Number(y))]);
@@ -78,13 +93,15 @@ async function main() {
     "../../src/data/periodicAuraGenerated.ts",
     import.meta.url,
   ).pathname;
-  const header = `/**\n * Generated at: ${new Date().toISOString()}\n * Build: ${build}\n * Source: SpellEffect aura 3 / 53 / 89 (PERIODIC_DAMAGE / PERIODIC_LEECH /\n *   PERIODIC_DAMAGE_PERCENT) on the spell itself; every id, not only observed ones\n * ids: ${sorted.length}; periodic-trigger auras (23 / 227, observed): ${triggerRows.length}\n */\n\n`;
+  const header = `/**\n * Generated at: ${new Date().toISOString()}\n * Build: ${build}\n * Source: SpellEffect aura 3 / 53 / 89 (PERIODIC_DAMAGE / PERIODIC_LEECH /\n *   PERIODIC_DAMAGE_PERCENT) on the spell itself; every id, not only observed ones\n * ids: ${sorted.length}; periodic-trigger auras (23 / 227, observed): ${triggerRows.length}; scripted: ${scriptedIds.length}\n */\n\n`;
   writeArtifact(
     outPath,
     header +
       `export const PERIODIC_DAMAGE_AURA_IDS: ReadonlySet<string> = new Set(\n  ${JSON.stringify(sorted)},\n);\n\n` +
       `/** aura (effect 23 / 227, observed) → the spells it triggers each period */\n` +
-      `export const PERIODIC_TRIGGER_SPELLS: ReadonlyMap<string, readonly string[]> = new Map(\n  ${JSON.stringify(triggerRows)} as [string, string[]][],\n);\n`,
+      `export const PERIODIC_TRIGGER_SPELLS: ReadonlyMap<string, readonly string[]> = new Map(\n  ${JSON.stringify(triggerRows)} as [string, string[]][],\n);\n\n` +
+      `/** aura (effect 23 / 227, observed) with no trigger id on any row: the game scripts what it fires */\n` +
+      `export const SCRIPTED_PERIODIC_TRIGGER_AURA_IDS: ReadonlySet<string> = new Set(\n  ${JSON.stringify(scriptedIds)},\n);\n`,
   );
   console.log(
     `periodicAuraGenerated.ts: ${sorted.length} periodic damage auras (build ${build})`,

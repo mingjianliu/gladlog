@@ -97,6 +97,25 @@ describe("DR reset tick band (fact10 D9)", () => {
     );
   });
 
+  it("a control that landed was never Immune: on a chain of two the band resets (cover set 31-2 r2 1:39)", () => {
+    // Intimidation Full, Binding Shot 50 %, then an Intimidation 20.178 s
+    // after the chain's end, cut by Blessing of Sanctuary at 1.49 s of 3 s
+    const first = { applyMs: T0, removeMs: T0 + 3_000, spellId: "24394" };
+    const second = {
+      applyMs: T0 + 21_000,
+      removeMs: T0 + 22_500,
+      spellId: "117526",
+    };
+    const at = second.removeMs + 20_178;
+    expect(
+      getDRLevel([first, second], at, {
+        applyMs: at,
+        removeMs: at + 1_490,
+        fullMs: 3_000,
+      }).level,
+    ).toBe("Full");
+  });
+
   it("drLevelAtLanding and computeIncomingDR carry the landing's full length", () => {
     const bolt = {
       applyMs: boltAt,

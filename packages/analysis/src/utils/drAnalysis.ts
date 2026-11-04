@@ -435,14 +435,20 @@ export function isDiminishedLength(
 
 /** Does a landing `gapMs` after the chain's end start over? The reset
  * window resets it, but inside `DR_RESET_TICK_MS` after it a control whose
- * own length reads diminished was still on the chain (fact10 D9). */
+ * own length reads diminished was still on the chain (fact10 D9) — on a
+ * chain of one: a control that landed (it has an aura) was never Immune,
+ * so on a longer chain it started over (cover set 31-2 r2 1:39: an
+ * Intimidation cut by Blessing of Sanctuary at half its length read
+ * "Immune"). */
 function resetsChain(
   gapMs: number,
   resetMs: number,
   landing: { applyMs: number; removeMs: number; fullMs?: number } | undefined,
+  chainLength: number,
 ): boolean {
   if (gapMs < resetMs) return false;
   if (gapMs >= resetMs + DR_RESET_TICK_MS || landing === undefined) return true;
+  if (chainLength >= 2) return true;
   return (
     isDiminishedLength(landing.removeMs - landing.applyMs, landing.fullMs) !==
     true
@@ -988,7 +994,10 @@ export function getDRLevel(
   let chainLength = 0;
   let chainEnd = -Infinity;
   for (const e of prior) {
-    if (chainLength > 0 && resetsChain(e.applyMs - chainEnd, resetMs, e))
+    if (
+      chainLength > 0 &&
+      resetsChain(e.applyMs - chainEnd, resetMs, e, chainLength)
+    )
       chainLength = 0;
     chainEnd = chainLength === 0 ? e.removeMs : Math.max(chainEnd, e.removeMs);
     chainLength++;
@@ -1003,6 +1012,7 @@ export function getDRLevel(
         fullMs: landing.fullMs,
         applyMs: landing.applyMs ?? newApplyMs,
       },
+      chainLength,
     )
   )
     chainLength = 0;
