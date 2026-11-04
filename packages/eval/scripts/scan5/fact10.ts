@@ -56,6 +56,14 @@
  *    96 / 149) standing in for its press, not beside it (915f90ae 2:48
  *    `The Hunt ×2`: 1246167 at the press, 1246169 at the impact). Counted:
  *    every (line, name) whose window holds an impact row.
+ *  - unseenOrbMissing (class 6, D23): an enemy's own Freezing Rain 270232
+ *    (talent 270233: "Frozen Orb makes Blizzard instant cast") put up fresh
+ *    with no own Frozen Orb row (84714 / 198149) in the 2 s before it, and no
+ *    `[ENEMY CD] … Frozen Orb` line at its second (733ef717 0:09: the orb
+ *    pressed while the mage was unseen, the buff in the 9.816 re-statement
+ *    batch; the line read `cast 1 of 2` from 0:43). The pairing is the
+ *    check's own, not `PRESS_PROOF_AURA_IDS`. Counted: every such fresh
+ *    Freezing Rain with no orb row before it.
  */
 import { ON_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { ROOT_AURA_SPELL_IDS } from "@gladlog/analysis/src/data/rootAuraGenerated";
@@ -86,6 +94,7 @@ export const CHECKS = [
   "mobilityAsDefensive",
   "jukeBarSuperseded",
   "pressImpactCountedTwice",
+  "unseenOrbMissing",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -125,6 +134,7 @@ export function run(ctx: IRoundCtx): void {
   mobilityAsDefensive(ctx);
   jukeBarSuperseded(ctx);
   pressImpactCountedTwice(ctx);
+  unseenOrbMissing(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -555,6 +565,49 @@ function pressImpactCountedTwice(ctx: IRoundCtx): void {
           `${m[3]} ${name} ×${k} into ${m[6]}: ${inside.length} rows, ${paired} the impact of a press beside it`,
           l.slice(0, 160),
         );
+    }
+  }
+}
+
+const FREEZING_RAIN = "270232";
+const ORB_IDS = new Set(["84714", "198149"]);
+const ORB_LINE = /^(\d+):(\d{2})\s+\[ENEMY CD\]\s+(\d+)\([^)]*\)[^:]*: Frozen Orb\b/;
+
+function unseenOrbMissing(ctx: IRoundCtx): void {
+  if (!ctx.owner) return;
+  const orbLines = new Map<string, number[]>();
+  for (const l of ctx.lines) {
+    const m = ORB_LINE.exec(l);
+    if (m) orbLines.set(m[3]!, [...(orbLines.get(m[3]!) ?? []), mss(m[1]!, m[2]!)]);
+  }
+  for (const u of ctx.players) {
+    if (u.reaction === ctx.owner.reaction) continue;
+    const orbs = ((u.spellCastEvents ?? []) as any[])
+      .filter((c) => ev(c) === SUCCESS && ORB_IDS.has(String(c.spellId)))
+      .map(tsOf);
+    let up = false;
+    const rows = ((u.auraEvents ?? []) as any[])
+      .filter((a) => String(a.spellId) === FREEZING_RAIN && a.destUnitId === u.id)
+      .sort((a, b) => tsOf(a) - tsOf(b));
+    for (const a of rows) {
+      const t = tsOf(a);
+      if (ev(a) === REMOVED) up = false;
+      if (ev(a) !== APPLIED) continue;
+      const fresh = !up;
+      up = true;
+      if (!fresh || t < ctx.start || t > ctx.end) continue;
+      if (orbs.some((o) => o <= t && o >= t - 2000)) continue;
+      ctx.bump("unseenOrbMissing");
+      const pid = ctx.pidOf(u.name);
+      const sec = Math.floor((t - ctx.start) / 1000);
+      if ((orbLines.get(pid ?? "") ?? []).some((x) => Math.abs(x - sec) <= 1)) continue;
+      ctx.violate(
+        "unseenOrbMissing",
+        "Frozen Orb",
+        t,
+        u.name,
+        `${u.name} Freezing Rain up at +${((t - ctx.start) / 1000).toFixed(3)}s with no orb row before it and no [ENEMY CD] Frozen Orb line`,
+      );
     }
   }
 }

@@ -12,8 +12,10 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import { selfSaveCasts } from "../src/utils/enemyDefensives";
 import {
   hiddenAuraLifeMs,
+  hiddenPressCandidates,
   hiddenPressMs,
   isResyncBatchAt,
+  pressRowsWithHidden,
   RESYNC_BATCH_MIN_APPLIED,
   RESYNC_BATCH_SPAN_MS,
 } from "../src/utils/hiddenPress";
@@ -355,6 +357,41 @@ describe("hiddenPressMs — a summon that brings the aura (fact10 D7)", () => {
     expect(hiddenPressMs(paladin(BATCH_MS + 500), SACRED_WEAPON, T0)).toEqual([
       BATCH_MS,
     ]);
+  });
+});
+
+describe("hiddenPressMs — an aura that proves another cooldown's press (fact10 D23)", () => {
+  const FROZEN_ORB = "84714";
+  const FREEZING_RAIN = "270232";
+  const mage = (rainMs: number, casts: any[] = []): any =>
+    rogue(
+      [...batch(8, false), aura(LogEvent.SPELL_AURA_APPLIED, FREEZING_RAIN, rainMs)],
+      casts,
+    );
+  it("733ef717 0:09.816: Freezing Rain new in the re-stating batch, no orb row — the orb was pressed while unseen", () => {
+    const u = mage(BATCH_MS);
+    expect(hiddenPressMs(u, FROZEN_ORB, T0)).toEqual([BATCH_MS]);
+    // the [ENEMY CD] reader asks the orb because the rain names it
+    expect([...hiddenPressCandidates(u, (id) => id === FROZEN_ORB)]).toEqual([
+      FROZEN_ORB,
+    ]);
+    expect(
+      pressRowsWithHidden(u, (id) => id === FROZEN_ORB, T0).map((r) => [
+        r.spellId,
+        r.logLine.timestamp,
+        (r as any).unseenPress ?? false,
+      ]),
+    ).toEqual([[FROZEN_ORB, BATCH_MS, true]]);
+  });
+  it("an orb row beside it, or a rain outside a batch: no hidden press", () => {
+    const orb = {
+      spellId: FROZEN_ORB,
+      spellName: "Frozen Orb",
+      srcUnitId: "rogue",
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: BATCH_MS - 20 },
+    };
+    expect(hiddenPressMs(mage(BATCH_MS, [orb]), FROZEN_ORB, T0)).toEqual([]);
+    expect(hiddenPressMs(mage(BATCH_MS + 3_000), FROZEN_ORB, T0)).toEqual([]);
   });
 });
 

@@ -67,6 +67,28 @@ const AVENGING_WRATH_AURA_IDS = new Set(["31884", "454351"]);
  * no charge spent (fact10 D7, 070c4933 0:39.94 / 1:59.55: SPELL_SUMMON 434132
  * beside both, the presses alternate Holy Bulwark / Sacred Weapon around
  * them). */
+/** An aura that only the press of a cooldown with no aura of its own puts
+ * up, by cooldown id: Freezing Rain 270232 (talent 270233, an aura-42 proc,
+ * "Frozen Orb makes Blizzard instant cast") on Frozen Orb 84714 / 198149.
+ * New in a re-stating batch with no orb row, it is the orb pressed unseen
+ * (fact10 D23, 733ef717 0:09.8: Greater Invisibility from 0:03.3, Freezing
+ * Rain re-stated new at 0:09.816 and the orb's damage from 0:10.3; cover
+ * set: 152 of 178 own Freezing Rain APPLIED rows within 200 ms of an own
+ * 84714 SUCCESS, and every new one in a batch without an orb row came out
+ * of an invisibility). */
+export const PRESS_PROOF_AURA_IDS: ReadonlyMap<string, readonly string[]> =
+  new Map([
+    ["84714", ["270232"]],
+    ["198149", ["270232"]],
+  ]);
+
+/** The cooldowns whose press `PRESS_PROOF_AURA_IDS` says this aura proves. */
+function pressesProvenBy(auraId: string): string[] {
+  return [...PRESS_PROOF_AURA_IDS]
+    .filter(([, auras]) => auras.includes(auraId))
+    .map(([cd]) => cd);
+}
+
 export const SUMMON_BORNE_AURA_IDS: ReadonlyMap<string, readonly string[]> =
   new Map([["434132", ["432502"]]]);
 
@@ -241,6 +263,7 @@ export function hiddenPressMs(
     ...ownEffectAurasOfCast(spellId).filter((a) =>
       effectAuraViaName(spellId, a),
     ),
+    ...(PRESS_PROOF_AURA_IDS.get(spellId) ?? []),
   ]);
   const own = rows.filter(
     (a) =>
@@ -443,7 +466,11 @@ export function hiddenPressCandidates(
   const out = new Set<string>();
   for (const a of unit.auraEvents ?? []) {
     if (!a.spellId) continue;
-    for (const id of [a.spellId, ...castsOwningEffectAura(a.spellId)])
+    for (const id of [
+      a.spellId,
+      ...castsOwningEffectAura(a.spellId),
+      ...pressesProvenBy(a.spellId),
+    ])
       if (keep(id)) out.add(id);
   }
   return out;

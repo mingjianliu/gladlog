@@ -148,6 +148,7 @@ import {
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
 import {
   HERALD_PROC_BUNDLE_IDS,
+  PRESS_PROOF_AURA_IDS,
   SUMMON_BORNE_AURA_IDS,
 } from "../utils/hiddenPress";
 import {
@@ -903,6 +904,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("HERALD_PROC_BUNDLE_IDS", "utils/hiddenPress.ts", "aura", () =>
     set(HERALD_PROC_BUNDLE_IDS),
+  ),
+  t("PRESS_PROOF_AURA_IDS", "utils/hiddenPress.ts", "aura", () =>
+    set([...PRESS_PROOF_AURA_IDS.keys(), ...[...PRESS_PROOF_AURA_IDS.values()].flat()]),
   ),
   t("SUMMON_BORNE_AURA_IDS", "utils/hiddenPress.ts", "aura", () =>
     set([...SUMMON_BORNE_AURA_IDS.keys(), ...[...SUMMON_BORNE_AURA_IDS.values()].flat()]),
