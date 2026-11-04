@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { emitEnemyDefEntries } from "@gladlog/analysis/src/context/timelineSections/enemyDef";
-import { enemySaveEffectNote } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  ENEMY_DEF_NO_PRESS_TAG,
+  enemySaveEffectNote,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   buildDpsKillWindowLines,
   createKillWindowFactsComputer,
@@ -71,11 +74,7 @@ describe("checkNoWindowAcrossOwnWall", () => {
       "Aspect of the Turtle (deflects direct attacks; periodic damage still lands, 8.0s)",
     );
     expect(
-      checkNoWindowAcrossOwnWall([
-        ...ROSTER,
-        vulnerable("1:35–2:51"),
-        turtle,
-      ]),
+      checkNoWindowAcrossOwnWall([...ROSTER, vulnerable("1:35–2:51"), turtle]),
     ).toHaveLength(1);
     expect(
       checkNoWindowAcrossOwnWall([...ROSTER, vulnerable("1:35–2:04"), turtle]),
@@ -370,5 +369,25 @@ describe("checkNoWindowAcrossOwnSave", () => {
         vulnerable("1:35–2:51", DRUID),
       ]),
     ).toEqual([]);
+  });
+  // fact10 D25 (user ruling 2026-11-04): a passive absorb proc's line is a
+  // fact only and cuts no span (kind "passive", `ownSaveSpanS` undefined)
+  it("passes: a passive absorb proc's line inside the span", () => {
+    const line = `Angelic Bulwark (${enemySaveEffectNote("absorb", 56_000, "2.7s")}) ${ENEMY_DEF_NO_PRESS_TAG}`;
+    expect(
+      checkNoWindowAcrossOwnSave([
+        ...ROSTER,
+        vulnerable("1:35–2:51"),
+        own("2:04", line),
+      ]),
+    ).toEqual([]);
+    // the same line under an ordinary save's name still fails
+    expect(
+      checkNoWindowAcrossOwnSave([
+        ...ROSTER,
+        vulnerable("1:35–2:51"),
+        own("2:04", line.replace("Angelic Bulwark", "Anti-Magic Shell")),
+      ]),
+    ).toHaveLength(1);
   });
 });

@@ -211,6 +211,7 @@ import {
   enemySaveEffectOfNote,
   isShieldOnEnemyCdLine,
   ownWallLineNames,
+  PASSIVE_ABSORB_PROC_AURAS,
   SAVE_AURA_END_UNSEEN_NAMES,
   schoolLimitedImmunityNames,
   selfSaveMechanismOfName,
@@ -1667,7 +1668,8 @@ const TIMELINE_LEGEND_HEAD = /^MATCH TIMELINE$/;
 const DEATH_LINE_PID = /^\d+:\d{2}\s+\[DEATH\]\s+(\S+)/;
 /** The one timestamped line a `[DEATH]` entry carries under it
  *  (`emitEnemyDeathEntries`): `m:ss  [ROSTER]  enemy 5(FMage) removed (dead)`. */
-const DEATH_ROSTER_LINE = /^\d+:\d{2}\s+\[ROSTER\]\s+enemy (\S+) removed \(dead\)/;
+const DEATH_ROSTER_LINE =
+  /^\d+:\d{2}\s+\[ROSTER\]\s+enemy (\S+) removed \(dead\)/;
 
 /**
  * Hard invariant (A1, user 2026-10-24 「全按建议」): no timeline line is
@@ -2854,8 +2856,7 @@ export function checkPeelOptionConsistency(lines: string[]): string[] {
         c.spell === spell &&
         c.at >= death - PEEL_LOOKBACK_S &&
         (c.at < death ||
-          (c.at === death &&
-            (deathLine === undefined || c.line < deathLine))),
+          (c.at === death && (deathLine === undefined || c.line < deathLine))),
     );
     if (used)
       why.push(
@@ -5069,6 +5070,11 @@ function windowsAcrossOwnLines(
  * absorb line: `(immune, 3.0s`, `(immune to magic, end not logged`,
  * `(absorb, 2.0s` / `(absorb 494k, 3.5s` — with its length, or the
  * official-length cap the producer cut at when the end was never logged. */
+/** The names a passive absorb proc's `[ENEMY DEF]` line carries. */
+const PASSIVE_ABSORB_PROC_NAMES: ReadonlySet<string> = new Set(
+  PASSIVE_ABSORB_PROC_AURAS.values(),
+);
+
 const ENEMY_DEF_OWN_SAVE_LABEL = new RegExp(
   String.raw`^\((?:immune(?: to [a-z]+(?:\/[a-z]+)*)?|absorb(?: (?:<1k|\d+k))?), (?:${ENEMY_DEF_END_NOT_LOGGED}|(\d+(?:\.\d+)?)s)`,
 );
@@ -5080,12 +5086,17 @@ const ENEMY_DEF_OWN_SAVE_LABEL = new RegExp(
  * own `[ENEMY DEF]` line labelled `immune …` / `absorb …` (`ownSaveSpanS`,
  * the producer's cut). A line of no length (`0.0s`) cuts nothing. 605
  * capture before the cut: see docs/prompt-version-history.md v420.
+ *
+ * A passive absorb proc's line (`PASSIVE_ABSORB_PROC_AURAS`, Angelic
+ * Bulwark: kind `"passive"`, for which `ownSaveSpanS` gives no span) is a
+ * fact line only and cuts nothing (fact10 D25, user ruling 2026-11-04).
  */
 export function checkNoWindowAcrossOwnSave(lines: string[]): string[] {
   const savesOf = new Map<string, Array<{ second: number; spell: string }>>();
   for (const line of lines) {
     const m = ENEMY_DEF_LINE.exec(line);
     if (!m || !m[0].endsWith("(")) continue;
+    if (PASSIVE_ABSORB_PROC_NAMES.has(m[3]!)) continue;
     const label = ENEMY_DEF_OWN_SAVE_LABEL.exec(
       line.slice(m.index + m[0].length - 1),
     );
@@ -6129,9 +6140,10 @@ export function checkCdPriorCrossingHp(lines: string[]): string[] {
   const failures: string[] = [];
   lines.forEach((line, i) => {
     if (!/^\s*\d+:\d{2}\s+\[CD PRIOR\]/.test(line)) return;
-    const m = /;\s*(\d+\([^()]*\))(?: \(you\))? fell below that at (\d+):(\d{2}) \((\d+)%\)/.exec(
-      line,
-    );
+    const m =
+      /;\s*(\d+\([^()]*\))(?: \(you\))? fell below that at (\d+):(\d{2}) \((\d+)%\)/.exec(
+        line,
+      );
     if (!m) return;
     const tick = stateAt.get(Number(m[2]) * 60 + Number(m[3]))?.get(m[1]!);
     if (tick === undefined) return;
@@ -8241,14 +8253,13 @@ export function checkSelfOnlyDefensiveClaims(lines: string[]): string[] {
     // wall on an ally (`allyReachTalentNote`, user ruling 2026-10-27) — the
     // note must be the one that spell's talent prints
     const note = / \((on an ally — [^)]+)\)$/.exec(spellName.trim());
-    const name = note ? spellName.trim().slice(0, note.index) : spellName.trim();
+    const name = note
+      ? spellName.trim().slice(0, note.index)
+      : spellName.trim();
     const spellId = DEFENSIVE_ID_BY_NAME.get(name);
     if (!spellId) return; // 认不出的技能不报
     if (canHelpAnotherUnit(spellId)) return;
-    if (
-      note &&
-      allyReachTalentNote({ spellId, allyReach: true }) === note[1]
-    )
+    if (note && allyReachTalentNote({ spellId, allyReach: true }) === note[1])
       return;
     violations.push(
       `self-only defensive offered for another unit's death: "${line.trim()}" ` +

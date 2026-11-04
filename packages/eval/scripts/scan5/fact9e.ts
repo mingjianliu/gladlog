@@ -23,13 +23,17 @@
  *    channelled cooldown still running at a row whose second starts after
  *    the channel was over — its caster's same-named aura on itself REMOVED,
  *    else (no such row) its next on-GCD press of another spell (a7e95468 r0 1:23: Ray of
- *    Frost 79.05, Ice Lance 80.64, its buff gone 81.98, `1s left`).
+ *    Frost 79.05, Ice Lance 80.64, its buff gone 81.98, `1s left`). A
+ *    periodic-trigger aura's last trigger row just after its REMOVED is
+ *    still the effect (fact10 D29, the producer's reading).
  */
 import { specToString } from "@gladlog/analysis";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { OFF_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
+import { PERIODIC_TRIGGER_SPELLS } from "@gladlog/analysis/src/data/periodicAuraGenerated";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import { RESTATED_END_TOLERANCE_MS } from "@gladlog/analysis/src/utils/auraIntervals";
+import { PERIODIC_LAST_TRIGGER_SLACK_MS } from "@gladlog/analysis/src/utils/enemyCDs";
 
 import {
   APPLIED,
@@ -316,10 +320,9 @@ function resChannel(ctx: IRoundCtx): void {
         // the window is this press's only when the press can reach the row
         // (a window an aura-only occurrence opened later is another's)
         const full = spellEffectData[press.spellId]?.durationSeconds;
-        if (typeof full !== "number" || rowMs - p > (full + 1) * 1000)
-          continue;
+        if (typeof full !== "number" || rowMs - p > (full + 1) * 1000) continue;
         ctx.bump("resWindowAfterChannel");
-        const removed = ((u.auraEvents ?? []) as any[])
+        const removedRow = ((u.auraEvents ?? []) as any[])
           .filter(
             (a) =>
               a.srcUnitId === u.id &&
@@ -328,8 +331,33 @@ function resChannel(ctx: IRoundCtx): void {
               nameOf(a.spellId, a.spellName) === x[1] &&
               tsOf(a) > p,
           )
-          .map(tsOf)
-          .sort((a, b) => a - b)[0];
+          .sort((a, b) => tsOf(a) - tsOf(b))[0];
+        // fact10 D29: a periodic-trigger aura's last trigger row logged
+        // just after its REMOVED is the effect's own — the effect ends there
+        // (`PERIODIC_TRIGGER_SPELLS` within `PERIODIC_LAST_TRIGGER_SLACK_MS`,
+        // the producer's reading; 605 8-1 r1 1:29: Dark Harvest REMOVED
+        // 88.984 s, its 1257065 heal 89.001 s, `1s left` at 89 s)
+        let removed: number | undefined =
+          removedRow === undefined ? undefined : tsOf(removedRow);
+        const triggers =
+          removedRow === undefined
+            ? undefined
+            : PERIODIC_TRIGGER_SPELLS.get(String(removedRow.spellId));
+        if (removed !== undefined && triggers) {
+          const upTo = removed + PERIODIC_LAST_TRIGGER_SLACK_MS;
+          for (const d of [
+            ...((u.damageOut ?? []) as any[]),
+            ...((u.healOut ?? []) as any[]),
+          ]) {
+            const t = tsOf(d);
+            if (
+              t > removed &&
+              t <= upTo &&
+              triggers.includes(String(d.spellId))
+            )
+              removed = t;
+          }
+        }
         const next = successesOf(u)
           .filter(
             (c) =>

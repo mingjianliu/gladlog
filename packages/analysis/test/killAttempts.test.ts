@@ -229,13 +229,44 @@ describe("extractKillAttempts", () => {
         reaction: 1,
         damageOut: [dmg("f1", "e1", 12, 50_000)],
       });
-      return extractKillAttempts([f1], [e1], makeCombat(f1, e1))[0]!
-        .attribution?.trinketed;
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1))[0]!.attribution
+        ?.trinketed;
     };
     // the Medallion removed the Strangulate in its own ms
     expect(run(16.352, 16.352)).toBe(true);
     // a Medallion 2 s after the silence ran out took nothing off
     expect(run(16.352, 18.4)).toBe(false);
+  });
+
+  it("codex 20-F25-05 #2: a trinket that took off two roots is the attempt's when either was of it", () => {
+    const run = (withSecond: boolean) => {
+      const e1 = unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", "853", 10, 4), // Hammer of Justice 10–14
+          ...stunAuras("e1", "339", 13, 3), // Entangling Roots 13–16
+          ...(withSecond ? stunAuras("e1", "102359", 15, 1) : []), // Mass Entanglement 15–16
+        ],
+        spellCastEvents: [
+          {
+            spellId: "336126",
+            logLine: {
+              event: LogEvent.SPELL_CAST_SUCCESS,
+              timestamp: ms(16),
+              parameters: [],
+            },
+          },
+        ],
+      });
+      const f1 = unit("f1", {
+        reaction: 1,
+        damageOut: [dmg("f1", "e1", 12, 50_000)],
+      });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1))[0]!.attribution
+        ?.trinketed;
+    };
+    expect(run(false)).toBe(true);
+    // the second root, outside the attempt, does not hide the first
+    expect(run(true)).toBe(true);
   });
 
   it("codex 20-F16-08 #1: a deferral shield's absorb row is not in the bracket figure", () => {
@@ -570,7 +601,11 @@ describe("formatKillAttemptsForContext — 徽章在手不是失误(用户裁决
       reaction: 1,
       damageOut: [dmg("f1", "e1", 7, 50_000)],
     });
-    const attempts = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+    const attempts = extractKillAttempts(
+      [f1],
+      [e1, e2],
+      makeCombat(f1, e1, [e2]),
+    );
     expect(attempts[0]!.opportunity.tier).toBe("locked");
     const text = formatKillAttemptsForContext(attempts).join("\n");
     expect(text).toContain(
@@ -597,7 +632,11 @@ describe("formatKillAttemptsForContext — 徽章在手不是失误(用户裁决
       reaction: 1,
       damageOut: [dmg("f1", "e1", 7, 50_000)],
     });
-    const attempts = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+    const attempts = extractKillAttempts(
+      [f1],
+      [e1, e2],
+      makeCombat(f1, e1, [e2]),
+    );
     expect(attempts[0]!.opportunity.tier).toBe("locked");
     const text = formatKillAttemptsForContext(attempts).join("\n");
     expect(text).not.toContain("trinket locked by a racial");
@@ -622,7 +661,11 @@ describe("formatKillAttemptsForContext — 徽章在手不是失误(用户裁决
       reaction: 1,
       damageOut: [dmg("f1", "e1", 7, 50_000)],
     });
-    const attempts = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+    const attempts = extractKillAttempts(
+      [f1],
+      [e1, e2],
+      makeCombat(f1, e1, [e2]),
+    );
     const text = formatKillAttemptsForContext(attempts).join("\n");
     expect(text).not.toContain("trinket locked by a racial");
   });

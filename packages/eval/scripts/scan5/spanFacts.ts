@@ -41,6 +41,7 @@ import {
   staleMaxHpRows,
 } from "@gladlog/analysis/src/utils/advancedActions";
 import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
+import { ccLengthIsDrEvidence } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   isHealerSpec,
   MIN_CD_SECONDS,
@@ -257,8 +258,24 @@ function drHalf(ctx: IRoundCtx): void {
     if (!full) continue;
     // "half its length" is the walk's own predicate (fact10 D9 /
     // F25 residual: a 0.4–0.6 ratio band called Chaos Nova's 1.25 s of 3 s
-    // — cut by a trinket and a Purify — half; the walk reads it neither)
-    if (isDiminishedLength(tsOf(off) - tsOf(on), full * 1000) === true)
+    // — cut by a trinket and a Purify — half; the walk reads it neither),
+    // and so is "a length the game ended" (`ccLengthIsDrEvidence`: a
+    // dispel, break, trinket or immunity ends it wherever it was — codex
+    // 20-F25-05 #3)
+    if (
+      isDiminishedLength(tsOf(off) - tsOf(on), full * 1000) === true &&
+      ccLengthIsDrEvidence(
+        unit,
+        {
+          spellId: String(on.spellId),
+          applyMs: tsOf(on),
+          removeMs: tsOf(off),
+          srcUnitId: on.srcUnitId,
+        },
+        ctx.start,
+        caster,
+      )
+    )
       ctx.violate(
         "drHalfLengthFull",
         "halfLengthInBand",

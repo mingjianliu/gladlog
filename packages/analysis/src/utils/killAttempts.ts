@@ -90,8 +90,7 @@ import {
   analyzePlayerCCAndTrinket,
   breakAbilityPresses,
   ccsRemovedByPress,
-  findBrokenDisarm,
-  findBrokenRoot,
+  disarmsRemovedByPress,
   type ICCInstance,
   type IPlayerCCTrinketSummary,
   pressEndedSilence,
@@ -1868,7 +1867,7 @@ function attributeFailure(
   let trinketed = false;
   // fact10 D24 (733ef717 0:09–0:14): what the press removed beside a CC —
   // a disarm, a root, a silence — read as the `[ENEMY TRINKET]` line does
-  // (`findBrokenDisarm`, `findBrokenRoot`, `pressEndedSilence` over the
+  // (`disarmsRemovedByPress`, `pressEndedSilence` over the
   // attackers' silences): the Medallion took off the Strangulate the DK
   // layered into the Hammer of Justice, and the attempt read "not enough
   // damage"
@@ -1886,10 +1885,22 @@ function attributeFailure(
       Pick<ICCInstance, "atSeconds" | "durationSeconds" | "spellId">
     > = [
       ...ccsRemovedByPress(summary.ccInstances, matchStartMs, use.atMs),
-      ...[
-        findBrokenDisarm(summary.disarmInstances ?? [], matchStartMs, use.atMs),
-        findBrokenRoot(summary.rootInstances, matchStartMs, use.atMs),
-      ].filter((x) => x !== undefined),
+      // every disarm and root it took off, not only the one the binder
+      // names (codex 20-F25-05 #2: a Medallion that took off two roots, the
+      // binder's pick outside the attempt; 605: 5 presses took off two) —
+      // the `[DISARM]` line's reading (`disarmsRemovedByPress`)
+      ...disarmsRemovedByPress(
+        summary.disarmInstances ?? [],
+        matchStartMs,
+        use.atMs,
+        summary.ccInstances,
+      ),
+      ...disarmsRemovedByPress(
+        summary.rootInstances ?? [],
+        matchStartMs,
+        use.atMs,
+        summary.ccInstances,
+      ),
       ...silences
         .filter((x) =>
           pressEndedSilence(x.from, x.to, use.atMs, x.spellId, target),
