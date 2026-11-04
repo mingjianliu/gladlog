@@ -11,6 +11,33 @@
     "pct": 100
    }
   ],
+  "1850": [
+   {
+    "carrier": "381746",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381749",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381754",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381756",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381757",
+    "kind": "snapshot",
+    "pct": 15
+   }
+  ],
   "1953": [
    {
     "carrier": "381750",
@@ -23,6 +50,31 @@
     "carrier": "1259614",
     "kind": "rate",
     "mult": 3
+   },
+   {
+    "carrier": "381746",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381749",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381754",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381756",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381757",
+    "kind": "snapshot",
+    "pct": 15
    }
   ],
   "6343": [
@@ -120,6 +172,33 @@
     "mult": 2
    }
   ],
+  "48020": [
+   {
+    "carrier": "381746",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381749",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381754",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381756",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381757",
+    "kind": "snapshot",
+    "pct": 15
+   }
+  ],
   "48265": [
    {
     "carrier": "381732",
@@ -132,6 +211,33 @@
     "carrier": "1259614",
     "kind": "rate",
     "mult": 3
+   }
+  ],
+  "58875": [
+   {
+    "carrier": "381746",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381749",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381754",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381756",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381757",
+    "kind": "snapshot",
+    "pct": 15
    }
   ],
   "61295": [
@@ -165,6 +271,33 @@
     "carrier": "102558",
     "kind": "snapshot",
     "pct": 50
+   }
+  ],
+  "79206": [
+   {
+    "carrier": "381746",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381749",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381754",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381756",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381757",
+    "kind": "snapshot",
+    "pct": 15
    }
   ],
   "107428": [
@@ -297,11 +430,65 @@
     "mult": 1.2475
    }
   ],
+  "186257": [
+   {
+    "carrier": "381746",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381749",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381754",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381756",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381757",
+    "kind": "snapshot",
+    "pct": 15
+   }
+  ],
   "190784": [
    {
     "carrier": "381752",
     "kind": "rate",
     "mult": 1.1764705882352942
+   }
+  ],
+  "192063": [
+   {
+    "carrier": "381746",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381749",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381754",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381756",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381757",
+    "kind": "snapshot",
+    "pct": 15
    }
   ],
   "195072": [
@@ -349,6 +536,33 @@
     "carrier": "381750",
     "kind": "rate",
     "mult": 1.1764705882352942
+   }
+  ],
+  "252216": [
+   {
+    "carrier": "381746",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381749",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381754",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381756",
+    "kind": "snapshot",
+    "pct": 15
+   },
+   {
+    "carrier": "381757",
+    "kind": "snapshot",
+    "pct": 15
    }
   ],
   "257044": [

@@ -98,6 +98,27 @@ describe("Time Spiral — the free movement press", () => {
     expect(presses[1]!.readyAgainAtSeconds).toBeCloseTo(10 + cd, 6);
   });
 
+  it("under the rogue's Blessing of the Bronze (381754, −15 % on label 1381) the opener and its free press read 0.85 × the cooldown (fact10 D6)", () => {
+    const botbRogue = (pressS: number[], auraEvents: any[]) => {
+      const u = rogue(pressS, auraEvents);
+      (u as any).info = {
+        ...(u as any).info,
+        interestingAurasJSON: JSON.stringify(["evoker-1", 381754, 1]),
+      };
+      return u;
+    };
+    const plain = unitCooldownEntry(
+      rogue([10], []),
+      combatOf(rogue([10], [])),
+      SPRINT,
+    )!.cooldownSeconds;
+    const u = botbRogue([10, 40, 200], [removed(ROGUE_SPIRAL, 40_005)]);
+    const entry = unitCooldownEntry(u, combatOf(u), SPRINT)!;
+    expect(entry.casts[1]!.freeRecast).toBe(true);
+    expect(pressReadyAgainAtSeconds(entry, 10)).toBeCloseTo(10 + plain * 0.85, 6);
+    expect(pressReadyAgainAtSeconds(entry, 40)).toBeCloseTo(10 + plain * 0.85, 6);
+  });
+
   it("a row 0.26 s after a free press is its echo, not a press that restarts the cooldown", () => {
     // corpus shape (605 set, Subtlety Sprint / Marksmanship Cheetah): the
     // second row lands before the cooldown could be back and puts no aura up

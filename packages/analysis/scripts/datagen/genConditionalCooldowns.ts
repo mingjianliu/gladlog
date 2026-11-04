@@ -228,6 +228,40 @@ async function main() {
       if (hasCooldown(t))
         add(t, { carrier: r.SpellID!, kind: "rate", mult });
   }
+  // Third pass (fact10 D6): a SpellLabel cooldown SpellMod (aura 218 pct /
+  // 219 flat, op 11 in misc0, the label in misc1) on an observed carrier no
+  // talent reaches — the per-class Blessing of the Bronze auras 381746 /
+  // 381749 / 381754 / 381756 / 381757, −15 % on label 1381 (Sprint, Dash,
+  // Spirit Walk, …), listed on COMBATANT_INFO and up all round. A snapshot,
+  // as the first pass reads the same mod off the inventory.
+  const invCarriers = new Set(inv.rows.map((r) => r.spellId));
+  for (const r of effects.rows) {
+    const aura = Number(r.EffectAura ?? 0);
+    if (Number(r.Effect ?? 0) !== 6 || (aura !== 218 && aura !== 219)) continue;
+    if (Number(r.EffectMiscValue_0 ?? 0) !== 11) continue;
+    if (r.DifficultyID && r.DifficultyID !== "0") continue;
+    if (!observed.has(r.SpellID ?? "") || invCarriers.has(r.SpellID ?? ""))
+      continue;
+    const pvp = r.PvpMultiplier === undefined ? 1 : Number(r.PvpMultiplier);
+    const v =
+      Math.round(Number(r.EffectBasePointsF ?? 0) * (pvp || 1) * 1000) / 1000;
+    if (v >= 0) continue; // a lengthening is no faster recovery
+    for (const t of new Set(
+      labelSpells.get(Number(r.EffectMiscValue_1 ?? 0)) ?? [],
+    )) {
+      if (!hasCooldown(t) || chargedSpells.has(t)) continue;
+      add(
+        t,
+        aura === 218
+          ? { carrier: r.SpellID!, kind: "snapshot", pct: -v }
+          : {
+              carrier: r.SpellID!,
+              kind: "snapshot",
+              flatS: Math.abs(v) > 500 ? -v / 1000 : -v,
+            },
+      );
+    }
+  }
   const sorted = Object.fromEntries(
     Object.entries(out).sort((a, b) => Number(a[0]) - Number(b[0])),
   );

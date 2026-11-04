@@ -14,7 +14,8 @@ import {
 import { makeSpellCastEvent } from "./ported/testHelpers";
 
 const T0 = 1_000_000;
-const row = (id: string, ms: number, dest = "t1") =>
+type Row = Parameters<typeof isNoPressRow>[0];
+const row = (id: string, ms: number, dest = "t1"): Row =>
   makeSpellCastEvent(
     id,
     T0 + ms,
@@ -24,7 +25,7 @@ const row = (id: string, ms: number, dest = "t1") =>
     "Hunter",
     0,
     "The Hunt",
-  );
+  ) as unknown as Row;
 
 describe("fact10 D28 — The Hunt's impact row", () => {
   it("915f90ae 2:48: 1246167 at the press, 1246169 272 ms later at the same target — one press", () => {

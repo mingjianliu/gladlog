@@ -5971,6 +5971,35 @@ function buildCooldownEntry(
       c.cooldownSecondsOverride === undefined
     )
       c.cooldownSecondsOverride = c.baseCooldownSeconds;
+  // Batch C: modifiers that hold only while one of the unit's own buffs is
+  // up (conditionalCooldownsGenerated.json). Snapshot rows price a press
+  // made under the buff (single-charge spells); rate rows (read above) warp
+  // the clock. Before the free presses below: one stands on its opener's
+  // own priced cooldown (fact10 D6: a Blessing of the Bronze Sprint at 0:53,
+  // 51 s, then a Time Spiral press at 1:25 read back at 1:53, re-pressed at
+  // 1:44).
+  if (carriers) {
+    for (const m of conditional) {
+      const ivs = carriers.get(m.carrier) ?? [];
+      if (!ivs.length) continue;
+      if (m.kind === "rate") continue;
+      if (baselineCharges <= 1) {
+        for (const c of casts) {
+          if (c.cooldownSecondsOverride !== undefined) continue;
+          if (
+            !ivs.some(
+              (iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS,
+            )
+          )
+            continue;
+          c.cooldownSecondsOverride = Math.max(
+            0,
+            (cooldownSeconds - (m.flatS ?? 0)) * (1 - (m.pct ?? 0) / 100),
+          );
+        }
+      }
+    }
+  }
   // Time Spiral's free press stands on the cooldown of the last press that
   // started one (on none: ready again at once); a charge spell's simulation
   // leaves it out (`chargeSpendTimesOf`).
@@ -6028,32 +6057,6 @@ function buildCooldownEntry(
     }
   }
 
-  // Batch C: modifiers that hold only while one of the unit's own buffs is
-  // up (conditionalCooldownsGenerated.json). Snapshot rows price a press
-  // made under the buff (single-charge spells); rate rows (read above) warp
-  // the clock.
-  if (carriers) {
-    for (const m of conditional) {
-      const ivs = carriers.get(m.carrier) ?? [];
-      if (!ivs.length) continue;
-      if (m.kind === "rate") continue;
-      if (baselineCharges <= 1) {
-        for (const c of casts) {
-          if (c.cooldownSecondsOverride !== undefined) continue;
-          if (
-            !ivs.some(
-              (iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS,
-            )
-          )
-            continue;
-          c.cooldownSecondsOverride = Math.max(
-            0,
-            (cooldownSeconds - (m.flatS ?? 0)) * (1 - (m.pct ?? 0) / 100),
-          );
-        }
-      }
-    }
-  }
   const readyAfter = (c: ICooldownCast): number => {
     const own = c.cooldownSecondsOverride ?? cooldownSeconds;
     if (!rateWindows) return c.timeSeconds + own;
