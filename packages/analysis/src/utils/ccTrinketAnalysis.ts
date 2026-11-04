@@ -1168,6 +1168,11 @@ export interface ICCInstance {
   endedByLoggedCause?: true;
   /** The log has no REMOVED for it (its end is the official length). */
   noRemoved?: true;
+  /** Its full length on the holder when its logged length is DR evidence
+   * (`ccLengthIsDrEvidence`) — what the DR walk read inside
+   * `DR_RESET_TICK_MS`, carried so the Q2 point queries
+   * (`getDRLevelAtTime`) read the same evidence (codex 20-F25-04 #1). */
+  drFullSeconds?: number;
   damageTakenDuring: number;
   /**
    * `racial_break` (2026-08-12): the CC was removed by a racial that does what
@@ -2397,6 +2402,49 @@ export function ccEndedByLoggedCause(
     // aura) rides the holder's own press, which the break binder binds.
     immunityAuraAtRemoval(holder, spellId, removeMs, srcUnitId)?.byUnitId !==
       undefined
+  );
+}
+
+/**
+ * Whether a control's logged length can tell its DR tier (fact10 D9, read
+ * inside `DR_RESET_TICK_MS`): only when nothing but the game ended it. A
+ * cause the log or the holder gives (`ccRemovalCause`: a break row, the
+ * holder's trinket or break press, a dispel), a control immunity going up at
+ * its removal (`immunityAuraAtRemoval`, the holder's own included), the
+ * holder's immunity press (`immunityBreak`) or its caster's stopped channel
+ * (`channelStoppedAtRemoval`) ends it wherever it was — one that happens to
+ * fall at half its length is no 50 % (codex 20-F25-04 #2: a Polymorph broken
+ * by damage at half put the next landed one on Immune).
+ */
+export function ccLengthIsDrEvidence(
+  holder: ICombatUnit,
+  w: { spellId: string; applyMs: number; removeMs: number; srcUnitId?: string },
+  matchStartMs: number,
+  caster?: Pick<ICombatUnit, "actionIn">,
+): boolean {
+  if (
+    ccRemovalCause(
+      holder,
+      w.spellId,
+      w.applyMs,
+      w.removeMs,
+      undefined,
+      w.srcUnitId,
+    ) !== undefined
+  )
+    return false;
+  if (immunityAuraAtRemoval(holder, w.spellId, w.removeMs) !== undefined)
+    return false;
+  if (channelStoppedAtRemoval(caster, w.spellId, w.removeMs)) return false;
+  return (
+    immunityBreak(
+      {
+        atSeconds: (w.applyMs - matchStartMs) / 1000,
+        durationSeconds: (w.removeMs - w.applyMs) / 1000,
+      },
+      matchStartMs,
+      holder,
+    ) === null
   );
 }
 
@@ -3798,7 +3846,15 @@ export function analyzePlayerCCAndTrinket(
   const fullSecondsOfWindow = (
     w: (typeof filteredCCWindows)[number],
   ): number | undefined =>
-    w.noRemoved || w.stillOnAtRoundEnd || w.roarAtApply
+    w.noRemoved ||
+    w.stillOnAtRoundEnd ||
+    w.roarAtApply ||
+    !ccLengthIsDrEvidence(
+      player,
+      w,
+      matchStartMs,
+      castersById.get(w.srcUnitId),
+    )
       ? undefined
       : ccFullDurationForCaster(w.spellId, castersById.get(w.srcUnitId));
   const walkDr = () => {
@@ -4192,10 +4248,14 @@ export function analyzePlayerCCAndTrinket(
     matchStartMs,
     historyOnly,
   );
-  const ccInstances: ICCInstance[] = sorted.map((cc, i) => ({
-    ...cc,
-    drInfo: drAnnotations[i] ?? null,
-  }));
+  const ccInstances: ICCInstance[] = sorted.map((cc, i) => {
+    const full = fullOfInstance.get(cc);
+    return {
+      ...cc,
+      ...(full !== undefined ? { drFullSeconds: full } : {}),
+      drInfo: drAnnotations[i] ?? null,
+    };
+  });
 
   const missedTrinketWindows = ccInstances.filter(
     (c) =>

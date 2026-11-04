@@ -126,6 +126,7 @@ import {
 } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { ROOT_AURA_SPELL_IDS } from "@gladlog/analysis/src/data/rootAuraGenerated";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { staleMaxHpRows } from "@gladlog/analysis/src/utils/advancedActions";
 import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { pressRidesAlong } from "@gladlog/analysis/src/utils/castCommitSpans";
 import { PRESS_TRIGGERED_CAST_IDS } from "@gladlog/analysis/src/utils/castMissRows";
@@ -168,9 +169,12 @@ export const CHECKS = [
   "resHastedLeftUnclosed",
   "channelLastTickDropped",
   "drResetBandLength",
+  "drBandForcedEnd",
   "summonDiedBeforePulse",
   "reflectedHealerCcNoConseq",
   "killAttemptTrinketOutMissed",
+  "unusedOwnAuraOnAlly",
+  "staleMaxTickRescaled",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -217,6 +221,8 @@ export function run(ctx: IRoundCtx): void {
   summonDiedBeforePulse(ctx);
   reflectedHealerCcNoConseq(ctx);
   killAttemptTrinketOutMissed(ctx);
+  unusedOwnAuraOnAlly(ctx);
+  staleMaxTickRescaled(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -860,8 +866,11 @@ function drResetBandLength(ctx: IRoundCtx): void {
     const m = DR_LINE.exec(l);
     if (!m) continue;
     // a length something cut (a dispel, a break, an immunity, a press) is
-    // no reading of the DR (cover set 31-2 r2 1:39: Blessing of Sanctuary)
-    if (/ended by|dispelled by|broke this|broken by|cut short/.test(l)) continue;
+    // no reading of the DR (cover set 31-2 r2 1:39: Blessing of Sanctuary):
+    // in the band it resets — drBandForcedEnd (codex 20-F25-04 #2)
+    const forced = /ended by|dispelled by|broke this|broken by|cut short/.test(
+      l,
+    );
     const u = ctx.unitOfPid(m[3]);
     if (!u) continue;
     const sec = mss(m[1]!, m[2]!);
@@ -901,6 +910,20 @@ function drResetBandLength(ctx: IRoundCtx): void {
     const full = ccFullDurationForCaster(id, caster);
     if (!full) continue;
     const len = (tsOf(end) - tsOf(land)) / 1000;
+    if (forced) {
+      if (Math.abs(len - full / 2) > 0.15) continue;
+      ctx.bump("drBandForcedEnd");
+      if (m[5] !== "Full")
+        ctx.violate(
+          "drBandForcedEnd",
+          name,
+          tsOf(land),
+          `${u.name}:${sec}`,
+          `${fmtS(sec)} ${name} on ${u.name}: ${(gap / 1000).toFixed(3)} s after the family's last control ended, cut at ${len.toFixed(2)} s of ${full} s, printed ${m[5]}`,
+          l.slice(0, 160),
+        );
+      continue;
+    }
     const says =
       Math.abs(len - full / 2) <= 0.15
         ? "50%"
@@ -1076,3 +1099,100 @@ function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
     }
   }
 }
+
+/**
+ * unusedOwnAuraOnAlly (class 7, D19): a `<cooldowns>` entry `Name [..]
+ * [UNUSED]` whose unit put an aura of that name on another unit inside the
+ * round with no cast row of the name — the press was out of the recorder's
+ * sight (46eb2199 r0: a prowling Balance Druid's Stampeding Roar 77764 on
+ * two allies at 0:03.256, the kit read `[UNUSED]`). Counted: every kit entry
+ * with such an aura and no cast row.
+ */
+function unusedOwnAuraOnAlly(ctx: IRoundCtx): void {
+  const end = roundEndMs(ctx.legacy);
+  for (const u of ctx.players) {
+    const pid = ctx.pidOf(u.name);
+    const at = ctx.text.indexOf(`<unit id="${pid}" `);
+    if (at < 0) continue;
+    const cds = /<cooldowns>([^<]*)<\/cooldowns>/.exec(ctx.text.slice(at))?.[1];
+    if (!cds) continue;
+    const cast = new Set(
+      successesOf(u)
+        .filter((c) => tsOf(c) >= ctx.start && tsOf(c) <= end)
+        .map((c) => nameOf(c.spellId, c.spellName)),
+    );
+    const onOthers = new Map<string, number>();
+    for (const x of ctx.units)
+      for (const a of (x.auraEvents ?? []) as any[]) {
+        if (ev(a) !== APPLIED || a.srcUnitId !== u.id) continue;
+        if (a.destUnitId === u.id) continue;
+        const t = tsOf(a);
+        if (t < ctx.start || t > end) continue;
+        const name = nameOf(a.spellId, a.spellName);
+        if (!onOthers.has(name)) onOthers.set(name, t);
+      }
+    for (const m of cds.matchAll(/(?:^|, )([^,[]+?) \[[^\]]*\]( \[UNUSED\])?(?=,|$| \[)/g)) {
+      const name = m[1]!;
+      const t = onOthers.get(name);
+      if (t === undefined || cast.has(name)) continue;
+      ctx.bump("unusedOwnAuraOnAlly");
+      if (m[2])
+        ctx.violate(
+          "unusedOwnAuraOnAlly",
+          name,
+          t,
+          `${u.name}:${name}`,
+          `${u.name}: ${name} on another unit at ${fmtS((t - ctx.start) / 1000)} with no cast row; kit reads [UNUSED]`,
+        );
+    }
+  }
+}
+
+/**
+ * staleMaxTickRescaled (class 8, D18 / D33): a `[STATE]` tick whose unit's
+ * last HP row at or before the tick is a stale-max row (`staleMaxHpRows`: the
+ * current already on a max-HP step's new scale, the max still the old one)
+ * prints that row's current over the step's NEW max — the max of the first
+ * later row with a smaller one (461265d4 r0 1:55: Fortifying Brew off, 907k
+ * over the new 1,057,720 = 86, printed the pre-step 88; 6e0b8761 r0 0:14:
+ * Fortitude dispelled, 1,073,314 / 1,158,460 = 93, printed 95). Counted:
+ * every such tick.
+ */
+function staleMaxTickRescaled(ctx: IRoundCtx): void {
+  for (const l of ctx.lines) {
+    const m = STATE.exec(l);
+    if (!m) continue;
+    const tMs = ctx.start + mss(m[1]!, m[2]!) * 1000;
+    for (const x of m[3]!.matchAll(/(\d+)\([^)]*\):(\d+)/g)) {
+      const unit = ctx.unitOfPid(x[1]);
+      if (!unit) continue;
+      const rows = ((unit.advancedActions ?? []) as any[])
+        .filter((a) => a.advancedActorId === unit.id && a.advancedActorMaxHp > 0)
+        .sort((a, b) => tsOf(a) - tsOf(b));
+      let k = -1;
+      for (let i = 0; i < rows.length && tsOf(rows[i]) <= tMs; i++) k = i;
+      if (k < 0 || tMs - tsOf(rows[k]) > 3000) continue;
+      const last = rows[k];
+      if (!staleMaxHpRows(unit).has(last)) continue;
+      const step = rows
+        .slice(k + 1)
+        .find((a) => a.advancedActorMaxHp < last.advancedActorMaxHp);
+      if (!step) continue;
+      ctx.bump("staleMaxTickRescaled");
+      const want = Math.min(
+        100,
+        Math.round((100 * last.advancedActorCurrentHp) / step.advancedActorMaxHp),
+      );
+      if (Math.abs(want - +x[2]!) > 1)
+        ctx.violate(
+          "staleMaxTickRescaled",
+          "tick",
+          tMs,
+          `${unit.name}#${m[1]}:${m[2]}`,
+          `[STATE] ${m[1]}:${m[2]} ${unit.name} printed ${x[2]}, last row ${last.advancedActorCurrentHp} over the new max ${step.advancedActorMaxHp} = ${want}`,
+          l.slice(0, 160),
+        );
+    }
+  }
+}
+

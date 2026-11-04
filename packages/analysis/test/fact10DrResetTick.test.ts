@@ -5,9 +5,16 @@
  * DR_RESET_TICK_MS after the reset window the control's own logged length
  * decides; without one (or with a length that says neither) the reset stands.
  */
+import {
+  CombatUnitReaction,
+  CombatUnitSpec,
+  LogEvent,
+} from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
+import { ccFullDurationForCaster } from "../src/utils/ccDuration";
+import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
 import {
   computeIncomingDR,
   DR_RESET_CUTOVER_EPOCH_MS,
@@ -15,8 +22,10 @@ import {
   DR_RESET_TICK_MS,
   drLevelAtLanding,
   getDRLevel,
+  getDRLevelAtTime,
   isDiminishedLength,
 } from "../src/utils/drAnalysis";
+import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -153,5 +162,96 @@ describe("DR reset tick band (fact10 D9)", () => {
       T0,
     );
     expect(noFull.map((d) => d?.level)).toEqual(["Full", "Full"]);
+  });
+
+  it("the Q2 point query reads the instances' own length evidence (codex 20-F25-04 #1, 11890839 r0 54.818)", () => {
+    const s = (ms: number) => (ms - T0) / 1000;
+    const stun = { category: "Stun", level: "Full" as const, sequenceIndex: 0 };
+    const instances = [
+      { atSeconds: 0, durationSeconds: 4.01, drInfo: stun },
+      {
+        atSeconds: s(boltAt),
+        durationSeconds: 1.52,
+        drInfo: { ...stun, level: "50%" as const, sequenceIndex: 1 },
+        drFullSeconds: 3,
+      },
+    ];
+    const at = s(boltAt) + 1.52 + 0.5;
+    expect(getDRLevelAtTime(instances, "Stun", at, T0)).toBe("Immune");
+    const { drFullSeconds: _d, ...noEvidence } = instances[1]!;
+    void _d;
+    expect(
+      getDRLevelAtTime([instances[0]!, noEvidence], "Stun", at, T0),
+    ).toBe("50%");
+  });
+
+  it("a control a damage break ended at half its length is no DR evidence (codex 20-F25-04 #2)", () => {
+    const POLY = "118";
+    const fullS = ccFullDurationForCaster(POLY, undefined)!;
+    const at = (sec: number) => T0 + Math.round(sec * 1000);
+    const bAt = fullS + 20.1;
+    const bEnd = bAt + fullS / 2;
+    const run = (broken: boolean) => {
+      const mage = makeUnit("mage-1", {
+        name: "Mage",
+        spec: CombatUnitSpec.Mage_Frost,
+        reaction: CombatUnitReaction.Hostile,
+      });
+      const rogue = makeUnit("rogue-1", {
+        name: "Rogue",
+        spec: CombatUnitSpec.Rogue_Assassination,
+        reaction: CombatUnitReaction.Hostile,
+      });
+      const priest = makeUnit("player-1", {
+        name: "Priest",
+        spec: CombatUnitSpec.Priest_Discipline,
+        reaction: CombatUnitReaction.Friendly,
+        auraEvents: [
+          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, POLY, at(0), "mage-1"),
+          makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, POLY, at(fullS), "mage-1"),
+          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, POLY, at(bAt), "mage-1"),
+          ...(broken
+            ? [
+                makeAuraEvent(
+                  LogEvent.SPELL_AURA_BROKEN,
+                  POLY,
+                  at(bEnd),
+                  "rogue-1",
+                ),
+              ]
+            : []),
+          makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, POLY, at(bEnd), "mage-1"),
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            POLY,
+            at(bEnd + 1),
+            "mage-1",
+          ),
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            POLY,
+            at(bEnd + 1 + fullS / 4),
+            "mage-1",
+          ),
+        ],
+      });
+      const combat = {
+        startTime: T0,
+        endTime: T0 + 300_000,
+        startInfo: { zoneId: "1672" },
+        units: { [priest.id]: priest, [mage.id]: mage, [rogue.id]: rogue },
+      };
+      return analyzePlayerCCAndTrinket(priest, [mage, rogue], combat as never, [])
+        .ccInstances.filter((c) => c.spellId === POLY)
+        .map((c) => [c.drInfo?.level, c.drFullSeconds]);
+    };
+    // broken at half: no evidence, the second reset the chain
+    expect(run(true)).toEqual([
+      ["Full", fullS],
+      ["Full", undefined],
+      ["50%", fullS],
+    ]);
+    // ran out at half by itself: its length says 50 %
+    expect(run(false).map((r) => r[0])).toEqual(["Full", "50%", "Immune"]);
   });
 });

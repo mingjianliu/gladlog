@@ -1093,6 +1093,8 @@ export function getDRLevelAtTime(
     atSeconds: number;
     durationSeconds: number;
     drInfo: IDRInfo | null;
+    /** `ICCInstance.drFullSeconds`: the walk's own length evidence */
+    drFullSeconds?: number;
   }>,
   category: string,
   atSeconds: number,
@@ -1106,6 +1108,9 @@ export function getDRLevelAtTime(
         applyMs: matchStartMs + cc.atSeconds * 1000,
         removeMs: matchStartMs + (cc.atSeconds + cc.durationSeconds) * 1000,
         spellId: "",
+        ...(cc.drFullSeconds !== undefined
+          ? { fullMs: cc.drFullSeconds * 1000 }
+          : {}),
       });
   return drLevelNextAt(history, matchStartMs + atSeconds * 1000);
 }

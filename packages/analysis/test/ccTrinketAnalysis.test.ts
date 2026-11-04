@@ -358,6 +358,9 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       // the official PvP length of Polymorph at Full DR (F-E15: what the
       // break binder ranks "time left" by)
       expectedDurationSeconds: ccFullDurationSeconds("118"),
+      // its full length on the holder, the DR walk's length evidence
+      // (fact10 D9, carried for the Q2 queries — codex 20-F25-04 #1)
+      drFullSeconds: ccFullDurationSeconds("118"),
       spellId: "118",
       spellName: "Polymorph",
       sourceName: "EnemyMage",
