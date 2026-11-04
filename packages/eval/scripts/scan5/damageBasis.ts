@@ -78,6 +78,7 @@ import {
 } from "@gladlog/analysis/src/data/spellReach";
 import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
 import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
+import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 
 import {
   ABSORBED,
@@ -228,11 +229,7 @@ function duringExternalShare(ctx: IRoundCtx): void {
           ev(x) === APPLIED &&
           Math.abs(tsOf(x) - tsOf(applied)) <= 5,
       ).length >= 6;
-    const fromMs = restated
-      ? tsOf(press)
-      : applied
-        ? tsOf(applied)
-        : lo;
+    const fromMs = restated ? tsOf(press) : applied ? tsOf(applied) : lo;
     const printedTo = fromMs + +m[5]! * 1000;
     // the aura's own end, read from its row (a re-broadcast's REMOVED sits
     // mid-span, so the one the printed length points at)
@@ -244,8 +241,7 @@ function duringExternalShare(ctx: IRoundCtx): void {
           nameOf(a.spellId, a.spellName) === m[3],
       )
       .sort(
-        (a, b) =>
-          Math.abs(tsOf(a) - printedTo) - Math.abs(tsOf(b) - printedTo),
+        (a, b) => Math.abs(tsOf(a) - printedTo) - Math.abs(tsOf(b) - printedTo),
       )[0];
     const removed = removedRow === undefined ? undefined : tsOf(removedRow);
     const auraTo =
@@ -525,7 +521,7 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
     }
     const lo = ctx.start + secOfTag(m[1]!, m[2]!) * 1000;
     const auras = ((target.auraEvents ?? []) as any[]).filter(
-      (a) => nameOf(a.spellId, a.spellName) === m[6],
+      (a) => nameOf(a.spellId, a.spellName) === withoutDeferralTag(m[6]!),
     );
     const up = auras.find(
       (a) => ev(a) === APPLIED && tsOf(a) >= lo - 1000 && tsOf(a) < lo + 1000,

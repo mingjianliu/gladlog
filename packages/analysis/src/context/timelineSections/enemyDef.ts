@@ -255,6 +255,10 @@ export function emitEnemyDefEntries(
           // is a fact of the second, not of the save — its absence read as
           // "nothing of ours was running" (0deb726b 0:47 Spirit Link Totem)
           line = `${d.spellName} (area)${burstStr}`;
+        } else if (d.kind === "passive") {
+          // fact10 D25 (user 2026-11-04): a passive absorb proc — what it
+          // absorbed, how long it was up, that nobody pressed it
+          line = `${d.spellName} (${enemySaveEffectNote("absorb", d.absorbedAmount, dur)}) ${ENEMY_DEF_NO_PRESS_TAG}${burstStr}`;
         } else if (d.kind === "self-save") {
           // The unit's own defensive outside the wall table, labelled by what
           // it DOES — never by why it was pressed (user ruling 2026-10-11;

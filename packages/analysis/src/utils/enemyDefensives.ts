@@ -179,6 +179,23 @@ export const RIDER_ABSORB_SAVE_AURAS: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * Passive absorb procs nobody pressed — a low-HP shield that goes up by
+ * itself — keyed by the logged aura id → the name the line prints. User
+ * ruling 2026-11-04 (fact10 D25, 733ef717 r0 0:22.176: a 500,025 Angelic
+ * Bulwark 114214 under the priest at ~28 %, its 114216 lockout beside it, no
+ * cast, every SPELL_ABSORBED under it inside the owner's burst, and no line
+ * said so): a fact line only, `(absorb Nk, Ts) [no press logged]` — never a
+ * KILL ATTEMPTS cause and never a cut in `defenseless` (the F20 ruling
+ * 2026-10-28: passive shields do not count), hence its own event kind
+ * `"passive"`, which no reader of the save kinds reads. This id only; the
+ * other passive absorb procs are a forward-check list on GitHub. Registered
+ * in curatedIdRegistry.
+ */
+export const PASSIVE_ABSORB_PROC_AURAS: ReadonlyMap<string, string> = new Map([
+  ["114214", "Angelic Bulwark"],
+]);
+
+/**
  * User rulings 2026-10-21 on the F16 same-round retest — auras that end a
  * kill window's `defenseless` span while they are on the target, without an
  * `[ENEMY DEF]` line of their own (a rotational press is no defensive line):
@@ -744,6 +761,10 @@ export const ENEMY_SAVE_EFFECT_BY_NAME: ReadonlyMap<string, EnemySaveEffect> =
     ["Feign Death", "absorb"],
     // a rider absorb shield (`RIDER_ABSORB_SAVE_AURAS`, user ruling 2026-10-20)
     ...[...RIDER_ABSORB_SAVE_AURAS.values()].map(
+      (n): [string, EnemySaveEffect] => [n, "absorb"],
+    ),
+    // a passive absorb shield (`PASSIVE_ABSORB_PROC_AURAS`, fact10 D25)
+    ...[...PASSIVE_ABSORB_PROC_AURAS.values()].map(
       (n): [string, EnemySaveEffect] => [n, "absorb"],
     ),
     ...Object.values(ENEMY_PROC_SAVES).map((p): [string, EnemySaveEffect] => [
@@ -1732,7 +1753,7 @@ export interface IEnemyDefensiveEvent {
   casterName: string;
   casterId?: string;
   /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy; "self-save" = the caster's own defensive outside the wall table (`SELF_SAVE_IDS` — see `mechanism` — or an effect save — see `effect`); "area" = an area save anchored on its cast (`ENEMY_AREA_SAVE_IDS`): who pressed it and when, nothing else */
-  kind: "self" | "immune" | "external" | "self-save" | "area";
+  kind: "self" | "immune" | "external" | "self-save" | "area" | "passive";
   /** Set on a self-save whose line carries an effect note
    * (`enemySaveEffectNote`): `(absorb Nk, Ts)` — Feign Death (`effectSaves`,
    * ruling D8) and a pressed self defensive whose mechanism is an absorb —
@@ -2328,8 +2349,7 @@ export function enemyDefensiveEvents(
       // in whole log milliseconds: 10.05 - 10 is 0.05000000000000071 in
       // floating point, which rejected a cast exactly 50 ms after its aura
       .filter(
-        (t) =>
-          putUp(t) || pressRefreshedCopy(enemy, iv, t, combat.startTime),
+        (t) => putUp(t) || pressRefreshedCopy(enemy, iv, t, combat.startTime),
       )
       .reduce(
         (best, t) =>
@@ -2448,6 +2468,27 @@ export function enemyDefensiveEvents(
             ...earlyEndOf(enemy, shield, shield.spellId),
           }
         : { removedEarly: false }),
+    });
+  }
+
+  // fact10 D25 (user 2026-11-04): a passive absorb proc — a fact line only
+  // (`PASSIVE_ABSORB_PROC_AURAS`, kind "passive")
+  for (const iv of intervalsOf(enemy)) {
+    const name = PASSIVE_ABSORB_PROC_AURAS.get(iv.spellId);
+    if (!name || !isIntervalFrom(iv, enemy)) continue;
+    const absorbed = absorbedDuring(enemy, inRound(iv), combat.startTime);
+    out.push({
+      atSeconds: iv.fromS,
+      spellId: iv.spellId,
+      spellName: name,
+      casterName: enemy.name,
+      casterId: enemy.id,
+      kind: "passive",
+      effect: "absorb",
+      noPressLogged: true,
+      observedSeconds: iv.toS - iv.fromS,
+      ...(absorbed !== undefined ? { absorbedAmount: absorbed } : {}),
+      ...earlyEndOf(enemy, iv, iv.spellId),
     });
   }
 

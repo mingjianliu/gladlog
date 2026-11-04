@@ -2106,6 +2106,21 @@ const INDEX: PredicateRow[] = [
     mod: ccTrinketAnalysis,
   },
   {
+    file: `${A}/utils/offensiveWasteAnalysis.ts`,
+    symbol: "INTO_DEFERRAL_TAG",
+    mod: offensiveWasteAnalysis,
+  },
+  {
+    file: `${A}/utils/offensiveWasteAnalysis.ts`,
+    symbol: "withoutDeferralTag",
+    mod: offensiveWasteAnalysis,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "PASSIVE_ABSORB_PROC_AURAS",
+    mod: enemyDefensives,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "crisisHpProbeMismatch",
     mod: promptQualityCheck,

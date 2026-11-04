@@ -140,7 +140,12 @@ import {
   DR_RESET_TICK_MS,
   isDiminishedLength,
 } from "@gladlog/analysis/src/utils/drAnalysis";
-import { isDeferralDamageRow } from "@gladlog/analysis/src/utils/incomingPressure";
+import { PASSIVE_ABSORB_PROC_AURAS } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  DEFERRAL_SHIELD_DAMAGE_IDS,
+  isDeferralDamageRow,
+} from "@gladlog/analysis/src/utils/incomingPressure";
+import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import {
   nonPlayerUnitKill,
@@ -180,6 +185,8 @@ export const CHECKS = [
   "killAttemptTrinketOutMissed",
   "unusedOwnAuraOnAlly",
   "staleMaxTickRescaled",
+  "deferralFiledAsWall",
+  "passiveAbsorbProcUnlisted",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -228,6 +235,8 @@ export function run(ctx: IRoundCtx): void {
   killAttemptTrinketOutMissed(ctx);
   unusedOwnAuraOnAlly(ctx);
   staleMaxTickRescaled(ctx);
+  deferralFiledAsWall(ctx);
+  passiveAbsorbProcUnlisted(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -262,7 +271,8 @@ export function run(ctx: IRoundCtx): void {
 
 const mss = (m: string, ss: string) => +m * 60 + +ss;
 const BURST_HEAD = /^\s*Burst #\d+ — (\d+):(\d{2})–(\d+):(\d{2}) \|/;
-const BURST_TARGET = /^\s*Target: (\S+) \d+% → \d+% \(low (\d+)% at (\d+):(\d{2})\)/;
+const BURST_TARGET =
+  /^\s*Target: (\S+) \d+% → \d+% \(low (\d+)% at (\d+):(\d{2})\)/;
 const SPIKE =
   /^(\d+):(\d{2})–(\d+):(\d{2})\s+\[DMG SPIKE\]\s+(\d+)\(.*low (\d+)% @(\d+):(\d{2})/;
 const STATE = /^(\d+):(\d{2})\s+\[STATE\]\s+(.*)$/;
@@ -292,7 +302,8 @@ function troughPastRoundEnd(ctx: IRoundCtx): void {
     const m = STATE.exec(l);
     if (!m) continue;
     const row = new Map<string, number>();
-    for (const t of m[3]!.matchAll(/(\d+)\([^)]*\):(\d+)/g)) row.set(t[1]!, +t[2]!);
+    for (const t of m[3]!.matchAll(/(\d+)\([^)]*\):(\d+)/g))
+      row.set(t[1]!, +t[2]!);
     ticks.set(mss(m[1]!, m[2]!), row);
   }
   const judge = (
@@ -332,7 +343,14 @@ function troughPastRoundEnd(ctx: IRoundCtx): void {
     }
     const t = BURST_TARGET.exec(l);
     if (t && burst) {
-      judge(ctx.byName.get(t[1]!), burst.from, burst.to, +t[2]!, "burst ledger", l);
+      judge(
+        ctx.byName.get(t[1]!),
+        burst.from,
+        burst.to,
+        +t[2]!,
+        "burst ledger",
+        l,
+      );
       burst = null;
     }
   }
@@ -393,7 +411,9 @@ function trinketAfterAllyImmunity(ctx: IRoundCtx): void {
 
 /** `name start–end` spans of each burst-ledger header (a single-press
  * header's own range for its one name) */
-function ledgerSpans(text: string): { name: string; from: number; to: number }[] {
+function ledgerSpans(
+  text: string,
+): { name: string; from: number; to: number }[] {
   const out: { name: string; from: number; to: number }[] = [];
   for (const l of text.split("\n")) {
     const h = /^\s*Burst #\d+ — (\d+):(\d{2})–(\d+):(\d{2}) \| (.+)$/.exec(l);
@@ -401,9 +421,18 @@ function ledgerSpans(text: string): { name: string; from: number; to: number }[]
     const parts = h[5]!.split(" + ");
     for (const part of parts) {
       const p = /^(.+?) (\d+):(\d{2})–(\d+):(\d{2})$/.exec(part.trim());
-      if (p) out.push({ name: p[1]!, from: mss(p[2]!, p[3]!), to: mss(p[4]!, p[5]!) });
+      if (p)
+        out.push({
+          name: p[1]!,
+          from: mss(p[2]!, p[3]!),
+          to: mss(p[4]!, p[5]!),
+        });
       else if (parts.length === 1)
-        out.push({ name: part.trim(), from: mss(h[1]!, h[2]!), to: mss(h[3]!, h[4]!) });
+        out.push({
+          name: part.trim(),
+          from: mss(h[1]!, h[2]!),
+          to: mss(h[3]!, h[4]!),
+        });
     }
   }
   return out;
@@ -414,7 +443,9 @@ function effectSpanSideAuraEnd(ctx: IRoundCtx): void {
   const spans = ledgerSpans(ctx.text);
   if (spans.length === 0) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
-  const enemies = ctx.units.filter((u: any) => u.reaction !== ctx.owner.reaction);
+  const enemies = ctx.units.filter(
+    (u: any) => u.reaction !== ctx.owner.reaction,
+  );
   for (const caster of side) {
     for (const c of (caster.spellCastEvents ?? []) as any[]) {
       if (ev(c) !== SUCCESS) continue;
@@ -433,11 +464,16 @@ function effectSpanSideAuraEnd(ctx: IRoundCtx): void {
         const applied = auras.filter(
           (a) => ev(a) === APPLIED && tsOf(a) >= t && tsOf(a) <= t + 1000,
         );
-        const roots = applied.filter((a) => ROOT_AURA_SPELL_IDS.has(String(a.spellId)));
+        const roots = applied.filter((a) =>
+          ROOT_AURA_SPELL_IDS.has(String(a.spellId)),
+        );
         // the press's own family: an aura named as the root or as the press
         // (The Hunt's root and damage aura are both "The Hunt"), not another
         // aura the caster happened to apply in that second
-        const family = new Set([name, ...roots.map((r) => nameOf(r.spellId, r.spellName))]);
+        const family = new Set([
+          name,
+          ...roots.map((r) => nameOf(r.spellId, r.spellName)),
+        ]);
         const others = applied.filter(
           (a) =>
             !ROOT_AURA_SPELL_IDS.has(String(a.spellId)) &&
@@ -447,7 +483,10 @@ function effectSpanSideAuraEnd(ctx: IRoundCtx): void {
         const endOf = (a: any) =>
           tsOf(
             auras.find(
-              (r) => ev(r) === REMOVED && r.spellId === a.spellId && tsOf(r) >= tsOf(a),
+              (r) =>
+                ev(r) === REMOVED &&
+                r.spellId === a.spellId &&
+                tsOf(r) >= tsOf(a),
             ) ?? { timestamp: tsOf(a) },
           );
         for (const r of roots) rootEnd = Math.max(rootEnd, endOf(r));
@@ -486,7 +525,10 @@ function talentedSaveUnseen(ctx: IRoundCtx): void {
       ctx.bump("talentedSaveUnseen");
       const pid = ctx.pidOf(u.name);
       const at = ctx.text.indexOf(`<unit id="${pid}" `);
-      const cds = at >= 0 ? /<cooldowns>([^<]*)<\/cooldowns>/.exec(ctx.text.slice(at))?.[1] : undefined;
+      const cds =
+        at >= 0
+          ? /<cooldowns>([^<]*)<\/cooldowns>/.exec(ctx.text.slice(at))?.[1]
+          : undefined;
       if (cds !== undefined && !cds.includes(`${name} [`))
         ctx.violate(
           "talentedSaveUnseen",
@@ -516,7 +558,8 @@ function mobilityAsDefensive(ctx: IRoundCtx): void {
   }
 }
 
-const JUKE = /^(\d+):(\d{2})\s+\[KICK\]\s+your (.+?) on (\d+)\([^)]*\) — JUKED by fake (.+)$/;
+const JUKE =
+  /^(\d+):(\d{2})\s+\[KICK\]\s+your (.+?) on (\d+)\([^)]*\) — JUKED by fake (.+)$/;
 
 function jukeBarSuperseded(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
@@ -538,7 +581,9 @@ function jukeBarSuperseded(ctx: IRoundCtx): void {
     const starts = ((target.castStartEvents ?? []) as any[]).filter(
       (c) => tsOf(c) <= kickMs && tsOf(c) >= kickMs - 4000,
     );
-    const bar = starts.filter((c) => nameOf(c.spellId, c.spellName) === m[5]).at(-1);
+    const bar = starts
+      .filter((c) => nameOf(c.spellId, c.spellName) === m[5])
+      .at(-1);
     if (!bar) continue;
     const startMs = tsOf(bar);
     const prevBar = ((target.castStartEvents ?? []) as any[])
@@ -590,8 +635,7 @@ function jukeBarSuperseded(ctx: IRoundCtx): void {
   }
 }
 
-const INTO =
-  /^\s*\[(\d+):(\d{2})\] [^(]+\(([^)]+)\): (.+) into (.+?)'s (.+)$/;
+const INTO = /^\s*\[(\d+):(\d{2})\] [^(]+\(([^)]+)\): (.+) into (.+?)'s (.+)$/;
 const IMPACT_IDS = new Set([...PRESS_TRIGGERED_CAST_IDS.values()].flat());
 
 function pressImpactCountedTwice(ctx: IRoundCtx): void {
@@ -611,7 +655,7 @@ function pressImpactCountedTwice(ctx: IRoundCtx): void {
       (a) =>
         ev(a) === APPLIED &&
         a.destUnitId === target.id &&
-        nameOf(a.spellId, a.spellName) === m[6] &&
+        nameOf(a.spellId, a.spellName) === withoutDeferralTag(m[6]!) &&
         tsOf(a) >= fromMs &&
         tsOf(a) < fromMs + 1000,
     );
@@ -668,14 +712,16 @@ function pressImpactCountedTwice(ctx: IRoundCtx): void {
 
 const FREEZING_RAIN = "270232";
 const ORB_IDS = new Set(["84714", "198149"]);
-const ORB_LINE = /^(\d+):(\d{2})\s+\[ENEMY CD\]\s+(\d+)\([^)]*\)[^:]*: Frozen Orb\b/;
+const ORB_LINE =
+  /^(\d+):(\d{2})\s+\[ENEMY CD\]\s+(\d+)\([^)]*\)[^:]*: Frozen Orb\b/;
 
 function unseenOrbMissing(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
   const orbLines = new Map<string, number[]>();
   for (const l of ctx.lines) {
     const m = ORB_LINE.exec(l);
-    if (m) orbLines.set(m[3]!, [...(orbLines.get(m[3]!) ?? []), mss(m[1]!, m[2]!)]);
+    if (m)
+      orbLines.set(m[3]!, [...(orbLines.get(m[3]!) ?? []), mss(m[1]!, m[2]!)]);
   }
   for (const u of ctx.players) {
     if (u.reaction === ctx.owner.reaction) continue;
@@ -684,7 +730,9 @@ function unseenOrbMissing(ctx: IRoundCtx): void {
       .map(tsOf);
     let up = false;
     const rows = ((u.auraEvents ?? []) as any[])
-      .filter((a) => String(a.spellId) === FREEZING_RAIN && a.destUnitId === u.id)
+      .filter(
+        (a) => String(a.spellId) === FREEZING_RAIN && a.destUnitId === u.id,
+      )
       .sort((a, b) => tsOf(a) - tsOf(b));
     for (const a of rows) {
       const t = tsOf(a);
@@ -697,7 +745,8 @@ function unseenOrbMissing(ctx: IRoundCtx): void {
       ctx.bump("unseenOrbMissing");
       const pid = ctx.pidOf(u.name);
       const sec = Math.floor((t - ctx.start) / 1000);
-      if ((orbLines.get(pid ?? "") ?? []).some((x) => Math.abs(x - sec) <= 1)) continue;
+      if ((orbLines.get(pid ?? "") ?? []).some((x) => Math.abs(x - sec) <= 1))
+        continue;
       ctx.violate(
         "unseenOrbMissing",
         "Frozen Orb",
@@ -782,7 +831,9 @@ const BURST_DAMAGE = /^\s*Target: (\S+) \d+% → \d+%.*?\| your damage ([\d.]+)M
 function channelLastTickDropped(ctx: IRoundCtx): void {
   const o = ctx.owner;
   if (!o) return;
-  const succ = ((o.spellCastEvents ?? []) as any[]).filter((c) => ev(c) === SUCCESS);
+  const succ = ((o.spellCastEvents ?? []) as any[]).filter(
+    (c) => ev(c) === SUCCESS,
+  );
   const auras = ((o.auraEvents ?? []) as any[]).filter(
     (a) => a.srcUnitId === o.id && a.destUnitId === o.id,
   );
@@ -793,7 +844,10 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
       head = {
         from: mss(h[1]!, h[2]!),
         to: mss(h[3]!, h[4]!),
-        opener: /\| ([^|]+?)(?: \d+:\d{2}–\d+:\d{2})?(?: \+ |$)/.exec(l)?.[1]?.trim() ?? "",
+        opener:
+          /\| ([^|]+?)(?: \d+:\d{2}–\d+:\d{2})?(?: \+ |$)/
+            .exec(l)?.[1]
+            ?.trim() ?? "",
       };
       continue;
     }
@@ -820,9 +874,11 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
     let removedAt = 0;
     for (const c of succ) {
       const id = String(c.spellId);
-      if (!CHANNELED_SPELL_IDS.has(id) || tsOf(c) < fromMs || tsOf(c) >= hi) continue;
+      if (!CHANNELED_SPELL_IDS.has(id) || tsOf(c) < fromMs || tsOf(c) >= hi)
+        continue;
       const rem = auras.find(
-        (a) => String(a.spellId) === id && ev(a) === REMOVED && tsOf(a) > tsOf(c),
+        (a) =>
+          String(a.spellId) === id && ev(a) === REMOVED && tsOf(a) > tsOf(c),
       );
       if (!rem) continue;
       const name = nameOf(id, c.spellName);
@@ -857,7 +913,7 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
         "burst ledger",
         removedAt,
         `${from}`,
-        `${fmtS(from)} printed ${printed}M = to the REMOVED (${cut.toFixed(3)}M); with the tick ${((tickEnd - removedAt) | 0)} ms later ${full.toFixed(3)}M`,
+        `${fmtS(from)} printed ${printed}M = to the REMOVED (${cut.toFixed(3)}M); with the tick ${(tickEnd - removedAt) | 0} ms later ${full.toFixed(3)}M`,
         l.slice(0, 160),
       );
   }
@@ -881,7 +937,9 @@ function drResetBandLength(ctx: IRoundCtx): void {
     const sec = mss(m[1]!, m[2]!);
     const name = m[4]!;
     const rows = ((u.auraEvents ?? []) as any[])
-      .filter((a) => a.destUnitId === u.id && DR_CATEGORY_MAP[String(a.spellId)])
+      .filter(
+        (a) => a.destUnitId === u.id && DR_CATEGORY_MAP[String(a.spellId)],
+      )
       .sort((a, b) => tsOf(a) - tsOf(b));
     const land = rows.find(
       (a) =>
@@ -972,7 +1030,8 @@ function summonDiedBeforePulse(ctx: IRoundCtx): void {
       ctx.bump("summonDiedBeforePulse");
       const kill = nonPlayerUnitKill(summon as any);
       if (!kill) continue;
-      const by = (r: any) => r.srcUnitId === summon.id && tsOf(r) <= kill.timestamp;
+      const by = (r: any) =>
+        r.srcUnitId === summon.id && tsOf(r) <= kill.timestamp;
       const wentOff =
         [
           ...((caster.petSpellCastEvents ?? []) as any[]),
@@ -1044,7 +1103,8 @@ function reflectedHealerCcNoConseq(ctx: IRoundCtx): void {
   }
 }
 
-const KILL_ATTEMPT_LINE = /^ {2}\[(\d+):(\d{2})–(\d+):(\d{2})\] on (\S+) — .*\| (FAILED: .+|KILL)$/;
+const KILL_ATTEMPT_LINE =
+  /^ {2}\[(\d+):(\d{2})–(\d+):(\d{2})\] on (\S+) — .*\| (FAILED: .+|KILL)$/;
 const ENEMY_TRINKET_OUT =
   /^(\d+):(\d{2})\s+\[ENEMY TRINKET\]\s+(\d+)\([^)]*\) used PvP trinket out of (.+?) \(by /;
 
@@ -1074,7 +1134,8 @@ function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
       const rows = ((target.auraEvents ?? []) as any[])
         .filter(
           (x) =>
-            x.destUnitId === target.id && nameOf(x.spellId, x.spellName) === o.name,
+            x.destUnitId === target.id &&
+            nameOf(x.spellId, x.spellName) === o.name,
         )
         .sort((x, y) => tsOf(x) - tsOf(y));
       const overlaps = rows.some((app) => {
@@ -1082,9 +1143,7 @@ function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
         // a hard control is the CC binder's (F15 R3 / F16 idx 37): the class
         // is the rest a Medallion removes — silence, disarm, root
         if (ccSpellIds.has(String(app.spellId))) return false;
-        const rem = rows.find(
-          (x) => ev(x) === REMOVED && tsOf(x) >= tsOf(app),
-        );
+        const rem = rows.find((x) => ev(x) === REMOVED && tsOf(x) >= tsOf(app));
         const to = rem ? tsOf(rem) : ctx.end;
         return tsOf(app) < hi && to >= lo;
       });
@@ -1135,7 +1194,9 @@ function unusedOwnAuraOnAlly(ctx: IRoundCtx): void {
         const name = nameOf(a.spellId, a.spellName);
         if (!onOthers.has(name)) onOthers.set(name, t);
       }
-    for (const m of cds.matchAll(/(?:^|, )([^,[]+?) \[[^\]]*\]( \[UNUSED\])?(?=,|$| \[)/g)) {
+    for (const m of cds.matchAll(
+      /(?:^|, )([^,[]+?) \[[^\]]*\]( \[UNUSED\])?(?=,|$| \[)/g,
+    )) {
       const name = m[1]!;
       const t = onOthers.get(name);
       if (t === undefined || cast.has(name)) continue;
@@ -1171,7 +1232,9 @@ function staleMaxTickRescaled(ctx: IRoundCtx): void {
       const unit = ctx.unitOfPid(x[1]);
       if (!unit) continue;
       const rows = ((unit.advancedActions ?? []) as any[])
-        .filter((a) => a.advancedActorId === unit.id && a.advancedActorMaxHp > 0)
+        .filter(
+          (a) => a.advancedActorId === unit.id && a.advancedActorMaxHp > 0,
+        )
         .sort((a, b) => tsOf(a) - tsOf(b));
       let k = -1;
       for (let i = 0; i < rows.length && tsOf(rows[i]) <= tMs; i++) k = i;
@@ -1185,7 +1248,9 @@ function staleMaxTickRescaled(ctx: IRoundCtx): void {
       ctx.bump("staleMaxTickRescaled");
       const want = Math.min(
         100,
-        Math.round((100 * last.advancedActorCurrentHp) / step.advancedActorMaxHp),
+        Math.round(
+          (100 * last.advancedActorCurrentHp) / step.advancedActorMaxHp,
+        ),
       );
       if (Math.abs(want - +x[2]!) > 1)
         ctx.violate(
@@ -1200,3 +1265,76 @@ function staleMaxTickRescaled(ctx: IRoundCtx): void {
   }
 }
 
+/**
+ * deferralFiledAsWall (class 7, D26): an ABILITIES INTO IMMUNITY/DR line into
+ * a deferral shield (`DEFERRAL_SHIELD_DAMAGE_IDS`: Time Dilation) that does
+ * not say it is one — the section's legend files every other line as an
+ * immunity or a damage-reduction wall, and a deferral reduces nothing
+ * (915f90ae r0 1:13: three lines `… into …'s Time Dilation`). Counted: every
+ * line into a deferral shield.
+ */
+function deferralFiledAsWall(ctx: IRoundCtx): void {
+  const names = new Set(
+    Object.keys(DEFERRAL_SHIELD_DAMAGE_IDS).map((id) => nameOf(id)),
+  );
+  for (const l of ctx.lines) {
+    const m = INTO.exec(l);
+    if (!m) continue;
+    const name = withoutDeferralTag(m[6]!);
+    if (!names.has(name)) continue;
+    ctx.bump("deferralFiledAsWall");
+    if (name === m[6])
+      ctx.violate(
+        "deferralFiledAsWall",
+        name,
+        ctx.start + mss(m[1]!, m[2]!) * 1000,
+        `${m[5]}:${m[1]}:${m[2]}`,
+        `into ${m[5]}'s ${name} with no deferral mark`,
+        l.slice(0, 160),
+      );
+  }
+}
+
+/**
+ * passiveAbsorbProcUnlisted (class 7, D25): an enemy's passive absorb proc
+ * (`PASSIVE_ABSORB_PROC_AURAS`: Angelic Bulwark) that went up on itself
+ * inside the round has an `[ENEMY DEF]` line naming it at that second
+ * (733ef717 r0 0:22: a 500k Angelic Bulwark under the priest, no line).
+ * Counted: every such application.
+ */
+function passiveAbsorbProcUnlisted(ctx: IRoundCtx): void {
+  if (!ctx.owner) return;
+  const end = roundEndMs(ctx.legacy);
+  for (const u of ctx.players) {
+    if (u.reaction === ctx.owner.reaction) continue;
+    const pid = ctx.pidOf(u.name);
+    if (!pid) continue;
+    for (const a of (u.auraEvents ?? []) as any[]) {
+      if (ev(a) !== APPLIED || a.destUnitId !== u.id || a.srcUnitId !== u.id)
+        continue;
+      const name = PASSIVE_ABSORB_PROC_AURAS.get(String(a.spellId));
+      if (!name) continue;
+      const t = tsOf(a);
+      if (t < ctx.start || t > end) continue;
+      ctx.bump("passiveAbsorbProcUnlisted");
+      const sec = Math.floor((t - ctx.start) / 1000);
+      const listed = ctx.lines.some((l) => {
+        const m = /^(\d+):(\d{2})\s+\[ENEMY DEF\]\s+(\d+)\(/.exec(l);
+        return (
+          !!m &&
+          m[3] === pid &&
+          mss(m[1]!, m[2]!) === sec &&
+          l.includes(`: ${name} (`)
+        );
+      });
+      if (!listed)
+        ctx.violate(
+          "passiveAbsorbProcUnlisted",
+          name,
+          t,
+          `${u.name}:${sec}`,
+          `${fmtS(sec)} ${u.name}: ${name} went up with no [ENEMY DEF] line`,
+        );
+    }
+  }
+}

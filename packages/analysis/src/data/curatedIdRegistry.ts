@@ -134,6 +134,7 @@ import {
   KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
   KW_REDIRECT_PROTECTION_AURA_IDS,
   KW_UNTARGETABLE_AURA_IDS,
+  PASSIVE_ABSORB_PROC_AURAS,
   RIDER_ABSORB_SAVE_AURAS,
   STEALTH_KEPT_BY_ALLOWED_PRESS_IDS,
 } from "../utils/enemyDefensives";
@@ -569,6 +570,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("RIDER_ABSORB_SAVE_AURAS", "utils/enemyDefensives.ts", "aura", () => [
     ...RIDER_ABSORB_SAVE_AURAS.keys(),
   ]),
+  t("PASSIVE_ABSORB_PROC_AURAS", "utils/enemyDefensives.ts", "aura", () => [
+    ...PASSIVE_ABSORB_PROC_AURAS.keys(),
+  ]),
   // GH #155(10-21):天赋 tooltip 写明、语料验证过的持续时间延长。
   t("TOOLTIP_DURATION_ROWS", "data/talentDurationTooltips.ts", "mixed", () => [
     ...Object.keys(TOOLTIP_DURATION_ROWS),
@@ -906,10 +910,16 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     set(HERALD_PROC_BUNDLE_IDS),
   ),
   t("PRESS_PROOF_AURA_IDS", "utils/hiddenPress.ts", "aura", () =>
-    set([...PRESS_PROOF_AURA_IDS.keys(), ...[...PRESS_PROOF_AURA_IDS.values()].flat()]),
+    set([
+      ...PRESS_PROOF_AURA_IDS.keys(),
+      ...[...PRESS_PROOF_AURA_IDS.values()].flat(),
+    ]),
   ),
   t("SUMMON_BORNE_AURA_IDS", "utils/hiddenPress.ts", "aura", () =>
-    set([...SUMMON_BORNE_AURA_IDS.keys(), ...[...SUMMON_BORNE_AURA_IDS.values()].flat()]),
+    set([
+      ...SUMMON_BORNE_AURA_IDS.keys(),
+      ...[...SUMMON_BORNE_AURA_IDS.values()].flat(),
+    ]),
   ),
   t("CC_AVOIDANCE_FACT_ONLY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(CC_AVOIDANCE_FACT_ONLY_IDS),

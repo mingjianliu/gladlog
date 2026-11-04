@@ -1033,6 +1033,7 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Guardian of the Forgot
     // the saves read off an aura or a heal; a PRESSED shield (Ultimate
     // Penitence, Dark Pact …) is `selfDefensiveMechanism`'s since 2026-10-11
     expect([...ENEMY_SAVE_EFFECT_BY_NAME].sort()).toEqual([
+      ["Angelic Bulwark", "absorb"],
       ["Cauterize", "cheat-death proc"],
       ["Cheat Death", "cheat-death proc"],
       ["Feign Death", "absorb"],
@@ -1117,8 +1118,25 @@ describe("a re-applied aura with no REMOVED between is one press (F-E12)", () =>
   it("a joined interval ends at the later one's closing row (codex 20-F24-15 #3)", () => {
     const row = { ms: 1_026_000, lineIndex: 50 };
     const split = [
-      { spellId: BARKSKIN, spellName: "Barkskin", srcUnitName: "e1", fromS: 10, toS: 14, inferredStart: false, inferredEnd: true },
-      { spellId: BARKSKIN, spellName: "Barkskin", srcUnitName: "e1", fromS: 14, toS: 26, inferredStart: false, inferredEnd: false, toRow: row },
+      {
+        spellId: BARKSKIN,
+        spellName: "Barkskin",
+        srcUnitName: "e1",
+        fromS: 10,
+        toS: 14,
+        inferredStart: false,
+        inferredEnd: true,
+      },
+      {
+        spellId: BARKSKIN,
+        spellName: "Barkskin",
+        srcUnitName: "e1",
+        fromS: 14,
+        toS: 26,
+        inferredStart: false,
+        inferredEnd: false,
+        toRow: row,
+      },
     ];
     expect(joinReappliedIntervals(split, () => [10])).toMatchObject([
       { fromS: 10, toS: 26, toRow: row },

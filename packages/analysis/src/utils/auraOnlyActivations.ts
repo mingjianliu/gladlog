@@ -109,7 +109,8 @@ export function auraOnlyActivations(
   const out = castlessHealCdAuras(unit, matchStartMs, endMs);
   const bounds = { startTime: matchStartMs, endTime: endMs };
   for (const e of enemyDefensiveEvents(unit, [...units], bounds)) {
-    if (!e.noPressLogged || e.procSource) continue;
+    // a passive shield (fact10 D25) is no press at all, hidden or not
+    if (!e.noPressLogged || e.procSource || e.kind === "passive") continue;
     out.push({
       atSeconds: e.atSeconds,
       spellId: e.spellId,

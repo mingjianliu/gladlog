@@ -534,6 +534,23 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     expect(f[0]).toContain("something other than its effect");
   });
 
+  it("fact10 D25: Angelic Bulwark's passive shield reads as an absorb, and only as one", () => {
+    const PRIEST = "5(DPriest) (Discipline Priest)";
+    expect(
+      checkEnemyDefSaveEffect([
+        D(
+          PRIEST,
+          "Angelic Bulwark (absorb 500k, 7.9s — used up) [no press logged] [friendly offensive CD active]",
+        ),
+      ]),
+    ).toEqual([]);
+    const f = checkEnemyDefSaveEffect([
+      D(PRIEST, "Angelic Bulwark (cheat-death proc) [no press logged]"),
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("something other than its effect");
+  });
+
   it("fact4 D6: a deflection reads the producer's deflect words, and nothing else does", () => {
     expect(
       checkEnemyDefSaveEffect([

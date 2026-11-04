@@ -501,6 +501,9 @@ export function computeOffensiveWindows(
     for (const d of enemyDefensiveEvents(caster, enemies, combat)) {
       // F15 C1: a 15 % ally copy cuts no span, as a 15 % own aura does not
       if (isBelowWallFloorExternal(d)) continue;
+      // fact10 D25 (user ruling 2026-11-04): a passive shield that went up
+      // by itself (Angelic Bulwark) is a fact line only — it ends no span
+      if (d.kind === "passive") continue;
       if (d.kind === "area") {
         const lifetimeS =
           buffFullDurationForCaster(d.spellId, caster, matchStartMs) ??

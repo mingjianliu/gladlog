@@ -101,6 +101,7 @@ import {
   distanceBetween,
   getUnitPositionAtTime,
 } from "@gladlog/analysis/src/utils/losAnalysis";
+import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import {
   getHighValueSpellIds,
   pressLandingCaster,
@@ -413,7 +414,7 @@ function runRound(ctx: IContext): void {
         sec: secOf(m[1]!),
         player,
         target,
-        defense: m[5]!,
+        defense: withoutDeferralTag(m[5]!),
         count,
         line: l,
       });

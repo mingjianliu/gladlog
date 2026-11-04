@@ -31,7 +31,7 @@ import {
   specToString,
 } from "./cooldowns";
 import { spellNameKey } from "./damagePress";
-import { isDeferralDamageRow } from "./incomingPressure";
+import { isDeferralAbsorb, isDeferralDamageRow } from "./incomingPressure";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 
@@ -61,6 +61,19 @@ interface IOffensiveWasteCast {
   atSeconds: number;
 }
 
+/** The mark a deferral shield's line carries (fact10 D26, user 2026-11-04:
+ * Time Dilation holds part of each hit back and the target takes it later —
+ * no reduction; it is still counted as the 07-30 ruling's wall). The gates
+ * that read the defense name off the line strip it (`withoutDeferralTag`). */
+export const INTO_DEFERRAL_TAG = " (deferral)";
+
+/** A line's defense name without `INTO_DEFERRAL_TAG`. */
+export function withoutDeferralTag(name: string): string {
+  return name.endsWith(INTO_DEFERRAL_TAG)
+    ? name.slice(0, -INTO_DEFERRAL_TAG.length)
+    : name;
+}
+
 interface IOffensiveWasteEvent {
   casterName: string;
   casterSpec: string;
@@ -69,6 +82,8 @@ interface IOffensiveWasteEvent {
   /** 该减伤在裁定册里的类别 —— 决定这条是不是无条件出面。 */
   verdict: Extract<MitigationVerdict, "unconditional" | "kill-live-gated">;
   defenseName: string;
+  /** a deferral shield (`isDeferralAbsorb`): no reduction */
+  deferral?: true;
   defenseWindowSeconds: [number, number];
   wasteCasts: IOffensiveWasteCast[];
 }
@@ -432,6 +447,9 @@ export function buildOffensiveWasteSummary(
             targetSpec: window.unitSpec,
             verdict: window.verdict,
             defenseName: window.defenseName,
+            ...(isDeferralAbsorb({ spellId: window.spellId })
+              ? { deferral: true as const }
+              : {}),
             defenseWindowSeconds: [window.fromSeconds, window.toSeconds],
             wasteCasts,
           });
@@ -481,12 +499,7 @@ export function pressLandingsMs<T extends LandingPress>(
   targets: readonly Pick<ICombatUnit, "id" | "auraEvents">[],
 ): Map<T, number> {
   const landed = new Map<T, number>();
-  for (const [press, row] of pressLandingRows(
-    presses,
-    atMsOf,
-    caster,
-    targets,
-  ))
+  for (const [press, row] of pressLandingRows(presses, atMsOf, caster, targets))
     landed.set(press, row.atMs);
   return landed;
 }
@@ -568,10 +581,7 @@ export function pressLandingRows<T extends LandingPress>(
     const key = `${press.destUnitId}|${spellNameKey(press.spellId, press.spellName)}`;
     const rows = rowsByKey.get(key) ?? [];
     let next = taken.get(key) ?? 0;
-    while (
-      next < rows.length &&
-      rows[next]!.atMs < atMs - PRESS_EFFECT_LEAD_MS
-    )
+    while (next < rows.length && rows[next]!.atMs < atMs - PRESS_EFFECT_LEAD_MS)
       next++;
     const row = rows[next];
     if (row !== undefined && row.atMs <= atMs + REFLECT_ROW_LAG_MS) {
@@ -635,13 +645,14 @@ export function formatOffensiveWasteForContext(
     `  Two kinds of defensive are listed: one that makes hitting into it pointless whatever the target's HP (full immunities and`,
     `  the few walls signed the same way) — from ${WASTE_MIN_CASTS.unconditional} casts; and a damage-reduction wall — from ${WASTE_MIN_CASTS["kill-live-gated"]} casts, and only when that enemy never`,
     `  read ${KILL_LIVE_HP_PCT}% HP or lower while it was up. Casts counted: the player's spells that each made at least ${Math.round(HIGH_VALUE_DAMAGE_SHARE * 100)}% of their damage this`,
-    "  round, plus their control spells into the first kind.)",
+    "  round, plus their control spells into the first kind. A line marked `(deferral)` is Time Dilation: counted as a",
+    "  damage-reduction wall, but it reduces nothing — it holds part of each hit back and the target takes it later.)",
   ];
   for (const ev of summary.events) {
     const t = fmtTime(ev.defenseWindowSeconds[0]);
     const spells = formatAbilitySequence(ev.wasteCasts);
     lines.push(
-      `  [${t}] ${ev.casterSpec} (${ev.casterName}): ${spells} into ${ev.targetName}'s ${ev.defenseName}`,
+      `  [${t}] ${ev.casterSpec} (${ev.casterName}): ${spells} into ${ev.targetName}'s ${ev.defenseName}${ev.deferral ? INTO_DEFERRAL_TAG : ""}`,
     );
   }
   return lines.join("\n");

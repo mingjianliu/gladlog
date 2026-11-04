@@ -16,6 +16,8 @@ import {
 import {
   buildOffensiveWasteSummary,
   formatOffensiveWasteForContext,
+  INTO_DEFERRAL_TAG,
+  withoutDeferralTag,
   getHighValueSpellIds,
   pressLandingCaster,
   pressLandingRows,
@@ -683,6 +685,50 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
     const summary3 = buildOffensiveWasteSummary(combat, [friend], [enemy]);
     expect(summary3.events).toHaveLength(1);
     expect(summary3.events[0]!.verdict).toBe("kill-live-gated");
+  });
+
+  it("fact10 D26 (915f90ae 1:13): a Time Dilation line says it is a deferral", () => {
+    const friend = makeUnit("warrior-1", {
+      name: "Ares",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [11_000, 12_000, 13_000].map((t) =>
+        makeSpellCastEvent("12294", matchStart + t, "enemy-1"),
+      ),
+    });
+    const enemy = makeUnit("enemy-1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Arcane,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "357170",
+          matchStart + 10_000,
+          "enemy-2",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "357170",
+          matchStart + 18_000,
+          "enemy-2",
+          "enemy-1",
+          "BUFF",
+        ),
+      ],
+    });
+    const summary = buildOffensiveWasteSummary(combat, [friend], [enemy]);
+    expect(summary.events).toHaveLength(1);
+    const line = formatOffensiveWasteForContext(summary)
+      .split("\n")
+      .find((l) => l.startsWith("  [0:10]"))!;
+    expect(line.endsWith(`'s Time Dilation${INTO_DEFERRAL_TAG}`)).toBe(true);
+    expect(withoutDeferralTag("Time Dilation (deferral)")).toBe(
+      "Time Dilation",
+    );
+    expect(withoutDeferralTag("Divine Shield")).toBe("Divine Shield");
   });
 
   it("suppresses kill-live-gated waste if target was in kill territory (HP <= 20%) during window", () => {

@@ -67,6 +67,7 @@ import {
   getUnitRawPositionAtTime,
   hasLineOfSight,
 } from "@gladlog/analysis/src/utils/losAnalysis";
+import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { LOS_SWEEP_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
@@ -433,7 +434,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
     const startS = secOf(m[1]!);
     // a wall the log re-applied inside its printed second is two intervals of
     // that second, and the line is one of them
-    const ivs = wallRuns(ctx, target, m[6]!).filter(
+    const ivs = wallRuns(ctx, target, withoutDeferralTag(m[6]!)).filter(
       (r) => Math.floor((r.fromMs - ctx.start) / 1000) === startS,
     );
     if (ivs.length === 0) continue;
