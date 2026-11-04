@@ -14,6 +14,7 @@ import {
   HASTE_DURATION_SPELL_IDS,
 } from "../data/channeledGenerated";
 import { isOffensivePressFactFor } from "../data/enemyHealCds";
+import { PERIODIC_TRIGGER_SPELLS } from "../data/periodicAuraGenerated";
 import { ROOT_AURA_SPELL_IDS } from "../data/rootAuraGenerated";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
@@ -507,12 +508,47 @@ function observedEffectEnd(
   }
   return best?.observed
     ? {
-        endS: best.end,
+        endS: lastPeriodicTriggerEndS(caster, best.auraId, best.end, combat),
         holderId: best.destId,
         auraId: best.auraId,
         appliedS: pressAppliedS(best),
       }
     : null;
+}
+
+/** How long after a periodic-trigger aura's REMOVED its last trigger is
+ * still its own (fact10 D29). Cover set, 1,746 own REMOVED rows of a
+ * `PERIODIC_TRIGGER_SPELLS` aura: every trigger row after one within 1 s sits
+ * at ≤ 71 ms (Bladestorm 107, Immolation Aura 73, Dark Harvest 61, Fel
+ * Devastation 26, Boomstick 14 …) except Remorseless Winter's ground pulses
+ * at 561–911 ms, a different effect. */
+export const PERIODIC_LAST_TRIGGER_SLACK_MS = 100;
+
+/**
+ * fact10 D29 (1cbbdcb3 Burst #3, 2:01.766): a periodic-trigger aura's
+ * (`PERIODIC_TRIGGER_SPELLS`, DB2 effect 23 / 227) last trigger is logged
+ * just after its REMOVED — Boomstick 1261193's fourth volley 1261215 1 ms
+ * later, Burst #1's 12 ms — and is the effect's own: the effect ends at that
+ * row, by the caster (pets merged), within
+ * `PERIODIC_LAST_TRIGGER_SLACK_MS` and not past the combat's end.
+ */
+function lastPeriodicTriggerEndS(
+  caster: ICombatUnit,
+  auraId: string,
+  endS: number,
+  combat: AtomicArenaCombat,
+): number {
+  const ids = PERIODIC_TRIGGER_SPELLS.get(auraId);
+  if (!ids) return endS;
+  const endMs = combat.startTime + endS * 1000;
+  const upTo = Math.min(endMs + PERIODIC_LAST_TRIGGER_SLACK_MS, combat.endTime);
+  let last = endMs;
+  for (const d of [...(caster.damageOut ?? []), ...(caster.healOut ?? [])]) {
+    const t = d.logLine.timestamp;
+    if (t > last && t <= upTo && !!d.spellId && ids.includes(d.spellId))
+      last = t;
+  }
+  return (last - combat.startTime) / 1000;
 }
 
 /**

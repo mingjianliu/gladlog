@@ -73,6 +73,15 @@
  *    REMOVED 0.2 s past the round's end; the round's first Bladestorm ran
  *    5.07 s, so 4 s were left). Counted: every such entry with a completed
  *    run to compare.
+ *  - channelLastTickDropped (class 4, D29): a burst-ledger entry holding an
+ *    own channel press (`CHANNELED_SPELL_IDS`) whose own aura's REMOVED is
+ *    followed within 100 ms by a damage row of the same-named spell (its
+ *    last tick), and whose printed `your damage X.XXM` on its Target is the
+ *    sum up to the REMOVED, not the sum with the tick (1cbbdcb3 Burst #3
+ *    `Boomstick`: 1261193 off at 2:01.766, the 4th volley 1261215 1 ms
+ *    later, printed 0.23M / 0.30M with it). Sums: the owner's damageOut (pets
+ *    merged) on the Target from the first own press of the header's opening
+ *    second. Counted: every entry with such a trailing tick.
  */
 import {
   CHANNELED_SPELL_IDS,
@@ -86,6 +95,7 @@ import { PRESS_TRIGGERED_CAST_IDS } from "@gladlog/analysis/src/utils/castMissRo
 import { STOPPED_JUST_BEFORE_S } from "@gladlog/analysis/src/utils/castStopEvidence";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import { isDeferralDamageRow } from "@gladlog/analysis/src/utils/incomingPressure";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
@@ -111,6 +121,7 @@ export const CHECKS = [
   "pressImpactCountedTwice",
   "unseenOrbMissing",
   "resHastedLeftUnclosed",
+  "channelLastTickDropped",
 ] as const;
 
 /** fact10 class 1: ruled into the roster 2026-11-04 */
@@ -152,6 +163,7 @@ export function run(ctx: IRoundCtx): void {
   pressImpactCountedTwice(ctx);
   unseenOrbMissing(ctx);
   resHastedLeftUnclosed(ctx);
+  channelLastTickDropped(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
@@ -694,4 +706,90 @@ function resHastedLeftUnclosed(ctx: IRoundCtx): void {
         break;
       }
     }
+}
+
+const BURST_DAMAGE = /^\s*Target: (\S+) \d+% → \d+%.*?\| your damage ([\d.]+)M/;
+
+function channelLastTickDropped(ctx: IRoundCtx): void {
+  const o = ctx.owner;
+  if (!o) return;
+  const succ = ((o.spellCastEvents ?? []) as any[]).filter((c) => ev(c) === SUCCESS);
+  const auras = ((o.auraEvents ?? []) as any[]).filter(
+    (a) => a.srcUnitId === o.id && a.destUnitId === o.id,
+  );
+  let head: { from: number; to: number; opener: string } | null = null;
+  for (const l of ctx.text.split("\n")) {
+    const h = BURST_HEAD.exec(l);
+    if (h) {
+      head = {
+        from: mss(h[1]!, h[2]!),
+        to: mss(h[3]!, h[4]!),
+        opener: /\| ([^|]+?)(?: \d+:\d{2}–\d+:\d{2})?(?: \+ |$)/.exec(l)?.[1]?.trim() ?? "",
+      };
+      continue;
+    }
+    const m = BURST_DAMAGE.exec(l);
+    if (!m || !head) continue;
+    const { from, to } = head;
+    const target = ctx.byName.get(m[1]!);
+    if (!target) continue;
+    const lo = ctx.start + from * 1000;
+    const hi = ctx.start + (to + 1) * 1000;
+    const opener = head.opener;
+    const first = succ
+      .filter(
+        (c) =>
+          tsOf(c) >= lo &&
+          tsOf(c) < lo + 1000 &&
+          nameOf(c.spellId, c.spellName) === opener,
+      )
+      .map(tsOf);
+    head = null;
+    if (first.length === 0) continue;
+    const fromMs = Math.min(...first);
+    let tickEnd: number | null = null;
+    let removedAt = 0;
+    for (const c of succ) {
+      const id = String(c.spellId);
+      if (!CHANNELED_SPELL_IDS.has(id) || tsOf(c) < fromMs || tsOf(c) >= hi) continue;
+      const rem = auras.find(
+        (a) => String(a.spellId) === id && ev(a) === REMOVED && tsOf(a) > tsOf(c),
+      );
+      if (!rem) continue;
+      const name = nameOf(id, c.spellName);
+      const tick = ((o.damageOut ?? []) as any[]).filter(
+        (d) =>
+          tsOf(d) > tsOf(rem) &&
+          tsOf(d) <= tsOf(rem) + 100 &&
+          nameOf(d.spellId, d.spellName) === name,
+      );
+      if (tick.length === 0) continue;
+      tickEnd = Math.max(...tick.map(tsOf));
+      removedAt = tsOf(rem);
+    }
+    if (tickEnd === null) continue;
+    ctx.bump("channelLastTickDropped");
+    const sum = (until: number) =>
+      ((o.damageOut ?? []) as any[])
+        .filter(
+          (d) =>
+            d.destUnitId === target.id &&
+            tsOf(d) >= fromMs &&
+            tsOf(d) <= until &&
+            !isDeferralDamageRow(d),
+        )
+        .reduce((a, d) => a + Math.abs(d.effectiveAmount ?? 0), 0) / 1e6;
+    const printed = +m[2]!;
+    const cut = sum(removedAt);
+    const full = sum(tickEnd);
+    if (Math.abs(full - printed) > 0.006 && Math.abs(cut - printed) <= 0.006)
+      ctx.violate(
+        "channelLastTickDropped",
+        "burst ledger",
+        removedAt,
+        `${from}`,
+        `${fmtS(from)} printed ${printed}M = to the REMOVED (${cut.toFixed(3)}M); with the tick ${((tickEnd - removedAt) | 0)} ms later ${full.toFixed(3)}M`,
+        l.slice(0, 160),
+      );
+  }
 }
