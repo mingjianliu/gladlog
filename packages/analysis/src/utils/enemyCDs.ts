@@ -10,6 +10,7 @@ import {
   triggeredEffectAurasOfCast,
 } from "../data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
+import { ROOT_AURA_SPELL_IDS } from "../data/rootAuraGenerated";
 import { isOffensivePressFactFor } from "../data/enemyHealCds";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
@@ -327,13 +328,22 @@ function observedEffectEnd(
     // over a side effect of it that went up first: The Hunt's 1.5 s root
     // 370970 ended its span at 1:16 while its DoT 370969 ran to 1:21 (fact5
     // cxa e38f41c9 1:15)
+    // fact10 D11 / D27: a triggered aura that is a DB2 root
+    // (`ROOT_AURA_SPELL_IDS`, aura 26 / 455) is a side effect too — The
+    // Hunt's root 370970 clears the 0.9 trigger share (95 % of 1246167's
+    // presses), so when the log wrote it 1 ms before the DoT 1246168 it
+    // headed the chain and Predator's Wake's span stopped at the root's end
+    // (11890839 1:36; the DoT ran to 1:41). Which row comes first is the
+    // log's order, not the game's.
+    const sideEffect = (id: string): boolean =>
+      !triggered.has(id) || ROOT_AURA_SPELL_IDS.has(id);
     if (
       first >= 0 &&
       ivs[first]!.spellId !== castSpellId &&
-      !triggered.has(ivs[first]!.spellId)
+      sideEffect(ivs[first]!.spellId)
     ) {
       const main = ivs.findIndex(
-        (iv) => startsAtPress(iv) && triggered.has(iv.spellId),
+        (iv) => startsAtPress(iv) && !sideEffect(iv.spellId),
       );
       if (main >= 0) first = main;
     }

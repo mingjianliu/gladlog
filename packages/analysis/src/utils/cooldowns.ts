@@ -6,7 +6,10 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { isHealNotMajorDefensive, isSurvivalWall } from "../data/abilityProfile";
+import {
+  isNotMajorDefensive,
+  isSurvivalWall,
+} from "../data/abilityProfile";
 import {
   AURA_ACTIVATION_PROVES_BUTTON_IDS,
   AURA_IS_THE_PRESS_IDS,
@@ -1568,6 +1571,7 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   "370960": [CombatUnitSpec.Evoker_Preservation], // Emerald Communion
   "370537": [CombatUnitSpec.Evoker_Preservation], // Stasis
   "403631": [CombatUnitSpec.Evoker_Augmentation], // Breath of Eons
+  "442204": [CombatUnitSpec.Evoker_Augmentation], // Breath of Eons (Maneuverability)
   "404977": [CombatUnitSpec.Evoker_Augmentation], // Time Skip
   "360828": [CombatUnitSpec.Evoker_Augmentation], // Blistering Scales
 };
@@ -2216,6 +2220,30 @@ export function gridHpMinInWindow(
     if (best === null || pct < best.pct) best = { pct, atSec: s };
   }
   return best;
+}
+
+/**
+ * The span that keeps a displayed-seconds trough (`[DMG SPIKE]`, burst-ledger
+ * `low`) inside its round: `undefined` — read the seconds as before — unless
+ * the round ends (`roundEndMs`: a Solo Shuffle round at its first death)
+ * inside the window's last displayed second, and then the samples up to that
+ * instant only, the window's ticks read as before (fact10 D30, 6a545d58:
+ * `Burst #4 — 3:08–3:15 … low 40% at 3:15` read the hits after the 3:15
+ * round-ending death; the low inside the round was the 67 % its tick shows).
+ */
+export function roundClippedTroughSpan(
+  matchStartMs: number,
+  fromSec: number,
+  toSec: number,
+  roundEndAtMs: number | undefined,
+): { fromMs: number; toMs: number; ticksRegardless: true } | undefined {
+  if (roundEndAtMs === undefined) return undefined;
+  if (roundEndAtMs >= matchStartMs + (toSec + 1) * 1000) return undefined;
+  return {
+    fromMs: matchStartMs + fromSec * 1000,
+    toMs: roundEndAtMs,
+    ticksRegardless: true,
+  };
 }
 
 /**
@@ -7045,7 +7073,7 @@ export function detectOverlappedDefensives(
       const spellId = action.spellId;
       if (!spellId || !ALL_MAJOR_DEFENSIVE_IDS.has(spellId)) continue;
       // fact9 D17: a heal is no major defensive to overlap
-      if (isHealNotMajorDefensive(spellId)) continue;
+      if (isNotMajorDefensive(spellId)) continue;
 
       let targetId = action.destUnitId;
       let targetName = action.destUnitName;
@@ -7482,7 +7510,7 @@ export function detectPanicDefensives(
       const spellId = action.spellId;
       if (!spellId || !MAJOR_DEFENSIVE_IDS.has(spellId)) continue;
       // fact9 D17: a heal is no "major defensive used with no threat"
-      if (isHealNotMajorDefensive(spellId)) continue;
+      if (isNotMajorDefensive(spellId)) continue;
       if (!friendlyIds.has(action.destUnitId)) continue;
 
       const castMs = action.timestamp;

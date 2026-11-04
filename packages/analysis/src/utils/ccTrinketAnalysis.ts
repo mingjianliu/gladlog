@@ -2387,7 +2387,16 @@ export function ccEndedByLoggedCause(
 ): boolean {
   return (
     auraBreakAtRemoval(holder, spellId, applyMs, removeMs, srcUnitId) !==
-      null || dispelAtRemoval(holder, spellId, removeMs) !== undefined
+      null ||
+    dispelAtRemoval(holder, spellId, removeMs) !== undefined ||
+    // fact10 D8 (11890839 r0 0:18): an ally's control immunity that went up
+    // on the holder in the removal's own millisecond — Aezryl's Berserker
+    // Shout 384102 on the Demon Hunter at .6608, the Psychic Scream's
+    // REMOVED the same ms, the Medallion's aura 25 ms later. Someone else's
+    // aura only: the holder's own (their Berserker Shout, Will to Survive's
+    // aura) rides the holder's own press, which the break binder binds.
+    immunityAuraAtRemoval(holder, spellId, removeMs, srcUnitId)?.byUnitId !==
+      undefined
   );
 }
 
@@ -2566,17 +2575,31 @@ export function ccEndedByImmunityAura(
   if (cc.stillOnAtRoundEnd) return undefined;
   const removeMs =
     matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+  return immunityAuraAtRemoval(holder, cc.spellId, removeMs, cc.sourceId);
+}
+
+/** `ccEndedByImmunityAura`'s reading at a removal millisecond: the control
+ * `spellId`'s REMOVED on the holder at `removeMs` (by `srcUnitId` when
+ * given) with a covering control immunity APPLIED on the holder in that same
+ * millisecond. Shared with `ccEndedByLoggedCause` (fact10 D8), so the break
+ * binder and the end note read one predicate. */
+export function immunityAuraAtRemoval(
+  holder: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  removeMs: number,
+  srcUnitId?: string,
+): Extract<ICcLoggedEnd, { kind: "immunity" }> | undefined {
   const atRemoval = (holder.auraEvents ?? []).filter(
     (a) => a.logLine.timestamp === removeMs && a.destUnitId === holder.id,
   );
   const removedLogged = atRemoval.some(
     (a) =>
-      a.spellId === cc.spellId &&
+      a.spellId === spellId &&
       (a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED &&
-      (cc.sourceId === undefined || a.srcUnitId === cc.sourceId),
+      (srcUnitId === undefined || a.srcUnitId === srcUnitId),
   );
   if (!removedLogged) return undefined;
-  const covers = applicableCCAvoidanceIds(cc.spellId, "");
+  const covers = applicableCCAvoidanceIds(spellId, "");
   const up = atRemoval.find(
     (a) =>
       (a.logLine.event as string) === LogEvent.SPELL_AURA_APPLIED &&

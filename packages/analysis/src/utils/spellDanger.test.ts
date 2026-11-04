@@ -11,6 +11,8 @@ import {
   isOffensiveSpell,
   OFFENSIVE_CD_DEAD_IDS,
   OFFENSIVE_CD_SPELL_IDS,
+  OFFENSIVE_PRESS_FACT_IDS,
+  offensiveEffectCdId,
 } from "./spellDanger";
 
 describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
@@ -66,12 +68,31 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2; 2026-10-20: + 9 racial window ids and Ultimate Penitence 421453, user ruling; 2026-11-03: + Dark Harvest 1257052, user ruling, fact9 D7)", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(71);
+  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2; 2026-10-20: + 9 racial window ids and Ultimate Penitence 421453, user ruling; 2026-11-03: + Dark Harvest 1257052, user ruling, fact9 D7; 2026-11-04: + Breath of Eons 403631 and Frostwyrm's Fury 279302, user ruling, fact10 D2–D4 D31)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(73);
     expect(OFFENSIVE_CD_SPELL_IDS.has("1257052")).toBe(true);
+    for (const id of ["403631", "279302"])
+      expect(OFFENSIVE_CD_SPELL_IDS.has(id)).toBe(true);
+    // Maneuverability's Breath of Eons 442204 is a press of the 403631 row
+    // (TALENT_REPLACE_VARIANT_IDS), not a second roster row; Chosen of
+    // Frostbrood's free re-summon 1265384 is Frostwyrm's Fury's effect
+    // activation (user ruling 2026-11-04), never a cooldown press
+    expect(OFFENSIVE_CD_SPELL_IDS.has("442204")).toBe(false);
+    expect(offensiveEffectCdId("442204")).toBe("403631");
+    expect(OFFENSIVE_CD_SPELL_IDS.has("1265384")).toBe(false);
+    expect(offensiveEffectCdId("1265384")).toBe("279302");
+    expect(OFFENSIVE_PRESS_FACT_IDS.has("279302")).toBe(false);
     // user ruling 2026-10-20: racial damage buffs and Ultimate Penitence are
     // offensive cooldowns; the racial nukes are not windows
-    for (const id of ["20572", "33697", "33702", "26297", "274738", "274742", "421453"])
+    for (const id of [
+      "20572",
+      "33697",
+      "33702",
+      "26297",
+      "274738",
+      "274742",
+      "421453",
+    ])
       expect(OFFENSIVE_CD_SPELL_IDS.has(id)).toBe(true);
     expect(OFFENSIVE_CD_SPELL_IDS.has("255647")).toBe(false); // Light's Judgment
     expect(OFFENSIVE_CD_SPELL_IDS.has("204362")).toBe(true);
@@ -112,7 +133,8 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
   });
 
   it("isOffensiveSpell IS the set — no second membership rule", () => {
-    for (const id of OFFENSIVE_CD_SPELL_IDS) expect(isOffensiveSpell(id)).toBe(true);
+    for (const id of OFFENSIVE_CD_SPELL_IDS)
+      expect(isOffensiveSpell(id)).toBe(true);
     expect(isOffensiveSpell("8936")).toBe(false); // Regrowth, never offensive
   });
 });
@@ -152,7 +174,9 @@ describe("both consumers read the canonical table", () => {
       }) as never;
     expect(hasOffensiveSpellActive(unit("DEBUFF"), 2_000, null)).toBe(false);
     // asked for those sources by name, the debuff is still read
-    expect(hasOffensiveSpellActive(unit("DEBUFF"), 2_000, new Set(["F1"]))).toBe(true);
+    expect(
+      hasOffensiveSpellActive(unit("DEBUFF"), 2_000, new Set(["F1"])),
+    ).toBe(true);
   });
 
   it("…and no longer reacts to a dead id's aura", () => {

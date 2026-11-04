@@ -4999,3 +4999,21 @@ naming the examples). Findings: one candidate's facts — a cd-hoarded at 1:37
 now lists Tip the Scales ready, the decaying Temporal Burst giving it 2.2 s
 more recovery than the flat ×1.005 did (ready 95.4 s; pressed again 106.9 s).
 `docs/talent-coverage-gaps.md` is stale until the next full talent scan.
+
+v480 (2026-11-04, fact10 batch 1 — the round-10 audit's eight high defects and
+their classes): Breath of Eons 403631 and Frostwyrm's Fury 279302 join the
+major offensive cooldowns (user ruling; Maneuverability's 442204 is a press of
+the 403631 row, Chosen of Frostbrood's free recast 1265384 an effect
+activation of 279302, never a cooldown press) — missed-sync-window's ready
+set, the loadout, [RES], bursts and kill attempts see them (D2–D4, D31).
+Burrow 409293 is a Shaman Defensive row, ready on the ledger when talented
+(D13); Spirit Walk 58875 leaves the ready / accusation set and still answers a
+crisis when pressed (D12). A control removed in the millisecond another unit's
+control immunity went up on the holder is ended by it: a later trinket or
+break racial did not break it (D8). Of a press's triggered auras a DB2 root is
+no effect-span chain head (The Hunt / Predator's Wake, D11 D27). A kick into a
+cast bar its caster had left — another press or bar more than 0.5 s before
+the kick — or whose likely target died first is a miss, not a juke (D22 D5).
+The burst ledger's `low` and `[DMG SPIKE]`'s low stop at the round's end
+(`roundClippedTroughSpan`, D30). An effect activation shares its cooldown's
+[RES] window (one Frostwyrm's Fury, not two).

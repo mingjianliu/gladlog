@@ -12,7 +12,8 @@
  *
  *  - `dmgSpikeLow`: `M:SS–M:SS  [DMG SPIKE]   <pid>(…) … low N% @M:SS` — no
  *    line of the unit inside the window's displayed seconds
- *    `[from, to + 1)` may round below N;
+ *    `[from, to + 1)`, up to the round's end (`roundEndMs`), may round
+ *    below N;
  *  - `killWindowTeamMin`: `[KILL WINDOW] M:SS–M:SS … team min HP N%` — no
  *    friendly line strictly inside the window's interior
  *    `[from + 1, to)` (certainly inside the span, whose ends are fractional)
@@ -25,6 +26,7 @@ import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
 
@@ -208,7 +210,13 @@ for (const f of files) {
       const from = secOf(s[1]!, s[2]!);
       const to = secOf(s[3]!, s[4]!);
       const printed = Number(s[6]);
-      const m = minPct(unit, start, start + from * 1000, start + (to + 1) * 1000);
+      // not past the round's end (fact10 D30: `roundClippedTroughSpan`)
+      const m = minPct(
+        unit,
+        start,
+        start + from * 1000,
+        Math.min(start + (to + 1) * 1000, roundEndMs(legacy) + 1),
+      );
       if (m && m.pct < printed)
         fail(
           "dmgSpikeLow",

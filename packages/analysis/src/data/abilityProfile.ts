@@ -294,7 +294,7 @@ export const KW_UNPRESSED_NOT_IN_HAND_IDS: ReadonlySet<string> = new Set([
  * "never-used self-only defensive cooldowns … correctly HELD", the
  * `[STACKED DEFENSIVES]` pairs (not cd-hoarded's protection record), the healer metrics' defensive overlaps,
  * positioning's "a defensive CD was available" and the match phases' first
- * major defensive (codex 20-F24-07) (`isHealNotMajorDefensive`). Their
+ * major defensive (codex 20-F24-07) (`isNotMajorDefensive`). Their
  * presses keep their lines, the cooldown ledger keeps their readiness, and a
  * heal still answers a crisis (`BURST_HEAL_CD_IDS`; cd-hoarded's response
  * side, `isDefensiveCdResponse`). Evidence, the official profile (unit-tested in
@@ -312,10 +312,32 @@ export const HEAL_NOT_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
   "740", // Tranquility — a group heal
 ]);
 
-/** Is this Defensive-tagged cooldown a heal no reader may call a major
- * defensive (`HEAL_NOT_MAJOR_DEFENSIVE_IDS`)? */
-export function isHealNotMajorDefensive(spellId: string): boolean {
-  return HEAL_NOT_MAJOR_DEFENSIVE_IDS.has(spellId);
+/**
+ * Movement buttons a roster or the name rule tags Defensive that no reader
+ * files as a MAJOR DEFENSIVE cooldown (fact10 D12, user ruling 2026-11-04:
+ * out of the ready set only, a press still answers). Spirit Walk 58875 —
+ * DB2: removes and grants immunity to movement-impairing effects, +speed,
+ * no mitigation, absorb or immunity to damage — reaches the ledger as
+ * Defensive through the `/spirit/` discovery rule (`cooldowns.ts` already
+ * names it that rule's false positive; `NON_SUBSTITUTE_DEFENSIVE_IDS`,
+ * `CRISIS_MOBILITY_PRESS_IDS` and `REPOSITIONING_SPELL_IDS` file it as
+ * mobility). 2d19e8ca r0 @174: cd-hoarded `readyCds=Spirit Walk`.
+ * Registered in curatedIdRegistry.
+ */
+export const MOBILITY_NOT_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
+  "58875", // Spirit Walk — movement
+]);
+
+/** Is this Defensive-tagged cooldown one no reader may call a major
+ * defensive — a heal (`HEAL_NOT_MAJOR_DEFENSIVE_IDS`, fact9 D17) or a
+ * movement button (`MOBILITY_NOT_MAJOR_DEFENSIVE_IDS`, fact10 D12)? Every
+ * reader listed above `HEAL_NOT_MAJOR_DEFENSIVE_IDS` reads this; the
+ * response side (`isDefensiveCdResponse`) keeps both. */
+export function isNotMajorDefensive(spellId: string): boolean {
+  return (
+    HEAL_NOT_MAJOR_DEFENSIVE_IDS.has(spellId) ||
+    MOBILITY_NOT_MAJOR_DEFENSIVE_IDS.has(spellId)
+  );
 }
 
 /**

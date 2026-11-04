@@ -202,6 +202,7 @@ import {
   KW_MAJOR_DEFENSIVE_IDS,
   KW_NOT_UP_AS_DEFENSE_IDS,
   KW_UNPRESSED_NOT_IN_HAND_IDS,
+  MOBILITY_NOT_MAJOR_DEFENSIVE_IDS,
 } from "./abilityProfile";
 import { castEffectPairs } from "./castEffectAuras";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
@@ -510,6 +511,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/abilityProfile.ts",
     "cast",
     () => [...HEAL_NOT_MAJOR_DEFENSIVE_IDS],
+  ),
+  // fact10 D12 (user 2026-11-04): movement buttons out of the ready set
+  t(
+    "abilityProfile.MOBILITY_NOT_MAJOR_DEFENSIVE_IDS",
+    "data/abilityProfile.ts",
+    "cast",
+    () => [...MOBILITY_NOT_MAJOR_DEFENSIVE_IDS],
   ),
   t(
     "abilityProfile.KW_NOT_UP_AS_DEFENSE_IDS",

@@ -1,15 +1,15 @@
-import { classMetadata } from '../data/classSpells';
-import { OVERRIDE_VARIANTS_GENERATED } from '../data/overrideVariantsGenerated';
-import { OFFENSIVE_RACIAL_WINDOW_IDS } from '../data/racialAbilities';
-import { spells } from '../data/spellTags';
-import { SpellTag } from '../data/spellTypes';
-import { TALENT_REPLACE_VARIANT_IDS } from '../data/talentReplaceVariants';
+import { classMetadata } from "../data/classSpells";
+import { OVERRIDE_VARIANTS_GENERATED } from "../data/overrideVariantsGenerated";
+import { OFFENSIVE_RACIAL_WINDOW_IDS } from "../data/racialAbilities";
+import { spells } from "../data/spellTags";
+import { SpellTag } from "../data/spellTypes";
+import { TALENT_REPLACE_VARIANT_IDS } from "../data/talentReplaceVariants";
 
 export enum SpellEffectType {
-  DamageAmp = 'DamageAmp',
-  HealReduction = 'HealReduction',
-  Vulnerability = 'Vulnerability',
-  Execution = 'Execution',
+  DamageAmp = "DamageAmp",
+  HealReduction = "HealReduction",
+  Vulnerability = "Vulnerability",
+  Execution = "Execution",
 }
 
 export const EFFECT_TYPE_WEIGHTS: Record<SpellEffectType, number> = {
@@ -31,17 +31,17 @@ export const EFFECT_TYPE_WEIGHTS: Record<SpellEffectType, number> = {
 // 115080 an old Touch of Death id → both replaced by the live 322109.
 export const SPELL_EFFECT_OVERRIDES: Record<string, SpellEffectType[]> = {
   // DamageAmp + HealReduction
-  '360194': [SpellEffectType.DamageAmp, SpellEffectType.HealReduction], // Deathmark (Assassination Rogue)
-  '1248010': [SpellEffectType.DamageAmp, SpellEffectType.HealReduction], // Deathmark (Assassination Rogue, 12.1 variant id)
+  "360194": [SpellEffectType.DamageAmp, SpellEffectType.HealReduction], // Deathmark (Assassination Rogue)
+  "1248010": [SpellEffectType.DamageAmp, SpellEffectType.HealReduction], // Deathmark (Assassination Rogue, 12.1 variant id)
   // HealReduction only
-  '375901': [SpellEffectType.HealReduction], // Mindgames (Shadow Priest) — reverses heals into damage
-  '198817': [SpellEffectType.HealReduction], // Sharpen Blade (Warrior)
+  "375901": [SpellEffectType.HealReduction], // Mindgames (Shadow Priest) — reverses heals into damage
+  "198817": [SpellEffectType.HealReduction], // Sharpen Blade (Warrior)
   // Execution
-  '322109': [SpellEffectType.Execution], // Touch of Death (Monk)
-  '343527': [SpellEffectType.Execution], // Execution Sentence (Paladin) — 4 live ids 12.1
-  '387113': [SpellEffectType.Execution], // Execution Sentence (Paladin) — 4 live ids 12.1
-  '1234189': [SpellEffectType.Execution], // Execution Sentence (Paladin) — 4 live ids 12.1
-  '1260251': [SpellEffectType.Execution], // Execution Sentence (Paladin) — 4 live ids 12.1
+  "322109": [SpellEffectType.Execution], // Touch of Death (Monk)
+  "343527": [SpellEffectType.Execution], // Execution Sentence (Paladin) — 4 live ids 12.1
+  "387113": [SpellEffectType.Execution], // Execution Sentence (Paladin) — 4 live ids 12.1
+  "1234189": [SpellEffectType.Execution], // Execution Sentence (Paladin) — 4 live ids 12.1
+  "1260251": [SpellEffectType.Execution], // Execution Sentence (Paladin) — 4 live ids 12.1
 };
 
 /**
@@ -59,15 +59,15 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, SpellEffectType[]> = {
  * "when in doubt keep it" rule was applied — none of the nine was in doubt.
  */
 export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
-  '113860', // Dark Soul: Misery — gone in 12.x
-  '137639', // Storm, Earth, and Fire — gone in 12.x
-  '207289', // Unholy Assault
-  '231895', // Crusade (Avenging Wrath, Retribution variant)
-  '266779', // Coordinated Assault
-  '275699', // Apocalypse
-  '323764', // Convoke the Spirits — renumbered to 322109 (S2 sweep 2026-08-21)
-  '359844', // Call of the Wild
-  '391109', // Dark Ascension
+  "113860", // Dark Soul: Misery — gone in 12.x
+  "137639", // Storm, Earth, and Fire — gone in 12.x
+  "207289", // Unholy Assault
+  "231895", // Crusade (Avenging Wrath, Retribution variant)
+  "266779", // Coordinated Assault
+  "275699", // Apocalypse
+  "323764", // Convoke the Spirits — renumbered to 322109 (S2 sweep 2026-08-21)
+  "359844", // Call of the Wild
+  "391109", // Dark Ascension
 ]);
 
 /**
@@ -89,10 +89,13 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  *   - Convoke the Spirits 391528: similarly, Restoration Druids press the same
  *     id as a major healing channel (Regrowth, Rejuvenation, Swiftmend, Wild
  *     Growth). Needs a spec-aware table first.
- *   - Meteor 153561 (lift 2.54), Frostwyrm's Fury 279302 (2.65): instant
- *     nukes. Every consumer renders a table member as a WINDOW ("Meteor/Fire
- *     Mage (7 s left)" in [RES] — caught by the real-fixture test); a nuke
- *     that has already landed is not a window to defend through.
+ *   - Meteor 153561 (lift 2.54): an instant nuke. Every consumer renders a
+ *     table member as a WINDOW ("Meteor/Fire Mage (7 s left)" in [RES] —
+ *     caught by the real-fixture test); a nuke that has already landed is
+ *     not a window to defend through. Frostwyrm's Fury 279302 (2.65) was
+ *     kept out on the same reasoning until the user ruling of 2026-11-04
+ *     (fact10 D31) made it a member: its window is its 10 s slow 279303 on
+ *     the enemies it hit (`castEffectAuraGenerated`).
  *   - Predator's Wake 1259431 (Devourer, lift 2.26) is no member of its
  *     own: it is the The Hunt 1246167 button under Demonsurge 1245496 (DB2
  *     SpellEffect aura 332, misc 1246167 → 1259431; both SpellCategories
@@ -141,8 +144,8 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
   [
     ...Object.keys(spells).filter(
       (id) =>
-        spells[id].type === 'buffs_offensive' ||
-        spells[id].type === 'debuffs_offensive',
+        spells[id].type === "buffs_offensive" ||
+        spells[id].type === "debuffs_offensive",
     ),
     ...classMetadata.flatMap((cls) =>
       cls.abilities
@@ -156,7 +159,7 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
     // cooldown; 465k + 422k of its bolts on two players, the [ENEMY DEF] line
     // its only record). The 6.5 s window is the channel's aura on the caster
     // (`buffDuration.ts`); the save half stays where it is (`[ENEMY DEF]`).
-    '421453',
+    "421453",
   ].filter((id) => !OFFENSIVE_CD_DEAD_IDS.has(id)),
 );
 
@@ -177,24 +180,25 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
  * `buffEndSeconds`). Registered in `curatedIdRegistry.ts`.
  */
 export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
-  '228920', // Ravager — Warrior, 90 s recharge (D16)
-  '385059', // Odyn's Fury — Fury, 45 s (D8, D45); lift 1.70, coPressed 0.50
+  "228920", // Ravager — Warrior, 90 s recharge (D16)
+  "385059", // Odyn's Fury — Fury, 45 s (D8, D45); lift 1.70, coPressed 0.50
   // Dark Harvest 1257052 left 2026-11-03 (fact9 D7, user ruling): a
   // roster Offensive row, so an `OFFENSIVE_CD_SPELL_IDS` member.
-  '357210', // Deep Breath, 120 s recharge (D78)
-  '433874', // Deep Breath, the Scalecommander override (D78)
-  '375576', // Divine Toll — 60 s, a Holy Paladin's is [ENEMY HEAL CD] (D75)
+  "357210", // Deep Breath, 120 s recharge (D78)
+  "433874", // Deep Breath, the Scalecommander override (D78)
+  "375576", // Divine Toll — 60 s, a Holy Paladin's is [ENEMY HEAL CD] (D75)
   // The same class in the notes above: live, printed nowhere.
-  '153561', // Meteor — Fire, 45 s
-  '279302', // Frostwyrm's Fury — Frost, 90 s
-  '439843', // Reaper's Mark — 45 s
-  '426591', // Goremaw's Bite — Subtlety, 45 s
-  '343527', // Execution Sentence — 60 s
-  '370553', // Tip the Scales — 120 s, a Preservation's is [ENEMY HEAL CD]
-  '391528', // Convoke the Spirits — 120 s, a Restoration's is [ENEMY HEAL CD]
+  "153561", // Meteor — Fire, 45 s
+  // Frostwyrm's Fury 279302 left 2026-11-04 (fact10 D31, user ruling): a
+  // roster Offensive row, so an `OFFENSIVE_CD_SPELL_IDS` member.
+  "439843", // Reaper's Mark — 45 s
+  "426591", // Goremaw's Bite — Subtlety, 45 s
+  "343527", // Execution Sentence — 60 s
+  "370553", // Tip the Scales — 120 s, a Preservation's is [ENEMY HEAL CD]
+  "391528", // Convoke the Spirits — 120 s, a Restoration's is [ENEMY HEAL CD]
   // In `SPELL_EFFECT_OVERRIDES` only, which keys a weight and prints nothing.
-  '322109', // Touch of Death — 180 s
-  '375901', // Mindgames — 45 s
+  "322109", // Touch of Death — 180 s
+  "375901", // Mindgames — 45 s
 ]);
 
 /**
@@ -220,7 +224,17 @@ export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
  * an "available again" time. Registered in `curatedIdRegistry.ts`.
  */
 export const OFFENSIVE_EFFECT_ACTIVATION_IDS: ReadonlyMap<string, string> =
-  new Map([['454351', '31884']]);
+  new Map([
+    ["454351", "31884"],
+    // fact10 D31 (user ruling 2026-11-04, 「效果激活」): Chosen of Frostbrood
+    // 1265639 puts 1265384 on the Frostwyrm's Fury button for 45 s after a
+    // press (SpellEffect aura 332, misc 279302) — a free second frostwyrm,
+    // damage and slow only, no stun, no SpellCooldowns row of its own. Its
+    // effect is Frostwyrm's Fury's; it is no press of the 90 s cooldown and
+    // never makes the button ready. 6a545d58 / 733ef717: every 1265384
+    // follows a 279302 by 3–58 s.
+    ["1265384", "279302"],
+  ]);
 
 /** The canonical offensive cooldown whose effect this cast / aura id is:
  * itself for a table member, its cooldown for a registered activation
@@ -265,9 +279,17 @@ export function cdTierWeight(cooldownSeconds: number): number {
  * Uses SPELL_EFFECT_OVERRIDES for non-DamageAmp effects; defaults to DamageAmp for
  * any spell tagged offensive in spells.json.
  */
-export function spellDangerWeight(spellId: string, cooldownSeconds: number): number {
-  const effects = SPELL_EFFECT_OVERRIDES[spellId] ?? [SpellEffectType.DamageAmp];
-  const effectWeight = effects.reduce((sum, e) => sum + EFFECT_TYPE_WEIGHTS[e], 0);
+export function spellDangerWeight(
+  spellId: string,
+  cooldownSeconds: number,
+): number {
+  const effects = SPELL_EFFECT_OVERRIDES[spellId] ?? [
+    SpellEffectType.DamageAmp,
+  ];
+  const effectWeight = effects.reduce(
+    (sum, e) => sum + EFFECT_TYPE_WEIGHTS[e],
+    0,
+  );
   return cdTierWeight(cooldownSeconds) * effectWeight;
 }
 
@@ -287,9 +309,11 @@ export function offensiveDangerWeight(
 }
 
 /** Score label for display */
-export function dangerLabel(score: number): 'Low' | 'Moderate' | 'High' | 'Critical' {
-  if (score >= 7) return 'Critical';
-  if (score >= 4) return 'High';
-  if (score >= 2) return 'Moderate';
-  return 'Low';
+export function dangerLabel(
+  score: number,
+): "Low" | "Moderate" | "High" | "Critical" {
+  if (score >= 7) return "Critical";
+  if (score >= 4) return "High";
+  if (score >= 2) return "Moderate";
+  return "Low";
 }

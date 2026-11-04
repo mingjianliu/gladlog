@@ -15,11 +15,13 @@ import {
   CC_END_CAUSE_NOT_LOGGED,
   CC_LOGGED_END_NOTE_RE_SRC,
   ccEndedByImmunityAura,
+  ccEndedByLoggedCause,
   ccEndedBySanctuary,
   ccUnloggedEarlyEnd,
   formatCcLoggedEnd,
   formatCcRemovalCause,
   formatCcUnloggedEnd,
+  immunityAuraAtRemoval,
 } from "../src/utils/ccTrinketAnalysis";
 import {
   makeAuraEvent,
@@ -338,5 +340,52 @@ describe("fact7 — a control that ran its length; a Sanctuary is a logged end",
     expect(ccEndedBySanctuary(holder, cc(0.9), T0, units)).toBeUndefined();
     // no Sanctuary press in the round: nothing to name
     expect(ccEndedBySanctuary(holder, cc(0.41), T0, [holder])).toBeUndefined();
+  });
+});
+
+describe("ccEndedByLoggedCause — another unit's control immunity in the removal's ms (fact10 D8)", () => {
+  // 11890839 r0 0:18: Psychic Scream off the Demon Hunter at the ms Aezryl's
+  // Berserker Shout 384102 went up on him; his Medallion 25 ms later
+  const SCREAM = "8122";
+  const SHOUT = "384102";
+  const holder = (shoutSrc: string) =>
+    makeUnit("player-1", {
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, SCREAM, T0 + 17_000),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, SCREAM, T0 + 18_660),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          SHOUT,
+          T0 + 18_660,
+          shoutSrc,
+          "player-1",
+          "BUFF",
+        ),
+      ],
+    }) as ICombatUnit;
+
+  it("an ally's Berserker Shout ended it: a later trinket did not", () => {
+    expect(
+      ccEndedByLoggedCause(
+        holder("warrior-1"),
+        SCREAM,
+        T0 + 17_000,
+        T0 + 18_660,
+      ),
+    ).toBe(true);
+    expect(
+      immunityAuraAtRemoval(holder("warrior-1"), SCREAM, T0 + 18_660)?.byUnitId,
+    ).toBe("warrior-1");
+  });
+
+  it("the holder's own immunity is their press, which the break binder reads — no logged cause", () => {
+    expect(
+      ccEndedByLoggedCause(
+        holder("player-1"),
+        SCREAM,
+        T0 + 17_000,
+        T0 + 18_660,
+      ),
+    ).toBe(false);
   });
 });

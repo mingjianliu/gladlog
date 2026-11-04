@@ -19,4 +19,11 @@
  */
 export const TALENT_REPLACE_VARIANT_IDS: Readonly<Record<string, string>> = {
   "198149": "84714", // Frozen Orb ← Concentrated Coolness
+  // fact10 D2–D4 (user ruling 2026-11-04): an aura-332 override the
+  // generator cannot pair — Maneuverability 442255 (Scalecommander) puts
+  // 442204 on the Breath of Eons 403631 button, but each id has its own
+  // 120 s SpellCooldowns row and no shared Category, the generator's
+  // same-cooldown test. One button, one cooldown: the fact10 library and
+  // the cover set have 3 Augmentations pressing 442204, none pressing both.
+  "442204": "403631", // Breath of Eons ← Maneuverability
 };

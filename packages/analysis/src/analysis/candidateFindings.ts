@@ -9,7 +9,7 @@ import { mateHitDuringCc } from "../context/observedConsequences";
 import { refusalWhy } from "../context/spellOutcomeLines";
 import { dmgSpikeWindowsOf } from "../context/timelineHelpers";
 import { ALTER_TIME_RETURN_ID } from "../context/timelineSections/alterTime";
-import { isHealNotMajorDefensive } from "../data/abilityProfile";
+import { isNotMajorDefensive } from "../data/abilityProfile";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
@@ -425,10 +425,10 @@ export function cdWasteEvents(
   const groups: (typeof cds)[] = [];
   for (const cd of cds) {
     // 指控说「防御」,就只能问防御 tag —— 不能拿「不是进攻」凑数。
-    // fact9 D17: a heal is no major defensive (`isHealNotMajorDefensive`)
+    // fact9 D17: a heal is no major defensive (`isNotMajorDefensive`)
     const isDefensive =
       (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)) &&
-      !isHealNotMajorDefensive(cd.spellId);
+      !isNotMajorDefensive(cd.spellId);
     // 「整局没交」对没有按键的能力不成立(`PROC_ONLY_ACTIVATION_IDS`)。
     if (cdIsProcOnly(cd)) continue;
     // A response-only save (Barkskin / Frenzied Regeneration, user ruling

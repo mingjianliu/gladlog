@@ -1,6 +1,6 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
-import { isHealNotMajorDefensive } from "../data/abilityProfile";
+import { isNotMajorDefensive } from "../data/abilityProfile";
 import { IMajorCooldownInfo, specToString } from "../utils/cooldowns";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { fmtTime } from "../utils/renderGrid";
@@ -94,7 +94,7 @@ export function buildMatchArcStructured(
     if (
       cd.tag !== "Defensive" ||
       // fact9 D17: a heal is no major defensive committed
-      isHealNotMajorDefensive(cd.spellId) ||
+      isNotMajorDefensive(cd.spellId) ||
       cd.neverUsed ||
       cd.casts.length === 0
     )

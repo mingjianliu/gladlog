@@ -11,7 +11,7 @@
 
 import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
-import { abilityProfile, isHealNotMajorDefensive } from "../data/abilityProfile";
+import { abilityProfile, isNotMajorDefensive } from "../data/abilityProfile";
 import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { buildAuraIntervals } from "./auraIntervals";
 import { hitByAttackers } from "./burstHit";
@@ -868,7 +868,7 @@ export function computeOwnerPositionEvents(params: {
       cd.tag === "Defensive" &&
       !cd.baselineOnly &&
       // fact9 D17: a heal is no "defensive CD available"
-      !isHealNotMajorDefensive(cd.spellId),
+      !isNotMajorDefensive(cd.spellId),
   );
   const offensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Offensive");
 

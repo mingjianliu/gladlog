@@ -32,7 +32,7 @@
  * Only pairs the OWNER took part in (cast A or B, or is the target) are
  * returned — the card is owner-anchored like every other context line.
  */
-import { isHealNotMajorDefensive } from "../data/abilityProfile";
+import { isNotMajorDefensive } from "../data/abilityProfile";
 import { castKeyOfAura } from "../data/castEffectAuras";
 import {
   resolveMitigation,
@@ -200,7 +200,7 @@ export function stackedDefensivePairs(
         // unit)
         .filter(
           (iv) =>
-            !isHealNotMajorDefensive(stackedDefensiveKeyOf(iv.spellId) ?? ""),
+            !isNotMajorDefensive(stackedDefensiveKeyOf(iv.spellId) ?? ""),
         )
         .filter((iv) => iv.fromS < roundEndS)
         .map(inRound);

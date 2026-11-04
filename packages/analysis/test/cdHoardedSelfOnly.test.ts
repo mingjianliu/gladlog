@@ -6,7 +6,7 @@
  * 这技能只能给自己加血。」下面第一批用例就是这句话的机制化复现。
  *
  * fact9 D17 (user ruling 2026-11-03): Desperate Prayer and Tranquility are
- * heals, no defensives (`isHealNotMajorDefensive`); the fixtures use
+ * heals, no defensives (`isNotMajorDefensive`); the fixtures use
  * Dispersion (a self-only wall) and Ironbark (an ally external) instead.
  *
  * 2026-08-30 重写(GH #34,决策点形状):判据从 `availableWindows` 换成了

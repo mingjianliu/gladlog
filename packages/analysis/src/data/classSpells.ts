@@ -241,7 +241,11 @@ export const classMetadata: IClassSpellMetadata[] = [
       // Defensive it had produced 5 cd-hoarded rows on the 605 files.
       a("49039", "Lichborne", U),
       a("42650", "Army of the Dead", O),
-      a("279302", "Frostwyrm's Fury", U), // fact7 class 3
+      // fact10 D31 (user ruling 2026-11-04, 「1算」): a major offensive
+      // cooldown on both sides (90 s) — it was a press fact only (fact7
+      // class 3), so a ready Frostwyrm's Fury sat in no missed-sync-window
+      // readyCds and opened no enemy burst window. Same move as Dark Harvest.
+      a("279302", "Frostwyrm's Fury", O),
       a("439843", "Reaper's Mark", U), // fact7 class 3
       a("1233448", "Dark Transformation", O),
       a("207289", "Unholy Assault", O),
@@ -257,6 +261,14 @@ export const classMetadata: IClassSpellMetadata[] = [
       // p25 1.76 · p50 2.05; corrected run) — user delegated the ruling ("你自己决定吧").
       a("384352", "Doom Winds", O), // talent choice (15 % of Enhancement rounds), lift 2.54
       a("108271", "Astral Shift", D),
+      // fact10 D13 (user ruling 2026-11-04, Time Stop's precedent): Burrow,
+      // the PvP talent of all three specs (DB2 120 s, 5 s immunity). It had
+      // no roster row — only the enemy immunity lists and the cast-only
+      // third catalog (Utility) — so a Shaman who picked it and never
+      // pressed it had no save in hand anywhere (2d19e8ca r0 1:26 "no
+      // defensive CD available"). A roster row is admitted on the
+      // COMBATANT_INFO pick, pressed or not.
+      a("409293", "Burrow", D),
       a("98008", "Spirit Link Totem", D),
       a("114050", "Ascendance", O),
       a("114051", "Ascendance", O),
@@ -438,6 +450,21 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("357210", "Deep Breath", U),
       a("433874", "Deep Breath", U),
       a("370553", "Tip the Scales", U), // fact7 class 3
+      // fact10 D2–D4 (user ruling 2026-11-04, 「1算」): Breath of Eons, the
+      // Augmentation's 120 s burst (Temporal Wound copies the team's damage
+      // for 10 s), is a major offensive cooldown. It had no roster row at
+      // all — an off-list [PRESS] — so the loadout, the kill windows'
+      // team CDs and missed-sync-window's readyCds never saw it, and a lock
+      // it was pressed inside read "no offensive CD entered" (070c4933
+      // 2:06). 442204 is the Scalecommander override (Maneuverability
+      // 442255, SpellEffect aura 332 misc 403631 → 442204; each its own
+      // 120 s SpellCooldowns row, no shared Category, so
+      // `OVERRIDE_VARIANTS_GENERATED` does not pair them): a press of this
+      // row through `TALENT_REPLACE_VARIANT_IDS`, not a second row (two
+      // rows listed the button twice in the loadout and [RES]). Every
+      // Augmentation in the fact10 library and the cover set presses one
+      // id only (all 442204).
+      a("403631", "Breath of Eons", O),
       a("360806", "Sleep Walk", C),
     ],
   },

@@ -1083,6 +1083,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ccTrinketSummaries,
     ownerName: owner.name,
     healerNames: friends.filter((f) => isHealerSpec(f.spec)).map((f) => f.name),
+    roundEndAtMs,
     addEntry,
   });
 

@@ -9,7 +9,7 @@
  * which is why the shared window predicates live here with them.
  */
 import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
-import { isHealNotMajorDefensive } from "../../data/abilityProfile";
+import { isNotMajorDefensive } from "../../data/abilityProfile";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
 import { MITIGATION_TABLE } from "../../data/mitigationData";
 import { OFF_GCD_SPELL_IDS } from "../../data/offGcdGenerated";
@@ -1661,7 +1661,7 @@ export function isSpendableDefensiveCd(
   return (
     isDefensiveCdResponse(cd) &&
     // fact9 D17: a heal is no defensive held through a crisis
-    !isHealNotMajorDefensive(cd.spellId)
+    !isNotMajorDefensive(cd.spellId)
   );
 }
 
@@ -2229,7 +2229,7 @@ export function cdHoardedEvents(
       const heals = ownerCds.filter(
         (cd) =>
           isDefensiveCdResponse(cd) &&
-          isHealNotMajorDefensive(cd.spellId) &&
+          isNotMajorDefensive(cd.spellId) &&
           cdHelpsRecipient(cd, own) &&
           cdAvailableAt(cd, point.tSec),
       );
@@ -2733,7 +2733,7 @@ export function cdSpentIdleEvents(
       DEFENSIVE_TAGS.has(cd.tag) &&
       !cd.isThroughput &&
       // fact9 D17: a heal is no defensive spent idle
-      !isHealNotMajorDefensive(cd.spellId) &&
+      !isNotMajorDefensive(cd.spellId) &&
       // 空放/攥着不放都是「你当时的选择」,被动触发的能力没有这个选择。
       !cdIsProcOnly(cd) &&
       !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId),

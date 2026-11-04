@@ -2020,6 +2020,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cooldowns.ts`,
+    symbol: "roundClippedTroughSpan",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
     symbol: "isTickBelowTrough",
     mod: cooldowns,
   },
@@ -3567,12 +3572,17 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/data/abilityProfile.ts`,
-    symbol: "isHealNotMajorDefensive",
+    symbol: "isNotMajorDefensive",
     mod: abilityProfileMod,
   },
   {
     file: `${A}/data/abilityProfile.ts`,
     symbol: "HEAL_NOT_MAJOR_DEFENSIVE_IDS",
+    mod: abilityProfileMod,
+  },
+  {
+    file: `${A}/data/abilityProfile.ts`,
+    symbol: "MOBILITY_NOT_MAJOR_DEFENSIVE_IDS",
     mod: abilityProfileMod,
   },
   {
@@ -4063,6 +4073,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "immunityAuraAtRemoval",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "ccEndedBySanctuary",
     mod: ccTrinketAnalysis,
   },
@@ -4079,6 +4094,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/castCommitSpans.ts`,
     symbol: "nextPressEndingChannelMs",
+    mod: castCommitSpans,
+  },
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "pressRidesAlong",
     mod: castCommitSpans,
   },
   {

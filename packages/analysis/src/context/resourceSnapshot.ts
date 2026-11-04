@@ -40,6 +40,7 @@ import type { CastFailedEvent } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
 import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import type { RosterSides } from "../utils/rosterSide";
+import { offensiveEffectCdId } from "../utils/spellDanger";
 import { getPvpToolkit } from "../utils/talentBehaviors";
 import { isDeadAt } from "../utils/unitDeath";
 import {
@@ -1146,7 +1147,11 @@ function buildResourceSnapshotOnce({
       // the floored row time, which dropped every press at s + 0.xxx.
       if (!pressSpentBy(cd.castTimeSeconds, timeSeconds)) continue;
       if (timeSeconds > end) continue;
-      const key = canonicalSpellId(cd.spellId);
+      // an activation of a cooldown's effect (fact10, Chosen of Frostbrood's
+      // free Frostwyrm's Fury 1265384 6 s into the first one's slow — one
+      // aura, refreshed) is that cooldown's window, as an override variant
+      // is (`offensiveEffectCdId`, the window builder's own mapping)
+      const key = canonicalSpellId(offensiveEffectCdId(cd.spellId) ?? cd.spellId);
       const prev = windows.get(key);
       // an effect its holder's death cut short: shown until the death, its
       // time left the official one — the death is not known before it

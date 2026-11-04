@@ -9,7 +9,7 @@ import {
 
 import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
-import { isHealNotMajorDefensive } from "../data/abilityProfile";
+import { isNotMajorDefensive } from "../data/abilityProfile";
 import { ownEffectAurasOfCast } from "../data/castEffectAuras";
 import { HASTE_DURATION_SPELL_IDS } from "../data/channeledGenerated";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
@@ -2466,7 +2466,7 @@ export function buildKillSequenceBlock(params: {
           const unusedDefensives = allFriendlyCDs.filter(({ player, cd }) => {
             if (cd.tag !== "Defensive") return false;
             // fact9 D17: a heal is no defensive left unused
-            if (isHealNotMajorDefensive(cd.spellId)) return false;
+            if (isNotMajorDefensive(cd.spellId)) return false;
 
             // Relevant if it was the dying player's OWN cooldown, or it can
             // actually reach them.

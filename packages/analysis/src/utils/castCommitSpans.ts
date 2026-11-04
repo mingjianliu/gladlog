@@ -169,14 +169,22 @@ export function nextPressEndingChannelMs(
       (e) =>
         e.spellId !== spellId &&
         e.timestamp > afterMs &&
-        !(
-          e.spellId &&
-          OFF_GCD_SPELL_IDS.has(e.spellId) &&
-          CAST_WHILE_CHANNELING_SPELL_IDS.has(e.spellId) &&
-          !CHANNELED_SPELL_IDS.has(e.spellId)
-        ),
+        !pressRidesAlong(e.spellId),
     )
     .reduce((m, e) => Math.min(m, e.timestamp), Infinity);
+}
+
+/** A press that leaves a running channel or cast bar going: off the global
+ * cooldown, castable while channelling (DB2 bit), and no channel itself.
+ * `nextPressEndingChannelMs`'s exemption; the kick audit's open-bar test
+ * reads it too (fact10 D22). */
+export function pressRidesAlong(spellId: string | undefined): boolean {
+  return (
+    !!spellId &&
+    OFF_GCD_SPELL_IDS.has(spellId) &&
+    CAST_WHILE_CHANNELING_SPELL_IDS.has(spellId) &&
+    !CHANNELED_SPELL_IDS.has(spellId)
+  );
 }
 
 /** The caster's own last row of a channel's effect after `afterMs`, up to

@@ -20,7 +20,11 @@ import {
   castBarOutcomesOf,
   JUKE_LOOKBACK_MS,
 } from "./castBarOutcomes";
-import { CHANNEL_AURA_LAG_MS, channelSpans } from "./castCommitSpans";
+import {
+  CHANNEL_AURA_LAG_MS,
+  channelSpans,
+  pressRidesAlong,
+} from "./castCommitSpans";
 import {
   CANCEL_CC_NEAR_S,
   forcedStopInstantsMs,
@@ -29,6 +33,7 @@ import {
 import { kickCastSpellId, LANDED_PAIR_MS } from "./enemyInterrupts";
 import { PET_COMMAND_MS } from "./petCommands";
 import type { RawStreams } from "./rawStreams";
+import { firstDeathMs } from "./unitDeath";
 
 // `LANDED_PAIR_MS` (a landed kick's SPELL_INTERRUPT pairs with the cast
 // within it) lives in enemyInterrupts.ts, which also reads it for the
@@ -397,11 +402,55 @@ export function analyzeKickAudit(
         return t >= fromS && t <= kickS;
       });
     };
+    // fact10 D22 / D5: a bar with no end row was over once the unit did
+    // something a cast bar cannot outlive — any other press but one that
+    // rides along (`pressRidesAlong`: off the GCD, castable while
+    // channelling), or a cast bar of another spell (733ef717 0:45: Smite
+    // begun 41.415, Void Shield 43.190, Penance 44.416, Mind Freeze 45.309
+    // read "JUKED by fake Smite") — or once a player other than the caster
+    // died, the bar's likely target (070c4933 2:25: Benediction begun
+    // 144.495, Yey died 145.415, Quell 145.520; the log's next row gives
+    // Kats Precognition, the aura of a kick into no cast). A SUCCESS of the
+    // previous bar's spell up to `CAST_QUEUE_TOLERANCE_MS` after the start
+    // is that bar's queued completion, and a row of the start's own
+    // millisecond can be logged before it: neither counts. A press in the
+    // `STOPPED_JUST_BEFORE_S` before the kick is the fake itself (ruling
+    // A35's "just before"): the bar was on screen when the kick went out
+    // (461265d4 1:26: Healing Wave begun 85.403, Riptide 86.207, Spear Hand
+    // Strike 86.291 — a juke).
+    const supersededInside = () => {
+      const startMs = matchStartMs + Math.round(last.t * 1000);
+      const prev = barsOf(enemy).filter((b) => b.t < last.t).at(-1);
+      const acted = [
+        ...(enemy.spellCastEvents ?? []),
+        ...((enemy as { castStartEvents?: typeof enemy.spellCastEvents })
+          .castStartEvents ?? []),
+      ].some(
+        (e) =>
+          e.timestamp > startMs &&
+          e.timestamp < kickMs - STOPPED_JUST_BEFORE_S * 1000 &&
+          e.spellId !== last.id &&
+          !pressRidesAlong(e.spellId) &&
+          !(
+            prev !== undefined &&
+            e.spellId === prev.id &&
+            e.timestamp <= startMs + CAST_QUEUE_TOLERANCE_MS
+          ),
+      );
+      if (acted) return true;
+      return allUnits.some(
+        (u) =>
+          u.info &&
+          u.id !== enemy.id &&
+          firstDeathMs(u) >= startMs &&
+          firstDeathMs(u) <= kickMs,
+      );
+    };
     const open =
       want === "unfinished"
         ? end.kind !== "completed" && end.kind !== "kicked"
         : end.kind === "none"
-          ? !forcedInside()
+          ? !forcedInside() && !supersededInside()
           : end.kind === "stopped" && end.near === null;
     return open ? getEnglishSpellName(last.id, last.name) : undefined;
   };

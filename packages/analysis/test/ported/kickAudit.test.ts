@@ -900,3 +900,63 @@ describe("kickAudit — a kick on an enemy summon (fact6 D3)", () => {
     expect(entries[0]!.result).toBe("missed");
   });
 });
+
+describe("kickAudit — a bar the target left is no fake (fact10 D22 / D5)", () => {
+  const kickTs = MATCH_START + 45_309;
+  const kicker = () => makeKicker(kickTs);
+  const press = (spellId: string, ts: number) =>
+    makeSpellCastEvent(spellId, ts, "p1", "Shaman", "e1", "Enemy", 0, spellId);
+  const SMITE = "585";
+  const VOID_SHIELD = "1253593";
+  const PENANCE = "47540";
+  const HEALING_WAVE = "77472";
+  const RIPTIDE = "61295";
+
+  it("733ef717 0:45: Smite begun 3.9 s before the kick, then Void Shield and a Penance — the bar was over, a miss", () => {
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [castStart(SMITE, kickTs - 3_894, "e1")],
+      spellCastEvents: [
+        press(VOID_SHIELD, kickTs - 2_119),
+        press(PENANCE, kickTs - 893),
+      ],
+    } as any);
+    const [e] = analyzeKickAudit(kicker(), [enemy], makeCombat());
+    expect(e!.result).toBe("missed");
+    expect(e!.jukedBySpellName).toBeUndefined();
+  });
+
+  it("461265d4 1:26: Healing Wave given up for a Riptide 84 ms before the kick — the fake itself, still a juke (STOPPED_JUST_BEFORE_S)", () => {
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [castStart(HEALING_WAVE, kickTs - 888, "e1")],
+      spellCastEvents: [press(RIPTIDE, kickTs - 84)],
+    } as any);
+    const [e] = analyzeKickAudit(kicker(), [enemy], makeCombat());
+    expect(e!.result).toBe("juked");
+    expect(e!.jukedBySpellName).toBeTruthy();
+  });
+
+  it("070c4933 2:25: a bar whose likely target died before the kick ended with the death — a miss", () => {
+    const BENEDICTION = "1262766";
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [castStart(BENEDICTION, kickTs - 1_025, "e1")],
+    } as any);
+    const ally = makeUnit("p2", {
+      name: "Ally",
+      info,
+      deathRecords: [{ timestamp: kickTs - 105 }],
+    } as any);
+    const player = kicker();
+    const combat = {
+      ...makeCombat(),
+      units: { p1: player, p2: ally, e1: enemy },
+    };
+    const [e] = analyzeKickAudit(player, [enemy], combat);
+    expect(e!.result).toBe("missed");
+  });
+});

@@ -792,4 +792,14 @@
  *  Walk, Barrier Diffusion on every barrier, Impish Instincts, Burn to Ash
  *  crit ticks. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 479;
+/*
+ * v480 (2026-11-04, fact10 batch 1): Breath of Eons and Frostwyrm's Fury are
+ *  major offensive cooldowns (user ruling; 442204 a press of 403631, the free
+ *  recast 1265384 an effect activation); Burrow a Shaman defensive and Spirit
+ *  Walk off the ready set; an ally's control immunity ends a control before a
+ *  later trinket; a triggered root is no effect-span chain head; a bar its
+ *  caster left, or whose target died, is no juke; the displayed-seconds
+ *  troughs stop at the round's end; an activation is its cooldown's [RES]
+ *  window. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 480;

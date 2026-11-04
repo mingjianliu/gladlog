@@ -20,6 +20,7 @@ import {
   hpTroughInWindow,
   isDeadAtRenderSecond,
   isHpTroughWorthPrinting,
+  roundClippedTroughSpan,
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
@@ -351,7 +352,8 @@ export function analyzeBurstLedger(
   // Shuffle round ends at its first death, `roundEndMs`), not the log's —
   // 0068182d `Burst #4 — 2:55–2:59` ran past the 2:57 round-ending death and
   // counted hits after it
-  const matchEndS = (roundEndMs(combat) - matchStartMs) / 1000;
+  const roundEndAtMs = roundEndMs(combat);
+  const matchEndS = (roundEndAtMs - matchStartMs) / 1000;
   const attackingSide = new Set<string>([
     player.name,
     ...allies.map((a) => a.name),
@@ -564,7 +566,20 @@ export function analyzeBurstLedger(
       // seconds, the `[DMG SPIKE]` line's own function and window
       const low =
         hpStartPct !== null && hpEndPct !== null && !deadAtEnd
-          ? hpTroughInWindow(target, matchStartMs, fromSec, toSec)
+          ? hpTroughInWindow(
+              target,
+              matchStartMs,
+              fromSec,
+              toSec,
+              undefined,
+              // not past the round's end (fact10 D30)
+              roundClippedTroughSpan(
+                matchStartMs,
+                fromSec,
+                toSec,
+                roundEndAtMs,
+              ),
+            )
           : null;
 
       dominantTarget = {

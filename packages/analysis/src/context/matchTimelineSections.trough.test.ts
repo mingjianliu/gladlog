@@ -35,6 +35,7 @@ import {
   hpTroughInWindow,
   isHpTroughWorthPrinting,
   isTickBelowTrough,
+  roundClippedTroughSpan,
 } from "../utils/cooldowns";
 import { emitDmgSpikeEntries } from "./matchTimelineSections";
 
@@ -402,5 +403,45 @@ describe("hpTroughInWindow — the true minimum, on the grid sampler's own valid
   it("no sample in reach → null", () => {
     const u = { ...friend({ 0: 90 }), advancedActions: [] };
     expect(hpTroughInWindow(u as never, T0, 10, 20)).toBeNull();
+  });
+});
+
+describe("[DMG SPIKE] trough — not past the round's end (fact10 D30)", () => {
+  // 6a545d58's shape: the round ends inside the window's last displayed
+  // second (a Solo Shuffle's first death at 20.4 s); the hits after it took
+  // the unit from 70 % to 40 % at 20.8 s — no reading of the round
+  const u = friend({ 0: 90, 14: 75, 18: 70 }, [], [[20.8, 40]]);
+  const renderAt = (roundEndAtMs?: number) => {
+    const out: string[] = [];
+    emitDmgSpikeEntries({
+      pressureWindows: [PW] as never,
+      friends: [u] as never,
+      matchStartMs: T0,
+      pid: (n) => n.split("-")[0]!,
+      roundEndAtMs,
+      addEntry: (_t, ...ls) => out.push(...ls),
+    });
+    return out.join("\n");
+  };
+
+  it("the samples after the round-ending instant are no part of the low", () => {
+    expect(renderAt()).toContain("low 40% @0:20");
+    expect(renderAt(T0 + 20_400)).not.toContain("low 40%");
+    expect(
+      hpTroughInWindow(
+        u as never,
+        T0,
+        10,
+        20,
+        undefined,
+        roundClippedTroughSpan(T0, 10, 20, T0 + 20_400),
+      )!.pct,
+    ).toBe(70);
+  });
+
+  it("a round that ends after the window's last second changes nothing", () => {
+    expect(roundClippedTroughSpan(T0, 10, 20, T0 + 21_000)).toBeUndefined();
+    expect(roundClippedTroughSpan(T0, 10, 20, undefined)).toBeUndefined();
+    expect(renderAt(T0 + 21_000)).toBe(renderAt());
   });
 });

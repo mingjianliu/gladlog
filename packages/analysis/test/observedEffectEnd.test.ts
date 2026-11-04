@@ -94,28 +94,78 @@ describe("observedEffectEndSeconds", () => {
       [LogEvent.SPELL_AURA_APPLIED, 150],
       [LogEvent.SPELL_AURA_REMOVED, 201],
     ]);
-    expect(observedEffectEndSeconds(caster, AVATAR, 150, Infinity, combat)).toBe(200);
+    expect(
+      observedEffectEndSeconds(caster, AVATAR, 150, Infinity, combat),
+    ).toBe(200);
     // control (the Kingsbane case): pressed at 190 s, its official end 210 s
     // lies past the combat's end — the clamp says nothing, the official stands
     const late = scene([
       [LogEvent.SPELL_AURA_APPLIED, 190],
       [LogEvent.SPELL_AURA_REMOVED, 205],
     ]);
-    expect(observedEffectEndSeconds(late.caster, AVATAR, 190, Infinity, late.combat)).toBeNull();
+    expect(
+      observedEffectEndSeconds(late.caster, AVATAR, 190, Infinity, late.combat),
+    ).toBeNull();
   });
 
   it("round-1 retest idx 46: another effect id of the cast on the same unit does not continue the chain (Kingsbane 385627 / 394095)", () => {
     const caster = makeUnit("c1", {
       name: "Caster",
       auraEvents: [
-        { ...makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "385627", T0 + 131_000, "c1", "c1", "BUFF"), srcUnitName: "Caster" },
-        { ...makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "394095", T0 + 142_000, "c1", "c1", "BUFF"), srcUnitName: "Caster" },
-        { ...makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "385627", T0 + 145_000, "c1", "c1", "BUFF"), srcUnitName: "Caster" },
-        { ...makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "394095", T0 + 149_700, "c1", "c1", "BUFF"), srcUnitName: "Caster" },
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "385627",
+            T0 + 131_000,
+            "c1",
+            "c1",
+            "BUFF",
+          ),
+          srcUnitName: "Caster",
+        },
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "394095",
+            T0 + 142_000,
+            "c1",
+            "c1",
+            "BUFF",
+          ),
+          srcUnitName: "Caster",
+        },
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            "385627",
+            T0 + 145_000,
+            "c1",
+            "c1",
+            "BUFF",
+          ),
+          srcUnitName: "Caster",
+        },
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            "394095",
+            T0 + 149_700,
+            "c1",
+            "c1",
+            "BUFF",
+          ),
+          srcUnitName: "Caster",
+        },
       ],
     } as never);
-    const combat = { startTime: T0, endTime: T0 + 200_000, units: { c1: caster } } as never;
-    expect(observedEffectEndSeconds(caster, "385627", 131, Infinity, combat)).toBe(145);
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 200_000,
+      units: { c1: caster },
+    } as never;
+    expect(
+      observedEffectEndSeconds(caster, "385627", 131, Infinity, combat),
+    ).toBe(145);
   });
 
   it("no logged removal is no observation: null, the official length stands", () => {
@@ -178,6 +228,52 @@ describe("observedEffectEndSeconds", () => {
     expect(
       observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat),
     ).toBeNull();
+  });
+
+  // fact10 D11 / D27 (11890839 1:34): a press whose triggered auras include
+  // a root — Predator's Wake 1246167's root 370970 logged 1 ms before its
+  // damage aura 1246168 — reads its span from the non-root aura, whatever
+  // order the log wrote them in
+  describe("a triggered root is no chain head (fact10 D11 / D27)", () => {
+    const CAST = "1246167";
+    const ROOT = "370970";
+    const DOT = "1246168";
+    const run = (rootFirst: boolean) => {
+      const caster = makeUnit("c1", { name: "Caster" } as never);
+      const row = (ev: LogEvent, id: string, s: number) => ({
+        ...makeAuraEvent(ev, id, T0 + s * 1000, "c1", "t1", "DEBUFF"),
+        srcUnitName: "Caster",
+      });
+      const applies = rootFirst
+        ? [
+            row(LogEvent.SPELL_AURA_APPLIED, ROOT, 94.5),
+            row(LogEvent.SPELL_AURA_APPLIED, DOT, 94.501),
+          ]
+        : [
+            row(LogEvent.SPELL_AURA_APPLIED, DOT, 94.5),
+            row(LogEvent.SPELL_AURA_APPLIED, ROOT, 94.501),
+          ];
+      const target = makeUnit("t1", {
+        name: "Target",
+        auraEvents: [
+          ...applies,
+          row(LogEvent.SPELL_AURA_REMOVED, ROOT, 96.5),
+          row(LogEvent.SPELL_AURA_REMOVED, DOT, 101.5),
+        ],
+      } as never);
+      const combat = {
+        startTime: T0,
+        endTime: T0 + 200_000,
+        units: { c1: caster, t1: target },
+      } as never;
+      return observedEffectEndSeconds(caster, CAST, 94.4, Infinity, combat);
+    };
+    it("root logged first: the damage aura's end", () => {
+      expect(run(true)).toBeCloseTo(101.5, 3);
+    });
+    it("damage aura logged first: the same end", () => {
+      expect(run(false)).toBeCloseTo(101.5, 3);
+    });
   });
 
   // FT F13 (9c6ab747): The Hunt's DoT left its player target at 83.9 and sat

@@ -2,7 +2,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CD_WASTE_PRESSURE_HP_PCT } from "../analysis/candidateFindings";
 import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
-import { isHealNotMajorDefensive } from "../data/abilityProfile";
+import { isNotMajorDefensive } from "../data/abilityProfile";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { PERIODIC_DAMAGE_AURA_IDS } from "../data/periodicAuraGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -34,6 +34,7 @@ import {
   isSpikeHealedThrough,
   lockoutDebuffStopsPressAtDeath,
   PRESSURE_WINDOWS_TOP_N,
+  roundClippedTroughSpan,
   specToBenchmarkKey,
   specToString,
   usableWhileStunned,
@@ -429,6 +430,8 @@ export function emitDmgSpikeEntries(params: {
   ownerName?: string;
   /** 治疗名单(角色化命名用:healer)。 */
   healerNames?: string[];
+  /** the round's end (`roundEndMs`); a low is not read past it (fact10 D30) */
+  roundEndAtMs?: number;
   addEntry: (timeSeconds: number, ...lines: string[]) => void;
 }): void {
   const {
@@ -444,6 +447,7 @@ export function emitDmgSpikeEntries(params: {
     ccTrinketSummaries,
     ownerName,
     healerNames,
+    roundEndAtMs,
     addEntry,
   } = params;
 
@@ -512,7 +516,14 @@ export function emitDmgSpikeEntries(params: {
       // The endpoints A / B stay [STATE] readings. The eval gate verifies the
       // weaker invariant: no tick inside the window reads below the low.
       const low = targetUnit
-        ? hpTroughInWindow(targetUnit, matchStartMs, fromSec, toSec)
+        ? hpTroughInWindow(
+            targetUnit,
+            matchStartMs,
+            fromSec,
+            toSec,
+            undefined,
+            roundClippedTroughSpan(matchStartMs, fromSec, toSec, roundEndAtMs),
+          )
         : null;
       const trough =
         low !== null && isHpTroughWorthPrinting(hpFrom, hpTo, low.pct)
@@ -803,7 +814,7 @@ export function lowPressureUnusedDefensiveNote(
       !cd.isThroughput &&
       (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)) &&
       // fact9 D17: a heal is no defensive "correctly HELD"
-      !isHealNotMajorDefensive(cd.spellId) &&
+      !isNotMajorDefensive(cd.spellId) &&
       !cdCanHelpAnotherUnit(cd) &&
       // a cooldown that is also an offensive one is no self-only defensive
       // (fact7 D62, 6ab51f91: Ultimate Penitence, whose bolts hit and heal
@@ -1034,7 +1045,7 @@ export function emitFriendlyDeathEntries<S>(params: {
         // fact9 D17: a heal is no unused defensive
         .filter(
           (cd) =>
-            cd.tag === "Defensive" && !isHealNotMajorDefensive(cd.spellId),
+            cd.tag === "Defensive" && !isNotMajorDefensive(cd.spellId),
         )
         // a row owned on the spec baseline alone is cd-hoarded's only (ruling
         // P-W6): this list has no school gate for a button never shown
