@@ -34,7 +34,10 @@ import {
 import { ENEMY_IMMUNITY_TEAM_PROC_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { SpellTag } from "@gladlog/analysis/src/data/spellTypes";
-import { staleMaxHpRows } from "@gladlog/analysis/src/utils/advancedActions";
+import {
+  hpReadingMaxHp,
+  staleMaxHpRows,
+} from "@gladlog/analysis/src/utils/advancedActions";
 import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
 import {
   isHealerSpec,
@@ -332,10 +335,15 @@ function troughs(ctx: IRoundCtx): void {
       ctx.bump("troughOnStaleMaxRow");
       const stale = staleMaxHpRows(unit);
       const p = +m[2]!;
-      const read = (a: any) =>
+      const raw = (a: any) =>
         Math.round((100 * a.advancedActorCurrentHp) / a.advancedActorMaxHp);
-      const staleHit = inSec.some((a) => stale.has(a) && read(a) === p);
-      const trueLow = Math.min(...inSec.filter((a) => !stale.has(a)).map(read));
+      // a stale-max row reads over its new max (fact10 D18 / D33)
+      const read = (a: any) =>
+        Math.round((100 * a.advancedActorCurrentHp) / hpReadingMaxHp(unit, a));
+      const staleHit = inSec.some(
+        (a) => stale.has(a) && raw(a) === p && read(a) !== p,
+      );
+      const trueLow = Math.min(...inSec.map(read));
       if (staleHit && trueLow > p)
         ctx.violate(
           "troughOnStaleMaxRow",

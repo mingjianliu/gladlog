@@ -88,6 +88,7 @@ import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriority
 import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior";
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
 import * as mitigationData from "@gladlog/analysis/src/data/mitigationData";
+import * as offGcdGenerated from "@gladlog/analysis/src/data/offGcdGenerated";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as overrideVariantsGenerated from "@gladlog/analysis/src/data/overrideVariantsGenerated";
 import * as ownShieldLinks from "@gladlog/analysis/src/data/ownShieldLinks";
@@ -2043,6 +2044,66 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/advancedActions.ts`,
     symbol: "hpReadingRows",
     mod: advancedActions,
+  },
+  {
+    file: `${A}/utils/advancedActions.ts`,
+    symbol: "hpReadingMaxHp",
+    mod: advancedActions,
+  },
+  {
+    file: `${A}/utils/castPress.ts`,
+    symbol: "pressImpactRow",
+    mod: castPress,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "PRESS_PROOF_AURA_IDS",
+    mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "SUMMON_BORNE_AURA_IDS",
+    mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "isPressVariantOf",
+    mod: hiddenPress,
+  },
+  {
+    file: `${A}/data/offGcdGenerated.ts`,
+    symbol: "ON_GCD_SPELL_IDS",
+    mod: offGcdGenerated,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "DR_RESET_TICK_MS",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "isDiminishedLength",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccLengthIsDrEvidence",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "findBrokenDisarm",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "findBrokenRoot",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "pressEndedSilence",
+    mod: ccTrinketAnalysis,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,

@@ -134,7 +134,7 @@ export function hiddenAuraLifeMs(
  * (`isPressOfCooldown` → `isVariantPress`) read off the official cooldown;
  * fact5 D25 (8d0ed9e9 r0 0:12): the cat-form roar pressed unseen came back
  * as 77764 and the kit printed `[UNUSED]`. */
-function isPressVariantOf(id: string, spellId: string): boolean {
+export function isPressVariantOf(id: string, spellId: string): boolean {
   if (id === spellId) return false;
   const name = getEnglishSpellName(spellId, "");
   return (

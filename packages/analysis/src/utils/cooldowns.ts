@@ -50,7 +50,6 @@ import spellIdListsData, {
   ENEMY_ONLY_SAVE_IDS,
 } from "../data/spellIdLists";
 import { spellSchoolMask } from "../data/spellSchools";
-import { ccSpellIds } from "../data/spellTags";
 import { hasOfficialTargeting, reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
 import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
@@ -75,8 +74,8 @@ import {
 } from "../data/usableWhileCcGenerated";
 import {
   getSortedAdvancedActions,
+  hpReadingMaxHp,
   hpReadingRows,
-  staleMaxHpRows,
 } from "./advancedActions";
 import { allyCopyRecipient } from "./allyCopyWall";
 import {
@@ -93,7 +92,7 @@ import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 import { isStasisReplayCast } from "./combatStates";
 import { interruptPressCooldownSeconds } from "./enemyInterrupts";
-import { hiddenPressMs } from "./hiddenPress";
+import { hiddenPressMs, isPressVariantOf } from "./hiddenPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import { logDatedNumberAt } from "./logEra";
 import {
@@ -1848,7 +1847,7 @@ export function unitHpSampleAt(
   return {
     pct: Math.round(
       (closestAction.advancedActorCurrentHp /
-        closestAction.advancedActorMaxHp) *
+        hpReadingMaxHp(unit, closestAction)) *
         100,
     ),
     sampleMs: closestAction.logLine.timestamp,
@@ -2132,9 +2131,8 @@ export function hpAtPress(
     // must not let a sample older than the radius stand for the press
     if (pressMs - a.logLine.timestamp > HP_SAMPLE_RADIUS_MS) return null;
     if (a.advancedActorId !== unit.id || !(a.advancedActorMaxHp > 0)) continue;
-    if (staleMaxHpRows(unit).has(a)) continue;
     const pct = Math.round(
-      (a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100,
+      (a.advancedActorCurrentHp / hpReadingMaxHp(unit, a)) * 100,
     );
     return Math.min(100, Math.max(0, pct));
   }
@@ -2375,7 +2373,7 @@ export function hpTroughInWindow(
   const endMs = toDeath ? deathMs + 1 : matchStartMs + (lastSec + 1) * 1000; // exclusive
   const spanToMs = span?.toMs ?? Infinity; // inclusive
   const actions = getSortedAdvancedActions(unit);
-  const staleRows = staleMaxHpRows(unit);
+  const staleMax = (a: (typeof actions)[number]) => hpReadingMaxHp(unit, a);
   // first index at or after `fromMs`
   let lo = 0;
   let hi = actions.length;
@@ -2394,14 +2392,13 @@ export function hpTroughInWindow(
     // a printed 43 %). The last-line rule stays the POINT reading's
     // (`unitHpSampleAt`, GH #100 / 2026-09-23).
     if (a.advancedActorId !== unit.id || a.advancedActorMaxHp <= 0) continue;
-    // a percentage over two scales is no state the unit was in (fact7 D60)
-    if (staleRows.has(a)) continue;
     // the killing blow's own row reads 0: not a live reading
     if (a.advancedActorCurrentHp <= 0) continue;
     const sec = toRenderSecond((ts - matchStartMs) / 1000);
     if (skipSec?.(sec)) continue;
+    // a row over two scales reads its new max (fact7 D60, fact10 D18)
     const pct = Math.min(
-      Math.round((a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100),
+      Math.round((a.advancedActorCurrentHp / staleMax(a)) * 100),
       100,
     );
     if (
@@ -2473,16 +2470,15 @@ export function firstHpReadingInSpanPct(
   fromMs: number,
   toMs: number,
 ): number | null {
-  const stale = staleMaxHpRows(unit);
   for (const a of getSortedAdvancedActions(unit)) {
     const ts = a.logLine.timestamp;
     if (ts < fromMs) continue;
     if (ts > toMs) break;
     if (a.advancedActorId !== unit.id || !(a.advancedActorMaxHp > 0)) continue;
-    if (stale.has(a) || a.advancedActorCurrentHp <= 0) continue;
+    if (a.advancedActorCurrentHp <= 0) continue;
     return Math.min(
       100,
-      Math.round((a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100),
+      Math.round((a.advancedActorCurrentHp / hpReadingMaxHp(unit, a)) * 100),
     );
   }
   return null;
@@ -4009,11 +4005,16 @@ export function effectEvidenceCastSeconds(
       effectAuraViaName(spellId, a) &&
       (effectAuraHitShare(spellId, a) ?? 0) >= CONTROL_EFFECT_MIN_HIT_SHARE,
   );
-  // …and a control's own id, put on ANOTHER unit: Blind's aura is 2094, its
-  // cast's id (fact4 D25, 3f433db1 0:21: a stealthed rogue's Blind landed
-  // on our healer with no cast row, and the kit read `Blind [UNUSED]`)
-  const ownIdOnOthers = ccSpellIds.has(spellId);
-  if (effects.length === 0 && !ownIdOnOthers) return [];
+  // …and the cooldown's own id — or a form variant's (`isPressVariantOf`)
+  // — put on ANOTHER unit: Blind's aura is 2094, its cast's id (fact4 D25,
+  // 3f433db1 0:21: a stealthed rogue's Blind landed on our healer with no
+  // cast row, and the kit read `Blind [UNUSED]`). Not a control's only
+  // (fact10 D19, 46eb2199 r0 0:03.256: a prowling Balance Druid's cat-form
+  // Stampeding Roar 77764 on two allies, no cast row, the kit read
+  // `Stampeding Roar [UNUSED]`). The unit's own copy stays out: a re-stated
+  // buff on itself is `hiddenPressMs`' reading.
+  const ownIdOnOthersOf = (id: string) =>
+    id === spellId || isPressVariantOf(id, spellId);
   const units = Object.values(combat.units ?? {}) as ICombatUnit[];
   // the unit's own applications: a summon can cast the same spell itself
   // (a Rider of the Apocalypse's Anti-Magic Shell on its Death Knight is no
@@ -4026,9 +4027,7 @@ export function effectEvidenceCastSeconds(
         a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
         !!a.spellId &&
         (effects.includes(a.spellId) ||
-          (ownIdOnOthers &&
-            a.spellId === spellId &&
-            a.destUnitId !== unit.id)) &&
+          (ownIdOnOthersOf(a.spellId) && a.destUnitId !== unit.id)) &&
         sources.has(a.srcUnitId) &&
         a.logLine.timestamp >= combat.startTime,
     )

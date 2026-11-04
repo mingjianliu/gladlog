@@ -561,12 +561,25 @@ describe("D60 — a form shift's row: fresh current over a stale max", () => {
     row(11, 150_180, 1_047_640), // 14.3 %
   ];
 
-  it("flags the row, and neither the trough nor the tick stands on it", () => {
+  it("flags the row, and the trough and the tick read it over its new max (fact10 D18 / D33)", () => {
     const u = unitOf(shift);
     expect(staleMaxHpRows(u).size).toBe(1);
     expect(staleMaxHpRows(u).has(u.advancedActions[1] as never)).toBe(true);
+    // 151,364 / 1,047,640 = 14.4 %, never the 11 % over the Bear max
     expect(hpTroughInWindow(u as never, T, 10, 11)?.pct).toBe(14);
-    expect(gridHpPct(u as never, at(10.2))).toBe(15);
+    // the Cat current is the state at 10.2: 14, not the 15 before the shift
+    expect(gridHpPct(u as never, at(10.2))).toBe(14);
+  });
+
+  it("D18 (461265d4 1:55): a Fortifying Brew falling off — the run's rows read over the new max", () => {
+    const u = unitOf([
+      row(114.727, 1_114_521, 1_269_274), // 87.8 %
+      row(114.761, 917_380, 1_269_274), // the new current, the old max
+      row(114.919, 907_158, 1_269_274),
+      row(115.105, 907_158, 1_057_720), // the new max: 85.8 %
+    ]);
+    expect(staleMaxHpRows(u).size).toBe(2);
+    expect(gridHpPct(u as never, at(115))).toBe(86);
   });
 
   it("a max that rises, and a max lost with its share, flag nothing", () => {

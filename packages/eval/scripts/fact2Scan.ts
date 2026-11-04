@@ -213,7 +213,10 @@ import castEffectAuraGenerated from "@gladlog/analysis/src/data/castEffectAuraGe
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import talentDurationTooltips from "@gladlog/analysis/src/data/talentDurationTooltipsGenerated.json";
-import { hpReadingRows } from "@gladlog/analysis/src/utils/advancedActions";
+import {
+  hpReadingMaxHp,
+  hpReadingRows,
+} from "@gladlog/analysis/src/utils/advancedActions";
 import {
   CONTROL_FAILED_MISS_TYPES,
   isControlCast,
@@ -1143,7 +1146,7 @@ function runRound(ctx: IContext): void {
       const want = Math.min(
         100,
         Math.round(
-          (pick.advancedActorCurrentHp / pick.advancedActorMaxHp) * 100,
+          (pick.advancedActorCurrentHp / hpReadingMaxHp(unit, pick)) * 100,
         ),
       );
       if (Number(pm[2]) !== want)

@@ -134,7 +134,12 @@ import { STOPPED_JUST_BEFORE_S } from "@gladlog/analysis/src/utils/castStopEvide
 import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
-import { DR_CATEGORY_MAP } from "@gladlog/analysis/src/utils/drAnalysis";
+import {
+  DR_CATEGORY_MAP,
+  DR_RESET_MS_121,
+  DR_RESET_TICK_MS,
+  isDiminishedLength,
+} from "@gladlog/analysis/src/utils/drAnalysis";
 import { isDeferralDamageRow } from "@gladlog/analysis/src/utils/incomingPressure";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import {
@@ -905,13 +910,16 @@ function drResetBandLength(ctx: IRoundCtx): void {
       )
         prevEnd = Math.max(prevEnd, tsOf(a));
     const gap = tsOf(land) - prevEnd;
-    if (!(gap >= 20_000 && gap < 20_400)) continue;
+    // the analysis' own band and length reading (shared predicate)
+    if (!(gap >= DR_RESET_MS_121 && gap < DR_RESET_MS_121 + DR_RESET_TICK_MS))
+      continue;
     const caster = ctx.units.find((x) => x.id === land.srcUnitId);
     const full = ccFullDurationForCaster(id, caster);
     if (!full) continue;
     const len = (tsOf(end) - tsOf(land)) / 1000;
+    const diminished = isDiminishedLength(len * 1000, full * 1000);
     if (forced) {
-      if (Math.abs(len - full / 2) > 0.15) continue;
+      if (diminished !== true) continue;
       ctx.bump("drBandForcedEnd");
       if (m[5] !== "Full")
         ctx.violate(
@@ -925,11 +933,7 @@ function drResetBandLength(ctx: IRoundCtx): void {
       continue;
     }
     const says =
-      Math.abs(len - full / 2) <= 0.15
-        ? "50%"
-        : Math.abs(len - full) <= 0.15
-          ? "Full"
-          : null;
+      diminished === true ? "50%" : diminished === false ? "Full" : null;
     if (!says) continue;
     ctx.bump("drResetBandLength");
     if (says !== m[5])

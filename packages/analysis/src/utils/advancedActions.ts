@@ -55,7 +55,7 @@ const STALE_MAX_HP_STEP_CARRIES = 0.5;
 
 const staleMaxHpRowsCache = new WeakMap<
   IAdvancedAction[],
-  ReadonlySet<IAdvancedAction>
+  ReadonlyMap<IAdvancedAction, number>
 >();
 
 /**
@@ -83,10 +83,26 @@ export function staleMaxHpRows(
   unit: Pick<ICombatUnit, "advancedActions" | "id"> &
     Partial<Pick<ICombatUnit, "damageIn">>,
 ): ReadonlySet<IAdvancedAction> {
+  return new Set(staleMaxHpNewMax(unit).keys());
+}
+
+/**
+ * `staleMaxHpRows`, each row with the max its current is on: the step's NEW
+ * max (fact10 D18 / D33). The detection already proves it — the run's current
+ * over the new max recovers the reading before it — so the row is a reading
+ * on that scale, not a gap: dropped, the tick fell back to the reading before
+ * the step and left out what happened in it (461265d4 1:55: Fortifying Brew
+ * off, 907,158 / 1,057,720 = 86, printed the pre-step 88; 6e0b8761 0:14:
+ * Fortitude dispelled, three hits on the new scale, printed 95 for 93).
+ */
+export function staleMaxHpNewMax(
+  unit: Pick<ICombatUnit, "advancedActions" | "id"> &
+    Partial<Pick<ICombatUnit, "damageIn">>,
+): ReadonlyMap<IAdvancedAction, number> {
   const sorted = getSortedAdvancedActions(unit);
   const cached = staleMaxHpRowsCache.get(sorted);
   if (cached) return cached;
-  const out = new Set<IAdvancedAction>();
+  const out = new Map<IAdvancedAction, number>();
   const rows = sorted.filter(
     (a) => a.advancedActorId === unit.id && a.advancedActorMaxHp > 0,
   );
@@ -131,26 +147,27 @@ export function staleMaxHpRows(
       after.advancedActorCurrentHp - rescaled >=
         STALE_MAX_HP_STEP_CARRIES * (last - rescaled)
     )
-      for (let k = i; k < j; k++) out.add(rows[k]!);
+      for (let k = i; k < j; k++) out.set(rows[k]!, m1);
   }
   staleMaxHpRowsCache.set(sorted, out);
   return out;
 }
 
-const hpReadingRowsCache = new WeakMap<IAdvancedAction[], IAdvancedAction[]>();
-
-/** `getSortedAdvancedActions` without `staleMaxHpRows`: the rows a point HP
- * reading may stand on. The same array when the unit has none. */
+/** The rows a point HP reading may stand on: every row, a stale-max one
+ * read over its new max (`hpReadingMaxHp`, fact10 D18 / D33 — it used to be
+ * dropped). */
 export function hpReadingRows(
   unit: Pick<ICombatUnit, "advancedActions" | "id">,
 ): IAdvancedAction[] {
-  const sorted = getSortedAdvancedActions(unit);
-  const stale = staleMaxHpRows(unit);
-  if (stale.size === 0) return sorted;
-  let rows = hpReadingRowsCache.get(sorted);
-  if (!rows) {
-    rows = sorted.filter((a) => !stale.has(a));
-    hpReadingRowsCache.set(sorted, rows);
-  }
-  return rows;
+  return getSortedAdvancedActions(unit);
+}
+
+/** The max HP a row's current is on: the logged max, or a stale-max row's
+ * new max (`staleMaxHpNewMax`). Every HP percentage of a row reads it. */
+export function hpReadingMaxHp(
+  unit: Pick<ICombatUnit, "advancedActions" | "id"> &
+    Partial<Pick<ICombatUnit, "damageIn">>,
+  a: IAdvancedAction,
+): number {
+  return staleMaxHpNewMax(unit).get(a) ?? a.advancedActorMaxHp;
 }
