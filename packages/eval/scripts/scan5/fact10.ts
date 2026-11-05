@@ -139,7 +139,10 @@ import { PRESS_TRIGGERED_CAST_IDS } from "@gladlog/analysis/src/utils/castMissRo
 import { STOPPED_JUST_BEFORE_S } from "@gladlog/analysis/src/utils/castStopEvidence";
 import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  effectEvidenceCastSeconds,
+  isHealerSpec,
+} from "@gladlog/analysis/src/utils/cooldowns";
 import {
   DR_CATEGORY_MAP,
   DR_RESET_MS_121,
@@ -1432,65 +1435,71 @@ function trinketTookSeveralRoots(ctx: IRoundCtx): void {
 /**
  * evidencePressOnRestatedAura (codex 20-F25-05 #1, exposure): a unit's own
  * cooldown id APPLIED on other units with no cast row of it in the round
- * (D19's press evidence), walked as `effectEvidenceCastSeconds` groups it:
- * a new press whenever an APPLIED lands the group length (the official
- * length + 1 s, never more than the cooldown) or more after the last
- * accepted press — the anchor moves only on an accepted press (codex
- * 20-F25-06 #3: APPLIED at 0, 5 and 10 s reads two presses). A violation
- * is an accepted press whose recipient still held that unit's aura of the
- * id (no REMOVED since its APPLIED): a re-stated aura read as a press.
+ * (D19's press evidence). The presses are the producer's own
+ * (`effectEvidenceCastSeconds`: its effect auras, its span, an anchor that
+ * moves only on an accepted press — codex 20-F25-06 #3, 20-F25-07: a
+ * re-walk of the raw id alone missed Bestial Wrath's self effect 186254
+ * moving the anchor). A violation is an accepted press, after the first,
+ * whose rows at its millisecond are all re-statements: each recipient
+ * still held that unit's aura of the id (no REMOVED since its APPLIED).
  * Counted: every accepted press after a unit's first of the id.
  */
 function evidencePressOnRestatedAura(ctx: IRoundCtx): void {
+  const allAuras = ctx.units.flatMap((x: any) => x.auraEvents ?? []) as any[];
   for (const u of ctx.players) {
     const cast = new Set(
       successesOf(u)
         .filter((c) => tsOf(c) >= ctx.start && tsOf(c) <= ctx.end)
         .map((c) => String(c.spellId)),
     );
-    const rows = (ctx.units.flatMap((x: any) => x.auraEvents ?? []) as any[])
-      .filter(
-        (a) =>
-          a.srcUnitId === u.id &&
-          a.destUnitId !== u.id &&
-          !cast.has(String(a.spellId)) &&
-          (spellEffectData[String(a.spellId)]?.cooldownSeconds ?? 0) >= 20 &&
-          tsOf(a) >= ctx.start &&
-          tsOf(a) <= ctx.end,
-      )
+    const own = allAuras
+      .filter((a) => a.srcUnitId === u.id && tsOf(a) >= ctx.start)
       .sort((a, b) => tsOf(a) - tsOf(b));
-    const anchor = new Map<string, number>();
-    const onSince = new Map<string, number>();
-    for (const a of rows) {
-      const id = String(a.spellId);
-      const key = `${a.destUnitId}|${id}`;
-      if (ev(a) === REMOVED) {
-        onSince.delete(key);
-        continue;
-      }
-      if (ev(a) !== APPLIED) continue;
-      const data = spellEffectData[id];
-      const groupMs =
-        Math.min(
-          Math.max(data?.cooldownSeconds ?? 0, 1),
-          Math.max((data?.durationSeconds ?? 0) + 1, 1),
-        ) * 1000;
-      const last = anchor.get(id);
-      const held = onSince.get(key);
-      if (held === undefined) onSince.set(key, tsOf(a));
-      if (last !== undefined && tsOf(a) - last < groupMs) continue;
-      anchor.set(id, tsOf(a));
-      if (last === undefined) continue;
-      ctx.bump("evidencePressOnRestatedAura");
-      if (held !== undefined)
+    const ids = new Set(
+      own
+        .filter(
+          (a) =>
+            a.destUnitId !== u.id &&
+            ev(a) === APPLIED &&
+            !cast.has(String(a.spellId)) &&
+            (spellEffectData[String(a.spellId)]?.cooldownSeconds ?? 0) >= 20 &&
+            tsOf(a) <= ctx.end,
+        )
+        .map((a) => String(a.spellId)),
+    );
+    for (const id of ids) {
+      const presses = effectEvidenceCastSeconds(
+        u,
+        id,
+        spellEffectData[id]!.cooldownSeconds!,
+        ctx.legacy,
+      ).map((sec) => ctx.start + sec * 1000);
+      for (const at of presses.slice(1)) {
+        if (at > ctx.end) break;
+        ctx.bump("evidencePressOnRestatedAura");
+        const rows = own.filter((a) => ev(a) === APPLIED && tsOf(a) === at);
+        const restated = (row: any): number | undefined => {
+          const key = (a: any) => `${a.destUnitId}|${a.spellId}`;
+          let since: number | undefined;
+          for (const a of own) {
+            if (tsOf(a) >= at) break;
+            if (key(a) !== key(row)) continue;
+            if (ev(a) === REMOVED) since = undefined;
+            else if (ev(a) === APPLIED && since === undefined) since = tsOf(a);
+          }
+          return since;
+        };
+        const held = rows.map(restated);
+        if (!rows.length || held.some((h) => h === undefined)) continue;
         ctx.violate(
           "evidencePressOnRestatedAura",
-          nameOf(a.spellId, a.spellName),
-          tsOf(a),
-          `${u.name}:${id}:${tsOf(a)}`,
-          `${nameOf(a.spellId, a.spellName)} by ${u.name}: read as a press at ${fmtS((tsOf(a) - ctx.start) / 1000)}, its aura on ${a.destUnitName} up since ${((tsOf(a) - held) / 1000).toFixed(2)} s before, no REMOVED between, no cast row`,
+          nameOf(id),
+          at,
+          `${u.name}:${id}:${at}`,
+          `${nameOf(id)} by ${u.name}: read as a press at ${fmtS((at - ctx.start) / 1000)}, every aura it applied then (${rows.map((r) => `${nameOf(r.spellId, r.spellName)} on ${r.destUnitName}`).join(", ")}) already up, no REMOVED between, no cast row`,
           "",
         );
+      }
     }
   }
 }
