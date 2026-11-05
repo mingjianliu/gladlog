@@ -106,9 +106,9 @@ describe("DR reset tick band (fact10 D9)", () => {
     );
   });
 
-  it("a control that landed was never Immune: on a chain of two the band resets (cover set 31-2 r2 1:39)", () => {
+  it("a control that landed was never Immune: on a chain of two the band reads its own length (GH #191, #190)", () => {
     // Intimidation Full, Binding Shot 50 %, then an Intimidation 20.178 s
-    // after the chain's end, cut by Blessing of Sanctuary at 1.49 s of 3 s
+    // after the chain's end
     const first = { applyMs: T0, removeMs: T0 + 3_000, spellId: "24394" };
     const second = {
       applyMs: T0 + 21_000,
@@ -116,13 +116,59 @@ describe("DR reset tick band (fact10 D9)", () => {
       spellId: "117526",
     };
     const at = second.removeMs + 20_178;
+    // the game ended it at half its length: the game's chain was one shorter
+    // than the walk's — the second of it, 50 % (605: Psychic Scream 3.00 s of
+    // 6, Cheap Shot 2.04 s of 4, both printed Full)
     expect(
       getDRLevel([first, second], at, {
         applyMs: at,
         removeMs: at + 1_490,
         fullMs: 3_000,
       }).level,
+    ).toBe("50%");
+    // its full length: it started over
+    expect(
+      getDRLevel([first, second], at, {
+        applyMs: at,
+        removeMs: at + 3_000,
+        fullMs: 3_000,
+      }).level,
     ).toBe("Full");
+    // a forced end carries no full length (`ccLengthIsDrEvidence` — cover set
+    // 31-2 r2 1:39: Blessing of Sanctuary cut it at 1.49 s of 3 s): the
+    // band resets, never Immune
+    expect(
+      getDRLevel([first, second], at, {
+        applyMs: at,
+        removeMs: at + 1_490,
+      }).level,
+    ).toBe("Full");
+  });
+
+  it("a chain member the game ended at half its length in the band is the second of a chain, not a new one (GH #191)", () => {
+    const first = { applyMs: T0, removeMs: T0 + 3_000, spellId: "24394" };
+    const second = {
+      applyMs: T0 + 21_000,
+      removeMs: T0 + 22_500,
+      spellId: "117526",
+    };
+    // a third member 20.1 s after the chain of two, run at half its length
+    const third = {
+      applyMs: second.removeMs + 20_100,
+      removeMs: second.removeMs + 20_100 + 1_500,
+      spellId: "24394",
+      fullMs: 3_000,
+    };
+    // a fourth control right after it: the chain is two long → Immune
+    expect(
+      getDRLevel([first, second, third], third.removeMs + 1_000).level,
+    ).toBe("Immune");
+    // the third with no length evidence started a new chain → 50 %
+    const { fullMs: _f, ...thirdForced } = third;
+    void _f;
+    expect(
+      getDRLevel([first, second, thirdForced], third.removeMs + 1_000).level,
+    ).toBe("50%");
   });
 
   it("drLevelAtLanding and computeIncomingDR carry the landing's full length", () => {
@@ -180,9 +226,9 @@ describe("DR reset tick band (fact10 D9)", () => {
     expect(getDRLevelAtTime(instances, "Stun", at, T0)).toBe("Immune");
     const { drFullSeconds: _d, ...noEvidence } = instances[1]!;
     void _d;
-    expect(
-      getDRLevelAtTime([instances[0]!, noEvidence], "Stun", at, T0),
-    ).toBe("50%");
+    expect(getDRLevelAtTime([instances[0]!, noEvidence], "Stun", at, T0)).toBe(
+      "50%",
+    );
   });
 
   it("a control a damage break ended at half its length is no DR evidence (codex 20-F25-04 #2)", () => {
@@ -241,7 +287,12 @@ describe("DR reset tick band (fact10 D9)", () => {
         startInfo: { zoneId: "1672" },
         units: { [priest.id]: priest, [mage.id]: mage, [rogue.id]: rogue },
       };
-      return analyzePlayerCCAndTrinket(priest, [mage, rogue], combat as never, [])
+      return analyzePlayerCCAndTrinket(
+        priest,
+        [mage, rogue],
+        combat as never,
+        [],
+      )
         .ccInstances.filter((c) => c.spellId === POLY)
         .map((c) => [c.drInfo?.level, c.drFullSeconds]);
     };

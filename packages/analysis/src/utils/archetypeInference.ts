@@ -1,11 +1,15 @@
-import { IArenaMatch, ICombatUnit, IShuffleRound } from '@gladlog/parser-compat';
+import {
+  IArenaMatch,
+  ICombatUnit,
+  IShuffleRound,
+} from "@gladlog/parser-compat";
 
-import { analyzePlayerCCAndTrinket } from './ccTrinketAnalysis';
-import { isHealerSpec, specToString } from './cooldowns';
-import { analyzeOutgoingCCChains } from './drAnalysis';
-import { reconstructEnemyCDTimeline } from './enemyCDs';
-import { analyzeHealerExposureAtBurst } from './healerExposureAnalysis';
-import { computeMatchArchetype } from './matchArchetype';
+import { analyzePlayerCCAndTrinket } from "./ccTrinketAnalysis";
+import { isHealerSpec, specToString } from "./cooldowns";
+import { reconstructEnemyCDTimeline } from "./enemyCDs";
+import { analyzeHealerExposureAtBurst } from "./healerExposureAnalysis";
+import { computeMatchArchetype } from "./matchArchetype";
+import { analyzeOutgoingCCChains } from "./outgoingCcChains";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -13,13 +17,18 @@ export interface IMatchDynamicFeatures {
   durationSeconds: number;
   burstWindowCount: number;
   peakBurstScore: number;
-  burstWindowQuality: { low: number; moderate: number; high: number; critical: number };
+  burstWindowQuality: {
+    low: number;
+    moderate: number;
+    high: number;
+    critical: number;
+  };
   ccEventsPerMinute: number;
   tunnelScore: number; // friendlyDamageShare[0].share
   criticalOrExposedBurstWindows: number | null;
   enemyMeleeCount: number;
   enemyRangedCount: number;
-  setupStyle: 'one_shot_burst' | 'cc_then_burst' | 'flat_dampening' | 'unknown';
+  setupStyle: "one_shot_burst" | "cc_then_burst" | "flat_dampening" | "unknown";
   ownTeamCCPerMin: number;
   enemyTeamCCPerMin: number;
   ownTeamSpecs: string[];
@@ -48,7 +57,10 @@ export function toFeatureVector(d: IMatchDynamicFeatures): number[] {
   ];
 }
 
-export function normalize(v: number[], params: IArchetypeModel['normParams']): number[] {
+export function normalize(
+  v: number[],
+  params: IArchetypeModel["normParams"],
+): number[] {
   return v.map((x, i) => {
     const std = params.std[i] || 1;
     return (x - params.mean[i]) / std;
@@ -73,7 +85,11 @@ export function classifyCluster(
       bestIdx = idx;
     }
   });
-  return { clusterKey: `cluster_${bestIdx}`, clusterIdx: bestIdx, distance: bestDist };
+  return {
+    clusterKey: `cluster_${bestIdx}`,
+    clusterIdx: bestIdx,
+    distance: bestDist,
+  };
 }
 
 // ── Match dynamic feature extraction ─────────────────────────────────────────
@@ -94,9 +110,16 @@ export function extractMatchDynamics(
   const ccTrinketSummaries = friends.map((p) =>
     analyzePlayerCCAndTrinket(p, enemies, combat, enemyPets),
   );
-  const enemyCDTimeline = reconstructEnemyCDTimeline(enemies, combat, healerUnit ?? undefined, friends);
+  const enemyCDTimeline = reconstructEnemyCDTimeline(
+    enemies,
+    combat,
+    healerUnit ?? undefined,
+    friends,
+  );
 
-  const healerCCSummary = healerUnit ? ccTrinketSummaries.find((s) => s.playerName === healerUnit.name) : undefined;
+  const healerCCSummary = healerUnit
+    ? ccTrinketSummaries.find((s) => s.playerName === healerUnit.name)
+    : undefined;
   const healerExposures =
     healerUnit && healerCCSummary
       ? analyzeHealerExposureAtBurst(
@@ -124,8 +147,14 @@ export function extractMatchDynamics(
   // and classification depend on ownTeamCCPerMin being computed identically.
   const ownTeamOutgoing = analyzeOutgoingCCChains(friends, enemies, combat);
   const enemyTeamOutgoing = analyzeOutgoingCCChains(enemies, friends, combat);
-  const ownTeamCCEvents = ownTeamOutgoing.reduce((s, c) => s + c.applications.length, 0);
-  const enemyTeamCCEvents = enemyTeamOutgoing.reduce((s, c) => s + c.applications.length, 0);
+  const ownTeamCCEvents = ownTeamOutgoing.reduce(
+    (s, c) => s + c.applications.length,
+    0,
+  );
+  const enemyTeamCCEvents = enemyTeamOutgoing.reduce(
+    (s, c) => s + c.applications.length,
+    0,
+  );
 
   const burstWindowQuality = { low: 0, moderate: 0, high: 0, critical: 0 };
   for (const w of enemyCDTimeline.alignedBurstWindows) {
@@ -145,9 +174,11 @@ export function extractMatchDynamics(
     criticalOrExposedBurstWindows: archetype.criticalOrExposedBurstWindows,
     enemyMeleeCount: archetype.enemyMeleeCount,
     enemyRangedCount: archetype.enemyRangedCount,
-    setupStyle: 'unknown', // setupStyle calculation is complex and depends on first death context
-    ownTeamCCPerMin: durationSeconds > 0 ? (ownTeamCCEvents / durationSeconds) * 60 : 0,
-    enemyTeamCCPerMin: durationSeconds > 0 ? (enemyTeamCCEvents / durationSeconds) * 60 : 0,
+    setupStyle: "unknown", // setupStyle calculation is complex and depends on first death context
+    ownTeamCCPerMin:
+      durationSeconds > 0 ? (ownTeamCCEvents / durationSeconds) * 60 : 0,
+    enemyTeamCCPerMin:
+      durationSeconds > 0 ? (enemyTeamCCEvents / durationSeconds) * 60 : 0,
     ownTeamSpecs: friends.map((p) => specToString(p.spec)),
     enemyTeamSpecs: enemies.map((p) => specToString(p.spec)),
   };

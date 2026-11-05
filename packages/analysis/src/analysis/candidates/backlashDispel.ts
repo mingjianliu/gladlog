@@ -63,7 +63,8 @@ import {
   type IDispelEvent,
   reconstructDispelSummary,
 } from "../../utils/dispelAnalysis";
-import { analyzeOutgoingCCChains, getDRCategory } from "../../utils/drAnalysis";
+import { getDRCategory } from "../../utils/drAnalysis";
+import { analyzeOutgoingCCChains } from "../../utils/outgoingCcChains";
 import { roundEndMs } from "../../utils/roundEnd";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";

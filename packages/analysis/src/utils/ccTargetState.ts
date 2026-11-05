@@ -47,6 +47,7 @@ import { castingLockIntervalsOf } from "./castingLocks";
 import {
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
+  ccLengthIsDrEvidence,
   pvpTrinketRemainingSecondsAt,
 } from "./ccTrinketAnalysis";
 import { auraIsImmunityForm } from "./combatStates";
@@ -398,6 +399,7 @@ export function ccSamplerFor(params: {
           cat,
           start,
           new Map(Object.values(combat.units ?? {}).map((u) => [u.id, u])),
+          ccLengthIsDrEvidence,
         ),
         tools: breakToolsFor(t, mech),
         talents: playerTalentIdSets(t),

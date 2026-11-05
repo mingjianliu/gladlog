@@ -22,6 +22,7 @@ import {
   ccRemainingSeconds,
   oppressingRoarOnAt,
 } from "../utils/ccBreakAnalysis";
+import { ccLengthIsDrEvidence } from "../utils/ccTrinketAnalysis";
 import { ccRecastSplitsResend } from "../utils/drAnalysis";
 import { groundingRedirects } from "../utils/groundingRedirects";
 import { isDeferralAbsorb } from "../utils/incomingPressure";
@@ -852,6 +853,7 @@ function heldAndLeft(
       matchStartMs,
       roarAtApply: oppressingRoarOnAt(target, applied),
       unitById,
+      lengthIsDrEvidence: ccLengthIsDrEvidence,
     }),
   };
 }

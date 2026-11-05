@@ -18,7 +18,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { analyzeOutgoingCCChains } from "../src/utils/drAnalysis";
+import { analyzeOutgoingCCChains } from "../src/utils/outgoingCcChains";
 import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
 
 const MATCH_START = 1_000_000;

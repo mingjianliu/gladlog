@@ -248,16 +248,22 @@ export function getHighValueSpellIds(
  *
  * 读的是光环在身期间的真实最低值(`hpTroughInEventSpan`)。
  */
-function killWasLive(w: IDefenseWindow, matchStartMs: number): boolean {
+function killWasLive(
+  w: IDefenseWindow,
+  matchStartMs: number,
+  roundEndAtMs: number,
+): boolean {
   // fact8 D31: the span's true minimum (`hpTroughInEventSpan`), the reading
   // every other "lowest while up" number takes — the legend says "never read
   // 20 % HP or lower while it was up", and a druid at 16 % between two
-  // whole-second samples kept its Barkskin row (980d8143 r0 2:34.6)
+  // whole-second samples kept its Barkskin row (980d8143 r0 2:34.6). Read
+  // inside the round (`roundEndMs`, fact10 D30 follow-up, GH #191): the hits
+  // after a Solo Shuffle round's ending death are in no round.
   const low = hpTroughInEventSpan(
     w.unit,
     matchStartMs,
     w.fromSeconds,
-    w.toSeconds,
+    Math.min(w.toSeconds, (roundEndAtMs - matchStartMs) / 1000),
   );
   return low !== null && low.pct <= KILL_LIVE_HP_PCT;
 }
@@ -435,7 +441,7 @@ export function buildOffensiveWasteSummary(
         // 无条件类不看这个:打不进去就是打不进去。
         if (
           window.verdict === "kill-live-gated" &&
-          killWasLive(window, matchStartMs)
+          killWasLive(window, matchStartMs, roundEndAt)
         ) {
           continue;
         }

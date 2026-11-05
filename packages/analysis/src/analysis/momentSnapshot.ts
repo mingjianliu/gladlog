@@ -30,7 +30,7 @@ import {
   selfCastNoopAnnotatedName,
   specToString,
 } from "../utils/cooldowns";
-import { analyzeOutgoingCCChains, DR_CATEGORY_MAP } from "../utils/drAnalysis";
+import { DR_CATEGORY_MAP } from "../utils/drAnalysis";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
 import {
   getHpPercentAtTime,
@@ -42,6 +42,7 @@ import {
   getUnitRawPositionAtTime,
   hasLineOfSight,
 } from "../utils/losAnalysis";
+import { analyzeOutgoingCCChains } from "../utils/outgoingCcChains";
 import { INTERP_MAX_GAP_MS, LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { fmtTime } from "../utils/renderGrid";
 import type { PackItem } from "./deepDive";

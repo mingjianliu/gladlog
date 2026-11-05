@@ -36,6 +36,7 @@ import {
   isHpTroughWorthPrinting,
   isTickBelowTrough,
   roundClippedTroughSpan,
+  secondsPastRoundEnd,
 } from "../utils/cooldowns";
 import { emitDmgSpikeEntries } from "./matchTimelineSections";
 
@@ -443,5 +444,38 @@ describe("[DMG SPIKE] trough — not past the round's end (fact10 D30)", () => {
     expect(roundClippedTroughSpan(T0, 10, 20, T0 + 21_000)).toBeUndefined();
     expect(roundClippedTroughSpan(T0, 10, 20, undefined)).toBeUndefined();
     expect(renderAt(T0 + 21_000)).toBe(renderAt());
+  });
+});
+
+describe("a window printed past the round's end second — its ticks (GH #191)", () => {
+  // cover set 31-3's shape: [BURST ANSWERED] / STAYED IN read their window's
+  // ticks whatever instant they sampled (`ticksRegardless`), and the window
+  // runs into second 21 — after a round over at 20.4 s. That second's tick
+  // read 32 %, a hit after the round-ending death no [STATE] tick prints.
+  const u = friend({ 0: 90, 14: 75, 18: 70, 21: 32 });
+  const span = roundClippedTroughSpan(T0, 10, 21, T0 + 20_400)!;
+
+  it("reads that tick without the skip, and not with it", () => {
+    expect(span.ticksRegardless).toBe(true);
+    expect(hpTroughInWindow(u as never, T0, 10, 21, undefined, span)!.pct).toBe(
+      32,
+    );
+    expect(
+      hpTroughInWindow(
+        u as never,
+        T0,
+        10,
+        21,
+        secondsPastRoundEnd(T0, T0 + 20_400),
+        span,
+      ),
+    ).toMatchObject({ pct: 70 });
+  });
+
+  it("only seconds that begin after the round's end are skipped", () => {
+    const skip = secondsPastRoundEnd(T0, T0 + 20_400)!;
+    expect(skip(20)).toBe(false);
+    expect(skip(21)).toBe(true);
+    expect(secondsPastRoundEnd(T0, undefined)).toBeUndefined();
   });
 });

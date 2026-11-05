@@ -41,8 +41,8 @@ import {
   DISPEL_PENALTY_SPELLS,
   purgePriorityForTest,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
-import { analyzeOutgoingCCChains } from "@gladlog/analysis/src/utils/drAnalysis";
 import { computeEnemyInterruptAvailability } from "@gladlog/analysis/src/utils/enemyInterrupts";
+import { analyzeOutgoingCCChains } from "@gladlog/analysis/src/utils/outgoingCcChains";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 import { LogEvent } from "@gladlog/parser-compat";
@@ -55,7 +55,6 @@ import {
   splitTeams,
 } from "../src/explore/storeAccess";
 import { argOf } from "./lib/cli";
-
 
 const pct = (a: number, b: number) =>
   b === 0 ? "n/a" : `${((a / b) * 100).toFixed(1)}%`;

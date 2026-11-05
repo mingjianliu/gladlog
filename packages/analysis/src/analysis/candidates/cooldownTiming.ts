@@ -39,6 +39,7 @@ import {
   ccRemovalCause,
   formatCcRemovalCause,
   type ICcRemovalCause,
+  immunityAuraAtRemoval,
   renderedCcDuration,
 } from "../../utils/ccTrinketAnalysis";
 import {
@@ -58,7 +59,6 @@ import {
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
 import {
-  analyzeOutgoingCCChains,
   DR_CATEGORY_MAP,
   drDurationFactor,
   type DRLevel,
@@ -69,6 +69,7 @@ import {
   distanceBetween,
   getUnitPositionAtTime,
 } from "../../utils/losAnalysis";
+import { outgoingCcChainsWithDrHistory } from "../../utils/outgoingCcChains";
 import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
@@ -139,6 +140,31 @@ export interface IEnemyHealerCcWindow {
 }
 
 /**
+ * A control immunity another unit put on the healer in the control's own
+ * REMOVED millisecond (`immunityAuraAtRemoval` → `byUnitId`: a teammate's
+ * Berserker Shout on the feared healer) — what ended the lock when no break,
+ * dispel or press of the healer's did. The `[CC ON ENEMY]` line already
+ * says `ended by <unit>'s X` (`ccLoggedEnd`); the menu's `endedBy` said
+ * nothing (fact10 D8 follow-up, GH #191: cover set 38 of 6,291 healer locks,
+ * all Berserker Shout). The healer's own immunity rides its own press, which
+ * `ccRemovalCause` reads.
+ */
+function allyImmunityEnd(
+  healer: any,
+  spellId: string,
+  removeMs: number,
+): ICcRemovalCause | undefined {
+  const imm = immunityAuraAtRemoval(healer, spellId, removeMs);
+  if (imm?.byUnitId === undefined) return undefined;
+  return {
+    kind: "immunity",
+    spellName: imm.spellName,
+    byUnitId: imm.byUnitId,
+    ...(imm.byName ? { byName: imm.byName } : {}),
+  };
+}
+
+/**
  * Shared "敌治疗硬控窗" extraction (CLAUDE.md shared-predicate rule): both
  * `missedSyncWindowEvents` and `unsyncedBurstEvents` consume the exact same
  * windows so a "the healer was locked" fact can never disagree between the
@@ -168,10 +194,17 @@ export function enemyHealerCcWindows(
   );
   if (healerNames.size === 0) return [];
   const out: IEnemyHealerCcWindow[] = [];
-  for (const chain of analyzeOutgoingCCChains(friends, enemies, combat)) {
+  for (const chain of outgoingCcChainsWithDrHistory(friends, enemies, combat)) {
     if (!healerNames.has(chain.targetName)) continue;
     const healer = enemies.find((e) => e.name === chain.targetName);
-    for (const app of chain.applications) {
+    // our applications, and the healer's own control sent back onto it
+    // (`reflectedOntoTarget`: DR history only by ruling A52, a lock all the
+    // same — fact10 D21 follow-up, user ruling 2026-11-05: cover set 14
+    // such controls ≥ 1 s, Hammer of Justice ×7, Sleep Walk ×4, Cyclone ×2,
+    // Holy Word: Chastise; 46eb2199 1:18 a Hex sent back by Nether Ward)
+    for (const app of (chain.drHistory ?? chain.applications).filter(
+      (a) => !("drOnly" in a && a.drOnly) || a.reflectedOntoTarget,
+    )) {
       if (!HARD_CC_CATEGORIES.has(app.drInfo.category)) continue;
       if (app.drInfo.level === "Immune") continue;
       const applyMs = Math.round(combat.startTime + app.atSeconds * 1000);
@@ -185,19 +218,20 @@ export function enemyHealerCcWindows(
         healer ? oppressingRoarOnAtMs(healer, app.spellId, applyMs) : false,
       );
       // a lock the round ended on was ended by nothing logged
+      const removeMs = Math.round(
+        combat.startTime + (app.atSeconds + app.durationSeconds) * 1000,
+      );
       const endedBy =
         healer && !app.cutByRoundEnd
-          ? ccRemovalCause(
+          ? (ccRemovalCause(
               healer,
               app.spellId,
               applyMs,
-              Math.round(
-                combat.startTime + (app.atSeconds + app.durationSeconds) * 1000,
-              ),
+              removeMs,
               full === undefined
                 ? undefined
                 : applyMs + full * drDurationFactor(app.drInfo.level) * 1000,
-            )
+            ) ?? allyImmunityEnd(healer, app.spellId, removeMs))
           : undefined;
       out.push({
         fromSeconds: app.atSeconds,

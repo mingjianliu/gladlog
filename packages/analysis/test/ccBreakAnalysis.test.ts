@@ -8,10 +8,8 @@
  */
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 
-import {
-  analyzeCcBreaks,
-  CC_BREAK_REPORT_MIN_REMAINING_S,
-} from "../src/utils/ccBreakAnalysis";
+import { CC_BREAK_REPORT_MIN_REMAINING_S } from "../src/utils/ccBreakAnalysis";
+import { analyzeCcBreaks } from "../src/utils/ccBreaks";
 import { makeUnit } from "./ported/testHelpers";
 
 const MATCH_START = 1_000_000;

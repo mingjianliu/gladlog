@@ -45,8 +45,8 @@ import {
   DISPEL_PENALTY_SPELLS,
   purgePriorityForTest,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
-import { analyzeOutgoingCCChains } from "@gladlog/analysis/src/utils/drAnalysis";
 import { computeEnemyInterruptAvailability } from "@gladlog/analysis/src/utils/enemyInterrupts";
+import { analyzeOutgoingCCChains } from "@gladlog/analysis/src/utils/outgoingCcChains";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { GladLogParser } from "@gladlog/parser";
 import type { ICombatUnit } from "@gladlog/parser-compat";
@@ -236,8 +236,7 @@ function perspective(
     // at each candidate instant would re-walk casts; a kick's cooldown is
     // constant, so derive "ready at t" as: no owner kick cast within cd before t.
     const cdS =
-      ownerCds.find((cd) => isKickSpellId(cd.spellId))
-        ?.cooldownSeconds ?? 24;
+      ownerCds.find((cd) => isKickSpellId(cd.spellId))?.cooldownSeconds ?? 24;
     for (const victim of enemyPlayers) {
       const starts = (victim.castStartEvents ?? []).filter(
         (e) => e.logLine.event === LogEvent.SPELL_CAST_START,

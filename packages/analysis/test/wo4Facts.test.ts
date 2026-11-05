@@ -28,11 +28,11 @@ import {
 import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
 import { whitelistedIntervalsInDeathWindow } from "../src/utils/counterfactual";
 import {
-  analyzeOutgoingCCChains,
   CAST_BACKED_REFRESH_MS,
   ccRecastBetween,
   reAppliedIsSameApplication,
 } from "../src/utils/drAnalysis";
+import { analyzeOutgoingCCChains } from "../src/utils/outgoingCcChains";
 import {
   INTERRUPT_IMMUNE_MIN_LEFT_S,
   interruptImmuneLeftS,

@@ -32,6 +32,7 @@ import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerat
 import { OFF_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import { RESTATED_END_TOLERANCE_MS } from "@gladlog/analysis/src/utils/auraIntervals";
+import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
 import { lastPeriodicTriggerEndS } from "@gladlog/analysis/src/utils/enemyCDs";
 
 import {
@@ -348,12 +349,19 @@ function resChannel(ctx: IRoundCtx): void {
                 ctx.legacy,
               ) *
                 1000;
+        // a triggered row is no press (`isNoPressRow`, the producer's
+        // reading): Snowdrift's per-target pulses 389823 / 390171 are logged
+        // as the mage's casts on every unit they hit, end nothing, and read
+        // as the next press they cut 16 Ray of Frost windows on the 605
+        // (GH #191)
+        const rows = (u.spellCastEvents ?? []) as any[];
         const next = successesOf(u)
           .filter(
             (c) =>
               tsOf(c) > p &&
               nameOf(c.spellId, c.spellName) !== x[1] &&
-              !OFF_GCD_SPELL_IDS.has(c.spellId),
+              !OFF_GCD_SPELL_IDS.has(c.spellId) &&
+              !isNoPressRow(c, rows),
           )
           .map(tsOf)
           .sort((a, b) => a - b)[0];

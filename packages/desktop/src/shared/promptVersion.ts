@@ -831,4 +831,13 @@
  *  dead or dismissed, and come back with a summon / revive cast.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 488;
+/*
+ * v489 (2026-11-05, GH #191, GH #190): the DR reset band reads a control's
+ *  length only when the game alone ended it, on every walk (outgoing, the
+ *  holder's history, incoming) — not a Blessing of Sanctuary, nor the
+ *  holder's death; troughs and kill-live walls stop at the round's end;
+ *  an enemy healer's own control reflected back is a healer lock; a control
+ *  immunity at a lock's removal is its `endedBy`; Shield Charge is no
+ *  defensive; Stampeding Roar's 10 s. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 489;

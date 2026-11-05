@@ -104,7 +104,6 @@ import {
 } from "./combatStates";
 import { isSameSpell } from "./damagePress";
 import {
-  analyzeOutgoingCCChains,
   DRLevel,
   drResetMsAt,
   isStunCcInstance,
@@ -153,6 +152,7 @@ import {
   WALL_IN_HAND_MIT_IDS,
 } from "./killWindowTargetSelection";
 import { KW_BURST_MIN_DAMAGE } from "./offensiveWindows";
+import { analyzeOutgoingCCChains } from "./outgoingCcChains";
 import { pvpTrinketUses } from "./pvpTrinketUses";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides, type RosterSides } from "./rosterSide";

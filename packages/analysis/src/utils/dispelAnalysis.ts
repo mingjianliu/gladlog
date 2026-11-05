@@ -50,6 +50,7 @@ import {
 } from "./castCommitSpans";
 import { oppressingRoarOnAtMs } from "./ccBreakAnalysis";
 import { ccFullDurationForApplication } from "./ccDuration";
+import { ccLengthIsDrEvidence } from "./ccTrinketAnalysis";
 import { charmedThrough } from "./charmedPlayer";
 import {
   applyCdTalentModifiers,
@@ -2805,6 +2806,7 @@ function drLevelAtApply(
     category,
     matchStartMs,
     unitById,
+    ccLengthIsDrEvidence,
   );
   return drLevelAtLanding(history, { applyMs: applyTs, spellId: ccSpellId });
 }
@@ -2836,6 +2838,7 @@ export function computeDrChainRisk(
     category,
     matchStartMs,
     unitById,
+    ccLengthIsDrEvidence,
   );
   const level = drLevelAtLanding(history, {
     applyMs: applyTs,

@@ -20,7 +20,7 @@ import {
   BREAKING_HIT_LOOKBACK_MS,
   isCasterSideLinkAura,
 } from "../src/utils/brokenRowBreaker";
-import { analyzeCcBreaks } from "../src/utils/ccBreakAnalysis";
+import { analyzeCcBreaks } from "../src/utils/ccBreaks";
 import { auraBreakAtRemoval } from "../src/utils/ccTrinketAnalysis";
 
 const T0 = 1_000_000;

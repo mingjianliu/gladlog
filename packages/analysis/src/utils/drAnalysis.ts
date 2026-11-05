@@ -433,26 +433,38 @@ export function isDiminishedLength(
   return undefined;
 }
 
-/** Does a landing `gapMs` after the chain's end start over? The reset
- * window resets it, but inside `DR_RESET_TICK_MS` after it a control whose
- * own length reads diminished was still on the chain (fact10 D9) — on a
- * chain of one: a control that landed (it has an aura) was never Immune,
- * so on a longer chain it started over (cover set 31-2 r2 1:39: an
- * Intimidation cut by Blessing of Sanctuary at half its length read
- * "Immune"). */
-function resetsChain(
+/** The chain a landing `gapMs` after the chain's end continues: 0 when it
+ * starts over, else the chain's length before it. Before the reset window
+ * the chain runs on; the reset window resets it, but inside
+ * `DR_RESET_TICK_MS` after it the control's own logged length decides
+ * (fact10 D9) — read only when the game alone ended it (`fullMs` is set
+ * then: `ccLengthIsDrEvidence`, GH #190):
+ *  - half its full length: it was diminished, the second of the game's
+ *    chain — on a chain of one that is the chain itself; on a longer one
+ *    the game's chain was one shorter than the walk's (a control that landed
+ *    was never Immune), so it reads as the second (GH #191 named two 605
+ *    controls at half their length 20.0–20.4 s after the family's last end;
+ *    neither is a reading: Cheap Shot 2.04 s of 4 came off in its holder's
+ *    death cascade, Psychic Scream 3.00 s of 6 after the round's deciding
+ *    death — the walk reads it cut at the round's end. No 605 landing takes
+ *    this branch; it is what the length says if one does);
+ *  - anything else: it started over (cover set 31-2 r2 1:39: an
+ *    Intimidation cut by Blessing of Sanctuary at half its length read
+ *    "Immune" — a forced end is no evidence). */
+function chainAfterGap(
   gapMs: number,
   resetMs: number,
   landing: { applyMs: number; removeMs: number; fullMs?: number } | undefined,
   chainLength: number,
-): boolean {
-  if (gapMs < resetMs) return false;
-  if (gapMs >= resetMs + DR_RESET_TICK_MS || landing === undefined) return true;
-  if (chainLength >= 2) return true;
-  return (
-    isDiminishedLength(landing.removeMs - landing.applyMs, landing.fullMs) !==
-    true
-  );
+): number {
+  if (gapMs < resetMs) return chainLength;
+  if (gapMs >= resetMs + DR_RESET_TICK_MS || landing === undefined) return 0;
+  return isDiminishedLength(
+    landing.removeMs - landing.applyMs,
+    landing.fullMs,
+  ) === true
+    ? 1
+    : 0;
 }
 
 /**
@@ -696,6 +708,16 @@ export function buildCcCategoryHistory(
     Pick<ICombatUnit, "spellCastEvents" | "ownerId"> &
       Partial<Pick<ICombatUnit, "spec" | "info">>
   >,
+  /** whether a logged length is DR evidence — `ccLengthIsDrEvidence`,
+   * handed in by the callers outside the `ccTrinketAnalysis` cycle (GH #190
+   * follow-up: the incoming and outgoing walks read it, and this history
+   * read a length an ally's Blessing of Sanctuary cut at half as 50 % —
+   * cover set 31-2 r2 1:39, `[CC REMOVED] … (~<1s of it left)` beside
+   * `[CC ON ENEMY] … [DR: Stun Full]`). Asked only of a length that reads
+   * halved, the one the band reads (`isDiminishedLength`); with every unit in
+   * `unitById`, an ally's Sanctuary is read too. Absent: every logged length
+   * counts (the tests' direct calls). */
+  lengthIsDrEvidence?: CcLengthEvidence,
 ): Array<
   CCEntry & {
     atSeconds: number;
@@ -729,6 +751,7 @@ export function buildCcCategoryHistory(
   > = [];
   // the DR walk reads only drInfo.category; level/sequenceIndex are
   // placeholders.
+  let unitsOfMap: ICombatUnit[] | undefined;
   const close = (
     open: {
       applyMs: number;
@@ -737,15 +760,38 @@ export function buildCcCategoryHistory(
       applySeq: number;
     },
     removeMs: number,
+    /** the walk's own estimate of the end (a lost REMOVED), not a logged
+     * removal: no length evidence (the outgoing walk's `endEstimated`) */
+    estimated = false,
   ) => {
     // fact10 D9: its full length on this unit, read inside DR_RESET_TICK_MS
     const caster = unitById?.get(open.srcUnitId);
-    const fullS = ccFullDurationForCaster(
-      open.spellId,
+    const casterFull =
       caster?.spec !== undefined && caster.info !== undefined
         ? (caster as Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">)
-        : undefined,
-    );
+        : undefined;
+    const officialFullS = ccFullDurationForCaster(open.spellId, casterFull);
+    const forced =
+      officialFullS !== undefined &&
+      (estimated ||
+        (lengthIsDrEvidence !== undefined &&
+          isDiminishedLength(removeMs - open.applyMs, officialFullS * 1000) ===
+            true &&
+          !lengthIsDrEvidence(
+            unit,
+            {
+              spellId: open.spellId,
+              applyMs: open.applyMs,
+              removeMs,
+              srcUnitId: open.srcUnitId,
+            },
+            matchStartMs,
+            caster as ICombatUnit | undefined,
+            (unitsOfMap ??= unitById
+              ? ([...unitById.values()] as ICombatUnit[])
+              : undefined),
+          )));
+    const fullS = forced ? undefined : officialFullS;
     instances.push({
       applyMs: open.applyMs,
       removeMs,
@@ -804,7 +850,11 @@ export function buildCcCategoryHistory(
           )
         )
           continue;
-        close(open, Math.min(aura.timestamp, open.applyMs + officialS! * 1000));
+        close(
+          open,
+          Math.min(aura.timestamp, open.applyMs + officialS! * 1000),
+          true,
+        );
       }
       pending.set(key, {
         applyMs: aura.timestamp,
@@ -840,7 +890,8 @@ export function buildCcCategoryHistory(
   }
   for (const open of pending.values()) {
     const officialS = ccFullDurationSeconds(open.spellId);
-    if (officialS !== undefined) close(open, open.applyMs + officialS * 1000);
+    if (officialS !== undefined)
+      close(open, open.applyMs + officialS * 1000, true);
   }
   instances.sort(
     (a, b) => a.atSeconds - b.atSeconds || a.applySeq! - b.applySeq!,
@@ -994,17 +1045,18 @@ export function getDRLevel(
   let chainLength = 0;
   let chainEnd = -Infinity;
   for (const e of prior) {
-    if (
-      chainLength > 0 &&
-      resetsChain(e.applyMs - chainEnd, resetMs, e, chainLength)
-    )
-      chainLength = 0;
+    if (chainLength > 0)
+      chainLength = chainAfterGap(
+        e.applyMs - chainEnd,
+        resetMs,
+        e,
+        chainLength,
+      );
     chainEnd = chainLength === 0 ? e.removeMs : Math.max(chainEnd, e.removeMs);
     chainLength++;
   }
-  if (
-    chainLength > 0 &&
-    resetsChain(
+  if (chainLength > 0)
+    chainLength = chainAfterGap(
       newApplyMs - chainEnd,
       resetMs,
       landing && {
@@ -1013,9 +1065,7 @@ export function getDRLevel(
         applyMs: landing.applyMs ?? newApplyMs,
       },
       chainLength,
-    )
-  )
-    chainLength = 0;
+    );
   // WoW 12.0: Full → 50% → Immune (25% tier removed)
   const level: DRLevel =
     chainLength === 0 ? "Full" : chainLength === 1 ? "50%" : "Immune";
@@ -1217,6 +1267,11 @@ export interface IOutgoingCCApplication {
    * from a control that ended on that ms (F19 605 gate: a Binding Shot the
    * round ended on lost its missed-sync `endedBy=the round's end`) */
   cutByRoundEnd?: true;
+  /** the target's own control sent back onto it (its source is the target —
+   * Spell Reflection, Nether Ward, Diffuse Magic): a DR-only history entry
+   * (ruling A52), and a lock on the target all the same — the healer-lock
+   * windows read it (fact10 D21 follow-up, user ruling 2026-11-05) */
+  reflectedOntoTarget?: true;
 }
 
 export interface IOutgoingCCChain {
@@ -1237,6 +1292,19 @@ export interface IOutgoingCCChain {
   // "hit immune" 提示随之同批退役;逐条 application 的 drInfo 照旧保留。
 }
 
+/** `ccLengthIsDrEvidence`'s shape (GH #190): the outgoing walk reads a
+ * control's logged length inside `DR_RESET_TICK_MS` only when this says the
+ * game alone ended it. */
+export type CcLengthEvidence = (
+  holder: ICombatUnit,
+  w: { spellId: string; applyMs: number; removeMs: number; srcUnitId?: string },
+  matchStartMs: number,
+  caster?: ICombatUnit,
+  /** the round's units: an ally's Blessing of Sanctuary that took the
+   * control off is a forced end too */
+  units?: readonly ICombatUnit[],
+) => boolean;
+
 /**
  * Scans enemy aura events for CC spells cast by friendly players.
  * Returns per-enemy CC chains annotated with DR levels.
@@ -1249,10 +1317,21 @@ export interface IOutgoingCCChain {
  * the timeline's DR annotation on [YOU] [CC] depends on getting everything
  * back, so do not reinstate a filter on the strength of that sentence.
  */
-export function analyzeOutgoingCCChains(
+export function analyzeOutgoingCCChainsWith(
   friendlies: ICombatUnit[],
   enemies: ICombatUnit[],
   combat: IArenaMatch | IShuffleRound,
+  /** Can this control's logged length tell its DR tier — did nothing but the
+   * game end it? `ccLengthIsDrEvidence` (ccTrinketAnalysis), passed in by
+   * `outgoingCcChains.ts`: importing it here would put this module inside
+   * the `ccTrinketAnalysis → enemyDefensives → cooldownTiming` cycle, whose
+   * top-level `HARD_CC_CATEGORIES` reads `DR_CATEGORY_MAP` (GH #190). Call
+   * `analyzeOutgoingCCChains` (outgoingCcChains.ts), never this directly. */
+  lengthIsDrEvidence: CcLengthEvidence,
+  /** keep a target whose chain holds DR-only entries and no application of
+   * ours (a healer locked only by its own reflected control — fact10 D21
+   * follow-up); every other reader asks for chains with an application */
+  keepDrOnlyChains = false,
 ): IOutgoingCCChain[] {
   const friendlyIds = new Set(friendlies.map((f) => f.id));
   const friendlySpecMap = new Map(
@@ -1324,6 +1403,9 @@ export function analyzeOutgoingCCChains(
         key: string,
         removeMs: number,
         noRemoved?: boolean,
+        /** its end is the walk's own estimate (a re-APPLIED with no REMOVED
+         * between), not a logged removal: no length evidence (GH #190) */
+        endEstimated?: boolean,
       ) => {
         const p = pending.get(key);
         if (!p) return;
@@ -1350,14 +1432,40 @@ export function analyzeOutgoingCCChains(
             sequenceIndex: 0,
           },
           ...(cutByRoundEnd ? { cutByRoundEnd: true as const } : {}),
+          ...(p.drOnly && p.srcId === enemy.id
+            ? { reflectedOntoTarget: true as const }
+            : {}),
         };
         applications.push(app);
         applySeqOf.set(app, p.applySeq);
-        if (!cutByRoundEnd) {
-          const caster =
-            p.srcId === enemy.id
-              ? enemy
-              : allUnits.find((u) => u.id === p.srcId);
+        // GH #190 (codex 20-F25-04 #2): a length something forced — a damage
+        // break, a dispel, the holder's trinket or break press, a control
+        // immunity, an ally's Blessing of Sanctuary, an immunity press, a
+        // stopped channel — is no reading of
+        // the DR, and neither is one with no REMOVED; the incoming walk's
+        // reading (`ccLengthIsDrEvidence`, `fullSecondsOfWindow`)
+        const caster =
+          p.srcId === enemy.id ? enemy : allUnits.find((u) => u.id === p.srcId);
+        if (
+          !cutByRoundEnd &&
+          !noRemoved &&
+          !endEstimated &&
+          lengthIsDrEvidence(
+            enemy,
+            {
+              spellId,
+              applyMs: p.applyMs,
+              removeMs,
+              // the aura's own source — the pet, not the owner the chain
+              // credits (`p.srcId`): the break, dispel and Sanctuary rows
+              // name it (cover set 31-2 r2 1:39, a pet's Intimidation)
+              srcUnitId: key.slice(spellId!.length + 1),
+            },
+            matchStartMs,
+            caster,
+            allUnits,
+          )
+        ) {
           const fullS =
             officialDurationS(spellId, caster, p.applyMs) ??
             ccFullDurationForCaster(spellId, caster);
@@ -1463,6 +1571,8 @@ export function analyzeOutgoingCCChains(
             officialS === null
               ? aura.timestamp
               : Math.min(aura.timestamp, open.applyMs + officialS * 1000),
+            undefined,
+            true,
           );
         }
         if (event === LogEvent.SPELL_AURA_APPLIED) {
@@ -1571,7 +1681,11 @@ export function analyzeOutgoingCCChains(
         ),
       };
     })
-    .filter((chain) => chain.applications.length > 0);
+    .filter(
+      (chain) =>
+        chain.applications.length > 0 ||
+        (keepDrOnlyChains && (chain.drHistory?.length ?? 0) > 0),
+    );
 }
 
 export interface ITeammateDrClash {

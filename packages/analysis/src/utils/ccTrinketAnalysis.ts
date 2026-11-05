@@ -154,7 +154,11 @@ import { interruptImmuneWindows } from "./talentBehaviors";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 import { detectTrinketType, type TrinketType } from "./trinketType";
-import { AURA_NATURAL_END_JITTER_S, firstDeathMs } from "./unitDeath";
+import {
+  AURA_NATURAL_END_JITTER_S,
+  firstDeathMs,
+  removedByDeath,
+} from "./unitDeath";
 
 export { detectTrinketType, type TrinketType };
 
@@ -455,10 +459,7 @@ export function ccAvoidanceBuffsUpAt(
     (opts.withForms ? DRUID_FORM_BUFFS.get(id) : undefined) ??
     (opts.also?.(id) ? getEnglishSpellName(id, rowName) : undefined);
   const rows = unit.auraEvents ?? [];
-  const up = new Map<
-    string,
-    ICcAvoidanceBuffUp & { untilMs: number }
-  >();
+  const up = new Map<string, ICcAvoidanceBuffUp & { untilMs: number }>();
   const open = (
     id: string,
     name: string,
@@ -2174,8 +2175,13 @@ export function breakAbilityPresses(
 export interface ICcRemovalCause {
   /** broken = a damage event (`SPELL_AURA_BROKEN[_SPELL]`, its source the
    * breaker); trinket / break = the holder's own press at the removal;
-   * dispel = a `SPELL_DISPEL` of this aura on the holder */
-  kind: "broken" | "trinket" | "break" | "dispel";
+   * dispel = a `SPELL_DISPEL` of this aura on the holder; immunity = a
+   * control immunity ANOTHER unit put on the holder in the removal's own
+   * millisecond (`immunityAuraAtRemoval` → `byUnitId`) — never returned by
+   * `ccRemovalCause` itself, which the DR evidence reads with
+   * `immunityAuraAtRemoval` beside it; the healer-lock windows add it
+   * (fact10 D8 follow-up, GH #191) */
+  kind: "broken" | "trinket" | "break" | "dispel" | "immunity";
   spellName: string;
   byUnitId?: string;
   byName?: string;
@@ -2405,6 +2411,22 @@ export function ccEndedByLoggedCause(
   );
 }
 
+/** `sanctuaryRemovalPairs` once per unit list (a walk asks per window). */
+const sanctuaryPairsCache = new WeakMap<
+  readonly ICombatUnit[],
+  ReturnType<typeof sanctuaryRemovalPairs>
+>();
+function sanctuaryPairsOf(
+  units: readonly ICombatUnit[],
+): ReturnType<typeof sanctuaryRemovalPairs> {
+  let pairs = sanctuaryPairsCache.get(units);
+  if (pairs === undefined) {
+    pairs = sanctuaryRemovalPairs(units);
+    sanctuaryPairsCache.set(units, pairs);
+  }
+  return pairs;
+}
+
 /**
  * Whether a control's logged length can tell its DR tier (fact10 D9, read
  * inside `DR_RESET_TICK_MS`): only when nothing but the game ended it. A
@@ -2414,14 +2436,42 @@ export function ccEndedByLoggedCause(
  * holder's immunity press (`immunityBreak`) or its caster's stopped channel
  * (`channelStoppedAtRemoval`) ends it wherever it was — one that happens to
  * fall at half its length is no 50 % (codex 20-F25-04 #2: a Polymorph broken
- * by damage at half put the next landed one on Immune).
+ * by damage at half put the next landed one on Immune). So is an ally's
+ * Blessing of Sanctuary that took it off (`sanctuaryRemovalPairs`, the
+ * `[CC REMOVED]` line's pairing), read when the round's `units` are given —
+ * cover set 31-2 r2 1:39: Sanctuary cut an Intimidation at 1.49 s of 3 s,
+ * and the chain-of-two band read 50 % from it (GH #191). And so is the
+ * holder's death cascade (`removedByDeath`, no natural end given: a death
+ * within `DEATH_CASCADE_MS` of the removal explains it either way) — 605
+ * 39-2 r2 1:00: a Cheap Shot 20.32 s after the family's last end came off at
+ * 2.04 s of 4 s in the death's wipe of every aura on the unit, and the band
+ * read 50 % from it.
  */
 export function ccLengthIsDrEvidence(
   holder: ICombatUnit,
   w: { spellId: string; applyMs: number; removeMs: number; srcUnitId?: string },
   matchStartMs: number,
   caster?: Pick<ICombatUnit, "actionIn">,
+  units?: readonly ICombatUnit[],
 ): boolean {
+  if (
+    units !== undefined &&
+    sanctuaryPairsOf(units).some(
+      (r) =>
+        r.target.id === holder.id &&
+        r.removed.spellId === w.spellId &&
+        r.removed.logLine.timestamp === w.removeMs &&
+        (w.srcUnitId === undefined || r.removed.srcUnitId === w.srcUnitId),
+    )
+  )
+    return false;
+  if (
+    removedByDeath(
+      (holder.deathRecords ?? []).map((d) => d.timestamp as number),
+      w.removeMs,
+    )
+  )
+    return false;
   if (
     ccRemovalCause(
       holder,
@@ -2866,6 +2916,10 @@ export function formatCcLoggedEnd(
  * broke the lock" on a healer seven abilities had hit for 51k in that span;
  * the value now says which part the log supports. */
 export const CC_BREAKING_HIT_LEAD = "damage — breaking hit: ";
+/** `endedBy` of a lock another unit's control immunity ended (fact10 D8
+ * follow-up): `control immunity: Berserker Shout (Name)` — the legend's
+ * words (buildFindingsPrompt `missed-sync-window`) */
+export const CC_IMMUNITY_END_LEAD = "control immunity: ";
 
 /** `endedBy` as a facts value: `trinket (Gladiator's Medallion)`, a break
  * ability's name, a dispel as `<spell> (<who>)`, or a damage break as
@@ -2878,7 +2932,12 @@ export function formatCcRemovalCause(
   const clean = (x: string) => x.replace(/, /g, " ");
   if (c.kind === "trinket") return `trinket (${clean(c.spellName)})`;
   if (c.kind === "break") return clean(c.spellName);
-  const lead = c.kind === "broken" ? CC_BREAKING_HIT_LEAD : "";
+  const lead =
+    c.kind === "broken"
+      ? CC_BREAKING_HIT_LEAD
+      : c.kind === "immunity"
+        ? CC_IMMUNITY_END_LEAD
+        : "";
   // a break line with no source: the spell alone
   if (c.byUnitId === undefined && !c.byName)
     return `${lead}${clean(c.spellName)}`;
@@ -3843,6 +3902,9 @@ export function analyzePlayerCCAndTrinket(
   // fact10 D9: a window's full length on the player, read by the DR walk
   // inside DR_RESET_TICK_MS — none for one with no REMOVED, one the round's
   // end cut, or one Oppressing Roar lengthened
+  // the round's units: an ally's Blessing of Sanctuary that took a control
+  // off (`ccLengthIsDrEvidence`), who throws a pet kick (below)
+  const roundUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
   const fullSecondsOfWindow = (
     w: (typeof filteredCCWindows)[number],
   ): number | undefined =>
@@ -3854,6 +3916,7 @@ export function analyzePlayerCCAndTrinket(
       w,
       matchStartMs,
       castersById.get(w.srcUnitId),
+      roundUnits,
     )
       ? undefined
       : ccFullDurationForCaster(w.spellId, castersById.get(w.srcUnitId));
@@ -4345,9 +4408,8 @@ export function analyzePlayerCCAndTrinket(
       if (a.srcUnitId && !enemyIds.has(a.srcUnitId))
         hostileToEnemies.add(a.srcUnitId);
 
-  // the round's units: who throws a pet kick at cast start
-  // (`interruptCasterAt`)
-  const roundUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
+  // the round's units (`roundUnits`, above) also say who throws a pet kick
+  // at cast start (`interruptCasterAt`)
 
   const ownerInterruptImmuneWindows = interruptImmuneWindows(
     player,

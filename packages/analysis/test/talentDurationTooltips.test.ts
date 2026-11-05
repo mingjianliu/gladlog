@@ -106,16 +106,25 @@ describe("fact10 D14 / D17 — Stampeding Roar under Pack's Endurance, Time Skip
   const PACKS_ENDURANCE = { id1: 94615, id2: 117215 };
   const TOMORROW_TODAY = { id1: 93369, id2: 115687 };
   it("44942dae 0:22: a Feral holder's Roar runs 10 s, a non-holder's 8 s", () => {
-    for (const id of ["77764", "106898"]) {
-      expect(buffFullDurationForCaster(id, holder("103", PACKS_ENDURANCE))).toBe(10);
+    // …and the bear-form copy 77761 (GH #191: holders 2 / 2 at 10 s,
+    // non-holders 11 / 16 at 8 s, none at 10 s)
+    for (const id of ["77764", "106898", "77761"]) {
+      expect(
+        buffFullDurationForCaster(id, holder("103", PACKS_ENDURANCE)),
+      ).toBe(10);
       expect(buffFullDurationForCaster(id, holder("103", null))).toBe(8);
     }
   });
   it("461265d4 1:05: a holder's Time Skip channels 3 s, a non-holder's 2 s", () => {
     expect(
-      buffFullDurationForCaster("404977", holder("1473", TOMORROW_TODAY), undefined, {
-        pressed: true,
-      }),
+      buffFullDurationForCaster(
+        "404977",
+        holder("1473", TOMORROW_TODAY),
+        undefined,
+        {
+          pressed: true,
+        },
+      ),
     ).toBe(3);
     expect(
       buffFullDurationForCaster("404977", holder("1473", null), undefined, {

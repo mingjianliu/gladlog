@@ -13,7 +13,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { analyzeOutgoingCCChains } from "../src/utils/drAnalysis";
+import { analyzeOutgoingCCChains } from "../src/utils/outgoingCcChains";
 import { makeUnit } from "./ported/testHelpers";
 
 const T0 = 1_000_000;

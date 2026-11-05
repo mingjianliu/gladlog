@@ -154,6 +154,7 @@ import {
   DEFERRAL_SHIELD_DAMAGE_IDS,
   isDeferralDamageRow,
 } from "@gladlog/analysis/src/utils/incomingPressure";
+import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { pvpTrinketUses } from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
@@ -942,10 +943,14 @@ function drResetBandLength(ctx: IRoundCtx): void {
     if (!m) continue;
     // a length something cut (a dispel, a break, an immunity, a press) is
     // no reading of the DR (cover set 31-2 r2 1:39: Blessing of Sanctuary):
-    // in the band it resets — drBandForcedEnd (codex 20-F25-04 #2)
-    const forced = /ended by|dispelled by|broke this|broken by|cut short/.test(
-      l,
-    );
+    // in the band it resets — drBandForcedEnd (codex 20-F25-04 #2); so is
+    // one the holder's death or the round's end cut (F25b 605: Cheap Shot
+    // 2.04 s of 4 in a death cascade, Psychic Scream removed after the
+    // round's deciding death)
+    const forced =
+      /ended by|dispelled by|broke this|broken by|cut short|ended at their death|its target died|when the round ended/.test(
+        l,
+      );
     const u = ctx.unitOfPid(m[3]);
     if (!u) continue;
     const sec = mss(m[1]!, m[2]!);
@@ -1154,7 +1159,27 @@ function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
           });
       }
     }
-  if (!outs.length) return;
+  if (!outs.length || !ctx.owner) return;
+  // The attempt's own milliseconds, as the product brackets it
+  // (`attributeFailure`'s `ofThisAttempt`: a control applied by `toMs` and
+  // still on at `fromMs`). The rendered seconds alone were wider: a Disarm
+  // landing 0.77 s after the anchoring stun came off, in the bracket's last
+  // rendered second, read as one of the attempt's (GH #191). Bounds only —
+  // which controls the press removed is still read from the log here.
+  let attempts: ReturnType<typeof extractKillAttempts> | undefined;
+  const attemptOf = (targetName: string, a: number, b: number) => {
+    attempts ??= extractKillAttempts(
+      ctx.players.filter((u) => u.reaction === ctx.owner.reaction),
+      ctx.players.filter((u) => u.reaction !== ctx.owner.reaction),
+      ctx.legacy,
+    );
+    return attempts.find(
+      (x) =>
+        x.targetName === targetName &&
+        Math.floor(x.fromSeconds) === a &&
+        Math.floor(x.toSeconds) === b,
+    );
+  };
   for (const l of ctx.lines) {
     const m = KILL_ATTEMPT_LINE.exec(l);
     if (!m || m[6] === "KILL") continue;
@@ -1167,8 +1192,10 @@ function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
       // the last one of the credit span, may sit outside the attempt's own
       // milliseconds
       if (o.unit.id !== target.id || o.sec <= a || o.sec >= b + 5) continue;
-      const lo = ctx.start + (a + 1) * 1000;
-      const hi = ctx.start + (b + 1) * 1000;
+      const attempt = attemptOf(m[5]!, a, b);
+      if (!attempt) continue;
+      const lo = ctx.start + attempt.fromSeconds * 1000;
+      const hi = ctx.start + attempt.toSeconds * 1000;
       const rows = ((target.auraEvents ?? []) as any[])
         .filter(
           (x) =>
@@ -1199,7 +1226,7 @@ function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
             tsOf(x) >= tsOf(app),
         );
         const to = rem ? tsOf(rem) : ctx.end;
-        return tsOf(app) < hi && to >= lo;
+        return tsOf(app) <= hi && to >= lo;
       });
       if (!overlaps) continue;
       ctx.bump("killAttemptTrinketOutMissed");

@@ -27,10 +27,8 @@
  *   npx tsx packages/eval/scripts/drTeammateClashProbe.ts [--n 300] [--examples 10]
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
-import {
-  analyzeOutgoingCCChains,
-  drResetMsAt,
-} from "@gladlog/analysis/src/utils/drAnalysis";
+import { drResetMsAt } from "@gladlog/analysis/src/utils/drAnalysis";
+import { analyzeOutgoingCCChains } from "@gladlog/analysis/src/utils/outgoingCcChains";
 
 import {
   DEFAULT_MATCH_DIR,
@@ -59,10 +57,9 @@ async function main(): Promise<void> {
   const limit = argOf("--n", 300);
   const nEx = argOf("--examples", 10);
   await ensureAnalysisData();
-  const rows = pickRows(loadIndex(DEFAULT_MATCH_DIR), { minDurationS: 60 }).slice(
-    0,
-    limit,
-  );
+  const rows = pickRows(loadIndex(DEFAULT_MATCH_DIR), {
+    minDurationS: 60,
+  }).slice(0, limit);
 
   let rounds = 0;
   let apps = 0;
@@ -156,7 +153,9 @@ async function main(): Promise<void> {
     b === 0 ? "n/a" : `${((a / b) * 100).toFixed(1)}%`;
   console.log(`rounds scanned                 ${rounds}`);
   console.log(`team CC applications           ${apps}`);
-  console.log(`  landed diminished            ${diminished}  (${pct(diminished, apps)})`);
+  console.log(
+    `  landed diminished            ${diminished}  (${pct(diminished, apps)})`,
+  );
   console.log(
     `    diminished by a TEAMMATE     ${clashes.length}  (${pct(clashes.length, diminished)} of diminished, ${(clashes.length / Math.max(rounds, 1)).toFixed(2)}/round)`,
   );
@@ -167,9 +166,7 @@ async function main(): Promise<void> {
     `    prior application OUTSIDE the DR reset window ${outsideWindow}  (${pct(outsideWindow, diminished)})  <- NOT attributable to it; excluded from both counts above`,
   );
 
-  console.log(
-    `\nINCIDENCE (the unit every shipped type is measured in):`,
-  );
+  console.log(`\nINCIDENCE (the unit every shipped type is measured in):`);
   console.log(
     `  rounds with >= 1 teammate clash  ${roundsWithClash.size}/${rounds} = ${pct(roundsWithClash.size, rounds)}`,
   );

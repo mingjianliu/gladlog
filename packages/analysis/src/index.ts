@@ -50,6 +50,7 @@ export * from "./utils/castCancels";
 // desktop cast lanes drop the same rows as the prompt's cast lines (GH #187)
 export { isCompanionCastRow } from "./utils/castPress";
 export * from "./utils/ccBreakAnalysis";
+export * from "./utils/ccBreaks";
 export * from "./utils/ccTrinketAnalysis";
 export * from "./utils/cooldowns";
 export * from "./utils/counterfactual";
@@ -69,6 +70,7 @@ export * from "./utils/kickAudit";
 export * from "./utils/killAttempts";
 export * from "./utils/killWindowTargetSelection";
 export * from "./utils/offensiveWindows";
+export * from "./utils/outgoingCcChains";
 export * from "./utils/positionSampling";
 export * from "./utils/rawStreams";
 export * from "./utils/renderGrid";

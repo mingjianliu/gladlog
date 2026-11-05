@@ -63,6 +63,8 @@ import {
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
   RESPONSE_ONLY_DEFENSIVE_IDS,
+  roundClippedTroughSpan,
+  secondsPastRoundEnd,
   specToString,
   TEAM_HEAL_CD_IDS,
 } from "../utils/cooldowns";
@@ -79,6 +81,7 @@ import { LANDED_PAIR_MS } from "../utils/kickAudit";
 import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
+import { roundEndMs } from "../utils/roundEnd";
 import { isOffensiveSpell } from "../utils/spellDanger";
 import { isDeadAt } from "../utils/unitDeath";
 import { buildFilteredAuraIntervals } from "../utils/utils";
@@ -333,7 +336,6 @@ export interface BurstResponseCast {
     auras: ControlLandingAura[];
   };
 }
-
 
 /** One aura application a control answer put on its target: the aura's own
  * id and the instant it went on — the key the `[CC ON ENEMY]` instance of the
@@ -1204,6 +1206,9 @@ export function burstWindowDecisionPoints(
   const units: any[] = Object.values(combat?.units ?? {});
   const players = units.filter((u) => u.info);
   if (!players.length) return [];
+  // the round's end (`roundEndMs`): a printed bottom is not read past it
+  // (fact10 D30 follow-up, GH #191)
+  const roundEndAtMs: number = roundEndMs(combat);
   // CombatUnitReaction.Friendly === 1 (parser-compat enums.ts)
   const friendlyReaction = opts.friendlyReaction ?? 1;
   const friendlies = players.filter((u) => u.reaction === friendlyReaction);
@@ -1694,7 +1699,23 @@ export function burstWindowDecisionPoints(
         const trough =
           minHpPct === null
             ? null
-            : hpTroughInWindow(f, start, tSec, outcomeEndSec);
+            : hpTroughInWindow(
+                f,
+                start,
+                tSec,
+                outcomeEndSec,
+                // not past the round's end — neither its samples nor the
+                // ticks of seconds that begin after it (fact10 D30
+                // follow-up, GH #191: cover set 31-3 `bottomed at 32%`, the
+                // round's lowest 36 %, the hits after the round-ending death)
+                secondsPastRoundEnd(start, roundEndAtMs),
+                roundClippedTroughSpan(
+                  start,
+                  tSec,
+                  outcomeEndSec,
+                  roundEndAtMs,
+                ),
+              );
         // F-B6 (triage sync-burst, codex 09-30): the window the line prints
         // ends at the END of its last rendered second — a lethal burst's
         // segment ends at the death, which falls in the fractional part of

@@ -311,8 +311,7 @@ export function computeSlackSegments(
             a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
             !!a.spellId &&
             rootSpellIds.has(a.spellId) &&
-            (a.srcUnitId === owner.id ||
-              ownerPetIds.has(a.srcUnitId ?? "")) &&
+            (a.srcUnitId === owner.id || ownerPetIds.has(a.srcUnitId ?? "")) &&
             inSeg(a.logLine.timestamp),
         ),
       ).length;
@@ -452,8 +451,7 @@ export function computeContestedSegments(
             a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
             !!a.spellId &&
             rootSpellIds.has(a.spellId) &&
-            (a.srcUnitId === owner.id ||
-              ownerPetIds.has(a.srcUnitId ?? "")) &&
+            (a.srcUnitId === owner.id || ownerPetIds.has(a.srcUnitId ?? "")) &&
             inSeg(a.logLine.timestamp),
         ),
       ).length;
@@ -652,8 +650,15 @@ export function computeContestedTradeFacts(
   // our control offers no control on them — Freezing Trap 3:04.4–3:10.4,
   // then Psychic Scream to 3:16.1, and the line offered Mighty Bash on him.
   // The span needs MIN_SLACK_SECONDS of [STATE] seconds with the healer free.
+  // …and in its own control sent back onto it (`reflectedOntoSelf`: DR
+  // history only by ruling A52, a lock all the same — fact10 D21 follow-up,
+  // user ruling 2026-11-05)
+  const healerLocks = [
+    ...enemyHealerCCInstances,
+    ...enemyHealerDrHistoryOnly.filter((h) => h.reflectedOntoSelf),
+  ];
   const healerCcAt = (t: number) =>
-    enemyHealerCCInstances.some(
+    healerLocks.some(
       (c) => t >= c.atSeconds && t < c.atSeconds + c.durationSeconds,
     );
   for (const seg of contestedSegments) {
@@ -954,6 +959,9 @@ type CCWithDR = ReadonlyArray<{
   atSeconds: number;
   durationSeconds: number;
   drInfo: IDRInfo | null;
+  /** a history-only entry that is the healer's own control sent back onto
+   * it (`IPlayerCCTrinketSummary.drHistoryOnly`) */
+  reflectedOntoSelf?: true;
 }>;
 
 export function computeWindowContributions(

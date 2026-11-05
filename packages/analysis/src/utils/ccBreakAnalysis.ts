@@ -11,6 +11,7 @@ import { breakerOfBrokenRow } from "./brokenRowBreaker";
 import { ccFullDurationForApplication } from "./ccDuration";
 import {
   buildCcCategoryHistory,
+  type CcLengthEvidence,
   ccRecastBetween,
   ccRecastSplitsResend,
   drDurationFactor,
@@ -121,6 +122,9 @@ export function ccRemainingSeconds(p: {
   roarAtApply: boolean;
   /** the CC's possible casters, for the DR history's recast test */
   unitById?: ReadonlyMap<string, ICombatUnit>;
+  /** `ccLengthIsDrEvidence`, handed in from outside the `ccTrinketAnalysis`
+   * cycle (`buildCcCategoryHistory`'s parameter; GH #190 follow-up) */
+  lengthIsDrEvidence: CcLengthEvidence;
 }): number | null {
   const tableDuration = ccFullDurationForApplication(
     p.spellId,
@@ -140,6 +144,7 @@ export function ccRemainingSeconds(p: {
       category,
       p.matchStartMs,
       p.unitById,
+      p.lengthIsDrEvidence,
     );
     const level = drLevelAtLanding(history, {
       applyMs: p.applyMs,
@@ -221,7 +226,11 @@ export function oppressingRoarOnAtMs(
   return applied !== undefined && oppressingRoarOnAt(holder, applied);
 }
 
-export function analyzeCcBreaks(
+/** Call `analyzeCcBreaks` (ccBreaks.ts), which hands in
+ * `ccLengthIsDrEvidence`; this module sits inside the `ccTrinketAnalysis`
+ * import graph and cannot import it (GH #190 follow-up). */
+export function analyzeCcBreaksWith(
+  lengthIsDrEvidence: CcLengthEvidence,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
   combat: {
@@ -386,6 +395,7 @@ export function analyzeCcBreaks(
           matchStartMs: combat.startTime,
           roarAtApply: entry.roarAtApply,
           unitById,
+          lengthIsDrEvidence,
         });
 
         events.push({

@@ -29,6 +29,7 @@ import {
   isDeadAtRenderSecond,
   isHealerSpec,
   isMeleeSpec,
+  secondsPastRoundEnd,
 } from "./cooldowns";
 import { IAlignedBurstWindow } from "./enemyCDs";
 import { isOwnImmunityInterval } from "./enemyDefensives";
@@ -827,7 +828,8 @@ export function computeOwnerPositionEvents(params: {
   // the round's end (`roundEndMs`): a Solo Shuffle round's ending death,
   // not the log's end ~2 s later (codex R6C-06 #5: HEALER TRAINED swept the
   // post-death tail and met its 8 s door on it)
-  const durationSeconds = (roundEndMs(combat) - combat.startTime) / 1000;
+  const roundEndAtMs = roundEndMs(combat);
+  const durationSeconds = (roundEndAtMs - combat.startTime) / 1000;
   const events: IPositionEvent[] = [];
 
   if ((owner.advancedActions ?? []).length === 0) return [];
@@ -1205,12 +1207,27 @@ export function computeOwnerPositionEvents(params: {
       const trough =
         hpMin === null || diedAtEnd
           ? null
-          : hpTroughInWindow(owner, matchStartMs, tStart, tEnd, undefined, {
-              fromMs: matchStartMs + Math.round(w.fromSeconds * 1000),
-              toMs: matchStartMs + Math.round(evalEnd * 1000),
-              // the line pairs this minimum with the start second's tick
-              ticksRegardless: true,
-            });
+          : hpTroughInWindow(
+              owner,
+              matchStartMs,
+              tStart,
+              tEnd,
+              // …nor the ticks of seconds that begin after it
+              secondsPastRoundEnd(matchStartMs, roundEndAtMs),
+              {
+                fromMs: matchStartMs + Math.round(w.fromSeconds * 1000),
+                // not past the round's end (`roundEndMs`, fact10 D30 follow-up,
+                // GH #191): a Solo Shuffle round is over at its first death, and
+                // the hits logged after it are in no round (cover set s2/30-5:
+                // `45% (min over window)` where the round's lowest was 52 %)
+                toMs: Math.min(
+                  matchStartMs + Math.round(evalEnd * 1000),
+                  roundEndAtMs,
+                ),
+                // the line pairs this minimum with the start second's tick
+                ticksRegardless: true,
+              },
+            );
       const hpLow = trough?.pct ?? hpMin;
 
       // B24b: who actually hit the owner over the rendered span

@@ -26,7 +26,7 @@ import {
   extractMajorCooldowns,
   TEAM_SAVE_CD_IDS,
 } from "../src/utils/cooldowns";
-import { makeUnit } from "./ported/testHelpers";
+import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
 const T0 = 1_700_000_000_000;
 const DARKNESS = "196718";
@@ -126,5 +126,27 @@ describe("a name is no defensive — fact3 D56 / D57", () => {
       (c) => c.spellId === "79206",
     );
     expect(cd?.tag).toBe(SpellTag.Utility);
+  });
+
+  it("a Protection Warrior's Shield Charge (/shield/) ledgers as Utility (GH #191)", () => {
+    const owner = makeUnit("player-1", {
+      class: CombatUnitClass.Warrior,
+      spec: CombatUnitSpec.Warrior_Protection,
+      info: {
+        talents: [{ id1: 90317, id2: 112173, count: 1 }],
+        pvpTalents: [],
+      } as any,
+      spellCastEvents: [makeSpellCastEvent("385952", T0 + 10_000, "enemy-1")],
+    });
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 300_000,
+      units: { "player-1": owner },
+    } as unknown as import("@gladlog/parser-compat").AtomicArenaCombat;
+    const cd = extractMajorCooldowns(owner, combat).find(
+      (c) => c.spellId === "385952",
+    );
+    expect(cd, "Shield Charge is on the ledger").toBeDefined();
+    expect(cd!.tag).toBe(SpellTag.Utility);
   });
 });

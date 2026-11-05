@@ -44,6 +44,7 @@ import {
   applicableCCAvoidanceIds,
   avoidanceExplainsMissType,
   ccAvoidanceBuffsUpAt,
+  ccLengthIsDrEvidence,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
 } from "../../utils/ccTrinketAnalysis";
@@ -645,7 +646,10 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   // logged]` beside a `[CC NOT LANDED]` printing that row. Every cast-line
   // fail tag (`ccImmuneTagFor`, `ccMissTagFor`, `noCcAuraTagFor`) reads
   // this one list, in log order.
-  const ccSourceMissesCache = new Map<string, NonNullable<ICombatUnit["missesOut"]>>();
+  const ccSourceMissesCache = new Map<
+    string,
+    NonNullable<ICombatUnit["missesOut"]>
+  >();
   const ccSourceMissesOf = (
     caster: ICombatUnit,
   ): NonNullable<ICombatUnit["missesOut"]> => {
@@ -951,6 +955,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       category,
       matchStartMs,
       new Map(_allUnits.map((u) => [u.id, u])),
+      ccLengthIsDrEvidence,
     );
     return drLevelNextAt(history, missMs) === "Immune"
       ? `DR: ${category} Immune`
@@ -1183,7 +1188,11 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
      * state (the sweep pairs a cast with a row near it; a delayed control's
      * row comes seconds later — fact8 D41, b71edaa9 0:56: Binding Shot's stun
      * logged MISS 3.2 s after the cast, inside Phase Shift, no cause) */
-    missRow?: { timestamp: number; missType?: string; logLine?: { lineIndex?: number } },
+    missRow?: {
+      timestamp: number;
+      missType?: string;
+      logLine?: { lineIndex?: number };
+    },
   ): string {
     const avoided = enemyCCSummaries
       ?.find((x) => x.playerName === destUnitName)

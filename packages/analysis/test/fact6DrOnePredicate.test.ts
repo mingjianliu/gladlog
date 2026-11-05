@@ -11,7 +11,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { ccRemainingSeconds } from "../src/utils/ccBreakAnalysis";
-import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
+import {
+  analyzePlayerCCAndTrinket,
+  ccLengthIsDrEvidence,
+} from "../src/utils/ccTrinketAnalysis";
 import {
   buildCcCategoryHistory,
   detectTeammateDrClashes,
@@ -254,6 +257,7 @@ describe("[CC BROKEN]'s remainder reads the whole DR history (D29)", () => {
       srcUnitId: "lock",
       matchStartMs: T0,
       roarAtApply: false,
+      lengthIsDrEvidence: ccLengthIsDrEvidence,
     });
     // 6 s × 50 % − 0.7 s held (it read 5.3 s with opponent sources only)
     expect(left).toBeCloseTo(2.3, 5);
@@ -411,6 +415,7 @@ describe("codex 20-F20-28 #1 — Q1 does not count a landing the log wrote after
         srcUnitId: src,
         matchStartMs: T0,
         roarAtApply: false,
+        lengthIsDrEvidence: ccLengthIsDrEvidence,
       });
     expect(left(FEAR, "lock", 51.509)).toBeCloseTo(3.5, 5);
     // the Blind, logged second, is at 50 % behind the Fear

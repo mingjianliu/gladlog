@@ -17,10 +17,8 @@ import {
 } from "@gladlog/parser-compat";
 
 import { castsOfEffectAura } from "../src/data/castEffectAuras";
-import {
-  analyzeOutgoingCCChains,
-  ccRecastBetween,
-} from "../src/utils/drAnalysis";
+import { ccRecastBetween } from "../src/utils/drAnalysis";
+import { analyzeOutgoingCCChains } from "../src/utils/outgoingCcChains";
 import { makeUnit } from "./ported/testHelpers";
 
 const T0 = 1_000_000;

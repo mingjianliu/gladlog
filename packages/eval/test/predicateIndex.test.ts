@@ -140,6 +140,7 @@ import * as castPress from "@gladlog/analysis/src/utils/castPress";
 import * as castRowLag from "@gladlog/analysis/src/utils/castRowLag";
 import * as castStopEvidence from "@gladlog/analysis/src/utils/castStopEvidence";
 import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
+import * as ccBreaks from "@gladlog/analysis/src/utils/ccBreaks";
 import * as ccDuration from "@gladlog/analysis/src/utils/ccDuration";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -180,6 +181,7 @@ import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensive
 import * as offensiveWasteAnalysis from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
 import * as offListPress from "@gladlog/analysis/src/utils/offListPress";
+import * as outgoingCcChains from "@gladlog/analysis/src/utils/outgoingCcChains";
 import * as petCommandsMod from "@gladlog/analysis/src/utils/petCommands";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
@@ -2027,6 +2029,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cooldowns.ts`,
+    symbol: "secondsPastRoundEnd",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
     symbol: "isTickBelowTrough",
     mod: cooldowns,
   },
@@ -2090,6 +2097,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "ccLengthIsDrEvidence",
     mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/outgoingCcChains.ts`,
+    symbol: "analyzeOutgoingCCChains",
+    mod: outgoingCcChains,
+  },
+  {
+    file: `${A}/utils/ccBreaks.ts`,
+    symbol: "analyzeCcBreaks",
+    mod: ccBreaks,
   },
   {
     file: `${A}/utils/enemyCDs.ts`,
@@ -5291,7 +5308,7 @@ describe("谓词索引:刻意不统一的配对,两边的符号都还在", () =>
     expect(typeof kickPriority.meleeKickReachYd).toBe("function");
   });
   it("「施加控制时压迫怒吼在不在」的两份实现:analyzeCcBreaks 内联的 roarActive 与 oppressingRoarOnAt —— 未收口,见「Not yet unified」(triage CD CR1 遗留)", () => {
-    expect(typeof ccBreakAnalysis.analyzeCcBreaks).toBe("function");
+    expect(typeof ccBreakAnalysis.analyzeCcBreaksWith).toBe("function");
     expect(typeof ccBreakAnalysis.oppressingRoarOnAt).toBe("function");
   });
 });

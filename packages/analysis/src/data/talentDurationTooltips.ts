@@ -45,8 +45,20 @@ export const TOOLTIP_DURATION_ROWS: Readonly<
   // Stampeding Roar — Pack's Endurance 441844 「狂奔怒吼的持续时间延长25%」
   // (fact10 D14: 44942dae 0:22 printed 8 s, the aura ran 10.0 s). Verified on
   // the 71 downloaded / fact10-library files holding a Roar (the 605 set has
-  // no holder): 77764 h 15/0, n 73/0; 106898 h 6/0, n 18/0. The third copy
-  // 77761 has no holder logged — not priced.
+  // no holder): 77764 h 15/0, n 73/0; 106898 h 6/0, n 18/0. The bear-form
+  // copy 77761 (GH #191; the 42 downloaded files that log it, 2026-11-05):
+  // holders 2 runs, both 10 s, none at 8 s; non-holders 16 runs, 11 at 8 s,
+  // none at 10 s — n = 2 is under talentDurationVerify's 5, priced on the
+  // DB2 row + the tooltip's target list (77761 is one of its spellIds) and
+  // these runs, upward only (Game-Behaviour Rule 7).
+  "77761": [
+    {
+      talentSpellId: "441844",
+      untalentedBaseSeconds: 8,
+      pct: 25,
+      specs: ["103", "104"],
+    },
+  ],
   "77764": [
     {
       talentSpellId: "441844",
@@ -218,8 +230,7 @@ export interface ITooltipPerCritDuration extends ITooltipPerEventBase {
 }
 
 export type ITooltipPerEventDuration =
-  | ITooltipPerPressDuration
-  | ITooltipPerCritDuration;
+  ITooltipPerPressDuration | ITooltipPerCritDuration;
 
 // Spiritwalker's Momentum 443425: 「使用带有施法时间的法术会使灵魂行者的恩赐和
 // 灵魂行者的神盾的持续时间延长1秒，最多可延长4秒」. 605 files, per holder

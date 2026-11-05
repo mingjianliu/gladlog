@@ -2243,6 +2243,23 @@ export function roundClippedTroughSpan(
 }
 
 /**
+ * The rendered seconds a trough skips because they begin after the round's
+ * end (`roundEndMs`): a window the page prints past a Solo Shuffle round's
+ * ending death reads, with `ticksRegardless`, those seconds' grid ticks —
+ * samples of the hits after the death, which no `[STATE]` tick prints
+ * (fact10 D30 follow-up, GH #191: cover set 31-3 `bottomed at 32% at 0:52`,
+ * the round over at 0:51.637 and its lowest reading 36 %). Undefined when
+ * there is no round's end to read. The `skipSec` of `hpTroughInWindow`.
+ */
+export function secondsPastRoundEnd(
+  matchStartMs: number,
+  roundEndAtMs: number | undefined,
+): ((sec: number) => boolean) | undefined {
+  if (roundEndAtMs === undefined) return undefined;
+  return (sec) => matchStartMs + sec * 1000 > roundEndAtMs;
+}
+
+/**
  * A TROUGH — the true minimum of a unit's HP inside a rendered window: every
  * advanced-log sample of the window's displayed seconds
  * `[fromSec.000, (toSec + 1).000)`, not only the whole-second ticks.
@@ -6352,6 +6369,10 @@ function buildCooldownEntry(
  */
 export const NOT_DEFENSIVE_BY_NAME_IDS: ReadonlySet<string> = new Set([
   "79206", // Spiritwalker's Grace
+  // Shield Charge 385952 (Protection Warrior): `/shield/` — DB2 a charge
+  // that damages and stuns (385954, 4 s), no reduction, absorb or immunity
+  // (GH #191, user ruling 2026-11-05: Spiritwalker's Grace's precedent)
+  "385952", // Shield Charge
 ]);
 
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */

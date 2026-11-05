@@ -5198,3 +5198,39 @@ aura's logged life; `kitLifetimesById` and fact2Scan read `Ns+` as N.
 byte-identical; the text gates unchanged; corpusFactScan5 `offListPressLine`
 308 → 305 rows (107 → 106 facts: the Spatial Paradox `lastsBeyond` 10.8 s, 0
 new).
+
+v489 (2026-11-05, GH #191 F25 leftovers, GH #190; user rulings 2026-11-05).
+The DR reset tick band (`DR_RESET_TICK_MS` after the 20 s window) reads a
+control's logged length only when the game alone ended it
+(`ccLengthIsDrEvidence`, now on all three walks: the outgoing chains through
+`outgoingCcChains.ts`, the holder's history `buildCcCategoryHistory` behind
+`[CC BROKEN]` / `[CC REMOVED]` time left and the dispel DR, and the incoming
+walk). New clauses: an ally's Blessing of Sanctuary that took it off
+(`sanctuaryRemovalPairs`), the holder's death cascade (`removedByDeath`), and
+the aura's own source (a pet, not the owner it is credited to). On a chain of
+two, a half length in the band reads as the second. Troughs past the round's
+end: `[BURST ANSWERED] bottomed at` and STAYED IN `(min over window)` /
+position-mistake `hpMin` skip seconds after `roundEndMs`
+(`secondsPastRoundEnd`); `killWasLive` clips at the round's end. An enemy
+healer's own control reflected back onto it is a healer lock
+(`enemyHealerCcWindows`: missed-sync-window, unsynced-burst, `[KILL WINDOW]`
+`enemy healer hard-CC'd`; `healerCcAt`). A control immunity another unit put
+on the healer in the control's REMOVED millisecond is the lock's `endedBy`
+(`control immunity: X (who)`). Shield Charge (385952) is Utility, not a
+defensive (Spiritwalker's Grace precedent). Stampeding Roar 77761 gets its
+talented 10 s row. 605 files, base ec4f3a94a (checks re-read on the base
+capture): candidate rows +0 / −0; one row's facts gain `endedBy=control
+immunity: Berserker Shout (…)`; the missed-sync-window legend gains two
+sentences (562 files); context: `[BURST ANSWERED]` 18 lines, STAYED IN 2,
+`[KILL WINDOW]` 2, a Blinding Light our own Highlord's Judgment broke at half
+its length reads Full (9 lines + 3 new `[CC BROKEN]`), Shield Charge 3 lines.
+corpusFactScan5: troughPastRoundEndReaders 26 → 6 (the 6 left: the owner died
+at the round's end and the line prints that death's 0 %), drBandForcedEnd
+3 → 0, drHalfLengthFull 6 → 3, drResetBandLength 6 → 3; one rise,
+drReaderAgreement 6 → 9 (a Cheap Shot cut by its holder's death read 50 %),
+fixed after the run by the death-cascade clause: on those two files every DR
+check is 0 and the line is back to base (`Full | ended at their death`); the
+remaining drHalfLengthFull / drResetBandLength rows (a Psychic Scream
+removed after the round's deciding death) are read as cut by the round's end
+in the checks too. The `syncWindowPriorGenerated` table is stale (the healer
+lock set changed) — GH #115.

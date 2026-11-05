@@ -52,6 +52,7 @@ import {
   DR_RESET_TICK_MS,
   isDiminishedLength,
 } from "@gladlog/analysis/src/utils/drAnalysis";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
   APPLIED,
@@ -244,6 +245,9 @@ function drHalf(ctx: IRoundCtx): void {
         (ev(a) === REMOVED || ev(a)?.startsWith("SPELL_AURA_BROKEN")),
     );
     if (!off || ev(off) !== REMOVED) continue;
+    // a removal after the round's end is no reading: the walk reads the
+    // control cut at the round's end (F25b 605 100-5 r5 1:51)
+    if (tsOf(off) > roundEndMs(ctx.legacy)) continue;
     const prevEnd = Math.max(
       -Infinity,
       ...rows.filter((a) => ev(a) === REMOVED && tsOf(a) < tsOf(on)).map(tsOf),
@@ -274,6 +278,7 @@ function drHalf(ctx: IRoundCtx): void {
         },
         ctx.start,
         caster,
+        ctx.units,
       )
     )
       ctx.violate(

@@ -26,7 +26,7 @@ import {
   ccRemovalCause,
   formatCcRemovalCause,
 } from "../src/utils/ccTrinketAnalysis";
-import { analyzeOutgoingCCChains } from "../src/utils/drAnalysis";
+import { analyzeOutgoingCCChains } from "../src/utils/outgoingCcChains";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -143,21 +143,25 @@ describe("outgoing CC pairing (G2)", () => {
     // the removal is the REMOVED line's time now, 3 ms after the BROKEN line
     expect(
       ccRemovalCause(e as never, POLYMORPH, at(12), at(15.003)),
-    ).toMatchObject({ kind: "broken", byUnitId: "f1", spellName: "Fire Breath" });
+    ).toMatchObject({
+      kind: "broken",
+      byUnitId: "f1",
+      spellName: "Fire Breath",
+    });
     const f = rogue();
     const w = enemyHealerCcWindows([f], [e], combat(f, e));
     expect(w).toHaveLength(1);
     expect(w[0]?.endedBy?.kind).toBe("broken");
     // the outgoing chain closes the application at the REMOVED too — one end
     // for one CC in every reader (agy review of FT-T08 step 2)
-    const [app] = analyzeOutgoingCCChains(
-      [f],
-      [e],
-      combat(f, e),
-    ).flatMap((c) => c.applications);
+    const [app] = analyzeOutgoingCCChains([f], [e], combat(f, e)).flatMap(
+      (c) => c.applications,
+    );
     expect(app!.durationSeconds).toBeCloseTo(3.003, 3);
     // a BROKEN line of an EARLIER application is not this one's cause
-    expect(ccRemovalCause(e as never, POLYMORPH, at(15.002), at(15.003))).toBeUndefined();
+    expect(
+      ccRemovalCause(e as never, POLYMORPH, at(15.002), at(15.003)),
+    ).toBeUndefined();
   });
 
   it("FT-T08 step 2b: the break of the PREVIOUS application, in the very ms the next one landed, is not the next one's", () => {
@@ -166,7 +170,12 @@ describe("outgoing CC pairing (G2)", () => {
       params[11] = 133;
       params[12] = "Fireball";
       const base = aura(LogEvent.SPELL_AURA_BROKEN_SPELL, POLYMORPH, s) as any;
-      return { ...base, srcUnitId: "f1", srcUnitName: "Mage", logLine: { ...base.logLine, parameters: params } };
+      return {
+        ...base,
+        srcUnitId: "f1",
+        srcUnitName: "Mage",
+        logLine: { ...base.logLine, parameters: params },
+      };
     };
     // #1: 10 → 13, broken by Fireball; #2 lands in that same ms and runs out at 13.75
     const e = healer({
@@ -178,8 +187,12 @@ describe("outgoing CC pairing (G2)", () => {
         aura(LogEvent.SPELL_AURA_REMOVED, POLYMORPH, 13.75),
       ],
     });
-    expect(ccRemovalCause(e as never, POLYMORPH, at(10), at(13))).toMatchObject({ kind: "broken", spellName: "Fireball" });
-    expect(ccRemovalCause(e as never, POLYMORPH, at(13), at(13.75))).toBeUndefined();
+    expect(ccRemovalCause(e as never, POLYMORPH, at(10), at(13))).toMatchObject(
+      { kind: "broken", spellName: "Fireball" },
+    );
+    expect(
+      ccRemovalCause(e as never, POLYMORPH, at(13), at(13.75)),
+    ).toBeUndefined();
     // and a second application that IS broken names its own breaker
     const e2 = healer({
       auraEvents: [
@@ -191,7 +204,9 @@ describe("outgoing CC pairing (G2)", () => {
         aura(LogEvent.SPELL_AURA_REMOVED, POLYMORPH, 13.402),
       ],
     });
-    expect(ccRemovalCause(e2 as never, POLYMORPH, at(13), at(13.402))).toMatchObject({ kind: "broken" });
+    expect(
+      ccRemovalCause(e2 as never, POLYMORPH, at(13), at(13.402)),
+    ).toMatchObject({ kind: "broken" });
   });
 
   it("F-S3: the healer's trinket at the removal, a dispel, or nothing logged", () => {
