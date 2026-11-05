@@ -336,7 +336,10 @@ npx tsx packages/analysis/scripts/datagen/genPeriodicAuras.ts
 #          the cast ≥ 10 times, ≥ 50 % of the aura's applications follow a nominating cast, and ≥ 50 % of
 #          the hits come within 3 s — or ≥ 90 % of (≥ 10) aura applications with that cast in the 60 s before
 #          them come within 3 s of its nearest one (a cast that applies it only sometimes: a stealth Rake's
-#          stun 163505); a talent-only nomination needs the latter → castEffectAuraGenerated.json (read by
+#          stun 163505); a talent-only nomination needs the latter. A pair nominated by name alone is refused
+#          when ≥ 50 % of its casts went out with the aura up and saw it REMOVED within 300 ms (not re-applied:
+#          the cast eats it — Sheilun's Gift's clouds), or ≥ 50 % of its applications came from a summon
+#          other than the one that cast (GH #169 item 2) → castEffectAuraGenerated.json (read by
 #          data/castEffectAuras.ts). `--keep <old table>` makes an emit additive (the old pairs stay as they
 #          were): for a rule change measured on a corpus that has lost files since — not for a season refresh.
 #      test/castEffectAuras.test.ts pins the former hand rows (CC_CAST_EFFECT_AURA) — a row that fails the

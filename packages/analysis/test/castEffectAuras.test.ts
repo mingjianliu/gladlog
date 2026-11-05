@@ -142,3 +142,22 @@ describe("a cast whose variants sit in different DR families (codex 35-CD-06)", 
     );
   });
 });
+
+describe("pairs the consumed / sibling-summon test refuses (GH #169 item 2)", () => {
+  // a cast that EATS its name-twin aura (Sheilun's Gift's clouds, which
+  // regenerate every ~4 s and so always follow a cast; Benediction), and a
+  // summon's spell credited with what a sibling summon of the same owner
+  // applied (Lord of the Dead's Frostbolt / Necrotic Bolt) — refused by
+  // castEffectAuraScan.ts, 2026-11-05; a regeneration must not bring them back
+  const REFUSED: Array<[string, string]> = [
+    ["399491", "399497"],
+    ["399491", "399510"],
+    ["1262763", "1262766"],
+    ["317792", "1292107"],
+    ["1297055", "1297086"],
+  ];
+  it.each(REFUSED)("%s does not own %s", (cast, aura) => {
+    expect(effectAurasOfCast(cast)).not.toContain(aura);
+    expect(castsOfEffectAura(aura)).not.toContain(cast);
+  });
+});

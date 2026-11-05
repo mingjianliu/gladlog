@@ -58,6 +58,19 @@ const MIN_SHARE = 0.5;
 const MIN_FAST_SHARE = 0.5;
 /** the aura side of the fast test (`nearFast` / `nearAny`) */
 const MIN_NEAR_FAST_SHARE = 0.9;
+/** A pair nominated by name alone is refused when its cast mostly CONSUMES the aura (it was
+ * up, by the same root caster, when the cast went out, and a REMOVED of it
+ * follows within CONSUME_MS) or when a summon other than the one that cast
+ * mostly applies it (GH #169 item 2, 605 files 2026-11-05: Sheilun's Gift
+ * 399491 eats its own clouds 399497 / 399510, which regenerate every ~4 s
+ * and so always "follow" a cast; Benediction 1262763 → 1262766 and Reaper's
+ * Toll 1245470 → 1245523 the same; Lord of the Dead's own Frostbolt
+ * 1292107 / Necrotic Bolt 1297086 credited to its sibling summons' casts
+ * 317792 / 1297055). Both shares over the cast's own count / the aura's
+ * applications with a cast of it before them. */
+const CONSUME_MS = 300;
+const MAX_CONSUMED_SHARE = 0.5;
+const MAX_SIBLING_SHARE = 0.5;
 
 function parseArgs() {
   const a = process.argv.slice(2);
@@ -121,6 +134,10 @@ const auraApps = new Map<string, number>();
 const nearAny = new Map<string, number>();
 const nearFast = new Map<string, number>();
 const auraCovered = new Map<string, number>();
+/** per pair: casts that went out with the aura up and saw it REMOVED within
+ * CONSUME_MS; nearest-cast applications made by a sibling summon */
+const pairConsumed = new Map<string, number>();
+const pairSibling = new Map<string, number>();
 const inc = (m: Map<string, number>, k: string) =>
   m.set(k, (m.get(k) ?? 0) + 1);
 
@@ -142,16 +159,97 @@ for (const f of files) {
   // was lost when pairing ran as the lines streamed).
   let recent = new Map<
     string,
-    Array<{ t: number; c: string; hit: Set<string> }>
+    Array<{ t: number; c: string; src: string; hit: Set<string> }>
   >();
-  let apps: Array<{ t: number; e: string; who: string }> = [];
+  let apps: Array<{ t: number; e: string; who: string; src: string }> = [];
+  // per root caster|aura|destination: instances up, REMOVED and applied
+  // times; per root caster|aura: every application time; the casts that
+  // went out with a nominee up somewhere (codex review 2026-11-05: keyed
+  // without the destination, a Fear ending on A as another went out on B
+  // read as eaten)
+  let upCount = new Map<string, number>();
+  let removes = new Map<string, number[]>();
+  let appliesOn = new Map<string, number[]>();
+  let appliesAny = new Map<string, number[]>();
+  // REFRESH rows and charge spends (REMOVED_DOSE) per root caster|aura|
+  // destination: a REFRESH is the cast putting the aura up again, unless it
+  // is the one a charge spend logs with its REMOVED_DOSE at that ms
+  let refreshes = new Map<string, number[]>();
+  let doseSpends = new Map<string, number[]>();
+  let upAtCast: Array<{
+    t: number;
+    key: string;
+    dests: string[];
+    pair: string;
+  }> = [];
+  const push = (m: Map<string, number[]>, k: string, t: number) => {
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(t);
+  };
   const pairRound = () => {
-    for (const { t, e, who } of apps) {
+    // consumed: the cast applied none of it (from just before its row to
+    // CONSUME_MS after), and on a destination where it was up a REMOVED
+    // came within CONSUME_MS that no application there follows within
+    // CONSUME_MS (a recast logging REMOVED + APPLIED at one ms re-broadcasts
+    // its aura, it does not eat it)
+    const within = (ts: number[] | undefined, from: number, to: number) =>
+      (ts ?? []).some((x) => x >= from && x <= to);
+    for (const { t, key, dests, pair } of upAtCast) {
+      if (within(appliesAny.get(key), t - 100, t + CONSUME_MS)) continue;
+      // …or refreshed it anywhere that was no charge spend (codex review
+      // 2026-11-05: a Sunfire recast refreshing B while A's ran out)
+      let refreshed = false;
+      for (const [k, ts] of refreshes)
+        if (
+          k.startsWith(`${key}|`) &&
+          ts.some(
+            (x) =>
+              x >= t - 100 &&
+              x <= t + CONSUME_MS &&
+              !within(doseSpends.get(k), x - 1, x + 1),
+          )
+        )
+          refreshed = true;
+      if (refreshed) continue;
+      if (
+        dests.some((d) =>
+          (removes.get(`${key}|${d}`) ?? []).some(
+            (r) =>
+              r >= t &&
+              r <= t + CONSUME_MS &&
+              !within(appliesOn.get(`${key}|${d}`), r, r + CONSUME_MS),
+          ),
+        )
+      )
+        inc(pairConsumed, pair);
+    }
+    upAtCast = [];
+    upCount = new Map();
+    removes = new Map();
+    appliesOn = new Map();
+    appliesAny = new Map();
+    refreshes = new Map();
+    doseSpends = new Map();
+    for (const { t, e, who, src } of apps) {
       const noms = nominators.get(e)!;
       const list = recent.get(who);
       if (!list) continue;
       let covered = false;
       const nearestSeen = new Set<string>();
+      // a sibling: the cast came from a summon, the aura from another unit
+      // of the same owner (not a player's totem / pet applying what the
+      // player's own cast put down), and that unit cast none of the aura's
+      // nominating casts in the window itself (codex review 2026-11-05: two
+      // pets of one owner, each applying its own)
+      const sibling =
+        src !== who &&
+        !list.some(
+          (r) =>
+            r.src === src &&
+            noms.has(r.c) &&
+            r.t <= t + 100 &&
+            r.t >= t - WINDOW_S * 1000,
+        );
       for (let i = list.length - 1; i >= 0; i--) {
         const r = list[i]!;
         if (r.t > t + 100) continue;
@@ -162,6 +260,7 @@ for (const f of files) {
           nearestSeen.add(r.c);
           inc(nearAny, `${r.c}|${e}`);
           if (t - r.t <= FAST_S * 1000) inc(nearFast, `${r.c}|${e}`);
+          if (sibling && r.src !== who) inc(pairSibling, `${r.c}|${e}`);
         }
         if (r.hit.has(e)) continue;
         r.hit.add(e);
@@ -213,7 +312,29 @@ for (const f of files) {
       inc(casts, c);
       const who = root(p[1]!);
       if (!recent.has(who)) recent.set(who, []);
-      recent.get(who)!.push({ t, c, hit: new Set() });
+      recent.get(who)!.push({ t, c, src: p[1]!, hit: new Set() });
+      for (const { aura } of nominations[c]!) {
+        const key = `${who}|${aura}`;
+        const dests = [...upCount]
+          .filter(([k, n]) => n > 0 && k.startsWith(`${key}|`))
+          .map(([k]) => k.slice(key.length + 1));
+        if (dests.length)
+          upAtCast.push({ t, key, dests, pair: `${c}|${aura}` });
+      }
+      continue;
+    }
+    // a REMOVED_DOSE spends a charge of the aura (Benediction 1262766: the
+    // cast logs REMOVED_DOSE + REFRESH, the last charge a REMOVED)
+    if (ev === "SPELL_AURA_REMOVED" || ev === "SPELL_AURA_REMOVED_DOSE") {
+      const e = p[9]!;
+      if (!nominators.has(e)) continue;
+      const t = tsMs(line);
+      if (t === null) continue;
+      const key = `${root(p[1]!)}|${e}|${p[5]}`;
+      if (ev === "SPELL_AURA_REMOVED")
+        upCount.set(key, Math.max(0, (upCount.get(key) ?? 0) - 1));
+      else push(doseSpends, key, t);
+      push(removes, key, t);
       continue;
     }
     if (ev !== "SPELL_AURA_APPLIED" && ev !== "SPELL_AURA_REFRESH") continue;
@@ -223,7 +344,16 @@ for (const f of files) {
     const t = tsMs(line);
     if (t === null) continue;
     inc(auraApps, e);
-    apps.push({ t, e, who: root(p[1]!) });
+    const who = root(p[1]!);
+    // an APPLIED, or a REFRESH that no charge spend logged with it (read in
+    // pairRound), is the cast putting the aura up
+    const onKey = `${who}|${e}|${p[5]}`;
+    if (ev === "SPELL_AURA_APPLIED") {
+      upCount.set(onKey, (upCount.get(onKey) ?? 0) + 1);
+      push(appliesOn, onKey, t);
+      push(appliesAny, `${who}|${e}`, t);
+    } else push(refreshes, onKey, t);
+    apps.push({ t, e, who, src: p[1]! });
   }
   pairRound();
 }
@@ -248,6 +378,9 @@ type Row = {
 };
 const rows: Record<string, Row[]> = {};
 let kept = 0;
+/** `name` pairs this run refuses as consumed / sibling-applied — dropped
+ * from a `--keep` table too */
+const guarded = new Set<string>();
 const report: string[] = [];
 for (const [k, hits] of pairHits) {
   const [c, e] = k.split("|") as [string, string];
@@ -276,14 +409,25 @@ for (const [k, hits] of pairHits) {
   // MIN_HITS floor too: one Blighted Arrow 1239385 read as 15 cast hits)
   const nearOk =
     (nearAny.get(k) ?? 0) >= MIN_HITS && nearShare >= MIN_NEAR_FAST_SHARE;
+  const consumedShare = (pairConsumed.get(k) ?? 0) / Math.max(1, row.casts);
+  const siblingShare =
+    (pairSibling.get(k) ?? 0) / Math.max(1, nearAny.get(k) ?? 0);
+  // only a pair nominated by its name alone: a DB2 trigger chain is the
+  // cast's own evidence
+  const refused =
+    row.via === "name" &&
+    ((row.casts >= MIN_HITS && consumedShare >= MAX_CONSUMED_SHARE) ||
+      ((nearAny.get(k) ?? 0) >= MIN_HITS && siblingShare >= MAX_SIBLING_SHARE));
+  if (refused) guarded.add(k);
   const ok =
+    !refused &&
     hits >= MIN_HITS &&
     share >= MIN_SHARE &&
     (row.via === "talent"
       ? nearOk
       : row.hitsWithin3s / hits >= MIN_FAST_SHARE || nearOk);
   report.push(
-    `${ok ? "KEEP" : "drop"} ${c} -> ${e} casts=${row.casts} hits=${hits} (${((100 * hits) / Math.max(1, row.casts)).toFixed(0)}%) fast=${row.hitsWithin3s} near=${nearFast.get(k) ?? 0}/${nearAny.get(k) ?? 0} p50=${row.medianDelayS}s share=${row.coveredShare} apps=${auraApps.get(e)} via=${row.via}`,
+    `${ok ? "KEEP" : refused ? "REFUSE" : "drop"} ${c} -> ${e} consumed=${consumedShare.toFixed(2)} sibling=${siblingShare.toFixed(2)} casts=${row.casts} hits=${hits} (${((100 * hits) / Math.max(1, row.casts)).toFixed(0)}%) fast=${row.hitsWithin3s} near=${nearFast.get(k) ?? 0}/${nearAny.get(k) ?? 0} p50=${row.medianDelayS}s share=${row.coveredShare} apps=${auraApps.get(e)} via=${row.via}`,
   );
   if (!ok) continue;
   if (!(row.via !== "talent" && row.hitsWithin3s / hits >= MIN_FAST_SHARE)) {
@@ -292,6 +436,17 @@ for (const [k, hits] of pairHits) {
   }
   kept++;
   (rows[c] ??= []).push(row);
+}
+// a pair whose casts only ever ate the aura (no hit at all) is refused too
+// (codex review 2026-11-05: a carried pair with zero hits this run survived
+// `--keep`)
+for (const [k, n] of pairConsumed) {
+  if (pairHits.has(k)) continue;
+  const [c, e] = k.split("|") as [string, string];
+  const via = nominations[c]?.find((x) => x.aura === e)?.via;
+  const nCasts = casts.get(c) ?? 0;
+  if (via === "name" && nCasts >= MIN_HITS && n / nCasts >= MAX_CONSUMED_SHARE)
+    guarded.add(k);
 }
 for (const list of Object.values(rows)) list.sort((a, b) => b.hits - a.hits);
 report.sort();
@@ -315,6 +470,7 @@ if (args.emit) {
   if (args.keep) {
     let carried = 0;
     let added = 0;
+    let pruned = 0;
     const prev = JSON.parse(readFileSync(args.keep, "utf8")) as {
       meta: { generatedAt?: string; filesRead?: number; nominations?: string };
       casts: Record<string, Row[]>;
@@ -322,8 +478,10 @@ if (args.emit) {
     const fresh = rows;
     const merged: Record<string, Row[]> = {};
     for (const [c, list] of Object.entries(prev.casts)) {
-      merged[c] = [...list];
-      carried += list.length;
+      const left = list.filter((r) => !guarded.has(`${c}|${r.aura}`));
+      pruned += list.length - left.length;
+      if (left.length) merged[c] = left;
+      carried += left.length;
     }
     for (const [c, list] of Object.entries(fresh))
       for (const r of list)
@@ -336,7 +494,7 @@ if (args.emit) {
     for (const list of Object.values(rows))
       list.sort((a, b) => b.hits - a.hits);
     kept = carried + added;
-    keepNote = `additive: the ${carried} pairs of the table generated ${prev.meta.generatedAt} (${prev.meta.filesRead} files, ${prev.meta.nominations}) kept as they were; ${added} added by this run`;
+    keepNote = `additive: the ${carried} pairs of the table generated ${prev.meta.generatedAt} (${prev.meta.filesRead} files, ${prev.meta.nominations}) kept as they were; ${added} added by this run${pruned ? `; ${pruned} refused by this run's consumed / sibling test dropped` : ""}`;
   }
   const sorted = Object.fromEntries(
     Object.entries(rows).sort((a, b) => Number(a[0]) - Number(b[0])),
@@ -351,7 +509,7 @@ if (args.emit) {
           manifest: args.manifest,
           every: args.every,
           filesRead: read,
-          rule: `a cast hits a nominated aura when the same root caster (summons resolved) applies it within ${WINDOW_S} s after the cast (once per cast); a pair is kept when hits >= ${MIN_HITS} the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= ${MIN_SHARE}, and >= ${MIN_FAST_SHARE} of the hits come within ${FAST_S} s of the cast or >= ${MIN_NEAR_FAST_SHARE} of the aura's applications with that cast in the window before them come within ${FAST_S} s of its nearest one (a talent-only nomination needs the latter)`,
+          rule: `a cast hits a nominated aura when the same root caster (summons resolved) applies it within ${WINDOW_S} s after the cast (once per cast); a pair is kept when hits >= ${MIN_HITS} the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= ${MIN_SHARE}, and >= ${MIN_FAST_SHARE} of the hits come within ${FAST_S} s of the cast or >= ${MIN_NEAR_FAST_SHARE} of the aura's applications with that cast in the window before them come within ${FAST_S} s of its nearest one (a talent-only nomination needs the latter); a name pair is refused when >= ${MAX_CONSUMED_SHARE} of its casts went out with the aura up and saw it REMOVED within ${CONSUME_MS} ms, or >= ${MAX_SIBLING_SHARE} of its nearest-cast applications came from a summon other than the one that cast`,
           ...(keepNote ? { keep: keepNote } : {}),
           generatedAt: new Date().toISOString(),
         },

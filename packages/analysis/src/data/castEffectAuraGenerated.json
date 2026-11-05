@@ -5,9 +5,9 @@
   "manifest": "/Users/mingjianliu/code/gladlog-eval-private/corpus/manifest-archive-2026-08-28-newseason.txt",
   "every": 5,
   "filesRead": 1429,
-  "rule": "a cast hits a nominated aura when the same root caster (summons resolved) applies it within 60 s after the cast (once per cast); a pair is kept when hits >= 10 the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= 0.5, and >= 0.5 of the hits come within 3 s of the cast or >= 0.9 of the aura's applications with that cast in the window before them come within 3 s of its nearest one (a talent-only nomination needs the latter)",
-  "keep": "additive: the 258 pairs of the table generated 2026-10-03T04:36:40.752Z (1814 files, castEffectNominationsGenerated.json (build 12.1.0.69587)) kept as they were; 17 added by this run",
-  "generatedAt": "2026-10-28T23:05:02.469Z"
+  "rule": "a cast hits a nominated aura when the same root caster (summons resolved) applies it within 60 s after the cast (once per cast); a pair is kept when hits >= 10 the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= 0.5, and >= 0.5 of the hits come within 3 s of the cast or >= 0.9 of the aura's applications with that cast in the window before them come within 3 s of its nearest one (a talent-only nomination needs the latter); a name pair is refused when >= 0.5 of its casts went out with the aura up and saw it REMOVED within 300 ms, or >= 0.5 of its nearest-cast applications came from a summon other than the one that cast",
+  "keep": "additive: the 270 pairs of the table generated 2026-10-28T23:05:02.469Z (1429 files, castEffectNominationsGenerated.json (build 12.1.5.70391)) kept as they were; 0 added by this run; 5 refused by this run's consumed / sibling test dropped",
+  "generatedAt": "2026-11-05T07:18:54.956Z"
  },
  "casts": {
   "66": [
@@ -1611,17 +1611,6 @@
     "via": "name"
    }
   ],
-  "317792": [
-   {
-    "aura": "1292107",
-    "casts": 8244,
-    "hits": 7742,
-    "hitsWithin3s": 3996,
-    "medianDelayS": 2.33,
-    "coveredShare": 0.989,
-    "via": "name"
-   }
-  ],
   "321507": [
    {
     "aura": "210824",
@@ -2296,26 +2285,6 @@
     "via": "name"
    }
   ],
-  "399491": [
-   {
-    "aura": "399497",
-    "casts": 4360,
-    "hits": 4321,
-    "hitsWithin3s": 2573,
-    "medianDelayS": 2.51,
-    "coveredShare": 0.817,
-    "via": "name"
-   },
-   {
-    "aura": "399510",
-    "casts": 4360,
-    "hits": 4321,
-    "hitsWithin3s": 2588,
-    "medianDelayS": 2.5,
-    "coveredShare": 0.817,
-    "via": "name"
-   }
-  ],
   "406732": [
    {
     "aura": "406789",
@@ -2806,17 +2775,6 @@
     "via": "trigger"
    }
   ],
-  "1262763": [
-   {
-    "aura": "1262766",
-    "casts": 20159,
-    "hits": 19526,
-    "hitsWithin3s": 12387,
-    "medianDelayS": 0.02,
-    "coveredShare": 0.838,
-    "via": "name"
-   }
-  ],
   "1263884": [
    {
     "aura": "1271863",
@@ -2916,17 +2874,6 @@
     "medianDelayS": 0,
     "coveredShare": 0.558,
     "via": "trigger"
-   }
-  ],
-  "1297055": [
-   {
-    "aura": "1297086",
-    "casts": 3044,
-    "hits": 2913,
-    "hitsWithin3s": 1638,
-    "medianDelayS": 1.44,
-    "coveredShare": 0.988,
-    "via": "name"
    }
   ]
  }
