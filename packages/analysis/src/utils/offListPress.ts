@@ -25,10 +25,16 @@ import {
 
 import { effectAurasOfCast } from "../data/castEffectAuras";
 import { classMetadata } from "../data/classSpells";
-import { effectiveCooldownSeconds } from "../data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
+} from "../data/spellEffectData";
 import { timeSpiralEchoMs } from "../data/talentScriptedCooldowns";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { isNoPressRow } from "./castPress";
+import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
+import { oppressingRoarOnAt } from "./ccBreakAnalysis";
+import { oppressingRoarLengthens } from "./ccDuration";
 import { isStasisReplayCast } from "./combatStates";
 import {
   canonicalSpellId,
@@ -37,6 +43,7 @@ import {
   unitCooldownEntry,
   unreleasedHoldMs,
 } from "./cooldowns";
+import { isResyncBatchAt } from "./hiddenPress";
 import {
   OFFENSIVE_CD_SPELL_IDS,
   OFFENSIVE_PRESS_FACT_IDS,
@@ -282,10 +289,21 @@ export function pressAuraCandidates(
   },
   allUnits: readonly ICombatUnit[],
   untilMs = Infinity,
+  /** only these of the cast's auras (`pressDuration` after a re-stated row:
+   * the same aura on another unit) */
+  onlyAuraIds?: ReadonlySet<string>,
+  /** how far ahead of the cast row a row may be logged — that fallback's
+   * only (GH #179 128-5: Holy Bulwark's 432496 on the caster 1 ms before the
+   * SUCCESS). Everywhere else 0: widening it for every press put a length on
+   * 8,759 lines of the 605 capture, some wrong (Dream Breath read its
+   * channel's 2 s) — a batch of its own. */
+  leadMs = 0,
 ): Array<{ unit: ICombatUnit; row: ICombatUnit["auraEvents"][number] }> {
   const release = empowerReleaseMs(caster, cast, untilMs);
   const at = release ?? cast.logLine.timestamp;
   const auraIds = new Set([cast.spellId!, ...effectAurasOfCast(cast.spellId!)]);
+  if (onlyAuraIds)
+    for (const id of [...auraIds]) if (!onlyAuraIds.has(id)) auraIds.delete(id);
   // an empowered press's own id on the caster is the empower channel (Fire
   // Breath's 2.5 s), not its effect — on a released press and on one the
   // player let go of with no release (cancelled: no effect at all)
@@ -307,20 +325,103 @@ export function pressAuraCandidates(
       u.id === cast.destUnitId
         ? Math.min(at + PRESS_TARGET_AURA_LEAD_MS, untilMs - 1)
         : at + PRESS_AURA_LEAD_MS;
-    const row = (u.auraEvents ?? []).find(
+    const rows = (u.auraEvents ?? []).filter(
       (a) =>
         (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
           a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
         a.srcUnitId === caster.id &&
         !!a.spellId &&
         auraIds.has(a.spellId) &&
-        a.logLine.timestamp >= at &&
+        a.logLine.timestamp >= at - leadMs &&
         a.logLine.timestamp <= end,
     );
+    // a row at or after the press first; one logged ahead of it only when
+    // there is none, the latest of them (codex 20-179a #1: a previous
+    // press's APPLIED 100 ms ahead and this press's REFRESH 10 ms after —
+    // the REFRESH is this press's)
+    const row =
+      rows.find((a) => a.logLine.timestamp >= at) ?? rows[rows.length - 1];
     if (row) out.push({ unit: u, row });
   }
   return out;
 }
+
+/** Time Stop: the Evoker's aura on a unit that stops every aura on it from
+ * running down ("auras do not progress"). */
+export const TIME_STOP_AURA_IDS: ReadonlySet<string> = new Set(["378441"]);
+
+/**
+ * GH #179 (2026-11-05): the seconds a Time Stop on `unit` held an aura that
+ * went up at `fromMs` and was to run `seconds` — each logged Time Stop span
+ * that starts inside the (growing) run adds its own length. 605 files:
+ * Gladiator's Badge 19.96 / 19.95 s under a 5.0 s self Time Stop (5 others
+ * 15.00–15.01 s), Explosive Shot 8.97 s ×2 under the target's own 5.0 s one,
+ * Spirit Walk 9.34 = 8 + an ally's 1.33 s one. A Time Stop with no logged
+ * end adds nothing (its length is not read), and neither does one that
+ * starts after the aura's own REMOVED — it held nothing (Time Spiral's 375234
+ * consumed 1.1 s after its press, a self Time Stop 3.2 s later: the first
+ * cut printed `lasts 15s` for the 10 s press, 605 capture 41-2).
+ */
+export function timeStopHeldSeconds(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  fromMs: number,
+  seconds: number,
+  /** the held aura: its first REMOVED on `unit` after `fromMs` ends what a
+   * Time Stop can hold */
+  aura?: {
+    spellId?: string;
+    srcUnitId?: string;
+    logLine?: { lineIndex?: number };
+  },
+): number {
+  // a REMOVED in the aura's own millisecond ends it when it is logged after
+  // the aura's row (codex 20-179a #4: consumed at once); with no line index
+  // on either side, the same millisecond counts as after
+  const afterAura = (a: ICombatUnit["auraEvents"][number]) =>
+    a.logLine.timestamp > fromMs ||
+    (a.logLine.timestamp === fromMs &&
+      (a.logLine.lineIndex ?? Infinity) >
+        (aura?.logLine?.lineIndex ?? -Infinity));
+  const goneMs = aura
+    ? (unit.auraEvents ?? []).find(
+        (a) =>
+          a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+          a.spellId === aura.spellId &&
+          a.srcUnitId === aura.srcUnitId &&
+          a.destUnitId === unit.id &&
+          afterAura(a),
+      )?.logLine.timestamp
+    : undefined;
+  // paired per caster: an unclosed Time Stop never borrows another
+  // Evoker's REMOVED (codex 20-179a #2)
+  const spans: Array<{ from: number; to: number }> = [];
+  const open = new Map<string, number>();
+  for (const a of unit.auraEvents ?? []) {
+    if (!TIME_STOP_AURA_IDS.has(a.spellId ?? "") || a.destUnitId !== unit.id)
+      continue;
+    const src = a.srcUnitId ?? "";
+    if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED)
+      open.set(src, a.logLine.timestamp);
+    else if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
+      const from = open.get(src);
+      if (from !== undefined) spans.push({ from, to: a.logLine.timestamp });
+      open.delete(src);
+    }
+  }
+  let endMs = fromMs + seconds * 1000;
+  let held = 0;
+  for (const sp of spans.sort((x, y) => x.from - y.from)) {
+    if (sp.from < fromMs || sp.from >= endMs) continue;
+    if (goneMs !== undefined && sp.from >= goneMs) continue;
+    held += sp.to - sp.from;
+    endMs += sp.to - sp.from;
+  }
+  return held / 1000;
+}
+
+/** A re-stating batch this soon after the press is the press's own bundle,
+ * not the unit coming back into sight (`pressDuration`). */
+export const PRESS_RESTATE_MIN_LAG_MS = 1000;
 
 /** The duration a press's line prints, and the APPLIED row it is read
  * from: the first of `pressAuraCandidates` (bounded by the caster's next
@@ -350,16 +451,48 @@ export function pressDuration(
       r.spellId === cast.spellId &&
       r.logLine.timestamp > at,
   )?.logLine.timestamp;
-  for (const { unit, row } of pressAuraCandidates(
-    caster,
-    cast,
-    allUnits,
-    nextPressMs,
-  )) {
+  const candidates = pressAuraCandidates(caster, cast, allUnits, nextPressMs);
+  // an empowered press lands at its release (codex 20-179a #3: Dream
+  // Breath's bundle at a 2 s release is no re-state)
+  const landAt = empowerReleaseMs(caster, cast, nextPressMs) ?? at;
+  const skipped = new Set<ICombatUnit>();
+  for (let k = 0; k < candidates.length; k++) {
+    const { unit, row } = candidates[k]!;
     // laid on an aura already up: the life is what was left plus the
     // press's share, not the table's length (Holy Armaments: 605 files,
     // 96 + 71 of the presses printed `lasts 20s` lived 26–48 s)
     if (row.logLine.event === LogEvent.SPELL_AURA_REFRESH) return undefined;
+    // a row the log re-stated after the unit was unseen (Vanish, Mass
+    // Invisibility) is when the aura showed again, not when it went up —
+    // the press's own row is the next candidate (GH #179: a Holy Bulwark
+    // read off the target's re-state 2.1 s after its Vanish printed 20 s
+    // and ran 29.9 s with the caster's own refreshed copy). Only a row
+    // apart from the press: the press's own millisecond carries its own
+    // bundle of APPLIED rows on the caster (a Gladiator's Badge beside
+    // wings and trinket procs — the first cut dropped `lasts` off 447
+    // [PRESS] lines in the 605 capture)
+    if (
+      row.logLine.timestamp - landAt > PRESS_RESTATE_MIN_LAG_MS &&
+      isResyncBatchAt(unit, row.logLine.timestamp)
+    ) {
+      // the rest are the same aura on the other units: a press's other
+      // effect aura is not its length (Holy Bulwark's 432607 is the shield
+      // it re-lays every 2 s — 47.4 s on the caster, 605 capture 128-5)
+      skipped.add(unit);
+      candidates.splice(
+        k + 1,
+        Infinity,
+        ...pressAuraCandidates(
+          caster,
+          cast,
+          allUnits,
+          nextPressMs,
+          new Set([row.spellId!]),
+          AURA_BEFORE_CAST_ROW_MAX_MS,
+        ).filter((c) => !skipped.has(c.unit)),
+      );
+      continue;
+    }
     // nor when a second copy lands on it in the same millisecond: a Holy
     // Armament cast on oneself by a paladin it also arms — APPLIED then
     // REFRESH, and the aura runs 40 s (GH #179: 2 of 79 self-casts in 22
@@ -380,14 +513,28 @@ export function pressDuration(
     // (SPELL_EMPOWER_END) that sets its length comes after the press and
     // `castParamAt` (which looks back from the aura) found no level — Fire
     // Breath / Dream Breath printed DB2's 2 s placeholder (GH #183)
-    const d = buffFullDurationForCaster(
+    const base = buffFullDurationForCaster(
       row.spellId!,
       caster,
       row.logLine.timestamp,
       { pressed: true, onUnitId: unit.id },
     );
-    if (d !== undefined && d >= PRESS_LINE_MIN_DURATION_S)
-      return { durationSeconds: d, unit, row };
+    if (base === undefined || base < PRESS_LINE_MIN_DURATION_S) continue;
+    // what the game did to this application (GH #179, 2026-11-05): an
+    // Oppressing Roar on the unit lengthens a control / slow / root it
+    // covers by 30 % (the CC lines' own `ccFullDurationForApplication`
+    // reading — Chimaeral Sting's slow 3.90–3.92 s ×4 under it, 2.98–3.02
+    // s ×54 without; Flying Serpent Kick 5.21; Landslide 7.81), and a Time
+    // Stop on the unit holds it for as long as it ran
+    const roared =
+      oppressingRoarLengthens(row.spellId!) && oppressingRoarOnAt(unit, row);
+    const len = roared ? base * OPPRESSING_ROAR_PVP_CC_DURATION_MULT : base;
+    return {
+      durationSeconds:
+        len + timeStopHeldSeconds(unit, row.logLine.timestamp, len, row),
+      unit,
+      row,
+    };
   }
   return undefined;
 }

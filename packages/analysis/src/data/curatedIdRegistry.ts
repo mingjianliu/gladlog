@@ -175,7 +175,10 @@ import {
   OFFENSIVE_AURA_EVIDENCE,
   OFFENSIVE_FORM_FACT_AURAS,
 } from "../utils/offensiveAuraOccurrences";
-import { PRESS_LINE_WHITELIST_IDS } from "../utils/offListPress";
+import {
+  PRESS_LINE_WHITELIST_IDS,
+  TIME_STOP_AURA_IDS,
+} from "../utils/offListPress";
 import {
   DISMISS_PET_SPELL_ID,
   PET_COMMAND_SPELL_IDS,
@@ -621,6 +624,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ]),
   t("PET_COMMAND_SPELL_IDS", "utils/petPresence.ts", "cast", () =>
     set(PET_COMMAND_SPELL_IDS),
+  ),
+  // Time Stop holds an aura on the unit (GH #179, [PRESS] `lasts`)
+  t("TIME_STOP_AURA_IDS", "utils/offListPress.ts", "aura", () =>
+    set(TIME_STOP_AURA_IDS),
   ),
   // Fade 586 → Translucent Image 373446 (GH #126 row 203)
   t(

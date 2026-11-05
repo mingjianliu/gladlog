@@ -20,6 +20,7 @@ import {
   PRESS_TARGET_AURA_LEAD_MS,
   pressDuration,
   pressLineCaster,
+  timeStopHeldSeconds,
 } from "../src/utils/offListPress";
 import {
   equippedBadgeCount,
@@ -265,5 +266,247 @@ describe("[PRESS] lasts — which aura it reads (GH #179)", () => {
     expect(
       pressDuration(pal, cast as any, [pal, ally], pal.spellCastEvents),
     ).toBeUndefined();
+  });
+});
+
+// GH #179 (2026-11-05): what the game did to one application
+describe("[PRESS] lasts — re-stated rows, Oppressing Roar, Time Stop (GH #179)", () => {
+  const T = 1_000_000;
+  const { SPELL_AURA_APPLIED: APPLIED, SPELL_AURA_REMOVED: REMOVED } = LogEvent;
+
+  it("a target row inside a re-state batch is skipped: the caster's own copy prints", () => {
+    const cast = makeSpellCastEvent("432459", T, "ally", "Ally", "pal", "Pal");
+    const pal = makeUnit("pal", {
+      spellCastEvents: [cast],
+      auraEvents: [makeAuraEvent(APPLIED, "432496", T, "pal", "pal", "BUFF")],
+    });
+    // the target vanished; 2.09 s later the log re-states six of its auras
+    const at = T + 2090;
+    const restate = ["1", "2", "3", "4", "5"].map((id) =>
+      makeAuraEvent(APPLIED, id, at, "x", "ally", "BUFF"),
+    );
+    const own = makeAuraEvent(APPLIED, "432496", at, "pal", "ally", "BUFF");
+    const ally = makeUnit("ally", { auraEvents: [...restate, own] });
+    const d = pressDuration(pal, cast as any, [pal, ally], pal.spellCastEvents);
+    expect(d?.unit.id).toBe("pal");
+    // one APPLIED short of a batch: the target's row is the press's
+    const ally5 = makeUnit("ally", {
+      auraEvents: [...restate.slice(1), own],
+    });
+    expect(
+      pressDuration(pal, cast as any, [pal, ally5], pal.spellCastEvents)?.unit
+        .id,
+    ).toBe("ally");
+  });
+
+  it("after a re-stated row, the same aura on another unit — logged ahead of the cast row too", () => {
+    const cast = makeSpellCastEvent("432459", T, "ally", "Ally", "pal", "Pal");
+    // the caster's own copy 1 ms before the SUCCESS, beside the shield
+    // 432607 the bulwark re-lays (in the press's millisecond)
+    const pal = makeUnit("pal", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "432496", T - 1, "pal", "pal", "BUFF"),
+        makeAuraEvent(APPLIED, "432607", T, "pal", "pal", "BUFF"),
+      ],
+    });
+    const at = T + 1760;
+    const ally = makeUnit("ally", {
+      auraEvents: [
+        ...["1", "2", "3", "4", "5"].map((id) =>
+          makeAuraEvent(APPLIED, id, at, "x", "ally", "BUFF"),
+        ),
+        makeAuraEvent(APPLIED, "432496", at, "pal", "ally", "BUFF"),
+      ],
+    });
+    const d = pressDuration(pal, cast as any, [pal, ally], pal.spellCastEvents);
+    expect(d?.unit.id).toBe("pal");
+    expect(d?.row.spellId).toBe("432496");
+    // the caster's copy missing: no other aura of the press stands in
+    const palShieldOnly = makeUnit("pal", {
+      spellCastEvents: [cast],
+      auraEvents: [makeAuraEvent(APPLIED, "432607", T, "pal", "pal", "BUFF")],
+    });
+    expect(
+      pressDuration(
+        palShieldOnly,
+        cast as any,
+        [palShieldOnly, ally],
+        palShieldOnly.spellCastEvents,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("the lead never takes a previous press's row over this press's REFRESH (codex 20-179a #1)", () => {
+    const cast = makeSpellCastEvent("432459", T, "ally", "Ally", "pal", "Pal");
+    const pal = makeUnit("pal", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "432496", T - 100, "pal", "pal", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REFRESH,
+          "432496",
+          T + 10,
+          "pal",
+          "pal",
+          "BUFF",
+        ),
+      ],
+    });
+    const at = T + 2000;
+    const ally = makeUnit("ally", {
+      auraEvents: [
+        ...["1", "2", "3", "4", "5"].map((id) =>
+          makeAuraEvent(APPLIED, id, at, "x", "ally", "BUFF"),
+        ),
+        makeAuraEvent(APPLIED, "432496", at, "pal", "ally", "BUFF"),
+      ],
+    });
+    expect(
+      pressDuration(pal, cast as any, [pal, ally], pal.spellCastEvents),
+    ).toBeUndefined();
+  });
+
+  it("an empowered press's bundle at its release is no re-state (codex 20-179a #3)", () => {
+    const cast = makeSpellCastEvent("355936", T, "ally", "Ally", "ev", "Ev");
+    const rel = T + 2000;
+    const ev = makeUnit("ev", { spellCastEvents: [cast] });
+    // makeUnit carries no empower rows
+    (ev as any).empowerEnds = [
+      {
+        spellId: "355936",
+        spellName: "Dream Breath",
+        timestamp: rel,
+        level: 1,
+        logLine: { timestamp: rel, lineIndex: 1 },
+      },
+    ];
+    const ally = makeUnit("ally", {
+      auraEvents: [
+        ...["1", "2", "3", "4", "5"].map((id) =>
+          makeAuraEvent(APPLIED, id, rel, "x", "ally", "BUFF"),
+        ),
+        makeAuraEvent(APPLIED, "355941", rel, "ev", "ally", "BUFF"),
+      ],
+    });
+    const d = pressDuration(ev, cast as any, [ev, ally], ev.spellCastEvents);
+    expect(d?.unit.id).toBe("ally");
+    expect(d?.row.spellId).toBe("355941");
+  });
+
+  it("a batch in the press's own millisecond is its bundle, not a re-state", () => {
+    // Gladiator's Badge pressed beside wings and procs: six APPLIED rows on
+    // the caster at the press, the badge's own among them
+    const cast = makeSpellCastEvent("345228", T, "", "", "r", "R");
+    const bundle = ["1", "2", "3", "4", "5"].map((id) =>
+      makeAuraEvent(APPLIED, id, T, "r", "r", "BUFF"),
+    );
+    const badge = makeAuraEvent(APPLIED, "345228", T, "r", "r", "BUFF");
+    const ret = makeUnit("r", {
+      spellCastEvents: [cast],
+      auraEvents: [...bundle, badge],
+    });
+    expect(
+      pressDuration(ret, cast as any, [ret], ret.spellCastEvents)
+        ?.durationSeconds,
+    ).toBe(15);
+  });
+
+  it("Oppressing Roar on the target at the landing: Chimaeral Sting's slow runs 3.9 s", () => {
+    const sting = (roar: boolean) => {
+      const cast = makeSpellCastEvent("356719", T, "e", "E", "h", "H");
+      const hunter = makeUnit("h", { spellCastEvents: [cast] });
+      const rows = [
+        ...(roar
+          ? [makeAuraEvent(APPLIED, "406971", T - 1000, "ev", "e", "DEBUFF")]
+          : []),
+        makeAuraEvent(APPLIED, "356723", T + 100, "h", "e", "DEBUFF"),
+      ];
+      const enemy = makeUnit("e", { auraEvents: rows });
+      return pressDuration(
+        hunter,
+        cast as any,
+        [hunter, enemy],
+        hunter.spellCastEvents,
+      )?.durationSeconds;
+    };
+    expect(sting(false)).toBe(3);
+    expect(sting(true)).toBeCloseTo(3.9, 5);
+  });
+
+  it("a Time Stop on the holder holds the aura for its own length", () => {
+    const u = (spans: Array<[number, number]>) =>
+      makeUnit("u", {
+        auraEvents: spans.flatMap(([a, b]) => [
+          makeAuraEvent(APPLIED, "378441", T + a * 1000, "u", "u", "BUFF"),
+          makeAuraEvent(REMOVED, "378441", T + b * 1000, "u", "u", "BUFF"),
+        ]),
+      });
+    // a 15 s badge: Time Stop from 14.9 s for 5 s → 20 s
+    expect(timeStopHeldSeconds(u([[14.9, 19.9]]), T, 15)).toBeCloseTo(5, 5);
+    // one starting at the (held) end or before the aura: nothing
+    expect(timeStopHeldSeconds(u([[15, 20]]), T, 15)).toBe(0);
+    expect(timeStopHeldSeconds(u([[-1, 4]]), T, 15)).toBe(0);
+    // the second one starts inside the time the first one added
+    expect(
+      timeStopHeldSeconds(
+        u([
+          [14, 19],
+          [19.5, 21],
+        ]),
+        T,
+        15,
+      ),
+    ).toBeCloseTo(6.5, 5);
+    // another unit's Time Stop holds nothing here
+    const other = makeUnit("u", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "378441", T + 1000, "v", "v", "BUFF"),
+        makeAuraEvent(REMOVED, "378441", T + 6000, "v", "v", "BUFF"),
+      ],
+    });
+    expect(timeStopHeldSeconds(other, T, 15)).toBe(0);
+  });
+
+  it("a Time Stop after the aura's own REMOVED holds nothing", () => {
+    // Time Spiral: 10 s press, its aura consumed 1.1 s in, Time Stop 3.2 s in
+    const rows = [
+      makeAuraEvent(APPLIED, "375234", T, "u", "u", "BUFF"),
+      makeAuraEvent(REMOVED, "375234", T + 1100, "u", "u", "BUFF"),
+      makeAuraEvent(APPLIED, "378441", T + 3200, "u", "u", "BUFF"),
+      makeAuraEvent(REMOVED, "378441", T + 8200, "u", "u", "BUFF"),
+    ];
+    const u = makeUnit("u", { auraEvents: rows });
+    const aura = { spellId: "375234", srcUnitId: "u" };
+    expect(timeStopHeldSeconds(u, T, 10, aura)).toBe(0);
+    // still up at the Time Stop: held
+    const up = makeUnit("u", {
+      auraEvents: [rows[0]!, rows[2]!, rows[3]!],
+    });
+    expect(timeStopHeldSeconds(up, T, 10, aura)).toBeCloseTo(5, 5);
+    // consumed in its own millisecond, logged after the aura's row (#4)
+    const applied = {
+      ...rows[0]!,
+      logLine: { ...rows[0]!.logLine, lineIndex: 10 },
+    };
+    const gone = {
+      ...rows[1]!,
+      logLine: { ...rows[1]!.logLine, timestamp: T, lineIndex: 11 },
+    };
+    const sameMs = makeUnit("u", {
+      auraEvents: [applied, gone, rows[2]!, rows[3]!] as any,
+    });
+    expect(timeStopHeldSeconds(sameMs, T, 10, applied)).toBe(0);
+  });
+
+  it("Time Stop rows pair per caster (codex 20-179a #2)", () => {
+    // A's Time Stop never closes; B's REMOVED has no APPLIED
+    const u = makeUnit("u", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "378441", T + 1000, "a", "u", "BUFF"),
+        makeAuraEvent(REMOVED, "378441", T + 35_000, "b", "u", "BUFF"),
+      ],
+    });
+    expect(timeStopHeldSeconds(u, T, 15)).toBe(0);
   });
 });

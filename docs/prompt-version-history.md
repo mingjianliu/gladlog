@@ -5120,3 +5120,25 @@ would leave the entry ready in the reader's picture and owe its return).
 rest a pet-gone row without the presses or the row after the revive listing
 them again); findings byte-identical; the text gates' counts unchanged
 (`checkResReturnAnnounced` 0 → 0).
+
+v485 (2026-11-05, GH #179 batch 3a). A `[PRESS]` line's `lasts` reads what
+the game did to the application (`pressDuration`): an Oppressing Roar on the
+unit at the landing lengthens a control / slow / root it covers by 30 % (the
+CC lines' own reading — Chimaeral Sting 3 → 3.9 s, Landslide 6 → 7.8 s,
+Flying Serpent Kick 4 → 5.2 s), and a Time Stop on the holder that starts
+while the aura is still up adds its own length (`timeStopHeldSeconds`:
+Gladiator's Badge 15 → 20 s, Explosive Shot 4 → 9 s, Spirit Walk 8 → 9.3 s,
+Spiritwalker's Grace 19 → 24 s, Dream Breath 16 → 21 s, each checked against
+the aura's logged REMOVED). A candidate row inside a re-stating batch (≥ 6
+APPLIED on the unit within 5 ms) more than 1 s after the press is the unit
+coming back into sight, not the press's application: the next candidate is
+the same aura on another unit, which may be logged up to 150 ms ahead of the
+cast row (Holy Bulwark on a Vanished target: `lasts 20s` for a 29.9 s life
+is gone; Holy Bulwark on a target out of sight reads the caster's own 432496,
+not the shield 432607 it re-lays every 2 s). A batch in the press's own
+millisecond is the press's bundle (the first cut dropped `lasts` off 447
+lines — Gladiator's Badge beside wings and procs). 605 files, base 12fddc281:
+36 context files, `[PRESS]` −39 / +39 and `[YOU]` −8 / +8 (45 longer, 2
+without `lasts`); findings byte-identical; the text gates unchanged;
+corpusFactScan5 `offListPressLine` 132 → 118 facts (14 lastsBeyond gone,
+0 new).
