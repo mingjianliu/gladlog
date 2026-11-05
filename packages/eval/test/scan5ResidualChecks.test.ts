@@ -1655,6 +1655,32 @@ describe("listGapPress", () => {
   });
 });
 
+describe("listGapPress — a press that spent nothing (GH #179 batch 3b)", () => {
+  // Cauterizing Flame: 60 s, its cooldown only when it removed something
+  const flame = (dispelled: boolean) => [
+    unit("Owner", "1", 1, {
+      info: { teamId: "0" },
+      spec: CombatUnitSpec.Evoker_Preservation,
+      spellCastEvents: [cast(10_200, "Owner", "374251", "Cauterizing Flame")],
+      actionOut: dispelled
+        ? [
+            rowOf(LogEvent.SPELL_DISPEL, 10_200, {
+              srcUnitId: "Owner",
+              spellId: "374251",
+              extraSpellId: "703",
+            }),
+          ]
+        : [],
+    }),
+  ];
+  it("a Cauterizing Flame that removed nothing owes no line", () => {
+    expect(of(scan(runListGap, flame(false), []), "listGapPress")).toEqual([]);
+    expect(
+      of(scan(runListGap, flame(true), []), "listGapPress"),
+    ).toHaveLength(1);
+  });
+});
+
 describe("silenceFiledAsKick", () => {
   // the check reads SpellEffect from the datagen cache, which CI has not got:
   // a two-row table of its own. Silence has aura 27 and no effect 68.

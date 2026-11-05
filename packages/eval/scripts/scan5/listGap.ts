@@ -27,11 +27,15 @@
  * `[ENEMY CD]` line names. `report()` prints the ranked gap list, one row per
  * id. A press some other family carries (a press tag of its own) is no gap:
  * `PRESS_LINE_TAG` lists them; a PvP trinket's line names no spell, its tag
- * does. The rosters, the tags and the caster reading are the renderer's own
+ * does. A press that spent no cooldown (`unreleasedHoldMs`) is no press.
+ * The rosters, the tags and the caster reading are the renderer's own
  * (`utils/offListPress.ts`: `isRosterPressId`, `lineStatesPress`).
  */
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
-import { MIN_CD_SECONDS } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  MIN_CD_SECONDS,
+  unreleasedHoldMs,
+} from "@gladlog/analysis/src/utils/cooldowns";
 import {
   FILLED_HEAL_IDS,
   isOffListPressId,
@@ -126,6 +130,10 @@ export function run(ctx: IRoundCtx): void {
       const id = String(c.spellId);
       const cd = effectiveCooldownSeconds(id) ?? 0;
       if (cd < MIN_CD_SECONDS) continue;
+      // a press that spent nothing — a hold never released, a release that
+      // hit nothing, a cleanse that removed nothing — owns no line (the
+      // renderer's own exclusion, `unreleasedHoldMs`; GH #179 batch 3b)
+      if (unreleasedHoldMs(unit, id, [at]).length) continue;
       ctx.bump("listGapPress");
       const name = nameOf(id, c.spellName ?? "");
       const sec = Math.floor((at - ctx.start) / 1000);

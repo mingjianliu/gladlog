@@ -5330,18 +5330,87 @@ export function unitCooldownEntry(
   memo.byId.set(spellId, entry);
   return entry;
 }
-/** The unit's holds ending in SPELL_EMPOWER_INTERRUPT, or released at
- * level 0 (`empowerSpans`). Released at level 0 is the same nothing (1
- * corpus case, re-pressed 3.3 s later). */
-function cutHolds(unit: ICombatUnit) {
-  return (empowerSpans(unit) ?? []).filter(
-    (h) => h.interrupted || h.level === 0,
-  );
+/** Empowered presses whose release hit nothing spent no cooldown, by cast
+ * id → the effect ids its release lands (GH #179, 2026-11-05): Eternity
+ * Surge (359073 / Font of Magic 382411) released with no row of its damage
+ * 359077 by the caster — SPELL_DAMAGE or SPELL_MISSED (immune, absorbed) —
+ * within `DEAD_RELEASE_WINDOW_MS`. 605 files: 5 such releases (4 matches),
+ * each pressed again 3.1–9.8 s later; 223 releases with a hit, none pressed
+ * again before 16.2 s. Fire Breath's 18 are no such case (its next presses
+ * 1.0–45 s, most after the round's end) and stay out. */
+export const DEAD_RELEASE_EFFECT_IDS: ReadonlyMap<string, readonly string[]> =
+  new Map([
+    ["359073", ["359077"]],
+    ["382411", ["359077"]],
+  ]);
+/** How long after the release its first hit may be logged (605 files: the
+ * latest live one 1.05 s). */
+export const DEAD_RELEASE_WINDOW_MS = 1500;
+
+/** Cleanses whose cooldown starts only when they remove something
+ * (GH #179, 2026-11-05): a Cauterizing Flame press with no SPELL_DISPEL of
+ * its own beside it spent nothing. 605 files: 9 such presses, the 4 with a
+ * next press pressed again 1.9–20.2 s later (the recorder's own CAST_FAILED
+ * "Not yet recovered" never follows them); of 109 that dispelled, 36 of 38
+ * with a next press waited ≥ 56 s. */
+export const COOLDOWN_ON_DISPEL_IDS: ReadonlySet<string> = new Set(["374251"]);
+const COOLDOWN_ON_DISPEL_MATCH_MS = 50;
+
+/** A release that landed nothing (`DEAD_RELEASE_EFFECT_IDS`). */
+function isDeadRelease(
+  unit: ICombatUnit,
+  h: { spellId: string; endMs: number },
+): boolean {
+  const fx = DEAD_RELEASE_EFFECT_IDS.get(String(h.spellId));
+  if (!fx) return false;
+  // a hit a shield ate whole is a SPELL_ABSORBED row in damageOut keyed by
+  // the shield, the hit's id in `attackSpellId` (codex 20-179b #1)
+  const hit = (r: {
+    srcUnitId?: string;
+    spellId?: string | number;
+    attackSpellId?: string | number;
+    logLine: { timestamp: number };
+  }) =>
+    r.srcUnitId === unit.id &&
+    (fx.includes(String(r.spellId)) ||
+      fx.includes(String(r.attackSpellId))) &&
+    r.logLine.timestamp >= h.endMs &&
+    r.logLine.timestamp <= h.endMs + DEAD_RELEASE_WINDOW_MS;
+  return !(unit.damageOut ?? []).some(hit) && !(unit.missesOut ?? []).some(hit);
 }
 
-/** Of `ms` (cast-row timestamps of `spellId` by `unit`), the ones that are
- * cut holds (`cutHolds`): a span of that spell starting on the row's
- * millisecond (≤ 1 ms). None on a parse that carries no empower starts.
+/** The unit's presses that spent no cooldown, as {spell, cast-row ms}: holds
+ * ending in SPELL_EMPOWER_INTERRUPT, or released at level 0
+ * (`empowerSpans`; released at level 0 is the same nothing — 1 corpus case,
+ * re-pressed 3.3 s later), releases that hit nothing (`isDeadRelease`), and
+ * cleanses that removed nothing (`COOLDOWN_ON_DISPEL_IDS`). */
+function cutHolds(unit: ICombatUnit): Array<{ spellId: string; startMs: number }> {
+  const out = (empowerSpans(unit) ?? [])
+    .filter((h) => h.interrupted || h.level === 0 || isDeadRelease(unit, h))
+    .map((h) => ({ spellId: String(h.spellId), startMs: h.startMs }));
+  for (const c of unit.spellCastEvents ?? []) {
+    const id = String(c.spellId);
+    if (
+      c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+      !COOLDOWN_ON_DISPEL_IDS.has(id)
+    )
+      continue;
+    const at = c.logLine.timestamp;
+    const dispelled = (unit.actionOut ?? []).some(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_DISPEL &&
+        String(a.spellId) === id &&
+        Math.abs(a.logLine.timestamp - at) <= COOLDOWN_ON_DISPEL_MATCH_MS,
+    );
+    if (!dispelled) out.push({ spellId: id, startMs: at });
+  }
+  return out;
+}
+
+/** Of `ms` (cast-row timestamps of `spellId` by `unit`), the ones that
+ * spent no cooldown (`cutHolds`: cut holds, releases that hit nothing,
+ * cleanses that removed nothing): one of that spell starting on the row's
+ * millisecond (≤ 1 ms). No empower ones on a parse that carries no empower starts.
  * Such a row prints no `[PRESS]` line — the renderer's exclusion, which the
  * scan5 `offListPressLine` gate imports to pair a line with its press. */
 export function unreleasedHoldMs(
@@ -5758,7 +5827,8 @@ function buildCooldownEntry(
   // cooldown (GH #183, 605-file subsets, one-charge evokers: 0 of 872
   // released holds re-pressed within 12 s, 58 of 63 cut at level 0 and 7 of
   // 12 cut at level 1–3 were) — the same no-spend, no-restart path as a
-  // Time Spiral free press
+  // Time Spiral free press. So is a release that hit nothing and a cleanse
+  // that removed nothing (`cutHolds`, GH #179 batch 3b)
   const cutS = unreleasedHoldSeconds(unit, castEvents, matchStartMs);
   for (const c of castRawCasts)
     if (cutS.some((s) => Math.abs(s - c.timeSeconds) < 1e-6)) {

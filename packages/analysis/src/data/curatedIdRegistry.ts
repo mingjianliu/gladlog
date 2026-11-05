@@ -88,6 +88,8 @@ import {
   AURA_ONLY_ACTIVATION_IDS,
   BASELINE_DEFENSIVE_BY_SPEC,
   CD_ROLE_TAGS,
+  COOLDOWN_ON_DISPEL_IDS,
+  DEAD_RELEASE_EFFECT_IDS,
   ENEMY_TARGET_DEFENSIVE_IDS,
   FORBEARANCE_GATED_IDS,
   HAND_CANONICAL_IDS,
@@ -767,6 +769,18 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("NON_SUBSTITUTE_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(NON_SUBSTITUTE_DEFENSIVE_IDS),
+  ),
+  // GH #179 batch 3b: an empowered cast whose release hit nothing / a cleanse
+  // that removed nothing spent no cooldown (cast ids; the effect ids a
+  // release lands are damage rows)
+  t("DEAD_RELEASE_EFFECT_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(DEAD_RELEASE_EFFECT_IDS.keys()),
+  ),
+  t("DEAD_RELEASE_EFFECT_IDS (effects)", "utils/cooldowns.ts", "mixed", () =>
+    set([...DEAD_RELEASE_EFFECT_IDS.values()].flat()),
+  ),
+  t("COOLDOWN_ON_DISPEL_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(COOLDOWN_ON_DISPEL_IDS),
   ),
   t("NOT_DEFENSIVE_BY_NAME_IDS", "utils/cooldowns.ts", "cast", () =>
     set(NOT_DEFENSIVE_BY_NAME_IDS),

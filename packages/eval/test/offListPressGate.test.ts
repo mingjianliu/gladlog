@@ -129,6 +129,14 @@ describe("offListPressLine — the next press", () => {
       id: "p1",
       name: "Evoker",
       spellCastEvents: [cast("374251", 10_000), cast("374251", 40_200)],
+      // each removed something: a Cauterizing Flame that removed nothing
+      // spends no cooldown and owns no line (GH #179 batch 3b)
+      actionOut: [10_000, 40_200].map((ms) => ({
+        logLine: { event: LogEvent.SPELL_DISPEL, timestamp: at(ms) },
+        timestamp: at(ms),
+        spellId: "374251",
+        srcUnitId: "p1",
+      })),
       auraEvents: [
         aura(LogEvent.SPELL_AURA_APPLIED, "370537", 9_500),
         aura(LogEvent.SPELL_AURA_REMOVED, "370537", 10_100),

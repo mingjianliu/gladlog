@@ -519,3 +519,103 @@ describe("Burn to Ash — Truth's Wake grows by its own crit ticks", () => {
     expect(buffFullDurationForCaster(TRUTHS_WAKE, u, T0)).toBe(9);
   });
 });
+
+describe("a press that did nothing spends no cooldown (GH #179 batch 3b)", () => {
+  const SURGE = "359073";
+  const SURGE_HIT = "359077";
+  // pressed at 10 s and 20 s, released 2 s in; `hits` are the releases
+  // (s) that landed a 359077 row
+  const surger = (hits: number[], missed: number[] = []) =>
+    Object.assign(
+      makeUnit(PID, {
+        class: CombatUnitClass.Evoker,
+        spec: CombatUnitSpec.Evoker_Devastation,
+        info: { talents: [], pvpTalents: [] },
+        spellCastEvents: [10, 20].map((s) =>
+          makeSpellCastEvent(SURGE, T0 + s * 1000, ""),
+        ),
+        damageOut: hits.map((s) =>
+          row(LogEvent.SPELL_DAMAGE, SURGE_HIT, s * 1000 + 300, {
+            destUnitId: "enemy",
+          }),
+        ),
+      }),
+      {
+        empowerStarts: [10, 20].map((s) => empower(SURGE, s * 1000)),
+        empowerEnds: [12, 22].map((s) => empower(SURGE, s * 1000, 2)),
+        missesOut: missed.map((s) =>
+          row(LogEvent.SPELL_MISSED, SURGE_HIT, s * 1000 + 300, {
+            destUnitId: "enemy",
+          }),
+        ),
+      },
+    ) as any;
+
+  it("an Eternity Surge released with no hit is no spend; the retry is", () => {
+    const u = surger([22]);
+    const entry = unitCooldownEntry(u, combatOf(u), SURGE)!;
+    expect(chargeSpendTimesOf(entry)).toEqual([20]);
+    const presses = extractOffListPresses([u], combatOf(u), T0 + 300_000);
+    expect(presses.map((p) => p.timeSeconds)).toEqual([20]);
+  });
+
+  it("a release whose hit was immune or absorbed (SPELL_MISSED) did spend", () => {
+    const u = surger([22], [12]);
+    expect(chargeSpendTimesOf(unitCooldownEntry(u, combatOf(u), SURGE)!)).toEqual(
+      [10, 20],
+    );
+  });
+
+  it("a hit a shield ate whole (SPELL_ABSORBED, keyed by the shield) did spend", () => {
+    const u = surger([22]);
+    u.damageOut.push(
+      row(LogEvent.SPELL_ABSORBED, "17", 12_300, {
+        destUnitId: "enemy",
+        attackSpellId: SURGE_HIT,
+      }),
+    );
+    expect(chargeSpendTimesOf(unitCooldownEntry(u, combatOf(u), SURGE)!)).toEqual(
+      [10, 20],
+    );
+  });
+
+  it("a hit logged after the window does not count", () => {
+    // hit at 12 + 1.6 s
+    const u = surger([22]);
+    u.damageOut.push(
+      row(LogEvent.SPELL_DAMAGE, SURGE_HIT, 13_600, { destUnitId: "enemy" }),
+    );
+    expect(chargeSpendTimesOf(unitCooldownEntry(u, combatOf(u), SURGE)!)).toEqual(
+      [20],
+    );
+  });
+
+  const CAUTERIZE = "374251";
+  const preserver = (dispelAt: number[]) =>
+    makeUnit(PID, {
+      class: CombatUnitClass.Evoker,
+      spec: CombatUnitSpec.Evoker_Preservation,
+      info: { talents: [], pvpTalents: [] },
+      spellCastEvents: [10, 15].map((s) =>
+        makeSpellCastEvent(CAUTERIZE, T0 + s * 1000, "ally"),
+      ),
+      actionOut: dispelAt.map((s) =>
+        row(LogEvent.SPELL_DISPEL, CAUTERIZE, s * 1000, {
+          destUnitId: "ally",
+          extraSpellId: "703",
+        }),
+      ),
+    }) as any;
+
+  it("a Cauterizing Flame that removed nothing is no spend", () => {
+    const u = preserver([15]);
+    const entry = unitCooldownEntry(u, combatOf(u), CAUTERIZE)!;
+    expect(chargeSpendTimesOf(entry)).toEqual([15]);
+  });
+
+  it("one that dispelled spends its cooldown", () => {
+    const u = preserver([10, 15]);
+    const entry = unitCooldownEntry(u, combatOf(u), CAUTERIZE)!;
+    expect(chargeSpendTimesOf(entry)).toEqual([10, 15]);
+  });
+});

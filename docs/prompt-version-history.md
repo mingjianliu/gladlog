@@ -5142,3 +5142,21 @@ lines — Gladiator's Badge beside wings and procs). 605 files, base 12fddc281:
 without `lasts`); findings byte-identical; the text gates unchanged;
 corpusFactScan5 `offListPressLine` 132 → 118 facts (14 lastsBeyond gone,
 0 new).
+
+v486 (2026-11-05, GH #179 batch 3b). A press that did nothing spends no
+cooldown and prints no `[PRESS]` line, the same reading as a hold never
+released (`cutHolds` → `unreleasedHoldMs` / the ledger's free press): an
+Eternity Surge (359073 / 382411) released with no row of its damage 359077
+by the caster — SPELL_DAMAGE, SPELL_MISSED or a SPELL_ABSORBED whose
+`attackSpellId` it is — within 1.5 s of the release (`DEAD_RELEASE_EFFECT_IDS`;
+605 files: 5 such releases each pressed again 3.1–9.8 s later, 223 with a hit
+none before 16.2 s), and a Cauterizing Flame (374251) with no SPELL_DISPEL of
+its own within 50 ms (`COOLDOWN_ON_DISPEL_IDS`; 9 such presses, the 4 with a
+next press pressed again 1.9–20.2 s later). scan5 `listGapPress` owes such a
+press no line (it imports `unreleasedHoldMs`). 605 files, base 1c658ff3f:
+28 context files, `[PRESS]` −24 and `[YOU]` −4 (Eternity Surge ×4 matches,
+Cauterizing Flame ×7); findings byte-identical; the text gates unchanged;
+corpusFactScan5 `offListPressLine` 118 → 110 facts (backBeforeNextPress
+Eternity Surge 5 and Cauterizing Flame 3 gone, 0 new); `listGapPress`
+`offList/*` 123 → 2 (121 were holds never released and these presses — the
+gate had owed them a line the renderer rightly never printed).
