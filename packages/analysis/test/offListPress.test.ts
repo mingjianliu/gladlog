@@ -269,6 +269,32 @@ describe("[PRESS] lasts — which aura it reads (GH #179)", () => {
   });
 });
 
+describe("[PRESS] lasts — a Timewalker floor (user ruling 2026-11-05)", () => {
+  const SP = "406732"; // Spatial Paradox
+  const T = 1_000_000;
+  const press = (spec: CombatUnitSpec) => {
+    const cast = makeSpellCastEvent(SP, T, "ev", "Ev", "ev", "Ev");
+    const ev = makeUnit("ev", {
+      spec,
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, SP, T, "ev", "ev", "BUFF"),
+      ],
+    });
+    return pressDuration(ev, cast as any, [ev], ev.spellCastEvents);
+  };
+
+  it("an Augmentation evoker's copy is a floor, the number stays the official one", () => {
+    const d = press(CombatUnitSpec.Evoker_Augmentation);
+    expect(d?.durationSeconds).toBe(10);
+    expect(d?.floor).toBe(true);
+  });
+
+  it("another spec's is not", () => {
+    expect(press(CombatUnitSpec.Evoker_Preservation)?.floor).toBe(false);
+  });
+});
+
 // GH #179 (2026-11-05): what the game did to one application
 describe("[PRESS] lasts — re-stated rows, Oppressing Roar, Time Stop (GH #179)", () => {
   const T = 1_000_000;

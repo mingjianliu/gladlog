@@ -30,7 +30,10 @@ import {
   OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
 } from "../data/spellEffectData";
 import { timeSpiralEchoMs } from "../data/talentScriptedCooldowns";
-import { buffFullDurationForCaster } from "./buffDuration";
+import {
+  buffDurationIsFloorForCaster,
+  buffFullDurationForCaster,
+} from "./buffDuration";
 import { isNoPressRow } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 import { oppressingRoarOnAt } from "./ccBreakAnalysis";
@@ -211,6 +214,9 @@ export interface IOffListPress {
    * effect aura's), when one went up — or was refreshed — within
    * `PRESS_AURA_LEAD_MS` */
   durationSeconds?: number;
+  /** `durationSeconds` is a floor (`pressDuration`'s `floor`): the line
+   * prints `lasts 10s+` */
+  durationIsFloor?: true;
   /** where `durationSeconds` was read: the unit and the APPLIED row
    * (`pressDuration`). The press scan measures the
    * life of this row, not one of its own choosing. */
@@ -440,6 +446,9 @@ export function pressDuration(
 ):
   | {
       durationSeconds: number;
+      /** the length is a floor: the caster's copy runs past it by an amount
+       * the log cannot price (`buffDurationIsFloorForCaster`, Timewalker) */
+      floor: boolean;
       unit: ICombatUnit;
       row: ICombatUnit["auraEvents"][number];
     }
@@ -532,6 +541,7 @@ export function pressDuration(
     return {
       durationSeconds:
         len + timeStopHeldSeconds(unit, row.logLine.timestamp, len, row),
+      floor: buffDurationIsFloorForCaster(row.spellId!, caster),
       unit,
       row,
     };
@@ -607,6 +617,7 @@ export function extractOffListPresses(
         ...(dur
           ? {
               durationSeconds: dur.durationSeconds,
+              ...(dur.floor ? { durationIsFloor: true as const } : {}),
               durationAura: {
                 unitId: dur.unit.id,
                 spellId: dur.row.spellId!,

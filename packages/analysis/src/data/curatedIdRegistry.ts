@@ -45,6 +45,7 @@ import { CASTER_SIDE_LINK_AURA_IDS } from "../utils/brokenRowBreaker";
 import {
   NO_FIXED_DURATION_IDS,
   SPELL_DURATION_OVERRIDES,
+  TIMEWALKER_LENGTHENED_IDS,
 } from "../utils/buffDuration";
 import {
   ATTACK_LOCK_AURA_IDS,
@@ -1099,6 +1100,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("SPELL_DURATION_OVERRIDES", "utils/buffDuration.ts", "mixed", () =>
     keys(SPELL_DURATION_OVERRIDES),
+  ),
+  t("TIMEWALKER_LENGTHENED_IDS", "utils/buffDuration.ts", "aura", () =>
+    set(TIMEWALKER_LENGTHENED_IDS),
   ),
   t("HEALING_AMPLIFIER_SPELL_IDS", "context/timelineHelpers.ts", "aura", () =>
     set(HEALING_AMPLIFIER_SPELL_IDS),

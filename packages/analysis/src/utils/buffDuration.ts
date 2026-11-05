@@ -1,4 +1,4 @@
-import { ICombatUnit } from "@gladlog/parser-compat";
+import { CombatUnitSpec, ICombatUnit } from "@gladlog/parser-compat";
 
 import { triggeredEffectAurasOfCast } from "../data/castEffectAuras";
 import { setBonusDurationSeconds } from "../data/classSetBonuses";
@@ -53,6 +53,75 @@ export const SPELL_DURATION_OVERRIDES: Record<string, number> = {
 export const NO_FIXED_DURATION_IDS: ReadonlySet<string> = new Set([
   "5384", // Feign Death
 ]);
+
+/** Augmentation's mastery, Timewalker. */
+export const TIMEWALKER_MASTERY_ID = "406380";
+/**
+ * The auras Timewalker lengthens: DB2 406380 effect 1 (row 1082679) is a
+ * percent duration SpellMod (aura 108, misc 1) on class mask [0, 0, 8, 0],
+ * with basePoints 0 — the percent is the evoker's mastery, which the log
+ * does not state as a number. So an Augmentation evoker's copy of these runs
+ * PAST the length `buffFullDurationForCaster` gives (the official one, a
+ * lower bound): GH #179 batch 3 agent B, 605 capture — Spatial Paradox
+ * 406732 10 × 1.083; Obsidian Scales 12.20–12.88 s on Augmentation against
+ * 12.02 s on the other two specs. The number every reader gets stays the
+ * official one (no reader knows the mastery); only the printed length says
+ * it is a floor — `lasts 10s+` (user ruling 2026-11-05, cat1 #10). The
+ * readers that cap an aura's end at it still cut such a copy early: known,
+ * GH #179.
+ * The mask's whole target list (`talentEffectInventoryGenerated.json`,
+ * `test/buffDuration.test.ts` pins it there). Registered in
+ * curatedIdRegistry.
+ */
+export const TIMEWALKER_LENGTHENED_IDS: ReadonlySet<string> = new Set([
+  "360827", // Blistering Scales
+  "363916", // Obsidian Scales
+  "369459", // Source of Magic
+  "370889", // Twin Guardian
+  "370901", // Leaping Flames
+  "374227", // Zephyr
+  "374348", // Renewing Blaze
+  "375234", // Time Spiral
+  "375802", // Burnout
+  "392268", // Essence Burst
+  "395152", // Ebon Might
+  "395296", // Ebon Might
+  "406043", // Nourishing Sands
+  "406732", // Spatial Paradox
+  "406789", // Spatial Paradox (the ally's)
+  "407244", // Bronze Aspect's Favor
+  "407254", // Black Aspect's Favor
+  "408005", // Momentum Shift
+  "409311", // Prescience
+  "409560", // Temporal Wound
+  "409678", // Chrono Ward
+  "410089", // Prescience
+  "410256", // Reactive Hide
+  "410263", // Inferno's Blessing
+  "410651", // Molten Blood
+  "410686", // Symbiotic Bloom
+  "413984", // Shifting Sands
+  "431698", // Temporal Burst
+  "431872", // Temporality
+  "431991", // Time Convergence
+  "432061", // Motes of Acceleration
+  "439606", // Perilous Fate
+  "459574", // Imminent Destruction
+]);
+
+/** Does this caster's copy of the aura run past its printed length by an
+ * amount the log cannot price (`TIMEWALKER_LENGTHENED_IDS`)? The renderers
+ * print the length as a floor (`lasts 10s+`) and the gates that re-read it
+ * do not hold the aura's logged life to it. */
+export function buffDurationIsFloorForCaster(
+  spellId: string,
+  caster: Pick<ICombatUnit, "spec"> | undefined,
+): boolean {
+  return (
+    caster?.spec === CombatUnitSpec.Evoker_Augmentation &&
+    TIMEWALKER_LENGTHENED_IDS.has(spellId)
+  );
+}
 
 /**
  * WO3 Part 2 (r1008-151): a cast whose own DB2 row lasts under a
@@ -263,7 +332,14 @@ function perEventExtensionSeconds(
   if (p.event === "own-crit")
     return onUnitId === undefined
       ? 0
-      : perCritExtensionSeconds(p, spellId, caster, baseSeconds, atMs, onUnitId);
+      : perCritExtensionSeconds(
+          p,
+          spellId,
+          caster,
+          baseSeconds,
+          atMs,
+          onUnitId,
+        );
   let ext = 0;
   for (const c of caster.spellCastEvents ?? []) {
     const t = c.logLine.timestamp;

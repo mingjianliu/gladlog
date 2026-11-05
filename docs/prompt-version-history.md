@@ -5181,3 +5181,20 @@ one a `back` that came earlier (Blazing / Prismatic Barrier, Shimmer — a
 stolen Alter Time never REMOVED, d510865c r5) or the hook's `free press`; findings byte-identical; the text gates unchanged;
 corpusFactScan5 `offListPressLine` facts 3 gone (Shimmer, Grappling Hook,
 Prismatic Barrier `backBeforeNextPress`), 0 new.
+
+v488 (2026-11-05, GH #179, user ruling 2026-11-05 cat1 #10). An Augmentation
+evoker's Timewalker mastery (406380 effect 1: aura 108 misc 1, a percent
+duration SpellMod on class mask [0, 0, 8, 0], basePoints 0 — scaled by
+mastery, which the log does not give as a number) lengthens 33 auras past
+their official length (Spatial Paradox 10 × 1.083; Obsidian Scales 12.20–12.88 s
+on Augmentation against 12.02 s on the other specs). The printed length is
+now a floor: `lasts 10s+` on the `[PRESS]` line (`pressDuration`'s `floor`)
+and `lasts 12s+` in the `<cooldowns>` kit (`buffDurationIsFloorForCaster`,
+`TIMEWALKER_LENGTHENED_IDS`, pinned to the inventory row). The number every
+reader gets is unchanged. scan5 `lastsBeyond` does not hold a floor to the
+aura's logged life; `kitLifetimesById` and fact2Scan read `Ns+` as N.
+605 files, base e959fd8c3: 18 context files, 18 kit `Obsidian Scales … lasts
+12s+` and 3 `[PRESS]` `Spatial Paradox (lasts 10s+ …)`; findings
+byte-identical; the text gates unchanged; corpusFactScan5 `offListPressLine`
+308 → 305 rows (107 → 106 facts: the Spatial Paradox `lastsBeyond` 10.8 s, 0
+new).

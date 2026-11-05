@@ -212,7 +212,8 @@ for (const f of files) {
       a.durChecked++;
       a.maxLife = Math.max(a.maxLife, life);
       if (Math.abs(life - p.durationSeconds) <= REACHED_S) a.reached++;
-      if (life > p.durationSeconds + LASTS_SLACK_S) {
+      // a floor (`lasts 10s+`, Timewalker) holds no life to it
+      if (!p.durationIsFloor && life > p.durationSeconds + LASTS_SLACK_S) {
         a.lastsBeyond++;
         lines.push(
           JSON.stringify({

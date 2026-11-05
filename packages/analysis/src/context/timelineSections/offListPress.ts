@@ -80,7 +80,9 @@ export function emitOffListPressEntries(
     if (stated) continue;
     const parts: string[] = [];
     if (p.durationSeconds !== undefined)
-      parts.push(`lasts ${seconds(Math.round(p.durationSeconds * 10) / 10)}`);
+      parts.push(
+        `lasts ${seconds(Math.round(p.durationSeconds * 10) / 10)}${p.durationIsFloor ? "+" : ""}`,
+      );
     const cd = Math.round(p.cooldownSeconds * 10) / 10;
     parts.push(
       p.equipped

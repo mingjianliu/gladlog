@@ -105,6 +105,18 @@ describe("checkEnemyDefRefConsistency", () => {
         lines("10–13s", "saved by external (Rallying Cry [up since 1:51])"),
       ),
     ).toEqual([]);
+    // a floor prints `Ns+` and reads as N, the length the producer used
+    // (Timewalker, user ruling 2026-11-05)
+    expect(
+      checkEnemyDefRefConsistency(
+        lines("13s+", "saved by external (Rallying Cry [up since 1:51])"),
+      ),
+    ).toEqual([]);
+    expect(
+      checkEnemyDefRefConsistency(
+        lines("2s+", "saved by external (Rallying Cry [up since 1:51])"),
+      ),
+    ).toHaveLength(1);
     // HAS TEETH: past the lifetime (+ the pairing slack) it is not that save
     expect(
       checkEnemyDefRefConsistency(

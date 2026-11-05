@@ -4711,7 +4711,8 @@ function enemyDefLinesOf(lines: readonly string[]): EnemyDefLine[] {
 /**
  * How long each unit's save can last, as its `<cooldowns>` kit prints it
  * (`X [… lasts Ns]`, or `lasts a–Ns` → N: `buffDurationRangeForCaster`'s
- * top), keyed by the unit's rendered id and the save's name. What an area
+ * top; `lasts Ns+` → N, the floor the producer reads too —
+ * `buffDurationIsFloorForCaster`), keyed by the unit's rendered id and the save's name. What an area
  * save's line (`X (area)`, at the press) is read against: its aura reaches a
  * unit any time inside its lifetime, which is when KILL ATTEMPTS dates it
  * (`areaSaveSpansOnS`: the on-target start within the save's lifetime of
@@ -4732,7 +4733,7 @@ function kitLifetimesById(
     if (unitId === undefined || !line.includes("<cooldowns>")) continue;
     const kit = new Map<string, number>();
     for (const e of line.matchAll(
-      /(?:<cooldowns>|, )([^,[\]<]+?) \[[^\]]*?lasts (?:[\d.]+–)?([\d.]+)s\]/g,
+      /(?:<cooldowns>|, )([^,[\]<]+?) \[[^\]]*?lasts (?:[\d.]+–)?([\d.]+)s\+?\]/g,
     ))
       kit.set(e[1]!.trim(), Number(e[2]));
     out.set(unitId, kit);

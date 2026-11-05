@@ -19,7 +19,9 @@
  *  - `lastsBeyond`: `lasts Ns`, and the APPLIED row the line read N from
  *    (`pressDuration` — the cast's target's first, the line's own predicate)
  *    lived to its REMOVED more than `LASTS_SLACK_S` past N (the printed
- *    duration is too short: an aura cannot outlive its duration).
+ *    duration is too short: an aura cannot outlive its duration); a floor
+ *    (`lasts 10s+`, `pressDuration`'s `floor` — Timewalker) is not held to
+ *    it.
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
 import { SHARED_CHARGE_CATEGORY } from "@gladlog/analysis/src/data/sharedChargeGenerated";
@@ -195,7 +197,12 @@ export function run(ctx: IRoundCtx): void {
             break;
         }
       }
-      if (life !== undefined && life > Number(lasts) + LASTS_SLACK_S)
+      // a floor (`lasts 10s+`, Timewalker) holds no life to it
+      if (
+        dur?.floor !== true &&
+        life !== undefined &&
+        life > Number(lasts) + LASTS_SLACK_S
+      )
         ctx.violate(
           "offListPressLine",
           "lastsBeyond",

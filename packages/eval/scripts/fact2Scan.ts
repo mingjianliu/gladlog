@@ -1997,7 +1997,7 @@ function runRound(ctx: IContext): void {
     const unit = byName.get(u[1]!);
     if (!unit) continue;
     for (const m of kit.matchAll(
-      /(?:<cooldowns>|, )([^,[<]+?) \[[^\]]*?lasts ([\d.]+)(?:–([\d.]+))?s\]/g,
+      /(?:<cooldowns>|, )([^,[<]+?) \[[^\]]*?lasts ([\d.]+)(?:–([\d.]+))?s\+?\]/g,
     )) {
       for (const r of tooltipLasts.get(m[1]!.trim()) ?? []) {
         if (!r.specs.includes(String(unit.spec))) continue;

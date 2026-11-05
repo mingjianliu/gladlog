@@ -6,6 +6,7 @@ import {
 } from "../data/castEffectAuras";
 import { spellEffectData } from "../data/spellEffectData";
 import {
+  buffDurationIsFloorForCaster,
   buffDurationRangeForCaster,
   buffFullDurationForCaster,
 } from "../utils/buffDuration";
@@ -180,14 +181,20 @@ export function buildPlayerLoadout(
           base !== undefined &&
           buffFullDurationForCaster(a, undefined) === base,
       ) ?? cd.spellId;
-    const r =
-      buffDurationRangeForCaster(runAuraId, caster) ??
-      buffDurationRangeForCaster(cd.spellId, caster);
+    const runR = buffDurationRangeForCaster(runAuraId, caster);
+    const r = runR ?? buffDurationRangeForCaster(cd.spellId, caster);
     if (r === undefined || !(r.min > 0)) return "";
     const fmt = (x: number) => Math.round(x * 10) / 10;
+    // a floor (Timewalker: `lasts 12s+`, user ruling 2026-11-05)
+    const floor = buffDurationIsFloorForCaster(
+      runR ? runAuraId : cd.spellId,
+      caster,
+    )
+      ? "+"
+      : "";
     return r.max > r.min
-      ? `, lasts ${fmt(r.min)}–${fmt(r.max)}s`
-      : `, lasts ${fmt(r.min)}s`;
+      ? `, lasts ${fmt(r.min)}–${fmt(r.max)}s${floor}`
+      : `, lasts ${fmt(r.min)}s${floor}`;
   };
   // FT-T06: "never spent" is not "never tried". A cast bar that was started
   // and never finished (kicked, cancelled, CC'd) is in the log —

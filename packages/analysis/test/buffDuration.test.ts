@@ -22,10 +22,14 @@ import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
 } from "../src/data/spellEffectData";
+import inventory from "../src/data/talentEffectInventoryGenerated.json";
 import {
+  buffDurationIsFloorForCaster,
   buffFullDurationForCaster,
   NO_FIXED_DURATION_IDS,
   SPELL_DURATION_OVERRIDES,
+  TIMEWALKER_LENGTHENED_IDS,
+  TIMEWALKER_MASTERY_ID,
 } from "../src/utils/buffDuration";
 import { talentOwnershipOf, talentRankOf } from "../src/utils/talentOwnership";
 import { makeUnit } from "./ported/testHelpers";
@@ -763,5 +767,41 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     // 阿古斯之治: 萨洛拉丝 / 艾瑞达双子 10 + 4 * 1 = 14s
     expect(buffFullDurationForCaster("1282501", warlock)).toBeCloseTo(14);
     expect(buffFullDurationForCaster("1282502", warlock)).toBeCloseTo(14);
+  });
+});
+
+describe("Timewalker 精通延长的光环只印下限(用户裁决 2026-11-05)", () => {
+  it("列表等于 DB2 406380 百分比时长 SpellMod 的掩码目标,且 basePoints 为 0(随精通变)", () => {
+    const rows = (
+      inventory as unknown as {
+        rows: {
+          spellId: string;
+          aura: number;
+          misc0: number;
+          basePoints: number;
+          targets: { spellId: string; via: string }[];
+        }[];
+      }
+    ).rows.filter(
+      (r) => r.spellId === TIMEWALKER_MASTERY_ID && r.aura === 108 && r.misc0 === 1,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.basePoints).toBe(0);
+    expect(new Set(rows[0]!.targets.map((t) => t.spellId))).toEqual(
+      new Set(TIMEWALKER_LENGTHENED_IDS),
+    );
+  });
+
+  it("只有增辉专精的施法者是下限", () => {
+    const aug = makeUnit("a1", { spec: CombatUnitSpec.Evoker_Augmentation });
+    const dev = makeUnit("e1", { spec: CombatUnitSpec.Evoker_Devastation });
+    expect(buffDurationIsFloorForCaster("406732", aug)).toBe(true);
+    expect(buffDurationIsFloorForCaster("363916", aug)).toBe(true);
+    expect(buffDurationIsFloorForCaster("363916", dev)).toBe(false);
+    expect(buffDurationIsFloorForCaster("363916", undefined)).toBe(false);
+    // 不在掩码里的增辉技能(Time Stop)不是下限
+    expect(buffDurationIsFloorForCaster("378441", aug)).toBe(false);
+    // 数值本身不变:仍是官方时长
+    expect(buffFullDurationForCaster("406732", aug)).toBe(10);
   });
 });
