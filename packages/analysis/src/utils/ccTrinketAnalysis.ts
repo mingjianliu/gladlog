@@ -2993,6 +2993,9 @@ export interface IPlayerCCTrinketSummary {
      * (an enemy's — a friendly holder's is a `ccInstances` window, ruling
      * A52); `[CONSEQ]` reads it as a control on it (fact10 D21) */
     reflectedOntoSelf?: true;
+    /** `ICCInstance.drFullSeconds`'s reading for it: its full length when
+     * its logged length is DR evidence */
+    drFullSeconds?: number;
   }>;
   /** An enemy control the log wrote IMMUNE on this player with no avoidance
    * the sweep could credit — the `[CC AVOIDED?]` line still states the miss
@@ -3859,6 +3862,10 @@ export function analyzePlayerCCAndTrinket(
     spellId: string;
     afterLandingAtSameMs?: true;
     reflectedOntoSelf?: true;
+    /** its full length when it is DR evidence (the history's own gated
+     * reading — codex 20-F25b-04: a reflected Hammer of Justice that ran
+     * half its length in the band lost it here) */
+    fullMs?: number;
   }> = [];
   {
     const drCats = new Set<string>();
@@ -3872,6 +3879,8 @@ export function analyzePlayerCCAndTrinket(
         cat,
         matchStartMs,
         castersById,
+        ccLengthIsDrEvidence,
+        roundEnd,
       )
         .slice()
         .sort((x, y) => x.applyMs - y.applyMs || x.removeMs - y.removeMs)) {
@@ -3899,6 +3908,7 @@ export function analyzePlayerCCAndTrinket(
           ...(h.srcUnitId === player.id
             ? { reflectedOntoSelf: true as const }
             : {}),
+          ...(h.fullMs !== undefined ? { fullMs: h.fullMs } : {}),
         });
       }
   }
@@ -6277,6 +6287,7 @@ export function analyzePlayerCCAndTrinket(
       durationSeconds: (h.removeMs - h.applyMs) / 1000,
       spellId: h.spellId,
       ...(h.reflectedOntoSelf ? { reflectedOntoSelf: true as const } : {}),
+      ...(h.fullMs !== undefined ? { drFullSeconds: h.fullMs / 1000 } : {}),
       drInfo: {
         category: getDRCategory(h.spellId),
         level: "Full" as const,

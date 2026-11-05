@@ -1200,6 +1200,8 @@ export function computeIncomingDR(
     removeMs: number;
     spellId: string;
     afterLandingAtSameMs?: true;
+    /** its full length when its logged length is DR evidence */
+    fullMs?: number;
   }> = [],
 ): Array<IDRInfo | null> {
   // Per DR-category history: list of resolved {applyMs, removeMs}
@@ -1231,6 +1233,7 @@ export function computeIncomingDR(
         applyMs: h.applyMs,
         removeMs: h.removeMs,
         spellId: h.spellId,
+        ...(h.fullMs !== undefined ? { fullMs: h.fullMs } : {}),
       });
       history.set(hc, list);
     }

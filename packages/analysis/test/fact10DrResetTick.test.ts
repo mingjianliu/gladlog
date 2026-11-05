@@ -365,4 +365,56 @@ describe("DR reset tick band (fact10 D9)", () => {
         .map((c) => c.drInfo?.level),
     ).toEqual(["Full", "Full", "50%"]);
   });
+
+  it("a control reflected back onto the holder keeps its length evidence on the history-only path (codex 20-F25b-04)", () => {
+    const CHEAP = "1833";
+    const HOJ = "853";
+    const at = (sec: number) => T0 + Math.round(sec * 1000);
+    const priest = makeUnit("player-1", {
+      name: "Priest",
+      spec: CombatUnitSpec.Paladin_Holy,
+      // an enemy holder: a friendly one's own reflected control is a window
+      // of its own (ruling A52), an enemy's is history only
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const hojFull = ccFullDurationForCaster(HOJ, priest)!;
+    const hojAt = 4 + 20.1;
+    priest.auraEvents = [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, CHEAP, at(0), "rogue-1"),
+      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, CHEAP, at(4), "rogue-1"),
+      // its own Hammer of Justice sent back by a reflect: source = itself
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, HOJ, at(hojAt), "player-1"),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        HOJ,
+        at(hojAt + hojFull / 2),
+        "player-1",
+      ),
+    ] as never;
+    const rogue = makeUnit("rogue-1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Friendly,
+    });
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 300_000,
+      startInfo: { zoneId: "1672" },
+      units: { [priest.id]: priest, [rogue.id]: rogue },
+    };
+    const s = analyzePlayerCCAndTrinket(priest, [rogue], combat as never, []);
+    const only = s.drHistoryOnly ?? [];
+    expect(only.map((h) => h.spellId)).toEqual([HOJ]);
+    expect(only[0]!.drFullSeconds).toBe(hojFull);
+    // the reflected Hammer ran half its length in the band: it was the
+    // chain's second, so the next stun is Immune
+    expect(
+      getDRLevelAtTime(
+        [...s.ccInstances, ...only],
+        "Stun",
+        hojAt + hojFull / 2 + 1,
+        T0,
+      ),
+    ).toBe("Immune");
+  });
 });
