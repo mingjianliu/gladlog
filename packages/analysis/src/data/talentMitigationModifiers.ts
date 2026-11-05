@@ -172,6 +172,20 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
       evidence:
         "Fortifying Brew + Ironshell Brew: Windwalker holders 0.700 (0.696–0.700), 98 units / 68 players, non-holders 0.800 (38); Mistweaver holders 0.700 (0.657–0.816), 5 units, non-holders 0.804 (54), expected 0.70; newseason every 10, 2026-11-02",
     },
+    {
+      // GH #164 (2026-11-05): Desperate Instincts 205411, aura 107 misc 23 on
+      // effect 3 of 212800 (Blur's −25), class mask covering 198589 and
+      // 212800. Every Havoc demon hunter of the 605 files holds it; the
+      // Devourer's Blur (no holders) is the control. Keyed by the table's
+      // cast id, as Ironshell Brew is.
+      auraSpellId: "198589",
+      talentSpellId: "205411",
+      schoolMask: 127,
+      modPct: 10,
+      validation: "promoted",
+      evidence:
+        "Blur + Desperate Instincts: Havoc holders 0.650 (90% 0.650–0.652), 139 units / 82 players (player-clustered 0.650–0.652), expected 0.65; Devourer non-holders 0.750 (46 units); new-season 605 files, 2026-11-05 (runs/cat1-2026-11-05/dur/mt-605.txt). The Havoc and Devourer PvP auras' Blur rows (expected 0.85) are out of band on both specs and not modelled",
+    },
   ];
 
 const BY_AURA = new Map<string, ITalentMitigationModifier[]>();

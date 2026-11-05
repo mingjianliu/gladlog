@@ -31,6 +31,14 @@ export interface IMitigationEntry {
    * ticks (~152k) landed during one.
    */
   deflectsDirectAttacks?: true;
+  /**
+   * The whole reduction is this talent's: the caster's holding it is worth
+   * `pct`, not holding it 0, unknown ownership 0–`pct` (`resolveMitigation`).
+   * Fade 586 → Translucent Image 373446 (GH #126 row 203). `pct` stays the
+   * talented value — the number the verdict book (`mitigationVerdicts.ts`)
+   * signed and every positive-only reader of this table expects.
+   */
+  wholeReductionTalentId?: string;
 }
 
 /**
@@ -59,6 +67,9 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   "204018": { pct: 100, schoolMask: 0x7e }, // Blessing of Spellwarding: magic immunity only; DB2 aura39 misc0=126
   "31224": { pct: 100, schoolMask: 0x7e }, // Cloak of Shadows: magic immunity only; DB2 aura186 points=-200 (spell hit -200%); spec decision; the aura87 0 row is a dead slot
   "186265": { pct: 100, schoolMask: 0x7f, deflectsDirectAttacks: true }, // Aspect of the Turtle (user ruling 2026-10-21: no immunity — direct attacks deflected, DoTs land; `deflectsDirectAttacks`): deflection = immunity (DB2 aura184/185/186 are all -200% hit); the spec decision overrides the generation layer's 30 with immunity semantics (that 30 is the residual mitigation on damage that isn't deflected)
+
+  // —— A talent's whole reduction (the spell itself reduces nothing) ——
+  "586": { pct: 10, schoolMask: 0x7f, wholeReductionTalentId: "373446" }, // Fade: the generated 10 % is Translucent Image 373446's ("Fade reduces damage you take by 10%"), not Fade's — GH #126 row 203 (2026-11-05): priests on the 605 new-season files under Fade, holders 0.900 (Discipline 76 units, Holy 133, Shadow 111; 90 % intervals inside 0.897–0.909), non-holders 1.000 (617 units). `resolveMitigation` prices a non-holder 0
 
   // —— The mitigation aura hangs off a different id (the generation layer can't find it by cast id) ——
   "51052": { pct: 30, schoolMask: 0x7e }, // Anti-Magic Zone: DR aura 145629 (observed), aura87 −15/126 × PvpMultiplier 2 = 30 % in PvP (2026-09-04 user ruling "PvP 值为官方值", BACKLOG #41; was 15 = the PvE number); the same-named 332831 (-20) is not observed and judged not live

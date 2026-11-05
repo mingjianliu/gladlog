@@ -609,6 +609,16 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("NO_MITIGATION_IDS", "data/mitigationData.ts", "cast", () =>
     set(NO_MITIGATION_IDS),
   ),
+  // Fade 586 → Translucent Image 373446 (GH #126 row 203)
+  t(
+    "MITIGATION_OVERRIDES.wholeReductionTalentId",
+    "data/mitigationData.ts",
+    "talent",
+    () =>
+      Object.values(MITIGATION_OVERRIDES)
+        .map((e) => e.wholeReductionTalentId)
+        .filter((x): x is string => x !== undefined),
+  ),
   // 治疗裁定册:登记的是**正册 ∪ 暂存区**的并集 —— 建册当天正册为空,而空表在扫描
   // 里和「100% 健康」长得一模一样。这两张表加起来才是「这张手工表对哪些 id 有断言」。
   t("HEALING_VERDICTS", "data/healingVerdicts.ts", "cast", () => [

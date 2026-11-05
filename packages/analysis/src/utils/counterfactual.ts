@@ -445,6 +445,10 @@ export function computeMitigationAudit(
       // M3a: one component per entry, so this loop runs once and is identical to
       // the table read; the lower bound is the conservative "blocked" claim.
       const pct = comp.pctMin;
+      // a component worth 0 % on its lower bound blocked nothing the claim
+      // can stand on — Fade without Translucent Image (GH #126 row 203: 0 %,
+      // the talent's 10 points are its whole reduction) printed "blocked ~0k"
+      if (comp.kind === "pct" && pct <= 0) continue;
 
       const observed = windowDamage(
         victim,

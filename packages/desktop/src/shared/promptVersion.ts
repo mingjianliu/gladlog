@@ -820,4 +820,9 @@
  *  target would have died without it (alone, or `+ … together`); kick-eaten
  *  ids that collide get `#2`. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 482;
+/*
+ * v483 (2026-11-05, GH #164, GH #126 row 203): Havoc's Blur is 35 %
+ *  (Desperate Instincts); Fade reduces nothing without Translucent Image.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 483;

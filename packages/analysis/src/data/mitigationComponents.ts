@@ -78,6 +78,21 @@ export function resolveMitigation(
     },
   ];
   const unresolved: string[] = [];
+  // the whole reduction is a talent's (Fade = Translucent Image, GH #126 row
+  // 203): a caster without it gets 0, an unknown one 0 as the claim and the
+  // table value as the ceiling
+  const gate = entry.wholeReductionTalentId;
+  if (gate !== undefined && getFactConfig().talentMitigation) {
+    const own = ctx.caster
+      ? talentModifierOwnershipOf(ctx.caster, gate)
+      : "unknown";
+    if (own !== "yes") components[0].pctMin = 0;
+    if (own === "no") components[0].pctMax = 0;
+    if (own !== "yes" && own !== "no")
+      unresolved.push(
+        `talent ${gate} on ${spellId}: ${ctx.caster ? "ownership unknown" : "caster unknown"}`,
+      );
+  }
   const mods = talentMitigationModifiersFor(spellId);
   if (mods.length && getFactConfig().talentMitigation)
     applyTalentModifiers(

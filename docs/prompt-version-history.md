@@ -5088,3 +5088,16 @@ fix, rechecked on the 176 archives with an already-up external (1,911
 contexts): only that attempt's 3 owner lines moved back. Rebased onto v481
 (d75078e75), the same 176 archives, base vs after: 490 changed lines, line
 for line the v479 delta.
+
+v483 (2026-11-05, GH #164, GH #126 row 203). Havoc's Blur is priced 35 %:
+Desperate Instincts 205411 (aura 107 misc 23 on 212800's −25) is a promoted
+`TALENT_MITIGATION_MODIFIERS` row keyed by 198589 (605 new-season files:
+Havoc holders 0.650, 90 % 0.650–0.652, 139 units / 82 players; Devourer
+non-holders 0.750, 46 units). Fade's 10 % is Translucent Image 373446's:
+the table row keeps the signed 10 with `wholeReductionTalentId`, and
+`resolveMitigation` prices a caster without the talent 0 (holders 0.900 on
+all three priest specs, 320 units; non-holders 1.000, 617 units); the
+mitigation audit leaves a 0 % component out instead of printing "blocked
+~0k". 605 files, base c05e223af: `[ENEMY DEF]` Blur `(25%` 531 → 131 (the
+Devourer lines), `(35%` 0 → 400 (every Havoc line); `Mitigation audit: Fade`
+rows 60 → 41; 21 of 27 Blur audit rows re-priced; findings byte-identical.
