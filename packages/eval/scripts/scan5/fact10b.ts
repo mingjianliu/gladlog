@@ -24,8 +24,9 @@
  *    source is the holder — for 1 s or more inside the round. Ruling A52
  *    keeps it off the enemy side's `ccInstances`, so the lock-window readers
  *    (`enemyHealerCcWindows` → missed-sync-window / unsynced-burst /
- *    `[KILL WINDOW]` healer facts; healer-offense `healerCcAt`) do not see
- *    it. An exposure count: every such control is a violation; kinds are
+ *    `[KILL WINDOW]` healer facts; healer-offense `healerCcAt`) did not see
+ *    it. Violation: no `enemyHealerCcWindows` lock of the opponents covers
+ *    its landing (codex 20-F25b-01 #4: it was an exposure count); kinds are
  *    the spell names. Counted once per round.
  *  - healerLockEndedByAllyImmunity (D8 follow-up): an enemy-healer lock
  *    (`enemyHealerCcWindows`, either side as "ours") with no `endedBy`
@@ -216,6 +217,29 @@ function killLivePastRoundEnd(ctx: IRoundCtx): void {
 
 function reflectedHealerLockUnread(ctx: IRoundCtx): void {
   const endAt = roundEndMs(ctx.legacy);
+  // the product's healer locks as the healer's opponents read them
+  // (`enemyHealerCcWindows`): a lock counts as read when one of them covers
+  // its landing (codex 20-F25b-01 #4: an exposure count is no check)
+  const locksBySide = new Map<
+    number,
+    ReturnType<typeof enemyHealerCcWindows>
+  >();
+  const locksAgainst = (healer: any) => {
+    let w = locksBySide.get(healer.reaction);
+    if (w === undefined) {
+      try {
+        w = enemyHealerCcWindows(
+          ctx.players.filter((x) => x.reaction !== healer.reaction),
+          ctx.players.filter((x) => x.reaction === healer.reaction),
+          ctx.legacy,
+        );
+      } catch {
+        w = [];
+      }
+      locksBySide.set(healer.reaction, w);
+    }
+    return w;
+  };
   for (const u of ctx.players) {
     if (!isHealerSpec(u.spec)) continue;
     const auras = ((u.auraEvents ?? []) as any[]).filter(
@@ -237,6 +261,16 @@ function reflectedHealerLockUnread(ctx: IRoundCtx): void {
       const offMs = Math.min(off ? tsOf(off) : endAt, endAt);
       if (offMs - on < 1000) continue;
       ctx.bump("reflectedHealerLockUnread");
+      const onS = (on - ctx.start) / 1000;
+      if (
+        locksAgainst(u).some(
+          (w) =>
+            w.healerName === u.name &&
+            w.fromSeconds <= onS + 0.001 &&
+            w.toSeconds >= onS,
+        )
+      )
+        continue;
       ctx.violate(
         "reflectedHealerLockUnread",
         nameOf(id, a.spellName),

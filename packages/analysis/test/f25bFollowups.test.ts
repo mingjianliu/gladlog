@@ -11,12 +11,14 @@
 import {
   CombatUnitReaction,
   CombatUnitSpec,
+  type ICombatUnit,
   LogEvent,
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { enemyHealerCcWindows } from "../src/analysis/candidates/cooldownTiming";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { ccFullDurationSeconds } from "../src/data/spellEffectData";
 import {
   CC_IMMUNITY_END_LEAD,
   ccLengthIsDrEvidence,
@@ -52,8 +54,9 @@ const DIVINE_SHIELD = "642";
 const HOJ = "853";
 const FEAR = "118699"; // Fear's aura
 const BERSERKER_SHOUT = "384100";
+const SEDUCTION = "6358"; // a Succubus' channelled Disorient
 
-const combatOf = (units: any[], endS = 300) =>
+const combatOf = (units: ICombatUnit[], endS = 300) =>
   ({
     startTime: T0,
     endTime: at(endS),
@@ -69,7 +72,7 @@ describe("#190: the outgoing walk's band reads only a length the game decided", 
     });
   // Cheap Shot 0–4 s (Full), then a second one 20.1 s after it ended — in the
   // band — that came off at 2 s, half its length
-  const enemyWith = (extra: any[], src = "f1") =>
+  const enemyWith = (extra: ReturnType<typeof makeAuraEvent>[], src = "f1") =>
     makeUnit("e1", {
       name: "EnemyPally",
       spec: CombatUnitSpec.Paladin_Retribution,
@@ -106,7 +109,7 @@ describe("#190: the outgoing walk's band reads only a length the game decided", 
         ...extra,
       ],
     });
-  const second = (e: any) => {
+  const second = (e: ICombatUnit) => {
     const f = rogue();
     const apps = analyzeOutgoingCCChains([f], [e], combatOf([f, e])).flatMap(
       (c) => c.applications,
@@ -133,9 +136,9 @@ describe("#190: the outgoing walk's band reads only a length the game decided", 
 
   it("…and so is one its holder's death cascade took off (605 39-2 r2 1:00: 2.04 s of 4, the unit died 36 ms later)", () => {
     const e = enemyWith([]);
-    (e as any).deathRecords = [
+    e.deathRecords = [
       { timestamp: at(6 + DR_RESET_MS_121 / 1000 + 0.1) + 36 },
-    ];
+    ] as ICombatUnit["deathRecords"];
     expect(second(e).drInfo.level).toBe("Full");
   });
 
@@ -197,6 +200,137 @@ describe("#190: the outgoing walk's band reads only a length the game decided", 
     expect(drLevelAtLanding(historyOf(ccLengthIsDrEvidence), landing)).toBe(
       "Full",
     );
+  });
+
+  it("a REFRESH that cut the band's landing at half its length is no evidence (codex 20-F25b-01 #1)", () => {
+    const applyS = 4 + DR_RESET_MS_121 / 1000 + 0.1;
+    const e = makeUnit("e1", {
+      name: "EnemyPally",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          CHEAP_SHOT,
+          at(0),
+          "f1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          CHEAP_SHOT,
+          at(4),
+          "f1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          CHEAP_SHOT,
+          at(applyS),
+          "f1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REFRESH,
+          CHEAP_SHOT,
+          at(applyS + 2),
+          "f1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          CHEAP_SHOT,
+          at(applyS + 3),
+          "f1",
+          "e1",
+        ),
+      ],
+    });
+    const f = rogue();
+    const apps = analyzeOutgoingCCChains([f], [e], combatOf([f, e])).flatMap(
+      (c) => c.applications,
+    );
+    expect(apps.map((a) => a.drInfo.level)).toEqual(["Full", "Full", "50%"]);
+    const units = new Map([f, e].map((u) => [u.id, u as never]));
+    expect(
+      drLevelAtLanding(
+        buildCcCategoryHistory(
+          e,
+          getDRCategory(CHEAP_SHOT),
+          T0,
+          units,
+          ccLengthIsDrEvidence,
+        ),
+        { applyMs: at(applyS), spellId: CHEAP_SHOT, srcUnitId: "f1" },
+      ),
+    ).toBe("Full");
+  });
+
+  it("a pet's channelled control its pet was kicked out of is no evidence: the kick is read on the pet (codex 20-F25b-01 #2)", () => {
+    const full = ccFullDurationSeconds(SEDUCTION)!;
+    const applyS = full + DR_RESET_MS_121 / 1000 + 0.1;
+    const removeMs = at(applyS + full / 2);
+    const lock = makeUnit("f1", {
+      name: "Lock",
+      spec: CombatUnitSpec.Warlock_Affliction,
+      reaction: CombatUnitReaction.Friendly,
+    });
+    const succubus = makeUnit("p1", {
+      name: "Succubus",
+      reaction: CombatUnitReaction.Friendly,
+      ownerId: "f1",
+      actionIn: [
+        {
+          logLine: { event: LogEvent.SPELL_INTERRUPT, timestamp: removeMs },
+          timestamp: removeMs,
+          extraSpellId: SEDUCTION,
+          srcUnitId: "e1",
+          destUnitId: "p1",
+        },
+      ],
+    });
+    const e = makeUnit("e1", {
+      name: "EnemyPally",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          SEDUCTION,
+          at(0),
+          "p1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          SEDUCTION,
+          at(full),
+          "p1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          SEDUCTION,
+          at(applyS),
+          "p1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          SEDUCTION,
+          removeMs,
+          "p1",
+          "e1",
+        ),
+      ],
+    });
+    const apps = analyzeOutgoingCCChains(
+      [lock],
+      [e],
+      combatOf([lock, succubus, e]),
+    ).flatMap((c) => c.applications);
+    expect(apps).toHaveLength(2);
+    expect(apps[1]!.drInfo.level).toBe("Full");
   });
 });
 

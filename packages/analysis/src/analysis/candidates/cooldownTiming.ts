@@ -150,7 +150,7 @@ export interface IEnemyHealerCcWindow {
  * `ccRemovalCause` reads.
  */
 function allyImmunityEnd(
-  healer: any,
+  healer: Parameters<typeof immunityAuraAtRemoval>[0],
   spellId: string,
   removeMs: number,
 ): ICcRemovalCause | undefined {

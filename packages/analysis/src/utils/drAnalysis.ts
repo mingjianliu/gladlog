@@ -760,8 +760,9 @@ export function buildCcCategoryHistory(
       applySeq: number;
     },
     removeMs: number,
-    /** the walk's own estimate of the end (a lost REMOVED), not a logged
-     * removal: no length evidence (the outgoing walk's `endEstimated`) */
+    /** the walk's own estimate of the end (a lost REMOVED) or a REFRESH
+     * that cut it short, not a removal the game decided: no length evidence
+     * (the outgoing walk's `endEstimated`) */
     estimated = false,
   ) => {
     // fact10 D9: its full length on this unit, read inside DR_RESET_TICK_MS
@@ -869,7 +870,9 @@ export function buildCcCategoryHistory(
       // the Howl of Terror after it was logged IMMUNE — read as one Full Fear
       const open = pending.get(key);
       if (!open || !ccRefreshIsNewApplication(sid)) continue;
-      close(open, aura.timestamp);
+      // the REFRESH cut the prior one short: no length evidence
+      // (codex 20-F25b-01 #1)
+      close(open, aura.timestamp, true);
       pending.set(key, {
         applyMs: aura.timestamp,
         spellId: sid,
@@ -1404,7 +1407,8 @@ export function analyzeOutgoingCCChainsWith(
         removeMs: number,
         noRemoved?: boolean,
         /** its end is the walk's own estimate (a re-APPLIED with no REMOVED
-         * between), not a logged removal: no length evidence (GH #190) */
+         * between) or a REFRESH that cut it short, not a removal the game
+         * decided: no length evidence (GH #190) */
         endEstimated?: boolean,
       ) => {
         const p = pending.get(key);
@@ -1462,7 +1466,10 @@ export function analyzeOutgoingCCChainsWith(
               srcUnitId: key.slice(spellId!.length + 1),
             },
             matchStartMs,
-            caster,
+            // …and its channel is that source's (a Succubus' Seduction,
+            // not the warlock's — codex 20-F25b-01 #2)
+            allUnits.find((u) => u.id === key.slice(spellId!.length + 1)) ??
+              caster,
             allUnits,
           )
         ) {
@@ -1595,7 +1602,9 @@ export function analyzeOutgoingCCChainsWith(
           // corpus's Bull Rush double-applies end at REFRESH + 0.75 s, 3 / 3)
           const prior = pending.get(key);
           if (!prior || !ccRefreshIsNewApplication(spellId)) continue;
-          closePending(key, aura.timestamp);
+          // the REFRESH cut the prior one short: no length evidence
+          // (codex 20-F25b-01 #1)
+          closePending(key, aura.timestamp, undefined, true);
           pending.set(key, {
             applyMs: aura.timestamp,
             spellName: getEnglishSpellName(spellId, aura.spellName),
