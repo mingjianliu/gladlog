@@ -25,7 +25,11 @@ import {
   getDRLevelAtTime,
   isDiminishedLength,
 } from "../src/utils/drAnalysis";
-import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
+import {
+  makeAuraEvent,
+  makeSpellCastEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -304,5 +308,61 @@ describe("DR reset tick band (fact10 D9)", () => {
     ]);
     // ran out at half by itself: its length says 50 %
     expect(run(false).map((r) => r[0])).toEqual(["Full", "50%", "Immune"]);
+  });
+
+  it("a recast REFRESH that cut the band's landing at half is no DR evidence on the incoming walk either (codex 20-F25b-02 #1)", () => {
+    const POLY = "118";
+    const fullS = ccFullDurationForCaster(POLY, undefined)!;
+    const at = (sec: number) => T0 + Math.round(sec * 1000);
+    const bAt = fullS + 20.1;
+    const refreshAt = bAt + fullS / 2;
+    const mage = makeUnit("mage-1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Frost,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          POLY,
+          at(refreshAt),
+          "player-1",
+          "Priest",
+          "mage-1",
+          "Mage",
+        ),
+      ],
+    });
+    const priest = makeUnit("player-1", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, POLY, at(0), "mage-1"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, POLY, at(fullS), "mage-1"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, POLY, at(bAt), "mage-1"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REFRESH,
+          POLY,
+          at(refreshAt),
+          "mage-1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          POLY,
+          at(refreshAt + fullS / 2),
+          "mage-1",
+        ),
+      ],
+    });
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 300_000,
+      startInfo: { zoneId: "1672" },
+      units: { [priest.id]: priest, [mage.id]: mage },
+    };
+    expect(
+      analyzePlayerCCAndTrinket(priest, [mage], combat as never, [])
+        .ccInstances.filter((c) => c.spellId === POLY)
+        .map((c) => c.drInfo?.level),
+    ).toEqual(["Full", "Full", "50%"]);
   });
 });

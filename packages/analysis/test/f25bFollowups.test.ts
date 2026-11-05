@@ -334,6 +334,68 @@ describe("#190: the outgoing walk's band reads only a length the game decided", 
   });
 });
 
+describe("codex 20-F25b-02 #2: the holder history reads no length past the round's end", () => {
+  it("a half-length landing removed after the round ended is no evidence once the history is given the end", () => {
+    const applyS = 4 + DR_RESET_MS_121 / 1000 + 0.1;
+    const e = makeUnit("e1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          CHEAP_SHOT,
+          at(0),
+          "f1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          CHEAP_SHOT,
+          at(4),
+          "f1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          CHEAP_SHOT,
+          at(applyS),
+          "f1",
+          "e1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          CHEAP_SHOT,
+          at(applyS + 2),
+          "f1",
+          "e1",
+        ),
+      ],
+    });
+    const units = new Map([[e.id, e]]);
+    const landing = {
+      applyMs: at(applyS),
+      spellId: CHEAP_SHOT,
+      srcUnitId: "f1",
+    };
+    const level = (roundEndAtMs?: number) =>
+      drLevelAtLanding(
+        buildCcCategoryHistory(
+          e,
+          getDRCategory(CHEAP_SHOT),
+          T0,
+          units,
+          ccLengthIsDrEvidence,
+          roundEndAtMs,
+        ),
+        landing,
+      );
+    expect(level()).toBe("50%");
+    expect(level(at(applyS + 1.5))).toBe("Full");
+    expect(level(at(applyS + 2))).toBe("50%");
+  });
+});
+
 describe("fact10 D21 follow-up: a healer's own control reflected onto it is a lock", () => {
   const warrior = () =>
     makeUnit("f1", {

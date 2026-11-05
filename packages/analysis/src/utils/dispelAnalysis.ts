@@ -2799,6 +2799,9 @@ function drLevelAtApply(
   applyTs: number,
   matchStartMs: number,
   unitById?: ReadonlyMap<string, ICombatUnit>,
+  /** the round's end (`roundEndMs`): a removal after it is no DR length
+   * evidence (codex 20-F25b-02 #2) */
+  roundEndAtMs?: number,
 ): "Full" | "50%" | "25%" | "Immune" {
   const category = getDRCategory(ccSpellId);
   const history = buildCcCategoryHistory(
@@ -2807,6 +2810,7 @@ function drLevelAtApply(
     matchStartMs,
     unitById,
     ccLengthIsDrEvidence,
+    roundEndAtMs,
   );
   return drLevelAtLanding(history, { applyMs: applyTs, spellId: ccSpellId });
 }
@@ -2819,6 +2823,8 @@ export function computeDrChainRisk(
   enemyIds: Set<string>,
   matchStartMs: number,
   unitById?: ReadonlyMap<string, ICombatUnit>,
+  /** as `drLevelAtApply`'s */
+  roundEndAtMs?: number,
 ): boolean {
   // Triage missed-cleanse F-C16: an id no DR family claims (a curse) falls
   // back to `spell:<id>` self-DR, and a curse re-applied 0.08 s after its
@@ -2839,6 +2845,7 @@ export function computeDrChainRisk(
     matchStartMs,
     unitById,
     ccLengthIsDrEvidence,
+    roundEndAtMs,
   );
   const level = drLevelAtLanding(history, {
     applyMs: applyTs,
@@ -3796,6 +3803,7 @@ export function reconstructDispelSummary(
                   applyTs,
                   combat.startTime,
                   rosterUnitById,
+                  roundEnd,
                 ) !== "Full"
               ) {
                 lateWorth = lateVerdict.afterDR;
@@ -3914,6 +3922,7 @@ export function reconstructDispelSummary(
                 enemyIds,
                 combat.startTime,
                 rosterUnitById,
+                roundEnd,
               ),
               lateDispelSeconds: durationSeconds,
             });
@@ -3963,6 +3972,7 @@ export function reconstructDispelSummary(
                 applyTs,
                 combat.startTime,
                 rosterUnitById,
+                roundEnd,
               ) !== "Full"
             ) {
               effectiveWorth = windowVerdict.afterDR;
@@ -4256,6 +4266,7 @@ export function reconstructDispelSummary(
               enemyIds,
               combat.startTime,
               rosterUnitById,
+              roundEnd,
             ),
           });
         }

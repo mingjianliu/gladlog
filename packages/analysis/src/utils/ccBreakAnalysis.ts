@@ -125,6 +125,8 @@ export function ccRemainingSeconds(p: {
   /** `ccLengthIsDrEvidence`, handed in from outside the `ccTrinketAnalysis`
    * cycle (`buildCcCategoryHistory`'s parameter; GH #190 follow-up) */
   lengthIsDrEvidence: CcLengthEvidence;
+  /** the round's end (`roundEndMs`), for the history's length evidence */
+  roundEndAtMs?: number;
 }): number | null {
   const tableDuration = ccFullDurationForApplication(
     p.spellId,
@@ -145,6 +147,7 @@ export function ccRemainingSeconds(p: {
       p.matchStartMs,
       p.unitById,
       p.lengthIsDrEvidence,
+      p.roundEndAtMs,
     );
     const level = drLevelAtLanding(history, {
       applyMs: p.applyMs,
@@ -396,6 +399,7 @@ export function analyzeCcBreaksWith(
           roarAtApply: entry.roarAtApply,
           unitById,
           lengthIsDrEvidence,
+          roundEndAtMs: roundEnd,
         });
 
         events.push({

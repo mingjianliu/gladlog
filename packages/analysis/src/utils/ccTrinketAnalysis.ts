@@ -3375,6 +3375,9 @@ export function analyzePlayerCCAndTrinket(
     applySeq: number;
     /** closed here with no REMOVED in the log */
     noRemoved?: true;
+    /** closed by its source's recast REFRESH: the game did not decide its
+     * length (codex 20-F25b-02 #1) */
+    cutByRefresh?: true;
     /** REFRESH rows of this aura from its source that did not start a new
      * window (F06c, `ICCInstance.refreshedAtSeconds`) */
     refreshesMs?: number[];
@@ -3725,6 +3728,7 @@ export function analyzePlayerCCAndTrinket(
         removeMs: aura.timestamp,
         roarAtApply: pending.roarAtApply,
         applySeq: pending.applySeq,
+        cutByRefresh: true,
       });
       pendingCC.set(ccKey, {
         applyMs: aura.timestamp,
@@ -3901,7 +3905,7 @@ export function analyzePlayerCCAndTrinket(
   const drLevelOfIdx = new Map<number, IDRInfo | null>();
   // fact10 D9: a window's full length on the player, read by the DR walk
   // inside DR_RESET_TICK_MS — none for one with no REMOVED, one the round's
-  // end cut, or one Oppressing Roar lengthened
+  // end or a recast REFRESH cut, or one Oppressing Roar lengthened
   // the round's units: an ally's Blessing of Sanctuary that took a control
   // off (`ccLengthIsDrEvidence`), who throws a pet kick (below)
   const roundUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
@@ -3910,6 +3914,7 @@ export function analyzePlayerCCAndTrinket(
   ): number | undefined =>
     w.noRemoved ||
     w.stillOnAtRoundEnd ||
+    w.cutByRefresh ||
     w.roarAtApply ||
     !ccLengthIsDrEvidence(
       player,

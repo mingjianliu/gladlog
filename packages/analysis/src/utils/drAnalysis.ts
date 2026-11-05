@@ -718,6 +718,11 @@ export function buildCcCategoryHistory(
    * `unitById`, an ally's Sanctuary is read too. Absent: every logged length
    * counts (the tests' direct calls). */
   lengthIsDrEvidence?: CcLengthEvidence,
+  /** the round's end (`roundEndMs`): a removal after it is no length
+   * evidence — the walk reads the control cut there (codex 20-F25b-02 #2:
+   * missed-cleanse read a post-round half length as 50 % and dropped the
+   * opportunity) */
+  roundEndAtMs?: number,
 ): Array<
   CCEntry & {
     atSeconds: number;
@@ -775,6 +780,7 @@ export function buildCcCategoryHistory(
     const forced =
       officialFullS !== undefined &&
       (estimated ||
+        (roundEndAtMs !== undefined && removeMs > roundEndAtMs) ||
         (lengthIsDrEvidence !== undefined &&
           isDiminishedLength(removeMs - open.applyMs, officialFullS * 1000) ===
             true &&
