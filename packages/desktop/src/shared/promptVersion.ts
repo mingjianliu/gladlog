@@ -831,4 +831,4 @@
  *  dead or dismissed, and come back with a summon / revive cast.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 486;
+export const PROMPT_VERSION = 487;

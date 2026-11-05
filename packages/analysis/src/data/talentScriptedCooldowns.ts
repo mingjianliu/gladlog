@@ -30,6 +30,7 @@ import {
 
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { type ILogDatedNumber, logDatedNumberAt } from "../utils/logEra";
+import { isResyncBatchAt } from "../utils/resyncBatch";
 import { spellEffectData } from "./spellEffectData";
 import { spellSchoolMask } from "./spellSchools";
 
@@ -38,6 +39,11 @@ export interface IFreeRecastWindow {
   spellId: string;
   windowS: number;
   note: string;
+  /** A self aura the game applies for the window (its DB2 duration is
+   * `windowS`): when the log carries it, the window is that aura's life —
+   * applied after the press lands, removed in the free press's own
+   * millisecond or on expiry — rather than `windowS` from the press. */
+  windowAuraId?: string;
 }
 
 export const FREE_RECAST_WINDOWS: Readonly<Record<string, IFreeRecastWindow>> =
@@ -90,10 +96,17 @@ export const FREE_RECAST_WINDOWS: Readonly<Record<string, IFreeRecastWindow>> =
     // Shadowstep branch (Assassination) is a sub-45 s button. Corpus, 605
     // files: holders' gaps 0.87 / 1.03 / 1.18 / 2.09 / 2.20 / 3.09 s (6 of 19),
     // then 4.84 s on; 5 holder presses the model called impossible.
+    // The window is the aura 457343 (DB2 3 s; GH #179 batch 3c): applied when
+    // the hook lands, 0.55–0.84 s after the press (19/19 opener presses in the
+    // 605 files); each of the 6 free presses has its REMOVED in its own
+    // millisecond, logged right after the cast row; the 13 unused ones expire
+    // 2.99–3.02 s after the APPLIED. Timed from the press, the 3.09 s gap
+    // (2.43 s into the aura) fell outside the window.
     "454433": {
       spellId: "195457",
       windowS: 3,
       note: "Death's Arrival — Grappling Hook again within 3 s",
+      windowAuraId: "457343",
     },
   };
 
@@ -1136,6 +1149,106 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
 export const EVENT_HIT_SAME_USE_MS = 300;
 
 /**
+ * When an aura of `auraIds` the unit sourced ended (epoch ms, ascending) —
+ * `triggerOwnAuraEndIds`' reading: every SPELL_AURA_REMOVED / REFRESH row
+ * the unit sourced, wherever the aura sat, plus the ends the log left out on
+ * the unit itself (GH #179 batch 3c). An APPLIED of its own aura on itself
+ * while the last one has no end row ended that one there — no later than its
+ * DB2 duration after its own APPLIED; the last one with no end row ends its
+ * duration after its APPLIED; no inferred end lies past `untilMs`. An APPLIED in a re-state batch (`isResyncBatchAt`:
+ * the log re-listing the unit's auras after a stall — 83 of the 106 such
+ * re-applies in the 605 files) is the same aura still up and ends nothing.
+ * 605 files, own APPLIED with no end row before the next: Ice Barrier 11
+ * of 1,113, Blazing 6 of 1,103, Prismatic 4 of 631, Alter Time 2 of 822
+ * (outside re-state batches); 18 more still open at the round's end.
+ */
+export function ownAuraEndTimesMs(
+  unit: Partial<Pick<ICombatUnit, "actionOut" | "auraEvents" | "id">>,
+  auraIds: readonly string[],
+  /** the round's end (epoch ms): no end is inferred past it — the log goes
+   * on recording a unit after the round is decided (codex review of batch
+   * 3c round 2). Absent → the logged end rows only. */
+  untilMs?: number,
+): number[] {
+  const out: number[] = [];
+  const rows = (unit.actionOut ?? []).filter((e) =>
+    auraIds.includes(String(e.spellId)),
+  );
+  const isEnd = (e: (typeof rows)[number]) =>
+    e.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+    e.logLine.event === LogEvent.SPELL_AURA_REFRESH;
+  for (const e of rows) if (isEnd(e)) out.push(e.logLine.timestamp);
+  const self = unit.id;
+  if (self === undefined || untilMs === undefined) return out;
+  // the unit's own copy in log order (a same-millisecond REMOVED after an
+  // APPLIED is that aura removed at once, not the one before it — codex
+  // review of batch 3c #1)
+  const own = rows
+    .filter(
+      (e) =>
+        e.destUnitId === self &&
+        e.srcUnitId === self &&
+        (isEnd(e) || e.logLine.event === LogEvent.SPELL_AURA_APPLIED),
+    )
+    .sort(
+      (a, b) =>
+        a.logLine.timestamp - b.logLine.timestamp ||
+        (a.logLine.lineIndex ?? 0) - (b.logLine.lineIndex ?? 0),
+    );
+  const open = new Map<string, number>();
+  const lastsMs = (id: string) =>
+    (spellEffectData[id]?.durationSeconds ?? 0) * 1000;
+  const infer = (ms: number) => {
+    if (ms <= untilMs) out.push(ms);
+  };
+  // an end row that is the open aura's, logged right after the APPLIED of
+  // the next one in the same millisecond (a recast): read once, as that end
+  const endOfPrevious = new Set<(typeof own)[number]>();
+  for (let i = 0; i < own.length; i++) {
+    const e = own[i]!;
+    const id = String(e.spellId);
+    const at = e.logLine.timestamp;
+    if (e.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
+      if (!endOfPrevious.has(e)) open.delete(id);
+      continue;
+    }
+    // a recast over a live one: that one ended, this one is up
+    if (e.logLine.event === LogEvent.SPELL_AURA_REFRESH) {
+      open.set(id, at);
+      continue;
+    }
+    if (
+      unit.auraEvents &&
+      isResyncBatchAt({ id: self, auraEvents: unit.auraEvents }, at)
+    )
+      continue;
+    const prev = open.get(id);
+    // (one opened in this very millisecond is this aura's own row pair)
+    if (prev !== undefined && prev < at) {
+      const sameMsEnd = own
+        .slice(i + 1)
+        .find(
+          (n) =>
+            String(n.spellId) === id && n.logLine.timestamp === at && isEnd(n),
+        );
+      // …only while the open one can still be up: one already past its
+      // duration ended then, and this end row is the new one's (codex 3c
+      // round 3)
+      const prevLive = lastsMs(id) === 0 || prev + lastsMs(id) >= at;
+      if (sameMsEnd && prevLive) endOfPrevious.add(sameMsEnd);
+      else infer(Math.min(prev + lastsMs(id), at));
+    }
+    open.set(id, at);
+  }
+  // the last one with no end row: its duration after its APPLIED, inside the
+  // round (d510865c r5: a stolen Alter Time applied at 0:24, never REMOVED —
+  // its return reset Shimmer, pressed again at 1:46, 24 s into a 28.5 s
+  // recharge)
+  for (const [id, at] of open) if (lastsMs(id) > 0) infer(at + lastsMs(id));
+  return out.sort((a, b) => a - b);
+}
+
+/**
  * When a reduction's triggers fired for `unit` (epoch ms, ascending) — the
  * ONE reading of "a trigger happened" for the ledger (`extractMajorCooldowns`),
  * the [RES] utility entries (`resUtilityCds`) and the interrupt cooldown
@@ -1148,7 +1261,7 @@ export const EVENT_HIT_SAME_USE_MS = 300;
  */
 export function eventTriggerTimesMs(
   unit: Pick<ICombatUnit, "spellCastEvents" | "damageOut" | "missesOut"> &
-    Partial<Pick<ICombatUnit, "actionOut">>,
+    Partial<Pick<ICombatUnit, "actionOut" | "auraEvents" | "id">>,
   r: Pick<
     IEventCooldownReduction,
     | "triggerCastIds"
@@ -1164,6 +1277,9 @@ export function eventTriggerTimesMs(
     | "hitsCountEachRow"
     | "minHitsPerUse"
   >,
+  /** the round's end (epoch ms), for the aura ends the log left out
+   * (`ownAuraEndTimesMs`) */
+  untilMs?: number,
 ): number[] {
   const schoolMask = r.triggerCastSchoolMask;
   const out = unit.spellCastEvents
@@ -1194,13 +1310,7 @@ export function eventTriggerTimesMs(
         out.push(e.logLine.timestamp);
   const auraEndIds = r.triggerOwnAuraEndIds;
   if (auraEndIds?.length)
-    for (const e of unit.actionOut ?? [])
-      if (
-        (e.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
-          e.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-        auraEndIds.includes(String(e.spellId))
-      )
-        out.push(e.logLine.timestamp);
+    out.push(...ownAuraEndTimesMs(unit, auraEndIds, untilMs));
   const interruptIds = r.triggerInterruptIds;
   if (interruptIds?.length)
     for (const e of unit.actionOut ?? [])
@@ -1345,6 +1455,9 @@ export function eventTriggersFor(
   /** the holder's purchased rank of a talent (`creditBonus.perRank`);
    * absent → no per-rank bonus */
   rankOf?: (talentSpellId: string) => number,
+  /** the round's end (epoch ms): the ledger passes it so an own aura's end
+   * the log left out is read (`ownAuraEndTimesMs`); absent → logged ends only */
+  untilMs?: number,
 ): IEventTrigger[] {
   const holderSpec = unit.spec === undefined ? undefined : String(unit.spec);
   const bonused = (
@@ -1376,7 +1489,7 @@ export function eventTriggersFor(
       charged(
         r,
         bonused(r, [
-          ...eventTriggerTimesMs(unit, r).map((atMs) => ({
+          ...eventTriggerTimesMs(unit, r, untilMs).map((atMs) => ({
             atMs,
             seconds: eventReductionSecondsAt(r, holderSpec, atMs),
           })),

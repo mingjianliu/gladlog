@@ -5160,3 +5160,24 @@ corpusFactScan5 `offListPressLine` 118 → 110 facts (backBeforeNextPress
 Eternity Surge 5 and Cauterizing Flame 3 gone, 0 new); `listGapPress`
 `offList/*` 123 → 2 (121 were holds never released and these presses — the
 gate had owed them a line the renderer rightly never printed).
+
+v487 (2026-11-05, GH #179 batch 3c). Two cooldown readings the log
+already carried. (1) Death's Arrival's free Grappling Hook window is the life
+of its aura 457343 (`windowAuraId`, `freeRecastWindowEndSeconds`): applied
+when the hook lands 0.55–0.84 s after the press, removed in the free press's
+own millisecond or 3 s after its APPLIED — the 605 files' one holder: 6 free
+presses, one 3.09 s after its opener (2.43 s into the aura) that the 3 s
+from the press had left a full-cooldown press. (2) A "when X is removed"
+give-back (Barrier Diffusion, Time Walk) also reads an end the log left out
+of the unit's own aura (`ownAuraEndTimesMs`): at its next own APPLIED, no
+later than the DB2 duration after the open one (the last one its duration
+after its APPLIED), never past the round's end, which the ledger passes in; an APPLIED inside a re-state batch (`isResyncBatchAt`, now in the leaf
+module `utils/resyncBatch.ts`, re-exported by `hiddenPress.ts`) is the same
+aura still up — 83 of the 106 such re-applies in the 605 files. Lead the
+Charge (469780) stays unmodelled: dummy effects only, no mask or label, and
+the corpus does not single out a spell list or a range. 605 files, base
+9b5d334d2: 15 context files, `[PRESS]` −38 / +38 and `[YOU]` −1 / +1, every
+one a `back` that came earlier (Blazing / Prismatic Barrier, Shimmer — a
+stolen Alter Time never REMOVED, d510865c r5) or the hook's `free press`; findings byte-identical; the text gates unchanged;
+corpusFactScan5 `offListPressLine` facts 3 gone (Shimmer, Grappling Hook,
+Prismatic Barrier `backBeforeNextPress`), 0 new.

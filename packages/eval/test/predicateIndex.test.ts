@@ -187,6 +187,7 @@ import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
 import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
+import * as resyncBatch from "@gladlog/analysis/src/utils/resyncBatch";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as rosterSide from "@gladlog/analysis/src/utils/rosterSide";
 import * as roundEnd from "@gladlog/analysis/src/utils/roundEnd";
@@ -4408,6 +4409,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/hiddenPress.ts`,
     symbol: "isResyncBatchAt",
     mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/resyncBatch.ts`,
+    symbol: "isResyncBatchAt",
+    mod: resyncBatch,
   },
   {
     file: `${A}/utils/hiddenPress.ts`,

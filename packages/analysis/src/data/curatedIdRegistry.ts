@@ -1297,6 +1297,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("FREE_RECAST_WINDOWS", "data/talentScriptedCooldowns.ts", "mixed", () => [
     ...Object.keys(FREE_RECAST_WINDOWS),
     ...Object.values(FREE_RECAST_WINDOWS).map((w) => w.spellId),
+    ...Object.values(FREE_RECAST_WINDOWS).flatMap((w) =>
+      w.windowAuraId ? [w.windowAuraId] : [],
+    ),
   ]),
   // GH #176: Time Spiral's per-class auras (vouched by aura rows) and the
   // movement spells each frees (vouched by casts)

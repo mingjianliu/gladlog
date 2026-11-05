@@ -11,9 +11,11 @@ import {
   eventReductionsFor,
   eventTriggersFor,
   eventTriggerTimesMs,
+  FREE_RECAST_WINDOWS,
   IDLE_COOLDOWN_CREDITS,
   idleCreditCapFor,
   ON_INTERRUPT_COOLDOWN_REDUCTIONS,
+  ownAuraEndTimesMs,
   powerSpendTriggers,
 } from "../src/data/talentScriptedCooldowns";
 import {
@@ -25,6 +27,7 @@ import {
   chargesAvailableAt,
   chargeStateAt,
   entryAvailabilityTransitions,
+  freeRecastWindowEndSeconds,
   warpClock,
 } from "../src/utils/cooldowns";
 import {
@@ -368,6 +371,116 @@ describe("Wingleader — a Mass Eruption's targets take Breath of Eons's cooldow
   });
 });
 
+describe("freeRecastWindowEndSeconds — Death's Arrival's window is its aura's life (GH #179 batch 3c)", () => {
+  const START = 1_000_000;
+  const row = (
+    event: LogEvent,
+    s: number,
+    spellId = "457343",
+    dest = "me",
+  ) => ({
+    spellId,
+    destUnitId: dest,
+    timestamp: START + s * 1000,
+    logLine: { event },
+  });
+  const unit = (auraEvents: unknown[]) =>
+    ({ id: "me", auraEvents }) as unknown as Parameters<
+      typeof freeRecastWindowEndSeconds
+    >[0];
+  const w = FREE_RECAST_WINDOWS["454433"]!;
+
+  it("the table names the aura", () => {
+    expect(w).toMatchObject({
+      spellId: "195457",
+      windowS: 3,
+      windowAuraId: "457343",
+    });
+  });
+  it("consumed by the free press 2.43 s into the aura, 3.09 s after the press (8c70dc85)", () => {
+    const u = unit([
+      row(LogEvent.SPELL_AURA_APPLIED, 100.658),
+      row(LogEvent.SPELL_AURA_REMOVED, 103.085),
+    ]);
+    expect(freeRecastWindowEndSeconds(u, w, 100, START)).toBeCloseTo(
+      103.085,
+      6,
+    );
+  });
+  it("an unused aura expiring 3 s after its APPLIED ends the window there", () => {
+    const u = unit([
+      row(LogEvent.SPELL_AURA_APPLIED, 100.6),
+      row(LogEvent.SPELL_AURA_REMOVED, 103.61),
+    ]);
+    expect(freeRecastWindowEndSeconds(u, w, 100, START)).toBeCloseTo(103.61, 6);
+  });
+  it("no REMOVED logged: windowS after the APPLIED", () => {
+    const u = unit([row(LogEvent.SPELL_AURA_APPLIED, 100.7)]);
+    expect(freeRecastWindowEndSeconds(u, w, 100, START)).toBeCloseTo(103.7, 6);
+  });
+  it("a later instance's REMOVED in the same ms, logged after its APPLIED, is not this one's end (codex 3c round 2 #3)", () => {
+    const u = unit([
+      row(LogEvent.SPELL_AURA_APPLIED, 100.6),
+      row(LogEvent.SPELL_AURA_APPLIED, 104.4),
+      row(LogEvent.SPELL_AURA_REMOVED, 104.4),
+    ]);
+    expect(freeRecastWindowEndSeconds(u, w, 100, START)).toBeCloseTo(103.6, 6);
+  });
+  it("a later instance's REMOVED is not this one's end (codex 3c #2)", () => {
+    const u = unit([
+      row(LogEvent.SPELL_AURA_APPLIED, 100.6),
+      row(LogEvent.SPELL_AURA_APPLIED, 104.4),
+      row(LogEvent.SPELL_AURA_REMOVED, 104.5),
+    ]);
+    expect(freeRecastWindowEndSeconds(u, w, 100, START)).toBeCloseTo(103.6, 6);
+  });
+  it("a REMOVED long past the aura's duration is not its end", () => {
+    const u = unit([
+      row(LogEvent.SPELL_AURA_APPLIED, 100.7),
+      row(LogEvent.SPELL_AURA_REMOVED, 110),
+    ]);
+    expect(freeRecastWindowEndSeconds(u, w, 100, START)).toBeCloseTo(103.7, 6);
+  });
+  it("never shorter than windowS from the press", () => {
+    const u = unit([
+      row(LogEvent.SPELL_AURA_APPLIED, 100.5),
+      row(LogEvent.SPELL_AURA_REMOVED, 101),
+    ]);
+    expect(freeRecastWindowEndSeconds(u, w, 100, START)).toBe(103);
+  });
+  it("no aura, an aura before the press, an APPLIED later than windowS, another unit's or another id: windowS from the press", () => {
+    for (const ev of [
+      [],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, 99.9),
+        row(LogEvent.SPELL_AURA_REMOVED, 103.5),
+      ],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, 103.2),
+        row(LogEvent.SPELL_AURA_REMOVED, 106),
+      ],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, 100.6, "457343", "ally"),
+        row(LogEvent.SPELL_AURA_REMOVED, 103.6, "457343", "ally"),
+      ],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, 100.6, "457333"),
+        row(LogEvent.SPELL_AURA_REMOVED, 103.6, "457333"),
+      ],
+    ])
+      expect(freeRecastWindowEndSeconds(unit(ev), w, 100, START)).toBe(103);
+  });
+  it("a window with no aura stays windowS from the press", () => {
+    const u = unit([
+      row(LogEvent.SPELL_AURA_APPLIED, 100.6),
+      row(LogEvent.SPELL_AURA_REMOVED, 103.6),
+    ]);
+    expect(
+      freeRecastWindowEndSeconds(u, FREE_RECAST_WINDOWS["394110"]!, 100, START),
+    ).toBe(110);
+  });
+});
+
 describe("a free press with event reductions stands on the opener's clock", () => {
   it("the static reading counts from the opener, its triggers included (Deep Breath)", () => {
     const reductions = [{ atSeconds: 105, seconds: 5 }];
@@ -447,6 +560,161 @@ describe("warpClock — buff 期间冷却加速(batch C)", () => {
     expect(flips[1]!.atSeconds).toBeCloseTo(290 / 11, 6);
     expect(cdAvailableAt(cd, 25.5)).toBe(false);
     expect(cdAvailableAt(cd, 27)).toBe(true);
+  });
+});
+
+describe("ownAuraEndTimesMs — an own aura's end the log left out (GH #179 batch 3c)", () => {
+  const T0 = 1_000_000;
+  const row = (event: LogEvent, spellId: string, s: number, dest = "me") => ({
+    spellId,
+    srcUnitId: "me",
+    destUnitId: dest,
+    logLine: { event, timestamp: T0 + s * 1000 },
+  });
+  const ends = (
+    actionOut: unknown[],
+    auraEvents?: unknown[],
+    roundEndS: number | null = 1000,
+  ) =>
+    ownAuraEndTimesMs(
+      { id: "me", actionOut, auraEvents } as unknown as Parameters<
+        typeof ownAuraEndTimesMs
+      >[0],
+      ["11426", "342246"],
+      roundEndS === null ? undefined : T0 + roundEndS * 1000,
+    ).map((t) => (t - T0) / 1000);
+  const A = LogEvent.SPELL_AURA_APPLIED;
+  const R = LogEvent.SPELL_AURA_REMOVED;
+  const F = LogEvent.SPELL_AURA_REFRESH;
+
+  it("logged ends are read as before, the stolen copy's too", () => {
+    expect(
+      ends([
+        row(A, "11426", 10),
+        row(R, "11426", 20),
+        row(F, "11426", 40, "thief"),
+      ]),
+    ).toEqual([20, 40]);
+  });
+  it("re-applied with no end row: the earlier one ended at the APPLIED", () => {
+    expect(
+      ends([row(A, "11426", 10), row(A, "11426", 35), row(R, "11426", 50)]),
+    ).toEqual([35, 50]);
+  });
+  it("…no later than its duration after its own APPLIED", () => {
+    expect(
+      ends([row(A, "342246", 10), row(A, "342246", 70), row(R, "342246", 75)]),
+    ).toEqual([20, 75]);
+  });
+  it("the last one with no end row: its duration after the APPLIED, inside the round (codex 3c #3)", () => {
+    // d510865c r5 shape: a stolen Alter Time never REMOVED, the round going on
+    expect(ends([row(A, "342246", 10)], undefined, 100)).toEqual([20]);
+    // the round over first, the unit's rows going on after it: no end
+    expect(
+      ends(
+        [row(A, "342246", 10.4), row(A, "212653", 20.6, "enemy")],
+        undefined,
+        20.1,
+      ),
+    ).toEqual([]);
+  });
+  it("no round end given: the logged end rows only", () => {
+    expect(
+      ends(
+        [row(A, "11426", 10), row(A, "11426", 35), row(R, "11426", 50)],
+        undefined,
+        null,
+      ),
+    ).toEqual([50]);
+  });
+  it("an end inferred at the next APPLIED stays inside the round", () => {
+    expect(
+      ends([row(A, "11426", 10), row(A, "11426", 35)], undefined, 30),
+    ).toEqual([]);
+  });
+  it("a REFRESH ends one and opens the next", () => {
+    expect(
+      ends([
+        row(A, "11426", 10),
+        row(F, "11426", 20),
+        row(A, "11426", 50),
+        row(A, "212653", 200, "enemy"),
+      ]),
+    ).toEqual([20, 50, 110]);
+  });
+  it("a REMOVED right after its own APPLIED in the same ms is that aura's, not the one before (codex 3c #1)", () => {
+    expect(
+      ends([
+        row(A, "11426", 0),
+        row(R, "11426", 5),
+        row(A, "11426", 10),
+        row(R, "11426", 10),
+        row(A, "11426", 20),
+        row(R, "11426", 21),
+      ]),
+    ).toEqual([5, 10, 21]);
+  });
+  it("a recast logged APPLIED first: the same-ms REMOVED / REFRESH is the old one's end, read once (codex 3c round 2 #2)", () => {
+    expect(
+      ends([
+        row(A, "11426", 10),
+        row(A, "11426", 30),
+        row(R, "11426", 30),
+        row(R, "11426", 45),
+      ]),
+    ).toEqual([30, 45]);
+    expect(
+      ends([
+        row(A, "11426", 0),
+        row(A, "11426", 10),
+        row(F, "11426", 10),
+        row(R, "11426", 15),
+      ]),
+    ).toEqual([10, 15]);
+  });
+  it("an open one already past its duration ended then; the same-ms REMOVED is the new one's (codex 3c round 3)", () => {
+    expect(
+      ends(
+        [row(A, "342246", 0), row(A, "342246", 70), row(R, "342246", 70)],
+        undefined,
+        200,
+      ),
+    ).toEqual([10, 70]);
+  });
+  it("an APPLIED in a re-state batch is the same aura still up", () => {
+    const batch = Array.from({ length: 6 }, (_, i) => ({
+      spellId: String(900000 + i),
+      destUnitId: "me",
+      timestamp: T0 + 30_000,
+      logLine: { event: A, timestamp: T0 + 30_000 },
+    }));
+    expect(
+      ends(
+        [row(A, "11426", 10), row(A, "11426", 30), row(R, "11426", 45)],
+        batch,
+      ),
+    ).toEqual([45]);
+    // without the batch the same rows end it at 30
+    expect(
+      ends([row(A, "11426", 10), row(A, "11426", 30), row(R, "11426", 45)], []),
+    ).toEqual([30, 45]);
+  });
+  it("another unit's copy and other ids synthesize nothing", () => {
+    expect(
+      ends([
+        row(A, "11426", 10, "ally"),
+        row(A, "11426", 30, "ally"),
+        row(A, "1953", 10),
+      ]),
+    ).toEqual([]);
+  });
+  it("a unit with no id reads the logged rows only", () => {
+    expect(
+      ownAuraEndTimesMs(
+        { actionOut: [row(A, "11426", 10), row(A, "11426", 30)] } as never,
+        ["11426"],
+      ),
+    ).toEqual([]);
   });
 });
 

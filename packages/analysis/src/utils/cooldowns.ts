@@ -6,10 +6,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import {
-  isNotMajorDefensive,
-  isSurvivalWall,
-} from "../data/abilityProfile";
+import { isNotMajorDefensive, isSurvivalWall } from "../data/abilityProfile";
 import {
   AURA_ACTIVATION_PROVES_BUTTON_IDS,
   AURA_IS_THE_PRESS_IDS,
@@ -61,6 +58,7 @@ import {
   eventTriggersFor,
   freeRecastWindowFor,
   idleCreditCapFor,
+  type IFreeRecastWindow,
   onInterruptReductionFor,
   ownStacksBefore,
   PER_PRESS_STACK_COOLDOWNS,
@@ -5372,8 +5370,7 @@ function isDeadRelease(
     logLine: { timestamp: number };
   }) =>
     r.srcUnitId === unit.id &&
-    (fx.includes(String(r.spellId)) ||
-      fx.includes(String(r.attackSpellId))) &&
+    (fx.includes(String(r.spellId)) || fx.includes(String(r.attackSpellId))) &&
     r.logLine.timestamp >= h.endMs &&
     r.logLine.timestamp <= h.endMs + DEAD_RELEASE_WINDOW_MS;
   return !(unit.damageOut ?? []).some(hit) && !(unit.missesOut ?? []).some(hit);
@@ -5384,7 +5381,9 @@ function isDeadRelease(
  * (`empowerSpans`; released at level 0 is the same nothing — 1 corpus case,
  * re-pressed 3.3 s later), releases that hit nothing (`isDeadRelease`), and
  * cleanses that removed nothing (`COOLDOWN_ON_DISPEL_IDS`). */
-function cutHolds(unit: ICombatUnit): Array<{ spellId: string; startMs: number }> {
+function cutHolds(
+  unit: ICombatUnit,
+): Array<{ spellId: string; startMs: number }> {
   const out = (empowerSpans(unit) ?? [])
     .filter((h) => h.interrupted || h.level === 0 || isDeadRelease(unit, h))
     .map((h) => ({ spellId: String(h.spellId), startMs: h.startMs }));
@@ -5580,6 +5579,53 @@ interface ICooldownEntryContext {
  * with it, and `unitCooldownEntry` builds the same entry for a spell the
  * ledger does not carry — so every reader of "is X back" reads one model.
  */
+/**
+ * The last instant a free-recast window opened by a press at `pressS` is open
+ * (seconds from the match start). `windowS` from the press, or — for a window
+ * the game carries as a self aura (`windowAuraId`, Death's Arrival 457343) —
+ * the life of that aura when it is applied within `windowS` of the press:
+ * its first REMOVED before the next APPLIED (the free press consumes it in
+ * its own millisecond), or `windowS` after the APPLIED with no REMOVED. Never shorter than `windowS`
+ * from the press (GH #179 batch 3c).
+ */
+export function freeRecastWindowEndSeconds(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  w: Pick<IFreeRecastWindow, "windowS" | "windowAuraId">,
+  pressS: number,
+  matchStartMs: number,
+): number {
+  const fromPress = pressS + w.windowS;
+  if (!w.windowAuraId) return fromPress;
+  const pressMs = matchStartMs + pressS * 1000;
+  const own = (unit.auraEvents ?? []).filter(
+    (a) =>
+      a.spellId === w.windowAuraId &&
+      a.destUnitId === unit.id &&
+      a.timestamp >= pressMs,
+  );
+  const applied = own.find(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      a.timestamp <= pressMs + w.windowS * 1000,
+  );
+  if (!applied) return fromPress;
+  const capMs = applied.timestamp + w.windowS * 1000;
+  // this instance's own REMOVED: none past the next APPLIED (codex review of
+  // batch 3c #2 — a later instance's REMOVED is not this one's end)
+  // (in log order: a REMOVED logged after the next APPLIED of the same
+  // millisecond is that one's — codex round 2)
+  const from = own.indexOf(applied);
+  const nextAt = own.findIndex(
+    (a, k) => k > from && a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+  );
+  const removed = own
+    .slice(from + 1, nextAt < 0 ? undefined : nextAt)
+    .find((a) => a.logLine.event === LogEvent.SPELL_AURA_REMOVED);
+  const endMs =
+    removed && removed.timestamp <= capMs + 1000 ? removed.timestamp : capMs;
+  return Math.max(fromPress, (endMs - matchStartMs) / 1000);
+}
+
 function buildCooldownEntry(
   unit: ICombatUnit,
   combat: AtomicArenaCombat,
@@ -5798,11 +5844,13 @@ function buildCooldownEntry(
     holds,
     String(specIdNum),
   );
+  const roundEndAtMs = matchStartMs + matchDurationSeconds * 1000;
   const resetAtSeconds = eventTriggersFor(
     unit,
     reductions.filter((r) => r.seconds === Number.POSITIVE_INFINITY),
     holds,
     rankOf,
+    roundEndAtMs,
   )
     .filter((g) => g.seconds === Number.POSITIVE_INFINITY && !g.oneCharge)
     .map((g) => (g.atMs - matchStartMs) / 1000);
@@ -5996,7 +6044,9 @@ function buildCooldownEntry(
         if (c.cooldownSecondsOverride !== undefined || snapshotPriced.has(c))
           continue;
         if (
-          !ivs.some((iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS)
+          !ivs.some(
+            (iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS,
+          )
         )
           continue;
         c.baseCooldownSeconds = Math.max(
@@ -6040,10 +6090,12 @@ function buildCooldownEntry(
     applyEventReductions(
       casts.filter((c) => !spiralFree.has(c)),
       cooldownSeconds,
-      eventTriggersFor(unit, reductions, holds, rankOf).map((g) => ({
-        atSeconds: (g.atMs - matchStartMs) / 1000,
-        seconds: g.seconds,
-      })),
+      eventTriggersFor(unit, reductions, holds, rankOf, roundEndAtMs).map(
+        (g) => ({
+          atSeconds: (g.atMs - matchStartMs) / 1000,
+          seconds: g.seconds,
+        }),
+      ),
       idleCap,
       rateWindows ? warpClock(rateWindows) : undefined,
     );
@@ -6052,13 +6104,17 @@ function buildCooldownEntry(
     // simulation (`IChargeEffects`) — the give-back pulls in the charge
     // recharging then; the idle credit is the time spent at full charges
     chargeEffects = {
-      reductions: eventTriggersFor(unit, reductions, holds, rankOf).map(
-        (g) => ({
-          atSeconds: (g.atMs - matchStartMs) / 1000,
-          seconds: g.seconds,
-          ...(g.oneCharge ? { oneCharge: g.oneCharge } : {}),
-        }),
-      ),
+      reductions: eventTriggersFor(
+        unit,
+        reductions,
+        holds,
+        rankOf,
+        roundEndAtMs,
+      ).map((g) => ({
+        atSeconds: (g.atMs - matchStartMs) / 1000,
+        seconds: g.seconds,
+        ...(g.oneCharge ? { oneCharge: g.oneCharge } : {}),
+      })),
       ...(idleCap > 0 ? { idleCapSeconds: idleCap } : {}),
     };
   }
@@ -6122,7 +6178,12 @@ function buildCooldownEntry(
       }
       opener = c;
       used = false;
-      c.freeRecastUntil = c.timeSeconds + freeWindow.windowS;
+      c.freeRecastUntil = freeRecastWindowEndSeconds(
+        unit,
+        freeWindow,
+        c.timeSeconds,
+        matchStartMs,
+      );
     }
   }
 
