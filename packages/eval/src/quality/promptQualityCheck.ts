@@ -4602,6 +4602,48 @@ const KILL_ATTEMPT_DEFENSIVE = new RegExp(
 );
 const KILL_ATTEMPT_SAVE_CLAUSE =
   /^(?:popped ([^()]+?)|saved by external \(([^()]+)\)|self-saved \(([^()]+)\))$/;
+/**
+ * The names a FAILED cause's save clauses list, and the clauses the gate
+ * cannot read. A list is `A/B`; since GH #146 item 2 (2026-11-04) the
+ * external list can close with `A [up since m:ss] + B together` — the
+ * already-up reductions that decided the attempt only together, where B may
+ * be the target's own reduction, named again in its own `popped` clause:
+ * that B is read there, not as an external.
+ */
+function killAttemptCauseNames(cause: string): {
+  names: string[];
+  unreadable: string[];
+} {
+  const clauses = cause.split("; ").map((c) => c.trim());
+  const parsed = clauses.map((c) => KILL_ATTEMPT_SAVE_CLAUSE.exec(c));
+  const bare = (n: string) =>
+    n
+      .replace(/@\d+:\d\d$/, "")
+      .replace(KILL_ATTEMPT_UP_SINCE, "")
+      .trim();
+  const own = new Set(
+    parsed.flatMap((c) =>
+      c && c[2] === undefined ? (c[1] ?? c[3])!.split("/").map(bare) : [],
+    ),
+  );
+  const names: string[] = [];
+  const unreadable: string[] = [];
+  parsed.forEach((c, i) => {
+    if (!c) return void unreadable.push(clauses[i]!);
+    if (c[2] === undefined)
+      return void names.push(...(c[1] ?? c[3])!.split("/"));
+    for (const item of c[2].split("/")) {
+      const joint = / together$/.exec(item);
+      if (!joint) {
+        names.push(item);
+        continue;
+      }
+      for (const n of item.slice(0, joint.index).split(" + "))
+        if (!own.has(bare(n))) names.push(n);
+    }
+  });
+  return { names, unreadable };
+}
 /** `m:ss  [ENEMY DEF]   <pid> (<spec>): <Spell> (…)` / `: <Spell> → <pid> (…)`
  * / an ally copy `: <Spell> + 15% copy → <pid> (…)` (fact9 D1) — an
  * external's match ends in ` → ` either way */
@@ -4752,17 +4794,11 @@ export function checkEnemyDefRefConsistency(lines: string[]): string[] {
     // the attempt's target, as the timeline numbers it (undefined = the
     // roster does not resolve the name → the unit is not compared)
     const targetId = idOf.get(m[5]!);
-    const names: string[] = [];
-    for (const clause of m[6]!.split("; ")) {
-      const c = KILL_ATTEMPT_SAVE_CLAUSE.exec(clause.trim());
-      if (!c) {
-        failures.push(
-          `line ${i + 1}: KILL ATTEMPTS FAILED cause has a clause the gate cannot read ("${clause.trim()}"): "${line.trim()}"`,
-        );
-        continue;
-      }
-      names.push(...(c[1] ?? c[2] ?? c[3])!.split("/"));
-    }
+    const { names, unreadable } = killAttemptCauseNames(m[6]!);
+    for (const clause of unreadable)
+      failures.push(
+        `line ${i + 1}: KILL ATTEMPTS FAILED cause has a clause the gate cannot read ("${clause}"): "${line.trim()}"`,
+      );
     for (const raw of names) {
       let spell = raw.replace(/@\d+:\d\d$/, "").trim();
       const up = KILL_ATTEMPT_UP_SINCE.exec(spell);
@@ -4855,11 +4891,9 @@ export function checkKillAttemptUpSinceEndLogged(lines: string[]): string[] {
     }
     const m = KILL_ATTEMPT_DEFENSIVE.exec(line);
     if (!m) return;
-    for (const clause of m[6]!.split("; ")) {
-      const c = KILL_ATTEMPT_SAVE_CLAUSE.exec(clause.trim());
-      // an unreadable clause is `checkEnemyDefRefConsistency`'s failure
-      if (!c) continue;
-      for (const raw of (c[1] ?? c[2] ?? c[3])!.split("/")) {
+    // an unreadable clause is `checkEnemyDefRefConsistency`'s failure
+    {
+      for (const raw of killAttemptCauseNames(m[6]!).names) {
         const up = KILL_ATTEMPT_UP_SINCE.exec(raw.trim());
         if (!up) continue;
         const spell = raw.trim().slice(0, up.index).trim();
@@ -4889,7 +4923,7 @@ const KILL_ATTEMPT_FAILED_CLAUSE = /\| FAILED: ([^|]+?)\s*(?:\||$)/;
 /** One `X [up since m:ss]` inside a FAILED clause: X runs back to the clause
  * punctuation before it (`/` between names, `(` of a list, `; ` between
  * clauses). */
-const KILL_ATTEMPT_UP_SINCE_STAMP = /([^/(;]+?) \[up since (\d+:\d\d)\]/g;
+const KILL_ATTEMPT_UP_SINCE_STAMP = /([^/(;+]+?) \[up since (\d+:\d\d)\]/g;
 /** One `X already up since m:ss` of an opportunity clause (its `; ` items). */
 const KILL_ATTEMPT_ALREADY_UP_ITEM = /^(.+) already up since (\d+:\d\d)$/;
 

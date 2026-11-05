@@ -814,4 +814,10 @@
  *  on ABILITIES INTO, Angelic Bulwark an [ENEMY DEF] fact line. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 481;
+/*
+ * v482 (2026-11-04, GH #146 item 2, GH #148 item 4): an external already up
+ *  when a kill attempt began is named only when the damage account says the
+ *  target would have died without it (alone, or `+ … together`); kick-eaten
+ *  ids that collide get `#2`. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 482;

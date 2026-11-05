@@ -2105,6 +2105,50 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
     expect(warded.attribution?.primary).toBe("pressure");
   });
 
+  it("GH #146 item 2: an already-up external is named only when the target would have died without it — once, however many readers saw it", async () => {
+    await ensureAnalysisData();
+    const IRONBARK = "102342";
+    // the target's own HP readings: 18k left after the 0:12 hit
+    const reading = (atS: number, cur: number): any => ({
+      timestamp: ms(atS),
+      advancedActorId: "e1",
+      advancedActorCurrentHp: cur,
+      advancedActorMaxHp: 1_000_000,
+      advancedActorPowers: [],
+      logLine: { event: "ADVANCED_SAMPLE", timestamp: ms(atS) },
+    });
+    const attempt = (left: number, auraFromS = 9, id = IRONBARK) =>
+      run(
+        stunned({
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            ...up(id, "e2", "e1", auraFromS, 21),
+          ],
+          advancedActions: [reading(12, left)],
+        }),
+        // 64k landed under Ironbark 20 %: 16k more without it
+        attacker([hit("0x1", 64_000)]),
+        [unit("e2", { spellCastEvents: [press(id, "e1", 9)] })],
+      );
+    // 16k more against 10k left: it decided the attempt
+    expect(attempt(10_000).attribution?.externalReceived).toEqual(["Ironbark"]);
+    // against 18k left it did not — and its two readers (the cast and the
+    // ally wall) are one save, not two multiplied (codex review 2026-11-04)
+    const kept = attempt(18_000).attribution;
+    expect(kept?.externalReceived).toEqual([]);
+    expect(kept?.externalTogether).toBeUndefined();
+    expect(kept?.externalAccountDropped).toBe(true);
+    // cast before the attempt, its aura up only inside it: an external of
+    // the attempt, not on trial (codex review 2026-11-04)
+    // a shield that ate nothing: on trial it would go (codex's Life Cocoon)
+    expect(
+      attempt(18_000, 10.1, "116849").attribution?.externalReceived,
+    ).toEqual(["Life Cocoon"]);
+    expect(attempt(18_000, 9, "116849").attribution?.externalReceived).toEqual(
+      [],
+    );
+  });
+
   it("rule 2 for a self-save: Guardian Spirit pressed on oneself just before the first stun counts; Blessing of Sacrifice thrown at an ally does not", async () => {
     await ensureAnalysisData();
     // 537209d8: self Guardian Spirit 0.14 s before the first stun

@@ -1902,7 +1902,7 @@ export function kickEatenEvents(
   };
   let capped = 0;
   let exempt = 0;
-  return withPresses
+  const rows = withPresses
     .sort(
       (a, b) =>
         // Shared rank (ccTrinketAnalysis.ts) — never a second severity table
@@ -2102,6 +2102,32 @@ export function kickEatenEvents(
         ...sameKickerFact(k.sourceName),
       },
     }));
+  return suffixCollidingIds(rows);
+}
+
+/**
+ * GH #148 item 4 (user 2026-11-03 「可能需要修一下」, 2026-11-04 「一起做」):
+ * the id keys a kick by its ROUNDED second, so two kicks on the same player
+ * that round to one second shared one id — a Counter Shot at 50.8 s and a
+ * Kick at 51.1 s both read `kick-eaten:<owner>:51`, and the audit tied any
+ * comment on either to one of them (605 capture: 2 prompts). The earlier
+ * kick keeps the id it always had; each later one in the same second gets
+ * `#2`, `#3`, … — every id that never collided is byte-for-byte unchanged.
+ */
+export function suffixCollidingIds<T extends { id: string; t: number }>(
+  rows: T[],
+): T[] {
+  const byId = new Map<string, T[]>();
+  for (const r of rows) byId.set(r.id, [...(byId.get(r.id) ?? []), r]);
+  for (const group of byId.values()) {
+    if (group.length < 2) continue;
+    [...group]
+      .sort((a, b) => a.t - b.t)
+      .forEach((r, i) => {
+        if (i > 0) r.id = `${r.id}#${i + 1}`;
+      });
+  }
+  return rows;
 }
 
 /** Could the player have cast this from outside the kick's range? One fact,

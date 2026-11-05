@@ -5046,3 +5046,45 @@ Orb pressed unseen at 0:09 merged the offensive windows, and the stayed-in
 row at 0:16 went); one kick-eaten row's `enemyBurst` None → Frozen Orb; one
 position-mistake `hpStart` 69 → 68. cd-hoarded, cd-waste and kick-eaten totals
 are unchanged.
+
+v482 (2026-11-04, GH #146 item 2, GH #148 item 4). An external that was
+already up when a kill attempt began is named in `FAILED: saved by external`
+only when the log's damage shows the target would have died without it (user
+rulings 2026-11-03 / 2026-11-04: strictly, no margin; taken away one at a
+time; absorbs count). `killAttemptSaveAccount.ts` puts each one back on the
+attempt's hits inside the credit window — a percentage row divides every hit
+it covered (its school, while its aura was up) by its own factor, as damage
+reductions multiply (measured through `damage.baseAmount`, the pre-reduction
+amount: Ironbark + Die by the Sword 0.55 of base landed vs 0.56 multiplied /
+0.50 added; three more pairs the same way), a shield adds what its own
+`SPELL_ABSORBED` rows ate (divided by the removed reductions on that hit's
+school) — builds a deficit that overhealing pays back, and asks whether any
+HP reading of the target's own, minus the deficit, reaches 0. None deciding
+it alone but all of them together (the target's own already-up walls
+included): `X [up since m:ss] + Y together`. Not accounted, named whenever up
+as before: everything that is no percentage and no shield (Guardian Spirit,
+Blessing of Protection, Rallying Cry …), Time Dilation (a deferral),
+Blessing of Sacrifice and its talented Ultimate Sacrifice 199448 (transfers;
+199448's DB2 row carries an absorb, and the first 605 pass dropped one),
+Spirit Link Totem; and every external when the target has no HP reading of
+its own in the window. An external taken off this way cannot drop the
+target's own saves: they are all named, as beside an external (B16b). `X
+already up since m:ss` in the opportunity clause goes with the FAILED stamp
+(the R08(c) gate pairs them both ways). The quality gate reads the
+`together` item's names. Kick-eaten ids: two kicks on one player rounding to
+one second shared an id; the later one now gets `#2`.
+
+605 files, base 4d60faecf (v479): distinct attempts naming an already-up
+external — Pain Suppression 27 → 1, Ironbark 16 → 0, Life Cocoon 8 → 0,
+Anti-Magic Shell 1 → 0; Guardian Spirit 87, Blessing of Sacrifice 63,
+Rallying Cry 28, Time Dilation 9, Spirit Link Totem 1, Gift of the Naaru 1
+unchanged. 68 distinct attempts changed (191 owner lines in 170 contexts): 62
+lose the external — 24 now name the target's own save, 21 `not enough
+damage`, 17 `healed through` — and 6 keep another external; no `together`
+occurs in the 605. 108 contexts lose the legend line for `already up since`.
+Kick-eaten duplicate ids: 2 findings files → 0. 239 checks: 238 unchanged, 0
+fell, 0 rose; gates identical; body lines unchanged. The Ultimate Sacrifice
+fix, rechecked on the 176 archives with an already-up external (1,911
+contexts): only that attempt's 3 owner lines moved back. Rebased onto v481
+(d75078e75), the same 176 archives, base vs after: 490 changed lines, line
+for line the v479 delta.

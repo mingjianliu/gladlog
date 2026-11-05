@@ -34,6 +34,22 @@ const ROSTER = [
 ];
 
 describe("checkEnemyDefRefConsistency", () => {
+  it("reads `A [up since m:ss] + B together` (GH #146 item 2): A as an external, B through its own popped clause", () => {
+    const lines = (ironbarkAt: string) => [
+      LEGEND,
+      ...ROSTER,
+      "1:25  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Die by the Sword (30%, 8.0s)",
+      `${ironbarkAt}  [ENEMY DEF]   5(RDruid) (Restoration Druid): Ironbark → 4(ORogue) (20%, 12.0s)`,
+      ATTEMPT(
+        "1:31–1:45",
+        "popped Die by the Sword [up since 1:25]; saved by external (Ironbark [up since 1:29] + Die by the Sword together)",
+      ),
+    ];
+    expect(checkEnemyDefRefConsistency(lines("1:29"))).toEqual([]);
+    // HAS TEETH: the external's own line is still looked for at its mark
+    expect(checkEnemyDefRefConsistency(lines("1:20"))).toHaveLength(1);
+  });
+
   it("Ultimate Penitence's shield line is its [ENEMY CD] line (GH #173)", () => {
     const lines = (line: string) => [
       LEGEND,

@@ -141,6 +141,11 @@ import {
   isDeferralDamageRow,
 } from "./incomingPressure";
 import {
+  accountedSave,
+  type IAccountedSave,
+  judgeAlreadyUpExternals,
+} from "./killAttemptSaveAccount";
+import {
   getHpPercentAtTime,
   IKillOpportunity,
   killOpportunityAt,
@@ -198,6 +203,17 @@ export interface IKillAttemptAttribution {
   externalReceived: string[];
   /** round seconds of each `externalReceived` cast (parallel array) */
   externalReceivedAtS: number[];
+  /** GH #146 item 2 (user 2026-11-04): the already-up externals of
+   * `externalReceived` that are named only TOGETHER with the other
+   * already-up reductions — none decides the attempt alone, all of them do
+   * (`judgeAlreadyUpExternals`). `with` = the target's own reductions of
+   * that set, named after them. Absent when there is none. */
+  externalTogether?: { names: string[]; with: string[] };
+  /** an already-up external the damage account took off this attempt
+   * (it would not have died without it) — the target's own saves are then
+   * all named, as beside an external (B16b), so taking it off cannot drop
+   * them (user 2026-11-04). Absent otherwise. */
+  externalAccountDropped?: true;
   /** B4a (2026-09-25): the target's own no-%-mitigation saves in the span
    * (`selfSaveCasts`, the same predicate the [ENEMY DEF] self-save line uses)
    * — and, since ruling D8 (2026-10-10), its effect saves (`effectSaves`:
@@ -1373,13 +1389,32 @@ function failureText(
         .filter(
           (i) => !attr.defensivePopped.includes(attr.externalReceived[i]!),
         );
+      // GH #146 item 2: the already-up externals named only together with
+      // the other already-up reductions close the list, `A + B together`
+      const joint = new Set(attr.externalTogether?.names ?? []);
+      const alone = extra.filter((i) => !joint.has(attr.externalReceived[i]!));
+      const together = extra.filter((i) =>
+        joint.has(attr.externalReceived[i]!),
+      );
+      const stampOf = (idx: number[], sep: string) =>
+        stampNames(
+          idx.map((i) => attr.externalReceived[i]!),
+          idx.map((i) => attr.externalReceivedAtS[i]!),
+          spanFromSeconds,
+          externalUp,
+        )
+          .split("/")
+          .join(sep);
+      const externalNames = [
+        alone.length ? stampOf(alone, "/") : "",
+        together.length
+          ? `${[stampOf(together, " + "), ...(attr.externalTogether?.with ?? [])].join(" + ")} together`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("/");
       const external = extra.length
-        ? `saved by external (${stampNames(
-            extra.map((i) => attr.externalReceived[i]!),
-            extra.map((i) => attr.externalReceivedAtS[i]!),
-            spanFromSeconds,
-            externalUp,
-          )})`
+        ? `saved by external (${externalNames})`
         : "";
       // The target's own defensive outside the wall table is worded
       // `popped X`, as a wall is (user ruling 2026-10-11): the log shows the
@@ -1418,7 +1453,10 @@ function failureText(
       // Enraged Regeneration at 22 %, Lay on Hands at 12 %, "popped Enraged
       // Regeneration"). Without an external the line is unchanged: the first
       // of wall / self-save, as `primary` orders them.
-      if (external && (popped || selfSaved)) {
+      // …and when the damage account took an already-up external off the
+      // attempt, so that taking it off cannot drop a save of the target's
+      // own (user 2026-11-04)
+      if ((external || attr.externalAccountDropped) && (popped || selfSaved)) {
         alreadyUp?.push(...poppedUp, ...externalUp, ...ownUp);
         return [popped, external, selfSaved].filter(Boolean).join("; ");
       }
@@ -1501,7 +1539,7 @@ export function formatKillAttemptsForContext(
   // cause — the legend states that order and no longer says "cause" /
   // "reason". The selection itself is untouched (A29 / A′4 / B16b).
   lines.push(
-    "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall of its own, an external (an ally's wall on it counts here), another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external under the " +
+    "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall of its own, an external (an ally's wall on it counts here), another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external already up when the attempt began is named only when the log's damage shows the target would have died without it (its percentage put back on the hits it reduced, or what its shield absorbed, inside the attempt and the next 5 s); `X [up since m:ss] + Y together` = no one of them would have, all of them together would. An already-up external that is neither a percentage nor a shield (Guardian Spirit, Blessing of Sacrifice, Time Dilation, Rallying Cry …) is named as up. An external under the " +
       MITIGATION_AURA_MIN_PCT +
       "% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. A teammate's area save whose aura was on the target (Spirit Link Totem, Anti-Magic Zone, Darkness, Rallying Cry, Power Word: Barrier) is named as an external. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).",
   );
@@ -2013,7 +2051,15 @@ function attributeFailure(
   const defensivePopped: string[] = [];
   const defensivePoppedAtS: number[] = [];
   /** a wall aura another unit of the target's side put on it */
-  const allyWalls: Array<{ name: string; atS: number }> = [];
+  const allyWalls: Array<{
+    name: string;
+    atS: number;
+    /** up when the attempt began: its damage account (GH #146 item 2) */
+    account?: IAccountedSave;
+    alreadyUp: boolean;
+  }> = [];
+  /** the target's own accounted reductions up when the attempt began */
+  const ownUpAccounts: IAccountedSave[] = [];
   const selfSaved: string[] = [];
   const selfSavedAtS: number[] = [];
   // One name per spell: a shapeshift-type defensive re-applies its aura
@@ -2103,10 +2149,29 @@ function attributeFailure(
       // target is that ally's external (0272f81c 0:26 Ironbark, 3d066aaf 1:05
       // Time Dilation, which is no percentage wall at all): `popped X` would
       // say the target pressed it, and hid the target's own Touch of Karma.
+      const account = upAtStart
+        ? accountedSave(
+            {
+              name: wallName,
+              spellId: iv.spellId,
+              castId: wallId,
+              fromS: iv.fromS,
+              toS: iv.toS,
+            },
+            { unit: target, isCaster: bySelf },
+          )
+        : undefined;
       if (bySelf) {
         defensivePopped.push(wallName);
         defensivePoppedAtS.push(iv.fromS);
-      } else allyWalls.push({ name: wallName, atS: iv.fromS });
+        if (account) ownUpAccounts.push(account);
+      } else
+        allyWalls.push({
+          name: wallName,
+          atS: iv.fromS,
+          account,
+          alreadyUp: upAtStart,
+        });
     }
   }
 
@@ -2152,8 +2217,15 @@ function attributeFailure(
     defensivePoppedAtS.push((castMs - matchStartMs) / 1000);
   }
 
-  const externalReceived: string[] = [];
-  const externalReceivedAtS: number[] = [];
+  // Every external candidate in log-source order; the account of the
+  // already-up ones decides which are named (GH #146 item 2), then one name
+  // per spell, the first kept — as the three loops below always did.
+  const extCands: Array<{
+    name: string;
+    atS: number;
+    alreadyUp: boolean;
+    account?: IAccountedSave;
+  }> = [];
   // The externals the `[ENEMY DEF]` lines show on this target — one source,
   // so an external seen only as its aura (the cast missing from the log)
   // counts here exactly where it renders (codex review, 2026-10-03).
@@ -2162,6 +2234,7 @@ function attributeFailure(
     // wall here either — as the same aura is not one in the loop above
     if (isBelowWallFloorExternal(d)) continue;
     const castMs = matchStartMs + d.atSeconds * 1000;
+    let upAura: ISaveAuraInterval | undefined;
     if (!inSave(castMs)) {
       // Rule 2, as for a wall and a self-save: thrown before the attempt
       // and its aura still on the target when the attempt began (an
@@ -2177,6 +2250,10 @@ function attributeFailure(
         d.casterId,
       );
       if (!aura || !auraSavesSpan(aura)) continue;
+      // already up = its AURA began before the attempt; one thrown just
+      // before whose aura went up inside it is an external of the attempt
+      // (codex review 2026-11-04: Life Cocoon cast 9.9 s, aura 10.1 s)
+      if (matchStartMs + aura.fromS * 1000 < fromMs) upAura = aura;
     }
     // A school-limited immunity thrown BEFORE the attempt began — merely
     // still up, against a go in the other school — did nothing in this
@@ -2199,9 +2276,23 @@ function attributeFailure(
     if (!absorbCovers(d.spellId)) continue;
     // One name per spell, as for walls and self-saves: two Intervenes or
     // two Leaps of Faith in one span read "Leap of Faith/Leap of Faith".
-    if (externalReceived.includes(d.spellName)) continue;
-    externalReceived.push(d.spellName);
-    externalReceivedAtS.push(d.atSeconds);
+    extCands.push({
+      name: d.spellName,
+      atS: d.atSeconds,
+      alreadyUp: !!upAura,
+      account: upAura
+        ? accountedSave(
+            {
+              name: d.spellName,
+              spellId: upAura.spellId,
+              castId: d.spellId,
+              fromS: upAura.fromS,
+              toS: upAura.toS,
+            },
+            { unit: target, isCaster: false },
+          )
+        : undefined,
+    });
   }
   // …and a teammate's area save whose aura was on the target inside the span,
   // or up on it when the span began (user ruling 2026-10-26, fact5 retest r4
@@ -2220,17 +2311,86 @@ function attributeFailure(
   for (const { d, spans } of readings.areaSavesOn()) {
     if (d.casterId === target.id) continue; // its own, below
     const met = areaSpanMeeting(spans);
-    if (!met || externalReceived.includes(d.spellName)) continue;
-    externalReceived.push(d.spellName);
-    externalReceivedAtS.push(met.from);
+    if (!met) continue;
+    const alreadyUp = matchStartMs + met.from * 1000 < fromMs;
+    extCands.push({
+      name: d.spellName,
+      atS: met.from,
+      alreadyUp,
+      account: alreadyUp
+        ? accountedSave(
+            {
+              name: d.spellName,
+              spellId: d.spellId,
+              fromS: met.from,
+              toS: met.to,
+            },
+            { unit: target, isCaster: false },
+          )
+        : undefined,
+    });
   }
   // …and an ally's wall the `[ENEMY DEF]` readings above did not carry: the
   // aura stands, as it did in the wall loop
-  for (const w of allyWalls) {
-    if (externalReceived.includes(w.name)) continue;
-    externalReceived.push(w.name);
-    externalReceivedAtS.push(w.atS);
+  for (const w of allyWalls)
+    extCands.push({
+      name: w.name,
+      atS: w.atS,
+      alreadyUp: w.alreadyUp,
+      account: w.account,
+    });
+  // GH #146 item 2 (user rulings 2026-11-03 / 2026-11-04): an external that
+  // was already up when the attempt began is its cause only when the damage
+  // account says the target would have died without it — alone, or (none
+  // deciding it alone) together with the other already-up reductions. One
+  // that is no percentage and no shield is named as before.
+  // one candidate per spell and standing before the account: the cast
+  // reader and the ally-wall fallback both see the same Ironbark, and two
+  // copies of it on trial would multiply it twice (codex review 2026-11-04)
+  const upCands = extCands.filter(
+    (c, i) =>
+      c.alreadyUp &&
+      extCands.findIndex((o) => o.alreadyUp && o.name === c.name) === i,
+  );
+  const upVerdicts = upCands.length
+    ? judgeAlreadyUpExternals(
+        target,
+        matchStartMs,
+        fromMs,
+        creditToMs,
+        upCands.map((c) => c.account),
+        ownUpAccounts,
+      )
+    : [];
+  const verdictOf = new Map(
+    upCands.map((c, i) => [c.name, upVerdicts[i]!] as const),
+  );
+  const externalReceived: string[] = [];
+  const externalReceivedAtS: number[] = [];
+  const togetherNames: string[] = [];
+  let togetherWith: string[] = [];
+  let externalAccountDropped = false;
+  for (const c of extCands) {
+    const v = c.alreadyUp ? verdictOf.get(c.name) : undefined;
+    if (v?.kind === "dropped") {
+      externalAccountDropped = true;
+      continue;
+    }
+    if (externalReceived.includes(c.name)) continue;
+    externalReceived.push(c.name);
+    externalReceivedAtS.push(c.atS);
+    if (v?.kind === "together") {
+      togetherNames.push(c.name);
+      togetherWith = v.with;
+    }
   }
+  if (externalReceived.length) externalAccountDropped = false;
+  const externalTogether = togetherNames.length
+    ? {
+        names: togetherNames,
+        with: togetherWith.filter((n) => !togetherNames.includes(n)),
+      }
+    : undefined;
 
   // The target's own no-%-mitigation saves: pressed inside the span, or
   // (rule 2) pressed before it with the save's aura still up when it began.
@@ -2358,6 +2518,10 @@ function attributeFailure(
     defensivePoppedAtS,
     externalReceived,
     externalReceivedAtS,
+    ...(externalTogether ? { externalTogether } : {}),
+    ...(externalAccountDropped
+      ? { externalAccountDropped: true as const }
+      : {}),
     selfSaved,
     selfSavedAtS,
     outhealed,

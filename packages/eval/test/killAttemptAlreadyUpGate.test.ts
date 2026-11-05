@@ -14,6 +14,47 @@ const line = (opportunity: string, outcome: string) =>
 const PRIME = "PRIME (no trinket, no 20-99% wall in hand";
 
 describe("checkKillAttemptAlreadyUpStated", () => {
+  it("passes on the renderer's `A + B together` line (GH #146 item 2), each [up since] restated once", () => {
+    const rendered = formatKillAttemptsForContext([
+      {
+        targetUnitId: "e1",
+        targetName: "Druid-R",
+        anchor: "burst",
+        anchorSpellName: "The Hunt",
+        fromSeconds: 91.2,
+        toSeconds: 105.4,
+        stuns: [],
+        opportunity: { tier: "prime", wallsInHand: [] },
+        teamDamageToTarget: 1_120_000,
+        teamDamageToTargetInBracket: 1_120_000,
+        teamDamageTotal: 1_500_000,
+        teamOnTargetPct: 71,
+        killed: false,
+        attribution: {
+          trinketed: false,
+          brokeOut: [],
+          immunityBaited: false,
+          defensivePopped: ["Barkskin"],
+          defensivePoppedAtS: [89.4],
+          externalReceived: ["Ironbark", "Pain Suppression"],
+          externalReceivedAtS: [89.1, 87.5],
+          externalTogether: {
+            names: ["Ironbark", "Pain Suppression"],
+            with: ["Barkskin"],
+          },
+          selfSaved: [],
+          selfSavedAtS: [],
+          outhealed: false,
+          primary: "defensive",
+        },
+      } as any,
+    ]);
+    expect(rendered.join("\n")).toContain(
+      "saved by external (Ironbark [up since 1:29] + Pain Suppression [up since 1:27] + Barkskin together)",
+    );
+    expect(checkKillAttemptAlreadyUpStated(rendered)).toEqual([]);
+  });
+
   it("passes: no `[up since]` and no fact; a wall, an external list, an immunity each restated", () => {
     expect(
       checkKillAttemptAlreadyUpStated([
