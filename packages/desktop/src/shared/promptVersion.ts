@@ -802,4 +802,16 @@
  *  troughs stop at the round's end; an activation is its cooldown's [RES]
  *  window. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 480;
+/*
+ * v481 (2026-11-04, fact10 batches 2/3): Wingleader's Breath of Eons half,
+ *  Blessing of the Bronze's movement prices, Sacred Weapon no hidden Holy
+ *  Armaments, a charge press's impact in ABILITIES INTO, Freezing Rain's
+ *  unseen Frozen Orb, Pack's Endurance / Tomorrow, Today lengths, a periodic
+ *  trigger's last tick ends its effect, the DR reset band reads a length the
+ *  game ended, a killed totem never pulsed, [CONSEQ] on a reflected control,
+ *  every silence / disarm / root a trinket took is the attempt's, stale-max
+ *  HP rows, an unseen press in its aura on others, Time Dilation a deferral
+ *  on ABILITIES INTO, Angelic Bulwark an [ENEMY DEF] fact line. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 481;

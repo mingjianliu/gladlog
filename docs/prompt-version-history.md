@@ -5017,3 +5017,32 @@ the kick — or whose likely target died first is a miss, not a juke (D22 D5).
 The burst ledger's `low` and `[DMG SPIKE]`'s low stop at the round's end
 (`roundClippedTroughSpan`, D30). An effect activation shares its cooldown's
 [RES] window (one Frostwyrm's Fury, not two).
+
+v481 (2026-11-04, fact10 batches 2/3 — the round-10 audit's other fact
+defects and their readers): Wingleader halves Breath of Eons' cooldown (D1);
+the [RES] check reads a cooldown range's low end (D16). Blessing of the
+Bronze's label variants price the movement cooldowns, and a free press stands
+on its opener's priced cooldown (D6). Blessing of the Forge's Sacred Weapon is
+no hidden Holy Armaments press, and the `[PRESS]` back check reads the DB2
+charge pool (D7). A charge press's impact row stands in for its press in
+ABILITIES INTO (D28). Freezing Rain proves a Frozen Orb pressed while unseen
+(D23). Pack's Endurance and Tomorrow, Today lengthen their auras, and a hasted
+length past the round's end reads the unit's own run (D14 D17 D20). A
+periodic-trigger aura's last trigger logged within 100 ms after its REMOVED
+ends the effect (D29). A control landing in the 20 s DR reset band reads its
+own length only when nothing but the game ended it; a control that landed is
+never Immune (D9). A totem killed before its first pulse never went off
+(D10). `[CONSEQ]` reads an enemy healer's own control reflected onto it (D21).
+A PvP trinket that took off a silence, disarm or root — every one, not only
+the one the `[ENEMY TRINKET]` line names — is the kill attempt's trinket
+(D24). A stale-max HP row reads over the new maximum (D18 D33). An unseen
+press shows through its own aura on other units (D19). Time Dilation is a
+deferral, not a wall, in ABILITIES INTO (D26). Angelic Bulwark 114214 prints
+an `[ENEMY DEF]` fact line — no KILL ATTEMPTS cause, no defenseless cut
+(D25, user ruling).
+
+605 candidate rows, batches 2/3 alone: position-mistake 160 → 159 (a Frozen
+Orb pressed unseen at 0:09 merged the offensive windows, and the stayed-in
+row at 0:16 went); one kick-eaten row's `enemyBurst` None → Frozen Orb; one
+position-mistake `hpStart` 69 → 68. cd-hoarded, cd-waste and kick-eaten totals
+are unchanged.
