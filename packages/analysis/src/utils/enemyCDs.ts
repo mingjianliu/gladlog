@@ -536,7 +536,7 @@ export const PERIODIC_LAST_TRIGGER_SLACK_MS = 100;
  * row, by the caster (pets merged), within
  * `PERIODIC_LAST_TRIGGER_SLACK_MS` and not past the combat's end.
  */
-function lastPeriodicTriggerEndS(
+export function lastPeriodicTriggerEndS(
   caster: ICombatUnit,
   auraId: string,
   endS: number,

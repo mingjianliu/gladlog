@@ -126,8 +126,13 @@ import {
 } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { ROOT_AURA_SPELL_IDS } from "@gladlog/analysis/src/data/rootAuraGenerated";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
-import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import {
+  ccSpellIds,
+  disarmSpellIds,
+  rootSpellIds,
+} from "@gladlog/analysis/src/data/spellTags";
 import { staleMaxHpRows } from "@gladlog/analysis/src/utils/advancedActions";
+import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { pressRidesAlong } from "@gladlog/analysis/src/utils/castCommitSpans";
 import { PRESS_TRIGGERED_CAST_IDS } from "@gladlog/analysis/src/utils/castMissRows";
@@ -1124,7 +1129,9 @@ function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
   }
   // …and every root or disarm a Medallion press took off, from the log
   // itself: the `[ENEMY TRINKET]` line names the binder's one (codex
-  // 20-F25-05 #2: two roots off, the named one outside the attempt)
+  // 20-F25-05 #2: two roots off, the named one outside the attempt). The
+  // product's control sets (`rootSpellIds` / `disarmSpellIds`): Charge's
+  // 1 s root is not one (605 192-2 0:25)
   for (const u of ctx.players)
     for (const use of pvpTrinketUses(u)) {
       if (use.atMs < ctx.start || use.atMs > ctx.end) continue;
@@ -1134,7 +1141,7 @@ function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
           a.destUnitId === u.id &&
           ev(a) === REMOVED &&
           !ccSpellIds.has(id) &&
-          (ROOT_AURA_SPELL_IDS.has(id) || DR_CATEGORY_MAP[id] === "Disarm") &&
+          (rootSpellIds.has(id) || disarmSpellIds.has(id)) &&
           Math.abs(tsOf(a) - use.atMs) <= 300
         )
           outs.push({
@@ -1170,8 +1177,24 @@ function killAttemptTrinketOutMissed(ctx: IRoundCtx): void {
         if (ev(app) !== APPLIED) return false;
         // a hard control is the CC binder's (F15 R3 / F16 idx 37): the class
         // is the rest a Medallion removes — silence, disarm, root
-        if (ccSpellIds.has(String(app.spellId))) return false;
-        const rem = rows.find((x) => ev(x) === REMOVED && tsOf(x) >= tsOf(app));
+        const id = String(app.spellId);
+        if (ccSpellIds.has(id)) return false;
+        // …and by id, not by name alone: a same-name aura that is no
+        // control (Binding Shot's tether 117405, Snowdrift's slow) is
+        // nothing a Medallion answers (605 164-2 3:04, 4-1 1:21: the stun
+        // landed after the attempt ended)
+        if (
+          !rootSpellIds.has(id) &&
+          !disarmSpellIds.has(id) &&
+          !isSilenceOnlyAura(id)
+        )
+          return false;
+        const rem = rows.find(
+          (x) =>
+            ev(x) === REMOVED &&
+            String(x.spellId) === id &&
+            tsOf(x) >= tsOf(app),
+        );
         const to = rem ? tsOf(rem) : ctx.end;
         return tsOf(app) < hi && to >= lo;
       });
@@ -1370,7 +1393,9 @@ function passiveAbsorbProcUnlisted(ctx: IRoundCtx): void {
 /**
  * trinketTookSeveralRoots (codex 20-F25-05 #2, exposure): a PvP trinket
  * press that took off two or more roots or disarms (no hard control) at
- * once. The kill attempt's D24 reading binds one of them
+ * once — the control sets the product reads (`rootSpellIds` /
+ * `disarmSpellIds`: a gap-closer's 1 s root such as Charge's is no control
+ * response, predicate index "Not yet unified"). The kill attempt's D24 reading binds one of them
  * (`findBrokenRoot` / `findBrokenDisarm`), so the other is not asked
  * whether it was of the attempt. Counted: every press that took off one;
  * a violation is a press that took off more than one.
@@ -1385,7 +1410,7 @@ function trinketTookSeveralRoots(ctx: IRoundCtx): void {
           a.destUnitId === u.id &&
           ev(a) === REMOVED &&
           !ccSpellIds.has(id) &&
-          (ROOT_AURA_SPELL_IDS.has(id) || DR_CATEGORY_MAP[id] === "Disarm") &&
+          (rootSpellIds.has(id) || disarmSpellIds.has(id)) &&
           Math.abs(tsOf(a) - use.atMs) <= 300
         );
       });
@@ -1405,13 +1430,16 @@ function trinketTookSeveralRoots(ctx: IRoundCtx): void {
 }
 
 /**
- * evidencePressOnRestatedAura (codex 20-F25-05 #1, exposure): an APPLIED
- * of a unit's own cooldown id on another unit, no cast row of it in the
- * round (D19's press evidence), logged while the same unit's aura of that
- * id was still on that recipient (no REMOVED since its last APPLIED) and
- * more than its official length + 1 s after that APPLIED —
- * `effectEvidenceCastSeconds` reads it as a second press. Counted: every
- * such APPLIED of a cooldown id (a cooldown of 20 s or more).
+ * evidencePressOnRestatedAura (codex 20-F25-05 #1, exposure): a unit's own
+ * cooldown id APPLIED on other units with no cast row of it in the round
+ * (D19's press evidence), walked as `effectEvidenceCastSeconds` groups it:
+ * a new press whenever an APPLIED lands the group length (the official
+ * length + 1 s, never more than the cooldown) or more after the last
+ * accepted press — the anchor moves only on an accepted press (codex
+ * 20-F25-06 #3: APPLIED at 0, 5 and 10 s reads two presses). A violation
+ * is an accepted press whose recipient still held that unit's aura of the
+ * id (no REMOVED since its APPLIED): a re-stated aura read as a press.
+ * Counted: every accepted press after a unit's first of the id.
  */
 function evidencePressOnRestatedAura(ctx: IRoundCtx): void {
   for (const u of ctx.players) {
@@ -1431,27 +1459,36 @@ function evidencePressOnRestatedAura(ctx: IRoundCtx): void {
           tsOf(a) <= ctx.end,
       )
       .sort((a, b) => tsOf(a) - tsOf(b));
-    const lastOn = new Map<string, number>();
+    const anchor = new Map<string, number>();
+    const onSince = new Map<string, number>();
     for (const a of rows) {
-      const key = `${a.destUnitId}|${a.spellId}`;
+      const id = String(a.spellId);
+      const key = `${a.destUnitId}|${id}`;
       if (ev(a) === REMOVED) {
-        lastOn.delete(key);
+        onSince.delete(key);
         continue;
       }
       if (ev(a) !== APPLIED) continue;
+      const data = spellEffectData[id];
+      const groupMs =
+        Math.min(
+          Math.max(data?.cooldownSeconds ?? 0, 1),
+          Math.max((data?.durationSeconds ?? 0) + 1, 1),
+        ) * 1000;
+      const last = anchor.get(id);
+      const held = onSince.get(key);
+      if (held === undefined) onSince.set(key, tsOf(a));
+      if (last !== undefined && tsOf(a) - last < groupMs) continue;
+      anchor.set(id, tsOf(a));
+      if (last === undefined) continue;
       ctx.bump("evidencePressOnRestatedAura");
-      const prev = lastOn.get(key);
-      lastOn.set(key, tsOf(a));
-      if (prev === undefined) continue;
-      const lenMs =
-        ((spellEffectData[String(a.spellId)]?.durationSeconds ?? 0) + 1) * 1000;
-      if (tsOf(a) - prev >= lenMs)
+      if (held !== undefined)
         ctx.violate(
           "evidencePressOnRestatedAura",
           nameOf(a.spellId, a.spellName),
           tsOf(a),
-          `${u.name}:${a.spellId}:${tsOf(a)}`,
-          `${nameOf(a.spellId, a.spellName)} by ${u.name}: APPLIED again ${((tsOf(a) - prev) / 1000).toFixed(2)} s after the last, no REMOVED between, no cast row`,
+          `${u.name}:${id}:${tsOf(a)}`,
+          `${nameOf(a.spellId, a.spellName)} by ${u.name}: read as a press at ${fmtS((tsOf(a) - ctx.start) / 1000)}, its aura on ${a.destUnitName} up since ${((tsOf(a) - held) / 1000).toFixed(2)} s before, no REMOVED between, no cast row`,
           "",
         );
     }

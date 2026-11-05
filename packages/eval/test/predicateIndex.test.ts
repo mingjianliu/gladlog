@@ -2091,6 +2091,11 @@ const INDEX: PredicateRow[] = [
     mod: ccTrinketAnalysis,
   },
   {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "lastPeriodicTriggerEndS",
+    mod: enemyCDs,
+  },
+  {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "findBrokenDisarm",
     mod: ccTrinketAnalysis,

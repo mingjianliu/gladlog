@@ -30,10 +30,9 @@
 import { specToString } from "@gladlog/analysis";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { OFF_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
-import { PERIODIC_TRIGGER_SPELLS } from "@gladlog/analysis/src/data/periodicAuraGenerated";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import { RESTATED_END_TOLERANCE_MS } from "@gladlog/analysis/src/utils/auraIntervals";
-import { PERIODIC_LAST_TRIGGER_SLACK_MS } from "@gladlog/analysis/src/utils/enemyCDs";
+import { lastPeriodicTriggerEndS } from "@gladlog/analysis/src/utils/enemyCDs";
 
 import {
   APPLIED,
@@ -334,30 +333,21 @@ function resChannel(ctx: IRoundCtx): void {
           .sort((a, b) => tsOf(a) - tsOf(b))[0];
         // fact10 D29: a periodic-trigger aura's last trigger row logged
         // just after its REMOVED is the effect's own — the effect ends there
-        // (`PERIODIC_TRIGGER_SPELLS` within `PERIODIC_LAST_TRIGGER_SLACK_MS`,
-        // the producer's reading; 605 8-1 r1 1:29: Dark Harvest REMOVED
-        // 88.984 s, its 1257065 heal 89.001 s, `1s left` at 89 s)
-        let removed: number | undefined =
-          removedRow === undefined ? undefined : tsOf(removedRow);
-        const triggers =
+        // (605 8-1 r1 1:29: Dark Harvest REMOVED 88.984 s, its 1257065 heal
+        // 89.001 s, `1s left` at 89 s). The producer's own end predicate
+        // (`lastPeriodicTriggerEndS`: DB2 triggers and the scripted ones,
+        // within the slack, not past the combat's end — codex 20-F25-06 #2)
+        const removed: number | undefined =
           removedRow === undefined
             ? undefined
-            : PERIODIC_TRIGGER_SPELLS.get(String(removedRow.spellId));
-        if (removed !== undefined && triggers) {
-          const upTo = removed + PERIODIC_LAST_TRIGGER_SLACK_MS;
-          for (const d of [
-            ...((u.damageOut ?? []) as any[]),
-            ...((u.healOut ?? []) as any[]),
-          ]) {
-            const t = tsOf(d);
-            if (
-              t > removed &&
-              t <= upTo &&
-              triggers.includes(String(d.spellId))
-            )
-              removed = t;
-          }
-        }
+            : ctx.start +
+              lastPeriodicTriggerEndS(
+                u,
+                String(removedRow.spellId),
+                (tsOf(removedRow) - ctx.start) / 1000,
+                ctx.legacy,
+              ) *
+                1000;
         const next = successesOf(u)
           .filter(
             (c) =>
