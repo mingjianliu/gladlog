@@ -825,4 +825,10 @@
  *  (Desperate Instincts); Fade reduces nothing without Translucent Image.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 483;
+/*
+ * v484 (2026-11-05, GH #128 item 1): a hunter's Master's Call / Roar of
+ *  Sacrifice / Intimidation leave the [RES] line while the hunter's pet is
+ *  dead or dismissed, and come back with a summon / revive cast.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 484;

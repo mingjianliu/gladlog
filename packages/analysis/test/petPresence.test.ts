@@ -56,6 +56,28 @@ describe("ownerPetGoneAt", () => {
     const units = [pet(A, 0, 30), pet(B, 0)];
     expect(ownerPetGoneAt(owner(), units as never, at(40))).toBe(false);
   });
+  // GH #128: c5b55e06 r2 — Revive Pet at 1:16, the new pet's first own row
+  // 15 s later; the pet is out from the cast
+  it("a summon / revive cast after the end puts a pet out", () => {
+    const units = [pet(A, 0, 30), pet(B, 60)];
+    const revive = owner([{ spellId: "982", s: 40 }]);
+    expect(ownerPetGoneAt(revive, units as never, at(39))).toBe(true);
+    expect(ownerPetGoneAt(revive, units as never, at(40))).toBe(false);
+    expect(ownerPetGoneAt(revive, units as never, at(50))).toBe(false);
+    // a summon before the end brings nothing back
+    const early = owner([{ spellId: "691", s: 10 }]);
+    expect(ownerPetGoneAt(early, units as never, at(50))).toBe(true);
+    // Dismiss Pet, then Call Pet 1
+    const swap = owner([
+      { spellId: "2641", s: 20 },
+      { spellId: "883", s: 25 },
+    ]);
+    expect(ownerPetGoneAt(swap, [pet(A, 0)] as never, at(22))).toBe(true);
+    expect(ownerPetGoneAt(swap, [pet(A, 0)] as never, at(26))).toBe(false);
+    // a cast that is no summon does not count
+    const other = owner([{ spellId: "136", s: 40 }]);
+    expect(ownerPetGoneAt(other, units as never, at(50))).toBe(true);
+  });
   it("no end in the log, or no pet unit at all: there", () => {
     expect(ownerPetGoneAt(owner(), [pet(A, 0)] as never, at(90))).toBe(false);
     expect(ownerPetGoneAt(owner(), [] as never, at(90))).toBe(false);
@@ -65,7 +87,11 @@ describe("ownerPetGoneAt", () => {
 describe("warlockPurgePetSpans ends the Felhunter at its death", () => {
   it("a Felhunter that died at 40 s purges until 40 s", () => {
     const felhunter = pet("Pet-0-1-1-1-417-0204BBD685", 0, 40);
-    const spans = warlockPurgePetSpans(owner() as never, [felhunter] as never, T0);
+    const spans = warlockPurgePetSpans(
+      owner() as never,
+      [felhunter] as never,
+      T0,
+    );
     expect(spans).toEqual([{ fromSeconds: -Infinity, toSeconds: 40 }]);
   });
 });

@@ -1204,6 +1204,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     rosterSides,
     manaFallback,
     roundBounds,
+    _allUnits,
   });
 
   // ── Sort and format (timelineSections/formatTimeline.ts) ─────────────────

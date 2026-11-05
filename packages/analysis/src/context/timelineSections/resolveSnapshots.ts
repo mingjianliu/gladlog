@@ -13,6 +13,7 @@ import { toRenderSecond } from "../../utils/renderGrid";
 import {
   computeChargeSuffixes,
   computeOnCDDisplayNames,
+  computePetGoneNames,
   computeReadyNames,
   positionalOutOfReachNames,
   RES_OPENER_SKIP_S,
@@ -36,6 +37,7 @@ export function resolveDeferredSnapshots(
     | "rosterSides"
     | "manaFallback"
     | "roundBounds"
+    | "_allUnits"
   >,
 ): Pick<TimelineCtx, "resOutOfReachRows"> {
   const {
@@ -52,6 +54,7 @@ export function resolveDeferredSnapshots(
     rosterSides,
     manaFallback,
     roundBounds,
+    _allUnits,
   } = ctx;
 
   const placeholders: DeferredSnapshot[] = [];
@@ -83,6 +86,8 @@ export function resolveDeferredSnapshots(
   let prevReadyNamesState: string[] | null = null;
   let prevOnCDNamesState: string[] | null = null;
   let prevChargesState: ReadonlyMap<string, string> | null = null;
+  // GH #128: the pet-carried entries gone at the last printed row
+  let prevPetGoneState: ReadonlySet<string> = new Set();
   let lastSnapshotTime = -100;
   // B14b: the last offensive-window row — a request at the same instant is
   // the same row, but the 2 s debounce does not count from it
@@ -116,7 +121,7 @@ export function resolveDeferredSnapshots(
     }));
     // F-C4: the same dead-holder cut the snapshot applies, so the delta state
     // never carries a dead holder's entries forward.
-    const resDeaths = { matchStartMs, ownerUnit: owner };
+    const resDeaths = { matchStartMs, ownerUnit: owner, allUnits: _allUnits };
     // The delta state is what the row PRINTS, so it is read at the row's
     // rendered second — the snapshot builder's own anchor (shared-predicate
     // rule). Read at the fractional instant it disagreed with the printed
@@ -142,8 +147,21 @@ export function resolveDeferredSnapshots(
       teammateCDsWithLabel,
       resDeaths,
     );
+    // GH #128 (codex review): an entry that left with its holder's pet since
+    // the last printed row — a delta could not say so (`-X` is a press), and a
+    // return pending for it would never come; the row is printed in full
+    const currentPetGone = new Set(
+      computePetGoneNames(
+        stateSeconds,
+        resOwnerCDs,
+        teammateCDsWithLabel,
+        resDeaths,
+      ),
+    );
+    const petLeft = [...currentPetGone].some((n) => !prevPetGoneState.has(n));
     const forceFullRefresh =
       forceFull ||
+      petLeft ||
       timeSeconds - lastFullSnapshotTime >= FULL_SNAPSHOT_REFRESH_SECONDS;
     const prevReadyNames = forceFullRefresh
       ? undefined
@@ -156,16 +174,19 @@ export function resolveDeferredSnapshots(
       onCd: string[] | null;
       charges: ReadonlyMap<string, string> | null;
       full: number;
+      petGone: ReadonlySet<string>;
     } = {
       ready: prevReadyNamesState,
       onCd: prevOnCDNamesState,
       charges: prevChargesState,
       full: lastFullSnapshotTime,
+      petGone: prevPetGoneState,
     };
     if (forceFullRefresh) lastFullSnapshotTime = timeSeconds;
     prevReadyNamesState = currentReadyNames;
     prevOnCDNamesState = currentOnCDNames;
     prevChargesState = currentCharges;
+    prevPetGoneState = currentPetGone;
 
     const deathVictim = req.deathOfUnitId
       ? [owner, ...teammateCDs.map((t) => t.player)].find(
@@ -197,6 +218,7 @@ export function resolveDeferredSnapshots(
       prevOnCDNames,
       matchStartMs,
       ownerUnit: owner,
+      allUnits: _allUnits,
       rosterSides,
       manaFallback,
       roundBounds,
@@ -226,6 +248,7 @@ export function resolveDeferredSnapshots(
       prevReadyNamesState = stateBefore.ready;
       prevOnCDNamesState = stateBefore.onCd;
       prevChargesState = stateBefore.charges;
+      prevPetGoneState = stateBefore.petGone;
     }
     // fact2: a first-5-s row that printed lists the never-pressed cooldowns
     // as ready (the builder's second pass) — so does the delta state

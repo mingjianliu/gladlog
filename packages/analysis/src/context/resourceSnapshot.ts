@@ -36,6 +36,7 @@ import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
 import { isStunCcInstance } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
+import { ownerPetGoneAt, PET_COMMAND_SPELL_IDS } from "../utils/petPresence";
 import type { CastFailedEvent } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
 import { affordableAt, type ManaFallback } from "../utils/resourceAt";
@@ -583,6 +584,10 @@ function resStateOf(
 export interface ResHolderDeaths {
   matchStartMs: number;
   ownerUnit?: ICombatUnit;
+  /** the round's units, pets included — a pet-carried press
+   * (`PET_COMMAND_SPELL_IDS`) leaves with its holder's pet (`ownerPetGoneAt`,
+   * D7 / GH #128). Absent = every pet is there, as before. */
+  allUnits?: ReadonlyArray<ICombatUnit>;
 }
 
 type ResTeammateCds = {
@@ -614,6 +619,8 @@ function friendlyResCds(
   displayName: string;
   cd: IMajorCooldownInfo;
   holderDead: boolean;
+  /** gone with the holder's pet (GH #128) — `holderDead` is set too */
+  petGone: boolean;
   /** off cooldown, but its holder is under a debuff that refuses the press
    * (`ownPressLockout`: Forbearance, Hypothermia) until this second */
   lockout?: ResPressLockout;
@@ -627,6 +634,16 @@ function friendlyResCds(
       : deaths.matchStartMs + toRenderSecond(timeSeconds) * 1000 - 1;
   const dead = (unit: ICombatUnit | undefined) =>
     rowMs !== undefined && unit !== undefined && isDeadAt(unit, rowMs);
+  // GH #128 item 1 (D7, user 2026-10-24: a pet's abilities go with the pet):
+  // Master's Call / Roar of Sacrifice / Intimidation while the holder's pet is
+  // dead or dismissed and not yet back leave the line like a dead holder's
+  // (c5b55e06 r2: `rdy:…Master's Call` 1:15–1:16, the pet dead since 1:15)
+  const petGone = (cd: IMajorCooldownInfo, unit: ICombatUnit | undefined) =>
+    rowMs !== undefined &&
+    unit !== undefined &&
+    deaths?.allUnits !== undefined &&
+    PET_COMMAND_SPELL_IDS.has(canonicalSpellId(cd.spellId)) &&
+    ownerPetGoneAt(unit, deaths.allUnits, rowMs);
   const ownerDead = dead(deaths?.ownerUnit);
   // FT-T04 / FT F22: the debuff that takes a cooldown from its own holder
   // while it is off cooldown (`ownPressLockout`: Divine Shield under
@@ -650,24 +667,32 @@ function friendlyResCds(
   return [
     ...ownerCDs
       .filter((cd) => !cdIsProcOnly(cd))
-      .map((cd) => ({
-        displayName: cd.spellName,
-        cd,
-        holderDead: ownerDead,
-        lockout: lockoutOf(cd, deaths?.ownerUnit),
-      })),
+      .map((cd) => {
+        const gone = !ownerDead && petGone(cd, deaths?.ownerUnit);
+        return {
+          displayName: cd.spellName,
+          cd,
+          holderDead: ownerDead || gone,
+          petGone: gone,
+          lockout: lockoutOf(cd, deaths?.ownerUnit),
+        };
+      }),
     ...teammateCDs.flatMap(({ cds, playerLabel, player }) => {
       const holderDead = dead(player);
       return cds
         .filter((cd) => !cdIsProcOnly(cd))
-        .map((cd) => ({
-          displayName: playerLabel
-            ? `${playerLabel}:${cd.spellName}`
-            : cd.spellName,
-          cd,
-          holderDead,
-          lockout: lockoutOf(cd, player),
-        }));
+        .map((cd) => {
+          const gone = !holderDead && petGone(cd, player);
+          return {
+            displayName: playerLabel
+              ? `${playerLabel}:${cd.spellName}`
+              : cd.spellName,
+            cd,
+            holderDead: holderDead || gone,
+            petGone: gone,
+            lockout: lockoutOf(cd, player),
+          };
+        });
     }),
   ];
 }
@@ -758,6 +783,25 @@ export function positionalOutOfReachNames(
         out.add(label ? `${label}:${cd.spellName}` : cd.spellName);
   }
   return out;
+}
+
+/**
+ * GH #128 (codex review): the entries that left the ledger with their holder's
+ * pet at this second. A dead holder's entries leave without a `-X` because the
+ * death has its own row and ends the [RES] chain's reading; a pet has neither,
+ * so the row where a pet-carried entry first goes is printed in full (the
+ * reader's ready set and every pending return start over) — the snapshot
+ * resolver compares this set with the last printed row's.
+ */
+export function computePetGoneNames(
+  timeSeconds: number,
+  ownerCDs: IMajorCooldownInfo[],
+  teammateCDs: ResTeammateCds[],
+  deaths?: ResHolderDeaths,
+): string[] {
+  return friendlyResCds(timeSeconds, ownerCDs, teammateCDs, deaths)
+    .filter((e) => e.petGone)
+    .map((e) => e.displayName);
 }
 
 export function computeReadyNames(
@@ -875,6 +919,8 @@ interface ResourceSnapshotParams {
   prevOnCDNames?: string[];
   matchStartMs?: number;
   ownerUnit?: ICombatUnit;
+  /** the round's units, pets included (`ResHolderDeaths.allUnits`) */
+  allUnits?: ReadonlyArray<ICombatUnit>;
   /** unit GUID → roster side (`buildRosterSides`), for the focus pick's
    * incoming-pressure read */
   rosterSides?: RosterSides;
@@ -931,6 +977,7 @@ function buildResourceSnapshotOnce({
   prevOnCDNames,
   matchStartMs,
   ownerUnit,
+  allUnits,
   rosterSides,
   manaFallback,
   roundBounds,
@@ -960,7 +1007,9 @@ function buildResourceSnapshotOnce({
     playerLabel: pid(player.name),
   }));
   const deaths: ResHolderDeaths | undefined =
-    matchStartMs !== undefined ? { matchStartMs, ownerUnit } : undefined;
+    matchStartMs !== undefined
+      ? { matchStartMs, ownerUnit, allUnits }
+      : undefined;
   // B14a: positional cooldowns out of reach of the dying friendly
   const outOfReach =
     outOfReachOf && prevReadyNames === undefined
@@ -1151,7 +1200,9 @@ function buildResourceSnapshotOnce({
       // free Frostwyrm's Fury 1265384 6 s into the first one's slow — one
       // aura, refreshed) is that cooldown's window, as an override variant
       // is (`offensiveEffectCdId`, the window builder's own mapping)
-      const key = canonicalSpellId(offensiveEffectCdId(cd.spellId) ?? cd.spellId);
+      const key = canonicalSpellId(
+        offensiveEffectCdId(cd.spellId) ?? cd.spellId,
+      );
       const prev = windows.get(key);
       // an effect its holder's death cut short: shown until the death, its
       // time left the official one — the death is not known before it

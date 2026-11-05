@@ -177,6 +177,11 @@ import {
 } from "../utils/offensiveAuraOccurrences";
 import { PRESS_LINE_WHITELIST_IDS } from "../utils/offListPress";
 import {
+  DISMISS_PET_SPELL_ID,
+  PET_COMMAND_SPELL_IDS,
+  PET_SUMMON_SPELL_IDS,
+} from "../utils/petPresence";
+import {
   ADAPTATION_LOCKOUT_AURA_ID,
   ADAPTATION_TRIGGER_AURA_ID,
 } from "../utils/pvpTrinketUses";
@@ -608,6 +613,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("NO_MITIGATION_IDS", "data/mitigationData.ts", "cast", () =>
     set(NO_MITIGATION_IDS),
+  ),
+  // GH #128: a pet's end and return, and the presses that go with it
+  t("PET_SUMMON_SPELL_IDS", "utils/petPresence.ts", "cast", () => [
+    ...set(PET_SUMMON_SPELL_IDS),
+    DISMISS_PET_SPELL_ID,
+  ]),
+  t("PET_COMMAND_SPELL_IDS", "utils/petPresence.ts", "cast", () =>
+    set(PET_COMMAND_SPELL_IDS),
   ),
   // Fade 586 → Translucent Image 373446 (GH #126 row 203)
   t(

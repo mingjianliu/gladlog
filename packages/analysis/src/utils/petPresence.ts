@@ -12,7 +12,8 @@
  *  - Dismiss Pet (2641) is a cast row of the owner with no row on the pet;
  *    a pet despawned any other way writes nothing.
  * So: a pet's end is its death or its owner's Dismiss Pet; the owner has a
- * pet again once another of its pet units is first seen. An end the log
+ * pet again once another of its pet units is first seen, or from its own
+ * summon / revive cast after the end (`PET_SUMMON_SPELL_IDS`, GH #128). An end the log
  * does not show reads as no end — the pet is there, as every reader assumed
  * before (the direction that accuses nobody).
  */
@@ -22,6 +23,44 @@ import { firstDeathMs } from "./unitDeath";
 
 /** Dismiss Pet: the owner's own cast; the log writes nothing on the pet. */
 export const DISMISS_PET_SPELL_ID = "2641";
+
+/**
+ * The owner's casts that put a permanent pet out: DB2 SpellEffect Effect 56
+ * (SUMMON_PET) and 109 (RESURRECT_PET), every such id observed in the corpus
+ * (build 12.1.5.70688, GH #128 2026-11-05). A pet that comes back is out from
+ * this cast on — its first row of its own can come long after (c5b55e06 r2:
+ * Revive Pet at 1:16, the new pet's first own row 15 s later).
+ */
+export const PET_SUMMON_SPELL_IDS: ReadonlySet<string> = new Set([
+  "883", // Call Pet 1
+  "83242", // Call Pet 2
+  "83243", // Call Pet 3
+  "83244", // Call Pet 4
+  "83245", // Call Pet 5
+  "982", // Revive Pet (Effect 109)
+  "688", // Summon Imp
+  "691", // Summon Felhunter
+  "697", // Summon Voidwalker
+  "366222", // Summon Sayaad
+  "30146", // Summon Felguard
+  "52150", // Raise Dead (the permanent ghoul)
+  "31687", // Summon Water Elemental
+]);
+
+/**
+ * A player's press that the PET carries out — gone with the pet (D7, GH #128
+ * item 1). DB2 marks none of them (dummy / scripted effects), so the evidence
+ * is the corpus: 605 new-season files + 480 downloaded 12.1.5 logs, 3,562
+ * presses of these three, 0 while the presser's own pet was gone (dead — a
+ * Play Dead `UNIT_DIED` carries the unconscious flag and is no death — and not
+ * yet summoned, revived or seen again). Marksmanship's Intimidation 474421 is
+ * not one: the spec has no permanent pet to read.
+ */
+export const PET_COMMAND_SPELL_IDS: ReadonlySet<string> = new Set([
+  "272682", // Master's Call (the pet casts 54216)
+  "53480", // Roar of Sacrifice
+  "19577", // Intimidation
+]);
 
 type PetLike = Pick<ICombatUnit, "id" | "ownerId"> &
   Partial<
@@ -59,7 +98,8 @@ function firstSeenMs(pet: PetLike): number {
  * shows no end (unknown is "there").
  */
 export function ownerPetGoneAt(
-  owner: Pick<ICombatUnit, "id"> & Partial<Pick<ICombatUnit, "spellCastEvents">>,
+  owner: Pick<ICombatUnit, "id"> &
+    Partial<Pick<ICombatUnit, "spellCastEvents">>,
   units: Iterable<PetLike>,
   atMs: number,
 ): boolean {
@@ -79,6 +119,20 @@ export function ownerPetGoneAt(
   const ended =
     Number.isFinite(dismissedMs) || pets.some((p) => p.died <= atMs);
   if (!ended) return false;
+  // the latest end by `atMs`; a summon / revive cast after it puts a pet out
+  const lastEndMs = Math.max(
+    dismissedMs,
+    ...pets.filter((p) => p.died <= atMs).map((p) => p.died),
+  );
+  if (
+    (owner.spellCastEvents ?? []).some(
+      (c) =>
+        PET_SUMMON_SPELL_IDS.has(c.spellId) &&
+        c.timestamp > lastEndMs &&
+        c.timestamp <= atMs,
+    )
+  )
+    return false;
   return !pets.some(
     (p) => p.seen <= atMs && p.died > atMs && p.seen > dismissedMs,
   );

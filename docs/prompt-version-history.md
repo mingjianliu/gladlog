@@ -5101,3 +5101,22 @@ mitigation audit leaves a 0 % component out instead of printing "blocked
 ~0k". 605 files, base c05e223af: `[ENEMY DEF]` Blur `(25%` 531 → 131 (the
 Devourer lines), `(35%` 0 → 400 (every Havoc line); `Mitigation audit: Fade`
 rows 60 → 41; 21 of 27 Blur audit rows re-priced; findings byte-identical.
+
+v484 (2026-11-05, GH #128 item 1). A hunter's pet-carried presses (Master's
+Call 272682, Roar of Sacrifice 53480, Intimidation 19577 —
+`PET_COMMAND_SPELL_IDS`) leave the `[RES]` line, neither ready nor on
+cooldown, while `ownerPetGoneAt` says the hunter's pet is gone (its
+UNIT_DIED or Dismiss Pet). A summon / revive cast by the owner after that
+end (`PET_SUMMON_SPELL_IDS`, DB2 effects 56 / 109) puts the pet back from
+the cast, not from the new pet unit's first row (a Revive Pet at 1:16 had
+its pet's first own row 15 s later). Corpus check: 3,562 presses of the
+three spells (605 files + downloads), 0 while the owner's pet was gone.
+The row where a pet-carried entry first goes is printed in full (codex
+review: a dead holder's entries leave a delta without `-X` because the death
+has its own row and ends the gate's reading; a pet has neither, so a delta
+would leave the entry ready in the reader's picture and owe its return).
+605 files, base eda327c53: 18 context files changed, `[RES]` rows −51 / +51
+(24 of them a delta row turned full at the first row after a pet death, the
+rest a pet-gone row without the presses or the row after the revive listing
+them again); findings byte-identical; the text gates' counts unchanged
+(`checkResReturnAnnounced` 0 → 0).
