@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- synthetic legacy unit fixtures */
 /**
  * fact10 D25 (user ruling 2026-11-04): Angelic Bulwark 114214 — a Priest's
  * passive shield that goes up by itself at low HP — gets an `[ENEMY DEF]`

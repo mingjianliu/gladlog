@@ -16,12 +16,12 @@ import {
 import {
   buildOffensiveWasteSummary,
   formatOffensiveWasteForContext,
-  INTO_DEFERRAL_TAG,
-  withoutDeferralTag,
   getHighValueSpellIds,
+  INTO_DEFERRAL_TAG,
   pressLandingCaster,
   pressLandingRows,
   pressLandingsMs,
+  withoutDeferralTag,
 } from "../src/utils/offensiveWasteAnalysis";
 import {
   makeAdvancedAction,

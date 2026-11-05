@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- synthetic legacy unit fixtures */
 /**
  * fact10 (F25) class 4 — effect span ends, D29: a periodic-trigger aura's
  * last trigger, logged just after its REMOVED, is the effect's own (1cbbdcb3

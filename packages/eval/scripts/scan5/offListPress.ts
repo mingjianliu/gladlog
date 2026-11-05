@@ -22,13 +22,13 @@
  *    duration is too short: an aura cannot outlive its duration).
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
+import { SHARED_CHARGE_CATEGORY } from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   timeSpiralEchoMs,
   timeSpiralFreePressMs,
 } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import { isStasisReplayCast } from "@gladlog/analysis/src/utils/combatStates";
-import { SHARED_CHARGE_CATEGORY } from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import { unreleasedHoldMs } from "@gladlog/analysis/src/utils/cooldowns";
 import { pressDuration } from "@gladlog/analysis/src/utils/offListPress";
 import type { ICombatUnit } from "@gladlog/parser-compat";
