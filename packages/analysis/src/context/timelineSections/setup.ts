@@ -956,6 +956,10 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       matchStartMs,
       new Map(_allUnits.map((u) => [u.id, u])),
       ccLengthIsDrEvidence,
+      // a control still on at the miss has its level read from its own
+      // length — never from a removal after the round's end (codex
+      // 20-F25b-03)
+      roundEndMs({ endTime: matchEndMs, startInfo: { bracket } }, allPlayers),
     );
     return drLevelNextAt(history, missMs) === "Immune"
       ? `DR: ${category} Immune`

@@ -80,6 +80,7 @@ import {
   hasLineOfSight,
 } from "./losAnalysis";
 import { INTERP_MAX_GAP_MS } from "./positionSampling";
+import { roundEndMs } from "./roundEnd";
 import {
   auraBlocksMechanic,
   ccMechanicOf,
@@ -400,6 +401,8 @@ export function ccSamplerFor(params: {
           start,
           new Map(Object.values(combat.units ?? {}).map((u) => [u.id, u])),
           ccLengthIsDrEvidence,
+          // no length evidence past the round's end (codex 20-F25b-03)
+          roundEndMs(combat),
         ),
         tools: breakToolsFor(t, mech),
         talents: playerTalentIdSets(t),
