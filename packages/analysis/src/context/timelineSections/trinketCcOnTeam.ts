@@ -459,6 +459,11 @@ export function emitTrinketCcOnTeamEntries(
               applyMs: matchStartMs + c.atSeconds * 1000,
               removeMs: matchStartMs + (c.atSeconds + c.durationSeconds) * 1000,
               spellId: c.spellId,
+              // the walk's own length evidence, read inside the reset tick
+              // band (codex 20-F25b-05 #2)
+              ...(c.drFullSeconds !== undefined
+                ? { fullMs: c.drFullSeconds * 1000 }
+                : {}),
             }))
             .sort((a, b) => a.applyMs - b.applyMs);
           if (getDRLevel(history, imm.missMs).level === "Immune")

@@ -3856,6 +3856,9 @@ export function analyzePlayerCCAndTrinket(
   // REFRESH on one ms read as two history entries before the window and
   // printed Immune); the one that REFRESH began counts after the window
   // (`afterLandingAtSameMs`), never before it.
+  const rosterById = new Map(
+    (Object.values(combat.units ?? {}) as ICombatUnit[]).map((u) => [u.id, u]),
+  );
   const historyOnly: Array<{
     applyMs: number;
     removeMs: number;
@@ -3878,7 +3881,9 @@ export function analyzePlayerCCAndTrinket(
         player,
         cat,
         matchStartMs,
-        castersById,
+        // the whole roster: the length predicate reads an ally's Blessing of
+        // Sanctuary on the holder (codex 20-F25b-05 #1)
+        rosterById,
         ccLengthIsDrEvidence,
         roundEnd,
       )

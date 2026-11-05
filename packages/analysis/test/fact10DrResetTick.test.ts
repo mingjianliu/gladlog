@@ -25,6 +25,7 @@ import {
   getDRLevelAtTime,
   isDiminishedLength,
 } from "../src/utils/drAnalysis";
+import { BLESSING_OF_SANCTUARY_ID } from "../src/utils/sanctuaryRemovals";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -416,5 +417,63 @@ describe("DR reset tick band (fact10 D9)", () => {
         T0,
       ),
     ).toBe("Immune");
+  });
+
+  it("…and an ally's Blessing of Sanctuary that took it off is read on that path too: the whole roster is passed (codex 20-F25b-05 #1)", () => {
+    const CHEAP = "1833";
+    const HOJ = "853";
+    const at = (sec: number) => T0 + Math.round(sec * 1000);
+    const priest = makeUnit("player-1", {
+      name: "Priest",
+      spec: CombatUnitSpec.Paladin_Holy,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const hojFull = ccFullDurationForCaster(HOJ, priest)!;
+    const hojAt = 4 + 20.1;
+    const removeMs = at(hojAt + hojFull / 2);
+    priest.auraEvents = [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, CHEAP, at(0), "rogue-1"),
+      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, CHEAP, at(4), "rogue-1"),
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, HOJ, at(hojAt), "player-1"),
+      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, HOJ, removeMs, "player-1"),
+    ] as never;
+    const ally = makeUnit("ret-1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          BLESSING_OF_SANCTUARY_ID,
+          removeMs,
+          "player-1",
+          "Priest",
+          "ret-1",
+          "Ret",
+        ),
+      ],
+    });
+    const rogue = makeUnit("rogue-1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Friendly,
+    });
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 300_000,
+      startInfo: { zoneId: "1672" },
+      units: { [priest.id]: priest, [rogue.id]: rogue, [ally.id]: ally },
+    };
+    const s = analyzePlayerCCAndTrinket(priest, [rogue], combat as never, []);
+    const only = s.drHistoryOnly ?? [];
+    expect(only.map((h) => h.spellId)).toEqual([HOJ]);
+    expect(only[0]!.drFullSeconds).toBeUndefined();
+    expect(
+      getDRLevelAtTime(
+        [...s.ccInstances, ...only],
+        "Stun",
+        hojAt + hojFull / 2 + 1,
+        T0,
+      ),
+    ).toBe("50%");
   });
 });

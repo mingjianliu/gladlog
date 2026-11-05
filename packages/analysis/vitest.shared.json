@@ -110,6 +110,7 @@
     "test/burstLedgerHeader.test.ts",
     "test/castStopped.test.ts",
     "test/ccAvoidanceForwardAdditions.test.ts",
+    "test/ccAvoidedDrLengthEvidence.test.ts",
     "test/ccAvoidedLoggedMiss.test.ts",
     "test/ccBreakAnalysis.test.ts",
     "test/ccBrokenRemovalPairing.test.ts",
