@@ -985,6 +985,8 @@
 
 **2026-11-05 记录,未结(GH #126 Elusiveness;在 GH #135 跟踪)** —— 整份减伤都来自天赋的 `MITIGATION_TABLE` 行(`wholeReductionTalentId`:佯攻 1966 / 闪避 5277 → Elusiveness 79008,20%)按单位定价(`resolveMitigation`:持有 20、未持有 0、未知 0–20),但不进 `MITIGATION_WALL_IDS`。墙家族的读者只凭 id 问「X 是不是 20–99% 的墙」—— `WALL_IN_HAND_MIT_IDS`(击杀机会档位)及其门规 `checkKillTierWallOwnership`(从技能栏行的 `[UNUSED]` 名字读回,文本里没有天赋);`MITIGATION_AURA_IDS`(`[ENEMY DEF]` 墙行、KILL ATTEMPTS、`defenseless` 切点)—— 进去就会让没点天赋的盗贼的佯攻变成墙。在这些读者能拿到单位之前,佯攻没有 `[ENEMY DEF]` 行,闪避保留 `(dodge)` 行;已签字的裁定(佯攻 `never`,闪避对招架能挡的攻击 `unconditional`、对法术 `never`)经由 `offensiveWasteAnalysis` 生效,它读裁定册而不是墙集合。`mitigationElusiveness.test.ts` 钉住这个排除。
 
+**2026-11-06 记录,未结(GH #184 乙)** —— 惩戒骑手里的 Divine Toll 375576,窗口是它的 Divine Resonance 1266308 光环(`TALENT_EFFECT_AURAS_OF_CAST`,经 `effectSpanIdsOfCast` 由敌方大招时间线的观测结束读取;日志在回合内没写结束时,`talentEffectAuraAtPress` 给它光环的官方时长)。光环读者不会把 1266308 解析成 Divine Toll:`offensiveCdOfAura` 只认 `castsOwningEffectAura`,所以 `hasOffensiveSpellActive`(`[friendly offensive CD active]`、威胁门)和 `offensiveAuraOccurrences` 看不到 Divine Toll,而窗口构造、`[RES]`、击杀窗口看得到。直接在那里映射会让每次 Resonance 施加都变成一条 `(no press)`:通用的按键配对只把光环配给同名按键或「以它为自身效果」的施法,这两条都不成立。在配对逻辑接上天赋表之前,这个标签对 Divine Toll 只认按键那一刻。
+
 ## 怎么保证这页不腐烂
 
 `packages/eval/test/predicateIndex.test.ts` 是这个页面可执行的另一半。它会:

@@ -847,4 +847,10 @@
  *  are offensive cooldowns; Feint / Evasion carry Elusiveness's 20 %.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 490;
+/*
+ * v491 (2026-11-05, GH #184 part B): Divine Toll is a major offensive
+ *  cooldown for Retribution only (its window is Divine Resonance as
+ *  logged), Convoke the Spirits for Balance and Feral only.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 491;

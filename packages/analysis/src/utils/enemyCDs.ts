@@ -6,7 +6,8 @@ import {
 } from "@gladlog/parser-compat";
 
 import {
-  castAndEffectIds,
+  effectSpanIdsOfCast,
+  TALENT_EFFECT_AURAS_OF_CAST,
   triggeredEffectAurasOfCast,
 } from "../data/castEffectAuras";
 import {
@@ -309,6 +310,30 @@ export function observedEffectEndSeconds(
   );
 }
 
+/** The talent aura (`TALENT_EFFECT_AURAS_OF_CAST`) this caster applied —
+ * or refreshed — on itself inside a press's start window, if any: the press
+ * had the talent and its effect ran, whatever the log shows of its end. */
+export function talentEffectAuraAtPress(
+  caster: ICombatUnit,
+  castSpellId: string,
+  castS: number,
+  matchStartMs: number,
+): string | undefined {
+  const auras = TALENT_EFFECT_AURAS_OF_CAST[castSpellId];
+  if (auras === undefined) return undefined;
+  const castMs = matchStartMs + castS * 1000;
+  return (caster.auraEvents ?? []).find(
+    (a) =>
+      !!a.spellId &&
+      auras.includes(a.spellId) &&
+      a.srcUnitId === caster.id &&
+      (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+      a.logLine.timestamp >= castMs - EFFECT_START_BEFORE_S * 1000 &&
+      a.logLine.timestamp <= castMs + EFFECT_START_AFTER_S * 1000,
+  )?.spellId;
+}
+
 /** `observedEffectEndSeconds` with the unit whose chain it read — the
  * effect's holder (codex 20-G167-02: Power Infusion's end is its target's,
  * not its caster's). */
@@ -328,7 +353,9 @@ function observedEffectEnd(
   auraId: string;
   appliedS: number;
 } | null {
-  const ids = castAndEffectIds(castSpellId);
+  // the cast's effect auras, and a talent's aura it runs on (Divine Toll's
+  // Divine Resonance, GH #184 part B)
+  const ids = effectSpanIdsOfCast(castSpellId);
   const triggered = new Set(triggeredEffectAurasOfCast(castSpellId));
   const mine = auraIndexOf(combat).filter(
     ({ iv, destId }) =>
@@ -736,16 +763,15 @@ export function reconstructEnemyCDTimeline(
     // corpusFactScan hiddenPressUnused (2026-10-21): a press made while the
     // enemy was unseen (`hiddenPressMs`) is a press too (0284fcd9 r1 0:12:
     // Tranquility; 4-3 r3 0:06: Takedown — no line, kit [UNUSED])
-    const presses = pressRowsWithHidden(
-      enemy,
-      isEnemyCdWindowSpell,
-      matchStartMs,
-    );
+    // the enemy's spec admits its spec-gated cooldowns (GH #184 part B:
+    // a Retribution's Divine Toll, a Feral's Convoke)
+    const isWindowSpell = (id: string) => isEnemyCdWindowSpell(id, enemy.spec);
+    const presses = pressRowsWithHidden(enemy, isWindowSpell, matchStartMs);
     for (const cast of presses) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const { spellId } = cast;
       if (!spellId) continue;
-      if (!isEnemyCdWindowSpell(spellId)) continue;
+      if (!isWindowSpell(spellId)) continue;
       const effectData = spellEffectData[spellId]!;
       // an activation of another cooldown's effect (GH #115) has no button:
       // no cooldown of its own, nothing to come "available again". An
@@ -753,7 +779,7 @@ export function reconstructEnemyCDTimeline(
       // button) IS that button: priced on the cooldown it presses, under the
       // log's own id and name.
       const isActivation = OFFENSIVE_EFFECT_ACTIVATION_IDS.has(spellId);
-      const cdId = offensiveEffectCdId(spellId) ?? spellId;
+      const cdId = offensiveEffectCdId(spellId, enemy.spec) ?? spellId;
       // the enemy's own talent-resolved cooldown (`unitCooldownOf`: Summon
       // Infernal 90 with Inferno, not 120) — talent impact audit 2026-09-26
       const cooldownSeconds = isActivation
@@ -842,6 +868,23 @@ export function reconstructEnemyCDTimeline(
         combat,
       );
       if (end === null) {
+        // GH #184 part B (codex review 2026-11-06 P2): a press whose effect
+        // runs on a talent's aura (Divine Toll → Divine Resonance) has no
+        // official length of its own; with the aura applied at the press
+        // and its end not logged inside the round, the aura's official
+        // length is the press's, as the cast's is for any other cooldown
+        const talentAura = talentEffectAuraAtPress(
+          enemy,
+          cd.spellId,
+          cd.castTimeSeconds,
+          combat.startTime,
+        );
+        if (talentAura !== undefined && cd.buffEndSeconds <= cd.castTimeSeconds)
+          cd.buffEndSeconds =
+            cd.castTimeSeconds +
+            (buffFullDurationForCaster(talentAura, enemy) ??
+              spellEffectData[talentAura]?.durationSeconds ??
+              0);
         // fact10 D20: a length that moves with haste, its end not logged by
         // the round's end, runs as long as this unit's own completed run of
         // it did — not the official length (`ownCompletedRunSeconds`). Not

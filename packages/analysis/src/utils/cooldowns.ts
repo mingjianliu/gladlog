@@ -101,7 +101,11 @@ import {
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
-import { OFFENSIVE_CD_SPELL_IDS, offensiveEffectCdId } from "./spellDanger";
+import {
+  isSpecGatedOffensiveFor,
+  OFFENSIVE_CD_SPELL_IDS,
+  offensiveEffectCdId,
+} from "./spellDanger";
 import { ccMechanicOf } from "./spellMechanics";
 import {
   CD_TALENT_MODIFIERS,
@@ -1163,8 +1167,12 @@ export const ENEMY_CD_MAX_SECONDS = 360;
  * a registered activation (`OFFENSIVE_EFFECT_ACTIVATION_IDS`, Radiant Glory's
  * Avenging Wrath 454351) is admitted on its canonical cooldown (GH #115).
  */
-export function isEnemyCdWindowSpell(spellId: string): boolean {
-  const cdId = offensiveEffectCdId(spellId);
+export function isEnemyCdWindowSpell(
+  spellId: string,
+  /** the caster's spec, for a spec-gated member (GH #184 part B) */
+  spec?: unknown,
+): boolean {
+  const cdId = offensiveEffectCdId(spellId, spec);
   if (cdId === undefined) return false;
   const effectData = spellEffectData[spellId];
   if (!effectData) return false;
@@ -1193,12 +1201,17 @@ export function isEnemyCdWindowSpell(spellId: string): boolean {
  * The aura-only effects `OFFENSIVE_AURA_EVIDENCE` answers for keep their own
  * reader and are not resolved here. Undefined = not an offensive effect.
  */
-export function offensiveCdOfAura(auraSpellId: string): string | undefined {
-  const own = offensiveEffectCdId(auraSpellId);
+export function offensiveCdOfAura(
+  auraSpellId: string,
+  /** the aura's caster's spec, for a spec-gated member (GH #184 part B:
+   * Convoke's channel aura 391528 is a Feral's or Balance's burst) */
+  spec?: unknown,
+): string | undefined {
+  const own = offensiveEffectCdId(auraSpellId, spec);
   if (own !== undefined) return own;
   if (OFFENSIVE_AURA_EVIDENCE.has(auraSpellId)) return undefined;
   return castsOwningEffectAura(auraSpellId).find((c) =>
-    isEnemyCdWindowSpell(c),
+    isEnemyCdWindowSpell(c, spec),
   );
 }
 
@@ -5084,6 +5097,25 @@ function extractMajorCooldownsAll(
   // the same id is dropped (Avenging Wrath heals in a Holy Paladin's hands;
   // `isThroughput` reads that tag). Spells the roster does not list are left
   // exactly as the catalog had them. See data/healerSaveCd.ts.
+  // GH #184 part B (user ruling 2026-11-05): a spec-gated offensive
+  // cooldown is this unit's Offensive row in its spec (Retribution's Divine
+  // Toll, a Feral's / Balance's Convoke). Outside the healer branch below —
+  // none of these specs has a save roster (codex review 2026-11-06 P1: the
+  // loop sat inside it and never ran). COPY-ON-WRITE: `majorSpells` entries
+  // are the shared `classMetadata` objects.
+  for (let i = 0; i < majorSpells.length; i++) {
+    const sp = majorSpells[i]!;
+    if (!isSpecGatedOffensiveFor(sp.spellId, unit.spec)) continue;
+    majorSpells[i] = {
+      ...sp,
+      tags: [
+        SpellTag.Offensive,
+        ...sp.tags.filter(
+          (t) => t !== SpellTag.Offensive && t !== SpellTag.Utility,
+        ),
+      ],
+    };
+  }
   const saveRoster = healerSaveCdRoster(specToString(unit.spec));
   if (saveRoster) {
     // Authority cuts both ways — but only on EVIDENCE: a catalog / name-regex
@@ -7404,7 +7436,7 @@ function offensiveSummonActiveAt(
       !id ||
       c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
       !SUMMON_SPELL_IDS.has(id) ||
-      !isEnemyCdWindowSpell(id)
+      !isEnemyCdWindowSpell(id, unit.spec)
     )
       return false;
     const pressMs = c.logLine.timestamp;
@@ -7468,7 +7500,9 @@ export function hasOffensiveSpellActive(
   unit: ICombatUnit,
   timestampMs: number,
   requiredSourceIds: Set<string> | null,
-  spellIdFilter?: (spellId: string) => boolean,
+  /** asked with the aura's caster's spec when that is the unit itself (a
+   * spec-gated cooldown, GH #184 part B — codex review 2026-11-06 P2) */
+  spellIdFilter?: (spellId: string, spec?: unknown) => boolean,
   /** the round, when the caller has it (GH #119: the aura-evidenced effects
    * are read over the same bounds the enemy-CD timeline uses) */
   combat?: { startTime: number; endTime: number },
@@ -7494,7 +7528,10 @@ export function hasOffensiveSpellActive(
     const spellId = aura.spellId;
     // the aura's own id or the cast it is the effect of (fact2 C10:
     // Colossus Smash runs as 208086) — the filter asks about the cooldown
-    const cdId = spellId ? offensiveCdOfAura(spellId) : undefined;
+    // a spec-gated cooldown (Convoke's channel) reads its caster's spec: the
+    // unit's own when the aura is
+    const casterSpec = aura.srcUnitId === unit.id ? unit.spec : undefined;
+    const cdId = spellId ? offensiveCdOfAura(spellId, casterSpec) : undefined;
     if (!spellId || cdId === undefined) continue;
     if (notTheEnd.has(aura)) continue;
     if (OFFENSIVE_AURA_EVIDENCE.has(spellId)) continue;
@@ -7508,8 +7545,8 @@ export function hasOffensiveSpellActive(
     if (requiredSourceIds === null && aura.auraType === "DEBUFF") continue;
     if (
       spellIdFilter !== undefined &&
-      !spellIdFilter(spellId) &&
-      !spellIdFilter(cdId)
+      !spellIdFilter(spellId, casterSpec) &&
+      !spellIdFilter(cdId, casterSpec)
     )
       continue;
 
@@ -7611,7 +7648,13 @@ function offensiveThreatStartedAfter(
   for (const enemy of enemies) {
     for (const aura of enemy.auraEvents) {
       if (aura.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-      if (!aura.spellId || offensiveCdOfAura(aura.spellId) === undefined)
+      if (
+        !aura.spellId ||
+        offensiveCdOfAura(
+          aura.spellId,
+          aura.srcUnitId === enemy.id ? enemy.spec : undefined,
+        ) === undefined
+      )
         continue;
       // an enemy's own offensive cooldown is a buff on it — a DEBUFF there is
       // ours (a friendly mage's Touch of the Magi 210824), the rule
@@ -7624,7 +7667,13 @@ function offensiveThreatStartedAfter(
 
   for (const aura of target.auraEvents) {
     if (aura.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-    if (!aura.spellId || offensiveCdOfAura(aura.spellId) === undefined)
+    if (
+      !aura.spellId ||
+      offensiveCdOfAura(
+        aura.spellId,
+        enemies.find((e) => e.id === aura.srcUnitId)?.spec,
+      ) === undefined
+    )
       continue;
     if (!enemyIds.has(aura.srcUnitId)) continue;
     if (aura.timestamp > castMs && aura.timestamp <= windowEnd) return true;

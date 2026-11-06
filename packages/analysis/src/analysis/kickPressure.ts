@@ -73,7 +73,7 @@ import {
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { fullImmunityIntervals } from "../utils/enemyDefensives";
 import { roundEndMs } from "../utils/roundEnd";
-import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
+import { isOffensiveCdFor } from "../utils/spellDanger";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 
 /** Deaths this long after the lockout ends still count as its outcome. */
@@ -250,7 +250,7 @@ export function kickPressureFor(params: {
           (u.spellCastEvents ?? []).map((e) => String(e.spellId ?? "")),
         );
         for (const id of kit) {
-          if (!OFFENSIVE_CD_SPELL_IDS.has(id)) continue;
+          if (!isOffensiveCdFor(id, u.spec)) continue;
           if (!kitSpellReadyAt(u, id, s, start, talents.get(u.id)!, combat))
             continue;
           // readiness is read on the rendered second (`s` = floor of the

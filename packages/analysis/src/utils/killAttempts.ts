@@ -1258,7 +1258,7 @@ export function anchorsKillAttempt(
   attacker: Pick<ICombatUnit, "spec">,
   spellId: string,
 ): boolean {
-  const cdId = offensiveEffectCdId(spellId) ?? spellId;
+  const cdId = offensiveEffectCdId(spellId, attacker.spec) ?? spellId;
   return !KILL_ATTEMPT_NON_ANCHOR_CDS.get(attacker.spec)?.has(cdId);
 }
 

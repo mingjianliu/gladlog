@@ -31,7 +31,7 @@ import {
 import { pressRowsWithHidden } from "../../utils/hiddenPress";
 import { NO_PRESS_SUFFIX } from "../../utils/offensiveAuraOccurrences";
 import { fmtTime } from "../../utils/renderGrid";
-import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
+import { isOffensiveCdFor } from "../../utils/spellDanger";
 import type { TimelineCtx } from "./ctx";
 
 /** The per-spell cast ordinal (triage res-readiness F-C2): `[k/N]` is the
@@ -347,7 +347,7 @@ export function emitEnemyCdEntries(
           // a healing major of THIS unit's spec has its own line (a Feral's
           // Convoke is no healer's)
           !isEnemyHealCdFor(ab.spellId, enemy.spec) &&
-          !OFFENSIVE_CD_SPELL_IDS.has(ab.spellId) &&
+          !isOffensiveCdFor(ab.spellId, enemy.spec) &&
           // an offensive press fact is an [ENEMY CD] line (`offensiveFacts`)
           !isOffensivePressFactFor(ab.spellId, enemy.spec),
       );

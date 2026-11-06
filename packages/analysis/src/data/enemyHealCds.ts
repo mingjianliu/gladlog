@@ -32,7 +32,10 @@
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 
 import { TEAM_HEAL_CD_IDS } from "../utils/cooldowns";
-import { OFFENSIVE_PRESS_FACT_IDS } from "../utils/spellDanger";
+import {
+  isSpecGatedOffensiveFor,
+  OFFENSIVE_PRESS_FACT_IDS,
+} from "../utils/spellDanger";
 
 export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   ...TEAM_HEAL_CD_IDS,
@@ -123,6 +126,10 @@ export function isOffensivePressFactFor(
   spec: unknown,
 ): boolean {
   return (
-    OFFENSIVE_PRESS_FACT_IDS.has(spellId) && !isEnemyHealCdFor(spellId, spec)
+    OFFENSIVE_PRESS_FACT_IDS.has(spellId) &&
+    !isEnemyHealCdFor(spellId, spec) &&
+    // GH #184 part B: a Retribution's Divine Toll, a Feral's or Balance's
+    // Convoke is an offensive cooldown, not a fact line
+    !isSpecGatedOffensiveFor(spellId, spec)
   );
 }

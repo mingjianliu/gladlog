@@ -3,6 +3,7 @@ import { ICombatUnit } from "@gladlog/parser-compat";
 import {
   effectAuraViaName,
   ownEffectAurasOfCast,
+  TALENT_EFFECT_AURAS_OF_CAST,
 } from "../data/castEffectAuras";
 import { spellEffectData } from "../data/spellEffectData";
 import {
@@ -1197,6 +1198,12 @@ function buildResourceSnapshotOnce({
       // "5s left" at 35 s (codex review): no cap. If duration is 0 (instant
       // cast), show it for 8 seconds to ensure AI has context.
       const buffDuration = cd.buffEndSeconds - cd.castTimeSeconds;
+      // a press whose effect lives only on a talent's aura (Divine Toll →
+      // Divine Resonance, GH #184 part B, user ruling 2026-11-05 option A)
+      // and logged none has no span: the 8 s would state a window the log
+      // never showed
+      if (buffDuration <= 0 && TALENT_EFFECT_AURAS_OF_CAST[cd.spellId])
+        continue;
       const end = cd.castTimeSeconds + (buffDuration > 0 ? buffDuration : 8);
       // F20 D25: spent by the row's second on the friendly half's predicate
       // (`pressSpentBy` — the rendered second, A45), not `ago >= 0` against

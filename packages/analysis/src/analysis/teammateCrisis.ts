@@ -308,7 +308,7 @@ export function teammateCrisisPoints(
       // one predicate with the enemy-CD window builder and crisisDecisionPoints'
       // enemyBurst (utils/enemyCDs.ts): canonical offensive table AND a real
       // cooldown — never a curse / Ignite the table admits without one
-      if (isEnemyCdWindowSpell(sid))
+      if (isEnemyCdWindowSpell(sid, e.spec))
         enemyBurstCasts.push({
           t: c.timestamp,
           casterName: e.name,

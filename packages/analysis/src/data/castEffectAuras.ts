@@ -154,6 +154,35 @@ export function castAndEffectIds(castSpellId: string): ReadonlySet<string> {
   return new Set([castSpellId, ...effectAurasOfCast(castSpellId)]);
 }
 
+/**
+ * GH #184 part B (user ruling 2026-11-05, option A): a cooldown whose effect
+ * runs on a TALENT's aura of another name, which no DB2 name / trigger chain
+ * links to the cast — the generated table cannot nominate it. Divine Toll
+ * 375576 → Divine Resonance 1266308 (Retribution: "Your next $w1 Judgments
+ * casts again at $w2% effectiveness", 30 s, ends as the Judgments consume
+ * it). 150 files of the 605 set: 248 Retribution presses, 173 applications,
+ * every one on a Retribution paladin, median 13.5 s. Read only for the
+ * effect span of a press (`effectSpanIdsOfCast` → the offensive window's
+ * observed end); a press with no such aura logged has no span — DB2 gives
+ * the cast no length. Registered in `curatedIdRegistry.ts`.
+ */
+export const TALENT_EFFECT_AURAS_OF_CAST: Readonly<
+  Record<string, readonly string[]>
+> = {
+  "375576": ["1266308"],
+};
+
+/** `castAndEffectIds` plus the talent aura a press's effect may run on
+ * (`TALENT_EFFECT_AURAS_OF_CAST`) — the ids an offensive press's observed
+ * span reads, and nothing else (misses, control and dispel readers keep
+ * `castAndEffectIds`). */
+export function effectSpanIdsOfCast(castSpellId: string): ReadonlySet<string> {
+  return new Set([
+    ...castAndEffectIds(castSpellId),
+    ...(TALENT_EFFECT_AURAS_OF_CAST[castSpellId] ?? []),
+  ]);
+}
+
 /** Does `auraOrMissSpellId` belong to a cast of `castSpellId` — the same id,
  * or one of its effect auras. */
 export function isCastOrEffect(

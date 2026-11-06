@@ -123,12 +123,16 @@ export const NO_PRESS_SUFFIX = " (no press)";
  * duplicateLine). */
 export const GENERIC_PRESS_AFTER_MS = 1000;
 
-function genericCdOfAura(auraSpellId: string): string | undefined {
+function genericCdOfAura(
+  auraSpellId: string,
+  /** the unit's spec: its own buff, so the caster's (GH #184 part B) */
+  spec?: unknown,
+): string | undefined {
   if (OFFENSIVE_AURA_EVIDENCE.has(auraSpellId)) return undefined;
-  const cd = offensiveCdOfAura(auraSpellId);
+  const cd = offensiveCdOfAura(auraSpellId, spec);
   // the enemy-CD window test on the resolved id too: a table id with no
   // cooldown is no cooldown tracker's (codex 20-F18-02 #2: Archangel 81700)
-  return cd !== undefined && isEnemyCdWindowSpell(cd) ? cd : undefined;
+  return cd !== undefined && isEnemyCdWindowSpell(cd, spec) ? cd : undefined;
 }
 
 /** Cast ids read as evidence (registered with the table above). */
@@ -257,7 +261,7 @@ export function auraOffensiveOccurrences(
         OFFENSIVE_FORM_FACT_AURAS.has(a.spellId) ||
         // a generic one: the unit's own buff on itself
         (a.destUnitId === unit.id &&
-          genericCdOfAura(a.spellId) !== undefined)) &&
+          genericCdOfAura(a.spellId, unit.spec) !== undefined)) &&
       a.srcUnitId === unit.id &&
       a.logLine.timestamp >= bounds.startTime &&
       a.logLine.timestamp <= bounds.endTime,
@@ -341,7 +345,7 @@ export function auraOffensiveOccurrences(
       continue;
     }
 
-    const genericCd = genericCdOfAura(iv.spellId);
+    const genericCd = genericCdOfAura(iv.spellId, unit.spec);
     if (genericCd !== undefined) {
       if (iv.inferredStart) continue;
       const name = getEnglishSpellName(genericCd, iv.spellName);

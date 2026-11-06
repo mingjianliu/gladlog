@@ -95,8 +95,11 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("216331", "Avenging Crusader", D),
       a("31821", "Aura Mastery", D),
       // fact7 class 3 (D75): Holy's press of this id is the healer save
-      // roster's and `[ENEMY HEAL CD]`; a Retribution press is a fact line
-      // (OFFENSIVE_PRESS_FACT_IDS). 4206b8a9: 2 teammate presses, no line.
+      // roster's and `[ENEMY HEAL CD]`; a Protection press is a fact line
+      // (OFFENSIVE_PRESS_FACT_IDS). A Retribution press is a major offensive
+      // cooldown (GH #184 part B, user ruling 2026-11-05): the ledger tags
+      // this row Offensive in a Retribution's hands
+      // (`SPEC_GATED_OFFENSIVE_CD_IDS`), its window is Divine Resonance's.
       a("375576", "Divine Toll", U),
       // GH #184 (user ruling 2026-11-05): a major offensive cooldown, no
       // use condition (fact7 class 3 made it a press fact first)
@@ -400,11 +403,13 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("106951", "Berserk", O),
       a("102560", "Incarnation: Chosen of Elune", O),
       a("194223", "Celestial Alignment", O),
-      // Convoke the Spirits 391528 deliberately out of the offensive table:
-      // no spec gate in OFFENSIVE_CD_SPELL_IDS, and Restoration Druids cast
-      // the same id as a healing channel (same reason as Divine Toll
-      // 375576). A Utility row (fact7 class 3): Restoration's is the healer
-      // save roster's, a Feral's or a Balance's press is a fact line.
+      // Convoke the Spirits 391528 stays out of the id-keyed offensive
+      // table: Restoration Druids cast the same id as a healing channel
+      // (same reason as Divine Toll 375576). A Utility row (fact7 class 3):
+      // Restoration's is the healer save roster's, a Guardian's press is a
+      // fact line; a Balance's or a Feral's is a major offensive cooldown
+      // (GH #184 part B, `SPEC_GATED_OFFENSIVE_CD_IDS` — the ledger tags the
+      // row Offensive in their hands).
       a("391528", "Convoke the Spirits", U),
       a("33786", "Cyclone", C),
       a("99", "Incapacitating Roar", C),

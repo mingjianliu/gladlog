@@ -76,7 +76,10 @@ import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
 import type { RosterSides } from "../../utils/rosterSide";
 import { SOLO_SHUFFLE_BRACKET } from "../../utils/roundEnd";
-import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
+import {
+  isOffensiveCdFor,
+  isOffensiveLedgerCd,
+} from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
 import {
   type DecisionPoint,
@@ -724,7 +727,7 @@ export function countsAsTeamBurst(
   owner: { spec?: unknown },
   spellId: string,
 ): boolean {
-  if (!OFFENSIVE_CD_SPELL_IDS.has(spellId)) return false;
+  if (!isOffensiveCdFor(spellId, owner.spec)) return false;
   return (
     !isHealerSpec(owner.spec as never) || HEALER_TEAM_BURST_IDS.has(spellId)
   );
@@ -2510,7 +2513,7 @@ export function cdHoardedEvents(
       // Power Infusion and Voidform 1–2 s before the 37 % reading with
       // Dispersion ready.
       const ownBurstPressed = ownerCds
-        .filter((cd) => OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId)))
+        .filter((cd) => isOffensiveLedgerCd(cd))
         .flatMap((cd) =>
           cd.casts
             .filter(

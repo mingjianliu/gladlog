@@ -82,7 +82,10 @@ import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import { roundEndMs } from "../utils/roundEnd";
-import { isOffensiveSpell } from "../utils/spellDanger";
+import {
+  isOffensiveSpell,
+  SPEC_GATED_OFFENSIVE_CD_IDS,
+} from "../utils/spellDanger";
 import { isDeadAt } from "../utils/unitDeath";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
@@ -176,7 +179,12 @@ export const BURST_LAPSE_DMG_PCT_PER_S = 0.03;
  * builder cannot widen what this engine calls a burst without this line
  * going with it) survives unification.
  */
-export const isBurstWindowOffensiveCd = isOffensiveSpell;
+export const isBurstWindowOffensiveCd = (spellId: string): boolean =>
+  isOffensiveSpell(spellId) ||
+  // GH #184 part B: a spec-gated cooldown reaches this engine only through
+  // the builder, which admitted it on its caster's spec (`activeCDs` carry
+  // no spec to ask again)
+  spellId in SPEC_GATED_OFFENSIVE_CD_IDS;
 
 /**
  * Ids that may never be a window's `leadCd` (they stay in `extraCds`).

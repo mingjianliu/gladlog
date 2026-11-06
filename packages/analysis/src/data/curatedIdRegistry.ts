@@ -196,6 +196,7 @@ import {
   OFFENSIVE_CD_SPELL_IDS,
   OFFENSIVE_EFFECT_ACTIVATION_IDS,
   OFFENSIVE_PRESS_FACT_IDS,
+  SPEC_GATED_OFFENSIVE_CD_IDS,
   SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
 } from "../utils/spellDanger";
 import { HEALER_REACH_SPELLS } from "../utils/spellRange";
@@ -220,7 +221,10 @@ import {
   KW_UNPRESSED_NOT_IN_HAND_IDS,
   MOBILITY_NOT_MAJOR_DEFENSIVE_IDS,
 } from "./abilityProfile";
-import { castEffectPairs } from "./castEffectAuras";
+import {
+  castEffectPairs,
+  TALENT_EFFECT_AURAS_OF_CAST,
+} from "./castEffectAuras";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
 import {
   AURA_KEYED_BREAK_RACIALS,
@@ -1166,6 +1170,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("castEffectAuraGenerated", "data/castEffectAuras.ts", "mixed", () =>
     castEffectPairs().flatMap(([cast, aura]) => [cast, aura]),
   ),
+  // GH #184 part B (2026-11-05): a cooldown's effect on a talent aura of
+  // another name (Divine Toll → Divine Resonance) — both sides hand-keyed.
+  t("TALENT_EFFECT_AURAS_OF_CAST", "data/castEffectAuras.ts", "mixed", () =>
+    Object.entries(TALENT_EFFECT_AURAS_OF_CAST).flatMap(([k, v]) => [k, ...v]),
+  ),
   t("IMMUNITY_SPELLS", "utils/deathOutcomeAnalysis.ts", "mixed", () =>
     Object.entries(IMMUNITY_SPELLS).flatMap(([k, v]) => [
       k,
@@ -1221,6 +1230,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // line, no window; found forward by scan5/listGap.ts.
   t("OFFENSIVE_PRESS_FACT_IDS", "utils/spellDanger.ts", "cast", () =>
     set(OFFENSIVE_PRESS_FACT_IDS),
+  ),
+  // GH #184 part B (2026-11-05): offensive cooldowns in one spec's hands only
+  t("SPEC_GATED_OFFENSIVE_CD_IDS", "utils/spellDanger.ts", "cast", () =>
+    keys(SPEC_GATED_OFFENSIVE_CD_IDS),
   ),
   // fact9 D27: a talent's same-cooldown button replacement (Frozen Orb 198149)
   t("TALENT_REPLACE_VARIANT_IDS", "data/talentReplaceVariants.ts", "cast", () =>

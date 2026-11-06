@@ -5273,3 +5273,33 @@ audits priced (Feint 218, Evasion 38) where they read "not in the
 mitigation table". Gates unchanged; corpusFactScan5 `talentWallPrinted` 870
 → 864, `noDefensiveButPressed` 5 → 6 (an existing class: Execution Sentence
 starts a window at 1:22 whose STAYED IN span holds a Death Pact).
+
+v491 (2026-11-05, GH #184 part B; user rulings 2026-11-05: Divine Toll only
+for Retribution, Convoke only for Balance / Feral; window option 「a」).
+`SPEC_GATED_OFFENSIVE_CD_IDS` (spellDanger.ts): Divine Toll 375576 is a major
+offensive cooldown in a Retribution's hands, Convoke the Spirits 391528 in a
+Balance's or a Feral's. Readers that know the unit pass its spec
+(`isOffensiveCdFor`, `offensiveEffectCdId(id, spec)`, `isEnemyCdWindowSpell`,
+`offensiveCdOfAura`); the ledger tags the row Offensive in that spec
+(`isOffensiveLedgerCd`). Holy's / Restoration's stay `[ENEMY HEAL CD]`,
+Protection's / Guardian's stay press facts. Divine Toll is instant in DB2;
+its window is Divine Resonance 1266308 as logged (`TALENT_EFFECT_AURAS_OF_CAST`,
+castEffectAuras.ts — read only by the observed effect end). 150 files: 248
+Retribution presses, 173 applications, all on Retribution, median 13.5 s
+(DB2 30 s, consumed by Judgments). A press with none logged has no span:
+`[RES]` drops its 8 s fallback for it. 605 files against PV490
+(ff53cc390): findings missed-sync-window 660 → 666 (Divine Toll ready at an
+own-team healer control; −5 where its Resonance ran through the control),
+kick-eaten 1847 → 1854 (+ ~150 burst-list fields), position-mistake 157 →
+154 (windows merged). Context: Divine Toll in 1,343 `[OFFENSIVE WINDOW]`,
+1,627 `[RES]` enemy entries; Convoke in 2 windows. Burst spans: 78 at 0–5 s
+(no talent), 196 at 10–20 s, 20 at 30 s. Gates unchanged; corpusFactScan5
+resCdBeforeNextPress 632 → 626, troughPastRoundEndReaders 6 → 5,
+allyOverlapDeferral 4 → 5 (the existing summedByMagnitude class, a new
+Divine Toll overlap line). codex review: the ledger's Offensive promotion
+runs outside the healer-roster branch, a Resonance whose end the round does
+not show gives the aura's official length (`talentEffectAuraAtPress`),
+`hasOffensiveSpellActive` passes the aura caster's spec; recapture — same
+finding counts, 14 burst-list fields and 38 context files more name Divine
+Toll. Not unified (predicate-index): the aura readers do not resolve
+Divine Resonance to Divine Toll.

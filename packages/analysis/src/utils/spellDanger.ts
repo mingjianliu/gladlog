@@ -1,3 +1,5 @@
+import { CombatUnitSpec } from "@gladlog/parser-compat";
+
 import { classMetadata } from "../data/classSpells";
 import { OVERRIDE_VARIANTS_GENERATED } from "../data/overrideVariantsGenerated";
 import { OFFENSIVE_RACIAL_WINDOW_IDS } from "../data/racialAbilities";
@@ -85,10 +87,11 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  *   - Divine Toll 375576 (Ret lift 2.03, coPressed 5 %): the table keys on the
  *     spell id with no spec gate, and Holy Paladins press the same id as a
  *     heal — it would open a fake "enemy burst" window on every enemy Holy
- *     Paladin. Needs a spec-aware table first.
+ *     Paladin. Since GH #184 part B (2026-11-05) the spec-aware table is
+ *     `SPEC_GATED_OFFENSIVE_CD_IDS` below: Retribution's press is a burst.
  *   - Convoke the Spirits 391528: similarly, Restoration Druids press the same
  *     id as a major healing channel (Regrowth, Rejuvenation, Swiftmend, Wild
- *     Growth). Needs a spec-aware table first.
+ *     Growth). Balance's and Feral's are bursts through the same table.
  *   - Meteor 153561 (lift 2.54): an instant nuke. Every consumer renders a
  *     table member as a WINDOW ("Meteor/Fire Mage (7 s left)" in [RES] —
  *     caught by the real-fixture test); a nuke that has already landed is
@@ -164,6 +167,60 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
 );
 
 /**
+ * GH #184 part B (user ruling 2026-11-05): offensive cooldowns in ONE spec's
+ * hands only — the id is a healer's major in another spec, so it cannot sit
+ * in the id-keyed `OFFENSIVE_CD_SPELL_IDS` (the notes above). Divine Toll
+ * 375576 is Retribution's (Holy's is `[ENEMY HEAL CD]`); Convoke the Spirits
+ * 391528 is Balance's and Feral's (Restoration's is `[ENEMY HEAL CD]`,
+ * Guardian's stays a press fact). Read through `isOffensiveCdFor` /
+ * `offensiveEffectCdId(id, spec)`: a reader that knows the unit's spec sees
+ * them, one that does not keeps the id-only answer. Registered in
+ * `curatedIdRegistry.ts`.
+ */
+export const SPEC_GATED_OFFENSIVE_CD_IDS: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  "375576": new Set([CombatUnitSpec.Paladin_Retribution]),
+  "391528": new Set([CombatUnitSpec.Druid_Balance, CombatUnitSpec.Druid_Feral]),
+};
+
+/** Is `spellId` a spec-gated offensive cooldown in `spec`'s hands
+ * (`SPEC_GATED_OFFENSIVE_CD_IDS`)? */
+export function isSpecGatedOffensiveFor(
+  spellId: string,
+  spec: unknown,
+): boolean {
+  return (
+    spec !== undefined &&
+    spec !== null &&
+    (SPEC_GATED_OFFENSIVE_CD_IDS[spellId]?.has(String(spec)) ?? false)
+  );
+}
+
+/** Is `spellId` an offensive cooldown in `spec`'s hands — a member of the
+ * id-keyed table, or a spec-gated one of this spec. The reader of
+ * `OFFENSIVE_CD_SPELL_IDS` wherever the unit is known. */
+export function isOffensiveCdFor(spellId: string, spec: unknown): boolean {
+  return (
+    OFFENSIVE_CD_SPELL_IDS.has(spellId) || isSpecGatedOffensiveFor(spellId, spec)
+  );
+}
+
+/** The same question of a ledger row (`extractMajorCooldowns`), whose tag
+ * already carries its unit's spec: a spec-gated row is Offensive only in
+ * its spec's ledger. For a reader that holds the row, not the unit. */
+export function isOffensiveLedgerCd(cd: {
+  spellId: string | number;
+  tag?: string;
+}): boolean {
+  const id = String(cd.spellId);
+  return (
+    OFFENSIVE_CD_SPELL_IDS.has(id) ||
+    (id in SPEC_GATED_OFFENSIVE_CD_IDS && cd.tag === SpellTag.Offensive)
+  );
+}
+
+/**
  * fact7 class 3 (F21, 2026-10-30; D7 D8 D16 D45 D75 D78): offensive buttons
  * whose PRESS is a fact and that open nothing. Each has an official cooldown
  * of 45 s or more (the shape floor of user ruling 2026-09-18) and a press the
@@ -189,7 +246,9 @@ export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
   // roster Offensive row, so an `OFFENSIVE_CD_SPELL_IDS` member.
   "357210", // Deep Breath, 120 s recharge (D78)
   "433874", // Deep Breath, the Scalecommander override (D78)
-  "375576", // Divine Toll — 60 s, a Holy Paladin's is [ENEMY HEAL CD] (D75)
+  // a Protection's press (Retribution's is a burst, GH #184 part B —
+  // `SPEC_GATED_OFFENSIVE_CD_IDS`; a Holy Paladin's is [ENEMY HEAL CD])
+  "375576", // Divine Toll — 60 s (D75)
   // The same class in the notes above: live, printed nowhere.
   "153561", // Meteor — Fire, 45 s
   // Frostwyrm's Fury 279302 left 2026-11-04 (fact10 D31, user ruling): a
@@ -197,7 +256,9 @@ export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
   "439843", // Reaper's Mark — 45 s
   "426591", // Goremaw's Bite — Subtlety, 45 s
   "370553", // Tip the Scales — 120 s, a Preservation's is [ENEMY HEAL CD]
-  "391528", // Convoke the Spirits — 120 s, a Restoration's is [ENEMY HEAL CD]
+  // a Guardian's press (Balance's and Feral's are bursts, GH #184 part B; a
+  // Restoration's is [ENEMY HEAL CD])
+  "391528", // Convoke the Spirits — 120 s
   // In `SPELL_EFFECT_OVERRIDES` only, which keys a weight and prints nothing.
   "322109", // Touch of Death — 180 s
   "375901", // Mindgames — 45 s
@@ -247,8 +308,13 @@ export const OFFENSIVE_EFFECT_ACTIVATION_IDS: ReadonlyMap<string, string> =
  * button replacement (`TALENT_REPLACE_VARIANT_IDS`, fact9 D27: Frozen Orb
  * 198149), undefined otherwise. A variant is a PRESS of the cooldown (it is in
  * `SPELL_CANONICAL_IDS` too); an activation is not. */
-export function offensiveEffectCdId(spellId: string): string | undefined {
-  if (OFFENSIVE_CD_SPELL_IDS.has(spellId)) return spellId;
+export function offensiveEffectCdId(
+  spellId: string,
+  /** the caster's spec, for a spec-gated member (`SPEC_GATED_OFFENSIVE_CD_IDS`);
+   * absent = the id-keyed table alone */
+  spec?: unknown,
+): string | undefined {
+  if (isOffensiveCdFor(spellId, spec)) return spellId;
   const overridden =
     OVERRIDE_VARIANTS_GENERATED[spellId] ?? TALENT_REPLACE_VARIANT_IDS[spellId];
   if (overridden !== undefined && OFFENSIVE_CD_SPELL_IDS.has(overridden))
@@ -263,8 +329,8 @@ export function offensiveEffectCdId(spellId: string): string | undefined {
  * seen the same way everywhere. (The pre-2026-09-02 comment claimed "covers
  * all 120 tagged offensive spells" — that was wrong on both counts.)
  */
-export function isOffensiveSpell(spellId: string): boolean {
-  return offensiveEffectCdId(spellId) !== undefined;
+export function isOffensiveSpell(spellId: string, spec?: unknown): boolean {
+  return offensiveEffectCdId(spellId, spec) !== undefined;
 }
 
 /**

@@ -38,7 +38,7 @@ import { CLOSE_RANGE_YARDS } from "./positionAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { canReachTargetAt } from "./rootReachability";
-import { OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
+import { isOffensiveCdFor } from "./spellDanger";
 import { RANGE_HITBOX_SLACK_YD, spellRangeForCaster } from "./spellRange";
 import { isDeadAt } from "./unitDeath";
 
@@ -156,7 +156,7 @@ export function createKillWindowFactsComputer(
         f,
         combat as Parameters<typeof extractMajorCooldowns>[1],
       )
-        .filter((cd) => OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId)))
+        .filter((cd) => isOffensiveCdFor(String(cd.spellId), f.spec))
         .map((cd) => ({ cd, holder: f }));
     } catch {
       return [];
