@@ -131,7 +131,11 @@ describe("replacedSpellListed", () => {
   });
 
   it("reads the enemy column for an enemy only, and only when no same-spec enemy keeps it", () => {
-    const line = ["0:10  [RES] rdy:—  enemy:Divine Toll/Holy Paladin(8s left)"];
+    // a ledger row as rendered: under its timed line, six spaces, no time
+    const line = [
+      "0:10  [PRESS]   x",
+      "      [RES] rdy:—  cd:—  enemy:Divine Toll/Holy Paladin(8s left)",
+    ];
     const enemy = () => ({
       ...paladin(),
       info: { ...paladin().info, teamId: "1" },
@@ -168,7 +172,10 @@ describe("replacedSpellListed", () => {
 
   it("does not read a mate's entry or a longer name as the owner's", () => {
     const owner = "Player-1";
-    const line = (s: string) => [`0:10  [RES] rdy:Aura Mastery,${s}`];
+    const line = (s: string) => [
+      "0:10  [PRESS]   x",
+      `      [RES] rdy:Aura Mastery,${s}  cd:—`,
+    ];
     expect(scan(paladin(), line("3:Divine Toll"), "", owner)).toEqual([]);
     expect(scan(paladin(), line("Mass Divine Toll"), "", owner)).toEqual([]);
     expect(scan(paladin(), line("Divine Toll"), "", owner)).toEqual(["res"]);

@@ -44,6 +44,7 @@
  *  - `kickBackVsNextPress` (D28): a `[RES]` `cd:` entry or `[KICK] … back m:ss`
  *    of an interrupt putting it back later than its unit's next press of it.
  */
+import { parseResRow } from "@gladlog/analysis/src/context/resRow";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import {
@@ -87,8 +88,7 @@ export const CHECKS = [
   "kickBackVsNextPress",
 ] as const;
 
-export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
-]);
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([]);
 
 const NEAR_MS = 50;
 const JITTER_MS = 100;
@@ -588,8 +588,7 @@ function kickBack(ctx: IRoundCtx): void {
           );
       }
     }
-    if (!/^\s*\[RES\]/.test(line)) continue;
-    const cd = /(?:^|\s)cd:(\S.*?)(?:\s\||\s{2}|$)/.exec(line)?.[1];
+    const cd = parseResRow(line)?.cd;
     if (!cd) continue;
     for (const e of cd.matchAll(RES_CD)) {
       if (!kickNames.has(e[2]!)) continue;

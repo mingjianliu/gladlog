@@ -39,6 +39,7 @@
  *    spell (measured, not in the total: a hand reads these).
  */
 import { specToString } from "@gladlog/analysis";
+import { parseResRow } from "@gladlog/analysis/src/context/resRow";
 import { replacedSpellIds } from "@gladlog/analysis/src/data/talentReplaces";
 import { TALENT_REPLACES_GENERATED } from "@gladlog/analysis/src/data/talentReplacesGenerated";
 import {
@@ -190,12 +191,12 @@ export function run(ctx: IRoundCtx): void {
         seen("ccKit", ctx.start, l);
       const t = TIMED.exec(l);
       if (t) at = ctx.start + (Number(t[1]) * 60 + Number(t[2])) * 1000;
-      if (l.includes("[RES] ")) {
-        const col = /\[RES\] (.*?)(?: {2}enemy:(.*?))?(?: {2}focus:.*)?$/.exec(
-          l,
-        );
-        const own = col?.[1] ?? "";
-        const en = col?.[2] ?? "";
+      const res = parseResRow(l);
+      if (res) {
+        // the team's own columns (rdy, cd) and the enemy's; `cc:` names the
+        // controls on units, no one's kit
+        const own = `rdy:${res.rdy}  cd:${res.cd}`;
+        const en = res.enemy ?? "";
         if (token?.test(own)) seen("res", at, l);
         if (readsEnemyColumn && enemyToken.test(en)) seen("resEnemy", at, l);
         continue;

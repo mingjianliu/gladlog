@@ -36,6 +36,7 @@
  *  - `racialPressNoLine` (class 11, D49): our side's press of a racial that
  *    shares the trinket's lock, no line naming it in that second.
  */
+import { parseResRow } from "@gladlog/analysis/src/context/resRow";
 import {
   castsOfEffectAura,
   effectAurasOfCast,
@@ -123,8 +124,7 @@ function resCd(ctx: IRoundCtx): void {
   for (const line of ctx.lines) {
     const timed = TIMED.exec(line);
     if (timed) t = +timed[1]! * 60 + +timed[2]!;
-    if (!/^\s*\[RES\]/.test(line)) continue;
-    const cd = /(?:^|\s)cd:(\S.*?)(?:\s\||\s{2}|$)/.exec(line)?.[1];
+    const cd = parseResRow(line)?.cd;
     if (!cd) continue;
     for (const e of cd.matchAll(RES_CD)) {
       const unit = e[1] ? ctx.unitOfPid(e[1]) : ctx.owner;
@@ -268,10 +268,7 @@ function staleDip(ctx: IRoundCtx): void {
               0.05 * step,
         );
         // the step excuses the reading before it, not any printed number
-        if (
-          dropAt > 0 &&
-          printed - pct(span[dropAt - 1]!) <= STATE_SLACK_PCT
-        )
+        if (dropAt > 0 && printed - pct(span[dropAt - 1]!) <= STATE_SLACK_PCT)
           continue;
       }
       const top = Math.max(...span.map((a) => a.advancedActorCurrentHp));
@@ -381,8 +378,7 @@ function auraNoLine(ctx: IRoundCtx): void {
     for (const a of self) {
       const cast = tracked.get(a.spellId);
       const ms = tsOf(a);
-      if (cast === undefined || ms < ctx.start || ms > ctx.roundEndAt)
-        continue;
+      if (cast === undefined || ms < ctx.start || ms > ctx.roundEndAt) continue;
       // the batch's rows it re-lists, not the batch: a new aura in it still
       // needs its line (`hiddenPressMs`)
       if (
@@ -442,7 +438,8 @@ function auraNoLine(ctx: IRoundCtx): void {
   }
 }
 
-const LEDGER_DEF = /Target had a major defensive up: (.+?) active ON THE TARGET/;
+const LEDGER_DEF =
+  /Target had a major defensive up: (.+?) active ON THE TARGET/;
 function ledgerTwice(ctx: IRoundCtx): void {
   let prev = "";
   for (const line of ctx.lines) {
@@ -463,7 +460,8 @@ function ledgerTwice(ctx: IRoundCtx): void {
   }
 }
 
-const HEAL_CD_LINE = /^\s*(\d+:\d\d)\s+\[ENEMY HEAL CD\]\s+(\S+).*?: ?(.+?)(?: \(| \[|$)/;
+const HEAL_CD_LINE =
+  /^\s*(\d+:\d\d)\s+\[ENEMY HEAL CD\]\s+(\S+).*?: ?(.+?)(?: \(| \[|$)/;
 function healAndDef(ctx: IRoundCtx): void {
   const defs = ctx.lines.filter((l) => l.includes("[ENEMY DEF]"));
   for (const line of ctx.lines) {
@@ -519,7 +517,14 @@ function silenceImmune(ctx: IRoundCtx): void {
       ctx.bump("silenceImmuneNoLine");
       const name = nameOf(m.spellId, m.spellName);
       const t = (tsOf(m) - ctx.start) / 1000;
-      if (!lineNames(ctx, /\[CC NOT LANDED\]|\[(?:YOU|TEAM)\] \[CC\]|\[SILENCE\]/, t, name))
+      if (
+        !lineNames(
+          ctx,
+          /\[CC NOT LANDED\]|\[(?:YOU|TEAM)\] \[CC\]|\[SILENCE\]/,
+          t,
+          name,
+        )
+      )
         ctx.violate(
           "silenceImmuneNoLine",
           name,
@@ -543,9 +548,7 @@ function backlashBreak(ctx: IRoundCtx): void {
       const applied = rows
         .filter(
           (a) =>
-            ev(a) === APPLIED &&
-            a.spellId === r.spellId &&
-            tsOf(a) <= tsOf(r),
+            ev(a) === APPLIED && a.spellId === r.spellId && tsOf(a) <= tsOf(r),
         )
         .pop();
       if (!applied || tsOf(r) - tsOf(applied) > 3500) continue;
@@ -559,7 +562,9 @@ function backlashBreak(ctx: IRoundCtx): void {
           (l.includes("trinket broke this silence") ||
             l.includes("ended by their PvP trinket")) &&
           (pid === undefined || FIRST_PID.exec(l)?.[1] === pid) &&
-          Math.abs(+(TIMED.exec(l)?.[1] ?? 0) * 60 + +(TIMED.exec(l)?.[2] ?? 0) - t) <= 1,
+          Math.abs(
+            +(TIMED.exec(l)?.[1] ?? 0) * 60 + +(TIMED.exec(l)?.[2] ?? 0) - t,
+          ) <= 1,
       );
       if (!noted)
         ctx.violate(

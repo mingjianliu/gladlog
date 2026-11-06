@@ -56,6 +56,10 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import {
+  isResRowLine,
+  parseResRow,
+} from "@gladlog/analysis/src/context/resRow";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import {
   castKeyOfAura,
@@ -875,8 +879,7 @@ function runRound(ctx: IContext): void {
     for (const l of lines) {
       const m = /^(\d+:\d\d)\s/.exec(l);
       if (m) rowSec = secOf(m[1]!);
-      else if (/^\s+\[RES\]/.test(l) && rowSec >= 0)
-        resAt.push({ sec: rowSec, l });
+      else if (isResRowLine(l) && rowSec >= 0) resAt.push({ sec: rowSec, l });
     }
     for (const e of enemiesOfOwner) {
       if (deathMs(e) <= end) continue;
@@ -1086,8 +1089,7 @@ function runRound(ctx: IContext): void {
     for (const l of lines) {
       const m = /^(\d+:\d\d)\s/.exec(l);
       if (m) rowSec = secOf(m[1]!);
-      else if (/^\s+\[RES\]/.test(l) && rowSec >= 0)
-        resAt.push({ sec: rowSec, l });
+      else if (isResRowLine(l) && rowSec >= 0) resAt.push({ sec: rowSec, l });
     }
     // the defensive kit as data: the mitigation table and its absorb /
     // heal / transfer whitelist (Dark Pact)
@@ -1114,13 +1116,14 @@ function runRound(ctx: IContext): void {
       const b = secOf(m[2]!);
       const back = resAt.find((r) => {
         if (r.sec <= a || r.sec > b) return false;
-        const m2 = /rdy:(Δ )?(.*?)(?: {2}|$)/.exec(r.l);
-        if (!m2) return false;
+        const row = parseResRow(r.l);
         // `rdy:Δ +A +2:B -C` (a change list) or `rdy:A,B,2:C` (the full one)
         // a change list only: `+X` is X coming back at that second (the full
         // list says what is ready, not what came back)
-        if (!m2[1]) return false;
-        const added = m2[2]!
+        if (!row?.delta) return false;
+        const added = row.rdy
+          .slice(1)
+          .trim()
           .split(/\s+(?=[+~-])/)
           .filter((t) => t.startsWith("+"))
           .map((t) => t.slice(1));

@@ -26,6 +26,10 @@
  *  - `sameSecond` (exposure only): spent by a use in the printed second, before
  *    the burst opened (the first press of the [OFFENSIVE WINDOW] line's CDs).
  */
+import {
+  parseResRow,
+  splitResList,
+} from "@gladlog/analysis/src/context/resRow";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { AOE_CC_LANDING_WINDOW_S } from "@gladlog/analysis/src/utils/drAnalysis";
 
@@ -40,7 +44,6 @@ const EXPOSURE =
 const ENTRY = /^(.+?) (?:Full|50%|25%|Immune)(?: DR)?$/;
 const WINDOW = /^\s*(\d+):(\d\d)\s+\[OFFENSIVE WINDOW\].*\| CDs: (.*)$/;
 const TIMED = /^\s*(\d+):(\d\d)\s/;
-const RES = /^\s+\[RES\] rdy:(\S.*?)(?:\s+cd:|$)/;
 
 let landingOnlyByAura = new Map<string, number>();
 
@@ -232,9 +235,9 @@ export function run(ctx: IRoundCtx): void {
         }
       }
     }
-    const r = RES.exec(line);
-    if (r)
-      for (const entry of r[1]!.split(",")) {
+    const rdy = parseResRow(line)?.rdy;
+    if (rdy)
+      for (const entry of splitResList(rdy)) {
         const m = /^(\d+):(.+?)(?:\[.*)?$/.exec(entry.trim());
         if (!m) continue;
         const enemy = ctx.unitOfPid(m[1]);

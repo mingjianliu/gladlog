@@ -28,6 +28,7 @@
  *    still the effect (fact10 D29, the producer's reading).
  */
 import { specToString } from "@gladlog/analysis";
+import { isResRowLine } from "@gladlog/analysis/src/context/resRow";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { OFF_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
@@ -298,7 +299,7 @@ function resChannel(ctx: IRoundCtx): void {
       s = Number(t[1]) * 60 + Number(t[2]);
       continue;
     }
-    if (!/^ {6}\[RES\] rdy:/.test(l) || s === undefined) continue;
+    if (!isResRowLine(l) || s === undefined) continue;
     const f = / {2}enemy:(.*?)(?= {2}focus:| {2}cc:| \| Atonements|$)/.exec(l);
     if (!f) continue;
     for (const e of f[1]!.split(/(?<=s left\)),/)) {

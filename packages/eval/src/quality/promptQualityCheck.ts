@@ -103,6 +103,12 @@ import {
   PEEL_LOOKBACK_S,
   PEEL_MIN_USABLE_S,
 } from "@gladlog/analysis/src/context/peelOptions";
+import {
+  isResRowLine,
+  parseResRow,
+  resLedgerName,
+  splitResList,
+} from "@gladlog/analysis/src/context/resRow";
 import { REFUSAL_WHY_WORDS } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import {
   parseTopSourceEntries,
@@ -281,7 +287,6 @@ import { CoverageManifest } from "./coverageManifest";
  * the gate looks for drift apart, the calibration is measuring two different
  * things (a gate predicate IS the spec). */
 export const DEATH_KEYWORDS = /death|died|dies|killed|\[DEATH\]/i;
-const RES_READY_SPAM = /\[RES\] rdy:/;
 const BIAS_LEXICON = [
   "[CRITICAL]",
   "[SPIKE]",
@@ -628,9 +633,8 @@ export function checkWindowSpanConsistency(lines: string[]): string[] {
 // "  [2:21] Frost Mage (N) — had Ice Block available, was not CC'd"
 const MISSED_OPTION = /^\s*\[(\d+):(\d+)\].*?\bhad ([A-Za-z' :]+?) available/;
 // "      [RES] rdy:…  cd:Ironbark(48s),Stampeding Roar(91s),2:Icebound Fortitude(42s)  enemy:…"
-// Teammate entries carry an "N:" prefix and charge entries a "[1/2]" suffix;
-// both must be stripped.
-const RES_CD_BLOCK = /\[RES\].*?\bcd:(\S(?:.*?))(?:\s{2,}|$)/;
+// (`parseResRow`). Teammate entries carry an "N:" prefix and charge entries a
+// "[1/2]" suffix; both must be stripped.
 /** Ledger entry: optional "N:" ownership prefix (captured) + spell name. No
  *  prefix = it belongs to the log owner. */
 const CD_ENTRY = /(?:^|,)\s*(?:(\d+):)?([A-Za-z' :]+?)\s*\(/g;
@@ -693,10 +697,10 @@ export function checkCooldownLedgerConsistency(lines: string[]): string[] {
   for (const line of lines) {
     const t = line.match(LEADING_TIME);
     if (t) currentSeconds = Number(t[1]) * 60 + Number(t[2]);
-    const res = line.match(RES_CD_BLOCK);
+    const res = parseResRow(line);
     if (!res || currentSeconds === null) continue;
     const owned = new Set<string>();
-    for (const e of res[1].matchAll(CD_ENTRY)) {
+    for (const e of res.cd.matchAll(CD_ENTRY)) {
       // No prefix = the log owner's own cooldown
       const who = e[1] ?? ownerId;
       // Roster missing and entry has no prefix → ownership unknown, excluded
@@ -4258,18 +4262,9 @@ export function checkKarmaFedClause(lines: string[]): string[] {
   return failures;
 }
 
-/** `      [RES] rdy:<…>  cd:<…>[  enemy:… / focus:… / cc:… | Atonements: N]` */
-const RES_ROW =
-  /^ {6}\[RES\] rdy:(.*?) {2}cd:(.*?)(?: {2}(?:enemy|focus|cc):| \| Atonements|$)/;
 /** A `cd:` entry whose return is exact: `Name(Ns)` — no `a–b` range, no `≤`,
  * no charge suffix. */
 const RES_CD_EXACT = /^(.*)\((\d+)s\)$/;
-/** A ledger name without its display suffixes (`[1/2]`, `(no mana 6.1k/11.5k)`). */
-const resLedgerName = (n: string): string =>
-  n.trim().replace(/(\[[\d–-]+\/\d+\]|\(no mana [^)]*\))+$/, "");
-/** The ledger joins entries with a bare comma; a name may hold ", " itself
- * (Invoke Chi-Ji, the Red Crane). */
-const splitResList = (s: string): string[] => s.split(/,(?! )/);
 
 /**
  * The [RES] delta chain must let a reader follow a cooldown back to ready.
@@ -4310,10 +4305,9 @@ export function checkResReturnAnnounced(lines: string[]): string[] {
       t = s;
       continue;
     }
-    const m = line.match(RES_ROW);
+    const m = parseResRow(line);
     if (!m || t === null) continue;
-    const rdy = m[1];
-    const cd = m[2];
+    const { rdy, cd } = m;
     if (rdy.startsWith("Δ")) {
       if (ready === null) ready = new Set();
       for (const tok of rdy
@@ -8645,7 +8639,7 @@ export function checkMatch(
       templateDuplicateRatio: duplicateRatio(lines, (l) =>
         l.replace(/\d+(\.\d+)?/g, "#"),
       ),
-      resReadySpamLines: lines.filter((l) => RES_READY_SPAM.test(l)).length,
+      resReadySpamLines: lines.filter(isResRowLine).length,
     },
     labelBias: {
       hits: labelHits,

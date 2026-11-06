@@ -205,6 +205,11 @@
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
 import {
+  isResRowLine,
+  parseResRow,
+  splitResList,
+} from "@gladlog/analysis/src/context/resRow";
+import {
   KW_IN_HAND_ONLY_DEFENSIVE_IDS,
   KW_MAJOR_DEFENSIVE_IDS,
   unpressedKitDefensiveInHand,
@@ -1163,8 +1168,8 @@ function runRound(ctx: IContext): void {
       const tm = /^(\d+:\d\d) {2}/.exec(l);
       if (tm) lastT = tm[1]!;
       // a timeline row (under a `m:ss` line), not the legend's own `[RES]`
-      const rm = /^ {6}\[RES\] (rdy:.*)$/.exec(l);
-      if (rm && lastT) resRows.push({ t: lastT, row: rm[1]! });
+      const rm = isResRowLine(l) ? l.trimStart().slice("[RES] ".length) : "";
+      if (rm && lastT) resRows.push({ t: lastT, row: rm });
     }
     const first = resRows[0];
     if (first && secOf(first.t || "9:59") <= 5) {
@@ -1841,10 +1846,11 @@ function runRound(ctx: IContext): void {
     // loadout single-value cooldowns vs the [RES] rows' own range for them
     const ranged = new Set<string>();
     for (const l of lines) {
-      if (!/^ {6}\[RES\]/.test(l)) continue;
-      const cdPart = / cd:(\S+)/.exec(l)?.[1];
+      // the whole `cd:` value (a `\S+` read stopped at the first space in a
+      // name: GH #178)
+      const cdPart = parseResRow(l)?.cd;
       if (!cdPart) continue;
-      for (const e of cdPart.split(",")) {
+      for (const e of splitResList(cdPart)) {
         const rm = /^(?:(\d+):)?(.+?)\(\d+–\d+s\)/.exec(e);
         if (rm) ranged.add(`${rm[1] ?? "1"}|${rm[2]}`);
       }

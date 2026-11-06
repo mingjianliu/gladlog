@@ -81,6 +81,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { isResRowLine } from "@gladlog/analysis/src/context/resRow";
 import spellReach from "@gladlog/analysis/src/data/spellReachGenerated.json";
 import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
 import {
@@ -467,7 +468,7 @@ export function resRows(ctx: IRoundCtx): IResRow[] {
       anchor = /^\d+:\d\d {2}(\[[^\]]+\])/.exec(l)?.[1] ?? "";
       continue;
     }
-    if (!/^ {6}\[RES\] rdy:/.test(l) || s === undefined) continue;
+    if (!isResRowLine(l) || s === undefined) continue;
     const f = / {2}enemy:(.*?)(?= {2}focus:| {2}cc:| \| Atonements|$)/.exec(l);
     const entries: IResRow["entries"] = [];
     if (f)

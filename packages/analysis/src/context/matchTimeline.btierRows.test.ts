@@ -27,6 +27,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../data/ensure";
 import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
+import { isResRowLine } from "./resRow";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -206,7 +207,10 @@ describe("[IMMUNE] says why (B17a)", () => {
   it("one earlier control (the next would land at 50 %), or a chain the reset broke: no reason is claimed", () => {
     const one = immuneLine(
       buildMatchTimeline(
-        params(polyImmuneOwner(), enemy({ auraEvents: ccAuras([16]) as never })),
+        params(
+          polyImmuneOwner(),
+          enemy({ auraEvents: ccAuras([16]) as never }),
+        ),
       ),
     );
     expect(one).toContain("[IMMUNE]");
@@ -864,8 +868,7 @@ describe("[OFFENSIVE WINDOW] is followed by a full [RES] row (B14b)", () => {
       lines.findIndex((l) => /^\d+:\d\d {2}\[/.test(l) && l.includes(needle)) +
         1
     ] ?? "";
-  const resRows = (lines: string[]) =>
-    lines.filter((l) => /^ {6}\[RES\] rdy:/.test(l));
+  const resRows = (lines: string[]) => lines.filter(isResRowLine);
 
   it("a full row right under the header — not a delta", () => {
     const lines = run({ ibf: [], ams: [] });
@@ -906,7 +909,14 @@ describe("[OFFENSIVE WINDOW] is followed by a full [RES] row (B14b)", () => {
 
 describe("a friendly press under MIN_CD_SECONDS keeps its line (fact7 D19 / D26, user ruling 2026-10-30)", () => {
   const reflect = (id: string, name: string, s: number) =>
-    ev(LogEvent.SPELL_CAST_SUCCESS, "23920", "Spell Reflection", s, [id, name], [id, name]);
+    ev(
+      LogEvent.SPELL_CAST_SUCCESS,
+      "23920",
+      "Spell Reflection",
+      s,
+      [id, name],
+      [id, name],
+    );
 
   it("the owner's and a teammate's Spell Reflection print, and nothing else does", () => {
     const owner = mkUnit("o", "Me-Realm", {
@@ -925,10 +935,14 @@ describe("a friendly press under MIN_CD_SECONDS keeps its line (fact7 D19 / D26,
         { friends: [owner, mate], isHealer: false, matchEndMs: at(60) },
       ),
     );
-    const lines = text.split("\n").filter((l) => l.includes("Spell Reflection"));
+    const lines = text
+      .split("\n")
+      .filter((l) => l.includes("Spell Reflection"));
     expect(lines).toEqual([
       expect.stringMatching(/^0:21 {2}\[YOU\] \[CD\] {3}Spell Reflection$/),
-      expect.stringMatching(/^0:40 {2}\[TEAM\] \[CD\] {3}.+ \(Fury Warrior\): Spell Reflection$/),
+      expect.stringMatching(
+        /^0:40 {2}\[TEAM\] \[CD\] {3}.+ \(Fury Warrior\): Spell Reflection$/,
+      ),
     ]);
   });
 });
