@@ -3036,6 +3036,66 @@ export function trinketStateFact(
 }
 
 /**
+ * When a trinket-equivalent racial is back, as seen at `atMs` (log ms;
+ * −Infinity when nothing held it): its own DB2 cooldown from its last press,
+ * or the shared lock of a PvP-trinket press — the racial → trinket lock read
+ * the other way (ruling A′15: "and vice versa"), the same per-racial lock
+ * both ways (codex 62-POSTHOC-13d #1, 285aa6d2 r6: Will to Survive read 16 s
+ * left 44 s after a Medallion — 30 reverse presses all ≥ 60.0 s, a refusal
+ * "Not yet recovered" at +46.7 s). Both lists ascending. One reading for the
+ * [CC] line's `breakRacialOnCd` and KILL ATTEMPTS' ready racial (fact11 D11).
+ */
+export function trinketRacialReadyMs(
+  racialId: string,
+  breakPresses: ReadonlyArray<{ ts: number; spellId: string }>,
+  trinketCastTimestamps: readonly number[],
+  isHealer: boolean,
+  atMs: number,
+): number {
+  let readyMs = Number.NEGATIVE_INFINITY;
+  const cd = effectiveCooldownSeconds(racialId);
+  for (const press of breakPresses) {
+    if (press.ts > atMs) break;
+    if (press.spellId !== racialId || cd === undefined) continue;
+    readyMs = Math.max(readyMs, press.ts + cd * 1000);
+  }
+  for (const ts of trinketCastTimestamps) {
+    if (ts > atMs) break;
+    readyMs = Math.max(readyMs, ts + racialTrinketLockoutMs(racialId, isHealer));
+  }
+  return readyMs;
+}
+
+/**
+ * fact11 D11 (user ruling 2026-11-06, wording only — the tier stays, P-b7):
+ * the trinket-equivalent racial `unit` holds READY at `atMs`, by name. The
+ * racial is the one the unit is SEEN pressing this round (the log has no race
+ * field, as `breakRacialOnCd`'s); ready = `trinketRacialReadyMs` at or before
+ * `atMs`. 16bc5861 3:35: Will to Survive back from 3:12, pressed at 3:36 out
+ * of the Chaos Nova the line called PRIME.
+ */
+export function readyTrinketRacialNameAt(
+  unit: ICombatUnit,
+  atMs: number,
+): string | undefined {
+  const presses = breakAbilityPresses(unit);
+  const id = presses.find((p) => SHARED_CD_RACIAL_SPELL_IDS.has(p.spellId))
+    ?.spellId;
+  if (id === undefined) return undefined;
+  const trinketTs = getTrinketUses(unit, detectTrinketType(unit))
+    .map((u) => u.atMs)
+    .sort((a, b) => a - b);
+  const ready = trinketRacialReadyMs(
+    id,
+    presses,
+    trinketTs,
+    isHealerSpec(unit.spec),
+    atMs,
+  );
+  return ready <= atMs ? (ccBreakAbilityName(id) ?? id) : undefined;
+}
+
+/**
  * Returns all timestamps (ms) at which the unit successfully cast their active trinket.
  */
 function getTrinketUses(
@@ -4250,26 +4310,14 @@ export function analyzePlayerCCAndTrinket(
       // the player is SEEN pressing this round (the log has no race field).
       let breakRacialOnCd: ICCInstance["breakRacialOnCd"];
       if (ownedTrinketRacialId !== undefined) {
-        let readyMs = Number.NEGATIVE_INFINITY;
-        const cd = effectiveCooldownSeconds(ownedTrinketRacialId);
-        for (const press of breakPresses) {
-          if (press.ts > w.applyMs) break;
-          if (press.spellId !== ownedTrinketRacialId || cd === undefined)
-            continue;
-          readyMs = Math.max(readyMs, press.ts + cd * 1000);
-        }
-        for (const ts of trinketCastTimestamps) {
-          if (ts > w.applyMs) break;
-          // the same per-racial lock both ways (codex 62-POSTHOC-13d #1,
-          // 285aa6d2 r6: Will to Survive read 16 s left 44 s after a
-          // Medallion — 30 reverse presses all ≥ 60.0 s, a refusal "Not yet
-          // recovered" at +46.7 s)
-          readyMs = Math.max(
-            readyMs,
-            ts + racialTrinketLockoutMs(ownedTrinketRacialId, isHealer),
-          );
-        }
-        const leftMs = readyMs - w.applyMs;
+        const leftMs =
+          trinketRacialReadyMs(
+            ownedTrinketRacialId,
+            breakPresses,
+            trinketCastTimestamps,
+            isHealer,
+            w.applyMs,
+          ) - w.applyMs;
         if (leftMs > 0)
           breakRacialOnCd = {
             name:

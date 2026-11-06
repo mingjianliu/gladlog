@@ -23,7 +23,10 @@
  */
 import { CombatUnitClass, type ICombatUnit } from "@gladlog/parser-compat";
 
-import { enemyHealerCcWindows } from "../analysis/candidates/cooldownTiming";
+import {
+  countsAsTeamBurst,
+  enemyHealerCcWindows,
+} from "../analysis/candidates/cooldownTiming";
 import {
   castSpellName,
   cdAvailableAt,
@@ -162,6 +165,15 @@ export function createKillWindowFactsComputer(
       return [];
     }
   });
+  // B3iii (user ruling 2026-09-25; codex 20-F26-03 #1, applied 2026-11-06):
+  // what the team holds READY is team burst only — a healer's own offensive
+  // cooldown counts only when it is Power Infusion (the sync window's
+  // `countsAsTeamBurst`), so a Holy Paladin's Avenging Wrath makes no window
+  // "ready". What the team PRESSED stays every offensive cooldown: Ultimate
+  // Penitence pressed inside a window is named (user ruling 2026-10-20).
+  const burstCds = teamCds.filter(({ cd, holder }) =>
+    countsAsTeamBurst(holder, String(cd.spellId)),
+  );
   let healerWindows: Array<{ fromSeconds: number; toSeconds: number }>;
   try {
     // The window derivation only reads units/timestamps off `combat`; the
@@ -197,7 +209,7 @@ export function createKillWindowFactsComputer(
       // a [RES] row listing Malevolence ready) — named `[press-only]`, and
       // kept out of `readyOffCds`: `accountable` reads that list alone, and
       // no accusation may name such a row (ruling 2026-10-09).
-      const living = teamCds.filter(({ holder }) => !isDeadAt(holder, tMs));
+      const living = burstCds.filter(({ holder }) => !isDeadAt(holder, tMs));
       const label = (cd: { spellName: string; responseOnly?: boolean }) =>
         cd.responseOnly ? `${cd.spellName} ${PRESS_ONLY_TAG}` : cd.spellName;
       const certain = living.filter(({ cd }) =>

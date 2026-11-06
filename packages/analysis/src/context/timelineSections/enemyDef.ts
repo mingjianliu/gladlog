@@ -22,11 +22,15 @@ import {
 import {
   ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
+  ENEMY_DEF_NO_AURA_LOGGED,
   ENEMY_DEF_NO_PRESS_TAG,
   ENEMY_DEF_UNSEEN_PRESS_TAG,
+  enemyDefAlsoOnClause,
   enemyDefDefersLabel,
   enemyDefensiveEvents,
   enemySaveEffectNote,
+  immunityAlsoOn,
+  immunityPressesWithoutAura,
   immunitySchoolWords,
   limitedImmunitySchoolMask,
   renderedObservedSeconds,
@@ -375,7 +379,21 @@ export function emitEnemyDefEntries(
           const fromStr = d.procSource
             ? ` from ${enemyPid(d.procSource.unitName)}${d.procSource.spellName ? `'s ${d.procSource.spellName}` : ""}`
             : "";
-          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${fromStr}${noPress}${burstStr}${hpStr}`;
+          // fact11 D45: the allies the same press put the immunity on
+          const alsoOn =
+            d.kind === "immune"
+              ? immunityAlsoOn(
+                  enemy,
+                  d.spellId,
+                  d.atSeconds,
+                  enemies ?? [],
+                  combatSpan,
+                )
+              : [];
+          const alsoStr = enemyDefAlsoOnClause(
+            alsoOn.map((u) => enemyPid(u.name)),
+          );
+          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""}${alsoStr})${fromStr}${noPress}${burstStr}${hpStr}`;
         }
         // Ultimate Penitence is an offensive cooldown (user 2026-10-28) that
         // also shields its caster: one press, one line, the `[ENEMY CD]` one
@@ -389,6 +407,20 @@ export function emitEnemyDefEntries(
         addEntry(
           d.atSeconds,
           `${fmtTime(d.atSeconds)}  [ENEMY DEF]   ${who}: ${line}`,
+        );
+      }
+      // fact11 D34: an immunity pressed with no aura the log shows
+      for (const p of immunityPressesWithoutAura(
+        enemy,
+        events,
+        combatSpan,
+        roundEndAtMs,
+      )) {
+        if (p.atSeconds > matchEndSeconds) continue;
+        const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
+        addEntry(
+          p.atSeconds,
+          `${fmtTime(p.atSeconds)}  [ENEMY DEF]   ${who}: ${p.spellName} (immune, ${ENEMY_DEF_NO_AURA_LOGGED})`,
         );
       }
     }

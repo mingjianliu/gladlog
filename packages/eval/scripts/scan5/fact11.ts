@@ -82,7 +82,8 @@
  *    clause set listing a cooldown under `pressed inside` that is on none of
  *    its other lists — ready, `may already be back`, `back inside`, `pressed
  *    at start` — a press proves it was back by then. Counted: every
- *    `pressed inside` entry.
+ *    `pressed inside` entry but a healer's own cooldown that is no team
+ *    burst (B3iii: on no ready list by rule).
  *  - healMajorAsDefensive (D4): a cd-hoarded menu row's `readyCds` (the
  *    player's "usable major defensive cooldown") naming a healing major —
  *    an `[ENEMY HEAL CD]` id (`ENEMY_HEAL_CD_IDS`, the throughput roster).
@@ -118,22 +119,48 @@
  *    the variant) within the button's cooldown before that second — the
  *    variant's press spent it. Counted: every `[RES]` cd entry of such a
  *    button on such a log.
+ *  - teamReadyHealerOnlyCd (codex 20-F26-03 #1, B3iii): a `team offensive
+ *    CDs ready …: <list>` entry whose every friendly caster this round is a
+ *    healer for whom it is no team burst (`countsAsTeamBurst` — only Power
+ *    Infusion). Kind = the cooldown. Counted: every entry with a friendly
+ *    caster.
+ *  - immunityPressNoLine (D34): an enemy's successful press of an immunity
+ *    save (`isImmunitySaveAura` of the cast or its effect aura) inside the
+ *    round with no `[ENEMY DEF]` line of that unit naming it within a
+ *    second. Counted: every such press.
+ *  - immunityCopyUnstated (D45): an immunity aura an enemy's press put on a
+ *    teammate of theirs and on the caster in one instant (APPLIED, source
+ *    the caster, within 50 ms — `immunityAlsoOn`'s) whose recipient the
+ *    caster's `[ENEMY DEF]` line of that second does not name. Counted:
+ *    every such copy.
+ *  - auraOnlyPressNoLine (D42): a player's own aura of an
+ *    `AURA_ONLY_ACTIVATION_IDS` button that is the `[PRESS]` line's
+ *    (`isOffListPressId`), applied with no logged press of it within
+ *    `SAVE_CAST_AURA_PAIR_S`, and no line naming it in its second. Counted:
+ *    every such aura.
  */
+import { countsAsTeamBurst } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import {
   parseResRow,
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
 import { isControlSpell } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
+import { AURA_ONLY_ACTIVATION_IDS } from "@gladlog/analysis/src/data/auraActivation";
 import {
   castAndEffectIds,
   castsOfEffectAura,
+  effectAurasOfCast,
 } from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { ENEMY_HEAL_CD_IDS } from "@gladlog/analysis/src/data/enemyHealCds";
 import { healerSaveCdRoster } from "@gladlog/analysis/src/data/healerSaveCd";
 import { OVERRIDE_VARIANTS_GENERATED } from "@gladlog/analysis/src/data/overrideVariantsGenerated";
-import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
+import { SHARED_CD_RACIAL_SPELL_IDS } from "@gladlog/analysis/src/data/racialAbilities";
+import {
+  effectiveCooldownSeconds,
+  spellEffectData,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import { ENEMY_AREA_SAVE_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { isButtonPress } from "@gladlog/analysis/src/utils/castCommitSpans";
@@ -144,13 +171,23 @@ import {
 } from "@gladlog/analysis/src/utils/castMissRows";
 import { COPY_CAST_IDS } from "@gladlog/analysis/src/utils/castPress";
 import { CANCEL_CC_NEAR_S } from "@gladlog/analysis/src/utils/castStopEvidence";
-import { auraIsImmunityForm } from "@gladlog/analysis/src/utils/combatStates";
 import {
+  breakAbilityPresses,
+  readyTrinketRacialNameAt,
+} from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import { auraIsImmunityForm } from "@gladlog/analysis/src/utils/combatStates";
+import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  holderFirstOwnActionAfterMs,
   immunityStopsSpellSchool,
+  isImmunitySaveAura,
   KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
+  KW_UNTARGETABLE_AURA_IDS,
+  SAVE_CAST_AURA_PAIR_S,
   wallStopsEveryHit,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { groundingRedirects } from "@gladlog/analysis/src/utils/groundingRedirects";
+import { isOffListPressId } from "@gladlog/analysis/src/utils/offListPress";
 import { OVERRIDE_VARIANT_SHARES_BY_ERA } from "@gladlog/analysis/src/utils/overrideVariantEra";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/talents";
@@ -188,6 +225,12 @@ export const CHECKS = [
   "areaCarryInDefenseless",
   "ownerGroundedUnstated",
   "castStopUnderUnloggedSilence",
+  "teamReadyHealerOnlyCd",
+  "immunityPressNoLine",
+  "immunityCopyUnstated",
+  "auraOnlyPressNoLine",
+  "immunityBaitedSelfBroken",
+  "primeRacialReadyUnstated",
 ] as const;
 
 export function run(ctx: IRoundCtx): void {
@@ -204,6 +247,12 @@ export function run(ctx: IRoundCtx): void {
   healerRosterAsEnemyBurst(ctx);
   areaCarryInDefenseless(ctx);
   if (!ctx.owner) return;
+  teamReadyHealerOnlyCd(ctx);
+  immunityPressNoLine(ctx);
+  immunityCopyUnstated(ctx);
+  auraOnlyPressNoLine(ctx);
+  immunityBaitedSelfBroken(ctx);
+  primeRacialReadyUnstated(ctx);
   ownShieldNotPopped(ctx);
   ownerGroundedUnstated(ctx);
   castStopUnderUnloggedSilence(ctx);
@@ -925,6 +974,24 @@ const TEAM_READY =
   /team offensive CDs ready at (\d+:\d{2}): (.*?)(?: \((.*?)\))?\.?(?:;|$)/;
 const CD_AT = / \d+:\d{2}$/;
 
+/** Every friendly caster of `name` this round is a healer it is no team
+ * burst for (`countsAsTeamBurst`, B3iii): the team-ready lists never carry
+ * it, only `pressed inside` does. */
+function noTeamBurstPress(ctx: IRoundCtx, name: string): boolean {
+  if (!ctx.owner) return false;
+  const casts = (ctx.players as any[])
+    .filter((u) => u.reaction === ctx.owner.reaction)
+    .flatMap((u) =>
+      castsOf(u)
+        .filter((c) => nameOf(c.spellId, c.spellName ?? "") === name)
+        .map((c) => ({ u, id: String(c.spellId) })),
+    );
+  return (
+    casts.length > 0 &&
+    casts.every(({ u, id }) => isHealerSpec(u.spec) && !countsAsTeamBurst(u, id))
+  );
+}
+
 function pressedInsideNeverBack(ctx: IRoundCtx): void {
   for (const l of ctx.text.split("\n")) {
     const m = TEAM_READY.exec(l);
@@ -953,6 +1020,9 @@ function pressedInsideNeverBack(ctx: IRoundCtx): void {
       ...(clauses.get("pressed at start") ?? []),
     ]);
     for (const name of clauses.get("pressed inside") ?? []) {
+      // B3iii: a healer's own offensive cooldown that is no team burst
+      // (`countsAsTeamBurst`) is pressed, never on a ready / back list
+      if (noTeamBurstPress(ctx, name)) continue;
       ctx.bump("pressedInsideNeverBack");
       if (known.has(name)) continue;
       ctx.violate(
@@ -1266,5 +1336,255 @@ function castStopUnderUnloggedSilence(ctx: IRoundCtx): void {
       `${m[2]} stop at +${stopMs - ctx.start}ms (bar from ${m[1]}) read as no silence; an aura-less silence was cast within ${CANCEL_CC_NEAR_S} s of it`,
       l,
     );
+  }
+}
+
+const TEAM_READY_LIST =
+  /team offensive CDs ready(?: at \d+:\d{2})?: (.+?)(?: \(|;|\.$|$)/;
+
+function teamReadyHealerOnlyCd(ctx: IRoundCtx): void {
+  const ours = (ctx.players as any[]).filter(
+    (u) => u.reaction === ctx.owner.reaction,
+  );
+  for (const l of ctx.lines) {
+    const m = TEAM_READY_LIST.exec(l);
+    if (!m || m[1] === "none") continue;
+    for (const raw of m[1]!.split("、")) {
+      const name = raw.replace(/ \[press-only\]$/, "").trim();
+      const casts = ours.flatMap((u) =>
+        castsOf(u)
+          .filter((c) => nameOf(c.spellId, c.spellName ?? "") === name)
+          .map((c) => ({ u, id: String(c.spellId) })),
+      );
+      if (casts.length === 0) continue;
+      ctx.bump("teamReadyHealerOnlyCd");
+      // a non-healer caster (its cast row can carry another id of the
+      // button than the ledger's: Metamorphosis 191427 / 200166) holds it
+      if (
+        casts.some(
+          ({ u, id }) => !isHealerSpec(u.spec) || countsAsTeamBurst(u, id),
+        )
+      )
+        continue;
+      ctx.violate(
+        "teamReadyHealerOnlyCd",
+        name,
+        ctx.start,
+        `${name}:${l.slice(0, 40)}`,
+        `${name} is a ready team offensive CD; only a healer it is no team burst for cast it`,
+        l,
+      );
+    }
+  }
+}
+
+const ENEMY_DEF_TAG = "[ENEMY DEF]";
+
+const KILL_ATTEMPT_LINE =
+  /^\s*\[(\d+:\d\d)–(\d+:\d\d)\] on (\S.*?) — .*\| (?:FAILED: )?(.*)$/;
+
+function primeRacialReadyUnstated(ctx: IRoundCtx): void {
+  for (const l of ctx.lines) {
+    const m = KILL_ATTEMPT_LINE.exec(l);
+    if (!m) continue;
+    const opp = /\| opportunity: PRIME \(([^|]*)\) \|/.exec(l);
+    if (!opp) continue;
+    const target = ctx.byName.get(m[3]!) as any;
+    if (!target) continue;
+    const pressed = breakAbilityPresses(target).some((p) =>
+      SHARED_CD_RACIAL_SPELL_IDS.has(p.spellId),
+    );
+    if (!pressed) continue;
+    ctx.bump("primeRacialReadyUnstated");
+    const fromMs = ctx.start + secOf(m[1]!) * 1000;
+    const racial = readyTrinketRacialNameAt(target, fromMs);
+    if (!racial || opp[1]!.split("; ").includes(`${racial} ready`)) continue;
+    ctx.violate(
+      "primeRacialReadyUnstated",
+      racial,
+      fromMs,
+      `${target.name}:${m[1]}`,
+      `${target.name} held ${racial} ready at ${m[1]}; the PRIME clause does not say so`,
+      l,
+    );
+  }
+}
+
+function immunityBaitedSelfBroken(ctx: IRoundCtx): void {
+  for (const l of ctx.lines) {
+    const m = KILL_ATTEMPT_LINE.exec(l);
+    if (!m || !m[4]!.includes("forced a full immunity")) continue;
+    if (/forced a full immunity \[up since/.test(m[4]!)) continue;
+    const target = ctx.byName.get(m[3]!) as any;
+    if (!target) continue;
+    const fromMs = ctx.start + secOf(m[1]!) * 1000;
+    const toMs = ctx.start + (secOf(m[2]!) + 1) * 1000 + 5000;
+    const auras = ((target.auraEvents ?? []) as any[]).filter(
+      (a) => a.destUnitId === target.id,
+    );
+    const ups = auras.filter(
+      (a) =>
+        ev(a) === APPLIED &&
+        isImmunitySaveAura(String(a.spellId)) &&
+        tsOf(a) >= fromMs &&
+        tsOf(a) < toMs,
+    );
+    if (ups.length === 0) continue;
+    ctx.bump("immunityBaitedSelfBroken");
+    const selfBroken = (a: any): boolean => {
+      const id = String(a.spellId);
+      if (!KW_UNTARGETABLE_AURA_IDS.has(id)) return false;
+      const lenMs = (spellEffectData[id]?.durationSeconds ?? 0) * 1000;
+      if (
+        auras.some(
+          (r) =>
+            ev(r) === REMOVED &&
+            String(r.spellId) === id &&
+            tsOf(r) >= tsOf(a) &&
+            tsOf(r) <= tsOf(a) + lenMs,
+        )
+      )
+        return false;
+      const first = holderFirstOwnActionAfterMs(
+        target,
+        tsOf(a),
+        id,
+        ctx.units as any,
+      );
+      return first < tsOf(a) + lenMs;
+    };
+    if (!ups.every(selfBroken)) continue;
+    ctx.violate(
+      "immunityBaitedSelfBroken",
+      nameOf(ups[0].spellId, ups[0].spellName ?? ""),
+      tsOf(ups[0]),
+      `${target.name}:${m[1]}`,
+      `${target.name}'s ${nameOf(ups[0].spellId, "")} at ${fmtS((tsOf(ups[0]) - ctx.start) / 1000)} ended at its own action; the attempt reads forced a full immunity`,
+      l,
+    );
+  }
+}
+
+function immunityPressNoLine(ctx: IRoundCtx): void {
+  for (const u of ctx.players as any[]) {
+    if (u.reaction === ctx.owner.reaction) continue;
+    const pid = ctx.pidOf(u.name);
+    if (!pid) continue;
+    for (const c of castsOf(u)) {
+      const id = String(c.spellId);
+      if (![id, ...effectAurasOfCast(id)].some(isImmunitySaveAura)) continue;
+      const at = tsOf(c);
+      if (at < ctx.start || at > ctx.roundEndAt) continue;
+      ctx.bump("immunityPressNoLine");
+      const sec = Math.floor((at - ctx.start) / 1000);
+      const name = nameOf(id, c.spellName ?? "");
+      const stated = ctx.lines.some((l) => {
+        const m = /^(\d+:\d{2})\s/.exec(l);
+        return (
+          !!m &&
+          Math.abs(secOf(m[1]!) - sec) <= 1 &&
+          l.includes(ENEMY_DEF_TAG) &&
+          l.includes(`${pid}(`) &&
+          l.includes(name)
+        );
+      });
+      if (stated) continue;
+      ctx.violate(
+        "immunityPressNoLine",
+        name,
+        at,
+        `${u.name}:${id}:${sec}`,
+        `${pid} pressed ${name} at ${fmtS(sec)}; no [ENEMY DEF] line names it`,
+      );
+    }
+  }
+}
+
+function immunityCopyUnstated(ctx: IRoundCtx): void {
+  const enemies = (ctx.players as any[]).filter(
+    (u) => u.reaction !== ctx.owner.reaction,
+  );
+  for (const r of enemies) {
+    for (const a of (r.auraEvents ?? []) as any[]) {
+      if (ev(a) !== APPLIED || !isImmunitySaveAura(String(a.spellId))) continue;
+      if (a.destUnitId !== r.id || a.srcUnitId === r.id) continue;
+      const caster = enemies.find((e) => e.id === a.srcUnitId);
+      if (!caster) continue;
+      const at = tsOf(a);
+      if (at < ctx.start || at > ctx.roundEndAt) continue;
+      // one press on several of them, the caster among them (an external
+      // the caster put on one ally is its own `→ unit` line)
+      if (
+        !((caster.auraEvents ?? []) as any[]).some(
+          (b) =>
+            ev(b) === APPLIED &&
+            String(b.spellId) === String(a.spellId) &&
+            b.destUnitId === caster.id &&
+            b.srcUnitId === caster.id &&
+            Math.abs(tsOf(b) - at) <= 50,
+        )
+      )
+        continue;
+      const cpid = ctx.pidOf(caster.name);
+      const rpid = ctx.pidOf(r.name);
+      if (!cpid || !rpid) continue;
+      ctx.bump("immunityCopyUnstated");
+      const at0 = fmtS((at - ctx.start) / 1000);
+      // the line prints the press's second, which can be the second before
+      // the aura's (28-6 r6: pressed 0:23.98, applied 0:24.015)
+      const sec = Math.floor((at - ctx.start) / 1000);
+      const stated = ctx.lines.some(
+        (l) =>
+          [sec - 1, sec].some((s) => l.startsWith(`${fmtS(s)} `)) &&
+          l.includes(ENEMY_DEF_TAG) &&
+          l.includes(`${cpid}(`) &&
+          l.includes(`also on`) &&
+          l.includes(`${rpid}(`),
+      );
+      if (stated) continue;
+      const name = nameOf(a.spellId, a.spellName ?? "");
+      ctx.violate(
+        "immunityCopyUnstated",
+        name,
+        at,
+        `${caster.name}:${r.name}:${at0}`,
+        `${cpid}'s ${name} also went up on ${rpid} at ${at0}; no line says so`,
+      );
+    }
+  }
+}
+
+function auraOnlyPressNoLine(ctx: IRoundCtx): void {
+  const ids = Object.keys(AURA_ONLY_ACTIVATION_IDS).filter(isOffListPressId);
+  for (const u of ctx.players as any[]) {
+    for (const id of ids) {
+      const auraIds = AURA_ONLY_ACTIVATION_IDS[id]!;
+      for (const a of (u.auraEvents ?? []) as any[]) {
+        if (ev(a) !== APPLIED || !auraIds.includes(String(a.spellId))) continue;
+        if (a.srcUnitId !== u.id || a.destUnitId !== u.id) continue;
+        const at = tsOf(a);
+        if (at < ctx.start || at > ctx.roundEndAt) continue;
+        if (
+          castsOf(u).some(
+            (c) =>
+              String(c.spellId) === id &&
+              Math.abs(tsOf(c) - at) <= SAVE_CAST_AURA_PAIR_S * 1000,
+          )
+        )
+          continue;
+        ctx.bump("auraOnlyPressNoLine");
+        const at0 = fmtS((at - ctx.start) / 1000);
+        const name = nameOf(id, a.spellName ?? "");
+        if (ctx.lines.some((l) => l.startsWith(`${at0} `) && l.includes(name)))
+          continue;
+        ctx.violate(
+          "auraOnlyPressNoLine",
+          name,
+          at,
+          `${u.name}:${id}:${at0}`,
+          `${u.name}'s ${name} went up at ${at0} with no press row; no line names it`,
+        );
+      }
+    }
   }
 }

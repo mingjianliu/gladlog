@@ -951,6 +951,8 @@ export function enemySaveEffectNote(
  * (`checkEnemyDefEndNotLogged`).
  */
 export const ENEMY_DEF_END_NOT_LOGGED = "end not logged";
+/** fact11 D34: an immunity press with no aura row (`immunityPressesWithoutAura`) */
+export const ENEMY_DEF_NO_AURA_LOGGED = "no aura logged";
 /** What an `[ENEMY DEF]` line says of a deferral shield (Time Dilation) in
  * place of `N%`: what it held back while it was up, from the unit's own
  * SPELL_ABSORBED rows — `defers 64k` (`<1k` when it rounds to 0). That damage
@@ -1026,8 +1028,16 @@ export const ENEMY_DEF_IMMUNE_LABEL_RE_SRC = String.raw`immune(?: to [a-z]+(?:\/
 // …a deflection's label too (codex 60-POSTHOC-10e #4: a Turtle with no
 // REMOVED, `(deflects direct attacks; …, end not logged)`, read as a line with
 // no slot — a false hard failure and `endNotLogged` false)
+/** fact11 D45: an immunity's slot may close by naming the allies the same
+ * press put it on — `(immune, 8.0s; also on 4(HPriest), 6(SRogue))`. The
+ * producer writes it with `enemyDefAlsoOnClause`; every reader of the slot
+ * accepts it through this source. */
+export const ENEMY_DEF_ALSO_ON_RE_SRC = String.raw`; also on \d+\([^()]*\)(?:, \d+\([^()]*\))*`;
+export const enemyDefAlsoOnClause = (pids: string[]): string =>
+  pids.length ? `; also on ${pids.join(", ")}` : "";
+
 export const ENEMY_DEF_END_NOT_LOGGED_SLOT_RE = new RegExp(
-  String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFLECTS_WORDS}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}\)`,
+  String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFLECTS_WORDS}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}(?:${ENEMY_DEF_ALSO_ON_RE_SRC})?\)`,
 );
 
 /** GH #173 (user 2026-11-02): Ultimate Penitence prints its shield on its
@@ -2189,6 +2199,95 @@ function externalPressMissed(
         castMs,
         m.timestamp,
         CAST_ROW_LAG_MAX_MS,
+      ),
+  );
+}
+
+/** fact11 D34 (c73ff2b4 1:48): an immunity save's press whose aura the log
+ * never shows — a Frost Mage's Mass Invisibility 414664 pressed inside its
+ * Greater Invisibility, no 414664 aura row anywhere in the file. The
+ * `[ENEMY DEF]` aura loop reads immunities off aura intervals only, so the
+ * press had no line. A fact line only (`(immune, no aura logged)`): no span,
+ * no attribution reads it — the untargetable spans stay the auras'.
+ * `events` = the unit's `enemyDefensiveEvents`; a press within
+ * `PRESS_TO_AURA_MAX_S` of one of them, or of any row of its aura on the
+ * unit (a refresh of a copy already up), is that event's. */
+export function immunityPressesWithoutAura(
+  enemy: ICombatUnit,
+  events: readonly Pick<
+    IEnemyDefensiveEvent,
+    "spellId" | "atSeconds" | "pressSeconds"
+  >[],
+  combat: { startTime: number },
+  roundEndAtMs: number,
+): Array<{ atSeconds: number; spellId: string; spellName: string }> {
+  const out: Array<{ atSeconds: number; spellId: string; spellName: string }> =
+    [];
+  for (const c of enemy.spellCastEvents ?? []) {
+    if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !c.spellId) continue;
+    const ms = c.logLine.timestamp;
+    if (ms < combat.startTime || ms > roundEndAtMs) continue;
+    const auraIds = [c.spellId, ...effectAurasOfCast(c.spellId)].filter(
+      isImmunitySaveAura,
+    );
+    if (auraIds.length === 0) continue;
+    const t = (ms - combat.startTime) / 1000;
+    const near = (x: number) => Math.abs(x - t) <= PRESS_TO_AURA_MAX_S;
+    if (
+      events.some(
+        (e) =>
+          auraIds.includes(e.spellId) && near(e.pressSeconds ?? e.atSeconds),
+      )
+    )
+      continue;
+    if (
+      (enemy.auraEvents ?? []).some(
+        (a) =>
+          !!a.spellId &&
+          auraIds.includes(a.spellId) &&
+          near((a.logLine.timestamp - combat.startTime) / 1000),
+      )
+    )
+      continue;
+    out.push({
+      atSeconds: t,
+      spellId: c.spellId,
+      spellName:
+        IMMUNITY_SAVE_AURA_NAMES.get(c.spellId) ??
+        getEnglishSpellName(c.spellId, c.spellName ?? ""),
+    });
+  }
+  return out;
+}
+
+/** How far apart one press's copies of its aura go up on its targets. */
+const SAME_PRESS_COPY_MS = 50;
+
+/** fact11 D45 (faede60a 0:35): the allies an immunity save's own press put
+ * the same aura on — Mass Invisibility 414664 applied to the mage, a monk and
+ * a warrior in one millisecond. Their copies are not their own presses (the
+ * aura loop drops a copy whose source is another unit), so the line read as
+ * the mage's alone. The caster's `[ENEMY DEF]` line names them; nothing else
+ * reads it. */
+export function immunityAlsoOn(
+  caster: Pick<ICombatUnit, "id">,
+  spellId: string,
+  atSeconds: number,
+  enemies: readonly ICombatUnit[],
+  combat: { startTime: number },
+): ICombatUnit[] {
+  if (!isImmunitySaveAura(spellId)) return [];
+  const atMs = combat.startTime + atSeconds * 1000;
+  return enemies.filter(
+    (e) =>
+      e.id !== caster.id &&
+      (e.auraEvents ?? []).some(
+        (a) =>
+          a.spellId === spellId &&
+          a.srcUnitId === caster.id &&
+          a.destUnitId === e.id &&
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+          Math.abs(a.logLine.timestamp - atMs) <= SAME_PRESS_COPY_MS,
       ),
   );
 }

@@ -6,7 +6,8 @@
  *
  * Check `offListPressLine`, kinds:
  *  - `noPress`: no SPELL_CAST_SUCCESS of the named spell by that unit in the
- *    line's second;
+ *    line's second (a button whose press logs only its aura —
+ *    `AURA_ONLY_ACTIVATION_IDS`, fact11 D42 — the ledger's aura-read press);
  *  - `backBeforeNextPress`: `back m:ss`, and the unit pressed the spell again
  *    more than `BACK_SLACK_MS` before it (the printed cooldown is too long —
  *    a reduction or reset the model does not read); a free press (the text's
@@ -30,6 +31,7 @@
  *    3,600 s, a channel read for a HoT), GH #179 batch 3d's overshoot gate.
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
+import { AURA_ONLY_ACTIVATION_IDS } from "@gladlog/analysis/src/data/auraActivation";
 import { SHARED_CHARGE_CATEGORY } from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import {
@@ -37,7 +39,11 @@ import {
   timeSpiralFreePressMs,
 } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import { isStasisReplayCast } from "@gladlog/analysis/src/utils/combatStates";
-import { unreleasedHoldMs } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  auraOnlyActivationSeconds,
+  unreleasedHoldMs,
+} from "@gladlog/analysis/src/utils/cooldowns";
+import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { pressDuration } from "@gladlog/analysis/src/utils/offListPress";
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
@@ -66,6 +72,33 @@ const BACK_SLACK_MS = 2000;
 /** an aura's logged life this far past the printed length is beyond it */
 const LASTS_SLACK_S = 0.65;
 
+/** fact11 D42: a button whose press logs only its own aura
+ * (`AURA_ONLY_ACTIVATION_IDS` — Rain from Above, DB2 NO_CAST_LOG): the
+ * ledger's own reading of those presses (`auraOnlyActivationSeconds`), as
+ * press rows of the button */
+function auraOnlyPressRows(unit: any, name: string, ctx: IRoundCtx): any[] {
+  return Object.keys(AURA_ONLY_ACTIVATION_IDS)
+    .filter((id) => nameOf(id) === name)
+    .flatMap((id) =>
+      auraOnlyActivationSeconds(unit, id, ctx.start, ctx.roundEndAt)
+        .map((t) => ctx.start + t * 1000)
+        // a logged press beside it is that press
+        .filter(
+          (ms) =>
+            !successesOf(unit).some(
+              (c) =>
+                String(c.spellId) === id &&
+                Math.abs(tsOf(c) - ms) <= SAVE_CAST_AURA_PAIR_S * 1000,
+            ),
+        )
+        .map((ms) => ({
+          spellId: id,
+          spellName: name,
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: ms },
+        })),
+    );
+}
+
 export function run(ctx: IRoundCtx): void {
   // pass 1: each line's press (the k-th line of a second is its k-th press —
   // two presses in one second, Ace Up Your Sleeve's reset, print two lines in
@@ -90,12 +123,14 @@ export function run(ctx: IRoundCtx): void {
     const unit = m[2] ? ctx.owner : ctx.unitOfPid(m[3]!);
     const name = m[4]!;
     const named = unit
-      ? successesOf(unit).filter(
-          (c) =>
-            nameOf(c.spellId, c.spellName) === name &&
-            (effectiveCooldownSeconds(String(c.spellId)) ?? 0) > 0 &&
-            !isStasisReplayCast(unit, String(c.spellId), tsOf(c)),
-        )
+      ? [...successesOf(unit), ...auraOnlyPressRows(unit, name, ctx)]
+          .filter(
+            (c) =>
+              nameOf(c.spellId, c.spellName) === name &&
+              (effectiveCooldownSeconds(String(c.spellId)) ?? 0) > 0 &&
+              !isStasisReplayCast(unit, String(c.spellId), tsOf(c)),
+          )
+          .sort((a, b) => tsOf(a) - tsOf(b))
       : [];
     // a row echoing a Time Spiral free press is no press either
     // (`timeSpiralEchoMs`, the renderer's own exclusion)

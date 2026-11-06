@@ -110,6 +110,12 @@ export const AURA_ONLY_ACTIVATION_IDS: Record<string, string[]> = {
   // presses in one round, the kit read `[UNUSED]`; castless in 9 of 957
   // presses on the 605-file capture). The self copy only a press puts up.
   "6940": ["6940"],
+  // Rain from Above (Demon Hunter PvP talent, 90 s; fact11 D42, ea47f4c6 r0
+  // 0:35): DB2 SpellMisc Attributes_4 bit 0 (SPELL_ATTR4_NO_CAST_LOG) — the
+  // press never logs a SPELL_CAST_SUCCESS (0 in the round-11 library, 6
+  // APPLIED / 6 REMOVED of the self aura); the aura is the press, its next
+  // attempt 42 ms later refused "Not yet recovered".
+  "206803": ["206803"],
 };
 
 /**

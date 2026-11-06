@@ -95,6 +95,7 @@ import {
   type IPlayerCCTrinketSummary,
   pressEndedSilence,
   racialTrinketLockUntilSeconds,
+  readyTrinketRacialNameAt,
   renderedCcSeconds,
 } from "./ccTrinketAnalysis";
 import {
@@ -123,6 +124,7 @@ import {
   isBelowWallFloorExternal,
   isImmunitySaveAura,
   isIntervalFrom,
+  KW_UNTARGETABLE_AURA_IDS,
   limitedAbsorbSchoolMask,
   limitedImmunitySchoolMask,
   MITIGATION_AURA_IDS,
@@ -134,6 +136,7 @@ import {
   saveAuraIntervals,
   SELF_SAVE_IDS,
   selfSaveCasts,
+  untargetableEndS,
   wallTableIdOfAura,
 } from "./enemyDefensives";
 import {
@@ -269,6 +272,11 @@ export interface IKillAttempt {
   trinketRacialLockUntilSeconds?: number;
   /** the target holds no PvP trinket to press (`hasPressablePvpTrinket`) */
   noPressableTrinket?: boolean;
+  /** A `prime` tier whose target held a trinket-equivalent racial ready at
+   * the start (`readyTrinketRacialNameAt`), by name. The tier stays (ruling
+   * P-b7); only the words beside it say so (user ruling 2026-11-06, fact11
+   * D11). */
+  readyTrinketRacial?: string;
   /** The softest OTHER enemy alive at the attempt start, present only when
    * its tier was strictly softer than the target's (see softerTargetAt).
    * Absent = nobody was a softer target, which at a match opener is the
@@ -433,6 +441,11 @@ export const TRINKET_RACIAL_LOCK_WORDS = "trinket locked by a racial";
 export const NO_PRESSABLE_TRINKET_WORDS = "no pressable PvP trinket";
 export const KILL_ATTEMPTS_NO_TRINKET_LEGEND = `  \`${NO_PRESSABLE_TRINKET_WORDS}\` = the target's trinket slots hold no PvP trinket it can press: the same reading as \`trinket up\` for the attempt's tier, but there is no trinket to bait.`;
 export const KILL_ATTEMPTS_RACIAL_LOCK_LEGEND = `  \`${TRINKET_RACIAL_LOCK_WORDS} (back m:ss; …)\` = the target pressed a racial that shares the trinket's lock: the same reading as \`trinket up\` for the attempt's tier, but the trinket itself could not be pressed before m:ss.`;
+/** fact11 D11: the ready racial beside a PRIME tier — `PRIME (no trinket,
+ * no 20-99% wall in hand; Will to Survive ready)`. */
+export const killAttemptRacialReadyFact = (name: string): string =>
+  `${name} ready`;
+export const KILL_ATTEMPTS_RACIAL_READY_LEGEND = `  \`PRIME (…; X ready)\` = the target held X, a racial that breaks control as the PvP trinket does (it was seen pressing it this round), ready when the attempt began. The tier stays PRIME — it reads the PvP trinket and walls only — but the target could still break one control with X.`;
 export const KILL_ATTEMPTS_OWN_CONTROL_LEGEND = `  \`| target in your team's Cyclone a–b\` at the end of a line = your own team's Cyclone was on that target from a to b (its [CC ON ENEMY] line), and those seconds meet this attempt's bracket or the ${KILL_CREDIT_SLACK_S} s after it — the span the outcome is read over (a Cyclone that began after the bracket's last second is one of those). A cycloned unit takes no damage from anyone while it lasts. It is a fact beside the outcome: \`FAILED:\` still names what its fixed order picked, and does not weigh the Cyclone.`;
 
 interface StunApp {
@@ -1174,6 +1187,13 @@ export function extractKillAttempts(
       if (lockUntil !== undefined) a.trinketRacialLockUntilSeconds = lockUntil;
       if (unit && !hasPressablePvpTrinket(unit)) a.noPressableTrinket = true;
     }
+    if (a.opportunity.tier === "prime") {
+      const unit = enemies.find((e) => e.id === a.targetUnitId);
+      const racial =
+        unit &&
+        readyTrinketRacialNameAt(unit, matchStartMs + a.fromSeconds * 1000);
+      if (racial) a.readyTrinketRacial = racial;
+    }
     const fromMs = matchStartMs + a.fromSeconds * 1000;
     const toMs = matchStartMs + a.toSeconds * 1000;
     let inBracket = 0;
@@ -1567,6 +1587,8 @@ export function formatKillAttemptsForContext(
     lines.push(KILL_ATTEMPTS_NO_TRINKET_LEGEND);
   if (attempts.some((a) => a.trinketRacialLockUntilSeconds !== undefined))
     lines.push(KILL_ATTEMPTS_RACIAL_LOCK_LEGEND);
+  if (attempts.some((a) => a.readyTrinketRacial !== undefined))
+    lines.push(KILL_ATTEMPTS_RACIAL_READY_LEGEND);
   let kills = 0;
   let withSofter = 0;
   let onPrime = 0;
@@ -1592,7 +1614,7 @@ export function formatKillAttemptsForContext(
     );
     const opp =
       a.opportunity.tier === "prime"
-        ? `PRIME (${["no trinket, no 20-99% wall in hand", ...up].join("; ")})`
+        ? `PRIME (${["no trinket, no 20-99% wall in hand", ...(a.readyTrinketRacial ? [killAttemptRacialReadyFact(a.readyTrinketRacial)] : []), ...up].join("; ")})`
         : a.opportunity.tier === "gated"
           ? `gated (${[`${a.opportunity.wallsInHand.join("/")} in hand`, ...up, softer].join("; ")})`
           : a.noPressableTrinket
@@ -2080,6 +2102,7 @@ function attributeFailure(
   // a re-announced aura is one press). An interval whose start was inferred
   // (up before the log saw it) is skipped — only a logged application counts.
   const targetIntervals = readings.saveIntervals();
+  const roundUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
   for (const iv of targetIntervals) {
     if (iv.inferredStart) continue;
     const startMs = matchStartMs + iv.fromS * 1000;
@@ -2093,7 +2116,18 @@ function attributeFailure(
     // it). Feign Death, Cheat Death, Cauterize and Nature's
     // Guardian are not read here at all (ruling D8): see the self-saves.
     const immunityInSpan = inCredit(startMs);
+    // fact11 D47 (user ruling 2026-11-06): an unseen-end invisibility the
+    // holder ended with its own action (`untargetableEndS`: its first own
+    // press or hit before the official length ran out) forced nothing —
+    // fb01eed7 1:28, an ally's Mass Invisibility on a Rogue whose own Cheap
+    // Shot came 0.22 s later. No seconds floor: it is the holder's action
+    // that ends it, not how soon.
+    const brokeItself =
+      KW_UNTARGETABLE_AURA_IDS.has(iv.spellId) &&
+      !!iv.inferredEnd &&
+      untargetableEndS(target, iv, matchStartMs, roundUnits) < iv.toS;
     if (
+      !brokeItself &&
       isImmunitySaveAura(iv.spellId) &&
       (immunityInSpan || (upAtStart && immunityCountsWhenAlreadyUp(iv))) &&
       immunityCovers(iv.spellId)

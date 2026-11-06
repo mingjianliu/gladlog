@@ -23,6 +23,7 @@ import { PURGE_PRESS_REMOVALS_TEXT } from "../../utils/dispelAnalysis";
 import {
   ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
+  ENEMY_DEF_NO_AURA_LOGGED,
   ENEMY_DEF_NO_PRESS_TAG,
   ENEMY_DEF_UNSEEN_PRESS_TAG,
   isShieldOnEnemyCdLine,
@@ -513,6 +514,19 @@ export function formatTimeline(
           `    \`${ENEMY_DEF_END_NOT_LOGGED}\` in place of Ts = the log never shows that aura end (an enemy who goes invisible takes the`,
           "    line with them) — how long it lasted is unknown: it is NOT the full duration, and the unit may have been hit seconds later.",
           "    `immune` = full immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);",
+          // fact11 D34 / D45: shown only when a line carries them
+          ...(enemyDefLines.some((l) =>
+            l.includes(`immune, ${ENEMY_DEF_NO_AURA_LOGGED}`),
+          )
+            ? [
+                `    \`(immune, ${ENEMY_DEF_NO_AURA_LOGGED})\` = the press is logged, its aura never is — when it took effect and for how long is unknown;`,
+              ]
+            : []),
+          ...(enemyDefLines.some((l) => l.includes("; also on "))
+            ? [
+                "    `; also on N(X), …` inside an immunity's parens = the same press put that immunity on those teammates of the caster at the same instant;",
+              ]
+            : []),
           `    \`${ENEMY_DEF_DEFLECTS_WORDS}\` = Aspect of the Turtle: no immunity — attacks and spells aimed at the unit are deflected, damage already ticking on it lands;`,
           "    `defers Nk` = Time Dilation: it held back Nk of the damage while it was up (half of each hit) — no reduction: that damage lands on the unit later as its own `deferred Time Dilation` ticks, from about 1 s after the first hit it held, and counts when it lands;",
           "    `immune to magic` / `immune to physical` = an immunity to those schools only — the other school still hits (Cloak of Shadows, Blessing of Protection, Blessing of Spellwarding);",

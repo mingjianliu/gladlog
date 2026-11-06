@@ -1822,6 +1822,17 @@ const INDEX: PredicateRow[] = [
     symbol: "countsAsTeamBurst",
     mod: cooldownTiming,
   },
+  // fact11 D11: a ready trinket-equivalent racial
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "trinketRacialReadyMs",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "readyTrinketRacialNameAt",
+    mod: ccTrinketAnalysis,
+  },
   {
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkPetCreditSide",
@@ -2352,6 +2363,17 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "ENEMY_DEF_END_NOT_LOGGED_SLOT_RE",
+    mod: enemyDefensives,
+  },
+  // fact11 D45: the `; also on …` clause of an immunity's slot
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "enemyDefAlsoOnClause",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_ALSO_ON_RE_SRC",
     mod: enemyDefensives,
   },
   {

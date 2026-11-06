@@ -208,6 +208,7 @@ import {
   AURA_EMPOWERING_WALLS,
   deferralWallNames,
   deflectionNames,
+  ENEMY_DEF_ALSO_ON_RE_SRC,
   ENEMY_DEF_DEFERS_LABEL_RE_SRC,
   ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
@@ -5337,7 +5338,7 @@ export function checkKillAttemptOwnControlClause(lines: string[]): string[] {
  * when its ability is neither an effect save nor a pressed self defensive:
  * a wall's `(N%…`, an immunity's `(immune…`, an area save's `(area)`. */
 const ENEMY_DEF_WALL_LABEL = new RegExp(
-  String.raw`^\((?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}[,)]|\d+%[,)]|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}[,)]|area\))`,
+  String.raw`^\((?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}(?:[,)]|${ENEMY_DEF_ALSO_ON_RE_SRC}\))|\d+%[,)]|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}[,)]|area\))`,
 );
 
 /**

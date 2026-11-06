@@ -23,6 +23,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { AURA_ONLY_ACTIVATION_IDS } from "../data/auraActivation";
 import { effectAurasOfCast } from "../data/castEffectAuras";
 import { classMetadata } from "../data/classSpells";
 import {
@@ -46,6 +47,7 @@ import {
   unitCooldownEntry,
   unreleasedHoldMs,
 } from "./cooldowns";
+import { SAVE_CAST_AURA_PAIR_S } from "./enemyDefensives";
 import { isResyncBatchAt } from "./hiddenPress";
 import {
   OFFENSIVE_CD_SPELL_IDS,
@@ -654,6 +656,40 @@ export function extractOffListPresses(
             }
           : {}),
       });
+    }
+    // fact11 D42 (ea47f4c6 r0 0:35): a press that logs only its own aura
+    // (`AURA_ONLY_ACTIVATION_IDS` — Rain from Above, DB2 NO_CAST_LOG): the
+    // ledger's aura-read presses, those no logged row of the button backs
+    for (const id of Object.keys(AURA_ONLY_ACTIVATION_IDS)) {
+      if (!isOffListPressId(id)) continue;
+      const entry = unitCooldownEntry(unit, combat, id);
+      if (!entry) continue;
+      for (const k of entry.casts) {
+        if (k.unreleased) continue;
+        const at = combat.startTime + k.timeSeconds * 1000;
+        if (at > roundEndAtMs) continue;
+        if (
+          rows.some(
+            (r) =>
+              r.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              r.spellId === id &&
+              Math.abs(r.logLine.timestamp - at) <=
+                SAVE_CAST_AURA_PAIR_S * 1000,
+          )
+        )
+          continue;
+        out.push({
+          unit,
+          spellId: id,
+          timeSeconds: k.timeSeconds,
+          cooldownSeconds: k.baseCooldownSeconds ?? entry.cooldownSeconds,
+          charges: entry.charges ?? 1,
+          readyAgainAtSeconds: pressReadyAgainAtSeconds(
+            upToPress(entry, k.timeSeconds),
+            k.timeSeconds,
+          ),
+        });
+      }
     }
   }
   return out.sort((a, b) => a.timeSeconds - b.timeSeconds);
