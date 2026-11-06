@@ -58,6 +58,10 @@
  *    variant's press spent it. Counted: every `[RES]` cd entry of such a
  *    button on such a log.
  */
+import {
+  parseResRow,
+  splitResList,
+} from "@gladlog/analysis/src/context/resRow";
 import { castAndEffectIds } from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { OVERRIDE_VARIANTS_GENERATED } from "@gladlog/analysis/src/data/overrideVariantsGenerated";
@@ -268,7 +272,8 @@ function doomWindsNoPressReading(ctx: IRoundCtx): void {
           (a) => ev(a) === APPLIED && a.srcUnitId === u.id,
         ),
       ].some(
-        (e) => ids.includes(String(e.spellId)) && Math.abs(tsOf(e) - ms) <= 1000,
+        (e) =>
+          ids.includes(String(e.spellId)) && Math.abs(tsOf(e) - ms) <= 1000,
       );
     for (const a of (u.auraEvents ?? []) as any[]) {
       if (String(a.spellId) !== "466772" || ev(a) !== APPLIED) continue;
@@ -315,7 +320,8 @@ const PERIODIC_DAMAGE = "SPELL_PERIODIC_DAMAGE";
 const PERIODIC_MISSED = "SPELL_PERIODIC_MISSED";
 const MISSED = "SPELL_MISSED";
 
-const INTO_LINE = /^\s+\[(\d+:\d{2})\] [^(]+\((.+?)\): (.+) into (.+)'s (.+?)(?: \(deferral\))?$/;
+const INTO_LINE =
+  /^\s+\[(\d+:\d{2})\] [^(]+\((.+?)\): (.+) into (.+)'s (.+?)(?: \(deferral\))?$/;
 
 function intoImmunityLanded(ctx: IRoundCtx): void {
   const at = ctx.text.indexOf("ABILITIES INTO IMMUNITY/DR");
@@ -345,8 +351,7 @@ function intoImmunityLanded(ctx: IRoundCtx): void {
     const from = tsOf(app);
     const to = rem ? tsOf(rem) : ctx.end;
     const listed = new Map<string, number>();
-    for (const n of m[3]!.split(" + "))
-      listed.set(n, (listed.get(n) ?? 0) + 1);
+    for (const n of m[3]!.split(" + ")) listed.set(n, (listed.get(n) ?? 0) + 1);
     for (const [name, k] of listed) {
       ctx.bump("intoImmunityLanded");
       // the target's direct rows of this spell by the player, in order
@@ -360,7 +365,8 @@ function intoImmunityLanded(ctx: IRoundCtx): void {
       ]
         .filter(
           (r) =>
-            r.destUnitId === target.id && nameOf(r.spellId, r.spellName) === name,
+            r.destUnitId === target.id &&
+            nameOf(r.spellId, r.spellName) === name,
         )
         .sort((a, b) => tsOf(a) - tsOf(b));
       const casts = castsOf(player)
@@ -401,7 +407,8 @@ function intoImmunityLanded(ctx: IRoundCtx): void {
   }
 }
 
-const PRESS_LINE = /^(\d+:\d{2})\s+\[(YOU|TEAM)\] \[[A-Z ]+\]\s+(.*?) \[IMMUNE(?:: [^\]—]+)?(?: — (.+?) was up)?\]/;
+const PRESS_LINE =
+  /^(\d+:\d{2})\s+\[(YOU|TEAM)\] \[[A-Z ]+\]\s+(.*?) \[IMMUNE(?:: [^\]—]+)?(?: — (.+?) was up)?\]/;
 
 function pressImmuneTagChecks(ctx: IRoundCtx): void {
   const friends = ctx.owner
@@ -434,7 +441,8 @@ function pressImmuneTagChecks(ctx: IRoundCtx): void {
     const family = new Set(ids.flatMap((i) => [...castAndEffectIds(i)]));
     const names = new Set(ids.map((i) => nameOf(i, i === id ? name : "")));
     const ofPress = (r: any) =>
-      family.has(String(r.spellId)) || names.has(nameOf(r.spellId, r.spellName));
+      family.has(String(r.spellId)) ||
+      names.has(nameOf(r.spellId, r.spellName));
     const inWindow = (r: any) =>
       tsOf(r) >= tsOf(press) - 100 && tsOf(r) <= tsOf(press) + 3000;
     const immune = ((actor.missesOut ?? []) as any[]).filter(
@@ -530,8 +538,7 @@ function exposureThreatOnFormHealer(ctx: IRoundCtx): void {
     for (const f of friends) {
       const rows = ((f.auraEvents ?? []) as any[])
         .filter(
-          (a) =>
-            a.destUnitId === f.id && auraIsImmunityForm(String(a.spellId)),
+          (a) => a.destUnitId === f.id && auraIsImmunityForm(String(a.spellId)),
         )
         .sort((a, b) => tsOf(a) - tsOf(b));
       const app = [...rows]
@@ -553,8 +560,6 @@ function exposureThreatOnFormHealer(ctx: IRoundCtx): void {
   }
 }
 
-const RES_CD = /\[RES\] .*?\bcd:(\S.*?)(?: {2}|$)/;
-
 function variantSpentButton(ctx: IRoundCtx): void {
   const dated = Object.entries(OVERRIDE_VARIANT_SHARES_BY_ERA).filter(
     ([, d]) => !d.before && ctx.start < d.cutoverEpochMs,
@@ -569,9 +574,9 @@ function variantSpentButton(ctx: IRoundCtx): void {
     for (const l of ctx.text.split("\n")) {
       const t = /^(\d+:\d{2})\s/.exec(l);
       if (t) atS = secOf(t[1]!);
-      const m = RES_CD.exec(l);
-      if (!m) continue;
-      for (const entry of m[1]!.split(",")) {
+      const cd = parseResRow(l)?.cd;
+      if (!cd) continue;
+      for (const entry of splitResList(cd)) {
         const e = /^(?:(\d+):)?(.+?)\((\d+)s\)$/.exec(entry.trim());
         if (!e || e[2] !== name) continue;
         const unit = e[1] === undefined ? ctx.owner : ctx.unitOfPid(e[1]);
