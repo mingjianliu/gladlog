@@ -79,6 +79,7 @@ import { allyCopyRecipient } from "./allyCopyWall";
 import {
   auraIsThePressAt,
   auraOnlyActivationIdsAt,
+  auraStandsForPressAt,
 } from "./auraActivationEra";
 import {
   buildAuraIntervals,
@@ -4068,9 +4069,17 @@ export function effectEvidenceCastSeconds(
   cooldownSeconds: number,
   combat: Pick<AtomicArenaCombat, "startTime" | "units">,
 ): number[] {
+  // dated (`auraStandsForPressAt`): an aura that is no press on this log is
+  // no effect evidence of one either — from 12.1.5 a Doom Winds 466772 with
+  // no press row is a proc (fact11 D7 / D44; codex 20-F26-01 #1: the
+  // fallback spent the button on it)
+  const procOnThisLog = auraStandsForPressAt(spellId, combat.startTime)
+    ? []
+    : (AURA_ONLY_ACTIVATION_IDS[spellId] ?? []);
   const effects = effectAurasOfCast(spellId).filter(
     (a) =>
       a !== spellId &&
+      !procOnThisLog.includes(a) &&
       effectAuraViaName(spellId, a) &&
       (effectAuraHitShare(spellId, a) ?? 0) >= CONTROL_EFFECT_MIN_HIT_SHARE,
   );

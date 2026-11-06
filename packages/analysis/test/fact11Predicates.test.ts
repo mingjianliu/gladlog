@@ -75,6 +75,29 @@ describe("Doom Winds 384352: an aura-only press before 12.1.5, a proc from it (D
   it("an undated aura-only activation is untouched", () => {
     expect(auraStandsForPressAt("114051", NEW)).toBe(true);
   });
+  // codex 20-F26-01 #1: the effect-evidence fallback read the same proc
+  // aura as a press and spent the cooldown
+  it("the effect-evidence fallback follows the date", () => {
+    const at = (start: number) => {
+      const u = makeUnit("sh", {
+        auraEvents: [
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "466772",
+            start + 10_000,
+            "sh",
+            "sh",
+          ),
+        ],
+      });
+      return effectEvidenceCastSeconds(u as never, "384352", 60, {
+        startTime: start,
+        units: { sh: u },
+      } as never);
+    };
+    expect(at(NEW)).toEqual([]);
+    expect(at(OLD)).toEqual([10]);
+  });
 });
 
 describe("Predator's Wake 1259431 / The Hunt 1246167 (D22 D25 D29)", () => {
