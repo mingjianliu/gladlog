@@ -384,10 +384,14 @@ describe("D17 — Peaceweaver is an immunity-kind save with its DB2 mask (ruling
       addEntry: (_t: number, line: string) => lines.push(line),
       _allUnits: enemies,
     } as never);
-    expect(lines.find((l) => l.includes("E:ally"))).toContain(
+    // the ally's own line (fact11 D45: the monk's line now also names it,
+    // `; also on E:ally`)
+    expect(lines.find((l) => l.includes("E:ally ("))).toContain(
       "from E:monk's Restoral",
     );
-    expect(lines.find((l) => l.includes("E:monk ("))).not.toContain(" from ");
+    const monkLine = lines.find((l) => l.includes("E:monk ("));
+    expect(monkLine).not.toContain(" from ");
+    expect(monkLine).toContain("; also on E:ally)");
   });
 
   it("an aura the OTHER side put on the unit is not its save", () => {
