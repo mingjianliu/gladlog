@@ -10,10 +10,12 @@
  *             firstPaint        → packages/desktop/qa/visual/firstPaint.spec.ts
  *             firstPaintControl → packages/desktop/qa/visual/firstPaint.spec.ts
  *             firstPaintRatio   → packages/desktop/qa/visual/firstPaint.spec.ts
+ *             firstPaintControlPerCal → packages/desktop/qa/visual/firstPaint.spec.ts
  *             coldStart       → packages/desktop/qa/e2e/import.spec.ts
  *
- *  Every entry is milliseconds except firstPaintRatio, which is a
- *  dimensionless ratio of two same-run millisecond floors (see its comment).
+ *  Every entry is milliseconds except firstPaintRatio and
+ *  firstPaintControlPerCal, dimensionless ratios of two same-run millisecond
+ *  floors (see their comments).
  *
  *  Why all the budgets live in one place: they are one family of constants
  *  under one strategy, so the predicate is single-source — spread across their
@@ -27,6 +29,8 @@ export const BUDGET_MS: {
   firstPaintControl: number | null;
   /** Dimensionless — NOT milliseconds. */
   firstPaintRatio: number | null;
+  /** Dimensionless — NOT milliseconds. */
+  firstPaintControlPerCal: number | null;
   coldStart: number | null;
 } = {
   // Basis for the lock: 3 CI samples taken on ubuntu-latest on 2026-07-19,
@@ -187,6 +191,29 @@ export const BUDGET_MS: {
   firstPaint: null, // measured only since 2026-11-03: see firstPaintControl
   firstPaintControl: 6300,
   firstPaintRatio: 5.2,
+  // 2026-11-06 (GH #145 item 2): the CPU-calibrated absolute reading,
+  // control floor ÷ the floor of dev/cpu-cal.html — a fixed workload (seeded
+  // JSON round trip, sort, 8,000-row DOM insert, layout, two frames) built
+  // separately so it shares no code with the app and the app's chunks stay
+  // byte-identical. A fixed per-load cost in the app raises the numerator
+  // only; a slow runner raises both. MEASURE-ONLY: lock it from ≥ 10
+  // ubuntu-latest runs, and only if its spread across runs is clearly
+  // tighter than firstPaintControl's own (the 206-run control spread was
+  // 1,521–3,557 ms, 2.3×) — a calibrator that does not track the runner
+  // adds noise instead of removing it. Changing cpuCal.ts's sizes or work
+  // restarts the sample population.
+  // Local probes (one Mac, headless shell 149, min of 5, 2026-11-06):
+  //   - baseline: control 1,492 ms, cal 776 ms → 1.92.
+  //   - a +740 ms busy loop at dev/main.tsx's top level (a +50 % fixed
+  //     cost, the icon-table class): control 2,199, cal 778 → 2.83 (+47 %);
+  //     the ratio sees it, the 6,300 ms control line does not.
+  //   - DevTools CPU throttling (main thread only) 2× / 3×: control 2,136 /
+  //     3,111, cal 1,572 / 2,371 → 1.36 / 1.31. The cal page is nearly all
+  //     main-thread script and the control is not, so a main-thread-only
+  //     slowdown over-corrects (−30 %) — still a 1.47× spread against the
+  //     control's own 2.08× over the same range. A real runner slows every
+  //     thread; only the CI population shows which way it lands.
+  firstPaintControlPerCal: null,
   coldStart: 2600,
 };
 

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "dev:ui": "vite --config dev/vite.config.mts",
-    "build:ui": "vite build --config dev/vite.config.mts",
+    "build:ui": "vite build --config dev/vite.config.mts && vite build --config dev/vite.cal.config.mts",
     "preview:ui": "vite preview --config dev/vite.config.mts",
     "build": "electron-vite build",
     "test": "vitest run --passWithNoTests",

@@ -36,6 +36,7 @@ App.tsx 的比赛列表 / IPC / preload**,所以不受 Electron 侧 fixture 预�
 - `index.html` / `main.tsx` —— harness 入口(fixture 切换 + AI mock bridge)。
 - `harness.css` —— 顶部工具条样式(与 app chrome 无关)。
 - `vite.config.mts` —— 纯 vite 配置(root=dev,react 插件,端口 5199)。
+- `cpu-cal.html` / `cpuCal.ts` / `vite.cal.config.mts` —— 首渲预算的同次运行 CPU 校准页(GH #145):固定负载、不 import 任何应用代码,单独构建进同一个 dist-ui,所以应用产物逐字节不变。改它的负载规模 = 重新攒 CI 样本。
 
 `dev/` 不进 `tsconfig`(include: src/test)也不进 electron-vite 构建,是隔离的 dev-only
 工具,不影响 `build` / `test` / `typecheck`。

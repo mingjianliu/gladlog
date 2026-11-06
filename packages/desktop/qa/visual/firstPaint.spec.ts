@@ -6,7 +6,7 @@ import { isolateExternalRequests } from "../support/stubExternal";
 
 /** First paint on the oversized payload is naturally slower than an ordinary
  * scene, so the test's overall timeout must accommodate every sample (now
- * SAMPLES heavy + SAMPLES control reloads). */
+ * SAMPLES heavy + SAMPLES control reloads + SAMPLES calibration loads). */
 test.setTimeout(180_000);
 
 /** How many reloads to time, per scene. Five rather than three so the
@@ -22,6 +22,11 @@ const HEAVY = "report-heavy";
 const CONTROL = "report-battle";
 /** The "first meaningful element" both scenes are timed to. */
 const ANCHOR_TESTID = "rpt-timeline";
+/** Same-run CPU normaliser (GH #145 item 2, dev/cpuCal.ts): a fixed workload
+ * sharing no code or data with the app, built on its own so the app's chunks
+ * stay byte-identical. */
+const CAL_PATH = "/cpu-cal.html";
+const CAL_TESTID = "cal-done";
 
 test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ page }) => {
   // Isolate the network here too: the first-paint budget measures our code and
@@ -38,6 +43,14 @@ test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ 
     });
     return Date.now() - t0;
   };
+  const timeCal = async (i: number): Promise<number> => {
+    const t0 = Date.now();
+    await page.goto(`${CAL_PATH}?i=${i}`);
+    await expect(page.getByTestId(CAL_TESTID)).toBeAttached({
+      timeout: 30_000,
+    });
+    return Date.now() - t0;
+  };
 
   // Interleaved, with the order alternating per pair (H C, C H, H C, …): both
   // floors must come from the same stretch of runner state — timing all five
@@ -45,17 +58,27 @@ test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ 
   // up or slows down mid-test move one scene and not the other, which is the
   // very noise the ratio exists to divide out. Alternating also stops either
   // scene from always being the one that runs right after the other's GC.
+  // The calibration load (GH #145) sits on the outside of each pair — first
+  // on odd pairs, last on even ones — so heavy and control keep their
+  // adjacent, alternating order.
   const samples: number[] = [];
   const controlSamples: number[] = [];
+  const calSamples: number[] = [];
   for (let i = 0; i < SAMPLES; i++) {
-    const order = i % 2 === 0 ? [HEAVY, CONTROL] : [CONTROL, HEAVY];
+    const order =
+      i % 2 === 0 ? [HEAVY, CONTROL, CAL_PATH] : [CAL_PATH, CONTROL, HEAVY];
     for (const scene of order) {
+      if (scene === CAL_PATH) {
+        calSamples.push(await timeCal(i));
+        continue;
+      }
       const ms = await timeFirstPaint(scene, i);
       (scene === HEAVY ? samples : controlSamples).push(ms);
     }
   }
   samples.sort((a, b) => a - b);
   controlSamples.sort((a, b) => a - b);
+  calSamples.sort((a, b) => a - b);
 
   // ── Why the MINIMUM and not the median (2026-08-18) ──────────────────────
   //
@@ -106,6 +129,25 @@ test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ 
   const ratio = floor / controlFloor;
   reportBudgetRatio("firstPaintRatio", ratio, samples.length);
 
+  // ── The CPU-calibrated absolute reading (GH #145 item 2, 2026-11-06) ─────
+  //
+  // The ratio is blind to a fixed per-load cost by construction, and the
+  // control's absolute floor cannot see a +50 % one on a runner population
+  // spanning 2.3×. Dividing the control floor by the floor of a fixed
+  // workload that shares nothing with the app keeps the fixed cost and
+  // divides the runner out. Measure-only until ≥ 10 CI runs show its spread
+  // is tighter than the control's own (budgets.ts, firstPaintControlPerCal).
+  const calFloor = calSamples[0]!;
+  reportBudget("cpuCal", calFloor, calSamples.length);
+  // eslint-disable-next-line no-console
+  console.log(`[budget] cpuCal samples=${calSamples.join(",")}`);
+  const controlPerCal = controlFloor / calFloor;
+  reportBudgetRatio(
+    "firstPaintControlPerCal",
+    controlPerCal,
+    calSamples.length,
+  );
+
   if (BUDGET_MS.firstPaintRatio !== null) {
     expect(ratio).toBeLessThan(BUDGET_MS.firstPaintRatio);
   }
@@ -114,6 +156,9 @@ test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ 
   // read on the control, which does not grow with the analysis (2026-11-03).
   if (BUDGET_MS.firstPaintControl !== null) {
     expect(controlFloor).toBeLessThan(BUDGET_MS.firstPaintControl);
+  }
+  if (BUDGET_MS.firstPaintControlPerCal !== null) {
+    expect(controlPerCal).toBeLessThan(BUDGET_MS.firstPaintControlPerCal);
   }
   if (BUDGET_MS.firstPaint !== null) {
     expect(floor).toBeLessThan(BUDGET_MS.firstPaint);
