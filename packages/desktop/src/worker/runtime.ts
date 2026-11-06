@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from "fs";
 import { basename, join } from "path";
 
+import { stageMatch } from "../main/matchStore";
 import type {
   FileStatus,
   MainToWorker,
@@ -13,7 +14,7 @@ import {
   saveCheckpoints,
 } from "./checkpoints";
 import { FilePipeline, type ParserLike } from "./pipeline";
-import { type LogWatcher,startLogWatcher } from "./watcher";
+import { type LogWatcher, startLogWatcher } from "./watcher";
 
 export interface WorkerTransport {
   post(msg: WorkerToMain): void;
@@ -102,6 +103,33 @@ export function createWorkerRuntime(opts: {
     });
   };
 
+  // GH #149: a parsed match is written to the store's staging area here, in
+  // the worker, and main is sent only its meta (`matchStaged`); main renames
+  // the directory into place. Posting the document itself cost main a
+  // structured clone plus a JSON.stringify of up to ~0.7 GB on its own
+  // thread. Without a store root, or if staging throws, the old full-payload
+  // message goes out instead, so a match is never dropped.
+  const emitFromPipeline = (msg: WorkerToMain): void => {
+    if (
+      (msg.type === "match" || msg.type === "shuffle") &&
+      config?.matchesDir
+    ) {
+      try {
+        const staged = stageMatch(config.matchesDir, msg.payload, Date.now());
+        if (staged) post({ type: "matchStaged", fileKey: msg.fileKey, staged });
+        return;
+      } catch (e) {
+        post({
+          type: "diagnostic",
+          fileKey: msg.fileKey,
+          code: "stage-failed",
+          detail: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+    post(msg);
+  };
+
   const pipelineFor = (fileKey: string): FilePipeline | null => {
     if (!config || config.quarantined.includes(fileKey)) return null;
     let p = pipelines.get(fileKey);
@@ -110,7 +138,7 @@ export function createWorkerRuntime(opts: {
         fileKey,
         filePath: join(config.logsDir, fileKey),
         checkpoint: registry.files[fileKey] ?? null,
-        emit: post,
+        emit: emitFromPipeline,
         parserFactory: opts.parserFactory,
       });
       pipelines.set(fileKey, p);

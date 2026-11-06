@@ -1,11 +1,11 @@
-import { type UtilityProcess,utilityProcess } from "electron";
+import { type UtilityProcess, utilityProcess } from "electron";
 
 import type {
   MainToWorker,
   WorkerConfig,
   WorkerToMain,
 } from "../shared/protocol";
-import { type CrashRecord,nextCrashRecord } from "./crashPolicy";
+import { type CrashRecord, nextCrashRecord } from "./crashPolicy";
 
 export class WorkerHost {
   private child: UtilityProcess | null = null;
@@ -57,7 +57,12 @@ export class WorkerHost {
     );
     child.on("message", (msg: WorkerToMain) => {
       if (msg.type === "status") this.lastCurrent = msg.current ?? null;
-      if (msg.type === "match" || msg.type === "shuffle") this.crash = null; // 有进展,清计数
+      if (
+        msg.type === "match" ||
+        msg.type === "shuffle" ||
+        msg.type === "matchStaged"
+      )
+        this.crash = null; // 有进展,清计数
       this.opts.onMessage(msg);
     });
     child.on("exit", (code) => {

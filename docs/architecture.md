@@ -125,7 +125,7 @@ Inside the worker (`src/worker/`):
 - `pipeline.ts` — `FilePipeline` owns one `GladLogParser` per file. Its one non-obvious rule: the persisted checkpoint advances **only when `!parser.hasOpenSegment()`**. Never checkpoint in the middle of a match. On rotation it emits a synthetic aborted `segmentClose` (so the OBS recorder doesn't wait out its 40-minute safety valve) and rebuilds the parser.
 - `checkpoints.ts` — the registry is `{ files: { [fileKey]: { offset, firstLineChecksum } } }`, written with tmp + rename to `<userData>/checkpoints.json`.
 
-Messages back to main are the `WorkerToMain` union in `src/shared/protocol.ts`: `match`, `shuffle`, `diagnostic`, `segmentOpen`, `segmentClose`, `status`. Routing lives in `workerMessageHandler.ts` as a pure function so it can be unit-tested without Electron; `index.ts` only injects the Electron-specific ends of it.
+Messages back to main are the `WorkerToMain` union in `src/shared/protocol.ts`: `matchStaged`, `match`, `shuffle`, `diagnostic`, `segmentOpen`, `segmentClose`, `status`. A finished match normally arrives as `matchStaged`: the worker has already written its three files into a `.stage-*` directory under the store root (`stageMatch` in `matchStore.ts`), and main only renames it into place (`MatchStore.commitStaged`). `match` / `shuffle` carry the whole document and are the fallback when staging fails (GH #149: on the two largest archived shuffles that clone was 405–669 MB and cost main 2.0–3.6 s of deserialize + `JSON.stringify`; the commit is ~2 ms). Routing lives in `workerMessageHandler.ts` as a pure function so it can be unit-tested without Electron; `index.ts` only injects the Electron-specific ends of it.
 
 ---
 
@@ -144,7 +144,7 @@ Messages back to main are the `WorkerToMain` union in `src/shared/protocol.ts`: 
 | `recordingsStore.ts`               | Index of recorded videos and their match association (`TOLERANCE_MS = 60_000` overlap rule); prunes to `recordingKeepCount`                     | `<userData>/recordings/` NDJSON index + the video files                   |
 | `settingsStore.ts`                 | Typed settings with defaults, patch sanitisation, legacy migration, and `safeStorage` encryption of secret fields                               | `<userData>/settings.json`                                                |
 | `workerHost.ts`                    | Spawn/restart/reconfigure the log-tailing utility process                                                                                       | none                                                                      |
-| `workerMessageHandler.ts`          | Pure router for `WorkerToMain` messages (store the match, tell the recorder, emit to the window)                                                | none                                                                      |
+| `workerMessageHandler.ts`          | Pure router for `WorkerToMain` messages (commit or store the match, tell the recorder, emit to the window)                                                | none                                                                      |
 | `crashPolicy.ts`                   | Decide when a repeatedly-crashing log file gets quarantined                                                                                     | none (in memory)                                                          |
 | `quitLifecycle.ts`                 | `before-quit` handler that suspends the quit, stops the recorder (4 s cap), stops the worker, kills in-flight AI, then really quits             | none                                                                      |
 | `slimWorker.ts`                    | `worker_threads` entry: read → parse → `slimStoredDoc` → atomic rewrite → report round line offsets                                             | rewrites `match.json` in place                                            |
@@ -456,7 +456,7 @@ Everything user-generated lives under Electron's `userData` directory — `~/Lib
 
 ### Writes are atomic
 
-A match is written into `.tmp-<dir>`, then `rename`d over the final directory. The NDJSON index is append-only for the normal path and rewritten via tmp + rename when repair is needed. `MatchStore.init()` reconciles the index against the directory names on disk — recovering matches whose directory exists but whose index line was lost to a crash, and dropping index entries whose directory is gone. The same tmp + rename discipline is used by `checkpoints.ts`, `learningLedger.compact()`, the analysis caches, and `slimWorker.ts`.
+A match is written into `.tmp-<dir>` (or, from the log worker, `.stage-<dir>-<pid>-<n>`), then `rename`d over the final directory; `init()` removes any such staging directory a crash left behind. The NDJSON index is append-only for the normal path and rewritten via tmp + rename when repair is needed. `MatchStore.init()` reconciles the index against the directory names on disk — recovering matches whose directory exists but whose index line was lost to a crash, and dropping index entries whose directory is gone. The same tmp + rename discipline is used by `checkpoints.ts`, `learningLedger.compact()`, the analysis caches, and `slimWorker.ts`.
 
 ### How big this actually gets
 

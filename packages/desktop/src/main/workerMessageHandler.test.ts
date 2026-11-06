@@ -29,7 +29,10 @@ function makeDeps(
     onSegmentClose: vi.fn(),
   };
   const storeResult = overrides.storeResult ?? { stored: true, meta: META };
-  const store = { store: vi.fn(() => storeResult) };
+  const store = {
+    store: vi.fn(() => storeResult),
+    commitStaged: vi.fn(() => storeResult),
+  };
   return { emit, setStatus, logWarn, recorder, store };
 }
 
@@ -49,6 +52,26 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       payload: {} as never,
     };
     handler(msg);
+    expect(deps.recorder.associate).toHaveBeenCalledWith(META);
+    expect(deps.emit).toHaveBeenCalledWith("gladlog:logs:matchStored", {
+      ...META,
+      live: true,
+    });
+  });
+
+  it("matchStaged(GH #149,worker 已写好暂存目录)→ commitStaged,同样带 live:true,不走 store", () => {
+    const deps = makeDeps();
+    const handler = createWorkerMessageHandler({
+      store: deps.store,
+      recorder: deps.recorder,
+      emit: deps.emit,
+      setStatus: deps.setStatus,
+      logWarn: deps.logWarn,
+    });
+    const staged = { id: "m1", meta: META, stagingDir: "/x/.stage-m1-1-1" };
+    handler({ type: "matchStaged", fileKey: "a.txt", staged });
+    expect(deps.store.commitStaged).toHaveBeenCalledWith(staged);
+    expect(deps.store.store).not.toHaveBeenCalled();
     expect(deps.recorder.associate).toHaveBeenCalledWith(META);
     expect(deps.emit).toHaveBeenCalledWith("gladlog:logs:matchStored", {
       ...META,

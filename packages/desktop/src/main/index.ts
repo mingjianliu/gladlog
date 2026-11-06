@@ -14,7 +14,7 @@ import { createAnalysisService } from "./analysis";
 import type { CaptureBackend } from "./captureBackend";
 import { createCoachChatService } from "./coachChat";
 import { createCompareService } from "./compare";
-import { gameBuildFromManifest,loadBundledCorpus } from "./corpusLoader";
+import { gameBuildFromManifest, loadBundledCorpus } from "./corpusLoader";
 import {
   detectWowDirCandidates,
   realFsProbe,
@@ -481,6 +481,7 @@ function workerConfig(wowDirectory: string): WorkerConfig {
     quarantined,
     flushIntervalMs: 2000,
     quietPeriodMs: 5000,
+    matchesDir: join(userData(), "matches"),
   };
 }
 
@@ -490,7 +491,10 @@ function workerConfig(wowDirectory: string): WorkerConfig {
 // construction, and calls only happen after whenReady has assigned them all —
 // equivalent to the old direct closure references).
 const onWorkerMessage = createWorkerMessageHandler({
-  store: { store: (item) => store.store(item) },
+  store: {
+    store: (item) => store.store(item),
+    commitStaged: (staged) => store.commitStaged(staged),
+  },
   recorder: {
     associate: (m) => recorder?.associate(m),
     onSegmentOpen: (o) => recorder?.onSegmentOpen(o),

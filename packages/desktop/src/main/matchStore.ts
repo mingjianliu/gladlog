@@ -436,6 +436,181 @@ function metaExtras(src: {
   };
 }
 
+/** A match whose files are written to a staging directory and await
+ * `MatchStore.commitStaged` (GH #149). */
+export interface StagedMatch {
+  id: string;
+  meta: StoredMatchMeta;
+  /** absolute; under the store's root, `.`-prefixed so init() never indexes
+   * it and removes it if a crash left it behind */
+  stagingDir: string;
+}
+
+interface PreparedMatch {
+  id: string;
+  meta: StoredMatchMeta;
+  data: unknown;
+}
+
+/** The meta row and the stored document of a parsed match — what store() and
+ * the worker's stageMatch both write (one definition, two callers). Null for a
+ * shuffle with no round. */
+function prepareStoredMatch(
+  item: GladMatch | GladShuffle,
+  storedAt: number,
+): PreparedMatch | null {
+  if (item.kind === "shuffle") {
+    const first = item.rounds[0];
+    if (!first) return null;
+    const id = first.id;
+    const meta: StoredMatchMeta = {
+      id,
+      kind: "shuffle",
+      bracket: first.bracket,
+      zoneId: first.zoneId,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      result: String(item.result),
+      storedAt,
+      // Take the roster from round 1 (a shuffle swaps sides every round, so
+      // round 1 is the entry roster); take the duration over the whole run.
+      ...metaExtras(first as unknown as Parameters<typeof metaExtras>[0]),
+      durationS: Math.max(
+        0,
+        Math.round((item.endTime - item.startTime) / 1000),
+      ),
+      // Slim at write time (the compose layer already trimmed params); the
+      // offset table lets rawLine work without parsing
+      slimmed: true,
+      roundLinesTotal: [...item.rounds]
+        .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+        .map((r) => ({ seq: r.sequenceNumber, lines: r.linesTotal })),
+      roundStats: shuffleRoundStats(
+        item.rounds as unknown as Parameters<typeof shuffleRoundStats>[0],
+      ),
+      structuralIssues: structuralIssueCodes(item),
+    };
+    const data = {
+      ...item,
+      rawLines: undefined,
+      rounds: item.rounds.map((r) => ({ ...r, rawLines: undefined })),
+    };
+    return { id, meta, data };
+  }
+  const id = item.id;
+  const meta: StoredMatchMeta = {
+    id,
+    kind: "match",
+    bracket: item.bracket,
+    zoneId: item.zoneId,
+    startTime: item.startTime,
+    endTime: item.endTime,
+    result: String(item.result),
+    storedAt,
+    ...metaExtras(item as unknown as Parameters<typeof metaExtras>[0]),
+    slimmed: true, // slim at write time (compose already trimmed params)
+    structuralIssues: structuralIssueCodes(item),
+  };
+  return { id, meta, data: { ...item, rawLines: undefined } };
+}
+
+/** Does `<root>/<id>/meta.json` exist and parse? (store()'s dedup guard: an
+ * indexed id whose meta.json is missing or corrupt is re-written.) */
+function storedMetaIntact(rootDir: string, id: string): boolean {
+  try {
+    JSON.parse(readFileSync(join(rootDir, safeName(id), "meta.json"), "utf-8"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Does `<root>/<id>/meta.json` parse AND name this id — a directory init()
+ * would index? (The worker's dedup; see stageMatch.) */
+function storedMetaNamesId(rootDir: string, id: string): boolean {
+  try {
+    const meta = JSON.parse(
+      readFileSync(join(rootDir, safeName(id), "meta.json"), "utf-8"),
+    ) as { id?: unknown };
+    return meta.id === id;
+  } catch {
+    return false;
+  }
+}
+
+function writeStagedFiles(
+  stagingDir: string,
+  prepared: PreparedMatch,
+  rawLines: readonly string[],
+): void {
+  rmSync(stagingDir, { recursive: true, force: true });
+  mkdirSync(stagingDir, { recursive: true });
+  writeFileSync(
+    join(stagingDir, "meta.json"),
+    JSON.stringify(prepared.meta, null, 2),
+  );
+  writeFileSync(
+    join(stagingDir, "match.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      storedAt: prepared.meta.storedAt,
+      kind: prepared.meta.kind,
+      data: prepared.data,
+    }),
+  );
+  // Retention invariant (GH #100, docs/log-observability-audit.md "Raw-log
+  // retention invariant"): raw.txt is the ONLY copy of what match.json does
+  // not materialise — slim.ts trims params 13+, and L3 keeps no facing, no
+  // periodic-energize, no enchant events, no undecoded advanced fields. Do
+  // not drop, truncate or lossily replace it until every audit-listed field
+  // has a verified lossless replacement.
+  writeFileSync(join(stagingDir, "raw.txt"), rawLines.join("\n") + "\n");
+}
+
+let stageSeq = 0;
+
+/**
+ * The log worker's half of a store (GH #149, runs in the worker process):
+ * write a parsed match's three files into a staging directory under the
+ * store's root and return the meta for `MatchStore.commitStaged`. The worker
+ * used to post the whole document to main — a structured clone of 405–669 MB
+ * on the two largest archived shuffles, which main then deserialized
+ * (1.3–1.5 s) and JSON.stringified to disk (0.7–2.0 s) on its own thread.
+ *
+ * Returns null when there is nothing to store: a shuffle with no round, or a
+ * match already on disk whose meta.json names this id. That is store()'s
+ * dedup read from the disk, because the worker has no index: a directory
+ * whose meta.json carries its id is one init() indexes, so main holds it;
+ * anything weaker (missing, corrupt, `{}`) is staged and main decides in
+ * commitStaged (codex review 2026-11-06: a bare "parses" check skipped a
+ * match init() could not recover). A failed write removes its own staging
+ * directory before rethrowing, so the caller's full-payload fallback leaves
+ * no copy behind.
+ */
+export function stageMatch(
+  rootDir: string,
+  item: GladMatch | GladShuffle,
+  storedAt: number,
+): StagedMatch | null {
+  const prepared = prepareStoredMatch(item, storedAt);
+  if (!prepared || storedMetaNamesId(rootDir, prepared.id)) return null;
+  const stagingDir = join(
+    rootDir,
+    `.stage-${safeName(prepared.id)}-${process.pid}-${++stageSeq}`,
+  );
+  try {
+    writeStagedFiles(stagingDir, prepared, item.rawLines);
+  } catch (e) {
+    try {
+      rmSync(stagingDir, { recursive: true, force: true });
+    } catch {
+      /* init() removes it on the next start */
+    }
+    throw e;
+  }
+  return { id: prepared.id, meta: prepared.meta, stagingDir };
+}
+
 export class MatchStore {
   private index = new Map<string, StoredMatchMeta>();
   private now: () => number;
@@ -491,6 +666,19 @@ export class MatchStore {
     } catch {
       /* empty */
     }
+    // A staging directory left by a crash between write and commit (store()'s
+    // `.tmp-`, the worker's `.stage-`, GH #149) is never a match: remove it.
+    // init() runs before the log worker starts, so none is in flight.
+    // Best effort: a directory Windows still holds open (EPERM / EBUSY) is
+    // left for a later start rather than failing init(), which runs before
+    // the window opens (codex review 2026-11-06).
+    for (const n of names)
+      if (n.startsWith(".tmp-") || n.startsWith(".stage-"))
+        try {
+          rmSync(join(this.rootDir, n), { recursive: true, force: true });
+        } catch {
+          /* retried on the next start */
+        }
     const nameSet = new Set(
       names.filter((n) => !n.startsWith(".") && !n.startsWith("_")),
     );
@@ -531,101 +719,39 @@ export class MatchStore {
     stored: boolean;
     meta: StoredMatchMeta | null;
   } {
-    let id: string;
-    let meta: StoredMatchMeta;
-    let data: unknown;
-    if (item.kind === "shuffle") {
-      const first = item.rounds[0];
-      if (!first) return { stored: false, meta: null };
-      id = first.id;
-      meta = {
-        id,
-        kind: "shuffle",
-        bracket: first.bracket,
-        zoneId: first.zoneId,
-        startTime: item.startTime,
-        endTime: item.endTime,
-        result: String(item.result),
-        storedAt: this.now(),
-        // Take the roster from round 1 (a shuffle swaps sides every round, so
-        // round 1 is the entry roster); take the duration over the whole run.
-        ...metaExtras(first as unknown as Parameters<typeof metaExtras>[0]),
-        durationS: Math.max(
-          0,
-          Math.round((item.endTime - item.startTime) / 1000),
-        ),
-        // Slim at write time (the compose layer already trimmed params); the
-        // offset table lets rawLine work without parsing
-        slimmed: true,
-        roundLinesTotal: [...item.rounds]
-          .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
-          .map((r) => ({ seq: r.sequenceNumber, lines: r.linesTotal })),
-        roundStats: shuffleRoundStats(
-          item.rounds as unknown as Parameters<typeof shuffleRoundStats>[0],
-        ),
-        structuralIssues: structuralIssueCodes(item),
-      };
-      data = {
-        ...item,
-        rawLines: undefined,
-        rounds: item.rounds.map((r) => ({ ...r, rawLines: undefined })),
-      };
-    } else {
-      id = item.id;
-      meta = {
-        id,
-        kind: "match",
-        bracket: item.bracket,
-        zoneId: item.zoneId,
-        startTime: item.startTime,
-        endTime: item.endTime,
-        result: String(item.result),
-        storedAt: this.now(),
-        ...metaExtras(item as unknown as Parameters<typeof metaExtras>[0]),
-        slimmed: true, // slim at write time (compose already trimmed params)
-        structuralIssues: structuralIssueCodes(item),
-      };
-      data = { ...item, rawLines: undefined };
-    }
-    if (this.index.has(id)) {
-      // Already indexed — dedup, UNLESS the on-disk meta.json is missing or
-      // corrupt: then fall through and re-write to self-heal the files.
-      let intact = false;
-      try {
-        JSON.parse(
-          readFileSync(join(this.rootDir, safeName(id), "meta.json"), "utf-8"),
-        );
-        intact = true;
-      } catch {
-        /* missing or corrupt → recover */
-      }
-      if (intact) return { stored: false, meta: this.index.get(id)! };
-    }
+    const prepared = prepareStoredMatch(item, this.now());
+    if (!prepared) return { stored: false, meta: null };
+    const { id } = prepared;
+    // Already indexed — dedup, UNLESS the on-disk meta.json is missing or
+    // corrupt: then fall through and re-write to self-heal the files.
+    if (this.index.has(id) && storedMetaIntact(this.rootDir, id))
+      return { stored: false, meta: this.index.get(id)! };
+    const stagingDir = join(this.rootDir, `.tmp-${safeName(id)}`);
+    writeStagedFiles(stagingDir, prepared, item.rawLines);
+    return this.commitStaged({ id, meta: prepared.meta, stagingDir });
+  }
 
-    const dirName = safeName(id);
-    const finalDir = join(this.rootDir, dirName);
-    const tmpDir = join(this.rootDir, `.tmp-${dirName}`);
-    rmSync(tmpDir, { recursive: true, force: true });
-    mkdirSync(tmpDir, { recursive: true });
-    writeFileSync(join(tmpDir, "meta.json"), JSON.stringify(meta, null, 2));
-    writeFileSync(
-      join(tmpDir, "match.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        storedAt: meta.storedAt,
-        kind: meta.kind,
-        data,
-      }),
-    );
-    // Retention invariant (GH #100, docs/log-observability-audit.md "Raw-log
-    // retention invariant"): raw.txt is the ONLY copy of what match.json does
-    // not materialise — slim.ts trims params 13+, and L3 keeps no facing, no
-    // periodic-energize, no enchant events, no undecoded advanced fields. Do
-    // not drop, truncate or lossily replace it until every audit-listed field
-    // has a verified lossless replacement.
-    writeFileSync(join(tmpDir, "raw.txt"), item.rawLines.join("\n") + "\n");
+  /**
+   * Second half of a store whose files were written elsewhere (GH #149: the
+   * log worker stages a live match itself — `stageMatch` — and posts only the
+   * meta, instead of a structured clone of the whole document that main then
+   * had to deserialize and JSON.stringify on its own thread). Moves the
+   * staging directory into place and indexes the meta: a rename and an index
+   * append, milliseconds whatever the match size. Dedup is the same as
+   * store()'s: an indexed id with an intact meta.json drops the staged copy.
+   */
+  commitStaged(staged: StagedMatch): {
+    stored: boolean;
+    meta: StoredMatchMeta | null;
+  } {
+    const { id, meta, stagingDir } = staged;
+    if (this.index.has(id) && storedMetaIntact(this.rootDir, id)) {
+      rmSync(stagingDir, { recursive: true, force: true });
+      return { stored: false, meta: this.index.get(id)! };
+    }
+    const finalDir = join(this.rootDir, safeName(id));
     rmSync(finalDir, { recursive: true, force: true });
-    renameWithRetrySync(tmpDir, finalDir);
+    renameWithRetrySync(stagingDir, finalDir);
     this.index.set(id, meta);
     this.appendIndexLine(meta);
     // perf-1: build the per-round sidecar right away — the user typically opens

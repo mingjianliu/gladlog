@@ -1,5 +1,7 @@
 import type { GladMatch, GladShuffle } from "@gladlog/parser";
 
+import type { StagedMatch } from "../main/matchStore";
+
 export interface FileCheckpoint {
   offset: number; // byte offset past the last fully consumed line (safe boundary)
   firstLineChecksum: string | null; // sha1 hex of the file's first line; null for an empty file
@@ -11,6 +13,9 @@ export interface WorkerConfig {
   quarantined: string[]; // skipped fileKeys (basename)
   flushIntervalMs: number; // default 2000
   quietPeriodMs: number; // default 5000
+  /** the match store's root: the worker stages a parsed match there and posts
+   * `matchStaged` (GH #149); absent → it posts the whole document */
+  matchesDir?: string;
 }
 
 export type MainToWorker = { type: "configure"; config: WorkerConfig };
@@ -25,6 +30,9 @@ export interface FileStatus {
 export type WorkerToMain =
   | { type: "match"; fileKey: string; payload: GladMatch }
   | { type: "shuffle"; fileKey: string; payload: GladShuffle }
+  // a match/shuffle the worker already wrote to the store's staging area
+  // (GH #149); main commits it with MatchStore.commitStaged
+  | { type: "matchStaged"; fileKey: string; staged: StagedMatch }
   | { type: "diagnostic"; fileKey?: string; code: string; detail?: string }
   // Match lifecycle (drives OBS recording; a shuffle lobby gets one open/close
   // pair for the whole lobby)

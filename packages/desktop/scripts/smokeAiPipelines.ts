@@ -9,9 +9,17 @@
  *
  * Optional: ANTHROPIC_MODEL (default: the product default, AI_DEFAULT_MODEL.anthropic), LOG_PATH (use a local raw
  * combat log instead of the feed).
+ *
+ * MODE=window (#16 "selected time range → AI analysis" filler smoke, GH #38):
+ * sweeps 20 s windows over the first healer round, keeps those that pass the
+ * product's own signal gate (buildWindowPack non-null), and runs
+ * analyzeWindow on the weakest one (fewest pack items) and the strongest one
+ * through the configured backend (AI_BACKEND=claudeCli for the local CLI).
+ * Prints every entry so a reader can judge whether a thin window got padded.
  */
 import {
   buildMatchContext,
+  buildWindowPack,
   computeHealerMetrics,
   enemyCompArchetype,
   ensureAnalysisData,
@@ -25,7 +33,7 @@ import {
   toLegacyMatch,
   toLegacyShuffle,
 } from "@gladlog/parser-compat";
-import { mkdirSync,readFileSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
 
@@ -340,12 +348,77 @@ async function local() {
   );
 }
 
+// #16 window-analysis filler smoke (GH #38): the weakest and the strongest
+// window that pass the signal gate, through the real backend.
+async function windowSmoke() {
+  const logText = await fetchOneLog();
+  const { round, healer } = firstHealerRound(logText);
+  const spec = specToString(healer.spec);
+  const candidates = extractCandidateFindings(round);
+  const durS = Math.floor((round.endTime - round.startTime) / 1000);
+  type WindowHit = NonNullable<ReturnType<typeof buildWindowPack>> & {
+    fromS: number;
+    toS: number;
+    items: number;
+  };
+  const hits: WindowHit[] = [];
+  for (let fromS = 0; fromS + 20 <= durS; fromS += 10) {
+    const w = buildWindowPack(
+      round,
+      fromS,
+      fromS + 20,
+      candidates,
+      healer.name,
+    );
+    if (w)
+      hits.push({
+        fromS,
+        toS: fromS + 20,
+        kind: w.kind,
+        pack: w.pack,
+        items: w.pack.items.length,
+      });
+  }
+  console.log(
+    `match: ${spec} | round ${durS}s | ${hits.length} of ${Math.max(0, Math.floor((durS - 20) / 10) + 1)} windows pass the signal gate | backend=${process.env.AI_BACKEND ?? "anthropic"}`,
+  );
+  if (hits.length === 0) return;
+  const sorted = [...hits].sort((a, b) => a.items - b.items);
+  const picks = [sorted[0]!, sorted[sorted.length - 1]!];
+  const c = collector();
+  const s = createAnalysisService({
+    getSettings,
+    clientFactory: undefined,
+    matchesDir: DIR,
+    emit: c.emit,
+  });
+  for (const w of picks) {
+    console.log(
+      `\n--- window ${w.fromS}-${w.toS}s (${w.kind}, ${w.items} pack items): ${w.pack.items.map((i) => i.kind).join(", ")}`,
+    );
+    const r = await s.analyzeWindow({
+      matchId: `smoke-window-${w.fromS}`,
+      fromS: w.fromS,
+      toS: w.toS,
+      pack: w.pack,
+      kind: w.kind,
+      spec,
+      ownerName: healer.name,
+      force: true,
+    });
+    console.log(`status=${r.status}`);
+    for (const e of r.status === "ok" ? r.entries : [])
+      console.log(`  ## ${e.title ?? "(no title)"}\n  ${e.text}`);
+  }
+}
+
 async function main() {
   await ensureAnalysisData();
   console.log(`\n=== SP-A/SP-B2 smoke (MODE=${MODE}) ===`);
   if (MODE === "dump") return dump();
   if (MODE === "replay") return replay();
   if (MODE === "local") return local();
+  if (MODE === "window") return windowSmoke();
   return live();
 }
 main().catch((e) => {

@@ -1,6 +1,7 @@
 import {
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -11,7 +12,7 @@ import { join } from "node:path";
 import type { GladMatch } from "@gladlog/parser";
 import { describe, expect, it } from "vitest";
 
-import { MatchStore } from "./matchStore";
+import { MatchStore, stageMatch } from "./matchStore";
 
 function tmpStore() {
   return new MatchStore(mkdtempSync(join(tmpdir(), "ms-")));
@@ -261,5 +262,97 @@ describe("MatchStore dir naming (GH #38 hardening: id → dir name must be injec
         .map((m) => m.id)
         .sort(),
     ).toEqual([".dot", "_idx"]);
+  });
+});
+
+// GH #149: the log worker writes a live match itself (stageMatch) and main
+// only renames it into place (commitStaged) — no structured clone of the
+// document, no JSON.stringify on main's thread.
+describe("MatchStore.commitStaged + stageMatch (GH #149 worker-side write)", () => {
+  const withRaw = (id: string, t: number): GladMatch =>
+    ({ ...mkMatch(id, t), rawLines: ["L1", "L2"] }) as unknown as GladMatch;
+
+  it("stage + commit leaves the same files and index row as store()", () => {
+    const a = mkdtempSync(join(tmpdir(), "ms-st-a-"));
+    const b = mkdtempSync(join(tmpdir(), "ms-st-b-"));
+    const viaStore = new MatchStore(a, { now: () => 42 });
+    viaStore.init();
+    viaStore.store(withRaw("m1", 7));
+    const viaStage = new MatchStore(b, { now: () => 999 });
+    viaStage.init();
+    const staged = stageMatch(b, withRaw("m1", 7), 42);
+    expect(staged).not.toBeNull();
+    expect(staged!.stagingDir.startsWith(join(b, ".stage-"))).toBe(true);
+    const r = viaStage.commitStaged(staged!);
+    expect(r.stored).toBe(true);
+    for (const f of ["meta.json", "match.json", "raw.txt"])
+      expect(readFileSync(join(b, "m1", f), "utf-8")).toBe(
+        readFileSync(join(a, "m1", f), "utf-8"),
+      );
+    expect(readFileSync(join(b, "_index.ndjson"), "utf-8")).toBe(
+      readFileSync(join(a, "_index.ndjson"), "utf-8"),
+    );
+    expect(readdirSync(b).filter((n) => n.startsWith("."))).toEqual([]);
+    expect(viaStage.list().map((m) => m.id)).toEqual(["m1"]);
+  });
+
+  it("dedups like store(): an intact stored match is not staged again", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ms-st-dup-"));
+    const s = new MatchStore(dir);
+    s.init();
+    s.store(withRaw("m1", 1));
+    expect(stageMatch(dir, withRaw("m1", 1), 5)).toBeNull();
+  });
+
+  it("commit of a copy staged before the first landed drops the staging dir", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ms-st-race-"));
+    const s = new MatchStore(dir);
+    s.init();
+    const first = stageMatch(dir, withRaw("m1", 1), 5)!;
+    const second = stageMatch(dir, withRaw("m1", 1), 6)!;
+    expect(s.commitStaged(first).stored).toBe(true);
+    const r = s.commitStaged(second);
+    expect(r.stored).toBe(false);
+    expect(r.meta?.storedAt).toBe(5);
+    expect(existsSync(second.stagingDir)).toBe(false);
+    expect(s.list()).toHaveLength(1);
+  });
+
+  it("a dir whose meta.json does not name the id is staged again, and the commit indexes it", () => {
+    // codex review 2026-11-06: `{}` parses, but init() cannot index it
+    const dir = mkdtempSync(join(tmpdir(), "ms-st-bare-"));
+    const s = new MatchStore(dir);
+    s.init();
+    s.store(withRaw("m1", 1));
+    writeFileSync(join(dir, "m1", "meta.json"), "{}");
+    rmSync(join(dir, "_index.ndjson"));
+    const s2 = new MatchStore(dir);
+    expect(s2.init()).toEqual([]);
+    const staged = stageMatch(dir, withRaw("m1", 1), 9);
+    expect(staged).not.toBeNull();
+    expect(s2.commitStaged(staged!).stored).toBe(true);
+    expect(s2.list().map((m) => m.id)).toEqual(["m1"]);
+  });
+
+  it("a failed staging write removes its own directory before rethrowing", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ms-st-fail-"));
+    const bad = {
+      ...withRaw("m1", 1),
+      rawLines: {
+        join() {
+          throw new Error("EIO");
+        },
+      },
+    } as unknown as GladMatch;
+    expect(() => stageMatch(dir, bad, 5)).toThrow("EIO");
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("init() removes staging dirs a crash left behind and indexes none of them", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ms-st-crash-"));
+    const left = stageMatch(dir, withRaw("m1", 1), 5)!;
+    const s = new MatchStore(dir);
+    expect(s.init()).toEqual([]);
+    expect(existsSync(left.stagingDir)).toBe(false);
   });
 });

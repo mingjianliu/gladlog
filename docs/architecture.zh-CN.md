@@ -125,7 +125,7 @@ worker 内部(`src/worker/`):
 - `pipeline.ts` —— `FilePipeline` 每个文件持有一个 `GladLogParser`。它唯一不显然的规则:持久化的 checkpoint **只在 `!parser.hasOpenSegment()` 时推进**。绝不在对局中途 checkpoint。轮转时它会先发一个合成的 aborted `segmentClose`(免得 OBS 录像那边干等 40 分钟的安全阀),再重建 parser。
 - `checkpoints.ts` —— 注册表形状是 `{ files: { [fileKey]: { offset, firstLineChecksum } } }`,用 tmp + rename 写到 `<userData>/checkpoints.json`。
 
-回传给 main 的是 `src/shared/protocol.ts` 里的 `WorkerToMain` 联合类型:`match`、`shuffle`、`diagnostic`、`segmentOpen`、`segmentClose`、`status`。路由逻辑放在 `workerMessageHandler.ts` 里做成纯函数,好脱离 Electron 单测;`index.ts` 只负责把 Electron 具体的那几端注进去。
+回传给 main 的是 `src/shared/protocol.ts` 里的 `WorkerToMain` 联合类型:`matchStaged`、`match`、`shuffle`、`diagnostic`、`segmentOpen`、`segmentClose`、`status`。一场打完的对局正常以 `matchStaged` 到达:worker 已经把三个文件写进库根目录下的 `.stage-*` 目录(`matchStore.ts` 的 `stageMatch`),main 只把它 rename 到位(`MatchStore.commitStaged`)。`match` / `shuffle` 携带整份文档,只在暂存失败时兜底(GH #149:归档里最大的两场单排,这次克隆是 405–669 MB,main 要花 2.0–3.6 s 反序列化 + `JSON.stringify`;提交只要约 2 ms)。路由逻辑放在 `workerMessageHandler.ts` 里做成纯函数,好脱离 Electron 单测;`index.ts` 只负责把 Electron 具体的那几端注进去。
 
 ---
 
@@ -144,7 +144,7 @@ worker 内部(`src/worker/`):
 | `recordingsStore.ts`              | 录像索引及其与对局的关联(`TOLERANCE_MS = 60_000` 重叠判据);按 `recordingKeepCount` 清理                                                    | `<userData>/recordings/` NDJSON 索引 + 视频文件                      |
 | `settingsStore.ts`                | 带默认值的类型化设置、patch 净化、旧字段迁移、密钥字段用 `safeStorage` 加密                                                                | `<userData>/settings.json`                                           |
 | `workerHost.ts`                   | 拉起/重启/重配 tail 日志的 utility 进程                                                                                                    | 无                                                                   |
-| `workerMessageHandler.ts`         | `WorkerToMain` 消息的纯路由(入库、通知录像、推给窗口)                                                                                      | 无                                                                   |
+| `workerMessageHandler.ts`         | `WorkerToMain` 消息的纯路由(提交或入库、通知录像、推给窗口)                                                                                      | 无                                                                   |
 | `crashPolicy.ts`                  | 判定反复崩溃的日志文件何时被隔离                                                                                                           | 无(内存)                                                             |
 | `quitLifecycle.ts`                | `before-quit` 钩子:挂起退出 → 停录像(封顶 4 秒)→ 停 worker → 收掉在飞 AI → 真正退出                                                        | 无                                                                   |
 | `slimWorker.ts`                   | `worker_threads` 入口:读 → parse → `slimStoredDoc` → 原子回写 → 回报每轮行偏移                                                             | 原地重写 `match.json`                                                |
@@ -456,7 +456,7 @@ L2 拥有两样对下游要紧的东西:
 
 ### 写入是原子的
 
-一场对局先写进 `.tmp-<dir>`,再 `rename` 覆盖到最终目录。NDJSON 索引正常路径只追加,需要修复时用 tmp + rename 整体重写。`MatchStore.init()` 会拿磁盘上的目录名与索引对账 —— 把「目录在、索引行因崩溃丢了」的对局捞回来,把「目录已不在」的索引项删掉。同一套 tmp + rename 纪律也用于 `checkpoints.ts`、`learningLedger.compact()`、分析缓存与 `slimWorker.ts`。
+一场对局先写进 `.tmp-<dir>`(日志 worker 写的是 `.stage-<dir>-<pid>-<n>`),再 `rename` 覆盖到最终目录;崩溃留下的这类暂存目录由 `init()` 清掉。NDJSON 索引正常路径只追加,需要修复时用 tmp + rename 整体重写。`MatchStore.init()` 会拿磁盘上的目录名与索引对账 —— 把「目录在、索引行因崩溃丢了」的对局捞回来,把「目录已不在」的索引项删掉。同一套 tmp + rename 纪律也用于 `checkpoints.ts`、`learningLedger.compact()`、分析缓存与 `slimWorker.ts`。
 
 ### 实际会长到多大
 

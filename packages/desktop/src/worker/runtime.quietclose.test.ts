@@ -1,4 +1,4 @@
-import { appendFileSync, mkdtempSync, writeFileSync } from "fs";
+import { appendFileSync, existsSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,7 +19,10 @@ function line(i: number, s: string): string {
  * `Date.now()` and every interval move only when the test says so. */
 const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 
-function setup(quiet: { closeMs: number; checkMs: number }) {
+function setup(
+  quiet: { closeMs: number; checkMs: number },
+  matchesDir?: string,
+) {
   const dir = mkdtempSync(join(tmpdir(), "gladlog-runtime-"));
   const file = join(dir, "WoWCombatLog.txt");
   writeFileSync(file, "");
@@ -51,6 +54,7 @@ function setup(quiet: { closeMs: number; checkMs: number }) {
         quarantined: [],
         flushIntervalMs: 10,
         quietPeriodMs: 10,
+        ...(matchesDir ? { matchesDir } : {}),
       },
     });
   const closes = () => msgs.filter((m) => m.type === "segmentClose");
@@ -133,6 +137,53 @@ describe("段静默超时(打完了 END 不落盘 → 录像只剩 40 分钟阀�
     // absorbed as a no-op)
     expect(t.closes()).toHaveLength(2);
     expect(t.closes()[1]).toMatchObject({ aborted: false });
+    t.rt.dispose();
+  });
+});
+
+// GH #149: with a store root configured, the worker writes the match itself and
+// posts only its meta; if staging throws, the full document still goes out.
+describe("worker 侧写盘(GH #149)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("配了 matchesDir → 发 matchStaged(暂存目录已写好),不发整份 match", async () => {
+    const store = mkdtempSync(join(tmpdir(), "gladlog-stage-"));
+    const t = setup({ closeMs: 10_000, checkMs: 1_000 }, store);
+    appendFileSync(t.file, line(0, "ARENA_MATCH_START,1825,41,3v3,1"));
+    appendFileSync(t.file, line(30, "ARENA_MATCH_END,1,30,1500,1501"));
+    t.configure();
+    await tick(40);
+    expect(t.msgs.filter((m) => m.type === "match")).toHaveLength(0);
+    const staged = t.msgs.filter((m) => m.type === "matchStaged");
+    expect(staged).toHaveLength(1);
+    const s = staged[0] as Extract<WorkerToMain, { type: "matchStaged" }>;
+    expect(s.staged.stagingDir.startsWith(join(store, ".stage-"))).toBe(true);
+    for (const f of ["meta.json", "match.json", "raw.txt"])
+      expect(existsSync(join(s.staged.stagingDir, f))).toBe(true);
+    t.rt.dispose();
+  });
+
+  it("暂存写失败 → 诊断 stage-failed + 照旧发整份 match(不丢局)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gladlog-stage-bad-"));
+    const notADir = join(dir, "file");
+    writeFileSync(notADir, "x"); // mkdir under a regular file throws
+    const t = setup({ closeMs: 10_000, checkMs: 1_000 }, notADir);
+    appendFileSync(t.file, line(0, "ARENA_MATCH_START,1825,41,3v3,1"));
+    appendFileSync(t.file, line(30, "ARENA_MATCH_END,1,30,1500,1501"));
+    t.configure();
+    await tick(40);
+    expect(t.msgs.filter((m) => m.type === "matchStaged")).toHaveLength(0);
+    expect(t.msgs.filter((m) => m.type === "match")).toHaveLength(1);
+    expect(
+      t.msgs.filter(
+        (m) => m.type === "diagnostic" && m.code === "stage-failed",
+      ),
+    ).toHaveLength(1);
     t.rt.dispose();
   });
 });

@@ -14,7 +14,7 @@ import type { RecorderService } from "./recorder";
  * here.
  */
 interface WorkerMessageHandlerDeps {
-  store: Pick<MatchStore, "store">;
+  store: Pick<MatchStore, "store" | "commitStaged">;
   recorder: Pick<
     RecorderService,
     "associate" | "onSegmentOpen" | "onSegmentClose"
@@ -28,8 +28,15 @@ export function createWorkerMessageHandler(
   deps: WorkerMessageHandlerDeps,
 ): (msg: WorkerToMain) => void {
   return (msg: WorkerToMain): void => {
-    if (msg.type === "match" || msg.type === "shuffle") {
-      const r = deps.store.store(msg.payload);
+    if (
+      msg.type === "match" ||
+      msg.type === "shuffle" ||
+      msg.type === "matchStaged"
+    ) {
+      const r =
+        msg.type === "matchStaged"
+          ? deps.store.commitStaged(msg.staged)
+          : deps.store.store(msg.payload);
       if (r.stored && r.meta) {
         deps.recorder?.associate(r.meta);
         const live: StoredMatchMeta & { live: true } = {
