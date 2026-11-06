@@ -23,7 +23,8 @@
  *    the same millisecond).
  *  - `channelOutlived` (D12): `[YOU] [CD] X (channeled Ns, ended m:ss)` with
  *    a cast row of the owner's inside the printed length: a channel does not
- *    run through the caster's next cast. Off-GCD and castable-while-casting
+ *    run through the caster's next cast (a cast row of a button:
+ *    `isButtonPress`, not a pet command). Off-GCD and castable-while-casting
  *    spells are what `kind` names, one kind per spell, so an exception shows.
  *  - `wallHeldPastHold` (D76, user ruling 2026-10-31): `defenseless a–b` on a
  *    unit whose own wall aura, the one its `[ENEMY DEF]` line prints with a
@@ -51,6 +52,7 @@ import {
 } from "@gladlog/analysis/src/data/spellSchools";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
+import { isButtonPress } from "@gladlog/analysis/src/utils/castCommitSpans";
 import {
   ENEMY_DEF_TAG_NAME_RE_SRC,
   SAVE_AURA_END_UNSEEN_IDS,
@@ -310,7 +312,11 @@ function channelOutlived(ctx: IRoundCtx, line: string): void {
   const end = at + Number(m[3]) * 1000;
   const inside = ((ctx.owner.spellCastEvents ?? []) as any[]).find(
     (c) =>
-      (ev(c) === "SPELL_CAST_START" || ev(c) === SUCCESS) &&
+      (ev(c) === "SPELL_CAST_START" ||
+        // a cast row with no DB2 SpellCooldowns row is no button press (a
+        // pet command: Command Demon's Spell Lock 119910 inside Dark
+        // Harvest, its ticks running on — `isButtonPress`, codex 20-F25-01)
+        (ev(c) === SUCCESS && isButtonPress(String(c.spellId)))) &&
       c.srcUnitId === ctx.owner.id &&
       nameOf(c.spellId, c.spellName ?? "") !== m[2] &&
       tsOf(c) > at + 100 &&

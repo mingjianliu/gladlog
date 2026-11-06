@@ -216,7 +216,7 @@ export function emitEnemyCdEntries(
     // one counter, each line under the log's own name. An activation has
     // no cooldown and keeps its own name's counter.
     const ordinalKey = (cd: (typeof shown)[number]): string => {
-      const canon = canonicalSpellId(cd.spellId);
+      const canon = canonicalSpellId(cd.spellId, ctx.matchStartMs);
       return canon === cd.spellId || isActivationCd(cd)
         ? cd.spellName
         : getEnglishSpellName(canon);

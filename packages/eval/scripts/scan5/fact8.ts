@@ -20,7 +20,11 @@
  *    of a tracked cooldown goes up with no press of it near, and no line of a
  *    press tag names it for that unit. Kind = `<side>/<spell>`. Log rows only:
  *    a row of the batch that re-states a unit (`RESTATE_BATCH` self rows in
- *    one millisecond) is no activation.
+ *    one millisecond) is no activation. Kind `unlogged press (dated)` (not
+ *    in the total): a cooldown whose aura stands for an unlogged press on
+ *    the log's date (`AURA_PRESS_BY_ERA`, `auraStandsForPressAt`: Doom Winds
+ *    before 12.1.5, fact11 D44 / user ruling 2026-11-05 — our side prints no
+ *    `(no press)` line for it).
  *  - `ledgerOnePressTwice` (class 11, D1): two identical burst-ledger
  *    "major defensive up" lines in a row.
  *  - `pressFiledHealAndDef` (class 11, D37): one press on an `[ENEMY HEAL CD]`
@@ -44,6 +48,10 @@ import {
   getEnglishSpellName,
   spellEffectData,
 } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  AURA_PRESS_BY_ERA,
+  auraStandsForPressAt,
+} from "@gladlog/analysis/src/utils/auraActivationEra";
 import { SELF_SAVE_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { MEDALLION_SPELL_ID } from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
@@ -74,6 +82,10 @@ export const CHECKS = [
   "backlashTrinketNoNote",
   "racialPressNoLine",
 ] as const;
+
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "auraActivationNoLine|unlogged press (dated)",
+]);
 
 /** Unstable Affliction's dispel backlash (`BACKLASH_AURA_CC_TYPE`) */
 const BACKLASH_SILENCE_ID = "196364";
@@ -416,12 +428,15 @@ function auraNoLine(ctx: IRoundCtx): void {
         : u.info?.teamId === ctx.owner?.info?.teamId
           ? "ally"
           : "enemy";
+      const unlogged =
+        AURA_PRESS_BY_ERA[cast] !== undefined &&
+        auraStandsForPressAt(cast, ms);
       ctx.violate(
         "auraActivationNoLine",
-        `${side}/${name}`,
+        unlogged ? "unlogged press (dated)" : `${side}/${name}`,
         ms,
         `${u.name}#${name}#${t}`,
-        `${name} on ${u.name} at ${fmtS(t)}, no press, no line`,
+        `${unlogged ? `${side}: ` : ""}${name} on ${u.name} at ${fmtS(t)}, no press, no line`,
       );
     }
   }

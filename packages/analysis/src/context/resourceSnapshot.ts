@@ -5,6 +5,7 @@ import {
   ownEffectAurasOfCast,
   TALENT_EFFECT_AURAS_OF_CAST,
 } from "../data/castEffectAuras";
+import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
 import { spellEffectData } from "../data/spellEffectData";
 import {
   buffDurationIsFloorForCaster,
@@ -38,13 +39,14 @@ import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
 import { isStunCcInstance } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
+import { offensiveCooldownIdAt } from "../utils/overrideVariantEra";
 import { ownerPetGoneAt, PET_COMMAND_SPELL_IDS } from "../utils/petPresence";
 import type { CastFailedEvent } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
 import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import type { RosterSides } from "../utils/rosterSide";
-import { offensiveEffectCdId } from "../utils/spellDanger";
 import { getPvpToolkit } from "../utils/talentBehaviors";
+import { unitLogEpochMs } from "../utils/talents";
 import { isDeadAt } from "../utils/unitDeath";
 import {
   formatKitUnusedNote,
@@ -128,6 +130,8 @@ export function buildPlayerLoadout(
   enemyIdMap: Map<string, number>;
 } {
   const lines: string[] = [];
+  // the round's date: a variant's alias is dated (`canonicalSpellId`)
+  const logEpochMs = unitLogEpochMs(owner);
   lines.push("<player_loadout>");
   // Talent-ownership guard note (issue #8 / BACKLOG #23-1). The kits below are
   // already filtered to spells there is evidence the player HAS this round
@@ -404,14 +408,16 @@ export function buildPlayerLoadout(
     const kitNames = new Set((kit ?? []).map((c) => c.spellName));
     // F20 D23: an override variant pressed under its own name (Predator's
     // Wake) is the kit row's button (The Hunt) — one cooldown, one entry
-    const kitIds = new Set((kit ?? []).map((c) => canonicalSpellId(c.spellId)));
+    const kitIds = new Set(
+      (kit ?? []).map((c) => canonicalSpellId(c.spellId, logEpochMs)),
+    );
     const observedOnly: string[] = [];
     const seen = new Set<string>();
     for (const cd of player.offensiveCDs) {
       if (
         kitNames.has(cd.spellName) ||
-        (canonicalSpellId(cd.spellId) !== cd.spellId &&
-          kitIds.has(canonicalSpellId(cd.spellId))) ||
+        (canonicalSpellId(cd.spellId, logEpochMs) !== cd.spellId &&
+          kitIds.has(canonicalSpellId(cd.spellId, logEpochMs))) ||
         seen.has(cd.spellName)
       )
         continue;
@@ -1204,6 +1210,10 @@ function buildResourceSnapshotOnce({
       // never showed
       if (buffDuration <= 0 && TALENT_EFFECT_AURAS_OF_CAST[cd.spellId])
         continue;
+      // a channel with no length never ran (`channelRefusedAtCast`, fact11
+      // D39: Ray of Frost into a Grounding Totem, IMMUNE at the press) — no
+      // instant cooldown, nothing running
+      if (!(buffDuration > 0) && CHANNELED_SPELL_IDS.has(cd.spellId)) continue;
       const end = cd.castTimeSeconds + (buffDuration > 0 ? buffDuration : 8);
       // F20 D25: spent by the row's second on the friendly half's predicate
       // (`pressSpentBy` — the rendered second, A45), not `ago >= 0` against
@@ -1215,7 +1225,8 @@ function buildResourceSnapshotOnce({
       // aura, refreshed) is that cooldown's window, as an override variant
       // is (`offensiveEffectCdId`, the window builder's own mapping)
       const key = canonicalSpellId(
-        offensiveEffectCdId(cd.spellId) ?? cd.spellId,
+        offensiveCooldownIdAt(cd.spellId, matchStartMs) ?? cd.spellId,
+        matchStartMs,
       );
       const prev = windows.get(key);
       // an effect its holder's death cut short: shown until the death, its

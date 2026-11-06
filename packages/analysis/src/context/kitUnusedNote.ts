@@ -43,6 +43,7 @@ import { NOT_READY_REASONS } from "../analysis/candidates/shared";
 import { CAST_INTERRUPTED_REASONS } from "../utils/castCancels";
 import { isPressOfCooldown, talentReplacementsOf } from "../utils/cooldowns";
 import type { CastFailedEvent } from "../utils/rawStreams";
+import { unitLogEpochMs } from "../utils/talents";
 import {
   REFUSAL_WHY_WORDS,
   refusalWhy,
@@ -80,6 +81,8 @@ export function kitRefusedPressesOf(
   untilS: number,
 ): IKitRefusedPresses | null {
   const replacements = talentReplacementsOf(unit);
+  // the round's date, once (a variant's alias is dated)
+  const logEpochMs = unitLogEpochMs(unit);
   const ms = (s: number) => Math.round(s * 1000);
   const reasons: IKitRefusedPresses["reasons"] = [];
   let count = 0;
@@ -94,7 +97,10 @@ export function kitRefusedPressesOf(
         isPressOfCooldown(
           {
             spellId: String(h.spellId),
-            logLine: { event: LogEvent.SPELL_CAST_SUCCESS },
+            logLine: {
+              event: LogEvent.SPELL_CAST_SUCCESS,
+              timestamp: logEpochMs,
+            },
           },
           cd.spellId,
           cd.spellName,

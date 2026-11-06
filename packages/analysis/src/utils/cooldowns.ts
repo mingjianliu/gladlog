@@ -77,6 +77,10 @@ import {
 } from "./advancedActions";
 import { allyCopyRecipient } from "./allyCopyWall";
 import {
+  auraIsThePressAt,
+  auraOnlyActivationIdsAt,
+} from "./auraActivationEra";
+import {
   buildAuraIntervals,
   dropAuraRebroadcasts,
   type IAuraInterval,
@@ -85,7 +89,11 @@ import {
 import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { empowerSpans } from "./castCommitSpans";
-import { CONTROL_EFFECT_MIN_HIT_SHARE, isControlCast } from "./castMissRows";
+import {
+  CAST_MISS_WINDOW_MS,
+  CONTROL_EFFECT_MIN_HIT_SHARE,
+  isControlCast,
+} from "./castMissRows";
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 import { isStasisReplayCast } from "./combatStates";
@@ -98,6 +106,11 @@ import {
   METAMORPHOSIS_PRESS_CAST_IDS,
   OFFENSIVE_AURA_EVIDENCE,
 } from "./offensiveAuraOccurrences";
+import {
+  OVERRIDE_VARIANT_SHARES_BY_ERA,
+  ownCooldownVariantOf,
+  variantSharesCooldownAt,
+} from "./overrideVariantEra";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
@@ -1705,6 +1718,7 @@ export function readyAfterReductions(
 function overrideVariantPressId(
   pressId: string | null | undefined,
   spell: { spellId: string },
+  logEpochMs: number,
 ): string | undefined {
   if (!pressId || pressId === spell.spellId) return undefined;
   if (
@@ -1712,7 +1726,10 @@ function overrideVariantPressId(
     !(spell.spellId in OVERRIDE_VARIANTS_GENERATED)
   )
     return undefined;
-  if (canonicalSpellId(pressId) !== canonicalSpellId(spell.spellId))
+  if (
+    canonicalSpellId(pressId, logEpochMs) !==
+    canonicalSpellId(spell.spellId, logEpochMs)
+  )
     return undefined;
   return pressId;
 }
@@ -1724,8 +1741,9 @@ function overrideVariantPressId(
 function overrideVariantPressName(
   pressId: string | null | undefined,
   spell: { spellId: string; name: string },
+  logEpochMs: number,
 ): string | undefined {
-  const id = overrideVariantPressId(pressId, spell);
+  const id = overrideVariantPressId(pressId, spell, logEpochMs);
   if (!id) return undefined;
   const name = getEnglishSpellName(id, "");
   return name && name !== spell.name ? name : undefined;
@@ -3733,16 +3751,28 @@ export const SPELL_CANONICAL_IDS: Record<string, string> = (() => {
   return { ...out, ...HAND_CANONICAL_IDS };
 })();
 
-export function canonicalSpellId(spellId: string): string {
+/** The one id of the cooldown `spellId` presses. `logEpochMs` (the match
+ * start, or the press's own timestamp) dates the reading: an override
+ * variant that shared no cooldown with its button on that patch is its own
+ * (`variantSharesCooldownAt` — Predator's Wake before 12.1.5, fact11 D22).
+ * Undated = the current game. */
+export function canonicalSpellId(spellId: string, logEpochMs?: number): string {
+  if (!variantSharesCooldownAt(spellId, logEpochMs)) return spellId;
   return SPELL_CANONICAL_IDS[spellId] ?? spellId;
 }
 
-/** All known spell IDs representing the same ability (including itself). */
-export function spellAliasIds(spellId: string): string[] {
-  const canon = canonicalSpellId(spellId);
+/** All known spell IDs representing the same ability (including itself),
+ * dated as `canonicalSpellId`. */
+export function spellAliasIds(spellId: string, logEpochMs?: number): string[] {
+  const canon = canonicalSpellId(spellId, logEpochMs);
   const aliases = [canon];
   for (const [alias, target] of Object.entries(SPELL_CANONICAL_IDS)) {
-    if (target === canon && alias !== canon) aliases.push(alias);
+    if (
+      target === canon &&
+      alias !== canon &&
+      variantSharesCooldownAt(alias, logEpochMs)
+    )
+      aliases.push(alias);
   }
   return aliases;
 }
@@ -3902,7 +3932,12 @@ export function talentReplacementsOf(unit: ICombatUnit): {
  * unit, whose procs are its only activations.
  */
 export function isPressOfCooldown(
-  e: { spellId?: string | null; logLine: { event: string } },
+  e: {
+    spellId?: string | null;
+    /** `timestamp` dates the alias reading (`canonicalSpellId`); a row
+     * without one reads the current game */
+    logLine: { event: string; timestamp?: number };
+  },
   spellId: string,
   spellName: string,
   replacements: ReturnType<typeof talentReplacementsOf>,
@@ -3910,7 +3945,13 @@ export function isPressOfCooldown(
   if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
     return false;
   if (e.spellId === spellId) return true;
-  if (canonicalSpellId(e.spellId) === canonicalSpellId(spellId)) return true;
+  // dated by the press itself (Predator's Wake before 12.1.5 is no press of
+  // The Hunt — `variantSharesCooldownAt`, fact11 D22)
+  if (
+    canonicalSpellId(e.spellId, e.logLine.timestamp) ===
+    canonicalSpellId(spellId, e.logLine.timestamp)
+  )
+    return true;
   if (replacements.pressedAs.get(spellId)?.includes(e.spellId)) return true;
   // A copy / tick / later stage of another press (`COPY_CAST_IDS`) is never a
   // press by its name: Champion's Spear's re-press 1271980 has a 6 s cooldown
@@ -4048,6 +4089,22 @@ export function effectEvidenceCastSeconds(
   // (a Rider of the Apocalypse's Anti-Magic Shell on its Death Knight is no
   // press of the Death Knight's)
   const sources = new Set([unit.id]);
+  // a press of a variant that, on this log, is a cooldown of its own
+  // (`ownCooldownVariantOf`) puts the overridden button's effect up as its
+  // own: Predator's Wake before 12.1.5 lands as The Hunt's 1246168 0.2 s
+  // later (fact11 605 preview, a70ff89c r2 0:29: `[YOU] [CD] The Hunt` and
+  // The Hunt spent with no press of it). Inside the follow-up window the
+  // press's impact row reads (`CAST_MISS_WINDOW_MS`).
+  const ownVariantPressMs = (unit.spellCastEvents ?? [])
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!e.spellId &&
+        ownCooldownVariantOf(e.spellId, e.logLine.timestamp) === spellId,
+    )
+    .map((e) => e.logLine.timestamp);
+  const variantsEffect = (ms: number) =>
+    ownVariantPressMs.some((t) => ms >= t && ms <= t + CAST_MISS_WINDOW_MS);
   const applied = units
     .flatMap((u) => u.auraEvents ?? [])
     .filter(
@@ -4057,7 +4114,8 @@ export function effectEvidenceCastSeconds(
         (effects.includes(a.spellId) ||
           (ownIdOnOthersOf(a.spellId) && a.destUnitId !== unit.id)) &&
         sources.has(a.srcUnitId) &&
-        a.logLine.timestamp >= combat.startTime,
+        a.logLine.timestamp >= combat.startTime &&
+        !variantsEffect(a.logLine.timestamp),
     )
     .map((a) => a.logLine.timestamp)
     .sort((a, b) => a - b);
@@ -4093,7 +4151,9 @@ export function auraOnlyActivationSeconds(
    * preparation) is no cast of this round (codex 20-F16-04 #2) */
   roundEndMs: number = Infinity,
 ): number[] {
-  const auraIds = AURA_ONLY_ACTIVATION_IDS[spellId];
+  // dated (`auraOnlyActivationIdsAt`): from 12.1.5 a Doom Winds buff with
+  // no press row is a proc, no press (fact11 D7 / D44)
+  const auraIds = auraOnlyActivationIdsAt(spellId, matchStartMs);
   if (!auraIds) return [];
   const hasRealCast = unit.spellCastEvents.some(
     (e) =>
@@ -4101,7 +4161,7 @@ export function auraOnlyActivationSeconds(
       e.spellId === spellId &&
       e.logLine.timestamp <= roundEndMs,
   );
-  if (hasRealCast && !AURA_IS_THE_PRESS_IDS.has(spellId)) return [];
+  if (hasRealCast && !auraIsThePressAt(spellId, matchStartMs)) return [];
   // An APPLIED while the same buff is still up (no REMOVED since the last
   // one, and that one within AURA_PRESS_EXTENSION_WINDOW_S) is the buff
   // being extended, not a press — cooldown mastery round 2026-10-20: Doom
@@ -4876,9 +4936,19 @@ function extractMajorCooldownsAll(
   // the button. Only this pair — the other `SPELL_CANONICAL_IDS` aliases keep
   // the ownership they had (codex review 20-F15-01: a 633 Lay on Hands cast
   // promoted the Defensive 471195 row and added a cd-hoarded accusation).
+  // A dated override variant on a log where it shares its button's cooldown
+  // is that button's press, and proves it the same way: Predator's Wake
+  // 1259431 from 12.1.5 is The Hunt 1246167 (fact11 D26 put 1246167 on the
+  // roster, in Devourer's tree; with the talents undecoded only a press
+  // proves it, and a Devourer who pressed only the Wake had no row — the
+  // press-only path that used to admit it is for ids off the roster).
   for (const id of castSpellIds)
-    if (METAMORPHOSIS_PRESS_CAST_IDS.has(id))
-      activatedSpellIds.add(canonicalSpellId(id));
+    if (
+      METAMORPHOSIS_PRESS_CAST_IDS.has(id) ||
+      (OVERRIDE_VARIANT_SHARES_BY_ERA[id] !== undefined &&
+        variantSharesCooldownAt(id, matchStartMs))
+    )
+      activatedSpellIds.add(canonicalSpellId(id, matchStartMs));
   for (const id of AURA_ACTIVATION_PROVES_BUTTON_IDS)
     if (
       auraOnlyActivationSeconds(unit, id, matchStartMs, matchEndMs).length > 0
@@ -4911,7 +4981,7 @@ function extractMajorCooldownsAll(
   const talentsGrantButton = (spellId: string): boolean =>
     talentSets.grantedButtonIds.has(spellId) ||
     (talentedSpellIds !== null &&
-      spellAliasIds(spellId).some(
+      spellAliasIds(spellId, matchStartMs).some(
         (alias) =>
           alias !== spellId &&
           !rosterIds.has(alias) &&
@@ -5141,7 +5211,7 @@ function extractMajorCooldownsAll(
     }
     for (const [spellId, entry] of saveRoster) {
       if (replacedByTalent.has(spellId)) continue;
-      const aliases = spellAliasIds(spellId);
+      const aliases = spellAliasIds(spellId, matchStartMs);
       const evidence =
         aliases.some((id) => castSpellIds.has(id)) ||
         aliases.some((id) => pvpTalentIds.has(id)) ||
@@ -5149,9 +5219,9 @@ function extractMajorCooldownsAll(
         (talentedSpellIds !== null &&
           aliases.some((id) => talentedSpellIds.has(id)));
       if (!evidence) continue;
-      const canonId = canonicalSpellId(spellId);
+      const canonId = canonicalSpellId(spellId, matchStartMs);
       const idx = majorSpells.findIndex(
-        (s) => canonicalSpellId(s.spellId) === canonId,
+        (s) => canonicalSpellId(s.spellId, matchStartMs) === canonId,
       );
       const observedId = aliases.find((id) => castSpellIds.has(id));
       if (idx >= 0) {
@@ -5229,7 +5299,7 @@ function extractMajorCooldownsAll(
     const canonOfVariant =
       castId in OVERRIDE_VARIANTS_GENERATED ||
       castId in TALENT_REPLACE_VARIANT_IDS
-        ? canonicalSpellId(castId)
+        ? canonicalSpellId(castId, matchStartMs)
         : castId;
     const spellId =
       canonOfVariant !== castId &&
@@ -5238,7 +5308,13 @@ function extractMajorCooldownsAll(
         ? canonOfVariant
         : castId;
     if (seen.has(spellId) || replacedByTalent.has(spellId)) continue;
-    const offensive = OFFENSIVE_CD_SPELL_IDS.has(spellId);
+    // a variant that is its own cooldown on this log is an offensive
+    // cooldown of its own when its button is one (Predator's Wake before
+    // 12.1.5 — `ownCooldownVariantOf`, fact11 D22 / D25 / D29)
+    const ownOf = ownCooldownVariantOf(spellId, matchStartMs);
+    const offensive =
+      OFFENSIVE_CD_SPELL_IDS.has(spellId) ||
+      (ownOf !== undefined && OFFENSIVE_CD_SPELL_IDS.has(ownOf));
     // fact4 D38 (4dee936a 0:18): the immunity-kind saves the enemy side
     // prints `immune` (Burrow — a friendly Restoration Shaman's 5 s of 30
     // misses had no press line and no kit row) are the third catalog
@@ -5252,11 +5328,12 @@ function extractMajorCooldownsAll(
     const effectData = spellEffectData[spellId];
     if (!effectData) continue;
     if ((effectiveCooldownSeconds(spellId) ?? 0) < MIN_CD_SECONDS) continue;
-    const canon = canonicalSpellId(spellId);
+    const canon = canonicalSpellId(spellId, matchStartMs);
     if (
       majorSpells.some(
         (sp) =>
-          canonicalSpellId(sp.spellId) === canon || sp.name === effectData.name,
+          canonicalSpellId(sp.spellId, matchStartMs) === canon ||
+          sp.name === effectData.name,
       )
     )
       continue;
@@ -5279,12 +5356,12 @@ function extractMajorCooldownsAll(
   const seenCanonical = new Set<string>();
   for (let i = 0; i < majorSpells.length; i++) {
     const sp = majorSpells[i]!;
-    const cid = canonicalSpellId(sp.spellId);
+    const cid = canonicalSpellId(sp.spellId, matchStartMs);
     if (seenCanonical.has(cid)) continue;
     seenCanonical.add(cid);
 
     const siblings = majorSpells.filter(
-      (s) => canonicalSpellId(s.spellId) === cid,
+      (s) => canonicalSpellId(s.spellId, matchStartMs) === cid,
     );
     if (siblings.length === 1) {
       dedupedMajorSpells.push(sp);
@@ -5347,7 +5424,8 @@ export function unitCooldownEntry(
   if (memo.byId.has(spellId)) return memo.byId.get(spellId);
   const fromLedger = memo.ledger.find(
     (cd) =>
-      cd.spellId === spellId || spellAliasIds(cd.spellId).includes(spellId),
+      cd.spellId === spellId ||
+      spellAliasIds(cd.spellId, combat.startTime).includes(spellId),
   );
   let entry = fromLedger;
   if (!entry && spellEffectData[spellId]) {
@@ -5744,9 +5822,17 @@ function buildCooldownEntry(
     .map((e) => {
       const timeSeconds = (e.logLine.timestamp - matchStartMs) / 1000;
       const cast: ICooldownCast = { timeSeconds };
-      const pressedId = overrideVariantPressId(e.spellId, spell);
+      const pressedId = overrideVariantPressId(
+        e.spellId,
+        spell,
+        e.logLine.timestamp,
+      );
       if (pressedId) cast.pressedId = pressedId;
-      const pressedName = overrideVariantPressName(e.spellId, spell);
+      const pressedName = overrideVariantPressName(
+        e.spellId,
+        spell,
+        e.logLine.timestamp,
+      );
       if (pressedName) cast.pressedName = pressedName;
       if (
         (isDefOrExternal || isControl || reachesSomeoneElse) &&
@@ -6356,7 +6442,7 @@ function buildCooldownEntry(
             )
           ? { allyReach: true as const }
           : {}),
-      ...(spellAliasIds(spell.spellId).some(
+      ...(spellAliasIds(spell.spellId, matchStartMs).some(
         (id) => saveRoster?.get(id)?.responseOnly,
       ) ||
       RESPONSE_ONLY_DEFENSIVE_IDS.has(spell.spellId) ||

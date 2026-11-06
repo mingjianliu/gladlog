@@ -859,4 +859,16 @@
  *  150 ms ahead of it, priced at the press. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 492;
+/*
+ * v493 (2026-11-06, fact11 D2 D7 D10 D20 D21 D22 D25 D26 D27 D29 D32 D39
+ *  D44): a press row ends a channel, a channel refused at its press never
+ *  ran; Doom Winds is a press before 12.1.5 and a proc from it, and
+ *  Predator's Wake its own 90 s cooldown before 12.1.5 (both priced by the
+ *  log's date, the Wake's The Hunt effect its own); Devourer's The Hunt is
+ *  on the roster; a press that landed is no IMMUNE miss, a hit through a
+ *  pct-100 wall is no press into it, a school the immunity does not stop is
+ *  no waste and no IMMUNE cause; a healer in an immunity form is not
+ *  exposed.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 493;

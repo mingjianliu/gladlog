@@ -13,7 +13,6 @@ import {
 } from "../data/mitigationVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { parryStopsAttack } from "../data/spellParry";
-import { immunityCoversSpell } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
 import { empowerSpans, type EmpowerSpanUnit } from "./castCommitSpans";
@@ -31,6 +30,10 @@ import {
   specToString,
 } from "./cooldowns";
 import { spellNameKey } from "./damagePress";
+import {
+  immunityStopsSpellSchool,
+  wallStopsEveryHit,
+} from "./enemyDefensives";
 import { isDeferralAbsorb, isDeferralDamageRow } from "./incomingPressure";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
@@ -404,10 +407,14 @@ export function buildOffensiveWasteSummary(
             // stop the schools it does not cover — a Chaos Bolt into Blessing
             // of Protection, a Sinister Strike into Spellwarding LANDED (the
             // prompt's own legend says so). The official school masks decide
-            // (`immunityCoversSpell`); a wall with no immunity mask (Die by the
+            // (`immunityStopsSpellSchool`); a wall with no immunity mask (Die by the
             // Sword, signed unconditional — ruling C3) keeps its verdict.
-            const covers = immunityCoversSpell(window.spellId, e.spellId);
+            // fact11 D20: a school-limited immunity with no DB2 mask (Cloak
+            // of Shadows) reads its hand mask (`immunityStopsSpellSchool`)
+            const covers = immunityStopsSpellSchool(window.spellId, e.spellId);
             if (covers === false) return false;
+            if (landedThroughWall(window.spellId, landings.get(e)!))
+              return false;
             // B28: for immunity windows, also count high-value CC/utility spells that do no damage
             // (e.g. Mindgames, HoJ, Silence) which would otherwise be filtered by the damage threshold.
             // Round-1 retest idx 44: only into an immunity that covers it — a
@@ -531,28 +538,49 @@ export function pressLandingCaster(
       };
 }
 
-/** `pressLandingsMs` with the attack each press landed as: `spellId` is the
- * spell of its hit or miss row, null when it landed as an aura or wrote no row
- * (an aura is no attack: Colossus Smash's debuff is not the strike). */
+/** Where a press landed: `spellId` is the spell of its hit or miss row,
+ * null when it landed as an aura or wrote no row (an aura is no attack:
+ * Colossus Smash's debuff is not the strike); `hit` is true when that row is
+ * a damage row or a miss of type ABSORB (a hit a shield ate whole) — the
+ * attack got through whatever wall the target had up. */
+export interface IPressLanding {
+  atMs: number;
+  spellId: string | null;
+  hit: boolean;
+}
+
+/** Did this landing go THROUGH the defensive `auraId` — a damage row of the
+ * press inside a wall whose signed row stops every hit it covers (pct 100:
+ * an immunity or a deflection)? Then the wall did not stop it and the cast
+ * is no attack "into" it (fact11 D21, 7708f698 1:55: a Chaos Bolt in flight
+ * hit for 220k inside Aspect of the Turtle, the hunter left at 4.9 %). A
+ * damage-reduction wall is hit through by design and keeps its casts. One
+ * reading for ABILITIES INTO IMMUNITY and its gate (`corpusFactScan4`). */
+export function landedThroughWall(
+  auraId: string,
+  landing: Pick<IPressLanding, "hit">,
+): boolean {
+  return landing.hit && wallStopsEveryHit(auraId);
+}
+
+/** `pressLandingsMs` with the attack each press landed as (`IPressLanding`). */
 export function pressLandingRows<T extends LandingPress>(
   presses: readonly T[],
   atMsOf: (press: T) => number,
   caster: LandingCaster,
   targets: readonly Pick<ICombatUnit, "id" | "auraEvents">[],
-): Map<T, { atMs: number; spellId: string | null }> {
-  const rowsByKey = new Map<
-    string,
-    { atMs: number; spellId: string | null }[]
-  >();
+): Map<T, IPressLanding> {
+  const rowsByKey = new Map<string, IPressLanding[]>();
   const add = (
     destUnitId: string,
     spellId: string | null | undefined,
     spellName: string | null | undefined,
     atMs: number,
     attack: boolean,
+    hit: boolean,
   ) => {
     const key = `${destUnitId}|${spellNameKey(spellId, spellName)}`;
-    const row = { atMs, spellId: attack ? (spellId ?? null) : null };
+    const row = { atMs, spellId: attack ? (spellId ?? null) : null, hit };
     const rows = rowsByKey.get(key);
     if (rows) rows.push(row);
     else rowsByKey.set(key, [row]);
@@ -561,11 +589,21 @@ export function pressLandingRows<T extends LandingPress>(
     const event = d.logLine?.event as string | undefined;
     if (event === LogEvent.SPELL_ABSORBED) continue;
     if (event === LogEvent.SPELL_PERIODIC_DAMAGE) continue;
-    add(d.destUnitId, d.spellId, d.spellName, d.logLine.timestamp, true);
+    add(d.destUnitId, d.spellId, d.spellName, d.logLine.timestamp, true, true);
   }
   for (const m of caster.missesOut ?? []) {
     if (m.logLine?.event === LogEvent.SPELL_PERIODIC_MISSED) continue;
-    add(m.destUnitId, m.spellId, m.spellName, m.timestamp, true);
+    // a hit a shield ate whole is logged as a miss of type ABSORB: it got
+    // through whatever wall the target had up (fact11 D20: Tiger Palm into
+    // Void Shield inside Cloak of Shadows)
+    add(
+      m.destUnitId,
+      m.spellId,
+      m.spellName,
+      m.timestamp,
+      true,
+      m.missType === "ABSORB",
+    );
   }
   for (const unit of targets)
     for (const a of unit.auraEvents ?? []) {
@@ -575,12 +613,12 @@ export function pressLandingRows<T extends LandingPress>(
         event === LogEvent.SPELL_AURA_APPLIED ||
         event === LogEvent.SPELL_AURA_REFRESH
       )
-        add(unit.id, a.spellId, a.spellName, a.logLine.timestamp, false);
+        add(unit.id, a.spellId, a.spellName, a.logLine.timestamp, false, false);
     }
   for (const rows of rowsByKey.values()) rows.sort((a, b) => a.atMs - b.atMs);
 
   const taken = new Map<string, number>();
-  const landed = new Map<T, { atMs: number; spellId: string | null }>();
+  const landed = new Map<T, IPressLanding>();
   const inOrder = [...presses].sort((a, b) => atMsOf(a) - atMsOf(b));
   for (const press of inOrder) {
     const atMs = atMsOf(press);
@@ -593,7 +631,7 @@ export function pressLandingRows<T extends LandingPress>(
     if (row !== undefined && row.atMs <= atMs + REFLECT_ROW_LAG_MS) {
       landed.set(press, row);
       next++;
-    } else landed.set(press, { atMs, spellId: null });
+    } else landed.set(press, { atMs, spellId: null, hit: false });
     taken.set(key, next);
   }
   return landed;

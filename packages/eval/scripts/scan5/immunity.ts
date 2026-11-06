@@ -60,7 +60,9 @@
  *    owner's side whose `[YOU]` / `[TEAM]` `[CD]` / `[CC]` / `[CAST]` /
  *    `[PROC]` line (its second, its caster, its English name) lacks
  *    `[IMMUNE`. Kind `no press line` (out of the total): the press prints no
- *    such line (a control the timeline states as `[CC NOT LANDED]`).
+ *    such line (a control the timeline states as `[CC NOT LANDED]`). A
+ *    press with a hit of its own on that unit in the IMMUNE row's instant
+ *    (`isPressHitRow`, `PRESS_LANDED_SAME_INSTANT_MS`) landed: not refused.
  *  - `immunityEnemyDef` (F, D17): every run ≥ 1 s of a T aura with a damage
  *    cover, on an ENEMY player, put up by the enemy side (our own Cyclone is
  *    no defensive of theirs), started inside the round, with ≥ 1 IMMUNE row
@@ -84,6 +86,11 @@
 import { DR_CATEGORIES_GENERATED } from "@gladlog/analysis/src/data/drCategoriesGenerated";
 import mechanicsRaw from "@gladlog/analysis/src/data/spellMechanicsGenerated.json";
 import schoolsRaw from "@gladlog/analysis/src/data/spellSchoolsGenerated.json";
+import {
+  isPressHitRow,
+  PRESS_LANDED_SAME_INSTANT_MS,
+  PRESS_TRIGGERED_CAST_IDS,
+} from "@gladlog/analysis/src/utils/castMissRows";
 
 import {
   APPLIED,
@@ -480,6 +487,22 @@ export function run(ctx: IRoundCtx): void {
     const next = successesOf(caster)
       .filter((x) => String(x.spellId) === id && tsOf(x) > t + 5)
       .map(tsOf);
+    // a hit of the press on that unit in the refusal's own instant is the
+    // press landing through one refused component (fact11 D10, the
+    // product's `pressLandedOn`): Takedown 1250646 IMMUNE into Blessing of
+    // Spellwarding, its physical leap 1253859 hitting for 574k in the same
+    // millisecond
+    const pressName = nameOf(c.spellId, c.spellName);
+    const hitIds = [id, ...(PRESS_TRIGGERED_CAST_IDS.get(id) ?? [])];
+    const landedAt = (m: any) =>
+      ((caster.damageOut ?? []) as any[]).some(
+        (d) =>
+          d.destUnitId === m.destUnitId &&
+          Math.abs(tsOf(d) - tsOf(m)) <= PRESS_LANDED_SAME_INSTANT_MS &&
+          hitIds.some((h) =>
+            isPressHitRow(h, h === id ? pressName : "", d),
+          ),
+      );
     const miss = ((caster.missesOut ?? []) as any[]).some(
       (m) =>
         m.missType === "IMMUNE" &&
@@ -488,7 +511,8 @@ export function run(ctx: IRoundCtx): void {
         m.destUnitId === c.destUnitId &&
         tsOf(m) >= t - PRESS_MISS_LEAD_MS &&
         tsOf(m) <= t + PRESS_MISS_WINDOW_MS &&
-        !next.some((n) => n <= tsOf(m) + PRESS_MISS_LEAD_MS),
+        !next.some((n) => n <= tsOf(m) + PRESS_MISS_LEAD_MS) &&
+        !landedAt(m),
     );
     if (!miss) return false;
     return !((caster.damageOut ?? []) as any[]).some(

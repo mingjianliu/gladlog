@@ -5,7 +5,11 @@ import { canDefensiveCleanse } from "../src/utils/dispelAnalysis";
 
 // Talent reads stubbed: "IMPROVED" holds Improved Purify, "PLAIN" does not,
 // null = no parsed loadout.
-vi.mock("../src/utils/talents", () => ({
+vi.mock("../src/utils/talents", async (importOriginal) => ({
+  // the patch dates stay real (the dated tables read them at import)
+  PATCH_1215_GOLIVE_EPOCH_MS: (
+    await importOriginal<typeof import("../src/utils/talents")>()
+  ).PATCH_1215_GOLIVE_EPOCH_MS,
   // the era-aware talent list (cooldown mastery round 2026-10-20) — this
   // file's synthetic units read as they are
   talentsOf: (u: { info?: { talents?: unknown } }) => u.info?.talents,

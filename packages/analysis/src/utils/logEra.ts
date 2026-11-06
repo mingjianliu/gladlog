@@ -45,41 +45,63 @@ export function logIsFrom(logEpochMs: number, cutoverEpochMs: number): boolean {
   return logEpochMs >= cutoverEpochMs;
 }
 
-/** A number the game changed at `cutoverEpochMs` (a wall-clock epoch, asked
+/** A value the game changed at `cutoverEpochMs` (a wall-clock epoch, asked
  * through `logIsFrom`): `before` for a log timestamp earlier than it,
- * `since` from it on. */
-export interface ILogDatedNumber {
+ * `since` from it on — a number (a modifier, a lockout multiplier) or any
+ * other reading of the log (fact11, user 2026-11-05: "以后这种都按日期分版本
+ * 如果是版本改动的话" — whether two buttons share a cooldown, whether an aura
+ * stands for a press).
+ *
+ * `uncertainTakes` is the side a timestamp that cannot be placed reads — not
+ * a number, or inside `LOG_ZONE_UNCERTAINTY_MS` before the cutover. It is
+ * `since` (the current value: the dated value is a past exception) unless
+ * the rule names `before` because that is its careful direction (a reading
+ * that spends a cooldown rather than call it ready). */
+export interface ILogDated<T> {
   cutoverEpochMs: number;
-  before: number;
-  since: number;
+  before: T;
+  since: T;
+  uncertainTakes?: "before" | "since";
 }
+/** A number the game changed at a dated cutover (`ILogDated`). */
+export type ILogDatedNumber = ILogDated<number>;
 
 /**
- * What a dated number is at a log timestamp — the one reading for every
- * number that moved in a dated change, so two halves of one hotfix (Storm
- * Conduit's cooldown give-back and its lockout multiplier) cannot put the
- * same timestamp on different sides.
+ * What a dated value is at a log timestamp — the one reading for every value
+ * that moved in a dated change, so two halves of one change (Storm Conduit's
+ * cooldown give-back and its lockout multiplier) cannot put the same
+ * timestamp on different sides.
  *
- * A timestamp that is not a number is not a date and takes the CURRENT value
- * (`since`), never the old one: the dated value is a past exception. A rule
- * for which that is the less careful direction must not use this.
+ * A timestamp that is not a number is not a date and takes
+ * `uncertainTakes` (by default the CURRENT value, `since`: the dated value
+ * is a past exception).
  *
  * So does a timestamp inside `LOG_ZONE_UNCERTAINTY_MS` BEFORE the cutover:
  * the parser dates a line without a signed offset in the parsing machine's
- * zone (header), so such a match may really be up to that much later — a
- * post-hotfix log must never be given the old number (codex review
+ * zone (header), so such a match may really be up to that much later — by
+ * default a post-hotfix log must never be given the old value (codex review
  * 45-FT-101, 2026-10-11: recorded east of UTC, imported further east, a
  * match hours after the cutover read 4 s and a ×0.35 lockout). The old value
- * is taken only for a timestamp that is before the cutover in every zone.
+ * is then taken only for a timestamp that is before the cutover in every
+ * zone; a rule whose careful side is the old one (`uncertainTakes:
+ * "before"`) takes the new value only for one after it in every zone.
  */
+export function logDatedAt<T>(dated: ILogDated<T>, logEpochMs: number): T {
+  const uncertain =
+    dated.uncertainTakes === "before" ? dated.before : dated.since;
+  if (!Number.isFinite(logEpochMs)) return uncertain;
+  if (!logIsFrom(logEpochMs, dated.cutoverEpochMs - LOG_ZONE_UNCERTAINTY_MS))
+    return dated.before;
+  if (logIsFrom(logEpochMs, dated.cutoverEpochMs)) return dated.since;
+  return uncertain;
+}
+
+/** `logDatedAt` of a dated number. */
 export function logDatedNumberAt(
   dated: ILogDatedNumber,
   logEpochMs: number,
 ): number {
-  return Number.isFinite(logEpochMs) &&
-    !logIsFrom(logEpochMs, dated.cutoverEpochMs - LOG_ZONE_UNCERTAINTY_MS)
-    ? dated.before
-    : dated.since;
+  return logDatedAt(dated, logEpochMs);
 }
 
 /**

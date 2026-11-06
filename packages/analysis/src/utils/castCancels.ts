@@ -77,6 +77,7 @@ import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
 import { analyzeKickAudit } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
 import { roundEndMs } from "./roundEnd";
+import { unitLogEpochMs } from "./talents";
 
 // The reading of how a cast bar ended, the rows it starts from and the
 // interruption reasons live in castBarOutcomes.ts (kickAudit reads them too);
@@ -156,9 +157,17 @@ export function castBarsOfCooldown(
   cd: { spellId: string; spellName: string },
 ): CastBarStart[] {
   const replacements = talentReplacementsOf(unit);
+  // the round's date, once (a variant's alias is dated)
+  const logEpochMs = unitLogEpochMs(unit);
   return starts.filter((s) =>
     isPressOfCooldown(
-      { spellId: s.id, logLine: { event: LogEvent.SPELL_CAST_SUCCESS } },
+      {
+        spellId: s.id,
+        logLine: {
+          event: LogEvent.SPELL_CAST_SUCCESS,
+          timestamp: logEpochMs,
+        },
+      },
       cd.spellId,
       cd.spellName,
       replacements,

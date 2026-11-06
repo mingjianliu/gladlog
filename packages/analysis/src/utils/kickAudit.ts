@@ -10,7 +10,6 @@ import {
   classifyKickedSpell,
   type KickedSpellCategory,
 } from "../data/kickedSpellCategories";
-import { OFF_GCD_SPELL_IDS, ON_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { isKickSpellId } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -24,7 +23,9 @@ import {
 import {
   CHANNEL_AURA_LAG_MS,
   channelSpans,
+  isButtonPress,
   pressRidesAlong,
+  rowIsPressEndingCast,
 } from "./castCommitSpans";
 import {
   CANCEL_CC_NEAR_S,
@@ -40,12 +41,11 @@ import { firstDeathMs } from "./unitDeath";
 // within it) lives in enemyInterrupts.ts, which also reads it for the
 // on-interrupt cooldown talents; re-exported from here, its first home.
 
-/** A press of a button: DB2 SpellCooldowns has its row, on the global
- * cooldown or off it. A passive trigger (Shadowy Apparition 148859) or a pet
- * command (Spell Lock 119910) has none (fact10 D22, codex 20-F25-01 / 02). */
-export function isButtonPress(spellId: string): boolean {
-  return ON_GCD_SPELL_IDS.has(spellId) || OFF_GCD_SPELL_IDS.has(spellId);
-}
+// `isButtonPress` (a press of a button: DB2 SpellCooldowns has its row) and
+// `rowIsPressEndingCast` (such a press, no copy / tick row, not riding along)
+// live in castCommitSpans.ts with the channel end that reads them too;
+// re-exported from here, its first home (fact10 D22, codex 20-F25-01 / 02).
+export { isButtonPress };
 
 export { LANDED_PAIR_MS };
 /** Two SPELL_CAST_SUCCESS rows of ONE kick: Skull Bash logs its cast id
@@ -451,7 +451,7 @@ export function analyzeKickAudit(
           .castStartEvents ?? []
         ).some(inside) ||
         (enemy.spellCastEvents ?? []).some(
-          (e) => !!e.spellId && isButtonPress(e.spellId) && inside(e),
+          (e, _, rows) => rowIsPressEndingCast(e, rows) && inside(e),
         );
       if (acted) return true;
       return allUnits.some(

@@ -120,10 +120,6 @@ import {
   CHANNELED_SPELL_IDS,
   HASTE_DURATION_SPELL_IDS,
 } from "@gladlog/analysis/src/data/channeledGenerated";
-import {
-  OFF_GCD_SPELL_IDS,
-  ON_GCD_SPELL_IDS,
-} from "@gladlog/analysis/src/data/offGcdGenerated";
 import { ROOT_AURA_SPELL_IDS } from "@gladlog/analysis/src/data/rootAuraGenerated";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import {
@@ -134,7 +130,10 @@ import {
 import { staleMaxHpRows } from "@gladlog/analysis/src/utils/advancedActions";
 import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
-import { pressRidesAlong } from "@gladlog/analysis/src/utils/castCommitSpans";
+import {
+  pressRidesAlong,
+  rowIsPressEndingCast,
+} from "@gladlog/analysis/src/utils/castCommitSpans";
 import { PRESS_TRIGGERED_CAST_IDS } from "@gladlog/analysis/src/utils/castMissRows";
 import { STOPPED_JUST_BEFORE_S } from "@gladlog/analysis/src/utils/castStopEvidence";
 import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
@@ -604,17 +603,16 @@ function jukeBarSuperseded(ctx: IRoundCtx): void {
     const prevBar = ((target.castStartEvents ?? []) as any[])
       .filter((c) => tsOf(c) < startMs)
       .at(-1);
-    // A SUCCESS ends a bar only when it is a button's (DB2 SpellCooldowns
-    // has its row, on or off the GCD): a passive trigger or a pet command has
-    // none (codex 20-F25-01); an off-GCD Counterspell out of a Frostbolt
-    // ends it (20-F25-02). A SUCCESS of the previous bar's spell inside
+    // A SUCCESS ends a bar only when it is a button's press
+    // (`rowIsPressEndingCast`, the product's one reading: DB2 SpellCooldowns
+    // has its row, no copy / tick row — fact11 D2): a passive trigger or a
+    // pet command has none (codex 20-F25-01); an off-GCD Counterspell out of
+    // a Frostbolt ends it (20-F25-02). A SUCCESS of the previous bar's spell inside
     // CAST_QUEUE_TOLERANCE_MS is that bar's queued completion.
     const other = [
       ...((target.spellCastEvents ?? []) as any[]).filter(
-        (c) =>
-          ev(c) === SUCCESS &&
-          (ON_GCD_SPELL_IDS.has(String(c.spellId)) ||
-            OFF_GCD_SPELL_IDS.has(String(c.spellId))),
+        (c, _: number, rows: any[]) =>
+          ev(c) === SUCCESS && rowIsPressEndingCast(c, rows),
       ),
       ...((target.castStartEvents ?? []) as any[]),
     ].find(

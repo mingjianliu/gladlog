@@ -533,13 +533,10 @@ describe("talentOwnershipOf — a button the tree grants under another id is tal
  */
 describe("completeness: every roster cooldown a talent of the spec names is in the ledger of a holder who never pressed it", () => {
   /** `spec|roster id|talent entry id` */
-  const KNOWN_OPEN: Record<string, string> = {
-    // The Hunt, Devourer: its own spell 1246167, which the roster does not
-    // list (it lists Havoc's 370965) and no discovery rule names. Press-only
-    // by the user ruling of 2026-10-09 (an offensive-catalog member outside
-    // the roster is `responseOnly`).
-    "1480|370965|1246167": "The Hunt, Devourer",
-  };
+  // empty since fact11 D26 (user 2026-11-05): The Hunt, Devourer
+  // (`1480|370965|1246167`, its own spell 1246167 off the roster, press-only)
+  // is a roster row
+  const KNOWN_OPEN: Record<string, string> = {};
 
   it("no pair without a row outside the known-open list, and no stale entry in it", () => {
     const open: string[] = [];
@@ -591,8 +588,11 @@ describe("completeness: every roster cooldown a talent of the spec names is in t
         }
       }
     }
-    // the 19 spec × spell pairs of fix-FT/scripts/sw_talentIdVsCastId.ts
-    expect(pairs).toBe(19);
+    // the 19 spec × spell pairs of fix-FT/scripts/sw_talentIdVsCastId.ts,
+    // + Devourer's The Hunt 1246167 on the roster (fact11 D26) paired by
+    // name with a Havoc / Vengeance holder of The Hunt 370965, whose row
+    // stays 370965's
+    expect(pairs).toBe(20);
     expect(open.sort()).toEqual(Object.keys(KNOWN_OPEN).sort());
     // the row must stand under an id players cast: a same-name row whose id
     // the corpus has never seen is a renumbered spell (the roster's id or

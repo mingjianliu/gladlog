@@ -5333,3 +5333,56 @@ for per-event extensions (`buffFullDurationForCaster`'s new `paramAtMs`
 moves only the cast-parameter read: a Lightning Bolt between Spiritwalker's
 Grace's row and its SUCCESS still adds Momentum's 1 s; 0 lines of the 605
 capture move), and a dispelled aura is no overshoot.
+
+v493 (2026-11-06, fact11 batch 1: D2 D7 D10 D20 D21 D22 D25 D26 D27 D29 D32
+D39 D44; user rulings 2026-11-05 「以后这种都按日期分版本」, Doom Winds a
+proc from 12.1.5, Predator's Wake its own 90 s before 12.1.5, D26 「Add,
+preview first」).
+(1) Channels (D2 D39): `rowIsPressEndingCast` — a button press
+(`isButtonPress`: DB2 SpellCooldowns row), not riding along, no copy / tick /
+companion / impact row (`isNoPressRow`) — is the one reading of a cast row
+that ends a running channel (`nextPressEndingChannelMs`, kickAudit). A
+channel the game refused at its press (`channelRefusedAtCast`: its own MISS
+within 50 ms, no effect row after) has length 0.
+(2) Dated game data (`ILogDated` / `logDatedAt`, logEra.ts): Doom Winds
+384352's aura stands for a press before 12.1.5 and is a proc from it
+(`AURA_PRESS_BY_ERA`, auraActivationEra.ts; careful side the press);
+Predator's Wake 1259431 is its own 90 s offensive cooldown before 12.1.5 and
+The Hunt's button from it (`OVERRIDE_VARIANT_SHARES_BY_ERA`,
+overrideVariantEra.ts; `canonicalSpellId` / `spellAliasIds` take the date).
+Before 12.1.5 the Wake's The Hunt effect aura 1246168 is the Wake's own, no
+evidence of a press of The Hunt (`effectEvidenceCastSeconds`). An enemy's
+hidden-press reading reads the same date (`hiddenPressMs`).
+(3) Immunity (D10 D20 D21 D32 D27): a press with a hit of its own on the
+unit in the IMMUNE row's own instant (`pressLandedOn`,
+`PRESS_LANDED_SAME_INSTANT_MS`, follow-up cast ids included) landed — one
+component refused, no `[IMMUNE]`; `immunityStopsSpellSchool` (DB2 aura-39
+mask) — a school the immunity does not stop is no waste and no IMMUNE
+cause; a hit through a pct-100 wall is no press into it
+(`landedThroughWall`); a damage spell's IMMUNE cause is a pct-100 wall
+covering its school (`immunityStopsDamageSpell`); a healer in an immunity
+form lists no control threats.
+(4) D26: Devourer's The Hunt 1246167 is a roster offensive cooldown. On a
+12.1.5 log a press of Predator's Wake proves The Hunt's button
+(`activatedSpellIds` takes a dated override variant's canonical id), so a
+Devourer who pressed only the Wake keeps the row without decoded talents.
+605 files, base ff53cc390 rescanned with these checks → this tree: no FATAL;
+274 checks 237 unchanged, 11 fell, 1 rose. Fell: variantSpentButton 368 → 25
+(→ 0 on the 17 Wake files after (2)'s effect rule), channelEndOnOwnRow 412 →
+20 (Ultimate Penitence, as at the base), intoDefenseLanded 288 → 0,
+intoImmunityLanded 223 → 0, doomWindsNoPressReading 117 → 0,
+exposureThreatOnFormHealer 88 → 0, immuneCauseCannotStopDamage 79 → 0,
+pressImmuneTagLanded 68 → 0, channelSpanUnrun 3 → 0. Rose:
+resCdBeforeNextPress 632 → 713 — The Hunt 142 → 0, Predator's Wake 13 → 236,
+all August (12.1.0) logs, where the Wake is re-pressed 43–68 s apart against
+its own 90 s (old patch only: recorded on GitHub, user ruling 2026-11-05).
+Family diff: `[PROC] Doom Winds` 123 → 0 (an unlogged press before 12.1.5;
+scan5 `auraActivationNoLine` lists them as `unlogged press (dated)`, out of
+the total); `[KILL WINDOW]` / `[VULNERABLE]` on Predator's Wake 30 → 0;
+`[RES] Predator's Wake` 295 → 802; ABILITIES INTO Cloak of Shadows 259 → 78.
+Candidates 7428 → 7430: missed-sync-window +2 (one fact, The Hunt ready on a
+12.1.0 Devourer), none removed.
+Cover set (117 files, mixed 12.1.0 / 12.1.5), against the same tree before
+(4)'s activation proof and (2)'s effect rule: no FATAL; 275 checks 268
+unchanged, 0 fell, 0 rose; missed-sync-window gains The Hunt in 5 places on
+12.1.5 Devourer logs (2 new candidates, 3 list it in readyCds).

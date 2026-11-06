@@ -121,6 +121,7 @@ import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlag
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
 import * as advancedActions from "@gladlog/analysis/src/utils/advancedActions";
 import * as allyCopyWall from "@gladlog/analysis/src/utils/allyCopyWall";
+import * as auraActivationEra from "@gladlog/analysis/src/utils/auraActivationEra";
 import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as auraOnlyActivationsMod from "@gladlog/analysis/src/utils/auraOnlyActivations";
@@ -182,6 +183,7 @@ import * as offensiveWasteAnalysis from "@gladlog/analysis/src/utils/offensiveWa
 import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
 import * as offListPress from "@gladlog/analysis/src/utils/offListPress";
 import * as outgoingCcChains from "@gladlog/analysis/src/utils/outgoingCcChains";
+import * as overrideVariantEra from "@gladlog/analysis/src/utils/overrideVariantEra";
 import * as petCommandsMod from "@gladlog/analysis/src/utils/petCommands";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
@@ -452,6 +454,22 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/castMissRows.ts`,
     symbol: "pressRefusedImmuneOn",
+    mod: castMissRows,
+  },
+  // fact11 D10: a non-control press that landed on the unit anyway
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "pressLandedOn",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "isPressHitRow",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "PRESS_LANDED_SAME_INSTANT_MS",
     mod: castMissRows,
   },
   {
@@ -1694,6 +1712,28 @@ const INDEX: PredicateRow[] = [
     symbol: "immunityCoversSpell",
     mod: spellSchools,
   },
+  // fact11 D20 / D32 / D21: the hand mask of a school-limited immunity, a
+  // damage spell's IMMUNE cause, a hit through a wall
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "immunityStopsSpellSchool",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "immunityStopsDamageSpell",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "wallStopsEveryHit",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/offensiveWasteAnalysis.ts`,
+    symbol: "landedThroughWall",
+    mod: offensiveWasteAnalysis,
+  },
   {
     file: `${A}/data/healingVerdicts.ts`,
     symbol: "healingVerdictOf",
@@ -2082,6 +2122,17 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/offGcdGenerated.ts`,
     symbol: "ON_GCD_SPELL_IDS",
     mod: offGcdGenerated,
+  },
+  // fact11 D2: which cast rows end a cast or a channel
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "rowIsPressEndingCast",
+    mod: castCommitSpans,
+  },
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "isButtonPress",
+    mod: castCommitSpans,
   },
   {
     file: `${A}/utils/drAnalysis.ts`,
@@ -2966,6 +3017,12 @@ const INDEX: PredicateRow[] = [
     symbol: "tickEndedChannelSpans",
     mod: castCommitSpans,
   },
+  // fact11 D39: a channel the game refused at its press
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "channelRefusedAtCast",
+    mod: castCommitSpans,
+  },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "ccEndedByCasterInterrupt",
@@ -3573,6 +3630,28 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/logEra.ts`,
     symbol: "logDatedNumberAt",
     mod: logEra,
+  },
+  // fact11 (user 2026-11-05): any dated reading, and its two first users
+  // (whether an aura stands for a press; whether a variant shares a cooldown)
+  {
+    file: `${A}/utils/logEra.ts`,
+    symbol: "logDatedAt",
+    mod: logEra,
+  },
+  {
+    file: `${A}/utils/auraActivationEra.ts`,
+    symbol: "auraStandsForPressAt",
+    mod: auraActivationEra,
+  },
+  {
+    file: `${A}/utils/overrideVariantEra.ts`,
+    symbol: "variantSharesCooldownAt",
+    mod: overrideVariantEra,
+  },
+  {
+    file: `${A}/utils/overrideVariantEra.ts`,
+    symbol: "offensiveCooldownIdAt",
+    mod: overrideVariantEra,
   },
   {
     file: `${A}/utils/kickLockout.ts`,

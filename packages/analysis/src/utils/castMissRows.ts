@@ -182,8 +182,131 @@ export function pressImmuneMissRows<T extends IPressMissRow>(
   sameSpellCastMs: readonly number[],
   castMs: number,
   followUp?: IPressFollowUp,
+  /** the caster's damage and heal rows (`damageOut` + `healOut`): an IMMUNE
+   * on a unit a non-control press landed on anyway is one component refused,
+   * not the press (`pressLandedOn`, fact11 D10) */
+  landed?: readonly IPressHitRow[],
 ): T[] {
   if (!misses || misses.length === 0) return [];
+  const out = pressImmuneMissRowsAll(
+    misses,
+    spellId,
+    sameSpellCastMs,
+    castMs,
+    followUp,
+  );
+  // a control's refused control is the refusal whatever else of it landed
+  // (Storm Bolt's damage into a stun immunity: the stun 132169 IMMUNE is the
+  // press refused) — the landed reading is for a press whose purpose is not
+  // the component the immunity stopped
+  if (!landed || ccSpellIds.has(spellId)) return out;
+  // the press and the cast rows its effect triggers (`pressFollowUpCastRows`:
+  // Predator's Wake 1259431 lands as The Hunt 1246169 — be1686eb 0:34, the
+  // root 370970 IMMUNE and the impact's damage in one millisecond)
+  const ids = [
+    spellId,
+    ...(followUp
+      ? pressFollowUpCastRows(
+          followUp.casts,
+          spellId,
+          sameSpellCastMs,
+          castMs,
+          followUp.destUnitId,
+        ).map((r) => r.spellId!)
+      : []),
+  ];
+  return out.filter(
+    (m) =>
+      !m.destUnitId ||
+      !ids.some((id) =>
+        pressLandedOn(
+          landed,
+          id,
+          getEnglishSpellName(id, ""),
+          sameSpellCastMs,
+          castMs,
+          m.destUnitId!,
+          m.timestamp,
+        ),
+      ),
+  );
+}
+
+/** The fields of a damage / heal row the landed reading asks: the hit's own
+ * id, or — on a SPELL_ABSORBED row — the attack's (`attackSpellId`). */
+export interface IPressHitRow {
+  spellId?: string;
+  spellName?: string;
+  attackSpellId?: string;
+  attackSpellName?: string;
+  destUnitId?: string;
+  logLine: { timestamp: number };
+}
+
+/** Is this damage / heal row a hit of the press `spellId` — its id or an
+ * effect aura's (`castAndEffectIds`), or a row of the same English name
+ * (the damage under another id: Execute 281000 → 260798; The Hunt's impact
+ * 370966)? A SPELL_ABSORBED row is the attack's (`attackSpellId`). The one
+ * reading of "a hit of this press": `pressLandedOn` and the KILL ATTEMPTS
+ * burst anchor (`killAttempts.ts`). */
+export function isPressHitRow(
+  spellId: string,
+  spellName: string,
+  row: IPressHitRow,
+): boolean {
+  const id = row.attackSpellId ?? row.spellId;
+  if (!id) return false;
+  if (castAndEffectIds(spellId).has(id)) return true;
+  const rowName = row.attackSpellId ? row.attackSpellName : row.spellName;
+  const a = getEnglishSpellName(id, rowName ?? "") || id;
+  const b = getEnglishSpellName(spellId, spellName) || spellId;
+  return a === b;
+}
+
+/**
+ * Did the press land on `destUnitId` anyway — a hit of it (`isPressHitRow`)
+ * on that unit inside the press's cast window (`missBelongsToCast`)? fact11
+ * D10 (16bc5861 1:10 / 3:14 / 4:31): The Hunt's root 370970 met Blessing of
+ * Freedom IMMUNE, its impact 370966 and DoT 370969 landed in the same
+ * millisecond — three `[IMMUNE — Blessing of Freedom was up]` read as the
+ * whole cooldown refused.
+ */
+export function pressLandedOn(
+  rows: readonly IPressHitRow[],
+  spellId: string,
+  spellName: string,
+  sameSpellCastMs: readonly number[],
+  castMs: number,
+  destUnitId: string,
+  /** the refusal row's own ms: a hit counts only in its instant
+   * (`PRESS_LANDED_SAME_INSTANT_MS`) */
+  refusedAtMs?: number,
+): boolean {
+  return rows.some(
+    (r) =>
+      r.destUnitId === destUnitId &&
+      missBelongsToCast(sameSpellCastMs, castMs, r.logLine.timestamp) &&
+      (refusedAtMs === undefined ||
+        Math.abs(r.logLine.timestamp - refusedAtMs) <=
+          PRESS_LANDED_SAME_INSTANT_MS) &&
+      isPressHitRow(spellId, spellName, r),
+  );
+}
+
+/** A hit of the press is the press landing through a refused component only
+ * in the refusal's own instant — The Hunt's impact and its root's IMMUNE share
+ * a millisecond (fact11 D10). A same-named hit seconds later is a separate
+ * trigger landing once the immunity is gone: Arcane Surge 365350 IMMUNE into
+ * Ice Block, its 453326 "Arcane Surge" 2.4 s later on the unblocked mage. */
+export const PRESS_LANDED_SAME_INSTANT_MS = CAST_MISS_LEAD_MS;
+
+function pressImmuneMissRowsAll<T extends IPressMissRow>(
+  misses: readonly T[],
+  spellId: string,
+  sameSpellCastMs: readonly number[],
+  castMs: number,
+  followUp?: IPressFollowUp,
+): T[] {
   const ownRows = (id: string, castTimes: readonly number[], atMs: number) => {
     const family = castAndEffectIds(id);
     return misses.filter(
@@ -325,6 +448,8 @@ export function pressRefusedImmuneOn(
   /** the caster's cast rows: a follow-up impact row's IMMUNE counts
    * (`pressFollowUpCastRows`) */
   casts?: readonly IPressCastRow[],
+  /** the caster's damage and heal rows (`pressImmuneMissRows`' `landed`) */
+  landed?: readonly IPressHitRow[],
 ): boolean {
   return pressImmuneMissRows(
     misses,
@@ -332,6 +457,7 @@ export function pressRefusedImmuneOn(
     sameSpellCastMs,
     castMs,
     casts ? { casts, destUnitId: destId } : undefined,
+    landed,
   ).some((m) => m.destUnitId === destId);
 }
 

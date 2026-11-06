@@ -5,6 +5,7 @@ import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
 } from "../data/spellEffectData";
+import { auraStandsForPressAt } from "./auraActivationEra";
 import { buildAuraIntervals } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 // call-time only (cooldowns reads this module's table the same way)
@@ -32,7 +33,9 @@ import { offensiveDangerWeight } from "./spellDanger";
  *    logged) and by Ascendance 114051 (171); 73 more carry neither but are
  *    followed by the 469270 storm pulses — an unlogged 384352 press (DB2 says
  *    only those two spells trigger it; the owner ledger's
- *    AURA_ONLY_ACTIVATION_IDS reads the same buff the same way).
+ *    AURA_ONLY_ACTIVATION_IDS reads the same buff the same way). That is the
+ *    12.1.0 reading; from 12.1.5 the press logs and such a buff is a proc
+ *    (`auraStandsForPressAt`, utils/auraActivationEra.ts — fact11 D7).
  *
  * User rulings (2026-09-26): both Metamorphosis populations count (「算」);
  * a Doom Winds without a logged press is an ordinary Doom Winds occurrence
@@ -351,7 +354,11 @@ export function auraOffensiveOccurrences(
       const name = getEnglishSpellName(genericCd, iv.spellName);
       // a press of this button: under its name, as a cast that makes this
       // aura, or as a DB2 override variant of it (fact7 D68: Predator's Wake
-      // 1259431's own buff, its The Hunt row lost to the caster's death)
+      // 1259431's own buff, its The Hunt row lost to the caster's death).
+      // Undated on purpose: which press PUT UP this aura is the effect, not
+      // the cooldown — Predator's Wake makes it on 12.1.0 logs too, where it
+      // spends a cooldown of its own (fact11 D22; dated, it read the aura a
+      // `The Hunt (no press)` proc beside the Wake that made it, 9efe5b38 0:36)
       const isThisButton = (c: {
         spellId?: string | null;
         spellName?: string;
@@ -573,6 +580,33 @@ export function auraOffensiveOccurrences(
       // Ascendance grants the buff — ONE burst, Ascendance's (user ruling);
       // Ascendance's own aura keeps the aura path "active"
       if (near(ascendances, startMs, -W, W) !== undefined) continue;
+      // from 12.1.5 the press logs, and a buff with neither a press nor
+      // Ascendance is a proc (`auraStandsForPressAt`, fact11 D7: 10244184
+      // 1:30 / 1:55, 24.9 s apart, each in a Lightning Bolt's millisecond):
+      // the cooldown's window, no press, nothing spent (Radiant Glory's
+      // shape)
+      if (!auraStandsForPressAt(DOOM_WINDS_PRESS_ID, startMs)) {
+        result.occurrences.push({
+          spellId: DOOM_WINDS_PRESS_ID,
+          spellName: `Doom Winds${NO_PRESS_SUFFIX}`,
+          startMs,
+          endMs,
+          endObserved,
+          cooldownSeconds: 0,
+          availableAgainAtMs: null,
+          availabilityUnknown: false,
+          dangerWeight: offensiveDangerWeight(
+            DOOM_WINDS_PRESS_ID,
+            (id) => effectiveCooldownSeconds(id) ?? 0,
+          ),
+          burstRole: "burst",
+          provenance: "proc",
+          ...(auraOfficialEndMs !== undefined
+            ? { officialEndMs: auraOfficialEndMs }
+            : {}),
+        });
+        continue;
+      }
       const cd = effectiveCooldownSeconds(DOOM_WINDS_PRESS_ID) ?? 0;
       result.occurrences.push({
         spellId: DOOM_WINDS_PRESS_ID,

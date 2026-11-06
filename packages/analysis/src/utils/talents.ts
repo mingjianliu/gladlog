@@ -32,14 +32,15 @@ const PRE_1215_ENTRY_SWAPS: ReadonlyArray<
 /** The unit's first logged event — "when was this match" for a unit (NaN
  * when it logged nothing). */
 export function unitLogEpochMs(unit: {
-  spellCastEvents?: ReadonlyArray<{ logLine: { timestamp: number } }>;
-  auraEvents?: ReadonlyArray<{ logLine: { timestamp: number } }>;
+  spellCastEvents?: ReadonlyArray<{ logLine?: { timestamp: number } }>;
+  auraEvents?: ReadonlyArray<{ logLine?: { timestamp: number } }>;
 }): number {
   let first = Number.POSITIVE_INFINITY;
+  // a row without its log line (a synthetic one) dates nothing
   for (const e of unit.spellCastEvents ?? [])
-    first = Math.min(first, e.logLine.timestamp);
+    first = Math.min(first, e.logLine?.timestamp ?? Infinity);
   for (const e of unit.auraEvents ?? [])
-    first = Math.min(first, e.logLine.timestamp);
+    first = Math.min(first, e.logLine?.timestamp ?? Infinity);
   return Number.isFinite(first) ? first : Number.NaN;
 }
 

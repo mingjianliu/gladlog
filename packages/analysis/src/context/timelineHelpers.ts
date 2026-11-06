@@ -583,7 +583,10 @@ export function extractOwnerCDBuffExpiry(
    */
   owner?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
     Partial<
-      Pick<ICombatUnit, "auraEvents" | "deathRecords" | "id" | "missesOut">
+      Pick<
+        ICombatUnit,
+        "auraEvents" | "deathRecords" | "id" | "missesOut" | "damageOut" | "healOut"
+      >
     >,
   /** the other side's units: Touch of Karma's debuff sits on one of them */
   enemies: ReadonlyArray<
@@ -876,6 +879,9 @@ export function extractOwnerCDBuffExpiry(
             castMs,
             owner && pressDest
               ? { casts: owner.spellCastEvents ?? [], destUnitId: pressDest }
+              : undefined,
+            owner
+              ? [...(owner.damageOut ?? []), ...(owner.healOut ?? [])]
               : undefined,
           ).length > 0;
         const applied = friends.some((f) =>

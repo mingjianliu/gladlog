@@ -1,11 +1,12 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
-import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
+import { OFF_GCD_SPELL_IDS, ON_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { CAST_WHILE_CHANNELING_SPELL_IDS } from "../data/spellStateAttrsGenerated";
 import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { isNoPressRow } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 
 /**
@@ -160,18 +161,48 @@ export function nextPressEndingChannelMs(
   spellId: string,
   afterMs: number,
 ): number {
+  const casts = unit.spellCastEvents ?? [];
   return [
-    ...(unit.spellCastEvents ?? []),
+    ...casts.filter((e) => rowIsPressEndingCast(e, casts)),
     ...((unit as { castStartEvents?: typeof unit.spellCastEvents })
-      .castStartEvents ?? []),
+      .castStartEvents ?? []
+    ).filter((e) => !pressRidesAlong(e.spellId)),
   ]
-    .filter(
-      (e) =>
-        e.spellId !== spellId &&
-        e.timestamp > afterMs &&
-        !pressRidesAlong(e.spellId),
-    )
+    .filter((e) => e.spellId !== spellId && e.timestamp > afterMs)
     .reduce((m, e) => Math.min(m, e.timestamp), Infinity);
+}
+
+/** Has DB2 a SpellCooldowns row for this cast id — on the global cooldown or
+ * off it (`ON_GCD_SPELL_IDS` / `OFF_GCD_SPELL_IDS`)? A row with none — a
+ * passive trigger, a pet command, a channel's tick under its own id — is no
+ * press of a button (codex 20-F25-01: 8919f02e Shadowy Apparition inside a
+ * Vampiric Touch, 0bc703bc Spell Lock's command inside a Chaos Bolt). */
+export function isButtonPress(spellId: string): boolean {
+  return ON_GCD_SPELL_IDS.has(spellId) || OFF_GCD_SPELL_IDS.has(spellId);
+}
+
+/**
+ * Is this SPELL_CAST_SUCCESS row a press that ends a running channel or cast
+ * bar of another spell — the one reading of "the unit did something a cast
+ * cannot outlive" (`nextPressEndingChannelMs`, `kickAudit`'s open bar):
+ * a press of a button (`isButtonPress`), no copy, tick or companion row of
+ * another press (`isNoPressRow` — fact11 D2: Divine Hymn's own 64844 tick
+ * row 1.04 s into the channel read as the press that ended it, `channeled
+ * 1.0s` for a 3.95 s channel), that does not ride along (`pressRidesAlong`).
+ */
+export function rowIsPressEndingCast<
+  T extends {
+    spellId?: string;
+    destUnitId?: string;
+    logLine: { timestamp: number; event?: string };
+  },
+>(e: T, rows: readonly T[]): boolean {
+  return (
+    !!e.spellId &&
+    isButtonPress(e.spellId) &&
+    !pressRidesAlong(e.spellId) &&
+    !isNoPressRow(e, rows)
+  );
 }
 
 /** A press that leaves a running channel or cast bar going: off the global
@@ -260,6 +291,45 @@ export function channelEndSeconds(
   return lastEffectMs === undefined
     ? end
     : Math.min(end, toSeconds(lastEffectMs));
+}
+
+/** How close to its SUCCESS row a channel's own refusal is logged: the
+ * Ray of Frost MISS a millisecond after the press (fact11 D39). */
+const CHANNEL_REFUSED_AT_CAST_MS = 50;
+
+/**
+ * Did a channel that put no aura on its caster never run? The game refused
+ * it at the press — a SPELL_MISSED of the cast's own id by the caster logged
+ * within `CHANNEL_REFUSED_AT_CAST_MS` of the press — and nothing of the
+ * channel (`lastChannelEffectMs`: a damage, heal, absorbed or missed row of
+ * its English name) follows that refusal before `untilMs`. fact11 D39
+ * (e4784cab r0): Ray of Frost at 9.718 into a fresh Phase Shift, MISS at
+ * 9.719, no aura, no tick, the next press a second Ray at 12.168 — the
+ * ledger gave the first one its official 4 s.
+ */
+export function channelRefusedAtCast(
+  unit: Pick<ICombatUnit, "id" | "damageOut" | "healOut"> &
+    Partial<Pick<ICombatUnit, "missesOut">>,
+  spellId: string,
+  castMs: number,
+  untilMs: number,
+  spellName = "",
+): boolean {
+  const refusal = (unit.missesOut ?? []).find(
+    (r) =>
+      r.srcUnitId === unit.id &&
+      r.spellId === spellId &&
+      Math.abs(r.logLine.timestamp - castMs) <= CHANNEL_REFUSED_AT_CAST_MS,
+  );
+  if (!refusal) return false;
+  return (
+    lastChannelEffectMs(
+      unit,
+      getEnglishSpellName(spellId, spellName),
+      refusal.logLine.timestamp,
+      untilMs,
+    ) === undefined
+  );
 }
 
 /** Ultimate Penitence's 25 bolts in 6 s before haste: the last bolt of a

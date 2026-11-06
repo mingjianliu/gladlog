@@ -64,6 +64,7 @@ import {
   OWNER_AOE_CC_NO_PLAYER_TAG,
 } from "../../utils/drAnalysis";
 import { observedCastEndMs } from "../../utils/enemyCDs";
+import { immunityStopsDamageSpell } from "../../utils/enemyDefensives";
 import { groundingEatenRedirects } from "../../utils/groundingRedirects";
 import { sumIncomingPressure } from "../../utils/incomingPressure";
 import { PET_COMMAND_MS, petCommands } from "../../utils/petCommands";
@@ -806,6 +807,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       aimedAt
         ? { casts: unit.spellCastEvents ?? [], destUnitId: aimedAt }
         : undefined,
+      [...(unit.damageOut ?? []), ...(unit.healOut ?? [])],
     ).filter((m) => counts(m.destUnitId) && !consumedImmuneMisses.has(m));
     let miss: (typeof candidates)[number] | undefined = candidates[0];
     let unnamedLabel = "";
@@ -889,6 +891,15 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       const mech = ccMechanicOf(miss.spellId ?? "");
       const stopsIt = (id: string) =>
         mech !== undefined && !!immunityMechanics(id)?.includes(mech);
+      // fact11 D32 (c73ff2b4 1:40): a miss row of no control and no DB2
+      // mechanic (a damage spell — the plain-cast refused tag reads this
+      // too) is explained by an immunity that stops its school
+      // (`immunityStopsDamageSpell`), never by a control avoidance: Lava
+      // Burst IMMUNE into Ice Block printed `Precognition was up`. A root or
+      // a silence keeps the avoidance reading (Freedom, Precognition).
+      const control = isControlCast(miss.spellId ?? "") || mech !== undefined;
+      const stopsDamage = (id: string) =>
+        !control && immunityStopsDamageSpell(id, miss.spellId ?? "");
       const up = ccAvoidanceBuffsUpAt(target, miss.timestamp, {
         atLine: miss.logLine.lineIndex,
         // a shapeshifted druid is immune to Polymorph / Hex (DB2 aura 77,
@@ -899,9 +910,12 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         casterOf: (id) =>
           allUnits?.find((u) => u.id === id) ??
           allPlayers.find((u) => u.id === id),
-        also: stopsIt,
+        also: (id) => stopsIt(id) || stopsDamage(id),
       }).filter((b) => avoidanceExplainsMissType(b.spellId, miss.missType));
-      immunityName = up.find((b) => applicable.has(b.spellId))?.name ?? "";
+      immunityName =
+        up.find((b) =>
+          control ? applicable.has(b.spellId) : stopsDamage(b.spellId),
+        )?.name ?? "";
       mechanicAuraName = up.find((b) => stopsIt(b.spellId))?.name ?? "";
     }
     if (immunityName) return `${immunityName} was up`;

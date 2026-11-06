@@ -26,9 +26,13 @@ import {
   isOffensiveSpell,
   offensiveEffectCdId,
 } from "../src/utils/spellDanger";
+import { PATCH_1215_GOLIVE_EPOCH_MS } from "../src/utils/talents";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
-const START = 1_000_000;
+// a 12.1.5 log: the variant shares The Hunt's cooldown from that patch on
+// (fact11 D22, `OVERRIDE_VARIANT_SHARES_BY_ERA`)
+const START = PATCH_1215_GOLIVE_EPOCH_MS + 86_400_000;
+const START_1210 = PATCH_1215_GOLIVE_EPOCH_MS - 3 * 86_400_000;
 
 describe("override variants — one button, one cooldown", () => {
   it("Predator's Wake is The Hunt's press: canonical id, offensive effect, window spell", () => {
@@ -92,7 +96,10 @@ describe("override variants — the friendly ledger", () => {
     makeUnit("player-1", {
       class: CombatUnitClass.DemonHunter,
       spec: CombatUnitSpec.DemonHunter_Devourer,
-      info: { talents: [], pvpTalents: [] } as any,
+      // talents undecoded: a roster talent stands on its press (The Hunt
+      // 1246167 is on the roster since fact11 D26 and in Devourer's tree; an
+      // empty decoded loadout would say it was not taken)
+      info: { pvpTalents: [] } as any,
       spellCastEvents: casts.map(([id, s]) =>
         makeSpellCastEvent(id, START + s * 1000, "player-1"),
       ),
@@ -107,15 +114,17 @@ describe("override variants — the friendly ledger", () => {
   // user 2026-10-28: a variant sharing a cooldown counts with its base
   // spell under its own name — the key is The Hunt's, the name what was
   // pressed
-  it("only the variant pressed → one row keyed on The Hunt, named Predator's Wake", () => {
+  it("only the variant pressed → one row keyed on The Hunt, each press named Predator's Wake", () => {
     const rows = ledger(
       dh([
         ["1259431", 28],
         ["1259431", 90],
       ]),
     ).filter((c) => canonicalSpellId(c.spellId) === "1246167");
+    // the row is the roster's button (fact11 D26: The Hunt 1246167 is on
+    // the roster); each press keeps the name it logged
     expect(rows.map((r) => [r.spellId, r.spellName])).toEqual([
-      ["1246167", "Predator's Wake"],
+      ["1246167", "The Hunt"],
     ]);
     expect(rows[0]!.casts.map((c) => Math.round(c.timeSeconds))).toEqual([
       28, 90,
@@ -124,6 +133,31 @@ describe("override variants — the friendly ledger", () => {
       "Predator's Wake",
       "Predator's Wake",
     ]);
+  });
+
+  it("on a 12.1.0 log the variant is its own cooldown: its own row, no The Hunt", () => {
+    const u = makeUnit("player-1", {
+      class: CombatUnitClass.DemonHunter,
+      spec: CombatUnitSpec.DemonHunter_Devourer,
+      // talents undecoded: a roster talent stands on its press (The Hunt
+      // 1246167 is on the roster since fact11 D26 and in Devourer's tree; an
+      // empty decoded loadout would say it was not taken)
+      info: { pvpTalents: [] } as any,
+      spellCastEvents: [
+        makeSpellCastEvent("1259431", START_1210 + 28_000, "player-1"),
+      ],
+    });
+    const rows = extractMajorCooldowns(u, {
+      startTime: START_1210,
+      endTime: START_1210 + 200_000,
+      units: { [u.id]: u },
+    } as any).filter((c) => ["1246167", "1259431"].includes(c.spellId));
+    const wake = rows.find((r) => r.spellId === "1259431");
+    expect(wake?.spellName).toBe("Predator's Wake");
+    expect(wake!.casts.map((c) => Math.round(c.timeSeconds))).toEqual([28]);
+    expect(
+      rows.find((r) => r.spellId === "1246167")?.casts ?? [],
+    ).toHaveLength(0);
   });
 
   it("both ids pressed → still one row (unchanged)", () => {

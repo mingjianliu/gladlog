@@ -10,8 +10,10 @@ import {
   emitEnemyCdEntries,
   procOrdinal,
 } from "../src/context/timelineSections/enemyCd";
+import { PATCH_1215_GOLIVE_EPOCH_MS } from "../src/utils/talents";
 
-const T0 = 1_000_000;
+// a 12.1.5 log (Predator's Wake shares The Hunt's cooldown from it on)
+const T0 = PATCH_1215_GOLIVE_EPOCH_MS + 86_400_000;
 const cast = (spellId: string, spellName: string, atS: number) =>
   ({
     spellId,
@@ -141,6 +143,39 @@ describe("FT-T06 — [ENEMY CD] proc", () => {
       "0:20  [ENEMY CD]   4(DH) (Havoc Demon Hunter): The Hunt (cast 1 of 3)",
       "2:26  [ENEMY CD]   4(DH) (Havoc Demon Hunter): Predator's Wake (cast 2 of 3)",
       "2:33  [ENEMY CD]   4(DH) (Havoc Demon Hunter): Predator's Wake (cast 3 of 3)",
+    ]);
+  });
+
+  // fact11 D22: before 12.1.5 Predator's Wake is its own cooldown — its own
+  // counter
+  it("12.1.0 日志上变体自成冷却,分开计数", () => {
+    const lines: string[] = [];
+    const old = PATCH_1215_GOLIVE_EPOCH_MS - 3 * 86_400_000;
+    const at = (id: string, name: string, s: number) => cd(id, name, s, false);
+    emitEnemyCdEntries({
+      enemyCDTimeline: {
+        players: [
+          {
+            playerName: "DH",
+            specName: "Havoc Demon Hunter",
+            offensiveCDs: [
+              at("370965", "The Hunt", 20),
+              at("1259431", "Predator's Wake", 146),
+              at("1259431", "Predator's Wake", 153),
+            ],
+          },
+        ],
+      },
+      cdPurgeAnnotations: new Map(),
+      addEntry: (_t: number, l: string) => lines.push(l),
+      enemyPid: (n: string) => `4(${n})`,
+      enemies: [],
+      matchStartMs: old,
+    } as never);
+    expect(lines).toEqual([
+      "0:20  [ENEMY CD]   4(DH) (Havoc Demon Hunter): The Hunt",
+      "2:26  [ENEMY CD]   4(DH) (Havoc Demon Hunter): Predator's Wake (cast 1 of 2)",
+      "2:33  [ENEMY CD]   4(DH) (Havoc Demon Hunter): Predator's Wake (cast 2 of 2)",
     ]);
   });
 });

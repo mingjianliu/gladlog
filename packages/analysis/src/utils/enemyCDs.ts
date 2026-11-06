@@ -33,7 +33,10 @@ import {
   supersededAuraBreaks,
 } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
-import { channelEndSeconds } from "./castCommitSpans";
+import {
+  channelEndSeconds,
+  channelRefusedAtCast,
+} from "./castCommitSpans";
 import {
   canonicalSpellId,
   getUnitHpAtTimestamp,
@@ -68,11 +71,11 @@ import {
   GENERIC_PRESS_AFTER_MS,
   TWIN_CAST_BEFORE_S,
 } from "./offensiveAuraOccurrences";
+import { offensiveCooldownIdAt } from "./overrideVariantEra";
 import {
   dangerLabel,
   OFFENSIVE_EFFECT_ACTIVATION_IDS,
   offensiveDangerWeight,
-  offensiveEffectCdId,
 } from "./spellDanger";
 
 /** Two offensive CD casts within this window are considered an aligned burst.
@@ -779,7 +782,9 @@ export function reconstructEnemyCDTimeline(
       // button) IS that button: priced on the cooldown it presses, under the
       // log's own id and name.
       const isActivation = OFFENSIVE_EFFECT_ACTIVATION_IDS.has(spellId);
-      const cdId = offensiveEffectCdId(spellId, enemy.spec) ?? spellId;
+      // dated: a variant that is its own cooldown on this log spends its
+      // own (Predator's Wake before 12.1.5, fact11 D22)
+      const cdId = offensiveCooldownIdAt(spellId, matchStartMs, enemy.spec) ?? spellId;
       // the enemy's own talent-resolved cooldown (`unitCooldownOf`: Summon
       // Infernal 90 with Inferno, not 120) — talent impact audit 2026-09-26
       const cooldownSeconds = isActivation
@@ -857,7 +862,8 @@ export function reconstructEnemyCDTimeline(
     for (const cd of offensiveCDs) {
       const next = offensiveCDs.find(
         (c) =>
-          canonicalSpellId(c.spellId) === canonicalSpellId(cd.spellId) &&
+          canonicalSpellId(c.spellId, combat.startTime) ===
+            canonicalSpellId(cd.spellId, combat.startTime) &&
           c.castTimeSeconds > cd.castTimeSeconds,
       );
       const end = observedEffectEnd(
@@ -911,18 +917,36 @@ export function reconstructEnemyCDTimeline(
         // owner's `[YOU] [CD]` uses (`channelEndSeconds`, fact7 D12). Ice
         // Lance at 80.64 ended a Ray of Frost pressed at 79.05; the window
         // read `1s left` at 1:23 on the official 4 s.
-        if (CHANNELED_SPELL_IDS.has(cd.spellId))
-          cd.buffEndSeconds = Math.max(
-            cd.castTimeSeconds,
-            channelEndSeconds(
-              enemy,
-              cd.spellId,
-              cd.castTimeSeconds,
-              cd.buffEndSeconds,
-              matchStartMs,
-              cd.spellName,
-            ),
+        // fact11 D39 (e4784cab r0 0:09): one caster runs one of it at a
+        // time — the next press of the same channel ends this one — and a
+        // channel the game refused at its press (`channelRefusedAtCast`:
+        // Ray of Frost MISS into a fresh Phase Shift, no aura, no tick) never
+        // ran at all.
+        if (CHANNELED_SPELL_IDS.has(cd.spellId)) {
+          const untilS = Math.min(
+            cd.buffEndSeconds,
+            next?.castTimeSeconds ?? Infinity,
           );
+          cd.buffEndSeconds = channelRefusedAtCast(
+            enemy,
+            cd.spellId,
+            matchStartMs + cd.castTimeSeconds * 1000,
+            matchStartMs + untilS * 1000,
+            cd.spellName,
+          )
+            ? cd.castTimeSeconds
+            : Math.max(
+                cd.castTimeSeconds,
+                channelEndSeconds(
+                  enemy,
+                  cd.spellId,
+                  cd.castTimeSeconds,
+                  untilS,
+                  matchStartMs,
+                  cd.spellName,
+                ),
+              );
+        }
         continue;
       }
       // the observed aura's own official length (this caster's talents —

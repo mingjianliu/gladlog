@@ -74,7 +74,6 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { parryStopsAttack } from "@gladlog/analysis/src/data/spellParry";
-import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
 import {
   COPY_CAST_IDS,
   pressImpactRow,
@@ -93,6 +92,7 @@ import {
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   holderFirstOwnActionAfterMs,
+  immunityStopsSpellSchool,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
@@ -104,6 +104,7 @@ import {
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import {
   getHighValueSpellIds,
+  landedThroughWall,
   pressLandingCaster,
   pressLandingRows,
 } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
@@ -487,8 +488,9 @@ function runRound(ctx: IContext): void {
           // Hunt 1246167 → 1246169), the product's `pressImpactRow`
           pressImpactRow(c, successesOf(player)) === undefined &&
           // a school the immunity does not cover landed (DB2 masks: a Frost
-          // Strike into Blessing of Protection) — the section's own rule
-          immunityCoversSpell(run.auraId, String(c.spellId)) !== false,
+          // Strike into Blessing of Protection; the hand mask of one with
+          // none: Cloak of Shadows, fact11 D20) — the section's own rule
+          immunityStopsSpellSchool(run.auraId, String(c.spellId)) !== false,
       );
       // an empowered spell's success row is written when the hold BEGINS:
       // it goes off at its SPELL_EMPOWER_END; a hold never ended fired
@@ -517,7 +519,13 @@ function runRound(ctx: IContext): void {
       );
       rows = fired.filter((c) => {
         const at = landings.get(c)!.atMs;
-        return at >= run.from && at <= run.to;
+        // a hit that went through an immunity is no cast into it (fact11
+        // D21) — the section's `landedThroughWall`
+        return (
+          at >= run.from &&
+          at <= run.to &&
+          !landedThroughWall(run.auraId, landings.get(c)!)
+        );
       });
       // one press written under two ids of the spell in one instant (Flame
       // Shock 470411 + 188389) is one cast

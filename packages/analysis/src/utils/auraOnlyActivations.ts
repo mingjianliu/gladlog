@@ -10,7 +10,8 @@
  * One reading per family, the ones the enemy lines already use:
  *  - a save: `enemyDefensiveEvents`' own `noPressLogged` rows;
  *  - an offensive cooldown: `auraOffensiveOccurrences`' occurrences no press
- *    backs (the `(no press)` ones, and a Doom Winds whose press is unlogged);
+ *    backs (the `(no press)` ones — a 12.1.5 Doom Winds proc among them; a
+ *    12.1.0 Doom Winds whose press is unlogged is a press, fact11 D44);
  *  - a healing major: `castlessHealCdAuras` below.
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
@@ -27,7 +28,6 @@ import {
 import { isResyncBatchAt } from "./hiddenPress";
 import {
   auraOffensiveOccurrences,
-  DOOM_WINDS_PRESS_ID,
   NO_PRESS_SUFFIX,
 } from "./offensiveAuraOccurrences";
 
@@ -120,14 +120,14 @@ export function auraOnlyActivations(
   }
   for (const o of auraOffensiveOccurrences(unit, bounds).occurrences) {
     if (o.burstRole !== "burst") continue;
-    const noPress = o.spellName.endsWith(NO_PRESS_SUFFIX);
-    if (!noPress && o.spellId !== DOOM_WINDS_PRESS_ID) continue;
+    // a 12.1.0 Doom Winds with no press row is an unlogged press
+    // (`auraStandsForPressAt`), never a `(no press)` line (fact11 D44); from
+    // 12.1.5 it is a proc and carries the suffix like every other
+    if (!o.spellName.endsWith(NO_PRESS_SUFFIX)) continue;
     out.push({
       atSeconds: (o.startMs - matchStartMs) / 1000,
       spellId: o.spellId,
-      spellName: noPress
-        ? o.spellName.slice(0, -NO_PRESS_SUFFIX.length)
-        : o.spellName,
+      spellName: o.spellName.slice(0, -NO_PRESS_SUFFIX.length),
       family: "offensive",
     });
   }

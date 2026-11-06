@@ -85,7 +85,7 @@ import { TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import { enemySourceIds, silenceIntervals } from "./cannotCastIntervals";
-import { pressRefusedImmuneOn } from "./castMissRows";
+import { isPressHitRow, pressRefusedImmuneOn } from "./castMissRows";
 import {
   analyzePlayerCCAndTrinket,
   breakAbilityPresses,
@@ -102,7 +102,6 @@ import {
   type ISpiritOfRedemptionInterval,
   PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
 } from "./combatStates";
-import { isSameSpell } from "./damagePress";
 import {
   DRLevel,
   drResetMsAt,
@@ -826,16 +825,8 @@ export function extractKillAttempts(
      * A hit a shield ate is such a row too, with the shield in `spellId` and
      * the hit in `attackSpellId` (`HitRow`; 1405c83e 0:48: Bestial Wrath's
      * 344572 into Onlyfansgeno, every hit on it absorbed). */
-    const isHitOf = (c: TeamCast, d: ICombatUnit["damageOut"][number]) => {
-      const { attackSpellId, attackSpellName } = d as HitRow;
-      const id = attackSpellId ?? d.spellId;
-      const name = attackSpellId ? attackSpellName : d.spellName;
-      return (
-        !!id &&
-        (castAndEffectIds(c.spellId).has(id) ||
-          isSameSpell(id, name, c.spellId, c.spellName))
-      );
-    };
+    const isHitOf = (c: TeamCast, d: ICombatUnit["damageOut"][number]) =>
+      isPressHitRow(c.spellId, c.spellName, d as HitRow & typeof d);
     /** fact7 D4 (96fb4d42 1:25): a press on nobody — its caster's own buff,
      * no dest but its caster — goes where its caster's damage went. Avenging
      * Wrath opened the bracket and was skipped for an Ultimate Penitence 5.6 s
@@ -913,6 +904,7 @@ export function extractKillAttempts(
             c.castMs,
             target.id,
             c.caster.spellCastEvents ?? [],
+            [...(c.caster.damageOut ?? []), ...(c.caster.healOut ?? [])],
           )
         )
           return true;

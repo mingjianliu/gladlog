@@ -76,8 +76,8 @@ import {
   MELEE_RANGE_YD,
   spellRangeYards,
 } from "@gladlog/analysis/src/data/spellReach";
-import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
 import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
+import { immunityStopsSpellSchool } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 
 import {
@@ -557,9 +557,10 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
           // a copy row of another press is no cast (Twin Flame 1265980, a set
           // proc in Disintegrate's instant)
           !isNoPressRow(c, friendRows) &&
-          // a school the immunity does not stop (DB2 masks) goes through it:
+          // a school the immunity does not stop (DB2 masks, else the hand mask
+          // of a school-limited immunity: fact11 D20) goes through it:
           // Crusading Strikes (Physical) into Spellwarding (Magic)
-          immunityCoversSpell(wallKey, c.spellId) !== false &&
+          immunityStopsSpellSchool(wallKey, c.spellId) !== false &&
           !(rangedGated && !parryStops(String(c.spellId))),
       );
       if (casts.length < WALL_MIN_CASTS) continue;

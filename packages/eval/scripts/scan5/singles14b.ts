@@ -26,7 +26,9 @@
  *    ids in one instant is one press; a reflected one landed on nobody here;
  *    a wall re-applied inside its second is two intervals, the line one of
  *    them. The wall's span is its own aura rows (`wallRuns`), not the
- *    product's interval reader. Kinds `undercount` / `overcount`.
+ *    product's interval reader. A hit through a wall that stops every hit
+ *    went through it and is not counted (fact11 D21, `landedThroughWall`).
+ *    Kinds `undercount` / `overcount`.
  *  - `avoidedWhileControlled` (D65): `[CC AVOIDED?] P: X (by C) did not land;
  *    Y …` for a control with no destination that landed on nobody and logged
  *    no miss, with a hard control on P through the second.
@@ -67,7 +69,10 @@ import {
   getUnitRawPositionAtTime,
   hasLineOfSight,
 } from "@gladlog/analysis/src/utils/losAnalysis";
-import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
+import {
+  landedThroughWall,
+  withoutDeferralTag,
+} from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { LOS_SWEEP_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
@@ -487,7 +492,9 @@ function checkIntoDefense(ctx: IRoundCtx): void {
         const reflected = missed
           .filter((d) => d.missType === "REFLECT")
           .map((d) => tsOf(d) as number);
-        const rows: number[] = [
+        // `hit`: the product's `IPressLanding.hit` — a damage row, or a miss
+        // the target's absorb ate (fact11 D21)
+        const rows: { t: number; hit: boolean }[] = [
           ...((caster.damageOut ?? []) as any[])
             .filter(
               (d) =>
@@ -496,8 +503,11 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                 !(ev(d) as string).startsWith("SPELL_PERIODIC") &&
                 same(d.spellId, d.spellName),
             )
-            .map((d) => tsOf(d) as number),
-          ...missed.map((d) => tsOf(d) as number),
+            .map((d) => ({ t: tsOf(d) as number, hit: true })),
+          ...missed.map((d) => ({
+            t: tsOf(d) as number,
+            hit: d.missType === "ABSORB",
+          })),
           ...((target.auraEvents ?? []) as any[])
             .filter(
               (a) =>
@@ -505,17 +515,22 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                 (ev(a) === APPLIED || ev(a) === REFRESH) &&
                 same(a.spellId, a.spellName),
             )
-            .map((a) => tsOf(a) as number),
-        ].sort((a, b) => a - b);
+            .map((a) => ({ t: tsOf(a) as number, hit: false })),
+        ].sort((a, b) => a.t - b.t);
+        const wallAuraId = iv.key.split("|")[0]!;
         let next = 0;
         let inside = 0;
         for (const t of presses) {
-          while (next < rows.length && rows[next]! < t - 50) next++;
+          while (next < rows.length && rows[next]!.t < t - 50) next++;
           const row = rows[next];
-          const at = row !== undefined && row <= t + 1500 ? row : t;
-          if (at === row) next++;
+          const matched = row !== undefined && row.t <= t + 1500;
+          const at = matched ? row.t : t;
+          if (matched) next++;
           // reflected: it went back at the caster and landed on nobody here
           if (reflected.some((r) => r >= t && r <= t + 1500)) continue;
+          // a hit through a wall that stops every hit went through it, it
+          // was not pressed into it (fact11 D21, `landedThroughWall`)
+          if (matched && landedThroughWall(wallAuraId, row)) continue;
           if (at >= fromMs && at <= toMs) inside++;
         }
         return { spell, printed, inside, iv };

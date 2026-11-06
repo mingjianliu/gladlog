@@ -327,7 +327,8 @@ export function isPressImpactRow<
     logLine: { timestamp: number; event?: string };
   },
 >(e: T, rows: readonly T[]): boolean {
-  if (!e.spellId || e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS)
+  // a row without its log line (a synthetic one) is no impact row
+  if (!e.spellId || e.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS)
     return false;
   const t = e.logLine.timestamp;
   return rows.some(

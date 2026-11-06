@@ -429,6 +429,13 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("187827", "Metamorphosis", D),
       a("191427", "Metamorphosis", O),
       a("370965", "The Hunt", O),
+      // fact11 D26 (user ruling 2026-11-05): Devourer's The Hunt — its own
+      // button id (DB2 90 s, Category 2427 with Predator's Wake from
+      // 12.1.5), pressed 1246167 and landing as 1246169. Off the roster it
+      // entered the ledger only through the cast path (`responseOnly`), so a
+      // ready one was never named (9efe5b38 0:41 missed-sync-window listed
+      // only Power Infusion).
+      a("1246167", "The Hunt", O),
       a("179057", "Chaos Nova", C),
       a("217832", "Imprison", C),
       a("207684", "Sigil of Misery", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed

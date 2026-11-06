@@ -34,6 +34,7 @@ import {
 } from "../data/castEffectAuras";
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "../data/druidForms";
 import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import { auraStandsForPressAt } from "./auraActivationEra";
 import { dropAuraRebroadcasts } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
@@ -329,7 +330,11 @@ export function hiddenPressMs(
         !restated(i) &&
         !heraldProc(a.spellId!, ms) &&
         !summonBorne(a.spellId!, ms) &&
-        !formBuffUpBefore(ms)
+        !formBuffUpBefore(ms) &&
+        // an aura that on this log's date stands for no press (Doom Winds
+        // from 12.1.5, `auraStandsForPressAt`) proves no press lost while
+        // unseen either: the round reads it `(no press)` (fact11 D44)
+        auraStandsForPressAt(spellId, ms)
       )
         out.push(ms);
       upUntilMs.set(a.spellId!, untilOf(i, ms));

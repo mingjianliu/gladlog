@@ -19,7 +19,11 @@ import {
 import { makeAuraEvent, makeDispelAction, makeUnit } from "./testHelpers";
 
 // Mock talents module to bypass complex lookups
-vi.mock("../../src/utils/talents", () => ({
+vi.mock("../../src/utils/talents", async (importOriginal) => ({
+  // the patch dates stay real (the dated tables read them at import)
+  PATCH_1215_GOLIVE_EPOCH_MS: (
+    await importOriginal<typeof import("../../src/utils/talents")>()
+  ).PATCH_1215_GOLIVE_EPOCH_MS,
   // the era-aware talent list (cooldown mastery round 2026-10-20) — this
   // file's synthetic units read as they are
   talentsOf: (u: { info?: { talents?: unknown } }) => u.info?.talents,

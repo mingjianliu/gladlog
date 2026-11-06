@@ -24,6 +24,7 @@ import {
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { castsOfEffectAura, effectAuraViaName } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { buildAuraIntervals } from "./auraIntervals";
 import { hardCcAuraAt } from "./cannotCastIntervals";
 import { CONTROL_FAILED_MISS_TYPES, missReportsControl } from "./castMissRows";
 import {
@@ -32,6 +33,7 @@ import {
   pvpTrinketRemainingSecondsAt,
   rendersCcOnTeamLine,
 } from "./ccTrinketAnalysis";
+import { auraIsImmunityForm } from "./combatStates";
 import {
   chargeAvailabilityTransitions,
   earliestCooldownSecondsFor,
@@ -299,6 +301,8 @@ export function analyzeHealerExposureAtBurst(
   /** every unit of the round, so a summon's CC is credited to its owner
    * (pets-summons F-PS3); absent = player-sourced CC only */
   allUnits?: Iterable<ICombatUnit>,
+  /** the round, for the healer's immunity-form spans; absent = none read */
+  combat?: Parameters<typeof buildAuraIntervals>[1],
 ): IHealerBurstExposure[] {
   const enemyCCHistory = buildEnemyCCHistory(
     allFriendlyCCSummaries,
@@ -323,8 +327,24 @@ export function analyzeHealerExposureAtBurst(
     ...healerCCSummary.ccInstances,
     ...(healerCCSummary.drHistoryOnly ?? []),
   ];
+  // the healer's immunity-form spans (`auraIsImmunityForm`: Spirit of
+  // Redemption, immune to control — user ruling fact2 5 / F20): no control
+  // threatens a healer in one (fact11 D27, 9efe5b38 2:58: Polymorph and Mind
+  // Control listed against a priest in the form). Read off the shared
+  // intervals, as the CC bookmark's blocker does (`ccTargetBlockerIntervals`)
+  const formSpans = combat
+    ? buildAuraIntervals(healer, combat).filter((iv) =>
+        auraIsImmunityForm(iv.spellId),
+      )
+    : [];
   for (const window of burstWindows) {
     const windowMs = matchStartMs + window.fromSeconds * 1000;
+    if (
+      formSpans.some(
+        (iv) => iv.fromS <= window.fromSeconds && window.fromSeconds < iv.toS,
+      )
+    )
+      continue;
 
     const healerPos = getUnitPositionAtTime(
       healer,
@@ -1519,5 +1539,6 @@ export function computeHealerExposureEvents(
     combat.startInfo?.zoneId ?? "",
     combat.startTime,
     units,
+    combat,
   );
 }

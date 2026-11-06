@@ -1265,7 +1265,7 @@ describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
       },
     ] as never);
     const rows = pressLandingRows([press], (p) => p.atMs, caster, []);
-    expect(rows.get(press)).toEqual({ atMs: 1_100, spellId: "83381" });
+    expect(rows.get(press)).toEqual({ atMs: 1_100, spellId: "83381", hit: false });
   });
 
   it("a guardian's same-named row is not the press landing (a Dryad's Starsurge)", () => {
@@ -1273,7 +1273,7 @@ describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
       { id: "Creature-1", ownerId: "hunter-1", missesOut: [miss] },
     ] as never);
     const rows = pressLandingRows([press], (p) => p.atMs, caster, []);
-    expect(rows.get(press)).toEqual({ atMs: 1_000, spellId: null });
+    expect(rows.get(press)).toEqual({ atMs: 1_000, spellId: null, hit: false });
   });
 
   it("a press that landed as an aura has no attack row", () => {
@@ -1286,7 +1286,7 @@ describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
     const rows = pressLandingRows([press], (p) => p.atMs, hunter, [
       { id: "enemy-1", auraEvents: [aura] },
     ] as never);
-    expect(rows.get(press)).toEqual({ atMs: 1_050, spellId: null });
+    expect(rows.get(press)).toEqual({ atMs: 1_050, spellId: null, hit: false });
   });
 });
 

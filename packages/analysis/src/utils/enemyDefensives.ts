@@ -47,7 +47,11 @@ import spellIdListsData, {
   ENEMY_STEALTH_WALL_AURAS,
   type EnemyProcSaveEffect,
 } from "../data/spellIdLists";
-import { immunitySchoolMask } from "../data/spellSchools";
+import {
+  immunityCoversSpell,
+  immunitySchoolMask,
+  spellSchoolMask,
+} from "../data/spellSchools";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "../data/spellStateAttrsGenerated";
 import { allyCopyRecipient } from "./allyCopyWall";
 import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
@@ -1169,6 +1173,53 @@ export function limitedImmunitySchoolMask(spellId: string): number | undefined {
         : undefined;
   if (mask === undefined || mask === 0) return undefined;
   return (mask & ALL_SCHOOLS) === ALL_SCHOOLS ? undefined : mask;
+}
+
+/** Does immunity `immunityId` stop every school of `spellId`? The DB2
+ * SCHOOL_IMMUNITY mask (`immunityCoversSpell`) when it has one; else a
+ * school-limited immunity's hand mask (`limitedImmunitySchoolMask` — Cloak of
+ * Shadows 31224 0x7e has no aura-39 row: its mechanism is aura 186, −200 %
+ * spell hit); undefined when neither side knows (a full immunity with no
+ * mask: Aspect of the Turtle, Die by the Sword — the caller keeps its own
+ * rule). One reading for ABILITIES INTO IMMUNITY (`offensiveWasteAnalysis`)
+ * and its gates (`corpusFactScan4` abilities-into, `scan5/damageBasis`
+ * abilityIntoWallShare) — fact11 D20: physical Blackout Kick / Tiger Palm /
+ * Rising Sun Kick listed "into" Cloak of Shadows, which the `[ENEMY DEF]`
+ * label of the same round calls `immune to magic`. */
+export function immunityStopsSpellSchool(
+  immunityId: string,
+  spellId: string,
+): boolean | undefined {
+  const official = immunityCoversSpell(immunityId, spellId);
+  if (official !== undefined) return official;
+  const mask = limitedImmunitySchoolMask(immunityId);
+  const school = spellSchoolMask(spellId);
+  if (mask === undefined || school === undefined) return undefined;
+  return (school & ~mask) === 0;
+}
+
+/** Is the aura `auraId` a pct-100 wall (an immunity or a deflection,
+ * `MITIGATION_TABLE` through `wallTableIdOfAura`) that stops `spellId` —
+ * every school of it, as far as the masks know (`immunityStopsSpellSchool`)?
+ * The damage half of "why was this IMMUNE": a damage spell refused IMMUNE
+ * is explained by an aura of this kind, never by a control avoidance
+ * (fact11 D32, c73ff2b4 1:40: Lava Burst IMMUNE into Ice Block printed
+ * `Precognition was up`). Also what `landedThroughWall` keys on. */
+export function immunityStopsDamageSpell(
+  auraId: string,
+  spellId: string,
+): boolean {
+  if (!wallStopsEveryHit(auraId)) return false;
+  return (
+    (immunityStopsSpellSchool(auraId, spellId) ??
+      immunityStopsSpellSchool(wallTableIdOfAura(auraId), spellId)) !== false
+  );
+}
+
+/** Does the aura's signed `MITIGATION_TABLE` row stop every hit it covers
+ * (pct 100: an immunity, school-limited or not, or a deflection)? */
+export function wallStopsEveryHit(auraId: string): boolean {
+  return (MITIGATION_TABLE[wallTableIdOfAura(auraId)]?.pct ?? 0) >= 100;
 }
 
 /** F15 / fact1215 C2 (2026-10-17): the words a school-limited immunity's
