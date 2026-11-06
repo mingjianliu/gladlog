@@ -248,9 +248,36 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
      * unknowns get the base; only a definite non-holder gets base − addSeconds.
      */
     includedInBase?: boolean;
+    /**
+     * Written on legs (a)+(b) alone — the DB2 row, its mask on the target and
+     * the tooltip — with no corpus split yet, because no caster in the corpus
+     * holds the talent (user ruling 2026-11-06 for Airborne Irritant). The
+     * season run of `durationTalentScan.ts --candidates` (runbook §7b) prints
+     * every such entry under PENDING with its verdict, so the first holders
+     * that show up are measured against it.
+     */
+    corpusPending?: string;
     note: string;
   }>
 > = {
+  "2094": [
+    {
+      talentSpellId: "200733",
+      pct: -35,
+      corpusPending:
+        "605 files 2026-11-05: 0 of 276 rogue loadouts hold entry 117740; Blind 2094 583 segments, all non-holders, plateau 5.00 s",
+      note: "Airborne Irritant (Rogue class node 90741, entry 117740, single rank) — DB2 row 1102512: aura 108 SPELLMOD_DURATION −70 % × PvpMultiplier 0.5 = −35 % on the Blind mask (2094, 427773); tooltip 「Blind has $s1% reduced cooldown, $s2% reduced duration, and applies to all nearby enemies」. 5 s → 3.25 s. User ruling 2026-11-05: a control shortened by the caster's talent is priced at the shortened length; 2026-11-06: add it on DB2 + tooltip alone (GH #123).",
+    },
+  ],
+  "427773": [
+    {
+      talentSpellId: "200733",
+      pct: -35,
+      corpusPending:
+        "the second Blind id on the same DB2 row (DB2 5 s); 605 files 2026-11-05: 0 lines, 0 holders",
+      note: "Airborne Irritant (Rogue class node 90741, entry 117740, single rank) — DB2 row 1102512: aura 108 SPELLMOD_DURATION −70 % × PvpMultiplier 0.5 = −35 % on the Blind mask (2094, 427773); tooltip 「Blind has $s1% reduced cooldown, $s2% reduced duration, and applies to all nearby enemies」. 5 s → 3.25 s. User ruling 2026-11-05: a control shortened by the caster's talent is priced at the shortened length; 2026-11-06: add it on DB2 + tooltip alone (GH #123).",
+    },
+  ],
   "117526": [
     {
       talentSpellId: "459460",

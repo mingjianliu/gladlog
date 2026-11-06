@@ -884,4 +884,9 @@
  *  round's end and the lower unrounded reading.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 494;
+/*
+ * v495 (2026-11-06, GH #123): a Blind cast by a Rogue holding Airborne
+ *  Irritant is priced at 3.25 s (−35 %, DB2 + tooltip; no holder in the
+ *  corpus yet). See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 495;

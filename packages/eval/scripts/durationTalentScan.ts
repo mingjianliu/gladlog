@@ -46,7 +46,10 @@
  * Output: stdout + $GLADLOG_EVAL_HOME/reports/talent-integration-2026-09-13/durationTalent.json
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  CC_DURATION_TALENT_MODIFIERS,
+  getEnglishSpellName,
+} from "@gladlog/analysis/src/data/spellEffectData";
 // The raw DB2 mining, untouched by CORPUS_DURATION_PATCHES (imported as the
 // JSON: the extensionless specifier resolves to the .json, not the .ts wrapper).
 import SPELL_EFFECTS_GENERATED from "@gladlog/analysis/src/data/spellEffectGenerated.json";
@@ -358,14 +361,39 @@ const out = CANDIDATES.map((c) => {
   };
 });
 
+// Hand-table entries written on DB2 + tooltip alone (`corpusPending`, user
+// ruling 2026-11-06): each prints its verdict from this run, so the first
+// holders to appear in a season's corpus are measured against the entry.
+const pending = Object.entries(CC_DURATION_TALENT_MODIFIERS).flatMap(
+  ([target, mods]) =>
+    mods
+      .filter((m) => m.corpusPending)
+      .map((m) => {
+        const row = out.find(
+          (r) => r.talent === m.talentSpellId && r.target === target,
+        );
+        return {
+          target,
+          talent: m.talentSpellId,
+          verdict: row
+            ? `${row.verdict}; holder cells ${row.holders.cells}, near ${row.holders.near}, expected ${row.expected} s`
+            : "not in this candidate set",
+        };
+      }),
+);
+
 const outDir = join(home, "reports/talent-integration-2026-09-13");
 mkdirSync(outDir, { recursive: true });
 writeFileSync(
   join(outDir, `durationTalent${tag ? `.${tag}` : ""}.json`),
-  JSON.stringify({ files: scannedFiles, rounds, rows: out }, null, 1),
+  JSON.stringify({ files: scannedFiles, rounds, rows: out, pending }, null, 1),
 );
 console.log(`files ${scannedFiles} rounds ${rounds}`);
 for (const r of out)
   console.log(
     `${r.verdict.padEnd(48)} ${r.targetEn || r.targetZh} ${r.target}${r.measuredAura && r.measuredAura !== r.target ? `→aura ${r.measuredAura}` : ""} ← ${r.talentZh} ${r.talent} (${r.aura === "107" ? `${r.value / 1000}s` : `${r.value}%`}) base ${r.base} exp ${r.expected} | holders ${r.holders.cells} near ${r.holders.near} top ${JSON.stringify(r.holders.top)} | non ${r.nonHolders.cells} top ${JSON.stringify(r.nonHolders.top)} | unknown ${r.unknown}`,
+  );
+for (const p of pending)
+  console.log(
+    `PENDING ${getEnglishSpellName(p.target, "")} ${p.target} ← ${p.talent}: ${p.verdict}`,
   );

@@ -62,6 +62,30 @@ describe("ccFullDurationForCaster — 天赋条件时长", () => {
     expect(ccFullDurationForCaster("118", talented)).toBe(6); // Polymorph: no modifier
   });
 
+  // GH #123 (user ruling 2026-11-06): Airborne Irritant −35 % (DB2 −70 % ×
+  // PvP 0.5), written on DB2 + tooltip with no holder in the corpus yet
+  it("Airborne Irritant:持有者的致盲 5 s × 0.65 = 3.25 s;没有数据或没点的仍是 5 s", () => {
+    const AIRBORNE_IRRITANT = { id1: 90741, id2: 117740, count: 1 };
+    const holder = makeUnit("r1", {
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      info: { talents: [AIRBORNE_IRRITANT], pvpTalents: [] },
+    });
+    expect(talentOwnershipOf(holder, "200733")).toBe("yes");
+    expect(ccFullDurationForCaster("2094", holder)).toBeCloseTo(3.25);
+    // the same DB2 row covers the second Blind id (codex review 2026-11-06)
+    expect(ccFullDurationForCaster("427773", holder)).toBeCloseTo(3.25);
+    const without = makeUnit("r2", {
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      info: { talents: [], pvpTalents: [] },
+    });
+    expect(ccFullDurationForCaster("2094", without)).toBe(5);
+    expect(ccFullDurationForCaster("427773", without)).toBe(5);
+    const unknown = makeUnit("r3", { spec: CombatUnitSpec.Rogue_Subtlety });
+    expect(ccFullDurationForCaster("2094", unknown)).toBe(5);
+    for (const id of ["2094", "427773"])
+      expect(CC_DURATION_TALENT_MODIFIERS[id]?.[0]?.corpusPending).toBeTruthy();
+  });
+
   // GH #96 review (agy): ccFullDurationForCaster applies a modifier once, not
   // per rank. That is only right while every registered talent is single-rank —
   // a maxRanks > 1 entry must add rank handling first (buffDuration has it).

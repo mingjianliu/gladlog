@@ -5436,3 +5436,14 @@ Immolation's burst now ends at 2:22, before the enemy healer's 2:25 control),
 slow-defensive-response +1 (the window now opens at Malevolence, not the
 paladin's Avenging Wrath).
 
+v495 (2026-11-06, GH #123): `CC_DURATION_TALENT_MODIFIERS["2094"]` and
+`["427773"]` (both Blind ids on the same DB2 mask) —
+Airborne Irritant 200733 shortens Blind by 35 % (DB2 row 1102512, aura 108
+−70 % × PvpMultiplier 0.5; tooltip "…$s2% reduced duration…"), so a holder's
+Blind is priced at 3.25 s, not 5 s. User ruling 2026-11-06: add it on DB2 and
+the tooltip alone. 605 files: 0 of 276 rogue loadouts hold the talent (entry
+117740), so no rendered line changes; the entry carries `corpusPending`, and
+the season run of `durationTalentScan.ts --candidates` prints it under
+PENDING with its verdict until holders are measured
+(`durationCandidatesFromInventory.ts` keeps `corpusPending` pairs as
+candidates instead of dropping them as registered).

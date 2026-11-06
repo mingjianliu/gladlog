@@ -559,6 +559,9 @@ npx tsx packages/eval/scripts/durationTalentScan.ts \
 #    own last event, split by the owner's talent rank (Healing Stream 15 / 18 / 21.5).
 #    PROMOTE = an increase that reproduces; REDUCTION-CONFIRMED = a decrease with its mechanism; a
 #    multi-rank talent still needs the rank read (buffDurationScan --detail prints `holder rN`).
+#    PENDING lines (2026-11-06): CC_DURATION_TALENT_MODIFIERS entries written on DB2 + tooltip alone
+#    (`corpusPending`, e.g. Airborne Irritant → Blind −35 %, no holder in the corpus when added). Read
+#    each one: holders measured near `expected` → drop `corpusPending`; holders elsewhere → a ruling.
 npx tsx packages/eval/scripts/buffDurationScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 120 --gap --dose-unclean
 # 4. Official durations vs the game (GH #44 tail, 2026-09-02): every CC / root id's observed aura lifetime

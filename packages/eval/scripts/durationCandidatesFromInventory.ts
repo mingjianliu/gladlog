@@ -18,13 +18,15 @@
  * pair; 219 is reported as scan aura "107" (flat ms), 218 as "108" (pct);
  * value = basePoints × pvpMultiplier (the PvP number is the official one, user
  * ruling 2026-09-04). Pairs whose (target, talent) is already registered in
- * BUFF_DURATION_TALENT_MODIFIERS or CC_DURATION_TALENT_MODIFIERS are dropped.
+ * BUFF_DURATION_TALENT_MODIFIERS or CC_DURATION_TALENT_MODIFIERS are dropped,
+ * unless the CC entry is `corpusPending` (kept, so the scan can confirm it).
  * Corpus split + promotion rule stay in durationTalentScan (predeclared).
  *
  * Usage:
  *   npx tsx packages/eval/scripts/durationCandidatesFromInventory.ts <out.json>
  *   npx tsx packages/eval/scripts/durationTalentScan.ts --manifest … --candidates <out.json> --tag inventory-<date>
  */
+import { CC_DURATION_TALENT_MODIFIERS } from "@gladlog/analysis/src/data/spellEffectData";
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
@@ -62,6 +64,13 @@ for (const block of src.matchAll(/^\s*"(\d+)": \[([\s\S]*?)^\s*\],/gm)) {
   for (const t of block[2]!.matchAll(/talentSpellId: "(\d+)"/g))
     registered.add(`${block[1]}|${t[1]}`);
 }
+
+// …except an entry written on DB2 + tooltip alone (`corpusPending`, 2026-11-06):
+// it stays a candidate so the season scan measures its first holders and
+// prints them on its PENDING line.
+for (const [target, mods] of Object.entries(CC_DURATION_TALENT_MODIFIERS))
+  for (const m of mods)
+    if (m.corpusPending) registered.delete(`${target}|${m.talentSpellId}`);
 
 const stats = { mask: 0, label: 0, droppedRegistered: 0, noTarget: 0 };
 const seen = new Set<string>();
