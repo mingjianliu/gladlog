@@ -1130,11 +1130,15 @@ function areaCarryInDefenseless(ctx: IRoundCtx): void {
         const from = Math.max(tsOf(a), lo);
         const to = Math.min(off ? tsOf(off) : tsOf(a) + 8000, hi);
         if (from >= to) continue;
+        // a closing row can carry no source (codex 20-F26-05 #1: the
+        // product's shared intervals end the aura there)
+        const nilSrc = (id: unknown) => !id || /^0+$/.test(String(id));
         const dev = ((u.auraEvents ?? []) as any[]).filter(
           (x) =>
             String(x.spellId) === "465" &&
-            x.srcUnitId === p.id &&
-            x.destUnitId === u.id,
+            x.destUnitId === u.id &&
+            (x.srcUnitId === p.id ||
+              (ev(x) === REMOVED && nilSrc(x.srcUnitId))),
         );
         const before = dev.filter((x) => tsOf(x) <= from);
         const last = before[before.length - 1];
@@ -1228,7 +1232,7 @@ function castStopUnderUnloggedSilence(ctx: IRoundCtx): void {
     const after = Number(m[3]!);
     // the bar's end: a FAILED row of the spell N.N s (±0.05, the rendered
     // tenth) after an instant inside the line's second
-    const row = failed.find((f) => {
+    const rows = failed.filter((f) => {
       const startS = f.tSeconds - after;
       return (
         nameOf(String(f.spellId), f.spellName ?? "") === m[2] &&
@@ -1236,6 +1240,18 @@ function castStopUnderUnloggedSilence(ctx: IRoundCtx): void {
         startS < sec + 1 + 0.05
       );
     });
+    // a refused press of the same spell can sit in the same window (codex
+    // 20-F26-05 #2): an interruption row wins; two candidates and no
+    // interruption among them is ambiguous and not counted
+    const interrupted = rows.filter((f) =>
+      /interrupt|打断|中断/i.test(f.reason ?? ""),
+    );
+    const row =
+      interrupted.length === 1
+        ? interrupted[0]
+        : rows.length === 1
+          ? rows[0]
+          : undefined;
     const stopMs = row ? ctx.start + row.tSeconds * 1000 : undefined;
     if (stopMs === undefined) continue;
     ctx.bump("castStopUnderUnloggedSilence");
