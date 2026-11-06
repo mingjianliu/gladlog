@@ -298,11 +298,11 @@ export function pressAuraCandidates(
   /** only these of the cast's auras (`pressDuration` after a re-stated row:
    * the same aura on another unit) */
   onlyAuraIds?: ReadonlySet<string>,
-  /** how far ahead of the cast row a row may be logged — that fallback's
-   * only (GH #179 128-5: Holy Bulwark's 432496 on the caster 1 ms before the
-   * SUCCESS). Everywhere else 0: widening it for every press put a length on
-   * 8,759 lines of the 605 capture, some wrong (Dream Breath read its
-   * channel's 2 s) — a batch of its own. */
+  /** how far ahead of the cast row a row may be logged — the re-state
+   * fallback (GH #179 128-5: Holy Bulwark's 432496 on the caster 1 ms before
+   * the SUCCESS) and a press with no row at or after its cast row (GH #179
+   * 3d). Otherwise 0: widening it for every press moved lines that had read
+   * a row of their own. */
   leadMs = 0,
 ): Array<{ unit: ICombatUnit; row: ICombatUnit["auraEvents"][number] }> {
   const release = empowerReleaseMs(caster, cast, untilMs);
@@ -344,9 +344,13 @@ export function pressAuraCandidates(
     // a row at or after the press first; one logged ahead of it only when
     // there is none, the latest of them (codex 20-179a #1: a previous
     // press's APPLIED 100 ms ahead and this press's REFRESH 10 ms after —
-    // the REFRESH is this press's)
+    // the REFRESH is this press's) — the first logged in that millisecond,
+    // as at the press (GH #179 3d: Holy Bulwark's 432496 then its shield
+    // 432607 1 ms ahead; the shield is re-laid every 2 s and ran 40 s)
+    const lastAhead = rows[rows.length - 1]?.logLine.timestamp;
     const row =
-      rows.find((a) => a.logLine.timestamp >= at) ?? rows[rows.length - 1];
+      rows.find((a) => a.logLine.timestamp >= at) ??
+      rows.find((a) => a.logLine.timestamp === lastAhead);
     if (row) out.push({ unit: u, row });
   }
   return out;
@@ -460,7 +464,21 @@ export function pressDuration(
       r.spellId === cast.spellId &&
       r.logLine.timestamp > at,
   )?.logLine.timestamp;
-  const candidates = pressAuraCandidates(caster, cast, allUnits, nextPressMs);
+  let candidates = pressAuraCandidates(caster, cast, allUnits, nextPressMs);
+  // none at or after the cast row: a row the log wrote ahead of it is the
+  // press's own (GH #179 3d — Divine Steed's 221883 1 ms before its
+  // SUCCESS). Only then: widening every press moved lines that already read
+  // a row of their own (a Holy Armament's self REFRESH 1 ms ahead hid the
+  // ally's APPLIED it had printed)
+  if (!candidates.length)
+    candidates = pressAuraCandidates(
+      caster,
+      cast,
+      allUnits,
+      nextPressMs,
+      undefined,
+      AURA_BEFORE_CAST_ROW_MAX_MS,
+    );
   // an empowered press lands at its release (codex 20-179a #3: Dream
   // Breath's bundle at a 2 s release is no re-state)
   const landAt = empowerReleaseMs(caster, cast, nextPressMs) ?? at;
@@ -522,11 +540,21 @@ export function pressDuration(
     // (SPELL_EMPOWER_END) that sets its length comes after the press and
     // `castParamAt` (which looks back from the aura) found no level — Fire
     // Breath / Dream Breath printed DB2's 2 s placeholder (GH #183)
+    // a row logged ahead of the press reads its cast parameter at the
+    // press: the cast that sets it comes after the row (GH #179 3d: a Tip the
+    // Scales Dream Breath's 355941 1 ms before its SUCCESS read DB2's 2 s
+    // placeholder). Extensions stay bounded by the row (codex 20-179d #1: a
+    // Lightning Bolt between Spiritwalker's Grace's row and its SUCCESS
+    // extends it)
     const base = buffFullDurationForCaster(
       row.spellId!,
       caster,
       row.logLine.timestamp,
-      { pressed: true, onUnitId: unit.id },
+      {
+        pressed: true,
+        onUnitId: unit.id,
+        paramAtMs: Math.max(row.logLine.timestamp, landAt),
+      },
     );
     if (base === undefined || base < PRESS_LINE_MIN_DURATION_S) continue;
     // what the game did to this application (GH #179, 2026-11-05): an

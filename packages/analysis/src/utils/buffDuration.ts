@@ -187,6 +187,10 @@ export function buffFullDurationForCaster(
      * (`ITooltipPerCritDuration`: Burn to Ash grows each Truth's Wake copy
      * by its own crit ticks); without it that talent adds nothing */
     onUnitId?: string;
+    /** the instant the cast parameter (empower level, combo points) is read
+     * back from, when not `atMs`: an aura row logged ahead of its own cast
+     * row (GH #179 3d) — `atMs` still bounds the per-event extensions */
+    paramAtMs?: number;
   },
 ): number | undefined {
   const talented = talentedDuration(
@@ -195,6 +199,7 @@ export function buffFullDurationForCaster(
     atMs,
     opts?.pressed,
     opts?.onUnitId,
+    opts?.paramAtMs,
   );
   // fact8 D15: a class set bonus, on top of everything the talents give
   return talented === undefined
@@ -210,14 +215,18 @@ function talentedDuration(
   atMs?: number,
   pressed = false,
   onUnitId?: string,
+  paramAtMs?: number,
 ): number | undefined {
   if (NO_FIXED_DURATION_IDS.has(spellId)) return undefined;
   const noCasterValue =
     SPELL_DURATION_OVERRIDES[spellId] ??
     summonedEffectSeconds(spellId) ??
     spellEffectData[spellId]?.durationSeconds;
+  const paramAt = paramAtMs ?? atMs;
   const paramBase =
-    atMs === undefined ? null : castParamBaseSeconds(caster, spellId, atMs);
+    paramAt === undefined
+      ? null
+      : castParamBaseSeconds(caster, spellId, paramAt);
   // GH #155 (2026-10-21): the hand table, plus the tooltip-stated and
   // corpus-confirmed rows (`TOOLTIP_DURATION_ROWS`) for talents it does not
   // already price

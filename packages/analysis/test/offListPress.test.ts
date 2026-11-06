@@ -269,6 +269,130 @@ describe("[PRESS] lasts — which aura it reads (GH #179)", () => {
   });
 });
 
+describe("[PRESS] lasts — a row the log wrote ahead of the cast row (GH #179 3d)", () => {
+  const T = 1_000_000;
+  const { SPELL_AURA_APPLIED: APPLIED, SPELL_AURA_REFRESH: REFRESH } = LogEvent;
+
+  it("no row at or after the press: the one 1 ms ahead is its own", () => {
+    const cast = makeSpellCastEvent(
+      GLADIATOR_BADGE_SPELL_ID,
+      T,
+      "",
+      "",
+      "r",
+      "R",
+    );
+    const ret = makeUnit("r", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(
+          APPLIED,
+          GLADIATOR_BADGE_SPELL_ID,
+          T - 1,
+          "r",
+          "r",
+          "BUFF",
+        ),
+      ],
+    });
+    expect(
+      pressDuration(ret, cast as any, [ret], ret.spellCastEvents)
+        ?.durationSeconds,
+    ).toBe(15);
+  });
+
+  it("past the lead (151 ms ahead) it is not", () => {
+    const cast = makeSpellCastEvent(
+      GLADIATOR_BADGE_SPELL_ID,
+      T,
+      "",
+      "",
+      "r",
+      "R",
+    );
+    const ret = makeUnit("r", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(
+          APPLIED,
+          GLADIATOR_BADGE_SPELL_ID,
+          T - 151,
+          "r",
+          "r",
+          "BUFF",
+        ),
+      ],
+    });
+    expect(
+      pressDuration(ret, cast as any, [ret], ret.spellCastEvents),
+    ).toBeUndefined();
+  });
+
+  it("a row at the press elsewhere wins over one ahead on the target (Holy Armament's self REFRESH 1 ms ahead)", () => {
+    const cast = makeSpellCastEvent("432459", T, "pal", "Pal", "pal", "Pal");
+    const pal = makeUnit("pal", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(REFRESH, "432496", T - 1, "pal", "pal", "BUFF"),
+      ],
+    });
+    const ally = makeUnit("ally", {
+      auraEvents: [makeAuraEvent(APPLIED, "432496", T, "pal", "ally", "BUFF")],
+    });
+    const d = pressDuration(pal, cast as any, [pal, ally], pal.spellCastEvents);
+    expect(d?.unit.id).toBe("ally");
+    expect(d?.durationSeconds).toBe(20);
+  });
+
+  it("ahead of the press, the first row of that millisecond: Holy Bulwark's 432496, not its re-laid shield 432607", () => {
+    const cast = makeSpellCastEvent("432459", T, "ally", "Ally", "pal", "Pal");
+    const pal = makeUnit("pal", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "432496", T - 1, "pal", "pal", "BUFF"),
+        makeAuraEvent(APPLIED, "432607", T - 1, "pal", "pal", "BUFF"),
+      ],
+    });
+    const ally = makeUnit("ally", { auraEvents: [] });
+    expect(
+      pressDuration(pal, cast as any, [pal, ally], pal.spellCastEvents)?.row
+        .spellId,
+    ).toBe("432496");
+  });
+
+  it("extensions stay bounded by the row: a Lightning Bolt between Spiritwalker's Grace's row and its SUCCESS adds its 1 s (codex 20-179d #1)", () => {
+    const cast = makeSpellCastEvent("79206", T, "", "", "sh", "Sh");
+    const sh = makeUnit("sh", {
+      spec: CombatUnitSpec.Shaman_Elemental,
+      spellCastEvents: [
+        // the talent's own cast is the ownership evidence without a loadout
+        makeSpellCastEvent("443425", T - 100_000, "", "", "sh", "Sh"),
+        makeSpellCastEvent("188196", T - 50, "", "", "sh", "Sh"),
+        cast,
+      ],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "79206", T - 100, "sh", "sh", "BUFF"),
+      ],
+    });
+    (sh as any).info = { talents: [], pvpTalents: [] };
+    expect(
+      pressDuration(sh, cast as any, [sh], sh.spellCastEvents)?.durationSeconds,
+    ).toBe(16);
+  });
+
+  it("priced at the press: a Tip the Scales Dream Breath's HoT 1 ms ahead is level 3's 8 s, not DB2's 2 s", () => {
+    const cast = makeSpellCastEvent("355936", T, "", "", "ev", "Ev");
+    const ev = makeUnit("ev", {
+      spellCastEvents: [cast],
+      auraEvents: [makeAuraEvent(APPLIED, "355941", T - 1, "ev", "ev", "BUFF")],
+    });
+    (ev as any).empowerEnds = [];
+    const d = pressDuration(ev, cast as any, [ev], ev.spellCastEvents);
+    expect(d?.row.spellId).toBe("355941");
+    expect(d?.durationSeconds).toBe(8);
+  });
+});
+
 describe("[PRESS] lasts — a Timewalker floor (user ruling 2026-11-05)", () => {
   const SP = "406732"; // Spatial Paradox
   const T = 1_000_000;

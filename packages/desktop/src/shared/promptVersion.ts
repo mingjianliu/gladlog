@@ -853,4 +853,10 @@
  *  logged), Convoke the Spirits for Balance and Feral only.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 491;
+/*
+ * v492 (2026-11-06, GH #179 batch 3d): a [PRESS] line whose press has no
+ *  aura row at or after its cast row reads the one the log wrote up to
+ *  150 ms ahead of it, priced at the press. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 492;

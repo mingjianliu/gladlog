@@ -5303,3 +5303,33 @@ not show gives the aura's official length (`talentEffectAuraAtPress`),
 finding counts, 14 burst-list fields and 38 context files more name Divine
 Toll. Not unified (predicate-index): the aura readers do not resolve
 Divine Resonance to Divine Toll.
+
+v492 (2026-11-06, GH #179 batch 3d). `pressDuration` (offListPress.ts): when
+no unit has a row of the press's aura at or after its cast row, a row the
+log wrote up to `AURA_BEFORE_CAST_ROW_MAX_MS` (150 ms) ahead of it is the
+press's own (Divine Steed, Blazing / Prismatic Barrier, Gladiator's Badge,
+Sprint, Fade … 1 ms before their SUCCESS). Only then: widening every press
+(trial b3a3) moved 87 lines that had read a row of their own — a Holy
+Armament's self REFRESH 1 ms ahead hid the ally's APPLIED, a Tip the Scales
+Dream Breath read 2 s. Such a row is priced at the press (`castParamAt`
+looks back from the instant it is given: the cast comes after the row), and
+among several rows ahead the first logged in the latest millisecond is taken
+(Holy Bulwark's 432496, not its shield 432607 re-laid every 2 s). 605 files
+against PV491 (be3637d6d): 2,671 context files, 8,712 `[PRESS]` lines gain
+`lasts Ns` (Divine Steed 1,725, Blazing Barrier 883, Demonic Circle:
+Teleport 792, Prismatic Barrier 777, Gladiator's Badge 563, Sprint 554,
+Death Charge 523, Fade 465 …), no line loses or changes one; findings
+byte-identical; text gates identical. scan5 `offListPressLine` 305 → 324
+rows (106 → 113 facts, 0 gone): the 7 new are open classes already on #179
+— Spiritwalker's Grace past its Momentum cap ×3, Between the Eyes stacks /
+an unexplained 22 s ×3, a Sprint at 14.1 s ×1. The scan's life reader now
+stops at a later stack (`SPELL_AURA_APPLIED_DOSE`) and no longer reads an
+overshoot off a REMOVED of the press's own millisecond; its new
+`lastsOvershoot` kind (out of the total) counts lines whose aura was removed
+— not purged or stolen — before half its printed length (2,698 facts on this
+capture, mostly consumed or broken buffs: Thunder Focus Tea, Camouflage, Eye
+Beam). codex review: an aura row ahead of its cast row keeps its own instant
+for per-event extensions (`buffFullDurationForCaster`'s new `paramAtMs`
+moves only the cast-parameter read: a Lightning Bolt between Spiritwalker's
+Grace's row and its SUCCESS still adds Momentum's 1 s; 0 lines of the 605
+capture move), and a dispelled aura is no overshoot.

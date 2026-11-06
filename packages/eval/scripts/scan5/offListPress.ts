@@ -21,7 +21,13 @@
  *    lived to its REMOVED more than `LASTS_SLACK_S` past N (the printed
  *    duration is too short: an aura cannot outlive its duration); a floor
  *    (`lasts 10s+`, `pressDuration`'s `floor` — Timewalker) is not held to
- *    it.
+ *    it;
+ *  - `lastsOvershoot` (out of the total — a diagnostic): `lasts Ns`, and that
+ *    row's aura was REMOVED (not broken, not dispelled) before half of N
+ *    and more than `LASTS_SLACK_S` short of it. An aura may end early — a
+ *    consumed buff, a cancel — so this is no violation on its own; it ranks
+ *    the spells whose printed length the log never comes near (a toy's
+ *    3,600 s, a channel read for a HoT), GH #179 batch 3d's overshoot gate.
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
 import { SHARED_CHARGE_CATEGORY } from "@gladlog/analysis/src/data/sharedChargeGenerated";
@@ -33,7 +39,7 @@ import {
 import { isStasisReplayCast } from "@gladlog/analysis/src/utils/combatStates";
 import { unreleasedHoldMs } from "@gladlog/analysis/src/utils/cooldowns";
 import { pressDuration } from "@gladlog/analysis/src/utils/offListPress";
-import type { ICombatUnit } from "@gladlog/parser-compat";
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   APPLIED,
@@ -49,6 +55,9 @@ import {
 } from "./ctx";
 
 export const CHECKS = ["offListPressLine"] as const;
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "offListPressLine|lastsOvershoot",
+]);
 
 const PRESS_LINE =
   /^\s*(\d+:\d\d)\s+(\[YOU\] )?\[PRESS\]\s+(?:(\d+)\([^)]*\) \([^)]*\): )?(.+) \(([^()]*)\)\s*$/;
@@ -155,8 +164,7 @@ export function run(ctx: IRoundCtx): void {
           (r) =>
             tsOf(r) > at + 50 &&
             !freeRows.has(r) &&
-            !timeSpiralFreePressMs(unit, String(r.spellId), [tsOf(r)])
-              .length,
+            !timeSpiralFreePressMs(unit, String(r.spellId), [tsOf(r)]).length,
         )
         .map(tsOf)
         .sort((x, y) => x - y)[0];
@@ -181,6 +189,7 @@ export function run(ctx: IRoundCtx): void {
         unit.spellCastEvents ?? [],
       );
       let life: number | undefined;
+      let removedClean = false;
       if (dur) {
         const rows = ((dur.unit.auraEvents ?? []) as any[]).filter(
           (r) => r.srcUnitId === unit.id && r.spellId === dur.row.spellId,
@@ -191,9 +200,31 @@ export function run(ctx: IRoundCtx): void {
           const r = rows[j];
           if (ev(r) === REMOVED) {
             life = (tsOf(r) - start) / 1000;
+            // a REMOVED of the press's own millisecond, logged after the
+            // APPLIED, may end the previous instance (a Between the Eyes
+            // re-press re-merges): no overshoot reading off it
+            // …and none a purge or a steal took (codex 20-179d #2: those
+            // rows sit in the unit's actions, naming the aura as extraSpellId)
+            removedClean =
+              tsOf(r) > start &&
+              !((dur.unit as any).actionIn ?? []).some(
+                (x: any) =>
+                  (ev(x) === "SPELL_DISPEL" || ev(x) === "SPELL_STOLEN") &&
+                  String(x.extraSpellId) === String(dur.row.spellId) &&
+                  Math.abs(tsOf(x) - tsOf(r)) <= 50,
+              );
             break;
           }
-          if ((ev(r) === APPLIED || ev(r) === REFRESH) && tsOf(r) > start)
+          if (/BROKEN|DISPEL|STOLEN/.test(String(ev(r))) && tsOf(r) >= start)
+            break;
+          // …or a later press stacks on it (Between the Eyes: each press a
+          // stack of its own length, the aura ends with the last)
+          if (
+            (ev(r) === APPLIED ||
+              ev(r) === REFRESH ||
+              ev(r) === LogEvent.SPELL_AURA_APPLIED_DOSE) &&
+            tsOf(r) > start
+          )
             break;
         }
       }
@@ -209,6 +240,21 @@ export function run(ctx: IRoundCtx): void {
           at,
           `${ctx.roundKey}|${unit.id}|${name}|${second}`,
           `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, lived ${life.toFixed(1)}s`,
+          line,
+        );
+      if (
+        dur?.floor !== true &&
+        removedClean &&
+        life !== undefined &&
+        life < Number(lasts) / 2 &&
+        life < Number(lasts) - LASTS_SLACK_S
+      )
+        ctx.violate(
+          "offListPressLine",
+          "lastsOvershoot",
+          at,
+          `${ctx.roundKey}|${unit.id}|${name}|${second}`,
+          `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, removed after ${life.toFixed(1)}s`,
           line,
         );
     }
