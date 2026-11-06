@@ -163,7 +163,11 @@ describe("fact9 D17 — a heal is no major defensive", () => {
   });
   it("the burst ledger's not-up roster is these five plus Lichborne", () => {
     expect([...KW_NOT_UP_AS_DEFENSE_IDS].sort()).toEqual(
-      [...HEAL_NOT_MAJOR_DEFENSIVE_IDS, "49039"].sort(),
+      // Apotheosis (fact11 D4) is a heal in no kill-window roster
+      [
+        ...[...HEAL_NOT_MAJOR_DEFENSIVE_IDS].filter((id) => id !== "200183"),
+        "49039",
+      ].sort(),
     );
   });
 });

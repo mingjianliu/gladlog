@@ -51,10 +51,12 @@ describe("observedEffectEndSeconds", () => {
   });
 
   it(`a re-application within ${EFFECT_CHAIN_GAP_S} s continues the chain; a later one does not`, () => {
+    // a re-statement at the removal's own instant is no occurrence of its
+    // own (`auraOffensiveOccurrences` lists none) — the chain continues
     const kept = scene([
       [LogEvent.SPELL_AURA_APPLIED, 10],
       [LogEvent.SPELL_AURA_REMOVED, 30],
-      [LogEvent.SPELL_AURA_APPLIED, 30.3],
+      [LogEvent.SPELL_AURA_APPLIED, 30.001],
       [LogEvent.SPELL_AURA_REMOVED, 41],
     ]);
     expect(
@@ -74,6 +76,22 @@ describe("observedEffectEndSeconds", () => {
         Infinity,
         broken.combat,
       ),
+    ).toBe(30);
+  });
+
+  it("a re-application inside the gap that the timeline lists as its own (no press) occurrence ends the press's span (fact11 D24 / D30 / D41)", () => {
+    // Soul Immolation's shape: removed, then a cast-less proc 0.26 s later —
+    // `auraOffensiveOccurrences` prints it as its own occurrence, so the
+    // press's span must not run on into it (the burst ledger credited the
+    // proc twice)
+    const proc = scene([
+      [LogEvent.SPELL_AURA_APPLIED, 10],
+      [LogEvent.SPELL_AURA_REMOVED, 30],
+      [LogEvent.SPELL_AURA_APPLIED, 30.3],
+      [LogEvent.SPELL_AURA_REMOVED, 41],
+    ]);
+    expect(
+      observedEffectEndSeconds(proc.caster, AVATAR, 10, Infinity, proc.combat),
     ).toBe(30);
   });
 

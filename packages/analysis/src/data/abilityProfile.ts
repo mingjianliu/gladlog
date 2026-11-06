@@ -365,7 +365,11 @@ export function isNotMajorDefensive(spellId: string): boolean {
  * Registered in curatedIdRegistry.
  */
 export const KW_NOT_UP_AS_DEFENSE_IDS: ReadonlySet<string> = new Set([
-  ...HEAL_NOT_MAJOR_DEFENSIVE_IDS,
+  // only the roster's own members: Apotheosis 200183 (fact11 D4) is in no
+  // kill-window roster at all (user sign-off 2026-09-02) — nothing to take off
+  ...[...HEAL_NOT_MAJOR_DEFENSIVE_IDS].filter((id) =>
+    KW_MAJOR_DEFENSIVE_IDS.has(id),
+  ),
   "49039", // Lichborne — control immunity only
 ]);
 
