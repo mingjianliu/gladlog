@@ -840,4 +840,11 @@
  *  immunity at a lock's removal is its `endedBy`; Shield Charge is no
  *  defensive; Stampeding Roar's 10 s. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 489;
+/*
+ * v490 (2026-11-05, GH #157, GH #184 part A, GH #126 Elusiveness):
+ *  Retribution's Divine Protection with Shield of Vengeance is 25 % before
+ *  the 2026-08-25 PvP hotfix and 30 % after; Ravager and Execution Sentence
+ *  are offensive cooldowns; Feint / Evasion carry Elusiveness's 20 %.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 490;

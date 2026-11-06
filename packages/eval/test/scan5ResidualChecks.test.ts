@@ -395,6 +395,36 @@ describe("abilityIntoWallShare", () => {
     ).toEqual([]);
   });
 
+  describe("a wall with no verdict against spells (Evasion: `never`)", () => {
+    const players = (id: string, name: string) =>
+      team(
+        {
+          damageOut: [dmg("12294", "Mortal Strike", 500), dmg(id, name, 500)],
+          spellCastEvents: presses(id, name),
+        },
+        { auraEvents: wall("5277", "Evasion") },
+      );
+    const lines = [line("Mortal Strike", "Evasion")];
+
+    it("leaves out a spell a dodge cannot stop (Hammer of Wrath, 30 yd)", () => {
+      expect(
+        of(
+          scan(runDamageBasis, players("24275", "Hammer of Wrath"), lines),
+          "abilityIntoWallShare",
+        ),
+      ).toEqual([]);
+    });
+
+    it("still flags a melee strike left out of the line (Final Verdict)", () => {
+      expect(
+        of(
+          scan(runDamageBasis, players("383328", "Final Verdict"), lines),
+          "abilityIntoWallShare",
+        ),
+      ).toHaveLength(1);
+    });
+  });
+
   describe("a wall's kill-live-gated part, with the target at 15 %", () => {
     const low = {
       auraEvents: wall("118038", "Die by the Sword"),

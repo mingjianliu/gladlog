@@ -355,6 +355,25 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
       "2026-08-17 减伤裁定问卷(32 条全表),artifact 63e64c88;不构成真实阻碍,永不产出「浪费」判断",
     approved: "2026-08-17 user",
   },
+  "1966": {
+    zh: "佯攻",
+    officialPct: 20,
+    verdict: "never",
+    note: "20% 是天赋 Elusiveness 79008 的(未点 = 0);2026-09-26 用户「先不裁定 有点复杂」,2026-11-05 采纳建议:不构成真实阻碍",
+    source:
+      "GH #126 Elusiveness 行;语料 2026-09-26 持有者 0.800 / 非持有者 0.999;用户 2026-11-05「按你说的做」",
+    approved: "2026-11-05 user",
+  },
+  "5277": {
+    zh: "闪避",
+    officialPct: 20,
+    verdict: "unconditional",
+    note: "近战被闪避 —— 用户 2026-09-26「打进去 尤其是给晕 等于白打」;20% 是天赋 Elusiveness 79008 的,对法术只剩它,不构成阻碍(2026-11-05 采纳建议:对近战 unconditional、对法术 never)",
+    source:
+      "GH #126 Elusiveness 行;语料 2026-09-26 持有者 0.800 / 非持有者 1.000;用户 2026-11-05「按你说的做」",
+    approved: "2026-11-05 user",
+    nonMeleeVerdict: "never",
+  },
   "586": {
     zh: "渐隐术",
     officialPct: 10,

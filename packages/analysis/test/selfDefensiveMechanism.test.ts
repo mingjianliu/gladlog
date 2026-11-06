@@ -208,9 +208,12 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
       expect(OBSERVED.has(id), id).toBe(true);
       expect(SELF_SAVE_IDS.has(id), id).toBe(true);
       const p = abilityProfile(id);
+      // Evasion's 20 % is Elusiveness 79008's (`wholeReductionTalentId`,
+      // 2026-11-05): a self-cast profile with no talents reads its floor, 0
+      const talentWhole = MITIGATION_TABLE[id]?.wholeReductionTalentId;
       expect(
         [
-          p.mitigationPct,
+          talentWhole === undefined ? p.mitigationPct : undefined,
           p.absorbs,
           p.healsSelf,
           p.healsOthers,
@@ -268,8 +271,15 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
       ).toBe(words);
     }
     expect(selfSaveMechanismOfName("Barkskin")).toBeUndefined();
+    // a row whose whole reduction is a talent's (Evasion → Elusiveness) is
+    // no wall (`MITIGATION_WALL_IDS`): its line stays the family's
+    const wallRow = (id: string) =>
+      !!MITIGATION_TABLE[id] &&
+      MITIGATION_TABLE[id].wholeReductionTalentId === undefined;
     const others = new Set([
-      ...Object.keys(MITIGATION_TABLE).map((id) => getEnglishSpellName(id, "")),
+      ...Object.keys(MITIGATION_TABLE)
+        .filter(wallRow)
+        .map((id) => getEnglishSpellName(id, "")),
       ...Object.keys(SELF_WALL_AURA_TO_CAST_ID).map((id) =>
         getEnglishSpellName(id, ""),
       ),
@@ -278,7 +288,8 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
     ]);
     expect([...byName.keys()].filter((n) => others.has(n))).toEqual([]);
     // no member is a table row: a wall renders from its aura, with talents
-    expect(family().filter((id) => MITIGATION_TABLE[id])).toEqual([]);
+    expect(family().filter(wallRow)).toEqual([]);
+    expect(family().filter((id) => MITIGATION_TABLE[id])).toEqual(["5277"]);
   });
 
   it("statesSelfDefensiveLabel reads exactly what selfDefensiveLabelWords wrote — figures only where the kind carries them", () => {

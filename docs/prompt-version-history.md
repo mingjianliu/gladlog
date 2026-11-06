@@ -5244,3 +5244,32 @@ which `[CC AVOIDED?]`'s DR cause keeps. Cover set, base ec4f3a94a → aeab16340:
 267 checks, 0 rises, troughPastRoundEndReaders 19 → 0, the new
 reflectedHealerLockUnread 14 → 0 (14 with the reflected-lock reader off); the
 follow-ups change no output line on the cover set.
+
+v490 (2026-11-05, GH #157, GH #184 part A, GH #126 Elusiveness; user
+2026-11-05 「按你说的做」): three data rows.
+(1) Retribution's Divine Protection 403876 with Shield of Vengeance 1261562:
+a promoted talent modifier, priced by the log's date (`datedModPct`,
+`HOTFIX_2026_08_25_EPOCH_MS` 15:00 UTC, `logDatedNumberAt`): +5 → 25 % on a
+log certainly before the hotfix, +10 → 30 % from it on and inside the 14 h
+zone uncertainty. The date is `IMitigationContext.atMs`, else the caster's
+earliest cast or aura row (`unitLogEpochMs`). Corpus: holders 0.758 per day
+08-14…08-24, 0.701 from 08-26 (= DB2 20 + 10); Holy's 498 control flat
+0.62–0.66.
+(2) Ravager 228920 and Execution Sentence 343527 are roster Offensive (out
+of `OFFENSIVE_PRESS_FACT_IDS`).
+(3) Feint 1966 / Evasion 5277 leave `NO_MITIGATION_IDS` for
+`MITIGATION_OVERRIDES` at 20 %, the whole of it Elusiveness 79008's
+(`wholeReductionTalentId`); verdicts Feint `never`, Evasion `unconditional`
+against what a parry stops and `never` against spells. A talent-whole row is
+out of `MITIGATION_WALL_IDS` (predicate-index "Not yet unified", GH #135).
+scan5 `abilityIntoWallShare` treats a `never` spell verdict as the gated one.
+605 files against tw1 (ec4f3a94a): findings — 37 files, all part (2):
+position-mistake 82 → 81 and 70 → 69, kick-eaten burst lists naming
+Execution Sentence; part (1) adds 0 (the undated 30 % added 2
+burst-into-mitigation on these pre-hotfix logs; dated, 0). Context — 987
+`[ENEMY DEF]` Divine Protection 20 → 25 %, 34 `[STACKED DEFENSIVES]`; 207
+`ABILITIES INTO IMMUNITY/DR` lines into Evasion (167 files); 256 mitigation
+audits priced (Feint 218, Evasion 38) where they read "not in the
+mitigation table". Gates unchanged; corpusFactScan5 `talentWallPrinted` 870
+→ 864, `noDefensiveButPressed` 5 → 6 (an existing class: Execution Sentence
+starts a window at 1:22 whose STAYED IN span holds a Death Pact).

@@ -62,7 +62,10 @@ export const classMetadata: IClassSpellMetadata[] = [
       // fact7 class 3 (F21, 2026-10-30): a press on OFFENSIVE_PRESS_FACT_IDS
       // (spellDanger.ts) — a press line, the loadout and [RES], out of every
       // role reader.
-      a("228920", "Ravager", U), // D16: 69276401, 2 owner presses, no line
+      // GH #184 (user ruling 2026-11-05): a major offensive cooldown — a
+      // button with no use condition (D16: 69276401, 2 owner presses, no
+      // line, until it was a press fact)
+      a("228920", "Ravager", O),
       a("385059", "Odyn's Fury", U), // D8 / D45: 96fb4d42, ba5e59c6, no line
       a("871", "Shield Wall", D),
       a("118038", "Die by the Sword", D),
@@ -95,7 +98,9 @@ export const classMetadata: IClassSpellMetadata[] = [
       // roster's and `[ENEMY HEAL CD]`; a Retribution press is a fact line
       // (OFFENSIVE_PRESS_FACT_IDS). 4206b8a9: 2 teammate presses, no line.
       a("375576", "Divine Toll", U),
-      a("343527", "Execution Sentence", U), // fact7 class 3
+      // GH #184 (user ruling 2026-11-05): a major offensive cooldown, no
+      // use condition (fact7 class 3 made it a press fact first)
+      a("343527", "Execution Sentence", O),
       a("31884", "Avenging Wrath", O),
       a("231895", "Crusade", O),
       a("853", "Hammer of Justice", C),

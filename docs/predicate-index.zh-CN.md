@@ -983,6 +983,8 @@
 
 **记录于 2026-10-30,OPEN(fact7 F21 类 6 与类 14;在审计的 15 回合上测量,全库数字待补)** —— 这批修复留下了什么、为什么。(1)`pressBlockedIntervalsForSpells` 是审计点名的三个印出读者。`cannotCastIntervalsForSpells` 没有昏迷豁免,直接读它的按技能门规(`cooldownTiming.ts` 两处、`candidateFindings.ts` 的 `external-unused` 读法、`cdTriggerPrior.ts`、`burstWindowDecisionPoints.ts`)没有迁移:它们各自决定一条候选,迁移可能增删菜单行,要先预览。不点名单个技能的读者(GH #134,2026-10-01 的几条)仍读 `buildCannotCastIntervals`。(2)`IMajorCooldownInfo.readyWindows` 是每一段就绪时间;`availableWindows` 仍只保留长于 `GRACE_SECONDS` 的段,给问「冷却是否就绪了一阵」的读者用(进攻窗口、更便宜的替代、cc-held)。只有 STAYED IN 读 `readyWindows`。(3)`staleMaxHpRows` 由 prompt 的时点与谷值的四个 HP 读者读取。`crisisEvents`、`crisisDecisionPoints`、`killWindowTargetSelection`、`healerExposureAnalysis`、`killingBlow`、`counterfactual`、桌面端 `deathRecap` 与 eval 的 `crisisAnswerEvidence` 自己遍历行,仍会读到这种行:它们是判定输入和回顾,不是印出的谷值;这种行大约只存在 200 ms。(4)`selfSaveCasts` 继续不含区域族,因为 `enemyDefensiveEvents` 读它,而 `(area)` 行归那一族;KILL ATTEMPTS 经 `areaSavesOn` 读目标自己的区域保命。(5)爆发账本只按光环收 `ENEMY_IMMUNITY_TEAM_PROC_AURAS`;其余 `ENEMY_IMMUNITY_SAVE_AURAS`(Vanish、Burrow 等)不在本次审计内,这里没有做前向核对。
 
+**2026-11-05 记录,未结(GH #126 Elusiveness;在 GH #135 跟踪)** —— 整份减伤都来自天赋的 `MITIGATION_TABLE` 行(`wholeReductionTalentId`:佯攻 1966 / 闪避 5277 → Elusiveness 79008,20%)按单位定价(`resolveMitigation`:持有 20、未持有 0、未知 0–20),但不进 `MITIGATION_WALL_IDS`。墙家族的读者只凭 id 问「X 是不是 20–99% 的墙」—— `WALL_IN_HAND_MIT_IDS`(击杀机会档位)及其门规 `checkKillTierWallOwnership`(从技能栏行的 `[UNUSED]` 名字读回,文本里没有天赋);`MITIGATION_AURA_IDS`(`[ENEMY DEF]` 墙行、KILL ATTEMPTS、`defenseless` 切点)—— 进去就会让没点天赋的盗贼的佯攻变成墙。在这些读者能拿到单位之前,佯攻没有 `[ENEMY DEF]` 行,闪避保留 `(dodge)` 行;已签字的裁定(佯攻 `never`,闪避对招架能挡的攻击 `unconditional`、对法术 `never`)经由 `offensiveWasteAnalysis` 生效,它读裁定册而不是墙集合。`mitigationElusiveness.test.ts` 钉住这个排除。
+
 ## 怎么保证这页不腐烂
 
 `packages/eval/test/predicateIndex.test.ts` 是这个页面可执行的另一半。它会:

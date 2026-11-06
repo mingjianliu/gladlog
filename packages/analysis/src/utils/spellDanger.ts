@@ -180,7 +180,10 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
  * `buffEndSeconds`). Registered in `curatedIdRegistry.ts`.
  */
 export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
-  "228920", // Ravager — Warrior, 90 s recharge (D16)
+  // Ravager 228920 and Execution Sentence 343527 left 2026-11-05 (GH #184,
+  // user ruling: a button with a use condition — Touch of Death's execute
+  // range — stays a fact; one without is a major offensive cooldown): roster
+  // Offensive rows, so `OFFENSIVE_CD_SPELL_IDS` members.
   "385059", // Odyn's Fury — Fury, 45 s (D8, D45); lift 1.70, coPressed 0.50
   // Dark Harvest 1257052 left 2026-11-03 (fact9 D7, user ruling): a
   // roster Offensive row, so an `OFFENSIVE_CD_SPELL_IDS` member.
@@ -193,7 +196,6 @@ export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
   // roster Offensive row, so an `OFFENSIVE_CD_SPELL_IDS` member.
   "439843", // Reaper's Mark — 45 s
   "426591", // Goremaw's Bite — Subtlety, 45 s
-  "343527", // Execution Sentence — 60 s
   "370553", // Tip the Scales — 120 s, a Preservation's is [ENEMY HEAL CD]
   "391528", // Convoke the Spirits — 120 s, a Restoration's is [ENEMY HEAL CD]
   // In `SPELL_EFFECT_OVERRIDES` only, which keys a weight and prints nothing.

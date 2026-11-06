@@ -70,6 +70,9 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
 
   // —— A talent's whole reduction (the spell itself reduces nothing) ——
   "586": { pct: 10, schoolMask: 0x7f, wholeReductionTalentId: "373446" }, // Fade: the generated 10 % is Translucent Image 373446's ("Fade reduces damage you take by 10%"), not Fade's — GH #126 row 203 (2026-11-05): priests on the 605 new-season files under Fade, holders 0.900 (Discipline 76 units, Holy 133, Shadow 111; 90 % intervals inside 0.897–0.909), non-holders 1.000 (617 units). `resolveMitigation` prices a non-holder 0
+  // Feint and Evasion: the 20 % is Elusiveness 79008's, "Evasion also reduces damage taken by $s2%, and Feint also reduces non-area-of-effect damage taken by $s1%" — DB2 SpellEffect 68339 (aura 107, −20, class mask 134217728 = Feint) and 1018818 (aura 107, −20, mask 32 = Evasion) fill the cast ids' 0-point aura-87 slots (2026-08-12 audit). Corpus 2026-09-26: holders 0.800 (Feint 483 units / 231 players, Evasion 324 / 163), non-holders 0.999 / 1.000. Feint's own AoE-only reduction (aura 229) stays out, as Zephyr's does. Verdicts signed 2026-11-05 (mitigationVerdicts.ts); out of the wall family (`MITIGATION_WALL_IDS`) — see there
+  "1966": { pct: 20, schoolMask: 0x7f, wholeReductionTalentId: "79008" }, // Feint
+  "5277": { pct: 20, schoolMask: 0x7f, wholeReductionTalentId: "79008" }, // Evasion (its dodge is no percentage: the verdict book's melee reading carries it)
 
   // —— The mitigation aura hangs off a different id (the generation layer can't find it by cast id) ——
   "51052": { pct: 30, schoolMask: 0x7e }, // Anti-Magic Zone: DR aura 145629 (observed), aura87 −15/126 × PvpMultiplier 2 = 30 % in PvP (2026-09-04 user ruling "PvP 值为官方值", BACKLOG #41; was 15 = the PvE number); the same-named 332831 (-20) is not observed and judged not live
@@ -103,8 +106,6 @@ export const NO_MITIGATION_IDS: ReadonlySet<string> = new Set([
   "47788", // Guardian Spirit: +60% healing received (aura118) + death prevention, no percentage mitigation (the same-named new id 1247928 has a -10 row but is not observed, see the pending-decision section note)
   "97462", // Rallying Cry: +10% max health (the actual buff is 97463), no mitigation
   "116849", // Life Cocoon: pure absorb shield (aura69) + healing bonus, no percentage mitigation
-  "1966", // Feint: AoE-only damage reduction (aura229, like Zephyr below), plus a 0-point aura87 dead slot on the cast id — this table's shape cannot express AoE-conditional mitigation (2026-08-12 audit). Elusiveness 79008 fills the slot with 20 % (corpus 2026-09-26: holders 0.800, 1,331 units) — entering the table needs a signed verdict; user 2026-09-26: not ruled yet 「先不裁定 有点复杂」
-  "5277", // Evasion: dodge/parry chance, not percentage mitigation — the cast id's two aura87 rows are both 0-point dead slots (2026-08-12 audit). Elusiveness 79008 fills one with 20 % (corpus 2026-09-26: holders 0.800, 860 units) — not entered: user 2026-09-26 「打进去 尤其是给晕 等于白打 我觉得先不裁定 有点复杂」 (as Feint)
   "122470", // Touch of Karma: absorb + damage transfer to the target (aura69), not percentage mitigation
   "11426", // Ice Barrier: absorb shield (aura69); its only aura87 row is a 0-point dead slot. Absorbs are accounted for as effective HP from the log's own SPELL_ABSORBED events, not through this percentage table (2026-08-12)
   "974", // Earth Shield: the cast id's aura87 is a 0-point dead slot; the same-named -10/-15/-20 ids belong to other spells and none is corroborated by this library's logs, so no value is pinned (2026-08-12 audit)
@@ -141,6 +142,14 @@ export const MITIGATION_WALL_MIN_PCT = 20;
  * span is cut on (`computeOffensiveWindows` step 2b). Until 2026-10-13 the
  * first two each spelled the filter out.
  *
+ * A row whose whole reduction is a talent's (`wholeReductionTalentId`:
+ * Feint / Evasion → Elusiveness 79008, 2026-11-05) is not in it: it is a wall
+ * only on a unit holding the talent, and these readers ask "is X a wall" of
+ * the id alone — the kit-line gate (`checkKillTierWallOwnership`) reads it
+ * back off text that names no talent. Pricing reads it per unit
+ * (`resolveMitigation`). Recorded in docs/predicate-index.md "Not yet
+ * unified".
+ *
  * It is NOT the kill-window roster (`KW_MAJOR_DEFENSIVE_IDS`, the spells the
  * span's state machine times): on 2026-10-13 that curated list holds 24 of
  * these 26 — all but Survival of the Fittest 264735 and Retribution's Divine
@@ -149,7 +158,12 @@ export const MITIGATION_WALL_MIN_PCT = 20;
  */
 export const MITIGATION_WALL_IDS: ReadonlySet<string> = new Set(
   Object.entries(MITIGATION_TABLE)
-    .filter(([, e]) => e.pct >= MITIGATION_WALL_MIN_PCT && e.pct < 100)
+    .filter(
+      ([, e]) =>
+        e.pct >= MITIGATION_WALL_MIN_PCT &&
+        e.pct < 100 &&
+        e.wholeReductionTalentId === undefined,
+    )
     .map(([id]) => id),
 );
 

@@ -143,7 +143,9 @@ describe("OFFENSIVE_PRESS_FACT_IDS", () => {
       "0:11  [ENEMY HEAL CD]   5(Enemy) (Holy Paladin): Divine Toll",
     ]);
   });
-  it("D16: a friendly press has a Utility ledger row (press line, kit, [RES])", () => {
+  // GH #184 (user ruling 2026-11-05): Ravager is a major offensive
+  // cooldown now — its row is Offensive (was Utility as a press fact)
+  it("D16: a friendly press has a ledger row (press line, kit, [RES]) — Offensive since GH #184", () => {
     const row = extractMajorCooldowns(
       unit(CombatUnitClass.Warrior, CombatUnitSpec.Warrior_Arms, [
         cast("228920", 25.5),
@@ -151,7 +153,7 @@ describe("OFFENSIVE_PRESS_FACT_IDS", () => {
       combat,
     ).find((c) => c.spellId === "228920");
     expect(row?.casts.length).toBe(1);
-    expect(row?.tag).toBe(SpellTag.Utility);
+    expect(row?.tag).toBe(SpellTag.Offensive);
   });
   it("D78: both Deep Breath ids, one row for the unit, the id it pressed", () => {
     const rows = extractMajorCooldowns(

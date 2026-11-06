@@ -19,7 +19,18 @@
  * Talent modifiers add percentage points to the component they target
  * (Barkskin 20 + Oakskin 10 = 30), design D3.
  */
+import type { ILogDatedNumber } from "../utils/logEra";
+
 type TalentMitigationValidation = "promoted" | "unvalidated";
+
+/**
+ * The 2026-08-25 PvP hotfix (Blizzard's hotfix notes: "Divine Protection now
+ * reduces damage taken by 20% in PvP combat (was 25%)" — server-side, not in
+ * DB2). Read at the North American hotfix hour, 15:00 UTC, as
+ * `HOTFIX_2026_08_18_EPOCH_MS`; `logDatedNumberAt` gives the old number only
+ * to a log certainly before it in every zone.
+ */
+export const HOTFIX_2026_08_25_EPOCH_MS = Date.UTC(2026, 7, 25, 15, 0, 0);
 
 interface ITalentMitigationModifier {
   auraSpellId: string;
@@ -31,7 +42,11 @@ interface ITalentMitigationModifier {
   specIds?: string[];
   /** school mask the modified effect covers */
   schoolMask: number;
+  /** today's value — what the resolver uses for a log it cannot date */
   modPct: number;
+  /** a value a dated change moved (`logDatedNumberAt`; `since` equals
+   * `modPct`): the resolver reads it at the match's date */
+  datedModPct?: ILogDatedNumber;
   validation: TalentMitigationValidation;
   /** scan evidence: holder unit median, 90 % interval, units (or why not) */
   evidence: string;
@@ -78,6 +93,32 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
       validation: "unvalidated",
       evidence:
         "Divine Protection + Shield of Vengeance (Retribution): 0 holder units on aura 498 (Retribution's copy is 403876, not a table entry); S2 archive every 30, run 2 2026-09-13",
+    },
+    {
+      // GH #157 / cat1 #2 (user ruling 2026-11-05: work out the mechanism
+      // first). Retribution's own copy, 403876: DB2 aura 87 −20, and
+      // 1261562 (aura 107 misc 3 −10, class mask [0, 0, 256, 0] — 498 /
+      // 403876 / 1261559) adds 10 points. The corpus took less until the
+      // 2026-08-25 PvP hotfix ("Divine Protection now reduces damage taken by
+      // 20% in PvP combat (was 25%)", Blizzard hotfix notes; the server-side
+      // PvP tuning DB2 does not carry): Retribution holders 0.75–0.77 a day
+      // from 08-14 to 08-24, 0.70–0.72 a day from 08-26 to 11-05, while
+      // Holy's 498 (the control, same method) stays 0.62–0.66 throughout.
+      // So the talent adds 5 points to a log from before the hotfix (25 %,
+      // the notes' "was 25%"; measured 24.2) and 10 from it on — user ruling
+      // 2026-11-05: price it by date.
+      auraSpellId: "403876",
+      talentSpellId: "1261562",
+      schoolMask: 127,
+      modPct: 10,
+      datedModPct: {
+        cutoverEpochMs: HOTFIX_2026_08_25_EPOCH_MS,
+        before: 5,
+        since: 10,
+      },
+      validation: "promoted",
+      evidence:
+        "Divine Protection (Retribution) + Shield of Vengeance: holders 0.701 (median of unit medians), 480 unit-rounds, every Retribution DP caster a holder, 12.1.5 downloads 10-06..11-05, expected 0.70 (20 + 10); archive 08-26..09-05 0.70–0.72 a day (~260 unit-rounds). Before the 2026-08-25 PvP hotfix 0.758 (605 set, 225 unit-rounds, 08-14..08-24). Control Holy 498 (35 %): 0.649 (256) before, 0.645 (153) after. eval-private runs/cat1-2026-11-05/dp, tmp/dpScan.ts (mitigationTalentScan's per-hit method), 2026-11-05",
     },
     {
       auraSpellId: "33206",

@@ -68,8 +68,14 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2; 2026-10-20: + 9 racial window ids and Ultimate Penitence 421453, user ruling; 2026-11-03: + Dark Harvest 1257052, user ruling, fact9 D7; 2026-11-04: + Breath of Eons 403631 and Frostwyrm's Fury 279302, user ruling, fact10 D2–D4 D31)", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(73);
+  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2; 2026-10-20: + 9 racial window ids and Ultimate Penitence 421453, user ruling; 2026-11-03: + Dark Harvest 1257052, user ruling, fact9 D7; 2026-11-04: + Breath of Eons 403631 and Frostwyrm's Fury 279302, user ruling, fact10 D2–D4 D31; 2026-11-05: + Ravager 228920 and Execution Sentence 343527, user ruling, GH #184)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(75);
+    for (const id of ["228920", "343527"]) {
+      expect(OFFENSIVE_CD_SPELL_IDS.has(id)).toBe(true);
+      expect(OFFENSIVE_PRESS_FACT_IDS.has(id)).toBe(false);
+    }
+    // a button with a use condition stays a press fact (Touch of Death)
+    expect(OFFENSIVE_PRESS_FACT_IDS.has("322109")).toBe(true);
     expect(OFFENSIVE_CD_SPELL_IDS.has("1257052")).toBe(true);
     for (const id of ["403631", "279302"])
       expect(OFFENSIVE_CD_SPELL_IDS.has(id)).toBe(true);

@@ -530,12 +530,17 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
     const down = auras.find((a) => ev(a) === REMOVED && tsOf(a) > tsOf(up));
     const toMs = down ? tsOf(down) : ctx.end;
     const listed = listedOf.get(intoKey(m))!;
-    // the wall's verdict for what a parry cannot stop can be a gated one
+    // the wall's verdict for what a parry cannot stop can be a gated one, or
+    // none at all (Evasion: a spell meets only Elusiveness's 20 %, `never` —
+    // user 2026-11-05)
     const wallKey = String(up.spellId);
+    const nonMelee = nonMeleeMitigationVerdictOf(wallKey);
     const rangedGated =
-      nonMeleeMitigationVerdictOf(wallKey) === "kill-live-gated" &&
-      mitigationVerdictOf(wallKey) !== "kill-live-gated" &&
-      readHpAtOrBelow(ctx, target, tsOf(up), toMs, KILL_LIVE_HP_PCT);
+      (nonMelee !== mitigationVerdictOf(wallKey) &&
+        (nonMelee === "never" || nonMelee === "unresolved")) ||
+      (nonMelee === "kill-live-gated" &&
+        mitigationVerdictOf(wallKey) !== "kill-live-gated" &&
+        readHpAtOrBelow(ctx, target, tsOf(up), toMs, KILL_LIVE_HP_PCT));
     for (const [spell, v] of totals) {
       if (v < all * HIGH_VALUE_SHARE || listed.includes(spell)) continue;
       const parryStops = (id: string) =>

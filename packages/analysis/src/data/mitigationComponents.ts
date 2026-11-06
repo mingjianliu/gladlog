@@ -28,8 +28,10 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { getFactConfig } from "../facts/factProviderConfig";
+import { logDatedNumberAt } from "../utils/logEra";
 import { specPassiveOwnership } from "../utils/talentModifiers";
 import { talentModifierOwnershipOf } from "../utils/talentOwnership";
+import { unitLogEpochMs } from "../utils/talents";
 import { MITIGATION_TABLE, mitigationPctFor } from "./mitigationData";
 import { talentMitigationModifiersFor } from "./talentMitigationModifiers";
 
@@ -57,7 +59,20 @@ export interface IMitigationContext {
   carrierIsCaster: boolean;
   /** the unit that cast the aura, THIS round's unit (talent ownership is per
    * round in Solo Shuffle). Absent = talents cannot be attributed. */
-  caster?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">;
+  caster?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "auraEvents">>;
+  /** the application's log epoch, for a dated modifier (`datedModPct`);
+   * absent = the caster's earliest cast or aura row (`unitLogEpochMs` — a
+   * match is minutes long, a cutover's zone uncertainty 14 h), else today's
+   * value */
+  atMs?: number;
+}
+
+/** The log epoch a dated modifier is read at (`IMitigationContext.atMs`).
+ * codex review 2026-11-05: a caster with aura rows and no cast row read NaN
+ * — today's value — on a historical log. */
+function mitigationLogMs(ctx: IMitigationContext): number {
+  return ctx.atMs ?? (ctx.caster ? unitLogEpochMs(ctx.caster) : NaN);
 }
 
 /** Resolve one aura application. Undefined = the aura is not a table entry. */
@@ -129,6 +144,9 @@ function applyTalentModifiers(
         : talentModifierOwnershipOf(ctx.caster, m.talentSpellId);
     if (own === "no") continue;
     const certain = m.validation === "promoted" && own === "yes" && !allyCopy;
+    const modPct = m.datedModPct
+      ? logDatedNumberAt(m.datedModPct, mitigationLogMs(ctx))
+      : m.modPct;
     if (!certain)
       unresolved.push(
         `talent ${m.talentSpellId} on ${spellId}: ${
@@ -155,10 +173,8 @@ function applyTalentModifiers(
     // strengthening one raises pctMax, a weakening one lowers pctMin (GH #96
     // review, agy — no row is negative today)
     const clamp = (x: number) => Math.max(0, Math.min(99, x));
-    if (m.modPct >= 0 || certain)
-      target.pctMax = clamp(target.pctMax + m.modPct);
-    if (m.modPct < 0 || certain)
-      target.pctMin = clamp(target.pctMin + m.modPct);
+    if (modPct >= 0 || certain) target.pctMax = clamp(target.pctMax + modPct);
+    if (modPct < 0 || certain) target.pctMin = clamp(target.pctMin + modPct);
   }
 }
 
