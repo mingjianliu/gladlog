@@ -517,6 +517,11 @@ const INDEX: PredicateRow[] = [
     mod: spellOutcomeLines,
   },
   {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "reflectedSpellDealsDamage",
+    mod: spellOutcomeLines,
+  },
+  {
     file: `${A}/context/matchTimelineSections.ts`,
     symbol: "isDotAura",
     mod: matchTimelineSections,

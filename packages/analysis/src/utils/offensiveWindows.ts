@@ -533,8 +533,8 @@ export function computeOffensiveWindows(
           for (const span of empoweredAuraSpansOnS(
             d,
             ownWallSpanS(d, timed),
-            holder,
-            matchStartMs,
+            holder.id,
+            holderIntervals(holder),
           ))
             addSave(holder.id, span);
       addSave(

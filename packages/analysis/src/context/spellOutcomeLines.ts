@@ -358,6 +358,34 @@ export function reflectOwnIdRowGap(
  * four 5.6k returns; corpusFactScan reflectReturn shares it). */
 export const REFLECT_DIRECT_RETURN_MS = 3000;
 
+/**
+ * Can a reflected `id` of `caster` own a damage return? The official profile
+ * says it deals damage, or the caster's own hits of it (by id or English
+ * name) are in this round — a scripted damage spell the profile misses (Fel
+ * Lance 206966: effects 165 + dummy; 55-1 0:40 lost its 133k [REFLECTED]
+ * line; Death Coil's cast 47541 hits as 47632), never a Spellsteal or a
+ * control, which leave no hit of their own. One predicate for the reflected
+ * damage allocator (`reflectedSpells`) and the unrowed-return reading
+ * (`unrowedSpellReflections`, codex 20-F26-03 #3 #4).
+ */
+export function reflectedSpellDealsDamage(
+  id: string,
+  caster: Pick<ICombatUnit, "id">,
+  units: readonly Pick<ICombatUnit, "damageIn">[],
+): boolean {
+  if (abilityProfile(id).dealsDamage) return true;
+  const name = getEnglishSpellName(id, "");
+  return units.some((t) =>
+    (t.damageIn ?? []).some(
+      (d) =>
+        d.srcUnitId === caster.id &&
+        !!d.spellId &&
+        (d.spellId === id ||
+          (name !== "" && getEnglishSpellName(d.spellId, "") === name)),
+    ),
+  );
+}
+
 /** Spell Reflection's own id (`REFLECT_OWN_DAMAGE_IDS`). */
 const SPELL_REFLECTION_ID = "23920";
 
@@ -367,7 +395,8 @@ const SPELL_REFLECTION_ID = "23920";
  * caster with no counted REFLECT row of that caster on that reflector inside
  * the window an own-id row pairs with one (`REFLECT_DIRECT_RETURN_MS` before
  * it to `REFLECT_OWN_ID_LEAD_MS` after it). The spell it sent back is the
- * caster's latest damaging SPELL_CAST_SUCCESS at the reflector inside
+ * caster's latest damaging (`reflectedSpellDealsDamage`) SPELL_CAST_SUCCESS
+ * at the reflector inside
  * `REFLECT_DIRECT_RETURN_MS` before the row (a projectile's flight) — there
  * the Scorch cast 1 ms before 106.8k came back under 23920 and the
  * reflector's 23920 aura went in the same ms. A row with no such cast names
@@ -376,9 +405,16 @@ const SPELL_REFLECTION_ID = "23920";
  */
 export function unrowedSpellReflections(
   caster: ICombatUnit,
+  units: readonly Pick<ICombatUnit, "damageIn">[],
 ): Array<NonNullable<ICombatUnit["missesOut"]>[number]> {
   type MissRow = NonNullable<ICombatUnit["missesOut"]>[number];
-  const rowed = (caster.missesOut ?? []).filter(isCountedReflectRow);
+  const dealsDamage = (id: string) =>
+    reflectedSpellDealsDamage(id, caster, units);
+  // only a REFLECT row that can own a damage return accounts for one: a
+  // reflected Polymorph near it takes no damage (codex 20-F26-03 #3)
+  const rowed = (caster.missesOut ?? []).filter(
+    (m) => isCountedReflectRow(m) && !!m.spellId && dealsDamage(m.spellId),
+  );
   const returns = new Map<string, number>();
   for (const d of caster.damageIn ?? [])
     if (d.spellId === SPELL_REFLECTION_ID && d.srcUnitId)
@@ -408,8 +444,8 @@ export function unrowedSpellReflections(
         c.destUnitId === reflectorId &&
         t >= ts - REFLECT_DIRECT_RETURN_MS &&
         // a damage return is a damaging spell's (a control reflected deals
-        // nothing — codex 20-F16-03 #3)
-        abilityProfile(c.spellId).dealsDamage
+        // nothing — codex 20-F16-03 #3), the allocator's own reading
+        dealsDamage(c.spellId)
       )
         cast = c;
     }
@@ -469,7 +505,7 @@ export function reflectedSpells(
       ...(caster.missesOut ?? []).filter((m) => !commandReflects.has(m)),
       ...(reflectsMovedTo.get(caster.id) ?? []),
       // fact11 D9: a Spell Reflection return with no REFLECT row
-      ...unrowedSpellReflections(caster),
+      ...unrowedSpellReflections(caster, units),
     ]
       .filter(isCountedReflectRow)
       .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
@@ -679,24 +715,8 @@ export function reflectedSpells(
     // cannot own a damage return (codex 20-F16-03 #3: a Polymorph reflected
     // 190 ms after a Fireball took the Fireball's 100k, and the Fireball's
     // [REFLECTED] line went)
-    // deals damage: the official profile says so, or the caster's own hits
-    // of it (by id or English name) are in this round — a scripted damage
-    // spell the profile misses (Fel Lance 206966: effects 165 + dummy;
-    // 55-1 0:40 lost its 133k [REFLECTED] line), never a Spellsteal or a
-    // control, which leave no hit of their own
-    const dealsDamage = (id: string): boolean => {
-      if (abilityProfile(id).dealsDamage) return true;
-      const name = getEnglishSpellName(id, "");
-      return units.some((t) =>
-        (t.damageIn ?? []).some(
-          (d) =>
-            d.srcUnitId === caster.id &&
-            !!d.spellId &&
-            (d.spellId === id ||
-              (name !== "" && getEnglishSpellName(d.spellId, "") === name)),
-        ),
-      );
-    };
+    const dealsDamage = (id: string): boolean =>
+      reflectedSpellDealsDamage(id, caster, units);
     const wardPairs = new Map<string, Map<number, number>>();
     const wardPairsOf = (src: string | undefined) => {
       const key = src ?? "";

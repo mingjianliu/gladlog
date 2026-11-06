@@ -11,6 +11,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src";
 import {
+  reflectedSpellDealsDamage,
   reflectedSpells,
   unrowedSpellReflections,
 } from "../src/context/spellOutcomeLines";
@@ -193,7 +194,7 @@ describe("fact11 D9 — a Spell Reflection return with no REFLECT row", () => {
   });
 
   it("the Scorch is read back as reflected at the return's ms", () => {
-    const rows = unrowedSpellReflections(mage());
+    const rows = unrowedSpellReflections(mage(), [warrior]);
     expect(
       rows.map((r) => [r.spellId, r.destUnitId, r.logLine.timestamp - T0]),
     ).toEqual([[SCORCH, "war", 280_226]]);
@@ -216,7 +217,33 @@ describe("fact11 D9 — a Spell Reflection return with no REFLECT row", () => {
         destUnitId: "war",
       },
     ];
-    expect(unrowedSpellReflections(m)).toEqual([]);
+    expect(unrowedSpellReflections(m, [warrior])).toEqual([]);
+  });
+  it("a reflected control's REFLECT row near it accounts for no damage return (codex 20-F26-03 #3)", () => {
+    const m = mage();
+    (m as any).missesOut = [
+      {
+        logLine: { event: LogEvent.SPELL_MISSED, timestamp: at(280.4) },
+        timestamp: at(280.4),
+        missType: "REFLECT",
+        spellId: "118",
+        spellName: "Polymorph",
+        srcUnitId: "mage",
+        destUnitId: "war",
+      },
+    ];
+    expect(
+      unrowedSpellReflections(m, [warrior]).map((r) => r.spellId),
+    ).toEqual([SCORCH]);
+  });
+  it("a cast id whose hits carry another id deals damage by the caster's own hits (codex 20-F26-03 #4)", () => {
+    // Death Coil: cast 47541, damage 47632
+    const dk = { id: "dk" };
+    expect(reflectedSpellDealsDamage("47541", dk, [])).toBe(false);
+    const hit = {
+      damageIn: [{ srcUnitId: "dk", spellId: "47632" }],
+    } as never;
+    expect(reflectedSpellDealsDamage("47541", dk, [hit])).toBe(true);
   });
   it("only a control cast at the reflector before it: the return names nothing", () => {
     const m = mage({
@@ -224,7 +251,7 @@ describe("fact11 D9 — a Spell Reflection return with no REFLECT row", () => {
         makeSpellCastEvent("118", at(280.1), "war", "Warrior", "mage", "Mage"),
       ] as never,
     });
-    expect(unrowedSpellReflections(m)).toEqual([]);
+    expect(unrowedSpellReflections(m, [warrior])).toEqual([]);
   });
   it("a cast at someone else, or more than 3 s before: nothing", () => {
     expect(
@@ -235,6 +262,7 @@ describe("fact11 D9 — a Spell Reflection return with no REFLECT row", () => {
             makeSpellCastEvent(SCORCH, at(277.1), "war", "W", "mage", "Mage"),
           ] as never,
         }),
+        [warrior],
       ),
     ).toEqual([]);
   });

@@ -1777,43 +1777,26 @@ export const AURA_EMPOWERING_WALLS: ReadonlyMap<string, string> = new Map([
 
 /**
  * The spans (match seconds) in which an `AURA_EMPOWERING_WALLS` wall of `d`'s
- * caster reached `holder` through the empowered aura: the wall's own span
- * ∩ each logged run of that aura from the caster on the holder. A run with no
- * APPLIED before its REMOVED was up since the round began; one with no
- * REMOVED runs on. [] for the caster itself (its own wall covers it), for any
- * other wall, and for a holder with no row of the aura from the caster.
+ * caster reached `holderId` through the empowered aura: the wall's own span
+ * ∩ each run of that aura from the caster in the holder's shared intervals
+ * (`saveAuraIntervals` — the one aura lifecycle: a run up since before the
+ * round, a REMOVED the log wrote with no source, codex 20-F26-03 #2). [] for
+ * the caster itself (its own wall covers it), for any other wall, and for a
+ * holder with no run of the aura from the caster.
  */
 export function empoweredAuraSpansOnS(
   d: Pick<IEnemyDefensiveEvent, "spellId" | "casterId">,
   wallSpan: { from: number; to: number } | undefined,
-  holder: Pick<ICombatUnit, "id" | "auraEvents">,
-  matchStartMs: number,
+  holderId: string,
+  holderIntervals: readonly ISaveAuraInterval[],
 ): Array<{ from: number; to: number }> {
   const auraId = AURA_EMPOWERING_WALLS.get(d.spellId);
-  if (!auraId || !wallSpan || holder.id === d.casterId) return [];
-  const rows = (holder.auraEvents ?? [])
-    .filter(
-      (a) =>
-        a.spellId === auraId &&
-        a.srcUnitId === d.casterId &&
-        a.destUnitId === holder.id,
-    )
-    .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
-  const runs: Array<{ from: number; to: number }> = [];
-  let on: number | undefined;
-  for (const a of rows) {
-    const t = (a.logLine.timestamp - matchStartMs) / 1000;
-    if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) on ??= t;
-    else if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
-      runs.push({ from: on ?? -Infinity, to: t });
-      on = undefined;
-    }
-  }
-  if (on !== undefined) runs.push({ from: on, to: Infinity });
-  return runs
+  if (!auraId || !wallSpan || holderId === d.casterId) return [];
+  return holderIntervals
+    .filter((x) => x.spellId === auraId && x.srcUnitId === d.casterId)
     .map((r) => ({
-      from: Math.max(r.from, wallSpan.from),
-      to: Math.min(r.to, wallSpan.to),
+      from: Math.max(r.fromS, wallSpan.from),
+      to: Math.min(r.toS, wallSpan.to),
     }))
     .filter((r) => r.from < r.to);
 }

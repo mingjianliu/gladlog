@@ -1797,8 +1797,8 @@ function targetReadingsFactory(
                 : empoweredAuraSpansOnS(
                     d,
                     ownWallSpanS(d, false),
-                    target,
-                    combat.startTime,
+                    target.id,
+                    ivs,
                   ),
           };
         })

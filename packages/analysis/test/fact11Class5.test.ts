@@ -14,7 +14,9 @@ import {
   areaSaveSpansOnS,
   empoweredAuraSpansOnS,
   NO_TARGET_GUID,
+  saveAuraIntervals,
 } from "../src/utils/enemyDefensives";
+import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -48,53 +50,59 @@ describe("fact11 D15 — Anti-Magic Zone's nil-source aura is carried", () => {
 });
 
 describe("fact11 D17 — Aura Mastery reaches Devotion Aura's carriers", () => {
-  const row = (event: LogEvent, s: number, spellId = "465", src = "pal") => ({
-    spellId,
-    srcUnitId: src,
-    destUnitId: "druid",
-    logLine: { event, timestamp: T0 + s * 1000 },
-  });
+  // the holder's intervals as every reader builds them (`saveAuraIntervals`)
+  const pal = makeUnit("pal", { name: "Pal" });
+  const ivsOf = (rows: Array<[LogEvent, number, string?, string?]>) => {
+    const druid = makeUnit("druid", {
+      name: "Druid",
+      auraEvents: rows.map(([ev, s, spellId = "465", src = "pal"]) => ({
+        ...makeAuraEvent(ev, spellId, T0 + s * 1000, src, "druid", "BUFF"),
+        srcUnitName: src === NO_TARGET_GUID ? "nil" : src,
+      })),
+    } as never);
+    return saveAuraIntervals(druid, [pal], {
+      startTime: T0,
+      endTime: T0 + 300_000,
+    });
+  };
   const am = { spellId: "31821", casterId: "pal" };
   const wall = { from: 42.594, to: 50.598 };
   it("26b28640: Devotion Aura from 0:04 to 2:18, Aura Mastery 0:42.6–0:50.6", () => {
-    const druid = {
-      id: "druid",
-      auraEvents: [
-        row(LogEvent.SPELL_AURA_APPLIED, 4.3),
-        row(LogEvent.SPELL_AURA_REMOVED, 138),
-      ],
-    };
-    expect(empoweredAuraSpansOnS(am, wall, druid as never, T0)).toEqual([
-      wall,
+    const ivs = ivsOf([
+      [LogEvent.SPELL_AURA_APPLIED, 4.3],
+      [LogEvent.SPELL_AURA_REMOVED, 138],
     ]);
+    expect(empoweredAuraSpansOnS(am, wall, "druid", ivs)).toEqual([wall]);
   });
   it("no Devotion Aura from that paladin, the paladin itself, or another wall: nothing", () => {
-    const other = {
-      id: "druid",
-      auraEvents: [row(LogEvent.SPELL_AURA_APPLIED, 4.3, "465", "pal2")],
-    };
-    expect(empoweredAuraSpansOnS(am, wall, other as never, T0)).toEqual([]);
-    expect(
-      empoweredAuraSpansOnS(am, wall, { id: "pal", auraEvents: [] }, T0),
-    ).toEqual([]);
+    const other = ivsOf([[LogEvent.SPELL_AURA_APPLIED, 4.3, "465", "pal2"]]);
+    expect(empoweredAuraSpansOnS(am, wall, "druid", other)).toEqual([]);
+    const own = ivsOf([[LogEvent.SPELL_AURA_APPLIED, 4.3]]);
+    expect(empoweredAuraSpansOnS(am, wall, "pal", own)).toEqual([]);
     expect(
       empoweredAuraSpansOnS(
         { spellId: "498", casterId: "pal" },
         wall,
-        { id: "druid", auraEvents: [row(LogEvent.SPELL_AURA_APPLIED, 4)] } as never,
-        T0,
+        "druid",
+        own,
       ),
     ).toEqual([]);
   });
   it("a Devotion Aura removed mid-wall stops the reach there", () => {
-    const druid = {
-      id: "druid",
-      auraEvents: [
-        row(LogEvent.SPELL_AURA_APPLIED, 4.3),
-        row(LogEvent.SPELL_AURA_REMOVED, 45),
-      ],
-    };
-    expect(empoweredAuraSpansOnS(am, wall, druid as never, T0)).toEqual([
+    const ivs = ivsOf([
+      [LogEvent.SPELL_AURA_APPLIED, 4.3],
+      [LogEvent.SPELL_AURA_REMOVED, 45],
+    ]);
+    expect(empoweredAuraSpansOnS(am, wall, "druid", ivs)).toEqual([
+      { from: 42.594, to: 45 },
+    ]);
+  });
+  it("a REMOVED the log wrote with no source still ends the run (codex 20-F26-03 #2)", () => {
+    const ivs = ivsOf([
+      [LogEvent.SPELL_AURA_APPLIED, 4.3],
+      [LogEvent.SPELL_AURA_REMOVED, 45, "465", NO_TARGET_GUID],
+    ]);
+    expect(empoweredAuraSpansOnS(am, wall, "druid", ivs)).toEqual([
       { from: 42.594, to: 45 },
     ]);
   });

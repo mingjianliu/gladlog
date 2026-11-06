@@ -26,6 +26,7 @@ import {
   OWN_SHIELD_PRESS_LOOKBACK_MS,
   SAVE_CAST_AURA_PAIR_S,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { isResyncBatchAt } from "@gladlog/analysis/src/utils/resyncBatch";
 
 import {
   ABSORBED,
@@ -108,19 +109,23 @@ export function run(ctx: IRoundCtx): void {
           )
           .map(tsOf),
       );
-      const startMs = Math.min(
-        tsOf(runStart),
-        ...((u.absorbsIn ?? []) as any[])
-          .filter(
-            (r) =>
-              (ev(r) === undefined || ev(r) === ABSORBED) &&
-              String(r.spellId) === id &&
-              r.srcUnitId === caster.id &&
-              tsOf(r) > lastOff &&
-              tsOf(r) < tsOf(runStart),
-          )
-          .map(tsOf),
-      );
+      // only a start the log re-stated late (`isResyncBatchAt`, the
+      // product's own condition — codex 20-F26-04 #5) moves back
+      const startMs = !isResyncBatchAt(u, tsOf(runStart))
+        ? tsOf(runStart)
+        : Math.min(
+            tsOf(runStart),
+            ...((u.absorbsIn ?? []) as any[])
+              .filter(
+                (r) =>
+                  (ev(r) === undefined || ev(r) === ABSORBED) &&
+                  String(r.spellId) === id &&
+                  r.srcUnitId === caster.id &&
+                  tsOf(r) > lastOff &&
+                  tsOf(r) < tsOf(runStart),
+              )
+              .map(tsOf),
+          );
       const press = successesOf(caster).find(
         (c: any) =>
           tsOf(c) <= t &&

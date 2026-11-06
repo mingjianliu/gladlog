@@ -982,7 +982,7 @@ function runRound(ctx: IContext): void {
     // one at its own ms — the product's `unrowedSpellReflections`
     const reflects = [
       ...((caster.missesOut ?? []) as any[]).filter(isCountedReflectRow),
-      ...unrowedSpellReflections(caster),
+      ...unrowedSpellReflections(caster, units),
     ].sort((x, y) => tsOf(x) - tsOf(y));
     const groups: Array<{
       first: any;

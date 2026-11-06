@@ -143,6 +143,7 @@ import {
   PRESS_TRIGGERED_CAST_IDS,
 } from "@gladlog/analysis/src/utils/castMissRows";
 import { COPY_CAST_IDS } from "@gladlog/analysis/src/utils/castPress";
+import { CANCEL_CC_NEAR_S } from "@gladlog/analysis/src/utils/castStopEvidence";
 import { auraIsImmunityForm } from "@gladlog/analysis/src/utils/combatStates";
 import {
   immunityStopsSpellSchool,
@@ -767,11 +768,13 @@ function allyOverlapPastAura(ctx: IRoundCtx): void {
       ctx.bump("allyOverlapPastAura");
       // the union of the ally's own runs of the name, clipped to the burst
       let covered = 0;
+      let longestRunS = 0;
       let open: number | null = null;
       let openId = "";
       const close = (endMs: number) => {
         if (open === null) return;
         covered += Math.max(0, Math.min(endMs, toMs) - Math.max(open, fromMs));
+        longestRunS = Math.max(longestRunS, (endMs - open) / 1000);
         open = null;
       };
       for (const a of rows) {
@@ -784,8 +787,12 @@ function allyOverlapPastAura(ctx: IRoundCtx): void {
       close(Math.min(toMs, ctx.end));
       const coveredS = covered / 1000;
       // an effect that lives on another unit (Predator's Wake's The Hunt DoT
-      // on its target) is not this aura's to bound
-      if (max > coveredS + 0.2) continue;
+      // on its target) is not this aura's to bound — its own aura on the
+      // ally is a blip (The Hunt's buff a fraction of a second). Longer
+      // coverage alone proves nothing: three Soul Immolation runs of ~5 s
+      // credited 15.5 + 5 + 5 s exceed their 15.0 s by one entry's 0.5 s
+      // (codex 20-F26-04 #4)
+      if (longestRunS < 1 && max > coveredS + 0.2) continue;
       if (!(s > coveredS + 0.2)) continue;
       ctx.violate(
         "allyOverlapPastAura",
@@ -830,57 +837,61 @@ function savePressRunsOverlap(ctx: IRoundCtx): void {
 }
 
 const BURST_ANSWERED = /^(\d+:\d{2})\s+\[BURST ANSWERED\]/;
+// `controlTargetClause`: `on A (2s) and B in 4.4s` — each target its pid,
+// an optional span (codex 20-F26-04 #3)
 const ANSWER_ON =
-  /(?:^|; |: )(\d+)\(\w+\) answered with (.+?) on (\d+)\(\w+\) in ([\d.]+)s/g;
+  /(?:^|; |: )(\d+)\(\w+\) answered with (.+?) on ((?:\d+\(\w+\)(?: \([^)]*\))?(?: and )?)+) in ([\d.]+)s/g;
+const ANSWER_TARGET = /(\d+)\(\w+\)(?: \([^)]*\))?/g;
 
 function answeredByOldSummonPulse(ctx: IRoundCtx): void {
-  const byId = new Map<string, any>(
-    (ctx.units as any[]).map((u) => [u.id, u]),
-  );
+  const byId = new Map<string, any>((ctx.units as any[]).map((u) => [u.id, u]));
   for (const l of ctx.lines) {
     const b = BURST_ANSWERED.exec(l);
     if (!b) continue;
     const openS = secOf(b[1]!);
-    for (const m of l.matchAll(ANSWER_ON)) {
-      const answerer = ctx.unitOfPid(m[1]!);
-      const holder = ctx.unitOfPid(m[3]!);
-      if (!answerer || !holder) continue;
-      const name = m[2]!;
-      const atMs = ctx.start + (openS + Number(m[4])) * 1000;
-      const aura = ((holder.auraEvents ?? []) as any[]).find(
-        (a) =>
-          ev(a) === APPLIED &&
-          nameOf(a.spellId, a.spellName) === name &&
-          Math.abs(tsOf(a) - atMs) <= 1000 &&
-          a.srcUnitId !== answerer.id,
-      );
-      if (!aura) continue;
-      const summon = byId.get(aura.srcUnitId);
-      if (
-        !summon ||
-        summon.ownerId !== answerer.id ||
-        String(aura.srcUnitId).startsWith("Pet-")
-      )
-        continue;
-      ctx.bump("answeredByOldSummonPulse");
-      const summonedMs = ((summon.actionIn ?? []) as any[]).find(
-        (a) => ev(a) === "SPELL_SUMMON",
-      );
-      if (!summonedMs || tsOf(summonedMs) >= ctx.start + openS * 1000)
-        continue;
-      ctx.violate(
-        "answeredByOldSummonPulse",
-        name,
-        tsOf(aura),
-        `${answerer.name}:${aura.srcUnitId}:${tsOf(aura)}`,
-        `${answerer.name}'s ${summon.name} summoned ${((tsOf(summonedMs) - ctx.start) / 1000).toFixed(3)}s, its ${name} on ${holder.name} ${((tsOf(aura) - ctx.start) / 1000).toFixed(3)}s, burst opened ${fmtS(openS)}`,
-        l,
-      );
-    }
+    for (const m of l.matchAll(ANSWER_ON))
+      for (const t of m[3]!.matchAll(ANSWER_TARGET)) {
+        const answerer = ctx.unitOfPid(m[1]!);
+        const holder = ctx.unitOfPid(t[1]!);
+        if (!answerer || !holder) continue;
+        const name = m[2]!;
+        const atMs = ctx.start + (openS + Number(m[4])) * 1000;
+        const aura = ((holder.auraEvents ?? []) as any[]).find(
+          (a) =>
+            ev(a) === APPLIED &&
+            nameOf(a.spellId, a.spellName) === name &&
+            Math.abs(tsOf(a) - atMs) <= 1000 &&
+            a.srcUnitId !== answerer.id,
+        );
+        if (!aura) continue;
+        const summon = byId.get(aura.srcUnitId);
+        if (
+          !summon ||
+          summon.ownerId !== answerer.id ||
+          String(aura.srcUnitId).startsWith("Pet-")
+        )
+          continue;
+        ctx.bump("answeredByOldSummonPulse");
+        const summonedMs = ((summon.actionIn ?? []) as any[]).find(
+          (a) => ev(a) === "SPELL_SUMMON",
+        );
+        if (!summonedMs || tsOf(summonedMs) >= ctx.start + openS * 1000)
+          continue;
+        ctx.violate(
+          "answeredByOldSummonPulse",
+          name,
+          tsOf(aura),
+          `${answerer.name}:${aura.srcUnitId}:${tsOf(aura)}`,
+          `${answerer.name}'s ${summon.name} summoned ${((tsOf(summonedMs) - ctx.start) / 1000).toFixed(3)}s, its ${name} on ${holder.name} ${((tsOf(aura) - ctx.start) / 1000).toFixed(3)}s, burst opened ${fmtS(openS)}`,
+          l,
+        );
+      }
   }
 }
 
-const YOU_CAST_LINE = /^(\d+:\d{2})\s+\[YOU\] \[CAST\]\s+(.+?)(?: \(x\d+ over \d+s\))?(?: →| \[|$)/;
+// both fold forms, `(x2)` and `(x2 over 2s)` (codex 20-F26-04 #7)
+const YOU_CAST_LINE =
+  /^(\d+:\d{2})\s+\[YOU\] \[CAST\]\s+(.+?)(?: \(x\d+(?: over \d+s)?\))?(?: →| \[|$)/;
 
 function castLineNoButton(ctx: IRoundCtx): void {
   const owner = ctx.owner;
@@ -909,8 +920,9 @@ function castLineNoButton(ctx: IRoundCtx): void {
   }
 }
 
+// the producer ends the sentence with `.` (codex 20-F26-04 #2)
 const TEAM_READY =
-  /team offensive CDs ready at (\d+:\d{2}): (.*?)(?: \((.*?)\))?(?:;|$)/;
+  /team offensive CDs ready at (\d+:\d{2}): (.*?)(?: \((.*?)\))?\.?(?:;|$)/;
 const CD_AT = / \d+:\d{2}$/;
 
 function pressedInsideNeverBack(ctx: IRoundCtx): void {
@@ -920,7 +932,12 @@ function pressedInsideNeverBack(ctx: IRoundCtx): void {
     const names = (s: string) =>
       s
         .split("、")
-        .map((x) => x.trim().replace(CD_AT, "").replace(/ ≤\d+s$/, ""))
+        .map((x) =>
+          x
+            .trim()
+            .replace(CD_AT, "")
+            .replace(/ ≤\d+s$/, ""),
+        )
         .filter((x) => x && x !== "none");
     const ready = new Set(names(m[2]!));
     const clauses = new Map<string, string[]>();
@@ -976,7 +993,8 @@ function healMajorAsDefensive(ctx: IRoundCtx): void {
   }
 }
 
-const ENEMY_CD_LINE = /^(\d+:\d{2})\s+\[ENEMY CD\]\s+\S+ \(([^)]+)\): (.+?)(?: \(|$)/;
+const ENEMY_CD_LINE =
+  /^(\d+:\d{2})\s+\[ENEMY CD\]\s+\S+ \(([^)]+)\): (.+?)(?: \(|$)/;
 
 function healerRosterAsEnemyBurst(ctx: IRoundCtx): void {
   for (const l of ctx.lines) {
@@ -1116,11 +1134,16 @@ function areaCarryInDefenseless(ctx: IRoundCtx): void {
           (x) =>
             String(x.spellId) === "465" &&
             x.srcUnitId === p.id &&
-            x.destUnitId === u.id &&
-            tsOf(x) <= from,
+            x.destUnitId === u.id,
         );
-        const last = dev[dev.length - 1];
-        if (!last || ev(last) === REMOVED) continue;
+        const before = dev.filter((x) => tsOf(x) <= from);
+        const last = before[before.length - 1];
+        // carried at the wall's start, or picked up while it ran (codex
+        // 20-F26-04 #6)
+        const carried =
+          (!!last && ev(last) !== REMOVED) ||
+          dev.some((x) => ev(x) === APPLIED && tsOf(x) > from && tsOf(x) < to);
+        if (!carried) continue;
         ctx.violate(
           "areaCarryInDefenseless",
           "Aura Mastery (Devotion Aura)",
@@ -1139,14 +1162,15 @@ function ownerGroundedUnstated(ctx: IRoundCtx): void {
   for (const g of groundingRedirects(ctx.owner)) {
     if (g.via !== "cast" || !isControlSpell(g.spellId)) continue;
     const sec = Math.floor((g.timestampMs - ctx.start) / 1000);
-    if (sec < 0) continue;
+    // the renderer's own bounds: the round, its start to its end (codex
+    // 20-F26-04 #8: a Shuffle log's tail after the round's ending death)
+    if (sec < 0 || g.timestampMs > ctx.roundEndAt) continue;
     ctx.bump("ownerGroundedUnstated");
     const at = fmtS(sec);
     const stated = ctx.lines.some(
       (l) =>
         l.startsWith(`${at} `) &&
-        (l.includes("[GROUNDED]") ||
-          l.includes("[absorbed: Grounding Totem]")),
+        (l.includes("[GROUNDED]") || l.includes("[absorbed: Grounding Totem]")),
     );
     if (stated) continue;
     const name = nameOf(g.spellId, g.spellName ?? "");
@@ -1161,31 +1185,69 @@ function ownerGroundedUnstated(ctx: IRoundCtx): void {
 }
 
 const UNLOGGED_SILENCE_LINE =
-  /^(\d+:\d{2})\s+\[SILENCE\]\s.*\| no aura logged — silenced at /;
+  /^(\d+:\d{2})\s+\[SILENCE\]\s+\S+ ← (.+?) \(by .*\| no aura logged — silenced at /;
 const CANCEL_STOP_LINE =
-  /^(\d+:\d{2})\s+\[CAST STOPPED\]\s+(.+?) — .*no control, silence or knockback landed on you then/;
+  /^(\d+:\d{2})\s+\[CAST STOPPED\]\s+(.+?) — cast bar stopped after (\d+(?:\.\d)?)s.*no control, silence or knockback landed on you then/;
 
-/** fact11 D6: a `[CAST STOPPED]` line that says no silence landed, at the
- * second (or the next) of the prompt's own `[SILENCE] … no aura logged`
- * line — the two readers of one silence disagree. */
+/** fact11 D6: a `[CAST STOPPED]` line that says no silence landed, its stop
+ * within the product's own `CANCEL_CC_NEAR_S` of the silence a `[SILENCE] …
+ * no aura logged` line prints — the two readers of one silence disagree.
+ * Raw instants (codex 20-F26-04 #1: the stop line prints at the bar's
+ * START, the stop is `stopped after N.Ns` later; whole seconds alone pair a
+ * stop 1.06 s before a Solar Beam with it): the stop is the owner's
+ * CAST_FAILED row N.N s after an instant in the line's second; the silence
+ * is its spell's cast row at its line's second. */
 function castStopUnderUnloggedSilence(ctx: IRoundCtx): void {
-  const silenceSecs = ctx.lines
+  const secOfMs = (ms: number) => Math.floor((ms - ctx.start) / 1000);
+  const allCasts = (ctx.players as any[]).flatMap((u) =>
+    ((u.spellCastEvents ?? []) as any[]).filter((c) => ev(c) === SUCCESS),
+  );
+  const silenceMs = ctx.lines
     .map((l) => UNLOGGED_SILENCE_LINE.exec(l))
     .filter((m): m is RegExpExecArray => !!m)
-    .map((m) => secOf(m[1]!));
-  if (silenceSecs.length === 0) return;
+    .flatMap((m) => {
+      const s = secOf(m[1]!);
+      return allCasts
+        .filter(
+          (c) =>
+            nameOf(String(c.spellId), c.spellName ?? "") === m[2] &&
+            secOfMs(tsOf(c)) === s,
+        )
+        .map(tsOf);
+    });
+  if (silenceMs.length === 0) return;
+  // the owner's FAILED rows (the legacy parse keeps no START rows): tSeconds
+  // since the round's start
+  const failed = ctx
+    .rawStreams()
+    .castFailed.filter((f) => f.unitGuid === ctx.owner.id);
   for (const l of ctx.lines) {
     const m = CANCEL_STOP_LINE.exec(l);
     if (!m) continue;
-    ctx.bump("castStopUnderUnloggedSilence");
     const sec = secOf(m[1]!);
-    if (!silenceSecs.some((s) => sec === s || sec === s + 1)) continue;
+    const after = Number(m[3]!);
+    // the bar's end: a FAILED row of the spell N.N s (±0.05, the rendered
+    // tenth) after an instant inside the line's second
+    const row = failed.find((f) => {
+      const startS = f.tSeconds - after;
+      return (
+        nameOf(String(f.spellId), f.spellName ?? "") === m[2] &&
+        startS >= sec - 0.05 &&
+        startS < sec + 1 + 0.05
+      );
+    });
+    const stopMs = row ? ctx.start + row.tSeconds * 1000 : undefined;
+    if (stopMs === undefined) continue;
+    ctx.bump("castStopUnderUnloggedSilence");
+    const at = stopMs;
+    if (!silenceMs.some((t) => Math.abs(t - at) <= CANCEL_CC_NEAR_S * 1000))
+      continue;
     ctx.violate(
       "castStopUnderUnloggedSilence",
       m[2]!,
-      ctx.start + sec * 1000,
+      stopMs,
       `${ctx.ownerName}:${m[2]}:${m[1]}`,
-      `${m[2]} stop at ${m[1]} read as no silence; a [SILENCE] … no aura logged line sits at ${fmtS(sec)} or the second before`,
+      `${m[2]} stop at +${stopMs - ctx.start}ms (bar from ${m[1]}) read as no silence; an aura-less silence was cast within ${CANCEL_CC_NEAR_S} s of it`,
       l,
     );
   }
