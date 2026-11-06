@@ -5234,3 +5234,13 @@ remaining drHalfLengthFull / drResetBandLength rows (a Psychic Scream
 removed after the round's deciding death) are read as cut by the round's end
 in the checks too. The `syncWindowPriorGenerated` table is stale (the healer
 lock set changed) — GH #115.
+Cross-review follow-ups (same version): a control a REFRESH cut is no band
+evidence on any walk; a removal past the round's end is none either
+(`buildCcCategoryHistory`'s `roundEndAtMs`, passed by the dispel DR, the
+`[CC MISS]` Immune note and the control target state); a kicked pet channel is
+checked against the pet; the incoming history-only path (a reflected control)
+is gated, round-bounded, reads the whole roster and carries `drFullSeconds`,
+which `[CC AVOIDED?]`'s DR cause keeps. Cover set, base ec4f3a94a → aeab16340:
+267 checks, 0 rises, troughPastRoundEndReaders 19 → 0, the new
+reflectedHealerLockUnread 14 → 0 (14 with the reflected-lock reader off); the
+follow-ups change no output line on the cover set.
