@@ -871,4 +871,17 @@
  *  exposed.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 493;
+/*
+ * v494 (2026-11-06, fact11 D1 D3 D4 D5 D6 D8 D9 D13 D14 D15 D16 D17 D19
+ *  D24 D28 D30 D33 D40 D41 D46): a Holy Paladin's Avenging Wrath is a
+ *  healing cooldown, never an enemy burst; heals (Apotheosis) are no major
+ *  defensive; Mage barriers are ledger saves; the kit carries the silences
+ *  that landed; an aura-less silence stops a cast bar; a Spell Reflection
+ *  return with no REFLECT row is a reflect; area saves reach units through
+ *  a nil-source aura and Aura Mastery through Devotion Aura; a re-stated
+ *  shield's run starts at its first absorb; summon pulses, toys and passive
+ *  rows are no answers or presses; troughs and top damagers stop at the
+ *  round's end and the lower unrounded reading.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 494;

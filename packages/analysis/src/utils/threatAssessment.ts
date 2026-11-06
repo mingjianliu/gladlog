@@ -1,6 +1,10 @@
 import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
-import { getPressureThreshold, hasOffensiveSpellActive } from "./cooldowns";
+import {
+  enemyBurstFilterOf,
+  getPressureThreshold,
+  hasOffensiveSpellActive,
+} from "./cooldowns";
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
 
 /**
@@ -98,7 +102,7 @@ export function threatActiveAt(
       : undefined;
   if (
     enemies.some((e) =>
-      hasOffensiveSpellActive(e, tMs, null, undefined, round),
+      hasOffensiveSpellActive(e, tMs, null, enemyBurstFilterOf(e), round),
     )
   )
     return true;

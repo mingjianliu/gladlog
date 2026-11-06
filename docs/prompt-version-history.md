@@ -5386,3 +5386,53 @@ Cover set (117 files, mixed 12.1.0 / 12.1.5), against the same tree before
 (4)'s activation proof and (2)'s effect rule: no FATAL; 275 checks 268
 unchanged, 0 fell, 0 rose; missed-sync-window gains The Hunt in 5 places on
 12.1.5 Devourer logs (2 new candidates, 3 list it in readyCds).
+
+v494 (2026-11-06, fact11 F26 classes 3–8). Readers that disagreed about one
+fact now read it once. (1) D16: a Holy Paladin's Avenging Wrath 31884 is a
+healing cooldown (`HEALER_HELD_OFFENSIVE_SPEC`, `[ENEMY HEAL CD]`), never an
+enemy burst — the enemy CD timeline, offensive windows, crisis bursts and
+the threat reads gate it by spec, on both sides. (2) D4: Apotheosis joins
+`HEAL_NOT_MAJOR_DEFENSIVE_IDS` (no `readyCds`, no "defensive CD
+available"). (3) D46: Prismatic Barrier 235450 and Blazing Barrier 235313
+are ledger saves like Ice Barrier (`ENEMY_SELF_SAVE_ONLY_IDS`): `[PRESS]`
+becomes `[YOU]` / `[TEAM] [CD]` and `[ENEMY DEF]`. (4) D5: `landedControlsForKit`
+counts the silences the `[SILENCE]` lines print (`silenceIntervalsInRound`,
+the owner's `unloggedSilencesOnOwner`), a dispel backlash aside; the kit gate
+counts `[SILENCE]` lines the same way. (5) D6: a silence the log wrote no
+aura for (`unloggedSilencesOnOwner`, moved out of the `[SILENCE]` section)
+stops a cast bar (`ownerCastBarOutcomes` → `near` = cc): `[CAST STOPPED]`
+and the cancel ledger. (6) D9: `unrowedSpellReflections` reads a Spell
+Reflection return logged only as a 23920 row as a reflect of the caster's
+latest damaging cast at the reflector (`reflectedSpells` and corpusFactScan
+`reflectReturn`). (7) D15 / D17 / D19: an area save's nil-source aura of the
+cast's name counts; Aura Mastery reaches Devotion Aura holders
+(`AURA_EMPOWERING_WALLS`, `empoweredAuraSpansOnS`; the `[ENEMY DEF]` gate
+reads it like an area save); a shield whose run starts in a re-stated batch
+starts at its first absorb. (8) D24 / D30 / D41 / D33 / D28 / D3 / D14:
+overlap and save-press spans stop at the aura's own end, a summon's old
+pulse is no answer, a cast row with no button (toys, passive procs:
+Sanctified Ground) is no `[YOU] [CAST]`. (9) D8 / D40 / D1 / D13: a healer
+owner's control into a Grounding Totem is printed; Stormstream Totem is a
+critical summon; STAYED IN's top damager stops at the round's end; a
+trough's second is the lower unrounded reading's.
+19 audited rounds, base → after: castStopUnderUnloggedSilence 1/7 → 0/6,
+kit gate 11/19 → 0/19, ownerGroundedUnstated 2/2 → 0/2, reflectReturn 1/7 →
+0/7, healerRosterAsEnemyBurst 4/22 → 0/18, areaCarryInDefenseless 4/48 →
+0/47, allyOverlapPastAura 4/5 → 0/3, savePressRunsOverlap 1/46 → 0/53.
+Cover set (117 files), base rescanned → this tree: no FATAL; 288 checks 206
+unchanged, 13 fell, 4 rose. Fell: healerRosterAsEnemyBurst 75 → 0,
+areaCarryInDefenseless 26 → 0, savePressRunsOverlap 12 → 0,
+answeredByOldSummonPulse 9 → 0, allyOverlapPastAura 16 → 3, castLineNoButton
+569 → 441, pressedInsideNeverBack 257 → 199, ownerGroundedUnstated 9 → 1,
+reflectReturn 3 → 0, kit gate 420 → 0 (with the backlash rule). Rose:
+checkEnemyDefRefConsistency 0 → 46 (Aura Mastery on holders; the gate now
+reads the wall like an area save → 0), noDefensiveButPressed 1 → 2 (the
+scan counted Apotheosis; it now reads `isNotMajorDefensive`),
+resCdBeforeNextPress +3 (the known 12.1.0 Predator's Wake re-press on a new
+`[RES]` line) and staleDipWithDamage +3 (an existing grid tick, newly
+printed beside a barrier press). Candidates 2652 → 2646: cd-hoarded −10
+(Apotheosis-only rows), missed-sync-window +3 (one fact: the pressed Soul
+Immolation's burst now ends at 2:22, before the enemy healer's 2:25 control),
+slow-defensive-response +1 (the window now opens at Malevolence, not the
+paladin's Avenging Wrath).
+

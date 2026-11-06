@@ -205,6 +205,7 @@ import {
 import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import { OWNER_AOE_CC_NO_PLAYER_TAG } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
+  AURA_EMPOWERING_WALLS,
   deferralWallNames,
   deflectionNames,
   ENEMY_DEF_DEFERS_LABEL_RE_SRC,
@@ -1367,9 +1368,12 @@ const KIT_ROSTER_UNIT =
 /** A `[CC ON TEAM]` data line whose victim and source are roster labels:
  * 1 = the victim's id, 2 = the control, 3 = the id of the source player — or
  * of the owner of the summon that cast it (`… (by 4(BMHunter)'s pet)`). A
- * control reflected back names no source and is not read. */
+ * control reflected back names no source and is not read. A `[SILENCE]` line
+ * is read the same way (fact11 D5, user ruling 2026-10-16: a silence is a
+ * form of control) — the kit counts the silences those lines print, but not
+ * a dispel backlash (`backlashCcTag("silence")`, fact3 D37). */
 const KIT_CC_ON_TEAM_LINE =
-  /^\s*\d+:\d{2}\s+\[CC ON TEAM\]\s+(\d+)\([^()]*\) ← (.+?) \(by (\d+)\([^()]*\)(?:'s [^()]*)?\)/;
+  /^\s*\d+:\d{2}\s+\[(?:CC ON TEAM|SILENCE)\]\s+(\d+)\([^()]*\) ← (.+?) \(by (\d+)\([^()]*\)(?:'s [^()]*)?\)/;
 
 /**
  * The `ENEMY CC KIT` line and the `[CC ON TEAM]` lines are one list (FT R03,
@@ -1386,7 +1390,8 @@ const KIT_CC_ON_TEAM_LINE =
  *  - a kit line that is not in the generated format, or that does not
  *    promise the landed controls;
  *  - an enemy on it that the roster does not list as an enemy;
- *  - both ways, per enemy player and control name: N `[CC ON TEAM]` lines on
+ *  - both ways, per enemy player and control name: N `[CC ON TEAM]` /
+ *    `[SILENCE]` lines on
  *    the kit's unit from that enemy (or its summon) ⟺ `(landed N×)` entries
  *    summing to N — a control that landed and is missing or miscounted, and
  *    a `landed` mark with no such lines, both fail;
@@ -1425,6 +1430,9 @@ export function checkEnemyCcKitLanded(lines: string[]): string[] {
   for (const line of lines) {
     const m = line.match(KIT_CC_ON_TEAM_LINE);
     if (!m || m[1] !== unitId || !enemyIds.has(m[3]!)) continue;
+    // a dispel-backlash silence is not a control that landed (fact3 D37:
+    // the producer leaves it off the kit) — its line carries the tag
+    if (line.includes(backlashCcTag("silence"))) continue;
     const k = key(m[3]!, m[2]!);
     onTimeline.set(k, (onTimeline.get(k) ?? 0) + 1);
   }
@@ -1455,7 +1463,7 @@ export function checkEnemyCcKitLanded(lines: string[]): string[] {
     const kitCount = onKit.get(k) ?? 0;
     if (lineCount !== kitCount)
       failures.push(
-        `${where}: ${nameOfId.get(id)} 的 ${spell} —— 名单写 landed ${kitCount}×,而落在该单位身上的 [CC ON TEAM] 行有 ${lineCount} 条`,
+        `${where}: ${nameOfId.get(id)} 的 ${spell} —— 名单写 landed ${kitCount}×,而落在该单位身上的 [CC ON TEAM] / [SILENCE] 行有 ${lineCount} 条`,
       );
   }
   return failures;
@@ -4685,22 +4693,41 @@ function enemyDefLinesOf(lines: readonly string[]): EnemyDefLine[] {
     const m = ENEMY_DEF_LINE.exec(line);
     if (!m) continue;
     const recipient = ENEMY_DEF_RECIPIENT_ID.exec(line);
+    // fact11 D17: a wall that empowers an aura (`AURA_EMPOWERING_WALLS`:
+    // Aura Mastery through Devotion Aura) reaches the aura's holders — the
+    // producer credits it to them (`empoweredAuraSpansOnS`), so it is read
+    // like an area save of its caster
+    const area =
+      line.includes(" (area)") ||
+      (recipient === null && auraEmpoweringWallNames().has(m[3]!));
     defs.push({
       atS: Number(m[1]) * 60 + Number(m[2]),
       spell: m[3]!,
       // an area save (`X (area)`) is on nobody in particular
-      onId: line.includes(" (area)")
+      onId: area
         ? undefined
         : (recipient ?? ENEMY_DEF_CASTER_ID.exec(line))?.[1],
       endNotLogged: ENEMY_DEF_END_NOT_LOGGED_SLOT_RE.test(line),
       canBeImmunity:
         recipient !== null || line.includes(": " + m[3] + " (immune"),
-      ...(line.includes(" (area)")
-        ? { areaCasterId: ENEMY_DEF_CASTER_ID.exec(line)?.[1] }
-        : {}),
+      ...(area ? { areaCasterId: ENEMY_DEF_CASTER_ID.exec(line)?.[1] } : {}),
     });
   }
   return defs;
+}
+/** The English names of `AURA_EMPOWERING_WALLS`' walls, as `[ENEMY DEF]`
+ * lines print them (read after the analysis data has loaded). */
+let auraEmpoweringWallNamesCache: Set<string> | undefined;
+function auraEmpoweringWallNames(): Set<string> {
+  if (auraEmpoweringWallNamesCache) return auraEmpoweringWallNamesCache;
+  const names = new Set(
+    [...AURA_EMPOWERING_WALLS.keys()]
+      .map((id) => getEnglishSpellName(id, ""))
+      .filter((n) => n !== ""),
+  );
+  // not cached before the spell data has loaded
+  if (names.size > 0) auraEmpoweringWallNamesCache = names;
+  return names;
 }
 /**
  * How long each unit's save can last, as its `<cooldowns>` kit prints it

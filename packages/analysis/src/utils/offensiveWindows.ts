@@ -31,6 +31,8 @@ import {
 } from "./cooldowns";
 import {
   areaSaveSpansOnS,
+  AURA_EMPOWERING_WALLS,
+  empoweredAuraSpansOnS,
   enemyDefensiveEvents,
   type ISaveAuraInterval,
   isBelowWallFloorExternal,
@@ -47,6 +49,7 @@ import {
 } from "./enemyDefensives";
 import { isDeferralAbsorb } from "./incomingPressure";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
+import { isResyncBatchAt } from "./resyncBatch";
 import { roundEndMs } from "./roundEnd";
 // GH #31 ② (2026-09-02): the hand list is replaced by the shared official-face
 // predicate; the curated remainder lives as its registered fallback floor.
@@ -523,6 +526,17 @@ export function computeOffensiveWindows(
         continue;
       }
       const timed = timesCastOf(wallTableIdOfAura(d.spellId));
+      // fact11 D17: Aura Mastery reaches the carriers of the caster's
+      // Devotion Aura (`empoweredAuraSpansOnS`)
+      if (d.kind === "self" && AURA_EMPOWERING_WALLS.has(d.spellId))
+        for (const holder of enemies)
+          for (const span of empoweredAuraSpansOnS(
+            d,
+            ownWallSpanS(d, timed),
+            holder,
+            matchStartMs,
+          ))
+            addSave(holder.id, span);
       addSave(
         d.kind === "external" ? d.recipientId : caster.id,
         d.kind === "external"
@@ -577,12 +591,41 @@ export function computeOffensiveWindows(
           )
         : -Infinity;
       const runEndMs = Math.max(matchStartMs + iv.toS * 1000, lastOwnAbsorbMs);
+      // …and a start the log wrote late — the run re-stated when its unseen
+      // holder came back (`isResyncBatchAt`) — is no start while the shield
+      // was already absorbing for it before, back to its previous run's end
+      // (fact11 D19, 7708f698 r0 1:06: an ally's no-target Void Shield
+      // pressed at 33.018, the vanished rogue's absorbs from 33.471, its
+      // APPLIED re-stated at 34.189 — 1.17 s after the press, past
+      // `ALLY_SHIELD_PRESS_PAIR_MS`, and the run counted for nothing inside
+      // `defenseless 1:14–1:22`)
+      const loggedStartMs = matchStartMs + iv.fromS * 1000;
+      const prevRunEndMs = Math.max(
+        -Infinity,
+        ...holderIntervals(holder)
+          .filter((o) => o.spellId === iv.spellId && o.toS < iv.fromS)
+          .map((o) => matchStartMs + o.toS * 1000),
+      );
+      const runStartMs = isResyncBatchAt(holder, loggedStartMs)
+        ? Math.min(
+            loggedStartMs,
+            ...(holder.absorbsIn ?? [])
+              .filter(
+                (a) =>
+                  a.spellId === iv.spellId &&
+                  a.srcUnitId === iv.srcUnitId &&
+                  a.timestamp > prevRunEndMs &&
+                  a.timestamp < loggedStartMs,
+              )
+              .map((a) => a.timestamp),
+          )
+        : loggedStartMs;
       const shieldCaster = enemies.find((u) => u.id === iv.srcUnitId);
       const shieldSpans = shieldCaster
         ? ownPressedShieldSpansMs(
             holder,
             iv.spellId,
-            matchStartMs + iv.fromS * 1000,
+            runStartMs,
             runEndMs,
             shieldCaster,
           )

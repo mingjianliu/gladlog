@@ -14,7 +14,9 @@
  * somebody else that carries the aura here: Reversion's echo, 19-1 4:39). A
  * proc shield with no such press is no violation. A press with no target
  * (fact8 D10, multi-target Void Shield) counts when it sits beside the run's
- * start.
+ * start. A run starts no later than the shield's first absorb for the target
+ * since it last came off (fact11 D19: an APPLIED re-stated late, after the
+ * target was unseen).
  */
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { riderCastsOfShield } from "@gladlog/analysis/src/data/ownShieldLinks";
@@ -32,6 +34,7 @@ import {
   type IRoundCtx,
   nameOf,
   REFRESH,
+  REMOVED,
   secOf,
   successesOf,
   tsOf,
@@ -90,15 +93,42 @@ export function run(ctx: IRoundCtx): void {
         )
         .pop();
       if (!runStart) continue;
+      // fact11 D19: the run began no later than the shield's first absorb
+      // for u since the shield last came off u — an APPLIED the log wrote
+      // late (u unseen, the aura re-stated when it came back) is no start
+      const lastOff = Math.max(
+        -Infinity,
+        ...((u.auraEvents ?? []) as any[])
+          .filter(
+            (a) =>
+              String(a.spellId) === id &&
+              a.srcUnitId === caster.id &&
+              ev(a) === REMOVED &&
+              tsOf(a) < tsOf(runStart),
+          )
+          .map(tsOf),
+      );
+      const startMs = Math.min(
+        tsOf(runStart),
+        ...((u.absorbsIn ?? []) as any[])
+          .filter(
+            (r) =>
+              (ev(r) === undefined || ev(r) === ABSORBED) &&
+              String(r.spellId) === id &&
+              r.srcUnitId === caster.id &&
+              tsOf(r) > lastOff &&
+              tsOf(r) < tsOf(runStart),
+          )
+          .map(tsOf),
+      );
       const press = successesOf(caster).find(
         (c: any) =>
           tsOf(c) <= t &&
-          tsOf(c) >= tsOf(runStart) - ALLY_SHIELD_PRESS_PAIR_MS &&
+          tsOf(c) >= startMs - ALLY_SHIELD_PRESS_PAIR_MS &&
           tsOf(c) >= t - OWN_SHIELD_PRESS_LOOKBACK_MS &&
           (c.destUnitId === u.id ||
             ((!c.destUnitId || c.destUnitId === NO_TARGET_GUID) &&
-              Math.abs(tsOf(c) - tsOf(runStart)) <=
-                ALLY_SHIELD_PRESS_PAIR_MS)) &&
+              Math.abs(tsOf(c) - startMs) <= ALLY_SHIELD_PRESS_PAIR_MS)) &&
           (String(c.spellId) === id ||
             nameOf(String(c.spellId), c.spellName ?? "") === name ||
             castsOfEffectAura(id).includes(String(c.spellId)) ||

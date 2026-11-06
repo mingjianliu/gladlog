@@ -358,6 +358,76 @@ export function reflectOwnIdRowGap(
  * four 5.6k returns; corpusFactScan reflectReturn shares it). */
 export const REFLECT_DIRECT_RETURN_MS = 3000;
 
+/** Spell Reflection's own id (`REFLECT_OWN_DAMAGE_IDS`). */
+const SPELL_REFLECTION_ID = "23920";
+
+/**
+ * Spell Reflection returns the log wrote no REFLECT row for (fact11 D9,
+ * 10244184 4:40.226): the reflector's 23920 damage (or absorbed) row on the
+ * caster with no counted REFLECT row of that caster on that reflector inside
+ * the window an own-id row pairs with one (`REFLECT_DIRECT_RETURN_MS` before
+ * it to `REFLECT_OWN_ID_LEAD_MS` after it). The spell it sent back is the
+ * caster's latest damaging SPELL_CAST_SUCCESS at the reflector inside
+ * `REFLECT_DIRECT_RETURN_MS` before the row (a projectile's flight) — there
+ * the Scorch cast 1 ms before 106.8k came back under 23920 and the
+ * reflector's 23920 aura went in the same ms. A row with no such cast names
+ * nothing and is left out. Read as a REFLECT row at the return's own ms, one
+ * per millisecond, by `reflectedSpells` and corpusFactScan `reflectReturn`.
+ */
+export function unrowedSpellReflections(
+  caster: ICombatUnit,
+): Array<NonNullable<ICombatUnit["missesOut"]>[number]> {
+  type MissRow = NonNullable<ICombatUnit["missesOut"]>[number];
+  const rowed = (caster.missesOut ?? []).filter(isCountedReflectRow);
+  const returns = new Map<string, number>();
+  for (const d of caster.damageIn ?? [])
+    if (d.spellId === SPELL_REFLECTION_ID && d.srcUnitId)
+      returns.set(`${d.srcUnitId}|${d.logLine.timestamp}`, d.logLine.timestamp);
+  for (const a of caster.absorbsIn ?? [])
+    if (a.attackSpellId === SPELL_REFLECTION_ID && a.attackerId)
+      returns.set(`${a.attackerId}|${a.timestamp}`, a.timestamp);
+  const out: MissRow[] = [];
+  for (const [key, ts] of returns) {
+    const reflectorId = key.slice(0, key.lastIndexOf("|"));
+    if (
+      rowed.some(
+        (m) =>
+          m.destUnitId === reflectorId &&
+          m.logLine.timestamp >= ts - REFLECT_DIRECT_RETURN_MS &&
+          m.logLine.timestamp <= ts + REFLECT_OWN_ID_LEAD_MS,
+      )
+    )
+      continue;
+    let cast: ICombatUnit["spellCastEvents"][number] | undefined;
+    for (const c of caster.spellCastEvents ?? []) {
+      const t = c.logLine.timestamp;
+      if (t > ts) break;
+      if (
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!c.spellId &&
+        c.destUnitId === reflectorId &&
+        t >= ts - REFLECT_DIRECT_RETURN_MS &&
+        // a damage return is a damaging spell's (a control reflected deals
+        // nothing — codex 20-F16-03 #3)
+        abilityProfile(c.spellId).dealsDamage
+      )
+        cast = c;
+    }
+    if (!cast) continue;
+    out.push({
+      ...(cast as unknown as MissRow),
+      missType: "REFLECT",
+      spellId: cast.spellId,
+      spellName: cast.spellName,
+      srcUnitId: caster.id,
+      destUnitId: reflectorId,
+      timestamp: ts,
+      logLine: { ...cast.logLine, timestamp: ts },
+    } as MissRow);
+  }
+  return out.sort((x, y) => x.logLine.timestamp - y.logLine.timestamp);
+}
+
 export function reflectedSpells(
   units: readonly ICombatUnit[],
   matchStartMs: number,
@@ -398,6 +468,8 @@ export function reflectedSpells(
     const reflects = [
       ...(caster.missesOut ?? []).filter((m) => !commandReflects.has(m)),
       ...(reflectsMovedTo.get(caster.id) ?? []),
+      // fact11 D9: a Spell Reflection return with no REFLECT row
+      ...unrowedSpellReflections(caster),
     ]
       .filter(isCountedReflectRow)
       .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);

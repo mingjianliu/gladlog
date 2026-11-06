@@ -28,6 +28,7 @@ import {
   CURATED_ABILITY_FACTS,
 } from "../data/curatedAbilityFacts";
 import { DISCOVERY_TAG_RULES } from "../data/discoveryRules";
+import { isHealerHeldOffensive } from "../data/healerHeldOffensive";
 import {
   healerSaveCdRoster,
   healerSaveCdStripDefensive,
@@ -1449,6 +1450,10 @@ export const PASSIVE_PROC_CAST_IDS: ReadonlyMap<string, string> = new Map([
     "415388",
     "Reclamation (Holy Paladin) — passive proc; 3,604 casts over 300 S2 logs, ~24% of the spec's raw cast count (healer-study passive_ids.json)",
   ],
+  [
+    "289655",
+    "Sanctified Ground (Holy Priest) — a talent's row: no DB2 SpellCooldowns row (`isButtonPress` false), logged 15–60 ms after a Holy Word: Serenity (fact11 D3, 0af2e488: 17 rows, one inside a Storm Bolt stun read `[YOU] [CAST] … succeeded after CC arrived`); scan5 castLineNoButton is this list's forward check",
+  ],
 ]);
 
 /**
@@ -2370,6 +2375,37 @@ export function hpTroughInWindow(
   },
 ): { pct: number; atSec: number; atMs: number } | null {
   let best: { pct: number; atSec: number; atMs: number } | null = null;
+  const actions = getSortedAdvancedActions(unit);
+  const staleMax = (a: (typeof actions)[number]) => hpReadingMaxHp(unit, a);
+  /** the unrounded reading of a row: two readings that print the same whole
+   * percent are told apart by it (fact11 D13, 16bc5861 5:12–5:34: 70.30 % at
+   * 5:25 and the true low 69.64 % at 5:28.6 both print 70 — the earlier
+   * second won the tie and the line said `low 70% at 5:25`) */
+  const rawOf = (a: (typeof actions)[number]) =>
+    a.advancedActorCurrentHp / staleMax(a);
+  /** the seed's own reading: the last row of the unit at its sample's ms
+   * (the point reading's), -Infinity when none — then the seed keeps every
+   * tie, as before */
+  const rawAtSampleMs = (ms: number): number => {
+    // sorted by time: binary search to the instant (an O(n) walk per call
+    // is the first-paint regression shape, perf notes 2026-11-03)
+    let lo = 0;
+    let hi = actions.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (actions[mid]!.logLine.timestamp < ms) lo = mid + 1;
+      else hi = mid;
+    }
+    let raw = -Infinity;
+    for (let i = lo; i < actions.length; i++) {
+      const a = actions[i]!;
+      if (a.logLine.timestamp !== ms) break;
+      if (a.advancedActorId === unit.id && a.advancedActorMaxHp > 0)
+        raw = rawOf(a);
+    }
+    return raw;
+  };
+  let bestRaw = -Infinity;
   if (span && !span.ticksRegardless) {
     // An event's own span reads only what happened inside it (user ruling
     // 2026-10-17, F15: 「只读事件开始之后」): a tick whose sample was taken
@@ -2382,14 +2418,17 @@ export function hpTroughInWindow(
       const smp = gridHpSample(unit, matchStartMs + s * 1000);
       if (smp === null) continue;
       if (smp.sampleMs < span.fromMs || smp.sampleMs > span.toMs) continue;
-      if (best === null || smp.pct < best.pct)
+      if (best === null || smp.pct < best.pct) {
         best = { pct: smp.pct, atSec: s, atMs: smp.sampleMs };
+        bestRaw = rawAtSampleMs(smp.sampleMs);
+      }
     }
   } else {
     const grid = gridHpMinInWindow(unit, matchStartMs, fromSec, toSec, skipSec);
     if (grid !== null) {
       const tickMs = matchStartMs + grid.atSec * 1000;
       best = { ...grid, atMs: gridHpSample(unit, tickMs)?.sampleMs ?? tickMs };
+      bestRaw = rawAtSampleMs(best.atMs);
     }
   }
 
@@ -2419,8 +2458,6 @@ export function hpTroughInWindow(
     toRenderSecond((deathMs - matchStartMs) / 1000) === lastSec + 1;
   const endMs = toDeath ? deathMs + 1 : matchStartMs + (lastSec + 1) * 1000; // exclusive
   const spanToMs = span?.toMs ?? Infinity; // inclusive
-  const actions = getSortedAdvancedActions(unit);
-  const staleMax = (a: (typeof actions)[number]) => hpReadingMaxHp(unit, a);
   // first index at or after `fromMs`
   let lo = 0;
   let hi = actions.length;
@@ -2444,16 +2481,17 @@ export function hpTroughInWindow(
     const sec = toRenderSecond((ts - matchStartMs) / 1000);
     if (skipSec?.(sec)) continue;
     // a row over two scales reads its new max (fact7 D60, fact10 D18)
-    const pct = Math.min(
-      Math.round((a.advancedActorCurrentHp / staleMax(a)) * 100),
-      100,
-    );
+    const raw = rawOf(a);
+    const pct = Math.min(Math.round(raw * 100), 100);
     if (
       best === null ||
       pct < best.pct ||
-      (pct === best.pct && sec < best.atSec)
-    )
+      (pct === best.pct &&
+        (raw < bestRaw || (raw === bestRaw && sec < best.atSec)))
+    ) {
       best = { pct, atSec: sec, atMs: ts };
+      bestRaw = raw;
+    }
   }
   return best;
 }
@@ -7581,6 +7619,18 @@ export function friendlyOffensiveCdActiveAt(
 }
 
 /**
+ * The `spellIdFilter` an enemy-burst reader of `hasOffensiveSpellActive`
+ * passes for one enemy: every offensive cooldown but a healer's throughput
+ * major in that enemy's spec (fact11 D16: a Holy Paladin's Avenging Wrath —
+ * `isHealerHeldOffensive`, the timeline's own gate).
+ */
+export function enemyBurstFilterOf(enemy: {
+  spec?: unknown;
+}): (spellId: string) => boolean {
+  return (id) => !isHealerHeldOffensive(id, enemy.spec);
+}
+
+/**
  * Returns true if the given unit has an Offensive-tagged spell active at `timestampMs`,
  * optionally filtered to only auras sourced from `requiredSourceIds`.
  * - Pass `null` for `requiredSourceIds` to allow any source (used for enemy self-buffs).
@@ -7751,6 +7801,11 @@ function offensiveThreatStartedAfter(
         ) === undefined
       )
         continue;
+      // a healer's throughput major is no threat (fact11 D16)
+      if (
+        isHealerHeldOffensive(offensiveCdOfAura(aura.spellId)!, enemy.spec)
+      )
+        continue;
       // an enemy's own offensive cooldown is a buff on it — a DEBUFF there is
       // ours (a friendly mage's Touch of the Magi 210824), the rule
       // `hasOffensiveSpellActive` applies to the same question (codex
@@ -7815,10 +7870,17 @@ export function detectPanicDefensives(
       const castTimeSeconds = (castMs - combat.startTime) / 1000;
       const targetUnit = unitMap.get(action.destUnitId);
 
-      // 1. Enemy self-buffs: Combustion, Recklessness, etc.
+      // 1. Enemy self-buffs: Combustion, Recklessness, etc. — never a
+      // healer's throughput major (fact11 D16)
       if (
         enemies.some((e) =>
-          hasOffensiveSpellActive(e, castMs, null, undefined, round),
+          hasOffensiveSpellActive(
+            e,
+            castMs,
+            null,
+            enemyBurstFilterOf(e),
+            round,
+          ),
         )
       )
         continue;

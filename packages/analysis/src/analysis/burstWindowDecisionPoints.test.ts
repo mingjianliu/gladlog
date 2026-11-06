@@ -1360,6 +1360,47 @@ describe("controlLandedResponses — a pet's control (fact6 D11)", () => {
   });
 });
 
+describe("controlLandedResponses — a totem's own pulse (fact11 D28)", () => {
+  // be1686eb: Earthgrab Totem 51485 dropped 0:05.505, its root 64695 on the
+  // priest at 0:17.501 (a 2 s pulse), the burst opened at 0:13.1; the shaman
+  // stunned then silenced, no press of his in the fuse
+  const EARTHGRAB_ROOT = "64695";
+  const TOTEM = "Creature-0-F1-Earthgrab";
+  const aura = {
+    id: "E1",
+    auraEvents: [
+      {
+        timestamp: 17_501,
+        spellId: EARTHGRAB_ROOT,
+        srcUnitId: TOTEM,
+        logLine: { event: "SPELL_AURA_APPLIED" },
+      },
+    ],
+  };
+  const ownerOf = (id: string) =>
+    id === "F1" || id.includes("-F1") ? "F1" : undefined;
+  const run = (summonedAt: number | null) =>
+    controlLandedResponses(
+      [aura],
+      new Set(["E1"]),
+      ownerOf,
+      [],
+      13_100,
+      28_100,
+      () => [],
+      (id) => (id === TOTEM ? summonedAt : null),
+    );
+  it("a totem dropped before the burst: its pulse answers nothing", () => {
+    expect(run(5_505)).toEqual([]);
+  });
+  it("a totem dropped inside the burst: the drop is the answer, at its own instant", () => {
+    expect(run(14_000)).toMatchObject([{ unitId: "F1", tMs: 14_000 }]);
+  });
+  it("no summon row in the log: the aura's own instant, as before", () => {
+    expect(run(null)).toMatchObject([{ tMs: 17_501 }]);
+  });
+});
+
 describe("controlLandedResponses — which cast times a landed control (F-B8)", () => {
   const LASSO_CAST = "305483";
   const LASSO_AURA = "305485";

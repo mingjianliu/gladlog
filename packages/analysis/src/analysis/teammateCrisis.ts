@@ -53,6 +53,7 @@
  */
 import { LogEvent } from "@gladlog/parser-compat";
 
+import { isHealerHeldOffensive } from "../data/healerHeldOffensive";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   cdAvailableAt,
@@ -307,8 +308,12 @@ export function teammateCrisisPoints(
       const sid = String(c.spellId ?? "");
       // one predicate with the enemy-CD window builder and crisisDecisionPoints'
       // enemyBurst (utils/enemyCDs.ts): canonical offensive table AND a real
-      // cooldown — never a curse / Ignite the table admits without one
-      if (isEnemyCdWindowSpell(sid, e.spec))
+      // cooldown — never a curse / Ignite the table admits without one, nor
+      // a healer's throughput major (fact11 D16)
+      if (
+        isEnemyCdWindowSpell(sid, e.spec) &&
+        !isHealerHeldOffensive(sid, e.spec)
+      )
         enemyBurstCasts.push({
           t: c.timestamp,
           casterName: e.name,
@@ -317,7 +322,7 @@ export function teammateCrisisPoints(
     }
     // GH #119: aura-evidenced bursts — the timeline's occurrences
     for (const o of auraOffensiveOccurrences(e, combat).occurrences)
-      if (o.burstRole === "burst")
+      if (o.burstRole === "burst" && !isHealerHeldOffensive(o.spellId, e.spec))
         enemyBurstCasts.push({
           t: o.startMs,
           casterName: e.name,

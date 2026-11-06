@@ -310,6 +310,12 @@ export const HEAL_NOT_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
   "109304", // Exhilaration — a self heal
   "64843", // Divine Hymn — a group heal
   "740", // Tranquility — a group heal
+  // fact11 D4 (0af2e488 1:10: cd-hoarded `readyCds=Apotheosis`): a Holy
+  // Priest throughput cooldown — user sign-off 2026-09-02 (GH #31 ②, "wrong
+  // table") took it off the kill-window defensive roster, and it is an
+  // `[ENEMY HEAL CD]` (`ENEMY_HEAL_CD_IDS`); the 2026-11-03 rule 「凡称它为防御
+  // 冷却的都改」 reaches it
+  "200183", // Apotheosis — throughput
 ]);
 
 /**

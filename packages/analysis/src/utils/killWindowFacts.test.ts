@@ -87,7 +87,9 @@ describe("killWindowFacts (GH #31 ①)", () => {
     // burst itself is the capability evidence, facts are never a gate here)
     const burstWin = {
       ...win,
-      bursts: [{ fromSeconds: 50, toSeconds: 55, damage: 900_000, absorbed: 0 }],
+      bursts: [
+        { fromSeconds: 50, toSeconds: 55, damage: 900_000, absorbed: 0 },
+      ],
     };
     const killLines = buildDpsKillWindowLines(
       [burstWin],
@@ -216,6 +218,16 @@ describe("kill-window readiness grammar", () => {
         { name: "Colossus Smash", atSeconds: 57.3 },
       ]);
       expect(f.pressedAtStart).toEqual([]);
+    });
+
+    it("fact11 D14: back and pressed in one rendered second still reads `back inside` at that second", () => {
+      // 16bc5861 3:00 shape: pressed 10.64 → back 55.64 (sampled 55.5: not
+      // yet), pressed again 56.944 — the grid spends that press at 0:56
+      const f = factsFor([10.64, 56.944], 48.731, 60);
+      expect(f.backInside).toEqual([{ name: "Colossus Smash", atSeconds: 56 }]);
+      expect(f.pressedInside).toEqual([
+        { name: "Colossus Smash", atSeconds: 56.944 },
+      ]);
     });
 
     it("a cooldown ready at the sampled second is in the certain list and has no `back inside`", () => {

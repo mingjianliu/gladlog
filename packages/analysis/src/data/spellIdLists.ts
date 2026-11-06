@@ -191,6 +191,14 @@ export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
   "452930", // Demonic Healthstone — 425
   "212295", // Nether Ward — 534
   "11426", // Ice Barrier — 722
+  // fact11 D46 (fb01eed7 r0 0:29): Frost's Ice Barrier was here, its Arcane
+  // and Fire forms were not — the same 25 s self absorb shield (DB2: aura
+  // 69 on the caster; one shared talent row, `talentScriptedCooldowns`'
+  // targets 11426 / 235313 / 235450). An Arcane Mage's Prismatic Barrier
+  // ate 415k of the team's hits inside an attempt read `FAILED: not enough
+  // damage`, its press a bare [PRESS] line.
+  "235450", // Prismatic Barrier
+  "235313", // Blazing Barrier
   "342245", // Alter Time (the press; 342247 is the return) — 804
   "185311", // Crimson Vial — 1,060
   "109304", // Exhilaration — 597

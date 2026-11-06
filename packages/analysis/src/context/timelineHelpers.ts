@@ -147,6 +147,10 @@ export const SPIRIT_LINK_TOTEM_NPC_ID = "53006";
 export const CRITICAL_NON_PLAYER_NPC_NAMES: Record<string, string> = {
   // Shaman Totems
   "3527": "Healing Stream Totem",
+  // fact11 D40 (e4784cab r0 2:39): the talented Healing Stream Totem — a
+  // different npc, so its kill by The Hunt had no [UNIT DESTROYED] line
+  // while the plain one's did (0:23, same DH)
+  "256196": "Stormstream Totem",
   "59764": "Healing Tide Totem",
   [SPIRIT_LINK_TOTEM_NPC_ID]: "Spirit Link Totem",
   [GROUNDING_TOTEM_NPC_ID]: "Grounding Totem",

@@ -93,6 +93,8 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
         "452930": "heal", // Demonic Healthstone
         "19236": "heal", // Desperate Prayer
         "22842": "heal", // Frenzied Regeneration
+        "235313": "absorb", // Blazing Barrier (fact11 D46)
+        "235450": "absorb", // Prismatic Barrier (fact11 D46)
         "109304": "heal", // Exhilaration
         "185311": "heal", // Crimson Vial
         // … and HEAL_ABSORB_SELF_SAVE_IDS (DB2 aura 301)

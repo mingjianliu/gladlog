@@ -6,6 +6,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import {
+  castAndEffectIds,
   effectSpanIdsOfCast,
   TALENT_EFFECT_AURAS_OF_CAST,
   triggeredEffectAurasOfCast,
@@ -15,6 +16,7 @@ import {
   HASTE_DURATION_SPELL_IDS,
 } from "../data/channeledGenerated";
 import { isOffensivePressFactFor } from "../data/enemyHealCds";
+import { isHealerHeldOffensive } from "../data/healerHeldOffensive";
 import {
   PERIODIC_TRIGGER_SPELLS,
   SCRIPTED_PERIODIC_TRIGGER_AURA_IDS,
@@ -33,10 +35,7 @@ import {
   supersededAuraBreaks,
 } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
-import {
-  channelEndSeconds,
-  channelRefusedAtCast,
-} from "./castCommitSpans";
+import { channelEndSeconds, channelRefusedAtCast } from "./castCommitSpans";
 import {
   canonicalSpellId,
   getUnitHpAtTimestamp,
@@ -389,6 +388,19 @@ function observedEffectEnd(
         a.logLine.timestamp >= castMs - EFFECT_START_BEFORE_S * 1000 &&
         a.logLine.timestamp <= castMs + EFFECT_START_AFTER_S * 1000,
     );
+  let noPressStarts: Array<{ startMs: number; spellId: string }> | undefined;
+  const ownNoPressStartsAt = (iv: { fromS: number; spellId: string }) => {
+    noPressStarts ??= auraOffensiveOccurrences(caster, combat)
+      .occurrences.filter((o) => o.generic)
+      .map((o) => ({ startMs: o.startMs, spellId: o.spellId }));
+    const ms = combat.startTime + iv.fromS * 1000;
+    return noPressStarts.some(
+      (o) =>
+        Math.abs(o.startMs - ms) <= 1 &&
+        (o.spellId === iv.spellId ||
+          castAndEffectIds(o.spellId).has(iv.spellId)),
+    );
+  };
   let best: {
     end: number;
     observed: boolean;
@@ -448,6 +460,13 @@ function observedEffectEnd(
     let lastFromS = ivs[first]!.fromS;
     for (const iv of ivs.slice(first + 1)) {
       if (iv.fromS > chainEnd + EFFECT_CHAIN_GAP_S) break;
+      // fact11 D24 / D30 / D41: a re-application the timeline lists as an
+      // occurrence of its own — a cast-less `(no press)` one
+      // (`auraOffensiveOccurrences`' generic branch) — is that occurrence's,
+      // not this press's: Soul Immolation pressed 1:04.06, removed 1:09.06,
+      // a proc 1:09.32–1:14.33 and another to 1:19.58 — the press's span
+      // ran to 1:19.58 and the burst ledger credited the procs twice
+      if (dest === caster.id && ownNoPressStartsAt(iv)) break;
       // a re-application of the SAME aura continues the chain; another of
       // the cast's effect ids on this unit does not (round-1 retest idx 46:
       // Kingsbane 385627 ended at 2:25.13, and its same-named stacking buff
@@ -767,8 +786,12 @@ export function reconstructEnemyCDTimeline(
     // enemy was unseen (`hiddenPressMs`) is a press too (0284fcd9 r1 0:12:
     // Tranquility; 4-3 r3 0:06: Takedown — no line, kit [UNUSED])
     // the enemy's spec admits its spec-gated cooldowns (GH #184 part B:
-    // a Retribution's Divine Toll, a Feral's Convoke)
-    const isWindowSpell = (id: string) => isEnemyCdWindowSpell(id, enemy.spec);
+    // a Retribution's Divine Toll, a Feral's Convoke); fact11 D16: a
+    // healer's throughput major on the offensive roster (Holy Paladin
+    // Avenging Wrath) is that healer's [ENEMY HEAL CD], no burst
+    const isWindowSpell = (id: string) =>
+      isEnemyCdWindowSpell(id, enemy.spec) &&
+      !isHealerHeldOffensive(id, enemy.spec);
     const presses = pressRowsWithHidden(enemy, isWindowSpell, matchStartMs);
     for (const cast of presses) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
@@ -996,6 +1019,9 @@ export function reconstructEnemyCDTimeline(
     // 20-F15-34: its 12.5–20.5 s interval stretched the 10 s cast)
     const mergedInto = new Set<IEnemyCDCast>();
     for (const o of aura.occurrences) {
+      // fact11 D16: the healer's own (no press) Avenging Wrath is its
+      // [ENEMY HEAL CD] line's (`castlessHealCdAuras`)
+      if (isHealerHeldOffensive(o.spellId, enemy.spec)) continue;
       const castTimeSeconds = (o.startMs - matchStartMs) / 1000;
       // the aura a press made while unseen was restated from
       // (`pressRowsWithHidden`: the press sits at the aura's own instant) is

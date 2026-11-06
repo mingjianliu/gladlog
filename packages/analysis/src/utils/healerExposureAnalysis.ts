@@ -621,16 +621,38 @@ export function landedControlsForKit(
   unitCCSummary: Pick<IPlayerCCTrinketSummary, "ccInstances">,
   enemies: readonly ICombatUnit[],
   allUnits?: Iterable<ICombatUnit>,
+  /** the silences the unit's `[SILENCE]` lines print (fact11 D5, user ruling
+   * 2026-10-16: a silence is a form of control): `silenceIntervalsInRound`,
+   * plus the owner's `unloggedSilencesOnOwner`; epoch ms, the round's start
+   * `startMs` */
+  silences?: {
+    startMs: number;
+    landed: ReadonlyArray<{
+      atMs: number;
+      spellId: string;
+      spellName: string;
+      sourceId: string;
+    }>;
+  },
 ): IKitLandedControl[] {
   const out: IKitLandedControl[] = [];
   const units = allUnits ? [...allUnits] : undefined;
-  for (const cc of [...unitCCSummary.ccInstances].sort(
-    (a, b) => a.atSeconds - b.atSeconds,
-  )) {
+  const landed: Array<{
+    atSeconds: number;
+    spellId: string;
+    spellName: string;
+    sourceId: string;
+  }> = [];
+  for (const cc of unitCCSummary.ccInstances) {
     if (!rendersCcOnTeamLine(cc)) continue;
     // fact3 D37: a dispel-backlash silence is a [SILENCE] line, not a
     // control that landed (Unstable Affliction "landed 3×" in the kit)
     if (BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence") continue;
+    landed.push(cc);
+  }
+  for (const x of silences?.landed ?? [])
+    landed.push({ ...x, atSeconds: (x.atMs - silences!.startMs) / 1000 });
+  for (const cc of landed.sort((a, b) => a.atSeconds - b.atSeconds)) {
     const enemy =
       enemies.find((e) => e.id === cc.sourceId) ??
       summonOwnerById(units, cc.sourceId, enemies);

@@ -222,10 +222,30 @@ export function createKillWindowFactsComputer(
       // not certainly ready is — the same `cdAvailableAt` on the same grid.
       const lastSecond = Math.floor(toSeconds);
       const backInside: IKillWindowCdAt[] = [];
+      // fact11 D14 (16bc5861 3:00): a press in second s is spent at s on the
+      // grid (`gridConsumedView`), so a cooldown back at 189.64 and pressed
+      // at 190.94 never read back — `pressed inside: Dark Transformation
+      // 3:10` and no `back inside`. Whether it was back at s is asked
+      // without the presses s itself renders: the same grid sample, before
+      // them.
+      const beforePressesOf = <T extends (typeof notCertain)[number]["cd"]>(
+        cd: T,
+        s: number,
+      ): T => {
+        const keep = (c: { timeSeconds: number }) =>
+          toRenderSecond(c.timeSeconds) !== s;
+        return {
+          ...cd,
+          casts: cd.casts.filter(keep),
+          ...(cd.sharedCasts
+            ? { sharedCasts: cd.sharedCasts.filter(keep) }
+            : {}),
+        };
+      };
       for (const { cd, holder } of notCertain)
         for (let s = readyAtSecond + 1; s <= lastSecond; s++) {
           if (isDeadAt(holder, startMs + s * 1000)) break;
-          if (cdAvailableAt(cd, s)) {
+          if (cdAvailableAt(beforePressesOf(cd, s), s)) {
             backInside.push({ name: label(cd), atSeconds: s });
             break;
           }
@@ -397,7 +417,10 @@ export function killWindowAcquittal(f: IKillWindowGateFacts): string {
  * clause does. fact2 R7 (2026-10-20, user ruling 3): `never punished (team
  * damage 0k total)` on a rogue whose shields had taken 381k of the team's
  * hits. One writer for both views. */
-export function teamDamageTotalClause(landed: number, absorbed: number): string {
+export function teamDamageTotalClause(
+  landed: number,
+  absorbed: number,
+): string {
   const k = (n: number) => (n / 1000).toFixed(0);
   const a = k(absorbed);
   return `team damage ${k(landed)}k total${a === "0" ? "" : `, +${a}k absorbed`}`;

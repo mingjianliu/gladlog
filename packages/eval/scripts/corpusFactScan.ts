@@ -120,6 +120,7 @@ import {
   REFLECT_MIN_DAMAGE_PCT,
   REFLECT_OWN_ID_LEAD_MS,
   reflectOwnIdRowGap,
+  unrowedSpellReflections,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
@@ -977,9 +978,12 @@ function runRound(ctx: IContext): void {
   for (const caster of units) {
     const cp = pidOf.get(caster.name);
     if (!cp) continue;
-    const reflects = ((caster.missesOut ?? []) as any[])
-      .filter(isCountedReflectRow)
-      .sort((x, y) => tsOf(x) - tsOf(y));
+    // fact11 D9: a Spell Reflection return with no REFLECT row is read as
+    // one at its own ms — the product's `unrowedSpellReflections`
+    const reflects = [
+      ...((caster.missesOut ?? []) as any[]).filter(isCountedReflectRow),
+      ...unrowedSpellReflections(caster),
+    ].sort((x, y) => tsOf(x) - tsOf(y));
     const groups: Array<{
       first: any;
       last: number;

@@ -194,6 +194,11 @@ export function auraEndFromLog(
      * removal on it is the aura's own end, not its holder's death
      * (`removedByDeath`) */
     naturalEndMs?: number;
+    /** the application began at a re-press's REFRESH at this ms
+     * (`splitAtRepressRefresh`): what the shield absorbed up to and at it
+     * is the previous press's (fact11 D33, c73ff2b4 0:33: Ice Barrier
+     * re-pressed 0.74 s in printed the whole life's 351k, its own 205k) */
+    repressedAtMs?: number;
   },
   srcUnitId?: string,
 ): IAuraEndFromLog {
@@ -270,8 +275,15 @@ export function auraEndFromLog(
     }
   }
   const floorMs = fromMs - SPAN_START_SLACK_MS;
-  const sumFromMs = Math.max(lifeFromMs, floorMs);
-  const sumFromExclusive = lifeFromExclusive && lifeFromMs >= floorMs;
+  const repressed = span.repressedAtMs;
+  const sumFromMs =
+    repressed !== undefined
+      ? Math.max(lifeFromMs, repressed)
+      : Math.max(lifeFromMs, floorMs);
+  const sumFromExclusive =
+    repressed !== undefined
+      ? lifeFromMs <= repressed
+      : lifeFromExclusive && lifeFromMs >= floorMs;
   let absorbed = 0;
   for (const x of holder.absorbsIn ?? []) {
     if (x.spellId !== spellId || !mine(x)) continue;

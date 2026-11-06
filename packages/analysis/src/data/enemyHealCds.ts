@@ -36,6 +36,7 @@ import {
   isSpecGatedOffensiveFor,
   OFFENSIVE_PRESS_FACT_IDS,
 } from "../utils/spellDanger";
+import { HEALER_HELD_OFFENSIVE_SPEC } from "./healerHeldOffensive";
 
 export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   ...TEAM_HEAL_CD_IDS,
@@ -81,6 +82,11 @@ export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   // healing sits on the triggered 15290, so the official profile reads
   // nothing and the roster never named it.
   "15286",
+  // fact11 D16: an offensive-roster id that is a healer's throughput major
+  // in that spec's hands (`HEALER_HELD_OFFENSIVE_SPEC`: Holy Paladin
+  // Avenging Wrath) — gated to the spec below; the burst readers skip it
+  // for that spec (`isHealerHeldOffensive`)
+  ...Object.keys(HEALER_HELD_OFFENSIVE_SPEC),
 ]);
 
 /** Ids that are a healing major only for one spec — the press of another
@@ -94,6 +100,7 @@ const ENEMY_HEAL_CD_SPEC: Readonly<Record<string, string>> = {
   "375576": CombatUnitSpec.Paladin_Holy,
   "443028": CombatUnitSpec.Monk_Mistweaver,
   "15286": CombatUnitSpec.Priest_Shadow,
+  ...HEALER_HELD_OFFENSIVE_SPEC,
 };
 
 /**
@@ -102,7 +109,6 @@ const ENEMY_HEAL_CD_SPEC: Readonly<Record<string, string>> = {
  */
 export const ENEMY_HEAL_CD_ROSTER_ELSEWHERE: Readonly<Record<string, string>> =
   {
-    "31884": "Avenging Wrath — an [ENEMY CD] (the offensive roster)",
     "421453": "Ultimate Penitence — an [ENEMY CD] carrying its self-save (absorb)",
     "19236": "Desperate Prayer — an [ENEMY DEF] self-save (self-heal)",
     // fact8 D37 (a39539f2 1:19): the user's 2026-09-24 ruling is a save for

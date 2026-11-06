@@ -28,6 +28,7 @@
  *    scale, max HP still the old one. 4f8a5947 2:33: 151364 / 1361920 = 11 %,
  *    then 151771 / 1047640 = 14 %.
  */
+import { isNotMajorDefensive } from "@gladlog/analysis/src/data/abilityProfile";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import {
   effectiveCooldownSeconds,
@@ -80,10 +81,16 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "noDefensiveButPressed|edgeSecond",
 ]);
 
+// the product's "defensive CD": Defensive-tagged, never a heal or a movement
+// button (`isNotMajorDefensive` — fact9 D17 / fact10 D12; fact11 D4 added
+// Apotheosis)
 const DEFENSIVE_IDS = new Set(
   classMetadata
     .flatMap((m) => m.abilities)
-    .filter((s) => s.tags.includes(SpellTag.Defensive))
+    .filter(
+      (s) =>
+        s.tags.includes(SpellTag.Defensive) && !isNotMajorDefensive(s.spellId),
+    )
     .map((s) => s.spellId),
 );
 const STAYED_NONE =

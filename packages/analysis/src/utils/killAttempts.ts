@@ -111,7 +111,9 @@ import {
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   areaSaveSpansOnS,
+  AURA_EMPOWERING_WALLS,
   effectSaves,
+  empoweredAuraSpansOnS,
   ENEMY_PROC_SAVE_NAMES,
   enemyDefensiveEvents,
   externalAuraOf,
@@ -125,6 +127,7 @@ import {
   limitedImmunitySchoolMask,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
+  ownWallSpanS,
   SAVE_AURA_END_UNSEEN_NAMES,
   SAVE_CAST_AURA_PAIR_S,
   saveAuraCountsWhenAlreadyUp,
@@ -1764,9 +1767,13 @@ function targetReadingsFactory(
       return externals.filter((d) => d.recipientId === target.id);
     },
     areaSavesOn: () => {
+      // …and a wall that empowers an aura its caster's allies carry (fact11
+      // D17: Aura Mastery through Devotion Aura — `empoweredAuraSpansOnS`)
       areas ??= enemies.flatMap((mate) =>
         enemyDefensiveEvents(mate, enemies, combat).filter(
-          (d) => d.kind === "area",
+          (d) =>
+            d.kind === "area" ||
+            (d.kind === "self" && AURA_EMPOWERING_WALLS.has(d.spellId)),
         ),
       );
       const units = Object.values(combat.units ?? {}) as ICombatUnit[];
@@ -1784,7 +1791,15 @@ function targetReadingsFactory(
             SAVE_CAST_AURA_PAIR_S;
           return {
             d,
-            spans: areaSaveSpansOnS(d, ivs, fromCaster, lifetimeS),
+            spans:
+              d.kind === "area"
+                ? areaSaveSpansOnS(d, ivs, fromCaster, lifetimeS)
+                : empoweredAuraSpansOnS(
+                    d,
+                    ownWallSpanS(d, false),
+                    target,
+                    combat.startTime,
+                  ),
           };
         })
         .filter((x) => x.spans.length > 0);

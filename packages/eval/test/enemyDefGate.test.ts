@@ -146,6 +146,34 @@ describe("checkEnemyDefRefConsistency", () => {
     ).toHaveLength(1);
   });
 
+  it("fact11 D17: Aura Mastery reaches the paladin's Devotion Aura holders — read like an area save of its caster", () => {
+    // 32-3 (cover set) 0:55: Sineex "saved by external (Blessing of
+    // Sacrifice/Aura Mastery)", the line on the paladin at 0:58
+    const kit = [
+      ...ROSTER,
+      '  <unit id="6" name="Aesque-DefiasBrotherhood-EU" spec="Holy Paladin" role="enemy">',
+      "    <cooldowns>Divine Shield [210s, lasts 8s], Aura Mastery [120s, lasts 8s]</cooldowns>",
+      "  </unit>",
+    ];
+    const lines = (at: string) => [
+      LEGEND,
+      ...kit,
+      `${at}  [ENEMY DEF]   6(HPaladin) (Holy Paladin): Aura Mastery (24%, 8.0s) (at 90% HP)`,
+      ATTEMPT("0:55–1:19", "saved by external (Aura Mastery)"),
+    ];
+    expect(checkEnemyDefRefConsistency(lines("0:58"))).toEqual([]);
+    // HAS TEETH: no line in the span, and another wall gets no such reach
+    expect(checkEnemyDefRefConsistency(lines("1:30"))).toHaveLength(1);
+    expect(
+      checkEnemyDefRefConsistency([
+        LEGEND,
+        ...kit,
+        "0:58  [ENEMY DEF]   6(HPaladin) (Holy Paladin): Divine Shield (immune, 8.0s)",
+        ATTEMPT("0:55–1:19", "saved by external (Divine Shield)"),
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("B4a (2026-09-25): the target's own non-wall press (`popped X` since 2026-10-11) needs an [ENEMY DEF] line for X in the span", () => {
     const ok = [
       LEGEND,

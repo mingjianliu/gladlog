@@ -78,6 +78,7 @@ import { analyzeKickAudit } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
 import { roundEndMs } from "./roundEnd";
 import { unitLogEpochMs } from "./talents";
+import { unloggedSilencesOnOwner } from "./unloggedSilence";
 
 // The reading of how a cast bar ended, the rows it starts from and the
 // interruption reasons live in castBarOutcomes.ts (kickAudit reads them too);
@@ -194,6 +195,11 @@ export function ownerCastBarOutcomes(params: {
   /** the other side: their target-dropping presses (`dodgeMs`), Feign Death
    * included */
   enemies?: readonly ICombatUnit[];
+  /** every unit of the round and the round's end (epoch ms): with both, a
+   * silence the log wrote no aura for (`unloggedSilencesOnOwner`, the
+   * `[SILENCE] … no aura logged` reading) is stop evidence too (fact11 D6) */
+  allUnits?: readonly ICombatUnit[];
+  roundEndAtMs?: number;
 }): CastBarOutcome[] | null {
   const { owner, startMs, rawStreams } = params;
   if (!rawStreams?.available) return null;
@@ -215,7 +221,24 @@ export function ownerCastBarOutcomes(params: {
       .map((c) => c.logLine.timestamp),
     ...feignDeathInstantsMs(e),
   ]);
-  return castBarOutcomesOf({ unit: owner, startMs, failed, dodgeMs });
+  const unloggedSilenceMs =
+    params.allUnits && params.roundEndAtMs !== undefined
+      ? unloggedSilencesOnOwner({
+          owner,
+          allUnits: params.allUnits,
+          enemies: params.enemies ?? [],
+          matchStartMs: startMs,
+          roundEndAtMs: params.roundEndAtMs,
+          rawStreams,
+        }).map((x) => x.castMs)
+      : [];
+  return castBarOutcomesOf({
+    unit: owner,
+    startMs,
+    failed,
+    dodgeMs,
+    unloggedSilenceMs,
+  });
 }
 
 /**
@@ -292,6 +315,8 @@ export function ownerCastCancels(params: {
     startMs: combat.startTime,
     rawStreams,
     enemies,
+    allUnits: Object.values(combat.units),
+    roundEndAtMs: roundEndMs(combat),
   });
   if (!starts) return null;
   const roundEndS = (roundEndMs(combat) - combat.startTime) / 1000;

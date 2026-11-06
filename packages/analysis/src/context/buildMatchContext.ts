@@ -118,6 +118,10 @@ import {
   formatSpecBaselines,
 } from "../utils/specBaselines";
 import { heroBuildGroupOf } from "../utils/talents";
+import {
+  silenceIntervalsInRound,
+  unloggedSilencesOnOwner,
+} from "../utils/unloggedSilence";
 import { warlockPetFunctions, warlockPurgePetSpans } from "../utils/warlockPet";
 import { BURST_ANSWERED_POSITIONING_XREF } from "./burstAnswered";
 import { ccUseSummary, formatCcUse, ownerControlCastBars } from "./ccUse";
@@ -879,6 +883,42 @@ export function buildMatchContext(
   // FT R03 (user ruling 2026-10-11): the kit is the burst-window threats ∪
   // every control that landed on that healer this round — the healer's own
   // instances of the summaries the [CC ON TEAM] lines are printed from
+  // fact11 D5: …and the silences its [SILENCE] lines print — the same two
+  // readings (`silenceIntervalsInRound` from the other side and its summons,
+  // the owner's `unloggedSilencesOnOwner`)
+  const kitSilencesOn = (unit: ICombatUnit) => {
+    const units = Object.values(combat.units) as ICombatUnit[];
+    const attackerIds = new Set(enemies.map((e) => e.id));
+    for (const u of units)
+      if (u.ownerId && attackerIds.has(u.ownerId)) attackerIds.add(u.id);
+    const endMs = roundEndMs(combat);
+    return {
+      startMs: combat.startTime,
+      landed: [
+        ...silenceIntervalsInRound(unit, attackerIds, endMs).map((x) => ({
+          atMs: x.from,
+          spellId: x.spellId,
+          spellName: getEnglishSpellName(x.spellId, x.spellName),
+          sourceId: x.srcUnitId,
+        })),
+        ...(unit.id === owner.id
+          ? unloggedSilencesOnOwner({
+              owner: unit,
+              allUnits: units,
+              enemies: enemies as ICombatUnit[],
+              matchStartMs: combat.startTime,
+              roundEndAtMs: endMs,
+              rawStreams: options.rawStreams,
+            }).map((x) => ({
+              atMs: x.castMs,
+              spellId: x.spellId,
+              spellName: x.spellName,
+              sourceId: x.srcId,
+            }))
+          : []),
+      ],
+    };
+  };
   const kitHealerSummary = healerUnit
     ? ccTrinketSummaries.find((s) => s.playerName === healerUnit.name)
     : undefined;
@@ -890,6 +930,7 @@ export function buildMatchContext(
           kitHealerSummary,
           enemies as ICombatUnit[],
           Object.values(combat.units) as ICombatUnit[],
+          healerUnit ? kitSilencesOn(healerUnit) : undefined,
         )
       : undefined,
     healerUnit

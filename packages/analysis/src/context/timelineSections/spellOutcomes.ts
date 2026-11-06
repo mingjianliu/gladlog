@@ -40,6 +40,7 @@ export function emitSpellOutcomeEntries(
     | "enemyPid"
     | "addEntry"
     | "rawStreams"
+    | "isHealer"
   >,
 ): {
   /** The `[REJECTED]` runs that printed — what a `[CAST STOPPED]` line must
@@ -68,10 +69,15 @@ export function emitSpellOutcomeEntries(
     );
   const byId = new Map(_allUnits.map((u) => [u.id, u]));
   const inMatch = (t: number) => t >= 0 && t <= matchEndSeconds;
+  // the owner's own cast into the totem is stated by the healer gap
+  // filler's `[absorbed: Grounding Totem]` tag — written for a healer owner
+  // only (`emitHealerCastGapFillerEntries`); any other owner's gets the
+  // [GROUNDED] line (fact11 D8, 10244184 0:34 / 1:17: a Feral's two Cyclones
+  // into the Grounding Totem printed nowhere)
   for (const g of groundedControls(
     _allUnits,
     matchStartMs,
-    new Set([owner.id]),
+    ctx.isHealer ? new Set([owner.id]) : new Set(),
   )) {
     if (!inMatch(g.atSeconds)) continue;
     const caster = byId.get(g.casterId);

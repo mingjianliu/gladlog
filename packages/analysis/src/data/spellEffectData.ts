@@ -527,6 +527,15 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Catlike Reflexes — DB2 aura 107 misc 1 +2000 ms, mask 0/256/0/0 covering Aspect of the Cheetah (2097152/256); tooltip 'initial burst of speed is increased by 2 sec' (the tooltip's ${$s2/1000} reads the one effect). Corpus, 605 files: holders 5.0 s ×5 (all three specs), non-holders 3.0 s in 381 of 388",
     },
   ],
+  // fact11 D18: the same burst's copy on the hunter's allies (DB2 3 s)
+  "356781": [
+    {
+      talentSpellId: "1258404",
+      untalentedBaseSeconds: 3,
+      addSeconds: 2,
+      note: "Catlike Reflexes — the same DB2 row (1267050, aura 107 misc 1 +2000 ms, mask 0/256/0/0) covers 356781 too (talentEffectInventoryGenerated: via mask); 5b8e0ac4: a holder's allies' copies ran 5.0 s at both presses (54.595–59.599, 100.546–105.566), the `[PRESS]` line read this copy at the untalented 3 s",
+    },
+  ],
   "114052": [
     {
       talentSpellId: "378270",

@@ -124,6 +124,18 @@ export function auraOnlyActivations(
     // (`auraStandsForPressAt`), never a `(no press)` line (fact11 D44); from
     // 12.1.5 it is a proc and carries the suffix like every other
     if (!o.spellName.endsWith(NO_PRESS_SUFFIX)) continue;
+    // a healer's throughput major on the offensive roster (fact11 D16: Holy
+    // Paladin Avenging Wrath) is read once — as the heal family's line
+    if (
+      out.some(
+        (h) =>
+          h.family === "heal" &&
+          h.spellId === o.spellId &&
+          Math.abs(h.atSeconds * 1000 + matchStartMs - o.startMs) <=
+            SAVE_CAST_AURA_PAIR_S * 1000,
+      )
+    )
+      continue;
     out.push({
       atSeconds: (o.startMs - matchStartMs) / 1000,
       spellId: o.spellId,

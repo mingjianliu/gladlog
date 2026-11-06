@@ -914,6 +914,9 @@ export function absorbedDuring(
     {
       fromMs: Math.round(matchStartMs + iv.fromS * 1000),
       removedMs: Math.round(matchStartMs + iv.toS * 1000),
+      ...(iv.startedByRepress
+        ? { repressedAtMs: Math.round(matchStartMs + iv.fromS * 1000) }
+        : {}),
     },
     iv.srcUnitId ?? holder.id,
   ).absorb?.absorbed;
@@ -1723,9 +1726,10 @@ export function ownSaveSpanS(
  * Spirit Link late, or leaves and comes back, is covered for each visit
  * (codex 20-F15-31) — for as long as each was up (1120cb61: Rallying Cry on
  * the Death Knight 0:29.5–0:42.5 inside `defenseless 0:29–0:55`). Two
- * warriors' Rallying Cries each read their own aura. A save with no aura on
- * the unit (Darkness, an Anti-Magic Zone the log writes no aura for) cuts
- * nothing here.
+ * warriors' Rallying Cries each read their own aura. An aura the log writes
+ * with no source counts by the cast's name (Anti-Magic Zone's 145629, fact11
+ * D15). A save with no aura on the unit (Darkness, an Anti-Magic Zone the
+ * log writes no aura for) cuts nothing here.
  */
 export function areaSaveSpansOnS(
   d: Pick<IEnemyDefensiveEvent, "kind" | "spellId" | "atSeconds" | "casterId">,
@@ -1736,17 +1740,82 @@ export function areaSaveSpansOnS(
 ): Array<{ from: number; to: number }> {
   if (d.kind !== "area") return [];
   const effects = new Set(effectAurasOfCast(d.spellId));
-  if (effects.size === 0) return [];
+  // fact11 D15 (211fe2a6 r0 1:48): an area aura the log writes with no
+  // source — Anti-Magic Zone's 145629, every one of its APPLIED rows
+  // `0000000000000000,nil` — is paired with no cast by the generated table
+  // and fails the caster test; it is the save's own when it carries the
+  // cast's name and went up inside the save's lifetime
+  const name = getEnglishSpellName(d.spellId, "");
+  const nilSourceCarry = (x: ISaveAuraInterval) =>
+    (!x.srcUnitId || x.srcUnitId === NO_TARGET_GUID) &&
+    name !== "" &&
+    getEnglishSpellName(x.spellId, "") === name;
   return holderIntervals
     .filter(
       (x) =>
-        effects.has(x.spellId) &&
-        fromCaster(x.srcUnitId) &&
+        ((effects.has(x.spellId) && fromCaster(x.srcUnitId)) ||
+          nilSourceCarry(x)) &&
         x.fromS >= d.atSeconds - 0.5 &&
         x.fromS <= d.atSeconds + Math.max(lifetimeS, SAVE_CAST_AURA_PAIR_S) &&
         x.toS > x.fromS,
     )
     .map((x) => ({ from: x.fromS, to: x.toS }));
+}
+
+/**
+ * fact11 D17 (26b28640 0:42): an own wall that empowers an aura its caster
+ * puts on its allies — the wall reaches every carrier of that aura while both
+ * are up. Aura Mastery 31821 empowers Devotion Aura 465: the 24 % team-wide
+ * reduction `MITIGATION_TABLE` already prices (全团减伤). Filed `self` (the
+ * caster's own wall), it cut only the paladin's spans: the Balance Druid
+ * under the paladin's Devotion Aura read `defenseless 0:44–1:12` through
+ * Aura Mastery's 0:42.6–0:50.6. Registered in curatedIdRegistry.
+ */
+export const AURA_EMPOWERING_WALLS: ReadonlyMap<string, string> = new Map([
+  ["31821", "465"],
+]);
+
+/**
+ * The spans (match seconds) in which an `AURA_EMPOWERING_WALLS` wall of `d`'s
+ * caster reached `holder` through the empowered aura: the wall's own span
+ * ∩ each logged run of that aura from the caster on the holder. A run with no
+ * APPLIED before its REMOVED was up since the round began; one with no
+ * REMOVED runs on. [] for the caster itself (its own wall covers it), for any
+ * other wall, and for a holder with no row of the aura from the caster.
+ */
+export function empoweredAuraSpansOnS(
+  d: Pick<IEnemyDefensiveEvent, "spellId" | "casterId">,
+  wallSpan: { from: number; to: number } | undefined,
+  holder: Pick<ICombatUnit, "id" | "auraEvents">,
+  matchStartMs: number,
+): Array<{ from: number; to: number }> {
+  const auraId = AURA_EMPOWERING_WALLS.get(d.spellId);
+  if (!auraId || !wallSpan || holder.id === d.casterId) return [];
+  const rows = (holder.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.spellId === auraId &&
+        a.srcUnitId === d.casterId &&
+        a.destUnitId === holder.id,
+    )
+    .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+  const runs: Array<{ from: number; to: number }> = [];
+  let on: number | undefined;
+  for (const a of rows) {
+    const t = (a.logLine.timestamp - matchStartMs) / 1000;
+    if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) on ??= t;
+    else if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
+      runs.push({ from: on ?? -Infinity, to: t });
+      on = undefined;
+    }
+  }
+  if (on !== undefined) runs.push({ from: on, to: Infinity });
+  return runs
+    .map((r) => ({
+      from: Math.max(r.from, wallSpan.from),
+      to: Math.min(r.to, wallSpan.to),
+    }))
+    .filter((r) => r.from < r.to);
 }
 
 /**
@@ -1967,13 +2036,24 @@ export function splitAtRepressRefresh(
     refreshesOf.set(key, list);
   }
   for (const iv of intervals) {
-    const refreshS = (
-      refreshesOf.get(`${iv.spellId}\u0000${iv.srcUnitName}`) ?? []
-    ).filter((t) => t > iv.fromS + SAVE_CAST_AURA_PAIR_S && t < iv.toS);
     const casts = castSecondsOf(iv.srcUnitName, iv.spellId);
-    const cuts = refreshS
-      .filter((t) =>
-        casts.some((c) => Math.abs(c - t) <= SAVE_CAST_AURA_PAIR_S),
+    // fact11 D33 (c73ff2b4 0:32): inside the pairing window of the start a
+    // REFRESH can be the start's own press landing on a copy
+    // (`pressRefreshedCopy`), so there it cuts only when the log pairs both
+    // ends tightly — a press beside the APPLIED and another beside the
+    // REFRESH (Ice Barrier pressed 32.385, re-pressed 33.126 with its REFRESH
+    // at 33.125: both lines read the whole 4.8 s and 351k)
+    const pairS = PRESS_REFRESH_PAIR_MS / 1000;
+    const pressedAt = (s: number) =>
+      casts.some((c) => Math.abs(c - s) <= pairS);
+    const startPressed = !iv.inferredStart && pressedAt(iv.fromS);
+    const cuts = (refreshesOf.get(`${iv.spellId}\u0000${iv.srcUnitName}`) ?? [])
+      .filter(
+        (t) =>
+          t < iv.toS &&
+          (t > iv.fromS + SAVE_CAST_AURA_PAIR_S
+            ? casts.some((c) => Math.abs(c - t) <= SAVE_CAST_AURA_PAIR_S)
+            : t > iv.fromS + 2 * pairS && startPressed && pressedAt(t)),
       )
       .sort((a, b) => a - b);
     let from = iv.fromS;
@@ -1987,12 +2067,15 @@ export function splitAtRepressRefresh(
         inferredStart,
         inferredEnd: false,
         endedByRepress: true,
+        ...(from !== iv.fromS ? { startedByRepress: true as const } : {}),
       });
       from = cut;
       inferredStart = false;
     }
     out.push(
-      from === iv.fromS ? { ...iv } : { ...iv, fromS: from, inferredStart },
+      from === iv.fromS
+        ? { ...iv }
+        : { ...iv, fromS: from, inferredStart, startedByRepress: true },
     );
   }
   return out;
@@ -2005,6 +2088,9 @@ export type ISaveAuraInterval = IAuraInterval & {
   /** the press ended where the same source pressed it again (a cast-backed
    * REFRESH, `splitAtRepressRefresh`) — not removed early */
   endedByRepress?: true;
+  /** the press began at a REFRESH its source pressed (the run before it
+   * `endedByRepress`): what the aura did before it is the earlier press's */
+  startedByRepress?: true;
 };
 
 /**
@@ -2262,6 +2348,11 @@ export function enemyDefensiveEvents(
           removedMs: endMs,
           naturalEndMs:
             Math.round(combat.startTime + iv.fromS * 1000) + full * 1000,
+          ...(iv.startedByRepress
+            ? {
+                repressedAtMs: Math.round(combat.startTime + iv.fromS * 1000),
+              }
+            : {}),
         },
         iv.srcUnitId,
       );
@@ -2295,6 +2386,11 @@ export function enemyDefensiveEvents(
         {
           fromMs: Math.round(combat.startTime + iv.fromS * 1000),
           removedMs: endMs,
+          ...(iv.startedByRepress
+            ? {
+                repressedAtMs: Math.round(combat.startTime + iv.fromS * 1000),
+              }
+            : {}),
         },
         iv.srcUnitId,
       ),

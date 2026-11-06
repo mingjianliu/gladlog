@@ -86,6 +86,7 @@ import {
   isOffensiveSpell,
   SPEC_GATED_OFFENSIVE_CD_IDS,
 } from "../utils/spellDanger";
+import { summonedAtMs } from "../utils/summonLife";
 import { isDeadAt } from "../utils/unitDeath";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
@@ -840,6 +841,8 @@ export function controlLandedResponses(
   summonCastsOf: (
     summonId: string,
   ) => ReadonlyArray<{ spellId: string; tMs: number }> = () => [],
+  /** a summon's own SPELL_SUMMON instant (`summonedAtMs`), or null */
+  summonedAtOf: (summonId: string) => number | null = () => null,
 ): LandedControlResponse[] {
   const out: LandedControlResponse[] = [];
   for (const caster of casters)
@@ -932,7 +935,16 @@ export function controlLandedResponses(
           c.dest === caster.id,
       );
       if (aimed) continue;
-      const tMs = cast?.tMs ?? a.timestamp;
+      // fact11 D28 (be1686eb 0:17): a totem or guardian (no pet) whose
+      // control no press of its owner made inside the fuse pulsed on its own
+      // — the press that answered is the one that summoned it (an Earthgrab
+      // Totem dropped at 0:05.5 rooted the priest at 0:17.5, read "answered
+      // with Earthgrab in 4.4s" for a burst opened at 0:13.1)
+      const summonedAt =
+        !cast && a.srcUnitId !== unitId && !fromPet
+          ? summonedAtOf(a.srcUnitId)
+          : null;
+      const tMs = cast?.tMs ?? summonedAt ?? a.timestamp;
       if (tMs < w0 || tMs > w1) continue;
       out.push({
         unitId,
@@ -1634,6 +1646,10 @@ export function burstWindowDecisionPoints(
               spellId: String(c.spellId),
               tMs: c.timestamp ?? c.logLine?.timestamp ?? 0,
             }));
+        },
+        (summonId) => {
+          const u = units.find((x) => x.id === summonId);
+          return u ? summonedAtMs(u) : null;
         },
       )) {
         const holder = units.find((u) => u.id === r.holderId);

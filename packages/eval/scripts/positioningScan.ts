@@ -16,6 +16,7 @@
 import { gunzipSync } from "node:zlib";
 
 import { isHealerSpec } from "@gladlog/analysis";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { GladLogParser } from "@gladlog/parser";
 import {
   CombatUnitReaction,
@@ -143,6 +144,7 @@ async function main() {
       matchStartMs: combat.startTime,
       unitIdMap,
       units,
+      roundEndAtMs: roundEndMs(combat),
     };
 
     const result = checkGeoClaims(claims, ctx);

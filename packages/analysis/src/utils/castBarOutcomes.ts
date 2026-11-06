@@ -177,6 +177,10 @@ export function castBarOutcomesOf(params: {
    * Feign Death, `feignDeathInstantsMs`) — `near` = "dodged" for a stop one of
    * them sits next to */
   dodgeMs?: readonly number[];
+  /** epoch ms of silences the log wrote no aura for on the unit
+   * (`unloggedSilencesOnOwner`) — `near` = "cc" for a stop next to one, like
+   * a logged silence aura (fact11 D6) */
+  unloggedSilenceMs?: readonly number[];
 }): CastBarOutcome[] {
   const { unit, startMs, failed } = params;
   const dodgeAt = (params.dodgeMs ?? []).map((ms) => (ms - startMs) / 1000);
@@ -191,7 +195,7 @@ export function castBarOutcomesOf(params: {
   // a control / silence aura on the unit, and (F-K10b) landed enemy
   // displacements — the shared stop evidence
   const forced = forcedStopInstantsMs(unit);
-  const ccAt = forced.cc.map(sec);
+  const ccAt = [...forced.cc, ...(params.unloggedSilenceMs ?? [])].map(sec);
   // a landed Death Grip is a displacement too (fact9 D11)
   const displacedAt = [...forced.displaced, ...forced.gripped].map(sec);
   const diedAt = (unit.deathRecords ?? []).map((d) => sec(d.timestamp));

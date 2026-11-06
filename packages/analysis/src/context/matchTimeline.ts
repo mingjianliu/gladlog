@@ -957,6 +957,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // repeated rejections outside CC. Builders: spellOutcomeLines.ts.
   const { rejectRunsPrinted } = emitSpellOutcomeEntries({
     actorLabel,
+    isHealer,
     owner,
     _allUnits,
     matchEndSeconds,
@@ -981,6 +982,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   emitCastStoppedEntries({
     owner,
     enemies: enemies ?? [],
+    allUnits,
+    roundEndAtMs,
     matchStartMs,
     // the round's end, not the log's (FT I11): a Solo Shuffle round is over
     // at its first player death — the one round end the ledger's cancels

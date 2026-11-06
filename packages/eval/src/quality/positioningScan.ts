@@ -372,6 +372,9 @@ interface CheckContext {
   /** Every unit of the combat — pets and summons carry the `ownerId` G4c's
    * predicate credits their damage through. Absent ⇒ players only. */
   units?: ICombatUnit[];
+  /** the round's end (`roundEndMs`): the span readers stop there, as the
+   * producer's do (fact11 D1). Absent ⇒ no clamp. */
+  roundEndAtMs?: number;
 }
 
 /** Name resolution: prompt full name (Name-Realm-US) → unit. The pid label
@@ -711,6 +714,7 @@ export function checkGeoClaims(
           ctx.matchStartMs,
           claim.atSeconds,
           claim.toSeconds ?? claim.atSeconds,
+          ctx.roundEndAtMs,
         );
         checked++;
         const claimed = claim.unitName
@@ -741,6 +745,7 @@ export function checkGeoClaims(
           ctx.matchStartMs,
           claim.atSeconds,
           claim.toSeconds ?? claim.atSeconds,
+          ctx.roundEndAtMs,
         );
         if (!measured) break;
         checked++;

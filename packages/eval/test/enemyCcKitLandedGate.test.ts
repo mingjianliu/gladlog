@@ -169,4 +169,29 @@ describe("checkEnemyCcKitLanded (FT R03)", () => {
       ).length,
     ).toBeGreaterThan(0);
   });
+
+  it("fact11 D5: a [SILENCE] line on the kit's unit is a control that landed, both ways", () => {
+    const silence =
+      "0:50  [SILENCE]   3(RDruid) ← Silence (by 6(HPriest)) | 4s [DR: Silence Full]";
+    const withSilence = KIT.replace(
+      "Psychic Scream [Disorient] (landed 1×)",
+      "Psychic Scream [Disorient] (landed 1×), Silence [Silence] (landed 1×)",
+    );
+    expect(checkEnemyCcKitLanded(prompt(withSilence, [...TIMELINE, silence]))).toEqual([]);
+    // the silence line with no kit entry, and the entry with no line
+    expect(checkEnemyCcKitLanded(prompt(KIT, [...TIMELINE, silence]))).toHaveLength(1);
+    expect(checkEnemyCcKitLanded(prompt(withSilence))).toHaveLength(1);
+    // reflected back names no enemy, and a silence on someone else is not the kit's
+    expect(
+      checkEnemyCcKitLanded(
+        prompt(KIT, [
+          ...TIMELINE,
+          "0:50  [SILENCE]   3(RDruid) ← Silence (reflected back) | 4s",
+          "0:51  [SILENCE]   2(DWarlock) ← Silence (by 6(HPriest)) | 4s",
+          // a dispel backlash is no control that landed (fact3 D37)
+          "0:52  [SILENCE]   3(RDruid) ← Unstable Affliction (by 6(HPriest)) | 4s [DISPEL BACKLASH CC: silence]",
+        ]),
+      ),
+    ).toEqual([]);
+  });
 });

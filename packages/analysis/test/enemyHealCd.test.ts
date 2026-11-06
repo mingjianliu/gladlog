@@ -14,8 +14,15 @@ import {
 } from "../src/context/timelineSections/enemyCd";
 import { abilityProfile } from "../src/data/abilityProfile";
 import { CURATED_ABILITY_FACTS } from "../src/data/curatedAbilityFacts";
-import { ENEMY_HEAL_CD_IDS } from "../src/data/enemyHealCds";
+import {
+  ENEMY_HEAL_CD_IDS,
+  isEnemyHealCdFor,
+} from "../src/data/enemyHealCds";
 import { ensureAnalysisData } from "../src/data/ensure";
+import {
+  HEALER_HELD_OFFENSIVE_SPEC,
+  isHealerHeldOffensive,
+} from "../src/data/healerHeldOffensive";
 import { HEALER_SAVE_CD_IDS } from "../src/data/healerSaveCd";
 import { TEAM_HEAL_CD_IDS } from "../src/utils/cooldowns";
 import { OFFENSIVE_CD_SPELL_IDS } from "../src/utils/spellDanger";
@@ -90,9 +97,22 @@ describe("G7-P3", () => {
         expect(ENEMY_HEAL_CD_IDS.has(f.id), f.id).toBe(false);
     expect(ENEMY_HEAL_CD_IDS.has("2050")).toBe(false);
   });
-  it("the heal-CD set never overlaps the burst-window set", () => {
-    for (const id of ENEMY_HEAL_CD_IDS)
-      expect(OFFENSIVE_CD_SPELL_IDS.has(id), id).toBe(false);
+  it("the heal-CD set overlaps the burst-window set only through a spec gate the burst readers skip", () => {
+    for (const id of ENEMY_HEAL_CD_IDS) {
+      if (!OFFENSIVE_CD_SPELL_IDS.has(id)) continue;
+      // fact11 D16: Holy Paladin Avenging Wrath — the heal line for Holy,
+      // the burst for Retribution
+      const spec = HEALER_HELD_OFFENSIVE_SPEC[id];
+      expect(spec, id).toBeDefined();
+      expect(isEnemyHealCdFor(id, spec), id).toBe(true);
+      expect(isHealerHeldOffensive(id, spec), id).toBe(true);
+      expect(isEnemyHealCdFor(id, CombatUnitSpec.Paladin_Retribution)).toBe(
+        false,
+      );
+      expect(
+        isHealerHeldOffensive(id, CombatUnitSpec.Paladin_Retribution),
+      ).toBe(false);
+    }
   });
   // FT F01: Time Spiral 374968 sat in the set and is a movement-ability
   // reset (5 `[ENEMY HEAL CD]` lines on the 60 re-eval prompts, 96 on the

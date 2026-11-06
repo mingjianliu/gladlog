@@ -156,7 +156,13 @@ export function castStoppedLine(
 export function emitCastStoppedEntries(
   ctx: Pick<
     TimelineCtx,
-    "owner" | "matchStartMs" | "rawStreams" | "addEntry" | "enemies"
+    | "owner"
+    | "matchStartMs"
+    | "rawStreams"
+    | "addEntry"
+    | "enemies"
+    | "allUnits"
+    | "roundEndAtMs"
   > & {
     /** The round's end, seconds since `matchStartMs` (`roundEndMs`). */
     roundEndSeconds: number;
@@ -181,6 +187,10 @@ export function emitCastStoppedEntries(
     startMs: matchStartMs,
     rawStreams,
     enemies: ctx.enemies,
+    // a silence the log wrote no aura for — the `[SILENCE] … no aura
+    // logged` line's own reading (fact11 D6)
+    allUnits: ctx.allUnits,
+    roundEndAtMs: ctx.roundEndAtMs,
   });
   if (!outcomes) return;
   // one bar = one SPELL_CAST_START row: its spell id and its instant

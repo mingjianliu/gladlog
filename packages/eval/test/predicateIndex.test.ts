@@ -214,6 +214,7 @@ import * as threatAssessment from "@gladlog/analysis/src/utils/threatAssessment"
 import * as trinketCooldown from "@gladlog/analysis/src/utils/trinketCooldown";
 import * as trinketTypeMod from "@gladlog/analysis/src/utils/trinketType";
 import * as unitDeath from "@gladlog/analysis/src/utils/unitDeath";
+import * as unloggedSilence from "@gladlog/analysis/src/utils/unloggedSilence";
 import * as warlockPet from "@gladlog/analysis/src/utils/warlockPet";
 import {
   decodeAdvanced as parserDecodeAdvanced,
@@ -497,6 +498,23 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/castStopEvidence.ts`,
     symbol: "feignDeathInstantsMs",
     mod: castStopEvidence,
+  },
+  // fact11 D5 / D6: the aura-less silence and the [SILENCE] set
+  {
+    file: `${A}/utils/unloggedSilence.ts`,
+    symbol: "unloggedSilencesOnOwner",
+    mod: unloggedSilence,
+  },
+  {
+    file: `${A}/utils/unloggedSilence.ts`,
+    symbol: "silenceIntervalsInRound",
+    mod: unloggedSilence,
+  },
+  // fact11 D9: a Spell Reflection return with no REFLECT row
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "unrowedSpellReflections",
+    mod: spellOutcomeLines,
   },
   {
     file: `${A}/context/matchTimelineSections.ts`,

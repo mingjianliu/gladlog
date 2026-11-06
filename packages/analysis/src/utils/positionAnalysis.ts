@@ -375,6 +375,8 @@ export function topEnemyDamagerInSpan(
   matchStartMs: number,
   fromRenderS: number,
   toRenderS: number,
+  /** the round's end (`roundEndMs`): a hit logged after it is in no round */
+  untilMs: number = Infinity,
 ): { name: string; damage: number } | null {
   const enemyNameById = new Map(enemies.map((e) => [e.id, e.name]));
   const ownerOf = new Map(
@@ -383,7 +385,7 @@ export function topEnemyDamagerInSpan(
       .map((u) => [u.id, u.ownerId as string]),
   );
   const fromMs = matchStartMs + fromRenderS * 1000;
-  const toMs = matchStartMs + (toRenderS + 1) * 1000;
+  const toMs = Math.min(matchStartMs + (toRenderS + 1) * 1000, untilMs);
   const byEnemy = new Map<string, number>();
   for (const d of owner.damageIn ?? []) {
     const ts = d.logLine.timestamp;
@@ -451,6 +453,8 @@ export function spanMeasuredEnemy<E extends ICombatUnit>(
   matchStartMs: number,
   fromRenderS: number,
   toRenderS: number,
+  /** the round's end (`roundEndMs`) — `topEnemyDamagerInSpan`'s */
+  untilMs: number = Infinity,
 ): E | null {
   const read = (among: readonly E[]) =>
     topEnemyDamagerInSpan(
@@ -460,6 +464,7 @@ export function spanMeasuredEnemy<E extends ICombatUnit>(
       matchStartMs,
       fromRenderS,
       toRenderS,
+      untilMs,
     );
   const top = read(enemies);
   const unit = top ? enemies.find((e) => e.name === top.name) : undefined;
@@ -940,6 +945,7 @@ export function computeOwnerPositionEvents(params: {
       matchStartMs,
       tStart,
       tEnd,
+      roundEndAtMs,
     );
     const sampleAt = measured
       ? (t: number) =>
@@ -1230,7 +1236,9 @@ export function computeOwnerPositionEvents(params: {
             );
       const hpLow = trough?.pct ?? hpMin;
 
-      // B24b: who actually hit the owner over the rendered span
+      // B24b: who actually hit the owner over the rendered span — not past
+      // the round's end, as the trough above (fact11 D1, 0815382c r0
+      // 1:02–1:12: 472k with ~146k landed after the first death at 1:09.4)
       const topDamager = topEnemyDamagerInSpan(
         owner,
         enemies,
@@ -1238,6 +1246,7 @@ export function computeOwnerPositionEvents(params: {
         matchStartMs,
         tStart,
         tEnd,
+        roundEndAtMs,
       );
       events.push({
         type: "STAYED_IN",

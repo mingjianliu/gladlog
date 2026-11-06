@@ -134,6 +134,7 @@ import {
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_LANDING_WINDOW_S, AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
 import {
+  AURA_EMPOWERING_WALLS,
   KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
   KW_REDIRECT_PROTECTION_AURA_IDS,
   KW_UNTARGETABLE_AURA_IDS,
@@ -241,6 +242,7 @@ import {
   FORM_COOLDOWN_BUFF_BY_CAST_ID,
 } from "./druidForms";
 import { ENEMY_HEAL_CD_IDS } from "./enemyHealCds";
+import { HEALER_HELD_OFFENSIVE_SPEC } from "./healerHeldOffensive";
 import { HEALING_VERDICTS, PROPOSED_HEALING_VERDICTS } from "./healingVerdicts";
 import {
   KICKED_CONTROL_OVERRIDE_IDS,
@@ -1466,6 +1468,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("ENEMY_HEAL_CD_IDS", "data/enemyHealCds.ts", "cast", () =>
     set(ENEMY_HEAL_CD_IDS),
+  ),
+  t("HEALER_HELD_OFFENSIVE_SPEC", "data/healerHeldOffensive.ts", "cast", () =>
+    set(new Set(Object.keys(HEALER_HELD_OFFENSIVE_SPEC))),
+  ),
+  t("AURA_EMPOWERING_WALLS", "utils/enemyDefensives.ts", "aura", () =>
+    set([...AURA_EMPOWERING_WALLS.keys(), ...AURA_EMPOWERING_WALLS.values()]),
   ),
   t("CHANNEL_PROXY_IDS", "data/occupancyAuras.ts", "aura", () =>
     set(CHANNEL_PROXY_IDS),

@@ -49,6 +49,67 @@
  *    Redemption form (`auraIsImmunityForm`: immune to control, user ruling
  *    fact2 5 / F20) at the line's second — the log's own aura rows. Counted:
  *    every `[HEALER EXPOSURE]` line.
+ *  - allyOverlapPastAura (D24 D30 D41): a BURST LEDGER `Ally CDs
+ *    overlapping:` line whose entries of one ally and one cooldown (`X Ns`
+ *    and `X (no press) Ns` together) claim more seconds than that ally's own
+ *    aura of the name — APPLIED → REMOVED on themselves, by themselves —
+ *    covers inside the burst (its printed seconds widened by one on each
+ *    side). One aura run credited to a press and to the cast-less
+ *    re-application it chained into, or to the press that refreshed it.
+ *    Counted: every (burst, ally, cooldown) with two entries or more whose
+ *    ally has such an aura covering each entry alone (an effect on another
+ *    unit — Predator's Wake's DoT — is not bounded by it).
+ *  - savePressRunsOverlap (D33): two press lines of one unit's own save
+ *    (`[ENEMY DEF]` / `[YOU] [CD]` / `[TEAM] [CD]`, no `→` target) of one
+ *    name, the later one pressed before the earlier one's printed length ran
+ *    out by more than the rendering's second — one aura run read for both
+ *    presses (Ice Barrier re-pressed 0.74 s in, both lines `absorb 351k,
+ *    4.8s`). A re-press ends the earlier run. Counted: every such line
+ *    followed by a later line of the same unit and name.
+ *  - answeredByOldSummonPulse (D28): a `[BURST ANSWERED]` `P answered with
+ *    X on Y in Ns` whose control aura X on Y — APPLIED within a second of
+ *    the opener's second + N — came from a summon of P that is no pet (a
+ *    totem, a guardian) summoned (its SPELL_SUMMON) before the opener's
+ *    second: a pulse of a totem dropped before the burst, no answer to it.
+ *    Counted: every such answer whose aura came from a non-pet summon.
+ *  - castLineNoButton (D3): a `[YOU] [CAST]` line naming a spell whose every
+ *    owner SPELL_CAST_SUCCESS row of the name in that second is no button —
+ *    no DB2 SpellCooldowns row (`isButtonPress`): a row a passive writes
+ *    (Sanctified Ground 289655 after each Holy Word: Serenity). The forward
+ *    check of `PASSIVE_PROC_CAST_IDS`; kind = the spell id. Counted: every
+ *    `[YOU] [CAST]` line with an owner row of its name in its second.
+ *  - pressedInsideNeverBack (D14): a `team offensive CDs ready at M:SS: …`
+ *    clause set listing a cooldown under `pressed inside` that is on none of
+ *    its other lists — ready, `may already be back`, `back inside`, `pressed
+ *    at start` — a press proves it was back by then. Counted: every
+ *    `pressed inside` entry.
+ *  - healMajorAsDefensive (D4): a cd-hoarded menu row's `readyCds` (the
+ *    player's "usable major defensive cooldown") naming a healing major —
+ *    an `[ENEMY HEAL CD]` id (`ENEMY_HEAL_CD_IDS`, the throughput roster).
+ *    Kind = the name (Tree of Life is a ruled defensive, 2026-09-14: read
+ *    the kinds, not the total). Counted: every readyCds entry.
+ *  - healerRosterAsEnemyBurst (D16): an `[ENEMY CD]` line of an enemy
+ *    healer naming a cooldown on that spec's signed save roster
+ *    (`healerSaveCdRoster`, user-signed 2026-09-04) that deals no damage
+ *    (official profile) — a healer's throughput major filed as an offensive
+ *    burst (Holy Paladin Avenging Wrath). Counted: every healer `[ENEMY CD]`
+ *    line.
+ *  - ownShieldNotPopped (D46): a `KILL ATTEMPTS` line `FAILED: not enough
+ *    damage` on a target whose own pressed absorb shield (an aura the target
+ *    put on itself, from a button — `isButtonPress` of the aura or a cast it
+ *    is the effect of) absorbed ≥ 50k of our team's hits inside the
+ *    attempt's rendered seconds. Kind = the shield. Counted: every such
+ *    failed attempt line.
+ *  - areaCarryInDefenseless (D15): a `[KILL WINDOW] … (defenseless a–b)`
+ *    span on a unit that carried, strictly inside it, an aura named as an
+ *    area save (`ENEMY_AREA_SAVE_IDS`' casts, by English name — the log can
+ *    write the aura with no source: Anti-Magic Zone 145629). Kind = the
+ *    save. Counted: every defenseless span.
+ *  - ownerGroundedUnstated (D8): the owner's own control whose cast row
+ *    names an enemy Grounding Totem (`groundingRedirects` via "cast", a
+ *    lookup of the log's own redirect) with neither a `[GROUNDED]` line nor
+ *    an `[absorbed: Grounding Totem]` tag in its second. Counted: every
+ *    such redirect of the owner's.
  *  - variantSpentButton (D22 D25 D29): on a log from before a dated
  *    override variant's cutover (`OVERRIDE_VARIANT_SHARES_BY_ERA`: Predator's
  *    Wake 1259431 → The Hunt 1246167 before 12.1.5), a `[RES]` `cd:` entry of
@@ -62,11 +123,20 @@ import {
   parseResRow,
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
-import { castAndEffectIds } from "@gladlog/analysis/src/data/castEffectAuras";
+import { isControlSpell } from "@gladlog/analysis/src/context/spellOutcomeLines";
+import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
+import {
+  castAndEffectIds,
+  castsOfEffectAura,
+} from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
+import { ENEMY_HEAL_CD_IDS } from "@gladlog/analysis/src/data/enemyHealCds";
+import { healerSaveCdRoster } from "@gladlog/analysis/src/data/healerSaveCd";
 import { OVERRIDE_VARIANTS_GENERATED } from "@gladlog/analysis/src/data/overrideVariantsGenerated";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
+import { ENEMY_AREA_SAVE_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { isButtonPress } from "@gladlog/analysis/src/utils/castCommitSpans";
 import {
   isControlCast,
   PRESS_LANDED_SAME_INSTANT_MS,
@@ -76,8 +146,10 @@ import { COPY_CAST_IDS } from "@gladlog/analysis/src/utils/castPress";
 import { auraIsImmunityForm } from "@gladlog/analysis/src/utils/combatStates";
 import {
   immunityStopsSpellSchool,
+  KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
   wallStopsEveryHit,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { groundingRedirects } from "@gladlog/analysis/src/utils/groundingRedirects";
 import { OVERRIDE_VARIANT_SHARES_BY_ERA } from "@gladlog/analysis/src/utils/overrideVariantEra";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/talents";
@@ -86,6 +158,7 @@ import {
   ABSORBED,
   APPLIED,
   ev,
+  fmtS,
   type IRoundCtx,
   nameOf,
   REMOVED,
@@ -103,6 +176,17 @@ export const CHECKS = [
   "immuneCauseCannotStopDamage",
   "exposureThreatOnFormHealer",
   "variantSpentButton",
+  "allyOverlapPastAura",
+  "savePressRunsOverlap",
+  "answeredByOldSummonPulse",
+  "castLineNoButton",
+  "pressedInsideNeverBack",
+  "healMajorAsDefensive",
+  "healerRosterAsEnemyBurst",
+  "ownShieldNotPopped",
+  "areaCarryInDefenseless",
+  "ownerGroundedUnstated",
+  "castStopUnderUnloggedSilence",
 ] as const;
 
 export function run(ctx: IRoundCtx): void {
@@ -111,8 +195,19 @@ export function run(ctx: IRoundCtx): void {
   pressImmuneTagChecks(ctx);
   exposureThreatOnFormHealer(ctx);
   variantSpentButton(ctx);
+  allyOverlapPastAura(ctx);
+  savePressRunsOverlap(ctx);
+  answeredByOldSummonPulse(ctx);
+  pressedInsideNeverBack(ctx);
+  healMajorAsDefensive(ctx);
+  healerRosterAsEnemyBurst(ctx);
+  areaCarryInDefenseless(ctx);
   if (!ctx.owner) return;
+  ownShieldNotPopped(ctx);
+  ownerGroundedUnstated(ctx);
+  castStopUnderUnloggedSilence(ctx);
   channelEndOnOwnRow(ctx);
+  castLineNoButton(ctx);
   channelSpanUnrun(ctx);
 }
 
@@ -619,5 +714,479 @@ function variantSpentButton(ctx: IRoundCtx): void {
         );
       }
     }
+  }
+}
+
+const LEDGER_BURST_SPAN = /^\s+Burst #\d+ — (\d+:\d{2})–(\d+:\d{2})\b/;
+const ALLY_OVERLAPS = /^\s+Ally CDs overlapping: (.*)$/;
+const ALLY_ENTRY = /^(\S+) (.+?) ([\d.]+)s \(/;
+
+function allyOverlapPastAura(ctx: IRoundCtx): void {
+  let burst: { fromS: number; toS: number } | null = null;
+  for (const l of ctx.text.split("\n")) {
+    const b = LEDGER_BURST_SPAN.exec(l);
+    if (b) {
+      burst = { fromS: secOf(b[1]!), toS: secOf(b[2]!) + 1 };
+      continue;
+    }
+    const o = ALLY_OVERLAPS.exec(l);
+    if (!o || !burst) continue;
+    const sums = new Map<
+      string,
+      { ally: string; name: string; s: number; n: number; max: number }
+    >();
+    for (const part of o[1]!.split("; ")) {
+      const e = ALLY_ENTRY.exec(part.trim());
+      if (!e) continue;
+      const name = e[2]!.replace(/ \(no press\)$/, "");
+      const key = `${e[1]}|${name}`;
+      const cur = sums.get(key) ?? { ally: e[1]!, name, s: 0, n: 0, max: 0 };
+      cur.s += Number(e[3]);
+      cur.max = Math.max(cur.max, Number(e[3]));
+      cur.n += 1;
+      sums.set(key, cur);
+    }
+    const fromMs = ctx.start + (burst.fromS - 1) * 1000;
+    const toMs = ctx.start + (burst.toS + 1) * 1000;
+    for (const { ally, name, s, n, max } of sums.values()) {
+      // one entry can run past its own aura by design (The Hunt's effect is
+      // its DoT on the target, its buff on the caster a fraction of a
+      // second); the class is one run under two entries
+      if (n < 2) continue;
+      const u = ctx.byName.get(ally);
+      if (!u) continue;
+      const rows = ((u.auraEvents ?? []) as any[])
+        .filter(
+          (a) =>
+            a.srcUnitId === u.id &&
+            a.destUnitId === u.id &&
+            nameOf(a.spellId, a.spellName) === name,
+        )
+        .sort((a, b) => tsOf(a) - tsOf(b));
+      if (!rows.some((a) => ev(a) === APPLIED)) continue;
+      ctx.bump("allyOverlapPastAura");
+      // the union of the ally's own runs of the name, clipped to the burst
+      let covered = 0;
+      let open: number | null = null;
+      let openId = "";
+      const close = (endMs: number) => {
+        if (open === null) return;
+        covered += Math.max(0, Math.min(endMs, toMs) - Math.max(open, fromMs));
+        open = null;
+      };
+      for (const a of rows) {
+        if (ev(a) === APPLIED && open === null) {
+          open = tsOf(a);
+          openId = String(a.spellId);
+        } else if (ev(a) === REMOVED && String(a.spellId) === openId)
+          close(tsOf(a));
+      }
+      close(Math.min(toMs, ctx.end));
+      const coveredS = covered / 1000;
+      // an effect that lives on another unit (Predator's Wake's The Hunt DoT
+      // on its target) is not this aura's to bound
+      if (max > coveredS + 0.2) continue;
+      if (!(s > coveredS + 0.2)) continue;
+      ctx.violate(
+        "allyOverlapPastAura",
+        name,
+        fromMs,
+        `${ally}:${name}:${burst.fromS}`,
+        `${ally} ${name}: entries claim ${s.toFixed(1)}s, own aura covers ${coveredS.toFixed(2)}s of ${fmtS(burst.fromS)}–${fmtS(burst.toS - 1)} (±1 s)`,
+        l,
+      );
+    }
+  }
+}
+
+const SAVE_PRESS_LINE =
+  /^(\d+:\d{2})\s+\[(?:ENEMY DEF|YOU\] \[CD|TEAM\] \[CD)\]\s+(?:(\d+\(\w+\)) \([^)]*\): )?([^(→[]+?) \((?:[^()]*?, )?([\d.]+)s(?:[,—][^)]*)?\)/;
+
+function savePressRunsOverlap(ctx: IRoundCtx): void {
+  const last = new Map<string, { atS: number; lenS: number; line: string }>();
+  for (const l of ctx.lines) {
+    const m = SAVE_PRESS_LINE.exec(l);
+    if (!m) continue;
+    const who = m[2] ?? (l.includes("[YOU]") ? "you" : "");
+    if (!who) continue;
+    const key = `${who}|${m[3]!.trim()}`;
+    const atS = secOf(m[1]!);
+    const prev = last.get(key);
+    if (prev) {
+      ctx.bump("savePressRunsOverlap");
+      // floored seconds: the later press can sit up to 1 s past its second
+      if (atS + 1 < prev.atS + prev.lenS)
+        ctx.violate(
+          "savePressRunsOverlap",
+          m[3]!.trim(),
+          ctx.start + prev.atS * 1000,
+          `${key}:${prev.atS}`,
+          `${key}: ${fmtS(prev.atS)} printed ${prev.lenS}s, re-pressed ${fmtS(atS)}`,
+          prev.line,
+        );
+    }
+    last.set(key, { atS, lenS: Number(m[4]), line: l });
+  }
+}
+
+const BURST_ANSWERED = /^(\d+:\d{2})\s+\[BURST ANSWERED\]/;
+const ANSWER_ON =
+  /(?:^|; |: )(\d+)\(\w+\) answered with (.+?) on (\d+)\(\w+\) in ([\d.]+)s/g;
+
+function answeredByOldSummonPulse(ctx: IRoundCtx): void {
+  const byId = new Map<string, any>(
+    (ctx.units as any[]).map((u) => [u.id, u]),
+  );
+  for (const l of ctx.lines) {
+    const b = BURST_ANSWERED.exec(l);
+    if (!b) continue;
+    const openS = secOf(b[1]!);
+    for (const m of l.matchAll(ANSWER_ON)) {
+      const answerer = ctx.unitOfPid(m[1]!);
+      const holder = ctx.unitOfPid(m[3]!);
+      if (!answerer || !holder) continue;
+      const name = m[2]!;
+      const atMs = ctx.start + (openS + Number(m[4])) * 1000;
+      const aura = ((holder.auraEvents ?? []) as any[]).find(
+        (a) =>
+          ev(a) === APPLIED &&
+          nameOf(a.spellId, a.spellName) === name &&
+          Math.abs(tsOf(a) - atMs) <= 1000 &&
+          a.srcUnitId !== answerer.id,
+      );
+      if (!aura) continue;
+      const summon = byId.get(aura.srcUnitId);
+      if (
+        !summon ||
+        summon.ownerId !== answerer.id ||
+        String(aura.srcUnitId).startsWith("Pet-")
+      )
+        continue;
+      ctx.bump("answeredByOldSummonPulse");
+      const summonedMs = ((summon.actionIn ?? []) as any[]).find(
+        (a) => ev(a) === "SPELL_SUMMON",
+      );
+      if (!summonedMs || tsOf(summonedMs) >= ctx.start + openS * 1000)
+        continue;
+      ctx.violate(
+        "answeredByOldSummonPulse",
+        name,
+        tsOf(aura),
+        `${answerer.name}:${aura.srcUnitId}:${tsOf(aura)}`,
+        `${answerer.name}'s ${summon.name} summoned ${((tsOf(summonedMs) - ctx.start) / 1000).toFixed(3)}s, its ${name} on ${holder.name} ${((tsOf(aura) - ctx.start) / 1000).toFixed(3)}s, burst opened ${fmtS(openS)}`,
+        l,
+      );
+    }
+  }
+}
+
+const YOU_CAST_LINE = /^(\d+:\d{2})\s+\[YOU\] \[CAST\]\s+(.+?)(?: \(x\d+ over \d+s\))?(?: →| \[|$)/;
+
+function castLineNoButton(ctx: IRoundCtx): void {
+  const owner = ctx.owner;
+  for (const l of ctx.lines) {
+    const m = YOU_CAST_LINE.exec(l);
+    if (!m) continue;
+    const name = m[2]!.trim();
+    const atS = secOf(m[1]!);
+    const rows = castsOf(owner).filter(
+      (c) =>
+        nameOf(c.spellId, c.spellName) === name &&
+        Math.floor((tsOf(c) - ctx.start) / 1000) === atS,
+    );
+    if (rows.length === 0) continue;
+    ctx.bump("castLineNoButton");
+    if (rows.some((c) => isButtonPress(String(c.spellId)))) continue;
+    const id = String(rows[0].spellId);
+    ctx.violate(
+      "castLineNoButton",
+      `${name} ${id}`,
+      tsOf(rows[0]),
+      `${owner.name}:${id}:${tsOf(rows[0])}`,
+      `${name} ${id} at ${m[1]}: no SpellCooldowns row`,
+      l,
+    );
+  }
+}
+
+const TEAM_READY =
+  /team offensive CDs ready at (\d+:\d{2}): (.*?)(?: \((.*?)\))?(?:;|$)/;
+const CD_AT = / \d+:\d{2}$/;
+
+function pressedInsideNeverBack(ctx: IRoundCtx): void {
+  for (const l of ctx.text.split("\n")) {
+    const m = TEAM_READY.exec(l);
+    if (!m || !m[3]) continue;
+    const names = (s: string) =>
+      s
+        .split("、")
+        .map((x) => x.trim().replace(CD_AT, "").replace(/ ≤\d+s$/, ""))
+        .filter((x) => x && x !== "none");
+    const ready = new Set(names(m[2]!));
+    const clauses = new Map<string, string[]>();
+    for (const c of m[3].split("; ")) {
+      const i = c.indexOf(": ");
+      if (i < 0) continue;
+      clauses.set(c.slice(0, i), names(c.slice(i + 2)));
+    }
+    const known = new Set([
+      ...ready,
+      ...(clauses.get("may already be back") ?? []),
+      ...(clauses.get("back inside") ?? []),
+      ...(clauses.get("pressed at start") ?? []),
+    ]);
+    for (const name of clauses.get("pressed inside") ?? []) {
+      ctx.bump("pressedInsideNeverBack");
+      if (known.has(name)) continue;
+      ctx.violate(
+        "pressedInsideNeverBack",
+        name,
+        ctx.start + secOf(m[1]!) * 1000,
+        `${m[1]}:${name}:${l.slice(0, 40)}`,
+        `${name} pressed inside the window from ${m[1]}, on no ready / back list`,
+        l,
+      );
+    }
+  }
+}
+
+const HOARDED_READY = /type=cd-hoarded .*?\breadyCds=([^,}]*)/;
+
+function healMajorAsDefensive(ctx: IRoundCtx): void {
+  const healNames = new Set(
+    [...ENEMY_HEAL_CD_IDS].map((id) => nameOf(id)).filter((n) => n !== ""),
+  );
+  for (const l of ctx.menu.split("\n")) {
+    const m = HOARDED_READY.exec(l);
+    if (!m) continue;
+    for (const raw of m[1]!.split("、")) {
+      const name = raw.trim().replace(/ \([^)]*\)$/, "");
+      if (!name) continue;
+      ctx.bump("healMajorAsDefensive");
+      if (!healNames.has(name)) continue;
+      ctx.violate(
+        "healMajorAsDefensive",
+        name,
+        ctx.start,
+        `${ctx.ownerName}:${name}:${l.slice(0, 60)}`,
+        `cd-hoarded readyCds names ${name}, a healing major`,
+        l,
+      );
+    }
+  }
+}
+
+const ENEMY_CD_LINE = /^(\d+:\d{2})\s+\[ENEMY CD\]\s+\S+ \(([^)]+)\): (.+?)(?: \(|$)/;
+
+function healerRosterAsEnemyBurst(ctx: IRoundCtx): void {
+  for (const l of ctx.lines) {
+    const m = ENEMY_CD_LINE.exec(l);
+    if (!m) continue;
+    const roster = healerSaveCdRoster(m[2]!);
+    if (!roster) continue;
+    ctx.bump("healerRosterAsEnemyBurst");
+    const name = m[3]!.replace(/ \d+(?:st|nd|rd|th) of \d+$/, "").trim();
+    const e = [...roster.values()].find(
+      (x) => nameOf(x.spellId, x.name) === name,
+    );
+    if (!e || abilityProfile(e.spellId).dealsDamage) continue;
+    // Ultimate Penitence's damage is on its triggered rows (the cast's own
+    // profile reads none): a damage ultimate, an [ENEMY CD] by design
+    if (e.spellId === "421453") continue;
+    ctx.violate(
+      "healerRosterAsEnemyBurst",
+      `${m[2]}:${name}`,
+      ctx.start + secOf(m[1]!) * 1000,
+      `${m[2]}:${name}:${m[1]}`,
+      `[ENEMY CD] files ${m[2]}'s ${name} (healer save roster) as offensive`,
+      l,
+    );
+  }
+}
+
+const FAILED_ATTEMPT_LINE =
+  /^ {2}\[(\d+:\d{2})–(\d+:\d{2})\] on (\S+) — .*\| FAILED: not enough damage/;
+const OWN_SHIELD_MIN_ABSORBED = 50_000;
+
+function ownShieldNotPopped(ctx: IRoundCtx): void {
+  const ours = new Set(
+    ctx.players
+      .filter((u: any) => u.reaction === ctx.owner.reaction)
+      .map((u: any) => u.id),
+  );
+  for (const l of ctx.lines) {
+    const m = FAILED_ATTEMPT_LINE.exec(l);
+    if (!m) continue;
+    const target = ctx.byName.get(m[3]!);
+    if (!target) continue;
+    ctx.bump("ownShieldNotPopped");
+    const lo = ctx.start + secOf(m[1]!) * 1000;
+    const hi = ctx.start + (secOf(m[2]!) + 1) * 1000;
+    const bySpell = new Map<string, number>();
+    for (const r of (target.absorbsIn ?? []) as any[]) {
+      if (ev(r) !== undefined && ev(r) !== ABSORBED) continue;
+      if (r.srcUnitId !== target.id || !ours.has(r.attackerId)) continue;
+      const t = tsOf(r);
+      if (t < lo || t >= hi) continue;
+      const id = String(r.spellId);
+      // a rotational shield of the target's own (Power Word: Shield, Void
+      // Shield — user ruling 2026-10-21 (1)) is no defensive line
+      if (KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(id)) continue;
+      const pressed =
+        isButtonPress(id) ||
+        castsOfEffectAura(id).some((c: string) => isButtonPress(c));
+      if (!pressed) continue;
+      bySpell.set(
+        id,
+        (bySpell.get(id) ?? 0) + Math.abs(Number(r.absorbedAmount) || 0),
+      );
+    }
+    for (const [id, amt] of bySpell) {
+      if (amt < OWN_SHIELD_MIN_ABSORBED) continue;
+      const name = nameOf(id, id);
+      ctx.violate(
+        "ownShieldNotPopped",
+        name,
+        lo,
+        `${m[3]}:${name}:${m[1]}`,
+        `${name} absorbed ${Math.round(amt / 1000)}k of our hits, attempt reads not enough damage`,
+        l,
+      );
+    }
+  }
+}
+
+const KW_DEFENSELESS =
+  /^\s+\[KILL WINDOW\] (\d+:\d\d)–(\d+:\d\d) on [^(]+ \(([^()]+(?:\([^()]*\)[^()]*)*)\):.*\(defenseless (\d+:\d\d)–(\d+:\d\d)\)/;
+
+function areaCarryInDefenseless(ctx: IRoundCtx): void {
+  const areaNames = new Set(
+    [...ENEMY_AREA_SAVE_IDS].map((id) => nameOf(id)).filter((n) => n !== ""),
+  );
+  for (const l of ctx.lines) {
+    const m = KW_DEFENSELESS.exec(l);
+    if (!m) continue;
+    const u = ctx.byName.get(m[3]!);
+    if (!u) continue;
+    ctx.bump("areaCarryInDefenseless");
+    const lo = ctx.start + (secOf(m[4]!) + 1) * 1000;
+    const hi = ctx.start + secOf(m[5]!) * 1000;
+    const rows = ((u.auraEvents ?? []) as any[]).filter(
+      (a) => a.destUnitId === u.id && areaNames.has(nameOf(a.spellId, "")),
+    );
+    for (const a of rows) {
+      if (ev(a) !== APPLIED) continue;
+      const on = tsOf(a);
+      const off = rows.find(
+        (b) =>
+          String(b.spellId) === String(a.spellId) &&
+          ev(b) === REMOVED &&
+          tsOf(b) >= on,
+      );
+      const offMs = off ? tsOf(off) : on + 1;
+      if (offMs <= lo || on >= hi) continue;
+      const name = nameOf(a.spellId, "");
+      ctx.violate(
+        "areaCarryInDefenseless",
+        name,
+        on,
+        `${u.id}:${name}:${m[4]}`,
+        `${u.name} carried ${name} ${fmtS((on - ctx.start) / 1000)} inside defenseless ${m[4]}–${m[5]}`,
+        l,
+      );
+      break;
+    }
+    // D17: Aura Mastery 31821 up on a paladin whose Devotion Aura 465 u
+    // carried (no REMOVED of it on u before the wall's start)
+    for (const p of ctx.players) {
+      if (p.id === u.id) continue;
+      const am = ((p.auraEvents ?? []) as any[]).filter(
+        (a) =>
+          String(a.spellId) === "31821" &&
+          a.destUnitId === p.id &&
+          a.srcUnitId === p.id,
+      );
+      for (const a of am) {
+        if (ev(a) !== APPLIED) continue;
+        const off = am.find((b) => ev(b) === REMOVED && tsOf(b) >= tsOf(a));
+        const from = Math.max(tsOf(a), lo);
+        const to = Math.min(off ? tsOf(off) : tsOf(a) + 8000, hi);
+        if (from >= to) continue;
+        const dev = ((u.auraEvents ?? []) as any[]).filter(
+          (x) =>
+            String(x.spellId) === "465" &&
+            x.srcUnitId === p.id &&
+            x.destUnitId === u.id &&
+            tsOf(x) <= from,
+        );
+        const last = dev[dev.length - 1];
+        if (!last || ev(last) === REMOVED) continue;
+        ctx.violate(
+          "areaCarryInDefenseless",
+          "Aura Mastery (Devotion Aura)",
+          from,
+          `${u.id}:AM:${m[4]}`,
+          `${u.name} under ${p.name}'s Devotion Aura during Aura Mastery ${fmtS((from - ctx.start) / 1000)} inside defenseless ${m[4]}–${m[5]}`,
+          l,
+        );
+        break;
+      }
+    }
+  }
+}
+
+function ownerGroundedUnstated(ctx: IRoundCtx): void {
+  for (const g of groundingRedirects(ctx.owner)) {
+    if (g.via !== "cast" || !isControlSpell(g.spellId)) continue;
+    const sec = Math.floor((g.timestampMs - ctx.start) / 1000);
+    if (sec < 0) continue;
+    ctx.bump("ownerGroundedUnstated");
+    const at = fmtS(sec);
+    const stated = ctx.lines.some(
+      (l) =>
+        l.startsWith(`${at} `) &&
+        (l.includes("[GROUNDED]") ||
+          l.includes("[absorbed: Grounding Totem]")),
+    );
+    if (stated) continue;
+    const name = nameOf(g.spellId, g.spellName ?? "");
+    ctx.violate(
+      "ownerGroundedUnstated",
+      name,
+      g.timestampMs,
+      `${ctx.ownerName}:${name}:${at}`,
+      `owner's ${name} into a Grounding Totem at ${at}: no [GROUNDED] line, no absorbed tag`,
+    );
+  }
+}
+
+const UNLOGGED_SILENCE_LINE =
+  /^(\d+:\d{2})\s+\[SILENCE\]\s.*\| no aura logged — silenced at /;
+const CANCEL_STOP_LINE =
+  /^(\d+:\d{2})\s+\[CAST STOPPED\]\s+(.+?) — .*no control, silence or knockback landed on you then/;
+
+/** fact11 D6: a `[CAST STOPPED]` line that says no silence landed, at the
+ * second (or the next) of the prompt's own `[SILENCE] … no aura logged`
+ * line — the two readers of one silence disagree. */
+function castStopUnderUnloggedSilence(ctx: IRoundCtx): void {
+  const silenceSecs = ctx.lines
+    .map((l) => UNLOGGED_SILENCE_LINE.exec(l))
+    .filter((m): m is RegExpExecArray => !!m)
+    .map((m) => secOf(m[1]!));
+  if (silenceSecs.length === 0) return;
+  for (const l of ctx.lines) {
+    const m = CANCEL_STOP_LINE.exec(l);
+    if (!m) continue;
+    ctx.bump("castStopUnderUnloggedSilence");
+    const sec = secOf(m[1]!);
+    if (!silenceSecs.some((s) => sec === s || sec === s + 1)) continue;
+    ctx.violate(
+      "castStopUnderUnloggedSilence",
+      m[2]!,
+      ctx.start + sec * 1000,
+      `${ctx.ownerName}:${m[2]}:${m[1]}`,
+      `${m[2]} stop at ${m[1]} read as no silence; a [SILENCE] … no aura logged line sits at ${fmtS(sec)} or the second before`,
+      l,
+    );
   }
 }
