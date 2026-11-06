@@ -5447,3 +5447,24 @@ the season run of `durationTalentScan.ts --candidates` prints it under
 PENDING with its verdict until holders are measured
 (`durationCandidatesFromInventory.ts` keeps `corpusPending` pairs as
 candidates instead of dropping them as registered).
+
+v496 (2026-11-06, codex 20-F26-03 #1, fact11 D34 D45 D42 D38 D47 D11).
+(1) P1, B3iii: `killWindowFacts.ts` builds the `[KILL WINDOW]` /
+`[VULNERABLE]` ready, maybe-back and back-inside lists from
+`countsAsTeamBurst` (a healer's own offensive cooldown is team burst only
+when it is Power Infusion). `pressed inside` still names every offensive
+press (Ultimate Penitence, ruling 2026-10-20). (2) D34: an immunity save
+pressed with no aura logged prints `(immune, no aura logged)`
+(`immunityPressesWithoutAura`). (3) D45: an immunity's slot names the
+allies the same press covered, `; also on N(X), …` (`immunityAlsoOn`). It
+is written by `enemyDefAlsoOnClause` and read through
+`ENEMY_DEF_ALSO_ON_RE_SRC`. (4) D42: Rain from Above 206803 is an aura-only
+activation (DB2 NO_CAST_LOG), so its aura prints a `[PRESS]` line. (5) D38:
+Essence Break's debuff 320338 lasts 5 s (corpus patch, n=205). (6) D47 (user
+2026-11-06): an unseen-end invisibility its holder ended with its own action
+is no "forced a full immunity". (7) D11 (user 2026-11-06, wording only):
+`PRIME (…; Will to Survive ready)` with a legend line, read with the [CC]
+line's `trinketRacialReadyMs`. Cover set (117 files, 1,140 owners) against
+e950156df: no FATAL, 0 of 1,140 findings files change, gates unchanged, and
+the six new class checks fall to 0 except immunityCopyUnstated, which keeps
+3/618 (one fact).

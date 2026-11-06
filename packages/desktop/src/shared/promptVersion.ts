@@ -889,4 +889,13 @@
  *  Irritant is priced at 3.25 s (−35 %, DB2 + tooltip; no holder in the
  *  corpus yet). See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 495;
+/*
+ * v496 (2026-11-06, codex 20-F26-03 #1, fact11 D34 D45 D42 D38 D47 D11): a
+ *  healer's own offensive CD (Power Infusion aside) is off the kill windows'
+ *  team-ready lists but still a press; an immunity pressed with no aura and
+ *  the allies one immunity press covered are stated; Rain from Above's aura
+ *  is its press; Essence Break's debuff runs 5 s; an invisibility its holder
+ *  broke itself forced nothing; a ready break racial is named beside PRIME.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 496;
