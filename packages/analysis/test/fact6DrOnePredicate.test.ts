@@ -11,6 +11,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { ccRemainingSeconds } from "../src/utils/ccBreakAnalysis";
+import { NO_CC_LANDING_STATE } from "../src/utils/ccDuration";
 import {
   analyzePlayerCCAndTrinket,
   ccLengthIsDrEvidence,
@@ -256,7 +257,7 @@ describe("[CC BROKEN]'s remainder reads the whole DR history (D29)", () => {
       endMs: S(20.7),
       srcUnitId: "lock",
       matchStartMs: T0,
-      roarAtApply: false,
+      landing: NO_CC_LANDING_STATE,
       lengthIsDrEvidence: ccLengthIsDrEvidence,
     });
     // 6 s × 50 % − 0.7 s held (it read 5.3 s with opponent sources only)
@@ -414,7 +415,7 @@ describe("codex 20-F20-28 #1 — Q1 does not count a landing the log wrote after
         endMs: S(endS),
         srcUnitId: src,
         matchStartMs: T0,
-        roarAtApply: false,
+        landing: NO_CC_LANDING_STATE,
         lengthIsDrEvidence: ccLengthIsDrEvidence,
       });
     expect(left(FEAR, "lock", 51.509)).toBeCloseTo(3.5, 5);

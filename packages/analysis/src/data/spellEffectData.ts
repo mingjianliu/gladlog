@@ -122,6 +122,40 @@ export const OPPRESSING_ROAR_LENGTHENED_MECHANICS: ReadonlySet<number> =
   new Set([1, 2, 3, 5, 7, 9, 10, 11, 12, 13, 14, 17, 18, 23, 26, 27, 30]);
 
 /**
+ * GH #126: Prismatic Barrier (Arcane Mage) shortens every Magic effect that
+ * lands on its holder while it is up — DB2 SpellEffect row 355854 of 235450
+ * (`talentEffectInventoryGenerated.json`, build 12.1.5.70391): effect 3,
+ * aura 245 "mod aura duration by dispel type", misc0 1 (Magic), basePoints
+ * −25 × PvpMultiplier 0.6 = **−15 % in PvP**, activation whileAura.
+ * `test/ccDuration.test.ts` pins both numbers to that row, so a data refresh
+ * that changes it turns CI red (the Roar's pattern: the inventory is a
+ * datagen artefact, not a runtime table).
+ *
+ * Corpus leg (605 + wide cap-final2, Arcane mages, applications that ran
+ * out on their own): the Magic CCs that landed with the barrier up ran
+ * 0.83–0.87 of their length (Binding Shot 4/4, Hammer of Justice 3/3,
+ * Polymorph 1/1); the non-Magic ones under it ran their full length — see
+ * the entry's note in `ccFullDurationForApplication`.
+ *
+ * Merely a Setback 449336 (the Arcane talent 449330's aura: applied in the
+ * millisecond the barrier falls to damage, 8 s) carries the identical row —
+ * DB2 SpellEffect 12.1.5.70391 row 1247362: effect 3, aura 245, misc0 1,
+ * −25 × 0.6. The inventory has no row for it (it is the talent's triggered
+ * aura, listed only as a label target), so `test/ccDuration.test.ts` pins its
+ * generated 8 s length and spell name instead. Corpus leg: the Magic effects
+ * that landed with the barrier itself down yet ran 0.85 of their length
+ * landed inside a Merely a Setback (one ran 3.40 of 4 s, landing 6.6 s after
+ * the barrier's REMOVED). 414663 (another barrier id with the same row) has
+ * zero corpus occurrences and is left out.
+ */
+export const PRISMATIC_BARRIER_AURA_IDS: ReadonlySet<string> = new Set([
+  "235450",
+  "449336",
+]);
+export const PRISMATIC_BARRIER_DISPEL_TYPE = "Magic";
+export const PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT = 1 - (25 * 0.6) / 100;
+
+/**
  * Full, undiminished PvP duration of a CC / root aura in seconds — the fact the
  * "Xs of CC wasted" estimate in ccBreakAnalysis rests on. Reads the official
  * DB2 duration (`durationSeconds`: PvPDurationIndex when the spell has one,

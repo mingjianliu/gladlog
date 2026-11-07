@@ -33,8 +33,11 @@ import {
   couldActForMostOf,
   lockedSchoolsText,
 } from "../../utils/cannotCastIntervals";
-import { oppressingRoarOnAtMs } from "../../utils/ccBreakAnalysis";
-import { ccFullDurationForApplication } from "../../utils/ccDuration";
+import { ccLandingStateAtMs } from "../../utils/ccBreakAnalysis";
+import {
+  ccFullDurationForApplication,
+  NO_CC_LANDING_STATE,
+} from "../../utils/ccDuration";
 import {
   ccRemovalCause,
   formatCcRemovalCause,
@@ -218,7 +221,9 @@ export function enemyHealerCcWindows(
       const full = ccFullDurationForApplication(
         app.spellId,
         friends.find((f) => f.name === app.casterName),
-        healer ? oppressingRoarOnAtMs(healer, app.spellId, applyMs) : false,
+        healer
+          ? ccLandingStateAtMs(healer, app.spellId, applyMs)
+          : NO_CC_LANDING_STATE,
       );
       // a lock the round ended on was ended by nothing logged
       const removeMs = Math.round(

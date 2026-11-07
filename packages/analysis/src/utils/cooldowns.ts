@@ -7597,8 +7597,9 @@ export interface IPanicDefensive {
  * the summon has no aura for `hasOffensiveSpellActive` to read, so the run is
  * the press plus the spell's own length (fact7 D72 / D79: Force of Nature,
  * filed as a cooldown by the burst ledger, was no `[friendly offensive CD
- * active]`). */
-function offensiveSummonActiveAt(
+ * active]`). Exported for the tag's audit (`scan5/friendlyOffensiveTag.ts`,
+ * GH #173), which asks the same question of the line's second. */
+export function offensiveSummonActiveAt(
   unit: ICombatUnit,
   timestampMs: number,
 ): boolean {

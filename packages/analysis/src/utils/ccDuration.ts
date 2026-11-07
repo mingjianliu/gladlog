@@ -5,6 +5,9 @@ import {
   ccFullDurationSeconds,
   OPPRESSING_ROAR_LENGTHENED_MECHANICS,
   OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
+  PRISMATIC_BARRIER_DISPEL_TYPE,
+  PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT,
+  spellEffectData,
 } from "../data/spellEffectData";
 import { ccMechanicOf } from "./spellMechanics";
 import { talentModifierOwnershipOf } from "./talentOwnership";
@@ -58,11 +61,35 @@ export function oppressingRoarLengthens(spellId: string): boolean {
   return mech !== undefined && OPPRESSING_ROAR_LENGTHENED_MECHANICS.has(mech);
 }
 
+/** What sat on the TARGET as a CC landed that changes how long that
+ * application runs (read by `ccLandingStateAt` / `ccLandingStateAtMs`,
+ * ccBreakAnalysis.ts). */
+export interface ICcLandingState {
+  /** Oppressing Roar's debuff (`oppressingRoarOnAt`) */
+  roar: boolean;
+  /** Prismatic Barrier (`prismaticBarrierOnAtMs`, GH #126) */
+  prismaticBarrier: boolean;
+}
+
+/** Nothing on the target that changes the length. */
+export const NO_CC_LANDING_STATE: ICcLandingState = Object.freeze({
+  roar: false,
+  prismaticBarrier: false,
+});
+
+/** Does Prismatic Barrier shorten this CC — is the CC's DB2 dispel type the
+ * barrier's aura-245 one (Magic)? No dispel type → not shortened. */
+export function prismaticBarrierShortens(spellId: string): boolean {
+  return spellEffectData[spellId]?.dispelType === PRISMATIC_BARRIER_DISPEL_TYPE;
+}
+
 /**
  * Full (undiminished) length of ONE application of a CC / root:
  * `ccFullDurationForCaster` × Oppressing Roar's +30 % when the debuff was on
  * the TARGET as the CC landed (`oppressingRoarOnAt`, ccBreakAnalysis.ts) and
- * the Roar covers the CC's mechanic. The caller applies the DR share
+ * the Roar covers the CC's mechanic, × Prismatic Barrier's −15 % when the
+ * target's barrier was up at the landing and the CC is a Magic effect
+ * (GH #126, `PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT`). The caller applies the DR share
  * (`drDurationFactor`). This is what the game did at that application, read
  * from the log — the official number of the spell itself
  * (`ccFullDurationSeconds`, the kit lines, the `[DR: …]` tags) is untouched:
@@ -93,11 +120,14 @@ export function oppressingRoarLengthens(spellId: string): boolean {
 export function ccFullDurationForApplication(
   spellId: string,
   caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> | undefined,
-  roarOnTargetAtApply: boolean,
+  landing: ICcLandingState,
 ): number | undefined {
   const full = ccFullDurationForCaster(spellId, caster);
   if (full === undefined) return undefined;
-  return roarOnTargetAtApply && oppressingRoarLengthens(spellId)
-    ? full * OPPRESSING_ROAR_PVP_CC_DURATION_MULT
-    : full;
+  let mult = 1;
+  if (landing.roar && oppressingRoarLengthens(spellId))
+    mult *= OPPRESSING_ROAR_PVP_CC_DURATION_MULT;
+  if (landing.prismaticBarrier && prismaticBarrierShortens(spellId))
+    mult *= PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT;
+  return full * mult;
 }

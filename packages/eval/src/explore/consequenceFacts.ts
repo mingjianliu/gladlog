@@ -12,14 +12,17 @@
  * value is an EXPERIMENT parameter, not a product constant — the report shows
  * its distribution; the user sets it. Counterfactuals stay banned.
  *
- * Every HP number goes through the `[STATE]` grid sampler (`gridHpPct` /
- * `gridHpMinInWindow`, render-grid seconds) so a line can never disagree with
- * the `[STATE]` tick printed for the same second (Shared-Predicate Rule).
+ * The kick / CC drops are the product `[CONSEQ]` line's own readings
+ * (`teamDrops`: the HP at the event's instant, the trough of its own span —
+ * GH #138); the forced-defensive HP is the `[STATE]` grid sampler's
+ * (`gridHpPct`, render-grid seconds) so it never disagrees with the tick
+ * printed for the same second (Shared-Predicate Rule).
  * Kill-attempt spans and their popped walls / externals come from
  * `extractKillAttempts` — the same objects the `[KILL ATTEMPTS]` block renders.
  *
  * Not product code: lives in eval until the user reads the examples.
  */
+import { teamDrops } from "@gladlog/analysis/src/context/observedConsequences";
 import {
   resolveMitigation,
   strongestComponentPct,
@@ -27,7 +30,6 @@ import {
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { analyzePlayerCCAndTrinket } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
-  gridHpMinInWindow,
   gridHpPct,
   isHealerSpec,
 } from "@gladlog/analysis/src/utils/cooldowns";
@@ -158,19 +160,16 @@ export function buildConsequenceLines(
         : `no completed cast by ${L(victim)} afterwards`;
       let teamPart = "";
       if (isHealerSpec(victim.spec)) {
-        const from = Math.floor(t);
-        const to = Math.floor(t + lockS);
-        const drops: string[] = [];
-        for (const mate of teamOf(victim)) {
-          if (mate.id === victim.id) continue;
-          const h0 = gridHpPct(mate, start + from * 1000);
-          const lo = gridHpMinInWindow(mate, start, from, to);
-          if (h0 === null || !lo) continue;
-          if (h0 - lo.pct >= 10)
-            drops.push(
-              `${L(mate)} ${Math.round(h0)}% → ${Math.round(lo.pct)}% by ${fmtTime(lo.atSec)}`,
-            );
-        }
+        // the [CONSEQ] line's own readings (`teamDrops`: the HP at the
+        // landing, the trough of the lockout's own span — GH #138)
+        const mates = teamOf(victim).filter((m) => m.id !== victim.id);
+        const drops = teamDrops(
+          mates,
+          (name) => L(mates.find((m) => m.name === name)),
+          start,
+          t,
+          t + lockS,
+        ).parts;
         const died = teamOf(victim).filter((m) => {
           const d = deathS(m);
           return d !== null && d >= t && d <= t + lockS;
@@ -206,22 +205,18 @@ export function buildConsequenceLines(
     );
     for (const cc of summary.ccInstances) {
       if (cc.durationSeconds < HEALER_CC_MIN_S) continue;
-      const from = Math.floor(cc.atSeconds);
-      const to = Math.floor(cc.atSeconds + cc.durationSeconds);
-      const parts: string[] = [];
-      let quiet = 0;
-      for (const mate of teamOf(healer)) {
-        if (mate.id === healer.id) continue;
-        const h0 = gridHpPct(mate, start + from * 1000);
-        const lo = gridHpMinInWindow(mate, start, from, to);
-        if (h0 === null || !lo) continue;
-        // Only a real drop is a consequence; "100% → low 100%" is noise.
-        if (h0 - lo.pct >= 10)
-          parts.push(
-            `${L(mate)} ${Math.round(h0)}% → low ${Math.round(lo.pct)}% at ${fmtTime(lo.atSec)}`,
-          );
-        else quiet++;
-      }
+      // the [CONSEQ] line's own readings (`teamDrops`, GH #138); only a
+      // real drop is a consequence, "100% → low 100%" is noise
+      const mates = teamOf(healer).filter((m) => m.id !== healer.id);
+      const drops = teamDrops(
+        mates,
+        (name) => L(mates.find((m) => m.name === name)),
+        start,
+        cc.atSeconds,
+        cc.atSeconds + cc.durationSeconds,
+      );
+      const parts = drops.parts;
+      const quiet = drops.held.length;
       const died = teamOf(healer).filter((m) => {
         const d = deathS(m);
         return (

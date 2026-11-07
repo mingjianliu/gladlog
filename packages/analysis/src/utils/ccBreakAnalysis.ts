@@ -4,11 +4,15 @@ import { SPELL_CATEGORIES } from "../data/spellCategories";
 import {
   getEnglishSpellName,
   OPPRESSING_ROAR_AURA_IDS,
+  PRISMATIC_BARRIER_AURA_IDS,
   spellEffectData,
 } from "../data/spellEffectData";
-import { dropAuraRebroadcasts } from "./auraIntervals";
+import { buildAuraIntervals, dropAuraRebroadcasts } from "./auraIntervals";
 import { breakerOfBrokenRow } from "./brokenRowBreaker";
-import { ccFullDurationForApplication } from "./ccDuration";
+import {
+  ccFullDurationForApplication,
+  type ICcLandingState,
+} from "./ccDuration";
 import {
   buildCcCategoryHistory,
   type CcLengthEvidence,
@@ -106,7 +110,8 @@ const isRootType = (spellId: string): boolean =>
  * How much of a CC was left when it ended early: the application's full
  * length (`ccFullDurationForApplication`: DB2 PvP duration, caster-aware
  * talents, × Oppressing Roar's +30 % when the debuff was on the holder at
- * application and covers the CC's mechanic) × DR factor at the apply − time
+ * application and covers the CC's mechanic, × Prismatic Barrier's −15 % on a
+ * Magic CC that landed on its up barrier) × DR factor at the apply − time
  * already held. No duration known → null (no guess). The one arithmetic for
  * `[CC BROKEN]` and `[CC REMOVED]` (triage cc-dr F-CR1).
  */
@@ -119,7 +124,8 @@ export function ccRemainingSeconds(p: {
   /** the application's source (its identity in the DR history) */
   srcUnitId?: string;
   matchStartMs: number;
-  roarAtApply: boolean;
+  /** what sat on the holder as it landed (`ccLandingStateAt`) */
+  landing: ICcLandingState;
   /** the CC's possible casters, for the DR history's recast test */
   unitById?: ReadonlyMap<string, ICombatUnit>;
   /** `ccLengthIsDrEvidence`, handed in from outside the `ccTrinketAnalysis`
@@ -131,7 +137,7 @@ export function ccRemainingSeconds(p: {
   const tableDuration = ccFullDurationForApplication(
     p.spellId,
     p.caster,
-    p.roarAtApply,
+    p.landing,
   );
   if (tableDuration === undefined) return null;
   const category = getDRCategory(p.spellId);
@@ -229,6 +235,84 @@ export function oppressingRoarOnAtMs(
   return applied !== undefined && oppressingRoarOnAt(holder, applied);
 }
 
+/** `buildAuraIntervals` on the log's own clock (ms → s): the barrier reading
+ * needs no round, and one stable object keeps the builder's cache hitting. */
+const ABSOLUTE_CLOCK = Object.freeze({
+  startTime: 0,
+  endTime: Number.MAX_SAFE_INTEGER,
+});
+/** per holder, the one casters map the builder is keyed by (the barrier is
+ * the holder's own: its duration talents — Overpowered Barrier's 4 s — are
+ * the holder's) */
+const holderAsCaster = new WeakMap<object, ReadonlyMap<string, ICombatUnit>>();
+
+/**
+ * GH #126: was a Prismatic Barrier — or the Merely a Setback it leaves
+ * when it falls, which carries the same −15 % Magic row
+ * (`PRISMATIC_BARRIER_AURA_IDS`) — up on `holder` at `ms` — the
+ * single-source interval builder's reading
+ * (`buildAuraIntervals`), so a barrier put up before the gates opened (a
+ * REMOVED / REFRESH with no APPLIED in the round) counts from its inferred
+ * start, capped by its official length, and a barrier whose REMOVED was
+ * never logged ends at its length. Inclusive at both ends, as
+ * `aurasActiveAt` reads an interval.
+ */
+export function prismaticBarrierOnAtMs(
+  holder: Pick<ICombatUnit, "id" | "auraEvents">,
+  ms: number,
+): boolean {
+  if (
+    !holder.auraEvents?.some(
+      (a) =>
+        a.spellId !== undefined && PRISMATIC_BARRIER_AURA_IDS.has(a.spellId),
+    )
+  )
+    return false;
+  let casters = holderAsCaster.get(holder);
+  if (!casters) {
+    casters = new Map([[holder.id, holder as ICombatUnit]]);
+    holderAsCaster.set(holder, casters);
+  }
+  const t = ms / 1000;
+  return buildAuraIntervals(
+    holder as ICombatUnit,
+    ABSOLUTE_CLOCK,
+    casters,
+  ).some(
+    (iv) =>
+      PRISMATIC_BARRIER_AURA_IDS.has(iv.spellId) &&
+      iv.fromS <= t &&
+      t <= iv.toS,
+  );
+}
+
+/** What sat on `holder` as the CC application `applied` (one of its aura
+ * events) landed: the Roar (`oppressingRoarOnAt`) and the barrier
+ * (`prismaticBarrierOnAtMs`) — `ccFullDurationForApplication`'s input. */
+export function ccLandingStateAt(
+  holder: Pick<ICombatUnit, "id" | "auraEvents">,
+  applied: ICombatUnit["auraEvents"][number],
+): ICcLandingState {
+  return {
+    roar: oppressingRoarOnAt(holder, applied),
+    prismaticBarrier: prismaticBarrierOnAtMs(holder, applied.logLine.timestamp),
+  };
+}
+
+/** `ccLandingStateAt` for a caller that holds the application's time
+ * (`oppressingRoarOnAtMs`'s contract for the Roar; the barrier is read at
+ * `applyMs` itself). */
+export function ccLandingStateAtMs(
+  holder: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  applyMs: number,
+): ICcLandingState {
+  return {
+    roar: oppressingRoarOnAtMs(holder, spellId, applyMs),
+    prismaticBarrier: prismaticBarrierOnAtMs(holder, applyMs),
+  };
+}
+
 /** Call `analyzeCcBreaks` (ccBreaks.ts), which hands in
  * `ccLengthIsDrEvidence`; this module sits inside the `ccTrinketAnalysis`
  * import graph and cannot import it (GH #190 follow-up). */
@@ -275,7 +359,7 @@ export function analyzeCcBreaksWith(
         applyMs: number;
         casterId: string;
         casterName: string;
-        roarAtApply: boolean;
+        landing: ICcLandingState;
       }
     >();
     // Oppressing Roar debuff on the holder lengthens every CC applied while it
@@ -313,8 +397,7 @@ export function analyzeCcBreaksWith(
           reAppliedIsSameApplication(
             open.applyMs,
             aura.timestamp,
-            ccFullDurationForApplication(spellId, src, open.roarAtApply) ??
-              null,
+            ccFullDurationForApplication(spellId, src, open.landing) ?? null,
             ccRecastBetween(
               [src, owner],
               spellId,
@@ -334,7 +417,10 @@ export function analyzeCcBreaksWith(
           applyMs: aura.timestamp,
           casterId: aura.srcUnitId,
           casterName: aura.srcUnitName,
-          roarAtApply: roar.onAt(aura.timestamp),
+          landing: {
+            roar: roar.onAt(aura.timestamp),
+            prismaticBarrier: prismaticBarrierOnAtMs(holder, aura.timestamp),
+          },
         });
       } else if (ev === LogEvent.SPELL_AURA_REMOVED) {
         pending.delete(key);
@@ -396,7 +482,7 @@ export function analyzeCcBreaksWith(
           endMs: aura.timestamp,
           srcUnitId: entry.casterId,
           matchStartMs: combat.startTime,
-          roarAtApply: entry.roarAtApply,
+          landing: entry.landing,
           unitById,
           lengthIsDrEvidence,
           roundEndAtMs: roundEnd,

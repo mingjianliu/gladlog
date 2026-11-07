@@ -283,6 +283,7 @@ import {
   BUFF_DURATION_TALENT_MODIFIERS,
   CC_DURATION_TALENT_MODIFIERS,
   OPPRESSING_ROAR_AURA_IDS,
+  PRISMATIC_BARRIER_AURA_IDS,
 } from "./spellEffectData";
 import {
   ARENA_DURATION_RULINGS,
@@ -1413,6 +1414,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("OPPRESSING_ROAR_AURA_IDS", "data/spellEffectData.ts", "aura", () => [
     ...OPPRESSING_ROAR_AURA_IDS,
+  ]),
+  // GH #126: the auras whose presence on a CC's holder shortens a Magic CC
+  // (Prismatic Barrier and the Merely a Setback it leaves when it falls)
+  t("PRISMATIC_BARRIER_AURA_IDS", "data/spellEffectData.ts", "aura", () => [
+    ...PRISMATIC_BARRIER_AURA_IDS,
   ]),
   // Talent-conditional CC duration modifiers (GH #44 tail, 2026-09-02): the CC
   // aura ids it keys on plus the talent spell ids it gates on — a renumbered

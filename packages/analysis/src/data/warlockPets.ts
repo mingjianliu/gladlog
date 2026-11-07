@@ -33,6 +33,13 @@ export const WARLOCK_PET_FUNCTION: Record<string, IWarlockPetFunction> = {
   "1863": { pet: "Sayaad", does: "Seduction (disorient)" },
   "184600": { pet: "Incubus", does: "Seduction (disorient)" },
   "17252": { pet: "Felguard", does: "Axe Toss (stun)" },
+  // GH #128 (census 2026-11-07, 605 + wide cap-final2, 1,427 warlock
+  // rounds): the Felguard on its Wrathguard model — 7 units of one
+  // Demonology player (s2/33 r2–r6, the 5 rounds no pet resolved), casting
+  // exactly the Felguard's kit (Pursuit 30151, Felstorm 89751 / 89753,
+  // Threatening Presence 134477, Legion Strike 30213). Every other unresolved
+  // round has no pet unit at all.
+  "58965": { pet: "Felguard", does: "Axe Toss (stun)" },
   "416": { pet: "Imp", does: "Singe Magic (friendly dispel)" },
   "1860": { pet: "Voidwalker", does: "no control or dispel" },
 };

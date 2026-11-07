@@ -367,6 +367,13 @@ describe("warlockPetFunction — the roster names a warlock's pet by what it doe
     expect(warlockPetFunction(lock, [petOf("1860")])?.pet).toBe("Voidwalker");
   });
 
+  it("GH #128: the Felguard on its Wrathguard model (npc 58965) is a Felguard, with no Axe Toss pressed", () => {
+    const wrathguard = petOf("58965", ["30151", "89751", "134477", "30213"]);
+    expect(warlockPetFunction(lock, [wrathguard])).toEqual(
+      warlockPetFunction(lock, [petOf("17252")]),
+    );
+  });
+
   it("unlisted npcId falls back to the pet's signature cast", () => {
     expect(warlockPetFunction(lock, [petOf("999999", ["6358"])])?.pet).toBe(
       "Sayaad",

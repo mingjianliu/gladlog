@@ -25,6 +25,7 @@ import {
   chargesAvailableAt,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
+  hpTroughInEventSpan,
   isHealerSpec,
   specToString,
   unitCooldownAvailableAt,
@@ -186,8 +187,25 @@ export function getHpPercentAtTime(
 }
 
 /**
- * Returns the lowest HP% (0–100) observed for `unit` within [fromSeconds, toSeconds].
- * Scans all advancedActions in that window; returns null if none exist (advanced logging off).
+ * The lowest HP% (0–100, whole) `unit` reached within [fromSeconds,
+ * toSeconds] (fractional match seconds) — the shared trough over the event's
+ * own span (`hpTroughInEventSpan`): its sample-validity rules (a 0-HP
+ * killing-blow row and anything after the death are no reading, a row over
+ * two max-HP scales reads its new max, the unit's own rows only). null when
+ * the window holds no reading (advanced logging off).
+ *
+ * GH #138 (predicate-index "Not yet unified", 2026-10-10 WP-E item 4): this
+ * was a third reading — every raw advanced row between its own ms bounds,
+ * none of the validity rules — under `matchMinHpPct`'s printed NOTE, threat
+ * assessment, the moment snapshot and the healing-gap low.
+ *
+ * A death inside the window reads 0 — the death is the lowest the unit got
+ * (the `[STATE]` tick's `dead`, STAYED IN's death-second 0). The raw scan
+ * gave 0 there through the killing blow's 0-HP row, which the trough does
+ * not count as a live reading; every reader asks "how bad did it get", and a
+ * dead owner must not read as "never under meaningful pressure".
+ *
+ * Unbounded ends (`matchMinHpPct` with no round) read the unit's whole log.
  */
 export function getLowestHpPercentInWindow(
   unit: ICombatUnit,
@@ -197,22 +215,27 @@ export function getLowestHpPercentInWindow(
 ): number | null {
   const actions = getSortedAdvancedActions(unit);
   if (actions.length === 0) return null;
-
-  const fromMs = matchStartMs + fromSeconds * 1000;
-  const toMs = matchStartMs + toSeconds * 1000;
-
-  let lowest: number | null = null;
-  for (const a of actions) {
-    if (a.logLine.timestamp < fromMs) continue;
-    if (a.logLine.timestamp > toMs) break;
-    if (a.advancedActorMaxHp <= 0) continue;
-    const pct = Math.min(
-      100,
-      Math.max(0, (a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100),
-    );
-    if (lowest === null || pct < lowest) lowest = pct;
-  }
-  return lowest;
+  const firstS = (actions[0]!.logLine.timestamp - matchStartMs) / 1000;
+  const lastS =
+    (actions[actions.length - 1]!.logLine.timestamp - matchStartMs) / 1000;
+  const fromS = Number.isFinite(fromSeconds) ? fromSeconds : firstS;
+  const toS = Number.isFinite(toSeconds) ? toSeconds : lastS;
+  if (toS < fromS) return null;
+  // a death is read against the window as asked: an unbounded end keeps a
+  // death logged after the unit's last sample (codex 20-cat4A-01 #3)
+  const deathFromMs = Number.isFinite(fromSeconds)
+    ? matchStartMs + fromSeconds * 1000
+    : -Infinity;
+  const deathToMs = Number.isFinite(toSeconds)
+    ? matchStartMs + toSeconds * 1000
+    : Infinity;
+  if (
+    (unit.deathRecords ?? []).some(
+      (d) => d.timestamp >= deathFromMs && d.timestamp <= deathToMs,
+    )
+  )
+    return 0;
+  return hpTroughInEventSpan(unit, matchStartMs, fromS, toS)?.pct ?? null;
 }
 
 /** Lowest HP% of the round (delegates to the windowed predicate, single
@@ -353,10 +376,7 @@ function getDefensiveStateAtTime(
   // round (user ruling 2026-10-20, fact1215 retest idx 60 — the span's
   // reading, `computeOffensiveWindows`)
   for (const r of combat ? unusedKitRows(enemy, combat) : [])
-    if (
-      unpressedKitDefensiveInHand(r.spellId) &&
-      !castsBySpell.has(r.spellId)
-    )
+    if (unpressedKitDefensiveInHand(r.spellId) && !castsBySpell.has(r.spellId))
       available.push(r.name);
 
   return { available, unavailable };

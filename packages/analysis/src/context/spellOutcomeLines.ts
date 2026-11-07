@@ -19,8 +19,8 @@ import { binarySearchClosest } from "../utils/binarySearch";
 import { CAST_INTERRUPTED_REASONS } from "../utils/castCancels";
 import { castControlsIn, isControlCast } from "../utils/castMissRows";
 import {
+  ccLandingStateAt,
   ccRemainingSeconds,
-  oppressingRoarOnAt,
 } from "../utils/ccBreakAnalysis";
 import { ccLengthIsDrEvidence } from "../utils/ccTrinketAnalysis";
 import { ccRecastSplitsResend } from "../utils/drAnalysis";
@@ -943,7 +943,7 @@ function heldAndLeft(
       endMs: removedMs,
       srcUnitId: srcId,
       matchStartMs,
-      roarAtApply: oppressingRoarOnAt(target, applied),
+      landing: ccLandingStateAt(target, applied),
       unitById,
       lengthIsDrEvidence: ccLengthIsDrEvidence,
     }),

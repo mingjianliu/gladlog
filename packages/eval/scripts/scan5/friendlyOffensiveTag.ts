@@ -5,47 +5,35 @@
  * `[ENEMY DEF]` line.
  *
  * `offensiveTagWrong`, from the owner's side's own rows in the printed second:
- *  - kind `summonUntagged`: no tag, while a friend's offensive summon pressed
- *    before the second runs through all of it on the spell's official length
- *    (a summon has no aura, so only the press and the length say so);
+ *  - kind `summonUntagged`: no tag, while a friend's offensive summon runs
+ *    through all of the second (at both its ends);
  *  - kind `cdLessOnly`: a tag, while the only offensive aura on a friend that
  *    has no official cooldown (Archangel) is what is up: no friendly offensive
- *    aura WITH a cooldown, no summon, no debuff of theirs on an enemy.
+ *    aura WITH a cooldown, no summon at either end of the second, no debuff
+ *    of theirs on an enemy.
+ *  A summon has no aura, so whether one runs is the product's own reading
+ *  (`offensiveSummonActiveAt`: an enemy-CD-window summon, its press plus the
+ *  caster's length), asked at the second's two ends like the auras below
+ *  (GH #173: a Force of Nature pressed at +85.52 s, 10 s, ran past the
+ *  +95.165 s Greater Invisibility press the tag is about but not through the
+ *  printed second 1:35 — the scan's own whole-second rule read it gone and
+ *  filed the tag as Archangel's, 44333434 r1).
  */
+import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import {
-  effectiveCooldownSeconds,
-  spellEffectData,
-} from "@gladlog/analysis/src/data/spellEffectData";
-import { SUMMON_SPELL_IDS } from "@gladlog/analysis/src/data/summonGenerated";
-import { offensiveCdOfAura } from "@gladlog/analysis/src/utils/cooldowns";
+  offensiveCdOfAura,
+  offensiveSummonActiveAt,
+} from "@gladlog/analysis/src/utils/cooldowns";
 import { ENEMY_DEF_TAG_RE_SRC } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { OFFENSIVE_AURA_EVIDENCE } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
-import {
-  OFFENSIVE_CD_SPELL_IDS,
-  offensiveEffectCdId,
-} from "@gladlog/analysis/src/utils/spellDanger";
+import { offensiveEffectCdId } from "@gladlog/analysis/src/utils/spellDanger";
 
-import { APPLIED, ev, type IRoundCtx, REMOVED, successesOf, tsOf } from "./ctx";
+import { APPLIED, ev, type IRoundCtx, REMOVED, tsOf } from "./ctx";
 
 export const CHECKS = ["offensiveTagWrong"] as const;
 
 const LINE = new RegExp(String.raw`^\s*(\d+):(\d\d)\s+${ENEMY_DEF_TAG_RE_SRC}`);
 const TAG = "[friendly offensive CD active]";
-
-const summonRunning = (unit: any, lo: number, hi: number): any =>
-  successesOf(unit).find((c: any) => {
-    const id = String(c.spellId);
-    const cd = spellEffectData[id]?.cooldownSeconds ?? 0;
-    const d = spellEffectData[id]?.durationSeconds ?? 0;
-    return (
-      SUMMON_SPELL_IDS.has(id) &&
-      OFFENSIVE_CD_SPELL_IDS.has(id) &&
-      cd >= 30 &&
-      d >= 2 &&
-      tsOf(c) < lo &&
-      tsOf(c) + d * 1000 > hi
-    );
-  });
 
 /** the offensive cooldowns whose auras a unit carries at `ms`, by its rows */
 function offensiveAurasUp(unit: any, ms: number, side: Set<string>): string[] {
@@ -81,35 +69,35 @@ export function run(ctx: IRoundCtx): void {
     const lo = ctx.start + (+m[1]! * 60 + +m[2]!) * 1000;
     const hi = lo + 999;
     const tagged = line.includes(TAG);
-    const summon = friends
-      .map((f: any) => summonRunning(f, lo, hi))
-      .find(Boolean);
-    if (!tagged && summon)
+    const through = friends.find(
+      (f: any) =>
+        offensiveSummonActiveAt(f, lo) && offensiveSummonActiveAt(f, hi),
+    );
+    if (!tagged && through)
       ctx.violate(
         "offensiveTagWrong",
         "summonUntagged",
         lo,
         `${line.trim()}`,
-        `summon ${summon.spellId} pressed +${tsOf(summon) - ctx.start}ms`,
+        `summon of ${through.name} runs through the second`,
         line,
       );
-    if (!tagged || summon) continue;
-    // the tag is a fact of the press instant inside the second: read both ends
+    if (!tagged || through) continue;
+    // the tag is a fact of the press instant inside the second: a summon
+    // running at either end of it can be what it read
+    if (
+      friends.some(
+        (f: any) =>
+          offensiveSummonActiveAt(f, lo) || offensiveSummonActiveAt(f, hi),
+      )
+    )
+      continue;
+    // …and so can an aura up at either end
     const up = [...friends, ...enemies].flatMap((u: any) => [
       ...offensiveAurasUp(u, lo, side),
       ...offensiveAurasUp(u, hi, side),
     ]);
     if (up.length === 0) continue;
-    const pressedInSecond = friends.some((f: any) =>
-      successesOf(f).some(
-        (c: any) =>
-          SUMMON_SPELL_IDS.has(String(c.spellId)) &&
-          OFFENSIVE_CD_SPELL_IDS.has(String(c.spellId)) &&
-          tsOf(c) >= lo &&
-          tsOf(c) <= hi,
-      ),
-    );
-    if (pressedInSecond) continue;
     // a charge's recharge is a cooldown (Ray of Frost, Soul Immolation, 60 s),
     // and an activation has its cooldown's (Radiant Glory's Avenging Wrath)
     if (

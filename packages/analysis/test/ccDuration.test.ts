@@ -7,7 +7,7 @@
  * `talentOwnershipOf` answers "yes" — "unknown" (no talent data) stays at the
  * base, because a longer-CC claim must rest on evidence the player has it.
  */
-import { CombatUnitSpec } from "@gladlog/parser-compat";
+import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 
 import {
   CC_DURATION_TALENT_MODIFIERS,
@@ -15,16 +15,32 @@ import {
   OPPRESSING_ROAR_LENGTHENED_MECHANICS,
   OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
   OPPRESSING_ROAR_SPELL_ID,
+  PRISMATIC_BARRIER_AURA_IDS,
+  PRISMATIC_BARRIER_DISPEL_TYPE,
+  PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT,
 } from "../src/data/spellEffectData";
+import spellEffects from "../src/data/spellEffectGenerated.json";
 import inventory from "../src/data/talentEffectInventoryGenerated.json";
+import {
+  ccLandingStateAt,
+  prismaticBarrierOnAtMs,
+} from "../src/utils/ccBreakAnalysis";
 import {
   ccFullDurationForApplication,
   ccFullDurationForCaster,
+  type ICcLandingState,
+  NO_CC_LANDING_STATE,
   oppressingRoarLengthens,
+  prismaticBarrierShortens,
 } from "../src/utils/ccDuration";
 import { ccMechanicOf } from "../src/utils/spellMechanics";
 import { talentOwnershipOf } from "../src/utils/talentOwnership";
-import { makeUnit } from "./ported/testHelpers";
+import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
+
+const ROAR: ICcLandingState = { roar: true, prismaticBarrier: false };
+const BARRIER: ICcLandingState = { roar: false, prismaticBarrier: true };
+const BARRIER_AURA = "235450";
+const MERELY_A_SETBACK = "449336";
 
 const INTIMIDATING_SHOUT = "5246";
 const RESONANT_VOICE = "1243660";
@@ -221,10 +237,14 @@ describe("ccFullDurationForApplication — Oppressing Roar on the target", () =>
   it("Terror of the Skies: 3 s without the Roar, 3 × 1.3 = 3.9 s with it on the target", () => {
     expect(ccFullDurationSeconds(TERROR_OF_THE_SKIES)).toBe(3);
     expect(
-      ccFullDurationForApplication(TERROR_OF_THE_SKIES, undefined, false),
+      ccFullDurationForApplication(
+        TERROR_OF_THE_SKIES,
+        undefined,
+        NO_CC_LANDING_STATE,
+      ),
     ).toBe(3);
     expect(
-      ccFullDurationForApplication(TERROR_OF_THE_SKIES, undefined, true),
+      ccFullDurationForApplication(TERROR_OF_THE_SKIES, undefined, ROAR),
     ).toBeCloseTo(3.9, 6);
   });
 
@@ -237,20 +257,23 @@ describe("ccFullDurationForApplication — Oppressing Roar on the target", () =>
       CHAOS_NOVA,
       VOID_NOVA,
     ])
-      expect(ccFullDurationForApplication(id, undefined, false), id).toBe(
+      expect(
+        ccFullDurationForApplication(id, undefined, NO_CC_LANDING_STATE),
+        id,
+      ).toBe(
         ccFullDurationForCaster(id, undefined),
       );
   });
 
   it("a mechanic the Roar does not list keeps its length under it; no duration stays no duration", () => {
-    expect(ccFullDurationForApplication(MORTAL_COIL, undefined, true)).toBe(
+    expect(ccFullDurationForApplication(MORTAL_COIL, undefined, ROAR)).toBe(
       ccFullDurationSeconds(MORTAL_COIL),
     );
     expect(
-      ccFullDurationForApplication(CHASTISE, undefined, true),
+      ccFullDurationForApplication(CHASTISE, undefined, ROAR),
     ).toBeUndefined();
     expect(
-      ccFullDurationForApplication("no-such-id", undefined, true),
+      ccFullDurationForApplication("no-such-id", undefined, ROAR),
     ).toBeUndefined();
   });
 
@@ -260,12 +283,148 @@ describe("ccFullDurationForApplication — Oppressing Roar on the target", () =>
       info: { talents: [RESONANT_VOICE_TALENT], pvpTalents: [] },
     });
     expect(
-      ccFullDurationForApplication(INTIMIDATING_SHOUT, warrior, true),
+      ccFullDurationForApplication(INTIMIDATING_SHOUT, warrior, ROAR),
     ).toBeCloseTo(6 * 1.2 * 1.3, 6);
   });
 
   it("Chaos Nova and Void Nova stay on DB2's 3 s — their 4 s plateau has no known mechanism and is not the Roar", () => {
     expect(ccFullDurationSeconds(CHAOS_NOVA)).toBe(3);
     expect(ccFullDurationSeconds(VOID_NOVA)).toBe(3);
+  });
+});
+
+describe("GH #126 — Prismatic Barrier shortens a Magic CC on its holder by 15 %", () => {
+  const POLYMORPH = "118"; // Magic, 6 s
+  const HAMMER_OF_JUSTICE = "853"; // Magic, 5 s
+  const CHEAP_SHOT = "1833"; // not Magic, 4 s
+  const T = 1_700_000_000_000;
+
+  it("the −15 % and the Magic type are the inventory's aura-245 row of 235450 (the DB2 leg, re-checked on every data refresh)", () => {
+    const rows = (
+      inventory as unknown as {
+        rows: Array<{
+          spellId: string;
+          aura: number;
+          misc0: number;
+          basePoints: number;
+          pvpMultiplier?: number;
+          activation?: string;
+        }>;
+      }
+    ).rows.filter(
+      (r) => r.spellId === BARRIER_AURA && r.aura === 245,
+    );
+    expect(rows).toHaveLength(1);
+    // SpellDispelType 1 = Magic
+    expect(rows[0]!.misc0).toBe(1);
+    expect(PRISMATIC_BARRIER_DISPEL_TYPE).toBe("Magic");
+    expect(rows[0]!.activation).toBe("whileAura");
+    expect(
+      1 + (rows[0]!.basePoints * (rows[0]!.pvpMultiplier ?? 1)) / 100,
+    ).toBeCloseTo(PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT, 6);
+    expect(PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT).toBeCloseTo(0.85, 6);
+  });
+
+  it("a Magic CC under the barrier runs 0.85 of its length; a non-Magic one keeps it", () => {
+    expect(prismaticBarrierShortens(POLYMORPH)).toBe(true);
+    expect(prismaticBarrierShortens(CHEAP_SHOT)).toBe(false);
+    expect(
+      ccFullDurationForApplication(POLYMORPH, undefined, BARRIER),
+    ).toBeCloseTo(6 * 0.85, 6);
+    expect(
+      ccFullDurationForApplication(HAMMER_OF_JUSTICE, undefined, BARRIER),
+    ).toBeCloseTo(5 * 0.85, 6);
+    expect(ccFullDurationForApplication(CHEAP_SHOT, undefined, BARRIER)).toBe(
+      ccFullDurationSeconds(CHEAP_SHOT),
+    );
+  });
+
+  it("the Roar and the barrier both apply: 6 × 1.3 × 0.85", () => {
+    expect(
+      ccFullDurationForApplication(POLYMORPH, undefined, {
+        roar: true,
+        prismaticBarrier: true,
+      }),
+    ).toBeCloseTo(6 * 1.3 * 0.85, 6);
+  });
+
+  it("the barrier is read off the interval builder: up between its APPLIED and REMOVED, and from before the round when only its REMOVED is logged", () => {
+    const mage = (rows: ReturnType<typeof makeAuraEvent>[]) =>
+      makeUnit("mage", { auraEvents: rows });
+    const own = (ev: LogEvent, ms: number) =>
+      makeAuraEvent(ev, BARRIER_AURA, ms, "mage", "mage", "BUFF");
+    const inRound = mage([
+      own(LogEvent.SPELL_AURA_APPLIED, T + 10_000),
+      own(LogEvent.SPELL_AURA_REMOVED, T + 14_000),
+    ]);
+    expect(prismaticBarrierOnAtMs(inRound, T + 9_000)).toBe(false);
+    expect(prismaticBarrierOnAtMs(inRound, T + 12_000)).toBe(true);
+    expect(prismaticBarrierOnAtMs(inRound, T + 15_000)).toBe(false);
+    // put up in the preparation room: the round logs only its fall
+    const preRound = mage([own(LogEvent.SPELL_AURA_REMOVED, T + 3_000)]);
+    expect(prismaticBarrierOnAtMs(preRound, T + 1_000)).toBe(true);
+    expect(prismaticBarrierOnAtMs(preRound, T + 4_000)).toBe(false);
+    // no barrier rows at all
+    expect(prismaticBarrierOnAtMs(mage([]), T + 1_000)).toBe(false);
+  });
+
+  it("the landing state is read in log order: a Roar REMOVED after the CC's APPLIED in the same ms was on as it landed (the reading the DR gate shares — codex 20-cat4A-02)", () => {
+    const roarRow = (ev: LogEvent, ms: number) =>
+      makeAuraEvent(ev, OPPRESSING_ROAR_SPELL_ID, ms, "evoker", "mage", "DEBUFF");
+    const poly = makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      POLYMORPH,
+      T + 5_000,
+      "priest",
+      "mage",
+      "DEBUFF",
+    );
+    const mage = makeUnit("mage", {
+      auraEvents: [
+        roarRow(LogEvent.SPELL_AURA_APPLIED, T + 3_000),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, MERELY_A_SETBACK, T + 4_000, "mage", "mage", "BUFF"),
+        poly,
+        roarRow(LogEvent.SPELL_AURA_REMOVED, T + 5_000),
+      ],
+    });
+    const landing = ccLandingStateAt(mage, poly as never);
+    expect(landing).toEqual({ roar: true, prismaticBarrier: true });
+    expect(ccFullDurationForApplication(POLYMORPH, undefined, landing)).toBeCloseTo(
+      6 * 1.3 * 0.85,
+      6,
+    );
+  });
+
+  it("Merely a Setback counts as the barrier: the 8 s aura the barrier leaves when it falls (same DB2 aura-245 row; the inventory has no row for it, so its id and generated length are pinned here)", () => {
+    expect([...PRISMATIC_BARRIER_AURA_IDS].sort()).toEqual([
+      BARRIER_AURA,
+      MERELY_A_SETBACK,
+    ]);
+    const setback = (
+      spellEffects as unknown as Record<
+        string,
+        { name?: string; durationSeconds?: number }
+      >
+    )[MERELY_A_SETBACK];
+    expect(setback?.name).toBe("Merely a Setback");
+    expect(setback?.durationSeconds).toBe(8);
+    const own = (id: string, ev: LogEvent, ms: number) =>
+      makeAuraEvent(ev, id, ms, "mage", "mage", "BUFF");
+    const fell = makeUnit("mage", {
+      auraEvents: [
+        own(BARRIER_AURA, LogEvent.SPELL_AURA_APPLIED, T + 10_000),
+        own(BARRIER_AURA, LogEvent.SPELL_AURA_REMOVED, T + 14_000),
+        own(MERELY_A_SETBACK, LogEvent.SPELL_AURA_APPLIED, T + 14_000),
+        own(MERELY_A_SETBACK, LogEvent.SPELL_AURA_REMOVED, T + 22_000),
+      ],
+    });
+    expect(prismaticBarrierOnAtMs(fell, T + 20_600)).toBe(true);
+    expect(prismaticBarrierOnAtMs(fell, T + 23_000)).toBe(false);
+    // a REMOVED never logged: it ends at its 8 s length
+    const unlogged = makeUnit("mage", {
+      auraEvents: [own(MERELY_A_SETBACK, LogEvent.SPELL_AURA_APPLIED, T + 14_000)],
+    });
+    expect(prismaticBarrierOnAtMs(unlogged, T + 21_000)).toBe(true);
+    expect(prismaticBarrierOnAtMs(unlogged, T + 23_000)).toBe(false);
   });
 });

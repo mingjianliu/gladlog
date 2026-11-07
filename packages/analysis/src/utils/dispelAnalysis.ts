@@ -48,7 +48,7 @@ import {
   empowerSpans,
   tickEndedChannelSpans,
 } from "./castCommitSpans";
-import { oppressingRoarOnAtMs } from "./ccBreakAnalysis";
+import { ccLandingStateAtMs } from "./ccBreakAnalysis";
 import { ccFullDurationForApplication } from "./ccDuration";
 import { ccLengthIsDrEvidence } from "./ccTrinketAnalysis";
 import { charmedThrough } from "./charmedPlayer";
@@ -3547,7 +3547,7 @@ export function reconstructDispelSummary(
       ccFullDurationForApplication(
         spellId,
         enemyPlayerById.get(srcUnitId),
-        oppressingRoarOnAtMs(unit, spellId, applyMs),
+        ccLandingStateAtMs(unit, spellId, applyMs),
       ) ?? null;
 
     // A BROKEN line its aura's own REMOVED follows is not the end (FT-T08):

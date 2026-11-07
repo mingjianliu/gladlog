@@ -184,6 +184,8 @@ export const CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS = Date.UTC(2026, 8, 22, 0, 0, 0);
 export const HOTFIX_2026_08_18_EPOCH_MS = Date.UTC(2026, 7, 18, 15, 0, 0);
 export const HOTFIX_2026_08_25_EPOCH_MS = Date.UTC(2026, 7, 25, 15, 0, 0);
 export const HOTFIX_2026_09_01_EPOCH_MS = Date.UTC(2026, 8, 1, 15, 0, 0);
+/** 12.1.0 PvP hotfix of 2026-10-06 (GH #157), the same convention */
+export const HOTFIX_2026_10_06_EPOCH_MS = Date.UTC(2026, 9, 6, 15, 0, 0);
 
 export interface IDatedCooldownValue {
   /** which of the talent's rows the dated number replaces */
@@ -314,5 +316,37 @@ export const DATED_COOLDOWN_VALUES: Readonly<
       since: 15,
     },
     note: "Improved Conjuration — Mirror Image −30 s a rank before the 2026-09-01 hotfix, −15 since",
+  },
+  // GH #157 (user ruling 2026-11-07, 「按你说」): two cooldown cuts the data
+  // refresh to 12.1.5.70391 brought in, which a 12.1.0 log read as if they
+  // had always been. Official text, PvP hotfix 2026-10-06 (eval-private
+  // runs/data-1215-2026-10-16/patchnotes/CHANGES.md lines 259 / 298):
+  // "Improved Mass Dispel reduces the cooldown of Mass Dispel by 75 seconds
+  // (was 60 seconds)"; "Call of Al'Akir now increases the cooldown of
+  // Nature's Swiftness by 20 seconds (was 30 seconds)". FLAG — the official
+  // text only, not measured: 605 + wide hold 0 holders of either (Mass
+  // Dispel recasts 0 holder vs 24 non-holder gaps; Nature's Swiftness 0 vs
+  // 1,987). An undated or zone-uncertain log takes the longer, older
+  // cooldown (`uncertainTakes: "before"` — a reading that spends a cooldown
+  // rather than call it ready).
+  "426438": {
+    effect: "reduce_cd",
+    value: {
+      cutoverEpochMs: HOTFIX_2026_10_06_EPOCH_MS,
+      before: 60,
+      since: 75,
+      uncertainTakes: "before",
+    },
+    note: "Improved Mass Dispel — Mass Dispel −60 s before the 2026-10-06 hotfix, −75 s since; official text only, no corpus holder (FLAG)",
+  },
+  "1246131": {
+    effect: "reduce_cd",
+    value: {
+      cutoverEpochMs: HOTFIX_2026_10_06_EPOCH_MS,
+      before: -30,
+      since: -20,
+      uncertainTakes: "before",
+    },
+    note: "Call of Al'Akir — Nature's Swiftness +30 s before the 2026-10-06 hotfix, +20 s since; official text only, no corpus holder (FLAG)",
   },
 };

@@ -1433,6 +1433,36 @@ describe("offensiveTagWrong", () => {
   it("flags a tag only Curse of Tongues stands behind", () => {
     expect(seen([], ["1714"])).toHaveLength(1);
   });
+  // GH #173 (44333434 r1 1:35): a Force of Nature (10 s) running into the
+  // printed second is what the press instant read — the product's own
+  // summon reading (`offensiveSummonActiveAt`), not Archangel
+  it("a summon running at either end of the second stands behind the tag; one gone before it does not", () => {
+    const withTreants = (pressMs: number) =>
+      of(
+        scan(
+          runFriendlyOffensiveTag,
+          [
+            unit("Ally", "1", 1, {
+              info: {},
+              spec: "102",
+              auraEvents: [up("81700")],
+              spellCastEvents: [
+                rowOf(LogEvent.SPELL_CAST_SUCCESS, pressMs, {
+                  spellId: "205636",
+                  spellName: "Force of Nature",
+                  srcUnitId: "Ally",
+                }),
+              ],
+            }),
+            unit("Enemy", "2", 2, { info: {} }),
+          ],
+          [line],
+        ),
+        "offensiveTagWrong",
+      );
+    expect(withTreants(17_500)).toEqual([]);
+    expect(withTreants(16_500)).toHaveLength(1);
+  });
 });
 
 describe("rotDotCount", () => {

@@ -136,7 +136,9 @@ export function mateHitDuringCc(
   return hp !== null && hp.h0 - hp.lo.pct >= CONSEQ_DROP_MIN_PCT;
 }
 
-function teamDrops(
+/** Exported for the GH #70 consequence probe (`packages/eval/src/explore/
+ * consequenceFacts.ts`), which prints the same readings (GH #138). */
+export function teamDrops(
   mates: ICombatUnit[],
   label: (name: string) => string,
   matchStartMs: number,

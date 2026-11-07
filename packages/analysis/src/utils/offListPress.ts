@@ -29,6 +29,7 @@ import { classMetadata } from "../data/classSpells";
 import {
   effectiveCooldownSeconds,
   OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
+  PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT,
 } from "../data/spellEffectData";
 import { timeSpiralEchoMs } from "../data/talentScriptedCooldowns";
 import {
@@ -37,8 +38,8 @@ import {
 } from "./buffDuration";
 import { isNoPressRow } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
-import { oppressingRoarOnAt } from "./ccBreakAnalysis";
-import { oppressingRoarLengthens } from "./ccDuration";
+import { oppressingRoarOnAt, prismaticBarrierOnAtMs } from "./ccBreakAnalysis";
+import { oppressingRoarLengthens, prismaticBarrierShortens } from "./ccDuration";
 import { isStasisReplayCast } from "./combatStates";
 import {
   canonicalSpellId,
@@ -563,11 +564,21 @@ export function pressDuration(
     // Oppressing Roar on the unit lengthens a control / slow / root it
     // covers by 30 % (the CC lines' own `ccFullDurationForApplication`
     // reading — Chimaeral Sting's slow 3.90–3.92 s ×4 under it, 2.98–3.02
-    // s ×54 without; Flying Serpent Kick 5.21; Landslide 7.81), and a Time
-    // Stop on the unit holds it for as long as it ran
+    // s ×54 without; Flying Serpent Kick 5.21; Landslide 7.81), a Prismatic
+    // Barrier up on it shortens a harmful Magic one by 15 % (GH #126, the
+    // same reading — a debuff only: the barrier's own buff, or any other
+    // Magic buff on its holder, keeps its length; codex 20-cat4A-01 #1), and
+    // a Time Stop on the unit holds it for as long as it ran
     const roared =
       oppressingRoarLengthens(row.spellId!) && oppressingRoarOnAt(unit, row);
-    const len = roared ? base * OPPRESSING_ROAR_PVP_CC_DURATION_MULT : base;
+    const barred =
+      row.auraType === "DEBUFF" &&
+      prismaticBarrierShortens(row.spellId!) &&
+      prismaticBarrierOnAtMs(unit, row.logLine.timestamp);
+    const len =
+      base *
+      (roared ? OPPRESSING_ROAR_PVP_CC_DURATION_MULT : 1) *
+      (barred ? PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT : 1);
     return {
       durationSeconds:
         len + timeStopHeldSeconds(unit, row.logLine.timestamp, len, row),

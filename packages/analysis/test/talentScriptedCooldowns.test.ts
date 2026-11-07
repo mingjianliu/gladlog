@@ -34,6 +34,7 @@ import {
   CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS,
   CD_TALENT_MODIFIERS,
   DATED_COOLDOWN_VALUES,
+  HOTFIX_2026_10_06_EPOCH_MS,
   PER_RANK_COOLDOWN_TALENTS,
 } from "../src/utils/talentModifiers";
 import { talentsOf } from "../src/utils/talents";
@@ -974,6 +975,36 @@ describe("Restoration Druid cooldown talents (GH #154)", () => {
     expect(at(CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS + 14 * DAY)).toBe(120);
     expect(at(undefined)).toBe(120);
     expect(at(Number.NaN)).toBe(120);
+  });
+
+  it("GH #157: Improved Mass Dispel and Call of Al'Akir read their old, longer cooldown before the 2026-10-06 hotfix and in an undated log", () => {
+    const DAY = 86_400_000;
+    const cases: Array<[string, string, number, number, number]> = [
+      // talent, spell, base, before → cooldown, since → cooldown
+      ["426438", "32375", 120, 60, 45],
+      ["1246131", "378081", 60, 90, 80],
+    ];
+    for (const [talent, spell, base, before, since] of cases) {
+      const mods = CD_TALENT_MODIFIERS[spell]!;
+      const row = mods.find((m) => m.talentSpellId === talent)!;
+      // today's number is the generated DB2 row's
+      expect(DATED_COOLDOWN_VALUES[talent]!.value!.since, talent).toBe(
+        row.value,
+      );
+      const at = (logEpochMs?: number) =>
+        applyCdModifiers(
+          mods,
+          base,
+          1,
+          new Set(),
+          new Set([talent]),
+          logEpochMs === undefined ? {} : { logEpochMs },
+        ).cooldownSeconds;
+      expect(at(HOTFIX_2026_10_06_EPOCH_MS - 7 * DAY), talent).toBe(before);
+      expect(at(HOTFIX_2026_10_06_EPOCH_MS + 2 * DAY), talent).toBe(since);
+      expect(at(undefined), talent).toBe(before);
+      expect(at(Number.NaN), talent).toBe(before);
+    }
   });
 });
 

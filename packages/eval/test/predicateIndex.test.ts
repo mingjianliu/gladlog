@@ -558,6 +558,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cooldowns.ts`,
+    symbol: "offensiveSummonActiveAt",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
     symbol: "readyAfterReductions",
     mod: cooldowns,
   },
@@ -2088,6 +2093,27 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/ccBreakAnalysis.ts`,
     symbol: "oppressingRoarOnAtMs",
+    mod: ccBreakAnalysis,
+  },
+  // GH #126: Prismatic Barrier, the second landing state
+  {
+    file: `${A}/data/spellEffectData.ts`,
+    symbol: "PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT",
+    mod: spellEffectData,
+  },
+  {
+    file: `${A}/utils/ccBreakAnalysis.ts`,
+    symbol: "prismaticBarrierOnAtMs",
+    mod: ccBreakAnalysis,
+  },
+  {
+    file: `${A}/utils/ccBreakAnalysis.ts`,
+    symbol: "ccLandingStateAt",
+    mod: ccBreakAnalysis,
+  },
+  {
+    file: `${A}/utils/ccBreakAnalysis.ts`,
+    symbol: "ccLandingStateAtMs",
     mod: ccBreakAnalysis,
   },
   // WP-E (FT-T03, ruling D7): troughs — the signed exception to the grid rule

@@ -134,6 +134,36 @@ describe("fact10 D14 / D17 — Stampeding Roar under Pack's Endurance, Time Skip
   });
 });
 
+describe("GH #173 Q5 — Darkness under Long Night", () => {
+  // the choice node Long Night / Pitch Black (node 91001): entry 112920 is
+  // Long Night 389781, 112919 Pitch Black 389783 (talentIdMap)
+  const dh = (spec: string, entry: number | null, pvpTalents: string[] = []) =>
+    ({
+      spec,
+      info: {
+        talents: entry === null ? [] : [{ id1: 91001, id2: entry, count: 1 }],
+        pvpTalents,
+      },
+      spellCastEvents: [],
+    }) as never;
+  it("a Long Night holder's Darkness runs 11 s, a Pitch Black taker's 8 s (fact11 39-23-361: rows to +10.65 s)", () => {
+    for (const spec of ["577", "581", "1480"]) {
+      expect(buffFullDurationForCaster("196718", dh(spec, 112920))).toBe(11);
+      expect(buffFullDurationForCaster("196718", dh(spec, 112919))).toBe(8);
+    }
+    // no caster: the DB2 length, as before
+    expect(buffFullDurationForCaster("196718", undefined)).toBe(8);
+  });
+  it("Cover of Darkness 357419 (PvP) adds 4 s: 12 s alone, 15 s with Long Night (corpus: 11.26 / 11.61 s alone, up to 12.31 s with both)", () => {
+    expect(
+      buffFullDurationForCaster("196718", dh("577", 112919, ["357419"])),
+    ).toBe(12);
+    expect(
+      buffFullDurationForCaster("196718", dh("577", 112920, ["357419"])),
+    ).toBe(15);
+  });
+});
+
 describe("buffFullDurationForCaster — the tooltip rows", () => {
   // a COMBATANT_INFO loadout holding Ethereal Cloak 457022 (hero node 95106,
   // entry 117703) — a rank is needed to price a row; a "yes" with no rank

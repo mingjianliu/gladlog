@@ -923,4 +923,12 @@
  *  Strike Dispatch spends the maximum combo points. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 499;
+/*
+ * v500 (2026-11-07, GH #138 #126 #128 #157 #173): window lows read the
+ *  shared trough (9 cd-waste rows at a rendered 60 % drop, user ruling);
+ *  Darkness lasts 11 s with Long Night / Cover; a Magic CC under Prismatic
+ *  Barrier or Merely a Setback runs 0.85 of its length; npc 58965 is a
+ *  Felguard; two cooldown changes are dated at the 10-06 hotfix.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 500;

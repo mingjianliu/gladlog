@@ -273,7 +273,8 @@ describe("matchMinHpPct", () => {
       startInfo: { bracket: "Rated Solo Shuffle" },
       units: { p1: owner, p2: dead },
     };
-    expect(matchMinHpPct(owner, round)).toBeCloseTo(71.4, 6);
+    // a whole percent: the shared trough's reading (GH #138)
+    expect(matchMinHpPct(owner, round)).toBe(71);
     // a 3v3 round keeps the combat's end
     expect(
       matchMinHpPct(owner, { ...round, startInfo: { bracket: "3v3" } }),

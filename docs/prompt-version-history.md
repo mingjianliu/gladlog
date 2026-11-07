@@ -5543,3 +5543,33 @@ reference numbers only. Context: cooldown ranges narrow where a floor went
 NOTE goes with Fade's roster entry. Built before #123 (Airborne Irritant,
 605 byte-identical) and before the F26 batch 3 / cat4 / #150 commits; those
 land after this regen and are not in these tables.
+
+v500 (2026-11-07, GH #138 #126 #128 #157 #173 + Darkness; user rulings
+2026-11-07). (1) GH #138: `getLowestHpPercentInWindow` reads the shared
+trough `hpTroughInEventSpan` (validity rules, whole percent, a death inside
+the window reads 0) under `matchMinHpPct`, threat assessment, the moment
+snapshot and the healing-gap low; 344 NOTE hunks on the 605 set move by
+rounding (84 % → 85 %). Where the old raw minimum was 59.5–59.99 % the
+rendered trough is 60 %, so the cd-waste pressure gate (anchored on the
+rendered value — user ruling 2026-11-07, 「可以」) drops 9 menu rows:
+111-1-598 Die by the Sword; 160-6-1001 Evasion and Cloak of Shadows;
+171-3-1066 Evasion and Cloak of Shadows; 39-6-238 Blessing of Spellwarding
+and Lay on Hands; 68-1-398 Astral Shift; 96-3-513 Die by the Sword. The
+GH #70 consequence probe prints the `[CONSEQ]` line's own readings
+(`teamDrops`). (2) Darkness 196718 lasts 8 s + Long Night 389781 3 s +
+Cover of Darkness 357419 4 s (PvP) — 89 kit lines 8 s → 11 s, a kill
+window's `defenseless` start moves 2:21 → 2:24. (3) GH #126: a Magic CC or
+debuff landing on a unit under Prismatic Barrier 235450 or the Merely a
+Setback 449336 it leaves when it falls runs 0.85 of its length in PvP (DB2
+aura 245 misc0 1, −25 × 0.6); `ccFullDurationForApplication` takes an
+`ICcLandingState` {roar, prismaticBarrier}, read by `ccLandingStateAt` in
+the product and the DR gate alike. 605: [CC BROKEN] 18 hunks (Howl of
+Terror 5.0 → 4.1 s wasted, Psychic Scream 4.2 → 3.3 s, five Dragon's Breath
+breaks fall under the 2 s print threshold), [PRESS] 36 (Wake of Ashes 11 →
+9.4 s, Flying Serpent Kick 4 → 3.4 s). (4) GH #128: npc 58965 (the Felguard
+on its Wrathguard model) is a Felguard — 15 roster lines gain the pet, and
+6 lines stop naming that Demonology Warlock a purger. (5) GH #157: Improved
+Mass Dispel 426438 (Mass Dispel 120 → 60 s before, 45 s since) and Call of Al'Akir 1246131 (Nature's Swiftness 60 → 90 s before, 80 s since)
+are dated at the 2026-10-06 15:00Z PvP hotfix (0 holders in 605 + wide; 0
+lines). (6) GH #173: the offensiveTagWrong gate reads the product's
+`offensiveSummonActiveAt` (scanner only).

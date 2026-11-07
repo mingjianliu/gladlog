@@ -138,6 +138,32 @@ export const TOOLTIP_DURATION_ROWS: Readonly<
       specs: ["257"],
     },
   ],
+  // Darkness — Long Night 389781 「黑暗的持续时间延长${$s1/1000}秒」 (+3 s; DB2
+  // row 1026249: aura 107 misc 1, +3000 ms, class mask [0,0,8192,0] covering
+  // 196718) and Cover of Darkness 357419 (PvP) 「…持续时间延长${$s2/1000}秒」
+  // (+4 s; row 891976, the same aura / mask). Darkness logs no aura, so
+  // talentDurationVerify measures nothing; the corpus leg is the zone's own
+  // absorb rows (209426, source = the demon hunter), press → last row (GH #173
+  // Q5, 2026-11-07; 605 + wide cap-final2, talents from COMBATANT_INFO): Long
+  // Night alone 92 presses, last row up to 11.02 s (60 past 8.5 s); neither
+  // talent 381 presses, none past 8.02 s (fact11 39-23-361: rows to +10.65 s
+  // beside a span the 8 s model called defenseless). Cover of Darkness: 5
+  // presses — alone 2, at 11.26 / 11.61 s (≤ 12); with Long Night 3, up to
+  // 12.31 s (≤ 15). Upward only (Game-Behaviour Rule 7).
+  "196718": [
+    {
+      talentSpellId: "389781",
+      untalentedBaseSeconds: 8,
+      addSeconds: 3,
+      specs: ["577", "581", "1480"],
+    },
+    {
+      talentSpellId: "357419",
+      untalentedBaseSeconds: 8,
+      addSeconds: 4,
+      specs: ["577", "581", "1480"],
+    },
+  ],
   // Atonement — 440671's Discipline branch +4 s; h 252/6, n 89/7
   "194384": [
     {

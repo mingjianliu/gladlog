@@ -112,6 +112,40 @@ describe("killWindowTargetSelection — HP helpers", () => {
     expect(getLowestHpPercentInWindow(unit, 6, 20, MATCH_START)).toBe(20);
   });
 
+  // GH #138 (predicate-index 2026-10-10 WP-E item 4): the shared trough's
+  // reading, not a raw scan of its own
+  it("reads the shared trough: whole percent; a death in the window reads 0, a window before it the trough", () => {
+    const rows = [
+      makeAdvancedAction(MATCH_START + 5000, 0, 0, 1000, 714), // 71.4 %
+      makeAdvancedAction(MATCH_START + 9000, 0, 0, 1000, 456), // 45.6 %
+      makeAdvancedAction(MATCH_START + 9500, 0, 0, 1000, 0), // killing blow
+    ];
+    const alive = makeUnit("unit-1", { advancedActions: rows.slice(0, 2) });
+    expect(getLowestHpPercentInWindow(alive, 4, 6, MATCH_START)).toBe(71);
+    expect(getLowestHpPercentInWindow(alive, 4, 9.2, MATCH_START)).toBe(46);
+    const dead = makeUnit("unit-1", {
+      advancedActions: rows,
+      deathRecords: [{ timestamp: MATCH_START + 9500 }],
+    } as never);
+    // a window that holds the death reads 0 (the old reading, kept: a dead
+    // owner is never "under no meaningful pressure")…
+    expect(getLowestHpPercentInWindow(dead, 4, 12, MATCH_START)).toBe(0);
+    // …one that ends before it reads the trough
+    expect(getLowestHpPercentInWindow(dead, 4, 9.2, MATCH_START)).toBe(46);
+    // unbounded ends read the whole log
+    expect(
+      getLowestHpPercentInWindow(alive, -Infinity, Infinity, MATCH_START),
+    ).toBe(46);
+    // …and keep a death logged after the last sample (codex 20-cat4A-01 #3)
+    const diedLate = makeUnit("unit-1", {
+      advancedActions: rows.slice(0, 2),
+      deathRecords: [{ timestamp: MATCH_START + 9501 }],
+    } as never);
+    expect(
+      getLowestHpPercentInWindow(diedLate, -Infinity, Infinity, MATCH_START),
+    ).toBe(0);
+  });
+
   it("handles units with zero max HP", () => {
     const unit = makeUnit("u1", {
       advancedActions: [makeAdvancedAction(MATCH_START, 0, 0, 0, 100)],

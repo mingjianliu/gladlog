@@ -58,13 +58,10 @@
  * not give), `ccBroken|ccRemoved:noDuration`.
  */
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
-import {
-  ccFullDurationSeconds,
-  OPPRESSING_ROAR_AURA_IDS,
-  spellEffectData,
-} from "@gladlog/analysis/src/data/spellEffectData";
+import { ccFullDurationSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { CAST_ROW_LAG_MAX_MS } from "@gladlog/analysis/src/utils/castRowLag";
+import { ccLandingStateAt } from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import { ccFullDurationForApplication } from "@gladlog/analysis/src/utils/ccDuration";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import {
@@ -128,6 +125,9 @@ interface IApp {
   idx: number;
   brokeAt?: number;
   roar: boolean;
+  /** a Prismatic Barrier (or its Merely a Setback) up on the holder at the
+   * landing — the product's own reading (`ccLandingStateAt`, GH #126) */
+  barrier: boolean;
 }
 
 /** the DR family name → the ids the table files under it (name lookup) */
@@ -215,27 +215,16 @@ export function run(ctx: IRoundCtx): void {
     const hit = appsCache.get(u.id);
     if (hit) return hit;
     const rows = (u.auraEvents ?? []) as any[];
-    const roarRows = rows.filter((a) =>
-      OPPRESSING_ROAR_AURA_IDS.has(String(a.spellId)),
-    );
-    const roarOn = (at: number): boolean => {
-      let until = -Infinity;
-      for (const r of roarRows) {
-        if (tsOf(r) > at) break;
-        const e = ev(r);
-        if (e === APPLIED || e === REFRESH)
-          until =
-            tsOf(r) +
-            (spellEffectData[String(r.spellId)]?.durationSeconds ?? 10) * 1000;
-        else if (e === REMOVED) until = -Infinity;
-      }
-      return at < until;
-    };
     const apps: IApp[] = [];
     const open = new Map<string, IApp>();
     const lastClosed = new Map<string, IApp>();
     const officialMs = (id: string) => (ccFullDurationSeconds(id) ?? 8) * 1000;
     const openApp = (a: any, i: number, id: string, cat: string) => {
+      // what sat on the holder as it landed — the product's own reading
+      // (`ccLandingStateAt`: the Roar up to this row in log order, so a Roar
+      // REMOVED after it in the same ms still counts; the barrier off
+      // `prismaticBarrierOnAtMs`) — codex 20-cat4A-02
+      const landing = ccLandingStateAt(u, a);
       const app: IApp = {
         spellId: id,
         name: nameOf(id, a.spellName ?? id),
@@ -244,7 +233,8 @@ export function run(ctx: IRoundCtx): void {
         apply: tsOf(a),
         end: NaN,
         idx: i,
-        roar: roarOn(tsOf(a)),
+        roar: landing.roar,
+        barrier: landing.prismaticBarrier,
       };
       apps.push(app);
       open.set(`${id}|${a.srcUnitId}`, app);
@@ -711,7 +701,7 @@ export function run(ctx: IRoundCtx): void {
         const full = ccFullDurationForApplication(
           x.spellId,
           unitById.get(x.src),
-          x.roar,
+          { roar: x.roar, prismaticBarrier: x.barrier },
         );
         if (full === undefined) return { x, full };
         const held = (endOf(x)! - x.apply) / 1000;
@@ -752,7 +742,7 @@ export function run(ctx: IRoundCtx): void {
         inBand ? `${reader}:boundary` : reader,
         x.apply,
         fid(u, x, spell),
-        `${spell} on ${u.name} landed ${((x.apply - ctx.start) / 1000).toFixed(3)} at ${r.at} (full ${full.toFixed(1)} s${x.roar ? " incl. Roar" : ""}), held ${held.toFixed(2)} s → ${left(r.at).toFixed(1)} s left; printed ${printed} s`,
+        `${spell} on ${u.name} landed ${((x.apply - ctx.start) / 1000).toFixed(3)} at ${r.at} (full ${full.toFixed(1)} s${x.roar ? " incl. Roar" : ""}${x.barrier ? " barrier up" : ""}), held ${held.toFixed(2)} s → ${left(r.at).toFixed(1)} s left; printed ${printed} s`,
         l,
       );
     }

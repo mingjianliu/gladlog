@@ -74,10 +74,12 @@ import {
 } from "./castMissRows";
 import { COPY_CAST_IDS } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
-import { oppressingRoarOnAt, oppressingRoarOnAtMs } from "./ccBreakAnalysis";
+import { ccLandingStateAt, ccLandingStateAtMs } from "./ccBreakAnalysis";
 import {
   ccFullDurationForApplication,
   ccFullDurationForCaster,
+  type ICcLandingState,
+  NO_CC_LANDING_STATE,
 } from "./ccDuration";
 import { charmedAt } from "./charmedPlayer";
 import {
@@ -1424,14 +1426,17 @@ export function pressEndedSilence(
    * press broke it (codex 20-F16-02 #2; the CC binder's `ranFullLength`) */
   spellId?: string,
   /** the silenced unit: an Oppressing Roar on it at the landing lengthens
-   * the silence (codex 20-F16-08 #2: 5.2 s, trinketed at 4.5 s) */
-  holder?: Pick<ICombatUnit, "auraEvents">,
+   * the silence (codex 20-F16-08 #2: 5.2 s, trinketed at 4.5 s), a
+   * Prismatic Barrier on it shortens a Magic one (GH #126) */
+  holder?: Pick<ICombatUnit, "id" | "auraEvents">,
 ): boolean {
   const official = spellId
     ? ccFullDurationForApplication(
         spellId,
         undefined,
-        holder ? oppressingRoarOnAtMs(holder, spellId, fromMs) : false,
+        holder
+          ? ccLandingStateAtMs(holder, spellId, fromMs)
+          : NO_CC_LANDING_STATE,
       )
     : undefined;
   if (official !== undefined && endMs - fromMs >= official * 1000) return false;
@@ -3061,7 +3066,10 @@ export function trinketRacialReadyMs(
   }
   for (const ts of trinketCastTimestamps) {
     if (ts > atMs) break;
-    readyMs = Math.max(readyMs, ts + racialTrinketLockoutMs(racialId, isHealer));
+    readyMs = Math.max(
+      readyMs,
+      ts + racialTrinketLockoutMs(racialId, isHealer),
+    );
   }
   return readyMs;
 }
@@ -3079,8 +3087,9 @@ export function readyTrinketRacialNameAt(
   atMs: number,
 ): string | undefined {
   const presses = breakAbilityPresses(unit);
-  const id = presses.find((p) => SHARED_CD_RACIAL_SPELL_IDS.has(p.spellId))
-    ?.spellId;
+  const id = presses.find((p) =>
+    SHARED_CD_RACIAL_SPELL_IDS.has(p.spellId),
+  )?.spellId;
   if (id === undefined) return undefined;
   const trinketTs = getTrinketUses(unit, detectTrinketType(unit))
     .map((u) => u.atMs)
@@ -3428,9 +3437,10 @@ export function analyzePlayerCCAndTrinket(
     srcUnitId: string;
     applyMs: number;
     removeMs: number;
-    /** Oppressing Roar was on the player as this application landed
-     * (`oppressingRoarOnAt`) — it runs 30 % longer (FT-T07) */
-    roarAtApply: boolean;
+    /** what sat on the player as this application landed
+     * (`ccLandingStateAt`): an Oppressing Roar runs it 30 % longer (FT-T07),
+     * a Prismatic Barrier a Magic one 15 % shorter (GH #126) */
+    landing: ICcLandingState;
     /** the order of the row that opened it on the holder's aura stream:
      * landings on one ms keep the log's order (F20 wide residual — a Maim
      * and a Cheap Shot on 2d4d9d9d r3 49.009, closed in removal order,
@@ -3453,7 +3463,7 @@ export function analyzePlayerCCAndTrinket(
       spellName: string;
       srcName: string;
       srcUnitId: string;
-      roarAtApply: boolean;
+      landing: ICcLandingState;
       applySeq: number;
       refreshesMs?: number[];
     }
@@ -3723,7 +3733,7 @@ export function analyzePlayerCCAndTrinket(
             aura.timestamp,
             pendingEnd(spellId, openCc.srcUnitId, openCc.applyMs),
           ),
-          roarAtApply: openCc.roarAtApply,
+          landing: openCc.landing,
           applySeq: openCc.applySeq,
           noRemoved: true,
           ...(openCc.refreshesMs ? { refreshesMs: openCc.refreshesMs } : {}),
@@ -3733,7 +3743,7 @@ export function analyzePlayerCCAndTrinket(
         spellName: getEnglishSpellName(spellId, aura.spellName),
         srcName: aura.srcUnitName,
         srcUnitId: aura.srcUnitId,
-        roarAtApply: oppressingRoarOnAt(player, aura),
+        landing: ccLandingStateAt(player, aura),
         applySeq: seq,
       });
     } else if (isRemovalEvent) {
@@ -3747,7 +3757,7 @@ export function analyzePlayerCCAndTrinket(
           srcUnitId: pending.srcUnitId,
           applyMs: pending.applyMs,
           removeMs: aura.timestamp,
-          roarAtApply: pending.roarAtApply,
+          landing: pending.landing,
           applySeq: pending.applySeq,
           ...(pending.refreshesMs ? { refreshesMs: pending.refreshesMs } : {}),
         });
@@ -3789,7 +3799,7 @@ export function analyzePlayerCCAndTrinket(
         srcUnitId: pending.srcUnitId,
         applyMs: pending.applyMs,
         removeMs: aura.timestamp,
-        roarAtApply: pending.roarAtApply,
+        landing: pending.landing,
         applySeq: pending.applySeq,
         cutByRefresh: true,
       });
@@ -3798,8 +3808,8 @@ export function analyzePlayerCCAndTrinket(
         spellName: getEnglishSpellName(spellId, aura.spellName),
         srcName: aura.srcUnitName,
         srcUnitId: aura.srcUnitId,
-        // the re-cast is a new application: the Roar is read again
-        roarAtApply: oppressingRoarOnAt(player, aura),
+        // the re-cast is a new application: the Roar and barrier are read again
+        landing: ccLandingStateAt(player, aura),
         applySeq: seq,
       });
     }
@@ -3815,7 +3825,7 @@ export function analyzePlayerCCAndTrinket(
       srcUnitId: pending.srcUnitId,
       applyMs: pending.applyMs,
       removeMs: pendingEnd(pendingSpellId, pending.srcUnitId, pending.applyMs),
-      roarAtApply: pending.roarAtApply,
+      landing: pending.landing,
       applySeq: pending.applySeq,
       noRemoved: true,
       ...(pending.refreshesMs ? { refreshesMs: pending.refreshesMs } : {}),
@@ -3990,7 +4000,7 @@ export function analyzePlayerCCAndTrinket(
     w.noRemoved ||
     w.stillOnAtRoundEnd ||
     w.cutByRefresh ||
-    w.roarAtApply ||
+    w.landing.roar ||
     !ccLengthIsDrEvidence(
       player,
       w,
@@ -4018,13 +4028,13 @@ export function analyzePlayerCCAndTrinket(
   };
   walkDr();
   const expectedDurationS = (
-    w: { spellId: string; srcUnitId: string; roarAtApply: boolean },
+    w: { spellId: string; srcUnitId: string; landing: ICcLandingState },
     idx: number,
   ): number | undefined => {
     const full = ccFullDurationForApplication(
       w.spellId,
       [...enemies, ...enemyPets].find((u) => u.id === w.srcUnitId),
-      w.roarAtApply,
+      w.landing,
     );
     if (full === undefined) return undefined;
     const dr = drLevelOfIdx.get(idx);
@@ -4445,7 +4455,7 @@ export function analyzePlayerCCAndTrinket(
         const full = ccFullDurationForApplication(
           w.spellId,
           [...enemies, ...enemyPets].find((u) => u.id === w.srcId),
-          oppressingRoarOnAtMs(player, w.spellId, w.applyMs),
+          ccLandingStateAtMs(player, w.spellId, w.applyMs),
         );
         return full !== undefined ? { fullDurationSeconds: full } : {};
       })(),

@@ -660,3 +660,18 @@ describe("[PRESS] lasts — re-stated rows, Oppressing Roar, Time Stop (GH #179)
     expect(timeStopHeldSeconds(u, T, 15)).toBe(0);
   });
 });
+
+describe("[PRESS] lasts — Prismatic Barrier shortens a harmful Magic effect only (GH #126)", () => {
+  const T = 1_000_000;
+  it("the barrier's own buff keeps its length under itself (codex 20-cat4A-01 #1: it read 60 → 51)", () => {
+    const cast = makeSpellCastEvent("235450", T, "mage", "Mage", "mage", "Mage");
+    const mage = makeUnit("mage", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "235450", T, "mage", "mage", "BUFF"),
+      ],
+    });
+    const d = pressDuration(mage, cast as any, [mage], mage.spellCastEvents);
+    expect(d?.durationSeconds).toBe(60);
+  });
+});
