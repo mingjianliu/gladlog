@@ -23,7 +23,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { AURA_ONLY_ACTIVATION_IDS } from "../data/auraActivation";
+import { NO_CAST_LOG_PRESS_IDS } from "../data/auraActivation";
 import { effectAurasOfCast } from "../data/castEffectAuras";
 import { classMetadata } from "../data/classSpells";
 import {
@@ -658,9 +658,10 @@ export function extractOffListPresses(
       });
     }
     // fact11 D42 (ea47f4c6 r0 0:35): a press that logs only its own aura
-    // (`AURA_ONLY_ACTIVATION_IDS` — Rain from Above, DB2 NO_CAST_LOG): the
-    // ledger's aura-read presses, those no logged row of the button backs
-    for (const id of Object.keys(AURA_ONLY_ACTIVATION_IDS)) {
+    // (`NO_CAST_LOG_PRESS_IDS` — Rain from Above, DB2 NO_CAST_LOG; never a
+    // proc-capable key): the ledger's aura-read presses, those no logged row
+    // of the button backs
+    for (const id of NO_CAST_LOG_PRESS_IDS) {
       if (!isOffListPressId(id)) continue;
       const entry = unitCooldownEntry(unit, combat, id);
       if (!entry) continue;

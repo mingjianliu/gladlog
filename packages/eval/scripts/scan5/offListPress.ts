@@ -7,7 +7,7 @@
  * Check `offListPressLine`, kinds:
  *  - `noPress`: no SPELL_CAST_SUCCESS of the named spell by that unit in the
  *    line's second (a button whose press logs only its aura —
- *    `AURA_ONLY_ACTIVATION_IDS`, fact11 D42 — the ledger's aura-read press);
+ *    `NO_CAST_LOG_PRESS_IDS`, fact11 D42 — the ledger's aura-read press);
  *  - `backBeforeNextPress`: `back m:ss`, and the unit pressed the spell again
  *    more than `BACK_SLACK_MS` before it (the printed cooldown is too long —
  *    a reduction or reset the model does not read); a free press (the text's
@@ -31,7 +31,7 @@
  *    3,600 s, a channel read for a HoT), GH #179 batch 3d's overshoot gate.
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
-import { AURA_ONLY_ACTIVATION_IDS } from "@gladlog/analysis/src/data/auraActivation";
+import { NO_CAST_LOG_PRESS_IDS } from "@gladlog/analysis/src/data/auraActivation";
 import { SHARED_CHARGE_CATEGORY } from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import {
@@ -73,11 +73,11 @@ const BACK_SLACK_MS = 2000;
 const LASTS_SLACK_S = 0.65;
 
 /** fact11 D42: a button whose press logs only its own aura
- * (`AURA_ONLY_ACTIVATION_IDS` — Rain from Above, DB2 NO_CAST_LOG): the
+ * (`NO_CAST_LOG_PRESS_IDS` — Rain from Above, DB2 NO_CAST_LOG): the
  * ledger's own reading of those presses (`auraOnlyActivationSeconds`), as
  * press rows of the button */
 function auraOnlyPressRows(unit: any, name: string, ctx: IRoundCtx): any[] {
-  return Object.keys(AURA_ONLY_ACTIVATION_IDS)
+  return [...NO_CAST_LOG_PRESS_IDS]
     .filter((id) => nameOf(id) === name)
     .flatMap((id) =>
       auraOnlyActivationSeconds(unit, id, ctx.start, ctx.roundEndAt)

@@ -56,6 +56,18 @@ import type { TimelineCtx } from "./ctx";
 
 const ULTIMATE_PENITENCE_ID = "421453";
 
+
+/** An immunity's label as the `[ENEMY DEF]` slot prints it: `immune`, or a
+ * school-limited one's `immune to magic` (F15 C2) — one reading for the
+ * aura's line and an aura-less press's (codex 20-F26-06 #1: Cloak of
+ * Shadows with no aura rows printed `immune`). */
+const immuneLabelOf = (auraId: string): string => {
+  const limited = limitedImmunitySchoolMask(wallTableIdOfAura(auraId));
+  return limited !== undefined
+    ? `immune to ${immunitySchoolWords(limited)}`
+    : "immune";
+};
+
 export function emitEnemyDefEntries(
   ctx: Pick<
     TimelineCtx,
@@ -336,10 +348,7 @@ export function emitEnemyDefEntries(
           line = `${d.spellName}${label ? ` (${label})` : ""}${noPress}${burstStr}${hpStr}${selfSaveStr}${karmaStr}${channelStr}`;
         } else {
           // F15 C2: a school-limited immunity says which schools it stops
-          const limited =
-            d.kind === "immune"
-              ? limitedImmunitySchoolMask(wallTableIdOfAura(d.spellId))
-              : undefined;
+          // (`immuneLabelOf`)
           // Aspect of the Turtle (user ruling 2026-10-21): no immunity, no
           // percentage — what the log shows it doing
           const deflects =
@@ -363,9 +372,7 @@ export function emitEnemyDefEntries(
                     ?.absorbedAmount ?? 0,
                 )
               : d.kind === "immune"
-                ? limited !== undefined
-                  ? `immune to ${immunitySchoolWords(limited)}`
-                  : "immune"
+                ? immuneLabelOf(d.spellId)
                 : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
           // F15 C5: a copy no press put up says so; fact3 D35: a press made
@@ -420,7 +427,7 @@ export function emitEnemyDefEntries(
         const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
         addEntry(
           p.atSeconds,
-          `${fmtTime(p.atSeconds)}  [ENEMY DEF]   ${who}: ${p.spellName} (immune, ${ENEMY_DEF_NO_AURA_LOGGED})`,
+          `${fmtTime(p.atSeconds)}  [ENEMY DEF]   ${who}: ${p.spellName} (${immuneLabelOf(p.auraId)}, ${ENEMY_DEF_NO_AURA_LOGGED})`,
         );
       }
     }

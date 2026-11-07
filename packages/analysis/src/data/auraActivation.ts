@@ -139,6 +139,18 @@ export const AURA_IS_THE_PRESS_IDS: ReadonlySet<string> = new Set(["384352"]);
  * press. Not the proc-capable keys (Avenging Wrath's Herald procs, Riptide
  * Ascendance, Renewing Blaze). Registered in curatedIdRegistry.
  */
+/**
+ * `AURA_ONLY_ACTIVATION_IDS` keys whose button never writes its cast row
+ * (DB2 SpellMisc Attributes_4 bit 0, SPELL_ATTR4_NO_CAST_LOG) and whose aura
+ * nothing but the press puts up: each aura-read activation IS a press, and is
+ * printed as one (`offListPressEvents`' `[PRESS]` row, fact11 D42). Not the
+ * proc-capable keys (codex 20-F26-06 #2: a Riptide-proc Ascendance is no
+ * press). Registered in curatedIdRegistry.
+ */
+export const NO_CAST_LOG_PRESS_IDS: ReadonlySet<string> = new Set([
+  "206803", // Rain from Above (DB2 NO_CAST_LOG; ea47f4c6 r0 0:35)
+]);
+
 export const AURA_ACTIVATION_PROVES_BUTTON_IDS: ReadonlySet<string> = new Set([
   "5384", // Feign Death ← Survival Tactics 202748
   ...AURA_IS_THE_PRESS_IDS,

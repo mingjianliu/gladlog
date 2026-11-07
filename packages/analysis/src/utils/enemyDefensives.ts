@@ -2220,9 +2220,19 @@ export function immunityPressesWithoutAura(
   >[],
   combat: { startTime: number },
   roundEndAtMs: number,
-): Array<{ atSeconds: number; spellId: string; spellName: string }> {
-  const out: Array<{ atSeconds: number; spellId: string; spellName: string }> =
-    [];
+): Array<{
+  atSeconds: number;
+  spellId: string;
+  spellName: string;
+  /** the immunity aura the press would have put up (its label's key) */
+  auraId: string;
+}> {
+  const out: Array<{
+    atSeconds: number;
+    spellId: string;
+    spellName: string;
+    auraId: string;
+  }> = [];
   for (const c of enemy.spellCastEvents ?? []) {
     if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !c.spellId) continue;
     const ms = c.logLine.timestamp;
@@ -2251,6 +2261,7 @@ export function immunityPressesWithoutAura(
       continue;
     out.push({
       atSeconds: t,
+      auraId: auraIds[0]!,
       spellId: c.spellId,
       spellName:
         IMMUNITY_SAVE_AURA_NAMES.get(c.spellId) ??

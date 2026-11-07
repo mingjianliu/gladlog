@@ -222,6 +222,7 @@ import {
   KW_UNPRESSED_NOT_IN_HAND_IDS,
   MOBILITY_NOT_MAJOR_DEFENSIVE_IDS,
 } from "./abilityProfile";
+import { NO_CAST_LOG_PRESS_IDS } from "./auraActivation";
 import {
   castEffectPairs,
   TALENT_EFFECT_AURAS_OF_CAST,
@@ -764,6 +765,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // itself (read even when a real cast was logged).
   t("AURA_IS_THE_PRESS_IDS", "data/auraActivation.ts", "cast", () => [
     ...AURA_IS_THE_PRESS_IDS,
+  ]),
+  // fact11 D42 (2026-11-06): aura-only buttons that never log a cast row
+  t("NO_CAST_LOG_PRESS_IDS", "data/auraActivation.ts", "cast", () => [
+    ...NO_CAST_LOG_PRESS_IDS,
   ]),
   t("AURA_ONLY_ACTIVATION_IDS", "data/auraActivation.ts", "mixed", () => [
     ...keys(AURA_ONLY_ACTIVATION_IDS),

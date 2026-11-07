@@ -19,7 +19,11 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src";
-import { AURA_ONLY_ACTIVATION_IDS } from "../src/data/auraActivation";
+import { emitEnemyDefEntries } from "../src/context/timelineSections/enemyDef";
+import {
+  AURA_ONLY_ACTIVATION_IDS,
+  NO_CAST_LOG_PRESS_IDS,
+} from "../src/data/auraActivation";
 import { spellEffectData } from "../src/data/spellEffectData";
 import { readyTrinketRacialNameAt } from "../src/utils/ccTrinketAnalysis";
 import {
@@ -85,7 +89,16 @@ describe("P1 — a healer's own offensive cooldown is no team burst (B3iii)", ()
       class: CombatUnitClass.Paladin,
       spec: CombatUnitSpec.Paladin_Holy,
       spellCastEvents: [
-        makeSpellCastEvent(AW, at(205), "P1", "P1", "P1", "P1", 0, "Avenging Wrath"),
+        makeSpellCastEvent(
+          AW,
+          at(205),
+          "P1",
+          "P1",
+          "P1",
+          "P1",
+          0,
+          "Avenging Wrath",
+        ),
       ],
     });
     const f = createKillWindowFactsComputer(
@@ -125,6 +138,7 @@ describe("D34 — an immunity press the log wrote no aura for", () => {
     ).toEqual([
       {
         atSeconds: 108.575,
+        auraId: MASS_INVIS,
         spellId: MASS_INVIS,
         spellName: "Mass Invisibility",
       },
@@ -158,6 +172,42 @@ describe("D34 — an immunity press the log wrote no aura for", () => {
         at(300),
       ),
     ).toEqual([]);
+  });
+
+  it("a school-limited one prints its schools (codex 20-F26-06 #1)", () => {
+    const CLOAK = "31224";
+    const rogue = makeUnit("E5", {
+      name: "Rogue",
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          CLOAK,
+          at(50),
+          "",
+          "",
+          "E5",
+          "Rogue",
+          0,
+          "Cloak of Shadows",
+        ),
+      ],
+    });
+    const lines: string[] = [];
+    emitEnemyDefEntries({
+      matchStartMs: T0,
+      matchEndSeconds: 180,
+      enemies: [rogue],
+      enemyPid: (n: string) => `E:${n}`,
+      friends: [],
+      roundBounds: undefined,
+      pid: (n: string) => `F:${n}`,
+      actorLabel: (n: string) => `E:${n}`,
+      addEntry: (_t: number, line: string) => lines.push(line),
+      _allUnits: [rogue],
+    } as never);
+    expect(lines.find((l) => l.includes("Cloak of Shadows"))).toContain(
+      "(immune to magic, no aura logged)",
+    );
   });
 
   it("is not after the round's end", () => {
@@ -234,6 +284,13 @@ describe("D45 — the teammates one immunity press covered", () => {
 describe("D42 / D38 — the data rows", () => {
   it("Rain from Above's aura is its press (DB2 NO_CAST_LOG)", () => {
     expect(AURA_ONLY_ACTIVATION_IDS["206803"]).toEqual(["206803"]);
+  });
+
+  it("only a no-cast-log button's aura is printed as a press (codex 20-F26-06 #2)", () => {
+    expect([...NO_CAST_LOG_PRESS_IDS]).toEqual(["206803"]);
+    // a Riptide-proc Ascendance is an aura-only activation, never a press
+    expect(AURA_ONLY_ACTIVATION_IDS["114052"]).toBeDefined();
+    expect(NO_CAST_LOG_PRESS_IDS.has("114052")).toBe(false);
   });
 
   it("Essence Break's debuff is read at its observed 5 s", () => {

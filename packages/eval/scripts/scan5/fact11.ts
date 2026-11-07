@@ -133,8 +133,8 @@
  *    the caster, within 50 ms — `immunityAlsoOn`'s) whose recipient the
  *    caster's `[ENEMY DEF]` line of that second does not name. Counted:
  *    every such copy.
- *  - auraOnlyPressNoLine (D42): a player's own aura of an
- *    `AURA_ONLY_ACTIVATION_IDS` button that is the `[PRESS]` line's
+ *  - auraOnlyPressNoLine (D42): a player's own aura of a
+ *    `NO_CAST_LOG_PRESS_IDS` button that is the `[PRESS]` line's
  *    (`isOffListPressId`), applied with no logged press of it within
  *    `SAVE_CAST_AURA_PAIR_S`, and no line naming it in its second. Counted:
  *    every such aura.
@@ -146,7 +146,7 @@ import {
 } from "@gladlog/analysis/src/context/resRow";
 import { isControlSpell } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
-import { AURA_ONLY_ACTIVATION_IDS } from "@gladlog/analysis/src/data/auraActivation";
+import { AURA_ONLY_ACTIVATION_IDS, NO_CAST_LOG_PRESS_IDS } from "@gladlog/analysis/src/data/auraActivation";
 import {
   castAndEffectIds,
   castsOfEffectAura,
@@ -1396,9 +1396,14 @@ function primeRacialReadyUnstated(ctx: IRoundCtx): void {
     );
     if (!pressed) continue;
     ctx.bump("primeRacialReadyUnstated");
+    // the line prints the start's second; production samples its exact
+    // instant inside it — ready over the whole second, so at that instant
+    // (codex 20-F26-06 #3: a press at 100.2 s, an attempt from 100.8 s)
     const fromMs = ctx.start + secOf(m[1]!) * 1000;
     const racial = readyTrinketRacialNameAt(target, fromMs);
-    if (!racial || opp[1]!.split("; ").includes(`${racial} ready`)) continue;
+    if (!racial || readyTrinketRacialNameAt(target, fromMs + 999) !== racial)
+      continue;
+    if (opp[1]!.split("; ").includes(`${racial} ready`)) continue;
     ctx.violate(
       "primeRacialReadyUnstated",
       racial,
@@ -1530,12 +1535,14 @@ function immunityCopyUnstated(ctx: IRoundCtx): void {
       if (!cpid || !rpid) continue;
       ctx.bump("immunityCopyUnstated");
       const at0 = fmtS((at - ctx.start) / 1000);
-      // the line prints the press's second, which can be the second before
-      // the aura's (28-6 r6: pressed 0:23.98, applied 0:24.015)
+      // the line prints its event's second: the press's, which can be the
+      // second before this copy (28-6 r6: pressed 0:23.98, applied 0:24.015),
+      // or the caster's own aura's, up to 50 ms after it (codex 20-F26-06
+      // #4: 10.990 / 11.010)
       const sec = Math.floor((at - ctx.start) / 1000);
       const stated = ctx.lines.some(
         (l) =>
-          [sec - 1, sec].some((s) => l.startsWith(`${fmtS(s)} `)) &&
+          [sec - 1, sec, sec + 1].some((s) => l.startsWith(`${fmtS(s)} `)) &&
           l.includes(ENEMY_DEF_TAG) &&
           l.includes(`${cpid}(`) &&
           l.includes(`also on`) &&
@@ -1555,7 +1562,7 @@ function immunityCopyUnstated(ctx: IRoundCtx): void {
 }
 
 function auraOnlyPressNoLine(ctx: IRoundCtx): void {
-  const ids = Object.keys(AURA_ONLY_ACTIVATION_IDS).filter(isOffListPressId);
+  const ids = [...NO_CAST_LOG_PRESS_IDS].filter(isOffListPressId);
   for (const u of ctx.players as any[]) {
     for (const id of ids) {
       const auraIds = AURA_ONLY_ACTIVATION_IDS[id]!;
