@@ -20,6 +20,7 @@ import {
 import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { castingLockIntervalsOf } from "./castingLocks";
+import { isCompanionCastRow } from "./castPress";
 import { charmedAt } from "./charmedPlayer";
 import {
   playerTalentIdSets,
@@ -318,10 +319,13 @@ function pressedHeals(
       .filter((n) => n !== ""),
   );
   const presses = new Map<string, number[]>();
-  for (const c of unit.spellCastEvents ?? []) {
+  const rows = unit.spellCastEvents ?? [];
+  for (const c of rows) {
     const id = c.spellId;
     if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !id) continue;
     if (!healNames.has(getEnglishSpellName(id, ""))) continue;
+    // GH #188: the companion row of another press is no press of its own
+    if (isCompanionCastRow(c, rows)) continue;
     if (isUnsilenceableCast(id) && effectiveCooldownSeconds(id) === undefined)
       continue;
     presses.set(id, [...(presses.get(id) ?? []), c.logLine.timestamp]);

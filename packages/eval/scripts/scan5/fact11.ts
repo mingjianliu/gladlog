@@ -140,6 +140,7 @@
  *    every such aura.
  */
 import { countsAsTeamBurst } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
+import { isDamageImmuneControl } from "@gladlog/analysis/src/analysis/candidates/massDispel";
 import {
   parseResRow,
   splitResList,
@@ -653,8 +654,12 @@ function pressImmuneTagChecks(ctx: IRoundCtx): void {
           a.destUnitId === target.id &&
           nameOf(a.spellId, a.spellName) === cause &&
           tsOf(a) <= tsOf(x) &&
-          wallStopsEveryHit(String(a.spellId)) &&
-          immunityStopsSpellSchool(String(a.spellId), xid) !== false,
+          // a wall stopping its school — or a control the holder takes
+          // nothing through, the enemy's Cyclone a heal was refused into
+          // (GH #167, user ruling 2026-11-07; `isDamageImmuneControl`)
+          ((wallStopsEveryHit(String(a.spellId)) &&
+            immunityStopsSpellSchool(String(a.spellId), xid) !== false) ||
+            isDamageImmuneControl(String(a.spellId))),
       );
     };
     if (!rows.some(stops)) {

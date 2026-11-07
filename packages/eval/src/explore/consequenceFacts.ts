@@ -248,8 +248,27 @@ export function buildConsequenceLines(
   const forcedSamples: ForcedSample[] = [];
   const attempts = extractKillAttempts(friends, enemies, combat);
   const enemyByName = new Map(enemies.map((e) => [e.name, e]));
-  /** ", from N(Tag)" — the enemy teammate whose cast on `target` landed at `atS`. */
-  const externalCaster = (target: any, atS: number): string => {
+  /** ", from N(Tag)" — the enemy teammate who put the external `name` on
+   * `target` at `atS`: the source GUID of its aura row there (what the
+   * product's `externalReceived` reads — an aura-only external has no
+   * targeted cast; GH #177), else a targeted cast in that instant. */
+  const externalCaster = (target: any, name: string, atS: number): string => {
+    let best: { src: string; d: number } | undefined;
+    for (const a of target.auraEvents ?? []) {
+      const e = a.logLine?.event;
+      if (
+        (e !== LogEvent.SPELL_AURA_APPLIED &&
+          e !== LogEvent.SPELL_AURA_REFRESH) ||
+        !a.srcUnitId ||
+        a.srcUnitId === target.id ||
+        getEnglishSpellName(String(a.spellId), "") !== name
+      )
+        continue;
+      const d = Math.abs(sec(a.logLine.timestamp) - atS);
+      if (d <= 0.5 && (!best || d < best.d)) best = { src: a.srcUnitId, d };
+    }
+    const giver = best && enemies.find((m) => m.id === best!.src);
+    if (giver) return `, from ${L(giver)}`;
     for (const mate of enemies) {
       if (mate.id === target.id) continue;
       for (const c of (mate.spellCastEvents ?? []) as any[])
@@ -323,7 +342,7 @@ export function buildConsequenceLines(
         hpAtUse: hp,
         text: `${fmtTime(u.atS)}  [CONSEQ]   ${
           u.what === "external"
-            ? `${L(target)} received ${u.name} (external${externalCaster(target, u.atS)})`
+            ? `${L(target)} received ${u.name} (external${externalCaster(target, u.name, u.atS)})`
             : `${L(target)} used ${u.name}`
         } at ${hpTxt} inside your kill attempt ${span} (${opener}) → ${forced ? `FORCED (gate: inside the attempt, at or below ${gatePct}% HP)` : `used, NOT counted as forced (gate: at or below ${gatePct}% HP${hp === null ? "; HP unknown" : ""})`}`,
       });

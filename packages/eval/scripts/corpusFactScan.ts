@@ -64,7 +64,8 @@
  *    inside the round). Ids with ≥ 20 runs of which ≥ 80 % end within ±0.1 s
  *    of one value V that differs from the official duration
  *    (`spellEffectGenerated.json` `durationSeconds`) by > 0.5 s are listed.
- *    Violations: an early-end claim — `[BUFF FADED] X (ended early …)`,
+ *    Violations: an early-end claim — `[BUFF FADED] X (ended early …)` /
+ *    `(ended after N of M s …)` (GH #173),
  *    `[ENEMY DEF] … (…, N.Ns — removed early)`, `[CC ON …] … | ended early
  *    …` — on a clean run that lasted ≥ V − 0.1 s of a listed id (`atV`), or
  *    ≥ its official duration − 0.1 s for any id (`fullOfficial`) except one
@@ -842,7 +843,10 @@ function runRound(ctx: IContext): void {
     let src: any;
     let name = "";
     let removedInSecond = false;
-    const bf = /^\d+:\d\d {2}\[BUFF FADED\] {3}(.+?) \(ended early/.exec(l);
+    const bf =
+      /^\d+:\d\d {2}\[BUFF FADED\] {3}(.+?) \((?:ended early|ended after [\d.]+ of [\d.]+s)/.exec(
+        l,
+      );
     const ed =
       /^\d+:\d\d {2}\[ENEMY DEF\] {3}(\d+)\([^)]*\) \([^)]*\): (.+?)(?:(?: \+ \d+% copy)? → (\d+)\([^)]*\))? \([^)]*— removed early\)/.exec(
         l,
@@ -1251,10 +1255,7 @@ function runRound(ctx: IContext): void {
               ),
             ),
             ownRowNames: new Map(
-              ownRows.map((ts) => [
-                ts,
-                netherWardNamedSpells(caster, src, ts),
-              ]),
+              ownRows.map((ts) => [ts, netherWardNamedSpells(caster, src, ts)]),
             ),
           },
         );

@@ -331,6 +331,35 @@ describe("buildCastFlowLines", () => {
     ]);
   });
 
+  it("GH #188:Germination 的伴随 774 行不是一次按键,不另出一行", () => {
+    const press = {
+      ...castEvent(10_000, "155777", "Rejuvenation (Germination)"),
+      destUnitId: "m",
+    };
+    const companion = {
+      ...castEvent(10_001, "774", "Rejuvenation"),
+      destUnitId: "m",
+    };
+    const own = {
+      ...castEvent(12_000, "774", "Rejuvenation"),
+      destUnitId: "m",
+    };
+    const a = mkUnit(
+      "a",
+      "Alpha-Area52",
+      true,
+      CombatUnitSpec.Druid_Restoration,
+      {
+        spellCastEvents: [press, companion, own],
+      },
+    );
+    const combat = { startTime: 0, endTime: 100_000, units: { a } };
+    expect(buildCastFlowLines(combat, 0, 30)).toEqual([
+      "0:10 Alpha(Restoration Druid) → Rejuvenation (Germination)",
+      "0:12 Alpha(Restoration Druid) → Rejuvenation",
+    ]);
+  });
+
   it("超过 90 次施法:保留前 89 行 + 追加 (+N more)", () => {
     const times = Array.from({ length: 95 }, (_, i) => i * 1000);
     const a = mkUnit("a", "Alpha-Area52", true, CombatUnitSpec.Warrior_Arms, {

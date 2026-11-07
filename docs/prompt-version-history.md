@@ -5468,3 +5468,24 @@ line's `trinketRacialReadyMs`. Cover set (117 files, 1,140 owners) against
 e950156df: no FATAL, 0 of 1,140 findings files change, gates unchanged, and
 the six new class checks fall to 0 except immunityCopyUnstated, which keeps
 3/618 (one fact).
+
+v497 (2026-11-07, GH #188 #179 #173 #167; user rulings 2026-11-07). (1)
+GH #188: companion cast rows (`isNoPressRow`) no longer count as presses in
+`healerMetrics`, `momentSnapshot`, `teammateCrisis`, `healingGaps` and
+`cannotCastIntervals`; 0 rendered lines change on the 605 set. (2) GH #179:
+Violent Transformation 452409 resets Voidblade 1245412 / Pierce the Veil
+1245483 on entering Void Metamorphosis 1217607 (holders with an entry
+between two presses: 87/126 gaps under 29 s; holders without one 0/64;
+non-holders 0/7); 272 press lines change their back time. (3) GH #173: a
+`[BUFF FADED]` early end with no logged cause reads `(ended after N of M s
+— …)` instead of `(ended early — …)` (1,302 lines). (4) GH #167: a heal or
+buff into an enemy's Cyclone on our player reads `[IMMUNE — Cyclone was up]`
+(57 lines). A KILL ATTEMPTS burst opener whose every press of the anchor
+into the target was refused IMMUNE keeps its anchor and adds `| every X
+press into the target logged IMMUNE` with a legend
+(`killAttemptAllImmuneClause`; 5 attempts, 14 lines). `landedAnywayOn`
+stops at the caster's next press of the same spell id, so a later press's
+hit no longer lands a refused one (1d9b0cbe 2:17: Fury of Elune →
+Incarnation: Chosen of Elune, 3 lines). 605 set against 8d72336ad: 1,035
+of 3,519 context files change, 0 findings files; immunityBurstAnchor 17 (6)
+→ 0, offListPressLine 306 → 68 (same scanner).

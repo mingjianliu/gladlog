@@ -55,6 +55,7 @@ import { LogEvent } from "@gladlog/parser-compat";
 
 import { isHealerHeldOffensive } from "../data/healerHeldOffensive";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { isCompanionCastRow } from "../utils/castPress";
 import {
   cdAvailableAt,
   extractMajorCooldowns,
@@ -285,10 +286,14 @@ export function teammateCrisisPoints(
   const externalCds = cds.filter((cd) =>
     CRISIS_EXTERNAL_IDS.has(String(cd.spellId)),
   );
-  // GH #108: the owner's presses — a passive proc is not the healer acting
-  const ownerCasts = ((owner.spellCastEvents ?? []) as any[]).filter(
+  // GH #108: the owner's presses — a passive proc is not the healer acting;
+  // GH #188: nor is the companion row of another press (Germination's 774)
+  const ownerRows = (owner.spellCastEvents ?? []) as any[];
+  const ownerCasts = ownerRows.filter(
     (c) =>
-      c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS && !isPassiveProcCast(c),
+      c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
+      !isPassiveProcCast(c) &&
+      !isCompanionCastRow(c, ownerRows),
   );
   const ownerStarts = (owner.castStartEvents ?? []) as any[];
   const friendlyDeaths: number[] = [];

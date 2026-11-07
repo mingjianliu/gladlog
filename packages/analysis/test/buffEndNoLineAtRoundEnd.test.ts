@@ -205,7 +205,7 @@ describe("[BUFF FADED] — no line for a buff the round ended on", () => {
     ]);
     // pressed 1:40, gone 4 s later
     expect(run(shaman(100, 104), 100, SOLO_SHUFFLE_BRACKET).lines).toEqual([
-      "1:44  [BUFF FADED]   Astral Shift (ended early — no dispel logged)",
+      "1:44  [BUFF FADED]   Astral Shift (ended after 4.0 of 12s — no dispel logged)",
     ]);
   });
 
@@ -216,13 +216,13 @@ describe("[BUFF FADED] — no line for a buff the round ended on", () => {
     expect(
       run(shaman(100, DEATH_S - 0.001), 100, SOLO_SHUFFLE_BRACKET).lines,
     ).toEqual([
-      "1:44  [BUFF FADED]   Astral Shift (ended early — no dispel logged)",
+      "1:44  [BUFF FADED]   Astral Shift (ended after 5.0 of 12s — no dispel logged)",
     ]);
   });
 
   it("another bracket ends where its log does: the same removal at 1:46 is inside the round", () => {
     expect(run(shaman(100, STRIP_S), 100, "3v3").lines).toEqual([
-      "1:46  [BUFF FADED]   Astral Shift (ended early — no dispel logged)",
+      "1:46  [BUFF FADED]   Astral Shift (ended after 6.4 of 12s — no dispel logged)",
     ]);
     expect(run(shaman(100, null), 100, "3v3").lines).toEqual([]);
   });

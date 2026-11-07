@@ -1489,3 +1489,48 @@ describe("tooltip resets and give-backs found by the #176 catalog", () => {
     }
   });
 });
+
+describe("Violent Transformation — entering Void Metamorphosis resets Voidblade (GH #179)", () => {
+  // the tooltip names Voidblade on both eras (12.1.0.69587 "… Voidblade and
+  // The Hunt", 12.1.5 "… Voidblade and Soul Immolation"); Pierce the Veil
+  // 1245483 is the same button (aura-332 variant), so one target covers it
+  const r = EVENT_COOLDOWN_REDUCTIONS["452409"]!;
+  it("targets Voidblade beside Soul Immolation, as a full reset", () => {
+    expect(r.targets).toEqual(["1241937", "1245412"]);
+    expect(r.seconds).toBe(Number.POSITIVE_INFINITY);
+    expect(eventReductionsFor("1245412", (t) => t === "452409")).toContain(r);
+    expect(eventReductionsFor("1245412", () => false)).not.toContain(r);
+  });
+  it("an entry 17 s after a 30 s Voidblade makes it ready there (90c57b63 r4 0:02 → 0:19)", () => {
+    // Voidblade at 0:02.548, Void Metamorphosis 1217607 applied at 0:19.589,
+    // Pierce the Veil pressed at 0:23.869 — `back 0:32` on the line before
+    const T0 = Date.UTC(2026, 7, 14, 8, 51, 20, 967);
+    const u = {
+      id: "dh",
+      spec: "1480",
+      spellCastEvents: [],
+      damageOut: [],
+      missesOut: [],
+      actionOut: [
+        {
+          spellId: "1217607",
+          srcUnitId: "dh",
+          destUnitId: "dh",
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: T0 + 19_589,
+          },
+        },
+      ],
+    } as never;
+    expect(eventTriggerTimesMs(u, r).map((t) => t - T0)).toEqual([19_589]);
+    const at = eventTriggersFor(u, [r]).map((g) => ({
+      atSeconds: (g.atMs - T0) / 1000,
+      seconds: g.seconds,
+    }));
+    expect(2.548 + eventReducedCooldownSeconds(2.548, 30, at)).toBeCloseTo(
+      19.589,
+      6,
+    );
+  });
+});

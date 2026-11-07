@@ -17,6 +17,7 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import { castKeyOfAura } from "../data/castEffectAuras";
 import { buildAuraIntervals } from "../utils/auraIntervals";
+import { isCompanionCastRow } from "../utils/castPress";
 import {
   cdAvailableAt,
   cdIsProcOnly,
@@ -145,11 +146,13 @@ export function largestCastGap(
 ): { fromT: number; toT: number; gapS: number } | null {
   const events = (unit.spellCastEvents ?? []) as any[];
   const times = events
-    // GH #108: a passive proc does not break an idle gap
+    // GH #108: a passive proc does not break an idle gap; GH #188: nor a
+    // companion row of another press
     .filter(
       (e) =>
         e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
-        !isPassiveProcCast(e),
+        !isPassiveProcCast(e) &&
+        !isCompanionCastRow(e, events),
     )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000)
     .filter((s) => s >= fromS && s <= toS)
@@ -187,6 +190,7 @@ export function buildCastFlowLines(
     for (const e of events) {
       if (e.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (isPassiveProcCast(e)) continue; // GH #108: not a press
+      if (isCompanionCastRow(e, events)) continue; // GH #188: nor this
       const relS = (e.logLine.timestamp - matchStartMs) / 1000;
       if (relS < fromS || relS > toS) continue;
       rows.push({

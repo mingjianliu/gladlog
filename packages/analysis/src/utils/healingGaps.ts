@@ -5,6 +5,7 @@ import {
   coveredMsWithin,
   enemySourceIds,
 } from "./cannotCastIntervals";
+import { isCompanionCastRow } from "./castPress";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
 import {
@@ -158,11 +159,13 @@ export function detectHealingGaps(
   // All timestamps where the healer produced a heal event or successfully cast a spell, sorted ascending
   const healTimestamps = healer.healOut.map((h) => h.logLine.timestamp);
   const castTimestamps = healer.spellCastEvents
-    // GH #108: a passive proc is not the healer acting
+    // GH #108: a passive proc is not the healer acting; GH #188: nor the
+    // companion row of another press
     .filter(
       (e) =>
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        !isPassiveProcCast(e),
+        !isPassiveProcCast(e) &&
+        !isCompanionCastRow(e, healer.spellCastEvents),
     )
     .map((e) => e.logLine.timestamp);
 

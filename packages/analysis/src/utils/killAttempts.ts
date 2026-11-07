@@ -309,6 +309,14 @@ export interface IKillAttempt {
    * (`ownImmuneControlsOverBracket`). A fact beside the outcome — the
    * attribution does not read it. Absent when there is none. */
   ownImmuneControl?: IKillAttemptOwnControl[];
+  /** GH #167 (user ruling 2026-11-07): a burst anchor every one of whose
+   * presses into the target the game refused as IMMUNE there, none landing
+   * anyway — the anchor stays, the line says so (`killAttemptAllImmuneClause`).
+   * Absent otherwise. */
+  anchorAllImmune?: true;
+  /** with `anchorAllImmune`: the refused press's own name (the anchor can
+   * read `X (cast into …)`) */
+  anchorPressName?: string;
 }
 
 /** One of the attackers' own damage-immune controls on an attempt's target,
@@ -446,6 +454,14 @@ export const KILL_ATTEMPTS_RACIAL_LOCK_LEGEND = `  \`${TRINKET_RACIAL_LOCK_WORDS
 export const killAttemptRacialReadyFact = (name: string): string =>
   `${name} ready`;
 export const KILL_ATTEMPTS_RACIAL_READY_LEGEND = `  \`PRIME (…; X ready)\` = the target held X, a racial that breaks control as the PvP trinket does (it was seen pressing it this round), ready when the attempt began. The tier stays PRIME — it reads the PvP trinket and walls only — but the target could still break one control with X.`;
+/** GH #167: the clause after a burst opener whose every press into the
+ * target logged IMMUNE on it (`IKillAttempt.anchorAllImmune`). */
+export const KILL_ATTEMPT_ALL_IMMUNE_TAIL =
+  " press into the target logged IMMUNE";
+export function killAttemptAllImmuneClause(pressName: string): string {
+  return `every ${pressName}${KILL_ATTEMPT_ALL_IMMUNE_TAIL}`;
+}
+export const KILL_ATTEMPTS_ALL_IMMUNE_LEGEND = `  \`| every X${KILL_ATTEMPT_ALL_IMMUNE_TAIL}\` after a burst opener = every press of X your team aimed at the target in that burst was refused by the game (its \`[IMMUNE]\` press lines) and none of its hits landed anyway: the burst is still dated from X, but X itself did nothing to the target.`;
 export const KILL_ATTEMPTS_OWN_CONTROL_LEGEND = `  \`| target in your team's Cyclone a–b\` at the end of a line = your own team's Cyclone was on that target from a to b (its [CC ON ENEMY] line), and those seconds meet this attempt's bracket or the ${KILL_CREDIT_SLACK_S} s after it — the span the outcome is read over (a Cyclone that began after the bracket's last second is one of those). A cycloned unit takes no damage from anyone while it lasts. It is a fact beside the outcome: \`FAILED:\` still names what its fixed order picked, and does not weigh the Cyclone.`;
 
 interface StunApp {
@@ -890,12 +906,53 @@ export function extractKillAttempts(
      * bracket and the slack; a self-buff, `selfBuffInto`). 0d08dd90 1:26:
      * `Feral Frenzy burst` on Kalshi for a Feral Frenzy cast into Calculator.
      * With none, the opener, and where it went. */
+    // fact6 D14 (2b3fba97-r0 2:27): a press the game refused as IMMUNE on
+    // the target (Deathmark into Time Stop) did not go into it — it anchors
+    // only by a hit of its own that landed anyway
+    const refusedOn = (c: TeamCast, target: ICombatUnit) =>
+      pressRefusedImmuneOn(
+        c.caster.missesOut,
+        c.spellId,
+        (c.caster.spellCastEvents ?? [])
+          .filter(
+            (e) =>
+              e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              e.spellId === c.spellId,
+          )
+          .map((e) => e.logLine.timestamp),
+        c.castMs,
+        target.id,
+        c.caster.spellCastEvents ?? [],
+        [...(c.caster.damageOut ?? []), ...(c.caster.healOut ?? [])],
+      );
+    // …before the caster's next press of it: that press's own hits are its
+    // own (GH #167, 1d9b0cbe 2:17: Fury of Elune refused tick by tick on
+    // Blessing of Spellwarding, the 2:45 press's tick on the target fell
+    // inside this bracket's credit and passed for this press landing)
+    const landedAnywayOn = (c: TeamCast, target: ICombatUnit, toMs: number) => {
+      const nextMs = (c.caster.spellCastEvents ?? [])
+        .filter(
+          (e) =>
+            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            e.spellId === c.spellId &&
+            e.logLine.timestamp > c.castMs + 5,
+        )
+        .reduce((m, e) => Math.min(m, e.logLine.timestamp), Infinity);
+      return (c.caster.damageOut ?? []).some(
+        (d) =>
+          d.destUnitId === target.id &&
+          isHitOf(c, d) &&
+          d.logLine.timestamp >= matchStartMs + c.cast * 1000 &&
+          d.logLine.timestamp <= toMs &&
+          d.logLine.timestamp < nextMs,
+      );
+    };
     const anchorNameOf = (
       cl: (typeof clusters)[number],
       target: ICombatUnit,
       toMs: number,
       bracketToMs: number,
-    ): string => {
+    ): { name: string; pressName: string } => {
       const hitTarget = (c: TeamCast) => {
         // a press on nobody is `selfBuffInto`'s, its caster's most-hit enemy
         // (codex 06-1): a splash on the target aims it no more than one
@@ -903,39 +960,13 @@ export function extractKillAttempts(
         if (c.destId === undefined || c.destId === "0000000000000000")
           return false;
         if (c.destId !== target.id) return false;
-        // fact6 D14 (2b3fba97-r0 2:27): a press the game refused as IMMUNE
-        // on the target (Deathmark into Time Stop) did not go into it —
-        // it anchors only by a hit of its own that landed anyway
-        if (
-          !pressRefusedImmuneOn(
-            c.caster.missesOut,
-            c.spellId,
-            (c.caster.spellCastEvents ?? [])
-              .filter(
-                (e) =>
-                  e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-                  e.spellId === c.spellId,
-              )
-              .map((e) => e.logLine.timestamp),
-            c.castMs,
-            target.id,
-            c.caster.spellCastEvents ?? [],
-            [...(c.caster.damageOut ?? []), ...(c.caster.healOut ?? [])],
-          )
-        )
-          return true;
-        return (c.caster.damageOut ?? []).some(
-          (d) =>
-            d.destUnitId === target.id &&
-            isHitOf(c, d) &&
-            d.logLine.timestamp >= matchStartMs + c.cast * 1000 &&
-            d.logLine.timestamp <= toMs,
-        );
+        if (!refusedOn(c, target)) return true;
+        return landedAnywayOn(c, target, toMs);
       };
       const into = cl.casts.find(
         (c) => hitTarget(c) || selfBuffInto(c, target, toMs, bracketToMs),
       );
-      if (into) return into.spellName;
+      if (into) return { name: into.spellName, pressName: into.spellName };
       const first = cl.casts[0]!;
       // an enemy player or any unit of theirs (a pet: 691a7f31 1:13, a Ray
       // of Frost into the hunter's pet)
@@ -946,9 +977,32 @@ export function extractKillAttempts(
               first.destId
             ]
           : undefined;
-      return elsewhere && elsewhere.reaction !== first.caster.reaction
-        ? `${first.spellName} (cast into ${elsewhere.name})`
-        : first.spellName;
+      return {
+        name:
+          elsewhere && elsewhere.reaction !== first.caster.reaction
+            ? `${first.spellName} (cast into ${elsewhere.name})`
+            : first.spellName,
+        pressName: first.spellName,
+      };
+    };
+    /** GH #167: every press of the anchor's spell in the cluster aimed at
+     * the target was refused IMMUNE there, none landing anyway — the same
+     * two readings the anchor's own choice reads */
+    const anchorAllImmuneOf = (
+      cl: (typeof clusters)[number],
+      target: ICombatUnit,
+      toMs: number,
+      pressName: string,
+    ): boolean => {
+      const presses = cl.casts.filter(
+        (c) => c.spellName === pressName && c.destId === target.id,
+      );
+      return (
+        presses.length > 0 &&
+        presses.every(
+          (c) => refusedOn(c, target) && !landedAnywayOn(c, target, toMs),
+        )
+      );
     };
     const enemyIds = new Set(enemies.map((e) => e.id));
     /** Team damage per enemy inside [fromMs, toMs] (one pass). */
@@ -1050,16 +1104,23 @@ export function extractKillAttempts(
       )
         continue;
       const killed = deathMs !== undefined;
+      const anchorOf = anchorNameOf(
+        cl,
+        target,
+        spanToMs,
+        matchStartMs + toSeconds * 1000,
+      );
       const attempt: IKillAttempt = {
         targetUnitId: target.id,
         targetName: target.name,
         anchor: "burst",
-        anchorSpellName: anchorNameOf(
-          cl,
-          target,
-          spanToMs,
-          matchStartMs + toSeconds * 1000,
-        ),
+        anchorSpellName: anchorOf.name,
+        ...(anchorAllImmuneOf(cl, target, spanToMs, anchorOf.pressName)
+          ? {
+              anchorAllImmune: true as const,
+              anchorPressName: anchorOf.pressName,
+            }
+          : {}),
         fromSeconds,
         toSeconds,
         stuns: [],
@@ -1583,6 +1644,8 @@ export function formatKillAttemptsForContext(
   // I10: the trailing clause, explained only when a line carries it.
   if (attempts.some((a) => a.ownImmuneControl?.length))
     lines.push(KILL_ATTEMPTS_OWN_CONTROL_LEGEND);
+  if (attempts.some((a) => a.anchorAllImmune))
+    lines.push(KILL_ATTEMPTS_ALL_IMMUNE_LEGEND);
   if (attempts.some((a) => a.noPressableTrinket))
     lines.push(KILL_ATTEMPTS_NO_TRINKET_LEGEND);
   if (attempts.some((a) => a.trinketRacialLockUntilSeconds !== undefined))
@@ -1626,7 +1689,7 @@ export function formatKillAttemptsForContext(
     const opener =
       a.anchor === "stun"
         ? `${a.anchorSpellName} opener (${a.openingDrLevel} DR), ${a.stuns.length} stun${a.stuns.length > 1 ? "s" : ""}`
-        : `${a.anchorSpellName} burst (no stun)`;
+        : `${a.anchorSpellName} burst (no stun)${a.anchorAllImmune && a.anchorPressName ? ` | ${killAttemptAllImmuneClause(a.anchorPressName)}` : ""}`;
     // I10: our own Cyclone on the target — after the outcome, never in it
     const ownControl = a.ownImmuneControl?.length
       ? ` | ${killAttemptOwnControlClause(a.ownImmuneControl)}`

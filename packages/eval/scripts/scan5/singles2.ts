@@ -967,6 +967,9 @@ interface IPress {
   /** an Improved Spellsteal repeat: its own removal, never merged with a
    * direct one in either order (codex F20-30) */
   repeat: boolean;
+  /** the tool's own SPELL_CAST_SUCCESS by the source that this press is
+   * (the one nearest its first removal), when the log has one */
+  castMs?: number;
 }
 /** a "remove all" tool (DB2 Effect 38 base points 100: Mass Dispel 32375 /
  *  32592) — the legend's per-tool count leaves it out on purpose (it is not
@@ -1009,6 +1012,29 @@ function pressesOf(ctx: IRoundCtx): IPress[] {
         a.f[5] === r.f[5] &&
         Math.abs(r.ms - a.ms - SPELLSTEAL_REPEAT_MS) <= 100,
     );
+  // every source's presses by tool name, for telling two presses in 300 ms
+  // apart (GH #167: three Spellsteals at 43.139 / 43.366 / 43.428, each
+  // with its own SPELL_STOLEN, read as one press removing three)
+  const castsBy = new Map<string, number[]>();
+  for (const c of rows) {
+    if (c.f[0] !== "SPELL_CAST_SUCCESS") continue;
+    const ck = `${c.f[1]}|${nameOf(c.f[9], c.f[10])}`;
+    const l = castsBy.get(ck) ?? [];
+    l.push(c.ms);
+    castsBy.set(ck, l);
+  }
+  // the removal's own press: the source's SUCCESS of the tool nearest it
+  // within the 300 ms a press's removals are grouped over, either side
+  const castOf = (src: string, tool: string, ms: number) => {
+    let best: number | undefined;
+    for (const c of castsBy.get(`${src}|${tool}`) ?? [])
+      if (
+        Math.abs(c - ms) <= 300 &&
+        (best === undefined || Math.abs(c - ms) < Math.abs(best - ms))
+      )
+        best = c;
+    return best;
+  };
   for (const r of rows) {
     if (r.f[0] !== "SPELL_DISPEL" && r.f[0] !== "SPELL_STOLEN") continue;
     // keyed on the tool's NAME: Mass Dispel logs its immunity removal as
@@ -1022,12 +1048,15 @@ function pressesOf(ctx: IRoundCtx): IPress[] {
       getDispelType(r.f[12] ?? "") === "Magic" &&
       !UNPURGEABLE_MAGIC_AURAS.has(r.f[12] ?? "");
     const repeat = isRepeat(r);
+    const castMs = castOf(r.f[1]!, tool, r.ms);
     if (
       last &&
       r.ms - last.ms <= 300 &&
       r.f[9] !== KLEPTOMANIA_TICK_ID &&
       !repeat &&
-      !last.repeat
+      !last.repeat &&
+      // a press of its own since the last one's: a removal of its own
+      !(castMs !== undefined && castMs !== last.castMs)
     ) {
       last.buffs.push(buff);
       if (purgeable) last.countedIds.add(r.f[12] ?? "");
@@ -1046,6 +1075,7 @@ function pressesOf(ctx: IRoundCtx): IPress[] {
           purgeable && r.f[15] === "BUFF" ? [r.f[12] ?? ""] : [],
         ),
         repeat,
+        ...(castMs !== undefined ? { castMs } : {}),
       });
     groups.set(k, list);
   }

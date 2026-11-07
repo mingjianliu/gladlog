@@ -943,9 +943,16 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         friends.find((f) => f.id === src),
       ),
     );
-    const druid = up && friends.find((f) => f.id === up.srcUnitId);
-    if (!druid) return undefined;
-    return `${pid(druid.name)}'s Cyclone was on the target`;
+    if (!up) return undefined;
+    const druid = friends.find((f) => f.id === up.srcUnitId);
+    if (druid) return `${pid(druid.name)}'s Cyclone was on the target`;
+    // GH #167 (user ruling 2026-11-07): the enemy's Cyclone on our own unit
+    // — a heal refused into it read a bare `[IMMUNE]`; named the way an
+    // immunity aura is (`[IMMUNE — Cyclone was up]`). Only on our side: a
+    // Cyclone on an enemy no friend of ours put there stays unnamed (B17a)
+    if (!friends.some((f) => f.id === target.id)) return undefined;
+    const name = getEnglishSpellName(up.spellId, "");
+    return name ? `${name} was up` : undefined;
   }
 
   /** B17a: the target's diminishing returns for this control's family were

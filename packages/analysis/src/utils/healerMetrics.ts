@@ -7,6 +7,7 @@ import {
 
 import { isNotMajorDefensive } from "../data/abilityProfile";
 import { isControlCast } from "./castMissRows";
+import { isCompanionCastRow } from "./castPress";
 import {
   analyzePlayerCCAndTrinket,
   CC_AVOIDANCE_FACT_ONLY_IDS,
@@ -193,10 +194,13 @@ export function computeHealerMetrics(
     combat as any,
     enemyPets,
   );
-  // GH #108: passive procs are not casts the healer landed
+  // GH #108: passive procs are not casts the healer landed; GH #188: nor
+  // the companion row of another press (Germination's 774)
   const successCasts = healerUnit.spellCastEvents.filter(
     (e: any) =>
-      e.logLine.event === "SPELL_CAST_SUCCESS" && !isPassiveProcCast(e),
+      e.logLine.event === "SPELL_CAST_SUCCESS" &&
+      !isPassiveProcCast(e) &&
+      !isCompanionCastRow(e, healerUnit.spellCastEvents),
   ).length;
   const interuptsOnMe = ccTrinketSummary.interruptInstances.length;
   const effectiveCastRatio = successCasts / (successCasts + interuptsOnMe + 1);

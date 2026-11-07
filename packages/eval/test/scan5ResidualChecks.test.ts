@@ -17,7 +17,12 @@ import { makeUnit } from "../../analysis/test/ported/testHelpers";
 import { dispelKindOfRow } from "../scripts/dispelKindOfRow";
 import { run as runCastThroughStun } from "../scripts/scan5/castThroughStun";
 import { run as runDamageBasis } from "../scripts/scan5/damageBasis";
+import { run as runFact8 } from "../scripts/scan5/fact8";
+import { run as runFact9 } from "../scripts/scan5/fact9";
+import { run as runFact9b } from "../scripts/scan5/fact9b";
+import { run as runFact11 } from "../scripts/scan5/fact11";
 import { run as runFriendlyOffensiveTag } from "../scripts/scan5/friendlyOffensiveTag";
+import { run as runImmunity } from "../scripts/scan5/immunity";
 import { run as runKillAttemptFacts } from "../scripts/scan5/killAttemptFacts";
 import { run as runListGap } from "../scripts/scan5/listGap";
 import { run as runOverrideVariant } from "../scripts/scan5/overrideVariant";
@@ -94,6 +99,7 @@ function scan(
   const byName = new Map(players.map((p) => [p.name, p]));
   run({
     lines,
+    text: lines.join("\n"),
     menu,
     rawLines,
     legacy: {
@@ -1705,9 +1711,9 @@ describe("listGapPress — a press that spent nothing (GH #179 batch 3b)", () =>
   ];
   it("a Cauterizing Flame that removed nothing owes no line", () => {
     expect(of(scan(runListGap, flame(false), []), "listGapPress")).toEqual([]);
-    expect(
-      of(scan(runListGap, flame(true), []), "listGapPress"),
-    ).toHaveLength(1);
+    expect(of(scan(runListGap, flame(true), []), "listGapPress")).toHaveLength(
+      1,
+    );
   });
 });
 
@@ -1859,5 +1865,508 @@ describe("dispelKindOfRow: the audit readers' kind is the product's", () => {
         () => true,
       ),
     ).toBe("proc");
+  });
+});
+
+// GH #182: a Stasis release the log wrote no SUCCESS for (the ready aura's
+// early REMOVED, `stasisReleasePressesMs`) ends another kick's lock in the
+// analysis; the check must read it as well.
+describe("pressOutsideButLocked: an inferred Stasis release ends a lock", () => {
+  const kick = (ms: number, extraSpellId: string) =>
+    rowOf("SPELL_INTERRUPT", ms, {
+      srcUnitId: "rogue",
+      spellId: "1766",
+      spellName: "Kick",
+      extraSpellId,
+    });
+  const run = (released: boolean): IViolation[] => {
+    const evoker = unit("Evo", "1", 1, {
+      actionIn: [kick(10_000, "355936"), kick(11_000, "356995")],
+      auraEvents: released
+        ? [
+            aura(LogEvent.SPELL_AURA_APPLIED, 5_000, "370562", "Stasis"),
+            aura(LogEvent.SPELL_AURA_REMOVED, 12_000, "370562", "Stasis"),
+          ]
+        : [],
+      // a stored Living Flame replayed after the release
+      spellCastEvents: released
+        ? [cast(12_020, "Evo", "361469", "Living Flame", "Evo")]
+        : [],
+      castStartEvents: [],
+    });
+    const rogue = unit("rogue", "2", 2);
+    const seen: IViolation[] = [];
+    runFact9b({
+      lines: [],
+      menu: "- id=kick-eaten:Evo:10 type=kick-eaten t=10.00s facts={postKick=outside the locked school 1x (Disintegrate +2.5s)}",
+      rawLines: [],
+      players: [evoker, rogue],
+      units: [evoker, rogue],
+      byName: new Map([
+        ["Evo", evoker],
+        ["rogue", rogue],
+      ]),
+      owner: evoker,
+      ownerName: "Evo",
+      start: START,
+      end: at(600_000),
+      roundEndAt: at(600_000),
+      pidOf: (n: string) => (n === "Evo" ? "1" : "2"),
+      rawStreams: () => ({
+        castFailed: [
+          {
+            unitGuid: "Evo",
+            spellId: "356995",
+            spellName: "Disintegrate",
+            tSeconds: 12.5,
+          },
+        ],
+      }),
+      violate: (
+        check: string,
+        kind: string,
+        _t: number,
+        _f: string,
+        detail: string,
+      ) => seen.push({ check, kind, detail }),
+      bump: () => {},
+    } as any);
+    return seen.filter((v) => v.check === "pressOutsideButLocked");
+  };
+
+  it("the release at 12 s ends the 11 s Disintegrate kick's lock", () => {
+    expect(run(true)).toEqual([]);
+  });
+
+  it("without the release the later lock still covers the press", () => {
+    expect(run(false).map((v) => v.kind)).toEqual(["laterLock"]);
+  });
+});
+
+// GH #181: the 5 % floor reads the reflect chain's whole Nether Ward return at
+// its FIRST reflect, as `reflectedSpells` does — not one row at the latest.
+describe("wardReturnMisnamed: the floor is the chain's, at its first reflect", () => {
+  const reflect = (ms: number) =>
+    rowOf("SPELL_MISSED", ms, {
+      srcUnitId: "Lock",
+      destUnitId: "W",
+      spellId: "980",
+      spellName: "Agony",
+      missType: "REFLECT",
+    });
+  const ward = (ms: number, amount: number) =>
+    rowOf(LogEvent.SPELL_DAMAGE, ms, {
+      srcUnitId: "W",
+      spellId: "212295",
+      spellName: "Nether Ward",
+      effectiveAmount: -amount,
+    });
+  // the reflector's Agony put on the caster in the row's ms names it
+  const agonyOn = (ms: number) => ({
+    ...aura(LogEvent.SPELL_AURA_APPLIED, ms, "980", "Agony"),
+    srcUnitId: "W",
+  });
+  const hp = (ms: number, max: number) => ({
+    advancedActorMaxHp: max,
+    advancedActorCurrentHp: max,
+    timestamp: at(ms),
+    logLine: { timestamp: at(ms) },
+  });
+  const run = (
+    wards: Array<[number, number]>,
+    hps: Array<[number, number]>,
+    absorbsIn: any[] = [],
+  ): string[] => {
+    const caster = {
+      ...makeUnit("Lock", {
+        damageIn: wards.map(([ms, amt]) => ward(ms, amt)),
+        auraEvents: wards.map(([ms]) => agonyOn(ms)),
+        advancedActions: hps.map(([ms, max]) => hp(ms, max)),
+      }),
+      absorbsIn,
+      missesOut: [reflect(10_000), reflect(11_000)],
+      pid: "1",
+    };
+    const w = { ...makeUnit("W"), pid: "2" };
+    return of(
+      scan(
+        (ctx) => runFact9({ ...ctx, firstOwnerOfRound: true }),
+        [caster, w],
+        [],
+      ),
+      "wardReturnMisnamed",
+    );
+  };
+
+  it("one row over the floor at the latest reflect, under it at the first: no line is owed", () => {
+    // 52k: 5.2 % of 1.0M at 11 s, 4.3 % of 1.2M at 10 s
+    expect(
+      run(
+        [[11_200, 52_000]],
+        [
+          [10_000, 1_200_000],
+          [11_000, 1_000_000],
+          [11_200, 1_000_000],
+        ],
+      ),
+    ).toEqual([]);
+  });
+
+  it("an absorb two rows of one millisecond both name counts once (codex review)", () => {
+    // 10k + 10k + one 20k absorb = 40k, under 5 % of 1.0M; counted per row
+    // it read 60k and demanded a line
+    const absorb = {
+      ...absorbed(11_200, "W", 20_000, "17"),
+      attackSpellId: "212295",
+    };
+    expect(
+      run(
+        [
+          [11_200, 10_000],
+          [11_200, 10_000],
+        ],
+        [
+          [10_000, 1_000_000],
+          [11_200, 1_000_000],
+        ],
+        [absorb],
+      ),
+    ).toEqual([]);
+  });
+
+  it("two rows each under the floor, together over it: the missing line is caught", () => {
+    const seen = run(
+      [
+        [10_200, 30_000],
+        [11_200, 30_000],
+      ],
+      [
+        [10_000, 1_000_000],
+        [11_200, 1_000_000],
+      ],
+    );
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toContain("Agony came back 60k");
+  });
+});
+
+describe("resCdBeforeNextPress: rows that are no next press (GH #177 checks)", () => {
+  // a `[RES]` row at 0:23 with Power Infusion 120 s on cooldown
+  const res = "      [RES] rdy:—  cd:Power Infusion(120s)";
+  const priest = (rows: any[]) =>
+    unit("Priest", "1", 0, { spellCastEvents: rows, auraEvents: [] });
+  const viol = (rows: any[], roundEndAt?: number) =>
+    of(
+      scan(
+        runFact8,
+        [priest(rows)],
+        ["0:23  [STATE] x", res],
+        "",
+        [],
+        roundEndAt,
+      ),
+      "resCdBeforeNextPress",
+    );
+  it("Power Infusion's self copy 25 ms after the press is that press (dca02448 r4)", () => {
+    const rows = [
+      cast(23_979, "Priest", "10060", "Power Infusion", "Mate"),
+      cast(24_004, "Priest", "10060", "Power Infusion", "Priest"),
+    ];
+    expect(viol(rows)).toEqual([]);
+    // a second press half a second on is a press
+    expect(
+      viol([
+        ...rows,
+        cast(24_500, "Priest", "10060", "Power Infusion", "Mate"),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("a press after the round's end of play is the next round's preparation (05b762f1 r1)", () => {
+    const rows = [
+      cast(23_000, "Priest", "10060", "Power Infusion", "Mate"),
+      cast(60_000, "Priest", "10060", "Power Infusion", "Mate"),
+    ];
+    expect(viol(rows, at(50_000))).toEqual([]);
+    expect(viol(rows, at(90_000))).toHaveLength(1);
+  });
+});
+
+describe("immuneCauseCannotStopDamage: the enemy's Cyclone on a teammate (GH #167)", () => {
+  // the owner's Riptide at 0:22 refused IMMUNE on the teammate, whose
+  // aura rows carry `cycloneId` from the enemy at 0:20
+  const viol = (cycloneId: string, cycloneName: string) => {
+    const owner = unit("Me", "1", 1, {
+      spellCastEvents: [cast(22_000, "Me", "61295", "Riptide", "Mate")],
+      missesOut: [
+        rowOf(LogEvent.SPELL_MISSED, 22_000, {
+          srcUnitId: "Me",
+          destUnitId: "Mate",
+          spellId: "61295",
+          spellName: "Riptide",
+          missType: "IMMUNE",
+        }),
+      ],
+    });
+    const mate = unit("Mate", "2", 1, {
+      auraEvents: [
+        rowOf(LogEvent.SPELL_AURA_APPLIED, 20_000, {
+          srcUnitId: "Foe",
+          destUnitId: "Mate",
+          spellId: cycloneId,
+          spellName: cycloneName,
+        }),
+      ],
+    });
+    const foe = unit("Foe", "4", 2);
+    return of(
+      scan(
+        runFact11,
+        [owner, mate, foe],
+        [
+          `0:22  [YOU] [CAST]   Riptide → 2(AWarrior) [IMMUNE — ${cycloneName} was up]`,
+        ],
+      ),
+      "immuneCauseCannotStopDamage",
+    );
+  };
+  it("names a control the holder takes nothing through: no violation", () => {
+    expect(viol("33786", "Cyclone")).toEqual([]);
+  });
+  it("an aura that stops no heal is still caught", () => {
+    expect(viol("1044", "Blessing of Freedom")).toHaveLength(1);
+  });
+});
+
+describe("immunityBurstAnchor: the all-refused clause (GH #167)", () => {
+  // our Mage's Ray of Frost into the Rogue at 2:09; `refused` logs IMMUNE
+  const viol = (refused: boolean, clause: boolean) => {
+    const mage = unit("Mage", "1", 1, {
+      spellCastEvents: [
+        cast(129_000, "Mage", "205021", "Ray of Frost", "Rogue"),
+      ],
+      missesOut: refused
+        ? [
+            rowOf(LogEvent.SPELL_MISSED, 129_010, {
+              srcUnitId: "Mage",
+              destUnitId: "Rogue",
+              spellId: "205021",
+              spellName: "Ray of Frost",
+              missType: "IMMUNE",
+            }),
+          ]
+        : [],
+      damageOut: [],
+    });
+    const rogue = unit("Rogue", "4", 2, { auraEvents: [] });
+    const line = `  [2:09–2:09] on Rogue — Ray of Frost burst (no stun)${clause ? " | every Ray of Frost press into the target logged IMMUNE" : ""} | opportunity: trinket up (no softer target) | team focus 90% (0.10M on target inside it, 0.10M incl. the 5 s after) | FAILED: not enough damage`;
+    return scan(runImmunity, [mage, rogue], [line])
+      .filter((v) => v.check === "immunityBurstAnchor")
+      .map((v) => v.kind);
+  };
+  it("every press refused: the line must say so", () => {
+    expect(viol(true, true)).toEqual([]);
+    expect(viol(true, false)).toEqual(["clause missing"]);
+  });
+  it("a press that went in: no clause", () => {
+    expect(viol(false, false)).toEqual([]);
+    expect(viol(false, true)).toEqual(["clause wrong"]);
+  });
+  it("a second caster's landed press nearby is another burst's: the clause stands (codex review)", () => {
+    const mage = (name: string, pid: string, ms: number, refused: boolean) =>
+      unit(name, pid, 1, {
+        spellCastEvents: [cast(ms, name, "205021", "Ray of Frost", "Rogue")],
+        missesOut: refused
+          ? [
+              rowOf(LogEvent.SPELL_MISSED, ms + 10, {
+                srcUnitId: name,
+                destUnitId: "Rogue",
+                spellId: "205021",
+                spellName: "Ray of Frost",
+                missType: "IMMUNE",
+              }),
+            ]
+          : [],
+        damageOut: [],
+      });
+    const rogue = unit("Rogue", "4", 2, { auraEvents: [] });
+    const line =
+      "  [0:40–0:40] on Rogue — Ray of Frost burst (no stun) | every Ray of Frost press into the target logged IMMUNE | opportunity: trinket up (no softer target) | team focus 90% (0.10M on target inside it, 0.10M incl. the 5 s after) | FAILED: not enough damage";
+    const kinds = (players: any[]) =>
+      scan(runImmunity, players, [line])
+        .filter((v) => v.check === "immunityBurstAnchor")
+        .map((v) => v.kind);
+    expect(
+      kinds([
+        mage("MageA", "1", 40_000, true),
+        mage("MageB", "2", 40_800, false),
+        rogue,
+      ]),
+    ).toEqual([]);
+    // neither caster's presses were all refused: still wrong
+    expect(
+      kinds([
+        mage("MageA", "1", 40_000, false),
+        mage("MageB", "2", 40_800, false),
+        rogue,
+      ]),
+    ).toEqual(["clause wrong"]);
+  });
+  it("a refusal logged under the press's effect id is the press refused (castAndEffectIds)", () => {
+    // 605 run s1/38-1-219 1:23: The Hunt 370965 refused as 370969
+    const hunt = (missId: string) =>
+      unit("DH", "1", 1, {
+        spellCastEvents: [cast(83_000, "DH", "370965", "The Hunt", "Rogue")],
+        missesOut: [
+          rowOf(LogEvent.SPELL_MISSED, 83_300, {
+            srcUnitId: "DH",
+            destUnitId: "Rogue",
+            spellId: missId,
+            spellName: "The Hunt",
+            missType: "IMMUNE",
+          }),
+        ],
+        damageOut: [],
+      });
+    const rogue = unit("Rogue", "4", 2, { auraEvents: [] });
+    const line =
+      "  [1:23–1:23] on Rogue — The Hunt burst (no stun) | every The Hunt press into the target logged IMMUNE | opportunity: trinket up (no softer target) | team focus 90% (0.10M on target inside it, 0.10M incl. the 5 s after) | FAILED: not enough damage";
+    const kinds = (missId: string) =>
+      scan(runImmunity, [hunt(missId), rogue], [line])
+        .filter((v) => v.check === "immunityBurstAnchor")
+        .map((v) => v.kind);
+    expect(kinds("370969")).toEqual([]);
+    // an id outside the press's family is not its refusal
+    expect(kinds("1")).toEqual(["clause wrong"]);
+  });
+  it("a hit in the next press's own millisecond is the next press's (codex review)", () => {
+    // refused at 0:40; the caster's next Ray of Frost at 0:44.000 hits at
+    // 0:44.000 — inside this line's 5 s tail, but that press's hit
+    const mage = (hitMs: number) =>
+      unit("Mage", "1", 1, {
+        spellCastEvents: [
+          cast(40_000, "Mage", "205021", "Ray of Frost", "Rogue"),
+          cast(44_000, "Mage", "205021", "Ray of Frost", "Rogue"),
+        ],
+        missesOut: [
+          rowOf(LogEvent.SPELL_MISSED, 40_010, {
+            srcUnitId: "Mage",
+            destUnitId: "Rogue",
+            spellId: "205021",
+            spellName: "Ray of Frost",
+            missType: "IMMUNE",
+          }),
+        ],
+        damageOut: [
+          rowOf(LogEvent.SPELL_DAMAGE, hitMs, {
+            srcUnitId: "Mage",
+            destUnitId: "Rogue",
+            spellId: "205021",
+            spellName: "Ray of Frost",
+            effectiveAmount: -10_000,
+          }),
+        ],
+      });
+    const rogue = unit("Rogue", "4", 2, { auraEvents: [] });
+    const line =
+      "  [0:40–0:40] on Rogue — Ray of Frost burst (no stun) | every Ray of Frost press into the target logged IMMUNE | opportunity: trinket up (no softer target) | team focus 90% (0.10M on target inside it, 0.10M incl. the 5 s after) | FAILED: not enough damage";
+    const kinds = (hitMs: number) =>
+      scan(runImmunity, [mage(hitMs), rogue], [line])
+        .filter((v) => v.check === "immunityBurstAnchor")
+        .map((v) => v.kind);
+    expect(kinds(44_000)).toEqual([]);
+    expect(kinds(43_999)).toEqual(["clause wrong"]);
+  });
+  it("a same-named impact row is no next press: its hit lands the press (s0/167-2 1:33)", () => {
+    // Takedown 1250646 refused at 1:33.750; its leap 1253859 logged as a
+    // cast and a hit on the target at 1:34.270
+    const hunter = unit("Hunter", "1", 1, {
+      spellCastEvents: [
+        cast(93_750, "Hunter", "1250646", "Takedown", "Rogue"),
+        cast(94_270, "Hunter", "1253859", "Takedown"),
+      ],
+      missesOut: [
+        rowOf(LogEvent.SPELL_MISSED, 93_750, {
+          srcUnitId: "Hunter",
+          destUnitId: "Rogue",
+          spellId: "1250646",
+          spellName: "Takedown",
+          missType: "IMMUNE",
+        }),
+      ],
+      damageOut: [
+        rowOf(LogEvent.SPELL_DAMAGE, 94_270, {
+          srcUnitId: "Hunter",
+          destUnitId: "Rogue",
+          spellId: "1253859",
+          spellName: "Takedown",
+          effectiveAmount: -35_245,
+        }),
+      ],
+    });
+    const rogue = unit("Rogue", "4", 2, { auraEvents: [] });
+    const line =
+      "  [1:33–1:57] on Rogue — Takedown burst (no stun) | opportunity: trinket up (no softer target) | team focus 90% (0.10M on target inside it, 0.10M incl. the 5 s after) | FAILED: not enough damage";
+    expect(
+      scan(runImmunity, [hunter, rogue], [line])
+        .filter((v) => v.check === "immunityBurstAnchor")
+        .map((v) => v.kind),
+    ).toEqual([]);
+  });
+});
+
+describe("immunityPressTag: a press's impact row is the press (codex review)", () => {
+  it("a refusal logged under the impact's own id is the press's: its line must carry [IMMUNE", () => {
+    const dh = unit("DH", "1", 1, {
+      spellCastEvents: [
+        cast(83_000, "DH", "370965", "The Hunt", "Rogue"),
+        cast(83_300, "DH", "370966", "The Hunt", "Rogue"),
+      ],
+      missesOut: [
+        rowOf(LogEvent.SPELL_MISSED, 83_300, {
+          srcUnitId: "DH",
+          destUnitId: "Rogue",
+          spellId: "370966",
+          spellName: "The Hunt",
+          missType: "IMMUNE",
+        }),
+      ],
+      damageOut: [],
+    });
+    const rogue = unit("Rogue", "4", 2, { auraEvents: [] });
+    const kinds = (line: string) =>
+      scan(runImmunity, [dh, rogue], [line])
+        .filter((x) => x.check === "immunityPressTag")
+        .map((x) => x.kind);
+    expect(kinds("1:23  [YOU] [CD]   The Hunt → 4(Rogue)")).toEqual([
+      "press line without [IMMUNE",
+    ]);
+    expect(kinds("1:23  [YOU] [CD]   The Hunt → 4(Rogue) [IMMUNE]")).toEqual(
+      [],
+    );
+  });
+  it("The Hunt's 370966 impact refused under 370969 asks no line of its own", () => {
+    const dh = unit("DH", "1", 1, {
+      spellCastEvents: [
+        cast(83_900, "DH", "370965", "The Hunt", "Rogue"),
+        cast(84_200, "DH", "370966", "The Hunt", "Rogue"),
+      ],
+      missesOut: [
+        rowOf(LogEvent.SPELL_MISSED, 84_200, {
+          srcUnitId: "DH",
+          destUnitId: "Rogue",
+          spellId: "370969",
+          spellName: "The Hunt",
+          missType: "IMMUNE",
+        }),
+      ],
+      damageOut: [],
+    });
+    const rogue = unit("Rogue", "4", 2, { auraEvents: [] });
+    const v = scan(
+      runImmunity,
+      [dh, rogue],
+      ["1:23  [YOU] [CD]   The Hunt → 4(Rogue) [IMMUNE]"],
+    ).filter((x) => x.check === "immunityPressTag");
+    expect(v.map((x) => x.detail)).toEqual([]);
   });
 });

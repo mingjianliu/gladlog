@@ -24,7 +24,8 @@
  *    (`castStartEvents`) of a silenceable spell of that school after the kick
  *    and at or before the press — not one the lock ignores
  *    (`LOCK_IGNORING_CAST_IDS`), not a Stasis replay (`stasisReplayWindows`;
- *    the release itself counts), as the analysis's lock end reads them. A
+ *    the release itself counts, a release with no SUCCESS row too:
+ *    `stasisReleasePressesMs`, GH #182), as the analysis's lock end reads them. A
  *    press DB2 calls unsilenceable is never either.
  *  - `rootAuraCastBlock` (D10): an aura typed `interrupts` (so read as
  *    cast-blocking) put on the player by the other side, under which the
@@ -60,6 +61,7 @@ import { CANCEL_CC_NEAR_S } from "@gladlog/analysis/src/utils/castStopEvidence";
 import { LOCK_IGNORING_CAST_IDS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   STASIS_RELEASE_SPELL_ID,
+  stasisReleasePressesMs,
   stasisReplayWindows,
 } from "@gladlog/analysis/src/utils/combatStates";
 import { kickLockoutSecondsFor } from "@gladlog/analysis/src/utils/kickLockout";
@@ -171,6 +173,24 @@ function kickRows(ctx: IRoundCtx): void {
     }
     const lockedMask = spellSchoolMask(String(kick.extraSpellId));
     const replays = stasisReplayWindows(owner);
+    // the analysis's lock-end casts: the SUCCESS rows, plus a Stasis release
+    // the log wrote no SUCCESS for, read off the ready aura's early REMOVED
+    // (`stasisReleasePressesMs`, ccTrinketAnalysis' castTimes — GH #182)
+    const successes = ((owner.spellCastEvents ?? []) as any[]).filter(
+      (c) => ev(c) === "SPELL_CAST_SUCCESS",
+    );
+    const lockEndCasts = [
+      ...successes,
+      ...stasisReleasePressesMs(owner)
+        .filter(
+          (ms) =>
+            !successes.some(
+              (c) =>
+                tsOf(c) === ms && String(c.spellId) === STASIS_RELEASE_SPELL_ID,
+            ),
+        )
+        .map((ms) => ({ spellId: STASIS_RELEASE_SPELL_ID, timestamp: ms })),
+    ];
     for (const p of clausePresses(facts, "outside the locked school ")) {
       const f = rowOf(failed, kickS, p);
       if (!f) continue;
@@ -213,9 +233,7 @@ function kickRows(ctx: IRoundCtx): void {
             );
           };
           const freed =
-            ((owner.spellCastEvents ?? []) as any[]).some(
-              (c) => ev(c) === "SPELL_CAST_SUCCESS" && freesLock(c, true),
-            ) ||
+            lockEndCasts.some((c) => freesLock(c, true)) ||
             ((owner.castStartEvents ?? []) as any[]).some((c) =>
               freesLock(c, false),
             );

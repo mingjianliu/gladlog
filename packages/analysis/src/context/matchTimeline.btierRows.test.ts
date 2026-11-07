@@ -343,6 +343,66 @@ describe("[IMMUNE] says why (B17a)", () => {
       immuneLine(buildMatchTimeline(params(polyImmuneOwner(), byEnemy))),
     ).not.toContain("Cyclone");
   });
+
+  it("a heal refused into the enemy's Cyclone on a teammate names it — GH #167 (user ruling 2026-11-07)", () => {
+    const RIPTIDE = "61295";
+    const MATE: [string, string] = ["t", "Mate-Realm"];
+    const cyclone = (removedAt?: number) => [
+      ev(LogEvent.SPELL_AURA_APPLIED, CYCLONE, "Cyclone", 20, FOE, MATE, {
+        auraType: "DEBUFF",
+      }),
+      ...(removedAt === undefined
+        ? []
+        : [
+            ev(
+              LogEvent.SPELL_AURA_REMOVED,
+              CYCLONE,
+              "Cyclone",
+              removedAt,
+              FOE,
+              MATE,
+              {
+                auraType: "DEBUFF",
+              },
+            ),
+          ]),
+    ];
+    const run = (mateAuras: any[]) => {
+      const owner = mkUnit("o", "Me-Realm", {
+        class: CombatUnitClass.Shaman,
+        spec: CombatUnitSpec.Shaman_Restoration,
+        spellCastEvents: [
+          ev(LogEvent.SPELL_CAST_SUCCESS, RIPTIDE, "Riptide", 22, ME, MATE),
+        ] as never,
+        missesOut: [
+          ev(LogEvent.SPELL_MISSED, RIPTIDE, "Riptide", 22, ME, MATE, {
+            missType: "IMMUNE",
+            amount: 0,
+          }),
+        ] as never,
+      });
+      const mate = mkUnit("t", "Mate-Realm", {
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Arms,
+        auraEvents: mateAuras as never,
+      });
+      const foe = mkUnit("e", "Enemy-Realm", {
+        reaction: CombatUnitReaction.Hostile,
+        class: CombatUnitClass.Druid,
+        spec: CombatUnitSpec.Druid_Balance,
+      });
+      return immuneLine(
+        buildMatchTimeline({
+          ...params(owner, foe, { friends: [owner, mate] }),
+          ownerSpec: "Shaman_Restoration",
+        }),
+      );
+    };
+    expect(run(cyclone(25))).toContain("Riptide");
+    expect(run(cyclone(25))).toContain("[IMMUNE — Cyclone was up]");
+    // gone before the heal: no cause
+    expect(run(cyclone(21))).toContain("[IMMUNE]");
+  });
 });
 
 describe("[GRIP]: an enemy Death Grip on our team (B17b-U8)", () => {

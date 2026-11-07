@@ -2724,6 +2724,21 @@ const INDEX: PredicateRow[] = [
     mod: killAttempts,
   },
   {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "killAttemptAllImmuneClause",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPT_ALL_IMMUNE_TAIL",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPTS_ALL_IMMUNE_LEGEND",
+    mod: killAttempts,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKillAttemptOwnControlClause",
     mod: promptQualityCheck,

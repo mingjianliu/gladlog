@@ -47,6 +47,16 @@ export function emitBuffFadedEntries(
     // A dispel line the log cannot tie to this copy is stated next to
     // whatever else the line reads from the removal — the death, the empty
     // shield — never dropped behind it (codex post-hoc review of step 3a).
+    // GH #173 (user ruling 2026-11-07): an early end the log gives no cause
+    // for is stated as its length, "ended after N of M s" — Ice Block,
+    // Greater Invisibility, Leap of Faith read "ended early" on 60–69 % of
+    // their lines, most of them the player's own cancel or action. Every
+    // such line, not a hand-picked list: no official field says which buffs
+    // a player ends.
+    const ranOf = (ranS: number | undefined) =>
+      ranS !== undefined && expiry.fullS !== undefined
+        ? `ended after ${ranS.toFixed(1)} of ${Number(expiry.fullS.toFixed(1))}s`
+        : "ended early";
     const unclear = expiry.dispelUnclear
       ? "; a dispel of this spell is logged at that moment — not which copy it took"
       : "";
@@ -81,11 +91,11 @@ export function emitBuffFadedEntries(
                             ? ` (ended by your own ${expiry.endedByOwnPress}${took ? `; ${took}` : ""})`
                             : expiry.cause === "ended_early" &&
                                 expiry.channelStoppedAfterS !== undefined
-                              ? ` (ended early — the channel stopped after ${expiry.channelStoppedAfterS.toFixed(1)}s${took ? `; ${took}` : ""})`
+                              ? ` (${ranOf(expiry.channelStoppedAfterS)} — the channel stopped${took ? `; ${took}` : ""})`
                               : expiry.cause === "ended_early"
                                 ? took
-                                  ? ` (ended early — ${took}; no dispel logged)`
-                                  : " (ended early — no dispel logged)"
+                                  ? ` (${ranOf(expiry.ranForS)} — ${took}; no dispel logged)`
+                                  : ` (${ranOf(expiry.ranForS)} — no dispel logged)`
                                 : expiry.isEstimated
                                   ? " (expired, estimated)"
                                   : took

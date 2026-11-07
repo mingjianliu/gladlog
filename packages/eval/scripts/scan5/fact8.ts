@@ -53,6 +53,10 @@ import {
   AURA_PRESS_BY_ERA,
   auraStandsForPressAt,
 } from "@gladlog/analysis/src/utils/auraActivationEra";
+import {
+  isFormReshiftCast,
+  isNoPressRow,
+} from "@gladlog/analysis/src/utils/castPress";
 import { SELF_SAVE_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { MEDALLION_SPELL_ID } from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
@@ -98,6 +102,8 @@ const RES_CD = /(?:^|[ ,])(?:(\d+):)?([A-Z][^,()[\]]*?)\((\d+)(?:–\d+)?s\)/g;
 const TIMED = /^\s*(\d+):(\d\d)\s/;
 /** the back time may sit this far past the press: a floored row, a slack */
 const BACK_SLACK_MS = 2000;
+/** two rows of one button this close are one press */
+const SAME_PRESS_MS = 100;
 
 function resCd(ctx: IRoundCtx): void {
   const memo = new Map<string, number[]>();
@@ -105,17 +111,34 @@ function resCd(ctx: IRoundCtx): void {
     const key = `${u.id}|${name}`;
     let out = memo.get(key);
     if (!out) {
+      const rows = (u.spellCastEvents ?? []) as any[];
       out = successesOf(u)
         // a row of the name with no cooldown of its own is no press of the
         // button: Odyn's Fury's three hit rows after the press, Divine Hymn's
-        // tick, Alter Time's return (a different id, the same name)
+        // tick, Alter Time's return (a different id, the same name); nor is
+        // a row the product reads as no press (`isNoPressRow`: Champion's
+        // Spear's re-press 1271980 while the spear stands, GH #177), nor a
+        // shift back into a form whose cooldown is running
+        // (`isFormReshiftCast`: Incarnation: Tree of Life re-entered under
+        // its own buff), nor a press after the round's end of play (a Solo
+        // Shuffle round's rows run into the next round's preparation, where
+        // Arena Preparation resets cooldowns: 05b762f1 r1 Stasis at 2:44,
+        // the round over at 2:22)
         .filter(
           (c) =>
             nameOf(c.spellId, c.spellName) === name &&
-            (effectiveCooldownSeconds(c.spellId) ?? 0) > 0,
+            (effectiveCooldownSeconds(c.spellId) ?? 0) > 0 &&
+            !isNoPressRow(c, rows) &&
+            !isFormReshiftCast(u, c) &&
+            tsOf(c) <= ctx.roundEndAt,
         )
         .map(tsOf)
-        .sort((a, b) => a - b);
+        .sort((a, b) => a - b)
+        // a row within `SAME_PRESS_MS` of the one before is that press logged
+        // twice (Power Infusion's self copy 16–25 ms after the press, which
+        // can cross into the next second: dca02448 r4 0:23.979 / 0:24.004);
+        // a human's second press lands ≥ 0.485 s later (the ledger's fold)
+        .filter((t, i, a) => i === 0 || t - a[i - 1]! > SAME_PRESS_MS);
       memo.set(key, out);
     }
     return out;
@@ -425,8 +448,7 @@ function auraNoLine(ctx: IRoundCtx): void {
           ? "ally"
           : "enemy";
       const unlogged =
-        AURA_PRESS_BY_ERA[cast] !== undefined &&
-        auraStandsForPressAt(cast, ms);
+        AURA_PRESS_BY_ERA[cast] !== undefined && auraStandsForPressAt(cast, ms);
       ctx.violate(
         "auraActivationNoLine",
         unlogged ? "unlogged press (dated)" : `${side}/${name}`,

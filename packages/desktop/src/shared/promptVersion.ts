@@ -898,4 +898,12 @@
  *  broke itself forced nothing; a ready break racial is named beside PRIME.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 496;
+/*
+ * v497 (2026-11-07, GH #188 #179 #173 #167): companion cast rows are no
+ *  presses in the healer readers; Violent Transformation resets Voidblade on
+ *  entering Void Metamorphosis; a cause-less early end reads "ended after N
+ *  of M s"; a heal into an enemy's Cyclone names it; a burst whose anchor's
+ *  every press was refused IMMUNE says so, and a later press's hit no longer
+ *  lands a refused one. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 497;

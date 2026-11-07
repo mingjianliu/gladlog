@@ -22,13 +22,21 @@
  *    `[REFLECTED]` line of Y while a line stands for another of the caster's
  *    spells that reflector reflected AFTER Y and before the row — the one
  *    case a timing-only pairing hands the row to (kind `misnamed`) — or no
- *    line at all and the row alone is 5 % of the caster's max health (kind
- *    `missing`). A Y return under the 5 % floor with only earlier reflects'
- *    lines beside it is no violation (cover set: be27ee5f 2:08 Wicked Reaping
- *    27k, reflected in the row's own millisecond).
+ *    line at all (kind `missing`). Only while Y's reflect chain is over the
+ *    5 % floor, read over Y's whole reflect chain at its FIRST reflect (GH
+ *    #181: the row alone at the latest reflect missed both ways). The chain
+ *    is grouped here from the caster's own REFLECT rows — one spell (id or
+ *    English name), one reflector, ≤ `REFLECT_CHAIN_GAP_MS` apart, the
+ *    shared constant — never through the analysis's `reflectChains`, which
+ *    is what the check audits (codex review: a product chain split would
+ *    have hidden the missing line); its return is every Nether Ward row
+ *    naming one of its reflects, each absorb row counted once. A Y return under the floor with only
+ *    earlier reflects' lines beside it is no violation (cover set: be27ee5f
+ *    2:08 Wicked Reaping 27k, reflected in the row's own millisecond).
  */
 import {
   maxHpNear,
+  REFLECT_CHAIN_GAP_MS,
   REFLECT_MIN_DAMAGE_PCT,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
@@ -265,6 +273,45 @@ function wardReturns(ctx: IRoundCtx): void {
   for (const c of ctx.players) {
     const pidC = ctx.pidOf(c.name);
     if (!pidC) continue;
+    // the caster's reflect chains, from its own REFLECT rows: one spell (id
+    // or English name), one reflector, consecutive rows ≤
+    // `REFLECT_CHAIN_GAP_MS` apart; each REFLECT row → its chain
+    const sameSpell = (a: any, b: any) =>
+      String(a.spellId) === String(b.spellId) ||
+      (nameOf(a.spellId) !== "" && nameOf(a.spellId) === nameOf(b.spellId));
+    const chainOf = new Map<any, { first: any; members: any[] }>();
+    {
+      const open: Array<{ first: any; last: any; members: any[] }> = [];
+      const reflects = ((c.missesOut ?? []) as any[])
+        .filter((x) => x.missType === "REFLECT")
+        .sort((a, b) => tsOf(a) - tsOf(b));
+      for (const x of reflects) {
+        const k = [...open]
+          .reverse()
+          .find(
+            (o) => o.first.destUnitId === x.destUnitId && sameSpell(o.first, x),
+          );
+        if (k && tsOf(x) - tsOf(k.last) <= REFLECT_CHAIN_GAP_MS) {
+          k.last = x;
+          k.members.push(x);
+          chainOf.set(x, k);
+        } else {
+          const n = { first: x, last: x, members: [x] };
+          open.push(n);
+          chainOf.set(x, n);
+        }
+      }
+    }
+    // every Nether Ward row on the caster that names a spell it reflected,
+    // with the reflect it names and what it returned
+    const rows: Array<{
+      d: any;
+      ts: number;
+      hit: any;
+      amount: number;
+      /** the absorb rows `amount` counted */
+      absorbs: any[];
+    }> = [];
     for (const d of (c.damageIn ?? []) as any[]) {
       if (String(d.spellId) !== NETHER_WARD) continue;
       const ts = tsOf(d);
@@ -286,27 +333,68 @@ function wardReturns(ctx: IRoundCtx): void {
         )
           named.add(String(e.spellId));
       if (named.size === 0) continue;
-      const reflects = ((c.missesOut ?? []) as any[]).filter(
-        (x) =>
-          x.missType === "REFLECT" &&
-          x.destUnitId === r &&
-          tsOf(x) <= ts &&
-          tsOf(x) >= ts - 3_000,
-      );
-      const hit = reflects
-        .filter((x) =>
-          [...named].some(
-            (n) =>
-              n === String(x.spellId) ||
-              (nameOf(n) !== "" && nameOf(n) === nameOf(x.spellId)),
-          ),
+      const hit = ((c.missesOut ?? []) as any[])
+        .filter(
+          (x) =>
+            x.missType === "REFLECT" &&
+            x.destUnitId === r &&
+            tsOf(x) <= ts &&
+            tsOf(x) >= ts - 3_000 &&
+            [...named].some(
+              (n) =>
+                n === String(x.spellId) ||
+                (nameOf(n) !== "" && nameOf(n) === nameOf(x.spellId)),
+            ),
         )
         .sort((a, b) => tsOf(b) - tsOf(a))[0];
       if (!hit) continue;
+      // what the analysis side credits to Y's chain: the row, the own id's
+      // absorbs (`creditOwnId`) and Y's own absorbs (`credit`), a deferral's
+      // never (review 20-F24-02 #2)
+      const absorbs = rowAbsorbs.filter(
+        (a) =>
+          !isDeferralAbsorb(a) &&
+          (String(a.attackSpellId) === NETHER_WARD ||
+            String(a.attackSpellId) === String(hit.spellId)),
+      );
+      const amount =
+        Math.abs(d.effectiveAmount ?? 0) +
+        absorbs.reduce((t, a) => t + Math.abs(a.absorbedAmount ?? 0), 0);
+      rows.push({ d, ts, hit, amount, absorbs });
+    }
+    for (const { d, ts, hit, amount } of rows) {
+      const r = d.srcUnitId;
       ctx.bump("wardReturnMisnamed");
       const y = nameOf(hit.spellId, hit.spellName);
       const pidR = ctx.pidOf(ctx.units.find((u) => u.id === r)?.name ?? "");
-      const fromSec = Math.floor((tsOf(hit) - ctx.start) / 1000) - 3;
+      // Y's reflect chain (grouped above from the rows): its line stands at
+      // the chain's first reflect, and the 5 % floor reads the chain's whole
+      // return at that first reflect (GH #181) — every Nether Ward row
+      // naming one of the chain's reflects, an absorb row two damage rows of
+      // one millisecond both named counted once (codex review). A Nether
+      // Ward row naming no spell is left out (as it always was): pairing it
+      // to a reflect is the analysis's timing rule, not a row's statement,
+      // so the total can only read low — a missed line, never a false one
+      // (codex review, second round; recorded on GH #181)
+      const chain = chainOf.get(hit);
+      const firstMs = chain ? tsOf(chain.first) : tsOf(hit);
+      let total = amount;
+      if (chain) {
+        const mine = rows.filter(
+          (o) => o.d.srcUnitId === r && chainOf.get(o.hit) === chain,
+        );
+        const seenAbsorbs = new Set<any>();
+        total = 0;
+        for (const o of mine) {
+          total += Math.abs(o.d.effectiveAmount ?? 0);
+          for (const a of o.absorbs)
+            if (!seenAbsorbs.has(a)) {
+              seenAbsorbs.add(a);
+              total += Math.abs(a.absorbedAmount ?? 0);
+            }
+        }
+      }
+      const fromSec = Math.floor((firstMs - ctx.start) / 1000) - 3;
       const toSec = Math.floor((ts - ctx.start) / 1000);
       const span = lines.filter(
         (l) =>
@@ -316,34 +404,27 @@ function wardReturns(ctx: IRoundCtx): void {
           l.sec <= toSec,
       );
       if (span.some((l) => l.spell === y)) continue;
-      // what the analysis side credits to Y's chain: the row, the own id's
-      // absorbs (`creditOwnId`) and Y's own absorbs (`credit`), a deferral's
-      // never (review 20-F24-02 #2)
-      const amount =
-        Math.abs(d.effectiveAmount ?? 0) +
-        rowAbsorbs
-          .filter(
-            (a) =>
-              !isDeferralAbsorb(a) &&
-              (String(a.attackSpellId) === NETHER_WARD ||
-                String(a.attackSpellId) === String(hit.spellId)),
-          )
-          .reduce((t, a) => t + Math.abs(a.absorbedAmount ?? 0), 0);
-      // the analysis side's floor reading: max HP near Y's reflect
-      const maxHp = maxHpNear(c, tsOf(hit));
+      // the analysis side's floor reading: max HP near the chain's first
+      // reflect
+      const maxHp = maxHpNear(c, firstMs);
       // the timing rule goes wrong only when another of the caster's spells
       // was reflected by the same reflector after Y and before the row
       const stolenBy = new Set(
-        reflects
+        ((c.missesOut ?? []) as any[])
           .filter(
-            (x) => tsOf(x) > tsOf(hit) && nameOf(x.spellId, x.spellName) !== y,
+            (x) =>
+              x.missType === "REFLECT" &&
+              x.destUnitId === r &&
+              tsOf(x) <= ts &&
+              tsOf(x) > tsOf(hit) &&
+              nameOf(x.spellId, x.spellName) !== y,
           )
           .map((x) => nameOf(x.spellId, x.spellName)),
       );
       // a return under the 5 % floor prints no line of its own, so neither
       // kind can be read off it (review 20-F24-01: 14bb43b3 2:39 Twin Flame
       // 17k = 1.3 % beside a Living Flame line of its own)
-      if (!maxHp || (amount / maxHp) * 100 < REFLECT_MIN_DAMAGE_PCT) continue;
+      if (!maxHp || (total / maxHp) * 100 < REFLECT_MIN_DAMAGE_PCT) continue;
       const kind = span.some((l) => stolenBy.has(l.spell))
         ? "misnamed"
         : span.length === 0
@@ -355,7 +436,7 @@ function wardReturns(ctx: IRoundCtx): void {
         kind,
         ts,
         `${c.name}#${Math.floor((ts - ctx.start) / 1000)}#${y}`,
-        `${y} came back ${Math.round(amount / 1000)}k under Nether Ward at ${fmtS((ts - ctx.start) / 1000)}; lines: ${span.map((l) => l.spell).join(", ") || "none"}`,
+        `${y} came back ${Math.round(total / 1000)}k under Nether Ward at ${fmtS((ts - ctx.start) / 1000)}; lines: ${span.map((l) => l.spell).join(", ") || "none"}`,
       );
     }
   }

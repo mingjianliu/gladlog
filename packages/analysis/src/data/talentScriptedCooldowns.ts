@@ -993,12 +993,17 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // of 180. Replay (6 files, 161 presses): static 53 impossible, reset to
   // full charges 9, one charge 15. (Leaving Void Meta as a second reset
   // would take 9 → 6 — unproven, not modelled.)
+  // Voidblade 1245412 (its Void Meta variant Pierce the Veil 1245483 is the
+  // same button, `overrideVariantsGenerated`) is named by the tooltip on both
+  // eras (12.1.0.69587 "… resets the cooldown of Voidblade and The Hunt",
+  // 12.1.5 "… Voidblade and Soul Immolation"); GH #179: the `[PRESS]` line's
+  // `back` sat 9–20 s after a Pierce the Veil pressed right after an entry.
   "452409": {
-    targets: ["1241937"],
+    targets: ["1241937", "1245412"],
     triggerCastIds: [],
     triggerSelfAuraAppliedIds: ["1217607"],
     seconds: Number.POSITIVE_INFINITY,
-    note: "Violent Transformation — entering Void Metamorphosis resets Soul Immolation",
+    note: "Violent Transformation — entering Void Metamorphosis resets Soul Immolation and Voidblade",
   },
   // Cold Snap (Frost, 235219): resets Ice Block and Ice Barrier (and Frost
   // Nova / Cone of Cold, not ledger spells). 0.5 % of Frost hold it (the

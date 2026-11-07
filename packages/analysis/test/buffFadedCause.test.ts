@@ -79,7 +79,12 @@ describe("[BUFF FADED] end causes (FT-T08)", () => {
         { ...base, dispelUnclear: true },
         { ...base, cause: "ended_early", dispelUnclear: true },
         // …and it is not dropped behind an empty shield or a death (codex post-hoc review)
-        { ...base, cause: "absorbed", absorb: { absorbed: 20_000, left: 0 }, dispelUnclear: true },
+        {
+          ...base,
+          cause: "absorbed",
+          absorb: { absorbed: 20_000, left: 0 },
+          dispelUnclear: true,
+        },
         { ...base, cause: "target_death", dispelUnclear: true },
       ]).map((l) => l.replace("0:13  [BUFF FADED]   Ice Barrier", "").trim()),
     ).toEqual([
@@ -94,6 +99,32 @@ describe("[BUFF FADED] end causes (FT-T08)", () => {
       "(a dispel of this spell is logged at that moment — not which copy it took)",
       "(used up — absorbed 20k; a dispel of this spell is logged at that moment — not which copy it took)",
       "(its target died; a dispel of this spell is logged at that moment — not which copy it took)",
+    ]);
+  });
+
+  it("an early end with no cause reads its length — GH #173 (user ruling 2026-11-07)", () => {
+    expect(
+      render([
+        { ...base, cause: "ended_early", ranForS: 3.04, fullS: 10 },
+        {
+          ...base,
+          cause: "ended_early",
+          ranForS: 4.96,
+          fullS: 12.5,
+          absorb: { absorbed: 60_000 },
+        },
+        {
+          ...base,
+          cause: "ended_early",
+          channelStoppedAfterS: 1.9,
+          ranForS: 1.9,
+          fullS: 8,
+        },
+      ]).map((l) => l.replace("0:13  [BUFF FADED]   Ice Barrier", "").trim()),
+    ).toEqual([
+      "(ended after 3.0 of 10s — no dispel logged)",
+      "(ended after 5.0 of 12.5s — 60k absorbed; no dispel logged)",
+      "(ended after 1.9 of 8s — the channel stopped)",
     ]);
   });
 });

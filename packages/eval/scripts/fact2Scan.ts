@@ -173,8 +173,9 @@
  *  - `hotPressHp` (new: press HP): a `[YOU] [CD]   <Spell> (self: N% HP`
  *    line whose press has its own heal row on the owner (a direct heal within
  *    PRESS_EFFECT_LEAD_MS of the cast row, a first HoT tick on its own fresh
- *    aura within AURA_BEFORE_CAST_ROW_MAX_MS; up to 50 ms after): N is the
- *    owner's last reading strictly before that heal (± 1).
+ *    aura within AURA_BEFORE_CAST_ROW_MAX_MS; none after the cast row, as
+ *    `hpAtPress` reads it): N is the owner's last reading strictly before
+ *    that heal (± 1).
  *  - `fadedDebuff` (new: reflected control): a `[BUFF FADED]   X` line while
  *    the owner's only X rows that round are DEBUFFs it put on itself.
  *  - `nonControlCount` (new: CC USE): a `Counts:` entry whose spell, when the
@@ -199,7 +200,9 @@
  *    (Greater Invisibility, Vanish, Mass Invisibility, Burrow — the
  *    auras whose end the log does not show). N may not exceed the time from
  *    the aura's APPLIED (inside the burst, or the last before it) to the
- *    target's first damage after it, clipped to the burst (± 1 s).
+ *    holder's first own action after it (`holderFirstOwnActionAfterMs`: its
+ *    press or own hit, not a pet's hit or a DoT tick), clipped to the burst
+ *    (± 1 s).
  *
  *   npx tsx packages/eval/scripts/fact2Scan.ts <captureDir> [--examples N] [--archive-dir <dir>]
  */
@@ -242,6 +245,7 @@ import {
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "@gladlog/analysis/src/utils/dispelKind";
 import {
+  holderFirstOwnActionAfterMs,
   isExternalSaveId,
   SELF_SAVE_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -1611,7 +1615,10 @@ function runRound(ctx: IContext): void {
             if (h.srcUnitId !== owner.id || !h.spellId) return false;
             if (!isOf(h.spellId, pm[2]!)) return false;
             const d = h.logLine.timestamp - sMs;
-            if (d > 50) return false;
+            // a heal logged after the cast row is not in the product's lead
+            // (`hpAtPress` reads heals up to the press only — GH #173: the
+            // check took one up to 50 ms after and cut past the press)
+            if (d > 0) return false;
             return h.logLine.event === LogEvent.SPELL_PERIODIC_HEAL
               ? d >= -AURA_BEFORE_CAST_ROW_MAX_MS && freshAuraBy(h)
               : d >= -PRESS_EFFECT_LEAD_MS;
@@ -1815,25 +1822,31 @@ function runRound(ctx: IContext): void {
             l,
           );
         if (!im || !tgt) continue;
-        const applies = ((tgt.auraEvents ?? []) as any[])
-          .filter(
-            (a) =>
-              a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-              getEnglishSpellName(a.spellId, "") === im[1],
-          )
-          .map((a) => a.timestamp as number);
-        const apply =
+        const applies = ((tgt.auraEvents ?? []) as any[]).filter(
+          (a) =>
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            getEnglishSpellName(a.spellId, "") === im[1],
+        );
+        const applyRow =
           im[3] === "already up"
-            ? applies.filter((t) => t <= bFrom).at(-1)
+            ? applies.filter((a) => a.timestamp <= bFrom).at(-1)
             : applies.find(
-                (t) => Math.abs(t - (bFrom + Number(im[4]) * 1000)) <= 1500,
+                (a) =>
+                  Math.abs(a.timestamp - (bFrom + Number(im[4]) * 1000)) <=
+                  1500,
               );
-        if (apply === undefined) continue;
-        const firstHit = ((tgt.damageOut ?? []) as any[])
-          .map((d) => d.logLine.timestamp as number)
-          .filter((t) => t > apply)
-          .sort((a, b) => a - b)[0];
-        const end = Math.min(firstHit ?? Infinity, bTo);
+        if (applyRow === undefined) continue;
+        const apply = applyRow.timestamp as number;
+        // the holder's own action (its press or own hit — not its pet's
+        // hits nor its DoT ticks: 6804c59a5, GH #173 `invisAfterAction`
+        // was still reading every damageOut row)
+        const firstAction = holderFirstOwnActionAfterMs(
+          tgt,
+          apply,
+          String(applyRow.spellId),
+          units,
+        );
+        const end = Math.min(firstAction, bTo);
         const maxS = Math.max(0, (end - Math.max(apply, bFrom)) / 1000);
         bump("invisAfterAction");
         if (Number(im[2]) > maxS + 1)

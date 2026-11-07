@@ -262,6 +262,10 @@ function selfOnlyHeldDualRole(ctx: IRoundCtx): void {
 /** Measurement, not a verdict: per spell, how many of its `[BUFF FADED]` lines
  * say `ended early — no dispel logged`. A spell at most of its lines is a run
  * that ends with the action, not early (Deep Breath, Predator's Wake). */
+/** an early end with no cause, either wording: `ended early — no dispel
+ * logged` (before GH #173) or `ended after N of M s — no dispel logged` */
+const EARLY_NO_CAUSE =
+  /\((?:ended early|ended after [\d.]+ of [\d.]+s) — no dispel logged\)/;
 const FADE_LINE = /\[BUFF FADED\]\s+(?:\d+\([^)]*\)[^:]*: )?(.+?) \(/;
 let fades = new Map<string, { all: number; early: number }>();
 
@@ -271,7 +275,7 @@ function fadeEarlyShare(ctx: IRoundCtx): void {
     if (!name) continue;
     const f = fades.get(name) ?? { all: 0, early: 0 };
     f.all++;
-    if (line.includes("(ended early — no dispel logged)")) f.early++;
+    if (EARLY_NO_CAUSE.test(line)) f.early++;
     fades.set(name, f);
   }
 }

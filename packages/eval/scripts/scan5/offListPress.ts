@@ -23,6 +23,16 @@
  *    duration is too short: an aura cannot outlive its duration); a floor
  *    (`lasts 10s+`, `pressDuration`'s `floor` — Timewalker) is not held to
  *    it;
+ *    …unless the log went silent across the printed end and the REMOVED
+ *    sits in the burst that ended the silence (`stallAcross`, out of the
+ *    total as `lastsLogStall`: GH #179, 5b724629 r5 Explosive Shot — no row
+ *    from anyone for 2.6 s over its 4 s end, the REMOVED 0.2 s into the
+ *    383-row burst after it); the end the log shows is the flush, not the
+ *    aura's;
+ *  - a next press after the round's end of play (`roundEndAt`) is no next
+ *    press: a Solo Shuffle round's rows run into the next round's
+ *    preparation, where Arena Preparation resets every cooldown (GH #179,
+ *    c5b55e06 r1 Camouflage, 7b07c1de r1 Dream Breath);
  *  - `lastsOvershoot` (out of the total — a diagnostic): `lasts Ns`, and that
  *    row's aura was REMOVED (not broken, not dispelled) before half of N
  *    and more than `LASTS_SLACK_S` short of it. An aura may end early — a
@@ -63,6 +73,7 @@ import {
 export const CHECKS = ["offListPressLine"] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "offListPressLine|lastsOvershoot",
+  "offListPressLine|lastsLogStall",
 ]);
 
 const PRESS_LINE =
@@ -71,6 +82,53 @@ const PRESS_LINE =
 const BACK_SLACK_MS = 2000;
 /** an aura's logged life this far past the printed length is beyond it */
 const LASTS_SLACK_S = 0.65;
+/** a silence of the whole log this long is a stall (6 players and their
+ * pets write rows every few hundred ms) */
+const STALL_MS = 1000;
+/** the REMOVED this close after a stall's end is in the burst that flushed it */
+const STALL_BURST_MS = 500;
+
+const rowTimesCache = new WeakMap<object, number[]>();
+/** every row time of the round's units, ascending (the log's own clock):
+ * every row list a unit carries — every array on it, not a hand list: a
+ * swing's miss, an absorb or a heal-absorb row is not mirrored into
+ * `actionIn` / `actionOut`, and a list left out reads as silence (codex
+ * reviews) */
+function rowTimes(ctx: IRoundCtx): number[] {
+  const key = ctx.units as object;
+  const hit = rowTimesCache.get(key);
+  if (hit) return hit;
+  const out: number[] = [];
+  for (const u of ctx.units as any[])
+    for (const list of Object.values(u))
+      if (Array.isArray(list))
+        for (const r of list as any[]) {
+          const t = r && typeof r === "object" ? tsOf(r) : undefined;
+          if (typeof t === "number") out.push(t);
+        }
+  out.sort((a, b) => a - b);
+  rowTimesCache.set(key, out);
+  return out;
+}
+/** a silence of the log (≥ `STALL_MS`, no row from anyone) that began at or
+ * before `endMs` and ended after it, with `removedMs` in the burst that
+ * ended it: the REMOVED's time is the flush, the aura's own end unseen */
+function stallAcross(
+  ctx: IRoundCtx,
+  endMs: number,
+  removedMs: number,
+): { fromMs: number; toMs: number } | undefined {
+  const ts = rowTimes(ctx);
+  for (let i = 1; i < ts.length; i++) {
+    const p = ts[i - 1]!;
+    const q = ts[i]!;
+    if (q <= endMs) continue;
+    if (p > endMs) return undefined;
+    if (q - p >= STALL_MS && removedMs >= q && removedMs - q <= STALL_BURST_MS)
+      return { fromMs: p, toMs: q };
+  }
+  return undefined;
+}
 
 /** fact11 D42: a button whose press logs only its own aura
  * (`NO_CAST_LOG_PRESS_IDS` — Rain from Above, DB2 NO_CAST_LOG): the
@@ -198,6 +256,7 @@ export function run(ctx: IRoundCtx): void {
         .filter(
           (r) =>
             tsOf(r) > at + 50 &&
+            tsOf(r) <= ctx.roundEndAt &&
             !freeRows.has(r) &&
             !timeSpiralFreePressMs(unit, String(r.spellId), [tsOf(r)]).length,
         )
@@ -224,6 +283,7 @@ export function run(ctx: IRoundCtx): void {
         unit.spellCastEvents ?? [],
       );
       let life: number | undefined;
+      let removedMs: number | undefined;
       let removedClean = false;
       if (dur) {
         const rows = ((dur.unit.auraEvents ?? []) as any[]).filter(
@@ -235,6 +295,7 @@ export function run(ctx: IRoundCtx): void {
           const r = rows[j];
           if (ev(r) === REMOVED) {
             life = (tsOf(r) - start) / 1000;
+            removedMs = tsOf(r);
             // a REMOVED of the press's own millisecond, logged after the
             // APPLIED, may end the previous instance (a Between the Eyes
             // re-press re-merges): no overshoot reading off it
@@ -264,17 +325,34 @@ export function run(ctx: IRoundCtx): void {
         }
       }
       // a floor (`lasts 10s+`, Timewalker) holds no life to it
-      if (
+      const beyond =
         dur?.floor !== true &&
         life !== undefined &&
-        life > Number(lasts) + LASTS_SLACK_S
-      )
+        life > Number(lasts) + LASTS_SLACK_S;
+      // the printed end itself, as the life above measures it (from the
+      // row read): the silence must open at or before it — the slack is the
+      // overshoot's allowance only, never a window a silence may start in
+      // (codex review)
+      const stall =
+        beyond && dur && removedMs !== undefined
+          ? stallAcross(ctx, tsOf(dur.row) + Number(lasts) * 1000, removedMs)
+          : undefined;
+      if (stall)
+        ctx.violate(
+          "offListPressLine",
+          "lastsLogStall",
+          at,
+          `${ctx.roundKey}|${unit.id}|${name}|${second}`,
+          `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, REMOVED after ${life!.toFixed(1)}s, ${((stall.toMs - stall.fromMs) / 1000).toFixed(1)}s log silence before it`,
+          line,
+        );
+      else if (beyond)
         ctx.violate(
           "offListPressLine",
           "lastsBeyond",
           at,
           `${ctx.roundKey}|${unit.id}|${name}|${second}`,
-          `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, lived ${life.toFixed(1)}s`,
+          `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, lived ${life!.toFixed(1)}s`,
           line,
         );
       if (

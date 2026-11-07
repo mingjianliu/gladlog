@@ -459,6 +459,12 @@ export interface ICDExpiryEvent {
   /** cause ended_early on a channel: how long it ran before it stopped
    * (fact4 D44: a Tranquility cut 1.9 s into its 8 s read "expired") */
   channelStoppedAfterS?: number;
+  /** cause ended_early: how long it ran (press → removal) and the full
+   * length it was read against — the line states "ended after N of M s",
+   * not "ended early", on a buff the player often ends (GH #173, user
+   * ruling 2026-11-07) */
+  ranForS?: number;
+  fullS?: number;
 }
 
 const FORM_SHIFT_PAIR_MS = 250;
@@ -589,7 +595,12 @@ export function extractOwnerCDBuffExpiry(
     Partial<
       Pick<
         ICombatUnit,
-        "auraEvents" | "deathRecords" | "id" | "missesOut" | "damageOut" | "healOut"
+        | "auraEvents"
+        | "deathRecords"
+        | "id"
+        | "missesOut"
+        | "damageOut"
+        | "healOut"
       >
     >,
   /** the other side's units: Touch of Karma's debuff sits on one of them */
@@ -1231,6 +1242,12 @@ export function extractOwnerCDBuffExpiry(
           : {}),
         ...(channelStoppedAfterS !== undefined && cause === "ended_early"
           ? { channelStoppedAfterS }
+          : {}),
+        ...(cause === "ended_early" && !isEstimated
+          ? {
+              ranForS: expiresAtSeconds - cast.timeSeconds,
+              fullS: duration,
+            }
           : {}),
         spellId: cd.spellId,
         spellName: cd.spellName,

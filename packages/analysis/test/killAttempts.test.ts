@@ -844,6 +844,69 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
     ).toBe("Recklessness");
   });
 
+  it("GH #167 (user ruling 2026-11-07): an anchor every press of which was refused keeps its name and says so", () => {
+    // 3c0bbb48 r3 2:09: `Ray of Frost (cast into <the target>) burst` with
+    // every Ray of Frost into Ice Block — the anchor stays, the clause tells
+    const run = (refusedAt: number[], over: Record<string, unknown> = {}) => {
+      const e1 = unit("e1");
+      const f1 = unit("f1", {
+        reaction: 1,
+        spec: "71", // Arms Warrior
+        spellCastEvents: [
+          {
+            ...offensiveCast(40),
+            destUnitId: "e1",
+            destUnitName: "e1",
+          },
+        ],
+        damageOut: [dmg("f1", "e1", 42, 60_000)],
+        missesOut: refusedAt.map((s) => ({
+          spellId: "1719",
+          missType: "IMMUNE",
+          destUnitId: "e1",
+          timestamp: ms(s),
+          logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(s) },
+        })),
+        ...over,
+      });
+      const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+      return {
+        a: attempts[0]!,
+        text: formatKillAttemptsForContext(attempts).join("\n"),
+      };
+    };
+    const refused = run([40.01]);
+    expect(refused.a.anchorAllImmune).toBe(true);
+    expect(refused.text).toContain(
+      "Recklessness (cast into e1) burst (no stun) | every Recklessness press into the target logged IMMUNE | opportunity:",
+    );
+    expect(refused.text).toContain(
+      "`| every X press into the target logged IMMUNE` after a burst opener",
+    );
+    // control: the press went in — no clause, no legend
+    const landed = run([]);
+    expect(landed.a.anchorAllImmune).toBeUndefined();
+    expect(landed.text).not.toContain("logged IMMUNE");
+    // 1d9b0cbe 2:17: a hit of the caster's NEXT press of it is that press's,
+    // not this one landing anyway — the refused press still says so; a hit
+    // of its own before then does land it
+    const own1719 = (atS: number) => ({
+      ...dmg("f1", "e1", atS, 30_000),
+      spellId: "1719",
+      spellName: "Recklessness",
+    });
+    const later = (hitAtS: number) =>
+      run([40.01], {
+        spellCastEvents: [
+          { ...offensiveCast(40), destUnitId: "e1", destUnitName: "e1" },
+          offensiveCast(46),
+        ],
+        damageOut: [dmg("f1", "e1", 42, 60_000), own1719(hitAtS)],
+      });
+    expect(later(46.2).a.anchorAllImmune).toBe(true);
+    expect(later(45.8).a.anchorAllImmune).toBeUndefined();
+  });
+
   it("同目标已有重叠晕锚尝试 → 不再另立 burst 尝试(晕锚优先,去重)", () => {
     const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 40, 5) });
     const f1 = unit("f1", {

@@ -59,7 +59,8 @@ export const CYCLONE_SPELL_ID = "33786";
  * unit is banished, immune to everything, the caster's own team included.
  * One reader for "our own control made the target unhittable": the cause a
  * `[CC NOT LANDED]` / `[IMMUNE — …]` note names (`X's Cyclone was on the
- * target`, timelineSections/setup.ts, B17a) and the KILL ATTEMPTS clause
+ * target`, timelineSections/setup.ts, B17a; the enemy's on our own unit,
+ * `Cyclone was up`, GH #167) and the KILL ATTEMPTS clause
  * `target in your team's Cyclone a–b` (killAttempts.ts, I10). No list of its
  * own: it is `CYCLONE_SPELL_ID`.
  */
@@ -85,7 +86,7 @@ export function damageImmuneControlUpAt(
   unit: Pick<ICombatUnit, "auraEvents">,
   atMs: number,
   fullSecondsFor: (spellId: string, srcUnitId: string) => number | undefined,
-): { srcUnitId: string; sinceMs: number } | undefined {
+): { srcUnitId: string; sinceMs: number; spellId: string } | undefined {
   let on: { srcUnitId: string; sinceMs: number; spellId: string } | undefined;
   for (const a of unit.auraEvents ?? []) {
     if (a.timestamp > atMs) break;
@@ -105,7 +106,7 @@ export function damageImmuneControlUpAt(
   if (!on) return undefined;
   const full = fullSecondsFor(on.spellId, on.srcUnitId);
   if (full !== undefined && atMs > on.sinceMs + full * 1000) return undefined;
-  return { srcUnitId: on.srcUnitId, sinceMs: on.sinceMs };
+  return on;
 }
 export { ICE_BLOCK_SPELL_ID };
 export const DIVINE_SHIELD_SPELL_ID = "642";

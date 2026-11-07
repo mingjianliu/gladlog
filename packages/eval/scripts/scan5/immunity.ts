@@ -56,6 +56,11 @@
  *    ATTEMPTS; ` (cast into …)` stripped) — every team press of X aimed at
  *    the target in [a − 3 s, b + 1 s] was refused. Lines whose X has no press
  *    aimed at the target are not checked (named off a hit of its effect).
+ *    GH #167 (user ruling 2026-11-07): such a line keeps its anchor and says
+ *    so (`| every X press into the target logged IMMUNE`,
+ *    `killAttemptAllImmuneClause`) — kind `clause missing` when it does not,
+ *    `clause wrong` when the clause stands on a burst a press of X went
+ *    into.
  *  - `immunityPressTag` (E, D14): every refused press of a player of the
  *    owner's side whose `[YOU]` / `[TEAM]` `[CD]` / `[CC]` / `[CAST]` /
  *    `[PROC]` line (its second, its caster, its English name) lacks
@@ -83,6 +88,7 @@
  * rows (a DoT tick says nothing of a press); runs longer than 30 s (passives)
  * never explain a miss.
  */
+import { castAndEffectIds } from "@gladlog/analysis/src/data/castEffectAuras";
 import { DR_CATEGORIES_GENERATED } from "@gladlog/analysis/src/data/drCategoriesGenerated";
 import mechanicsRaw from "@gladlog/analysis/src/data/spellMechanicsGenerated.json";
 import schoolsRaw from "@gladlog/analysis/src/data/spellSchoolsGenerated.json";
@@ -91,6 +97,8 @@ import {
   PRESS_LANDED_SAME_INSTANT_MS,
   PRESS_TRIGGERED_CAST_IDS,
 } from "@gladlog/analysis/src/utils/castMissRows";
+import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
+import { killAttemptAllImmuneClause } from "@gladlog/analysis/src/utils/killAttempts";
 
 import {
   APPLIED,
@@ -493,21 +501,26 @@ export function run(ctx: IRoundCtx): void {
     // Spellwarding, its physical leap 1253859 hitting for 574k in the same
     // millisecond
     const pressName = nameOf(c.spellId, c.spellName);
+    // the press's refusal is logged under its own id or an effect aura's
+    // (`castAndEffectIds`, as fact11 reads it): The Hunt 370965 misses as
+    // 370969, Touch of the Magi 321507 as 210824 (GH #167 605 run, two
+    // `clause wrong` that were these) — and so is its triggered impact's
+    // (`PRESS_TRIGGERED_CAST_IDS`: The Hunt's 370966 refused under 370966,
+    // the impact row itself skipped by E as no press — codex review)
     const hitIds = [id, ...(PRESS_TRIGGERED_CAST_IDS.get(id) ?? [])];
+    const family = new Set(hitIds.flatMap((h) => [...castAndEffectIds(h)]));
     const landedAt = (m: any) =>
       ((caster.damageOut ?? []) as any[]).some(
         (d) =>
           d.destUnitId === m.destUnitId &&
           Math.abs(tsOf(d) - tsOf(m)) <= PRESS_LANDED_SAME_INSTANT_MS &&
-          hitIds.some((h) =>
-            isPressHitRow(h, h === id ? pressName : "", d),
-          ),
+          hitIds.some((h) => isPressHitRow(h, h === id ? pressName : "", d)),
       );
     const miss = ((caster.missesOut ?? []) as any[]).some(
       (m) =>
         m.missType === "IMMUNE" &&
         ev(m) !== PERIODIC_MISS &&
-        String(m.spellId) === id &&
+        family.has(String(m.spellId)) &&
         m.destUnitId === c.destUnitId &&
         tsOf(m) >= t - PRESS_MISS_LEAD_MS &&
         tsOf(m) <= t + PRESS_MISS_WINDOW_MS &&
@@ -614,29 +627,52 @@ export function run(ctx: IRoundCtx): void {
       // inside the bracket and its 5 s after
       const landedAnyway = (u: any, c: any) => {
         const t = tsOf(c);
-        const next =
-          successesOf(u)
+        // the caster's next press of this spell id (the product's
+        // `landedAnywayOn`): a same-named impact row is no press — Takedown's
+        // leap 1253859 is logged as a cast at its own hit (s0/167-2 1:33)
+        const next = Math.min(
+          ...successesOf(u)
             .filter(
               (x) =>
-                nameOf(x.spellId, x.spellName) === anchor && tsOf(x) > t + 5,
+                String(x.spellId) === String(c.spellId) && tsOf(x) > t + 5,
             )
-            .map(tsOf)[0] ?? Infinity;
-        const hi = Math.min(next, ctx.start + (to + 5) * 1000);
+            .map(tsOf),
+        );
+        // the next press's own millisecond is its hit, not this one's (the
+        // product's `landedAnywayOn` cuts there too — codex review)
+        const hi = ctx.start + (to + 5) * 1000;
         return ((u.damageOut ?? []) as any[]).some(
           (d) =>
             d.destUnitId === target.id &&
             nameOf(d.spellId, d.spellName) === anchor &&
             tsOf(d) >= t &&
-            tsOf(d) <= hi,
+            tsOf(d) <= hi &&
+            tsOf(d) < next,
         );
       };
-      if (presses.every(({ u, c }) => refused(u, c) && !landedAnyway(u, c)))
+      const allRefused = presses.every(
+        ({ u, c }) => refused(u, c) && !landedAnyway(u, c),
+      );
+      const said = l.includes(`| ${killAttemptAllImmuneClause(anchor)}`);
+      // the clause stands on one burst, and the window above can hold a
+      // second caster's press of X that went into another one (codex
+      // review: Mage A refused at 0:40.0, Mage B's landed at 0:40.8, two
+      // attempts) — wrong only when no caster's presses were all refused
+      const oneCasterAllRefused = [...new Set(presses.map(({ u }) => u))].some(
+        (u) =>
+          presses
+            .filter((p) => p.u === u)
+            .every(({ c }) => refused(u, c) && !landedAnyway(u, c)),
+      );
+      if (said ? !oneCasterAllRefused : allRefused)
         ctx.violate(
           "immunityBurstAnchor",
-          anchor,
+          said ? "clause wrong" : "clause missing",
           tsOf(presses[0]!.c),
           `${target.name}:${from}-${to}`,
-          `${anchor} burst on ${target.name}: every press (${presses.map(({ c }) => fmtS(rel(tsOf(c)))).join(",")}) logged IMMUNE on it`,
+          said
+            ? `${anchor} burst on ${target.name}: says every press logged IMMUNE, but one of (${presses.map(({ c }) => fmtS(rel(tsOf(c)))).join(",")}) went in`
+            : `${anchor} burst on ${target.name}: every press (${presses.map(({ c }) => fmtS(rel(tsOf(c)))).join(",")}) logged IMMUNE on it, and the line does not say so`,
           l,
         );
       continue;
@@ -731,10 +767,15 @@ export function run(ctx: IRoundCtx): void {
   for (const u of ctx.players.filter(ours)) {
     const label =
       u.id === ctx.owner.id ? "[YOU]" : `${ctx.pidOf(u.name) ?? "?"}(`;
+    const rows = (u.spellCastEvents ?? []) as any[];
     for (const c of successesOf(u)) {
       const t = tsOf(c);
       if (t < ctx.start || t > ctx.roundEndAt || !enemyIds.has(c.destUnitId))
         continue;
+      // a press's impact / companion row is that press, not another
+      // (`isNoPressRow`, the producer's reading): The Hunt's 370966 impact,
+      // refused under 370969, has its press's line at the press's second
+      if (isNoPressRow(c, rows)) continue;
       if (!refused(u, c)) continue;
       ctx.bump("immunityPressTag");
       const name = nameOf(c.spellId, c.spellName);

@@ -25,7 +25,12 @@ const aura = (event: LogEvent, spellId: string, ms: number): any => ({
   destUnitId: "p1",
 });
 
-function scan(unit: any, lines: string[], other?: any) {
+function scan(
+  unit: any,
+  lines: string[],
+  other?: any,
+  roundEndAt = at(600_000),
+) {
   const seen: Array<{ kind: string; detail: string }> = [];
   run({
     lines,
@@ -34,6 +39,7 @@ function scan(unit: any, lines: string[], other?: any) {
     unitOfPid: (pid: string) =>
       pid === "1" ? unit : pid === "2" ? other : undefined,
     start: START,
+    roundEndAt,
     roundKey: "r",
     violate: (
       _c: string,
@@ -188,5 +194,115 @@ describe("offListPressLine — the next press", () => {
     ]);
     expect(seen.map((v) => v.kind)).toEqual(["backBeforeNextPress"]);
     expect(seen[0]!.detail).toContain("pressed 0:20");
+  });
+});
+
+describe("offListPressLine — scan artefacts (GH #179)", () => {
+  it("a press after the round's end of play is no next press (Shuffle preparation, c5b55e06 r1)", () => {
+    // Camouflage at 0:00, the round over at 0:14, pressed again at 0:48 in
+    // the next round's preparation (Arena Preparation resets cooldowns)
+    const unit = {
+      id: "p1",
+      name: "Hunter",
+      spellCastEvents: [cast("199483", 431), cast("199483", 48_000)],
+      auraEvents: [],
+    };
+    const line = [
+      "0:00  [PRESS]   1(SHunter) (Survival Hunter): Camouflage (60s cd, back 1:00)",
+    ];
+    expect(scan(unit, line, undefined, at(14_000))).toEqual([]);
+    expect(scan(unit, line, undefined, at(60_000)).map((v) => v.kind)).toEqual([
+      "backBeforeNextPress",
+    ]);
+  });
+
+  // Sprint pressed at 0:10 on itself, its REMOVED at 0:22 (12 s against a
+  // printed 8 s); `filler` rows from the round's units up to `quietFromMs`,
+  // swing misses (`missesIn` only, never mirrored into the action lists)
+  // after it when `missesAfter`
+  const sprinter = (quietFromMs: number, missesAfter = false): any => {
+    const filler: any[] = [];
+    for (let ms = 10_200; ms <= 21_800; ms += 200)
+      if (ms <= quietFromMs)
+        filler.push({
+          logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: at(ms) },
+          timestamp: at(ms),
+          spellId: "1",
+          srcUnitId: "p1",
+        });
+    const misses: any[] = [];
+    if (missesAfter)
+      for (let ms = 10_200; ms <= 21_800; ms += 200)
+        if (ms > quietFromMs)
+          misses.push({
+            logLine: { event: LogEvent.SWING_MISSED, timestamp: at(ms) },
+            timestamp: at(ms),
+            missType: "MISS",
+            srcUnitId: "p2",
+            destUnitId: "p1",
+          });
+    return {
+      id: "p1",
+      name: "Rogue",
+      spellCastEvents: [{ ...cast("2983", 10_000), destUnitId: "p1" }],
+      actionOut: filler,
+      missesIn: misses,
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "2983", 10_000),
+        aura(LogEvent.SPELL_AURA_REMOVED, "2983", 22_000),
+      ],
+    };
+  };
+  const sprintLine = [
+    "0:10  [PRESS]   1(ORogue) (Outlaw Rogue): Sprint (60s cd, lasts 8s, back 1:10)",
+  ];
+
+  it("a REMOVED the log wrote on time past the printed length is lastsBeyond", () => {
+    expect(scan(sprinter(Infinity), sprintLine).map((v) => v.kind)).toEqual([
+      "lastsBeyond",
+    ]);
+  });
+
+  it("a REMOVED in the burst after a log silence across the printed end is a stall (5b724629 r5)", () => {
+    // no row from anyone 0:17–0:22, the REMOVED in the flush at 0:22
+    const seen = scan(sprinter(17_000), sprintLine);
+    expect(seen.map((v) => v.kind)).toEqual(["lastsLogStall"]);
+    expect(seen[0]!.detail).toContain("5.0s log silence");
+  });
+
+  it("a silence that began after the printed end explains nothing", () => {
+    // rows up to 0:20 (past 0:18.65), quiet to 0:22
+    expect(scan(sprinter(20_000), sprintLine).map((v) => v.kind)).toEqual([
+      "lastsBeyond",
+    ]);
+  });
+
+  it("a silence that opened inside the overshoot slack, past the printed end, explains nothing (codex review)", () => {
+    // rows up to 0:18.2 — 0.2 s past the printed 0:18, inside the slack
+    expect(scan(sprinter(18_200), sprintLine).map((v) => v.kind)).toEqual([
+      "lastsBeyond",
+    ]);
+  });
+
+  it("heal-absorb rows logged through the gap mean the log never went quiet (codex review)", () => {
+    const u = sprinter(17_000);
+    u.healAbsorbsIn = [];
+    for (let ms = 17_200; ms <= 21_800; ms += 200)
+      u.healAbsorbsIn.push({
+        timestamp: at(ms),
+        absorbSpellId: "223929",
+        absorbedAmount: 1000,
+        logLine: {
+          event: "SPELL_HEAL_ABSORBED" as LogEvent,
+          timestamp: at(ms),
+        },
+      });
+    expect(scan(u, sprintLine).map((v) => v.kind)).toEqual(["lastsBeyond"]);
+  });
+
+  it("swing misses logged through the gap mean the log never went quiet (codex review)", () => {
+    expect(scan(sprinter(17_000, true), sprintLine).map((v) => v.kind)).toEqual(
+      ["lastsBeyond"],
+    );
   });
 });
