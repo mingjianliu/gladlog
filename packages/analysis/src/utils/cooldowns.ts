@@ -21,6 +21,7 @@ import {
   isCastOrEffect,
 } from "../data/castEffectAuras";
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
+import { setPiecesWorn } from "../data/classSetBonuses";
 import { classMetadata } from "../data/classSpells";
 import CONDITIONAL_COOLDOWNS from "../data/conditionalCooldownsGenerated.json";
 import {
@@ -6045,7 +6046,11 @@ function buildCooldownEntry(
   const roundEndAtMs = matchStartMs + matchDurationSeconds * 1000;
   const resetAtSeconds = eventTriggersFor(
     unit,
-    reductions.filter((r) => r.seconds === Number.POSITIVE_INFINITY),
+    // a dated row (GH #193) resolves per trigger below
+    reductions.filter(
+      (r) =>
+        typeof r.seconds !== "number" || r.seconds === Number.POSITIVE_INFINITY,
+    ),
     holds,
     rankOf,
     roundEndAtMs,
@@ -6203,7 +6208,14 @@ function buildCooldownEntry(
   // `PER_PRESS_STACK_COOLDOWNS`): the base the event reductions start from;
   // with none to apply, the press's override
   const stackCd = PER_PRESS_STACK_COOLDOWNS[spell.spellId];
-  if (stackCd && holds(stackCd.talentSpellId) && baselineCharges <= 1)
+  if (
+    stackCd &&
+    holds(stackCd.talentSpellId) &&
+    (!stackCd.requiresSet ||
+      setPiecesWorn(unit, stackCd.requiresSet.itemSetId) >=
+        stackCd.requiresSet.pieces) &&
+    baselineCharges <= 1
+  )
     for (const c of casts) {
       if (c.cooldownSecondsOverride !== undefined) continue;
       const stacks = Math.min(

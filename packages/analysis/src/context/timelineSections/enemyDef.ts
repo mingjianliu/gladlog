@@ -22,6 +22,7 @@ import {
 import {
   ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
+  ENEMY_DEF_ENDED_BY_HIT,
   ENEMY_DEF_NO_AURA_LOGGED,
   ENEMY_DEF_NO_PRESS_TAG,
   ENEMY_DEF_UNSEEN_PRESS_TAG,
@@ -153,7 +154,9 @@ export function emitEnemyDefEntries(
           : "";
         const earlyNote = d.upAtRoundEnd
           ? ` — ${AURA_STILL_UP_AT_ROUND_END}`
-          : !d.removedEarly
+          : d.endedByHit
+            ? ` — ${ENEMY_DEF_ENDED_BY_HIT}`
+            : !d.removedEarly
             ? ""
             : end?.takenBy
               ? ` — ${end.takenBy.kind} by ${taker}`

@@ -147,7 +147,10 @@ import {
 } from "@gladlog/analysis/src/context/resRow";
 import { isControlSpell } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
-import { AURA_ONLY_ACTIVATION_IDS, NO_CAST_LOG_PRESS_IDS } from "@gladlog/analysis/src/data/auraActivation";
+import {
+  AURA_ONLY_ACTIVATION_IDS,
+  NO_CAST_LOG_PRESS_IDS,
+} from "@gladlog/analysis/src/data/auraActivation";
 import {
   castAndEffectIds,
   castsOfEffectAura,
@@ -164,7 +167,10 @@ import {
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { ENEMY_AREA_SAVE_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
-import { isButtonPress } from "@gladlog/analysis/src/utils/castCommitSpans";
+import {
+  CHANNEL_AURA_TAIL,
+  isButtonPress,
+} from "@gladlog/analysis/src/utils/castCommitSpans";
 import {
   isControlCast,
   PRESS_LANDED_SAME_INSTANT_MS,
@@ -203,6 +209,7 @@ import {
   REMOVED,
   secOf,
   SUCCESS,
+  successesOf,
   tsOf,
 } from "./ctx";
 
@@ -232,6 +239,7 @@ export const CHECKS = [
   "auraOnlyPressNoLine",
   "immunityBaitedSelfBroken",
   "primeRacialReadyUnstated",
+  "stealthImmuneThroughHit",
 ] as const;
 
 export function run(ctx: IRoundCtx): void {
@@ -254,6 +262,7 @@ export function run(ctx: IRoundCtx): void {
   auraOnlyPressNoLine(ctx);
   immunityBaitedSelfBroken(ctx);
   primeRacialReadyUnstated(ctx);
+  stealthImmuneThroughHit(ctx);
   ownShieldNotPopped(ctx);
   ownerGroundedUnstated(ctx);
   castStopUnderUnloggedSilence(ctx);
@@ -263,7 +272,7 @@ export function run(ctx: IRoundCtx): void {
 }
 
 const CHANNELED_LINE =
-  /^(\d+:\d{2})\s+\[YOU\] \[CD\]\s+(.+?)(?: \[[^\]]*\])? \(channeled ([\d.]+)s, ended (\d+:\d{2})\)/;
+  /^(\d+:\d{2})\s+\[YOU\] \[CD\]\s+(.+?)(?: \[[^\]]*\])? \(channeled ([\d.]+)s, ended (\d+:\d{2})(?:; [^)]*)?\)/;
 
 const castsOf = (u: any): any[] =>
   ((u.spellCastEvents ?? []) as any[]).filter((c) => ev(c) === SUCCESS);
@@ -311,6 +320,10 @@ function channelEndOnOwnRow(ctx: IRoundCtx): void {
     const printedEndS = secOf(m[4]!);
     const trueEndS = (tsOf(removed) - ctx.start) / 1000;
     if (!(trueEndS > printedEndS + 1)) continue;
+    // GH #194: the channel is its bolts and the line states the aura's own
+    // end beside it — consistent when that end is the REMOVED row's second
+    const tail = new RegExp(`; ${CHANNEL_AURA_TAIL} (\\d+:\\d{2})\\)`).exec(l);
+    if (tail && Math.abs(secOf(tail[1]!) - Math.floor(trueEndS)) <= 1) continue;
     const otherInside = [
       ...castsOf(owner),
       ...((owner.castStartEvents ?? []) as any[]),
@@ -810,35 +823,52 @@ function allyOverlapPastAura(ctx: IRoundCtx): void {
       if (n < 2) continue;
       const u = ctx.byName.get(ally);
       if (!u) continue;
-      const rows = ((u.auraEvents ?? []) as any[])
+      // the ally's runs of the name on any unit (GH #196: Colossus Smash and
+      // Feral Frenzy run as the debuff / bleed on the target, their own
+      // aura on the ally a blip), unioned and clipped to the burst. The
+      // parser keeps each aura row on its recipient only, so the rows are
+      // every unit's, filtered by the ally as their source
+      const rows = (ctx.units as any[])
+        .flatMap((x) => (x.auraEvents ?? []) as any[])
         .filter(
           (a) =>
-            a.srcUnitId === u.id &&
-            a.destUnitId === u.id &&
-            nameOf(a.spellId, a.spellName) === name,
+            a.srcUnitId === u.id && nameOf(a.spellId, a.spellName) === name,
         )
         .sort((a, b) => tsOf(a) - tsOf(b));
       if (!rows.some((a) => ev(a) === APPLIED)) continue;
       ctx.bump("allyOverlapPastAura");
-      // the union of the ally's own runs of the name, clipped to the burst
+      const runs: Array<[number, number]> = [];
+      const openAt = new Map<string, number>();
+      for (const a of rows) {
+        const k = `${a.destUnitId}|${a.spellId}`;
+        if (ev(a) === APPLIED && !openAt.has(k)) openAt.set(k, tsOf(a));
+        else if (ev(a) === REMOVED && openAt.has(k)) {
+          runs.push([openAt.get(k)!, tsOf(a)]);
+          openAt.delete(k);
+        }
+      }
+      for (const t0 of openAt.values())
+        runs.push([t0, Math.min(toMs, ctx.end)]);
+      runs.sort((a, b) => a[0] - b[0]);
       let covered = 0;
       let longestRunS = 0;
-      let open: number | null = null;
-      let openId = "";
-      const close = (endMs: number) => {
-        if (open === null) return;
-        covered += Math.max(0, Math.min(endMs, toMs) - Math.max(open, fromMs));
-        longestRunS = Math.max(longestRunS, (endMs - open) / 1000);
-        open = null;
+      let cur: [number, number] | null = null;
+      const flush = () => {
+        if (!cur) return;
+        covered += Math.max(
+          0,
+          Math.min(cur[1], toMs) - Math.max(cur[0], fromMs),
+        );
+        longestRunS = Math.max(longestRunS, (cur[1] - cur[0]) / 1000);
       };
-      for (const a of rows) {
-        if (ev(a) === APPLIED && open === null) {
-          open = tsOf(a);
-          openId = String(a.spellId);
-        } else if (ev(a) === REMOVED && String(a.spellId) === openId)
-          close(tsOf(a));
+      for (const r of runs) {
+        if (cur && r[0] <= cur[1]) cur[1] = Math.max(cur[1], r[1]);
+        else {
+          flush();
+          cur = [r[0], r[1]];
+        }
       }
-      close(Math.min(toMs, ctx.end));
+      flush();
       const coveredS = covered / 1000;
       // an effect that lives on another unit (Predator's Wake's The Hunt DoT
       // on its target) is not this aura's to bound — its own aura on the
@@ -993,7 +1023,9 @@ function noTeamBurstPress(ctx: IRoundCtx, name: string): boolean {
     );
   return (
     casts.length > 0 &&
-    casts.every(({ u, id }) => isHealerSpec(u.spec) && !countsAsTeamBurst(u, id))
+    casts.every(
+      ({ u, id }) => isHealerSpec(u.spec) && !countsAsTeamBurst(u, id),
+    )
   );
 }
 
@@ -1420,6 +1452,112 @@ function primeRacialReadyUnstated(ctx: IRoundCtx): void {
   }
 }
 
+/** The three stealth-kind immunities of U-KA3 / U-KA3b, by logged aura id. */
+const STEALTH_IMMUNE_AURAS: Readonly<Record<string, string>> = {
+  "11327": "Vanish",
+  "409293": "Burrow",
+  "414664": "Mass Invisibility",
+};
+const SWINGS = new Set([
+  "SWING_DAMAGE",
+  "SWING_DAMAGE_LANDED",
+  "RANGE_DAMAGE",
+  "SWING_MISSED",
+  "RANGE_MISSED",
+]);
+
+/** GH #195 (user ruling 2026-11-07): the first aimed hit on `unit` in
+ * (`appliedMs` + 1 s, `untilMs`) — a swing or ranged auto-attack, hit or
+ * missed but not IMMUNE, or a spell hit / miss whose source pressed a
+ * same-named spell at the unit after `appliedMs`. Read off the log rows. */
+function aimedHitAfterMs(
+  ctx: IRoundCtx,
+  unit: any,
+  appliedMs: number,
+  untilMs: number,
+  /** the closing row's line: a hit logged before it in its ms counts */
+  untilLineIndex?: number,
+): number | undefined {
+  let first: number | undefined;
+  const rows = [
+    ...((unit.damageIn ?? []) as any[]),
+    ...((unit.missesIn ?? []) as any[]).filter((m) => m.missType !== "IMMUNE"),
+  ];
+  for (const r of rows) {
+    const t = tsOf(r);
+    const beforeEnd =
+      t < untilMs ||
+      (t === untilMs &&
+        untilLineIndex !== undefined &&
+        r.logLine?.lineIndex !== undefined &&
+        r.logLine.lineIndex < untilLineIndex);
+    if (t <= appliedMs + 1000 || !beforeEnd) continue;
+    if (first !== undefined && t >= first) continue;
+    const e = ev(r);
+    if (SWINGS.has(e)) {
+      first = t;
+      continue;
+    }
+    if (e !== "SPELL_DAMAGE" && e !== "SPELL_MISSED") continue;
+    const src = (ctx.units as any[]).find((u) => u.id === r.srcUnitId);
+    const name = nameOf(r.spellId, r.spellName ?? "");
+    if (
+      src &&
+      successesOf(src).some(
+        (c) =>
+          c.destUnitId === unit.id &&
+          tsOf(c) >= appliedMs &&
+          tsOf(c) <= t &&
+          nameOf(c.spellId, c.spellName ?? "") === name,
+      )
+    )
+      first = t;
+  }
+  return first;
+}
+
+const STEALTH_IMMUNE_LINE =
+  /^(\d+:\d{2})\s+\[ENEMY DEF\]\s+(\d+)\(\w+\) \([^)]*\): (Vanish|Burrow|Mass Invisibility) \(immune, ([\d.]+)s/;
+
+/** GH #195: an `[ENEMY DEF]` stealth-kind immunity printed `(immune, Ns)`
+ * past an aimed hit more than 1 s after its aura went up. */
+function stealthImmuneThroughHit(ctx: IRoundCtx): void {
+  for (const l of ctx.lines) {
+    const m = STEALTH_IMMUNE_LINE.exec(l);
+    if (!m) continue;
+    const unit = ctx.unitOfPid(m[2]) as any;
+    if (!unit) continue;
+    const sec = secOf(m[1]!);
+    const applied = ((unit.auraEvents ?? []) as any[]).find(
+      (a) =>
+        ev(a) === APPLIED &&
+        a.destUnitId === unit.id &&
+        STEALTH_IMMUNE_AURAS[String(a.spellId)] === m[3] &&
+        Math.floor((tsOf(a) - ctx.start) / 1000) === sec,
+    );
+    if (!applied) continue;
+    ctx.bump("stealthImmuneThroughHit");
+    const printedS = Number(m[4]);
+    const hit = aimedHitAfterMs(
+      ctx,
+      unit,
+      tsOf(applied),
+      tsOf(applied) + (printedS + 0.05) * 1000,
+    );
+    if (hit === undefined) continue;
+    const hitS = (hit - tsOf(applied)) / 1000;
+    if (!(printedS > hitS + 0.05)) continue;
+    ctx.violate(
+      "stealthImmuneThroughHit",
+      m[3]!,
+      tsOf(applied),
+      `${unit.name}:${m[1]}:${m[3]}`,
+      `${unit.name} ${m[3]} at ${m[1]}: aimed hit ${hitS.toFixed(2)}s in, printed immune ${printedS}s`,
+      l,
+    );
+  }
+}
+
 function immunityBaitedSelfBroken(ctx: IRoundCtx): void {
   for (const l of ctx.lines) {
     const m = KILL_ATTEMPT_LINE.exec(l);
@@ -1443,6 +1581,26 @@ function immunityBaitedSelfBroken(ctx: IRoundCtx): void {
     ctx.bump("immunityBaitedSelfBroken");
     const selfBroken = (a: any): boolean => {
       const id = String(a.spellId);
+      // GH #195: one an aimed hit ended past its first second did not hold
+      if (STEALTH_IMMUNE_AURAS[id]) {
+        const removed = auras.find(
+          (r) =>
+            ev(r) === REMOVED && String(r.spellId) === id && tsOf(r) > tsOf(a),
+        );
+        const endMs = removed
+          ? tsOf(removed)
+          : tsOf(a) + (spellEffectData[id]?.durationSeconds ?? 0) * 1000;
+        if (
+          aimedHitAfterMs(
+            ctx,
+            target,
+            tsOf(a),
+            endMs,
+            removed?.logLine?.lineIndex,
+          ) !== undefined
+        )
+          return true;
+      }
       if (!KW_UNTARGETABLE_AURA_IDS.has(id)) return false;
       const lenMs = (spellEffectData[id]?.durationSeconds ?? 0) * 1000;
       if (

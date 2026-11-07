@@ -956,6 +956,7 @@ export function reconstructEnemyCDTimeline(
             matchStartMs + cd.castTimeSeconds * 1000,
             matchStartMs + untilS * 1000,
             cd.spellName,
+            next !== undefined && next.castTimeSeconds <= cd.buffEndSeconds,
           )
             ? cd.castTimeSeconds
             : Math.max(

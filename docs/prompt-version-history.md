@@ -5490,6 +5490,27 @@ Incarnation: Chosen of Elune, 3 lines). 605 set against 8d72336ad: 1,035
 of 3,519 context files change, 0 findings files; immunityBurstAnchor 17 (6)
 → 0, offListPressLine 306 → 68 (same scanner).
 
+v499 (2026-11-07, GH #192–#198 — fact11 leftovers, user ruling 2026-11-07
+"都修了吧"): an old DoT's tick is not a new press landing, and a channel
+refused at its next press reads refused (#192); Ultimate Penitence's channel
+stays its bolt phase and the line adds "; its aura until M:SS" (#194); a
+single-target direct hit on Vanish / Burrow / Mass Invisibility more than
+1 s in ends the immunity — the [ENEMY DEF] line prints the cut length with
+"— ended by a hit" (conditional legend) and KILL ATTEMPTS no longer reads it
+as a forced full immunity (#195); 12.1.0 Violent Transformation resets The
+Hunt and Predator's Wake, its Soul Immolation reset is dated from 12.1.5,
+and the 12.1.0 Doom Winds unlogged press gets its line (#193); Havoc 4pc
+Essence Break 5 s / 30 s (#197); a Fang Strike Dispatch spends the maximum
+combo points for Restless Blades (#198); re-pressed ally spans (#196). Cover
+set (293 checks): 277 unchanged, 6 fell, 0 rose — stealthImmuneThroughHit
+24/75 → 0/314, immunityBaitedSelfBroken 27/622 → 3/595, Predator's Wake
+resCdBeforeNextPress 137 → 0, Essence Break backBeforeNextPress 111 → 3.
+Candidates (cover set; no 605 preview, user approved): missed-sync-window ::
+The Hunt 8 → 28 files, [VULNERABLE] :: The Hunt 3 → 12, missed-sync-window
+:: Binding Shot 1 → 5 — The Hunt ready again after the 12.1.0 reset. The
+cooldown-model change leaves the PV498 reference tables stale for The Hunt
+(GH #115).
+
 v498 (2026-11-07, GH #115 batched regen #6 — data only): the reference
 tables went stale across the fact8–fact11 / F21–F26 rounds (PV425–PV495:
 heals off the major-defensive set, more answers recognised, the F24/F25

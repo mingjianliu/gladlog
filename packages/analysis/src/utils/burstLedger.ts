@@ -16,6 +16,7 @@ import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import {
+  canonicalSpellId,
   gridEndpointHpPct,
   hpTroughInWindow,
   isDeadAtRenderSecond,
@@ -371,18 +372,35 @@ export function analyzeBurstLedger(
   if (ownCDs.length === 0) return [];
 
   // Ally offensive CD spans, computed once (player excluded).
+  // A press's span ends at the same ally's next press of the same cooldown
+  // (GH #196: Soul Immolation pressed 3 s apart, both spans counted in
+  // full, 9.0 + 5.8 s against the 9.0 s its aura ran) — one run at a time,
+  // as `[ENEMY DEF]` / `[TEAM] [CD]` save presses read it (fact11 D33).
   const allyCDSpans = allies
     .filter((a) => a.id !== player.id)
-    .flatMap((a) =>
-      (reconstructEnemyCDTimeline([a], combat).players[0]?.offensiveCDs ?? [])
-        .filter(pressedInRound)
-        .map((cd) => ({
+    .flatMap((a) => {
+      const cds = (
+        reconstructEnemyCDTimeline([a], combat).players[0]?.offensiveCDs ?? []
+      ).filter(pressedInRound);
+      return cds.map((cd) => {
+        const key = canonicalSpellId(cd.spellId, matchStartMs);
+        const next = cds
+          .filter(
+            (c) =>
+              c.castTimeSeconds > cd.castTimeSeconds &&
+              canonicalSpellId(c.spellId, matchStartMs) === key,
+          )
+          .reduce((m, c) => Math.min(m, c.castTimeSeconds), Infinity);
+        const span = burstCastSpan(cd);
+        return {
           ally: a,
           playerName: a.name,
           spellName: cd.spellName,
-          ...burstCastSpan(cd),
-        })),
-    );
+          from: span.from,
+          to: Math.max(span.from, Math.min(span.to, next)),
+        };
+      });
+    });
 
   const enemyPlayers = enemies.filter((e) => e.info);
   const enemyById = new Map(enemyPlayers.map((e) => [e.id, e]));

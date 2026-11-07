@@ -2185,10 +2185,14 @@ function attributeFailure(
     // fb01eed7 1:28, an ally's Mass Invisibility on a Rogue whose own Cheap
     // Shot came 0.22 s later. No seconds floor: it is the holder's action
     // that ends it, not how soon.
+    // GH #195 (user ruling 2026-11-07): one a single-target hit ended past
+    // its first second (`endedByHit`) did not hold either — the attackers
+    // reached the unit; faede60a 0:35, a Mass Invisibility hit 2.06 s in
     const brokeItself =
-      KW_UNTARGETABLE_AURA_IDS.has(iv.spellId) &&
-      !!iv.inferredEnd &&
-      untargetableEndS(target, iv, matchStartMs, roundUnits) < iv.toS;
+      !!iv.endedByHit ||
+      (KW_UNTARGETABLE_AURA_IDS.has(iv.spellId) &&
+        !!iv.inferredEnd &&
+        untargetableEndS(target, iv, matchStartMs, roundUnits) < iv.toS);
     if (
       !brokeItself &&
       isImmunitySaveAura(iv.spellId) &&

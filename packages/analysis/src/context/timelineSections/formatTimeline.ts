@@ -23,6 +23,7 @@ import { PURGE_PRESS_REMOVALS_TEXT } from "../../utils/dispelAnalysis";
 import {
   ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
+  ENEMY_DEF_ENDED_BY_HIT,
   ENEMY_DEF_NO_AURA_LOGGED,
   ENEMY_DEF_NO_PRESS_TAG,
   ENEMY_DEF_UNSEEN_PRESS_TAG,
@@ -543,6 +544,13 @@ export function formatTimeline(
           "    An aura that ended before its full duration says why when the log does: `— dispelled by X's Spell` /",
           "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);",
           "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",
+          ...(enemyDefLines.some((l) =>
+            l.includes(`— ${ENEMY_DEF_ENDED_BY_HIT}`),
+          )
+            ? [
+                `    \`— ${ENEMY_DEF_ENDED_BY_HIT}\` = Vanish, Burrow or Mass Invisibility took an attack aimed at its holder more than 1 s in: the immunity ends at that hit (its aura can stay up);`,
+              ]
+            : []),
           `    \`${ENEMY_DEF_NO_PRESS_TAG}\` = the aura went up with no press of it in the log — a copy a talent or proc put up (Exhilaration's 3 s`,
           "    Survival of the Fittest, Ancient of Lore), a shield that rides another press (Shield of Vengeance with Divine Protection),",
           "    or a passive shield that went up by itself (Angelic Bulwark at low HP — a fact only: KILL ATTEMPTS never names it);",

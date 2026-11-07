@@ -2365,6 +2365,17 @@ const INDEX: PredicateRow[] = [
     symbol: "ENEMY_DEF_END_NOT_LOGGED_SLOT_RE",
     mod: enemyDefensives,
   },
+  // GH #194: a pressed channel's aura past its channel
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "channelAuraTail",
+    mod: castCommitSpans,
+  },
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "CHANNEL_AURA_TAIL",
+    mod: castCommitSpans,
+  },
   // fact11 D45: the `; also on …` clause of an immunity's slot
   {
     file: `${A}/utils/enemyDefensives.ts`,

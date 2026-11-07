@@ -293,8 +293,8 @@ describe("D42 / D38 — the data rows", () => {
     expect(NO_CAST_LOG_PRESS_IDS.has("114052")).toBe(false);
   });
 
-  it("Essence Break's debuff is read at its observed 5 s", () => {
-    expect(spellEffectData["320338"]?.durationSeconds).toBe(5);
+  it("Essence Break's debuff keeps DB2's 4 s; the 5th second is the Havoc 4pc (GH #197)", () => {
+    expect(spellEffectData["320338"]?.durationSeconds).toBe(4);
   });
 });
 

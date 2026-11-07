@@ -913,4 +913,14 @@
  *  priest save rosters, new burst-window cells move the slow-defensive-
  *  response contrast door. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 498;
+/*
+ * v499 (2026-11-07, GH #192–#198, fact11 leftovers): a stealth immunity an
+ *  aimed hit ended past its first second prints its cut length with
+ *  "— ended by a hit" and is no forced full immunity; Ultimate Penitence's
+ *  line adds "; its aura until M:SS"; 12.1.0 Violent Transformation resets
+ *  The Hunt and Predator's Wake (dated), Soul Immolation only from 12.1.5;
+ *  the 12.1.0 Doom Winds unlogged press gets its line; Havoc 4pc; a Fang
+ *  Strike Dispatch spends the maximum combo points. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 499;

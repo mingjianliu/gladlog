@@ -19,6 +19,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { castsOfEffectAura, effectAurasOfCast } from "../data/castEffectAuras";
 import { ENEMY_HEAL_CD_IDS, isEnemyHealCdFor } from "../data/enemyHealCds";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { AURA_PRESS_BY_ERA, auraStandsForPressAt } from "./auraActivationEra";
 import { dropAuraRebroadcasts } from "./auraIntervals";
 import {
   enemyDefensiveEvents,
@@ -37,8 +38,15 @@ export interface IAuraOnlyActivation {
   spellId: string;
   /** the name a line prints, without the `(no press)` suffix */
   spellName: string;
-  family: "save" | "offensive" | "heal";
+  /** `unlogged-press`: a cooldown whose aura stands for a press the log did
+   * not write, on this log's date (`AURA_PRESS_BY_ERA`: Doom Winds before
+   * 12.1.5) — a press, the button spent (GH #193) */
+  family: "save" | "offensive" | "heal" | "unlogged-press";
 }
+
+/** The suffix of an `unlogged-press` line: a press the log shows only as its
+ * aura (GH #193, user ruling 2026-11-07). */
+export const UNLOGGED_PRESS_SUFFIX = " (pressed; the log has only its aura)";
 
 /** A healing major's own aura the unit put on itself with no press beside it
  * (Deeply Rooted Elements' Ascendance, Reforestation's Tree of Life). */
@@ -121,8 +129,23 @@ export function auraOnlyActivations(
   for (const o of auraOffensiveOccurrences(unit, bounds).occurrences) {
     if (o.burstRole !== "burst") continue;
     // a 12.1.0 Doom Winds with no press row is an unlogged press
-    // (`auraStandsForPressAt`), never a `(no press)` line (fact11 D44); from
-    // 12.1.5 it is a proc and carries the suffix like every other
+    // (`auraStandsForPressAt`), never a `(no press)` line (fact11 D44) — it
+    // has a line of its own as a press (GH #193, user ruling 2026-11-07:
+    // before it had none on our side); from 12.1.5 it is a proc and carries
+    // the suffix like every other
+    if (
+      o.provenance === "press-inferred" &&
+      AURA_PRESS_BY_ERA[o.spellId] !== undefined &&
+      auraStandsForPressAt(o.spellId, o.startMs)
+    ) {
+      out.push({
+        atSeconds: (o.startMs - matchStartMs) / 1000,
+        spellId: o.spellId,
+        spellName: o.spellName,
+        family: "unlogged-press",
+      });
+      continue;
+    }
     if (!o.spellName.endsWith(NO_PRESS_SUFFIX)) continue;
     // a healer's throughput major on the offensive roster (fact11 D16: Holy
     // Paladin Avenging Wrath) is read once — as the heal family's line

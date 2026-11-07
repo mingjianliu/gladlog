@@ -399,12 +399,6 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // carries its producer's length (Game-Behaviour Rule 6). A SHORTER patch,
   // allowed because it carries that mechanism (Rule 7), 2026-09-22 GH #65 item 5.
   "257622": 6,
-  // Essence Break debuff 320338 (fact11 D38, 2026-11-06): DB2 4 s vs 5 s ×87 %
-  // of 205 lifetimes (buffDurationScan --gap on the 117-file cover set, 393
-  // rounds; e4784cab r0: 5.015 / 4.998 / 5.004 / 5.011 s). LONGER direction.
-  // No talent row in the inventory reaches 320338 (only the label-wide
-  // whileAura rows); mechanism unexplained, patch stays.
-  "320338": 5,
 };
 /**
  * Arena durations SHORTER than DB2 that a user ruling sets — a downward

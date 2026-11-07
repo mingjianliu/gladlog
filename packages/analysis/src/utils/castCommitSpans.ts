@@ -8,6 +8,7 @@ import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { isNoPressRow } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
+import { fmtTime } from "./renderGrid";
 
 /**
  * castCommitSpans.ts — the stretches a unit spent committed to a cast that
@@ -230,6 +231,9 @@ function lastChannelEffectMs(
   name: string,
   afterMs: number,
   untilMs: number,
+  /** `untilMs` is the next press of the same channel: its own rows (a
+   * refusal logged in its millisecond) are not this channel's (GH #192) */
+  untilExclusive = false,
 ): number | undefined {
   let last: number | undefined;
   for (const r of [
@@ -239,7 +243,8 @@ function lastChannelEffectMs(
   ]) {
     if (r.srcUnitId !== unit.id) continue;
     const t = r.logLine.timestamp;
-    if (t <= afterMs || t > untilMs) continue;
+    if (t <= afterMs || t > untilMs || (untilExclusive && t >= untilMs - 0.5))
+      continue;
     const { attackSpellId, attackSpellName } = r as {
       attackSpellId?: string;
       attackSpellName?: string;
@@ -293,6 +298,28 @@ export function channelEndSeconds(
     : Math.min(end, toSeconds(lastEffectMs));
 }
 
+/**
+ * The `[YOU] [CD]` channel suffix's tail for a pressed spell whose own aura
+ * outlives the channel it measures (GH #194, user ruling 2026-11-07):
+ * Ultimate Penitence's channel is its bolts (what a kick can stop), and its
+ * 421453 aura runs on through the descent, ~6.5 s. The suffix keeps the bolt
+ * phase and states the aura's end beside it; `channelEndOnOwnRow` reads this
+ * tail. Empty when the aura is the channel (`CHANNELED_SPELL_IDS`) or ends
+ * in the channel's rendered second.
+ */
+export const CHANNEL_AURA_TAIL = "its aura until";
+export function channelAuraTail(
+  spellId: string,
+  channelEndSeconds: number,
+  auraEndSeconds: number,
+): string {
+  if (CHANNELED_SPELL_IDS.has(spellId)) return "";
+  if (!(auraEndSeconds > channelEndSeconds)) return "";
+  const aura = fmtTime(auraEndSeconds);
+  if (aura === fmtTime(channelEndSeconds)) return "";
+  return `; ${CHANNEL_AURA_TAIL} ${aura}`;
+}
+
 /** How close to its SUCCESS row a channel's own refusal is logged: the
  * Ray of Frost MISS a millisecond after the press (fact11 D39). */
 const CHANNEL_REFUSED_AT_CAST_MS = 50;
@@ -314,6 +341,10 @@ export function channelRefusedAtCast(
   castMs: number,
   untilMs: number,
   spellName = "",
+  /** `untilMs` is the caster's next press of the same channel: a row in
+   * its millisecond is that press's (GH #192: the second Ray of Frost's
+   * IMMUNE at exactly 12.000 read as the first one running to 12 s) */
+  untilIsNextPress = false,
 ): boolean {
   const refusal = (unit.missesOut ?? []).find(
     (r) =>
@@ -328,6 +359,7 @@ export function channelRefusedAtCast(
       getEnglishSpellName(spellId, spellName),
       refusal.logLine.timestamp,
       untilMs,
+      untilIsNextPress,
     ) === undefined
   );
 }

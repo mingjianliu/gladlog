@@ -17,7 +17,15 @@
  */
 import { OVERRIDE_VARIANTS_GENERATED } from "@gladlog/analysis/src/data/overrideVariantsGenerated";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
-import { EVENT_COOLDOWN_REDUCTIONS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
+import {
+  EVENT_COOLDOWN_REDUCTIONS,
+  eventReductionOwner,
+  eventReductionSecondsAt,
+} from "@gladlog/analysis/src/data/talentScriptedCooldowns";
+import {
+  getPlayerTalentedSpellInfo,
+  talentsOf,
+} from "@gladlog/analysis/src/utils/talents";
 
 import { APPLIED, ev, type IRoundCtx, successesOf, tsOf } from "./ctx";
 
@@ -43,6 +51,21 @@ function variantIds(name: string): Set<string> {
   return ids;
 }
 
+/** does the unit hold `talentId`? — COMBATANT_INFO's talents (and PvP
+ * talents) decoded; an unreadable talent list proves nothing either way */
+function holdsTalent(unit: any, talentId: string): boolean {
+  if ((unit.info?.pvpTalents ?? []).map(String).includes(talentId)) return true;
+  const talents = talentsOf(unit);
+  if (!talents) return true;
+  const specId = parseInt(String(unit.spec), 10);
+  const selected =
+    !Number.isNaN(specId) && talents.length > 0
+      ? getPlayerTalentedSpellInfo(specId, talents)
+      : new Map();
+  if (selected === null) return true;
+  return selected.has(talentId);
+}
+
 /** a full reset of `name`'s cooldown under a second after one of its presses */
 function resetInsideItsPress(unit: any, name: string): boolean {
   if (!unit) return false;
@@ -51,8 +74,23 @@ function resetInsideItsPress(unit: any, name: string): boolean {
       getEnglishSpellName(String(c.spellId), c.spellName ?? "") === name,
   );
   const ids = new Set(presses.map((c: any) => String(c.spellId)));
-  for (const r of Object.values(EVENT_COOLDOWN_REDUCTIONS)) {
-    if (r.seconds !== Infinity || !r.targets.some((t) => ids.has(t))) continue;
+  const spec = unit.spec === undefined ? undefined : String(unit.spec);
+  for (const [key, r] of Object.entries(EVENT_COOLDOWN_REDUCTIONS)) {
+    if (!r.targets.some((t) => ids.has(t))) continue;
+    // the reset is the talent's: a unit without it gets none (codex
+    // 20-F26-07 #5 — spec and date alone do not make a holder)
+    const owned =
+      (holdsTalent(unit, eventReductionOwner(key, r)) ||
+        (spec !== undefined && !!r.ownedBySpecIds?.includes(spec))) &&
+      (r.requiresTalentId === undefined ||
+        holdsTalent(unit, r.requiresTalentId));
+    if (!owned) continue;
+    // a dated row (12.1.0's Violent Transformation, GH #193) is a full
+    // reset only for its holders and only on the log's own date
+    const full = presses.filter(
+      (c: any) => eventReductionSecondsAt(r, spec, tsOf(c)) === Infinity,
+    );
+    if (full.length === 0) continue;
     const auras = new Set<string>(r.triggerSelfAuraAppliedIds ?? []);
     const casts = new Set<string>(r.triggerCastIds);
     const triggers = [
@@ -64,7 +102,7 @@ function resetInsideItsPress(unit: any, name: string): boolean {
         .map(tsOf),
     ];
     if (
-      presses.some((c: any) =>
+      full.some((c: any) =>
         triggers.some((t) => t > tsOf(c) && t - tsOf(c) < 1000),
       )
     )

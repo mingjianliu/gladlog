@@ -1922,6 +1922,107 @@ export interface IEnemyDefensiveEvent {
    * after it, or the log has none and the round ended inside the aura's
    * official length: shorter than its full duration, but not removed early. */
   upAtRoundEnd?: true;
+  /** GH #195 (user ruling 2026-11-07): a stealth-kind immunity closed at an
+   * aimed hit (`ISaveAuraInterval.endedByHit`) — its length is up to that
+   * hit, and its aura may have run on: not removed early. */
+  endedByHit?: true;
+}
+
+/** The `[ENEMY DEF]` note of a stealth-kind immunity an aimed hit ended
+ * (`IEnemyDefensiveEvent.endedByHit`). */
+export const ENEMY_DEF_ENDED_BY_HIT = "ended by a hit";
+
+/** Damage on the carrier inside this first stretch of a stealth-kind
+ * immunity was already on its way (U-KA3: "a hit inside the aura's first
+ * second"); after it, an aimed hit is the unit being a target again. */
+export const STEALTH_IMMUNITY_IN_FLIGHT_MS = 1000;
+
+const DIRECT_SWING_EVENTS: ReadonlySet<string> = new Set([
+  LogEvent.SWING_DAMAGE,
+  LogEvent.SWING_DAMAGE_LANDED,
+  LogEvent.RANGE_DAMAGE,
+  LogEvent.SWING_MISSED,
+  LogEvent.RANGE_MISSED,
+]);
+
+/**
+ * The first single-target hit on the carrier of a stealth-kind immunity
+ * (`ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`: Burrow, Vanish, Mass Invisibility)
+ * more than `STEALTH_IMMUNITY_IN_FLIGHT_MS` after the aura went up and
+ * before `toMs` — log ms, undefined when none. User ruling 2026-11-07 (GH
+ * #195, fact11 D31 — narrows U-KA3: be1686eb r0, a Bear's melee swing on a
+ * Vanished rogue 1.28 s in, the line read `(immune, 1.5s)`): from that hit
+ * on, the unit is no longer immune. Single target is
+ *  - a melee swing or ranged auto-attack (any source, a pet's too) — one a
+ *    shield ate whole or the carrier dodged too (the D31 swing is a
+ *    SWING_MISSED ABSORB: the carrier was swung at), or
+ *  - a non-periodic spell hit or miss whose source pressed that spell at the carrier
+ *    (a SUCCESS row of it, `castAndEffectIds` or the same English name, with
+ *    the carrier as its target) after the aura went up.
+ * A DoT's tick, area damage (no press aimed at the carrier) and a hit in
+ * the first second stay no evidence, as U-KA3 has it. A hit in the closing
+ * row's own millisecond counts when it was logged before that row
+ * (`toRow`): a swing and the REMOVED it caused share their millisecond.
+ */
+export function stealthImmunityHitMs(
+  holder: Pick<ICombatUnit, "id" | "damageIn"> &
+    Partial<Pick<ICombatUnit, "missesIn">>,
+  fromMs: number,
+  toMs: number,
+  units: readonly ICombatUnit[],
+  toRow?: { ms: number; lineIndex: number },
+): number | undefined {
+  const byId = new Map(units.map((u) => [u.id, u]));
+  const beforeEnd = (t: number, lineIndex: number | undefined): boolean =>
+    t < toMs ||
+    (toRow !== undefined &&
+      t === toRow.ms &&
+      // a row past a clipped end (the round's) stays out (codex 20-F26-08)
+      toRow.ms <= toMs &&
+      lineIndex !== undefined &&
+      lineIndex < toRow.lineIndex);
+  let first: number | undefined;
+  const rows = [
+    ...(holder.damageIn ?? []),
+    // an IMMUNE miss is the immunity holding, not the unit being hit
+    ...(holder.missesIn ?? []).filter((m) => m.missType !== "IMMUNE"),
+  ];
+  for (const r of rows) {
+    const t = r.logLine.timestamp;
+    if (
+      t <= fromMs + STEALTH_IMMUNITY_IN_FLIGHT_MS ||
+      !beforeEnd(t, r.logLine.lineIndex)
+    )
+      continue;
+    if (first !== undefined && t >= first) continue;
+    const event = r.logLine.event as string;
+    if (DIRECT_SWING_EVENTS.has(event)) {
+      first = t;
+      continue;
+    }
+    if (
+      (event !== LogEvent.SPELL_DAMAGE && event !== LogEvent.SPELL_MISSED) ||
+      !r.spellId
+    )
+      continue;
+    const src = byId.get(r.srcUnitId);
+    if (!src) continue;
+    const ids = castAndEffectIds(r.spellId);
+    const name = getEnglishSpellName(r.spellId, r.spellName);
+    const aimed = (src.spellCastEvents ?? []).some(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.destUnitId === holder.id &&
+        c.logLine.timestamp >= fromMs &&
+        c.logLine.timestamp <= t &&
+        !!c.spellId &&
+        (ids.has(c.spellId) ||
+          castAndEffectIds(c.spellId).has(r.spellId) ||
+          getEnglishSpellName(c.spellId, c.spellName) === name),
+    );
+    if (aimed) first = t;
+  }
+  return first;
 }
 
 /**
@@ -1936,7 +2037,11 @@ export interface IEnemyDefensiveEvent {
 export function saveAuraIntervals(
   unit: ICombatUnit,
   team: readonly ICombatUnit[],
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Record<string, ICombatUnit>;
+  },
 ): ISaveAuraInterval[] {
   const castersById = new Map(team.map((e) => [e.id, e]));
   // The log's own id for each source name on this unit's auras. A name is not
@@ -1969,7 +2074,28 @@ export function saveAuraIntervals(
     castSecondsOf,
   ).map((iv) => {
     const srcUnitId = srcIdByName.get(iv.srcUnitName);
-    return srcUnitId === undefined ? iv : { ...iv, srcUnitId };
+    const out = srcUnitId === undefined ? iv : { ...iv, srcUnitId };
+    // GH #195: a stealth-kind immunity ends at the first single-target hit
+    // past its first second (`stealthImmunityHitMs`)
+    if (!ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId)) return out;
+    const hitMs = stealthImmunityHitMs(
+      unit,
+      combat.startTime + iv.fromS * 1000,
+      combat.startTime + iv.toS * 1000,
+      Object.values(combat.units ?? {}),
+      iv.toRow,
+    );
+    if (hitMs === undefined) return out;
+    // the hit ends the immunity, not the aura: an end the log never showed
+    // stays unshown (`inferredEnd`, ruling P-FU-b8 — a hit does not prove
+    // the aura was up until it)
+    // and the closing row is the aura's, not this end's
+    const { toRow: _auraRow, ...cut } = out;
+    return {
+      ...cut,
+      toS: (hitMs - combat.startTime) / 1000,
+      endedByHit: true as const,
+    };
   });
 }
 
@@ -2084,6 +2210,9 @@ export type ISaveAuraInterval = IAuraInterval & {
   /** the press began at a REFRESH its source pressed (the run before it
    * `endedByRepress`): what the aura did before it is the earlier press's */
   startedByRepress?: true;
+  /** a stealth-kind immunity a single-target hit ended past its first
+   * second (`stealthImmunityHitMs`, GH #195): `toS` is that hit */
+  endedByHit?: true;
 };
 
 /**
@@ -2367,6 +2496,7 @@ export function enemyDefensiveEvents(
     | "earlyEnd"
     | "upAtRoundEnd"
     | "endNotLogged"
+    | "endedByHit"
   > => {
     const endMs = Math.round(combat.startTime + iv.toS * 1000);
     // The round ended before the log did (a Solo Shuffle round's ending
@@ -2399,6 +2529,9 @@ export function enemyDefensiveEvents(
             };
     }
     if (iv.endedByRepress) return { removedEarly: false };
+    // GH #195: the length is up to the hit, whether or not the log shows
+    // the aura's own end — the hit is the end this line states
+    if (iv.endedByHit) return { removedEarly: false, endedByHit: true };
     if (iv.inferredEnd) {
       // The log has no end for this application: the interval builder closed
       // it at its official length, and that number is no observation (ruling

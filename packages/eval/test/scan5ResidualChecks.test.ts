@@ -1607,6 +1607,42 @@ describe("kitRangeBelowSeen", () => {
   });
 });
 
+describe("kitRangeBelowSeen: a dated reset is its talent's (codex 20-F26-07 #5)", () => {
+  const lines = [
+    '  <unit id="2" name="Dh" spec="Devourer Demon Hunter" role="enemy">',
+    "    <cooldowns>The Hunt [0–90s]</cooldowns>",
+  ];
+  const seen = (talents: any[]) =>
+    of(
+      scan(
+        runOverrideVariant,
+        [
+          unit("Dh", "2", 1, {
+            spec: CombatUnitSpec.DemonHunter_Devourer,
+            info: { talents, pvpTalents: [] },
+            spellCastEvents: [cast(10_000, "Dh", "1246167", "The Hunt")],
+            auraEvents: [
+              rowOf(LogEvent.SPELL_AURA_APPLIED, 10_500, {
+                spellId: "1217607",
+                spellName: "Void Metamorphosis",
+                srcUnitId: "Dh",
+                destUnitId: "Dh",
+              }),
+            ],
+          }),
+        ],
+        lines,
+      ),
+      "kitRangeBelowSeen",
+    );
+  it("Violent Transformation held (node 110115): a true 0", () => {
+    expect(seen([{ id1: 110115, id2: 0, count: 1 }])).toEqual([]);
+  });
+  it("not held: the 0 is flagged", () => {
+    expect(seen([])).toHaveLength(1);
+  });
+});
+
 describe("listGapPress", () => {
   // Ravager: 90 s, on the roster
   const pressAt = (who: string, ms: number) =>

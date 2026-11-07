@@ -31,6 +31,7 @@ import {
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { type ILogDatedNumber, logDatedNumberAt } from "../utils/logEra";
 import { isResyncBatchAt } from "../utils/resyncBatch";
+import { PATCH_1215_GOLIVE_EPOCH_MS } from "../utils/talents";
 import { spellEffectData } from "./spellEffectData";
 import { spellSchoolMask } from "./spellSchools";
 
@@ -251,6 +252,17 @@ export interface IPowerSpendTrigger {
    * the give-back is `pct` % larger (DB2 aura 108 on the talent's own class
    * mask: Triple Threat / Jackpot +30 % on Restless Blades). */
   boosts?: ReadonlyArray<{ whileAuraIds: readonly string[]; pct: number }>;
+  /** A finisher a proc made free logs no cost of `powerType`; the game
+   * counts it as the maximum (Outlaw 12.1 4pc Fang Strike 1301405: 「your
+   * next Dispatch … as if you spent the maximum combo points」, GH #198,
+   * user ruling 2026-11-07 — Restless Blades too). A press of `castIds`
+   * with the unit's own `consumedAuraId` removed within `withinMs` of it
+   * spends the `powerType` maximum its nearest advanced reading states. */
+  freeSpendAsMax?: {
+    castIds: readonly string[];
+    consumedAuraId: string;
+    withinMs: number;
+  };
   costReductions?: ReadonlyArray<{
     castIds: readonly string[];
     pct?: number;
@@ -999,11 +1011,60 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // 12.1.5 "… Voidblade and Soul Immolation"); GH #179: the `[PRESS]` line's
   // `back` sat 9–20 s after a Pierce the Veil pressed right after an entry.
   "452409": {
-    targets: ["1241937", "1245412"],
+    targets: ["1245412"],
     triggerCastIds: [],
     triggerSelfAuraAppliedIds: ["1217607"],
     seconds: Number.POSITIVE_INFINITY,
-    note: "Violent Transformation — entering Void Metamorphosis resets Soul Immolation and Voidblade",
+    note: "Violent Transformation — entering Void Metamorphosis resets Voidblade",
+  },
+  // Soul Immolation from 12.1.5 only (codex 20-F26-07 #1): the 12.1.0
+  // tooltip names The Hunt instead (the dated row below), so an August log
+  // gets no Soul Immolation reset from it.
+  "452409:si-1215": {
+    talentSpellId: "452409",
+    targets: ["1241937"],
+    triggerCastIds: [],
+    triggerSelfAuraAppliedIds: ["1217607"],
+    seconds: {
+      base: 0,
+      bySpec: {
+        [CombatUnitSpec.DemonHunter_Devourer]: {
+          cutoverEpochMs: PATCH_1215_GOLIVE_EPOCH_MS,
+          before: 0,
+          since: Number.POSITIVE_INFINITY,
+        },
+      },
+    },
+    note: "Violent Transformation from 12.1.5 — entering Void Metamorphosis resets Soul Immolation (dated)",
+  },
+  // Violent Transformation before 12.1.5 (GH #193, fact11; user ruling
+  // 2026-11-07 「两个都修」): the 12.1.0 tooltip (69299 / 69587 enUS, 69933
+  // zhCN 「进入虚空变形时，重置虚空之刃和恶魔追击的冷却时间」) resets Voidblade
+  // and The Hunt; from 12.1.5.70340 it names Soul Immolation instead (the
+  // row above). Before 12.1.5 Predator's Wake 1259431 — The Hunt's button
+  // under Demonsurge — is its own 90 s cooldown (`OVERRIDE_VARIANT_SHARES_
+  // BY_ERA`), so it is a target of its own. 12 August files (08-28
+  // manifest): 39 Wake re-presses, all 34 under 90 s (37.0–67.8 s) with a
+  // Void Metamorphosis entry 1217607 between, none without; Wake pressed a
+  // median 2.5 s after the latest entry (n 75). Every Wake user held the
+  // talent (no non-holder control); that the reset reaches the Wake variant
+  // rests on those timings, not on DB2 (dummy effects only).
+  "452409:hunt-1210": {
+    talentSpellId: "452409",
+    targets: ["1246167", "1259431"],
+    triggerCastIds: [],
+    triggerSelfAuraAppliedIds: ["1217607"],
+    seconds: {
+      base: 0,
+      bySpec: {
+        [CombatUnitSpec.DemonHunter_Devourer]: {
+          cutoverEpochMs: PATCH_1215_GOLIVE_EPOCH_MS,
+          before: Number.POSITIVE_INFINITY,
+          since: 0,
+        },
+      },
+    },
+    note: "Violent Transformation before 12.1.5 — entering Void Metamorphosis resets The Hunt and Predator's Wake (12.1.0 tooltip; dated)",
   },
   // Cold Snap (Frost, 235219): resets Ice Block and Ice Barrier (and Frost
   // Nova / Cone of Cold, not ledger spells). 0.5 % of Frost hold it (the
@@ -1134,6 +1195,17 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
       // Triple Threat 1214935 / Jackpot 1214937 (Roll the Bones outcomes,
       // GH #176): aura 108 +30 % on mask 0/0/8192/0 — Restless Blades' own
       boosts: [{ whileAuraIds: ["1214935", "1214937"], pct: 30 }],
+      // GH #198 (user ruling 2026-11-07): a Fang Strike Dispatch (Outlaw
+      // 12.1 4pc 1296589, buff 1301405) logs no combo-point cost; counted
+      // at the maximum. 11 Outlaw logs, 39 Sprint intervals: recasts before
+      // the model 2 → 1 (the third needs a finisher logged ≤ 0.1 s before
+      // the press). The opposite side — 7–8 intervals where Sprint failed
+      // `not yet recovered` after the model called it back — stays open.
+      freeSpendAsMax: {
+        castIds: ["2098"],
+        consumedAuraId: "1301405",
+        withinMs: 100,
+      },
     },
     seconds: 0,
     note: "Restless Blades — Outlaw finishers: −1 s per combo point on Adrenaline Rush and the Outlaw kit",
@@ -1797,9 +1869,40 @@ export function selfAuraUpAt(
  * `unitsPerSecond`. A cast whose row states no cost gives nothing (unknown,
  * not free — documents stored before 2026-10-11 carry no costs at all).
  */
+/** The `powerType` maximum a free finisher spent (`freeSpendAsMax`), 0 when
+ * the press is not one or no advanced reading states the maximum. */
+function freeSpendMax(
+  unit: Partial<Pick<ICombatUnit, "auraEvents" | "id" | "advancedActions">>,
+  p: IPowerSpendTrigger,
+  castId: string,
+  atMs: number,
+): number {
+  const f = p.freeSpendAsMax;
+  if (!f || !f.castIds.includes(castId)) return 0;
+  const consumed = (unit.auraEvents ?? []).some(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      String(a.spellId) === f.consumedAuraId &&
+      a.destUnitId === unit.id &&
+      Math.abs(a.logLine.timestamp - atMs) <= f.withinMs,
+  );
+  if (!consumed) return 0;
+  let best: { dt: number; max: number } | undefined;
+  for (const s of unit.advancedActions ?? []) {
+    if (s.advancedActorId !== unit.id) continue;
+    const max = s.advancedActorPowers.find(
+      (w) => (w.type as number) === p.powerType,
+    )?.max;
+    if (!max) continue;
+    const dt = Math.abs(s.timestamp - atMs);
+    if (!best || dt < best.dt) best = { dt, max };
+  }
+  return best?.max ?? 0;
+}
+
 export function powerSpendTriggers(
   unit: Pick<ICombatUnit, "spellCastEvents"> &
-    Partial<Pick<ICombatUnit, "auraEvents" | "id">>,
+    Partial<Pick<ICombatUnit, "auraEvents" | "id" | "advancedActions">>,
   p: IPowerSpendTrigger,
   holderSpec: string | undefined,
   holds?: (talentSpellId: string) => boolean,
@@ -1818,7 +1921,9 @@ export function powerSpendTriggers(
       p.exclude.specIds.includes(holderSpec)
     )
       continue;
-    const stated = e.powerCosts?.find((c) => c.type === p.powerType)?.cost;
+    const stated =
+      e.powerCosts?.find((c) => c.type === p.powerType)?.cost ||
+      freeSpendMax(unit, p, id, e.logLine.timestamp);
     if (!stated || stated <= 0) continue;
     let cost = stated;
     for (const red of p.costReductions ?? []) {
@@ -1987,6 +2092,8 @@ export const PER_PRESS_STACK_COOLDOWNS: Readonly<
       auraId: string;
       secondsPerStack: number;
       maxStacks: number;
+      /** the row needs this class set bonus worn as well (`setPiecesWorn`) */
+      requiresSet?: { bonusSpellId: string; itemSetId: string; pieces: number };
       note: string;
     }
   >
@@ -1997,6 +2104,22 @@ export const PER_PRESS_STACK_COOLDOWNS: Readonly<
     secondsPerStack: 2.5,
     maxStacks: 4,
     note: "Cycle of Hatred — Eye Beam −2.5 s per stack up before the press (≤ 4)",
+  },
+  // Havoc 12.1 4pc 1296612 (GH #197, fact11 D35–D37): 「Essence Break now
+  // applies and benefits from the effects of Cycle of Hatred」 — scripted, no
+  // cooldown row in DB2 (why the talent inventory found nothing). 40 − 4 ×
+  // 2.5 = 30.0 s, the corpus minimum. 25 downloaded logs, 228 recast gaps:
+  // holders' minimum gap by stacks up before the press 29.99 s at 4 (n 201),
+  // 35.25 at 3, 38.76 at 2; each Essence Break press adds a 1214887 dose.
+  // The one 0-piece player (73 Havoc logs) got no dose from Essence Break,
+  // gaps 43.7–55.8 s with 3–4 stacks up — a single-player control.
+  "258860": {
+    talentSpellId: "258887",
+    auraId: "1214887",
+    secondsPerStack: 2.5,
+    maxStacks: 4,
+    requiresSet: { bonusSpellId: "1296612", itemSetId: "2056", pieces: 4 },
+    note: "Havoc 12.1 4pc — Essence Break −2.5 s per Cycle of Hatred stack up before the press (≤ 4)",
   },
 };
 

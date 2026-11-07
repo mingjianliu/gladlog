@@ -240,7 +240,7 @@ export interface IPressHitRow {
   attackSpellId?: string;
   attackSpellName?: string;
   destUnitId?: string;
-  logLine: { timestamp: number };
+  logLine: { timestamp: number; event?: string };
 }
 
 /** Is this damage / heal row a hit of the press `spellId` — its id or an
@@ -285,6 +285,10 @@ export function pressLandedOn(
   return rows.some(
     (r) =>
       r.destUnitId === destUnitId &&
+      // a periodic row is a tick of an application already running, not
+      // the new press landing (GH #192: an old Flame Shock's tick in the
+      // instant a new one met IMMUNE)
+      !r.logLine.event?.startsWith("SPELL_PERIODIC_") &&
       missBelongsToCast(sameSpellCastMs, castMs, r.logLine.timestamp) &&
       (refusedAtMs === undefined ||
         Math.abs(r.logLine.timestamp - refusedAtMs) <=

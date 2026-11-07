@@ -1495,8 +1495,8 @@ describe("Violent Transformation — entering Void Metamorphosis resets Voidblad
   // The Hunt", 12.1.5 "… Voidblade and Soul Immolation"); Pierce the Veil
   // 1245483 is the same button (aura-332 variant), so one target covers it
   const r = EVENT_COOLDOWN_REDUCTIONS["452409"]!;
-  it("targets Voidblade beside Soul Immolation, as a full reset", () => {
-    expect(r.targets).toEqual(["1241937", "1245412"]);
+  it("targets Voidblade, as a full reset on both eras (Soul Immolation is its own dated row, GH #193)", () => {
+    expect(r.targets).toEqual(["1245412"]);
     expect(r.seconds).toBe(Number.POSITIVE_INFINITY);
     expect(eventReductionsFor("1245412", (t) => t === "452409")).toContain(r);
     expect(eventReductionsFor("1245412", () => false)).not.toContain(r);

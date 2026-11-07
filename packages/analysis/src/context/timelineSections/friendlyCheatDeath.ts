@@ -14,7 +14,10 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CRISIS_PROC_ANSWERS } from "../../analysis/crisisDecisionPoints";
 import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
-import { auraOnlyActivations } from "../../utils/auraOnlyActivations";
+import {
+  auraOnlyActivations,
+  UNLOGGED_PRESS_SUFFIX,
+} from "../../utils/auraOnlyActivations";
 import {
   type IMajorCooldownInfo,
   specToString,
@@ -179,13 +182,21 @@ export function emitFriendlyAuraOnlyEntries(ctx: {
       );
       if (inLedger) continue;
       const t = a.atSeconds;
+      // GH #193: a press the log shows only as its aura is a press — the
+      // [CD] tag, the button spent
+      const [tag, suffix] =
+        a.family === "unlogged-press"
+          ? ["[CD]", UNLOGGED_PRESS_SUFFIX]
+          : ["[PROC]", NO_PRESS_SUFFIX];
       addEntry(
         t,
         u.id === owner.id
-          ? `${fmtTime(t)}  [YOU] [PROC]   ${a.spellName}${NO_PRESS_SUFFIX}`
-          : `${fmtTime(t)}  [TEAM] [PROC]   ${pid(u.name)} (${specToString(u.spec)}): ${a.spellName}${NO_PRESS_SUFFIX}`,
+          ? `${fmtTime(t)}  [YOU] ${tag}   ${a.spellName}${suffix}`
+          : `${fmtTime(t)}  [TEAM] ${tag}   ${pid(u.name)} (${specToString(u.spec)}): ${a.spellName}${suffix}`,
       );
-      emitted = true;
+      // the return says a [PROC] line went out (its legend); a press's [CD]
+      // line explains itself
+      if (a.family !== "unlogged-press") emitted = true;
     }
   }
   return emitted;

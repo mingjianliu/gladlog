@@ -17,6 +17,7 @@ import { reachesAlly } from "../../data/spellTargeting";
 import { allyCopyClause } from "../../utils/allyCopyWall";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import {
+  channelAuraTail,
   channelEndSeconds,
   channelOverBeforeRoundEnd,
 } from "../../utils/castCommitSpans";
@@ -585,9 +586,16 @@ export function emitOwnerCdEntries(
               channelEndS,
             );
             const channelEnd = fmtTime(cast.timeSeconds + actualDuration);
+            // GH #194: the bolt phase stays the channel; an aura of the
+            // press that runs on past it is stated beside it
+            const auraTail = channelAuraTail(
+              cd.spellId,
+              channelEndS,
+              expiry.expiresAtSeconds,
+            );
             channelSuffix = interrupted
-              ? ` (interrupted at ${actualDuration.toFixed(1)}s, ended ${channelEnd})`
-              : ` (channeled ${actualDuration.toFixed(1)}s, ended ${channelEnd})`;
+              ? ` (interrupted at ${actualDuration.toFixed(1)}s, ended ${channelEnd}${auraTail})`
+              : ` (channeled ${actualDuration.toFixed(1)}s, ended ${channelEnd}${auraTail})`;
           }
         }
       }

@@ -23,4 +23,11 @@ describe("class set bonuses (fact8 D15)", () => {
     expect(setBonusDurationSeconds("102543", undefined)).toBe(0);
     expect(setBonusDurationSeconds("1", gear(...FOUR))).toBe(0);
   });
+
+  it("Essence Break's debuff runs 1 s longer on the Havoc 4pc (GH #197)", () => {
+    const havoc = ["271535", "271536", "271537", "271538"];
+    expect(setPiecesWorn(gear(...havoc), "2056")).toBe(4);
+    expect(setBonusDurationSeconds("320338", gear(...havoc))).toBe(1);
+    expect(setBonusDurationSeconds("320338", gear(...havoc.slice(0, 3)))).toBe(0);
+  });
 });
