@@ -39,6 +39,7 @@ import {
 import { fmtTime } from "../../src/utils/renderGrid";
 import {
   makeAdvancedAction,
+  makeAuraEvent,
   makeCombat,
   makeDamageEvent,
   makeSpellCastEvent,
@@ -794,7 +795,9 @@ describe("detectOverlappedDefensives", () => {
   const combat = { startTime: START };
 
   // Real spell IDs from MAJOR_DEFENSIVE_IDS (externalOrBigDefensiveSpellIds)
-  const DIVINE_PROTECTION = "498"; // 60s CD, 8s duration
+  // An ally-castable major (8 s): a self-only one (Divine Protection 498)
+  // sits on its caster whatever unit its cast row names (GH #150)
+  const ALLY_WALL = "33206"; // Pain Suppression — 8s duration
   const PAIN_SUPPRESSION = "33206"; // 180s CD, 8s duration
   const BLESSING_OF_SACRIFICE = "6940"; // 120s CD, 12s duration
 
@@ -806,18 +809,145 @@ describe("detectOverlappedDefensives", () => {
     expect(result).toHaveLength(0);
   });
 
+  it("a self-only defensive logged against a selected ally sits on its caster (GH #150)", () => {
+    // codex review of #150: Survival of the Fittest pressed with the priest
+    // selected, then the priest's own Pain Suppression — two units, no overlap
+    const sotf = makeSpellCastEvent(
+      "264735",
+      START + 10_000,
+      "priest",
+      "Priest",
+      "hunter",
+      "Hunter",
+    );
+    const ps = makeSpellCastEvent(
+      PAIN_SUPPRESSION,
+      START + 11_000,
+      "priest",
+      "Priest",
+      "priest",
+      "Priest",
+    );
+    const hunter = makeUnit("hunter", {
+      name: "Hunter",
+      spec: CombatUnitSpec.Hunter_BeastMastery,
+      spellCastEvents: [sotf as any],
+    });
+    const priest = makeUnit("priest", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      spellCastEvents: [ps as any],
+    });
+    expect(detectOverlappedDefensives([hunter, priest], combat)).toHaveLength(
+      0,
+    );
+  });
+
+  it("a Lifecinders Obsidian Scales copy keeps its ally as the recipient (GH #150)", () => {
+    // codex re-review: the copy's aura on the ally is the proof — the ally's
+    // own Pain Suppression a second later overlaps it
+    const scales = makeSpellCastEvent(
+      "363916",
+      START + 60_000,
+      "mate",
+      "Mate",
+      "evoker",
+      "Evoker",
+    );
+    const copy = makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      "363916",
+      START + 60_000,
+      "evoker",
+      "mate",
+      "BUFF",
+    );
+    const ps = makeSpellCastEvent(
+      PAIN_SUPPRESSION,
+      START + 61_000,
+      "mate",
+      "Mate",
+      "priest",
+      "Priest",
+    );
+    const evoker = makeUnit("evoker", {
+      name: "Evoker",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      spellCastEvents: [scales as any],
+    });
+    const mate = makeUnit("mate", { name: "Mate", auraEvents: [copy as any] });
+    const priest = makeUnit("priest", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      spellCastEvents: [ps as any],
+    });
+    const result = detectOverlappedDefensives([evoker, mate, priest], combat);
+    expect(result).toHaveLength(1);
+    expect(result[0].targetName).toBe("Mate");
+  });
+
+  it("a Lifecinders copy does not take the wall off its caster (GH #150)", () => {
+    // codex third pass: Scales with the evoker itself selected, copied to an
+    // unpressured ally, the evoker under 100k of damage, then Pain
+    // Suppression on the evoker — the overlap is on the evoker, no panic
+    const scales = makeSpellCastEvent(
+      "363916",
+      START + 60_000,
+      "evoker",
+      "Evoker",
+      "evoker",
+      "Evoker",
+    );
+    const copy = makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      "363916",
+      START + 60_000,
+      "evoker",
+      "mate",
+      "BUFF",
+    );
+    const ps = makeSpellCastEvent(
+      PAIN_SUPPRESSION,
+      START + 61_000,
+      "evoker",
+      "Evoker",
+      "priest",
+      "Priest",
+    );
+    const evoker = makeUnit("evoker", {
+      name: "Evoker",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      spellCastEvents: [scales as any],
+      damageIn: [makeDamageEvent(START + 59_000, 100_000, "evoker") as any],
+    });
+    const mate = makeUnit("mate", { name: "Mate", auraEvents: [copy as any] });
+    const priest = makeUnit("priest", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      spellCastEvents: [ps as any],
+    });
+    const overlaps = detectOverlappedDefensives([evoker, mate, priest], combat);
+    expect(overlaps).toHaveLength(1);
+    expect(overlaps[0].targetName).toBe("Evoker");
+    expect(
+      detectPanicDefensives([evoker, mate, priest], [], {
+        startTime: START,
+      }).filter((p) => p.spellId === "363916"),
+    ).toHaveLength(0);
+  });
+
   it("detects an overlap when two different casters use majors within 8s on the same target", () => {
     const targetId = "target-1";
     // Caster-1 at t=10s, Caster-2 at t=13s — gap=3s, Divine Protection duration=8s → overlap=5s
     const cast1 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 10_000,
       targetId,
       "Target",
       "caster-1",
     );
     const cast2 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 13_000,
       targetId,
       "Target",
@@ -849,14 +979,14 @@ describe("detectOverlappedDefensives", () => {
     const targetId = "target-1";
     // Divine Protection: 8s duration, gap = 3s → simultaneous = 5s
     const cast1 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 30_000,
       targetId,
       "Target",
       "caster-1",
     );
     const cast2 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 33_000,
       targetId,
       "Target",
@@ -877,7 +1007,7 @@ describe("detectOverlappedDefensives", () => {
   it("does not flag same-player double cast on same target", () => {
     const targetId = "target-1";
     const cast1 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 10_000,
       targetId,
       "Target",
@@ -902,14 +1032,14 @@ describe("detectOverlappedDefensives", () => {
 
   it("does not flag casts targeting different units", () => {
     const cast1 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 10_000,
       "target-1",
       "T1",
       "caster-1",
     );
     const cast2 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 12_000,
       "target-2",
       "T2",
@@ -932,14 +1062,14 @@ describe("detectOverlappedDefensives", () => {
     const targetId = "target-1";
     // Divine Protection: 8s duration; gap = 9s → no overlap
     const cast1 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 10_000,
       targetId,
       "Target",
       "caster-1",
     );
     const cast2 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 19_000,
       targetId,
       "Target",
@@ -989,14 +1119,14 @@ describe("detectOverlappedDefensives", () => {
   it("ignores casts whose dest is not a friendly unit", () => {
     const targetId = "enemy-1"; // NOT in the friends list
     const cast = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 10_000,
       targetId,
       "Enemy",
       "caster-1",
     );
     const cast2 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 13_000,
       targetId,
       "Enemy",
@@ -1018,7 +1148,7 @@ describe("detectOverlappedDefensives", () => {
   it("reports correct timeSeconds (first cast relative to match start)", () => {
     const targetId = "target-1";
     const cast1 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 45_000,
       targetId,
       "Target",
@@ -1147,7 +1277,8 @@ describe("detectOverlappedDefensives", () => {
 describe("detectPanicDefensives", () => {
   const START = 1_000_000;
   const combat = { startTime: START };
-  const DIVINE_PROTECTION = "498"; // in MAJOR_DEFENSIVE_IDS; 60s CD
+  // an ally-castable major: a self-only one sits on its caster (GH #150)
+  const ALLY_WALL = "33206"; // Pain Suppression, in MAJOR_DEFENSIVE_IDS
 
   it("returns empty when there are no defensive casts", () => {
     const friends = [makeUnit("player-1")];
@@ -1161,7 +1292,7 @@ describe("detectPanicDefensives", () => {
     const targetId = "target-1";
     const castTime = START + 60_000;
     const cast = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       castTime,
       targetId,
       "Target",
@@ -1180,7 +1311,7 @@ describe("detectPanicDefensives", () => {
 
     const result = detectPanicDefensives([caster, target], [enemy], combat);
     expect(result).toHaveLength(1);
-    expect(result[0].spellId).toBe(DIVINE_PROTECTION);
+    expect(result[0].spellId).toBe(ALLY_WALL);
     expect(result[0].casterName).toBe("player-1");
     expect(result[0].timeSeconds).toBeCloseTo(60);
   });
@@ -1189,7 +1320,7 @@ describe("detectPanicDefensives", () => {
     const targetId = "target-1";
     const castTime = START + 60_000;
     const cast = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       castTime,
       targetId,
       "Target",
@@ -1215,7 +1346,7 @@ describe("detectPanicDefensives", () => {
     const targetId = "target-1";
     const castTime = START + 60_000;
     const cast = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       castTime,
       targetId,
       "Target",
@@ -1241,7 +1372,7 @@ describe("detectPanicDefensives", () => {
     const targetId = "target-1";
     const castTime = START + 60_000;
     const cast = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       castTime,
       targetId,
       "Target",
@@ -1297,7 +1428,7 @@ describe("detectPanicDefensives", () => {
     const targetId = "target-1";
     const castTime = START + 60_000;
     const cast = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       castTime,
       targetId,
       "Target",
@@ -1339,14 +1470,14 @@ describe("detectPanicDefensives", () => {
     const targetId = "target-1";
     // Two panic presses: first at 120s, second at 60s → sorted as [60, 120]
     const cast1 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 120_000,
       targetId,
       "Target",
       "caster-a",
     );
     const cast2 = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       START + 60_000,
       targetId,
       "Target",
@@ -1378,7 +1509,7 @@ describe("detectPanicDefensives", () => {
     const targetId = "healer-target";
     const castTime = START + 60_000;
     const cast = makeSpellCastEvent(
-      DIVINE_PROTECTION,
+      ALLY_WALL,
       castTime,
       targetId,
       "HealerTarget",
@@ -2281,9 +2412,19 @@ describe("rendersOnCaster", () => {
     }
   });
 
-  it("adds an officially self-only Defensive outside the big-defensive roster", () => {
-    // Survival of the Fittest: the cast line names the hunter's current target
-    expect(isSelfOnlyDefensive("264735")).toBe(false);
+  it("the healing cooldowns the derived list dropped still render on the caster (GH #150)", () => {
+    // Divine Hymn / Tranquility take the B136 team-heal branch from there
+    for (const id of ["64843", "740", "200183"]) {
+      expect(isSelfOnlyDefensive(id)).toBe(false);
+      expect(rendersOnCaster(id)).toBe(true);
+    }
+  });
+
+  it("Survival of the Fittest renders on the caster", () => {
+    // the cast line names the hunter's current target. Since GH #150
+    // (2026-11-06) the major-defensive list is derived from
+    // bigDefensiveSpellIds, which carries it, so the first arm answers.
+    expect(isSelfOnlyDefensive("264735")).toBe(true);
     expect(rendersOnCaster("264735")).toBe(true);
   });
 

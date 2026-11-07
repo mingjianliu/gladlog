@@ -111,50 +111,25 @@ const spellIdLists = {
     "374227", // Zephyr
     "31821", // Aura Mastery — 2026-08-22 用户裁定 20%、2026-09-04 改按官方 PvP 链路 24%(3 + 9 × 2.34)全团减伤(见 mitigationData.ts 该条注释的官方链路与语料实证);补登记到这里是因为减伤表有「无第三态」不变量:有减伤值的 id 必须已经是登记在册的防御技能
   ],
-  // External or major personal defensives (the list above + the main personal
-  // walls)
-  externalOrBigDefensiveSpellIds: [
-    "33206",
-    "47788",
-    "102342",
-    "6940",
-    "1022",
-    "204018",
-    "116849",
-    "62618",
-    "98008",
-    "97462",
-    "196718",
-    "51052",
-    "357170",
-    "374227",
-    "642",
-    "45438",
-    "871",
-    "48792",
-    "104773",
-    "115203",
-    "186265",
-    "31224",
-    "61336",
-    "122470",
-    "108271",
-    "363916",
-    "31850",
-    "86659",
-    "22812",
-    "5277",
-    "118038",
-    "184364",
-    "19236",
-    "47585",
-    "498",
-    "64843",
-    "740",
-    "200183",
-    "31821",
-  ],
+  // External or major personal defensives. Derived below from the two lists
+  // above (GH #150, 2026-11-06): it used to be a third hand copy that drifted
+  // — it kept three healing cooldowns (Divine Hymn 64843, Tranquility 740,
+  // Apotheosis 200183) and missed the four ids W1g added to
+  // bigDefensiveSpellIds (Survival of the Fittest, Greater Invisibility,
+  // Retribution's Divine Protection 403876, Renewing Blaze).
+  externalOrBigDefensiveSpellIds: [] as string[],
 };
+spellIdLists.externalOrBigDefensiveSpellIds = [
+  ...new Set([
+    ...spellIdLists.externalDefensiveSpellIds,
+    ...spellIdLists.bigDefensiveSpellIds,
+    // Evasion sits in attributedMitigationSpellIds (dodge, not a percentage)
+    // and not in bigDefensiveSpellIds, whose members dispelAnalysis treats as
+    // Critical purges and the crisis / burst-window response sets count as
+    // answers. It stays a major defensive here, as it was in the hand copy.
+    "5277",
+  ]),
+];
 export default spellIdLists;
 
 // —— Enemy-side saves (triage 2026-09-29, enemy-def F-E7 / F-E4 / F-E9) ————————

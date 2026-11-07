@@ -170,6 +170,21 @@ export function isSelfOnlyDefensive(spellId: string): boolean {
 }
 
 /**
+ * GH #150 (2026-11-07): the three healing cooldowns the old hand copy of
+ * `externalOrBigDefensiveSpellIds` carried — and the derived list no longer
+ * does — keep rendering on the caster. Their cast row names whatever unit the
+ * healer had selected; Divine Hymn and Tranquility then take the B136
+ * team-heal branch (lowest friendly HP), Apotheosis (a self buff) the
+ * caster's own. Without this a Divine Hymn cast with a healthy ally selected
+ * read `→ ally (100% HP)` (codex review of the #150 diff).
+ */
+const CASTER_RENDERED_HEAL_CD_IDS: ReadonlySet<string> = new Set([
+  "64843", // Divine Hymn
+  "740", // Tranquility
+  "200183", // Apotheosis
+]);
+
+/**
  * Triage 2026-09-29, hp-state F-S1: should a `[YOU] [CD]` line render on the
  * caster (`self: N% HP`) whatever unit the cast was logged against?
  * `isSelfOnlyDefensive` answers it for the big-defensive roster only, so an
@@ -187,6 +202,7 @@ export function isSelfOnlyDefensive(spellId: string): boolean {
 export function rendersOnCaster(spellId: string): boolean {
   return (
     isSelfOnlyDefensive(spellId) ||
+    CASTER_RENDERED_HEAL_CD_IDS.has(spellId) ||
     (DEFENSIVE_CLASS_IDS.has(spellId) &&
       hasOfficialTargeting(spellId) &&
       !reachesAlly(spellId))
@@ -7394,26 +7410,37 @@ export function detectOverlappedDefensives(
       // fact9 D17: a heal is no major defensive to overlap
       if (isNotMajorDefensive(spellId)) continue;
 
-      let targetId = action.destUnitId;
-      let targetName = action.destUnitName;
-      if (!targetId || targetId === "0000000000000000") {
-        targetId = unit.id;
-        targetName = unit.name;
+      // GH #150: a self-only defensive's cast row names whatever unit the
+      // caster had selected — the wall is on the caster, and also on the ally
+      // its aura events prove a talent copied it to (Lifecinders Obsidian
+      // Scales): one entry per protected unit
+      let recipients: { id: string; name: string }[];
+      if (rendersOnCaster(spellId)) {
+        const copy = allyCopyRecipient(unit.id, action, friends);
+        recipients = copy ? [unit, copy] : [unit];
+      } else if (
+        !action.destUnitId ||
+        action.destUnitId === "0000000000000000"
+      ) {
+        recipients = [unit];
+      } else {
+        recipients = [{ id: action.destUnitId, name: action.destUnitName }];
       }
 
-      if (!friendlyIds.has(targetId)) continue;
-
-      casts.push({
-        timeSeconds: (action.timestamp - combat.startTime) / 1000,
-        castMs: action.timestamp,
-        casterUnitId: unit.id,
-        casterName: unit.name,
-        casterSpec: specToString(unit.spec),
-        spellId,
-        spellName: getEnglishSpellName(spellId, action.spellName),
-        targetUnitId: targetId,
-        targetName: targetName,
-      });
+      for (const r of recipients) {
+        if (!friendlyIds.has(r.id)) continue;
+        casts.push({
+          timeSeconds: (action.timestamp - combat.startTime) / 1000,
+          castMs: action.timestamp,
+          casterUnitId: unit.id,
+          casterName: unit.name,
+          casterSpec: specToString(unit.spec),
+          spellId,
+          spellName: getEnglishSpellName(spellId, action.spellName),
+          targetUnitId: r.id,
+          targetName: r.name,
+        });
+      }
     }
   }
 
@@ -7802,9 +7829,7 @@ function offensiveThreatStartedAfter(
       )
         continue;
       // a healer's throughput major is no threat (fact11 D16)
-      if (
-        isHealerHeldOffensive(offensiveCdOfAura(aura.spellId)!, enemy.spec)
-      )
+      if (isHealerHeldOffensive(offensiveCdOfAura(aura.spellId)!, enemy.spec))
         continue;
       // an enemy's own offensive cooldown is a buff on it — a DEBUFF there is
       // ours (a friendly mage's Touch of the Magi 210824), the rule
@@ -7864,11 +7889,24 @@ export function detectPanicDefensives(
       if (!spellId || !MAJOR_DEFENSIVE_IDS.has(spellId)) continue;
       // fact9 D17: a heal is no "major defensive used with no threat"
       if (isNotMajorDefensive(spellId)) continue;
-      if (!friendlyIds.has(action.destUnitId)) continue;
+      // GH #150: a self-only defensive protects its caster whatever unit the
+      // cast row names (the caster's selection) — and, alongside the caster,
+      // the ally its aura events prove a talent copied it to (Lifecinders
+      // Obsidian Scales). The press is a panic only when NO recipient was
+      // under threat.
+      let recipients: ICombatUnit[];
+      if (rendersOnCaster(spellId)) {
+        const copy = allyCopyRecipient(unit.id, action, friends);
+        recipients = copy ? [unit, copy] : [unit];
+      } else {
+        if (!friendlyIds.has(action.destUnitId)) continue;
+        const dest = unitMap.get(action.destUnitId);
+        recipients = dest ? [dest] : [];
+      }
 
       const castMs = action.timestamp;
       const castTimeSeconds = (castMs - combat.startTime) / 1000;
-      const targetUnit = unitMap.get(action.destUnitId);
+      const targetUnit: ICombatUnit | undefined = recipients[0];
 
       // 1. Enemy self-buffs: Combustion, Recklessness, etc. — never a
       // healer's throughput major (fact11 D16)
@@ -7885,47 +7923,48 @@ export function detectPanicDefensives(
       )
         continue;
 
-      // 2. Offensive debuffs on the target from enemies: Deathmark, Colossus Smash, etc.
-      if (
-        targetUnit &&
-        hasOffensiveSpellActive(targetUnit, castMs, enemyIds, undefined, round)
-      )
-        continue;
-
-      // 3. Local pressure: raw damage to target in the 3s before this cast
-      const pressureThreshold = targetUnit
-        ? getPressureThreshold(targetUnit)
-        : PANIC_PRESS_DAMAGE_THRESHOLD_DPS;
-      const preCastDamage = (targetUnit?.damageIn ?? [])
-        .filter(
-          (d) =>
-            d.logLine.timestamp >= castMs - PANIC_PRESS_PRE_CAST_WINDOW_MS &&
-            d.logLine.timestamp < castMs,
+      const damageIn = (u: ICombatUnit | undefined, from: number, to: number) =>
+        (u?.damageIn ?? [])
+          .filter(
+            (d) => d.logLine.timestamp > from && d.logLine.timestamp <= to,
+          )
+          .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
+      const threatened = (u: ICombatUnit | undefined): boolean => {
+        // 2. Offensive debuffs on the target from enemies: Deathmark, Colossus Smash, etc.
+        if (u && hasOffensiveSpellActive(u, castMs, enemyIds, undefined, round))
+          return true;
+        // 3. Local pressure: raw damage to target in the 3s before this cast
+        const pressureThreshold = u
+          ? getPressureThreshold(u)
+          : PANIC_PRESS_DAMAGE_THRESHOLD_DPS;
+        // [castMs − window, castMs): the half-open window of the original filter
+        const preCastDamage = (u?.damageIn ?? [])
+          .filter(
+            (d) =>
+              d.logLine.timestamp >= castMs - PANIC_PRESS_PRE_CAST_WINDOW_MS &&
+              d.logLine.timestamp < castMs,
+          )
+          .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
+        if (preCastDamage >= pressureThreshold) return true;
+        // 3. Post-cast pressure: if the target took significant damage in the 4s after, it was a pre-wall
+        if (
+          damageIn(u, castMs, castMs + PANIC_PRESS_POST_CAST_WINDOW_MS) >=
+          pressureThreshold
         )
-        .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
-      if (preCastDamage >= pressureThreshold) continue;
-
-      // 3. Post-cast pressure: if the target took significant damage in the 4s after, it was a pre-wall
-      const postCastDamage = (targetUnit?.damageIn ?? [])
-        .filter(
-          (d) =>
-            d.logLine.timestamp > castMs &&
-            d.logLine.timestamp <= castMs + PANIC_PRESS_POST_CAST_WINDOW_MS,
-        )
-        .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
-      if (postCastDamage >= pressureThreshold) continue;
-
-      // 4. Enemy burst started within 2s after the cast — valid pre-wall, not a panic
-      if (
-        targetUnit &&
-        offensiveThreatStartedAfter(
-          targetUnit,
-          enemies,
-          enemyIds,
-          castMs,
-          ENEMY_BURST_POST_CAST_WINDOW_MS,
-        )
-      )
+          return true;
+        // 4. Enemy burst started within 2s after the cast — valid pre-wall, not a panic
+        return (
+          !!u &&
+          offensiveThreatStartedAfter(
+            u,
+            enemies,
+            enemyIds,
+            castMs,
+            ENEMY_BURST_POST_CAST_WINDOW_MS,
+          )
+        );
+      };
+      if ((recipients.length ? recipients : [undefined]).some(threatened))
         continue;
 
       results.push({
@@ -7934,7 +7973,7 @@ export function detectPanicDefensives(
         casterName: unit.name,
         spellName: getEnglishSpellName(spellId, action.spellName),
         spellId,
-        targetName: action.destUnitName,
+        targetName: targetUnit?.name ?? action.destUnitName,
         targetSpec: targetUnit ? specToString(targetUnit.spec) : "Unknown",
       });
     }

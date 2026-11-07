@@ -802,8 +802,9 @@ export function lowPressureUnusedDefensiveNote(
   // match — ba8c0510 printed that beside a teammate cd-hoarded line accusing
   // a held Time Dilation. An ally-reaching cooldown is never called "held
   // correctly" here: the owner's HP says nothing about the teammate's.
-  // (`!isSelfOnlyDefensive` is NOT the selector: it is true for Tranquility,
-  // Divine Hymn and Apotheosis.)
+  // (`!isSelfOnlyDefensive` is NOT the selector: it was true for Tranquility,
+  // Divine Hymn and Apotheosis until GH #150 derived the list, and it only
+  // covers the big-defensive roster.)
   const held = cds.filter(
     (cd) =>
       cdNeverSpent(cd) &&
@@ -1044,8 +1045,7 @@ export function emitFriendlyDeathEntries<S>(params: {
       const readyAtDeath = allPlayerCDs
         // fact9 D17: a heal is no unused defensive
         .filter(
-          (cd) =>
-            cd.tag === "Defensive" && !isNotMajorDefensive(cd.spellId),
+          (cd) => cd.tag === "Defensive" && !isNotMajorDefensive(cd.spellId),
         )
         // a row owned on the spec baseline alone is cd-hoarded's only (ruling
         // P-W6): this list has no school gate for a button never shown

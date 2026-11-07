@@ -218,8 +218,24 @@ export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
     "5277", // Evasion — 120 s
     "212295", // Nether Ward — 45 s
     "109304", // Exhilaration — 120 s
-  ].filter((id) => id !== "200183"),
-); // Apotheosis dropped
+    // GH #150 (2026-11-06): externalOrBigDefensiveSpellIds is now derived
+    // (external ∪ big ∪ Evasion), so the two group heals it used to carry by
+    // hand are named here. They stay in the span roster: the span state
+    // machine times them like the D9 self heals above (fact8 D9, user
+    // 2026-11-01), and the burst ledger does not call them a defensive up
+    // (KW_NOT_UP_AS_DEFENSE_IDS, fact9 D21).
+    "64843", // Divine Hymn — 180 s
+    "740", // Tranquility — 180 s
+  ].filter(
+    (id) =>
+      // Apotheosis (user sign-off 2026-09-02, GH #31 ②) — dropped
+      id !== "200183" &&
+      // Renewing Blaze reaches the derived list through bigDefensiveSpellIds
+      // (W1g) but was never in this roster; whether it closes a span is an
+      // open question on GH #150 (605: −18 window lines), kept out until ruled
+      id !== "374348",
+  ),
+);
 
 /** Same floor the kill-window state machine has always applied — hoisted from
  * offensiveWindows.ts's literal so scan/product/gate share one number. */
