@@ -1577,10 +1577,11 @@ export function saveCoversPressureOn(
 
 /**
  * Corpus-derived outcome reference for cd-hoarded (2026-08-30, GH #34;
- * re-run 2026-10-08 and 2026-10-13 in the GH #115 batched regens):
+ * re-run 2026-10-08, 2026-10-13, 2026-10-20 and 2026-11-06 in the GH #115
+ * batched regens):
  * 3,000-match outcome probe "cd-hoarded" (`signalOutcomeProbe.ts --only
  * cd-hoarded`, the first 3,000 files of manifest-archive-2026-08-28-newseason;
- * report eval-private/runs/regen-115-2026-10-13/cd-hoarded-ref/report.md;
+ * report eval-private/runs/regen-115-2026-11-06/cd-hoarded-ref/report.md;
  * first run: eval-private/reports/signal-outcomes-2026-08-30/report.md). Decision
  * point = every friendly crisis (`crisisDecisionPoints` on the owner for
  * their own crises, and on each teammate as owner for theirs; HP crossed
@@ -1588,15 +1589,15 @@ export function saveCoversPressureOn(
  * crisisDecisionPoints.ts) at which the owner had >=1 usable major
  * Defensive cooldown ready (a personal wall or a self-castable external for
  * the owner's own crisis; any cooldown `canHelpAnotherUnit` says can reach
- * the crisis unit for a teammate's). Across 15,653 such decision points,
- * the crisis unit died within 10s **5.8%** of the time when a ready
- * cooldown was spent within `CD_HOARD_RESPONSE_S` vs **13.0%** when every
- * ready cooldown was held (share acted 27%; 2v2 7.0% vs 16.7%; Solo Shuffle
- * 5.3% vs 11.6%; own-crisis 6.9% vs 19.7%; teammate-crisis 5.5% vs 11.8%).
+ * the crisis unit for a teammate's). Across 16,061 such decision points,
+ * the crisis unit died within 10s **5.3%** of the time when a ready
+ * cooldown was spent within `CD_HOARD_RESPONSE_S` vs **13.8%** when every
+ * ready cooldown was held (share acted 30%; 2v2 7.3% vs 17.1%; Solo Shuffle
+ * 4.6% vs 12.6%; own-crisis 7.6% vs 19.5%; teammate-crisis 4.8% vs 12.8%).
  * The 2026-08-30 run (16,960 points: 4.5% vs 11.4%) recorded only "3,000
  * matches"; its 2v2 / Solo Shuffle point counts (4,485 / 11,943) are close
- * to this slice's (4,359 / 11,274) but not equal, and its 3v3 count (532) is
- * far off (23 here — the slice holds 6 3v3 files), so the slice is a best
+ * to this slice's (4,440 / 11,596) but not equal, and its 3v3 count (532) is
+ * far off (25 here — the slice holds 6 3v3 files), so the slice is a best
  * reconstruction, not proven to be the same input.
  *
  * Descriptive, never causal — the legend (buildFindingsPrompt.ts) says so
@@ -1616,11 +1617,15 @@ export function saveCoversPressureOn(
  * printed rate, overall or per slice. The 2026-10-20 re-run (code cc8b22e8c,
  * after the fact1215 fixes) moved it 15,656 → 15,653 and no printed rate;
  * four per-slice rates moved by 0.1 pp (2v2 and own-crisis, both sides).
+ * The 2026-11-06 re-run (code e950156df, after the fact8–fact11 / F21–F26
+ * rounds: more answers recognised, heals off the major-defensive set, the
+ * F24/F25 offensive-cooldown additions) moved it 15,653 → 16,061 and the
+ * printed rates 5.8 → 5.3 (spent) and 13.0 → 13.8 (held).
  */
 export const CD_HOARDED_OUTCOME_REF = {
-  refDeathSpent: "5.8",
-  refDeathHeld: "13.0",
-  refN: "15653",
+  refDeathSpent: "5.3",
+  refDeathHeld: "13.8",
+  refN: "16061",
 } as const;
 
 /** One crisis-decision-point SOURCE cd-hoarded scans: the unit in crisis

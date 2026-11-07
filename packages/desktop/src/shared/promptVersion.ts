@@ -906,4 +906,11 @@
  *  every press was refused IMMUNE says so, and a later press's hit no longer
  *  lands a refused one. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 497;
+/*
+ * v498 (2026-11-07, GH #115 regen #6, data only): the reference tables and
+ *  CD_HOARDED_OUTCOME_REF (5.3 / 13.8 / 16,061) are regenerated at
+ *  e950156df; cooldown floors the model now explains drop, Fade leaves the
+ *  priest save rosters, new burst-window cells move the slow-defensive-
+ *  response contrast door. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 498;

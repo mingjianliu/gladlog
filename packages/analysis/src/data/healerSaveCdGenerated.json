@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-10-20",
+    "generatedAt": "2026-11-06",
     "corpus": "1814 archived files (12.1+ rounds only)",
     "command": "npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in <counts.json> --out <file.json>",
     "minShare": 0.02,
@@ -52,19 +52,6 @@
           ]
         },
         {
-          "spellId": "586",
-          "name": "Fade",
-          "cooldownSeconds": 30,
-          "share": 0.712,
-          "rounds": 664,
-          "casts": 1619,
-          "savesAlly": false,
-          "savesSelf": true,
-          "why": [
-            "self: mitigation"
-          ]
-        },
-        {
           "spellId": "19236",
           "name": "Desperate Prayer",
           "cooldownSeconds": 90,
@@ -83,6 +70,7 @@
         "256948",
         "32375",
         "336126",
+        "586",
         "58984",
         "73325",
         "7744",
@@ -283,19 +271,6 @@
           ]
         },
         {
-          "spellId": "586",
-          "name": "Fade",
-          "cooldownSeconds": 30,
-          "share": 0.834,
-          "rounds": 2182,
-          "casts": 6483,
-          "savesAlly": false,
-          "savesSelf": true,
-          "why": [
-            "self: mitigation"
-          ]
-        },
-        {
           "spellId": "215769",
           "name": "Spirit of Redemption",
           "cooldownSeconds": 120,
@@ -355,6 +330,7 @@
         "32375",
         "336126",
         "34861",
+        "586",
         "58984",
         "73325",
         "7744",
@@ -784,6 +760,13 @@
         "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
       },
       {
+        "spellId": "586",
+        "name": "Fade",
+        "cooldownSeconds": 30,
+        "share": 0.712,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
+      },
+      {
         "spellId": "336126",
         "name": "Gladiator's Medallion",
         "cooldownSeconds": 120,
@@ -912,6 +895,13 @@
         "cooldownSeconds": 40,
         "share": 0.92,
         "reason": "official profile silent (reachesAlly=false, hitsEnemy=true, dealsDamage=false, moveSpeed=-)"
+      },
+      {
+        "spellId": "586",
+        "name": "Fade",
+        "cooldownSeconds": 30,
+        "share": 0.834,
+        "reason": "official profile silent (reachesAlly=false, hitsEnemy=false, dealsDamage=false, moveSpeed=-)"
       },
       {
         "spellId": "336126",

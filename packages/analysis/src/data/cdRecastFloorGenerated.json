@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-10-20",
+    "generatedAt": "2026-11-06",
     "manifest": "manifest-archive-2026-08-28-newseason.txt",
     "every": 3,
     "offset": 1,
@@ -13,229 +13,59 @@
       "quantile": 0.02,
       "floorRatio": 0.07,
       "staticBreak": 0.377,
-      "holdoutStaticBreak": 0.325,
+      "holdoutStaticBreak": 0.324,
       "nTrain": 183,
-      "nHoldout": 169,
-      "holdoutBelow": 0.03
-    },
-    "13750|260": {
-      "name": "Adrenaline Rush",
-      "quantile": 0.02,
-      "floorRatio": 0.087,
-      "staticBreak": 1,
-      "holdoutStaticBreak": 1,
-      "nTrain": 120,
-      "nHoldout": 137,
+      "nHoldout": 170,
       "holdoutBelow": 0.029
     },
-    "45438|64": {
-      "name": "Ice Block",
+    "1259431|1480": {
+      "name": "Predator's Wake",
       "quantile": 0.02,
-      "floorRatio": 0.151,
-      "staticBreak": 0.554,
-      "holdoutStaticBreak": 0.538,
-      "nTrain": 56,
-      "nHoldout": 65,
-      "holdoutBelow": 0
-    },
-    "446035|71": {
-      "name": "Bladestorm",
-      "quantile": 0.02,
-      "floorRatio": 0.292,
-      "staticBreak": 0.961,
-      "holdoutStaticBreak": 0.966,
-      "nTrain": 3009,
-      "nHoldout": 3012,
-      "holdoutBelow": 0.021
-    },
-    "1719|72": {
-      "name": "Recklessness",
-      "quantile": 0.01,
-      "floorRatio": 0.357,
-      "staticBreak": 0.997,
-      "holdoutStaticBreak": 0.997,
-      "nTrain": 1169,
-      "nHoldout": 1198,
-      "holdoutBelow": 0.02
-    },
-    "107574|72": {
-      "name": "Avatar",
-      "quantile": 0.02,
-      "floorRatio": 0.368,
-      "staticBreak": 0.996,
-      "holdoutStaticBreak": 0.997,
-      "nTrain": 945,
-      "nHoldout": 940,
-      "holdoutBelow": 0.021
-    },
-    "391528|105": {
-      "name": "Convoke the Spirits",
-      "quantile": 0.02,
-      "floorRatio": 0.389,
-      "staticBreak": 0.928,
-      "holdoutStaticBreak": 0.948,
-      "nTrain": 236,
-      "nHoldout": 229,
-      "holdoutBelow": 0.022
-    },
-    "446035|72": {
-      "name": "Bladestorm",
-      "quantile": 0.01,
-      "floorRatio": 0.39,
-      "staticBreak": 0.915,
-      "holdoutStaticBreak": 0.896,
-      "nTrain": 117,
-      "nHoldout": 135,
-      "holdoutBelow": 0.022
-    },
-    "228260|258": {
-      "name": "Voidform",
-      "quantile": 0.02,
-      "floorRatio": 0.445,
-      "staticBreak": 0.94,
-      "holdoutStaticBreak": 0.925,
-      "nTrain": 748,
-      "nHoldout": 788,
-      "holdoutBelow": 0.022
-    },
-    "79206|262": {
-      "name": "Spiritwalker's Grace",
-      "quantile": 0.0025,
-      "floorRatio": 0.45,
-      "staticBreak": 0.042,
-      "holdoutStaticBreak": 0.054,
-      "nTrain": 213,
-      "nHoldout": 221,
-      "holdoutBelow": 0.023
-    },
-    "33891|105": {
-      "name": "Incarnation: Tree of Life",
-      "quantile": 0.02,
-      "floorRatio": 0.463,
-      "staticBreak": 0.993,
-      "holdoutStaticBreak": 0.988,
-      "nTrain": 592,
-      "nHoldout": 578,
-      "holdoutBelow": 0.014
+      "floorRatio": 0.413,
+      "staticBreak": 0.974,
+      "holdoutStaticBreak": 0.963,
+      "nTrain": 491,
+      "nHoldout": 464,
+      "holdoutBelow": 0.019
     },
     "471195|65": {
       "name": "Lay on Hands",
       "quantile": 0.02,
       "floorRatio": 0.471,
-      "staticBreak": 0.852,
+      "staticBreak": 0.849,
       "holdoutStaticBreak": 0.885,
-      "nTrain": 54,
+      "nTrain": 53,
       "nHoldout": 78,
       "holdoutBelow": 0.026
-    },
-    "84714|64": {
-      "name": "Frozen Orb",
-      "quantile": 0.02,
-      "floorRatio": 0.485,
-      "staticBreak": 0.906,
-      "holdoutStaticBreak": 0.897,
-      "nTrain": 1901,
-      "nHoldout": 2153,
-      "holdoutBelow": 0.015
-    },
-    "202770|102": {
-      "name": "Fury of Elune",
-      "quantile": 0.02,
-      "floorRatio": 0.524,
-      "staticBreak": 0.491,
-      "holdoutStaticBreak": 0.475,
-      "nTrain": 271,
-      "nHoldout": 219,
-      "holdoutBelow": 0.014
-    },
-    "132158|105": {
-      "name": "Nature's Swiftness",
-      "quantile": 0.02,
-      "floorRatio": 0.59,
-      "staticBreak": 0.656,
-      "holdoutStaticBreak": 0.702,
-      "nTrain": 1080,
-      "nHoldout": 1088,
-      "holdoutBelow": 0.019
     },
     "1241937|1480": {
       "name": "Soul Immolation",
       "quantile": 0.02,
-      "floorRatio": 0.596,
-      "staticBreak": 0.111,
+      "floorRatio": 0.659,
+      "staticBreak": 0.1,
       "holdoutStaticBreak": 0.075,
-      "nTrain": 1180,
+      "nTrain": 1162,
       "nHoldout": 1070,
-      "holdoutBelow": 0.012
-    },
-    "473909|105": {
-      "name": "Ancient of Lore",
-      "quantile": 0.02,
-      "floorRatio": 0.634,
-      "staticBreak": 0.719,
-      "holdoutStaticBreak": 0.811,
-      "nTrain": 153,
-      "nHoldout": 175,
-      "holdoutBelow": 0.023
-    },
-    "46968|71": {
-      "name": "Shockwave",
-      "quantile": 0.02,
-      "floorRatio": 0.654,
-      "staticBreak": 0.149,
-      "holdoutStaticBreak": 0.111,
-      "nTrain": 2603,
-      "nHoldout": 2118,
-      "holdoutBelow": 0.018
+      "holdoutBelow": 0.016
     },
     "22842|102": {
       "name": "Frenzied Regeneration",
       "quantile": 0.02,
       "floorRatio": 0.67,
-      "staticBreak": 0.312,
-      "holdoutStaticBreak": 0.308,
-      "nTrain": 458,
-      "nHoldout": 490,
-      "holdoutBelow": 0.018
-    },
-    "205636|102": {
-      "name": "Force of Nature",
-      "quantile": 0.02,
-      "floorRatio": 0.676,
-      "staticBreak": 0.541,
-      "holdoutStaticBreak": 0.52,
-      "nTrain": 1417,
-      "nHoldout": 1532,
-      "holdoutBelow": 0.016
-    },
-    "46968|72": {
-      "name": "Shockwave",
-      "quantile": 0.02,
-      "floorRatio": 0.68,
-      "staticBreak": 0.072,
-      "holdoutStaticBreak": 0.07,
-      "nTrain": 417,
-      "nHoldout": 445,
+      "staticBreak": 0.313,
+      "holdoutStaticBreak": 0.309,
+      "nTrain": 460,
+      "nHoldout": 492,
       "holdoutBelow": 0.02
-    },
-    "191634|262": {
-      "name": "Stormkeeper",
-      "quantile": 0.02,
-      "floorRatio": 0.683,
-      "staticBreak": 0.651,
-      "holdoutStaticBreak": 0.645,
-      "nTrain": 1096,
-      "nHoldout": 930,
-      "holdoutBelow": 0.027
     },
     "33206|256": {
       "name": "Pain Suppression",
       "quantile": 0.02,
       "floorRatio": 0.686,
-      "staticBreak": 0.867,
-      "holdoutStaticBreak": 0.895,
-      "nTrain": 270,
-      "nHoldout": 228,
+      "staticBreak": 0.866,
+      "holdoutStaticBreak": 0.894,
+      "nTrain": 268,
+      "nHoldout": 227,
       "holdoutBelow": 0.013
     },
     "116849|270": {
@@ -243,70 +73,20 @@
       "quantile": 0.0025,
       "floorRatio": 0.722,
       "staticBreak": 0.129,
-      "holdoutStaticBreak": 0.19,
+      "holdoutStaticBreak": 0.191,
       "nTrain": 225,
-      "nHoldout": 221,
+      "nHoldout": 220,
       "holdoutBelow": 0.027
-    },
-    "167105|71": {
-      "name": "Colossus Smash",
-      "quantile": 0.02,
-      "floorRatio": 0.733,
-      "staticBreak": 0.754,
-      "holdoutStaticBreak": 0.753,
-      "nTrain": 5604,
-      "nHoldout": 5049,
-      "holdoutBelow": 0.026
-    },
-    "107574|71": {
-      "name": "Avatar",
-      "quantile": 0.02,
-      "floorRatio": 0.747,
-      "staticBreak": 0.864,
-      "holdoutStaticBreak": 0.861,
-      "nTrain": 2357,
-      "nHoldout": 2169,
-      "holdoutBelow": 0.025
     },
     "22842|103": {
       "name": "Frenzied Regeneration",
       "quantile": 0.02,
       "floorRatio": 0.8,
-      "staticBreak": 0.17,
-      "holdoutStaticBreak": 0.175,
-      "nTrain": 188,
-      "nHoldout": 285,
-      "holdoutBelow": 0.011
-    },
-    "5384|255": {
-      "name": "Feign Death",
-      "quantile": 0.02,
-      "floorRatio": 0.815,
-      "staticBreak": 0.233,
-      "holdoutStaticBreak": 0.243,
-      "nTrain": 688,
-      "nHoldout": 765,
-      "holdoutBelow": 0.008
-    },
-    "5384|254": {
-      "name": "Feign Death",
-      "quantile": 0.02,
-      "floorRatio": 0.819,
-      "staticBreak": 0.259,
-      "holdoutStaticBreak": 0.253,
-      "nTrain": 1350,
-      "nHoldout": 1211,
-      "holdoutBelow": 0.017
-    },
-    "5384|253": {
-      "name": "Feign Death",
-      "quantile": 0.02,
-      "floorRatio": 0.823,
-      "staticBreak": 0.228,
-      "holdoutStaticBreak": 0.251,
-      "nTrain": 2555,
-      "nHoldout": 2501,
-      "holdoutBelow": 0.026
+      "staticBreak": 0.175,
+      "holdoutStaticBreak": 0.174,
+      "nTrain": 189,
+      "nHoldout": 287,
+      "holdoutBelow": 0.01
     },
     "205021|64": {
       "name": "Ray of Frost",
@@ -321,21 +101,41 @@
     "11426|64": {
       "name": "Ice Barrier",
       "quantile": 0.02,
-      "floorRatio": 0.845,
+      "floorRatio": 0.844,
       "staticBreak": 0.092,
       "holdoutStaticBreak": 0.095,
-      "nTrain": 2495,
-      "nHoldout": 2726,
-      "holdoutBelow": 0.016
+      "nTrain": 2527,
+      "nHoldout": 2756,
+      "holdoutBelow": 0.015
+    },
+    "385059|72": {
+      "name": "Odyn's Fury",
+      "quantile": 0.02,
+      "floorRatio": 0.87,
+      "staticBreak": 0.046,
+      "holdoutStaticBreak": 0.016,
+      "nTrain": 628,
+      "nHoldout": 640,
+      "holdoutBelow": 0
+    },
+    "235450|62": {
+      "name": "Prismatic Barrier",
+      "quantile": 0.02,
+      "floorRatio": 0.872,
+      "staticBreak": 0.082,
+      "holdoutStaticBreak": 0.063,
+      "nTrain": 1312,
+      "nHoldout": 1356,
+      "holdoutBelow": 0.015
     },
     "102560|102": {
       "name": "Incarnation: Chosen of Elune",
       "quantile": 0.02,
       "floorRatio": 0.885,
-      "staticBreak": 0.152,
-      "holdoutStaticBreak": 0.175,
+      "staticBreak": 0.149,
+      "holdoutStaticBreak": 0.174,
       "nTrain": 435,
-      "nHoldout": 468,
+      "nHoldout": 470,
       "holdoutBelow": 0.028
     },
     "370553|1468": {
@@ -343,60 +143,50 @@
       "quantile": 0.02,
       "floorRatio": 0.912,
       "staticBreak": 0.391,
-      "holdoutStaticBreak": 0.447,
+      "holdoutStaticBreak": 0.445,
       "nTrain": 325,
-      "nHoldout": 385,
+      "nHoldout": 384,
       "holdoutBelow": 0
-    },
-    "115078|269": {
-      "name": "Paralysis",
-      "quantile": 0.01,
-      "floorRatio": 0.922,
-      "staticBreak": 0.019,
-      "holdoutStaticBreak": 0.015,
-      "nTrain": 1714,
-      "nHoldout": 1491,
-      "holdoutBelow": 0.006
     },
     "372048|1468": {
       "name": "Oppressing Roar",
       "quantile": 0.02,
       "floorRatio": 0.926,
-      "staticBreak": 0.232,
-      "holdoutStaticBreak": 0.288,
-      "nTrain": 82,
-      "nHoldout": 104,
+      "staticBreak": 0.235,
+      "holdoutStaticBreak": 0.291,
+      "nTrain": 81,
+      "nHoldout": 103,
       "holdoutBelow": 0.019
     },
     "357170|1468": {
       "name": "Time Dilation",
       "quantile": 0.02,
-      "floorRatio": 0.932,
-      "staticBreak": 0.099,
-      "holdoutStaticBreak": 0.101,
-      "nTrain": 715,
-      "nHoldout": 839,
-      "holdoutBelow": 0.023
+      "floorRatio": 0.933,
+      "staticBreak": 0.098,
+      "holdoutStaticBreak": 0.102,
+      "nTrain": 707,
+      "nHoldout": 836,
+      "holdoutBelow": 0.024
     },
     "363916|1468": {
       "name": "Obsidian Scales",
       "quantile": 0.02,
       "floorRatio": 0.938,
       "staticBreak": 0.181,
-      "holdoutStaticBreak": 0.179,
+      "holdoutStaticBreak": 0.18,
       "nTrain": 166,
-      "nHoldout": 207,
+      "nHoldout": 205,
       "holdoutBelow": 0.024
     },
     "370537|1468": {
       "name": "Stasis",
       "quantile": 0.02,
-      "floorRatio": 0.953,
-      "staticBreak": 0.183,
-      "holdoutStaticBreak": 0.201,
-      "nTrain": 251,
-      "nHoldout": 314,
-      "holdoutBelow": 0.016
+      "floorRatio": 0.949,
+      "staticBreak": 0.18,
+      "holdoutStaticBreak": 0.212,
+      "nTrain": 322,
+      "nHoldout": 378,
+      "holdoutBelow": 0.013
     }
   }
 }

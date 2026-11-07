@@ -1,99 +1,69 @@
 {
   "meta": {
-    "generatedAt": "2026-10-20",
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-20",
+    "generatedAt": "2026-11-07",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-06",
     "command": "npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "cohort": "all",
     "cohortRule": "all 12.1+ healer rounds in the archive",
-    "rows": 300236,
+    "rows": 235096,
     "nFloor": 50,
     "predicateVersion": 1
   },
   "cells": {
-    "Discipline Priest|*|19236": {
-      "n": 1682,
-      "medianHpPct": 46,
-      "spellName": "Desperate Prayer"
-    },
     "Discipline Priest|*|33206": {
-      "n": 12071,
+      "n": 12033,
       "medianHpPct": 49,
       "spellName": "Pain Suppression"
     },
     "Discipline Priest|*|421453": {
-      "n": 4241,
+      "n": 4224,
       "medianHpPct": 52,
       "spellName": "Ultimate Penitence"
     },
     "Discipline Priest|*|472433": {
-      "n": 14279,
+      "n": 14400,
       "medianHpPct": 52,
       "spellName": "Evangelism"
-    },
-    "Discipline Priest|*|586": {
-      "n": 7983,
-      "medianHpPct": 54,
-      "spellName": "Fade"
     },
     "Discipline Priest|*|62618": {
       "n": 34,
       "medianHpPct": 52,
       "spellName": "Power Word: Barrier"
     },
-    "Discipline Priest|Oracle|19236": {
-      "n": 1245,
-      "medianHpPct": 46,
-      "spellName": "Desperate Prayer"
-    },
     "Discipline Priest|Oracle|33206": {
-      "n": 9903,
+      "n": 9871,
       "medianHpPct": 49,
       "spellName": "Pain Suppression"
     },
     "Discipline Priest|Oracle|421453": {
-      "n": 3228,
+      "n": 3215,
       "medianHpPct": 53,
       "spellName": "Ultimate Penitence"
     },
     "Discipline Priest|Oracle|472433": {
-      "n": 12015,
+      "n": 12128,
       "medianHpPct": 52,
       "spellName": "Evangelism"
-    },
-    "Discipline Priest|Oracle|586": {
-      "n": 6510,
-      "medianHpPct": 54,
-      "spellName": "Fade"
     },
     "Discipline Priest|Oracle|62618": {
       "n": 32,
       "medianHpPct": 52,
       "spellName": "Power Word: Barrier"
     },
-    "Discipline Priest|Voidweaver|19236": {
-      "n": 437,
-      "medianHpPct": 44,
-      "spellName": "Desperate Prayer"
-    },
     "Discipline Priest|Voidweaver|33206": {
-      "n": 2168,
+      "n": 2162,
       "medianHpPct": 50,
       "spellName": "Pain Suppression"
     },
     "Discipline Priest|Voidweaver|421453": {
-      "n": 1013,
+      "n": 1009,
       "medianHpPct": 47,
       "spellName": "Ultimate Penitence"
     },
     "Discipline Priest|Voidweaver|472433": {
-      "n": 2264,
+      "n": 2272,
       "medianHpPct": 50,
       "spellName": "Evangelism"
-    },
-    "Discipline Priest|Voidweaver|586": {
-      "n": 1473,
-      "medianHpPct": 52,
-      "spellName": "Fade"
     },
     "Discipline Priest|Voidweaver|62618": {
       "n": 2,
@@ -101,77 +71,77 @@
       "spellName": "Power Word: Barrier"
     },
     "Holy Paladin|*|1022": {
-      "n": 2925,
+      "n": 2921,
       "medianHpPct": 42,
       "spellName": "Blessing of Protection"
     },
     "Holy Paladin|*|199448": {
-      "n": 827,
+      "n": 833,
       "medianHpPct": 48,
       "spellName": "Blessing of Sacrifice"
     },
     "Holy Paladin|*|204018": {
-      "n": 2417,
+      "n": 2416,
       "medianHpPct": 42,
       "spellName": "Blessing of Spellwarding"
     },
     "Holy Paladin|*|216331": {
-      "n": 11517,
+      "n": 11512,
       "medianHpPct": 54,
       "spellName": "Avenging Crusader"
     },
     "Holy Paladin|*|31821": {
-      "n": 8163,
+      "n": 8115,
       "medianHpPct": 54,
       "spellName": "Aura Mastery"
     },
     "Holy Paladin|*|31884": {
-      "n": 4156,
+      "n": 4149,
       "medianHpPct": 53,
       "spellName": "Avenging Wrath"
     },
     "Holy Paladin|*|375576": {
-      "n": 8273,
+      "n": 8229,
       "medianHpPct": 55,
       "spellName": "Divine Toll"
     },
     "Holy Paladin|*|471195": {
-      "n": 6858,
+      "n": 6984,
       "medianHpPct": 28,
       "spellName": "Lay on Hands"
     },
     "Holy Paladin|*|498": {
-      "n": 8674,
+      "n": 8665,
       "medianHpPct": 53,
       "spellName": "Divine Protection"
     },
     "Holy Paladin|*|633": {
-      "n": 183,
+      "n": 190,
       "medianHpPct": 36,
       "spellName": "Lay on Hands"
     },
     "Holy Paladin|*|642": {
-      "n": 6076,
+      "n": 6056,
       "medianHpPct": 38,
       "spellName": "Divine Shield"
     },
     "Holy Paladin|*|6940": {
-      "n": 9209,
+      "n": 9254,
       "medianHpPct": 54,
       "spellName": "Blessing of Sacrifice"
     },
     "Holy Paladin|Herald of the Sun|1022": {
-      "n": 1017,
+      "n": 1018,
       "medianHpPct": 43,
       "spellName": "Blessing of Protection"
     },
     "Holy Paladin|Herald of the Sun|199448": {
-      "n": 295,
+      "n": 296,
       "medianHpPct": 47,
       "spellName": "Blessing of Sacrifice"
     },
     "Holy Paladin|Herald of the Sun|204018": {
-      "n": 823,
+      "n": 825,
       "medianHpPct": 43,
       "spellName": "Blessing of Spellwarding"
     },
@@ -181,22 +151,22 @@
       "spellName": "Avenging Crusader"
     },
     "Holy Paladin|Herald of the Sun|31821": {
-      "n": 2747,
+      "n": 2736,
       "medianHpPct": 55,
       "spellName": "Aura Mastery"
     },
     "Holy Paladin|Herald of the Sun|31884": {
-      "n": 3892,
+      "n": 3885,
       "medianHpPct": 53,
       "spellName": "Avenging Wrath"
     },
     "Holy Paladin|Herald of the Sun|375576": {
-      "n": 8273,
+      "n": 8229,
       "medianHpPct": 55,
       "spellName": "Divine Toll"
     },
     "Holy Paladin|Herald of the Sun|471195": {
-      "n": 2131,
+      "n": 2169,
       "medianHpPct": 28,
       "spellName": "Lay on Hands"
     },
@@ -206,42 +176,42 @@
       "spellName": "Divine Protection"
     },
     "Holy Paladin|Herald of the Sun|633": {
-      "n": 125,
-      "medianHpPct": 36,
+      "n": 130,
+      "medianHpPct": 34,
       "spellName": "Lay on Hands"
     },
     "Holy Paladin|Herald of the Sun|642": {
-      "n": 2067,
+      "n": 2063,
       "medianHpPct": 39,
       "spellName": "Divine Shield"
     },
     "Holy Paladin|Herald of the Sun|6940": {
-      "n": 3214,
-      "medianHpPct": 54,
+      "n": 3236,
+      "medianHpPct": 53,
       "spellName": "Blessing of Sacrifice"
     },
     "Holy Paladin|Lightsmith|1022": {
-      "n": 1908,
-      "medianHpPct": 41,
+      "n": 1903,
+      "medianHpPct": 42,
       "spellName": "Blessing of Protection"
     },
     "Holy Paladin|Lightsmith|199448": {
-      "n": 532,
+      "n": 537,
       "medianHpPct": 49,
       "spellName": "Blessing of Sacrifice"
     },
     "Holy Paladin|Lightsmith|204018": {
-      "n": 1594,
+      "n": 1591,
       "medianHpPct": 41,
       "spellName": "Blessing of Spellwarding"
     },
     "Holy Paladin|Lightsmith|216331": {
-      "n": 11337,
+      "n": 11332,
       "medianHpPct": 54,
       "spellName": "Avenging Crusader"
     },
     "Holy Paladin|Lightsmith|31821": {
-      "n": 5416,
+      "n": 5379,
       "medianHpPct": 54,
       "spellName": "Aura Mastery"
     },
@@ -251,187 +221,127 @@
       "spellName": "Avenging Wrath"
     },
     "Holy Paladin|Lightsmith|471195": {
-      "n": 4727,
+      "n": 4815,
       "medianHpPct": 28,
       "spellName": "Lay on Hands"
     },
     "Holy Paladin|Lightsmith|498": {
-      "n": 5819,
+      "n": 5810,
       "medianHpPct": 53,
       "spellName": "Divine Protection"
     },
     "Holy Paladin|Lightsmith|633": {
-      "n": 58,
-      "medianHpPct": 37,
+      "n": 60,
+      "medianHpPct": 38,
       "spellName": "Lay on Hands"
     },
     "Holy Paladin|Lightsmith|642": {
-      "n": 4009,
+      "n": 3993,
       "medianHpPct": 38,
       "spellName": "Divine Shield"
     },
     "Holy Paladin|Lightsmith|6940": {
-      "n": 5995,
+      "n": 6018,
       "medianHpPct": 54,
       "spellName": "Blessing of Sacrifice"
     },
-    "Holy Priest|*|19236": {
-      "n": 2947,
-      "medianHpPct": 52,
-      "spellName": "Desperate Prayer"
-    },
-    "Holy Priest|*|200183": {
-      "n": 16006,
-      "medianHpPct": 52,
-      "spellName": "Apotheosis"
-    },
     "Holy Priest|*|215769": {
-      "n": 16112,
+      "n": 16031,
       "medianHpPct": 56,
       "spellName": "Spirit of Redemption"
     },
     "Holy Priest|*|47788": {
-      "n": 30748,
-      "medianHpPct": 47,
+      "n": 30692,
+      "medianHpPct": 48,
       "spellName": "Guardian Spirit"
     },
-    "Holy Priest|*|586": {
-      "n": 21451,
-      "medianHpPct": 59,
-      "spellName": "Fade"
-    },
-    "Holy Priest|*|64843": {
-      "n": 12343,
-      "medianHpPct": 57,
-      "spellName": "Divine Hymn"
-    },
-    "Holy Priest|Archon|19236": {
-      "n": 35,
-      "medianHpPct": 47,
-      "spellName": "Desperate Prayer"
-    },
-    "Holy Priest|Archon|200183": {
-      "n": 108,
-      "medianHpPct": 52,
-      "spellName": "Apotheosis"
-    },
     "Holy Priest|Archon|215769": {
-      "n": 83,
+      "n": 84,
       "medianHpPct": 57,
       "spellName": "Spirit of Redemption"
     },
     "Holy Priest|Archon|47788": {
-      "n": 192,
+      "n": 191,
       "medianHpPct": 50,
       "spellName": "Guardian Spirit"
     },
-    "Holy Priest|Archon|586": {
-      "n": 135,
-      "medianHpPct": 57,
-      "spellName": "Fade"
-    },
-    "Holy Priest|Archon|64843": {
-      "n": 55,
-      "medianHpPct": 55,
-      "spellName": "Divine Hymn"
-    },
-    "Holy Priest|Oracle|19236": {
-      "n": 2912,
-      "medianHpPct": 52,
-      "spellName": "Desperate Prayer"
-    },
-    "Holy Priest|Oracle|200183": {
-      "n": 15898,
-      "medianHpPct": 52,
-      "spellName": "Apotheosis"
-    },
     "Holy Priest|Oracle|215769": {
-      "n": 16029,
+      "n": 15947,
       "medianHpPct": 56,
       "spellName": "Spirit of Redemption"
     },
     "Holy Priest|Oracle|47788": {
-      "n": 30556,
-      "medianHpPct": 47,
+      "n": 30501,
+      "medianHpPct": 48,
       "spellName": "Guardian Spirit"
     },
-    "Holy Priest|Oracle|586": {
-      "n": 21316,
-      "medianHpPct": 59,
-      "spellName": "Fade"
-    },
-    "Holy Priest|Oracle|64843": {
-      "n": 12288,
-      "medianHpPct": 57,
-      "spellName": "Divine Hymn"
-    },
     "Mistweaver Monk|*|115203": {
-      "n": 1570,
+      "n": 1553,
       "medianHpPct": 51,
       "spellName": "Fortifying Brew"
     },
     "Mistweaver Monk|*|115310": {
-      "n": 335,
-      "medianHpPct": 43,
+      "n": 334,
+      "medianHpPct": 44,
       "spellName": "Revival"
     },
     "Mistweaver Monk|*|116849": {
-      "n": 4897,
+      "n": 4895,
       "medianHpPct": 40,
       "spellName": "Life Cocoon"
     },
     "Mistweaver Monk|*|325197": {
-      "n": 3507,
+      "n": 3481,
       "medianHpPct": 54,
       "spellName": "Invoke Chi-Ji, the Red Crane"
     },
     "Mistweaver Monk|*|388615": {
-      "n": 3211,
+      "n": 3235,
       "medianHpPct": 44,
       "spellName": "Restoral"
     },
     "Mistweaver Monk|*|443028": {
       "n": 459,
-      "medianHpPct": 53,
+      "medianHpPct": 52,
       "spellName": "Celestial Conduit"
     },
     "Mistweaver Monk|Conduit of the Celestials|115203": {
-      "n": 241,
+      "n": 240,
       "medianHpPct": 50,
       "spellName": "Fortifying Brew"
     },
     "Mistweaver Monk|Conduit of the Celestials|115310": {
-      "n": 67,
-      "medianHpPct": 44,
+      "n": 68,
+      "medianHpPct": 46,
       "spellName": "Revival"
     },
     "Mistweaver Monk|Conduit of the Celestials|116849": {
-      "n": 753,
-      "medianHpPct": 41,
+      "n": 751,
+      "medianHpPct": 42,
       "spellName": "Life Cocoon"
     },
     "Mistweaver Monk|Conduit of the Celestials|325197": {
-      "n": 422,
+      "n": 420,
       "medianHpPct": 54,
       "spellName": "Invoke Chi-Ji, the Red Crane"
     },
     "Mistweaver Monk|Conduit of the Celestials|388615": {
-      "n": 411,
+      "n": 415,
       "medianHpPct": 45,
       "spellName": "Restoral"
     },
     "Mistweaver Monk|Conduit of the Celestials|443028": {
       "n": 459,
-      "medianHpPct": 53,
+      "medianHpPct": 52,
       "spellName": "Celestial Conduit"
     },
     "Mistweaver Monk|Master of Harmony|115203": {
-      "n": 1329,
+      "n": 1313,
       "medianHpPct": 51,
       "spellName": "Fortifying Brew"
     },
     "Mistweaver Monk|Master of Harmony|115310": {
-      "n": 268,
+      "n": 266,
       "medianHpPct": 43,
       "spellName": "Revival"
     },
@@ -441,43 +351,43 @@
       "spellName": "Life Cocoon"
     },
     "Mistweaver Monk|Master of Harmony|325197": {
-      "n": 3085,
+      "n": 3061,
       "medianHpPct": 54,
       "spellName": "Invoke Chi-Ji, the Red Crane"
     },
     "Mistweaver Monk|Master of Harmony|388615": {
-      "n": 2800,
+      "n": 2820,
       "medianHpPct": 44,
       "spellName": "Restoral"
     },
     "Preservation Evoker|*|357170": {
-      "n": 6873,
+      "n": 6864,
       "medianHpPct": 50,
       "spellName": "Time Dilation"
     },
     "Preservation Evoker|*|363534": {
-      "n": 2177,
+      "n": 2178,
       "medianHpPct": 37,
       "spellName": "Rewind"
     },
     "Preservation Evoker|*|363916": {
-      "n": 3064,
+      "n": 3058,
       "medianHpPct": 54,
       "spellName": "Obsidian Scales"
     },
     "Preservation Evoker|*|370537": {
-      "n": 2628,
+      "n": 2622,
       "medianHpPct": 53,
       "spellName": "Stasis"
     },
     "Preservation Evoker|*|370553": {
-      "n": 2542,
+      "n": 2533,
       "medianHpPct": 55,
       "spellName": "Tip the Scales"
     },
     "Preservation Evoker|*|370960": {
-      "n": 2523,
-      "medianHpPct": 41,
+      "n": 2527,
+      "medianHpPct": 40,
       "spellName": "Emerald Communion"
     },
     "Preservation Evoker|*|374227": {
@@ -486,12 +396,12 @@
       "spellName": "Zephyr"
     },
     "Preservation Evoker|*|378441": {
-      "n": 38,
-      "medianHpPct": 43,
+      "n": 37,
+      "medianHpPct": 41,
       "spellName": "Time Stop"
     },
     "Preservation Evoker|Chronowarden|357170": {
-      "n": 4025,
+      "n": 4019,
       "medianHpPct": 49,
       "spellName": "Time Dilation"
     },
@@ -501,23 +411,23 @@
       "spellName": "Rewind"
     },
     "Preservation Evoker|Chronowarden|363916": {
-      "n": 1648,
+      "n": 1649,
       "medianHpPct": 54,
       "spellName": "Obsidian Scales"
     },
     "Preservation Evoker|Chronowarden|370537": {
-      "n": 1540,
+      "n": 1535,
       "medianHpPct": 52,
       "spellName": "Stasis"
     },
     "Preservation Evoker|Chronowarden|370553": {
-      "n": 1685,
-      "medianHpPct": 54,
+      "n": 1680,
+      "medianHpPct": 55,
       "spellName": "Tip the Scales"
     },
     "Preservation Evoker|Chronowarden|370960": {
-      "n": 1435,
-      "medianHpPct": 40,
+      "n": 1440,
+      "medianHpPct": 39,
       "spellName": "Emerald Communion"
     },
     "Preservation Evoker|Chronowarden|374227": {
@@ -531,97 +441,92 @@
       "spellName": "Time Stop"
     },
     "Preservation Evoker|Flameshaper|357170": {
-      "n": 2848,
+      "n": 2845,
       "medianHpPct": 51,
       "spellName": "Time Dilation"
     },
     "Preservation Evoker|Flameshaper|363534": {
-      "n": 874,
+      "n": 875,
       "medianHpPct": 35,
       "spellName": "Rewind"
     },
     "Preservation Evoker|Flameshaper|363916": {
-      "n": 1416,
+      "n": 1409,
       "medianHpPct": 54,
       "spellName": "Obsidian Scales"
     },
     "Preservation Evoker|Flameshaper|370537": {
-      "n": 1088,
+      "n": 1087,
       "medianHpPct": 54,
       "spellName": "Stasis"
     },
     "Preservation Evoker|Flameshaper|370553": {
-      "n": 857,
+      "n": 853,
       "medianHpPct": 58,
       "spellName": "Tip the Scales"
     },
     "Preservation Evoker|Flameshaper|370960": {
-      "n": 1088,
-      "medianHpPct": 42,
+      "n": 1087,
+      "medianHpPct": 41,
       "spellName": "Emerald Communion"
     },
     "Preservation Evoker|Flameshaper|374227": {
       "n": 6,
-      "medianHpPct": 57,
+      "medianHpPct": 58,
       "spellName": "Zephyr"
     },
     "Preservation Evoker|Flameshaper|378441": {
-      "n": 4,
-      "medianHpPct": 72,
+      "n": 3,
+      "medianHpPct": 69,
       "spellName": "Time Stop"
     },
     "Restoration Druid|*|102342": {
-      "n": 11452,
+      "n": 11408,
       "medianHpPct": 49,
       "spellName": "Ironbark"
     },
     "Restoration Druid|*|132158": {
-      "n": 7236,
-      "medianHpPct": 53,
+      "n": 7201,
+      "medianHpPct": 54,
       "spellName": "Nature's Swiftness"
     },
     "Restoration Druid|*|22812": {
-      "n": 4685,
+      "n": 4652,
       "medianHpPct": 54,
       "spellName": "Barkskin"
     },
     "Restoration Druid|*|22842": {
-      "n": 2180,
-      "medianHpPct": 53,
+      "n": 2205,
+      "medianHpPct": 52,
       "spellName": "Frenzied Regeneration"
     },
     "Restoration Druid|*|391528": {
-      "n": 1848,
-      "medianHpPct": 52,
+      "n": 1836,
+      "medianHpPct": 51,
       "spellName": "Convoke the Spirits"
     },
     "Restoration Druid|*|473909": {
-      "n": 1234,
+      "n": 1227,
       "medianHpPct": 54,
       "spellName": "Ancient of Lore"
     },
-    "Restoration Druid|*|740": {
-      "n": 2615,
-      "medianHpPct": 43,
-      "spellName": "Tranquility"
-    },
     "Restoration Druid|Keeper of the Grove|102342": {
-      "n": 8443,
+      "n": 8397,
       "medianHpPct": 48,
       "spellName": "Ironbark"
     },
     "Restoration Druid|Keeper of the Grove|132158": {
-      "n": 5262,
-      "medianHpPct": 53,
+      "n": 5237,
+      "medianHpPct": 54,
       "spellName": "Nature's Swiftness"
     },
     "Restoration Druid|Keeper of the Grove|22812": {
-      "n": 3288,
+      "n": 3268,
       "medianHpPct": 54,
       "spellName": "Barkskin"
     },
     "Restoration Druid|Keeper of the Grove|22842": {
-      "n": 1483,
+      "n": 1500,
       "medianHpPct": 52,
       "spellName": "Frenzied Regeneration"
     },
@@ -631,102 +536,107 @@
       "spellName": "Convoke the Spirits"
     },
     "Restoration Druid|Keeper of the Grove|473909": {
-      "n": 926,
+      "n": 921,
       "medianHpPct": 54,
       "spellName": "Ancient of Lore"
     },
-    "Restoration Druid|Keeper of the Grove|740": {
-      "n": 1856,
-      "medianHpPct": 43,
-      "spellName": "Tranquility"
-    },
     "Restoration Druid|Wildstalker|102342": {
-      "n": 3009,
+      "n": 3011,
       "medianHpPct": 50,
       "spellName": "Ironbark"
     },
     "Restoration Druid|Wildstalker|132158": {
-      "n": 1974,
+      "n": 1964,
       "medianHpPct": 54,
       "spellName": "Nature's Swiftness"
     },
     "Restoration Druid|Wildstalker|22812": {
-      "n": 1397,
+      "n": 1384,
       "medianHpPct": 54,
       "spellName": "Barkskin"
     },
     "Restoration Druid|Wildstalker|22842": {
-      "n": 697,
+      "n": 705,
       "medianHpPct": 53,
       "spellName": "Frenzied Regeneration"
     },
     "Restoration Druid|Wildstalker|391528": {
-      "n": 1159,
+      "n": 1147,
       "medianHpPct": 51,
       "spellName": "Convoke the Spirits"
     },
     "Restoration Druid|Wildstalker|473909": {
-      "n": 308,
+      "n": 306,
       "medianHpPct": 55,
       "spellName": "Ancient of Lore"
     },
-    "Restoration Druid|Wildstalker|740": {
-      "n": 759,
-      "medianHpPct": 43,
-      "spellName": "Tranquility"
-    },
     "Restoration Shaman|*|108271": {
-      "n": 2154,
-      "medianHpPct": 50,
+      "n": 2143,
+      "medianHpPct": 51,
       "spellName": "Astral Shift"
     },
     "Restoration Shaman|*|108280": {
-      "n": 8716,
+      "n": 8737,
       "medianHpPct": 52,
       "spellName": "Healing Tide Totem"
     },
     "Restoration Shaman|*|378081": {
-      "n": 10525,
-      "medianHpPct": 52,
+      "n": 10515,
+      "medianHpPct": 51,
       "spellName": "Nature's Swiftness"
     },
+    "Restoration Shaman|*|409293": {
+      "n": 73,
+      "medianHpPct": 45,
+      "spellName": "Burrow"
+    },
     "Restoration Shaman|*|98008": {
-      "n": 4583,
+      "n": 4576,
       "medianHpPct": 30,
       "spellName": "Spirit Link Totem"
     },
     "Restoration Shaman|Farseer|108271": {
-      "n": 638,
+      "n": 636,
       "medianHpPct": 50,
       "spellName": "Astral Shift"
     },
     "Restoration Shaman|Farseer|108280": {
-      "n": 2325,
+      "n": 2328,
       "medianHpPct": 53,
       "spellName": "Healing Tide Totem"
     },
+    "Restoration Shaman|Farseer|409293": {
+      "n": 20,
+      "medianHpPct": 47,
+      "spellName": "Burrow"
+    },
     "Restoration Shaman|Farseer|98008": {
-      "n": 1199,
-      "medianHpPct": 29,
+      "n": 1195,
+      "medianHpPct": 28,
       "spellName": "Spirit Link Totem"
     },
     "Restoration Shaman|Totemic|108271": {
-      "n": 1516,
+      "n": 1507,
       "medianHpPct": 51,
       "spellName": "Astral Shift"
     },
     "Restoration Shaman|Totemic|108280": {
-      "n": 6391,
-      "medianHpPct": 52,
+      "n": 6409,
+      "medianHpPct": 51,
       "spellName": "Healing Tide Totem"
     },
     "Restoration Shaman|Totemic|378081": {
-      "n": 10525,
-      "medianHpPct": 52,
+      "n": 10515,
+      "medianHpPct": 51,
       "spellName": "Nature's Swiftness"
     },
+    "Restoration Shaman|Totemic|409293": {
+      "n": 53,
+      "medianHpPct": 44,
+      "spellName": "Burrow"
+    },
     "Restoration Shaman|Totemic|98008": {
-      "n": 3384,
+      "n": 3381,
       "medianHpPct": 31,
       "spellName": "Spirit Link Totem"
     }

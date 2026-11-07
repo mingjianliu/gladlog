@@ -12,14 +12,14 @@
  * only deliberate + proc removals count; rider dispels (a form shift /
  * movement ability shaking off its own root or snare) are excluded, so a
  * debuff that was only ever shaken off never opens this gate.
- * Kind tally at generation: deliberate 790702, proc 108269,
+ * Kind tally at generation: deliberate 792891, proc 106080,
  * rider 231060 (excluded); 8 ids were rider-only.
  *
  * Regenerate: npx tsx packages/eval/scripts/confidenceAudit.ts \
  *   --manifest <manifest> --emit-table --date YYYY-MM-DD \
  *   > packages/analysis/src/data/dispelObservedGenerated.ts
- * Manifest: ~/code/gladlog-eval-private/runs/regen-115-2026-10-20/manifest-dispel-union.txt
- * Corpus snapshot: 37894 matches, 421 ids (2026-10-20).
+ * Manifest: ~/code/gladlog-eval-private/runs/regen-115-2026-11-06/manifest-dispel-union.txt
+ * Corpus snapshot: 37894 matches, 421 ids (2026-11-06).
  */
 export const CORPUS_OBSERVED_DISPEL_IDS: ReadonlySet<string> = new Set([
   "139", // ×36968

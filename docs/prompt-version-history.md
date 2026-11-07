@@ -5489,3 +5489,36 @@ hit no longer lands a refused one (1d9b0cbe 2:17: Fury of Elune →
 Incarnation: Chosen of Elune, 3 lines). 605 set against 8d72336ad: 1,035
 of 3,519 context files change, 0 findings files; immunityBurstAnchor 17 (6)
 → 0, offListPressLine 306 → 68 (same scanner).
+
+v498 (2026-11-07, GH #115 batched regen #6 — data only): the reference
+tables went stale across the fact8–fact11 / F21–F26 rounds (PV425–PV495:
+heals off the major-defensive set, more answers recognised, the F24/F25
+offensive-cooldown additions, event-based cooldown reductions). Regenerated
+on the same corpora as the 2026-10-20 regen at code e950156df:
+burstWindowPrior (1,630 → 2,162 leaves: cells for Blood Fury 20572 and Dark
+Harvest 1257052), syncWindowPrior, behaviorPrior, cdTriggerPrior,
+kickPriorityPrior + heal spells, kickLockoutObserved, healerSaveCd (Fade 586
+leaves the Holy / Discipline rosters: eda327c53 made its base profile 0 %
+without Translucent Image), backlashDispelPrior, dispelObserved,
+cdRecastFloor (39 → 18 floors: 24 drop — Bladestorm, Avatar, Recklessness,
+Shockwave, Colossus Smash, Feign Death, Paralysis, Ice Block, … — because the
+cooldown model now explains their early recasts, hold-out share under 0.99
+below 1 %; 3 added: Predator's Wake, Odyn's Fury, Prismatic Barrier), the
+reference vectors, and CD_HOARDED_OUTCOME_REF (5.8 / 13.0 / 15,653 → 5.3 /
+13.8 / 16,061). 605 files (cap-before e00f0525 → cap-after ceece3ea):
+the six reference-consistency gates that the stale tables tripped fall to 0
+(backlash 244, behaviorPrior 40, burstWindow 291, cdPrior 174, kickPriority
+279, syncWindow 668 → 0; CjkLeak 12 and FindingsCountFollowsMenu 3,519
+unchanged). Healer candidates: slow-defensive-response 86 → 109 (+37 / −14: the
+3-point contrast door — Solo Shuffle Avenging Wrath 5 vs 7 → 5 vs 8 and
+Summon Darkglare 7 vs 8 → 7 vs 10 cross it, Blood Fury / Dark Harvest get
+their own cells, Army of the Dead 12 vs 15 → 12 vs 14 falls under it),
+cd-hoarded 423 → 420 (all roles 1,011 → 1,008), cd-waste 157 → 151 (all
+roles 888 → 882); missed-sync-window 664,
+backlash-dispel 61, kick-priority-team 54, kick-priority-missed 36 change
+reference numbers only. Context: cooldown ranges narrow where a floor went
+([26–40s] → [40s] Shockwave), so a Shockwave on cooldown leaves the
+[HEALER EXPOSURE] and ENEMY CC KIT threat lists; the "Fade correctly HELD"
+NOTE goes with Fade's roster entry. Built before #123 (Airborne Irritant,
+605 byte-identical) and before the F26 batch 3 / cat4 / #150 commits; those
+land after this regen and are not in these tables.
