@@ -22,6 +22,7 @@ import {
   auraOnlyActivationSeconds,
   castRecovery,
   CD_INSTANT_SLACK_S,
+  cdAvailableAt,
   cdChargesAvailableAt,
   ENEMY_TARGET_DEFENSIVE_IDS,
   FORBEARANCE_AURA_ID,
@@ -587,6 +588,34 @@ export function offCooldownForLastSecondsBy(
       return Math.max(0, Math.round(k - 1 - CD_INSTANT_SLACK_S * 10) / 10);
   }
   return undefined;
+}
+
+/**
+ * T32: the `[DEFENSIVE AVAILABLE]` "free to press it for the last Ns before
+ * the death" — the holder's free time before `atSeconds` (`freeMs`, from its
+ * cannot-cast runs, `freeMsBefore`) clipped to how long the ledger entry had
+ * been back from cooldown (`offCooldownForLastSecondsBy` on `cdAvailableAt`,
+ * the walk the death lines' "off cooldown only for the last Ns" and the
+ * counterfactual read). A spell that came back inside the free stretch was
+ * free to press only from its return (round 11, 132-1: Feign Death back 1.7 s
+ * before the death, the line said 7.8 s). Undefined stays undefined (no lock
+ * started before it: the line prints no figure). One predicate for the line
+ * and its gate (scan5 castThroughStun `freeToPressBelowLog`).
+ */
+export function freeToPressMsBefore(
+  freeMs: number | undefined,
+  cd: Parameters<typeof cdAvailableAt>[0],
+  atSeconds: number,
+): number | undefined {
+  if (freeMs === undefined) return undefined;
+  const readyFor = offCooldownForLastSecondsBy(
+    (t) => cdAvailableAt(cd, t),
+    atSeconds,
+    freeMs / 1000 + CD_INSTANT_SLACK_S + 0.1,
+  );
+  return readyFor === undefined
+    ? freeMs
+    : Math.min(freeMs, Math.round(readyFor * 1000));
 }
 
 /** Pre-computed lockout intervals: [fromSeconds, toSeconds] pairs sorted by fromSeconds. */

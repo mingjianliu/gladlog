@@ -34,7 +34,11 @@ import {
 } from "@gladlog/analysis/src/data/spellSchools";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { SpellTag } from "@gladlog/analysis/src/data/spellTypes";
-import { usableWhileStunned } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  unitCooldownEntry,
+  usableWhileStunned,
+} from "@gladlog/analysis/src/utils/cooldowns";
+import { freeToPressMsBefore } from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
 import { isStunDrAura } from "@gladlog/analysis/src/utils/drAnalysis";
 import { unaffordableIntervals } from "@gladlog/analysis/src/utils/resourceAt";
 import { isUnsilenceableCast } from "@gladlog/analysis/src/utils/spellMechanics";
@@ -201,7 +205,24 @@ function freeToPress(ctx: IRoundCtx): void {
     const lastHard = Math.max(-Infinity, ...hard.map((c) => c.to));
     if (lastHard >= deathAt) return;
     const lo = windowed ? deathAt - 5000 : -Infinity;
-    const free = (deathAt - Math.max(lastHard, lo, ctx.start)) / 1000;
+    const logFreeMs = deathAt - Math.max(lastHard, lo, ctx.start);
+    // T32: the `[DEFENSIVE AVAILABLE]` figure stops at the spell's return
+    // from cooldown — the line's own predicate (`freeToPressMsBefore`)
+    let entry: any;
+    if (!windowed)
+      try {
+        entry = unitCooldownEntry(unit, ctx.legacy as never, id);
+      } catch {
+        entry = undefined;
+      }
+    const free =
+      (entry
+        ? (freeToPressMsBefore(
+            logFreeMs,
+            entry,
+            (deathAt - ctx.legacy.startTime) / 1000,
+          ) ?? logFreeMs)
+        : logFreeMs) / 1000;
     if (free - printed > 0.15)
       ctx.violate(
         "freeToPressBelowLog",

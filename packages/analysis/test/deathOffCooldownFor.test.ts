@@ -7,7 +7,10 @@
 import { LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { offCooldownForLastSeconds } from "../src/utils/deathOutcomeAnalysis";
+import {
+  freeToPressMsBefore,
+  offCooldownForLastSeconds,
+} from "../src/utils/deathOutcomeAnalysis";
 
 const T0 = 1_000_000;
 const unit = (castAt: number[]): any => ({
@@ -33,5 +36,28 @@ describe("offCooldownForLastSeconds", () => {
     expect(
       offCooldownForLastSeconds(unit([]), "47788", 30, 20, T0),
     ).toBeUndefined();
+  });
+});
+
+describe("freeToPressMsBefore (T32)", () => {
+  // a single-charge ledger entry: pressed at 38.8 s on a 20 s cooldown → back
+  // at 58.8 s
+  const cd = (casts: number[]) =>
+    ({
+      casts: casts.map((timeSeconds) => ({ timeSeconds })),
+      cooldownSeconds: 20,
+    }) as unknown as Parameters<typeof freeToPressMsBefore>[1];
+  it("Feign Death back 1.7 s before the death: free 7.8 s of control → 1.7 s (round-11 132-1)", () => {
+    expect(freeToPressMsBefore(7800, cd([38.8]), 60.5)).toBe(1700);
+  });
+  it("back before the free stretch began: the control figure stands", () => {
+    expect(freeToPressMsBefore(7800, cd([10]), 60.5)).toBe(7800);
+    expect(freeToPressMsBefore(7800, cd([]), 60.5)).toBe(7800);
+  });
+  it("no lock before the death: no figure either way", () => {
+    expect(freeToPressMsBefore(undefined, cd([38.8]), 60.5)).toBeUndefined();
+  });
+  it("locked through the death: 0 stays 0", () => {
+    expect(freeToPressMsBefore(0, cd([38.8]), 60.5)).toBe(0);
   });
 });

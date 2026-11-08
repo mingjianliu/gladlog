@@ -63,6 +63,7 @@ import {
 import { doseStackCount, getDampeningPercentage } from "../utils/dampening";
 import {
   enemyTargetReaches,
+  freeToPressMsBefore,
   positionalWallReaches,
 } from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
@@ -2666,15 +2667,22 @@ export function buildKillSequenceBlock(params: {
               // ("free to press it" is the spell's own free time either way)
               // fact7 D21: a stun counts only against what the game does not
               // let a stunned player press
-              const freeMs = freeMsBefore(
-                pressBlockedIntervalsForSpells(
-                  u.player as ICombatUnit,
-                  enemySourceIds(enemies, params.allUnits ?? []),
-                  [u.cd.spellId],
-                  params.allUnits as ICombatUnit[] | undefined,
-                  u.player.name === dyingUnit.name,
+              // T32: …and clipped to the spell's return from cooldown — a
+              // defensive back inside the free stretch was free to press
+              // only from then (`freeToPressMsBefore`, the gate's predicate)
+              const freeMs = freeToPressMsBefore(
+                freeMsBefore(
+                  pressBlockedIntervalsForSpells(
+                    u.player as ICombatUnit,
+                    enemySourceIds(enemies, params.allUnits ?? []),
+                    [u.cd.spellId],
+                    params.allUnits as ICombatUnit[] | undefined,
+                    u.player.name === dyingUnit.name,
+                  ),
+                  matchStartMs + Math.round(deathTime * 1000),
                 ),
-                matchStartMs + Math.round(deathTime * 1000),
+                u.cd,
+                deathTime,
               );
               const freeNote =
                 freeMs === undefined
