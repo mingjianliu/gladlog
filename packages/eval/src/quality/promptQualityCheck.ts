@@ -28,7 +28,6 @@
  * Expects under BASE_DIR: prompts/, manifests/, index.json.
  */
 
-import type { CombatUnitSpec } from "@gladlog/parser-compat";
 import {
   creditSpikesToWindows,
   DAMPENING_DOSE_PCT,
@@ -282,6 +281,7 @@ import {
   RANGE_HITBOX_SLACK_YD,
 } from "@gladlog/analysis/src/utils/spellRange";
 import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
+import type { CombatUnitSpec } from "@gladlog/parser-compat";
 import fs from "fs-extra";
 import path from "path";
 

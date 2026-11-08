@@ -8,6 +8,10 @@ import {
   castsOfEffectAura,
   ownEffectAurasKeyedBy,
 } from "../data/castEffectAuras";
+import {
+  HEALER_HELD_OFFENSIVE_SPEC,
+  isHealerHeldOffensive,
+} from "../data/healerHeldOffensive";
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -23,10 +27,6 @@ import {
   isHpTroughWorthPrinting,
   roundClippedTroughSpan,
 } from "./cooldowns";
-import {
-  HEALER_HELD_OFFENSIVE_SPEC,
-  isHealerHeldOffensive,
-} from "../data/healerHeldOffensive";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   ALIAS_PRESS_TWIN_MS,
