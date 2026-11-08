@@ -116,7 +116,7 @@ describe("enemyTargetReaches", () => {
     // zone 1505's north pillar: centre (-2044.5, 6623.5), radius 4
     const pos = (id: string, x: number, y: number) => {
       const u = at(id, 0);
-      for (const a of (u as any).advancedActions) {
+      for (const a of u.advancedActions) {
         a.advancedActorPositionX = x;
         a.advancedActorPositionY = y;
       }
