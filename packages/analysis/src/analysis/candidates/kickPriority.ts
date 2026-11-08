@@ -60,6 +60,7 @@ import {
   interruptImmuneWindows,
 } from "../../utils/talentBehaviors";
 import { firstDeathMs } from "../../utils/unitDeath";
+import { petFunctionOf } from "../../utils/warlockPet";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
 
@@ -205,6 +206,10 @@ export interface KickPriorityFriend {
    * budget is zero, so the reach collapsed to kick range + slack (triage
    * kick-priority F-P2). */
   rootedThroughCast: boolean;
+  /** Set when the kick is the friend's pet's (GH #180 / T26 ruling R04):
+   * the pet that throws it, by kind ("Felhunter", `petFunctionOf`) — its
+   * logged name is a random one — else "pet". `distanceYd` is the pet's. */
+  kickerPet?: string;
   /** This kicker's interrupt range (official + their range talents); null
    * when unknown. */
   rangeYd: number | null;
@@ -753,6 +758,12 @@ export function kickPriorityDecisionPoints(
           rangeYd: range ?? null,
           reachYd: leanedOnRun ? reachYd : null,
           kickReadyForS,
+          ...(kicker && kicker !== f
+            ? {
+                kickerPet:
+                  petFunctionOf(kicker as never)?.pet ?? "pet",
+              }
+            : {}),
         });
       }
 
@@ -964,9 +975,12 @@ export function kickPriorityTeamEvents(
           // name + distance only (user ruling 2026-09-15): the interrupt's
           // name was one more audited token per teammate and the coaching
           // line is "call the kick", not "call Counterspell"
+          // a pet's kick names the pet and its own distance (T26 ruling
+          // R04): `<owner>'s Felhunter 19 yd`, not the owner's name over the
+          // pet's distance
           .map(
             (f) =>
-              `${f.name} ${f.distanceYd == null ? "?" : Math.round(f.distanceYd)} yd`,
+              `${f.kickerPet ? `${f.name}'s ${f.kickerPet}` : f.name} ${f.distanceYd == null ? "?" : Math.round(f.distanceYd)} yd`,
           )
           .join("; "),
         refNCompleted: String(ref.nCompleted),

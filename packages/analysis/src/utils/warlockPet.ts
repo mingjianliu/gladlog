@@ -35,7 +35,7 @@ export function warlockPetFunction(
 }
 
 /** What one pet unit does: its npcId first, then its own signature casts. */
-function petFunctionOf(
+export function petFunctionOf(
   u: Pick<ICombatUnit, "id" | "spellCastEvents">,
 ): IWarlockPetFunction | null {
   const npcId = getNpcIdFromGuid(u.id);

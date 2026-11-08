@@ -129,6 +129,12 @@ describe("kickPriorityTeamEvents (user ruling 3: teammate form, distance include
     // owner has no interrupt at all
     expect(kickPriorityTeamEvents([point({ friends: [mate] })], owner, probes)[0]!.facts.ownerWhy).toBe("no interrupt");
   });
+
+  it("a pet's kick names the pet with the pet's distance, not the owner's name over it (T26 ruling R04)", () => {
+    const lock = friend({ id: "P3", name: "Lock3", kickSpellId: "19647", kickSpellName: "Spell Lock", distanceYd: 19, kickerPet: "Felhunter" });
+    const ev = kickPriorityTeamEvents([point({ friends: [friend({ cdRemainingS: 6, feasible: false }), lock] })], owner, probes);
+    expect(ev[0]!.facts.teammates).toBe("Lock3's Felhunter 19 yd");
+  });
 });
 
 describe("meleeKickReachYd (reliability round 3 W1a, 6954)", () => {
