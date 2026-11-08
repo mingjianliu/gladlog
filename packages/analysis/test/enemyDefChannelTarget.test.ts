@@ -91,7 +91,7 @@ describe("channelTargetClause", () => {
     ).toBe("");
   });
   it("a save that is no channel says nothing: Blazing Barrier's reactive hits are no bolts (pipeline T02, fact12 D15 / D24)", () => {
-    const mage: any = {
+    const mage = {
       id: "e1",
       name: "Mage-R-US",
       spellCastEvents: [
@@ -104,13 +104,13 @@ describe("channelTargetClause", () => {
           },
         },
       ],
-    };
-    const meleeAttacker: any = {
+    } as unknown as Parameters<typeof channelTargetClause>[0];
+    const meleeAttacker = {
       id: "f1",
       name: "Dk-R-US",
       damageIn: [hit(45.5, "e1", "235314", "Blazing Barrier", 1_500)],
       absorbsIn: [],
-    };
+    } as unknown as Parameters<typeof channelTargetClause>[2][number];
     expect(
       channelTargetClause(
         mage,
