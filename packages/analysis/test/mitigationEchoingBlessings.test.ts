@@ -10,6 +10,7 @@ import {
   MITIGATION_WALL_IDS,
   NO_MITIGATION_IDS,
 } from "../src/data/mitigationData";
+import { mitigationVerdictOf } from "../src/data/mitigationVerdicts";
 import observed from "../src/data/observedSpellIdsGenerated.json";
 import spellIdLists from "../src/data/spellIdLists";
 import { eligibleExternalMitigation } from "../src/utils/externalDamage";
@@ -75,6 +76,11 @@ describe("Echoing Blessings", () => {
     );
     // a talent-whole row without the flag stays priced at 0 (Evasion)
     expect(isUnheldMechanic("5277", res("5277", true, []))).toBe(false);
+  });
+
+  it("both rows are signed never (R07, 2026-11-08)", () => {
+    expect(mitigationVerdictOf(SACRIFICE)).toBe("never");
+    expect(mitigationVerdictOf(ECHOING_PROTECTION)).toBe("never");
   });
 
   it("Echoing Protection is its own 15 % on every school, no ownership needed", () => {
