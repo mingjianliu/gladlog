@@ -47,7 +47,7 @@ import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import type { RosterSides } from "../utils/rosterSide";
 import { getPvpToolkit } from "../utils/talentBehaviors";
 import { unitLogEpochMs } from "../utils/talents";
-import { isDeadAt } from "../utils/unitDeath";
+import { DEATH_CASCADE_MS, isDeadAt } from "../utils/unitDeath";
 import {
   formatKitUnusedNote,
   KIT_REFUSED_PRESS_LEGEND,
@@ -1220,6 +1220,25 @@ function buildResourceSnapshotOnce({
       // the floored row time, which dropped every press at s + 0.xxx.
       if (!pressSpentBy(cd.castTimeSeconds, timeSeconds)) continue;
       if (timeSeconds > end) continue;
+      // an effect a death ended is over from that death's rendered second
+      // on: the row prints the `[DEATH]` above it, so the GH #167
+      // no-hindsight reason for the official time left below is gone (T03,
+      // fact12 D18: 65d7e61a r0 2:20 `Bladestorm/Arms Warrior(5s left)`
+      // under the warrior's own death — REMOVED 2:20.004, UNIT_DIED
+      // 2:20.030). The death is the holder's, or the Solo Shuffle round's
+      // ending one (`deathCutAtSeconds`); an effect that outlives its holder
+      // (a DoT on its target, a Power Infusion on an ally) runs on.
+      if (
+        cd.deathCutAtSeconds !== undefined &&
+        toRenderSecond(cd.deathCutAtSeconds) <= timeSeconds
+      )
+        continue;
+      if (
+        player.deathSeconds !== undefined &&
+        toRenderSecond(player.deathSeconds) <= timeSeconds &&
+        end <= player.deathSeconds + DEATH_CASCADE_MS / 1000
+      )
+        continue;
       // an activation of a cooldown's effect (fact10, Chosen of Frostbrood's
       // free Frostwyrm's Fury 1265384 6 s into the first one's slow — one
       // aura, refreshed) is that cooldown's window, as an override variant

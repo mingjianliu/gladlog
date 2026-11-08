@@ -108,6 +108,52 @@ describe("[RES] enemy: time left of an effect its holder's death cut short (GH #
     expect(enemyField(tl, 16)).toBeUndefined();
   });
 
+  it("T03 (fact12 D18): the death's own row lists no effect the death ended — the `[DEATH]` is printed above it", () => {
+    const tl = scene(15.04);
+    expect(tl.players[0]!.deathSeconds).toBeCloseTo(15.04, 3);
+    expect(tl.players[0]!.offensiveCDs[0]!.deathCutAtSeconds).toBeCloseTo(
+      15.04,
+      3,
+    );
+    expect(enemyField(tl, 14)).toContain("(16s left)");
+    expect(enemyField(tl, 15)).toBeUndefined();
+  });
+
+  it("T03: a REMOVED logged after a UNIT_DIED of the second before — the death's row is the earlier second", () => {
+    const tl = scene(14.96);
+    expect(enemyField(tl, 13)).toContain("(17s left)");
+    expect(enemyField(tl, 14)).toBeUndefined();
+  });
+
+  it("T03: an effect that outlives its holder (a DoT on its target) still runs on the death's row", () => {
+    const timeline = {
+      players: [
+        {
+          playerName: "Rogue",
+          specName: "Subtlety Rogue",
+          deathSeconds: 12.5,
+          offensiveCDs: [
+            {
+              spellId: AVATAR,
+              spellName: "Avatar",
+              castTimeSeconds: 10,
+              cooldownSeconds: 90,
+              availableAgainAtSeconds: 100,
+              buffEndSeconds: 20,
+              dangerWeight: 1,
+            },
+          ],
+        },
+      ],
+      alignedBurstWindows: [],
+    };
+    expect(enemyField(timeline, 12)).toContain("(8s left)");
+    expect(enemyField(timeline, 13)).toContain("(7s left)");
+    // control: the same effect ended in the death's cascade is over
+    timeline.players[0]!.offensiveCDs[0]!.buffEndSeconds = 12.55;
+    expect(enemyField(timeline, 12)).toBeUndefined();
+  });
+
   it("control: removed long before the holder died → the observed end stands", () => {
     const tl = scene(40);
     const cd = tl.players[0]!.offensiveCDs[0]!;
@@ -223,6 +269,18 @@ describe("[RES] enemy: time left of an effect its holder's death cut short (GH #
     expect(cut(SOLO_SHUFFLE_BRACKET)).toBeCloseTo(30, 3);
     // control: in a 3v3 another player's death ends no one's buff
     expect(cut("Rated Arena 3v3")).toBeUndefined();
+    // T03: the round's ending death is the cut; from its second on the
+    // living holder's effect is over too
+    const tl = reconstructEnemyCDTimeline(
+      [warrior],
+      combat(SOLO_SHUFFLE_BRACKET),
+    );
+    expect(tl.players[0]!.offensiveCDs[0]!.deathCutAtSeconds).toBeCloseTo(
+      15.02,
+      3,
+    );
+    expect(enemyField(tl, 14)).toContain("(16s left)");
+    expect(enemyField(tl, 15)).toBeUndefined();
   });
 
   it("codex 20-G167-02 #1: a later press of the chain whose span ends later does not shorten the cut press's time left", () => {

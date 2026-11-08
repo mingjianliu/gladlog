@@ -118,6 +118,12 @@ export interface IEnemyCDCast {
    * can state as time left (GH #167, 121afd91 r6 1:55: `Dark
    * Transformation (5s left)` counted down to a death 5 s later). */
   deathCutOfficialEndSeconds?: number;
+  /** With `deathCutOfficialEndSeconds`: the instant that cut it — the
+   * holder's death, or the Solo Shuffle round's ending one. From that
+   * instant's rendered second on the death is printed (`[DEATH]`) and the
+   * effect is over: the official time left above is only for rows before
+   * it (T03, fact12 D18). */
+  deathCutAtSeconds?: number;
   /** GH #119: "fact" = shown, never part of a burst window (a Demonic
    * Metamorphosis form under OFFENSIVE_AURA_FLAGS.demonic "fact"). Absent =
    * "burst". */
@@ -137,6 +143,10 @@ export interface IEnemyPlayerTimeline {
    * pick one up by accident; only the [ENEMY CD] renderer reads this, and
    * the [RES] `enemy:` column for a row with an effect span (fact7 class 3). */
   readonly offensiveFacts?: readonly IEnemyCDCast[];
+  /** The player's first death, seconds from the round's start; absent when
+   * they did not die. An effect the death ended is over from its rendered
+   * second on (the `[RES]` `enemy:` column, T03). */
+  readonly deathSeconds?: number;
 }
 
 export interface IAlignedBurstWindow {
@@ -627,18 +637,26 @@ function deathCutOfficialEnd(
   endS: number,
   officialEndS: number,
   combat: AtomicArenaCombat,
-): number | undefined {
+): Pick<IEnemyCDCast, "deathCutOfficialEndSeconds" | "deathCutAtSeconds"> {
   // the official end is read from the aura's own application (a press
   // logged after its aura, codex 20-G167-06 #3, is no cut); less than
   // AURA_NATURAL_END_JITTER_S short is jitter
-  if (!(officialEndS - endS > AURA_NATURAL_END_JITTER_S)) return undefined;
+  if (!(officialEndS - endS > AURA_NATURAL_END_JITTER_S)) return {};
   const endMs = combat.startTime + endS * 1000;
   const near = (ms: number | undefined) =>
     ms !== undefined && Math.abs(ms - endMs) <= DEATH_CASCADE_MS;
-  return (holder && near(firstDeathMs(holder))) ||
-    near(shuffleRoundEndMs(combat, Object.values(combat.units ?? {})))
-    ? officialEndS
-    : undefined;
+  const deathMs = holder ? firstDeathMs(holder) : undefined;
+  const roundEndMs = shuffleRoundEndMs(
+    combat,
+    Object.values(combat.units ?? {}),
+  );
+  const cutMs = near(deathMs) ? deathMs : near(roundEndMs) ? roundEndMs : null;
+  return cutMs === null || cutMs === undefined
+    ? {}
+    : {
+        deathCutOfficialEndSeconds: officialEndS,
+        deathCutAtSeconds: (cutMs - combat.startTime) / 1000,
+      };
 }
 
 const OWN_CAST_COMBAT = new WeakMap<object, AtomicArenaCombat>();
@@ -711,7 +729,9 @@ function pressEffectEndSeconds(
   pressMs: number,
   matchStartMs: number,
   roundEndMs: number,
-): { endSeconds: number; officialEndSeconds?: number } | undefined {
+):
+  | { endSeconds: number; officialEndSeconds?: number; cutAtSeconds?: number }
+  | undefined {
   // an aura's rows sit on the unit wearing it, not on its caster
   const own = allUnits.flatMap((u) =>
     dropAuraRebroadcasts(
@@ -764,7 +784,11 @@ function pressEffectEndSeconds(
     endSeconds: (endMs - matchStartMs) / 1000,
     ...(cutOfficialMs === undefined
       ? {}
-      : { officialEndSeconds: (cutOfficialMs - matchStartMs) / 1000 }),
+      : {
+          officialEndSeconds: (cutOfficialMs - matchStartMs) / 1000,
+          // the wearer's death is the end itself
+          cutAtSeconds: (endMs - matchStartMs) / 1000,
+        }),
   };
 }
 
@@ -807,7 +831,8 @@ export function reconstructEnemyCDTimeline(
       const isActivation = OFFENSIVE_EFFECT_ACTIVATION_IDS.has(spellId);
       // dated: a variant that is its own cooldown on this log spends its
       // own (Predator's Wake before 12.1.5, fact11 D22)
-      const cdId = offensiveCooldownIdAt(spellId, matchStartMs, enemy.spec) ?? spellId;
+      const cdId =
+        offensiveCooldownIdAt(spellId, matchStartMs, enemy.spec) ?? spellId;
       // the enemy's own talent-resolved cooldown (`unitCooldownOf`: Summon
       // Infernal 90 with Inferno, not 120) — talent impact audit 2026-09-26
       const cooldownSeconds = isActivation
@@ -875,12 +900,13 @@ export function reconstructEnemyCDTimeline(
       holder: ICombatUnit | undefined,
     ) => {
       cd.buffEndSeconds = endS;
-      const cut =
-        officialEndS === undefined
-          ? undefined
-          : deathCutOfficialEnd(holder, endS, officialEndS, combat);
-      if (cut === undefined) delete cd.deathCutOfficialEndSeconds;
-      else cd.deathCutOfficialEndSeconds = cut;
+      delete cd.deathCutOfficialEndSeconds;
+      delete cd.deathCutAtSeconds;
+      if (officialEndS !== undefined)
+        Object.assign(
+          cd,
+          deathCutOfficialEnd(holder, endS, officialEndS, combat),
+        );
     };
     for (const cd of offensiveCDs) {
       const next = offensiveCDs.find(
@@ -1087,9 +1113,9 @@ export function reconstructEnemyCDTimeline(
       }
       // its own official end (`officialEndMs` — a Demonic form's 5 s, not
       // Metamorphosis's 20, codex 20-G167-06 #1)
-      const cutOfficialEnd =
+      const cut =
         !o.endObserved || o.officialEndMs === undefined
-          ? undefined
+          ? {}
           : deathCutOfficialEnd(
               enemy,
               (o.endMs - matchStartMs) / 1000,
@@ -1097,9 +1123,7 @@ export function reconstructEnemyCDTimeline(
               combat,
             );
       (o.burstRole === "fact" ? offensiveFacts : offensiveCDs).push({
-        ...(cutOfficialEnd !== undefined
-          ? { deathCutOfficialEndSeconds: cutOfficialEnd }
-          : {}),
+        ...cut,
         spellId: o.spellId,
         spellName: o.spellName,
         castTimeSeconds,
@@ -1158,7 +1182,10 @@ export function reconstructEnemyCDTimeline(
           castTimeSeconds + (spellEffectData[spellId]?.durationSeconds ?? 0),
         ...(effectEnd?.officialEndSeconds === undefined
           ? {}
-          : { deathCutOfficialEndSeconds: effectEnd.officialEndSeconds }),
+          : {
+              deathCutOfficialEndSeconds: effectEnd.officialEndSeconds,
+              deathCutAtSeconds: effectEnd.cutAtSeconds,
+            }),
         ...(cast.unseenPress ? { unseenPress: true as const } : {}),
         dangerWeight: 0,
         burstRole: "fact",
@@ -1173,6 +1200,9 @@ export function reconstructEnemyCDTimeline(
         specName: specToString(enemy.spec),
         offensiveCDs,
         ...(offensiveFacts.length > 0 ? { offensiveFacts } : {}),
+        ...(Number.isFinite(firstDeathMs(enemy))
+          ? { deathSeconds: (firstDeathMs(enemy) - matchStartMs) / 1000 }
+          : {}),
       });
     }
   }
