@@ -56,9 +56,11 @@ describe("Feint and Evasion are Elusiveness's 20 %", () => {
     for (const id of [FEINT, EVASION]) {
       expect(pct(id, [ELUSIVENESS])).toEqual({ pctMin: 20, pctMax: 20 });
       expect(pct(id, [])).toEqual({ pctMin: 0, pctMax: 0 });
+      // Evasion's ceiling with a caster unknown is Bait and Switch's magic
+      // on top (1 − 0.80 × 0.85, GH #126 row 234)
       expect(
         strongestComponentPct(resolveMitigation(id, { carrierIsCaster: true })!),
-      ).toEqual({ pctMin: 0, pctMax: 20 });
+      ).toEqual({ pctMin: 0, pctMax: id === EVASION ? 32 : 20 });
     }
   });
 

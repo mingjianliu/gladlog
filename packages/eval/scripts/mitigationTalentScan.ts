@@ -50,6 +50,12 @@ const CANDIDATES: Array<{
   /** a talent `basePct` assumes: units that do not provably hold it are not
    * counted (unknown cannot justify the base either) */
   requires?: string;
+  /** a talent whose modifier `basePct` leaves out: units that do not
+   * provably lack it are not counted (GH #126 rows 6 / 8, 2026-11-08) */
+  requiresNot?: string;
+  /** only hits on a carrier that is not the caster ("other") or is ("self"):
+   * a link aura sits on both ends (Blessing of Sacrifice) */
+  carrier?: "other" | "self";
   /** specs whose aura carries a further modifier this row's expectation
    * leaves out (they are the next row's population) */
   exceptSpecs?: string[];
@@ -232,6 +238,84 @@ const CANDIDATES: Array<{
     basePct: 0,
     modPct: 20,
   },
+  // GH #126 rows 170 / 171 / 234 (2026-11-08). Echoing Blessings 387801:
+  // aura 107 op 32 (effect #3) −15 on Blessing of Sacrifice's aura 87 slot
+  // (mask 8192), op 23 (effect #2) −15 on Blessing of Protection's magic
+  // aura 87 (mask 128, the 1022 row above; Spellwarding 204018 has no
+  // effect #2), op 12 (effect #1) +15 on Spellwarding's aura 79 (mask bit 28).
+  // The 8 s linger is its own aura, Echoing Protection 387804 (aura 87 −15,
+  // every school). Sacrifice's own 30 % is a split (aura 81): the ally's
+  // damage row reads the whole hit (non-holders 1.00), so its base is 0.
+  {
+    aura: "6940",
+    name: "Blessing of Sacrifice (on the ally)",
+    talent: "387801",
+    talentName: "Echoing Blessings",
+    school: 127,
+    basePct: 0,
+    modPct: 15,
+    carrier: "other",
+  },
+  {
+    aura: "6940",
+    name: "Blessing of Sacrifice (the paladin's link)",
+    talent: "387801",
+    talentName: "Echoing Blessings",
+    school: 127,
+    basePct: 0,
+    modPct: 15,
+    carrier: "self",
+  },
+  {
+    aura: "204018",
+    name: "Blessing of Spellwarding (physical)",
+    talent: "387801",
+    talentName: "Echoing Blessings",
+    school: 1,
+    basePct: 0,
+    modPct: 15,
+  },
+  {
+    aura: "387804",
+    name: "Echoing Protection",
+    talent: "387801",
+    talentName: "Echoing Blessings",
+    school: 127,
+    basePct: 0,
+    modPct: 15,
+  },
+  // Bait and Switch 457034 effect #0: op 23 (effect #2) −15 on Evasion's
+  // magic aura 87 slot (mask 32), a different slot from Elusiveness's
+  // effect #1 (every school). Split by Elusiveness so the base is known.
+  {
+    aura: "5277",
+    name: "Evasion (magic, with Elusiveness)",
+    talent: "457034",
+    talentName: "Bait and Switch",
+    school: 126,
+    basePct: 20,
+    modPct: 15,
+    requires: "79008",
+  },
+  {
+    aura: "5277",
+    name: "Evasion (magic, no Elusiveness)",
+    talent: "457034",
+    talentName: "Bait and Switch",
+    school: 126,
+    basePct: 0,
+    modPct: 15,
+    requiresNot: "79008",
+  },
+  {
+    aura: "5277",
+    name: "Evasion (physical)",
+    talent: "79008",
+    talentName: "Elusiveness",
+    school: 1,
+    basePct: 0,
+    modPct: 20,
+  },
   // GH #125 (2026-11-02): Ironshell Brew 388814, a choice node against
   // Expeditious Fortification 388813: aura 107 through the class mask on
   // 115203's −20. The buff on the monk is 120954, so the row reads that aura
@@ -247,6 +331,10 @@ const CANDIDATES: Array<{
     modPct: 10,
   },
 ];
+/** a bucket per candidate row: two rows of one aura and talent split by a
+ * third talent (`requiresNot`) must not share one */
+const candidateKey = (c: (typeof CANDIDATES)[number]) =>
+  `${c.aura}|${c.talent}${c.requiresNot ? `!${c.requiresNot}` : ""}${c.carrier ? `@${c.carrier}` : ""}`;
 const TRACK = new Set([
   ...Object.keys(MITIGATION_TABLE),
   ...CANDIDATES.map((c) => c.aura),
@@ -409,10 +497,17 @@ for (const f of files) {
             talentModifierOwnershipOf(caster, c.requires) !== "yes"
           )
             continue;
+          if (c.carrier && (c.carrier === "self") !== (caster.id === u.id))
+            continue;
+          if (
+            c.requiresNot &&
+            talentModifierOwnershipOf(caster, c.requiresNot) !== "no"
+          )
+            continue;
           const own = c.specIds
             ? specPassiveOwnership(c.specIds, caster.spec)
             : talentModifierOwnershipOf(caster, c.talent);
-          const key = `${c.aura}|${c.talent}${splitSpec ? `|${caster.spec}` : ""}`;
+          const key = `${candidateKey(c)}${splitSpec ? `|${caster.spec}` : ""}`;
           const bk = buckets.get(key) ?? {
             yes: new Map(),
             no: new Map(),
@@ -541,14 +636,14 @@ const rowsToReport = CANDIDATES.filter(
 ).flatMap((c) =>
   splitSpec
     ? [...buckets.keys()]
-        .filter((k) => k.startsWith(`${c.aura}|${c.talent}|`))
+        .filter((k) => k.startsWith(`${candidateKey(c)}|`))
         .sort()
         .map((k) => ({ ...c, spec: k.split("|")[2]!, key: k }))
     : [
         {
           ...c,
           spec: undefined as string | undefined,
-          key: `${c.aura}|${c.talent}`,
+          key: candidateKey(c),
         },
       ],
 );

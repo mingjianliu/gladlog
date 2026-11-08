@@ -21,10 +21,10 @@ import { HASTE_DURATION_SPELL_IDS } from "../data/channeledGenerated";
 import { wallDoorPct } from "../data/mitigationComponents";
 import {
   DEFLECTION_IDS,
+  hasNoOwnPercentage,
   MITIGATION_TABLE,
   MITIGATION_WALL_IDS,
   MITIGATION_WALL_MIN_PCT,
-  NO_MITIGATION_IDS,
   SELF_WALL_AURA_TO_CAST_ID,
 } from "../data/mitigationData";
 import {
@@ -1318,7 +1318,8 @@ export function enemyDefSpeaksForPress(spellId: string): boolean {
 /** Reliability audit B4a (2026-09-25): an enemy's own save that carries no
  * percentage mitigation — Guardian Spirit on itself, Desperate Prayer, Touch
  * of Karma, Renewing Blaze, Life Cocoon on itself, Rallying Cry, Zephyr — the
- * product's "major" lists (external ∪ big defensive) ∩ `NO_MITIGATION_IDS`.
+ * product's "major" lists (external ∪ big defensive) ∩ `NO_MITIGATION_IDS`
+ * (`hasNoOwnPercentage`, which keeps Blessing of Sacrifice in it).
  * Neither the mitigation-aura test nor the external branch saw these, so a
  * kill attempt the target survived with one was attributed "not enough
  * damage" (a9bc48b5 @2:14: the priest's self Guardian Spirit at 2:16 and
@@ -1338,7 +1339,7 @@ export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>([
       (spellIdListsData as unknown as { bigDefensiveSpellIds?: string[] })
         .bigDefensiveSpellIds ?? []
     ).map(String),
-  ].filter((id) => NO_MITIGATION_IDS.has(id)),
+  ].filter(hasNoOwnPercentage),
   ...ENEMY_ONLY_SAVE_IDS,
 ]);
 

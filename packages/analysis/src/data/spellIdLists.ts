@@ -86,6 +86,10 @@ const spellIdLists = {
     // (它唯一的运行时读者是 2026-10-11 起 `selfDefensiveMechanism` 的标签,只读一行)。
     "473909",
     "108416", // Dark Pact (Warlock)
+    // Echoing Protection: the 15 % an Echoing Blessings 387801 paladin's
+    // blessing leaves on its target for 8 s (GH #126 rows 170 / 171,
+    // 2026-11-08) — a buff someone else put on the unit, never pressed
+    "387804",
   ],
   // 团队/外放减伤。**名字里的 "cast on a teammate" 描述的不是它的实际内容** ——
   // 集结呐喊 97462、黑暗 196718、清风 374227、灵魂链接图腾 98008 都不是指向队友的

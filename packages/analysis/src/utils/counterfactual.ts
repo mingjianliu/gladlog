@@ -2,7 +2,7 @@ import { CombatUnitType, ICombatUnit } from "@gladlog/parser-compat";
 
 import { castKeyOfAura } from "../data/castEffectAuras";
 import { resolveMitigation } from "../data/mitigationComponents";
-import { DEFLECTION_IDS } from "../data/mitigationData";
+import { DEFLECTION_IDS, MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
@@ -406,7 +406,16 @@ export function computeMitigationAudit(
       });
       continue;
     }
-    if (!res) {
+    // a talent's whole reduction no claim can stand on (the caster lacks the
+    // talent, or nobody knows), where the row says the aura is still the
+    // off-table mechanic (Blessing of Sacrifice's transfer, GH #126 row
+    // 170): the row it printed before the table had it
+    const unheldMechanic =
+      res !== undefined &&
+      MITIGATION_TABLE[whitelistKeyOf(iv.spellId) ?? iv.spellId]
+        ?.unheldIsMechanic === true &&
+      res.components.every((c) => c.pctMin <= 0);
+    if (!res || unheldMechanic) {
       // Off-table (including NO_MITIGATION_IDS; the two are mutually
       // exclusive). Absorb shields are the one off-table class that CAN be
       // measured rather than guessed: the log records what each shield actually

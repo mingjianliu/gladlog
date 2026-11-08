@@ -128,6 +128,10 @@ export function eligibleExternalMitigation(
   if (NO_MITIGATION_IDS.has(spellId)) return null;
   const e = MITIGATION_TABLE[spellId];
   if (!e) return null;
+  // a talent's whole reduction (Blessing of Sacrifice → Echoing Blessings,
+  // GH #126 row 170) is a reduction only on its holder's aura; this reads the
+  // id alone, so it stays out as it was
+  if (e.wholeReductionTalentId !== undefined) return null;
   if (e.positional) return null;
   if (e.pct >= 100) return { pct: 100, schoolMask: e.schoolMask, kind: "immunity" };
   return { pct: e.pct, schoolMask: e.schoolMask, kind: "mitigation" };

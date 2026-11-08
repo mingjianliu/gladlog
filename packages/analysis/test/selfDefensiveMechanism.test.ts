@@ -291,7 +291,12 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
     expect([...byName.keys()].filter((n) => others.has(n))).toEqual([]);
     // no member is a table row: a wall renders from its aura, with talents
     expect(family().filter(wallRow)).toEqual([]);
-    expect(family().filter((id) => MITIGATION_TABLE[id])).toEqual(["5277"]);
+    // the table rows in it are talent-whole: Evasion (Elusiveness) and
+    // Blessing of Sacrifice (Echoing Blessings, GH #126 row 170)
+    expect(family().filter((id) => MITIGATION_TABLE[id])).toEqual([
+      "5277",
+      "6940",
+    ]);
   });
 
   it("statesSelfDefensiveLabel reads exactly what selfDefensiveLabelWords wrote — figures only where the kind carries them", () => {

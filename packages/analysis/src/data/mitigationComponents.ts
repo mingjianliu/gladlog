@@ -28,6 +28,7 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { getFactConfig } from "../facts/factProviderConfig";
+import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
 import { logDatedNumberAt } from "../utils/logEra";
 import { specPassiveOwnership } from "../utils/talentModifiers";
 import { talentModifierOwnershipOf } from "../utils/talentOwnership";
@@ -97,7 +98,17 @@ export function resolveMitigation(
   // 203): a caster without it gets 0, an unknown one 0 as the claim and the
   // table value as the ceiling
   const gate = entry.wholeReductionTalentId;
-  if (gate !== undefined && getFactConfig().talentMitigation) {
+  // the damage-transfer link on its own caster carries none of it (Blessing
+  // of Sacrifice with Echoing Blessings: the paladin's end reads 1.002 on
+  // 605, the ally's 0.854 — GH #126 row 170)
+  if (
+    gate !== undefined &&
+    getFactConfig().talentMitigation &&
+    isCasterSideLinkAura(spellId, ctx.carrierIsCaster)
+  ) {
+    components[0].pctMin = 0;
+    components[0].pctMax = 0;
+  } else if (gate !== undefined && getFactConfig().talentMitigation) {
     const own = ctx.caster
       ? talentModifierOwnershipOf(ctx.caster, gate)
       : "unknown";
@@ -159,6 +170,10 @@ function applyTalentModifiers(
                 : "ally-carried copy"
         }`,
       );
+    if (m.ownEffectSlot) {
+      applyOwnSlotModifier(m.schoolMask, modPct, certain, components);
+      continue;
+    }
     // the modifier adds points to the percentage component covering its
     // schools; a school the aura does not reduce at all (Cloak's physical,
     // BoP's magic) becomes its own component starting from 0
@@ -176,6 +191,47 @@ function applyTalentModifiers(
     if (modPct >= 0 || certain) target.pctMax = clamp(target.pctMax + modPct);
     if (modPct < 0 || certain) target.pctMin = clamp(target.pctMin + modPct);
   }
+}
+
+/**
+ * A modifier on an aura 87 slot of its own (`ownEffectSlot`): the game
+ * multiplies it with the row's reduction on the schools both cover, so the
+ * row's component splits there — Evasion with Elusiveness and Bait and
+ * Switch is physical 20 and magic 1 − 0.80 × 0.85 = 32 (GH #126 row 234).
+ * Same bounds rule as the additive path: an uncertain modifier moves only
+ * the bound in its own direction.
+ */
+function applyOwnSlotModifier(
+  schoolMask: number,
+  modPct: number,
+  certain: boolean,
+  components: IResolvedMitigationComponent[],
+): void {
+  const clamp = (x: number) => Math.max(0, Math.min(99, x));
+  const compound = (p: number) =>
+    clamp(100 - ((100 - p) * (100 - modPct)) / 100);
+  let left = schoolMask;
+  for (const c of [...components]) {
+    const both = c.schoolMask & schoolMask;
+    if (both === 0) continue;
+    left &= ~both;
+    if (c.kind !== "pct") continue; // an immunity there takes everything
+    let target = c;
+    if (both !== c.schoolMask) {
+      c.schoolMask &= ~both;
+      target = { ...c, schoolMask: both };
+      components.push(target);
+    }
+    if (modPct >= 0 || certain) target.pctMax = compound(target.pctMax);
+    if (modPct < 0 || certain) target.pctMin = compound(target.pctMin);
+  }
+  if (left === 0) return;
+  components.push({
+    kind: "pct",
+    schoolMask: left,
+    pctMin: certain || modPct < 0 ? clamp(modPct) : 0,
+    pctMax: certain || modPct >= 0 ? clamp(modPct) : 0,
+  });
 }
 
 /**

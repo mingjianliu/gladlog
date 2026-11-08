@@ -39,6 +39,14 @@ export interface IMitigationEntry {
    * signed and every positive-only reader of this table expects.
    */
   wholeReductionTalentId?: string;
+  /**
+   * With `wholeReductionTalentId`: an aura whose caster provably lacks the
+   * talent is the off-table mechanic it was before the row existed — the
+   * death audit's "active Ns … not modeled" row, not a silent skip. Blessing
+   * of Sacrifice, whose 30 % transfer stays out of the table (GH #126 row
+   * 170).
+   */
+  unheldIsMechanic?: true;
 }
 
 /**
@@ -73,6 +81,16 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   // Feint and Evasion: the 20 % is Elusiveness 79008's, "Evasion also reduces damage taken by $s2%, and Feint also reduces non-area-of-effect damage taken by $s1%" — DB2 SpellEffect 68339 (aura 107, −20, class mask 134217728 = Feint) and 1018818 (aura 107, −20, mask 32 = Evasion) fill the cast ids' 0-point aura-87 slots (2026-08-12 audit). Corpus 2026-09-26: holders 0.800 (Feint 483 units / 231 players, Evasion 324 / 163), non-holders 0.999 / 1.000. Feint's own AoE-only reduction (aura 229) stays out, as Zephyr's does. Verdicts signed 2026-11-05 (mitigationVerdicts.ts); out of the wall family (`MITIGATION_WALL_IDS`) — see there
   "1966": { pct: 20, schoolMask: 0x7f, wholeReductionTalentId: "79008" }, // Feint
   "5277": { pct: 20, schoolMask: 0x7f, wholeReductionTalentId: "79008" }, // Evasion (its dodge is no percentage: the verdict book's melee reading carries it)
+  // Blessing of Sacrifice: its own 30 % is a transfer (aura 81 — the spec keeps transfers out of the table, and the ally's damage row reads the whole hit: non-holders 1.000); the 15 % is Echoing Blessings 387801's, DB2 effect #4 aura 107 op 32 (effect #3) −15 through mask 8192 into 6940's 0-point aura 87 slot. GH #126 row 170 (2026-11-08, 605 new-season files, `mitigationTalentScan`): on the ally, holders 0.854 (90 % 0.850–0.874), 72 units / 30 players, non-holders 1.000 (521); the paladin's own link (`isCasterSideLinkAura`) 1.002 (57 units) — `resolveMitigation` prices that end 0. `unheldIsMechanic`: a non-holder's aura keeps the death audit's off-table row
+  "6940": {
+    pct: 15,
+    schoolMask: 0x7f,
+    wholeReductionTalentId: "387801",
+    unheldIsMechanic: true,
+  },
+
+  // —— A talent's own aura ——
+  "387804": { pct: 15, schoolMask: 0x7f }, // Echoing Protection: the 8 s linger of Echoing Blessings 387801 ("These effects linger for 8 sec after the Blessing ends"), its own aura — DB2 387804 effect #0 aura87 −15 misc 127, PvpMultiplier 1. GH #126 rows 170 / 171 (2026-11-08, 605 new-season files): carriers 0.855 (90 % 0.850–0.869), 75 units / 34 players (`mitigationTalentScan`); applied within 2 s of a holder's Blessing of Protection (33 of 35), Spellwarding (18 / 19), Ultimate Sacrifice 199448 (15 / 15) or Sacrifice (106 / 222, the rest being the paladin's own link) ending, after no non-holder's (0 / 2,102). The aura proves the talent, so no ownership gate
 
   // —— The mitigation aura hangs off a different id (the generation layer can't find it by cast id) ——
   "51052": { pct: 30, schoolMask: 0x7e }, // Anti-Magic Zone: DR aura 145629 (observed), aura87 −15/126 × PvpMultiplier 2 = 30 % in PvP (2026-09-04 user ruling "PvP 值为官方值", BACKLOG #41; was 15 = the PvE number); the same-named 332831 (-20) is not observed and judged not live
@@ -101,7 +119,6 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
  * guards that there is no third state.
  */
 export const NO_MITIGATION_IDS: ReadonlySet<string> = new Set([
-  "6940", // Blessing of Sacrifice: damage transfer (30% redirected to the paladin); the spec states transfer effects don't enter the table; its aura87 points=0 row is a dead slot
   "19236", // Desperate Prayer: pure healing + max health, DB2 has no aura87 row at all
   "47788", // Guardian Spirit: +60% healing received (aura118) + death prevention, no percentage mitigation (the same-named new id 1247928 has a -10 row but is not observed, see the pending-decision section note)
   "97462", // Rallying Cry: +10% max health (the actual buff is 97463), no mitigation
@@ -129,6 +146,17 @@ export const MITIGATION_TABLE: Record<string, IMitigationEntry> = {
   ...gen,
   ...MITIGATION_OVERRIDES,
 };
+
+/**
+ * The spell itself carries no percentage: a `NO_MITIGATION_IDS` member, or a
+ * row whose whole reduction is a talent's and whose aura is otherwise the
+ * off-table mechanic (`unheldIsMechanic`: Blessing of Sacrifice, moved into
+ * the table for Echoing Blessings — GH #126 row 170). For the readers that
+ * ask it of the id alone (`SELF_SAVE_IDS`), so the move changes none of them.
+ */
+export const hasNoOwnPercentage = (spellId: string): boolean =>
+  NO_MITIGATION_IDS.has(spellId) ||
+  MITIGATION_TABLE[spellId]?.unheldIsMechanic === true;
 
 /** The floor of "a wall": a row of at least this percentage. */
 export const MITIGATION_WALL_MIN_PCT = 20;

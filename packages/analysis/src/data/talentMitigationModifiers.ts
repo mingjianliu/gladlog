@@ -48,6 +48,12 @@ interface ITalentMitigationModifier {
    * `modPct`): the resolver reads it at the match's date */
   datedModPct?: ILogDatedNumber;
   validation: TalentMitigationValidation;
+  /** the modifier fills an aura 87 slot of its own (a different effect index
+   * from the one the table row prices), so the game multiplies the two
+   * instead of adding points: Evasion's magic with Elusiveness 20 and Bait
+   * and Switch 15 reads 0.80 × 0.85 = 0.68 (GH #126 row 234). Absent = the
+   * modifier adds points to the row's own effect (Barkskin + Oakskin) */
+  ownEffectSlot?: true;
   /** scan evidence: holder unit median, 90 % interval, units (or why not) */
   evidence: string;
 }
@@ -173,6 +179,20 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
       validation: "promoted",
       evidence:
         "Blessing of Protection magic + Echoing Blessings: holders 0.845 (0.814–0.875), 23 units, non-holders 0.983 (135), expected 0.85; S2 archive every 30, run 2 2026-09-13",
+    },
+    {
+      // GH #126 row 234 (2026-11-08): Bait and Switch 457034 effect #0, aura
+      // 107 op 23 (effect #2) −15 through mask 32 on Evasion's magic aura 87
+      // slot ("Magical damage taken reduced by $w3%") — not Elusiveness's
+      // effect #1, so the two multiply
+      auraSpellId: "5277",
+      talentSpellId: "457034",
+      schoolMask: 126,
+      modPct: 15,
+      ownEffectSlot: true,
+      validation: "promoted",
+      evidence:
+        "Evasion magic + Bait and Switch, Elusiveness holders: 0.680 (90% 0.680–0.689), 33 units / 17 players, non-holders 0.800 (258), expected 0.68 = 0.80 × 0.85 (additive would be 0.65); 605 new-season files, 2026-11-08. No holder without Elusiveness on that set (0 units)",
     },
     {
       auraSpellId: "108271",
