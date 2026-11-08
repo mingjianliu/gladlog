@@ -20,6 +20,7 @@ import { run as runDamageBasis } from "../scripts/scan5/damageBasis";
 import { run as runFact8 } from "../scripts/scan5/fact8";
 import { run as runFact9 } from "../scripts/scan5/fact9";
 import { run as runFact9b } from "../scripts/scan5/fact9b";
+import { run as runFact10 } from "../scripts/scan5/fact10";
 import { run as runFact11 } from "../scripts/scan5/fact11";
 import { run as runFact12 } from "../scripts/scan5/fact12";
 import { run as runFriendlyOffensiveTag } from "../scripts/scan5/friendlyOffensiveTag";
@@ -2481,5 +2482,36 @@ describe("resEnemyEffectAfterDeath: a source-less REMOVED closes the aura (T03, 
   });
   it("an Avatar the log never closes runs its official length: no violation", () => {
     expect(viol("none")).toEqual([]);
+  });
+});
+
+describe("staleMaxTickRescaled — a stale row before a max-HP step UP (T09 attempt 2)", () => {
+  // cf63da4a 1:43.5 moved to whole seconds: Fortifying Brew's 211,554 grant
+  // in the current at 103.8 s, the max at 104.2 s; the brew ends at 115 s
+  const hpRow = (ms: number, cur: number, max: number) =>
+    rowOf(LogEvent.SPELL_DAMAGE, ms, {
+      advancedActorId: "Monk",
+      advancedActorCurrentHp: cur,
+      advancedActorMaxHp: max,
+    });
+  const monk = (rows: any[]) => unit("Monk", "1", 1, { advancedActions: rows });
+  const brew = [
+    hpRow(103_600, 469_387, 1_057_720),
+    hpRow(103_700, 453_513, 1_057_720),
+    hpRow(103_800, 665_067, 1_057_720), // +211,554: the grant, max not yet
+    hpRow(104_200, 450_289, 1_269_274),
+    hpRow(115_000, 450_289, 1_057_720), // the brew falls off
+  ];
+  const tick = (pct: number) => [`1:44  [STATE]   friends 1(Monk):${pct}`];
+
+  it("reads the step up's own new max, not the later step down's", () => {
+    // 665,067 / 1,269,274 = 52
+    expect(
+      of(scan(runFact10, [monk(brew)], tick(52)), "staleMaxTickRescaled"),
+    ).toEqual([]);
+    // the mixed-scale 63 is still caught
+    expect(
+      of(scan(runFact10, [monk([...brew])], tick(63)), "staleMaxTickRescaled"),
+    ).toHaveLength(1);
   });
 });

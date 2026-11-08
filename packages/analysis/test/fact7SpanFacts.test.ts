@@ -15,7 +15,11 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { formatObservedConsequences } from "../src/context/observedConsequences";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { hpReadingMaxHp, staleMaxHpRows } from "../src/utils/advancedActions";
+import {
+  amountLoggedBetween,
+  hpReadingMaxHp,
+  staleMaxHpRows,
+} from "../src/utils/advancedActions";
 import { analyzeBurstLedger } from "../src/utils/burstLedger";
 import { pressBlockedIntervalsForSpells } from "../src/utils/cannotCastIntervals";
 import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
@@ -677,5 +681,49 @@ describe("D60 — a form shift's row: fresh current over a stale max", () => {
       row(10.2, 600_000, 1_200_000), // a form going in: current and max at once
     ]);
     expect(staleMaxHpRows(rescaled).size).toBe(0);
+  });
+
+  it("T09 attempt 2 (codex P2, 197491d6 r1 85.187): heals logged in one millisecond with the rows count in the log's line order", () => {
+    // four rows of one ms, each after its heal's own line; the max steps
+    // up 104,490 0.24 s later. Read by timestamp alone, the 81,677 Chain
+    // Heal was "not after" the 893,324 row and its rise passed for the
+    // grant: 975,001 read 85 % over the new max for a real 93 %
+    const line = (r: any, lineIndex: number) => ({
+      ...r,
+      logLine: { ...r.logLine, lineIndex },
+    });
+    const heal = (s: number, lineIndex: number, amount: number) => ({
+      logLine: { timestamp: at(s), lineIndex },
+      effectiveAmount: amount,
+    });
+    const rows = [
+      line(row(85.187, 866_255, 1_044_900), 8434),
+      line(row(85.187, 893_324, 1_044_900), 8439),
+      line(row(85.187, 975_001, 1_044_900), 8441),
+      line(row(85.187, 975_001, 1_044_900), 8443),
+      line(row(85.428, 1_057_956, 1_149_390), 8470),
+    ];
+    const u = {
+      ...makeUnit("unit-1", { advancedActions: rows }),
+      healIn: [
+        heal(85.187, 8434, 76_484), // Stormswell
+        heal(85.187, 8439, 27_069), // Stormstream Totem
+        heal(85.187, 8441, 81_677), // Chain Heal
+      ],
+    } as never;
+    expect(staleMaxHpRows(u).size).toBe(0);
+    expect(gridHpPct(u, at(85.187))).toBe(93);
+    // the shared predicate itself: after the first row's line, up to the
+    // second's, and by time with no line index
+    expect(amountLoggedBetween((u as any).healIn, rows[1], rows[2])).toBe(
+      81_677,
+    );
+    expect(
+      amountLoggedBetween(
+        [{ logLine: { timestamp: at(85.187) }, effectiveAmount: 5 }],
+        { logLine: { timestamp: at(85.187) } },
+        { logLine: { timestamp: at(85.3) } },
+      ),
+    ).toBe(0);
   });
 });

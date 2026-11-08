@@ -1297,7 +1297,8 @@ function unusedOwnAuraOnAlly(ctx: IRoundCtx): void {
  * last HP row at or before the tick is a stale-max row (`staleMaxHpRows`: the
  * current already on a max-HP step's new scale, the max still the old one)
  * prints that row's current over the step's NEW max — the max of the first
- * later row with a smaller one (461265d4 r0 1:55: Fortifying Brew off, 907k
+ * later row with another one, smaller for a step down, larger for a step up
+ * (T09 attempt 2) (461265d4 r0 1:55: Fortifying Brew off, 907k
  * over the new 1,057,720 = 86, printed the pre-step 88; 6e0b8761 r0 0:14:
  * Fortitude dispelled, 1,073,314 / 1,158,460 = 93, printed 95). Counted:
  * every such tick.
@@ -1320,9 +1321,12 @@ function staleMaxTickRescaled(ctx: IRoundCtx): void {
       if (k < 0 || tMs - tsOf(rows[k]) > 3000) continue;
       const last = rows[k];
       if (!staleMaxHpRows(unit).has(last)) continue;
+      // the step is the first later row of another max — a step down's
+      // smaller one or (T09) a step up's larger one; "the first smaller"
+      // took a Fortifying Brew's grant row over the max of the brew's end
       const step = rows
         .slice(k + 1)
-        .find((a) => a.advancedActorMaxHp < last.advancedActorMaxHp);
+        .find((a) => a.advancedActorMaxHp !== last.advancedActorMaxHp);
       if (!step) continue;
       ctx.bump("staleMaxTickRescaled");
       const want = Math.min(

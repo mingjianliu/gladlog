@@ -36,6 +36,38 @@ export const MAX_HP_LAG_RATIO_TOL = 0.01;
 export const MAX_HP_LAG_EXPLAINED_TOL = 0.02;
 
 /**
+ * Whether an event was logged after row `from` and up to row `to` — the
+ * heals / hits a change between two HP rows is made of. In one millisecond
+ * the log's line order decides (fact9 D33, f73f4f15 r0 1:11: a cast row read
+ * 380,477 and the next row, a 55,260 heal logged in the same ms, 435,737 — a
+ * jump of the max's 1.145; the heal was skipped as "not after the first row"
+ * and the pre-Healthstone reading took the Soulburn maximum, 48 % for a 56 %
+ * press). With no line index a heal of the first row's ms is left out and one
+ * of the second's counts. One predicate for every reader of the fact: the
+ * max-HP lag below, `staleMaxHpNewMax`'s step up and step down, and the scan
+ * `hpStaleMaxStepUp` (T09 attempt 2).
+ */
+export function loggedBetween(
+  e: { timestamp: number; lineIndex?: number },
+  from: { timestamp: number; lineIndex?: number },
+  to: { timestamp: number; lineIndex?: number },
+): boolean {
+  const afterFrom =
+    e.timestamp > from.timestamp ||
+    (e.timestamp === from.timestamp &&
+      e.lineIndex !== undefined &&
+      from.lineIndex !== undefined &&
+      e.lineIndex > from.lineIndex);
+  const upToTo =
+    e.timestamp < to.timestamp ||
+    (e.timestamp === to.timestamp &&
+      (e.lineIndex === undefined ||
+        to.lineIndex === undefined ||
+        e.lineIndex <= to.lineIndex));
+  return afterFrom && upToTo;
+}
+
+/**
  * The max HP each sample should be read with: its own, or — for a sample
  * inside a lag run — the maximum the run ends on. Samples must be sorted by
  * time; returns an array of the same length.
@@ -55,33 +87,6 @@ export function laggingMaxHpCorrected(
   }> = [],
 ): number[] {
   const out = samples.map((s) => s.maxHp);
-  /** the heals / hits logged after row `from` and up to row `to`. In one
-   * millisecond the log's line order decides (fact9 D33, f73f4f15 r0 1:11:
-   * a cast row read 380,477 and the next row, a 55,260 heal logged in the
-   * same ms, 435,737 — a jump of the max's 1.145; the heal was skipped as
-   * "not after the first row" and the pre-Healthstone reading took the
-   * Soulburn maximum, 48 % for a 56 % press). With no line index a heal of
-   * the first row's ms is left out and one of the second's counts, as
-   * before. */
-  const between = (
-    e: { timestamp: number; lineIndex?: number },
-    from: { timestamp: number; lineIndex?: number },
-    to: { timestamp: number; lineIndex?: number },
-  ) => {
-    const afterFrom =
-      e.timestamp > from.timestamp ||
-      (e.timestamp === from.timestamp &&
-        e.lineIndex !== undefined &&
-        from.lineIndex !== undefined &&
-        e.lineIndex > from.lineIndex);
-    const upToTo =
-      e.timestamp < to.timestamp ||
-      (e.timestamp === to.timestamp &&
-        (e.lineIndex === undefined ||
-          to.lineIndex === undefined ||
-          e.lineIndex <= to.lineIndex));
-    return afterFrom && upToTo;
-  };
   const explained = (
     from: { timestamp: number; lineIndex?: number },
     to: { timestamp: number; lineIndex?: number },
@@ -92,7 +97,7 @@ export function laggingMaxHpCorrected(
     for (const e of hpEvents) {
       if (e.timestamp < from.timestamp) continue;
       if (e.timestamp > to.timestamp) break;
-      if (!between(e, from, to)) continue;
+      if (!loggedBetween(e, from, to)) continue;
       sum += e.amount;
       any = true;
     }

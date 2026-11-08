@@ -1,4 +1,8 @@
-import { IAdvancedAction, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  IAdvancedAction,
+  ICombatUnit,
+  loggedBetween,
+} from "@gladlog/parser-compat";
 
 const sortedAdvancedActionsCache = new WeakMap<
   IAdvancedAction[],
@@ -37,7 +41,7 @@ export function getSortedAdvancedActions(
 
 /** How far before the max-HP step a stale row is looked for: a form's rows are
  * rewritten within a few hundred ms (4f8a5947 2:33.08 → 2:33.28). */
-const STALE_MAX_HP_LOOKBACK_MS = 500;
+export const STALE_MAX_HP_LOOKBACK_MS = 500;
 /** "Current HP has not moved" across the step, as a share of the new max. */
 const STALE_MAX_HP_CURRENT_SLACK = 0.05;
 /** The dip a stale row must show, and how close the current over the new max
@@ -55,7 +59,28 @@ const STALE_MAX_HP_STEP_CARRIES = 0.5;
 /** A max-HP step UP: how far the current's rise (heals and hits between the
  * two rows taken out) may sit off the grant (new max − old max), as its share.
  * Fortifying Brew's 211,554 rose 211,554 (cf63da4a 1:43.5, T09). */
-const STALE_MAX_HP_GRANT_SLACK = 0.25;
+export const STALE_MAX_HP_GRANT_SLACK = 0.25;
+
+/** The heals or hits (effective amounts, unsigned) logged after HP row
+ * `from` and up to row `to`, in the log's line order (`loggedBetween`) — what
+ * moved the current between two rows. Shared with the scan
+ * `hpStaleMaxStepUp`. */
+export function amountLoggedBetween(
+  events:
+    | readonly {
+        logLine: { timestamp: number; lineIndex?: number };
+        effectiveAmount?: number;
+      }[]
+    | undefined,
+  from: { logLine: { timestamp: number; lineIndex?: number } },
+  to: { logLine: { timestamp: number; lineIndex?: number } },
+): number {
+  let sum = 0;
+  for (const d of events ?? [])
+    if (loggedBetween(d.logLine, from.logLine, to.logLine))
+      sum += Math.abs(d.effectiveAmount ?? 0);
+  return sum;
+}
 
 const staleMaxHpRowsCache = new WeakMap<
   IAdvancedAction[],
@@ -121,20 +146,6 @@ export function staleMaxHpNewMax(
   );
   const pct = (a: IAdvancedAction) =>
     (100 * a.advancedActorCurrentHp) / a.advancedActorMaxHp;
-  const amountBetween = (
-    events:
-      | readonly { logLine: { timestamp: number }; effectiveAmount: number }[]
-      | undefined,
-    fromMs: number,
-    toMs: number,
-  ) =>
-    (events ?? []).reduce(
-      (sum, d) =>
-        d.logLine.timestamp > fromMs && d.logLine.timestamp <= toMs
-          ? sum + Math.abs(d.effectiveAmount)
-          : sum,
-      0,
-    );
   for (let j = 1; j < rows.length; j++) {
     const after = rows[j]!;
     const m0 = rows[j - 1]!.advancedActorMaxHp;
@@ -152,13 +163,15 @@ export function staleMaxHpNewMax(
           STALE_MAX_HP_LOOKBACK_MS;
         k--
       ) {
-        const fromMs = rows[k - 1]!.logLine.timestamp;
-        const toMs = rows[k]!.logLine.timestamp;
+        // T09 attempt 2 (codex P2, 197491d6 r1 85.187): the heals and hits
+        // between the two rows in the log's line order — an 81,677 Chain
+        // Heal logged in the first row's own millisecond, after it, is the
+        // rise, not a grant
         const rise =
           rows[k]!.advancedActorCurrentHp -
           rows[k - 1]!.advancedActorCurrentHp +
-          amountBetween(unit.damageIn, fromMs, toMs) -
-          amountBetween(unit.healIn, fromMs, toMs);
+          amountLoggedBetween(unit.damageIn, rows[k - 1]!, rows[k]!) -
+          amountLoggedBetween(unit.healIn, rows[k - 1]!, rows[k]!);
         if (Math.abs(rise - grant) <= STALE_MAX_HP_GRANT_SLACK * grant) {
           for (let r = k; r < j; r++) out.set(rows[r]!, m1);
           break;
@@ -184,15 +197,7 @@ export function staleMaxHpNewMax(
     const first = rows[i]!;
     const last = rows[j - 1]!.advancedActorCurrentHp;
     const rescaled = (last * m1) / m0;
-    const priorMs = rows[i - 1]!.logLine.timestamp;
-    const hitsInDip = (unit.damageIn ?? []).reduce(
-      (sum, d) =>
-        d.logLine.timestamp > priorMs &&
-        d.logLine.timestamp <= first.logLine.timestamp
-          ? sum + Math.abs(d.effectiveAmount)
-          : sum,
-      0,
-    );
+    const hitsInDip = amountLoggedBetween(unit.damageIn, rows[i - 1]!, first);
     if (
       before - pct(first) - (100 * hitsInDip) / m0 >=
         STALE_MAX_HP_MIN_DIP_PCT &&

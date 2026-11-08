@@ -2903,6 +2903,16 @@ const INDEX: PredicateRow[] = [
     mod: maxHpLagMod,
   },
   {
+    file: "packages/parser-compat/src/maxHpLag.ts",
+    symbol: "loggedBetween",
+    mod: maxHpLagMod,
+  },
+  {
+    file: `${A}/utils/advancedActions.ts`,
+    symbol: "amountLoggedBetween",
+    mod: advancedActions,
+  },
+  {
     file: "packages/parser-compat/src/convert.ts",
     symbol: "correctedAdvancedSamples",
     mod: convertMod,

@@ -13,22 +13,25 @@
  *    Truth from the unit's own HP rows: a row of max m0 within
  *    `LOOKBACK_MS` before the first row of max m1 > m0 whose current rose
  *    off the row before it by the grant (m1 − m0, within `GRANT_SLACK`),
- *    once the heals and hits logged between the two are taken out; it and
+ *    once the heals and hits logged between the two are taken out (in the
+ *    log's line order — the product's `amountLoggedBetween`, codex P2 on
+ *    attempt 1: 197491d6 r1 85.187, an 81,677 Chain Heal in the first row's
+ *    own millisecond logged after it is the rise); it and
  *    every later m0 row before the step are on the m1 scale. Violation: the
  *    product's reading of such a row (`hpReadingMaxHp`, rounded, clamped at
  *    100) is not its current over m1. Counted: every such row whose two
  *    scales round apart. Once per round (the rows are owner-independent).
  */
-import { hpReadingMaxHp } from "@gladlog/analysis/src/utils/advancedActions";
+import {
+  amountLoggedBetween,
+  hpReadingMaxHp,
+  STALE_MAX_HP_GRANT_SLACK as GRANT_SLACK,
+  STALE_MAX_HP_LOOKBACK_MS as LOOKBACK_MS,
+} from "@gladlog/analysis/src/utils/advancedActions";
 
 import { type IRoundCtx, tsOf } from "./ctx";
 
 export const CHECKS = ["hpStaleMaxStepUp"] as const;
-
-/** the same window the step-down detection looks back over */
-const LOOKBACK_MS = 500;
-/** how far the unexplained rise may sit off the grant, as its share */
-const GRANT_SLACK = 0.25;
 
 export function run(ctx: IRoundCtx): void {
   if (!ctx.firstOwnerOfRound) return;
@@ -43,14 +46,6 @@ function hpStaleMaxStepUp(ctx: IRoundCtx): void {
     const rows = ((u.advancedActions ?? []) as any[])
       .filter((a) => a.advancedActorId === u.id && a.advancedActorMaxHp > 0)
       .sort((a, b) => tsOf(a) - tsOf(b));
-    const between = (list: any[] | undefined, from: number, to: number) =>
-      (list ?? []).reduce(
-        (s, d) =>
-          tsOf(d) > from && tsOf(d) <= to
-            ? s + Math.abs(d.effectiveAmount ?? 0)
-            : s,
-        0,
-      );
     for (let j = 1; j < rows.length; j++) {
       const m0 = rows[j - 1].advancedActorMaxHp;
       const m1 = rows[j].advancedActorMaxHp;
@@ -67,13 +62,11 @@ function hpStaleMaxStepUp(ctx: IRoundCtx): void {
         stepMs - tsOf(rows[k]) <= LOOKBACK_MS;
         k--
       ) {
-        const from = tsOf(rows[k - 1]);
-        const to = tsOf(rows[k]);
         const rise =
           rows[k].advancedActorCurrentHp -
           rows[k - 1].advancedActorCurrentHp +
-          between(u.damageIn, from, to) -
-          between(u.healIn, from, to);
+          amountLoggedBetween(u.damageIn, rows[k - 1], rows[k]) -
+          amountLoggedBetween(u.healIn, rows[k - 1], rows[k]);
         if (Math.abs(rise - grant) <= GRANT_SLACK * grant) {
           i = k;
           break;
