@@ -991,4 +991,10 @@
  *  presses for kick-eaten postKick, missed-cleanse dispellerPressed and
  *  ABILITIES INTO. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 509;
+/*
+ * v510 (2026-11-08, fact12 D15 D24 D25; pipeline batch B15, T02): the
+ *  [ENEMY DEF] "its bolts hit X" clause only follows a channelled save
+ *  (timelineHelpers.isChannelledPress); a mage barrier's reactive damage is no
+ *  channel bolt. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 510;

@@ -5711,3 +5711,16 @@ t12 (pressNamedRead): repro 11 → 0, 605 1,618 → 0. 605: menu rows +0 / −0
 549, all Crusading Strikes (160 Retribution lines under the 3-cast floor).
 Batch verified on tests + codex (user 11-08); 605 / cover / wide run at the end
 of the wave.
+
+v510 (2026-11-08, fact12 D15 D24 D25; pipeline batch B15, T02). enemyDef's
+`channelTargetClause` ("— its bolts hit X: Nk of the Mk …", legend "a save that
+is a channel") ran for every enemy self-save with a SUCCESS row, so Blazing
+Barrier's reactive 235314 hits read as channel bolts and its Overpowered Barrier
+pulse 1220755 was left out of the total. New shared predicate
+`timelineHelpers.isChannelledPress` (DB2 `CHANNELED_SPELL_IDS` or
+`CHANNELED_CD_SPELL_IDS`; Ultimate Penitence's press 421453 stays a channel)
+gates the clause; anything else ends at "(at N% HP)". New scan5 module t02
+(boltsClauseOnNoChannel): repro 42 → 0; on the 605 base 967 such lines, every
+one Blazing Barrier 235313 (Ultimate Penitence's 288 unchanged). Menu rows +0 /
+−0 (repro). Batch verified on tests + codex (user 11-08); 605 / cover / wide run
+at the end of the wave.
