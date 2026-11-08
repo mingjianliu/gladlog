@@ -92,39 +92,50 @@ function firstSeenMs(pet: PetLike): number {
 /**
  * Was `pet` sent away by its owner's later summon by `atMs` — the owner's
  * latest pet summon at or before `atMs` (`PET_SUMMON_SPELL_IDS`, a
- * SPELL_CAST_SUCCESS) comes after the pet's last own row at or before it?
- * One permanent pet is out at a time: Summon Imp sends the Felhunter away
- * (codex review of batch B10, T26: a Felhunter last seen 0.3 s before an Imp
- * was summoned still threw the Spell Lock of a heal 0.2 s after it). A pet
- * the same summon brings back under the same unit has no row after the cast
- * yet and reads as sent away until it shows — no kick is credited to it.
+ * SPELL_CAST_SUCCESS) with no row of the pet's own AFTER it, in log order,
+ * up to `atMs`? One permanent pet is out at a time: Summon Imp sends the
+ * Felhunter away (codex review of batch B10, T26: a Felhunter last seen
+ * 0.3 s before an Imp was summoned still threw the Spell Lock of a heal 0.2 s
+ * after it). Presence has to be shown after the summon: a row of the summon's
+ * own millisecond counts only when its line comes after the cast's
+ * (`lineIndex`; unknown order is not after), and an aura removal is no
+ * presence — it is what a dismissal writes (codex 85-tk-C-T26-3). A pet the
+ * same summon brings back under the same unit reads as sent away until it
+ * shows — no kick is credited to it.
  */
 export function petReplacedBySummonAt(
   owner: Partial<Pick<ICombatUnit, "spellCastEvents">>,
   pet: PetLike,
   atMs: number,
 ): boolean {
-  let summonMs = -Infinity;
+  type Row = { timestamp: number; logLine?: { lineIndex?: number } };
+  let summon: Row | undefined;
   for (const c of owner.spellCastEvents ?? [])
     if (
       PET_SUMMON_SPELL_IDS.has(c.spellId) &&
       c.logLine.event === "SPELL_CAST_SUCCESS" &&
       c.timestamp <= atMs &&
-      c.timestamp > summonMs
+      (!summon || c.timestamp >= summon.timestamp)
     )
-      summonMs = c.timestamp;
-  if (!Number.isFinite(summonMs)) return false;
-  let last = -Infinity;
-  for (const stream of [
-    pet.spellCastEvents,
-    pet.auraEvents,
-    pet.damageOut,
-    pet.damageIn,
-    pet.advancedActions,
-  ] as ReadonlyArray<ReadonlyArray<{ timestamp: number }> | undefined>)
-    for (const e of stream ?? [])
-      if (e.timestamp <= atMs && e.timestamp > last) last = e.timestamp;
-  return last < summonMs;
+      summon = c;
+  if (!summon) return false;
+  const s = summon;
+  const after = (r: Row): boolean =>
+    r.timestamp > s.timestamp ||
+    (r.timestamp === s.timestamp &&
+      r.logLine?.lineIndex !== undefined &&
+      s.logLine?.lineIndex !== undefined &&
+      r.logLine.lineIndex > s.logLine.lineIndex);
+  const shows = (r: Row): boolean => r.timestamp <= atMs && after(r);
+  const auraShows = (a: Row & { logLine?: { event?: string } }): boolean =>
+    a.logLine?.event !== "SPELL_AURA_REMOVED" && shows(a);
+  return !(
+    (pet.spellCastEvents ?? []).some(shows) ||
+    (pet.auraEvents ?? []).some(auraShows) ||
+    (pet.damageOut ?? []).some(shows) ||
+    (pet.damageIn ?? []).some(shows) ||
+    (pet.advancedActions ?? []).some(shows)
+  );
 }
 
 /**

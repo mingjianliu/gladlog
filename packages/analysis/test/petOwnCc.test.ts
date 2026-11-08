@@ -710,7 +710,11 @@ describe("readers", () => {
       const h = healer();
       (h as any).advancedActions = samples(100);
       const f = pointWith(warlock, [pet, pet2], h);
-      expect(f).toMatchObject({ distanceYd: 10, locked: true, feasible: false });
+      expect(f).toMatchObject({
+        distanceYd: 10,
+        locked: true,
+        feasible: false,
+      });
     });
 
     it("B10 #2: a Felhunter sent away by Summon Imp throws no Spell Lock", () => {
@@ -736,6 +740,52 @@ describe("readers", () => {
         distanceYd: 10,
         feasible: true,
       });
+    });
+
+    it("B10 #2 (codex 85-tk-C-T26-3): presence after the summon is shown in log order; an aura removal is none", () => {
+      const withLine = (row: any, lineIndex: number) => ({
+        ...row,
+        logLine: { ...row.logLine, lineIndex },
+      });
+      const summon = withLine(
+        makeSpellCastEvent("688", at(69.8), "", "", "w", "Warlock"),
+        500,
+      );
+      const run = (petRows: { advanced?: any[]; auras?: any[] }) => {
+        const { warlock, pet } = pair({ ownerCasts: [summon] });
+        (pet as any).advancedActions = petRows.advanced ?? [];
+        (pet as any).auraEvents = petRows.auras ?? [];
+        const imp = makeUnit("Pet-3", { name: "Imp", ownerId: "w" });
+        (imp as any).advancedActions = [makeAdvancedAction(at(69.9), 95, 0)];
+        const h = healer();
+        (h as any).advancedActions = samples(100);
+        return pointWith(warlock, [pet, imp], h);
+      };
+      // a sample of the summon's millisecond logged BEFORE the cast: sent away
+      expect(
+        run({ advanced: [withLine(makeAdvancedAction(at(69.8), 90, 0), 499)] }),
+      ).toMatchObject({ distanceYd: null, feasible: false });
+      // ... and AFTER it: the pet is (back) out
+      expect(
+        run({ advanced: [withLine(makeAdvancedAction(at(69.8), 90, 0), 501)] }),
+      ).toMatchObject({ distanceYd: 10, feasible: true });
+      // an aura removal at the summon is the dismissal, not presence
+      const removed = withLine(
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "1000",
+          at(69.8),
+          "Pet-1",
+          "Pet-1",
+        ),
+        501,
+      );
+      expect(
+        run({
+          advanced: [makeAdvancedAction(at(69.5), 90, 0)],
+          auras: [removed],
+        }),
+      ).toMatchObject({ distanceYd: null, feasible: false });
     });
 
     it("B10 #3: line of sight reads the raw samples, distance the interpolated point", () => {
