@@ -11,6 +11,18 @@
  *    has no official cooldown (Archangel) is what is up: no friendly offensive
  *    aura WITH a cooldown, no summon at either end of the second, no debuff
  *    of theirs on an enemy.
+ *  - kind `noAuraLineUntagged`: an aura-less immunity line (`(immune, no
+ *    aura logged)`) with no tag, while an offensive aura with a cooldown
+ *    that the owner's side put up (on a friend, or as their debuff on an
+ *    enemy) is up at both ends of the printed second — so at the press,
+ *    whatever its millisecond (fact12 D14: that line form skipped the shared
+ *    predicate under a warrior's Avatar + Recklessness);
+ *  - kind `auraUntagged` (not in the total): the same reading on every other
+ *    line form. On 605 files it reads 207 facts the product leaves untagged
+ *    on purpose or by its own window test — 162264 is Metamorphosis AND the
+ *    Demonic form Eye Beam gives (`OFFENSIVE_AURA_EVIDENCE` keys it by the
+ *    cooldown either way), Colossus Smash's debuff, Power Infusion — a
+ *    pointer list, not a defect count.
  *  A summon has no aura, so whether one runs is the product's own reading
  *  (`offensiveSummonActiveAt`: an enemy-CD-window summon, its press plus the
  *  caster's length), asked at the second's two ends like the auras below
@@ -24,13 +36,19 @@ import {
   offensiveCdOfAura,
   offensiveSummonActiveAt,
 } from "@gladlog/analysis/src/utils/cooldowns";
-import { ENEMY_DEF_TAG_RE_SRC } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  ENEMY_DEF_NO_AURA_LOGGED,
+  ENEMY_DEF_TAG_RE_SRC,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import { OFFENSIVE_AURA_EVIDENCE } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import { offensiveEffectCdId } from "@gladlog/analysis/src/utils/spellDanger";
 
 import { APPLIED, ev, type IRoundCtx, REMOVED, tsOf } from "./ctx";
 
 export const CHECKS = ["offensiveTagWrong"] as const;
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "offensiveTagWrong|auraUntagged",
+]);
 
 const LINE = new RegExp(String.raw`^\s*(\d+):(\d\d)\s+${ENEMY_DEF_TAG_RE_SRC}`);
 const TAG = "[friendly offensive CD active]";
@@ -82,6 +100,29 @@ export function run(ctx: IRoundCtx): void {
         `summon of ${through.name} runs through the second`,
         line,
       );
+    if (!tagged) {
+      const lit = (ms: number) =>
+        new Set(
+          [...friends, ...enemies]
+            .flatMap((u: any) => offensiveAurasUp(u, ms, side))
+            .filter(
+              (id) => !!effectiveCooldownSeconds(offensiveEffectCdId(id) ?? id),
+            ),
+        );
+      const atLo = lit(lo);
+      const both = [...lit(hi)].filter((id) => atLo.has(id));
+      if (both.length > 0)
+        ctx.violate(
+          "offensiveTagWrong",
+          line.includes(`, ${ENEMY_DEF_NO_AURA_LOGGED})`)
+            ? "noAuraLineUntagged"
+            : "auraUntagged",
+          lo,
+          `${line.trim()}`,
+          `up through the second: ${both.join(",")}`,
+          line,
+        );
+    }
     if (!tagged || through) continue;
     // the tag is a fact of the press instant inside the second: a summon
     // running at either end of it can be what it read

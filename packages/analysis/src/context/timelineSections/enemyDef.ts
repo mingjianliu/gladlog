@@ -123,6 +123,21 @@ export function emitEnemyDefEntries(
       combatSpan.endTime,
     );
     const roundSpan = { startTime: matchStartMs, endTime: roundEndAtMs };
+    const friendlyIds = new Set(friends.map((f) => f.id));
+    // `[friendly offensive CD active]` is a fact of the PRESS instant (round-3
+    // audit D8: at m:ss.0 it missed a Dark Transformation started 0.13 s
+    // before an Obsidian Scales in the same second). Every `[ENEMY DEF]` line
+    // form reads it here (fact12 D14: the aura-less immunity line skipped it).
+    const burstTagAt = (pressSeconds: number): string =>
+      friendlyOffensiveCdActiveAt(
+        friends,
+        enemies ?? [],
+        friendlyIds,
+        matchStartMs + Math.round(pressSeconds * 1000),
+        roundBounds,
+      )
+        ? " [friendly offensive CD active]"
+        : "";
     for (const enemy of enemies ?? []) {
       const events = enemyDefensiveEvents(
         enemy,
@@ -181,20 +196,7 @@ export function emitEnemyDefEntries(
           : d.observedSeconds !== undefined
             ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${earlyNote}`
             : "";
-        const friendlyIds = new Set(friends.map((f) => f.id));
-        // the tag is a fact of the PRESS instant (round-3 audit D8: at
-        // m:ss.0 it missed a Dark Transformation started 0.13 s before an
-        // Obsidian Scales in the same second)
-        const pressMs =
-          matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000);
-        const hasBurst = friendlyOffensiveCdActiveAt(
-          friends,
-          enemies ?? [],
-          friendlyIds,
-          pressMs,
-          roundBounds,
-        );
-        const burstStr = hasBurst ? " [friendly offensive CD active]" : "";
+        const burstStr = burstTagAt(d.pressSeconds ?? d.atSeconds);
         const targetUnit =
           d.kind === "external"
             ? (enemies?.find((e) => e.id === d.recipientId) ??
@@ -430,7 +432,7 @@ export function emitEnemyDefEntries(
         const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
         addEntry(
           p.atSeconds,
-          `${fmtTime(p.atSeconds)}  [ENEMY DEF]   ${who}: ${p.spellName} (${immuneLabelOf(p.auraId)}, ${ENEMY_DEF_NO_AURA_LOGGED})`,
+          `${fmtTime(p.atSeconds)}  [ENEMY DEF]   ${who}: ${p.spellName} (${immuneLabelOf(p.auraId)}, ${ENEMY_DEF_NO_AURA_LOGGED})${burstTagAt(p.atSeconds)}`,
         );
       }
     }

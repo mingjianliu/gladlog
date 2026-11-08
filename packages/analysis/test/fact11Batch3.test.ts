@@ -210,6 +210,57 @@ describe("D34 — an immunity press the log wrote no aura for", () => {
     );
   });
 
+  it("carries [friendly offensive CD active] at its press (fact12 D14)", () => {
+    // 60bfdea9 1:12: Mass Invisibility pressed under a warrior's Recklessness
+    const linesWith = (reckEndS: number) => {
+      const mage = makeUnit("E5", {
+        name: "Mage",
+        reaction: CombatUnitReaction.Hostile,
+        spellCastEvents: [press],
+      });
+      const warrior = makeUnit("f1", {
+        name: "Warrior",
+        auraEvents: [
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "1719",
+            at(100),
+            "f1",
+            "f1",
+            "BUFF",
+          ),
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            "1719",
+            at(reckEndS),
+            "f1",
+            "f1",
+            "BUFF",
+          ),
+        ],
+      });
+      const lines: string[] = [];
+      emitEnemyDefEntries({
+        matchStartMs: T0,
+        matchEndSeconds: 180,
+        enemies: [mage],
+        enemyPid: (n: string) => `E:${n}`,
+        friends: [warrior],
+        roundBounds: { startTime: T0, endTime: at(180) },
+        pid: (n: string) => `F:${n}`,
+        actorLabel: (n: string) => `E:${n}`,
+        addEntry: (_t: number, line: string) => lines.push(line),
+        _allUnits: [mage, warrior],
+      } as never);
+      return lines.find((l) => l.includes("Mass Invisibility")) ?? "";
+    };
+    // up at the press millisecond, gone 0.1 s before it inside the same second
+    expect(linesWith(112)).toContain(
+      "(immune, no aura logged) [friendly offensive CD active]",
+    );
+    expect(linesWith(108.475)).not.toContain("[friendly offensive CD active]");
+  });
+
   it("is not after the round's end", () => {
     const mage = makeUnit("E5", { name: "Mage", spellCastEvents: [press] });
     expect(
