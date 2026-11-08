@@ -5600,3 +5600,16 @@ effect ends the decision with no row. New gate
 context (605: 43/43). 605: the 61 backlash rows are unchanged; the round-12
 repro row (cf63da4a r0, UA t=103.5) goes. Batch verified on tests + codex
 (user 11-08); 605 / cover / wide run at the end of the wave.
+
+v503 (2026-11-08, fact12 D16, GH #141 item 5; pipeline batch B5). (1) fact12
+D16: Nether Ward logs a returned spell's damage row in the caster's own press
+millisecond, ahead of the REFLECT row that names it; `pairNetherWardReturns`
+now pairs such a lead row with the first free REFLECT row of the pressed spell
+after it (`netherWardPressedSpells`), so "Fire Blast reflected ×2" no longer
+hides a Pyroblast. New scan5 check `wardLeadReturn`: repro 2/2 → 0/2, cover
+set 8/8 → 0/8 (one [REFLECTED] line × 3 views), 0 menu changes. (2) GH #141
+item 5 (user ruling 11-08: official 20 yd reach plus line of sight):
+`enemyTargetReaches` (Touch of Karma) drops an in-reach enemy proven out of
+sight; unknown line of sight still counts. 605: 0 of 7,400 menu rows and 0
+context lines change. Batch verified on tests + codex (user 11-08); 605 /
+cover / wide run at the end of the wave.

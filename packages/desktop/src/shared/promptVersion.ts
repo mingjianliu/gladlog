@@ -942,4 +942,10 @@
  *  counts presses, not miss rows (one shared isTwinMissRow); backlash-dispel
  *  reads only a deliberate dispel. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 502;
+/*
+ * v503 (2026-11-08, fact12 D16, GH #141 item 5; pipeline batch B5): a
+ *  Nether Ward return logged in its press's ms pairs with the REFLECT row
+ *  after it; Touch of Karma counts as ready only with an in-reach enemy in
+ *  line of sight. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 503;
