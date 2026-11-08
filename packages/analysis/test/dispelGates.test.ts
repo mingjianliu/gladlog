@@ -926,6 +926,27 @@ describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
     expect(dispellerPressedFact(priest, MATCH_START, 150, 160)).toEqual({});
   });
 
+  it("dispellerPressed: a set proc's copy row is no press (T12, 1d26a991 Twin Flame beside Disintegrate)", () => {
+    const c = (spellId: string, spellName: string, t: number) => ({
+      spellId,
+      spellName,
+      timestamp: S(t),
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: S(t) },
+    });
+    const evoker = makeUnit("ev", {
+      spec: CombatUnitSpec.Evoker_Preservation,
+      spellCastEvents: [
+        c("361469", "Living Flame", 9.053),
+        c("1265980", "Twin Flame", 9.179),
+        c("356995", "Disintegrate", 9.179),
+        c("360823", "Naturalize", 12.494),
+      ],
+    });
+    expect(dispellerPressedFact(evoker, MATCH_START, 7.642, 31.7)).toEqual({
+      dispellerPressed: "Living Flame +1.4s、Disintegrate +1.5s、Naturalize +4.8s",
+    });
+  });
+
   it("dispellersCcS states the gate's own blocked seconds, floored (work order 2026-10-14c #12, 29aabcc2)", () => {
     const owner = makeUnit("mw", { spec: CombatUnitSpec.Monk_Mistweaver });
     const w = {

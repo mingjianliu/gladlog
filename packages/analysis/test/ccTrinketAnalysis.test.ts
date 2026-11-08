@@ -1703,6 +1703,74 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(inst.firstActionDelayS).toBeCloseTo(3.2, 5);
   });
 
+  it("T12: an auto-attack swing or a triggered row in the post-kick window is no press (1d26a991 Crusading Strikes, 4cacc702 Sundering beside Lava Lash)", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyDK",
+      spec: CombatUnitSpec.DeathKnight_Unholy,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const cast = (id: string, ms: number, name: string, dest = "enemy-1") =>
+      makeSpellCastEvent(
+        id,
+        MATCH_START + ms,
+        dest,
+        "EnemyDK",
+        "player-1",
+        "PlayerShaman",
+        0,
+        name,
+      );
+    const shaman = makeUnit("player-1", {
+      name: "PlayerShaman",
+      spec: CombatUnitSpec.Shaman_Enhancement,
+      reaction: CombatUnitReaction.Friendly,
+      actionIn: [
+        makeInterruptEvent(
+          "47528",
+          "Mind Freeze",
+          "51514",
+          "Hex",
+          MATCH_START + 30_000,
+          "enemy-1",
+          "EnemyDK",
+        ),
+      ],
+      spellCastEvents: [
+        // the triggered Sundering is logged first, in the press's own ms
+        cast("467283", 31_793, "Sundering", "0000000000000000"),
+        cast("60103", 31_793, "Lava Lash"),
+      ],
+    });
+    const k = analyzePlayerCCAndTrinket(shaman, [enemy], makeCombat())
+      .interruptInstances[0]!;
+    expect(k.switchSpellName).toBe("Lava Lash");
+
+    const paladin = makeUnit("player-1", {
+      name: "PlayerPaladin",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      reaction: CombatUnitReaction.Friendly,
+      actionIn: [
+        makeInterruptEvent(
+          "19647",
+          "Spell Lock",
+          "410126",
+          "Searing Glare",
+          MATCH_START + 30_000,
+          "enemy-1",
+          "EnemyDK",
+        ),
+      ],
+      spellCastEvents: [
+        cast("408385", 32_325, "Crusading Strikes"),
+        cast("96231", 33_126, "Rebuke"),
+      ],
+    });
+    const p = analyzePlayerCCAndTrinket(paladin, [enemy], makeCombat())
+      .interruptInstances[0]!;
+    expect(p.switchSpellName).toBe("Rebuke");
+    expect(p.switchDelayS).toBeCloseTo(3.126, 3);
+  });
+
   it("W1k: a kick after the spell's own SPELL_CAST_SUCCESS hit the channel — channelS set, no cast depth (1bad0a5c Mind Control)", () => {
     const enemy = makeUnit("enemy-1", {
       name: "EnemyShaman",

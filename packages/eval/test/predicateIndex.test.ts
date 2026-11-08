@@ -189,6 +189,7 @@ import * as overrideVariantEra from "@gladlog/analysis/src/utils/overrideVariant
 import * as petCommandsMod from "@gladlog/analysis/src/utils/petCommands";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
+import * as pressRowMod from "@gladlog/analysis/src/utils/pressRow";
 import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
 import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
@@ -2863,6 +2864,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/castPress.ts`,
     symbol: "isNoPressRow",
     mod: castPress,
+  },
+  {
+    file: `${A}/utils/pressRow.ts`,
+    symbol: "isNoPlayerPressRow",
+    mod: pressRowMod,
   },
   {
     file: `${A}/utils/cooldowns.ts`,

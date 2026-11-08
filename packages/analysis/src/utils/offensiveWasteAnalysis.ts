@@ -35,6 +35,7 @@ import {
   wallStopsEveryHit,
 } from "./enemyDefensives";
 import { isDeferralAbsorb, isDeferralDamageRow } from "./incomingPressure";
+import { isAutomaticCastRow } from "./pressRow";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 
@@ -337,6 +338,10 @@ export function buildOffensiveWasteSummary(
       (e, i) =>
         castAtMs(e) !== null &&
         (!isNoPressRow(e, successRows) || isPressImpactRow(e, successRows)) &&
+        // an auto-attack swing or a passive proc is no cast of the player's
+        // (pipeline T12, 1d26a991 0:53: two Crusading Strikes swings read
+        // as casts into Time Dilation)
+        !isAutomaticCastRow(e) &&
         pressImpactRow(e, successRows) === undefined &&
         !successRows.some(
           (o, j) =>

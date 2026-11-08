@@ -87,7 +87,7 @@ import {
   stasisReleasePressesMs,
   stasisReplayWindows,
 } from "./combatStates";
-import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
+import { isHealerSpec, specToString } from "./cooldowns";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
 import {
   AOE_CC_LANDING_WINDOW_S,
@@ -133,6 +133,7 @@ import {
 import type { CastFailedEvent } from "./rawStreams";
 import { fmtTime, fmtWholeSeconds } from "./renderGrid";
 import { rootIntervalsOf } from "./rootReachability";
+import { isNoPlayerPressRow } from "./pressRow";
 import { playableEndMs, roundEndMs, stillOnAtRoundEnd } from "./roundEnd";
 import {
   BLESSING_OF_SANCTUARY_ID,
@@ -4985,14 +4986,19 @@ export function analyzePlayerCCAndTrinket(
       ...trinketSpellIds,
       ...BREAK_RACIAL_SPELL_IDS,
     ]);
-    const castTimes = player.spellCastEvents
+    const successRows = player.spellCastEvents.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    );
+    const castTimes = successRows
       .filter(
         (e) =>
-          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
           !ccBreakIds.has(String(e.spellId ?? "")) &&
           // GH #108: a passive proc is not "the first cast after the kick"
-          // (825ca842 @303: Reclamation read as "first cast 0.5s later").
-          !isPassiveProcCast(e),
+          // (825ca842 @303: Reclamation read as "first cast 0.5s later");
+          // nor is an auto-attack swing or a row riding on another press
+          // (pipeline T12: 1d26a991 Crusading Strikes 2.1–2.6 s after each
+          // kick, 4cacc702 the Sundering Lava Lash triggers).
+          !isNoPlayerPressRow(e, successRows),
       )
       .map((e) => ({
         t: (e.logLine.timestamp - matchStartMs) / 1000,

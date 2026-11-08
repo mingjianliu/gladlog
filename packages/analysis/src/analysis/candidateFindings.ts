@@ -160,6 +160,7 @@ import {
   POSITION_MISTAKES,
   stayedInHadRealCost,
 } from "../utils/positionAnalysis";
+import { isNoPlayerPressRow } from "../utils/pressRow";
 import {
   type CastFailedEvent,
   castFailedInWindow,
@@ -1573,14 +1574,14 @@ export function dispellerPressedFact(
   fromS: number,
   toS: number,
 ): Record<string, string> {
-  const presses = ((f.spellCastEvents ?? []) as any[])
+  const successRows = ((f.spellCastEvents ?? []) as any[]).filter(
+    (c) => c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS,
+  );
+  const presses = successRows
     // a passive proc logged as a cast is not a press (codex 40-FT-83:
-    // Reclamation read as something the paladin pressed)
-    .filter(
-      (c) =>
-        c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
-        !isPassiveProcCast(c),
-    )
+    // Reclamation read as something the paladin pressed), nor a copy of
+    // another press (pipeline T12: 1d26a991 Twin Flame beside Disintegrate)
+    .filter((c) => !isNoPlayerPressRow(c, successRows))
     .map((c) => ({
       t: (c.logLine.timestamp - matchStartMs) / 1000,
       name: getEnglishSpellName(String(c.spellId), c.spellName),

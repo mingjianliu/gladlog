@@ -136,6 +136,17 @@ export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
   ["361509", "Living Flame proc copy (75% same-instant with Chrono Flames)"],
   ["1265980", "Twin Flames set proc (100% same-instant with Disintegrate)"],
   ["1265991", "Twin Flames set proc (0.1% standalone)"],
+  // pipeline T12 (fact12 D9, 4cacc702 1:05): the Sundering Lava Lash
+  // triggers, logged under its own id beside the press — the button is
+  // 197214. 605 files: 92 rows of 467283, every one with no target and
+  // 0–545 ms after a Lava Lash 60103 of the same caster (65 within 5 ms, 14
+  // at 8–15 ms, 13 at 505–545 ms); 69 presses of 197214. Its name made the
+  // kick-eaten follow-up read "acted on another school 1.8s later
+  // (Sundering …)" for the Lava Lash press.
+  [
+    "467283",
+    "Sundering triggered by Lava Lash (92 of 92 rows 0–545 ms after a 60103 of the same caster, no target; the button is 197214)",
+  ],
   ["157982", "Tranquility channel tick (0.80s spacing; the press is 740)"],
   ["64844", "Divine Hymn channel tick (1.00s spacing; the press is 64843)"],
   // Void Blast 450215 stood here as a "channel tick (1.00s spacing)" until

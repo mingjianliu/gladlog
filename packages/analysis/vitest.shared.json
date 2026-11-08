@@ -264,6 +264,7 @@
     "test/positionSpanOwnerDeath.test.ts",
     "test/positionStayedInSpan.test.ts",
     "test/positionStayedRange.test.ts",
+    "test/pressRow.test.ts",
     "test/procOnlyActivation.test.ts",
     "test/purgePressRemovals.test.ts",
     "test/questionableExternal.test.ts",

@@ -95,6 +95,7 @@ import { auraCloseRow } from "@gladlog/analysis/src/utils/auraIntervals";
 import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
 import { immunityStopsSpellSchool } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
+import { isAutomaticCastRow } from "@gladlog/analysis/src/utils/pressRow";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
@@ -600,6 +601,9 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
           // a copy row of another press is no cast (Twin Flame 1265980, a set
           // proc in Disintegrate's instant)
           !isNoPressRow(c, friendRows) &&
+          // nor an auto-attack swing or a passive proc — the producer's
+          // `isAutomaticCastRow` (pipeline T12: Crusading Strikes swings)
+          !isAutomaticCastRow(c) &&
           // a school the immunity does not stop (DB2 masks, else the hand mask
           // of a school-limited immunity: fact11 D20) goes through it:
           // Crusading Strikes (Physical) into Spellwarding (Magic)
