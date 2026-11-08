@@ -18,6 +18,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   netherWardNamedSpells,
+  netherWardPressedSpells,
   pairNetherWardReturns,
 } from "../src/context/spellOutcomeLines";
 import {
@@ -191,6 +192,71 @@ describe("fact9 D6 — a Nether Ward return goes to the reflect it names", () =>
       ownRowNames: new Map([[ROW, new Set(["116858"])]]),
     });
     expect(p.get(ROW)).toBe(AGONY);
+  });
+  it("fact12 D16: an instant spell's return logged in its press's ms, before its REFLECT row", () => {
+    // 64e9a3f3 r0 1:44: Fire Blast cast 40.2678 (return that ms, REFLECT
+    // 40.4048); Pyroblast REFLECT 41.3558; Fire Blast cast 41.3398 (return
+    // 41.3408, REFLECT 41.4748); the Pyroblast's return 41.5738
+    const FB = "108853";
+    const PYRO = "11366";
+    const [fb1, pyro, fb2] = [40_404.8, 41_355.8, 41_474.8];
+    const rows = [40_267.8, 41_340.8, 41_573.8];
+    const reflectRowSpells = new Map([
+      [fb1, new Set([FB])],
+      [pyro, new Set([PYRO])],
+      [fb2, new Set([FB])],
+    ]);
+    const ownRowNames = new Map(rows.map((r) => [r, new Set<string>()]));
+    // the old reading: one row unpaired, the Pyroblast's reflect left free
+    const before = pairNetherWardReturns([fb1, pyro, fb2], rows, {
+      reflectRowSpells,
+      ownRowNames,
+    });
+    expect([...before.values()]).not.toContain(pyro);
+    const p = pairNetherWardReturns([fb1, pyro, fb2], rows, {
+      reflectRowSpells,
+      ownRowNames,
+      ownRowPresses: new Map([
+        [rows[0]!, new Set([FB])],
+        [rows[1]!, new Set([FB])],
+        [rows[2]!, new Set<string>()],
+      ]),
+    });
+    expect(rows.map((r) => p.get(r))).toEqual([fb1, fb2, pyro]);
+    // a press with no REFLECT row of its spell ahead keeps the timing rule
+    const q = pairNetherWardReturns([pyro], [41_573.8], {
+      reflectRowSpells,
+      ownRowNames,
+      ownRowPresses: new Map([[41_573.8, new Set([FB])]]),
+    });
+    expect(q.get(41_573.8)).toBe(pyro);
+  });
+  it("fact12 D16: a REFLECT row in the return's own ms keeps it, whatever was pressed", () => {
+    // 605 files: Lava Burst pressed 1 ms before an Earth Shock's reflect and
+    // return; the Lava Burst's own REFLECT 425 ms later (its flight)
+    const [es, lvb] = [10_000, 10_425];
+    const p = pairNetherWardReturns([es, lvb], [10_000], {
+      reflectRowSpells: new Map([
+        [es, new Set(["8042"])],
+        [lvb, new Set(["51505"])],
+      ]),
+      ownRowNames: new Map([[10_000, new Set<string>()]]),
+      ownRowPresses: new Map([[10_000, new Set(["51505"])]]),
+    });
+    expect(p.get(10_000)).toBe(es);
+  });
+  it("netherWardPressedSpells reads the caster's SUCCESS rows of the row's ms", () => {
+    const cast = (spellId: string, timestamp: number, event: string) =>
+      ({ spellId, logLine: { event, timestamp } }) as never;
+    const caster = {
+      spellCastEvents: [
+        cast("108853", 1000, LogEvent.SPELL_CAST_SUCCESS),
+        cast("11366", 990, LogEvent.SPELL_CAST_SUCCESS),
+        cast("133", 1000, LogEvent.SPELL_CAST_START),
+        cast("2948", 1002, LogEvent.SPELL_CAST_SUCCESS),
+      ],
+    };
+    expect([...netherWardPressedSpells(caster, 1001)]).toEqual(["108853"]);
   });
   it("netherWardNamedSpells reads the reflector's same-ms absorb and aura rows only", () => {
     const caster = {

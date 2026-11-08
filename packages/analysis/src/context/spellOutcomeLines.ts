@@ -254,10 +254,18 @@ export function pairNetherWardReturns(
    * a REFLECT row belongs to, and the spells an own-id row's own
    * millisecond names (`netherWardNamedSpells`). A row that names a spell
    * takes the latest free REFLECT row of that spell; one that names none,
-   * or none of the reflects behind it, keeps the timing rule. */
+   * or none of the reflects behind it, keeps the timing rule.
+   * fact12 D16: `ownRowPresses`, the spells the caster pressed in the row's
+   * own millisecond (`netherWardPressedSpells`) — an instant spell's return
+   * is logged there, BEFORE its REFLECT row (64e9a3f3 r0 1:44: Fire Blast
+   * cast 40.2678, its 12.3k back in that ms, REFLECT 40.4048), so such a row
+   * takes the first free REFLECT row of that spell within
+   * `REFLECT_OWN_ID_LEAD_MS` after it — unless a free REFLECT row stands in
+   * the row's own millisecond, whose return it is. */
   names?: {
     reflectRowSpells: ReadonlyMap<number, ReadonlySet<string>>;
     ownRowNames: ReadonlyMap<number, ReadonlySet<string>>;
+    ownRowPresses?: ReadonlyMap<number, ReadonlySet<string>>;
   },
 ): Map<number, number> {
   const free = [...reflectRows].sort((a, b) => a - b);
@@ -266,18 +274,39 @@ export function pairNetherWardReturns(
     a === b ||
     (getEnglishSpellName(a, "") !== "" &&
       getEnglishSpellName(a, "") === getEnglishSpellName(b, ""));
+  const ofSpells = (row: number, spells: ReadonlySet<string>) => {
+    const own = names?.reflectRowSpells.get(row);
+    return (
+      !!own && [...own].some((s) => [...spells].some((n) => sameName(s, n)))
+    );
+  };
   for (const ts of [...ownRows].sort((a, b) => a - b)) {
+    const pressed = names?.ownRowPresses?.get(ts);
+    // a REFLECT row in the row's own millisecond is the return's own (an
+    // instant reflect returned at once: 605 files, a Lava Burst pressed 1 ms
+    // before an Earth Shock's reflect and return, the Lava Burst's own
+    // REFLECT 425 ms later — its flight)
+    const sameMs = free.some(
+      (r) => Math.abs(r - ts) <= NETHER_WARD_SAME_MS_JITTER_MS,
+    );
+    if (pressed && pressed.size > 0 && !sameMs) {
+      const ahead = free.findIndex(
+        (r) =>
+          r > ts && r <= ts + REFLECT_OWN_ID_LEAD_MS && ofSpells(r, pressed),
+      );
+      if (ahead >= 0) {
+        const [row] = free.splice(ahead, 1);
+        if (!out.has(ts)) out.set(ts, row!);
+        continue;
+      }
+    }
     let at = free.length - 1;
     while (at >= 0 && free[at]! > ts) at--;
     if (at < 0) continue;
     const named = names?.ownRowNames.get(ts);
     if (named && named.size > 0) {
       for (let i = at; i >= 0; i--) {
-        const spells = names!.reflectRowSpells.get(free[i]!);
-        if (
-          spells &&
-          [...spells].some((s) => [...named].some((n) => sameName(s, n)))
-        ) {
+        if (ofSpells(free[i]!, named)) {
           at = i;
           break;
         }
@@ -325,6 +354,35 @@ export function netherWardNamedSpells(
         e.logLine.event === LogEvent.SPELL_AURA_REFRESH)
     )
       out.add(e.spellId);
+  return out;
+}
+
+/** How far a Nether Ward return written in its press's millisecond can trail
+ * that press's SUCCESS row (the log's 1 ms jitter: 64e9a3f3 r0 41.3398 →
+ * 41.3408). */
+export const NETHER_WARD_PRESS_ROW_MS = 5;
+/** Two rows the log means as one millisecond (its 1 ms jitter). */
+export const NETHER_WARD_SAME_MS_JITTER_MS = 1;
+
+/**
+ * The spells the caster pressed in a Nether Ward row's own millisecond
+ * (`NETHER_WARD_PRESS_ROW_MS`) — an instant spell's return is logged there,
+ * before its REFLECT row (fact12 D16). Shared by `reflectedSpells` and
+ * corpusFactScan `reflectReturn`.
+ */
+export function netherWardPressedSpells(
+  caster: Pick<ICombatUnit, "spellCastEvents">,
+  ts: number,
+): Set<string> {
+  const out = new Set<string>();
+  for (const c of caster.spellCastEvents ?? [])
+    if (
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      !!c.spellId &&
+      c.logLine.timestamp <= ts &&
+      c.logLine.timestamp >= ts - NETHER_WARD_PRESS_ROW_MS
+    )
+      out.add(c.spellId);
   return out;
 }
 
@@ -748,6 +806,9 @@ export function reflectedSpells(
             ),
             ownRowNames: new Map(
               ownRows.map((ts) => [ts, netherWardNamedSpells(caster, src, ts)]),
+            ),
+            ownRowPresses: new Map(
+              ownRows.map((ts) => [ts, netherWardPressedSpells(caster, ts)]),
             ),
           },
         );

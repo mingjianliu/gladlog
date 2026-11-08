@@ -1696,6 +1696,11 @@ const INDEX: PredicateRow[] = [
     mod: spellOutcomeLines,
   },
   {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "netherWardPressedSpells",
+    mod: spellOutcomeLines,
+  },
+  {
     file: `${A}/data/channeledGenerated.ts`,
     symbol: "HASTE_DURATION_SPELL_IDS",
     mod: channeledGenerated,

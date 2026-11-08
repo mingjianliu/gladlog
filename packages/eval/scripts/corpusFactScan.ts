@@ -114,6 +114,7 @@ import {
   maxHpNear,
   NETHER_WARD_ID,
   netherWardNamedSpells,
+  netherWardPressedSpells,
   pairNetherWardReturns,
   REFLECT_CHAIN_GAP_MS,
   REFLECT_DAMAGE_WINDOW_S,
@@ -1256,6 +1257,9 @@ function runRound(ctx: IContext): void {
             ),
             ownRowNames: new Map(
               ownRows.map((ts) => [ts, netherWardNamedSpells(caster, src, ts)]),
+            ),
+            ownRowPresses: new Map(
+              ownRows.map((ts) => [ts, netherWardPressedSpells(caster, ts)]),
             ),
           },
         );

@@ -60,6 +60,7 @@ const MODULE_FILES = [
   "pressFiling",
   "listGap",
   "talentWall",
+  "wardLeadReturn",
   "overrideVariant",
   "friendlyOffensiveTag",
   "allyShield",
