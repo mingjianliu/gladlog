@@ -46,6 +46,39 @@ describe("rootSourceLabel", () => {
     );
   });
 
+  it("the root's own source GUID decides whose totem it was — two shamans on ONE team (fact12 D29)", () => {
+    // eacff4b7 r0 1:13: an Enhancement and a Restoration shaman on one team,
+    // each with an "Earthgrab Totem"; the root came from the Enhancement
+    // shaman's totem, and the by-name lookup credited the first one listed
+    const mates = [
+      unit("p1", "Resto-Illidan-US"),
+      unit("p2", "Enhance-Dragonmaw-US"),
+    ];
+    const all = [
+      ...mates,
+      unit("Creature-0-3779-1505-1-60561-0000000001", "Earthgrab Totem", "p1"),
+      unit("Creature-0-3779-1505-1-60561-0000000002", "Earthgrab Totem", "p2"),
+    ];
+    expect(
+      rootSourceLabel(
+        "Earthgrab Totem",
+        mates,
+        all,
+        mates,
+        "Creature-0-3779-1505-1-60561-0000000002",
+      ),
+    ).toBe("Enhance's totem");
+    expect(
+      rootSourceLabel(
+        "Earthgrab Totem",
+        mates,
+        all,
+        mates,
+        "Creature-0-3779-1505-1-60561-0000000001",
+      ),
+    ).toBe("Resto's totem");
+  });
+
   it("a localized summon with no owner → `[pet]`; an ASCII one keeps its short name", () => {
     expect(rootSourceLabel("陷地图腾", players, players)).toBe("[pet]");
     expect(

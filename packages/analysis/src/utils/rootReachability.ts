@@ -207,18 +207,29 @@ export function rootSourceLabel(
    * opponents). Restricts the by-name owner lookup to that side, so a
    * same-named summon on the other team is never credited. */
   sourceSide?: ICombatUnit[],
+  /** the aura row's source GUID — see `rootSourceOf` */
+  srcUnitId?: string,
 ): string {
-  return rootSourceOf(srcUnitName, players, allUnits, sourceSide).label;
+  return rootSourceOf(srcUnitName, players, allUnits, sourceSide, srcUnitId)
+    .label;
 }
 
 /** `rootSourceLabel` with its parts: the player behind the root (the caster,
  * or the summon's owner) and, for a summon, what kind it is — so the line can
- * print the player's roster label instead of a raw name. */
+ * print the player's roster label instead of a raw name.
+ *
+ * `srcUnitId` (the aura row's own source GUID) decides whose summon it was —
+ * `resolveSummonOwner`'s id path, GH #99's "a known summon GUID is final".
+ * By the NAME alone two shamans on one team are one "Earthgrab Totem", and
+ * the first of them in the unit table took every root (fact12 D29,
+ * eacff4b7 r0 1:13: the Enhancement shaman's totem credited to the
+ * Restoration shaman). */
 export function rootSourceOf(
   srcUnitName: string,
   players: ICombatUnit[],
   allUnits: ICombatUnit[],
   sourceSide?: ICombatUnit[],
+  srcUnitId?: string,
 ): { label: string; playerName?: string; kind?: string } {
   if (players.some((p) => p.name === srcUnitName))
     return { label: srcUnitName, playerName: srcUnitName };
@@ -226,12 +237,13 @@ export function rootSourceOf(
     allUnits,
     friends: sourceSide ?? players,
     name: srcUnitName,
+    sourceId: srcUnitId,
     side: "friendly",
   });
   if (owner) {
-    const src = allUnits.find(
-      (u) => u.name === srcUnitName && u.ownerId === owner.id,
-    );
+    const src =
+      (srcUnitId ? allUnits.find((u) => u.id === srcUnitId) : undefined) ??
+      allUnits.find((u) => u.name === srcUnitName && u.ownerId === owner.id);
     const kind = summonKindOf(src?.id, src);
     return {
       label: `${owner.name.split("-")[0]}'s ${kind}`,
@@ -373,7 +385,13 @@ export function computeRootReachability(
         rootedRole: role,
         sourceName: iv.srcUnitName,
         ...(() => {
-          const src = rootSourceOf(iv.srcUnitName, players, allUnits, enemies);
+          const src = rootSourceOf(
+            iv.srcUnitName,
+            players,
+            allUnits,
+            enemies,
+            iv.srcUnitId,
+          );
           return {
             sourceLabel: src.label,
             sourcePlayerName: src.playerName,

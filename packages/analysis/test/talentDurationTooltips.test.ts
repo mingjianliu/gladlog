@@ -164,6 +164,27 @@ describe("GH #173 Q5 — Darkness under Long Night", () => {
   });
 });
 
+describe("GH #123.2 — Anti-Magic Zone under Assimilation", () => {
+  // Assimilation 374383: class node 76048, entry 96176 (talentIdMap)
+  const dk = (spec: string, holds: boolean) =>
+    ({
+      spec,
+      info: {
+        talents: holds ? [{ id1: 76048, id2: 96176, count: 1 }] : [],
+        pvpTalents: [],
+      },
+      spellCastEvents: [],
+    }) as never;
+  it("a holder's zone runs 8 s, a non-holder's 6 s — the cast id and its aura alike (605: h 7/0, n 0/103)", () => {
+    for (const id of ["51052", "145629"])
+      for (const spec of ["250", "251", "252"]) {
+        expect(buffFullDurationForCaster(id, dk(spec, true))).toBe(8);
+        expect(buffFullDurationForCaster(id, dk(spec, false))).toBe(6);
+      }
+    expect(buffFullDurationForCaster("145629", undefined)).toBe(6);
+  });
+});
+
 describe("buffFullDurationForCaster — the tooltip rows", () => {
   // a COMBATANT_INFO loadout holding Ethereal Cloak 457022 (hero node 95106,
   // entry 117703) — a rank is needed to price a row; a "yes" with no rank

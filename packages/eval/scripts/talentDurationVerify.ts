@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- the legacy parse units are untyped here */
 /**
  * talentDurationVerify.ts — GH #155 (2026-10-21): the verifying half of
  * `genTalentDurations.ts`. The tooltip says what a talent does to a duration;
@@ -8,7 +9,8 @@
  * cell semantics; `buildAuraIntervals` is not used, its cap is the number
  * under test), split by the caster: a HOLDER (`talentModifierOwnershipOf` =
  * yes, spec among the specs the tooltip branch is read for) or a NON-HOLDER
- * (no). Buffs are often consumed or cancelled, so the question is whether the
+ * (no). The caster of a summon's row is its owner, of a row with no source
+ * the player who pressed the aura's name just before it (`casterOf`). Buffs are often consumed or cancelled, so the question is whether the
  * LONGEST lifetimes reach what the tooltip promises:
  *   predicted = base + amount (s) · base × (1 + amount / 100) (%) · amount (set)
  *   confirmed     holders n ≥ 5, some lifetime within 0.5 s of predicted,
@@ -33,6 +35,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import tooltips from "@gladlog/analysis/src/data/talentDurationTooltipsGenerated.json";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { talentModifierOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
@@ -121,6 +124,45 @@ const accOf = (w: { e: Entry; base: number; key: string }, auraId: string) => {
   return a;
 };
 
+/** a nil-source aura's press: a SUCCESS of its name this long before it */
+const NIL_SOURCE_PRESS_LEAD_MS = 1000;
+const NIL_GUID = "0000000000000000";
+/**
+ * Whose talents price an application (pipeline T14, GH #123.2): the source
+ * player; a summon's owner (the parse's `ownerId` of the source GUID); for a
+ * row the log writes with no source at all (Anti-Magic Zone's 145629 is
+ * `0000000000000000,nil` on every APPLIED) the one player whose
+ * SPELL_CAST_SUCCESS of a spell of the aura's English name came within
+ * `NIL_SOURCE_PRESS_LEAD_MS` before it — none or two, and it is nobody's.
+ * Before this the zone had no holder and no non-holder, so Assimilation's
+ * +2 s was never measured.
+ */
+function casterOf(
+  units: Record<string, any>,
+  srcUnitId: string | undefined,
+  auraId: string,
+  appliedAt: number,
+): any {
+  const src = units[srcUnitId ?? ""];
+  if (src?.info) return src;
+  if (src?.ownerId) return units[src.ownerId];
+  if (srcUnitId && srcUnitId !== NIL_GUID) return undefined;
+  const name = getEnglishSpellName(auraId, "");
+  if (!name) return undefined;
+  const pressers = Object.values(units).filter(
+    (u: any) =>
+      u.info &&
+      (u.spellCastEvents ?? []).some(
+        (c: any) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          appliedAt - c.logLine.timestamp >= 0 &&
+          appliedAt - c.logLine.timestamp <= NIL_SOURCE_PRESS_LEAD_MS &&
+          getEnglishSpellName(c.spellId ?? "", "") === name,
+      ),
+  );
+  return pressers.length === 1 ? pressers[0] : undefined;
+}
+
 const files = readFileSync(manifest, "utf8")
   .split("\n")
   .map((s) => s.trim())
@@ -173,7 +215,7 @@ for (const f of files) {
           if (!o || !o.clean) continue;
           const life = Math.round((t - o.t) / 100) / 10;
           if (life <= 0 || life > 180) continue;
-          const caster = legacy.units[a.srcUnitId ?? ""];
+          const caster = casterOf(legacy.units, a.srcUnitId, spellId, o.t);
           if (!caster?.info) continue;
           for (const w of watch.get(spellId)!) {
             if (!w.e.specs.includes(String(caster.spec))) continue;

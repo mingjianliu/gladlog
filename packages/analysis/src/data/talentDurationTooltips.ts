@@ -218,6 +218,29 @@ export const TOOLTIP_DURATION_ROWS: Readonly<
       specs: ["256", "257"],
     },
   ],
+  // Anti-Magic Zone — Assimilation 374383 「反魔法领域的冷却时间缩短…，持续时间延长
+  // ${$s2/1000}秒」 (+2 s; DB2 row 1245953: aura 107 misc 1, +2000 ms, class mask
+  // [0,524288,0,0] covering 51052 and 145629). The zone's aura is written with
+  // no source (`0000000000000000,nil`), so until pipeline T14 the verifier
+  // had no holder at all; caster = the one player whose Anti-Magic Zone
+  // SUCCESS came ≤ 1 s before it: h 7/0, n 0/103 (605 set, 2026-11-08). The
+  // cast id carries the same row for the kit's `lasts` and the save lifetime.
+  "145629": [
+    {
+      talentSpellId: "374383",
+      untalentedBaseSeconds: 6,
+      addSeconds: 2,
+      specs: ["250", "251", "252"],
+    },
+  ],
+  "51052": [
+    {
+      talentSpellId: "374383",
+      untalentedBaseSeconds: 6,
+      addSeconds: 2,
+      specs: ["250", "251", "252"],
+    },
+  ],
   // Lightning Rod — 468625 +4 s; h 8/0, n 6/0
   "197209": [
     {
