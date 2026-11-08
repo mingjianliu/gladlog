@@ -89,53 +89,74 @@ function firstSeenMs(pet: PetLike): number {
   return first;
 }
 
+type PresenceRow = { timestamp: number; logLine?: { lineIndex?: number } };
+
+/** Log order of two rows: timestamp, then `lineIndex` inside one
+ * millisecond; same millisecond with an unknown line on either side = 0 (no
+ * order). */
+function logOrder(a: PresenceRow, b: PresenceRow): number {
+  if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+  const la = a.logLine?.lineIndex;
+  const lb = b.logLine?.lineIndex;
+  return la === undefined || lb === undefined ? 0 : la - lb;
+}
+
+/**
+ * The pet's latest row at or before `atMs` that shows it out — a cast, an
+ * aura row other than a removal (a removal is what a dismissal writes), its
+ * own damage done or taken, a position sample — in log order. The one
+ * presence reading of `petReplacedBySummonAt` and of which of an owner's
+ * pets is out (`interruptCasterAt`, codex 85-tk-C-T26-3 / -3b). Undefined =
+ * none yet.
+ */
+export function petLastPresenceRow(
+  pet: PetLike,
+  atMs: number,
+): PresenceRow | undefined {
+  let last: PresenceRow | undefined;
+  const take = (r: PresenceRow) => {
+    if (r.timestamp > atMs) return;
+    if (!last || logOrder(r, last) > 0) last = r;
+  };
+  for (const r of pet.spellCastEvents ?? []) take(r);
+  for (const r of pet.auraEvents ?? [])
+    if (r.logLine?.event !== "SPELL_AURA_REMOVED") take(r);
+  for (const r of pet.damageOut ?? []) take(r);
+  for (const r of pet.damageIn ?? []) take(r);
+  for (const r of pet.advancedActions ?? []) take(r);
+  return last;
+}
+
 /**
  * Was `pet` sent away by its owner's later summon by `atMs` — the owner's
  * latest pet summon at or before `atMs` (`PET_SUMMON_SPELL_IDS`, a
- * SPELL_CAST_SUCCESS) with no row of the pet's own AFTER it, in log order,
- * up to `atMs`? One permanent pet is out at a time: Summon Imp sends the
- * Felhunter away (codex review of batch B10, T26: a Felhunter last seen
- * 0.3 s before an Imp was summoned still threw the Spell Lock of a heal 0.2 s
- * after it). Presence has to be shown after the summon: a row of the summon's
- * own millisecond counts only when its line comes after the cast's
- * (`lineIndex`; unknown order is not after), and an aura removal is no
- * presence — it is what a dismissal writes (codex 85-tk-C-T26-3). A pet the
- * same summon brings back under the same unit reads as sent away until it
- * shows — no kick is credited to it.
+ * SPELL_CAST_SUCCESS) with no row showing the pet out AFTER it, in log
+ * order, up to `atMs` (`petLastPresenceRow`)? One permanent pet is out at a
+ * time: Summon Imp sends the Felhunter away (codex review of batch B10, T26:
+ * a Felhunter last seen 0.3 s before an Imp was summoned still threw the
+ * Spell Lock of a heal 0.2 s after it). A row of the summon's own
+ * millisecond is after it only when its line is (`lineIndex`; unknown order
+ * is not after) (codex 85-tk-C-T26-3). A pet the same summon brings back
+ * under the same unit reads as sent away until it shows — no kick is
+ * credited to it.
  */
 export function petReplacedBySummonAt(
   owner: Partial<Pick<ICombatUnit, "spellCastEvents">>,
   pet: PetLike,
   atMs: number,
 ): boolean {
-  type Row = { timestamp: number; logLine?: { lineIndex?: number } };
-  let summon: Row | undefined;
+  let summon: PresenceRow | undefined;
   for (const c of owner.spellCastEvents ?? [])
     if (
       PET_SUMMON_SPELL_IDS.has(c.spellId) &&
       c.logLine.event === "SPELL_CAST_SUCCESS" &&
       c.timestamp <= atMs &&
-      (!summon || c.timestamp >= summon.timestamp)
+      (!summon || logOrder(c, summon) >= 0)
     )
       summon = c;
   if (!summon) return false;
-  const s = summon;
-  const after = (r: Row): boolean =>
-    r.timestamp > s.timestamp ||
-    (r.timestamp === s.timestamp &&
-      r.logLine?.lineIndex !== undefined &&
-      s.logLine?.lineIndex !== undefined &&
-      r.logLine.lineIndex > s.logLine.lineIndex);
-  const shows = (r: Row): boolean => r.timestamp <= atMs && after(r);
-  const auraShows = (a: Row & { logLine?: { event?: string } }): boolean =>
-    a.logLine?.event !== "SPELL_AURA_REMOVED" && shows(a);
-  return !(
-    (pet.spellCastEvents ?? []).some(shows) ||
-    (pet.auraEvents ?? []).some(auraShows) ||
-    (pet.damageOut ?? []).some(shows) ||
-    (pet.damageIn ?? []).some(shows) ||
-    (pet.advancedActions ?? []).some(shows)
-  );
+  const last = petLastPresenceRow(pet, atMs);
+  return !last || logOrder(last, summon) <= 0;
 }
 
 /**

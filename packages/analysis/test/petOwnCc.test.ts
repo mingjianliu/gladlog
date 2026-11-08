@@ -31,6 +31,7 @@ import {
   purgePriorityForTest,
   reconstructDispelSummary,
 } from "../src/utils/dispelAnalysis";
+import { interruptCasterAt } from "../src/utils/enemyInterrupts";
 import {
   makeAdvancedAction,
   makeAuraEvent,
@@ -786,6 +787,79 @@ describe("readers", () => {
           auras: [removed],
         }),
       ).toMatchObject({ distanceYd: null, feasible: false });
+    });
+
+    it("B10 #2 (codex 85-tk-C-T26-3b): a replacement Felhunter that casts it too is the one out, whatever the pet order", () => {
+      const withLine = (row: any, lineIndex: number) => ({
+        ...row,
+        logLine: { ...row.logLine, lineIndex },
+      });
+      const build = (newPetSeenBy: "sample" | "damageIn") => {
+        const { warlock, pet } = pair({
+          petCasts: [petCast(SPELL_LOCK, 20), petCast(SPELL_LOCK, 40, "Pet-2")],
+          ownerCasts: [
+            withLine(
+              makeSpellCastEvent("691", at(69.8), "", "", "w", "Warlock"),
+              500,
+            ),
+          ],
+        });
+        // the old Felhunter: out until the summon, its aura removed at it
+        (pet as any).advancedActions = [makeAdvancedAction(at(69.5), 40, 0)];
+        (pet as any).auraEvents = [
+          withLine(
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_REMOVED,
+              "1000",
+              at(69.8),
+              "Pet-1",
+              "Pet-1",
+            ),
+            501,
+          ),
+        ];
+        // the new one, 10 yd from the healer
+        const pet2 = makeUnit("Pet-2", { name: "Felhunter", ownerId: "w" });
+        (pet2 as any).advancedActions = [
+          withLine(makeAdvancedAction(at(69.8), 90, 0), 502),
+        ];
+        if (newPetSeenBy === "damageIn") {
+          (pet2 as any).advancedActions = [makeAdvancedAction(at(60), 90, 0)];
+          (pet2 as any).damageIn = [
+            withLine(
+              {
+                logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: at(69.9) },
+                timestamp: at(69.9),
+              },
+              600,
+            ),
+          ];
+        }
+        const h = healer();
+        (h as any).advancedActions = samples(100);
+        return { warlock, pet, pet2, h };
+      };
+      for (const order of ["old-first", "new-first"] as const) {
+        const { warlock, pet, pet2, h } = build("sample");
+        const pets = order === "old-first" ? [pet, pet2] : [pet2, pet];
+        expect(pointWith(warlock, pets, h)).toMatchObject({
+          distanceYd: 10,
+          feasible: true,
+        });
+      }
+      // a replacement seen after the summon only by the damage it took is
+      // the caster picked (no position at 70 s, so no reach claim either way)
+      const byDamage = build("damageIn");
+      for (const pets of [
+        [byDamage.pet, byDamage.pet2],
+        [byDamage.pet2, byDamage.pet],
+      ])
+        expect(
+          interruptCasterAt(byDamage.warlock, SPELL_LOCK, at(70), [
+            byDamage.warlock,
+            ...pets,
+          ]).caster?.id,
+        ).toBe("Pet-2");
     });
 
     it("B10 #3: line of sight reads the raw samples, distance the interpolated point", () => {

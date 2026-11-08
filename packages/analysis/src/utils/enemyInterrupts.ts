@@ -15,7 +15,11 @@ import {
   specToString,
   unitCooldownOf,
 } from "./cooldowns";
-import { ownerPetGoneAt, petReplacedBySummonAt } from "./petPresence";
+import {
+  ownerPetGoneAt,
+  petLastPresenceRow,
+  petReplacedBySummonAt,
+} from "./petPresence";
 import { isDeadAt } from "./unitDeath";
 
 /**
@@ -463,13 +467,14 @@ export function interruptCasterAt(
     return { caster: enemy, viaPet: false, gone: false };
   if (allUnits !== undefined && ownerPetGoneAt(enemy, allUnits, atMs))
     return { caster: undefined, viaPet: true, gone: true };
-  const caster = activeUnitAt(
-    (allUnits ?? []).filter((u) => petCasterIds.has(u.id)),
-    atMs,
-  );
-  // the kicking pet sent away by a later summon of another (Summon Imp over
-  // the Felhunter) is gone with its kick (codex review of batch B10, T26)
-  if (caster && petReplacedBySummonAt(enemy, caster, atMs))
+  // a kicking pet sent away by a later summon of another (Summon Imp over
+  // the Felhunter) is gone with its kick (codex review of batch B10, T26) —
+  // left out BEFORE the pick, so a replacement that casts it too is the one
+  // out (codex 85-tk-C-T26-3b)
+  const casters = (allUnits ?? []).filter((u) => petCasterIds.has(u.id));
+  const kept = casters.filter((u) => !petReplacedBySummonAt(enemy, u, atMs));
+  const caster = activeUnitAt(kept, atMs);
+  if (!caster && kept.length < casters.length)
     return { caster: undefined, viaPet: true, gone: true };
   return { caster, viaPet: true, gone: false };
 }
@@ -492,26 +497,27 @@ export interface IEnemyInterruptState {
 }
 
 /** Of several units (an owner's pets over a round), the one present at
- * `atMs`: not dead by then, and with the latest own event (cast, aura,
- * advanced sample) at or before it. Undefined when none was seen yet. */
+ * `atMs`: not dead by then, and with the latest row showing it out at or
+ * before it, in log order (`petLastPresenceRow` — the reading the summon
+ * replacement takes). Undefined when none was seen yet. */
 function activeUnitAt(
   units: ReadonlyArray<ICombatUnit>,
   atMs: number,
 ): ICombatUnit | undefined {
   let best: ICombatUnit | undefined;
-  let bestTs = -Infinity;
+  let bestRow: ReturnType<typeof petLastPresenceRow>;
   for (const u of units) {
     if (isDeadAt(u, atMs)) continue;
-    let last = -Infinity;
-    for (const list of [
-      u.spellCastEvents ?? [],
-      u.auraEvents ?? [],
-      u.advancedActions ?? [],
-    ] as ReadonlyArray<ReadonlyArray<{ timestamp: number }>>)
-      for (const e of list)
-        if (e.timestamp <= atMs && e.timestamp > last) last = e.timestamp;
-    if (last > bestTs) {
-      bestTs = last;
+    const row = petLastPresenceRow(u, atMs);
+    if (!row) continue;
+    if (
+      !bestRow ||
+      row.timestamp > bestRow.timestamp ||
+      (row.timestamp === bestRow.timestamp &&
+        (row.logLine?.lineIndex ?? -Infinity) >
+          (bestRow.logLine?.lineIndex ?? -Infinity))
+    ) {
+      bestRow = row;
       best = u;
     }
   }
