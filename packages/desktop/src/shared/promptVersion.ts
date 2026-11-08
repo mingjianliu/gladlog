@@ -1004,4 +1004,10 @@
  *  wins over death in the endpoint; [ROT PRESSURE] needs positive damage. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 511;
+/*
+ * v512 (2026-11-08; pipeline batch B17, T32): [DEFENSIVE AVAILABLE]'s "free to
+ *  press it for the last Ns before the death" is clipped to how long the
+ *  defensive had been off cooldown (deathOutcomeAnalysis.freeToPressMsBefore).
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 512;

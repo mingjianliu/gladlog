@@ -5741,3 +5741,16 @@ ghostEndTroughDropped, 0 → 0 for the other two; 2 burst Target: and 3
 `[DMG SPIKE]` lines gain "→ ghost"; findings 0 of 1,140 differ. (v511's T07
 first went into batch B9, abandoned before push.) Batch verified on tests +
 codex (user 11-08); 605 / cover / wide run at the end of the wave.
+
+v512 (2026-11-08; pipeline batch B17, T32). New
+`deathOutcomeAnalysis.freeToPressMsBefore`: the `[DEFENSIVE AVAILABLE]` "(free
+to press it for the last Ns before the death)" figure is clipped to how long the
+ledger entry had been off cooldown (`offCooldownForLastSecondsBy` on
+`cdAvailableAt`, the walk behind the death lines' "off cooldown only for the
+last Ns"); the scan5 castThroughStun gate freeToPressBelowLog clips the same way.
+`death.ts` freeBeforeDeathS and the missed-options "longest stretch free to cast
+it" are unchanged. New scan5 module t32 (freeToPressPastReturn): the ticket's
+one real case (a Feign Death, 7.8 s printed, back 1.7 s before the death) was
+already removed by v506 (T24, ruling R05); cover set 0 of 199 → 0 of 199, capture
+byte-identical. Batch verified on tests + codex (user 11-08); 605 / cover / wide
+run at the end of the wave.
