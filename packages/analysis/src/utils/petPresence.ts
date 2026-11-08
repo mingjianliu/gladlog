@@ -90,6 +90,44 @@ function firstSeenMs(pet: PetLike): number {
 }
 
 /**
+ * Was `pet` sent away by its owner's later summon by `atMs` — the owner's
+ * latest pet summon at or before `atMs` (`PET_SUMMON_SPELL_IDS`, a
+ * SPELL_CAST_SUCCESS) comes after the pet's last own row at or before it?
+ * One permanent pet is out at a time: Summon Imp sends the Felhunter away
+ * (codex review of batch B10, T26: a Felhunter last seen 0.3 s before an Imp
+ * was summoned still threw the Spell Lock of a heal 0.2 s after it). A pet
+ * the same summon brings back under the same unit has no row after the cast
+ * yet and reads as sent away until it shows — no kick is credited to it.
+ */
+export function petReplacedBySummonAt(
+  owner: Partial<Pick<ICombatUnit, "spellCastEvents">>,
+  pet: PetLike,
+  atMs: number,
+): boolean {
+  let summonMs = -Infinity;
+  for (const c of owner.spellCastEvents ?? [])
+    if (
+      PET_SUMMON_SPELL_IDS.has(c.spellId) &&
+      c.logLine.event === "SPELL_CAST_SUCCESS" &&
+      c.timestamp <= atMs &&
+      c.timestamp > summonMs
+    )
+      summonMs = c.timestamp;
+  if (!Number.isFinite(summonMs)) return false;
+  let last = -Infinity;
+  for (const stream of [
+    pet.spellCastEvents,
+    pet.auraEvents,
+    pet.damageOut,
+    pet.damageIn,
+    pet.advancedActions,
+  ] as ReadonlyArray<ReadonlyArray<{ timestamp: number }> | undefined>)
+    for (const e of stream ?? [])
+      if (e.timestamp <= atMs && e.timestamp > last) last = e.timestamp;
+  return last < summonMs;
+}
+
+/**
  * Is `owner`'s permanent pet gone at `atMs` — the log shows an end (a pet's
  * death, or the owner's Dismiss Pet) by then, and no pet of theirs is out:
  * seen by `atMs`, not dead by it, and seen after the last Dismiss Pet. Two

@@ -44,6 +44,7 @@ import {
   getUnitPositionAtTime,
   hasLineOfSight,
   type IPosition,
+  rawLineOfSightAt,
 } from "./losAnalysis";
 import { CLOSE_RANGE_YARDS, isDeadAt } from "./positionAnalysis";
 import { CC_MAX_CAST_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
@@ -171,6 +172,12 @@ function roleOf(unit: ICombatUnit): RootedRole {
  * (a melee swing at `CLOSE_RANGE_YARDS` is not blocked by pillar geometry at
  * that scale). With `checkLoS=true`, LoS **not disproven** counts as
  * reachable (`hasLineOfSight` returns null on an unknown map / no zoneId).
+ *
+ * `losFromUnit`: the unit standing at `from` — then LoS is read on the two
+ * units' nearest RAW samples (`rawLineOfSightAt`, the `losAnalysis`
+ * contract), distance still on the interpolated points (kick-priority, codex
+ * review of batch B10). Without it, LoS reads `from` and the target's
+ * interpolated point, as before.
  */
 export function canReachTargetAt(
   from: IPosition,
@@ -179,6 +186,7 @@ export function canReachTargetAt(
   zoneId: string | undefined,
   rangeYards: number,
   checkLoS: boolean,
+  losFromUnit?: ICombatUnit,
 ): boolean | null {
   if (isDeadAt(target, tMs)) return null;
   const q = getUnitPositionAtTime(target, tMs, LOS_SWEEP_GAP_MS);
@@ -186,7 +194,11 @@ export function canReachTargetAt(
   const d = distanceBetween(from, q);
   if (d > rangeYards) return false;
   if (!checkLoS) return true;
-  const los = zoneId ? hasLineOfSight(zoneId, from, q) : null;
+  const los = !zoneId
+    ? null
+    : losFromUnit
+      ? rawLineOfSightAt(zoneId, losFromUnit, target, tMs, LOS_SWEEP_GAP_MS)
+      : hasLineOfSight(zoneId, from, q);
   return los !== false; // LoS not disproven counts as reachable
 }
 
@@ -365,8 +377,7 @@ export function computeRootReachability(
           // 62-POSTHOC-13g #1, 818c7c41 0:52: one unknown position turned a
           // second into "could not attack"), the healer branch's reading
           const results = enemies.map(inReach);
-          const bad =
-            results.length > 0 && results.every((r) => r === false);
+          const bad = results.length > 0 && results.every((r) => r === false);
           if (bad) unreachable++;
           if (!inHardCc) {
             if (bad) sweep.unreachable++;

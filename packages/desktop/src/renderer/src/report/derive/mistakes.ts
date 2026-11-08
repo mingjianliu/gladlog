@@ -460,9 +460,12 @@ export function candidateDetail(c: CandidateEvent): string {
     case "kick-priority-missed":
       return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k${healCastsNote(f)}),你的 ${f.kick ?? ""} 空着、${
         // 近战踢是按「读条期间跑得到」放行的,不是站在射程里(分诊 kick-priority F-P3)
-        f.reachYd
-          ? `距离 ${f.distanceYd ?? "?"} 码(近战踢 ${f.kickRangeYd ?? "?"} 码,读条期间跑得到)`
-          : `${f.distanceYd ?? "?"} 码内`
+        // 宠物的踢(法术封锁):距离是宠物的(T26 codex B10 #4)
+        f.kicker
+          ? `${f.kicker} ${f.kickerYd ?? "?"} 码内`
+          : f.reachYd
+            ? `距离 ${f.distanceYd ?? "?"} 码(近战踢 ${f.kickRangeYd ?? "?"} 码,读条期间跑得到)`
+            : `${f.distanceYd ?? "?"} 码内`
       },没踢${f.othersFeasible && f.othersFeasible !== "none" ? `;${f.othersFeasible} 也能踢` : ""}`;
     case "kick-priority-team":
       return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k${healCastsNote(f)}),你踢不了(${f.ownerWhy ?? ""}),${f.teammates ?? ""} 能踢,没人踢`;

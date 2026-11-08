@@ -667,5 +667,93 @@ describe("readers", () => {
         lockedFor({ ownerStun: [69, 73], petStun: [69, 73] })?.locked,
       ).toBe(true);
     });
+
+    // codex review of batch B10 (T26 attempt 3): the kick is judged on the
+    // pet that throws it at the cast start — its control, its presence, its
+    // line of sight
+    const pointWith = (
+      warlock: any,
+      pets: any[],
+      healerUnit: any,
+      zoneId?: string,
+    ) => {
+      const enemies = [target(), healerUnit];
+      const pts = kickPriorityDecisionPoints(
+        [warlock],
+        enemies,
+        {
+          startTime: T0,
+          endTime: at(107),
+          ...(zoneId ? { startInfo: { zoneId } } : {}),
+          units: Object.fromEntries(
+            [warlock, ...pets, ...enemies].map((u) => [u.id, u]),
+          ),
+        } as any,
+        { eligibility: "bootstrap" },
+      );
+      expect(pts).toHaveLength(1);
+      return pts[0]!.friends.find((x) => x.id === "w")!;
+    };
+
+    it("B10 #1: a Felhunter dead earlier in the round does not erase the current one's stun", () => {
+      const { warlock, pet } = pair({
+        petCasts: [petCast(SPELL_LOCK, 5), petCast(SPELL_LOCK, 20, "Pet-2")],
+      });
+      (pet as any).advancedActions = [makeAdvancedAction(at(4), 0, 0)];
+      (pet as any).deathRecords = [{ timestamp: at(10) }];
+      const pet2 = makeUnit("Pet-2", {
+        name: "Felhunter",
+        ownerId: "w",
+        auraEvents: stun("Pet-2", 69, 73),
+      });
+      (pet2 as any).advancedActions = samples(90);
+      const h = healer();
+      (h as any).advancedActions = samples(100);
+      const f = pointWith(warlock, [pet, pet2], h);
+      expect(f).toMatchObject({ distanceYd: 10, locked: true, feasible: false });
+    });
+
+    it("B10 #2: a Felhunter sent away by Summon Imp throws no Spell Lock", () => {
+      const { warlock, pet } = pair({
+        ownerCasts: [
+          makeSpellCastEvent("688", at(69.8), "", "", "w", "Warlock"),
+        ],
+      });
+      (pet as any).advancedActions = samples(90); // 69.5 and 71 s
+      (pet as any).advancedActions.pop(); // last seen 69.5 s
+      const imp = makeUnit("Pet-3", { name: "Imp", ownerId: "w" });
+      (imp as any).advancedActions = [makeAdvancedAction(at(69.9), 95, 0)];
+      const h = healer();
+      (h as any).advancedActions = samples(100);
+      const f = pointWith(warlock, [pet, imp], h);
+      expect(f).toMatchObject({ distanceYd: null, feasible: false });
+      // the same Felhunter, no summon: it throws it
+      const kept = pair({});
+      (kept.pet as any).advancedActions = samples(90);
+      const h2 = healer();
+      (h2 as any).advancedActions = samples(100);
+      expect(pointWith(kept.warlock, [kept.pet], h2)).toMatchObject({
+        distanceYd: 10,
+        feasible: true,
+      });
+    });
+
+    it("B10 #3: line of sight reads the raw samples, distance the interpolated point", () => {
+      // zone 1505: the Felhunter at y 6623.5 at 69 s and 6643.5 at 71 s, the
+      // healer at (-2034.5, 6623.5); at 70 s the raw pair is blocked, the
+      // interpolated point is not
+      const { warlock, pet } = pair({});
+      (pet as any).advancedActions = [
+        makeAdvancedAction(at(69), -2054.5, 6623.5),
+        makeAdvancedAction(at(71), -2054.5, 6643.5),
+      ];
+      const h = healer();
+      (h as any).advancedActions = [69, 71].map((t) =>
+        makeAdvancedAction(at(t), -2034.5, 6623.5),
+      );
+      const f = pointWith(warlock, [pet], h, "1505");
+      expect(f.distanceYd).toBeCloseTo(Math.hypot(20, 10), 5);
+      expect(f).toMatchObject({ inRange: false, feasible: false });
+    });
   });
 });

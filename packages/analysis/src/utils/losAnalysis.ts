@@ -128,6 +128,29 @@ export function getUnitRawPositionAtTime(
   return { x: best.advancedActorPositionX, y: best.advancedActorPositionY };
 }
 
+/**
+ * Line of sight between two units at an instant, read on their nearest RAW
+ * samples (`getUnitRawPositionAtTime`) — the topological contract above.
+ * null = unknown (no raw sample pair within `maxGapMs`, or `hasLineOfSight`
+ * has no answer: an unmapped arena, a unit on an elevated structure); readers
+ * treat only `false` as disproven. The one LoS reading of
+ * `enemyTargetReaches` (GH #141 item 5) and of `canReachTargetAt`'s
+ * unit-to-unit form (kick-priority, codex review of batch B10: a Felhunter
+ * between two pillar-blocked samples read in sight on the interpolated point).
+ */
+export function rawLineOfSightAt(
+  zoneId: string,
+  a: ICombatUnit,
+  b: ICombatUnit,
+  timestampMs: number,
+  maxGapMs: number,
+): boolean | null {
+  const aRaw = getUnitRawPositionAtTime(a, timestampMs, maxGapMs);
+  const bRaw = getUnitRawPositionAtTime(b, timestampMs, maxGapMs);
+  if (!aRaw || !bRaw) return null;
+  return hasLineOfSight(zoneId, aRaw, bRaw);
+}
+
 // ---------------------------------------------------------------------------
 // 2D geometry helpers
 // ---------------------------------------------------------------------------

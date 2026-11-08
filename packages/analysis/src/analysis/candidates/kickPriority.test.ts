@@ -72,6 +72,21 @@ describe("isOwnerMissedKick", () => {
   });
 });
 
+describe("kick-priority-missed for a pet's kick (codex review of batch B10 #4)", () => {
+  it("names the pet and gives its distance as kickerYd, never as the player's distanceYd", () => {
+    const f = kickPriorityMissedEvents(
+      [point({ friends: [friend({ kickSpellId: "19647", kickSpellName: "Spell Lock", kickerPet: "Felhunter", distanceYd: 19, rangeYd: 40, reachYd: null })] })],
+      owner,
+      probes,
+    )[0]!.facts;
+    expect(f).toMatchObject({ kicker: "Rogue's Felhunter", kickerYd: "19" });
+    expect(f.distanceYd).toBeUndefined();
+    const own = kickPriorityMissedEvents([point()], owner, probes)[0]!.facts;
+    expect(own.distanceYd).toBe("4");
+    expect(own.kicker).toBeUndefined();
+  });
+});
+
 describe("healedWhom (the log has no cast target; where the heal landed is a rendered fact)", () => {
   it("target / another unit with amount / none", () => {
     const f = (over: Partial<IKickPriorityPoint>) =>
@@ -134,6 +149,15 @@ describe("kickPriorityTeamEvents (user ruling 3: teammate form, distance include
     const lock = friend({ id: "P3", name: "Lock3", kickSpellId: "19647", kickSpellName: "Spell Lock", distanceYd: 19, kickerPet: "Felhunter" });
     const ev = kickPriorityTeamEvents([point({ friends: [friend({ cdRemainingS: 6, feasible: false }), lock] })], owner, probes);
     expect(ev[0]!.facts.teammates).toBe("Lock3's Felhunter 19 yd");
+  });
+
+  it("the owner's own pet kick: ownerWhy says the lock or the distance is the pet's (codex B10 #4)", () => {
+    const pet = { kickSpellId: "19647", kickSpellName: "Spell Lock", kickerPet: "Felhunter", distanceYd: 44, inRange: false, feasible: false };
+    const mate = friend({ id: "P2", name: "Mage", distanceYd: 20 });
+    const why = (over: Partial<KickPriorityFriend>) =>
+      kickPriorityTeamEvents([point({ friends: [friend({ ...pet, ...over }), mate] })], owner, probes)[0]!.facts.ownerWhy;
+    expect(why({})).toBe("out of range (44 yd, Rogue's Felhunter)");
+    expect(why({ locked: true, inRange: true })).toBe("locked (Rogue's Felhunter)");
   });
 });
 

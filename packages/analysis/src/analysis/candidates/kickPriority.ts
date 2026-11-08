@@ -270,7 +270,10 @@ interface UnitLike {
   spec: number;
   castStartEvents?: any[];
   spellCastEvents: any[];
-  petSpellCastEvents?: any[];
+  petSpellCastEvents?: ReadonlyArray<{
+    spellId: string;
+    logLine: { event: string; timestamp: number };
+  }>;
   actionIn: any[];
   healOut: any[];
   advancedActions: any[];
@@ -389,6 +392,43 @@ export function kickPriorityDecisionPoints(
         iv = [];
       }
       lockedCache.set(f.id, iv);
+    }
+    return iv;
+  };
+  /** The kick's cannot-cast intervals as thrown by `kicker`: the friend's
+   * own (`cannotCastOf`), or — for a pet's kick — the CC and kick lockouts
+   * on THAT pet alone (`cannotCastIntervalsForSpells` asked of the pet) plus
+   * the friend's own casting locks. Asked of the friend, the reading keeps
+   * only what stops every pet that ever cast the spell this round: a dead
+   * Felhunter's empty list erased its replacement's stun (codex review of
+   * batch B10, T26). */
+  const kickerBlockedCache = new Map<
+    string,
+    Array<{ from: number; to: number }>
+  >();
+  const kickBlockedOf = (
+    f: UnitLike,
+    kicker: UnitLike | undefined,
+    kitSpellId: string,
+  ): Array<{ from: number; to: number }> => {
+    if (!kicker || kicker === f) return cannotCastOf(f);
+    const key = `${f.id}|${kicker.id}`;
+    let iv = kickerBlockedCache.get(key);
+    if (!iv) {
+      try {
+        iv = [
+          ...cannotCastIntervalsForSpells(
+            kicker as never,
+            cannotCastSrcIds,
+            [kitSpellId],
+            units as never,
+          ),
+          ...castingLockIntervalsOf(f as never, combat, kitSpellId),
+        ];
+      } catch {
+        iv = [];
+      }
+      kickerBlockedCache.set(key, iv);
     }
     return iv;
   };
@@ -620,9 +660,10 @@ export function kickPriorityDecisionPoints(
         // `interruptCasterAt`, the reading kick-eaten's kicker sweep and
         // `enemy interrupts UP` take. A pet kick (Spell Lock) is thrown by
         // the pet out then: its own position, range and death; a dead or
-        // dismissed pet (`gone`) or none out yet throws nothing. The cooldown
-        // stays the friend's (their history holds the pets' casts); the
-        // cannot-cast reading already asks the pet (`cannotCastOf`).
+        // dismissed pet (`gone`, a later summon of another pet included) or
+        // none out yet throws nothing. The cooldown stays the friend's (their
+        // history holds the pets' casts); the cannot-cast reading asks the
+        // selected pet (`kickBlockedOf`).
         const at = interruptCasterAt(
           f as never,
           kit.spellId,
@@ -647,14 +688,10 @@ export function kickPriorityDecisionPoints(
             roundEndAt,
           ),
         );
-        const freeS = kicker
-          ? longestOutside(cannotCastOf(f), sMs, castEndMs)
-          : 0;
+        const blocked = kickBlockedOf(f, kicker, kit.spellId);
+        const freeS = kicker ? longestOutside(blocked, sMs, castEndMs) : 0;
         const locked = freeS < Math.min(KICK_MIN_FREE_S, nominalS);
-        const runBlocked = [
-          ...cannotCastOf(f),
-          ...(kicker ? rootedOf(kicker) : []),
-        ];
+        const runBlocked = [...blocked, ...(kicker ? rootedOf(kicker) : [])];
         const runS = longestOutside(runBlocked, sMs, castEndMs);
         const pos = kicker
           ? getUnitPositionAtTime(kicker as never, sMs, LOS_SWEEP_GAP_MS)
@@ -692,6 +729,10 @@ export function kickPriorityDecisionPoints(
           // run budget = the runnable stretch (castable and not rooted), not
           // the cast length: a friendly stunned for 1.5 s of a 2 s cast can
           // run for 0.5 s, a rooted one not at all
+          // LoS on the kicker's and the healer's raw samples, distance on
+          // the interpolated points (`losAnalysis` contract; codex review of
+          // batch B10: a Felhunter between two pillar-blocked samples read
+          // in sight on its interpolated point)
           inRange = canReachTargetAt(
             pos,
             healer as never,
@@ -699,13 +740,14 @@ export function kickPriorityDecisionPoints(
             zoneId,
             melee ? meleeKickReachYd(runS, range, baseRange) : range,
             !melee,
+            kicker as never,
           );
           // An accusation needs the chance BEFORE the heal landed (codex,
           // W1a): the nominal cast keeps the kicked / completed arms
           // comparable for the reference table, but a completed cast that
           // landed early leaves less time than the nominal one.
           if (outcome === "completed" && endMs < nominalEndMs) {
-            const freeB = longestOutside(cannotCastOf(f), sMs, endMs);
+            const freeB = longestOutside(blocked, sMs, endMs);
             const runB = longestOutside(runBlocked, sMs, endMs);
             // the number both accusation tests passed is the smaller reach
             if (melee)
@@ -723,6 +765,7 @@ export function kickPriorityDecisionPoints(
                   zoneId,
                   melee ? meleeKickReachYd(runB, range, baseRange) : range,
                   !melee,
+                  kicker as never,
                 );
           }
         }
@@ -760,8 +803,7 @@ export function kickPriorityDecisionPoints(
           kickReadyForS,
           ...(kicker && kicker !== f
             ? {
-                kickerPet:
-                  petFunctionOf(kicker as never)?.pet ?? "pet",
+                kickerPet: petFunctionOf(kicker as never)?.pet ?? "pet",
               }
             : {}),
         });
@@ -894,8 +936,20 @@ export function kickPriorityMissedEvents(
         ...(me.kickReadyForS === null
           ? {}
           : { kickReadyForS: fmt(me.kickReadyForS) }),
-        distanceYd:
-          me.distanceYd == null ? "?" : String(Math.round(me.distanceYd)),
+        // a pet's kick (Spell Lock) is judged from the pet: name it and give
+        // its distance as the pet's, never as the player's (codex review of
+        // batch B10: 169-2 @134.2 printed the Felhunter's 19 yd as
+        // `distanceYd`, the Warlock stood at 22)
+        ...(me.kickerPet
+          ? {
+              kicker: `${owner.name}'s ${me.kickerPet}`,
+              kickerYd:
+                me.distanceYd == null ? "?" : String(Math.round(me.distanceYd)),
+            }
+          : {
+              distanceYd:
+                me.distanceYd == null ? "?" : String(Math.round(me.distanceYd)),
+            }),
         ...(me.reachYd === null
           ? {}
           : { reachYd: String(Math.round(me.reachYd)) }),
@@ -937,19 +991,25 @@ export function kickPriorityTeamEvents(
     );
     if (mates.length === 0) continue;
     const me = p.friends.find((f) => f.id === owner.id);
+    // a pet's kick: the lock and the distance are the pet's — say whose
+    // (codex review of batch B10, as on the owner form's `kicker`)
+    const pet = me?.kickerPet ? `, ${owner.name}'s ${me.kickerPet}` : "";
+    const yd = me?.distanceYd == null ? "?" : Math.round(me.distanceYd);
     const ownerWhy = !me
       ? "no interrupt"
       : me.cdRemainingS > 0
         ? `on cooldown (${fmt(me.cdRemainingS)}s)`
         : me.locked
-          ? "locked"
+          ? pet
+            ? `locked (${pet.slice(2)})`
+            : "locked"
           : me.inRange === false
             ? // F-P2: a castable melee kicker rooted for the whole cast is not
               // "out of range" by the same rule as the teammates listed at a
               // larger distance — say what held them
               me.rootedThroughCast
-              ? `rooted through the cast (${me.distanceYd == null ? "?" : Math.round(me.distanceYd)} yd)`
-              : `out of range (${me.distanceYd == null ? "?" : Math.round(me.distanceYd)} yd)`
+              ? `rooted through the cast (${yd} yd${pet})`
+              : `out of range (${yd} yd${pet})`
             : "unknown";
     out.push({
       id: `kick-priority-team:${owner.id}:${Math.round(p.castStartS)}`,

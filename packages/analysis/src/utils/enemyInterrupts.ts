@@ -15,7 +15,7 @@ import {
   specToString,
   unitCooldownOf,
 } from "./cooldowns";
-import { ownerPetGoneAt } from "./petPresence";
+import { ownerPetGoneAt, petReplacedBySummonAt } from "./petPresence";
 import { isDeadAt } from "./unitDeath";
 
 /**
@@ -436,7 +436,8 @@ export function interruptForUnit(unit: ICombatUnit): InterruptDef | null {
  * aura or position at `atMs`, codex review). `caster` is undefined when no
  * such pet is out yet or the round's units were not handed in; `gone` when
  * the pet is dead or dismissed and not yet replaced (`ownerPetGoneAt`, D7,
- * user 2026-10-24: a pet kick goes with the pet). The cooldown stays the
+ * user 2026-10-24: a pet kick goes with the pet), or sent away by a later
+ * summon of another pet (`petReplacedBySummonAt`). The cooldown stays the
  * owner's to read (`interruptCooldownRemainingMs` counts the pets' casts).
  */
 export function interruptCasterAt(
@@ -462,14 +463,15 @@ export function interruptCasterAt(
     return { caster: enemy, viaPet: false, gone: false };
   if (allUnits !== undefined && ownerPetGoneAt(enemy, allUnits, atMs))
     return { caster: undefined, viaPet: true, gone: true };
-  return {
-    caster: activeUnitAt(
-      (allUnits ?? []).filter((u) => petCasterIds.has(u.id)),
-      atMs,
-    ),
-    viaPet: true,
-    gone: false,
-  };
+  const caster = activeUnitAt(
+    (allUnits ?? []).filter((u) => petCasterIds.has(u.id)),
+    atMs,
+  );
+  // the kicking pet sent away by a later summon of another (Summon Imp over
+  // the Felhunter) is gone with its kick (codex review of batch B10, T26)
+  if (caster && petReplacedBySummonAt(enemy, caster, atMs))
+    return { caster: undefined, viaPet: true, gone: true };
+  return { caster, viaPet: true, gone: false };
 }
 
 export interface IEnemyInterruptState {
