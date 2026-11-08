@@ -984,4 +984,11 @@
  *  component the burst met while the wall was up. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 508;
+/*
+ * v509 (2026-11-08, fact12 D5 D6 D9; pipeline batch B14, T12): one predicate
+ *  for "a button the player pressed" (pressRow.isNoPlayerPressRow): auto-attack
+ *  replacement swings, passive procs and copy / companion / impact rows are no
+ *  presses for kick-eaten postKick, missed-cleanse dispellerPressed and
+ *  ABILITIES INTO. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 509;

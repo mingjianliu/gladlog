@@ -5696,3 +5696,18 @@ component from the ledger's own damage while the wall was up
 +11 Echoing Protection rows, 6 Blessing of Sacrifice rows priced). Batch
 verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
 the wave.
+
+v509 (2026-11-08, fact12 D5 D6 D9; pipeline batch B14, T12). New
+`utils/pressRow.ts` `isNoPlayerPressRow` (an auto-attack replacement swing or a
+passive proc, `isAutomaticCastRow`, or a copy / companion / impact row,
+`isNoPressRow`) is the one predicate for "a button the player pressed": the
+kick-eaten `postKick` (ccTrinketAnalysis) and the missed-cleanse
+`dispellerPressed` (candidateFindings) read it, and ABILITIES INTO
+(offensiveWasteAnalysis) with its gate (scan5 damageBasis `abilityIntoWallShare`)
+drops `isAutomaticCastRow`. Sundering 467283 joins `COPY_CAST_IDS` (605: 92 / 92
+rows 0–545 ms after the same caster's Lava Lash, no target). New scan5 module
+t12 (pressNamedRead): repro 11 → 0, 605 1,618 → 0. 605: menu rows +0 / −0
+(facts on 19 rows: kick-eaten 14, missed-cleanse 5); ABILITIES INTO lines 709 →
+549, all Crusading Strikes (160 Retribution lines under the 3-cast floor).
+Batch verified on tests + codex (user 11-08); 605 / cover / wide run at the end
+of the wave.
