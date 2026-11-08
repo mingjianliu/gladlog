@@ -1,8 +1,11 @@
 import { CombatUnitType, ICombatUnit } from "@gladlog/parser-compat";
 
 import { castKeyOfAura } from "../data/castEffectAuras";
-import { resolveMitigation } from "../data/mitigationComponents";
-import { DEFLECTION_IDS, MITIGATION_TABLE } from "../data/mitigationData";
+import {
+  isUnheldMechanic,
+  resolveMitigation,
+} from "../data/mitigationComponents";
+import { DEFLECTION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
@@ -410,11 +413,10 @@ export function computeMitigationAudit(
     // talent, or nobody knows), where the row says the aura is still the
     // off-table mechanic (Blessing of Sacrifice's transfer, GH #126 row
     // 170): the row it printed before the table had it
-    const unheldMechanic =
-      res !== undefined &&
-      MITIGATION_TABLE[whitelistKeyOf(iv.spellId) ?? iv.spellId]
-        ?.unheldIsMechanic === true &&
-      res.components.every((c) => c.pctMin <= 0);
+    const unheldMechanic = isUnheldMechanic(
+      whitelistKeyOf(iv.spellId) ?? iv.spellId,
+      res,
+    );
     if (!res || unheldMechanic) {
       // Off-table (including NO_MITIGATION_IDS; the two are mutually
       // exclusive). Absorb shields are the one off-table class that CAN be

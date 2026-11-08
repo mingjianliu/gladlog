@@ -35,6 +35,7 @@
 import { isNotMajorDefensive } from "../data/abilityProfile";
 import { castKeyOfAura } from "../data/castEffectAuras";
 import {
+  isUnheldMechanic,
   resolveMitigation,
   strongestComponentPct,
 } from "../data/mitigationComponents";
@@ -273,7 +274,11 @@ export function stackedDefensivePairs(
         } else if (absorbed > 0) {
           pricing = "absorb";
           blockedOverlapPct = Math.round((absorbed / maxHp) * 100);
-        } else if (!res) unpricedReason = "off-table";
+        } else if (
+          !res ||
+          isUnheldMechanic(stackedDefensiveKeyOf(second.spellId)!, res)
+        )
+          unpricedReason = "off-table";
         else unpricedReason = "positional";
         out.push({
           targetId: target.id,

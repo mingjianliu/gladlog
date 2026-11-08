@@ -194,6 +194,25 @@ function applyTalentModifiers(
 }
 
 /**
+ * A talent's whole reduction no claim can stand on — the caster lacks the
+ * talent, nobody knows, or it is the paladin's own link — on a row that says
+ * the aura is otherwise the off-table mechanic (`unheldIsMechanic`: Blessing
+ * of Sacrifice, GH #126 row 170). Its readers print what they printed before
+ * the row existed: the death audit's off-table row, [STACKED DEFENSIVES]'
+ * "(off-table)".
+ */
+export function isUnheldMechanic(
+  spellId: string,
+  res: IResolvedMitigation | undefined,
+): boolean {
+  return (
+    res !== undefined &&
+    MITIGATION_TABLE[spellId]?.unheldIsMechanic === true &&
+    res.components.every((c) => c.pctMin <= 0)
+  );
+}
+
+/**
  * A modifier on an aura 87 slot of its own (`ownEffectSlot`): the game
  * multiplies it with the row's reduction on the schools both cover, so the
  * row's component splits there — Evasion with Elusiveness and Bait and

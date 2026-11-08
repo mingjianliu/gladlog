@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveMitigation } from "../src/data/mitigationComponents";
+import {
+  isUnheldMechanic,
+  resolveMitigation,
+} from "../src/data/mitigationComponents";
 import {
   hasNoOwnPercentage,
   MITIGATION_TABLE,
@@ -54,6 +57,24 @@ describe("Echoing Blessings", () => {
     expect(hasNoOwnPercentage(SACRIFICE)).toBe(true);
     expect(MITIGATION_WALL_IDS.has(SACRIFICE)).toBe(false);
     expect(eligibleExternalMitigation(SACRIFICE)).toBeNull();
+  });
+
+  it("an unheld Sacrifice reads as the off-table mechanic it was (death audit, [STACKED DEFENSIVES])", () => {
+    const res = (id: string, carrierIsCaster: boolean, holds?: string[]) =>
+      resolveMitigation(id, {
+        carrierIsCaster,
+        ...(holds ? { caster: paladin(holds) } : {}),
+      });
+    expect(isUnheldMechanic(SACRIFICE, res(SACRIFICE, false, []))).toBe(true);
+    expect(isUnheldMechanic(SACRIFICE, res(SACRIFICE, false))).toBe(true);
+    expect(isUnheldMechanic(SACRIFICE, res(SACRIFICE, true, [ECHOING]))).toBe(
+      true,
+    );
+    expect(isUnheldMechanic(SACRIFICE, res(SACRIFICE, false, [ECHOING]))).toBe(
+      false,
+    );
+    // a talent-whole row without the flag stays priced at 0 (Evasion)
+    expect(isUnheldMechanic("5277", res("5277", true, []))).toBe(false);
   });
 
   it("Echoing Protection is its own 15 % on every school, no ownership needed", () => {
