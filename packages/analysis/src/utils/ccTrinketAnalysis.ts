@@ -124,6 +124,7 @@ import {
   INTERP_MAX_GAP_MS,
   LOS_SWEEP_GAP_MS,
 } from "./positionSampling";
+import { isNoPlayerPressRow } from "./pressRow";
 import {
   type IPvpTrinketUse,
   MEDALLION_SPELL_ID,
@@ -133,7 +134,6 @@ import {
 import type { CastFailedEvent } from "./rawStreams";
 import { fmtTime, fmtWholeSeconds } from "./renderGrid";
 import { rootIntervalsOf } from "./rootReachability";
-import { isNoPlayerPressRow } from "./pressRow";
 import { playableEndMs, roundEndMs, stillOnAtRoundEnd } from "./roundEnd";
 import {
   BLESSING_OF_SANCTUARY_ID,
