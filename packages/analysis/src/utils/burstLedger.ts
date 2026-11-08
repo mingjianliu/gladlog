@@ -32,9 +32,7 @@ import {
   ALIAS_PRESS_TWIN_MS,
   FULL_IMMUNITY_IDS,
   holderFirstOwnActionAfterMs,
-  joinReappliedIntervals,
   MITIGATION_AURA_MIN_PCT,
-  pressSecondsOfAura,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "./enemyDefensives";
 import { isDeferralDamageRow } from "./incomingPressure";
@@ -75,7 +73,8 @@ const DEF_OR_IMMUNE_CAST_IDS = new Set<string>([
  * mitigation table's hand map — Rallying Cry 97462 → 97463 and Spirit Link
  * Totem 98008 → 325174 are kill-window major defensives the ledger never
  * named. */
-const DEF_OR_IMMUNE_IDS = new Set<string>([
+/** @internal exported for eval scan5/reannounce (the defensive split of its count) */
+export const DEF_OR_IMMUNE_IDS = new Set<string>([
   ...DEF_OR_IMMUNE_CAST_IDS,
   ...Object.keys(
     ownEffectAurasKeyedBy((id) => DEF_OR_IMMUNE_CAST_IDS.has(id)),
@@ -524,24 +523,11 @@ export function analyzeBurstLedger(
       // (real aura intervals, not cast+duration estimates).
       const defensivesHit: IBurstDefensiveHit[] = [];
       // a re-announced aura (APPLIED again within a second of its one press)
-      // is that press — `[ENEMY DEF]`'s join (`joinReappliedIntervals`;
-      // codex R6C-05 #2: one Guardian Spirit read as two pressed walls)
-      const castSecondsOf = (srcUnitName: string, spellId: string) => {
-        const src = Object.values(combat.units ?? {}).find(
-          (u) => (u as ICombatUnit).name === srcUnitName,
-        ) as ICombatUnit | undefined;
-        return pressSecondsOfAura(
-          src?.spellCastEvents,
-          spellId,
-          combat.startTime,
-        );
-      };
-      for (const iv of joinReappliedIntervals(
-        buildAuraIntervals(target, combat).filter((x) =>
-          DEF_OR_IMMUNE_IDS.has(x.spellId),
-        ),
-        castSecondsOf,
-      )
+      // is that press: `buildAuraIntervals` joins it for every reader
+      // (`joinReappliedIntervals`, GH #136.3; codex R6C-05 #2: one Guardian
+      // Spirit read as two pressed walls)
+      for (const iv of buildAuraIntervals(target, combat)
+        .filter((x) => DEF_OR_IMMUNE_IDS.has(x.spellId))
         .map((x) => ({
           spellId: x.spellId,
           spellName: x.spellName,

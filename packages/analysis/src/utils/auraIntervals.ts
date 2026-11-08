@@ -2,7 +2,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 // runtime-only use (inside buildAuraIntervals); drAnalysis → cooldowns →
 // auraIntervals is a cycle, safe because no module-level code calls across it
-import { isCastOrEffect } from "../data/castEffectAuras";
+import { castsOfEffectAura, isCastOrEffect } from "../data/castEffectAuras";
 import { analysisDataReady } from "../data/ensure";
 import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -10,7 +10,6 @@ import type { CastParamCaster } from "./castParam";
 import { ccFullDurationForCaster } from "./ccDuration";
 import { isResyncBatchAt, lowerBound } from "./hiddenPress";
 import { TOUCH_OF_KARMA_ABSORB_ID, TOUCH_OF_KARMA_ID } from "./karmaFeed";
-
 
 /**
  * auraIntervals.ts -- aura interval sets (phase 4 item 4, the WoWAnalyzer Auras
@@ -120,8 +119,7 @@ const OPEN_EVENTS = new Set<string>([
 export function officialDurationS(
   spellId: string,
   caster:
-    | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
-        CastParamCaster)
+    | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster)
     | undefined,
   /** The cap's anchor time — lets a cast-parameter aura (empower level, combo
    * points; GH #65 item 1) be priced by the cast that produced it. */
@@ -256,7 +254,10 @@ function auraBreakPairing<
   const cached = auraBreakPairingCache.get(events);
   if (cached) return cached;
   const pending = new Map<string, T[]>();
-  const pairing: AuraBreakPairing = { superseded: new Set(), before: new Map() };
+  const pairing: AuraBreakPairing = {
+    superseded: new Set(),
+    before: new Map(),
+  };
   for (const a of events) {
     if (!a.spellId) continue;
     const ev = a.logLine.event;
@@ -388,8 +389,7 @@ function removedRowsBySpell(rows: AuraRows): Map<string, AuraRows> {
   if (hit && hit.len === rows.length) return hit.bySpell;
   const bySpell = new Map<string, AuraRows>();
   for (const x of rows) {
-    if (!x.spellId || x.logLine.event !== LogEvent.SPELL_AURA_REMOVED)
-      continue;
+    if (!x.spellId || x.logLine.event !== LogEvent.SPELL_AURA_REMOVED) continue;
     let list = bySpell.get(x.spellId);
     if (!list) bySpell.set(x.spellId, (list = []));
     list.push(x);
@@ -425,9 +425,7 @@ export function restatedAuraWasUp(
   const rowBetween = (rows: SpellRows | undefined) => {
     if (!rows) return false;
     if (!finite)
-      return rows.some(
-        (x) => x.spellId === id && between(x.logLine.timestamp),
-      );
+      return rows.some((x) => x.spellId === id && between(x.logLine.timestamp));
     const at = spellRowMs(rows).get(id);
     if (!at) return false;
     const i = lowerBound(at, pressMs);
@@ -761,10 +759,130 @@ export function buildAuraIntervalsUncached(
     });
   }
 
-  endKarmaAtItsShield(out);
-  return out.sort(
-    (a, b) => a.fromS - b.fromS || a.spellId.localeCompare(b.spellId),
-  );
+  out.sort((a, b) => a.fromS - b.fromS || a.spellId.localeCompare(b.spellId));
+  // GH #136.3: a re-announced aura is one press for every reader
+  const joined = joinReappliedIntervals(out, (_name, spellId, iv) => {
+    const caster = casterOf(iv.srcUnitId);
+    return caster
+      ? pressSecondsOfAura(caster.spellCastEvents, spellId, combat.startTime)
+      : undefined;
+  });
+  endKarmaAtItsShield(joined);
+  return joined;
+}
+
+/** How close to an aura's start its cast is logged, either side. The same
+ * pairing radius the external branch uses to tie a cast to its aura. */
+export const SAVE_CAST_AURA_PAIR_S = 1.5;
+
+/**
+ * Enemy-def F-E12: a second `SPELL_AURA_APPLIED` of an aura that is still up,
+ * with no `REMOVED` between, is the game re-announcing ONE press — not the
+ * first one ending and a new one starting. `buildAuraIntervals` splits there
+ * (its anti-artifact rule for a missed REMOVED followed by a real recast), so
+ * the `[ENEMY DEF]` line read one Divine Shield as `(immune, 0.9s)` +
+ * `(immune, 7.1s)` (f4eb8c87 2:47), one Guardian Spirit as `(1.6s)` +
+ * `(10.4s — removed early)` (69546267 2:05), one Feign Death as three.
+ *
+ * Two back-to-back intervals of one spell from one source are the same press
+ * unless the source logged a SECOND cast of that spell around them: a split
+ * with at most one cast behind it (the one that opened the first interval,
+ * or none for an aura that is never cast) is one press.
+ *
+ * GH #136.3: applied inside `buildAuraIntervals`, so every reader sees the
+ * one press (it used to be joined only for `[ENEMY DEF]` and the burst
+ * ledger's defensives-hit; the death-window mitigation audit,
+ * `[STACKED DEFENSIVES]` and the other readers saw the two pieces). A split
+ * whose source is not known (`castSecondsOf` returns undefined) stays split.
+ */
+export function joinReappliedIntervals(
+  intervals: readonly IAuraInterval[],
+  /** round seconds of the source's presses of `spellId`; undefined when the
+   * source is unknown */
+  castSecondsOf: (
+    srcUnitName: string,
+    spellId: string,
+    iv: IAuraInterval,
+  ) => readonly number[] | undefined,
+): IAuraInterval[] {
+  const out: IAuraInterval[] = [];
+  const lastOf = new Map<string, IAuraInterval>();
+  for (const iv of intervals) {
+    const key = `${iv.spellId}:${iv.srcUnitName}`;
+    const prev = lastOf.get(key);
+    const casts =
+      prev && prev.inferredEnd && Math.abs(prev.toS - iv.fromS) < 1e-6
+        ? castSecondsOf(iv.srcUnitName, iv.spellId, iv)
+        : undefined;
+    const near = (t: number, at: number) =>
+      Math.abs(t - at) <= SAVE_CAST_AURA_PAIR_S;
+    if (
+      prev &&
+      casts !== undefined &&
+      casts.filter(
+        (t) =>
+          t >= prev.fromS - SAVE_CAST_AURA_PAIR_S &&
+          t <= iv.fromS + SAVE_CAST_AURA_PAIR_S,
+      ).length <= 1 &&
+      // the one cast is the press that opened the FIRST piece; one next to
+      // the second APPLIED and not next to the first is a new press whose
+      // REMOVED was missed (the first piece's cast unlogged)
+      !casts.some((t) => near(t, iv.fromS) && !near(t, prev.fromS))
+    ) {
+      prev.toS = iv.toS;
+      prev.inferredEnd = iv.inferredEnd;
+      // the joined interval ends at the later one's closing row (codex
+      // 20-F24-15 #3: fact9 D2's same-ms rows were lost on this path)
+      if (iv.toRow) prev.toRow = iv.toRow;
+      else delete prev.toRow;
+      continue;
+    }
+    const copy = { ...iv };
+    out.push(copy);
+    lastOf.set(key, copy);
+  }
+  return out;
+}
+
+/** Two SUCCESS rows of one press under different ids of one aura — the
+ * cast and its effect, logged together (Greater Invisibility: 110959 and
+ * 110960 at the same ms or 1 ms apart). */
+export const ALIAS_PRESS_TWIN_MS = 100;
+
+/**
+ * The round seconds of a source's presses of an aura: SUCCESS rows of the
+ * aura's own id or of a cast whose effect it is (codex R6C-15 #2 / R6C-05
+ * #1: Blur is cast as 198589 and runs as 212800 — its second press, a
+ * same-ms REFRESH, was never split off the first), one per press: a row of
+ * another of those ids within `ALIAS_PRESS_TWIN_MS` of a kept one is the
+ * same press (F19 605 diff: Greater Invisibility's two rows read as two
+ * casts kept `joinReappliedIntervals` from joining a re-announced aura —
+ * two `[ENEMY DEF]` lines for one press).
+ */
+export function pressSecondsOfAura(
+  casts: ICombatUnit["spellCastEvents"] | undefined,
+  spellId: string,
+  startTime: number,
+): number[] {
+  const ids = new Set([spellId, ...castsOfEffectAura(spellId)]);
+  const rows = (casts ?? [])
+    .filter(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!c.spellId &&
+        ids.has(c.spellId),
+    )
+    .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+  const out: number[] = [];
+  let last: { ms: number; id: string } | null = null;
+  for (const c of rows) {
+    const ms = c.logLine.timestamp;
+    if (last && c.spellId !== last.id && ms - last.ms <= ALIAS_PRESS_TWIN_MS)
+      continue;
+    out.push((ms - startTime) / 1000);
+    last = { ms, id: c.spellId! };
+  }
+  return out;
 }
 
 /** How far from the Touch of Karma buff's APPLIED its shield aura may go up

@@ -59,8 +59,17 @@ import {
   buildAuraIntervals,
   dropAuraRebroadcasts,
   type IAuraInterval,
+  pressSecondsOfAura,
+  SAVE_CAST_AURA_PAIR_S,
 } from "./auraIntervals";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
+// moved to auraIntervals.ts (GH #136.3); re-exported for existing importers
+export {
+  ALIAS_PRESS_TWIN_MS,
+  joinReappliedIntervals,
+  pressSecondsOfAura,
+  SAVE_CAST_AURA_PAIR_S,
+} from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { missBelongsToCast } from "./castMissRows";
 import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
@@ -1511,102 +1520,6 @@ export function selfSaveReductionNames(): string[] {
   return [...names];
 }
 
-/** How close to an aura's start its cast is logged, either side. The same
- * pairing radius the external branch uses to tie a cast to its aura. */
-export const SAVE_CAST_AURA_PAIR_S = 1.5;
-
-/**
- * Enemy-def F-E12: a second `SPELL_AURA_APPLIED` of an aura that is still up,
- * with no `REMOVED` between, is the game re-announcing ONE press — not the
- * first one ending and a new one starting. `buildAuraIntervals` splits there
- * (its anti-artifact rule for a missed REMOVED followed by a real recast), so
- * the `[ENEMY DEF]` line read one Divine Shield as `(immune, 0.9s)` +
- * `(immune, 7.1s)` (f4eb8c87 2:47), one Guardian Spirit as `(1.6s)` +
- * `(10.4s — removed early)` (69546267 2:05), one Feign Death as three.
- *
- * Joined here, at the `[ENEMY DEF]` layer, because `buildAuraIntervals` has
- * many consumers with their own reading of a re-apply. Two back-to-back
- * intervals of one spell from one source are the same press unless the source
- * logged a SECOND cast of that spell around them: a split with at most one
- * cast behind it (the one that opened the first interval, or none for an
- * aura that is never cast) is one press.
- */
-export function joinReappliedIntervals(
-  intervals: readonly IAuraInterval[],
-  /** round seconds of the source's SPELL_CAST_SUCCESS of `spellId` */
-  castSecondsOf: (srcUnitName: string, spellId: string) => readonly number[],
-): IAuraInterval[] {
-  const out: IAuraInterval[] = [];
-  const lastOf = new Map<string, IAuraInterval>();
-  for (const iv of intervals) {
-    const key = `${iv.spellId}:${iv.srcUnitName}`;
-    const prev = lastOf.get(key);
-    if (
-      prev &&
-      prev.inferredEnd &&
-      Math.abs(prev.toS - iv.fromS) < 1e-6 &&
-      castSecondsOf(iv.srcUnitName, iv.spellId).filter(
-        (t) =>
-          t >= prev.fromS - SAVE_CAST_AURA_PAIR_S &&
-          t <= iv.fromS + SAVE_CAST_AURA_PAIR_S,
-      ).length <= 1
-    ) {
-      prev.toS = iv.toS;
-      prev.inferredEnd = iv.inferredEnd;
-      // the joined interval ends at the later one's closing row (codex
-      // 20-F24-15 #3: fact9 D2's same-ms rows were lost on this path)
-      if (iv.toRow) prev.toRow = iv.toRow;
-      else delete prev.toRow;
-      continue;
-    }
-    const copy = { ...iv };
-    out.push(copy);
-    lastOf.set(key, copy);
-  }
-  return out;
-}
-
-/** Two SUCCESS rows of one press under different ids of one aura — the
- * cast and its effect, logged together (Greater Invisibility: 110959 and
- * 110960 at the same ms or 1 ms apart). */
-export const ALIAS_PRESS_TWIN_MS = 100;
-
-/**
- * The round seconds of a source's presses of an aura: SUCCESS rows of the
- * aura's own id or of a cast whose effect it is (codex R6C-15 #2 / R6C-05
- * #1: Blur is cast as 198589 and runs as 212800 — its second press, a
- * same-ms REFRESH, was never split off the first), one per press: a row of
- * another of those ids within `ALIAS_PRESS_TWIN_MS` of a kept one is the
- * same press (F19 605 diff: Greater Invisibility's two rows read as two
- * casts kept `joinReappliedIntervals` from joining a re-announced aura —
- * two `[ENEMY DEF]` lines for one press).
- */
-export function pressSecondsOfAura(
-  casts: ICombatUnit["spellCastEvents"] | undefined,
-  spellId: string,
-  startTime: number,
-): number[] {
-  const ids = new Set([spellId, ...castsOfEffectAura(spellId)]);
-  const rows = (casts ?? [])
-    .filter(
-      (c) =>
-        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        !!c.spellId &&
-        ids.has(c.spellId),
-    )
-    .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
-  const out: number[] = [];
-  let last: { ms: number; id: string } | null = null;
-  for (const c of rows) {
-    const ms = c.logLine.timestamp;
-    if (last && c.spellId !== last.id && ms - last.ms <= ALIAS_PRESS_TWIN_MS)
-      continue;
-    out.push((ms - startTime) / 1000);
-    last = { ms, id: c.spellId! };
-  }
-  return out;
-}
-
 /** How long before its aura a logged cast can still be the press that put
  * it up (an `[ENEMY DEF]` aura kind's `pressSeconds`). */
 export const PRESS_TO_AURA_MAX_S = 1;
@@ -2064,11 +1977,10 @@ export function saveAuraIntervals(
       combat.startTime,
     );
   };
+  // a re-announced aura is already one interval (`joinReappliedIntervals`
+  // runs inside `buildAuraIntervals`, GH #136.3)
   return splitAtRepressRefresh(
-    joinReappliedIntervals(
-      buildAuraIntervals(unit, combat, castersById),
-      castSecondsOf,
-    ),
+    buildAuraIntervals(unit, combat, castersById),
     unit,
     combat.startTime,
     castSecondsOf,
