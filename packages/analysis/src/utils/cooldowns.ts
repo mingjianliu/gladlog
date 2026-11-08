@@ -132,6 +132,7 @@ import {
   RULED_COOLDOWN_VALUES,
   specPassiveOwned,
 } from "./talentModifiers";
+import { talentModifierOwnershipOf } from "./talentOwnership";
 import {
   choiceSelectionResolved,
   getPlayerTalentedSpellInfo,
@@ -453,6 +454,33 @@ export function cdHelpsRecipient(
   return recipientIsHolder
     ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
     : cdCanHelpAnotherUnit(cd);
+}
+
+/** Survival Tactics, the Hunter PvP talent that makes Feign Death a save
+ * (its 202748 absorb). */
+export const SURVIVAL_TACTICS_TALENT_ID = "202746";
+
+/**
+ * T24 ruling R05 (2026-11-08): is this cooldown a death save its holder left
+ * unpressed? Feign Death is one only with Survival Tactics — without the PvP
+ * talent the feign still spends the cooldown (`auraOnlyActivationSeconds`
+ * reads its `UNIT_DIED … unconscious=1` row) but shields nobody, so the
+ * `[DEATH] (Unused: …)` list and `[DEFENSIVE AVAILABLE]` leave it out unless
+ * the hunter provably holds the talent (COMBATANT_INFO, or its aura seen
+ * this round). Every other cooldown: yes.
+ */
+export function cdIsDeathSaveOf(
+  cd: { spellId: string },
+  holder: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "auraEvents">>,
+): boolean {
+  if (cd.spellId !== FEIGN_DEATH_CAST_ID) return true;
+  const auras = AURA_ONLY_ACTIVATION_IDS[FEIGN_DEATH_CAST_ID] ?? [];
+  if ((holder.auraEvents ?? []).some((a) => auras.includes(a.spellId)))
+    return true;
+  return (
+    talentModifierOwnershipOf(holder, SURVIVAL_TACTICS_TALENT_ID) === "yes"
+  );
 }
 
 /**

@@ -19,6 +19,7 @@ import {
 import {
   cdCanHelpAnotherUnit,
   cdHelpsRecipient,
+  cdIsDeathSaveOf,
   cdIsProcOnly,
   cdNeverSpent,
   cdReadyInTimeAt,
@@ -1107,6 +1108,8 @@ export function emitFriendlyDeathEntries<S>(params: {
         // already guards the "cheaper available" advice in cooldowns.ts; both
         // sides import it rather than each keeping a list.
         .filter((cd) => cdHelpsRecipient(cd, true))
+        // T24 ruling R05: Feign Death without Survival Tactics is no save
+        .filter((cd) => cdIsDeathSaveOf(cd, dyingUnit))
         // A defensive pressed ON AN ENEMY (Touch of Karma) only with a living
         // enemy in its reach — cd-hoarded's and the kill sequence's predicate
         // (codex review of F-W6, round 7: a Windwalker with no Karma cast

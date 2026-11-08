@@ -45,6 +45,7 @@ import {
   allyReachTalentNote,
   castSpellName,
   cdHelpsRecipient,
+  cdIsDeathSaveOf,
   cdReadyInTimeAt,
   IMajorCooldownInfo,
   isHealerSpec,
@@ -2557,6 +2558,9 @@ export function buildKillSequenceBlock(params: {
             // predicate with cd-hoarded / [DEATH] Unused.
             const isDyingPlayer = player.name === dyingUnit.name;
             if (!cdHelpsRecipient(cd, isDyingPlayer)) return false;
+            // T24 ruling R05: Feign Death without Survival Tactics is no
+            // save — one predicate with [DEATH] Unused
+            if (!cdIsDeathSaveOf(cd, player as ICombatUnit)) return false;
             // a row owned on the spec baseline alone (never pressed this
             // round) is cd-hoarded's only (ruling P-W6) — not "available but
             // unused" here, where no CC / usability gate stands behind it
