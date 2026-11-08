@@ -28,6 +28,7 @@
  * Expects under BASE_DIR: prompts/, manifests/, index.json.
  */
 
+import type { CombatUnitSpec } from "@gladlog/parser-compat";
 import {
   creditSpikesToWindows,
   DAMPENING_DOSE_PCT,
@@ -143,6 +144,7 @@ import { CANDIDATE_TYPE_REGISTRY } from "@gladlog/analysis/src/data/candidateTyp
 import { lookupCdTriggerPrior } from "@gladlog/analysis/src/data/cdTriggerPrior";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "@gladlog/analysis/src/data/druidForms";
+import { HEALER_HELD_OFFENSIVE_SPEC } from "@gladlog/analysis/src/data/healerHeldOffensive";
 import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
 import {
@@ -167,6 +169,7 @@ import {
   BURST_ALLY_OVERLAP_ITEM_RE_SRC,
   BURST_ALLY_OVERLAP_LABEL,
   BURST_TARGET_DAMAGE_RE_SRC,
+  healerHeldNotCountedNote,
   KILL_CREDIT_SLACK_S,
   ON_TARGET_GOOD_PCT,
 } from "@gladlog/analysis/src/utils/burstLedger";
@@ -202,6 +205,7 @@ import {
   PRESSURE_WINDOWS_TOP_N,
   REACTION_WINDOW_S,
   sharesChargePool,
+  specToString,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import { OWNER_AOE_CC_NO_PLAYER_TAG } from "@gladlog/analysis/src/utils/drAnalysis";
@@ -1295,6 +1299,124 @@ export function checkBurstAllyOverlap(lines: string[]): string[] {
         failures.push(
           `${at} 重叠 ${item[1]}s 超过所在 burst 的显示长度 ${burstWidth}s(+1s 取整余量)`,
         );
+  });
+  return failures;
+}
+
+/** A healer's throughput major on the offensive roster, as the prompt names
+ * it: the roster spec's display name and the spell's English name
+ * (`HEALER_HELD_OFFENSIVE_SPEC`, the burst ledger's own table). */
+function healerHeldRenderedPairs(): Array<{ spec: string; spell: string }> {
+  return Object.entries(HEALER_HELD_OFFENSIVE_SPEC).map(([id, spec]) => ({
+    spec: specToString(spec as CombatUnitSpec),
+    spell: spellEffectData[id]?.name ?? id,
+  }));
+}
+
+const SOLO_BURST_LINE = /^\s*Solo burst — no ally offensive CD overlapped(.*)\.$/;
+
+/**
+ * Hard invariant (user ruling R01, 2026-11-08, fact12 D22): a burst-ledger
+ * `Solo burst` line that a teammate healer's Avenging Wrath (a Holy
+ * Paladin's, `isHealerHeldOffensive` — no ally offensive CD there, fact11
+ * D16, while KILL WINDOWS' `pressed inside` lists it) overlapped says so:
+ * `(a healer's Avenging Wrath is not counted)` (`healerHeldNotCountedNote`).
+ *
+ * Re-derived from the rendered text: the healer's `[TEAM] [CD] … (Holy
+ * Paladin): Avenging Wrath` press second `p`, its roster `lasts Ls`, and the
+ * burst header's floored `from–to`.
+ *   - forward (only where the overlap is certain on the floored grid): a press
+ *     with `p + 1 <= to` and `p + L >= from + 1`, the healer not dead before
+ *     `from + 1` → the Solo line must carry the note;
+ *   - reverse: a note needs a press that can overlap at all (`p <= to` and
+ *     `p + L + 1 >= from`; any press when the roster has no `lasts`).
+ */
+export function checkBurstSoloHealerHeldNote(lines: string[]): string[] {
+  const failures: string[] = [];
+  const pairs = healerHeldRenderedPairs();
+  // roster: unit id → { spell → lasts } for teammate units of a healer spec
+  const lastsByUnit = new Map<string, Map<string, number | null>>();
+  let rosterUnit: { id: string; spec: string; role: string } | null = null;
+  for (const line of lines) {
+    const u = line.match(
+      /^\s*<unit id="(\d+)" name="[^"]*" spec="([^"]*)" role="([^"]*)">/,
+    );
+    if (u) {
+      rosterUnit = { id: u[1]!, spec: u[2]!, role: u[3]! };
+      continue;
+    }
+    const cds = line.match(/^\s*<cooldowns>(.*)<\/cooldowns>/);
+    if (!cds || !rosterUnit || rosterUnit.role !== "teammate") continue;
+    for (const { spec, spell } of pairs) {
+      if (rosterUnit.spec !== spec) continue;
+      const item = cds[1]!
+        .split(/, (?=[A-Z])/)
+        .find((x) => x.startsWith(`${spell} [`));
+      if (item === undefined) continue;
+      const lasts = item.match(/lasts (\d+)s/);
+      const m = lastsByUnit.get(rosterUnit.id) ?? new Map();
+      m.set(spell, lasts ? Number(lasts[1]) : null);
+      lastsByUnit.set(rosterUnit.id, m);
+    }
+  }
+  if (lastsByUnit.size === 0) return failures;
+  const presses: Array<{ unit: string; spell: string; p: number }> = [];
+  const deathAt = new Map<string, number>();
+  for (const line of lines) {
+    const d = line.match(/^(\d+):(\d{2})\s+\[DEATH\]\s+(\d+)\(/);
+    if (d && !deathAt.has(d[3]!))
+      deathAt.set(d[3]!, Number(d[1]) * 60 + Number(d[2]));
+    const t = line.match(
+      /^(\d+):(\d{2})\s+\[TEAM\] \[CD\]\s+(\d+)\(\S+\) \(([^)]+)\): (.+?)(?: \(|$)/,
+    );
+    if (!t) continue;
+    const spell = t[5]!.trim();
+    if (!pairs.some((x) => x.spec === t[4] && x.spell === spell)) continue;
+    if (!lastsByUnit.get(t[3]!)?.has(spell)) continue;
+    presses.push({ unit: t[3]!, spell, p: Number(t[1]) * 60 + Number(t[2]) });
+  }
+  let burst: { from: number; to: number; at: number } | null = null;
+  lines.forEach((line, i) => {
+    const head = line.match(BURST_HEAD);
+    if (head) {
+      burst = {
+        from: Number(head[1]) * 60 + Number(head[2]),
+        to: Number(head[3]) * 60 + Number(head[4]),
+        at: i + 1,
+      };
+      return;
+    }
+    const solo = line.match(SOLO_BURST_LINE);
+    if (!solo || burst === null) return;
+    const { from, to, at } = burst as { from: number; to: number; at: number };
+    const lastsOf = (x: { unit: string; spell: string }) =>
+      lastsByUnit.get(x.unit)!.get(x.spell) ?? null;
+    const certain = presses.filter((x) => {
+      const L = lastsOf(x);
+      const died = deathAt.get(x.unit);
+      return (
+        L !== null &&
+        x.p + 1 <= to &&
+        x.p + L >= from + 1 &&
+        (died === undefined || died > from + 1)
+      );
+    });
+    const possible = presses.filter((x) => {
+      const L = lastsOf(x);
+      return x.p <= to && (L === null || x.p + L + 1 >= from);
+    });
+    const note = solo[1]!;
+    const want = healerHeldNotCountedNote([
+      ...new Set(certain.map((x) => x.spell)),
+    ]);
+    if (certain.length > 0 && note === "")
+      failures.push(
+        `line ${i + 1}: Burst(line ${at}) ${fmtTime(from)}–${fmtTime(to)} 写 Solo burst,但队友治疗的 ${certain[0]!.spell} ${fmtTime(certain[0]!.p)} 与它重叠,缺注「${want.trim()}」`,
+      );
+    if (note !== "" && possible.length === 0)
+      failures.push(
+        `line ${i + 1}: Burst(line ${at}) ${fmtTime(from)}–${fmtTime(to)} 的 Solo 注「${note.trim()}」找不到可能重叠的队友治疗按键`,
+      );
   });
   return failures;
 }
@@ -8746,6 +8868,7 @@ export function checkMatch(
   hardFailures.push(...checkBurstTargetHpConsistency(lines));
   hardFailures.push(...checkBurstTargetDamageParts(lines));
   hardFailures.push(...checkBurstAllyOverlap(lines));
+  hardFailures.push(...checkBurstSoloHealerHeldNote(lines));
   hardFailures.push(...checkVulnerableOwnerDamage(lines));
   hardFailures.push(...checkContestedCastRisk(lines));
   hardFailures.push(...checkEnemyCcKitLanded(lines));

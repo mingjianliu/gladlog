@@ -1116,6 +1116,59 @@ describe("burstLedger — ally CDs overlapping: seconds and their top target (T1
     expect(solo.join("\n")).not.toContain("Aligned");
   });
 
+  // User ruling R01 (2026-11-08, fact12 D22, 7edc099d r0): a Holy Paladin's
+  // Avenging Wrath is no ally offensive CD here (fact11 D16) while KILL
+  // WINDOWS lists it pressed inside — the Solo line says it was not counted
+  it("a teammate Holy Paladin's Avenging Wrath: still Solo, and the line says it is not counted", () => {
+    const holy = (castAtS: number) =>
+      makeUnit("f3", {
+        name: "Holy",
+        spec: CombatUnitSpec.Paladin_Holy,
+        info,
+        spellCastEvents: [cast("31884", castAtS, "f3", "Avenging Wrath")],
+      } as any);
+    const soloOf = (ally: ReturnType<typeof holy>) => {
+      const bursts = analyzeBurstLedger(
+        dk(),
+        [ally],
+        [paladin(), hunter()],
+        makeCombat(),
+      );
+      return {
+        bursts,
+        lines: formatBurstLedgerForContext(bursts, [], []),
+      };
+    };
+    // pressed 5 s into the 13–33 s burst
+    const inside = soloOf(holy(18));
+    expect(inside.bursts[0]!.allyCDsOverlapping).toEqual([]);
+    expect(inside.bursts[0]!.healerHeldOverlapping).toEqual(["Avenging Wrath"]);
+    expect(inside.lines).toContain(
+      "    Solo burst — no ally offensive CD overlapped (a healer's Avenging Wrath is not counted).",
+    );
+    // over (20 s effect) before the burst began: no note
+    const before = soloOf(holy(-10));
+    expect(before.bursts[0]!.healerHeldOverlapping).toBeUndefined();
+    expect(before.lines).toContain(
+      "    Solo burst — no ally offensive CD overlapped.",
+    );
+    // a Retribution Paladin's press stays an ally offensive CD
+    const ret = makeUnit("f4", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [cast("31884", 18, "f4", "Avenging Wrath")],
+    } as any);
+    const withRet = analyzeBurstLedger(
+      dk(),
+      [ret],
+      [paladin(), hunter()],
+      makeCombat(),
+    );
+    expect(withRet[0]!.allyCDsOverlapping).toHaveLength(1);
+    expect(withRet[0]!.healerHeldOverlapping).toBeUndefined();
+  });
+
   it("each item reads in the pattern the gate uses", () => {
     const line = overlapLine(
       ledger(priest(13, [dmgOut(MATCH_START + 16_000, -730_000, "e2")])),

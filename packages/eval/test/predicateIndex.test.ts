@@ -83,6 +83,7 @@ import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObser
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
 import * as druidForms from "@gladlog/analysis/src/data/druidForms";
 import * as enemyHealCds from "@gladlog/analysis/src/data/enemyHealCds";
+import * as healerHeldOffensive from "@gladlog/analysis/src/data/healerHeldOffensive";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
 import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriorityHealSpells";
@@ -2950,6 +2951,21 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkBurstAllyOverlap",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "healerHeldNotCountedNote",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/data/healerHeldOffensive.ts`,
+    symbol: "HEALER_HELD_OFFENSIVE_SPEC",
+    mod: healerHeldOffensive,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstSoloHealerHeldNote",
     mod: promptQualityCheck,
   },
   {

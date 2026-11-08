@@ -23,6 +23,10 @@ import {
   isHpTroughWorthPrinting,
   roundClippedTroughSpan,
 } from "./cooldowns";
+import {
+  HEALER_HELD_OFFENSIVE_SPEC,
+  isHealerHeldOffensive,
+} from "../data/healerHeldOffensive";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   ALIAS_PRESS_TWIN_MS,
@@ -265,6 +269,22 @@ export interface IBurstLedgerEntry {
      * damage went to the hunter and 0.34M to the paladin). */
     topTarget: IBurstTargetDamage | null;
   }>;
+  /** A healer's throughput major on the offensive roster (`isHealerHeldOffensive`:
+   * a Holy Paladin's Avenging Wrath) an ally pressed whose span overlaps this
+   * burst — not an ally offensive CD (fact11 D16), so not in
+   * `allyCDsOverlapping`; the Solo line names it as not counted (user ruling
+   * R01, 2026-11-08). Spell names, deduplicated; absent when none. */
+  healerHeldOverlapping?: string[];
+}
+
+/** The Solo-burst line's note for a healer's throughput major that
+ * overlapped the burst and is not counted (user ruling R01, 2026-11-08):
+ * ` (a healer's Avenging Wrath is not counted)`; empty for none. The gate
+ * (`checkBurstSoloHealerHeldNote`) matches this text. */
+export function healerHeldNotCountedNote(spellNames: readonly string[]): string {
+  if (spellNames.length === 0) return "";
+  const names = spellNames.join(" / ");
+  return ` (a healer's ${names} ${spellNames.length > 1 ? "are" : "is"} not counted)`;
 }
 
 /**
@@ -376,31 +396,58 @@ export function analyzeBurstLedger(
   // (GH #196: Soul Immolation pressed 3 s apart, both spans counted in
   // full, 9.0 + 5.8 s against the 9.0 s its aura ran) — one run at a time,
   // as `[ENEMY DEF]` / `[TEAM] [CD]` save presses read it (fact11 D33).
-  const allyCDSpans = allies
-    .filter((a) => a.id !== player.id)
-    .flatMap((a) => {
-      const cds = (
-        reconstructEnemyCDTimeline([a], combat).players[0]?.offensiveCDs ?? []
-      ).filter(pressedInRound);
-      return cds.map((cd) => {
-        const key = canonicalSpellId(cd.spellId, matchStartMs);
-        const next = cds
-          .filter(
-            (c) =>
-              c.castTimeSeconds > cd.castTimeSeconds &&
-              canonicalSpellId(c.spellId, matchStartMs) === key,
-          )
-          .reduce((m, c) => Math.min(m, c.castTimeSeconds), Infinity);
-        const span = burstCastSpan(cd);
-        return {
-          ally: a,
-          playerName: a.name,
-          spellName: cd.spellName,
-          from: span.from,
-          to: Math.max(span.from, Math.min(span.to, next)),
-        };
-      });
+  const spansOf = (a: ICombatUnit, cds: IEnemyCDCast[]) =>
+    cds.map((cd) => {
+      const key = canonicalSpellId(cd.spellId, matchStartMs);
+      const next = cds
+        .filter(
+          (c) =>
+            c.castTimeSeconds > cd.castTimeSeconds &&
+            canonicalSpellId(c.spellId, matchStartMs) === key,
+        )
+        .reduce((m, c) => Math.min(m, c.castTimeSeconds), Infinity);
+      const span = burstCastSpan(cd);
+      return {
+        ally: a,
+        playerName: a.name,
+        spellName: cd.spellName,
+        from: span.from,
+        to: Math.max(span.from, Math.min(span.to, next)),
+      };
     });
+  const otherAllies = allies.filter((a) => a.id !== player.id);
+  const allyCDSpans = otherAllies.flatMap((a) =>
+    spansOf(
+      a,
+      (
+        reconstructEnemyCDTimeline([a], combat).players[0]?.offensiveCDs ?? []
+      ).filter(pressedInRound),
+    ),
+  );
+  // User ruling R01 (2026-11-08, fact12 D22): a healer's throughput major on
+  // the offensive roster (a Holy Paladin's Avenging Wrath,
+  // `isHealerHeldOffensive`) is no ally burst here (fact11 D16) while KILL
+  // WINDOWS' `pressed inside` lists it; neither reader changes — a Solo
+  // burst it overlapped says it was not counted. Same spans, same overlap
+  // test as the counted ones.
+  const healerHeldSpans = otherAllies
+    .filter((a) =>
+      Object.keys(HEALER_HELD_OFFENSIVE_SPEC).some((id) =>
+        isHealerHeldOffensive(id, a.spec),
+      ),
+    )
+    .flatMap((a) =>
+      spansOf(
+        a,
+        (
+          reconstructEnemyCDTimeline([a], combat, undefined, undefined, {
+            keepHealerHeldPresses: true,
+          }).players[0]?.offensiveCDs ?? []
+        ).filter(
+          (cd) => pressedInRound(cd) && isHealerHeldOffensive(cd.spellId, a.spec),
+        ),
+      ),
+    );
 
   const enemyPlayers = enemies.filter((e) => e.info);
   const enemyById = new Map(enemyPlayers.map((e) => [e.id, e]));
@@ -674,7 +721,16 @@ export function analyzeBurstLedger(
         };
       });
 
+    const healerHeldOverlapping = [
+      ...new Set(
+        healerHeldSpans
+          .filter((s) => s.from <= toSeconds && s.to >= fromSeconds)
+          .map((s) => s.spellName),
+      ),
+    ];
+
     entries.push({
+      ...(healerHeldOverlapping.length > 0 ? { healerHeldOverlapping } : {}),
       fromSeconds,
       toSeconds,
       spells: group.map((cd) => ({
@@ -1015,7 +1071,7 @@ export function formatBurstLedgerForContext(
     lines.push(
       b.allyCDsOverlapping.length > 0
         ? formatAllyOverlaps(b)
-        : `    Solo burst — no ally offensive CD overlapped.`,
+        : `    Solo burst — no ally offensive CD overlapped${healerHeldNotCountedNote(b.healerHeldOverlapping ?? [])}.`,
     );
   });
 

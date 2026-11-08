@@ -861,6 +861,13 @@ export function reconstructEnemyCDTimeline(
   combat: AtomicArenaCombat,
   owner?: ICombatUnit,
   friendlies?: ICombatUnit[],
+  opts?: {
+    /** keep the presses of a healer's throughput major on the offensive
+     * roster (`isHealerHeldOffensive`) — only for a reader that names them
+     * as not counted (the burst ledger's Solo note, user ruling R01
+     * 2026-11-08); every other reader leaves them out (fact11 D16) */
+    keepHealerHeldPresses?: boolean;
+  },
 ): IEnemyCDTimeline {
   const matchStartMs = combat.startTime;
   const matchDurationSeconds = (combat.endTime - matchStartMs) / 1000;
@@ -879,7 +886,8 @@ export function reconstructEnemyCDTimeline(
     // Avenging Wrath) is that healer's [ENEMY HEAL CD], no burst
     const isWindowSpell = (id: string) =>
       isEnemyCdWindowSpell(id, enemy.spec) &&
-      !isHealerHeldOffensive(id, enemy.spec);
+      (opts?.keepHealerHeldPresses === true ||
+        !isHealerHeldOffensive(id, enemy.spec));
     const presses = pressRowsWithHidden(enemy, isWindowSpell, matchStartMs);
     for (const cast of presses) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;

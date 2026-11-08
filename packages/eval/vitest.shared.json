@@ -15,6 +15,7 @@
     "test/backlashSilenceAndTopSourcesGate.test.ts",
     "test/behaviorPriorTable.test.ts",
     "test/buildCorpus.test.ts",
+    "test/burstSoloHealerHeldGate.test.ts",
     "test/burstTargetHpGate.test.ts",
     "test/burstWindowPriorTable.test.ts",
     "test/burstWindowRefGate.test.ts",
