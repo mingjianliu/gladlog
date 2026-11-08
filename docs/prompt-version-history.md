@@ -5648,3 +5648,20 @@ interval for an aura re-APPLIED with no REMOVED between. 605 reannounceSplit
 13,863 → 77 of 50,310; −8 phantom [ENEMY CD] lines; 0 menu rows. Batch
 verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
 the wave.
+
+v506 (2026-11-08, fact12 D19 D31, GH #139 item 2; pipeline batch B8).
+(1) fact12 D19: the [ENEMY DEF] channel clause's "damage they took" (Ultimate
+Penitence) reads `sumIncomingPressure`, so victim-sourced rows (a deferred
+Time Dilation tick, a reflected spell) count. (2) fact12 D31: at a death
+teardown the game logs the REMOVEDs, PARTY_KILL, then the lethal hit in one
+millisecond; the new shared `auraCloseRow` moves the close row past that hit
+for every `toRow` consumer. 605 damageBasis: channelTookBasis 93 views → 0,
+duringLethalHit 23 → 0, duringExternalShare 2 → 0; 0 findings files; 412
+context lines change (352 Penitence clauses, 60 during-it figures).
+(3) GH #139 item 2 (ruling R05, option B): a hunter's `UNIT_DIED
+unconscious=1` with no Survival Tactics aura is a Feign Death press in the
+cooldown ledger (605: +29 presses, 9 [RES] lines no longer call it ready on
+cooldown), but such a Feign Death is never a death save left unpressed:
+[DEATH] (Unused: Feign Death) 12 → 0 and [DEFENSIVE AVAILABLE] 3 → 0 against
+attempt 1; 0 menu rows. Batch verified on tests + codex (user 11-08); 605 /
+cover / wide run at the end of the wave.

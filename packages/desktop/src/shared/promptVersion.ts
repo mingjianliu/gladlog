@@ -962,4 +962,11 @@
  *  lasts 8 s; a re-announced aura is one interval for every reader. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 505;
+/*
+ * v506 (2026-11-08, fact12 D19 D31, GH #139 item 2; pipeline batch B8):
+ *  Ultimate Penitence's damage-taken basis reads the shared damage-taken
+ *  predicate; a death-teardown aura close row includes the lethal hit;
+ *  Feign Death without Survival Tactics is a ledger press but no unused
+ *  death save. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 506;
