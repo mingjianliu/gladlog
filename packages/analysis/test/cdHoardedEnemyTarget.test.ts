@@ -112,6 +112,27 @@ describe("enemyTargetReaches", () => {
     expect(enemyTargetReaches(KARMA, at("ww", 0), [], 20_000)).toBe(false);
   });
 
+  it("GH #141 (T25): an enemy in reach behind a pillar is no target; an unmapped zone does not falsify", () => {
+    // zone 1505's north pillar: centre (-2044.5, 6623.5), radius 4
+    const pos = (id: string, x: number, y: number) => {
+      const u = at(id, 0);
+      for (const a of (u as any).advancedActions) {
+        a.advancedActorPositionX = x;
+        a.advancedActorPositionY = y;
+      }
+      return u;
+    };
+    const ww = pos("ww", -2052, 6623.5);
+    const behind = pos("e", -2037, 6623.5); // 15 yd, through the pillar
+    const clear = pos("c", -2052, 6638.5); // 15 yd, open ground
+    expect(enemyTargetReaches(KARMA, ww, [behind], 20_000, "1505")).toBe(false);
+    expect(enemyTargetReaches(KARMA, ww, [behind, clear], 20_000, "1505")).toBe(
+      true,
+    );
+    expect(enemyTargetReaches(KARMA, ww, [behind], 20_000, "999999")).toBe(true);
+    expect(enemyTargetReaches(KARMA, ww, [behind], 20_000)).toBe(true);
+  });
+
   it("a spell that is not cast on an enemy is never gated here", () => {
     expect(
       enemyTargetReaches(DIVINE_SHIELD, at("p", 0, { samples: false }), [], 0),

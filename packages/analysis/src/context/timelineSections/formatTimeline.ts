@@ -145,6 +145,7 @@ export function formatTimeline(
     | "bracket"
     | "enemyPid"
     | "pressureWindowsNotListed"
+    | "params"
   >,
 ): string {
   const {
@@ -800,6 +801,7 @@ export function formatTimeline(
       unitNames,
       rosterSides,
       allUnits,
+      zoneId: ctx.params.zoneId,
     }),
   );
 

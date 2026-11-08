@@ -47,10 +47,7 @@ import {
   IMajorCooldownInfo,
   isHealerSpec,
 } from "../utils/cooldowns";
-import {
-  dampeningReadersAt,
-  getDampeningPercentage,
-} from "../utils/dampening";
+import { dampeningReadersAt, getDampeningPercentage } from "../utils/dampening";
 import { IDispelSummary } from "../utils/dispelAnalysis";
 import { IOutgoingCCChain } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
@@ -509,6 +506,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ownerCDs,
     teammateCDs,
     enemies: enemies ?? [],
+    zoneId: params.zoneId,
     matchStartMs,
     pid,
     playerIdMap,
@@ -1251,5 +1249,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     bracket,
     enemyPid,
     pressureWindowsNotListed: params.pressureWindowsNotListed,
+    params,
   });
 }

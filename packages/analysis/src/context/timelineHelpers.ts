@@ -2330,6 +2330,8 @@ export function buildKillSequenceBlock(params: {
   /** every unit of the round — the cannot-cast sources include pets (cc-dr
    * F-KS1); absent = players only */
   allUnits?: ReadonlyArray<{ id: string; ownerId?: string }>;
+  /** Arena zone id — `enemyTargetReaches`' line-of-sight test (GH #141). */
+  zoneId?: string;
 }): string[] {
   const {
     matchStartMs,
@@ -2337,6 +2339,7 @@ export function buildKillSequenceBlock(params: {
     owner,
     friends,
     enemies,
+    zoneId,
     ownerCDs,
     teammateCDs,
     enemyCDTimeline,
@@ -2545,6 +2548,7 @@ export function buildKillSequenceBlock(params: {
                 player as ICombatUnit,
                 enemies as ICombatUnit[],
                 matchStartMs + deathTime * 1000,
+                zoneId,
               )
             )
               return false;

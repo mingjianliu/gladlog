@@ -1001,14 +1001,17 @@ export function positionalWallReach(
  * `positionalWallReaches` and for the same consumers (cd-hoarded's
  * accusation set, the kill sequence's [DEFENSIVE AVAILABLE]) plus the
  * `[DEATH] (Unused: …)` list (codex round 7); a missing
- * position sample or an unknown reach fails CLOSED. Line of sight is not
- * checked.
+ * position sample or an unknown reach fails CLOSED. GH #141 item 5 (T25):
+ * the enemy must also be in line of sight — `hasLineOfSight` on the same two
+ * positions, falsified only (an unmapped arena, no `zoneId`, or a unit on an
+ * elevated structure reads `null` and passes), as `ccReachAt` reads it.
  */
 export function enemyTargetReaches(
   spellId: string,
   holder: ICombatUnit,
   enemies: readonly ICombatUnit[],
   atMs: number,
+  zoneId?: string,
 ): boolean {
   if (!ENEMY_TARGET_DEFENSIVE_IDS.has(spellId)) return true;
   const reach = spellReachForCaster(holder, spellId);
@@ -1017,7 +1020,11 @@ export function enemyTargetReaches(
   return enemies.some((e) => {
     if (isDeadAt(e, atMs)) return false;
     const b = getUnitPositionAtTime(e, atMs, LOS_SWEEP_GAP_MS);
-    return !!b && distanceBetween(a, b) <= reach;
+    return (
+      !!b &&
+      distanceBetween(a, b) <= reach &&
+      !(zoneId && hasLineOfSight(zoneId, a, b) === false)
+    );
   });
 }
 

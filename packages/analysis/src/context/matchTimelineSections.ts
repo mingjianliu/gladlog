@@ -936,6 +936,8 @@ export function emitFriendlyDeathEntries<S>(params: {
    * "Unused" only with a living enemy in reach (`enemyTargetReaches`).
    * Omitted → none in reach, so such a defensive is never listed. */
   enemies?: readonly ICombatUnit[];
+  /** Arena zone id — `enemyTargetReaches`' line-of-sight test (GH #141). */
+  zoneId?: string;
   matchStartMs: number;
   pid: (name: string) => string;
   playerIdMap?: Map<string, number>;
@@ -986,6 +988,7 @@ export function emitFriendlyDeathEntries<S>(params: {
     ownerCDs,
     teammateCDs,
     enemies = [],
+    zoneId,
     matchStartMs,
     pid,
     playerIdMap,
@@ -1114,6 +1117,7 @@ export function emitFriendlyDeathEntries<S>(params: {
             dyingUnit,
             enemies as ICombatUnit[],
             matchStartMs + death.atSeconds * 1000,
+            zoneId,
           ),
         )
         // B-tier B3a (user ruling 2026-10-06): a school-limited save is

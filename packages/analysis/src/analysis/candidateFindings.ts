@@ -4277,6 +4277,7 @@ function teamPlayEvents(
               owner,
               enemies,
               combat.startTime + tSec * 1000,
+              combat.startInfo?.zoneId,
             ),
         ),
       );
