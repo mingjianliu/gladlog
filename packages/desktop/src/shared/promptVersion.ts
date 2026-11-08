@@ -948,4 +948,12 @@
  *  after it; Touch of Karma counts as ready only with an in-reach enemy in
  *  line of sight. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 503;
+/*
+ * v504 (2026-11-08, fact12 D18 A15/B19 D8 D22, GH #173.3; pipeline batch B6):
+ *  [RES] death cut ends an enemy effect only when no copy outlives it; HP
+ *  read across a max-HP step up reads over the new max; a silenced target is
+ *  no "not CC'd" second; an interrupted channel's [BUFF FADED] is no expiry;
+ *  a Solo burst notes a healer's Avenging Wrath. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 504;

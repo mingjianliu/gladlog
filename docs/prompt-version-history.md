@@ -5613,3 +5613,24 @@ item 5 (user ruling 11-08: official 20 yd reach plus line of sight):
 sight; unknown line of sight still counts. 605: 0 of 7,400 menu rows and 0
 context lines change. Batch verified on tests + codex (user 11-08); 605 /
 cover / wide run at the end of the wave.
+
+v504 (2026-11-08, fact12 D18 A15/B19 D8 D22, GH #173.3; pipeline batch B6).
+(1) fact12 D18: the [RES] death cut ends an enemy effect only for the caster's
+own death or the Solo Shuffle round's end, and only when no copy the caster
+put on any unit (pets included) outlives cut + 100 ms (`casterAuraOutlives`,
+shared with the scan). 605 resEnemyEffectAfterDeath: holder dead 764 → 23,
+round over 692 → 515; the B1 regression (an enemy press in the death's own
+second) stays 0; findings 0 changed. (2) fact12 A15/B19: an HP row read across
+a max-HP step up reads over the new max; heals between two HP rows are read
+in the log's line order inside one millisecond (`loggedBetween`, one predicate
+for every reader). 605 hpStaleMaxStepUp 2093 → 0; candidate delta exactly
+ruling R02 (+1 position-mistake 3e26e29c r1 t=82, −1 backlash-dispel
+cf63da4a r0 t=103.5). (3) fact12 D8: a silenced target is no "not CC'd"
+second for [CC BOOKMARK] / [PEEL OPTION]; checkCcSuggestionInsideSilence
+49 → 0. (4) GH #173.3: an interrupted channel's [BUFF FADED] prints "ended
+after N of M s — the channel stopped", not an expiry;
+checkChannelInterruptedFadeExpired 18 → 0. (5) fact12 D22 (ruling R01): a
+Solo burst line a healer's Avenging Wrath overlapped says
+`(a healer's Avenging Wrath is not counted)`; checkBurstSoloHealerHeldNote
+40 → 0. Batch verified on tests + codex (user 11-08); 605 / cover / wide run
+at the end of the wave.
