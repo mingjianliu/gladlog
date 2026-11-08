@@ -90,6 +90,43 @@ describe("channelTargetClause", () => {
       ),
     ).toBe("");
   });
+  it("a save that is no channel says nothing: Blazing Barrier's reactive hits are no bolts (pipeline T02, fact12 D15 / D24)", () => {
+    const mage: any = {
+      id: "e1",
+      name: "Mage-R-US",
+      spellCastEvents: [
+        {
+          spellId: "235313",
+          spellName: "Blazing Barrier",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 45_040,
+          },
+        },
+      ],
+    };
+    const meleeAttacker: any = {
+      id: "f1",
+      name: "Dk-R-US",
+      damageIn: [hit(45.5, "e1", "235314", "Blazing Barrier", 1_500)],
+      absorbsIn: [],
+    };
+    expect(
+      channelTargetClause(
+        mage,
+        {
+          spellId: "235313",
+          atSeconds: 45.04,
+          pressSeconds: 45.04,
+          observedSeconds: 1.39,
+        },
+        [meleeAttacker],
+        T0,
+        T0 + 200_000,
+        (n) => n,
+      ),
+    ).toBe("");
+  });
   it("clipped at the round's end", () => {
     expect(
       channelTargetClause(enemy, d, [target], T0, T0 + 71_500, (n) => n),

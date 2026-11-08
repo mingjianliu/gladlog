@@ -11,7 +11,10 @@ import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
 import { isNotMajorDefensive } from "../data/abilityProfile";
 import { ownEffectAurasOfCast } from "../data/castEffectAuras";
-import { HASTE_DURATION_SPELL_IDS } from "../data/channeledGenerated";
+import {
+  CHANNELED_SPELL_IDS,
+  HASTE_DURATION_SPELL_IDS,
+} from "../data/channeledGenerated";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
@@ -482,6 +485,18 @@ export const CHANNELED_CD_SPELL_IDS = new Set<string>([
   "1257052", // Dark Harvest (Warlock): 1.7–2.1 s runs; the kick lands after its
   // SUCCESS row (129-5-742 0:22), 77 of 283 read "ended early" on the 605
 ]);
+
+/** Is this press a channel — DB2's channel attribute (`CHANNELED_SPELL_IDS`),
+ * or a channelled cooldown whose press id is the aura beside its channel
+ * (`CHANNELED_CD_SPELL_IDS`: Ultimate Penitence's 421453 is the shield, its
+ * channel 421434)? The `[ENEMY DEF]` / `[ENEMY CD]` "its bolts hit" clause
+ * reads it (pipeline T02, fact12 D15: Blazing Barrier's reactive hits read
+ * as channel bolts), and so does its gate, scan5 `t02`. */
+export function isChannelledPress(spellId: string): boolean {
+  return (
+    CHANNELED_SPELL_IDS.has(spellId) || CHANNELED_CD_SPELL_IDS.has(spellId)
+  );
+}
 
 /** A buff whose length moves with haste: a channel, or an aura DB2 marks so
  * (`HASTE_DURATION_SPELL_IDS`; fact8 D38, a39539f2 2:26: a full Bladestorm

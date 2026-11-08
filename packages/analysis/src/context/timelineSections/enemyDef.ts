@@ -57,6 +57,7 @@ import {
   selfDefensiveLabelWords,
   selfDefensiveMechanism,
 } from "../../utils/selfDefensiveMechanism";
+import { isChannelledPress } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
 
 const ULTIMATE_PENITENCE_ID = "421453";
@@ -453,8 +454,9 @@ export function emitEnemyDefEntries(
  * that player took in the same span — the damage-taken predicate
  * `sumIncomingPressure` (fact12 D19, 66bd381b 1:40: the rogue's own
  * deferred Time Dilation landing, 149k, and a warlock's own reflected
- * Wither were left out, 556k printed for 705k). Nothing when the SUCCESS
- * names no friendly or no such damage landed.
+ * Wither were left out, 556k printed for 705k). Nothing when the save is
+ * no channel (`isChannelledPress`), or the SUCCESS names no friendly or no
+ * such damage landed.
  * @internal exported for tests
  */
 export function channelTargetClause(
@@ -478,6 +480,12 @@ export function channelTargetClause(
   sides?: RosterSides,
 ): string {
   if (d.observedSeconds === undefined) return "";
+  // a channel's clause (the legend's "a save that is a channel"): a
+  // reactive or pulsing self-save is none — Blazing Barrier's 235314 hits on
+  // a melee attacker read as its bolts (pipeline T02, fact12 D15, 60bfdea9),
+  // and its talent's Overpowered Barrier pulse 1220755 under another name
+  // was left out of them (D24 / D25, bd7f386f: 2k printed for ~46k)
+  if (!isChannelledPress(d.spellId)) return "";
   const pressMs =
     matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000);
   const cast = (enemy.spellCastEvents ?? []).find(

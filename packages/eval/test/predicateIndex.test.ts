@@ -2421,6 +2421,11 @@ const INDEX: PredicateRow[] = [
     mod: castCommitSpans,
   },
   {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "isChannelledPress",
+    mod: timelineHelpers,
+  },
+  {
     file: `${A}/utils/castCommitSpans.ts`,
     symbol: "CHANNEL_AURA_TAIL",
     mod: castCommitSpans,
