@@ -5585,3 +5585,18 @@ closure); cover set: 3 [ENEMY DEF] lines gain the tag, 0 menu changes.
 (3) GH #134 (c) was already fixed at PV394: a pin test only. Batch verified
 on tests + codex (user 11-08); the 605 / cover / wide verification runs at
 the end of the wave.
+
+v502 (2026-11-08, fact12 D30 D28; pipeline batch B4). (1) fact12 D30: new
+shared predicate `castMissRows.isTwinMissRow` (same miss type within
+CAST_MISS_LEAD_MS, or the same English name in one rendered second, as
+Intimidation 24394 + 474421); `aimedControlsForKit` dedupes twins, so the
+ENEMY CC KIT header's 'aimed at you / them N×' counts presses, and the
+[CC NOT LANDED] fold reads the same predicate. Cover set: 3 KIT lines
+(Maim 2× → 1×), 0 menu changes. (2) fact12 D28: backlash-dispel decision
+points take only a deliberate dispel (`isDeliberateDispel`, the predicate
+[MINOR DISPELS] folds on); a rider removal such as Fortifying Brew's side
+effect ends the decision with no row. New gate
+`checkBacklashDispelWasPressed`, which checks every backlash candidate's
+context (605: 43/43). 605: the 61 backlash rows are unchanged; the round-12
+repro row (cf63da4a r0, UA t=103.5) goes. Batch verified on tests + codex
+(user 11-08); 605 / cover / wide run at the end of the wave.

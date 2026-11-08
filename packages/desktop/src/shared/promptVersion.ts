@@ -937,4 +937,9 @@
  *  carries [friendly offensive CD active]. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 501;
+/*
+ * v502 (2026-11-08, fact12 D30 D28; pipeline batch B4): the enemy CC kit
+ *  counts presses, not miss rows (one shared isTwinMissRow); backlash-dispel
+ *  reads only a deliberate dispel. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 502;
