@@ -956,4 +956,10 @@
  *  a Solo burst notes a healer's Avenging Wrath. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 504;
+/*
+ * v505 (2026-11-08, fact12 D29, GH #123.2 #136.3; pipeline batch B7): a
+ *  root's own summon GUID names its owner; Anti-Magic Zone under Assimilation
+ *  lasts 8 s; a re-announced aura is one interval for every reader. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 505;

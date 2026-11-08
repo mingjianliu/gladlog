@@ -5634,3 +5634,17 @@ Solo burst line a healer's Avenging Wrath overlapped says
 `(a healer's Avenging Wrath is not counted)`; checkBurstSoloHealerHeldNote
 40 → 0. Batch verified on tests + codex (user 11-08); 605 / cover / wide run
 at the end of the wave.
+
+v505 (2026-11-08, fact12 D29, GH #123.2 #136.3; pipeline batch B7).
+(1) fact12 D29: `[ROOT] … (from X's totem)` resolves the owner from the root
+aura's own source GUID, not the first same-named summon on the side (two
+shamans on one team). (2) GH #123.2: Assimilation 374383 adds 2 s to
+Anti-Magic Zone (DB2 row 1245953, aura 107, mask covers 51052 / 145629;
+605 holders 7 of 17 at 8 s, non-holders 0 of 265 past 6 s). New scan5
+module fact12c: rootSummonOwner 3/302 → 0/302, kitLastsUnderAreaAura
+17/1014 → 0/1014 on 605; 0 findings files changed. (3) GH #136.3 (ruling R06):
+the re-announce join moves into `buildAuraIntervals`, so every reader sees one
+interval for an aura re-APPLIED with no REMOVED between. 605 reannounceSplit
+13,863 → 77 of 50,310; −8 phantom [ENEMY CD] lines; 0 menu rows. Batch
+verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
+the wave.
