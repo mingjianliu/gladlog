@@ -119,6 +119,7 @@
     "test/ccNotLanded.test.ts",
     "test/ccOnEnemyEnds.test.ts",
     "test/ccRefreshed.test.ts",
+    "test/ccSamplerSilence.test.ts",
     "test/ccTrinketAnalysis.test.ts",
     "test/ccUnloggedEnd.test.ts",
     "test/cdAvailableAt.test.ts",

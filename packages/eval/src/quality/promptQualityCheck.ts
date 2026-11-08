@@ -188,6 +188,7 @@ import {
   DEATH_BREAKABLE_CC_LOOKBACK_S,
   DEATH_BREAKABLE_CC_MIN_S,
   DEATH_CUT_CC_TAG_RE_SRC,
+  renderedCcSpanSeconds,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { spanHoldsGhostSecond } from "@gladlog/analysis/src/utils/combatStates";
 import {
@@ -3142,6 +3143,92 @@ export function checkCcSuggestionInsideImmunity(lines: string[]): string[] {
     if (hit)
       failures.push(
         `line ${i + 1}: ${b ? "[CC BOOKMARK]" : "[PEEL OPTION]"} ${fmtTime(from)}–${fmtTime(to)} 说 ${target} 不免疫,但 ${fmtTime(Math.max(from, hit.from))} 起它在 [ENEMY DEF] 的 ${hit.name}(完全免疫)里 —— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
+/** A `[SILENCE]` line: `m:ss  [SILENCE]   <pid> ← <spell> (by …) | Ns…`, or
+ * its trinket form `… | trinket broke this silence after Ns (cut short …)`. */
+const SILENCE_LINE_HEAD = /^\s*(\d+):(\d{2})\s+\[SILENCE\]\s+(\S+) ← (.+?) \(/;
+const SILENCE_TRINKET_AFTER = /trinket broke this silence after (<1|\d+)s\b/;
+
+/**
+ * HardFailure class (fact12 D8, 3e1f5c3a r0): a `[CC BOOKMARK]` or
+ * `[PEEL OPTION]` says its target was "not CC'd" on every second of its span
+ * (`ccSamplerFor`), and the same prompt counts a silence as control — its
+ * `[SILENCE]` line, and `[CONSEQ] enemy healer … in Spider Venom (silence)`.
+ * So no second of a bookmark's span may be one a `[SILENCE]` line on that
+ * target covers. A peel option's span runs from its first usable second to
+ * its last (`peelOptions.ts`): its two ends may not be covered, and its
+ * `usable N s` may not exceed the span's seconds less the covered ones. 3e1f5c3a P:488 `0:48–0:56 [CC BOOKMARK] Storm Bolt → 6(DPriest): …
+ * their healer was not CC'd` under `0:50 [SILENCE] 6(DPriest) ← Spider Venom
+ * … | 3s`.
+ *
+ * Read off the rendered grid only: the silence began somewhere in its
+ * printed second `a` and its printed length `n` (whole seconds, `<1` = 0) is
+ * its length to within a second, so it overlaps every second `a … a+max(n,1)−1`
+ * whatever the fractions (the sampler's test: any overlap with `[s, s+1)`).
+ */
+export function checkCcSuggestionInsideSilence(lines: string[]): string[] {
+  const spans = new Map<
+    string,
+    Array<{ name: string; from: number; to: number }>
+  >();
+  for (const line of lines) {
+    const m = line.match(SILENCE_LINE_HEAD);
+    if (!m) continue;
+    const a = Number(m[1]) * 60 + Number(m[2]);
+    const t = line.match(SILENCE_TRINKET_AFTER)?.[1];
+    const n =
+      t !== undefined
+        ? t === "<1"
+          ? 0
+          : Number(t)
+        : renderedCcSpanSeconds(line.slice(line.indexOf(") |") + 1));
+    if (n === undefined) continue;
+    const covered = { name: m[4]!, from: a, to: a + Math.max(n, 1) - 1 };
+    spans.set(m[3]!, [...(spans.get(m[3]!) ?? []), covered]);
+  }
+  if (spans.size === 0) return [];
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const b = CC_BOOKMARK_DATA_LINE.test(line)
+      ? line.match(CC_BOOKMARK_LINE)
+      : null;
+    const p = !b && PEEL_DATA_LINE.test(line) ? line.match(PEEL_LINE) : null;
+    const m = b ?? p;
+    if (!m) return;
+    const from = Number(m[1]) * 60 + Number(m[2]);
+    const to = Number(m[3]) * 60 + Number(m[4]);
+    const target = b ? b[6]! : p![7]!;
+    const onTarget = spans.get(target) ?? [];
+    if (b) {
+      // a bookmark's span is "not CC'd" on every second of it
+      const hit = onTarget.find((s) => s.from <= to && s.to >= from);
+      if (hit)
+        failures.push(
+          `line ${i + 1}: [CC BOOKMARK] ${fmtTime(from)}–${fmtTime(to)} 说 ${target} 没被控,但 ${fmtTime(Math.max(from, hit.from))} 它在 [SILENCE] 的 ${hit.name} 里 —— ${line.trim().slice(0, 140)}`,
+        );
+      return;
+    }
+    // a peel option's span runs from its first usable second to its last
+    // (`peelOptions.ts`); the seconds between need not all be usable, so its
+    // two ends must lie outside every silence and its `usable N s` may not
+    // count a silenced second
+    const silenced = new Set<number>();
+    let name = "";
+    for (const s of onTarget)
+      for (let x = Math.max(s.from, from); x <= Math.min(s.to, to); x++) {
+        silenced.add(x);
+        name ||= s.name;
+      }
+    if (silenced.size === 0) return;
+    const usable = Number(p![8]);
+    const end = silenced.has(from) ? from : silenced.has(to) ? to : null;
+    if (end !== null || usable > to - from + 1 - silenced.size)
+      failures.push(
+        `line ${i + 1}: [PEEL OPTION] ${fmtTime(from)}–${fmtTime(to)} 把 ${target} 在 [SILENCE] 的 ${name} 里的秒算成可用(${end !== null ? `端点 ${fmtTime(end)} 被沉默` : `usable ${usable} s > ${to - from + 1} − ${silenced.size} 秒沉默`})—— ${line.trim().slice(0, 140)}`,
       );
   });
   return failures;
@@ -8686,6 +8773,7 @@ export function checkMatch(
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkCcSuggestionInsideImmunity(lines));
+  hardFailures.push(...checkCcSuggestionInsideSilence(lines));
   hardFailures.push(...checkCcUseStartedCounts(lines));
   hardFailures.push(...checkCastStoppedLines(lines));
   hardFailures.push(...checkKickEatenCancelsCoverCastStopped(lines));

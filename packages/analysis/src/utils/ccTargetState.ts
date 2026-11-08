@@ -42,7 +42,10 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
-import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
+import {
+  cannotCastIntervalsForSpells,
+  enemySourceIds,
+} from "./cannotCastIntervals";
 import { castingLockIntervalsOf } from "./castingLocks";
 import {
   applicableCCAvoidanceIds,
@@ -88,6 +91,7 @@ import {
   mechanicStateOf,
 } from "./spellMechanics";
 import { ccThreatReachYards } from "./spellRange";
+import { silenceIntervalsInRound } from "./unloggedSilence";
 
 export type CcTargetState =
   | {
@@ -364,6 +368,16 @@ export function ccSamplerFor(params: {
     iv.fromS < s + 1 && s < iv.toS;
   const castSeconds = new Set(cd.casts.map((c) => Math.floor(c.timeSeconds)));
 
+  const roundEndAtMs = roundEndMs(combat);
+  const allUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
+  /** The players of the side that is not `t`'s, with their summons — the
+   * attackers a `[SILENCE]` line on `t` is read from (`emitSilenceEntries`:
+   * friends for an enemy victim, enemies for a friendly one). */
+  const otherSideOf = (t: ICombatUnit) =>
+    enemySourceIds(
+      allUnits.filter((u) => u.info && u.reaction !== t.reaction),
+      allUnits,
+    );
   const perTarget = new Map<
     string,
     {
@@ -381,10 +395,24 @@ export function ccSamplerFor(params: {
     if (!f) {
       const auras = buildAuraIntervals(t, combat);
       const cc = auras.filter((iv) => ccSpellIds.has(iv.spellId));
-      const rendered = (params.renderedCcOf?.(t.name) ?? []).map((c) => ({
-        fromS: c.atSeconds,
-        toS: c.atSeconds + c.durationSeconds,
-      }));
+      const rendered = [
+        ...(params.renderedCcOf?.(t.name) ?? []).map((c) => ({
+          fromS: c.atSeconds,
+          toS: c.atSeconds + c.durationSeconds,
+        })),
+        // fact12 D8 (3e1f5c3a r0 0:48–0:56): the silences the target's
+        // `[SILENCE]` lines print — the same reading
+        // (`silenceIntervalsInRound` from the other side and its summons,
+        // cut at the round's end) — are control too: the prompt's
+        // `[CONSEQ]` counts Spider Venom on the enemy healer as it, and a
+        // bookmark read the healer as "not CC'd" through it
+        ...silenceIntervalsInRound(t, otherSideOf(t), roundEndAtMs).map(
+          (x) => ({
+            fromS: (x.from - start) / 1000,
+            toS: (Math.min(x.to, roundEndAtMs) - start) / 1000,
+          }),
+        ),
+      ];
       f = {
         death: deathS(t),
         cc,

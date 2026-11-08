@@ -4781,6 +4781,11 @@ const INDEX: PredicateRow[] = [
     mod: promptQualityCheck,
   },
   {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcSuggestionInsideSilence",
+    mod: promptQualityCheck,
+  },
+  {
     file: `${A}/context/ccUse.ts`,
     symbol: "ccUseSummary",
     mod: ccUse,
