@@ -457,7 +457,12 @@ describe("auraOnlyActivationSeconds: Feign Death 5384 from its unconscious row",
       "player-1",
       "BUFF",
     );
-  const hunter = (over: { auraEvents?: any[]; unconsciousRecords?: any[] }) =>
+  const hunter = (
+    over: Pick<
+      NonNullable<Parameters<typeof makeUnit>[1]>,
+      "auraEvents" | "unconsciousRecords"
+    >,
+  ) =>
     makeUnit("player-1", {
       class: CombatUnitClass.Hunter,
       spec: CombatUnitSpec.Hunter_Marksmanship,

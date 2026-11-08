@@ -131,7 +131,7 @@ describe("channelTargetClause", () => {
     // the rogue's own deferred Time Dilation tick lands as self → self
     // damage; a reflected spell is logged as the victim's own; Time
     // Dilation's SPELL_ABSORBED only held the hit back
-    const rogue: any = {
+    const rogue = {
       id: "f1",
       name: "Rogue-R-US",
       damageIn: [
@@ -151,7 +151,7 @@ describe("channelTargetClause", () => {
           absorbedAmount: 90_000,
         },
       ],
-    };
+    } as never;
     expect(
       channelTargetClause(enemy, d, [rogue], T0, T0 + 200_000, (n) => n),
     ).toBe(
