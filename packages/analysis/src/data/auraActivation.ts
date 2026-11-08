@@ -101,7 +101,9 @@ export const AURA_ONLY_ACTIVATION_IDS: Record<string, string[]> = {
   // the library; 7,240 SPELL_CAST_FAILED in the every-6 archive) — Survival
   // Tactics 202748 (PvP talent 202746), self-applied at the feign, is the
   // evidence: 20,704 activations in the every-6 archive, 20,166 with the aura
-  // (A9-EVIDENCE §3). Hunters without Survival Tactics stay invisible here.
+  // (A9-EVIDENCE §3). A hunter without Survival Tactics leaves only
+  // `UNIT_DIED … unconscious=1`, which `auraOnlyActivationSeconds` reads for
+  // this key (GH #139 item 2); the absorb table keys on the aura alone.
   "5384": ["202748"],
   // Blessing of Sacrifice (Paladin, 120 s): a caster whose presses log no
   // SPELL_CAST_SUCCESS at all — the press shows as its pair of 6940 auras,

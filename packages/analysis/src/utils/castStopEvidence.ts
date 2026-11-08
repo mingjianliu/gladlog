@@ -137,12 +137,20 @@ const FEIGN_DEATH_CAST_ID = "5384";
  * reader of cast rows can see one. 91 fact7 files: 456 such UNIT_DIED rows,
  * all on 39 hunters, 28 of them with no aura beside them (fact7 D31).
  */
+/** The `UNIT_DIED … unconscious=1` rows of `unit` (epoch ms): every Feign
+ * Death writes one, with or without Survival Tactics. */
+export function feignDeathUnconsciousMs(
+  unit: Pick<ICombatUnit, "unconsciousRecords">,
+): number[] {
+  return (unit.unconsciousRecords ?? []).map((r) => r.timestamp);
+}
+
 export function feignDeathInstantsMs(
   unit: Pick<ICombatUnit, "auraEvents" | "unconsciousRecords">,
 ): number[] {
   const auras = AURA_ONLY_ACTIVATION_IDS[FEIGN_DEATH_CAST_ID] ?? [];
   return [
-    ...(unit.unconsciousRecords ?? []).map((r) => r.timestamp),
+    ...feignDeathUnconsciousMs(unit),
     ...(unit.auraEvents ?? [])
       .filter(
         (a) =>

@@ -436,3 +436,63 @@ describe("auraOnlyActivationSeconds: aura-only activation (Ascendance 114052)", 
     expect(auraOnlyActivationSeconds(owner, "114052", 0)).toEqual([]);
   });
 });
+
+/**
+ * GH #139 item 2 (pipeline T24): every Feign Death writes `UNIT_DIED …
+ * unconscious=1`; only a hunter with Survival Tactics also gets the 202748
+ * aura. Without the PvP talent the unconscious row is the only trace, and the
+ * ledger read Feign Death as never pressed.
+ */
+describe("auraOnlyActivationSeconds: Feign Death 5384 from its unconscious row", () => {
+  const unconscious = (ms: number) => ({
+    logLine: { event: "UNIT_DIED", timestamp: ms, parameters: [] },
+    timestamp: ms,
+  });
+  const st = (ms: number) =>
+    makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      "202748",
+      ms,
+      "player-1",
+      "player-1",
+      "BUFF",
+    );
+  const hunter = (over: { auraEvents?: any[]; unconsciousRecords?: any[] }) =>
+    makeUnit("player-1", {
+      class: CombatUnitClass.Hunter,
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      info: { talents: [], pvpTalents: [] },
+      spellCastEvents: [],
+      ...over,
+    });
+
+  it("no Survival Tactics: each unconscious row is a press", () => {
+    const u = hunter({
+      unconsciousRecords: [unconscious(20_000), unconscious(55_000)],
+    });
+    expect(auraOnlyActivationSeconds(u, "5384", 0)).toEqual([20, 55]);
+    const fd = extractMajorCooldowns(u, {
+      startTime: 0,
+      endTime: 120_000,
+      units: { "player-1": u },
+    } as unknown as AtomicArenaCombat).find((cd) => cd.spellId === "5384");
+    expect(fd).toBeDefined();
+    expect(fd!.casts.map((c) => c.timeSeconds)).toEqual([20, 55]);
+  });
+
+  it("with Survival Tactics: the aura and the row of one feign are one press", () => {
+    const u = hunter({
+      auraEvents: [st(20_000)],
+      unconsciousRecords: [unconscious(20_004), unconscious(55_000)],
+    });
+    expect(auraOnlyActivationSeconds(u, "5384", 0)).toEqual([20, 55]);
+  });
+
+  it("a row after the round's end is no press of this round; other spells never read it", () => {
+    const u = hunter({
+      unconsciousRecords: [unconscious(20_000), unconscious(95_000)],
+    });
+    expect(auraOnlyActivationSeconds(u, "5384", 0, 90_000)).toEqual([20]);
+    expect(auraOnlyActivationSeconds(u, "186265", 0)).toEqual([]);
+  });
+});

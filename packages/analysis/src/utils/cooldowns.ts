@@ -99,6 +99,7 @@ import {
 } from "./castMissRows";
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
+import { feignDeathUnconsciousMs } from "./castStopEvidence";
 import { isStasisReplayCast } from "./combatStates";
 import { interruptPressCooldownSeconds } from "./enemyInterrupts";
 import { hiddenPressMs, isPressVariantOf } from "./hiddenPress";
@@ -4253,8 +4254,29 @@ export function auraOnlyActivationSeconds(
       upSince.set(a.spellId, a.timestamp);
     }
   }
+  // GH #139 item 2 (T24): a Feign Death leaves `UNIT_DIED … unconscious=1`
+  // whether or not the hunter has Survival Tactics (`unconsciousRecords`,
+  // `feignDeathUnconsciousMs` — the row `feignDeathInstantsMs` reads too);
+  // without the PvP talent it is the only trace of the press. One feign, one
+  // press: a row within FEIGN_DEATH_ROW_PAIR_MS of an aura-read one is it.
+  if (spellId === FEIGN_DEATH_CAST_ID) {
+    for (const ms of feignDeathUnconsciousMs(unit)) {
+      if (ms > roundEndMs) continue;
+      const t = (ms - matchStartMs) / 1000;
+      if (out.some((x) => Math.abs(x - t) * 1000 <= FEIGN_DEATH_ROW_PAIR_MS))
+        continue;
+      out.push(t);
+    }
+    out.sort((a, b) => a - b);
+  }
   return out;
 }
+
+/** Feign Death's cast id — its press is never logged as a SUCCESS. */
+const FEIGN_DEATH_CAST_ID = "5384";
+/** The Survival Tactics APPLIED and the `UNIT_DIED … unconscious=1` row of
+ * one feign share their instant; a second of slack for log ordering. */
+export const FEIGN_DEATH_ROW_PAIR_MS = 1000;
 
 /** How long after an aura-evidenced press a second APPLIED of the same buff,
  * with no REMOVED between, is read as the buff extended (Doom Winds' +7 s)
