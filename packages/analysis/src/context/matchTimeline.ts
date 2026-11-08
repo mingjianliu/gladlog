@@ -803,6 +803,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     actorLabel,
     addEntry,
     _allUnits,
+    rosterSides,
     extendEnemyCdLine: (head, text) => {
       for (const e of entries) {
         const i = e.lines.findIndex(

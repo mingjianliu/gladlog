@@ -180,6 +180,32 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     expect(cut).toMatchObject({ nDirect: 10_000, nPeriodic: 0 });
   });
 
+  it("fact12 D31: the hit that killed the holder, logged after the removal its death tore down, is under the aura", () => {
+    // f13566f0 r0 11:51:37.841: the Obsidian Scales copy's REMOVED, twenty
+    // more removals, PARTY_KILL, then the killing Bladestorm — one ms
+    const at = (row: any, lineIndex: number) => ({ ...row, logLine: { ...row.logLine, lineIndex } });
+    // each holder its own stream, as each unit has (the interval cache
+    // keys on the stream)
+    const ps = () => [
+      at(aura(PAIN_SUPPRESSION, "Pain Suppression", "E2", "E1", 20, LogEvent.SPELL_AURA_APPLIED), 10),
+      at(aura(PAIN_SUPPRESSION, "Pain Suppression", "E2", "E1", 28, LogEvent.SPELL_AURA_REMOVED), 50),
+    ];
+    const blow = (overkill: number | undefined, atS = 28) => ({
+      ...at(dmg(LogEvent.SPELL_DAMAGE, atS, "E1", 29_000), 60),
+      srcUnitId: "A1",
+      ...(overkill ? { overkill } : {}),
+    });
+    const run = (row: any) => {
+      const holder = { ...enemy("E1", ps()), damageIn: [row] };
+      return externalDamageObservations(holder, [ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 10_000), row])], [holder], combat)[0];
+    };
+    expect(run(blow(2_327))).toMatchObject({ nDirect: 39_000 });
+    // a hit with no overkill after the REMOVED row is still past it
+    expect(run(blow(undefined))).toMatchObject({ nDirect: 10_000 });
+    // a killing blow in a later millisecond is past it too
+    expect(run(blow(2_327, 28.001))).toMatchObject({ nDirect: 10_000 });
+  });
+
   it("fact9 D15: a control the target refused is no immune hit (Binding Shot's stun into a wall)", () => {
     const BOP = "1022";
     const bop = enemy("E1", [

@@ -58,6 +58,21 @@
  *  - `stackedWallPrice` (D77): a `[STACKED DEFENSIVES]` percentage price
  *    against (landed + absorbed) × b / (1 − b). 831c3fd5 0:23: ~6 % printed,
  *    ~20 % true.
+ *  - `duringLethalHit` (fact12 D31): the `Nk on target` of a `| during it:`
+ *    segment whose window ends at a REMOVED row the target's death tore
+ *    down — a hit with overkill on it logged after that row in its
+ *    millisecond (`auraCloseRow`) — against the landed rows on the target
+ *    up to and including that hit. f13566f0 r0 11:51:37.841: Obsidian
+ *    Scales' copy REMOVED, then the killing Bladestorm (28.8k landed);
+ *    `0k on target` printed. Counted: every such segment.
+ *  - `channelTookBasis` (fact12 D19): the `Mk damage they took over it` of
+ *    an Ultimate Penitence line, against every landed (redistribution
+ *    left out) and absorbed (deferral shields left out) row on that player
+ *    from the press for the caster's aura's length, cut at the round's end
+ *    (`roundEndMs`), the player's own rows too — a deferred Time
+ *    Dilation tick lands as self → self damage and a reflected spell as the
+ *    victim's own. 66bd381b r0 1:40: 556k printed, 705k on the rows.
+ *    Counted: every such clause.
  */
 import {
   resolveMitigation,
@@ -76,9 +91,11 @@ import {
   MELEE_RANGE_YD,
   spellRangeYards,
 } from "@gladlog/analysis/src/data/spellReach";
+import { auraCloseRow } from "@gladlog/analysis/src/utils/auraIntervals";
 import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
 import { immunityStopsSpellSchool } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
   ABSORBED,
@@ -101,6 +118,8 @@ export const CHECKS = [
   "abilityIntoWallShare",
   "postCcAbsorbedUnsaid",
   "stackedWallPrice",
+  "duringLethalHit",
+  "channelTookBasis",
 ] as const;
 
 export const DEFERRAL_SHIELDS = new Set(["357170", "410355", "386124"]);
@@ -177,6 +196,7 @@ const ENEMY_DEF_EXTERNAL =
 const ENEMY_DEF_CASTER = /\[ENEMY DEF\]\s+(\d+)\(/;
 const DURING_SHARE =
   /^(\d+)\([^)]*\) \d+k on target(?: \([^)]*\))? · (\d+)% of their enemy-player damage/;
+const DURING_ON_TARGET = /^(\d+)\([^)]*\) (\d+)k on target/;
 
 function duringExternalShare(ctx: IRoundCtx): void {
   const enemies = ctx.players.filter((p) => p.reaction !== ctx.owner.reaction);
@@ -258,11 +278,34 @@ function duringExternalShare(ctx: IRoundCtx): void {
       if (!ally) continue;
       const src = attackersOf(ctx, ally);
       const toMs = Math.min(wallTo, deathMs(ally));
-      // the window ends at the REMOVED row itself, not its millisecond
+      // the window ends at the REMOVED row itself, not its millisecond —
+      // past a lethal hit its death teardown logged after it (the
+      // product's `auraCloseRow`)
       const close: CloseRow =
         toMs === removed && removedIx !== undefined
-          ? { ms: removed, lineIndex: removedIx }
+          ? auraCloseRow(removedRow.logLine, target)
           : undefined;
+      // the close moved past the REMOVED row: a lethal hit after it
+      const lethalAfterRemoval =
+        close !== undefined &&
+        removedIx !== undefined &&
+        close.lineIndex > removedIx;
+      const ot = DURING_ON_TARGET.exec(seg);
+      if (lethalAfterRemoval && ot) {
+        ctx.bump("duringLethalHit");
+        const truthK = Math.round(
+          landedOn(target, fromMs, toMs, src, close) / 1000,
+        );
+        if (Math.abs(truthK - +ot[2]!) > 1)
+          ctx.violate(
+            "duringLethalHit",
+            +ot[2]! < truthK ? "dropped" : "high",
+            removed!,
+            `${m[3]}#${m[1]}:${m[2]}#${ally.name}`,
+            `${ally.name} on ${target.name}: printed ${ot[2]}k on target, rows ${truthK}k through the lethal hit after the REMOVED row`,
+            line.slice(0, 200),
+          );
+      }
       // signed: a negative Fel Armor row is the other half of a shield's
       // overstated row on one hit (7308d15a r2 1:16: a 350 tick logged Fel Armor
       // -1480 + Saved by the Light 1458 + Soul Leech 247 = its 225 absorbed)
@@ -691,4 +734,78 @@ export function run(ctx: IRoundCtx): void {
   abilityIntoWallShare(ctx);
   postCcAbsorbedUnsaid(ctx);
   stackedWallPrice(ctx);
+  channelTookBasis(ctx);
 }
+
+const CHANNEL_HEAD =
+  /^\s*(\d+):(\d\d)\s+\[ENEMY (?:CD|DEF)\]\s+(\d+)\([^)]*\)(?: \([^)]*\))?: (Ultimate Penitence) /;
+const CHANNEL_TOOK =
+  /(?:its bolts hit |; )(\d+)\([^)]*\): \d+k of the (\d+)k damage they took over it/g;
+
+function channelTookBasis(ctx: IRoundCtx): void {
+  for (const line of ctx.lines) {
+    const at = line.indexOf("— its bolts hit ");
+    if (at < 0) continue;
+    const h = CHANNEL_HEAD.exec(line);
+    if (!h) continue;
+    const caster = ctx.unitOfPid(h[3]);
+    if (!caster) continue;
+    const lo = ctx.start + secOfTag(h[1]!, h[2]!) * 1000;
+    // the caster's own aura of the channel opened in the line's second
+    const rows = ((caster.auraEvents ?? []) as any[]).filter(
+      (a) =>
+        a.destUnitId === caster.id &&
+        a.srcUnitId === caster.id &&
+        nameOf(a.spellId, a.spellName) === h[4],
+    );
+    const applied = rows.find(
+      (a) => ev(a) === APPLIED && tsOf(a) >= lo && tsOf(a) < lo + 1000,
+    );
+    if (!applied) continue;
+    const removed = rows.find(
+      (a) => ev(a) === REMOVED && tsOf(a) >= tsOf(applied),
+    );
+    // the line's window: from the press, the aura's length long, cut at
+    // the product's round end — what the basis is judged over, not the
+    // window itself (a SUCCESS logged 1 ms after its APPLIED moves a tick
+    // in that millisecond across the edge: b2db52b4 r5 1:04, 11k)
+    const press = successesOf(caster).find(
+      (s) =>
+        nameOf(s.spellId, s.spellName) === h[4] &&
+        Math.abs(tsOf(s) - tsOf(applied)) <= 50,
+    );
+    const fromMs = press ? tsOf(press) : tsOf(applied);
+    const toMs = Math.min(
+      removed ? fromMs + tsOf(removed) - tsOf(applied) : Infinity,
+      roundEndMs(ctx.legacy),
+      ctx.end,
+    );
+    for (const c of line.slice(at).matchAll(CHANNEL_TOOK)) {
+      const victim = ctx.unitOfPid(c[1]);
+      if (!victim) continue;
+      ctx.bump("channelTookBasis");
+      const landed = ((victim.damageIn ?? []) as any[])
+        .filter((d) => tsOf(d) >= fromMs && tsOf(d) <= toMs)
+        .filter((d) => !REDISTRIBUTION_IDS.has(String(d.spellId)))
+        .reduce((n, d) => n + Math.abs(d.effectiveAmount ?? 0), 0);
+      const absorbed = ((victim.absorbsIn ?? []) as any[])
+        .filter((r) => tsOf(r) >= fromMs && tsOf(r) <= toMs)
+        .filter((r) => !DEFERRAL_SHIELDS.has(String(r.spellId)))
+        .filter((r) => !REDISTRIBUTION_IDS.has(String(r.attackSpellId)))
+        .reduce((n, r) => n + Math.abs(r.absorbedAmount ?? 0), 0);
+      const truthK = Math.round((landed + absorbed) / 1000);
+      const printed = +c[2]!;
+      if (Math.abs(truthK - printed) <= Math.max(1, truthK * 0.01)) continue;
+      ctx.violate(
+        "channelTookBasis",
+        printed < truthK ? "low" : "high",
+        fromMs,
+        `${caster.id}@${fromMs}#${victim.id}`,
+        `${victim.name} took ${truthK}k on the rows over ${h[4]} ${fmtLedgerS((toMs - fromMs) / 1000)}; printed ${printed}k`,
+        line.slice(0, 240),
+      );
+    }
+  }
+}
+
+const fmtLedgerS = (s: number): string => `${s.toFixed(1)}s`;

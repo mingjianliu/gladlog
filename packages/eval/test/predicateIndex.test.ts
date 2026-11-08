@@ -4580,6 +4580,12 @@ const INDEX: PredicateRow[] = [
     symbol: "DURING_ABSORBED_TAG_RE_SRC",
     mod: externalDamage,
   },
+  // fact12 D31: the closing row past a death teardown's killing blow
+  {
+    file: `${A}/utils/auraIntervals.ts`,
+    symbol: "auraCloseRow",
+    mod: auraIntervals,
+  },
   // fact7 D29: the share field of a unit with nothing dealt
   {
     file: `${A}/utils/externalDamage.ts`,

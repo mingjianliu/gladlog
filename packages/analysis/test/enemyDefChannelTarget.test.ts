@@ -45,6 +45,7 @@ const target: any = {
   absorbsIn: [
     {
       timestamp: T0 + 73_000,
+      logLine: { timestamp: T0 + 73_000 },
       attackerId: "e1",
       attackSpellId: "421543",
       attackSpellName: "终极苦修",
@@ -124,6 +125,37 @@ describe("channelTargetClause", () => {
       ),
     ).toBe(
       " — its bolts hit Priest-R-US: 673k of the 700k damage they took over it; Hunter-R-US: 9k of the 9k damage they took over it (its cast row names Hunter-R-US)",
+    );
+  });
+  it("what they took is the damage-taken predicate: their own rows count, a deferral shield's hold does not (fact12 D19, 66bd381b 1:40)", () => {
+    // the rogue's own deferred Time Dilation tick lands as self → self
+    // damage; a reflected spell is logged as the victim's own; Time
+    // Dilation's SPELL_ABSORBED only held the hit back
+    const rogue: any = {
+      id: "f1",
+      name: "Rogue-R-US",
+      damageIn: [
+        hit(71, "e1", "421543", "终极苦修", 321_000),
+        hit(72, "f1", "361029", "Time Dilation", 149_000),
+        hit(73, "f1", "445468", "Wither", 38_000),
+        hit(74, "e2", "1", "Fireball", 197_000),
+      ],
+      absorbsIn: [
+        {
+          timestamp: T0 + 72_500,
+          logLine: { timestamp: T0 + 72_500 },
+          spellId: "357170",
+          attackerId: "e2",
+          attackSpellId: "1",
+          attackSpellName: "Fireball",
+          absorbedAmount: 90_000,
+        },
+      ],
+    };
+    expect(
+      channelTargetClause(enemy, d, [rogue], T0, T0 + 200_000, (n) => n),
+    ).toBe(
+      " — its bolts hit Rogue-R-US: 321k of the 705k damage they took over it",
     );
   });
 });

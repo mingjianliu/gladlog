@@ -41,13 +41,17 @@ import {
   externalDamageForApplication,
   formatDuringExternal,
 } from "../../utils/externalDamage";
-import { isDeferralAbsorb } from "../../utils/incomingPressure";
+import {
+  isDeferralAbsorb,
+  sumIncomingPressure,
+} from "../../utils/incomingPressure";
 import {
   karmaFeedClause,
   karmaFeedOf,
   TOUCH_OF_KARMA_ID,
 } from "../../utils/karmaFeed";
 import { fmtTime } from "../../utils/renderGrid";
+import type { RosterSides } from "../../utils/rosterSide";
 import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
 import {
   selfDefensiveLabelWords,
@@ -56,7 +60,6 @@ import {
 import type { TimelineCtx } from "./ctx";
 
 const ULTIMATE_PENITENCE_ID = "421453";
-
 
 /** An immunity's label as the `[ENEMY DEF]` slot prints it: `immune`, or a
  * school-limited one's `immune to magic` (F15 C2) — one reading for the
@@ -85,7 +88,7 @@ export function emitEnemyDefEntries(
   > &
     // optional for the hand-built contexts of the unit tests: absent, the
     // log's end stands in
-    Partial<Pick<TimelineCtx, "roundEndAtMs">> & {
+    Partial<Pick<TimelineCtx, "roundEndAtMs" | "rosterSides">> & {
       /** Puts `text` right after `head` on the `[ENEMY CD]` line starting with
        * it; false when there is none. Absent in the hand-built contexts of the
        * unit tests. */
@@ -103,6 +106,7 @@ export function emitEnemyDefEntries(
     actorLabel,
     addEntry,
     _allUnits,
+    rosterSides,
   } = ctx;
 
   if (TIMELINE_LINE_FLAGS.enemyDef === "timeline") {
@@ -172,21 +176,21 @@ export function emitEnemyDefEntries(
           : d.endedByHit
             ? ` — ${ENEMY_DEF_ENDED_BY_HIT}`
             : !d.removedEarly
-            ? ""
-            : end?.takenBy
-              ? ` — ${end.takenBy.kind} by ${taker}`
-              : end?.holderDied
-                ? d.kind === "external"
-                  ? ` — its target died${unclear}`
-                  : ` — ended at death${unclear}`
-                : end?.absorb?.left === 0
-                  ? // an `(absorb Nk, …)` line already leads with the amount
-                    d.effect === "absorb"
-                    ? ` — used up${unclear}`
-                    : ` — used up, absorbed ${Math.round(end.absorb.absorbed / 1000)}k${unclear}`
-                  : end?.takeUnclear
-                    ? " — a dispel of this spell is logged at that moment, not which copy it took"
-                    : " — removed early";
+              ? ""
+              : end?.takenBy
+                ? ` — ${end.takenBy.kind} by ${taker}`
+                : end?.holderDied
+                  ? d.kind === "external"
+                    ? ` — its target died${unclear}`
+                    : ` — ended at death${unclear}`
+                  : end?.absorb?.left === 0
+                    ? // an `(absorb Nk, …)` line already leads with the amount
+                      d.effect === "absorb"
+                      ? ` — used up${unclear}`
+                      : ` — used up, absorbed ${Math.round(end.absorb.absorbed / 1000)}k${unclear}`
+                    : end?.takeUnclear
+                      ? " — a dispel of this spell is logged at that moment, not which copy it took"
+                      : " — removed early";
         // Ruling D6 (2026-10-10): an aura the log never shows end prints
         // that, not the official length the interval was closed at — the
         // number was read as OBSERVED (`Mass Invisibility (immune, 12.0s)` on
@@ -341,6 +345,7 @@ export function emitEnemyDefEntries(
             pid,
             enemies ?? [],
             enemyPid,
+            rosterSides,
           );
           // F16 retest: a rider shield no press of its own put up
           // (Shield of Vengeance with Divine Protection) says so, as a wall
@@ -445,8 +450,11 @@ export function emitEnemyDefEntries(
  * what the channel dealt them: the caster's damage rows to that player under
  * the cast's own (log-locale) name, over the caster's own aura of it (the
  * line's printed length, clipped to the round's end), beside everything
- * that player took in the same span. Nothing when the SUCCESS names no
- * friendly or no such damage landed.
+ * that player took in the same span — the damage-taken predicate
+ * `sumIncomingPressure` (fact12 D19, 66bd381b 1:40: the rogue's own
+ * deferred Time Dilation landing, 149k, and a warlock's own reflected
+ * Wither were left out, 556k printed for 705k). Nothing when the SUCCESS
+ * names no friendly or no such damage landed.
  * @internal exported for tests
  */
 export function channelTargetClause(
@@ -466,6 +474,8 @@ export function channelTargetClause(
    * its bolts on 2(HDHunter)) */
   castersTeam: readonly ICombatUnit[] = [],
   castersPid: (name: string) => string = pid,
+  /** the round's roster sides (`sumIncomingPressure`'s redistribution test) */
+  sides?: RosterSides,
 ): string {
   if (d.observedSeconds === undefined) return "";
   const pressMs =
@@ -491,24 +501,20 @@ export function channelTargetClause(
   // counts — beside everything they took over the channel.
   const per = friends.map((f) => {
     let dealt = 0;
-    let took = 0;
+    const took = sumIncomingPressure(f, fromMs, toMs, sides);
     const hitIds = new Set<string>();
     for (const r of f.damageIn ?? []) {
       const ts = r.logLine.timestamp;
-      if (ts < fromMs || ts > toMs || r.srcUnitId === f.id) continue;
-      const amount = Math.abs(r.effectiveAmount);
-      took += amount;
+      if (ts < fromMs || ts > toMs) continue;
       if (r.srcUnitId === enemy.id && r.spellName === cast.spellName) {
-        dealt += amount;
+        dealt += Math.abs(r.effectiveAmount);
         if (r.spellId) hitIds.add(r.spellId);
       }
     }
     for (const a of f.absorbsIn ?? []) {
       if (a.timestamp < fromMs || a.timestamp > toMs) continue;
-      if (!a.attackerId || a.attackerId === f.id) continue;
       if (isDeferralAbsorb(a)) continue; // delayed, counted when it lands
       const amount = Math.abs(a.absorbedAmount);
-      took += amount;
       if (
         a.attackerId === enemy.id &&
         ((a.attackSpellId !== undefined && hitIds.has(a.attackSpellId)) ||

@@ -78,18 +78,56 @@ export interface IAuraInterval {
   /** The row that closed it (REMOVED / BROKEN), when one did: what was
    * logged in its millisecond BEFORE it happened under the aura (fact9 D2,
    * 03cba5ac 2:09: a Shadow Word: Madness tick under Time Dilation, logged
-   * just before the removal). `externalDamageForApplication` reads it. */
+   * just before the removal). A removal that is the holder's death
+   * teardown closes past the lethal hit (`auraCloseRow`).
+   * `externalDamageForApplication` reads it. */
   toRow?: { ms: number; lineIndex: number };
 }
 
-/** `toRow` of an interval this row closes */
-function closeRowOf(a: {
-  logLine: { timestamp: number; lineIndex?: number };
-}): Pick<IAuraInterval, "toRow"> {
-  const ix = a.logLine.lineIndex;
-  return ix === undefined
-    ? {}
-    : { toRow: { ms: a.logLine.timestamp, lineIndex: ix } };
+/**
+ * The closing row of an aura its `removed` row ends on `holder`: rows of
+ * that millisecond logged before it happened under the aura (fact9 D2). One
+ * exception, the death teardown (fact12 D31, f13566f0 r0 11:51:37.841): the
+ * game strips the dying unit's auras FIRST and writes the hit that killed it
+ * after them in the same millisecond — the Obsidian Scales copy's REMOVED,
+ * twenty more removals, PARTY_KILL, then the Bladestorm SPELL_DAMAGE with
+ * overkill. That blow landed under the aura, so a damage row on the holder
+ * with overkill > 0 logged after the removal in its millisecond moves the
+ * close past it. The one predicate of `buildAuraIntervals`' `toRow` and of
+ * scan5 damageBasis's during-it windows.
+ */
+export function auraCloseRow(
+  removed: { timestamp: number; lineIndex?: number },
+  holder: {
+    damageIn?: ReadonlyArray<{
+      overkill?: number;
+      logLine: { timestamp: number; lineIndex?: number };
+    }>;
+  },
+): { ms: number; lineIndex: number } | undefined {
+  const ix = removed.lineIndex;
+  if (ix === undefined) return undefined;
+  let close = ix;
+  for (const d of holder.damageIn ?? []) {
+    const li = d.logLine.lineIndex;
+    if (
+      (d.overkill ?? 0) > 0 &&
+      d.logLine.timestamp === removed.timestamp &&
+      li !== undefined &&
+      li > close
+    )
+      close = li + 1;
+  }
+  return { ms: removed.timestamp, lineIndex: close };
+}
+
+/** `toRow` of an interval this row closes on `holder` */
+function closeRowOf(
+  a: { logLine: { timestamp: number; lineIndex?: number } },
+  holder: Parameters<typeof auraCloseRow>[1],
+): Pick<IAuraInterval, "toRow"> {
+  const toRow = auraCloseRow(a.logLine, holder);
+  return toRow ? { toRow } : {};
 }
 
 const CLOSE_EVENTS = new Set<string>([
@@ -698,7 +736,7 @@ export function buildAuraIntervalsUncached(
           toS,
           inferredStart: o.inferredStart,
           inferredEnd: false,
-          ...closeRowOf(a),
+          ...closeRowOf(a, unit),
         });
         lastCloseToSBySpellId.set(id, toS);
       } else {
@@ -728,7 +766,7 @@ export function buildAuraIntervalsUncached(
             toS: t,
             inferredStart: true,
             inferredEnd: false,
-            ...closeRowOf(a),
+            ...closeRowOf(a, unit),
           });
         }
         lastCloseToSBySpellId.set(id, t);
@@ -928,6 +966,7 @@ function endKarmaAtItsShield(out: IAuraInterval[]): void {
 interface AuraIntervalsEntry {
   unitId: string;
   len: number;
+  dmgLen: number;
   startTime: number;
   endTime: number;
   castsFp: number;
@@ -1002,10 +1041,13 @@ export function buildAuraIntervals(
     entries = [];
     byCasters.set(casters, entries);
   }
+  // the close rows read the holder's killing blows (`auraCloseRow`)
+  const dmgLen = unit.damageIn?.length ?? -1;
   const hit = entries.find(
     (e) =>
       e.unitId === unit.id &&
       e.len === events.length &&
+      e.dmgLen === dmgLen &&
       e.startTime === combat.startTime &&
       e.endTime === combat.endTime &&
       e.castsFp === castsFp,
@@ -1016,6 +1058,7 @@ export function buildAuraIntervals(
   entries.push({
     unitId: unit.id,
     len: events.length,
+    dmgLen,
     startTime: combat.startTime,
     endTime: combat.endTime,
     castsFp,
