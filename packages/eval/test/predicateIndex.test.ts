@@ -447,6 +447,12 @@ const INDEX: PredicateRow[] = [
     symbol: "missBelongsToCast",
     mod: castMissRows,
   },
+  // fact12 D7: the press row a ledger id names, for both outcome tags
+  {
+    file: `${A}/utils/castPress.ts`,
+    symbol: "pressRowOfLedgerId",
+    mod: castPress,
+  },
   {
     file: `${A}/utils/castMissRows.ts`,
     symbol: "CC_MISS_TAG_WORD",

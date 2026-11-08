@@ -27,6 +27,7 @@ import {
   pressRidesAlong,
   rowIsPressEndingCast,
 } from "./castCommitSpans";
+import { missBelongsToCast } from "./castMissRows";
 import {
   CANCEL_CC_NEAR_S,
   forcedStopInstantsMs,
@@ -144,9 +145,6 @@ export interface IKickMiss {
   targetId: string;
   targetName: string;
 }
-/** A kick and its SPELL_MISSED line share the ms on every pair of the
- * 605-file probe; 100 ms is the allowance. */
-export const KICK_MISS_PAIR_MS = 100;
 const KICK_MISS_WORD: Readonly<Record<string, string>> = {
   MISS: "MISSED on",
   DODGE: "DODGED by",
@@ -520,6 +518,17 @@ export function analyzeKickAudit(
   for (const kick of kicks) {
     const kickMs = kick.logLine.timestamp;
     const petExecMs = petExecMsOf.get(kick);
+    // every press of this kick: a miss after a later one is that one's
+    const sameKickMs = kicks
+      .filter(
+        (k) =>
+          kickCastSpellId(k.spellId ?? "") ===
+          kickCastSpellId(kick.spellId ?? ""),
+      )
+      .flatMap((k) => [
+        k.logLine.timestamp,
+        ...(petExecMsOf.has(k) ? [petExecMsOf.get(k)!] : []),
+      ]);
     const base = {
       atSeconds: (kickMs - matchStartMs) / 1000,
       kickSpellId: kick.spellId ?? "",
@@ -559,14 +568,24 @@ export function analyzeKickAudit(
     const missLines = kickerMisses.filter(
       (m) =>
         (isCastOrEffect(kick.spellId ?? "", m.spellId ?? "") ||
+          // a row of the kick's English name under another id: Solar Beam
+          // 78675 logs its IMMUNE under its interrupt effect 97547 (fact12
+          // D3 residual on the 605 capture, two lines)
+          (base.kickSpellName !== "" &&
+            getEnglishSpellName(m.spellId ?? "", m.spellName ?? "") ===
+              base.kickSpellName) ||
           // the pet's own row of a commanded kick (Command Demon 119910 →
           // the Felhunter's Spell Lock 19647)
           (petExecMs !== undefined &&
             kickCastSpellId(m.spellId ?? "") ===
               kickCastSpellId(kick.spellId ?? ""))) &&
-        (Math.abs(m.timestamp - kickMs) <= KICK_MISS_PAIR_MS ||
+        // fact12 D3 (pipeline T11, 1d26a991 1:40): the cast lines' own
+        // pairing (`missBelongsToCast`) — a Rebuke into Eye Beam logged its
+        // IMMUNE 178 ms after the press, past the 100 ms this used to allow,
+        // and read "hit nothing"
+        (missBelongsToCast(sameKickMs, kickMs, m.timestamp) ||
           (petExecMs !== undefined &&
-            Math.abs(m.timestamp - petExecMs) <= KICK_MISS_PAIR_MS)) &&
+            missBelongsToCast(sameKickMs, petExecMs, m.timestamp))) &&
         m.missType !== "ABSORB" &&
         !!m.destUnitId &&
         (m.destUnitId === kick.destUnitId ||

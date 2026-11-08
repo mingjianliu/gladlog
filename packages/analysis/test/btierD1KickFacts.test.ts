@@ -170,8 +170,14 @@ describe("kickAudit: the miss line the log wrote for the kick (FT-T11)", () => {
     expect(
       run([missEvent(MIND_FREEZE, 30, ["e1", "Priest"], "ABSORB")]).kickMiss,
     ).toBeUndefined();
+    // fact12 D3 (pipeline T11): the cast lines' window (`missBelongsToCast`)
+    // — an IMMUNE 200 ms after the kick is its own, 3 s after it is not
     expect(
-      run([missEvent(MIND_FREEZE, 30.2, ["e1", "Priest"], "IMMUNE")]).kickMiss,
+      run([missEvent(MIND_FREEZE, 30.2, ["e1", "Priest"], "IMMUNE")]).kickMiss
+        ?.missType,
+    ).toBe("IMMUNE");
+    expect(
+      run([missEvent(MIND_FREEZE, 33, ["e1", "Priest"], "IMMUNE")]).kickMiss,
     ).toBeUndefined();
     // another spell's miss in the same ms is not the kick's
     expect(

@@ -40,6 +40,7 @@ import {
   missReportsControl,
   pressImmuneMissRows,
 } from "../../utils/castMissRows";
+import { pressRowOfLedgerId } from "../../utils/castPress";
 import { ccFullDurationForCaster } from "../../utils/ccDuration";
 import {
   applicableCCAvoidanceIds,
@@ -758,25 +759,12 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     // Imprison 217832 while the press logs 210873 / 221527, and its IMMUNE
     // row under the variant left the line bare — s0/1-1 0:25 Hex into Cloak
     // of Shadows, `[CC NOT LANDED]` said it instead)
-    const nearPress = (e: {
-      logLine?: { event?: unknown };
-      timestamp: number;
-    }) =>
-      e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
-      Math.abs(e.timestamp - castMs) <= 100;
-    const pressName = getEnglishSpellName(spellId, "");
-    const pressRow =
-      (unit.spellCastEvents ?? []).find(
-        (e) => nearPress(e) && e.spellId === spellId,
-      ) ??
-      (pressName
-        ? (unit.spellCastEvents ?? []).find(
-            (e) =>
-              nearPress(e) &&
-              !!e.spellId &&
-              getEnglishSpellName(e.spellId, e.spellName) === pressName,
-          )
-        : undefined);
+    const pressRow = pressRowOfLedgerId(
+      unit.spellCastEvents ?? [],
+      spellId,
+      castMs,
+      100,
+    );
     const rowSpellId = pressRow?.spellId ?? spellId;
     const aimedAt = pressRow?.destUnitId;
     let aimedNamed: ReadonlySet<string> | undefined;
@@ -1021,17 +1009,18 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   ): string {
     const ownCcSources = ccSourcesOf(caster);
     const castMs = matchStartMs + castTimeSeconds * 1000;
-    const ev = caster.spellCastEvents.find(
-      (e) =>
-        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        e.spellId === spellId &&
-        Math.abs(e.logLine.timestamp - castMs) <= 1,
-    );
+    // the press's own row, by id or a skin variant of its name — the
+    // IMMUNE tag's lookup (`pressRowOfLedgerId`; fact12 D7: the ledger's
+    // Imprison 217832 against a logged 221527 left the line bare)
+    const ev = pressRowOfLedgerId(caster.spellCastEvents, spellId, castMs, 1);
     if (!ev) return "";
     const dest = (enemies ?? []).find((u) => u.id === ev.destUnitId);
     const t0 = ev.logLine.timestamp;
     const inWindow = (ms: number) => ms >= t0 - 100 && ms <= t0 + 2500;
-    const own = castAndEffectIds(spellId);
+    const own = new Set([
+      ...castAndEffectIds(spellId),
+      ...castAndEffectIds(ev.spellId ?? spellId),
+    ]);
     // fact9 D25 (90065607 r0 1:40): only THIS press's own control aura is
     // its landing — its own ids, or an aura of the press's English name (a
     // skin variant, as the IMMUNE tag reads it). Any control aura of the

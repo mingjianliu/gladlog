@@ -41,6 +41,7 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "../data/druidForms";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   CAST_MISS_WINDOW_MS,
   PRESS_TRIGGERED_CAST_IDS,
@@ -378,4 +379,41 @@ export function filterRealPresses<
     keep.add(i);
   }
   return events.filter((_, i) => keep.has(i));
+}
+
+/**
+ * The `SPELL_CAST_SUCCESS` row of a press the cooldown ledger keys as
+ * `spellId`, within `toleranceMs` of `castMs`: that id's own row, else a skin
+ * variant of the same English name. The ledger keys Hex 51514 / Imprison
+ * 217832 while the press logs 210873 / 221527 (F20 immunity residual); the
+ * readers of a control press's outcome look the row up here, so the
+ * `[IMMUNE …]` tag and the `[no CC aura logged …]` tag find the same press
+ * (fact12 D7, pipeline T11: 3c8b52e7 r0 1:52, an Imprison into Nullifying
+ * Shroud printed bare — the no-aura reader matched the id only).
+ */
+export function pressRowOfLedgerId<
+  T extends {
+    spellId?: string;
+    spellName?: string;
+    logLine: { event: unknown; timestamp: number };
+  },
+>(
+  rows: readonly T[],
+  spellId: string,
+  castMs: number,
+  toleranceMs: number,
+): T | undefined {
+  const near = (e: T) =>
+    e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+    Math.abs(e.logLine.timestamp - castMs) <= toleranceMs;
+  const exact = rows.find((e) => near(e) && e.spellId === spellId);
+  if (exact) return exact;
+  const name = getEnglishSpellName(spellId, "");
+  if (!name) return undefined;
+  return rows.find(
+    (e) =>
+      near(e) &&
+      !!e.spellId &&
+      getEnglishSpellName(e.spellId, e.spellName ?? "") === name,
+  );
 }
