@@ -105,44 +105,54 @@ const BACK_SLACK_MS = 2000;
 /** two rows of one button this close are one press */
 const SAME_PRESS_MS = 100;
 
+/** The unit's presses of the button `name` in the round, one per press
+ * (shared with `t16`'s kit check). */
+export function buttonPressesOf(
+  ctx: IRoundCtx,
+  memo: Map<string, number[]>,
+  u: any,
+  name: string,
+): number[] {
+  const key = `${u.id}|${name}`;
+  let out = memo.get(key);
+  if (!out) {
+    const rows = (u.spellCastEvents ?? []) as any[];
+    out = successesOf(u)
+      // a row of the name with no cooldown of its own is no press of the
+      // button: Odyn's Fury's three hit rows after the press, Divine Hymn's
+      // tick, Alter Time's return (a different id, the same name); nor is
+      // a row the product reads as no press (`isNoPressRow`: Champion's
+      // Spear's re-press 1271980 while the spear stands, GH #177), nor a
+      // shift back into a form whose cooldown is running
+      // (`isFormReshiftCast`: Incarnation: Tree of Life re-entered under
+      // its own buff), nor a press after the round's end of play (a Solo
+      // Shuffle round's rows run into the next round's preparation, where
+      // Arena Preparation resets cooldowns: 05b762f1 r1 Stasis at 2:44,
+      // the round over at 2:22)
+      .filter(
+        (c) =>
+          nameOf(c.spellId, c.spellName) === name &&
+          (effectiveCooldownSeconds(c.spellId) ?? 0) > 0 &&
+          !isNoPressRow(c, rows) &&
+          !isFormReshiftCast(u, c) &&
+          tsOf(c) <= ctx.roundEndAt,
+      )
+      .map(tsOf)
+      .sort((a, b) => a - b)
+      // a row within `SAME_PRESS_MS` of the one before is that press logged
+      // twice (Power Infusion's self copy 16–25 ms after the press, which
+      // can cross into the next second: dca02448 r4 0:23.979 / 0:24.004);
+      // a human's second press lands ≥ 0.485 s later (the ledger's fold)
+      .filter((t, i, a) => i === 0 || t - a[i - 1]! > SAME_PRESS_MS);
+    memo.set(key, out);
+  }
+  return out;
+}
+
 function resCd(ctx: IRoundCtx): void {
   const memo = new Map<string, number[]>();
-  const pressesOf = (u: any, name: string): number[] => {
-    const key = `${u.id}|${name}`;
-    let out = memo.get(key);
-    if (!out) {
-      const rows = (u.spellCastEvents ?? []) as any[];
-      out = successesOf(u)
-        // a row of the name with no cooldown of its own is no press of the
-        // button: Odyn's Fury's three hit rows after the press, Divine Hymn's
-        // tick, Alter Time's return (a different id, the same name); nor is
-        // a row the product reads as no press (`isNoPressRow`: Champion's
-        // Spear's re-press 1271980 while the spear stands, GH #177), nor a
-        // shift back into a form whose cooldown is running
-        // (`isFormReshiftCast`: Incarnation: Tree of Life re-entered under
-        // its own buff), nor a press after the round's end of play (a Solo
-        // Shuffle round's rows run into the next round's preparation, where
-        // Arena Preparation resets cooldowns: 05b762f1 r1 Stasis at 2:44,
-        // the round over at 2:22)
-        .filter(
-          (c) =>
-            nameOf(c.spellId, c.spellName) === name &&
-            (effectiveCooldownSeconds(c.spellId) ?? 0) > 0 &&
-            !isNoPressRow(c, rows) &&
-            !isFormReshiftCast(u, c) &&
-            tsOf(c) <= ctx.roundEndAt,
-        )
-        .map(tsOf)
-        .sort((a, b) => a - b)
-        // a row within `SAME_PRESS_MS` of the one before is that press logged
-        // twice (Power Infusion's self copy 16–25 ms after the press, which
-        // can cross into the next second: dca02448 r4 0:23.979 / 0:24.004);
-        // a human's second press lands ≥ 0.485 s later (the ledger's fold)
-        .filter((t, i, a) => i === 0 || t - a[i - 1]! > SAME_PRESS_MS);
-      memo.set(key, out);
-    }
-    return out;
-  };
+  const pressesOf = (u: any, name: string): number[] =>
+    buttonPressesOf(ctx, memo, u, name);
   let t = 0;
   for (const line of ctx.lines) {
     const timed = TIMED.exec(line);

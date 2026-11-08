@@ -1388,6 +1388,8 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         // weekly review 2026-10-24: the id fields 5dcd31c added — a
         // renumbered Sudden Death aura silently dropped Unrelenting
         // Onslaught's reductions with no scan seeing it
+        ...(r.triggerOwnAuraStacksLost?.auraIds ?? []),
+        ...(r.triggerOwnAuraStacksLost?.atOwnHitIds ?? []),
         ...(r.triggerAuraConsumed?.auraIds ?? []),
         ...(r.triggerAuraConsumed?.byCastIds ?? []),
         ...(r.triggerAuraConsumed?.perStackOfAuraId

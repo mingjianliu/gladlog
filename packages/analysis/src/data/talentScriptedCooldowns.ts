@@ -215,6 +215,15 @@ export interface IEventCooldownReduction {
     withinMs: number;
     perStackOfAuraId?: string;
   };
+  /** "Each stack of X shattered": one trigger per stack of the unit's own
+   * `auraIds` on another unit lost — a REMOVED_DOSE's drop, a REMOVED's
+   * whole count — in the millisecond of one of the unit's own hit rows of
+   * `atOwnHitIds` on that unit (`ownAuraStacksLostTimesMs`). A loss with no
+   * such hit (the aura running out) shattered nothing. */
+  triggerOwnAuraStacksLost?: {
+    auraIds: readonly string[];
+    atOwnHitIds: readonly string[];
+  };
   /** "Mass Disintegrate … for each target struck": a use is the unit's own
    * cast of `byCastIds` that consumed `auraIds` within `withinMs` of it. One
    * trigger per distinct unit its rows of `hitIds` reached — damage, periodic
@@ -1145,15 +1154,36 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     note: "Summon Doomguard — each Demonic Core spent: −3 s",
   },
   // White Out (Frost, 1281638; GH #176): 「冰枪术使寒冰宝珠的冷却时间缩短
-  // ${$s1/1000}.1秒，每粉碎一层冻结额外缩短${$s2/1000}.1秒」 — 0.5 s an Ice
-  // Lance 30455, plus 0.1 s a shattered stack. Only the per-cast half is
-  // read: the stacks are not in the log row, and the smaller give-back keeps
-  // Frozen Orb "not ready" longer, never "ready" sooner.
+  // ${$s1/1000}.1秒，每粉碎一层冻结额外缩短${$s2/1000}.1秒」 — DB2 1281638
+  // s1 500, s2 100: 0.5 s an Ice Lance, plus 0.1 s a Freezing 1221389 stack
+  // it shatters. fact12 D17 (T16): the 0.5 s is per Ice Lance HIT (228598 —
+  // Splitting Ice's second bolt too), and the stacks are the log's own: the
+  // caster's Freezing on the struck unit dropping (REMOVED_DOSE n → m, or
+  // REMOVED) in the millisecond of its Ice Lance or Shatter 1246949 hit
+  // there (`triggerOwnAuraStacksLost`). 584 downloaded logs, 28 Frozen Orb
+  // recast gaps of White Out + Spellfrost Teachings holders: per cast and
+  // no stacks (this row before) 7 recasts impossible, up to 7.9 s early
+  // (64e9a3f3 r0 1:14 → 1:40, 26.0 s: 72 splinters, 9 casts / 18 hits, 38
+  // stacks); per hit with the shattered stacks 1 (a gap whose 2 s are
+  // 21 stacks that ran out, no hit — not shattered, left out).
   "1281638": {
     targets: ["84714", "198149"],
-    triggerCastIds: ["30455"],
+    triggerCastIds: [],
+    triggerHitIds: ["228598"],
+    hitsCountEachRow: true,
     seconds: 0.5,
-    note: "White Out — Ice Lance: Frozen Orb −0.5 s (the per-stack 0.1 s not read)",
+    note: "White Out — each Ice Lance hit: Frozen Orb −0.5 s",
+  },
+  "1281638:shatter": {
+    talentSpellId: "1281638",
+    targets: ["84714", "198149"],
+    triggerCastIds: [],
+    triggerOwnAuraStacksLost: {
+      auraIds: ["1221389"],
+      atOwnHitIds: ["228598", "1246949"],
+    },
+    seconds: 0.1,
+    note: "White Out — each Freezing stack an Ice Lance shatters: Frozen Orb −0.1 s",
   },
   // Red Thirst (Blood): "Every 10 Runic Power spent reduces the cooldown of
   // Vampiric Blood by 2.0 sec" — s1 2 000, s2 10. Runic Power is ×10 in the
@@ -1468,6 +1498,50 @@ export function eventTriggerTimesMs(
 }
 
 /**
+ * `triggerOwnAuraStacksLost`: one instant per stack of the unit's own aura
+ * lost on a unit in the millisecond of one of its own hits there. Stacks
+ * are read off the unit's own aura rows in log order (APPLIED 1 — a
+ * restated one keeps the count —, a DOSE row's count, REMOVED 0).
+ */
+export function ownAuraStacksLostTimesMs(
+  unit: Pick<ICombatUnit, "damageOut"> &
+    Partial<Pick<ICombatUnit, "missesOut" | "actionOut">>,
+  c: NonNullable<IEventCooldownReduction["triggerOwnAuraStacksLost"]>,
+): number[] {
+  const hitAt = new Set<string>();
+  for (const e of [...unit.damageOut, ...(unit.missesOut ?? [])])
+    if (e.destUnitId && c.atOwnHitIds.includes(String(e.spellId)))
+      hitAt.add(`${e.destUnitId}@${e.logLine.timestamp}`);
+  const rows = (unit.actionOut ?? [])
+    .filter((e) => e.destUnitId && c.auraIds.includes(String(e.spellId)))
+    .sort(
+      (a, b) =>
+        a.logLine.timestamp - b.logLine.timestamp ||
+        (a.logLine.lineIndex ?? 0) - (b.logLine.lineIndex ?? 0),
+    );
+  const stacks = new Map<string, number>();
+  const out: number[] = [];
+  for (const e of rows) {
+    const key = `${e.destUnitId}|${e.spellId}`;
+    const before = stacks.get(key) ?? 0;
+    const ev = e.logLine.event;
+    const count = Number(e.logLine.parameters?.at(-1));
+    let after = before;
+    if (ev === LogEvent.SPELL_AURA_APPLIED) after = before > 0 ? before : 1;
+    else if (
+      ev === LogEvent.SPELL_AURA_APPLIED_DOSE ||
+      ev === LogEvent.SPELL_AURA_REMOVED_DOSE
+    )
+      after = Number.isFinite(count) ? count : before;
+    else if (ev === LogEvent.SPELL_AURA_REMOVED) after = 0;
+    stacks.set(key, after);
+    if (after < before && hitAt.has(`${e.destUnitId}@${e.logLine.timestamp}`))
+      for (let i = 0; i < before - after; i++) out.push(e.logLine.timestamp);
+  }
+  return out;
+}
+
+/**
  * The seconds ONE trigger of `r` gives back to a holder of spec `holderSpec`
  * when it fires at `logEpochMs` — the one reading of "how much", next to
  * `eventTriggerTimesMs`'s "when".
@@ -1574,6 +1648,14 @@ export function eventTriggersFor(
             ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
             : []),
           ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
+          ...(r.triggerOwnAuraStacksLost
+            ? ownAuraStacksLostTimesMs(unit, r.triggerOwnAuraStacksLost).map(
+                (atMs) => ({
+                  atMs,
+                  seconds: eventReductionSecondsAt(r, holderSpec, atMs),
+                }),
+              )
+            : []),
           ...(r.triggerBuffedUseTargets
             ? buffedUseTargetTriggers(unit, r)
             : []),
@@ -2094,6 +2176,9 @@ export const PER_PRESS_STACK_COOLDOWNS: Readonly<
       maxStacks: number;
       /** the row needs this class set bonus worn as well (`setPiecesWorn`) */
       requiresSet?: { bonusSpellId: string; itemSetId: string; pieces: number };
+      /** the press's own dose of the aura counts too: the stacks up
+       * `PER_PRESS_OWN_DOSE_MS` after the press, not strictly before it */
+      ownDoseCounts?: true;
       note: string;
     }
   >
@@ -2113,15 +2198,29 @@ export const PER_PRESS_STACK_COOLDOWNS: Readonly<
   // 35.25 at 3, 38.76 at 2; each Essence Break press adds a 1214887 dose.
   // The one 0-piece player (73 Havoc logs) got no dose from Essence Break,
   // gaps 43.7–55.8 s with 3–4 stacks up — a single-player control.
+  // fact12 D4 (T16): the press's own dose counts — it applies the stack and
+  // benefits from it (`ownDoseCounts`; the dose row 0–60 ms after the
+  // SUCCESS). 584 downloaded logs, 61 recast gaps of presses that add a
+  // dose: stacks strictly before the press call 14 recasts impossible (12 at
+  // 1 stack, up to 3.2 s early: 1d26a991 r0 0:17, 1 stack, recast 34.3 s
+  // later against 37.5); with the own dose 1 (that one, 0.7 s under 35);
+  // stacks gained later in the cooldown taking time off too would leave no
+  // recast within 1.85 s of its return — 0 of 61, so they do not.
   "258860": {
     talentSpellId: "258887",
     auraId: "1214887",
     secondsPerStack: 2.5,
     maxStacks: 4,
     requiresSet: { bonusSpellId: "1296612", itemSetId: "2056", pieces: 4 },
-    note: "Havoc 12.1 4pc — Essence Break −2.5 s per Cycle of Hatred stack up before the press (≤ 4)",
+    ownDoseCounts: true,
+    note: "Havoc 12.1 4pc — Essence Break −2.5 s per Cycle of Hatred stack up once the press's own dose is in (≤ 4)",
   },
 };
+
+/** How long after a press its own dose of a `PER_PRESS_STACK_COOLDOWNS`
+ * aura is still that press's (`ownDoseCounts`): the 1214887 dose row comes
+ * 0–60 ms after Essence Break's SUCCESS (61 presses, 584 logs). */
+export const PER_PRESS_OWN_DOSE_MS = 100;
 
 /** Stacks of `unit`'s own `auraId` strictly before `atMs`, a restated
  * APPLIED (no REMOVED since the last one) keeping the count. */

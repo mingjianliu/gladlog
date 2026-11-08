@@ -1068,6 +1068,49 @@ describe("event-reduction triggers: interrupts, school casts, per-row hits, mini
     expect(seconds(u, "444986")).toEqual([1, 1.05, 1.1]);
   });
 
+  it("White Out (fact12 D17): 0.5 s each Ice Lance hit, 0.1 s each Freezing stack its or Shatter's hit took off", () => {
+    const aura = (event: string, atMs: number, dest: string, n?: number) =>
+      row(event, "1221389", atMs, {
+        destUnitId: dest,
+        logLine: {
+          event,
+          timestamp: T0 + atMs,
+          parameters: n === undefined ? ["DEBUFF"] : ["DEBUFF", n],
+        },
+      });
+    const u = {
+      spellCastEvents: [row("SPELL_CAST_SUCCESS", "30455", 1000)],
+      damageOut: [
+        // Splitting Ice: one cast, two hits
+        row("SPELL_DAMAGE", "228598", 1500, { destUnitId: "e1" }),
+        row("SPELL_DAMAGE", "228598", 1510, { destUnitId: "e2" }),
+        row("SPELL_DAMAGE", "1246949", 1500, { destUnitId: "e1" }),
+      ],
+      missesOut: [],
+      actionOut: [
+        aura("SPELL_AURA_APPLIED", 200, "e1"),
+        aura("SPELL_AURA_APPLIED_DOSE", 300, "e1", 6),
+        aura("SPELL_AURA_REMOVED_DOSE", 1500, "e1", 2), // shattered 4
+        aura("SPELL_AURA_APPLIED", 400, "e2"),
+        aura("SPELL_AURA_APPLIED_DOSE", 450, "e2", 3),
+        aura("SPELL_AURA_REMOVED", 1510, "e2"), // shattered 3
+        aura("SPELL_AURA_APPLIED", 2000, "e3"),
+        aura("SPELL_AURA_APPLIED_DOSE", 2100, "e3", 5),
+        aura("SPELL_AURA_REMOVED", 9000, "e3"), // ran out: no hit, nothing
+      ],
+    } as never;
+    const trig = eventTriggersFor(u, [
+      EVENT_COOLDOWN_REDUCTIONS["1281638"]!,
+      EVENT_COOLDOWN_REDUCTIONS["1281638:shatter"]!,
+    ]);
+    const total = trig.reduce((s, g) => s + g.seconds, 0);
+    expect(
+      trig.filter((g) => g.seconds === 0.5).map((g) => g.atMs - T0),
+    ).toEqual([1500, 1510]);
+    expect(trig.filter((g) => g.seconds === 0.1)).toHaveLength(7);
+    expect(total).toBeCloseTo(1.7, 6);
+  });
+
   it("Rumbling Earth: one trigger for a Shockwave that struck 3+ units, none for 2", () => {
     const hit = (at: number, dest: string) =>
       row("SPELL_DAMAGE", "46968", at, { destUnitId: dest });

@@ -63,6 +63,7 @@ import {
   type IFreeRecastWindow,
   onInterruptReductionFor,
   ownStacksBefore,
+  PER_PRESS_OWN_DOSE_MS,
   PER_PRESS_STACK_COOLDOWNS,
   STACKED_RATE_CARRIERS,
   timeSpiralEchoMs,
@@ -6368,7 +6369,9 @@ function buildCooldownEntry(
         ownStacksBefore(
           unit,
           stackCd.auraId,
-          matchStartMs + c.timeSeconds * 1000,
+          matchStartMs +
+            c.timeSeconds * 1000 +
+            (stackCd.ownDoseCounts ? PER_PRESS_OWN_DOSE_MS : 0),
         ),
       );
       if (stacks <= 0) continue;

@@ -354,6 +354,42 @@ describe("Cycle of Hatred — Eye Beam's own cooldown by the stacks before it", 
   });
 });
 
+describe("Havoc 4pc — Essence Break counts the press's own Cycle of Hatred dose (fact12 D4)", () => {
+  const ESSENCE_BREAK = "258860";
+  const STACKS = "1214887";
+  const havoc = (doseAtMs: number) =>
+    makeUnit(PID, {
+      class: CombatUnitClass.DemonHunter,
+      spec: CombatUnitSpec.DemonHunter_Havoc,
+      info: {
+        talents: [{ id1: 91032, id2: 112955, count: 1 }],
+        pvpTalents: [],
+        equipment: ["271535", "271536", "271537", "271538"].map((id) => ({
+          id,
+        })),
+      },
+      spellCastEvents: [makeSpellCastEvent(ESSENCE_BREAK, T0 + 10_000, "")],
+      auraEvents: [
+        row(LogEvent.SPELL_AURA_APPLIED, STACKS, 5_000),
+        row(LogEvent.SPELL_AURA_APPLIED_DOSE, STACKS, doseAtMs, { amount: 2 }),
+      ],
+    } as any);
+  it("1d26a991 r0 0:17: 1 stack up, its own dose 9 ms later — 2 stacks, 35 s", () => {
+    const entry = unitCooldownEntry(
+      havoc(10_009),
+      combatOf(havoc(10_009)),
+      ESSENCE_BREAK,
+    )!;
+    expect(entry.cooldownSeconds).toBe(40);
+    expect(pressReadyAgainAtSeconds(entry, 10)).toBeCloseTo(10 + 35, 6);
+  });
+  it("a dose a second later is no part of the press", () => {
+    const u = havoc(11_000);
+    const entry = unitCooldownEntry(u, combatOf(u), ESSENCE_BREAK)!;
+    expect(pressReadyAgainAtSeconds(entry, 10)).toBeCloseTo(10 + 37.5, 6);
+  });
+});
+
 describe("Cycle of Hatred under a Metamorphosis reset (codex review #3)", () => {
   it("seconds left before the reset read the press's own base", () => {
     const EYE_BEAM = "198013";
@@ -561,9 +597,9 @@ describe("a press that did nothing spends no cooldown (GH #179 batch 3b)", () =>
 
   it("a release whose hit was immune or absorbed (SPELL_MISSED) did spend", () => {
     const u = surger([22], [12]);
-    expect(chargeSpendTimesOf(unitCooldownEntry(u, combatOf(u), SURGE)!)).toEqual(
-      [10, 20],
-    );
+    expect(
+      chargeSpendTimesOf(unitCooldownEntry(u, combatOf(u), SURGE)!),
+    ).toEqual([10, 20]);
   });
 
   it("a hit a shield ate whole (SPELL_ABSORBED, keyed by the shield) did spend", () => {
@@ -574,9 +610,9 @@ describe("a press that did nothing spends no cooldown (GH #179 batch 3b)", () =>
         attackSpellId: SURGE_HIT,
       }),
     );
-    expect(chargeSpendTimesOf(unitCooldownEntry(u, combatOf(u), SURGE)!)).toEqual(
-      [10, 20],
-    );
+    expect(
+      chargeSpendTimesOf(unitCooldownEntry(u, combatOf(u), SURGE)!),
+    ).toEqual([10, 20]);
   });
 
   it("a hit logged after the window does not count", () => {
@@ -585,9 +621,9 @@ describe("a press that did nothing spends no cooldown (GH #179 batch 3b)", () =>
     u.damageOut.push(
       row(LogEvent.SPELL_DAMAGE, SURGE_HIT, 13_600, { destUnitId: "enemy" }),
     );
-    expect(chargeSpendTimesOf(unitCooldownEntry(u, combatOf(u), SURGE)!)).toEqual(
-      [20],
-    );
+    expect(
+      chargeSpendTimesOf(unitCooldownEntry(u, combatOf(u), SURGE)!),
+    ).toEqual([20]);
   });
 
   const CAUTERIZE = "374251";
