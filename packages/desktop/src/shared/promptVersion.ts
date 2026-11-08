@@ -931,4 +931,10 @@
  *  Felguard; two cooldown changes are dated at the 10-06 hotfix.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 500;
+/*
+ * v501 (2026-11-08, fact12 D34 D14; pipeline batch B3): Ray of Frost's
+ *  channel buff proves a press made unseen; the aura-less immunity line
+ *  carries [friendly offensive CD active]. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 501;

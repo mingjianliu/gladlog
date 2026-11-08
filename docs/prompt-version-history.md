@@ -5573,3 +5573,15 @@ Mass Dispel 426438 (Mass Dispel 120 → 60 s before, 45 s since) and Call of Al'
 are dated at the 2026-10-06 15:00Z PvP hotfix (0 holders in 605 + wide; 0
 lines). (6) GH #173: the offensiveTagWrong gate reads the product's
 `offensiveSummonActiveAt` (scanner only).
+
+v501 (2026-11-08, fact12 D34 D14; pipeline batch B3). (1) fact12 D34:
+Ray of Frost 205021 is proven by its channel buff 269748 in
+`PRESS_PROOF_AURA_IDS`, so a press channelled out of invisibility is on the
+enemy press list ([ENEMY CD] numbering, cooldown ledger, windows); the 605
+capture is byte-identical (no unseen Ray of Frost there). (2) fact12 D14:
+the aura-less immunity line of [ENEMY DEF] asks
+`friendlyOffensiveCdActiveAt` like the aura line (one `burstTagAt`
+closure); cover set: 3 [ENEMY DEF] lines gain the tag, 0 menu changes.
+(3) GH #134 (c) was already fixed at PV394: a pin test only. Batch verified
+on tests + codex (user 11-08); the 605 / cover / wide verification runs at
+the end of the wave.
