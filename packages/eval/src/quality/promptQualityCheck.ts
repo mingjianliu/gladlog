@@ -7042,6 +7042,57 @@ export function checkBacklashRefConsistency(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * fact12 D28 (T21): a `backlash-dispel` row says "the player dispelled
+ * facts.debuff" — a dispel DECISION. The timeline renders every deliberate
+ * dispel as a cast with its second and the names it removed: a `[MINOR
+ * DISPELS]` deliberate part (`Purify ×5 (0:17 Unstable Affliction、Haunt …`)
+ * or a `[CLEANSE]` line (`dispelled X off …` / `dispelled N effects: X, …`).
+ * A row with no such cast of its debuff at its own second is a removal nobody
+ * pressed a dispel for — cf63da4a r0 1:43: Fortifying Brew's own SPELL_DISPEL
+ * (a rider, folded as `Fortifying Brew (side effect of the cast)`, no time
+ * listed) was filed as the owner's choice to dispel Unstable Affliction.
+ * A deliberate part that hides casts behind `+N` makes the row unprovable,
+ * not failed.
+ */
+export function checkBacklashDispelWasPressed(lines: string[]): string[] {
+  const failures: string[] = [];
+  const pressed = new Set<string>(); // `${m:ss}|${removed name}`
+  let hidden = false;
+  for (const line of lines) {
+    const minor = line.match(/^\s*\d+:\d{2}\s+\[MINOR DISPELS\]\s+(.*)$/);
+    if (minor) {
+      const body = minor[1]!;
+      if (/, \+\d+\)/.test(body)) hidden = true;
+      for (const c of body.matchAll(/(\d+:\d{2}) ([^;()]+)/g)) {
+        const names = c[2]!.replace(/ — [^;)]*$/, "").split("、");
+        for (const n of names) pressed.add(`${c[1]}|${n.trim()}`);
+      }
+      continue;
+    }
+    const cl = line.match(
+      /^\s*(\d+:\d{2})\s+\[CLEANSE\]\s+.*? dispelled (?:\d+ effects: (.*?)|(.*?) off .*?)(?: \(|$)/,
+    );
+    if (cl)
+      for (const n of (cl[2] ?? cl[3] ?? "").split(", "))
+        pressed.add(`${cl[1]}|${n.trim()}`);
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("type=backlash-dispel ")) continue;
+    const m = line.match(/facts=\{(.*)\}\s*$/);
+    if (!m) continue;
+    const f = parseFactsBlock(m[1]!);
+    const t = Number(f.t);
+    if (!Number.isFinite(t) || !f.debuff) continue;
+    if (pressed.has(`${fmtTime(t)}|${f.debuff}`) || hidden) continue;
+    failures.push(
+      `line ${i + 1}: backlash-dispel ${f.debuff} @${fmtTime(t)} —— 时间线上这一秒没有任何驱散按键移除它(副作用/被动移除不是驱散决定)`,
+    );
+  }
+  return failures;
+}
+
 /** `0:47  [CC ON ENEMY]   4(HPaladin) ← Kidney Shot (by …` — the second,
  *  the unit's `<unit>` id, the control and the rest of the line. The source
  *  label nests parentheses (`(by 3(ORogue))`), so the length is searched for
@@ -8582,6 +8633,7 @@ export function checkMatch(
   hardFailures.push(...checkSyncWindowOwnerPart(lines));
   hardFailures.push(...checkCdWasteSharedCooldown(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));
+  hardFailures.push(...checkBacklashDispelWasPressed(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));
   hardFailures.push(...checkCdPriorCrossingHp(lines));

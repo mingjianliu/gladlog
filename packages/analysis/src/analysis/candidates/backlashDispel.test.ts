@@ -9,6 +9,7 @@ import {
   BACKLASH_WORTH_MIN_DOTS,
   backlashDispelEvents,
   backlashDispelWindowEvents,
+  backlashRemovalDecision,
   type IBacklashDispelPoint,
   isAccusableBacklashDispel,
   isImmuneWindow,
@@ -174,5 +175,21 @@ describe("F-B2 charge replay counts presses, not removals (codex review)", () =>
     expect(
       chargeStateAt(distinctDispelPressSeconds([10, 10]), 8, 2, 11).charges,
     ).toBe(1);
+  });
+});
+
+describe("backlashRemovalDecision — only a deliberate dispel is a dispel decision (fact12 D28)", () => {
+  const rm = (dispelKind: "deliberate" | "proc" | "rider", timeSeconds: number) => ({ dispelKind, timeSeconds });
+  it("a deliberate dispel is the decision, even next to a side-effect removal", () => {
+    const d = rm("deliberate", 12);
+    expect(backlashRemovalDecision([rm("rider", 11), d], 10)).toBe(d);
+  });
+  it("cf63da4a r0 1:43: Fortifying Brew's own removal 1 s in is no decision either way", () => {
+    expect(backlashRemovalDecision([rm("rider", 11)], 10)).toBe("no-decision");
+    expect(backlashRemovalDecision([rm("proc", 14.9)], 10)).toBe("no-decision");
+  });
+  it("a side-effect removal after the left-on instant leaves the left-on decision standing", () => {
+    expect(backlashRemovalDecision([rm("rider", 15)], 10)).toBeUndefined();
+    expect(backlashRemovalDecision([], 10)).toBeUndefined();
   });
 });

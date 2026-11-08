@@ -63,6 +63,7 @@ import {
   type IDispelEvent,
   reconstructDispelSummary,
 } from "../../utils/dispelAnalysis";
+import { isDeliberateDispel } from "../../utils/dispelKind";
 import { getDRCategory } from "../../utils/drAnalysis";
 import { analyzeOutgoingCCChains } from "../../utils/outgoingCcChains";
 import { roundEndMs } from "../../utils/roundEnd";
@@ -199,6 +200,26 @@ function sumAbs(
     if (t >= fromMs && t <= toMs) s += Math.abs(e.effectiveAmount);
   }
   return s;
+}
+
+/**
+ * fact12 D28 (T21, cf63da4a r0 1:43): which removal of a backlash debuff is a
+ * decision to dispel it. Only a deliberate dispel — `dispelKind`, the
+ * predicate the [MINOR DISPELS] fold and the cleanse-on-cooldown replay
+ * already read. A Fortifying Brew's own SPELL_DISPEL (a rider) or a Cleanse
+ * the Weak proc removed it as a side effect: no dispel decision, and when it
+ * went before the left-on instant (application + BACKLASH_LEFT_ON_LAG_S) no
+ * left-on decision either (`"no-decision"`). `undefined`: left on.
+ */
+export function backlashRemovalDecision<
+  T extends Pick<IDispelEvent, "dispelKind" | "timeSeconds">,
+>(removals: readonly T[], applyRel: number): T | undefined | "no-decision" {
+  const dispel = removals.find((c) => isDeliberateDispel(c.dispelKind));
+  if (dispel) return dispel;
+  const side = removals.find((c) => !isDeliberateDispel(c.dispelKind));
+  if (side && side.timeSeconds < applyRel + BACKLASH_LEFT_ON_LAG_S)
+    return "no-decision";
+  return undefined;
 }
 
 /**
@@ -366,13 +387,16 @@ export function backlashDispelDecisionPoints(
       if (capable.length === 0) continue;
       const available = capable.filter((f) => offCd(f, applyRel));
 
-      const dispel = cleanses.find(
+      const removals = cleanses.filter(
         (c) =>
           c.targetName === target.name &&
           c.removedSpellId === sid &&
           c.timeSeconds >= applyRel - 0.05 &&
           c.timeSeconds <= rel(endMs) + 0.15,
       );
+      const pick = backlashRemovalDecision(removals, applyRel);
+      if (pick === "no-decision") continue;
+      const dispel = pick;
       // one dispel cast that took two applications (two casters' copies) is
       // one decision: the earlier application's, the other copy among what
       // it co-removed
@@ -409,6 +433,7 @@ export function backlashDispelDecisionPoints(
         ? cleanses
             .filter(
               (c) =>
+                isDeliberateDispel(c.dispelKind) &&
                 c.sourceName === dispel.sourceName &&
                 Math.abs(c.timeSeconds - dispel.timeSeconds) <=
                   CO_REMOVE_PAIR_S &&
