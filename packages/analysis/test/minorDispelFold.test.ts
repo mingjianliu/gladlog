@@ -14,8 +14,10 @@ import {
   MINOR_DISPEL_RIDER_TAG,
   minorDispelPartTag,
 } from "../src/context/timelineSections/minorDispels";
+import { BACKLASH_CC_SPELL_IDS } from "../src/data/backlashCc";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  DISPEL_PENALTY_SPELLS,
   type IDispelEvent,
   reconstructDispelSummary,
 } from "../src/utils/dispelAnalysis";
@@ -80,6 +82,10 @@ describe("formatMinorDispelPart", () => {
     expect(out).toBe(
       "Purify ×7 (0:10 Corruption; 0:20 Corruption; 0:30 Corruption; 0:40 Corruption; 2:20 Unstable Affliction — no backlash silence landed; 2:48 Unstable Affliction — backlash silence landed, +1)",
     );
+  });
+  it("every backlash-dispel debuff (DISPEL_PENALTY_SPELLS) is a never-folded backlash id (eval checkBacklashDispelWasPressed reads this)", () => {
+    for (const id of DISPEL_PENALTY_SPELLS.keys())
+      expect(BACKLASH_CC_SPELL_IDS.has(id), id).toBe(true);
   });
   it("more than four casts end in +N; removals ≤ 50 ms apart are one cast", () => {
     const out = formatMinorDispelPart({

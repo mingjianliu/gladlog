@@ -7052,18 +7052,21 @@ export function checkBacklashRefConsistency(lines: string[]): string[] {
  * pressed a dispel for — cf63da4a r0 1:43: Fortifying Brew's own SPELL_DISPEL
  * (a rider, folded as `Fortifying Brew (side effect of the cast)`, no time
  * listed) was filed as the owner's choice to dispel Unstable Affliction.
- * A deliberate part that hides casts behind `+N` makes the row unprovable,
- * not failed.
+ * A `+N` fold never hides the cast checked here: the row's debuff is a
+ * `DISPEL_PENALTY_SPELLS` key, every one of which is a
+ * `BACKLASH_CC_SPELL_IDS` key, and `formatMinorDispelPart` always lists a
+ * backlash cast (both pinned in analysis `minorDispelFold.test.ts`).
+ * Known slack (codex B2, recorded only): one press's removals are listed
+ * under its first removal's second, so a press straddling a second boundary
+ * (Purify 17.990 / 18.010 → `0:17`, row t=18.0) would read as unpressed.
  */
 export function checkBacklashDispelWasPressed(lines: string[]): string[] {
   const failures: string[] = [];
   const pressed = new Set<string>(); // `${m:ss}|${removed name}`
-  let hidden = false;
   for (const line of lines) {
     const minor = line.match(/^\s*\d+:\d{2}\s+\[MINOR DISPELS\]\s+(.*)$/);
     if (minor) {
       const body = minor[1]!;
-      if (/, \+\d+\)/.test(body)) hidden = true;
       for (const c of body.matchAll(/(\d+:\d{2}) ([^;()]+)/g)) {
         const names = c[2]!.replace(/ — [^;)]*$/, "").split("、");
         for (const n of names) pressed.add(`${c[1]}|${n.trim()}`);
@@ -7085,7 +7088,7 @@ export function checkBacklashDispelWasPressed(lines: string[]): string[] {
     const f = parseFactsBlock(m[1]!);
     const t = Number(f.t);
     if (!Number.isFinite(t) || !f.debuff) continue;
-    if (pressed.has(`${fmtTime(t)}|${f.debuff}`) || hidden) continue;
+    if (pressed.has(`${fmtTime(t)}|${f.debuff}`)) continue;
     failures.push(
       `line ${i + 1}: backlash-dispel ${f.debuff} @${fmtTime(t)} —— 时间线上这一秒没有任何驱散按键移除它(副作用/被动移除不是驱散决定)`,
     );

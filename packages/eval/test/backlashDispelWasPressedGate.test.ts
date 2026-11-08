@@ -39,10 +39,17 @@ describe("checkBacklashDispelWasPressed (fact12 D28)", () => {
       ]),
     ).toHaveLength(2);
   });
-  it("casts hidden behind +N make the row unprovable, not failed", () => {
+  it("a +N fold anywhere does not excuse the row (a backlash cast is never folded)", () => {
     expect(
       checkBacklashDispelWasPressed([
+        "0:05  [MINOR DISPELS]   3(RPriest): Dispel Magic ×6 (0:05 Power Word: Fortitude; 0:12 Mark of the Wild; 0:20 Arcane Intellect; 0:31 Battle Shout, +2) (low-priority, folded)",
         "0:17  [MINOR DISPELS]   1(HPriest): Purify ×5 (0:17 Haunt; 0:26 Haunt; 0:53 Haunt; 1:24 Haunt, +1) (low-priority, folded)",
+        row("95.2"),
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkBacklashDispelWasPressed([
+        "0:17  [MINOR DISPELS]   1(HPriest): Purify ×6 (0:17 Haunt; 0:26 Haunt; 0:53 Haunt; 1:24 Haunt; 1:35 Unstable Affliction — backlash silence landed, +1) (low-priority, folded)",
         row("95.2"),
       ]),
     ).toHaveLength(0);
