@@ -2819,6 +2819,27 @@ const INDEX: PredicateRow[] = [
     symbol: "isGhostAtRenderSecondOf",
     mod: combatStates,
   },
+  // T07 a2 (codex B9): a ghost end keeps its trough; the rot damage sum
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "isGhostEndWindow",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "ghostEndTroughInWindow",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "windowTroughOffGhost",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "rotPressureDamageInWindow",
+    mod: matchTimelineSections,
+  },
   {
     file: `${A}/utils/combatStates.ts`,
     symbol: "spanHoldsGhostSecond",

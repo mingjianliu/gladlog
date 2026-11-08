@@ -842,6 +842,107 @@ describe("① c — a [DMG SPIKE] bucket closes at its victim's death / the roun
     expect(gridHpPct(priest, at(43))).toBe(34);
   });
 
+  const sor = (fromS: number, toS: number) => [
+    makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      "215769",
+      at(fromS),
+      "f1",
+      "f1",
+      "BUFF",
+    ),
+    makeAuraEvent(
+      LogEvent.SPELL_AURA_REMOVED,
+      "215769",
+      at(toS),
+      "f1",
+      "f1",
+      "BUFF",
+    ),
+  ];
+
+  // codex B9 #1: the form's last second is also the death's — the tick
+  // prints `ghost` there (`state.ts` statusOf: ghost before dead)
+  it("T07 a2: a second both ghost and dead reads as the tick does — no reading", () => {
+    const priest = {
+      ...victim({ hitsAt: [9.5], deathS: 20.4, hp: [[9, 70]] }),
+      auraEvents: sor(10, 20.4),
+    } as ReturnType<typeof makeUnit>;
+    expect(isDeadAtRenderSecond(priest, T0, 20)).toBe(true);
+    expect(gridEndpointHpPct(priest, T0, 20)).toBeNull();
+  });
+
+  // codex B9 #2: a ghost end withholds that endpoint only — the trough
+  // before the form stays (Spirit of Redemption follows a lethal drop)
+  it("T07 a2: a [DMG SPIKE] ending on a ghost second keeps its trough", () => {
+    const priest = {
+      ...victim({
+        hitsAt: [10.2, 12, 14, 15.4],
+        hp: [
+          [10, 80],
+          [15.4, 6],
+          [17, 57],
+        ],
+      }),
+      auraEvents: sor(18.7, 28),
+    } as ReturnType<typeof makeUnit>;
+    const out: string[] = [];
+    emitDmgSpikeEntries({
+      pressureWindows: [
+        {
+          fromSeconds: 10,
+          toSeconds: 20,
+          totalDamage: 600_000,
+          targetName: "Victim-Realm",
+          targetSpec: "Holy Priest",
+        },
+      ],
+      friends: [priest],
+      matchStartMs: T0,
+      pid: (n) => n.split("-")[0]!,
+      addEntry: (_t, ...ls) => out.push(...ls),
+    });
+    // the second is `hpTroughInWindow`'s own (the grid tick that reads it)
+    expect(out[0]).toMatch(/\(80% -> ghost, low 6% @0:1[45]\)/);
+    expect(out[0]).not.toContain("healed through");
+  });
+
+  // codex 85-tk-B-T07-2: a form inside a numeric-ended window (the pressed
+  // form can end alive) — no low on its ghost seconds
+  it("T07 a2: a numeric-ended [DMG SPIKE] reads no low on a ghost second", () => {
+    const priest = {
+      ...victim({
+        hitsAt: [10.2, 12, 13, 14],
+        hp: [
+          [10, 80],
+          [12, 80],
+          [14, 20],
+          [18.9, 80],
+          [20, 80],
+        ],
+      }),
+      auraEvents: sor(12.2, 18.4),
+    } as ReturnType<typeof makeUnit>;
+    const out: string[] = [];
+    emitDmgSpikeEntries({
+      pressureWindows: [
+        {
+          fromSeconds: 10,
+          toSeconds: 20,
+          totalDamage: 600_000,
+          targetName: "Victim-Realm",
+          targetSpec: "Holy Priest",
+        },
+      ],
+      friends: [priest],
+      matchStartMs: T0,
+      pid: (n) => n.split("-")[0]!,
+      addEntry: (_t, ...ls) => out.push(...ls),
+    });
+    expect(out[0]).toContain("(80% -> 80% HP");
+    expect(out[0]).not.toContain("low 20%");
+  });
+
   it("a bucket that opens before the death second keeps its live start", () => {
     const dead = victim({
       hitsAt: [44.2, 44.6, 45.1, 45.2, 45.3, 45.6],

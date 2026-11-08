@@ -21,11 +21,12 @@ import { buildAuraIntervals } from "./auraIntervals";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import {
   canonicalSpellId,
+  ghostEndTroughInWindow,
   gridEndpointHpPct,
-  hpTroughInWindow,
   isDeadAtRenderSecond,
+  isGhostEndWindow,
   isHpTroughWorthPrinting,
-  roundClippedTroughSpan,
+  windowTroughOffGhost,
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
@@ -247,6 +248,9 @@ export interface IBurstLedgerEntry {
      * readings, and nothing decides on this field (`isBurstConverted` reads
      * `died`, the cards read the endpoints). */
     hpLow: { pct: number; atSeconds: number } | null;
+    /** the last second is a Spirit of Redemption (`ghost`) second: the line
+     * prints `A% → ghost` (`hpEndPct` is null there; codex B9 #2) */
+    hpEndGhost?: true;
     damage: number;
     /** The part of `damage` the target's shields absorbed. */
     absorbed: number;
@@ -686,32 +690,46 @@ export function analyzeBurstLedger(
       // seconds, the `[DMG SPIKE]` line's own function and window
       const low =
         hpStartPct !== null && hpEndPct !== null && !deadAtEnd
-          ? hpTroughInWindow(
+          ? // not past the round's end (fact10 D30), no low on a ghost
+            // second (codex 85-tk-B-T07-2)
+            windowTroughOffGhost(
               target,
               matchStartMs,
               fromSec,
               toSec,
-              undefined,
-              // not past the round's end (fact10 D30)
-              roundClippedTroughSpan(
-                matchStartMs,
-                fromSec,
-                toSec,
-                roundEndAtMs,
-              ),
+              roundEndAtMs,
             )
           : null;
+
+      // codex B9 #2: a burst ending on a Spirit of Redemption second
+      // withholds that end only (`A% → ghost`), never the trough before it
+      const ghostEnd =
+        hpStartPct !== null &&
+        isGhostEndWindow(target, matchStartMs, fromSec, toSec);
+      const ghostLow = ghostEnd
+        ? ghostEndTroughInWindow(
+            target,
+            matchStartMs,
+            fromSec,
+            toSec,
+            roundEndAtMs,
+            hpStartPct,
+          )
+        : null;
 
       dominantTarget = {
         unitId: top.unitId,
         unitName: top.unitName,
         hpStartPct,
         hpEndPct,
+        ...(ghostEnd ? { hpEndGhost: true as const } : {}),
         hpLow:
           low !== null &&
           isHpTroughWorthPrinting(hpStartPct!, hpEndPct!, low.pct)
             ? { pct: low.pct, atSeconds: low.atSec }
-            : null,
+            : ghostLow
+              ? { pct: ghostLow.pct, atSeconds: ghostLow.atSec }
+              : null,
         damage: top.damage,
         absorbed: top.absorbed,
         defensivesHit,
@@ -1058,6 +1076,10 @@ export function formatBurstLedgerForContext(
   // FT-T03 (ruling D7): the low is off the grid — legended when one prints
   // (worded without the literal line tag: tests and gates find the target
   // line by it)
+  if (bursts.some((b) => b.dominantTarget?.hpEndGhost))
+    lines.push(
+      "  On a burst's target line, `A% → ghost` = the burst's last second is one that unit's [STATE] tick reads `ghost` (Spirit of Redemption: no HP reading).",
+    );
   if (bursts.some((b) => b.dominantTarget?.hpLow))
     lines.push(
       "  On a burst's target line, `A% → B% (low L% at m:ss)` = that unit's [STATE] readings at the burst's first and last second; `low` = the lowest HP the log shows for it in between, at the second it happened (the true minimum between the ticks: it can sit below every [STATE] number of the span).",
@@ -1075,7 +1097,9 @@ export function formatBurstLedgerForContext(
       const hpStr =
         t.hpStartPct !== null && t.hpEndPct !== null
           ? ` ${Math.round(t.hpStartPct)}% → ${Math.round(t.hpEndPct)}%${lowStr}`
-          : "";
+          : t.hpStartPct !== null && t.hpEndGhost
+            ? ` ${Math.round(t.hpStartPct)}% → ghost${lowStr}`
+            : "";
       // F-L1: the burst's other victim(s) — a fact about who else it hit
       // and killed; the target above is unchanged
       const alsoStr =

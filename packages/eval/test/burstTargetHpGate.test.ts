@@ -144,3 +144,32 @@ describe("checkBurstTargetHpConsistency", () => {
     ).toEqual([]);
   });
 });
+
+describe("checkBurstTargetHpConsistency — a ghost end (T07 a2, codex B9 #2)", () => {
+  const ghostTick = (t: string) =>
+    `${t}  [STATE]   friends 1(SPriest):99 / enemies 4(MHunter):ghost`;
+  it("`A% → ghost (low …)` beside a ghost end tick passes", () => {
+    expect(
+      run(
+        head,
+        target("80% → ghost (low 6% at 0:35)"),
+        state("0:27", 80),
+        state("0:40", 57),
+        ghostTick("0:48"),
+      ),
+    ).toEqual([]);
+  });
+  it("a ghost end whose tick reads a number, and a numeric end on a ghost tick, are red", () => {
+    expect(run(head, target("80% → ghost"), state("0:48", 40))[0]).toContain(
+      "终点写 ghost",
+    );
+    expect(run(head, target("80% → 40%"), ghostTick("0:48"))[0]).toContain(
+      "[STATE] 报 ghost",
+    );
+  });
+  it("the low is weighed against the start; an unprinted trough tick is red", () => {
+    expect(
+      run(head, target("80% → ghost"), state("0:35", 6), ghostTick("0:48"))[0],
+    ).toContain("未标注低谷");
+  });
+});

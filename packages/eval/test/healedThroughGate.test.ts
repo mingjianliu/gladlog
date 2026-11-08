@@ -243,3 +243,41 @@ describe("checkHealedThroughConsistency — a window that ends on a death (T12 �
     ).toEqual([]);
   });
 });
+
+describe("checkHealedThroughConsistency — a ghost end (T07 a2, codex B9 #2)", () => {
+  const GHOST =
+    "0:10–0:20  [DMG SPIKE]   2(HPriest) (Holy Priest): 0.60M in 10s (60k DPS) (80% -> ghost, low 6% @0:15)";
+  const tick = (t: string, v: string) =>
+    `${t}  [STATE]   friends 1(RShaman):99 2(HPriest):${v} / enemies 6(RShaman):68`;
+  it("passes beside its ticks: no word, the low under every tick", () => {
+    expect(
+      checkHealedThroughConsistency([
+        tick("0:10", "80"),
+        tick("0:17", "57"),
+        tick("0:20", "ghost"),
+        GHOST,
+      ]),
+    ).toEqual([]);
+  });
+  it("a word, a numeric end tick, or a low on a ghost second is red", () => {
+    expect(
+      checkHealedThroughConsistency([
+        GHOST.replace(")", " — healed through)"),
+      ]).join(),
+    ).toContain("终点是 ghost");
+    expect(
+      checkHealedThroughConsistency([tick("0:20", "40"), GHOST]).join(),
+    ).toContain("不报 ghost");
+    expect(
+      checkHealedThroughConsistency([tick("0:15", "ghost"), GHOST]).join(),
+    ).toContain("报 ghost");
+  });
+  it("a numeric end on a ghost tick is red", () => {
+    expect(
+      checkHealedThroughConsistency([
+        tick("0:20", "ghost"),
+        "0:10–0:20  [DMG SPIKE]   2(HPriest) (Holy Priest): 0.60M in 10s (80% -> 34% HP, -5%/s)",
+      ]).join(),
+    ).toContain("应为 ghost");
+  });
+});

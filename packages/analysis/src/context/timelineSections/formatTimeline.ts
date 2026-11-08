@@ -241,6 +241,12 @@ export function formatTimeline(
   const ghostRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && STATE_GHOST_TOKEN_RE.test(l)),
   );
+  // codex B9 #2: a [DMG SPIKE] whose last second is a ghost second
+  const spikeGhostEndRendered = entries.some((e) =>
+    e.lines.some(
+      (l) => typeof l === "string" && /\[DMG SPIKE\].*% -> ghost\b/.test(l),
+    ),
+  );
   // FT-T03 (ruling D7): the tick's own legend, whenever a tick is printed
   const stateRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && STATE_TICK_LINE_RE.test(l)),
@@ -599,6 +605,11 @@ export function formatTimeline(
       ? [
           "  `unit:ghost` on a [STATE] line = that priest is in Spirit of Redemption form at that second (pressed, or the",
           "    on-death proc): the form has no HP reading, so none is printed.",
+        ]
+      : []),
+    ...(spikeGhostEndRendered
+      ? [
+          "  `A% -> ghost` on a [DMG SPIKE] line = its last second is a Spirit of Redemption second (no HP reading); a `low` before it is still printed.",
         ]
       : []),
     ...(silenceLineCount > 0

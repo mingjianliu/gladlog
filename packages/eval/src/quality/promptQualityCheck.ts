@@ -488,7 +488,7 @@ export function checkPercentileMonotonicity(lines: string[]): string[] {
 
 // "0:27–0:37  [DMG SPIKE]   2(SHunter) (Survival Hunter): 0.88M in 10s (…) (79% -> 29% HP, …)"
 const SPIKE_HP =
-  /^(\d+):(\d+)–(?:\d+):(?:\d+)\s+\[DMG SPIKE\]\s+(\S+)\s+\([^)]*\):.*?\((\d+)%\s*->\s*(\d+)%\s*HP/;
+  /^(\d+):(\d+)–(?:\d+):(?:\d+)\s+\[DMG SPIKE\]\s+(\S+)\s+\([^)]*\):.*?\((\d+)%\s*->\s*(?:(\d+)%\s*HP|ghost)/;
 // "0:15  [YOU] [CD]   Holy Word: Chastise → 6(RPaladin) (68% HP)" — the
 // class-C inline HP form
 const INLINE_HP = /^(\d+):(\d+)\s+.*?→\s*(\S+)\s*\((\d+)%\s*HP/;
@@ -950,12 +950,14 @@ export function checkDmgSpikeCcCoverConsistency(lines: string[]): string[] {
  * half above also requires "and no trough".
  */
 const SPIKE_OUTCOME =
-  /^(\d+):(\d+)–(\d+):(\d+)\s+\[DMG SPIKE\]\s+(\S+)\s.*?\((\d+)% -> (\d+)% HP([^)]*)\)/;
+  /^(\d+):(\d+)–(\d+):(\d+)\s+\[DMG SPIKE\]\s+(\S+)\s.*?\((\d+)% -> (?:(\d+)% HP|ghost)([^)]*)\)/;
 const SPIKE_LOW = /, low (\d+)% @(\d+):(\d+)/;
 export function checkHealedThroughConsistency(lines: string[]): string[] {
   const ticks: Array<{ s: number; hp: Map<number, number> }> = [];
   /** second → units a `dead` tick names (a printed low there is no low) */
   const deadAt = new Map<number, Set<number>>();
+  /** second → units a `ghost` tick names (Spirit of Redemption: no reading) */
+  const ghostAt = new Map<number, Set<number>>();
   for (const line of lines) {
     const st = line.match(STATE_LINE);
     if (!st) continue;
@@ -966,7 +968,10 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
       if (v === "dead") {
         if (!deadAt.has(s)) deadAt.set(s, new Set());
         deadAt.get(s)!.add(Number(tok[1]));
-      } else if (v !== "ghost") hp.set(Number(tok[1]), Number(v));
+      } else if (v === "ghost") {
+        if (!ghostAt.has(s)) ghostAt.set(s, new Set());
+        ghostAt.get(s)!.add(Number(tok[1]));
+      } else hp.set(Number(tok[1]), Number(v));
     }
     ticks.push({ s, hp });
   }
@@ -974,11 +979,15 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   lines.forEach((line, i) => {
     if (!line.includes("[DMG SPIKE]")) return;
-    const pair = line.match(/\((\d+)% -> (\d+)% HP([^)]*)\)/);
+    const pair = line.match(/\((\d+)% -> (?:(\d+)% HP|(ghost))([^)]*)\)/);
     if (!pair) return;
     const A = Number(pair[1]);
-    const B = Number(pair[2]);
-    const tail = pair[3]!;
+    // `A% -> ghost` (codex B9 #2): the end second is a Spirit of Redemption
+    // second — no end reading, no rate, no outcome word; a low is weighed
+    // against the start alone
+    const ghostEnd = pair[3] !== undefined;
+    const B = ghostEnd ? A : Number(pair[2]);
+    const tail = pair[4]!;
     const delta = B - A;
     // Whole line, not just the HP tail: a stray word anywhere on the line is
     // the drift this gate exists for (and what its pre-trough tests pin).
@@ -996,8 +1005,10 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
     // whatever the delta (`0% -> 0%` for a bucket opened in the death second).
     if (hasWord && B === 0)
       failures.push(`${at} 标注「healed through」但终点 HP 为 0%(死亡)`);
+    if (hasWord && ghostEnd)
+      failures.push(`${at} 标注「healed through」但终点是 ghost`);
     // the renderer's own predicate, so the two-sided rule cannot drift
-    if (!hasWord && isSpikeHealedThrough(A, B, Boolean(low)))
+    if (!ghostEnd && !hasWord && isSpikeHealedThrough(A, B, Boolean(low)))
       failures.push(
         `${at} 同行 HP ${A}% -> ${B}%(Δ${delta} ≥ 0)却没有「healed through」标注`,
       );
@@ -1018,10 +1029,21 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
       failures.push(
         `${at} 起点写 ${A}%,但 ${fmtTime(from)} 的 [STATE] 报 dead(应为 0%)`,
       );
-    if (deadAt.get(to)?.has(unitId) && B !== 0)
+    if (!ghostEnd && deadAt.get(to)?.has(unitId) && B !== 0)
       failures.push(
         `${at} 终点写 ${B}%,但 ${fmtTime(to)} 的 [STATE] 报 dead(应为 0%)`,
       );
+    if (!ghostEnd && ghostAt.get(to)?.has(unitId))
+      failures.push(
+        `${at} 终点写 ${B}%,但 ${fmtTime(to)} 的 [STATE] 报 ghost(应为 ghost)`,
+      );
+    if (ghostEnd) {
+      const endTick = ticks.find((t) => t.s === to);
+      if (deadAt.get(to)?.has(unitId) || endTick?.hp.has(unitId))
+        failures.push(
+          `${at} 终点写 ghost,但 ${fmtTime(to)} 的 [STATE] 不报 ghost`,
+        );
+    }
     const inWindow = ticks.filter(
       (t) => t.s >= from && t.s <= to && t.hp.has(unitId),
     );
@@ -1038,9 +1060,9 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
       // second the unit is `dead` at. The tick of the printed second is NOT
       // required to equal L any more (FT-T03) — only never to be below it,
       // like every other tick of the window.
-      if (deadAt.get(lowS)?.has(unitId))
+      if (deadAt.get(lowS)?.has(unitId) || ghostAt.get(lowS)?.has(unitId))
         failures.push(
-          `${at} 标注 low ${L}% @${fmtTime(lowS)},但该秒 [STATE] 报 dead`,
+          `${at} 标注 low ${L}% @${fmtTime(lowS)},但该秒 [STATE] 报 ${deadAt.get(lowS)?.has(unitId) ? "dead" : "ghost"}`,
         );
       for (const t of inWindow)
         if (isTickBelowTrough(t.hp.get(unitId)!, L))
@@ -1063,8 +1085,9 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
 // "  Burst #1 — 0:27–0:48 | Power Infusion + Voidform"
 const BURST_HEAD = /^\s*Burst #\d+ — (\d+):(\d+)–(\d+):(\d+) \|/;
 // "    Target: Cloudz-LaughingSkull-US 95% → 69% (low 39% at 0:38) | your damage 0.52M"
+// "    Target: X 80% → ghost (low 6% at 0:15) | …" — a Spirit of Redemption end
 const BURST_TARGET_HP =
-  /^\s*Target: (.+?) (\d+)% → (\d+)%(?: \(low (\d+)% at (\d+):(\d+)\))? \| your damage/;
+  /^\s*Target: (.+?) (\d+)% → (?:(\d+)%|(ghost))(?: \(low (\d+)% at (\d+):(\d+)\))? \| your damage/;
 
 /**
  * Hard invariant: the burst ledger's `Target: X A% → B% (low L% at m:ss)`
@@ -1097,15 +1120,15 @@ const BURST_TARGET_HP =
  */
 export function checkBurstTargetHpConsistency(lines: string[]): string[] {
   const { idByName } = parseRoster(lines);
-  const ticks = new Map<number, Map<string, number | "dead">>();
+  const ticks = new Map<number, Map<string, number | "dead" | "ghost">>();
   for (const line of lines) {
     const st = line.match(STATE_LINE);
     if (!st) continue;
-    const hp = new Map<string, number | "dead">();
+    const hp = new Map<string, number | "dead" | "ghost">();
     for (const tok of st[3]!.matchAll(STATE_TOKEN)) {
       const v = tok[2]!;
-      if (v === "dead") hp.set(tok[1]!, "dead");
-      else if (v !== "ghost") hp.set(tok[1]!, Number(v));
+      if (v === "dead" || v === "ghost") hp.set(tok[1]!, v);
+      else hp.set(tok[1]!, Number(v));
     }
     ticks.set(Number(st[1]) * 60 + Number(st[2]), hp);
   }
@@ -1131,7 +1154,10 @@ export function checkBurstTargetHpConsistency(lines: string[]): string[] {
     const from = Number(head[1]) * 60 + Number(head[2]);
     const to = Number(head[3]) * 60 + Number(head[4]);
     const A = Number(m[2]);
-    const B = Number(m[3]);
+    // `A% → ghost`: the end second is a Spirit of Redemption second (codex
+    // B9 #2) — no end reading; a low is weighed against the start alone
+    const ghostEnd = m[4] !== undefined;
+    const B = ghostEnd ? A : Number(m[3]);
     const at = `line ${targetLine + 1}: Burst Target ${m[1]}`;
     const tickAt = (s: number) => ticks.get(s)?.get(id);
 
@@ -1143,12 +1169,21 @@ export function checkBurstTargetHpConsistency(lines: string[]): string[] {
     if (startTick === "dead" && A !== 0)
       failures.push(`${at} 起点 ${A}% 而 ${fmtTime(from)} [STATE] 报 dead`);
     const endTick = tickAt(to);
-    if (typeof endTick === "number" && endTick !== B)
-      failures.push(
-        `${at} 终点 ${B}% 而 ${fmtTime(to)} [STATE] 报 ${endTick}%`,
-      );
-    if (endTick === "dead" && B !== 0)
-      failures.push(`${at} 终点 ${B}% 而 ${fmtTime(to)} [STATE] 报 dead`);
+    if (ghostEnd) {
+      if (endTick !== undefined && endTick !== "ghost")
+        failures.push(
+          `${at} 终点写 ghost 而 ${fmtTime(to)} [STATE] 报 ${endTick}`,
+        );
+    } else {
+      if (typeof endTick === "number" && endTick !== B)
+        failures.push(
+          `${at} 终点 ${B}% 而 ${fmtTime(to)} [STATE] 报 ${endTick}%`,
+        );
+      if (endTick === "dead" && B !== 0)
+        failures.push(`${at} 终点 ${B}% 而 ${fmtTime(to)} [STATE] 报 dead`);
+      if (endTick === "ghost")
+        failures.push(`${at} 终点 ${B}% 而 ${fmtTime(to)} [STATE] 报 ghost`);
+    }
 
     const inSpan: Array<{ s: number; hp: number }> = [];
     for (const [s, hp] of ticks) {
@@ -1156,11 +1191,13 @@ export function checkBurstTargetHpConsistency(lines: string[]): string[] {
       if (s >= from && s <= to && typeof v === "number")
         inSpan.push({ s, hp: v });
     }
-    if (m[4] !== undefined) {
-      const L = Number(m[4]);
-      const lowS = Number(m[5]) * 60 + Number(m[6]);
+    if (m[5] !== undefined) {
+      const L = Number(m[5]);
+      const lowS = Number(m[6]) * 60 + Number(m[7]);
       if (!isHpTroughWorthPrinting(A, B, L))
-        failures.push(`${at} low ${L}% 不满足低谷判据(${A}% → ${B}%)`);
+        failures.push(
+          `${at} low ${L}% 不满足低谷判据(${A}% → ${ghostEnd ? "ghost" : `${B}%`})`,
+        );
       if (lowS < from || lowS > to)
         failures.push(
           `${at} low at ${fmtTime(lowS)} 落在 ${fmtTime(from)}–${fmtTime(to)} 之外`,
@@ -1168,9 +1205,9 @@ export function checkBurstTargetHpConsistency(lines: string[]): string[] {
       // a trough is never read on a second the unit is `dead` at; the tick
       // of the printed second need not equal it (FT-T03) — like every tick
       // of the span, it only must not be below it
-      if (tickAt(lowS) === "dead")
+      if (tickAt(lowS) === "dead" || tickAt(lowS) === "ghost")
         failures.push(
-          `${at} 标注 low ${L}% at ${fmtTime(lowS)},但该秒 [STATE] 报 dead`,
+          `${at} 标注 low ${L}% at ${fmtTime(lowS)},但该秒 [STATE] 报 ${tickAt(lowS)}`,
         );
       for (const t of inSpan)
         if (isTickBelowTrough(t.hp, L))
@@ -1191,7 +1228,7 @@ export function checkBurstTargetHpConsistency(lines: string[]): string[] {
 /** The burst ledger's `Target:` line: 1 = the target's name; the rest is
  * the producer's own tail pattern (`BURST_TARGET_DAMAGE_RE_SRC`). */
 const BURST_TARGET_DAMAGE = new RegExp(
-  String.raw`^\s*Target: (.+?)(?: \d+% → \d+%(?: \(low \d+% at \d+:\d+\))?)?` +
+  String.raw`^\s*Target: (.+?)(?: \d+% → (?:\d+%|ghost)(?: \(low \d+% at \d+:\d+\))?)?` +
     BURST_TARGET_DAMAGE_RE_SRC,
 );
 
@@ -1313,7 +1350,8 @@ function healerHeldRenderedPairs(): Array<{ spec: string; spell: string }> {
   }));
 }
 
-const SOLO_BURST_LINE = /^\s*Solo burst — no ally offensive CD overlapped(.*)\.$/;
+const SOLO_BURST_LINE =
+  /^\s*Solo burst — no ally offensive CD overlapped(.*)\.$/;
 
 /**
  * Hard invariant (user ruling R01, 2026-11-08, fact12 D22): a burst-ledger

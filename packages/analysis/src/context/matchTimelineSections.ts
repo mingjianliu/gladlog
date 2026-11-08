@@ -26,20 +26,21 @@ import {
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
   getUnitHpAtTimestamp,
+  ghostEndTroughInWindow,
   gridEndpointHpPct,
   HP_SAMPLE_RADIUS_MS,
-  hpTroughInWindow,
   IDamageBucket,
   IMajorCooldownInfo,
+  isGhostEndWindow,
   isHealerSpec,
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
   lockoutDebuffStopsPressAtDeath,
   PRESSURE_WINDOWS_TOP_N,
-  roundClippedTroughSpan,
   specToBenchmarkKey,
   specToString,
   usableWhileStunned,
+  windowTroughOffGhost,
 } from "../utils/cooldowns";
 import {
   COUNTERFACTUAL_WINDOW_S,
@@ -293,24 +294,11 @@ export function emitRotPressureEntries(params: {
           const windowStartMs = tsMs - ROT_PRESSURE_MIN_SECONDS * 1000;
           const windowEndMs = tsMs;
 
-          let periodicDmg = 0;
-          let totalDmg = 0;
-
-          for (const dmg of player.damageIn) {
-            if (
-              dmg.timestamp >= windowStartMs &&
-              dmg.timestamp <= windowEndMs
-            ) {
-              const amount = Math.abs(dmg.effectiveAmount || dmg.amount);
-              totalDmg += amount;
-              if (
-                dmg.logLine.event === "SPELL_PERIODIC_DAMAGE" ||
-                dmg.logLine.event === "SPELL_PERIODIC_DAMAGE_SUPPORT"
-              ) {
-                periodicDmg += amount;
-              }
-            }
-          }
+          const { periodicDmg, totalDmg } = rotPressureDamageInWindow(
+            player,
+            windowStartMs,
+            windowEndMs,
+          );
 
           // no damage at all is no "at least half of it periodic" (T07,
           // fact12 B14: the form's window passed on `totalDmg === 0`)
@@ -331,6 +319,36 @@ export function emitRotPressureEntries(params: {
       }
     }
   }
+}
+
+/**
+ * The damage a `[ROT PRESSURE]` window weighs (its four seconds before the
+ * line's second, both ends inclusive): every `damageIn` row's amount, and
+ * the periodic part. The line needs `totalDmg > 0` and a periodic share of
+ * at least `ROT_PRESSURE_MIN_PERIODIC_SHARE`; scan5 `fact12d`
+ * (`rotPressureNoDamage`) reads this same sum (codex B9 #3: a zero-amount
+ * periodic row is a row, not damage).
+ */
+export function rotPressureDamageInWindow(
+  player: Pick<ICombatUnit, "damageIn">,
+  windowStartMs: number,
+  windowEndMs: number,
+): { periodicDmg: number; totalDmg: number } {
+  let periodicDmg = 0;
+  let totalDmg = 0;
+  for (const dmg of player.damageIn) {
+    if (dmg.timestamp >= windowStartMs && dmg.timestamp <= windowEndMs) {
+      const amount = Math.abs(dmg.effectiveAmount || dmg.amount);
+      totalDmg += amount;
+      if (
+        dmg.logLine.event === "SPELL_PERIODIC_DAMAGE" ||
+        dmg.logLine.event === "SPELL_PERIODIC_DAMAGE_SUPPORT"
+      ) {
+        periodicDmg += amount;
+      }
+    }
+  }
+  return { periodicDmg, totalDmg };
 }
 
 // ── [DMG SPIKE] events ──────────────────────────────────────────────────────
@@ -525,13 +543,13 @@ export function emitDmgSpikeEntries(params: {
       // The endpoints A / B stay [STATE] readings. The eval gate verifies the
       // weaker invariant: no tick inside the window reads below the low.
       const low = targetUnit
-        ? hpTroughInWindow(
+        ? // no low on a ghost second (codex 85-tk-B-T07-2)
+          windowTroughOffGhost(
             targetUnit,
             matchStartMs,
             fromSec,
             toSec,
-            undefined,
-            roundClippedTroughSpan(matchStartMs, fromSec, toSec, roundEndAtMs),
+            roundEndAtMs,
           )
         : null;
       const trough =
@@ -545,6 +563,22 @@ export function emitDmgSpikeEntries(params: {
         ? " — healed through"
         : "";
       hpStr = ` (${hpFrom}% -> ${hpTo}% HP, ${sign}${hpVelocity.toFixed(0)}%/s${troughTag}${outcomeTag})`;
+    } else if (
+      targetUnit &&
+      hpFrom !== null &&
+      isGhostEndWindow(targetUnit, matchStartMs, fromSec, toSec)
+    ) {
+      // codex B9 #2: the ghost end is withheld, the trough before it is not
+      // (no rate, no outcome word: there is no end reading)
+      const low = ghostEndTroughInWindow(
+        targetUnit,
+        matchStartMs,
+        fromSec,
+        toSec,
+        roundEndAtMs,
+        hpFrom,
+      );
+      hpStr = ` (${hpFrom}% -> ghost${low ? `, low ${low.pct}% @${fmtTime(low.atSec)}` : ""})`;
     }
 
     const benchmarkKey = targetUnit ? specToBenchmarkKey(targetUnit.spec) : "";

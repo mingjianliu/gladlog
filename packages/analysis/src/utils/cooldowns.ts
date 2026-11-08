@@ -2749,11 +2749,85 @@ export function gridEndpointHpPct(
   matchStartMs: number,
   renderSecond: number,
 ): number | null {
-  if (isDeadAtRenderSecond(unit, matchStartMs, renderSecond)) return 0;
   // a second the tick prints `ghost` has no reading: Spirit of Redemption's
-  // HP fields keep the last value (T07, fact12 C14)
+  // HP fields keep the last value (T07, fact12 C14). Checked before the
+  // death, the `[STATE]` tick's own precedence (`state.ts` `statusOf`): the
+  // form's last second is also the death's (codex B9 #1)
   if (isGhostAtRenderSecondOf(unit, matchStartMs, renderSecond)) return null;
+  if (isDeadAtRenderSecond(unit, matchStartMs, renderSecond)) return 0;
   return gridHpPct(unit, matchStartMs + renderSecond * 1000);
+}
+
+/**
+ * The trough of a `[DMG SPIKE]` / burst ledger window: `hpTroughInWindow`
+ * over its displayed seconds, round-clipped (`roundClippedTroughSpan`), with
+ * the seconds the `[STATE]` tick reads `ghost` skipped — the form has no HP
+ * reading, as no low is read on a `dead` second (codex 85-tk-B-T07-2: SoR
+ * 12.2–18.4 s inside a 10–20 s window printed `low 20% @0:14` beside a ghost
+ * tick). The worth-printing test stays the caller's.
+ */
+export function windowTroughOffGhost(
+  unit: ICombatUnit,
+  matchStartMs: number,
+  fromSec: number,
+  toSec: number,
+  roundEndAtMs: number | undefined,
+): { pct: number; atSec: number; atMs: number } | null {
+  return hpTroughInWindow(
+    unit,
+    matchStartMs,
+    fromSec,
+    toSec,
+    (sec) => isGhostAtRenderSecondOf(unit, matchStartMs, sec),
+    roundClippedTroughSpan(matchStartMs, fromSec, toSec, roundEndAtMs),
+  );
+}
+
+/**
+ * The trough a window ending on a Spirit of Redemption second keeps (codex
+ * B9 #2): its last endpoint is withheld (`gridEndpointHpPct` null — the form
+ * has no reading), not the low before it. The form follows a lethal drop, so
+ * the drop is the line's point: 80 % at 0:10, 6 % at 0:15.4, 57 % by 0:17,
+ * the form from 0:18.7 prints `80% -> ghost, low 6% @0:15`. The low is
+ * `windowTroughOffGhost`, worth printing against the live start alone
+ * (`isHpTroughWorthPrinting` with both ends = `hpFrom`). Read by
+ * `[DMG SPIKE]`, the burst ledger's `Target:` line and scan5 `fact12d`
+ * (`ghostEndTroughDropped`).
+ */
+export function ghostEndTroughInWindow(
+  unit: ICombatUnit,
+  matchStartMs: number,
+  fromSec: number,
+  toSec: number,
+  roundEndAtMs: number | undefined,
+  hpFrom: number,
+): { pct: number; atSec: number } | null {
+  const low = windowTroughOffGhost(
+    unit,
+    matchStartMs,
+    fromSec,
+    toSec,
+    roundEndAtMs,
+  );
+  return low !== null && isHpTroughWorthPrinting(hpFrom, hpFrom, low.pct)
+    ? { pct: low.pct, atSec: low.atSec }
+    : null;
+}
+
+/** Whether a window's HP pair is `A% -> ghost`: a live start and a last
+ * second the `[STATE]` tick reads `ghost` (codex B9 #2). */
+export function isGhostEndWindow(
+  unit: ICombatUnit,
+  matchStartMs: number,
+  fromSec: number,
+  toSec: number,
+): boolean {
+  return (
+    !isGhostAtRenderSecondOf(unit, matchStartMs, fromSec) &&
+    !isDeadAtRenderSecond(unit, matchStartMs, fromSec) &&
+    gridEndpointHpPct(unit, matchStartMs, fromSec) !== null &&
+    isGhostAtRenderSecondOf(unit, matchStartMs, toSec)
+  );
 }
 
 /**

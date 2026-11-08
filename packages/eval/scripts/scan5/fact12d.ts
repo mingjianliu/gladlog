@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- scan over raw parse output */
+ 
 /**
  * fact12d (pipeline 2026-11-07) class checks — T07, fact12 A12/B14/C13/C14.
  *
@@ -18,15 +18,31 @@
  *    seconds before its second) holds no damage row on the unit at all — the
  *    legend's "at least 50% of the damage they took in those 4 s was
  *    periodic" has nothing to be true of (the `totalDmg === 0` pass).
+ *  - ghostEndTroughDropped (codex B9 #2): a `[DMG SPIKE]` line or a burst
+ *    `Target:` line whose LAST second is a ghost second and whose first is
+ *    not (`isGhostEndWindow`), where the window held a trough worth
+ *    printing against the live start (`ghostEndTroughInWindow`, the
+ *    renderer's own selection), and the line prints no such `low`. A Spirit of Redemption form follows a lethal drop: withholding
+ *    the ghost endpoint must not take the trough before it with it.
  */
+import { rotPressureDamageInWindow } from "@gladlog/analysis/src/context/matchTimelineSections";
 import {
   extractSpiritOfRedemptionIntervals,
   isGhostAtRenderSecond,
 } from "@gladlog/analysis/src/utils/combatStates";
+import {
+  ghostEndTroughInWindow,
+  gridEndpointHpPct,
+  isGhostEndWindow,
+} from "@gladlog/analysis/src/utils/cooldowns";
 
-import { type IRoundCtx, secOf, tsOf } from "./ctx";
+import { type IRoundCtx, secOf } from "./ctx";
 
-export const CHECKS = ["ghostReadAsHp", "rotPressureNoDamage"] as const;
+export const CHECKS = [
+  "ghostReadAsHp",
+  "rotPressureNoDamage",
+  "ghostEndTroughDropped",
+] as const;
 
 export function run(ctx: IRoundCtx): void {
   const lines = ctx.text.split("\n");
@@ -54,6 +70,60 @@ export function run(ctx: IRoundCtx): void {
     return out;
   };
 
+  /** codex B9 #2: a window ending on a ghost second keeps its trough */
+  const troughDropped = (
+    name: string,
+    from: number,
+    to: number,
+    line: string,
+    kind: string,
+  ): void => {
+    const u = ctx.byName.get(name);
+    if (!u || !isGhostEndWindow(u, ctx.start, from, to)) return;
+    ctx.bump("ghostEndTroughDropped");
+    const a = gridEndpointHpPct(u, ctx.start, from)!;
+    // the renderer's own selection (`ghostEndTroughInWindow`)
+    const low = ghostEndTroughInWindow(
+      u,
+      ctx.start,
+      from,
+      to,
+      ctx.roundEndAt,
+      a,
+    );
+    if (!low) return;
+    if (new RegExp(`low ${low.pct}% (?:@|at )`).test(line)) return;
+    ctx.violate(
+      "ghostEndTroughDropped",
+      kind,
+      ctx.start + low.atSec * 1000,
+      `${name}:${from}-${to}:trough`,
+      `${name}: ${from}–${to}s ends on a ghost second, starts at ${a}%, low ${low.pct}% at ${low.atSec}s unprinted`,
+      line.trim(),
+    );
+  };
+  {
+    let bFrom = -1;
+    let bTo = -1;
+    for (const l of lines) {
+      const head = /^\s+Burst #\d+ — (\d+:\d{2})–(\d+:\d{2})/.exec(l);
+      if (head) {
+        bFrom = secOf(head[1]!);
+        bTo = secOf(head[2]!);
+        continue;
+      }
+      const tl = /^\s+Target: (\S+)/.exec(l);
+      if (tl && bFrom >= 0) {
+        troughDropped(tl[1]!, bFrom, bTo, l, "burst target");
+        continue;
+      }
+      const sp = /^(\d+:\d{2})–(\d+:\d{2})\s+\[DMG SPIKE\]\s+(\d+)\(/.exec(l);
+      const spName = sp ? pidName.get(sp[3]!) : undefined;
+      if (sp && spName)
+        troughDropped(spName, secOf(sp[1]!), secOf(sp[2]!), l, "dmg spike");
+    }
+  }
+
   let burstFrom = -1;
   let burstTo = -1;
   for (const l of lines) {
@@ -80,16 +150,17 @@ export function run(ctx: IRoundCtx): void {
       const u = ctx.byName.get(name);
       const fromMs = ctx.start + (t - 4) * 1000;
       const toMs = ctx.start + t * 1000;
-      const hits = ((u?.damageIn ?? []) as any[]).filter(
-        (d) => tsOf(d) >= fromMs && tsOf(d) <= toMs,
-      ).length;
-      if (hits === 0)
+      // the producer's own sum (codex B9 #3: a zero-amount row is no damage)
+      const { totalDmg } = u
+        ? rotPressureDamageInWindow(u, fromMs, toMs)
+        : { totalDmg: 0 };
+      if (totalDmg <= 0)
         ctx.violate(
           "rotPressureNoDamage",
           ghostOf(name).has(t) ? "ghost" : "alive",
           toMs,
           `${name}:${t}:rotdmg`,
-          `${name}: no damage row in ${t - 4}–${t}s`,
+          `${name}: no damage in ${t - 4}–${t}s`,
           l.trim(),
         );
       continue;
