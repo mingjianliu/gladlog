@@ -56,6 +56,11 @@ const CANDIDATES: Array<{
   /** only hits on a carrier that is not the caster ("other") or is ("self"):
    * a link aura sits on both ends (Blessing of Sacrifice) */
   carrier?: "other" | "self";
+  /** the modifier fills a different aura slot from the base (Bait and
+   * Switch's magic slot beside Elusiveness's every-school one), so the two
+   * compound as the game applies them, `(1 − base)(1 − mod)`, not
+   * `1 − (base + mod)` (`ownEffectSlot` in talentMitigationModifiers.ts) */
+  multiplicative?: true;
   /** specs whose aura carries a further modifier this row's expectation
    * leaves out (they are the next row's population) */
   exceptSpecs?: string[];
@@ -296,6 +301,7 @@ const CANDIDATES: Array<{
     basePct: 20,
     modPct: 15,
     requires: "79008",
+    multiplicative: true,
   },
   {
     aura: "5277",
@@ -332,9 +338,12 @@ const CANDIDATES: Array<{
   },
 ];
 /** a bucket per candidate row: two rows of one aura and talent split by a
- * third talent (`requiresNot`) must not share one */
+ * third talent (`requiresNot`), by carrier or by school ("Evasion" every
+ * school and "Evasion (physical)" are both 5277 / Elusiveness — codex review
+ * 85-tk-C-T27-2 #4: one bucket took each physical hit twice) must not share
+ * one. No `|` inside: the per-spec split reads the spec as the third field. */
 const candidateKey = (c: (typeof CANDIDATES)[number]) =>
-  `${c.aura}|${c.talent}${c.requiresNot ? `!${c.requiresNot}` : ""}${c.carrier ? `@${c.carrier}` : ""}`;
+  `${c.aura}|${c.talent}#${c.school}${c.requiresNot ? `!${c.requiresNot}` : ""}${c.carrier ? `@${c.carrier}` : ""}`;
 const TRACK = new Set([
   ...Object.keys(MITIGATION_TABLE),
   ...CANDIDATES.map((c) => c.aura),
@@ -653,7 +662,10 @@ const out = rowsToReport.map((c) => {
     no: new Map(),
     unknown: new Map(),
   };
-  const expectedWith = 1 - (c.basePct + c.modPct) / 100;
+  // codex review 85-tk-C-T27-2 #5: a modifier on its own slot compounds
+  const expectedWith = c.multiplicative
+    ? (1 - c.basePct / 100) * (1 - c.modPct / 100)
+    : 1 - (c.basePct + c.modPct) / 100;
   const holders = unitValues(bk.yes);
   const ci = bootstrap(holders);
   const players = clusterValues(bk.yes);

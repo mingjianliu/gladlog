@@ -49,7 +49,11 @@ import {
 import { absorbContributionsInWindow } from "../utils/absorbShields";
 import { buildAuraIntervals } from "../utils/auraIntervals";
 import { bracketKey } from "../utils/bracketKey";
-import { analyzeBurstLedger, wallUpAtOpen } from "../utils/burstLedger";
+import {
+  analyzeBurstLedger,
+  burstDamageBySchoolOn,
+  wallUpAtOpen,
+} from "../utils/burstLedger";
 import {
   actWindowFor,
   cannotCastIntervalsForSpells,
@@ -138,9 +142,7 @@ import { forcedMovesText } from "../utils/forcedDisplacement";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
 import {
   documentRecordsAttackSpell,
-  hitSchoolId,
   isDeferralAbsorb,
-  logSchoolMask,
 } from "../utils/incomingPressure";
 import {
   attemptIntoTrinketEvents,
@@ -5120,23 +5122,27 @@ function dpsOwnerEvents(
     // GH #96 D6 decision trace: every burst in the ledger is an opportunity.
     const bimTracing = isDecisionTraceActive();
     const bimTrace = new Map<BurstEntry, DecisionRecord>();
-    /** The owner's damage on the burst's target inside its span, by school
-     * (the burst ledger's own measure is the owner's, pets out) */
+    /** The burst's damage on its target while the wall was up, by school:
+     * the ledger's own population (`burstDamageBySchoolOn` — pets merged,
+     * shield-eaten rows in), cut to the stretch of the burst the wall
+     * covered. A pet's physical burst into Evasion with Bait and Switch met
+     * its 20, and damage after the wall fell met nothing (codex review
+     * 85-tk-C-T27-2 #1 / #2). */
     const burstDamageBySchool = (
       b: BurstEntry,
       targetId: string,
+      wall: { startOffsetMs?: number; endOffsetMs?: number },
     ): Record<string, number> => {
-      const target = units.find((u) => u.id === targetId);
-      const fromMs = combat.startTime + b.fromSeconds * 1000;
-      const toMs = combat.startTime + b.toSeconds * 1000;
-      const by: Record<string, number> = {};
-      for (const d of target?.damageIn ?? []) {
-        const tMs = d.logLine.timestamp;
-        if (d.srcUnitId !== owner.id || tMs < fromMs || tMs > toMs) continue;
-        const mask = String(logSchoolMask(hitSchoolId(d)));
-        by[mask] = (by[mask] ?? 0) + Math.abs(d.effectiveAmount);
-      }
-      return by;
+      const burstFromMs = combat.startTime + b.fromSeconds * 1000;
+      const burstToMs = combat.startTime + b.toSeconds * 1000;
+      return burstDamageBySchoolOn(
+        owner,
+        targetId,
+        burstFromMs + Math.max(0, wall.startOffsetMs ?? 0),
+        wall.endOffsetMs === undefined
+          ? burstToMs
+          : Math.min(burstToMs, burstFromMs + wall.endOffsetMs),
+      );
     };
     const bimOpp = (b: BurstEntry) =>
       `burst-into-mitigation:${owner.id}:${Math.round(b.fromSeconds)}`;
@@ -5185,7 +5191,7 @@ function dpsOwnerEvents(
           // attempt 2); a one-component row reads the door as before
           const met =
             res && res.components.length > 1
-              ? componentForDamage(res, burstDamageBySchool(b, t.unitId))
+              ? componentForDamage(res, burstDamageBySchool(b, t.unitId, d))
               : undefined;
           return {
             d,

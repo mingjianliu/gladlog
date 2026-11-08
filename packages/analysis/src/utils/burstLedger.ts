@@ -35,7 +35,11 @@ import {
   MITIGATION_AURA_MIN_PCT,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "./enemyDefensives";
-import { isDeferralDamageRow } from "./incomingPressure";
+import {
+  hitSchoolId,
+  isDeferralDamageRow,
+  logSchoolMask,
+} from "./incomingPressure";
 import {
   type IKickAuditEntry,
   jukedByFakeText,
@@ -155,6 +159,12 @@ export interface IBurstDefensiveHit {
    *  rounded display value (codex review of batch 12: a wall 30 ms after the
    *  opening rounded to 0.0 and read "already up"). */
   startOffsetMs?: number;
+  /** Raw ms from the burst's start to the aura's end (its logged end, or the
+   *  unseen-end clamp `overlapSeconds` used) — with `startOffsetMs`, the
+   *  stretch the wall was on the target; burst-into-mitigation picks a split
+   *  row's component from the damage inside it (codex review
+   *  85-tk-C-T27-2 #2). Optional for hand-built fixtures. */
+  endOffsetMs?: number;
 }
 
 /** Was the wall already up when the burst opened? One predicate for the
@@ -280,7 +290,9 @@ export interface IBurstLedgerEntry {
  * overlapped the burst and is not counted (user ruling R01, 2026-11-08):
  * ` (a healer's Avenging Wrath is not counted)`; empty for none. The gate
  * (`checkBurstSoloHealerHeldNote`) matches this text. */
-export function healerHeldNotCountedNote(spellNames: readonly string[]): string {
+export function healerHeldNotCountedNote(
+  spellNames: readonly string[],
+): string {
   if (spellNames.length === 0) return "";
   const names = spellNames.join(" / ");
   return ` (a healer's ${names} ${spellNames.length > 1 ? "are" : "is"} not counted)`;
@@ -357,8 +369,49 @@ export function dropOnePressAuraTwins(hits: IBurstDefensiveHit[]): void {
     );
     if (!cast) continue;
     cast.overlapSeconds = Math.max(cast.overlapSeconds, effect.overlapSeconds);
+    if (effect.endOffsetMs !== undefined)
+      cast.endOffsetMs = Math.max(
+        cast.endOffsetMs ?? effect.endOffsetMs,
+        effect.endOffsetMs,
+      );
     hits.splice(i, 1);
   }
+}
+
+/** A row of an attacker's `damageOut` the ledger counts inside
+ * [fromMs, toMs]: pets are merged into it upstream, a shield's
+ * `SPELL_ABSORBED` row counts, a deferral shield's row does not
+ * (`isDeferralDamageRow`). One reading for the ledger's per-target sum and
+ * `burstDamageBySchoolOn`. */
+function isLedgerDamageRow(
+  d: ICombatUnit["damageOut"][number],
+  fromMs: number,
+  toMs: number,
+): boolean {
+  const t = d.logLine.timestamp;
+  return t >= fromMs && t <= toMs && !isDeferralDamageRow(d);
+}
+
+/** The ledger's damage of `player` on `targetId` in [fromMs, toMs], keyed
+ * by the hit's school mask (`logSchoolMask(hitSchoolId(d))`, decimal) — the
+ * population `dominantTarget.damage` sums, split by school. What
+ * burst-into-mitigation reads to choose a split wall's component (codex
+ * review 85-tk-C-T27-2 #1: a pet's physical burst read as the owner's
+ * magic one). */
+export function burstDamageBySchoolOn(
+  player: ICombatUnit,
+  targetId: string,
+  fromMs: number,
+  toMs: number,
+): Record<string, number> {
+  const by: Record<string, number> = {};
+  for (const d of player.damageOut) {
+    if (d.destUnitId !== targetId || !isLedgerDamageRow(d, fromMs, toMs))
+      continue;
+    const mask = String(logSchoolMask(hitSchoolId(d)));
+    by[mask] = (by[mask] ?? 0) + Math.abs(d.effectiveAmount);
+  }
+  return by;
 }
 
 export function analyzeBurstLedger(
@@ -443,7 +496,8 @@ export function analyzeBurstLedger(
             keepHealerHeldPresses: true,
           }).players[0]?.offensiveCDs ?? []
         ).filter(
-          (cd) => pressedInRound(cd) && isHealerHeldOffensive(cd.spellId, a.spec),
+          (cd) =>
+            pressedInRound(cd) && isHealerHeldOffensive(cd.spellId, a.spec),
         ),
       ),
     );
@@ -490,12 +544,11 @@ export function analyzeBurstLedger(
     // 641k landed + 27k absorbed, and the line said neither.
     const absorbedMap = new Map<string, number>();
     for (const d of player.damageOut) {
-      if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs) continue;
       if (!enemyById.has(d.destUnitId)) continue;
       // a deferral shield's row is no absorb (FT-T02b, `isDeferralAbsorb`;
       // F16 retest idx 2: 0457a45e's `0.40M of it absorbed` was two-thirds
       // Time Dilation — the other burst readers already skip it)
-      if (isDeferralDamageRow(d)) continue;
+      if (!isLedgerDamageRow(d, fromMs, toMs)) continue;
       const amount = Math.abs(d.effectiveAmount);
       damageMap.set(d.destUnitId, (damageMap.get(d.destUnitId) ?? 0) + amount);
       if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED)
@@ -590,6 +643,7 @@ export function analyzeBurstLedger(
           casterName: iv.srcUnitName,
           startOffsetSeconds: Math.round((iv.startMs - fromMs) / 100) / 10,
           startOffsetMs: iv.startMs - fromMs,
+          endOffsetMs: endMs - fromMs,
         });
       }
       defensivesHit.sort((a, b) => b.overlapSeconds - a.overlapSeconds);

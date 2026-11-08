@@ -22,6 +22,7 @@ import { wallDoorPct } from "../data/mitigationComponents";
 import {
   DEFLECTION_IDS,
   hasNoOwnPercentage,
+  immunityMaskStopsSchool,
   MITIGATION_TABLE,
   MITIGATION_WALL_IDS,
   MITIGATION_WALL_MIN_PCT,
@@ -1217,7 +1218,7 @@ export function immunityStopsSpellSchool(
   const mask = limitedImmunitySchoolMask(immunityId);
   const school = spellSchoolMask(spellId);
   if (mask === undefined || school === undefined) return undefined;
-  return (school & ~mask) === 0;
+  return immunityMaskStopsSchool(mask, school);
 }
 
 /** Is the aura `auraId` a pct-100 wall (an immunity or a deflection,

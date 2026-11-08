@@ -5,8 +5,8 @@ import {
   componentForSchool,
   resolveMitigation,
 } from "../src/data/mitigationComponents";
-import { computeMitigationAudit } from "../src/utils/counterfactual";
 import { talentMitigationModifiersFor } from "../src/data/talentMitigationModifiers";
+import { computeMitigationAudit } from "../src/utils/counterfactual";
 
 // GH #126 row 234 (2026-11-08): Bait and Switch 457034 fills Evasion's magic
 // aura 87 slot (effect #2), not Elusiveness's (effect #1), so the game
@@ -137,5 +137,70 @@ describe("a split Evasion prices each hit once", () => {
       .map((r) => r.blockedAmount);
     expect(blocked.reduce((a, b) => a! + b!, 0)).toBe(32_000);
     expect(blocked).not.toContain(17_000);
+  });
+});
+
+// codex review 85-tk-C-T27-2 #3: an immunity component ranks first only when
+// it covers every school of the hit (`immunityMaskStopsSchool`, the reading
+// `immunityStopsSpellSchool` takes). Cloak of Shadows with Bait and Switch
+// is magic immunity + physical 20: a physical + fire hit lands through the
+// immunity and meets the 20.
+describe("a hybrid hit into Cloak of Shadows", () => {
+  const CLOAK = "31224";
+  const cloak = (holds: string[]) =>
+    resolveMitigation(CLOAK, { carrierIsCaster: true, caster: caster(holds) })!;
+
+  it("with Bait and Switch: physical + fire meets physical 20, fire the immunity", () => {
+    const hybrid = componentForSchool(cloak([BAIT]), 0x5);
+    expect(hybrid).toMatchObject({ kind: "pct", schoolMask: 0x1, pctMin: 20 });
+    expect(componentForSchool(cloak([BAIT]), 0x4)?.kind).toBe("immunity");
+  });
+
+  it("without it: the one component still prices the hit it touches, as before", () => {
+    expect(componentForSchool(cloak([]), 0x5)?.kind).toBe("immunity");
+  });
+});
+
+// codex review 85-tk-C-T27-2 #1: burst-into-mitigation picks a split wall's
+// component from the ledger's own population — the owner's `damageOut`, pets
+// merged upstream, shield-eaten rows in, deferral rows out.
+describe("burstDamageBySchoolOn: the ledger's damage, by school", () => {
+  it("counts every damageOut row on the target in the window, absorbs included", async () => {
+    const { burstDamageBySchoolOn } = await import("../src/utils/burstLedger");
+    const row = (
+      t: number,
+      amount: number,
+      school: string,
+      dest = "E1",
+      event = "SPELL_DAMAGE",
+    ) => ({
+      destUnitId: dest,
+      effectiveAmount: amount,
+      spellSchoolId: school,
+      logLine: { timestamp: t, event },
+    });
+    const hunter = {
+      damageOut: [
+        row(1_000, 90_000, "0x1"), // the pet's swings, merged upstream
+        row(2_000, 10_000, "0x8"),
+        row(3_000, 5_000, "0x1", "E1", "SPELL_ABSORBED"),
+        row(4_000, 70_000, "0x8", "E2"), // another target
+        row(9_000, 80_000, "0x8"), // after the window
+      ],
+    } as never;
+    expect(burstDamageBySchoolOn(hunter, "E1", 0, 5_000)).toEqual({
+      "1": 95_000,
+      "8": 10_000,
+    });
+  });
+
+  it("a mostly-physical burst into a split Evasion meets its 20, not 32", () => {
+    const res = resolveMitigation(EVASION, {
+      carrierIsCaster: true,
+      caster: caster([ELUSIVENESS, BAIT]),
+    })!;
+    expect(componentForDamage(res, { "1": 95_000, "8": 10_000 })?.pctMin).toBe(
+      20,
+    );
   });
 });

@@ -33,7 +33,11 @@ import { logDatedNumberAt } from "../utils/logEra";
 import { specPassiveOwnership } from "../utils/talentModifiers";
 import { talentModifierOwnershipOf } from "../utils/talentOwnership";
 import { unitLogEpochMs } from "../utils/talents";
-import { MITIGATION_TABLE, mitigationPctFor } from "./mitigationData";
+import {
+  immunityMaskStopsSchool,
+  MITIGATION_TABLE,
+  mitigationPctFor,
+} from "./mitigationData";
 import { talentMitigationModifiersFor } from "./talentMitigationModifiers";
 
 export type MitigationComponentKind = "pct" | "immunity";
@@ -200,8 +204,15 @@ function applyTalentModifiers(
  * into a split row (Evasion with Elusiveness and Bait and Switch: physical
  * 20, magic 32 — the magic one already includes Elusiveness's 20) is priced
  * once, by the 32 the game applies to it, not by both (codex review of
- * batch B7, T27 attempt 2). Undefined = no component touches the hit. A
- * row with one component prices every hit it touches, as before.
+ * batch B7, T27 attempt 2). An immunity component ranks first only when it
+ * covers every school of the hit (`immunityMaskStopsSchool`, the reading
+ * `immunityStopsSpellSchool` takes): a physical+fire hit into Cloak of
+ * Shadows with Bait and Switch meets the physical 20, not the magic
+ * immunity (codex review 85-tk-C-T27-2 #3). One that covers part of the hit
+ * ranks last — it is still the hit's component when nothing else touches
+ * it, so a one-component row prices every hit it touches, exactly as
+ * `windowDamage` on its mask did before. Undefined = no component touches
+ * the hit.
  */
 export function componentForSchool(
   res: IResolvedMitigation,
@@ -209,7 +220,11 @@ export function componentForSchool(
 ): IResolvedMitigationComponent | undefined {
   let best: IResolvedMitigationComponent | undefined;
   const rank = (c: IResolvedMitigationComponent) =>
-    c.kind === "immunity" ? 100 : c.pctMin;
+    c.kind !== "immunity"
+      ? c.pctMin
+      : immunityMaskStopsSchool(c.schoolMask, hitSchoolMask)
+        ? 100
+        : -1;
   for (const c of res.components) {
     if ((c.schoolMask & hitSchoolMask) === 0) continue;
     if (
@@ -239,8 +254,7 @@ export function componentForDamage(
     if (c && amount > 0) share.set(c, (share.get(c) ?? 0) + amount);
   }
   let best: IResolvedMitigationComponent | undefined;
-  for (const [c, n] of share)
-    if (!best || n > share.get(best)!) best = c;
+  for (const [c, n] of share) if (!best || n > share.get(best)!) best = c;
   return best;
 }
 

@@ -154,6 +154,16 @@ export const MITIGATION_TABLE: Record<string, IMitigationEntry> = {
  * the table for Echoing Blessings — GH #126 row 170). For the readers that
  * ask it of the id alone (`SELF_SAVE_IDS`), so the move changes none of them.
  */
+/** Does an immunity over school mask `immunityMask` stop a hit of school mask
+ * `hitSchoolMask`? Only when it covers EVERY school of the hit: a
+ * physical+fire hit lands through Cloak of Shadows' magic immunity. The one
+ * mask reading for `immunityStopsSpellSchool` (enemyDefensives.ts) and
+ * `componentForSchool` (codex review 85-tk-C-T27-2 #3). */
+export const immunityMaskStopsSchool = (
+  immunityMask: number,
+  hitSchoolMask: number,
+): boolean => (hitSchoolMask & ~immunityMask) === 0;
+
 export const hasNoOwnPercentage = (spellId: string): boolean =>
   NO_MITIGATION_IDS.has(spellId) ||
   MITIGATION_TABLE[spellId]?.unheldIsMechanic === true;
