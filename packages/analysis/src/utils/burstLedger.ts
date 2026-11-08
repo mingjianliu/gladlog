@@ -36,6 +36,7 @@ import {
   SAVE_AURA_END_UNSEEN_IDS,
 } from "./enemyDefensives";
 import {
+  absorbedHitSchoolMask,
   hitSchoolId,
   isDeferralDamageRow,
   logSchoolMask,
@@ -393,23 +394,37 @@ function isLedgerDamageRow(
 }
 
 /** The ledger's damage of `player` on `targetId` in [fromMs, toMs], keyed
- * by the hit's school mask (`logSchoolMask(hitSchoolId(d))`, decimal) — the
- * population `dominantTarget.damage` sums, split by school. What
- * burst-into-mitigation reads to choose a split wall's component (codex
- * review 85-tk-C-T27-2 #1: a pet's physical burst read as the owner's
- * magic one). */
+ * by the hit's school mask (decimal) — the population
+ * `dominantTarget.damage` sums, split by school. A landed row reads its own
+ * school (`logSchoolMask(hitSchoolId(d))`); a shield-eaten row reads the
+ * absorbed hit's (`absorbedHitSchoolMask`, the death audit's reading — its
+ * spell field is the shield's, and a swing absorb carries the shield
+ * caster's flags there, codex review 85-tk-C-T27-2b #1) and is left out when
+ * that cannot be told. What burst-into-mitigation reads to choose a split
+ * wall's component (codex review 85-tk-C-T27-2 #1: a pet's physical burst
+ * read as the owner's magic one). */
 export function burstDamageBySchoolOn(
   player: ICombatUnit,
   targetId: string,
   fromMs: number,
   toMs: number,
+  /** `documentRecordsAttackSpell` over the round's units: an absorb with no
+   * attack spell is then a swing */
+  recordsAttackSpell: boolean,
 ): Record<string, number> {
   const by: Record<string, number> = {};
   for (const d of player.damageOut) {
     if (d.destUnitId !== targetId || !isLedgerDamageRow(d, fromMs, toMs))
       continue;
-    const mask = String(logSchoolMask(hitSchoolId(d)));
-    by[mask] = (by[mask] ?? 0) + Math.abs(d.effectiveAmount);
+    const mask =
+      (d.logLine.event as string) === LogEvent.SPELL_ABSORBED
+        ? absorbedHitSchoolMask(
+            d as unknown as Parameters<typeof absorbedHitSchoolMask>[0],
+            recordsAttackSpell,
+          )
+        : logSchoolMask(hitSchoolId(d));
+    if (mask === undefined) continue;
+    by[String(mask)] = (by[String(mask)] ?? 0) + Math.abs(d.effectiveAmount);
   }
   return by;
 }

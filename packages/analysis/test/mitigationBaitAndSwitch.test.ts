@@ -183,12 +183,21 @@ describe("burstDamageBySchoolOn: the ledger's damage, by school", () => {
       damageOut: [
         row(1_000, 90_000, "0x1"), // the pet's swings, merged upstream
         row(2_000, 10_000, "0x8"),
-        row(3_000, 5_000, "0x1", "E1", "SPELL_ABSORBED"),
+        {
+          // a swing a shield ate: the spell field holds the shield caster's
+          // flags, no attack spell — physical (codex 85-tk-C-T27-2b #1)
+          ...row(3_000, 5_000, "0x548", "E1", "SPELL_ABSORBED"),
+          logLine: {
+            timestamp: 3_000,
+            event: "SPELL_ABSORBED",
+            parameters: [],
+          },
+        },
         row(4_000, 70_000, "0x8", "E2"), // another target
         row(9_000, 80_000, "0x8"), // after the window
       ],
     } as never;
-    expect(burstDamageBySchoolOn(hunter, "E1", 0, 5_000)).toEqual({
+    expect(burstDamageBySchoolOn(hunter, "E1", 0, 5_000, true)).toEqual({
       "1": 95_000,
       "8": 10_000,
     });
@@ -202,5 +211,41 @@ describe("burstDamageBySchoolOn: the ledger's damage, by school", () => {
     expect(componentForDamage(res, { "1": 95_000, "8": 10_000 })?.pctMin).toBe(
       20,
     );
+  });
+});
+
+// codex review 85-tk-C-T27-2b #1: an absorbed swing's school is the absorbed
+// hit's (`absorbedHitSchoolMask`), not the row's spell field; an absorb of
+// unknown school is left out.
+describe("burstDamageBySchoolOn: absorbed hits", () => {
+  it("an absorbed swing is physical; with no record of attack spells, unknown and left out", async () => {
+    const { burstDamageBySchoolOn } = await import("../src/utils/burstLedger");
+    const p = {
+      damageOut: [
+        {
+          destUnitId: "E1",
+          effectiveAmount: 90_000,
+          spellSchoolId: "0x548",
+          logLine: {
+            timestamp: 1_000,
+            event: "SPELL_ABSORBED",
+            parameters: [],
+          },
+        },
+        {
+          destUnitId: "E1",
+          effectiveAmount: 10_000,
+          spellSchoolId: "0x4",
+          logLine: { timestamp: 2_000, event: "SPELL_DAMAGE" },
+        },
+      ],
+    } as never;
+    expect(burstDamageBySchoolOn(p, "E1", 0, 5_000, true)).toEqual({
+      "1": 90_000,
+      "4": 10_000,
+    });
+    expect(burstDamageBySchoolOn(p, "E1", 0, 5_000, false)).toEqual({
+      "4": 10_000,
+    });
   });
 });

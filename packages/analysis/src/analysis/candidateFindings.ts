@@ -5128,6 +5128,7 @@ function dpsOwnerEvents(
      * covered. A pet's physical burst into Evasion with Bait and Switch met
      * its 20, and damage after the wall fell met nothing (codex review
      * 85-tk-C-T27-2 #1 / #2). */
+    const recordsAttackSpell = documentRecordsAttackSpell(units);
     const burstDamageBySchool = (
       b: BurstEntry,
       targetId: string,
@@ -5142,6 +5143,7 @@ function dpsOwnerEvents(
         wall.endOffsetMs === undefined
           ? burstToMs
           : Math.min(burstToMs, burstFromMs + wall.endOffsetMs),
+        recordsAttackSpell,
       );
     };
     const bimOpp = (b: BurstEntry) =>
@@ -5197,7 +5199,13 @@ function dpsOwnerEvents(
             d,
             res,
             // GH #114: the same helper prices the [ENEMY DEF] line
-            pct: met ? met.pctMin : (wallDoorPct(key, ctx) ?? 0),
+            // a split row whose wall met none of the burst's damage (all of
+            // it landed after the wall fell) is no door at all — not the
+            // row's strongest component (codex review 85-tk-C-T27-2b #2)
+            pct:
+              res && res.components.length > 1
+                ? (met?.pctMin ?? 0)
+                : (wallDoorPct(key, ctx) ?? 0),
           };
         })
         .filter(
