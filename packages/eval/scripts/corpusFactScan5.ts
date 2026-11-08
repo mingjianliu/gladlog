@@ -71,6 +71,7 @@ const MODULE_FILES = [
   "replacedKit",
   "fact8",
   "kickImmune",
+  "kitAimed",
   "offListPress",
   "fact9",
   "fact9b",

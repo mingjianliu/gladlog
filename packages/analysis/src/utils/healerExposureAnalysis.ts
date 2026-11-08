@@ -26,7 +26,11 @@ import { castsOfEffectAura, effectAuraViaName } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buildAuraIntervals } from "./auraIntervals";
 import { hardCcAuraAt } from "./cannotCastIntervals";
-import { CONTROL_FAILED_MISS_TYPES, missReportsControl } from "./castMissRows";
+import {
+  CONTROL_FAILED_MISS_TYPES,
+  isTwinMissRow,
+  missReportsControl,
+} from "./castMissRows";
 import {
   analyzePlayerCCAndTrinket,
   IPlayerCCTrinketSummary,
@@ -713,6 +717,10 @@ const kitLandedClause = (who: "you" | "them") =>
  * fact8 D42 (b71edaa9 r0): a hunter's Intimidation MISS and Freezing Trap
  * IMMUNE at the owner, and a Howl of Terror IMMUNE, on no entry of a list
  * headed "threats to you".
+ * Counted per press: a row that is the twin of one already counted
+ * (`isTwinMissRow`, the `[CC NOT LANDED]` reading — fact12 D30, ee79ddb7 r0
+ * 0:45: one Intimidation logged IMMUNE under 474421 and 24394 read
+ * "aimed at them 2×") is that press.
  */
 export function aimedControlsForKit(
   unit: Pick<ICombatUnit, "missesIn">,
@@ -723,6 +731,10 @@ export function aimedControlsForKit(
 ): IKitLandedControl[] {
   const out: IKitLandedControl[] = [];
   const units = allUnits ? [...allUnits] : undefined;
+  const counted = new Map<
+    IKitLandedControl,
+    NonNullable<typeof unit.missesIn>
+  >();
   for (const m of unit.missesIn ?? []) {
     if (!m.spellId || !CONTROL_FAILED_MISS_TYPES.has(m.missType)) continue;
     if (!missReportsControl(m.spellId)) continue;
@@ -735,16 +747,22 @@ export function aimedControlsForKit(
     const seen = out.find(
       (l) => l.enemyName === enemy.name && l.spellName === spellName,
     );
-    if (seen) seen.count++;
-    else {
+    if (seen) {
+      const rows = counted.get(seen)!;
+      if (rows.some((r) => isTwinMissRow(r, m, fromMs))) continue;
+      rows.push(m);
+      seen.count++;
+    } else {
       const category = DR_CATEGORY_MAP[m.spellId];
-      out.push({
+      const entry: IKitLandedControl = {
         enemyName: enemy.name,
         enemySpec: specToString(enemy.spec),
         spellName,
         ...(category ? { category } : {}),
         count: 1,
-      });
+      };
+      out.push(entry);
+      counted.set(entry, [m]);
     }
   }
   return out;

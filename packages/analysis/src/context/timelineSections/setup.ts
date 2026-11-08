@@ -35,6 +35,7 @@ import {
   CC_MISS_TAG_WORD,
   CONTROL_FAILED_MISS_TYPES,
   isControlCast,
+  isTwinMissRow,
   missBelongsToCast as missRowBelongsToCast,
   missReportsControl,
   pressImmuneMissRows,
@@ -1313,20 +1314,12 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     // `checkCcNotLandedLines`; wide 197-3 2:33: Binding Shot's tether 117405
     // and its stun 117526 each logged IMMUNE on one Divine Shield, 315 ms
     // apart)
-    const nameOf = (x: OutgoingMiss) =>
-      getEnglishSpellName(x.spellId ?? "", x.spellName ?? "");
-    const secondOf = (x: OutgoingMiss) =>
-      toRenderSecond((x.timestamp - matchStartMs) / 1000);
     for (const c of [...consumedImmuneMisses, ...consumedCcMisses]) {
       const x = c as OutgoingMiss;
       if (
         x.srcUnitId === m.srcUnitId &&
         x.destUnitId === m.destUnitId &&
-        x.missType === m.missType &&
-        (Math.abs(x.timestamp - m.timestamp) <= CAST_MISS_LEAD_MS ||
-          (nameOf(x) !== "" &&
-            nameOf(x) === nameOf(m) &&
-            secondOf(x) === secondOf(m)))
+        isTwinMissRow(x, m, matchStartMs)
       )
         return true;
     }

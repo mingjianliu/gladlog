@@ -21,6 +21,7 @@ import {
 } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
+import { toRenderSecond } from "./renderGrid";
 
 /** How often a cast's control effect must follow the cast for a miss of the
  * cast's own id to stand for that control (`missReportsControl`). */
@@ -118,6 +119,42 @@ export const CAST_MISS_LEAD_MS = 100;
 /** … and follow it by this much: an instant control misses on the same
  * instant, a Polymorph projectile lands up to ~1.5 s later. */
 export const CAST_MISS_WINDOW_MS = 2500;
+
+/** The fields of a `SPELL_MISSED` row the twin test asks. */
+export interface IMissTwinRow {
+  timestamp: number;
+  spellId?: string;
+  spellName?: string;
+  missType?: string;
+}
+
+/**
+ * One failure of one press, logged twice — under the cast id and under its
+ * control effect's id (95127ab4: Maim 22570 and its stun 203123, 4 ms apart;
+ * fact12 D30, ee79ddb7 r0 0:45: Intimidation 474421 and its stun 24394 in one
+ * millisecond), or as two parts of one control in one rendered second (wide
+ * 197-3 2:33: Binding Shot's tether 117405 and its stun 117526, 315 ms
+ * apart): the same miss type, and within `CAST_MISS_LEAD_MS` of each other or
+ * the same English name in the same rendered second. Whose rows they are (the
+ * caster, its summon) and on whom is the caller's to ask. Readers:
+ * `[CC NOT LANDED]` (`missStatedOnAnotherLine`) and the ENEMY CC KIT's
+ * `aimed at … N×` (`aimedControlsForKit`), which counts presses.
+ */
+export function isTwinMissRow(
+  a: IMissTwinRow,
+  b: IMissTwinRow,
+  matchStartMs: number,
+): boolean {
+  if (a.missType !== b.missType) return false;
+  if (Math.abs(a.timestamp - b.timestamp) <= CAST_MISS_LEAD_MS) return true;
+  const nameOf = (x: IMissTwinRow) =>
+    getEnglishSpellName(x.spellId ?? "", x.spellName ?? "");
+  const secondOf = (x: IMissTwinRow) =>
+    toRenderSecond((x.timestamp - matchStartMs) / 1000);
+  return (
+    nameOf(a) !== "" && nameOf(a) === nameOf(b) && secondOf(a) === secondOf(b)
+  );
+}
 
 /**
  * The miss falls in the cast's window AND no later cast of the same spell by

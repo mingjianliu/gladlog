@@ -1711,6 +1711,11 @@ const INDEX: PredicateRow[] = [
     mod: healerExposureAnalysis,
   },
   {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "isTwinMissRow",
+    mod: castMissRows,
+  },
+  {
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "limitedImmunitySchoolMask",
     mod: enemyDefensives,

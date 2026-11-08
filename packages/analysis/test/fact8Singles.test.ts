@@ -117,6 +117,22 @@ describe("ENEMY CC KIT — D42", () => {
     expect(parsed?.enemies.map((e) => e.name)).toEqual(["Mage-B", "Hunter-A"]);
     expect(parsed?.enemies[1]?.entries[0]).toMatchObject({ landed: 0 });
   });
+  it("one press logged under its cast id and its effect id counts once (fact12 D30)", () => {
+    // ee79ddb7 r0 0:45: Intimidation 474421 and its stun 24394, IMMUNE, one ms
+    const at = (spellId: string, timestamp: number) =>
+      ({
+        spellId,
+        spellName: "Intimidation",
+        missType: "IMMUNE",
+        timestamp,
+        srcUnitId: "h",
+      }) as never;
+    const count = (rows: never[]) =>
+      aimedControlsForKit({ missesIn: rows }, [hunter], 1000, 99_000)[0]?.count;
+    expect(count([at("24394", 46_131), at("474421", 46_131)])).toBe(1);
+    // two presses, seconds apart, stay two
+    expect(count([at("24394", 46_131), at("24394", 60_000)])).toBe(2);
+  });
   it("a miss outside the round is not counted", () => {
     expect(
       aimedControlsForKit(
@@ -155,7 +171,11 @@ describe("pairNetherWardReturns — D30", () => {
 });
 
 describe("dropOnePressAuraTwins — D1", () => {
-  const hit = (spellId: string, startOffsetMs: number, overlapSeconds: number) =>
+  const hit = (
+    spellId: string,
+    startOffsetMs: number,
+    overlapSeconds: number,
+  ) =>
     ({
       spellId,
       spellName: "Touch of Karma",
@@ -203,9 +223,7 @@ describe("[RES] charge change — D34", () => {
       prevChargeSuffixes: prev,
     });
   it("a cooldown that stays ready on fewer charges prints ~X[k/N]", () => {
-    expect(row(new Map([["Vanish", "[2/2]"]]))).toContain(
-      "rdy:Δ ~Vanish[1/2]",
-    );
+    expect(row(new Map([["Vanish", "[2/2]"]]))).toContain("rdy:Δ ~Vanish[1/2]");
   });
   it("the same charges print nothing", () => {
     expect(row(new Map([["Vanish", "[1/2]"]]))).not.toContain("~Vanish");
