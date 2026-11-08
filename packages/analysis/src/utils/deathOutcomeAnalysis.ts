@@ -47,6 +47,7 @@ import { documentRecordsAttackSpell } from "./incomingPressure";
 import {
   distanceBetween,
   getUnitPositionAtTime,
+  getUnitRawPositionAtTime,
   hasLineOfSight,
 } from "./losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
@@ -1002,9 +1003,10 @@ export function positionalWallReach(
  * accusation set, the kill sequence's [DEFENSIVE AVAILABLE]) plus the
  * `[DEATH] (Unused: …)` list (codex round 7); a missing
  * position sample or an unknown reach fails CLOSED. GH #141 item 5 (T25):
- * the enemy must also be in line of sight — `hasLineOfSight` on the same two
- * positions, falsified only (an unmapped arena, no `zoneId`, or a unit on an
- * elevated structure reads `null` and passes), as `ccReachAt` reads it.
+ * the enemy must also be in line of sight — `hasLineOfSight` on the two units'
+ * nearest raw samples (`getUnitRawPositionAtTime`, the `losAnalysis` contract
+ * the dispel reach check follows), falsified only (an unmapped arena, no
+ * `zoneId`, no raw sample pair, or a unit on an elevated structure passes).
  */
 export function enemyTargetReaches(
   spellId: string,
@@ -1020,11 +1022,16 @@ export function enemyTargetReaches(
   return enemies.some((e) => {
     if (isDeadAt(e, atMs)) return false;
     const b = getUnitPositionAtTime(e, atMs, LOS_SWEEP_GAP_MS);
-    return (
-      !!b &&
-      distanceBetween(a, b) <= reach &&
-      !(zoneId && hasLineOfSight(zoneId, a, b) === false)
-    );
+    if (!b || distanceBetween(a, b) > reach) return false;
+    if (!zoneId) return true;
+    // LoS is topological: it reads the nearest RAW samples, never the
+    // interpolated point (`losAnalysis` contract, as the dispel reach check
+    // does; codex review of B5: an interpolated enemy between two clear
+    // samples can sit inside a pillar). Distance keeps interpolating. No raw
+    // sample pair = LoS not disproven.
+    const aRaw = getUnitRawPositionAtTime(holder, atMs, LOS_SWEEP_GAP_MS);
+    const bRaw = getUnitRawPositionAtTime(e, atMs, LOS_SWEEP_GAP_MS);
+    return !(aRaw && bRaw && hasLineOfSight(zoneId, aRaw, bRaw) === false);
   });
 }
 

@@ -129,8 +129,40 @@ describe("enemyTargetReaches", () => {
     expect(enemyTargetReaches(KARMA, ww, [behind, clear], 20_000, "1505")).toBe(
       true,
     );
-    expect(enemyTargetReaches(KARMA, ww, [behind], 20_000, "999999")).toBe(true);
+    expect(enemyTargetReaches(KARMA, ww, [behind], 20_000, "999999")).toBe(
+      true,
+    );
     expect(enemyTargetReaches(KARMA, ww, [behind], 20_000)).toBe(true);
+  });
+
+  it("codex review of B5: LoS reads raw samples, so an interpolated point inside the pillar does not falsify it", () => {
+    // zone 1505's north pillar: centre (-2044.5, 6623.5), radius 4. The enemy
+    // is sampled clear of it at 18 s and 22 s; the straight line between the
+    // two samples passes through it at 20 s.
+    const unit = (id: string, pts: [number, number, number][]) =>
+      makeUnit(id, {
+        name: `${id}-R`,
+        advancedActions: pts.map(([s, x, y]) => ({
+          timestamp: s * 1000,
+          logLine: { timestamp: s * 1000 },
+          advancedActorId: id,
+          advancedActorCurrentHp: 100,
+          advancedActorMaxHp: 100,
+          advancedActorPositionX: x,
+          advancedActorPositionY: y,
+        })) as never,
+      });
+    const ww = unit("ww", [
+      [18, -2054.5, 6623.5],
+      [20, -2054.5, 6623.5],
+      [22, -2054.5, 6623.5],
+    ]);
+    const enemy = unit("e", [
+      [18, -2044.5, 6629.5],
+      [22, -2044.5, 6617.5],
+    ]);
+    expect(enemyTargetReaches(KARMA, ww, [enemy], 18_000, "1505")).toBe(true);
+    expect(enemyTargetReaches(KARMA, ww, [enemy], 20_000, "1505")).toBe(true);
   });
 
   it("a spell that is not cast on an enemy is never gated here", () => {

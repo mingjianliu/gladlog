@@ -43,8 +43,15 @@ const pressedSpells = (outcomeLines as Record<string, unknown>)[
 
 export const CHECKS = ["wardLeadReturn"] as const;
 
-/** a return in its press's millisecond, give or take the log's 1 ms jitter */
-const LEAD_CAST_MS = 5;
+/** a return in its press's millisecond, give or take the log's 1 ms jitter:
+ * the product's own constants when the code under test exports them (shared
+ * predicate; codex review of B5), the fix's values on the parent */
+const sharedMs = (name: string, parentValue: number): number => {
+  const v = (outcomeLines as Record<string, unknown>)[name];
+  return typeof v === "number" ? v : parentValue;
+};
+const LEAD_CAST_MS = sharedMs("NETHER_WARD_PRESS_ROW_MS", 5);
+const SAME_MS_JITTER_MS = sharedMs("NETHER_WARD_SAME_MS_JITTER_MS", 1);
 
 let hist: Record<string, number> = {};
 const bucket = (d: number): string =>
@@ -129,7 +136,8 @@ export function run(ctx: IRoundCtx): void {
         if (!lead) continue;
         // a REFLECT row in the return's own millisecond owns it (an instant
         // reflect returned at once): no lead
-        if (rows.some((m) => Math.abs(m.timestamp - ts) <= 1)) continue;
+        if (rows.some((m) => Math.abs(m.timestamp - ts) <= SAME_MS_JITTER_MS))
+          continue;
         hist[bucket(lead.d)] = (hist[bucket(lead.d)] ?? 0) + 1;
         if (lead.d > LEAD_CAST_MS) continue;
         ctx.bump("wardLeadReturn");
