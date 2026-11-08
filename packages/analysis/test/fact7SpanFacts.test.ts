@@ -15,7 +15,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { formatObservedConsequences } from "../src/context/observedConsequences";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { staleMaxHpRows } from "../src/utils/advancedActions";
+import { hpReadingMaxHp, staleMaxHpRows } from "../src/utils/advancedActions";
 import { analyzeBurstLedger } from "../src/utils/burstLedger";
 import { pressBlockedIntervalsForSpells } from "../src/utils/cannotCastIntervals";
 import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
@@ -621,7 +621,9 @@ describe("D60 — a form shift's row: fresh current over a stale max", () => {
     };
     expect(staleMaxHpRows(unitOf(rows)).size).toBe(2);
     expect(
-      staleMaxHpRows(makeUnit("unit-1", { advancedActions: rows, damageIn: [hit] })),
+      staleMaxHpRows(
+        makeUnit("unit-1", { advancedActions: rows, damageIn: [hit] }),
+      ),
     ).toEqual(new Set());
   });
 
@@ -634,5 +636,46 @@ describe("D60 — a form shift's row: fresh current over a stale max", () => {
     ]);
     expect(staleMaxHpRows(u).size).toBe(2);
     expect(hpTroughInWindow(u as never, T, 10, 11)?.pct).toBe(63);
+  });
+
+  // T09 (fact12 A15/B19, cf63da4a 1:43.5): the owner's rows around Fortifying
+  // Brew going on — the grant in the current, the max still the old one
+  const brew = [
+    row(103.308, 469_387, 1_057_720), // 44.4 %
+    row(103.341, 453_513, 1_057_720), // 42.9 %: Penance
+    row(103.534, 665_067, 1_057_720), // +211,554 = the grant, read 63 %
+    row(103.558, 450_289, 1_269_274), // the new max, after the backlash hit
+  ];
+
+  it("T09: a max-HP step UP whose grant the current took first reads over the new max", () => {
+    const u = makeUnit("unit-1", {
+      advancedActions: brew,
+      damageIn: [
+        { logLine: { timestamp: at(103.558) }, effectiveAmount: -214_778 },
+      ],
+    } as never);
+    expect(staleMaxHpRows(u).size).toBe(1);
+    expect(staleMaxHpRows(u).has(u.advancedActions[2] as never)).toBe(true);
+    // 665,067 / 1,269,274 = 52.4 %, never the mixed-scale 63 (the
+    // backlash-dispel's targetHpPct reads this instant)
+    expect(gridHpPct(u as never, at(103.534))).toBe(52);
+    expect(hpReadingMaxHp(u, u.advancedActions[2]!)).toBe(1_269_274);
+  });
+
+  it("T09: a rise a logged heal explains, or a current rescaled at the step, flags nothing", () => {
+    // a fresh array: the stale-row cache is keyed on the unit's rows
+    const healed = {
+      ...makeUnit("unit-1", { advancedActions: [...brew] }),
+      healIn: [
+        { logLine: { timestamp: at(103.534) }, effectiveAmount: 211_554 },
+      ],
+    } as never;
+    expect(staleMaxHpRows(healed).size).toBe(0);
+    const rescaled = unitOf([
+      row(10, 500_000, 1_000_000),
+      row(10.1, 500_000, 1_000_000),
+      row(10.2, 600_000, 1_200_000), // a form going in: current and max at once
+    ]);
+    expect(staleMaxHpRows(rescaled).size).toBe(0);
   });
 });

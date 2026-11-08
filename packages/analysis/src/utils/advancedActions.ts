@@ -52,6 +52,10 @@ const STALE_MAX_HP_RECOVERED_PCT = 5;
  * 2,590 runs on the 605 raw logs: 2,333 sit in 0.75–1.25 and 109 below this
  * (fact7 r6, codex 03-2). */
 const STALE_MAX_HP_STEP_CARRIES = 0.5;
+/** A max-HP step UP: how far the current's rise (heals and hits between the
+ * two rows taken out) may sit off the grant (new max − old max), as its share.
+ * Fortifying Brew's 211,554 rose 211,554 (cf63da4a 1:43.5, T09). */
+const STALE_MAX_HP_GRANT_SLACK = 0.25;
 
 const staleMaxHpRowsCache = new WeakMap<
   IAdvancedAction[],
@@ -67,9 +71,18 @@ const staleMaxHpRowsCache = new WeakMap<
  *
  * A run of rows, directly before a max-HP step down, whose current sits at the
  * step's own current, whose percentage fell off the reading before the run,
- * and whose current over the NEW max recovers that reading. A max that rises
- * (a form going in, Rallying Cry) and a max that falls with its current (the
- * real loss of a buff) are not flagged. The rows stay for every non-HP reader
+ * and whose current over the NEW max recovers that reading. A max that falls
+ * with its current (the real loss of a buff) is not flagged.
+ *
+ * T09 (fact12 A15/B19, cf63da4a 1:43.534): a max-HP step UP the same way
+ * round. Fortifying Brew (Rallying Cry, Fortitude) adds its grant to the
+ * current at once, and the rows until the next max still carry the old one:
+ * 453,513 → 665,067 over 1,057,720 read 63 %, the next row's max 1,269,274
+ * puts it at 52 %. The run starts at the row whose current rose off the row
+ * before by the grant (new max − old max, `STALE_MAX_HP_GRANT_SLACK`), the
+ * heals and hits logged between the two taken out; a form or a buff that
+ * rescales its current with the max, or rises it with a logged heal, has no
+ * such row and is not flagged. The rows stay for every non-HP reader
  * (resources, positions): this is a filter on the HP percentage alone, read by
  * `unitHpSampleAt`, `hpTroughInWindow` and `hpAtPress`.
  *
@@ -81,7 +94,7 @@ const staleMaxHpRowsCache = new WeakMap<
  */
 export function staleMaxHpRows(
   unit: Pick<ICombatUnit, "advancedActions" | "id"> &
-    Partial<Pick<ICombatUnit, "damageIn">>,
+    Partial<Pick<ICombatUnit, "damageIn" | "healIn">>,
 ): ReadonlySet<IAdvancedAction> {
   return new Set(staleMaxHpNewMax(unit).keys());
 }
@@ -97,7 +110,7 @@ export function staleMaxHpRows(
  */
 export function staleMaxHpNewMax(
   unit: Pick<ICombatUnit, "advancedActions" | "id"> &
-    Partial<Pick<ICombatUnit, "damageIn">>,
+    Partial<Pick<ICombatUnit, "damageIn" | "healIn">>,
 ): ReadonlyMap<IAdvancedAction, number> {
   const sorted = getSortedAdvancedActions(unit);
   const cached = staleMaxHpRowsCache.get(sorted);
@@ -108,11 +121,52 @@ export function staleMaxHpNewMax(
   );
   const pct = (a: IAdvancedAction) =>
     (100 * a.advancedActorCurrentHp) / a.advancedActorMaxHp;
+  const amountBetween = (
+    events:
+      | readonly { logLine: { timestamp: number }; effectiveAmount: number }[]
+      | undefined,
+    fromMs: number,
+    toMs: number,
+  ) =>
+    (events ?? []).reduce(
+      (sum, d) =>
+        d.logLine.timestamp > fromMs && d.logLine.timestamp <= toMs
+          ? sum + Math.abs(d.effectiveAmount)
+          : sum,
+      0,
+    );
   for (let j = 1; j < rows.length; j++) {
     const after = rows[j]!;
     const m0 = rows[j - 1]!.advancedActorMaxHp;
     const m1 = after.advancedActorMaxHp;
-    if (m1 >= m0) continue;
+    if (m1 > m0) {
+      // step up: the latest old-max row in the window whose current rose by
+      // the grant starts the run
+      const grant = m1 - m0;
+      for (
+        let k = j - 1;
+        k > 0 &&
+        rows[k]!.advancedActorMaxHp === m0 &&
+        rows[k - 1]!.advancedActorMaxHp === m0 &&
+        after.logLine.timestamp - rows[k]!.logLine.timestamp <=
+          STALE_MAX_HP_LOOKBACK_MS;
+        k--
+      ) {
+        const fromMs = rows[k - 1]!.logLine.timestamp;
+        const toMs = rows[k]!.logLine.timestamp;
+        const rise =
+          rows[k]!.advancedActorCurrentHp -
+          rows[k - 1]!.advancedActorCurrentHp +
+          amountBetween(unit.damageIn, fromMs, toMs) -
+          amountBetween(unit.healIn, fromMs, toMs);
+        if (Math.abs(rise - grant) <= STALE_MAX_HP_GRANT_SLACK * grant) {
+          for (let r = k; r < j; r++) out.set(rows[r]!, m1);
+          break;
+        }
+      }
+      continue;
+    }
+    if (m1 === m0) continue;
     let i = j;
     while (
       i > 0 &&
@@ -166,7 +220,7 @@ export function hpReadingRows(
  * new max (`staleMaxHpNewMax`). Every HP percentage of a row reads it. */
 export function hpReadingMaxHp(
   unit: Pick<ICombatUnit, "advancedActions" | "id"> &
-    Partial<Pick<ICombatUnit, "damageIn">>,
+    Partial<Pick<ICombatUnit, "damageIn" | "healIn">>,
   a: IAdvancedAction,
 ): number {
   return staleMaxHpNewMax(unit).get(a) ?? a.advancedActorMaxHp;
