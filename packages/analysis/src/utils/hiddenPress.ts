@@ -84,11 +84,21 @@ const AVENGING_WRATH_AURA_IDS = new Set(["31884", "454351"]);
  * Rain re-stated new at 0:09.816 and the orb's damage from 0:10.3; cover
  * set: 152 of 178 own Freezing Rain APPLIED rows within 200 ms of an own
  * 84714 SUCCESS, and every new one in a batch without an orb row came out
- * of an invisibility). */
+ * of an invisibility).
+ * Ray of Frost 205021's own aura is the debuff on its target; on the mage it
+ * runs as the channel buff 269748 (DB2 names it after the cast, Mage class
+ * options). New in a re-stating batch with no 205021 row, it is the channel
+ * pressed unseen (fact12 D34, fcee94ea r0 0:18.2: Greater Invisibility from
+ * 0:04, 269748 re-stated new at 21:00:08.322 beside the target's 205021 and
+ * the ticks, no SUCCESS — the later presses read `cast 1 of 2` / `2 of 2`).
+ * Corpus split in the commit that added it. 269748 is not in
+ * `observedSpellIdsGenerated` (an older season's universe); the 12.1.x logs
+ * apply it with nearly every Ray of Frost press. */
 export const PRESS_PROOF_AURA_IDS: ReadonlyMap<string, readonly string[]> =
   new Map([
     ["84714", ["270232"]],
     ["198149", ["270232"]],
+    ["205021", ["269748"]],
   ]);
 
 /** The cooldowns whose press `PRESS_PROOF_AURA_IDS` says this aura proves. */

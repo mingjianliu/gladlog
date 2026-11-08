@@ -365,7 +365,10 @@ describe("hiddenPressMs — an aura that proves another cooldown's press (fact10
   const FREEZING_RAIN = "270232";
   const mage = (rainMs: number, casts: any[] = []): any =>
     rogue(
-      [...batch(8, false), aura(LogEvent.SPELL_AURA_APPLIED, FREEZING_RAIN, rainMs)],
+      [
+        ...batch(8, false),
+        aura(LogEvent.SPELL_AURA_APPLIED, FREEZING_RAIN, rainMs),
+      ],
       casts,
     );
   it("733ef717 0:09.816: Freezing Rain new in the re-stating batch, no orb row — the orb was pressed while unseen", () => {
@@ -392,6 +395,16 @@ describe("hiddenPressMs — an aura that proves another cooldown's press (fact10
     };
     expect(hiddenPressMs(mage(BATCH_MS, [orb]), FROZEN_ORB, T0)).toEqual([]);
     expect(hiddenPressMs(mage(BATCH_MS + 3_000), FROZEN_ORB, T0)).toEqual([]);
+  });
+  it("fact12 D34: Ray of Frost's channel buff 269748 new in the batch proves 205021 pressed unseen", () => {
+    // fcee94ea r0 0:18.2: out of Greater Invisibility, no 205021 SUCCESS
+    const RAY = "205021";
+    const u = rogue([
+      ...batch(8, false),
+      aura(LogEvent.SPELL_AURA_APPLIED, "269748", BATCH_MS),
+    ]);
+    expect(hiddenPressMs(u, RAY, T0)).toEqual([BATCH_MS]);
+    expect([...hiddenPressCandidates(u, (id) => id === RAY)]).toEqual([RAY]);
   });
 });
 

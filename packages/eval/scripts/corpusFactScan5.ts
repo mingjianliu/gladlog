@@ -48,6 +48,7 @@ const MODULE_FILES = [
   "singles1",
   "singles2",
   "unseenPress",
+  "unseenSelfAura",
   "overheal",
   "controlCooldown",
   "pressEffect",
