@@ -34,6 +34,7 @@ import {
 import { castingLockIntervalsOf } from "../../utils/castingLocks";
 import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
 import {
+  interruptCasterAt,
   interruptCooldownRemainingMs,
   interruptForUnit,
   interruptReadySinceMs,
@@ -264,6 +265,7 @@ interface UnitLike {
   spec: number;
   castStartEvents?: any[];
   spellCastEvents: any[];
+  petSpellCastEvents?: any[];
   actionIn: any[];
   healOut: any[];
   advancedActions: any[];
@@ -586,7 +588,12 @@ export function kickPriorityDecisionPoints(
         // exact ms — 0.4 s left is not ready (codex round-1)
         const cdRemainingS =
           interruptCooldownRemainingMs(f as never, kit.spellId, sMs) / 1000;
-        const neverObserved = !f.spellCastEvents.some(
+        // a pet kick's casts are the pet's (`petSpellCastEvents`), as
+        // `enemy interrupts UP`'s `seen` reads them (GH #180)
+        const neverObserved = ![
+          ...f.spellCastEvents,
+          ...(f.petSpellCastEvents ?? []),
+        ].some(
           (e) =>
             e.spellId === kit.spellId &&
             e.logLine.event === "SPELL_CAST_SUCCESS" &&
@@ -604,6 +611,22 @@ export function kickPriorityDecisionPoints(
         // needs no prior cast — codex round-1: the prior-cast rule was
         // silently selecting players who already kick
         const kitOk = kit.confirmed || !neverObserved;
+        // GH #180 (T26): who throws this friend's kick at the cast start —
+        // `interruptCasterAt`, the reading kick-eaten's kicker sweep and
+        // `enemy interrupts UP` take. A pet kick (Spell Lock) is thrown by
+        // the pet out then: its own position, range and death; a dead or
+        // dismissed pet (`gone`) or none out yet throws nothing. The cooldown
+        // stays the friend's (their history holds the pets' casts); the
+        // cannot-cast reading already asks the pet (`cannotCastOf`).
+        const at = interruptCasterAt(
+          f as never,
+          kit.spellId,
+          sMs,
+          units as never,
+        );
+        const kicker: UnitLike | undefined = at.viaPet
+          ? (at.caster as UnitLike | undefined)
+          : f;
         // Feasibility is judged on the NOMINAL cast (same for a kicked and a
         // completed cast of the same spell), on the longest continuous
         // castable stretch inside it.
@@ -612,13 +635,25 @@ export function kickPriorityDecisionPoints(
         // Shuffle round ending there, read as a kicker with the cast free)
         const castEndMs = Math.max(
           sMs,
-          Math.min(nominalEndMs, firstDeathMs(f as never), roundEndAt),
+          Math.min(
+            nominalEndMs,
+            firstDeathMs(f as never),
+            kicker && kicker !== f ? firstDeathMs(kicker as never) : Infinity,
+            roundEndAt,
+          ),
         );
-        const freeS = longestOutside(cannotCastOf(f), sMs, castEndMs);
+        const freeS = kicker
+          ? longestOutside(cannotCastOf(f), sMs, castEndMs)
+          : 0;
         const locked = freeS < Math.min(KICK_MIN_FREE_S, nominalS);
-        const runBlocked = [...cannotCastOf(f), ...rootedOf(f)];
+        const runBlocked = [
+          ...cannotCastOf(f),
+          ...(kicker ? rootedOf(kicker) : []),
+        ];
         const runS = longestOutside(runBlocked, sMs, castEndMs);
-        const pos = getUnitPositionAtTime(f as never, sMs, LOS_SWEEP_GAP_MS);
+        const pos = kicker
+          ? getUnitPositionAtTime(kicker as never, sMs, LOS_SWEEP_GAP_MS)
+          : undefined;
         const hpos = getUnitPositionAtTime(
           healer as never,
           sMs,
@@ -633,11 +668,14 @@ export function kickPriorityDecisionPoints(
         let reachableBeforeLanding = true;
         let rootedThroughCast = false;
         let reachYd: number | null = null;
+        // an unconfirmed kit's range cannot be judged (a tree-availability
+        // fallback), except a pet's: its kick is thrown from the pet out at
+        // the cast start (GH #180, kick-eaten's kicker sweep, fact9 D30)
         if (
           pos &&
           baseRange != null &&
           range != null &&
-          kit.confirmed !== false
+          (kit.confirmed !== false || (at.viaPet && kicker !== undefined))
         ) {
           // melee is a property of the spell, not of the talented number: a
           // talented melee kick still needs no line of sight

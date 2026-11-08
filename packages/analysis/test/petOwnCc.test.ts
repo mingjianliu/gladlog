@@ -586,9 +586,28 @@ describe("readers", () => {
           },
         ],
       });
-    const lockedFor = (opts: Parameters<typeof pair>[0]) => {
-      const { warlock, units } = pair(opts);
-      const enemies = [target(), healer()];
+    const samples = (x: number) =>
+      [69.5, 71].map((t) => makeAdvancedAction(at(t), x, 0));
+    const pointFor = (
+      opts: Parameters<typeof pair>[0],
+      geo: {
+        /** the Felhunter out at the heal: position samples at 69.5 / 71 s */
+        petX?: number;
+        warlockX?: number;
+        healerX?: number;
+        petDiedS?: number;
+      } = {},
+    ) => {
+      const { warlock, pet, units } = pair(opts);
+      (pet as any).advancedActions = samples(geo.petX ?? 0);
+      if (geo.warlockX !== undefined)
+        (warlock as any).advancedActions = samples(geo.warlockX);
+      if (geo.petDiedS !== undefined)
+        (pet as any).deathRecords = [{ timestamp: at(geo.petDiedS) }];
+      const h = healer();
+      if (geo.healerX !== undefined)
+        (h as any).advancedActions = samples(geo.healerX);
+      const enemies = [target(), h];
       const pts = kickPriorityDecisionPoints(
         [warlock],
         enemies,
@@ -602,7 +621,10 @@ describe("readers", () => {
         { eligibility: "bootstrap" },
       );
       expect(pts).toHaveLength(1);
-      const f = pts[0]!.friends.find((x) => x.id === "w");
+      return pts[0]!.friends.find((x) => x.id === "w");
+    };
+    const lockedFor = (opts: Parameters<typeof pair>[0]) => {
+      const f = pointFor(opts);
       return f && { kick: f.kickSpellId, locked: f.locked };
     };
 
@@ -614,6 +636,28 @@ describe("readers", () => {
       expect(lockedFor({ ownerStun: [69, 73] })).toEqual({
         kick: SPELL_LOCK,
         locked: false,
+      });
+    });
+
+    it("GH #180 (T26): range is measured from the Felhunter, not the Warlock", () => {
+      // Spell Lock 40 yd: the pet 10 yd from the healer, the Warlock 60 yd
+      const near = pointFor({}, { petX: 90, warlockX: 40, healerX: 100 });
+      expect(near).toMatchObject({ distanceYd: 10, inRange: true });
+      // and the other way round: the Warlock next to the healer, the pet 60 yd
+      const far = pointFor({}, { petX: 40, warlockX: 95, healerX: 100 });
+      expect(far).toMatchObject({ distanceYd: 60, inRange: false });
+      expect(far!.feasible).toBe(false);
+    });
+
+    it("GH #180 (T26): a Felhunter dead before the heal throws no Spell Lock", () => {
+      const f = pointFor(
+        {},
+        { petX: 90, warlockX: 95, healerX: 100, petDiedS: 65 },
+      );
+      expect(f).toMatchObject({
+        locked: true,
+        feasible: false,
+        distanceYd: null,
       });
     });
 
