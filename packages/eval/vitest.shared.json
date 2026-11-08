@@ -28,6 +28,7 @@
     "test/cdPriorCrossingHpGate.test.ts",
     "test/cdPriorRefGate.test.ts",
     "test/cdWasteSharedCooldownGate.test.ts",
+    "test/channelInterruptedFadeGate.test.ts",
     "test/cjkLeakGate.test.ts",
     "test/conseqHpStateGate.test.ts",
     "test/contestedCastRiskGate.test.ts",

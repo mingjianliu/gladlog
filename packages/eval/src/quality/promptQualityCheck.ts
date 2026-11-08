@@ -1862,6 +1862,51 @@ export function checkAuraEndWithinRound(lines: string[]): string[] {
   return failures;
 }
 
+/** The `[YOU] [CD]` suffix of a channel the kick / control evidence cut
+ * (`ownerCd.ts` → `channelWasInterrupted`): `Dark Harvest (interrupted at
+ * 1.8s, ended 3:28)`. With an `; its aura until …` tail the aura outlived the
+ * channel and its fade is its own; that form is not read here. */
+const CHANNEL_INTERRUPTED_PRESS =
+  /^\s*\d+:\d{2}\s+\[YOU\] \[CD\]\s+(.+?)(?: \[[^\]]+\])* \(interrupted at [\d.]+s, ended (\d+):(\d{2})\)/;
+const BUFF_FADED_CAUSE =
+  /^\s*(\d+):(\d{2})\s+\[BUFF FADED\]\s+(.+?) \((.+)\)\s*$/;
+
+/**
+ * HardFailure class (GH #173.3, pipeline T19): a channel the press line
+ * reads "interrupted" may not fade "(expired)". `[BUFF FADED]` read the
+ * channel's length share only (`CHANNEL_STOPPED_MAX_SHARE`), so a Dark
+ * Harvest kicked at 1.8 s of its ~2 s read `(interrupted at 1.8s, ended
+ * 3:28)` on its press and `Dark Harvest (expired)` at 3:28. The fade of the
+ * press is the `[BUFF FADED]` of that spell in the press's printed end second
+ * (no aura tail: the aura ended with the channel).
+ */
+export function checkChannelInterruptedFadeExpired(lines: string[]): string[] {
+  const fades = new Map<
+    string,
+    Array<{ at: number; note: string; i: number }>
+  >();
+  lines.forEach((line, i) => {
+    const m = line.match(BUFF_FADED_CAUSE);
+    if (!m) return;
+    const at = Number(m[1]) * 60 + Number(m[2]);
+    fades.set(m[3]!, [...(fades.get(m[3]!) ?? []), { at, note: m[4]!, i }]);
+  });
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(CHANNEL_INTERRUPTED_PRESS);
+    if (!m) return;
+    const end = Number(m[2]) * 60 + Number(m[3]);
+    const f = (fades.get(m[1]!) ?? []).find(
+      (x) => x.at === end && x.note.startsWith("expired"),
+    );
+    if (f)
+      failures.push(
+        `line ${f.i + 1}: [BUFF FADED] ${m[1]} 写 expired,但第 ${i + 1} 行的按键行说这次引导在 ${fmtTime(end)} 被打断 —— ${lines[f.i]!.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
 /** `unpurgedForText`, read back: 1 = the whole seconds it printed. */
 const UNPURGED_FOR = new RegExp(UNPURGED_FOR_RE_SRC);
 
@@ -8706,6 +8751,7 @@ export function checkMatch(
   hardFailures.push(...checkEnemyCcKitLanded(lines));
   hardFailures.push(...checkKillWindowWithinRound(lines));
   hardFailures.push(...checkAuraEndWithinRound(lines));
+  hardFailures.push(...checkChannelInterruptedFadeExpired(lines));
   hardFailures.push(...checkNoEventAfterRoundEnd(lines));
   hardFailures.push(...checkUnpurgedWithinRound(lines));
   hardFailures.push(...checkCcEndCauseNotLogged(lines));

@@ -4290,6 +4290,17 @@ const INDEX: PredicateRow[] = [
     symbol: "checkAuraEndWithinRound",
     mod: promptQualityCheck,
   },
+  // GH #173.3: the channel press's "interrupted" and its fade's cause
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "channelWasInterrupted",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkChannelInterruptedFadeExpired",
+    mod: promptQualityCheck,
+  },
   // a missed-purge window ends at the round's end: the one text for its
   // length, that text read back, and the gate that holds it to the round
   {

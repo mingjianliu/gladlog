@@ -131,6 +131,7 @@
     "test/cdOutOfRangeReach.test.ts",
     "test/cdWasteGate.test.ts",
     "test/cdWasteSharedCooldown.test.ts",
+    "test/channelInterruptedFade.test.ts",
     "test/chargeAvailability.test.ts",
     "test/charmedPlayer.test.ts",
     "test/consequenceGate.test.ts",

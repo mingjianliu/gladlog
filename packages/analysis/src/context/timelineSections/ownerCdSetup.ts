@@ -101,6 +101,12 @@ export function prepareOwnerCdContext(
     healingEmissionTimes.set(cd.spellId, emit);
   }
 
+  // H13: computed once — used to confirm early-ended channels were a real kick/CC, not a
+  // self-cancel/movement, without recomputing the find() per cast.
+  const ownerCCSummary = ccTrinketSummaries.find(
+    (s) => s.playerName === owner.name,
+  );
+
   const cdExpiryEvents = extractOwnerCDBuffExpiry(
     ownerCDs,
     owner.id,
@@ -109,12 +115,7 @@ export function prepareOwnerCdContext(
     owner,
     enemies,
     roundEndAtMs,
-  );
-
-  // H13: computed once — used to confirm early-ended channels were a real kick/CC, not a
-  // self-cancel/movement, without recomputing the find() per cast.
-  const ownerCCSummary = ccTrinketSummaries.find(
-    (s) => s.playerName === owner.name,
+    ownerCCSummary,
   );
 
   // B145: an action taken while the owner is hard-CC'd (stun/incap) is NOT a free choice — the game

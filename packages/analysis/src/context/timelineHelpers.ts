@@ -34,6 +34,7 @@ import {
   namedCannotCastIntervals,
   pressBlockedIntervalsForSpells,
 } from "../utils/cannotCastIntervals";
+import { channelAuraTail, channelEndSeconds } from "../utils/castCommitSpans";
 import { pressImmuneMissRows } from "../utils/castMissRows";
 import {
   auraBreakAtRemoval,
@@ -611,6 +612,9 @@ export function extractOwnerCDBuffExpiry(
   /** the round's end, epoch ms (`roundEndMs`); a press at or after it is not
    * in the round and gets no expiry */
   roundEnd: number = Number.POSITIVE_INFINITY,
+  /** the owner's kicks and controls (`ccTrinketSummaries`): the `[YOU] [CD]`
+   * channel suffix's "interrupted" evidence (`channelWasInterrupted`) */
+  ownerCC?: Pick<IPlayerCCTrinketSummary, "ccInstances" | "interruptInstances">,
 ): ICDExpiryEvent[] {
   const ownerDeathsMs = (owner?.deathRecords ?? []).map(
     (d) => d.timestamp as number,
@@ -999,6 +1003,41 @@ export function extractOwnerCDBuffExpiry(
       ) {
         cause = "ended_early";
         channelStoppedAfterS = expiresAtSeconds - cast.timeSeconds;
+      }
+      // GH #173.3 (pipeline T19): a channel the press line reads
+      // "interrupted" — the kick / control evidence of `channelWasInterrupted`
+      // on the same channel end (`channelEndSeconds`) — stopped, whatever
+      // share of its haste-dependent length it ran. 605: a Dark Harvest
+      // kicked at 1.6 s of ~2 s read `(interrupted at 1.6s, ended 0:23)` on
+      // its press and `Dark Harvest (expired)` here (18 lines). An aura that
+      // outlives the channel (`channelAuraTail`) ends on its own terms.
+      if (
+        !isEstimated &&
+        cause === "expired" &&
+        CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
+        ownerCC &&
+        owner?.id !== undefined
+      ) {
+        const channelEndS = channelEndSeconds(
+          {
+            ...owner,
+            id: owner.id,
+            damageOut: owner.damageOut ?? [],
+            healOut: owner.healOut ?? [],
+          },
+          cd.spellId,
+          cast.timeSeconds,
+          expiresAtSeconds,
+          matchStartMs,
+          cd.spellName,
+        );
+        if (
+          channelAuraTail(cd.spellId, channelEndS, expiresAtSeconds) === "" &&
+          channelWasInterrupted(ownerCC, cast.timeSeconds, channelEndS)
+        ) {
+          cause = "ended_early";
+          channelStoppedAfterS = channelEndS - cast.timeSeconds;
+        }
       }
       // F-B1 (triage death-kill): removed from the owner and the owner died
       // within DEATH_CASCADE_MS after — the death stripped it, unless that
