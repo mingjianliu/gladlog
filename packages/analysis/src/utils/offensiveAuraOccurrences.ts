@@ -156,6 +156,35 @@ export const DEMONIC_FORM_SECONDS = 5;
  * the interval is split there, and the press occurrence starts at the press
  * (agy review: never anchor a later commitment at the earlier start). */
 export const PRESS_LANDING_LAG_S = 1.5;
+/**
+ * When a Metamorphosis press went up: its 162264 aura's APPLIED by the unit
+ * on itself, the latest within `PRESS_LANDING_LAG_S` before the press's
+ * landing row — the occurrence start the enemy side reads below — else the
+ * row itself (a press into a form already up). T05 (fact12 A6 / B7 / C19,
+ * 52a97230 r0): the aura went up at 0:32.885, the round-ending death came
+ * at 0:33.744 and the 200166 landing at 0:33.809; the friendly ledger's
+ * round cut read the landing and the kit said `[UNUSED]`.
+ */
+export function metamorphosisPressActivationMs(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  rowMs: number,
+): number {
+  let best: number | undefined;
+  for (const a of unit.auraEvents ?? []) {
+    if (
+      a.spellId === "162264" &&
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      a.srcUnitId === unit.id &&
+      (a.destUnitId === undefined || a.destUnitId === unit.id) &&
+      a.logLine.timestamp <= rowMs &&
+      a.logLine.timestamp >= rowMs - PRESS_LANDING_LAG_S * 1000 &&
+      (best === undefined || a.logLine.timestamp > best)
+    )
+      best = a.logLine.timestamp;
+  }
+  return best ?? rowMs;
+}
+
 /** Evidence tolerance around an aura start (cast ↔ aura association). */
 export const AURA_EVIDENCE_WINDOW_S = 3;
 /** Eye Beam cast window relative to the Demonic aura: the cast is logged up

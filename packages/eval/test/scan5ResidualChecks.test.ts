@@ -24,6 +24,7 @@ import { run as runFact10 } from "../scripts/scan5/fact10";
 import { run as runFact11 } from "../scripts/scan5/fact11";
 import { run as runFact12 } from "../scripts/scan5/fact12";
 import { run as runFact12d } from "../scripts/scan5/fact12d";
+import { run as runFact12e } from "../scripts/scan5/fact12e";
 import { run as runFriendlyOffensiveTag } from "../scripts/scan5/friendlyOffensiveTag";
 import { run as runImmunity } from "../scripts/scan5/immunity";
 import { run as runKillAttemptFacts } from "../scripts/scan5/killAttemptFacts";
@@ -2555,5 +2556,62 @@ describe("fact12d ghostReadAsHp / rotPressureNoDamage (T07)", () => {
     expect(
       of(scan(runFact12d, [priest], lines("2:50")), "rotPressureNoDamage"),
     ).toHaveLength(1);
+  });
+});
+
+describe("unusedPressedBeforeRoundEnd — a press up before the round's end (T05)", () => {
+  // 52a97230 r0: Metamorphosis' 162264 up at 32.885 s, the deciding death at
+  // 33.744 s, the 200166 landing row at 33.809 s
+  const dh = (auraMs: number | null) =>
+    unit("Dh", "1", 1, {
+      info: {},
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      spellCastEvents: [cast(33_809, "Dh", "200166", "Metamorphosis")],
+      auraEvents:
+        auraMs === null
+          ? []
+          : [
+              {
+                ...aura(
+                  LogEvent.SPELL_AURA_APPLIED,
+                  auraMs,
+                  "162264",
+                  "Metamorphosis",
+                ),
+                srcUnitId: "Dh",
+                destUnitId: "Dh",
+              },
+            ],
+    });
+  const mate = unit("Mate", "2", 1, {
+    info: {},
+    deathRecords: [{ timestamp: at(33_744) }],
+  });
+  const kit = (unused: boolean) => [
+    `<unit id="1" name="Dh">`,
+    `<cooldowns>Metamorphosis [120s]${unused ? " [UNUSED]" : ""}, Blur [60s]</cooldowns>`,
+  ];
+
+  it("flags an [UNUSED] kit entry whose press went up inside the round", () => {
+    expect(
+      of(
+        scan(runFact12e, [dh(32_885), mate], kit(true)),
+        "unusedPressedBeforeRoundEnd",
+      ),
+    ).toHaveLength(1);
+  });
+  it("reads a kit that counts the press, and a landing with no aura before the end", () => {
+    expect(
+      of(
+        scan(runFact12e, [dh(32_885), mate], kit(false)),
+        "unusedPressedBeforeRoundEnd",
+      ),
+    ).toEqual([]);
+    expect(
+      of(
+        scan(runFact12e, [dh(null), mate], kit(true)),
+        "unusedPressedBeforeRoundEnd",
+      ),
+    ).toEqual([]);
   });
 });

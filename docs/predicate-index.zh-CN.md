@@ -731,6 +731,8 @@
 >
 > 这里收口一条,就在对应 issue 上勾掉。
 
+**登记于 2026-11-08,未收口(T05,浩劫恶魔变形的按键何时生效)** —— 友方台账的回合截断读 `metamorphosisPressActivationMs`(`utils/offensiveAuraOccurrences.ts`:单位自己的 162264 APPLIED,取 200166 落地行之前 `PRESS_LANDING_LAG_S` 内最晚的一条，没有就取落地行本身),所以在单排决胜死亡之前已开、落地行记在死亡之后的按键算进本回合，冷却栏不再写 `[UNUSED]`(52a97230 r0:3 个上下文 → 0)。敌方侧(`[ENEMY CD]`,`offensiveAuraOccurrences`)直接以 162264 区间起点为出现时刻，配对的按键可以早于它 `AURA_EVIDENCE_WINDOW_S` 以内或落在区间内 —— 实测都是同一条光环行，只是配对窗口更宽。其他友方读者仍把按键放在落地行。语料检查 `scan5/fact12e.ts`(`unusedPressedBeforeRoundEnd`)故意按名字通用(按键同名的自身光环在回合结束前的落地延迟内 APPLIED):1cfbaa1ab 的 605 归档上 0 命中，那里没有别的技能是这个形状。
+
 **OPEN,2026-11-04(fact10 D22 / D5,敌方读条何时算结束)** —— 打断审计现在让没有结束行的读条在单位下一次别的技能的按键或读条(不「随行」,`pressRidesAlong`)早于打断 `STOPPED_JUST_BEFORE_S` 以上、或有玩家死亡时结束;桌面画的读条(`report/derive/castBars.ts`)仍画到下一次读条开始或 4 秒上限,所以回放上可能还画着一条读条,而 prompt 的 `[KICK]` 行说那次打断 hit nothing。画出来的读条不是判定,教练层也不读它;统一要给 `castBars.ts` 按键流。在 GH #133 跟踪。
 
 **有意保留,2026-11-04(fact10 D12,位移键当防御)** —— Spirit Walk 58875 与治疗一起进 `isNotMajorDefensive`(`MOBILITY_NOT_MAJOR_DEFENSIVE_IDS`);与下一条同样的两个读者(桌面关键时刻条、深挖包)以及 cd-hoarded 的回应侧仍把它当按键收 —— 裁决只把它移出就绪集。
