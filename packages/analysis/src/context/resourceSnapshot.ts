@@ -1227,13 +1227,18 @@ function buildResourceSnapshotOnce({
       // under the warrior's own death — REMOVED 2:20.004, UNIT_DIED
       // 2:20.030). The death is the holder's, or the Solo Shuffle round's
       // ending one (`deathCutAtSeconds`); an effect that outlives its holder
-      // (a DoT on its target, a Power Infusion on an ally) runs on.
+      // (a DoT on its target, a Power Infusion on an ally) runs on, and so
+      // does one whose copy on the caster's pet outlives the death's cascade
+      // (`casterAuraOutlives`: a death cut decides it alone). An effect that
+      // ended in its holder's death cascade with no cut (its official end
+      // there too) is over from the death's second.
       if (
         cd.deathCutAtSeconds !== undefined &&
         toRenderSecond(cd.deathCutAtSeconds) <= timeSeconds
       )
         continue;
       if (
+        cd.deathCutOfficialEndSeconds === undefined &&
         player.deathSeconds !== undefined &&
         toRenderSecond(player.deathSeconds) <= timeSeconds &&
         end <= player.deathSeconds + DEATH_CASCADE_MS / 1000

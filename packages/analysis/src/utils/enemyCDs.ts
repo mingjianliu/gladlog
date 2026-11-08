@@ -119,10 +119,11 @@ export interface IEnemyCDCast {
    * Transformation (5s left)` counted down to a death 5 s later). */
   deathCutOfficialEndSeconds?: number;
   /** With `deathCutOfficialEndSeconds`: the instant that cut it — the
-   * holder's death, or the Solo Shuffle round's ending one. From that
-   * instant's rendered second on the death is printed (`[DEATH]`) and the
-   * effect is over: the official time left above is only for rows before
-   * it (T03, fact12 D18). */
+   * caster's own death (it wore the aura), or the Solo Shuffle round's
+   * ending one. From that instant's rendered second on the death is printed
+   * (`[DEATH]`) and the effect is over: the official time left above is only
+   * for rows before it (T03, fact12 D18). A target's death cut sets none: it
+   * ends that copy, not the effect. */
   deathCutAtSeconds?: number;
   /** GH #119: "fact" = shown, never part of a burst window (a Demonic
    * Metamorphosis form under OFFENSIVE_AURA_FLAGS.demonic "fact"). Absent =
@@ -637,6 +638,9 @@ function deathCutOfficialEnd(
   endS: number,
   officialEndS: number,
   combat: AtomicArenaCombat,
+  caster: ICombatUnit,
+  /** the cooldown's English name — the `[RES]` entry's */
+  name: string,
 ): Pick<IEnemyCDCast, "deathCutOfficialEndSeconds" | "deathCutAtSeconds"> {
   // the official end is read from the aura's own application (a press
   // logged after its aura, codex 20-G167-06 #3, is no cut); less than
@@ -651,12 +655,67 @@ function deathCutOfficialEnd(
     Object.values(combat.units ?? {}),
   );
   const cutMs = near(deathMs) ? deathMs : near(roundEndMs) ? roundEndMs : null;
-  return cutMs === null || cutMs === undefined
-    ? {}
-    : {
-        deathCutOfficialEndSeconds: officialEndS,
-        deathCutAtSeconds: (cutMs - combat.startTime) / 1000,
-      };
+  if (cutMs === null || cutMs === undefined) return {};
+  // the effect is over from the cut on only when the cut ends the caster's
+  // effect itself — the Solo Shuffle round's end (whoever's death it was:
+  // 0284fcd9 r6 1:12, Touch of the Magi on the healer whose death ended the
+  // round) or the caster's own death — and no copy of it the caster put on
+  // any unit, a pet's included, outlives the cut's cascade
+  // (`casterAuraOutlives`, the scan's own truth: 3ac1fefa 0:56, Bestial
+  // Wrath's own aura REMOVED 21 ms before its hunter died, its pets' copies
+  // 292 ms after). A target's (the aura's wearer's) death alone ends that
+  // one copy: the effect can run on (B1 verify, bd473d94 r1 1:38: Strike of
+  // the Windlord's debuff on the rogue went with its death, its copies on
+  // two pets ran to 1:44).
+  const endsTheEffect =
+    (near(roundEndMs) || (holder !== undefined && holder.id === caster.id)) &&
+    !casterAuraOutlives(caster, name, cutMs + DEATH_CASCADE_MS, combat)
+      .outlives;
+  return {
+    deathCutOfficialEndSeconds: officialEndS,
+    ...(endsTheEffect
+      ? { deathCutAtSeconds: (cutMs - combat.startTime) / 1000 }
+      : {}),
+  };
+}
+
+/** every unit's aura intervals (pets, totems and guardians included), once
+ * per combat */
+const ALL_AURA_INDEX = new WeakMap<object, IAuraInterval[]>();
+
+/**
+ * T03: does an aura of English name `name` that `caster` put on any unit — a
+ * pet's copy included — run past `untilMs` (open at it, its intervals the
+ * builder's)? `any`: the caster put one of that name on someone this round.
+ * The one predicate `[RES]`'s death cut and its scan
+ * (`resEnemyEffectAfterDeath`) read.
+ */
+export function casterAuraOutlives(
+  caster: Pick<ICombatUnit, "id">,
+  name: string,
+  untilMs: number,
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Readonly<Record<string, ICombatUnit>>;
+  },
+): { any: boolean; outlives: boolean } {
+  let all = ALL_AURA_INDEX.get(combat);
+  if (!all) {
+    all = [];
+    for (const u of Object.values(combat.units ?? {}))
+      if (u.auraEvents?.length) all.push(...buildAuraIntervals(u, combat));
+    ALL_AURA_INDEX.set(combat, all);
+  }
+  const untilS = (untilMs - combat.startTime) / 1000;
+  let any = false;
+  for (const iv of all) {
+    if (iv.srcUnitId !== caster.id) continue;
+    if (getEnglishSpellName(iv.spellId, iv.spellName ?? "") !== name) continue;
+    any = true;
+    if (iv.fromS <= untilS && iv.toS > untilS) return { any, outlives: true };
+  }
+  return { any, outlives: false };
 }
 
 const OWN_CAST_COMBAT = new WeakMap<object, AtomicArenaCombat>();
@@ -746,6 +805,7 @@ function pressEffectEndSeconds(
   );
   let endMs: number | undefined;
   let cutOfficialMs: number | undefined;
+  let cutOnCaster = false;
   for (const opened of own) {
     if (opened.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
     const at = opened.logLine.timestamp;
@@ -777,6 +837,7 @@ function pressEffectEndSeconds(
     if (end !== undefined && (endMs === undefined || end > endMs)) {
       endMs = end;
       cutOfficialMs = diedMs === undefined ? undefined : officialEnd;
+      cutOnCaster = opened.destUnitId === unit.id;
     }
   }
   if (endMs === undefined) return undefined;
@@ -786,8 +847,11 @@ function pressEffectEndSeconds(
       ? {}
       : {
           officialEndSeconds: (cutOfficialMs - matchStartMs) / 1000,
-          // the wearer's death is the end itself
-          cutAtSeconds: (endMs - matchStartMs) / 1000,
+          // the wearer's death is the end itself — the effect's, when the
+          // caster wore it (a victim's death ends that copy only)
+          ...(cutOnCaster
+            ? { cutAtSeconds: (endMs - matchStartMs) / 1000 }
+            : {}),
         }),
   };
 }
@@ -905,7 +969,14 @@ export function reconstructEnemyCDTimeline(
       if (officialEndS !== undefined)
         Object.assign(
           cd,
-          deathCutOfficialEnd(holder, endS, officialEndS, combat),
+          deathCutOfficialEnd(
+            holder,
+            endS,
+            officialEndS,
+            combat,
+            enemy,
+            getEnglishSpellName(cd.spellId, cd.spellName),
+          ),
         );
     };
     for (const cd of offensiveCDs) {
@@ -1121,6 +1192,8 @@ export function reconstructEnemyCDTimeline(
               (o.endMs - matchStartMs) / 1000,
               (o.officialEndMs - matchStartMs) / 1000,
               combat,
+              enemy,
+              getEnglishSpellName(o.spellId, o.spellName),
             );
       (o.burstRole === "fact" ? offensiveFacts : offensiveCDs).push({
         ...cut,

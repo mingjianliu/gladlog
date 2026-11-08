@@ -21,6 +21,7 @@ import { run as runFact8 } from "../scripts/scan5/fact8";
 import { run as runFact9 } from "../scripts/scan5/fact9";
 import { run as runFact9b } from "../scripts/scan5/fact9b";
 import { run as runFact11 } from "../scripts/scan5/fact11";
+import { run as runFact12 } from "../scripts/scan5/fact12";
 import { run as runFriendlyOffensiveTag } from "../scripts/scan5/friendlyOffensiveTag";
 import { run as runImmunity } from "../scripts/scan5/immunity";
 import { run as runKillAttemptFacts } from "../scripts/scan5/killAttemptFacts";
@@ -2434,5 +2435,51 @@ describe("immunityPressTag: a press's impact row is the press (codex review)", (
       ["1:23  [YOU] [CD]   The Hunt → 4(Rogue) [IMMUNE]"],
     ).filter((x) => x.check === "immunityPressTag");
     expect(v.map((x) => x.detail)).toEqual([]);
+  });
+});
+
+describe("resEnemyEffectAfterDeath: a source-less REMOVED closes the aura (T03, codex P2)", () => {
+  // the Arms Warrior's Avatar up at 10 s, its REMOVED written with no
+  // source at 15 s, the warrior dead at 15.04 s; the 0:15 row under its
+  // `[DEATH]` still lists it
+  const viol = (removedSrc: string | undefined) => {
+    const avatar = (event: string, ms: number, srcUnitId?: string) =>
+      rowOf(event, ms, {
+        srcUnitId,
+        srcUnitName: srcUnitId ?? "nil",
+        destUnitId: "Warr",
+        spellId: "107574",
+        spellName: "Avatar",
+      });
+    const owner = unit("Mage", "1", 1);
+    const warr = unit("Warr", "4", 2, {
+      auraEvents: [
+        avatar(LogEvent.SPELL_AURA_APPLIED, 10_000, "Warr"),
+        ...(removedSrc === "none"
+          ? []
+          : [avatar(LogEvent.SPELL_AURA_REMOVED, 15_000, removedSrc)]),
+      ],
+      deathRecords: [{ timestamp: at(15_040) }],
+    });
+    return of(
+      scan(
+        runFact12,
+        [owner, warr],
+        [
+          `<unit id="4" name="Warr" spec="Arms Warrior" role="enemy">`,
+          "0:15  [DEATH]  4(AWarrior) (Arms Warrior — enemy)",
+          "      [RES] rdy:Δ  cd:—  enemy:Avatar/Arms Warrior(15s left)",
+        ],
+      ),
+      "resEnemyEffectAfterDeath",
+    );
+  };
+  it("a REMOVED with no source GUID ends the warrior's Avatar: the row is caught", () => {
+    expect(viol(undefined)).toHaveLength(1);
+    expect(viol("0000000000000000")).toHaveLength(1);
+    expect(viol("Warr")).toHaveLength(1);
+  });
+  it("an Avatar the log never closes runs its official length: no violation", () => {
+    expect(viol("none")).toEqual([]);
   });
 });

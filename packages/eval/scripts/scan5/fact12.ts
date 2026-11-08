@@ -24,18 +24,10 @@ import {
   parseResRow,
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
+import { casterAuraOutlives } from "@gladlog/analysis/src/utils/enemyCDs";
 import { DEATH_CASCADE_MS } from "@gladlog/analysis/src/utils/unitDeath";
 
-import {
-  APPLIED,
-  deathMs,
-  ev,
-  type IRoundCtx,
-  nameOf,
-  REMOVED,
-  secOf,
-  tsOf,
-} from "./ctx";
+import { deathMs, type IRoundCtx, secOf } from "./ctx";
 
 export const CHECKS = ["resEnemyEffectAfterDeath"] as const;
 
@@ -58,34 +50,18 @@ function resEnemyEffectAfterDeath(ctx: IRoundCtx): void {
     const r = ROSTER.exec(l);
     if (r) pidsOfSpec.set(r[2]!, [...(pidsOfSpec.get(r[2]!) ?? []), r[1]!]);
   }
-  /** does an aura named `name` by `holder` outlive `untilMs` anywhere? */
-  const outlives = (holder: any, name: string, untilMs: number) => {
-    let any = false;
-    for (const u of ctx.units) {
-      const open = new Map<string, number>();
-      const rows = ((u.auraEvents ?? []) as any[])
-        .filter(
-          (a) =>
-            a.srcUnitId === holder.id &&
-            nameOf(a.spellId, a.spellName ?? "") === name,
-        )
-        .sort((a, b) => tsOf(a) - tsOf(b));
-      for (const a of rows) {
-        any = true;
-        const key = String(a.spellId);
-        if (ev(a) === APPLIED) open.set(key, tsOf(a));
-        else if (ev(a) === REMOVED) {
-          const from = open.get(key);
-          open.delete(key);
-          if (from !== undefined && from <= untilMs && tsOf(a) > untilMs)
-            return { any, outlives: true };
-        }
-      }
-      for (const from of open.values())
-        if (from <= untilMs) return { any, outlives: true };
-    }
-    return { any, outlives: false };
+  /** does an aura named `name` by `holder` — on any unit, a pet's copy
+   * included — outlive `untilMs`? The product's own predicate
+   * (`casterAuraOutlives`, the one `[RES]`'s death cut reads; its intervals
+   * the builder's, so a REMOVED written with no source closes the holder's
+   * open interval — codex P2 on attempt 1) */
+  const combat = {
+    startTime: ctx.start,
+    endTime: ctx.end,
+    units: ctx.legacy.units,
   };
+  const outlives = (holder: any, name: string, untilMs: number) =>
+    casterAuraOutlives(holder, name, untilMs, combat);
   let atS = 0;
   for (const l of lines) {
     const t = /^(\d+:\d{2})\s/.exec(l);

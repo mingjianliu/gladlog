@@ -539,3 +539,160 @@ describe("[RES] enemy: time left of an effect its holder's death cut short (GH #
     expect(enemyField(tl, 25)).toContain("(6s left)");
   });
 });
+
+describe("T03 attempt 2 (B1 verify, bd473d94 r1 1:38): a TARGET's death ends that copy, not the effect", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  // the Windwalker's Strike of the Windlord (6 s) on a rogue who dies with
+  // it 2 s in; its copies elsewhere ran on — the monk lives
+  const SOTW = "392983";
+  function targetScene(bracket?: string) {
+    const monk = makeUnit("e1", {
+      name: "Monk",
+      spec: CombatUnitSpec.Monk_Windwalker,
+      info: {} as any,
+      spellCastEvents: [
+        makeSpellCastEvent(SOTW, START + 10_000, "f1", "Rogue", "e1", "Monk"),
+      ],
+    } as any);
+    const rogue = makeUnit("f1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      info: {} as any,
+      auraEvents: [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          SOTW,
+          START + 10_000,
+          ["e1", "Monk"],
+          "f1",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          SOTW,
+          START + 12_000,
+          ["e1", "Monk"],
+          "f1",
+        ),
+      ],
+    } as any);
+    (rogue as any).deathRecords = [{ timestamp: START + 12_002 }];
+    const combat = {
+      startTime: START,
+      endTime: START + 200_000,
+      ...(bracket ? { startInfo: { bracket } } : {}),
+      units: { e1: monk, f1: rogue },
+    } as any;
+    return reconstructEnemyCDTimeline([monk], combat, rogue, [rogue]);
+  }
+
+  it("the target's death second still lists the press, with its official time left", () => {
+    const tl = targetScene();
+    const cd = [
+      ...tl.players[0]!.offensiveCDs,
+      ...(tl.players[0]!.offensiveFacts ?? []),
+    ].find((c) => c.spellId === SOTW)!;
+    expect(cd).toBeDefined();
+    expect(cd.deathCutAtSeconds).toBeUndefined();
+    expect(enemyField(tl, 12)).toContain("Strike of the Windlord");
+  });
+
+  it("…unless that death ended the Solo Shuffle round and no copy outlives it (0284fcd9 r6 1:12, Touch of the Magi on the healer whose death ended the round)", () => {
+    const tl = targetScene(SOLO_SHUFFLE_BRACKET);
+    const cd = [
+      ...tl.players[0]!.offensiveCDs,
+      ...(tl.players[0]!.offensiveFacts ?? []),
+    ].find((c) => c.spellId === SOTW)!;
+    expect(cd.deathCutAtSeconds).toBeCloseTo(12.002, 3);
+    expect(enemyField(tl, 11)).toContain("Strike of the Windlord");
+    expect(enemyField(tl, 12)).toBeUndefined();
+  });
+});
+
+describe("T03 attempt 3: a copy on the caster's pet outlives the caster's death", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  // 3ac1fefa 0:56: Bestial Wrath pressed 56.572, the hunter's own aura
+  // REMOVED 56.907, the hunter died 56.928, its pets' copies REMOVED 57.220
+  // — the effect still ran past the death's cascade
+  function withPetCopy(petRemovedS: number) {
+    const warrior = makeUnit("e1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          AVATAR,
+          START + 10_000,
+          "e1",
+          "Warrior",
+          "e1",
+          "Warrior",
+        ),
+      ],
+      auraEvents: [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          AVATAR,
+          START + 10_000,
+          ["e1", "Warrior"],
+          "e1",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          AVATAR,
+          START + 15_000,
+          ["e1", "Warrior"],
+          "e1",
+        ),
+      ],
+    } as any);
+    (warrior as any).deathRecords = [{ timestamp: START + 15_040 }];
+    const pet = makeUnit("p1", {
+      name: "Pet",
+      auraEvents: [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          AVATAR,
+          START + 10_000,
+          ["e1", "Warrior"],
+          "p1",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          AVATAR,
+          START + petRemovedS * 1000,
+          ["e1", "Warrior"],
+          "p1",
+        ),
+      ],
+    } as any);
+    (pet as any).type = 3;
+    const combat = {
+      startTime: START,
+      endTime: START + 200_000,
+      units: { e1: warrior, p1: pet },
+    } as any;
+    return reconstructEnemyCDTimeline([warrior], combat);
+  }
+
+  it("the pet's copy REMOVED 0.29 s after the caster died → no cut; the death's row keeps the official time left (GH #167)", () => {
+    const tl = withPetCopy(15.33);
+    const cd = tl.players[0]!.offensiveCDs[0]!;
+    expect(cd.deathCutOfficialEndSeconds).toBeCloseTo(30, 3);
+    expect(cd.deathCutAtSeconds).toBeUndefined();
+    expect(enemyField(tl, 15)).toContain("Avatar");
+  });
+
+  it("control: the pet's copy REMOVED inside the death's cascade → the death's row drops it", () => {
+    const tl = withPetCopy(15.1);
+    expect(tl.players[0]!.offensiveCDs[0]!.deathCutAtSeconds).toBeCloseTo(
+      15.04,
+      3,
+    );
+    expect(enemyField(tl, 15)).toBeUndefined();
+  });
+});
