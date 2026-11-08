@@ -806,6 +806,42 @@ describe("① c — a [DMG SPIKE] bucket closes at its victim's death / the roun
     expect(lines.join("\n")).not.toContain("healed through");
   });
 
+  // T07 (fact12 C14, 7edc099d r0 Burst #6 `50% → 34%` with a `ghost` tick
+  // at its end second): Spirit of Redemption has no HP reading
+  it("T07: an endpoint on a second the tick reads `ghost` has no reading", () => {
+    const priest = {
+      ...victim({
+        hitsAt: [40.2, 40.5, 41, 41.5, 42, 42.5],
+        hp: [
+          [40, 80],
+          [41.5, 34],
+        ],
+      }),
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "215769",
+          at(42.7),
+          "f1",
+          "f1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "215769",
+          at(51.7),
+          "f1",
+          "f1",
+          "BUFF",
+        ),
+      ],
+    } as ReturnType<typeof makeUnit>;
+    expect(gridEndpointHpPct(priest, T0, 42)).toBe(34);
+    expect(gridEndpointHpPct(priest, T0, 43)).toBeNull();
+    expect(gridEndpointHpPct(priest, T0, 51)).toBeNull();
+    expect(gridHpPct(priest, at(43))).toBe(34);
+  });
+
   it("a bucket that opens before the death second keeps its live start", () => {
     const dead = victim({
       hitsAt: [44.2, 44.6, 45.1, 45.2, 45.3, 45.6],

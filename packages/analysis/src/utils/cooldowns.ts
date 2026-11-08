@@ -100,7 +100,7 @@ import {
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 import { feignDeathUnconsciousMs } from "./castStopEvidence";
-import { isStasisReplayCast } from "./combatStates";
+import { isGhostAtRenderSecondOf, isStasisReplayCast } from "./combatStates";
 import { interruptPressCooldownSeconds } from "./enemyInterrupts";
 import { hiddenPressMs, isPressVariantOf } from "./hiddenPress";
 import { incomingPressureEvents } from "./incomingPressure";
@@ -2731,7 +2731,7 @@ export function isDeadAtRenderSecond(
  * second — that second's `[STATE]` tick, as a number: `gridHpPct` (the tick's
  * sampler, clamped at 100), and 0 from the unit's death second on, where the
  * tick prints `dead` (`isDeadAtRenderSecond`). Null when the tick has no
- * reading.
+ * reading — a second it prints `ghost` included (`isGhostAtRenderSecondOf`).
  *
  * ONE reading for both ends of the two lines that print a window's `A% → B%`:
  * the burst ledger's `Target:` line (`analyzeBurstLedger`) and `[DMG SPIKE]`
@@ -2749,9 +2749,11 @@ export function gridEndpointHpPct(
   matchStartMs: number,
   renderSecond: number,
 ): number | null {
-  return isDeadAtRenderSecond(unit, matchStartMs, renderSecond)
-    ? 0
-    : gridHpPct(unit, matchStartMs + renderSecond * 1000);
+  if (isDeadAtRenderSecond(unit, matchStartMs, renderSecond)) return 0;
+  // a second the tick prints `ghost` has no reading: Spirit of Redemption's
+  // HP fields keep the last value (T07, fact12 C14)
+  if (isGhostAtRenderSecondOf(unit, matchStartMs, renderSecond)) return null;
+  return gridHpPct(unit, matchStartMs + renderSecond * 1000);
 }
 
 /**

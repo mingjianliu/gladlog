@@ -234,7 +234,7 @@ export interface IBurstLedgerEntry {
      * start / end second — the numbers the same-second `[STATE]` ticks print
      * (triage hp-state F-B1; the raw-millisecond samples disagreed with the
      * tick on 115 of 142 ledger targets). `hpEndPct` is 0 when the target is
-     * dead at the end second. */
+     * dead at the end second; either is null on a `ghost` second (T07). */
     hpStartPct: number | null;
     hpEndPct: number | null;
     /** The lowest HP inside the rendered span and the second it happened

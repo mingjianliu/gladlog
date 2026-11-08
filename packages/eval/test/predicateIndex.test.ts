@@ -2816,6 +2816,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/combatStates.ts`,
+    symbol: "isGhostAtRenderSecondOf",
+    mod: combatStates,
+  },
+  {
+    file: `${A}/utils/combatStates.ts`,
     symbol: "spanHoldsGhostSecond",
     mod: combatStates,
   },

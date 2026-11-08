@@ -411,12 +411,7 @@ describe("[HEALING] / [ROT PRESSURE] legends print only with their line family",
     // (refreshed at 0:08: a DoT with no later row ends at its official length)
     auraEvents: ["980", "146739", "1259790"].flatMap((spellId) => [
       debuff(spellId, id),
-      debuff(
-        spellId,
-        id,
-        LogEvent.SPELL_AURA_REFRESH,
-        MATCH_START_MS + 8_000,
-      ),
+      debuff(spellId, id, LogEvent.SPELL_AURA_REFRESH, MATCH_START_MS + 8_000),
     ]),
     advancedActions: [
       hpAt(id, 8, 80),
@@ -427,6 +422,24 @@ describe("[HEALING] / [ROT PRESSURE] legends print only with their line family",
       hpAt(id, 14, 30),
       hpAt(id, 20, 80),
     ],
+    // the DoTs' ticks: the stretch's damage is all periodic (T07 — no damage
+    // at all is no rot pressure)
+    damageIn: [10, 11, 12, 13, 14].map((sec) => ({
+      logLine: {
+        event: LogEvent.SPELL_PERIODIC_DAMAGE,
+        timestamp: MATCH_START_MS + sec * 1000,
+        parameters: [],
+      },
+      timestamp: MATCH_START_MS + sec * 1000,
+      amount: -10,
+      effectiveAmount: -10,
+      srcUnitId: "enemy-src",
+      srcUnitName: "Enemy",
+      destUnitId: id,
+      destUnitName: id,
+      spellId: "980",
+      spellName: "Agony",
+    })) as never[],
   });
 
   // FT-T15 ⑤a: `pid` knows the friendly roster only, so an enemy's line

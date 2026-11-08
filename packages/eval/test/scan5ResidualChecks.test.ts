@@ -23,6 +23,7 @@ import { run as runFact9b } from "../scripts/scan5/fact9b";
 import { run as runFact10 } from "../scripts/scan5/fact10";
 import { run as runFact11 } from "../scripts/scan5/fact11";
 import { run as runFact12 } from "../scripts/scan5/fact12";
+import { run as runFact12d } from "../scripts/scan5/fact12d";
 import { run as runFriendlyOffensiveTag } from "../scripts/scan5/friendlyOffensiveTag";
 import { run as runImmunity } from "../scripts/scan5/immunity";
 import { run as runKillAttemptFacts } from "../scripts/scan5/killAttemptFacts";
@@ -2512,6 +2513,47 @@ describe("staleMaxTickRescaled — a stale row before a max-HP step UP (T09 atte
     // the mixed-scale 63 is still caught
     expect(
       of(scan(runFact10, [monk([...brew])], tick(63)), "staleMaxTickRescaled"),
+    ).toHaveLength(1);
+  });
+});
+
+describe("fact12d ghostReadAsHp / rotPressureNoDamage (T07)", () => {
+  // 7edc099d r0: a Holy Priest's Spirit of Redemption 2:32.18 → 2:41.19;
+  // `[ROT PRESSURE] … at 36% HP` at 2:37 sat on a `ghost` tick
+  const sor = (event: string, ms: number) =>
+    rowOf(event, ms, {
+      spellId: "27827",
+      spellName: "Spirit of Redemption",
+      destUnitId: "Priest",
+    });
+  const priest = unit("Priest", "6", 1, {
+    auraEvents: [
+      sor(LogEvent.SPELL_AURA_APPLIED, 152_180),
+      sor(LogEvent.SPELL_AURA_REMOVED, 161_190),
+    ],
+    damageIn: [landed(156_500, "ext", 9_000)],
+  });
+  const lines = (sec: string) => [
+    '<unit id="6" name="Priest" spec="Holy Priest" role="friend">',
+    `${sec}  [ROT PRESSURE]   6(HPriest) (Holy Priest) at 36% HP with 3 active DoTs`,
+  ];
+
+  it("an HP number on a ghost second is caught; one before the form is not", () => {
+    expect(
+      of(scan(runFact12d, [priest], lines("2:37")), "ghostReadAsHp"),
+    ).toHaveLength(1);
+    expect(
+      of(scan(runFact12d, [priest], lines("2:30")), "ghostReadAsHp"),
+    ).toEqual([]);
+  });
+
+  it("a [ROT PRESSURE] window with no damage row on the unit is caught", () => {
+    // 2:37's window 2:33–2:37 holds the 2:36.5 hit; 2:50's holds none
+    expect(
+      of(scan(runFact12d, [priest], lines("2:37")), "rotPressureNoDamage"),
+    ).toEqual([]);
+    expect(
+      of(scan(runFact12d, [priest], lines("2:50")), "rotPressureNoDamage"),
     ).toHaveLength(1);
   });
 });

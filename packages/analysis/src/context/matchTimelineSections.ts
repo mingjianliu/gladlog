@@ -16,6 +16,7 @@ import {
   renderedCcDuration,
   rendersCcOnTeamLine,
 } from "../utils/ccTrinketAnalysis";
+import { isGhostAtRenderSecondOf } from "../utils/combatStates";
 import {
   cdCanHelpAnotherUnit,
   cdHelpsRecipient,
@@ -272,7 +273,12 @@ export function emitRotPressureEntries(params: {
       const tsMs = matchStartMs + t * 1000;
       const dotCount = dotCounts[t];
 
-      const hp = getUnitHpAtTimestamp(player, tsMs, HP_SAMPLE_RADIUS_MS);
+      // a `ghost` second (Spirit of Redemption) has no HP reading: the form's
+      // HP fields keep the last value, and every tick on it is IMMUNE (T07,
+      // fact12 A12: 7edc099d r0 2:37 `at 36% HP with 3 active DoTs`)
+      const hp = isGhostAtRenderSecondOf(player, matchStartMs, t)
+        ? null
+        : getUnitHpAtTimestamp(player, tsMs, HP_SAMPLE_RADIUS_MS);
 
       if (
         hp !== null &&
@@ -306,8 +312,10 @@ export function emitRotPressureEntries(params: {
             }
           }
 
+          // no damage at all is no "at least half of it periodic" (T07,
+          // fact12 B14: the form's window passed on `totalDmg === 0`)
           if (
-            totalDmg === 0 ||
+            totalDmg > 0 &&
             periodicDmg / totalDmg >= ROT_PRESSURE_MIN_PERIODIC_SHARE
           ) {
             addEntry(

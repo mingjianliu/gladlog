@@ -200,6 +200,43 @@ export function isGhostAtRenderSecond(
   );
 }
 
+const ghostIntervalsCache = new WeakMap<
+  object,
+  Map<number, ISpiritOfRedemptionInterval[]>
+>();
+
+/**
+ * `isGhostAtRenderSecond` for a unit read on its own — the readers that print
+ * an HP number at a rendered second and have no interval list passed in (the
+ * window endpoints `gridEndpointHpPct`, `[ROT PRESSURE]`). Same intervals as
+ * the `[STATE]` tick's (`extractSpiritOfRedemptionIntervals`); the round's end
+ * is left open, which only moves an interval's end past the log's last
+ * second — never a rendered one (T07, fact12 A12/C14: 7edc099d r0, a Holy
+ * Priest's pressed form 2:32.18–2:41.19 printed `[ROT PRESSURE] … at 36% HP`
+ * at 2:37 and a burst endpoint 34 % at 2:35, both `ghost` ticks).
+ */
+export function isGhostAtRenderSecondOf(
+  unit: Pick<ICombatUnit, "id" | "auraEvents"> &
+    Partial<Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">>,
+  matchStartMs: number,
+  second: number,
+): boolean {
+  let byStart = ghostIntervalsCache.get(unit.auraEvents);
+  if (!byStart) {
+    byStart = new Map();
+    ghostIntervalsCache.set(unit.auraEvents, byStart);
+  }
+  let intervals = byStart.get(matchStartMs);
+  if (!intervals) {
+    intervals = extractSpiritOfRedemptionIntervals(unit, {
+      startTime: matchStartMs,
+      endTime: Infinity,
+    });
+    byStart.set(matchStartMs, intervals);
+  }
+  return isGhostAtRenderSecond(intervals, second);
+}
+
 /**
  * Does a span printed `a–b` hold a `:ghost` second of its target? Whole
  * render seconds; the span's own first and last second are not "held".

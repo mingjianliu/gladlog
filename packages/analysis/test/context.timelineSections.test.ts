@@ -6,7 +6,7 @@ import {
   ICombatUnit,
   LogEvent,
 } from "@gladlog/parser-compat";
-import { describe, expect,it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { buildMatchTimeline } from "../src/context/matchTimeline";
 import {
@@ -36,8 +36,23 @@ import { fmtTime } from "../src/utils/renderGrid";
 import {
   makeAdvancedAction,
   makeAuraEvent,
+  makeDamageEvent,
   makeUnit,
 } from "./ported/testHelpers";
+
+/** a 10-damage SPELL_PERIODIC_DAMAGE row on player-1 every second of
+ * [fromMs, toMs] — the window's damage `[ROT PRESSURE]` asks to be periodic */
+const periodicHits = (fromMs: number, toMs: number) => {
+  const out = [];
+  for (let ms = fromMs; ms <= toMs; ms += 1000) {
+    const hit = makeDamageEvent(ms, 10, "player-1");
+    out.push({
+      ...hit,
+      logLine: { ...hit.logLine, event: LogEvent.SPELL_PERIODIC_DAMAGE },
+    });
+  }
+  return out as never[];
+};
 
 describe("context.timelineSections.test.ts", () => {
   // ── 1. emitRotPressureEntries ──────────────────────────────────────────────
@@ -60,12 +75,8 @@ describe("context.timelineSections.test.ts", () => {
     it("a DoT APPLIED under a Mind-Controlled unit ends at the controller's REMOVED", () => {
       // 87ba9256: Vampiric Touch APPLIED by the controlled priest, its ticks
       // and REMOVED under the priest who controlled them
-      const dot = (
-        event: LogEvent,
-        spellId: string,
-        ms: number,
-        src: string,
-      ) => makeAuraEvent(event, spellId, ms, src, "player-1", "DEBUFF");
+      const dot = (event: LogEvent, spellId: string, ms: number, src: string) =>
+        makeAuraEvent(event, spellId, ms, src, "player-1", "DEBUFF");
       const player = makeUnit("player-1", {
         name: "Player1",
         spec: CombatUnitSpec.Druid_Restoration,
@@ -81,7 +92,7 @@ describe("context.timelineSections.test.ts", () => {
           ...makeAdvancedAction(ms, 0, 0, 1000, 300),
           advancedActorId: "player-1",
         })),
-        damageIn: [],
+        damageIn: periodicHits(0, 10_000),
       });
       const entries: [number, string[]][] = [];
       emitRotPressureEntries({
@@ -133,9 +144,10 @@ describe("context.timelineSections.test.ts", () => {
             advancedActorId: "player-1",
           })),
         ],
-        damageIn: ["2818", "703", "1943", "980"].map((id) =>
-          tick(id, 20_000),
-        ) as never,
+        damageIn: [
+          ...periodicHits(15_000, 19_000),
+          ...["2818", "703", "1943", "980"].map((id) => tick(id, 20_000)),
+        ] as never,
       });
       const entries: [number, string[]][] = [];
       emitRotPressureEntries({
@@ -231,8 +243,8 @@ describe("context.timelineSections.test.ts", () => {
             advancedActorId: "player-1",
           },
         ],
-        // No damage event -> ratio evaluates to 1.0 (since totalDmg = 0)
-        damageIn: [],
+        // periodic damage only -> ratio 1.0 (T07: no damage at all is no rot)
+        damageIn: periodicHits(0, 10_000),
       });
 
       const entries: [number, string[]][] = [];
@@ -253,6 +265,66 @@ describe("context.timelineSections.test.ts", () => {
       expect(entries[0][1][0]).toBe(
         `${fmtTime(5)}  [ROT PRESSURE]   p-Player1 (${specToString(CombatUnitSpec.Druid_Restoration)}) at 30% HP with 3 active DoTs`,
       );
+    });
+
+    // T07 (fact12 A12/B14, 7edc099d r0 2:37): a Holy Priest in Spirit of
+    // Redemption — the HP fields keep the last value, every tick is IMMUNE
+    const rotScene = (damageIn: never[], extraAuras: object[] = []) => {
+      const player = makeUnit("player-1", {
+        name: "Player1",
+        spec: CombatUnitSpec.Priest_Holy,
+        reaction: CombatUnitReaction.Hostile,
+        auraEvents: [
+          ...["980", "146739", "1259790"].map((id) =>
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_APPLIED,
+              id,
+              0,
+              "enemy-1",
+              "player-1",
+              "DEBUFF",
+            ),
+          ),
+          ...extraAuras,
+        ],
+        advancedActions: [50, 50, 30, 30, 30, 30, 30, 30, 50, 50, 50].map(
+          (pct, i) => ({
+            ...makeAdvancedAction(i * 1000, 0, 0, 1000, pct * 10),
+            advancedActorId: "player-1",
+          }),
+        ),
+        damageIn,
+      });
+      const entries: [number, string[]][] = [];
+      emitRotPressureEntries({
+        allPlayers: [player],
+        matchStartMs: 0,
+        matchEndMs: 10_000,
+        matchDurationS: 10,
+        pid: (n) => `p-${n}`,
+        addEntry: (t, ...lines) => {
+          entries.push([t, lines]);
+        },
+      });
+      return entries.map(([t]) => t);
+    };
+
+    it("T07: a window with no damage at all is no rot pressure", () => {
+      expect(rotScene(periodicHits(0, 10_000))).toEqual([5]);
+      expect(rotScene([])).toEqual([]);
+    });
+
+    it("T07: seconds the tick reads `ghost` (Spirit of Redemption) have no HP reading", () => {
+      const form = (event: LogEvent, ms: number) =>
+        makeAuraEvent(event, "215769", ms, "player-1", "player-1", "BUFF");
+      // the form 3.2–9.0 s: ghost ticks 4–9, the 30 % run 2–7 never reaches
+      // four live seconds
+      expect(
+        rotScene(periodicHits(0, 10_000), [
+          form(LogEvent.SPELL_AURA_APPLIED, 3200),
+          form(LogEvent.SPELL_AURA_REMOVED, 9000),
+        ]),
+      ).toEqual([]);
     });
 
     // fact7 D32 (163de8f1 2:34): a hand list missed Black Arrow, so four ticking
@@ -280,7 +352,7 @@ describe("context.timelineSections.test.ts", () => {
           ),
         ),
         advancedActions: lowHpSamples(),
-        damageIn: [],
+        damageIn: periodicHits(0, 10_000),
       });
       const lines: string[] = [];
       emitRotPressureEntries({
