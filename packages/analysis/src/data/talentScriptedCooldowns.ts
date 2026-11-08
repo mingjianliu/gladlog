@@ -1436,19 +1436,7 @@ export function eventTriggerTimesMs(
         out.push(e.logLine.timestamp + (r.summonFadeMs ?? 0));
   const hitIds = r.triggerHitIds;
   if (hitIds?.length) {
-    const hits = [
-      ...unit.damageOut.filter(
-        (e) =>
-          e.logLine.event === LogEvent.SPELL_DAMAGE &&
-          hitIds.includes(String(e.spellId)),
-      ),
-      ...(unit.missesOut ?? []).filter(
-        (e) =>
-          e.logLine.event === LogEvent.SPELL_MISSED &&
-          e.missType === "ABSORB" &&
-          hitIds.includes(String(e.spellId)),
-      ),
-    ]
+    const hits = landedHitRows(unit, hitIds)
       .map((e) => ({ t: e.logLine.timestamp, dest: e.destUnitId }))
       .sort((a, b) => a.t - b.t);
     if (r.hitsCountEachRow) {
@@ -1497,9 +1485,36 @@ export function eventTriggerTimesMs(
   return out.sort((a, b) => a - b);
 }
 
+/** The unit's own hit rows of `hitIds` that landed — a SPELL_DAMAGE, or a
+ * SPELL_MISSED a shield ABSORBed; an immune, reflected or dodged one is no
+ * hit. The one reading of "an enemy hit by X" for every trigger kind. */
+export function landedHitRows(
+  unit: Pick<ICombatUnit, "damageOut"> &
+    Partial<Pick<ICombatUnit, "missesOut">>,
+  hitIds: readonly string[],
+): Array<
+  | ICombatUnit["damageOut"][number]
+  | NonNullable<ICombatUnit["missesOut"]>[number]
+> {
+  return [
+    ...unit.damageOut.filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_DAMAGE &&
+        hitIds.includes(String(e.spellId)),
+    ),
+    ...(unit.missesOut ?? []).filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_MISSED &&
+        e.missType === "ABSORB" &&
+        hitIds.includes(String(e.spellId)),
+    ),
+  ];
+}
+
 /**
  * `triggerOwnAuraStacksLost`: one instant per stack of the unit's own aura
- * lost on a unit in the millisecond of one of its own hits there. Stacks
+ * lost on a unit in the millisecond of one of its own landed hits there
+ * (`landedHitRows`: an immune or reflected Ice Lance shatters nothing). Stacks
  * are read off the unit's own aura rows in log order (APPLIED 1 — a
  * restated one keeps the count —, a DOSE row's count, REMOVED 0).
  */
@@ -1509,9 +1524,8 @@ export function ownAuraStacksLostTimesMs(
   c: NonNullable<IEventCooldownReduction["triggerOwnAuraStacksLost"]>,
 ): number[] {
   const hitAt = new Set<string>();
-  for (const e of [...unit.damageOut, ...(unit.missesOut ?? [])])
-    if (e.destUnitId && c.atOwnHitIds.includes(String(e.spellId)))
-      hitAt.add(`${e.destUnitId}@${e.logLine.timestamp}`);
+  for (const e of landedHitRows(unit, c.atOwnHitIds))
+    if (e.destUnitId) hitAt.add(`${e.destUnitId}@${e.logLine.timestamp}`);
   const rows = (unit.actionOut ?? [])
     .filter((e) => e.destUnitId && c.auraIds.includes(String(e.spellId)))
     .sort(

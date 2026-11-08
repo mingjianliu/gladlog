@@ -1086,7 +1086,14 @@ describe("event-reduction triggers: interrupts, school casts, per-row hits, mini
         row("SPELL_DAMAGE", "228598", 1510, { destUnitId: "e2" }),
         row("SPELL_DAMAGE", "1246949", 1500, { destUnitId: "e1" }),
       ],
-      missesOut: [],
+      // an immune Ice Lance is no hit: e3's stacks running out in its
+      // millisecond shattered nothing (codex review 85-tk-E-T16-1)
+      missesOut: [
+        row("SPELL_MISSED", "228598", 9000, {
+          destUnitId: "e3",
+          missType: "IMMUNE",
+        }),
+      ],
       actionOut: [
         aura("SPELL_AURA_APPLIED", 200, "e1"),
         aura("SPELL_AURA_APPLIED_DOSE", 300, "e1", 6),
@@ -1096,7 +1103,7 @@ describe("event-reduction triggers: interrupts, school casts, per-row hits, mini
         aura("SPELL_AURA_REMOVED", 1510, "e2"), // shattered 3
         aura("SPELL_AURA_APPLIED", 2000, "e3"),
         aura("SPELL_AURA_APPLIED_DOSE", 2100, "e3", 5),
-        aura("SPELL_AURA_REMOVED", 9000, "e3"), // ran out: no hit, nothing
+        aura("SPELL_AURA_REMOVED", 9000, "e3"), // ran out: no landed hit
       ],
     } as never;
     const trig = eventTriggersFor(u, [

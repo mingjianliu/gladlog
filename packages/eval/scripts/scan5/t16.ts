@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- legacy parse units */
 /**
  * scan5/t16.ts — the low end of a kit's `[a–Ns]` (fact12 D17, T16).
  *
@@ -11,10 +12,19 @@
  *    spell are no cooldown apart. Kind = the spell. Counted: every kit range
  *    entry whose unit pressed X at least twice.
  * Presses are fact8's `buttonPressesOf` (one per press, the round's end of
- * play the cut); the `[RES]` rows' range low end is fact8's
+ * play the cut), less a free press inside its opener's free-recast window; the `[RES]` rows' range low end is fact8's
  * `resCdBeforeNextPress`.
  */
-import { type IRoundCtx } from "./ctx";
+import {
+  FREE_RECAST_WINDOWS,
+  type IFreeRecastWindow,
+} from "@gladlog/analysis/src/data/talentScriptedCooldowns";
+import {
+  freeRecastWindowEndSeconds,
+  playerTalentIdSets,
+} from "@gladlog/analysis/src/utils/cooldowns";
+
+import { type IRoundCtx, nameOf } from "./ctx";
 import { buttonPressesOf } from "./fact8";
 
 export const CHECKS = ["kitSoonestAboveRecast"] as const;
@@ -24,6 +34,41 @@ const KIT_SLACK_S = 1;
 const UNIT_OPEN = /^\s*<unit id="(\d+)"/;
 const KIT_LINE = /^\s*<cooldowns>(.*)<\/cooldowns>/;
 const KIT_RANGE = /(?:^|, )([^,[\]]+?) \[(\d+)–(\d+)s([^\]]*)\]/g;
+
+/** The free-recast window (`FREE_RECAST_WINDOWS`) on the button `name`
+ * the unit holds: Strafing Run's second Deep Breath within 18 s. Held as
+ * the ledger reads it — a talented spell or a PvP talent of the unit. */
+function freeWindowOf(u: any, name: string): IFreeRecastWindow | undefined {
+  const ids = playerTalentIdSets(u);
+  return Object.entries(FREE_RECAST_WINDOWS).find(
+    ([talent, w]) =>
+      nameOf(w.spellId) === name &&
+      (!!ids.talentedSpellIds?.has(talent) || ids.pvpTalentIds.has(talent)),
+  )?.[1];
+}
+
+/** The presses whose cooldown ran out before them: a free press inside the
+ * window its opener opened (`freeRecastWindowEndSeconds`, the ledger's
+ * reading) stands on that opener's cooldown and is dropped (codex review
+ * 85-tk-E-T16-1: 0fe0e2e2 Deep Breath 22.0 / 31.2 s, the second free). */
+function cooldownPresses(
+  u: any,
+  presses: number[],
+  w: IFreeRecastWindow | undefined,
+): number[] {
+  if (!w) return presses;
+  const out: number[] = [];
+  let openEnd = Number.NEGATIVE_INFINITY;
+  for (const p of presses) {
+    if (p <= openEnd) {
+      openEnd = Number.NEGATIVE_INFINITY;
+      continue;
+    }
+    out.push(p);
+    openEnd = p + freeRecastWindowEndSeconds(u, w, 0, p) * 1000;
+  }
+  return out;
+}
 
 export function run(ctx: IRoundCtx): void {
   const memo = new Map<string, number[]>();
@@ -42,7 +87,11 @@ export function run(ctx: IRoundCtx): void {
       if (/Charges/.test(e[4]!)) continue;
       const name = e[1]!.trim();
       const soonest = Number(e[2]);
-      const presses = buttonPressesOf(ctx, memo, unit, name);
+      const presses = cooldownPresses(
+        unit,
+        buttonPressesOf(ctx, memo, unit, name),
+        freeWindowOf(unit, name),
+      );
       if (presses.length < 2) continue;
       ctx.bump("kitSoonestAboveRecast");
       let min = Infinity;
