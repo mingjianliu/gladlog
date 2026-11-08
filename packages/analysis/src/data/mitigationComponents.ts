@@ -194,6 +194,57 @@ function applyTalentModifiers(
 }
 
 /**
+ * The ONE component that prices a hit of school mask `hitSchoolMask`: of the
+ * components whose schools the hit touches, the strongest (an immunity
+ * first, then the higher lower bound). A hybrid hit (Tremor, physical + fire)
+ * into a split row (Evasion with Elusiveness and Bait and Switch: physical
+ * 20, magic 32 — the magic one already includes Elusiveness's 20) is priced
+ * once, by the 32 the game applies to it, not by both (codex review of
+ * batch B7, T27 attempt 2). Undefined = no component touches the hit. A
+ * row with one component prices every hit it touches, as before.
+ */
+export function componentForSchool(
+  res: IResolvedMitigation,
+  hitSchoolMask: number,
+): IResolvedMitigationComponent | undefined {
+  let best: IResolvedMitigationComponent | undefined;
+  const rank = (c: IResolvedMitigationComponent) =>
+    c.kind === "immunity" ? 100 : c.pctMin;
+  for (const c of res.components) {
+    if ((c.schoolMask & hitSchoolMask) === 0) continue;
+    if (
+      !best ||
+      rank(c) > rank(best) ||
+      (rank(c) === rank(best) && c.pctMax > best.pctMax)
+    )
+      best = c;
+  }
+  return best;
+}
+
+/**
+ * The component a stretch of damage met, from that damage split by school
+ * (`{ [schoolMask]: amount }`): the one that priced most of it
+ * (`componentForSchool` per school). A physical-only burst into an Evasion
+ * with Bait and Switch met its 20, not its magic 32. Undefined = no damage
+ * any component touches.
+ */
+export function componentForDamage(
+  res: IResolvedMitigation,
+  bySchool: Readonly<Record<string, number>>,
+): IResolvedMitigationComponent | undefined {
+  const share = new Map<IResolvedMitigationComponent, number>();
+  for (const [mask, amount] of Object.entries(bySchool)) {
+    const c = componentForSchool(res, Number(mask));
+    if (c && amount > 0) share.set(c, (share.get(c) ?? 0) + amount);
+  }
+  let best: IResolvedMitigationComponent | undefined;
+  for (const [c, n] of share)
+    if (!best || n > share.get(best)!) best = c;
+  return best;
+}
+
+/**
  * A talent's whole reduction no claim can stand on — the caster lacks the
  * talent, nobody knows, or it is the paladin's own link — on a row that says
  * the aura is otherwise the off-table mechanic (`unheldIsMechanic`: Blessing

@@ -27,7 +27,11 @@ import {
 import { costNormPhrase } from "../data/curatedAbilityFacts";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
-import { resolveMitigation, wallDoorPct } from "../data/mitigationComponents";
+import {
+  componentForDamage,
+  resolveMitigation,
+  wallDoorPct,
+} from "../data/mitigationComponents";
 import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { SELF_REMOVAL_BY_TYPE } from "../data/selfRemovals";
 import {
@@ -134,7 +138,9 @@ import { forcedMovesText } from "../utils/forcedDisplacement";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
 import {
   documentRecordsAttackSpell,
+  hitSchoolId,
   isDeferralAbsorb,
+  logSchoolMask,
 } from "../utils/incomingPressure";
 import {
   attemptIntoTrinketEvents,
@@ -5114,6 +5120,24 @@ function dpsOwnerEvents(
     // GH #96 D6 decision trace: every burst in the ledger is an opportunity.
     const bimTracing = isDecisionTraceActive();
     const bimTrace = new Map<BurstEntry, DecisionRecord>();
+    /** The owner's damage on the burst's target inside its span, by school
+     * (the burst ledger's own measure is the owner's, pets out) */
+    const burstDamageBySchool = (
+      b: BurstEntry,
+      targetId: string,
+    ): Record<string, number> => {
+      const target = units.find((u) => u.id === targetId);
+      const fromMs = combat.startTime + b.fromSeconds * 1000;
+      const toMs = combat.startTime + b.toSeconds * 1000;
+      const by: Record<string, number> = {};
+      for (const d of target?.damageIn ?? []) {
+        const tMs = d.logLine.timestamp;
+        if (d.srcUnitId !== owner.id || tMs < fromMs || tMs > toMs) continue;
+        const mask = String(logSchoolMask(hitSchoolId(d)));
+        by[mask] = (by[mask] ?? 0) + Math.abs(d.effectiveAmount);
+      }
+      return by;
+    };
     const bimOpp = (b: BurstEntry) =>
       `burst-into-mitigation:${owner.id}:${Math.round(b.fromSeconds)}`;
     for (const b of ledger) {
@@ -5155,11 +5179,19 @@ function dpsOwnerEvents(
           // Brew — dropped here by an undefined lookup, not by a decision)
           const key = wallTableIdOfAura(d.spellId);
           const res = resolveMitigation(key, ctx);
+          // a row split by school (Evasion with Bait and Switch: physical
+          // 20, magic 32) is the component the burst's own damage met — a
+          // physical burst met 20, not 32 (codex review of batch B7, T27
+          // attempt 2); a one-component row reads the door as before
+          const met =
+            res && res.components.length > 1
+              ? componentForDamage(res, burstDamageBySchool(b, t.unitId))
+              : undefined;
           return {
             d,
             res,
             // GH #114: the same helper prices the [ENEMY DEF] line
-            pct: wallDoorPct(key, ctx) ?? 0,
+            pct: met ? met.pctMin : (wallDoorPct(key, ctx) ?? 0),
           };
         })
         .filter(

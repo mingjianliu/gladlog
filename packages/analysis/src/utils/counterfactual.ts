@@ -2,6 +2,8 @@ import { CombatUnitType, ICombatUnit } from "@gladlog/parser-compat";
 
 import { castKeyOfAura } from "../data/castEffectAuras";
 import {
+  componentForSchool,
+  type IResolvedMitigationComponent,
   isUnheldMechanic,
   resolveMitigation,
 } from "../data/mitigationComponents";
@@ -188,6 +190,29 @@ export function windowDamage(
   let sum = 0;
   for (const [mask, amount] of Object.entries(bySchool))
     if ((Number(mask) & schoolMask) !== 0) sum += amount;
+  return sum;
+}
+
+/** `windowDamage` of the hits `comp` prices — each hit once, by the one
+ * component `componentForSchool` gives it (a hybrid hit into a split row is
+ * no longer counted under both, codex review of batch B7). A one-component
+ * row reads exactly `windowDamage(…, comp.schoolMask, …)`. */
+function windowDamageOfComponent(
+  unit: ICombatUnit,
+  fromS: number,
+  toS: number,
+  res: NonNullable<ReturnType<typeof resolveMitigation>>,
+  comp: IResolvedMitigationComponent,
+  matchStartMs: number,
+): number {
+  const bySchool = incomingPressureBySchool(
+    unit,
+    matchStartMs + fromS * 1000,
+    matchStartMs + toS * 1000,
+  );
+  let sum = 0;
+  for (const [mask, amount] of Object.entries(bySchool))
+    if (componentForSchool(res, Number(mask)) === comp) sum += amount;
   return sum;
 }
 
@@ -461,11 +486,12 @@ export function computeMitigationAudit(
       // the talent's 10 points are its whole reduction) printed "blocked ~0k"
       if (comp.kind === "pct" && pct <= 0) continue;
 
-      const observed = windowDamage(
+      const observed = windowDamageOfComponent(
         victim,
         overlapFrom,
         overlapTo,
-        comp.schoolMask,
+        res,
+        comp,
         combat.startTime,
       );
 
@@ -532,11 +558,12 @@ function savedByComponents(
 ): number {
   let saved = 0;
   for (const comp of res.components) {
-    const observed = windowDamage(
+    const observed = windowDamageOfComponent(
       victim,
       windowStartS,
       deathS,
-      comp.schoolMask,
+      res,
+      comp,
       combat.startTime,
     );
     saved += (observed * comp.pctMin) / 100;

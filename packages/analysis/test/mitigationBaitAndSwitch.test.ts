@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveMitigation } from "../src/data/mitigationComponents";
+import {
+  componentForDamage,
+  componentForSchool,
+  resolveMitigation,
+} from "../src/data/mitigationComponents";
+import { computeMitigationAudit } from "../src/utils/counterfactual";
 import { talentMitigationModifiersFor } from "../src/data/talentMitigationModifiers";
 
 // GH #126 row 234 (2026-11-08): Bait and Switch 457034 fills Evasion's magic
@@ -67,5 +72,70 @@ describe("Bait and Switch on Evasion is its own magic slot", () => {
       [PHYSICAL, 0, 20],
       [MAGIC, 0, 32],
     ]);
+  });
+});
+
+// codex review of batch B7 (T27 attempt 2): the split components both touch a
+// hybrid hit (Tremor, physical + fire, 0x5); each hit is priced once, by the
+// component the game applies to it — magic 32, which already holds
+// Elusiveness's 20.
+describe("a split Evasion prices each hit once", () => {
+  const res = () =>
+    resolveMitigation(EVASION, {
+      carrierIsCaster: true,
+      caster: caster([ELUSIVENESS, BAIT]),
+    })!;
+
+  it("componentForSchool: physical 20, fire 32, physical + fire 32", () => {
+    expect(componentForSchool(res(), 0x1)?.pctMin).toBe(20);
+    expect(componentForSchool(res(), 0x4)?.pctMin).toBe(32);
+    expect(componentForSchool(res(), 0x5)?.pctMin).toBe(32);
+  });
+
+  it("componentForDamage: the component that priced most of it", () => {
+    expect(componentForDamage(res(), { "1": 100_000 })?.pctMin).toBe(20);
+    expect(
+      componentForDamage(res(), { "1": 10_000, "127": 90_000 })?.pctMin,
+    ).toBe(32);
+    expect(componentForDamage(res(), {})).toBeUndefined();
+  });
+
+  it("the death audit: a 68,000 hybrid hit is 32,000 blocked, not 17,000 + 32,000", () => {
+    const rogue = {
+      id: "R1",
+      name: "R1",
+      spec: "261",
+      info: { holds: [ELUSIVENESS, BAIT] },
+      spellCastEvents: [],
+      damageIn: [
+        {
+          logLine: { timestamp: 55_000 },
+          effectiveAmount: 68_000,
+          spellSchoolId: "0x5",
+        },
+      ],
+      auraEvents: (["SPELL_AURA_APPLIED", "SPELL_AURA_REMOVED"] as const).map(
+        (event, i) => ({
+          spellId: EVASION,
+          spellName: "Evasion",
+          destUnitId: "R1",
+          srcUnitId: "R1",
+          srcUnitName: "R1",
+          timestamp: (i ? 58 : 52) * 1000,
+          logLine: { event, timestamp: (i ? 58 : 52) * 1000 },
+        }),
+      ),
+      advancedActions: [],
+    } as never;
+    const { rows } = computeMitigationAudit(
+      rogue,
+      { startTime: 0, endTime: 120_000, units: { R1: rogue } },
+      60,
+    );
+    const blocked = rows
+      .filter((r) => r.spellId === EVASION && r.kind === "arith")
+      .map((r) => r.blockedAmount);
+    expect(blocked.reduce((a, b) => a! + b!, 0)).toBe(32_000);
+    expect(blocked).not.toContain(17_000);
   });
 });
