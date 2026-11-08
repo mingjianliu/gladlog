@@ -5679,3 +5679,20 @@ up]` tag (ledger Imprison 217832 vs logged 221527). New scan5 module t11
 Solar Beam rows fixed since; findings byte-identical. (v507 was allocated to
 batches B9, B10 and B11 first; all were abandoned before push.) Batch verified
 on tests + codex (user 11-08); 605 / cover / wide run at the end of the wave.
+
+v508 (2026-11-08, GH #126 rows 170 / 171 / 234; pipeline batch B13, T27).
+(1) Echoing Blessings 387801: Blessing of Sacrifice 6940 is a mitigation row
+worth 15 % on the ally end of a holder's blessing, 0 on the paladin's own link,
+and keeps the off-table mechanic when the talent is not held; its Echoing
+Protection 387804 linger (15 %, every school) is priced. Both signed `never` in
+the verdict book (user ruling R07). (2) Bait and Switch 457034 gives Evasion its
+own magic slot (physical 20 / magic 32 with Elusiveness, multiplied, measured
+0.68). (3) A split row prices each hit once (`componentForSchool`; an immunity
+ranks first only when it covers every school of the hit,
+`immunityMaskStopsSchool`); the burst-into-mitigation door picks a split wall's
+component from the ledger's own damage while the wall was up
+(`burstDamageBySchoolOn`, `absorbedHitSchoolMask`). 605: menu rows 7,401 →
+7,401 (+0 / −0; ruling R08 replaced R07's +1); context +45 / −26 (death audit
++11 Echoing Protection rows, 6 Blessing of Sacrifice rows priced). Batch
+verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
+the wave.

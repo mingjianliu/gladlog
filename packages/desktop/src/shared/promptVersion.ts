@@ -976,4 +976,12 @@
  *  row of its ledger id or English name (Imprison 217832 / 221527). See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 507;
+/*
+ * v508 (2026-11-08, GH #126 rows 170/171/234; pipeline batch B13, T27):
+ *  Echoing Blessings prices Blessing of Sacrifice on the ally (15 %) and its
+ *  Echoing Protection linger; Bait and Switch gives Evasion a magic slot. A
+ *  split mitigation row prices each hit once, and the burst door reads the
+ *  component the burst met while the wall was up. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 508;
