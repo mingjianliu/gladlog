@@ -969,4 +969,11 @@
  *  Feign Death without Survival Tactics is a ledger press but no unused
  *  death save. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 506;
+/*
+ * v507 (2026-11-08, fact12 D3 D7; pipeline batch B12): a kick's SPELL_MISSED
+ *  row pairs through castMissRows.missBelongsToCast (an IMMUNE kick is no
+ *  longer 'hit nothing' without its tag); a no-aura control reads the logged
+ *  row of its ledger id or English name (Imprison 217832 / 221527). See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 507;

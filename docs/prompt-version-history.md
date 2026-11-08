@@ -5665,3 +5665,17 @@ cooldown), but such a Feign Death is never a death save left unpressed:
 [DEATH] (Unused: Feign Death) 12 → 0 and [DEFENSIVE AVAILABLE] 3 → 0 against
 attempt 1; 0 menu rows. Batch verified on tests + codex (user 11-08); 605 /
 cover / wide run at the end of the wave.
+
+v507 (2026-11-08, fact12 D3 D7; pipeline batch B12). (1) fact12 D3: kickAudit
+pairs a kick's SPELL_MISSED row through `castMissRows.missBelongsToCast` (the
+cast lines' 2.5 s window, no later press of the same kick before the row, at
+the kick or its pet's execution) instead of its own ±100 ms, and by the kick's
+English name under another id (Solar Beam 78675 → 97547): `[KICK] your Rebuke
+… — hit nothing` gains `[IMMUNE: …]`, as does the burst ledger's Kicks: entry.
+(2) fact12 D7: new `castPress.pressRowOfLedgerId` (exact id, else the same
+English name), shared by the immune tag and the `[no CC aura logged — X was
+up]` tag (ledger Imprison 217832 vs logged 221527). New scan5 module t11
+(refusedControlRead): repro 7 → 0; 605 (attempt's first run) 17 → 2, the two
+Solar Beam rows fixed since; findings byte-identical. (v507 was allocated to
+batches B9, B10 and B11 first; all were abandoned before push.) Batch verified
+on tests + codex (user 11-08); 605 / cover / wide run at the end of the wave.
