@@ -997,4 +997,11 @@
  *  (timelineHelpers.isChannelledPress); a mage barrier's reactive damage is no
  *  channel bolt. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 510;
+/*
+ * v511 (2026-11-08, fact12 A12 B14 C13 C14; pipeline batch B16, T07): a
+ *  Spirit of Redemption (ghost) second prints no HP number: a window ending on
+ *  one prints "A% → ghost" and keeps its trough off the ghost seconds; ghost
+ *  wins over death in the endpoint; [ROT PRESSURE] needs positive damage. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 511;

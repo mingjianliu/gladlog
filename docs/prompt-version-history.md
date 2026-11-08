@@ -5724,3 +5724,20 @@ gates the clause; anything else ends at "(at N% HP)". New scan5 module t02
 one Blazing Barrier 235313 (Ultimate Penitence's 288 unchanged). Menu rows +0 /
 −0 (repro). Batch verified on tests + codex (user 11-08); 605 / cover / wide run
 at the end of the wave.
+
+v511 (2026-11-08, fact12 A12 B14 C13 C14; pipeline batch B16, T07). A Spirit of
+Redemption second is a ghost, not live HP. `cooldowns.gridEndpointHpPct` checks
+ghost before death (the `[STATE]` precedence of `statusOf`). A window whose last
+second is ghost and whose first is live (`isGhostEndWindow`) prints "A% → ghost"
+and keeps its trough (`ghostEndTroughInWindow`) in `[DMG SPIKE]` and the burst
+ledger's Target: line; every spike / burst trough reads `windowTroughOffGhost`
+(`hpTroughInWindow` without the ghost seconds). The gates
+checkHealedThroughConsistency, checkBurstTargetHpConsistency,
+BURST_TARGET_DAMAGE and SPIKE_HP read the ghost end. `[ROT PRESSURE]` needs
+positive damage (`rotPressureDamageInWindow`, shared with scan5
+rotPressureNoDamage). New scan5 module fact12d (ghostReadAsHp,
+rotPressureNoDamage, ghostEndTroughDropped): cover set 5 → 0
+ghostEndTroughDropped, 0 → 0 for the other two; 2 burst Target: and 3
+`[DMG SPIKE]` lines gain "→ ghost"; findings 0 of 1,140 differ. (v511's T07
+first went into batch B9, abandoned before push.) Batch verified on tests +
+codex (user 11-08); 605 / cover / wide run at the end of the wave.
