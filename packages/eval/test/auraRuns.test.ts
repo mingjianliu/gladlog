@@ -84,4 +84,31 @@ describe("cleanAuraRuns", () => {
     expect(cleanAuraRuns(rows)).toHaveLength(1);
     expect(cleanAuraRuns(rows, { doseUnclean: true })).toEqual([]);
   });
+  // codex 85-tk-A-T18-2b #1: a re-APPLIED its source pressed is a new
+  // run; the earlier one lost its REMOVED and is no lifetime
+  it("a re-APPLIED the source pressed starts a run and drops the open one", () => {
+    const rows = [
+      row(LogEvent.SPELL_AURA_APPLIED, 0),
+      row(LogEvent.SPELL_AURA_APPLIED, 90),
+      row(LogEvent.SPELL_AURA_REMOVED, 100),
+    ];
+    expect(cleanAuraRuns(rows)).toEqual([
+      { srcUnitId: "w", fromMs: 0, toMs: 100_000 },
+    ]);
+    expect(
+      cleanAuraRuns(rows, {
+        isNewApplication: (a) => a.logLine.timestamp === 90_000,
+      }),
+    ).toEqual([{ srcUnitId: "w", fromMs: 90_000, toMs: 100_000 }]);
+  });
+  // codex 85-tk-A-T18-2b #3: a closing row from another source ends the
+  // oldest open run, which keeps its own source
+  it("a closing row of another source ends the oldest open run", () => {
+    expect(
+      cleanAuraRuns([
+        row(LogEvent.SPELL_AURA_APPLIED, 0, "w"),
+        row(LogEvent.SPELL_AURA_REMOVED, 18, "x"),
+      ]),
+    ).toEqual([{ srcUnitId: "w", fromMs: 0, toMs: 18_000 }]);
+  });
 });

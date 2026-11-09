@@ -4331,6 +4331,16 @@ const INDEX: PredicateRow[] = [
     mod: auraRebroadcast,
   },
   {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "sourcePressedAuraNear",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/utils/buffDuration.ts`,
+    symbol: "ownAuraRuns",
+    mod: buffDuration,
+  },
+  {
     file: `${A}/utils/auraEndCause.ts`,
     symbol: "auraEndFromLog",
     mod: auraEndCause,

@@ -171,6 +171,22 @@ describe("scan5/t18 setExtendedFade", () => {
     expect(scan(o(19.5), [fade("0:19", "expired")])).toEqual([]);
   });
 
+  // codex 85-tk-A-T18-2b #2: the producer pairs the 59.9 s REMOVED with the
+  // 0 s press (its window runs to the next press); the press nearest the
+  // APPLIED is the 60 s one. The scan reads the producer's press.
+  it("a logged fade is anchored at the press the producer paired it with", () => {
+    const o = warrior(
+      2,
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, 59.8),
+        aura(LogEvent.SPELL_AURA_REMOVED, 59.9),
+      ],
+      [cast(RECKLESSNESS, "Recklessness", 60)],
+      [],
+    );
+    expect(scan(o, [fade("0:59", "expired")])).toEqual([]);
+  });
+
   it("`(expired)` on a run the log cut short of its extended length is caught", () => {
     const o = warrior(
       2,

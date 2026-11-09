@@ -13,6 +13,7 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import {
   buffDurationRangeForCaster,
   buffFullDurationForCaster,
+  ownAuraRuns,
 } from "../src/utils/buffDuration";
 
 beforeAll(async () => {
@@ -309,6 +310,62 @@ describe("Fury 2pc: Raging Blow extends Recklessness by 2 s per press, up to 6 s
         T0 + 500,
       ),
     ).toBe(22);
+  });
+
+  // codex 85-tk-A-T18-2b #1: a second press whose aura re-APPLIED with the
+  // first copy's REMOVED lost starts its own run — the Raging Blow at 101 s
+  // is past that run's REMOVED at 100 s
+  it("a re-APPLIED the caster pressed is a new run, not a duplicate row", () => {
+    const row = (event: LogEvent, s: number) => ({
+      spellId: RECKLESSNESS,
+      srcUnitId: "w",
+      destUnitId: "w",
+      timestamp: T0 + s * 1000,
+      logLine: { event, timestamp: T0 + s * 1000 },
+    });
+    const u = (pressedAgain: boolean) =>
+      ({
+        ...(warrior(2, [
+          press(RECKLESSNESS, 0),
+          ...(pressedAgain ? [press(RECKLESSNESS, 90)] : []),
+          press(RAGING_BLOW, 101),
+        ]) as object),
+        id: "w",
+        auraEvents: [
+          row(LogEvent.SPELL_AURA_APPLIED, 0),
+          row(LogEvent.SPELL_AURA_APPLIED, 90),
+          row(LogEvent.SPELL_AURA_REMOVED, 100),
+        ],
+      }) as never;
+    expect(buffFullDurationForCaster(RECKLESSNESS, u(true), T0 + 90_000)).toBe(
+      18,
+    );
+    // the runs: 0 s with its REMOVED lost, 90–100 s; with no press at 90 s
+    // the row is a duplicate of the one 0–100 s run
+    const runs = (pressedAgain: boolean) =>
+      ownAuraRuns(
+        {
+          id: "w",
+          auraEvents: [
+            row(LogEvent.SPELL_AURA_APPLIED, 0),
+            row(LogEvent.SPELL_AURA_APPLIED, 90),
+            row(LogEvent.SPELL_AURA_REMOVED, 100),
+          ],
+          spellCastEvents: [
+            press(RECKLESSNESS, 0),
+            ...(pressedAgain ? [press(RECKLESSNESS, 90)] : []),
+          ],
+        },
+        RECKLESSNESS,
+      ).map((r) => [
+        r.from.logLine.timestamp - T0,
+        r.to ? r.to.logLine.timestamp - T0 : undefined,
+      ]);
+    expect(runs(true)).toEqual([
+      [0, undefined],
+      [90_000, 100_000],
+    ]);
+    expect(runs(false)).toEqual([[0, 100_000]]);
   });
 
   // codex B25 #1: an unreadable loadout falls back on the typical length,

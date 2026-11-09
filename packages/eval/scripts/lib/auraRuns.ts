@@ -7,7 +7,8 @@
  * an APPLIED while that source's run is open is a duplicate row of it, a
  * REFRESH makes the run unclean (with `doseUnclean`, an APPLIED_DOSE too: a
  * stacking aura's lifetime is not its duration — codex 85-tk-A-T18-2 #2), a
- * REMOVED / BROKEN ends it. Only clean, ended runs come back. `buffDurationScan --per-app` reads these.
+ * REMOVED / BROKEN ends it (its own source's run, else the oldest open
+ * one). Only clean, ended runs come back. `buffDurationScan --per-app` reads these.
  */
 import {
   dropAuraRebroadcasts,
@@ -38,9 +39,17 @@ const ENDS = new Set<string>([
 /** The clean, ended runs of one aura's rows on one unit (log order). */
 export function cleanAuraRuns(
   rows: readonly IAuraRunRow[],
-  opts: { doseUnclean?: boolean } = {},
+  opts: {
+    doseUnclean?: boolean;
+    /** an APPLIED while its source's run is open is a new press (the
+     * source logged a cast of it there — `sourcePressedAuraNear`): the
+     * open run lost its REMOVED and is dropped, a run starts (codex
+     * 85-tk-A-T18-2b #1) */
+    isNewApplication?: (applied: IAuraRunRow) => boolean;
+  } = {},
 ): ICleanAuraRun[] {
   const out: ICleanAuraRun[] = [];
+  // insertion order = oldest open run first
   const open = new Map<string, { t: number; clean: boolean }>();
   const notTheEnd = supersededAuraBreaks(rows);
   for (const a of dropAuraRebroadcasts(rows)) {
@@ -50,6 +59,10 @@ export function cleanAuraRuns(
     const t = a.logLine.timestamp;
     if (ev === LogEvent.SPELL_AURA_APPLIED) {
       if (!open.has(src)) open.set(src, { t, clean: true });
+      else if (opts.isNewApplication?.(a)) {
+        open.delete(src);
+        open.set(src, { t, clean: true });
+      }
     } else if (
       ev === LogEvent.SPELL_AURA_REFRESH ||
       (opts.doseUnclean && ev === LogEvent.SPELL_AURA_APPLIED_DOSE)
@@ -57,9 +70,14 @@ export function cleanAuraRuns(
       const o = open.get(src);
       if (o) o.clean = false;
     } else if (ENDS.has(ev)) {
-      const o = open.get(src);
-      open.delete(src);
-      if (o?.clean) out.push({ srcUnitId: src, fromMs: o.t, toMs: t });
+      // the builder's close: the row's own source first, else the oldest
+      // open run of any source (a closing row's source is often not the
+      // caster's — codex 85-tk-A-T18-2b #3); the run keeps its source
+      const key = open.has(src) ? src : open.keys().next().value;
+      if (key === undefined) continue;
+      const o = open.get(key)!;
+      open.delete(key);
+      if (o.clean) out.push({ srcUnitId: key, fromMs: o.t, toMs: t });
     }
   }
   return out;

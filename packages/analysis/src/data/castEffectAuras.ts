@@ -195,6 +195,36 @@ export function isCastOrEffect(
   );
 }
 
+/** How close to a re-sent APPLIED its source's cast of the aura is logged
+ * for the APPLIED to be a new press (the 1 s radius `buildAuraIntervals`
+ * reads a re-APPLIED with no REMOVED between by). */
+export const REAPPLY_PRESS_PAIR_MS = 1000;
+
+/**
+ * Did the source log a cast of `auraId` (the id or a cast whose effect aura
+ * it is — Fear 5782 applies 118699) within `REAPPLY_PRESS_PAIR_MS` of
+ * `atMs`? An APPLIED of an aura still up, with no REMOVED between, is a new
+ * press when it did (the earlier copy's REMOVED was lost) and the same aura
+ * re-sent when it did not. The one reading of that split:
+ * `buildAuraIntervals`, the set-bonus walk's run (`ownAuraRuns`) and the
+ * per-app lifetimes (codex 85-tk-A-T18-2b #1).
+ */
+export function sourcePressedAuraNear(
+  casts: ReadonlyArray<{
+    spellId?: string | null;
+    logLine: { timestamp: number };
+  }>,
+  auraId: string,
+  atMs: number,
+): boolean {
+  return casts.some(
+    (c) =>
+      !!c.spellId &&
+      isCastOrEffect(c.spellId, auraId) &&
+      Math.abs(c.logLine.timestamp - atMs) <= REAPPLY_PRESS_PAIR_MS,
+  );
+}
+
 /** Every [cast, effect aura] pair of the table — for the readers that build
  * a set of cast ids from a set of effect auras. */
 export function castEffectPairs(): ReadonlyArray<readonly [string, string]> {

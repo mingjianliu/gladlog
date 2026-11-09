@@ -2,7 +2,11 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 // runtime-only use (inside buildAuraIntervals); drAnalysis → cooldowns →
 // auraIntervals is a cycle, safe because no module-level code calls across it
-import { castsOfEffectAura, isCastOrEffect } from "../data/castEffectAuras";
+import {
+  castsOfEffectAura,
+  isCastOrEffect,
+  sourcePressedAuraNear,
+} from "../data/castEffectAuras";
 import { analysisDataReady } from "../data/ensure";
 import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraRebroadcast";
@@ -440,14 +444,9 @@ export function buildAuraIntervalsUncached(
         caster !== undefined &&
         dOpen !== null &&
         t <= existing.lastSeenS + dOpen &&
-        !(caster.spellCastEvents ?? []).some(
-          (c) =>
-            // Fear casts 5782 and applies 118699 (codex review of batch 9:
-            // a real second Fear was swallowed as a rebroadcast)
-            c.spellId !== undefined &&
-            isCastOrEffect(c.spellId, id) &&
-            Math.abs(c.logLine.timestamp - a.timestamp) <= 1000,
-        );
+        // Fear casts 5782 and applies 118699 (codex review of batch 9: a
+        // real second Fear was swallowed as a rebroadcast)
+        !sourcePressedAuraNear(caster.spellCastEvents ?? [], id, a.timestamp);
       if (rebroadcast) {
         // keep the interval open; its duration cap stays anchored where it was
       } else if (existing && ev === LogEvent.SPELL_AURA_APPLIED) {

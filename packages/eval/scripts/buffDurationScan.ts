@@ -30,6 +30,7 @@
  *     [--per-app <aura>,…]   # 逐次施加:观测寿命 vs 带施加时刻的谓词,见 per-app 注释
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
+import { sourcePressedAuraNear } from "@gladlog/analysis/src/data/castEffectAuras";
 import { setBonusPerEventFor } from "@gladlog/analysis/src/data/classSetBonuses";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
@@ -148,7 +149,15 @@ function perAppRuns(
       unit.auraEvents.filter(
         (a) => a.spellId === spellId && a.destUnitId === unit.id,
       ),
-      { doseUnclean: args.doseUnclean },
+      {
+        doseUnclean: args.doseUnclean,
+        isNewApplication: (a) =>
+          sourcePressedAuraNear(
+            legacy.units[a.srcUnitId ?? ""]?.spellCastEvents ?? [],
+            spellId,
+            a.logLine.timestamp,
+          ),
+      },
     );
     for (const r of runs) {
       const srcId = r.srcUnitId;

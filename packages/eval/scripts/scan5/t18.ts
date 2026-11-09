@@ -27,22 +27,24 @@
  * Counted: every such line whose application is found (no REFRESH between
  * the APPLIED and the line).
  */
+import { extractOwnerCDBuffExpiry } from "@gladlog/analysis/src/context/timelineHelpers";
 import {
   SET_BONUS_PER_EVENT_DURATIONS,
   setBonusPerEventFor,
 } from "@gladlog/analysis/src/data/classSetBonuses";
 import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraIntervals";
-import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
+import {
+  buffFullDurationForCaster,
+  ownAuraRuns,
+} from "@gladlog/analysis/src/utils/buffDuration";
 import { pressLandedOn } from "@gladlog/analysis/src/utils/castMissRows";
 import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
 
 import {
-  APPLIED,
   ev,
   type IRoundCtx,
   nameOf,
   REFRESH,
-  REMOVED,
   secOf,
   successesOf,
   tsOf,
@@ -124,31 +126,58 @@ function fullLengthS(
   return staticS + ext;
 }
 
-/** The ledger's press of the aura nearest the run's APPLIED (within
- * `PRESS_PAIR_MS`, either side: an aura row can be logged ahead of its cast
- * row), else the APPLIED itself. */
-const PRESS_PAIR_MS = 1000;
-function pressAnchorMs(
+/** The press the producer printed this fade line for, by its own pairing
+ * (`extractOwnerCDBuffExpiry` on the owner's ledger entry, the call the
+ * timeline makes). The scan audits the length the producer put after that
+ * press, not which press a removal belongs to (codex 85-tk-A-T18-2b #2:
+ * nearest-APPLIED pairing took a later press than the producer's).
+ * Undefined when the producer has no such fade. */
+function producerPressMs(
   ctx: IRoundCtx,
   owner: any,
   auraId: string,
-  appliedMs: number,
-): number {
+  sec: number,
+  estimated: boolean,
+): number | undefined {
   let entry: any;
   try {
     entry = unitCooldownEntry(owner, ctx.legacy as never, auraId);
   } catch {
     entry = undefined;
   }
+  if (!entry) return undefined;
   const startMs: number = ctx.legacy.startTime;
-  let best: number | undefined;
-  for (const c of (entry?.casts ?? []) as any[]) {
-    const ms = startMs + c.timeSeconds * 1000;
-    const d = Math.abs(ms - appliedMs);
-    if (d > PRESS_PAIR_MS) continue;
-    if (best === undefined || d < Math.abs(best - appliedMs)) best = ms;
-  }
-  return best ?? appliedMs;
+  const friends = ctx.players.filter((p) => p.reaction === owner.reaction);
+  const enemies = ctx.players.filter((p) => p.reaction !== owner.reaction);
+  const events = extractOwnerCDBuffExpiry(
+    [entry],
+    owner.id,
+    friends,
+    startMs,
+    owner,
+    enemies,
+    ctx.roundEndAt,
+  );
+  const secOfMs = (ms: number) => Math.floor((ms - ctx.start) / 1000);
+  // a logged fade: the press the producer paired that removal with (the
+  // removal's second, which no length moves); an estimated one: the latest
+  // press it estimated at or before the line — matched without its expiry,
+  // the length this scan audits (a line printed at the unworn length still
+  // finds its press)
+  const hit = estimated
+    ? events
+        .filter(
+          (e) =>
+            e.isEstimated && secOfMs(startMs + e.castAtSeconds * 1000) <= sec,
+        )
+        .sort((a, b) => a.castAtSeconds - b.castAtSeconds)
+        .pop()
+    : events.find(
+        (e) =>
+          !e.isEstimated &&
+          secOfMs(startMs + e.expiresAtSeconds * 1000) === sec,
+      );
+  return hit === undefined ? undefined : startMs + hit.castAtSeconds * 1000;
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -181,21 +210,9 @@ export function run(ctx: IRoundCtx): void {
     // another run — codex 85-tk-A-T18-1 #2); an estimated one has none, so
     // it is the latest application at or before the second
     const estimated = m[3]!.startsWith("expired, estimated");
-    // continuous runs in log order: an APPLIED while a run is open is a
-    // duplicate row of it (codex 85-tk-A-T18-1c #2)
-    const runs: Array<{ from: any; to?: any }> = [];
-    let open: { from: any; to?: any } | undefined;
-    for (const a of rows) {
-      if (ev(a) === APPLIED) {
-        if (!open) {
-          open = { from: a };
-          runs.push(open);
-        }
-      } else if (ev(a) === REMOVED && open) {
-        open.to = a;
-        open = undefined;
-      }
-    }
+    // the caster's own runs, the walk's reading (`ownAuraRuns`: duplicate
+    // APPLIED rows, re-broadcasts, a re-press whose REMOVED was lost)
+    const runs = ownAuraRuns(owner, auraId);
     const run = estimated
       ? runs.filter((r) => secOfMs(tsOf(r.from)) <= sec).pop()
       : runs.find((r) => r.to && secOfMs(tsOf(r.to)) === sec);
@@ -211,13 +228,13 @@ export function run(ctx: IRoundCtx): void {
     if (refreshed) continue;
     const staticS = buffFullDurationForCaster(auraId, owner);
     if (staticS === undefined) continue;
+    // the producer's expiry is its press + the full length: the run's length
+    // is walked from its APPLIED, the end anchored at the press the producer
+    // printed this line for (codex 85-tk-A-T18-2 #1, -2b #2)
+    const anchor = producerPressMs(ctx, owner, auraId, sec, estimated);
+    if (anchor === undefined) continue;
     ctx.bump("setExtendedFade");
     const full = fullLengthS(owner, auraId, at, staticS, removed, run.from);
-    // the producer's expiry is its press + the full length (the ledger's
-    // press: `unitCooldownEntry`, the cast the run's APPLIED sits by) — the
-    // run's length is walked from its APPLIED on both sides, the end is
-    // anchored where the producer anchors it (codex 85-tk-A-T18-2 #1)
-    const anchor = pressAnchorMs(ctx, owner, auraId, at);
     const claim = m[3]!;
     if (estimated && removed && secOfMs(tsOf(removed)) <= sec) continue;
     const key = `${owner.name}:${auraId}:${at}`;

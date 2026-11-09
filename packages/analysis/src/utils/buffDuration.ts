@@ -1,6 +1,9 @@
 import { CombatUnitSpec, ICombatUnit } from "@gladlog/parser-compat";
 
-import { triggeredEffectAurasOfCast } from "../data/castEffectAuras";
+import {
+  sourcePressedAuraNear,
+  triggeredEffectAurasOfCast,
+} from "../data/castEffectAuras";
 import {
   type ISetBonusPerPressDuration,
   setBonusDurationSeconds,
@@ -418,35 +421,61 @@ function perEventExtensionSeconds(
  * side: GH #179 3d, an aura row ahead of its cast row). */
 const OWN_AURA_PAIR_MS = 1000;
 
+/** One run of a caster's own aura on itself: its APPLIED row and the
+ * REMOVED that ended it, when logged. */
+export interface IOwnAuraRun<R> {
+  from: R;
+  to?: R;
+}
+
 /**
- * The caster's own application of this aura on itself nearest `atMs`
- * (within `OWN_AURA_PAIR_MS`) and the REMOVED that ended it, when the log
- * shows them; undefined without the caster's aura rows.
+ * The caster's own runs of `spellId` on itself, in log order: rows read
+ * through `dropAuraRebroadcasts` (a REMOVED → APPLIED re-broadcast is one
+ * run — codex 85-tk-A-T18-1b), an APPLIED while a run is open is a duplicate
+ * row of it (codex 85-tk-A-T18-1c #2) unless the caster logged a cast of it
+ * there (`sourcePressedAuraNear`: a new press whose earlier REMOVED was lost,
+ * which starts a run and leaves the earlier one with no end — codex
+ * 85-tk-A-T18-2b #1). The set-bonus walk and the scans that audit it read
+ * these runs.
  */
-function ownAuraRunNear(
-  caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
+export function ownAuraRuns<
+  R extends {
+    spellId?: string | null;
+    srcUnitId?: string;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string; timestamp: number };
+  },
+>(
+  caster: {
+    id?: string;
+    auraEvents?: readonly R[];
+    spellCastEvents?: ReadonlyArray<{
+      spellId?: string | null;
+      logLine: { timestamp: number };
+    }>;
+  },
   spellId: string,
-  atMs: number,
-):
-  | { fromMs: number; fromLine?: number; toMs?: number; toLine?: number }
-  | undefined {
+): Array<IOwnAuraRun<R>> {
   const id = caster.id;
-  if (!id || !caster.auraEvents) return undefined;
-  // a REMOVED → APPLIED re-broadcast (log order, `AURA_REBROADCAST_GAP_MS`)
-  // is one run, not an end and a new start (codex 85-tk-A-T18-1b)
+  if (!id || !caster.auraEvents) return [];
   const rows = dropAuraRebroadcasts(
     caster.auraEvents.filter(
       (a) => a.spellId === spellId && a.srcUnitId === id && a.destUnitId === id,
     ),
   );
-  // continuous runs in log order: an APPLIED while a run is open is a
-  // duplicate row of that run, not a new start (codex 85-tk-A-T18-1c #2)
-  type Row = (typeof rows)[number];
-  const runs: Array<{ from: Row; to?: Row }> = [];
-  let open: { from: Row; to?: Row } | undefined;
+  const runs: Array<IOwnAuraRun<R>> = [];
+  let open: IOwnAuraRun<R> | undefined;
   for (const a of rows) {
     if (a.logLine.event === "SPELL_AURA_APPLIED") {
-      if (!open) {
+      if (
+        !open ||
+        sourcePressedAuraNear(
+          caster.spellCastEvents ?? [],
+          spellId,
+          a.logLine.timestamp,
+        )
+      ) {
         open = { from: a };
         runs.push(open);
       }
@@ -455,6 +484,23 @@ function ownAuraRunNear(
       open = undefined;
     }
   }
+  return runs;
+}
+
+/**
+ * The caster's own application of this aura on itself nearest `atMs`
+ * (within `OWN_AURA_PAIR_MS`) and the REMOVED that ended it, when the log
+ * shows them (`ownAuraRuns`); undefined without the caster's aura rows.
+ */
+function ownAuraRunNear(
+  caster: Partial<Pick<ICombatUnit, "id" | "auraEvents" | "spellCastEvents">>,
+  spellId: string,
+  atMs: number,
+):
+  | { fromMs: number; fromLine?: number; toMs?: number; toLine?: number }
+  | undefined {
+  const runs = ownAuraRuns(caster, spellId);
+  type Row = (typeof runs)[number]["from"];
   let best: { from: Row; to?: Row } | undefined;
   for (const r of runs) {
     const d = Math.abs(r.from.logLine.timestamp - atMs);
