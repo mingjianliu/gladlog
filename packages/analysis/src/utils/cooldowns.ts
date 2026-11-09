@@ -5588,6 +5588,34 @@ function extractMajorCooldownsAll(
   );
 }
 
+function cooldownMemoOf(unit: ICombatUnit, combat: AtomicArenaCombat) {
+  let memo = unitCooldownEntryCache.get(unit);
+  if (!memo || memo.combat !== combat) {
+    memo = {
+      combat,
+      ledger: extractMajorCooldowns(unit, combat, { withBaselineOnly: true }),
+      byId: new Map(),
+    };
+    unitCooldownEntryCache.set(unit, memo);
+  }
+  return memo;
+}
+
+/**
+ * The unit's ledger itself — `extractMajorCooldowns(unit, combat,
+ * { withBaselineOnly: true })`, the list every `<player_loadout>` kit line
+ * renders an entry of — from `unitCooldownEntry`'s memo. For a reader that
+ * audits a kit entry and must read THAT entry, never the fallback
+ * `unitCooldownEntry` builds for an id the ledger does not carry (the Stasis
+ * release 370564 there is a cooldown entry of its own).
+ */
+export function unitCooldownLedger(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+): readonly IMajorCooldownInfo[] {
+  return cooldownMemoOf(unit, combat).ledger;
+}
+
 /**
  * The ONE answer to "what does unit X's cooldown Y look like": its ledger
  * entry when the ledger carries Y (aliases included), otherwise the same
@@ -5606,15 +5634,7 @@ export function unitCooldownEntry(
   combat: AtomicArenaCombat,
   spellId: string,
 ): IMajorCooldownInfo | undefined {
-  let memo = unitCooldownEntryCache.get(unit);
-  if (!memo || memo.combat !== combat) {
-    memo = {
-      combat,
-      ledger: extractMajorCooldowns(unit, combat, { withBaselineOnly: true }),
-      byId: new Map(),
-    };
-    unitCooldownEntryCache.set(unit, memo);
-  }
+  const memo = cooldownMemoOf(unit, combat);
   if (memo.byId.has(spellId)) return memo.byId.get(spellId);
   const fromLedger = memo.ledger.find(
     (cd) =>

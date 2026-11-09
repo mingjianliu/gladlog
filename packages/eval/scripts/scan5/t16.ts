@@ -10,16 +10,18 @@
  *    apart under White Out's per-hit and per-shattered-stack give-backs).
  *    A charge entry (`N Charges`) is not read: two presses of a charge
  *    spell are no cooldown apart. Kind = the spell. Counted: every kit range
- *    entry whose unit pressed X at least twice.
- * Presses are fact8's `buttonPressesOf` (one per press, the round's end of
- * play the cut), less the ones the ledger itself reads as free
- * (`freePressMsOf`); the `[RES]` rows' range low end is fact8's
- * `resCdBeforeNextPress`.
+ *    entry whose unit pressed X again after a press that started its
+ *    cooldown.
+ * Which rows are presses, and which of them started a cooldown, is the
+ * producer's own selection (`pressesOf`, the kit entry's ledger casts): the
+ * check audits the kit's `a`, not the press identification, and a second
+ * identification here drifted from the ledger's three times (free-recast
+ * windows, Time Spiral's free casts and its echo rows). The `[RES]` rows'
+ * range low end is fact8's `resCdBeforeNextPress`.
  */
-import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
+import { unitCooldownLedger } from "@gladlog/analysis/src/utils/cooldowns";
 
-import { type IRoundCtx, nameOf } from "./ctx";
-import { buttonPressesOf } from "./fact8";
+import { type IRoundCtx } from "./ctx";
 
 export const CHECKS = ["kitSoonestAboveRecast"] as const;
 
@@ -29,46 +31,65 @@ const UNIT_OPEN = /^\s*<unit id="(\d+)"/;
 const KIT_LINE = /^\s*<cooldowns>(.*)<\/cooldowns>/;
 const KIT_RANGE = /(?:^|, )([^,[\]]+?) \[(\d+)–(\d+)s([^\]]*)\]/g;
 
-/** The epoch ms of the presses on the button `name` that the ledger reads as
- * starting no cooldown of their own (`freeRecast`: Time Spiral's free cast,
- * a press inside a free-recast window, a hold that never went out) — the
- * producer's own selection, asked through `unitCooldownEntry` on the
- * button's cast ids, never re-derived here (codex reviews 85-tk-E-T16-1 /
- * -1b, batch review 80-PIPE-20-B20: 08428e7e r2 Spiritwalker's Grace 16.0 /
- * 69.3 s, the second a Time Spiral cast). */
-function freePressMsOf(ctx: IRoundCtx, u: any, name: string): number[] {
-  const ids = new Set<string>(
-    (u.spellCastEvents ?? [])
-      .filter((c: any) => nameOf(c.spellId, c.spellName) === name)
-      .map((c: any) => String(c.spellId)),
-  );
-  const out: number[] = [];
-  const seen = new Set<unknown>();
-  for (const id of ids) {
-    const cd = unitCooldownEntry(u, ctx.legacy, id);
-    if (!cd || seen.has(cd)) continue;
-    seen.add(cd);
-    for (const c of cd.casts)
-      if (c.freeRecast) out.push(ctx.legacy.startTime + c.timeSeconds * 1000);
-  }
-  return out;
-}
-
-/** The presses whose cooldown ran out before them: the button's presses
- * less the ones the ledger reads as free (`freePressMsOf`). */
-function cooldownPresses(
+/**
+ * The presses of the kit entry `name`, as the producer selects them: the
+ * casts of the ledger entry that kit entry is rendered from
+ * (`unitCooldownLedger`, the entry whose `spellName` the kit prints), never
+ * re-derived here and never `unitCooldownEntry`'s fallback for an id the
+ * ledger does not carry (the Stasis release 370564 built a cooldown entry of
+ * its own, its releases read as presses: 61 false Stasis rows on 605). Echo
+ * rows (Time Spiral's, Stasis replays, copy casts) are no cast there, and a
+ * free press (`freeRecast`) is marked (codex reviews 85-tk-E-T16-1 / -1b /
+ * -2, batch review 80-PIPE-20-B20: 08428e7e r2 Spiritwalker's Grace 16.0 /
+ * 69.3 s, the second a Time Spiral cast). `spent`: the presses that started
+ * a cooldown. `ready`: every press that proves the button was back — those,
+ * plus a hold that never went out (`unreleased`: it spent nothing, but it
+ * could only start on a ready button). A free press of Time Spiral or a
+ * free-recast window proves neither. Epoch ms, the round's end of play the
+ * cut. One per ledger entry of that name.
+ */
+function pressesOf(
   ctx: IRoundCtx,
   u: any,
-  presses: number[],
   name: string,
-): number[] {
-  const free = freePressMsOf(ctx, u, name);
-  if (!free.length) return presses;
-  return presses.filter((p) => !free.some((f) => Math.abs(f - p) < 1));
+): Array<{ spent: number[]; ready: number[] }> {
+  return unitCooldownLedger(u, ctx.legacy)
+    .filter((cd) => cd.spellName === name)
+    .map((cd) => {
+      const spent: number[] = [];
+      const ready: number[] = [];
+      for (const c of cd.casts) {
+        const ms = ctx.legacy.startTime + c.timeSeconds * 1000;
+        if (ms > ctx.roundEndAt) continue;
+        if (!c.freeRecast) {
+          spent.push(ms);
+          ready.push(ms);
+        } else if (c.unreleased) ready.push(ms);
+      }
+      return {
+        spent: spent.sort((x, y) => x - y),
+        ready: ready.sort((x, y) => x - y),
+      };
+    });
+}
+
+/** The shortest gap from a press that started the cooldown to the next
+ * press proving it back, and that press's start; undefined with none. */
+function shortestRecast(p: {
+  spent: number[];
+  ready: number[];
+}): { gapMs: number; at: number } | undefined {
+  let best: { gapMs: number; at: number } | undefined;
+  for (const r of p.ready) {
+    let from: number | undefined;
+    for (const s of p.spent) if (s < r) from = s;
+    if (from === undefined) continue;
+    if (!best || r - from < best.gapMs) best = { gapMs: r - from, at: from };
+  }
+  return best;
 }
 
 export function run(ctx: IRoundCtx): void {
-  const memo = new Map<string, number[]>();
   let pid: string | undefined;
   for (const line of ctx.lines) {
     const open = UNIT_OPEN.exec(line);
@@ -84,21 +105,15 @@ export function run(ctx: IRoundCtx): void {
       if (/Charges/.test(e[4]!)) continue;
       const name = e[1]!.trim();
       const soonest = Number(e[2]);
-      const presses = cooldownPresses(
-        ctx,
-        unit,
-        buttonPressesOf(ctx, memo, unit, name),
-        name,
-      );
-      if (presses.length < 2) continue;
+      let recast: { gapMs: number; at: number } | undefined;
+      for (const p of pressesOf(ctx, unit, name)) {
+        const r = shortestRecast(p);
+        if (r && (!recast || r.gapMs < recast.gapMs)) recast = r;
+      }
+      if (!recast) continue;
       ctx.bump("kitSoonestAboveRecast");
-      let min = Infinity;
-      let at = 0;
-      for (let i = 1; i < presses.length; i++)
-        if (presses[i]! - presses[i - 1]! < min) {
-          min = presses[i]! - presses[i - 1]!;
-          at = presses[i - 1]!;
-        }
+      const min = recast.gapMs;
+      const at = recast.at;
       if (min / 1000 >= soonest - KIT_SLACK_S) continue;
       ctx.violate(
         "kitSoonestAboveRecast",
