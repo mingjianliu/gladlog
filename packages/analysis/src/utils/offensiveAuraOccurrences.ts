@@ -282,7 +282,11 @@ const EYE_BEAM_AFTER_S = 0.3;
  * fields, crisis bursts, the aura-path "offensive active" check, the count of
  * cooldowns aligned in a window) priced by what produces it — Eye Beam's 30 s
  * cooldown, `offensiveDangerWeight(198013)` = 0 — so it never opens a window
- * on its own. The two alternatives measured on 605 files before the ruling
+ * on its own. Not `[friendly offensive CD active]`: that tag reads spent
+ * cooldowns only (`friendlyOffensiveCdActiveAt` filters with
+ * `isEnemyCdWindowSpell`, which a Demonic occurrence, 162264 with no
+ * Metamorphosis press, fails) — user ruling 2026-11-09 (pipeline T30). The
+ * two alternatives measured on 605 files before the ruling
  * stay selectable for re-measurement: "burst" = weighted like the pressed
  * Metamorphosis (≈ 200 extra windows, named in 92 kick-eaten burst fields);
  * "fact" = shown on the timeline only, never a burst. */

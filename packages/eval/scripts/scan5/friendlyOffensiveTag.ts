@@ -18,11 +18,12 @@
  *    whatever its millisecond (fact12 D14: that line form skipped the shared
  *    predicate under a warrior's Avatar + Recklessness);
  *  - kind `auraUntagged` (not in the total): the same reading on every other
- *    line form. On 605 files it reads 207 facts the product leaves untagged
- *    on purpose or by its own window test — 162264 is Metamorphosis AND the
- *    Demonic form Eye Beam gives (`OFFENSIVE_AURA_EVIDENCE` keys it by the
- *    cooldown either way), Colossus Smash's debuff, Power Infusion — a
- *    pointer list, not a defect count.
+ *    line form — a pointer list, not a defect count. Pipeline T30 (605 files,
+ *    base cap aeddaf5f7): 198 facts while the scan kept an aura with no
+ *    logged end up past its length; 154, all a Demonic form (162264 with no
+ *    Metamorphosis press), once it asked the product's own window; 0 once
+ *    an evidence aura also asks the tag's cooldown filter (user ruling
+ *    2026-11-09: the tag reads spent cooldowns only).
  *  A summon has no aura, so whether one runs is the product's own reading
  *  (`offensiveSummonActiveAt`: an enemy-CD-window summon, its press plus the
  *  caster's length), asked at the second's two ends like the auras below
@@ -33,6 +34,8 @@
  */
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import {
+  hasOffensiveSpellActive,
+  isEnemyCdWindowSpell,
   offensiveCdOfAura,
   offensiveSummonActiveAt,
 } from "@gladlog/analysis/src/utils/cooldowns";
@@ -43,7 +46,7 @@ import {
 import { OFFENSIVE_AURA_EVIDENCE } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import { offensiveEffectCdId } from "@gladlog/analysis/src/utils/spellDanger";
 
-import { APPLIED, ev, type IRoundCtx, REMOVED, tsOf } from "./ctx";
+import { APPLIED, ev, type IRoundCtx, REFRESH, tsOf } from "./ctx";
 
 export const CHECKS = ["offensiveTagWrong"] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
@@ -53,19 +56,76 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
 const LINE = new RegExp(String.raw`^\s*(\d+):(\d\d)\s+${ENEMY_DEF_TAG_RE_SRC}`);
 const TAG = "[friendly offensive CD active]";
 
-/** the offensive cooldowns whose auras a unit carries at `ms`, by its rows */
-function offensiveAurasUp(unit: any, ms: number, side: Set<string>): string[] {
-  const up = new Map<string, number>();
-  for (const a of (unit.auraEvents ?? []) as any[]) {
-    if (tsOf(a) > ms || !a.spellId || !side.has(a.srcUnitId)) continue;
-    const key = `${a.spellId}|${a.srcUnitId}`;
-    if (ev(a) === REMOVED) up.delete(key);
-    else if (ev(a) === APPLIED) up.set(key, tsOf(a));
+/** the offensive cooldowns whose auras a unit carries at `ms`: an aura of
+ * the owner's side applied to it by then that the product's own window
+ * (`hasOffensiveSpellActive`, asked for that aura and its caster alone) also
+ * reads up. The product's window, not a copy of it, decides when an aura
+ * ends (its REMOVED, a BROKEN no REMOVED supersedes; with no end logged its
+ * official length from its latest APPLIED / REFRESH; a pressed
+ * Metamorphosis' occurrence from its press):
+ * pipeline T30, 103 of `auraUntagged`'s 487 on 605 were a Colossus Smash /
+ * Power Infusion / Deathmark … the scan read up 14–110 s after it was
+ * applied (codex 85-tk-D-T30-1 / -1b: a re-implemented length missed the
+ * press-backed Metamorphosis twice). The tag's own cooldown filter
+ * (`isEnemyCdWindowSpell`) is asked of an evidence aura's occurrence only
+ * (a Demonic form spends no cooldown); any other aura is read up whatever
+ * its cooldown, which the readings below judge. */
+function offensiveAurasUp(
+  unit: any,
+  ms: number,
+  side: Set<string>,
+  round: { startTime: number; endTime: number },
+): string[] {
+  const up = new Set<string>();
+  for (const a of (unit.auraEvents ?? []) as any[])
+    if (
+      tsOf(a) <= ms &&
+      a.spellId &&
+      side.has(a.srcUnitId) &&
+      (ev(a) === APPLIED || ev(a) === REFRESH)
+    )
+      up.add(`${a.spellId}|${a.srcUnitId}`);
+  for (const key of up) {
+    const [id, src] = key.split("|") as [string, string];
+    // the aura, and the cooldown the product files its occurrence under (an
+    // evidence aura's, or `offensiveCdOfAura`'s with the caster's spec:
+    // 383410's generic occurrence is 194223's, codex 85-tk-D-T30-1c)
+    const spec = src === unit.id ? unit.spec : undefined;
+    // an aura neither the product nor the mapping below files under an
+    // offensive cooldown is never one (and asking costs a pass over the
+    // unit's rows: 605 files 210 s → 3597 s of module time without this)
+    if (
+      !OFFENSIVE_AURA_EVIDENCE.has(id) &&
+      offensiveCdOfAura(id, spec) === undefined &&
+      offensiveCdOfAura(id) === undefined
+    ) {
+      up.delete(key);
+      continue;
+    }
+    const ids = new Set(
+      [
+        id,
+        OFFENSIVE_AURA_EVIDENCE.get(id)?.cooldownId,
+        offensiveCdOfAura(id, spec),
+      ].filter((x): x is string => x !== undefined),
+    );
+    // an evidence aura is up as the product's occurrence of it, and the tag
+    // counts an occurrence only when it spends a cooldown (its own filter,
+    // `isEnemyCdWindowSpell`): a Demonic form, 162264 with no Metamorphosis
+    // press, is no running cooldown (user ruling 2026-11-09, pipeline T30).
+    // Other auras keep the bare ids: the tagged reading needs a cooldown-less
+    // one (Archangel) to see `cdLessOnly`.
+    const asked = OFFENSIVE_AURA_EVIDENCE.has(id)
+      ? (s: string, sSpec?: unknown) =>
+          ids.has(s) && isEnemyCdWindowSpell(s, sSpec)
+      : (s: string) => ids.has(s);
+    if (!hasOffensiveSpellActive(unit, ms, new Set([src]), asked, round))
+      up.delete(key);
   }
   // an aura whose cast is logged apart (Arcane Surge 365362, Ascendance
   // 1219480, Summon Infernal 111685, Doom Winds 466772) is that cooldown's
   // effect: `offensiveCdOfAura` leaves those to their own table
-  return [...up.keys()]
+  return [...up]
     .map((k) => k.split("|")[0]!)
     .map(
       (id) =>
@@ -80,6 +140,18 @@ export function run(ctx: IRoundCtx): void {
   );
   const enemies = ctx.players.filter((u: any) => !friends.includes(u));
   const side = new Set<string>(friends.map((u: any) => u.id));
+  // the bounds the product's tag reads (setup.ts `roundBounds`)
+  const round = { startTime: ctx.start, endTime: ctx.end };
+  // one answer per unit and instant in this context (a second's two ends are
+  // asked for the untagged and the tagged reading alike)
+  const memo = new Map<string, string[]>();
+  const aurasUp = (u: any, ms: number): string[] => {
+    const k = `${u.id}|${ms}`;
+    let r = memo.get(k);
+    if (r === undefined)
+      memo.set(k, (r = offensiveAurasUp(u, ms, side, round)));
+    return r;
+  };
   for (const line of ctx.lines) {
     const m = LINE.exec(line);
     if (!m) continue;
@@ -104,7 +176,7 @@ export function run(ctx: IRoundCtx): void {
       const lit = (ms: number) =>
         new Set(
           [...friends, ...enemies]
-            .flatMap((u: any) => offensiveAurasUp(u, ms, side))
+            .flatMap((u: any) => aurasUp(u, ms))
             .filter(
               (id) => !!effectiveCooldownSeconds(offensiveEffectCdId(id) ?? id),
             ),
@@ -135,8 +207,8 @@ export function run(ctx: IRoundCtx): void {
       continue;
     // …and so can an aura up at either end
     const up = [...friends, ...enemies].flatMap((u: any) => [
-      ...offensiveAurasUp(u, lo, side),
-      ...offensiveAurasUp(u, hi, side),
+      ...aurasUp(u, lo),
+      ...aurasUp(u, hi),
     ]);
     if (up.length === 0) continue;
     // a charge's recharge is a cooldown (Ray of Frost, Soul Immolation, 60 s),

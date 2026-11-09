@@ -1472,6 +1472,95 @@ describe("offensiveTagWrong", () => {
     expect(withTreants(17_500)).toEqual([]);
     expect(withTreants(16_500)).toHaveLength(1);
   });
+  // pipeline T30: an aura whose end the log never wrote is up for its
+  // official length (+1 s), the product's reading — not to the round's end
+  const untagged = (at: string) =>
+    `${at}  [ENEMY DEF]   2(RPaladin) (Retribution Paladin): Divine Protection (20%, 8.0s) (at 71% HP)`;
+  const untaggedSeen = (
+    lines: string[],
+    allyAuras: string[],
+    enemyAuras: string[],
+  ) =>
+    of(
+      scan(
+        runFriendlyOffensiveTag,
+        [
+          unit("Ally", "1", 1, { info: {}, auraEvents: allyAuras.map(up) }),
+          unit("Enemy", "2", 2, { info: {}, auraEvents: enemyAuras.map(up) }),
+        ],
+        lines,
+      ),
+      "offensiveTagWrong",
+    );
+  it("a Colossus Smash debuff with no REMOVED is gone after its length", () => {
+    expect(untaggedSeen([untagged("0:15")], [], ["208086"])).toHaveLength(1);
+    expect(untaggedSeen([untagged("0:27")], [], ["208086"])).toEqual([]);
+  });
+  // the product's window, not a copy of it (codex 85-tk-D-T30-1 / -1b): a
+  // Metamorphosis form with no press runs Demonic's 5 s; one pressed into it
+  // at 20 s is the press's occurrence, 20 s to 44 s
+  const meta = (at: string, pressMs?: number) =>
+    of(
+      scan(
+        runFriendlyOffensiveTag,
+        [
+          unit("Ally", "1", 1, {
+            info: {},
+            auraEvents: [
+              { ...up("162264"), destUnitId: "Ally", auraType: "BUFF" },
+            ],
+            spellCastEvents:
+              pressMs === undefined
+                ? []
+                : [
+                    rowOf(LogEvent.SPELL_CAST_SUCCESS, pressMs, {
+                      spellId: "200166",
+                      spellName: "Metamorphosis",
+                      srcUnitId: "Ally",
+                    }),
+                  ],
+          }),
+          unit("Enemy", "2", 2, { info: {} }),
+        ],
+        [untagged(at)],
+      ),
+      "offensiveTagWrong",
+    );
+  it("a Metamorphosis form is up while the product's occurrence is (codex 85-tk-D-T30-1 / -1b)", () => {
+    expect(meta("0:40", 20_000)).toHaveLength(1);
+    expect(meta("0:45", 20_000)).toEqual([]);
+  });
+  // user ruling 2026-11-09 (pipeline T30): the tag reads spent cooldowns
+  // only, and a Demonic form (no press) spends none — inside its 5 s too
+  it("a Metamorphosis form with no press is no running cooldown", () => {
+    expect(meta("0:15")).toEqual([]);
+    expect(meta("0:18")).toEqual([]);
+  });
+  it("an aura the product files under its cooldown is asked as that cooldown (383410 → 194223, codex 85-tk-D-T30-1c)", () => {
+    const buff = (event: string, ms: number, spellId: string) => ({
+      ...rowOf(event, ms, { spellId, spellName: "x", srcUnitId: "Ally" }),
+      destUnitId: "Ally",
+      auraType: "BUFF",
+    });
+    const found = scan(
+      runFriendlyOffensiveTag,
+      [
+        unit("Ally", "1", 1, {
+          info: {},
+          auraEvents: [
+            buff(LogEvent.SPELL_AURA_APPLIED, 12_000, "383410"),
+            buff(LogEvent.SPELL_AURA_APPLIED, 25_000, "81700"),
+            buff(LogEvent.SPELL_AURA_REFRESH, 31_000, "383410"),
+          ],
+        }),
+        unit("Enemy", "2", 2, { info: {} }),
+      ],
+      [
+        "0:29  [ENEMY DEF]   2(RPaladin) (Retribution Paladin): Divine Protection (20%, 8.0s) [friendly offensive CD active] (at 71% HP)",
+      ],
+    );
+    expect(found.filter((v) => v.kind === "cdLessOnly")).toEqual([]);
+  });
 });
 
 describe("rotDotCount", () => {
