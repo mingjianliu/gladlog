@@ -10,6 +10,11 @@
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import {
+  syncPriorRefusedPresses,
+  syncReadyTimingFacts,
+} from "../src/analysis/candidates/cooldownTiming";
+import { NOT_READY_REASON_ZH } from "../src/analysis/candidates/shared";
 import { buildResourceSnapshot } from "../src/context/resourceSnapshot";
 import { buildKillSequenceBlock } from "../src/context/timelineHelpers";
 import { ensureAnalysisData } from "../src/data/ensure";
@@ -17,8 +22,15 @@ import { analyzeBurstLedger } from "../src/utils/burstLedger";
 import {
   observedEffectEndSeconds,
   pressEffectRefusedAtCast,
+  pressRefusalMissType,
   reconstructEnemyCDTimeline,
 } from "../src/utils/enemyCDs";
+import { extractKillAttempts } from "../src/utils/killAttempts";
+import {
+  REFUSED_PRESS_MARKER_RE,
+  refusedPressCooldownState,
+  refusedPressMarker,
+} from "../src/utils/refusedPress";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -62,6 +74,7 @@ function scene(opts: {
   hits?: any[];
   targetAuras?: any[];
   deathS?: number;
+  info?: any;
 }) {
   const enemy = makeUnit("e1", {
     name: "Enemy",
@@ -70,6 +83,7 @@ function scene(opts: {
       makeSpellCastEvent(id, ms, "f1", "Friend", "e1", "Enemy"),
     ),
     damageOut: opts.hits ?? [],
+    ...(opts.info ? { info: opts.info } : {}),
   } as any);
   (enemy as any).missesOut = opts.misses ?? [];
   if (opts.deathS !== undefined)
@@ -633,5 +647,247 @@ describe("T29 — a press the game refused ran for no time", () => {
       presses: [[DEATHMARK, at]],
     });
     expect(names(landed)).toContain("Deathmark");
+  });
+});
+
+// T29 user rulings R14 + R15 (2026-11-09): the intent layer — a refused
+// press stays a press, says it was refused, and, where the log decides it,
+// whether its cooldown was spent
+describe("T29 R15 — a refused press's intent facts", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  const at = START + 10_000;
+  const failed = (spellId: string, tSeconds: number, reason = NOT_READY_REASON_ZH) => ({
+    tSeconds,
+    unitGuid: "e1",
+    spellId: Number(spellId),
+    spellName: "x",
+    reason,
+  });
+
+  it("marker: the three wordings, and the gate's regex reads each back", () => {
+    expect(refusedPressMarker("IMMUNE", "spent")).toBe(
+      "(refused: IMMUNE; cooldown spent)",
+    );
+    expect(refusedPressMarker("DODGE", "not spent")).toBe(
+      "(refused: DODGE; cooldown not spent)",
+    );
+    expect(refusedPressMarker("MISS")).toBe("(refused: MISS)");
+    for (const [miss, cd] of [
+      ["IMMUNE", "spent"],
+      ["DODGE", "not spent"],
+      ["MISS", undefined],
+    ] as const) {
+      const m = REFUSED_PRESS_MARKER_RE.exec(
+        `Touch of the Magi +0.6s ${refusedPressMarker(miss, cd)}`,
+      );
+      expect(m?.[1]).toBe(miss);
+      expect(m?.[2]).toBe(cd);
+    }
+  });
+
+  it("predicate: the miss type is the refusing miss row's", () => {
+    const s = scene({
+      spec: CombatUnitSpec.Rogue_Assassination,
+      presses: [[DEATHMARK, at]],
+      misses: [miss(DEATHMARK, at + 1, "DODGE")],
+    });
+    expect(
+      pressRefusalMissType(s.enemy, DEATHMARK, at, Infinity, s.combat),
+    ).toBe("DODGE");
+    expect(cdOf(s.tl, "Deathmark").refusedMissType).toBe("DODGE");
+  });
+
+  it("cooldown not spent: a later press the ledger allows only without the refused one", () => {
+    // 129-1 r1 0:47 shape: Ray of Frost refused, recast 12.4 s later
+    const s = scene({
+      spec: CombatUnitSpec.Mage_Frost,
+      presses: [
+        [RAY_OF_FROST, at],
+        [RAY_OF_FROST, at + 12_400],
+      ],
+      misses: [miss(RAY_OF_FROST, at + 1)],
+    });
+    expect(refusedPressCooldownState(s.enemy, s.combat, RAY_OF_FROST, 10)).toBe(
+      "not spent",
+    );
+    // the same recast a full cooldown later decides nothing
+    const late = scene({
+      spec: CombatUnitSpec.Mage_Frost,
+      presses: [
+        [RAY_OF_FROST, at],
+        [RAY_OF_FROST, at + 200_000],
+      ],
+      misses: [miss(RAY_OF_FROST, at + 1)],
+    });
+    expect(
+      refusedPressCooldownState(late.enemy, late.combat, RAY_OF_FROST, 10),
+    ).toBeUndefined();
+  });
+
+  it("cooldown spent: the recorder's own 'not ready' refusal only the press explains", () => {
+    // 62-6 r6 shape: Touch of the Magi refused, its recasts "尚未恢复"
+    const s = scene({
+      spec: CombatUnitSpec.Rogue_Assassination,
+      presses: [[DEATHMARK, at]],
+      misses: [miss(DEATHMARK, at + 1)],
+    });
+    const state = (rows: ReturnType<typeof failed>[]) =>
+      refusedPressCooldownState(s.enemy, s.combat, DEATHMARK, 10, rows);
+    expect(state([failed(DEATHMARK, 12.8)])).toBe("spent");
+    // inside the GCD after the press: the refusal may be the GCD's
+    expect(state([failed(DEATHMARK, 11)])).toBeUndefined();
+    // another reason, another spell, another unit, or none: undecided
+    expect(state([failed(DEATHMARK, 12.8, "Out of range")])).toBeUndefined();
+    expect(state([failed(RAY_OF_FROST, 12.8)])).toBeUndefined();
+    expect(
+      state([{ ...failed(DEATHMARK, 12.8), unitGuid: "f1" }]),
+    ).toBeUndefined();
+    expect(state([])).toBeUndefined();
+  });
+
+  it("kill attempts (R15 (1)): a refused press is still an attempt, on the window it had before the refusal", () => {
+    const run = (misses: any[]) => {
+      const s = scene({
+        spec: CombatUnitSpec.Rogue_Assassination,
+        presses: [[DEATHMARK, at]],
+        misses,
+        hits: [{ ...hit("1329", at + 2_000), amount: 60_000 }],
+      });
+      return {
+        cd: cdOf(s.tl, "Deathmark"),
+        attempts: extractKillAttempts([s.enemy], [s.combat.units.f1], {
+          ...s.combat,
+          startInfo: { zoneId: "1505" },
+        }),
+      };
+    };
+    const refused = run([miss(DEATHMARK, at + 1)]);
+    const landed = run([]);
+    expect(refused.cd.refusedAtPress).toBe(true);
+    expect(refused.cd.buffEndSeconds).toBe(10);
+    expect(refused.cd.refusedOfficialEndSeconds).toBe(landed.cd.buffEndSeconds);
+    expect(landed.attempts).toHaveLength(1);
+    expect(
+      refused.attempts.map((a) => [a.anchorSpellName, a.fromSeconds, a.toSeconds]),
+    ).toEqual(
+      landed.attempts.map((a) => [a.anchorSpellName, a.fromSeconds, a.toSeconds]),
+    );
+  });
+
+  // a13 (605): 167-5 r5 0:37 Ray of Frost into a Grounding Totem, 39-3 r3
+  // 2:09 Ray of Frost IMMUNE — main's attempt ran 0:37–0:37 / 2:09–2:09 (the
+  // channel's own refusal ended it at the press); the kept end is that one,
+  // not the official 4 s
+  it("kill attempts: a refused channel keeps the end main gave it, not the official length", () => {
+    const s = scene({
+      spec: CombatUnitSpec.Mage_Frost,
+      presses: [[RAY_OF_FROST, at]],
+      misses: [miss(RAY_OF_FROST, at + 1)],
+    });
+    const ray = cdOf(s.tl, "Ray of Frost");
+    expect(ray.refusedAtPress).toBe(true);
+    expect(ray.refusedOfficialEndSeconds).toBe(10);
+  });
+
+  // codex T29-1i #1: a "not ready" refusal right after another cast row may
+  // be that cast's global cooldown
+  it("cooldown spent: a 'not ready' refusal inside a later cast's GCD proves nothing", () => {
+    const s = scene({
+      spec: CombatUnitSpec.Rogue_Assassination,
+      presses: [
+        [DEATHMARK, at],
+        ["1329", at + 2_500],
+      ],
+      misses: [miss(DEATHMARK, at + 1)],
+    });
+    const state = (t: number) =>
+      refusedPressCooldownState(s.enemy, s.combat, DEATHMARK, 10, [
+        failed(DEATHMARK, t),
+      ]);
+    expect(state(12.8)).toBeUndefined();
+    expect(state(14.5)).toBe("spent");
+    // codex T29-1j #1: a cast row in the failure's own millisecond too
+    const same = scene({
+      spec: CombatUnitSpec.Rogue_Assassination,
+      presses: [
+        [DEATHMARK, at],
+        ["1329", at + 2_800],
+      ],
+      misses: [miss(DEATHMARK, at + 1)],
+    });
+    expect(
+      refusedPressCooldownState(same.enemy, same.combat, DEATHMARK, 10, [
+        failed(DEATHMARK, 12.8),
+      ]),
+    ).toBeUndefined();
+  });
+
+  // codex T29-1i #3: two refused presses of a two-charge spell, either of
+  // which could have kept its charge, decide nothing
+  it("cooldown not spent: two refused presses that could each explain the refund decide nothing", () => {
+    const run = (refusedBoth: boolean) => {
+      const s = scene({
+        spec: CombatUnitSpec.Mage_Frost,
+        presses: [
+          [RAY_OF_FROST, at],
+          [RAY_OF_FROST, at + 10_000],
+          [RAY_OF_FROST, at + 20_000],
+        ],
+        misses: [
+          miss(RAY_OF_FROST, at + 1),
+          ...(refusedBoth ? [miss(RAY_OF_FROST, at + 10_001)] : []),
+        ],
+        // Hand of Frost: a second charge (60 s each)
+        info: {
+          talents: [{ id1: 110422, id2: 137032, count: 1 }],
+          pvpTalents: [],
+        },
+      });
+      return [10, 20].map((t) =>
+        refusedPressCooldownState(s.enemy, s.combat, RAY_OF_FROST, t),
+      );
+    };
+    expect(run(true)).toEqual([undefined, undefined]);
+    // only the first refused: it alone explains the third press
+    expect(run(false)[0]).toBe("not spent");
+  });
+
+  it("missed-sync pressedAfter: a refused press keeps its entry and carries the marker", () => {
+    const cd = {
+      spellId: "321507",
+      spellName: "Touch of the Magi",
+      casts: [{ timeSeconds: 64.984 }],
+      cooldownSeconds: 45,
+      neverUsed: false,
+      charges: 1,
+      refusedAt: new Map([
+        [64_984, { marker: "(refused: IMMUNE; cooldown spent)", officialEndS: 76.984 }],
+      ]),
+    } as never;
+    expect(
+      syncReadyTimingFacts({ fromSeconds: 60.1, toSeconds: 64.4 }, [cd])
+        .pressedAfter,
+    ).toBe("Touch of the Magi +0.6s (refused: IMMUNE; cooldown spent)");
+  });
+
+  it("missed-sync priorPress: a refused press before the lock whose window would have reached it", () => {
+    const cd = (ms: number, officialEndS: number) =>
+      ({
+        spellName: "Touch of the Magi",
+        refusedAt: new Map([
+          [ms, { marker: "(refused: IMMUNE; cooldown spent)", officialEndS }],
+        ]),
+      }) as never;
+    const w = { fromSeconds: 69.2 };
+    expect(syncPriorRefusedPresses(w, [cd(64_984, 76.984)])).toEqual([
+      "Touch of the Magi at 64 (refused: IMMUNE; cooldown spent)",
+    ]);
+    // a window that would have ended before the lock: nothing
+    expect(syncPriorRefusedPresses(w, [cd(64_984, 69)])).toEqual([]);
+    // inside the 2 s lead the press is pressedIn's, not repeated here
+    expect(syncPriorRefusedPresses(w, [cd(67_500, 79.5)])).toEqual([]);
   });
 });

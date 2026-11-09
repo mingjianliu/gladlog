@@ -134,6 +134,12 @@ export interface IEnemyCDCast {
    * cooldown is spent); no `[RES]` entry, burst window or defensive timing
    * reads it as an effect. */
   refusedAtPress?: true;
+  /** T29 R14: the refusing row's miss type (`pressRefusalMissType`) */
+  refusedMissType?: string;
+  /** T29 R14: the end the press had before the refusal cut it to the press
+   * (its official / observed window) — kill attempts, which read the press
+   * as an intent, keep it */
+  refusedOfficialEndSeconds?: number;
   /** GH #119: "fact" = shown, never part of a burst window (a Demonic
    * Metamorphosis form under OFFENSIVE_AURA_FLAGS.demonic "fact"). Absent =
    * "burst". */
@@ -362,9 +368,10 @@ export function observedEffectEndSeconds(
  * 84714 while its orb's 84721 hits, same name, ran on). The effect never
  * ran, so its window ends at the press. fact12 (T03-1 residual): b74d7bf6
  * r1 2:45, Deathmark met two IMMUNE and put no 360194 on anyone — `[RES]`
- * listed it to 3:00 on the official 16 s.
+ * listed it to 3:00 on the official 16 s. Returns the refusing row's miss
+ * type (IMMUNE, MISS, DODGE …), undefined when the press was not refused.
  */
-export function pressEffectRefusedAtCast(
+export function pressRefusalMissType(
   caster: Pick<ICombatUnit, "id"> &
     Partial<
       Pick<
@@ -378,7 +385,7 @@ export function pressEffectRefusedAtCast(
    * caster's own next cast row of it bounds it too) */
   untilMs: number,
   combat: { units?: Readonly<Record<string, ICombatUnit>> },
-): boolean {
+): string | undefined {
   const ids = effectSpanIdsOfCast(castSpellId);
   const name = getEnglishSpellName(castSpellId, "");
   const mine = (r: {
@@ -424,19 +431,17 @@ export function pressEffectRefusedAtCast(
   )?.destUnitId;
   const target =
     castDest && castDest !== "0000000000000000" ? castDest : undefined;
-  if (
-    !(caster.missesOut ?? []).some(
-      (m) =>
-        m.missType !== "ABSORB" &&
-        m.srcUnitId === caster.id &&
-        (target === undefined || m.destUnitId === target) &&
-        !!m.spellId &&
-        ids.has(m.spellId) &&
-        m.logLine.timestamp >= castMs &&
-        m.logLine.timestamp <= startToMs,
-    )
-  )
-    return false;
+  const refusal = (caster.missesOut ?? []).find(
+    (m) =>
+      m.missType !== "ABSORB" &&
+      m.srcUnitId === caster.id &&
+      (target === undefined || m.destUnitId === target) &&
+      !!m.spellId &&
+      ids.has(m.spellId) &&
+      m.logLine.timestamp >= castMs &&
+      m.logLine.timestamp <= startToMs,
+  );
+  if (!refusal) return undefined;
   // a hit a shield ate in full is logged as an ABSORB miss: it landed
   if (
     [
@@ -448,7 +453,7 @@ export function pressEffectRefusedAtCast(
         mine(d) && d.logLine.timestamp >= castMs && d.logLine.timestamp <= toMs,
     )
   )
-    return false;
+    return undefined;
   for (const u of Object.values(combat.units ?? {}))
     for (const a of u.auraEvents ?? []) {
       const ev = a.logLine.event;
@@ -460,7 +465,7 @@ export function pressEffectRefusedAtCast(
         a.logLine.timestamp >= castMs - EFFECT_START_BEFORE_S * 1000 &&
         a.logLine.timestamp <= toMs
       )
-        return false;
+        return undefined;
     }
   // a press that put down a summon ran its effect through it, whatever its
   // own row on the target read: a SPELL_SUMMON by the caster (the summoned
@@ -480,10 +485,17 @@ export function pressEffectRefusedAtCast(
         a.logLine.timestamp < castMs - EFFECT_START_BEFORE_S * 1000
       )
         continue;
-      if (a.logLine.timestamp <= startToMs) return false;
-      if (mine(a) && a.logLine.timestamp <= toMs) return false;
+      if (a.logLine.timestamp <= startToMs) return undefined;
+      if (mine(a) && a.logLine.timestamp <= toMs) return undefined;
     }
-  return true;
+  return refusal.missType ?? "MISS";
+}
+
+/** `pressRefusalMissType` as a yes / no: did the game refuse this press. */
+export function pressEffectRefusedAtCast(
+  ...args: Parameters<typeof pressRefusalMissType>
+): boolean {
+  return pressRefusalMissType(...args) !== undefined;
 }
 
 /** The talent aura (`TALENT_EFFECT_AURAS_OF_CAST`) this caster applied —
@@ -1275,21 +1287,6 @@ export function reconstructEnemyCDTimeline(
         combat,
       );
       if (end === null) {
-        // T29: a press the game refused (`pressEffectRefusedAtCast`: a miss,
-        // nothing landed) never ran
-        if (
-          pressEffectRefusedAtCast(
-            enemy,
-            cd.spellId,
-            matchStartMs + cd.castTimeSeconds * 1000,
-            matchStartMs + (next?.castTimeSeconds ?? Infinity) * 1000,
-            combat,
-          )
-        ) {
-          cd.buffEndSeconds = cd.castTimeSeconds;
-          cd.refusedAtPress = true;
-          continue;
-        }
         // GH #184 part B (codex review 2026-11-06 P2): a press whose effect
         // runs on a talent's aura (Divine Toll → Divine Resonance) has no
         // official length of its own; with the aura applied at the press
@@ -1367,6 +1364,25 @@ export function reconstructEnemyCDTimeline(
                   cd.spellName,
                 ),
               );
+        }
+        // T29: a press the game refused (`pressRefusalMissType`: a miss on its
+        // own target, nothing landed) never ran. The end every reading above
+        // gave it — the window it had before T29 — is kept for the intent
+        // layer (`refusedOfficialEndSeconds`: kill attempts, user ruling R15
+        // (1)); no death cut applies to a press that ran no time.
+        const refusedMissType = pressRefusalMissType(
+          enemy,
+          cd.spellId,
+          matchStartMs + cd.castTimeSeconds * 1000,
+          matchStartMs + (next?.castTimeSeconds ?? Infinity) * 1000,
+          combat,
+        );
+        if (refusedMissType !== undefined) {
+          cd.refusedOfficialEndSeconds = cd.buffEndSeconds;
+          cd.buffEndSeconds = cd.castTimeSeconds;
+          cd.refusedAtPress = true;
+          cd.refusedMissType = refusedMissType;
+          continue;
         }
         // T29: the caster's own death ends a window the log shows no end of
         // when no copy of its effect the caster put on any unit outlives it
@@ -1569,15 +1585,17 @@ export function reconstructEnemyCDTimeline(
         combat.endTime,
       );
       // a press the game refused never ran (T29)
-      const refused =
-        effectEnd === undefined &&
-        pressEffectRefusedAtCast(
-          enemy,
-          spellId,
-          cast.logLine.timestamp,
-          Infinity,
-          combat,
-        );
+      const refusedMissType =
+        effectEnd === undefined
+          ? pressRefusalMissType(
+              enemy,
+              spellId,
+              cast.logLine.timestamp,
+              Infinity,
+              combat,
+            )
+          : undefined;
+      const refused = refusedMissType !== undefined;
       offensiveFacts.push({
         spellId,
         spellName: name,
@@ -1592,7 +1610,15 @@ export function reconstructEnemyCDTimeline(
             ? castTimeSeconds
             : castTimeSeconds +
               (spellEffectData[spellId]?.durationSeconds ?? 0)),
-        ...(refused ? { refusedAtPress: true as const } : {}),
+        ...(refused
+          ? {
+              refusedAtPress: true as const,
+              refusedMissType,
+              refusedOfficialEndSeconds:
+                castTimeSeconds +
+                (spellEffectData[spellId]?.durationSeconds ?? 0),
+            }
+          : {}),
         ...(effectEnd?.officialEndSeconds === undefined
           ? {}
           : {

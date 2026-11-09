@@ -3939,6 +3939,7 @@ function teamPlayEvents(
                   combat.startTime,
                   units,
                   combat,
+                  rawStreams?.available ? rawStreams.castFailed : undefined,
                 ),
               );
             }

@@ -813,11 +813,16 @@ export function extractKillAttempts(
         reconstructEnemyCDTimeline([f], combat).players[0]?.offensiveCDs ?? [];
       for (const cd of cds) {
         if (!anchorsKillAttempt(f, cd.spellId)) continue;
-        // a press the game refused outright (`refusedAtPress`, T29: nothing
-        // of it landed anywhere) was no burst — the burst ledger drops it
-        // too (codex T29-1 #2)
-        if (cd.refusedAtPress) continue;
-        const span = burstCastSpan(cd);
+        // a press the game refused (`refusedAtPress`, T29) is still an
+        // attempt — the team went for the kill (user ruling R15 (1): kill
+        // attempts read the intent layer); its line already says "every X
+        // press into the target logged IMMUNE". It keeps the window it had
+        // before the refusal cut it (`refusedOfficialEndSeconds`).
+        const span = burstCastSpan(
+          cd.refusedAtPress && cd.refusedOfficialEndSeconds !== undefined
+            ? { ...cd, buffEndSeconds: cd.refusedOfficialEndSeconds }
+            : cd,
+        );
         const castMs = matchStartMs + cd.castTimeSeconds * 1000;
         const row = (f.spellCastEvents ?? []).find(
           (e) =>

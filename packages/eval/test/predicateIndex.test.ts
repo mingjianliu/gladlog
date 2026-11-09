@@ -193,6 +193,7 @@ import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling"
 import * as pressRowMod from "@gladlog/analysis/src/utils/pressRow";
 import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
+import * as refusedPress from "@gladlog/analysis/src/utils/refusedPress";
 import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as resyncBatch from "@gladlog/analysis/src/utils/resyncBatch";
@@ -1295,6 +1296,31 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/enemyCDs.ts`,
     symbol: "pressEffectRefusedAtCast",
     mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "pressRefusalMissType",
+    mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/refusedPress.ts`,
+    symbol: "refusedPressCooldownState",
+    mod: refusedPress,
+  },
+  {
+    file: `${A}/utils/refusedPress.ts`,
+    symbol: "refusedPressMarker",
+    mod: refusedPress,
+  },
+  {
+    file: `${A}/utils/refusedPress.ts`,
+    symbol: "REFUSED_PRESS_MARKER_RE",
+    mod: refusedPress,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "syncPriorRefusedPresses",
+    mod: cooldownTiming,
   },
   {
     file: `${A}/utils/enemyCDs.ts`,

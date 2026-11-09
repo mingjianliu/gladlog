@@ -75,14 +75,19 @@ import {
 import { outgoingCcChainsWithDrHistory } from "../../utils/outgoingCcChains";
 import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
-import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
+import {
+  type CastFailedEvent,
+  castFailedInWindow,
+  type RawStreams,
+} from "../../utils/rawStreams";
+import {
+  refusedPressCooldownState,
+  refusedPressMarker,
+} from "../../utils/refusedPress";
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
 import type { RosterSides } from "../../utils/rosterSide";
 import { SOLO_SHUFFLE_BRACKET } from "../../utils/roundEnd";
-import {
-  isOffensiveCdFor,
-  isOffensiveLedgerCd,
-} from "../../utils/spellDanger";
+import { isOffensiveCdFor, isOffensiveLedgerCd } from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
 import {
   type DecisionPoint,
@@ -468,6 +473,10 @@ export type SyncWindowCd = Pick<
      *  end (`burstCastSpan`'s `buffEndSeconds`), keyed by the press second in
      *  whole ms; absent → the official length */
     castEndS?: ReadonlyMap<number, number>;
+    /** T29 R14/R15: each press the game refused (`refusedAtPress`), keyed
+     *  like `castEndS` — its intent-fact marker (`refusedPressMarker`) and
+     *  the end it had before the refusal cut it */
+    refusedAt?: ReadonlyMap<number, { marker: string; officialEndS: number }>;
   };
 
 /** Hard-cast bars a START → SUCCESS pair can span (the [ENEMY HARD CAST] /
@@ -488,6 +497,9 @@ export function syncWindowCdFor<T extends object>(
   /** the round — with it each press carries its observed effect end
    *  (`castEndS`); the candidate and the scan both pass it */
   combat?: any,
+  /** the recorder's SPELL_CAST_FAILED rows (`rawStreams.castFailed`), for a
+   *  refused press's "cooldown spent" (`refusedPressCooldownState`) */
+  recorderFailed?: readonly CastFailedEvent[],
 ): T & {
   owner: any;
   ownerEnemyIds: Set<string>;
@@ -496,18 +508,43 @@ export function syncWindowCdFor<T extends object>(
   roundUnits: readonly any[];
 } {
   let castEndS: Map<number, number> | undefined;
+  let refusedAt:
+    Map<number, { marker: string; officialEndS: number }> | undefined;
   if (combat) {
     try {
+      const presses = (
+        reconstructEnemyCDTimeline([owner], combat).players[0]?.offensiveCDs ??
+        []
+      ).filter((c) => c.spellId === String((cd as any).spellId));
       castEndS = new Map(
-        (
-          reconstructEnemyCDTimeline([owner], combat).players[0]
-            ?.offensiveCDs ?? []
-        )
-          .filter((c) => c.spellId === String((cd as any).spellId))
-          .map((c) => [Math.round(c.castTimeSeconds * 1000), c.buffEndSeconds]),
+        presses.map((c) => [
+          Math.round(c.castTimeSeconds * 1000),
+          c.buffEndSeconds,
+        ]),
       );
+      const refused = presses.filter((c) => c.refusedAtPress);
+      if (refused.length)
+        refusedAt = new Map(
+          refused.map((c) => [
+            Math.round(c.castTimeSeconds * 1000),
+            {
+              marker: refusedPressMarker(
+                c.refusedMissType ?? "MISS",
+                refusedPressCooldownState(
+                  owner,
+                  combat,
+                  c.spellId,
+                  c.castTimeSeconds,
+                  recorderFailed,
+                ),
+              ),
+              officialEndS: c.refusedOfficialEndSeconds ?? c.buffEndSeconds,
+            },
+          ]),
+        );
     } catch {
       castEndS = undefined;
+      refusedAt = undefined;
     }
   }
   return {
@@ -518,6 +555,7 @@ export function syncWindowCdFor<T extends object>(
     reachTargets: enemies.filter((e) => !isHealerSpec(e.spec)),
     roundUnits,
     ...(castEndS ? { castEndS } : {}),
+    ...(refusedAt ? { refusedAt } : {}),
   };
 }
 
@@ -762,6 +800,30 @@ const signedS = (d: number): string => `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
  *    a cooldown the holder's pet casts the gate reads the PET's intervals,
  *    and none of those is printed.
  */
+/**
+ * T29 R15 (2): the team presses the game refused before a healer lock whose
+ * window would have run into it (`castEntersWindow`'s activeIn, on the end
+ * the press had before the refusal cut it) — they entered nothing, the
+ * missed-sync row stands, and its `priorPress` fact says they were pressed,
+ * not held (62-6 r6: Touch of the Magi at 1:04, IMMUNE, before the 1:09 Leg
+ * Sweep). A press inside the 2 s lead is `castEntersWindow`'s pressedIn and
+ * is not repeated here.
+ */
+export function syncPriorRefusedPresses(
+  w: { fromSeconds: number },
+  cds: readonly Pick<SyncWindowCd, "spellName" | "refusedAt">[],
+): string[] {
+  return cds.flatMap((cd) =>
+    [...(cd.refusedAt ?? [])].flatMap(([ms, r]) => {
+      const s = ms / 1000;
+      return s < w.fromSeconds - SYNC_ENTER_LEAD_S &&
+        r.officialEndS > w.fromSeconds
+        ? [`${cd.spellName} at ${toRenderSecond(s)} ${r.marker}`]
+        : [];
+    }),
+  );
+}
+
 export function syncReadyTimingFacts(
   w: { fromSeconds: number; toSeconds: number },
   ready: readonly SyncWindowCd[],
@@ -775,10 +837,13 @@ export function syncReadyTimingFacts(
         c.timeSeconds > w.toSeconds &&
         c.timeSeconds <= w.toSeconds + SYNC_ENTER_LEAD_S,
     );
-    if (after)
+    if (after) {
+      // T29 R15: a refused press stays a press (the intent), and says so
+      const refused = cd.refusedAt?.get(Math.round(after.timeSeconds * 1000));
       pressedAfter.push(
-        `${cd.spellName} ${signedS(after.timeSeconds - w.toSeconds)}s`,
+        `${cd.spellName} ${signedS(after.timeSeconds - w.toSeconds)}s${refused ? ` ${refused.marker}` : ""}`,
       );
+    }
     const ret = rawReturnAfter(cd, w.fromSeconds - SYNC_ENTER_LEAD_S);
     if (ret !== null && ret <= w.toSeconds)
       readyFrom.push(`${cd.spellName} ${signedS(ret - w.fromSeconds)}s`);
@@ -1168,6 +1233,7 @@ export function missedSyncWindowEvents(
                 ];
               })
             : [];
+        const priorPress = syncPriorRefusedPresses(w, offensiveCds);
         // Work order 2026-10-14b fix 13 (facts only): (a) the owner's own
         // ready cooldowns pressed and refused inside this lock or a later
         // held one — 24b6a229: Volley refused "not ready" (the GCD) 1.2 s
@@ -1301,6 +1367,7 @@ export function missedSyncWindowEvents(
             ...(enteredNext.length
               ? { enteredNextLock: enteredNext.join("; ") }
               : {}),
+            ...(priorPress.length ? { priorPress: priorPress.join("、") } : {}),
             ...(setupBy ? { setupBy } : {}),
             ...(alsoHeldSetupBy ? { alsoHeldSetupBy } : {}),
             ...(refusedInLock ? { refusedInLock } : {}),
