@@ -1,7 +1,11 @@
 import { CombatUnitSpec, ICombatUnit } from "@gladlog/parser-compat";
 
 import { triggeredEffectAurasOfCast } from "../data/castEffectAuras";
-import { setBonusDurationSeconds } from "../data/classSetBonuses";
+import {
+  type ISetBonusPerPressDuration,
+  setBonusDurationSeconds,
+  setBonusPerEventFor,
+} from "../data/classSetBonuses";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
@@ -11,6 +15,7 @@ import {
   TOOLTIP_DURATION_ROWS,
   TOOLTIP_PER_EVENT_DURATIONS,
 } from "../data/talentDurationTooltips";
+import { pressLandedOn } from "./castMissRows";
 import { castParamBaseSeconds, type CastParamCaster } from "./castParam";
 import { talentModifierOwnershipOf, talentRankOf } from "./talentOwnership";
 
@@ -307,16 +312,20 @@ function talentedDuration(
   );
 }
 
-/** Does `caster` hold the per-event talent on this aura (spec and talent)? */
+/** Does `caster` hold the per-event talent on this aura (spec and talent),
+ * or wear the per-press set bonus on it (GH #175: Fury 2pc on Recklessness)? */
 function perEventFor(
   spellId: string,
   caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
-) {
+): ITooltipPerEventDuration | ISetBonusPerPressDuration | undefined {
   const p = TOOLTIP_PER_EVENT_DURATIONS[spellId];
-  if (!p || !p.specs.includes(caster.spec)) return undefined;
-  return talentModifierOwnershipOf(caster, p.talentSpellId) === "yes"
-    ? p
-    : undefined;
+  if (
+    p &&
+    p.specs.includes(caster.spec) &&
+    talentModifierOwnershipOf(caster, p.talentSpellId) === "yes"
+  )
+    return p;
+  return setBonusPerEventFor(spellId, caster);
 }
 
 /**
@@ -325,7 +334,8 @@ function perEventFor(
  * press while the aura is up adds 1 s, up to 4 s). Read off the caster's own
  * presses from `atMs`: each press inside the (growing) duration extends it,
  * so the window is walked press by press. 0 without `atMs`, without the
- * talent, or with no qualifying press.
+ * talent, or with no qualifying press. A per-press set bonus walks the same
+ * way, and the window it walks includes a flat set bonus on the same aura.
  */
 function perEventExtensionSeconds(
   spellId: string,
@@ -349,17 +359,49 @@ function perEventExtensionSeconds(
           atMs,
           onUnitId,
         );
+  const windowBase = baseSeconds + setBonusDurationSeconds(spellId, caster);
   let ext = 0;
   for (const c of caster.spellCastEvents ?? []) {
     const t = c.logLine.timestamp;
     if (t < atMs) continue;
-    if (t > atMs + (baseSeconds + ext) * 1000) break;
+    if (t > atMs + (windowBase + ext) * 1000) break;
     if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
     if (!p.qualifyingSpellIds.has(c.spellId ?? "")) continue;
+    if ("landedOnly" in p && p.landedOnly && !pressLanded(caster, c))
+      continue;
     ext = Math.min(p.capSeconds, ext + p.addSecondsPerEvent);
     if (ext >= p.capSeconds) break;
   }
   return ext;
+}
+
+/** Did one of this press's hits land on its target — a damage row, or a hit
+ * a shield ate whole (an ABSORB miss)? `pressLandedOn` is the reading; a
+ * press with no target logged is not judged. */
+function pressLanded(
+  caster: Pick<ICombatUnit, "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "damageOut" | "missesOut">>,
+  c: ICombatUnit["spellCastEvents"][number],
+): boolean {
+  const dest = c.destUnitId;
+  if (!dest || !c.spellId) return true;
+  const sameSpellCastMs = (caster.spellCastEvents ?? [])
+    .filter(
+      (x) =>
+        x.spellId === c.spellId && x.logLine.event === "SPELL_CAST_SUCCESS",
+    )
+    .map((x) => x.logLine.timestamp);
+  return pressLandedOn(
+    [
+      ...(caster.damageOut ?? []),
+      ...(caster.missesOut ?? []).filter((m) => m.missType === "ABSORB"),
+    ],
+    c.spellId,
+    c.spellName ?? "",
+    sameSpellCastMs,
+    c.logLine.timestamp,
+    dest,
+  );
 }
 
 /**

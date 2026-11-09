@@ -27,8 +27,10 @@
  *     --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt [--every 60] \
  *     [--gap-min-cells 30] [--gap] [--dose-unclean] \
  *     [--detail <aura>[:<talentSpellId>],…]   # 专精 × 月份 × 持有 拆分,见 detail 注释
+ *     [--per-app <aura>,…]   # 逐次施加:观测寿命 vs 带施加时刻的谓词,见 per-app 注释
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
+import { setBonusPerEventFor } from "@gladlog/analysis/src/data/classSetBonuses";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
@@ -53,6 +55,7 @@ function parseArgs() {
     gapMinCells: 30,
     doseUnclean: false,
     detail: "",
+    perApp: "",
   };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === "--manifest") out.manifest = a[++i] ?? "";
@@ -62,6 +65,7 @@ function parseArgs() {
     else if (a[i] === "--gap-min-cells") out.gapMinCells = Number(a[++i]);
     else if (a[i] === "--dose-unclean") out.doseUnclean = true;
     else if (a[i] === "--detail") out.detail = a[++i] ?? "";
+    else if (a[i] === "--per-app") out.perApp = a[++i] ?? "";
   }
   if (!out.manifest || !Number.isFinite(out.every) || out.every < 1) {
     console.error(
@@ -111,6 +115,24 @@ for (const spec of args.detail.split(",").filter(Boolean)) {
   if (aura) detail.set(aura, talent || undefined);
 }
 const detailCells = new Map<string, Map<string, Map<number, number>>>();
+/**
+ * `--per-app <aura>,…` (GH #175, 2026-11-09) — the half the cell mode cannot
+ * see: a length that grows with the caster's presses after the application
+ * (a per-event talent, a per-press set bonus — Recklessness under the Fury
+ * 2pc) has no single per-caster value. Per clean lifetime (no REFRESH, not
+ * cut by the holder's death or the round's end within 1 s), the logged
+ * length vs `buffFullDurationForCaster` AT the application, split by whether
+ * the caster wears a per-press set bonus on the aura (`setBonusPerEventFor`):
+ * exact (±0.1 s, and whether the predicate went past its static length),
+ * longer by a 5 s multiple, longer otherwise, shorter.
+ */
+const perApp = new Set(args.perApp.split(",").filter(Boolean));
+const perAppCounts = new Map<string, Map<string, number>>();
+function perAppBump(aura: string, k: string) {
+  const m = perAppCounts.get(aura) ?? new Map<string, number>();
+  m.set(k, (m.get(k) ?? 0) + 1);
+  perAppCounts.set(aura, m);
+}
 
 const REGISTERED = new Set(Object.keys(BUFF_DURATION_TALENT_MODIFIERS));
 
@@ -182,6 +204,39 @@ for (const f of files) {
           if (d < 0 || d > 120) continue;
           const src = legacy.units[a.srcUnitId ?? ""];
           if (!src?.info) continue;
+          if (perApp.has(spellId)) {
+            const cut =
+              legacy.endTime - t < 1000 ||
+              unit.deathRecords.some(
+                (r) => Math.abs((r.timestamp as number) - t) < 1000,
+              );
+            if (!cut) {
+              const atApp = buffFullDurationForCaster(spellId, src, o.t);
+              const flat = buffFullDurationForCaster(spellId, src);
+              if (atApp !== undefined && flat !== undefined) {
+                const holder = setBonusPerEventFor(spellId, src)
+                  ? "set holder"
+                  : "no set";
+                const obs = (t - o.t) / 1000;
+                const diff = obs - atApp;
+                const k =
+                  Math.abs(diff) <= 0.1
+                    ? atApp > flat
+                      ? "exact (extended)"
+                      : "exact (static)"
+                    : diff > 0
+                      ? Math.abs(diff / 5 - Math.round(diff / 5)) <= 0.02
+                        ? "longer by 5 s multiples"
+                        : "longer, other"
+                      : "shorter";
+                perAppBump(spellId, `${holder} | ${k}`);
+                perAppBump(
+                  spellId,
+                  `${holder} | static ${flat}s exact: ${Math.abs(obs - flat) <= 0.1 ? "yes" : "no"}`,
+                );
+              }
+            }
+          }
           const lh = lifetimes.get(spellId) ?? new Map<number, number>();
           lh.set(d, (lh.get(d) ?? 0) + 1);
           lifetimes.set(spellId, lh);
@@ -324,6 +379,17 @@ for (const spellId of [...REGISTERED].sort()) {
   );
 }
 console.log(`\nROT 结论: ${flags} 条登记项与语料不符`);
+
+if (perAppCounts.size > 0) {
+  console.log(
+    "\n=== PER-APP:逐次施加,观测寿命 vs 施加时刻的谓词(干净、未被死亡/回合结束截断) ===",
+  );
+  for (const [aura, m] of perAppCounts) {
+    console.log(`  ${aura} ${spellEffectData[aura]?.name ?? aura}`);
+    for (const [k, n] of [...m].sort((x, y) => x[0].localeCompare(y[0])))
+      console.log(`    ${k}: ${n}`);
+  }
+}
 
 if (detail.size > 0) {
   console.log("\n=== DETAIL:按 专精 × 月份 × 持有 拆分的观测分布(格) ===");

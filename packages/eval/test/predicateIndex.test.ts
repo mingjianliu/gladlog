@@ -1748,6 +1748,11 @@ const INDEX: PredicateRow[] = [
     mod: classSetBonuses,
   },
   {
+    file: `${A}/data/classSetBonuses.ts`,
+    symbol: "setBonusPerEventFor",
+    mod: classSetBonuses,
+  },
+  {
     file: `${A}/context/spellOutcomeLines.ts`,
     symbol: "pairNetherWardReturns",
     mod: spellOutcomeLines,

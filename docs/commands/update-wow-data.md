@@ -564,6 +564,13 @@ npx tsx packages/eval/scripts/durationTalentScan.ts \
 #    each one: holders measured near `expected` → drop `corpusPending`; holders elsewhere → a ruling.
 npx tsx packages/eval/scripts/buffDurationScan.ts \
   --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt --every 120 --gap --dose-unclean
+#    A length that grows with presses after the application (TOOLTIP_PER_EVENT_DURATIONS,
+#    SET_BONUS_PER_EVENT_DURATIONS — Recklessness under the Fury 2pc, GH #175) has no per-caster
+#    value for the cell mode above: `--per-app <aura>,…` reads every clean lifetime against the
+#    predicate AT its application, split by set holder (2026-11-09 on the 605's 29 Recklessness
+#    files: holders 32 of 48 exact, 5 at the static 18 s; non-holders 111 of 187 at 18 s).
+#    Re-run it for every aura in both tables each season:
+#    buffDurationScan.ts --manifest <same> --per-app 1719,79206
 # 4. Official durations vs the game (GH #44 tail, 2026-09-02): every CC / root id's observed aura lifetime
 #    (APPLIED→REMOVED, 0.5 s-bin mode) against ccFullDurationSeconds (DB2 PvP duration + CORPUS_DURATION_PATCHES).
 #    ~1 min on every 30th archive file. A FLAG row is a ruling question — DB2 wins unless the corpus contradicts it

@@ -233,7 +233,10 @@ import {
   AURA_KEYED_BREAK_RACIALS,
   CLASS_CC_BREAK_ABILITIES,
 } from "./ccBreakAbilities";
-import { SET_BONUS_DURATION_ROWS } from "./classSetBonuses";
+import {
+  SET_BONUS_DURATION_ROWS,
+  SET_BONUS_PER_EVENT_DURATIONS,
+} from "./classSetBonuses";
 import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
@@ -1234,6 +1237,19 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // fact8 D15: auras a class set bonus lengthens (`data/classSetBonuses.ts`)
   t("SET_BONUS_DURATION_ROWS", "data/classSetBonuses.ts", "aura", () =>
     keys(SET_BONUS_DURATION_ROWS),
+  ),
+  // GH #175: auras a class set bonus extends press by press, and the presses
+  // that extend them
+  t(
+    "SET_BONUS_PER_EVENT_DURATIONS",
+    "data/classSetBonuses.ts",
+    "mixed",
+    () => [
+      ...Object.keys(SET_BONUS_PER_EVENT_DURATIONS),
+      ...Object.values(SET_BONUS_PER_EVENT_DURATIONS).flatMap((r) => [
+        ...r.qualifyingSpellIds,
+      ]),
+    ],
   ),
   // fact7 class 3 (2026-10-30): offensive buttons whose press is a fact
   // line, no window; found forward by scan5/listGap.ts.
