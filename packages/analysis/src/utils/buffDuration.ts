@@ -368,11 +368,19 @@ function perEventExtensionSeconds(
     "bonusSpellId" in p ? ownAuraRunNear(caster, spellId, atMs) : undefined;
   const fromMs = run?.fromMs ?? atMs;
   const toMs = run?.toMs ?? Number.POSITIVE_INFINITY;
+  // a press in the REMOVED's own ms but logged after it is past the run
+  // (codex 85-tk-A-T18-1c #1)
+  const afterRun = (c: ICombatUnit["spellCastEvents"][number]) => {
+    const t = c.logLine.timestamp;
+    if (t !== toMs) return t > toMs;
+    const line = c.logLine.lineIndex;
+    return run?.toLine !== undefined && line !== undefined && line > run.toLine;
+  };
   let ext = 0;
   for (const c of caster.spellCastEvents ?? []) {
     const t = c.logLine.timestamp;
     if (t < fromMs) continue;
-    if (t > fromMs + (windowBase + ext) * 1000 || t > toMs) break;
+    if (t > fromMs + (windowBase + ext) * 1000 || afterRun(c)) break;
     if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
     if (!p.qualifyingSpellIds.has(c.spellId ?? "")) continue;
     if ("landedOnly" in p && p.landedOnly && !pressLanded(caster, c)) continue;
@@ -395,7 +403,7 @@ function ownAuraRunNear(
   caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
   spellId: string,
   atMs: number,
-): { fromMs: number; toMs?: number } | undefined {
+): { fromMs: number; toMs?: number; toLine?: number } | undefined {
   const id = caster.id;
   if (!id || !caster.auraEvents) return undefined;
   // a REMOVED → APPLIED re-broadcast (log order, `AURA_REBROADCAST_GAP_MS`)
@@ -405,22 +413,34 @@ function ownAuraRunNear(
       (a) => a.spellId === spellId && a.srcUnitId === id && a.destUnitId === id,
     ),
   );
-  let fromAt = -1;
-  for (let k = 0; k < rows.length; k++) {
-    const a = rows[k]!;
-    if (a.logLine.event !== "SPELL_AURA_APPLIED") continue;
-    const d = Math.abs(a.logLine.timestamp - atMs);
-    if (d > OWN_AURA_PAIR_MS) continue;
-    if (fromAt < 0 || d < Math.abs(rows[fromAt]!.logLine.timestamp - atMs))
-      fromAt = k;
+  // continuous runs in log order: an APPLIED while a run is open is a
+  // duplicate row of that run, not a new start (codex 85-tk-A-T18-1c #2)
+  type Row = (typeof rows)[number];
+  const runs: Array<{ from: Row; to?: Row }> = [];
+  let open: { from: Row; to?: Row } | undefined;
+  for (const a of rows) {
+    if (a.logLine.event === "SPELL_AURA_APPLIED") {
+      if (!open) {
+        open = { from: a };
+        runs.push(open);
+      }
+    } else if (a.logLine.event === "SPELL_AURA_REMOVED" && open) {
+      open.to = a;
+      open = undefined;
+    }
   }
-  if (fromAt < 0) return undefined;
-  const from = rows[fromAt]!.logLine.timestamp;
-  // the first REMOVED after that APPLIED in log order
-  const removed = rows
-    .slice(fromAt + 1)
-    .find((a) => a.logLine.event === "SPELL_AURA_REMOVED");
-  return { fromMs: from, toMs: removed?.logLine.timestamp };
+  let best: { from: Row; to?: Row } | undefined;
+  for (const r of runs) {
+    const d = Math.abs(r.from.logLine.timestamp - atMs);
+    if (d > OWN_AURA_PAIR_MS) continue;
+    if (!best || d < Math.abs(best.from.logLine.timestamp - atMs)) best = r;
+  }
+  if (!best) return undefined;
+  return {
+    fromMs: best.from.logLine.timestamp,
+    toMs: best.to?.logLine.timestamp,
+    toLine: best.to?.logLine.lineIndex,
+  };
 }
 
 /** Did one of this press's hits land on its target — a damage row, or a hit

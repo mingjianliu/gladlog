@@ -60,9 +60,20 @@ function fullLengthS(
   auraId: string,
   appliedMs: number,
   staticS: number,
-  /** the run's REMOVED: a press after it extends nothing */
-  removedMs: number = Number.POSITIVE_INFINITY,
+  /** the run's REMOVED: a press after it (in its ms, after it in log
+   * order) extends nothing */
+  removed?: any,
 ): number {
+  const removedMs = removed ? tsOf(removed) : Number.POSITIVE_INFINITY;
+  const removedLine: number | undefined = removed?.logLine?.lineIndex;
+  const afterRun = (c: any) => {
+    const t = tsOf(c);
+    if (t !== removedMs) return t > removedMs;
+    const line = c.logLine?.lineIndex;
+    return (
+      removedLine !== undefined && line !== undefined && line > removedLine
+    );
+  };
   const r = SET_BONUS_PER_EVENT_DURATIONS[auraId]!;
   const casts = successesOf(owner).sort((a: any, b: any) => tsOf(a) - tsOf(b));
   const hitRows = [
@@ -75,7 +86,7 @@ function fullLengthS(
   for (const c of casts) {
     const t = tsOf(c);
     if (t < appliedMs) continue;
-    if (t > appliedMs + (staticS + ext) * 1000 || t > removedMs) break;
+    if (t > appliedMs + (staticS + ext) * 1000 || afterRun(c)) break;
     const id = String(c.spellId ?? "");
     if (!r.qualifyingSpellIds.has(id)) continue;
     if (r.landedOnly && c.destUnitId) {
@@ -130,19 +141,27 @@ export function run(ctx: IRoundCtx): void {
     // another run — codex 85-tk-A-T18-1 #2); an estimated one has none, so
     // it is the latest application at or before the second
     const estimated = m[3]!.startsWith("expired, estimated");
-    const fadeRow = estimated
-      ? undefined
-      : rows.find((a) => ev(a) === REMOVED && secOfMs(tsOf(a)) === sec);
-    const applied = rows
-      .filter(
-        (a) =>
-          ev(a) === APPLIED &&
-          (fadeRow ? tsOf(a) < tsOf(fadeRow) : secOfMs(tsOf(a)) <= sec),
-      )
-      .pop();
-    if (!applied) continue;
-    const at = tsOf(applied);
-    const removed = rows.find((a) => ev(a) === REMOVED && tsOf(a) > at);
+    // continuous runs in log order: an APPLIED while a run is open is a
+    // duplicate row of it (codex 85-tk-A-T18-1c #2)
+    const runs: Array<{ from: any; to?: any }> = [];
+    let open: { from: any; to?: any } | undefined;
+    for (const a of rows) {
+      if (ev(a) === APPLIED) {
+        if (!open) {
+          open = { from: a };
+          runs.push(open);
+        }
+      } else if (ev(a) === REMOVED && open) {
+        open.to = a;
+        open = undefined;
+      }
+    }
+    const run = estimated
+      ? runs.filter((r) => secOfMs(tsOf(r.from)) <= sec).pop()
+      : runs.find((r) => r.to && secOfMs(tsOf(r.to)) === sec);
+    if (!run) continue;
+    const at = tsOf(run.from);
+    const removed = run.to;
     const refreshed = rows.some(
       (a) =>
         ev(a) === REFRESH &&
@@ -153,13 +172,7 @@ export function run(ctx: IRoundCtx): void {
     const staticS = buffFullDurationForCaster(auraId, owner);
     if (staticS === undefined) continue;
     ctx.bump("setExtendedFade");
-    const full = fullLengthS(
-      owner,
-      auraId,
-      at,
-      staticS,
-      removed ? tsOf(removed) : undefined,
-    );
+    const full = fullLengthS(owner, auraId, at, staticS, removed);
     const claim = m[3]!;
     if (estimated && removed && secOfMs(tsOf(removed)) <= sec) continue;
     const key = `${owner.name}:${auraId}:${at}`;

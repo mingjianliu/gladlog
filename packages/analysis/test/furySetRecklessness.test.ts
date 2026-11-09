@@ -261,6 +261,56 @@ describe("Fury 2pc: Raging Blow extends Recklessness by 2 s per press, up to 6 s
     ).toBe(18);
   });
 
+  // codex 85-tk-A-T18-1c: a press in the REMOVED's ms but logged after it
+  // is past the run; a duplicate APPLIED inside a run starts nothing
+  it("log order at the REMOVED's ms, and duplicate APPLIED rows", () => {
+    const row = (event: LogEvent, s: number, lineIndex?: number) => ({
+      spellId: RECKLESSNESS,
+      srcUnitId: "w",
+      destUnitId: "w",
+      timestamp: T0 + s * 1000,
+      logLine: { event, timestamp: T0 + s * 1000, lineIndex },
+    });
+    const at = (s: number, lineIndex: number) => ({
+      spellId: RAGING_BLOW,
+      logLine: {
+        event: LogEvent.SPELL_CAST_SUCCESS,
+        timestamp: T0 + s * 1000,
+        lineIndex,
+      },
+    });
+    const unit = (rows: ReturnType<typeof row>[], casts: unknown[]) =>
+      ({
+        ...(warrior(2, casts as never) as object),
+        id: "w",
+        auraEvents: rows,
+      }) as never;
+    const ended = [
+      row(LogEvent.SPELL_AURA_APPLIED, 0, 1),
+      row(LogEvent.SPELL_AURA_REMOVED, 18, 100),
+    ];
+    expect(
+      buffFullDurationForCaster(RECKLESSNESS, unit(ended, [at(18, 101)]), T0),
+    ).toBe(18);
+    expect(
+      buffFullDurationForCaster(RECKLESSNESS, unit(ended, [at(18, 99)]), T0),
+    ).toBe(20);
+    // a duplicate APPLIED at 10 s does not split the run 0–22 s: both
+    // presses are in it
+    const dup = [
+      row(LogEvent.SPELL_AURA_APPLIED, 0),
+      row(LogEvent.SPELL_AURA_APPLIED, 10),
+      row(LogEvent.SPELL_AURA_REMOVED, 22),
+    ];
+    expect(
+      buffFullDurationForCaster(
+        RECKLESSNESS,
+        unit(dup, [press(RAGING_BLOW, 3), press(RAGING_BLOW, 12)]),
+        T0 + 500,
+      ),
+    ).toBe(22);
+  });
+
   it("one piece, another spec, another press, or no application time: nothing", () => {
     const three = [1, 3, 5].map((s) => press(RAGING_BLOW, s));
     expect(buffFullDurationForCaster(RECKLESSNESS, warrior(1, three), T0)).toBe(

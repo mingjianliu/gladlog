@@ -171,6 +171,51 @@ describe("scan5/t18 setExtendedFade", () => {
     expect(scan(o, [fade("0:22", "expired")])).toEqual([]);
   });
 
+  // codex 85-tk-A-T18-1c #2: a duplicate APPLIED inside a run is no start
+  it("a duplicate APPLIED inside the run starts nothing", () => {
+    const o = warrior(
+      2,
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, 0),
+        aura(LogEvent.SPELL_AURA_APPLIED, 10),
+        aura(LogEvent.SPELL_AURA_REMOVED, 22),
+      ],
+      [cast("85288", "Raging Blow", 3), cast("85288", "Raging Blow", 12)],
+      [hit("96103", "Raging Blow", 3.05), hit("96103", "Raging Blow", 12.05)],
+    );
+    expect(scan(o, [fade("0:22", "expired")])).toEqual([]);
+  });
+
+  // codex 85-tk-A-T18-1c #1: a press in the REMOVED's ms logged after it
+  it("a press logged after the REMOVED in its ms is past the run", () => {
+    const removed = {
+      ...aura(LogEvent.SPELL_AURA_REMOVED, 18),
+      logLine: {
+        event: LogEvent.SPELL_AURA_REMOVED,
+        timestamp: ms(18),
+        lineIndex: 100,
+      },
+    };
+    const late = {
+      ...cast("85288", "Raging Blow", 18),
+      logLine: {
+        event: LogEvent.SPELL_CAST_SUCCESS,
+        timestamp: ms(18),
+        lineIndex: 101,
+      },
+    };
+    const o = warrior(
+      2,
+      [aura(LogEvent.SPELL_AURA_APPLIED, 0), removed],
+      [late],
+      [hit("96103", "Raging Blow", 18.05)],
+    );
+    expect(scan(o, [fade("0:18", "expired")])).toEqual([]);
+    expect(
+      scan(o, [fade("0:18", "ended after 18.0 of 20s — no dispel logged")]),
+    ).toEqual(["setExtendedFade:fullLengthMisread"]);
+  });
+
   it("a press after the REMOVED is no part of the run", () => {
     const o = warrior(
       2,
