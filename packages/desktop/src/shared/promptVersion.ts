@@ -1016,4 +1016,11 @@
  *  printed at or past the round's end are dropped (ruling R11). See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 513;
+/*
+ * v514 (2026-11-09; pipeline batch B23, T05, fact12 A6 B7 C19): a Havoc
+ *  Metamorphosis press is dated at its own activation on both sides
+ *  (metamorphosisPressActivationMs / castRowActivationMs), so one up before
+ *  the round's deciding death is no [UNUSED]. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 514;

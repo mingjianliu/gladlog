@@ -5771,3 +5771,22 @@ deathTeardownEarly 3 views / 1 fact → 0; burst spans past the round end 35 of
 no other scan5 class rises. (v513 was allocated to batches B20 and B21 first,
 both abandoned before push.) Batch verified on tests + codex (user 11-08); 605 /
 cover / wide run at the end of the wave.
+
+v514 (2026-11-09, fact12 A6 B7 C19; pipeline batch B23, T05). A Havoc
+Metamorphosis press is dated at its own activation on both sides:
+`metamorphosisPressActivationMs` (offensiveAuraOccurrences) — the unit's own
+162264 APPLIED / REFRESH within `PRESS_LANDING_LAG_S` before the 200166 landing
+row of the form instance still up at the landing, skipping a row an Eye Beam
+explains (`EYE_BEAM_BEFORE_S` 4 → 0.1 s), else the landing — and
+`castRowActivationMs` backdates only a 200166 landing row (a logged 191427 row
+keeps its own instant). The friendly ledger (`buildCooldownEntry`: round cut,
+`cdAvailableAt`, the press line) and the enemy occurrence read the same
+instant, so a Metamorphosis up before a Solo Shuffle round's deciding death
+is that round's press, not `[UNUSED]`. New scan5 module t05
+(unusedPressedBeforeRoundEnd), calling `castRowActivationMs`. 605 menu rows:
+−5 owner rows (3 distinct, all missed-sync-window: the lock sits inside the
+Meta burst the context prints; ruling R10), +0; facts changed in 4 rows;
+unusedPressedBeforeRoundEnd repro 3 → 0; every other scan5 count identical.
+(T05 first went into batches B11 and B19, both abandoned before push.) Batch
+verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
+the wave.
