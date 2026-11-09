@@ -15,7 +15,7 @@ import {
   TOOLTIP_DURATION_ROWS,
   TOOLTIP_PER_EVENT_DURATIONS,
 } from "../data/talentDurationTooltips";
-import { dropAuraRebroadcasts } from "./auraIntervals";
+import { dropAuraRebroadcasts } from "./auraRebroadcast";
 import { pressLandedOn } from "./castMissRows";
 import { castParamBaseSeconds, type CastParamCaster } from "./castParam";
 import { talentModifierOwnershipOf, talentRankOf } from "./talentOwnership";

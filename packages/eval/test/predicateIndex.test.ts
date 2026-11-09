@@ -128,6 +128,7 @@ import * as auraActivationEra from "@gladlog/analysis/src/utils/auraActivationEr
 import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as auraOnlyActivationsMod from "@gladlog/analysis/src/utils/auraOnlyActivations";
+import * as auraRebroadcast from "@gladlog/analysis/src/utils/auraRebroadcast";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as brokenRowBreaker from "@gladlog/analysis/src/utils/brokenRowBreaker";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
@@ -4320,14 +4321,14 @@ const INDEX: PredicateRow[] = [
     mod: auraIntervals,
   },
   {
-    file: `${A}/utils/auraIntervals.ts`,
+    file: `${A}/utils/auraRebroadcast.ts`,
     symbol: "dropAuraRebroadcasts",
-    mod: auraIntervals,
+    mod: auraRebroadcast,
   },
   {
-    file: `${A}/utils/auraIntervals.ts`,
+    file: `${A}/utils/auraRebroadcast.ts`,
     symbol: "supersededAuraBreaks",
-    mod: auraIntervals,
+    mod: auraRebroadcast,
   },
   {
     file: `${A}/utils/auraEndCause.ts`,
