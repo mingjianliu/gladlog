@@ -11,10 +11,11 @@
  *    or a logged 191427 button row (`METAMORPHOSIS_PRESS_CAST_IDS`) the
  *    product's own selection, `castRowActivationMs` (codex B11 #3, B19: the
  *    scan must not pick another instant than the ledger — a 191427 row is
- *    its own); for any other spell, kind `other`, the
+ *    its own). For any other spell, kind `other (aura-led inventory)`, the
  *    LATEST aura row of the same English name the unit put on itself
- *    (APPLIED / REFRESH) in [row − lag, row] — an inventory that no other
- *    spell has the shape. 52a97230 r0: Metamorphosis' 162264 up at
+ *    (APPLIED / REFRESH) in [row − lag, row] — an inventory of other spells
+ *    with the shape, OUT of the total: the ledger keeps those rows at their
+ *    own instant, so it nominates and never rejects (codex T05-4). 52a97230 r0: Metamorphosis' 162264 up at
  *    0:32.885, the round-ending death 0:33.744, its 200166 landing 0:33.809;
  *    the kit read `Metamorphosis [120s] [UNUSED]` while `0:32 [ENEMY CD]`
  *    printed the press. Counted: every kit entry with such a press.
@@ -30,6 +31,14 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { ev, fmtS, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = ["unusedPressedBeforeRoundEnd"] as const;
+
+/** the aura-led inventory of other spells: the ledger keeps their cast row
+ * (only a Metamorphosis landing is dated at its activation), so a hit here
+ * is a candidate for a future ticket, never a verdict against the ledger
+ * (codex T05-4: Recklessness' self-aura 0.1 s before its SUCCESS) */
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "unusedPressedBeforeRoundEnd|other (aura-led inventory)",
+]);
 
 export function run(ctx: IRoundCtx): void {
   unusedPressedBeforeRoundEnd(ctx);
@@ -84,7 +93,11 @@ function unusedPressedBeforeRoundEnd(ctx: IRoundCtx): void {
         ? castRowActivationMs(u, id, rowMs)
         : latestOwnAuraRowMs(u, name, rowMs);
       if (upMs === undefined || upMs > end || late.has(name)) continue;
-      late.set(name, { rowMs, upMs, kind: meta ? "metamorphosis" : "other" });
+      late.set(name, {
+        rowMs,
+        upMs,
+        kind: meta ? "metamorphosis" : "other (aura-led inventory)",
+      });
     }
     if (late.size === 0) continue;
     for (const m of cds.matchAll(

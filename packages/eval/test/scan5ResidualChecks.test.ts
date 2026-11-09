@@ -33,7 +33,10 @@ import { run as runPressFiling } from "../scripts/scan5/pressFiling";
 import { run as runSilenceKick } from "../scripts/scan5/silenceKick";
 import { run as runSingles14b } from "../scripts/scan5/singles14b";
 import { run as runSpanFacts } from "../scripts/scan5/spanFacts";
-import { run as runT05 } from "../scripts/scan5/t05";
+import {
+  OUT_OF_TOTAL as T05_OUT_OF_TOTAL,
+  run as runT05,
+} from "../scripts/scan5/t05";
 
 // fact7 r1: six corpus checks that kept firing after their 15-round fixes hit 0.
 // Each `reads` case is a shape the raw log proved right while the check flagged
@@ -2639,6 +2642,35 @@ describe("unusedPressedBeforeRoundEnd — a press up before the round's end (T05
         "unusedPressedBeforeRoundEnd",
       ),
     ).toEqual([]);
+  });
+  // codex T05-4: another spell's self-aura logged before its SUCCESS
+  // (Recklessness 1719) is an inventory hit, out of the total — the ledger
+  // keeps that row at its own instant, and the scan must not reject it
+  it("a Recklessness aura before the end and its SUCCESS after it: an inventory hit, out of the total", () => {
+    const warrior = unit("Dh", "1", 1, {
+      info: {},
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      spellCastEvents: [cast(33_809, "Dh", "1719", "Recklessness")],
+      auraEvents: [
+        {
+          ...aura(LogEvent.SPELL_AURA_APPLIED, 33_700, "1719", "Recklessness"),
+          srcUnitId: "Dh",
+          destUnitId: "Dh",
+        },
+      ],
+    });
+    const seen = scan(
+      runT05,
+      [warrior, mate],
+      [
+        `<unit id="1" name="Dh">`,
+        `<cooldowns>Recklessness [90s] [UNUSED]</cooldowns>`,
+      ],
+    ).filter((v) => v.check === "unusedPressedBeforeRoundEnd");
+    expect(seen.map((v) => v.kind)).toEqual(["other (aura-led inventory)"]);
+    expect(
+      seen.every((v) => T05_OUT_OF_TOTAL.has(`${v.check}|${v.kind}`)),
+    ).toBe(true);
   });
   // B19 assembly review: a logged 191427 button row is its own instant on
   // the ledger (codex T05-2b) — after the death, so [UNUSED] is right and
