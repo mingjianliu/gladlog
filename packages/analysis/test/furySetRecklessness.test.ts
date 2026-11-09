@@ -170,6 +170,65 @@ describe("Fury 2pc: Raging Blow extends Recklessness by 2 s per press, up to 6 s
     expect(buffFullDurationForCaster(RECKLESSNESS, late, T0)).toBe(18);
   });
 
+  // codex 85-tk-A-T18-1 #1: readers pass the press's time, half a second
+  // after the aura row; a press after the aura's REMOVED extends nothing
+  it("walks the aura's own logged run: from its APPLIED, not past its REMOVED", () => {
+    const auraRow = (event: LogEvent, s: number) => ({
+      spellId: RECKLESSNESS,
+      srcUnitId: "w",
+      destUnitId: "w",
+      logLine: { event, timestamp: T0 + s * 1000 },
+    });
+    const holder = (
+      removedAt: number | undefined,
+      casts: ReturnType<typeof press>[],
+    ) =>
+      ({
+        ...(warrior(2, casts) as object),
+        id: "w",
+        auraEvents: [
+          auraRow(LogEvent.SPELL_AURA_APPLIED, 0),
+          ...(removedAt === undefined
+            ? []
+            : [auraRow(LogEvent.SPELL_AURA_REMOVED, removedAt)]),
+        ],
+      }) as never;
+    const AT = T0 + 500;
+    expect(
+      buffFullDurationForCaster(
+        RECKLESSNESS,
+        holder(18, [press(RAGING_BLOW, 18.25)]),
+        AT,
+      ),
+    ).toBe(18);
+    // without the REMOVED, 18.25 s is past the run anchored at the APPLIED
+    expect(
+      buffFullDurationForCaster(
+        RECKLESSNESS,
+        holder(undefined, [press(RAGING_BLOW, 18.25)]),
+        AT,
+      ),
+    ).toBe(18);
+    expect(
+      buffFullDurationForCaster(
+        RECKLESSNESS,
+        holder(20, [press(RAGING_BLOW, 3)]),
+        AT,
+      ),
+    ).toBe(20);
+    // a same-ms REMOVED → APPLIED re-broadcast does not end the run
+    const rebroadcast = {
+      ...(holder(undefined, [press(RAGING_BLOW, 12)]) as object),
+      id: "w",
+      auraEvents: [
+        auraRow(LogEvent.SPELL_AURA_APPLIED, 0),
+        auraRow(LogEvent.SPELL_AURA_REMOVED, 10),
+        auraRow(LogEvent.SPELL_AURA_APPLIED, 10),
+      ],
+    } as never;
+    expect(buffFullDurationForCaster(RECKLESSNESS, rebroadcast, AT)).toBe(20);
+  });
+
   it("one piece, another spec, another press, or no application time: nothing", () => {
     const three = [1, 3, 5].map((s) => press(RAGING_BLOW, s));
     expect(buffFullDurationForCaster(RECKLESSNESS, warrior(1, three), T0)).toBe(

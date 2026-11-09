@@ -59,6 +59,8 @@ function fullLengthS(
   auraId: string,
   appliedMs: number,
   staticS: number,
+  /** the run's REMOVED: a press after it extends nothing */
+  removedMs: number = Number.POSITIVE_INFINITY,
 ): number {
   const r = SET_BONUS_PER_EVENT_DURATIONS[auraId]!;
   const casts = successesOf(owner).sort((a: any, b: any) => tsOf(a) - tsOf(b));
@@ -72,7 +74,7 @@ function fullLengthS(
   for (const c of casts) {
     const t = tsOf(c);
     if (t < appliedMs) continue;
-    if (t > appliedMs + (staticS + ext) * 1000) break;
+    if (t > appliedMs + (staticS + ext) * 1000 || t > removedMs) break;
     const id = String(c.spellId ?? "");
     if (!r.qualifyingSpellIds.has(id)) continue;
     if (r.landedOnly && c.destUnitId) {
@@ -120,8 +122,20 @@ export function run(ctx: IRoundCtx): void {
       )
       .sort((a, b) => tsOf(a) - tsOf(b));
     const secOfMs = (ms: number) => Math.floor((ms - ctx.start) / 1000);
+    // a logged fade is its REMOVED's: the application before the REMOVED
+    // printed at this second (a proc applied later in the same second is
+    // another run — codex 85-tk-A-T18-1 #2); an estimated one has none, so
+    // it is the latest application at or before the second
+    const estimated = m[3]!.startsWith("expired, estimated");
+    const fadeRow = estimated
+      ? undefined
+      : rows.find((a) => ev(a) === REMOVED && secOfMs(tsOf(a)) === sec);
     const applied = rows
-      .filter((a) => ev(a) === APPLIED && secOfMs(tsOf(a)) <= sec)
+      .filter(
+        (a) =>
+          ev(a) === APPLIED &&
+          (fadeRow ? tsOf(a) < tsOf(fadeRow) : secOfMs(tsOf(a)) <= sec),
+      )
       .pop();
     if (!applied) continue;
     const at = tsOf(applied);
@@ -136,8 +150,15 @@ export function run(ctx: IRoundCtx): void {
     const staticS = buffFullDurationForCaster(auraId, owner);
     if (staticS === undefined) continue;
     ctx.bump("setExtendedFade");
-    const full = fullLengthS(owner, auraId, at, staticS);
+    const full = fullLengthS(
+      owner,
+      auraId,
+      at,
+      staticS,
+      removed ? tsOf(removed) : undefined,
+    );
     const claim = m[3]!;
+    if (estimated && removed && secOfMs(tsOf(removed)) <= sec) continue;
     const key = `${owner.name}:${auraId}:${at}`;
     if (claim.startsWith("expired, estimated")) {
       if (sec < secOfMs(at + full * 1000))

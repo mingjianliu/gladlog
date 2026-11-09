@@ -340,7 +340,7 @@ function perEventFor(
 function perEventExtensionSeconds(
   spellId: string,
   caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
-    Partial<Pick<ICombatUnit, "damageOut" | "missesOut">>,
+    Partial<Pick<ICombatUnit, "id" | "auraEvents" | "damageOut" | "missesOut">>,
   baseSeconds: number,
   atMs: number | undefined,
   onUnitId: string | undefined,
@@ -360,19 +360,68 @@ function perEventExtensionSeconds(
           onUnitId,
         );
   const windowBase = baseSeconds + setBonusDurationSeconds(spellId, caster);
+  // a set bonus's walk runs on the application the log shows: readers pass
+  // the press's time, which can sit after the aura row, and a press after
+  // the aura's REMOVED extends nothing (codex 85-tk-A-T18-1 #1)
+  const run =
+    "bonusSpellId" in p ? ownAuraRunNear(caster, spellId, atMs) : undefined;
+  const fromMs = run?.fromMs ?? atMs;
+  const toMs = run?.toMs ?? Number.POSITIVE_INFINITY;
   let ext = 0;
   for (const c of caster.spellCastEvents ?? []) {
     const t = c.logLine.timestamp;
-    if (t < atMs) continue;
-    if (t > atMs + (windowBase + ext) * 1000) break;
+    if (t < fromMs) continue;
+    if (t > fromMs + (windowBase + ext) * 1000 || t > toMs) break;
     if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
     if (!p.qualifyingSpellIds.has(c.spellId ?? "")) continue;
-    if ("landedOnly" in p && p.landedOnly && !pressLanded(caster, c))
-      continue;
+    if ("landedOnly" in p && p.landedOnly && !pressLanded(caster, c)) continue;
     ext = Math.min(p.capSeconds, ext + p.addSecondsPerEvent);
     if (ext >= p.capSeconds) break;
   }
   return ext;
+}
+
+/** How far from the press's time its own aura row can be logged (either
+ * side: GH #179 3d, an aura row ahead of its cast row). */
+const OWN_AURA_PAIR_MS = 1000;
+
+/**
+ * The caster's own application of this aura on itself nearest `atMs`
+ * (within `OWN_AURA_PAIR_MS`) and the REMOVED that ended it, when the log
+ * shows them; undefined without the caster's aura rows.
+ */
+function ownAuraRunNear(
+  caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
+  spellId: string,
+  atMs: number,
+): { fromMs: number; toMs?: number } | undefined {
+  const id = caster.id;
+  if (!id || !caster.auraEvents) return undefined;
+  const rows = caster.auraEvents.filter(
+    (a) => a.spellId === spellId && a.srcUnitId === id && a.destUnitId === id,
+  );
+  let from: number | undefined;
+  for (const a of rows) {
+    if (a.logLine.event !== "SPELL_AURA_APPLIED") continue;
+    const t = a.logLine.timestamp;
+    if (Math.abs(t - atMs) > OWN_AURA_PAIR_MS) continue;
+    if (from === undefined || Math.abs(t - atMs) < Math.abs(from - atMs))
+      from = t;
+  }
+  if (from === undefined) return undefined;
+  // a same-ms REMOVED → APPLIED re-broadcast is not the aura ending
+  const reapplied = new Set(
+    rows
+      .filter((a) => a.logLine.event === "SPELL_AURA_APPLIED")
+      .map((a) => a.logLine.timestamp),
+  );
+  const removed = rows.find(
+    (a) =>
+      a.logLine.event === "SPELL_AURA_REMOVED" &&
+      a.logLine.timestamp > from &&
+      !reapplied.has(a.logLine.timestamp),
+  );
+  return { fromMs: from, toMs: removed?.logLine.timestamp };
 }
 
 /** Did one of this press's hits land on its target — a damage row, or a hit

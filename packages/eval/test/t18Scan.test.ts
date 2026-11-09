@@ -137,6 +137,36 @@ describe("scan5/t18 setExtendedFade", () => {
     ]);
   });
 
+  // codex 85-tk-A-T18-1 #2: an Enduring Rage proc applied in the same
+  // second the extended run ended is another run
+  it("a logged fade is paired with its own REMOVED, not a later proc", () => {
+    const o = warrior(
+      2,
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, 0),
+        aura(LogEvent.SPELL_AURA_REMOVED, 20),
+        aura(LogEvent.SPELL_AURA_APPLIED, 20.9),
+        aura(LogEvent.SPELL_AURA_REMOVED, 25.9),
+      ],
+      [cast("85288", "Raging Blow", 3)],
+      [hit("96103", "Raging Blow", 3.05)],
+    );
+    expect(scan(o, [fade("0:20", "expired")])).toEqual([]);
+  });
+
+  it("a press after the REMOVED is no part of the run", () => {
+    const o = warrior(
+      2,
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, 0),
+        aura(LogEvent.SPELL_AURA_REMOVED, 18),
+      ],
+      [cast("85288", "Raging Blow", 18.25)],
+      [hit("96103", "Raging Blow", 18.3)],
+    );
+    expect(scan(o, [fade("0:18", "expired")])).toEqual([]);
+  });
+
   it("a refused press extends nothing, and a non-holder is not read", () => {
     const refused = warrior(
       2,
