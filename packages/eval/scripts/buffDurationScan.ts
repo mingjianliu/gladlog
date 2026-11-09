@@ -31,7 +31,7 @@
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
 import { sourcePressedAuraNear } from "@gladlog/analysis/src/data/castEffectAuras";
-import { setBonusPerEventFor } from "@gladlog/analysis/src/data/classSetBonuses";
+import { classSetPiecesOf } from "@gladlog/analysis/src/data/classSetBonuses";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
@@ -125,10 +125,14 @@ const detailCells = new Map<string, Map<string, Map<number, number>>>();
  * 2pc) has no single per-caster value. Per clean lifetime (no REFRESH, not
  * cut by the holder's death or the round's end within 1 s), the logged
  * length vs `buffFullDurationForCaster` AT the application, split by whether
- * the caster wears a per-press set bonus on the aura (`setBonusPerEventFor`),
- * the runs read as the product reads them (`perAppRuns`):
+ * how many pieces of a class set the caster wears (`classSetPiecesOf`, the
+ * most of any set; T35), the runs read as the product reads them
+ * (`perAppRuns`):
  * exact (±0.1 s, and whether the predicate went past its static length),
- * longer by a 5 s multiple, longer otherwise, shorter.
+ * longer by a 5 s multiple, longer otherwise, shorter. Two more lines per
+ * split: the static length exact, and the predicate with the caster's gear
+ * taken off exact (the reading before any set-bonus row — one run gives the
+ * before and after of a set row, T35).
  */
 const perApp = new Set(args.perApp.split(",").filter(Boolean));
 const perAppCounts = new Map<string, Map<string, number>>();
@@ -183,9 +187,12 @@ function perAppRuns(
       const atApp = buffFullDurationForCaster(spellId, src, o.t);
       const flat = buffFullDurationForCaster(spellId, src);
       if (atApp === undefined || flat === undefined) continue;
-      const holder = setBonusPerEventFor(spellId, src)
-        ? "set holder"
-        : "no set";
+      const holder = `${Math.max(0, ...Object.values(classSetPiecesOf(src)))} pieces`;
+      const noGear = buffFullDurationForCaster(
+        spellId,
+        { ...src, info: { ...src.info, equipment: [] } },
+        o.t,
+      );
       const obs = (t - o.t) / 1000;
       const diff = obs - atApp;
       const k =
@@ -203,6 +210,11 @@ function perAppRuns(
         spellId,
         `${holder} | static ${flat}s exact: ${Math.abs(obs - flat) <= 0.1 ? "yes" : "no"}`,
       );
+      if (noGear !== undefined)
+        perAppBump(
+          spellId,
+          `${holder} | no-gear ${noGear}s exact: ${Math.abs(obs - noGear) <= 0.1 ? "yes" : "no"}`,
+        );
     }
   }
 }

@@ -32,6 +32,7 @@ import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { type ILogDatedNumber, logDatedNumberAt } from "../utils/logEra";
 import { isResyncBatchAt } from "../utils/resyncBatch";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "../utils/talents";
+import { type ISetBonusEventCredit, wearsSetBonus } from "./classSetBonuses";
 import { spellEffectData } from "./spellEffectData";
 import { spellSchoolMask } from "./spellSchools";
 
@@ -161,6 +162,10 @@ export interface IEventCooldownReduction {
     whileSelfAura?: { auraId: string; pct: number };
     perRank?: { talentId: string; pctPerRank: number };
   };
+  /** A class set bonus that adds seconds to every give-back of this entry
+   * for a unit wearing it (`wearsSetBonus`; Devastation 12.1 4pc on
+   * Causality, GH #175 row 6). Not on a reset. */
+  setBonus?: ISetBonusEventCredit;
   /** "Your Arcane abilities": the unit's own successful casts whose DB2
    * school mask (`spellSchoolMask`) shares a bit with this mask. */
   triggerCastSchoolMask?: number;
@@ -335,6 +340,21 @@ const SHAMAN_TOTEM_IDS = [
   "444995", // Surging Totem
   "1267068", // Stormstream Totem
 ] as const;
+
+/** Devastation 12.1 4pc 1296640 (set 2058, spec 1467, 4 pieces; GH #175
+ * row 6): 「Causality reduces the remaining cooldown of your empower spells
+ * by an additional ${$s1/-1000}.1 sec each time the effect occurs」. Effects
+ * 0 and 1 are aura 219 base −100 on SpellLabel 6673, a label only Causality
+ * 375777 carries, misc 3 / 12 (its effect 0 / effect 1 points: the
+ * Disintegrate and the Pyre give-back), × PvpMultiplier 0.5 = 0.05 s more
+ * per trigger. */
+const DEVASTATION_4PC_CAUSALITY: ISetBonusEventCredit = {
+  bonusSpellId: "1296640",
+  itemSetId: "2058",
+  pieces: 4,
+  specs: ["1467"],
+  addSeconds: 0.05,
+};
 
 export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   Record<string, IEventCooldownReduction>
@@ -771,6 +791,7 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
       windowMs: 6000,
     },
     seconds: 0.5,
+    setBonus: DEVASTATION_4PC_CAUSALITY,
     note: "Causality — Fire Breath / Eternity Surge −0.5 s per Disintegrate tick",
   },
   "375777:pyre": {
@@ -780,6 +801,7 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     triggerHitIds: ["357212"],
     maxHitsPerUse: 5,
     seconds: 0.4,
+    setBonus: DEVASTATION_4PC_CAUSALITY,
     note: "Causality — Fire Breath / Eternity Surge −0.4 s per enemy struck by Pyre (≤ 2 s)",
   },
   // Chaotic Transformation (Havoc, 388112): "When you activate
@@ -1610,7 +1632,7 @@ export function eventTriggersFor(
     Partial<
       Pick<
         ICombatUnit,
-        "actionOut" | "auraEvents" | "id" | "damageIn" | "missesIn"
+        "actionOut" | "auraEvents" | "id" | "damageIn" | "missesIn" | "info"
       >
     >,
   reductions: readonly IEventCooldownReduction[],
@@ -1649,11 +1671,25 @@ export function eventTriggersFor(
     gs: IEventTrigger[],
   ): IEventTrigger[] =>
     r.oneCharge ? gs.map((g) => ({ ...g, oneCharge: true as const })) : gs;
+  const setBonused = (
+    r: IEventCooldownReduction,
+    gs: IEventTrigger[],
+  ): IEventTrigger[] => {
+    const b = r.setBonus;
+    if (!b || !wearsSetBonus(unit, b)) return gs;
+    return gs.map((g) =>
+      g.seconds === Number.POSITIVE_INFINITY
+        ? g
+        : { ...g, seconds: g.seconds + b.addSeconds },
+    );
+  };
   return reductions
     .flatMap((r) =>
       charged(
         r,
-        bonused(r, [
+        setBonused(
+          r,
+          bonused(r, [
           ...eventTriggerTimesMs(unit, r, untilMs).map((atMs) => ({
             atMs,
             seconds: eventReductionSecondsAt(r, holderSpec, atMs),
@@ -1677,7 +1713,8 @@ export function eventTriggersFor(
           ...(r.triggerCastTargetTicks
             ? castTargetTickTriggers(unit, r, holderSpec)
             : []),
-        ]),
+          ]),
+        ),
       ),
     )
     .sort((a, b) => a.atMs - b.atMs);

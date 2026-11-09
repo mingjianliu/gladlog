@@ -1,0 +1,154 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- legacy parse objects (units, auraEvents, spellCastEvents) */
+/**
+ * scan5/t35.ts — pipeline T35 (GH #175 rows 2–17): a 12.1 class set bonus
+ * that shortens a cooldown (Protection 4pc Ravager, Augmentation 2pc
+ * Upheaval, Shadow 2pc Tentacle Slam — `SET_BONUS_COOLDOWN_ROWS`; the
+ * Devastation 4pc on Causality's give-back — an `EVENT_COOLDOWN_REDUCTIONS`
+ * row's `setBonus`) or lengthens a buff (Feral 4pc Berserk —
+ * `SET_BONUS_DURATION_ROWS`), read at the unworn number. Holders are picked
+ * by the product's own gear-and-spec gate (`wearsSetBonus` /
+ * `setBonusCooldownReductionSeconds` / `setBonusDurationSeconds`).
+ *
+ * Check `setCooldownBack`, kind `pressBeforeBack`: a `[PRESS]` line of a
+ * holder's bonus spell printing `back M:SS`, while the unit's own next
+ * logged press of it (SPELL_CAST_SUCCESS) came before M:SS by more than the
+ * ledger's `CD_INSTANT_SLACK_S` — the log pressed what the line called on
+ * cooldown. A printed `back` is floored, so the true instant is at or after
+ * it: only a press before the printed second itself is a contradiction.
+ *
+ * Check `setFadeWhileUp`, kind `estimatedFadeWhileUp`: the owner's
+ * `[BUFF FADED] <aura> (expired, estimated)` for an aura a worn bonus
+ * lengthens, while the log keeps the run up past the printed second + 1
+ * (no REMOVED before then, and the round and the owner lasted that long).
+ * The run is the latest self application at or before the printed second,
+ * read through `ownAuraRuns` (the set walk's and t18's reading).
+ */
+import {
+  SET_BONUS_COOLDOWN_ROWS,
+  SET_BONUS_DURATION_ROWS,
+  setBonusCooldownReductionSeconds,
+  setBonusDurationSeconds,
+  wearsSetBonus,
+} from "@gladlog/analysis/src/data/classSetBonuses";
+import { EVENT_COOLDOWN_REDUCTIONS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
+import { ownAuraRuns } from "@gladlog/analysis/src/utils/buffDuration";
+import { CD_INSTANT_SLACK_S } from "@gladlog/analysis/src/utils/cooldowns";
+
+import {
+  deathMs,
+  type IRoundCtx,
+  nameOf,
+  secOf,
+  successesOf,
+  tsOf,
+} from "./ctx";
+
+export const CHECKS = ["setCooldownBack", "setFadeWhileUp"] as const;
+
+const PRESS_LINE =
+  /^\s*(\d+:\d\d)\s+(\[YOU\] )?\[PRESS\]\s+(?:(\d+)\([^)]*\) \([^)]*\): )?(.+?) \(([^()]*)\)\s*$/;
+const BACK = /\bback (\d+:\d\d)\b/;
+const FADE_LINE =
+  /^\s*(\d+:\d\d)\s+\[BUFF FADED\]\s+(.+?) \(expired, estimated\)\s*$/;
+
+/** spell name → the ids it renders for and the gate that says a unit
+ * wears the bonus on it */
+function cooldownSpells(): Map<
+  string,
+  { ids: Set<string>; worn: (u: any) => boolean }
+> {
+  const out = new Map<
+    string,
+    { ids: Set<string>; worn: (u: any) => boolean }
+  >();
+  const add = (id: string, worn: (u: any) => boolean) => {
+    const name = nameOf(id, id);
+    const e = out.get(name);
+    if (e) {
+      e.ids.add(id);
+      const prev = e.worn;
+      e.worn = (u) => prev(u) || worn(u);
+    } else out.set(name, { ids: new Set([id]), worn });
+  };
+  for (const id of Object.keys(SET_BONUS_COOLDOWN_ROWS))
+    add(id, (u) => setBonusCooldownReductionSeconds(id, u) > 0);
+  for (const r of Object.values(EVENT_COOLDOWN_REDUCTIONS)) {
+    const b = r.setBonus;
+    if (!b) continue;
+    for (const id of r.targets) add(id, (u) => wearsSetBonus(u, b));
+  }
+  return out;
+}
+let spells: ReturnType<typeof cooldownSpells> | undefined;
+
+function runCooldown(ctx: IRoundCtx): void {
+  spells ??= cooldownSpells();
+  for (const line of ctx.lines) {
+    const m = PRESS_LINE.exec(line);
+    if (!m) continue;
+    const spell = spells.get(m[4]!.trim());
+    if (!spell) continue;
+    const back = BACK.exec(m[5]!);
+    if (!back) continue;
+    const unit: any = m[2] ? ctx.owner : ctx.unitOfPid(m[3]);
+    if (!unit || !spell.worn(unit)) continue;
+    ctx.bump("setCooldownBack");
+    const sec = secOf(m[1]!);
+    const backS = secOf(back[1]!);
+    const next = successesOf(unit)
+      .filter((c) => spell.ids.has(String(c.spellId)))
+      .map((c) => (tsOf(c) - ctx.start) / 1000)
+      .filter((s) => s >= sec + 1)
+      .sort((a, b) => a - b)[0];
+    if (next === undefined || next >= backS - CD_INSTANT_SLACK_S) continue;
+    ctx.violate(
+      "setCooldownBack",
+      "pressBeforeBack",
+      ctx.start + next * 1000,
+      `${unit.name}|${m[4]}|${sec}`,
+      `printed back ${back[1]}, the unit pressed it again at ${next.toFixed(1)} s`,
+      line,
+    );
+  }
+}
+
+function runFade(ctx: IRoundCtx): void {
+  const owner = ctx.owner;
+  if (!owner) return;
+  const auras = Object.keys(SET_BONUS_DURATION_ROWS).filter(
+    (a) => setBonusDurationSeconds(a, owner) > 0,
+  );
+  if (auras.length === 0) return;
+  const byName = new Map(auras.map((a) => [nameOf(a, a), a]));
+  for (const line of ctx.lines) {
+    const m = FADE_LINE.exec(line);
+    if (!m) continue;
+    const auraId = byName.get(m[2]!.trim());
+    if (!auraId) continue;
+    const sec = secOf(m[1]!);
+    // the caster's own runs, the set walk's reading (`ownAuraRuns`)
+    const runs = ownAuraRuns(owner, auraId);
+    const run = runs
+      .filter((r) => Math.floor((tsOf(r.from) - ctx.start) / 1000) <= sec)
+      .pop();
+    if (!run) continue;
+    ctx.bump("setFadeWhileUp");
+    const upUntil = run.to
+      ? tsOf(run.to)
+      : Math.min(ctx.roundEndAt, deathMs(owner));
+    if (upUntil <= ctx.start + (sec + 1) * 1000) continue;
+    ctx.violate(
+      "setFadeWhileUp",
+      "estimatedFadeWhileUp",
+      tsOf(run.from),
+      `${owner.name}:${auraId}:${tsOf(run.from)}`,
+      `estimated fade at ${m[1]}, the log keeps it up to ${((upUntil - ctx.start) / 1000).toFixed(1)} s`,
+      line,
+    );
+  }
+}
+
+export function run(ctx: IRoundCtx): void {
+  runCooldown(ctx);
+  runFade(ctx);
+}

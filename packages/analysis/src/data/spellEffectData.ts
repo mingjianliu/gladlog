@@ -1274,7 +1274,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "471369",
       untalentedBaseSeconds: 3,
       addSeconds: 1,
-      note: "Precision Detonation — DB2 aura 107 +1000 ms, Hunter/Marksmanship[spec] (maxRanks 1), mask covers Explosive Shot; corpus 172/172 holder cells within 0.5 s of 4.0 s (4.0 ×110, 4.5 ×62), 62 non-holders at 3.0 / 3.5 s; 3 + 1 = 4.",
+      note: "Precision Detonation — DB2 aura 107 +1000 ms, Hunter/Marksmanship[spec] (maxRanks 1), mask covers Explosive Shot; corpus 172/172 holder cells within 0.5 s of 4.0 s (4.0 ×110, 4.5 ×62), 62 non-holders at 3.0 / 3.5 s; 3 + 1 = 4. The 4.5 s cells are the Marksmanship 12.1 2pc 1296633's +0.5 s (`SET_BONUS_DURATION_ROWS`, GH #175 row 7): 117 of 118 2-piece lifetimes at 4.5 s on 605.",
     },
   ],
   "1280172": [

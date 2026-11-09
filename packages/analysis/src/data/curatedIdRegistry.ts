@@ -234,6 +234,7 @@ import {
   CLASS_CC_BREAK_ABILITIES,
 } from "./ccBreakAbilities";
 import {
+  SET_BONUS_COOLDOWN_ROWS,
   SET_BONUS_DURATION_ROWS,
   SET_BONUS_PER_EVENT_DURATIONS,
 } from "./classSetBonuses";
@@ -1237,6 +1238,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // fact8 D15: auras a class set bonus lengthens (`data/classSetBonuses.ts`)
   t("SET_BONUS_DURATION_ROWS", "data/classSetBonuses.ts", "aura", () =>
     keys(SET_BONUS_DURATION_ROWS),
+  ),
+  // GH #175: buttons whose cooldown a class set bonus shortens
+  t("SET_BONUS_COOLDOWN_ROWS", "data/classSetBonuses.ts", "cast", () =>
+    keys(SET_BONUS_COOLDOWN_ROWS),
   ),
   // GH #175: auras a class set bonus extends press by press, and the presses
   // that extend them

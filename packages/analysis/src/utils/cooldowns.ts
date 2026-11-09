@@ -21,7 +21,11 @@ import {
   isCastOrEffect,
 } from "../data/castEffectAuras";
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
-import { setPiecesWorn } from "../data/classSetBonuses";
+import {
+  classSetPiecesOf,
+  setBonusCooldownReduction,
+  setPiecesWorn,
+} from "../data/classSetBonuses";
 import { classMetadata } from "../data/classSpells";
 import CONDITIONAL_COOLDOWNS from "../data/conditionalCooldownsGenerated.json";
 import {
@@ -4449,15 +4453,25 @@ export function applyCdModifiers(
     /** When the match was played (`DATED_COOLDOWN_VALUES`); absent → the
      * current numbers. */
     logEpochMs?: number;
+    /** class set → pieces worn (`classSetPiecesOf`), for the set bonuses
+     * `applyCdTalentModifiers` turns into `setReduceSeconds`; absent → none */
+    classSetPieces?: Readonly<Record<string, number>>;
+    /** flat seconds the unit's set bonuses take off, summed with the talents'
+     * flat rows before any % row (`setBonusReduceSecondsOf`) */
+    setReduceSeconds?: number;
   },
 ): { cooldownSeconds: number; charges: number } {
   const specId = owner?.specId;
+  const setReduce = owner?.setReduceSeconds ?? 0;
   if (!modifiers || (!talentedSpellIds && pvpTalentIds.size === 0 && !specId)) {
-    return { cooldownSeconds: baseCooldownSeconds, charges: baseCharges };
+    return {
+      cooldownSeconds: Math.max(0, baseCooldownSeconds - setReduce),
+      charges: baseCharges,
+    };
   }
 
   let charges = baseCharges;
-  let flatReduceSeconds = 0;
+  let flatReduceSeconds = setReduce;
   let pctMultiplier = 1;
   for (const mod of modifiers) {
     const owned = mod.specIds
@@ -4800,6 +4814,9 @@ interface IPlayerTalentIdSets {
   /** The unit's first logged event — the date `DATED_COOLDOWN_VALUES` is
    * asked with; NaN for a unit with none (→ the current numbers). */
   logEpochMs: number;
+  /** class set → pieces worn (COMBATANT_INFO gear), for the cooldown set
+   * bonuses (`SET_BONUS_COOLDOWN_ROWS`, GH #175) */
+  classSetPieces: Readonly<Record<string, number>>;
 }
 const talentIdSetsCache = new WeakMap<ICombatUnit, IPlayerTalentIdSets>();
 
@@ -4827,9 +4844,24 @@ export function playerTalentIdSets(unit: ICombatUnit): IPlayerTalentIdSets {
       ? getPlayerTalentRanks(specIdNum, talentsOf(unit)!)
       : null,
     logEpochMs: unitLogEpochMs(unit),
+    classSetPieces: classSetPiecesOf(unit),
   };
   talentIdSetsCache.set(unit, result);
   return result;
+}
+
+/** The flat seconds the owner's set bonuses take off `spellId`
+ * (`SET_BONUS_COOLDOWN_ROWS`): the bonus's spec, and its pieces in
+ * `owner.classSetPieces`. */
+export function setBonusReduceSecondsOf(
+  spellId: string,
+  owner: Parameters<typeof applyCdModifiers>[5],
+): number {
+  return setBonusCooldownReduction(
+    spellId,
+    owner?.specId,
+    (id) => owner?.classSetPieces?.[id] ?? 0,
+  );
 }
 
 export function applyCdTalentModifiers(
@@ -4840,6 +4872,10 @@ export function applyCdTalentModifiers(
   pvpTalentIds: Set<string>,
   owner?: Parameters<typeof applyCdModifiers>[5],
 ): { cooldownSeconds: number; charges: number } {
+  // GH #175: the unit's class set bonuses on this spell, a flat row like a
+  // talent's (owner.classSetPieces — `playerTalentIdSets` carries them)
+  const setReduce = setBonusReduceSecondsOf(spellId, owner);
+  if (setReduce > 0) owner = { ...owner, setReduceSeconds: setReduce };
   // BACKLOG #45: a corpus cooldown patch whose number already contains the
   // talents (The Hunt 60 s) must not have the DB2 talent rows stacked on top.
   const patch = CORPUS_COOLDOWN_PATCHES[spellId];

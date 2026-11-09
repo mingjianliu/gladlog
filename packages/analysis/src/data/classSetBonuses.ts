@@ -47,8 +47,43 @@
  * walk, `SET_BONUS_PER_EVENT_DURATIONS`, read by `buffFullDurationForCaster`
  * the same way it reads the talents' `TOOLTIP_PER_EVENT_DURATIONS`.
  *
- * Other 12.1 bonuses that move a duration or a cooldown are not priced here
- * yet: see GH #175.
+ * GH #175 rows 2–17 (pipeline T35; DB2 12.1.5.70783, ItemSetSpell for the
+ * set / spec / pieces, SpellEffect for the value, PvP value = base ×
+ * PvpMultiplier). Corpus legs: the 605 files whose players wear the set,
+ * split by the pieces COMBATANT_INFO lists (`cooldownRecastScan --no-gear`:
+ * presses the worn model and the unworn one each call impossible;
+ * `buffDurationScan --per-app`: logged lifetimes vs the worn / unworn
+ * length).
+ *  - Shadow 2pc 1296579 → Tentacle Slam 1227280 cooldown −3 s (aura 453 on
+ *    ChargeCategory 1907, base −3000, PvpMultiplier 1): 15 → 12 s. Holders
+ *    of 2+ pieces: 67 of 134 re-presses impossible at 15 s, 0 at 12 s;
+ *    0–1 pieces: 0 of 815 at 15 s.
+ *  - Marksmanship 2pc 1296633 → Explosive Shot 212431 +0.5 s (aura 107
+ *    misc 1, mask covers 212431, base 1000 × 0.5): 2-piece holders 117 of
+ *    118 lifetimes exact at 4.5 s, none at the unworn 4 s; 0–1 pieces 674
+ *    exact at their static length (`SET_BONUS_DURATION_ROWS`).
+ *  - Protection 4pc 1296648 → Ravager 228920 cooldown −15 s (aura 453 on
+ *    ChargeCategory 2073, base −30000 × 0.5): 90 → 75 s. No 605 file
+ *    carries a Protection 4-piece Ravager: DB2 and the category only.
+ *  - Augmentation 2pc 1296637 → Upheaval 396286 cooldown −5 s (aura 107
+ *    misc 11, mask covers 396286, base −10000 × 0.5): 40 → 35 s. No 2-piece
+ *    Augmentation in 605 (5 unworn Upheaval records): DB2 and mask only.
+ *  - Devastation 4pc 1296640 → Causality's give-back +0.05 s per trigger
+ *    (aura 219 misc 3 / 12 on SpellLabel 6673, which only Causality 375777
+ *    carries; base −100 ms × 0.5), the `setBonus` of the two
+ *    `EVENT_COOLDOWN_REDUCTIONS` rows. One 4-piece holder in 605 (one
+ *    round): its Fire Breath / Eternity Surge `back` moves 1 s earlier, no
+ *    press contradicts either reading. DB2 and label, corpus thin.
+ *  - Feral 4pc 1296606 on Berserk 106951 (GH #175 row 17): the same mask
+ *    covers 106951; no 4-piece Feral pressed Berserk in 605 (5 unworn
+ *    lifetimes, all at 15 s). The Incarnation row above is the corpus leg.
+ * Not priced, no product reader reads the target's cooldown or duration:
+ * Discipline 2pc (Penance → Mind Blast), Marksmanship 4pc (Aimed Shot /
+ * Rapid Fire), Survival 4pc (Mongoose Fury), Frost DK 4pc (Freezing
+ * Tempest, label 6668), Vengeance 2pc (Sigil of Flame), Restoration Druid
+ * 4pc (Genesis, label 6767), Guardian 4pc (Thrash extends Berserk /
+ * Incarnation 0.25 s, up to 2.5 s), Mistweaver 4pc (a Rising / Rushing
+ * Wind Kick reset proc), Enhancement 4pc (Fire Nova → Crash Lightning).
  *
  * Registered in `curatedIdRegistry.ts`.
  */
@@ -57,14 +92,29 @@ export interface ISetBonusDurationRow {
   bonusSpellId: string;
   itemSetId: string;
   pieces: number;
+  /** the bonus belongs to one spec (`ItemSetSpell.ChrSpecID`): a class set
+   * is shared by the class's specs, each with its own bonuses */
+  specs: readonly string[];
   addSeconds: number;
 }
 
-/** `ItemSet` row → its items */
+/** `ItemSet` row → its items: the thirteen 12.1 class sets (ItemSet
+ * 12.1.5.70783, ids 2055–2067), one per class (Demon Hunter's 2056 shared by
+ * its three specs). */
 export const CLASS_SET_ITEM_IDS: Readonly<Record<string, readonly string[]>> = {
-  "2056": ["271535", "271536", "271537", "271538", "271540"],
-  "2057": ["271526", "271527", "271528", "271529", "271531"],
-  "2067": ["271454", "271455", "271456", "271457", "271459"],
+  "2055": ["271472", "271473", "271474", "271475", "271477"], // Death Knight
+  "2056": ["271535", "271536", "271537", "271538", "271540"], // Demon Hunter
+  "2057": ["271526", "271527", "271528", "271529", "271531"], // Druid
+  "2058": ["271499", "271500", "271501", "271502", "271504"], // Evoker
+  "2059": ["271490", "271491", "271492", "271493", "271495"], // Hunter
+  "2060": ["271562", "271563", "271564", "271565", "271567"], // Mage
+  "2061": ["271517", "271518", "271519", "271520", "271522"], // Monk
+  "2062": ["271463", "271464", "271465", "271466", "271468"], // Paladin
+  "2063": ["271553", "271554", "271555", "271556", "271558"], // Priest
+  "2064": ["271508", "271509", "271510", "271511", "271513"], // Rogue
+  "2065": ["271481", "271482", "271483", "271484", "271486"], // Shaman
+  "2066": ["271544", "271545", "271546", "271547", "271549"], // Warlock
+  "2067": ["271454", "271455", "271456", "271457", "271459"], // Warrior
 };
 
 /** aura id → the set bonuses that lengthen it */
@@ -72,12 +122,103 @@ export const SET_BONUS_DURATION_ROWS: Readonly<
   Record<string, readonly ISetBonusDurationRow[]>
 > = {
   "102543": [
-    { bonusSpellId: "1296606", itemSetId: "2057", pieces: 4, addSeconds: 5 },
+    {
+      bonusSpellId: "1296606",
+      itemSetId: "2057",
+      pieces: 4,
+      specs: ["103"],
+      addSeconds: 5,
+    },
+  ],
+  // the same Feral 4pc on Berserk, the Incarnation-less button (GH #175 row 17)
+  "106951": [
+    {
+      bonusSpellId: "1296606",
+      itemSetId: "2057",
+      pieces: 4,
+      specs: ["103"],
+      addSeconds: 5,
+    },
   ],
   "320338": [
-    { bonusSpellId: "1296612", itemSetId: "2056", pieces: 4, addSeconds: 1 },
+    {
+      bonusSpellId: "1296612",
+      itemSetId: "2056",
+      pieces: 4,
+      specs: ["577"],
+      addSeconds: 1,
+    },
+  ],
+  // Marksmanship 2pc on Explosive Shot (GH #175 row 7)
+  "212431": [
+    {
+      bonusSpellId: "1296633",
+      itemSetId: "2059",
+      pieces: 2,
+      specs: ["254"],
+      addSeconds: 0.5,
+    },
   ],
 };
+
+/** A set bonus that takes flat seconds off a spell's cooldown (or its
+ * charges' recharge) — the set-bonus twin of a `reduce_cd` talent row. */
+export interface ISetBonusCooldownRow {
+  /** the bonus spell, for the record */
+  bonusSpellId: string;
+  itemSetId: string;
+  pieces: number;
+  specs: readonly string[];
+  reduceSeconds: number;
+}
+
+/** spell id → the set bonuses that shorten its cooldown. Read by
+ * `applyCdTalentModifiers` (cooldowns.ts) for every reader of a unit's
+ * cooldown (`unitCooldownOf`, the ledger). */
+export const SET_BONUS_COOLDOWN_ROWS: Readonly<
+  Record<string, readonly ISetBonusCooldownRow[]>
+> = {
+  // Protection 4pc on Ravager (GH #175 row 2)
+  "228920": [
+    {
+      bonusSpellId: "1296648",
+      itemSetId: "2067",
+      pieces: 4,
+      specs: ["73"],
+      reduceSeconds: 15,
+    },
+  ],
+  // Augmentation 2pc on Upheaval (GH #175 row 3)
+  "396286": [
+    {
+      bonusSpellId: "1296637",
+      itemSetId: "2058",
+      pieces: 2,
+      specs: ["1473"],
+      reduceSeconds: 5,
+    },
+  ],
+  // Shadow 2pc on Tentacle Slam (GH #175 row 4)
+  "1227280": [
+    {
+      bonusSpellId: "1296579",
+      itemSetId: "2063",
+      pieces: 2,
+      specs: ["258"],
+      reduceSeconds: 3,
+    },
+  ],
+};
+
+/** A set bonus that adds seconds to every trigger of a scripted cooldown
+ * reduction (`IEventCooldownReduction.setBonus`, talentScriptedCooldowns.ts). */
+export interface ISetBonusEventCredit {
+  bonusSpellId: string;
+  itemSetId: string;
+  pieces: number;
+  specs: readonly string[];
+  addSeconds: number;
+}
 
 /** A set bonus whose extension is earned press by press while the aura is up
  * (the set-bonus twin of `ITooltipPerPressDuration`). */
@@ -115,7 +256,7 @@ export const SET_BONUS_PER_EVENT_DURATIONS: Readonly<
   },
 };
 
-interface IGearCarrier {
+export interface IGearCarrier {
   info?: { equipment?: ReadonlyArray<{ id: string }> };
 }
 
@@ -130,15 +271,73 @@ export function setPiecesWorn(
     .length;
 }
 
+/** Every class set the unit wears a piece of → how many pieces (corpus
+ * splits by holder: `buffDurationScan --per-app`, `cooldownRecastScan`). */
+export function classSetPiecesOf(
+  unit: IGearCarrier | undefined,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const setId of Object.keys(CLASS_SET_ITEM_IDS)) {
+    const n = setPiecesWorn(unit, setId);
+    if (n > 0) out[setId] = n;
+  }
+  return out;
+}
+
+/** The one gate of every set-bonus row: the holder's spec is the bonus's,
+ * and it wears at least the bonus's pieces of the set (`piecesOf`: from the
+ * gear, `setPiecesWorn`, or from a snapshot of it, `classSetPiecesOf`). */
+export function setBonusHeld(
+  r: { itemSetId: string; pieces: number; specs: readonly string[] },
+  specId: string | undefined,
+  piecesOf: (itemSetId: string) => number,
+): boolean {
+  if (!specId || !r.specs.includes(String(specId))) return false;
+  return piecesOf(r.itemSetId) >= r.pieces;
+}
+
+/** The unit wears enough of the bonus's set, in the bonus's spec. */
+export function wearsSetBonus(
+  unit: (IGearCarrier & { spec?: string }) | undefined,
+  r: { itemSetId: string; pieces: number; specs: readonly string[] },
+): boolean {
+  return setBonusHeld(r, unit?.spec, (id) => setPiecesWorn(unit, id));
+}
+
+/** The flat seconds a holder's set bonuses take off `spellId`
+ * (`SET_BONUS_COOLDOWN_ROWS`) — read by the cooldown model
+ * (`applyCdTalentModifiers`, off the `classSetPieces` snapshot) and by the
+ * gear reading below, one gate. */
+export function setBonusCooldownReduction(
+  spellId: string,
+  specId: string | undefined,
+  piecesOf: (itemSetId: string) => number,
+): number {
+  let reduce = 0;
+  for (const r of SET_BONUS_COOLDOWN_ROWS[spellId] ?? [])
+    if (setBonusHeld(r, specId, piecesOf)) reduce += r.reduceSeconds;
+  return reduce;
+}
+
 /** The seconds the caster's set bonuses add to this aura. */
 export function setBonusDurationSeconds(
   auraId: string,
-  caster: IGearCarrier | undefined,
+  caster: (IGearCarrier & { spec?: string }) | undefined,
 ): number {
   let add = 0;
   for (const r of SET_BONUS_DURATION_ROWS[auraId] ?? [])
-    if (setPiecesWorn(caster, r.itemSetId) >= r.pieces) add += r.addSeconds;
+    if (wearsSetBonus(caster, r)) add += r.addSeconds;
   return add;
+}
+
+/** The seconds the unit's set bonuses take off this spell's cooldown. */
+export function setBonusCooldownReductionSeconds(
+  spellId: string,
+  unit: (IGearCarrier & { spec?: string }) | undefined,
+): number {
+  return setBonusCooldownReduction(spellId, unit?.spec, (id) =>
+    setPiecesWorn(unit, id),
+  );
 }
 
 /** The caster's per-press set bonus on this aura, when it wears enough of the
@@ -148,6 +347,5 @@ export function setBonusPerEventFor(
   caster: (IGearCarrier & { spec?: string }) | undefined,
 ): ISetBonusPerPressDuration | undefined {
   const r = SET_BONUS_PER_EVENT_DURATIONS[auraId];
-  if (!r || !caster?.spec || !r.specs.includes(caster.spec)) return undefined;
-  return setPiecesWorn(caster, r.itemSetId) >= r.pieces ? r : undefined;
+  return r && wearsSetBonus(caster, r) ? r : undefined;
 }

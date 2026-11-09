@@ -34,11 +34,12 @@
  * model's time to a charge back.
  *
  * Usage:
- *   npx tsx packages/eval/scripts/cooldownRecastScan.ts --manifest <m> [--every 1] [--min-cd 8] --out <file.jsonl> > summary.json
+ *   npx tsx packages/eval/scripts/cooldownRecastScan.ts --manifest <m> [--every 1] [--min-cd 8] [--spells <id>,…] [--no-gear] --out <file.jsonl> > summary.json
  * Output: one JSON line per (round, unit, spell) with ≥ 2 casts, and a
  * summary on stdout per (spell, spec, cooldown, charges) — `recastAggKey`.
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { classSetPiecesOf } from "@gladlog/analysis/src/data/classSetBonuses";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   CD_INSTANT_SLACK_S,
@@ -65,6 +66,30 @@ const manifest = arg("--manifest", "");
 const every = Number(arg("--every", "1"));
 const minCd = Number(arg("--min-cd", "8"));
 const out = arg("--out", "");
+const noGear = process.argv.includes("--no-gear");
+
+/** the presses the model says were impossible (the loop below, without its
+ * floor and ratio bookkeeping) */
+function modelImpossibleTimes(
+  entry: ReturnType<typeof unitCooldownEntry>,
+): number[] {
+  if (!entry || entry.isProcOnly) return [];
+  const out: number[] = [];
+  for (const pt of entry.casts.map((c) => c.timeSeconds).sort((x, y) => x - y)) {
+    const before = {
+      ...entry,
+      casts: entry.casts.filter((c) => c.timeSeconds < pt),
+      sharedCasts: (entry.sharedCasts ?? []).filter((c) => c.timeSeconds < pt),
+    };
+    if (!before.casts.length && !before.sharedCasts.length) continue;
+    if (cdAvailableAt(before, pt) || cdMaybeAvailableAt(before, pt)) continue;
+    out.push(Math.round(pt * 10) / 10);
+  }
+  return out;
+}
+
+// only these spells (comma list); empty → every spell
+const onlySpells = new Set(arg("--spells", "").split(",").filter(Boolean));
 if (!manifest || !out) {
   console.error(
     "usage: --manifest <m> --out <file.jsonl> [--every 1] [--min-cd 8]",
@@ -153,6 +178,7 @@ for (const f of files) {
       const sets = playerTalentIdSets(u);
       for (const [id, g] of bySpell) {
         if (g.t.length < 2) continue;
+        if (onlySpells.size && !onlySpells.has(id)) continue;
         const own = unitCooldownOf(u, id);
         if (!own || !(own.cooldownSeconds >= minCd)) continue;
         const cd = own.cooldownSeconds;
@@ -186,6 +212,18 @@ for (const f of files) {
         ).map((x) => Math.round(x * 10) / 10);
         // the shared model's reading of the same unit and spell
         const entry = unitCooldownEntry(u, legacy, id);
+        // `--no-gear`: the same model with the unit's gear taken off — the
+        // reading before any set-bonus row (T35; non-holders are the control:
+        // their two readings must agree)
+        const noGearImpossibleAt = noGear
+          ? modelImpossibleTimes(
+              unitCooldownEntry(
+                { ...u, info: { ...u.info, equipment: [] } },
+                legacy,
+                id,
+              ),
+            )
+          : undefined;
         const modelImpossibleAt: number[] = [];
         let modelFloorExplained = 0;
         const modelRatios: number[] = [];
@@ -264,9 +302,12 @@ for (const f of files) {
             cooldownSeconds: cd,
             charges: cap,
             talentsKnown: own.talentsKnown,
+            // class set → pieces worn, for a split by set holder (T35)
+            classSetPieces: classSetPiecesOf(u),
             casts: t.map((x) => Math.round(x * 10) / 10),
             impossibleAt,
             modelImpossibleAt,
+            ...(noGearImpossibleAt ? { noGearImpossibleAt } : {}),
             modelFloorExplained,
             modelMinRatio: modelRatios.length
               ? Math.round(Math.min(...modelRatios) * 1000) / 1000
