@@ -716,6 +716,30 @@ describe("FT-T15 M1–M4 (2026-10-10): a legend names every fact key its rows ca
       expect(legend).toMatch(new RegExp(`facts\\.${key}\\b`));
   });
 
+  it("T26-4 (B18 review #1): a pet's kick does not cut the player's cast — youChannelling stays an occupancy fact", () => {
+    // 605: 169-2 t=134.2 Spell Lock by the player's Felhunter while the player
+    // channelled Dark Harvest
+    const legend = legendOf("kick-priority-missed", {
+      t: "134.2",
+      kick: "Spell Lock",
+      kicker: "Me-R's Felhunter",
+      kickerYd: "19",
+      youChannelling: "Dark Harvest",
+    });
+    expect(legend).toMatch(
+      /facts\.youChannelling \(when present\) is what the player was hard-casting or channelling/,
+    );
+    expect(legend).toMatch(
+      /When facts\.kicker is absent the kick is the player's own: an interrupt is off the global cooldown but pressing it would have cut that cast or channel/,
+    );
+    expect(legend).toMatch(
+      /When facts\.kicker is present the kick is the pet's own action: commanding it does not stop the player's cast or channel, so never write that the kick would have cut it/,
+    );
+    expect(legend).toMatch(
+      /never write that the player was idle or doing nothing/,
+    );
+  });
+
   it("M4: the keys the 605-capture table found on rows and in no legend are now named", () => {
     const cases: Array<[string, string[]]> = [
       ["death", ["unit"]],
