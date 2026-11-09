@@ -5848,3 +5848,36 @@ fact9c strips the label before its deflection-name lookup. Candidate rows
 off-table Touch of Karma audit rows (two same-name auras read as the victim's).
 Batch verified on tests + codex (user 11-08); 605 / cover / wide run at the end
 of the wave.
+
+v518 (2026-11-09; pipeline batch B30: T28 fact12, T30 ruling R12). (1) T28: an
+enemy effect due to run past a Solo Shuffle round's end (`shuffleRoundEndMs`; a
+3v3 deciding death ends no enemy effect), or pressed after it, is cut at that
+end (`cutAtRoundEnd` / `roundEndEndsEffect` in enemyCDs.ts) when the log has an
+in-combat aura of its name by that caster and none outlives the end +
+`DEATH_CASCADE_MS` (`casterAuraOutlives`, shared with T03's death cut). The cut
+moves `buffEndSeconds` (the official end kept in `deathCutOfficialEndSeconds`,
+as T03's cut does), so `[RES]`, `burstCastSpan` and the aligned burst windows
+end together. An aura applied within `EFFECT_START_AFTER_S` after the cut and
+running past it outlives it; a later caster-death cut gives way to the earlier
+round end. scan5 fact12 resEnemyEffectAfterDeath reads `shuffleRoundEndMs` and
+singles2 exempts a press the round end ended, so the two checks agree. 605
+(caps/98cca55f1-605): resEnemyEffectAfterDeath 240 / 69 distinct → 14 / 6
+(round over 217 → 0; the 14 left are presses whose effect never landed, T29);
+205 `[RES]` rows drop `enemy:` entries past the round end (e.g. "Power
+Infusion/Discipline Priest(10s left)"); 29 further context lines in 12 owner
+files (9 `[HEALER EXPOSURE]` and 1 STAYED IN burst level rise — the same damage
+over a window now ending at the round end — and 2 STAYED IN windows listed);
+candidate rows 7,399 → 7,399, findings byte-identical. Two synthetic review
+findings stay recorded with their 605 counts (an orphan post-combat REMOVED
+inferring survival: 0 orphans, the 36 verdicts it would flip are genuine
+survivals; fact12 preferring a later caster death over the round end: 0 of
+180). (2) T30 (ruling R12): `[friendly offensive CD active]` on `[ENEMY DEF]` /
+`[CC ON ENEMY]` stays for spent cooldowns only — a Demonic form 162264 with no
+Metamorphosis press does not light it; the product is unchanged, the 09-26
+docstring now says so, and scan5 friendlyOffensiveTag calls the producer's
+`hasOffensiveSpellActive` / `isEnemyCdWindowSpell` instead of re-implementing
+the window: auraUntagged 482 views / 198 facts → 376 / 154 with the window
+unified (106 views were auras with no logged end the scan read as up too long)
+→ 0 / 0 under R12 (the 376 were Demonic-only occurrences); in-total kinds 0 →
+0. Batch verified on tests + codex (user 11-08); 605 / cover / wide run at the
+end of the wave.

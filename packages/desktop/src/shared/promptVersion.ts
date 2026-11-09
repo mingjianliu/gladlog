@@ -1040,4 +1040,11 @@
  *  defensive's death-audit component rows name their school ("Cloak of
  *  Shadows (physical damage)"). See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 517;
+/*
+ * v518 (2026-11-09; pipeline batch B30: T28, T30 ruling R12): an enemy effect
+ *  running past a Solo Shuffle round's end is cut there for every reader
+ *  ([RES], burst spans) when no aura of its name outlives the end; the
+ *  friendly-offensive tag stays for spent cooldowns only (scan unified). See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 518;
