@@ -3818,6 +3818,21 @@ const INDEX: PredicateRow[] = [
     mod: talentScriptedCooldowns,
   },
   {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "landedHitRows",
+    mod: talentScriptedCooldowns,
+  },
+  {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "ownAuraStacksLostTimesMs",
+    mod: talentScriptedCooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "unitCooldownLedger",
+    mod: cooldowns,
+  },
+  {
     file: `${A}/utils/logEra.ts`,
     symbol: "logIsFrom",
     mod: logEra,
