@@ -12,17 +12,11 @@
  *    spell are no cooldown apart. Kind = the spell. Counted: every kit range
  *    entry whose unit pressed X at least twice.
  * Presses are fact8's `buttonPressesOf` (one per press, the round's end of
- * play the cut), less a free press inside its opener's free-recast window; the `[RES]` rows' range low end is fact8's
+ * play the cut), less the ones the ledger itself reads as free
+ * (`freePressMsOf`); the `[RES]` rows' range low end is fact8's
  * `resCdBeforeNextPress`.
  */
-import {
-  freeRecastWindowFor,
-  type IFreeRecastWindow,
-} from "@gladlog/analysis/src/data/talentScriptedCooldowns";
-import {
-  cooldownTalentHolds,
-  freeRecastWindowEndSeconds,
-} from "@gladlog/analysis/src/utils/cooldowns";
+import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx, nameOf } from "./ctx";
 import { buttonPressesOf } from "./fact8";
@@ -35,45 +29,42 @@ const UNIT_OPEN = /^\s*<unit id="(\d+)"/;
 const KIT_LINE = /^\s*<cooldowns>(.*)<\/cooldowns>/;
 const KIT_RANGE = /(?:^|, )([^,[\]]+?) \[(\d+)–(\d+)s([^\]]*)\]/g;
 
-/** The free-recast window on the button `name` the unit holds (Strafing
- * Run's second Deep Breath within 18 s): the ledger's own
- * `freeRecastWindowFor` and `cooldownTalentHolds` — an unresolved choice
- * node holds neither entry (codex review 85-tk-E-T16-1b). */
-function freeWindowOf(u: any, name: string): IFreeRecastWindow | undefined {
-  const holds = cooldownTalentHolds(u);
+/** The epoch ms of the presses on the button `name` that the ledger reads as
+ * starting no cooldown of their own (`freeRecast`: Time Spiral's free cast,
+ * a press inside a free-recast window, a hold that never went out) — the
+ * producer's own selection, asked through `unitCooldownEntry` on the
+ * button's cast ids, never re-derived here (codex reviews 85-tk-E-T16-1 /
+ * -1b, batch review 80-PIPE-20-B20: 08428e7e r2 Spiritwalker's Grace 16.0 /
+ * 69.3 s, the second a Time Spiral cast). */
+function freePressMsOf(ctx: IRoundCtx, u: any, name: string): number[] {
   const ids = new Set<string>(
     (u.spellCastEvents ?? [])
       .filter((c: any) => nameOf(c.spellId, c.spellName) === name)
       .map((c: any) => String(c.spellId)),
   );
-  for (const id of ids) {
-    const w = freeRecastWindowFor(id, holds);
-    if (w) return w;
-  }
-  return undefined;
-}
-
-/** The presses whose cooldown ran out before them: a free press inside the
- * window its opener opened (`freeRecastWindowEndSeconds`, the ledger's
- * reading) stands on that opener's cooldown and is dropped (codex review
- * 85-tk-E-T16-1: 0fe0e2e2 Deep Breath 22.0 / 31.2 s, the second free). */
-function cooldownPresses(
-  u: any,
-  presses: number[],
-  w: IFreeRecastWindow | undefined,
-): number[] {
-  if (!w) return presses;
   const out: number[] = [];
-  let openEnd = Number.NEGATIVE_INFINITY;
-  for (const p of presses) {
-    if (p <= openEnd) {
-      openEnd = Number.NEGATIVE_INFINITY;
-      continue;
-    }
-    out.push(p);
-    openEnd = p + freeRecastWindowEndSeconds(u, w, 0, p) * 1000;
+  const seen = new Set<unknown>();
+  for (const id of ids) {
+    const cd = unitCooldownEntry(u, ctx.legacy, id);
+    if (!cd || seen.has(cd)) continue;
+    seen.add(cd);
+    for (const c of cd.casts)
+      if (c.freeRecast) out.push(ctx.legacy.startTime + c.timeSeconds * 1000);
   }
   return out;
+}
+
+/** The presses whose cooldown ran out before them: the button's presses
+ * less the ones the ledger reads as free (`freePressMsOf`). */
+function cooldownPresses(
+  ctx: IRoundCtx,
+  u: any,
+  presses: number[],
+  name: string,
+): number[] {
+  const free = freePressMsOf(ctx, u, name);
+  if (!free.length) return presses;
+  return presses.filter((p) => !free.some((f) => Math.abs(f - p) < 1));
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -94,9 +85,10 @@ export function run(ctx: IRoundCtx): void {
       const name = e[1]!.trim();
       const soonest = Number(e[2]);
       const presses = cooldownPresses(
+        ctx,
         unit,
         buttonPressesOf(ctx, memo, unit, name),
-        freeWindowOf(unit, name),
+        name,
       );
       if (presses.length < 2) continue;
       ctx.bump("kitSoonestAboveRecast");

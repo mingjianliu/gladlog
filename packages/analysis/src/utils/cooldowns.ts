@@ -5962,18 +5962,6 @@ function talentHoldsFor(
     pvpTalentIds.has(t);
 }
 
-/** `talentHoldsFor` from the unit's own loadout — the reading the eval
- * scans share (scan5 t16's free-recast window). */
-export function cooldownTalentHolds(unit: ICombatUnit): (t: string) => boolean {
-  const { talentedSpellIds, pvpTalentIds } = playerTalentIdSets(unit);
-  return talentHoldsFor(
-    unit,
-    parseInt(unit.spec, 10),
-    talentedSpellIds,
-    pvpTalentIds,
-  );
-}
-
 function buildCooldownEntry(
   unit: ICombatUnit,
   combat: AtomicArenaCombat,
