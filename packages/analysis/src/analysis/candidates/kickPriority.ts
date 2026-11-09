@@ -403,9 +403,11 @@ export function kickPriorityDecisionPoints(
    * what stops every pet that ever cast the spell this round: a dead
    * Felhunter's empty list erased its replacement's stun (codex review of
    * batch B10, T26). The owner's own locks are not the pet's: on the 605
-   * capture pets threw Spell Lock under their owner's stun / horror / Hex
-   * with no command logged (scan5 t26petLock; T26 attempt 5, assembly review
-   * of batch B21 P2: a Hexed Warlock's free Felhunter read "locked"). */
+   * capture 82 of 720 pet Spell Locks went out under an owner stun, fear,
+   * horror, polymorph or silence (30 with the block >= 500 ms old, no command
+   * logged) and one under the owner's Hex (scan5 t26petLock; T26 attempt 5,
+   * assembly review of batch B21 P2: a Hexed Warlock's free Felhunter read
+   * "locked"). */
   const kickerBlockedCache = new Map<
     string,
     Array<{ from: number; to: number }>
