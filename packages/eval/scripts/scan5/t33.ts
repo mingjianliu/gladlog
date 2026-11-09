@@ -10,8 +10,9 @@
  * Check `auditSplitLabel`: inside one consecutive run of `Mitigation audit:`
  * lines (one death block), two or more rows of the same spell over the same
  * overlap seconds whose names are identical (no school label) — kind
- * `unlabelled`; when the rows are byte-identical it is one row printed twice,
- * kind `duplicate` (not this class). Two rows of the same spell over
+ * `unlabelled`; when every row is a form the formatter never labels
+ * (deferral, off-table: no components) it is one row printed twice, kind
+ * `duplicate` (not this class). Two rows of the same spell over
  * DIFFERENT overlaps are two applications, not a split.
  */
 import type { IRoundCtx } from "./ctx";
@@ -24,31 +25,38 @@ export const CHECKS = ["auditSplitLabel"] as const;
  * back ~Nk … over S.Ss`, immunity `X immunity covered S.Ss`, deflection
  * `X (deflects …) covered S.Ss`, off-table `X active S.Ss` */
 export const AUDIT_ROW =
-  /^\s*Mitigation audit: (.+?) (?:(?:blocked|held back) .*?\bover |immunity covered |\([^)]*\) covered |active )([\d.]+)s\b/;
+  /^\s*Mitigation audit: (?<name>.+?) (?<form>(?:blocked|held back) .*?\bover |immunity covered |\([^)]*\) covered |active )(?<overlap>[\d.]+)s\b/;
+
+/** the forms `formatMitigationAuditLine` never labels — a deferral or an
+ * off-table aura has no components, so it cannot be a split */
+const UNSPLITTABLE = /^(?:held back |active )/;
 
 export function run(ctx: IRoundCtx): void {
   const flush = (grp: string[]) => {
-    const seen = new Map<string, string[]>();
+    const seen = new Map<string, { line: string; form: string }[]>();
     for (const l of grp) {
-      const m = AUDIT_ROW.exec(l);
-      if (!m) continue;
+      const g = AUDIT_ROW.exec(l)?.groups;
+      if (!g) continue;
       ctx.bump("auditSplitLabel");
-      const k = `${m[1]}|${m[2]}`;
-      seen.set(k, [...(seen.get(k) ?? []), l]);
+      const k = `${g.name}|${g.overlap}`;
+      seen.set(k, [...(seen.get(k) ?? []), { line: l, form: g.form! }]);
     }
-    for (const [k, rows] of seen) {
-      if (rows.length < 2) continue;
+    for (const [k, group] of seen) {
+      if (group.length < 2) continue;
+      const rows = group.map((r) => r.line);
       const [name, overlap] = k.split("|");
-      // byte-identical rows are one row printed twice (Touch of Karma's
-      // off-table rows), not a split's components: kept apart
-      const duplicate = rows.every((r) => r === rows[0]);
+      // a row the formatter never labels, printed twice (Touch of Karma's
+      // off-table rows), is no split's components: kept apart. Identical
+      // TEXT proves nothing — two components can block the same rounded
+      // amount (codex 85-tk-C-T33-1b #1) — so this keys on the form.
+      const duplicate = group.every((r) => UNSPLITTABLE.test(r.form));
       ctx.violate(
         "auditSplitLabel",
         duplicate ? "duplicate" : "unlabelled",
         ctx.start,
         k,
         duplicate
-          ? `'${name}' printed ${rows.length}× identically over ${overlap}s`
+          ? `'${name}' printed ${rows.length}× over ${overlap}s (no components)`
           : `${rows.length} '${name}' rows over ${overlap}s with no school label`,
         rows[0],
       );

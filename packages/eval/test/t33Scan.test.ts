@@ -48,8 +48,8 @@ describe("t33 auditSplitLabel reads every audit form", () => {
         const line = formatMitigationAuditLine(r2);
         const m = AUDIT_ROW.exec(line);
         expect(m, line).not.toBeNull();
-        expect(m![2]).toBe("2.2");
-        expect(m![1]).toBe(
+        expect(m!.groups!.overlap).toBe("2.2");
+        expect(m!.groups!.name).toBe(
           r2.schoolMask !== undefined &&
             r2.kind !== "deferred" &&
             r2.kind !== "absorb"
@@ -85,6 +85,18 @@ describe("t33 auditSplitLabel on a split pair", () => {
     const offTable = row({ kind: "absorb", spellName: "Touch of Karma" });
     expect(scan([offTable, offTable]).violations).toEqual([
       "duplicate:Touch of Karma|2.2",
+    ]);
+  });
+
+  it("a split whose two components print the same text is still unlabelled (codex 85-tk-C-T33-1b #1)", () => {
+    const evasion = row({
+      kind: "arith",
+      spellName: "Evasion",
+      blockedAmount: 8_000,
+      blockedPctMaxHp: 0.8,
+    });
+    expect(scan([evasion, evasion]).violations).toEqual([
+      "unlabelled:Evasion|2.2",
     ]);
   });
 
