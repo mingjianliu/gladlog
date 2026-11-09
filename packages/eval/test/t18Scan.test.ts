@@ -122,6 +122,25 @@ describe("scan5/t18 setExtendedFade", () => {
     ).toEqual([]);
   });
 
+  // codex B25 #2: a press in the APPLIED's ms logged before it is not in
+  // the run — a flat 18 s expiry after it is right
+  it("a press logged before the APPLIED in its ms extends nothing", () => {
+    const line = (row: any, lineIndex: number) => ({
+      ...row,
+      logLine: { ...row.logLine, lineIndex },
+    });
+    const o = warrior(
+      2,
+      [
+        line(aura(LogEvent.SPELL_AURA_APPLIED, 0), 100),
+        line(aura(LogEvent.SPELL_AURA_REMOVED, 18), 500),
+      ],
+      [line(cast("85288", "Raging Blow", 0), 98)],
+      [line(hit("96103", "Raging Blow", 0), 99)],
+    );
+    expect(scan(o, [fade("0:18", "expired")])).toEqual([]);
+  });
+
   it("`(expired)` on a run the log cut short of its extended length is caught", () => {
     const o = warrior(
       2,

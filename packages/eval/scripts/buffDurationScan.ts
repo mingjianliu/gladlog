@@ -45,6 +45,8 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
+import { cleanAuraRuns } from "./lib/auraRuns";
+
 function parseArgs() {
   const a = process.argv.slice(2);
   const out = {
@@ -122,7 +124,8 @@ const detailCells = new Map<string, Map<string, Map<number, number>>>();
  * 2pc) has no single per-caster value. Per clean lifetime (no REFRESH, not
  * cut by the holder's death or the round's end within 1 s), the logged
  * length vs `buffFullDurationForCaster` AT the application, split by whether
- * the caster wears a per-press set bonus on the aura (`setBonusPerEventFor`):
+ * the caster wears a per-press set bonus on the aura (`setBonusPerEventFor`),
+ * the runs read as the product reads them (`perAppRuns`):
  * exact (±0.1 s, and whether the predicate went past its static length),
  * longer by a 5 s multiple, longer otherwise, shorter.
  */
@@ -132,6 +135,57 @@ function perAppBump(aura: string, k: string) {
   const m = perAppCounts.get(aura) ?? new Map<string, number>();
   m.set(k, (m.get(k) ?? 0) + 1);
   perAppCounts.set(aura, m);
+}
+
+/** One unit's per-app lifetimes: `cleanAuraRuns` (rebroadcasts dropped,
+ * continuous runs per source — the product's reading; codex B25 #3). */
+function perAppRuns(
+  unit: ReturnType<typeof toLegacyMatch>["units"][string],
+  legacy: ReturnType<typeof toLegacyMatch>,
+): void {
+  for (const spellId of perApp) {
+    const runs = cleanAuraRuns(
+      unit.auraEvents.filter(
+        (a) => a.spellId === spellId && a.destUnitId === unit.id,
+      ),
+    );
+    for (const r of runs) {
+      const srcId = r.srcUnitId;
+      const t = r.toMs;
+      const o = { t: r.fromMs };
+      const src = legacy.units[srcId];
+      if (!src?.info) continue;
+      const cut =
+        legacy.endTime - t < 1000 ||
+        unit.deathRecords.some(
+          (r) => Math.abs((r.timestamp as number) - t) < 1000,
+        );
+      if (cut) continue;
+      const atApp = buffFullDurationForCaster(spellId, src, o.t);
+      const flat = buffFullDurationForCaster(spellId, src);
+      if (atApp === undefined || flat === undefined) continue;
+      const holder = setBonusPerEventFor(spellId, src)
+        ? "set holder"
+        : "no set";
+      const obs = (t - o.t) / 1000;
+      const diff = obs - atApp;
+      const k =
+        Math.abs(diff) <= 0.1
+          ? atApp > flat
+            ? "exact (extended)"
+            : "exact (static)"
+          : diff > 0
+            ? Math.abs(diff / 5 - Math.round(diff / 5)) <= 0.02
+              ? "longer by 5 s multiples"
+              : "longer, other"
+            : "shorter";
+      perAppBump(spellId, `${holder} | ${k}`);
+      perAppBump(
+        spellId,
+        `${holder} | static ${flat}s exact: ${Math.abs(obs - flat) <= 0.1 ? "yes" : "no"}`,
+      );
+    }
+  }
 }
 
 const REGISTERED = new Set(Object.keys(BUFF_DURATION_TALENT_MODIFIERS));
@@ -166,6 +220,8 @@ for (const f of files) {
       continue;
     }
     rounds++;
+    for (const unit of Object.values(legacy.units))
+      perAppRuns(unit, legacy);
     const matchCells = new Map<string, Map<number, number>>();
     const matchCasters = new Map<string, { spec: string; info?: unknown }>();
     for (const unit of Object.values(legacy.units)) {
@@ -204,39 +260,6 @@ for (const f of files) {
           if (d < 0 || d > 120) continue;
           const src = legacy.units[a.srcUnitId ?? ""];
           if (!src?.info) continue;
-          if (perApp.has(spellId)) {
-            const cut =
-              legacy.endTime - t < 1000 ||
-              unit.deathRecords.some(
-                (r) => Math.abs((r.timestamp as number) - t) < 1000,
-              );
-            if (!cut) {
-              const atApp = buffFullDurationForCaster(spellId, src, o.t);
-              const flat = buffFullDurationForCaster(spellId, src);
-              if (atApp !== undefined && flat !== undefined) {
-                const holder = setBonusPerEventFor(spellId, src)
-                  ? "set holder"
-                  : "no set";
-                const obs = (t - o.t) / 1000;
-                const diff = obs - atApp;
-                const k =
-                  Math.abs(diff) <= 0.1
-                    ? atApp > flat
-                      ? "exact (extended)"
-                      : "exact (static)"
-                    : diff > 0
-                      ? Math.abs(diff / 5 - Math.round(diff / 5)) <= 0.02
-                        ? "longer by 5 s multiples"
-                        : "longer, other"
-                      : "shorter";
-                perAppBump(spellId, `${holder} | ${k}`);
-                perAppBump(
-                  spellId,
-                  `${holder} | static ${flat}s exact: ${Math.abs(obs - flat) <= 0.1 ? "yes" : "no"}`,
-                );
-              }
-            }
-          }
           const lh = lifetimes.get(spellId) ?? new Map<number, number>();
           lh.set(d, (lh.get(d) ?? 0) + 1);
           lifetimes.set(spellId, lh);

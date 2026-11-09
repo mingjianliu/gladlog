@@ -311,6 +311,66 @@ describe("Fury 2pc: Raging Blow extends Recklessness by 2 s per press, up to 6 s
     ).toBe(22);
   });
 
+  // codex B25 #1: an unreadable loadout falls back on the typical length,
+  // and the gear still walks on it
+  it("unreadable talents: the set walk runs on the fallback length", () => {
+    const fallback = buffFullDurationForCaster(RECKLESSNESS, undefined)!;
+    const unreadable = (pieces: number) =>
+      ({
+        ...(warrior(
+          pieces,
+          [3, 6, 9].map((s) => press(RAGING_BLOW, s)),
+        ) as object),
+        info: {
+          // a talent tuple the tree does not resolve
+          talents: [{ id1: 1, id2: 1, count: 1 }],
+          pvpTalents: [],
+          equipment: [...SET.slice(0, pieces).map((id) => ({ id }))],
+        },
+      }) as never;
+    expect(buffFullDurationForCaster(RECKLESSNESS, unreadable(2), T0)).toBe(
+      fallback + 6,
+    );
+    expect(buffFullDurationForCaster(RECKLESSNESS, unreadable(1), T0)).toBe(
+      fallback,
+    );
+  });
+
+  // codex B25 #2: a press in the APPLIED's ms but logged before it is not in
+  // the run
+  it("log order at the APPLIED's ms", () => {
+    const row = (event: LogEvent, s: number, lineIndex?: number) => ({
+      spellId: RECKLESSNESS,
+      srcUnitId: "w",
+      destUnitId: "w",
+      timestamp: T0 + s * 1000,
+      logLine: { event, timestamp: T0 + s * 1000, lineIndex },
+    });
+    const at = (s: number, lineIndex: number) => ({
+      spellId: RAGING_BLOW,
+      logLine: {
+        event: LogEvent.SPELL_CAST_SUCCESS,
+        timestamp: T0 + s * 1000,
+        lineIndex,
+      },
+    });
+    const unit = (casts: unknown[]) =>
+      ({
+        ...(warrior(2, casts as never) as object),
+        id: "w",
+        auraEvents: [
+          row(LogEvent.SPELL_AURA_APPLIED, 0, 100),
+          row(LogEvent.SPELL_AURA_REMOVED, 18, 500),
+        ],
+      }) as never;
+    expect(buffFullDurationForCaster(RECKLESSNESS, unit([at(0, 98)]), T0)).toBe(
+      18,
+    );
+    expect(
+      buffFullDurationForCaster(RECKLESSNESS, unit([at(0, 101)]), T0),
+    ).toBe(20);
+  });
+
   it("one piece, another spec, another press, or no application time: nothing", () => {
     const three = [1, 3, 5].map((s) => press(RAGING_BLOW, s));
     expect(buffFullDurationForCaster(RECKLESSNESS, warrior(1, three), T0)).toBe(

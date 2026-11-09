@@ -63,7 +63,19 @@ function fullLengthS(
   /** the run's REMOVED: a press after it (in its ms, after it in log
    * order) extends nothing */
   removed?: any,
+  /** the run's APPLIED: a press in its ms logged before it is not inside
+   * the run (codex B25 #2) */
+  applied?: any,
 ): number {
+  const appliedLine: number | undefined = applied?.logLine?.lineIndex;
+  const beforeRun = (c: any) => {
+    const t = tsOf(c);
+    if (t !== appliedMs) return t < appliedMs;
+    const line = c.logLine?.lineIndex;
+    return (
+      appliedLine !== undefined && line !== undefined && line < appliedLine
+    );
+  };
   const removedMs = removed ? tsOf(removed) : Number.POSITIVE_INFINITY;
   const removedLine: number | undefined = removed?.logLine?.lineIndex;
   const afterRun = (c: any) => {
@@ -85,7 +97,7 @@ function fullLengthS(
   let ext = 0;
   for (const c of casts) {
     const t = tsOf(c);
-    if (t < appliedMs) continue;
+    if (beforeRun(c)) continue;
     if (t > appliedMs + (staticS + ext) * 1000 || afterRun(c)) break;
     const id = String(c.spellId ?? "");
     if (!r.qualifyingSpellIds.has(id)) continue;
@@ -172,7 +184,7 @@ export function run(ctx: IRoundCtx): void {
     const staticS = buffFullDurationForCaster(auraId, owner);
     if (staticS === undefined) continue;
     ctx.bump("setExtendedFade");
-    const full = fullLengthS(owner, auraId, at, staticS, removed);
+    const full = fullLengthS(owner, auraId, at, staticS, removed, run.from);
     const claim = m[3]!;
     if (estimated && removed && secOfMs(tsOf(removed)) <= sec) continue;
     const key = `${owner.name}:${auraId}:${at}`;

@@ -300,7 +300,21 @@ function talentedDuration(
     // known: this spec's own base when the spell has one (a Retribution
     // paladin with an unreadable loadout is 6 s, not the DB2 3 s), otherwise
     // the typical caster value this call site got before the talent layer.
-    if (rank <= 0) return paramBase ?? specBase ?? noCasterValue;
+    if (rank <= 0) {
+      const fallback = paramBase ?? specBase ?? noCasterValue;
+      // the gear is read whatever the talents are: a per-press set bonus
+      // still walks on the fallback (codex B25 #1)
+      return fallback === undefined
+        ? undefined
+        : fallback +
+            perEventExtensionSeconds(
+              spellId,
+              caster,
+              fallback,
+              atMs,
+              onUnitId,
+            );
+    }
     // A proc-producing talent replaces the duration outright and does not
     // compose with anything (see `replaceSeconds`).
     if (m.replaceSeconds !== undefined) return m.replaceSeconds;
@@ -368,6 +382,16 @@ function perEventExtensionSeconds(
     "bonusSpellId" in p ? ownAuraRunNear(caster, spellId, atMs) : undefined;
   const fromMs = run?.fromMs ?? atMs;
   const toMs = run?.toMs ?? Number.POSITIVE_INFINITY;
+  // a press in the APPLIED's own ms but logged before it is not inside the
+  // run (codex B25 #2)
+  const beforeRun = (c: ICombatUnit["spellCastEvents"][number]) => {
+    const t = c.logLine.timestamp;
+    if (t !== fromMs) return t < fromMs;
+    const line = c.logLine.lineIndex;
+    return (
+      run?.fromLine !== undefined && line !== undefined && line < run.fromLine
+    );
+  };
   // a press in the REMOVED's own ms but logged after it is past the run
   // (codex 85-tk-A-T18-1c #1)
   const afterRun = (c: ICombatUnit["spellCastEvents"][number]) => {
@@ -379,7 +403,7 @@ function perEventExtensionSeconds(
   let ext = 0;
   for (const c of caster.spellCastEvents ?? []) {
     const t = c.logLine.timestamp;
-    if (t < fromMs) continue;
+    if (beforeRun(c)) continue;
     if (t > fromMs + (windowBase + ext) * 1000 || afterRun(c)) break;
     if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
     if (!p.qualifyingSpellIds.has(c.spellId ?? "")) continue;
@@ -403,7 +427,9 @@ function ownAuraRunNear(
   caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
   spellId: string,
   atMs: number,
-): { fromMs: number; toMs?: number; toLine?: number } | undefined {
+):
+  | { fromMs: number; fromLine?: number; toMs?: number; toLine?: number }
+  | undefined {
   const id = caster.id;
   if (!id || !caster.auraEvents) return undefined;
   // a REMOVED → APPLIED re-broadcast (log order, `AURA_REBROADCAST_GAP_MS`)
@@ -438,6 +464,7 @@ function ownAuraRunNear(
   if (!best) return undefined;
   return {
     fromMs: best.from.logLine.timestamp,
+    fromLine: best.from.logLine.lineIndex,
     toMs: best.to?.logLine.timestamp,
     toLine: best.to?.logLine.lineIndex,
   };
