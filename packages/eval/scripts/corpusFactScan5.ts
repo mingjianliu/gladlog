@@ -88,7 +88,7 @@ const MODULE_FILES = [
   "fact12",
   "fact12b",
   "fact12c",
-  "fact12e",
+  "t05",
   "reannounce",
   "t11",
   "t08",

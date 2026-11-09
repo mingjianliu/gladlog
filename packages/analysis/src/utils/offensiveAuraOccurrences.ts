@@ -15,6 +15,7 @@ import {
   offensiveCdOfAura,
 } from "./cooldowns";
 import { offensiveDangerWeight } from "./spellDanger";
+import { talentOwnershipOf } from "./talentOwnership";
 
 /**
  * GH #119 — offensive-cooldown effects whose only evidence is an AURA.
@@ -156,40 +157,99 @@ export const DEMONIC_FORM_SECONDS = 5;
  * the interval is split there, and the press occurrence starts at the press
  * (agy review: never anchor a later commitment at the earlier start). */
 export const PRESS_LANDING_LAG_S = 1.5;
+/** Demonic (213410): the talent that makes Eye Beam open a demon form. */
+export const DEMONIC_TALENT_ID = "213410";
 /**
- * When a Metamorphosis press went up: its 162264 aura's APPLIED by the unit
- * on itself, the latest within `PRESS_LANDING_LAG_S` before the press's
- * landing row — the occurrence start the enemy side reads below — else the
- * row itself (a press into a form already up). T05 (fact12 A6 / B7 / C19,
- * 52a97230 r0): the aura went up at 0:32.885, the round-ending death came
- * at 0:33.744 and the 200166 landing at 0:33.809; the friendly ledger's
- * round cut read the landing and the kit said `[UNUSED]`.
+ * When a Metamorphosis press went up: the press's OWN 162264 row — an
+ * APPLIED (the press opened the form) or a REFRESH (a press into a form
+ * already up) by the unit on itself, the EARLIEST within
+ * `PRESS_LANDING_LAG_S` before the press's 200166 landing row of the form
+ * instance still up at the landing (no REMOVED between the row and the
+ * landing) — else the landing row itself.
+ *
+ * A row an Eye Beam explains is that Eye Beam's Demonic form, not this press
+ * (codex B11 #2: Demonic up at 32.885 s, the round over at 33.744 s, a press
+ * REFRESHing it at 34.000 s with its landing at 34.200 s went up after the
+ * round): the first form row whose [row − `EYE_BEAM_BEFORE_S`, row +
+ * `EYE_BEAM_AFTER_S`] holds an Eye Beam cast, the window the enemy side names
+ * a Demonic form by; one Eye Beam explains one row. Only for a unit that may
+ * hold Demonic (`talentOwnershipOf` not "no"): without the talent an Eye Beam
+ * opens no form, and a press 2.4 s after one is the press's own row (codex
+ * T05-2 #1). A Demonic holder whose Demonic row was never logged stays
+ * indistinguishable from a press inside the window — that one reads as the
+ * landing (the window is 0.4 s wide: 0 of 263 landings in 605 files had an
+ * Eye Beam row within the landing lag).
+ *
+ * T05 (fact12 A6 / B7 / C19, 52a97230 r0): the aura went up at 0:32.885,
+ * the round-ending death came at 0:33.744 and the 200166 landing at
+ * 0:33.809; the friendly ledger read the landing and the kit said
+ * `[UNUSED]`. Every reader dates the press here: the friendly ledger
+ * (`cooldowns.ts` `buildCooldownEntry`: the round cut, the readiness at an
+ * instant, the press line) and the enemy occurrence below (its start when the
+ * press split a form, and `availableAgainAtMs`, codex T05-2 #2); scan5 `t05`
+ * reads the same.
  */
 export function metamorphosisPressActivationMs(
-  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  unit: Pick<ICombatUnit, "id" | "auraEvents" | "spellCastEvents" | "spec"> & {
+    info?: ICombatUnit["info"];
+  },
   rowMs: number,
 ): number {
-  let best: number | undefined;
-  for (const a of unit.auraEvents ?? []) {
-    if (
+  const own = (unit.auraEvents ?? []).filter(
+    (a) =>
       a.spellId === "162264" &&
-      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
       a.srcUnitId === unit.id &&
-      (a.destUnitId === undefined || a.destUnitId === unit.id) &&
-      a.logLine.timestamp <= rowMs &&
-      a.logLine.timestamp >= rowMs - PRESS_LANDING_LAG_S * 1000 &&
-      (best === undefined || a.logLine.timestamp > best)
+      (a.destUnitId === undefined || a.destUnitId === unit.id),
+  );
+  /** the unit's own 162264 APPLIED / REFRESH rows, in time order */
+  const rows = own
+    .filter(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        a.logLine.event === LogEvent.SPELL_AURA_REFRESH,
     )
-      best = a.logLine.timestamp;
-  }
-  return best ?? rowMs;
+    .map((a) => a.logLine.timestamp)
+    .sort((x, y) => x - y);
+  const removals = own
+    .filter((a) => a.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+    .map((a) => a.logLine.timestamp);
+  // one Eye Beam explains one form row: the first in its window
+  const explained = new Set<number>();
+  if (talentOwnershipOf(unit, DEMONIC_TALENT_ID) !== "no")
+    for (const c of unit.spellCastEvents ?? []) {
+      if (
+        c.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS ||
+        c.spellId !== EYE_BEAM_ID
+      )
+        continue;
+      const e = c.logLine.timestamp;
+      const i = rows.findIndex(
+        (t, k) =>
+          !explained.has(k) &&
+          e >= t - EYE_BEAM_BEFORE_S * 1000 &&
+          e <= t + EYE_BEAM_AFTER_S * 1000,
+      );
+      if (i >= 0) explained.add(i);
+    }
+  const k = rows.findIndex(
+    (t, i) =>
+      !explained.has(i) &&
+      t <= rowMs &&
+      t >= rowMs - PRESS_LANDING_LAG_S * 1000 &&
+      !removals.some((r) => r > t && r < rowMs),
+  );
+  return k >= 0 ? rows[k]! : rowMs;
 }
 
 /** Evidence tolerance around an aura start (cast ↔ aura association). */
 export const AURA_EVIDENCE_WINDOW_S = 3;
 /** Eye Beam cast window relative to the Demonic aura: the cast is logged up
- * to 0.3 s AFTER the aura it grants. */
-const EYE_BEAM_BEFORE_S = 4;
+ * to 0.3 s AFTER the aura it grants, never before it. Measured on 605 files
+ * (T05 a2, 2026-11-08): of 816 Eye Beams followed by a form row within 6 s,
+ * 815 had the row 0–86 ms BEFORE the cast, 1 came 5.4 s later (outside any
+ * window); 281 opened no form. The old 4 s before-slack had no support and
+ * let an Eye Beam claim a press's own row 2.4 s later (codex T05-2 #1). */
+const EYE_BEAM_BEFORE_S = 0.1;
 const EYE_BEAM_AFTER_S = 0.3;
 
 /** How a Demonic (Eye Beam) Metamorphosis form counts. User ruling
@@ -484,8 +544,10 @@ export function auraOffensiveOccurrences(
         formOccurrence(startMs, endMs, endObserved);
         continue;
       }
-      const splitAt =
-        press - startMs > PRESS_LANDING_LAG_S * 1000 ? press : startMs;
+      // the press went up at its activation, the instant the friendly ledger
+      // dates it at (codex T05-2 #2): its own row, else the landing
+      const activation = metamorphosisPressActivationMs(unit, press);
+      const splitAt = Math.max(startMs, activation);
       if (splitAt > startMs) formOccurrence(startMs, splitAt, true);
       // inferred end: the PRESS's own duration from the press, bounded by
       // the round and the next application of the aura — not the aura row's
@@ -513,7 +575,7 @@ export function auraOffensiveOccurrences(
         endMs: pressEnd,
         endObserved,
         cooldownSeconds: metaCd,
-        availableAgainAtMs: press + metaCd * 1000,
+        availableAgainAtMs: activation + metaCd * 1000,
         availabilityUnknown: false,
         dangerWeight: metaWeight,
         burstRole: "burst",

@@ -364,7 +364,9 @@ describe("[RES] enemy: time left of an effect its holder's death cut short (GH #
       name: "Dh",
       spec: CombatUnitSpec.DemonHunter_Havoc,
       spellCastEvents: [
-        makeSpellCastEvent("198013", START + 9_800, "e1", "Dh", "e2", "X"),
+        // the measured shape: the cast logged just after its Demonic row
+        // (T05 a2: 815 of 816 on 605 files 0–86 ms after)
+        makeSpellCastEvent("198013", START + 10_020, "e1", "Dh", "e2", "X"),
       ],
       auraEvents: [
         aura(

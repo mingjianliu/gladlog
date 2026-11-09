@@ -6000,11 +6000,6 @@ function buildCooldownEntry(
       castEvents.map((e) => e.logLine.timestamp),
     ),
   );
-  /** T05: a press whose cast row is its landing, logged after the thing it
-   * pressed went up (Havoc Metamorphosis' 200166, `METAMORPHOSIS_PRESS_CAST_IDS`):
-   * its activation — what the round cut below reads; the press keeps its
-   * row's time everywhere else */
-  const activatedAtS = new WeakMap<ICooldownCast, number>();
   const castRawCasts: ICooldownCast[] = castEvents
     .filter((e) => !isPassiveProcCast(e))
     // #36(a): an echo copy (Dream Breath 355941 etc.) is not a press — as a
@@ -6018,15 +6013,18 @@ function buildCooldownEntry(
     // nor is the row echoing a Time Spiral free press (`timeSpiralEchoMs`)
     .filter((e) => !spiralEchoMs.has(e.logLine.timestamp))
     .map((e) => {
-      const timeSeconds = (e.logLine.timestamp - matchStartMs) / 1000;
+      // T05: a press whose cast row is its landing, logged after the thing
+      // it pressed went up (Havoc Metamorphosis' 200166,
+      // `METAMORPHOSIS_PRESS_CAST_IDS`), is dated at its activation
+      // (`metamorphosisPressActivationMs`, the start `[ENEMY CD]` prints):
+      // the round cut, the readiness at an instant and the press line all
+      // read it (codex B11 #1: at 52a97230 r0's deciding death the press
+      // read ready, the landing still 65 ms away)
+      const pressMs = METAMORPHOSIS_PRESS_CAST_IDS.has(String(e.spellId ?? ""))
+        ? metamorphosisPressActivationMs(unit, e.logLine.timestamp)
+        : e.logLine.timestamp;
+      const timeSeconds = (pressMs - matchStartMs) / 1000;
       const cast: ICooldownCast = { timeSeconds };
-      if (METAMORPHOSIS_PRESS_CAST_IDS.has(String(e.spellId ?? "")))
-        activatedAtS.set(
-          cast,
-          (metamorphosisPressActivationMs(unit, e.logLine.timestamp) -
-            matchStartMs) /
-            1000,
-        );
       const pressedId = overrideVariantPressId(
         e.spellId,
         spell,
@@ -6133,11 +6131,10 @@ function buildCooldownEntry(
   // the round's own presses decide (codex 20-F16-04 #2: a press in the next
   // round's preparation, filtered out below, switched the effect reading off
   // and the kit read `[UNUSED]`)
-  // a press counts by when it went up (`activatedAtS`): a Havoc
-  // Metamorphosis whose aura rose before the round-ending death and whose
-  // landing row came 65 ms after it was this round's (T05, 52a97230 r0)
-  const inRound = (c: ICooldownCast) =>
-    (activatedAtS.get(c) ?? c.timeSeconds) <= matchDurationSeconds;
+  // a Havoc Metamorphosis is dated at its activation (above): one whose
+  // aura rose before the round-ending death and whose landing row came
+  // 65 ms after it is this round's (T05, 52a97230 r0)
+  const inRound = (c: ICooldownCast) => c.timeSeconds <= matchDurationSeconds;
   const effectRawCasts: ICooldownCast[] =
     !castRawCasts.some(inRound) &&
     !auraRawCasts.some(inRound) &&

@@ -173,6 +173,7 @@ import {
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import {
   ASCENDANCE_ENH_ID,
+  DEMONIC_TALENT_ID,
   DOOM_WINDS_PRESS_ID,
   EYE_BEAM_ID,
   METAMORPHOSIS_PRESS_CAST_IDS,
@@ -1283,6 +1284,15 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       DOOM_WINDS_PRESS_ID,
       ASCENDANCE_ENH_ID,
     ],
+  ),
+  // T05 a2 (2026-11-08): the talent that makes Eye Beam open a demon form —
+  // `metamorphosisPressActivationMs` lets an Eye Beam explain a form row only
+  // for a unit that may hold it
+  t(
+    "DEMONIC_TALENT_ID",
+    "utils/offensiveAuraOccurrences.ts",
+    "talent",
+    () => [DEMONIC_TALENT_ID],
   ),
   // CC full-duration predicate (GH #44 tail, 2026-09-02): the corpus-vs-DB2
   // duration corrections and the one aura that lengthens CC in arena. Both are

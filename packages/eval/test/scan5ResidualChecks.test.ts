@@ -24,7 +24,6 @@ import { run as runFact10 } from "../scripts/scan5/fact10";
 import { run as runFact11 } from "../scripts/scan5/fact11";
 import { run as runFact12 } from "../scripts/scan5/fact12";
 import { run as runFact12d } from "../scripts/scan5/fact12d";
-import { run as runFact12e } from "../scripts/scan5/fact12e";
 import { run as runFriendlyOffensiveTag } from "../scripts/scan5/friendlyOffensiveTag";
 import { run as runImmunity } from "../scripts/scan5/immunity";
 import { run as runKillAttemptFacts } from "../scripts/scan5/killAttemptFacts";
@@ -34,6 +33,7 @@ import { run as runPressFiling } from "../scripts/scan5/pressFiling";
 import { run as runSilenceKick } from "../scripts/scan5/silenceKick";
 import { run as runSingles14b } from "../scripts/scan5/singles14b";
 import { run as runSpanFacts } from "../scripts/scan5/spanFacts";
+import { run as runT05 } from "../scripts/scan5/t05";
 
 // fact7 r1: six corpus checks that kept firing after their 15-round fixes hit 0.
 // Each `reads` case is a shape the raw log proved right while the check flagged
@@ -2595,7 +2595,7 @@ describe("unusedPressedBeforeRoundEnd — a press up before the round's end (T05
   it("flags an [UNUSED] kit entry whose press went up inside the round", () => {
     expect(
       of(
-        scan(runFact12e, [dh(32_885), mate], kit(true)),
+        scan(runT05, [dh(32_885), mate], kit(true)),
         "unusedPressedBeforeRoundEnd",
       ),
     ).toHaveLength(1);
@@ -2603,13 +2603,39 @@ describe("unusedPressedBeforeRoundEnd — a press up before the round's end (T05
   it("reads a kit that counts the press, and a landing with no aura before the end", () => {
     expect(
       of(
-        scan(runFact12e, [dh(32_885), mate], kit(false)),
+        scan(runT05, [dh(32_885), mate], kit(false)),
         "unusedPressedBeforeRoundEnd",
       ),
     ).toEqual([]);
     expect(
       of(
-        scan(runFact12e, [dh(null), mate], kit(true)),
+        scan(runT05, [dh(null), mate], kit(true)),
+        "unusedPressedBeforeRoundEnd",
+      ),
+    ).toEqual([]);
+  });
+  // codex B11 #3: the scan reads the ledger's own selection — an earlier
+  // form that ended at the death and a new one after it is no press inside
+  // the round
+  it("an APPLIED before the end, REMOVED at it and a new APPLIED after: the kit's [UNUSED] stands", () => {
+    const own = (event: string, ms: number) => ({
+      ...aura(event, ms, "162264", "Metamorphosis"),
+      srcUnitId: "Dh",
+      destUnitId: "Dh",
+    });
+    const reopened = unit("Dh", "1", 1, {
+      info: {},
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      spellCastEvents: [cast(34_200, "Dh", "200166", "Metamorphosis")],
+      auraEvents: [
+        own(LogEvent.SPELL_AURA_APPLIED, 32_885),
+        own(LogEvent.SPELL_AURA_REMOVED, 33_744),
+        own(LogEvent.SPELL_AURA_APPLIED, 34_000),
+      ],
+    });
+    expect(
+      of(
+        scan(runT05, [reopened, mate], kit(true)),
         "unusedPressedBeforeRoundEnd",
       ),
     ).toEqual([]);

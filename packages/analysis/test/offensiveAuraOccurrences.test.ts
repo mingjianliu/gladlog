@@ -81,7 +81,9 @@ describe("Havoc Metamorphosis 162264", () => {
       endMs: s(40),
       endObserved: true,
       cooldownSeconds: 120,
-      availableAgainAtMs: s(10.6) + 120_000,
+      // recovered from the activation, the instant the friendly ledger dates
+      // the press at (codex T05-2 #2)
+      availableAgainAtMs: s(10) + 120_000,
       burstRole: "burst",
     });
     expect(o!.dangerWeight).toBe(metaWeight);
@@ -162,7 +164,7 @@ describe("Havoc Metamorphosis 162264", () => {
 
   it("a landing within the logging lag of the aura start is not a split", () => {
     const u = havoc(
-      [cast("198013", 50), cast("200166", 50.9)],
+      [cast("200166", 50.9)],
       [
         aura(LogEvent.SPELL_AURA_APPLIED, "162264", 50),
         aura(LogEvent.SPELL_AURA_REMOVED, "162264", 80),
@@ -171,6 +173,25 @@ describe("Havoc Metamorphosis 162264", () => {
     const occ = auraOffensiveOccurrences(u, COMBAT).occurrences;
     expect(occ).toHaveLength(1);
     expect(occ[0]!.provenance).toBe("press-inferred");
+    expect(occ[0]!.startMs).toBe(s(50));
+  });
+
+  // T05 a2: the row an Eye Beam explains is Demonic's, and the press goes up
+  // where the friendly ledger dates it (`metamorphosisPressActivationMs`):
+  // its landing, as no row of its own was logged
+  it("an Eye Beam's form row then a landing within the lag: split at the landing", () => {
+    const u = havoc(
+      [cast("198013", 50.02), cast("200166", 50.9)],
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, "162264", 50),
+        aura(LogEvent.SPELL_AURA_REMOVED, "162264", 80),
+      ],
+    );
+    const occ = auraOffensiveOccurrences(u, COMBAT).occurrences;
+    expect(occ.map((o) => [o.provenance, o.startMs])).toEqual([
+      ["proc", s(50)],
+      ["press-inferred", s(50.9)],
+    ]);
   });
 
   it("a Demonic form with no logged removal ends at Demonic's own 5 s, never at a cast's duration", () => {
