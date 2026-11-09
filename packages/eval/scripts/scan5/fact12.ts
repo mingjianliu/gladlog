@@ -15,7 +15,8 @@
  *    `no aura of the name` (holder has no aura named X this round: the log
  *    cannot say) is kept out of the total. Kind `round over`: the same for
  *    a living holder on a row at or after the round's end when it comes
- *    before the log's (`roundEndAt`, a Solo Shuffle round's ending death) —
+ *    before the log's (`shuffleRoundEndMs`, a Solo Shuffle round's ending
+ *    death; not a 3v3's deciding death, which ends no enemy effect, T28) —
  *    GH #167 gives that cut the official time left too. Counted: every
  *    `enemy:` entry of a dead holder or of a finished round, the holder's
  *    spec unique on the enemy roster.
@@ -25,6 +26,7 @@ import {
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
 import { casterAuraOutlives } from "@gladlog/analysis/src/utils/enemyCDs";
+import { shuffleRoundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { DEATH_CASCADE_MS } from "@gladlog/analysis/src/utils/unitDeath";
 
 import { deathMs, type IRoundCtx, secOf } from "./ctx";
@@ -62,6 +64,10 @@ function resEnemyEffectAfterDeath(ctx: IRoundCtx): void {
   };
   const outlives = (holder: any, name: string, untilMs: number) =>
     casterAuraOutlives(holder, name, untilMs, combat);
+  // a Solo Shuffle round's end (T28): a 3v3's deciding friendly death
+  // (`ctx.roundEndAt` carries it too) ends no enemy effect — the match runs
+  // on, and a press after it is a press, not an effect the death ended
+  const roundEnd = shuffleRoundEndMs(ctx.legacy, ctx.units);
   let atS = 0;
   for (const l of lines) {
     const t = /^(\d+:\d{2})\s/.exec(l);
@@ -80,8 +86,8 @@ function resEnemyEffectAfterDeath(ctx: IRoundCtx): void {
       const diedMs = deathMs(holder);
       const cut = known(diedMs)
         ? { ms: diedMs, why: "holder dead" }
-        : ctx.roundEndAt < ctx.end && known(ctx.roundEndAt)
-          ? { ms: ctx.roundEndAt, why: "round over" }
+        : roundEnd !== undefined && roundEnd < ctx.end && known(roundEnd)
+          ? { ms: roundEnd, why: "round over" }
           : undefined;
       if (!cut) continue;
       ctx.bump("resEnemyEffectAfterDeath");

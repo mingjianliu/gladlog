@@ -31,6 +31,7 @@ import { run as runListGap } from "../scripts/scan5/listGap";
 import { run as runOverrideVariant } from "../scripts/scan5/overrideVariant";
 import { run as runPressFiling } from "../scripts/scan5/pressFiling";
 import { run as runSilenceKick } from "../scripts/scan5/silenceKick";
+import { run as runSingles2 } from "../scripts/scan5/singles2";
 import { run as runSingles14b } from "../scripts/scan5/singles14b";
 import { run as runSpanFacts } from "../scripts/scan5/spanFacts";
 import {
@@ -101,6 +102,7 @@ function scan(
   menu = "",
   rawLines: string[] = [],
   roundEndAt = at(600_000),
+  end = at(600_000),
 ): IViolation[] {
   const seen: IViolation[] = [];
   const byName = new Map(players.map((p) => [p.name, p]));
@@ -111,7 +113,7 @@ function scan(
     rawLines,
     legacy: {
       startTime: START,
-      endTime: at(600_000),
+      endTime: end,
       units: Object.fromEntries(players.map((p) => [p.id, p])),
       startInfo: players[0]?.startInfo,
     },
@@ -122,7 +124,7 @@ function scan(
     unitOfPid: (pid: string | undefined) => players.find((p) => p.pid === pid),
     pidOf: (name: string) => players.find((p) => p.name === name)?.pid,
     start: START,
-    end: at(600_000),
+    end,
     roundEndAt,
     violate: (
       check: string,
@@ -2487,6 +2489,100 @@ describe("resEnemyEffectAfterDeath: a source-less REMOVED closes the aura (T03, 
   });
   it("an Avatar the log never closes runs its official length: no violation", () => {
     expect(viol("none")).toEqual([]);
+  });
+});
+
+describe("T28 — a Solo Shuffle round's end ends the effects it ended, a 3v3's deciding death none", () => {
+  // the Arms Warrior's Avatar up at 10 s, REMOVED at 15 s in the round's
+  // reset; the round ended at 15.02 s with another player's death; the
+  // warrior lives and the 0:15 row lists it
+  const avatarRows = [
+    rowOf(LogEvent.SPELL_AURA_APPLIED, 10_000, {
+      srcUnitId: "Warr",
+      destUnitId: "Warr",
+      spellId: "107574",
+      spellName: "Avatar",
+    }),
+    rowOf(LogEvent.SPELL_AURA_REMOVED, 15_000, {
+      srcUnitId: "Warr",
+      destUnitId: "Warr",
+      spellId: "107574",
+      spellName: "Avatar",
+    }),
+  ];
+  const roundOf = (bracket: string) => {
+    const owner = unit("Mage", "1", 1, {
+      info: {},
+      startInfo: { bracket },
+      deathRecords: [{ timestamp: at(15_020) }],
+    });
+    const warr = unit("Warr", "4", 2, { info: {}, auraEvents: avatarRows });
+    return [owner, warr];
+  };
+  const lines = [
+    `<unit id="4" name="Warr" spec="Arms Warrior" role="enemy">`,
+    "0:15  [DEATH]  1(FMage) (Fire Mage — friendly)",
+    "      [RES] rdy:Δ  cd:—  enemy:Avatar/Arms Warrior(5s left)",
+  ];
+  it("fact12: a Solo Shuffle round over is caught; a 3v3's deciding death is no round end", () => {
+    const seen = (bracket: string) =>
+      scan(runFact12, roundOf(bracket), lines).filter(
+        (v) => v.check === "resEnemyEffectAfterDeath",
+      );
+    expect(seen("Rated Solo Shuffle").map((v) => v.kind)).toEqual([
+      "effect over (round over)",
+    ]);
+    expect(seen("Rated Arena 3v3")).toEqual([]);
+  });
+
+  // 62-6-367 r6 3:24: Avenging Wrath pressed 55 ms before the round-ending
+  // death, its aura never closed before the log ended 40 ms after the round
+  it("singles2: a press the round's end ended need not be listed on the end's row", () => {
+    const raw = (sec: string, event: string, tail: string) =>
+      `8/20/2026 10:00:${sec}  ${event},Warr,"Warr",0x0,0x0,Warr,"Warr",0x0,0x0,${tail}`;
+    const rawLines = [
+      raw("14.5890", "SPELL_CAST_SUCCESS", '31884,"Avenging Wrath",0x2'),
+      raw("14.5890", "SPELL_AURA_APPLIED", '31884,"Avenging Wrath",0x2,BUFF'),
+    ];
+    const pressRow = {
+      ...cast(14_589, "Warr", "31884", "Avenging Wrath"),
+      logLine: {
+        event: LogEvent.SPELL_CAST_SUCCESS,
+        timestamp: at(14_589),
+        lineIndex: 0,
+      },
+    };
+    const players = (bracket: string) => {
+      const owner = unit("Mage", "1", 1, {
+        info: {},
+        startInfo: { bracket },
+        deathRecords: [{ timestamp: at(14_644) }],
+      });
+      const warr = unit("Warr", "4", 2, {
+        info: {},
+        spellCastEvents: [pressRow],
+        auraEvents: [
+          rowOf(LogEvent.SPELL_AURA_APPLIED, 14_589, {
+            srcUnitId: "Warr",
+            destUnitId: "Warr",
+            spellId: "31884",
+            spellName: "Avenging Wrath",
+          }),
+        ],
+      });
+      return [owner, warr];
+    };
+    const rows = [
+      "0:14  [ENEMY CD]   4(RPaladin) (Retribution Paladin): Avenging Wrath (cast 1 of 1)",
+      "0:14  [DEATH]  1(FMage) (Fire Mage — friendly)",
+      "      [RES] rdy:Δ  cd:—",
+    ];
+    const missing = (bracket: string) =>
+      scan(runSingles2, players(bracket), rows, "", rawLines, at(14_644), at(14_684))
+        .filter((v) => v.check === "resEnemySameSecondPressMissing")
+        .map((v) => v.kind);
+    expect(missing("Rated Solo Shuffle")).toEqual([]);
+    expect(missing("Rated Arena 3v3")).toEqual(["missing"]);
   });
 });
 

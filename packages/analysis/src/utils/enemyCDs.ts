@@ -124,7 +124,9 @@ export interface IEnemyCDCast {
    * ending one. From that instant's rendered second on the death is printed
    * (`[DEATH]`) and the effect is over: the official time left above is only
    * for rows before it (T03, fact12 D18). A target's death cut sets none: it
-   * ends that copy, not the effect. */
+   * ends that copy, not the effect. Also set without the official end above
+   * when a Solo Shuffle round's end ended an effect whatever its span
+   * read (`cutAtRoundEnd`, T28). */
   deathCutAtSeconds?: number;
   /** GH #119: "fact" = shown, never part of a burst window (a Demonic
    * Metamorphosis form under OFFENSIVE_AURA_FLAGS.demonic "fact"). Absent =
@@ -698,14 +700,90 @@ function deathCutOfficialEnd(
   };
 }
 
+/**
+ * T28: does a Solo Shuffle round's end (`endMs`) end `caster`'s effect of
+ * English name `name`? Every aura of that name the caster put on any unit
+ * is gone by `endMs` + `DEATH_CASCADE_MS` (`casterAuraOutlives`) and at
+ * least one was logged this round — with none, the log cannot say. The one
+ * predicate `[RES]`'s round-end cut (`cutAtRoundEnd`) and its scans
+ * (fact12 `resEnemyEffectAfterDeath` kind `round over`, singles2
+ * `resEnemySameSecondPressMissing`) read.
+ */
+export function roundEndEndsEffect(
+  caster: Pick<ICombatUnit, "id">,
+  name: string,
+  endMs: number,
+  combat: Parameters<typeof casterAuraOutlives>[3],
+): boolean {
+  const r = casterAuraOutlives(caster, name, endMs + DEATH_CASCADE_MS, combat);
+  return r.any && !r.outlives;
+}
+
+/**
+ * T28: cut every cast of `caster` whose effect the Solo Shuffle round's end
+ * (`endMs`, `shuffleRoundEndMs`) ended (`roundEndEndsEffect`) and that was
+ * still due at the end's rendered second — or was pressed after it, in the
+ * log's tail past the round — at that instant: `deathCutAtSeconds`, the field `[RES]` stops
+ * listing an effect at. A cast already cut keeps its cut. A 3v3's deciding
+ * death ends no enemy effect (the match runs on), so it is no cut here.
+ */
+export function cutAtRoundEnd(
+  casts: readonly IEnemyCDCast[],
+  endMs: number | undefined,
+  combat: AtomicArenaCombat,
+  caster: ICombatUnit,
+): void {
+  if (endMs === undefined || !(endMs < combat.endTime)) return;
+  const endS = (endMs - combat.startTime) / 1000;
+  for (const cd of casts) {
+    // an earlier cut stands; a later one — the caster's own death after the
+    // round's end (codex T28-1 #2) — the round's end comes first
+    if (cd.deathCutAtSeconds !== undefined && cd.deathCutAtSeconds <= endS)
+      continue;
+    const dueS = Math.max(
+      cd.buffEndSeconds,
+      cd.deathCutOfficialEndSeconds ?? -Infinity,
+    );
+    // still listable on the end's own row: an effect due past the end's
+    // rendered second's start (24-1-127 r1: Avatar REMOVED at 39.9 s, the
+    // round over at 39.966 s, `(1s left)` on the 0:39 death row), or a press
+    // in the log's tail
+    if (!(dueS >= Math.floor(endS)) && !(cd.castTimeSeconds > endS)) continue;
+    if (
+      !roundEndEndsEffect(
+        caster,
+        getEnglishSpellName(cd.spellId, cd.spellName),
+        endMs,
+        combat,
+      )
+    )
+      continue;
+    cd.deathCutAtSeconds = endS;
+    // every reader of the effect's end takes the same cut — the burst span
+    // (`burstCastSpan`), the aligned burst windows — as T03's death cut does:
+    // `buffEndSeconds` is the cut, the official end kept beside it for the
+    // time left on rows before it (codex 80-PIPE-29-B29 #1: a Power
+    // Infusion cut at the round's end at 20 s ran its burst to 25 s)
+    const cutEndS = Math.max(cd.castTimeSeconds, endS);
+    if (cd.buffEndSeconds > cutEndS) {
+      cd.deathCutOfficialEndSeconds ??= cd.buffEndSeconds;
+      cd.buffEndSeconds = cutEndS;
+    }
+  }
+}
+
 /** every unit's aura intervals (pets, totems and guardians included), once
  * per combat */
 const ALL_AURA_INDEX = new WeakMap<object, IAuraInterval[]>();
 
 /**
  * T03: does an aura of English name `name` that `caster` put on any unit — a
- * pet's copy included — run past `untilMs` (open at it, its intervals the
- * builder's)? `any`: the caster put one of that name on someone this round.
+ * pet's copy included — run past `untilMs` (its intervals the builder's)?
+ * Open at it, or applied up to `EFFECT_START_AFTER_S` after it and still
+ * running past it (codex T28-1 #1: an Avatar pressed 50 ms before a Solo
+ * Shuffle round's end, applied 150 ms after it, ran 3 s on); a later
+ * application is another effect (codex T28-1b). `any`: the caster put one of that name on
+ * someone this round.
  * The one predicate `[RES]`'s death cut and its scan
  * (`resEnemyEffectAfterDeath`) read.
  */
@@ -727,12 +805,28 @@ export function casterAuraOutlives(
     ALL_AURA_INDEX.set(combat, all);
   }
   const untilS = (untilMs - combat.startTime) / 1000;
+  const combatEndS = (combat.endTime - combat.startTime) / 1000;
   let any = false;
   for (const iv of all) {
     if (iv.srcUnitId !== caster.id) continue;
     if (getEnglishSpellName(iv.spellId, iv.spellName ?? "") !== name) continue;
+    // an application the builder clamped to the combat's end with no length
+    // (applied past it) is no evidence of the effect inside the combat at all
+    // (codex T28-1c: a lone APPLIED at 40 s in a combat ending at 17 s read
+    // [17, 17] and let the round's end cut a press whose aura never showed)
+    if (iv.toS <= iv.fromS && iv.fromS >= combatEndS) continue;
     any = true;
-    if (iv.fromS <= untilS && iv.toS > untilS) return { any, outlives: true };
+    // open at the cut, or applied after it by a press's landing lag
+    // (`EFFECT_START_AFTER_S`) and running past it — not a later, unrelated
+    // application, nor one the builder clamped to the combat's end with no
+    // length (codex T28-1b: an Avatar retained at 40 s in a combat ending at
+    // 17 s, read [17, 17], kept a dead holder's effect listed)
+    if (
+      iv.toS > untilS &&
+      iv.toS > iv.fromS &&
+      iv.fromS <= untilS + EFFECT_START_AFTER_S
+    )
+      return { any, outlives: true };
   }
   return { any, outlives: false };
 }
@@ -1291,6 +1385,21 @@ export function reconstructEnemyCDTimeline(
         burstRole: "fact",
       });
     }
+
+    // T28: an effect a Solo Shuffle round's end ended (`roundEndEndsEffect`:
+    // every aura of its name the caster put on any unit gone by the end's
+    // cascade) is over from that instant's rendered second, as a death cut
+    // is (`deathCutAtSeconds`) — whatever end its span read, and a press in
+    // the log's tail past the round with it. f22d547e: a Power Infusion's
+    // span had no observed end and `[RES]` read `Power Infusion/Discipline
+    // Priest(10s left)` past the round's end; 1-6-16 r6: a Touch of the Magi
+    // pressed after the round's end read `(13s left)` on the death's row.
+    cutAtRoundEnd(
+      [...offensiveCDs, ...offensiveFacts],
+      shuffleRoundEndMs(combat, Object.values(combat.units ?? {})),
+      combat,
+      enemy,
+    );
 
     offensiveCDs.sort((a, b) => a.castTimeSeconds - b.castTimeSeconds);
 

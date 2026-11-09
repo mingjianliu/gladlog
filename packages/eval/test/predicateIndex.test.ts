@@ -1287,6 +1287,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/enemyCDs.ts`,
+    symbol: "roundEndEndsEffect",
+    mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
     symbol: "observedCastEndMs",
     mod: enemyCDs,
   },

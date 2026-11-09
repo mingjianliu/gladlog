@@ -90,11 +90,13 @@ import {
   UNPURGEABLE_MAGIC_AURAS,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import { AOE_CC_LANDING_WINDOW_S } from "@gladlog/analysis/src/utils/drAnalysis";
+import { roundEndEndsEffect } from "@gladlog/analysis/src/utils/enemyCDs";
 import {
   distanceBetween,
   getUnitPositionAtTime,
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
+import { shuffleRoundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import {
   OFFENSIVE_CD_SPELL_IDS,
   OFFENSIVE_PRESS_FACT_IDS,
@@ -608,6 +610,12 @@ function resEnemyDuplicateWindow(
 
 function resEnemySameSecondPressMissing(ctx: IRoundCtx, rows: IResRow[]): void {
   const ivs = auraIntervals(ctx);
+  const roundEnd = shuffleRoundEndMs(ctx.legacy, ctx.units);
+  const roundCombat = {
+    startTime: ctx.start,
+    endTime: ctx.end,
+    units: ctx.legacy.units,
+  };
   const cds: Array<{
     s: number;
     pid: string;
@@ -677,6 +685,17 @@ function resEnemySameSecondPressMissing(ctx: IRoundCtx, rows: IResRow[]): void {
         continue;
       }
       if (!aura.some((iv) => iv.to > a + 1000)) continue;
+      // T28: a row at or after a Solo Shuffle round's end lists no effect
+      // that end ended (`roundEndEndsEffect`, the producer's cut): the round
+      // is over, though the log runs on (62-6-367 r6 3:24, Avenging Wrath
+      // pressed 55 ms before the round-ending death)
+      if (
+        roundEnd !== undefined &&
+        roundEnd < ctx.end &&
+        Math.floor((roundEnd - ctx.start) / 1000) <= row.s &&
+        roundEndEndsEffect(u, cd.name, roundEnd, roundCombat)
+      )
+        continue;
       ctx.bump("resEnemySameSecondPressMissing");
       if (listed) continue;
       ctx.violate(
