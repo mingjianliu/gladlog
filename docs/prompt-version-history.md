@@ -5905,3 +5905,28 @@ Teachings log, out of scope); repro logs 1d26a991 + 64e9a3f3 3 → 0; menu rows
 7,393 → 7,393. (T16 first went into batches B20 and B31b, abandoned before
 push.) Batch verified on tests + codex (user 11-08); 605 / cover / wide run at
 the end of the wave.
+
+v520 (2026-11-09, GH #129.1 ruling Q3; pipeline batch B32, T17). A DB2
+percentage mana cost is a share of base mana (`BASE_MANA` 250,000), not of the
+reading's max: `manaCostForCast(spellId, specId)` returns `pctManaCost(pct,
+base)` = float32(pct × base / 100) rounded half to even, the game's own
+arithmetic (Math.round priced Holy Word: Sanctify 34861 at 8,313 against the
+log's 8,312). Every consumer goes through `costFor` (resourceAt.ts), which reads
+the round's stated cost first for a percentage row (`statedManaCostInRound`, the
+highest stated cost inside the round): `affordableAt` for the `[RES]` "(no mana
+a/b)" tag, `unaffordableIntervals` for the death lines and scan5 castThroughStun,
+`affordableWithin` for cd-hoarded. Probe over 584 downloaded 12.1.5 logs: the
+fallback price within tolerance of the mana the press took 176,297 → 284,775 of
+352,476 presses (casters whose max differs from 250,000: 55,196 → 163,674 of
+205,283); the stated cost of a percentage row equals the predicate's price
+401,548 / 401,548. New scan5 module t17 (noManaCostOffBase) checks a rendered
+tag's b against the log — a flat row's price, else the owner's stated cost in
+the round through `statedManaCostInRound`, else the DB2 percentage of the base
+mana the owner's other rows state through the shared `pctManaCost` — 0 / 15 →
+0 / 15; 605 capture byte-identical (every rendered tag has a stated cost in its
+round, so the fallback decides no 605 line); menu rows 7,399 → 7,399.
+`pctManaCost` and `statedManaCostInRound` are in the predicate-index (en +
+zh-CN) and pinned; docs/talent-coverage-gaps.md regenerated (percentage cost
+reductions stay FLAGged open). (T17 first went into batch B31b, abandoned before
+push.) Batch verified on tests + codex (user 11-08); 605 / cover / wide run at
+the end of the wave.

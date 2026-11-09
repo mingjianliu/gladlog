@@ -1053,4 +1053,10 @@
  *  Ice Lance hit and per own Freezing stack shattered. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 519;
+/*
+ * v520 (2026-11-09; pipeline batch B32, T17, GH #129.1): a DB2 percentage mana
+ *  cost is a share of base mana (250,000), not of the reading's max, in the
+ *  game's own float32 half-even arithmetic. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 520;
