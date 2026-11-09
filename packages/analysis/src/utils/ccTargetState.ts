@@ -80,7 +80,7 @@ import {
 import {
   distanceBetween,
   getUnitPositionAtTime,
-  hasLineOfSight,
+  rawLineOfSightAt,
 } from "./losAnalysis";
 import { INTERP_MAX_GAP_MS } from "./positionSampling";
 import { roundEndMs } from "./roundEnd";
@@ -177,10 +177,11 @@ function breakToolsFor(target: ICombatUnit, mech: number): string[] {
  * The geometry half of "could this owner put this CC on that target at this
  * instant": both positions known (`INTERP_MAX_GAP_MS`), the distance within
  * the CC's reach (`ccThreatReachYards` — cast range, else a caster-centred
- * radius), LoS not falsified. Unknown position fails closed. One predicate
- * for `ccSamplerFor` and the healer-offense "X ready on enemy healer" lines
- * (fact5 D18 / D19, 5fb1039a r0: an Incapacitating Roar — 10 yd around the
- * druid — "ready on enemy healer" 38–65 yd away).
+ * radius), LoS on the nearest raw samples not falsified. Unknown position
+ * fails closed. One predicate for `ccSamplerFor` and the healer-offense "X
+ * ready on enemy healer" lines (fact5 D18 / D19, 5fb1039a r0: an
+ * Incapacitating Roar — 10 yd around the druid — "ready on enemy healer"
+ * 38–65 yd away).
  */
 export function ccReachAt(
   owner: ICombatUnit,
@@ -196,7 +197,11 @@ export function ccReachAt(
   if (!po || !pt) return { ok: false, reason: "no-position" };
   const dist = distanceBetween(po, pt);
   if (dist > reachYards) return { ok: false, reason: "out-of-range" };
-  if (hasLineOfSight(zone, po, pt) === false)
+  // LoS is topological: the two units' nearest RAW samples, never the
+  // interpolated points the distance reads (`rawLineOfSightAt`, the
+  // `losAnalysis` contract kick-priority and `enemyTargetReaches` follow;
+  // codex review of batch B5, T31). No raw pair = not disproven.
+  if (rawLineOfSightAt(zone, owner, target, ms, INTERP_MAX_GAP_MS) === false)
     return { ok: false, reason: "los" };
   return { ok: true, distanceYards: dist };
 }

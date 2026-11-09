@@ -97,6 +97,7 @@ const MODULE_FILES = [
   "fact12d",
   "t32",
   "t26petLock",
+  "t31",
 ];
 await ensureAnalysisData();
 const modules: Array<IScanModule & { file: string }> = [];
