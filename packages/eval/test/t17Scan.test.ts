@@ -104,4 +104,16 @@ describe("scan5/t17 noManaCostOffBase", () => {
         ],
       });
   });
+
+  it("a flat cost is the truth even when the spell's rows state what it drained (codex 85-tk-E-T17-1b)", () => {
+    // Arcane Surge 365350: 1 mana flat, its cast row states 320,773
+    const mage = {
+      name: "Mage",
+      spec: "62",
+      spellCastEvents: [cast("365350", 5_000, 320_773)],
+    };
+    expect(
+      scan(mage, ["      [RES] rdy:Δ +Arcane Surge(no mana 0.0k/0.0k)"]),
+    ).toEqual({ checked: 1, seen: [] });
+  });
 });

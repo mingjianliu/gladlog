@@ -8,8 +8,9 @@
  *
  * Check `noManaCostOffBase`, kind `offBase`: the tag's b is not the cost the
  * log implies. Truth comes from the log rows, not from the analysis cost
- * predicate: the cost the owner's own cast rows of that spell state (the
- * most common); else a flat row's cost; else DB2's percentage of the base
+ * predicate: a flat row's cost; for a percentage row, the cost the owner's
+ * own cast rows of that spell state (the most common), else DB2's
+ * percentage of the base
  * mana the owner's other percentage-priced cast rows imply (stated cost ÷
  * percentage, the most common value), in the game's arithmetic (float32,
  * half to even — `pctCost`). The entry name is the longest text before the
@@ -143,12 +144,17 @@ export function run(ctx: IRoundCtx): void {
       }
       if (!id || !name) continue;
       const row = rowOf(id, spec)!;
-      // truth: what the owner's own rows of this spell state; else DB2's
-      // flat cost, or its percentage of the base mana the owner's other
-      // percentage-priced rows state
-      let truth = statedCostOf(owner, id);
-      const from = truth !== undefined ? "its own cast rows" : undefined;
-      if (truth === undefined && row.pct === undefined) truth = row.flat;
+      // truth: DB2's flat cost; for a percentage row, what the owner's own
+      // rows of this spell state, else its percentage of the base mana the
+      // owner's other percentage-priced rows state
+      // a flat row is its own truth: a flat spell's cast row can state what
+      // it drained, not its price (Arcane Surge 365350: 1 mana, its rows
+      // 320,773 — codex 85-tk-E-T17-1b)
+      let truth = row.pct === undefined ? row.flat : statedCostOf(owner, id);
+      const from =
+        row.pct !== undefined && truth !== undefined
+          ? "its own cast rows"
+          : undefined;
       if (truth === undefined) {
         if (base === null) base = baseManaOf(owner, spec);
         if (base === undefined) continue;
