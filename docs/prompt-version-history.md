@@ -5881,3 +5881,27 @@ unified (106 views were auras with no logged end the scan read as up too long)
 → 0 / 0 under R12 (the 376 were Demonic-only occurrences); in-total kinds 0 →
 0. Batch verified on tests + codex (user 11-08); 605 / cover / wide run at the
 end of the wave.
+
+v519 (2026-11-09, fact12 D4 D17; pipeline batch B31c, T16). Two event-reduction
+rows under-reduced, so the ledger's back time and the kit's `[a–Ns]` sat above
+logged recasts. (1) Essence Break 258860 (Cycle of Hatred): the press's own
+dose, logged a few ms after the cast, now counts (`ownDoseCounts`,
+`ownStacksBefore` read at press + `PER_PRESS_OWN_DOSE_MS`). (2) White Out
+1281638 on Frozen Orb: 0.5 s per landed Ice Lance hit 228598 (`hitsCountEachRow`)
+plus 0.1 s per own Freezing 1221389 stack lost at the ms of an own landed Ice
+Lance / Shatter hit (`triggerOwnAuraStacksLost`), through `eventTriggersFor`
+(ledger, `[RES]` ranges, kit); the landed-hit predicate `landedHitRows` is
+shared with the existing hit path. New scan5 module t16 (kitSoonestAboveRecast)
+reads its presses from the ledger entry the kit entry is rendered from (new
+export `unitCooldownLedger`), never from `unitCooldownEntry`'s fallback — a
+Stasis release, a Hunt or Time Stop echo is no press; a press with no cast row
+is timed at the latest it can have been (`ICooldownCast.timedAtLatest`, read
+only by the scan) and anchors no gap. `unitCooldownLedger`, `landedHitRows` and
+`ownAuraStacksLostTimesMs` are in the predicate-index (en + zh-CN) and pinned.
+605 (caps/aeddaf5f7-605 vs the branch on it; cooldown-model output, unaffected
+by main's later context-only changes): kitSoonestAboveRecast all spells 105 /
+37 distinct → 102 / 36 (Frozen Orb 5 → 2, the residue a 12.1.0 Spellfrost
+Teachings log, out of scope); repro logs 1d26a991 + 64e9a3f3 3 → 0; menu rows
+7,393 → 7,393. (T16 first went into batches B20 and B31b, abandoned before
+push.) Batch verified on tests + codex (user 11-08); 605 / cover / wide run at
+the end of the wave.

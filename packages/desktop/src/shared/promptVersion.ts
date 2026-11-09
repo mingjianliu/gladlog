@@ -1047,4 +1047,10 @@
  *  friendly-offensive tag stays for spent cooldowns only (scan unified). See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 518;
+/*
+ * v519 (2026-11-09; pipeline batch B31c, T16, fact12 D4 D17): Essence Break
+ *  counts its own Cycle of Hatred dose; White Out reduces Frozen Orb per landed
+ *  Ice Lance hit and per own Freezing stack shattered. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 519;
