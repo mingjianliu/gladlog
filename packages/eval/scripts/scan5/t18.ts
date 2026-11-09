@@ -34,6 +34,7 @@ import {
 import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraIntervals";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { pressLandedOn } from "@gladlog/analysis/src/utils/castMissRows";
+import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
 
 import {
   APPLIED,
@@ -123,6 +124,33 @@ function fullLengthS(
   return staticS + ext;
 }
 
+/** The ledger's press of the aura nearest the run's APPLIED (within
+ * `PRESS_PAIR_MS`, either side: an aura row can be logged ahead of its cast
+ * row), else the APPLIED itself. */
+const PRESS_PAIR_MS = 1000;
+function pressAnchorMs(
+  ctx: IRoundCtx,
+  owner: any,
+  auraId: string,
+  appliedMs: number,
+): number {
+  let entry: any;
+  try {
+    entry = unitCooldownEntry(owner, ctx.legacy as never, auraId);
+  } catch {
+    entry = undefined;
+  }
+  const startMs: number = ctx.legacy.startTime;
+  let best: number | undefined;
+  for (const c of (entry?.casts ?? []) as any[]) {
+    const ms = startMs + c.timeSeconds * 1000;
+    const d = Math.abs(ms - appliedMs);
+    if (d > PRESS_PAIR_MS) continue;
+    if (best === undefined || d < Math.abs(best - appliedMs)) best = ms;
+  }
+  return best ?? appliedMs;
+}
+
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
   if (!owner) return;
@@ -185,17 +213,22 @@ export function run(ctx: IRoundCtx): void {
     if (staticS === undefined) continue;
     ctx.bump("setExtendedFade");
     const full = fullLengthS(owner, auraId, at, staticS, removed, run.from);
+    // the producer's expiry is its press + the full length (the ledger's
+    // press: `unitCooldownEntry`, the cast the run's APPLIED sits by) — the
+    // run's length is walked from its APPLIED on both sides, the end is
+    // anchored where the producer anchors it (codex 85-tk-A-T18-2 #1)
+    const anchor = pressAnchorMs(ctx, owner, auraId, at);
     const claim = m[3]!;
     if (estimated && removed && secOfMs(tsOf(removed)) <= sec) continue;
     const key = `${owner.name}:${auraId}:${at}`;
     if (claim.startsWith("expired, estimated")) {
-      if (sec < secOfMs(at + full * 1000))
+      if (sec < secOfMs(anchor + full * 1000))
         ctx.violate(
           "setExtendedFade",
           "estimatedBeforeEnd",
           at,
           key,
-          `estimated fade at ${m[1]} but the log's run is ${full} s from ${secOfMs(at)} s`,
+          `estimated fade at ${m[1]} but the log's run is ${full} s from the ${secOfMs(anchor)} s press`,
           line,
         );
       continue;
@@ -216,14 +249,14 @@ export function run(ctx: IRoundCtx): void {
     if (
       claim.startsWith("expired") &&
       removed &&
-      (tsOf(removed) - at) / 1000 < full - EARLY_TOLERANCE_S
+      (tsOf(removed) - anchor) / 1000 < full - EARLY_TOLERANCE_S
     )
       ctx.violate(
         "setExtendedFade",
         "shortRunReadExpired",
         at,
         key,
-        `ran ${((tsOf(removed) - at) / 1000).toFixed(1)} s of a ${full} s run`,
+        `ran ${((tsOf(removed) - anchor) / 1000).toFixed(1)} s from its press of a ${full} s run`,
         line,
       );
   }

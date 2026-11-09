@@ -78,6 +78,11 @@ function scan(owner: any, lines: string[]): string[] {
     owner,
     players: [owner],
     start: START,
+    legacy: {
+      startTime: START,
+      endTime: START + 300_000,
+      units: { [owner.id]: owner },
+    },
     firstOwnerOfRound: false,
     violate: (check: string, kind: string) => seen.push(`${check}:${kind}`),
     bump: () => {},
@@ -139,6 +144,31 @@ describe("scan5/t18 setExtendedFade", () => {
       [line(hit("96103", "Raging Blow", 0), 99)],
     );
     expect(scan(o, [fade("0:18", "expired")])).toEqual([]);
+  });
+
+  // codex 85-tk-A-T18-2 #1: the producer's expiry is its press + the full
+  // length; the scan anchors the end at that press, not at the APPLIED
+  it("the expected end is anchored at the press, as the producer anchors it", () => {
+    const o = (removedAt?: number) => {
+      const w = warrior(
+        2,
+        [
+          aura(LogEvent.SPELL_AURA_APPLIED, 1.1),
+          ...(removedAt === undefined
+            ? []
+            : [aura(LogEvent.SPELL_AURA_REMOVED, removedAt)]),
+        ],
+        [cast("85288", "Raging Blow", 3)],
+        [hit("96103", "Raging Blow", 3.05)],
+      );
+      w.spellCastEvents[0] = cast(RECKLESSNESS, "Recklessness", 0.8);
+      return w;
+    };
+    expect(scan(o(), [fade("0:20", "expired, estimated")])).toEqual([]);
+    expect(scan(o(), [fade("0:19", "expired, estimated")])).toEqual([
+      "setExtendedFade:estimatedBeforeEnd",
+    ]);
+    expect(scan(o(19.5), [fade("0:19", "expired")])).toEqual([]);
   });
 
   it("`(expired)` on a run the log cut short of its extended length is caught", () => {

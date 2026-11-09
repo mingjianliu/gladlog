@@ -59,4 +59,29 @@ describe("cleanAuraRuns", () => {
       { srcUnitId: "b", fromMs: 1_000, toMs: 9_000 },
     ]);
   });
+  // codex 85-tk-A-T18-2 #3: a BROKEN line its REMOVED follows is not the
+  // end, whoever broke it
+  it("a BROKEN line superseded by its REMOVED does not end the run", () => {
+    const rows = (breaker: string) => [
+      { ...row(LogEvent.SPELL_AURA_APPLIED, 0), spellId: "122" },
+      { ...row(LogEvent.SPELL_AURA_BROKEN_SPELL, 5.5, breaker), spellId: "122" },
+      { ...row(LogEvent.SPELL_AURA_REMOVED, 6), spellId: "122" },
+    ];
+    expect(cleanAuraRuns(rows("w"))).toEqual([
+      { srcUnitId: "w", fromMs: 0, toMs: 6_000 },
+    ]);
+    expect(cleanAuraRuns(rows("x"))).toEqual([
+      { srcUnitId: "w", fromMs: 0, toMs: 6_000 },
+    ]);
+  });
+  // codex 85-tk-A-T18-2 #2: `--dose-unclean` keeps a stacking run out
+  it("with doseUnclean an APPLIED_DOSE makes the run unclean", () => {
+    const rows = [
+      row(LogEvent.SPELL_AURA_APPLIED, 0),
+      row(LogEvent.SPELL_AURA_APPLIED_DOSE, 5),
+      row(LogEvent.SPELL_AURA_REMOVED, 35),
+    ];
+    expect(cleanAuraRuns(rows)).toHaveLength(1);
+    expect(cleanAuraRuns(rows, { doseUnclean: true })).toEqual([]);
+  });
 });

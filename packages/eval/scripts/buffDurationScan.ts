@@ -148,6 +148,7 @@ function perAppRuns(
       unit.auraEvents.filter(
         (a) => a.spellId === spellId && a.destUnitId === unit.id,
       ),
+      { doseUnclean: args.doseUnclean },
     );
     for (const r of runs) {
       const srcId = r.srcUnitId;

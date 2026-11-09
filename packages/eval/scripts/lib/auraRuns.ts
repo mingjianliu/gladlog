@@ -1,12 +1,18 @@
 /**
  * Clean aura lifetimes read the way the product reads an aura (GH #175,
- * codex B25 #3): rows through `dropAuraRebroadcasts` (a REMOVED → APPLIED
- * re-broadcast is one run), then continuous runs per source in log order —
+ * codex B25 #3; `buildAuraIntervals`): a BROKEN line its aura's own REMOVED
+ * follows is not the end (`supersededAuraBreaks` — codex 85-tk-A-T18-2 #3),
+ * rows through `dropAuraRebroadcasts` (a REMOVED → APPLIED re-broadcast is
+ * one run), then continuous runs per source in log order —
  * an APPLIED while that source's run is open is a duplicate row of it, a
- * REFRESH makes the run unclean, a REMOVED / BROKEN ends it. Only clean,
- * ended runs come back. `buffDurationScan --per-app` reads these.
+ * REFRESH makes the run unclean (with `doseUnclean`, an APPLIED_DOSE too: a
+ * stacking aura's lifetime is not its duration — codex 85-tk-A-T18-2 #2), a
+ * REMOVED / BROKEN ends it. Only clean, ended runs come back. `buffDurationScan --per-app` reads these.
  */
-import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraIntervals";
+import {
+  dropAuraRebroadcasts,
+  supersededAuraBreaks,
+} from "@gladlog/analysis/src/utils/auraIntervals";
 import { LogEvent } from "@gladlog/parser-compat";
 
 export interface IAuraRunRow {
@@ -30,16 +36,24 @@ const ENDS = new Set<string>([
 ]);
 
 /** The clean, ended runs of one aura's rows on one unit (log order). */
-export function cleanAuraRuns(rows: readonly IAuraRunRow[]): ICleanAuraRun[] {
+export function cleanAuraRuns(
+  rows: readonly IAuraRunRow[],
+  opts: { doseUnclean?: boolean } = {},
+): ICleanAuraRun[] {
   const out: ICleanAuraRun[] = [];
   const open = new Map<string, { t: number; clean: boolean }>();
+  const notTheEnd = supersededAuraBreaks(rows);
   for (const a of dropAuraRebroadcasts(rows)) {
+    if (notTheEnd.has(a)) continue;
     const src = a.srcUnitId ?? "";
     const ev = a.logLine.event;
     const t = a.logLine.timestamp;
     if (ev === LogEvent.SPELL_AURA_APPLIED) {
       if (!open.has(src)) open.set(src, { t, clean: true });
-    } else if (ev === LogEvent.SPELL_AURA_REFRESH) {
+    } else if (
+      ev === LogEvent.SPELL_AURA_REFRESH ||
+      (opts.doseUnclean && ev === LogEvent.SPELL_AURA_APPLIED_DOSE)
+    ) {
       const o = open.get(src);
       if (o) o.clean = false;
     } else if (ENDS.has(ev)) {
