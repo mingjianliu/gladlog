@@ -398,10 +398,14 @@ export function kickPriorityDecisionPoints(
   /** The kick's cannot-cast intervals as thrown by `kicker`: the friend's
    * own (`cannotCastOf`), or — for a pet's kick — the CC and kick lockouts
    * on THAT pet alone (`cannotCastIntervalsForSpells` asked of the pet) plus
-   * the friend's own casting locks. Asked of the friend, the reading keeps
-   * only what stops every pet that ever cast the spell this round: a dead
+   * the pet's own casting locks — the reading the enemy-interrupt side takes
+   * (`castBlockingAuraAt(pet)`). Asked of the friend, the reading keeps only
+   * what stops every pet that ever cast the spell this round: a dead
    * Felhunter's empty list erased its replacement's stun (codex review of
-   * batch B10, T26). */
+   * batch B10, T26). The owner's own locks are not the pet's: on the 605
+   * capture pets threw Spell Lock under their owner's stun / horror / Hex
+   * with no command logged (scan5 t26petLock; T26 attempt 5, assembly review
+   * of batch B21 P2: a Hexed Warlock's free Felhunter read "locked"). */
   const kickerBlockedCache = new Map<
     string,
     Array<{ from: number; to: number }>
@@ -423,7 +427,7 @@ export function kickPriorityDecisionPoints(
             [kitSpellId],
             units as never,
           ),
-          ...castingLockIntervalsOf(f as never, combat, kitSpellId),
+          ...castingLockIntervalsOf(kicker as never, combat, kitSpellId),
         ];
       } catch {
         iv = [];

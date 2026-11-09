@@ -70,6 +70,11 @@ const stun = (onId: string, fromS: number, toS: number) => [
     onId,
   ),
 ];
+/** any aura by id on a unit, applied / removed */
+const auraOn = (onId: string, spellId: string, fromS: number, toS: number) => [
+  makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, spellId, at(fromS), "e", onId),
+  makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, spellId, at(toS), "e", onId),
+];
 const petCast = (spellId: string, atS: number, petId = "Pet-1") =>
   makeSpellCastEvent(spellId, at(atS), "e", "Enemy", petId, "Felhunter");
 
@@ -82,12 +87,18 @@ function pair(opts: {
   ownerCasts?: any[];
   petActionIn?: any[];
   ownerDeathS?: number;
+  /** [spellId, fromS, toS] auras on the Warlock / the Felhunter */
+  ownerAura?: [string, number, number];
+  petAura?: [string, number, number];
 }) {
   const warlock = makeUnit("w", {
     name: "Warlock",
     spec: CombatUnitSpec.Warlock_Affliction,
     info: {},
-    auraEvents: opts.ownerStun ? stun("w", ...opts.ownerStun) : [],
+    auraEvents: [
+      ...(opts.ownerStun ? stun("w", ...opts.ownerStun) : []),
+      ...(opts.ownerAura ? auraOn("w", ...opts.ownerAura) : []),
+    ],
     spellCastEvents: opts.ownerCasts ?? [
       makeSpellCastEvent(SHADOWFURY, at(30), "e", "Enemy", "w", "Warlock"),
     ],
@@ -103,7 +114,10 @@ function pair(opts: {
   const pet = makeUnit("Pet-1", {
     name: "Felhunter",
     ownerId: "w",
-    auraEvents: opts.petStun ? stun("Pet-1", ...opts.petStun) : [],
+    auraEvents: [
+      ...(opts.petStun ? stun("Pet-1", ...opts.petStun) : []),
+      ...(opts.petAura ? auraOn("Pet-1", ...opts.petAura) : []),
+    ],
     actionIn: opts.petActionIn ?? [],
   });
   return { warlock, pet, units: [warlock, pet] };
@@ -638,6 +652,23 @@ describe("readers", () => {
         kick: SPELL_LOCK,
         locked: false,
       });
+    });
+
+    // assembly review of batch B21 P2 (T26 attempt 5): the owner's casting
+    // locks are not the pet's — the enemy-interrupt side reads the pet alone
+    // (`castBlockingAuraAt(pet)`), and on the 605 capture pets threw Spell
+    // Lock under their owner's controls (scan5 t26petLock)
+    const HEX = "51514"; // official locksCasting, and hard CC
+    const ICE_BLOCK = "45438"; // official locksCasting, no CC
+    it("B21 P2: Warlock Hexed through the heal, Felhunter free → not locked", () => {
+      expect(lockedFor({ ownerAura: [HEX, 69, 73] })).toEqual({
+        kick: SPELL_LOCK,
+        locked: false,
+      });
+      expect(lockedFor({ ownerAura: [ICE_BLOCK, 69, 73] })?.locked).toBe(false);
+    });
+    it("B21 P2: a casting lock on the Felhunter itself still locks its kick", () => {
+      expect(lockedFor({ petAura: [ICE_BLOCK, 69, 73] })?.locked).toBe(true);
     });
 
     it("GH #180 (T26): range is measured from the Felhunter, not the Warlock", () => {
