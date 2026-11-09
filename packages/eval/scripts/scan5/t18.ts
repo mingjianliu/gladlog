@@ -160,24 +160,35 @@ function producerPressMs(
   );
   const secOfMs = (ms: number) => Math.floor((ms - ctx.start) / 1000);
   // a logged fade: the press the producer paired that removal with (the
-  // removal's second, which no length moves); an estimated one: the latest
-  // press it estimated at or before the line — matched without its expiry,
-  // the length this scan audits (a line printed at the unworn length still
-  // finds its press)
-  const hit = estimated
-    ? events
-        .filter(
-          (e) =>
-            e.isEstimated && secOfMs(startMs + e.castAtSeconds * 1000) <= sec,
-        )
-        .sort((a, b) => a.castAtSeconds - b.castAtSeconds)
-        .pop()
-    : events.find(
-        (e) =>
-          !e.isEstimated &&
-          secOfMs(startMs + e.expiresAtSeconds * 1000) === sec,
-      );
-  return hit === undefined ? undefined : startMs + hit.castAtSeconds * 1000;
+  // removal's second, which no length moves)
+  if (!estimated) {
+    const hit = events.find(
+      (e) =>
+        !e.isEstimated && secOfMs(startMs + e.expiresAtSeconds * 1000) === sec,
+    );
+    return hit === undefined ? undefined : startMs + hit.castAtSeconds * 1000;
+  }
+  // an estimated one: the latest ledger press at or before the line that the
+  // producer did not pair with a removal — matched without any expiry, which
+  // hangs on the length this scan audits (the unworn length's line printed
+  // at 3:40 has no estimated event under the worn length, whose expiry falls
+  // past the round's end)
+  // (a press the round ended on — `round_end`, the producer's own estimate
+  // or removal past the round's end — printed no fade and stays a candidate)
+  const logged = new Set(
+    events
+      .filter((e) => !e.isEstimated && e.cause !== "round_end")
+      .map((e) => e.castAtSeconds),
+  );
+  const press = ((entry.casts ?? []) as Array<{ timeSeconds: number }>)
+    .filter(
+      (c) =>
+        !logged.has(c.timeSeconds) &&
+        secOfMs(startMs + c.timeSeconds * 1000) <= sec,
+    )
+    .sort((x, y) => x.timeSeconds - y.timeSeconds)
+    .pop();
+  return press === undefined ? undefined : startMs + press.timeSeconds * 1000;
 }
 
 export function run(ctx: IRoundCtx): void {

@@ -71,13 +71,14 @@ function warrior(
     missesOut,
   };
 }
-function scan(owner: any, lines: string[]): string[] {
+function scan(owner: any, lines: string[], roundEndS?: number): string[] {
   const seen: string[] = [];
   run({
     lines,
     owner,
     players: [owner],
     start: START,
+    ...(roundEndS === undefined ? {} : { roundEndAt: ms(roundEndS) }),
     legacy: {
       startTime: START,
       endTime: START + 300_000,
@@ -107,6 +108,15 @@ describe("scan5/t18 setExtendedFade", () => {
       "setExtendedFade:estimatedBeforeEnd",
     ]);
     expect(scan(twoLanded(), [fade("0:22", "expired, estimated")])).toEqual([]);
+  });
+
+  // 605 91b53e67 3:22 (the ticket's repro): the worn expiry falls past the
+  // round's end, so the producer prints no fade — the unworn line still
+  // finds its press
+  it("an unworn estimated fade is caught when the worn expiry is past the round's end", () => {
+    expect(
+      scan(twoLanded(), [fade("0:18", "expired, estimated")], 20),
+    ).toEqual(["setExtendedFade:estimatedBeforeEnd"]);
   });
 
   it("`ended after A of Bs` must state the extended length", () => {
