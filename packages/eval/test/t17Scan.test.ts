@@ -14,6 +14,7 @@ import { run } from "../scripts/scan5/t17";
 const START = 1_000_000;
 const HOLY_LIGHT = "82326"; // 7 %
 const DIVINE_TOLL = "375576"; // 3 %
+const VIVIFY = "116670"; // 3 % (Mistweaver)
 
 const cast = (spellId: string, atMs: number, cost?: number): any => ({
   spellId,
@@ -74,5 +75,33 @@ describe("scan5/t17 noManaCostOffBase", () => {
         "      [RES] rdy:Δ +Divine Toll(no mana 4.1k/8.2k)",
       ]),
     ).toEqual({ checked: 0, seen: [] });
+  });
+
+  it("the spell's own stated cost is the truth when the owner's rows carry it", () => {
+    // Divine Toll stated 7,500 in another round; no other pct row needed
+    const owner = paladin([cast(DIVINE_TOLL, 5_000, 7_500)]);
+    expect(
+      scan(owner, ["      [RES] rdy:Δ +Divine Toll(no mana 4.1k/8.2k)"]).seen,
+    ).toEqual([
+      "noManaCostOffBase: Paladin Divine Toll 375576: printed 8.2k, the log implies 7.5k (its own cast rows)",
+    ]);
+  });
+
+  it("a name carrying a comma is read whole, full and delta form (codex 85-tk-E-T17-1 #1)", () => {
+    const monk = {
+      name: "Monk",
+      spec: "270",
+      spellCastEvents: [cast(VIVIFY, 5_000, 7_500)], // base 250,000
+    };
+    for (const line of [
+      "      [RES] rdy:Δ +Invoke Chi-Ji, the Red Crane(no mana 4.0k/13.1k)",
+      "      [RES] rdy:Life Cocoon,Invoke Chi-Ji, the Red Crane(no mana 4.0k/13.1k),2:Blessing of Sacrifice",
+    ])
+      expect(scan(monk, [line])).toEqual({
+        checked: 1,
+        seen: [
+          "noManaCostOffBase: Monk Invoke Chi-Ji, the Red Crane 325197: printed 13.1k, the log implies 12.5k (base 250000)",
+        ],
+      });
   });
 });

@@ -12,6 +12,7 @@ import { parseCsv } from "../../scripts/datagen/lib/wagoCsv";
 import {
   BASE_MANA,
   manaCostForCast,
+  pctManaCost,
   SPELL_MANA_COST_TABLE,
 } from "../../src/data/spellManaCost";
 
@@ -191,6 +192,15 @@ describe("manaCostForCast", () => {
   it("unconditional row: pct is a share of base mana (BASE_MANA), not the caster's max", () => {
     expect(BASE_MANA).toBe(250_000);
     expect(manaCostForCast("20473", "65")).toBeCloseTo(5000, 5); // 2% of 250,000
+  });
+
+  it("the game's arithmetic: float32 share of base mana, half to even (codex 85-tk-E-T17-1 #2)", () => {
+    // 3.325 % → 8,312.5 → the log states 8,312 (362 rows); 2.375 % → 5,937.5 → 5,938
+    expect(pctManaCost(3.32500004768)).toBe(8_312);
+    expect(pctManaCost(2.375)).toBe(5_938);
+    // 0.9 % is 0.89999997616 in float32: still 2,250, not 2,249
+    expect(pctManaCost(0.89999997616)).toBe(2_250);
+    expect(manaCostForCast("34861", "257")).toBe(8_312);
   });
 
   it("spec-conditional row: picks the caster's own spec, not another spec's row", () => {

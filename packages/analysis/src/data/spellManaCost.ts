@@ -45,6 +45,22 @@ export const SPELL_MANA_COST_TABLE: Record<string, ISpellManaCostRow> = gen;
 export const BASE_MANA = 250_000;
 
 /**
+ * A percentage row's cost in whole mana, as the game charges it: the share
+ * of `BASE_MANA` taken in float32 (DB2 stores the percentage as one), then
+ * rounded half to even. That reproduces every stated cost of the 401,548
+ * percentage-priced cast rows; a plain round misses Holy Word: Sanctify
+ * 34861 (3.325 % → 8,312.5 → the log states 8,312, 362 rows) and a floor
+ * misses 136,834 rows (0.9 % is 0.89999997616 in float32) — codex
+ * 85-tk-E-T17-1 #2.
+ */
+export function pctManaCost(pct: number): number {
+  const x = Math.fround(Math.fround(pct) * (BASE_MANA / 100));
+  const r = Math.round(x);
+  // Math.round takes .5 up; the game takes it to the even neighbour
+  return r - x === 0.5 && r % 2 !== 0 ? r - 1 : r;
+}
+
+/**
  * Resolves the mana cost of one cast, in absolute mana, given the caster's
  * casting spec (`CombatUnitSpec` id, needed to disambiguate a
  * spec-conditional row); a `pct` row is that share of `BASE_MANA`.
@@ -64,9 +80,7 @@ export function manaCostForCast(
 ): number | null {
   const raw = manaCostRowFor(spellId, specId);
   if (!raw) return null;
-  // the log states whole mana; DB2's percentages are float32 (0.9 reads
-  // 0.89999997616), so the product is rounded to the unit the game charges
-  if (raw.pct !== undefined) return Math.round((raw.pct / 100) * BASE_MANA);
+  if (raw.pct !== undefined) return pctManaCost(raw.pct);
   if (raw.flat !== undefined) return raw.flat;
   return null;
 }
