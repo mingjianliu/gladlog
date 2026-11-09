@@ -229,4 +229,25 @@ describe("T05 — a Metamorphosis up before the round's end is its press", () =>
       at(AURA_S) + friendly.cooldownSeconds * 1000,
     );
   });
+
+  // codex T05-2b: a logged 191427 button row is its own instant — the enemy
+  // side keeps a logged cast's own start, so the friendly side does too
+  it("a logged 191427 button row is not backdated", () => {
+    const u = dh(
+      [
+        [LogEvent.SPELL_AURA_APPLIED, AURA_S],
+        [LogEvent.SPELL_AURA_REMOVED, 80],
+      ],
+      [["191427", LANDING_S]],
+    );
+    const combat = {
+      startTime: T0,
+      endTime: at(120),
+      units: { [u.id]: u },
+    } as never;
+    const meta = extractMajorCooldowns(u, combat).find(
+      (c) => c.spellId === "191427",
+    );
+    expect(meta?.casts.map((c) => c.timeSeconds)).toEqual([LANDING_S]);
+  });
 });

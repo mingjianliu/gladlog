@@ -140,9 +140,15 @@ function genericCdOfAura(
 }
 
 /** Cast ids read as evidence (registered with the table above). */
+/** The leap landing: how a Metamorphosis press shows up, logged after the
+ * form went up — the one cast row `metamorphosisPressActivationMs` dates. */
+export const METAMORPHOSIS_LANDING_ID = "200166";
 export const METAMORPHOSIS_PRESS_CAST_IDS: ReadonlySet<string> = new Set([
-  "191427", // the button — never logged in the corpus, kept for safety
-  "200166", // the leap landing: how a press shows up
+  // the button — no SUCCESS row of it on the 605 files (2026-11-08), kept
+  // for safety; a logged one is its own press instant on both sides (the
+  // enemy side keeps a logged cast's own start, codex T05-2b)
+  "191427",
+  METAMORPHOSIS_LANDING_ID,
 ]);
 export const EYE_BEAM_ID = "198013";
 export const DOOM_WINDS_PRESS_ID = "384352";
@@ -369,6 +375,10 @@ export function auraOffensiveOccurrences(
     unit.auraEvents,
   );
   const pressCasts = castTimes(unit, METAMORPHOSIS_PRESS_CAST_IDS);
+  const landings = new Set(
+    castTimes(unit, new Set([METAMORPHOSIS_LANDING_ID])),
+  );
+  const pressIsLanding = (ms: number) => landings.has(ms);
   const eyeBeams = castTimes(unit, new Set([EYE_BEAM_ID]));
   const doomWindsPresses = castTimes(unit, new Set([DOOM_WINDS_PRESS_ID]));
   const ascendances = castTimes(unit, new Set([ASCENDANCE_ENH_ID]));
@@ -546,7 +556,9 @@ export function auraOffensiveOccurrences(
       }
       // the press went up at its activation, the instant the friendly ledger
       // dates it at (codex T05-2 #2): its own row, else the landing
-      const activation = metamorphosisPressActivationMs(unit, press);
+      const activation = pressIsLanding(press)
+        ? metamorphosisPressActivationMs(unit, press)
+        : press;
       const splitAt = Math.max(startMs, activation);
       if (splitAt > startMs) formOccurrence(startMs, splitAt, true);
       // inferred end: the PRESS's own duration from the press, bounded by

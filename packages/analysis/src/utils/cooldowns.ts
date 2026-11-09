@@ -107,6 +107,7 @@ import { incomingPressureEvents } from "./incomingPressure";
 import { logDatedNumberAt } from "./logEra";
 import {
   auraOffensiveActiveAt,
+  METAMORPHOSIS_LANDING_ID,
   METAMORPHOSIS_PRESS_CAST_IDS,
   metamorphosisPressActivationMs,
   OFFENSIVE_AURA_EVIDENCE,
@@ -6015,12 +6016,14 @@ function buildCooldownEntry(
     .map((e) => {
       // T05: a press whose cast row is its landing, logged after the thing
       // it pressed went up (Havoc Metamorphosis' 200166,
-      // `METAMORPHOSIS_PRESS_CAST_IDS`), is dated at its activation
+      // `METAMORPHOSIS_LANDING_ID`; a logged 191427 button row is its own
+      // instant, as on the enemy side, codex T05-2b), is dated at its activation
       // (`metamorphosisPressActivationMs`, the start `[ENEMY CD]` prints):
       // the round cut, the readiness at an instant and the press line all
       // read it (codex B11 #1: at 52a97230 r0's deciding death the press
       // read ready, the landing still 65 ms away)
-      const pressMs = METAMORPHOSIS_PRESS_CAST_IDS.has(String(e.spellId ?? ""))
+      const pressMs =
+        String(e.spellId ?? "") === METAMORPHOSIS_LANDING_ID
         ? metamorphosisPressActivationMs(unit, e.logLine.timestamp)
         : e.logLine.timestamp;
       const timeSeconds = (pressMs - matchStartMs) / 1000;
