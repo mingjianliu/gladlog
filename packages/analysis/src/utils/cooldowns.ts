@@ -1709,6 +1709,12 @@ export interface ICooldownCast {
    * `freeRecast` that stands on the last press that spent one, not a free
    * press (GH #183). */
   unreleased?: true;
+  /** No cast row dates this press: it is timed at the latest it can have
+   * been (`hiddenPressMs`: the batch that re-stated the unit;
+   * `effectEvidenceCastSeconds`: its effect's first row), so the real press
+   * is at or before `timeSeconds`. A reader measuring a recast from it has
+   * an upper bound, not an instant (codex 85-tk-E-T16-2b). */
+  timedAtLatest?: true;
   /** Event reductions that pulled this press's ready instant in (Storm
    * Conduit's Lightning Bolts): `cooldownSecondsOverride` is the final
    * R − press, right for "available at t" (R ≤ t); "seconds until ready" at t
@@ -6151,7 +6157,10 @@ function buildCooldownEntry(
     spell.spellId,
     matchStartMs,
     matchStartMs + matchDurationSeconds * 1000,
-  ).map((ms) => ({ timeSeconds: (ms - matchStartMs) / 1000 }));
+  ).map((ms) => ({
+    timeSeconds: (ms - matchStartMs) / 1000,
+    timedAtLatest: true as const,
+  }));
 
   // A Solo Shuffle round's endTime is its deciding death + 2 s, but its
   // units keep the whole between-round gap — including the NEXT round's
@@ -6183,7 +6192,7 @@ function buildCooldownEntry(
           spell.spellId,
           cooldownSeconds,
           combat,
-        ).map((timeSeconds) => ({ timeSeconds }))
+        ).map((timeSeconds) => ({ timeSeconds, timedAtLatest: true as const }))
       : [];
   const rawCasts: ICooldownCast[] = [
     ...castRawCasts,

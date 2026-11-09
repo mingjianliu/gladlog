@@ -45,7 +45,11 @@ const KIT_RANGE = /(?:^|, )([^,[\]]+?) \[(\d+)–(\d+)s([^\]]*)\]/g;
  * a cooldown. `ready`: every press that proves the button was back — those,
  * plus a hold that never went out (`unreleased`: it spent nothing, but it
  * could only start on a ready button). A free press of Time Spiral or a
- * free-recast window proves neither. Epoch ms, the round's end of play the
+ * free-recast window proves neither. A press no cast row dates
+ * (`timedAtLatest`: unseen, or read off its effect) is ready, not spent: its
+ * real instant is at or before its time, so a gap measured from it reads
+ * short (codex 85-tk-E-T16-2b: an unseen Life Cocoon at 10 s re-stated at
+ * 15 s, pressed again at 97 s, read 82.0 s against `[86–120s]`). Epoch ms, the round's end of play the
  * cut. One per ledger entry of that name.
  */
 function pressesOf(
@@ -61,8 +65,10 @@ function pressesOf(
       for (const c of cd.casts) {
         const ms = ctx.legacy.startTime + c.timeSeconds * 1000;
         if (ms > ctx.roundEndAt) continue;
+        // a press timed at the latest it can have been is no anchor (the
+        // gap from it reads short), but it still proves the button back
         if (!c.freeRecast) {
-          spent.push(ms);
+          if (!c.timedAtLatest) spent.push(ms);
           ready.push(ms);
         } else if (c.unreleased) ready.push(ms);
       }
