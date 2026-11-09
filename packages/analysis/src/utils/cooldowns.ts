@@ -6979,6 +6979,7 @@ interface ISingleEnemyCDCast {
   spellName: string;
   castTimeSeconds: number;
   buffEndSeconds: number;
+  refusedAtPress?: true;
 }
 export interface IEnemyCDTimelineForTiming {
   alignedBurstWindows: readonly IBurstWindow[];
@@ -7094,7 +7095,10 @@ export function annotateDefensiveTimings(
 ): IMajorCooldownInfo[] {
   const matchStartMs = combat.startTime;
 
-  const allSingleCDs = enemyCDTimeline.players.flatMap((p) => p.offensiveCDs);
+  // a press the game refused (T29) ran no effect to time a defensive against
+  const allSingleCDs = enemyCDTimeline.players.flatMap((p) =>
+    p.offensiveCDs.filter((c) => !c.refusedAtPress),
+  );
 
   for (const cd of cooldowns) {
     if (!DEFENSIVE_TAGS.has(cd.tag)) continue;

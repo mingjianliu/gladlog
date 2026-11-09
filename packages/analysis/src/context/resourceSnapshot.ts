@@ -1214,6 +1214,9 @@ function buildResourceSnapshotOnce({
       // D39: Ray of Frost into a Grounding Totem, IMMUNE at the press) — no
       // instant cooldown, nothing running
       if (!(buffDuration > 0) && CHANNELED_SPELL_IDS.has(cd.spellId)) continue;
+      // nor did a press the game refused (`refusedAtPress`, T29: Deathmark
+      // into two IMMUNE, b74d7bf6 r1 2:45)
+      if (cd.refusedAtPress) continue;
       const end = cd.castTimeSeconds + (buffDuration > 0 ? buffDuration : 8);
       // F20 D25: spent by the row's second on the friendly half's predicate
       // (`pressSpentBy` — the rendered second, A45), not `ago >= 0` against

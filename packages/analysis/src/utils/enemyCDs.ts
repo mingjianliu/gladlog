@@ -128,6 +128,12 @@ export interface IEnemyCDCast {
    * when a Solo Shuffle round's end ended an effect whatever its span
    * read (`cutAtRoundEnd`, T28). */
   deathCutAtSeconds?: number;
+  /** T29: the game refused this press's effect
+   * (`pressEffectRefusedAtCast`: a miss, nothing landed) — it ran for no
+   * time (`buffEndSeconds` is the press). The press stays a fact (its
+   * cooldown is spent); no `[RES]` entry, burst window or defensive timing
+   * reads it as an effect. */
+  refusedAtPress?: true;
   /** GH #119: "fact" = shown, never part of a burst window (a Demonic
    * Metamorphosis form under OFFENSIVE_AURA_FLAGS.demonic "fact"). Absent =
    * "burst". */
@@ -314,16 +320,170 @@ export function observedEffectEndSeconds(
    * 20-F17-11 #1) */
   onlyDestId?: string,
 ): number | null {
-  return (
-    observedEffectEnd(
-      caster,
-      castSpellId,
-      castS,
-      nextSameCastS,
-      combat,
-      onlyDestId,
-    )?.endS ?? null
+  const end = observedEffectEnd(
+    caster,
+    castSpellId,
+    castS,
+    nextSameCastS,
+    combat,
+    onlyDestId,
   );
+  if (end !== null) return end.endS;
+  // a press the game refused ran for no time at all (T29)
+  return pressEffectRefusedAtCast(
+    caster,
+    castSpellId,
+    combat.startTime + castS * 1000,
+    combat.startTime + nextSameCastS * 1000,
+    combat,
+  )
+    ? castS
+    : null;
+}
+
+/**
+ * T29: did the game refuse this press's effect? A SPELL_MISSED of the cast
+ * or one of its effect ids (`effectSpanIdsOfCast`) by the caster inside the
+ * press's start window ([press, press + `EFFECT_START_AFTER_S`]) — any miss
+ * type but ABSORB: an absorbed hit landed (Takedown's own buff ran on a hit
+ * a shield ate) — on the press's own target when its cast row names one (a
+ * Divine Toll IMMUNE on a second enemy while its Judgment struck the cast's
+ * target refused nothing: 0284fcd9 r1 2:17) — and nothing of the press
+ * landed at all before the caster's next press of it (`untilMs`, or the
+ * caster's next cast row of the spell, whichever is first — a row of the
+ * press's own ids before its next press is its effect: Meteor's IMMUNE on a
+ * Chi-Ji at the press while its impact struck two players 2.2 s later,
+ * 7da6cb8d r1 0:20): no APPLIED / REFRESH /
+ * APPLIED_DOSE (from `EFFECT_START_BEFORE_S` before the press), damage or
+ * heal row (a fully absorbed hit's ABSORB miss included) or summon
+ * (SPELL_SUMMON; any summon inside the start window — a talent's summon
+ * has its own id) by the caster of those ids or of the press's English name (the
+ * channel refusal's reading, `channelRefusedAtCast`: Frozen Orb's IMMUNE on
+ * 84714 while its orb's 84721 hits, same name, ran on). The effect never
+ * ran, so its window ends at the press. fact12 (T03-1 residual): b74d7bf6
+ * r1 2:45, Deathmark met two IMMUNE and put no 360194 on anyone — `[RES]`
+ * listed it to 3:00 on the official 16 s.
+ */
+export function pressEffectRefusedAtCast(
+  caster: Pick<ICombatUnit, "id"> &
+    Partial<
+      Pick<
+        ICombatUnit,
+        "missesOut" | "damageOut" | "healOut" | "spellCastEvents"
+      >
+    >,
+  castSpellId: string,
+  castMs: number,
+  /** the caster's next press of the same spell (Infinity when none; the
+   * caster's own next cast row of it bounds it too) */
+  untilMs: number,
+  combat: { units?: Readonly<Record<string, ICombatUnit>> },
+): boolean {
+  const ids = effectSpanIdsOfCast(castSpellId);
+  const name = getEnglishSpellName(castSpellId, "");
+  const mine = (r: {
+    srcUnitId?: string;
+    spellId?: string;
+    spellName?: string;
+  }) =>
+    r.srcUnitId === caster.id &&
+    !!r.spellId &&
+    (ids.has(r.spellId) ||
+      (name !== "" &&
+        getEnglishSpellName(r.spellId, r.spellName ?? "") === name));
+  const casts = (caster.spellCastEvents ?? []).filter(
+    (e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+  );
+  // the next press that owns the press's effect rows — a cast row of the
+  // caster of its ids or its name (codex T29-1g #1: Frostwyrm's Fury
+  // 1265384 refused at 20.994, a 279302 cast at 113.470 struck 279303) —
+  // bounds the window, and the rows it may log ahead of its own cast row
+  // (`EFFECT_START_BEFORE_S`, the aura lead) are that press's: none of them
+  // is a landing of this one (codex T29-1b #1: a Ray of Frost hit at the
+  // next press's 12.168 rescued the refused 10.000; codex T29-1g #2:
+  // Execution Sentence's 1234189 applied 1 ms before the next press's row)
+  // (a cast row of its effect ids inside the start window is the press's
+  // own: Odyn's Fury logs its 385060 / 385061 / 385062 swings as casts)
+  const nextOwnMs =
+    casts.find(
+      (e) =>
+        e.logLine.timestamp > castMs &&
+        (e.spellId === castSpellId ||
+          (mine(e) &&
+            e.logLine.timestamp > castMs + EFFECT_START_AFTER_S * 1000)),
+    )?.logLine.timestamp ?? Infinity;
+  const lastMs =
+    Math.min(untilMs, nextOwnMs) - EFFECT_START_BEFORE_S * 1000 - 1;
+  const startToMs = Math.min(castMs + EFFECT_START_AFTER_S * 1000, lastMs);
+  const toMs = lastMs;
+  // the press's own target, when its cast row names one: a refusal on
+  // another unit of a press that strikes several (Divine Toll) is no
+  // refusal of the press
+  const castDest = casts.find(
+    (e) => e.logLine.timestamp === castMs && e.spellId === castSpellId,
+  )?.destUnitId;
+  const target =
+    castDest && castDest !== "0000000000000000" ? castDest : undefined;
+  if (
+    !(caster.missesOut ?? []).some(
+      (m) =>
+        m.missType !== "ABSORB" &&
+        m.srcUnitId === caster.id &&
+        (target === undefined || m.destUnitId === target) &&
+        !!m.spellId &&
+        ids.has(m.spellId) &&
+        m.logLine.timestamp >= castMs &&
+        m.logLine.timestamp <= startToMs,
+    )
+  )
+    return false;
+  // a hit a shield ate in full is logged as an ABSORB miss: it landed
+  if (
+    [
+      ...(caster.damageOut ?? []),
+      ...(caster.healOut ?? []),
+      ...(caster.missesOut ?? []).filter((m) => m.missType === "ABSORB"),
+    ].some(
+      (d) =>
+        mine(d) && d.logLine.timestamp >= castMs && d.logLine.timestamp <= toMs,
+    )
+  )
+    return false;
+  for (const u of Object.values(combat.units ?? {}))
+    for (const a of u.auraEvents ?? []) {
+      const ev = a.logLine.event;
+      if (
+        mine(a) &&
+        (ev === LogEvent.SPELL_AURA_APPLIED ||
+          ev === LogEvent.SPELL_AURA_REFRESH ||
+          ev === LogEvent.SPELL_AURA_APPLIED_DOSE) &&
+        a.logLine.timestamp >= castMs - EFFECT_START_BEFORE_S * 1000 &&
+        a.logLine.timestamp <= toMs
+      )
+        return false;
+    }
+  // a press that put down a summon ran its effect through it, whatever its
+  // own row on the target read: a SPELL_SUMMON by the caster (the summoned
+  // unit's `actionIn`) of the press's ids or name inside its window
+  // (39-3-227 r3 2:11, Grimoire: Imp Lord IMMUNE in the same millisecond
+  // its Imp Lord was summoned and fought on), or of any spell inside the
+  // press's start window — a talent's summon carries its own id and name
+  // (codex T29-1e, 310e5c6d r6 3:13: Soul Fire MISS, its Avatar of
+  // Destruction Overfiend 434587 summoned 7 ms after the press, 7k damage).
+  // An unrelated summon there keeps a refused press's official window: the
+  // pre-T29 reading, the safe side.
+  for (const u of Object.values(combat.units ?? {}))
+    for (const a of u.actionIn ?? []) {
+      if (
+        a.logLine.event !== LogEvent.SPELL_SUMMON ||
+        a.srcUnitId !== caster.id ||
+        a.logLine.timestamp < castMs - EFFECT_START_BEFORE_S * 1000
+      )
+        continue;
+      if (a.logLine.timestamp <= startToMs) return false;
+      if (mine(a) && a.logLine.timestamp <= toMs) return false;
+    }
+  return true;
 }
 
 /** The talent aura (`TALENT_EFFECT_AURAS_OF_CAST`) this caster applied —
@@ -1115,6 +1275,21 @@ export function reconstructEnemyCDTimeline(
         combat,
       );
       if (end === null) {
+        // T29: a press the game refused (`pressEffectRefusedAtCast`: a miss,
+        // nothing landed) never ran
+        if (
+          pressEffectRefusedAtCast(
+            enemy,
+            cd.spellId,
+            matchStartMs + cd.castTimeSeconds * 1000,
+            matchStartMs + (next?.castTimeSeconds ?? Infinity) * 1000,
+            combat,
+          )
+        ) {
+          cd.buffEndSeconds = cd.castTimeSeconds;
+          cd.refusedAtPress = true;
+          continue;
+        }
         // GH #184 part B (codex review 2026-11-06 P2): a press whose effect
         // runs on a talent's aura (Divine Toll → Divine Resonance) has no
         // official length of its own; with the aura applied at the press
@@ -1168,14 +1343,18 @@ export function reconstructEnemyCDTimeline(
             cd.buffEndSeconds,
             next?.castTimeSeconds ?? Infinity,
           );
-          cd.buffEndSeconds = channelRefusedAtCast(
+          const channelRefused = channelRefusedAtCast(
             enemy,
             cd.spellId,
             matchStartMs + cd.castTimeSeconds * 1000,
             matchStartMs + untilS * 1000,
             cd.spellName,
             next !== undefined && next.castTimeSeconds <= cd.buffEndSeconds,
-          )
+          );
+          // not `refusedAtPress`: that flag is `pressEffectRefusedAtCast`'s
+          // alone (above) — this reading counts an ABSORB miss as a refusal,
+          // and a fully absorbed tick landed (codex T29-1c #1)
+          cd.buffEndSeconds = channelRefused
             ? cd.castTimeSeconds
             : Math.max(
                 cd.castTimeSeconds,
@@ -1188,6 +1367,32 @@ export function reconstructEnemyCDTimeline(
                   cd.spellName,
                 ),
               );
+        }
+        // T29: the caster's own death ends a window the log shows no end of
+        // when no copy of its effect the caster put on any unit outlives it
+        // — T03's death cut (`deathCutOfficialEnd`) for a press-only window.
+        // 52-1-311 r1 1:58: Colossus Smash pressed 0.39 s before its warrior
+        // died; its debuff, 0.5 s behind the hit, never applied, and `[RES]`
+        // listed it after the warrior's `[DEATH]` on the official 10 s.
+        const diedMs = firstDeathMs(enemy);
+        const diedS = (diedMs - matchStartMs) / 1000;
+        if (
+          Number.isFinite(diedMs) &&
+          diedMs <= combat.endTime &&
+          diedS >= cd.castTimeSeconds &&
+          cd.buffEndSeconds - diedS > AURA_NATURAL_END_JITTER_S
+        ) {
+          const r = casterAuraOutlives(
+            enemy,
+            getEnglishSpellName(cd.spellId, cd.spellName),
+            diedMs + DEATH_CASCADE_MS,
+            combat,
+          );
+          if (r.any && !r.outlives) {
+            cd.deathCutOfficialEndSeconds = cd.buffEndSeconds;
+            cd.deathCutAtSeconds = diedS;
+            cd.buffEndSeconds = diedS;
+          }
         }
         continue;
       }
@@ -1363,6 +1568,16 @@ export function reconstructEnemyCDTimeline(
         matchStartMs,
         combat.endTime,
       );
+      // a press the game refused never ran (T29)
+      const refused =
+        effectEnd === undefined &&
+        pressEffectRefusedAtCast(
+          enemy,
+          spellId,
+          cast.logLine.timestamp,
+          Infinity,
+          combat,
+        );
       offensiveFacts.push({
         spellId,
         spellName: name,
@@ -1373,7 +1588,11 @@ export function reconstructEnemyCDTimeline(
           castTimeSeconds + cooldownSeconds,
         buffEndSeconds:
           effectEnd?.endSeconds ??
-          castTimeSeconds + (spellEffectData[spellId]?.durationSeconds ?? 0),
+          (refused
+            ? castTimeSeconds
+            : castTimeSeconds +
+              (spellEffectData[spellId]?.durationSeconds ?? 0)),
+        ...(refused ? { refusedAtPress: true as const } : {}),
         ...(effectEnd?.officialEndSeconds === undefined
           ? {}
           : {
@@ -1419,14 +1638,17 @@ export function reconstructEnemyCDTimeline(
   // Find aligned burst windows: clusters of 2+ casts within BURST_CLUSTER_SECONDS
   const allCastsRaw = players
     .flatMap((p) =>
-      p.offensiveCDs.map((cd) => ({
-        time: cd.castTimeSeconds,
-        buffEndSeconds: cd.buffEndSeconds,
-        playerName: p.playerName,
-        spellName: cd.spellName,
-        spellId: cd.spellId,
-        dangerWeight: cd.dangerWeight,
-      })),
+      // a refused press (T29) put no effect in any window
+      p.offensiveCDs
+        .filter((cd) => !cd.refusedAtPress)
+        .map((cd) => ({
+          time: cd.castTimeSeconds,
+          buffEndSeconds: cd.buffEndSeconds,
+          playerName: p.playerName,
+          spellName: cd.spellName,
+          spellId: cd.spellId,
+          dangerWeight: cd.dangerWeight,
+        })),
     )
     .sort((a, b) => a.time - b.time);
 

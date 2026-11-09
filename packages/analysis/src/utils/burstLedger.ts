@@ -455,8 +455,14 @@ export function analyzeBurstLedger(
   // grouping: grouped by span, a post-round press joined the burst it
   // overlapped and printed `Avatar 0:10–0:20 + Recklessness 0:21–0:20` in a
   // Solo Shuffle round that ended at 0:20 (codex post-hoc 60-POSTHOC-03 U3)
-  const pressedInRound = (cd: { castTimeSeconds: number }) =>
-    cd.castTimeSeconds < matchEndS;
+  // …and a press the game refused (`refusedAtPress`, T29: Touch of the
+  // Magi into an IMMUNE, nothing of it landed) ran no burst and overlapped
+  // no ally's (codex T29-1 #2: a `10–10` burst, and an ally's Avatar
+  // credited with a 0 s overlap)
+  const pressedInRound = (cd: {
+    castTimeSeconds: number;
+    refusedAtPress?: true;
+  }) => cd.castTimeSeconds < matchEndS && !cd.refusedAtPress;
   const ownCDs = (
     reconstructEnemyCDTimeline([player], combat).players[0]?.offensiveCDs ?? []
   ).filter(pressedInRound);

@@ -38,14 +38,18 @@ export function deriveBurstAuras(
     for (const p of reconstructEnemyCDTimeline(enemies, legacy).players) {
       const unitId = idByName.get(p.playerName);
       if (!unitId) continue;
-      out[unitId] = p.offensiveCDs.map((cd) => {
-        const span = burstCastSpan(cd);
-        return {
-          fromMs: legacy.startTime + span.from * 1000,
-          toMs: legacy.startTime + span.to * 1000,
-          spellName: cd.spellName,
-        };
-      });
+      // a press the game refused ran no burst (T29, codex T29-1c #2: the
+      // zero-length span still glowed at its own millisecond)
+      out[unitId] = p.offensiveCDs
+        .filter((cd) => !cd.refusedAtPress)
+        .map((cd) => {
+          const span = burstCastSpan(cd);
+          return {
+            fromMs: legacy.startTime + span.from * 1000,
+            toMs: legacy.startTime + span.to * 1000,
+            spellName: cd.spellName,
+          };
+        });
     }
     return out;
   } catch {

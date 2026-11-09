@@ -2524,6 +2524,9 @@ export function buildKillSequenceBlock(params: {
           const individualCDs = enemyCDTimeline.players.flatMap((p) =>
             p.offensiveCDs.filter(
               (cd) =>
+                // a press the game refused was never active (T29, codex
+                // T29-1b #2)
+                !cd.refusedAtPress &&
                 cd.castTimeSeconds <= deathTime &&
                 cd.castTimeSeconds >= deathTime - 15,
             ),
