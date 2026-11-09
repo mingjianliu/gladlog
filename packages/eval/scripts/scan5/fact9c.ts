@@ -80,7 +80,9 @@ function deflections(ctx: IRoundCtx): void {
       );
     if (audit) {
       ctx.bump("deflectAsImmunity");
-      if (audit[2] === "immunity") name = audit[1];
+      // a split entry's row carries its school (T33: `X (magic damage)`)
+      if (audit[2] === "immunity")
+        name = audit[1]!.replace(/ \([a-z/]+ damage\)$/, "");
     } else if (stacked) {
       ctx.bump("deflectAsImmunity");
       if (stacked[2] === "immunity") name = stacked[1];

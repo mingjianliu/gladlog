@@ -62,6 +62,7 @@ export * from "./utils/dpsMetrics";
 export * from "./utils/drAnalysis";
 export * from "./utils/enemyCDs";
 export * from "./utils/enemyCompArchetype";
+export { immunitySchoolWords } from "./utils/enemyDefensives";
 export * from "./utils/healerExposureAnalysis";
 export * from "./utils/healerOffenseAnalysis";
 export * from "./utils/healingGaps";

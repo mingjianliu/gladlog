@@ -1,4 +1,8 @@
-import { DECISIVE_MARGIN_PCT, fmtTime } from "@gladlog/analysis";
+import {
+  DECISIVE_MARGIN_PCT,
+  fmtTime,
+  immunitySchoolWords,
+} from "@gladlog/analysis";
 import { Fragment, useEffect, useState } from "react";
 
 import {
@@ -8,7 +12,6 @@ import {
 } from "../derive/deathRecap";
 import { ChipIcon } from "./SpellInline";
 import { UnitName } from "./UnitName";
-
 
 const fmtK = (n: number): string => `${(n / 1000).toFixed(1)}k`;
 
@@ -25,15 +28,35 @@ const KIND_LABEL: Record<string, string> = {
  * version. Numbers are taken straight from IMitigationAuditRow (the return value
  * of Task1's computeMitigationAudit) and never re-derived.
  */
+const SCHOOL_ZH: Record<string, string> = {
+  physical: "物理",
+  magic: "魔法",
+  holy: "神圣",
+  fire: "火焰",
+  nature: "自然",
+  frost: "冰霜",
+  shadow: "暗影",
+  arcane: "奥术",
+};
+
 function mitigationText(row: DeathRecap["mitigationAudit"][number]): string {
   const overlap = row.activeOverlapS.toFixed(1);
+  // a split entry's component rows name the school each prices — the
+  // prompt's own words (`immunitySchoolWords`), in Chinese (T33, ruling R07)
+  const name =
+    row.schoolMask !== undefined
+      ? `${row.spellName}(${immunitySchoolWords(row.schoolMask)
+          .split("/")
+          .map((w) => SCHOOL_ZH[w] ?? w)
+          .join("/")}伤害)`
+      : row.spellName;
   if (row.kind === "arith") {
     const blockedK = Math.round((row.blockedAmount ?? 0) / 1000);
     const pctPart =
       row.blockedPctMaxHp !== undefined
         ? `(≈${row.blockedPctMaxHp}% maxHp)`
         : "";
-    return `${row.spellName} 挡了 ~${blockedK}k${pctPart},覆盖 ${overlap}s`;
+    return `${name} 挡了 ~${blockedK}k${pctPart},覆盖 ${overlap}s`;
   }
   if (row.kind === "deferred") {
     // A deferral shield (Time Dilation, Stretch Time) holds damage back (Time
@@ -48,13 +71,13 @@ function mitigationText(row: DeathRecap["mitigationAudit"][number]): string {
   }
   if (row.kind === "immunity") {
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
-    return `${row.spellName} 免疫覆盖 ${overlap}s(期内观测承伤 ~${dmgK}k)`;
+    return `${name} 免疫覆盖 ${overlap}s(期内观测承伤 ~${dmgK}k)`;
   }
   if (row.kind === "deflection") {
     // fact9 D3: Aspect of the Turtle deflects direct attacks, damage over
     // time still lands — no immunity (user ruling 2026-10-21)
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
-    return `${row.spellName} 偏转直接攻击 ${overlap}s(持续伤害照常落地;期内观测承伤 ~${dmgK}k)`;
+    return `${name} 偏转直接攻击 ${overlap}s(持续伤害照常落地;期内观测承伤 ~${dmgK}k)`;
   }
   if (row.kind === "absorb") {
     // Absorb shields are effective HP measured from the log's own absorb

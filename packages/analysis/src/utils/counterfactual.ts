@@ -261,6 +261,13 @@ export interface IMitigationAuditRow {
    * expired unconsumed contributes nothing — see absorbShields.ts. */
   absorbedAmount?: number;
   absorbedPctMaxHp?: number;
+  /** The school mask this row prices, set on every component row of a SPLIT
+   * entry (more than one component: Evasion with Elusiveness and Bait and
+   * Switch — physical and magic; Cloak of Shadows with Bait and Switch — the
+   * magic immunity and physical 20 %). Without it the components print as
+   * same-named rows over the same seconds (pipeline T33, ruling R07 (5)).
+   * Undefined on a one-component entry. */
+  schoolMask?: number;
 }
 
 /** A whitelisted aura interval clipped to the death window (both ends in
@@ -476,6 +483,8 @@ export function computeMitigationAudit(
     }
     if (res.positional) continue; // Darkness class: positional conditions are not modelled this round, skip without a row
 
+    // a split entry labels each component row with the school it prices
+    const split = res.components.length > 1;
     for (const [compIndex, comp] of res.components.entries()) {
       // Shape A backs ACTIVE mitigation out of what landed: observed × p / (1 − p).
       // M3a: one component per entry, so this loop runs once and is identical to
@@ -520,6 +529,7 @@ export function computeMitigationAudit(
           activeOverlapS,
           damageTakenDuringImmunity: allSchools,
           damageOutsideImmunitySchool: Math.max(0, allSchools - observed),
+          ...(split ? { schoolMask: comp.schoolMask } : {}),
         });
         continue;
       }
@@ -541,6 +551,7 @@ export function computeMitigationAudit(
           maxHp !== null && maxHp > 0
             ? round1((blockedAmount / maxHp) * 100)
             : undefined,
+        ...(split ? { schoolMask: comp.schoolMask } : {}),
       });
     }
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { formatMitigationAuditLine } from "../src/context/matchTimelineSections";
 import {
   componentForDamage,
   componentForSchool,
@@ -137,6 +138,65 @@ describe("a split Evasion prices each hit once", () => {
       .map((r) => r.blockedAmount);
     expect(blocked.reduce((a, b) => a! + b!, 0)).toBe(32_000);
     expect(blocked).not.toContain(17_000);
+  });
+});
+
+// pipeline T33 (ruling R07 (5)): a split entry's component rows printed as
+// two same-named "Mitigation audit: Evasion blocked …" rows over the same
+// seconds (605: 82-1 r1, ~8k and ~41k); each now names its school
+describe("a split defensive's audit rows name their school (T33)", () => {
+  const rogueWith = (holds: string[]) =>
+    ({
+      id: "R1",
+      name: "R1",
+      spec: "261",
+      info: { holds },
+      spellCastEvents: [],
+      damageIn: [
+        {
+          logLine: { timestamp: 54_000 },
+          effectiveAmount: 40_000,
+          spellSchoolId: "0x1",
+        },
+        {
+          logLine: { timestamp: 55_000 },
+          effectiveAmount: 68_000,
+          spellSchoolId: "0x4",
+        },
+      ],
+      auraEvents: (["SPELL_AURA_APPLIED", "SPELL_AURA_REMOVED"] as const).map(
+        (event, i) => ({
+          spellId: EVASION,
+          spellName: "Evasion",
+          destUnitId: "R1",
+          srcUnitId: "R1",
+          srcUnitName: "R1",
+          timestamp: (i ? 58 : 52) * 1000,
+          logLine: { event, timestamp: (i ? 58 : 52) * 1000 },
+        }),
+      ),
+      advancedActions: [],
+    }) as never;
+  const auditLines = (holds: string[]) => {
+    const rogue = rogueWith(holds);
+    return computeMitigationAudit(
+      rogue,
+      { startTime: 0, endTime: 120_000, units: { R1: rogue } },
+      60,
+    )
+      .rows.filter((r) => r.spellId === EVASION)
+      .map((r) => formatMitigationAuditLine(r));
+  };
+  it("with Elusiveness and Bait and Switch: a physical row and a magic row", () => {
+    expect(auditLines([ELUSIVENESS, BAIT])).toEqual([
+      "Mitigation audit: Evasion (physical damage) blocked ~10k over 6.0s active in the final 10s",
+      "Mitigation audit: Evasion (magic damage) blocked ~32k over 6.0s active in the final 10s",
+    ]);
+  });
+  it("one component (no Bait and Switch): one row, no label", () => {
+    expect(auditLines([ELUSIVENESS])).toEqual([
+      "Mitigation audit: Evasion blocked ~27k over 6.0s active in the final 10s",
+    ]);
   });
 });
 

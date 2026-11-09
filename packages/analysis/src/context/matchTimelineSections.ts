@@ -55,7 +55,10 @@ import {
   wasLockedOutThroughWindow,
 } from "../utils/deathOutcomeAnalysis";
 import { TIME_DILATION_ID } from "../utils/deferralShield";
-import { ENEMY_DEF_DEFLECTS_WORDS } from "../utils/enemyDefensives";
+import {
+  ENEMY_DEF_DEFLECTS_WORDS,
+  immunitySchoolWords,
+} from "../utils/enemyDefensives";
 import {
   HEAL_ABSORB_SELF_SAVE_IDS,
   healAbsorbDeathLine,
@@ -893,6 +896,12 @@ export const MITIGATION_AUDIT_INDEPENDENT_NOTE =
  */
 export function formatMitigationAuditLine(row: IMitigationAuditRow): string {
   const overlap = row.activeOverlapS.toFixed(1);
+  // a split entry's component rows name the school each prices (T33, ruling
+  // R07 (5): Evasion's two rows over the same seconds were indistinguishable)
+  const name =
+    row.schoolMask !== undefined
+      ? `${row.spellName} (${immunitySchoolWords(row.schoolMask)} damage)`
+      : row.spellName;
   // triage G7-P5 (other F-O5 + cc-dr F-MA1, one wording): every form says the
   // overlap is inside the final window before the death
   const inWindow = `in the final ${COUNTERFACTUAL_WINDOW_S}s`;
@@ -902,7 +911,7 @@ export function formatMitigationAuditLine(row: IMitigationAuditRow): string {
       row.blockedPctMaxHp !== undefined
         ? ` (≈${row.blockedPctMaxHp}% max HP)`
         : "";
-    return `Mitigation audit: ${row.spellName} blocked ~${blockedK}k${pctPart} over ${overlap}s active ${inWindow}`;
+    return `Mitigation audit: ${name} blocked ~${blockedK}k${pctPart} over ${overlap}s active ${inWindow}`;
   }
   if (row.kind === "deferred") {
     const deferredK = Math.round((row.deferredAmount ?? 0) / 1000);
@@ -917,13 +926,13 @@ export function formatMitigationAuditLine(row: IMitigationAuditRow): string {
     const outsideK = Math.round((row.damageOutsideImmunitySchool ?? 0) / 1000);
     const outsidePart =
       outsideK > 0 ? `; ~${outsideK}k of it outside the immunity's school` : "";
-    return `Mitigation audit: ${row.spellName} immunity covered ${overlap}s ${inWindow} (still took ~${dmgK}k during it — dmg the immunity did not block${outsidePart})`;
+    return `Mitigation audit: ${name} immunity covered ${overlap}s ${inWindow} (still took ~${dmgK}k during it — dmg the immunity did not block${outsidePart})`;
   }
   if (row.kind === "deflection") {
     // fact9 D3 (user rulings 2026-10-21 / 11-03): a deflection in the
     // legend's own words (`ENEMY_DEF_DEFLECTS_WORDS`), never an immunity
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
-    return `Mitigation audit: ${row.spellName} (${ENEMY_DEF_DEFLECTS_WORDS}) covered ${overlap}s ${inWindow} (still took ~${dmgK}k during it)`;
+    return `Mitigation audit: ${name} (${ENEMY_DEF_DEFLECTS_WORDS}) covered ${overlap}s ${inWindow} (still took ~${dmgK}k during it)`;
   }
   // other F-O5: 24 of 25 such rows were shields, dodges or heals — "redirect /
   // reflect" named one; say only what is true of all of them
