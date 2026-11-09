@@ -5827,3 +5827,24 @@ option gone (raw pair pillar-blocked, the interpolated point 1.2 yd off read
 clear); s0/144-1 r1 2:53–2:55 Freezing Trap → FMage peel option added. Batch
 verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
 the wave.
+
+v517 (2026-11-09, ruling R07 item 5; pipeline batch B28, T33). A split
+defensive's death-audit component rows (Evasion / Cloak of Shadows with Bait
+and Switch, Blessing of Protection's physical immunity beside its magic
+reduction) printed under the same name over the same seconds, so the reader
+could not tell which school each row priced. `computeMitigationAudit`
+(counterfactual.ts) sets `schoolMask` on every component row of an entry with
+more than one component; `formatMitigationAuditLine` (prompt) and
+DeathRecapCard (desktop, Chinese) render the name as "X (physical damage)" /
+"X (magic damage)" through `immunitySchoolWords`, in the arith, immunity and
+deflection forms; one-component entries are unchanged. Example (605 s2/120-3):
+"Mitigation audit: Cloak of Shadows immunity covered 0.3s …" + "Mitigation
+audit: Cloak of Shadows blocked ~52k …" → "Cloak of Shadows (magic damage)
+immunity covered 0.3s …" + "Cloak of Shadows (physical damage) blocked ~52k …".
+New scan5 module t33 (auditSplitLabel): unlabelled same-name same-seconds
+groups 12 of 1,833 audit lines → 0 (caps/98cca55f1-605; 4 events × 3 owners);
+fact9c strips the label before its deflection-name lookup. Candidate rows
+7,399 → 7,399, findings byte-identical. Out of scope, recorded: 9 duplicate
+off-table Touch of Karma audit rows (two same-name auras read as the victim's).
+Batch verified on tests + codex (user 11-08); 605 / cover / wide run at the end
+of the wave.

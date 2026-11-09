@@ -1035,4 +1035,9 @@
  *  nearest raw position samples, as every other unit-to-unit LoS reader does.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 516;
+/*
+ * v517 (2026-11-09; pipeline batch B28, T33, ruling R07 item 5): a split
+ *  defensive's death-audit component rows name their school ("Cloak of
+ *  Shadows (physical damage)"). See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 517;
