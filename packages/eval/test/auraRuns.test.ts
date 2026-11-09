@@ -130,4 +130,25 @@ describe("cleanAuraRuns", () => {
       { srcUnitId: "b", fromMs: 1_000, toMs: 4_000 },
     ]);
   });
+  // codex 85-tk-A-T18-2d #2: the callback sees the open run's start (the
+  // builder also splits a re-APPLIED past the open copy's length)
+  it("the re-APPLIED split is told the open run's start", () => {
+    const seen: number[] = [];
+    expect(
+      cleanAuraRuns(
+        [
+          row(LogEvent.SPELL_AURA_APPLIED, 0),
+          row(LogEvent.SPELL_AURA_APPLIED, 60),
+          row(LogEvent.SPELL_AURA_REMOVED, 65),
+        ],
+        {
+          isNewApplication: (a, from) => {
+            seen.push(from);
+            return a.logLine.timestamp > from + 18_000;
+          },
+        },
+      ),
+    ).toEqual([{ srcUnitId: "w", fromMs: 60_000, toMs: 65_000 }]);
+    expect(seen).toEqual([0]);
+  });
 });

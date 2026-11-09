@@ -42,10 +42,11 @@ export function cleanAuraRuns(
   opts: {
     doseUnclean?: boolean;
     /** an APPLIED while its source's run is open is a new press (the
-     * source logged a cast of it there — `sourcePressedAuraNear`): the
-     * open run lost its REMOVED and is dropped, a run starts (codex
-     * 85-tk-A-T18-2b #1) */
-    isNewApplication?: (applied: IAuraRunRow) => boolean;
+     * source logged a cast of it there — `sourcePressedAuraNear` — or it
+     * came past the open run's official length: `buildAuraIntervals`'
+     * split): the open run lost its REMOVED and is dropped, a run starts
+     * (codex 85-tk-A-T18-2b #1, -2d #2) */
+    isNewApplication?: (applied: IAuraRunRow, openFromMs: number) => boolean;
   } = {},
 ): ICleanAuraRun[] {
   const out: ICleanAuraRun[] = [];
@@ -61,7 +62,8 @@ export function cleanAuraRuns(
       if (!open.has(src)) open.set(src, { t, clean: true });
       // replaced in place, as the builder's `Map.set` does: the run keeps
       // its place in the oldest-open fallback (codex 85-tk-A-T18-2c #2)
-      else if (opts.isNewApplication?.(a)) open.set(src, { t, clean: true });
+      else if (opts.isNewApplication?.(a, open.get(src)!.t))
+        open.set(src, { t, clean: true });
     } else if (
       ev === LogEvent.SPELL_AURA_REFRESH ||
       (opts.doseUnclean && ev === LogEvent.SPELL_AURA_APPLIED_DOSE)

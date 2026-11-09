@@ -119,6 +119,21 @@ describe("scan5/t18 setExtendedFade", () => {
     ).toEqual(["setExtendedFade:estimatedBeforeEnd"]);
   });
 
+  // codex 85-tk-A-T18-2d #1: the 0 s press's fade prints at 0:18; a second
+  // press at 18.9 s inside that second is the next run's
+  it("an estimated fade is not paired with a later press inside its second", () => {
+    const o = warrior(
+      2,
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, 0),
+        aura(LogEvent.SPELL_AURA_APPLIED, 18.9),
+      ],
+      [cast(RECKLESSNESS, "Recklessness", 18.9)],
+      [],
+    );
+    expect(scan(o, [fade("0:18", "expired, estimated")], 30)).toEqual([]);
+  });
+
   it("`ended after A of Bs` must state the extended length", () => {
     const o = warrior(
       2,

@@ -151,12 +151,21 @@ function perAppRuns(
       ),
       {
         doseUnclean: args.doseUnclean,
-        isNewApplication: (a) =>
-          sourcePressedAuraNear(
-            legacy.units[a.srcUnitId ?? ""]?.spellCastEvents ?? [],
-            spellId,
-            a.logLine.timestamp,
-          ),
+        // the builder's split of a re-APPLIED: its source pressed it, or it
+        // came past the open copy's official length (codex 85-tk-A-T18-2d #2)
+        isNewApplication: (a, openFromMs) => {
+          const src = legacy.units[a.srcUnitId ?? ""];
+          if (
+            sourcePressedAuraNear(
+              src?.spellCastEvents ?? [],
+              spellId,
+              a.logLine.timestamp,
+            )
+          )
+            return true;
+          const d = buffFullDurationForCaster(spellId, src, openFromMs);
+          return d !== undefined && a.logLine.timestamp > openFromMs + d * 1000;
+        },
       },
     );
     for (const r of runs) {

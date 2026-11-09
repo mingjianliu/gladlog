@@ -168,7 +168,7 @@ function producerPressMs(
     );
     return hit === undefined ? undefined : startMs + hit.castAtSeconds * 1000;
   }
-  // an estimated one: the latest ledger press at or before the line that the
+  // an estimated one: the latest ledger press before the line's second that the
   // producer did not pair with a removal — matched without any expiry, which
   // hangs on the length this scan audits (the unworn length's line printed
   // at 3:40 has no estimated event under the worn length, whose expiry falls
@@ -184,7 +184,10 @@ function producerPressMs(
     .filter(
       (c) =>
         !logged.has(c.timeSeconds) &&
-        secOfMs(startMs + c.timeSeconds * 1000) <= sec,
+        // strictly before the line's second: a fade prints after its
+        // press, and a later press inside that second is the next run's
+        // (codex 85-tk-A-T18-2d #1)
+        secOfMs(startMs + c.timeSeconds * 1000) < sec,
     )
     .sort((x, y) => x.timeSeconds - y.timeSeconds)
     .pop();
