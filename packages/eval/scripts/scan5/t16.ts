@@ -16,12 +16,12 @@
  * `resCdBeforeNextPress`.
  */
 import {
-  FREE_RECAST_WINDOWS,
+  freeRecastWindowFor,
   type IFreeRecastWindow,
 } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import {
+  cooldownTalentHolds,
   freeRecastWindowEndSeconds,
-  playerTalentIdSets,
 } from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx, nameOf } from "./ctx";
@@ -35,16 +35,22 @@ const UNIT_OPEN = /^\s*<unit id="(\d+)"/;
 const KIT_LINE = /^\s*<cooldowns>(.*)<\/cooldowns>/;
 const KIT_RANGE = /(?:^|, )([^,[\]]+?) \[(\d+)–(\d+)s([^\]]*)\]/g;
 
-/** The free-recast window (`FREE_RECAST_WINDOWS`) on the button `name`
- * the unit holds: Strafing Run's second Deep Breath within 18 s. Held as
- * the ledger reads it — a talented spell or a PvP talent of the unit. */
+/** The free-recast window on the button `name` the unit holds (Strafing
+ * Run's second Deep Breath within 18 s): the ledger's own
+ * `freeRecastWindowFor` and `cooldownTalentHolds` — an unresolved choice
+ * node holds neither entry (codex review 85-tk-E-T16-1b). */
 function freeWindowOf(u: any, name: string): IFreeRecastWindow | undefined {
-  const ids = playerTalentIdSets(u);
-  return Object.entries(FREE_RECAST_WINDOWS).find(
-    ([talent, w]) =>
-      nameOf(w.spellId) === name &&
-      (!!ids.talentedSpellIds?.has(talent) || ids.pvpTalentIds.has(talent)),
-  )?.[1];
+  const holds = cooldownTalentHolds(u);
+  const ids = new Set<string>(
+    (u.spellCastEvents ?? [])
+      .filter((c: any) => nameOf(c.spellId, c.spellName) === name)
+      .map((c: any) => String(c.spellId)),
+  );
+  for (const id of ids) {
+    const w = freeRecastWindowFor(id, holds);
+    if (w) return w;
+  }
+  return undefined;
 }
 
 /** The presses whose cooldown ran out before them: a free press inside the

@@ -24,6 +24,7 @@ import { buffFullDurationForCaster } from "../src/utils/buffDuration";
 import {
   cdSecondsUntilReady,
   chargeSpendTimesOf,
+  cooldownTalentHolds,
   pressReadyAgainAtSeconds,
   unitCooldownEntry,
 } from "../src/utils/cooldowns";
@@ -653,5 +654,22 @@ describe("a press that did nothing spends no cooldown (GH #179 batch 3b)", () =>
     const u = preserver([10, 15]);
     const entry = unitCooldownEntry(u, combatOf(u), CAUTERIZE)!;
     expect(chargeSpendTimesOf(entry)).toEqual([10, 15]);
+  });
+});
+
+describe("cooldownTalentHolds — the ledger's talent test the scans share (codex review 85-tk-E-T16-1b)", () => {
+  const DEATHS_ARRIVAL = "454433";
+  const outlaw = (id2: number) =>
+    makeUnit("Player-1-0000000A", {
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Outlaw,
+      info: { talents: [{ id1: 95130, id2, count: 1 }], pvpTalents: [] },
+    } as unknown as Parameters<typeof makeUnit>[1]);
+  it("a choice node with no entry id holds neither entry", () => {
+    expect(cooldownTalentHolds(outlaw(0))(DEATHS_ARRIVAL)).toBe(false);
+  });
+  it("the entry the loadout names is held", () => {
+    expect(cooldownTalentHolds(outlaw(125140))(DEATHS_ARRIVAL)).toBe(true);
+    expect(cooldownTalentHolds(outlaw(117727))(DEATHS_ARRIVAL)).toBe(false);
   });
 });

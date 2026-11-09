@@ -5947,6 +5947,33 @@ export function freeRecastWindowEndSeconds(
   return Math.max(fromPress, (endMs - matchStartMs) / 1000);
 }
 
+/** The ledger's "the unit holds talent `t`" for a scripted effect on a
+ * cooldown: a talented spell on a resolved choice node, or a PvP talent. */
+function talentHoldsFor(
+  unit: ICombatUnit,
+  specIdNum: number,
+  talentedSpellIds: Set<string> | null,
+  pvpTalentIds: Set<string>,
+): (t: string) => boolean {
+  return (t) =>
+    (!!talentedSpellIds?.has(t) &&
+      (!talentsOf(unit) ||
+        choiceSelectionResolved(specIdNum, talentsOf(unit)!, t))) ||
+    pvpTalentIds.has(t);
+}
+
+/** `talentHoldsFor` from the unit's own loadout — the reading the eval
+ * scans share (scan5 t16's free-recast window). */
+export function cooldownTalentHolds(unit: ICombatUnit): (t: string) => boolean {
+  const { talentedSpellIds, pvpTalentIds } = playerTalentIdSets(unit);
+  return talentHoldsFor(
+    unit,
+    parseInt(unit.spec, 10),
+    talentedSpellIds,
+    pvpTalentIds,
+  );
+}
+
 function buildCooldownEntry(
   unit: ICombatUnit,
   combat: AtomicArenaCombat,
@@ -6171,11 +6198,7 @@ function buildCooldownEntry(
   // was taken (`choiceSelectionResolved`): an unresolved choice lists both
   // entries, and these effects strengthen a fact (codex review 40-FT-46:
   // node 94675 with no entry id read as Save the Day over Divine Feathers).
-  const holds = (t: string) =>
-    (!!talentedSpellIds?.has(t) &&
-      (!talentsOf(unit) ||
-        choiceSelectionResolved(specIdNum, talentsOf(unit)!, t))) ||
-    pvpTalentIds.has(t);
+  const holds = talentHoldsFor(unit, specIdNum, talentedSpellIds, pvpTalentIds);
   const freeWindow = freeRecastWindowFor(spell.spellId, holds);
   const ranks = playerTalentIdSets(unit).talentRanks;
   const rankOf = (t: string) => ranks?.get(t) ?? (holds(t) ? 1 : 0);
