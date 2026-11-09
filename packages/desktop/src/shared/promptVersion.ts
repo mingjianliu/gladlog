@@ -1023,4 +1023,10 @@
  *  the round's deciding death is no [UNUSED]. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 514;
+/*
+ * v515 (2026-11-09; pipeline batch B24, T26, GH #134): a friendly pet's kick
+ *  is judged on the pet out at the cast start (its own control and casting
+ *  locks, presence and raw LoS) and named as the pet's. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 515;

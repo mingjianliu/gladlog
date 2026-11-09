@@ -5790,3 +5790,20 @@ unusedPressedBeforeRoundEnd repro 3 → 0; every other scan5 count identical.
 (T05 first went into batches B11 and B19, both abandoned before push.) Batch
 verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
 the wave.
+
+v515 (2026-11-09, GH #134; pipeline batch B24, T26). kick-priority judges a
+friendly pet's kick (Spell Lock) from the pet out at the cast start: the pet's
+own control and casting locks (`kickBlockedOf`; the owner's locks are not
+read — 605 corpus: 82 of 720 pet Spell Locks were cast while the owner was
+under a cast-blocking aura, against a 9.2 % base rate), its presence
+(`petReplacedBySummonAt` / `petLastPresenceRow` in petPresence.ts: an owner's
+later pet summon sends the pet away unless it shows itself after it in log
+order; an aura removal is no presence), and its raw-sample line of sight
+(`rawLineOfSightAt`, also read by `enemyTargetReaches`). A pet's kick prints
+`kicker=<owner>'s Felhunter` and `kickerYd`; the team form names the pet in
+its `teammates=` entry and in the `ownerWhy` parentheses (ruling R04); the
+missed legend no longer says a pet's kick would have cut the player's own
+cast. 605 menu rows 7,393 → 7,399 (+6 / −0, exactly the R04 rows), context
+lines 0 changed. (T26 first went into batches B10, B18b and B21, all
+abandoned before push.) Batch verified on tests + codex (user 11-08); 605 /
+cover / wide run at the end of the wave.
