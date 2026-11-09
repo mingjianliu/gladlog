@@ -201,6 +201,9 @@ describe("manaCostForCast", () => {
     // 0.9 % is 0.89999997616 in float32: still 2,250, not 2,249
     expect(pctManaCost(0.89999997616)).toBe(2_250);
     expect(manaCostForCast("34861", "257")).toBe(8_312);
+    // the base is a parameter (scan5/t17 passes the one it reads off the log)
+    expect(pctManaCost(7, 250_000)).toBe(pctManaCost(7));
+    expect(pctManaCost(3, 262_500)).toBe(7_875);
   });
 
   it("spec-conditional row: picks the caster's own spec, not another spec's row", () => {

@@ -51,10 +51,12 @@ export const BASE_MANA = 250_000;
  * percentage-priced cast rows; a plain round misses Holy Word: Sanctify
  * 34861 (3.325 % → 8,312.5 → the log states 8,312, 362 rows) and a floor
  * misses 136,834 rows (0.9 % is 0.89999997616 in float32) — codex
- * 85-tk-E-T17-1 #2.
+ * 85-tk-E-T17-1 #2. `base` is `BASE_MANA` for the product; scan5/t17 passes
+ * the base it reads off the caster's own cast rows, so the conversion is
+ * shared and the base is not (batch review 80-PIPE-31-B31b #2).
  */
-export function pctManaCost(pct: number): number {
-  const x = Math.fround(Math.fround(pct) * (BASE_MANA / 100));
+export function pctManaCost(pct: number, base: number = BASE_MANA): number {
+  const x = Math.fround(Math.fround(pct) * (base / 100));
   const r = Math.round(x);
   // Math.round takes .5 up; the game takes it to the even neighbour
   return r - x === 0.5 && r % 2 !== 0 ? r - 1 : r;

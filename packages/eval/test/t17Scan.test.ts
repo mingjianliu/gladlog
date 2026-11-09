@@ -12,6 +12,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { run } from "../scripts/scan5/t17";
 
 const START = 1_000_000;
+/** the round's length; a row after it is a later Solo Shuffle round's */
+const ROUND_MS = 120_000;
 const HOLY_LIGHT = "82326"; // 7 %
 const DIVINE_TOLL = "375576"; // 3 %
 const VIVIFY = "116670"; // 3 % (Mistweaver)
@@ -33,6 +35,7 @@ function scan(
     lines,
     owner,
     start: START,
+    legacy: { startTime: START, endTime: START + ROUND_MS },
     violate: (check: string, _k: string, _t: number, _f: string, d: string) =>
       seen.push(`${check}: ${d}`),
     bump: () => {
@@ -115,5 +118,28 @@ describe("scan5/t17 noManaCostOffBase", () => {
     expect(
       scan(mage, ["      [RES] rdy:Δ +Arcane Surge(no mana 0.0k/0.0k)"]),
     ).toEqual({ checked: 1, seen: [] });
+  });
+
+  it("only the round's own rows are read, through the producer's selection (batch review 80-PIPE-31-B31b #1)", () => {
+    // Divine Toll stated 7,500 in this round, 8,250 twice in a later one
+    const owner = paladin([
+      cast(DIVINE_TOLL, 5_000, 7_500),
+      cast(DIVINE_TOLL, ROUND_MS + 10_000, 8_250),
+      cast(DIVINE_TOLL, ROUND_MS + 70_000, 8_250),
+    ]);
+    expect(
+      scan(owner, ["      [RES] rdy:Δ +Divine Toll(no mana 4.1k/7.5k)"]),
+    ).toEqual({ checked: 1, seen: [] });
+    expect(
+      scan(owner, ["      [RES] rdy:Δ +Divine Toll(no mana 4.1k/8.3k)"]).seen,
+    ).toEqual([
+      "noManaCostOffBase: Paladin Divine Toll 375576: printed 8.3k, the log implies 7.5k (its own cast rows)",
+    ]);
+    // base mana from a later round's row only: no truth for this round
+    expect(
+      scan(paladin([cast(HOLY_LIGHT, ROUND_MS + 5_000, 17_500)]), [
+        "      [RES] rdy:Δ +Divine Toll(no mana 4.1k/8.2k)",
+      ]),
+    ).toEqual({ checked: 0, seen: [] });
   });
 });

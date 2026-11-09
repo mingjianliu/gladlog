@@ -105,6 +105,7 @@ import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeG
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
 import * as spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
+import * as spellManaCost from "@gladlog/analysis/src/data/spellManaCost";
 import * as spellParry from "@gladlog/analysis/src/data/spellParry";
 import * as spellParryGenerated from "@gladlog/analysis/src/data/spellParryGenerated";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
@@ -1851,6 +1852,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/resourceAt.ts`,
     symbol: "statedManaCostInRound",
     mod: resourceAt,
+  },
+  {
+    file: `${A}/data/spellManaCost.ts`,
+    symbol: "pctManaCost",
+    mod: spellManaCost,
   },
   {
     file: `${A}/analysis/candidates/cooldownTiming.ts`,

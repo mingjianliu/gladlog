@@ -7,17 +7,23 @@
  * 7,500 on a raised-max Holy Paladin).
  *
  * Check `noManaCostOffBase`, kind `offBase`: the tag's b is not the cost the
- * log implies. Truth comes from the log rows, not from the analysis cost
- * predicate: a flat row's cost; for a percentage row, the cost the owner's
- * own cast rows of that spell state (the most common), else DB2's
- * percentage of the base
- * mana the owner's other percentage-priced cast rows imply (stated cost ÷
- * percentage, the most common value), in the game's arithmetic (float32,
- * half to even — `pctCost`). The entry name is the longest text before the
- * tag that names a spell (a name may carry a comma). Counted: every tag
- * whose spell resolves and whose truth one of those gives.
+ * log implies. Truth: a flat row's DB2 cost; for a percentage row, the
+ * cost the owner's own cast rows of that spell state in the round, read
+ * through the producer's own selection (`statedManaCostInRound`, the
+ * highest in the round's bounds); else DB2's percentage of the base mana
+ * the owner's other percentage-priced rows of the round imply (stated ÷
+ * percentage, the most common value), converted by the producer's own
+ * arithmetic (`pctManaCost(pct, base)`) — the base is read off the log, the
+ * conversion is shared (batch review 80-PIPE-31-B31b). The entry name is the
+ * longest text before the tag that names a spell (a name may carry a
+ * comma). Counted: every tag whose spell resolves and whose truth one of
+ * those gives.
  */
-import { SPELL_MANA_COST_TABLE } from "@gladlog/analysis/src/data/spellManaCost";
+import {
+  pctManaCost,
+  SPELL_MANA_COST_TABLE,
+} from "@gladlog/analysis/src/data/spellManaCost";
+import { statedManaCostInRound } from "@gladlog/analysis/src/utils/resourceAt";
 
 import { type IRoundCtx, nameOf, successesOf } from "./ctx";
 
@@ -61,29 +67,6 @@ function rowOf(
   return r && (r.pct !== undefined || r.flat !== undefined) ? r : undefined;
 }
 
-/** A percentage cost in whole mana as the game charges it (the log's own
- * arithmetic, kept here and not taken from the analysis cost predicate): the
- * share of base mana in float32, rounded half to even — every stated cost
- * of the 401,548 percentage-priced cast rows of the T17 probe. */
-function pctCost(pct: number, base: number): number {
-  const x = Math.fround(Math.fround(pct) * (base / 100));
-  const r = Math.round(x);
-  return r - x === 0.5 && r % 2 !== 0 ? r - 1 : r;
-}
-
-/** the cost the owner's own cast rows of this spell state, the most common */
-function statedCostOf(owner: any, spellId: string): number | undefined {
-  const n = new Map<number, number>();
-  for (const c of successesOf(owner)) {
-    if (String(c.spellId) !== spellId) continue;
-    const cost = statedMana(c);
-    if (cost !== undefined) n.set(cost, (n.get(cost) ?? 0) + 1);
-  }
-  let best: number | undefined;
-  for (const [v, k] of n) if (best === undefined || k > n.get(best)!) best = v;
-  return best;
-}
-
 const statedMana = (c: any): number | undefined => {
   const cost = (c.powerCosts ?? []).find(
     (p: any) => Number(p.type) === MANA,
@@ -91,10 +74,18 @@ const statedMana = (c: any): number | undefined => {
   return cost !== undefined && cost > 0 ? cost : undefined;
 };
 
-/** the owner's base mana, from its own percentage-priced cast rows */
-function baseManaOf(owner: any, spec: string): number | undefined {
+/** the owner's base mana, from its own percentage-priced cast rows of the
+ * round (the bounds `statedManaCostInRound` reads: a Solo Shuffle round's
+ * units keep the rows that follow it) */
+function baseManaOf(
+  owner: any,
+  spec: string,
+  round: { startTime: number; endTime: number },
+): number | undefined {
   const n = new Map<number, number>();
   for (const c of successesOf(owner)) {
+    const t = c.logLine?.timestamp ?? c.timestamp;
+    if (!(t >= round.startTime && t <= round.endTime)) continue;
     const cost = statedMana(c);
     const pct = rowOf(String(c.spellId), spec)?.pct;
     if (cost === undefined || pct === undefined || !(pct > 0)) continue;
@@ -125,6 +116,12 @@ export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
   if (!owner) return;
   const spec = String(owner.spec ?? "");
+  // the round the product prices against (`costFor`'s `combat`: the round's
+  // own start and end)
+  const round = {
+    startTime: ctx.legacy.startTime as number,
+    endTime: ctx.legacy.endTime as number,
+  };
   let base: number | undefined | null = null;
   for (const line of ctx.lines) {
     if (!line.includes("[RES]") || !line.includes("(no mana ")) continue;
@@ -150,15 +147,18 @@ export function run(ctx: IRoundCtx): void {
       // a flat row is its own truth: a flat spell's cast row can state what
       // it drained, not its price (Arcane Surge 365350: 1 mana, its rows
       // 320,773 — codex 85-tk-E-T17-1b)
-      let truth = row.pct === undefined ? row.flat : statedCostOf(owner, id);
+      let truth =
+        row.pct === undefined
+          ? row.flat
+          : (statedManaCostInRound(owner, id, round) ?? undefined);
       const from =
         row.pct !== undefined && truth !== undefined
           ? "its own cast rows"
           : undefined;
       if (truth === undefined) {
-        if (base === null) base = baseManaOf(owner, spec);
+        if (base === null) base = baseManaOf(owner, spec, round);
         if (base === undefined) continue;
-        truth = pctCost(row.pct!, base);
+        truth = pctManaCost(row.pct!, base);
       }
       ctx.bump("noManaCostOffBase");
       const printed = (truth / 1000).toFixed(1);
