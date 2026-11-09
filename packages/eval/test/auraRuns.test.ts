@@ -111,4 +111,23 @@ describe("cleanAuraRuns", () => {
       ]),
     ).toEqual([{ srcUnitId: "w", fromMs: 0, toMs: 18_000 }]);
   });
+  // codex 85-tk-A-T18-2c #2: a re-press keeps its run's place among the
+  // open runs, as in buildAuraIntervals (A 2–3 s, B 1–4 s)
+  it("a re-pressed run keeps its place for the oldest-open fallback", () => {
+    expect(
+      cleanAuraRuns(
+        [
+          row(LogEvent.SPELL_AURA_APPLIED, 0, "a"),
+          row(LogEvent.SPELL_AURA_APPLIED, 1, "b"),
+          row(LogEvent.SPELL_AURA_APPLIED, 2, "a"),
+          row(LogEvent.SPELL_AURA_REMOVED, 3, "x"),
+          row(LogEvent.SPELL_AURA_REMOVED, 4, "x"),
+        ],
+        { isNewApplication: (a) => a.logLine.timestamp === 2_000 },
+      ),
+    ).toEqual([
+      { srcUnitId: "a", fromMs: 2_000, toMs: 3_000 },
+      { srcUnitId: "b", fromMs: 1_000, toMs: 4_000 },
+    ]);
+  });
 });

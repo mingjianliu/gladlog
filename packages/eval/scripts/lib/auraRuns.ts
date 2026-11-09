@@ -59,10 +59,9 @@ export function cleanAuraRuns(
     const t = a.logLine.timestamp;
     if (ev === LogEvent.SPELL_AURA_APPLIED) {
       if (!open.has(src)) open.set(src, { t, clean: true });
-      else if (opts.isNewApplication?.(a)) {
-        open.delete(src);
-        open.set(src, { t, clean: true });
-      }
+      // replaced in place, as the builder's `Map.set` does: the run keeps
+      // its place in the oldest-open fallback (codex 85-tk-A-T18-2c #2)
+      else if (opts.isNewApplication?.(a)) open.set(src, { t, clean: true });
     } else if (
       ev === LogEvent.SPELL_AURA_REFRESH ||
       (opts.doseUnclean && ev === LogEvent.SPELL_AURA_APPLIED_DOSE)
