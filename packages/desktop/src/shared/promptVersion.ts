@@ -1029,4 +1029,10 @@
  *  locks, presence and raw LoS) and named as the pet's. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 515;
+/*
+ * v516 (2026-11-09; pipeline batch B27, T31, ruling R13): ccReachAt (peel
+ *  options, CC bookmarks, healer-offense reach) reads line of sight on the
+ *  nearest raw position samples, as every other unit-to-unit LoS reader does.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 516;

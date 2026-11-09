@@ -5807,3 +5807,23 @@ cast. 605 menu rows 7,393 → 7,399 (+6 / −0, exactly the R04 rows), context
 lines 0 changed. (T26 first went into batches B10, B18b and B21, all
 abandoned before push.) Batch verified on tests + codex (user 11-08); 605 /
 cover / wide run at the end of the wave.
+
+v516 (2026-11-09, ruling R13; pipeline batch B27, T31). `ccReachAt`
+(ccTargetState.ts — the reach test behind PEEL OPTIONS, `[CC BOOKMARK]`, CC USE
+and the healer-offense `[OPPORTUNITY]` / `[CONTESTED]` "X ready on enemy
+healer" lines) reads line of sight on the nearest raw position samples
+(`rawLineOfSightAt`, as the losAnalysis contract, kick-priority and
+`enemyTargetReaches` do) instead of the interpolated points its distance
+reads; distance still interpolates. The predicate-index OPEN entry of
+2026-10-01 stays open for the other interpolated LoS readers (`[ROOT]`,
+`rootReachProvenS`, the burst-window gate, the healer-exposure sweep). 605
+(caps/576387789-605): candidate rows 7,399 → 7,399,
+findings byte-identical; context lines move both ways in 27 owner files —
+`[PEEL OPTION]` 899 → 902, `[CC BOOKMARK]` 4,255 → 4,256, `[OPPORTUNITY]` 154 →
+153, 2 `[CONTESTED]` lines name another ready control; rendered reach instants
+whose raw sample pair is LoS-blocked (new scan5 module t31, ccReachRawLos) 4
+of 1,643 → 0 of 1,647. Example: s2/7-1 r1 0:39 Freezing Trap → RDruid peel
+option gone (raw pair pillar-blocked, the interpolated point 1.2 yd off read
+clear); s0/144-1 r1 2:53–2:55 Freezing Trap → FMage peel option added. Batch
+verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
+the wave.
