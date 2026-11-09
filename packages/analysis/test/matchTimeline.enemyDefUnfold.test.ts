@@ -488,7 +488,7 @@ describe("legends follow the lines they explain (F-C16 / F-C17)", () => {
 
   it("F-C3: the `(no mana a/b)` legend appears exactly when a [RES] row carries the tag", () => {
     const NO_MANA_LEGEND = "`X(no mana a/b)` = X is off cooldown";
-    // Restoral 388615 costs 4.374 % of max mana (11,482 of 262,500)
+    // Restoral 388615 costs 4.374 % of base mana (10,935 of 250,000; T17 — not of the 262,500 max)
     const restoral = {
       spellId: "388615",
       spellName: "Restoral",
@@ -512,7 +512,7 @@ describe("legends follow the lines they explain (F-C16 / F-C17)", () => {
       ownerCDs: [astralShift, restoral],
       ownerAdvancedActions: mana(6_055),
     });
-    expect(low).toContain("Restoral(no mana 6.1k/11.5k)");
+    expect(low).toContain("Restoral(no mana 6.1k/10.9k)");
     expect(low).toContain(NO_MANA_LEGEND);
     const full = render({
       ownerCDs: [astralShift, restoral],

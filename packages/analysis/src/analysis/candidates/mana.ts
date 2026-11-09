@@ -328,8 +328,8 @@ interface IManaEfficiencySpellAgg {
   spellName: string;
   casts: number;
   /** Sum, across this spell's successful casts, of each cast's cost as a %
-   * of the healer's max mana (`SPELL_MANA_COST_TABLE`'s `pct` field IS
-   * already "% of max mana per cast" — summing it directly across casts
+   * of base mana (`BASE_MANA`) (`SPELL_MANA_COST_TABLE`'s `pct` field IS
+   * already "% of base mana per cast" — summing it directly across casts
    * needs no `manaMax`/rawStreams lookup at all, see `manaEfficiencyEvents`'
    * own doc comment for why this type does not consume rawStreams). */
   manaPctSpent: number;
@@ -363,7 +363,7 @@ interface IManaEfficiencySpellAgg {
  * beyond "one".
  *
  * **Deliberately does NOT consume `rawStreams`** (unlike mana-pressure
- * above): `SPELL_MANA_COST_TABLE`'s `pct` field is already "% of max mana
+ * above): `SPELL_MANA_COST_TABLE`'s `pct` field is already "% of base mana
  * per cast", so summing it across a spell's casts directly gives that
  * spell's share of total mana spend — no absolute `manaMax` value, and
  * therefore no raw.txt mana-sample stream, is ever needed. This also means

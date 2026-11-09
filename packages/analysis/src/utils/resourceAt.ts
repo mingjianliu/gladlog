@@ -367,28 +367,26 @@ export function statedManaCostInRound(
 
 /**
  * What the spell costs this unit, in mana: the official row
- * (`manaCostForCast`), and — FT F09, 2026-10-11 — for a PERCENTAGE row the
- * cost the unit's own cast rows of that spell state in the round, when one
- * does (`statedManaCostInRound`).
+ * (`manaCostForCast`: a PERCENTAGE row is that share of `BASE_MANA`,
+ * 250,000 — never of the reading's max; GH #129 / T17, user ruling Q3), and
+ * — FT F09, 2026-10-11 — for a percentage row the cost the unit's own cast
+ * rows of that spell state in the round, when one does
+ * (`statedManaCostInRound`; it states `pct × 250,000` on every such row
+ * measured, so the two agree and the stated one only guards a stale table).
  *
- * The percentage is a share of base mana, and the only mana figure a reading
- * has is the unit's current MAX — equal to base on 57 % of the slice's mana
- * cast rows, 4–9 % above it on most of the rest and up to half above — so
- * `pct × max` overstated the cost (7f67e778: max 262,500; Invoke Chi-Ji
- * printed `13.1k`, its cast rows say 12,500; Restoral `11.5k`, 10,935). A
- * flat row is not converted with a
- * mana figure and is left alone. No official row → null as before: the logged
- * cost does not create a gate where there was none. No round, no stated cost
- * in it, or a document without the field → `pct × max`, exactly as before.
+ * Before T17 an unpressed spell was priced `pct × max`, and max is above
+ * base on most healers (3282debd: Divine Toll printed `8.2k`, base prices it
+ * 7,500). A flat row is left alone. No official row → null: the logged cost
+ * does not create a gate where there was none. A reduction on the caster is
+ * in neither number (`BASE_MANA`'s note).
  */
 const costFor = (
   unit: Pick<ICombatUnit, "spec" | "spellCastEvents">,
   spellId: string,
-  manaMax: number,
   round?: { startTime: number; endTime: number },
 ) => {
   const spec = String(unit.spec ?? "");
-  const official = manaCostForCast(spellId, spec, manaMax);
+  const official = manaCostForCast(spellId, spec);
   if (official === null || !round || !manaCostIsPercentage(spellId, spec))
     return official;
   return statedManaCostInRound(unit, spellId, round) ?? official;
@@ -398,8 +396,8 @@ const costFor = (
  * "Could the unit pay for this spell's mana at `tMs`" — the ONE affordability
  * predicate (triage 2026-09-29 F-H6 × res-readiness F-C3, user ruling
  * 2026-09-30, res R2 = A). The reading is `manaReadingAt` (the [MANA]
- * sampler); the cost is `costFor` — the official `manaCostForCast` against
- * that reading's max, or what the unit's own cast rows of the spell state in
+ * sampler); the cost is `costFor` — the official `manaCostForCast` on
+ * base mana, or what the unit's own cast rows of the spell state in
  * the round. Null = unknown (no cost row, or no reading): callers must not
  * gate on it. [RES] (res F-C3) keeps an unaffordable cooldown `rdy` and
  * annotates it with `mana` / `cost`.
@@ -416,7 +414,7 @@ export function affordableAt(
   if (freeCastWithin(unit, tMs, tMs, combat)) return null;
   const r = manaReadingAt(unit, tMs, fallback);
   if (!r) return null;
-  const cost = costFor(unit, spellId, r.max, combat);
+  const cost = costFor(unit, spellId, combat);
   if (cost === null || !(cost > 0)) return null;
   return { affordable: r.current >= cost, mana: r.current, cost };
 }
@@ -450,7 +448,7 @@ export function unaffordableIntervals(
     const smp = samples[i]!;
     const next = samples[i + 1]?.ms ?? toMs;
     if (next <= fromMs) continue;
-    const cost = costFor(unit, spellId, smp.max, combat);
+    const cost = costFor(unit, spellId, combat);
     if (cost === null || !(cost > 0)) return [];
     if (smp.current < cost)
       out.push({ from: Math.max(fromMs, smp.ms), to: Math.min(toMs, next) });
@@ -518,7 +516,7 @@ export function affordableWithin(
   const samples = manaSamplesWithin(unit, fromMs, toMs, fallback);
   let known = false;
   for (const s of samples) {
-    const cost = costFor(unit, spellId, s.max, combat);
+    const cost = costFor(unit, spellId, combat);
     if (cost === null || !(cost > 0)) return null;
     known = true;
     if (s.current >= cost) return true;

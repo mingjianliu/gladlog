@@ -747,14 +747,14 @@ describe("[RES] rdy: (no mana a/b) on an unaffordable owner cooldown (res-readin
   it("full form: the unaffordable cooldown stays ready and is tagged with mana / cost at the rendered second", () => {
     // the reading of the rendered second 374 (not of 374.6)
     const line = snapshot(owner([mana(374, 6_055), mana(374.6, 200_000)]));
-    expect(line).toContain("rdy:Restoral(no mana 6.1k/11.5k),Fortifying Brew");
+    expect(line).toContain("rdy:Restoral(no mana 6.1k/10.9k),Fortifying Brew");
   });
 
   it("delta form: the tag rides on the +added entry; the delta keys are the bare names", () => {
     const line = snapshot(owner([mana(374, 6_055)]), {
       prevReadyNames: ["Fortifying Brew"],
     });
-    expect(line).toContain("rdy:Δ +Restoral(no mana 6.1k/11.5k)");
+    expect(line).toContain("rdy:Δ +Restoral(no mana 6.1k/10.9k)");
     // already-ready and unchanged → nothing re-printed
     expect(
       snapshot(owner([mana(374, 6_055)]), {

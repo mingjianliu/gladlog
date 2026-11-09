@@ -10,6 +10,7 @@ import {
 } from "../../scripts/datagen/genSpellManaCost";
 import { parseCsv } from "../../scripts/datagen/lib/wagoCsv";
 import {
+  BASE_MANA,
   manaCostForCast,
   SPELL_MANA_COST_TABLE,
 } from "../../src/data/spellManaCost";
@@ -187,28 +188,26 @@ describe("specKeyToDb2Name / buildSpecNameIndex (derived aura→spec resolution)
 });
 
 describe("manaCostForCast", () => {
-  it("unconditional row: pct converts to absolute mana via manaMax", () => {
-    expect(manaCostForCast("20473", "65", 273000)).toBeCloseTo(5460, 5); // 2% of 273000
+  it("unconditional row: pct is a share of base mana (BASE_MANA), not the caster's max", () => {
+    expect(BASE_MANA).toBe(250_000);
+    expect(manaCostForCast("20473", "65")).toBeCloseTo(5000, 5); // 2% of 250,000
   });
 
   it("spec-conditional row: picks the caster's own spec, not another spec's row", () => {
     // 2061 Flash Heal: Holy Priest 2.61%, Shadow Priest 10% (see generator anchors)
-    expect(manaCostForCast("2061", "257", 273000)).toBeCloseTo(
-      0.0261 * 273000,
-      1,
-    );
-    expect(manaCostForCast("2061", "258", 273000)).toBeCloseTo(0.1 * 273000, 5);
+    expect(manaCostForCast("2061", "257")).toBeCloseTo(0.0261 * 250_000, 1);
+    expect(manaCostForCast("2061", "258")).toBeCloseTo(0.1 * 250_000, 5);
   });
 
   it("spec-conditional row with no matching spec → null (never guesses)", () => {
     // 2061 has no unconditional row and no Discipline (256) anchor in this
     // synthetic case — but the real table DOES have 256, so use a spec that
     // is genuinely absent: e.g. a Mage spec never casts Flash Heal.
-    expect(manaCostForCast("2061", "62", 273000)).toBeNull();
+    expect(manaCostForCast("2061", "62")).toBeNull();
   });
 
   it("unknown spellId → null", () => {
-    expect(manaCostForCast("999999999", "65", 273000)).toBeNull();
+    expect(manaCostForCast("999999999", "65")).toBeNull();
   });
 });
 

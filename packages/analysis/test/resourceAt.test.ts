@@ -10,6 +10,7 @@ import {
   manaReadingAt,
   resourceDeltaPct,
   statedManaCostInRound,
+  unaffordableIntervals,
 } from "../src/utils/resourceAt";
 
 describe("resourceAt — getUnitResourceAtTimestamp", () => {
@@ -378,8 +379,9 @@ describe("resourceAt — manaReadingAt raw-pass fallback (reliability audit D2)"
 });
 
 // Triage 2026-09-29 F-H6 × res F-C3 (user ruling 2026-09-30): one
-// affordability predicate. 7f67e778: Restoral 388615 costs 4.374 % of
-// 262,500 = 11,482 while the Mistweaver held 1,398.
+// affordability predicate. 7f67e778: Restoral 388615 costs 4.374 % of base
+// mana, 250,000 = 10,935 (T17: not of the 262,500 max), while the Mistweaver
+// held 1,398.
 describe("resourceAt — affordableAt / affordableWithin", () => {
   const MW = "270"; // Mistweaver Monk
   const sample = (t: number, mana: number) => ({
@@ -396,7 +398,7 @@ describe("resourceAt — affordableAt / affordableWithin", () => {
     const u = unit([sample(10_000, 1_398)]);
     const r = affordableAt(u, "388615", 10_000)!;
     expect(r.affordable).toBe(false);
-    expect(Math.round(r.cost)).toBe(11_482);
+    expect(Math.round(r.cost)).toBe(10_935);
     expect(r.mana).toBe(1_398);
   });
 
@@ -528,22 +530,36 @@ describe("resourceAt — the cost the unit's own cast rows state", () => {
     ).toBe(false);
   });
 
-  it("a document without the field, or no round, reads exactly as before", () => {
+  it("no stated cost (unpressed, a document without the field, or no round) → pct × base 250,000, not pct × max (T17)", () => {
+    // 11,000 mana covers 4.374 % of 250,000 (10,935); pct × the 262,500 max
+    // (11,482) called it unaffordable
     const old = unit([sample(10_000, 11_000)], [cast(5_000, "388615")]);
     const before = affordableAt(old, "388615", 10_000, undefined, ROUND)!;
-    expect(Math.round(before.cost)).toBe(11_482);
-    expect(before.affordable).toBe(false);
+    expect(Math.round(before.cost)).toBe(10_935);
+    expect(before.affordable).toBe(true);
     expect(
       affordableWithin(old, "388615", 10_000, 12_000, undefined, ROUND),
-    ).toBe(false);
+    ).toBe(true);
     const withField = unit(
       [sample(10_000, 11_000)],
       [cast(5_000, "388615", mana(10_935))],
     );
     expect(Math.round(affordableAt(withField, "388615", 10_000)!.cost)).toBe(
-      11_482,
+      10_935,
     );
-    expect(affordableWithin(withField, "388615", 10_000, 12_000)).toBe(false);
+    expect(affordableWithin(withField, "388615", 10_000, 12_000)).toBe(true);
+    // the reading's max never moves the price
+    const raised = unit([sample(10_000, 11_000, 375_000)], []);
+    expect(Math.round(affordableAt(raised, "388615", 10_000)!.cost)).toBe(
+      10_935,
+    );
+    expect(
+      unaffordableIntervals(raised, "388615", 10_000, 12_000, undefined, ROUND),
+    ).toEqual([]);
+    const short = unit([sample(10_000, 10_900, 375_000)], []);
+    expect(
+      unaffordableIntervals(short, "388615", 10_000, 12_000, undefined, ROUND),
+    ).toEqual([{ from: 10_000, to: 12_000 }]);
   });
 
   it("only this spell's own casts inside the round count, and only a cost above 0", () => {
@@ -559,9 +575,10 @@ describe("resourceAt — the cost the unit's own cast rows state", () => {
       ],
     );
     expect(statedManaCostInRound(u, "388615", ROUND)).toBeNull();
+    // none stated in the round → the official price on base mana
     expect(
       Math.round(affordableAt(u, "388615", 10_000, undefined, ROUND)!.cost),
-    ).toBe(11_482);
+    ).toBe(10_935);
     expect(statedManaCostInRound(u, "115151", ROUND)).toBe(4_500);
   });
 

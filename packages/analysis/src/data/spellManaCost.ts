@@ -10,7 +10,7 @@
 import generated from "./spellManaCostGenerated.json";
 
 interface ISpellManaCostRaw {
-  /** % of the caster's base max mana per cast. */
+  /** % of base mana (`BASE_MANA`) per cast. */
   pct?: number;
   /** Flat absolute mana cost — mutually exclusive with `pct` in every
    * observed row so far. */
@@ -30,10 +30,25 @@ const gen = (
 export const SPELL_MANA_COST_TABLE: Record<string, ISpellManaCostRow> = gen;
 
 /**
+ * Base mana: what a DB2 percentage cost is a share of — not the caster's
+ * current max (GH #129, user ruling Q3; ticket T17). Measured on the 584
+ * downloaded 12.1.5 logs: every own percentage-priced cast row states
+ * `pct × 250,000` (401,548 of 401,548) while the caster's max differs from
+ * it on 230,952 of them. Against the mana each press actually took (the next
+ * reading's drop, regen added back), `pct × 250,000` is within tolerance on
+ * 284,775 of 352,476 measurable presses and `pct × max` on 176,297; on the
+ * raised-max casters alone 163,674 vs 55,196 of 205,283. A cost reduction
+ * applies to this base too (16,872 reduced presses: the deduction sits on a
+ * 5 % step of `pct × 250,000` on 13,687, of `pct × max` on 7,254), and it is
+ * not in this number.
+ */
+export const BASE_MANA = 250_000;
+
+/**
  * Resolves the mana cost of one cast, in absolute mana, given the caster's
- * own `manaMax` (needed to convert a `pct` row to an absolute amount) and
  * casting spec (`CombatUnitSpec` id, needed to disambiguate a
- * spec-conditional row). Resolution order: an exact `bySpec[specId]` row
+ * spec-conditional row); a `pct` row is that share of `BASE_MANA`.
+ * Resolution order: an exact `bySpec[specId]` row
  * first (a spell WITH spec-conditional rows has no reliable spec-agnostic
  * fallback — see the generator's module header), else the row's own
  * unconditional `pct`/`flat`. Returns `null` when neither resolves — the
@@ -46,11 +61,12 @@ export const SPELL_MANA_COST_TABLE: Record<string, ISpellManaCostRow> = gen;
 export function manaCostForCast(
   spellId: string,
   specId: string,
-  manaMax: number,
 ): number | null {
   const raw = manaCostRowFor(spellId, specId);
   if (!raw) return null;
-  if (raw.pct !== undefined) return (raw.pct / 100) * manaMax;
+  // the log states whole mana; DB2's percentages are float32 (0.9 reads
+  // 0.89999997616), so the product is rounded to the unit the game charges
+  if (raw.pct !== undefined) return Math.round((raw.pct / 100) * BASE_MANA);
   if (raw.flat !== undefined) return raw.flat;
   return null;
 }
