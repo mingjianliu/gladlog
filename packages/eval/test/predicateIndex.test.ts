@@ -1531,6 +1531,13 @@ const INDEX: PredicateRow[] = [
     symbol: "burstSpanSampledAfterDeath",
     mod: positionAnalysis,
   },
+  // No burst-span sample past the round's end — the producer (a span's last
+  // rendered second) and the positioning gate's G4f
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "burstSpanSampledPastRoundEnd",
+    mod: positionAnalysis,
+  },
   {
     file: `${A}/context/timelineHelpers.ts`,
     symbol: "dmgSpikeWindowsOf",
@@ -4489,6 +4496,26 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/unitDeath.ts`,
     symbol: "removedByDeath",
+    mod: unitDeath,
+  },
+  {
+    file: `${A}/utils/unitDeath.ts`,
+    symbol: "deathTeardownWindowsMs",
+    mod: unitDeath,
+  },
+  {
+    file: `${A}/utils/unitDeath.ts`,
+    symbol: "removedInDeathTeardown",
+    mod: unitDeath,
+  },
+  {
+    file: `${A}/utils/killingBlow.ts`,
+    symbol: "aliveAfterRow",
+    mod: killingBlowMod,
+  },
+  {
+    file: `${A}/utils/unitDeath.ts`,
+    symbol: "LETHAL_HIT_DEATH_LAG_MS",
     mod: unitDeath,
   },
   {

@@ -3,7 +3,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { AURA_REBROADCAST_GAP_MS, dropAuraRebroadcasts } from "./auraIntervals";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
-import { removedByDeath } from "./unitDeath";
+import { deathTeardownWindowsMs, removedInDeathTeardown } from "./unitDeath";
 
 // `DEATH_CASCADE_MS` lives in the leaf `unitDeath.ts` (cooldowns.ts reads it
 // too, and this module sits downstream of cooldowns.ts through
@@ -351,8 +351,8 @@ export function auraEndFromLog(
     (taken.some((t) => t !== undefined) ||
       oursRemoved.some((r) => pairing.unclear.has(r)));
 
-  const holderDied = removedByDeath(
-    (holder.deathRecords ?? []).map((d) => d.timestamp as number),
+  const holderDied = removedInDeathTeardown(
+    deathTeardownWindowsMs(holder),
     removedMs,
     span.naturalEndMs,
   );

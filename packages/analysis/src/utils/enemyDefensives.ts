@@ -1833,6 +1833,11 @@ export interface IEnemyDefensiveEvent {
    * a dispel / steal, its holder's death, an absorb used up. Set only with
    * `removedEarly`; an empty reading means the log gives no cause. */
   earlyEnd?: IAuraEndFromLog;
+  /** The instant `earlyEnd` was read at — the interval's closing row, epoch
+   * ms. Set with `earlyEnd`; what scan5/t08 asks the death-teardown
+   * predicate of, so the scan reads the producer's own span (FIX-CONTRACT
+   * §7). */
+  earlyEndAtMs?: number;
   /** The aura was still up when the round ended — its REMOVED is logged
    * after it, or the log has none and the round ended inside the aura's
    * official length: shorter than its full duration, but not removed early. */
@@ -2408,6 +2413,7 @@ export function enemyDefensiveEvents(
     | "observedSeconds"
     | "removedEarly"
     | "earlyEnd"
+    | "earlyEndAtMs"
     | "upAtRoundEnd"
     | "endNotLogged"
     | "endedByHit"
@@ -2497,7 +2503,7 @@ export function enemyDefensiveEvents(
         iv.srcUnitId,
       );
       return end.takenBy || end.holderDied || end.absorb?.left === 0
-        ? { removedEarly: true, earlyEnd: end }
+        ? { removedEarly: true, earlyEnd: end, earlyEndAtMs: endMs }
         : { removedEarly: false };
     }
     // The interval builder clamps a REMOVED logged after the round's end onto
@@ -2520,6 +2526,7 @@ export function enemyDefensiveEvents(
       return { removedEarly: false, upAtRoundEnd: true };
     return {
       removedEarly: true,
+      earlyEndAtMs: endMs,
       earlyEnd: auraEndFromLog(
         holder,
         iv.spellId,
@@ -2550,7 +2557,12 @@ export function enemyDefensiveEvents(
       e.earlyEnd?.absorb?.left === 0 ||
       e.earlyEnd?.takeUnclear
     )
-      ? { ...e, removedEarly: false, earlyEnd: undefined }
+      ? {
+          ...e,
+          removedEarly: false,
+          earlyEnd: undefined,
+          earlyEndAtMs: undefined,
+        }
       : e;
   /** A unit's own SPELL_CAST_SUCCESS seconds of a spell — the press search
    * of an aura kind (`pressSeconds`, F-E11). */

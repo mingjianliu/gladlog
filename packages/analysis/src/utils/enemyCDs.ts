@@ -53,6 +53,7 @@ import { roundEndMs, shuffleRoundEndMs } from "./roundEnd";
 import {
   AURA_NATURAL_END_JITTER_S,
   DEATH_CASCADE_MS,
+  deathTeardownWindowsMs,
   firstDeathMs,
 } from "./unitDeath";
 
@@ -649,12 +650,25 @@ function deathCutOfficialEnd(
   const endMs = combat.startTime + endS * 1000;
   const near = (ms: number | undefined) =>
     ms !== undefined && Math.abs(ms - endMs) <= DEATH_CASCADE_MS;
+  // the holder's death reads its whole teardown (`deathTeardownWindowsMs`,
+  // fact12 D32: the auras come off from the lethal hit on, UNIT_DIED can
+  // come 125 ms later), with the cascade's slack either side; the cut stays
+  // at the UNIT_DIED
   const deathMs = holder ? firstDeathMs(holder) : undefined;
+  const holderTornDown =
+    holder !== undefined &&
+    deathMs !== Infinity &&
+    deathTeardownWindowsMs(holder).some(
+      (w) =>
+        w.deathMs === deathMs &&
+        endMs >= w.fromMs - DEATH_CASCADE_MS &&
+        endMs <= w.deathMs + DEATH_CASCADE_MS,
+    );
   const roundEndMs = shuffleRoundEndMs(
     combat,
     Object.values(combat.units ?? {}),
   );
-  const cutMs = near(deathMs) ? deathMs : near(roundEndMs) ? roundEndMs : null;
+  const cutMs = holderTornDown ? deathMs : near(roundEndMs) ? roundEndMs : null;
   if (cutMs === null || cutMs === undefined) return {};
   // the effect is over from the cut on only when the cut ends the caster's
   // effect itself — the Solo Shuffle round's end (whoever's death it was:
@@ -667,8 +681,13 @@ function deathCutOfficialEnd(
   // one copy: the effect can run on (B1 verify, bd473d94 r1 1:38: Strike of
   // the Windlord's debuff on the rogue went with its death, its copies on
   // two pets ran to 1:44).
+  // the cut ends the round when it IS the round-ending death — a holder's
+  // teardown read from its lethal hit (fact12 D32) included, whose removal
+  // can sit more than DEATH_CASCADE_MS before that UNIT_DIED (codex
+  // 85-tk-A-T08-2f #1)
+  const cutEndsRound = cutMs === roundEndMs || near(roundEndMs);
   const endsTheEffect =
-    (near(roundEndMs) || (holder !== undefined && holder.id === caster.id)) &&
+    (cutEndsRound || (holder !== undefined && holder.id === caster.id)) &&
     !casterAuraOutlives(caster, name, cutMs + DEATH_CASCADE_MS, combat)
       .outlives;
   return {

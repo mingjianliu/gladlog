@@ -143,7 +143,11 @@ import {
   unitLogEpochMs,
 } from "./talents";
 import { equippedBadgeCount, GLADIATOR_BADGE_SPELL_ID } from "./trinketType";
-import { DEATH_CASCADE_MS, firstDeathMs } from "./unitDeath";
+import {
+  deathTeardownWindowsMs,
+  firstDeathMs,
+  removedInDeathTeardown,
+} from "./unitDeath";
 
 export const MAJOR_DEFENSIVE_IDS = new Set<string>(
   (spellIdListsData as unknown as { externalOrBigDefensiveSpellIds?: string[] })
@@ -908,11 +912,10 @@ export function selfForbearanceUntil(
   // at the death instant the unit was still under it. Read as an end, 26
   // `[DEATH] … (Unused: …)` lists of the 605-file capture named a blessing a
   // paladin who died 12 s into his Forbearance could not have pressed.
+  // (`removedInDeathTeardown`: from each lethal hit to its UNIT_DIED, no
+  // natural end: a lockout's own end is never a death's — fact12 D32)
   const diedJustAfter = (removedMs: number) =>
-    (unit.deathRecords ?? []).some(
-      (d) =>
-        d.timestamp >= removedMs && d.timestamp - removedMs <= DEATH_CASCADE_MS,
-    );
+    removedInDeathTeardown(deathTeardownWindowsMs(unit), removedMs);
   const applications: number[] = [];
   let open: { ts: number; srcUnitId?: string } | undefined;
   for (const a of unit.auraEvents ?? []) {
@@ -1041,11 +1044,10 @@ export function hypothermiaUntil(
   // `cd:Ice Block(Hypothermia …)` (3 contexts of the 605-file capture,
   // `checkCooldownLedgerConsistency`).
   const atMs = matchStartMs + toRenderSecond(atSeconds) * 1000;
+  // (`removedInDeathTeardown`: from each lethal hit to its UNIT_DIED, no
+  // natural end: a lockout's own end is never a death's — fact12 D32)
   const diedJustAfter = (removedMs: number) =>
-    (unit.deathRecords ?? []).some(
-      (d) =>
-        d.timestamp >= removedMs && d.timestamp - removedMs <= DEATH_CASCADE_MS,
-    );
+    removedInDeathTeardown(deathTeardownWindowsMs(unit), removedMs);
   let openMs: number | undefined;
   let removedMs: number | undefined;
   for (const a of unit.auraEvents ?? []) {

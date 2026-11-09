@@ -159,8 +159,9 @@ import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 import { detectTrinketType, type TrinketType } from "./trinketType";
 import {
   AURA_NATURAL_END_JITTER_S,
+  deathTeardownWindowsMs,
   firstDeathMs,
-  removedByDeath,
+  removedInDeathTeardown,
 } from "./unitDeath";
 
 export { detectTrinketType, type TrinketType };
@@ -2471,12 +2472,7 @@ export function ccLengthIsDrEvidence(
     )
   )
     return false;
-  if (
-    removedByDeath(
-      (holder.deathRecords ?? []).map((d) => d.timestamp as number),
-      w.removeMs,
-    )
-  )
+  if (removedInDeathTeardown(deathTeardownWindowsMs(holder), w.removeMs))
     return false;
   if (
     ccRemovalCause(

@@ -696,3 +696,68 @@ describe("T03 attempt 3: a copy on the caster's pet outlives the caster's death"
     expect(enemyField(tl, 15)).toBeUndefined();
   });
 });
+
+describe("fact12 D32 (codex 85-tk-A-T08-2f #1): a round-ending death read from its lethal hit ends the effect", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  // Strike of the Windlord on a rogue: REMOVED with the lethal hit at
+  // 12.000, the rogue's UNIT_DIED (the round's first death) at 12.125 —
+  // 125 ms, past DEATH_CASCADE_MS from the removal
+  const SOTW = "392983";
+  it("the cut is the round-ending death: the death's second lists no time left", () => {
+    const monk = makeUnit("e1", {
+      name: "Monk",
+      spec: CombatUnitSpec.Monk_Windwalker,
+      info: {} as any,
+      spellCastEvents: [
+        makeSpellCastEvent(SOTW, START + 10_000, "f1", "Rogue", "e1", "Monk"),
+      ],
+    } as any);
+    const rogue = makeUnit("f1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      info: {} as any,
+      auraEvents: [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          SOTW,
+          START + 10_000,
+          ["e1", "Monk"],
+          "f1",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          SOTW,
+          START + 12_000,
+          ["e1", "Monk"],
+          "f1",
+        ),
+      ],
+    } as any);
+    (rogue as any).deathRecords = [{ timestamp: START + 12_125 }];
+    (rogue as any).damageIn = [
+      {
+        overkill: 4_000,
+        amount: -40_000,
+        timestamp: START + 12_000,
+        logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: START + 12_000 },
+      },
+    ];
+    const combat = {
+      startTime: START,
+      endTime: START + 200_000,
+      startInfo: { bracket: SOLO_SHUFFLE_BRACKET },
+      units: { e1: monk, f1: rogue },
+    } as any;
+    const tl = reconstructEnemyCDTimeline([monk], combat, rogue, [rogue]);
+    const cd = [
+      ...tl.players[0]!.offensiveCDs,
+      ...(tl.players[0]!.offensiveFacts ?? []),
+    ].find((c) => c.spellId === SOTW)!;
+    expect(cd.deathCutAtSeconds).toBeCloseTo(12.125, 3);
+    expect(enemyField(tl, 11)).toContain("Strike of the Windlord");
+    expect(enemyField(tl, 12)).toBeUndefined();
+  });
+});

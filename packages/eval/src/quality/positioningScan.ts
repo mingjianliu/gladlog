@@ -56,6 +56,10 @@
  *                     KITED line prints no span end: a span the producer
  *                     should have dropped whose peak precedes the death is
  *                     not visible here.
+ *  G4f PAST_ROUND_END — nor for a second at or after the round's end
+ *                     (`burstSpanSampledPastRoundEnd`, the producer's own:
+ *                     a Solo Shuffle round's first death, else the log's
+ *                     end; fact12 D33). Needs `roundEndAtMs`.
  *  G5 LOS_BREAK     — "LoS break ~N.Nyd away (pillar-blocks <name>)": the map
  *                     must have obstacle data, and at that instant the owner
  *                     and that enemy must actually see each other (you can
@@ -74,6 +78,7 @@
 import {
   arenaObstacles,
   burstSpanSampledAfterDeath,
+  burstSpanSampledPastRoundEnd,
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
   ccDistanceClaimWindowS,
   distanceBetween,
@@ -647,6 +652,23 @@ export function checkGeoClaims(
             claim,
             code: "G4_OWNER_DEAD",
             detail: `${claim.endpoint ?? "start"} distance printed for ${claim.atSeconds}s, a second the log owner was already dead at`,
+          });
+          break;
+        }
+        // G4f (fact12 D33): …nor for a second at or after the round's end
+        if (
+          ctx.roundEndAtMs !== undefined &&
+          burstSpanSampledPastRoundEnd(
+            ctx.matchStartMs,
+            ctx.roundEndAtMs,
+            claim.atSeconds,
+          )
+        ) {
+          checked++;
+          violations.push({
+            claim,
+            code: "G4_PAST_ROUND_END",
+            detail: `${claim.endpoint ?? "start"} distance printed for ${claim.atSeconds}s, at or after the round's end`,
           });
           break;
         }

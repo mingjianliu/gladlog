@@ -96,8 +96,12 @@ export function attackerBlowFor(
   return best;
 }
 
+/** The log slack past UNIT_DIED the killing blow (and the survival test
+ * behind it, `aliveAfterRow`) reads to. */
+export const KILLING_BLOW_DEATH_SLACK_MS = 500;
+
 /** The blow that killed a player: the last damage event with overkill > 0 at
- * or before the death (+500 ms log slack) — the attacker blow behind it when
+ * or before the death (+`KILLING_BLOW_DEATH_SLACK_MS` log slack) — the attacker blow behind it when
  * that row is a split (`attackerBlowFor`) — else undefined. The ONE predicate
  * for "the killing blow" — KILL SEQUENCE's `killing blow:` and the friendly
  * death block's execute line both read it (moved here from
@@ -112,10 +116,17 @@ export function playerKillingBlow(
   let best: ICombatUnit["damageIn"][number] | undefined;
   for (const d of unit.damageIn) {
     if ((d.overkill ?? 0) <= 0) continue;
-    if (d.logLine.timestamp > deathMs + 500) continue;
+    if (d.logLine.timestamp > deathMs + KILLING_BLOW_DEATH_SLACK_MS) continue;
     if (!best || d.logLine.timestamp >= best.logLine.timestamp) best = d;
   }
-  if (best && aliveAfter(unit, best.logLine.timestamp, deathMs + 500))
+  if (
+    best &&
+    aliveAfterRow(
+      unit,
+      best.logLine.timestamp,
+      deathMs + KILLING_BLOW_DEATH_SLACK_MS,
+    )
+  )
     return undefined;
   return best && attackerBlowFor(best, unitById);
 }
@@ -126,8 +137,10 @@ export function playerKillingBlow(
  * 1 HP; it cast Greater Invisibility at 1,141 HP 329 ms later and died to an
  * enemy hit the log writes only as SPELL_ABSORBED rows (PARTY_KILL credits
  * the enemy) — the line read "killing blow: 4(AMage) — Refraction". With no
- * row the log shows as lethal, no killing blow is named. */
-function aliveAfter(
+ * row the log shows as lethal, no killing blow is named. The ONE "that
+ * overkill row did not kill it" reading — `deathTeardownWindowsMs`
+ * (unitDeath.ts) asks it of the lethal hit a teardown starts at. */
+export function aliveAfterRow(
   unit: Partial<Pick<ICombatUnit, "advancedActions">>,
   rowMs: number,
   untilMs: number,

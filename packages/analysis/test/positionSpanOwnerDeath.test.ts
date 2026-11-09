@@ -22,12 +22,14 @@ import { describe, expect, it } from "vitest";
 import { positionMistakeEvents } from "../src/analysis/candidateFindings";
 import {
   burstSpanSampledAfterDeath,
+  burstSpanSampledPastRoundEnd,
   computeOwnerPositionEvents,
   formatPositionEventsForContext,
   type IPositionEvent,
   KITED_SECTION_HEADER,
   STAYED_IN_SECTION_HEADER,
 } from "../src/utils/positionAnalysis";
+import { SOLO_SHUFFLE_BRACKET } from "../src/utils/roundEnd";
 
 const T0 = 1_000_000;
 const END = T0 + 60_000;
@@ -235,5 +237,58 @@ describe("dropped, not cut at the death", () => {
     // dead at 49.4 s: the 0:40–0:50 stay read 0 % on the corpse and sorted
     // first (rows 40, 10); without it the two living stays are the rows
     expect(rowsOf(standingOwner(49.4))).toEqual([10, 25]);
+  });
+});
+
+describe("fact12 D33: a span is not measured past the round's end", () => {
+  /** a Solo Shuffle round an enemy's death at `endS` ends, the owner alive */
+  const shuffleRun = (owner: any, from: number, to: number, endS: number) => {
+    const enemy = ENEMY();
+    const dead = {
+      ...unit("e2", "Dead-R-US", CombatUnitSpec.Priest_Discipline, {
+        x: () => 30,
+        diesAtS: endS,
+      }),
+      info: {},
+    };
+    return computeOwnerPositionEvents({
+      owner,
+      enemies: [enemy, dead],
+      combat: {
+        startTime: T0,
+        endTime: END,
+        startInfo: { bracket: SOLO_SHUFFLE_BRACKET },
+        units: {
+          o: { ...owner, info: {} },
+          e1: { ...enemy, info: {} },
+          e2: dead,
+        },
+      } as any,
+      burstWindows: [burst(from, to)],
+      ownerCooldowns: [],
+      isHealer: true,
+      ownerIsMelee: false,
+    });
+  };
+  it("the predicate: a rendered second at or after the round's end", () => {
+    expect(burstSpanSampledPastRoundEnd(T0, T0 + 16_460, 17)).toBe(true);
+    expect(burstSpanSampledPastRoundEnd(T0, T0 + 16_460, 16)).toBe(false);
+    expect(burstSpanSampledPastRoundEnd(T0, T0 + 16_000, 16)).toBe(true);
+  });
+  it("KITED 0:10–0:20, an enemy's death ends the round at 16.46 s: no event, no line (f22d547e r0 'peak at 2:30')", () => {
+    const evs = shuffleRun(kitingOwner(), 10, 20, 16.46);
+    expect(spans(evs)).toEqual([]);
+    expect(formatPositionEventsForContext(evs).join("\n")).not.toContain(
+      KITED_SECTION_HEADER,
+    );
+  });
+  it("STAYED IN past the round's end: no event, no candidate", () => {
+    const evs = shuffleRun(standingOwner(), 10, 20, 16.46);
+    expect(spans(evs)).toEqual([]);
+    expect(positionMistakeEvents(evs, OWNER_REF)).toEqual([]);
+  });
+  it("control — the round over after the span's last second leaves it alone", () => {
+    expect(spans(shuffleRun(standingOwner(), 10, 20, 20.4))).toHaveLength(1);
+    expect(spans(shuffleRun(kitingOwner(), 10, 20, 20.4))).toHaveLength(1);
   });
 });

@@ -513,6 +513,29 @@ export function burstSpanSampledAfterDeath(
   return isDeadAt(unit, matchStartMs + renderS * 1000);
 }
 
+/**
+ * fact12 D33: would a STAYED IN / KITED sample at rendered second `renderS`
+ * be taken at or after the round's end (`roundEndMs`: a Solo Shuffle round's
+ * first player death, else the log's end)? The positions there are what the
+ * log goes on writing after the round is over, held stale for the 1.5 s
+ * interpolation guard (f22d547e r0: "2:20 [Moderate burst] … (peak at
+ * 2:30)", the round over at 2:26.46 — the in-round peak was ~17 yd at 2:26).
+ * The second's first instant, as `burstSpanSampledAfterDeath` reads it.
+ *
+ * ONE predicate, two readers, the owner-death rule's: the producer asks it of
+ * a span's LAST rendered second and DROPS the span (not cut: the same reason
+ * as the death's — cutting makes a span's tail assessable and adds stays),
+ * and the positioning gate's G4f asks it of every second a STAYED IN / KITED
+ * line prints a distance at.
+ */
+export function burstSpanSampledPastRoundEnd(
+  matchStartMs: number,
+  roundEndAtMs: number,
+  renderS: number,
+): boolean {
+  return matchStartMs + renderS * 1000 >= roundEndAtMs;
+}
+
 /** The owner's straight-line displacement between two rendered seconds,
  *  one decimal — the "you moved N yd yourself (span start→end)" fact. The
  *  producer (STAYED IN) and the positioning gate's G4b both call this, at the
@@ -928,6 +951,11 @@ export function computeOwnerPositionEvents(params: {
     // death (`roundEndMs`), which is never later than the owner's own: every
     // span dropped here also runs past the round's end.
     if (burstSpanSampledAfterDeath(owner, matchStartMs, tEnd)) continue;
+    // …nor past the round's end, whoever's death ended it (fact12 D33: a
+    // Solo Shuffle round an enemy's death ends, the owner alive and the log
+    // still writing positions) — dropped by the same rule
+    if (burstSpanSampledPastRoundEnd(matchStartMs, roundEndAtMs, tEnd))
+      continue;
     // FT-T12 D2 (user ruling 2026-10-10): the start, the end and every
     // mid-span sample of this span read ONE enemy — the one that hit the
     // owner most over it (`spanMeasuredEnemy`, which also states the three

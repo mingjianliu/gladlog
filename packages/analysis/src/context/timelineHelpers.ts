@@ -96,7 +96,10 @@ import {
   summonedAtMs,
 } from "../utils/summonLife";
 import { summonOwnerById } from "../utils/summonOwner";
-import { removedByDeath } from "../utils/unitDeath";
+import {
+  deathTeardownWindowsMs,
+  removedInDeathTeardown,
+} from "../utils/unitDeath";
 import {
   ALTER_TIME_CAST_ID,
   ALTER_TIME_RETURN_ID,
@@ -633,9 +636,8 @@ export function extractOwnerCDBuffExpiry(
    * channel suffix's "interrupted" evidence (`channelWasInterrupted`) */
   ownerCC?: Pick<IPlayerCCTrinketSummary, "ccInstances" | "interruptInstances">,
 ): ICDExpiryEvent[] {
-  const ownerDeathsMs = (owner?.deathRecords ?? []).map(
-    (d) => d.timestamp as number,
-  );
+  // each death's teardown, from its lethal hit to its UNIT_DIED (fact12 D32)
+  const ownerTeardowns = owner ? deathTeardownWindowsMs(owner) : [];
   // Owner's own form removals (ms) — a buff removed at the same instant was
   // ended by the shapeshift, not dispelled or consumed.
   const formRemovalsMs = (owner?.auraEvents ?? [])
@@ -1066,7 +1068,7 @@ export function extractOwnerCDBuffExpiry(
         !isEstimated &&
         removedFromId !== undefined &&
         removedFromId === (owner?.id ?? ownerId) &&
-        removedByDeath(ownerDeathsMs, removedMsForDeath, naturalEndMs)
+        removedInDeathTeardown(ownerTeardowns, removedMsForDeath, naturalEndMs)
       )
         cause = "death";
       // Only a form-bound buff on the owner: the removal must be in the
@@ -1170,8 +1172,8 @@ export function extractOwnerCDBuffExpiry(
           if (emptiedByHit && absorb) {
             cause = "absorbed";
           } else if (target) {
-            const died = removedByDeath(
-              (target.deathRecords ?? []).map((d) => d.timestamp as number),
+            const died = removedInDeathTeardown(
+              deathTeardownWindowsMs(target),
               span.removedMs,
               naturalEndMs,
             );
