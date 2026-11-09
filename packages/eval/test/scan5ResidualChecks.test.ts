@@ -2640,4 +2640,27 @@ describe("unusedPressedBeforeRoundEnd — a press up before the round's end (T05
       ),
     ).toEqual([]);
   });
+  // B19 assembly review: a logged 191427 button row is its own instant on
+  // the ledger (codex T05-2b) — after the death, so [UNUSED] is right and
+  // the scan must not backdate it through the aura's name
+  it("a 191427 button row after the end with the form up before it: the kit's [UNUSED] stands", () => {
+    const button = unit("Dh", "1", 1, {
+      info: {},
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      spellCastEvents: [cast(33_809, "Dh", "191427", "Metamorphosis")],
+      auraEvents: [
+        {
+          ...aura(LogEvent.SPELL_AURA_APPLIED, 32_885, "162264", "Metamorphosis"),
+          srcUnitId: "Dh",
+          destUnitId: "Dh",
+        },
+      ],
+    });
+    expect(
+      of(
+        scan(runT05, [button, mate], kit(true)),
+        "unusedPressedBeforeRoundEnd",
+      ),
+    ).toEqual([]);
+  });
 });

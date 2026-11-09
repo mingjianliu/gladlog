@@ -8,9 +8,10 @@
  *    after it: a SPELL_CAST_SUCCESS of the name in (end, end +
  *    `PRESS_LANDING_LAG_S`] whose activation is at or before the end.
  *    Activation: for a Havoc Metamorphosis landing row
- *    (`METAMORPHOSIS_LANDING_ID`) the product's own selection,
- *    `metamorphosisPressActivationMs` (codex B11 #3: the scan must not pick
- *    another row than the ledger); for any other spell, kind `other`, the
+ *    or a logged 191427 button row (`METAMORPHOSIS_PRESS_CAST_IDS`) the
+ *    product's own selection, `castRowActivationMs` (codex B11 #3, B19: the
+ *    scan must not pick another instant than the ledger — a 191427 row is
+ *    its own); for any other spell, kind `other`, the
  *    LATEST aura row of the same English name the unit put on itself
  *    (APPLIED / REFRESH) in [row − lag, row] — an inventory that no other
  *    spell has the shape. 52a97230 r0: Metamorphosis' 162264 up at
@@ -19,8 +20,8 @@
  *    printed the press. Counted: every kit entry with such a press.
  */
 import {
-  METAMORPHOSIS_LANDING_ID,
-  metamorphosisPressActivationMs,
+  castRowActivationMs,
+  METAMORPHOSIS_PRESS_CAST_IDS,
   PRESS_LANDING_LAG_S,
 } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
@@ -74,9 +75,13 @@ function unusedPressedBeforeRoundEnd(ctx: IRoundCtx): void {
       const rowMs = tsOf(c);
       if (rowMs <= end || rowMs > end + LAG_MS) continue;
       const name = nameOf(c.spellId, c.spellName);
-      const meta = String(c.spellId ?? "") === METAMORPHOSIS_LANDING_ID;
+      const id = String(c.spellId ?? "");
+      // a Metamorphosis cast row (landing or a logged 191427 button) is
+      // dated by the ledger's own selection, never the generic fallback
+      // (B19 assembly review: a 191427 row backdated through its name)
+      const meta = METAMORPHOSIS_PRESS_CAST_IDS.has(id);
       const upMs = meta
-        ? metamorphosisPressActivationMs(u, rowMs)
+        ? castRowActivationMs(u, id, rowMs)
         : latestOwnAuraRowMs(u, name, rowMs);
       if (upMs === undefined || upMs > end || late.has(name)) continue;
       late.set(name, { rowMs, upMs, kind: meta ? "metamorphosis" : "other" });

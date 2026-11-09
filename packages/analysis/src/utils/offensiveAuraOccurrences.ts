@@ -247,6 +247,25 @@ export function metamorphosisPressActivationMs(
   return k >= 0 ? rows[k]! : rowMs;
 }
 
+/**
+ * The instant a logged cast row of `spellId` stands for: a Metamorphosis
+ * landing row (`METAMORPHOSIS_LANDING_ID`) at its activation
+ * (`metamorphosisPressActivationMs`), every other row — a logged 191427
+ * button row included (codex T05-2b) — at its own instant. The friendly
+ * ledger (`cooldowns.ts` `buildCooldownEntry`) and scan5 `t05` read this
+ * one selection (B19 assembly review: the scan's generic fallback backdated
+ * a 191427 row the ledger kept).
+ */
+export function castRowActivationMs(
+  unit: Parameters<typeof metamorphosisPressActivationMs>[0],
+  spellId: string,
+  rowMs: number,
+): number {
+  return spellId === METAMORPHOSIS_LANDING_ID
+    ? metamorphosisPressActivationMs(unit, rowMs)
+    : rowMs;
+}
+
 /** Evidence tolerance around an aura start (cast ↔ aura association). */
 export const AURA_EVIDENCE_WINDOW_S = 3;
 /** Eye Beam cast window relative to the Demonic aura: the cast is logged up
