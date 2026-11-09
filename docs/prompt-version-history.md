@@ -5754,3 +5754,20 @@ one real case (a Feign Death, 7.8 s printed, back 1.7 s before the death) was
 already removed by v506 (T24, ruling R05); cover set 0 of 199 → 0 of 199, capture
 byte-identical. Batch verified on tests + codex (user 11-08); 605 / cover / wide
 run at the end of the wave.
+
+v513 (2026-11-09, fact12 D32 D33; pipeline batch B22, T08). (1) D32: an aura
+stripped in a dying unit's lethal-hit millisecond is the death, not "removed
+early": `deathTeardownWindowsMs` (unitDeath.ts) opens each death's window at
+its lethal hit (the earliest overkill row the unit did not survive, at most
+`LETHAL_HIT_DEATH_LAG_MS` before UNIT_DIED; `aliveAfterRow` now exported from
+killingBlow.ts) and `removedInDeathTeardown` is read by every death-end reader
+(auraEndCause, timelineHelpers `[BUFF FADED]` / target died, ccTrinketAnalysis,
+cooldowns Forbearance / Hypothermia, enemyCDs `deathCutOfficialEnd`). (2) D33
+(ruling R11): a STAYED IN / KITED span whose last rendered second is at or
+after the round's end is dropped (`burstSpanSampledPastRoundEnd`); positioningScan
+G4f asks the same of every printed second. New scan5 module t08. 605:
+deathTeardownEarly 3 views / 1 fact → 0; burst spans past the round end 35 of
+2,218 → 0 of 2,168; menu rows 7,401 → 7,398 (−3 stayed-in, the R11 rows, +0);
+no other scan5 class rises. (v513 was allocated to batches B20 and B21 first,
+both abandoned before push.) Batch verified on tests + codex (user 11-08); 605 /
+cover / wide run at the end of the wave.

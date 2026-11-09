@@ -1010,4 +1010,10 @@
  *  defensive had been off cooldown (deathOutcomeAnalysis.freeToPressMsBefore).
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 512;
+/*
+ * v513 (2026-11-09; pipeline batch B22, T08, fact12 D32 D33): an aura stripped
+ *  in a dying unit's lethal-hit millisecond ends with the death; burst spans
+ *  printed at or past the round's end are dropped (ruling R11). See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 513;
