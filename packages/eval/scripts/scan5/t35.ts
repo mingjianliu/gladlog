@@ -11,15 +11,20 @@
  *
  * Check `setCooldownBack`, kind `pressBeforeBack`: a `[PRESS]` line of a
  * holder's bonus spell printing `back M:SS`, while the unit's own next
- * logged press of it (SPELL_CAST_SUCCESS) came before M:SS by more than the
+ * press of it — as the producer reads presses (`extractOffListPresses`:
+ * the round's bounds, Stasis copies, unreleased holds) — came before M:SS
+ * by more than the
  * ledger's `CD_INSTANT_SLACK_S` — the log pressed what the line called on
  * cooldown. A printed `back` is floored, so the true instant is at or after
  * it: only a press before the printed second itself is a contradiction.
+ * Only `[PRESS]` spells are read: on 12.1.5 that is the Devastation
+ * empowers (Fire Breath, Eternity Surge); Ravager, Upheaval and Tentacle
+ * Slam print no `[PRESS]` line (`isOffListPressId`).
  *
  * Check `setFadeWhileUp`, kind `estimatedFadeWhileUp`: the owner's
  * `[BUFF FADED] <aura> (expired, estimated)` for an aura a worn bonus
- * lengthens, while the log keeps the run up past the printed second + 1
- * (no REMOVED before then, and the round and the owner lasted that long).
+ * lengthens, while the run's logged REMOVED comes after the printed
+ * second + 1. With no REMOVED the log is silent and the line is not judged.
  * The run is the latest self application at or before the printed second,
  * read through `ownAuraRuns` (the set walk's and t18's reading).
  */
@@ -33,15 +38,12 @@ import {
 import { EVENT_COOLDOWN_REDUCTIONS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import { ownAuraRuns } from "@gladlog/analysis/src/utils/buffDuration";
 import { CD_INSTANT_SLACK_S } from "@gladlog/analysis/src/utils/cooldowns";
-
 import {
-  deathMs,
-  type IRoundCtx,
-  nameOf,
-  secOf,
-  successesOf,
-  tsOf,
-} from "./ctx";
+  extractOffListPresses,
+  type IOffListPress,
+} from "@gladlog/analysis/src/utils/offListPress";
+
+import { type IRoundCtx, nameOf, secOf, tsOf } from "./ctx";
 
 export const CHECKS = ["setCooldownBack", "setFadeWhileUp"] as const;
 
@@ -81,6 +83,16 @@ function cooldownSpells(): Map<
 }
 let spells: ReturnType<typeof cooldownSpells> | undefined;
 
+const pressesByCtx = new WeakMap<object, IOffListPress[]>();
+function offListPressesOf(ctx: IRoundCtx): IOffListPress[] {
+  let out = pressesByCtx.get(ctx);
+  if (!out) {
+    out = extractOffListPresses(ctx.players, ctx.legacy, ctx.roundEndAt);
+    pressesByCtx.set(ctx, out);
+  }
+  return out;
+}
+
 function runCooldown(ctx: IRoundCtx): void {
   spells ??= cooldownSpells();
   for (const line of ctx.lines) {
@@ -95,10 +107,19 @@ function runCooldown(ctx: IRoundCtx): void {
     ctx.bump("setCooldownBack");
     const sec = secOf(m[1]!);
     const backS = secOf(back[1]!);
-    const next = successesOf(unit)
-      .filter((c) => spell.ids.has(String(c.spellId)))
-      .map((c) => (tsOf(c) - ctx.start) / 1000)
-      .filter((s) => s >= sec + 1)
+    // the unit's next press as the producer reads presses
+    // (`extractOffListPresses`: the round's bounds, Stasis copies, unreleased
+    // holds — codex 85-tk-A-T35-1 #2)
+    const next = offListPressesOf(ctx)
+      .filter(
+        (p) =>
+          p.unit === unit &&
+          spell.ids.has(p.spellId) &&
+          p.timeSeconds >= sec + 1,
+      )
+      .map(
+        (p) => (ctx.legacy.startTime + p.timeSeconds * 1000 - ctx.start) / 1000,
+      )
       .sort((a, b) => a - b)[0];
     if (next === undefined || next >= backS - CD_INSTANT_SLACK_S) continue;
     ctx.violate(
@@ -132,10 +153,12 @@ function runFade(ctx: IRoundCtx): void {
       .filter((r) => Math.floor((tsOf(r.from) - ctx.start) / 1000) <= sec)
       .pop();
     if (!run) continue;
+    // only a logged REMOVED shows the run outlived the printed second: with
+    // none the log is silent and the estimate stands (codex 85-tk-A-T35-1
+    // #1: a correct 20 s Berserk estimate in a round that ran on to 30 s)
+    if (!run.to) continue;
     ctx.bump("setFadeWhileUp");
-    const upUntil = run.to
-      ? tsOf(run.to)
-      : Math.min(ctx.roundEndAt, deathMs(owner));
+    const upUntil = tsOf(run.to);
     if (upUntil <= ctx.start + (sec + 1) * 1000) continue;
     ctx.violate(
       "setFadeWhileUp",

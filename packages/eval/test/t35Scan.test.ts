@@ -66,6 +66,11 @@ function scan(owner: any, lines: string[], roundEndS = 300): string[] {
     players: [owner],
     start: START,
     roundEndAt: ms(roundEndS),
+    legacy: {
+      startTime: START,
+      endTime: ms(roundEndS),
+      units: { [owner.id]: owner },
+    },
     unitOfPid: (pid: string | undefined) => (pid === "1" ? owner : undefined),
     firstOwnerOfRound: false,
     violate: (check: string, kind: string) => seen.push(`${check}:${kind}`),
@@ -75,30 +80,44 @@ function scan(owner: any, lines: string[], roundEndS = 300): string[] {
 }
 
 describe("scan5/t35 setCooldownBack", () => {
-  const prot = (pieces: number) =>
-    unit("73", "2067", pieces, [
-      success("228920", 10),
-      success("228920", 85.2),
+  // a Devastation 4-piece: Causality's give-backs are 0.05 s longer, so
+  // the printed `back` is a holder's line; the check reads the log's next
+  // press as the producer reads presses
+  const dev = (pieces: number, again: number) =>
+    unit("1467", "2058", pieces, [
+      success("357208", 10),
+      success("357208", again),
     ]);
-  it("a 4-piece Protection's Ravager printed back at 90 s is caught by its 75 s re-press; back at 75 s passes", () => {
+  it("a holder's back printed after its logged re-press is caught; at it, it passes", () => {
     expect(
-      scan(prot(4), ["0:10  [YOU] [PRESS]   Ravager (90s cd, back 1:40)"]),
+      scan(dev(4, 30), [
+        "0:10  [YOU] [PRESS]   Fire Breath (30s cd, back 0:40)",
+      ]),
     ).toEqual(["setCooldownBack:pressBeforeBack"]);
     expect(
-      scan(prot(4), ["0:10  [YOU] [PRESS]   Ravager (75s cd, back 1:25)"]),
+      scan(dev(4, 40), [
+        "0:10  [YOU] [PRESS]   Fire Breath (30s cd, back 0:40)",
+      ]),
     ).toEqual([]);
   });
   it("a non-holder's line is not this check's (another pid form too)", () => {
+    const line =
+      "0:10  [PRESS]   1(DEvoker) (Devastation Evoker): Fire Breath (30s cd, back 0:40)";
+    expect(scan(dev(3, 30), [line])).toEqual([]);
+    expect(scan(dev(4, 30), [line])).toEqual([
+      "setCooldownBack:pressBeforeBack",
+    ]);
+  });
+  // codex 85-tk-A-T35-1 #2: a press after the round's end is no press of
+  // the round
+  it("a cast after the round's end contradicts nothing", () => {
     expect(
-      scan(prot(3), [
-        "0:10  [PRESS]   1(PWarrior) (Protection Warrior): Ravager (90s cd, back 1:40)",
-      ]),
+      scan(
+        dev(4, 20),
+        ["0:10  [YOU] [PRESS]   Fire Breath (30s cd, back 0:40)"],
+        15,
+      ),
     ).toEqual([]);
-    expect(
-      scan(prot(4), [
-        "0:10  [PRESS]   1(PWarrior) (Protection Warrior): Ravager (90s cd, back 1:40)",
-      ]),
-    ).toEqual(["setCooldownBack:pressBeforeBack"]);
   });
 });
 
@@ -112,13 +131,23 @@ describe("scan5/t35 setFadeWhileUp", () => {
       [aura("106951", LogEvent.SPELL_AURA_APPLIED, 0)],
     );
   const line = "0:15  [BUFF FADED]   Berserk (expired, estimated)";
-  it("an estimated fade at 15 s while the round ran to 18 s with no REMOVED is caught", () => {
-    expect(scan(feral(4), [line], 18)).toEqual([
+  const removedAt = (pieces: number, at: number) => {
+    const u = feral(pieces);
+    u.auraEvents.push(aura("106951", LogEvent.SPELL_AURA_REMOVED, at));
+    return u;
+  };
+  it("an estimated fade at 15 s whose run the log ended at 20 s is caught", () => {
+    expect(scan(removedAt(4, 20), [line])).toEqual([
       "setFadeWhileUp:estimatedFadeWhileUp",
     ]);
   });
-  it("the round ending inside the printed second, or a non-holder, passes", () => {
-    expect(scan(feral(4), [line], 15.5)).toEqual([]);
-    expect(scan(feral(3), [line], 18)).toEqual([]);
+  it("a REMOVED inside the printed second, or a non-holder, passes", () => {
+    expect(scan(removedAt(4, 15.5), [line])).toEqual([]);
+    expect(scan(removedAt(3, 20), [line])).toEqual([]);
+  });
+  // codex 85-tk-A-T35-1 #1: with no REMOVED the log is silent — a round
+  // running on past the estimate is no evidence the buff was still up
+  it("no REMOVED: no verdict", () => {
+    expect(scan(feral(4), [line], 30)).toEqual([]);
   });
 });
