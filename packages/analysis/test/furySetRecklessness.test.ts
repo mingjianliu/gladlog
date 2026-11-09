@@ -177,6 +177,7 @@ describe("Fury 2pc: Raging Blow extends Recklessness by 2 s per press, up to 6 s
       spellId: RECKLESSNESS,
       srcUnitId: "w",
       destUnitId: "w",
+      timestamp: T0 + s * 1000,
       logLine: { event, timestamp: T0 + s * 1000 },
     });
     const holder = (
@@ -227,6 +228,37 @@ describe("Fury 2pc: Raging Blow extends Recklessness by 2 s per press, up to 6 s
       ],
     } as never;
     expect(buffFullDurationForCaster(RECKLESSNESS, rebroadcast, AT)).toBe(20);
+    // codex 85-tk-A-T18-1b #1: a 1 ms re-broadcast is one run too
+    // (`dropAuraRebroadcasts`), and a duplicate APPLIED then the real
+    // REMOVED in one ms is the end
+    const run = (rows: ReturnType<typeof auraRow>[]) =>
+      ({
+        ...(holder(undefined, [press(RAGING_BLOW, 12)]) as object),
+        id: "w",
+        auraEvents: rows,
+      }) as never;
+    expect(
+      buffFullDurationForCaster(
+        RECKLESSNESS,
+        run([
+          auraRow(LogEvent.SPELL_AURA_APPLIED, 0),
+          auraRow(LogEvent.SPELL_AURA_REMOVED, 10),
+          auraRow(LogEvent.SPELL_AURA_APPLIED, 10.001),
+        ]),
+        AT,
+      ),
+    ).toBe(20);
+    expect(
+      buffFullDurationForCaster(
+        RECKLESSNESS,
+        run([
+          auraRow(LogEvent.SPELL_AURA_APPLIED, 0),
+          auraRow(LogEvent.SPELL_AURA_APPLIED, 10),
+          auraRow(LogEvent.SPELL_AURA_REMOVED, 10),
+        ]),
+        AT,
+      ),
+    ).toBe(18);
   });
 
   it("one piece, another spec, another press, or no application time: nothing", () => {

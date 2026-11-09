@@ -31,6 +31,7 @@ import {
   SET_BONUS_PER_EVENT_DURATIONS,
   setBonusPerEventFor,
 } from "@gladlog/analysis/src/data/classSetBonuses";
+import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraIntervals";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { pressLandedOn } from "@gladlog/analysis/src/utils/castMissRows";
 
@@ -113,14 +114,16 @@ export function run(ctx: IRoundCtx): void {
     const auraId = byName.get(m[2]!.trim());
     if (!auraId) continue;
     const sec = secOf(m[1]!);
-    const rows = ((owner.auraEvents ?? []) as any[])
-      .filter(
+    // a REMOVED → APPLIED re-broadcast is one run (the producer's own
+    // reading, `dropAuraRebroadcasts`; codex 85-tk-A-T18-1b #2)
+    const rows = dropAuraRebroadcasts(
+      ((owner.auraEvents ?? []) as any[]).filter(
         (a) =>
           String(a.spellId) === auraId &&
           a.srcUnitId === owner.id &&
           a.destUnitId === owner.id,
-      )
-      .sort((a, b) => tsOf(a) - tsOf(b));
+      ),
+    ).sort((a, b) => tsOf(a) - tsOf(b));
     const secOfMs = (ms: number) => Math.floor((ms - ctx.start) / 1000);
     // a logged fade is its REMOVED's: the application before the REMOVED
     // printed at this second (a proc applied later in the same second is

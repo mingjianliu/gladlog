@@ -15,6 +15,7 @@ import {
   TOOLTIP_DURATION_ROWS,
   TOOLTIP_PER_EVENT_DURATIONS,
 } from "../data/talentDurationTooltips";
+import { dropAuraRebroadcasts } from "./auraIntervals";
 import { pressLandedOn } from "./castMissRows";
 import { castParamBaseSeconds, type CastParamCaster } from "./castParam";
 import { talentModifierOwnershipOf, talentRankOf } from "./talentOwnership";
@@ -397,30 +398,28 @@ function ownAuraRunNear(
 ): { fromMs: number; toMs?: number } | undefined {
   const id = caster.id;
   if (!id || !caster.auraEvents) return undefined;
-  const rows = caster.auraEvents.filter(
-    (a) => a.spellId === spellId && a.srcUnitId === id && a.destUnitId === id,
+  // a REMOVED → APPLIED re-broadcast (log order, `AURA_REBROADCAST_GAP_MS`)
+  // is one run, not an end and a new start (codex 85-tk-A-T18-1b)
+  const rows = dropAuraRebroadcasts(
+    caster.auraEvents.filter(
+      (a) => a.spellId === spellId && a.srcUnitId === id && a.destUnitId === id,
+    ),
   );
-  let from: number | undefined;
-  for (const a of rows) {
+  let fromAt = -1;
+  for (let k = 0; k < rows.length; k++) {
+    const a = rows[k]!;
     if (a.logLine.event !== "SPELL_AURA_APPLIED") continue;
-    const t = a.logLine.timestamp;
-    if (Math.abs(t - atMs) > OWN_AURA_PAIR_MS) continue;
-    if (from === undefined || Math.abs(t - atMs) < Math.abs(from - atMs))
-      from = t;
+    const d = Math.abs(a.logLine.timestamp - atMs);
+    if (d > OWN_AURA_PAIR_MS) continue;
+    if (fromAt < 0 || d < Math.abs(rows[fromAt]!.logLine.timestamp - atMs))
+      fromAt = k;
   }
-  if (from === undefined) return undefined;
-  // a same-ms REMOVED → APPLIED re-broadcast is not the aura ending
-  const reapplied = new Set(
-    rows
-      .filter((a) => a.logLine.event === "SPELL_AURA_APPLIED")
-      .map((a) => a.logLine.timestamp),
-  );
-  const removed = rows.find(
-    (a) =>
-      a.logLine.event === "SPELL_AURA_REMOVED" &&
-      a.logLine.timestamp > from &&
-      !reapplied.has(a.logLine.timestamp),
-  );
+  if (fromAt < 0) return undefined;
+  const from = rows[fromAt]!.logLine.timestamp;
+  // the first REMOVED after that APPLIED in log order
+  const removed = rows
+    .slice(fromAt + 1)
+    .find((a) => a.logLine.event === "SPELL_AURA_REMOVED");
   return { fromMs: from, toMs: removed?.logLine.timestamp };
 }
 

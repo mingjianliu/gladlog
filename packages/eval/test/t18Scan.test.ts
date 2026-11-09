@@ -154,6 +154,23 @@ describe("scan5/t18 setExtendedFade", () => {
     expect(scan(o, [fade("0:20", "expired")])).toEqual([]);
   });
 
+  // codex 85-tk-A-T18-1b #2: a same-ms REMOVED → APPLIED re-broadcast is
+  // one run
+  it("a re-broadcast inside the run is no new application", () => {
+    const o = warrior(
+      2,
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, 0),
+        aura(LogEvent.SPELL_AURA_REMOVED, 10),
+        aura(LogEvent.SPELL_AURA_APPLIED, 10),
+        aura(LogEvent.SPELL_AURA_REMOVED, 22),
+      ],
+      [cast("85288", "Raging Blow", 3), cast("85288", "Raging Blow", 12)],
+      [hit("96103", "Raging Blow", 3.05), hit("96103", "Raging Blow", 12.05)],
+    );
+    expect(scan(o, [fade("0:22", "expired")])).toEqual([]);
+  });
+
   it("a press after the REMOVED is no part of the run", () => {
     const o = warrior(
       2,
