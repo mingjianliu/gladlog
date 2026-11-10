@@ -59,9 +59,11 @@
  *    of 2+ pieces: 67 of 134 re-presses impossible at 15 s, 0 at 12 s;
  *    0–1 pieces: 0 of 815 at 15 s.
  *  - Marksmanship 2pc 1296633 → Explosive Shot 212431 +0.5 s (aura 107
- *    misc 1, mask covers 212431, base 1000 × 0.5): 2-piece holders 117 of
- *    118 lifetimes exact at 4.5 s, none at the unworn 4 s; 0–1 pieces 674
- *    exact at their static length (`SET_BONUS_DURATION_ROWS`).
+ *    misc 1, mask covers 212431, base 1000 × 0.5): 2-piece holders 119 of
+ *    119 lifetimes exact — 117 at 4.5 s (Precision Detonation's 3 + 1,
+ *    +0.5), 2 at 3.5 s (no Precision Detonation: 3 + 0.5) — none at the
+ *    unworn 4 / 3 s; 0 pieces 674 of 696 and 1 piece 130 of 136 exact at
+ *    their static length (`SET_BONUS_DURATION_ROWS`).
  *  - Protection 4pc 1296648 → Ravager 228920 cooldown −15 s (aura 453 on
  *    ChargeCategory 2073, base −30000 × 0.5): 90 → 75 s. No 605 file
  *    carries a Protection 4-piece Ravager: DB2 and the category only.
