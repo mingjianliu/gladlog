@@ -1059,4 +1059,11 @@
  *  game's own float32 half-even arithmetic. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 520;
+/*
+ * v521 (2026-11-09; pipeline batch B34b, T29, rulings R14 + R15): a press the
+ *  game refused runs for no time (effect layer) but stays a press (intent
+ *  layer): kill attempts keep it, missed-sync facts mark it "(refused: <MISS
+ *  TYPE>; cooldown spent | not spent)" and gain priorPress. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 521;

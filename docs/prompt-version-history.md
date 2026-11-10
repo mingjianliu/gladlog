@@ -5930,3 +5930,52 @@ zh-CN) and pinned; docs/talent-coverage-gaps.md regenerated (percentage cost
 reductions stay FLAGged open). (T17 first went into batch B31b, abandoned before
 push.) Batch verified on tests + codex (user 11-08); 605 / cover / wide run at
 the end of the wave.
+
+v521 (2026-11-09, rulings R14 + R15; pipeline batch B34b, T29). A press the game
+refused (a full miss row on its own target: IMMUNE, EVADE, …) is read on two
+layers. Effect layer: the refused press runs for no time — `[RES]` enemy /
+ally effects, aligned bursts, the burst ledger, the kill sequence, the replay
+highlights, kick-eaten `ourBurst` and missed-sync `enteredNextLock` drop it, and
+its caster's death cuts a press-only window. Intent layer: the press was still
+made, so kill attempts keep it on the end main gave it and the missed-sync
+facts name it with a marker — `pressedAfter=<spell> +Ns (refused: <MISS TYPE>;
+cooldown spent)` / `(…; cooldown not spent)` / `(refused: <MISS TYPE>)`, the
+cooldown clause printed only where the log decides it — plus the new fact
+`priorPress=<spell> at <s> (refused: …)` (`syncPriorRefusedPresses`). Spent /
+not spent is one exported predicate, `refusedPressCooldownState`
+(utils/refusedPress.ts), read by the renderer and by scan5 t29, on the ledger's
+own availability (`cdAvailableAt`): not spent = the spell is unavailable at
+some press counting every press and available at all of them with this one
+dropped, no other refused press does the same, and no not-ready cast failure
+of the recorder falls where the spell would then have been available
+(conflicting evidence decides nothing); spent = every press available and the
+recorder's own not-ready cast failure of the spell (outside any GCD answer)
+falls where only this press explains it; otherwise no clause.
+`pressRefusalMissRow` returns the refusing miss row (`pressRefusalMissType` its
+type), and scan5 t29 reads that row rather than searching for one. The missed-sync glossary
+gains the marker and priorPress sentences (the findings header changes in every
+file with a missed-sync row). `refusedPressCooldownState`, `refusedPressMarker`,
+`REFUSED_PRESS_MARKER_RE`, `syncPriorRefusedPresses`, `pressRefusalMissType` and
+`pressRefusalMissRow` are in the predicate-index (en + zh-CN) and pinned. 605 (caps/0e0ca1e0c-605 =
+main at v520 vs the branch on it): menu rows 7,399 → 7,401 (+3 / −1) and six
+more rows change facts, the R15 bar exactly — three missed-sync rows now read
+`pressedAfter=Touch of the Magi +0.6s (refused: IMMUNE; cooldown spent)`, two
+added rows carry `priorPress=Touch of the Magi at 64 (refused: IMMUNE; cooldown
+spent)`; kill-attempt context lines differing from main 0; context 453 diff
+lines in 77 owner files, effect layer only. scan5 t29: refusedPressMarker 0
+markers → 5 checked / 0; refusedPressUnmarked 156 / 3 → 153 / 0;
+refusedNotSpentReadiness 0 disagreements ("cooldown not spent" markers on 605:
+0); pressEffectRefusedListed 28 → 0; resEnemyEffectAfterDeath 14 → 2 (one
+distinct, a DoT logged under another spell's name, out of scope);
+allyOverlapPastAura 8 → 7; a gate mutation on three copied owner files (miss
+type changed, spent → not spent, marker removed) trips all three checks; every
+other scan5 check's violation total and the text gates identical (checked
+denominators move with the dropped presses, e.g. trinketReadyVsPress 59,116 →
+59,117). The capture is of the tree before the batch-review fixes (a refund
+contradicted by a not-ready failure prints no clause; the scan reads the
+producer's row): the first can only remove a "cooldown not spent" clause, of
+which the capture has 0, and the scan re-run on the same capture is identical
+on every check. Not changed: the cooldown ledger's readiness still counts a
+refused press as spent (GH #158). Batch
+verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
+the wave.
