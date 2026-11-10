@@ -5979,3 +5979,49 @@ on every check. Not changed: the cooldown ledger's readiness still counts a
 refused press as spent (GH #158). Batch
 verified on tests + codex (user 11-08); 605 / cover / wide run at the end of
 the wave.
+
+v522 (2026-11-09, GH #175 rows 1–17; pipeline batch B33b, T18 + T35). The 12.1
+class-set bonuses that move a duration or a cooldown are priced, behind one
+gate, `setBonusHeld` (classSetBonuses.ts: the unit's spec is the bonus's and its
+COMBATANT_INFO lists at least the row's pieces). Durations: Fury 2pc (1296645)
+extends a running Recklessness 2 s per landed Raging Blow, up to 6 s — the walk
+runs on the caster's own logged aura run (`ownAuraRuns` / `ownAuraRunAt`,
+re-broadcasts dropped, a pressed re-APPLIED a new run through
+`sourcePressedAuraNear`, shared with `buildAuraIntervals`), also on the
+unreadable-talent fallback length; Marksmanship 2pc (1296633) Explosive Shot
++0.5 s; Feral 4pc (1296606) Berserk +5 s. Cooldowns (`SET_BONUS_COOLDOWN_ROWS`,
+folded into the flat reduction before percentages): Protection 4pc (1296648)
+Ravager −15 s, Augmentation 2pc (1296637) Upheaval −5 s, Shadow 2pc (1296579)
+Tentacle Slam −3 s; Devastation 4pc (1296640) adds 0.05 s to each Causality
+give-back. Havoc 4pc's Essence Break cooldown row (already priced) now goes
+through the same gate (`wearsSetBonus`, spec 577) instead of comparing pieces
+itself; no rendered change. The rows with no product reader of their target are
+listed with reasons in the classSetBonuses header and stay unpriced. On 605:
+Recklessness clean lifetimes equal to the predicate, 2pc holders 5 → 32 of 48
+(0–1 pieces 113 → 113 of 187; Enduring Rage's +5 s stays unpriced); Tentacle
+Slam re-presses impossible under the model, 2+ pieces 67 → 0 of 134 (0–1 pieces
+0 of 815); Explosive Shot lifetimes exact, 2 pieces 0 → 119 of 119 (117 at
+4.5 s; 2 at 3.5 s, holders without Precision Detonation). Ravager, Upheaval,
+Berserk and Causality have no 605 corpus leg (no holder, or one round) and land
+on DB2 + mask / label / charge category alone. Rendered change, a 605 capture
+of the batch's code against the capture of v521's tree: menus 0 lines (7,401 →
+7,401 rows); 72 context files differ, every changed line one of: 186 `[PRESS] …
+Explosive Shot` lines (183 `lasts 4s` → `4.5s`, 3 `3s` → `3.5s`); 9 Devastation
+`[PRESS] … back` 1 s earlier (one round, three recorders); one estimated
+Recklessness fade 3:16 → 3:22 and one gone past its round's end; 6 `[RES]`
+lines in that first round (two per recorder: the `cd:` lower bound of
+Recklessness / Avatar 34 → 37 s and 15 → 18 s — Anger Management credits the
+cheaper Rampages of the longer Recklessness). New scan5 modules t18
+(setExtendedFade, 56 checked / 2 violations → 55 / 0) and t35 (setCooldownBack
+12 / 0 on both sides; setFadeWhileUp 0 checked — no Feral 4pc Berserk fade on
+605); the other 204 checks' checked and violation counts are identical. Both
+modules pair a printed fade with the producer's press and that press's own run
+(scan5/producerPress.ts → `ownAuraRunAt`). `buffDurationScan --per-app` reads
+clean runs (scripts/lib/auraRuns.ts) and splits by pieces; `cooldownRecastScan
+--spells / --no-gear`. An import cycle buffDuration ↔ auraIntervals is broken
+by the leaf utils/auraRebroadcast.ts (moved unchanged, re-exported).
+`setBonusHeld`, `sourcePressedAuraNear`, `ownAuraRuns` / `ownAuraRunAt` are in
+the predicate-index (en + zh-CN) and pinned; the new id tables are in
+curatedIdRegistry. (Earlier attempts went into batches B25 and B33, both
+abandoned before push.) Batch verified on tests + codex (user 11-08); cover /
+wide run at the end of the wave.

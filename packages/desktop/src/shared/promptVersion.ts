@@ -1066,4 +1066,12 @@
  *  TYPE>; cooldown spent | not spent)" and gain priorPress. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 521;
+/*
+ * v522 (2026-11-09; pipeline batch B33b, T18 + T35, GH #175): the 12.1
+ *  class-set bonuses that move a duration or a cooldown are priced behind one
+ *  gate (spec + pieces from COMBATANT_INFO) — Fury 2pc Recklessness,
+ *  Marksmanship 2pc Explosive Shot, Feral 4pc Berserk, Protection 4pc Ravager,
+ *  Augmentation 2pc Upheaval, Shadow 2pc Tentacle Slam, Devastation 4pc
+ *  Causality. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 522;
