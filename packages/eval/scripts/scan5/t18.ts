@@ -35,7 +35,7 @@ import {
 import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
   buffFullDurationForCaster,
-  ownAuraRuns,
+  ownAuraRunAt,
 } from "@gladlog/analysis/src/utils/buffDuration";
 import { pressLandedOn } from "@gladlog/analysis/src/utils/castMissRows";
 import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
@@ -219,18 +219,19 @@ export function run(ctx: IRoundCtx): void {
       ),
     ).sort((a, b) => tsOf(a) - tsOf(b));
     const secOfMs = (ms: number) => Math.floor((ms - ctx.start) / 1000);
-    // a logged fade is its REMOVED's: the application before the REMOVED
-    // printed at this second (a proc applied later in the same second is
-    // another run — codex 85-tk-A-T18-1 #2); an estimated one has none, so
-    // it is the latest application at or before the second
     const estimated = m[3]!.startsWith("expired, estimated");
-    // the caster's own runs, the walk's reading (`ownAuraRuns`: duplicate
-    // APPLIED rows, re-broadcasts, a re-press whose REMOVED was lost)
-    const runs = ownAuraRuns(owner, auraId);
-    const run = estimated
-      ? runs.filter((r) => secOfMs(tsOf(r.from)) <= sec).pop()
-      : runs.find((r) => r.to && secOfMs(tsOf(r.to)) === sec);
+    // the press the producer printed this line for (codex 85-tk-A-T18-2
+    // #1, -2b #2), and the run that press put up — the one its walk reads
+    // (`ownAuraRunAt`; codex 85-tk-A-T18-2e #2: a later application in the
+    // same second is the next press's run)
+    const anchor = producerPressMs(ctx, owner, auraId, sec, estimated);
+    if (anchor === undefined) continue;
+    const run = ownAuraRunAt(owner, auraId, anchor);
     if (!run) continue;
+    // a logged fade is its REMOVED's: judged only when that REMOVED ends the
+    // press's run (a proc applied later in the same second is another run
+    // — codex 85-tk-A-T18-1 #2)
+    if (!estimated && !(run.to && secOfMs(tsOf(run.to)) === sec)) continue;
     const at = tsOf(run.from);
     const removed = run.to;
     const refreshed = rows.some(
@@ -243,10 +244,7 @@ export function run(ctx: IRoundCtx): void {
     const staticS = buffFullDurationForCaster(auraId, owner);
     if (staticS === undefined) continue;
     // the producer's expiry is its press + the full length: the run's length
-    // is walked from its APPLIED, the end anchored at the press the producer
-    // printed this line for (codex 85-tk-A-T18-2 #1, -2b #2)
-    const anchor = producerPressMs(ctx, owner, auraId, sec, estimated);
-    if (anchor === undefined) continue;
+    // is walked from its APPLIED, the end anchored at that press
     ctx.bump("setExtendedFade");
     const full = fullLengthS(owner, auraId, at, staticS, removed, run.from);
     const claim = m[3]!;

@@ -4341,6 +4341,11 @@ const INDEX: PredicateRow[] = [
     mod: buffDuration,
   },
   {
+    file: `${A}/utils/buffDuration.ts`,
+    symbol: "ownAuraRunAt",
+    mod: buffDuration,
+  },
+  {
     file: `${A}/utils/auraEndCause.ts`,
     symbol: "auraEndFromLog",
     mod: auraEndCause,

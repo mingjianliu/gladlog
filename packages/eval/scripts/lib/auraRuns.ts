@@ -45,13 +45,18 @@ export function cleanAuraRuns(
      * source logged a cast of it there — `sourcePressedAuraNear` — or it
      * came past the open run's official length: `buildAuraIntervals`'
      * split): the open run lost its REMOVED and is dropped, a run starts
-     * (codex 85-tk-A-T18-2b #1, -2d #2) */
-    isNewApplication?: (applied: IAuraRunRow, openFromMs: number) => boolean;
+     * (codex 85-tk-A-T18-2b #1, -2d #2). `anchorMs` is the builder's
+     * duration anchor: the open run's APPLIED, moved by every REFRESH and
+     * APPLIED_DOSE since (codex 85-tk-A-T18-2e #1) */
+    isNewApplication?: (applied: IAuraRunRow, anchorMs: number) => boolean;
   } = {},
 ): ICleanAuraRun[] {
   const out: ICleanAuraRun[] = [];
   // insertion order = oldest open run first
-  const open = new Map<string, { t: number; clean: boolean }>();
+  const open = new Map<
+    string,
+    { t: number; anchor: number; clean: boolean }
+  >();
   const notTheEnd = supersededAuraBreaks(rows);
   for (const a of dropAuraRebroadcasts(rows)) {
     if (notTheEnd.has(a)) continue;
@@ -59,17 +64,22 @@ export function cleanAuraRuns(
     const ev = a.logLine.event;
     const t = a.logLine.timestamp;
     if (ev === LogEvent.SPELL_AURA_APPLIED) {
-      if (!open.has(src)) open.set(src, { t, clean: true });
+      if (!open.has(src)) open.set(src, { t, anchor: t, clean: true });
       // replaced in place, as the builder's `Map.set` does: the run keeps
       // its place in the oldest-open fallback (codex 85-tk-A-T18-2c #2)
-      else if (opts.isNewApplication?.(a, open.get(src)!.t))
-        open.set(src, { t, clean: true });
+      else if (opts.isNewApplication?.(a, open.get(src)!.anchor))
+        open.set(src, { t, anchor: t, clean: true });
     } else if (
       ev === LogEvent.SPELL_AURA_REFRESH ||
-      (opts.doseUnclean && ev === LogEvent.SPELL_AURA_APPLIED_DOSE)
+      ev === LogEvent.SPELL_AURA_APPLIED_DOSE
     ) {
+      // the builder moves its duration anchor on both; a REFRESH (and, with
+      // `doseUnclean`, a DOSE) leaves the lifetime no clean sample
       const o = open.get(src);
-      if (o) o.clean = false;
+      if (!o) continue;
+      o.anchor = t;
+      if (ev === LogEvent.SPELL_AURA_REFRESH || opts.doseUnclean)
+        o.clean = false;
     } else if (ENDS.has(ev)) {
       // the builder's close: the row's own source first, else the oldest
       // open run of any source (a closing row's source is often not the

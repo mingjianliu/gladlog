@@ -488,10 +488,36 @@ export function ownAuraRuns<
 }
 
 /**
- * The caster's own application of this aura on itself nearest `atMs`
- * (within `OWN_AURA_PAIR_MS`) and the REMOVED that ended it, when the log
- * shows them (`ownAuraRuns`); undefined without the caster's aura rows.
+ * The caster's own run of this aura (`ownAuraRuns`) whose APPLIED is nearest
+ * `atMs`, within `OWN_AURA_PAIR_MS`: the run a press at `atMs` put up, which
+ * the set-bonus walk reads (and the scan that audits it — codex
+ * 85-tk-A-T18-2e #2). Undefined without the caster's aura rows or a run
+ * there.
  */
+export function ownAuraRunAt<
+  R extends {
+    spellId?: string | null;
+    srcUnitId?: string;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string; timestamp: number };
+  },
+>(
+  caster: Parameters<typeof ownAuraRuns<R>>[0],
+  spellId: string,
+  atMs: number,
+): IOwnAuraRun<R> | undefined {
+  let best: IOwnAuraRun<R> | undefined;
+  for (const r of ownAuraRuns(caster, spellId)) {
+    const d = Math.abs(r.from.logLine.timestamp - atMs);
+    if (d > OWN_AURA_PAIR_MS) continue;
+    if (!best || d < Math.abs(best.from.logLine.timestamp - atMs)) best = r;
+  }
+  return best;
+}
+
+/** `ownAuraRunAt` as the walk's bounds: its APPLIED and the REMOVED that
+ * ended it, with their log lines. */
 function ownAuraRunNear(
   caster: Partial<Pick<ICombatUnit, "id" | "auraEvents" | "spellCastEvents">>,
   spellId: string,
@@ -499,14 +525,7 @@ function ownAuraRunNear(
 ):
   | { fromMs: number; fromLine?: number; toMs?: number; toLine?: number }
   | undefined {
-  const runs = ownAuraRuns(caster, spellId);
-  type Row = (typeof runs)[number]["from"];
-  let best: { from: Row; to?: Row } | undefined;
-  for (const r of runs) {
-    const d = Math.abs(r.from.logLine.timestamp - atMs);
-    if (d > OWN_AURA_PAIR_MS) continue;
-    if (!best || d < Math.abs(best.from.logLine.timestamp - atMs)) best = r;
-  }
+  const best = ownAuraRunAt(caster, spellId, atMs);
   if (!best) return undefined;
   return {
     fromMs: best.from.logLine.timestamp,

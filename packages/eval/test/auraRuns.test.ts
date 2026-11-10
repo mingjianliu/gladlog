@@ -151,4 +151,27 @@ describe("cleanAuraRuns", () => {
     ).toEqual([{ srcUnitId: "w", fromMs: 60_000, toMs: 65_000 }]);
     expect(seen).toEqual([0]);
   });
+  // codex 85-tk-A-T18-2e #1: the length is counted from the builder's
+  // anchor, the latest REFRESH — APPLIED 0, REFRESH 15, APPLIED 20 is one
+  // refreshed (unclean) run, no 13 s sample
+  it("the re-APPLIED split counts from the latest REFRESH", () => {
+    const seen: number[] = [];
+    expect(
+      cleanAuraRuns(
+        [
+          row(LogEvent.SPELL_AURA_APPLIED, 0),
+          row(LogEvent.SPELL_AURA_REFRESH, 15),
+          row(LogEvent.SPELL_AURA_APPLIED, 20),
+          row(LogEvent.SPELL_AURA_REMOVED, 33),
+        ],
+        {
+          isNewApplication: (a, anchor) => {
+            seen.push(anchor);
+            return a.logLine.timestamp > anchor + 18_000;
+          },
+        },
+      ),
+    ).toEqual([]);
+    expect(seen).toEqual([15_000]);
+  });
 });

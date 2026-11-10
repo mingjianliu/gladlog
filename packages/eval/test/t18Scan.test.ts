@@ -134,6 +134,24 @@ describe("scan5/t18 setExtendedFade", () => {
     expect(scan(o, [fade("0:18", "expired, estimated")], 30)).toEqual([]);
   });
 
+  // codex 85-tk-A-T18-2e #2: the 0 s press's fade is walked on the 0 s
+  // run, not on the 18.9 s run a landed Raging Blow at 21 s extends
+  it("an estimated fade is walked on its own press's run", () => {
+    const o = warrior(
+      2,
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, 0),
+        aura(LogEvent.SPELL_AURA_APPLIED, 18.9),
+      ],
+      [
+        cast(RECKLESSNESS, "Recklessness", 18.9),
+        cast("85288", "Raging Blow", 21),
+      ],
+      [hit("96103", "Raging Blow", 21.05)],
+    );
+    expect(scan(o, [fade("0:18", "expired, estimated")], 60)).toEqual([]);
+  });
+
   it("`ended after A of Bs` must state the extended length", () => {
     const o = warrior(
       2,
