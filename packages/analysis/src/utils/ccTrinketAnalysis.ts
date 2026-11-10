@@ -142,7 +142,7 @@ import {
 import {
   baseCastSeconds,
   ccMechanicOf,
-  isSilenceableCast,
+  isSchoolLockableCast,
   SNARED_MECHANIC,
 } from "./spellMechanics";
 import {
@@ -1705,7 +1705,7 @@ export interface IInterruptInstance {
   /** Seconds after the kick at which the log shows the lock was already
    * over, before its modelled end: the first successful press of a spell the
    * lock fully covers (`schoolLockedBy`) that a lockout does prevent
-   * (`isSilenceableCast`). Triage 2026-09-29 F-K7a, user ruling A23
+   * (`isSchoolLockableCast`: silenceable, or pacify-only — T46). Triage 2026-09-29 F-K7a, user ruling A23
    * (2026-09-30): 1b930c17 @237 printed "pressed 3x but rejected (Surging
    * Totem、Riptide×2) inside the lockout; first successful cast 1.0s later" —
    * the two Riptide rejects came after Surging Totem had gone out.
@@ -1714,7 +1714,7 @@ export interface IInterruptInstance {
    * modelled lockout for [RES], CONSEQ and the cannot-cast intervals.
    * null / absent = the log shows no such cast. Never set by a cast that does
    * not prove it: `LOCK_IGNORING_CAST_IDS`, a Stasis replay
-   * (`stasisReplayWindows`), or a spell DB2 does not mark silenceable. */
+   * (`stasisReplayWindows`), or a spell DB2 does not say a lockout prevents. */
   lockEndedBySuccessS?: number | null;
   /** The spells the player got out inside the modelled lockout: spell id →
    * seconds after the kick of its first SPELL_CAST_SUCCESS there (a Stasis
@@ -2084,6 +2084,14 @@ export const POST_KICK_WINDOW_S = 5;
  *    its full length, and the cut dropped all eight presses from the line.
  *  - Snowdrift 390171 / 389823 (19 / 9 in-lock successes, 0 rejects) and
  *    Sanctified Ground 289655 (7, 0): rows a passive writes, not presses.
+ *  - Reaper's Toll 1245470 (pipeline T46, 2026-11-10 — the cut now reads a
+ *    pacify-only cast too, `isSchoolLockableCast`): a target-less row another
+ *    press writes, not a press — it follows the Demon Hunter's own casts
+ *    inside their GCD (74 ms from the next one, 0.24 s after the one before).
+ *    Of the pacify-only spells it is the one whose in-lock success on 605
+ *    files is not the tail of a shortened lock (1 success, +2.1 s of 3 s,
+ *    0.5 s after a Voidblade; 0 rejects), and the cut took `theirLow*` off
+ *    that row.
  * Left off, evidence mixed: Benediction 1262763 (24 in-lock successes but 47
  * lock-free rejects), Void Shield 1253593 (7 / 6), Glacial Spike 199786
  * (6 / 3). Lightning Bolt / Chain Lightning are the Storm Conduit lockout
@@ -2100,6 +2108,7 @@ export const LOCK_IGNORING_CAST_IDS: ReadonlySet<string> = new Set([
   "390171", // Snowdrift (passive row)
   "389823", // Snowdrift (passive row)
   "289655", // Sanctified Ground (passive row)
+  "1245470", // Reaper's Toll (a row another press writes)
 ]);
 
 /** How far before a `SPELL_CAST_SUCCESS` its own `SPELL_CAST_START` may sit
@@ -5136,7 +5145,7 @@ export function analyzePlayerCCAndTrinket(
               return (
                 m !== undefined &&
                 schoolLockedBy(m, lockedMask) &&
-                isSilenceableCast(c.spellId) &&
+                isSchoolLockableCast(c.spellId) &&
                 !LOCK_IGNORING_CAST_IDS.has(c.spellId) &&
                 !isReplay(c)
               );
@@ -5153,7 +5162,7 @@ export function analyzePlayerCCAndTrinket(
               return (
                 m !== undefined &&
                 schoolLockedBy(m, lockedMask) &&
-                isSilenceableCast(st.spellId) &&
+                isSchoolLockableCast(st.spellId) &&
                 !LOCK_IGNORING_CAST_IDS.has(st.spellId) &&
                 !replays.some(
                   (w) =>

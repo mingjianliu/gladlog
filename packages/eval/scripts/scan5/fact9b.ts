@@ -12,7 +12,7 @@
  *  - `pressOutsideButLocked` (D9 / D12): a press listed under `outside the
  *    locked school` that a lock did cover: its own DB2 school is inside this
  *    kick's locked school (kind `thisLock`; `thisLockUnsilenceable` when DB2
- *    says no silence stops the spell — the bucket is right that the lock did
+ *    says no lockout stops the spell (`isSchoolLockExemptCast`) — the bucket is right that the lock did
  *    not stop it, wrong about the school: 1eb4dd55 Heart of the Wild under a
  *    Nature Skull Bash), or another enemy kick on the player landed before the
  *    press and still had its school locked at it (kind `laterLock` when that
@@ -21,12 +21,12 @@
  *    Pyroblast inside a Rebuke's Fire lock). The lock's length is the
  *    victim's own (`kickLockoutSecondsFor`, Storm Conduit — a lookup), cut
  *    short by the player's own SUCCESS (`spellCastEvents`) or cast start
- *    (`castStartEvents`) of a silenceable spell of that school after the kick
+ *    (`castStartEvents`) of a spell a lockout prevents (`isSchoolLockableCast`) of that school after the kick
  *    and at or before the press — not one the lock ignores
  *    (`LOCK_IGNORING_CAST_IDS`), not a Stasis replay (`stasisReplayWindows`;
  *    the release itself counts, a release with no SUCCESS row too:
  *    `stasisReleasePressesMs`, GH #182), as the analysis's lock end reads them. A
- *    press DB2 calls unsilenceable is never either.
+ *    press DB2 exempts from a lockout is never either.
  *  - `rootAuraCastBlock` (D10): an aura typed `interrupts` (so read as
  *    cast-blocking) put on the player by the other side, under which the
  *    player's SPELL_CAST_SUCCESS of a spell DB2 says a silence stops went out
@@ -67,8 +67,9 @@ import {
 import { kickLockoutSecondsFor } from "@gladlog/analysis/src/utils/kickLockout";
 import {
   ccMechanicOf,
+  isSchoolLockableCast,
+  isSchoolLockExemptCast,
   isSilenceableCast,
-  isUnsilenceableCast,
 } from "@gladlog/analysis/src/utils/spellMechanics";
 
 import {
@@ -201,8 +202,10 @@ function kickRows(ctx: IRoundCtx): void {
       const fMs = ctx.start + f.tSeconds * 1000;
       let kind: string | undefined;
       if (lockedMask !== undefined && schoolLockedBy(mask, lockedMask))
-        kind = isUnsilenceableCast(id) ? "thisLockUnsilenceable" : "thisLock";
-      else if (!isUnsilenceableCast(id)) {
+        kind = isSchoolLockExemptCast(id)
+          ? "thisLockUnsilenceable"
+          : "thisLock";
+      else if (!isSchoolLockExemptCast(id)) {
         const other = kicks.filter((k) => {
           if (k === kick || tsOf(k) >= fMs) return false;
           const lm = spellSchoolMask(String(k.extraSpellId));
@@ -227,7 +230,7 @@ function kickRows(ctx: IRoundCtx): void {
               return false;
             const cm = spellSchoolMask(cid);
             return (
-              isSilenceableCast(cid) &&
+              isSchoolLockableCast(cid) &&
               cm !== undefined &&
               schoolLockedBy(cm, lm)
             );

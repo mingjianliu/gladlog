@@ -19,6 +19,7 @@ interface Entry {
   locksCasting?: boolean;
   silenceable?: boolean;
   unsilenceable?: boolean;
+  pacifyOnly?: boolean;
   weaponRequired?: boolean;
 }
 
@@ -144,6 +145,37 @@ export function isSilenceableCast(spellId: string): boolean {
  * no row is neither (no evidence either way). */
 export function isUnsilenceableCast(spellId: string): boolean {
   return SPELLS[spellId]?.unsilenceable === true;
+}
+
+/** Does an interrupt's SCHOOL LOCKOUT prevent this cast, by DB2 — for a
+ * spell whose every school is inside the lock (`schoolLockedBy`, the caller's
+ * half)? One a silence prevents (`isSilenceableCast`), and one whose
+ * `SpellCategories.PreventionType` is the pacify bit alone (Judgment, Blade
+ * of Justice, Final Verdict, Rushing Wind Kick): a silence does not stop
+ * those, a lock of their school does. Pipeline T46, 605 files, presses of a
+ * spell of the locked school in the first half of the lock (scan5/t46.ts):
+ * pacify-only went out 0× and was refused "not ready" 33× (whole lock
+ * 3 / 54) — the silence-bit control 7 / 1,371 (61 / 2,733). So a success of
+ * one inside the modelled lock is evidence the lock was over, as a
+ * silenceable one's is. False also means "no row": `true` is evidence,
+ * `false` never "cannot be locked" — that is `isSchoolLockExemptCast`. */
+export function isSchoolLockableCast(spellId: string): boolean {
+  const e = SPELLS[spellId];
+  return e?.silenceable === true || e?.pacifyOnly === true;
+}
+
+/** DB2 says a school lockout does NOT prevent this cast: the spell has a
+ * SpellCategories row and it is neither silenceable nor pacify-only
+ * (PreventionType 0, 4 or 6 — Barkskin, Dispersion, Heart of the Wild,
+ * Gladiator's Badge, Stormstrike). Same T46 scan: PreventionType 6 went out
+ * inside a lock of its school 10× and was never refused; 4 and 0 were not
+ * seen to go out (0 / 9, 12 / 6 with the triggered rows) and keep the
+ * reading they had. Not the negation of `isSchoolLockableCast` — a spell
+ * with no row is neither (no evidence either way; a reader keeps it
+ * stopped). */
+export function isSchoolLockExemptCast(spellId: string): boolean {
+  const e = SPELLS[spellId];
+  return e?.unsilenceable === true && e.pacifyOnly !== true;
 }
 
 /** DB2 SpellEquippedItems: the cast needs a weapon (EquippedItemClass 2) —

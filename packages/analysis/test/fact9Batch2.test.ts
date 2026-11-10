@@ -113,6 +113,41 @@ describe("fact9 D12 — an unsilenceable spell of the locked school (1eb4dd55 r1
   });
 });
 
+describe("T46 — a pacify-only spell of the locked school is rejected inside the lockout (1d26a991 0:30.1)", () => {
+  // Spell Lock on Searing Glare (Holy) at 30.15, 5 s. Judgment 20271, Blade
+  // of Justice 184575 and Final Verdict 383328 are Holy with PreventionType
+  // 2: none went out until the lock ended; Hammer of Wrath 24275 is Holy and
+  // silenceable
+  const k = {
+    atSeconds: 30.15,
+    lockoutDurationSeconds: 5,
+    postKick: "acted" as const,
+    firstActionDelayS: 3.1,
+    switchSpellName: "Rebuke",
+    switchDelayS: 3.1,
+    switchWasHardCast: false,
+    interruptedSpellId: "410126",
+  };
+  it("Judgment, Blade of Justice and Final Verdict sit with Hammer of Wrath, not under 'a spell the lock does not stop'", () => {
+    const f = postKickFact(k, [
+      failed(30.73, 20271),
+      failed(30.9, 184575),
+      failed(32.2, 24275),
+      failed(32.7, 383328),
+    ]);
+    expect(f).toContain(
+      "pressed 4x but rejected (Judgment +0.5s、Blade of Justice +0.7s、Hammer of Wrath +2.0s、Final Verdict +2.5s) inside the lockout",
+    );
+    expect(f).not.toContain("a spell the lock does not stop");
+  });
+  it("Divine Steed (Holy, PreventionType 4) stays 'a spell the lock does not stop'", () => {
+    const f = postKickFact(k, [failed(31, 190784)]);
+    expect(f).toContain(
+      "a spell the lock does not stop 1x not ready yet — its own cooldown or the GCD (Divine Steed +0.8s)",
+    );
+  });
+});
+
 describe("fact9 D10 — Shambling Rush's aura is a root, not a cast block", () => {
   const aura = (spellId: string, event: LogEvent, timestamp: number) => ({
     spellId,

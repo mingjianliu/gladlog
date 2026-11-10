@@ -180,7 +180,7 @@ import {
   shuffleRoundEndMs,
   threesDecidedMs,
 } from "../utils/roundEnd";
-import { isUnsilenceableCast } from "../utils/spellMechanics";
+import { isSchoolLockExemptCast } from "../utils/spellMechanics";
 import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import {
   isCasterCentredSpell,
@@ -2746,14 +2746,16 @@ export function postKickFact(
   const lockedMask = k.interruptedSpellId
     ? spellSchoolMask(k.interruptedSpellId)
     : undefined;
-  // fact9 D12: a spell of the locked school that no silence stops (DB2's
-  // silence bit, `isUnsilenceableCast`) is not stopped by the lockout either
-  // — its "not ready" is its own cooldown or the GCD, as for a spell outside
-  // the school, but it is not outside the school (1eb4dd55 r1: Heart of the
-  // Wild, Nature, under a Nature Skull Bash)
+  // fact9 D12: a spell of the locked school that DB2 says no lockout stops
+  // (`isSchoolLockExemptCast`, `intervalBlocksSpell`'s reading) — its "not
+  // ready" is its own cooldown or the GCD, as for a spell outside the
+  // school, but it is not outside the school (1eb4dd55 r1: Heart of the
+  // Wild, Nature, under a Nature Skull Bash). T46: a pacify-only spell
+  // (Judgment, Blade of Justice, Final Verdict) is NOT one of these; the
+  // lock stops it and its presses are "rejected inside the lockout"
   const notStoppedInSchool = (h: CastFailedEvent) => {
     if (lockedMask === undefined) return false;
-    if (!isUnsilenceableCast(String(h.spellId))) return false;
+    if (!isSchoolLockExemptCast(String(h.spellId))) return false;
     const m = spellSchoolMask(String(h.spellId));
     return m !== undefined && schoolLockedBy(m, lockedMask);
   };
@@ -2768,7 +2770,7 @@ export function postKickFact(
   // kick wins when both cover the press.
   const otherLockAt = (h: CastFailedEvent): "later" | "earlier" | undefined => {
     const id = String(h.spellId);
-    if (isUnsilenceableCast(id)) return undefined;
+    if (isSchoolLockExemptCast(id)) return undefined;
     const m = spellSchoolMask(id);
     if (m === undefined) return undefined;
     const covering = (otherKicks ?? []).filter((o) => {
@@ -2785,9 +2787,8 @@ export function postKickFact(
   };
   const isOwnCd = (h: CastFailedEvent) => {
     if (lockedMask === undefined) return false;
-    // a cast no lockout prevents (DB2's silence bit, `intervalBlocksSpell`'s
-    // reading — codex R6C-03 #2: Judgment ×5 "rejected inside the lockout")
-    if (isUnsilenceableCast(String(h.spellId))) return true;
+    // a cast no lockout prevents (`intervalBlocksSpell`'s reading)
+    if (isSchoolLockExemptCast(String(h.spellId))) return true;
     const m = spellSchoolMask(String(h.spellId));
     // the classifier's predicate: a spell with one school still open is not
     // locked, so its "not ready" is its own cooldown or the GCD (F-K7b:

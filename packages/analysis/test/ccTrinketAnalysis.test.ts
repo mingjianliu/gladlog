@@ -1405,6 +1405,26 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       expect(k.lockoutDurationSeconds).toBe(3);
     });
 
+    it("T46: a pacify-only spell of the locked school ends the lock as a silenceable one does; one DB2 exempts does not", () => {
+      // Flash of Light 19750 = Holy; Judgment 20271 = Holy, PreventionType 2
+      // (121afd91 r3: Judgment went out 2.4 s into a modelled 3 s Holy lock
+      // an interrupt-duration aura had cut to 2.1 s)
+      expect(
+        kicked(["19750", "Flash of Light"], [["20271", 2.4]])
+          .lockEndedBySuccessS,
+      ).toBeCloseTo(2.4, 5);
+      // Regrowth 8936 = Nature; Barkskin 22812 = Nature, PreventionType 4
+      expect(
+        kicked(["8936", "Regrowth"], [["22812", 1.0]]).lockEndedBySuccessS,
+      ).toBeNull();
+      // Consume 473662 and Reaper's Toll 1245470 share their four schools;
+      // Reaper's Toll is pacify-only but a row another press writes
+      // (LOCK_IGNORING_CAST_IDS): 605 s2/38-3, +2.1 s into a 3 s lock
+      expect(
+        kicked(["473662", "Consume"], [["1245470", 2.1]]).lockEndedBySuccessS,
+      ).toBeNull();
+    });
+
     it("a locked-school success at or after the modelled lockout end is not a cut", () => {
       const k = kicked(["33786", "Cyclone"], [["61295", 3.0]]);
       expect(k.lockEndedBySuccessS).toBeNull();

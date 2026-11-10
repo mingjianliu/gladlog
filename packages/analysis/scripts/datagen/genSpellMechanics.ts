@@ -56,6 +56,19 @@
  *                    files, 2,368 had such a row, 2 had the silence bit,
  *                    123 had no row (pet commands, proc rows) — work order
  *                    FT-R1011c follow-up, 2026-10-14.
+ *   · pacifyOnly   — `PreventionType` is exactly the pacify bit (2), on
+ *                    every row: Judgment, Blade of Justice, Final Verdict,
+ *                    Rushing Wind Kick. A silence does not prevent the cast
+ *                    (it is `unsilenceable` too) but an interrupt's school
+ *                    lockout does — pipeline T46, 605 files, presses of a
+ *                    spell of the locked school in the first half of the
+ *                    lock (scan5/t46.ts): PreventionType 2 went out 0× and
+ *                    was refused "not ready" 33× (whole lock 3 / 54), the
+ *                    silence-bit control 7 / 1,371 (61 / 2,733); 6 (pacify +
+ *                    no-actions: Gladiator's Badge, Voidblade) went out 4×
+ *                    and was never refused (whole lock 10 / 0), so the bit
+ *                    alone does not decide and 6 gets no flag. 4 alone
+ *                    (Barkskin, Dispersion) 0 / 2 (0 / 9): too thin, no flag.
  *
  * Universe = observedSpellIdsGenerated.json (every id the corpus has seen), so
  * the table cannot be incomplete relative to what a log can contain. An id
@@ -81,6 +94,8 @@ const AURA_DISABLE_CASTING_EXCEPT_ABILITIES = "263";
 const ALL_SCHOOLS = 127;
 /** SpellCategories.PreventionType bit 1: the cast is prevented by silence. */
 const PREVENTION_TYPE_SILENCE = 1;
+/** SpellCategories.PreventionType bit 2: the cast is prevented by pacify. */
+const PREVENTION_TYPE_PACIFY = 2;
 /** SpellMechanic ids that take control away: charmed 1, disoriented 2,
  * fleeing 5, rooted 7, asleep 10, stunned 12, frozen 13, incapacitated 14,
  * polymorphed 17, banished 18, shackled 20, turned 23, horrified 24,
@@ -98,6 +113,7 @@ interface Entry {
   locksCasting?: true;
   silenceable?: true;
   unsilenceable?: true;
+  pacifyOnly?: true;
   weaponRequired?: true;
 }
 
@@ -166,6 +182,8 @@ async function main() {
       entry(r.SpellID).castMs = ms;
   }
   const hasCategoriesRow = new Set<string>();
+  /** every PreventionType value the spell's rows carry */
+  const preventionTypes = new Map<string, Set<number>>();
   const categoryMech = new Set<string>();
   for (const r of cats.rows) {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
@@ -177,11 +195,22 @@ async function main() {
     }
     if ((Number(r.PreventionType) & PREVENTION_TYPE_SILENCE) !== 0)
       entry(r.SpellID).silenceable = true;
+    preventionTypes.set(
+      r.SpellID,
+      (preventionTypes.get(r.SpellID) ?? new Set()).add(
+        Number(r.PreventionType),
+      ),
+    );
   }
   // a SpellCategories row with no silence bit is DB2 saying a silence does
   // NOT prevent the cast — the positive "no" that a missing row is not
   for (const id of hasCategoriesRow)
     if (!out[id]?.silenceable) entry(id).unsilenceable = true;
+  // …and a row whose PreventionType is the pacify bit and nothing else is
+  // one an interrupt's school lockout prevents all the same (T46)
+  for (const [id, types] of preventionTypes)
+    if (types.size === 1 && types.has(PREVENTION_TYPE_PACIFY))
+      entry(id).pacifyOnly = true;
   // SpellEquippedItems.EquippedItemClass 2 (weapon): the cast needs a weapon,
   // which a disarm takes away — work order 2026-10-14d Part 2 (preview):
   // 605 files, casts inside a disarm aura: weapon-requiring 0 / 163,906,
@@ -323,6 +352,14 @@ async function main() {
     !out["341263"]?.silenceable,
     "Shadowy Apparition 341263 has no SpellCategories row",
   );
+  expect(
+    !!out["20271"]?.pacifyOnly && !!out["184575"]?.pacifyOnly,
+    "Judgment 20271 and Blade of Justice 184575 are pacify-only (PreventionType 2)",
+  );
+  expect(
+    !out["345228"]?.pacifyOnly && !out["22812"]?.pacifyOnly,
+    "Gladiator's Badge 345228 (6) and Barkskin 22812 (4) are not pacify-only",
+  );
 
   const outPath = new URL(
     "../../src/data/spellMechanicsGenerated.json",
@@ -341,7 +378,9 @@ async function main() {
     `spellMechanicsGenerated.json (build ${build}): ${Object.keys(out).length} ids — ` +
       `mech ${count((e) => e.mech !== undefined)}, instant ${count((e) => e.castMs === 0)}, ` +
       `immuneMech ${count((e) => !!e.immuneMech)}, mask ${count((e) => e.immuneMechMask !== undefined)}, ` +
-      `immuneAll ${count((e) => !!e.immuneAll)}, locksCasting ${count((e) => !!e.locksCasting)}`,
+      `immuneAll ${count((e) => !!e.immuneAll)}, locksCasting ${count((e) => !!e.locksCasting)}, ` +
+      `silenceable ${count((e) => !!e.silenceable)}, unsilenceable ${count((e) => !!e.unsilenceable)}, ` +
+      `pacifyOnly ${count((e) => !!e.pacifyOnly)}`,
   );
 }
 

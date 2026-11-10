@@ -2157,6 +2157,17 @@ const INDEX: PredicateRow[] = [
     symbol: "isUnsilenceableCast",
     mod: spellMechanics,
   },
+  // T46: what a school lockout does and does not prevent (pacify-only)
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "isSchoolLockExemptCast",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "isSchoolLockableCast",
+    mod: spellMechanics,
+  },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "lockedSchoolsText",

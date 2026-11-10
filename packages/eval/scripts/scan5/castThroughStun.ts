@@ -41,7 +41,10 @@ import {
 import { freeToPressMsBefore } from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
 import { isStunDrAura } from "@gladlog/analysis/src/utils/drAnalysis";
 import { unaffordableIntervals } from "@gladlog/analysis/src/utils/resourceAt";
-import { isUnsilenceableCast } from "@gladlog/analysis/src/utils/spellMechanics";
+import {
+  isSchoolLockExemptCast,
+  isUnsilenceableCast,
+} from "@gladlog/analysis/src/utils/spellMechanics";
 import { LogEvent } from "@gladlog/parser-compat";
 
 import {
@@ -135,7 +138,7 @@ function blocksOn(ctx: IRoundCtx, unit: any, spellId: string): ISpan[] {
       !schoolLockedBy(school, was)
     )
       continue;
-    if (isUnsilenceableCast(spellId)) continue;
+    if (isSchoolLockExemptCast(spellId)) continue;
     const kick = String(k.spellId ?? "");
     out.push({
       from: k.timestamp,

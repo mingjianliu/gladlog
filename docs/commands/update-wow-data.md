@@ -517,6 +517,14 @@ npx tsx packages/eval/scripts/drShareScan.ts --manifest <newseason manifest> --e
 #    the reading `intervalBlocksSpell` takes). Expect silenceable ≈ 0 per 10k; FLAG at ≥ 1. First run
 #    (605 files, DB2 69587): silenceable 0.05 / 10k, unsilenceable 70 / 10k, no row 28 / 10k. ~1 min.
 npx tsx packages/eval/scripts/silenceCastScan.ts --manifest <newseason manifest> --every 30
+# 3b''. What a school LOCKOUT stops (2026-11-10, pipeline T46): presses of a spell of the locked school
+#    inside an interrupt's lock, split by PreventionType (`isSchoolLockableCast` / `isSchoolLockExemptCast`,
+#    the reading `intervalBlocksSpell` takes for a lockout). Runs on a 605 capture, through the slot. Expect
+#    `notStoppedNeverOut` 0 and no pacify-only or exempt row whose out / refused contradicts its class in the
+#    `t46 per spell` table (first half of the lock, then the whole lock). First run (605 files, DB2 70391):
+#    silence bit out 7 / refused 1,371, pacify-only 0 / 33, PreventionType 6 4 / 0, 4 alone 0 / 2. A row that
+#    another press writes and that goes out inside a lock belongs in `LOCK_IGNORING_CAST_IDS`. ~12 min.
+npx tsx packages/eval/scripts/verify/run.ts <605 capture> --out <dir> --scans corpusFactScan5 --workers 6 --only lockedWentOut,notStoppedNeverOut
 # 3c. Cooldown-changing buffs the ledger cannot see (2026-09-25, GH #106 follow-up): every aura a player
 #    applied to themselves, fed through the talent generator's own target resolution against the spells
 #    extractMajorCooldowns really put in that spec's ledger; reports UNSEEN (never reached — a talent that

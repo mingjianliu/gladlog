@@ -105,6 +105,7 @@ const MODULE_FILES = [
   "t18",
   "t35",
   "t49",
+  "t46",
 ];
 await ensureAnalysisData();
 const modules: Array<IScanModule & { file: string }> = [];
@@ -180,7 +181,10 @@ function runRound(base: IContext): void {
     bump: (c, n = 1) => checked.set(c, (checked.get(c) ?? 0) + n),
     firstOwnerOfRound,
   };
-  for (const m of modules) timed(`scan5/${m.file}`, () => m.run(ctx));
+  // `--only`: a module none of whose checks was asked for is not run at all
+  for (const m of modules)
+    if (!ONLY || m.CHECKS.some((c) => ONLY!.includes(c)))
+      timed(`scan5/${m.file}`, () => m.run(ctx));
 }
 
 function report(): void {

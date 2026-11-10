@@ -661,19 +661,19 @@ describe("fact7 D1: a lockout that leaves a heal is no lock on the healer", () =
       1,
     );
   });
-  it("an unsilenceable heal with a cooldown of its own is a press: it leaves a heal while it is ready", () => {
+  it("a heal DB2 exempts from a lockout (Emerald Communion, PreventionType 0), with a cooldown of its own, is a press: it leaves a heal while it is ready", () => {
     const u = healer(
-      [["467307", 1_000]],
-      [{ spellId: "467307", destUnitId: "mate" }],
+      [["370960", 1_000]],
+      [{ spellId: "370960", destUnitId: "mate" }],
     );
     expect(
-      healerLockIntervals(u, [lockAt(NATURE, 100_000, 104_000)]),
+      healerLockIntervals(u, [lockAt(NATURE, 200_000, 204_000)]),
     ).toHaveLength(0);
   });
   it("... and is spent across a lockout inside its cooldown: the lock stays", () => {
     const u = healer(
-      [["467307", 1_000]],
-      [{ spellId: "467307", destUnitId: "mate" }],
+      [["370960", 1_000]],
+      [{ spellId: "370960", destUnitId: "mate" }],
     );
     expect(healerLockIntervals(u, [lockAt(NATURE, 2_000, 6_000)])).toHaveLength(
       1,
@@ -682,12 +682,25 @@ describe("fact7 D1: a lockout that leaves a heal is no lock on the healer", () =
   it("a press inside the lockout proves the heal was there, whatever the cooldown says", () => {
     const u = healer(
       [
-        ["467307", 1_000],
-        ["467307", 4_000],
+        ["370960", 1_000],
+        ["370960", 4_000],
       ],
-      [{ spellId: "467307", destUnitId: "mate" }],
+      [{ spellId: "370960", destUnitId: "mate" }],
     );
     expect(healerLockIntervals(u, [lockAt(NATURE, 2_000, 6_000)])).toHaveLength(
+      0,
+    );
+  });
+  it("T46: a pacify-only heal of the locked school is stopped — Rushing Wind Kick leaves no heal under a Nature lock", () => {
+    const u = healer(
+      [["467307", 1_000]],
+      [{ spellId: "467307", destUnitId: "mate" }],
+    );
+    expect(
+      healerLockIntervals(u, [lockAt(NATURE, 100_000, 104_000)]),
+    ).toHaveLength(1);
+    // …and is free under a lock of another school (Holy)
+    expect(healerLockIntervals(u, [lockAt(2, 100_000, 104_000)])).toHaveLength(
       0,
     );
   });

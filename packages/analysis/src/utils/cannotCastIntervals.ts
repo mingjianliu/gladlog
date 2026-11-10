@@ -36,6 +36,7 @@ import {
 } from "./drAnalysis";
 import { kickLockoutSecondsFor } from "./kickLockout";
 import {
+  isSchoolLockExemptCast,
   isSilenceableCast,
   isUnsilenceableCast,
   isWeaponRequiredCast,
@@ -242,8 +243,10 @@ export function petCastersOf(
  * silence aura on 605 files, 2,368 had such a row, 2 the silence bit, 123 no
  * row. A kick lockout stops a spell only when every school of
  * that spell is inside the lock (`schoolLockedBy`, the kick-eaten
- * predicate). Unknown school on either side → it blocks (the exemption
- * stays).
+ * predicate) and DB2 does not exempt it (`isSchoolLockExemptCast`: a row
+ * that is neither silenceable nor pacify-only — Barkskin, Gladiator's
+ * Badge; Judgment and Blade of Justice, pacify-only, ARE stopped, T46).
+ * Unknown school on either side → it blocks (the exemption stays).
  *
  * ONE interval of ONE unit: it cannot see a pet's intervals. A reader asks
  * `cannotCastIntervalsForSpells` (or `actWindowFor`) with the round's units
@@ -283,11 +286,13 @@ export function intervalBlocksSpell(
     );
   // the pet's spell: the owner's cast bar is not its cast bar
   if (iv.petCastSpellIds?.has(spellId)) return false;
-  // a cast a silence does not prevent is not one a school lockout prevents
-  // (DB2's silence bit, `isUnsilenceableCast`; codex R6C-03 #2: Judgment
-  // SUCCEEDED inside a Holy lock, 121afd91 r3, and its five refusals there
-  // were its own cooldown, not the lock)
-  if (isUnsilenceableCast(spellId)) return false;
+  // a cast DB2 says no school lockout prevents (`isSchoolLockExemptCast`).
+  // T46: until this, every cast a silence does not prevent was exempt
+  // (codex R6C-03 #2, on 121afd91 r3: "Judgment SUCCEEDED inside a Holy
+  // lock"). That lock was a Counter Shot cut short by an interrupt-duration
+  // aura; Judgment was refused five times inside it and went out 0.3 s
+  // after its end. A pacify-only spell of the locked school is stopped.
+  if (isSchoolLockExemptCast(spellId)) return false;
   const m = spellSchoolMask(spellId);
   if (m === undefined || iv.lockedSchoolMask === undefined) return true;
   return schoolLockedBy(m, iv.lockedSchoolMask);
@@ -304,8 +309,8 @@ export function intervalBlocksSpell(
  *  - one that only ever healed its caster: Healthstone, Frenzied Regeneration.
  *    A healer who can heal itself can still not heal the mate (66 lockouts
  *    erased by nothing else: Frenzied Regeneration 47, Healthstone 12);
- *  - a triggered row: no silence bit and no cooldown of its own, so DB2 cannot
- *    say a lock stops it, and nobody pressed it. Divine Hymn's tick 64844 logs
+ *  - a triggered row: one DB2 says no lock stops
+ *    (`isSchoolLockExemptCast`) with no cooldown of its own, and nobody pressed it. Divine Hymn's tick 64844 logs
  *    a SPELL_CAST_SUCCESS with the name of its heal: one Divine Hymn in a round
  *    erased every other lockout of that priest (555 lockouts).
  */
@@ -326,7 +331,10 @@ function pressedHeals(
     if (!healNames.has(getEnglishSpellName(id, ""))) continue;
     // GH #188: the companion row of another press is no press of its own
     if (isCompanionCastRow(c, rows)) continue;
-    if (isUnsilenceableCast(id) && effectiveCooldownSeconds(id) === undefined)
+    if (
+      isSchoolLockExemptCast(id) &&
+      effectiveCooldownSeconds(id) === undefined
+    )
       continue;
     presses.set(id, [...(presses.get(id) ?? []), c.logLine.timestamp]);
   }

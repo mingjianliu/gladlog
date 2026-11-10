@@ -78,8 +78,25 @@ describe("a kick lockout by school (FT-T10)", () => {
     expect(intervalBlocksSpell(garrote, "17364")).toBe(false);
     expect(intervalBlocksSpell(garrote, "22812")).toBe(false);
     expect(intervalBlocksSpell(garrote, "341263")).toBe(true);
+    // T46: a school lockout stops a pacify-only spell of its school
+    // (Judgment 20271, Blade of Justice 184575, Final Verdict 383328: Holy,
+    // PreventionType 2) though no silence does; a row that is neither
+    // silenceable nor pacify-only stays exempt (Barkskin 22812, Nature, 4;
+    // Gladiator's Badge 345228, Arcane, 6)
+    const holyLock = { lockout: true, lockedSchoolMask: 2 };
+    for (const id of ["20271", "184575", "383328"]) {
+      expect(intervalBlocksSpell(holyLock, id)).toBe(true);
+      expect(intervalBlocksSpell(garrote, id)).toBe(false);
+      expect(intervalBlocksSpell(lock!, id)).toBe(false); // an Arcane lock
+    }
+    expect(
+      intervalBlocksSpell({ lockout: true, lockedSchoolMask: 8 }, "22812"),
+    ).toBe(false);
+    expect(intervalBlocksSpell(lock!, "345228")).toBe(false);
     // hard CC stops all of them (Kidney Shot 408)
-    expect(intervalBlocksSpell({ lockout: false, spellId: "408" }, "17364")).toBe(true);
+    expect(
+      intervalBlocksSpell({ lockout: false, spellId: "408" }, "17364"),
+    ).toBe(true);
     expect(lockedSchoolsText(64)).toBe(" (Arcane)");
     expect(lockedSchoolsText(36)).toBe(" (Fire/Shadow)");
     expect(lockedSchoolsText(undefined)).toBe("");
