@@ -32,9 +32,10 @@
  *   school / immune = for a wall whose mask is not all-school, the ally's
  *                     on-target damage whose school the wall covers is
  *                     reported (`Nk (P%) of it in the wall's school`, from
- *                     each hit's spellSchoolId); the ally's SPELL_MISSED IMMUNE
- *                     events on the target inside W are reported as
- *                     `N hits immune` and count as seconds in K
+ *                     each hit's spellSchoolId); the IMMUNE rows of the
+ *                     ally and its pets / guardians (T51: the unit its
+ *                     damage counts) on the target inside W are reported
+ *                     as `N hits immune` and count as seconds in K
  *   qualifying ally = landed a same-target DIRECT hit in the PRE_HIT_S before
  *                     the application (a sampling choice, not a reaction
  *                     standard)
@@ -69,7 +70,11 @@
  *
  * No accusatory verb anywhere: the line states numbers, the model decides.
  */
-import { type ICombatUnit,LogEvent } from "@gladlog/parser-compat";
+import {
+  foldsIntoOwner,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import { abilityProfile } from "../data/abilityProfile";
 import { castKeyOfAura } from "../data/castEffectAuras";
@@ -154,7 +159,8 @@ export interface IExternalDamageObservation {
   /** On-target effective damage whose school the wall covers (equals the
    * on-target total for an all-school wall). */
   inSchool: number;
-  /** The ally's SPELL_MISSED IMMUNE events on the target inside W. */
+  /** The damaging IMMUNE rows (`isImmuneHitRow`) of the ally and its pets /
+   * guardians on the target inside W. */
   immuneHits: number;
   /** Who applied the external (log source name). */
   srcName: string;
@@ -253,6 +259,10 @@ export function externalDamageForApplication(
   friends: readonly ICombatUnit[],
   enemies: readonly ICombatUnit[],
   combat: { startTime: number; endTime: number },
+  /** Every unit of the round: an ally's pets / guardians are found here
+   * (`foldsIntoOwner`), for the rows parser-compat does not fold into the
+   * owner — their misses. */
+  units: readonly ICombatUnit[],
 ): IExternalDamageObservation[] {
   // an external's own aura under another id prices as its cast (fact2 C10:
   // Spirit Link Totem 98008 runs as 325174)
@@ -310,20 +320,26 @@ export function externalDamageForApplication(
         ll.lineIndex !== undefined &&
         ll.lineIndex < closeRow.lineIndex);
     const binOf = (tS: number) => Math.min(Math.floor(tS), Math.ceil(wTo) - 1);
-    for (const m of ally.missesOut ?? []) {
-      if (!isImmuneHitRow(m) || m.destUnitId !== target.id) continue;
-      const tS = (m.logLine.timestamp - startMs) / 1000;
-      if (!inWindow(tS, m.logLine)) continue;
-      immuneHits++;
-      bins.add(binOf(tS));
-    }
-    // the ally and its pets / guardians — the attackers its landed damage
-    // counts (parser-compat folds a summon's rows into the owner's
-    // `damageOut`); the absorbed part reads the same set (fact5 cxa
-    // 8d0ed9e9 0:25: a hunter's pets' 218k absorbed under Pain Suppression
-    // dropped beside their landed 134k)
-    const attackers = new Set<string>([ally.id]);
+    // the ally and its pets / guardians — ONE attacker unit for the whole
+    // line. parser-compat folds a summon's landed rows into the owner's
+    // `damageOut` (`foldsIntoOwner`), not its misses and not the victim-keyed
+    // absorbs, so those two read the same units here: the absorbed part
+    // (fact5 cxa 8d0ed9e9 0:25: a hunter's pets' 218k absorbed under Pain
+    // Suppression dropped beside their landed 134k) and the immune hits
+    // (T51, 65d7e61a 2:13: `4 hits immune` for a hunter whose pets logged 14
+    // more IMMUNE rows into the Blessing of Protection).
+    const summons = units.filter((u) => foldsIntoOwner(u, ally));
+    const attackers = new Set<string>([ally.id, ...summons.map((u) => u.id)]);
     for (const d of ally.damageOut) if (d.srcUnitId) attackers.add(d.srcUnitId);
+    for (const u of [ally, ...summons]) {
+      for (const m of u.missesOut ?? []) {
+        if (!isImmuneHitRow(m) || m.destUnitId !== target.id) continue;
+        const tS = (m.logLine.timestamp - startMs) / 1000;
+        if (!inWindow(tS, m.logLine)) continue;
+        immuneHits++;
+        bins.add(binOf(tS));
+      }
+    }
     for (const a of target.absorbsIn ?? []) {
       if (!a.attackerId || !attackers.has(a.attackerId)) continue;
       const tS = (a.logLine.timestamp - startMs) / 1000;
@@ -421,10 +437,13 @@ export function externalDamageObservations(
   friends: readonly ICombatUnit[],
   enemies: readonly ICombatUnit[],
   combat: { startTime: number; endTime: number },
+  units: readonly ICombatUnit[],
 ): IExternalDamageObservation[] {
   const out: IExternalDamageObservation[] = [];
   for (const iv of buildAuraIntervals(target, combat))
-    out.push(...externalDamageForApplication(iv, target, friends, enemies, combat));
+    out.push(
+      ...externalDamageForApplication(iv, target, friends, enemies, combat, units),
+    );
   return out;
 }
 

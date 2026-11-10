@@ -244,6 +244,7 @@ export function emitEnemyDefEntries(
             enemies ?? [],
             // the window stops where the printed length does
             roundSpan,
+            _allUnits ?? [],
           );
           if (obs.length > 0)
             duringStr = ` | during it: ${obs.map((o) => formatDuringExternal(o, pid)).join("; ")}`;

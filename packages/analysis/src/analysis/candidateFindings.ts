@@ -5249,6 +5249,7 @@ function dpsOwnerEvents(
           // the round's span, as the [ENEMY DEF] line's `during it:` reads
           // it (work order 2026-10-14d #7)
           { startTime: combat.startTime, endTime: roundEndOf(combat) },
+          Object.values(combat.units ?? {}) as ICombatUnit[],
         )[0];
         return obs ? formatDuringExternalForOwner(obs) : undefined;
       })();

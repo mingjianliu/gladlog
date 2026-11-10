@@ -4781,6 +4781,12 @@ const INDEX: PredicateRow[] = [
     symbol: "auraCloseRow",
     mod: auraIntervals,
   },
+  // T51: which units' rows count as their owner's
+  {
+    file: "packages/parser-compat/src/convert.ts",
+    symbol: "foldsIntoOwner",
+    mod: convertMod,
+  },
   // fact7 D29: the share field of a unit with nothing dealt
   {
     file: `${A}/utils/externalDamage.ts`,

@@ -6,7 +6,8 @@
  * only name things.
  *
  *  - `immuneHitControl` (D15): an `[ENEMY DEF] … | during it:` segment's
- *    `N hits immune` above the ally's IMMUNE rows on the target, inside the
+ *    `N hits immune` above the IMMUNE rows of the ally and its summons (the
+ *    unit the line counts, T51) on the target, inside the
  *    line's own span (press second … + its printed length + 1 s), whose
  *    spell deals damage (DB2 `dealsDamage`). A control the target refused
  *    (Binding Shot's stun into Icebound Fortitude) is no hit.
@@ -39,6 +40,7 @@ import { isGroundingTotemTarget } from "@gladlog/analysis/src/utils/groundingRed
 
 import {
   APPLIED,
+  ev,
   type IRoundCtx,
   nameOf,
   REFRESH,
@@ -79,7 +81,23 @@ function immuneHits(ctx: IRoundCtx): void {
     const target = unitOfLabel(ctx, m[2]);
     if (!target) continue;
     const fromMs = ctx.start + secOf(m[1]!) * 1000;
-    const toMs = fromMs + (Number(m[3]) + 1) * 1000;
+    // the line is stamped at the press; the aura can go on over a second
+    // later (T51, 605 file 13 r2 2:07: a Blessing of Protection pressed at
+    // 127.9 s, on at 129.2 s, off at 133.6 s — a pet's IMMUNE row at 132.8 s
+    // is inside it and past press + length + 1 s). The span ends where the
+    // target's own aura rows of that name end, when the log has them.
+    const wallName = / \([^)]*\): (.+?) → /.exec(line)?.[1];
+    const applied = ((target.auraEvents ?? []) as any[]).find(
+      (e) =>
+        ev(e) === APPLIED &&
+        nameOf(e.spellId, e.spellName) === wallName &&
+        tsOf(e) >= fromMs - 1000 &&
+        tsOf(e) < fromMs + 3000,
+    );
+    const toMs = Math.max(
+      fromMs + (Number(m[3]) + 1) * 1000,
+      applied ? tsOf(applied) + (Number(m[3]) + 0.1) * 1000 : 0,
+    );
     for (const seg of m[4]!.split("; ")) {
       swingUndercount(ctx, line, m, seg, fromMs);
       const s = SEG_IMMUNE.exec(seg);
@@ -87,13 +105,16 @@ function immuneHits(ctx: IRoundCtx): void {
       const ally = unitOfLabel(ctx, s[1]);
       if (!ally) continue;
       ctx.bump("immuneHitControl");
-      const rows = ((ally.missesOut ?? []) as any[]).filter(
-        (r) =>
-          r.missType === "IMMUNE" &&
-          r.destUnitId === target.id &&
-          tsOf(r) >= fromMs &&
-          tsOf(r) < toMs,
-      );
+      // the ally and its summons: the unit the line counts (T51)
+      const rows = [ally, ...summonsOf(ctx, ally)]
+        .flatMap((u) => (u.missesOut ?? []) as any[])
+        .filter(
+          (r) =>
+            r.missType === "IMMUNE" &&
+            r.destUnitId === target.id &&
+            tsOf(r) >= fromMs &&
+            tsOf(r) < toMs,
+        );
       const hits = rows.filter((r) => isImmuneHitRow(r));
       const printed = Number(s[2]);
       if (printed <= hits.length) continue;

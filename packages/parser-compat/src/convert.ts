@@ -851,6 +851,24 @@ function convertUnit(
   };
 }
 
+/**
+ * Whether `unit`'s damage / heal / absorb rows are folded into `owner`'s
+ * (`mergePetEvents`): a non-player unit a player summoned. Its miss rows
+ * (`missesOut`) are NOT folded — a reader that counts an owner's attacks
+ * beside its merged damage adds the misses of the units this admits.
+ */
+export function foldsIntoOwner(
+  unit: Pick<ICombatUnit, "type" | "ownerId">,
+  owner: Pick<ICombatUnit, "id" | "type">,
+): boolean {
+  return (
+    unit.type !== CombatUnitType.Player &&
+    !!unit.ownerId &&
+    unit.ownerId === owner.id &&
+    owner.type === CombatUnitType.Player
+  );
+}
+
 function mergePetEvents(units: Record<string, ICombatUnit>): void {
   for (const unit of Object.values(units)) {
     // GH #57 (user ruling 2026-08-29): merge by SUMMON relationship, not by
@@ -861,10 +879,9 @@ function mergePetEvents(units: Record<string, ICombatUnit>): void {
     // in this combat folds in. Measured before the ruling: 1,585 ghouls /
     // 19.6M damage per 300 matches left on the ghouls.
     if (
-      unit.type !== CombatUnitType.Player &&
       unit.ownerId &&
       units[unit.ownerId] &&
-      units[unit.ownerId]!.type === CombatUnitType.Player
+      foldsIntoOwner(unit, units[unit.ownerId]!)
     ) {
       const owner = units[unit.ownerId]!;
       owner.damageOut = [...owner.damageOut, ...unit.damageOut].sort(

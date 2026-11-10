@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { CombatUnitReaction, CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitReaction, CombatUnitSpec, CombatUnitType, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
@@ -54,6 +54,15 @@ const enemy = (id: string, auraEvents: any[] = []) =>
 const ally = (id: string, damageOut: any[]) =>
   makeUnit(id, { spec: CombatUnitSpec.Warrior_Arms, damageOut });
 
+/** the round's units default to the two sides named */
+const obsOf = (
+  target: Parameters<typeof externalDamageObservations>[0],
+  friends: Parameters<typeof externalDamageObservations>[1],
+  enemies: Parameters<typeof externalDamageObservations>[2],
+  c: Parameters<typeof externalDamageObservations>[3],
+  units: Parameters<typeof externalDamageObservations>[4] = [...friends, ...enemies],
+) => externalDamageObservations(target, friends, enemies, c, units);
+
 const psOn = (dest: string, src = "E2", from = 20, to = 28) => [
   aura(PAIN_SUPPRESSION, "Pain Suppression", src, dest, from, LogEvent.SPELL_AURA_APPLIED),
   aura(PAIN_SUPPRESSION, "Pain Suppression", src, dest, to, LogEvent.SPELL_AURA_REMOVED),
@@ -86,7 +95,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       timestamp: ms(atS), logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(atS), parameters: [] },
     });
     const warrior = { ...ally("A1", [dmg(LogEvent.SWING_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 25, "E3", 20_000)]), missesOut: [miss(21), miss(22.5), miss(26)] };
-    const [o] = externalDamageObservations(bop, [warrior], [bop, enemy("E3")], combat);
+    const [o] = obsOf(bop, [warrior], [bop, enemy("E3")], combat);
     expect(o).toMatchObject({ wallKind: "immunity", immuneHits: 3, K: 3, nDirect: 0, dAll: 20_000, M: 8, kind: "stops" });
     expect(formatDuringExternal(o!, (n) => n)).toBe(
       "A1 0k on target · 0% of their enemy-player damage · direct 0k / periodic 0k · 3 hits immune · damage in 3 of 8 s · longest gap 3 s",
@@ -101,7 +110,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       { ...dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 30_000), spellSchoolId: "0x20" }, // shadow
       { ...dmg(LogEvent.SWING_DAMAGE, 22, "E1", 10_000), spellSchoolId: "0x1" }, // physical
     ]);
-    const [o2] = externalDamageObservations(amz, [mixed], [amz], combat);
+    const [o2] = obsOf(amz, [mixed], [amz], combat);
     expect(o2).toMatchObject({ wallKind: "mitigation", wallSchoolMask: 0x7e, inSchool: 30_000, nDirect: 40_000 });
     expect(formatDuringExternal(o2!, (n) => n)).toBe(
       "A1 40k on target · 100% of their enemy-player damage · direct 40k / periodic 0k · 30k (75%) of it in the wall's school · damage in 2 of 8 s · longest gap 5 s",
@@ -128,21 +137,21 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 30_000),
       dmg(LogEvent.SPELL_DAMAGE, 22, "E3", 20_000),
     ]);
-    const [o] = externalDamageObservations(e1, [a1], [e1, e3], combat);
+    const [o] = obsOf(e1, [a1], [e1, e3], combat);
     // 50k of 100k (30 + 20 on the target, 20 + 30 on the other enemy): landed
     // alone read 60 %
     expect(o).toMatchObject({ nDirect: 30_000, absorbed: 20_000, dAll: 100_000 });
     expect(o!.X).toBeCloseTo(50, 5);
 
     const e1Whole = shielded("E1", [shield(21, 70_000)]);
-    const [whole] = externalDamageObservations(e1Whole, [ally("A1", [preHit])], [e1Whole], combat);
+    const [whole] = obsOf(e1Whole, [ally("A1", [preHit])], [e1Whole], combat);
     expect(formatDuringExternal(whole!, (n) => n)).toContain(
       "0k on target (+70k absorbed) · 100% of their enemy-player damage",
     );
 
     const FEL_ARMOR = "386124";
     const e1Net = shielded("E1", [shield(21, 40_000, FEL_ARMOR), shield(21.5, -40_000, FEL_ARMOR)]);
-    const [net] = externalDamageObservations(
+    const [net] = obsOf(
       e1Net,
       [
         ally("A1", [
@@ -168,15 +177,15 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 10_000),
       at(dmg(LogEvent.SPELL_PERIODIC_DAMAGE, 28, "E1", 9_000), tickIx),
     ];
-    const [before] = externalDamageObservations(enemy("E1", ps), [ally("A1", rows(49))], [enemy("E1", ps)], combat);
+    const [before] = obsOf(enemy("E1", ps), [ally("A1", rows(49))], [enemy("E1", ps)], combat);
     expect(before).toMatchObject({ nDirect: 10_000, nPeriodic: 9_000 });
     // …one logged after the REMOVED row is not
-    const [after] = externalDamageObservations(enemy("E1", ps), [ally("A1", rows(51))], [enemy("E1", ps)], combat);
+    const [after] = obsOf(enemy("E1", ps), [ally("A1", rows(51))], [enemy("E1", ps)], combat);
     expect(after).toMatchObject({ nDirect: 10_000, nPeriodic: 0 });
     // a window the combat's end closed first keeps none of the later
     // removal's millisecond (codex 20-F24-15 #2)
     const short = { ...combat, endTime: ms(25) };
-    const [cut] = externalDamageObservations(enemy("E1", ps), [ally("A1", rows(49))], [enemy("E1", ps)], short);
+    const [cut] = obsOf(enemy("E1", ps), [ally("A1", rows(49))], [enemy("E1", ps)], short);
     expect(cut).toMatchObject({ nDirect: 10_000, nPeriodic: 0 });
   });
 
@@ -197,7 +206,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     });
     const run = (row: any) => {
       const holder = { ...enemy("E1", ps()), damageIn: [row] };
-      return externalDamageObservations(holder, [ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 10_000), row])], [holder], combat)[0];
+      return obsOf(holder, [ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 10_000), row])], [holder], combat)[0];
     };
     expect(run(blow(2_327))).toMatchObject({ nDirect: 39_000 });
     // a hit with no overkill after the REMOVED row is still past it
@@ -222,7 +231,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       // 341263: no hit; the apparition's hit 148859 is one
       missesOut: [miss("117526", 21), miss("341263", 22), miss("148859", 22.2)],
     };
-    const [o] = externalDamageObservations(bop, [hunter], [bop], combat);
+    const [o] = obsOf(bop, [hunter], [bop], combat);
     expect(o!.immuneHits).toBe(1);
     expect(isImmuneHitRow(miss("117526", 21))).toBe(false);
     expect(isImmuneHitRow(miss("148859", 21))).toBe(true);
@@ -231,8 +240,35 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     const swing = { ...miss("0", 23), logLine: { event: LogEvent.SWING_MISSED, timestamp: ms(23), parameters: [] } };
     expect(isImmuneHitRow(swing)).toBe(true);
     expect(isImmuneHitRow(miss("0", 23))).toBe(false);
-    const [o2] = externalDamageObservations(bop, [{ ...hunter, missesOut: [...hunter.missesOut, swing] }], [bop], combat);
+    const [o2] = obsOf(bop, [{ ...hunter, missesOut: [...hunter.missesOut, swing] }], [bop], combat);
     expect(o2!.immuneHits).toBe(2);
+  });
+
+  it("T51: a pet's / guardian's IMMUNE rows count with its owner's, as its damage does; another unit's do not", () => {
+    const bop = enemy("E1", [
+      aura("1022", "Blessing of Protection", "E2", "E1", 20, LogEvent.SPELL_AURA_APPLIED),
+      aura("1022", "Blessing of Protection", "E2", "E1", 23, LogEvent.SPELL_AURA_REMOVED),
+    ]);
+    const swingMiss = (atS: number, dest = "E1"): any => ({
+      spellId: "0", spellName: "", destUnitId: dest, destUnitName: dest, missType: "IMMUNE", amount: 0,
+      timestamp: ms(atS), logLine: { event: LogEvent.SWING_MISSED, timestamp: ms(atS), parameters: [] },
+    });
+    const hunter = { ...ally("A1", [dmg(LogEvent.SWING_DAMAGE, 19, "E1", 40_000)]), missesOut: [swingMiss(20.2)] };
+    const summon = (id: string, ownerId: string, missesOut: any[]) =>
+      ({ ...makeUnit(id, { ownerId }), type: CombatUnitType.Guardian, missesOut });
+    // second 21 and 22 hold only the pet's rows; one row is on another unit, one after the wall
+    const pet = summon("Pet-1", "A1", [swingMiss(21.1), swingMiss(22.4), swingMiss(22.5, "E3"), swingMiss(23.5)]);
+    const othersPet = summon("Pet-2", "A2", [swingMiss(21.2)]);
+    const [alone] = obsOf(bop, [hunter], [bop], combat);
+    expect(alone!.immuneHits).toBe(1);
+    expect(alone!.K).toBe(1);
+    const [o] = obsOf(bop, [hunter], [bop], combat, [hunter, bop, pet, othersPet]);
+    expect(o!.immuneHits).toBe(3);
+    expect(o!.K).toBe(3);
+    expect(formatDuringExternal(o!, (n) => n)).toContain(" · 3 hits immune · damage in 3 of 3 s");
+    // a player is never folded, whatever its ownerId says
+    const player = { ...makeUnit("P9", { ownerId: "A1" }), missesOut: [swingMiss(21.3)] };
+    expect(obsOf(bop, [hunter], [bop], combat, [hunter, bop, player])[0]!.immuneHits).toBe(1);
   });
 
   it("fact7 D29: a unit with nothing dealt has no share, not `0%`", () => {
@@ -246,7 +282,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       timestamp: ms(21), logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(21), parameters: [] },
     };
     const warrior = ally("A1", [dmg(LogEvent.SWING_DAMAGE, 19, "E1", 40_000)]);
-    const [o] = externalDamageObservations(bop, [{ ...warrior, missesOut: [miss, { ...miss, timestamp: ms(22) }, { ...miss, timestamp: ms(23) }] }], [bop], combat);
+    const [o] = obsOf(bop, [{ ...warrior, missesOut: [miss, { ...miss, timestamp: ms(22) }, { ...miss, timestamp: ms(23) }] }], [bop], combat);
     expect(o!.X).toBeNull();
     expect(formatDuringExternal(o!, (n) => n)).toContain(`· ${DURING_NO_SHARE} ·`);
     expect(formatDuringExternalForOwner(o!)).toContain(`· ${DURING_NO_SHARE} ·`);
@@ -264,7 +300,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       dmg(LogEvent.SPELL_DAMAGE, 26.4, "E3", 20_000), // other enemy: counts in D only
       dmg(LogEvent.SPELL_DAMAGE, 29.0, "E1", 99_000), // after removal: ignored
     ]);
-    const [o] = externalDamageObservations(e1, [a1], [e1, e3], combat);
+    const [o] = obsOf(e1, [a1], [e1, e3], combat);
     expect(o).toMatchObject({
       allyName: "A1",
       targetName: "E1",
@@ -298,7 +334,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       dmg(LogEvent.SPELL_DAMAGE, 20 - EXTERNAL_DAMAGE_PRE_HIT_S - 0.5, "E1", 50_000),
       dmg(LogEvent.SPELL_DAMAGE, 22, "E1", 30_000),
     ]);
-    expect(externalDamageObservations(e1, [late], [e1], combat)).toEqual([]);
+    expect(obsOf(e1, [late], [e1], combat)).toEqual([]);
   });
 
   it("F-E14 (A30, 2026-09-30): a periodic hit in the PRE_HIT_S qualifies — a DoT ticking is the ally hitting the target", () => {
@@ -307,14 +343,14 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       dmg(LogEvent.SPELL_PERIODIC_DAMAGE, 19, "E1", 50_000),
       dmg(LogEvent.SPELL_DAMAGE, 22, "E1", 30_000),
     ]);
-    const [o] = externalDamageObservations(e1, [dotOnly], [e1], combat);
+    const [o] = obsOf(e1, [dotOnly], [e1], combat);
     expect(o).toMatchObject({ allyId: "A3", preDirect: 0, prePeriodic: 50_000, nDirect: 30_000 });
   });
 
   it("a qualifying ally with no damage on anyone in the window is the 'empty' shape", () => {
     const e1 = enemy("E1", psOn("E1"));
     const a1 = ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000)]);
-    const [o] = externalDamageObservations(e1, [a1], [e1], combat);
+    const [o] = obsOf(e1, [a1], [e1], combat);
     expect(o).toMatchObject({ kind: "empty", dAll: 0, X: null, K: 0, M: 8, G: 8 });
     expect(formatDuringExternal(o!, (n) => n)).toBe("A1 0k on target · no damage on any enemy player · 0 of 8 s");
   });
@@ -344,7 +380,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 1), // a fully absorbed hit: its damage row is the ≈ 0 health it removed
       dmg(LogEvent.SPELL_DAMAGE, 25, "E3", 20_000),
     ]);
-    const [o] = externalDamageObservations(e1, [a1], [e1, enemy("E3")], combat);
+    const [o] = obsOf(e1, [a1], [e1, enemy("E3")], combat);
     // The effective −1 residual at 21 s does not make a bin by itself (EXTERNAL_DAMAGE_BIN_MIN_HIT);
     // the two absorbed hits do → K = 2.
     expect(o).toMatchObject({ nDirect: 1, nPeriodic: 0, dAll: 75_001, absorbed: 55_000, K: 2, M: 8, kind: "stops" });
@@ -373,7 +409,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       absorbsIn: [row(21.0, 30_000, "357170"), row(23.5, 25_000, "17")],
     });
     const a1 = ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000)]);
-    const [o] = externalDamageObservations(e1, [a1], [e1], combat);
+    const [o] = obsOf(e1, [a1], [e1], combat);
     expect(o).toMatchObject({ absorbed: 25_000, deferred: 30_000, K: 2 });
     expect(formatDuringExternal(o!, (n) => n)).toContain(
       "A1 0k on target (+25k absorbed, +30k deferred)",
@@ -383,14 +419,14 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
   it("self-applied, inferred-endpoint and ineligible auras yield nothing", () => {
     const a1 = ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 22, "E1", 30_000)]);
     const selfApplied = enemy("E1", psOn("E1", "E1"));
-    expect(externalDamageObservations(selfApplied, [a1], [selfApplied], combat)).toEqual([]);
+    expect(obsOf(selfApplied, [a1], [selfApplied], combat)).toEqual([]);
     const gs = enemy("E1", [
       aura(GUARDIAN_SPIRIT, "Guardian Spirit", "E2", "E1", 20, LogEvent.SPELL_AURA_APPLIED),
       aura(GUARDIAN_SPIRIT, "Guardian Spirit", "E2", "E1", 28, LogEvent.SPELL_AURA_REMOVED),
     ]);
-    expect(externalDamageObservations(gs, [a1], [gs], combat)).toEqual([]);
+    expect(obsOf(gs, [a1], [gs], combat)).toEqual([]);
     const iv = { spellId: PAIN_SUPPRESSION, spellName: "Pain Suppression", srcUnitName: "E2", fromS: 20, toS: 28, inferredStart: false, inferredEnd: true };
-    expect(externalDamageForApplication(iv, enemy("E1"), [a1], [enemy("E1")], combat)).toEqual([]);
+    expect(externalDamageForApplication(iv, enemy("E1"), [a1], [enemy("E1")], combat, [])).toEqual([]);
   });
 
   it("the window is truncated at the target's death and the ally's own death", () => {
@@ -401,18 +437,18 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       auraEvents: psOn("E1"),
       deathRecords: [{ timestamp: ms(24.6) }],
     });
-    const [o] = externalDamageObservations(e1, [a1], [e1], combat);
+    const [o] = obsOf(e1, [a1], [e1], combat);
     // the aura's own span, cut at the death (24.6 s): seconds 20–24 touched
     expect(o).toMatchObject({ wFrom: 20, wTo: 24.6, M: 5 });
     const dead = makeUnit("A1", { spec: CombatUnitSpec.Warrior_Arms, damageOut: a1.damageOut, deathRecords: [{ timestamp: ms(23.2) }] });
-    const [o2] = externalDamageObservations(enemy("E1", psOn("E1")), [dead], [enemy("E1")], combat);
+    const [o2] = obsOf(enemy("E1", psOn("E1")), [dead], [enemy("E1")], combat);
     expect(o2).toMatchObject({ wFrom: 20, wTo: 23.2, M: 4 });
   });
 
   // round-3 audit D31 (46a55085 0:15): the press second is inside the window
   it("a hit in the aura's first (press) second counts", () => {
     const a1 = ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 20.5, "E1", 30_000)]);
-    const [o] = externalDamageObservations(enemy("E1", psOn("E1", "E2", 20.03, 28.04)), [a1], [enemy("E1")], combat);
+    const [o] = obsOf(enemy("E1", psOn("E1", "E2", 20.03, 28.04)), [a1], [enemy("E1")], combat);
     expect(o!.nDirect).toBe(30_000);
     expect(o!.M).toBe(9);
   });

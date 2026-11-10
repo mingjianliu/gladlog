@@ -71,7 +71,13 @@ function observe(
   const out: Obs[] = [];
   for (const target of enemies) {
     if (!target.info) continue;
-    for (const o of externalDamageObservations(target, friends, enemies, combat)) {
+    for (const o of externalDamageObservations(
+      target,
+      friends,
+      enemies,
+      combat,
+      Object.values(legacy.units ?? {}) as ICombatUnit[],
+    )) {
       const ally = friends.find((f) => f.id === o.allyId);
       out.push({
         ...o,
