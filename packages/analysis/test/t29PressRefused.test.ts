@@ -825,6 +825,26 @@ describe("T29 R15 — a refused press's intent facts", () => {
     ).toBeUndefined();
   });
 
+  // codex 80-PIPE-34-B34 #1: a recast the ledger allows only without the
+  // refused press reads "not spent", but the recorder's own "not ready"
+  // refusal in between says the spell was on cooldown — the two conflict
+  it("cooldown not spent: a 'not ready' refusal that contradicts the refund decides nothing", () => {
+    const s = scene({
+      spec: CombatUnitSpec.Rogue_Assassination,
+      presses: [
+        [DEATHMARK, at],
+        [DEATHMARK, at + 12_400],
+      ],
+      misses: [miss(DEATHMARK, at + 1)],
+    });
+    const state = (rows: ReturnType<typeof failed>[]) =>
+      refusedPressCooldownState(s.enemy, s.combat, DEATHMARK, 10, rows);
+    expect(state([])).toBe("not spent");
+    expect(state([failed(DEATHMARK, 12.8)])).toBeUndefined();
+    // inside a GCD the refusal says nothing either way: the refund stands
+    expect(state([failed(DEATHMARK, 11)])).toBe("not spent");
+  });
+
   // codex T29-1i #3: two refused presses of a two-charge spell, either of
   // which could have kept its charge, decide nothing
   it("cooldown not spent: two refused presses that could each explain the refund decide nothing", () => {

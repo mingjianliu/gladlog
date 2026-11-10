@@ -4,12 +4,12 @@
  *
  *  - pressEffectRefusedListed: a `[RES]` row's `enemy:` entry `X/<spec>(Ns
  *    left)` whose holder's latest press of X at or before the row is one the
- *    game refused — the product's own predicate, `pressEffectRefusedAtCast`
+ *    game refused — the product's own predicate, `pressRefusalMissType`
  *    (a SPELL_MISSED of the cast or an effect id by the caster in the
  *    press's start window, nothing of it landed) — on a row after the
  *    press's second: a refused press ran for no time. b74d7bf6 r1 2:45:
  *    Deathmark met two IMMUNE and put no 360194 on anyone; `[RES]` listed it
- *    to 3:00. Kind: `refused <missType>` (the first miss's type). Counted:
+ *    to 3:00. Kind: `refused <missType>` (the predicate's refusing row's type). Counted:
  *    every enemy entry (no `(no press)` tag) whose holder — spec unique on
  *    the roster — has a press of X at or before the row.
  *  - refusedPressMarker (T29 R15): a menu `missed-sync-window` row's
@@ -17,8 +17,8 @@
  *    cooldown spent|not spent])` (`REFUSED_PRESS_MARKER_RE`) — its press
  *    (the holder's press of X — the holder `readyCds` names, else the
  *    team's — at the printed second, one press only) must be one the
- *    producer's `pressRefusalMissType` refuses with that miss type, a
- *    non-ABSORB miss row of that type must sit on the press's own target
+ *    producer's `pressRefusalMissRow` refuses with a row of that miss type,
+ *    and that row must be a non-ABSORB miss on the press's own target
  *    (the cast row's dest, when it names one) in its start window, and the
  *    cooldown clause must be `refusedPressCooldownState`'s reading (absent
  *    when it decides nothing). Kind: the first disagreement. Counted: every
@@ -44,10 +44,9 @@ import {
   parseResRow,
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
-import { effectSpanIdsOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
 import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
 import {
-  pressEffectRefusedAtCast,
+  pressRefusalMissRow,
   pressRefusalMissType,
 } from "@gladlog/analysis/src/utils/enemyCDs";
 import {
@@ -113,24 +112,17 @@ function pressEffectRefusedListed(ctx: IRoundCtx): void {
         .slice(i + 1)
         .find((c: any) => String(c.spellId) === String(press.spellId));
       const id = String(press.spellId);
-      if (
-        !pressEffectRefusedAtCast(
-          holder,
-          id,
-          p,
-          next ? tsOf(next) : Infinity,
-          combat,
-        )
-      )
-        continue;
-      const miss = ((holder.missesOut ?? []) as any[]).find(
-        (m) =>
-          m.srcUnitId === holder.id &&
-          m.missType !== "ABSORB" &&
-          effectSpanIdsOfCast(id).has(String(m.spellId)) &&
-          tsOf(m) >= p,
+      // the producer's own refusal reading — its row's type, not a search of
+      // the scan's own (codex 80-PIPE-34-B34 #2)
+      const missType = pressRefusalMissType(
+        holder,
+        id,
+        p,
+        next ? tsOf(next) : Infinity,
+        combat,
       );
-      const kind = `refused ${miss?.missType ?? "?"}`;
+      if (missType === undefined) continue;
+      const kind = `refused ${missType}`;
       ctx.violate(
         "pressEffectRefusedListed",
         kind,
@@ -205,7 +197,10 @@ function refusedPressMarkers(ctx: IRoundCtx): void {
     if (candidates.length !== 1) return;
     const p = candidates[0]!;
     const nextMs = p.next ? tsOf(p.next) : Infinity;
-    const missType = pressRefusalMissType(p.u, p.id, p.ms, nextMs, ctx.legacy);
+    // the producer's refusing miss row (its target, its start window): the
+    // marker's type must be that row's (codex 80-PIPE-34-B34 #2)
+    const missRow = pressRefusalMissRow(p.u, p.id, p.ms, nextMs, ctx.legacy);
+    const missType = missRow ? (missRow.missType ?? "MISS") : undefined;
     const at = ((p.ms - ctx.start) / 1000).toFixed(3);
     const factId = `${p.u.name}:${Math.floor((p.ms - ctx.start) / 1000)}:${name}`;
     if (!marker) {
@@ -223,17 +218,13 @@ function refusedPressMarkers(ctx: IRoundCtx): void {
     }
     ctx.bump("refusedPressMarker");
     const m = REFUSED_PRESS_MARKER_RE.exec(marker)!;
+    // the row is a non-ABSORB miss on the press's own target (the cast
+    // row's dest, when it names one) — re-stated from the rendered press
     const dest = p.c.destUnitId;
-    const missRow = ((p.u.missesOut ?? []) as any[]).find(
-      (r) =>
-        r.srcUnitId === p.u.id &&
-        r.missType === m[1] &&
-        r.missType !== "ABSORB" &&
-        effectSpanIdsOfCast(p.id).has(String(r.spellId)) &&
-        tsOf(r) >= p.ms &&
-        tsOf(r) <= p.ms + 2_000 &&
-        (!dest || dest === "0000000000000000" || r.destUnitId === dest),
-    );
+    const rowOnTarget =
+      !!missRow &&
+      missRow.missType !== "ABSORB" &&
+      (!dest || dest === "0000000000000000" || missRow.destUnitId === dest);
     const cd = refusedPressCooldownState(
       p.u,
       ctx.legacy as never,
@@ -246,7 +237,7 @@ function refusedPressMarkers(ctx: IRoundCtx): void {
         ? "press not refused"
         : missType !== m[1]
           ? `miss type ${missType} printed ${m[1]}`
-          : !missRow
+          : !rowOnTarget
             ? "no miss row on the target"
             : cd !== m[2]
               ? `cooldown ${cd ?? "undecided"} printed ${m[2] ?? "none"}`

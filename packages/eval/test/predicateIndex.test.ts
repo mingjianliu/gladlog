@@ -1299,6 +1299,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/enemyCDs.ts`,
+    symbol: "pressRefusalMissRow",
+    mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
     symbol: "pressRefusalMissType",
     mod: enemyCDs,
   },

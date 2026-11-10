@@ -66,7 +66,9 @@ function availableWithout(
  *    unavailable at its instant; dropping this one, every press is available
  *    — and dropping no other refused press of the spell does the same (two
  *    refused presses either of which could have kept its charge decide
- *    nothing, codex T29-1i #3). On 605: refused Ray of Frost, e.g. 129-1 r1
+ *    nothing, codex T29-1i #3), and no "not ready" refusal below falls where
+ *    the spell would then have been available (conflicting evidence decides
+ *    nothing, codex 80-PIPE-34-B34 #1). On 605: refused Ray of Frost, e.g. 129-1 r1
  *    0:47, recast 12.4 s later and again inside the 60 s.
  *  - "spent": every press is available counting them all, and the
  *    recorder's own "not ready" refusal of the spell (`NOT_READY_REASONS`,
@@ -113,15 +115,13 @@ export function refusedPressCooldownState(
     own.every(
       (c) => c === drop || availableWithout(entry, drop, c.timeSeconds),
     );
-  if (!allFit(undefined)) {
-    return allFit(self) && !otherRefused.some((q) => allFit(q))
-      ? "not spent"
-      : undefined;
-  }
   const castRowsS = (unit.spellCastEvents ?? []).map(
     (e) => (e.logLine.timestamp - startMs) / 1000,
   );
-  const spent = recorderFailed.some(
+  // the recorder's own "not ready" refusals of the spell after the press,
+  // outside every GCD that could have answered them (a cast row of the unit
+  // at or before it, within `REFUSED_PRESS_RECAST_AFTER_S`)
+  const notReady = recorderFailed.filter(
     (f) =>
       f.unitGuid === unit.id &&
       String(f.spellId) === spellId &&
@@ -130,7 +130,20 @@ export function refusedPressCooldownState(
       !castRowsS.some(
         (s) =>
           s <= f.tSeconds && f.tSeconds - s < REFUSED_PRESS_RECAST_AFTER_S,
-      ) &&
+      ),
+  );
+  if (!allFit(undefined)) {
+    // the refund reading, unless a "not ready" refusal falls where it says
+    // the spell was available (the two sources conflict — no clause; codex
+    // 80-PIPE-34-B34 #1)
+    return allFit(self) &&
+      !otherRefused.some((q) => allFit(q)) &&
+      !notReady.some((f) => availableWithout(entry, self, f.tSeconds))
+      ? "not spent"
+      : undefined;
+  }
+  const spent = notReady.some(
+    (f) =>
       !availableWithout(entry, undefined, f.tSeconds) &&
       availableWithout(entry, self, f.tSeconds) &&
       !otherRefused.some((q) => availableWithout(entry, q, f.tSeconds)),

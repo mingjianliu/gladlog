@@ -2,6 +2,7 @@ import {
   AtomicArenaCombat,
   CombatUnitType,
   ICombatUnit,
+  IMissEvent,
   LogEvent,
 } from "@gladlog/parser-compat";
 
@@ -368,10 +369,11 @@ export function observedEffectEndSeconds(
  * 84714 while its orb's 84721 hits, same name, ran on). The effect never
  * ran, so its window ends at the press. fact12 (T03-1 residual): b74d7bf6
  * r1 2:45, Deathmark met two IMMUNE and put no 360194 on anyone — `[RES]`
- * listed it to 3:00 on the official 16 s. Returns the refusing row's miss
- * type (IMMUNE, MISS, DODGE …), undefined when the press was not refused.
+ * listed it to 3:00 on the official 16 s. Returns the refusing miss row
+ * (its type: `pressRefusalMissType`), undefined when the press was not
+ * refused.
  */
-export function pressRefusalMissType(
+export function pressRefusalMissRow(
   caster: Pick<ICombatUnit, "id"> &
     Partial<
       Pick<
@@ -385,7 +387,7 @@ export function pressRefusalMissType(
    * caster's own next cast row of it bounds it too) */
   untilMs: number,
   combat: { units?: Readonly<Record<string, ICombatUnit>> },
-): string | undefined {
+): IMissEvent | undefined {
   const ids = effectSpanIdsOfCast(castSpellId);
   const name = getEnglishSpellName(castSpellId, "");
   const mine = (r: {
@@ -488,7 +490,17 @@ export function pressRefusalMissType(
       if (a.logLine.timestamp <= startToMs) return undefined;
       if (mine(a) && a.logLine.timestamp <= toMs) return undefined;
     }
-  return refusal.missType ?? "MISS";
+  return refusal;
+}
+
+/** The refusing miss row's type (IMMUNE, MISS, DODGE …) of
+ * `pressRefusalMissRow`, undefined when the press was not refused — the
+ * reading every refusal marker prints (T29 R15). */
+export function pressRefusalMissType(
+  ...args: Parameters<typeof pressRefusalMissRow>
+): string | undefined {
+  const row = pressRefusalMissRow(...args);
+  return row ? (row.missType ?? "MISS") : undefined;
 }
 
 /** `pressRefusalMissType` as a yes / no: did the game refuse this press. */
