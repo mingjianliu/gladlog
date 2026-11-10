@@ -24,7 +24,7 @@ import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import {
   classSetPiecesOf,
   setBonusCooldownReduction,
-  setPiecesWorn,
+  wearsSetBonus,
 } from "../data/classSetBonuses";
 import { classMetadata } from "../data/classSpells";
 import CONDITIONAL_COOLDOWNS from "../data/conditionalCooldownsGenerated.json";
@@ -6433,9 +6433,7 @@ function buildCooldownEntry(
   if (
     stackCd &&
     holds(stackCd.talentSpellId) &&
-    (!stackCd.requiresSet ||
-      setPiecesWorn(unit, stackCd.requiresSet.itemSetId) >=
-        stackCd.requiresSet.pieces) &&
+    (!stackCd.requiresSet || wearsSetBonus(unit, stackCd.requiresSet)) &&
     baselineCharges <= 1
   )
     for (const c of casts) {

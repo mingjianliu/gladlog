@@ -13,12 +13,14 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { wearsSetBonus } from "../src/data/classSetBonuses";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   castTargetTickTriggers,
   EVENT_COOLDOWN_REDUCTIONS,
   hostileTakenTriggers,
   ownStacksBefore,
+  PER_PRESS_STACK_COOLDOWNS,
 } from "../src/data/talentScriptedCooldowns";
 import { buffFullDurationForCaster } from "../src/utils/buffDuration";
 import {
@@ -387,6 +389,22 @@ describe("Havoc 4pc — Essence Break counts the press's own Cycle of Hatred dos
     const u = havoc(11_000);
     const entry = unitCooldownEntry(u, combatOf(u), ESSENCE_BREAK)!;
     expect(pressReadyAgainAtSeconds(entry, 10)).toBeCloseTo(10 + 37.5, 6);
+  });
+  it("the 4pc row goes through the one set-bonus gate: Havoc only (B33 #3)", () => {
+    // Off-spec units never reach this gate in a match (Cycle of Hatred only
+    // resolves in the Havoc tree); the row's own spec keeps the gate whole
+    const gate = PER_PRESS_STACK_COOLDOWNS[ESSENCE_BREAK]!.requiresSet!;
+    const gear = {
+      equipment: ["271535", "271536", "271537", "271538"].map((id) => ({ id })),
+    };
+    expect(wearsSetBonus({ spec: "577", info: gear }, gate)).toBe(true);
+    expect(wearsSetBonus({ spec: "581", info: gear }, gate)).toBe(false);
+    expect(
+      wearsSetBonus(
+        { spec: "577", info: { equipment: gear.equipment.slice(1) } },
+        gate,
+      ),
+    ).toBe(false);
   });
 });
 

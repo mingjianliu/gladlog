@@ -2225,8 +2225,14 @@ export const PER_PRESS_STACK_COOLDOWNS: Readonly<
       auraId: string;
       secondsPerStack: number;
       maxStacks: number;
-      /** the row needs this class set bonus worn as well (`setPiecesWorn`) */
-      requiresSet?: { bonusSpellId: string; itemSetId: string; pieces: number };
+      /** the row needs this class set bonus held as well (`wearsSetBonus`:
+       * the bonus's spec and pieces — the one set-bonus gate) */
+      requiresSet?: {
+        bonusSpellId: string;
+        itemSetId: string;
+        pieces: number;
+        specs: readonly string[];
+      };
       /** the press's own dose of the aura counts too: the stacks up
        * `PER_PRESS_OWN_DOSE_MS` after the press, not strictly before it */
       ownDoseCounts?: true;
@@ -2262,7 +2268,12 @@ export const PER_PRESS_STACK_COOLDOWNS: Readonly<
     auraId: "1214887",
     secondsPerStack: 2.5,
     maxStacks: 4,
-    requiresSet: { bonusSpellId: "1296612", itemSetId: "2056", pieces: 4 },
+    requiresSet: {
+      bonusSpellId: "1296612",
+      itemSetId: "2056",
+      pieces: 4,
+      specs: ["577"],
+    },
     ownDoseCounts: true,
     note: "Havoc 12.1 4pc — Essence Break −2.5 s per Cycle of Hatred stack up once the press's own dose is in (≤ 4)",
   },
