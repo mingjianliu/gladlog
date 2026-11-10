@@ -150,4 +150,18 @@ describe("scan5/t35 setFadeWhileUp", () => {
   it("no REMOVED: no verdict", () => {
     expect(scan(feral(4), [line], 30)).toEqual([]);
   });
+  // codex B33 #2: the line is the 0 s press's; a re-press at 20.8 s — its
+  // APPLIED inside the printed second — is the next run, whose REMOVED at
+  // 40.8 s says nothing about the first
+  it("a re-press inside the printed second is the next run's", () => {
+    const u = feral(4);
+    u.spellCastEvents.push(success("106951", 20.8));
+    u.auraEvents.push(
+      aura("106951", LogEvent.SPELL_AURA_APPLIED, 20.8),
+      aura("106951", LogEvent.SPELL_AURA_REMOVED, 40.8),
+    );
+    expect(
+      scan(u, ["0:20  [BUFF FADED]   Berserk (expired, estimated)"], 60),
+    ).toEqual([]);
+  });
 });

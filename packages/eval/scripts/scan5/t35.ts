@@ -25,8 +25,8 @@
  * `[BUFF FADED] <aura> (expired, estimated)` for an aura a worn bonus
  * lengthens, while the run's logged REMOVED comes after the printed
  * second + 1. With no REMOVED the log is silent and the line is not judged.
- * The run is the latest self application at or before the printed second,
- * read through `ownAuraRuns` (the set walk's and t18's reading).
+ * The run is the one the producer's press for the line put up
+ * (`producerPressMs` → `ownAuraRunAt`, t18's chain).
  */
 import {
   SET_BONUS_COOLDOWN_ROWS,
@@ -36,7 +36,7 @@ import {
   wearsSetBonus,
 } from "@gladlog/analysis/src/data/classSetBonuses";
 import { EVENT_COOLDOWN_REDUCTIONS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
-import { ownAuraRuns } from "@gladlog/analysis/src/utils/buffDuration";
+import { ownAuraRunAt } from "@gladlog/analysis/src/utils/buffDuration";
 import { CD_INSTANT_SLACK_S } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   extractOffListPresses,
@@ -44,6 +44,7 @@ import {
 } from "@gladlog/analysis/src/utils/offListPress";
 
 import { type IRoundCtx, nameOf, secOf, tsOf } from "./ctx";
+import { producerPressMs } from "./producerPress";
 
 export const CHECKS = ["setCooldownBack", "setFadeWhileUp"] as const;
 
@@ -147,11 +148,16 @@ function runFade(ctx: IRoundCtx): void {
     const auraId = byName.get(m[2]!.trim());
     if (!auraId) continue;
     const sec = secOf(m[1]!);
-    // the caster's own runs, the set walk's reading (`ownAuraRuns`)
-    const runs = ownAuraRuns(owner, auraId);
-    const run = runs
-      .filter((r) => Math.floor((tsOf(r.from) - ctx.start) / 1000) <= sec)
-      .pop();
+    // the press the producer printed this line for and the run that press
+    // put up — t18's chain (`producerPressMs` → `ownAuraRunAt`; codex B33
+    // #2: the latest run by second took a re-press inside the line's second)
+    // (the line may be the unworn length's: a removal the producer pairs
+    // after the printed second does not rule its press out)
+    const anchor = producerPressMs(ctx, owner, auraId, sec, true, {
+      keepLaterRemovals: true,
+    });
+    if (anchor === undefined) continue;
+    const run = ownAuraRunAt(owner, auraId, anchor);
     if (!run) continue;
     // only a logged REMOVED shows the run outlived the printed second: with
     // none the log is silent and the estimate stands (codex 85-tk-A-T35-1
