@@ -119,6 +119,68 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     ).toBeCloseTo(11);
   });
 
+  it("pipeline T48:天神之赐让朱鹤 / 青龙从 25s 缩到 12s(DB2 aura 107 −13000 ms);没点的仍是 25s", () => {
+    // node 101113 / entry 124894 from talentIdMap.json (Mistweaver)
+    const holder = makeUnit("m1", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      info: {
+        talents: [{ id1: 101113, id2: 124894, count: 1 }],
+        pvpTalents: [],
+      },
+    });
+    const plain = makeUnit("m2", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      info: { talents: [], pvpTalents: [] },
+    });
+    for (const celestial of ["325197", "322118"]) {
+      expect(buffFullDurationForCaster(celestial, holder)).toBe(12);
+      expect(buffFullDurationForCaster(celestial, plain)).toBe(25);
+      expect(buffFullDurationForCaster(celestial, undefined)).toBe(25);
+    }
+  });
+
+  it("pipeline T48:体温过低 30s,霜寒调节持有者 20s(DB2 aura 219 −10000 ms,标签编码)", () => {
+    const holder = makeUnit("mg1", {
+      spec: CombatUnitSpec.Mage_Frost,
+      info: {
+        talents: [{ id1: 62107, id2: 80165, count: 1 }],
+        pvpTalents: [],
+      },
+    });
+    const plain = makeUnit("mg2", {
+      spec: CombatUnitSpec.Mage_Frost,
+      info: { talents: [], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("41425", holder)).toBe(20);
+    expect(buffFullDurationForCaster("41425", plain)).toBe(30);
+  });
+
+  it("pipeline T48:斜掠 15s;生死循环 ×0.8 = 12s;再加撕裂血脉 ×1.25 = 15s(与割裂同形,相乘)", () => {
+    const COLD = { id1: 82092, id2: 103152, count: 1 };
+    const VEINRIPPER = { id1: 82093, id2: 103154, count: 1 };
+    const feral = (id: string, talents: (typeof COLD)[]) =>
+      makeUnit(id, {
+        spec: CombatUnitSpec.Druid_Feral,
+        info: { talents, pvpTalents: [] },
+      });
+    expect(buffFullDurationForCaster("155722", feral("f0", []))).toBe(15);
+    expect(buffFullDurationForCaster("155722", feral("f1", [COLD]))).toBe(12);
+    expect(
+      buffFullDurationForCaster("155722", feral("f2", [COLD, VEINRIPPER])),
+    ).toBeCloseTo(15);
+    // the other bleeds and the heal-over-time half of the same talent
+    expect(buffFullDurationForCaster("192090", feral("f3", [COLD]))).toBe(12);
+    expect(
+      buffFullDurationForCaster("391356", feral("f4", [COLD])),
+    ).toBeCloseTo(6.4);
+    expect(
+      buffFullDurationForCaster("164812", feral("f5", [COLD])),
+    ).toBeCloseTo(14.4);
+    expect(buffFullDurationForCaster("774", feral("f6", [COLD]))).toBeCloseTo(
+      12 * 0.85,
+    );
+  });
+
   it("按级数生效:时间膨胀 0/1/2 级 = 8 / 9.2 / 10.4s", () => {
     const noTalent = makeUnit("e0", {
       spec: CombatUnitSpec.Evoker_Preservation,
@@ -783,7 +845,8 @@ describe("Timewalker 精通延长的光环只印下限(用户裁决 2026-11-05)"
         }[];
       }
     ).rows.filter(
-      (r) => r.spellId === TIMEWALKER_MASTERY_ID && r.aura === 108 && r.misc0 === 1,
+      (r) =>
+        r.spellId === TIMEWALKER_MASTERY_ID && r.aura === 108 && r.misc0 === 1,
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.basePoints).toBe(0);

@@ -1028,13 +1028,13 @@ export const HYPOTHERMIA_GATED_IDS: ReadonlySet<string> = new Set([
  * cast) and that is not a new application. The end is the REMOVED that
  * closes the run — in those logs 12 runs lasted 30.0 s (the DB2 length) and
  * 7 lasted 20.0 s (DB2 SpellEffect 1254377 of spell 1250315: aura 219,
- * −10 000 ms on 41425's label — NOT registered as a duration modifier; the
- * logged end needs none). A REMOVED the unit's own death wrote
+ * −10 000 ms on 41425's label — a `BUFF_DURATION_TALENT_MODIFIERS` row
+ * since pipeline T48; the logged end needs none). A REMOVED the unit's own death wrote
  * (`DEATH_CASCADE_MS`) did not end the lockout. With no REMOVED to read —
  * that death, the round's end, or a removal the log never wrote (0068182d:
  * applied at 00:03:28.2, next line of the aura the press at 00:05:13.7) —
- * the official length caps it (`buffFullDurationForCaster`), which is 10 s
- * too long for a holder of that talent. No cast fallback: without the aura
+ * the official length caps it (`buffFullDurationForCaster`: 20 s for a
+ * holder of that talent, 30 s otherwise). No cast fallback: without the aura
  * line there is no lockout, as before.
  */
 export function hypothermiaUntil(
