@@ -41,6 +41,7 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "../data/druidForms";
+import { OVERRIDE_VARIANTS_GENERATED } from "../data/overrideVariantsGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   CAST_MISS_WINDOW_MS,
@@ -395,7 +396,8 @@ export function filterRealPresses<
 /**
  * The `SPELL_CAST_SUCCESS` row of a press the cooldown ledger keys as
  * `spellId`, within `toleranceMs` of `castMs`: that id's own row, else a skin
- * variant of the same English name. The ledger keys Hex 51514 / Imprison
+ * variant of the same English name, else an override variant of the button
+ * (`OVERRIDE_VARIANTS_GENERATED`). The ledger keys Hex 51514 / Imprison
  * 217832 while the press logs 210873 / 221527 (F20 immunity residual); the
  * readers of a control press's outcome look the row up here, so the
  * `[IMMUNE …]` tag and the `[no CC aura logged …]` tag find the same press
@@ -420,11 +422,24 @@ export function pressRowOfLedgerId<
   const exact = rows.find((e) => near(e) && e.spellId === spellId);
   if (exact) return exact;
   const name = getEnglishSpellName(spellId, "");
-  if (!name) return undefined;
+  const named =
+    name &&
+    rows.find(
+      (e) =>
+        near(e) &&
+        !!e.spellId &&
+        getEnglishSpellName(e.spellId, e.spellName ?? "") === name,
+    );
+  if (named) return named;
+  // …else an override variant of that button, which has another name: the
+  // ledger keys The Hunt while the press logs Predator's Wake 1259431, and
+  // The Hunt's own impact row comes 0.3–0.45 s later, outside the tolerance
+  // (T85, wide s2/34 r16 1:28: the press into Peaceweaver printed bare; the
+  // same press with the impact in its millisecond was tagged)
   return rows.find(
     (e) =>
       near(e) &&
       !!e.spellId &&
-      getEnglishSpellName(e.spellId, e.spellName ?? "") === name,
+      OVERRIDE_VARIANTS_GENERATED[e.spellId] === spellId,
   );
 }

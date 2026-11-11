@@ -96,7 +96,7 @@ import {
 } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
-import { empowerSpans } from "./castCommitSpans";
+import { EMPOWER_MAX_HOLD_MS, empowerSpans } from "./castCommitSpans";
 import {
   CAST_MISS_WINDOW_MS,
   CONTROL_EFFECT_MIN_HIT_SHARE,
@@ -5762,7 +5762,8 @@ function isDeadRelease(
 /** The unit's presses that spent no cooldown, as {spell, cast-row ms}: holds
  * ending in SPELL_EMPOWER_INTERRUPT, or released at level 0
  * (`empowerSpans`; released at level 0 is the same nothing — 1 corpus case,
- * re-pressed 3.3 s later), releases that hit nothing (`isDeadRelease`), and
+ * re-pressed 3.3 s later), holds the log never closed and that were begun
+ * again, releases that hit nothing (`isDeadRelease`), and
  * cleanses that removed nothing (`COOLDOWN_ON_DISPEL_IDS`). */
 function cutHolds(
   unit: ICombatUnit,
@@ -5770,6 +5771,24 @@ function cutHolds(
   const out = (empowerSpans(unit) ?? [])
     .filter((h) => h.interrupted || h.level === 0 || isDeadRelease(unit, h))
     .map((h) => ({ spellId: String(h.spellId), startMs: h.startMs }));
+  // …and a hold the log never closed, begun again while it could still have
+  // been held (`EMPOWER_MAX_HOLD_MS`): the spell was not on cooldown at the
+  // second START, so the first fired nothing. `empowerSpans` has no span for
+  // it (T85, wide s0/106 r4 1:40: Eternity Surge START at 100.79 s with no
+  // END or INTERRUPT, START again at 101.67 s, released 102.52 s — the first
+  // printed `[PRESS] … (30s cd, back 2:05)`).
+  const starts = [...(unit.empowerStarts ?? [])].sort(
+    (x, y) => x.timestamp - y.timestamp,
+  );
+  const closed = new Set(
+    (empowerSpans(unit) ?? []).map((h) => `${h.spellId}\u0000${h.startMs}`),
+  );
+  starts.forEach((st, i) => {
+    if (closed.has(`${st.spellId}\u0000${st.timestamp}`)) return;
+    const next = starts.find((n, j) => j > i && n.spellId === st.spellId);
+    if (next && next.timestamp - st.timestamp <= EMPOWER_MAX_HOLD_MS)
+      out.push({ spellId: String(st.spellId), startMs: st.timestamp });
+  });
   for (const c of unit.spellCastEvents ?? []) {
     const id = String(c.spellId);
     if (

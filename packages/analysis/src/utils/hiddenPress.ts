@@ -163,6 +163,78 @@ export function isPressVariantOf(id: string, spellId: string): boolean {
   );
 }
 
+type OwnAuraRow = NonNullable<ICombatUnit["auraEvents"]>[number];
+
+/**
+ * Is the APPLIED row `own[j]` a re-listing of the run whose last row is
+ * `own[i]` — an aura a talent had taken past its official length, listed
+ * again when its holder came back into the log's sight? Its own REMOVED
+ * then comes sooner than a press at that row would have run. Another
+ * APPLIED before the REMOVED is the run listed once more (a mage seen again
+ * after Greater Invisibility, and again after Mass Invisibility): the
+ * REMOVED that follows is still this row's test — stopping there read the
+ * first re-listing as a press (T85, wide s0/68 r1: Combustion pressed
+ * 68.4 s, listed 81.9 s and 82.8 s, off 83.8 s, `cast 3 of 3`). Past
+ * `RELISTED_RUN_MAX_LIVES` of the run's last row it is a new press first
+ * seen late, whatever its own REMOVED says (codex 04-1).
+ */
+function relistsRunUnderWay(
+  own: readonly OwnAuraRow[],
+  kept: ReadonlySet<OwnAuraRow>,
+  i: number,
+  j: number,
+  lifeMs: (id: string, ms: number) => number,
+): boolean {
+  const at = own[j]!.logLine.timestamp;
+  const id = own[j]!.spellId!;
+  const runAt = own[i]!.logLine.timestamp;
+  if (at - runAt > RELISTED_RUN_MAX_LIVES * lifeMs(id, runAt)) return false;
+  for (let k = j + 1; k < own.length; k++) {
+    const b = own[k]!;
+    if (b.spellId !== id || !kept.has(b)) continue;
+    if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) continue;
+    if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+      return (
+        b.logLine.timestamp - at < lifeMs(id, at) - HIDDEN_AURA_LIFE_SLACK_MS
+      );
+  }
+  return false;
+}
+
+/**
+ * The same reading for one aura id of the unit's own, asked by its row: is
+ * the APPLIED of `auraId` at `appliedMs` a re-listing of that aura's run
+ * under way (no REMOVED of it since the row before)? The interval builder
+ * closes a run at its official length and opens another at such a row
+ * (`buildAuraIntervals`' anti-artefact split); the readers of "an aura that
+ * went up with no press" ask here before calling it one.
+ */
+export function relistedRunAt(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  auraId: string,
+  appliedMs: number,
+): boolean {
+  const own = (unit.auraEvents ?? []).filter(
+    (a) =>
+      a.spellId === auraId &&
+      a.destUnitId === unit.id &&
+      a.srcUnitId === unit.id,
+  );
+  const kept = new Set(dropAuraRebroadcasts(own));
+  const rows = own.filter((a) => kept.has(a));
+  const j = rows.findIndex(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      Math.abs(a.logLine.timestamp - appliedMs) <= 1,
+  );
+  if (j <= 0) return false;
+  // the run under way: its last row is no REMOVED
+  if (rows[j - 1]!.logLine.event === LogEvent.SPELL_AURA_REMOVED) return false;
+  return relistsRunUnderWay(rows, kept, j - 1, j, (id, ms) =>
+    hiddenAuraLifeMs(id, unit as never, ms),
+  );
+}
+
 /**
  * The instants (ms) of `spellId`'s hidden presses by `unit` in
  * [fromMs, toMs]: an APPLIED of its own aura (same id) from the unit on
@@ -275,22 +347,8 @@ export function hiddenPressMs(
   // Combustion, Recklessness, Malevolence, each 11–22 s after its press).
   // Past RELISTED_RUN_MAX_LIVES of the run's last row it is a new press first
   // seen late, whatever its own REMOVED says (codex 04-1).
-  const relisting = (i: number, j: number): boolean => {
-    const at = own[j]!.logLine.timestamp;
-    const id = own[j]!.spellId!;
-    const runAt = own[i]!.logLine.timestamp;
-    if (at - runAt > RELISTED_RUN_MAX_LIVES * lifeMs(id, runAt)) return false;
-    for (let k = j + 1; k < own.length; k++) {
-      const b = own[k]!;
-      if (b.spellId !== id || !kept.has(b)) continue;
-      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) return false;
-      if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED)
-        return (
-          b.logLine.timestamp - at < lifeMs(id, at) - HIDDEN_AURA_LIFE_SLACK_MS
-        );
-    }
-    return false;
-  };
+  const relisting = (i: number, j: number): boolean =>
+    relistsRunUnderWay(own, kept, i, j, lifeMs);
   const untilOf = (i: number, ms: number): number => {
     const id = own[i]!.spellId;
     for (let j = i + 1; j < own.length; j++) {

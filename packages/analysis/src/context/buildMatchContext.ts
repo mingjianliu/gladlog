@@ -1199,12 +1199,19 @@ export function buildMatchContext(
   } catch {
     /* no positions → no root facts */
   }
+  // the timeline's own cut (`addEntry`): nothing after the round's end.
+  // These two are merged in after it was built and went past it (T85, wide
+  // s2/186 r6: a `[HEALER EXPOSURE]` at 1:28, a second after the deciding
+  // death, listing the dead hunter's controls)
+  const insertRoundEndS = (roundEndMs(combat) - combat.startTime) / 1000;
   tLines.push("");
   tLines.push(
-    mergeTimestampedLines(timelineText.split("\n"), [
-      ...exposureInserts,
-      ...rootInserts,
-    ]).join("\n"),
+    mergeTimestampedLines(
+      timelineText.split("\n"),
+      [...exposureInserts, ...rootInserts].filter(
+        (e) => e.atSeconds <= insertRoundEndS,
+      ),
+    ).join("\n"),
   );
 
   if (positionLinesXref.length > 0) {

@@ -15,6 +15,8 @@ import {
   isEnemyCdWindowSpell,
   offensiveCdOfAura,
 } from "./cooldowns";
+import { relistedRunAt } from "./hiddenPress";
+import { isResyncBatchAt } from "./resyncBatch";
 import { offensiveDangerWeight } from "./spellDanger";
 import { talentOwnershipOf } from "./talentOwnership";
 
@@ -498,6 +500,18 @@ export function auraOffensiveOccurrences(
             effectAurasOfCast(c.spellId!).includes(iv.spellId)),
       );
       if (pressed) continue;
+      // the run under way listed again, not an aura that went up: a row of
+      // the batch that re-states the unit after it was unseen
+      // (`isResyncBatchAt`) which re-lists a run still going
+      // (`relistedRunAt`) — the unseen-press reader's own two tests (T85,
+      // wide s1/195 r1 2:34: a Combustion pressed at 2:20 and past its
+      // official length, listed again when the mage left Greater
+      // Invisibility). A proc is a row of its own, in no batch.
+      if (
+        isResyncBatchAt(unit, startMs) &&
+        relistedRunAt(unit, iv.spellId, startMs)
+      )
+        continue;
       // a press of it later inside the interval (a REFRESH) takes over from
       // there: the proc ends at the press (codex 20-F18-02 #3, 4501dd64
       // 2:19.9 → the 2:32.0 press), as a Metamorphosis press splits a form
