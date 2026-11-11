@@ -38,7 +38,12 @@ import { deserialize, serialize } from "node:v8";
 import { ensureAnalysisData } from "@gladlog/analysis";
 
 import { countsOf } from "./compare";
-import { CoverageTracker, type ICoverageRow } from "./coverage";
+import {
+  coverageGapsOf,
+  CoverageTracker,
+  type ICoverageRow,
+  type IReported,
+} from "./coverage";
 import { type MergeRule, mergeState } from "./merge";
 import { forEachContext, listContextFiles, splitContexts } from "./rounds";
 import { argOf, type IScan, type IScanOpts } from "./scan";
@@ -259,6 +264,11 @@ function writeReport(spec: ISpec, scan: IScan, unmapped: string[]): void {
   };
   try {
     scan.report({ unmapped });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the scans' common accumulator shape, as verify/coverage.ts reads it
+    const filed = (scan.state() as any).violations as
+      Array<{ check: string; kind: string }> | undefined;
+    for (const v of filed ?? [])
+      reportedKinds.add(`${spec.name}:${v.check}|${v.kind}`);
     if (unmapped.length > 0) {
       console.log(`UNMAPPED contexts: ${unmapped.length}`);
       for (const u of unmapped.slice(0, 10)) console.log(`    ${u}`);
@@ -269,22 +279,18 @@ function writeReport(spec: ISpec, scan: IScan, unmapped: string[]): void {
   }
 }
 
-/** a check a report states that no archive's row carries: counted or failed
- * only after the merge (`report`, `finalize`), so no archive can stand for it */
+/** every `<scan>:<check>|<kind>` the merged reports hold, read as each
+ * report is written (its `report()` has filed its own by then) */
+const reportedKinds = new Set<string>();
+
+/** a check — or a kind of it — a report states that no archive's row
+ * carries (`coverageGapsOf`) */
 function coverageGaps(rows: ICoverageRow[]): string[] {
-  const items = new Set<string>();
-  for (const r of rows) {
-    for (const h of r.hit) items.add(`hit ${h}`);
-    for (const f of r.fail) items.add(`fail ${f}`);
-  }
-  const gaps: string[] = [];
+  const reported: IReported[] = [];
   for (const spec of specs)
-    for (const [check, n] of countsOf(join(reportDir, `${spec.stem}.txt`))) {
-      const id = `${spec.name}:${check}`;
-      if (n.checked > 0 && !items.has(`hit ${id}`)) gaps.push(`hit ${id}`);
-      if (n.failed > 0 && !items.has(`fail ${id}`)) gaps.push(`fail ${id}`);
-    }
-  return gaps;
+    for (const [check, n] of countsOf(join(reportDir, `${spec.stem}.txt`)))
+      reported.push({ id: `${spec.name}:${check}`, ...n });
+  return coverageGapsOf(rows, reported, reportedKinds);
 }
 
 /** the last step: everything in `reportDir` has passed. All of it or none. */

@@ -23,7 +23,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { compareRuns, countsOf } from "../scripts/verify/compare";
-import { CoverageTracker } from "../scripts/verify/coverage";
+import { coverageGapsOf, CoverageTracker } from "../scripts/verify/coverage";
 import { pickCover } from "../scripts/verify/coverSet";
 import { addEach, mergeState, mergeValue } from "../scripts/verify/merge";
 import { listContextFiles, splitContexts } from "../scripts/verify/rounds";
@@ -460,6 +460,34 @@ const PER_PROCESS_CACHES = new Set([
 ]);
 /** set by `configure` in every process */
 const OPTIONS = new Set(["dir", "EXAMPLES", "JSON_OUT", "ONLY"]);
+
+describe("coverageGapsOf (GH #177 item 22)", () => {
+  const rows = [
+    { archive: "a", hit: ["s:c", "s:d"], fail: ["s:c", "s:c|walkKind"] },
+  ];
+  it("lists a check no archive counted or failed, as before", () => {
+    expect(
+      coverageGapsOf(
+        rows,
+        [
+          { id: "s:c", checked: 5, failed: 2 },
+          { id: "s:d", checked: 3, failed: 1 },
+          { id: "s:e", checked: 1, failed: 0 },
+        ],
+        [],
+      ),
+    ).toEqual(["fail s:d", "hit s:e"]);
+  });
+  it("lists a kind only the merged report filed, though its check failed on an archive", () => {
+    expect(
+      coverageGapsOf(
+        rows,
+        [{ id: "s:c", checked: 5, failed: 2 }],
+        ["s:c|walkKind", "s:c|reportKind", "s:c|reportKind"],
+      ),
+    ).toEqual(["fail s:c|reportKind"]);
+  });
+});
 
 describe("every accumulator a report reads crosses the merge", () => {
   const files = [

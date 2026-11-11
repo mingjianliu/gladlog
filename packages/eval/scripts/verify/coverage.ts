@@ -72,3 +72,41 @@ export class CoverageTracker {
     if (hit.length + fail.length > 0) this.rows.push({ archive, hit, fail });
   }
 }
+
+/** What one scan's merged report states: its counted checks and — after
+ * `report()` has run on the merged state — every `check|kind` it filed. */
+export interface IReported {
+  /** `<scan>:<check>` */
+  id: string;
+  checked: number;
+  failed: number;
+}
+
+/**
+ * A check a report states that no archive's row carries: counted or failed
+ * only after the merge (`report`, `finalize`), so no archive can stand for
+ * it. By check id, and by `check|kind` for the kinds the merged report holds
+ * (GH #177 item 22): a check that files one kind while walking and another
+ * only in its report (corpusFactScan `reflectReturn`: `unsupportedLine` in
+ * the walk, `amount` in the report) is covered as a check once any archive
+ * files the first, and its report-only kind had no gap entry.
+ */
+export function coverageGapsOf(
+  rows: readonly ICoverageRow[],
+  reported: readonly IReported[],
+  reportedKinds: Iterable<string>,
+): string[] {
+  const items = new Set<string>();
+  for (const r of rows) {
+    for (const h of r.hit) items.add(`hit ${h}`);
+    for (const f of r.fail) items.add(`fail ${f}`);
+  }
+  const gaps: string[] = [];
+  for (const { id, checked, failed } of reported) {
+    if (checked > 0 && !items.has(`hit ${id}`)) gaps.push(`hit ${id}`);
+    if (failed > 0 && !items.has(`fail ${id}`)) gaps.push(`fail ${id}`);
+  }
+  for (const kind of [...new Set(reportedKinds)].sort())
+    if (!items.has(`fail ${kind}`)) gaps.push(`fail ${kind}`);
+  return gaps;
+}
