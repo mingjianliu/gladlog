@@ -1273,10 +1273,16 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
   ],
   "445474": [
     {
+      talentSpellId: "196103",
+      untalentedBaseSeconds: 18,
+      addSeconds: 6,
+      note: "Absolute Corruption on Wither — against players it lasts 24 s (tooltip: `[Wither][Corruption] is now permanent … Duration reduced to $s1 sec against players`, $s1 = DB2 effect 0 basePoints 24; a scripted dummy, aura 4, so no aura-107/108 row carries it — the two aura-108 rows are damage). Written as 18 + 6 so the next row's percent applies to it. Corpus (codex 85-tk-G-T48-1c #1, 605): a holder of this and Hatefury Rituals, nine Wither lives at 20.36–20.48 s = 24 × 0.85 in two archives; without this row they were modelled 18 s, and 15.3 s once Hatefury's cut was priced alone. Upward (Game-Behaviour rule 7). Corruption 146739 under the same talent is not priced here (pipeline T48 scope: Wither, where the reduction row needs the right base)",
+    },
+    {
       talentSpellId: "440048",
       untalentedBaseSeconds: 18,
       pct: -15,
-      note: "Hatefury Rituals on Wither — REDUCTION with mechanism: DB2 aura 218 misc 1 −15 % on Wither's SpellLabel (label encoding); pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 15 / 0 / 31 (18 × 0.85 = 15.3; the other 16 end early at neither length)",
+      note: "Hatefury Rituals on Wither — REDUCTION with mechanism: DB2 aura 218 misc 1 −15 % on Wither's SpellLabel (label encoding); pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 15 / 0 / 31 (18 × 0.85 = 15.3); nine of the other 16 are an Absolute Corruption holder at 20.4 s = 24 × 0.85 (the row above), the rest end early",
     },
   ],
   "155722": [

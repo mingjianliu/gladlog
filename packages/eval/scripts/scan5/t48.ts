@@ -23,7 +23,9 @@
  * aura on its carrier at its end, the carrier's or the caster's death within
  * a second of it, the round's end within a second, or an immunity applied to
  * the carrier at its end (codex 85-tk-G-T48-1b #1: Cloak of Shadows and
- * Divine Shield take debuffs off with no SPELL_DISPEL row; `IMMUNITY_IDS`).
+ * Divine Shield take debuffs off with no SPELL_DISPEL row; `IMMUNITY_IDS`),
+ * or a control that clears damage-over-time effects landing on it
+ * (`DOT_CLEARING_APPLICATIONS`, codex 85-tk-G-T48-1c #2).
  * Counted: every such life whose target the model prices
  * (`buffFullDurationForCaster` for this caster, at the application).
  * Violation `shortLife`, only for a pair no duration table carries
@@ -130,6 +132,14 @@ const EVENTS = new Set([
   "SPELL_AURA_APPLIED",
 ]);
 const DISPELS = new Set(["SPELL_DISPEL", "SPELL_STOLEN"]);
+/** auras whose application takes the damage-over-time effects off their
+ * target with no SPELL_DISPEL row. Scatter Shot 213691 (tooltip: removes all
+ * harmful damage over time effects; 605: two Virulent Plague lives ended at
+ * its application's own timestamp, 144-4-837 and 137-1-755). A scan-side
+ * list of what is NOT a duration sample — it gates no product reading. */
+export const DOT_CLEARING_APPLICATIONS: ReadonlySet<string> = new Set([
+  "213691",
+]);
 
 export function rowsOf(rawLines: string[]): IRawRow[] {
   const rows: IRawRow[] = [];
@@ -150,7 +160,8 @@ export function rowsOf(rawLines: string[]): IRawRow[] {
       (DISPELS.has(parts.eventName) ? parts.params[11] : parts.params[8]) ?? "";
     // an application is kept only when it is an immunity's
     if (parts.eventName === "SPELL_AURA_APPLIED") {
-      if (!IMMUNITY_IDS.has(spellId)) continue;
+      if (!IMMUNITY_IDS.has(spellId) && !DOT_CLEARING_APPLICATIONS.has(spellId))
+        continue;
     } else if (parts.eventName !== "UNIT_DIED" && !BY_TARGET.has(spellId))
       continue;
     const ms = parseRawTimestamp(parts.datePart);
@@ -243,7 +254,7 @@ export function forcedEnd(
         Math.abs(r.ms - life.endMs) < FORCED_END_MS
       );
     if (r.event === "SPELL_AURA_APPLIED")
-      // rowsOf keeps immunity applications only
+      // rowsOf keeps the applications that take debuffs off only
       return (
         r.dest === life.dest && Math.abs(r.ms - life.endMs) <= DISPEL_AT_END_MS
       );

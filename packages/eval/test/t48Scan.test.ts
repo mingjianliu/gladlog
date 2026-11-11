@@ -161,6 +161,16 @@ describe("scan5/t48 shortenedDuration", () => {
         1e6,
       ),
     ).toBe(false);
+    // Scatter Shot clears damage-over-time effects as it lands
+    expect(
+      forcedEnd(
+        life,
+        "191587",
+        "P1",
+        [row(18_506, "SPELL_AURA_APPLIED", "E3", "E1", "213691")],
+        1e6,
+      ),
+    ).toBe(true);
     // rowsOf keeps an immunity's application and no other aura's
     const applied = (id: string, name: string) =>
       `11/5/2026 18:52:00.158-5  SPELL_AURA_APPLIED,Player-1-B,"B",0x548,0x0,Player-1-B,"B",0x548,0x0,${id},"${name}",0x1,BUFF`;

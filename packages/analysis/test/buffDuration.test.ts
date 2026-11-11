@@ -183,6 +183,31 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     );
   });
 
+  it("pipeline T48:枯萎 18s;憎怒仪式 ×0.85 = 15.3s;绝对腐蚀对玩家 24s,两者都点 24 × 0.85 = 20.4s", () => {
+    const ABSOLUTE_CORRUPTION = { id1: 72051, id2: 91572, count: 1 };
+    const HATEFURY_RITUALS = { id1: 94854, id2: 117451, count: 1 };
+    // a resolvable node that is neither (so "no", not "unknown")
+    const OTHER = { id1: 82092, id2: 103152, count: 1 };
+    const lock = (id: string, talents: (typeof OTHER)[]) =>
+      makeUnit(id, {
+        spec: CombatUnitSpec.Warlock_Affliction,
+        info: { talents, pvpTalents: [] },
+      });
+    expect(buffFullDurationForCaster("445474", lock("wl0", [OTHER]))).toBe(18);
+    expect(
+      buffFullDurationForCaster("445474", lock("wl1", [HATEFURY_RITUALS])),
+    ).toBeCloseTo(15.3);
+    expect(
+      buffFullDurationForCaster("445474", lock("wl2", [ABSOLUTE_CORRUPTION])),
+    ).toBeCloseTo(24);
+    expect(
+      buffFullDurationForCaster(
+        "445474",
+        lock("wl3", [ABSOLUTE_CORRUPTION, HATEFURY_RITUALS]),
+      ),
+    ).toBeCloseTo(20.4);
+  });
+
   it("按级数生效:时间膨胀 0/1/2 级 = 8 / 9.2 / 10.4s", () => {
     const noTalent = makeUnit("e0", {
       spec: CombatUnitSpec.Evoker_Preservation,
