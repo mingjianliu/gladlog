@@ -346,37 +346,6 @@ describe("buildFindingsPrompt", () => {
       );
       expect(p).not.toContain("yards the owner itself moved");
     });
-
-    it("cc-held 图例把「长期可用未使用」表述为事实层,明确禁止因果断言", () => {
-      const p = buildFindingsPrompt(
-        [
-          ...candidates,
-          {
-            id: "cc-held:p1:118:10",
-            type: "cc-held",
-            t: 10,
-            unitNames: ["Me"],
-            spell: "Polymorph",
-            facts: {
-              t: "10",
-              spell: "Polymorph",
-              heldS: "96",
-              windowEndT: "105",
-            },
-          },
-        ],
-        "",
-        "Holy Paladin",
-      );
-      expect(p).toMatch(/"cc-held"/);
-      expect(p).toMatch(/AVAILABLE/);
-      // No-causation guard, in the spec's own words: uptime is a fact, "cost
-      // the game" is the banned inference.
-      expect(p).toMatch(
-        /not a claim that pressing it would have changed the outcome/,
-      );
-      expect(p).toMatch(/never assert it "cost" anything/);
-    });
   });
 });
 

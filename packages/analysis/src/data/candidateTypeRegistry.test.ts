@@ -93,8 +93,6 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
       attemptIntoTrinket: false,
       mdCycloneWindow: true,
       missedPurge: false,
-      ccHeld: false,
-      killReview: false,
       backlashDispel: true,
       // + kick-priority (GH #78, 2026-09-12) — the first flag added AFTER the derivation
       kickPriority: true,
@@ -142,11 +140,15 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
       "off-target-in-window",
       "unconverted-burst",
     ];
+    // cc-held was a flag-retired card type on 2026-09-12 (so not ignored
+    // then); its producer and flag were deleted 2026-11-11 (GH #150 D1), and
+    // a deleted type is ignored like the other four.
+    const deletedSince = ["cc-held"];
     const derived = [...MENU_ONLY_TYPES, ...RETIRED_TYPES].filter(
       (t) => !CARD_TYPES.has(t),
     );
     expect([...new Set(derived)].sort()).toEqual(
-      [...former, ...forgotten].sort(),
+      [...former, ...forgotten, ...deletedSince].sort(),
     );
   });
 
@@ -169,7 +171,6 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
         "questionable-external",
         "healing-gap",
         "position-mistake",
-        "cc-held",
         "cc-avoidable",
         "slow-defensive-response",
         "missed-sync-window",

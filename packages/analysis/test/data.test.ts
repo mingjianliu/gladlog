@@ -69,8 +69,6 @@ describe("data layer", () => {
       mdCycloneWindow: true,
       // 2026-08-29 降级为上下文事实(GH #50 (a),用户裁定);此前 missed-purge 无开关
       missedPurge: false,
-      ccHeld: false,
-      killReview: false,
       // 2026-09-12 上线(GH #80,用户裁决「做出来看看是否对游戏建议有真正的帮助」)
       backlashDispel: true,
       // 2026-09-12 上线(GH #78,用户裁决 1 有用 / 2 门 50% / 3 队友版带距离)

@@ -11,7 +11,6 @@ import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
 import {
   ccAvoidableEvents,
   ccAvoidanceOptionsAt,
-  ccHeldEvents,
   cdHoardedEvents,
   cdSpentIdleEvents,
   cdWasteEvents,
@@ -77,24 +76,11 @@ describe("extractCandidateFindings", () => {
     expect(death!.type).toBe("death");
     expect(death!.facts["t"]).toBe("30");
   });
-  it("friendly deaths stay in the menu; enemy deaths (kill review) are demoted by default — killReview flag, GH #18 ruling (d) 2026-08-30", () => {
+  it("friendly deaths stay in the menu; enemy deaths (kill review) are not candidates — GH #18 ruling (d) 2026-08-30", () => {
     const evts = extractCandidateFindings(combat());
     const mine = evts.find((e) => e.id === "death:a:30");
     expect(mine!.facts["side"]).toBe("friendly");
     expect(evts.find((e) => e.id === "death:b:45")).toBeUndefined();
-  });
-  it("tags each death friendly/enemy so the LLM knows a kill from a loss (killReview flipped on)", () => {
-    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
-    CANDIDATE_TYPE_FLAGS.killReview = true;
-    try {
-      const evts = extractCandidateFindings(combat());
-      const mine = evts.find((e) => e.id === "death:a:30");
-      const theirs = evts.find((e) => e.id === "death:b:45");
-      expect(mine!.facts["side"]).toBe("friendly");
-      expect(theirs!.facts["side"]).toBe("enemy");
-    } finally {
-      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
-    }
   });
   it("2v2 allow-list (GH #18 ruling (a)): only cd-hoarded / missed-cleanse survive; 3v3 untouched", () => {
     const c3 = combat();
@@ -122,17 +108,11 @@ describe("extractCandidateFindings", () => {
       spellCastEvents: [],
       advancedActions: [],
     };
-    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
-    CANDIDATE_TYPE_FLAGS.killReview = true; // both player deaths visible for the count below
-    let evts: ReturnType<typeof extractCandidateFindings>;
-    try {
-      evts = extractCandidateFindings(c);
-    } finally {
-      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
-    }
+    const evts = extractCandidateFindings(c);
     expect(evts.some((e) => e.unitNames.includes("Gzaadym"))).toBe(false);
-    // The two real player deaths are still present.
-    expect(evts.filter((e) => e.type === "death")).toHaveLength(2);
+    // The friendly player's death is still present (the enemy's is no
+    // candidate: kill review).
+    expect(evts.filter((e) => e.type === "death")).toHaveLength(1);
   });
   it("returns [] for an empty combat without throwing", () => {
     expect(
@@ -2810,80 +2790,6 @@ describe("positionMistakeEvents(POSITION-001,2026-08-06 信号扩容批 1)", () 
 
   it("空输入(无位置数据轮的三态兑现:computeOwnerPositionEvents 本身已对此返回 [])→ 零产出", () => {
     expect(positionMistakeEvents([], owner)).toEqual([]);
-  });
-});
-
-describe("ccHeldEvents(COOLDOWN-001,2026-08-06 信号扩容批 1)", () => {
-  const owner = { id: "p1", name: "Me" };
-  const cd = (
-    spellId: string,
-    spellName: string,
-    windows: Array<{
-      fromSeconds: number;
-      toSeconds: number;
-      durationSeconds: number;
-    }>,
-  ) => ({ spellId, spellName, availableWindows: windows });
-
-  it("不在 ccSpellIds 里的技能 → 不报,即便窗口很长", () => {
-    const evts = ccHeldEvents(
-      [
-        cd("100", "Not A CC", [
-          { fromSeconds: 0, toSeconds: 200, durationSeconds: 200 },
-        ]),
-      ],
-      owner,
-    );
-    expect(evts).toEqual([]);
-  });
-
-  it("CC 技能但窗口 < CC_HELD_MIN_S(90s)→ 不报", () => {
-    const evts = ccHeldEvents(
-      [
-        cd("118", "Polymorph", [
-          { fromSeconds: 0, toSeconds: 80, durationSeconds: 80 },
-        ]),
-      ],
-      owner,
-    );
-    expect(evts).toEqual([]);
-  });
-
-  it("CC 技能且窗口 >= 90s → 报;facts 带 t(floor)/spell/heldS/windowEndT(均整数串)", () => {
-    const evts = ccHeldEvents(
-      [
-        cd("118", "Polymorph", [
-          { fromSeconds: 10.4, toSeconds: 105.9, durationSeconds: 95.5 },
-        ]),
-      ],
-      owner,
-    );
-    expect(evts).toHaveLength(1);
-    expect(evts[0]!.type).toBe("cc-held");
-    expect(evts[0]!.t).toBe(10);
-    expect(evts[0]!.spell).toBe("Polymorph");
-    expect(evts[0]!.facts["t"]).toBe("10");
-    expect(evts[0]!.facts["heldS"]).toBe("96");
-    expect(evts[0]!.facts["windowEndT"]).toBe("105");
-  });
-
-  it("多个超阈值窗口按时长降序排,截 cap=2(CC_HELD_CAP)", () => {
-    const evts = ccHeldEvents(
-      [
-        cd("118", "Polymorph", [
-          { fromSeconds: 0, toSeconds: 95, durationSeconds: 95 },
-          { fromSeconds: 200, toSeconds: 320, durationSeconds: 120 },
-          { fromSeconds: 400, toSeconds: 500, durationSeconds: 100 },
-        ]),
-      ],
-      owner,
-    );
-    expect(evts).toHaveLength(2);
-    expect(evts.map((e) => e.facts["heldS"])).toEqual(["120", "100"]);
-  });
-
-  it("owner kit 里没有被追踪的 CC 大招 → 零产出(三态)", () => {
-    expect(ccHeldEvents([], owner)).toEqual([]);
   });
 });
 

@@ -91,7 +91,6 @@ import {
   computePressureWindows,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
-  type IAvailableWindow,
   type IMajorCooldownInfo,
   isAllyCastableDefensive,
   isHealerSpec,
@@ -596,8 +595,9 @@ export function extractCandidateFindings(
       const t = ((d.timestamp ?? 0) - start) / 1000;
       const side =
         u.reaction === CombatUnitReaction.Friendly ? "friendly" : "enemy";
-      // Enemy-side deaths (kill review) demoted 2026-08-30 — see the flag.
-      if (side === "enemy" && !CANDIDATE_TYPE_FLAGS.killReview) continue;
+      // Enemy-side deaths (kill review) were demoted 2026-08-30 and their
+      // switch deleted 2026-11-11 (GH #150 D1; registry row `kill-review`).
+      if (side === "enemy") continue;
       out.push({
         id: `death:${u.id}:${Math.round(t)}`,
         type: "death",
@@ -970,14 +970,6 @@ const HEAL_GAP_CRISIS_HP_PCT = CRISIS_HP_PCT * 100;
 // the HP-crisis gate lands.)
 const HEALING_GAP_CAP = 2;
 const POSITION_MISTAKE_CAP = 2;
-// GH #34 batch 4 (2026-08-28), same corpus, 2,328 available windows of the
-// owner's CC majors (944/1,127 rounds have one): [0,30) 1,173 · [30,60) 610 ·
-// [60,90) 270 · [90,120) 112 · [120,180) 102 · [180,240) 57 · ≥ 240 4 (p50
-// 29.8 s, p90 101.8 s). Share that clears the gate: ≥ 60 s 23.4 % · **≥ 90 s
-// 11.8 %** · ≥ 120 s 7.0 % — 90 s sits in the decaying tail (≈ one full CC
-// cooldown of idle time), an editorial cut. Measured, not official.
-const CC_HELD_MIN_S = 90;
-const CC_HELD_CAP = 2;
 
 /**
  * DEFENSIVE-001 (cc-avoidable, 2026-08-07, BACKLOG #18 second batch, design:
@@ -3236,59 +3228,6 @@ export function positionMistakeEvents(
 }
 
 /**
- * cc-held mapping (COOLDOWN-001, pure function): the owner's own CC major
- * cooldown (`ccSpellIds` — the same set `matchTimeline.ts` uses to label
- * `[YOU] [CC]`) sat available for `>= CC_HELD_MIN_S` continuously
- * (`IMajorCooldownInfo.availableWindows`, the identical predicate `cd-waste`
- * consumes for defensives). Three-state: an owner with no CC major in their
- * tracked kit (`cds` has no id in `ccSpellIds`) naturally produces zero
- * candidates, not a fabricated "held nothing".
- */
-export function ccHeldEvents(
-  cds: Pick<IMajorCooldownInfo, "spellId" | "spellName" | "availableWindows">[],
-  owner: { id: string; name: string },
-): CandidateEvent[] {
-  const candidates: Array<{
-    spellId: string;
-    spellName: string;
-    window: IAvailableWindow;
-  }> = [];
-  for (const cd of cds) {
-    if (!isControlCast(cd.spellId)) continue;
-    for (const w of cd.availableWindows) {
-      if (w.durationSeconds >= CC_HELD_MIN_S) {
-        candidates.push({
-          spellId: cd.spellId,
-          spellName: cd.spellName,
-          window: w,
-        });
-      }
-    }
-  }
-  return candidates
-    .sort((a, b) => b.window.durationSeconds - a.window.durationSeconds)
-    .slice(0, CC_HELD_CAP)
-    .map(({ spellId, spellName, window }) => {
-      const t = toRenderSecond(window.fromSeconds);
-      const windowEndT = toRenderSecond(window.toSeconds);
-      return {
-        id: `cc-held:${owner.id}:${spellId}:${t}`,
-        type: "cc-held",
-        t,
-        unitNames: [owner.name],
-        spell: spellName,
-        spellId,
-        facts: {
-          t: String(t),
-          spell: spellName,
-          heldS: String(Math.round(window.durationSeconds)),
-          windowEndT: String(windowEndT),
-        },
-      };
-    });
-}
-
-/**
  * cc-avoidable wiring helper (DEFENSIVE-001): for one full-DR CC instance the
  * owner ate, return the display names of avoidance tools that were BOTH
  * (a) in the owner's kit — cast at least once anywhere in the match (the
@@ -4588,16 +4527,8 @@ function teamPlayEvents(
        position-mistake / cc-avoidable) absent */
   }
 
-  // cc-held (COOLDOWN-001, 2026-08-06): pure filter over ownerCds, already
-  // computed once by the caller (extractCandidateFindings) — no re-fetch.
-  // Demoted 2026-08-29 (GH #50 (d), flag ledger in docs/predicate-index.md).
-  if (CANDIDATE_TYPE_FLAGS.ccHeld) {
-    try {
-      out.push(...ccHeldEvents(ownerCds, owner));
-    } catch {
-      /* same as above */
-    }
-  }
+  // cc-held (COOLDOWN-001): demoted 2026-08-29 (GH #50 (d)); its mapper was
+  // deleted 2026-11-11 (GH #150 D1) — the registry row carries the numbers.
 
   // healing-gap (HEAL-001, 2026-08-06): healer-owner rounds only — mirrors
   // the "DPS owner only" gate dpsOwnerEvents uses on the other side.

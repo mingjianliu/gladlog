@@ -102,7 +102,6 @@ export const CHAIN_LEGENDS: Record<string, string> = {
   // No-causation guard (design doc, explicit): "sat available unused" is a
   // FACT about uptime; "and that's why you lost" is the banned inference —
   // do not let this legend, or a finding built from it, cross that line.
-  "cc-held": `- "cc-held": the player's control cooldown facts.spell sat AVAILABLE and unused for facts.heldS continuous seconds (facts.t to facts.windowEndT) — this is an uptime fact, not a claim that pressing it would have changed the outcome. Coach whether that stretch had a target worth using it on, or note that holding it may have been the correct call — never assert it "cost" anything.`,
   // DEFENSIVE-001 (2026-08-07, BACKLOG #18 second batch, design:
   // docs/superpowers/specs/2026-08-07-defensive-001-design.md).
   // No-causation guard: "X was available before it landed" is a FACT about

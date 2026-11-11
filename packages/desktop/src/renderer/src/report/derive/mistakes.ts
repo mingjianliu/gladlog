@@ -200,16 +200,6 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     source: "candidate",
   },
   {
-    // Opportunity-cost framing, same tier as cd-waste (never-used defensive):
-    // a control major sitting available is a fact about uptime, not a proven
-    // damage consequence — see the no-causation guard on this type's prompt
-    // legend (buildFindingsPrompt.ts).
-    type: "cc-held",
-    label: "压手未放",
-    severity: "minor",
-    source: "candidate",
-  },
-  {
     // DEFENSIVE-001 (2026-08-07, BACKLOG #18 second batch): a healer ate a
     // hard CC with a non-trinket avoidance tool evidenced-and-available
     // beforehand. Same opportunity-cost framing as cc-held (a fact about kit

@@ -75,8 +75,6 @@ export const CANDIDATE_TYPE_FLAG_KEYS = [
   "attemptIntoTrinket",
   "mdCycloneWindow",
   "missedPurge",
-  "ccHeld",
-  "killReview",
   "backlashDispel",
   "kickPriority",
   "teammateCrisis",
@@ -352,17 +350,6 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     reason:
       '19,019 个决策点(3,000 场新赛季归档)—— 威胁下按出之后 30s 内"被罚"(敌方进攻大 CD 命中且 10s 内有人阵亡)3.6%,空当按出之后仅 3.1%(Δ +0.5pp;前 10% 分段 −0.8pp;单排 −0.2pp)—— 指控没有可测量的代价。时间线冷却台账照旧;纯函数 cdSpentIdleEvents 与测试保留。数据:eval-private/reports/signal-outcomes-2026-08-30/report.md。',
   },
-  "cc-held": {
-    status: "retired",
-    surface: "card",
-    origin: "candidate",
-    flag: "ccHeld",
-    since: "2026-08-29",
-    issue:
-      "GH #50 (d) / GH #77 (normalised form re-tested 2026-09-11, still retired)",
-    reason:
-      "用户裁定「梯度仍平则下架」。机会归一化后的技能梯度(12.1 首周归档 10,682 场 / 23,056 回合;分母=我方对齐爆发开启时自己的控场大招可用,cdAvailableAt):转化率各分段 20–25%,单排未转化率 82.8→88.2% 随分数上升,胜负差 +2–4pp、2400+ 反转;前置窗口变体 [−10,+5]s 每段一致 +6pp、梯度依旧平。GH #77 的 casts-forfeited 口径预注册门 <50% 失败(79.5% 回合弃投)。纯函数 ccHeldEvents 保留。",
-  },
   "teammate-crisis-idle": {
     status: "retired",
     surface: "card",
@@ -393,25 +380,35 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     reason:
       "用户逐条裁定「降级为上下文事实」:触发率 63–79%(有高价值可偷增益的回合)、梯度 +4.0 但非单调(峰在中段);可行性门(purgeWasOnCD / purgersLockedOut / losReachable)齐全,所以不是可行性问题 —— 高分玩家同样不偷,「值不值得偷」这个价值判断不在判据里(getPriority 是先验非后果)。formatDispelContextForAI 的 [PURGEABLE] 事实行照旧进 prompt。Was menu-only even while live (DispelDashboard renders purge misses; the card would double count) — that is why it is in both the flag file and the desktop ignore set, not a double-kill.",
   },
-  "kill-review": {
-    status: "retired",
-    surface: "menu-only",
-    origin: "candidate",
-    flag: "killReview",
-    virtual: true,
-    since: "2026-08-30",
-    issue: "GH #18 human labels, ruling (d)",
-    reason:
-      'Not a type string: the side=enemy half of `death` ("your kill is worth repeating"), gated in candidateFindings.ts by CANDIDATE_TYPE_FLAGS.killReview. 3/3 blind-labelled cards generic/non-actionable, low or no impact, one causal reading disputed by the player. Kills stay in the timeline; side=friendly deaths unaffected.',
-  },
 
   // ─── deleted (no emitter; legend / deep-dive text may remain) ────────────
+  "cc-held": {
+    status: "deleted",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-11-11",
+    issue:
+      "GH #50 (d) / GH #77 (normalised form re-tested 2026-09-11, still retired)",
+    reason:
+      "用户裁定「梯度仍平则下架」。机会归一化后的技能梯度(12.1 首周归档 10,682 场 / 23,056 回合;分母=我方对齐爆发开启时自己的控场大招可用,cdAvailableAt):转化率各分段 20–25%,单排未转化率 82.8→88.2% 随分数上升,胜负差 +2–4pp、2400+ 反转;前置窗口变体 [−10,+5]s 每段一致 +6pp、梯度依旧平。GH #77 的 casts-forfeited 口径预注册门 <50% 失败(79.5% 回合弃投)。纯函数 ccHeldEvents 与开关 2026-11-11 删除(GH #150 D1)。",
+  },
+  "kill-review": {
+    status: "deleted",
+    surface: "menu-only",
+    origin: "candidate",
+    virtual: true,
+    since: "2026-11-11",
+    issue: "GH #18 human labels, ruling (d)",
+    reason:
+      'Not a type string: the side=enemy half of `death` ("your kill is worth repeating"), skipped in candidateFindings.ts (the killReview flag was deleted 2026-11-11, GH #150 D1). 3/3 blind-labelled cards generic/non-actionable, low or no impact, one causal reading disputed by the player. Kills stay in the timeline; side=friendly deaths unaffected.',
+  },
   "mana-pressure": {
     status: "deleted",
     surface: "card",
     origin: "candidate",
     since: "2026-11-11",
-    issue: "BACKLOG #26 (declined 2026-08-16) → #33 (declined 2026-09-05); GH #150 D2",
+    issue:
+      "BACKLOG #26 (declined 2026-08-16) → #33 (declined 2026-09-05); GH #150 D2",
     reason:
       'Killed at the value gate on sight of one real output ("you used too much mana here", detached from whether enemy burst forced it). Menu/legend/calibration wiring removed 2026-08-21; the producer was kept as raw material for #33, which the user declined on 2026-09-05. Producer and tests deleted 2026-11-11.',
   },
@@ -420,7 +417,8 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
     surface: "card",
     origin: "candidate",
     since: "2026-11-11",
-    issue: "BACKLOG #26 (declined 2026-08-16) → #33 (declined 2026-09-05); GH #150 D2",
+    issue:
+      "BACKLOG #26 (declined 2026-08-16) → #33 (declined 2026-09-05); GH #150 D2",
     reason:
       "Same batch and reason as mana-pressure. Producer and tests deleted 2026-11-11.",
   },
