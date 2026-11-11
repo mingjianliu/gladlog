@@ -500,6 +500,24 @@ export function computeOffensiveWindows(
     }
     return ivs;
   };
+  /** a holder's intervals of one spell (`holderIntervals`, grouped once) */
+  const intervalsOfSpell = new Map<string, Map<string, ISaveAuraInterval[]>>();
+  const holderIntervalsOfSpell = (
+    u: ICombatUnit,
+    spellId: string,
+  ): readonly ISaveAuraInterval[] => {
+    let bySpell = intervalsOfSpell.get(u.id);
+    if (!bySpell) {
+      bySpell = new Map();
+      for (const o of holderIntervals(u)) {
+        const list = bySpell.get(o.spellId);
+        if (list) list.push(o);
+        else bySpell.set(o.spellId, [o]);
+      }
+      intervalsOfSpell.set(u.id, bySpell);
+    }
+    return bySpell.get(spellId) ?? [];
+  };
   for (const caster of enemies) {
     for (const d of enemyDefensiveEvents(caster, enemies, combat)) {
       // F15 C1: a 15 % ally copy cuts no span, as a 15 % own aura does not
@@ -570,26 +588,31 @@ export function computeOffensiveWindows(
       // …up to the shield's next application, whose own absorbs they are
       // (codex 20-F17-04 #1: a shield at 10 s with no REMOVED, re-applied
       // at 100 s, read 10–102 s off the second one's absorb)
-      const nextApplicationMs = Math.min(
-        Infinity,
-        ...holderIntervals(holder)
-          .filter((o) => o.spellId === iv.spellId && o.fromS > iv.fromS)
-          .map((o) => matchStartMs + o.fromS * 1000),
-      );
-      const lastOwnAbsorbMs = iv.inferredEnd
-        ? Math.max(
-            -Infinity,
-            ...(holder.absorbsIn ?? [])
-              .filter(
-                (a) =>
-                  a.spellId === iv.spellId &&
-                  a.srcUnitId === iv.srcUnitId &&
-                  a.timestamp > matchStartMs + iv.toS * 1000 &&
-                  a.timestamp < nextApplicationMs,
-              )
-              .map((a) => a.timestamp),
-          )
-        : -Infinity;
+      // (read only for an inferred end, over the holder's runs of this
+      // spell alone — T39: every interval filtered the holder's whole list)
+      const nextApplicationMs = (): number =>
+        Math.min(
+          Infinity,
+          ...holderIntervalsOfSpell(holder, iv.spellId)
+            .filter((o) => o.fromS > iv.fromS)
+            .map((o) => matchStartMs + o.fromS * 1000),
+        );
+      let lastOwnAbsorbMs = -Infinity;
+      if (iv.inferredEnd) {
+        const nextMs = nextApplicationMs();
+        lastOwnAbsorbMs = Math.max(
+          -Infinity,
+          ...(holder.absorbsIn ?? [])
+            .filter(
+              (a) =>
+                a.spellId === iv.spellId &&
+                a.srcUnitId === iv.srcUnitId &&
+                a.timestamp > matchStartMs + iv.toS * 1000 &&
+                a.timestamp < nextMs,
+            )
+            .map((a) => a.timestamp),
+        );
+      }
       const runEndMs = Math.max(matchStartMs + iv.toS * 1000, lastOwnAbsorbMs);
       // …and a start the log wrote late — the run re-stated when its unseen
       // holder came back (`isResyncBatchAt`) — is no start while the shield
@@ -600,26 +623,29 @@ export function computeOffensiveWindows(
       // `ALLY_SHIELD_PRESS_PAIR_MS`, and the run counted for nothing inside
       // `defenseless 1:14–1:22`)
       const loggedStartMs = matchStartMs + iv.fromS * 1000;
-      const prevRunEndMs = Math.max(
-        -Infinity,
-        ...holderIntervals(holder)
-          .filter((o) => o.spellId === iv.spellId && o.toS < iv.fromS)
-          .map((o) => matchStartMs + o.toS * 1000),
-      );
-      const runStartMs = isResyncBatchAt(holder, loggedStartMs)
-        ? Math.min(
-            loggedStartMs,
-            ...(holder.absorbsIn ?? [])
-              .filter(
-                (a) =>
-                  a.spellId === iv.spellId &&
-                  a.srcUnitId === iv.srcUnitId &&
-                  a.timestamp > prevRunEndMs &&
-                  a.timestamp < loggedStartMs,
-              )
-              .map((a) => a.timestamp),
-          )
-        : loggedStartMs;
+      const prevRunEndMs = (): number =>
+        Math.max(
+          -Infinity,
+          ...holderIntervalsOfSpell(holder, iv.spellId)
+            .filter((o) => o.toS < iv.fromS)
+            .map((o) => matchStartMs + o.toS * 1000),
+        );
+      let runStartMs = loggedStartMs;
+      if (isResyncBatchAt(holder, loggedStartMs)) {
+        const prevEndMs = prevRunEndMs();
+        runStartMs = Math.min(
+          loggedStartMs,
+          ...(holder.absorbsIn ?? [])
+            .filter(
+              (a) =>
+                a.spellId === iv.spellId &&
+                a.srcUnitId === iv.srcUnitId &&
+                a.timestamp > prevEndMs &&
+                a.timestamp < loggedStartMs,
+            )
+            .map((a) => a.timestamp),
+        );
+      }
       const shieldCaster = enemies.find((u) => u.id === iv.srcUnitId);
       const shieldSpans = shieldCaster
         ? ownPressedShieldSpansMs(

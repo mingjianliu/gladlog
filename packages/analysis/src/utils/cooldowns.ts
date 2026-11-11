@@ -7907,6 +7907,55 @@ export function enemyBurstFilterOf(enemy: {
  * effect aura resolved to its cast by `offensiveCdOfAura`), not a
  * second cast+duration estimate (predicate-index.md: "Threat / pressure").
  */
+/** The unit's aura rows that are an offensive cooldown's effect, in log
+ * order, with the cooldown each stands for — the part of
+ * `hasOffensiveSpellActive`'s row loop that depends on the unit alone, read
+ * once per aura list (T39: every probe of every timestamp resolved every
+ * aura row of the unit again — 7.8 s of a ×12 report render). */
+interface IOffensiveAuraRow {
+  aura: ICombatUnit["auraEvents"][number];
+  spellId: string;
+  cdId: string;
+  casterSpec: unknown;
+}
+const OFFENSIVE_AURA_ROWS = new WeakMap<
+  object,
+  { unitId: string; spec: unknown; n: number; rows: IOffensiveAuraRow[] }
+>();
+function offensiveAuraRowsOf(unit: ICombatUnit): IOffensiveAuraRow[] {
+  const seen = OFFENSIVE_AURA_ROWS.get(unit.auraEvents);
+  if (
+    seen &&
+    seen.unitId === unit.id &&
+    seen.spec === unit.spec &&
+    seen.n === unit.auraEvents.length
+  )
+    return seen.rows;
+  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+  const notTheEnd = supersededAuraBreaks(unit.auraEvents);
+  const rows: IOffensiveAuraRow[] = [];
+  for (const aura of unit.auraEvents) {
+    const spellId = aura.spellId;
+    // the aura's own id or the cast it is the effect of (fact2 C10:
+    // Colossus Smash runs as 208086) — the filter asks about the cooldown
+    // a spec-gated cooldown (Convoke's channel) reads its caster's spec: the
+    // unit's own when the aura is
+    const casterSpec = aura.srcUnitId === unit.id ? unit.spec : undefined;
+    const cdId = spellId ? offensiveCdOfAura(spellId, casterSpec) : undefined;
+    if (!spellId || cdId === undefined) continue;
+    if (notTheEnd.has(aura)) continue;
+    if (OFFENSIVE_AURA_EVIDENCE.has(spellId)) continue;
+    rows.push({ aura, spellId, cdId, casterSpec });
+  }
+  OFFENSIVE_AURA_ROWS.set(unit.auraEvents, {
+    unitId: unit.id,
+    spec: unit.spec,
+    n: unit.auraEvents.length,
+    rows,
+  });
+  return rows;
+}
+
 export function hasOffensiveSpellActive(
   unit: ICombatUnit,
   timestampMs: number,
@@ -7933,19 +7982,7 @@ export function hasOffensiveSpellActive(
   const removed = new Map<string, number[]>();
   const refreshed = new Map<string, number[]>();
 
-  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
-  const notTheEnd = supersededAuraBreaks(unit.auraEvents);
-  for (const aura of unit.auraEvents) {
-    const spellId = aura.spellId;
-    // the aura's own id or the cast it is the effect of (fact2 C10:
-    // Colossus Smash runs as 208086) — the filter asks about the cooldown
-    // a spec-gated cooldown (Convoke's channel) reads its caster's spec: the
-    // unit's own when the aura is
-    const casterSpec = aura.srcUnitId === unit.id ? unit.spec : undefined;
-    const cdId = spellId ? offensiveCdOfAura(spellId, casterSpec) : undefined;
-    if (!spellId || cdId === undefined) continue;
-    if (notTheEnd.has(aura)) continue;
-    if (OFFENSIVE_AURA_EVIDENCE.has(spellId)) continue;
+  for (const { aura, spellId, cdId, casterSpec } of offensiveAuraRowsOf(unit)) {
     if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
       continue;
     // fact2 (2026-10-20): asked of ANY source, the unit's own offensive
@@ -8028,11 +8065,23 @@ export function hasOffensiveSpellActive(
  * When no advanced HP data is available, falls back to a role-based estimate derived
  * from typical arena HP pools at Gladiator ilvl rather than a flat value.
  */
+/** a unit's largest logged max HP, read once per advanced-action list (T39:
+ * every panic-press probe mapped and spread the whole list — 0.9 s of a ×12
+ * report render) */
+const MAX_HP_OF_ACTIONS = new WeakMap<object, { n: number; maxHp: number }>();
+function largestLoggedMaxHp(actions: ICombatUnit["advancedActions"]): number {
+  const seen = MAX_HP_OF_ACTIONS.get(actions);
+  if (seen && seen.n === actions.length) return seen.maxHp;
+  let maxHp = -Infinity;
+  for (const a of actions)
+    if (a.advancedActorMaxHp > maxHp) maxHp = a.advancedActorMaxHp;
+  MAX_HP_OF_ACTIONS.set(actions, { n: actions.length, maxHp });
+  return maxHp;
+}
+
 export function getPressureThreshold(unit: ICombatUnit): number {
   if (unit.advancedActions.length > 0) {
-    const maxHp = Math.max(
-      ...unit.advancedActions.map((a) => a.advancedActorMaxHp),
-    );
+    const maxHp = largestLoggedMaxHp(unit.advancedActions);
     if (maxHp > 0) return maxHp * PANIC_PRESS_PRESSURE_PCT;
   }
   // Role-based fallback: tanks absorb far more damage than the flat 250k implied

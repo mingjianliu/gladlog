@@ -1973,16 +1973,29 @@ export function saveAuraIntervals(
     if (!srcIdByName.has(a.srcUnitName))
       srcIdByName.set(a.srcUnitName, a.srcUnitId);
   }
-  const castSecondsOf = (srcUnitName: string, spellId: string): number[] => {
-    const srcId = srcIdByName.get(srcUnitName);
-    return pressSecondsOfAura(
-      (srcId !== undefined
-        ? castersById.get(srcId)
-        : team.find((e) => e.name === srcUnitName)
-      )?.spellCastEvents,
-      spellId,
-      combat.startTime,
-    );
+  // one read of a caster's cast rows per (caster, spell), not one per
+  // interval (T39: every interval of the unit filtered the caster's whole
+  // cast list — 3.1 s of a ×12 report render)
+  const castSecondsMemo = new Map<string, readonly number[]>();
+  const castSecondsOf = (
+    srcUnitName: string,
+    spellId: string,
+  ): readonly number[] => {
+    const key = `${spellId}\u0000${srcUnitName}`;
+    let seconds = castSecondsMemo.get(key);
+    if (!seconds) {
+      const srcId = srcIdByName.get(srcUnitName);
+      seconds = pressSecondsOfAura(
+        (srcId !== undefined
+          ? castersById.get(srcId)
+          : team.find((e) => e.name === srcUnitName)
+        )?.spellCastEvents,
+        spellId,
+        combat.startTime,
+      );
+      castSecondsMemo.set(key, seconds);
+    }
+    return seconds;
   };
   // a re-announced aura is already one interval (`joinReappliedIntervals`
   // runs inside `buildAuraIntervals`, GH #136.3)
