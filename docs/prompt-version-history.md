@@ -6056,3 +6056,12 @@ off-table rows. scan5 `auditSplitLabel` kind=duplicate on 605: 9 rows / 3 facts
 → 0 on the 3 archives that hold all of them; findings files identical there.
 Correction to v522: "the other 204 checks" should read 210. Batch verified on
 tests + codex (user 11-08); 605 / cover / wide run at the end of the wave.
+
+v524 (2026-11-10; pipeline batch B36, T49 follow-up). No rendered change; the
+number moves only because a pipeline batch carries one. v523's burst-ledger
+no-press reading called `enemyDefensiveEvents` for every enemy once per burst,
+which put the ×12 report first-paint check over its budget on CI (frontend-qa
+red on v523's commit). `analyzeBurstLedger` now reads those events once, lazily.
+20 rounds rendered on v523 and on this commit: 285 owner contexts and their
+findings files byte-identical; the ×12 MatchReport render 66.1 s → 31.9 s (same
+machine, back to back, single runs under other load).

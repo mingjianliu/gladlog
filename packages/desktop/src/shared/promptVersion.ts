@@ -1082,4 +1082,10 @@
  *  up; the death audit prints one row for one press's two off-table auras.
  *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 523;
+/*
+ * v524 (2026-11-10; pipeline batch B36, T49 follow-up): no rendered change.
+ *  v523's no-press reading re-read every enemy's defensive events once per
+ *  burst; it now reads them once per ledger. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 524;
