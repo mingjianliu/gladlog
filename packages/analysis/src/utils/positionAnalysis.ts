@@ -50,6 +50,7 @@ import {
   positionSampleInstants,
 } from "./positionSampling";
 import { fmtTime, toRenderSecond } from "./renderGrid";
+import { rootIntervalsOf } from "./rootReachability";
 import { buildRosterSides, type RosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
 import { ccMechanicOf, SNARED_MECHANIC } from "./spellMechanics";
@@ -816,8 +817,10 @@ export function computeOwnerPositionEvents(params: {
   };
   burstWindows: readonly IAlignedBurstWindow[];
   ownerCooldowns: IMajorCooldownInfo[];
-  /** The owner's `analyzePlayerCCAndTrinket` summary. `rootInstances` (same
-   *  summary) feed the STAYED_IN / KITED skip rule and the root seconds. */
+  /** The owner's `analyzePlayerCCAndTrinket` summary. Its `rootInstances`
+   *  say the root seconds are known; the roots themselves — the STAYED_IN /
+   *  KITED skip rule and the root seconds — are the owner's movement roots
+   *  (`rootIntervalsOf`, T44), the summary's only without an aura stream. */
   ownerCCSummary?: {
     ccInstances: Array<Pick<ICCInstance, "atSeconds" | "durationSeconds">>;
     rootInstances?: Array<{ atSeconds: number; durationSeconds: number }>;
@@ -884,7 +887,21 @@ export function computeOwnerPositionEvents(params: {
   if ((owner.advancedActions ?? []).length === 0) return [];
 
   const ccInstances = ownerCCSummary?.ccInstances ?? [];
-  const rootInstances = ownerCCSummary?.rootInstances;
+  // T44 (c5a44642-r0 2:16): "could the owner move" is the movement-root
+  // predicate (`rootIntervalsOf`, `ROOT_SPELL_IDS`) — the one [ROOT] lines
+  // and the kick run budget read. The summary's `rootInstances` are the
+  // control-response set (spellTags' `rootSpellIds`, a strict subset): a
+  // Charge root 105771 on the owner read `rootS=0`. The summary's stay the
+  // fallback for a fixture with no aura stream, and its absence still means
+  // "unknown" (three-state).
+  const rootInstances:
+    Array<{ atSeconds: number; durationSeconds: number }> | undefined =
+    ownerCCSummary?.rootInstances && owner.auraEvents
+      ? rootIntervalsOf(owner, combat).map((iv) => ({
+          atSeconds: iv.fromS,
+          durationSeconds: iv.toS - iv.fromS,
+        }))
+      : ownerCCSummary?.rootInstances;
   // The owner's OWN all-school immunities (`isOwnImmunityInterval`).
   // (bare fixtures carry no aura stream)
   const ownerAuraIntervals = owner.auraEvents

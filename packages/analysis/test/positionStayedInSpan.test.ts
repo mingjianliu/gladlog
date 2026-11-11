@@ -259,6 +259,34 @@ describe("STAYED IN: CC / root seconds and the skip rule (F-S2)", () => {
     expect(text).toContain(" — rooted 4s (4s in all)");
   });
 
+  it("T44 (c5a44642-r0 2:16): the root seconds are the owner's movement roots — a Charge root the control-response summary leaves out counts", () => {
+    const row = (event: string, s: number, spellId: string, src = "e1") => ({
+      spellId,
+      spellName: spellId === "105771" ? "Charge" : "Own",
+      srcUnitId: src,
+      srcUnitName: src === "e1" ? "Dk-R-US" : "Owner-R-US",
+      destUnitId: "o",
+      destUnitName: "Owner-R-US",
+      auraType: "DEBUFF",
+      timestamp: T0 + s * 1000,
+      logLine: { event, timestamp: T0 + s * 1000 },
+    });
+    const o = OWNER();
+    o.auraEvents = [
+      row("SPELL_AURA_APPLIED", 16.8, "105771"),
+      row("SPELL_AURA_REMOVED", 17.8, "105771"),
+    ];
+    // the summary (spellTags' rootSpellIds) saw no root at all
+    const summary = { ccInstances: [], rootInstances: [] };
+    const [e] = stayed(run(o, [o], { ownerCCSummary: summary }));
+    expect(e!.ownerRootSeconds).toBeCloseTo(1, 6);
+    expect(formatPositionEventsForContext([e!]).join("\n")).toContain(
+      " — rooted 1s",
+    );
+    // three-state kept: with no summary the seconds stay unknown
+    expect(stayed(run(o, [o]))[0]!.ownerRootSeconds).toBeUndefined();
+  });
+
   it("WO3 #15: an enemy snare (DB2 mechanic snared) is carried as its own seconds; a friendly one or an unknown stream is not", () => {
     const aura = (event: string, s: number, src: string, srcName: string, spellId = "1715") => ({
       spellId,
