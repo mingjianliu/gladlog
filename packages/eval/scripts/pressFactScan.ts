@@ -270,13 +270,21 @@ function runRound(ctx: IContext): void {
         {
           let lastApplied: number | undefined;
           let lastRemoved: number | undefined;
+          // open by row order, not by comparing the two stamps: a form that
+          // re-sends itself logs REMOVED then APPLIED in one millisecond, and
+          // an APPLIED over that still-open aura is the same aura (GH #173
+          // item 13: Ancient of Lore re-applied 1.7 s after such a pair)
+          let open = false;
           for (const x of (u.auraEvents ?? []) as IAuraEvent[]) {
             if (x === a) break;
             if (x.spellId !== a.spellId || x.destUnitId !== u.id) continue;
-            if (x.logLine.event === LogEvent.SPELL_AURA_APPLIED)
+            if (x.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
               lastApplied = x.logLine.timestamp;
-            else if (x.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+              open = true;
+            } else if (x.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
               lastRemoved = x.logLine.timestamp;
+              open = false;
+            }
           }
           // an application never seen to end holds only its official
           // length (codex 20-F15-34: a Barkskin at 10 s with no REMOVED
@@ -284,7 +292,7 @@ function runRound(ctx: IContext): void {
           const lenS = buffFullDurationForCaster(a.spellId, u, lastApplied);
           const continues =
             lastApplied !== undefined &&
-            (lastRemoved === undefined || lastRemoved < lastApplied
+            (open || lastRemoved === undefined
               ? lenS === undefined || ts - lastApplied <= lenS * 1000
               : ts - lastRemoved <= AURA_REBROADCAST_GAP_MS);
           const dead = (

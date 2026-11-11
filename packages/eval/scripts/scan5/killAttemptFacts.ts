@@ -228,21 +228,32 @@ function run1(ctx: IRoundCtx, line: string): void {
               ev(a) === "SPELL_AURA_APPLIED" &&
               Math.abs(tsOf(a) - tsOf(c)) <= 300,
           );
-          // where the press went: the caster's own damage over the bracket,
-          // the target its most-hit enemy (a splash on the press aims nothing)
-          const dealt = new Map<string, number>();
-          for (const d of (f.damageOut ?? []) as any[]) {
-            const t = d.logLine.timestamp;
-            if (t < fromMs || t >= toMs || !enemyIds.has(d.destUnitId))
-              continue;
-            dealt.set(
-              d.destUnitId,
-              (dealt.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount ?? 0),
+          // where the press went: the caster's own damage from the press to
+          // the bracket's end, the target its most-hit enemy (a splash on the
+          // press aims nothing). The product sums from the press's own
+          // millisecond to the bracket's own end; the line prints both floored
+          // to the second, so the end is read at both edges of its printed
+          // second and the press is an opener only when the target leads at
+          // both (GH #173 item 18: a Volley at 4:57.67 whose caster led on the
+          // target only with the 0.67 s before it counted in)
+          const leadsTo = (endMs: number): boolean => {
+            const dealt = new Map<string, number>();
+            for (const d of (f.damageOut ?? []) as any[]) {
+              const t = d.logLine.timestamp;
+              if (t < tsOf(c) || t > endMs || !enemyIds.has(d.destUnitId))
+                continue;
+              dealt.set(
+                d.destUnitId,
+                (dealt.get(d.destUnitId) ?? 0) +
+                  Math.abs(d.effectiveAmount ?? 0),
+              );
+            }
+            const onTarget = dealt.get(target.id) ?? 0;
+            return (
+              onTarget > 0 && [...dealt.values()].every((v) => v <= onTarget)
             );
-          }
-          const onTarget = dealt.get(target.id) ?? 0;
-          const hitTarget =
-            onTarget > 0 && [...dealt.values()].every((v) => v <= onTarget);
+          };
+          const hitTarget = leadsTo(toMs - 1000) && leadsTo(toMs);
           if (selfBuff && hitTarget)
             ctx.violate(
               "killAnchorSkippedOpener",

@@ -1094,8 +1094,31 @@ function runRound(ctx: IContext): void {
             x.destUnitId === u.id &&
             String(x.spellId) !== String(ext.spellId) &&
             tsOf(x) >= aMs - 1500 &&
-            tsOf(x) <= aMs + 500,
+            // the span's start is printed floored: its own millisecond lies
+            // anywhere in that second (GH #173 item 20, 130-1 r1 3:33: Phase
+            // Shift REMOVED at 3:33.66 opened the span)
+            tsOf(x) < aMs + 1000,
         )
+      )
+        continue;
+      // …nor did a press of the unit's own run out there: the product holds
+      // "not defenseless" for a press's official length from its cast row,
+      // whatever its aura did (ruling D6) — 122-1 r1 4:16: Divine Hymn
+      // pressed 4:11.4, its 5 s ending at 4:16.4
+      if (
+        successesOf(u).some((c) => {
+          const id = String(c.spellId ?? "");
+          if (id === String(ext.spellId)) return false;
+          if (
+            c.destUnitId &&
+            c.destUnitId !== u.id &&
+            !/^0+$/.test(c.destUnitId)
+          )
+            return false;
+          const d = official[id]?.durationSeconds ?? 0;
+          const end = tsOf(c) + d * 1000;
+          return d > 0 && end >= aMs - 1500 && end < aMs + 1000;
+        })
       )
         continue;
       violate(
