@@ -6065,3 +6065,14 @@ red on v523's commit). `analyzeBurstLedger` now reads those events once, lazily.
 20 rounds rendered on v523 and on this commit: 285 owner contexts and their
 findings files byte-identical; the ×12 MatchReport render 66.1 s → 31.9 s (same
 machine, back to back, single runs under other load).
+
+v525 (2026-11-10; pipeline batch B37, T39). No rendered change. The ×12 report
+first-paint ratio on CI stood at 5.397 after v524 (budget 5.2; 4.953 on v522).
+Read once instead of per row: `prevRunEndMs` and `nextApplicationMs` are lazy
+and indexed (`computeOffensiveWindows` 12.1 → 4.0 s of the profiled render),
+press seconds are memoised in `saveAuraIntervals` (7.9 → 3.2 s),
+`hasOffensiveSpellActive` resolves its unit-only rows once, and
+`getPressureThreshold` reads max HP once. 20 rounds rendered on v524 and on
+this commit: 285 owner contexts and their findings files byte-identical. The
+×12 render under a CPU profile, same machine back to back: v522 35.2 s, v524
+34.7 s, this commit 16.7 s.

@@ -1088,4 +1088,9 @@
  *  burst; it now reads them once per ledger. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 524;
+/*
+ * v525 (2026-11-10; pipeline batch B37, T39): no rendered change. The report
+ *  render's per-row repeats are read once (offensive windows, aura-interval
+ *  press seconds, pressure threshold). See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 525;
