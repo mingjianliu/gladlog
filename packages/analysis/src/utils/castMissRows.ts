@@ -136,7 +136,9 @@ export interface IMissTwinRow {
  * millisecond), or as two parts of one control in one rendered second (wide
  * 197-3 2:33: Binding Shot's tether 117405 and its stun 117526, 315 ms
  * apart): the same miss type, and within `CAST_MISS_LEAD_MS` of each other or
- * the same English name in the same rendered second. Whose rows they are (the
+ * the same English name in the same rendered second — or, whatever the miss
+ * types, the same English name within `CAST_MISS_LEAD_MS` (GH #205: two
+ * effects of one press, each refused its own way). Whose rows they are (the
  * caster, its summon) and on whom is the caller's to ask. Readers:
  * `[CC NOT LANDED]` (`missStatedOnAnotherLine`) and the ENEMY CC KIT's
  * `aimed at … N×` (`aimedControlsForKit`), which counts presses.
@@ -146,15 +148,20 @@ export function isTwinMissRow(
   b: IMissTwinRow,
   matchStartMs: number,
 ): boolean {
-  if (a.missType !== b.missType) return false;
-  if (Math.abs(a.timestamp - b.timestamp) <= CAST_MISS_LEAD_MS) return true;
   const nameOf = (x: IMissTwinRow) =>
     getEnglishSpellName(x.spellId ?? "", x.spellName ?? "");
+  const sameName = nameOf(a) !== "" && nameOf(a) === nameOf(b);
+  const together = Math.abs(a.timestamp - b.timestamp) <= CAST_MISS_LEAD_MS;
+  // GH #205 (T37): two effects of one press can each be refused its own way
+  // — Holy Word: Chastise's stun 200200 IMMUNE and its damage 88625 MISS,
+  // 1 ms apart, read "aimed at them 2×" for one press. Rows of one name in
+  // one instant are one press, whatever each row's miss type.
+  if (sameName && together) return true;
+  if (a.missType !== b.missType) return false;
+  if (together) return true;
   const secondOf = (x: IMissTwinRow) =>
     toRenderSecond((x.timestamp - matchStartMs) / 1000);
-  return (
-    nameOf(a) !== "" && nameOf(a) === nameOf(b) && secondOf(a) === secondOf(b)
-  );
+  return sameName && secondOf(a) === secondOf(b);
 }
 
 /**

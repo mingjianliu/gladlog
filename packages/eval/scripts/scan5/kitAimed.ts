@@ -8,15 +8,21 @@
  * summons, under the entry's English name, inside the round. One press can
  * log its failure twice — under the cast id and under its control effect's
  * id, in one millisecond (ee79ddb7 r0 0:45: Intimidation 474421 + 24394, both
- * IMMUNE under a Cyclone) — so rows of one enemy and one name less than a
- * second apart are one press: no control is pressed twice by one player
- * inside a second.
+ * IMMUNE under a Cyclone) — or as two effects each refused its own way
+ * (GH #205: Holy Word: Chastise's stun IMMUNE and its damage MISS, 1 ms
+ * apart). Which rows are one press is the producer's own rule, imported
+ * (`isTwinMissRow`), not a second grouping here: the two used to disagree.
+ * What this check owns is the row set — whose rows, which miss types, which
+ * name, inside the round.
  *
  * Check `kitAimedCount`, kinds:
  *  - `rowsCounted`: N is more than the presses;
  *  - `pressesMissed`: N is fewer.
  */
-import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
+import {
+  CONTROL_FAILED_MISS_TYPES,
+  isTwinMissRow,
+} from "@gladlog/analysis/src/utils/castMissRows";
 
 import { type IRoundCtx, nameOf } from "./ctx";
 
@@ -26,8 +32,6 @@ const KIT = /^ENEMY CC KIT \(threats to (?:your healer (\d+)\S* at|you\b)/;
 const ENEMY = /^(.+?) \((\S+)\): (.+)$/;
 const AIMED =
   /(?:^|, )([^,[(]+?)(?: \[[^\]]+\])? \(aimed at (?:you|them) (\d+)×, never landed\)/g;
-/** rows of one press are this close, or closer */
-const ONE_PRESS_MS = 1000;
 
 export function run(ctx: IRoundCtx): void {
   const line = [...ctx.lines, ...ctx.menu.split("\n")].find((l) => KIT.test(l));
@@ -57,19 +61,19 @@ export function run(ctx: IRoundCtx): void {
                 enemy.id) &&
             nameOf(m.spellId, m.spellName ?? "") === spellName,
         )
-        .map((m) => m.timestamp as number)
-        .sort((x, y) => x - y);
-      let presses = 0;
-      let last = -Infinity;
-      for (const t of rows) {
-        if (t - last >= ONE_PRESS_MS) presses++;
-        last = t;
-      }
+        .sort((x, y) => x.timestamp - y.timestamp);
+      // the producer's own press rule: a row that is the twin of one already
+      // counted is that press
+      const counted: any[] = [];
+      for (const m of rows)
+        if (!counted.some((r) => isTwinMissRow(r, m, ctx.start)))
+          counted.push(m);
+      const presses = counted.length;
       if (presses === 0 || printed === presses) continue;
       ctx.violate(
         "kitAimedCount",
         printed > presses ? "rowsCounted" : "pressesMissed",
-        rows[0]!,
+        rows[0]!.timestamp,
         `${e[2]}|${spellName}`,
         `printed ${printed}×, presses ${presses} (rows ${rows.length})`,
         line,
