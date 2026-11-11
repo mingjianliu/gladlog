@@ -1099,4 +1099,12 @@
  *  #6. Reference numbers only; no candidate row added or removed on 605. See
  *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 526;
+/*
+ * v527 (2026-11-11; pipeline batch B39, T72 + T47, ruling R19): a cast bar
+ *  the next bar replaced with no row is a cancel (kick-eaten yourCancels /
+ *  baitedKicks); five 45 s damage
+ *  buttons with no use condition are major offensive cooldowns — Reaper's
+ *  Mark, Odyn's Fury, Meteor, Goremaw's Bite, Mindgames. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 527;

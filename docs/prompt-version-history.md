@@ -6099,3 +6099,47 @@ Soul Immolation, `[CD PRIOR]`); captureFamilyDiff flags 0 families (body lines
 1,755,250 → 1,755,253). Not in these tables: the commits after 4882aca85 (v523
 T46's school-lock reading feeds the kick tables and the recast floors; v523
 T49 / T59 and v524–525 read none of them).
+
+v527 (2026-11-11; pipeline batch B39, T72 + T47; user ruling R19). (1) T72 — five 45 s damage
+buttons with no use condition are major offensive cooldowns: Reaper's Mark
+439843, Odyn's Fury 385059, Meteor 153561, Goremaw's Bite 426591, Mindgames
+375901 — roster Offensive rows, out of `OFFENSIVE_PRESS_FACT_IDS`, so members
+of `OFFENSIVE_CD_SPELL_IDS` (75 → 80); these five only. Window lengths:
+Reaper's Mark / Goremaw's Bite / Odyn's Fury run on their effect auras (12 /
+14 / 4 s; an application the log never closes keeps the official length, read
+on player wearers, never the next application's end), Mindgames on its own
+7 s, Meteor has no effect aura and takes the instant member's existing forms
+(8 s in `[RES] enemy:`, a zero-length burst-ledger span, as Soul Fire). No new
+line type or wording. Example: a kill-window line `team offensive CDs ready at
+2:36: none (… pressed inside: Avatar 2:45、Recklessness 2:45)` now reads `ready
+at 2:36: Odyn's Fury (… pressed inside: Avatar 2:45、Recklessness 2:45、Odyn's
+Fury 2:46)`. On 605 (branch capture against the capture of v522's tree): scan5
+t72 `ruledOffensivePress` 890 of 890 presses → 0 (Meteor 306, Goremaw's Bite
+296, Odyn's Fury 166, Reaper's Mark 117, Mindgames 5);
+`killWindowRuledPressUnnamed` 260 of 260 → 0. Candidate rows 7,401 → 7,430:
+missed-sync-window 687 → 709 (+46 −24; of the 24, 19 gained an entering press
+or effect and 5 were displaced by the candidate cap), kick-eaten 1,855 → 1,857
+(+5 −3), position-mistake 154 → 158 (+6 −2), slow-defensive-response 109 → 110
+(+1). 821 context and 142 menu files differ. Known and left: Mindgames is 4
+Discipline presses of its 5 on 605 — the team-ready list leaves a healer's
+out, the enemy side shows it as an offensive cooldown (R19 rules the button in
+without a spec split); `pressInsideLockNotEntered` reads 3 facts at the scan's
+own −2 s / +1 s edges. The burst-window and sync-window reference tables were
+generated with the five outside the offensive set (GH #115). The capture
+predates v526's tables. (2) T47 — a cast bar the unit's next bar replaced with no row of its
+spell in between is a cancel. A stop-casting restart writes no `Interrupted`
+SPELL_CAST_FAILED row, so `castBarOutcomesOf` read the bar `none` and the
+cancel ledger never saw it; `none` gains `superseded` (an instant START
+supersedes nothing; a failure row in the START's own millisecond, or another
+player's death inside the stretch, keeps the old reading), counted as an
+unlogged cancel only when the round has a completed bar of the same spell
+(`castCancels.isUnloggedCancelInRound`). Readers: kick-eaten `yourCancels` /
+`yourCancelMedianPct` / `baitedKicks` / `baitedThisKickerT` /
+`stoppedJustBefore`, and the desktop cast-control view (an unlogged cancel is
+placed at its bar's start). No line type or wording added. On the audited
+round: three kick-eaten rows `yourCancels=0, baitedKicks=0` → `yourCancels=4,
+baitedKicks=2`. On 605: scan5 t47 `unloggedStopNotCancel` 37 of 37 → 0;
+`jukedNotBaited` 5 of 258 → 1; 44 kick-eaten rows in 18 files change facts
+(`yourCancels` +48 summed, `baitedKicks` in 4); candidate ids 0 added, 0
+removed; 0 of 3,519 context files differ. Batch verified on tests + codex (user 11-08); 605 /
+cover / wide run at the end of the wave.
