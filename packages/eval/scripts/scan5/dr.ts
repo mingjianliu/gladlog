@@ -13,7 +13,9 @@
  * application per `spellId|source`: an APPLIED while it is open is the same
  * application (a re-send) unless its source (or its owner) recast it in
  * between (`castsOfEffectAura` / same name — a lookup) or it ran past its
- * official length; a REMOVED → APPLIED ≤ 50 ms is a re-broadcast (merged);
+ * official length; a REMOVED → APPLIED within `AURA_REBROADCAST_GAP_MS` (the
+ * product's measured gap, a constant of the log) is a re-broadcast (merged)
+ * unless a recast put it there;
  * every REFRESH of an open application is a new application, recast or not
  * (the game re-times it at the next tier — F20 dr, measured). It ends at
  * its REMOVED (a BROKEN row names the breaker as source; the REMOVED that
@@ -60,6 +62,7 @@
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { ccFullDurationSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { CAST_ROW_LAG_MAX_MS } from "@gladlog/analysis/src/utils/castRowLag";
 import { ccLandingStateAt } from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import { ccFullDurationForApplication } from "@gladlog/analysis/src/utils/ccDuration";
@@ -273,9 +276,16 @@ export function run(ctx: IRoundCtx): void {
         // 50.366 Cheap Shot cast → REMOVED 50.367 → APPLIED 50.368): look
         // back from the APPLIED, past the opening, at casts at the holder
         const lc = lastClosed.get(key);
+        // The gap is the product's measured one (`AURA_REBROADCAST_GAP_MS`:
+        // every control re-broadcast of 7,770 measured pairs sits at 0–1 ms),
+        // not this file's 50 ms recast lead (GH #177 item 11: a Garrote -
+        // Silence REMOVED at 2.992 s of its 3 s and APPLIED again 45 ms later
+        // by a Garrote 703 the cast table does not link to 1330 — the second
+        // ran 1.49 s, the 50 % tier, and the third was logged IMMUNE; merged,
+        // the check read the third at 50 %).
         if (
           lc &&
-          t - lc.end <= REBROADCAST_MS &&
+          t - lc.end <= AURA_REBROADCAST_GAP_MS &&
           !recast(
             lc.src,
             id,
