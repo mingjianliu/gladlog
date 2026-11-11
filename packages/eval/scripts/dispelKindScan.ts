@@ -12,7 +12,7 @@
  *    patch renumbered (expected: empty).
  *
  * Runs over raw.txt of every match in the local library with the SAME
- * reading the product uses: `dispelKindOfRow` (the actor rewrite, then
+ * reading the product uses: `dispelAsPressed` (the actor rewrite, then
  * `classifyDispel`) over a `CastMatchIndex` built from SPELL_CAST_SUCCESS and
  * SPELL_EMPOWER_END lines keyed by the raw source GUID, a pet's owner read off
  * its own cast rows and a side off the rows' reaction flags. Raw-line splitting
@@ -32,6 +32,7 @@ import { parseArgs } from "node:util";
 import {
   addCastToIndex,
   createCastMatchIndex,
+  dispelAsPressed,
   type DispelKind,
   MOVEMENT_ROOT_BREAK_DISPEL_IDS,
   parseRawTimestamp,
@@ -39,7 +40,6 @@ import {
 } from "@gladlog/analysis";
 
 import { DEFAULT_MATCH_DIR } from "../src/explore/storeAccess";
-import { dispelKindOfRow } from "./dispelKindOfRow";
 
 const { values } = parseArgs({
   options: {
@@ -112,7 +112,7 @@ async function scanMatch(path: string): Promise<void> {
   }
   let passive = 0;
   for (const d of dispels) {
-    const kind = dispelKindOfRow(
+    const { kind } = dispelAsPressed(
       idx,
       { ...d, srcOwnerId: owners.get(d.srcUnitId) },
       (presser) => sides.get(presser) === sides.get(d.srcUnitId),

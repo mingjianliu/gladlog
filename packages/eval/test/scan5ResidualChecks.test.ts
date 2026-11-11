@@ -7,6 +7,7 @@ import {
   addCastToIndex,
   buildCastMatchIndex,
   createCastMatchIndex,
+  dispelAsPressed,
   ensureAnalysisData,
   reconstructDispelSummary,
 } from "@gladlog/analysis";
@@ -14,7 +15,6 @@ import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { makeUnit } from "../../analysis/test/ported/testHelpers";
-import { dispelKindOfRow } from "../scripts/dispelKindOfRow";
 import { run as runCastThroughStun } from "../scripts/scan5/castThroughStun";
 import { run as runDamageBasis } from "../scripts/scan5/damageBasis";
 import { run as runFact8 } from "../scripts/scan5/fact8";
@@ -1279,6 +1279,43 @@ describe("killAnchorSkippedOpener", () => {
     expect(of(seen, "killAnchorSkippedOpener")).toEqual([]);
   });
 
+  // GH #173 item 18 (605 160-1 r1 4:57): the product sums from the press's
+  // own millisecond; the check read the whole printed second.
+  it("what the caster did before the press, inside its second, aims nothing", () => {
+    const seen = scan(
+      runKillAttemptFacts,
+      team({
+        ...wings,
+        damageOut: [
+          hit(85_100, "Target", 900), // before the 1:25.276 press
+          hit(86_000, "Target", 100),
+          hit(87_000, "Other", 500),
+        ],
+      }),
+      [line("Ultimate Penitence")],
+    );
+    expect(of(seen, "killAnchorSkippedOpener")).toEqual([]);
+  });
+
+  it("the bracket's end is read at both edges of its printed second", () => {
+    const tail = (ms: number) =>
+      of(
+        scan(
+          runKillAttemptFacts,
+          team({
+            ...wings,
+            damageOut: [hit(86_000, "Target", 100), hit(ms, "Other", 900)],
+          }),
+          [line("Ultimate Penitence")],
+        ),
+        "killAnchorSkippedOpener",
+      );
+    // inside the printed last second (1:37.x): the target leads at one edge only
+    expect(tail(97_500)).toEqual([]);
+    // past the printed second: the target leads at both
+    expect(tail(98_500)).toHaveLength(1);
+  });
+
   it("a Holy Paladin's Avenging Wrath opens no attempt (signed), a Retribution's does", () => {
     const seen = scan(
       runKillAttemptFacts,
@@ -1865,6 +1902,25 @@ describe("rotDotCount", () => {
     expect(seen(rows, 1)).toHaveLength(1);
   });
 
+  // GH #173 item 19 (605 13-1 r1 2:06): a tick a shield ate is a tick
+  it("a lost-REMOVED run still ticking into shields past its official length is on", () => {
+    const rows = {
+      auraEvents: [
+        debuff(LogEvent.SPELL_AURA_APPLIED, 10_000, "589", "Priest"),
+        debuff(LogEvent.SPELL_AURA_APPLIED, 45_000, "589", "Priest"),
+      ],
+      damageIn: [tick(11_000, "589", "Priest")],
+      missesIn: [
+        rowOf(LogEvent.SPELL_PERIODIC_MISSED, 40_500, {
+          spellId: "589",
+          srcUnitId: "Priest",
+        }),
+      ],
+    };
+    expect(seen(rows, 1)).toEqual([]);
+    expect(seen(rows, 0)).toHaveLength(1);
+  });
+
   it("a REMOVED under the controller is the Mind-Controlled caster's run ending, not a lost one", () => {
     const rows = {
       auraEvents: [
@@ -2173,7 +2229,7 @@ describe("silenceFiledAsKick", () => {
   });
 });
 
-describe("dispelKindOfRow: the audit readers' kind is the product's", () => {
+describe("dispelAsPressed: the audit readers' kind is the product's", () => {
   const BANDAGE = "212640";
   const T = 1_026_200;
   const dispelCast = (srcUnitId: string, ms: number, destUnitId?: string) => ({
@@ -2222,7 +2278,7 @@ describe("dispelKindOfRow: the audit readers' kind is the product's", () => {
       { startTime: 1_000_000, endTime: 1_100_000 },
     ).allyCleanse[0]!.dispelKind;
     const units = [hunter, lock, foe];
-    const audit = dispelKindOfRow(
+    const audit = dispelAsPressed(
       buildCastMatchIndex(units),
       {
         srcUnitId: "lock",
@@ -2231,7 +2287,7 @@ describe("dispelKindOfRow: the audit readers' kind is the product's", () => {
         timestamp: T,
       },
       (id) => units.find((u) => u.id === id)?.reaction === lock.reaction,
-    );
+    ).kind;
     return { product, audit };
   };
 
@@ -2264,7 +2320,7 @@ describe("dispelKindOfRow: the audit readers' kind is the product's", () => {
     const i = createCastMatchIndex();
     addCastToIndex(i, "hunter", BANDAGE, "Mending Bandage", T - 5_000, "lock");
     expect(
-      dispelKindOfRow(
+      dispelAsPressed(
         i,
         {
           srcUnitId: "lock",
@@ -2273,7 +2329,7 @@ describe("dispelKindOfRow: the audit readers' kind is the product's", () => {
           timestamp: T,
         },
         () => true,
-      ),
+      ).kind,
     ).toBe("proc");
   });
 });

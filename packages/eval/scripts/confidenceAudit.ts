@@ -23,6 +23,7 @@
  */
 import {
   buildCastMatchIndex,
+  dispelAsPressed,
   type DispelKind,
   ensureAnalysisData,
   extractCandidateFindings,
@@ -36,8 +37,6 @@ import {
 } from "@gladlog/parser-compat";
 import { readFileSync } from "fs";
 import { gunzipSync } from "zlib";
-
-import { dispelKindOfRow } from "./dispelKindOfRow";
 
 // Prompt builders read the background-loaded talent / spell-name tables
 // (data/ensure.ts contract) — without this the first combats are degraded.
@@ -107,7 +106,7 @@ for (const f of files) {
             string,
             { ownerId?: string; reaction?: number }
           >;
-          const kind = dispelKindOfRow(
+          const { kind } = dispelAsPressed(
             castIndex,
             {
               srcUnitId: a.srcUnitId,

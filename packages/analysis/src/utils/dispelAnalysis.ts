@@ -108,10 +108,9 @@ import { warlockPurgePetSpans, warlockRanPurgePet } from "./warlockPet";
 export type DispelPriority = "Critical" | "High" | "Medium" | "Low";
 import {
   buildCastMatchIndex,
-  classifyDispel,
+  dispelAsPressed,
   dispelCameWithOwnCast,
   type DispelKind,
-  dispelPressedBy,
   dispelRodeOwnPress,
   isRiderDispel,
 } from "./dispelKind";
@@ -3420,14 +3419,17 @@ function reconstructDispelSummaryUncached(
       };
       // a press on a teammate logged as the recipient's own dispel: the
       // presser is the actor and it is a deliberate press
-      const presserId = dispelPressedBy(castIndex, loggedDispel);
-      const presser = presserId ? unitMap.get(presserId) : undefined;
+      const {
+        dispel: dispelToClassify,
+        presserId,
+        kind: dispelKind,
+      } = dispelAsPressed(
+        castIndex,
+        loggedDispel,
+        (id) => unitMap.get(id)?.reaction === unit.reaction,
+      );
       const pressedByAlly =
-        presser && presser.reaction === unit.reaction ? presser : undefined;
-      const dispelToClassify = pressedByAlly
-        ? { ...loggedDispel, srcUnitId: pressedByAlly.id }
-        : loggedDispel;
-      const dispelKind = classifyDispel(castIndex, dispelToClassify);
+        presserId === undefined ? undefined : unitMap.get(presserId);
 
       // Treat a pet owned by a friendly player as a friendly source
       // Pets passed via friendlyPets are always friendly — we already filtered them by reaction

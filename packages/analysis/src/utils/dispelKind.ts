@@ -273,6 +273,33 @@ export function dispelPressedBy(
     )?.srcUnitId;
 }
 
+/**
+ * A logged SPELL_DISPEL as its presser's: the actor rewrite
+ * (`dispelPressedBy`, kept only for a presser on the logged source's team),
+ * then the kind of the rewritten row. The one reading of "whose dispel, and
+ * was it pressed" — `reconstructDispelSummary` stamps its lines with it, and
+ * the audit readers (`confidenceAudit.ts`, `dispelKindScan.ts`) count kinds
+ * with it (GH #173 item 22: they carried a copy of the rewrite, held equal by
+ * a test).
+ */
+export function dispelAsPressed<D extends IDispelToClassify>(
+  index: CastMatchIndex,
+  logged: D,
+  /** is this presser on the logged source's team */
+  onSourceTeam: (presserId: string) => boolean,
+): { dispel: D; presserId?: string; kind: DispelKind } {
+  const found = dispelPressedBy(index, logged);
+  const presserId =
+    found !== undefined && onSourceTeam(found) ? found : undefined;
+  const dispel =
+    presserId === undefined ? logged : { ...logged, srcUnitId: presserId };
+  return {
+    dispel,
+    ...(presserId === undefined ? {} : { presserId }),
+    kind: classifyDispel(index, dispel),
+  };
+}
+
 export function classifyDispel(
   index: CastMatchIndex,
   d: IDispelToClassify,
