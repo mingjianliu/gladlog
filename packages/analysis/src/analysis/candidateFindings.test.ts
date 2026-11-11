@@ -4336,7 +4336,7 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
   // fixture 两个类型的数据条件都满足,证明两个 flag 各自独立生效而非联动。
   // finally 里把开关复位回默认 true(Task 9 上线态),防止状态泄漏给上面的
   // 默认开启正向测试或其它文件的默认态测试(CANDIDATE_TYPE_FLAGS 是模块级可
-  // 变单例,和 TIMELINE_LINE_FLAGS 一样)。
+  // 变单例)。
   // Both flags default to false since 2026-08-29; the independence check now
   // turns each ON alone and expects only that type to appear.
   it("unsynced-burst 默认关:bracket=3v3 时只有 missed-sync-window 出现,unsynced-burst 不出现", () => {

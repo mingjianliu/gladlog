@@ -10,10 +10,7 @@
  * acceptanceCapture context hash.
  */
 import { backlashCcTag } from "../../data/backlashCc";
-import {
-  DEATH_WINDOW_S,
-  TIMELINE_LINE_FLAGS,
-} from "../../data/timelineLineFlags";
+import { DEATH_WINDOW_S } from "../../data/timelineLineFlags";
 import {
   DEFERRAL_ROLE_TAG,
   HP_SAMPLE_RADIUS_MS,
@@ -483,93 +480,82 @@ export function formatTimeline(
     `    the printed bounds. \`${NO_CREDITED_SPIKE_CLAUSE}\` = none of this timeline's [DMG SPIKE] lines overlaps the window, or the`,
     "    one that does overlaps another window longer — a statement about the listed lines, not that no damage landed.",
     "    The full [RES] row under an [OFFENSIVE WINDOW] header = what your team had ready at the whole second the window opened (a press of your team's inside that second is already spent on it).",
-    ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"
+    "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction (with the",
+    "    caster's own talents where the log shows them) and the OBSERVED duration in this round;",
+    // Ruling D6 (2026-10-10): what stands there when the log has no end.
+    `    \`${ENEMY_DEF_END_NOT_LOGGED}\` in place of Ts = the log never shows that aura end (an enemy who goes invisible takes the`,
+    "    line with them) — how long it lasted is unknown: it is NOT the full duration, and the unit may have been hit seconds later.",
+    "    `immune` = full immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);",
+    // fact11 D34 / D45: shown only when a line carries them
+    ...(enemyDefLines.some((l) =>
+      l.includes(`immune, ${ENEMY_DEF_NO_AURA_LOGGED}`),
+    )
       ? [
-          "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction (with the",
-          "    caster's own talents where the log shows them) and the OBSERVED duration in this round;",
-          // Ruling D6 (2026-10-10): what stands there when the log has no end.
-          `    \`${ENEMY_DEF_END_NOT_LOGGED}\` in place of Ts = the log never shows that aura end (an enemy who goes invisible takes the`,
-          "    line with them) — how long it lasted is unknown: it is NOT the full duration, and the unit may have been hit seconds later.",
-          "    `immune` = full immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);",
-          // fact11 D34 / D45: shown only when a line carries them
-          ...(enemyDefLines.some((l) =>
-            l.includes(`immune, ${ENEMY_DEF_NO_AURA_LOGGED}`),
-          )
-            ? [
-                `    \`(immune, ${ENEMY_DEF_NO_AURA_LOGGED})\` = the press is logged, its aura never is — when it took effect and for how long is unknown;`,
-              ]
-            : []),
-          ...(enemyDefLines.some((l) => l.includes("; also on "))
-            ? [
-                "    `; also on N(X), …` inside an immunity's parens = the same press put that immunity on those teammates of the caster at the same instant;",
-              ]
-            : []),
-          `    \`${ENEMY_DEF_DEFLECTS_WORDS}\` = Aspect of the Turtle: no immunity — attacks and spells aimed at the unit are deflected, damage already ticking on it lands;`,
-          "    `defers Nk` = Time Dilation: it held back Nk of the damage while it was up (half of each hit) — no reduction: that damage lands on the unit later as its own `deferred Time Dilation` ticks, from about 1 s after the first hit it held, and counts when it lands;",
-          "    `immune to magic` / `immune to physical` = an immunity to those schools only — the other school still hits (Cloak of Shadows, Blessing of Protection, Blessing of Spellwarding);",
-          ...(enemyDefLines.some(isShieldOnEnemyCdLine)
-            ? [
-                "    Ultimate Penitence is one [ENEMY CD] line carrying these same readings: it is an offensive cooldown that also shields the caster;",
-              ]
-            : []),
-          "    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no",
-          "    figure = the log shows none; a bare `(absorb)` states the mechanism only). `(heal proc)` = Nature's Guardian",
-          "    healed its owner; `(cheat-death proc)` = Cheat Death / Cauterize refused a killing blow — passives nobody pressed,",
-          "    and the unit can still be hit. KILL ATTEMPTS counts an `immune` line as a forced immunity (an `immune to …` one only against a go in its schools), names the three procs",
-          "    `self-saved (X)` and words a unit's own press of anything else here `popped X`.",
-          "    An aura that ended before its full duration says why when the log does: `— dispelled by X's Spell` /",
-          "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);",
-          "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",
-          ...(enemyDefLines.some((l) =>
-            l.includes(`— ${ENEMY_DEF_ENDED_BY_HIT}`),
-          )
-            ? [
-                `    \`— ${ENEMY_DEF_ENDED_BY_HIT}\` = Vanish, Burrow or Mass Invisibility took an attack aimed at its holder more than 1 s in: the immunity ends at that hit (its aura can stay up);`,
-              ]
-            : []),
-          `    \`${ENEMY_DEF_NO_PRESS_TAG}\` = the aura went up with no press of it in the log — a copy a talent or proc put up (Exhilaration's 3 s`,
-          "    Survival of the Fittest, Ancient of Lore), a shield that rides another press (Shield of Vengeance with Divine Protection),",
-          "    or a passive shield that went up by itself (Angelic Bulwark at low HP — a fact only: KILL ATTEMPTS never names it);",
-          "    a copy's length is its own, so it never reads `— removed early` on length alone.",
-          `    \`${ENEMY_DEF_UNSEEN_PRESS_TAG}\` = pressed while the unit was out of the log's sight (the press row is lost); the line stands where`,
-          "    the log showed the aura again, the latest the press can have been.",
-          "    `— still up when the round ended` = the round ended before it did;",
-          "    `— its bolts hit X: Nk of the Mk damage they took over it` = a save that is a channel whose damage landed on our",
-          "    player X (Ultimate Penitence; several units, largest first): Nk = what the channel dealt X, landed plus absorbed;",
-          "    Mk = everything X took while it ran; `(its cast row names Y)` = the cast row's target was someone else — the log",
-          "    shows where the damage went, not whether the channel was re-aimed;",
-          "    `X + N% copy → unit` = X stayed on its caster at full strength; a talent put an N% copy on that ally.",
-          "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
-          "    redirect (Leap of Faith, Intervene, Roar of Sacrifice); `(area)` = an area save pressed at that",
-          "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",
-          // User ruling 2026-10-11: a label says what the ability DOES, never
-          // why it was pressed (it read `(self-save)`); each label form is
-          // explained only when a line carries it (`selfDefensiveLabelLegends`).
-          // A pressed self defensive that prints a percentage (Roar of
-          // Sacrifice, 2026-10-11) has the wall's form and is no wall: its
-          // own entry says so, by name (`selfReductionLegend`).
-          "    Any other word in that parenthesis = what the ability does, from the game's data — not why it was pressed, and not",
-          "    that it saved anyone.",
-          ...selfDefensiveLabelLegends(
-            enemyDefLines,
-            selfSaveReductionNames(),
-          ).map((l) => `    ${l}`),
-          "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at the instant of the press.",
-          "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the press (just before the press's own",
-          "    heal), not the [STATE] reading of that second.",
-          ...(TIMELINE_LINE_FLAGS.duringExternal === "annotate"
-            ? [
-                "    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each",
-                "    friendly who had hit that unit in the 3 s before the external kept doing while it was up — from the aura going up to its removal (damage on it, share of",
-                "    their damage on enemy players — what landed, what shields absorbed and what was held back, on both sides of the share — seconds with damage; `(+Ak absorbed)` = eaten by the target's shields;",
-                "    `+Dk deferred` = held back by a Time Dilation / Stretch Time on the target — it lands later as that unit's",
-                "    own damage; for a school-limited wall, how much of it was in the wall's school; `N hits immune` = hits the",
-                "    target was immune to).",
-                "    A measurement, not a verdict — the team's CC lines say whether they could act.",
-              ]
-            : []),
+          `    \`(immune, ${ENEMY_DEF_NO_AURA_LOGGED})\` = the press is logged, its aura never is — when it took effect and for how long is unknown;`,
         ]
       : []),
+    ...(enemyDefLines.some((l) => l.includes("; also on "))
+      ? [
+          "    `; also on N(X), …` inside an immunity's parens = the same press put that immunity on those teammates of the caster at the same instant;",
+        ]
+      : []),
+    `    \`${ENEMY_DEF_DEFLECTS_WORDS}\` = Aspect of the Turtle: no immunity — attacks and spells aimed at the unit are deflected, damage already ticking on it lands;`,
+    "    `defers Nk` = Time Dilation: it held back Nk of the damage while it was up (half of each hit) — no reduction: that damage lands on the unit later as its own `deferred Time Dilation` ticks, from about 1 s after the first hit it held, and counts when it lands;",
+    "    `immune to magic` / `immune to physical` = an immunity to those schools only — the other school still hits (Cloak of Shadows, Blessing of Protection, Blessing of Spellwarding);",
+    ...(enemyDefLines.some(isShieldOnEnemyCdLine)
+      ? [
+          "    Ultimate Penitence is one [ENEMY CD] line carrying these same readings: it is an offensive cooldown that also shields the caster;",
+        ]
+      : []),
+    "    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no",
+    "    figure = the log shows none; a bare `(absorb)` states the mechanism only). `(heal proc)` = Nature's Guardian",
+    "    healed its owner; `(cheat-death proc)` = Cheat Death / Cauterize refused a killing blow — passives nobody pressed,",
+    "    and the unit can still be hit. KILL ATTEMPTS counts an `immune` line as a forced immunity (an `immune to …` one only against a go in its schools), names the three procs",
+    "    `self-saved (X)` and words a unit's own press of anything else here `popped X`.",
+    "    An aura that ended before its full duration says why when the log does: `— dispelled by X's Spell` /",
+    "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);",
+    "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",
+    ...(enemyDefLines.some((l) => l.includes(`— ${ENEMY_DEF_ENDED_BY_HIT}`))
+      ? [
+          `    \`— ${ENEMY_DEF_ENDED_BY_HIT}\` = Vanish, Burrow or Mass Invisibility took an attack aimed at its holder more than 1 s in: the immunity ends at that hit (its aura can stay up);`,
+        ]
+      : []),
+    `    \`${ENEMY_DEF_NO_PRESS_TAG}\` = the aura went up with no press of it in the log — a copy a talent or proc put up (Exhilaration's 3 s`,
+    "    Survival of the Fittest, Ancient of Lore), a shield that rides another press (Shield of Vengeance with Divine Protection),",
+    "    or a passive shield that went up by itself (Angelic Bulwark at low HP — a fact only: KILL ATTEMPTS never names it);",
+    "    a copy's length is its own, so it never reads `— removed early` on length alone.",
+    `    \`${ENEMY_DEF_UNSEEN_PRESS_TAG}\` = pressed while the unit was out of the log's sight (the press row is lost); the line stands where`,
+    "    the log showed the aura again, the latest the press can have been.",
+    "    `— still up when the round ended` = the round ended before it did;",
+    "    `— its bolts hit X: Nk of the Mk damage they took over it` = a save that is a channel whose damage landed on our",
+    "    player X (Ultimate Penitence; several units, largest first): Nk = what the channel dealt X, landed plus absorbed;",
+    "    Mk = everything X took while it ran; `(its cast row names Y)` = the cast row's target was someone else — the log",
+    "    shows where the damage went, not whether the channel was re-aimed;",
+    "    `X + N% copy → unit` = X stayed on its caster at full strength; a talent put an N% copy on that ally.",
+    "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
+    "    redirect (Leap of Faith, Intervene, Roar of Sacrifice); `(area)` = an area save pressed at that",
+    "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",
+    // User ruling 2026-10-11: a label says what the ability DOES, never
+    // why it was pressed (it read `(self-save)`); each label form is
+    // explained only when a line carries it (`selfDefensiveLabelLegends`).
+    // A pressed self defensive that prints a percentage (Roar of
+    // Sacrifice, 2026-10-11) has the wall's form and is no wall: its
+    // own entry says so, by name (`selfReductionLegend`).
+    "    Any other word in that parenthesis = what the ability does, from the game's data — not why it was pressed, and not",
+    "    that it saved anyone.",
+    ...selfDefensiveLabelLegends(enemyDefLines, selfSaveReductionNames()).map(
+      (l) => `    ${l}`,
+    ),
+    "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at the instant of the press.",
+    "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the press (just before the press's own",
+    "    heal), not the [STATE] reading of that second.",
+    "    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each",
+    "    friendly who had hit that unit in the 3 s before the external kept doing while it was up — from the aura going up to its removal (damage on it, share of",
+    "    their damage on enemy players — what landed, what shields absorbed and what was held back, on both sides of the share — seconds with damage; `(+Ak absorbed)` = eaten by the target's shields;",
+    "    `+Dk deferred` = held back by a Time Dilation / Stretch Time on the target — it lands later as that unit's",
+    "    own damage; for a school-limited wall, how much of it was in the wall's school; `N hits immune` = hits the",
+    "    target was immune to).",
+    "    A measurement, not a verdict — the team's CC lines say whether they could act.",
     ...(ghostRendered
       ? [
           "  `unit:ghost` on a [STATE] line = that priest is in Spirit of Redemption form at that second (pressed, or the",
@@ -726,15 +712,10 @@ export function formatTimeline(
     ...(rotPressureRendered ? ROT_PRESSURE_LEGEND : []),
     // F-C17 (triage res-readiness): the per-cast lines come from the healer
     // gap filler only, so only a healer owner gets their legend.
-    ...(isHealer && TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"
+    ...(isHealer
       ? [
           `  [YOU] [CAST] lines inside the ${DEATH_WINDOW_S}s before a friendly death are printed per cast with the target's HP`,
           "    at the press, even for spells that are folded `(xN over Ns)` elsewhere; the fold still counts them.",
-        ]
-      : []),
-    ...(isHealer && TIMELINE_LINE_FLAGS.deathWindowUnfold === "summary"
-      ? [
-          `  [YOU] [HEALS] = every cast you made in the ${DEATH_WINDOW_S}s before a friendly death, counted by spell and target.`,
         ]
       : []),
     // Conditional: a round with no such line pays no tokens for its legend.

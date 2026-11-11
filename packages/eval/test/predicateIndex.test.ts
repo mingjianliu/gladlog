@@ -120,7 +120,6 @@ import * as talentReplacesGenerated from "@gladlog/analysis/src/data/talentRepla
 import * as talentReplaceVariants from "@gladlog/analysis/src/data/talentReplaceVariants";
 import * as talentScriptedCooldowns from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
-import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
 import * as advancedActions from "@gladlog/analysis/src/utils/advancedActions";
 import * as allyCopyWall from "@gladlog/analysis/src/utils/allyCopyWall";
@@ -6395,12 +6394,12 @@ describe("谓词索引:分析产出 X ⇄ 门规验证 X", () => {
 // synonyms slip through, the Chinese doc cannot match an English pattern, and
 // a prose matcher stops matching exactly when the wording is edited.
 
-// String-valued flags (`TIMELINE_LINE_FLAGS`, GH #97) are listed with their
-// value in double quotes: `\`"timeline"\``.
+// A string-valued flag is listed with its value in double quotes
+// (`\`"timeline"\``); none is registered today (GH #150 D3 removed
+// `TIMELINE_LINE_FLAGS`).
 const FLAG_REGISTRIES: Record<string, Record<string, boolean | string>> = {
   CANDIDATE_TYPE_FLAGS,
   PRODUCTION_FACT_CONFIG,
-  TIMELINE_LINE_FLAGS,
 };
 
 const FLAG_BEGIN = "<!-- flag-state:begin -->";

@@ -81,7 +81,6 @@ import {
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "../data/outcomeRefs";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ENEMY_AREA_SAVE_IDS } from "../data/spellIdLists";
-import { TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import { enemySourceIds, silenceIntervals } from "./cannotCastIntervals";
@@ -1382,9 +1381,8 @@ export function killAttemptAlreadyUpFact(name: string, since: string): string {
 export const KILL_ATTEMPTS_ALREADY_UP_LEGEND =
   '  `X already up since m:ss` inside `opportunity: …` = X was on the target when the attempt began — the `[up since m:ss]` of the same line\'s FAILED clause, said where the tier is. The tier beside it (PRIME / gated / trinket up) is about what the target still HELD: something already running is not "in hand", and it is not what made the target PRIME or not.';
 
-/** GH #97 cheap alternative to the [ENEMY DEF] timeline line: the summary
- * names WHEN the wall went up (`popped Barkskin@2:17`) instead of a timeline
- * line. Only one of the two renders (TIMELINE_LINE_FLAGS.enemyDef). */
+/** The names of a FAILED clause's walls, each marked `[up since m:ss]` when
+ * it was already up as the attempt began. */
 function stampNames(
   names: string[],
   atS: number[],
@@ -1392,25 +1390,21 @@ function stampNames(
   /** collects every name this call marks `[up since m:ss]` (R08 c) */
   alreadyUp?: IKillAttemptAlreadyUp[],
 ): string {
-  if (TIMELINE_LINE_FLAGS.enemyDef !== "stamp")
-    return names
-      .map((n, i) => {
-        // F-E22 rule 2: a save that was already up when the attempt began is
-        // marked with the second it went up — the second its [ENEMY DEF] line
-        // sits at, so the gate can find that line outside the span. One that
-        // went up inside the span's own first second needs no mark.
-        const at = atS[i];
-        if (
-          at === undefined ||
-          toRenderSecond(at) >= toRenderSecond(spanFromSeconds)
-        )
-          return n;
-        alreadyUp?.push({ name: n, sinceSeconds: at });
-        return `${n} [up since ${fmtTime(at)}]`;
-      })
-      .join("/");
   return names
-    .map((n, i) => (atS[i] !== undefined ? `${n}@${fmtTime(atS[i]!)}` : n))
+    .map((n, i) => {
+      // F-E22 rule 2: a save that was already up when the attempt began is
+      // marked with the second it went up — the second its [ENEMY DEF] line
+      // sits at, so the gate can find that line outside the span. One that
+      // went up inside the span's own first second needs no mark.
+      const at = atS[i];
+      if (
+        at === undefined ||
+        toRenderSecond(at) >= toRenderSecond(spanFromSeconds)
+      )
+        return n;
+      alreadyUp?.push({ name: n, sinceSeconds: at });
+      return `${n} [up since ${fmtTime(at)}]`;
+    })
     .join("/");
 }
 
@@ -1426,7 +1420,6 @@ function failureText(
   // Rule 2, as for a wall (`stampNames`): an immunity that was already up
   // when the attempt began says since when — this attempt did not force it.
   const immunityWasUp =
-    TIMELINE_LINE_FLAGS.enemyDef !== "stamp" &&
     attr.immunityUpSinceS !== undefined &&
     toRenderSecond(attr.immunityUpSinceS) < toRenderSecond(spanFromSeconds);
   const upSince = immunityWasUp

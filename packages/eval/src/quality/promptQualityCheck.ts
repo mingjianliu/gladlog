@@ -4883,13 +4883,14 @@ export function checkKillCreditNotOwnSide(lines: string[]): string[] {
   return failures;
 }
 
-/** The KILL ATTEMPTS legend line that only renders while
- * `TIMELINE_LINE_FLAGS.enemyDef === "timeline"` — the gate keys on it so a
- * prompt built with the line off is not accused of missing it. */
+/** The `[ENEMY DEF]` legend line — the gate keys on it, so a prompt that
+ * carries no `[ENEMY DEF]` section is not accused of missing a line. (It was
+ * switchable until GH #150 D3; every prompt built today carries it.) */
 const ENEMY_DEF_LEGEND = /^\s*\[ENEMY DEF\] = /;
 /** `  [m:ss–m:ss] on <unit> — … | FAILED: popped A/B`,
  * `… | FAILED: saved by external (A/B)` or (B4a, 2026-09-25)
- * `… | FAILED: self-saved (A/B)`; names may carry `@m:ss` (stamp mode).
+ * `… | FAILED: self-saved (A/B)`; names may carry `@m:ss` (the retired stamp
+ * rendering; no prompt built today has it).
  * Since B-tier B16b (2026-10-07) a cause can be several of those clauses
  * joined with "; " (`popped A; saved by external (B)`): the line regex takes
  * the whole cause and `KILL_ATTEMPT_SAVE_CLAUSE` reads each clause. The

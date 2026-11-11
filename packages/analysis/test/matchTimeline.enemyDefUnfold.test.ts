@@ -4,14 +4,13 @@ import {
   CombatUnitSpec,
   LogEvent,
 } from "@gladlog/parser-compat";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { buildMatchTimeline } from "../src/context/matchTimeline";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   DEATH_WINDOW_S,
   DEATH_WINDOW_UNFOLD_CAP,
-  TIMELINE_LINE_FLAGS,
 } from "../src/data/timelineLineFlags";
 import {
   extractKillAttempts,
@@ -20,15 +19,15 @@ import {
 import { makeUnit } from "./ported/testHelpers";
 
 /**
- * GH #97 — the two timeline lines behind `TIMELINE_LINE_FLAGS`, pinned in
- * every flag position so a flag flip is a one-line change, never a rewrite:
- *  - `[ENEMY DEF]`: rendered only under "timeline"; "stamp" instead appends
- *    `@m:ss` to the KILL ATTEMPTS `popped X` names; "off" renders neither.
- *  - death-window unfold: under "perCast" a spam-folded spell's casts inside
- *    the DEATH_WINDOW_S before a friendly death print one line each with the
- *    target's `[STATE]`-grid HP, capped at DEATH_WINDOW_UNFOLD_CAP; "summary"
- *    prints one `[YOU] [HEALS]` count line per window; "off" keeps the fold.
- * Mutates the flag singleton → this file must stay OUT of vitest.shared.json.
+ * GH #97 — the two timeline lines it added:
+ *  - `[ENEMY DEF]`: an enemy defensive at the aura's start, with the official
+ *    pct and the observed duration;
+ *  - death-window unfold: a spam-folded spell's casts inside the
+ *    DEATH_WINDOW_S before a friendly death print one line each with the
+ *    target's HP at the press, capped at DEATH_WINDOW_UNFOLD_CAP.
+ * Both were one position of a three-way switch (`TIMELINE_LINE_FLAGS`) until
+ * GH #150 D3 removed the positions nothing rendered ("off", "stamp",
+ * "summary").
  */
 
 const START = 1_000_000;
@@ -36,11 +35,6 @@ const ms = (s: number) => START + s * 1000;
 const RIPTIDE = "61295";
 const BARKSKIN = "22812";
 const DEATH_AT = 60;
-
-const savedFlags = { ...TIMELINE_LINE_FLAGS };
-afterEach(() => {
-  Object.assign(TIMELINE_LINE_FLAGS, savedFlags);
-});
 
 function cast(atS: number, dest: string): any {
   return {
@@ -188,13 +182,12 @@ function render(
   });
 }
 
-describe("GH #97 timeline flags", () => {
+describe("GH #97 timeline lines", () => {
   beforeAll(async () => {
     await ensureAnalysisData();
   });
 
-  it("[ENEMY DEF] renders under 'timeline' with official pct + observed duration, never otherwise", () => {
-    TIMELINE_LINE_FLAGS.enemyDef = "timeline";
+  it("[ENEMY DEF] renders with official pct + observed duration", () => {
     const on = render();
     expect(on).toContain(
       // 20 + the Restoration PvP aura's 10 (GH #163)
@@ -207,15 +200,9 @@ describe("GH #97 timeline flags", () => {
     expect(on).toContain(
       "`end not logged` in place of Ts = the log never shows that aura end",
     );
-    for (const mode of ["off", "stamp"] as const) {
-      TIMELINE_LINE_FLAGS.enemyDef = mode;
-      const text = render();
-      expect(text).not.toContain("[ENEMY DEF]");
-    }
   });
 
-  it("death-window unfold: perCast lines carry the target's HP at the press and stop at the cap; off keeps the fold", () => {
-    TIMELINE_LINE_FLAGS.deathWindowUnfold = "perCast";
+  it("death-window unfold: per-cast lines carry the target's HP at the press and stop at the cap", () => {
     const on = render();
     expect(on).toContain("0:52  [YOU] [CAST]   Riptide → 2(BMHunter) (70% HP)");
     expect(on).toContain("0:55  [YOU] [CAST]   Riptide → 2(BMHunter) (40% HP)");
@@ -226,16 +213,10 @@ describe("GH #97 timeline flags", () => {
     expect(on).not.toContain("0:29  [YOU] [CAST]   Riptide");
     expect(DEATH_WINDOW_UNFOLD_CAP).toBeGreaterThanOrEqual(3);
     expect(DEATH_WINDOW_S).toBe(10);
-
-    TIMELINE_LINE_FLAGS.deathWindowUnfold = "off";
-    const off = render();
-    expect(off).not.toContain("0:55  [YOU] [CAST]   Riptide");
-    expect(off).not.toMatch(/\[CAST\].*\(\d+% HP\)/);
-    expect(off).not.toContain("[YOU] [HEALS]");
+    expect(on).not.toContain("[YOU] [HEALS]");
   });
 
   it("F16 retest idx 22: an annotated cast of the folded spell prints alone and the fold still counts it", () => {
-    TIMELINE_LINE_FLAGS.deathWindowUnfold = "perCast";
     const text = render({
       ccTrinketSummaries: [
         {
@@ -275,7 +256,6 @@ describe("GH #97 timeline flags", () => {
   });
 
   it("fact3 D21: casts on a unit the label cannot name make the fold say `various`, not claim the named target", () => {
-    TIMELINE_LINE_FLAGS.deathWindowUnfold = "perCast";
     const text = render({ petCasts: [1, 2, 3] });
     expect(text).toContain(
       "0:02  [YOU] [CAST]   Riptide (x14 over 56s) → various",
@@ -286,14 +266,7 @@ describe("GH #97 timeline flags", () => {
     );
   });
 
-  it("death-window unfold: summary prints one counted [YOU] [HEALS] line per window", () => {
-    TIMELINE_LINE_FLAGS.deathWindowUnfold = "summary";
-    const text = render();
-    expect(text).toContain("0:50–1:00  [YOU] [HEALS]   Riptide ×3 → 2");
-    expect(text).not.toContain("0:55  [YOU] [CAST]   Riptide");
-  });
-
-  it("'stamp' appends @m:ss to the KILL ATTEMPTS popped names; other modes do not", () => {
+  it("KILL ATTEMPTS names the popped defensive without a time stamp (its second is the [ENEMY DEF] line's)", () => {
     // minimal popped-defensive attempt: e1 stunned 10–15 s by f1, hit for 50k
     // at 12 s, Barkskin (20 %) applied by e1 at 12 s → attribution "defensive"
     const KIDNEY = "408";
@@ -359,19 +332,12 @@ describe("GH #97 timeline flags", () => {
       startInfo: { zoneId: "1672" },
     };
     const attempts = () => extractKillAttempts([f1], [e1], combat);
-    TIMELINE_LINE_FLAGS.enemyDef = "stamp";
-    const stamped = attempts()[0];
-    expect(stamped.attribution?.defensivePopped).toEqual(["Barkskin"]);
-    expect(stamped.attribution?.defensivePoppedAtS).toEqual([12.4]);
-    expect(formatKillAttemptsForContext([stamped]).join("\n")).toContain(
-      "popped Barkskin@0:12",
-    );
-    for (const mode of ["off", "timeline"] as const) {
-      TIMELINE_LINE_FLAGS.enemyDef = mode;
-      const text = formatKillAttemptsForContext([attempts()[0]]).join("\n");
-      expect(text).toContain("popped Barkskin");
-      expect(text).not.toContain("Barkskin@");
-    }
+    const attempt = attempts()[0];
+    expect(attempt.attribution?.defensivePopped).toEqual(["Barkskin"]);
+    expect(attempt.attribution?.defensivePoppedAtS).toEqual([12.4]);
+    const text = formatKillAttemptsForContext([attempt]).join("\n");
+    expect(text).toContain("popped Barkskin");
+    expect(text).not.toContain("Barkskin@");
   });
 });
 
@@ -394,13 +360,9 @@ describe("legends follow the lines they explain (F-C16 / F-C17)", () => {
     neverUsed: false,
   };
 
-  it("F-C17: the per-cast / summary legend is printed for a healer owner only", () => {
-    for (const mode of ["perCast", "summary"] as const) {
-      TIMELINE_LINE_FLAGS.deathWindowUnfold = mode;
-      const legend = mode === "perCast" ? PER_CAST_LEGEND : "[YOU] [HEALS]";
-      expect(render({ isHealer: true })).toContain(legend);
-      expect(render({ isHealer: false })).not.toContain(legend);
-    }
+  it("F-C17: the per-cast legend is printed for a healer owner only", () => {
+    expect(render({ isHealer: true })).toContain(PER_CAST_LEGEND);
+    expect(render({ isHealer: false })).not.toContain(PER_CAST_LEGEND);
   });
 
   it("fact7 D50: the next spike is the nearest window of the walk, listed or not", () => {

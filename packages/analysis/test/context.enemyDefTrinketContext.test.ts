@@ -9,7 +9,6 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { buildMatchTimeline } from "../src/context/matchTimeline";
-import { TIMELINE_LINE_FLAGS } from "../src/data/timelineLineFlags";
 import {
   ICCInstance,
   IPlayerCCTrinketSummary,
@@ -477,8 +476,6 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
   });
 
   it("5. [ENEMY DEF] self/immune: formats immune and displays friendly burst and target HP", () => {
-    TIMELINE_LINE_FLAGS.enemyDef = "timeline";
-
     const owner = makeUnit({
       id: "P1",
       name: "OwnerPlayer",
@@ -593,8 +590,6 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
   });
 
   it("6. [ENEMY DEF] external: resolves target HP via d.recipientId", () => {
-    TIMELINE_LINE_FLAGS.enemyDef = "timeline";
-
     const owner = makeUnit({
       id: "P1",
       name: "OwnerPlayer",
@@ -715,8 +710,6 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
   });
 
   it("7. Missing HP data: gracefully omitted without formatting artifacts or undefined", () => {
-    TIMELINE_LINE_FLAGS.enemyDef = "timeline";
-
     const owner = makeUnit({
       id: "P1",
       name: "OwnerPlayer",
@@ -843,7 +836,6 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
   });
 
   it("8. Legend entries describe [friendly offensive CD active] and target HP context", () => {
-    TIMELINE_LINE_FLAGS.enemyDef = "timeline";
     const owner = makeUnit();
     const timeline = buildMatchTimeline({
       owner,
@@ -882,7 +874,6 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
   });
 
   it("9. Attributes offensive debuffs (e.g. Deathmark 360194) by source team: enemy Deathmark on friendly does NOT trigger [friendly offensive CD active], friendly Deathmark on enemy DOES", () => {
-    TIMELINE_LINE_FLAGS.enemyDef = "timeline";
     const DEATHMARK = "360194";
 
     // Scenario A: Enemy rogue puts Deathmark on friendly owner. Friendly has NO offensive CD.
@@ -1076,7 +1067,6 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
   });
 
   it("10. Ordinary debuffs without cooldowns (Curse of Weakness 702, Curse of Tongues 1714, Ignite 12654) do NOT trigger [friendly offensive CD active]", () => {
-    TIMELINE_LINE_FLAGS.enemyDef = "timeline";
     const cleanOwner = makeUnit({ id: "P1", name: "OwnerPlayer" });
 
     for (const spellId of ["702", "1714", "12654"]) {

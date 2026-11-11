@@ -1,6 +1,6 @@
 /**
- * [ENEMY DEF] (GH #97) — enemy defensive cooldowns on the timeline (when
- * TIMELINE_LINE_FLAGS.enemyDef is "timeline"), priced through the same resolver
+ * [ENEMY DEF] (GH #97) — enemy defensive cooldowns on the timeline, priced
+ * through the same resolver
  * as the burst-into-mitigation door, with the `| during it:` fact line.
  *
  * Cut out of buildMatchTimeline verbatim (GH #116); the body is unchanged, only
@@ -10,7 +10,6 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { MITIGATION_TABLE } from "../../data/mitigationData";
-import { TIMELINE_LINE_FLAGS } from "../../data/timelineLineFlags";
 import { absorbContributionsInWindow } from "../../utils/absorbShields";
 import { allyCopyClause, isAllyCopyWallId } from "../../utils/allyCopyWall";
 import {
@@ -110,337 +109,327 @@ export function emitEnemyDefEntries(
     rosterSides,
   } = ctx;
 
-  if (TIMELINE_LINE_FLAGS.enemyDef === "timeline") {
-    const combatSpan = {
-      startTime: matchStartMs,
-      endTime: matchStartMs + matchEndSeconds * 1000,
-      // the round's units: a summon's press of its owner's save pairs with
-      // the owner's aura (codex 20-G2 #2: a pet's Master's Call 53271 left
-      // the hunter's 54216 / 62305 `[no press logged]`)
-      units: Object.fromEntries((_allUnits ?? []).map((u) => [u.id, u])),
-    };
-    // The round's end (`roundEndMs`: a Solo Shuffle round's ending death,
-    // ~2 s before the log's end) — the instant `— still up when the round
-    // ended` and the `during it` window are read against, as on every other
-    // line that says the round ended.
-    const roundEndAtMs = Math.min(
-      ctx.roundEndAtMs ?? combatSpan.endTime,
-      combatSpan.endTime,
+  const combatSpan = {
+    startTime: matchStartMs,
+    endTime: matchStartMs + matchEndSeconds * 1000,
+    // the round's units: a summon's press of its owner's save pairs with
+    // the owner's aura (codex 20-G2 #2: a pet's Master's Call 53271 left
+    // the hunter's 54216 / 62305 `[no press logged]`)
+    units: Object.fromEntries((_allUnits ?? []).map((u) => [u.id, u])),
+  };
+  // The round's end (`roundEndMs`: a Solo Shuffle round's ending death,
+  // ~2 s before the log's end) — the instant `— still up when the round
+  // ended` and the `during it` window are read against, as on every other
+  // line that says the round ended.
+  const roundEndAtMs = Math.min(
+    ctx.roundEndAtMs ?? combatSpan.endTime,
+    combatSpan.endTime,
+  );
+  const roundSpan = { startTime: matchStartMs, endTime: roundEndAtMs };
+  const friendlyIds = new Set(friends.map((f) => f.id));
+  // `[friendly offensive CD active]` is a fact of the PRESS instant (round-3
+  // audit D8: at m:ss.0 it missed a Dark Transformation started 0.13 s
+  // before an Obsidian Scales in the same second). Every `[ENEMY DEF]` line
+  // form reads it here (fact12 D14: the aura-less immunity line skipped it).
+  const burstTagAt = (pressSeconds: number): string =>
+    friendlyOffensiveCdActiveAt(
+      friends,
+      enemies ?? [],
+      friendlyIds,
+      matchStartMs + Math.round(pressSeconds * 1000),
+      roundBounds,
+    )
+      ? " [friendly offensive CD active]"
+      : "";
+  for (const enemy of enemies ?? []) {
+    const events = enemyDefensiveEvents(
+      enemy,
+      enemies ?? [],
+      combatSpan,
+      roundEndAtMs,
     );
-    const roundSpan = { startTime: matchStartMs, endTime: roundEndAtMs };
-    const friendlyIds = new Set(friends.map((f) => f.id));
-    // `[friendly offensive CD active]` is a fact of the PRESS instant (round-3
-    // audit D8: at m:ss.0 it missed a Dark Transformation started 0.13 s
-    // before an Obsidian Scales in the same second). Every `[ENEMY DEF]` line
-    // form reads it here (fact12 D14: the aura-less immunity line skipped it).
-    const burstTagAt = (pressSeconds: number): string =>
-      friendlyOffensiveCdActiveAt(
-        friends,
-        enemies ?? [],
-        friendlyIds,
-        matchStartMs + Math.round(pressSeconds * 1000),
-        roundBounds,
-      )
-        ? " [friendly offensive CD active]"
+    for (const d of events) {
+      if (d.atSeconds < 0 || d.atSeconds > matchEndSeconds) continue;
+      const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
+      // FT-T08 step 3: an early end says the cause the log gives for it
+      // (`auraEndFromLog`); `removed early` is what is left when it gives
+      // none. A dispel line names this aura outright, so it is read before
+      // the holder's death (a cascade inferred from timing).
+      const end = d.earlyEnd;
+      const taker =
+        end?.takenBy &&
+        `${actorLabel(
+          end.takenBy.unitName,
+          (enemies ?? []).some((e) => e.id === end.takenBy!.unitId)
+            ? "enemy"
+            : "friendly",
+          end.takenBy.unitId,
+        )}'s ${end.takenBy.spellName}`;
+      // a dispel line the log cannot tie to this copy is stated next to
+      // the death / the empty shield, never dropped behind them
+      const unclear = end?.takeUnclear
+        ? "; a dispel of this spell is logged at that moment, not which copy it took"
         : "";
-    for (const enemy of enemies ?? []) {
-      const events = enemyDefensiveEvents(
-        enemy,
-        enemies ?? [],
-        combatSpan,
-        roundEndAtMs,
-      );
-      for (const d of events) {
-        if (d.atSeconds < 0 || d.atSeconds > matchEndSeconds) continue;
-        const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
-        // FT-T08 step 3: an early end says the cause the log gives for it
-        // (`auraEndFromLog`); `removed early` is what is left when it gives
-        // none. A dispel line names this aura outright, so it is read before
-        // the holder's death (a cascade inferred from timing).
-        const end = d.earlyEnd;
-        const taker =
-          end?.takenBy &&
-          `${actorLabel(
-            end.takenBy.unitName,
-            (enemies ?? []).some((e) => e.id === end.takenBy!.unitId)
-              ? "enemy"
-              : "friendly",
-            end.takenBy.unitId,
-          )}'s ${end.takenBy.spellName}`;
-        // a dispel line the log cannot tie to this copy is stated next to
-        // the death / the empty shield, never dropped behind them
-        const unclear = end?.takeUnclear
-          ? "; a dispel of this spell is logged at that moment, not which copy it took"
+      const earlyNote = d.upAtRoundEnd
+        ? ` — ${AURA_STILL_UP_AT_ROUND_END}`
+        : d.endedByHit
+          ? ` — ${ENEMY_DEF_ENDED_BY_HIT}`
+          : !d.removedEarly
+            ? ""
+            : end?.takenBy
+              ? ` — ${end.takenBy.kind} by ${taker}`
+              : end?.holderDied
+                ? d.kind === "external"
+                  ? ` — its target died${unclear}`
+                  : ` — ended at death${unclear}`
+                : end?.absorb?.left === 0
+                  ? // an `(absorb Nk, …)` line already leads with the amount
+                    d.effect === "absorb"
+                    ? ` — used up${unclear}`
+                    : ` — used up, absorbed ${Math.round(end.absorb.absorbed / 1000)}k${unclear}`
+                  : end?.takeUnclear
+                    ? " — a dispel of this spell is logged at that moment, not which copy it took"
+                    : " — removed early";
+      // Ruling D6 (2026-10-10): an aura the log never shows end prints
+      // that, not the official length the interval was closed at — the
+      // number was read as OBSERVED (`Mass Invisibility (immune, 12.0s)` on
+      // a mage hit 3.3 s later).
+      const dur = d.endNotLogged
+        ? ENEMY_DEF_END_NOT_LOGGED
+        : d.observedSeconds !== undefined
+          ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${earlyNote}`
           : "";
-        const earlyNote = d.upAtRoundEnd
-          ? ` — ${AURA_STILL_UP_AT_ROUND_END}`
-          : d.endedByHit
-            ? ` — ${ENEMY_DEF_ENDED_BY_HIT}`
-            : !d.removedEarly
-              ? ""
-              : end?.takenBy
-                ? ` — ${end.takenBy.kind} by ${taker}`
-                : end?.holderDied
-                  ? d.kind === "external"
-                    ? ` — its target died${unclear}`
-                    : ` — ended at death${unclear}`
-                  : end?.absorb?.left === 0
-                    ? // an `(absorb Nk, …)` line already leads with the amount
-                      d.effect === "absorb"
-                      ? ` — used up${unclear}`
-                      : ` — used up, absorbed ${Math.round(end.absorb.absorbed / 1000)}k${unclear}`
-                    : end?.takeUnclear
-                      ? " — a dispel of this spell is logged at that moment, not which copy it took"
-                      : " — removed early";
-        // Ruling D6 (2026-10-10): an aura the log never shows end prints
-        // that, not the official length the interval was closed at — the
-        // number was read as OBSERVED (`Mass Invisibility (immune, 12.0s)` on
-        // a mage hit 3.3 s later).
-        const dur = d.endNotLogged
-          ? ENEMY_DEF_END_NOT_LOGGED
-          : d.observedSeconds !== undefined
-            ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${earlyNote}`
-            : "";
-        const burstStr = burstTagAt(d.pressSeconds ?? d.atSeconds);
-        const targetUnit =
-          d.kind === "external"
-            ? (enemies?.find((e) => e.id === d.recipientId) ??
-              enemies?.find((e) => e.name === d.recipientName))
-            : enemy;
-        // HP at the press (A21, enemy-def F-E11) — the same sampler as the
-        // owner's press lines; c2058ed4's Turtle read 26 % on the grid
-        const hpPct = targetUnit
-          ? hpAtPress(
-              targetUnit,
-              // the cast that put an aura up, when logged — not the aura
-              matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000),
-              { spellId: d.spellId, srcUnitId: enemy.id },
-            )
-          : null;
-        let line: string;
-        if (d.kind === "external") {
-          const hpStr =
-            hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
-          // GH #91: the application line owns the "what did our attackers do
-          // during it" fact (GH #99 item 3 ownership rule); one shared
-          // predicate with the burst-into-mitigation fact and the eval gate.
-          let duringStr = "";
-          if (
-            TIMELINE_LINE_FLAGS.duringExternal === "annotate" &&
-            targetUnit &&
-            d.auraFromS !== undefined &&
-            d.auraToS !== undefined
-          ) {
-            const obs = externalDamageForApplication(
-              {
-                spellId: d.spellId,
-                spellName: d.spellName,
-                srcUnitName: d.auraSrcName ?? d.casterName,
-                fromS: d.auraFromS,
-                toS: d.auraToS,
-                inferredStart: !!d.auraInferredStart,
-                inferredEnd: !!d.auraInferredEnd,
-                ...(d.auraToRow ? { toRow: d.auraToRow } : {}),
-              },
-              targetUnit,
-              friends,
-              enemies ?? [],
-              // the window stops where the printed length does
-              roundSpan,
-            );
-            if (obs.length > 0)
-              duringStr = ` | during it: ${obs.map((o) => formatDuringExternal(o, pid)).join("; ")}`;
-          }
-          // B18: a Guardian Spirit whose save triggered says so — ahead of
-          // `| during it:`, which the gate reads to the end of the line
-          const saveStr = guardianSpiritSaveClause(
-            d.spellId,
-            enemy,
-            d.pressSeconds ?? d.atSeconds,
-            matchStartMs,
-            targetUnit?.name,
-          );
-          // fact7 D33: a control removal on an ally is no grip / redirect;
-          // the label its own press carries (user ruling 2026-10-27)
-          const mechanism = selfDefensiveMechanism(d.spellId);
-          const what =
-            mechanism?.kind === "control removal"
-              ? selfDefensiveLabelWords(mechanism)
-              : dur;
-          // fact9 D1: a talent-shared wall's ally copy says it is one —
-          // the legend's `X + N% copy → unit` (F23 D23's friendly form); its
-          // caster's own line above carries the wall at full strength
-          const onWhom = isAllyCopyWallId(d.spellId)
-            ? allyCopyClause(d.spellId, enemyPid(d.recipientName ?? ""))
-            : ` → ${enemyPid(d.recipientName ?? "")}`;
-          line = `${d.spellName}${onWhom}${what ? ` (${what})` : ""}${burstStr}${hpStr}${saveStr}${duringStr}`;
-        } else if (d.kind === "area") {
-          // Ruling A15 (2026-09-30): who pressed it and when — no %, no
-          // recipients, no duration, no HP (nobody is "the target"). fact2
-          // (2026-10-20): the second's `[friendly offensive CD active]` tag
-          // is a fact of the second, not of the save — its absence read as
-          // "nothing of ours was running" (0deb726b 0:47 Spirit Link Totem)
-          line = `${d.spellName} (area)${burstStr}`;
-        } else if (d.kind === "passive") {
-          // fact10 D25 (user 2026-11-04): a passive absorb proc — what it
-          // absorbed, how long it was up, that nobody pressed it
-          line = `${d.spellName} (${enemySaveEffectNote("absorb", d.absorbedAmount, dur)}) ${ENEMY_DEF_NO_PRESS_TAG}${burstStr}`;
-        } else if (d.kind === "self-save") {
-          // The unit's own defensive outside the wall table, labelled by what
-          // it DOES — never by why it was pressed (user ruling 2026-10-11;
-          // the label read `(self-save)`):
-          //  - an effect note (ruling D8): Feign Death's shield and a pressed
-          //    absorb with what it absorbed and how long it was up, a proc
-          //    by its type;
-          //  - else the press's mechanism (`selfDefensiveMechanism`), a
-          //    percentage reduction with how long its aura was up;
-          //  - a press no source classifies prints no label at all.
-          const label =
-            d.effect !== undefined
-              ? enemySaveEffectNote(d.effect, d.absorbedAmount, dur)
-              : d.mechanism
-                ? `${selfDefensiveLabelWords(d.mechanism)}${d.mechanism.kind === "reduction" && dur ? `, ${dur}` : ""}`
-                : "";
-          const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
-          // B18: a Guardian Spirit the priest put on THEMSELVES is a
-          // self-save here, not an external (agy review of the batch)
-          const selfSaveStr = guardianSpiritSaveClause(
-            d.spellId,
-            enemy,
-            d.pressSeconds ?? d.atSeconds,
-            matchStartMs,
-            enemy.name,
-          );
-          // B20a: Touch of Karma says what our side fed it and where it
-          // sent the damage — a fact, by PRESS time (karmaFeed.ts)
-          let karmaStr = "";
-          if (d.spellId === TOUCH_OF_KARMA_ID) {
-            const pressS = d.pressSeconds ?? d.atSeconds;
-            const nextS = events
-              .filter(
-                (o) =>
-                  o.spellId === TOUCH_OF_KARMA_ID &&
-                  (o.pressSeconds ?? o.atSeconds) > pressS,
-              )
-              .map((o) => o.pressSeconds ?? o.atSeconds)
-              .sort((a, b) => a - b)[0];
-            karmaStr = karmaFeedClause(
-              karmaFeedOf(
-                enemy,
-                pressS,
-                nextS,
-                friends,
-                _allUnits,
-                matchStartMs,
-              ),
-              pid,
-              fmtTime,
-            );
-          }
-          const channelStr = channelTargetClause(
-            enemy,
-            d,
-            friends,
-            matchStartMs,
-            roundEndAtMs,
-            pid,
-            enemies ?? [],
-            enemyPid,
-            rosterSides,
-          );
-          // F16 retest: a rider shield no press of its own put up
-          // (Shield of Vengeance with Divine Protection) says so, as a wall
-          // copy does (F15 C5)
-          const noPress = d.noPressLogged
-            ? ` ${ENEMY_DEF_NO_PRESS_TAG}`
-            : d.unseenPress
-              ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}`
-              : "";
-          line = `${d.spellName}${label ? ` (${label})` : ""}${noPress}${burstStr}${hpStr}${selfSaveStr}${karmaStr}${channelStr}`;
-        } else {
-          // F15 C2: a school-limited immunity says which schools it stops
-          // (`immuneLabelOf`)
-          // Aspect of the Turtle (user ruling 2026-10-21): no immunity, no
-          // percentage — what the log shows it doing
-          const deflects =
-            MITIGATION_TABLE[wallTableIdOfAura(d.spellId)]
-              ?.deflectsDirectAttacks === true;
-          // Time Dilation (user 2026-10-30): what it held back while up, not
-          // the table's 50 % — the damage lands later as the unit's own
-          const deferral = isDeferralAbsorb({
-            spellId: wallTableIdOfAura(d.spellId),
-          });
-          const strength = deflects
-            ? ENEMY_DEF_DEFLECTS_WORDS
-            : deferral
-              ? enemyDefDefersLabel(
-                  absorbContributionsInWindow(
-                    enemy,
-                    matchStartMs + d.atSeconds * 1000,
-                    matchStartMs +
-                      (d.atSeconds + (d.observedSeconds ?? 0)) * 1000,
-                  ).find((c) => c.spellId === wallTableIdOfAura(d.spellId))
-                    ?.absorbedAmount ?? 0,
-                )
-              : d.kind === "immune"
-                ? immuneLabelOf(d.spellId)
-                : `${d.pct}%`;
-          const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
-          // F15 C5: a copy no press put up says so; fact3 D35: a press made
-          // while the unit was unseen, too
-          const noPress = d.noPressLogged
-            ? ` ${ENEMY_DEF_NO_PRESS_TAG}`
-            : d.unseenPress
-              ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}`
-              : "";
-          // fact7 D44: a teammate's proc says whose press it came from
-          const fromStr = d.procSource
-            ? ` from ${enemyPid(d.procSource.unitName)}${d.procSource.spellName ? `'s ${d.procSource.spellName}` : ""}`
-            : "";
-          // fact11 D45: the allies the same press put the immunity on
-          const alsoOn =
-            d.kind === "immune"
-              ? immunityAlsoOn(
-                  enemy,
-                  d.spellId,
-                  d.atSeconds,
-                  enemies ?? [],
-                  combatSpan,
-                )
-              : [];
-          const alsoStr = enemyDefAlsoOnClause(
-            alsoOn.map((u) => enemyPid(u.name)),
-          );
-          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""}${alsoStr})${fromStr}${noPress}${burstStr}${hpStr}`;
-        }
-        // Ultimate Penitence is an offensive cooldown (user 2026-10-28) that
-        // also shields its caster: one press, one line, the `[ENEMY CD]` one
-        // (user 2026-11-02, GH #173: 137 same-second pairs on 605 files)
-        const cdHead = `${fmtTime(d.atSeconds)}  [ENEMY CD]   ${who}: ${d.spellName}`;
+      const burstStr = burstTagAt(d.pressSeconds ?? d.atSeconds);
+      const targetUnit =
+        d.kind === "external"
+          ? (enemies?.find((e) => e.id === d.recipientId) ??
+            enemies?.find((e) => e.name === d.recipientName))
+          : enemy;
+      // HP at the press (A21, enemy-def F-E11) — the same sampler as the
+      // owner's press lines; c2058ed4's Turtle read 26 % on the grid
+      const hpPct = targetUnit
+        ? hpAtPress(
+            targetUnit,
+            // the cast that put an aura up, when logged — not the aura
+            matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000),
+            { spellId: d.spellId, srcUnitId: enemy.id },
+          )
+        : null;
+      let line: string;
+      if (d.kind === "external") {
+        const hpStr =
+          hpPct !== null ? ` (target at ${hpPct.toFixed(0)}% HP)` : "";
+        // GH #91: the application line owns the "what did our attackers do
+        // during it" fact (GH #99 item 3 ownership rule); one shared
+        // predicate with the burst-into-mitigation fact and the eval gate.
+        let duringStr = "";
         if (
-          d.spellId === ULTIMATE_PENITENCE_ID &&
-          ctx.extendEnemyCdLine?.(cdHead, line.slice(d.spellName.length))
-        )
-          continue;
-        addEntry(
-          d.atSeconds,
-          `${fmtTime(d.atSeconds)}  [ENEMY DEF]   ${who}: ${line}`,
+          targetUnit &&
+          d.auraFromS !== undefined &&
+          d.auraToS !== undefined
+        ) {
+          const obs = externalDamageForApplication(
+            {
+              spellId: d.spellId,
+              spellName: d.spellName,
+              srcUnitName: d.auraSrcName ?? d.casterName,
+              fromS: d.auraFromS,
+              toS: d.auraToS,
+              inferredStart: !!d.auraInferredStart,
+              inferredEnd: !!d.auraInferredEnd,
+              ...(d.auraToRow ? { toRow: d.auraToRow } : {}),
+            },
+            targetUnit,
+            friends,
+            enemies ?? [],
+            // the window stops where the printed length does
+            roundSpan,
+          );
+          if (obs.length > 0)
+            duringStr = ` | during it: ${obs.map((o) => formatDuringExternal(o, pid)).join("; ")}`;
+        }
+        // B18: a Guardian Spirit whose save triggered says so — ahead of
+        // `| during it:`, which the gate reads to the end of the line
+        const saveStr = guardianSpiritSaveClause(
+          d.spellId,
+          enemy,
+          d.pressSeconds ?? d.atSeconds,
+          matchStartMs,
+          targetUnit?.name,
         );
-      }
-      // fact11 D34: an immunity pressed with no aura the log shows
-      for (const p of immunityPressesWithoutAura(
-        enemy,
-        events,
-        combatSpan,
-        roundEndAtMs,
-      )) {
-        if (p.atSeconds > matchEndSeconds) continue;
-        const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
-        addEntry(
-          p.atSeconds,
-          `${fmtTime(p.atSeconds)}  [ENEMY DEF]   ${who}: ${p.spellName} (${immuneLabelOf(p.auraId)}, ${ENEMY_DEF_NO_AURA_LOGGED})${burstTagAt(p.atSeconds)}`,
+        // fact7 D33: a control removal on an ally is no grip / redirect;
+        // the label its own press carries (user ruling 2026-10-27)
+        const mechanism = selfDefensiveMechanism(d.spellId);
+        const what =
+          mechanism?.kind === "control removal"
+            ? selfDefensiveLabelWords(mechanism)
+            : dur;
+        // fact9 D1: a talent-shared wall's ally copy says it is one —
+        // the legend's `X + N% copy → unit` (F23 D23's friendly form); its
+        // caster's own line above carries the wall at full strength
+        const onWhom = isAllyCopyWallId(d.spellId)
+          ? allyCopyClause(d.spellId, enemyPid(d.recipientName ?? ""))
+          : ` → ${enemyPid(d.recipientName ?? "")}`;
+        line = `${d.spellName}${onWhom}${what ? ` (${what})` : ""}${burstStr}${hpStr}${saveStr}${duringStr}`;
+      } else if (d.kind === "area") {
+        // Ruling A15 (2026-09-30): who pressed it and when — no %, no
+        // recipients, no duration, no HP (nobody is "the target"). fact2
+        // (2026-10-20): the second's `[friendly offensive CD active]` tag
+        // is a fact of the second, not of the save — its absence read as
+        // "nothing of ours was running" (0deb726b 0:47 Spirit Link Totem)
+        line = `${d.spellName} (area)${burstStr}`;
+      } else if (d.kind === "passive") {
+        // fact10 D25 (user 2026-11-04): a passive absorb proc — what it
+        // absorbed, how long it was up, that nobody pressed it
+        line = `${d.spellName} (${enemySaveEffectNote("absorb", d.absorbedAmount, dur)}) ${ENEMY_DEF_NO_PRESS_TAG}${burstStr}`;
+      } else if (d.kind === "self-save") {
+        // The unit's own defensive outside the wall table, labelled by what
+        // it DOES — never by why it was pressed (user ruling 2026-10-11;
+        // the label read `(self-save)`):
+        //  - an effect note (ruling D8): Feign Death's shield and a pressed
+        //    absorb with what it absorbed and how long it was up, a proc
+        //    by its type;
+        //  - else the press's mechanism (`selfDefensiveMechanism`), a
+        //    percentage reduction with how long its aura was up;
+        //  - a press no source classifies prints no label at all.
+        const label =
+          d.effect !== undefined
+            ? enemySaveEffectNote(d.effect, d.absorbedAmount, dur)
+            : d.mechanism
+              ? `${selfDefensiveLabelWords(d.mechanism)}${d.mechanism.kind === "reduction" && dur ? `, ${dur}` : ""}`
+              : "";
+        const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
+        // B18: a Guardian Spirit the priest put on THEMSELVES is a
+        // self-save here, not an external (agy review of the batch)
+        const selfSaveStr = guardianSpiritSaveClause(
+          d.spellId,
+          enemy,
+          d.pressSeconds ?? d.atSeconds,
+          matchStartMs,
+          enemy.name,
         );
+        // B20a: Touch of Karma says what our side fed it and where it
+        // sent the damage — a fact, by PRESS time (karmaFeed.ts)
+        let karmaStr = "";
+        if (d.spellId === TOUCH_OF_KARMA_ID) {
+          const pressS = d.pressSeconds ?? d.atSeconds;
+          const nextS = events
+            .filter(
+              (o) =>
+                o.spellId === TOUCH_OF_KARMA_ID &&
+                (o.pressSeconds ?? o.atSeconds) > pressS,
+            )
+            .map((o) => o.pressSeconds ?? o.atSeconds)
+            .sort((a, b) => a - b)[0];
+          karmaStr = karmaFeedClause(
+            karmaFeedOf(enemy, pressS, nextS, friends, _allUnits, matchStartMs),
+            pid,
+            fmtTime,
+          );
+        }
+        const channelStr = channelTargetClause(
+          enemy,
+          d,
+          friends,
+          matchStartMs,
+          roundEndAtMs,
+          pid,
+          enemies ?? [],
+          enemyPid,
+          rosterSides,
+        );
+        // F16 retest: a rider shield no press of its own put up
+        // (Shield of Vengeance with Divine Protection) says so, as a wall
+        // copy does (F15 C5)
+        const noPress = d.noPressLogged
+          ? ` ${ENEMY_DEF_NO_PRESS_TAG}`
+          : d.unseenPress
+            ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}`
+            : "";
+        line = `${d.spellName}${label ? ` (${label})` : ""}${noPress}${burstStr}${hpStr}${selfSaveStr}${karmaStr}${channelStr}`;
+      } else {
+        // F15 C2: a school-limited immunity says which schools it stops
+        // (`immuneLabelOf`)
+        // Aspect of the Turtle (user ruling 2026-10-21): no immunity, no
+        // percentage — what the log shows it doing
+        const deflects =
+          MITIGATION_TABLE[wallTableIdOfAura(d.spellId)]
+            ?.deflectsDirectAttacks === true;
+        // Time Dilation (user 2026-10-30): what it held back while up, not
+        // the table's 50 % — the damage lands later as the unit's own
+        const deferral = isDeferralAbsorb({
+          spellId: wallTableIdOfAura(d.spellId),
+        });
+        const strength = deflects
+          ? ENEMY_DEF_DEFLECTS_WORDS
+          : deferral
+            ? enemyDefDefersLabel(
+                absorbContributionsInWindow(
+                  enemy,
+                  matchStartMs + d.atSeconds * 1000,
+                  matchStartMs +
+                    (d.atSeconds + (d.observedSeconds ?? 0)) * 1000,
+                ).find((c) => c.spellId === wallTableIdOfAura(d.spellId))
+                  ?.absorbedAmount ?? 0,
+              )
+            : d.kind === "immune"
+              ? immuneLabelOf(d.spellId)
+              : `${d.pct}%`;
+        const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
+        // F15 C5: a copy no press put up says so; fact3 D35: a press made
+        // while the unit was unseen, too
+        const noPress = d.noPressLogged
+          ? ` ${ENEMY_DEF_NO_PRESS_TAG}`
+          : d.unseenPress
+            ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}`
+            : "";
+        // fact7 D44: a teammate's proc says whose press it came from
+        const fromStr = d.procSource
+          ? ` from ${enemyPid(d.procSource.unitName)}${d.procSource.spellName ? `'s ${d.procSource.spellName}` : ""}`
+          : "";
+        // fact11 D45: the allies the same press put the immunity on
+        const alsoOn =
+          d.kind === "immune"
+            ? immunityAlsoOn(
+                enemy,
+                d.spellId,
+                d.atSeconds,
+                enemies ?? [],
+                combatSpan,
+              )
+            : [];
+        const alsoStr = enemyDefAlsoOnClause(
+          alsoOn.map((u) => enemyPid(u.name)),
+        );
+        line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""}${alsoStr})${fromStr}${noPress}${burstStr}${hpStr}`;
       }
+      // Ultimate Penitence is an offensive cooldown (user 2026-10-28) that
+      // also shields its caster: one press, one line, the `[ENEMY CD]` one
+      // (user 2026-11-02, GH #173: 137 same-second pairs on 605 files)
+      const cdHead = `${fmtTime(d.atSeconds)}  [ENEMY CD]   ${who}: ${d.spellName}`;
+      if (
+        d.spellId === ULTIMATE_PENITENCE_ID &&
+        ctx.extendEnemyCdLine?.(cdHead, line.slice(d.spellName.length))
+      )
+        continue;
+      addEntry(
+        d.atSeconds,
+        `${fmtTime(d.atSeconds)}  [ENEMY DEF]   ${who}: ${line}`,
+      );
+    }
+    // fact11 D34: an immunity pressed with no aura the log shows
+    for (const p of immunityPressesWithoutAura(
+      enemy,
+      events,
+      combatSpan,
+      roundEndAtMs,
+    )) {
+      if (p.atSeconds > matchEndSeconds) continue;
+      const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
+      addEntry(
+        p.atSeconds,
+        `${fmtTime(p.atSeconds)}  [ENEMY DEF]   ${who}: ${p.spellName} (${immuneLabelOf(p.auraId)}, ${ENEMY_DEF_NO_AURA_LOGGED})${burstTagAt(p.atSeconds)}`,
+      );
     }
   }
 }

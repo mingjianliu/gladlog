@@ -1,9 +1,7 @@
 /**
  * [YOU] [CAST] healer gap-filler (F61) — the healer owner's own casts that no
  * [YOU] [CD] line carries (folded runs, spam folds, CC casts). Healer owners
- * only (the caller gates on isHealer). With TIMELINE_LINE_FLAGS.deathWindowUnfold
- * = "summary" (not the current setting) it also writes one [YOU] [HEALS] line per
- * friendly-death window.
+ * only (the caller gates on isHealer).
  *
  * Cut out of buildMatchTimeline verbatim (GH #116); the body is unchanged, only
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
@@ -20,7 +18,6 @@ import {
 import {
   DEATH_WINDOW_S,
   DEATH_WINDOW_UNFOLD_CAP,
-  TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
 import { allyCopyClause, allyCopyRecipient } from "../../utils/allyCopyWall";
 import { channelSpans } from "../../utils/castCommitSpans";
@@ -790,10 +787,7 @@ export function emitHealerCastGapFillerEntries(
     // casts per window and each cast carries the target's HP at that
     // rendered second — the [STATE] sampler at toRenderSecond, the same
     // query the [YOU] [CD] line makes (class C stays pinned).
-    const deathWindow =
-      TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"
-        ? deathWindowAt(timeSeconds)
-        : null;
+    const deathWindow = deathWindowAt(timeSeconds);
     if (
       !hasAnnotation &&
       (ownerCastCountByName.get(displayName) ?? 0) >= SPAM_FOLD_THRESHOLD &&
@@ -883,10 +877,7 @@ export function emitHealerCastGapFillerEntries(
       // half-annotated window reads as if the un-annotated casts hit a
       // full-HP target.
       const windowHpTag =
-        TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast" &&
-        deathWindowAt(timeSeconds) !== null
-          ? castTargetHpTag(e)
-          : "";
+        deathWindowAt(timeSeconds) !== null ? castTargetHpTag(e) : "";
       addEntry(
         timeSeconds,
         `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${windowHpTag}${refusedNote}${totemNote}${orderNote}${purgeNote}${empowerNote}`,
@@ -902,32 +893,4 @@ export function emitHealerCastGapFillerEntries(
   // Flush any remaining active folds at loop end
   flushFold();
   for (const name of [...spamFolds.keys()]) flushSpamFold(name);
-
-  // GH #97 cheap alternative to the per-cast unfold: one line per
-  // friendly-death window with the owner's casts counted by spell and
-  // target. Measured against "perCast" by the fact-retrieval probe; only
-  // one of the two renders.
-  if (TIMELINE_LINE_FLAGS.deathWindowUnfold === "summary") {
-    for (const w of deathWindows) {
-      const counts = new Map<string, number>();
-      for (const e of owner.spellCastEvents ?? []) {
-        if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
-          continue;
-        if (isPassiveProcCast(e)) continue;
-        const t = (e.timestamp - matchStartMs) / 1000;
-        if (t < w.fromSeconds || t > w.toSeconds) continue;
-        const label = resolveTarget(e.destUnitName);
-        const key = `${getEnglishSpellName(e.spellId, e.spellName)}${label ? ` → ${label}` : ""}`;
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-      if (counts.size === 0) continue;
-      const parts = [...counts.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([k, n]) => (n > 1 ? k.replace(/( → |$)/, ` ×${n}$1`) : k));
-      addEntry(
-        w.fromSeconds,
-        `${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)}  [YOU] [HEALS]   ${parts.join(", ")}`,
-      );
-    }
-  }
 }
