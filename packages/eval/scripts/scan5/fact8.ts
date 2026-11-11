@@ -19,8 +19,8 @@
  *  - `auraActivationNoLine` (class 5, D11 D17 D22 D26 D40): a unit's own buff
  *    of a tracked cooldown goes up with no press of it near, and no line of a
  *    press tag names it for that unit. Kind = `<side>/<spell>`. Log rows only:
- *    a row of the batch that re-states a unit (`RESTATE_BATCH` self rows in
- *    one millisecond) is no activation. Kind `unlogged press (dated)` (not
+ *    a row of the batch that re-states a unit (`RESTATE_BATCH` self rows,
+ *    each within `RESTATE_BATCH_GAP_MS` of the one before) is no activation. Kind `unlogged press (dated)` (not
  *    in the total): a cooldown whose aura stands for an unlogged press on
  *    the log's date (`AURA_PRESS_BY_ERA`, `auraStandsForPressAt`: Doom Winds
  *    before 12.1.5, fact11 D44 / user ruling 2026-11-05 — our side prints no
@@ -333,8 +333,10 @@ function trackedAuras(): Map<string, string> {
   return out;
 }
 
-/** a batch of this many self rows in one ms can re-state the unit */
+/** a batch of this many self rows can re-state the unit */
 const RESTATE_BATCH = 4;
+/** rows of one batch follow each other within this gap */
+const RESTATE_BATCH_GAP_MS = 2;
 /** rows of the batch that must re-list an aura already up: four fresh buffs in
  * one ms are a press with its riders (Doom Winds, a39539f2 2:36) */
 const RESTATE_ALREADY_UP = 2;
@@ -393,12 +395,28 @@ function auraNoLine(ctx: IRoundCtx): void {
     const perMs = new Map<number, number>();
     const relistedPerMs = new Map<number, number>();
     const auraRows = (u.auraEvents ?? []) as any[];
-    for (const a of self) {
-      const ms = tsOf(a);
-      perMs.set(ms, (perMs.get(ms) ?? 0) + 1);
-      if (relistsAuraUp(auraRows, a))
-        relistedPerMs.set(ms, (relistedPerMs.get(ms) ?? 0) + 1);
+    // the batch: the unit's self APPLIED rows, buffs and debuffs, each at
+    // most RESTATE_BATCH_GAP_MS after the one before — the log writes one
+    // re-listing across two or three milliseconds, its debuffs (Dampening,
+    // Exhaustion) among the buffs (GH #177 item 14: all 23 residual facts on
+    // the 605 were such a batch, 5–25 rows, read one millisecond at a time)
+    let batch: any[] = [];
+    const closeBatch = () => {
+      const relisted = batch.filter((b) => relistsAuraUp(auraRows, b)).length;
+      for (const b of batch) {
+        perMs.set(tsOf(b), batch.length);
+        relistedPerMs.set(tsOf(b), relisted);
+      }
+      batch = [];
+    };
+    for (const a of auraRows) {
+      if (ev(a) !== APPLIED || a.srcUnitId !== u.id || a.destUnitId !== u.id)
+        continue;
+      const last = batch[batch.length - 1];
+      if (last && tsOf(a) - tsOf(last) > RESTATE_BATCH_GAP_MS) closeBatch();
+      batch.push(a);
     }
+    closeBatch();
     for (const a of self) {
       const cast = tracked.get(a.spellId);
       const ms = tsOf(a);
