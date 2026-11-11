@@ -202,7 +202,10 @@ import {
   SPEC_GATED_OFFENSIVE_CD_IDS,
   SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
 } from "../utils/spellDanger";
-import { HEALER_REACH_SPELLS } from "../utils/spellRange";
+import {
+  CC_THREAT_REACH_RULED_YD,
+  HEALER_REACH_SPELLS,
+} from "../utils/spellRange";
 import {
   STEALTH_ONLY_CONTROL_IDS,
   STEALTH_STATE_AURA_IDS,
@@ -907,6 +910,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // an enemy kicker can close a gap with — kick-eaten's out-range gate.
   t("GAP_CLOSER_SPELL_IDS", "utils/gapClosers.ts", "cast", () =>
     set(GAP_CLOSER_SPELL_IDS),
+  ),
+  // R26 (2026-11-11): a cast id and the aura the log records for it
+  t("CC_THREAT_REACH_RULED_YD", "utils/spellRange.ts", "mixed", () =>
+    Object.keys(CC_THREAT_REACH_RULED_YD),
   ),
   t("HEALER_REACH_SPELLS", "utils/spellRange.ts", "cast", () =>
     set(Object.values(HEALER_REACH_SPELLS).flat()),

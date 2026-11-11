@@ -181,6 +181,17 @@ describe("ccThreatReachYards / ccThreatRadiusYards (GH #83)", () => {
     expect(ccThreatReachYards(null, "118699")).toBe(30);
   });
 
+  it("R26: Song of Chi-Ji reaches 15 yd by its cast id and by its aura id, not DB2's 40 / placeholder", () => {
+    expect(ccThreatReachYards(null, "198898")).toBe(15);
+    expect(ccThreatReachYards(null, "198909")).toBe(15);
+    // the exposure radius adds the close-in of a reach past the melee split
+    expect(ccThreatRadiusYards(null, "198898")).toBe(
+      15 + CC_CLOSE_IN_RANGED_YD,
+    );
+    // the cast range itself (what a kick reads) stays DB2's
+    expect(spellRangeForCaster(null, "198898")).toBe(40);
+  });
+
   it("the 100 yd 'vision range' placeholder is not a range", () => {
     expect(ccThreatReachYards(null, "3355")).toBeNull(); // Freezing Trap aura
     expect(ccThreatRadiusYards(null, "3355")).toBe(CC_MAX_CAST_RANGE_YARDS);

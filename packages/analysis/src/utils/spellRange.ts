@@ -169,6 +169,28 @@ export function healerReachYards(
 export const PLACEHOLDER_RANGE_YD = 100;
 
 /**
+ * A control whose DB2 cast range is not how far it is used from — the reach
+ * every "could this player CC that unit" reader gets instead, by cast id and
+ * by the aura id the log records (user ruling R26, 2026-11-11).
+ *
+ * Song of Chi-Ji 198898 / 198909: DB2 gives the cast 40 yd and the disorient
+ * the 100 yd placeholder, but the cast is not aimed at a unit — a cloud
+ * creeps forward from the monk and disorients what it touches. The user:
+ * "这个技能不是那种指向性的,它是在地上一点一点缓慢挪过去的 … 大多数时间这个控用的
+ * 实际距离比较短,所以我觉得可以用 15 码吧". Measured on the 605 capture: 265
+ * landings (247 casts), 216 with positions, caster → target at the landing
+ * p50 3.8 / p85 8.6 / p95 14.5 / max 34.9 yd. At 40 yd, `[HEALER EXPOSURE]`,
+ * the CC target sampler (CC USE, peel options, `[CC BOOKMARK]`) and
+ * healer-offense's "healer in reach" counted a Mistweaver across the arena.
+ * Not a talent's number: range talents do not move it. Registered in
+ * `data/curatedIdRegistry.ts`.
+ */
+export const CC_THREAT_REACH_RULED_YD: Readonly<Record<string, number>> = {
+  "198898": 15, // Song of Chi-Ji (cast)
+  "198909": 15, // Song of Chi-Ji (disorient)
+};
+
+/**
  * How far a crowd control reaches from its caster, for "could this enemy CC
  * that unit" — GH #83 (user 2026-09-23: "距离都可以算进来"). A cast range when
  * the spell has one (Polymorph 30, Cyclone 20, Kidney Shot 5 — talents
@@ -176,12 +198,15 @@ export const PLACEHOLDER_RANGE_YD = 100;
  * Dragon's Breath 12, Blinding Light 10). Aura ids the log records for a CC
  * resolve through the cast that triggers them (genSpellReach, Fear 118699 →
  * 5782). null when neither is known or the only number is the 100 yd
- * placeholder — callers fall back to their generic bound.
+ * placeholder — callers fall back to their generic bound. A ruled reach
+ * (`CC_THREAT_REACH_RULED_YD`) comes first.
  */
 export function ccThreatReachYards(
   caster: Caster | null | undefined,
   spellId: string,
 ): number | null {
+  const ruled = CC_THREAT_REACH_RULED_YD[spellId];
+  if (ruled !== undefined) return ruled;
   const e = SPELLS[spellId];
   if (!e) return null;
   if (e.rangeYards > 0 && e.rangeYards < PLACEHOLDER_RANGE_YD)
