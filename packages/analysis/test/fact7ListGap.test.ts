@@ -6,6 +6,7 @@
 import {
   CombatUnitClass,
   CombatUnitSpec,
+  CombatUnitType,
   LogEvent,
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -307,6 +308,7 @@ describe("[RES] enemy: a promoted button runs on its effect aura (T72)", () => {
   );
   const furyVictim = {
     id: "v",
+    type: CombatUnitType.Player,
     auraEvents: [
       victimAuraOf(40.9, LogEvent.SPELL_AURA_APPLIED),
       victimAuraOf(44.9, LogEvent.SPELL_AURA_REMOVED),
@@ -339,7 +341,10 @@ describe("[RES] enemy: a promoted button runs on its effect aura (T72)", () => {
     const round = {
       startTime: T0,
       endTime: END,
-      units: { u: rogue, v: { id: "v", auraEvents: [goremaw] } },
+      units: {
+        u: rogue,
+        v: { id: "v", type: CombatUnitType.Player, auraEvents: [goremaw] },
+      },
     } as never;
     const row = reconstructEnemyCDTimeline([rogue], round).players[0]!
       .offensiveCDs[0]!;
@@ -352,6 +357,7 @@ describe("[RES] enemy: a promoted button runs on its effect aura (T72)", () => {
         u: rogue,
         v: {
           id: "v",
+          type: CombatUnitType.Player,
           auraEvents: [goremaw],
           deathRecords: [{ timestamp: T0 + 151_000 }],
         },
@@ -370,6 +376,7 @@ describe("[RES] enemy: a promoted button runs on its effect aura (T72)", () => {
         u: rogue,
         v: {
           id: "v",
+          type: CombatUnitType.Player,
           auraEvents: [goremaw],
           deathRecords: [{ timestamp: T0 + 161_000 }],
         },
@@ -379,6 +386,48 @@ describe("[RES] enemy: a promoted button runs on its effect aura (T72)", () => {
       reconstructEnemyCDTimeline([rogue], later).players[0]!.offensiveCDs[0]!
         .buffEndSeconds,
     ).toBeCloseTo(164.129, 3);
+  });
+
+  it("an unclosed application does not take the next application's end (codex 85-tk-G-T72-1b #1, 89-1-473)", () => {
+    const warrior = unit(CombatUnitClass.Warrior, CombatUnitSpec.Warrior_Fury, [
+      cast("385059", 10.075),
+      cast("385059", 57.8),
+    ]);
+    const round = {
+      startTime: T0,
+      endTime: END,
+      units: {
+        u: warrior,
+        v: {
+          id: "v",
+          type: CombatUnitType.Player,
+          auraEvents: [
+            victimAuraOf(10.186, LogEvent.SPELL_AURA_APPLIED),
+            victimAuraOf(57.898, LogEvent.SPELL_AURA_APPLIED),
+            victimAuraOf(61.957, LogEvent.SPELL_AURA_REMOVED),
+          ],
+        },
+      },
+    } as never;
+    const rows = reconstructEnemyCDTimeline([warrior], round).players[0]!
+      .offensiveCDs;
+    // the first runs its aura's official 4 s, not to the second one's end
+    expect(rows[0]!.buffEndSeconds).toBeCloseTo(14.186, 3);
+    expect(rows[1]!.buffEndSeconds).toBeCloseTo(61.957, 3);
+  });
+
+  it("a copy on a pet is not the effect's span (FT F13, as the observed-chain reader)", () => {
+    const round = {
+      startTime: T0,
+      endTime: END,
+      units: {
+        u: furyWarrior,
+        v: { ...furyVictim, type: CombatUnitType.Pet },
+      },
+    } as never;
+    const row = reconstructEnemyCDTimeline([furyWarrior], round).players[0]!
+      .offensiveCDs[0]!;
+    expect(row.buffEndSeconds).toBeCloseTo(40.77, 3);
   });
 });
 

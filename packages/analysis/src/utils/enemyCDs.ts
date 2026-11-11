@@ -1107,12 +1107,25 @@ function pressEffectEndSeconds(
     if (opened.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
     const at = opened.logLine.timestamp;
     if (at > pressMs + PRESS_EFFECT_AURA_LAG_MS) continue;
+    // this application's own end: a REMOVED after the unit's next
+    // application of the aura closes that one (codex 85-tk-G-T72-1b #1,
+    // 89-1-473: an Odyn's Fury applied at 10.186 with no end logged took the
+    // 61.957 end of the application at 57.898 — a 51.9 s effect)
+    const reappliedAt = own.find(
+      (a) =>
+        a !== opened &&
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        a.spellId === opened.spellId &&
+        a.destUnitId === opened.destUnitId &&
+        a.logLine.timestamp > at,
+    )?.logLine.timestamp;
     const closed = own.find(
       (a) =>
         a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
         a.spellId === opened.spellId &&
         a.destUnitId === opened.destUnitId &&
-        a.logLine.timestamp >= at,
+        a.logLine.timestamp >= at &&
+        (reappliedAt === undefined || a.logLine.timestamp <= reappliedAt),
     );
     const officialS = closed
       ? undefined
@@ -1322,11 +1335,15 @@ export function reconstructEnemyCDTimeline(
         // — the reading it had as a press fact (`pressEffectEndSeconds`;
         // Goremaw's Bite 426591 → 426593, 75-1-523: pressed at 150.128, the
         // round over at 2:39, the span read zero and `[RES]` the instant
-        // member's 8 s for a 14 s effect).
+        // member's 8 s for a 14 s effect). On players only, as the
+        // observed-chain reader reads (FT F13: a copy on a pet, a totem or
+        // a guardian is not the effect's span).
         if (cd.buffEndSeconds <= cd.castTimeSeconds) {
           const effectEnd = pressEffectEndSeconds(
             enemy,
-            Object.values(combat.units ?? {}),
+            Object.values(combat.units ?? {}).filter(
+              (u) => u.type === CombatUnitType.Player,
+            ),
             getEnglishSpellName(cd.spellId, cd.spellName),
             matchStartMs + cd.castTimeSeconds * 1000,
             matchStartMs,
