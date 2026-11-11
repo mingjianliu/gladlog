@@ -44,6 +44,12 @@ export async function main(): Promise<void> {
     return (t.match(/"\d+"/g) ?? []).length;
   };
 
+  // A `new Map([[key, [ids]], …])` literal: one entry per key.
+  const countMapEntries = (f: string) => {
+    const t = readFileSync(dataDir + f, "utf-8");
+    return (t.match(/^\s*\["\d+", \[/gm) ?? []).length;
+  };
+
   // The enum artifact lives in another package and is a TS enum, not JSON —
   // count member lines, do not try to JSON.parse it.
   const countEnumMembers = () => {
@@ -178,6 +184,10 @@ export async function main(): Promise<void> {
       // GH #167: the forward check of SELF_CAST_NOOP_EXTERNAL_IDS
       "excludeCasterGenerated.ts": {
         entries: countQuotedIds("excludeCasterGenerated.ts"),
+      },
+      // GH #167.21: press → triggered impact (SpellEffect charge effects)
+      "pressTriggeredCastsGenerated.ts": {
+        edges: countMapEntries("pressTriggeredCastsGenerated.ts"),
       },
       "summonGenerated.ts": {
         entries: countQuotedIds("summonGenerated.ts"),

@@ -1175,11 +1175,18 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   // codex 20-F20-28 (2026-10-29): press → the id its effect triggers as a
   // second SPELL_CAST_SUCCESS at the target (DB2 SpellEffect EffectTriggerSpell)
-  // — the evidence a follow-up row's IMMUNE is the press's refusal.
-  t("PRESS_TRIGGERED_CAST_IDS", "utils/castMissRows.ts", "cast", () => [
-    ...PRESS_TRIGGERED_CAST_IDS.keys(),
-    ...[...PRESS_TRIGGERED_CAST_IDS.values()].flat(),
-  ]),
+  // — the evidence a follow-up row's IMMUNE is the press's refusal. Generated
+  // since GH #167.21 (genPressTriggeredCasts.ts), and still registered: both
+  // ends are spell ids a renumbering leaves behind until the next datagen run.
+  t(
+    "PRESS_TRIGGERED_CAST_IDS",
+    "data/pressTriggeredCastsGenerated.ts",
+    "cast",
+    () => [
+      ...PRESS_TRIGGERED_CAST_IDS.keys(),
+      ...[...PRESS_TRIGGERED_CAST_IDS.values()].flat(),
+    ],
+  ),
   // Triage G3 (2026-10-02, ruling A10 = both): the one cast id → effect aura
   // table, which absorbed GH #111's hand list `CC_CAST_EFFECT_AURA`. Generated
   // — but from a CORPUS measurement over DB2 nominations, so its pairs are a
@@ -1250,17 +1257,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   // GH #175: auras a class set bonus extends press by press, and the presses
   // that extend them
-  t(
-    "SET_BONUS_PER_EVENT_DURATIONS",
-    "data/classSetBonuses.ts",
-    "mixed",
-    () => [
-      ...Object.keys(SET_BONUS_PER_EVENT_DURATIONS),
-      ...Object.values(SET_BONUS_PER_EVENT_DURATIONS).flatMap((r) => [
-        ...r.qualifyingSpellIds,
-      ]),
-    ],
-  ),
+  t("SET_BONUS_PER_EVENT_DURATIONS", "data/classSetBonuses.ts", "mixed", () => [
+    ...Object.keys(SET_BONUS_PER_EVENT_DURATIONS),
+    ...Object.values(SET_BONUS_PER_EVENT_DURATIONS).flatMap((r) => [
+      ...r.qualifyingSpellIds,
+    ]),
+  ]),
   // fact7 class 3 (2026-10-30): offensive buttons whose press is a fact
   // line, no window; found forward by scan5/listGap.ts.
   t("OFFENSIVE_PRESS_FACT_IDS", "utils/spellDanger.ts", "cast", () =>
@@ -1314,12 +1316,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // T05 a2 (2026-11-08): the talent that makes Eye Beam open a demon form —
   // `metamorphosisPressActivationMs` lets an Eye Beam explain a form row only
   // for a unit that may hold it
-  t(
-    "DEMONIC_TALENT_ID",
-    "utils/offensiveAuraOccurrences.ts",
-    "talent",
-    () => [DEMONIC_TALENT_ID],
-  ),
+  t("DEMONIC_TALENT_ID", "utils/offensiveAuraOccurrences.ts", "talent", () => [
+    DEMONIC_TALENT_ID,
+  ]),
   // CC full-duration predicate (GH #44 tail, 2026-09-02): the corpus-vs-DB2
   // duration corrections and the one aura that lengthens CC in arena. Both are
   // hand-keyed ids a patch can renumber, so both sit under the rot scans.

@@ -19,6 +19,7 @@ import {
   effectAurasOfCast,
   effectAuraViaName,
 } from "../data/castEffectAuras";
+import { PRESS_TRIGGERED_CAST_IDS } from "../data/pressTriggeredCastsGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { toRenderSecond } from "./renderGrid";
@@ -408,24 +409,20 @@ export interface IPressFollowUp {
  * The DB2 link is the evidence a row is the press's impact and not a press of
  * its own; a shared English name is not (codex 20-F20-28: Moonfire 8921 and
  * Lunar Inspiration's Moonfire 155625 share the name and no link).
- * Completeness (codex 20-F20-33, which found 370965 missing from a hand
- * pick): all 437 SpellEffect trigger edges between observed ids
+ * Generated from that DB2 query (`genPressTriggeredCasts.ts` →
+ * `data/pressTriggeredCastsGenerated.ts`; GH #167.21 — it was a hand copy,
+ * and a hand pick had missed 370965, codex 20-F20-33). Why the charge effect
+ * is the rule: of the 437 SpellEffect trigger edges between observed ids
  * (12.1.5.70575), read against the 605 files' casts — a triggered id cast by
- * the presser at the press's target within 2.5 s — leave exactly these as
+ * the presser at the press's target within 2.5 s — exactly these are
  * impacts: 370965 → 370966 followed 457 of 477 presses (100 % of 370966's
  * rows), 1259431 → 1246169 118 / 123, 1246167 → 1246169 74 / 74, 1244088 →
  * 1244091 6 / 7; the other followed edges are effect 64 / 6 procs and ticks
  * (Mutilate's off-hand, Throw Glaive's bounce, Odyn's Fury's hits, Divine
- * Hymn). Hand-kept from that DB2 query, registered in curatedIdRegistry.
+ * Hymn). Registered in curatedIdRegistry (a renumbered end drops out of the
+ * observed universe, and the rot scan reads the table's ids).
  */
-export const PRESS_TRIGGERED_CAST_IDS: ReadonlyMap<string, readonly string[]> =
-  new Map([
-    ["370965", ["370966"]],
-    ["432113", ["432120"]],
-    ["1244088", ["1244091"]],
-    ["1246167", ["1246169"]],
-    ["1259431", ["1246169"]],
-  ]);
+export { PRESS_TRIGGERED_CAST_IDS };
 
 /**
  * A press whose impact is logged as a SECOND `SPELL_CAST_SUCCESS` of an id

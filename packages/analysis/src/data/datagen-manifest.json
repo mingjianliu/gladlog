@@ -72,6 +72,9 @@
     "excludeCasterGenerated.ts": {
       "entries": 45
     },
+    "pressTriggeredCastsGenerated.ts": {
+      "edges": 5
+    },
     "summonGenerated.ts": {
       "entries": 185
     },

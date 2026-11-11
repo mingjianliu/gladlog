@@ -152,6 +152,7 @@
     "test/dampeningStart.test.ts",
     "test/data.test.ts",
     "test/datagen.mitigation.test.ts",
+    "test/datagen.pressTriggeredCasts.test.ts",
     "test/datagen.simcHotfix.test.ts",
     "test/datagen.spellNamesZh.test.ts",
     "test/datagen.spellReach.test.ts",
