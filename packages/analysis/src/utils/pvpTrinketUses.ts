@@ -24,6 +24,8 @@
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { unitMemo } from "./combatMemo";
+
 /** Gladiator's Medallion (active break-CC). */
 export const MEDALLION_SPELL_ID = "336126";
 /** Adaptation's logged trigger — a self-aura, no cast. */
@@ -45,6 +47,12 @@ export interface IPvpTrinketUse {
 export const MEDALLION_AURA_BEFORE_CAST_MS = 300;
 
 export function pvpTrinketUses(unit: ICombatUnit): IPvpTrinketUse[] {
+  // once per unit object (combatMemo.ts): `ccRemovalCause` asks per control
+  return unitMemo(unit, "pvpTrinketUses", () => pvpTrinketUsesUncached(unit));
+}
+
+/** `pvpTrinketUses` without the per-unit memo (the equality test reads both). */
+export function pvpTrinketUsesUncached(unit: ICombatUnit): IPvpTrinketUse[] {
   const out: IPvpTrinketUse[] = [];
   // the press instant is its own aura's APPLIED — logged in the same ms as
   // the control it broke came off, the cast row up to 150 ms later

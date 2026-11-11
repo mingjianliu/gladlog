@@ -82,6 +82,7 @@ import {
   NO_CC_LANDING_STATE,
 } from "./ccDuration";
 import { charmedAt } from "./charmedPlayer";
+import { unitMemo } from "./combatMemo";
 import {
   STASIS_RELEASE_SPELL_ID,
   stasisReleasePressesMs,
@@ -2216,6 +2217,17 @@ export interface IBreakAbilityUse {
  * P-b7, see `getTrinketStateAtTime`.)
  */
 export function breakAbilityPresses(
+  player: Pick<ICombatUnit, "id" | "spellCastEvents" | "auraEvents">,
+): Array<{ ts: number; spellId: string }> {
+  // once per unit object (combatMemo.ts): `ccRemovalCause` asks per control
+  return unitMemo(player, "breakAbilityPresses", () =>
+    breakAbilityPressesUncached(player),
+  );
+}
+
+/** `breakAbilityPresses` without the per-unit memo (the equality test reads
+ * both). */
+export function breakAbilityPressesUncached(
   player: Pick<ICombatUnit, "id" | "spellCastEvents" | "auraEvents">,
 ): Array<{ ts: number; spellId: string }> {
   const out: Array<{ ts: number; spellId: string }> = [];

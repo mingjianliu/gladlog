@@ -12,6 +12,38 @@ export interface IPosition {
   y: number;
 }
 
+const timeOrderedCache = new WeakMap<object, { len: number; ok: boolean }>();
+/** Whether a sample stream never steps back in time (checked once per array,
+ * again when its length changes). */
+function isTimeOrdered(actions: ReadonlyArray<{ timestamp: number }>): boolean {
+  const hit = timeOrderedCache.get(actions);
+  if (hit && hit.len === actions.length) return hit.ok;
+  let ok = true;
+  for (let i = 1; i < actions.length; i++)
+    // `!(a <= b)` so a NaN timestamp reads as unordered
+    if (!(actions[i - 1].timestamp <= actions[i].timestamp)) {
+      ok = false;
+      break;
+    }
+  timeOrderedCache.set(actions, { len: actions.length, ok });
+  return ok;
+}
+
+/** Index of the first sample with `timestamp > t` (length when none). */
+function firstSampleAfter(
+  actions: ReadonlyArray<{ timestamp: number }>,
+  t: number,
+): number {
+  let lo = 0;
+  let hi = actions.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (actions[mid].timestamp > t) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
 /**
  * Interpolate a unit's game position at a given absolute timestamp (ms).
  * Returns null when advanced logging is absent or the timestamp is outside
@@ -44,7 +76,14 @@ export function getUnitPositionAtTime(
     return { x: last.advancedActorPositionX, y: last.advancedActorPositionY };
   }
 
-  for (let i = 0; i < actions.length - 1; i++) {
+  // The bracketing pair is the FIRST i with actions[i] <= t < actions[i+1].
+  // On a time-ordered stream that is the pair ending at the first sample
+  // past t, found by bisection (T81: this scan was 2.2 s of self time in the
+  // ×12 report render); a stream with a sample out of order keeps the scan.
+  const start = isTimeOrdered(actions)
+    ? firstSampleAfter(actions, timestampMs) - 1
+    : 0;
+  for (let i = start; i < actions.length - 1; i++) {
     const curr = actions[i];
     const next = actions[i + 1];
     if (curr.timestamp <= timestampMs && next.timestamp > timestampMs) {

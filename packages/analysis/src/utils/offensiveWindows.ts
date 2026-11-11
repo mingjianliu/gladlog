@@ -19,6 +19,7 @@ import { SpellTag } from "../data/spellTypes";
 import { supersededAuraBreaks } from "./auraIntervals";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { combatMemo, roundFingerprint, unitTokens } from "./combatMemo";
 import { extractSpiritOfRedemptionIntervals } from "./combatStates";
 import {
   cdHelpsRecipient,
@@ -408,6 +409,23 @@ const WALL_CAST_TO_AURA_ID: Readonly<Record<string, string>> =
   );
 
 export function computeOffensiveWindows(
+  enemies: ICombatUnit[],
+  friendlies: ICombatUnit[],
+  combat: AtomicArenaCombat,
+): IOffensiveWindow[] {
+  // One computation per round object and pair of sides (combatMemo.ts): the
+  // report render and a prompt build ask for these windows from six places.
+  return combatMemo(
+    combat,
+    `offensiveWindows|${unitTokens(enemies)}|${unitTokens(friendlies)}`,
+    roundFingerprint(combat, enemies, friendlies),
+    () => computeOffensiveWindowsUncached(enemies, friendlies, combat),
+  );
+}
+
+/** `computeOffensiveWindows` without the per-round memo (the equality test
+ * reads both). */
+export function computeOffensiveWindowsUncached(
   enemies: ICombatUnit[],
   friendlies: ICombatUnit[],
   combat: AtomicArenaCombat,

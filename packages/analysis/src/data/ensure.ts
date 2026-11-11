@@ -1,5 +1,5 @@
-import { ensureHeroTalents } from "../utils/talents";
-import { ensureSpellNames } from "./spellEffectData";
+import { ensureHeroTalents, heroTalentsReady } from "../utils/talents";
+import { ensureSpellNames, spellNamesReady } from "./spellEffectData";
 import { ensureTalentData, talentDataReady } from "./talentStrings";
 
 /** The large data tables (spellNames 12MB / talentIdMap 1.6MB) load in the
@@ -36,3 +36,12 @@ export async function ensureAnalysisData(): Promise<void> {
  * moment, and the probe only ever saves one re-render, so a false negative is
  * harmless. */
 export const analysisDataReady = (): boolean => talentDataReady();
+
+/** Which of the three lazy tables are in, as a bit set — exact, unlike
+ * `analysisDataReady`'s representative. A cache of a reading that may fall
+ * back before a table loads keys on this (utils/combatMemo.ts), so a result
+ * computed against a missing table is never served once the table is there. */
+export const analysisDataEpoch = (): number =>
+  (spellNamesReady() ? 1 : 0) |
+  (talentDataReady() ? 2 : 0) |
+  (heroTalentsReady() ? 4 : 0);

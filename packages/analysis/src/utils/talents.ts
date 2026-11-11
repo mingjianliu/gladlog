@@ -113,6 +113,8 @@ const heroLoad = import("../data/talentIdMap.json").then((mod) => {
   heroReady = true;
 });
 export const ensureHeroTalents = (): Promise<void> => heroLoad;
+/** Whether the hero-talent table has loaded (synchronous probe). */
+export const heroTalentsReady = (): boolean => heroReady;
 
 export const findHeroTalent = memoizeWhenReady(
   () => heroReady,
