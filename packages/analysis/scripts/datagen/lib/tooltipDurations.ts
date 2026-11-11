@@ -25,7 +25,8 @@
  *     (「最多(可)延长 N 秒」, or 「最多可达基础持续时间的 N%」), and whether it
  *     is FIXED (the spell simply lasts longer) or PER-EVENT (a trigger — 每 /
  *     当…时 / 会使 / 施放 / 使用 / 消耗 / 击中 / 爆击 / 期间 — extends it each
- *     time). The trigger text is kept verbatim: what counts as an event is
+ *     time; a bare 「X激活期间，其…」 is X's own state and stays FIXED). The
+ *     trigger text is kept verbatim: what counts as an event is
  *     verified against the log, not decided here.
  */
 import { evalCondition } from "./tooltipSpecGates";
@@ -203,6 +204,10 @@ const CAP_OF_BASE_RE = new RegExp(
 // words that make an extension happen per event, not once
 const TRIGGER_RE =
   /每|当|时[，,]|时，|会使|施放|使用|消耗|击中|爆击|造成伤害|刷新|创造|期间|激活时|召唤天神后|重新施加/;
+/** a trigger that is only 「<names>激活期间」 — a state, with no event in it */
+const STATE_ONLY_RE = /^[^，,]*激活期间$/;
+const EVENT_WORD_RE =
+  /每|当|会使|施放|使用|消耗|击中|爆击|造成伤害|刷新|创造|重新施加/;
 const NAME_SPLIT_RE = /和|、|与|以及|或/;
 const NAME_PREFIX_RE =
   /^(?:并且|并使|并|且|使|你的|你激活的|你已激活的|激活的|正在生效的|一个激活的|一个|目标身上的|你对目标施加的|所有|其)+/;
@@ -290,15 +295,23 @@ export function parseDurationClauses(
       .filter(Boolean);
     const implied =
       targets.length === 0 || targets.some((t) => /^(?:其|它|它们)$/.test(t));
+    // 「X激活期间，其持续时间延长 N 秒」: the words before the pronoun are
+    // the state the sentence is about, not an event inside it — X simply
+    // lasts N longer (GH #179: Preeminence 462443 read as +3 s per event)
+    const stateOnly =
+      trigger !== undefined &&
+      implied &&
+      STATE_ONLY_RE.test(trigger) &&
+      !EVENT_WORD_RE.test(trigger);
     const clause: IDurationClause = {
       targets: implied ? [] : targets,
       ...(implied ? { subjectText: sentence.slice(0, at) } : {}),
-      kind: m[2] ? "set" : trigger ? "per-event" : "fixed",
+      kind: m[2] ? "set" : trigger && !stateOnly ? "per-event" : "fixed",
       unit,
       amount: value,
       sentence,
     };
-    if (trigger) clause.trigger = trigger;
+    if (trigger && !stateOnly) clause.trigger = trigger;
     const rest = sentence.slice(at + m[0].length);
     const capBase = CAP_OF_BASE_RE.exec(rest);
     const cap = capBase ? undefined : CAP_RE.exec(rest);

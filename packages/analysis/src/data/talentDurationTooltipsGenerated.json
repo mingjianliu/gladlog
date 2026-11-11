@@ -7254,10 +7254,9 @@
    "specs": [
     "262"
    ],
-   "kind": "per-event",
+   "kind": "fixed",
    "unit": "s",
    "amount": 3,
-   "trigger": "升腾激活期间",
    "sentence": "升腾激活期间，其持续时间延长${$s1/1000}秒，并且你的急速提高$s2%",
    "targets": [
     {
@@ -7298,10 +7297,9 @@
    "specs": [
     "264"
    ],
-   "kind": "per-event",
+   "kind": "fixed",
    "unit": "s",
    "amount": 3,
-   "trigger": "升腾或治疗之潮图腾激活期间",
    "sentence": "升腾或治疗之潮图腾激活期间，它们的持续时间延长${$s1/1000}秒，并且你的急速提高$s2%",
    "targets": [
     {

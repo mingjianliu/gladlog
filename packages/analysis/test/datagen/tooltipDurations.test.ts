@@ -172,3 +172,33 @@ describe("parseDurationClauses — codex 20-F16-13 #2–#5", () => {
     expect(clauses[0]).toMatchObject({ cap: 8 });
   });
 });
+
+describe("parseDurationClauses — a state is not an event (GH #179, T76)", () => {
+  it("「X激活期间，其持续时间延长」 is a fixed extension of X (Preeminence 462443)", () => {
+    for (const sentence of [
+      "升腾激活期间，其持续时间延长${$s1/1000}秒，并且你的急速提高$s2%。",
+      "升腾或治疗之潮图腾激活期间，它们的持续时间延长${$s1/1000}秒，并且你的急速提高$s2%。",
+    ]) {
+      const [c] = parseDurationClauses(
+        sentence,
+        ctx("462443", { "462443:0": 3000, "462443:1": 25 }),
+      ).clauses;
+      expect(c).toMatchObject({ targets: [], kind: "fixed", amount: 3 });
+      expect(c!.trigger).toBeUndefined();
+      expect(c!.subjectText).toContain("升腾");
+    }
+  });
+
+  it("an event inside the state still extends per event (Frostbound Will, Thunder Blast in Avatar)", () => {
+    const [frost] = parseDurationClauses(
+      "冷酷严冬期间每消耗一个符文，就会使冷酷严冬造成的伤害提高$s2%，并使其持续时间延长${$s1/10}.1秒。",
+      ctx("194912", { "194912:0": 5, "194912:1": 2 }),
+    ).clauses;
+    expect(frost).toMatchObject({ kind: "per-event" });
+    const [avatar] = parseDurationClauses(
+      "在天神下凡期间，雷霆轰击会使天神下凡的持续时间延长${$s1/1000}.1秒。",
+      ctx("1270724", { "1270724:0": 2000 }),
+    ).clauses;
+    expect(avatar).toMatchObject({ kind: "per-event", amount: 2 });
+  });
+});
