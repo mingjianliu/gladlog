@@ -39,6 +39,7 @@ import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
 import { isStunCcInstance } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
+import { logInstantOf } from "../utils/logEra";
 import { offensiveCooldownIdAt } from "../utils/overrideVariantEra";
 import { ownerPetGoneAt, PET_COMMAND_SPELL_IDS } from "../utils/petPresence";
 import type { CastFailedEvent } from "../utils/rawStreams";
@@ -46,7 +47,7 @@ import { toRenderSecond } from "../utils/renderGrid";
 import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import type { RosterSides } from "../utils/rosterSide";
 import { getPvpToolkit } from "../utils/talentBehaviors";
-import { unitLogEpochMs } from "../utils/talents";
+import { unitLogInstant } from "../utils/talents";
 import { DEATH_CASCADE_MS, isDeadAt } from "../utils/unitDeath";
 import {
   formatKitUnusedNote,
@@ -131,7 +132,7 @@ export function buildPlayerLoadout(
 } {
   const lines: string[] = [];
   // the round's date: a variant's alias is dated (`canonicalSpellId`)
-  const logEpochMs = unitLogEpochMs(owner);
+  const logEpochMs = unitLogInstant(owner);
   lines.push("<player_loadout>");
   // Talent-ownership guard note (issue #8 / BACKLOG #23-1). The kits below are
   // already filtered to spells there is evidence the player HAS this round
@@ -1251,9 +1252,13 @@ function buildResourceSnapshotOnce({
       // free Frostwyrm's Fury 1265384 6 s into the first one's slow — one
       // aura, refreshed) is that cooldown's window, as an override variant
       // is (`offensiveEffectCdId`, the window builder's own mapping)
+      const startAt =
+        matchStartMs === undefined
+          ? undefined
+          : logInstantOf(ownerUnit, matchStartMs);
       const key = canonicalSpellId(
-        offensiveCooldownIdAt(cd.spellId, matchStartMs) ?? cd.spellId,
-        matchStartMs,
+        offensiveCooldownIdAt(cd.spellId, startAt) ?? cd.spellId,
+        startAt,
       );
       const prev = windows.get(key);
       // an effect its holder's death cut short: shown until the death, its

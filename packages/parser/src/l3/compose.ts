@@ -1,3 +1,5 @@
+import { splitLine } from "../l1/splitTopLevel";
+import { logLineInstantMs } from "../l1/statedInstant";
 import type { ParsedLine } from "../l1/types";
 import type { Segment, ShuffleClose } from "../l2/types";
 import { slimMatchParams } from "../slim";
@@ -105,6 +107,7 @@ export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
     rawLines,
     hasAdvancedLogging,
     timezone: "local",
+    statedStartTime: statedInstantOf(seg.startLine),
   };
 }
 
@@ -229,6 +232,7 @@ function buildShuffleRound(
     rawLines,
     hasAdvancedLogging,
     timezone: "local",
+    statedStartTime: statedInstantOf(seg.startLine),
   };
 }
 
@@ -274,4 +278,11 @@ export function buildShuffle(close: ShuffleClose): GladShuffle {
     rawLines,
     result,
   };
+}
+
+/** The instant a parsed line states for itself (`GladMatchBase.statedStartTime`);
+ * null when it states none. */
+function statedInstantOf(line: ParsedLine): number | null {
+  const datePart = splitLine(line.raw)?.datePart;
+  return datePart === undefined ? null : logLineInstantMs(datePart);
 }

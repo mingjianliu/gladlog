@@ -3929,6 +3929,13 @@ const INDEX: PredicateRow[] = [
     symbol: "logDatedAt",
     mod: logEra,
   },
+  // T90: the instant a dated rule is asked with — a parsed timestamp plus
+  // its match's clock offset (parser `statedStartTime`)
+  {
+    file: `${A}/utils/logEra.ts`,
+    symbol: "logInstantOf",
+    mod: logEra,
+  },
   {
     file: `${A}/utils/auraActivationEra.ts`,
     symbol: "auraStandsForPressAt",

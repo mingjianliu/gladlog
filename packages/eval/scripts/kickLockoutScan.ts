@@ -86,6 +86,7 @@ import {
   KICK_LOCKOUT_VICTIM_MODIFIERS,
   kickLockoutVictimMultiplierAt,
 } from "@gladlog/analysis/src/utils/kickLockout";
+import type { LogInstant } from "@gladlog/analysis/src/utils/logEra";
 import { logIsFrom } from "@gladlog/analysis/src/utils/logEra";
 import {
   parseRawTimestamp,
@@ -521,7 +522,7 @@ const cutoverOf = (x: SplitPair) =>
   typeof x.modifier.multiplier === "number"
     ? null
     : x.modifier.multiplier.cutoverEpochMs;
-const sideAt = (x: SplitPair, logEpochMs: number) => {
+const sideAt = (x: SplitPair, logEpochMs: LogInstant) => {
   const cut = cutoverOf(x);
   return cut === null
     ? "undated"
@@ -529,9 +530,12 @@ const sideAt = (x: SplitPair, logEpochMs: number) => {
       ? "since"
       : "before";
 };
-/** the side the product puts the pair on: the parser's date of the row */
-const sideOf = (x: SplitPair) => sideAt(x, x.epochMs);
-/** the side the row's own stated instant is on */
+/** the side the product puts the pair on: the instant the row states for
+ * itself, which every freshly parsed match carries (T90, `logInstantOf`) */
+const sideOf = (x: SplitPair) => sideAt(x, { statedMs: x.statedMs });
+/** the side the row's own stated instant is on, read off the raw line —
+ * the same side since T90; a difference means the parsed match lost its
+ * clock offset */
 const statedSideOf = (x: SplitPair) => sideAt(x, x.statedMs);
 console.log(
   "victim lockout modifiers by log date (the SPELL_INTERRUPT row as the parser dates it, against the modifier's own cutover) and victim spec; gap / table lockout:",
@@ -559,7 +563,7 @@ const modified = splitPairs
   .filter((x) => x.holderOnSpell)
   .sort((a, b) => a.epochMs - b.epochMs);
 const modelOf = (x: SplitPair) =>
-  kickLockoutVictimMultiplierAt(x.modifier, x.epochMs);
+  kickLockoutVictimMultiplierAt(x.modifier, { statedMs: x.statedMs });
 /** the modifier's number for a log of today — what an undated table says */
 const currentOf = (x: SplitPair) =>
   kickLockoutVictimMultiplierAt(x.modifier, Number.NaN);

@@ -205,6 +205,18 @@ export interface GladMatchBase {
   rawLines: string[];
   hasAdvancedLogging: boolean;
   timezone: string;
+  /** The instant the segment's opening line states for itself
+   * (`logLineInstantMs`, l1/statedInstant.ts: the line's wall clock by the
+   * UTC offset written on the line) — the same line `startTime` is the
+   * parsed reading of. `startTime` and every other timestamp stay the parsed
+   * reading (the parsing machine's zone for a line with an unsigned offset);
+   * this is the one number that says how far that clock is from the stated
+   * one, for the question the machine's zone must not answer: on which side
+   * of a dated game change the match was played (analysis `utils/logEra.ts`).
+   * One offset per file, so `statedStartTime - startTime` holds for every
+   * line of the match. null = the line states no offset. Absent on documents
+   * stored before 2026-11-11 — absent means unknown. */
+  statedStartTime?: number | null;
 }
 
 export interface GladMatch extends GladMatchBase {

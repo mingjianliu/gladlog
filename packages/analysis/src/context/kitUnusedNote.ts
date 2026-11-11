@@ -105,6 +105,7 @@ export function kitRefusedPressesOf(
           cd.spellId,
           cd.spellName,
           replacements,
+          unit,
         ),
     )
     .sort((a, b) => a.tSeconds - b.tSeconds);

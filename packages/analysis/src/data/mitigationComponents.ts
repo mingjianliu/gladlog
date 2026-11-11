@@ -29,10 +29,13 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { getFactConfig } from "../facts/factProviderConfig";
 import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
+import type { LogInstant } from "../utils/logEra";
+import { logInstantOf } from "../utils/logEra";
+import { UNDATED_LOG_INSTANT } from "../utils/logEra";
 import { logDatedNumberAt } from "../utils/logEra";
 import { specPassiveOwnership } from "../utils/talentModifiers";
 import { talentModifierOwnershipOf } from "../utils/talentOwnership";
-import { unitLogEpochMs } from "../utils/talents";
+import { unitLogInstant } from "../utils/talents";
 import {
   immunityMaskStopsSchool,
   MITIGATION_TABLE,
@@ -65,7 +68,7 @@ export interface IMitigationContext {
   /** the unit that cast the aura, THIS round's unit (talent ownership is per
    * round in Solo Shuffle). Absent = talents cannot be attributed. */
   caster?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
-    Partial<Pick<ICombatUnit, "auraEvents">>;
+    Partial<Pick<ICombatUnit, "auraEvents" | "logClockOffsetMs">>;
   /** the application's log epoch, for a dated modifier (`datedModPct`);
    * absent = the caster's earliest cast or aura row (`unitLogEpochMs` — a
    * match is minutes long, a cutover's zone uncertainty 14 h), else today's
@@ -76,8 +79,11 @@ export interface IMitigationContext {
 /** The log epoch a dated modifier is read at (`IMitigationContext.atMs`).
  * codex review 2026-11-05: a caster with aura rows and no cast row read NaN
  * — today's value — on a historical log. */
-function mitigationLogMs(ctx: IMitigationContext): number {
-  return ctx.atMs ?? (ctx.caster ? unitLogEpochMs(ctx.caster) : NaN);
+function mitigationLogMs(ctx: IMitigationContext): LogInstant {
+  if (!ctx.caster) return ctx.atMs ?? UNDATED_LOG_INSTANT;
+  return ctx.atMs === undefined
+    ? unitLogInstant(ctx.caster)
+    : logInstantOf(ctx.caster, ctx.atMs);
 }
 
 /** Resolve one aura application. Undefined = the aura is not a table entry. */

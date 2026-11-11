@@ -87,6 +87,8 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { kickLockoutSeconds, spellEffectData } from "../data/spellEffectData";
 import { STORM_CONDUIT_HOTFIX_EPOCH_MS } from "../data/talentScriptedCooldowns";
 import { playerTalentIdSets } from "./cooldowns";
+import type { LogInstant } from "./logEra";
+import { logInstantOf } from "./logEra";
 import { type ILogDatedNumber, logDatedNumberAt } from "./logEra";
 import { talentModifierOwnershipOf } from "./talentOwnership";
 
@@ -276,7 +278,7 @@ export function kickLockoutSecondsOfKicker(
  */
 export function kickLockoutVictimMultiplierAt(
   m: Pick<KickLockoutVictimModifier, "multiplier">,
-  logEpochMs: number,
+  logEpochMs: LogInstant,
 ): number {
   return typeof m.multiplier === "number"
     ? m.multiplier
@@ -316,7 +318,10 @@ export function kickLockoutSecondsFor(
   }
   for (const m of KICK_LOCKOUT_VICTIM_MODIFIERS)
     if (held.has(m.talentId) && m.interruptedSpellIds.has(interruptedSpellId)) {
-      lock *= kickLockoutVictimMultiplierAt(m, interruptEpochMs);
+      lock *= kickLockoutVictimMultiplierAt(
+        m,
+        logInstantOf(victim, interruptEpochMs),
+      );
       modified = true;
     }
   return done();

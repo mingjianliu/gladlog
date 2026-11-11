@@ -20,6 +20,7 @@ import {
   AURA_IS_THE_PRESS_IDS,
   AURA_ONLY_ACTIVATION_IDS,
 } from "../data/auraActivation";
+import type { LogInstant } from "./logEra";
 import { type ILogDated, logDatedAt } from "./logEra";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "./talents";
 
@@ -37,7 +38,7 @@ export const AURA_PRESS_BY_ERA: Readonly<Record<string, ILogDated<boolean>>> = {
  * True for every `AURA_ONLY_ACTIVATION_IDS` key without a dated rule. */
 export function auraStandsForPressAt(
   spellId: string,
-  logEpochMs: number,
+  logEpochMs: LogInstant,
 ): boolean {
   const dated = AURA_PRESS_BY_ERA[spellId];
   return dated === undefined || logDatedAt(dated, logEpochMs);
@@ -47,7 +48,7 @@ export function auraStandsForPressAt(
  * when its aura is no press there). */
 export function auraOnlyActivationIdsAt(
   spellId: string,
-  logEpochMs: number,
+  logEpochMs: LogInstant,
 ): readonly string[] | undefined {
   return auraStandsForPressAt(spellId, logEpochMs)
     ? AURA_ONLY_ACTIVATION_IDS[spellId]
@@ -55,7 +56,10 @@ export function auraOnlyActivationIdsAt(
 }
 
 /** `AURA_IS_THE_PRESS_IDS` on a log at `logEpochMs`. */
-export function auraIsThePressAt(spellId: string, logEpochMs: number): boolean {
+export function auraIsThePressAt(
+  spellId: string,
+  logEpochMs: LogInstant,
+): boolean {
   return (
     AURA_IS_THE_PRESS_IDS.has(spellId) &&
     auraStandsForPressAt(spellId, logEpochMs)
@@ -65,7 +69,7 @@ export function auraIsThePressAt(spellId: string, logEpochMs: number): boolean {
 /** `AURA_ACTIVATION_PROVES_BUTTON_IDS` on a log at `logEpochMs`. */
 export function auraActivationProvesButtonAt(
   spellId: string,
-  logEpochMs: number,
+  logEpochMs: LogInstant,
 ): boolean {
   return (
     AURA_ACTIVATION_PROVES_BUTTON_IDS.has(spellId) &&

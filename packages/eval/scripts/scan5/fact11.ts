@@ -195,6 +195,7 @@ import {
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { groundingRedirects } from "@gladlog/analysis/src/utils/groundingRedirects";
 import { PRESS_ONLY_TAG } from "@gladlog/analysis/src/utils/killWindowFacts";
+import { logInstantOf, logIsFrom } from "@gladlog/analysis/src/utils/logEra";
 import { isOffListPressId } from "@gladlog/analysis/src/utils/offListPress";
 import {
   OVERRIDE_VARIANT_SHARES_BY_ERA,
@@ -424,7 +425,10 @@ function channelSpanUnrun(ctx: IRoundCtx): void {
 }
 
 function doomWindsNoPressReading(ctx: IRoundCtx): void {
-  const since1215 = ctx.start >= PATCH_1215_GOLIVE_EPOCH_MS;
+  const since1215 = logIsFrom(
+    logInstantOf(ctx.owner, ctx.start),
+    PATCH_1215_GOLIVE_EPOCH_MS,
+  );
   for (const u of ctx.players) {
     const near = (ms: number, ids: string[]) =>
       [
@@ -734,7 +738,9 @@ function variantSpentButton(ctx: IRoundCtx): void {
   // "pre-cutover" while the product, by its signed rule, read it shared
   // (T85, wide s2/34)
   const dated = Object.entries(OVERRIDE_VARIANT_SHARES_BY_ERA).filter(
-    ([variant, d]) => !d.before && !variantSharesCooldownAt(variant, ctx.start),
+    ([variant, d]) =>
+      !d.before &&
+      !variantSharesCooldownAt(variant, logInstantOf(ctx.owner, ctx.start)),
   );
   if (dated.length === 0) return;
   for (const [variant] of dated) {

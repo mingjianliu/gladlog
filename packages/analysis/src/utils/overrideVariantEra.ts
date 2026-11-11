@@ -18,6 +18,7 @@
  * The Hunt rather than call it ready.
  */
 import { OVERRIDE_VARIANTS_GENERATED } from "../data/overrideVariantsGenerated";
+import type { LogInstant } from "./logEra";
 import {
   type ILogDated,
   logDatedAt,
@@ -44,7 +45,7 @@ export const OVERRIDE_VARIANT_SHARES_BY_ERA: Readonly<
  * undated reading (`logEpochMs` undefined: the current game). */
 export function variantSharesCooldownAt(
   variantId: string,
-  logEpochMs: number | undefined,
+  logEpochMs: LogInstant | undefined,
 ): boolean {
   const dated = OVERRIDE_VARIANT_SHARES_BY_ERA[variantId];
   if (dated === undefined || logEpochMs === undefined) return true;
@@ -57,7 +58,7 @@ export function variantSharesCooldownAt(
  * button's kind (an offensive cooldown) on its own row. */
 export function ownCooldownVariantOf(
   spellId: string,
-  logEpochMs: number | undefined,
+  logEpochMs: LogInstant | undefined,
 ): string | undefined {
   if (variantSharesCooldownAt(spellId, logEpochMs)) return undefined;
   return OVERRIDE_VARIANTS_GENERATED[spellId];
@@ -70,7 +71,7 @@ export function ownCooldownVariantOf(
  * undated answer. */
 export function offensiveCooldownIdAt(
   spellId: string,
-  logEpochMs: number | undefined,
+  logEpochMs: LogInstant | undefined,
   /** the caster's spec, for a spec-gated member (`offensiveEffectCdId`) */
   spec?: unknown,
 ): string | undefined {

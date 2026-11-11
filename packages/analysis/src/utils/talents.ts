@@ -1,5 +1,10 @@
 import { nodeMaps, talentDataReady } from "../data/talentStrings";
-import { logDatedNumberAt, PATCH_1215_ZONE_BAND_TAKES } from "./logEra";
+import {
+  logDatedNumberAt,
+  type LogInstant,
+  logInstantOf,
+  PATCH_1215_ZONE_BAND_TAKES,
+} from "./logEra";
 import { memoizeWhenReady } from "./memoize";
 
 /**
@@ -43,6 +48,17 @@ export function unitLogEpochMs(unit: {
   return Number.isFinite(first) ? first : Number.NaN;
 }
 
+/** `unitLogEpochMs` as a dated rule is asked with it: the instant the unit's
+ * match states for that timestamp (`logInstantOf` — the unit carries its
+ * match's clock offset), the parsed epoch when the match states none. */
+export function unitLogInstant(
+  unit: Parameters<typeof unitLogEpochMs>[0] & {
+    logClockOffsetMs?: number | null;
+  },
+): LogInstant {
+  return logInstantOf(unit, unitLogEpochMs(unit));
+}
+
 type TalentTuple = { id1: number; id2: number; count: number } | null;
 const talentsOfCache = new WeakMap<object, TalentTuple[] | undefined>();
 
@@ -57,6 +73,7 @@ const talentsOfCache = new WeakMap<object, TalentTuple[] | undefined>();
  */
 export function talentsOf(unit: {
   info?: { talents?: TalentTuple[] };
+  logClockOffsetMs?: number | null;
   spellCastEvents?: ReadonlyArray<{ logLine: { timestamp: number } }>;
   auraEvents?: ReadonlyArray<{ logLine: { timestamp: number } }>;
 }): TalentTuple[] | undefined {
@@ -72,7 +89,7 @@ export function talentsOf(unit: {
         since: 0,
         zoneBandTakes: PATCH_1215_ZONE_BAND_TAKES,
       },
-      unitLogEpochMs(unit),
+      unitLogInstant(unit),
     ) === 1
   )
     out = talents.map((t) => {

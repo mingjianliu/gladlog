@@ -15,10 +15,13 @@ import {
 } from "../src/utils/drAnalysis";
 import {
   LOG_ZONE_UNCERTAINTY_MS,
+  logDatedAt,
   logDatedNumberAt,
+  logInstantOf,
   logIsFrom,
 } from "../src/utils/logEra";
 import { parseRawTimestamp, rawLineInstantMs } from "../src/utils/rawStreams";
+import { unitLogInstant } from "../src/utils/talents";
 
 describe("logIsFrom", () => {
   it("the cutover instant itself is already the new rule", () => {
@@ -141,5 +144,67 @@ describe("which side of a cutover a real line is on — the instant it states fo
 
   it("a line that states no offset has no stated instant — the parser's date is the only one", () => {
     expect(rawLineInstantMs("8/18/2026 18:56:32.167")).toBeNull();
+  });
+});
+
+// T90: a match that carries its clock offset (parser-compat
+// `logClockOffsetMs`: the instant its lines state minus the parsed
+// timestamp) is dated by the stated instant, exactly — the zone band is for
+// a bare parsed epoch only.
+describe("logInstantOf — the stated instant, and the door without the band", () => {
+  const H = 3_600_000;
+  const cut = STORM_CONDUIT_HOTFIX_EPOCH_MS;
+  const dated = { cutoverEpochMs: cut, before: 7, since: 3 };
+
+  it("offset known: stated = parsed + offset; unknown (null / absent / no holder) or not a number: the bare epoch", () => {
+    expect(logInstantOf({ logClockOffsetMs: -6 * H }, cut)).toEqual({
+      statedMs: cut - 6 * H,
+    });
+    expect(logInstantOf({ logClockOffsetMs: 0 }, cut)).toEqual({
+      statedMs: cut,
+    });
+    expect(logInstantOf({ logClockOffsetMs: null }, cut)).toBe(cut);
+    expect(logInstantOf({}, cut)).toBe(cut);
+    expect(logInstantOf(undefined, cut)).toBe(cut);
+    expect(logInstantOf({ logClockOffsetMs: 0 }, Number.NaN)).toBeNaN();
+  });
+
+  it("a stated instant inside the 14 h window before the cutover is BEFORE; the same number bare is uncertain", () => {
+    for (const hoursBefore of [0.001, 1, 9.7, 13.99]) {
+      const at = cut - hoursBefore * H;
+      expect(logDatedNumberAt(dated, { statedMs: at })).toBe(7);
+      expect(logDatedNumberAt(dated, at)).toBe(3);
+      expect(
+        logDatedAt({ ...dated, uncertainTakes: "before" }, { statedMs: at }),
+      ).toBe(7);
+      expect(
+        logDatedAt({ ...dated, zoneBandTakes: "since" }, { statedMs: at }),
+      ).toBe(7);
+    }
+    expect(logDatedNumberAt(dated, { statedMs: cut })).toBe(3);
+    expect(logIsFrom({ statedMs: cut - 1 }, cut)).toBe(false);
+    expect(logIsFrom({ statedMs: cut }, cut)).toBe(true);
+  });
+
+  it("a Central European log parsed on a US Eastern machine: the parsed date is past the cutover, the stated instant is not", () => {
+    // 8/17/2026 23:30 at UTC+2 = 21:30 UTC, 2.5 h before the cutover; read
+    // as Toronto wall clock it is 8/18 03:30 UTC, 3.5 h after it
+    const parsed = Date.UTC(2026, 7, 18, 3, 30, 0);
+    const holder = { logClockOffsetMs: -6 * H };
+    expect(logDatedNumberAt(dated, parsed)).toBe(3);
+    expect(logDatedNumberAt(dated, logInstantOf(holder, parsed))).toBe(7);
+  });
+
+  it("unitLogInstant: the unit's first row, by the unit's own clock offset", () => {
+    const row = (timestamp: number) => ({ logLine: { timestamp } });
+    const unit = {
+      spellCastEvents: [row(cut + 5 * H), row(cut + 4 * H)],
+      auraEvents: [row(cut + 6 * H)],
+    };
+    expect(unitLogInstant(unit)).toBe(cut + 4 * H);
+    expect(unitLogInstant({ ...unit, logClockOffsetMs: -6 * H })).toEqual({
+      statedMs: cut - 2 * H,
+    });
+    expect(unitLogInstant({ logClockOffsetMs: 0 })).toBeNaN();
   });
 });

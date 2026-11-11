@@ -870,3 +870,75 @@ describe("one player under two name forms: every row carries the roster's name (
     expect([...names]).toEqual(["Atk-X"]);
   });
 });
+
+// T90: a log line states its own UTC offset; the parser keeps the instant the
+// match's opening line states (`statedStartTime`) beside the parsed
+// `startTime`, and the conversion hands the gap to the match and each unit.
+describe("logClockOffsetMs — stated instant minus parsed timestamp", () => {
+  const A = "Player-1-0000000A";
+  const B = "Player-1-0000000B";
+  const lines = (tail: string) =>
+    [
+      `ARENA_MATCH_START,1505,41,3v3,0`,
+      CI(A, 0, 71, 2100),
+      CI(B, 1, 62, 2050),
+      DMG(A, "A-Realm", B, "B-Realm"),
+      `ARENA_MATCH_END,0,90,2110,2040`,
+    ].map(
+      (s, i) =>
+        `8/18/2026 02:00:${String(i).padStart(2, "0")}.000${tail}  ${s}`,
+    );
+  const parse = (tail: string, timezone: string) => {
+    const matches: GladMatch[] = [];
+    const p = new GladLogParser({ timezone });
+    p.on("match", (m: GladMatch) => matches.push(m));
+    for (const r of lines(tail)) p.push(r);
+    p.end();
+    return matches[0]!;
+  };
+
+  it("signed offset: the parsed timestamp is the stated instant, offset 0, whatever zone parses it", () => {
+    for (const zone of ["UTC", "America/Toronto", "Australia/Sydney"]) {
+      const m = parse("-4", zone);
+      expect(m.startTime).toBe(Date.UTC(2026, 7, 18, 6, 0, 0));
+      expect(m.statedStartTime).toBe(m.startTime);
+      const legacy = toLegacyMatch(m);
+      expect(legacy.logClockOffsetMs).toBe(0);
+      expect(
+        Object.values(legacy.units).map((u) => u.logClockOffsetMs),
+      ).toEqual([0, 0]);
+    }
+  });
+
+  it("unsigned offset (+2): parsed in the machine's zone, the stated instant is the same in every zone", () => {
+    const stated = Date.UTC(2026, 7, 18, 0, 0, 0);
+    const toronto = parse("2", "America/Toronto");
+    // read as Toronto wall clock (UTC−4 in August): 6 h late
+    expect(toronto.startTime).toBe(Date.UTC(2026, 7, 18, 6, 0, 0));
+    expect(toronto.statedStartTime).toBe(stated);
+    const legacy = toLegacyMatch(toronto);
+    expect(legacy.startTime).toBe(toronto.startTime);
+    expect(legacy.logClockOffsetMs).toBe(-6 * 3_600_000);
+    for (const u of Object.values(legacy.units))
+      expect(u.logClockOffsetMs).toBe(-6 * 3_600_000);
+    const berlin = parse("2", "Europe/Berlin");
+    expect(berlin.statedStartTime).toBe(stated);
+    expect(toLegacyMatch(berlin).logClockOffsetMs).toBe(0);
+  });
+
+  it("no offset on the line → null; a document stored before the field → absent, on the match and its units", () => {
+    const none = parse("", "UTC");
+    expect(none.statedStartTime).toBeNull();
+    const legacyNone = toLegacyMatch(none);
+    expect(legacyNone.logClockOffsetMs).toBeNull();
+    for (const u of Object.values(legacyNone.units))
+      expect(u.logClockOffsetMs).toBeNull();
+
+    const stored = { ...parse("-4", "UTC") };
+    delete stored.statedStartTime;
+    const legacyStored = toLegacyMatch(stored);
+    expect("logClockOffsetMs" in legacyStored).toBe(false);
+    for (const u of Object.values(legacyStored.units))
+      expect("logClockOffsetMs" in u).toBe(false);
+  });
+});

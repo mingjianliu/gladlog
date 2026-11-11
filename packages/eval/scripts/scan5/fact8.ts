@@ -58,6 +58,7 @@ import {
   isNoPressRow,
 } from "@gladlog/analysis/src/utils/castPress";
 import { SELF_SAVE_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { logInstantOf } from "@gladlog/analysis/src/utils/logEra";
 import { MEDALLION_SPELL_ID } from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
@@ -448,7 +449,8 @@ function auraNoLine(ctx: IRoundCtx): void {
           ? "ally"
           : "enemy";
       const unlogged =
-        AURA_PRESS_BY_ERA[cast] !== undefined && auraStandsForPressAt(cast, ms);
+        AURA_PRESS_BY_ERA[cast] !== undefined &&
+        auraStandsForPressAt(cast, logInstantOf(u, ms));
       ctx.violate(
         "auraActivationNoLine",
         unlogged ? "unlogged press (dated)" : `${side}/${name}`,

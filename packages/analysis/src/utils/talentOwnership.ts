@@ -8,6 +8,7 @@ import { PVP_TALENT_POOL_GENERATED } from "../data/pvpTalentPoolGenerated";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { replacedSpellIds } from "../data/talentReplaces";
 import { auraActivationProvesButtonAt } from "./auraActivationEra";
+import { unitLogInstant } from "./talents";
 import {
   choiceSelectionResolved,
   getPlayerTalentedSpellInfo,
@@ -18,7 +19,6 @@ import {
   getSpecTalentTreeSpellInfo,
   isLoadoutFullyResolved,
   talentsOf,
-  unitLogEpochMs,
 } from "./talents";
 
 /**
@@ -214,7 +214,7 @@ export function talentOwnershipOf(
     // the date only for an id the table holds (`unitLogEpochMs` walks the
     // unit's rows)
     AURA_ACTIVATION_PROVES_BUTTON_IDS.has(spellId) &&
-    auraActivationProvesButtonAt(spellId, unitLogEpochMs(unit)) &&
+    auraActivationProvesButtonAt(spellId, unitLogInstant(unit)) &&
     (unit.auraEvents ?? []).some(
       (a) =>
         a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&

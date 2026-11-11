@@ -173,6 +173,9 @@ export interface ICombatUnit {
   id: string;
   name: string;
   ownerId: string;
+  /** The match's `logClockOffsetMs`, on each of its units — a reader that
+   * dates a rule from a unit's rows alone has no match in hand. */
+  logClockOffsetMs?: number | null;
   /** Converted units are always well-formed (the parser already filtered out
    * malformed ones) */
   isWellFormed: boolean;
@@ -286,6 +289,14 @@ export interface IArenaCombatBase {
    * parser's `teamMmr`, passed through. Not a personal rating. null = the
    * log did not say; absent = a document stored before the parser kept it. */
   teamMmr?: { team0: number; team1: number } | null;
+  /** How far the instant this match's log lines state for themselves is from
+   * the parsed timestamps consumers read (`statedStartTime - startTime` of
+   * the parser's document; one UTC offset per file, so one number per
+   * match): stated instant = any parsed timestamp of this match + this.
+   * 0 for a log whose offset is signed, or parsed in the zone that recorded
+   * it. null = the log states no offset; absent = a document stored before
+   * the parser kept it. Read through analysis `utils/logEra.ts` only. */
+  logClockOffsetMs?: number | null;
   rawLines: string[];
   durationInSeconds: number;
   hasAdvancedLogging: boolean;

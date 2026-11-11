@@ -16,6 +16,7 @@ import {
   offensiveCdOfAura,
 } from "./cooldowns";
 import { relistedRunAt } from "./hiddenPress";
+import { logInstantOf } from "./logEra";
 import { isResyncBatchAt } from "./resyncBatch";
 import { offensiveDangerWeight } from "./spellDanger";
 import { talentOwnershipOf } from "./talentOwnership";
@@ -728,7 +729,9 @@ export function auraOffensiveOccurrences(
       // 1:30 / 1:55, 24.9 s apart, each in a Lightning Bolt's millisecond):
       // the cooldown's window, no press, nothing spent (Radiant Glory's
       // shape)
-      if (!auraStandsForPressAt(DOOM_WINDS_PRESS_ID, startMs)) {
+      if (
+        !auraStandsForPressAt(DOOM_WINDS_PRESS_ID, logInstantOf(unit, startMs))
+      ) {
         result.occurrences.push({
           spellId: DOOM_WINDS_PRESS_ID,
           spellName: `Doom Winds${NO_PRESS_SUFFIX}`,

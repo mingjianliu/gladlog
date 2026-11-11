@@ -52,6 +52,7 @@ import {
   missedKickText,
 } from "./kickAudit";
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
+import { logInstantOf } from "./logEra";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
@@ -499,12 +500,16 @@ export function analyzeBurstLedger(
   // as `[ENEMY DEF]` / `[TEAM] [CD]` save presses read it (fact11 D33).
   const spansOf = (a: ICombatUnit, cds: IEnemyCDCast[]) =>
     cds.map((cd) => {
-      const key = canonicalSpellId(cd.spellId, matchStartMs);
+      const key = canonicalSpellId(
+        cd.spellId,
+        logInstantOf(combat, matchStartMs),
+      );
       const next = cds
         .filter(
           (c) =>
             c.castTimeSeconds > cd.castTimeSeconds &&
-            canonicalSpellId(c.spellId, matchStartMs) === key,
+            canonicalSpellId(c.spellId, logInstantOf(combat, matchStartMs)) ===
+              key,
         )
         .reduce((m, c) => Math.min(m, c.castTimeSeconds), Infinity);
       const span = burstCastSpan(cd);

@@ -29,6 +29,7 @@ import {
   PRESS_TO_AURA_MAX_S,
 } from "../../utils/enemyDefensives";
 import { pressRowsWithHidden } from "../../utils/hiddenPress";
+import { logInstantOf } from "../../utils/logEra";
 import { NO_PRESS_SUFFIX } from "../../utils/offensiveAuraOccurrences";
 import { fmtTime } from "../../utils/renderGrid";
 import { isOffensiveCdFor } from "../../utils/spellDanger";
@@ -216,7 +217,10 @@ export function emitEnemyCdEntries(
     // one counter, each line under the log's own name. An activation has
     // no cooldown and keeps its own name's counter.
     const ordinalKey = (cd: (typeof shown)[number]): string => {
-      const canon = canonicalSpellId(cd.spellId, ctx.matchStartMs);
+      const canon = canonicalSpellId(
+        cd.spellId,
+        logInstantOf(enemyUnit, ctx.matchStartMs),
+      );
       return canon === cd.spellId || isActivationCd(cd)
         ? cd.spellName
         : getEnglishSpellName(canon);
@@ -259,17 +263,17 @@ export function emitEnemyCdEntries(
       const seqAnnotation = noPress
         ? ""
         : isActivation
-        ? procOrdinal(
-            seq,
-            total,
-            procTriggerAt(
-              enemyUnit,
-              cd.spellId,
-              Math.round(ctx.matchStartMs + cd.castTimeSeconds * 1000),
-              triggerBySpell.get(cd.spellId),
-            ),
-          )
-        : castOrdinal(seq, total);
+          ? procOrdinal(
+              seq,
+              total,
+              procTriggerAt(
+                enemyUnit,
+                cd.spellId,
+                Math.round(ctx.matchStartMs + cd.castTimeSeconds * 1000),
+                triggerBySpell.get(cd.spellId),
+              ),
+            )
+          : castOrdinal(seq, total);
       if (isActivation) procRendered = true;
       if (cd.unseenPress) unseenRendered = true;
       else if (seqAnnotation) ordinalRendered = true;

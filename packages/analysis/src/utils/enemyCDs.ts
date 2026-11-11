@@ -55,6 +55,7 @@ import {
   unitCooldownOf,
 } from "./cooldowns";
 import { pressRowsWithHidden } from "./hiddenPress";
+import { logInstantOf } from "./logEra";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs, shuffleRoundEndMs } from "./roundEnd";
 import {
@@ -1250,7 +1251,11 @@ function reconstructEnemyCDTimelineUncached(
       // dated: a variant that is its own cooldown on this log spends its
       // own (Predator's Wake before 12.1.5, fact11 D22)
       const cdId =
-        offensiveCooldownIdAt(spellId, matchStartMs, enemy.spec) ?? spellId;
+        offensiveCooldownIdAt(
+          spellId,
+          logInstantOf(combat, matchStartMs),
+          enemy.spec,
+        ) ?? spellId;
       // the enemy's own talent-resolved cooldown (`unitCooldownOf`: Summon
       // Infernal 90 with Inferno, not 120) — talent impact audit 2026-09-26
       const cooldownSeconds = isActivation
@@ -1336,9 +1341,14 @@ function reconstructEnemyCDTimelineUncached(
     for (const cd of offensiveCDs) {
       const next = offensiveCDs.find(
         (c) =>
-          canonicalSpellId(c.spellId, combat.startTime) ===
-            canonicalSpellId(cd.spellId, combat.startTime) &&
-          c.castTimeSeconds > cd.castTimeSeconds,
+          canonicalSpellId(
+            c.spellId,
+            logInstantOf(combat, combat.startTime),
+          ) ===
+            canonicalSpellId(
+              cd.spellId,
+              logInstantOf(combat, combat.startTime),
+            ) && c.castTimeSeconds > cd.castTimeSeconds,
       );
       const end = observedEffectEnd(
         enemy,

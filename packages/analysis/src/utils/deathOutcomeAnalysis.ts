@@ -366,7 +366,7 @@ function pressSeconds(
   const castSeconds = unit.spellCastEvents
     .filter(
       (e) =>
-        (isPressOfCooldown(e, spellId, name, replacements) &&
+        (isPressOfCooldown(e, spellId, name, replacements, unit) &&
           !isFormReshiftCast(unit, e)) ||
         spendsSharedChargeOf(e, spellId),
     )

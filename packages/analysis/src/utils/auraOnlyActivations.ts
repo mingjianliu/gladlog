@@ -27,6 +27,7 @@ import {
   SELF_SAVE_IDS,
 } from "./enemyDefensives";
 import { isResyncBatchAt } from "./hiddenPress";
+import { logInstantOf } from "./logEra";
 import {
   auraOffensiveOccurrences,
   NO_PRESS_SUFFIX,
@@ -136,7 +137,7 @@ export function auraOnlyActivations(
     if (
       o.provenance === "press-inferred" &&
       AURA_PRESS_BY_ERA[o.spellId] !== undefined &&
-      auraStandsForPressAt(o.spellId, o.startMs)
+      auraStandsForPressAt(o.spellId, logInstantOf(unit, o.startMs))
     ) {
       out.push({
         atSeconds: (o.startMs - matchStartMs) / 1000,

@@ -195,6 +195,7 @@ export function castBarsOfCooldown(
       cd.spellId,
       cd.spellName,
       replacements,
+      unit,
     ),
   );
 }

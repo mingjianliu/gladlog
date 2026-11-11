@@ -20,19 +20,29 @@
  * between the two zones on any other (a Central European log parsed on a US
  * Eastern machine is dated 6 hours late, an Oceanic one 14).
  *
- * The instant such a line states for ITSELF is `rawLineInstantMs`
- * (utils/rawStreams.ts — the parser's `logLineInstantMs`, whose header has
- * the measured grammar). The dated rules are NOT asked with it: they are
- * asked with event timestamps of the parsed match, dozens of call sites away
- * from anything that knows how far that match's clock is from the stated
- * one, and the parsed document does not carry the number (its timestamps
- * must stay what they are — a recording is joined to a match on them, and a
- * raw.txt line is subtracted from them). So a rule is only as sharp as the
- * parsing machine's zone: another player's match within a day of a cutover
- * may land on the wrong side of it — 2 of the 605 new-season files on a US
- * Eastern machine, both at the Storm Conduit cutover (docs/predicate-index.md,
- * "Not yet unified"; `kickLockoutScan.ts` prints both readings of every pair
- * it dates).
+ * The instant such a line states for ITSELF is the parser's
+ * `logLineInstantMs` (its header has the measured grammar), and since T90
+ * (2026-11-11) the dated rules ARE asked with it: the parser keeps the
+ * instant the match's opening line states (`statedStartTime`), parser-compat
+ * hands the gap to the parsed `startTime` to the converted match and to each
+ * of its units (`logClockOffsetMs` — one UTC offset per file, so one number
+ * per match), and a reader turns the parsed timestamp it has into the stated
+ * instant with `logInstantOf(unit or match, timestamp)`. The parsed
+ * timestamps themselves stay what they are — a recording is joined to a
+ * match on them, and a raw.txt line is subtracted from them.
+ *
+ * Measured for T90 on the 605-file sample: all 20,896,781 lines state an
+ * offset (379 files signed, 226 unsigned), no file changes shape or offset
+ * from its first line to its last, and stated − parsed is 0 on every signed
+ * file and exactly (parsing machine's offset − recorder's offset) on every
+ * unsigned one.
+ *
+ * What is left on the bare parsed epoch: a match that states no offset
+ * (none seen), a document stored before the parser kept the instant, a
+ * reader with neither unit nor match in hand — those keep the zone
+ * uncertainty below (`LOG_ZONE_UNCERTAINTY_MS`) — and the two `logIsFrom`
+ * readers of the 12.1 go-live (`drResetMsAt`, the Stellar Protection gate;
+ * docs/predicate-index.md, "Not yet unified").
  */
 
 /**
@@ -41,8 +51,44 @@
  * neither side and reads `false` — a rule that must not take such a log for
  * an old one says so itself (`logDatedNumberAt`).
  */
-export function logIsFrom(logEpochMs: number, cutoverEpochMs: number): boolean {
-  return logEpochMs >= cutoverEpochMs;
+export function logIsFrom(at: LogInstant, cutoverEpochMs: number): boolean {
+  return (
+    (typeof at === "object" && at !== null ? at.statedMs : at) >= cutoverEpochMs
+  );
+}
+
+/** What carries a match's clock offset: the converted match and each of its
+ * units (parser-compat `logClockOffsetMs`). */
+export interface ILogClock {
+  logClockOffsetMs?: number | null;
+}
+
+/** A log timestamp carried with the instant its own line states
+ * (`logInstantOf`): exact, wherever the log is parsed. */
+export interface IStatedLogInstant {
+  readonly statedMs: number;
+}
+/** What a dated rule is asked with: the instant the log states
+ * (`logInstantOf` of a match that carries its clock offset) — or a bare
+ * parsed epoch, for a log that states no offset, a document stored before
+ * the parser kept it, and a reader with no unit or match in hand. Only the
+ * bare epoch is uncertain by the parsing machine's zone
+ * (`LOG_ZONE_UNCERTAINTY_MS`). */
+export type LogInstant = number | IStatedLogInstant;
+
+/** No date at all (a unit that logged nothing): every dated rule reads its
+ * `uncertainTakes` side. */
+export const UNDATED_LOG_INSTANT: LogInstant = Number.NaN;
+
+/** The instant of a parsed timestamp of `holder`'s match. */
+export function logInstantOf(
+  holder: ILogClock | object | null | undefined,
+  parsedEpochMs: number,
+): LogInstant {
+  const offset = (holder as ILogClock | null | undefined)?.logClockOffsetMs;
+  return typeof offset === "number" && Number.isFinite(parsedEpochMs)
+    ? { statedMs: parsedEpochMs + offset }
+    : parsedEpochMs;
 }
 
 /** A value the game changed at `cutoverEpochMs` (a wall-clock epoch, asked
@@ -79,11 +125,16 @@ export type ILogDatedNumber = ILogDated<number>;
  * cooldown give-back and its lockout multiplier) cannot put the same
  * timestamp on different sides.
  *
- * A timestamp that is not a number is not a date and takes
+ * A stated instant (`logInstantOf` of a match that carries its clock
+ * offset — every freshly parsed log) is on one side or the other, exactly:
+ * nothing below applies to it (T90: all 1,333 archives of the 605 sample
+ * and the wide set state an offset on every line).
+ *
+ * A bare timestamp that is not a number is not a date and takes
  * `uncertainTakes` (by default the CURRENT value, `since`: the dated value
  * is a past exception).
  *
- * So does a timestamp inside `LOG_ZONE_UNCERTAINTY_MS` BEFORE the cutover:
+ * So does a bare timestamp inside `LOG_ZONE_UNCERTAINTY_MS` BEFORE the cutover:
  * the parser dates a line without a signed offset in the parsing machine's
  * zone (header), so such a match may really be up to that much later — by
  * default a post-hotfix log must never be given the old value (codex review
@@ -93,9 +144,13 @@ export type ILogDatedNumber = ILogDated<number>;
  * zone; a rule whose careful side is the old one (`uncertainTakes:
  * "before"`) takes the new value only for one after it in every zone.
  */
-export function logDatedAt<T>(dated: ILogDated<T>, logEpochMs: number): T {
+export function logDatedAt<T>(dated: ILogDated<T>, at: LogInstant): T {
   const uncertain =
     dated.uncertainTakes === "before" ? dated.before : dated.since;
+  if (typeof at === "object" && at !== null)
+    return logIsFrom(at, dated.cutoverEpochMs) ? dated.since : dated.before;
+  // anything that is not a number (a missing timestamp) is no date either
+  const logEpochMs: number = at;
   if (!Number.isFinite(logEpochMs)) return uncertain;
   if (!logIsFrom(logEpochMs, dated.cutoverEpochMs - LOG_ZONE_UNCERTAINTY_MS))
     return dated.before;
@@ -108,9 +163,9 @@ export function logDatedAt<T>(dated: ILogDated<T>, logEpochMs: number): T {
 /** `logDatedAt` of a dated number. */
 export function logDatedNumberAt(
   dated: ILogDatedNumber,
-  logEpochMs: number,
+  at: LogInstant,
 ): number {
-  return logDatedAt(dated, logEpochMs);
+  return logDatedAt(dated, at);
 }
 
 /**

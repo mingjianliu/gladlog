@@ -22,6 +22,7 @@ import {
   eventReductionOwner,
   eventReductionSecondsAt,
 } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
+import { logInstantOf } from "@gladlog/analysis/src/utils/logEra";
 import {
   getPlayerTalentedSpellInfo,
   talentsOf,
@@ -88,7 +89,9 @@ function resetInsideItsPress(unit: any, name: string): boolean {
     // a dated row (12.1.0's Violent Transformation, GH #193) is a full
     // reset only for its holders and only on the log's own date
     const full = presses.filter(
-      (c: any) => eventReductionSecondsAt(r, spec, tsOf(c)) === Infinity,
+      (c: any) =>
+        eventReductionSecondsAt(r, spec, logInstantOf(unit, tsOf(c))) ===
+        Infinity,
     );
     if (full.length === 0) continue;
     const auras = new Set<string>(r.triggerSelfAuraAppliedIds ?? []);

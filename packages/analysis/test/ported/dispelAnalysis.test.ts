@@ -28,6 +28,7 @@ vi.mock("../../src/utils/talents", async (importOriginal) => ({
   // file's synthetic units read as they are
   talentsOf: (u: { info?: { talents?: unknown } }) => u.info?.talents,
   unitLogEpochMs: () => Number.NaN,
+  unitLogInstant: () => Number.NaN,
   getPlayerTalentedSpellIds: (_spec: any, talents: any) => {
     if (talents === "HAS_DISEASE") return new Set(["213634"]);
     if (talents === "HAS_FELHUNTER") return new Set(["30146"]);

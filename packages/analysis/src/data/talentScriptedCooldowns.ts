@@ -29,6 +29,8 @@ import {
 } from "@gladlog/parser-compat";
 
 import { buffFullDurationForCaster } from "../utils/buffDuration";
+import type { LogInstant } from "../utils/logEra";
+import { logInstantOf } from "../utils/logEra";
 import {
   type ILogDatedNumber,
   logDatedNumberAt,
@@ -1607,7 +1609,7 @@ export function ownAuraStacksLostTimesMs(
 export function eventReductionSecondsAt(
   r: Pick<IEventCooldownReduction, "seconds">,
   holderSpec: string | undefined,
-  logEpochMs: number,
+  logEpochMs: LogInstant,
 ): number {
   if (typeof r.seconds === "number") return r.seconds;
   const dated =
@@ -1698,7 +1700,11 @@ export function eventTriggersFor(
           bonused(r, [
             ...eventTriggerTimesMs(unit, r, untilMs).map((atMs) => ({
               atMs,
-              seconds: eventReductionSecondsAt(r, holderSpec, atMs),
+              seconds: eventReductionSecondsAt(
+                r,
+                holderSpec,
+                logInstantOf(unit, atMs),
+              ),
             })),
             ...(r.triggerPowerSpend
               ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
@@ -1708,7 +1714,11 @@ export function eventTriggersFor(
               ? ownAuraStacksLostTimesMs(unit, r.triggerOwnAuraStacksLost).map(
                   (atMs) => ({
                     atMs,
-                    seconds: eventReductionSecondsAt(r, holderSpec, atMs),
+                    seconds: eventReductionSecondsAt(
+                      r,
+                      holderSpec,
+                      logInstantOf(unit, atMs),
+                    ),
                   }),
                 )
               : []),
@@ -1775,7 +1785,10 @@ export function castTargetTickTriggers(
       );
     });
     if (owner)
-      out.push({ atMs: t, seconds: eventReductionSecondsAt(r, holderSpec, t) });
+      out.push({
+        atMs: t,
+        seconds: eventReductionSecondsAt(r, holderSpec, logInstantOf(unit, t)),
+      });
   }
   return out.sort((a, b) => a.atMs - b.atMs);
 }

@@ -910,6 +910,21 @@ function extraSpellFields(
   };
 }
 
+/** `logClockOffsetMs` of a parsed document (types.ts), written onto each of
+ * its converted units as well; nothing at all for a document stored before
+ * the parser kept `statedStartTime` — absent stays absent. */
+function logClockOffsetOf(
+  m: { startTime: number; statedStartTime?: number | null },
+  units: Record<string, ICombatUnit>,
+): { logClockOffsetMs?: number | null } {
+  if (m.statedStartTime === undefined) return {};
+  const logClockOffsetMs =
+    m.statedStartTime === null ? null : m.statedStartTime - m.startTime;
+  for (const unit of Object.values(units))
+    unit.logClockOffsetMs = logClockOffsetMs;
+  return { logClockOffsetMs };
+}
+
 export function toLegacyMatch(m: GladMatch): IArenaMatch {
   const units: Record<string, ICombatUnit> = {};
   const absorbsByVictim = buildAbsorbsByVictim(m.units);
@@ -921,6 +936,7 @@ export function toLegacyMatch(m: GladMatch): IArenaMatch {
     units[id] = convertUnit(unit, m.units, absorbsByVictim);
   }
   mergePetEvents(units);
+  const clock = logClockOffsetOf(m, units);
 
   const startInfo: IStartInfo = {
     bracket: m.bracket,
@@ -943,6 +959,7 @@ export function toLegacyMatch(m: GladMatch): IArenaMatch {
     durationInSeconds: (m.endTime - m.startTime) / 1000,
     hasAdvancedLogging: m.hasAdvancedLogging,
     timezone: m.timezone,
+    ...clock,
     wowVersion: "retail",
   };
 }
@@ -959,6 +976,7 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
       units[id] = convertUnit(unit, round.units, absorbsByVictim);
     }
     mergePetEvents(units);
+    const clock = logClockOffsetOf(round, units);
 
     const startInfo: IStartInfo = {
       bracket: round.bracket,
@@ -984,6 +1002,7 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
       durationInSeconds: (round.endTime - round.startTime) / 1000,
       hasAdvancedLogging: round.hasAdvancedLogging,
       timezone: round.timezone,
+      ...clock,
       wowVersion: "retail" as const,
     };
   });

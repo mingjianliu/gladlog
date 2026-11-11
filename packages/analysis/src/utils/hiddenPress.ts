@@ -37,6 +37,7 @@ import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import { auraStandsForPressAt } from "./auraActivationEra";
 import { dropAuraRebroadcasts } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { logInstantOf } from "./logEra";
 import {
   isResyncBatchAt,
   lowerBound,
@@ -402,7 +403,7 @@ export function hiddenPressMs(
         // an aura that on this log's date stands for no press (Doom Winds
         // from 12.1.5, `auraStandsForPressAt`) proves no press lost while
         // unseen either: the round reads it `(no press)` (fact11 D44)
-        auraStandsForPressAt(spellId, ms)
+        auraStandsForPressAt(spellId, logInstantOf(unit, ms))
       )
         out.push(ms);
       upUntilMs.set(a.spellId!, untilOf(i, ms));
