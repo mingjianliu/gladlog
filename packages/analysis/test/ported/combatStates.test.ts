@@ -11,7 +11,7 @@ import {
   LogEvent,
 } from '@gladlog/parser-compat';
 
-import { extractShapeshiftIntervals, extractSpiritOfRedemptionIntervals, extractStasisEvents } from '../../src/utils/combatStates';
+import { extractSpiritOfRedemptionIntervals, extractStasisEvents } from '../../src/utils/combatStates';
 
 describe('combatStates', () => {
   const mockCombat = {
@@ -97,13 +97,6 @@ describe('combatStates', () => {
     petSpellCastEvents: [],
   };
 
-  it('extractShapeshiftIntervals extracts form intervals', () => {
-    const intervals = extractShapeshiftIntervals(mockUnit, mockCombat);
-    expect(intervals).toHaveLength(2);
-    expect(intervals[0]).toEqual({ form: 'Bear', startSeconds: 1, endSeconds: 3 });
-    expect(intervals[1]).toEqual({ form: 'Cat', startSeconds: 4, endSeconds: 8 });
-  });
-
   it('extractSpiritOfRedemptionIntervals extracts ghost form intervals', () => {
     const ghostUnit: ICombatUnit = {
       ...mockUnit,
@@ -137,38 +130,6 @@ describe('combatStates', () => {
     expect(stasisEvents[0].startSeconds).toBe(2);
     expect(stasisEvents[0].releaseSeconds).toBe(5);
     expect(stasisEvents[0].spells).toEqual(['Reversion', 'Dream Breath']);
-  });
-
-  it('extractShapeshiftIntervals handles direct Bear -> Cat shifting at the exact same timestamp', () => {
-    const shiftUnit: ICombatUnit = {
-      ...mockUnit,
-      auraEvents: [
-        {
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 1000 },
-          spellId: '5487',
-          spellName: 'Bear Form (Shapeshift)',
-        } as any,
-        {
-          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 2000 },
-          spellId: '768',
-          spellName: 'Cat Form (Shapeshift)',
-        } as any,
-        {
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: 2000 },
-          spellId: '5487',
-          spellName: 'Bear Form (Shapeshift)',
-        } as any,
-        {
-          logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: 3000 },
-          spellId: '768',
-          spellName: 'Cat Form (Shapeshift)',
-        } as any,
-      ],
-    };
-    const intervals = extractShapeshiftIntervals(shiftUnit, mockCombat);
-    expect(intervals).toHaveLength(2);
-    expect(intervals[0]).toEqual({ form: 'Bear', startSeconds: 1, endSeconds: 2 });
-    expect(intervals[1]).toEqual({ form: 'Cat', startSeconds: 2, endSeconds: 3 });
   });
 
   it('extractStasisEvents filters utility spells and handles simultaneous events properly', () => {

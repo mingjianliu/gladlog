@@ -107,8 +107,6 @@ export interface TimelineCtx {
   outgoingCCChains: P["outgoingCCChains"];
   enemyDeaths: P["enemyDeaths"];
   healingGaps: P["healingGaps"];
-  /** defaulted to [] by the destructuring */
-  shapeshiftIntervals: NonNullable<P["shapeshiftIntervals"]>;
 
   // ── what earlier emitters report back (read by the legends) ──
   enemyCdRender: ReturnType<typeof emitEnemyCdEntries>;

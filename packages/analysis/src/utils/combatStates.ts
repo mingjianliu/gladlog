@@ -12,12 +12,6 @@ import { COPY_CAST_IDS } from "./castPress";
 import { roundEndMs } from "./roundEnd";
 import { auraBlocksMechanic, INTERRUPT_MECHANIC } from "./spellMechanics";
 
-export interface IFormInterval {
-  form: "Bear" | "Cat";
-  startSeconds: number;
-  endSeconds: number;
-}
-
 export interface ISpiritOfRedemptionInterval {
   startSeconds: number;
   endSeconds: number;
@@ -257,64 +251,6 @@ export function spanHoldsGhostSecond(
   ghostSecond: number,
 ): boolean {
   return ghostSecond > fromSecond && ghostSecond < toSecond;
-}
-
-export function extractShapeshiftIntervals(
-  unit: ICombatUnit,
-  combat: AtomicArenaCombat,
-): IFormInterval[] {
-  const intervals: IFormInterval[] = [];
-  let bearStart: number | null = null;
-  let catStart: number | null = null;
-
-  for (const aura of unit.auraEvents) {
-    if (!aura.spellName) continue;
-
-    const isBear = aura.spellId === "5487" || aura.spellId === "9634"; // Bear Form, Dire Bear Form
-    const isCat = aura.spellId === "768"; // Cat Form
-
-    if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      if (isBear) {
-        bearStart = aura.logLine.timestamp;
-      } else if (isCat) {
-        catStart = aura.logLine.timestamp;
-      }
-    } else if (aura.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
-      if (isBear && bearStart !== null) {
-        intervals.push({
-          form: "Bear",
-          startSeconds: (bearStart - combat.startTime) / 1000,
-          endSeconds: (aura.logLine.timestamp - combat.startTime) / 1000,
-        });
-        bearStart = null;
-      } else if (isCat && catStart !== null) {
-        intervals.push({
-          form: "Cat",
-          startSeconds: (catStart - combat.startTime) / 1000,
-          endSeconds: (aura.logLine.timestamp - combat.startTime) / 1000,
-        });
-        catStart = null;
-      }
-    }
-  }
-
-  // Handle forms held until the end of the match
-  if (bearStart !== null) {
-    intervals.push({
-      form: "Bear",
-      startSeconds: (bearStart - combat.startTime) / 1000,
-      endSeconds: (combat.endTime - combat.startTime) / 1000,
-    });
-  }
-  if (catStart !== null) {
-    intervals.push({
-      form: "Cat",
-      startSeconds: (catStart - combat.startTime) / 1000,
-      endSeconds: (combat.endTime - combat.startTime) / 1000,
-    });
-  }
-
-  return intervals;
 }
 
 // Stasis (370537) lets a Preservation Evoker store the next 3 spells they cast,

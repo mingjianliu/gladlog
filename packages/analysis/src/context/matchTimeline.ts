@@ -38,7 +38,6 @@ import {
   IPlayerCCTrinketSummary,
 } from "../utils/ccTrinketAnalysis";
 import {
-  IFormInterval,
   ISpiritOfRedemptionInterval,
   IStasisEvent,
 } from "../utils/combatStates";
@@ -218,10 +217,6 @@ export interface BuildMatchTimelineParams {
   /** Arena zone id — the line-of-sight check of `summonReach` needs the map. */
   zoneId?: string;
   stasisEvents?: IStasisEvent[];
-  shapeshiftIntervals?: Array<{
-    player: ICombatUnit;
-    intervals: IFormInterval[];
-  }>;
   spiritOfRedemptionIntervals?: Array<{
     player: ICombatUnit;
     intervals: ISpiritOfRedemptionInterval[];
@@ -324,7 +319,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     outgoingCCChains,
     bracket,
     stasisEvents,
-    shapeshiftIntervals,
     spiritOfRedemptionIntervals,
     criticalWindowSet,
     crisisAnchorSeconds,
@@ -1212,7 +1206,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ── Sort and format (timelineSections/formatTimeline.ts) ─────────────────
   return formatTimeline({
     entries,
-    shapeshiftIntervals,
     owner,
     pid,
     silenceLineCount,

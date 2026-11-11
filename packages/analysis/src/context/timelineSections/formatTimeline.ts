@@ -1,6 +1,6 @@
 /**
- * Sort and format — the time-stable sort of every entry, the NOTABLE STATES
- * summary, the MATCH TIMELINE legends (each conditional on what actually
+ * Sort and format — the time-stable sort of every entry, the MATCH TIMELINE
+ * legends (each conditional on what actually
  * rendered), the per-second lines, and the [RES] zero-loss pruning shared with
  * the eval gate. The last step of buildMatchTimeline; its return value is the
  * timeline text.
@@ -107,7 +107,6 @@ export function formatTimeline(
   ctx: Pick<
     TimelineCtx,
     | "entries"
-    | "shapeshiftIntervals"
     | "owner"
     | "pid"
     | "silenceLineCount"
@@ -150,7 +149,6 @@ export function formatTimeline(
 ): string {
   const {
     entries,
-    shapeshiftIntervals,
     owner,
     pid,
     silenceLineCount,
@@ -199,34 +197,6 @@ export function formatTimeline(
     matchEndSeconds,
     pid,
   });
-
-  const summaryLines: string[] = [];
-  if (shapeshiftIntervals.length > 0) {
-    summaryLines.push("## NOTABLE STATES");
-    for (const { player, intervals } of shapeshiftIntervals) {
-      const bearTime = intervals
-        .filter((i) => i.form === "Bear")
-        .reduce((acc, i) => acc + (i.endSeconds - i.startSeconds), 0);
-      const catTime = intervals
-        .filter((i) => i.form === "Cat")
-        .reduce((acc, i) => acc + (i.endSeconds - i.startSeconds), 0);
-      const pLabel = player.id === owner.id ? "YOU" : pid(player.name);
-
-      if (bearTime > 0)
-        summaryLines.push(
-          `- ${pLabel} spent ${Math.round(bearTime)}s in Bear Form.`,
-        );
-      if (catTime > 0)
-        summaryLines.push(
-          `- ${pLabel} spent ${Math.round(catTime)}s in Cat Form.`,
-        );
-    }
-    if (summaryLines.length > 1) {
-      summaryLines.push("");
-    } else {
-      summaryLines.length = 0; // Empty if no valid times found
-    }
-  }
 
   // F-C3 (triage res-readiness): the `(no mana a/b)` tag on a [RES] `rdy:`
   // entry is legended only when a row carries it (snapshots are resolved to
@@ -388,7 +358,6 @@ export function formatTimeline(
     ),
   );
   const outputLines: string[] = [
-    ...summaryLines,
     "MATCH TIMELINE",
     "  Units: M = Million damage (1,000,000), k = Thousand damage (1,000)",
     // 2026-07-18 baseline: two independent responders read [DR: Full] backwards
