@@ -462,6 +462,51 @@ describe("G4d MEASURED_ENEMY — a STAYED span is measured to the enemy that hit
     ).toEqual([]);
   });
 
+  it("GH #141 item 3a: a KITED line's span is rebuilt from the burst header of its start second", () => {
+    // (the fixture's units stand still: 8 yd at every second)
+    const kited =
+      "    1:21 [High burst] opened 8→8yd from Mage-Realm-US (peak at 1:29)";
+    const header = (span: string) =>
+      `1:21  [OFFENSIVE WINDOW]   ${span} | peak spike 0.60M on 1(X) (Y) over 1:21–1:31 | CDs: Combustion@1:21`;
+    // the window's end, at most 10 s in (`burstEvalEndSeconds`)
+    expect(identity(`${header("1:21–1:50")}\n${kited}`)).toEqual([
+      expect.objectContaining({
+        atSeconds: 81,
+        toSeconds: 91,
+        unitName: "Mage-Realm-US",
+      }),
+    ]);
+    expect(identity(`${header("1:21–1:27")}\n${kited}`)).toEqual([
+      expect.objectContaining({ atSeconds: 81, toSeconds: 87 }),
+    ]);
+    // two headers in the second: which window the line read is not printed
+    expect(
+      identity(`${header("1:21–1:50")}\n${header("1:21–1:27")}\n${kited}`),
+    ).toEqual([]);
+    // a header of another second is not this line's window
+    expect(
+      identity(
+        `1:20  [OFFENSIVE WINDOW]   1:20–1:50 | no spike | CDs: X@1:20\n${kited}`,
+      ),
+    ).toEqual([]);
+    // the named enemy must be the one that hit the owner most over 1:21–1:31
+    expect(codes(`${header("1:21–1:50")}\n${kited}`, mk(hits))).toEqual([]);
+    expect(
+      codes(
+        `${header("1:21–1:50")}\n    1:21 [High burst] opened 3→3yd from Heal-Realm-US (peak at 1:21)`,
+        mk(hits),
+      ),
+    ).toEqual(["G4_MEASURED_ENEMY"]);
+    // …over the rebuilt span only: a hit past it does not count
+    const late = [dmg(81, "e-heal", 8_000), dmg(89, "e-mage", 600_000)];
+    expect(
+      codes(
+        `${header("1:21–1:27")}\n    1:21 [High burst] opened 3→3yd from Heal-Realm-US (peak at 1:21)`,
+        mk(late),
+      ),
+    ).toEqual([]);
+  });
+
   it("passes for the producer's own answer, range clause and all", () => {
     const r = checkGeoClaims(extractGeoClaims(measuredLine).claims, mk(hits));
     expect(r.violations).toEqual([]);

@@ -44,9 +44,13 @@
  *                     span, <name> must be that enemy and the line must not
  *                     carry the two-enemy "X→Y" form; when it returns null the
  *                     line is on the nearest-enemy fallback and G4 alone
- *                     checks its distances. A KITED line prints no span end,
- *                     so its measured enemy cannot be re-derived from the text
- *                     — not checked.
+ *                     checks its distances. A KITED line prints no span end;
+ *                     its span is rebuilt from the `[OFFENSIVE WINDOW] a–b`
+ *                     header of its start second (the burst window the
+ *                     producer read) through the producer's own
+ *                     `burstEvalEndSeconds` — GH #141 item 3a. With no
+ *                     header at that second, or two, the line is not
+ *                     checked.
  *  G4e OWNER_DEAD  — no STAYED / KITED distance is printed for a second the
  *                     log owner was already dead at (the producer's own
  *                     `burstSpanSampledAfterDeath`, at the line's start, a
@@ -77,6 +81,7 @@
  */
 import {
   arenaObstacles,
+  burstEvalEndSeconds,
   burstSpanSampledAfterDeath,
   burstSpanSampledPastRoundEnd,
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
@@ -184,6 +189,21 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
   const unitIdMap = new Map<number, string>();
   const lines = promptText.split("\n");
 
+  // the burst windows the timeline prints, by start second (G4d reads a
+  // KITED line's span off the one that starts with it)
+  const burstHeaderEnds = new Map<number, number[]>();
+  for (const line of lines) {
+    const h = line.match(
+      /^(\d+:\d{2}) {2}\[OFFENSIVE WINDOW\] +(\d+:\d{2})–(\d+:\d{2}) \|/,
+    );
+    if (!h || h[1] !== h[2]) continue;
+    const from = parseTime(h[2]!);
+    burstHeaderEnds.set(from, [
+      ...(burstHeaderEnds.get(from) ?? []),
+      parseTime(h[3]!),
+    ]);
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineNo = i + 1;
@@ -273,6 +293,21 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
           endpoint: "peak",
           raw: line,
         });
+        // G4d on a KITED line: the span is the burst window's evaluated
+        // part, the window being the header that starts in this second
+        const from = parseTime(m[1]);
+        const headerEnds = burstHeaderEnds.get(from) ?? [];
+        if (headerEnds.length === 1)
+          claims.push({
+            kind: "MEASURED_ENEMY",
+            lineNo,
+            atSeconds: from,
+            toSeconds: burstEvalEndSeconds(from, headerEnds[0]!),
+            distanceYards: 0,
+            unitName: startName,
+            ...(m[11] ? { endUnitName: m[11] } : {}),
+            raw: line,
+          });
       } else if (!m[3] && m[2]) {
         // STAYED: B at the span end, measured to Y (else the start enemy)
         claims.push({

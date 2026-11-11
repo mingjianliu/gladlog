@@ -1589,6 +1589,13 @@ const INDEX: PredicateRow[] = [
     symbol: "spanMeasuredEnemy",
     mod: positionAnalysis,
   },
+  // GH #141 item 3a: where a burst window's evaluated span ends — the
+  // producer and the gate's G4d on a KITED line (span end not printed)
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "burstEvalEndSeconds",
+    mod: positionAnalysis,
+  },
   // No burst-span sample on the log owner's corpse — the producer (a span's
   // last rendered second) and the positioning gate's G4e (every second a
   // line prints a distance at) call it

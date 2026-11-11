@@ -115,6 +115,18 @@ const MISSED_PUSH_RANGED_YARDS = 45; // ranged beyond this = disengaged (max cas
 // 2026-09-26; the old pooled 15 yd (p81 above) accused ranged specs.
 const CD_RANGE_RECHECK_SECONDS = 5; // beyond reach at every second through this long after the cast
 const BURST_EVAL_SECONDS = 10; // evaluate kite/stay over at most this much of the window
+/** Where the span a burst window's STAYED IN / KITED / SPLIT_PUSH reading
+ *  covers ends: the window's end, at most `BURST_EVAL_SECONDS` in. ONE
+ *  definition, two readers: the producer below and the positioning gate's
+ *  G4d, which rebuilds a KITED line's span from the `[OFFENSIVE WINDOW] a–b`
+ *  header of its start second (the KITED line prints no span end; on whole
+ *  seconds the floor of this equals this of the floors). */
+export function burstEvalEndSeconds(
+  fromSeconds: number,
+  toSeconds: number,
+): number {
+  return Math.min(toSeconds, fromSeconds + BURST_EVAL_SECONDS);
+}
 const MISSED_PUSH_MIN_SECONDS = 10; // sustained disengagement required
 const KILL_PROXIMITY_SECONDS = 15; // ignore disengagement right before an enemy death
 const MAX_MISSED_PUSH_EVENTS = 3;
@@ -948,7 +960,7 @@ export function computeOwnerPositionEvents(params: {
 
   // ── 1. Burst-window engagement: STAYED_IN / KITED ─────────────────────────
   for (const w of burstWindows) {
-    const evalEnd = Math.min(w.toSeconds, w.fromSeconds + BURST_EVAL_SECONDS);
+    const evalEnd = burstEvalEndSeconds(w.fromSeconds, w.toSeconds);
     const evalSpan = evalEnd - w.fromSeconds;
     if (evalSpan <= 0) continue;
 
@@ -1589,7 +1601,7 @@ export function computeOwnerPositionEvents(params: {
       );
       if (meleeDps.length < 2) continue; // convergence is only positionally checkable for melee
 
-      const evalEnd = Math.min(w.toSeconds, w.fromSeconds + BURST_EVAL_SECONDS);
+      const evalEnd = burstEvalEndSeconds(w.fromSeconds, w.toSeconds);
       const sampleTimes = [w.fromSeconds + 2, (w.fromSeconds + evalEnd) / 2];
       // the rendered span `from–to` the line prints (floored like fmtTime)
       const splitFromS = toRenderSecond(w.fromSeconds);
