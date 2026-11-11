@@ -867,6 +867,20 @@ export function extractKillAttempts(
      * 344572 into Onlyfansgeno, every hit on it absorbed). */
     const isHitOf = (c: TeamCast, d: ICombatUnit["damageOut"][number]) =>
       isPressHitRow(c.spellId, c.spellName, d as HitRow & typeof d);
+    /** Did the press put its own aura (its id, or an effect aura of the
+     * cast) on its caster — within `SAVE_CAST_AURA_PAIR_S` of the cast row? */
+    const pressAuraOnCaster = (c: TeamCast): boolean => {
+      const ids = castAndEffectIds(c.spellId);
+      return (c.caster.auraEvents ?? []).some(
+        (a) =>
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+          !!a.spellId &&
+          ids.has(a.spellId) &&
+          a.srcUnitId === c.caster.id &&
+          Math.abs(a.logLine.timestamp - c.castMs) <=
+            SAVE_CAST_AURA_PAIR_S * 1000,
+      );
+    };
     /** fact7 D4 (96fb4d42 1:25): a press on nobody — its caster's own buff,
      * no dest but its caster — goes where its caster's damage went. Avenging
      * Wrath opened the bracket and was skipped for an Ultimate Penitence 5.6 s
@@ -882,16 +896,34 @@ export function extractKillAttempts(
       toMs: number,
       bracketToMs: number,
     ): boolean => {
+      // T42 (5d145b70 2:57, 7edc099d-r0 1:40): a press whose cast row names
+      // a teammate is a buff too — on that teammate (Power Infusion), and on
+      // its caster when the press's own aura lands there as well (PvP
+      // Bloodlust names one ally and buffs the shaman). It goes where the
+      // damage of the players it buffed went. It opened the bracket and was
+      // skipped for a self-buff pressed seconds into it.
+      const ally =
+        c.destId !== undefined && c.destId !== c.caster.id
+          ? friendlies.find((f) => f.id === c.destId)
+          : undefined;
       if (
         c.destId !== undefined &&
         c.destId !== "0000000000000000" &&
-        c.destId !== c.caster.id
+        c.destId !== c.caster.id &&
+        !ally
       )
         return false;
       const fromMs = matchStartMs + c.cast * 1000;
-      const inIt = (c.caster.damageOut ?? []).filter(
-        (d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= toMs,
-      );
+      const buffed = !ally
+        ? [c.caster]
+        : pressAuraOnCaster(c)
+          ? [ally, c.caster]
+          : [ally];
+      const inIt = buffed
+        .flatMap((u) => u.damageOut ?? [])
+        .filter(
+          (d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= toMs,
+        );
       if (!inIt.some((d) => d.destUnitId === target.id)) return false;
       if (!inIt.some((d) => isHitOf(c, d))) return true;
       const onEnemy = new Map<string, number>();
