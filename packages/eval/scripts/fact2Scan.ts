@@ -1650,8 +1650,11 @@ function runRound(ctx: IContext): void {
               );
             const before = acts.at(-1);
             if (before) {
+              // over the max the product reads the row on (`hpReadingMaxHp`:
+              // a stale-max row after a max-HP grant — GH #203)
               const want =
-                (before.advancedActorCurrentHp / before.advancedActorMaxHp) *
+                (before.advancedActorCurrentHp /
+                  hpReadingMaxHp(owner, before)) *
                 100;
               bump("hotPressHp");
               if (Math.abs(Number(pm[3]) - want) > 1.5)

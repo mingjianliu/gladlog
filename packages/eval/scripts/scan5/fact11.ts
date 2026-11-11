@@ -194,6 +194,7 @@ import {
   wallStopsEveryHit,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { groundingRedirects } from "@gladlog/analysis/src/utils/groundingRedirects";
+import { PRESS_ONLY_TAG } from "@gladlog/analysis/src/utils/killWindowFacts";
 import { isOffListPressId } from "@gladlog/analysis/src/utils/offListPress";
 import { OVERRIDE_VARIANT_SHARES_BY_ERA } from "@gladlog/analysis/src/utils/overrideVariantEra";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
@@ -1009,16 +1010,23 @@ const TEAM_READY =
   /team offensive CDs ready at (\d+:\d{2}): (.*?)(?: \((.*?)\))?\.?(?:;|$)/;
 const CD_AT = / \d+:\d{2}$/;
 
-/** Every friendly caster of `name` this round is a healer it is no team
- * burst for (`countsAsTeamBurst`, B3iii): the team-ready lists never carry
- * it, only `pressed inside` does. */
-function noTeamBurstPress(ctx: IRoundCtx, name: string): boolean {
+/** The press of `name` in rendered second `atS` is a healer's own offensive
+ * cooldown that is no team burst (`countsAsTeamBurst`, B3iii): the
+ * team-ready lists never carry it, only `pressed inside` does. Keyed on the
+ * press, not the spell's name (GH #203): a name a healer and a damage dealer
+ * both press is exempt only where the healer pressed it. A second with no
+ * friendly cast row of the name exempts nothing. */
+function noTeamBurstPress(ctx: IRoundCtx, name: string, atS: number): boolean {
   if (!ctx.owner) return false;
   const casts = (ctx.players as any[])
     .filter((u) => u.reaction === ctx.owner.reaction)
     .flatMap((u) =>
       castsOf(u)
-        .filter((c) => nameOf(c.spellId, c.spellName ?? "") === name)
+        .filter(
+          (c) =>
+            nameOf(c.spellId, c.spellName ?? "") === name &&
+            Math.floor((tsOf(c) - ctx.start) / 1000) === atS,
+        )
         .map((c) => ({ u, id: String(c.spellId) })),
     );
   return (
@@ -1029,37 +1037,47 @@ function noTeamBurstPress(ctx: IRoundCtx, name: string): boolean {
   );
 }
 
+// the mark a press-only cooldown carries on the ready / back lists and not
+// on `pressed inside` (the producer's `PRESS_ONLY_TAG`): the same cooldown
+const PRESS_ONLY_SUFFIX = ` ${PRESS_ONLY_TAG}`;
+
 function pressedInsideNeverBack(ctx: IRoundCtx): void {
   for (const l of ctx.text.split("\n")) {
     const m = TEAM_READY.exec(l);
     if (!m || !m[3]) continue;
-    const names = (s: string) =>
+    const entries = (s: string) =>
       s
         .split("、")
-        .map((x) =>
-          x
-            .trim()
-            .replace(CD_AT, "")
-            .replace(/ ≤\d+s$/, ""),
-        )
-        .filter((x) => x && x !== "none");
+        .map((x) => {
+          const raw = x.trim();
+          const at = CD_AT.exec(raw);
+          let name = raw.replace(CD_AT, "").replace(/ ≤\d+s$/, "");
+          if (name.endsWith(PRESS_ONLY_SUFFIX))
+            name = name.slice(0, -PRESS_ONLY_SUFFIX.length);
+          return { name, atS: at ? secOf(at[0].trim()) : null };
+        })
+        .filter((x) => x.name && x.name !== "none");
+    const names = (s: string) => entries(s).map((x) => x.name);
     const ready = new Set(names(m[2]!));
-    const clauses = new Map<string, string[]>();
+    const clauses = new Map<
+      string,
+      Array<{ name: string; atS: number | null }>
+    >();
     for (const c of m[3].split("; ")) {
       const i = c.indexOf(": ");
       if (i < 0) continue;
-      clauses.set(c.slice(0, i), names(c.slice(i + 2)));
+      clauses.set(c.slice(0, i), entries(c.slice(i + 2)));
     }
     const known = new Set([
       ...ready,
-      ...(clauses.get("may already be back") ?? []),
-      ...(clauses.get("back inside") ?? []),
-      ...(clauses.get("pressed at start") ?? []),
+      ...(clauses.get("may already be back") ?? []).map((x) => x.name),
+      ...(clauses.get("back inside") ?? []).map((x) => x.name),
+      ...(clauses.get("pressed at start") ?? []).map((x) => x.name),
     ]);
-    for (const name of clauses.get("pressed inside") ?? []) {
+    for (const { name, atS } of clauses.get("pressed inside") ?? []) {
       // B3iii: a healer's own offensive cooldown that is no team burst
       // (`countsAsTeamBurst`) is pressed, never on a ready / back list
-      if (noTeamBurstPress(ctx, name)) continue;
+      if (atS !== null && noTeamBurstPress(ctx, name, atS)) continue;
       ctx.bump("pressedInsideNeverBack");
       if (known.has(name)) continue;
       ctx.violate(

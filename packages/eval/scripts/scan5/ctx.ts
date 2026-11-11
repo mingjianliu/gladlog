@@ -61,6 +61,38 @@ export const secOf = (mss: string): number => {
   const [m, s] = mss.split(":");
   return Number(m) * 60 + Number(s);
 };
+/**
+ * `m:ss  [REFLECTED]   <caster pid>'s X reflected[ ×N] by <reflector pid>[
+ * (came back for Nk)]` — the one reading of the line for every scan of it
+ * (GH #203: scan5/fact9 and scan5/pets could not read `reflected ×N by`
+ * after the producer began printing the count, and judged those lines as
+ * absent).
+ */
+const REFLECTED_LINE_RE =
+  /^\s*(\d+:\d\d)\s+\[REFLECTED\]\s+(\d+)\([^)]*\)'s (.+?) reflected(?: ×(\d+))? by (\d+)\([^)]*\)(?: \(came back for (\d+)k\))?/;
+/** the `reflected[ ×N] by` joint, for a scan whose caster is not a pid label */
+export const REFLECTED_BY_SRC = String.raw`reflected(?: ×\d+)? by`;
+export function parseReflectedLine(l: string): {
+  sec: number;
+  casterPid: string;
+  spell: string;
+  /** the printed `×N`, 1 when the line has none */
+  count: number;
+  reflectorPid: string;
+  /** `came back for Nk`, null when the line has none */
+  backK: number | null;
+} | null {
+  const m = REFLECTED_LINE_RE.exec(l);
+  if (!m) return null;
+  return {
+    sec: secOf(m[1]!),
+    casterPid: m[2]!,
+    spell: m[3]!,
+    count: m[4] !== undefined ? Number(m[4]) : 1,
+    reflectorPid: m[5]!,
+    backK: m[6] !== undefined ? Number(m[6]) : null,
+  };
+}
 export const ev = (a: any): string => a.logLine?.event;
 export const tsOf = (a: any): number => a.logLine?.timestamp ?? a.timestamp;
 export const APPLIED = LogEvent.SPELL_AURA_APPLIED as string;

@@ -113,6 +113,7 @@ import {
   pressLandingRows,
 } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
+import { isAutomaticCastRow } from "@gladlog/analysis/src/utils/pressRow";
 import { parseRawStreams } from "@gladlog/analysis/src/utils/rawStreams";
 import {
   playableEndMs,
@@ -488,6 +489,10 @@ function runRound(ctx: IContext): void {
           // a copy / tick / later stage of another press is no cast (the
           // product's table: Mutilate's 27576, Penance's bolts)
           !COPY_CAST_IDS.has(String(c.spellId)) &&
+          // nor an auto-attack swing or a passive proc — the producer's own
+          // `isAutomaticCastRow` (pipeline T12 / GH #203: Crusading Strikes'
+          // swings were counted here after the line stopped counting them)
+          !isAutomaticCastRow(c) &&
           // a charge press is counted at its impact row (fact10 D28: The
           // Hunt 1246167 → 1246169), the product's `pressImpactRow`
           pressImpactRow(c, successesOf(player)) === undefined &&

@@ -55,6 +55,7 @@ import {
   fmtS,
   type IRoundCtx,
   nameOf,
+  parseReflectedLine,
   REFRESH,
   REMOVED,
   successesOf,
@@ -257,18 +258,16 @@ function ledgerDefs(ctx: IRoundCtx): void {
   }
 }
 
-const REFLECTED_LINE =
-  /^\s*(\d+):(\d\d)\s+\[REFLECTED\]\s+(\d+)\([^)]*\)'s (.+?) reflected by (\d+)\(/;
-
 function wardReturns(ctx: IRoundCtx): void {
+  // the shared reading of the line (`reflected ×N by` too — GH #203)
   const lines = ctx.lines
-    .map((l) => REFLECTED_LINE.exec(l))
-    .filter((m): m is RegExpExecArray => m !== null)
+    .map(parseReflectedLine)
+    .filter((m) => m !== null)
     .map((m) => ({
-      sec: Number(m[1]) * 60 + Number(m[2]),
-      caster: m[3]!,
-      spell: m[4]!,
-      reflector: m[5]!,
+      sec: m.sec,
+      caster: m.casterPid,
+      spell: m.spell,
+      reflector: m.reflectorPid,
     }));
   for (const c of ctx.players) {
     const pidC = ctx.pidOf(c.name);

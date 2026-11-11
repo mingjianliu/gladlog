@@ -60,6 +60,7 @@ import {
   wallTableIdOfAura,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { hiddenPressMs } from "@gladlog/analysis/src/utils/hiddenPress";
+import { castRowActivationMs } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import {
   type IAuraEvent,
   type ISpellEvent,
@@ -174,7 +175,8 @@ function runRound(ctx: IContext): void {
         }
       }
       if (!friendly) continue;
-      const press = (check: Check, name: string) => {
+      // `t`: the second the product dates the press at
+      const press = (check: Check, name: string, t: string = at(ts)) => {
         bump(check);
         const ok = isOwner
           ? has(t, (l) => l.includes(`[YOU] [CD]   ${name}`))
@@ -187,7 +189,14 @@ function runRound(ctx: IContext): void {
         if (!ok) miss(check, `${where} ${t} ${u.name} ${name}`);
       };
       if (c.spellId === "378441") press("timeStop", "Time Stop");
-      if (c.spellId === "200166") press("havocMeta", "Metamorphosis");
+      // the Metamorphosis press is dated at its activation, not at the
+      // 200166 landing row (`castRowActivationMs` — GH #203)
+      if (c.spellId === "200166")
+        press(
+          "havocMeta",
+          "Metamorphosis",
+          at(castRowActivationMs(u, c.spellId, ts)),
+        );
       if (
         c.spellId === "33891" &&
         (u.auraEvents ?? []).some(

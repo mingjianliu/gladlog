@@ -142,6 +142,7 @@ import {
 import { DEFERRAL_SHIELD_DAMAGE_IDS } from "@gladlog/analysis/src/utils/incomingPressure";
 import { LogEvent } from "@gladlog/parser-compat";
 
+import { parseReflectedLine } from "./scan5/ctx";
 import {
   type IContext,
   type IScan,
@@ -965,17 +966,14 @@ function runRound(ctx: IContext): void {
     used: boolean;
   }> = [];
   for (const l of lines) {
-    const rm =
-      /^(\d+:\d\d) {2}\[REFLECTED\] {3}(\d+)\([^)]*\)'s (.+?) reflected(?: ×\d+)? by (\d+)\([^)]*\)(?: \(came back for (\d+)k\))?/.exec(
-        l,
-      );
+    const rm = parseReflectedLine(l);
     if (rm)
       reflectLines.push({
-        sec: secOf(rm[1]!),
-        cp: rm[2]!,
-        rp: rm[4]!,
-        spell: rm[3]!,
-        back: rm[5] !== undefined ? Number(rm[5]) : null,
+        sec: rm.sec,
+        cp: rm.casterPid,
+        rp: rm.reflectorPid,
+        spell: rm.spell,
+        back: rm.backK,
         text: l.slice(0, 160),
         used: false,
       });

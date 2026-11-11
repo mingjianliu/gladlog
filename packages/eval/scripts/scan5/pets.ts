@@ -59,7 +59,15 @@
  */
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 
-import { fmtS, type IRoundCtx, nameOf, secOf, SUCCESS, tsOf } from "./ctx";
+import {
+  fmtS,
+  type IRoundCtx,
+  nameOf,
+  REFLECTED_BY_SRC,
+  secOf,
+  SUCCESS,
+  tsOf,
+} from "./ctx";
 
 export const CHECKS = [
   "kickOnSummon",
@@ -107,7 +115,7 @@ const KICK_IMMUNE_RE = new RegExp(
   String.raw`^\s*(\d+:\d{2})\s+\[KICK\]\s+(${SUMMON_LABEL})'s (.+?) on (\S+) missed — IMMUNE`,
 );
 const REFLECTED_RE = new RegExp(
-  String.raw`^\s*(\d+:\d{2})\s+\[REFLECTED\]\s+(${SUMMON_LABEL})'s (.+?) reflected by (\S+)`,
+  String.raw`^\s*(\d+:\d{2})\s+\[REFLECTED\]\s+(${SUMMON_LABEL})'s (.+?) ${REFLECTED_BY_SRC} (\S+)`,
 );
 
 const guidType = (id: string): string =>

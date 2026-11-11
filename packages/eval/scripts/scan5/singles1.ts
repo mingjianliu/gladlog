@@ -128,6 +128,7 @@ import {
   type IRoundCtx,
   type IViolationRef,
   nameOf,
+  parseReflectedLine,
   type RecordViolation,
   REFRESH,
   REMOVED,
@@ -499,17 +500,14 @@ function reflectDotRun(ctx: IRoundCtx): void {
     line: string;
   }> = [];
   for (const l of ctx.lines) {
-    const m =
-      /^(\d+:\d\d) {2}\[REFLECTED\] {3}(\d+)\([^)]*\)'s (.+?) reflected(?: ×\d+)? by (\d+)\([^)]*\)(?: \(came back for (\d+)k\))?/.exec(
-        l,
-      );
+    const m = parseReflectedLine(l);
     if (m)
       lines.push({
-        sec: secOf(m[1]!),
-        cp: m[2]!,
-        rp: m[4]!,
-        spell: m[3]!,
-        back: m[5] !== undefined ? Number(m[5]) : null,
+        sec: m.sec,
+        cp: m.casterPid,
+        rp: m.reflectorPid,
+        spell: m.spell,
+        back: m.backK,
         line: l,
       });
   }
