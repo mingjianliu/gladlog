@@ -446,12 +446,24 @@ export interface ICcAvoidanceBuffUp {
  *    (`interestingAurasJSON`) begin there.
  *  - `also`: read these auras too, under their English name, outside the
  *    listed tables (`ccImmuneCauseOf`'s DB2 mechanic reading).
+ *  - `judgedIsMiss`: the judged row is a SPELL_MISSED row. An aura APPLIED
+ *    in its own millisecond on a row AFTER it is then read as up when the
+ *    unit itself pressed it in that millisecond (its own SPELL_CAST_SUCCESS
+ *    of the aura's id or of the cast whose effect it is): the game resolved
+ *    the press first and wrote its rows later — the miss is the press's
+ *    doing. Pipeline T64, a31-style: Spider Venom logged IMMUNE on a mage,
+ *    then, same millisecond, Ice Block APPLIED and its SUCCESS five rows
+ *    down — the `[CC NOT LANDED]` line named no cause. An aura applied
+ *    there with no press of the unit's (Precognition, which the control
+ *    itself triggers) stays unread.
  */
 export function ccAvoidanceBuffsUpAt(
-  unit: Pick<ICombatUnit, "auraEvents"> & Partial<Pick<ICombatUnit, "info">>,
+  unit: Pick<ICombatUnit, "auraEvents"> &
+    Partial<Pick<ICombatUnit, "info" | "spellCastEvents">>,
   atMs: number,
   opts: {
     atLine?: number;
+    judgedIsMiss?: boolean;
     withForms?: boolean;
     logStartMs?: number;
     casterOf?: (unitId: string) => ICombatUnit | undefined;
@@ -513,6 +525,22 @@ export function ccAvoidanceBuffsUpAt(
     }
   }
   const closedAtJudged = new Set<string>();
+  /** the unit's own SUCCESS, in the judged millisecond, of this aura's id
+   * or of a cast whose effect the aura is */
+  const pressedAtJudgedMs = (auraId: string, srcId: string): boolean => {
+    const casts = castsOfEffectAura(auraId);
+    return (unit.spellCastEvents ?? []).some(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.logLine.timestamp === atMs &&
+        c.srcUnitId === srcId &&
+        !!c.spellId &&
+        (c.spellId === auraId || casts.includes(c.spellId)),
+    );
+  };
+  /** the first row logged after the judged one: where the "closed later"
+   * reading below starts */
+  let laterFrom = -1;
   let k = 0;
   for (; k < rows.length; k++) {
     const a = rows[k]!;
@@ -522,8 +550,29 @@ export function ccAvoidanceBuffsUpAt(
       opts.atLine !== undefined &&
       a.logLine.lineIndex !== undefined &&
       a.logLine.lineIndex > opts.atLine
-    )
-      break;
+    ) {
+      // …but the unit's own press of that millisecond, logged after the
+      // miss it caused, is read (`judgedIsMiss`); nothing else there is
+      if (
+        opts.judgedIsMiss &&
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        a.spellId &&
+        pressedAtJudgedMs(a.spellId, a.srcUnitId)
+      ) {
+        const lateName = nameOf(a.spellId, a.spellName ?? "");
+        if (lateName)
+          open(
+            a.spellId,
+            lateName,
+            a.srcUnitName ?? "",
+            a.timestamp,
+            opts.casterOf?.(a.srcUnitId),
+            a.srcUnitId ?? "",
+          );
+      }
+      if (laterFrom < 0) laterFrom = k;
+      continue;
+    }
     const id = a.spellId;
     const name = id ? nameOf(id, a.spellName ?? "") : undefined;
     if (!id || !name) continue;
@@ -562,7 +611,7 @@ export function ccAvoidanceBuffsUpAt(
   // that open or close it — a dose change is neither (codex 20-F15-21)
   const closedLater = new Set<string>();
   const seenLater = new Set<string>();
-  for (; k < rows.length; k++) {
+  for (k = laterFrom < 0 ? k : laterFrom; k < rows.length; k++) {
     const a = rows[k]!;
     if (!a.spellId || !up.has(a.spellId) || seenLater.has(a.spellId)) continue;
     if (!ofOpen(a)) continue;
@@ -5323,9 +5372,14 @@ export function analyzePlayerCCAndTrinket(
       : (Object.values(combat.units ?? {}) as ICombatUnit[])
     ).map((u) => [u.id, u]),
   );
-  const avoidanceBuffsAt = (atMs: number, atLine: number | undefined) =>
+  const avoidanceBuffsAt = (
+    atMs: number,
+    atLine: number | undefined,
+    judgedIsMiss: boolean,
+  ) =>
     ccAvoidanceBuffsUpAt(player, atMs, {
       atLine,
+      judgedIsMiss,
       withForms: true,
       logStartMs: combat.startTime,
       casterOf: (id) => unitsById.get(id),
@@ -5745,17 +5799,25 @@ export function analyzePlayerCCAndTrinket(
     enemy: ICombatUnit,
     cast: ICombatUnit["spellCastEvents"][number],
     missRow: IMissEvent | undefined,
-  ): { ms: number; line: number | undefined } => {
+  ): { ms: number; line: number | undefined; isMissRow: boolean } => {
     const landing = cast.spellId
       ? AOE_CC_LANDING_WINDOW_S[cast.spellId]
       : undefined;
-    if (!landing)
-      return { ms: cast.logLine.timestamp, line: cast.logLine.lineIndex };
+    const atCast = {
+      ms: cast.logLine.timestamp,
+      line: cast.logLine.lineIndex,
+      isMissRow: false,
+    };
+    if (!landing) return atCast;
     if (missRow)
-      return { ms: missRow.timestamp, line: missRow.logLine?.lineIndex };
-    const atCast = { ms: cast.logLine.timestamp, line: cast.logLine.lineIndex };
+      return {
+        ms: missRow.timestamp,
+        line: missRow.logLine?.lineIndex,
+        isMissRow: true,
+      };
     if (landing.fromS <= 0) return atCast;
-    return pulseAssignment(enemy, cast).get(cast.logLine.timestamp) ?? atCast;
+    const pulse = pulseAssignment(enemy, cast).get(cast.logLine.timestamp);
+    return pulse ? { ms: pulse.ms, line: pulse.line, isMissRow: false } : atCast;
   };
 
   /** Does a go-off row at `rowMs` (of `family`, from the caster or its
@@ -6021,7 +6083,7 @@ export function analyzePlayerCCAndTrinket(
           // player who could move (`ccAvoidedLandingDelay.test`).
           if (!isTargeted && !missRow && hardCcAuraAt(player, enemyIds, hit.ms))
             continue;
-          const activeBuff = avoidanceBuffsAt(hit.ms, hit.line).find(
+          const activeBuff = avoidanceBuffsAt(hit.ms, hit.line, hit.isMissRow).find(
             (b) =>
               applicableIds.has(b.spellId) &&
               avoidanceExplainsMissType(b.spellId, loggedMissType) &&
@@ -6203,7 +6265,7 @@ export function analyzePlayerCCAndTrinket(
     if (landedThen) continue;
     // an avoidance the table explains is credited like the sweep's
     const applicableIds = applicableCCAvoidanceIds(m.spellId, name);
-    const buff = avoidanceBuffsAt(m.timestamp, m.logLine?.lineIndex).find(
+    const buff = avoidanceBuffsAt(m.timestamp, m.logLine?.lineIndex, true).find(
       (b) =>
         applicableIds.has(b.spellId) &&
         avoidanceExplainsMissType(b.spellId, m.missType),

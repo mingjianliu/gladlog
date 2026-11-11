@@ -83,6 +83,89 @@ describe("ccAvoidanceBuffsUpAt", () => {
   });
 });
 
+describe("ccAvoidanceBuffsUpAt — the unit's own press in the miss row's millisecond (pipeline T64)", () => {
+  const ICE_BLOCK = "45438";
+  const PRECOGNITION = "377362";
+  const also = (id: string) => id === ICE_BLOCK || id === PRECOGNITION;
+  const press = (id: string, atMs: number, line: number, src = "P") =>
+    ({
+      spellId: id,
+      srcUnitId: src,
+      logLine: {
+        event: LogEvent.SPELL_CAST_SUCCESS,
+        timestamp: T0 + atMs,
+        lineIndex: line,
+      },
+    }) as any;
+  // the rows of the real round: the miss at line 15, Ice Block APPLIED at
+  // line 21 and its SUCCESS at line 22, all in one millisecond
+  const blocked = (casts: any[]) =>
+    ({
+      id: "P",
+      auraEvents: [aura(LogEvent.SPELL_AURA_APPLIED, ICE_BLOCK, 1500, 21)],
+      spellCastEvents: casts,
+    }) as any;
+
+  it("a miss row reads the immunity the unit pressed in that ms, logged after it", () => {
+    const u = blocked([press(ICE_BLOCK, 1500, 22)]);
+    expect(
+      ccAvoidanceBuffsUpAt(u, T0 + 1500, {
+        atLine: 15,
+        judgedIsMiss: true,
+        also,
+      }).map((b) => b.name),
+    ).toEqual(["Ice Block"]);
+  });
+  it("a row that is no miss (a cast row) never reads a move pressed after it", () => {
+    const u = blocked([press(ICE_BLOCK, 1500, 22)]);
+    expect(ccAvoidanceBuffsUpAt(u, T0 + 1500, { atLine: 15, also })).toEqual(
+      [],
+    );
+  });
+  it("an aura applied there with no press of the unit's stays unread — nor one pressed in another ms, nor another unit's press", () => {
+    const opts = { atLine: 15, judgedIsMiss: true, also };
+    expect(ccAvoidanceBuffsUpAt(blocked([]), T0 + 1500, opts)).toEqual([]);
+    expect(
+      ccAvoidanceBuffsUpAt(blocked([press(ICE_BLOCK, 1499, 9)]), T0 + 1500, opts),
+    ).toEqual([]);
+    expect(
+      ccAvoidanceBuffsUpAt(
+        blocked([press(ICE_BLOCK, 1500, 22, "Q")]),
+        T0 + 1500,
+        opts,
+      ),
+    ).toEqual([]);
+    // Precognition: the control itself triggers it, the unit presses nothing
+    const precog = {
+      id: "P",
+      auraEvents: [aura(LogEvent.SPELL_AURA_APPLIED, PRECOGNITION, 1500, 16)],
+      spellCastEvents: [press(ICE_BLOCK, 1500, 22)],
+    } as any;
+    expect(ccAvoidanceBuffsUpAt(precog, T0 + 1500, opts)).toEqual([]);
+  });
+  it("the consumed aura's REMOVED after the miss row still reads as up, and as closed later", () => {
+    const u = {
+      id: "P",
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, SHROUD, 0, 10),
+        // past the Shroud's official 3 s: only its own later REMOVED keeps it
+        aura(LogEvent.SPELL_AURA_REMOVED, SHROUD, 4000, 25),
+        aura(LogEvent.SPELL_AURA_APPLIED, ICE_BLOCK, 4000, 26),
+      ],
+      spellCastEvents: [press(ICE_BLOCK, 4000, 27)],
+    } as any;
+    expect(
+      ccAvoidanceBuffsUpAt(u, T0 + 4000, {
+        atLine: 20,
+        judgedIsMiss: true,
+        also,
+      })
+        .map((b) => b.name)
+        .sort(),
+    ).toEqual(["Ice Block", "Nullifying Shroud"]);
+  });
+});
+
 describe("ccAvoidanceBuffsUpAt — Druid forms", () => {
   it("a new form ends the one before, also one the log's start list held", () => {
     const u = {

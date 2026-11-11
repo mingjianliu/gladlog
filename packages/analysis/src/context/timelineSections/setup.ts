@@ -891,6 +891,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         !control && immunityStopsDamageSpell(id, miss.spellId ?? "");
       const up = ccAvoidanceBuffsUpAt(target, miss.timestamp, {
         atLine: miss.logLine.lineIndex,
+        judgedIsMiss: true,
         // a shapeshifted druid is immune to Polymorph / Hex (DB2 aura 77,
         // mechanic 17 on all four forms; fact7 `immuneCauseUnnamed`:
         // ba5e59c6 2:07, a Polymorph IMMUNE on a Cat Form feral); the
@@ -1226,6 +1227,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     );
     const up = ccAvoidanceBuffsUpAt(dest, missRow.timestamp, {
       atLine: missRow.logLine?.lineIndex,
+      judgedIsMiss: true,
     }).find(
       (b) =>
         applicable.has(b.spellId) &&
