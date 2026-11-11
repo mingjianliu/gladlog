@@ -25,8 +25,18 @@
  *    the enemy priest's copy aimed at a teammate. The aim alone is no reach: a
  *    self-buff's cast row names whatever the presser had targeted, and
  *    Survival of the Fittest 264735 went on presser + pet only with that row
- *    naming an enemy and a teammate in one log (ec7bd3f5 r3).
+ *    naming an enemy and a teammate in one log (ec7bd3f5 r3). Nor is a row
+ *    on a unit of the other side a reach: Touch of Karma's cast names the
+ *    enemy it links to and puts its debuff there (wide s1/37, 3 facts). And a
+ *    reach a talent grants (`ALLY_REACH_GRANTED_BY_TALENT`: Obsidian Scales
+ *    on an ally ← Lifecinders) says nothing of an owner who did not take it
+ *    — kind `anotherBuild`, out of the total (wide s0/48, s0/55: an enemy
+ *    Preservation Evoker's copy beside a Devastation owner's own Scales).
  */
+import {
+  ALLY_REACH_GRANTED_BY_TALENT,
+  playerTalentIdSets,
+} from "@gladlog/analysis/src/utils/cooldowns";
 import { ENEMY_DEF_TAG_RE_SRC } from "@gladlog/analysis/src/utils/enemyDefensives";
 
 import { APPLIED, ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
@@ -39,6 +49,9 @@ export const CHECKS = [
   "controlRemovalFiled",
   "selfOnlyHeldDualRole",
 ] as const;
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "selfOnlyHeldDualRole|anotherBuild",
+]);
 
 const SECOND = 1000;
 const DISPEL_ROWS = new Set(["SPELL_DISPEL", "SPELL_STOLEN"]);
@@ -221,6 +234,9 @@ const HELD_NOTE =
 function pressReachedDest(ctx: IRoundCtx, c: any, name: string): boolean {
   const dest = ctx.units.find((u) => u.id === c.destUnitId);
   if (!dest) return false;
+  // the other side's unit is the spell's target, not one it protects
+  const src = ctx.units.find((u) => u.id === c.srcUnitId);
+  if (!src || src.reaction !== dest.reaction) return false;
   const mine = (r: any) =>
     r.srcUnitId === c.srcUnitId && nameOf(r.spellId, r.spellName) === name;
   return [
@@ -247,9 +263,16 @@ function selfOnlyHeldDualRole(ctx: IRoundCtx): void {
             pressReachedDest(ctx, c, name),
         );
       if (!aimed) continue;
+      const grantedBy = ALLY_REACH_GRANTED_BY_TALENT[String(aimed.spellId)];
+      const ownerHolds =
+        grantedBy === undefined ||
+        aimed.srcUnitId === ctx.owner?.id ||
+        !ctx.owner ||
+        (playerTalentIdSets(ctx.owner).talentedSpellIds?.has(grantedBy) ??
+          true);
       ctx.violate(
         "selfOnlyHeldDualRole",
-        "aimedAtAnother",
+        ownerHolds ? "aimedAtAnother" : "anotherBuild",
         tsOf(aimed),
         name,
         `${aimed.srcUnitName}'s ${name} aimed at ${aimed.destUnitName}`,

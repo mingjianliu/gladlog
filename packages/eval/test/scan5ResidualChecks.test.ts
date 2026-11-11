@@ -950,6 +950,24 @@ describe("selfOnlyHeldDualRole", () => {
       ),
     ).toHaveLength(1);
   });
+  it("a row on a unit of the other side is the spell's target, no reach (wide s1/37, Touch of Karma)", () => {
+    const players = [
+      unit("Hunter", "1", 1, {
+        spellCastEvents: [
+          cast(12_000, "Hunter", "122470", "Touch of Karma", "Foe"),
+        ],
+      }),
+      unit("Foe", "2", 2, {
+        auraEvents: [applied("Hunter", "122470", "Touch of Karma")],
+      }),
+    ];
+    expect(
+      of(
+        scan(runPressFiling, players, [note("Touch of Karma")]),
+        "selfOnlyHeldDualRole",
+      ),
+    ).toEqual([]);
+  });
 });
 
 // fact7 r3: the eight checks the 605 capture still fired on. Same split: `reads`
@@ -1445,6 +1463,33 @@ describe("freeToPressBelowLog", () => {
 
   it("flags the stun counted against a spell that goes out through it (D21)", () => {
     expect(checked({}, "0.0")).toHaveLength(1);
+  });
+
+  const from = (src: string, event: string, ms: number, id: string) => ({
+    ...onUnit(event, ms, id, "Control"),
+    srcUnitId: src,
+    auraType: "DEBUFF",
+  });
+  it("two casters' copies of one control are two applications: the second's end does not end the first (wide s1/55-4, Sleep Walk)", () => {
+    const auraEvents = [
+      ...stun,
+      from("foeA", APPLIED_ROW, 66_000, "360806"),
+      from("foeB", APPLIED_ROW, 66_100, "360806"),
+      from("foeB", REMOVED_ROW, 69_000, "360806"),
+      from("foeA", REMOVED_ROW, 72_245, "360806"),
+    ];
+    // free from the first's own end, 2.0 s before the death
+    expect(checked({ auraEvents }, "2.0")).toEqual([]);
+    expect(checked({ auraEvents }, "0.0")).toHaveLength(1);
+  });
+
+  it("a control reflected back onto its caster is a control on it (wide s2/175-5, Polymorph)", () => {
+    const auraEvents = [
+      ...stun,
+      from("Priest", APPLIED_ROW, 70_000, "118"),
+      from("Priest", REMOVED_ROW, 71_245, "118"),
+    ];
+    expect(checked({ auraEvents }, "3.0")).toEqual([]);
   });
 
   const flashHeal = (ms: number) => ({

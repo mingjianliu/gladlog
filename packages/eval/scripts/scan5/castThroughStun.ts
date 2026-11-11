@@ -76,26 +76,55 @@ interface ISpan {
   spellId: string;
 }
 
+/** One application per spell and source: two enemies' copies of one control
+ * overlap (wide s1/55-4: two Evokers' Sleep Walk, the second off 1.8 s before
+ * the first — keyed on the spell alone, the second's REMOVED closed the
+ * first). A row under a source with nothing open closes the earliest open
+ * one of that spell (a REMOVED logged under another caster). */
+function openKeyOf(open: Map<string, number>, a: any, id: string) {
+  const own = `${id}|${a.srcUnitId}`;
+  if (open.has(own)) return own;
+  let best: string | undefined;
+  for (const [k, from] of open)
+    if (
+      k.startsWith(`${id}|`) &&
+      (best === undefined || from < open.get(best)!)
+    )
+      best = k;
+  return best;
+}
+/** the teammates whose auras on `unit` are no control put on it. The unit's
+ * own debuff is one: its control reflected back (wide s2/175-5: a Polymorph
+ * reflected onto its Mage, 1 s, 2.6 s before the death). */
+function teammatesOf(ctx: IRoundCtx, unit: any): Set<string> {
+  return new Set(
+    ctx.units
+      .filter((u) => u.reaction === unit.reaction && u.id !== unit.id)
+      .map((u) => u.id),
+  );
+}
+const putOnIt = (ours: Set<string>, unit: any, a: any): boolean =>
+  !ours.has(a.srcUnitId) &&
+  (a.srcUnitId !== unit.id || a.auraType === "DEBUFF");
+
 /** the cast-blocking controls the other side put on `unit`, from the rows */
 function controlsOn(ctx: IRoundCtx, unit: any): ISpan[] {
   const open = new Map<string, number>();
   const out: ISpan[] = [];
-  const ours = new Set([
-    unit.id,
-    ...ctx.units.filter((u) => u.reaction === unit.reaction).map((u) => u.id),
-  ]);
+  const ours = teammatesOf(ctx, unit);
   for (const a of unit.auraEvents ?? []) {
     const id = String(a.spellId ?? "");
     const type = SPELL_CATEGORIES[id]?.type;
     if (!ccSpellIds.has(id) || !type || !isCastBlockingAuraType(type)) continue;
     const e = ev(a);
     if (e === APPLIED) {
-      if (!ours.has(a.srcUnitId) && !open.has(id)) open.set(id, tsOf(a));
+      const key = `${id}|${a.srcUnitId}`;
+      if (putOnIt(ours, unit, a) && !open.has(key)) open.set(key, tsOf(a));
     } else if (e === REMOVED || e?.startsWith("SPELL_AURA_BROKEN")) {
-      const from = open.get(id);
-      if (from !== undefined) {
-        out.push({ from, to: tsOf(a), spellId: id });
-        open.delete(id);
+      const key = openKeyOf(open, a, id);
+      if (key !== undefined) {
+        out.push({ from: open.get(key)!, to: tsOf(a), spellId: id });
+        open.delete(key);
       }
     }
   }
@@ -110,9 +139,7 @@ function controlsOn(ctx: IRoundCtx, unit: any): ISpan[] {
 function blocksOn(ctx: IRoundCtx, unit: any, spellId: string): ISpan[] {
   const open = new Map<string, number>();
   const out: ISpan[] = [];
-  const ours = new Set(
-    ctx.units.filter((u) => u.reaction === unit.reaction).map((u) => u.id),
-  );
+  const ours = teammatesOf(ctx, unit);
   for (const a of unit.auraEvents ?? []) {
     const id = String(a.spellId ?? "");
     const type = SPELL_CATEGORIES[id]?.type;
@@ -120,14 +147,18 @@ function blocksOn(ctx: IRoundCtx, unit: any, spellId: string): ISpan[] {
     if (!ccSpellIds.has(id) && isUnsilenceableCast(spellId)) continue;
     const e = ev(a);
     if (e === APPLIED) {
-      if (!ours.has(a.srcUnitId) && !open.has(id)) open.set(id, tsOf(a));
+      const key = `${id}|${a.srcUnitId}`;
+      if (putOnIt(ours, unit, a) && !open.has(key)) open.set(key, tsOf(a));
     } else if (e === REMOVED || e?.startsWith("SPELL_AURA_BROKEN")) {
-      const from = open.get(id);
-      if (from !== undefined) out.push({ from, to: tsOf(a), spellId: id });
-      open.delete(id);
+      const key = openKeyOf(open, a, id);
+      if (key !== undefined) {
+        out.push({ from: open.get(key)!, to: tsOf(a), spellId: id });
+        open.delete(key);
+      }
     }
   }
-  for (const [id, from] of open) out.push({ from, to: Infinity, spellId: id });
+  for (const [key, from] of open)
+    out.push({ from, to: Infinity, spellId: key.split("|")[0]! });
   const school = spellSchoolMask(spellId);
   for (const k of unit.actionIn ?? []) {
     if (k.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
