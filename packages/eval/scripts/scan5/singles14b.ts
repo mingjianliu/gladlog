@@ -60,6 +60,7 @@ import { spellNameKey } from "@gladlog/analysis/src/utils/damagePress";
 import {
   canDefensiveCleanse,
   canOffensivePurge,
+  CLEANSE_SPELLS_BY_TYPE,
   dispelReachYards,
   getDispelType,
   isCdGatedPurger,
@@ -268,11 +269,19 @@ function checkRotDots(ctx: IRoundCtx): void {
     const lapsed = (id: string, src: string): boolean => {
       const from = open.get(`${id}|${src}`)!;
       const caster = ctx.players.find((p: any) => p.id === src);
-      const d = officialDurationS(id, caster, atMs);
-      if (d === null) return false;
       const rows = debuffRows.filter(
         (a) => a.spellId === id && a.srcUnitId === src,
       );
+      const anchor = Math.max(
+        from,
+        ...rows.filter((a) => tsOf(a) <= atMs).map((a) => tsOf(a)),
+      );
+      // priced by the application it runs from, not by the printed second: a
+      // combo-point length (Rip, Rupture) read at the second is the next
+      // finisher's (GH #173 item 19: a 5-point Rip refreshed at 0:37, lost
+      // REMOVED, read 4 s of a later 1-point press and "gone" at 0:52)
+      const d = officialDurationS(id, caster, anchor);
+      if (d === null) return false;
       // a REMOVED under a unit with no run of its own is this run's, the
       // Mind-Control shape the loop above pairs too
       const endsRun = (a: any): boolean =>
@@ -295,18 +304,30 @@ function checkRotDots(ctx: IRoundCtx): void {
       // its own REMOVED was logged: the run's end is known, not a guess
       if (next !== undefined && ev(next) === REMOVED) return false;
       const until = next === undefined ? ctx.end : tsOf(next);
-      const tickedPast = ((unit.damageIn ?? []) as any[]).some(
-        (t) =>
-          t.spellId === id &&
-          t.srcUnitId === src &&
-          tsOf(t) >= atMs &&
-          tsOf(t) < until,
-      );
-      if (tickedPast) return false;
-      const anchor = Math.max(
-        from,
-        ...rows.filter((a) => tsOf(a) <= atMs).map((a) => tsOf(a)),
-      );
+      // a tick a shield ate whole, or an immunity refused, is a tick (13-1 r1
+      // 2:06: Shadow Word: Pain, its ticks at 2:05.8 and 2:06.5 both ABSORB)
+      const allTicks = [
+        ...((unit.damageIn ?? []) as any[]).filter((t) =>
+          (ev(t) as string).startsWith("SPELL_PERIODIC_DAMAGE"),
+        ),
+        ...((unit.missesIn ?? []) as any[]).filter(
+          (t) => ev(t) === "SPELL_PERIODIC_MISSED",
+        ),
+      ]
+        .filter((t) => t.spellId === id && t.srcUnitId === src)
+        .map((t) => tsOf(t) as number)
+        .sort((x, y) => x - y);
+      if (
+        allTicks.some((t) => t >= atMs && t < until) ||
+        ((unit.damageIn ?? []) as any[]).some(
+          (t) =>
+            t.spellId === id &&
+            t.srcUnitId === src &&
+            tsOf(t) >= atMs &&
+            tsOf(t) < until,
+        )
+      )
+        return false;
       return anchor + d * 1000 < atMs;
     };
     const truth = [...open.keys()].filter((k) => {
@@ -742,6 +763,12 @@ function checkReach(ctx: IRoundCtx, friends: any[]): void {
     const untilS = stated[2] === undefined ? undefined : secOf(stated[2]);
     const sweepEnd = (windowEndMs: number): number =>
       untilS === undefined ? windowEndMs : ctx.start + (untilS - 1) * 1000;
+    // The line prints the window's length rounded to a whole second, so the
+    // least it claims is half a second under the print: a 9.744 s window
+    // reads "10s", and the second at +9.8 s is past its end (GH #173 item
+    // 15: an Alter Time cut by the round's end, the owner in reach only then)
+    const claimedEnd = (onMs: number, printedS: number): number =>
+      onMs + (printedS - 0.5) * 1000;
     ctx.bump("reachStatedWholeBuff");
     const m = /^\s*(\d+:\d\d)\s+\[/.exec(line);
     if (!m) continue;
@@ -773,7 +800,7 @@ function checkReach(ctx: IRoundCtx, friends: any[]): void {
         who,
         target,
         tsOf(on) + 3000,
-        sweepEnd(tsOf(on) + Number(len[1]) * 1000),
+        sweepEnd(claimedEnd(tsOf(on), Number(len[1]))),
         (d: any) => dispelReachYards(d, PURGE_SPELLS_BY_SPEC[d.spec as never]),
       );
       if (hit)
@@ -809,8 +836,16 @@ function checkReach(ctx: IRoundCtx, friends: any[]): void {
       who,
       target,
       tsOf(on) + 3000,
-      sweepEnd(tsOf(on) + Number(c[3]) * 1000),
-      () => 40,
+      sweepEnd(claimedEnd(tsOf(on), Number(c[3]))),
+      // each cleanser's own reach, as the product's window asks it (GH #173
+      // item 15: this branch read a flat 40 yd)
+      (d: any) =>
+        dispelReachYards(
+          d,
+          CLEANSE_SPELLS_BY_TYPE[type as keyof typeof CLEANSE_SPELLS_BY_TYPE]?.[
+            d.spec as never
+          ],
+        ),
     );
     if (hit)
       ctx.violate(

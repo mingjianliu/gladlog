@@ -467,6 +467,53 @@ describe("[HEALING] / [ROT PRESSURE] legends print only with their line family",
     ]);
   });
 
+  // GH #173 item 19 (605 51-5 r5 2:47, 13-1 r1 2:06): a run whose REMOVED the
+  // log lost is closed at its official length unless its ticks say it ran on
+  // — and a tick a shield ate whole is a SPELL_PERIODIC_MISSED row.
+  it("a DoT past its official length still ticking into shields is counted", () => {
+    const base = rotting("o");
+    const missed = (sec: number) => ({
+      logLine: {
+        event: LogEvent.SPELL_PERIODIC_MISSED,
+        timestamp: MATCH_START_MS + sec * 1000,
+        parameters: [],
+      },
+      timestamp: MATCH_START_MS + sec * 1000,
+      srcUnitId: "src",
+      srcUnitName: "Source",
+      destUnitId: "o",
+      destUnitName: "o",
+      spellId: "431380",
+      spellName: "Dawnlight",
+      missType: "ABSORB",
+      amount: 10,
+    });
+    const rotOf = (missesIn: unknown[]) =>
+      buildMatchTimeline(
+        paramsWith(
+          mkOwner({
+            ...base,
+            // Dawnlight (8 s), applied at 0:02 and never seen to end
+            auraEvents: [
+              ...(base.auraEvents ?? []),
+              debuff(
+                "431380",
+                "o",
+                LogEvent.SPELL_AURA_APPLIED,
+                MATCH_START_MS + 2_000,
+              ),
+            ],
+            missesIn: missesIn as never[],
+          }),
+        ),
+      )
+        .split("\n")
+        .filter((l) => /^\d+:\d\d\s+\[ROT PRESSURE\]/.test(l))
+        .map((l) => /with (\d+) active DoTs/.exec(l)?.[1]);
+    expect(rotOf([])).toEqual(["3"]);
+    expect(rotOf([missed(11.5), missed(13.2)])).toEqual(["4"]);
+  });
+
   it("a rot-pressure stretch → the line and its legend, with the predicate's own numbers", () => {
     const owner = mkOwner(rotting("o"));
     const lines = buildMatchTimeline(paramsWith(owner)).split("\n");

@@ -164,7 +164,10 @@ function extractPlayerDotIntervals(
 }
 
 /** The run's last periodic tick on the unit, bounded by that source's next
- * run of the spell; 0 with none. */
+ * run of the spell; 0 with none. A tick a shield ate whole, or an immunity
+ * refused, is a tick: its row is SPELL_PERIODIC_MISSED, on `missesIn` (GH
+ * #173 item 19: a Vampiric Touch whose last two ticks read DAMAGE at 2:05.3
+ * and MISSED at 2:06.4 was off the 2:06 count, its REMOVED lost). */
 function lastDotTickMs(
   player: ICombatUnit,
   run: IAuraInterval,
@@ -191,6 +194,17 @@ function lastDotTickMs(
       d.spellId === run.spellId &&
       d.srcUnitName === run.srcUnitName &&
       d.logLine.event === LogEvent.SPELL_PERIODIC_DAMAGE &&
+      ts >= fromMs &&
+      ts < untilMs
+    )
+      last = Math.max(last, ts);
+  }
+  for (const m of player.missesIn ?? []) {
+    const ts = m.logLine.timestamp;
+    if (
+      m.spellId === run.spellId &&
+      m.srcUnitName === run.srcUnitName &&
+      m.logLine.event === LogEvent.SPELL_PERIODIC_MISSED &&
       ts >= fromMs &&
       ts < untilMs
     )
