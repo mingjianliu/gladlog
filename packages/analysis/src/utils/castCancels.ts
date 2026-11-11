@@ -78,6 +78,7 @@ import { analyzeKickAudit } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
 import { roundEndMs } from "./roundEnd";
 import { unitLogEpochMs } from "./talents";
+import { firstDeathMs } from "./unitDeath";
 import { unloggedSilencesOnOwner } from "./unloggedSilence";
 
 // The reading of how a cast bar ended, the rows it starts from and the
@@ -101,9 +102,31 @@ export interface CastCancel {
   spellName: string;
   /** Cast start, seconds since match start. */
   startS: number;
-  /** The SPELL_CAST_FAILED, seconds since match start. */
+  /** The SPELL_CAST_FAILED, seconds since match start — for an `unlogged`
+   * stop, the start of the bar that replaced it: the stop is at or before
+   * it. */
   cancelS: number;
   progressPct: number | null;
+  /** The bar was superseded by the owner's next cast bar with no row of its
+   * own (`CastBarEnd` `none` + `superseded`, pipeline T47): a stopped bar the
+   * client wrote no "Interrupted" row for. Its stop instant is not in the
+   * log, so `progressPct` is null and no reader may take `cancelS` for the
+   * stop itself (`stoppedJustBefore` does not read it); a reader that
+   * places the cancel in time places it at `startS` (the desktop's range
+   * filter). */
+  unlogged?: true;
+}
+
+/** Where a reader that places a cancel in time (a time-range filter) puts
+ * it: the stop row's instant, or — for an `unlogged` stop, whose `cancelS`
+ * is only the upper bound of the stretch it happened in — the bar's start,
+ * which is at or before any kick it baited (codex 85-tk-F-T47-1 #3:
+ * 1d26a991, the bar 28.02–29.14 and its baited Disrupt 28.77 — a 28–29 s
+ * range read 0 cancels beside 1 baited kick). */
+export function cancelPlacedAtS(
+  c: Pick<CastCancel, "startS" | "cancelS" | "unlogged">,
+): number {
+  return c.unlogged ? c.startS : c.cancelS;
 }
 
 export interface BaitedKick {
@@ -232,12 +255,19 @@ export function ownerCastBarOutcomes(params: {
           rawStreams,
         }).map((x) => x.castMs)
       : [];
+  // the other players' deaths: a bar with no end row may have lost its
+  // target (`superseded.near`)
+  const otherDeathMs = (params.allUnits ?? [])
+    .filter((u) => u.info && u.id !== owner.id)
+    .map(firstDeathMs)
+    .filter((ms) => Number.isFinite(ms));
   return castBarOutcomesOf({
     unit: owner,
     startMs,
     failed,
     dodgeMs,
     unloggedSilenceMs,
+    otherDeathMs,
   });
 }
 
@@ -262,6 +292,31 @@ export function isCancelInRound(
 }
 
 /**
+ * Is this bar a stop of the round that the log wrote no row for: a bar
+ * begun inside the round with no row of its spell before the owner's next
+ * cast bar (`none` + `superseded`), nothing that ends a cast landing on the
+ * owner from its start to that next bar (`near === null`), and that next bar
+ * begun before the round's end. The ledger counts it beside
+ * `isCancelInRound`'s bars when the spell went off as itself in the round
+ * (`ownerCastCancels`); it has no `[CAST STOPPED]` line (that line states
+ * how long the bar ran, which the log does not say here).
+ */
+export function isUnloggedCancelInRound(
+  o: CastBarOutcome,
+  roundEndS: number,
+): o is CastBarOutcome & {
+  end: { kind: "none"; superseded: { atS: number; near: null } };
+} {
+  return (
+    o.end.kind === "none" &&
+    o.end.superseded !== undefined &&
+    o.end.superseded.near === null &&
+    o.t >= 0 &&
+    o.end.superseded.atS < roundEndS
+  );
+}
+
+/**
  * The cancel ledger: `ownerCastBarOutcomes` counted, every bar for what that
  * reading says of it.
  *  - a cancel = a `stopped` bar with nothing that ends a cast happening to
@@ -278,7 +333,19 @@ export function isCancelInRound(
  *  - the median completed bar behind `progressPct` = every `completed` bar
  *    of the spell longer than 0.2 s, a `queued` completion included;
  *  - a baited kick = a kickAudit "juked" kick on the owner that went out into
- *    one of those cancels.
+ *    one of those cancels;
+ *  - pipeline T47: a bar the owner's next cast bar superseded with no row of
+ *    its own (`isUnloggedCancelInRound`) is a cancel too, `unlogged` — when
+ *    the round has a completed bar of the spell (begun and completed inside
+ *    the round), which shows its SUCCESS is
+ *    logged under the id its START carries (a spell whose two rows differ in
+ *    id would read as stopped every time). A stop-casting macro restarts a
+ *    bar without an "Interrupted" row: 1d26a991 printed `yourCancels=0,
+ *    baitedKicks=0` over four such Searing Glare bars and two Disrupts the
+ *    kick audit already called juked. Its kick is baited when it went out
+ *    while that bar was the last one begun (from its start to the bar that
+ *    replaced it) — the stop instant is not in the log, so there is no
+ *    `BAIT_AFTER_CANCEL_S` to run from it.
  *
  * Until 2026-10-11 the ledger left two kinds of bar out of the shared reading
  * (its 2026-09-26 code, kept when `[CAST STOPPED]` arrived so that no
@@ -321,16 +388,50 @@ export function ownerCastCancels(params: {
   if (!starts) return null;
   const roundEndS = (roundEndMs(combat) - combat.startTime) / 1000;
 
-  const pending: Array<{ id: string; name: string; t: number; failS: number }> =
-    [];
+  const pending: Array<{
+    id: string;
+    name: string;
+    t: number;
+    failS: number;
+    unlogged?: true;
+  }> = [];
+  /** the round shows the spell's SUCCESS under the id its START carries */
+  const completesAsItself = (id: string) =>
+    starts.some(
+      (b) =>
+        b.id === id &&
+        b.end.kind === "completed" &&
+        // inside the round, like the cancel it vouches for (codex
+        // 85-tk-F-T47-1 #5: a Solo Shuffle unit keeps the next round's
+        // preparation rows)
+        b.t >= 0 &&
+        b.end.atS < roundEndS,
+    );
   for (const s of starts) {
     if (s.end.kind !== "completed" && isCancelInRound(s, roundEndS))
       pending.push({ id: s.id, name: s.name, t: s.t, failS: s.end.atS });
+    else if (isUnloggedCancelInRound(s, roundEndS) && completesAsItself(s.id))
+      pending.push({
+        id: s.id,
+        name: s.name,
+        t: s.t,
+        failS: s.end.superseded.atS,
+        unlogged: true,
+      });
   }
   // the round's cast time of the spell — the one reading kick depth uses
   // (`completedBarMedianS`, D6 2026-10-24)
   const median = (id: string) => completedBarMedianS(starts, id);
   const cancels: CastCancel[] = pending.map((p) => {
+    if (p.unlogged)
+      return {
+        spellId: p.id,
+        spellName: p.name,
+        startS: p.t,
+        cancelS: p.failS,
+        progressPct: null,
+        unlogged: true,
+      };
     const m = median(p.id);
     const pct = m ? Math.round(((p.failS - p.t) / m) * 100) : null;
     return {
@@ -360,17 +461,19 @@ export function ownerCastCancels(params: {
       // The same cast instance: it started before the kick, was stopped
       // around it, and no other cast of the owner started in between (else
       // the kick was aimed at that one).
-      const bait = cancels.find(
-        (c) =>
-          c.startS <= k.atSeconds &&
-          k.atSeconds >= c.cancelS - BAIT_BEFORE_CANCEL_S &&
-          k.atSeconds <= c.cancelS + BAIT_AFTER_CANCEL_S &&
-          !starts.some(
-            (s) =>
-              s.t > Math.min(c.startS, k.atSeconds) &&
-              s.t <= k.atSeconds &&
-              s.t !== c.startS,
-          ),
+      const bait = cancels.find((c) =>
+        c.unlogged
+          ? // the bar the kick went out at: the last one begun before it
+            c.startS <= k.atSeconds && k.atSeconds < c.cancelS
+          : c.startS <= k.atSeconds &&
+            k.atSeconds >= c.cancelS - BAIT_BEFORE_CANCEL_S &&
+            k.atSeconds <= c.cancelS + BAIT_AFTER_CANCEL_S &&
+            !starts.some(
+              (s) =>
+                s.t > Math.min(c.startS, k.atSeconds) &&
+                s.t <= k.atSeconds &&
+                s.t !== c.startS,
+            ),
       );
       if (!bait) continue;
       baitedKicks.push({

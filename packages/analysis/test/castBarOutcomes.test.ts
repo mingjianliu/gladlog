@@ -187,7 +187,14 @@ describe("castBarOutcomesOf — 读条怎么结束,六步顺序", () => {
       atS: 1.35,
       queued: true,
     });
-    expect(r[2]!.end).toEqual({ kind: "none" });
+    // no row of the spell inside its window, and the next bar closed it:
+    // the bar had ended by 11.0 (T47 `superseded`)
+    expect(r[2]!.end).toEqual({
+      kind: "none",
+      superseded: { atS: 11, near: null },
+    });
+    // (the 11.45 SUCCESS is the 11.0 bar's own)
+    expect(r[3]!.end).toEqual({ kind: "completed", atS: 11.45 });
   });
 
   it("⑤ 其他 SPELL_CAST_FAILED = refused(带原行);「尚未恢复」类不算结束 → none", () => {

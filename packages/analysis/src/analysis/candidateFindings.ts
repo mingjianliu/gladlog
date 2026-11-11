@@ -2428,6 +2428,8 @@ function stoppedJustBeforeFact(
   const stop = c.cancels
     .filter(
       (x) =>
+        // an unlogged stop has no stop instant to measure from (T47)
+        !x.unlogged &&
         x.cancelS <= castStartS &&
         castStartS - x.cancelS <= STOPPED_JUST_BEFORE_S,
     )

@@ -306,6 +306,8 @@ describe("ownerCastCancels", () => {
     // Starts at 0 and 1 s, one success at 2 s: only the 1 s start completed
     // (1.0 s), so a 0.5 s cancel at 10 s is 50 % — not 25 % (the old lookup
     // let the 0 s start claim the same success as a 2.0 s bar).
+    // The 0 s bar itself, replaced by the 1 s one with no row of its own,
+    // is a stop the log wrote no row for (T47): a cancel with no progress.
     const o2 = {
       ...owner,
       castStartEvents: [0, 1, 10].map((s) => start("2061", s)),
@@ -319,7 +321,10 @@ describe("ownerCastCancels", () => {
         c.startS,
         c.progressPct,
       ]),
-    ).toEqual([[10, 50]]);
+    ).toEqual([
+      [0, null],
+      [10, 50],
+    ]);
   });
 
   it("drops a progress estimate above 100 %", () => {

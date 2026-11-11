@@ -5076,6 +5076,12 @@ const INDEX: PredicateRow[] = [
     symbol: "isCancelInRound",
     mod: castCancels,
   },
+  // T47: a bar superseded by the next cast bar with no end row
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "isUnloggedCancelInRound",
+    mod: castCancels,
+  },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCastStoppedWithinRound",

@@ -1,5 +1,6 @@
 import {
   type BaitedKick,
+  cancelPlacedAtS,
   type CastCancel,
   ownerCastCancels,
   type RawStreams,
@@ -49,7 +50,11 @@ export function deriveCastControl(
         rawStreams,
       });
       if (!r) continue;
-      const cancels = r.cancels.filter((c) => tInRange(c.cancelS, range));
+      // placed by `cancelPlacedAtS`: an unlogged stop (T47) has no stop
+      // instant, so it sits at its bar's start
+      const cancels = r.cancels.filter((c) =>
+        tInRange(cancelPlacedAtS(c), range),
+      );
       const pcts = cancels
         .map((c) => c.progressPct)
         .filter((p): p is number => p !== null)

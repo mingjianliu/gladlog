@@ -104,6 +104,20 @@ export function castBarStartsOf(
  *    unit that did not record the log this is every bar that neither went
  *    off nor was kicked — SPELL_CAST_FAILED is written for the recorder
  *    alone, so `stopped` and `refused` exist for the recorder only.
+ *    `superseded` (pipeline T47) = the unit's NEXT cast bar began at `atS`,
+ *    inside this bar's cap, and no row of this spell — no SUCCESS (a queued
+ *    one included), no SPELL_INTERRUPT, no SPELL_CAST_FAILED of any reason —
+ *    sits between the two starts. The next bar has to be a bar: a START
+ *    whose own SUCCESS follows inside `COMPLETED_BAR_MIN_S` (a pet command,
+ *    an instant-made cast) supersedes nothing. A bar cannot begin over a running one, so
+ *    this one had ended by `atS` with nothing saying how or when: a stop the
+ *    client wrote no "Interrupted" row for (the key pressed again through a
+ *    stop-casting macro, another cast begun over it — 1d26a991: Searing
+ *    Glare begun 28.02 and again 29.14, 0 "Interrupted" rows in a file of
+ *    933 failures). `near` is `stopped`'s, asked of the whole stretch from
+ *    the bar's start to `atS`: there is no stop instant to hold
+ *    `CANCEL_CC_NEAR_S` against. For the recorder that is a stopped bar; for
+ *    any other unit a refusal has no row either, so it says only "ended".
  */
 export type CastBarEnd =
   | { kind: "completed"; atS: number; queued?: true }
@@ -114,7 +128,13 @@ export type CastBarEnd =
       near: "cc" | "displaced" | "death" | "dodged" | null;
     }
   | { kind: "refused"; atS: number; row: CastFailedEvent }
-  | { kind: "none" };
+  | {
+      kind: "none";
+      superseded?: {
+        atS: number;
+        near: "cc" | "displaced" | "death" | "dodged" | null;
+      };
+    };
 
 export interface CastBarOutcome extends CastBarStart {
   end: CastBarEnd;
@@ -146,7 +166,9 @@ export interface CastBarOutcome extends CastBarStart {
  *     press before a bar's SUCCESS or interruption row ("Another action is
  *     in progress" — learned from the log's rows, no table of client
  *     strings);
- *  6. else none.
+ *  6. else none — `superseded` when no failure row of the spell sits in the
+ *     window at all and the unit's next bar's start closed it (T47), that
+ *     next bar not an instant one.
  *
  * `failed` = the unit's own SPELL_CAST_FAILED rows, on the clock of
  * `startMs` (`rawStreams.castFailed`); empty for a unit that did not record
@@ -181,6 +203,11 @@ export function castBarOutcomesOf(params: {
    * (`unloggedSilencesOnOwner`) — `near` = "cc" for a stop next to one, like
    * a logged silence aura (fact11 D6) */
   unloggedSilenceMs?: readonly number[];
+  /** epoch ms of the deaths of the round's OTHER players — a `superseded`
+   * bar's `near` is "death" with one inside its stretch: the bar's likely
+   * target died (a START row names no target), the kick audit's reading of
+   * the same evidence (`supersededInside`, 070c4933 2:25) */
+  otherDeathMs?: readonly number[];
 }): CastBarOutcome[] {
   const { unit, startMs, failed } = params;
   const dodgeAt = (params.dodgeMs ?? []).map((ms) => (ms - startMs) / 1000);
@@ -199,6 +226,7 @@ export function castBarOutcomesOf(params: {
   // a landed Death Grip is a displacement too (fact9 D11)
   const displacedAt = [...forced.displaced, ...forced.gripped].map(sec);
   const diedAt = (unit.deathRecords ?? []).map((d) => sec(d.timestamp));
+  const othersDiedAt = (params.otherDeathMs ?? []).map(sec);
   const starts = castBarStartsOf(unit, startMs);
 
   // Reasons the client gave, IN THIS LOG, for a press made while a cast bar
@@ -319,12 +347,66 @@ export function castBarOutcomesOf(params: {
       const reason = e.reason.trim();
       return !NOT_READY_REASONS.has(reason) && !busyReasons.has(reason);
     });
-    if (refusal)
+    if (refusal) {
       outcomes[i] = {
         ...outcomes[i]!,
         end: { kind: "refused", atS: refusal.tSeconds, row: refusal },
         earlierFailure: fails[0] !== refusal,
       };
+      continue;
+    }
+    // T47: no row of the spell at all, and the unit's next bar began inside
+    // this one's cap — it had ended by then (`superseded`)
+    const s = starts[i]!;
+    const nextS = starts[i + 1]?.t;
+    if (fails.length > 0 || nextS === undefined || nextS >= s.t + capS)
+      continue;
+    // a failure row of the spell in the START's own millisecond is this
+    // bar's or the one before it (the rows carry no order): only the
+    // previous bar's own end row — its stop or refusal at that instant — is
+    // known not to be this bar's (codex 85-tk-F-T47-1 #1)
+    const prev = outcomes[i - 1];
+    const prevEndedHere =
+      prev !== undefined &&
+      prev.id === s.id &&
+      (prev.end.kind === "stopped" || prev.end.kind === "refused") &&
+      prev.end.atS === s.t;
+    // …that one row and no other (codex 85-tk-F-T47-1b #1: an
+    // "Interrupted" and a line-of-sight refusal in the same millisecond)
+    const sameMs = failed.filter(
+      (e) => String(e.spellId) === s.id && e.tSeconds === s.t,
+    ).length;
+    if (sameMs > (prevEndedHere ? 1 : 0)) continue;
+    // a START whose own SUCCESS is in the same few ms is no cast bar — a pet
+    // command (Seduction 119909: both rows in one ms, the warlock's Unstable
+    // Affliction bar running on to its SUCCESS 0.8 s later) or an
+    // instant-made cast. It says nothing of the bar before it.
+    const next = outcomes[i + 1]!;
+    if (
+      next.end.kind === "completed" &&
+      next.end.atS - next.t <= COMPLETED_BAR_MIN_S
+    )
+      continue;
+    const inside = (ts: readonly number[]) =>
+      ts.some((t) => t >= s.t && t <= nextS);
+    outcomes[i] = {
+      ...outcomes[i]!,
+      end: {
+        kind: "none",
+        superseded: {
+          atS: nextS,
+          near: inside(ccAt)
+            ? "cc"
+            : inside(displacedAt)
+              ? "displaced"
+              : inside(diedAt) || inside(othersDiedAt)
+                ? "death"
+                : inside(dodgeAt)
+                  ? "dodged"
+                  : null,
+        },
+      },
+    };
   }
   return outcomes;
 }
