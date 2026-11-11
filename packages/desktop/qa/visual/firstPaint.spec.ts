@@ -135,8 +135,8 @@ test("大号对局的报表首渲在预算内(未锁定时只测量)", async ({ 
   // control's absolute floor cannot see a +50 % one on a runner population
   // spanning 2.3×. Dividing the control floor by the floor of a fixed
   // workload that shares nothing with the app keeps the fixed cost and
-  // divides the runner out. Measure-only until ≥ 10 CI runs show its spread
-  // is tighter than the control's own (budgets.ts, firstPaintControlPerCal).
+  // divides the runner out. Locked 2026-11-11 from 36 CI runs: spread 1.20×
+  // against the control's own 1.73× (budgets.ts, firstPaintControlPerCal).
   const calFloor = calSamples[0]!;
   reportBudget("cpuCal", calFloor, calSamples.length);
   // eslint-disable-next-line no-console

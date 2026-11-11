@@ -196,7 +196,8 @@ export const BUDGET_MS: {
   // JSON round trip, sort, 8,000-row DOM insert, layout, two frames) built
   // separately so it shares no code with the app and the app's chunks stay
   // byte-identical. A fixed per-load cost in the app raises the numerator
-  // only; a slow runner raises both. MEASURE-ONLY: lock it from ≥ 10
+  // only; a slow runner raises both. Measure-only until 2026-11-11 (locked
+  // below); the rule was: lock it from ≥ 10
   // ubuntu-latest runs, and only if its spread across runs is clearly
   // tighter than firstPaintControl's own (the 206-run control spread was
   // 1,521–3,557 ms, 2.3×) — a calibrator that does not track the runner
@@ -213,7 +214,27 @@ export const BUDGET_MS: {
   //     slowdown over-corrects (−30 %) — still a 1.47× spread against the
   //     control's own 2.08× over the same range. A real runner slows every
   //     thread; only the CI population shows which way it lands.
-  firstPaintControlPerCal: null,
+  //
+  // 2026-11-11 (T81, #145 item 2): LOCKED from CI. 36 frontend-qa runs on
+  // main, 2026-11-06 → 11-11 (9fd936dd4 … 4e7bedc6f, latest attempt of each,
+  // min-of-5 floors from the `[budget]` lines):
+  //   - firstPaintControlPerCal: min 2.735, p50 3.018, p95 3.203, max 3.272
+  //     — max/min 1.20×, cv 4.4 %.
+  //   - firstPaintControl over the same runs: 2,119–3,663 ms — max/min
+  //     1.73×, cv 19.6 %; cpuCal itself 666–1,228 ms (1.84×, cv 19.9 %), so
+  //     the calibrator tracks the runner and divides it out: the spread is
+  //     4.5× tighter than the control's own, which was the locking condition.
+  //   - three runner classes show (cal ≈ 700 / 1,000 / 1,170 ms) and leave a
+  //     residue: 3.0–3.27 / 2.74–2.89 / 2.95–3.09. That residue is the 1.20×.
+  // 3.9 = 19 % over the highest clean reading (the same margin the ratio's
+  // 5.2 has over its own, 18 %). A fixed per-load cost multiplies this
+  // reading directly (the calibrator does not move): +50 % reads 4.10–4.91
+  // across the clean range and trips on every runner class; the smallest
+  // cost that trips from the lowest reading is +43 %, from the median +29 %.
+  // The 6,300 ms control line stays as the order-of-magnitude backstop.
+  // Re-lock (not relax) from the `[budget] firstPaintControlPerCal=` lines
+  // if cpuCal.ts's workload changes or the runner image moves the level.
+  firstPaintControlPerCal: 3.9,
   coldStart: 2600,
 };
 
