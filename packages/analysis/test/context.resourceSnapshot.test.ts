@@ -619,7 +619,11 @@ describe("context.resourceSnapshot unit tests", () => {
       // Verify the focus field and its mapped ID
       expect(resText).toContain("focus:2");
       // Verify the enemy CD information
-      expect(resText).toContain("enemy:Combustion/Fire Mage");
+      // Meteor beside it since user ruling R19 (2026-11-10, pipeline T72):
+      // an offensive cooldown, on the instant member's 8 s
+      expect(resText).toContain(
+        "enemy:Meteor/Fire Mage(7s left),Combustion/Fire Mage(10s left)",
+      );
       // Verify the CC information
       // Counterspell locks for 6 s (user ruling 2026-09-18 over the official
       // DB2 PvP 5 s, which rendered "-3s" here; the old 3 s fallback rendered

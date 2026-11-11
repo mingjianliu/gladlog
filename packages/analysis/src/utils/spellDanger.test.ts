@@ -68,9 +68,17 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2; 2026-10-20: + 9 racial window ids and Ultimate Penitence 421453, user ruling; 2026-11-03: + Dark Harvest 1257052, user ruling, fact9 D7; 2026-11-04: + Breath of Eons 403631 and Frostwyrm's Fury 279302, user ruling, fact10 D2–D4 D31; 2026-11-05: + Ravager 228920 and Execution Sentence 343527, user ruling, GH #184)", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(75);
-    for (const id of ["228920", "343527"]) {
+  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2; 2026-10-20: + 9 racial window ids and Ultimate Penitence 421453, user ruling; 2026-11-03: + Dark Harvest 1257052, user ruling, fact9 D7; 2026-11-04: + Breath of Eons 403631 and Frostwyrm's Fury 279302, user ruling, fact10 D2–D4 D31; 2026-11-05: + Ravager 228920 and Execution Sentence 343527, user ruling, GH #184; 2026-11-10: + Odyn's Fury 385059, Meteor 153561, Reaper's Mark 439843, Goremaw's Bite 426591 and Mindgames 375901, user ruling R19, pipeline T72)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(80);
+    for (const id of [
+      "228920",
+      "343527",
+      "385059",
+      "153561",
+      "439843",
+      "426591",
+      "375901",
+    ]) {
       expect(OFFENSIVE_CD_SPELL_IDS.has(id)).toBe(true);
       expect(OFFENSIVE_PRESS_FACT_IDS.has(id)).toBe(false);
     }
@@ -110,8 +118,8 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     // deliberately excluded: no spec gate, Resto Druids press the same id as a heal channel
     expect(OFFENSIVE_CD_SPELL_IDS.has("391528")).toBe(false);
     expect(OFFENSIVE_CD_SPELL_IDS.has("323764")).toBe(false);
-    // deliberately excluded: instant nuke, not a window
-    expect(OFFENSIVE_CD_SPELL_IDS.has("153561")).toBe(false);
+    // Meteor: excluded as an instant nuke until user ruling R19 (2026-11-10)
+    expect(OFFENSIVE_CD_SPELL_IDS.has("153561")).toBe(true);
     // The Windwalker burst that replaced the dead Storm, Earth, and Fire.
     expect(OFFENSIVE_CD_SPELL_IDS.has("1249625")).toBe(true);
     expect(OFFENSIVE_CD_SPELL_IDS.has("137639")).toBe(false);

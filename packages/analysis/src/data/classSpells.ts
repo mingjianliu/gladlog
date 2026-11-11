@@ -66,7 +66,9 @@ export const classMetadata: IClassSpellMetadata[] = [
       // button with no use condition (D16: 69276401, 2 owner presses, no
       // line, until it was a press fact)
       a("228920", "Ravager", O),
-      a("385059", "Odyn's Fury", U), // D8 / D45: 96fb4d42, ba5e59c6, no line
+      // user ruling R19 (2026-11-10): a 45 s damage button with no use
+      // condition is a major offensive cooldown (was a press fact)
+      a("385059", "Odyn's Fury", O),
       a("871", "Shield Wall", D),
       a("118038", "Die by the Sword", D),
       a("184364", "Enraged Regeneration", D),
@@ -176,7 +178,9 @@ export const classMetadata: IClassSpellMetadata[] = [
       // Smoke Bomb rule: a press line, the loadout and [RES]; never a ready
       // defensive (it drops targeting as often as it saves).
       a("1856", "Vanish", U),
-      a("426591", "Goremaw's Bite", U), // fact7 class 3
+      // user ruling R19 (2026-11-10): a 45 s damage button with no use
+      // condition is a major offensive cooldown (was a press fact)
+      a("426591", "Goremaw's Bite", O),
       a("207777", "Dismantle", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
@@ -200,7 +204,9 @@ export const classMetadata: IClassSpellMetadata[] = [
       // no line. A press line, the loadout and [RES]; the enemy side prints
       // it `[ENEMY HEAL CD]` (enemyHealCds.ts).
       a("15286", "Vampiric Embrace", U),
-      a("375901", "Mindgames", U), // fact7 class 3
+      // user ruling R19 (2026-11-10): a 45 s damage button with no use
+      // condition is a major offensive cooldown (was a press fact)
+      a("375901", "Mindgames", O),
       a("391109", "Dark Ascension", O),
       a("8122", "Psychic Scream", C),
       // fact2 C6 (2026-10-20): Holy Word: Chastise (DB2 60 s; incapacitate /
@@ -254,7 +260,9 @@ export const classMetadata: IClassSpellMetadata[] = [
       // class 3), so a ready Frostwyrm's Fury sat in no missed-sync-window
       // readyCds and opened no enemy burst window. Same move as Dark Harvest.
       a("279302", "Frostwyrm's Fury", O),
-      a("439843", "Reaper's Mark", U), // fact7 class 3
+      // user ruling R19 (2026-11-10): a 45 s damage button with no use
+      // condition is a major offensive cooldown (was a press fact)
+      a("439843", "Reaper's Mark", O),
       a("1233448", "Dark Transformation", O),
       a("207289", "Unholy Assault", O),
       a("221562", "Asphyxiate", C),
@@ -326,7 +334,9 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("414664", "Mass Invisibility", D),
       a("190319", "Combustion", O),
       a("365350", "Arcane Surge", O),
-      a("153561", "Meteor", U), // fact7 class 3
+      // user ruling R19 (2026-11-10): a 45 s damage button with no use
+      // condition is a major offensive cooldown (was a press fact)
+      a("153561", "Meteor", O),
       a("118", "Polymorph", C),
       a("31661", "Dragon's Breath", C),
       a("113724", "Ring of Frost", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)

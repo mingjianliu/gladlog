@@ -98,7 +98,9 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  *     not a window to defend through. Frostwyrm's Fury 279302 (2.65) was
  *     kept out on the same reasoning until the user ruling of 2026-11-04
  *     (fact10 D31) made it a member: its window is its 10 s slow 279303 on
- *     the enemies it hit (`castEffectAuraGenerated`).
+ *     the enemies it hit (`castEffectAuraGenerated`). Meteor itself is a
+ *     member since the user ruling R19 of 2026-11-10 (pipeline T72), with
+ *     Soul Fire's shape: no effect aura, the instant member's 8 s in [RES].
  *   - Predator's Wake 1259431 (Devourer, lift 2.26) is no member of its
  *     own: it is the The Hunt 1246167 button under Demonsurge 1245496 (DB2
  *     SpellEffect aura 332, misc 1246167 → 1259431; both SpellCategories
@@ -115,6 +117,11 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  *   - Reaper's Mark, Goremaw's Bite, Execution Sentence, Tip the Scales,
  *     Champion's Spear: coPressed 67–90 % or lift < 1.5 — the scan cannot
  *     separate them from the cooldown they are pressed with.
+ *     Execution Sentence is a member since GH #184 (2026-11-05); Reaper's
+ *     Mark and Goremaw's Bite since R19 (2026-11-10), with Odyn's Fury and
+ *     Mindgames — the user's criterion is the button (45 s or more, no use
+ *     condition), not the scan's separation. Their windows are their effect
+ *     auras (434765 12 s, 426593 14 s, 385060 4 s; Mindgames' own 7 s).
  *   - Fury's Berserk 1269349 (Rampaging Berserker 1269308, 8 s: 3,531
  *     applications / 91 player-rounds ≈ 39 each, lift 5.4, coPressed 0.20)
  *     and Subtlety's Shadow Dance aura 185422 (6 s, 1,115 applications,
@@ -202,7 +209,8 @@ export function isSpecGatedOffensiveFor(
  * `OFFENSIVE_CD_SPELL_IDS` wherever the unit is known. */
 export function isOffensiveCdFor(spellId: string, spec: unknown): boolean {
   return (
-    OFFENSIVE_CD_SPELL_IDS.has(spellId) || isSpecGatedOffensiveFor(spellId, spec)
+    OFFENSIVE_CD_SPELL_IDS.has(spellId) ||
+    isSpecGatedOffensiveFor(spellId, spec)
   );
 }
 
@@ -241,7 +249,11 @@ export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
   // user ruling: a button with a use condition — Touch of Death's execute
   // range — stays a fact; one without is a major offensive cooldown): roster
   // Offensive rows, so `OFFENSIVE_CD_SPELL_IDS` members.
-  "385059", // Odyn's Fury — Fury, 45 s (D8, D45); lift 1.70, coPressed 0.50
+  // Odyn's Fury 385059, Meteor 153561, Reaper's Mark 439843, Goremaw's Bite
+  // 426591 and Mindgames 375901 left 2026-11-10 (pipeline T72, user ruling
+  // R19: the five 45 s damage buttons with no use condition are major
+  // offensive cooldowns — exactly these five): roster Offensive rows, so
+  // `OFFENSIVE_CD_SPELL_IDS` members.
   // Dark Harvest 1257052 left 2026-11-03 (fact9 D7, user ruling): a
   // roster Offensive row, so an `OFFENSIVE_CD_SPELL_IDS` member.
   "357210", // Deep Breath, 120 s recharge (D78)
@@ -249,19 +261,14 @@ export const OFFENSIVE_PRESS_FACT_IDS: ReadonlySet<string> = new Set([
   // a Protection's press (Retribution's is a burst, GH #184 part B —
   // `SPEC_GATED_OFFENSIVE_CD_IDS`; a Holy Paladin's is [ENEMY HEAL CD])
   "375576", // Divine Toll — 60 s (D75)
-  // The same class in the notes above: live, printed nowhere.
-  "153561", // Meteor — Fire, 45 s
   // Frostwyrm's Fury 279302 left 2026-11-04 (fact10 D31, user ruling): a
   // roster Offensive row, so an `OFFENSIVE_CD_SPELL_IDS` member.
-  "439843", // Reaper's Mark — 45 s
-  "426591", // Goremaw's Bite — Subtlety, 45 s
   "370553", // Tip the Scales — 120 s, a Preservation's is [ENEMY HEAL CD]
   // a Guardian's press (Balance's and Feral's are bursts, GH #184 part B; a
   // Restoration's is [ENEMY HEAL CD])
   "391528", // Convoke the Spirits — 120 s
   // In `SPELL_EFFECT_OVERRIDES` only, which keys a weight and prints nothing.
   "322109", // Touch of Death — 180 s
-  "375901", // Mindgames — 45 s
 ]);
 
 /**

@@ -52,4 +52,15 @@ describe("effectiveCooldownSeconds", () => {
 // Soul Fire: pre-existing spellCategories entry ("45s nuke") — an instant
 // nuke, the same shape Meteor was EXCLUDED for on 2026-09-18. Left in place
 // (retiring a registered member is a user call); listed so it stays visible.
-const KNOWN_NO_DURATION: string[] = ["6353"];
+// pipeline T72 (user ruling R19, 2026-11-10): Meteor 153561, Odyn's Fury
+// 385059, Goremaw's Bite 426591 and Reaper's Mark 439843 are members with no
+// duration on the cast. Three run on their effect aura (385060, 426593,
+// 434765 — `castEffectAuraGenerated`, read by `observedEffectEndSeconds`);
+// Meteor has none and is Soul Fire's shape.
+const KNOWN_NO_DURATION: string[] = [
+  "6353",
+  "153561",
+  "385059",
+  "426591",
+  "439843",
+];

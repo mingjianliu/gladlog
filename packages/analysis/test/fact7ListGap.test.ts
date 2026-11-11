@@ -95,7 +95,10 @@ describe("OFFENSIVE_PRESS_FACT_IDS", () => {
       expect(effectiveCooldownSeconds(id) ?? 0, id).toBeGreaterThanOrEqual(45);
     }
   });
-  it("D8: Odyn's Fury is an [ENEMY CD] line and opens nothing", () => {
+  // pipeline T72 (user ruling R19, 2026-11-10): Odyn's Fury is a major
+  // offensive cooldown now — the same [ENEMY CD] lines, on a burst row
+  // (was a press fact that opened nothing)
+  it("D8: Odyn's Fury is an [ENEMY CD] line — an offensive cooldown row since R19", () => {
     const enemy = unit(CombatUnitClass.Warrior, CombatUnitSpec.Warrior_Fury, [
       cast("385059", 34.25),
       cast("385059", 87.05),
@@ -105,19 +108,22 @@ describe("OFFENSIVE_PRESS_FACT_IDS", () => {
       "1:27  [ENEMY CD]   5(Enemy) (Fury Warrior): Odyn's Fury (cast 2 of 2)",
     ]);
     const t = reconstructEnemyCDTimeline([enemy], combat);
-    expect(t.players[0]!.offensiveCDs).toEqual([]);
-    expect(t.alignedBurstWindows).toEqual([]);
+    expect(t.players[0]!.offensiveCDs.map((c) => c.spellId)).toEqual([
+      "385059",
+      "385059",
+    ]);
+    expect(t.players[0]!.offensiveFacts ?? []).toEqual([]);
   });
-  it("Odyn's Fury's effect runs through a rebroadcast of its aura (codex 02-1)", () => {
+  it("a press fact's effect runs through a rebroadcast of its aura (codex 02-1; Deep Breath since R19 took Odyn's Fury)", () => {
     const enemy = unit(
-      CombatUnitClass.Warrior,
-      CombatUnitSpec.Warrior_Fury,
-      [cast("385059", 40.77)],
+      CombatUnitClass.Evoker,
+      CombatUnitSpec.Evoker_Devastation,
+      [cast("433874", 40.77)],
       [
-        aura("385059", 40.9, LogEvent.SPELL_AURA_APPLIED),
-        aura("385059", 43.0, LogEvent.SPELL_AURA_REMOVED),
-        aura("385059", 43.001, LogEvent.SPELL_AURA_APPLIED),
-        aura("385059", 44.9, LogEvent.SPELL_AURA_REMOVED),
+        aura("433874", 40.9, LogEvent.SPELL_AURA_APPLIED),
+        aura("433874", 43.0, LogEvent.SPELL_AURA_REMOVED),
+        aura("433874", 43.001, LogEvent.SPELL_AURA_APPLIED),
+        aura("433874", 44.9, LogEvent.SPELL_AURA_REMOVED),
       ],
     );
     const round = { startTime: T0, endTime: END, units: { u: enemy } } as never;
@@ -182,14 +188,16 @@ const enemyField = (timeline: unknown, t: number) =>
   }).match(/enemy:(.+)$/)?.[1];
 
 describe("[RES] enemy: lists a press fact while its effect runs", () => {
-  /** Odyn's Fury lands on its victim: the rows sit on the unit wearing it */
+  /** Deep Breath lands on its victim: the rows sit on the unit wearing it
+   * (Odyn's Fury and Goremaw's Bite carried these until R19 made them
+   * offensive cooldowns, pipeline T72) */
   const victimAura = (s: number, event: LogEvent) => ({
-    ...aura("385060", s, event),
-    spellName: "Odyn's Fury",
+    ...aura("1236943", s, event),
+    spellName: "Deep Breath",
     destUnitId: "v",
   });
-  const fury = unit(CombatUnitClass.Warrior, CombatUnitSpec.Warrior_Fury, [
-    cast("385059", 40.77),
+  const fury = unit(CombatUnitClass.Evoker, CombatUnitSpec.Evoker_Devastation, [
+    cast("433874", 40.77),
   ]);
   const victim = {
     id: "v",
@@ -208,28 +216,30 @@ describe("[RES] enemy: lists a press fact while its effect runs", () => {
     const t = reconstructEnemyCDTimeline([fury], withVictim);
     const row = t.players[0]!.offensiveFacts![0]!;
     expect(row.buffEndSeconds).toBeCloseTo(44.9, 3);
-    expect(enemyField(t, 40)).toBe("Odyn's Fury/Fury Warrior(5s left)");
-    expect(enemyField(t, 44)).toBe("Odyn's Fury/Fury Warrior(1s left)");
+    expect(enemyField(t, 40)).toBe("Deep Breath/Devastation Evoker(5s left)");
+    expect(enemyField(t, 44)).toBe("Deep Breath/Devastation Evoker(1s left)");
     expect(enemyField(t, 45)).toBeUndefined();
   });
 
-  it("an aura the log never closes runs its own official length (Goremaw's Bite 75-1-523)", () => {
-    const goremaw = {
-      ...aura("426593", 150.129, LogEvent.SPELL_AURA_APPLIED),
-      spellName: "Goremaw's Bite",
+  it("an aura the log never closes runs its own official length (seen on Goremaw's Bite, 75-1-523)", () => {
+    const breath = {
+      ...aura("1236943", 150.129, LogEvent.SPELL_AURA_APPLIED),
+      spellName: "Deep Breath",
       destUnitId: "v",
     };
-    const rogue = unit(CombatUnitClass.Rogue, CombatUnitSpec.Rogue_Subtlety, [
-      cast("426591", 150.128),
-    ]);
+    const rogue = unit(
+      CombatUnitClass.Evoker,
+      CombatUnitSpec.Evoker_Devastation,
+      [cast("433874", 150.128)],
+    );
     const round = {
       startTime: T0,
       endTime: END,
-      units: { u: rogue, v: { id: "v", auraEvents: [goremaw] } },
+      units: { u: rogue, v: { id: "v", auraEvents: [breath] } },
     } as never;
     const row = reconstructEnemyCDTimeline([rogue], round).players[0]!
       .offensiveFacts![0]!;
-    expect(row.buffEndSeconds).toBeCloseTo(164.129, 3);
+    expect(row.buffEndSeconds).toBeCloseTo(154.129, 3);
     // 72-1-407: its wearer dead, the effect is over
     const dead = {
       startTime: T0,
@@ -238,7 +248,7 @@ describe("[RES] enemy: lists a press fact while its effect runs", () => {
         u: rogue,
         v: {
           id: "v",
-          auraEvents: [goremaw],
+          auraEvents: [breath],
           deathRecords: [{ timestamp: T0 + 151_000 }],
         },
       },
@@ -247,28 +257,32 @@ describe("[RES] enemy: lists a press fact while its effect runs", () => {
       .offensiveFacts![0]!;
     expect(cut.buffEndSeconds).toBeCloseTo(151, 3);
     // a row before the death states the official time left (codex 20-F21-12)
-    expect(cut.deathCutOfficialEndSeconds).toBeCloseTo(164.129, 3);
+    expect(cut.deathCutOfficialEndSeconds).toBeCloseTo(154.129, 3);
     // a death past the round's end is no end of it
     const later = {
       startTime: T0,
-      endTime: T0 + 159_000,
+      endTime: T0 + 153_000,
       units: {
         u: rogue,
         v: {
           id: "v",
-          auraEvents: [goremaw],
-          deathRecords: [{ timestamp: T0 + 161_000 }],
+          auraEvents: [breath],
+          deathRecords: [{ timestamp: T0 + 155_000 }],
         },
       },
     } as never;
     expect(
       reconstructEnemyCDTimeline([rogue], later).players[0]!.offensiveFacts![0]!
         .buffEndSeconds,
-    ).toBeCloseTo(164.129, 3);
+    ).toBeCloseTo(154.129, 3);
   });
 
   it("a button with no effect span states no window: no 8 s fallback", () => {
-    const t = reconstructEnemyCDTimeline([fury], combat);
+    // Touch of Death: a press fact with no duration of its own
+    const monk = unit(CombatUnitClass.Monk, CombatUnitSpec.Monk_Windwalker, [
+      cast("322109", 40.77),
+    ]);
+    const t = reconstructEnemyCDTimeline([monk], combat);
     expect(t.players[0]!.offensiveFacts![0]!.buffEndSeconds).toBeCloseTo(
       40.77,
       3,

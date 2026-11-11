@@ -201,23 +201,29 @@ export const CHECKS = [
   "evidencePressOnRestatedAura",
 ] as const;
 
-/** fact10 class 1: ruled into the roster 2026-11-04 */
-const RULED = new Set(["403631", "442204", "279302"]);
-/** GH #184: the other press-fact-only offensive buttons of 45 s or more */
-const OPEN = new Set([
+/** fact10 class 1: ruled into the roster 2026-11-04; Ravager and Execution
+ * Sentence 2026-11-05 (GH #184); the five 45 s buttons 2026-11-10 (R19,
+ * pipeline T72) */
+const RULED = new Set([
+  "403631",
+  "442204",
+  "279302",
   "228920", // Ravager
+  "343527", // Execution Sentence
   "385059", // Odyn's Fury
-  "357210", // Deep Breath
-  "433874", // Deep Breath (Scalecommander)
-  "375576", // Divine Toll
   "153561", // Meteor
   "439843", // Reaper's Mark
   "426591", // Goremaw's Bite
-  "343527", // Execution Sentence
+  "375901", // Mindgames
+]);
+/** GH #184: the other press-fact-only offensive buttons of 45 s or more */
+const OPEN = new Set([
+  "357210", // Deep Breath
+  "433874", // Deep Breath (Scalecommander)
+  "375576", // Divine Toll
   "370553", // Tip the Scales
   "391528", // Convoke the Spirits
   "322109", // Touch of Death
-  "375901", // Mindgames
 ]);
 /** a healer's press of these is a heal (Holy Paladin, Restoration Druid,
  * Preservation Evoker), not a burst */
