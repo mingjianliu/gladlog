@@ -627,6 +627,13 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       addSeconds: 2,
       note: "Divine Wrath — DB2 aura 107 +4000 ms per rank, Paladin/Retribution (maxRanks 2), mask covers the spell; corpus 72 of 74 caster-cells at 24.0 s hold it AT RANK 2 vs 0 % of the Holy 30 s group, so two ranks buy +4 s in TOTAL (20 + 2×2 = 24). DB2 states 4000 ms and it is NOT per rank here — unlike Timeless Magic, which the corpus separates cleanly at 0 / 1 / 2 ranks (8.0 / 9.0 / 10.5). Rank 1 is unobserved and priced at +2 s",
     },
+    {
+      talentSpellId: "1241511",
+      specs: ["65"], // Paladin_Holy
+      untalentedBaseSeconds: 20,
+      addSeconds: -4,
+      note: "Call of the Righteous (2 ranks; T89) — tooltip: \"Avenging Wrath's cooldown is reduced … but its duration is reduced by N sec. Avenging Crusader's … duration is reduced by N sec\"; DB2 1241511 aura 107 misc 1 rows −5000 (mask word 1 256) and −3000 (word 3 64). Ranks from COMBATANT_INFO; the reduction comes off BEFORE Sanctified Wrath's ×1.5. Corpus (605 files + 1 wide file, text pass over every cast-backed run): Avenging Wrath rank 2 = 18.0 s (2 casters, 11 runs; (20 − 8) × 1.5), rank 1 = 24.0 s (1 run; (20 − 4) × 1.5), rank 1 without Sanctified Wrath = 16.0 s (1 run); Avenging Crusader rank 1 = 18.75 s (15 runs; (15 − 2.5) × 1.5), rank 2 = 15.0 s (1 run; (15 − 5) × 1.5). FLAG — the per-rank numbers are the corpus's, not the DB2 points: they reconcile only as −(5 + 3) s at max rank for Avenging Wrath and −5 s for Avenging Crusader (halved at rank 1, like the cooldown half's valueByRank), which is not what the two masks say. Downward from the untalented reading, with the tooltip as the mechanism.",
+    },
   ],
   "216331": [
     {
@@ -635,6 +642,13 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 15,
       pct: 50,
       note: "Sanctified Wrath — corpus is unambiguous and matches Avenging Wrath's ×1.5 exactly: 102 of 102 caster-cells at 22.5 s hold it, the 15 s group 2 of 5 (15 × 1.5 = 22.5). DB2 only accounts for HALF of it here — 216331's class mask is 0/0/0/64 and the second +25 % row (171648) carries 0/256/0/0, so only the talent's own +25 % legally reaches it. Mechanism (user-supplied research, 2026-10-21): Patch 12.0.0 notes — 'Sanctified Wrath … now increases the duration of Avenging Wrath by 50% (was 25%)', and its Holy text names Avenging Crusader too ($?c1 branch of 53376); the client's effect row still carries 25 (Wowhead's spell details show the same), so the +50 % is the live server value, not a second talent. Do not look for another +25 % row.",
+    },
+    {
+      talentSpellId: "1241511",
+      specs: ["65"], // Paladin_Holy
+      untalentedBaseSeconds: 15,
+      addSeconds: -2.5,
+      note: "Call of the Righteous (2 ranks; T89) — tooltip: \"Avenging Wrath's cooldown is reduced … but its duration is reduced by N sec. Avenging Crusader's … duration is reduced by N sec\"; DB2 1241511 aura 107 misc 1 rows −5000 (mask word 1 256) and −3000 (word 3 64). Ranks from COMBATANT_INFO; the reduction comes off BEFORE Sanctified Wrath's ×1.5. Corpus (605 files + 1 wide file, text pass over every cast-backed run): Avenging Wrath rank 2 = 18.0 s (2 casters, 11 runs; (20 − 8) × 1.5), rank 1 = 24.0 s (1 run; (20 − 4) × 1.5), rank 1 without Sanctified Wrath = 16.0 s (1 run); Avenging Crusader rank 1 = 18.75 s (15 runs; (15 − 2.5) × 1.5), rank 2 = 15.0 s (1 run; (15 − 5) × 1.5). FLAG — the per-rank numbers are the corpus's, not the DB2 points: they reconcile only as −(5 + 3) s at max rank for Avenging Wrath and −5 s for Avenging Crusader (halved at rank 1, like the cooldown half's valueByRank), which is not what the two masks say. Downward from the untalented reading, with the tooltip as the mechanism.",
     },
   ],
   "358267": [

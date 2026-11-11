@@ -309,6 +309,28 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(buffFullDurationForCaster("31884", ret)).toBeCloseTo(24);
   });
 
+  it("Call of the Righteous 按级数缩短神骑的复仇之怒 / 复仇十字军,先减再乘 Sanctified Wrath(T89)", () => {
+    const SANCTIFIED_WRATH = { id1: 81592, id2: 102578, count: 1 };
+    const holyWith = (rank: number, sanctified = true) =>
+      makeUnit(`h-cotr-${rank}-${sanctified}`, {
+        spec: CombatUnitSpec.Paladin_Holy,
+        info: {
+          talents: [
+            ...(sanctified ? [SANCTIFIED_WRATH] : []),
+            { id1: 81587, id2: 102572, count: rank },
+          ],
+          pvpTalents: [],
+        },
+      });
+    expect(talentOwnershipOf(holyWith(2), "1241511")).toBe("yes");
+    // corpus: rank 2 = 18.0 s (11 runs), rank 1 = 24.0 s (1 run)
+    expect(buffFullDurationForCaster("31884", holyWith(2))).toBeCloseTo(18);
+    expect(buffFullDurationForCaster("31884", holyWith(1))).toBeCloseTo(24);
+    // corpus: rank 1 = 18.75 s (15 runs), rank 2 = 15.0 s (1 run)
+    expect(buffFullDurationForCaster("216331", holyWith(1))).toBeCloseTo(18.75);
+    expect(buffFullDurationForCaster("216331", holyWith(2))).toBeCloseTo(15);
+  });
+
   it("多级天赋:按**语料实际观测到的级数**复现观测时长", () => {
     // DB2 的多级语义不统一,这一条是唯一的护栏:Timeless Magic 确实是每级
     // (语料 0/1/2 级三档 8.0 / 9.0 / 10.5 都有样本),而 Divine Wrath /
