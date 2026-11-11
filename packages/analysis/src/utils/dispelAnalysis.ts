@@ -53,6 +53,12 @@ import { ccFullDurationForApplication } from "./ccDuration";
 import { ccLengthIsDrEvidence } from "./ccTrinketAnalysis";
 import { charmedThrough } from "./charmedPlayer";
 import {
+  mixFingerprintString,
+  roundFingerprint,
+  roundValue,
+  unitTokens,
+} from "./combatMemo";
+import {
   applyCdTalentModifiers,
   chargeStateAt,
   getPressureThreshold,
@@ -3172,6 +3178,67 @@ export function formatMissedPurgeExemption(
 }
 
 export function reconstructDispelSummary(
+  friends: ICombatUnit[],
+  enemies: ICombatUnit[],
+  // zoneId lets feasibility gate a look up arena geometry (LoS); omit it and
+  // the gate judges on range alone (still tri-state). The legacy match carries
+  // it under startInfo (triage missed-cleanse F-C9: every caller passed the
+  // legacy match, so LoS was never evaluated).
+  combat: {
+    startTime: number;
+    endTime: number;
+    zoneId?: string;
+    startInfo?: { zoneId?: string; bracket?: string };
+    // the round's units, for `roundEndMs` (missed-cleanse F-C3); absent =
+    // the round ends at `endTime`
+    units?: Record<string, unknown> | ReadonlyArray<unknown>;
+  },
+  // B45: friendly pet/guardian units whose dispels should be attributed to their owner player
+  friendlyPets: ICombatUnit[] = [],
+  // Coverage tail fix: dispels by enemy pets (Felhunter Devour Magic etc.)
+  // previously landed in no bucket at all, leaving hostilePurges blind to pet
+  // purges — completed symmetrically with friendlyPets.
+  enemyPets: ICombatUnit[] = [],
+): IDispelSummary {
+  // T81: the dispel dashboard, the candidate menu, the prompt context and
+  // every deep-dive pack ask for the same summary; one per round object and
+  // argument identity. Shared and read-only — except the missed-purge rows:
+  // `annotateMissedPurgesWithKillWindows` writes `duringKillWindow` onto
+  // them, each caller against its own kill windows, so every caller gets its
+  // own copy of those rows (and its own summary object), as it always had.
+  const shared = roundValue(
+    combat,
+    `dispelSummary|${unitTokens(friends)}|${unitTokens(enemies)}|${unitTokens(friendlyPets)}|${unitTokens(enemyPets)}`,
+    mixFingerprintString(
+      mixFingerprintString(
+        roundFingerprint(combat, friends, enemies, friendlyPets, enemyPets),
+        combat.zoneId ?? combat.startInfo?.zoneId,
+      ),
+      combat.startInfo?.bracket,
+    ),
+    () =>
+      reconstructDispelSummaryUncached(
+        friends,
+        enemies,
+        combat,
+        friendlyPets,
+        enemyPets,
+      ),
+  );
+  return {
+    ...shared,
+    missedPurgeWindows: shared.missedPurgeWindows.map((w) => ({ ...w })),
+    ...(shared.scopedMissedPurgeWindows
+      ? {
+          scopedMissedPurgeWindows: shared.scopedMissedPurgeWindows.map(
+            (w) => ({ ...w }),
+          ),
+        }
+      : {}),
+  };
+}
+
+function reconstructDispelSummaryUncached(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
   // zoneId lets feasibility gate a look up arena geometry (LoS); omit it and

@@ -38,6 +38,12 @@ import {
 import { buffFullDurationForCaster } from "./buffDuration";
 import { channelEndSeconds, channelRefusedAtCast } from "./castCommitSpans";
 import {
+  identityToken,
+  roundFingerprint,
+  roundValue,
+  unitTokens,
+} from "./combatMemo";
+import {
   canonicalSpellId,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -1167,6 +1173,36 @@ function pressEffectEndSeconds(
 }
 
 export function reconstructEnemyCDTimeline(
+  enemies: ICombatUnit[],
+  combat: AtomicArenaCombat,
+  owner?: ICombatUnit,
+  friendlies?: ICombatUnit[],
+  opts?: {
+    /** keep the presses of a healer's throughput major on the offensive
+     * roster (`isHealerHeldOffensive`) — only for a reader that names them
+     * as not counted (the burst ledger's Solo note, user ruling R01
+     * 2026-11-08); every other reader leaves them out (fact11 D16) */
+    keepHealerHeldPresses?: boolean;
+  },
+): IEnemyCDTimeline {
+  // T81: eight readers per match ask for the same timeline; one per round
+  // object and argument identity. Shared: read-only.
+  return roundValue(
+    combat,
+    `enemyCdTimeline|${unitTokens(enemies)}|${identityToken(owner)}|${friendlies ? unitTokens(friendlies) : "-"}|${opts?.keepHealerHeldPresses ? 1 : 0}`,
+    roundFingerprint(combat, enemies, owner ? [owner] : [], friendlies ?? []),
+    () =>
+      reconstructEnemyCDTimelineUncached(
+        enemies,
+        combat,
+        owner,
+        friendlies,
+        opts,
+      ),
+  );
+}
+
+function reconstructEnemyCDTimelineUncached(
   enemies: ICombatUnit[],
   combat: AtomicArenaCombat,
   owner?: ICombatUnit,

@@ -15,6 +15,7 @@ import {
   analyzePlayerCCAndTrinket,
   trinketStateFact,
 } from "../utils/ccTrinketAnalysis";
+import { once, roundFingerprint, roundValue } from "../utils/combatMemo";
 import {
   annotateDefensiveTimings,
   computePressureWindows,
@@ -137,6 +138,157 @@ function selectPackItems(
 }
 
 /**
+ * The pack's whole-round readings (T81): none of them depends on the window,
+ * and the uncovered-highlights sweep builds a pack per 20 s window — every
+ * window re-ran each friendly's CC/trinket summary and cooldown ledger, the
+ * dispel summary, the death facts and the owner's position events (of a
+ * 4.9 s sweep on a 3-minute match, 4.7 s). Each is computed once per round
+ * object, on first use and in the order a single pack asks for them; a
+ * reading that throws throws again for the next asker (`once`), so a missing
+ * category stays missing. Performance only: the rows are read, never written.
+ */
+type PackUnit = Parameters<typeof analyzePlayerCCAndTrinket>[0];
+type PackRound = Parameters<typeof extractMajorCooldowns>[1];
+interface IPackRoundReadings {
+  cc: (u: PackUnit) => ReturnType<typeof analyzePlayerCCAndTrinket>;
+  enemyTl: () => ReturnType<typeof reconstructEnemyCDTimeline>;
+  /** the unit's cooldown ledger with its defensive timing labels */
+  cds: (u: PackUnit) => IMajorCooldownInfo[];
+  dispels: () => ReturnType<typeof reconstructDispelSummary>;
+  deathOutcome: () => ReturnType<typeof buildDeathOutcomeSummary>;
+  ownerPosition: (
+    owner: PackUnit,
+  ) => ReturnType<typeof computeOwnerPositionEvents>;
+  burstLedger: (owner: PackUnit) => IBurstLedgerEntry[];
+  outgoingCcChains: () => IOutgoingCCChain[];
+}
+
+function packRoundReadings(
+  combat: PackRound,
+  units: PackUnit[],
+  friends: PackUnit[],
+  enemies: PackUnit[],
+): IPackRoundReadings {
+  return roundValue(
+    combat,
+    "deepDivePack",
+    roundFingerprint(combat, friends, enemies),
+    () => {
+      const petsOf = (side: PackUnit[]) => {
+        const ids = new Set(side.map((u) => u.id));
+        return units.filter((u) => u.ownerId && ids.has(u.ownerId));
+      };
+      const enemyPets = petsOf(enemies);
+      const friendlyPets = petsOf(friends);
+      const perUnit = <T>(f: (u: PackUnit) => T): ((u: PackUnit) => T) => {
+        const byUnit = new Map<PackUnit, () => T>();
+        return (u) => {
+          let thunk = byUnit.get(u);
+          if (!thunk) byUnit.set(u, (thunk = once(() => f(u))));
+          return thunk();
+        };
+      };
+      const cc = perUnit((u) =>
+        analyzePlayerCCAndTrinket(u, enemies, combat, enemyPets),
+      );
+      const enemyTl = once(() => reconstructEnemyCDTimeline(enemies, combat));
+      const cds = perUnit((u) => {
+        const tl = enemyTl();
+        return annotateDefensiveTimings(
+          extractMajorCooldowns(u, combat),
+          u,
+          combat,
+          tl,
+        );
+      });
+      const attempt = <T>(f: () => T): T | undefined => {
+        try {
+          return f();
+        } catch {
+          return undefined;
+        }
+      };
+      const deathOutcome = once(() => {
+        // every friendly's summary that could be built — the death facts ask
+        // whether an external's holder was CC-locked through the window
+        const ccSummaries = friends
+          .map((u) => attempt(() => cc(u)))
+          .filter((s): s is NonNullable<typeof s> => s !== undefined);
+        // Resolved cooldowns (same source as the [RES] ledger, talent
+        // modifiers included), injected the same way as buildMatchContext, so
+        // two places never disagree about one cooldown.
+        const resolvedCdByUnit = new Map<
+          string,
+          Map<string, IMajorCooldownInfo>
+        >();
+        for (const u of friends) {
+          const list = attempt(() => cds(u));
+          if (!list) continue;
+          const bySpell = new Map<string, IMajorCooldownInfo>();
+          for (const cd of list) bySpell.set(cd.spellId, cd);
+          resolvedCdByUnit.set(u.id, bySpell);
+        }
+        return buildDeathOutcomeSummary(
+          {
+            startTime: combat.startTime ?? 0,
+            endTime: combat.endTime,
+            zoneId: combat.startInfo?.zoneId,
+          },
+          friends,
+          ccSummaries,
+          (unit, spellId) =>
+            resolvedCdByUnit.get(unit.id)?.get(spellId) ??
+            (combat?.units
+              ? unitCooldownEntry(unit, combat, spellId)
+              : undefined),
+          // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
+          enemySourceIds(enemies, [...enemyPets]),
+          // an option the holder's pet casts is asked of the pet
+          units,
+        );
+      });
+      return {
+        cc,
+        enemyTl,
+        cds,
+        dispels: once(() =>
+          reconstructDispelSummary(
+            friends,
+            enemies,
+            combat,
+            friendlyPets,
+            enemyPets,
+          ),
+        ),
+        deathOutcome,
+        ownerPosition: perUnit((owner) =>
+          computeOwnerPositionEvents({
+            owner,
+            enemies,
+            combat,
+            burstWindows: enemyTl().alignedBurstWindows,
+            ownerCooldowns: attempt(() => cds(owner)) ?? [],
+            ownerCCSummary: attempt(() => cc(owner)),
+            isHealer: isHealerSpec(owner.spec),
+            ownerIsMelee: isMeleeSpec(owner.spec),
+            friends,
+            spikeWindows: dmgSpikeWindowsOf(
+              computePressureWindows(friends, combat),
+            ),
+          }),
+        ),
+        burstLedger: perUnit((owner) =>
+          analyzeBurstLedger(owner, friends, enemies, combat),
+        ),
+        outgoingCcChains: once(() =>
+          analyzeOutgoingCCChains(friends, enemies, combat),
+        ),
+      };
+    },
+  );
+}
+
+/**
  * Deep-dive evidence pack (deterministic expansion): around the time window
  * [minT-30, maxT+10] of the events the finding references, pull details the
  * first-round menu left out — CC taken / defensive casts / enemy offensive
@@ -182,31 +334,17 @@ export function buildDeepDivePack(
   // role tag (fix 2): owner = the person being coached, coaching lands on them first; teammate/enemy are background only.
   const friendlyRole = (fullName: string) =>
     ownerName && fullName === ownerName ? "owner" : "teammate";
-  const petsOf = (side: any[]) => {
-    const ids = new Set(side.map((u) => u.id));
-    return units.filter((u) => u.ownerId && ids.has(u.ownerId));
-  };
-  const enemyPets = petsOf(enemies);
-  const friendlyPets = petsOf(friends);
   const ownerUnit = ownerName
     ? friends.find((u) => u.name === ownerName)
     : undefined;
-  // Positioning analysis (fix 3) reuses the owner's CC/CD summaries, captured in passing in the loops — no recompute.
-  let ownerCcSummary: ReturnType<typeof analyzePlayerCCAndTrinket> | undefined;
-  let ownerCds: IMajorCooldownInfo[] | undefined;
+  const round = packRoundReadings(combat, units, friends, enemies);
 
   const raw: Omit<PackItem, "key">[] = [];
 
   // CC taken (friendly): CC instances + trinket state.
-  // Keep every player's summary in passing — the "available but unused"
-  // section's deathOutcome predicate below needs them (to decide whether the
-  // external's holder was CC-locked during the death window); no recompute.
-  const ccSummaries: ReturnType<typeof analyzePlayerCCAndTrinket>[] = [];
   for (const u of friends) {
     try {
-      const s = analyzePlayerCCAndTrinket(u, enemies, combat, enemyPets);
-      ccSummaries.push(s);
-      if (u === ownerUnit) ownerCcSummary = s;
+      const s = round.cc(u);
       for (const cc of s.ccInstances) {
         if (!inWin(cc.atSeconds)) continue;
         raw.push({
@@ -231,24 +369,9 @@ export function buildDeepDivePack(
   }
 
   // Defensive casts (friendly, with timing audit labels)
-  let enemyTl: ReturnType<typeof reconstructEnemyCDTimeline> | null = null;
-  // Resolved cooldowns (same source as the [RES] ledger, talent modifiers
-  // included) — fed to deathOutcome's availability check, injected the same
-  // way as buildMatchContext, so two places never disagree about one cooldown.
-  const resolvedCdByUnit = new Map<string, Map<string, IMajorCooldownInfo>>();
   for (const u of friends) {
     try {
-      enemyTl = enemyTl ?? reconstructEnemyCDTimeline(enemies, combat);
-      const cds = annotateDefensiveTimings(
-        extractMajorCooldowns(u, combat),
-        u,
-        combat,
-        enemyTl,
-      );
-      if (u === ownerUnit) ownerCds = cds;
-      const bySpell = new Map<string, IMajorCooldownInfo>();
-      for (const cd of cds) bySpell.set(cd.spellId, cd);
-      resolvedCdByUnit.set(u.id, bySpell);
+      const cds = round.cds(u);
       for (const cd of cds) {
         if (!DEFENSIVE_TAGS.has(cd.tag)) continue;
         for (const cast of cd.casts) {
@@ -278,8 +401,7 @@ export function buildDeepDivePack(
 
   // Enemy offensive CD casts
   try {
-    enemyTl = enemyTl ?? reconstructEnemyCDTimeline(enemies, combat);
-    for (const p of enemyTl.players) {
+    for (const p of round.enemyTl().players) {
       for (const cd of p.offensiveCDs) {
         if (!inWin(cd.castTimeSeconds)) continue;
         raw.push({
@@ -354,13 +476,7 @@ export function buildDeepDivePack(
 
   // Dispels (all priorities)
   try {
-    const ds = reconstructDispelSummary(
-      friends,
-      enemies,
-      combat,
-      friendlyPets,
-      enemyPets,
-    );
+    const ds = round.dispels();
     for (const e of [...ds.allyCleanse, ...ds.ourPurges]) {
       if (!inWin(e.timeSeconds)) continue;
       raw.push({
@@ -393,22 +509,7 @@ export function buildDeepDivePack(
   // not given / Blessing of Protection available but not pressed) out of the
   // follow-up round.
   try {
-    const outcome = buildDeathOutcomeSummary(
-      {
-        startTime: combat.startTime ?? 0,
-        endTime: combat.endTime,
-        zoneId: combat.startInfo?.zoneId,
-      },
-      friends,
-      ccSummaries,
-      (unit, spellId) =>
-        resolvedCdByUnit.get(unit.id)?.get(spellId) ??
-        (combat?.units ? unitCooldownEntry(unit, combat, spellId) : undefined),
-      // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
-      enemySourceIds(enemies, [...enemyPets]),
-      // an option the holder's pet casts is asked of the pet
-      units,
-    );
+    const outcome = round.deathOutcome();
     for (const ev of outcome.events) {
       if (!inWin(ev.atSeconds)) continue;
       for (const imm of ev.availableImmunities) {
@@ -457,22 +558,16 @@ export function buildDeepDivePack(
   // Positioning mistakes (fix 3): the owner's STAYED_IN/MISSED_PUSH/CD_OUT_OF_RANGE
   // falling inside the window. Fills the "died to positioning" gap that resource
   // signals can't see (519-match survey: rogue saves 9/40, Havoc 4/9).
-  if (ownerUnit && enemyTl) {
+  let enemyTlBuilt = false;
+  try {
+    round.enemyTl();
+    enemyTlBuilt = true;
+  } catch {
+    /* no enemy timeline: no burst windows to judge the position against */
+  }
+  if (ownerUnit && enemyTlBuilt) {
     try {
-      const posEvents = computeOwnerPositionEvents({
-        owner: ownerUnit,
-        enemies,
-        combat,
-        burstWindows: enemyTl.alignedBurstWindows,
-        ownerCooldowns: ownerCds ?? [],
-        ownerCCSummary: ownerCcSummary,
-        isHealer: isHealerSpec(ownerUnit.spec),
-        ownerIsMelee: isMeleeSpec(ownerUnit.spec),
-        friends,
-        spikeWindows: dmgSpikeWindowsOf(
-          computePressureWindows(friends, combat),
-        ),
-      });
+      const posEvents = round.ownerPosition(ownerUnit);
       for (const e of posEvents) {
         if (!POSITION_MISTAKES.has(e.type)) continue;
         if (!inWin(e.atSeconds)) continue;
@@ -724,10 +819,11 @@ export function buildOffensiveDeepDivePack(
     : undefined;
   if (!owner) return null;
 
+  const round = packRoundReadings(combat, units, friends, enemies);
   let entries: IBurstLedgerEntry[] = [];
   let healerChains: IOutgoingCCChain[] = [];
   try {
-    entries = analyzeBurstLedger(owner, friends, enemies, combat);
+    entries = round.burstLedger(owner);
   } catch {
     /* no advanced logging */
   }
@@ -735,9 +831,9 @@ export function buildOffensiveDeepDivePack(
     const enemyHealers = new Set(
       enemies.filter((e) => isHealerSpec(e.spec)).map((e) => e.name),
     );
-    healerChains = analyzeOutgoingCCChains(friends, enemies, combat).filter(
-      (c) => enemyHealers.has(c.targetName),
-    );
+    healerChains = round
+      .outgoingCcChains()
+      .filter((c) => enemyHealers.has(c.targetName));
   } catch {
     /* absent */
   }

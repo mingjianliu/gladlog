@@ -8,6 +8,7 @@ import {
 import { auraStandsForPressAt } from "./auraActivationEra";
 import { buildAuraIntervals } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { registerMemoInput } from "./combatMemo";
 // call-time only (cooldowns reads this module's table the same way)
 import {
   canonicalSpellId,
@@ -293,6 +294,8 @@ const EYE_BEAM_AFTER_S = 0.3;
 export const OFFENSIVE_AURA_FLAGS: { demonic: "burst" | "minor" | "fact" } = {
   demonic: "minor",
 };
+// a reading kept per round (combatMemo.ts) is the one this setting produced
+registerMemoInput("OFFENSIVE_AURA_FLAGS", () => OFFENSIVE_AURA_FLAGS.demonic);
 
 export type AuraOccurrenceProvenance =
   "press-logged" | "press-inferred" | "proc" | "unresolved";

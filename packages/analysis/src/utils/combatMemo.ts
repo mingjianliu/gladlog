@@ -124,6 +124,28 @@ function hashString(s: string): number {
   return h;
 }
 
+/**
+ * The inputs a kept reading sees that are neither the round nor an argument:
+ * the mutable flag singletons a harness or a test flips between two readings
+ * of one round object (`OFFENSIVE_AURA_FLAGS.demonic` changes the enemy
+ * cooldown timeline). A flag module registers its own reader next to the
+ * object; the value is part of every `combatMemo` / `roundValue` fingerprint,
+ * with which lazy tables are loaded.
+ */
+const memoInputs = new Map<string, () => string>();
+export function registerMemoInput(name: string, read: () => string): void {
+  memoInputs.set(name, read);
+}
+/** The registered inputs' names (tests: every flag singleton is one). */
+export function memoInputNames(): string[] {
+  return [...memoInputs.keys()];
+}
+function inputsEpoch(): number {
+  let h = analysisDataEpoch();
+  for (const read of memoInputs.values()) h = mix(h, hashString(read()));
+  return h;
+}
+
 let enabled = true;
 
 export function combatMemo<T>(
@@ -134,7 +156,7 @@ export function combatMemo<T>(
 ): T[] {
   if (!enabled) return compute();
   // which lazy tables are loaded is part of what the reading saw
-  const fp = mix(roundFp, analysisDataEpoch());
+  const fp = mix(roundFp, inputsEpoch());
   let byKey = cache.get(combat);
   const hit = byKey?.get(key);
   if (hit && hit.fp === fp) return (hit.value as readonly T[]).slice();
@@ -147,7 +169,105 @@ export function combatMemo<T>(
   return value.slice();
 }
 
-/** Test seam: `false` makes every `combatMemo` call compute. */
+const values = new WeakMap<
+  object,
+  Map<string, { fp: number; value: unknown }>
+>();
+let freezeShared =
+  typeof process !== "undefined" && process.env?.GLADLOG_MEMO_FREEZE === "1";
+
+/** Freeze a result's own arrays and plain objects, all the way down. */
+function deepFreeze(v: unknown, seen = new Set<object>()): void {
+  if (v === null || typeof v !== "object" || seen.has(v)) return;
+  const proto = Object.getPrototypeOf(v) as unknown;
+  if (!Array.isArray(v) && proto !== Object.prototype && proto !== null) return;
+  seen.add(v);
+  for (const child of Object.values(v)) deepFreeze(child, seen);
+  Object.freeze(v);
+}
+
+/**
+ * A whole-round reading that is ONE object (a summary, a timeline, a holder
+ * of several readings), computed once per round object and key. Unlike
+ * `combatMemo` the SAME object comes back to every asker, so its rows are
+ * read-only by contract: no asker may write to, sort or splice what it gets.
+ *
+ * That contract is checked, not assumed: with `setSharedReadingsFrozenForTest`
+ * (or `GLADLOG_MEMO_FREEZE=1`) every stored result is frozen all the way
+ * down, and a writer throws a TypeError — the real-fixture test and the
+ * byte-identity capture run that way.
+ *
+ * The caller's key must hold the identity of every unit argument and every
+ * option; `roundFp` is `roundFingerprint` over the same units, mixed with
+ * any other input's shape. And the reading must have no side effect, since
+ * it runs once for all its askers: the ones kept so far write no decision
+ * trace (`traceDecision` is called by the candidate builders only).
+ */
+export function roundValue<T extends object>(
+  combat: object,
+  key: string,
+  roundFp: number,
+  compute: () => T,
+): T {
+  if (!enabled) return compute();
+  const fp = mix(roundFp, inputsEpoch());
+  let byKey = values.get(combat);
+  const hit = byKey?.get(key);
+  if (hit && hit.fp === fp) return hit.value as T;
+  const value = compute();
+  if (freezeShared) deepFreeze(value);
+  if (!byKey) {
+    byKey = new Map();
+    values.set(combat, byKey);
+  }
+  byKey.set(key, { fp, value });
+  return value;
+}
+
+/** Test seam: freeze every `roundValue` result stored from now on. */
+export function setSharedReadingsFrozenForTest(on: boolean): void {
+  freezeShared = on;
+}
+
+/** A stable number for one object argument (0 for none), as a key part. */
+export function identityToken(o: object | null | undefined): number {
+  return o ? tokenOf(o) : 0;
+}
+
+/** `h` mixed with `n` — for a caller adding another input's shape to a
+ * `roundFingerprint`. */
+export function mixFingerprint(h: number, n: number): number {
+  return mix(h, n);
+}
+
+/** `h` mixed with a string input (a zone id, a bracket). */
+export function mixFingerprintString(h: number, s: string | undefined): number {
+  return mix(h, s === undefined ? -1 : hashString(s));
+}
+
+/** A thunk that runs `f` once and afterwards returns the same value — or
+ * throws the same error: a reading that failed fails for every later asker,
+ * as it did when each asker computed it. */
+export function once<T>(f: () => T): () => T {
+  let state = 0;
+  let value: T | undefined;
+  let error: unknown;
+  return () => {
+    if (state === 0) {
+      try {
+        value = f();
+        state = 1;
+      } catch (e) {
+        error = e;
+        state = 2;
+      }
+    }
+    if (state === 2) throw error;
+    return value as T;
+  };
+}
+
+/** Test seam: `false` makes every `combatMemo` / `roundValue` call compute. */
 export function setCombatMemoEnabledForTest(on: boolean): void {
   enabled = on;
 }

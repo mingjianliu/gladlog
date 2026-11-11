@@ -20,6 +20,7 @@
  * `BRACKET_TYPE_ALLOWLIST` is re-exported from the registry for the existing
  * import sites; the registry file is its authoritative home.
  */
+import { registerMemoInput } from "../utils/combatMemo";
 import {
   type CandidateTypeFlagKey,
   deriveCandidateTypeFlags,
@@ -29,3 +30,7 @@ export { BRACKET_TYPE_ALLOWLIST } from "./candidateTypeRegistry";
 
 export const CANDIDATE_TYPE_FLAGS: Record<CandidateTypeFlagKey, boolean> =
   deriveCandidateTypeFlags();
+// a reading kept per round (combatMemo.ts) is the one these settings produced
+registerMemoInput("CANDIDATE_TYPE_FLAGS", () =>
+  JSON.stringify(CANDIDATE_TYPE_FLAGS),
+);

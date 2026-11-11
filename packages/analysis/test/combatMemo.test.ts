@@ -2,18 +2,27 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 import { LogEvent } from "@gladlog/parser-compat";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import {
   breakAbilityPresses,
   breakAbilityPressesUncached,
 } from "../src/utils/ccTrinketAnalysis";
 import {
   combatMemo,
+  identityToken,
+  memoInputNames,
+  mixFingerprint,
+  mixFingerprintString,
+  once,
   roundFingerprint,
+  roundValue,
   setCombatMemoEnabledForTest,
+  setSharedReadingsFrozenForTest,
   unitMemo,
   unitTokens,
 } from "../src/utils/combatMemo";
 import { getUnitPositionAtTime } from "../src/utils/losAnalysis";
+import { OFFENSIVE_AURA_FLAGS } from "../src/utils/offensiveAuraOccurrences";
 import {
   ADAPTATION_LOCKOUT_AURA_ID,
   ADAPTATION_TRIGGER_AURA_ID,
@@ -21,6 +30,7 @@ import {
   pvpTrinketUses,
   pvpTrinketUsesUncached,
 } from "../src/utils/pvpTrinketUses";
+import { MUTABLE_FLAG_NAMES } from "./support/flagGuard";
 
 // T81 (first-paint growers): three readings are computed once instead of once
 // per caller / per control / by a linear scan. Performance only — each must
@@ -35,7 +45,10 @@ function rng(seed: number) {
   };
 }
 
-afterEach(() => setCombatMemoEnabledForTest(true));
+afterEach(() => {
+  setCombatMemoEnabledForTest(true);
+  setSharedReadingsFrozenForTest(false);
+});
 
 describe("combatMemo", () => {
   const combatOf = (units: object[]) => ({
@@ -144,9 +157,7 @@ describe("按键 / 饰品读数:记住的与现算的逐值相等", () => {
         spellId: BREAK_IDS[Math.floor(r() * BREAK_IDS.length)],
         logLine: {
           event:
-            r() < 0.8
-              ? LogEvent.SPELL_CAST_SUCCESS
-              : LogEvent.SPELL_CAST_START,
+            r() < 0.8 ? LogEvent.SPELL_CAST_SUCCESS : LogEvent.SPELL_CAST_START,
           timestamp: 1000 + Math.floor(r() * 60_000),
         },
       })),
@@ -230,7 +241,10 @@ describe("getUnitPositionAtTime:二分起点与线性扫描逐值相等", () => 
     for (let round = 0; round < 300; round++) {
       const n = Math.floor(r() * 40);
       const kind = round % 3; // 0 ordered with ties, 1 shuffled, 2 ordered + a NaN
-      let ts = Array.from({ length: n }, () => 1000 + Math.floor(r() * 50) * 100);
+      let ts = Array.from(
+        { length: n },
+        () => 1000 + Math.floor(r() * 50) * 100,
+      );
       if (kind !== 1) ts = ts.sort((a, b) => a - b);
       if (kind === 2 && n > 2) ts[Math.floor(r() * n)] = Number.NaN;
       const actions: Sample[] = ts.map((timestamp) => ({
@@ -260,5 +274,148 @@ describe("getUnitPositionAtTime:二分起点与线性扫描逐值相等", () => 
     }
     expect(checked).toBe(300 * 60 * 3);
     expect(hits).toBeGreaterThan(10_000);
+  });
+});
+
+// T81 attempt 2: a whole-round reading that is one object comes back as the
+// SAME object to every asker — read-only by contract, and the contract can be
+// switched to a hard one (frozen all the way down) for the tests that check it.
+describe("roundValue:同一个对象给所有调用方", () => {
+  const combat = () => ({ startTime: 0, endTime: 90_000, units: {} });
+
+  it("同一回合对象 + 同一把键 + 同一指纹只算一次,返回的是同一个对象", () => {
+    const c = combat();
+    const compute = vi.fn(() => ({ rows: [{ t: 1 }] }));
+    const fp = roundFingerprint(c);
+    const first = roundValue(c, "k", fp, compute);
+    expect(roundValue(c, "k", fp, compute)).toBe(first);
+    expect(compute).toHaveBeenCalledTimes(1);
+    // another key, another fingerprint, another round object: computed
+    roundValue(c, "k2", fp, compute);
+    roundValue(c, "k", mixFingerprint(fp, 1), compute);
+    roundValue(combat(), "k", fp, compute);
+    expect(compute).toHaveBeenCalledTimes(4);
+    // the latest fingerprint is the one kept
+    roundValue(c, "k", fp, compute);
+    expect(compute).toHaveBeenCalledTimes(5);
+  });
+
+  it("关掉以后每次都算;算的时候抛了不留结果,下一个调用方重算", () => {
+    const c = combat();
+    const fp = roundFingerprint(c);
+    let fail = true;
+    const compute = vi.fn(() => {
+      if (fail) throw new Error("no advanced logging");
+      return { ok: true };
+    });
+    expect(() => roundValue(c, "k", fp, compute)).toThrow("no advanced");
+    fail = false;
+    expect(roundValue(c, "k", fp, compute)).toEqual({ ok: true });
+    expect(compute).toHaveBeenCalledTimes(2);
+    setCombatMemoEnabledForTest(false);
+    expect(roundValue(c, "k", fp, compute)).not.toBe(
+      roundValue(c, "k", fp, compute),
+    );
+  });
+
+  it("冻结开关:存下的结果从上到下都冻住,写它就抛;类实例和输入对象不动", () => {
+    const c = combat();
+    const fp = roundFingerprint(c);
+    const input = new (class Unit {
+      hp = 1;
+    })();
+    setSharedReadingsFrozenForTest(true);
+    const v = roundValue(c, "k", fp, () => ({
+      rows: [{ t: 1, nested: { list: [1, 2] } }],
+      byId: new Map<string, number>(),
+      input,
+    }));
+    expect(() => {
+      (v.rows[0] as { flag?: boolean }).flag = true;
+    }).toThrow(TypeError);
+    expect(() => v.rows.push({ t: 2, nested: { list: [] } })).toThrow(
+      TypeError,
+    );
+    expect(() => v.rows[0]!.nested.list.sort()).toThrow(TypeError);
+    v.byId.set("a", 1);
+    input.hp = 2;
+    expect(input.hp).toBe(2);
+    // off again: a new result is left writable
+    setSharedReadingsFrozenForTest(false);
+    const w = roundValue(c, "k2", fp, () => ({ rows: [1] }));
+    w.rows.push(2);
+    expect(w.rows).toEqual([1, 2]);
+  });
+
+  it("键与指纹的辅助:对象身份、字符串输入", () => {
+    const [a, b] = [{}, {}];
+    expect(identityToken(a)).toBe(identityToken(a));
+    expect(identityToken(a)).not.toBe(identityToken(b));
+    expect(identityToken(undefined)).toBe(0);
+    expect(mixFingerprintString(7, "1505")).toBe(
+      mixFingerprintString(7, "1505"),
+    );
+    expect(mixFingerprintString(7, "1505")).not.toBe(
+      mixFingerprintString(7, "1552"),
+    );
+    expect(mixFingerprintString(7, undefined)).not.toBe(
+      mixFingerprintString(7, ""),
+    );
+  });
+});
+
+describe("开关单例是记忆的输入:翻了开关,记住的结果不再被拿来用", () => {
+  it("每个可变开关单例都登记了(时间线渲染开关除外:没有哪个记住的读数读它)", () => {
+    // TIMELINE_LINE_FLAGS is read by the timeline formatters and the kill
+    // attempt's stamp only — line rendering, never inside a kept reading
+    const exempt = new Set(["TIMELINE_LINE_FLAGS"]);
+    expect(
+      MUTABLE_FLAG_NAMES.filter(
+        (n) => !exempt.has(n) && !memoInputNames().includes(n),
+      ),
+    ).toEqual([]);
+  });
+
+  it("combatMemo 与 roundValue:翻开关重算,翻回来仍是翻回来之后那次算的", () => {
+    const c = { startTime: 0, endTime: 90_000, units: {} };
+    const fp = roundFingerprint(c);
+    const compute = vi.fn(() => ({ demonic: OFFENSIVE_AURA_FLAGS.demonic }));
+    const list = vi.fn(() => [CANDIDATE_TYPE_FLAGS.missedPurge]);
+    const savedAura = { ...OFFENSIVE_AURA_FLAGS };
+    const savedTypes = { ...CANDIDATE_TYPE_FLAGS };
+    try {
+      expect(roundValue(c, "k", fp, compute).demonic).toBe("minor");
+      OFFENSIVE_AURA_FLAGS.demonic = "burst";
+      expect(roundValue(c, "k", fp, compute).demonic).toBe("burst");
+      expect(roundValue(c, "k", fp, compute).demonic).toBe("burst");
+      expect(compute).toHaveBeenCalledTimes(2);
+
+      const before = combatMemo(c, "l", fp, list);
+      CANDIDATE_TYPE_FLAGS.missedPurge = !savedTypes.missedPurge;
+      expect(combatMemo(c, "l", fp, list)).toEqual([!before[0]]);
+      expect(list).toHaveBeenCalledTimes(2);
+    } finally {
+      Object.assign(OFFENSIVE_AURA_FLAGS, savedAura);
+      Object.assign(CANDIDATE_TYPE_FLAGS, savedTypes);
+    }
+  });
+});
+
+describe("once:算一次;抛过的以后照样抛同一个错", () => {
+  it("值只算一次", () => {
+    const f = vi.fn(() => [1]);
+    const thunk = once(f);
+    expect(thunk()).toBe(thunk());
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+  it("抛错只算一次,每次都抛同一个错误对象", () => {
+    const err = new Error("absent");
+    const f = vi.fn(() => {
+      throw err;
+    });
+    const thunk = once(f);
+    expect(thunk).toThrow(err);
+    expect(thunk).toThrow(err);
+    expect(f).toHaveBeenCalledTimes(1);
   });
 });

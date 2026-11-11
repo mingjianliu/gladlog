@@ -82,7 +82,15 @@ import {
   NO_CC_LANDING_STATE,
 } from "./ccDuration";
 import { charmedAt } from "./charmedPlayer";
-import { unitMemo } from "./combatMemo";
+import {
+  identityToken,
+  mixFingerprint,
+  mixFingerprintString,
+  roundFingerprint,
+  roundValue,
+  unitMemo,
+  unitTokens,
+} from "./combatMemo";
 import {
   STASIS_RELEASE_SPELL_ID,
   stasisReleasePressesMs,
@@ -3475,6 +3483,57 @@ const PRE_TELEPORT_STALE_MS = 500;
 const LANDED_CAST_PROVES_LOS_MS = 1_500;
 
 export function analyzePlayerCCAndTrinket(
+  player: ICombatUnit,
+  enemies: ICombatUnit[],
+  combat: {
+    startTime: number;
+    endTime: number;
+    startInfo: { zoneId: string; bracket?: string };
+    // the round's units, for `roundEndMs` (a Solo Shuffle round ends at its
+    // first player death); absent = the round ends at `endTime`
+    units?: Record<string, unknown> | ReadonlyArray<unknown>;
+  },
+  // 2026-07-18 baseline investigation: CC from enemy pets (Intimidation,
+  // Seduction, …) used to be silently dropped by the "src ∈ enemy players"
+  // filter (Intimidation missing in 54/176 matches) — leaving [CC ON TEAM],
+  // trinket windows and DR chains all blind downstream. The caller passes enemy
+  // pet units in to complete the src set.
+  enemyPets: ICombatUnit[] = [],
+  /** the recorder's SPELL_CAST_FAILED rows (`RawStreams.castFailed`), when
+   * the caller has them: the cast-time median reads the player's own, as
+   * the cancel ledger does (codex R6C-02 #2: without them a bar stopped at
+   * 41.56 s paired with a SUCCESS at 44.32 s and the median read 1.032 s
+   * for 1.013 s) */
+  castFailed?: readonly CastFailedEvent[],
+): IPlayerCCTrinketSummary {
+  // T81: the report, the candidate menu, the prompt context and every
+  // deep-dive pack ask for the same unit's summary (eight call sites on one
+  // match); one per round object and argument identity. Shared: read-only.
+  return roundValue(
+    combat,
+    `ccTrinket|${identityToken(player)}|${unitTokens(enemies)}|${unitTokens(enemyPets)}|${identityToken(castFailed)}`,
+    mixFingerprintString(
+      mixFingerprintString(
+        mixFingerprint(
+          roundFingerprint(combat, [player], enemies, enemyPets),
+          castFailed?.length ?? -1,
+        ),
+        combat.startInfo?.zoneId,
+      ),
+      combat.startInfo?.bracket,
+    ),
+    () =>
+      analyzePlayerCCAndTrinketUncached(
+        player,
+        enemies,
+        combat,
+        enemyPets,
+        castFailed,
+      ),
+  );
+}
+
+function analyzePlayerCCAndTrinketUncached(
   player: ICombatUnit,
   enemies: ICombatUnit[],
   combat: {
