@@ -2,6 +2,7 @@ import { computeOffensiveWindows } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 /**
@@ -28,7 +29,7 @@ export interface VulnBand {
   targetDied: boolean;
 }
 
-export function deriveVulnBands(source: ReportSource): VulnBand[] {
+function deriveVulnBandsUncached(source: ReportSource): VulnBand[] {
   try {
     const legacy = toLegacySafe(source);
     const players = Object.values(legacy.units).filter((u) => u.info);
@@ -85,4 +86,9 @@ export function deriveVulnBands(source: ReportSource): VulnBand[] {
   } catch {
     return [];
   }
+}
+
+/** deriveVulnBandsUncached, kept per source object across mounts (see sourceMemo.ts). */
+export function deriveVulnBands(source: ReportSource): ReturnType<typeof deriveVulnBandsUncached> {
+  return sourceMemo(source, "deriveVulnBands", () => deriveVulnBandsUncached(source));
 }

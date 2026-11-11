@@ -13,6 +13,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
 import { type TimeRange,tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
@@ -162,7 +163,7 @@ export function scopedMissedPurgeInstances(
  * are filtered by the timestamp of the fact; ccEfficiency is a whole-match
  * aggregate (analysis carries no per-window timestamps), so when a window is
  * active the component labels it as whole-match scope. */
-export function deriveDispelDash(
+function deriveDispelDashUncached(
   source: ReportSource,
   range?: TimeRange | null,
 ): DispelDash {
@@ -297,4 +298,14 @@ export function deriveDispelDash(
   } catch {
     return EMPTY;
   }
+}
+
+/** deriveDispelDashUncached; the whole-match call (no range) is kept per source object
+ * across mounts (see sourceMemo.ts). */
+export function deriveDispelDash(
+  source: ReportSource,
+  range?: TimeRange | null,
+): ReturnType<typeof deriveDispelDashUncached> {
+  if (range != null) return deriveDispelDashUncached(source, range);
+  return sourceMemo(source, "deriveDispelDash", () => deriveDispelDashUncached(source, range));
 }

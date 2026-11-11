@@ -5,6 +5,7 @@ import {
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import { overlapSeconds, type TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
@@ -43,7 +44,7 @@ const EMPTY: { rows: CCChainRow[] } = { rows: [] };
  * but mostly inside it would be dropped whole (caught by the agy flash review
  * and adopted).
  */
-export function deriveCCChainDash(
+function deriveCCChainDashUncached(
   source: ReportSource,
   range?: TimeRange | null,
 ): { rows: CCChainRow[] } {
@@ -94,4 +95,14 @@ export function deriveCCChainDash(
   } catch {
     return EMPTY;
   }
+}
+
+/** deriveCCChainDashUncached; the whole-match call (no range) is kept per source object
+ * across mounts (see sourceMemo.ts). */
+export function deriveCCChainDash(
+  source: ReportSource,
+  range?: TimeRange | null,
+): ReturnType<typeof deriveCCChainDashUncached> {
+  if (range != null) return deriveCCChainDashUncached(source, range);
+  return sourceMemo(source, "deriveCCChainDash", () => deriveCCChainDashUncached(source, range));
 }

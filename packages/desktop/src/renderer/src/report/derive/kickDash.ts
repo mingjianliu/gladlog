@@ -2,6 +2,7 @@ import { analyzeKickAudit, type IKickAuditEntry } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import { type TimeRange,tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
@@ -38,7 +39,7 @@ export interface KickDashRow {
  * stream (so landed pairings are unaffected by window boundaries), and only
  * afterwards are the entries filtered by atSeconds — filtering at the fact
  * layer, see derive/timeRange.ts. */
-export function deriveKickDash(
+function deriveKickDashUncached(
   source: ReportSource,
   range?: TimeRange | null,
 ): KickDashRow[] {
@@ -94,4 +95,14 @@ export function deriveKickDash(
   } catch {
     return [];
   }
+}
+
+/** deriveKickDashUncached; the whole-match call (no range) is kept per source object
+ * across mounts (see sourceMemo.ts). */
+export function deriveKickDash(
+  source: ReportSource,
+  range?: TimeRange | null,
+): ReturnType<typeof deriveKickDashUncached> {
+  if (range != null) return deriveKickDashUncached(source, range);
+  return sourceMemo(source, "deriveKickDash", () => deriveKickDashUncached(source, range));
 }

@@ -9,6 +9,7 @@ import {
 import { resolveOwner } from "./analysisInput";
 import { toLegacySafe } from "./legacySource";
 import { getRawStreamsSync } from "./rawStreamsCache";
+import { sourceMemoWith } from "./sourceMemo";
 import type { TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
@@ -69,6 +70,19 @@ function buildSweepContext(source: ReportSource): SweepContext | null {
   } catch {
     return null;
   }
+}
+
+/** buildSweepContext, kept per source object across mounts (see
+ * sourceMemo.ts). The raw streams arrive asynchronously and are an input to
+ * the candidates, so an entry computed against a different streams object
+ * (typically: before they arrived) is recomputed instead of reused. */
+function sweepContextOf(source: ReportSource): SweepContext | null {
+  return sourceMemoWith(
+    source,
+    "sweepContext",
+    [getRawStreamsSync(source.id)],
+    () => buildSweepContext(source),
+  );
 }
 
 /** Window width (seconds). A product-decided fixed value; v1 is not
@@ -161,8 +175,24 @@ export function deriveUncoveredHighlights(
   durationS: number,
   anchors: readonly number[],
 ): UncoveredHighlight[] {
+  // Kept across mounts (sourceMemo.ts): re-entering the AI view with the same
+  // anchors does not sweep the match again. The anchors are compared by value
+  // (the caller rebuilds the array); the raw streams feed the candidates.
+  return sourceMemoWith(
+    source,
+    "deriveUncoveredHighlights",
+    [durationS, anchors.join(","), getRawStreamsSync(source.id)],
+    () => deriveUncoveredHighlightsUncached(source, durationS, anchors),
+  );
+}
+
+function deriveUncoveredHighlightsUncached(
+  source: ReportSource,
+  durationS: number,
+  anchors: readonly number[],
+): UncoveredHighlight[] {
   if (!(durationS > 0)) return [];
-  const ctx = buildSweepContext(source);
+  const ctx = sweepContextOf(source);
   if (!ctx) return [];
   // The same legacy/candidates/ownerName is fed to every window's
   // buildWindowPack — #16's signal-gate primitive, zero reimplementation; we

@@ -11,6 +11,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { resolveOwner } from "./analysisInput";
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 /**
@@ -25,7 +26,7 @@ import type { ReportSource } from "./types";
  * swallowed and returns [] — the header row is a bonus and must never take
  * down the whole report page.
  */
-export function deriveMatchArc(source: ReportSource): IMatchArcPhase[] {
+function deriveMatchArcUncached(source: ReportSource): IMatchArcPhase[] {
   try {
     const legacy = toLegacySafe(source);
     const units = Object.values(legacy.units);
@@ -76,4 +77,9 @@ export function deriveMatchArc(source: ReportSource): IMatchArcPhase[] {
   } catch {
     return [];
   }
+}
+
+/** deriveMatchArcUncached, kept per source object across mounts (see sourceMemo.ts). */
+export function deriveMatchArc(source: ReportSource): ReturnType<typeof deriveMatchArcUncached> {
+  return sourceMemo(source, "deriveMatchArc", () => deriveMatchArcUncached(source));
 }

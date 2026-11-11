@@ -2,6 +2,7 @@ import { analyzeCcBreaks, type ICcBreakEvent } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
 import { shortUnitName } from "./teamSide";
 import { type TimeRange,tInRange } from "./timeRange";
@@ -42,7 +43,7 @@ const remainTag = (e: ICcBreakEvent): string =>
  * Corpus baseline: 6.14 per combat, 48.2% self-inflicted vs 46.6% enemy
  * mistakes.
  */
-export function deriveCcBreakDash(
+function deriveCcBreakDashUncached(
   source: ReportSource,
   range?: TimeRange | null,
 ): CcBreakDash {
@@ -96,4 +97,14 @@ export function deriveCcBreakDash(
   } catch {
     return EMPTY;
   }
+}
+
+/** deriveCcBreakDashUncached; the whole-match call (no range) is kept per source object
+ * across mounts (see sourceMemo.ts). */
+export function deriveCcBreakDash(
+  source: ReportSource,
+  range?: TimeRange | null,
+): ReturnType<typeof deriveCcBreakDashUncached> {
+  if (range != null) return deriveCcBreakDashUncached(source, range);
+  return sourceMemo(source, "deriveCcBreakDash", () => deriveCcBreakDashUncached(source, range));
 }

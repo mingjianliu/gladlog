@@ -15,6 +15,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { resolveOwner } from "./analysisInput";
 import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import { type TimeRange, tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
@@ -486,7 +487,7 @@ export function timedAnchorsFromMistakes(
   return mistakes.filter((mk) => mk.timed).map((mk) => mk.tS);
 }
 
-export function deriveMistakes(
+function deriveMistakesUncached(
   source: ReportSource,
   range?: TimeRange | null,
 ): Mistake[] {
@@ -723,4 +724,14 @@ export function splitMistakesByOwner(mistakes: readonly Mistake[]): {
     own: mistakes.filter((m) => m.isOwner),
     teammates: mistakes.filter((m) => !m.isOwner),
   };
+}
+
+/** deriveMistakesUncached; the whole-match call (no range) is kept per source object
+ * across mounts (see sourceMemo.ts). */
+export function deriveMistakes(
+  source: ReportSource,
+  range?: TimeRange | null,
+): ReturnType<typeof deriveMistakesUncached> {
+  if (range != null) return deriveMistakesUncached(source, range);
+  return sourceMemo(source, "deriveMistakes", () => deriveMistakesUncached(source, range));
 }

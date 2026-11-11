@@ -2242,6 +2242,17 @@ pre {
   flex: 1;
   min-height: 0;
 }
+/* T80: a library of 1,100 matches is 1,100 rows (23k nodes) laid out and
+   painted on every return to this page, filter change and backfill page —
+   measured 130-170 ms of each. Rows outside the scroll viewport skip layout
+   and paint; `auto` remembers each row's real height once it has been
+   rendered; before that 38.75px stands in — the content box of the measured
+   57.75px row (9px padding top and bottom, 1px border), so the scroll height
+   is the same as with every row laid out. */
+.match-list li:not(.mlr-group):not(.loading-more) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 38.75px;
+}
 .match-list .loading-more {
   opacity: 0.6;
   font-style: italic;

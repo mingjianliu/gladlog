@@ -1,5 +1,5 @@
 import type { IPlayerCCTrinketSummary } from "@gladlog/analysis";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 // #10 T2: the cc KeyMoment used to receive ICCInstance.drInfo and throw it all
 // away — CC cut down to 50%/25%/Immune by DR looked identical on the moment
@@ -36,10 +36,16 @@ vi.mock("@gladlog/analysis", async (importOriginal) => {
 import { DR_LEVEL_LABEL } from "@gladlog/analysis";
 
 import { deriveKeyMoments } from "../src/renderer/src/report/derive/keyMoments";
+import { resetSourceMemoForTest } from "../src/renderer/src/report/derive/sourceMemo";
 import type { ReportSource } from "../src/renderer/src/report/derive/types";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
 
 const base = loadRealMatchFixture();
+
+// The mocked summary changes between cases while the source object stays the
+// same; the per-source derive cache (sourceMemo.ts) would hand back the first
+// case's moments.
+beforeEach(() => resetSourceMemoForTest(true));
 
 function ccInstance(
   overrides: Partial<IPlayerCCTrinketSummary["ccInstances"][number]>,

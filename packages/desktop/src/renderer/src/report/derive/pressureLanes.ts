@@ -6,6 +6,7 @@ import {
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 export interface PressureBand {
@@ -30,7 +31,7 @@ export interface ExposureMark {
  * computePressureWindows' default arguments), so every segment the prompt has
  * must also appear in the lane. Exposure goes through the single entry point
  * computeHealerExposureEvents, which degrades gracefully without coordinates. */
-export function derivePressureLanes(source: ReportSource): {
+function derivePressureLanesUncached(source: ReportSource): {
   spikes: PressureBand[];
   exposures: ExposureMark[];
 } {
@@ -84,4 +85,9 @@ export function derivePressureLanes(source: ReportSource): {
   } catch {
     return { spikes: [], exposures: [] };
   }
+}
+
+/** derivePressureLanesUncached, kept per source object across mounts (see sourceMemo.ts). */
+export function derivePressureLanes(source: ReportSource): ReturnType<typeof derivePressureLanesUncached> {
+  return sourceMemo(source, "derivePressureLanes", () => derivePressureLanesUncached(source));
 }

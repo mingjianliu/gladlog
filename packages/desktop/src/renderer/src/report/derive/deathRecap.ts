@@ -21,6 +21,7 @@ import {
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
 import type { ReportSource } from "./types";
 
@@ -161,7 +162,7 @@ const DEF_TYPES = new Set(["immunities", "buffs_defensive"]);
  * render layer does not rebuild death judgements; that is the lesson from the
  * duplicate-predicate disease found in the audit.
  */
-export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
+function deriveDeathRecapsUncached(source: ReportSource): DeathRecap[] {
   try {
     const legacy = toLegacySafe(source);
     const matchStartMs = legacy.startTime;
@@ -670,4 +671,9 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
   } catch {
     return [];
   }
+}
+
+/** deriveDeathRecapsUncached, kept per source object across mounts (see sourceMemo.ts). */
+export function deriveDeathRecaps(source: ReportSource): ReturnType<typeof deriveDeathRecapsUncached> {
+  return sourceMemo(source, "deriveDeathRecaps", () => deriveDeathRecapsUncached(source));
 }

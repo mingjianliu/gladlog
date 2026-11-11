@@ -1,5 +1,6 @@
 import { correctedAdvancedSamples } from "@gladlog/parser-compat";
 
+import { sourceMemo } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 export interface HpPoint {
@@ -100,7 +101,7 @@ function downsampleMinMax(pts: HpPoint[], buckets: number): HpPoint[] {
   return out;
 }
 
-export function deriveTimeline(m: ReportSource): TimelineData {
+function deriveTimelineUncached(m: ReportSource): TimelineData {
   const players = Object.values(m.units).filter(
     (u) => u.kind === "Player" && u.info,
   );
@@ -138,4 +139,9 @@ export function deriveTimeline(m: ReportSource): TimelineData {
     series,
     deaths,
   };
+}
+
+/** deriveTimelineUncached, kept per source object across mounts (see sourceMemo.ts). */
+export function deriveTimeline(source: ReportSource): ReturnType<typeof deriveTimelineUncached> {
+  return sourceMemo(source, "deriveTimeline", () => deriveTimelineUncached(source));
 }

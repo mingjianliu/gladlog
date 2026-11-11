@@ -25,6 +25,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { resolveOwner } from "./analysisInput";
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import { shortUnitName } from "./teamSide";
 import type { ReportSource } from "./types";
 
@@ -81,7 +82,7 @@ const drSuffix = (drInfo: IDRInfo | null): string =>
  * analysis. Each kind has its own try/catch so one failing kind does not take
  * the rest down.
  */
-export function deriveKeyMoments(
+function deriveKeyMomentsUncached(
   source: ReportSource,
   ownerId?: string,
 ): KeyMoment[] {
@@ -424,4 +425,12 @@ export function deriveKeyMoments(
       weight: MAJOR_KINDS.has(m.kind) ? "major" : "minor",
     }))
     .sort((a, b) => a.t - b.t);
+}
+
+/** deriveKeyMomentsUncached, kept per source object and owner across mounts (see
+ * sourceMemo.ts). */
+export function deriveKeyMoments(source: ReportSource, ownerId?: string): ReturnType<typeof deriveKeyMomentsUncached> {
+  return sourceMemo(source, `deriveKeyMoments:${ownerId ?? ""}`, () =>
+    deriveKeyMomentsUncached(source, ownerId),
+  );
 }

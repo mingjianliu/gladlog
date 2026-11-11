@@ -3,6 +3,7 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
 import {
   eventInRange,
@@ -58,7 +59,7 @@ export interface StatsRow {
  * decisions are still computed on the full stream (state inference must not be
  * polluted by the window), and only then are facts filtered by timestamp and
  * durations clipped by overlap. Predicates live in derive/timeRange.ts. */
-export function deriveStatsTable(
+function deriveStatsTableUncached(
   source: ReportSource,
   range?: TimeRange | null,
 ): StatsRow[] {
@@ -180,4 +181,14 @@ export function deriveStatsTable(
   } catch {
     return [];
   }
+}
+
+/** deriveStatsTableUncached; the whole-match call (no range) is kept per source object
+ * across mounts (see sourceMemo.ts). */
+export function deriveStatsTable(
+  source: ReportSource,
+  range?: TimeRange | null,
+): ReturnType<typeof deriveStatsTableUncached> {
+  if (range != null) return deriveStatsTableUncached(source, range);
+  return sourceMemo(source, "deriveStatsTable", () => deriveStatsTableUncached(source, range));
 }

@@ -13,6 +13,7 @@ import {
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 export interface LedgerPlayer {
@@ -46,7 +47,7 @@ const EMPTY_RESULT: BurstLedgerResult = { players: [], targetSelection: [] };
  * the enemy CD timeline and the colour bands. DPS come first (the ledger mainly
  * targets DPS) and healers last; a player with nothing at all gets no row.
  */
-export function deriveBurstLedger(source: ReportSource): BurstLedgerResult {
+function deriveBurstLedgerUncached(source: ReportSource): BurstLedgerResult {
   try {
     const legacy = toLegacySafe(source);
     const players = Object.values(legacy.units).filter((u) => u.info);
@@ -91,4 +92,9 @@ export function deriveBurstLedger(source: ReportSource): BurstLedgerResult {
   } catch {
     return EMPTY_RESULT;
   }
+}
+
+/** deriveBurstLedgerUncached, kept per source object across mounts (see sourceMemo.ts). */
+export function deriveBurstLedger(source: ReportSource): ReturnType<typeof deriveBurstLedgerUncached> {
+  return sourceMemo(source, "deriveBurstLedger", () => deriveBurstLedgerUncached(source));
 }

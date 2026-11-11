@@ -8,6 +8,7 @@ import {
   deriveMistakes,
   timedAnchorsFromMistakes,
 } from "../src/renderer/src/report/derive/mistakes";
+import { resetSourceMemoForTest } from "../src/renderer/src/report/derive/sourceMemo";
 import {
   ANCHOR_TOLERANCE_S,
   deriveUncoveredHighlights,
@@ -45,6 +46,8 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  // Each case counts from a cold per-source derive cache (sourceMemo.ts).
+  resetSourceMemoForTest(true);
   candidatesSpy.mockClear();
 });
 

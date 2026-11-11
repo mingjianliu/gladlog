@@ -15,6 +15,7 @@ import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
 import { getRawStreamsSync } from "./rawStreamsCache";
+import { sourceMemoWith } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 /**
@@ -63,6 +64,22 @@ export type AnalysisRunInput = {
  * dataReady; the batch driver awaits it once before starting.
  */
 export function buildAnalysisInput(
+  source: ReportSource,
+  matchId: string,
+): AnalysisRunInput | null {
+  // Kept across mounts (sourceMemo.ts): the AI view rebuilt the whole prompt
+  // input on every entry. Nothing is stored before the analysis tables are
+  // loaded, and an entry built against other raw streams (or none yet) is
+  // rebuilt, so what a run sends is what an uncached call would build.
+  return sourceMemoWith(
+    source,
+    "buildAnalysisInput",
+    [matchId, getRawStreamsSync(source.id)],
+    () => buildAnalysisInputUncached(source, matchId),
+  );
+}
+
+function buildAnalysisInputUncached(
   source: ReportSource,
   matchId: string,
 ): AnalysisRunInput | null {

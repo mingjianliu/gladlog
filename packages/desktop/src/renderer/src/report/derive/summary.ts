@@ -1,4 +1,5 @@
 import { type FlowBasis, forEachContribution, petsOf } from "./flowSeries";
+import { sourceMemo } from "./sourceMemo";
 import { eventInRange, rangeDurationS, type TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
@@ -25,7 +26,7 @@ export interface UnitTotals {
  * from flowSeries' forEachContribution, the same source the timeline's
  * per-second flow bars read — so a stack of bars can never drift from the
  * leaderboard number sitting next to it. */
-export function deriveSummary(
+function deriveSummaryUncached(
   m: ReportSource,
   range?: TimeRange | null,
 ): UnitTotals[] {
@@ -63,4 +64,14 @@ export function deriveSummary(
     });
   }
   return rows.sort((a, b) => b.damageDone - a.damageDone);
+}
+
+/** deriveSummaryUncached; the whole-match call (no range) is kept per source object
+ * across mounts (see sourceMemo.ts). */
+export function deriveSummary(
+  source: ReportSource,
+  range?: TimeRange | null,
+): ReturnType<typeof deriveSummaryUncached> {
+  if (range != null) return deriveSummaryUncached(source, range);
+  return sourceMemo(source, "deriveSummary", () => deriveSummaryUncached(source, range));
 }

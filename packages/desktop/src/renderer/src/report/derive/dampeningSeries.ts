@@ -2,6 +2,7 @@ import { buildDampeningEvents, getInitialDampening } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
+import { sourceMemo } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 /**
@@ -39,7 +40,7 @@ import type { ReportSource } from "./types";
  * D11). A 2v2 round whose log printed no stack has none (null) and its series
  * is empty. Seconds stay contiguous from the first point on.
  */
-export function deriveDampeningSeries(
+function deriveDampeningSeriesUncached(
   source: ReportSource,
 ): Array<{ tS: number; pct: number }> {
   try {
@@ -92,4 +93,9 @@ export function dampeningAt(
     cur = p.pct;
   }
   return cur;
+}
+
+/** deriveDampeningSeriesUncached, kept per source object across mounts (see sourceMemo.ts). */
+export function deriveDampeningSeries(source: ReportSource): ReturnType<typeof deriveDampeningSeriesUncached> {
+  return sourceMemo(source, "deriveDampeningSeries", () => deriveDampeningSeriesUncached(source));
 }

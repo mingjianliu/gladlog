@@ -29,6 +29,7 @@ export function mergeCoverage(
   }
   return out;
 }
+import { sourceMemo } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 /** Maximum aura rows shown per unit (the top rows by in-window uptime,
@@ -92,7 +93,7 @@ export interface AuraUptime {
  * at the start / never seen dropping) are drawn dashed by the render layer and
  * never pass themselves off as observations.
  */
-export function deriveAuraUptime(
+function deriveAuraUptimeUncached(
   source: ReportSource,
   range?: TimeRange | null,
 ): AuraUptime {
@@ -168,4 +169,14 @@ export function deriveAuraUptime(
   } catch {
     return { groups: [], durationS: 1 };
   }
+}
+
+/** deriveAuraUptimeUncached; the whole-match call (no range) is kept per source object
+ * across mounts (see sourceMemo.ts). */
+export function deriveAuraUptime(
+  source: ReportSource,
+  range?: TimeRange | null,
+): ReturnType<typeof deriveAuraUptimeUncached> {
+  if (range != null) return deriveAuraUptimeUncached(source, range);
+  return sourceMemo(source, "deriveAuraUptime", () => deriveAuraUptimeUncached(source, range));
 }

@@ -36,6 +36,12 @@ describe("B1 — a pet's purge is on its owner's row", () => {
     const m = loadRealMatchFixture();
     const before = deriveStatsTable(m);
     ownerName = before.find((r) => r.reaction === "Friendly")!.name;
+    // The mocked panel now answers differently for the same source object:
+    // drop the per-source derive cache (sourceMemo.ts) so the table is rebuilt.
+    const { resetSourceMemoForTest } = await import(
+      "../src/renderer/src/report/derive/sourceMemo"
+    );
+    resetSourceMemoForTest(true);
     const row = deriveStatsTable(m).find((r) => r.name === ownerName)!;
     expect(row.purges).toBe(1);
   });
