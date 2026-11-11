@@ -11,7 +11,7 @@
  * IMMUNE under a Cyclone) — or as two effects each refused its own way
  * (GH #205: Holy Word: Chastise's stun IMMUNE and its damage MISS, 1 ms
  * apart). Which rows are one press is the producer's own rule, imported
- * (`isTwinMissRow`), not a second grouping here: the two used to disagree.
+ * (`missPressCount`), not a second grouping here: the two used to disagree.
  * What this check owns is the row set — whose rows, which miss types, which
  * name, inside the round.
  *
@@ -21,7 +21,7 @@
  */
 import {
   CONTROL_FAILED_MISS_TYPES,
-  isTwinMissRow,
+  missPressCount,
 } from "@gladlog/analysis/src/utils/castMissRows";
 
 import { type IRoundCtx, nameOf } from "./ctx";
@@ -62,13 +62,9 @@ export function run(ctx: IRoundCtx): void {
             nameOf(m.spellId, m.spellName ?? "") === spellName,
         )
         .sort((x, y) => x.timestamp - y.timestamp);
-      // the producer's own press rule: a row that is the twin of one already
-      // counted is that press
-      const counted: any[] = [];
-      for (const m of rows)
-        if (!counted.some((r) => isTwinMissRow(r, m, ctx.start)))
-          counted.push(m);
-      const presses = counted.length;
+      // the producer's own press rule (`missPressCount`): a row that is the
+      // twin of an earlier one is that press
+      const presses = missPressCount(rows, ctx.start);
       if (presses === 0 || printed === presses) continue;
       ctx.violate(
         "kitAimedCount",

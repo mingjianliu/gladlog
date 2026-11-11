@@ -28,7 +28,7 @@ import { buildAuraIntervals } from "./auraIntervals";
 import { hardCcAuraAt } from "./cannotCastIntervals";
 import {
   CONTROL_FAILED_MISS_TYPES,
-  isTwinMissRow,
+  missPressCount,
   missReportsControl,
 } from "./castMissRows";
 import {
@@ -704,10 +704,10 @@ const kitLandedClause = (who: "you" | "them") =>
  * fact8 D42 (b71edaa9 r0): a hunter's Intimidation MISS and Freezing Trap
  * IMMUNE at the owner, and a Howl of Terror IMMUNE, on no entry of a list
  * headed "threats to you".
- * Counted per press: a row that is the twin of one already counted
- * (`isTwinMissRow`, the `[CC NOT LANDED]` reading — fact12 D30, ee79ddb7 r0
- * 0:45: one Intimidation logged IMMUNE under 474421 and 24394 read
- * "aimed at them 2×") is that press.
+ * Counted per press (`missPressCount`): a row that is the twin of an
+ * earlier one (`isTwinMissRow`, the `[CC NOT LANDED]` reading — fact12 D30,
+ * ee79ddb7 r0 0:45: one Intimidation logged IMMUNE under 474421 and 24394
+ * read "aimed at them 2×") is that press.
  */
 export function aimedControlsForKit(
   unit: Pick<ICombatUnit, "missesIn">,
@@ -718,10 +718,7 @@ export function aimedControlsForKit(
 ): IKitLandedControl[] {
   const out: IKitLandedControl[] = [];
   const units = allUnits ? [...allUnits] : undefined;
-  const counted = new Map<
-    IKitLandedControl,
-    NonNullable<typeof unit.missesIn>
-  >();
+  const rows = new Map<IKitLandedControl, NonNullable<typeof unit.missesIn>>();
   for (const m of unit.missesIn ?? []) {
     if (!m.spellId || !CONTROL_FAILED_MISS_TYPES.has(m.missType)) continue;
     if (!missReportsControl(m.spellId)) continue;
@@ -735,10 +732,7 @@ export function aimedControlsForKit(
       (l) => l.enemyName === enemy.name && l.spellName === spellName,
     );
     if (seen) {
-      const rows = counted.get(seen)!;
-      if (rows.some((r) => isTwinMissRow(r, m, fromMs))) continue;
-      rows.push(m);
-      seen.count++;
+      rows.get(seen)!.push(m);
     } else {
       const category = DR_CATEGORY_MAP[m.spellId];
       const entry: IKitLandedControl = {
@@ -749,9 +743,10 @@ export function aimedControlsForKit(
         count: 1,
       };
       out.push(entry);
-      counted.set(entry, [m]);
+      rows.set(entry, [m]);
     }
   }
+  for (const [entry, own] of rows) entry.count = missPressCount(own, fromMs);
   return out;
 }
 

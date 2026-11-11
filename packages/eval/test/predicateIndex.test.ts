@@ -1803,6 +1803,11 @@ const INDEX: PredicateRow[] = [
     mod: castMissRows,
   },
   {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "missPressCount",
+    mod: castMissRows,
+  },
+  {
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "limitedImmunitySchoolMask",
     mod: enemyDefensives,
