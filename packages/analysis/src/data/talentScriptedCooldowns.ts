@@ -129,6 +129,14 @@ export interface IEventCooldownReduction {
   /** With `triggerHitIds`: at most this many hits of one use count (the
    * talent's "up to N sec" cap ÷ `seconds`). */
   maxHitsPerUse?: number;
+  /** With `triggerHitIds`: several uses can land in ONE instant (Dragonrage
+   * exhales Pyres at 3 enemies, each exploding on everyone near it), so a
+   * second row on a unit inside the use window is that unit struck by
+   * another use, not a re-logged hit: the k-th row on a unit belongs to the
+   * k-th use, and each use credits each unit once and caps on its own
+   * (`maxHitsPerUse`). This is the fewest credits the rows allow — the uses
+   * are nested, so the cap bites as early as it can. */
+  simultaneousUses?: boolean;
   /** A talent worded "when X fades": the unit's own SPELL_SUMMON rows of
    * these ids drop it, `summonFadeMs` after the summon (`eventTriggerTimesMs`). */
   triggerSummonIds?: readonly string[];
@@ -806,6 +814,7 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     triggerCastIds: [],
     triggerHitIds: ["357212"],
     maxHitsPerUse: 5,
+    simultaneousUses: true,
     seconds: 0.4,
     setBonus: DEVASTATION_4PC_CAUSALITY,
     note: "Causality — Fire Breath / Eternity Surge −0.4 s per enemy struck by Pyre (≤ 2 s)",
@@ -1404,6 +1413,7 @@ export function eventTriggerTimesMs(
     | "triggerCastIds"
     | "triggerHitIds"
     | "maxHitsPerUse"
+    | "simultaneousUses"
     | "triggerSummonIds"
     | "summonFadeMs"
     | "triggerInterruptIds"
@@ -1497,18 +1507,26 @@ export function eventTriggerTimesMs(
     // logged row: a second row on the same unit inside the use (a hit and
     // the part of it a shield soaked, a re-logged hit) is the same enemy
     // (codex review 45-FT-101, 2026-10-11).
-    let hitUnits = new Set<string>();
+    // unit → its rows inside the current use window; with
+    // `simultaneousUses` the k-th row of a unit is the k-th use's hit on it
+    let rowsOfUnit = new Map<string, number>();
+    // use index → units that use has credited
+    let creditedOfUse: number[] = [];
     for (const { t, dest } of hits) {
       if (t - useStart > EVENT_HIT_SAME_USE_MS) {
         useStart = t;
-        hitUnits = new Set();
+        rowsOfUnit = new Map();
+        creditedOfUse = [];
       }
       // a row that names no destination is not evidence of another enemy
       // (the parser allows an empty one — review 40-FT-72)
-      if (!dest || hitUnits.has(dest)) continue;
-      if (hitUnits.size < cap) {
+      if (!dest) continue;
+      const use = rowsOfUnit.get(dest) ?? 0;
+      if (use > 0 && !r.simultaneousUses) continue;
+      rowsOfUnit.set(dest, use + 1);
+      if ((creditedOfUse[use] ?? 0) < cap) {
         out.push(t);
-        hitUnits.add(dest);
+        creditedOfUse[use] = (creditedOfUse[use] ?? 0) + 1;
       }
     }
   }

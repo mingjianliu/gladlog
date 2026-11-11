@@ -778,6 +778,47 @@ describe('eventTriggerTimesMs — one reading of "a trigger happened" (FT F20)',
     });
     expect(seconds(u)).toEqual([10.3, 10.32]);
   });
+  it("Pyres landing in one instant are separate uses: the k-th row on a unit is the k-th Pyre, each capped on its own (T89)", () => {
+    const pyre = EVENT_COOLDOWN_REDUCTIONS["375777:pyre"]!;
+    expect(pyre).toMatchObject({ maxHitsPerUse: 5, simultaneousUses: true });
+    // Dragonrage: 3 Pyres on 5 units in one millisecond, and one unit
+    // struck by a 4th
+    const hits = (unitIds: string[], atMs: number) =>
+      unitIds.map((destUnitId) =>
+        row("SPELL_DAMAGE", "357212", atMs, { destUnitId }),
+      );
+    const five = ["e1", "e2", "e3", "e4", "e5"];
+    const u = unit({
+      damage: [
+        ...hits(five, 1000),
+        ...hits(five, 1000),
+        ...hits(five, 1001),
+        ...hits(["e1"], 1001),
+      ],
+    });
+    expect(seconds(u, pyre)).toHaveLength(16);
+    // seven units under one Pyre: its cap of five; a second Pyre on the
+    // same seven caps on its own
+    const seven = [...five, "e6", "e7"];
+    expect(seconds(unit({ damage: hits(seven, 1000) }), pyre)).toHaveLength(5);
+    expect(
+      seconds(
+        unit({ damage: [...hits(seven, 1000), ...hits(seven, 1000)] }),
+        pyre,
+      ),
+    ).toHaveLength(10);
+    // a row without the flag keeps one credit per unit per use
+    expect(
+      seconds(
+        unit({
+          damage: [
+            row("SPELL_DAMAGE", "265157", 1000, { destUnitId: "e1" }),
+            row("SPELL_DAMAGE", "265157", 1000, { destUnitId: "e1" }),
+          ],
+        }),
+      ),
+    ).toHaveLength(1);
+  });
   it("a hit a shield soaked whole counts, an immune target does not", () => {
     const u = unit({
       damage: [row("SPELL_DAMAGE", "265157", 10_300, { destUnitId: "e1" })],
