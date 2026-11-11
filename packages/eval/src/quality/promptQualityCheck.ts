@@ -208,7 +208,12 @@ import {
   specToString,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
-import { OWNER_AOE_CC_NO_PLAYER_TAG } from "@gladlog/analysis/src/utils/drAnalysis";
+import {
+  DR_RESET_MS_121,
+  DR_RESET_MS_PRE_121,
+  drDurationFactor,
+  OWNER_AOE_CC_NO_PLAYER_TAG,
+} from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   AURA_EMPOWERING_WALLS,
   deferralWallNames,
@@ -2701,9 +2706,15 @@ export function checkDeathTrinketCcConsistency(lines: string[]): string[] {
  * `| 3s`. Read back from the text: a `[TRINKET] P used PvP trinket` at
  * second s, and a `[DISARM] P` line printing a bare `| Ns` whose rendered end
  * (m:ss + N) is within a second of s, cut short of the disarm's official
- * length undiminished (the producer's `ranFullLength` reading,
- * `ccFullDurationSeconds`) by more than a second. A `[TRINKET]` line that
- * names another disarm is that disarm's press.
+ * length (the producer's `ranFullLength` reading, `ccFullDurationSeconds`)
+ * by more than a second. A `[TRINKET]` line that names another disarm is
+ * that disarm's press.
+ *
+ * GH #167 item 15: the official length is the diminished one when another
+ * `[DISARM]` line of the same unit ended inside the DR reset before this one
+ * (or started in its second) — wide, 15 lines / 5 facts, every one a second
+ * disarm that ran its halved 2.0–2.5 s and a press up to a second later
+ * (a Dismantle 9 s after a Disarm ended: APPLIED → REMOVED 2.52 s).
  */
 const DISARM_LINE =
   /^\s*(\d+):(\d{2})\s+\[DISARM\]\s+(\S+) ← (.+?) \(by .*?\) \| (.*)$/;
@@ -2724,6 +2735,33 @@ function disarmOfficialSeconds(name: string): number | undefined {
   }
   return disarmOfficialByName.get(name);
 }
+interface IRenderedDisarm {
+  unit: string;
+  at: number;
+  /** rendered end second; absent when the round ended on it */
+  end?: number;
+}
+/** The DR reset on the rendered grid: the longer of the two eras' resets (the
+ *  text carries no date) plus the second a floored start and a rounded length
+ *  can hide. */
+const DISARM_DR_RESET_GRID_S =
+  Math.max(DR_RESET_MS_PRE_121, DR_RESET_MS_121) / 1000 + 1;
+/** Another `[DISARM]` line of the same unit that puts line `i`'s disarm on
+ *  the 50 % tier: one that started in its second, or ended at most the DR
+ *  reset before it. */
+function disarmDiminished(
+  disarms: ReadonlyMap<number, IRenderedDisarm>,
+  i: number,
+): boolean {
+  const d = disarms.get(i)!;
+  for (const [j, o] of disarms) {
+    if (j === i || o.unit !== d.unit || o.at > d.at) continue;
+    if (o.at === d.at) return true;
+    if (o.end === undefined || d.at - o.end <= DISARM_DR_RESET_GRID_S)
+      return true;
+  }
+  return false;
+}
 export function checkDisarmTrinketTail(lines: string[]): string[] {
   const presses = new Map<string, Array<{ s: number; outOf?: string }>>();
   for (const line of lines) {
@@ -2734,6 +2772,22 @@ export function checkDisarmTrinketTail(lines: string[]): string[] {
       { s: Number(t[1]) * 60 + Number(t[2]), outOf: t[4] },
     ]);
   }
+  const disarms = new Map<number, IRenderedDisarm>();
+  lines.forEach((line, i) => {
+    const d = line.match(DISARM_LINE);
+    if (!d) return;
+    const span = d[5]!.match(
+      /^(?:trinket broke this disarm after )?(<1|\d+)s\b/,
+    );
+    const at = Number(d[1]) * 60 + Number(d[2]);
+    disarms.set(i, {
+      unit: d[3]!,
+      at,
+      ...(span
+        ? { end: at + (span[1] === "<1" ? 0 : Number(span[1])) }
+        : {}),
+    });
+  });
   const failures: string[] = [];
   lines.forEach((line, i) => {
     const d = line.match(DISARM_LINE);
@@ -2744,8 +2798,11 @@ export function checkDisarmTrinketTail(lines: string[]): string[] {
     if (!span) return; // still on at the round end: nothing cut it
     const at = Number(d[1]) * 60 + Number(d[2]);
     const n = span[1] === "<1" ? 0 : Number(span[1]);
-    const official = disarmOfficialSeconds(d[4]!);
-    if (official === undefined || official <= n + 1) return;
+    const full = disarmOfficialSeconds(d[4]!);
+    if (full === undefined) return;
+    const official =
+      full * (disarmDiminished(disarms, i) ? drDurationFactor("50%") : 1);
+    if (official <= n + 1) return;
     const press = (presses.get(d[3]!) ?? []).find(
       (p) =>
         p.s >= at &&

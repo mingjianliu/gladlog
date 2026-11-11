@@ -58,6 +58,48 @@ describe("checkDisarmTrinketTail (D9)", () => {
     expect(checkDisarmTrinketTail([bare, trinket])).toHaveLength(1);
     expect(checkDisarmTrinketTail([tail, trinket])).toEqual([]);
   });
+  it("GH #167 item 15: a second disarm inside the DR reset ran its halved length", () => {
+    // wide 229-6: Disarm 0:15 for 5 s, Dismantle 0:29 APPLIED → REMOVED
+    // 2.52 s, the press a second later
+    const first = "0:15  [DISARM]   2(SHunter) ← Disarm (by 5(AWarrior)) | 5s";
+    const second =
+      "0:29  [DISARM]   2(SHunter) ← Dismantle (by 6(ARogue)) | 3s";
+    const press = "0:33  [TRINKET]   2(SHunter) used PvP trinket";
+    expect(checkDisarmTrinketTail([first, second, press])).toEqual([]);
+    // the same second disarm with no first one was cut short
+    expect(checkDisarmTrinketTail([second, press])).toHaveLength(1);
+    // a first disarm on another player, or one past the reset, does not halve it
+    expect(
+      checkDisarmTrinketTail([
+        "0:15  [DISARM]   3(RDruid) ← Disarm (by 5(AWarrior)) | 5s",
+        second,
+        press,
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkDisarmTrinketTail([
+        "0:02  [DISARM]   2(SHunter) ← Disarm (by 5(AWarrior)) | 5s",
+        second,
+        press,
+      ]),
+    ).toHaveLength(1);
+    // two disarms landing in one second: either may be the halved one
+    expect(
+      checkDisarmTrinketTail([
+        "2:18  [DISARM]   2(SHunter) ← Dismantle (by 6(ARogue)) | 2s",
+        "2:18  [DISARM]   2(SHunter) ← Disarm (by 5(AWarrior)) | 3s",
+        "2:21  [TRINKET]   2(SHunter) used PvP trinket",
+      ]),
+    ).toEqual([]);
+    // a halved disarm cut well short of its halved length still fails
+    expect(
+      checkDisarmTrinketTail([
+        first,
+        "0:29  [DISARM]   2(SHunter) ← Dismantle (by 6(ARogue)) | <1s",
+        "0:29  [TRINKET]   2(SHunter) used PvP trinket",
+      ]),
+    ).toHaveLength(1);
+  });
   it("a disarm that ran its length, a press on another player, or one long after, does not", () => {
     const full = "0:09  [DISARM]   2(SHunter) ← Disarm (by 5(AWarrior)) | 5s";
     expect(checkDisarmTrinketTail([full, trinket])).toEqual([]);
