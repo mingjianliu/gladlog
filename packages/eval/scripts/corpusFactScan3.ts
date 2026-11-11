@@ -67,6 +67,7 @@ import {
   drCategoryOfCast,
   getDRCategory,
 } from "@gladlog/analysis/src/utils/drAnalysis";
+import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { LogEvent } from "@gladlog/parser-compat";
@@ -705,6 +706,7 @@ function runRound(ctx: IContext): void {
   }
   const KA_RE =
     /^\s+\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: (.+)$/;
+  let attempts: ReturnType<typeof extractKillAttempts> | undefined;
   for (const l of lines) {
     const m = KA_RE.exec(l);
     if (!m) continue;
@@ -733,13 +735,32 @@ function runRound(ctx: IContext): void {
         .sort((x, y) => x - y)[0];
       if (press !== undefined) a = press;
     }
+    // the attempt's own bounds, to the ms (`extractKillAttempts`, the
+    // producer's `ofThisAttempt`: a control on the target inside [from, to]).
+    // The rendered seconds alone are up to a second wider on each side —
+    // T85, wide s1/37 r2 0:17: a Strangulate that landed 0.25 s after the
+    // anchoring stun came off, in the bracket's last rendered second, read as
+    // one of the attempt's (the reading scan5/fact10 already takes, GH #191)
+    attempts ??= extractKillAttempts(
+      players.filter((u) => u.reaction === owner.reaction),
+      enemies,
+      legacy,
+    );
+    const attempt = attempts.find(
+      (x) =>
+        x.targetName === m[5] &&
+        Math.floor(x.fromSeconds) === Number(m[1]) * 60 + Number(m[2]) &&
+        Math.floor(x.toSeconds) === Number(m[3]) * 60 + Number(m[4]),
+    );
+    const toMs = attempt ? start + attempt.toSeconds * 1000 : b;
+    if (attempt && opener === undefined) a = start + attempt.fromSeconds * 1000;
     bump("sanctuaryKillAttempt");
     const hit = sanct.find(
       (x) =>
         x.holder.id === target.id &&
         x.ms >= a &&
         x.ms <= b + 5000 &&
-        x.appliedMs <= b,
+        x.appliedMs <= toMs,
     );
     if (hit)
       violate(

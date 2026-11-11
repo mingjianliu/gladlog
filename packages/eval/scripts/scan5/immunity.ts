@@ -633,8 +633,7 @@ export function run(ctx: IRoundCtx): void {
         const next = Math.min(
           ...successesOf(u)
             .filter(
-              (x) =>
-                String(x.spellId) === String(c.spellId) && tsOf(x) > t + 5,
+              (x) => String(x.spellId) === String(c.spellId) && tsOf(x) > t + 5,
             )
             .map(tsOf),
         );
@@ -811,6 +810,18 @@ export function run(ctx: IRoundCtx): void {
         );
         continue;
       }
+      // two presses of one spell in one second, one landed and one refused,
+      // are two lines of that second: the refused one is tagged (T85, wide
+      // s2/51 r1 0:24: Void Blast hit at 24.118 s, refused at 24.837 s)
+      const refusedThen = successesOf(u).filter(
+        (o: any) =>
+          nameOf(o.spellId, o.spellName) === name &&
+          fmtS(rel(tsOf(o))) === sec &&
+          !isNoPressRow(o, rows) &&
+          refused(u, o),
+      ).length;
+      if (pressLines.filter((l) => l.includes("[IMMUNE")).length >= refusedThen)
+        continue;
       for (const pl of pressLines)
         if (!pl.includes("[IMMUNE"))
           ctx.violate(

@@ -196,7 +196,10 @@ import {
 import { groundingRedirects } from "@gladlog/analysis/src/utils/groundingRedirects";
 import { PRESS_ONLY_TAG } from "@gladlog/analysis/src/utils/killWindowFacts";
 import { isOffListPressId } from "@gladlog/analysis/src/utils/offListPress";
-import { OVERRIDE_VARIANT_SHARES_BY_ERA } from "@gladlog/analysis/src/utils/overrideVariantEra";
+import {
+  OVERRIDE_VARIANT_SHARES_BY_ERA,
+  variantSharesCooldownAt,
+} from "@gladlog/analysis/src/utils/overrideVariantEra";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/talents";
 
@@ -725,8 +728,13 @@ function exposureThreatOnFormHealer(ctx: IRoundCtx): void {
 }
 
 function variantSpentButton(ctx: IRoundCtx): void {
+  // the product's own dated reading (`variantSharesCooldownAt`, `logDatedAt`:
+  // a log inside the zone-uncertainty window before the cutover reads the
+  // `since` side) — the raw cutover alone called a log 9.7 h before it
+  // "pre-cutover" while the product, by its signed rule, read it shared
+  // (T85, wide s2/34)
   const dated = Object.entries(OVERRIDE_VARIANT_SHARES_BY_ERA).filter(
-    ([, d]) => !d.before && ctx.start < d.cutoverEpochMs,
+    ([variant, d]) => !d.before && !variantSharesCooldownAt(variant, ctx.start),
   );
   if (dated.length === 0) return;
   for (const [variant] of dated) {

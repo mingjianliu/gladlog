@@ -78,6 +78,7 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { parryStopsAttack } from "@gladlog/analysis/src/data/spellParry";
+import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
   COPY_CAST_IDS,
   pressImpactRow,
@@ -89,6 +90,10 @@ import {
 import { charmedAt } from "@gladlog/analysis/src/utils/charmedPlayer";
 import { isEnemyCdWindowSpell } from "@gladlog/analysis/src/utils/cooldowns";
 import { spellNameKey } from "@gladlog/analysis/src/utils/damagePress";
+import {
+  KW_UNTARGETABLE_AURA_IDS,
+  PRESS_REFRESH_PAIR_MS,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   isExternalSaveId,
   KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
@@ -230,6 +235,10 @@ const ev = (a: any): string => a.logLine?.event;
 const tsOf = (a: any): number => a.logLine?.timestamp ?? a.timestamp;
 const APPLIED = LogEvent.SPELL_AURA_APPLIED as string;
 const REMOVED = LogEvent.SPELL_AURA_REMOVED as string;
+const REFRESH = LogEvent.SPELL_AURA_REFRESH as string;
+/** how far back a save's press can sit from a row that re-lists it (its
+ *  aura never taken off in between) */
+const RELISTED_SAVE_LOOKBACK_MS = 30_000;
 const SUCCESS = LogEvent.SPELL_CAST_SUCCESS as string;
 const ABSORBED = LogEvent.SPELL_ABSORBED as string;
 /** "0.87M" / "110k" / "950" → its value and half its last printed digit */
@@ -849,11 +858,19 @@ function runRound(ctx: IContext): void {
         const ts = tsOf(a);
         if (ts < start || ts > end || ts >= dies) continue;
         const name = nameOf(id, a.spellName ?? "");
+        // a press beside the row — or an earlier press whose aura the log
+        // never took off before this row: the APPLIED re-lists a save that
+        // went up at that cast, unseen (T85, wide s0/49 r4: Pain Suppression
+        // cast 78.0 s, listed 81.2 s, off 86.0 s = cast + 8 s; the line is
+        // at the cast)
         const pressed = castsOf(e).some(
           (c) =>
             nameOf(String(c.spellId), c.spellName ?? "") === name &&
-            tsOf(c) >= ts - 3000 &&
-            tsOf(c) <= ts + 1000,
+            tsOf(c) <= ts + 1000 &&
+            (tsOf(c) >= ts - 3000 ||
+              (tsOf(c) >= ts - RELISTED_SAVE_LOOKBACK_MS &&
+                (c.destUnitId === mate.id || !c.destUnitId) &&
+                (lastRemoved.get(id) ?? -Infinity) < tsOf(c))),
         );
         if (pressed) continue;
         bump("enemyExternalForward");
@@ -998,6 +1015,11 @@ function runRound(ctx: IContext): void {
           ev(x) === APPLIED && x.srcUnitId === u.id && x.destUnitId === u.id,
       );
       for (const id of Object.keys(ENEMY_IMMUNITY_SAVE_AURAS)) {
+        // not a save the product holds "in hand": it ends `defenseless`
+        // only while its aura is up (Mass Invisibility, ruling P-b8
+        // 2026-10-01, kept 2026-10-22 — `KW_UNTARGETABLE_AURA_IDS`; T85,
+        // wide s0/174 r1: `defenseless 0:54–1:00`, pressed at 1:01)
+        if (KW_UNTARGETABLE_AURA_IDS.has(id)) continue;
         const cd = official[id] as { cooldownSeconds?: number } | undefined;
         const cdS = cd?.cooldownSeconds ?? 0;
         if (cdS <= 0) continue;
@@ -1605,7 +1627,38 @@ function runRound(ctx: IContext): void {
           tsOf(y) > tsOf(on),
       );
       const a = tsOf(on);
-      const b = off ? tsOf(off) : a + Number(m[4]) * 1000;
+      // a second press ends the first's line (`splitAtRepressRefresh`: a
+      // REFRESH its source logged with a cast of the spell) — T85, wide
+      // s0/64 r6: Pain Suppression pressed 73.5 s and 79.1 s, off 87.1 s,
+      // printed as 5.6 s and 8.0 s
+      const src = units.find((u) => u.id === on.srcUnitId);
+      const pressedNear = (u: any, at: number, within: number) =>
+        castsOf(u).some(
+          (c) =>
+            String(c.spellId) === String(on.spellId) &&
+            Math.abs(tsOf(c) - at) <= within,
+        );
+      const repress = rows.find(
+        (y) =>
+          ev(y) === REFRESH &&
+          String(y.spellId) === String(on.spellId) &&
+          y.srcUnitId === on.srcUnitId &&
+          (!off || tsOf(y) < tsOf(off)) &&
+          !!src &&
+          // past the start's pairing window any cast beside the REFRESH
+          // cuts; inside it only two tightly paired presses do (the
+          // producer's two cases)
+          (tsOf(y) > a + SAVE_CAST_AURA_PAIR_S * 1000
+            ? pressedNear(src, tsOf(y), SAVE_CAST_AURA_PAIR_S * 1000)
+            : tsOf(y) > a + 2 * PRESS_REFRESH_PAIR_MS &&
+              pressedNear(src, a, PRESS_REFRESH_PAIR_MS) &&
+              pressedNear(src, tsOf(y), PRESS_REFRESH_PAIR_MS)),
+      );
+      const b = repress
+        ? tsOf(repress)
+        : off
+          ? tsOf(off)
+          : a + Number(m[4]) * 1000;
       for (const part of m[5]!.split("; ")) {
         const p =
           /^(\d+)\([^)]*\) [\d.]+[kM] on target(?: \(\+([\d.]+[kM]) absorbed)?/.exec(

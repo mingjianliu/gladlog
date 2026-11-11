@@ -2032,7 +2032,7 @@ export function saveAuraIntervals(
 }
 
 /** A cast row and the REFRESH it makes share a millisecond or so. */
-const PRESS_REFRESH_PAIR_MS = 20;
+export const PRESS_REFRESH_PAIR_MS = 20;
 
 /**
  * Is the cast at `pressS` a press landing on a copy of the aura that was

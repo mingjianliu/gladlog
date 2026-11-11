@@ -54,6 +54,7 @@ import {
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { isButtonPress } from "@gladlog/analysis/src/utils/castCommitSpans";
+import { stasisReplayWindows } from "@gladlog/analysis/src/utils/combatStates";
 import {
   ENEMY_DEF_TAG_NAME_RE_SRC,
   SAVE_AURA_END_UNSEEN_IDS,
@@ -310,13 +311,20 @@ function channelOutlived(ctx: IRoundCtx, line: string): void {
   const at = press ? tsOf(press) : startRow ? tsOf(startRow) : undefined;
   if (at === undefined) return;
   const end = at + Number(m[3]) * 1000;
+  const replays = stasisReplayWindows(ctx.owner);
   const inside = ((ctx.owner.spellCastEvents ?? []) as any[]).find(
     (c) =>
       (ev(c) === "SPELL_CAST_START" ||
         // a cast row with no DB2 SpellCooldowns row is no button press (a
         // pet command: Command Demon's Spell Lock 119910 inside Dark
         // Harvest, its ticks running on — `isButtonPress`, codex 20-F25-01)
-        (ev(c) === SUCCESS && isButtonPress(String(c.spellId)))) &&
+        (ev(c) === SUCCESS &&
+          isButtonPress(String(c.spellId)) &&
+          // Stasis letting a stored spell go is no press either: the
+          // channel runs on (`stasisReplayWindows`; T85, wide s0/200 r3: a
+          // Dream Breath row 6 ms after the ready aura ran out, Emerald
+          // Communion's aura and heal ticks going on to the printed 3.6 s)
+          !replays.some((w) => tsOf(c) >= w.from && tsOf(c) <= w.to))) &&
       c.srcUnitId === ctx.owner.id &&
       nameOf(c.spellId, c.spellName ?? "") !== m[2] &&
       tsOf(c) > at + 100 &&

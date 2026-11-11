@@ -57,7 +57,7 @@ const WASTE_MIN_CASTS: Record<IDefenseWindow["verdict"], number> = {
 const HIGH_VALUE_DAMAGE_SHARE = 0.05;
 /** A hold's own SPELL_CAST_SUCCESS sits this close to its EMPOWER_START —
  * `pressBehindDamageOf`'s hold-start test. */
-const EMPOWER_HOLD_ROW_MS = 500;
+export const EMPOWER_HOLD_ROW_MS = 500;
 
 interface IOffensiveWasteCast {
   spellId: string;

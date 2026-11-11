@@ -49,12 +49,14 @@ import {
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { officialDurationS } from "@gladlog/analysis/src/utils/auraIntervals";
 import { CAST_INTERRUPTED_REASONS } from "@gladlog/analysis/src/utils/castBarOutcomes";
+import { empowerSpans } from "@gladlog/analysis/src/utils/castCommitSpans";
 import {
   COMPANION_CAST_ROW_MS,
   COPY_CAST_IDS,
   pressImpactRow,
 } from "@gladlog/analysis/src/utils/castPress";
 import { selectPressureWindows } from "@gladlog/analysis/src/utils/cooldowns";
+import { spellNameKey } from "@gladlog/analysis/src/utils/damagePress";
 import {
   canDefensiveCleanse,
   canOffensivePurge,
@@ -70,7 +72,9 @@ import {
   hasLineOfSight,
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import {
+  EMPOWER_HOLD_ROW_MS,
   landedThroughWall,
+  pressLandingCaster,
   withoutDeferralTag,
 } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { LOS_SWEEP_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
@@ -450,6 +454,8 @@ function checkIntoDefense(ctx: IRoundCtx): void {
         printedOf.set(p[1]!, (printedOf.get(p[1]!) ?? 0) + Number(p[2] ?? 1));
     }
     ctx.bump("intoDefenseLanded", printedOf.size);
+    const holds = empowerSpans(caster) ?? [];
+    const landingCaster = pressLandingCaster(caster, ctx.units);
     const countsOf = (iv: (typeof ivs)[number]) => {
       const { fromMs, toMs } = iv;
       return [...printedOf].map(([spell, printed]) => {
@@ -479,11 +485,35 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                   Math.abs(tsOf(o) - tsOf(c)) <= COMPANION_CAST_ROW_MS,
               ),
           )
-          .map((c: any) => tsOf(c) as number);
+          // an empowered spell goes off at its release, and a hold the log
+          // never shows released fired nothing — the producer's reading
+          // (`empowerSpans`; T85, wide s1/189 r1: an Eternity Surge held from
+          // 110.0 s, released 110.9 s, hit at 111.7 s inside a Time Dilation
+          // that went up at 111.2 s)
+          .flatMap((c: any) => {
+            const t = tsOf(c) as number;
+            const key = spellNameKey(c.spellId, c.spellName);
+            const hold = holds.find(
+              (h) =>
+                spellNameKey(h.spellId, h.spellName) === key &&
+                Math.abs(h.startMs - t) <= EMPOWER_HOLD_ROW_MS,
+            );
+            if (hold) return hold.interrupted ? [] : [hold.endMs];
+            return ((caster.empowerStarts ?? []) as any[]).some(
+              (st) =>
+                spellNameKey(st.spellId, st.spellName) === key &&
+                Math.abs(tsOf(st) - t) <= EMPOWER_HOLD_ROW_MS,
+            )
+              ? []
+              : [t];
+          });
         // one row per hit: a hit eaten whole writes SPELL_MISSED and
         // SPELL_ABSORBED; a DoT or a channel lands as its aura going on, and
         // its later ticks, eaten or not, are nobody's press
-        const missed = ((caster.missesOut ?? []) as any[]).filter(
+        // …with its pets' misses: a press can land as the pet's row alone
+        // (`pressLandingCaster`; T85, wide s0/89 r3: a Wild Thrash whose
+        // only rows on the target are both pets' SPELL_MISSED)
+        const missed = ((landingCaster.missesOut ?? []) as any[]).filter(
           (d) =>
             d.destUnitId === target.id &&
             !(ev(d) as string).startsWith("SPELL_PERIODIC") &&
