@@ -46,6 +46,7 @@ import {
   renderedCcDuration,
 } from "../../utils/ccTrinketAnalysis";
 import {
+  canonicalSpellId,
   CD_INSTANT_SLACK_S,
   cdAvailableAt,
   cdCanHelpAnotherUnit,
@@ -73,6 +74,7 @@ import {
   getUnitPositionAtTime,
 } from "../../utils/losAnalysis";
 import { outgoingCcChainsWithDrHistory } from "../../utils/outgoingCcChains";
+import { offensiveCooldownIdAt } from "../../utils/overrideVariantEra";
 import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
 import {
@@ -545,10 +547,24 @@ export function syncWindowCdFor<T extends object>(
     Map<number, { marker: string; officialEndS: number }> | undefined;
   if (combat) {
     try {
+      // the timeline's rows of THIS cooldown, under whatever id each press
+      // logged: an override variant (Incarnation 390414 on a 102560 row) or
+      // an activation of the cooldown's effect (Radiant Glory's Avenging
+      // Wrath 454351 on a 31884 row) is the same cooldown (`sameCooldown`,
+      // the `[RES]` window's own key). Keyed on the exact id, such a press
+      // had no observed end and read its official length (GH #167 item 28,
+      // T65: an Avenging Wrath that ended at 29.4 s read 41.4 s and
+      // "entered" a healer lock from 36.6 s).
+      const cdId = String((cd as any).spellId);
+      const keyOf = (id: string) =>
+        canonicalSpellId(
+          offensiveCooldownIdAt(id, matchStartMs, owner?.spec) ?? id,
+          matchStartMs,
+        );
       const presses = (
         reconstructEnemyCDTimeline([owner], combat).players[0]?.offensiveCDs ??
         []
-      ).filter((c) => c.spellId === String((cd as any).spellId));
+      ).filter((c) => c.spellId === cdId || keyOf(c.spellId) === keyOf(cdId));
       castEndS = new Map(
         presses.map((c) => [
           Math.round(c.castTimeSeconds * 1000),
