@@ -25,12 +25,16 @@ const ENEMY_DEF_NO_PRESS =
 export function run(ctx: IRoundCtx): void {
   const C = "ledgerPressedNoPress";
   const noPress: Array<{ at: number; holder: string; wall: string }> = [];
+  // the ledger names its target by name alone: a name two units carry
+  // identifies neither, and the line is not judged (codex 85-tk-H-T49-1b #1)
+  const unitsNamed = (name: string): number =>
+    ctx.units.filter((u) => u.name === name).length;
   for (const l of ctx.lines) {
     const m = ENEMY_DEF_NO_PRESS.exec(l);
     if (!m) continue;
     const holder = ctx.unitOfPid(m[4] ?? m[2]);
     if (holder)
-      noPress.push({ at: secOf(m[1]!), holder: holder.name, wall: m[3]! });
+      noPress.push({ at: secOf(m[1]!), holder: holder.id, wall: m[3]! });
   }
   let head: number | undefined;
   let target: string | undefined;
@@ -48,12 +52,14 @@ export function run(ctx: IRoundCtx): void {
     }
     const p = BURST_PRESSED.exec(l);
     if (!p || head === undefined || target === undefined) continue;
+    if (unitsNamed(target) !== 1) continue;
+    const targetId = ctx.units.find((u) => u.name === target)!.id;
     ctx.bump(C);
     const at = head + Number(p[2]!.replace("<", ""));
     const hit = noPress.find(
       (n) =>
         n.wall === p[1] &&
-        n.holder === target &&
+        n.holder === targetId &&
         n.at >= at - 1.05 &&
         n.at <= at + 1.05,
     );

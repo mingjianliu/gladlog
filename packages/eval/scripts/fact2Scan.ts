@@ -1818,7 +1818,7 @@ function runRound(ctx: IContext): void {
         const tm = /^ {4}Target: (\S+) /.exec(l);
         if (tm) tgt = byName.get(tm[1]!);
         const im =
-          /Target had a major defensive up: (Greater Invisibility|Vanish|Mass Invisibility|Burrow) active ON THE TARGET (\d+\.\d)s of this burst \((already up|pressed (\d+\.\d)s after)/.exec(
+          /Target had a major defensive up: (Greater Invisibility|Vanish|Mass Invisibility|Burrow) active ON THE TARGET (\d+\.\d)s of this burst \((already up|(?:pressed )?(\d+\.\d)s after)/.exec(
             l,
           );
         if (!im || !tgt) continue;
