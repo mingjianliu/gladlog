@@ -286,6 +286,45 @@ describe("computeMitigationAudit(A 形态)", () => {
       expect(r).toMatchObject({ kind: "deferred", deferredAmount: 50_000 });
   });
 
+  // T60 (GH #202 item 1): the Holy Priest's proc Power Word: Shield is aura
+  // 1246768 (no cast row); Void Shield 1253593 and Unfolding Vision's copies
+  // are the pressed shield 17's DB2 family too. The audit listed 17 alone.
+  test("吸收盾:Power Word: Shield 的整个 DB2 族都进审计,不只是按键的 17", () => {
+    for (const [spellId, spellName] of [
+      ["17", "Power Word: Shield"],
+      ["1246768", "Power Word: Shield"],
+      ["1253593", "Void Shield"],
+      ["1300008", "Power Word: Shield (Unfolding Vision)"],
+      ["1300009", "Void Shield (Unfolding Vision)"],
+    ] as const) {
+      const victim = mkVictim(
+        "v1",
+        [{ atS: 55, amount: 100_000, school: "0x20" }],
+        [{ spellId, spellName, fromS: 52, toS: 58 }],
+      );
+      (victim as { absorbsIn: unknown[] }).absorbsIn = [
+        {
+          spellId,
+          spellName,
+          absorbedAmount: 50_000,
+          timestamp: 54_000,
+          logLine: { event: "SPELL_ABSORBED", timestamp: 54_000 },
+        },
+      ];
+      const { rows } = computeMitigationAudit(victim, combatOf(), 60);
+      expect(rows.filter((r) => r.spellId === spellId)).toMatchObject([
+        { kind: "absorb", activeOverlapS: 6, absorbedAmount: 50_000 },
+      ]);
+      // up and eating nothing: the row still says it was up
+      (victim as { absorbsIn: unknown[] }).absorbsIn = [];
+      expect(
+        computeMitigationAudit(victim, combatOf(), 60).rows.filter(
+          (r) => r.spellId === spellId,
+        ),
+      ).toMatchObject([{ kind: "mechanic", activeOverlapS: 6 }]);
+    }
+  });
+
   test("arith:反推只吃激活区间∩窗口∩schoolMask 命中的观测伤害", () => {
     const victim = mkVictim(
       "v1",

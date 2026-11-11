@@ -8,6 +8,7 @@ import {
   resolveMitigation,
 } from "../data/mitigationComponents";
 import { DEFLECTION_IDS } from "../data/mitigationData";
+import { OWN_SHIELD_RULING_FAMILY_IDS } from "../data/ownShieldLinks";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
@@ -106,6 +107,13 @@ const WHITELIST_IDS: ReadonlySet<string> = new Set<string>([
   // Attribution-only mitigation (stances, ally-maintained buffs) — see the
   // list's own comment for why it is separate from the other two.
   ...spellIdLists.attributedMitigationSpellIds,
+  // …and the whole DB2 family of the pressed shield that list names (Power
+  // Word: Shield 17): the Holy Priest's proc shield 1246768 (no cast row,
+  // GH #202 item 1), Void Shield 1253593 and Unfolding Vision's copies are
+  // the same shield under another id (`OWN_SHIELD_RULING_FAMILY_IDS`, DB2
+  // class mask). Keyed on 17 alone, a death under one of them printed no
+  // audit row (T60).
+  ...OWN_SHIELD_RULING_FAMILY_IDS,
 ]);
 /** The whitelist key an aura on the victim stands for — its own id or the
  * cast whose own effect it is (fact2 C10, `castKeyOfAura`): Rallying Cry
