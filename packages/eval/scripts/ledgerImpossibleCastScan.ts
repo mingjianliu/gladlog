@@ -17,6 +17,11 @@
  * (`earliestCooldownSeconds`, GH #106 step 3) allows is counted separately
  * as `floorExplained`.
  *
+ * Every record carries the `era` of its round (`logEraOf`: pre-12.1 /
+ * 12.1.0 / 12.1.5) and every spell's summary an `eras` split of its counts
+ * (GH #160 item 3): a cooldown a patch changed is one number per era, and a
+ * pooled count cannot say which side its impossible casts are on.
+ *
  * Usage:
  *   npx tsx packages/eval/scripts/ledgerImpossibleCastScan.ts --manifest <m> [--every 30] --out <file.jsonl>
  * Output: one JSON line per (round, unit, ledger entry) with ≥ 1 cast, and a
@@ -36,6 +41,7 @@ import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
 import { arg } from "./lib/cli";
+import { bumpEra, type LogEra, logEraOf } from "./lib/logEra";
 
 const manifest = arg("--manifest", "");
 const every = Number(arg("--every", "30"));
@@ -62,7 +68,13 @@ interface Agg {
   unitsWithImpossible: number;
   specs: Record<string, number>;
   cooldowns: Record<string, number>;
+  eras: Partial<Record<LogEra, IEraCounts>>;
 }
+type IEraCounts = Record<
+  "entries" | "casts" | "impossible" | "floorExplained",
+  number
+>;
+const eraTotals: Partial<Record<LogEra, IEraCounts>> = {};
 const agg = new Map<string, Agg>();
 let rounds = 0;
 let fileNo = 0;
@@ -92,6 +104,7 @@ for (const f of files) {
       continue;
     }
     rounds++;
+    const era = logEraOf(legacy.startTime);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const u of Object.values(legacy.units ?? {}) as any[]) {
       if (!u.info) continue;
@@ -147,7 +160,16 @@ for (const f of files) {
           unitsWithImpossible: 0,
           specs: {},
           cooldowns: {},
+          eras: {},
         };
+        const eraCounts: IEraCounts = {
+          entries: 1,
+          casts: times.length,
+          impossible: impossibleAt.length,
+          floorExplained,
+        };
+        bumpEra(a.eras, era, eraCounts);
+        bumpEra(eraTotals, era, eraCounts);
         a.entries++;
         a.casts += times.length;
         a.impossible += impossibleAt.length;
@@ -161,6 +183,7 @@ for (const f of files) {
           JSON.stringify({
             file: f,
             round: rounds,
+            era,
             unit: u.id,
             spec: u.spec,
             spellId: key,
@@ -199,6 +222,7 @@ console.log(
       rounds,
       totalCasts: rows.reduce((s, r) => s + r.casts, 0),
       totalImpossible: rows.reduce((s, r) => s + r.impossible, 0),
+      eras: eraTotals,
       spells: rows,
     },
     null,

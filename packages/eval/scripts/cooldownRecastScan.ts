@@ -33,6 +33,11 @@
  * runs from the press that spent its last charge: the next press over the
  * model's time to a charge back.
  *
+ * Every record carries the `era` of its round (`logEraOf`: pre-12.1 /
+ * 12.1.0 / 12.1.5) and every summary row an `eras` split — counts and the
+ * smallest model ratio per era (GH #160 item 3): a floor pooled over a patch
+ * that changed the cooldown is the shorter era's.
+ *
  * Usage:
  *   npx tsx packages/eval/scripts/cooldownRecastScan.ts --manifest <m> [--every 1] [--min-cd 8] [--spells <id>,…] [--no-gear] --out <file.jsonl> > summary.json
  * Output: one JSON line per (round, unit, spell) with ≥ 2 casts, and a
@@ -61,6 +66,7 @@ import { gunzipSync } from "zlib";
 
 import { chargeImpossibleAt, recastAggKey } from "./lib/chargeRecast";
 import { arg } from "./lib/cli";
+import { bumpEra, type LogEra, logEraOf } from "./lib/logEra";
 
 const manifest = arg("--manifest", "");
 const every = Number(arg("--every", "1"));
@@ -139,7 +145,19 @@ interface Agg {
   modelFloorExplained: number;
   modelRatios: number[];
   modelChargeRatios: number[];
+  eras: Partial<Record<LogEra, IEraCounts>>;
+  eraMinModelRatio: Partial<Record<LogEra, number>>;
 }
+type IEraCounts = Record<
+  | "records"
+  | "pairs"
+  | "impossible"
+  | "modelImpossible"
+  | "modelFloorExplained"
+  | "modelPairs",
+  number
+>;
+const eraTotals: Partial<Record<LogEra, IEraCounts>> = {};
 const agg = new Map<string, Agg>();
 let rounds = 0;
 let fileNo = 0;
@@ -169,6 +187,7 @@ for (const f of files) {
       continue;
     }
     rounds++;
+    const era = logEraOf(legacy.startTime);
     const endMs = roundEndMs(legacy);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const u of Object.values(legacy.units ?? {}) as any[]) {
@@ -219,6 +238,8 @@ for (const f of files) {
           modelFloorExplained: 0,
           modelRatios: [],
           modelChargeRatios: [],
+          eras: {},
+          eraMinModelRatio: {},
         };
         for (let i = cap; i < t.length; i++) {
           a.pairs++;
@@ -312,11 +333,28 @@ for (const f of files) {
         a.modelChargeRatios.push(...modelChargeRatios);
         a.records++;
         a.impossible += impossibleAt.length;
+        const eraCounts: IEraCounts = {
+          records: 1,
+          pairs: Math.max(0, t.length - cap),
+          impossible: impossibleAt.length,
+          modelImpossible: modelImpossibleAt.length,
+          modelFloorExplained,
+          modelPairs: modelRatios.length,
+        };
+        bumpEra(a.eras, era, eraCounts);
+        bumpEra(eraTotals, era, eraCounts);
+        if (modelRatios.length)
+          a.eraMinModelRatio[era] =
+            Math.round(
+              Math.min(a.eraMinModelRatio[era] ?? Infinity, ...modelRatios) *
+                1000,
+            ) / 1000;
         agg.set(key, a);
         lines.push(
           JSON.stringify({
             file: f,
             round: rounds,
+            era,
             unit: u.id,
             spec: u.spec,
             spellId: id,
@@ -394,6 +432,7 @@ console.log(
         (s, r) => s + r.modelFloorExplained,
         0,
       ),
+      eras: eraTotals,
       spells: rows,
     },
     null,
