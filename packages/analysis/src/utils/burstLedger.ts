@@ -634,9 +634,13 @@ export function analyzeBurstLedger(
           .filter(
             (e) =>
               e.noPressLogged &&
+              // by id: two enemies can carry one name (codex
+              // 85-tk-H-T49-1 #1); the name only when the event has no id
               (e.recipientId !== undefined
                 ? e.recipientId === target.id
-                : e.casterName === target.name),
+                : e.casterId !== undefined
+                  ? e.casterId === target.id
+                  : e.casterName === target.name),
           )
           .map((e) => ({ spellId: e.spellId, atS: e.atSeconds }));
         const atS = (startMs - combat.startTime) / 1000;

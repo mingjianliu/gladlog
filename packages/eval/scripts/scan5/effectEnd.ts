@@ -378,7 +378,7 @@ function wallHeldPastHold(ctx: IRoundCtx): void {
 
 const BURST_HEAD = /^\s*Burst #\d+ — (\d+:\d\d)–/;
 const UNSEEN_LINE =
-  /(.+?) active ON THE TARGET (\d+\.\d)s of this burst(?: \((already up|pressed (<?\d+\.\d)s after))?/;
+  /(.+?) active ON THE TARGET (\d+\.\d)s of this burst(?: \((already up|(?:pressed )?(<?\d+\.\d)s after))?/;
 const VANISH = "11327";
 const NO_UNIT = "0000000000000000";
 
