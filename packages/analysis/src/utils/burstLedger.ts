@@ -49,6 +49,7 @@ import {
   jukedByFakeText,
   jukedByStoppedChannelText,
   kickMissTag,
+  missedKickText,
 } from "./kickAudit";
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
@@ -1253,7 +1254,8 @@ export function formatBurstLedgerForContext(
             ? `${at} ${k.kickSpellName} → ${jukedByStoppedChannelText(k)}${missTag(k)}`
             : `${at} ${k.kickSpellName} → ${jukedByFakeText(k)}${missTag(k)}`;
         case "missed":
-          return `${at} ${k.kickSpellName} → hit nothing${missTag(k)}`;
+          // no "hit nothing" for a kick refused at a live cast (T52)
+          return `${at} ${k.kickSpellName} → ${`${missedKickText(k)}${missTag(k)}`.trim()}`;
         default:
           return `${at} ${k.kickSpellName} → outcome unknown (no cast-start data)${missTag(k)}`;
       }

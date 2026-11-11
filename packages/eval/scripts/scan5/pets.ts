@@ -84,7 +84,7 @@ const COMMAND_PAIR_MS = 500;
 const LABEL = String.raw`\d+\([A-Za-z]+\)`;
 const SUMMON_LABEL = String.raw`${LABEL}(?:'s (?:pet|guardian|totem))?`;
 const KICK_OWN_RE =
-  /^\s*(\d+:\d{2})\s+\[KICK\]\s+your (.+?) — (hit nothing|JUKED)/;
+  /^\s*(\d+:\d{2})\s+\[KICK\]\s+your (.+?) — (hit nothing|JUKED|\[)/;
 const KICKS_LEDGER_RE = /^\s*Kicks: (.*)$/;
 const LEDGER_ENTRY_RE = /^(\d+:\d{2}) (.+?) → (.*)$/;
 const OPENER_RE = new RegExp(

@@ -82,7 +82,7 @@ function pressIsSilence(
 }
 
 const KICK_MISS = /\[KICK\]\s+.*?'s (.+?) on \d+\([^)]*\) missed — IMMUNE/;
-const KICK_OWN = /\[KICK\]\s+your (.+?) (?:on .*)?— (?:hit nothing|missed)/;
+const KICK_OWN = /\[KICK\]\s+your (.+?) (?:on .*)?— (?:hit nothing|missed|\[)/;
 const UP = /enemy interrupts UP: ([^|]*)/;
 
 const secOfLine = (line: string): number | undefined => {

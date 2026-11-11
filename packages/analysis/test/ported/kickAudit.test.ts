@@ -145,6 +145,65 @@ describe("kickAudit — a pet's own kick (fact3 D28)", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]!.kickMiss?.missType).toBe("IMMUNE");
   });
+  it("T52 (codex 85-tk-F-T52-1 #1): the target's bar is read at the pet's refusal, not at the owner's command", () => {
+    const t = MATCH_START + 43_000;
+    const POLYMORPH = "118";
+    const run = (startMs: number, offMs: number) => {
+      const player = makeUnit("p1", {
+        name: "Warlock",
+        info,
+        spellCastEvents: [
+          makeSpellCastEvent(
+            COMMAND_DEMON,
+            t,
+            "e1",
+            "Enemy",
+            "p1",
+            "Warlock",
+            0,
+            "Spell Lock",
+          ),
+        ],
+      } as any);
+      const felhunter = pet(t + 476);
+      felhunter.missesOut = [
+        {
+          timestamp: t + 477,
+          spellId: SPELL_LOCK_PET,
+          srcUnitId: "pet1",
+          destUnitId: "e1",
+          destUnitName: "Enemy",
+          missType: "IMMUNE",
+        },
+      ] as any;
+      const begun = makeSpellCastEvent(
+        POLYMORPH,
+        startMs,
+        "e1",
+        "e1",
+        "e1",
+        "e1",
+      );
+      begun.logLine.event = LogEvent.SPELL_CAST_START;
+      const enemy = makeUnit("e1", {
+        name: "Enemy",
+        info,
+        castStartEvents: [begun],
+        spellCastEvents: [
+          makeSpellCastEvent(POLYMORPH, offMs, "p9", "Healer", "e1", "Enemy"),
+        ],
+      } as any);
+      const combat = {
+        ...makeCombat(),
+        units: { p1: player, pet1: felhunter, e1: enemy },
+      };
+      return analyzeKickAudit(player, [enemy], combat)[0]!;
+    };
+    // begun after the command, before the pet's row; off after it
+    expect(run(t + 200, t + 744).refusedAtCastSpellName).toBe("Polymorph");
+    // running at the command, over before the pet's row
+    expect(run(t - 800, t + 200).refusedAtCastSpellName).toBeUndefined();
+  });
 });
 
 describe("kickAudit", () => {

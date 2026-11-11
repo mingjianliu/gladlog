@@ -45,6 +45,17 @@ describe("checkOwnKickNotContradictedByInterrupt (fact6 D3)", () => {
     ).toHaveLength(1);
   });
 
+  it("the tag-only verdict of a kick refused at a live cast (T52) is read as not landed too", () => {
+    expect(
+      checkOwnKickNotContradictedByInterrupt([
+        ...roster,
+        "  Kicks: 2:41 Rebuke → [IMMUNE: Enemy-DunModr-EU]",
+        "2:41  [KICK]   your Rebuke on 5(AWarlock)'s pet — [IMMUNE: 5(AWarlock)'s pet]",
+        interrupt,
+      ]),
+    ).toHaveLength(2);
+  });
+
   it("the fixed shape passes: the kick reads as landed", () => {
     expect(
       checkOwnKickNotContradictedByInterrupt([

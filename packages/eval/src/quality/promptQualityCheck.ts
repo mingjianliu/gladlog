@@ -3820,11 +3820,14 @@ export function checkJukedKickNotAfterInterrupt(lines: string[]): string[] {
   return failures;
 }
 
-/** 1 = m:ss, 2 = the owner's kick; the audit said it stopped nothing. */
+/** 1 = m:ss, 2 = the owner's kick; the audit said it stopped nothing — a
+ * kick refused at a live cast prints its miss tag alone (`missedKickText`,
+ * pipeline T52). */
 const KICK_OWN_NOT_LANDED_LINE =
-  /^\s*(\d+:\d{2})\s+\[KICK\]\s+your (.+?)(?: on .+?)? — (?:hit nothing|JUKED)/;
+  /^\s*(\d+:\d{2})\s+\[KICK\]\s+your (.+?)(?: on .+?)? — (?:hit nothing|JUKED|\[)/;
 /** One `Kicks:` entry (burst ledger) whose verdict is "stopped nothing". */
-const KICKS_ENTRY_NOT_LANDED = /^(\d+:\d{2}) (.+?) → (?:hit nothing|JUKED)/;
+const KICKS_ENTRY_NOT_LANDED =
+  /^(\d+:\d{2}) (.+?) → (?:hit nothing|JUKED|\[)/;
 
 /**
  * The owner's kick the audit calls "hit nothing" / "JUKED" (the timeline's

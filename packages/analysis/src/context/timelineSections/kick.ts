@@ -27,6 +27,7 @@ import {
   jukedByFakeText,
   jukedByStoppedChannelText,
   kickMissTag,
+  missedKickText,
 } from "../../utils/kickAudit";
 import { petCommands } from "../../utils/petCommands";
 import { fmtTime } from "../../utils/renderGrid";
@@ -337,10 +338,11 @@ export function emitKickEntries(
           : jukedByFakeText(k)
         : k.beatenBy
           ? `hit nothing — ${resolveKicker(k.beatenBy.kickerName, k.beatenBy.kickerId)}'s ${k.beatenBy.kickSpellName} had interrupted ${k.beatenBy.interruptedSpellName ? `the ${k.beatenBy.interruptedSpellName}` : "the cast"} ${k.beatenBy.agoS < 0.1 ? "under 0.1s" : `${(Math.floor(k.beatenBy.agoS * 10 + 1e-9) / 10).toFixed(1)}s`} earlier`
-          : "hit nothing";
+          : missedKickText(k);
+    // a kick refused at a live cast has no outcome words: the tag alone
     addEntry(
       k.atSeconds,
-      `${fmtTime(k.atSeconds)}  [KICK]   your ${k.kickSpellName}${on} — ${outcome}${kickMissTag(k, resolveKicker)}`,
+      `${fmtTime(k.atSeconds)}  [KICK]   your ${k.kickSpellName}${on} — ${`${outcome}${kickMissTag(k, resolveKicker)}`.trim()}`,
     );
   }
 }

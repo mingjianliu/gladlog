@@ -26,6 +26,7 @@ import {
   CHANNEL_STOPPED_MAX_SHARE,
   jukedByStoppedChannelText,
   kickMissTag,
+  missedKickText,
 } from "../src/utils/kickAudit";
 import {
   makeAuraEvent,
@@ -225,6 +226,230 @@ describe("kickAudit: the miss line the log wrote for the kick (FT-T11)", () => {
       missType: "IMMUNE",
       targetId: "e1",
       targetName: "Priest",
+    });
+  });
+
+  it("T52: 目标读条还在走时被拒绝(免疫)的打断 —— 不是「hit nothing」,只留落空标签", () => {
+    // bd7f386f 0:43: Polymorph begun 42.58, Mind Freeze 43.39 logged IMMUNE,
+    // the Polymorph off at 43.74
+    const POLYMORPH = "118";
+    const mage = () =>
+      priest(10, 20, {
+        castStartEvents: [castStart(POLYMORPH, 42.58)],
+      }) as any;
+    const withCast = (offS: number | null) => {
+      const u = mage();
+      if (offS !== null)
+        u.spellCastEvents.push(
+          makeSpellCastEvent(
+            POLYMORPH,
+            T0 + offS * 1000,
+            "p9",
+            "Healer",
+            "e1",
+            "Priest",
+            0,
+            "Polymorph",
+          ),
+        );
+      return u;
+    };
+    const immune = [missEvent(MIND_FREEZE, 43.392, ["e1", "Priest"], "IMMUNE")];
+    const [k] = analyzeKickAudit(
+      kickerWith(43.391, immune),
+      [withCast(43.744)],
+      combat,
+    );
+    expect(k!.result).toBe("missed");
+    expect(k!.refusedAtCastSpellName).toBe("Polymorph");
+    expect(missedKickText(k!)).toBe("");
+    expect(
+      formatBurstLedgerForContext([], [], [k!], (n) => n).find((l) =>
+        l.includes("Kicks:"),
+      ),
+    ).toBe("  Kicks: 0:43 Mind Freeze → [IMMUNE: Priest]");
+    // no miss row: the log does not say the kick was refused
+    const [bare] = analyzeKickAudit(kicker(43.391), [withCast(43.744)], combat);
+    expect(bare!.result).toBe("missed");
+    expect(bare!.refusedAtCastSpellName).toBeUndefined();
+    expect(missedKickText(bare!)).toBe("hit nothing");
+    // the bar had gone off before the kick: nothing was running
+    const [late] = analyzeKickAudit(
+      kickerWith(44.5, [
+        missEvent(MIND_FREEZE, 44.5, ["e1", "Priest"], "IMMUNE"),
+      ]),
+      [withCast(43.744)],
+      combat,
+    );
+    expect(late!.refusedAtCastSpellName).toBeUndefined();
+    expect(
+      formatBurstLedgerForContext([], [], [late!], (n) => n).find((l) =>
+        l.includes("Kicks:"),
+      ),
+    ).toBe("  Kicks: 0:44 Mind Freeze → hit nothing [IMMUNE: Priest]");
+    // the bar never went off: the audit's juke reading, as before
+    const [juked] = analyzeKickAudit(
+      kickerWith(43.391, immune),
+      [withCast(null)],
+      combat,
+    );
+    expect(juked!.result).toBe("juked");
+    expect(juked!.refusedAtCastSpellName).toBeUndefined();
+  });
+
+  describe("T52 review (codex 85-tk-F-T52-1)", () => {
+    const POLYMORPH = "118";
+    const FROSTBOLT = "116";
+    const off = (spellId: string, s: number) =>
+      makeSpellCastEvent(
+        spellId,
+        T0 + s * 1000,
+        "p9",
+        "Healer",
+        "e1",
+        "Priest",
+      );
+    const mage = (extra: Record<string, any>, casts: any[] = []) => {
+      const u = priest(10, 20, extra) as any;
+      u.spellCastEvents.push(...casts);
+      return u;
+    };
+    const immuneAt = (s: number, lineIndex?: number) => {
+      const m = missEvent(MIND_FREEZE, s, ["e1", "Priest"], "IMMUNE");
+      if (lineIndex !== undefined) m.logLine.lineIndex = lineIndex;
+      return m;
+    };
+
+    it("#3: a bar somebody interrupted after the refusal was running at it", () => {
+      const [k] = analyzeKickAudit(
+        kickerWith(43.391, [immuneAt(43.392)]),
+        [
+          mage({
+            castStartEvents: [castStart(POLYMORPH, 42.581)],
+            actionIn: [
+              makeInterruptEvent(
+                "57994",
+                "Wind Shear",
+                POLYMORPH,
+                "Polymorph",
+                T0 + 43_600,
+                "p2",
+                "Mate",
+              ),
+            ],
+          }),
+        ],
+        combat,
+      );
+      expect(k!.result).toBe("missed");
+      expect(k!.refusedAtCastSpellName).toBe("Polymorph");
+    });
+
+    it("#4: an interrupt before a bar that was running at the kick is not why it missed", () => {
+      const [k] = analyzeKickAudit(
+        kickerWith(43.391, [immuneAt(43.392)]),
+        [
+          mage(
+            {
+              castStartEvents: [
+                castStart(FROSTBOLT, 42.5),
+                castStart(POLYMORPH, 43.2),
+              ],
+              actionIn: [
+                makeInterruptEvent(
+                  "57994",
+                  "Wind Shear",
+                  FROSTBOLT,
+                  "Frostbolt",
+                  T0 + 43_000,
+                  "p2",
+                  "Mate",
+                ),
+              ],
+            },
+            [off(POLYMORPH, 44.5)],
+          ),
+        ],
+        combat,
+      );
+      expect(k!.refusedAtCastSpellName).toBe("Polymorph");
+      expect(k!.beatenBy).toBeUndefined();
+    });
+
+    it("#5: a START of the miss row's millisecond counts only when logged before it", () => {
+      const startAt = (lineIndex: number) => {
+        const s = castStart(POLYMORPH, 43.392);
+        s.logLine.lineIndex = lineIndex;
+        return s;
+      };
+      const run = (startLine: number) =>
+        analyzeKickAudit(
+          kickerWith(43.391, [immuneAt(43.392, 102)]),
+          [
+            mage({ castStartEvents: [startAt(startLine)] }, [
+              off(POLYMORPH, 44),
+            ]),
+          ],
+          combat,
+        )[0]!;
+      expect(run(103).refusedAtCastSpellName).toBeUndefined();
+      expect(run(101).refusedAtCastSpellName).toBe("Polymorph");
+    });
+
+    it("#2: a kick with no target is bound to the unit its miss row names", () => {
+      const beam = makeUnit("p1", {
+        name: "Knight",
+        info,
+        spellCastEvents: [
+          makeSpellCastEvent(
+            MIND_FREEZE,
+            T0 + 43_391,
+            "",
+            "",
+            "p1",
+            "Knight",
+            0,
+            "Mind Freeze",
+          ),
+        ],
+      } as any);
+      (beam as any).spellCastEvents[0].destUnitId = undefined;
+      (beam as any).missesOut = [immuneAt(43.392)];
+      // the miss names e1, whose last bar ended long before; e2 has one up
+      const idle = mage({ castStartEvents: [castStart(POLYMORPH, 40)] }, [
+        off(POLYMORPH, 41),
+      ]);
+      const other = makeUnit("e2", {
+        name: "Mage",
+        info,
+        castStartEvents: [
+          (() => {
+            const e = makeSpellCastEvent(
+              POLYMORPH,
+              T0 + 42_581,
+              "e2",
+              "e2",
+              "e2",
+              "e2",
+            );
+            e.logLine.event = LogEvent.SPELL_CAST_START;
+            return e;
+          })(),
+        ],
+        spellCastEvents: [
+          makeSpellCastEvent(
+            POLYMORPH,
+            T0 + 43_744,
+            "p9",
+            "Healer",
+            "e2",
+            "Mage",
+          ),
+        ],
+      } as any);
+      const [k] = analyzeKickAudit(beam, [idle, other], combat);
+      expect(k!.kickMiss?.targetId).toBe("e1");
+      expect(k!.refusedAtCastSpellName).toBeUndefined();
     });
   });
 

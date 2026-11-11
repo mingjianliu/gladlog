@@ -547,6 +547,36 @@ describe("[KICK]: the owner's kick that stopped nothing (B7a)", () => {
     expect(nothing.endsWith(" — hit nothing")).toBe(true);
   });
 
+  it("T52: refused (IMMUNE) while the target's bar was running — the tag alone, no 'hit nothing'", () => {
+    // bd7f386f 0:43: Polymorph begun 42.58, the kick 43.39 logged IMMUNE,
+    // the Polymorph off at 43.74
+    const miss = (s: number) =>
+      ev(LogEvent.SPELL_MISSED, COUNTER_SHOT, "Counter Shot", s, ME, FOE, {
+        missType: "IMMUNE",
+        amount: 0,
+      });
+    const owner = (kickS: number) =>
+      mkUnit("o", "Me-Realm", {
+        info: {} as never,
+        spellCastEvents: [kickAt(kickS)] as never,
+        missesOut: [miss(kickS + 0.001)] as never,
+      });
+    const enemy = () =>
+      foe({
+        castStartEvents: [castStart(HEX, "Hex", 42.58)] as never,
+        spellCastEvents: [
+          ev(LogEvent.SPELL_CAST_SUCCESS, HEX, "Hex", 43.74, FOE, ME),
+        ] as never,
+      });
+    const refused = kickLine(buildMatchTimeline(params(owner(43.39), enemy())));
+    expect(refused).toMatch(
+      /^0:43 {2}\[KICK\] {3}your Counter Shot on .+ — \[IMMUNE: [^\]]+\]$/,
+    );
+    // the same IMMUNE after the bar went off: nothing was there to kick
+    const late = kickLine(buildMatchTimeline(params(owner(44.5), enemy())));
+    expect(late).toMatch(/ — hit nothing \[IMMUNE: [^\]]+\]$/);
+  });
+
   it("a landed kick keeps its own line and gets no second one", () => {
     const owner = mkUnit("o", "Me-Realm", {
       info: {} as never,

@@ -128,6 +128,17 @@ export interface IKickAuditEntry {
    * the audit read none and they all said "hit nothing" or "JUKED"). A fact
    * beside `result`, which it does not change. */
   kickMiss?: IKickMiss;
+  /** missed, with a miss row (`kickMiss`): the cast bar the kick's target
+   * had running when the kick went out — the last one it began before the
+   * kick's miss row, which went off or was interrupted after it
+   * (`castBarOutcomesOf` `completed` / `kicked`, later than that row); for a
+   * kick with no target, the unit the miss row names. No `beatenBy` beside
+   * it. The kick was refused at a live cast, not sent at
+   * nothing: bd7f386f 0:43, Polymorph begun 42.58, Sanctified Ground on the
+   * mage 43.31, Mind Freeze 43.39 logged IMMUNE, the Polymorph off at 43.74
+   * (pipeline T52). The result stays `missed` (nothing was stopped); the
+   * renderings do not say "hit nothing" of it (`missedKickText`). */
+  refusedAtCastSpellName?: string;
   /** silenced: who carried the kick's aura. */
   silencedTargetName?: string;
   /** silenced: the cast that target had open AT the kick and never finished
@@ -153,6 +164,18 @@ const KICK_MISS_WORD: Readonly<Record<string, string>> = {
   DEFLECT: "DEFLECTED by",
   RESIST: "RESISTED by",
 };
+/** The words of a `missed` kick with nobody's interrupt just before it
+ * (`beatenBy` has its own sentence), for every rendering of the audit:
+ * "hit nothing" — nothing kickable — or no words at all for a kick refused
+ * at a live cast (`refusedAtCastSpellName`), whose miss tag
+ * (`kickMissTag`) is the whole statement. */
+export const KICK_HIT_NOTHING = "hit nothing";
+export function missedKickText(
+  k: Pick<IKickAuditEntry, "refusedAtCastSpellName">,
+): string {
+  return k.refusedAtCastSpellName ? "" : KICK_HIT_NOTHING;
+}
+
 /** The one wording of `kickMiss`, for every rendering of the audit: the tag
  * vocabulary the control lines use (` [REFLECTED by X]`, ` [IMMUNE: X]`,
  * ` [MISSED on X]`). `label` resolves the target's roster label. */
@@ -404,10 +427,12 @@ export function analyzeKickAudit(
     const forcedInside = () => {
       const forced = forcedOf(enemy);
       const fromS = last.t;
-      return [...forced.cc, ...forced.displaced, ...forced.gripped].some((ms) => {
-        const t = (ms - matchStartMs) / 1000;
-        return t >= fromS && t <= kickS;
-      });
+      return [...forced.cc, ...forced.displaced, ...forced.gripped].some(
+        (ms) => {
+          const t = (ms - matchStartMs) / 1000;
+          return t >= fromS && t <= kickS;
+        },
+      );
     };
     // fact10 D22 / D5: a bar with no end row was over once the unit did
     // something a cast bar cannot outlive — a press of a button, on the
@@ -433,7 +458,9 @@ export function analyzeKickAudit(
     // Strike 86.291 — a juke).
     const supersededInside = () => {
       const startMs = matchStartMs + Math.round(last.t * 1000);
-      const prev = barsOf(enemy).filter((b) => b.t < last.t).at(-1);
+      const prev = barsOf(enemy)
+        .filter((b) => b.t < last.t)
+        .at(-1);
       const inside = (e: { timestamp: number; spellId?: string }) =>
         e.timestamp > startMs &&
         e.timestamp < kickMs - STOPPED_JUST_BEFORE_S * 1000 &&
@@ -445,8 +472,9 @@ export function analyzeKickAudit(
           e.timestamp <= startMs + CAST_QUEUE_TOLERANCE_MS
         );
       const acted =
-        ((enemy as { castStartEvents?: typeof enemy.spellCastEvents })
-          .castStartEvents ?? []
+        (
+          (enemy as { castStartEvents?: typeof enemy.spellCastEvents })
+            .castStartEvents ?? []
         ).some(inside) ||
         (enemy.spellCastEvents ?? []).some(
           (e, _, rows) => rowIsPressEndingCast(e, rows) && inside(e),
@@ -467,6 +495,38 @@ export function analyzeKickAudit(
           ? !forcedInside() && !supersededInside()
           : end.kind === "stopped" && end.near === null;
     return open ? getEnglishSpellName(last.id, last.name) : undefined;
+  };
+
+  /** The cast bar `enemy` had running when a row at `atMs` (log line
+   * `atLine`, when the parser kept it) was written, by the log's own rows:
+   * the last bar it began before that row — a START of the row's own
+   * millisecond counts only when it is logged before it — whose end is
+   * later than the row: it went off, or somebody interrupted it (codex
+   * 85-tk-F-T52-1 #3: a teammate's kick after the immunity ran out is the
+   * log saying the bar was still up). */
+  const runningCastOf = (
+    enemy: ICombatUnit,
+    atMs: number,
+    atLine: number | undefined,
+  ) => {
+    const atS = (atMs - matchStartMs) / 1000;
+    let last: CastBarOutcome | undefined;
+    for (const bar of barsOf(enemy)) {
+      if (bar.t > atS) break;
+      if (
+        bar.t === atS &&
+        bar.line !== undefined &&
+        atLine !== undefined &&
+        bar.line > atLine
+      )
+        break;
+      last = bar;
+    }
+    return last &&
+      (last.end.kind === "completed" || last.end.kind === "kicked") &&
+      last.end.atS > atS
+      ? getEnglishSpellName(last.id, last.name)
+      : undefined;
   };
 
   /** The channel `enemy` stopped itself just before `kickMs`: a logged
@@ -701,11 +761,34 @@ export function analyzeKickAudit(
       )
       .sort((a, b) => b.logLine.timestamp - a.logLine.timestamp)[0] as
       CombatExtraSpellAction | undefined;
+    // T52: the log refused the kick (a miss row) while the target's bar was
+    // running — it went off after the kick
+    // The instant is the miss row's own (a pet carries the command out
+    // later than the owner's press: codex #1), and the unit is the one the
+    // kick was aimed at — for a kick with no target, the one the miss row
+    // names, never any enemy with a bar up (#2).
+    const refusedUnit = missLine
+      ? (enemyUnits.find((e) => e.id === kick.destUnitId) ??
+        enemyUnits.find((e) => e.id === missLine.destUnitId))
+      : undefined;
+    const refusedAt =
+      missLine && refusedUnit
+        ? runningCastOf(
+            refusedUnit,
+            missLine.timestamp,
+            typeof missLine.logLine?.lineIndex === "number"
+              ? missLine.logLine.lineIndex
+              : undefined,
+          )
+        : undefined;
     entries.push({
       ...base,
       ...missed,
       result: "missed",
-      ...(beat
+      ...(refusedAt ? { refusedAtCastSpellName: refusedAt } : {}),
+      // an interrupt before a bar that was running at this kick stopped
+      // another cast, not the one this kick was sent at (#4)
+      ...(beat && !refusedAt
         ? {
             beatenBy: {
               kickerId: beat.srcUnitId,
