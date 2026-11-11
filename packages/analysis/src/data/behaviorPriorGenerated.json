@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generatedAt": "2026-11-07",
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-06",
+    "generatedAt": "2026-11-11",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-09",
     "weeks": [
       "2026-W33",
       "2026-W34",
@@ -13,9 +13,9 @@
   },
   "cells": {
     "2v2|healer|*": {
-      "nNoResp": 2972,
+      "nNoResp": 2971,
       "deathNoResp": 0.32,
-      "nResp": 10219,
+      "nResp": 10220,
       "deathResp": 0.09,
       "top": [
         [
@@ -55,9 +55,9 @@
       "outcome": "ownDeath10s"
     },
     "2v2|healer|>=20%": {
-      "nNoResp": 1313,
+      "nNoResp": 1312,
       "deathNoResp": 0.4,
-      "nResp": 5781,
+      "nResp": 5782,
       "deathResp": 0.11,
       "top": [
         [
@@ -70,7 +70,7 @@
         ],
         [
           "wall",
-          0.24
+          0.25
         ]
       ],
       "outcome": "ownDeath10s"

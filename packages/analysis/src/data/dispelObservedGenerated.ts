@@ -18,8 +18,8 @@
  * Regenerate: npx tsx packages/eval/scripts/confidenceAudit.ts \
  *   --manifest <manifest> --emit-table --date YYYY-MM-DD \
  *   > packages/analysis/src/data/dispelObservedGenerated.ts
- * Manifest: ~/code/gladlog-eval-private/runs/regen-115-2026-11-06/manifest-dispel-union.txt
- * Corpus snapshot: 37894 matches, 421 ids (2026-11-06).
+ * Manifest: ~/code/gladlog-eval-private/runs/regen-115-2026-11-09/manifest-dispel-union.txt
+ * Corpus snapshot: 37894 matches, 421 ids (2026-11-09).
  */
 export const CORPUS_OBSERVED_DISPEL_IDS: ReadonlySet<string> = new Set([
   "139", // ×36968

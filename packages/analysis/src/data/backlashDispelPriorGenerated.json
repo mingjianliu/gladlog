@@ -1,53 +1,53 @@
 {
  "meta": {
-  "corpus": "wowarenalogs archive, GH #115 regen 2026-11-06",
-  "generatedAt": "2026-11-07T07:03:52.642Z",
+  "corpus": "wowarenalogs archive, GH #115 regen 2026-11-09",
+  "generatedAt": "2026-11-10T18:03:36.811Z",
   "files": 21101,
-  "opportunities": 94485,
+  "opportunities": 94431,
   "generator": "backlashDispelOutcomeProbe.ts emit-table",
   "nFloor": 50
  },
  "cells": {
   "34914": {
-   "n": 3908,
-   "nLeft": 12247,
-   "removedK": 41,
-   "healLostK": 112,
-   "backlashDmgK": 15,
-   "ccExposureS": 0.7,
+   "n": 3786,
+   "nLeft": 12349,
+   "removedK": 37,
+   "healLostK": 115,
+   "backlashDmgK": 17,
+   "ccExposureS": 0.72,
    "backlashKind": "horror",
    "backlashS": 3
   },
   "1259790": {
-   "n": 4342,
-   "nLeft": 23694,
-   "removedK": 103,
-   "healLostK": 133,
-   "backlashDmgK": 219,
-   "ccExposureS": 0.85,
+   "n": 4293,
+   "nLeft": 23726,
+   "removedK": 105,
+   "healLostK": 134,
+   "backlashDmgK": 222,
+   "ccExposureS": 0.86,
    "backlashKind": "silence",
    "backlashS": 4
   },
   "1259790:immune": {
-   "nD": 1397,
-   "nL": 1140,
+   "nD": 1395,
+   "nL": 1141,
    "deathDPct": 2,
    "deathLPct": 4,
    "netK": -55
   },
   "34914:worth": {
-   "nD": 570,
-   "nL": 1230,
+   "nD": 563,
+   "nL": 1235,
    "deathDPct": 5,
    "deathLPct": 14,
-   "netK": -82
+   "netK": -83
   },
   "34914:immune": {
-   "nD": 704,
-   "nL": 684,
+   "nD": 703,
+   "nL": 687,
    "deathDPct": 1,
    "deathLPct": 2,
-   "netK": -78
+   "netK": -80
   }
  },
  "immunity": {

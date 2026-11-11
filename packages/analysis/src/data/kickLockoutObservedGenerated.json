@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T19:30:51.761Z",
+  "generatedAt": "2026-11-10T06:10:11.041Z",
   "generator": "packages/eval/scripts/kickLockoutScan.ts",
   "manifest": "corpus/manifest-archive-2026-08-28-newseason.txt",
   "every": 30,

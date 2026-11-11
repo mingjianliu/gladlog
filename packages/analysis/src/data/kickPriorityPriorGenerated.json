@@ -1,17 +1,17 @@
 {
  "meta": {
-  "corpus": "wowarenalogs archive, GH #115 regen 2026-11-06",
-  "generatedAt": "2026-11-07T08:35:42.401Z",
+  "corpus": "wowarenalogs archive, GH #115 regen 2026-11-09",
+  "generatedAt": "2026-11-10T19:43:02.359Z",
   "files": 21101,
-  "points": 18153,
+  "points": 18162,
   "hpGate": 50,
   "generator": "kickPriorityOutcomeProbe.ts emit-table",
   "nFloor": 50
  },
  "cells": {
   "all": {
-   "nCompleted": 2340,
-   "nInterrupted": 657,
+   "nCompleted": 2493,
+   "nInterrupted": 702,
    "deathCompletedPct": 16,
    "deathInterruptedPct": 38
   }

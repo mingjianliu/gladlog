@@ -1,17 +1,17 @@
 {
   "meta": {
-    "generatedAt": "2026-11-07",
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-06",
+    "generatedAt": "2026-11-11",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-09",
     "command": "npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "cohort": "all",
     "cohortRule": "all 12.1+ healer rounds in the archive",
-    "rows": 235096,
+    "rows": 235114,
     "nFloor": 50,
     "predicateVersion": 1
   },
   "cells": {
     "Discipline Priest|*|33206": {
-      "n": 12033,
+      "n": 12034,
       "medianHpPct": 49,
       "spellName": "Pain Suppression"
     },
@@ -21,7 +21,7 @@
       "spellName": "Ultimate Penitence"
     },
     "Discipline Priest|*|472433": {
-      "n": 14400,
+      "n": 14402,
       "medianHpPct": 52,
       "spellName": "Evangelism"
     },
@@ -31,7 +31,7 @@
       "spellName": "Power Word: Barrier"
     },
     "Discipline Priest|Oracle|33206": {
-      "n": 9871,
+      "n": 9872,
       "medianHpPct": 49,
       "spellName": "Pain Suppression"
     },
@@ -41,7 +41,7 @@
       "spellName": "Ultimate Penitence"
     },
     "Discipline Priest|Oracle|472433": {
-      "n": 12128,
+      "n": 12129,
       "medianHpPct": 52,
       "spellName": "Evangelism"
     },
@@ -61,7 +61,7 @@
       "spellName": "Ultimate Penitence"
     },
     "Discipline Priest|Voidweaver|472433": {
-      "n": 2272,
+      "n": 2273,
       "medianHpPct": 50,
       "spellName": "Evangelism"
     },
@@ -86,7 +86,7 @@
       "spellName": "Blessing of Spellwarding"
     },
     "Holy Paladin|*|216331": {
-      "n": 11512,
+      "n": 11515,
       "medianHpPct": 54,
       "spellName": "Avenging Crusader"
     },
@@ -96,12 +96,12 @@
       "spellName": "Aura Mastery"
     },
     "Holy Paladin|*|31884": {
-      "n": 4149,
+      "n": 4150,
       "medianHpPct": 53,
       "spellName": "Avenging Wrath"
     },
     "Holy Paladin|*|375576": {
-      "n": 8229,
+      "n": 8230,
       "medianHpPct": 55,
       "spellName": "Divine Toll"
     },
@@ -126,7 +126,7 @@
       "spellName": "Divine Shield"
     },
     "Holy Paladin|*|6940": {
-      "n": 9254,
+      "n": 9256,
       "medianHpPct": 54,
       "spellName": "Blessing of Sacrifice"
     },
@@ -156,12 +156,12 @@
       "spellName": "Aura Mastery"
     },
     "Holy Paladin|Herald of the Sun|31884": {
-      "n": 3885,
+      "n": 3886,
       "medianHpPct": 53,
       "spellName": "Avenging Wrath"
     },
     "Holy Paladin|Herald of the Sun|375576": {
-      "n": 8229,
+      "n": 8230,
       "medianHpPct": 55,
       "spellName": "Divine Toll"
     },
@@ -206,7 +206,7 @@
       "spellName": "Blessing of Spellwarding"
     },
     "Holy Paladin|Lightsmith|216331": {
-      "n": 11332,
+      "n": 11335,
       "medianHpPct": 54,
       "spellName": "Avenging Crusader"
     },
@@ -241,23 +241,23 @@
       "spellName": "Divine Shield"
     },
     "Holy Paladin|Lightsmith|6940": {
-      "n": 6018,
+      "n": 6020,
       "medianHpPct": 54,
       "spellName": "Blessing of Sacrifice"
     },
     "Holy Priest|*|215769": {
-      "n": 16031,
+      "n": 16032,
       "medianHpPct": 56,
       "spellName": "Spirit of Redemption"
     },
     "Holy Priest|*|47788": {
-      "n": 30692,
+      "n": 30693,
       "medianHpPct": 48,
       "spellName": "Guardian Spirit"
     },
     "Holy Priest|Archon|215769": {
       "n": 84,
-      "medianHpPct": 57,
+      "medianHpPct": 56,
       "spellName": "Spirit of Redemption"
     },
     "Holy Priest|Archon|47788": {
@@ -266,12 +266,12 @@
       "spellName": "Guardian Spirit"
     },
     "Holy Priest|Oracle|215769": {
-      "n": 15947,
+      "n": 15948,
       "medianHpPct": 56,
       "spellName": "Spirit of Redemption"
     },
     "Holy Priest|Oracle|47788": {
-      "n": 30501,
+      "n": 30502,
       "medianHpPct": 48,
       "spellName": "Guardian Spirit"
     },
@@ -367,7 +367,7 @@
     },
     "Preservation Evoker|*|363534": {
       "n": 2178,
-      "medianHpPct": 37,
+      "medianHpPct": 36,
       "spellName": "Rewind"
     },
     "Preservation Evoker|*|363916": {
@@ -571,18 +571,18 @@
       "spellName": "Ancient of Lore"
     },
     "Restoration Shaman|*|108271": {
-      "n": 2143,
+      "n": 2144,
       "medianHpPct": 51,
       "spellName": "Astral Shift"
     },
     "Restoration Shaman|*|108280": {
-      "n": 8737,
+      "n": 8739,
       "medianHpPct": 52,
       "spellName": "Healing Tide Totem"
     },
     "Restoration Shaman|*|378081": {
-      "n": 10515,
-      "medianHpPct": 51,
+      "n": 10518,
+      "medianHpPct": 52,
       "spellName": "Nature's Swiftness"
     },
     "Restoration Shaman|*|409293": {
@@ -616,18 +616,18 @@
       "spellName": "Spirit Link Totem"
     },
     "Restoration Shaman|Totemic|108271": {
-      "n": 1507,
+      "n": 1508,
       "medianHpPct": 51,
       "spellName": "Astral Shift"
     },
     "Restoration Shaman|Totemic|108280": {
-      "n": 6409,
+      "n": 6411,
       "medianHpPct": 51,
       "spellName": "Healing Tide Totem"
     },
     "Restoration Shaman|Totemic|378081": {
-      "n": 10515,
-      "medianHpPct": 51,
+      "n": 10518,
+      "medianHpPct": 52,
       "spellName": "Nature's Swiftness"
     },
     "Restoration Shaman|Totemic|409293": {

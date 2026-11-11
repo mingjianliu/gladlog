@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-11-06",
+    "generatedAt": "2026-11-10",
     "manifest": "manifest-archive-2026-08-28-newseason.txt",
     "every": 3,
     "offset": 1,
@@ -18,16 +18,6 @@
       "nHoldout": 170,
       "holdoutBelow": 0.029
     },
-    "1259431|1480": {
-      "name": "Predator's Wake",
-      "quantile": 0.02,
-      "floorRatio": 0.413,
-      "staticBreak": 0.974,
-      "holdoutStaticBreak": 0.963,
-      "nTrain": 491,
-      "nHoldout": 464,
-      "holdoutBelow": 0.019
-    },
     "471195|65": {
       "name": "Lay on Hands",
       "quantile": 0.02,
@@ -41,12 +31,12 @@
     "1241937|1480": {
       "name": "Soul Immolation",
       "quantile": 0.02,
-      "floorRatio": 0.659,
-      "staticBreak": 0.1,
+      "floorRatio": 0.613,
+      "staticBreak": 0.105,
       "holdoutStaticBreak": 0.075,
-      "nTrain": 1162,
+      "nTrain": 1171,
       "nHoldout": 1070,
-      "holdoutBelow": 0.016
+      "holdoutBelow": 0.012
     },
     "22842|102": {
       "name": "Frenzied Regeneration",

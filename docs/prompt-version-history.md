@@ -6076,3 +6076,26 @@ press seconds are memoised in `saveAuraIntervals` (7.9 → 3.2 s),
 this commit: 285 owner contexts and their findings files byte-identical. The
 ×12 render under a CPU profile, same machine back to back: v522 35.2 s, v524
 34.7 s, this commit 16.7 s.
+
+v526 (2026-11-11; pipeline batch B38, GH #115 regen #7). The reference tables
+went stale across the pipeline wave PV500–522. Regenerated at code 4882aca85
+(v522) on the same corpora as regen #6: burstWindowPrior (2,162 leaves, 179
+changed, largest rate move 0.030), syncWindowPrior (143,759 → 148,478 windows;
+12 leaves changed, 0.002), behaviorPrior (5 of 99 leaves, 0.010),
+cdTriggerPrior (27 of 378 leaves), kickPriorityPrior (2 of 4 leaves; 18,153 →
+18,162 points) and its heal spells (6 of 24 leaves), backlashDispelPrior (20 of
+46 leaves, 0.020; 94,485 → 94,431 opportunities), cdRecastFloor (18 → 17
+floors: Predator's Wake's 0.413 floor goes, Soul Immolation 0.659 → 0.613),
+the reference vectors (414 of 90,934 leaves), and — date stamps only —
+kickLockoutObserved, healerSaveCd and dispelObserved. The hand-pinned
+CD_HOARDED_OUTCOME_REF re-measures to the same 5.3 / 13.8 / 16,061 and is not
+touched. On 605 (both captures at 4882aca85, 3,519 owner files): the five
+reference-consistency gates the stale tables tripped fall to 0 (backlash 305,
+burstWindow 102, cdPrior 40, kickPriority 198, syncWindow 687); CjkLeak 12 and
+FindingsCountFollowsMenu 3,519 unchanged. Menu rows 7,401 → 7,401, 0 ids added,
+0 removed; 738 menu files and 228 context files differ, in reference numbers
+and cooldown ranges only (`[RES]` / `<cooldowns>` rows of Predator's Wake and
+Soul Immolation, `[CD PRIOR]`); captureFamilyDiff flags 0 families (body lines
+1,755,250 → 1,755,253). Not in these tables: the commits after 4882aca85 (v523
+T46's school-lock reading feeds the kick tables and the recast floors; v523
+T49 / T59 and v524–525 read none of them).

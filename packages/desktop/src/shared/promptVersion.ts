@@ -1093,4 +1093,10 @@
  *  render's per-row repeats are read once (offensive windows, aura-interval
  *  press seconds, pressure threshold). See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 525;
+/*
+ * v526 (2026-11-11; pipeline batch B38, GH #115 regen #7): the reference
+ *  tables regenerated at 4882aca85 (v522's code) on the same corpora as regen
+ *  #6. Reference numbers only; no candidate row added or removed on 605. See
+ *  docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 526;
