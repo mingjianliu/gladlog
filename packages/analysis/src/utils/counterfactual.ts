@@ -1,6 +1,6 @@
 import { CombatUnitType, ICombatUnit } from "@gladlog/parser-compat";
 
-import { castKeyOfAura } from "../data/castEffectAuras";
+import { castKeyOfAura, castsOfEffectAura } from "../data/castEffectAuras";
 import {
   componentForSchool,
   type IResolvedMitigationComponent,
@@ -12,7 +12,11 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
 import { getSortedAdvancedActions } from "./advancedActions";
-import { buildAuraIntervals, IAuraInterval } from "./auraIntervals";
+import {
+  ALIAS_PRESS_TWIN_MS,
+  buildAuraIntervals,
+  IAuraInterval,
+} from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -390,13 +394,20 @@ export function computeMitigationAudit(
   );
 
   const rows: IMitigationAuditRow[] = [];
-
-  for (const iv of whitelistedIntervalsInDeathWindow(
+  /** the off-table rows (`mechanic`, `absorb` — one line form, "X active Ns
+   * … (not in the mitigation table …)") and the interval each stands for */
+  const offTableRows: Array<{
+    row: IMitigationAuditRow;
+    iv: IWindowedAuraInterval;
+  }> = [];
+  const intervals = whitelistedIntervalsInDeathWindow(
     victim,
     combat,
     deathS,
     deathInstantS,
-  )) {
+  );
+
+  for (const iv of intervals) {
     const { overlapFrom, overlapTo } = iv;
     const activeOverlapS = round1(overlapTo - overlapFrom);
     const spellName = getEnglishSpellName(iv.spellId, iv.spellName);
@@ -460,7 +471,7 @@ export function computeMitigationAudit(
         combat.startTime + overlapTo * 1000,
       ).find((c) => c.spellId === iv.spellId);
       if (absorbed) {
-        rows.push({
+        const row: IMitigationAuditRow = {
           spellId: iv.spellId,
           spellName,
           kind: "absorb",
@@ -470,15 +481,19 @@ export function computeMitigationAudit(
             maxHp !== null && maxHp > 0
               ? round1((absorbed.absorbedAmount / maxHp) * 100)
               : undefined,
-        });
+        };
+        rows.push(row);
+        offTableRows.push({ row, iv });
         continue;
       }
-      rows.push({
+      const row: IMitigationAuditRow = {
         spellId: iv.spellId,
         spellName,
         kind: "mechanic",
         activeOverlapS,
-      });
+      };
+      rows.push(row);
+      offTableRows.push({ row, iv });
       continue;
     }
     if (res.positional) continue; // Darkness class: positional conditions are not modelled this round, skip without a row
@@ -554,6 +569,37 @@ export function computeMitigationAudit(
         ...(split ? { schoolMask: comp.schoolMask } : {}),
       });
     }
+  }
+
+  // GH #201 (T59): one press that puts up its cast-id aura and its
+  // own-effect aura is one defensive — the burst ledger's rule
+  // (`dropOnePressAuraTwins`: same caster, starting within
+  // `ALIAS_PRESS_TWIN_MS`, a cast and its effect). Touch of Karma's 122470
+  // and 125174 printed two identical "active Ns … (not in the mitigation
+  // table)" rows in one death block (605: 9 rows, 3 deaths). Only an
+  // unmodelled `mechanic` row is dropped — it claims no number — and only
+  // beside the off-table row of its own press's other aura, which prints
+  // the same line: an `absorb` row stands (it carries the measured amount);
+  // of two `mechanic` rows the cast's id stands. The longer overlap is kept.
+  // A twin that is priced (a reduction, an immunity) keeps both rows.
+  const twinOf = (a: IWindowedAuraInterval, b: IWindowedAuraInterval) =>
+    a !== b &&
+    a.srcUnitName === b.srcUnitName &&
+    Math.abs(a.fromS - b.fromS) * 1000 <= ALIAS_PRESS_TWIN_MS &&
+    (castsOfEffectAura(a.spellId).includes(b.spellId) ||
+      castsOfEffectAura(b.spellId).includes(a.spellId));
+  for (const { row, iv } of offTableRows) {
+    if (row.kind !== "mechanic" || !rows.includes(row)) continue;
+    const other = offTableRows.find(
+      (o) => rows.includes(o.row) && twinOf(iv, o.iv),
+    );
+    if (!other) continue;
+    const dropThis =
+      other.row.kind === "absorb" ||
+      castsOfEffectAura(iv.spellId).includes(other.iv.spellId);
+    const [keep, drop] = dropThis ? [other.row, row] : [row, other.row];
+    keep.activeOverlapS = Math.max(keep.activeOverlapS, drop.activeOverlapS);
+    rows.splice(rows.indexOf(drop), 1);
   }
 
   return { rows, netDamage, maxHp };

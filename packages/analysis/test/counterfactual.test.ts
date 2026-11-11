@@ -155,6 +155,85 @@ describe("computeMitigationAudit(A 形态)", () => {
     expect(td[0]!.blockedAmount).toBeUndefined();
   });
 
+  test("GH #201 (T59): one press's cast aura and effect aura, both unmodelled, are one row", () => {
+    // Touch of Karma: 122470 and its own-effect aura 125174, 1 ms apart
+    const karma = (twinFromS: number) =>
+      computeMitigationAudit(
+        mkVictim(
+          "v1",
+          [{ atS: 59.5, amount: 100_000, school: "0x1" }],
+          [
+            {
+              spellId: "125174",
+              spellName: "Touch of Karma",
+              fromS: twinFromS,
+              toS: 60,
+            },
+            {
+              spellId: "122470",
+              spellName: "Touch of Karma",
+              fromS: 59.2,
+              toS: 59.9,
+            },
+          ],
+          [{ atS: 51, hp: 900_000, maxHp: 1_000_000 }],
+        ),
+        combatOf(),
+        60,
+      ).rows.filter((r) => r.spellName === "Touch of Karma");
+    const one = karma(59.201);
+    expect(one).toHaveLength(1);
+    // the cast's id stands, with the longer of the two overlaps
+    expect(one[0]).toMatchObject({
+      spellId: "122470",
+      kind: "mechanic",
+      activeOverlapS: 0.8,
+    });
+    // two auras that did not start together are two presses' worth: both stay
+    expect(karma(55)).toHaveLength(2);
+  });
+
+  test("GH #201 (T59): beside the absorb row of its own press, the unmodelled twin row goes — the measured row stands", () => {
+    const victim = mkVictim(
+      "v1",
+      [{ atS: 59.5, amount: 100_000, school: "0x1" }],
+      [
+        {
+          spellId: "125174",
+          spellName: "Touch of Karma",
+          fromS: 55,
+          toS: 60,
+        },
+        {
+          spellId: "122470",
+          spellName: "Touch of Karma",
+          fromS: 55.001,
+          toS: 59.5,
+        },
+      ],
+      [{ atS: 51, hp: 900_000, maxHp: 1_000_000 }],
+    );
+    (victim as { absorbsIn: unknown[] }).absorbsIn = [
+      {
+        spellId: "122470",
+        spellName: "Touch of Karma",
+        absorbedAmount: 40_000,
+        timestamp: 57_000,
+        logLine: { event: "SPELL_ABSORBED", timestamp: 57_000 },
+      },
+    ];
+    const rows = computeMitigationAudit(victim, combatOf(), 60).rows.filter(
+      (r) => r.spellName === "Touch of Karma",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      spellId: "122470",
+      kind: "absorb",
+      absorbedAmount: 40_000,
+      activeOverlapS: 5,
+    });
+  });
+
   test("百分比减伤按「落地 + 被盾吃掉」定价:百分比先于吸收结算(fact7 D77)", () => {
     const priced = (absorbed: boolean) => {
       const victim = mkVictim(
