@@ -298,6 +298,17 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "1253593": { type: "buffs_defensive" }, // Void Shield(155 段)——吸收盾
   "406220": { type: "buffs_defensive" }, // Chi Cocoon(武僧,66 段)——吸收盾
   "1260681": { type: "buffs_defensive" }, // Chi Cocoon(另一 id,58 段)
+  // 2026-11-11 (user ruling R24, measured on the 605-round sample): the same
+  // shields under their other aura ids. The two Unfolding Vision
+  // copies (1300009 / 1300008) absorb a median 5.4 % / 0.8 % of max HP per run (152 /
+  // 19 runs); Chi Cocoon 406139 is the third id of the two rows above (59
+  // runs, purged 32 times). Holy's proc Power Word: Shield 1246768 is left OUT
+  // on purpose: 7,655 runs at a median 2.6 % of max HP that last 0.7 s — not
+  // a purge target, and registering it adds 90 kill-window cards for a shield
+  // that is gone before a purge can land. Do not add it without a new ruling.
+  "1300008": { type: "buffs_defensive" }, // Power Word: Shield (Unfolding Vision copy)
+  "1300009": { type: "buffs_defensive" }, // Void Shield (Unfolding Vision copy)
+  "406139": { type: "buffs_defensive" }, // Chi Cocoon (third aura id)
   "457387": { type: "buffs_defensive" }, // Wind Barrier(71 段)——吸收盾
   // Earth Shield:用户裁定「没那么高」(2026-08-13)。官方可驱散(Magic)且需逐个
   // 维持,所以不进常驻团队增益的 blocklist;但它随手就能重上,驱掉的收益远不如

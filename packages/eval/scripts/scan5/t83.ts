@@ -39,12 +39,20 @@ import {
   missedPurgeNotActionable,
   reconstructDispelSummary,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
-
 import { computeOffensiveWindows } from "@gladlog/analysis/src/utils/offensiveWindows";
 
 import { ev, fmtS, type IRoundCtx, nameOf, tsOf } from "./ctx";
 
 export const CHECKS = ["shieldRun", "purgeWindow"] as const;
+
+/** `purgeWindow` also reads the three Chi Cocoon aura ids (T86, ruling R24:
+ *  406139 joins the two registered same-name ids). */
+const PURGE_WINDOW_IDS: ReadonlySet<string> = new Set([
+  ...OWN_SHIELD_RULING_FAMILY_IDS,
+  "406139",
+  "406220",
+  "1260681",
+]);
 
 const ENDS = ["purged", "round end", "ran out", "used up", "other"] as const;
 const DOORS = [
@@ -54,7 +62,7 @@ const DOORS = [
   "no kill window, not actionable",
 ] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
-  [...OWN_SHIELD_RULING_FAMILY_IDS].flatMap((id) => [
+  [...PURGE_WINDOW_IDS].flatMap((id) => [
     ...ENDS.map((e) => `shieldRun|${id} ${e}`),
     ...DOORS.map((d) => `purgeWindow|${id} ${d}`),
   ]),
@@ -205,7 +213,7 @@ export function run(ctx: IRoundCtx): void {
       why.onCooldownThroughout
     );
     if (w.duringKillWindow && actionable) cards++;
-    if (!OWN_SHIELD_RULING_FAMILY_IDS.has(w.spellId)) continue;
+    if (!PURGE_WINDOW_IDS.has(w.spellId)) continue;
     const door = w.duringKillWindow
       ? actionable
         ? "card"
