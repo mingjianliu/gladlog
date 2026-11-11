@@ -888,11 +888,19 @@ export function controlLandedResponses(
       let family: (typeof friendlyCasts)[number] | undefined;
       let aimedControl: (typeof friendlyCasts)[number] | undefined;
       let untargeted: (typeof friendlyCasts)[number] | undefined;
+      // T43 (60bfdea9 0:12): the producing cast's own SUCCESS row can be
+      // logged just AFTER its aura (Rake's stun 163505 at 13.454 s, Rake
+      // 1822 at 13.456 s) — the lead the cast side already allows an aimed
+      // control (`AIMED_CONTROL_LANDING_LEAD_MS`). Stopping at the aura
+      // dropped it, and the stun was timed from the Prowl 0.24 s earlier
+      // ("answered with Rake … in 0.9s" for a Rake 1.13 s after the opener).
+      // Only the cast that makes this aura is read past it.
       for (const c of friendlyCasts) {
-        if (c.tMs > a.timestamp) break;
+        if (c.tMs > a.timestamp + AIMED_CONTROL_LANDING_LEAD_MS) break;
         if (c.unitId !== unitId || c.tMs < a.timestamp - GROUND_CONTROL_FUSE_MS)
           continue;
         if (producesAura(c.spellId)) family = c;
+        else if (c.tMs > a.timestamp) continue;
         else if (fromPet) continue;
         else if (
           caster.id !== undefined &&
@@ -928,7 +936,8 @@ export function controlLandedResponses(
         (c) =>
           c.unitId === unitId &&
           c.tMs >= a.timestamp - GROUND_CONTROL_FUSE_MS &&
-          c.tMs <= a.timestamp &&
+          // the cast side's own landing window (`aimedControlLandingAuras`)
+          c.tMs <= a.timestamp + AIMED_CONTROL_LANDING_LEAD_MS &&
           CONTROL_IDS.has(c.spellId) &&
           producesAura(c.spellId) &&
           caster.id !== undefined &&
