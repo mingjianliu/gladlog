@@ -582,11 +582,12 @@ npx tsx packages/eval/scripts/buffDurationScan.ts \
 #    REDUCTIONS (pipeline T48, 2026-11-10): durationTalentScan never promotes one (rule 7), so the
 #    corpus leg of a shortening row is scan5/t48 `shortenedDuration` over a capture: every DB2
 #    duration reduction (inventory misc0 1, negative, both encodings) × the holders' clean lives,
-#    summons included (SPELL_SUMMON → UNIT_DIED). Its report lists each pair as lives / at the
+#    summons included (SPELL_SUMMON → UNIT_DIED); auras through `cleanAuraRuns`, the per-app reader. Its report lists each pair as lives / at the
 #    model's length / at the cut length; a `shortLife` violation is an UNPRICED pair whose lives sit
 #    at the cut length. Add a row when lives at the cut length are ≥ 5 and none sit at the uncut one.
-#    Known open (FLAGged, not priced): Ebon Fever → Virulent Plague / Dread Plague (190 / 24 lives at
-#    the cut length but 57 / 19 at the uncut one), Feral Frenzy (4 lives).
+#    Known open (FLAGged, not priced): Ebon Fever → Virulent Plague / Dread Plague (153 / 14 lives at
+#    the cut length but 39 / 11 at the uncut one), Tear (4 lives). A life a dispel, a death or the
+#    round's end closed is no sample (the report's last column counts those dropped).
 #    npx tsx packages/eval/scripts/verify/run.ts <capture> --out <dir> --scans corpusFactScan5 --only shortenedDuration --workers 6
 # 4. Official durations vs the game (GH #44 tail, 2026-09-02): every CC / root id's observed aura lifetime
 #    (APPLIED→REMOVED, 0.5 s-bin mode) against ccFullDurationSeconds (DB2 PvP duration + CORPUS_DURATION_PATCHES).

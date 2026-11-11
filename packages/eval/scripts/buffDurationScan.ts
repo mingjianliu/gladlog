@@ -30,7 +30,6 @@
  *     [--per-app <aura>,…]   # 逐次施加:观测寿命 vs 带施加时刻的谓词,见 per-app 注释
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
-import { sourcePressedAuraNear } from "@gladlog/analysis/src/data/castEffectAuras";
 import { classSetPiecesOf } from "@gladlog/analysis/src/data/classSetBonuses";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
@@ -46,7 +45,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
-import { cleanAuraRuns } from "./lib/auraRuns";
+import { builderNewApplication, cleanAuraRuns } from "./lib/auraRuns";
 
 function parseArgs() {
   const a = process.argv.slice(2);
@@ -157,19 +156,7 @@ function perAppRuns(
         doseUnclean: args.doseUnclean,
         // the builder's split of a re-APPLIED: its source pressed it, or it
         // came past the open copy's official length (codex 85-tk-A-T18-2d #2)
-        isNewApplication: (a, anchorMs) => {
-          const src = legacy.units[a.srcUnitId ?? ""];
-          if (
-            sourcePressedAuraNear(
-              src?.spellCastEvents ?? [],
-              spellId,
-              a.logLine.timestamp,
-            )
-          )
-            return true;
-          const d = buffFullDurationForCaster(spellId, src, anchorMs);
-          return d !== undefined && a.logLine.timestamp > anchorMs + d * 1000;
-        },
+        isNewApplication: builderNewApplication(legacy.units, spellId),
       },
     );
     for (const r of runs) {
@@ -251,8 +238,7 @@ for (const f of files) {
       continue;
     }
     rounds++;
-    for (const unit of Object.values(legacy.units))
-      perAppRuns(unit, legacy);
+    for (const unit of Object.values(legacy.units)) perAppRuns(unit, legacy);
     const matchCells = new Map<string, Map<number, number>>();
     const matchCasters = new Map<string, { spec: string; info?: unknown }>();
     for (const unit of Object.values(legacy.units)) {

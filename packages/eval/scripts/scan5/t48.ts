@@ -11,11 +11,17 @@
  * aura 107 / 108 (mask) or 219 / 218 (label), a negative value and a resolved
  * target. Per round, for each player who holds the talent
  * (`talentModifierOwnershipOf` = yes, a lookup) the scan reads the effect's
- * clean lives from the round's raw rows, never from the model:
- *  - an aura of the target id the player applied: APPLIED → REMOVED with no
- *    REFRESH of it between;
+ * clean lives, never from the model:
+ *  - an aura of the target id the player applied: `cleanAuraRuns` over the
+ *    carrier's parsed aura rows — the product's reading (`buildAuraIntervals`:
+ *    a REMOVED → APPLIED re-broadcast is one run, a REFRESH makes the run
+ *    unclean), the reader `buffDurationScan --per-app` uses;
  *  - a SPELL_SUMMON of the target id by the player → that creature's
- *    UNIT_DIED.
+ *    UNIT_DIED (raw rows).
+ * A life something else ended is no duration sample and is dropped
+ * (`forcedEnd`, codex 85-tk-G-T48-1 #1): a SPELL_DISPEL / SPELL_STOLEN of the
+ * aura on its carrier at its end, the carrier's or the caster's death within
+ * a second of it, or the round's end within a second.
  * Counted: every such life whose target the model prices
  * (`buffFullDurationForCaster` for this caster, at the application).
  * Violation `shortLife`, only for a pair no duration table carries
@@ -47,6 +53,7 @@ import {
   talentRankOf,
 } from "@gladlog/analysis/src/utils/talentOwnership";
 
+import { builderNewApplication, cleanAuraRuns } from "../lib/auraRuns";
 import { type IRoundCtx, nameOf } from "./ctx";
 
 export const CHECKS = ["shortenedDuration"] as const;
@@ -108,29 +115,33 @@ interface IRawRow {
   event: string;
   src: string;
   dest: string;
+  /** the summoned id; for a dispel / steal, the aura taken off */
   spellId: string;
 }
 const EVENTS = new Set([
-  "SPELL_AURA_APPLIED",
-  "SPELL_AURA_REMOVED",
-  "SPELL_AURA_REFRESH",
   "SPELL_SUMMON",
+  "SPELL_DISPEL",
+  "SPELL_STOLEN",
   "UNIT_DIED",
 ]);
+const DISPELS = new Set(["SPELL_DISPEL", "SPELL_STOLEN"]);
 
-function rowsOf(rawLines: string[]): IRawRow[] {
+export function rowsOf(rawLines: string[]): IRawRow[] {
   const rows: IRawRow[] = [];
   for (const l of rawLines) {
     // cheap reject before the split
     if (
-      !l.includes("SPELL_AURA_") &&
       !l.includes("SPELL_SUMMON") &&
+      !l.includes("SPELL_DISPEL") &&
+      !l.includes("SPELL_STOLEN") &&
       !l.includes("UNIT_DIED")
     )
       continue;
     const parts = splitRawLine(l);
     if (!parts || !EVENTS.has(parts.eventName)) continue;
-    const spellId = parts.params[8] ?? "";
+    // a dispel names the aura it took in its extra spell id
+    const spellId =
+      (DISPELS.has(parts.eventName) ? parts.params[11] : parts.params[8]) ?? "";
     if (parts.eventName !== "UNIT_DIED" && !BY_TARGET.has(spellId)) continue;
     const ms = parseRawTimestamp(parts.datePart);
     if (ms === null) continue;
@@ -145,55 +156,131 @@ function rowsOf(rawLines: string[]): IRawRow[] {
   return rows;
 }
 
-/** the clean lives of `target` produced by `casterId`, in seconds, with the
- * start (epoch ms, the parsed events' clock) */
-export function cleanLives(
+export interface ILife {
+  startMs: number;
+  endMs: number;
+  /** the aura's carrier, or the summoned creature */
+  dest: string;
+  summon?: true;
+}
+
+/** `casterId`'s summons of `target`: SPELL_SUMMON → that creature's
+ * UNIT_DIED */
+export function summonLives(
   rows: IRawRow[],
   casterId: string,
   target: string,
-): { startMs: number; seconds: number }[] {
-  const lives: { startMs: number; seconds: number }[] = [];
-  const open = new Map<string, number | null>(); // dest → start, null = dirty
+): ILife[] {
+  const lives: ILife[] = [];
   const summoned = new Map<string, number>();
   for (const r of rows) {
     if (r.event === "UNIT_DIED") {
       const at = summoned.get(r.dest);
       if (at !== undefined) {
-        lives.push({ startMs: at, seconds: (r.ms - at) / 1000 });
+        lives.push({ startMs: at, endMs: r.ms, dest: r.dest, summon: true });
         summoned.delete(r.dest);
       }
-      continue;
-    }
-    if (r.spellId !== target || r.src !== casterId) continue;
-    if (r.event === "SPELL_SUMMON") summoned.set(r.dest, r.ms);
-    else if (r.event === "SPELL_AURA_APPLIED") open.set(r.dest, r.ms);
-    else if (r.event === "SPELL_AURA_REFRESH") {
-      if (open.has(r.dest)) open.set(r.dest, null);
-    } else {
-      const at = open.get(r.dest);
-      if (at !== undefined && at !== null)
-        lives.push({ startMs: at, seconds: (r.ms - at) / 1000 });
-      open.delete(r.dest);
-    }
+    } else if (
+      r.event === "SPELL_SUMMON" &&
+      r.spellId === target &&
+      r.src === casterId
+    )
+      summoned.set(r.dest, r.ms);
   }
   return lives;
+}
+
+/** every clean run of `target` in the round, on every carrier: the shared
+ * reader (`cleanAuraRuns` with the builder's split) */
+export function auraLives(units: any[], target: string): ILife[] {
+  const byId: Record<string, any> = {};
+  for (const u of units) byId[u.id] = u;
+  const isNewApplication = builderNewApplication(byId, target);
+  const lives: (ILife & { src: string })[] = [];
+  for (const u of units) {
+    const rows = ((u.auraEvents ?? []) as any[]).filter(
+      (a) => a.spellId === target && a.destUnitId === u.id,
+    );
+    if (rows.length === 0) continue;
+    for (const r of cleanAuraRuns(rows, { isNewApplication }))
+      lives.push({
+        src: r.srcUnitId,
+        startMs: r.fromMs,
+        endMs: r.toMs,
+        dest: String(u.id),
+      });
+  }
+  return lives;
+}
+
+const FORCED_END_MS = 1000;
+const DISPEL_AT_END_MS = 100;
+
+/** did something other than the duration end this life? */
+export function forcedEnd(
+  life: ILife,
+  target: string,
+  casterId: string,
+  rows: IRawRow[],
+  roundEndMs: number,
+): boolean {
+  if (roundEndMs - life.endMs < FORCED_END_MS) return true;
+  return rows.some((r) => {
+    if (r.event === "UNIT_DIED")
+      return (
+        // a summon's own death row is its end, not a forced one
+        ((!life.summon && r.dest === life.dest) || r.dest === casterId) &&
+        Math.abs(r.ms - life.endMs) < FORCED_END_MS
+      );
+    return (
+      DISPELS.has(r.event) &&
+      r.spellId === target &&
+      r.dest === life.dest &&
+      Math.abs(r.ms - life.endMs) <= DISPEL_AT_END_MS
+    );
+  });
 }
 
 /** pair → [lives, at the model's length, at the cut length] */
 let pairs = new Map<string, number[]>();
 
+/** dropped as forced ends, per pair — printed, never counted */
+let forced = new Map<string, number>();
+
 export function run(ctx: IRoundCtx): void {
   if (!ctx.firstOwnerOfRound) return;
   let rows: IRawRow[] | undefined;
+  const auraCache = new Map<string, ReturnType<typeof auraLives>>();
+  const roundEndMs = Math.min(ctx.end, ctx.roundEndAt);
   for (const u of ctx.players as any[]) {
     for (const s of SHORTENINGS) {
       if (talentModifierOwnershipOf(u, s.talent) !== "yes") continue;
       rows ??= rowsOf(ctx.rawLines);
-      const lives = cleanLives(rows, String(u.id), s.target);
+      let ofTarget = auraCache.get(s.target);
+      if (!ofTarget) {
+        ofTarget = auraLives(ctx.units, s.target);
+        auraCache.set(s.target, ofTarget);
+      }
+      const casterId = String(u.id);
+      const k = `${s.talent}|${s.target}`;
+      const lives = [
+        ...(ofTarget as (ILife & { src: string })[]).filter(
+          (l) => l.src === casterId,
+        ),
+        ...summonLives(rows, casterId, s.target),
+      ].filter((l) => {
+        if (!forcedEnd(l, s.target, casterId, rows!, roundEndMs)) return true;
+        forced.set(k, (forced.get(k) ?? 0) + 1);
+        return false;
+      });
       if (lives.length === 0) continue;
       const rank = Math.max(1, talentRankOf(u, s.talent));
       const priced = isPriced(s);
-      for (const life of lives) {
+      for (const l of lives) {
+        const life = {
+          startMs: l.startMs,
+          seconds: (l.endMs - l.startMs) / 1000,
+        };
         const model = buffFullDurationForCaster(s.target, u, life.startMs);
         if (model === undefined) continue;
         ctx.bump("shortenedDuration");
@@ -201,7 +288,6 @@ export function run(ctx: IRoundCtx): void {
           s.kind === "flat"
             ? model + s.value * rank
             : model * (1 + (s.value / 100) * rank);
-        const k = `${s.talent}|${s.target}`;
         const tally = pairs.get(k) ?? [0, 0, 0];
         tally[0]!++;
         const atModel = Math.abs(life.seconds - model) <= TOL_S;
@@ -226,7 +312,7 @@ export function run(ctx: IRoundCtx): void {
 
 export function report(): string[] {
   const out = [
-    "shortening pairs with holder lives (lives / at model / at cut):",
+    "shortening pairs with holder lives (lives / at model / at cut; forced ends dropped):",
   ];
   for (const [k, [n, atModel, atCut]] of [...pairs].sort(
     (a, b) => b[1][0]! - a[1][0]!,
@@ -236,14 +322,15 @@ export function report(): string[] {
       (x) => x.talent === talent && x.target === target,
     )!;
     out.push(
-      `  ${nameOf(talent, talent)} ${talent} → ${nameOf(target, target)} ${target} (${s.kind} ${s.value}${isPriced(s) ? ", priced" : ""}): ${n} / ${atModel} / ${atCut}`,
+      `  ${nameOf(talent, talent)} ${talent} → ${nameOf(target, target)} ${target} (${s.kind} ${s.value}${isPriced(s) ? ", priced" : ""}): ${n} / ${atModel} / ${atCut}; ${forced.get(k) ?? 0}`,
     );
   }
   return out;
 }
-export const state = () => ({ pairs });
+export const state = () => ({ pairs, forced });
 export const load = (s: ReturnType<typeof state>): void => {
   pairs = s.pairs;
+  forced = s.forced;
 };
 export const merge = {
   pairs: (a: Map<string, number[]>, b: Map<string, number[]>) => {
@@ -251,6 +338,10 @@ export const merge = {
       const had = a.get(k);
       a.set(k, had ? had.map((x, i) => x + (v[i] ?? 0)) : v);
     }
+    return a;
+  },
+  forced: (a: Map<string, number>, b: Map<string, number>) => {
+    for (const [k, v] of b) a.set(k, (a.get(k) ?? 0) + v);
     return a;
   },
 };

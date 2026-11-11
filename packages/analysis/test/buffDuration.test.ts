@@ -171,8 +171,10 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     // the other bleeds and the heal-over-time half of the same talent
     expect(buffFullDurationForCaster("192090", feral("f3", [COLD]))).toBe(12);
     expect(
-      buffFullDurationForCaster("391356", feral("f4", [COLD])),
-    ).toBeCloseTo(6.4);
+      buffFullDurationForCaster("274838", feral("f4", [COLD])),
+    ).toBeCloseTo(4.8);
+    // Tear, on the same DB2 row, has 4 holder lives on the 605: not priced
+    expect(buffFullDurationForCaster("391356", feral("f4", [COLD]))).toBe(8);
     expect(
       buffFullDurationForCaster("164812", feral("f5", [COLD])),
     ).toBeCloseTo(14.4);

@@ -10,10 +10,12 @@
  * REMOVED / BROKEN ends it (its own source's run, else the oldest open
  * one). Only clean, ended runs come back. `buffDurationScan --per-app` reads these.
  */
+import { sourcePressedAuraNear } from "@gladlog/analysis/src/data/castEffectAuras";
 import {
   dropAuraRebroadcasts,
   supersededAuraBreaks,
 } from "@gladlog/analysis/src/utils/auraIntervals";
+import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { LogEvent } from "@gladlog/parser-compat";
 
 export interface IAuraRunRow {
@@ -53,10 +55,7 @@ export function cleanAuraRuns(
 ): ICleanAuraRun[] {
   const out: ICleanAuraRun[] = [];
   // insertion order = oldest open run first
-  const open = new Map<
-    string,
-    { t: number; anchor: number; clean: boolean }
-  >();
+  const open = new Map<string, { t: number; anchor: number; clean: boolean }>();
   const notTheEnd = supersededAuraBreaks(rows);
   for (const a of dropAuraRebroadcasts(rows)) {
     if (notTheEnd.has(a)) continue;
@@ -92,4 +91,28 @@ export function cleanAuraRuns(
     }
   }
   return out;
+}
+
+/** `cleanAuraRuns`' `isNewApplication` as the builder splits a re-APPLIED:
+ * its source pressed the aura there, or it came past the open copy's
+ * official length (codex 85-tk-A-T18-2d #2). One definition for every scan
+ * that reads clean runs (`buffDurationScan --per-app`, scan5/t48). */
+export function builderNewApplication(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy parse objects
+  units: Record<string, any>,
+  spellId: string,
+): (applied: IAuraRunRow, anchorMs: number) => boolean {
+  return (a, anchorMs) => {
+    const src = units[a.srcUnitId ?? ""];
+    if (
+      sourcePressedAuraNear(
+        src?.spellCastEvents ?? [],
+        spellId,
+        a.logLine.timestamp,
+      )
+    )
+      return true;
+    const d = buffFullDurationForCaster(spellId, src, anchorMs);
+    return d !== undefined && a.logLine.timestamp > anchorMs + d * 1000;
+  };
 }

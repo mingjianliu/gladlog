@@ -1236,7 +1236,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "1250315",
       untalentedBaseSeconds: 30,
       addSeconds: -10,
-      note: "Frost Conditioning on Hypothermia — REDUCTION with mechanism: DB2 SpellEffect 1254377, aura 219 misc 1 −10000 ms on Hypothermia's SpellLabel (label encoding, not the class mask); pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 76 / 0 / 89 (30 − 10 = 20). `hypothermiaUntil` reads the logged REMOVED first; this row is the cap when the log wrote none",
+      note: "Frost Conditioning on Hypothermia — REDUCTION with mechanism: DB2 SpellEffect 1254377, aura 219 misc 1 −10000 ms on Hypothermia's SpellLabel (label encoding, not the class mask); pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 76 / 0 / 76 (30 − 10 = 20). `hypothermiaUntil` reads the logged REMOVED first; this row is the cap when the log wrote none",
     },
   ],
   "164812": [
@@ -1244,7 +1244,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "400320",
       untalentedBaseSeconds: 18,
       pct: -20,
-      note: "Circle of Life and Death on Moonfire's debuff 164812 — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers it, the same row as Rip 1079 and the bear-form Moonfire 155625; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 9 / 0 / 12 (18 × 0.8 = 14.4)",
+      note: "Circle of Life and Death on Moonfire's debuff 164812 — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers it, the same row as Rip 1079 and the bear-form Moonfire 155625; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 9 / 0 / 11 (18 × 0.8 = 14.4)",
     },
   ],
   "192090": [
@@ -1252,15 +1252,15 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "400320",
       untalentedBaseSeconds: 15,
       pct: -20,
-      note: "Circle of Life and Death on Thrash's bleed 192090 — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers it; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 19 / 0 / 20 (15 × 0.8 = 12)",
+      note: "Circle of Life and Death on Thrash's bleed 192090 — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers it; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 18 / 0 / 19 (15 × 0.8 = 12)",
     },
   ],
-  "391356": [
+  "274838": [
     {
       talentSpellId: "400320",
-      untalentedBaseSeconds: 8,
+      untalentedBaseSeconds: 6,
       pct: -20,
-      note: "Circle of Life and Death on Tear 391356 — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers it; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 5 / 0 / 7 (8 × 0.8 = 6.4)",
+      note: "Circle of Life and Death on Feral Frenzy's bleed 274838 — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers it; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 5 / 0 / 5 (6 × 0.8 = 4.8). Tear 391356 is on the same row with 4 / 0 / 4 — under the 5-life bar, not priced, FLAGged by the scan",
     },
   ],
   "451084": [
@@ -1268,7 +1268,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "450391",
       untalentedBaseSeconds: 10,
       pct: -50,
-      note: "Chi Wave on Path of Resurgence — REDUCTION with mechanism: DB2 aura 218 misc 1 −50 % on the aura's SpellLabel (label encoding); pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 14 / 0 / 14 (10 × 0.5 = 5)",
+      note: "Chi Wave on Path of Resurgence — REDUCTION with mechanism: DB2 aura 218 misc 1 −50 % on the aura's SpellLabel (label encoding); pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 13 / 0 / 13 (10 × 0.5 = 5)",
     },
   ],
   "445474": [
@@ -1276,7 +1276,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "440048",
       untalentedBaseSeconds: 18,
       pct: -15,
-      note: "Hatefury Rituals on Wither — REDUCTION with mechanism: DB2 aura 218 misc 1 −15 % on Wither's SpellLabel (label encoding); pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 20 / 0 / 98 (18 × 0.85 = 15.3; the other 78 are refreshed-then-cut or dispelled runs at neither length)",
+      note: "Hatefury Rituals on Wither — REDUCTION with mechanism: DB2 aura 218 misc 1 −15 % on Wither's SpellLabel (label encoding); pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 15 / 0 / 34 (18 × 0.85 = 15.3; the other 19 end early at neither length)",
     },
   ],
   "155722": [
@@ -1285,14 +1285,14 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       specs: ["103"], // Druid_Feral
       untalentedBaseSeconds: 15,
       pct: -20,
-      note: "Circle of Life and Death on Rake's bleed — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers 155722, the same row as Rip 1079; pipeline T48, scan5/t48 on the 605: 521 holder lives, 100 at 12 s (94 at exactly 12.0 = 15 × 0.8) and 329 at 15 s — the Veinripper holders of the next row.",
+      note: "Circle of Life and Death on Rake's bleed — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers 155722, the same row as Rip 1079; pipeline T48, scan5/t48 on the 605: 455 holder lives, 98 at 12 s (15 × 0.8) and 324 at 15 s — the Veinripper holders of the next row.",
     },
     {
       talentSpellId: "391978",
       specs: ["103"],
       untalentedBaseSeconds: 15,
       pct: 25,
-      note: "Veinripper on Rake — DB2 aura 108 +25 %, mask covers 155722 (the Rip row's talent, same effect); with Circle of Life and Death 15 × 0.8 × 1.25 = 15, which is why most holders of that talent still read 15 s. 605 (scan5/t48): 426 of 521 clean Rake lives of Circle of Life and Death holders sit at the model's length with both rows, 100 sat at 12 s against a flat 15 before them.",
+      note: "Veinripper on Rake — DB2 aura 108 +25 %, mask covers 155722 (the Rip row's talent, same effect); with Circle of Life and Death 15 × 0.8 × 1.25 = 15, which is why most holders of that talent still read 15 s. 605 (scan5/t48): 422 of 455 clean Rake lives of Circle of Life and Death holders sit at the model's length with both rows, 98 sat at 12 s against a flat 15 before them.",
     },
   ],
   "410358": [
@@ -1340,7 +1340,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "400320",
       untalentedBaseSeconds: 12,
       pct: -15,
-      note: "Circle of Life and Death on Rejuvenation — REDUCTION with mechanism: DB2 aura 108 −15 % (effect 3, the healing-over-time half), mask covers it; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 8 / 0 / 9, on Lingering Healing holders ((12 + 3) × 0.85 = 12.75). Germination 155777 is on the same row; no holder life on the 605, not priced",
+      note: "Circle of Life and Death on Rejuvenation — REDUCTION with mechanism: DB2 aura 108 −15 % (effect 3, the healing-over-time half), mask covers it; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 8 / 0 / 8, on Lingering Healing holders ((12 + 3) × 0.85 = 12.75). Germination 155777 is on the same row; no holder life on the 605, not priced",
     },
   ],
   "703": [
