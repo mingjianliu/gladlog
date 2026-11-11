@@ -1,7 +1,8 @@
 /**
- * Per-spell mana cost lookup (BACKLOG #26 Task 4, raw-streams plan):
- * generation layer for `mana-efficiency`'s aggregate builder
- * (candidateFindings.ts's `manaEfficiencyEvents`). Generator:
+ * Per-spell mana cost lookup (BACKLOG #26 Task 4, raw-streams plan). Built
+ * for the `mana-efficiency` candidate (deleted 2026-11-11, GH #150 D2); the
+ * live reader is `utils/resourceAt.ts` (could the unit pay for a spell named
+ * as ready). Generator:
  * `packages/analysis/scripts/datagen/genSpellManaCost.ts` — see that file's
  * module header for the DB2 `SpellPower` column semantics and the
  * spec-conditional-cost derivation (Flash Heal-style spells whose cost
@@ -74,7 +75,7 @@ export function pctManaCost(pct: number, base: number = BASE_MANA): number {
  * none matching this caster's spec (an off-spec use of a shared-class-pool
  * spell the generation layer never anchored) — callers must skip the spell
  * rather than guess (CLAUDE.md 修复给前后数字 / anchor-list discipline:
- * a wrong guess here silently corrupts the mana-efficiency aggregate).
+ * a wrong guess here silently mis-states whether the spell was affordable).
  */
 export function manaCostForCast(
   spellId: string,

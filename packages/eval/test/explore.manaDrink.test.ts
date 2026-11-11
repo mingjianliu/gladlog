@@ -2,7 +2,7 @@
 /**
  * TDD fixture for `mana`/`drink` (BACKLOG #26 Task 5) — the two matchExplore
  * subcommands that consume Task 1's rawStreams predicates
- * (`parseRawStreams`/`manaAt`/`oomWindows`/`castFailedInWindow`/
+ * (`parseRawStreams`/`oomWindowsOf`/`castFailedInWindow`/
  * `drinkingSegments`). Line shapes mirror `packages/analysis/test/
  * rawStreams.test.ts`'s real-raw.txt-anchored fixture helpers (same
  * `SPELL_CAST_SUCCESS`/`SPELL_CAST_FAILED` field layout), not a bespoke
@@ -185,7 +185,7 @@ describe("manaLines", () => {
     expect(lines.some((l) => l.includes("窗内最低蓝 900"))).toBe(true);
   });
 
-  it("reports the terminal mana reading at --to via manaAt (60ab-style headline stat)", () => {
+  it("reports the terminal mana reading at --to (60ab-style headline stat)", () => {
     const lines = manaLines(legacy, streams, HEALER_NAME, 10, 21);
     expect(
       lines.some((l) => l.includes("终局蓝量") && l.includes("4000/20000")),

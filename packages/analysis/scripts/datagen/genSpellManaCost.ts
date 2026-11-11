@@ -1,9 +1,9 @@
 /**
  * Per-spell mana cost table (BACKLOG #26 Task 4, raw-streams plan): mines
  * DB2 `SpellPower` for the observed universe's mana-type (`PowerType`=0)
- * spells — consumed by `mana-efficiency`'s per-spell "mana spent vs
- * effective healing bought" aggregate (candidateFindings.ts's
- * `manaEfficiencyEvents`, feature-flagged off by default).
+ * spells — read through `src/data/spellManaCost.ts` by `utils/resourceAt.ts`
+ * (the table was first built for the `mana-efficiency` candidate, deleted
+ * 2026-11-11, GH #150 D2).
  *
  * Column semantics (verified 2026-08-15 against build 12.1.0.69273's live
  * `SpellPower` CSV — see task-4-report.md for the full derivation):

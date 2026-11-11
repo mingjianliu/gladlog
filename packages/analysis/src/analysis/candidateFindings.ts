@@ -297,20 +297,9 @@ export {
   questionableExternalEvents,
 } from "./candidates/death";
 
-// The mana producers and their calibrated thresholds moved to
-// `candidates/mana.ts` in the 2026-08-16 theme split. Re-exported here so the
-// package barrel, eval's calibration sweep and the existing tests keep their
-// import paths — the split is mechanical, the public surface is unchanged.
-export {
-  MANA_EFF_FLOOR,
-  MANA_EFF_MIN_CASTS,
-  MANA_PRESSURE_LOW_PCT,
-  MANA_PRESSURE_MIN_FAILED,
-  MANA_PRESSURE_MIN_WINDOW_S,
-  MANA_PRESSURE_TAIL_MAX_GAP_S,
-  manaEfficiencyEvents,
-  manaPressureEvents,
-} from "./candidates/mana";
+// The one mana threshold still read (eval's matchExplore): see
+// `candidates/mana.ts` for what happened to the two mana candidates.
+export { MANA_PRESSURE_LOW_PCT } from "./candidates/mana";
 
 // crisis-no-response (spec 2026-08-29): lives in `candidates/crisisNoResponse.ts`
 // alongside the shared `crisisDecisionPoints` predicate it consumes;

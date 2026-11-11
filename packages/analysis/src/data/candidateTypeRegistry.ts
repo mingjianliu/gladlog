@@ -54,10 +54,7 @@
  *     retiring one means also unwiring or deleting the emitter in
  *     candidateFindings.ts — and the tests here cannot prove you did (a
  *     `status: "retired"` row whose emitter still fires passes every test in
- *     candidateTypeRegistry.test.ts; only the corpus scan shows it). The
- *     reverse holds for `retired` unwired types (mana-pressure, mana-efficiency):
- *     flipping to `live` reconnects nothing until the assembly calls the
- *     producer again.
+ *     candidateTypeRegistry.test.ts; only the corpus scan shows it).
  *   - `deleted` is enforced: the test fails if a `type: "…"` literal is still
  *     produced anywhere a CandidateEvent is built.
  */
@@ -408,27 +405,25 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
       'Not a type string: the side=enemy half of `death` ("your kill is worth repeating"), gated in candidateFindings.ts by CANDIDATE_TYPE_FLAGS.killReview. 3/3 blind-labelled cards generic/non-actionable, low or no impact, one causal reading disputed by the player. Kills stay in the timeline; side=friendly deaths unaffected.',
   },
 
-  // ─── retired by unwiring (emitter kept, assembly no longer calls it) ──────
+  // ─── deleted (no emitter; legend / deep-dive text may remain) ────────────
   "mana-pressure": {
-    status: "retired",
+    status: "deleted",
     surface: "card",
     origin: "candidate",
-    since: "2026-08-21",
-    issue: "BACKLOG #26 (declined 2026-08-16) → #33",
+    since: "2026-11-11",
+    issue: "BACKLOG #26 (declined 2026-08-16) → #33 (declined 2026-09-05); GH #150 D2",
     reason:
-      'Killed at the value gate on sight of one real output ("you used too much mana here", detached from whether enemy burst forced it). Menu/legend/calibration wiring removed 2026-08-21; pure function manaPressureEvents kept in candidates/mana.ts as raw material for #33.',
+      'Killed at the value gate on sight of one real output ("you used too much mana here", detached from whether enemy burst forced it). Menu/legend/calibration wiring removed 2026-08-21; the producer was kept as raw material for #33, which the user declined on 2026-09-05. Producer and tests deleted 2026-11-11.',
   },
   "mana-efficiency": {
-    status: "retired",
+    status: "deleted",
     surface: "card",
     origin: "candidate",
-    since: "2026-08-21",
-    issue: "BACKLOG #26 (declined 2026-08-16) → #33",
+    since: "2026-11-11",
+    issue: "BACKLOG #26 (declined 2026-08-16) → #33 (declined 2026-09-05); GH #150 D2",
     reason:
-      "Same batch and reason as mana-pressure; manaEfficiencyEvents kept in candidates/mana.ts.",
+      "Same batch and reason as mana-pressure. Producer and tests deleted 2026-11-11.",
   },
-
-  // ─── deleted (no emitter; legend / deep-dive text may remain) ────────────
   "cc-locked": {
     status: "deleted",
     surface: "card",

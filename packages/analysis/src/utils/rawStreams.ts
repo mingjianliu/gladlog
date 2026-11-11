@@ -1,7 +1,8 @@
 /**
  * rawStreams.ts — 单源模块:直读 raw.txt 里两条被 parser 丢弃的流(逐事件法力样本 +
- * SPELL_CAST_FAILED 施法意图),供意图守护(cd-hoarded 冤枉修正)、mana-pressure/
- * mana-efficiency 候选、matchExplore 深挖子命令共用(BACKLOG #26,
+ * SPELL_CAST_FAILED 施法意图),供意图守护(cd-hoarded 冤枉修正)、上下文的 [MANA] 行兜底、
+ * matchExplore 深挖子命令共用(BACKLOG #26;原为之而建的 mana-pressure / mana-efficiency
+ * 候选已于 2026-11-11 删除,GH #150 D2;
  * docs/superpowers/plans/2026-08-15-raw-streams.md「数据契约」)。
  *
  * 行拆分 / 时间戳 / advanced 块解码**不再镜像** parser 的实现:2026-09-26 起
@@ -268,7 +269,7 @@ export function rawStreamsForRound(
   // ONE file shared by all 6 rounds, so without a bound here a line
   // belonging to a DIFFERENT round of the same lobby still gets a `tSeconds`
   // value relative to THIS round's `baseMs` and is indistinguishable from a
-  // same-round sample downstream (`oomWindows`/`castFailedInWindow` have no
+  // same-round sample downstream (`oomWindowsOf`/`castFailedInWindow` have no
   // way to tell). Both directions leak: an earlier round's tail lands at
   // negative `tSeconds`, a later round's head lands past this round's own
   // duration. Zero grace (no slack past `roundDurationS`, no slack before 0):
@@ -334,31 +335,9 @@ export function roundDurationSOf(
 }
 
 /**
- * The mana reading nearest-at-or-before `tSeconds` for `unitGuid` — `null`
- * when unavailable or when every sample for that unit is strictly after `t`.
- * `manaSamples` is time-ordered (raw.txt lines are chronological), so this
- * can stop scanning the moment a later sample is reached.
- */
-export function manaAt(
-  s: RawStreams,
-  unitGuid: string,
-  tSeconds: number,
-): { mana: number; manaMax: number } | null {
-  if (!s.available) return null;
-  let result: ManaSample | null = null;
-  for (const sample of s.manaSamples) {
-    if (sample.tSeconds > tSeconds) break;
-    if (sample.unitGuid === unitGuid) result = sample;
-  }
-  return result ? { mana: result.mana, manaMax: result.manaMax } : null;
-}
-
-/**
  * A mana sample's percent of its own `manaMax`, as a raw (unrounded) value in
  * `[0, 100]` — `0` when `manaMax` is non-positive (a display-safe degenerate
- * case, not a claim the unit is actually empty). Single-sourced because
- * `oomWindows` below and `extendOomTailWithFailedCasts`
- * (`candidateFindings.ts`) both need this exact fact — see
+ * case, not a claim the unit is actually empty). See
  * docs/predicate-index.md's "Raw log streams" section.
  */
 export function manaPct(sample: { mana: number; manaMax: number }): number {
@@ -366,25 +345,12 @@ export function manaPct(sample: { mana: number; manaMax: number }): number {
 }
 
 /**
- * Contiguous runs of `unitGuid`'s mana samples whose mana% (of that sample's
- * own `manaMax`) is strictly below `thresholdPct` — each run becomes one
- * window spanning its first-to-last below-threshold sample, with the run's
- * lowest raw mana value.
+ * Contiguous runs of one unit's time-ordered mana samples whose mana% (of
+ * that sample's own `manaMax`) is strictly below `thresholdPct` — each run
+ * becomes one window spanning its first-to-last below-threshold sample, with
+ * the run's lowest raw mana value. The series may come from any source
+ * (`manaSeriesOf` in resourceAt.ts hands the advanced-sample series here).
  */
-export function oomWindows(
-  s: RawStreams,
-  unitGuid: string,
-  thresholdPct: number,
-): Array<{ fromS: number; toS: number; minMana: number }> {
-  if (!s.available) return [];
-  return oomWindowsOf(
-    s.manaSamples.filter((sample) => sample.unitGuid === unitGuid),
-    thresholdPct,
-  );
-}
-
-/** `oomWindows` over one unit's time-ordered mana series, whatever its source
- * (`manaSeriesOf` in resourceAt.ts hands the advanced-sample series here). */
 export function oomWindowsOf(
   samples: readonly ManaSample[],
   thresholdPct: number,

@@ -14,9 +14,8 @@ import { describe, expect, it } from "vitest";
 import {
   castFailedInWindow,
   drinkingSegments,
-  manaAt,
   manaPct,
-  oomWindows,
+  oomWindowsOf,
   parseRawStreams,
   type RawStreams,
   roundDurationSOf,
@@ -108,7 +107,6 @@ describe("parseRawStreams", () => {
     const streams = parseRawStreams(raw, BASE_MS);
     expect(streams.manaSamples).toHaveLength(1);
     expect(streams.manaSamples[0]!.unitGuid).toBe(OTHER_GUID);
-    expect(manaAt(streams, GUID, 100)).toBeNull();
   });
 });
 
@@ -178,33 +176,7 @@ describe("parseRawStreams round-boundary clamp (BACKLOG #32 — Solo Shuffle cro
   });
 });
 
-describe("manaAt", () => {
-  const fixture: RawStreams = {
-    available: true,
-    manaSamples: [
-      { tSeconds: 1.1, unitGuid: GUID, mana: 100, manaMax: 1000 },
-      { tSeconds: 3.4, unitGuid: GUID, mana: 80, manaMax: 1000 },
-      { tSeconds: 5.9, unitGuid: GUID, mana: 60, manaMax: 1000 },
-    ],
-    castFailed: [],
-  };
-
-  it("returns the nearest sample at-or-before t", () => {
-    expect(manaAt(fixture, GUID, 2)).toEqual({ mana: 100, manaMax: 1000 });
-    expect(manaAt(fixture, GUID, 3.4)).toEqual({ mana: 80, manaMax: 1000 });
-    expect(manaAt(fixture, GUID, 100)).toEqual({ mana: 60, manaMax: 1000 });
-  });
-
-  it("returns null when t is before every sample for that unit", () => {
-    expect(manaAt(fixture, GUID, 0)).toBeNull();
-  });
-
-  it("returns null when unavailable", () => {
-    expect(manaAt({ ...fixture, available: false }, GUID, 10)).toBeNull();
-  });
-});
-
-describe("oomWindows", () => {
+describe("oomWindowsOf", () => {
   const fixture: RawStreams = {
     available: true,
     manaSamples: [
@@ -220,7 +192,7 @@ describe("oomWindows", () => {
   };
 
   it("groups contiguous below-threshold samples into windows", () => {
-    expect(oomWindows(fixture, GUID, 10)).toEqual([
+    expect(oomWindowsOf(fixture.manaSamples, 10)).toEqual([
       { fromS: 1.5, toS: 3.5, minMana: 50 },
       { fromS: 5.5, toS: 5.5, minMana: 80 },
     ]);
@@ -235,21 +207,20 @@ describe("oomWindows", () => {
       ],
       castFailed: [],
     };
-    expect(oomWindows(trailing, GUID, 10)).toEqual([
+    expect(oomWindowsOf(trailing.manaSamples, 10)).toEqual([
       { fromS: 2, toS: 2, minMana: 10 },
     ]);
   });
 
-  it("returns [] when unavailable or no samples cross the threshold", () => {
-    expect(oomWindows({ ...fixture, available: false }, GUID, 10)).toEqual([]);
-    expect(oomWindows(fixture, GUID, 1)).toEqual([]);
+  it("returns [] when there are no samples or none cross the threshold", () => {
+    expect(oomWindowsOf([], 10)).toEqual([]);
+    expect(oomWindowsOf(fixture.manaSamples, 1)).toEqual([]);
   });
 });
 
 describe("manaPct", () => {
-  // Single-sourced (BACKLOG #26 final review §2.d.1): `oomWindows` above and
-  // `extendOomTailWithFailedCasts` (candidateFindings.ts) both consume this
-  // exact fact — byte-identical output is load-bearing, not just style.
+  // Single-sourced (BACKLOG #26 final review §2.d.1): `oomWindowsOf` above reads this
+  // exact fact.
   it("mana over manaMax, as a raw percent, no rounding", () => {
     expect(manaPct({ mana: 500, manaMax: 1000 })).toBe(50);
     expect(manaPct({ mana: 1, manaMax: 3 })).toBeCloseTo(33.333333, 5);
@@ -260,8 +231,8 @@ describe("manaPct", () => {
     expect(manaPct({ mana: 500, manaMax: -10 })).toBe(0);
   });
 
-  it("agrees with oomWindows' own below-threshold grouping on the fixture above", () => {
-    // 90/1000 = 9% is the exact boundary oomWindows' fixture comments assert.
+  it("agrees with oomWindowsOf's own below-threshold grouping on the fixture above", () => {
+    // 90/1000 = 9% is the exact boundary oomWindowsOf's fixture comments assert.
     expect(manaPct({ mana: 90, manaMax: 1000 })).toBe(9);
   });
 });
