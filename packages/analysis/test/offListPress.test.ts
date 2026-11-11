@@ -223,6 +223,40 @@ describe("two Gladiator's Badges — two items, a cooldown each (GH #176)", () =
   });
 });
 
+describe("[PRESS] lasts — an effect that is a series of auras (pipeline T40)", () => {
+  const T = 1_000_000;
+  const { SPELL_AURA_APPLIED: APPLIED } = LogEvent;
+
+  it("Chimaeral Sting: Scorpid → Spider → Viper, 3 + 3 + 3 s on the first venom's row", () => {
+    const cast = makeSpellCastEvent("356719", T, "foe", "Foe", "hun", "Hun");
+    const hun = makeUnit("hun", { spellCastEvents: [cast] });
+    const row = makeAuraEvent(
+      APPLIED,
+      "356723",
+      T + 150,
+      "hun",
+      "foe",
+      "DEBUFF",
+    );
+    const foe = makeUnit("foe", { auraEvents: [row] });
+    const d = pressDuration(hun, cast as any, [hun, foe], hun.spellCastEvents);
+    expect(d?.row).toBe(row);
+    expect(d?.durationSeconds).toBe(9);
+  });
+
+  it("Aspect of the Cheetah: 3 s, then its second phase's 9 s", () => {
+    const cast = makeSpellCastEvent("186257", T, "hun", "Hun", "hun", "Hun");
+    const hun = makeUnit("hun", {
+      spellCastEvents: [cast],
+      auraEvents: [makeAuraEvent(APPLIED, "186257", T, "hun", "hun", "BUFF")],
+    });
+    expect(
+      pressDuration(hun, cast as any, [hun], hun.spellCastEvents)
+        ?.durationSeconds,
+    ).toBe(12);
+  });
+});
+
 describe("[PRESS] lasts — which aura it reads (GH #179)", () => {
   // Holy Bulwark: the cast 432459 arms its target and its caster with 432496
   const CAST = "432459";
@@ -562,7 +596,7 @@ describe("[PRESS] lasts — re-stated rows, Oppressing Roar, Time Stop (GH #179)
     ).toBe(15);
   });
 
-  it("Oppressing Roar on the target at the landing: Chimaeral Sting's slow runs 3.9 s", () => {
+  it("Oppressing Roar on the target at the landing: Chimaeral Sting's slow runs 3.9 s of its series", () => {
     const sting = (roar: boolean) => {
       const cast = makeSpellCastEvent("356719", T, "e", "E", "h", "H");
       const hunter = makeUnit("h", { spellCastEvents: [cast] });
@@ -580,8 +614,10 @@ describe("[PRESS] lasts — re-stated rows, Oppressing Roar, Time Stop (GH #179)
         hunter.spellCastEvents,
       )?.durationSeconds;
     };
-    expect(sting(false)).toBe(3);
-    expect(sting(true)).toBeCloseTo(3.9, 5);
+    // the whole series since pipeline T40: 3 + 3 + 3
+    expect(sting(false)).toBe(9);
+    // the roar is read on the first venom's row: 3.9 + 3 + 3
+    expect(sting(true)).toBeCloseTo(9.9, 5);
   });
 
   it("a Time Stop on the holder holds the aura for its own length", () => {

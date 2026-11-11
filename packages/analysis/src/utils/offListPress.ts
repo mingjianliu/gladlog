@@ -26,6 +26,7 @@ import {
 import { NO_CAST_LOG_PRESS_IDS } from "../data/auraActivation";
 import { effectAurasOfCast } from "../data/castEffectAuras";
 import { classMetadata } from "../data/classSpells";
+import { PRESS_EFFECT_CHAIN_AURAS } from "../data/pressEffectChains";
 import {
   effectiveCooldownSeconds,
   OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
@@ -39,7 +40,10 @@ import {
 import { isNoPressRow } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 import { oppressingRoarOnAt, prismaticBarrierOnAtMs } from "./ccBreakAnalysis";
-import { oppressingRoarLengthens, prismaticBarrierShortens } from "./ccDuration";
+import {
+  oppressingRoarLengthens,
+  prismaticBarrierShortens,
+} from "./ccDuration";
 import { isStasisReplayCast } from "./combatStates";
 import {
   canonicalSpellId,
@@ -575,13 +579,29 @@ export function pressDuration(
       row.auraType === "DEBUFF" &&
       prismaticBarrierShortens(row.spellId!) &&
       prismaticBarrierOnAtMs(unit, row.logLine.timestamp);
-    const len =
+    const own =
       base *
       (roared ? OPPRESSING_ROAR_PVP_CC_DURATION_MULT : 1) *
       (barred ? PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT : 1);
+    // pipeline T40: an effect that is a series of auras, each applied when
+    // the one before it ends (`PRESS_EFFECT_CHAIN_AURAS` — Chimaeral Sting's
+    // three venoms, Aspect of the Cheetah's second phase), lasts the whole
+    // series. Each follow-up at its own talented length; what sits on the
+    // unit when a follow-up lands is not this row's to say, so the two
+    // readings above stay on the first aura.
+    const followUps = (PRESS_EFFECT_CHAIN_AURAS[row.spellId!] ?? []).reduce(
+      (sum, id) =>
+        sum +
+        (buffFullDurationForCaster(id, caster, row.logLine.timestamp, {
+          pressed: true,
+          onUnitId: unit.id,
+        }) ?? 0),
+      0,
+    );
+    const len = own + followUps;
     return {
       durationSeconds:
-        len + timeStopHeldSeconds(unit, row.logLine.timestamp, len, row),
+        len + timeStopHeldSeconds(unit, row.logLine.timestamp, own, row),
       floor: buffDurationIsFloorForCaster(row.spellId!, caster),
       unit,
       row,

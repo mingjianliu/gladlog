@@ -269,6 +269,7 @@ import {
   OWN_FLIGHT_AURA_IDS,
 } from "./occupancyAuras";
 import { riderShieldPairs } from "./ownShieldLinks";
+import { PRESS_EFFECT_CHAIN_AURAS } from "./pressEffectChains";
 import {
   HIGH_VALUE_PURGEABLE_BUFFS,
   PURGE_WHITELIST_DATA_BLOCKED,
@@ -1292,6 +1293,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("SPEC_GATED_OFFENSIVE_CD_IDS", "utils/spellDanger.ts", "cast", () =>
     keys(SPEC_GATED_OFFENSIVE_CD_IDS),
   ),
+  // pipeline T40: a press effect that is a series of auras (Chimaeral
+  // Sting's venoms, Aspect of the Cheetah's second phase) — first aura and
+  // every follow-up
+  t("PRESS_EFFECT_CHAIN_AURAS", "data/pressEffectChains.ts", "aura", () => [
+    ...keys(PRESS_EFFECT_CHAIN_AURAS),
+    ...Object.values(PRESS_EFFECT_CHAIN_AURAS).flat(),
+  ]),
   // fact9 D27: a talent's same-cooldown button replacement (Frozen Orb 198149)
   t("TALENT_REPLACE_VARIANT_IDS", "data/talentReplaceVariants.ts", "cast", () =>
     keys(TALENT_REPLACE_VARIANT_IDS),
