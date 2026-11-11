@@ -105,7 +105,7 @@ async function main() {
             const pos = getUnitPositionAtTime(f, tMs, LOS_SWEEP_GAP_MS);
             if (!pos) continue;
             reachKnown = true;
-            if (canReachTargetAt(pos, target, tMs, combat?.startInfo?.zoneId, 40, true) !== false) { reachable = true; break; }
+            if (canReachTargetAt(pos, target, tMs, combat?.startInfo?.zoneId, 40, true, f) !== false) { reachable = true; break; }
             reachable = false;
           }
           if (!reachKnown) reachable = true;

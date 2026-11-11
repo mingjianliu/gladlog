@@ -83,13 +83,13 @@ import {
   ccDistanceClaimWindowS,
   distanceBetween,
   getUnitPositionAtTime,
-  hasLineOfSight,
   HEALER_TRAINED_YARDS,
   isHealerSpec,
   LOS_SWEEP_GAP_MS,
   LOS_SWEEP_SLACK_S,
   ownerDisplacementYards,
   positionSampleInstants,
+  rawLosSweepInSight,
   spanMeasuredEnemy,
   topEnemyDamagerInSpan,
 } from "@gladlog/analysis";
@@ -807,33 +807,26 @@ export function checkGeoClaims(
           continue;
         }
         // Grounded if any sample within ±slack has LoS (sub-second jitter at a
-        // pillar edge is not a false claim)
-        let sawAny = false;
-        let sawLoS = false;
+        // pillar edge is not a false claim) — the producer's own sweep
+        // (`rawLosSweepInSight`: raw samples, the same seconds and gap)
         // [HEALER EXPOSURE] always takes the friendly healer as its subject
         // (healerExposureAnalysis anchors on healerUnit); when the owner is a
         // DPS, recomputing against the owner is a subject mismatch (measured
         // in D2).
         const exposureSubject =
           ctx.friends.find((u) => isHealerSpec(u.spec)) ?? ctx.owner;
-        for (let dt = -TIME_SLACK_SECONDS; dt <= TIME_SLACK_SECONDS; dt++) {
-          const ts = ctx.matchStartMs + (claim.atSeconds + dt) * 1000;
-          const po = getUnitPositionAtTime(
-            exposureSubject,
-            ts,
-            POSITION_MAX_GAP_MS,
-          );
-          const pe = getUnitPositionAtTime(enemy, ts, POSITION_MAX_GAP_MS);
-          if (!po || !pe) continue;
-          sawAny = true;
-          if (hasLineOfSight(ctx.zoneId, po, pe) !== false) sawLoS = true;
-        }
-        if (!sawAny) {
+        const inSight = rawLosSweepInSight(
+          ctx.zoneId,
+          exposureSubject,
+          enemy,
+          ctx.matchStartMs + claim.atSeconds * 1000,
+        );
+        if (inSight === null) {
           unverifiable++;
           continue;
         }
         checked++;
-        if (!sawLoS) {
+        if (!inSight) {
           violations.push({
             claim,
             code: "G5_ALREADY_BROKEN",

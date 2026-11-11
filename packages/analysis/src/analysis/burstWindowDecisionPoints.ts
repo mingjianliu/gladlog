@@ -1956,6 +1956,7 @@ export function burstWindowDecisionPoints(
               combat?.startInfo?.zoneId,
               externalReachYards(cd.spellId, u),
               true,
+              u,
             ) !== false,
         );
       };

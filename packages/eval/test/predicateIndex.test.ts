@@ -1491,6 +1491,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/losAnalysis.ts`,
+    symbol: "rawLosSweepInSight",
+    mod: losAnalysis,
+  },
+  {
+    file: `${A}/utils/losAnalysis.ts`,
     symbol: "distanceBetween",
     mod: losAnalysis,
   },

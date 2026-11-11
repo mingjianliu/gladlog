@@ -268,7 +268,15 @@ async function main(): Promise<void> {
           freeSteps++;
           const pos = getUnitPositionAtTime(owner, ms, LOS_SWEEP_GAP_MS);
           const r = pos
-            ? canReachTargetAt(pos, mate, ms, zoneId, HEAL_REACH_YARDS, true)
+            ? canReachTargetAt(
+                pos,
+                mate,
+                ms,
+                zoneId,
+                HEAL_REACH_YARDS,
+                true,
+                owner,
+              )
             : null;
           if (r === true) usableSteps++;
           else if (r === null) unknownSteps++;

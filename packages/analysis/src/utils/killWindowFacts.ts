@@ -78,7 +78,15 @@ function friendlyReachesAt(
   zoneId: string | undefined,
 ): boolean | null {
   if (isMeleeSpec(f.spec))
-    return canReachTargetAt(pos, target, tMs, zoneId, CLOSE_RANGE_YARDS, false);
+    return canReachTargetAt(
+      pos,
+      target,
+      tMs,
+      zoneId,
+      CLOSE_RANGE_YARDS,
+      false,
+      f,
+    );
   // an Evoker's own range plus the hitbox slack every reach claim adds
   // (RANGE_HITBOX_SLACK_YD, the spellReachToAccuse convention)
   const evokerRange =
@@ -87,7 +95,7 @@ function friendlyReachesAt(
       : null;
   const yards =
     evokerRange !== null ? evokerRange + RANGE_HITBOX_SLACK_YD : KW_REACH_YARDS;
-  return canReachTargetAt(pos, target, tMs, zoneId, yards, true);
+  return canReachTargetAt(pos, target, tMs, zoneId, yards, true, f);
 }
 
 /** A cooldown named on a kill-window line with the second it is about. */

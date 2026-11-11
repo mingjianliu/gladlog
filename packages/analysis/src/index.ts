@@ -105,6 +105,7 @@ export {
   getUnitPositionAtTime,
   hasLineOfSight,
   type IPosition,
+  rawLosSweepInSight,
 } from "./utils/losAnalysis";
 export * from "./utils/positionAnalysis";
 // P1/P2 起爆候选开关(2026-08-15,Task 6 A/B harness):候选类型开关本身没有

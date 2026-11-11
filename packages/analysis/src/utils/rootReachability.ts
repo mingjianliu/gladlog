@@ -42,7 +42,6 @@ import { isHealerSpec, isMeleeSpec } from "./cooldowns";
 import {
   distanceBetween,
   getUnitPositionAtTime,
-  hasLineOfSight,
   type IPosition,
   rawLineOfSightAt,
 } from "./losAnalysis";
@@ -173,11 +172,13 @@ function roleOf(unit: ICombatUnit): RootedRole {
  * that scale). With `checkLoS=true`, LoS **not disproven** counts as
  * reachable (`hasLineOfSight` returns null on an unknown map / no zoneId).
  *
- * `losFromUnit`: the unit standing at `from` — then LoS is read on the two
- * units' nearest RAW samples (`rawLineOfSightAt`, the `losAnalysis`
- * contract), distance still on the interpolated points (kick-priority, codex
- * review of batch B10). Without it, LoS reads `from` and the target's
- * interpolated point, as before.
+ * `losFromUnit`: the unit standing at `from`. LoS is read on the two units'
+ * nearest RAW samples (`rawLineOfSightAt`, the `losAnalysis` contract),
+ * distance on the interpolated points (kick-priority since the codex review
+ * of batch B10; every caller since pipeline T38 — [ROOT], `rootReachProvenS`,
+ * the kill-window and summon reach, the burst-window delivery gate. Until
+ * then those read `from` and the target's interpolated point, which can sit
+ * inside a pillar neither sample is behind).
  */
 export function canReachTargetAt(
   from: IPosition,
@@ -186,7 +187,7 @@ export function canReachTargetAt(
   zoneId: string | undefined,
   rangeYards: number,
   checkLoS: boolean,
-  losFromUnit?: ICombatUnit,
+  losFromUnit: ICombatUnit,
 ): boolean | null {
   if (isDeadAt(target, tMs)) return null;
   const q = getUnitPositionAtTime(target, tMs, LOS_SWEEP_GAP_MS);
@@ -196,9 +197,7 @@ export function canReachTargetAt(
   if (!checkLoS) return true;
   const los = !zoneId
     ? null
-    : losFromUnit
-      ? rawLineOfSightAt(zoneId, losFromUnit, target, tMs, LOS_SWEEP_GAP_MS)
-      : hasLineOfSight(zoneId, from, q);
+    : rawLineOfSightAt(zoneId, losFromUnit, target, tMs, LOS_SWEEP_GAP_MS);
   return los !== false; // LoS not disproven counts as reachable
 }
 
@@ -352,8 +351,16 @@ export function computeRootReachability(
         sampled++;
         const inReach = (T: ICombatUnit): boolean | null =>
           role === "melee"
-            ? canReachTargetAt(p, T, t, zoneId, CLOSE_RANGE_YARDS, false)
-            : canReachTargetAt(p, T, t, zoneId, CC_MAX_CAST_RANGE_YARDS, true);
+            ? canReachTargetAt(p, T, t, zoneId, CLOSE_RANGE_YARDS, false, X)
+            : canReachTargetAt(
+                p,
+                T,
+                t,
+                zoneId,
+                CC_MAX_CAST_RANGE_YARDS,
+                true,
+                X,
+              );
         if (role === "healer") {
           let bad = false;
           let allTrue = true;

@@ -56,16 +56,11 @@ import {
   distanceBetween,
   getUnitPositionAtTime,
   getUnitRawPositionAtTime,
-  hasLineOfSight,
   IPosition,
   nearestLosBreakOption,
+  rawLosSweepInSight,
 } from "./losAnalysis";
-import {
-  CC_MAX_CAST_RANGE_YARDS,
-  INTERP_MAX_GAP_MS,
-  LOS_SWEEP_GAP_MS,
-  LOS_SWEEP_SLACK_S,
-} from "./positionSampling";
+import { CC_MAX_CAST_RANGE_YARDS, INTERP_MAX_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
 import { ccThreatRadiusYards } from "./spellRange";
 import { stealthControlUsableAt } from "./stealthControl";
@@ -376,31 +371,23 @@ export function analyzeHealerExposureAtBurst(
       );
       if (!enemyPos) continue;
 
-      // LoS uses the exact semantics of the eval positioning gate (G5): sweep
-      // ±2s at integer seconds with interpolated positions (3s max gap); the
-      // enemy is "in LoS" if ANY evaluable instant has LoS (unmapped geometry
-      // = visible). Any single-instant check — raw or interpolated — either
-      // pairs non-simultaneous samples or crosses pillar edges neither real
-      // position crossed; sharing the gate's sweep is the only consistent
-      // definition (G5 take 2, 2026-07-15 audit).
+      // LoS uses the exact semantics of the eval positioning gate (G5) — the
+      // one function `rawLosSweepInSight`: sweep ±2s at integer seconds, each
+      // on the two units' nearest RAW samples (3s max gap); the enemy is "in
+      // LoS" if ANY evaluable instant has LoS (unmapped geometry = visible).
+      // A single-instant check pairs non-simultaneous samples; the sweep is
+      // what makes one reading consistent (G5 take 2, 2026-07-15 audit).
+      // Until pipeline T38 the sweep read interpolated points, which cross
+      // pillar edges neither real position crossed.
       // The sweep anchors on the FLOORED second: the prompt renders fmtTime
       // (floored), and the gate re-parses that rendered time — sweeping from
       // fractional fromSeconds probes different instants than the gate and
       // flips borderline pillar geometry (death-trace fix, same class).
       const flooredWindowMs =
         matchStartMs + Math.floor(window.fromSeconds) * 1000;
-      let sawAnyLosSample = false;
-      let sawLoS = false;
-      for (let dt = -LOS_SWEEP_SLACK_S; dt <= LOS_SWEEP_SLACK_S; dt++) {
-        const ts = flooredWindowMs + dt * 1000;
-        const hp = getUnitPositionAtTime(healer, ts, LOS_SWEEP_GAP_MS);
-        const ep = getUnitPositionAtTime(enemy, ts, LOS_SWEEP_GAP_MS);
-        if (!hp || !ep) continue;
-        sawAnyLosSample = true;
-        if (hasLineOfSight(zoneId, hp, ep) !== false) sawLoS = true;
-      }
       // Blocked only when positions exist and NO swept instant had LoS.
-      const losBlocked = sawAnyLosSample && !sawLoS;
+      const losBlocked =
+        rawLosSweepInSight(zoneId, healer, enemy, flooredWindowMs) === false;
 
       // B26: enemies beyond CC range or in CC cannot threaten the healer.
       // GH #83: "beyond CC range" is per CC below (its own reach + how far

@@ -125,6 +125,7 @@ export function summonReach(
           zoneId,
           melee ? CLOSE_RANGE_YARDS : KW_REACH_YARDS,
           !melee,
+          f,
         ) === true
       )
         ok++;

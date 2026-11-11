@@ -1,6 +1,7 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
 import { ArenaObstacle, arenaObstacles } from "../data/arenaGeometry";
+import { LOS_SWEEP_GAP_MS, LOS_SWEEP_SLACK_S } from "./positionSampling";
 
 // ---------------------------------------------------------------------------
 // Position interpolation
@@ -149,6 +150,37 @@ export function rawLineOfSightAt(
   const bRaw = getUnitRawPositionAtTime(b, timestampMs, maxGapMs);
   if (!aRaw || !bRaw) return null;
   return hasLineOfSight(zoneId, aRaw, bRaw);
+}
+
+/**
+ * Whether two units were in line of sight around an anchor second — the LoS
+ * sweep of `[HEALER EXPOSURE]` (`IN LoS:` / `Pillar-blocked:`) and of its
+ * gate (`positioningScan` G5), one function for both: the whole seconds
+ * within `LOS_SWEEP_SLACK_S` of `flooredMs` (the rendered second), each read
+ * on the two units' nearest RAW samples within `LOS_SWEEP_GAP_MS` — the
+ * topological contract above (pipeline T38, GH #141 item 4 / #148 item 6b:
+ * the sweep read interpolated points, which can sit inside a pillar neither
+ * sample is behind, or in the open between two samples both behind one).
+ * true = some swept second with a sample pair is not blocked (unmapped
+ * geometry counts as in sight); false = every one is blocked; null = no
+ * swept second has a sample pair.
+ */
+export function rawLosSweepInSight(
+  zoneId: string,
+  a: ICombatUnit,
+  b: ICombatUnit,
+  flooredMs: number,
+): boolean | null {
+  let sawAny = false;
+  for (let dt = -LOS_SWEEP_SLACK_S; dt <= LOS_SWEEP_SLACK_S; dt++) {
+    const ts = flooredMs + dt * 1000;
+    const pa = getUnitRawPositionAtTime(a, ts, LOS_SWEEP_GAP_MS);
+    const pb = getUnitRawPositionAtTime(b, ts, LOS_SWEEP_GAP_MS);
+    if (!pa || !pb) continue;
+    sawAny = true;
+    if (hasLineOfSight(zoneId, pa, pb) !== false) return true;
+  }
+  return sawAny ? false : null;
 }
 
 // ---------------------------------------------------------------------------
