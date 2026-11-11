@@ -896,3 +896,59 @@ describe("F20 D23 — an override variant is its kit row's button in the enemy l
     expect(res.text).not.toContain("Predator's Wake");
   });
 });
+
+describe("T55 — a kit range's low end is the return the model gives the press", () => {
+  it("Tree of Life under Control of the Dream: 17 guardians and a 15 s credit read [80–180s]", () => {
+    const owner = makeUnit("player-1", { name: "Player1" });
+    const druid = makeUnit("enemy-1", {
+      name: "Druid",
+      spec: CombatUnitSpec.Druid_Restoration,
+    });
+    // 605 s0/1-3: pressed 22.94 s and again 92.9 s later; the kit read
+    // `[95–180s]`, the reductions walked from the full 180 s
+    const fades = [
+      29.7, 32.2, 40.9, 50.9, 52.3, 53.6, 58.1, 60.9, 66.4, 72.0, 76.4, 80.7,
+      89.7, 90.9, 94.8, 100.9, 103.7,
+    ];
+    const kit = (idleCreditSeconds?: number) =>
+      buildPlayerLoadout(
+        owner,
+        "Holy Priest",
+        [],
+        [],
+        { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
+        [druid],
+        [
+          {
+            player: druid,
+            cds: [
+              {
+                spellId: "33891",
+                spellName: "Incarnation: Tree of Life",
+                cooldownSeconds: 180,
+                maxChargesDetected: 1,
+                casts: [
+                  {
+                    timeSeconds: 22.94,
+                    reductions: fades.map((atSeconds) => ({
+                      atSeconds,
+                      seconds: 5,
+                    })),
+                    ...(idleCreditSeconds === undefined
+                      ? {}
+                      : // the ledger's own press: the credit and the model's
+                        // return with it (`applyEventReductions`)
+                        { idleCreditSeconds, cooldownSecondsOverride: 80.708 }),
+                  },
+                ],
+                neverUsed: false,
+              } as unknown as IMajorCooldownInfo,
+            ],
+          },
+        ],
+      ).text;
+    expect(kit(15)).toContain("Incarnation: Tree of Life [80–180s");
+    // no credit: the same walk from the full cooldown
+    expect(kit()).toContain("Incarnation: Tree of Life [95–180s");
+  });
+});

@@ -309,11 +309,30 @@ export function buildPlayerLoadout(
           ),
         )
       : cd.cooldownSeconds;
+    // … and the two together, with the time the button sat ready before the
+    // press (`idleCreditSeconds`): the return the model itself gives each
+    // press, the [RES] rows' own low end (`cdRealisedSecondsUntilReady`) at
+    // the press. Each term above reads one effect alone — T55, 605: Tree of
+    // Life `[95–180s]` pressed 92.9 s apart (17 guardians and Control of
+    // the Dream's 15 s: 80.7 s), Adrenaline Rush `[86–180s]` pressed 73.2 s
+    // apart (Restless Blades on the cooldown's warped clock: 69.6 s)
+    const realisedShortest = Math.min(
+      cd.cooldownSeconds,
+      ...(cd.casts ?? [])
+        .filter(
+          (c) =>
+            (c.reductions?.length ?? 0) > 0 ||
+            c.idleCreditSeconds !== undefined,
+        )
+        .map((c) => cdRealisedSecondsUntilReady(cd, c.timeSeconds))
+        .filter((left) => left > 0),
+    );
     const soonest = Math.floor(
       Math.min(
         cd.earliestCooldownSeconds ?? cd.cooldownSeconds,
         cd.cooldownSeconds - eventShortest,
         rateShortest,
+        realisedShortest,
       ),
     );
     if (soonest < cd.cooldownSeconds) {
