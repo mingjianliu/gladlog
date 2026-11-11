@@ -31,6 +31,8 @@ import {
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   ALIAS_PRESS_TWIN_MS,
+  ENEMY_DEF_NO_PRESS_TAG,
+  enemyDefensiveEvents,
   FULL_IMMUNITY_IDS,
   holderFirstOwnActionAfterMs,
   MITIGATION_AURA_MIN_PCT,
@@ -167,6 +169,11 @@ export interface IBurstDefensiveHit {
    *  row's component from the damage inside it (codex review
    *  85-tk-C-T27-2 #2). Optional for hand-built fixtures. */
   endOffsetMs?: number;
+  /** T49: no press put this aura up — the `[ENEMY DEF]` line's own reading
+   *  (`enemyDefensiveEvents`' `noPressLogged`: a copy a talent or proc put
+   *  up, a rider shield). The ledger line then drops "pressed" and carries
+   *  that line's own tag. */
+  noPressLogged?: true;
 }
 
 /** Was the wall already up when the burst opened? One predicate for the
@@ -181,19 +188,35 @@ export function wallUpAtOpen(d: {
   return undefined;
 }
 
-/** "already up when the burst opened" / "pressed 1.2s after the burst opened" */
+/** "already up when the burst opened" / "pressed 1.2s after the burst
+ *  opened"; an aura no press put up (`noPressLogged`, T49 — eacff4b7 2:23:
+ *  Exhilaration's 3 s Survival of the Fittest read "pressed 6.7s after")
+ *  reads "6.7s after the burst opened [no press logged]" — the `[ENEMY DEF]`
+ *  line's tag verbatim, no new verb (ruling R22, 2026-11-10). */
 export function wallTimingPhrase(
-  d: { startOffsetMs?: number; startOffsetSeconds?: number } | undefined,
+  d:
+    | {
+        startOffsetMs?: number;
+        startOffsetSeconds?: number;
+        noPressLogged?: true;
+      }
+    | undefined,
 ): string {
   if (!d) return "";
   const up = wallUpAtOpen(d);
   if (up === undefined) return "";
   if (up) return "already up when the burst opened";
   const s = d.startOffsetSeconds ?? (d.startOffsetMs ?? 0) / 1000;
-  return s < 0.05
-    ? "pressed <0.1s after the burst opened"
-    : `pressed ${s.toFixed(1)}s after the burst opened`;
+  const after = `${s < 0.05 ? "<0.1" : s.toFixed(1)}s after the burst opened`;
+  return d.noPressLogged
+    ? `${after} ${ENEMY_DEF_NO_PRESS_TAG}`
+    : `pressed ${after}`;
 }
+
+/** Slack between an `[ENEMY DEF]` event's start and the ledger's own aura
+ *  interval of the same aura (both read the holder's aura rows; a float
+ *  round trip through seconds is all that separates them). */
+const NO_PRESS_SAME_AURA_S = 0.05;
 
 export interface IBurstTargetDamage {
   unitId: string;
@@ -600,6 +623,29 @@ export function analyzeBurstLedger(
       // Defensive/immunity auras actually ACTIVE on the target during the span
       // (real aura intervals, not cast+duration estimates).
       const defensivesHit: IBurstDefensiveHit[] = [];
+      // T49: the auras on this target that no press put up, as the
+      // `[ENEMY DEF]` line reads them — its own events, the target's and its
+      // mates' (an external). Built once, for the first wall that started
+      // after the burst opened.
+      let noPressOnTarget: Array<{ spellId: string; atS: number }> | undefined;
+      const noPressPutUp = (spellId: string, startMs: number): boolean => {
+        noPressOnTarget ??= enemies
+          .flatMap((e) => enemyDefensiveEvents(e, enemies, combat))
+          .filter(
+            (e) =>
+              e.noPressLogged &&
+              (e.recipientId !== undefined
+                ? e.recipientId === target.id
+                : e.casterName === target.name),
+          )
+          .map((e) => ({ spellId: e.spellId, atS: e.atSeconds }));
+        const atS = (startMs - combat.startTime) / 1000;
+        return noPressOnTarget.some(
+          (e) =>
+            e.spellId === spellId &&
+            Math.abs(e.atS - atS) <= NO_PRESS_SAME_AURA_S,
+        );
+      };
       // a re-announced aura (APPLIED again within a second of its one press)
       // is that press: `buildAuraIntervals` joins it for every reader
       // (`joinReappliedIntervals`, GH #136.3; codex R6C-05 #2: one Guardian
@@ -669,6 +715,9 @@ export function analyzeBurstLedger(
           startOffsetSeconds: Math.round((iv.startMs - fromMs) / 100) / 10,
           startOffsetMs: iv.startMs - fromMs,
           endOffsetMs: endMs - fromMs,
+          ...(iv.startMs > fromMs && noPressPutUp(iv.spellId, iv.startMs)
+            ? { noPressLogged: true as const }
+            : {}),
         });
       }
       defensivesHit.sort((a, b) => b.overlapSeconds - a.overlapSeconds);

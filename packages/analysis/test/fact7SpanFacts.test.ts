@@ -20,7 +20,7 @@ import {
   hpReadingMaxHp,
   staleMaxHpRows,
 } from "../src/utils/advancedActions";
-import { analyzeBurstLedger } from "../src/utils/burstLedger";
+import { analyzeBurstLedger, wallTimingPhrase } from "../src/utils/burstLedger";
 import { pressBlockedIntervalsForSpells } from "../src/utils/cannotCastIntervals";
 import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
 import {
@@ -550,6 +550,86 @@ describe("D40 — a teammate's proc immunity in the burst ledger", () => {
     } as any)[0]!.dominantTarget?.defensivesHit;
     expect(hits?.map((d) => d.spellId)).toEqual(["353319"]);
     expect(hits?.[0]?.viaLoggedAura).toBe(true);
+  });
+});
+
+describe("T49 — a wall no press put up is not 'pressed' in the burst ledger", () => {
+  // eacff4b7 2:23: Exhilaration's 3 s Survival of the Fittest, 6.7 s into a
+  // Combustion, read "pressed 6.7s after the burst opened"
+  const SOTF = "264735";
+  const info = { teamId: "0", specId: "x" } as any;
+  const dmg = (s: number) => ({
+    logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: at(s), parameters: [] },
+    timestamp: at(s),
+    effectiveAmount: -50_000,
+    amount: -50_000,
+    srcUnitId: "p1",
+    srcUnitName: "Ret",
+    destUnitId: "e1",
+    destUnitName: "Hunter",
+    spellId: "1",
+    spellName: "TestSpell",
+  });
+  const ret = makeUnit("p1", {
+    name: "Ret",
+    spec: CombatUnitSpec.Paladin_Retribution,
+    info,
+    spellCastEvents: [
+      makeSpellCastEvent(
+        "31884",
+        at(10),
+        "p1",
+        "S",
+        "p1",
+        "Ret",
+        0,
+        "Avenging Wrath",
+      ),
+    ],
+    damageOut: [dmg(12), dmg(17)],
+  } as any);
+  const hunterWith = (castId: string) =>
+    makeUnit("e1", {
+      name: "Hunter",
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      auraEvents: auraSpan(SOTF, 16.7, 19.7, "e1", "e1", "BUFF"),
+      spellCastEvents: [
+        makeSpellCastEvent(
+          castId,
+          at(16.7),
+          "e1",
+          "Hunter",
+          "e1",
+          "Hunter",
+          0,
+          "x",
+        ),
+      ],
+    } as any);
+  const hitOf = (hunter: any) =>
+    analyzeBurstLedger(ret, [], [hunter], {
+      startTime: T,
+      endTime: at(120),
+    } as any)[0]!.dominantTarget?.defensivesHit.find((d) => d.spellId === SOTF);
+
+  it("the copy Exhilaration put up drops 'pressed' and carries [no press logged]", () => {
+    const hit = hitOf(hunterWith("109304"));
+    expect(hit?.noPressLogged).toBe(true);
+    expect(wallTimingPhrase(hit)).toBe(
+      "6.7s after the burst opened [no press logged]",
+    );
+  });
+  it("the pressed wall keeps 'pressed'", () => {
+    const hit = hitOf(hunterWith(SOTF));
+    expect(hit?.noPressLogged).toBeUndefined();
+    expect(wallTimingPhrase(hit)).toBe("pressed 6.7s after the burst opened");
+  });
+  it("a copy already up at the opening makes no press claim to correct", () => {
+    expect(wallTimingPhrase({ startOffsetMs: -500, noPressLogged: true })).toBe(
+      "already up when the burst opened",
+    );
   });
 });
 
