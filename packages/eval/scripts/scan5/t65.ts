@@ -34,8 +34,11 @@
  *    (second kind): such a catch-up burst holds a control's REMOVED row.
  *  - `envMistInvoke` (GH #123 item 16), once per round: an Enveloping Mist
  *    124682 applied inside its monk's Invoke Chi-Ji / Yu'lon window.
- *    Wrong: that run was left without a REMOVED row — the only case the
- *    official-length cap, which lacks the window's +4 s, decides its end.
+ *    Wrong (T84): that run was left without a REMOVED row and the builder,
+ *    given the casters, cut it short of the plain length + the window's
+ *    4 s with the round still running. Occasions: such a run the cap or
+ *    the round's end closed at its full length; a Gift of the Celestials
+ *    holder's (the +4 s is not priced for them).
  *  - `survivalSet4` (GH #175 item 9), once per round: a Survival Hunter.
  *    Occasion: it wears 4 pieces of set 2059 (Mongoose Fury's bonus, which
  *    no product reader prices).
@@ -69,6 +72,7 @@ import {
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "@gladlog/analysis/src/utils/enemyCDs";
+import { talentModifierOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
 
 import {
   APPLIED,
@@ -104,6 +108,10 @@ const OCC_STALL = "occasion: write stall";
 const OCC_STALL_CC = "occasion: stall's catch-up holds a control REMOVED";
 const OCC_SET4 = "occasion: wears 4 pieces of set 2059";
 const OCC_TW_LONG = "occasion: ran past the official length";
+const OCC_ENV_CAPPED =
+  "occasion: left without REMOVED: the cap carries the window's +4 s, or the round ended first";
+const OCC_ENV_GIFT =
+  "occasion: Gift of the Celestials holder (or unreadable talents), not lengthened";
 
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `syncVariantEnd|${OCC_SYNC_VARIANT}`,
@@ -115,6 +123,8 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `writeStall|${OCC_STALL_CC}`,
   `survivalSet4|${OCC_SET4}`,
   `timewalkerCap|${OCC_TW_LONG}`,
+  `envMistInvoke|${OCC_ENV_CAPPED}`,
+  `envMistInvoke|${OCC_ENV_GIFT}`,
 ]);
 
 export function run(ctx: IRoundCtx): void {
@@ -518,12 +528,20 @@ function writeStall(ctx: IRoundCtx): void {
 const ENVELOPING_MIST = "124682";
 const INVOKES = ["325197", "322118"];
 const INVOKE_WINDOW_MS = 25_000;
+const ENV_MIST_WINDOW_ADD_S = 4;
+const GIFT_OF_THE_CELESTIALS = "388212";
 
 function envMistInvoke(ctx: IRoundCtx): void {
   const combat = combatOf(ctx);
+  // the product's builder with the casters in hand, as its readers call it:
+  // the official-length cap is the caster's (T84)
+  const castersById = new Map<string, any>(
+    (ctx.players as any[]).map((p) => [p.id, p]),
+  );
+  const endS = (ctx.end - ctx.start) / 1000;
   for (const u of ctx.units as any[]) {
     if (!u.auraEvents?.length) continue;
-    for (const iv of buildAuraIntervals(u, combat as any)) {
+    for (const iv of buildAuraIntervals(u, combat as any, castersById)) {
       if (iv.spellId !== ENVELOPING_MIST) continue;
       const monk = (ctx.players as any[]).find((p) => p.id === iv.srcUnitId);
       if (!monk) continue;
@@ -537,12 +555,25 @@ function envMistInvoke(ctx: IRoundCtx): void {
       if (!inside) continue;
       ctx.bump("envMistInvoke");
       if (!iv.inferredEnd) continue;
+      const id = `${monk.name}:${u.name}:${iv.fromS.toFixed(3)}`;
+      const where = `${monk.name}'s Enveloping Mist on ${u.name} ${iv.fromS.toFixed(1)}–${iv.toS.toFixed(1)}s`;
+      // the plain length with no application time: what the cap was before
+      // the window's +4 s
+      const plain = buffFullDurationForCaster(ENVELOPING_MIST, monk);
+      const cutShort =
+        plain !== undefined &&
+        iv.toS - iv.fromS < plain + ENV_MIST_WINDOW_ADD_S - 0.05 &&
+        iv.toS < endS - 0.05;
       ctx.violate(
         "envMistInvoke",
-        "left without REMOVED: the cap decides its end",
+        !cutShort
+          ? OCC_ENV_CAPPED
+          : talentModifierOwnershipOf(monk, GIFT_OF_THE_CELESTIALS) !== "no"
+            ? OCC_ENV_GIFT
+            : "left without REMOVED: cut without the window's +4 s",
         at,
-        `${monk.name}:${u.name}:${iv.fromS.toFixed(3)}`,
-        `${monk.name}'s Enveloping Mist on ${u.name} ${iv.fromS.toFixed(1)}–${iv.toS.toFixed(1)}s`,
+        id,
+        where,
       );
     }
   }

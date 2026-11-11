@@ -232,6 +232,7 @@ import {
   castEffectPairs,
   TALENT_EFFECT_AURAS_OF_CAST,
 } from "./castEffectAuras";
+import { CASTER_WINDOW_DURATIONS } from "./casterWindowDurations";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
 import {
   AURA_KEYED_BREAK_RACIALS,
@@ -608,6 +609,18 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       rs.map((r) => r.talentSpellId),
     ),
   ]),
+  t(
+    "CASTER_WINDOW_DURATIONS",
+    "data/casterWindowDurations.ts",
+    "mixed",
+    () => [
+      ...Object.keys(CASTER_WINDOW_DURATIONS),
+      ...Object.values(CASTER_WINDOW_DURATIONS).flatMap((r) => [
+        ...r.windowCastIds,
+        ...(r.notWithTalentSpellId ? [r.notWithTalentSpellId] : []),
+      ]),
+    ],
+  ),
   t(
     "TOOLTIP_PER_EVENT_DURATIONS",
     "data/talentDurationTooltips.ts",

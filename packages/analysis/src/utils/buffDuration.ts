@@ -4,6 +4,7 @@ import {
   sourcePressedAuraNear,
   triggeredEffectAurasOfCast,
 } from "../data/castEffectAuras";
+import { CASTER_WINDOW_DURATIONS } from "../data/casterWindowDurations";
 import {
   type ISetBonusPerPressDuration,
   setBonusDurationSeconds,
@@ -213,7 +214,40 @@ export function buffFullDurationForCaster(
   // fact8 D15: a class set bonus, on top of everything the talents give
   return talented === undefined
     ? undefined
-    : talented + setBonusDurationSeconds(spellId, caster);
+    : talented +
+        setBonusDurationSeconds(spellId, caster) +
+        casterWindowExtensionSeconds(spellId, caster, atMs);
+}
+
+/**
+ * T84: the seconds an aura gains because it was applied while another
+ * effect of its caster was running (`CASTER_WINDOW_DURATIONS` — Enveloping
+ * Mist inside Invoke Yu'lon / Chi-Ji). The window is the caster's own press
+ * of the effect → that press's length. 0 without the application's time or
+ * a caster, and unless the caster is known not to hold the row's excluding talent.
+ */
+function casterWindowExtensionSeconds(
+  spellId: string,
+  caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> | undefined,
+  atMs: number | undefined,
+): number {
+  const row = CASTER_WINDOW_DURATIONS[spellId];
+  if (!row || !caster || atMs === undefined) return 0;
+  if (
+    row.notWithTalentSpellId !== undefined &&
+    talentModifierOwnershipOf(caster, row.notWithTalentSpellId) !== "no"
+  )
+    return 0;
+  for (const c of caster.spellCastEvents ?? []) {
+    const t = c.logLine.timestamp;
+    if (t > atMs) break;
+    if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
+    if (!row.windowCastIds.includes(c.spellId ?? "")) continue;
+    const windowS = buffFullDurationForCaster(c.spellId ?? "", caster);
+    if (windowS !== undefined && atMs <= t + windowS * 1000)
+      return row.addSeconds;
+  }
+  return 0;
 }
 
 function talentedDuration(
