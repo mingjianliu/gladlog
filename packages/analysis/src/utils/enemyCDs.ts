@@ -1345,6 +1345,25 @@ function pressEffectEndSeconds(
   };
 }
 
+/**
+ * T91: the seconds a burst window's damage is a RATE over — its start to
+ * its end, cut at the analysed slice's end. A window whose last effect's
+ * official end runs past the slice (a press whose REMOVED the slice lost,
+ * F15; a Divine Toll's 30 s Divine Resonance pressed 7 s before the end)
+ * was divided by seconds the log shows no damage for — the match's own
+ * average rate it is compared with (`avgDamageRate`) is over the slice —
+ * and its `damageRatio`, `dangerScore` and `dangerLabel` read low. The
+ * window's own `toSeconds` is not cut. Never under 1 s. The one reading for
+ * the window engine and scan5/t91.
+ */
+export function burstWindowRateSpanSeconds(
+  fromSeconds: number,
+  toSeconds: number,
+  sliceEndSeconds: number,
+): number {
+  return Math.max(Math.min(toSeconds, sliceEndSeconds) - fromSeconds, 1);
+}
+
 export function reconstructEnemyCDTimeline(
   enemies: ICombatUnit[],
   combat: AtomicArenaCombat,
@@ -2076,7 +2095,11 @@ function reconstructEnemyCDTimelineUncached(
         })
         .reduce((sum, e) => sum + Math.abs(e.effectiveAmount), 0);
 
-      const windowSpan = Math.max(windowEnd - windowStart, 1);
+      const windowSpan = burstWindowRateSpanSeconds(
+        windowStart,
+        windowEnd,
+        matchDurationSeconds,
+      );
       const damageRatio =
         avgDamageRate > 0
           ? Math.min(
