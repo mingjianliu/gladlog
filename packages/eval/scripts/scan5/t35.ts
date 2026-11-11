@@ -19,7 +19,10 @@
  * it: only a press before the printed second itself is a contradiction.
  * Only `[PRESS]` spells are read: on 12.1.5 that is the Devastation
  * empowers (Fire Breath, Eternity Surge); Ravager, Upheaval and Tentacle
- * Slam print no `[PRESS]` line (`isOffListPressId`).
+ * Slam print no `[PRESS]` line (`isOffListPressId`). For Tentacle Slam
+ * (2 charges × 15 s) and Upheaval (40 s) that is a ruling, not a gap (user
+ * 2026-11-11, pipeline T57 / R23: neither joins the `[PRESS]` whitelist
+ * under the 45 s floor), so their set-bonus cooldown rows are ledger-only.
  *
  * Check `setFadeWhileUp`, kind `estimatedFadeWhileUp`: the owner's
  * `[BUFF FADED] <aura> (expired, estimated)` for an aura a worn bonus

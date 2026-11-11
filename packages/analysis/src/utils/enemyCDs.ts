@@ -147,6 +147,12 @@ export interface IEnemyCDCast {
    * official length. What the scan counts such presses by, whatever end the
    * reading gave them (codex 81-tk-G-T72-2 #2). */
   endIsDelivery?: true;
+  /** T41: the effect was still up when the analysed slice ended and
+   * `buffEndSeconds` is its own end, past the slice's. This is the end its
+   * burst window keeps — the one the window read before T41, at the slice's
+   * end (`alignedBurstWindows`: a window's damage is a rate over its span,
+   * and the span is what the slice shows). */
+  windowEndSeconds?: number;
   /** T29 R14: the refusing row's miss type (`pressRefusalMissType`) */
   refusedMissType?: string;
   /** T29 R14: the end the press had before the refusal cut it to the press
@@ -556,6 +562,9 @@ function observedEffectEnd(
   nextSameCastS: number,
   combat: AtomicArenaCombat,
   onlyDestId?: string,
+  /** T41: where the chain read as ending before the clamp guard looked at
+   * the chain's own aura and its own length — `windowEndSeconds` */
+  out?: { windowEndS?: number },
 ): {
   endS: number;
   holderId: string;
@@ -744,13 +753,31 @@ function observedEffectEnd(
     const fromMs = combat.startTime + best.lastFromS * 1000;
     // re-broadcast pairs dropped first, as the interval builder does
     // (codex 20-F15-10: a REMOVED + APPLIED at 26 s is not the close)
-    const closing = dropAuraRebroadcasts(auraRowsOf(best.destId, true))
+    // …of the chain's own aura: the rows hold every effect id of the cast,
+    // and another one's REMOVED inside the combat hid the clamp (T41, 605
+    // s0/34-2: Incarnation: Avatar of Ashamane up 104.2 s, a side aura of
+    // the press off at 104.4 s, its own REMOVED at 124.2 s past the 121.3 s
+    // end — `11s left` at 1:50 against 14)
+    const chainAura = best.auraId;
+    const closing = dropAuraRebroadcasts(
+      auraRowsOf(best.destId, true).filter((a) => a.spellId === chainAura),
+    )
       .filter(
         (a) =>
           a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
           a.logLine.timestamp >= fromMs,
       )
       .sort((x, y) => x.logLine.timestamp - y.logLine.timestamp)[0];
+    // a REMOVED of another effect id of the press inside the combat: what
+    // read as the chain's observed end, at the clamp, before T41
+    const sideClosedInside = dropAuraRebroadcasts(
+      auraRowsOf(best.destId, true),
+    ).some(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+        a.logLine.timestamp >= fromMs &&
+        a.logLine.timestamp <= combat.endTime,
+    );
     if (closing && closing.logLine.timestamp > combat.endTime) {
       // …unless the log shows it outliving its official length: still up
       // when the combat ended, past `cast + official`, it ran at least to the
@@ -758,7 +785,39 @@ function observedEffectEnd(
       // Dragonrage up 29.5 s against 18 s read as ending at cast + 18 s). A
       // clamp before the official end leaves the official end standing (the
       // Kingsbane case).
+      // The effect's own aura, when it is not the cast's (Feral Frenzy's
+      // 1 s self aura 274837 and its 6 s bleed 274838), has its own length,
+      // from this press's application of it — the official end the timeline
+      // already reads off an observed chain (codex 20-G167-06): still due
+      // past the combat's end, the effect runs to it (T41, 605 s0/34-2
+      // 1:59: `Feral Frenzy/Feral Druid(2s left)`, the bleed refreshed at
+      // 118.99 s and removed at 124.50 s, the slice over at 121.34 s).
+      const auraFull =
+        best.auraId === castSpellId
+          ? undefined
+          : buffFullDurationForCaster(best.auraId, caster);
+      if (auraFull !== undefined) {
+        const appliedS = pressAppliedS(best);
+        if (out && appliedS + auraFull > combatEndS) {
+          const castFull = buffFullDurationForCaster(castSpellId, caster);
+          // …where the chain read as ending before: at the clamp when a
+          // side aura's REMOVED hid it, else the cast's own official end
+          // (never before the slice's end). A cast with no length of its
+          // own ran on its talent aura's already (Divine Toll's Divine
+          // Resonance) — nothing to keep.
+          if (sideClosedInside) out.windowEndS = combatEndS;
+          else if (castFull !== undefined)
+            out.windowEndS = Math.max(combatEndS, castS + castFull);
+        }
+        return {
+          endS: Math.max(combatEndS, appliedS + auraFull),
+          holderId: best.destId,
+          auraId: best.auraId,
+          appliedS,
+        };
+      }
       const full = buffFullDurationForCaster(castSpellId, caster);
+      if (out && sideClosedInside) out.windowEndS = combatEndS;
       return full !== undefined && castS + full < combatEndS
         ? {
             endS: combatEndS,
@@ -1425,13 +1484,18 @@ function reconstructEnemyCDTimelineUncached(
               logInstantOf(combat, combat.startTime),
             ) && c.castTimeSeconds > cd.castTimeSeconds,
       );
+      const endNote: { windowEndS?: number } = {};
       const end = observedEffectEnd(
         enemy,
         cd.spellId,
         cd.castTimeSeconds,
         next?.castTimeSeconds ?? Infinity,
         combat,
+        undefined,
+        endNote,
       );
+      if (endNote.windowEndS !== undefined)
+        cd.windowEndSeconds = endNote.windowEndS;
       if (end === null) {
         // GH #184 part B (codex review 2026-11-06 P2): a press whose effect
         // runs on a talent's aura (Divine Toll → Divine Resonance) has no
@@ -1741,7 +1805,26 @@ function reconstructEnemyCDTimelineUncached(
           o.availableAgainAtMs === null
             ? null
             : (o.availableAgainAtMs - matchStartMs) / 1000,
-        buffEndSeconds: (o.endMs - matchStartMs) / 1000,
+        // an end nothing observed, at the slice's own end: the aura was
+        // still up when the slice ended (the occurrences read no row past
+        // it, and bound an inferred end by it), so the effect's own official
+        // end stands, as it does for a logged press (`observedEffectEnd`'s
+        // clamp guard, F15) — T41, 52a97230 r0: Metamorphosis up at 0:32.9,
+        // the slice over at 0:35.7, `3s left` at 0:33 against 24 s
+        buffEndSeconds:
+          ((!o.endObserved &&
+          o.officialEndMs !== undefined &&
+          o.endMs >= combat.endTime - 1
+            ? Math.max(o.endMs, o.officialEndMs)
+            : o.endMs) -
+            matchStartMs) /
+          1000,
+        ...(!o.endObserved &&
+        o.officialEndMs !== undefined &&
+        o.endMs >= combat.endTime - 1 &&
+        o.officialEndMs > o.endMs
+          ? { windowEndSeconds: (o.endMs - matchStartMs) / 1000 }
+          : {}),
         dangerWeight: o.dangerWeight,
         ...(o.burstRole === "fact" ? { burstRole: "fact" as const } : {}),
         ...(o.availabilityUnknown ? { availabilityUnknown: true } : {}),
@@ -1863,7 +1946,15 @@ function reconstructEnemyCDTimelineUncached(
         .filter((cd) => !cd.refusedAtPress)
         .map((cd) => ({
           time: cd.castTimeSeconds,
-          buffEndSeconds: cd.buffEndSeconds,
+          // an effect T41 found still up when the slice ended carries its
+          // own end past it (`[RES]` reads that); its window keeps the end
+          // it had (`windowEndSeconds`) — the window's damage is a RATE
+          // over the span (a Metamorphosis due 14 s past the end halved the
+          // rate of its window, `High burst` read `Moderate burst`).
+          buffEndSeconds: Math.min(
+            cd.buffEndSeconds,
+            cd.windowEndSeconds ?? Infinity,
+          ),
           playerName: p.playerName,
           spellName: cd.spellName,
           spellId: cd.spellId,
