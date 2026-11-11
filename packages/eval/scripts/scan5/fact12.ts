@@ -20,16 +20,24 @@
  *    GH #167 gives that cut the official time left too. Counted: every
  *    `enemy:` entry of a dead holder or of a finished round, the holder's
  *    spec unique on the enemy roster.
+ *    The effect of X is read as its producer reads it — by spell id, not by
+ *    X's name alone (T58): an aura of the ids the holder's presses named X
+ *    run on (`effectSpanIdsOfCast`, the window's own selection) is X's
+ *    effect under whatever name the log writes it. 155-1-865 r1 2:16:
+ *    Predator's Wake 1259431 pressed 0.1 s before its demon hunter died,
+ *    its 6 s DoT 1246168 — logged as "The Hunt" — ticking on its target to
+ *    2:22; the row listing it read `effect over`.
  */
 import {
   parseResRow,
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
+import { effectSpanIdsOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
 import { casterAuraOutlives } from "@gladlog/analysis/src/utils/enemyCDs";
 import { shuffleRoundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { DEATH_CASCADE_MS } from "@gladlog/analysis/src/utils/unitDeath";
 
-import { deathMs, type IRoundCtx, secOf } from "./ctx";
+import { deathMs, type IRoundCtx, nameOf, secOf, successesOf } from "./ctx";
 
 export const CHECKS = ["resEnemyEffectAfterDeath"] as const;
 
@@ -62,8 +70,24 @@ function resEnemyEffectAfterDeath(ctx: IRoundCtx): void {
     endTime: ctx.end,
     units: ctx.legacy.units,
   };
-  const outlives = (holder: any, name: string, untilMs: number) =>
-    casterAuraOutlives(holder, name, untilMs, combat);
+  const outlives = (holder: any, name: string, untilMs: number) => {
+    // X's own name, and the names the log gives the auras X's effect runs
+    // on (the ids of the holder's presses named X, `effectSpanIdsOfCast`)
+    const names = new Set([name]);
+    for (const c of successesOf(holder))
+      if (c.spellId && nameOf(c.spellId, c.spellName ?? "") === name)
+        for (const id of effectSpanIdsOfCast(String(c.spellId))) {
+          const n = nameOf(id);
+          if (n) names.add(n);
+        }
+    let any = false;
+    for (const n of names) {
+      const r = casterAuraOutlives(holder, n, untilMs, combat);
+      if (r.outlives) return { any: true, outlives: true };
+      any ||= r.any;
+    }
+    return { any, outlives: false };
+  };
   // a Solo Shuffle round's end (T28): a 3v3's deciding friendly death
   // (`ctx.roundEndAt` carries it too) ends no enemy effect — the match runs
   // on, and a press after it is a press, not an effect the death ended

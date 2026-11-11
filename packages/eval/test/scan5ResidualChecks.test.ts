@@ -2581,6 +2581,62 @@ describe("resEnemyEffectAfterDeath: a source-less REMOVED closes the aura (T03, 
   });
 });
 
+describe("T58 — an effect is read by its press's ids, not by the entry's name alone", () => {
+  // Predator's Wake 1259431 pressed at 136.76 s; its own aura off at the
+  // landing; its DoT 1246168 — which the log names "The Hunt" — on the
+  // target from 136.78 s; the demon hunter dead at 136.88 s
+  const viol = (dotRemovedMs: number | undefined) => {
+    const aura = (
+      event: string,
+      ms: number,
+      destUnitId: string,
+      spellId: string,
+      spellName: string,
+    ) =>
+      rowOf(event, ms, { srcUnitId: "DH", destUnitId, spellId, spellName });
+    const own = (event: string, ms: number) =>
+      aura(event, ms, "DH", "1259431", "Predator's Wake");
+    const dot = (event: string, ms: number) =>
+      aura(event, ms, "Warr", "1246168", "The Hunt");
+    const dh = unit("DH", "4", 2, {
+      spellCastEvents: [
+        cast(136_757, "DH", "1259431", "Predator's Wake", "Warr"),
+      ],
+      auraEvents: [
+        own(LogEvent.SPELL_AURA_APPLIED, 136_757),
+        own(LogEvent.SPELL_AURA_REMOVED, 136_777),
+      ],
+      deathRecords: [{ timestamp: at(136_880) }],
+    });
+    const warr = unit("Warr", "1", 1, {
+      auraEvents: [
+        dot(LogEvent.SPELL_AURA_APPLIED, 136_777),
+        ...(dotRemovedMs === undefined
+          ? []
+          : [dot(LogEvent.SPELL_AURA_REMOVED, dotRemovedMs)]),
+      ],
+    });
+    return of(
+      scan(
+        runFact12,
+        [warr, dh],
+        [
+          `<unit id="4" name="DH" spec="Devourer Demon Hunter" role="enemy">`,
+          "2:16  [DEATH]  4(DDHunter) (Devourer Demon Hunter — enemy)",
+          "      [RES] rdy:Δ  cd:—  enemy:Predator's Wake/Devourer Demon Hunter(7s left)",
+        ],
+      ),
+      "resEnemyEffectAfterDeath",
+    );
+  };
+  it("the DoT ticking on past its caster's death is the effect running on", () => {
+    expect(viol(142_762)).toEqual([]);
+  });
+  it("the DoT gone in the death's cascade too: the row is caught", () => {
+    expect(viol(136_900)).toHaveLength(1);
+  });
+});
+
 describe("T28 — a Solo Shuffle round's end ends the effects it ended, a 3v3's deciding death none", () => {
   // the Arms Warrior's Avatar up at 10 s, REMOVED at 15 s in the round's
   // reset; the round ended at 15.02 s with another player's death; the
