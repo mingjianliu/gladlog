@@ -8072,9 +8072,18 @@ const MAX_HP_OF_ACTIONS = new WeakMap<object, { n: number; maxHp: number }>();
 function largestLoggedMaxHp(actions: ICombatUnit["advancedActions"]): number {
   const seen = MAX_HP_OF_ACTIONS.get(actions);
   if (seen && seen.n === actions.length) return seen.maxHp;
+  // `Math.max`'s own reading: one unreadable (NaN) max HP makes the whole
+  // answer NaN, and the caller falls back to the role's threshold (codex
+  // 85-tk-H-T39-1)
   let maxHp = -Infinity;
-  for (const a of actions)
-    if (a.advancedActorMaxHp > maxHp) maxHp = a.advancedActorMaxHp;
+  for (const a of actions) {
+    const v = Number(a.advancedActorMaxHp);
+    if (Number.isNaN(v)) {
+      maxHp = NaN;
+      break;
+    }
+    if (v > maxHp) maxHp = v;
+  }
   MAX_HP_OF_ACTIONS.set(actions, { n: actions.length, maxHp });
   return maxHp;
 }
