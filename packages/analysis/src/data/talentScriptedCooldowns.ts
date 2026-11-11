@@ -29,7 +29,11 @@ import {
 } from "@gladlog/parser-compat";
 
 import { buffFullDurationForCaster } from "../utils/buffDuration";
-import { type ILogDatedNumber, logDatedNumberAt } from "../utils/logEra";
+import {
+  type ILogDatedNumber,
+  logDatedNumberAt,
+  PATCH_1215_ZONE_BAND_TAKES,
+} from "../utils/logEra";
 import { isResyncBatchAt } from "../utils/resyncBatch";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "../utils/talents";
 import { type ISetBonusEventCredit, wearsSetBonus } from "./classSetBonuses";
@@ -1063,6 +1067,7 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
           cutoverEpochMs: PATCH_1215_GOLIVE_EPOCH_MS,
           before: 0,
           since: Number.POSITIVE_INFINITY,
+          zoneBandTakes: PATCH_1215_ZONE_BAND_TAKES,
         },
       },
     },
@@ -1092,6 +1097,7 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
           cutoverEpochMs: PATCH_1215_GOLIVE_EPOCH_MS,
           before: Number.POSITIVE_INFINITY,
           since: 0,
+          zoneBandTakes: PATCH_1215_ZONE_BAND_TAKES,
         },
       },
     },
@@ -1690,29 +1696,29 @@ export function eventTriggersFor(
         setBonused(
           r,
           bonused(r, [
-          ...eventTriggerTimesMs(unit, r, untilMs).map((atMs) => ({
-            atMs,
-            seconds: eventReductionSecondsAt(r, holderSpec, atMs),
-          })),
-          ...(r.triggerPowerSpend
-            ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
-            : []),
-          ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
-          ...(r.triggerOwnAuraStacksLost
-            ? ownAuraStacksLostTimesMs(unit, r.triggerOwnAuraStacksLost).map(
-                (atMs) => ({
-                  atMs,
-                  seconds: eventReductionSecondsAt(r, holderSpec, atMs),
-                }),
-              )
-            : []),
-          ...(r.triggerBuffedUseTargets
-            ? buffedUseTargetTriggers(unit, r)
-            : []),
-          ...(r.triggerHostileTaken ? hostileTakenTriggers(unit, r) : []),
-          ...(r.triggerCastTargetTicks
-            ? castTargetTickTriggers(unit, r, holderSpec)
-            : []),
+            ...eventTriggerTimesMs(unit, r, untilMs).map((atMs) => ({
+              atMs,
+              seconds: eventReductionSecondsAt(r, holderSpec, atMs),
+            })),
+            ...(r.triggerPowerSpend
+              ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
+              : []),
+            ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
+            ...(r.triggerOwnAuraStacksLost
+              ? ownAuraStacksLostTimesMs(unit, r.triggerOwnAuraStacksLost).map(
+                  (atMs) => ({
+                    atMs,
+                    seconds: eventReductionSecondsAt(r, holderSpec, atMs),
+                  }),
+                )
+              : []),
+            ...(r.triggerBuffedUseTargets
+              ? buffedUseTargetTriggers(unit, r)
+              : []),
+            ...(r.triggerHostileTaken ? hostileTakenTriggers(unit, r) : []),
+            ...(r.triggerCastTargetTicks
+              ? castTargetTickTriggers(unit, r, holderSpec)
+              : []),
           ]),
         ),
       ),

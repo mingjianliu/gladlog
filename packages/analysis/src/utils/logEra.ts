@@ -62,6 +62,13 @@ export interface ILogDated<T> {
   before: T;
   since: T;
   uncertainTakes?: "before" | "since";
+  /** The side of a timestamp inside `LOG_ZONE_UNCERTAINTY_MS` before the
+   * cutover alone, when it differs from `uncertainTakes` (which then only
+   * speaks for a timestamp that is not a number). The 12.1.5 go-live names
+   * `before` here (`PATCH_1215_ZONE_BAND_TAKES`, below, with the
+   * measurement); the hotfix cutovers leave it unset and keep the reading
+   * codex 45-FT-101 asked for. */
+  zoneBandTakes?: "before" | "since";
 }
 /** A number the game changed at a dated cutover (`ILogDated`). */
 export type ILogDatedNumber = ILogDated<number>;
@@ -93,6 +100,8 @@ export function logDatedAt<T>(dated: ILogDated<T>, logEpochMs: number): T {
   if (!logIsFrom(logEpochMs, dated.cutoverEpochMs - LOG_ZONE_UNCERTAINTY_MS))
     return dated.before;
   if (logIsFrom(logEpochMs, dated.cutoverEpochMs)) return dated.since;
+  if (dated.zoneBandTakes !== undefined)
+    return dated.zoneBandTakes === "before" ? dated.before : dated.since;
   return uncertain;
 }
 
@@ -111,3 +120,16 @@ export function logDatedNumberAt(
  * early by (machine − recorder) hours at most — 14.
  */
 export const LOG_ZONE_UNCERTAINTY_MS = 14 * 60 * 60 * 1000;
+
+/** The side a log takes when its date is inside the zone uncertainty before
+ * the 12.1.5 go-live (`ILogDated.zoneBandTakes`; the instant is
+ * `PATCH_1215_GOLIVE_EPOCH_MS`, utils/talents.ts): BEFORE. Measured, not
+ * assumed: of the 1,333 archives of the 605-file sample and the wide set,
+ * the 4 dated inside the window all state an instant before the go-live
+ * (`rawLineInstantMs` of their first line), one of them under a
+ * `BUILD_VERSION,12.1.0` header with The Hunt and Predator's Wake pressed
+ * 9–13 s apart, which the shared 12.1.5 cooldown forbids (T85; the
+ * coordinator's reading of the 2026-11-05 "split by date" ruling for a date
+ * that cannot decide). Every default-`since` reader of this cutover names
+ * it, so two halves of the patch cannot disagree about one log. */
+export const PATCH_1215_ZONE_BAND_TAKES = "before" as const;

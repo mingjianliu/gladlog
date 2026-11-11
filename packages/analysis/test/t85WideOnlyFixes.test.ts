@@ -6,6 +6,7 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
+import { AURA_PRESS_BY_ERA } from "../src/utils/auraActivationEra";
 import { pressRowOfLedgerId } from "../src/utils/castPress";
 import { unreleasedHoldMs } from "../src/utils/cooldowns";
 import {
@@ -14,6 +15,16 @@ import {
   relistedRunAt,
   RESYNC_BATCH_MIN_APPLIED,
 } from "../src/utils/hiddenPress";
+import {
+  LOG_ZONE_UNCERTAINTY_MS,
+  logDatedAt,
+  PATCH_1215_ZONE_BAND_TAKES,
+} from "../src/utils/logEra";
+import {
+  OVERRIDE_VARIANT_SHARES_BY_ERA,
+  variantSharesCooldownAt,
+} from "../src/utils/overrideVariantEra";
+import { PATCH_1215_GOLIVE_EPOCH_MS, talentsOf } from "../src/utils/talents";
 
 const T0 = 1_000_000;
 
@@ -159,5 +170,36 @@ describe("a hold the log never closed, begun again, spent no cooldown (T85, wide
   it("the next START long after it says nothing about the first", () => {
     const u = evoker([start(T0), start(T0 + 30_000)], [end(T0 + 30_800)]);
     expect(unreleasedHoldMs(u, SURGE, [T0])).toEqual([]);
+  });
+});
+
+// A log dated inside the zone uncertainty before the 12.1.5 go-live reads as
+// 12.1.0 for every reader of that cutover (PATCH_1215_ZONE_BAND_TAKES).
+describe("T85 12.1.5 上线前不确定带内的日志按 12.1.0 读", () => {
+  const inBand = PATCH_1215_GOLIVE_EPOCH_MS - LOG_ZONE_UNCERTAINTY_MS / 2;
+  it("Predator's Wake 是自己的冷却,不占 The Hunt", () => {
+    expect(variantSharesCooldownAt("1259431", inBand)).toBe(false);
+    expect(variantSharesCooldownAt("1259431", PATCH_1215_GOLIVE_EPOCH_MS)).toBe(
+      true,
+    );
+    expect(variantSharesCooldownAt("1259431", undefined)).toBe(true);
+  });
+  it("这个切换点的每个读者都点名同一侧", () => {
+    expect(PATCH_1215_ZONE_BAND_TAKES).toBe("before");
+    for (const row of [
+      ...Object.values(OVERRIDE_VARIANT_SHARES_BY_ERA),
+      ...Object.values(AURA_PRESS_BY_ERA),
+    ])
+      if (row.cutoverEpochMs === PATCH_1215_GOLIVE_EPOCH_MS)
+        expect(logDatedAt(row, inBand)).toBe(row.before);
+    expect(variantSharesCooldownAt("1259431", Number.NaN)).toBe(true);
+  });
+  it("天赋表按 12.1.0 的条目读(交换过的条目换回)", () => {
+    const unit = {
+      info: { talents: [{ id1: 103900, id2: 103733, count: 1 }] },
+      spellCastEvents: [{ logLine: { timestamp: inBand } }],
+      auraEvents: [],
+    };
+    expect(talentsOf(unit)?.[0]).toMatchObject({ id1: 82612, id2: 103745 });
   });
 });

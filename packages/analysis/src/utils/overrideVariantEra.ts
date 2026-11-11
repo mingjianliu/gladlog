@@ -11,11 +11,18 @@
  * Void Metamorphosis entry. Before 12.1.5 Predator's Wake is its own 90 s
  * offensive cooldown — its own row and name, no press of The Hunt; from
  * 12.1.5 it is The Hunt's button under Demonsurge, as the generated table
- * says. An undatable log takes the shared reading (`since`, the default):
- * it spends The Hunt rather than call it ready.
+ * says. A log the date cannot place (inside the zone uncertainty before the
+ * go-live) takes the 12.1.0 reading like every reader of that cutover
+ * (`PATCH_1215_ZONE_BAND_TAKES`); an undatable log, or a reading with no
+ * log date at all (`logEpochMs` undefined), takes the shared one — it spends
+ * The Hunt rather than call it ready.
  */
 import { OVERRIDE_VARIANTS_GENERATED } from "../data/overrideVariantsGenerated";
-import { type ILogDated, logDatedAt } from "./logEra";
+import {
+  type ILogDated,
+  logDatedAt,
+  PATCH_1215_ZONE_BAND_TAKES,
+} from "./logEra";
 import { offensiveEffectCdId } from "./spellDanger";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "./talents";
 
@@ -28,6 +35,7 @@ export const OVERRIDE_VARIANT_SHARES_BY_ERA: Readonly<
     cutoverEpochMs: PATCH_1215_GOLIVE_EPOCH_MS,
     before: false,
     since: true,
+    zoneBandTakes: PATCH_1215_ZONE_BAND_TAKES,
   },
 };
 

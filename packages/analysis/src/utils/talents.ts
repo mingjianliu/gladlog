@@ -1,5 +1,5 @@
 import { nodeMaps, talentDataReady } from "../data/talentStrings";
-import { logDatedNumberAt } from "./logEra";
+import { logDatedNumberAt, PATCH_1215_ZONE_BAND_TAKES } from "./logEra";
 import { memoizeWhenReady } from "./memoize";
 
 /**
@@ -8,7 +8,6 @@ import { memoizeWhenReady } from "./memoize";
  * 10-13 23:17 UTC carries a 12.1.5-only spell id; 20 after).
  */
 export const PATCH_1215_GOLIVE_EPOCH_MS = Date.UTC(2026, 9, 13, 15, 0, 0);
-
 /**
  * Talent definitions whose spell traded places at 12.1.5 (TraitDefinition
  * SpellID 12.1.0.69587 → 12.1.5.70391): on a 12.1.0 log the (node, entry)
@@ -50,8 +49,9 @@ const talentsOfCache = new WeakMap<object, TalentTuple[] | undefined>();
 /**
  * The unit's COMBATANT_INFO talents as the talent map (12.1.5) reads them:
  * on a log from before 12.1.5 went live, the entries whose definition
- * traded spells are swapped (`PRE_1215_ENTRY_SWAPS`). A log of unknown date,
- * or within the zone uncertainty of the cutover, is read as 12.1.5
+ * traded spells are swapped (`PRE_1215_ENTRY_SWAPS`), and so on one within
+ * the zone uncertainty of the cutover (`PATCH_1215_ZONE_BAND_TAKES`). A log
+ * of unknown date is read as 12.1.5
  * (`logDatedNumberAt`). Every talent reader asks this, never
  * `unit.info.talents` directly.
  */
@@ -66,7 +66,12 @@ export function talentsOf(unit: {
   if (
     talents &&
     logDatedNumberAt(
-      { cutoverEpochMs: PATCH_1215_GOLIVE_EPOCH_MS, before: 1, since: 0 },
+      {
+        cutoverEpochMs: PATCH_1215_GOLIVE_EPOCH_MS,
+        before: 1,
+        since: 0,
+        zoneBandTakes: PATCH_1215_ZONE_BAND_TAKES,
+      },
       unitLogEpochMs(unit),
     ) === 1
   )
