@@ -6025,3 +6025,34 @@ the predicate-index (en + zh-CN) and pinned; the new id tables are in
 curatedIdRegistry. (Earlier attempts went into batches B25 and B33, both
 abandoned before push.) Batch verified on tests + codex (user 11-08); cover /
 wide run at the end of the wave.
+
+v523 (2026-11-10; pipeline batch B35, T46 + T49 + T59; GH #201). Three
+fact-layer fixes, no new line type and no new wording.
+(1) T46 — an interrupt's school lockout stops a pacify-only spell of its
+school. `intervalBlocksSpell` and kick-eaten's post-kick split exempted every
+cast DB2 gives no silence bit; by `SpellCategories.PreventionType` on 605
+(presses of a locked-school spell in the first half of the lock, went out vs
+refused "not ready"): silence bit 7 / 1,371; 2 (pacify alone: Judgment, Blade
+of Justice, Hammer of Wrath, Rushing Wind Kick) 0 / 33; 6 (Gladiator's Badge,
+Voidblade) 4 / 0; 4 alone 0 / 2 and 0: 7 / 4 (too thin, exemption kept).
+`spellMechanicsGenerated.json` gains `pacifyOnly`; one predicate pair
+`isSchoolLockExemptCast` / `isSchoolLockableCast` (spellMechanics.ts,
+predicate-index en + zh-CN) is read by the lockout branch, the healer lock
+intervals and the post-kick fact. On 605, rendered kick-eaten "a spell the lock
+does not stop" clauses / presses / files 18 / 43 / 16 → 7 / 7 / 7 (the rest
+PreventionType 4, not moved); scan5 t46 `notStoppedNeverOut` 39 checked / 25
+violations → 6 / 0. Candidate rows 0 added, 0 removed.
+(2) T49 — the burst ledger wrote `(pressed Zs after the burst opened)` for a
+wall aura no press put up (a granted copy), while its `[ENEMY DEF]` line says
+`[no press logged]`. The ledger reads that producer's own `noPressLogged` and
+prints `(Zs after the burst opened [no press logged])`, the existing tag
+reused verbatim. scan5 t49 `ledgerPressedNoPress` on the 605 base 25 rows / 21
+facts; on the ticket's round 3 → 0; the 605 after-count is left to the
+wave-end run. No candidate reads the field.
+(3) T59 — one Touch of Karma press puts up two auras off the mitigation table
+and the death audit printed the same "active Ns in the final 10s" row twice;
+`computeMitigationAudit` applies the burst ledger's one-press twin rule to its
+off-table rows. scan5 `auditSplitLabel` kind=duplicate on 605: 9 rows / 3 facts
+→ 0 on the 3 archives that hold all of them; findings files identical there.
+Correction to v522: "the other 204 checks" should read 210. Batch verified on
+tests + codex (user 11-08); 605 / cover / wide run at the end of the wave.

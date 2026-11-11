@@ -1074,4 +1074,12 @@
  *  Augmentation 2pc Upheaval, Shadow 2pc Tentacle Slam, Devastation 4pc
  *  Causality. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 522;
+/*
+ * v523 (2026-11-10; pipeline batch B35, T46 + T49 + T59): an interrupt's
+ *  school lockout stops a pacify-only spell of its school (kick-eaten no
+ *  longer lists Judgment / Blade of Justice under "a spell the lock does not
+ *  stop"); the burst ledger no longer says "pressed" for a wall no press put
+ *  up; the death audit prints one row for one press's two off-table auras.
+ *  See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 523;
