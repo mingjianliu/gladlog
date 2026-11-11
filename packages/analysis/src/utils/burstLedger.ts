@@ -572,6 +572,14 @@ export function analyzeBurstLedger(
   }
 
   const entries: IBurstLedgerEntry[] = [];
+  // every enemy's no-press `[ENEMY DEF]` events, read once for the whole
+  // ledger and only when a burst asks (T39: read per burst, it was 29 s of
+  // a 50 s ×12 report render — the events do not depend on the burst)
+  let noPressAll: ReturnType<typeof enemyDefensiveEvents> | undefined;
+  const noPressEvents = () =>
+    (noPressAll ??= enemies
+      .flatMap((e) => enemyDefensiveEvents(e, enemies, combat))
+      .filter((e) => e.noPressLogged));
   for (const group of groups) {
     const fromSeconds = group[0].castTimeSeconds;
     if (fromSeconds >= matchEndS) continue; // pressed after the round ended
@@ -629,8 +637,7 @@ export function analyzeBurstLedger(
       // after the burst opened.
       let noPressOnTarget: Array<{ spellId: string; atS: number }> | undefined;
       const noPressPutUp = (spellId: string, startMs: number): boolean => {
-        noPressOnTarget ??= enemies
-          .flatMap((e) => enemyDefensiveEvents(e, enemies, combat))
+        noPressOnTarget ??= noPressEvents()
           .filter(
             (e) =>
               e.noPressLogged &&
