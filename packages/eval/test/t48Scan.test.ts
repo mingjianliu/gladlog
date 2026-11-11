@@ -141,6 +141,37 @@ describe("scan5/t48 shortenedDuration", () => {
     ).toBe(false);
   });
 
+  it("免疫上身的那一刻被带走的减益不是时长样本;别人身上的免疫不算", () => {
+    const life = { startMs: 0, endMs: 18_506, dest: "E1" };
+    expect(
+      forcedEnd(
+        life,
+        "191587",
+        "P1",
+        [row(18_506, "SPELL_AURA_APPLIED", "E1", "E1", "31224")],
+        1e6,
+      ),
+    ).toBe(true);
+    expect(
+      forcedEnd(
+        life,
+        "191587",
+        "P1",
+        [row(18_506, "SPELL_AURA_APPLIED", "E2", "E2", "31224")],
+        1e6,
+      ),
+    ).toBe(false);
+    // rowsOf keeps an immunity's application and no other aura's
+    const applied = (id: string, name: string) =>
+      `11/5/2026 18:52:00.158-5  SPELL_AURA_APPLIED,Player-1-B,"B",0x548,0x0,Player-1-B,"B",0x548,0x0,${id},"${name}",0x1,BUFF`;
+    expect(
+      rowsOf([
+        applied("31224", "Cloak of Shadows"),
+        applied("1784", "Stealth"),
+      ]),
+    ).toMatchObject([{ event: "SPELL_AURA_APPLIED", spellId: "31224" }]);
+  });
+
   it("rowsOf:驱散行读被驱散的光环 id(第 12 个参数)", () => {
     const line =
       '11/5/2026 18:52:00.158-5  SPELL_DISPEL,Player-1-A,"A",0x511,0x0,Player-1-B,"B",0x10548,0x0,527,"Purify",0x2,191587,"Virulent Plague",32,DEBUFF';

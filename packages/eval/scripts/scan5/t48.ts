@@ -21,7 +21,9 @@
  * A life something else ended is no duration sample and is dropped
  * (`forcedEnd`, codex 85-tk-G-T48-1 #1): a SPELL_DISPEL / SPELL_STOLEN of the
  * aura on its carrier at its end, the carrier's or the caster's death within
- * a second of it, or the round's end within a second.
+ * a second of it, the round's end within a second, or an immunity applied to
+ * the carrier at its end (codex 85-tk-G-T48-1b #1: Cloak of Shadows and
+ * Divine Shield take debuffs off with no SPELL_DISPEL row; `IMMUNITY_IDS`).
  * Counted: every such life whose target the model prices
  * (`buffFullDurationForCaster` for this caster, at the application).
  * Violation `shortLife`, only for a pair no duration table carries
@@ -44,6 +46,7 @@ import {
 import { TOOLTIP_DURATION_ROWS } from "@gladlog/analysis/src/data/talentDurationTooltips";
 import INVENTORY from "@gladlog/analysis/src/data/talentEffectInventoryGenerated.json";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
+import { IMMUNITY_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   parseRawTimestamp,
   splitRawLine,
@@ -115,7 +118,8 @@ interface IRawRow {
   event: string;
   src: string;
   dest: string;
-  /** the summoned id; for a dispel / steal, the aura taken off */
+  /** the summoned id; for a dispel / steal, the aura taken off; for an
+   * application, the immunity applied */
   spellId: string;
 }
 const EVENTS = new Set([
@@ -123,6 +127,7 @@ const EVENTS = new Set([
   "SPELL_DISPEL",
   "SPELL_STOLEN",
   "UNIT_DIED",
+  "SPELL_AURA_APPLIED",
 ]);
 const DISPELS = new Set(["SPELL_DISPEL", "SPELL_STOLEN"]);
 
@@ -134,7 +139,8 @@ export function rowsOf(rawLines: string[]): IRawRow[] {
       !l.includes("SPELL_SUMMON") &&
       !l.includes("SPELL_DISPEL") &&
       !l.includes("SPELL_STOLEN") &&
-      !l.includes("UNIT_DIED")
+      !l.includes("UNIT_DIED") &&
+      !l.includes("SPELL_AURA_APPLIED")
     )
       continue;
     const parts = splitRawLine(l);
@@ -142,7 +148,11 @@ export function rowsOf(rawLines: string[]): IRawRow[] {
     // a dispel names the aura it took in its extra spell id
     const spellId =
       (DISPELS.has(parts.eventName) ? parts.params[11] : parts.params[8]) ?? "";
-    if (parts.eventName !== "UNIT_DIED" && !BY_TARGET.has(spellId)) continue;
+    // an application is kept only when it is an immunity's
+    if (parts.eventName === "SPELL_AURA_APPLIED") {
+      if (!IMMUNITY_IDS.has(spellId)) continue;
+    } else if (parts.eventName !== "UNIT_DIED" && !BY_TARGET.has(spellId))
+      continue;
     const ms = parseRawTimestamp(parts.datePart);
     if (ms === null) continue;
     rows.push({
@@ -231,6 +241,11 @@ export function forcedEnd(
         // a summon's own death row is its end, not a forced one
         ((!life.summon && r.dest === life.dest) || r.dest === casterId) &&
         Math.abs(r.ms - life.endMs) < FORCED_END_MS
+      );
+    if (r.event === "SPELL_AURA_APPLIED")
+      // rowsOf keeps immunity applications only
+      return (
+        r.dest === life.dest && Math.abs(r.ms - life.endMs) <= DISPEL_AT_END_MS
       );
     return (
       DISPELS.has(r.event) &&
