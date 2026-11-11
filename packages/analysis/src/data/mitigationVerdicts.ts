@@ -427,6 +427,15 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
       "官方 DB2 SpellEffect 387804 #0(aura87 −15 misc 127)+ 605 语料拆分 2026-11-08;裁定 R07(T27)",
     approved: "2026-11-08 user",
   },
+  "414658": {
+    zh: "冰冷",
+    officialPct: 70,
+    verdict: "unconditional",
+    note: "T61:天赋 414659 把寒冰屏障换成这个按键 —— 6 秒、全学派 70% 减伤、没有免疫。605 上只按了 1 次(1 个文件)",
+    source:
+      "官方 DB2 SpellEffect 1083953(414658 aura87 −70 misc 127);裁定 R25(T61):「一律算浪费」",
+    approved: "2026-11-11 user",
+  },
 };
 
 /** 未裁定 / 从不出面的条目不参与任何「浪费」判断。 */

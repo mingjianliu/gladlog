@@ -10,6 +10,7 @@ const spellIdLists = {
   bigDefensiveSpellIds: [
     "642",
     "45438",
+    "414658", // Ice Cold: Ice Block under the talent 414659 (T61)
     "871",
     "48792",
     "104773",
