@@ -61,6 +61,7 @@ import {
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { hiddenPressMs } from "@gladlog/analysis/src/utils/hiddenPress";
 import { castRowActivationMs } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
+import { shuffleRoundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import {
   type IAuraEvent,
   type ISpellEvent,
@@ -125,6 +126,15 @@ function runRound(ctx: IContext): void {
   }
   const byId = new Map(units.map((u) => [u.id, u]));
   const start = legacy.startTime;
+  // a Solo Shuffle round is over at its first death (`shuffleRoundEndMs`,
+  // the product's cut): a press at or after it is not in the round and has
+  // no line (GH #177 item 17: wide's one allyScales miss, an Obsidian Scales
+  // 29 ms after the round-ending death)
+  const shuffleEnd = shuffleRoundEndMs(legacy, units);
+  const outOfRound = (ts: number) =>
+    ts < start ||
+    ts > legacy.endTime ||
+    (shuffleEnd !== undefined && ts >= shuffleEnd);
   const at = (ts: number) => fmt((ts - start) / 1000);
   const has = (t: string, pred: (l: string) => boolean) =>
     lines.some((l) => l.startsWith(`${t}  `) && pred(l));
@@ -138,7 +148,7 @@ function runRound(ctx: IContext): void {
     for (const c of u.spellCastEvents ?? []) {
       if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const ts = c.logLine.timestamp;
-      if (ts < start || ts > legacy.endTime) continue;
+      if (outOfRound(ts)) continue;
       const t = at(ts);
       if (c.spellId === "363916" && c.destUnitId && c.destUnitId !== u.id) {
         const d = byId.get(c.destUnitId);
@@ -227,7 +237,7 @@ function runRound(ctx: IContext): void {
         if (a.srcUnitId !== u.id || a.destUnitId !== u.id || !a.spellId)
           continue;
         const ts = a.logLine.timestamp;
-        if (ts < start || ts > legacy.endTime) continue;
+        if (outOfRound(ts)) continue;
         const t = at(ts);
         // aura-only Avenging Wrath — an APPLIED while no 454351 aura is up
         // (one re-applied over an open one is that one: 92-4 0:56)
@@ -431,7 +441,7 @@ function runRound(ctx: IContext): void {
         );
       for (const c of activations) {
         const ts = c.logLine.timestamp;
-        if (ts < start || ts > legacy.endTime) continue;
+        if (outOfRound(ts)) continue;
         const t = at(ts);
         const procLine = procLineAt(t);
         bump("procWith");
@@ -459,7 +469,7 @@ function runRound(ctx: IContext): void {
       if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (!ENEMY_UTILITY_IDS.has(c.spellId)) continue;
       const ts = c.logLine.timestamp;
-      if (ts < start || ts > legacy.endTime) continue;
+      if (outOfRound(ts)) continue;
       const t = at(ts);
       bump("enemyUtilityPress");
       const name = getEnglishSpellName(c.spellId, c.spellName);
