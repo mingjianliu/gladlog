@@ -64,6 +64,7 @@ import {
   auraBlocksMechanic,
   ccMechanicOf,
 } from "@gladlog/analysis/src/utils/spellMechanics";
+import { AURA_NATURAL_END_JITTER_S } from "@gladlog/analysis/src/utils/unitDeath";
 
 import {
   APPLIED,
@@ -92,7 +93,8 @@ export const CHECKS = [
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([]);
 
 const NEAR_MS = 50;
-const JITTER_MS = 100;
+// the product's own tolerance for "ran its length" (`auraRanItsLength`)
+const JITTER_MS = AURA_NATURAL_END_JITTER_S * 1000;
 const SANCTUARY = "210256";
 const BROKEN = new Set(["SPELL_AURA_BROKEN", "SPELL_AURA_BROKEN_SPELL"]);
 const CC_LINE =

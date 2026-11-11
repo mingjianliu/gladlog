@@ -15,6 +15,7 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { auraEndFromLog } from "../../utils/auraEndCause";
+import { officialDurationS } from "../../utils/auraIntervals";
 import {
   pressEndedSilence,
   renderedCcDuration,
@@ -133,12 +134,28 @@ export function emitSilenceEntries(
         // a silence that ran on), and a dispel the log names wins over a
         // press that merely coincides (05b #1, the hard-CC binder's order:
         // a Purify at 22 s and a trinket at 22.050 s read "trinket broke")
+        const fullS = officialDurationS(
+          s.spellId,
+          [...friends, ...(enemies ?? [])].find((p) => p.id === s.srcUnitId),
+          s.from,
+        );
         const dispelledEnd = stillOnAtRoundEnd
           ? undefined
           : auraEndFromLog(
               u,
               s.spellId,
-              { fromMs: s.from, removedMs: s.to },
+              {
+                fromMs: s.from,
+                removedMs: s.to,
+                // a silence that ran its length ended on its own, whatever
+                // died in that millisecond (`removedByDeath`'s natural end,
+                // as the control and wall lines give it — GH #173 item 17:
+                // a 3 s Garrote silence removed at 3.012 s, in its holder's
+                // death, read "ended at their death")
+                ...(fullS === null
+                  ? {}
+                  : { naturalEndMs: s.from + fullS * 1000 }),
+              },
               s.srcUnitId,
             );
         const trinketAt =

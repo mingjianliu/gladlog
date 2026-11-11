@@ -8,6 +8,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { emitSilenceEntries } from "../src/context/timelineSections/silence";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { officialDurationS } from "../src/utils/auraIntervals";
 
 const T0 = Date.UTC(2026, 9, 9);
 const SILENCE = "15487"; // Priest: Silence
@@ -65,7 +66,10 @@ describe("FT-T08 step 3c — [SILENCE] logged end", () => {
       "0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | still on them when the round ended, 1s in",
     ]);
     // a death at the removal is past the round's end too: no cause is read
-    const died = unit("f1", { auraEvents: silenced, deathRecords: [{ timestamp: T0 + 22_000 }] });
+    const died = unit("f1", {
+      auraEvents: silenced,
+      deathRecords: [{ timestamp: T0 + 22_000 }],
+    });
     expect(render(died, T0 + 21_000)).toEqual([
       "0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | still on them when the round ended, 1s in",
     ]);
@@ -73,7 +77,9 @@ describe("FT-T08 step 3c — [SILENCE] logged end", () => {
     expect(render(unit("f1", { auraEvents: silenced }), T0 + 22_000)).toEqual([
       "0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | 2s",
     ]);
-    expect(render(unit("f1", { auraEvents: silenced }), T0 + 20_000)).toEqual([]);
+    expect(render(unit("f1", { auraEvents: silenced }), T0 + 20_000)).toEqual(
+      [],
+    );
   });
 
   it("没有日志原因:只印时长", () => {
@@ -97,7 +103,11 @@ describe("FT-T08 step 3c — [SILENCE] logged end", () => {
       auraEvents: silenced,
       actionIn: [
         {
-          logLine: { event: LogEvent.SPELL_DISPEL, timestamp: T0 + 22_000, parameters: [] },
+          logLine: {
+            event: LogEvent.SPELL_DISPEL,
+            timestamp: T0 + 22_000,
+            parameters: [],
+          },
           timestamp: T0 + 22_000,
           spellId: "527",
           spellName: "Purify",
@@ -119,15 +129,56 @@ describe("FT-T08 step 3c — [SILENCE] logged end", () => {
       "0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | 2s | ended at their death",
     ]);
   });
+  it("GH #173 第 17 项:跑满官方时长的沉默是自己到期的,同一刻死亡也不印 ended at their death", () => {
+    const full = officialDurationS(SILENCE, undefined)!;
+    expect(full).toBeGreaterThan(0);
+    const ranOut = (extraS: number) =>
+      unit("f1", {
+        auraEvents: [
+          aura(LogEvent.SPELL_AURA_APPLIED, 20),
+          aura(LogEvent.SPELL_AURA_REMOVED, 20 + full + extraS),
+        ],
+        deathRecords: [{ timestamp: T0 + (20 + full + extraS) * 1000 + 30 }],
+      });
+    // 605 132-3 r3 2:48: a 3 s silence removed at 3.012 s, in the death's ms
+    expect(render(ranOut(0.012))).toEqual([
+      `0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | ${full}s`,
+    ]);
+    // cut short by the death: still the death's
+    expect(render(ranOut(-1))).toEqual([
+      `0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | ${full - 1}s | ended at their death`,
+    ]);
+  });
+
   it("codex 3c P2-2: 敌方交徽章解掉沉默、随后死亡 —— 不印 ended at their death([ENEMY TRINKET] 行说了)", () => {
     const lines: string[] = [];
     const enemy = unit("e9", {
       auraEvents: [
-        { ...aura(LogEvent.SPELL_AURA_APPLIED, 20), srcUnitId: "f2", srcUnitName: "f2", destUnitId: "e9", destUnitName: "e9" },
-        { ...aura(LogEvent.SPELL_AURA_REMOVED, 22), srcUnitId: "f2", srcUnitName: "f2", destUnitId: "e9", destUnitName: "e9" },
+        {
+          ...aura(LogEvent.SPELL_AURA_APPLIED, 20),
+          srcUnitId: "f2",
+          srcUnitName: "f2",
+          destUnitId: "e9",
+          destUnitName: "e9",
+        },
+        {
+          ...aura(LogEvent.SPELL_AURA_REMOVED, 22),
+          srcUnitId: "f2",
+          srcUnitName: "f2",
+          destUnitId: "e9",
+          destUnitName: "e9",
+        },
       ],
       spellCastEvents: [
-        { spellId: "336126", spellName: "Gladiator's Medallion", logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + 22_000, parameters: [] } },
+        {
+          spellId: "336126",
+          spellName: "Gladiator's Medallion",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 22_000,
+            parameters: [],
+          },
+        },
       ],
       deathRecords: [{ timestamp: T0 + 22_030 }],
     });
@@ -140,7 +191,8 @@ describe("FT-T08 step 3c — [SILENCE] logged end", () => {
       roundEndAtMs: T0 + 120_000,
       pid: (n: string) => `F:${n}`,
       enemyPid: (n: string) => `E:${n}`,
-      actorLabel: (n: string, side: "friendly" | "enemy") => (side === "friendly" ? `F:${n}` : `E:${n}`),
+      actorLabel: (n: string, side: "friendly" | "enemy") =>
+        side === "friendly" ? `F:${n}` : `E:${n}`,
       addEntry: (_t: number, line: string) => lines.push(line),
       silenceLineCount: 0,
     } as never);
