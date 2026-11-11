@@ -144,6 +144,7 @@ import {
   documentRecordsAttackSpell,
   isDeferralAbsorb,
 } from "../utils/incomingPressure";
+import { kickTextLockEndMs } from "../utils/kickLockout";
 import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
@@ -2946,27 +2947,9 @@ function refusedForAnotherReasonText(
     .join("");
 }
 
-/** When the lock the kick-eaten TEXT speaks of ends, whole ms since the
- * match start: the modelled lockout or, earlier, the first successful press
- * of a spell that lock covers (`lockEndedBySuccessS`, ruling A23).
- *
- * Whole milliseconds, like `dropKeyRepeatRejects`: `lockEndedBySuccessS` is
- * `cast − kick`, and adding the kick back is one ulp above the cast's own
- * instant when the subtraction was inexact (kick 0.177 s, cast 0.838 s →
- * 0.8380000000000001), so a reject logged in the cast's own millisecond read
- * as inside the lockout. */
-function textLockEndMs(
-  k: Pick<
-    Parameters<typeof postKickFact>[0],
-    "atSeconds" | "lockoutDurationSeconds" | "lockEndedBySuccessS"
-  >,
-): number {
-  return Math.round(
-    (k.atSeconds +
-      Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity)) *
-      1000,
-  );
-}
+/** `kickTextLockEndMs` — the lock the kick-eaten TEXT speaks of, shared with
+ * the row's pressure window (`kickPressure`). */
+const textLockEndMs = kickTextLockEndMs;
 
 function postKickCore(
   k: Parameters<typeof postKickFact>[0],

@@ -163,6 +163,7 @@ import {
 import { TOUCH_OF_KARMA_FEED_IDS } from "../utils/karmaFeed";
 import {
   KICK_LOCKOUT_KICKER_TALENTS,
+  KICK_LOCKOUT_VICTIM_AURAS,
   KICK_LOCKOUT_VICTIM_MODIFIERS,
 } from "../utils/kickLockout";
 import { KILL_ATTEMPT_NON_ANCHOR_CDS } from "../utils/killAttempts";
@@ -845,6 +846,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       m.talentId,
       ...m.interruptedSpellIds,
     ]),
+  ),
+  // pipeline T69: auras on the victim that change every interrupt's length
+  // (Concentration Aura, Oppressing Roar — DB2 aura 232, misc 26)
+  t("KICK_LOCKOUT_VICTIM_AURAS", "utils/kickLockout.ts", "aura", () =>
+    Object.keys(KICK_LOCKOUT_VICTIM_AURAS),
   ),
   // position F-D1: teleports whose caster keeps its pre-teleport position
   // in the log for a moment (Shadowstep)

@@ -3947,6 +3947,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/kickLockout.ts`,
+    symbol: "kickTextLockEndMs",
+    mod: kickLockout,
+  },
+  {
+    file: `${A}/utils/kickLockout.ts`,
     symbol: "kickLockoutVictimMultiplierAt",
     mod: kickLockout,
   },

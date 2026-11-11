@@ -72,6 +72,7 @@ import {
 } from "../utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { fullImmunityIntervals } from "../utils/enemyDefensives";
+import { kickTextLockEndMs } from "../utils/kickLockout";
 import { roundEndMs } from "../utils/roundEnd";
 import { isOffensiveCdFor } from "../utils/spellDanger";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
@@ -235,11 +236,8 @@ export function kickPressureFor(params: {
     // a spell of the locked school went out or began its bar
     // …and never past the round's end (codex 60-POSTHOC-09h #2: ourLowPct
     // read after a Solo Shuffle round's ending death; `roundEndMs`)
-    const t1 = Math.min(
-      k.atSeconds +
-        Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity),
-      roundEndS,
-    );
+    // (`kickTextLockEndMs`, the kick-eaten text's own end)
+    const t1 = Math.min(kickTextLockEndMs(k) / 1000, roundEndS);
     const ours = side(friends, enemySpans, t0, t1);
     const theirs = side(enemies, ourSpans, t0, t1);
     const burstReady: string[] = [];

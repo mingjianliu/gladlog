@@ -82,7 +82,7 @@
  * `consequenceFacts.ts` — the four consumers of the signed row. The table is
  * registered in `curatedIdRegistry.ts`.
  */
-import type { ICombatUnit } from "@gladlog/parser-compat";
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { kickLockoutSeconds } from "../data/spellEffectData";
 import { STORM_CONDUIT_HOTFIX_EPOCH_MS } from "../data/talentScriptedCooldowns";
@@ -116,6 +116,104 @@ export const KICK_LOCKOUT_VICTIM_MODIFIERS: readonly KickLockoutVictimModifier[]
       },
     },
   ];
+
+/**
+ * Auras that change the length of an interrupt on the unit that HOLDS them at
+ * the interrupt, whatever spell was interrupted (pipeline T69, GH #134 item
+ * "lockout readers run to the modelled lock end": a lock printed 3.0 s on a
+ * victim standing in Concentration Aura). `multiplier` is the DB2 row's own
+ * PvP number, 1 + base × PvpMultiplier / 100.
+ *
+ * Evidence (Game-Behaviour Rule; `kickLockoutScan.ts` re-runs the corpus leg
+ * — its "victims with a DB2 interrupt-duration aura" block — and carries the
+ * full DB2 list, every SpellEffect row with aura 232 MOD_MECHANIC_DURATION,
+ * misc 26, of build 12.1.7.70740; the rows of the three ids below read the
+ * same in 12.1.0.69587, 12.1.5.69952 and 12.1.5.70391):
+ *  - Concentration Aura 317920: effect 0, area aura (Effect 65) 232 / misc
+ *    26, base −30, PvpMultiplier 0.67 → ×0.799. No class mask or label: the
+ *    row shortens the interrupt mechanic on its holder, as Storm Conduit's
+ *    does. 605 files, 43 pairs on a holder with no talent modifier (gap to
+ *    the victim's first cast of a locked school ÷ the kick's own lockout):
+ *    23 come back more than 15 ms before the unmodified end (×1), 8 before
+ *    ×0.799 — five of those no proof (a passive row, a lock-ignoring cast,
+ *    a triggered row, a Counterspell from a mage without the +1 s talent)
+ *    and three real: ×0.788 (33 ms early) and ×0.732 / ×0.736.
+ *  - Oppressing Roar 372048 / 406971: aura 232 / misc 26, base +50,
+ *    PvpMultiplier 0.6 → ×1.3. 7 pairs: none before ×1.3, the two earliest
+ *    at ×1.303 and ×1.320, and one still refused "not ready" after the
+ *    unmodified end.
+ *
+ * **FLAG, kept open — Concentration Aura may be the full −30 in arenas.**
+ * Two pairs of one Warlock (928f085e, Disrupt's 3 s: Agony at 2.196 s, Drain
+ * Soul at 2.209 s) come back ~200 ms before 2.397 s and after 2.1 s (×0.7,
+ * the row without its PvpMultiplier); no pair of the 43 contradicts ×0.7,
+ * and no refusal sits between the two. Oppressing Roar's cluster at ×1.30
+ * says the PvpMultiplier is applied to this aura type, so the official
+ * number stays (user ruling on control lengths, `ccFullDurationSeconds`:
+ * the official number unless a mechanism is known) — the longer lock of
+ * the two, the side that keeps a "was locked" exemption. Left of the DB2
+ * list with no pair on 605 and not modelled: 196879, 221404, 221660,
+ * 221677, 234084.
+ *
+ * Up at the interrupt = the victim's last APPLIED / REMOVED row of the id
+ * before it, or the log's start list (`interestingAurasJSON` — a Paladin
+ * aura is usually up before the gates open). Registered in
+ * curatedIdRegistry.
+ */
+export const KICK_LOCKOUT_VICTIM_AURAS: Readonly<
+  Record<string, { name: string; multiplier: number }>
+> = {
+  "317920": { name: "Concentration Aura", multiplier: 0.799 },
+  "372048": { name: "Oppressing Roar", multiplier: 1.3 },
+  "406971": { name: "Oppressing Roar", multiplier: 1.3 },
+};
+
+/** Is `auraId` up on `victim` at `atMs`: its last APPLIED / REFRESH /
+ * REMOVED row before that instant (a REMOVED in the instant's own
+ * millisecond leaves it up), else the log's start list. */
+function victimAuraUpAt(
+  victim: Pick<ICombatUnit, "auraEvents"> & Partial<Pick<ICombatUnit, "info">>,
+  auraId: string,
+  atMs: number,
+): boolean {
+  let up = false;
+  try {
+    const initial: unknown = JSON.parse(
+      victim.info?.interestingAurasJSON ?? "[]",
+    );
+    up = Array.isArray(initial) && initial.some((x) => String(x) === auraId);
+  } catch {
+    // unreadable start list: nothing up at the start
+  }
+  for (const a of victim.auraEvents ?? []) {
+    if (a.spellId !== auraId) continue;
+    const t = a.logLine.timestamp;
+    if (t > atMs) break;
+    const ev = a.logLine.event;
+    if (ev === LogEvent.SPELL_AURA_APPLIED || ev === LogEvent.SPELL_AURA_REFRESH)
+      up = true;
+    else if (ev === LogEvent.SPELL_AURA_REMOVED && t < atMs) up = false;
+  }
+  return up;
+}
+
+/** `KICK_LOCKOUT_VICTIM_AURAS` on this victim at this instant: the product
+ * of the multipliers of the auras up on it (one per name — the two
+ * Oppressing Roar ids are one debuff), 1 with none. */
+export function kickLockoutVictimAuraMultiplierAt(
+  victim: Pick<ICombatUnit, "auraEvents"> & Partial<Pick<ICombatUnit, "info">>,
+  interruptEpochMs: number,
+): number {
+  const seen = new Set<string>();
+  let mult = 1;
+  for (const [id, m] of Object.entries(KICK_LOCKOUT_VICTIM_AURAS)) {
+    if (seen.has(m.name) || !victimAuraUpAt(victim, id, interruptEpochMs))
+      continue;
+    seen.add(m.name);
+    mult *= m.multiplier;
+  }
+  return mult;
+}
 
 /**
  * Kicker talents a kick's lockout already INCLUDES (user ruling 2026-10-20,
@@ -171,7 +269,8 @@ export function kickLockoutVictimMultiplierAt(
  * modifier the victim holds for that spell, each as of that timestamp, in
  * whole milliseconds (3 × 0.6 is 1.7999999999999998 otherwise, and `[CONSEQ]`
  * prints the number as it is). Without a victim or an interrupted spell it
- * is the kick's own lockout. */
+ * is the kick's own lockout — times `KICK_LOCKOUT_VICTIM_AURAS` when a
+ * victim is given: an aura on it at the interrupt needs no interrupted spell. */
 export function kickLockoutSecondsFor(
   kickSpellId: string,
   victim: ICombatUnit | undefined,
@@ -182,19 +281,50 @@ export function kickLockoutSecondsFor(
   kicker?: ICombatUnit,
 ): number {
   const base = kickLockoutSecondsOfKicker(kickSpellId, kicker);
-  if (!victim || !interruptedSpellId) return base;
+  if (!victim) return base;
+  // an aura on the victim changes every interrupt on it, whatever was cast
+  const auraMult = kickLockoutVictimAuraMultiplierAt(victim, interruptEpochMs);
+  let lock = base * auraMult;
+  let modified = auraMult !== 1;
+  const done = () => (modified ? Math.round(lock * 1000) / 1000 : lock);
+  if (!interruptedSpellId) return done();
   let held: Set<string>;
   try {
     held = playerTalentIdSets(victim).pvpTalentIds;
   } catch {
-    return base;
+    return done();
   }
-  let lock = base;
-  let modified = false;
   for (const m of KICK_LOCKOUT_VICTIM_MODIFIERS)
     if (held.has(m.talentId) && m.interruptedSpellIds.has(interruptedSpellId)) {
       lock *= kickLockoutVictimMultiplierAt(m, interruptEpochMs);
       modified = true;
     }
-  return modified ? Math.round(lock * 1000) / 1000 : lock;
+  return done();
+}
+
+/**
+ * When the lock a kick-eaten row speaks of ends, in whole ms since the match
+ * start: the modelled lockout or, earlier, the first successful press of a
+ * spell that lock covers (`lockEndedBySuccessS`, ruling A23). The one end of
+ * the kick-eaten text (`postKick`, the rejected-press split) and of the
+ * row's pressure window (`kickPressure`: `ourLow*` / `theirLow*` / burst) —
+ * until pipeline T69 each computed it, one in ms and one in seconds (GH
+ * #134, "lock end, no shared predicate").
+ *
+ * Whole milliseconds: `lockEndedBySuccessS` is `cast − kick`, and adding
+ * the kick back is one ulp above the cast's own instant when the
+ * subtraction was inexact (kick 0.177 s, cast 0.838 s → 0.8380000000000001),
+ * so a reject logged in the cast's own millisecond read as inside the
+ * lockout.
+ */
+export function kickTextLockEndMs(k: {
+  atSeconds: number;
+  lockoutDurationSeconds: number;
+  lockEndedBySuccessS?: number | null;
+}): number {
+  return Math.round(
+    (k.atSeconds +
+      Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity)) *
+      1000,
+  );
 }

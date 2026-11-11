@@ -40,6 +40,12 @@
  * holder × modified spell, holder × other spell, non-holder × modified
  * spell, each with its gap / table-lockout ratios.
  *
+ * Victim auras (pipeline T69): the same pairs are also split by the DB2
+ * interrupt-duration AURAS up on the victim at the interrupt
+ * (`DB2_INTERRUPT_DURATION_AURAS` below) — the corpus leg of
+ * `KICK_LOCKOUT_VICTIM_AURAS` (Concentration Aura, Oppressing Roar), each
+ * against the DB2 row's numbers, the product's and ×1.
+ *
  * By log date (2026-10-11): a modifier's number can be dated (Storm Conduit:
  * ×0.35 before its 2026-08-18 hotfix, ×0.6 since), so every pair of the split
  * is also printed by the side of the modifier's cutover its SPELL_INTERRUPT
@@ -76,6 +82,7 @@ import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/sha
 import { kickLockoutSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import { schoolLockedBy } from "@gladlog/analysis/src/data/spellSchools";
 import {
+  KICK_LOCKOUT_VICTIM_AURAS,
   KICK_LOCKOUT_VICTIM_MODIFIERS,
   kickLockoutVictimMultiplierAt,
 } from "@gladlog/analysis/src/utils/kickLockout";
@@ -101,6 +108,25 @@ const EARLY_MS = 15;
 /** The longest global cooldown: a "not ready" refusal this long after the
  * interrupt is not the interrupted cast's own. */
 const GCD_MS = 1_500;
+/** Auras whose DB2 row shortens or lengthens the interrupt mechanic on the
+ * unit that holds them (SpellEffect aura 232 MOD_MECHANIC_DURATION, misc 26)
+ * — every such row of the build, fetched 2026-11-11 (12.1.7.70740); the
+ * `ask DB2 first` leg. `db2` is what the row's base and PvpMultiplier say
+ * the multiplier is; the split below is the corpus leg. A product entry
+ * (`KICK_LOCKOUT_VICTIM_AURAS`) overrides the name and number here. */
+const DB2_INTERRUPT_DURATION_AURAS: Record<
+  string,
+  { name: string; db2: number[] }
+> = {
+  "317920": { name: "Concentration Aura", db2: [0.7, 0.8] }, // −30, PvP ×0.67
+  "196879": { name: "aura 196879", db2: [0.75] }, // −25
+  "221660": { name: "Holy Concentration", db2: [0.3] }, // −70
+  "221677": { name: "aura 221677", db2: [0.5] }, // −50
+  "221404": { name: "aura 221404", db2: [0.3] }, // −70
+  "234084": { name: "Moon and Stars", db2: [0.5] }, // −50
+  "372048": { name: "Oppressing Roar", db2: [1.3, 1.5] }, // +50, PvP ×0.6
+  "406971": { name: "Oppressing Roar", db2: [1.3, 1.5] },
+};
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -192,6 +218,20 @@ interface SplitPair {
   refusedAtS: number | null;
 }
 const splitPairs: SplitPair[] = [];
+/** one pair on a victim with a DB2 interrupt-duration aura up at the
+ * interrupt (and no talent modifier of the table above on it) */
+interface AuraPair {
+  aura: string;
+  file: string;
+  dateText: string;
+  kick: string;
+  interrupted: string;
+  firstCast: string;
+  gapS: number;
+  lockS: number;
+  refusedAtS: number | null;
+}
+const auraPairs: AuraPair[] = [];
 /** gap − table lockout (ms) of every split pair no modifier applies to */
 const unmodifiedMs: number[] = [];
 let interrupts = 0;
@@ -222,6 +262,8 @@ for (const f of files) {
       kick: string;
       interrupted: string;
       dateText: string;
+      /** DB2 interrupt-duration auras up on the victim at the interrupt */
+      auras: string[];
       /** "not ready" SPELL_CAST_FAILED rows of a locked-school spell since
        * the interrupt (or since the victim's last cast of any kind): spell
        * id → last ms */
@@ -232,6 +274,13 @@ for (const f of files) {
   const pvp = new Map<string, Set<string>>();
   // victim GUID → spec id (COMBATANT_INFO: the field before the talent list)
   const specOf = new Map<string, string>();
+  // unit GUID → DB2 interrupt-duration auras up on it now
+  const aurasUp = new Map<string, Set<string>>();
+  const auraSet = (guid: string) => {
+    let set = aurasUp.get(guid);
+    if (!set) aurasUp.set(guid, (set = new Set()));
+    return set;
+  };
   for (const line of text.split("\n")) {
     const sep = line.indexOf("  ");
     if (sep < 0) continue;
@@ -241,6 +290,19 @@ for (const f of files) {
       pendingSplit.clear();
       pvp.clear();
       specOf.clear();
+      aurasUp.clear();
+      continue;
+    }
+    if (
+      body.startsWith("SPELL_AURA_APPLIED,") ||
+      body.startsWith("SPELL_AURA_REMOVED,")
+    ) {
+      const p = body.split(",");
+      if (DB2_INTERRUPT_DURATION_AURAS[p[9] ?? ""]) {
+        if (body.startsWith("SPELL_AURA_APPLIED,"))
+          auraSet(p[5] ?? "").add(p[9]!);
+        else auraSet(p[5] ?? "").delete(p[9]!);
+      }
       continue;
     }
     if (body.startsWith("COMBATANT_INFO,")) {
@@ -251,6 +313,10 @@ for (const f of files) {
           held.add(m.talentId);
       pvp.set(guid, held);
       specOf.set(guid, /,(\d+),\[/.exec(body)?.[1] ?? "?");
+      // the auras the log lists as up at its start: "…,<source GUID>,<aura id>,…"
+      for (const id of Object.keys(DB2_INTERRUPT_DURATION_AURAS))
+        if (new RegExp(`Player-[^,]+,${id}[,\\]]`).test(body))
+          auraSet(guid).add(id);
       continue;
     }
     if (body.startsWith("SPELL_INTERRUPT,")) {
@@ -270,6 +336,7 @@ for (const f of files) {
         kick,
         interrupted: p[12] ?? "",
         dateText: line.slice(0, sep),
+        auras: [...(aurasUp.get(dst ?? "") ?? [])],
         refused: new Map(),
       });
       continue;
@@ -321,6 +388,29 @@ for (const f of files) {
           unmodifiedMs.push(
             Math.round((gap - kickLockoutSeconds(split.kick)) * 1000),
           );
+        if (
+          gap >= 0 &&
+          gap <= MAX_GAP_S &&
+          !KICK_LOCKOUT_VICTIM_MODIFIERS.some(
+            (m) =>
+              victimHolds(m) && m.interruptedSpellIds.has(split.interrupted),
+          )
+        ) {
+          const refusedMs = split.refused.get(p[9] ?? "");
+          for (const aura of split.auras)
+            auraPairs.push({
+              aura,
+              file: f.replace(/^.*\//, "").slice(0, 8),
+              dateText: split.dateText,
+              kick: split.kick,
+              interrupted: split.interrupted,
+              firstCast: `${p[9]} ${(p[10] ?? "").replace(/"/g, "")}`,
+              gapS: gap,
+              lockS: kickLockoutSeconds(split.kick),
+              refusedAtS:
+                refusedMs === undefined ? null : (refusedMs - split.at) / 1000,
+            });
+        }
         if (gap >= 0 && gap <= MAX_GAP_S)
           for (const m of KICK_LOCKOUT_VICTIM_MODIFIERS) {
             const holder = pvp.get(p[1] ?? "")?.has(m.talentId) ?? false;
@@ -496,3 +586,44 @@ const tooShort = (mult: (x: SplitPair) => number) =>
 console.log(
   `holder × modified spell, n=${modified.length}: first cast more than ${EARLY_MS} ms BEFORE the modelled end (model too long) — dated model ${tooLong(modelOf)}, current value alone ${tooLong(currentOf)}; still refused more than ${EARLY_MS} ms AFTER the modelled end (model too short) — dated model ${tooShort(modelOf)}, current value alone ${tooShort(currentOf)}`,
 );
+
+// ── Victim AURAS that change the interrupt's length (DB2 aura 232, misc 26) ─
+console.log(
+  "victims with a DB2 interrupt-duration aura up at the interrupt (no talent modifier on the pair); gap / table lockout:",
+);
+for (const [aura, meta] of Object.entries(DB2_INTERRUPT_DURATION_AURAS)) {
+  const xs = auraPairs.filter((x) => x.aura === aura);
+  if (xs.length === 0) {
+    console.log(`  ${aura} ${meta.name}: no pair`);
+    continue;
+  }
+  const r = xs.map((x) => x.gapS / x.lockS).sort((a, b) => a - b);
+  const band = (lo: number, hi: number) =>
+    r.filter((v) => v >= lo && v < hi).length;
+  console.log(
+    `  ${aura} ${meta.name}: n=${r.length} min=${r[0]?.toFixed(3)} p25=${quantile(r, 0.25)?.toFixed(3)} p50=${quantile(r, 0.5)?.toFixed(3)} | <0.68: ${band(0, 0.68)}  0.68-0.72: ${band(0.68, 0.72)}  0.72-0.78: ${band(0.72, 0.78)}  0.78-0.82: ${band(0.78, 0.82)}  0.82-0.97: ${band(0.82, 0.97)}  0.97-1.10: ${band(0.97, 1.1)}  1.10-1.28: ${band(1.1, 1.28)}  1.28-1.35: ${band(1.28, 1.35)}  1.35-1.48: ${band(1.35, 1.48)}  >=1.48: ${band(1.48, Infinity)}`,
+  );
+  const product = KICK_LOCKOUT_VICTIM_AURAS[aura]?.multiplier;
+  console.log(
+    product === undefined
+      ? "    not in KICK_LOCKOUT_VICTIM_AURAS (the product reads ×1)"
+      : `    KICK_LOCKOUT_VICTIM_AURAS: ×${product}`,
+  );
+  for (const mult of [...new Set([...meta.db2, product ?? 1, 1])]) {
+    const tooLongN = xs.filter(
+      (x) => Math.round((x.gapS - mult * x.lockS) * 1000) < -EARLY_MS,
+    ).length;
+    const tooShortN = xs.filter(
+      (x) =>
+        x.refusedAtS !== null &&
+        Math.round((x.refusedAtS - mult * x.lockS) * 1000) > EARLY_MS,
+    ).length;
+    console.log(
+      `    ×${mult}: first cast more than ${EARLY_MS} ms before the modelled end (too long) ${tooLongN}/${xs.length}; still refused more than ${EARLY_MS} ms after it (too short) ${tooShortN}/${xs.length}`,
+    );
+  }
+  for (const x of xs.filter((y) => y.gapS / y.lockS < 0.97).slice(0, 40))
+    console.log(
+      `    ${x.file} ${x.dateText} kick ${x.kick} (${x.lockS}s) on ${x.interrupted} → ${x.firstCast} at ${x.gapS.toFixed(3)}s = ×${(x.gapS / x.lockS).toFixed(3)}${x.refusedAtS === null ? "" : ` | still refused at ${x.refusedAtS.toFixed(3)}s = ×${(x.refusedAtS / x.lockS).toFixed(3)}`}`,
+    );
+}
