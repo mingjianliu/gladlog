@@ -1316,6 +1316,34 @@ export function reconstructEnemyCDTimeline(
             (buffFullDurationForCaster(talentAura, enemy) ??
               spellEffectData[talentAura]?.durationSeconds ??
               0);
+        // pipeline T72 (codex 85-tk-G-T72-1 #1): a member whose cast has no
+        // length of its own and whose effect aura the log opened and never
+        // closed runs that aura's official length, up to its wearer's death
+        // — the reading it had as a press fact (`pressEffectEndSeconds`;
+        // Goremaw's Bite 426591 → 426593, 75-1-523: pressed at 150.128, the
+        // round over at 2:39, the span read zero and `[RES]` the instant
+        // member's 8 s for a 14 s effect).
+        if (cd.buffEndSeconds <= cd.castTimeSeconds) {
+          const effectEnd = pressEffectEndSeconds(
+            enemy,
+            Object.values(combat.units ?? {}),
+            getEnglishSpellName(cd.spellId, cd.spellName),
+            matchStartMs + cd.castTimeSeconds * 1000,
+            matchStartMs,
+            combat.endTime,
+          );
+          if (effectEnd !== undefined) {
+            cd.buffEndSeconds = Math.max(
+              cd.castTimeSeconds,
+              effectEnd.endSeconds,
+            );
+            if (effectEnd.officialEndSeconds !== undefined) {
+              cd.deathCutOfficialEndSeconds = effectEnd.officialEndSeconds;
+              if (effectEnd.cutAtSeconds !== undefined)
+                cd.deathCutAtSeconds = effectEnd.cutAtSeconds;
+            }
+          }
+        }
         // fact10 D20: a length that moves with haste, its end not logged by
         // the round's end, runs as long as this unit's own completed run of
         // it did — not the official length (`ownCompletedRunSeconds`). Not

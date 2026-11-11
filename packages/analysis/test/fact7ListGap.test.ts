@@ -291,6 +291,97 @@ describe("[RES] enemy: lists a press fact while its effect runs", () => {
   });
 });
 
+// pipeline T72 (R19; codex 85-tk-G-T72-1 #1): the promoted buttons keep the
+// effect-aura reading they had as press facts, on their offensive rows
+describe("[RES] enemy: a promoted button runs on its effect aura (T72)", () => {
+  /** Odyn's Fury lands on its victim: the rows sit on the unit wearing it */
+  const victimAuraOf = (s: number, event: LogEvent) => ({
+    ...aura("385060", s, event),
+    spellName: "Odyn's Fury",
+    destUnitId: "v",
+  });
+  const furyWarrior = unit(
+    CombatUnitClass.Warrior,
+    CombatUnitSpec.Warrior_Fury,
+    [cast("385059", 40.77)],
+  );
+  const furyVictim = {
+    id: "v",
+    auraEvents: [
+      victimAuraOf(40.9, LogEvent.SPELL_AURA_APPLIED),
+      victimAuraOf(44.9, LogEvent.SPELL_AURA_REMOVED),
+    ],
+  };
+  const furyRound = {
+    startTime: T0,
+    endTime: END,
+    units: { u: furyWarrior, v: furyVictim },
+  } as never;
+
+  it("the effect's end comes off the victim's aura rows", () => {
+    const t = reconstructEnemyCDTimeline([furyWarrior], furyRound);
+    const row = t.players[0]!.offensiveCDs[0]!;
+    expect(row.buffEndSeconds).toBeCloseTo(44.9, 3);
+    expect(enemyField(t, 40)).toBe("Odyn's Fury/Fury Warrior(5s left)");
+    expect(enemyField(t, 44)).toBe("Odyn's Fury/Fury Warrior(1s left)");
+    expect(enemyField(t, 45)).toBeUndefined();
+  });
+
+  it("an aura the log never closes runs its own official length (Goremaw's Bite 75-1-523)", () => {
+    const goremaw = {
+      ...aura("426593", 150.129, LogEvent.SPELL_AURA_APPLIED),
+      spellName: "Goremaw's Bite",
+      destUnitId: "v",
+    };
+    const rogue = unit(CombatUnitClass.Rogue, CombatUnitSpec.Rogue_Subtlety, [
+      cast("426591", 150.128),
+    ]);
+    const round = {
+      startTime: T0,
+      endTime: END,
+      units: { u: rogue, v: { id: "v", auraEvents: [goremaw] } },
+    } as never;
+    const row = reconstructEnemyCDTimeline([rogue], round).players[0]!
+      .offensiveCDs[0]!;
+    expect(row.buffEndSeconds).toBeCloseTo(164.129, 3);
+    // 72-1-407: its wearer dead, the effect is over
+    const dead = {
+      startTime: T0,
+      endTime: END,
+      units: {
+        u: rogue,
+        v: {
+          id: "v",
+          auraEvents: [goremaw],
+          deathRecords: [{ timestamp: T0 + 151_000 }],
+        },
+      },
+    } as never;
+    const cut = reconstructEnemyCDTimeline([rogue], dead).players[0]!
+      .offensiveCDs[0]!;
+    expect(cut.buffEndSeconds).toBeCloseTo(151, 3);
+    // a row before the death states the official time left (codex 20-F21-12)
+    expect(cut.deathCutOfficialEndSeconds).toBeCloseTo(164.129, 3);
+    // a death past the round's end is no end of it
+    const later = {
+      startTime: T0,
+      endTime: T0 + 159_000,
+      units: {
+        u: rogue,
+        v: {
+          id: "v",
+          auraEvents: [goremaw],
+          deathRecords: [{ timestamp: T0 + 161_000 }],
+        },
+      },
+    } as never;
+    expect(
+      reconstructEnemyCDTimeline([rogue], later).players[0]!.offensiveCDs[0]!
+        .buffEndSeconds,
+    ).toBeCloseTo(164.129, 3);
+  });
+});
+
 describe("Vampiric Embrace (D51 / D55)", () => {
   it("a Shadow Priest's press is [ENEMY HEAL CD], not [ENEMY UTILITY]", () => {
     expect(isEnemyHealCdFor("15286", CombatUnitSpec.Priest_Shadow)).toBe(true);
