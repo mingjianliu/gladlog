@@ -299,7 +299,7 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "200733",
       pct: -35,
       corpusPending:
-        "605 files 2026-11-05: 0 of 276 rogue loadouts hold entry 117740; Blind 2094 583 segments, all non-holders, plateau 5.00 s",
+        "605 files 2026-11-05: 0 of 276 rogue loadouts hold entry 117740; Blind 2094 583 segments, all non-holders, plateau 5.00 s. T76, 2026-11-11, the 105 files of the full manifest with a holder (player to player, clean APPLIED → REMOVED): 120 holder lifetimes at 3.25 s (86 rogue-rounds), 175 ended earlier — the −35 % holds. STILL OPEN, kept pending: 30 holder rogue-rounds (of 116 with a full-length Blind) ran 5.0–8 s instead (21 lifetimes at 5.3–5.8 s, tight at 5.52–5.56 = 3.25 × 1.7), longer than an untalented Blind; no loadout token separates the two groups (best split +0.44), the dates do not, and 5 of 57 non-holder lifetimes run 6.3–7.7 s too. Unexplained lengthening of some Blinds, not a refutation of the row",
       note: "Airborne Irritant (Rogue class node 90741, entry 117740, single rank) — DB2 row 1102512: aura 108 SPELLMOD_DURATION −70 % × PvpMultiplier 0.5 = −35 % on the Blind mask (2094, 427773); tooltip 「Blind has $s1% reduced cooldown, $s2% reduced duration, and applies to all nearby enemies」. 5 s → 3.25 s. User ruling 2026-11-05: a control shortened by the caster's talent is priced at the shortened length; 2026-11-06: add it on DB2 + tooltip alone (GH #123).",
     },
   ],
@@ -308,7 +308,7 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "200733",
       pct: -35,
       corpusPending:
-        "the second Blind id on the same DB2 row (DB2 5 s); 605 files 2026-11-05: 0 lines, 0 holders",
+        "the second Blind id on the same DB2 row (DB2 5 s); 605 files 2026-11-05: 0 lines, 0 holders. T76, 2026-11-11, the 105 holder files: 7 holder lifetimes at 3.25 s, 124 ended earlier; 4 at 5.3–5.8 s and 14 longer — the same open tail as 2094's",
       note: "Airborne Irritant (Rogue class node 90741, entry 117740, single rank) — DB2 row 1102512: aura 108 SPELLMOD_DURATION −70 % × PvpMultiplier 0.5 = −35 % on the Blind mask (2094, 427773); tooltip 「Blind has $s1% reduced cooldown, $s2% reduced duration, and applies to all nearby enemies」. 5 s → 3.25 s. User ruling 2026-11-05: a control shortened by the caster's talent is priced at the shortened length; 2026-11-06: add it on DB2 + tooltip alone (GH #123).",
     },
   ],
