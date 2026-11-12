@@ -54,7 +54,6 @@ import {
   SkelKpiRow,
   SkelLedger,
   SkelRecap,
-  SkelWindows,
 } from "./ReportSkeleton";
 import { StructuredAnalysisPanel } from "./StructuredAnalysisPanel";
 import { Timeline } from "./Timeline";
@@ -82,10 +81,14 @@ const isFriendlyUnit = (source: ReportSource, unitId: string): boolean =>
  * Measured on five matches of 14-68 MB (openStageProbe.mts): the conversion
  * plus step 1 is a quarter of the total, and the two derives kept for last
  * are 60 % of it.
- *   1  curve, leaderboard, match arc (and the legacy conversion every derive
- *      shares)
- *   2  kill windows and the curve's pressure lane, engagement tables, burst
- *      ledger, death recaps
+ *   1  curve, kill windows, leaderboard, match arc (and the legacy conversion
+ *      every derive shares)
+ *   2  the curve's pressure lane, engagement tables, burst ledger, death
+ *      recaps
+ * No section moves once it is drawn: within a column a section is real only
+ * when everything above it has its final height (test/stagedFill.test.tsx).
+ * The two heights the list row cannot know - the kill-window list and the
+ * death recap - are settled before anything below them is real.
  *   3  mistakes (KPI chips, curve marks, mistake list)
  *   4  the leaderboard's 统计 tab
  */
@@ -370,12 +373,15 @@ export function MatchReport({
         : undefined,
     [source, timeRange, L4],
   );
+  // Step 1, with the curve: the kill-window list sits between the curve and
+  // the leaderboard and its height (0-108 px) is not known before this runs,
+  // so arriving any later would move the cards under it after they are up.
   const vulnBands = useMemo(
     () =>
-      L2
+      L1
         ? openTimed("derive:deriveVulnBands", () => deriveVulnBands(source))
         : undefined,
-    [source, L2],
+    [source, L1],
   );
   const pressure = useMemo(
     () =>
@@ -1097,11 +1103,7 @@ export function MatchReport({
                     flow={flow}
                     teamSides={teamSides}
                   />
-                  {vulnBands ? (
-                    <WindowList bands={vulnBands} onSeek={handleSeekEvent} />
-                  ) : (
-                    <SkelWindows />
-                  )}
+                  <WindowList bands={vulnBands!} onSeek={handleSeekEvent} />
                 </div>
                 {/* Left column, two panes: meters | engagement panel (kick /
                   dispel / aura / CC chain merged into tabs) */}
@@ -1196,14 +1198,18 @@ export function MatchReport({
                       )}
                     </div>
                   )}
+                  {/* Not drawn before the recap above it has its real height (step
+                      2): what a death recap holds cannot be known from the
+                      list row, and a placeholder here would be pushed down
+                      when it arrives. */}
                   {mistakes ? (
                     <MistakesCard
                       mistakes={mistakes}
                       onSeek={handleSeekEvent}
                     />
-                  ) : (
+                  ) : deathRecaps ? (
                     <SkelLedger title="失误清单" lines={2} />
-                  )}
+                  ) : null}
                 </div>
                 <div
                   className="rpt-side-pane"

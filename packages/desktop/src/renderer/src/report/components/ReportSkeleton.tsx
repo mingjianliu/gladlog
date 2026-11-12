@@ -277,9 +277,11 @@ export function ReportBodySkeleton({
             <span className="active">回顾</span>
             <span>问教练</span>
           </div>
+          {/* No mistake-list placeholder under the recap: the recap's height
+              is not known until its derive has run, and nothing is drawn
+              below a box that will still grow. */}
           <div className="rpt-side-pane">
             <SkelRecap />
-            <SkelLedger title="失误清单" lines={2} />
           </div>
         </div>
       </div>

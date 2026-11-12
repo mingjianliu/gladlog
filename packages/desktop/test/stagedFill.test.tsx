@@ -89,6 +89,78 @@ describe("MatchReport staged fill", () => {
     expect(el.querySelector(".rpt-fill-status")?.textContent).toBe("分析中…");
   });
 
+  it("每一步都不挪动已经画出来的区块:同一栏里,真实区块上方没有高度未定的占位", async () => {
+    // jsdom has no layout, so the no-shift property is asserted structurally:
+    // a placeholder whose final height is unknown (everything .rpt-skel except
+    // the fixed-height KPI row) may only sit BELOW the real sections of its
+    // column. Checked on every step, in the commit that changes data-fill.
+    const REAL = [
+      "[data-testid=rpt-timeline]",
+      ".rpt-windows:not(.rpt-skel)",
+      ".rpt-meters-card:not(.rpt-skel)",
+      "[data-testid=engagement-panel]",
+      "[data-testid=burst-ledger]",
+      "[data-testid=mistakes-card]",
+      ".rpt-recap-col:not([aria-hidden])",
+    ].join(",");
+    const OPEN = ".rpt-skel:not(.rpt-kpi-row)";
+    const violations: string[] = [];
+    const steps: string[] = [];
+    const check = (el: HTMLElement) => {
+      const level = el.dataset["fill"]!;
+      steps.push(level);
+      for (const col of el.querySelectorAll(".rpt-col-main, .rpt-col-side")) {
+        let open: Element | null = null;
+        for (const node of col.querySelectorAll(`${REAL},${OPEN}`)) {
+          if (node.matches(OPEN)) open ??= node;
+          else if (open && !open.contains(node))
+            violations.push(
+              `step ${level}: ${node.className || node.getAttribute("data-testid")} below placeholder ${open.className}`,
+            );
+        }
+      }
+    };
+    const { container } = render(
+      <MatchReport source={fresh()} matchId="m" staged />,
+    );
+    const el = root(container);
+    check(el);
+    const mo = new MutationObserver(() => {
+      if (steps[steps.length - 1] !== el.dataset["fill"]) check(el);
+    });
+    mo.observe(el, { attributes: true, attributeFilter: ["data-fill"] });
+    await waitFor(() => expect(el.dataset["fill"]).toBe("done"), {
+      timeout: 20_000,
+      interval: 1,
+    });
+    mo.disconnect();
+    expect(steps).toEqual(["0", "1", "2", "3", "done"]);
+    expect(violations).toEqual([]);
+    // the two heights the list row cannot know are settled before anything
+    // under them is real: the mistake list has no placeholder until the recap
+    // is in (step 2)
+  });
+
+  it("失误清单的占位要等死亡回顾到位才画", async () => {
+    const { container } = render(
+      <MatchReport source={fresh()} matchId="m" staged />,
+    );
+    const el = root(container);
+    const side = () => el.querySelector(".rpt-col-side")!;
+    expect(side().querySelector(".rpt-ledger")).toBeNull();
+    await waitFor(() => expect(el.dataset["fill"]).toBe("1"), {
+      timeout: 20_000,
+      interval: 1,
+    });
+    expect(side().querySelector(".rpt-ledger")).toBeNull();
+    expect(el.querySelector(".rpt-windows.rpt-skel")).toBeNull();
+    await waitFor(() => expect(el.dataset["fill"]).toBe("2"), {
+      timeout: 20_000,
+      interval: 1,
+    });
+    expect(side().querySelector(".rpt-ledger.rpt-skel")).toBeTruthy();
+  });
+
   it("填过一次的对局再次挂载不再出现占位", async () => {
     const source = fresh();
     const first = render(<MatchReport source={source} matchId="m" staged />);
