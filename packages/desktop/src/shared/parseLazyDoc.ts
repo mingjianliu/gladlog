@@ -1,5 +1,24 @@
-import { docBytesToText } from "./parseDocBytes";
+import { docBytesToText, parseDocBytes } from "./parseDocBytes";
 import { slimStoredDoc, slimStoredRound } from "./slimDoc";
+
+/** What main's matches:getLazy answers with (MatchStore.getLazy), as it
+ * arrives on the consumer side. */
+export type LazyDocPayload =
+  | { mode: "full"; bytes: Uint8Array }
+  | {
+      mode: "perRound";
+      shell: Uint8Array;
+      round0: Uint8Array;
+      roundCount: number;
+    };
+
+/** Parse a getLazy payload. Null when the per-round compose fails: the
+ * caller then re-opens through the whole-doc path (fail-open). */
+export function parseLazyPayload(payload: LazyDocPayload): unknown | null {
+  return payload.mode === "perRound"
+    ? composeLazyDoc(payload.shell, payload.round0, payload.roundCount)
+    : parseDocBytes(payload.bytes);
+}
 
 /**
  * Consumer-side composition for the lazy per-round doc path (perf-1): main

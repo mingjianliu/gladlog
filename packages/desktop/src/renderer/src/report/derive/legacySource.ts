@@ -1,6 +1,7 @@
 import type { GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
 
+import { openTimed } from "../../openTrace";
 import { dropSourceMemo, onSourceMemoUse } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
@@ -57,6 +58,10 @@ export function toLegacySafe(source: ReportSource) {
     cache.set(source, cached);
     return cached;
   }
+  return openTimed("toLegacy", () => convert(source));
+}
+
+function convert(source: ReportSource) {
   const units = Object.fromEntries(
     Object.entries(source.units).map(([id, u]) => {
       const padded: Record<string, unknown> = { ...u };

@@ -1,10 +1,15 @@
 import { contextBridge, ipcRenderer, webFrame } from "electron";
 
+import { OPEN_TRACE_CHANNEL, type OpenTraceIo } from "../shared/openTrace";
 // Consumer-side parsing of the direct doc-bytes path: implementation and notes
 // live in shared/parseDocBytes (the tests deep-equal it against the old
 // pipeline directly).
 import { parseDocBytes } from "../shared/parseDocBytes";
-import { composeLazyDoc, parseRoundBytes } from "../shared/parseLazyDoc";
+import {
+  composeLazyDoc,
+  type LazyDocPayload,
+  parseRoundBytes,
+} from "../shared/parseLazyDoc";
 import { clampUiZoom } from "../shared/uiZoom";
 import type { GladlogApi } from "./api";
 
@@ -14,6 +19,22 @@ function sub<T>(channel: string) {
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   };
+}
+
+// T93 open-path timings: the IPC round trip and the parse of the last
+// getLazy / getRound, read by the page once the doc arrives.
+let lastOpenIo: OpenTraceIo | null = null;
+async function timedOpen<T>(
+  invoke: () => Promise<unknown>,
+  parse: (payload: unknown) => T | Promise<T>,
+): Promise<T> {
+  const t0 = performance.now();
+  const payload = await invoke();
+  const t1 = performance.now();
+  const doc = await parse(payload);
+  const t2 = performance.now();
+  lastOpenIo = { invokeMs: t1 - t0, parseMs: t2 - t1, handedAt: t2 };
+  return doc;
 }
 
 const api: GladlogApi = {
@@ -33,38 +54,54 @@ const api: GladlogApi = {
         .then((buf) => parseDocBytes(buf)),
     // perf-1: per-round lazy open. Any failure in the lazy compose falls back
     // to the whole-doc bytes (fail-open — worst case is the old cost).
-    getLazy: async (id) => {
-      const payload = (await ipcRenderer.invoke(
-        "gladlog:matches:getLazy",
-        id,
-      )) as
-        | { mode: "full"; bytes: unknown }
-        | {
-            mode: "perRound";
-            shell: unknown;
-            round0: unknown;
-            roundCount: number;
+    getLazy: (id) =>
+      timedOpen(
+        () => ipcRenderer.invoke("gladlog:matches:getLazy", id),
+        (raw) => {
+          const payload = raw as
+            | { mode: "full"; bytes: unknown }
+            | {
+                mode: "perRound";
+                shell: unknown;
+                round0: unknown;
+                roundCount: number;
+              }
+            | null;
+          if (!payload) return null;
+          if (payload.mode === "perRound") {
+            const doc = composeLazyDoc(
+              payload.shell,
+              payload.round0,
+              payload.roundCount,
+            );
+            if (doc) return doc;
+          } else if (payload.mode === "full") {
+            return parseDocBytes(payload.bytes);
           }
-        | null;
-      if (!payload) return null;
-      if (payload.mode === "perRound") {
-        const doc = composeLazyDoc(
-          payload.shell,
-          payload.round0,
-          payload.roundCount,
-        );
-        if (doc) return doc;
-      } else if (payload.mode === "full") {
-        return parseDocBytes(payload.bytes);
-      }
-      return ipcRenderer
-        .invoke("gladlog:matches:get", id)
-        .then((buf) => parseDocBytes(buf));
-    },
+          return ipcRenderer
+            .invoke("gladlog:matches:get", id)
+            .then((buf) => parseDocBytes(buf));
+        },
+      ),
     getRound: (id, roundIndex) =>
-      ipcRenderer
-        .invoke("gladlog:matches:getRound", id, roundIndex)
-        .then((buf) => parseRoundBytes(buf)),
+      timedOpen(
+        () => ipcRenderer.invoke("gladlog:matches:getRound", id, roundIndex),
+        (buf) => parseRoundBytes(buf),
+      ),
+    // T93: the bytes themselves, parsed by the page. A doc parsed here is
+    // deep-copied object by object on its way across the context bridge
+    // (measured 0.2-1.0 s on 15-68 MB matches, more than the parse itself);
+    // a byte array crosses as one block.
+    getLazyRaw: (id) =>
+      timedOpen(
+        () => ipcRenderer.invoke("gladlog:matches:getLazy", id),
+        (raw) => raw as LazyDocPayload | null,
+      ),
+    getRoundRaw: (id, roundIndex) =>
+      timedOpen(
+        () => ipcRenderer.invoke("gladlog:matches:getRound", id, roundIndex),
+        (buf) => (buf as Uint8Array | null) ?? null,
+      ),
     prefetch: (id) => ipcRenderer.invoke("gladlog:matches:prefetch", id),
     page: (opts) => ipcRenderer.invoke("gladlog:matches:page", opts),
     rebuildIndex: () => ipcRenderer.invoke("gladlog:matches:rebuildIndex"),
@@ -195,6 +232,8 @@ const api: GladlogApi = {
   },
   debug: {
     aiCalls: () => ipcRenderer.invoke("gladlog:debug:aiCalls"),
+    lastOpenIo: () => lastOpenIo,
+    openTrace: (rec) => ipcRenderer.invoke(OPEN_TRACE_CHANNEL, rec),
   },
   ai: {
     detectCli: (backend) => ipcRenderer.invoke("gladlog:ai:detectCli", backend),

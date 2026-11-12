@@ -1,13 +1,22 @@
 import { fmtTime, zoneMetadata } from "@gladlog/analysis";
 
 import { shortUnitName } from "../derive/teamSide";
-import type { ReportSource } from "../derive/types";
+
+/** What the hero line reads off a match. The report passes the match itself;
+ * the loading shell (ReportSkeleton) passes the same facts from the list row,
+ * where a shuffle round's own length is not known yet (endTime null). */
+export interface ReportHeaderFacts {
+  result: string;
+  bracket: string;
+  zoneId: string | number;
+  startTime: number;
+  endTime: number | null;
+}
 
 function fmtDuration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
-
 
 const RESULT_LABEL: Record<string, string> = {
   win: "胜利",
@@ -39,7 +48,7 @@ export function ReportHeader({
   turningPoint = null,
   onSeek,
 }: {
-  source: ReportSource;
+  source: ReportHeaderFacts;
   roundLabel?: string;
   /** Difference between two adjacent matches' meta (computed in the app
    * layer; the log carries no personal rating change); null/0 renders
@@ -63,7 +72,10 @@ export function ReportHeader({
           {source.bracket}
           {roundLabel ? ` · ${roundLabel}` : ""} ·{" "}
           {zoneMetadata[String(source.zoneId)]?.name ?? `zone ${source.zoneId}`}{" "}
-          · {fmtDuration(source.endTime - source.startTime)}
+          ·{" "}
+          {source.endTime == null
+            ? "–:––"
+            : fmtDuration(source.endTime - source.startTime)}
           {ratingDelta != null && ratingDelta !== 0 && (
             <span
               className={`rpt-head-rating ${

@@ -1,7 +1,8 @@
 import { ensureAnalysisData, type RawStreams } from "@gladlog/analysis";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { bridge } from "../../bridge";
+import { endOpen, openPaintAt, openReportAt, openTimed } from "../../openTrace";
 import { buildWindowAnalysisRequest } from "../derive/analysisInput";
 import { deriveAuraUptime } from "../derive/auraUptime";
 import { deriveBurstLedger } from "../derive/burstLedger";
@@ -19,10 +20,7 @@ import { deriveMatchArc } from "../derive/matchArc";
 import type { MeterMode } from "../derive/meterRows";
 import { deriveMistakes, timedAnchorsFromMistakes } from "../derive/mistakes";
 import { derivePressureLanes } from "../derive/pressureLanes";
-import {
-  ensureRawStreams,
-  getRawStreamsSync,
-} from "../derive/rawStreamsCache";
+import { ensureRawStreams, getRawStreamsSync } from "../derive/rawStreamsCache";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
 import {
@@ -48,6 +46,16 @@ import { ProComparisonVerified } from "./ProComparisonVerified";
 import { ReplayView } from "./ReplayView";
 import { ReportHeader } from "./ReportHeader";
 import { ReportOverflowMenu } from "./ReportOverflowMenu";
+import {
+  FillStatus,
+  ReportBodySkeleton,
+  SkelArcLine,
+  SkelEngage,
+  SkelKpiRow,
+  SkelLedger,
+  SkelRecap,
+  SkelWindows,
+} from "./ReportSkeleton";
 import { StructuredAnalysisPanel } from "./StructuredAnalysisPanel";
 import { Timeline } from "./Timeline";
 import { TimeRangeBar } from "./TimeRangeBar";
@@ -68,6 +76,46 @@ type View = "report" | "replay" | "events" | "video" | "ai";
 const isFriendlyUnit = (source: ReportSource, unitId: string): boolean =>
   sideOfUnit(source, unitId) === "friendly";
 
+/**
+ * Staged fill (T93): the report's whole-match derives, split into the steps a
+ * staged report runs one render apart, cheapest and most visible first.
+ * Measured on five matches of 14-68 MB (openStageProbe.mts): the conversion
+ * plus step 1 is a quarter of the total, and the two derives kept for last
+ * are 60 % of it.
+ *   1  curve, leaderboard, match arc (and the legacy conversion every derive
+ *      shares)
+ *   2  kill windows and the curve's pressure lane, engagement tables, burst
+ *      ledger, death recaps
+ *   3  mistakes (KPI chips, curve marks, mistake list)
+ *   4  the leaderboard's 统计 tab
+ */
+const FILL_DONE = 4;
+/** Sources whose staged fill has completed: their derive results are in
+ * sourceMemo, so a later mount renders in one pass. */
+const filledSources = new WeakSet<ReportSource>();
+const DEFAULT_TEAM_SIZES: readonly number[] = [3, 3];
+const NO_BANDS: ReturnType<typeof deriveVulnBands> = [];
+const NO_MISTAKES: ReturnType<typeof deriveMistakes> = [];
+
+/** Run `fn` after the browser has painted the current commit. The timer
+ * covers a hidden window, where animation frames do not fire. */
+function afterPaint(fn: () => void): () => void {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    fn();
+  };
+  const hasRaf = typeof requestAnimationFrame === "function";
+  const raf = hasRaf ? requestAnimationFrame(() => setTimeout(run, 0)) : 0;
+  const timer = setTimeout(run, hasRaf ? 120 : 0);
+  return () => {
+    done = true;
+    if (hasRaf) cancelAnimationFrame(raf);
+    clearTimeout(timer);
+  };
+}
+
 const VIEW_LABEL: Record<View, string> = {
   report: "战报",
   replay: "回放",
@@ -85,6 +133,8 @@ export function MatchReport({
   initialView = "report",
   initialTimeRange = null,
   externalSeek = null,
+  staged = false,
+  skeletonTeamSizes = DEFAULT_TEAM_SIZES,
 }: {
   source: ReportSource;
   roundLabel?: string;
@@ -114,11 +164,66 @@ export function MatchReport({
     unitNames: string[];
     nonce: number;
   } | null;
+  /** T93: fill the report in steps instead of deriving everything inside the
+   * first render (see FILL_STEPS). The app shell passes it when it opens a
+   * match; everything else (tests, export page, dev scenes) renders in one
+   * pass as before. A source that already filled once renders in one pass
+   * too, so coming back to a match never shows a placeholder. */
+  staged?: boolean;
+  /** Rows of the leaderboard placeholder before step 1 - the same sizes the
+   * loading shell drew from the list row, so the frame does not move when the
+   * match arrives. */
+  skeletonTeamSizes?: readonly number[];
 }) {
   // Hoisted to the top: runWindowAi's matchId guard (see matchIdRef below) must
   // be able to read the current value before the closure is created — depends
   // only on props, not on any hook, so computing it early affects nothing else.
   const resolvedMatchId = matchId ?? source.id;
+  // T93 open-path stage marks (no-ops unless the app shell started a trace).
+  openReportAt("reportRenderStart");
+  // Staged fill (T93). `level` is how many FILL_STEPS have run for this
+  // source; each step is one render that computes that step's derives, so the
+  // page paints between them and the cheap sections do not wait for the
+  // expensive ones. Keyed by the source object: a shuffle round switch reuses
+  // this component and starts over.
+  const startLevel = (src: ReportSource): number =>
+    staged && !filledSources.has(src) ? 0 : FILL_DONE;
+  const [fill, setFill] = useState(() => ({
+    source,
+    level: startLevel(source),
+  }));
+  let level = fill.level;
+  if (fill.source !== source) {
+    level = startLevel(source);
+    setFill({ source, level });
+  }
+  useEffect(() => {
+    if (level >= FILL_DONE) {
+      filledSources.add(source);
+      return;
+    }
+    return afterPaint(() =>
+      setFill((f) =>
+        f.source === source ? { source, level: f.level + 1 } : f,
+      ),
+    );
+  }, [level, source]);
+  const L1 = level >= 1;
+  const L2 = level >= 2;
+  const L3 = level >= 3;
+  const L4 = level >= 4;
+  const [rawSettled, setRawSettled] = useState<ReportSource | null>(null);
+  useLayoutEffect(() => {
+    openReportAt(level === 0 ? "reportCommitted" : `fill${level}Committed`);
+    if (level === 1 || (level === FILL_DONE && !staged))
+      openPaintAt("firstContentPainted", true);
+    if (level === FILL_DONE) openPaintAt("reportPainted", true);
+  }, [source, level, staged]);
+  // The open is over when the last step has run and the raw-stream re-derive
+  // has landed.
+  useEffect(() => {
+    if (level >= FILL_DONE && rawSettled === source) endOpen();
+  }, [level, rawSettled, source]);
   // Intent guard (BACKLOG #26 Task 2, 意图守护): kick off the raw.txt read +
   // parse as soon as the report opens — well before the user can click
   // "Analyze" — so buildAnalysisInput/buildWindowAnalysisRequest's synchronous
@@ -138,7 +243,9 @@ export function MatchReport({
     setRawStreams(getRawStreamsSync(source.id));
     void ensureRawStreams(source, videoMatchId ?? resolvedMatchId).then(
       (rs) => {
-        if (live) setRawStreams(rs);
+        if (!live) return;
+        setRawStreams(rs);
+        setRawSettled(source);
       },
     );
     return () => {
@@ -220,15 +327,33 @@ export function MatchReport({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSeek?.nonce]);
   const summary = useMemo(
-    () => deriveSummary(source, timeRange),
-    [source, timeRange],
+    () =>
+      L1
+        ? openTimed("derive:deriveSummary", () =>
+            deriveSummary(source, timeRange),
+          )
+        : undefined,
+    [source, timeRange, L1],
   );
-  const timeline = useMemo(() => deriveTimeline(source), [source]);
+  const timeline = useMemo(
+    () =>
+      L1
+        ? openTimed("derive:deriveTimeline", () => deriveTimeline(source))
+        : undefined,
+    [source, L1],
+  );
   // unitId → 我方/敌方, one source for every surface that marks a team.
-  const teamSides = useMemo(() => teamSidesByUnitId(source), [source]);
+  const teamSides = useMemo(
+    () =>
+      openTimed("derive:teamSidesByUnitId", () => teamSidesByUnitId(source)),
+    [source],
+  );
   // Name-keyed twin, for the many surfaces several components deep that only
   // ever hold a display name.
-  const teamSidesByShortName = useMemo(() => teamSideByName(source), [source]);
+  const teamSidesByShortName = useMemo(
+    () => openTimed("derive:teamSideByName", () => teamSideByName(source)),
+    [source],
+  );
   // Only the selected flow metric is bucketed, and only once the user leaves
   // 血量 — a report nobody switches pays nothing. Whole-match basis (not
   // timeRange), same as the HP curve it replaces.
@@ -237,76 +362,174 @@ export function MatchReport({
     [source, curveMetric],
   );
   const statsRows = useMemo(
-    () => deriveStatsTable(source, timeRange),
-    [source, timeRange],
+    () =>
+      L4
+        ? openTimed("derive:deriveStatsTable", () =>
+            deriveStatsTable(source, timeRange),
+          )
+        : undefined,
+    [source, timeRange, L4],
   );
-  const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
-  const pressure = useMemo(() => derivePressureLanes(source), [source]);
-  const dampening = useMemo(() => deriveDampeningSeries(source), [source]);
-  const ledger = useMemo(() => deriveBurstLedger(source), [source]);
+  const vulnBands = useMemo(
+    () =>
+      L2
+        ? openTimed("derive:deriveVulnBands", () => deriveVulnBands(source))
+        : undefined,
+    [source, L2],
+  );
+  const pressure = useMemo(
+    () =>
+      L2
+        ? openTimed("derive:derivePressureLanes", () =>
+            derivePressureLanes(source),
+          )
+        : undefined,
+    [source, L2],
+  );
+  const dampening = useMemo(
+    () =>
+      L1
+        ? openTimed("derive:deriveDampeningSeries", () =>
+            deriveDampeningSeries(source),
+          )
+        : undefined,
+    [source, L1],
+  );
+  const ledger = useMemo(
+    () =>
+      L2
+        ? openTimed("derive:deriveBurstLedger", () => deriveBurstLedger(source))
+        : undefined,
+    [source, L2],
+  );
   // Death recaps are derived once per match: the auto-open effect below and
   // every death-mark click read the same list instead of re-running the
   // derive per click.
-  const deathRecaps = useMemo(() => deriveDeathRecaps(source), [source]);
+  const deathRecaps = useMemo(
+    () =>
+      L2
+        ? openTimed("derive:deriveDeathRecaps", () => deriveDeathRecaps(source))
+        : undefined,
+    [source, L2],
+  );
   // Compute the whole-match basis first (KPI chips always use it); when
   // timeRange is empty the windowed version just reuses that reference instead
   // of running the same derive twice with identical args (agy review #7).
-  const kickFull = useMemo(() => deriveKickDash(source), [source]);
+  const kickFull = useMemo(
+    () =>
+      L1
+        ? openTimed("derive:deriveKickDash", () => deriveKickDash(source))
+        : undefined,
+    [source, L1],
+  );
   const kickRows = useMemo(
-    () => (timeRange ? deriveKickDash(source, timeRange) : kickFull),
-    [source, timeRange, kickFull],
+    () =>
+      !L1
+        ? undefined
+        : timeRange
+          ? openTimed("derive:deriveKickDash", () =>
+              deriveKickDash(source, timeRange),
+            )
+          : kickFull,
+    [source, timeRange, kickFull, L1],
   );
   const castControl = useMemo(
-    () => deriveCastControl(source, rawStreams, timeRange),
-    [source, rawStreams, timeRange],
+    () =>
+      L1
+        ? openTimed("derive:deriveCastControl", () =>
+            deriveCastControl(source, rawStreams, timeRange),
+          )
+        : undefined,
+    [source, rawStreams, timeRange, L1],
   );
   const ccChainDash = useMemo(
-    () => deriveCCChainDash(source, timeRange),
-    [source, timeRange],
+    () =>
+      L1
+        ? openTimed("derive:deriveCCChainDash", () =>
+            deriveCCChainDash(source, timeRange),
+          )
+        : undefined,
+    [source, timeRange, L1],
   );
-  const dispelFull = useMemo(() => deriveDispelDash(source), [source]);
+  const dispelFull = useMemo(
+    () =>
+      L2
+        ? openTimed("derive:deriveDispelDash", () => deriveDispelDash(source))
+        : undefined,
+    [source, L2],
+  );
   // Hero line facts (UI review #1): finisher = the last real player death —
   // the same predicate KpiChips used (timeline.deaths already excludes
   // unconscious states and non-players), moved not duplicated; turning point
   // = the latest phase that has one (mid beats early: first death / burst
   // resolved over first defensive CD). Rounds under 90 s have none.
   const lastDeath = useMemo(() => {
-    if (timeline.deaths.length === 0) return null;
+    if (!timeline || timeline.deaths.length === 0) return null;
     const d = timeline.deaths.reduce((a, b) => (b.t > a.t ? b : a));
     return { name: d.name, tS: (d.t - timeline.start) / 1000 };
   }, [timeline]);
   const dispelDash = useMemo(
-    () => (timeRange ? deriveDispelDash(source, timeRange) : dispelFull),
-    [source, timeRange, dispelFull],
+    () =>
+      !L2
+        ? undefined
+        : timeRange
+          ? openTimed("derive:deriveDispelDash", () =>
+              deriveDispelDash(source, timeRange),
+            )
+          : dispelFull,
+    [source, timeRange, dispelFull, L2],
   );
   // CC-break stats (2026-08-02): the "break" tab of the engagement panel
   const ccBreakDash = useMemo(
-    () => deriveCcBreakDash(source, timeRange),
-    [source, timeRange],
+    () =>
+      L1
+        ? openTimed("derive:deriveCcBreakDash", () =>
+            deriveCcBreakDash(source, timeRange),
+          )
+        : undefined,
+    [source, timeRange, L1],
   );
   const auraUptime = useMemo(
-    () => deriveAuraUptime(source, timeRange),
-    [source, timeRange],
+    () =>
+      L1
+        ? openTimed("derive:deriveAuraUptime", () =>
+            deriveAuraUptime(source, timeRange),
+          )
+        : undefined,
+    [source, timeRange, L1],
   );
   // Match-arc header row (#10 T4): whole-match basis, not linked to the time
   // window (same whole-match derive convention as the mistake list — the header
   // row is a "how did this match go" overview and must not shift around as the
   // user drag-selects windows).
-  const matchArc = useMemo(() => deriveMatchArc(source), [source]);
+  const matchArc = useMemo(
+    () =>
+      L1
+        ? openTimed("derive:deriveMatchArc", () => deriveMatchArc(source))
+        : undefined,
+    [source, L1],
+  );
   // Hero 转折: the latest phase that has a turning point (mid beats early —
   // first death / burst resolved over first defensive CD). See lastDeath above.
   const heroTurningPoint = useMemo(
     () =>
-      [...matchArc].reverse().find((p) => p.turningPoint)?.turningPoint ?? null,
+      [...(matchArc ?? [])].reverse().find((p) => p.turningPoint)
+        ?.turningPoint ?? null,
     [matchArc],
   );
 
   // Mistake list: derived once for the whole match (marks must be drawn across
   // the whole timeline); the card filters by window
-  const mistakesAll = useMemo(() => deriveMistakes(source), [source]);
+  const mistakesAll = useMemo(
+    () =>
+      L3
+        ? openTimed("derive:deriveMistakes", () => deriveMistakes(source))
+        : undefined,
+    [source, L3],
+  );
   const mistakes = useMemo(
     () =>
-      timeRange
+      timeRange && mistakesAll
         ? mistakesAll.filter(
             (mk) => mk.tS >= timeRange.fromS && mk.tS <= timeRange.toS,
           )
@@ -326,7 +549,10 @@ export function MatchReport({
   // "already covered").
   const [aiFindingAnchors, setAiFindingAnchors] = useState<number[]>([]);
   const uncoveredAnchors = useMemo(
-    () => [...aiFindingAnchors, ...timedAnchorsFromMistakes(mistakesAll)],
+    () => [
+      ...aiFindingAnchors,
+      ...timedAnchorsFromMistakes(mistakesAll ?? NO_MISTAKES),
+    ],
     [aiFindingAnchors, mistakesAll],
   );
   // Lazy compute (a judgment call, not a hard requirement): run the sliding
@@ -338,14 +564,16 @@ export function MatchReport({
   // at — so gate conservatively on view instead of precomputing.
   const uncoveredHighlights = useMemo(
     () =>
-      view === "ai"
+      // Not before the mistake list exists: its anchors decide which windows
+      // count as covered, and the sweep is too costly to run twice.
+      view === "ai" && mistakesAll
         ? deriveUncoveredHighlights(
             source,
             rangeDurationS(source),
             uncoveredAnchors,
           )
         : [],
-    [source, uncoveredAnchors, view],
+    [source, uncoveredAnchors, view, mistakesAll],
   );
   const [recap, setRecap] = useState<DeathRecap | null>(null);
   // P1-3: on entering a report / switching matches, expand the most recent death
@@ -354,7 +582,7 @@ export function MatchReport({
   const autoRecapKey = useRef<string | null>(null);
   useEffect(() => {
     const key = `${source.startTime}:${source.endTime}`;
-    if (autoRecapKey.current === key) return;
+    if (!deathRecaps || autoRecapKey.current === key) return;
     autoRecapKey.current = key;
     setRecap(null);
     const all = deathRecaps;
@@ -514,7 +742,10 @@ export function MatchReport({
   // The click flow already awaits ensureAnalysisData() (see runWindowAi), so by
   // the time results render the name index is guaranteed ready — no need for
   // StructuredAnalysisPanel's dataReady gate here.
-  const rich = useMemo(() => makeRichText(source, aiLang), [source, aiLang]);
+  const rich = useMemo(
+    () => openTimed("derive:makeRichText", () => makeRichText(source, aiLang)),
+    [source, aiLang],
+  );
 
   const runWindowAi = async (range: TimeRange, opts?: { force?: boolean }) => {
     // The matchId at request time (captured by the closure, unaffected by later
@@ -629,7 +860,7 @@ export function MatchReport({
   // instead of opening a popover.
   const openRecap = (unitId: string, tMs: number) => {
     const tS = (tMs - source.startTime) / 1000;
-    const hit = deathRecaps
+    const hit = (deathRecaps ?? [])
       .filter((r) => r.unitId === unitId)
       .sort((a, b) => Math.abs(a.deathS - tS) - Math.abs(b.deathS - tS))[0];
     if (hit) {
@@ -653,7 +884,7 @@ export function MatchReport({
       // recur in every shuffle round), so "all visible" / "none visible" are
       // judged against THIS report's roster only, and ids belonging to other
       // matches are never dropped.
-      const roster = summary.map((r) => r.unitId);
+      const roster = (summary ?? []).map((r) => r.unitId);
       const next = new Set(prev);
       if (roster.length > 1 && roster.every((p) => !prev.has(p))) {
         for (const p of roster) if (p !== id) next.add(p);
@@ -688,10 +919,20 @@ export function MatchReport({
 
   return (
     <TeamSideContext.Provider value={teamSidesByShortName}>
-      <div className="rpt-match">
+      <div
+        className="rpt-match"
+        data-fill={level >= FILL_DONE ? "done" : String(level)}
+        aria-busy={level < FILL_DONE || undefined}
+      >
         {/* Header row: view tabs on the left (user feedback), result + meta on
           the right */}
-        <div className="rpt-head-row">
+        <div
+          className={
+            level < FILL_DONE
+              ? "rpt-head-row rpt-head-row-busy"
+              : "rpt-head-row"
+          }
+        >
           <div className="rpt-view-tabs rpt-head-tabs">
             {(Object.keys(VIEW_LABEL) as View[])
               .filter((k) => k !== "video" || videoRec != null)
@@ -705,6 +946,7 @@ export function MatchReport({
                 </button>
               ))}
           </div>
+          {level < FILL_DONE && <FillStatus label="分析中…" />}
         </div>
         {/* Hero line (UI review 2026-08-21 #1): result · meta · 终结 · 转折 in
           one line under the tabs, on every view. */}
@@ -719,17 +961,28 @@ export function MatchReport({
         {/* Match-arc header row (#10 T4): applies to every report-* scene; sits
           below the header row and above the view switch so it never disappears
           with a tab change. */}
-        <MatchArcLine phases={matchArc} onSeek={handleSeekEvent} />
-        {view === "report" && (
+        {matchArc ? (
+          <MatchArcLine phases={matchArc} onSeek={handleSeekEvent} />
+        ) : (
+          <SkelArcLine />
+        )}
+        {view === "report" && !L1 && (
+          <ReportBodySkeleton teamSizes={skeletonTeamSizes} />
+        )}
+        {view === "report" && L1 && (
           <div className="rpt-body">
             {/* KPI chips row (UI redesign 1a): whole-match glance, never linked
               to the time window */}
-            <KpiChips
-              mistakes={mistakesAll}
-              bands={vulnBands}
-              kickRows={kickFull}
-              dispelDash={dispelFull}
-            />
+            {mistakesAll && vulnBands ? (
+              <KpiChips
+                mistakes={mistakesAll}
+                bands={vulnBands}
+                kickRows={kickFull!}
+                dispelDash={dispelFull!}
+              />
+            ) : (
+              <SkelKpiRow />
+            )}
             {/* Two-column workbench (1a): at ≥1440px left = curve/meters/ledger,
               right = death recap/mistakes; narrow viewports fall back to a
               single column (the grid is driven by CSS breakpoints, the
@@ -741,7 +994,7 @@ export function MatchReport({
                 <div>
                   <div className="rpt-toolbar-row">
                     <TimeRangeBar
-                      bands={vulnBands}
+                      bands={vulnBands ?? NO_BANDS}
                       range={timeRange}
                       onChange={setTimeRange}
                     />
@@ -820,7 +1073,7 @@ export function MatchReport({
                     />
                   )}
                   <Timeline
-                    data={timeline}
+                    data={timeline!}
                     hidden={hidden}
                     onSelectUnit={toggleUnit}
                     // 同一份 hidden,不新开 state:曲线与伤害榜共用可见性是
@@ -828,29 +1081,33 @@ export function MatchReport({
                     // 就是为了过滤生命曲线),拆成两份就会各走各的。
                     onSetHidden={setHidden}
                     onDeathClick={openRecap}
-                    bands={vulnBands}
+                    bands={vulnBands ?? NO_BANDS}
                     onBandClick={(tS) => handleSeekEvent(tS, [])}
                     cursorT={lastReplayT}
                     range={timeRange}
                     onRangeSelect={(fromS, toS) => setTimeRange({ fromS, toS })}
-                    marks={mistakesAll}
+                    marks={mistakesAll ?? NO_MISTAKES}
                     onMarkClick={(tS) =>
                       handleSeekEvent(Math.max(0, tS - 3), [])
                     }
                     pressure={pressure}
-                    dampening={dampening}
+                    dampening={dampening!}
                     metric={curveMetric}
                     onMetric={handleCurveMetric}
                     flow={flow}
                     teamSides={teamSides}
                   />
-                  <WindowList bands={vulnBands} onSeek={handleSeekEvent} />
+                  {vulnBands ? (
+                    <WindowList bands={vulnBands} onSeek={handleSeekEvent} />
+                  ) : (
+                    <SkelWindows />
+                  )}
                 </div>
                 {/* Left column, two panes: meters | engagement panel (kick /
                   dispel / aura / CC chain merged into tabs) */}
                 <div className="rpt-body-cols">
                   <Meters
-                    rows={summary}
+                    rows={summary!}
                     mode={mode}
                     onMode={setMode}
                     hidden={hidden}
@@ -862,25 +1119,33 @@ export function MatchReport({
                     range={timeRange}
                     teamSides={teamSides}
                   />
-                  <EngagementPanel
-                    kickRows={kickRows}
-                    castControl={castControl}
-                    dispelDash={dispelDash}
-                    auraUptime={auraUptime}
-                    ccRows={ccChainDash.rows}
-                    ccBreak={ccBreakDash}
-                    onSeek={handleSeekEvent}
-                    range={timeRange}
-                    tab={engageTab}
-                    onTab={setEngageTab}
-                    roundish={source.kind === "shuffleRound"}
-                  />
+                  {dispelDash ? (
+                    <EngagementPanel
+                      kickRows={kickRows!}
+                      castControl={castControl!}
+                      dispelDash={dispelDash!}
+                      auraUptime={auraUptime!}
+                      ccRows={ccChainDash!.rows}
+                      ccBreak={ccBreakDash!}
+                      onSeek={handleSeekEvent}
+                      range={timeRange}
+                      tab={engageTab}
+                      onTab={setEngageTab}
+                      roundish={source.kind === "shuffleRound"}
+                    />
+                  ) : (
+                    <SkelEngage />
+                  )}
                 </div>
-                <BurstLedgerCard
-                  players={ledger.players}
-                  targetSelection={ledger.targetSelection}
-                  onSeek={handleSeekEvent}
-                />
+                {ledger ? (
+                  <BurstLedgerCard
+                    players={ledger.players}
+                    targetSelection={ledger.targetSelection}
+                    onSeek={handleSeekEvent}
+                  />
+                ) : (
+                  <SkelLedger title="爆发账本" lines={3} />
+                )}
               </div>
               {/* Right column: persistent death recap + mistake list (1a) */}
               <div className="rpt-col-side">
@@ -908,33 +1173,48 @@ export function MatchReport({
                   hidden={sideTab !== "recap"}
                   data-testid="side-pane-recap"
                 >
-                  <div className="rpt-recap-col">
-                    {recap ? (
-                      <DeathRecapCard
-                        recap={recap}
-                        // Enemy death (fallback when no friendly died, or the
-                        // user clicked an enemy ✕): the title switches to
-                        // "finish"
-                        enemy={!isFriendlyUnit(source, recap.unitId)}
-                        onClose={() => setRecap(null)}
-                        onJump={(tSeconds, unitNames) => {
-                          handleSeekEvent(tSeconds, unitNames);
-                        }}
-                      />
-                    ) : (
-                      <div className="rpt-recap-placeholder">
-                        点击曲线上的 ✕ 查看死亡回顾
-                      </div>
-                    )}
-                  </div>
-                  <MistakesCard mistakes={mistakes} onSeek={handleSeekEvent} />
+                  {!deathRecaps ? (
+                    <SkelRecap />
+                  ) : (
+                    <div className="rpt-recap-col">
+                      {recap ? (
+                        <DeathRecapCard
+                          recap={recap}
+                          // Enemy death (fallback when no friendly died, or the
+                          // user clicked an enemy ✕): the title switches to
+                          // "finish"
+                          enemy={!isFriendlyUnit(source, recap.unitId)}
+                          onClose={() => setRecap(null)}
+                          onJump={(tSeconds, unitNames) => {
+                            handleSeekEvent(tSeconds, unitNames);
+                          }}
+                        />
+                      ) : (
+                        <div className="rpt-recap-placeholder">
+                          点击曲线上的 ✕ 查看死亡回顾
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {mistakes ? (
+                    <MistakesCard
+                      mistakes={mistakes}
+                      onSeek={handleSeekEvent}
+                    />
+                  ) : (
+                    <SkelLedger title="失误清单" lines={2} />
+                  )}
                 </div>
                 <div
                   className="rpt-side-pane"
                   hidden={sideTab !== "chat"}
                   data-testid="side-pane-chat"
                 >
-                  <CoachChatCard source={source} matchId={resolvedMatchId} rich={rich} />
+                  <CoachChatCard
+                    source={source}
+                    matchId={resolvedMatchId}
+                    rich={rich}
+                  />
                 </div>
               </div>
             </div>
@@ -943,7 +1223,7 @@ export function MatchReport({
         {view === "events" && (
           <EventsPanel
             source={source}
-            bands={vulnBands}
+            bands={vulnBands ?? NO_BANDS}
             globalRange={timeRange}
             onSeek={handleSeekEvent}
             inspectReq={inspectReq}
@@ -961,14 +1241,14 @@ export function MatchReport({
             onMomentDive={handleMomentDive}
           />
         )}
-        {view === "video" && videoRec && (
+        {view === "video" && videoRec && timeline && (
           <VideoTab
             url={videoRec.url}
             startedAt={videoRec.startedAt}
             source={source}
             matchId={resolvedMatchId}
             timeline={timeline}
-            bands={vulnBands}
+            bands={vulnBands ?? NO_BANDS}
           />
         )}
         {view === "ai" && (
@@ -986,7 +1266,11 @@ export function MatchReport({
                 chat.getState fetch on mount, and sending a message) happen while
                 the user is already looking at the top, so nothing below is
                 yanked away. */}
-              <CoachChatCard source={source} matchId={resolvedMatchId} rich={rich} />
+              <CoachChatCard
+                source={source}
+                matchId={resolvedMatchId}
+                rich={rich}
+              />
               <StructuredAnalysisPanel
                 source={source}
                 matchId={resolvedMatchId}

@@ -5470,7 +5470,8 @@ button.rpt-mistakes-showminor:hover {
 /* 宽屏兜底:不无限拉稀,同 .dash 的居中上限。
    2026-08-18 更正:这里原本写「4K「更多空间」(2560 CSS px)」,是量错的 ——
    用户 4K 屏实测汇报的是 3840 CSS px,1920 的上限等于左右各空 960px。 */
-.rpt-match {
+.rpt-match,
+.rpt-shell {
   max-width: 2560px;
   margin: 0 auto;
 }
@@ -5957,4 +5958,145 @@ button.rpt-kpi:hover {
   display: inline-flex;
   align-items: center;
   white-space: nowrap;
+}
+
+/* ── 加载态(T93):战报自己的框架,墨水还没到 ──
+   每个占位都是真实区块的容器(同一个 class,所以边框、内边距、宽度一致),
+   里面是它不随对局变化的标签,数字的位置放安静的灰条。只有一处动效:
+   tab 行下面那条扫线(transform 动画,走合成线程,主线程在算推导时它照样动);
+   prefers-reduced-motion 下它静止,状态文字承担同样的信息。 */
+.rpt-skel-bar {
+  display: inline-block;
+  flex: none;
+  max-width: 100%;
+  border-radius: 3px;
+  background: var(--hairline-soft);
+  vertical-align: middle;
+}
+.rpt-skel-ctl {
+  background: transparent;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 7px;
+}
+.rpt-skel-gap {
+  margin-left: 18px;
+}
+.rpt-arc-line.rpt-skel {
+  height: 26px;
+  overflow: hidden;
+}
+.rpt-skel-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px 20px;
+  min-height: 24.7px;
+}
+.rpt-skel-windows {
+  min-height: 20px;
+  justify-content: center;
+}
+.rpt-skel-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.rpt-skel-ident {
+  background: var(--hairline-soft);
+}
+.rpt-skel-fill {
+  display: block;
+  border-radius: 0 3px 3px 0;
+}
+.rpt-skel-value {
+  display: flex;
+  justify-content: flex-end;
+}
+.rpt-skel-seg span {
+  border-radius: 4px;
+  padding: 3px 12px;
+  font-size: 11px;
+  line-height: normal;
+  color: var(--ink-2);
+}
+.rpt-skel-seg span.active {
+  background: var(--accent-fill);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.rpt-skel-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 6px 0 4px;
+}
+.rpt-skel-rule {
+  border-radius: 0;
+}
+.rpt-engage.rpt-skel {
+  min-height: 156px;
+}
+.rpt-skel-recap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 83px;
+  padding: 0;
+}
+.rpt-shell .rpt-view-tabs button:disabled {
+  cursor: default;
+}
+.rpt-shell .rpt-view-tabs button:disabled:hover {
+  color: var(--mute);
+}
+.rpt-shell .rpt-view-tabs button.active:disabled:hover {
+  color: var(--ink);
+}
+/* 状态 + 扫线:挂在 tab 行上,绝对定位,不占版面 */
+.rpt-head-row-busy {
+  position: relative;
+}
+.rpt-fill-status {
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  padding-right: 2px;
+}
+.rpt-fill-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  overflow: hidden;
+  background: var(--hairline-soft);
+}
+.rpt-fill-line::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 24%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent) 50%,
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: rpt-fill-sweep 1.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+@keyframes rpt-fill-sweep {
+  to {
+    transform: translateX(420%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rpt-fill-line::after {
+    animation: none;
+    transform: none;
+    width: 100%;
+    background: var(--accent-line);
+  }
 }

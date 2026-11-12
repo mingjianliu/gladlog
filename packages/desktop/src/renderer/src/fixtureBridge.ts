@@ -287,6 +287,8 @@ export function installFixtureBridge(): void {
     // Developer page, AI-calls section: two deterministic records so the
     // visual baseline has something to capture
     debug: {
+      lastOpenIo: () => null,
+      async openTrace() {},
       async aiCalls() {
         return [
           {

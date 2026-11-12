@@ -14,6 +14,7 @@ import "../src/renderer/src/styles.css";
 import "./harness.css";
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { resolveScene, type SceneName } from "./scenes";
+import type { StoredMatchMeta } from "../src/main/matchStore";
 import App from "../src/renderer/src/App";
 import { installFixtureBridge } from "../src/renderer/src/fixtureBridge";
 import {
@@ -436,6 +437,63 @@ const review = scene
 // view actually renders finding cards instead of sitting idle). It must be
 // installed synchronously before render — the panel's mount effect reads it
 // immediately.
+// Loading-state mode (?loading=1, T93): the app shell on two fixture rows
+// whose documents arrive only when `window.__gladlogReleaseOpen()` is called,
+// so the shell and each step of the staged fill can be looked at and
+// screenshot. Not a scene: it has no baseline, it is a workbench.
+const loadingMode =
+  !scene && new URLSearchParams(window.location.search).get("loading") != null;
+if (loadingMode) {
+  installFixtureBridge();
+  const api = window.__gladlogFixture;
+  if (!api) throw new Error("installFixtureBridge 未挂载 __gladlogFixture");
+  const matches = api.matches as unknown as {
+    list: () => Promise<StoredMatchMeta[]>;
+    get: (id: string) => Promise<unknown | null>;
+  };
+  const baseList = matches.list.bind(matches);
+  const baseGet = matches.get.bind(matches);
+  // Four rows over the same two documents, so there is always another row to
+  // click; the round count of a shuffle row comes from its document.
+  matches.list = async () => {
+    const base = await baseList();
+    const shuffle = (await baseGet("fixture-shuffle")) as {
+      data: {
+        rounds: Array<{ winningTeamId: unknown; playerTeamId: unknown }>;
+      };
+    } | null;
+    return [0, 1].flatMap((n) =>
+      base.map((m, i) => ({
+        ...m,
+        id: n === 0 ? m.id : `${m.id}#again`,
+        startTime: m.startTime - (n * 2 + i) * 3_600_000,
+        endTime: m.endTime - (n * 2 + i) * 3_600_000,
+        ...(m.kind === "shuffle" && shuffle
+          ? {
+              roundStats: shuffle.data.rounds.map((r) => ({
+                win: r.winningTeamId === r.playerTeamId,
+                enemySpecIds: [],
+              })),
+            }
+          : {}),
+      })),
+    );
+  };
+  let release: (() => void) | null = null;
+  let held = false;
+  (
+    window as unknown as { __gladlogHoldOpen: (on: boolean) => void }
+  ).__gladlogHoldOpen = (on) => {
+    held = on;
+    if (!on) release?.();
+  };
+  matches.get = async (id) => {
+    if (held) await new Promise<void>((res) => (release = res));
+    // A fresh object every time: a source the report has already filled once
+    // renders in one pass, and this page exists to look at the fill.
+    return structuredClone(await baseGet(id.replace("#again", "")));
+  };
+}
 if (scene) installFixtureBridge();
 // Review mode reuses this file's slim mock as-is (icon stub, compare stub,
 // …) EXCEPT the AI tab's analysis surface: a blind reviewer seeing this
@@ -508,7 +566,11 @@ if (scene === "video") {
 void ensureAnalysisData().then(() => {
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      {scene ? (
+      {loadingMode ? (
+        <div className="scene-root scene-appshell">
+          <App />
+        </div>
+      ) : scene ? (
         <Scene name={scene} />
       ) : review ? (
         <ReviewMode name={review} />

@@ -11,6 +11,8 @@ import type { GladlogSettings } from "../main/settingsStore";
 import type { UpdateState } from "../main/updater";
 import type { AiBackend } from "../shared/aiModels";
 import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
+import type { OpenTraceIo, OpenTraceRecord } from "../shared/openTrace";
+import type { LazyDocPayload } from "../shared/parseLazyDoc";
 import type { FileStatus } from "../shared/protocol";
 
 export interface LogsStatusSnapshot {
@@ -65,6 +67,11 @@ export interface GladlogApi {
     /** One lazily-loaded round (parsed + slimmed), or null when the sidecar
      * is missing/stale — the caller re-opens via get() then. */
     getRound(id: string, roundIndex: number): Promise<unknown | null>;
+    /** T93: getLazy / getRound without the parse - the page parses the bytes
+     * itself (shared/parseLazyDoc), which spares the object-by-object copy a
+     * parsed doc pays crossing the context bridge. */
+    getLazyRaw(id: string): Promise<LazyDocPayload | null>;
+    getRoundRaw(id: string, roundIndex: number): Promise<Uint8Array | null>;
     /** perf-2 warm-up on hover/startup: ensure the per-round sidecar exists
      * and the OS page cache is warm. Fire-and-forget. */
     prefetch(id: string): Promise<void>;
@@ -462,6 +469,10 @@ export interface GladlogApi {
   /** Developer page: the prompts and raw responses of the last 10 AI calls
    * (in memory only). */
   debug: {
+    /** T93: preload's timings of the last match / round open (IPC round trip
+     * and parse), and the sink that writes one `[open]` line to main.log. */
+    lastOpenIo(): OpenTraceIo | null;
+    openTrace(rec: OpenTraceRecord): Promise<void>;
     aiCalls(): Promise<
       Array<{
         kind: "analysis" | "compare";

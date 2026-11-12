@@ -18,8 +18,19 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { SidebarSplitter } from "./components/SidebarSplitter";
 import { StatsDashboard } from "./components/StatsDashboard";
 import { UpdateBanner } from "./components/UpdateBanner";
+import {
+  canOpenRound,
+  openMatchDoc,
+  openMatchRound,
+  openWholeDoc,
+} from "./matchDocLoader";
+import { beginOpen, openAt, openDocArrived, openPaintAt } from "./openTrace";
 import { MatchReport } from "./report/components/MatchReport";
-import { ShuffleReport } from "./report/components/ShuffleReport";
+import {
+  ReportShell,
+  skeletonTeamSizes,
+} from "./report/components/ReportSkeleton";
+import { ShuffleHead, ShuffleReport } from "./report/components/ShuffleReport";
 import { useSidebarWidth } from "./sidebarWidth";
 import { applyUiZoom } from "./uiZoom";
 
@@ -43,6 +54,10 @@ export default function App({
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doc, setDoc] = useState<any | null>(null);
+  // Which match `doc` is: the render after a click still holds the previous
+  // match's doc, and must show the new match's shell, not the old report
+  // under the new key.
+  const [docId, setDocId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [filter, setFilter] = useState<ListFilter>(EMPTY_FILTER);
   // Batch-selection checkmarks (meta ids; a shuffle id selects the whole
@@ -176,13 +191,13 @@ export default function App({
     if (selectedId) {
       setDoc(null);
       setIsLoading(true);
-      const m = bridge().matches as {
-        get(id: string): Promise<unknown | null>;
-        getLazy?(id: string): Promise<unknown | null>;
-      };
-      void (m.getLazy ? m.getLazy(selectedId) : m.get(selectedId)).then((d) => {
+      openAt("selectEffect");
+      openPaintAt("loadingPainted");
+      void openMatchDoc(selectedId).then((d) => {
         if (selectedIdRef.current !== selectedId) return; // 已切走
+        openDocArrived();
         setDoc(d);
+        setDocId(selectedId);
         setIsLoading(false);
       });
     } else {
@@ -214,14 +229,12 @@ export default function App({
   const loadRound = useCallback((roundIndex: number) => {
     const id = selectedIdRef.current;
     if (!id) return;
-    const m = bridge().matches as {
-      get(id: string): Promise<unknown | null>;
-      getRound?(id: string, i: number): Promise<unknown | null>;
-    };
-    if (!m.getRound) return;
-    void m.getRound(id, roundIndex).then(async (round) => {
+    if (!canOpenRound()) return;
+    beginOpen(`${id}#${roundIndex}`, "round");
+    void openMatchRound(id, roundIndex).then(async (round) => {
+      openDocArrived();
       if (round == null) {
-        const full = await m.get(id);
+        const full = await openWholeDoc(id);
         if (selectedIdRef.current === id && full) setDoc(full);
         return;
       }
@@ -239,6 +252,17 @@ export default function App({
   // Rating deltas (1e): the algorithm lives in dashboard.ts's deriveRatingDeltas
   // (single-source, shared with the stats page's "recent matches" card)
   const ratingDeltas = useMemo(() => deriveRatingDeltas(metas), [metas]);
+  const selectedMeta = useMemo(
+    () => metas.find((m) => m.id === selectedId) ?? null,
+    [metas, selectedId],
+  );
+  const shellTeamSizes = useMemo(
+    () =>
+      selectedMeta
+        ? skeletonTeamSizes(selectedMeta.teams, selectedMeta.bracket)
+        : undefined,
+    [selectedMeta],
+  );
 
   // Date grouping (1e): today / yesterday / month-day, plus a per-day summary of
   // "N matches · W-L"
@@ -343,7 +367,10 @@ export default function App({
                   <li
                     key={m.id}
                     className={m.id === selectedId ? "sel" : ""}
-                    onClick={() => setSelectedId(m.id)}
+                    onClick={() => {
+                      if (m.id !== selectedId) beginOpen(m.id, "match");
+                      setSelectedId(m.id);
+                    }}
                     onMouseEnter={() => prefetchMatch(m.id)}
                   >
                     <MatchListRow
@@ -374,19 +401,17 @@ export default function App({
             layoutRef={layoutRef}
           />
           <main className="app-main">
-            {isLoading ? (
-              <div className="empty-state">加载中...</div>
-            ) : doc && doc.data ? (
+            {doc && doc.data && docId === selectedId ? (
               doc.kind === "shuffle" ? (
                 <ShuffleReport
                   key={selectedId ?? undefined}
                   shuffle={doc.data}
                   videoMatchId={selectedId ?? undefined}
                   ratingDelta={selectedId ? ratingDeltas.get(selectedId) : null}
-                  roundStats={
-                    metas.find((m) => m.id === selectedId)?.roundStats
-                  }
+                  roundStats={selectedMeta?.roundStats}
                   onNeedRound={loadRound}
+                  staged
+                  skeletonTeamSizes={shellTeamSizes}
                 />
               ) : (
                 <MatchReport
@@ -394,8 +419,19 @@ export default function App({
                   source={doc.data}
                   matchId={selectedId ?? undefined}
                   ratingDelta={selectedId ? ratingDeltas.get(selectedId) : null}
+                  staged
+                  skeletonTeamSizes={shellTeamSizes}
                 />
               )
+            ) : (isLoading || docId !== selectedId) && selectedMeta ? (
+              // T93: the page is never empty - from the click until the match
+              // is read, the report's own frame, drawn from the list row.
+              <MatchShell
+                meta={selectedMeta}
+                ratingDelta={ratingDeltas.get(selectedMeta.id) ?? null}
+              />
+            ) : isLoading ? (
+              <div className="empty-state">加载中...</div>
             ) : metas.length === 0 ? (
               <div className="onboard" data-testid="onboard">
                 <h2>欢迎使用 gladlog</h2>
@@ -442,6 +478,52 @@ export default function App({
           </main>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The loading shell for a list row (T93): only what the row itself knows.
+ * A shuffle opens on round 1, whose result the row has and whose length it
+ * does not; the rating change belongs to the last round and is left out. */
+function MatchShell({
+  meta,
+  ratingDelta,
+}: {
+  meta: StoredMatchMeta;
+  ratingDelta: number | null;
+}) {
+  const teamSizes = skeletonTeamSizes(meta.teams, meta.bracket);
+  if (meta.kind !== "shuffle")
+    return (
+      <ReportShell
+        facts={meta}
+        ratingDelta={ratingDelta}
+        teamSizes={teamSizes}
+      />
+    );
+  const stats = meta.roundStats ?? [];
+  return (
+    <div className="rpt-shuffle">
+      <ReportShell
+        facts={{
+          result: stats[0] == null ? "" : stats[0].win ? "Win" : "Loss",
+          bracket: meta.bracket,
+          zoneId: meta.zoneId,
+          startTime: meta.startTime,
+          endTime: null,
+        }}
+        roundLabel={stats.length > 0 ? `回合 1/${stats.length}` : undefined}
+        teamSizes={teamSizes}
+      >
+        {stats.length > 0 && (
+          <ShuffleHead
+            roundCount={stats.length}
+            result={meta.result}
+            wins={stats.map((r) => r.win)}
+            active={0}
+          />
+        )}
+      </ReportShell>
     </div>
   );
 }

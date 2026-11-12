@@ -655,6 +655,7 @@ else {
     void ensureManagedAssembly();
     handleVodProtocol((p) => recordings.list().some((r) => r.videoPath === p));
     registerIpc({
+      logInfo: (line) => log.info(line),
       recorder,
       updater: updaterFacade,
       store,

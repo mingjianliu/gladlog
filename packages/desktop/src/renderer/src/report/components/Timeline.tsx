@@ -35,6 +35,9 @@ const DRAG_MIN_PX = 8;
 const W = 1200,
   H = 240,
   PAD = { l: 34, r: 8, t: 18, b: 18 };
+/** The chart's frame, for the loading placeholder that must land on the same
+ * box and the same grid lines (ReportSkeleton's SkelChart). */
+export const TIMELINE_VIEW = { W, H, PAD } as const;
 /** Left padding while a flow metric is selected: the axis then reads "1.20M"
  * instead of "100%", which does not fit in PAD.l at the 10px mono of
  * .rpt-tl-axis. Widening it (rather than shortening the number) keeps a single

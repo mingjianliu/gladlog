@@ -25,6 +25,12 @@ import {
 import type { UpdaterService } from "./updater";
 
 type CoachChatService = ReturnType<typeof createCoachChatService>;
+import {
+  formatOpenTrace,
+  OPEN_TRACE_CHANNEL,
+  type OpenTraceRead,
+  type OpenTraceRecord,
+} from "../shared/openTrace";
 import { vodUrl } from "../shared/vod";
 import type { ObsAudioDevice } from "./managedObsBackend";
 import type { ObsInstallProgress } from "./obsAssets";
@@ -86,6 +92,8 @@ export function registerIpc(deps: {
   updater: Pick<UpdaterService, "getState" | "check" | "install">;
   chat: CoachChatService;
   icons: { get(name: string): Promise<string | null> };
+  /** main.log sink for the `[open]` stage line (T93). */
+  logInfo?: (line: string) => void;
   exportImage: (opts: {
     matchId: string;
     roundSeq?: number | null;
@@ -100,14 +108,45 @@ export function registerIpc(deps: {
   ipcMain.handle("gladlog:matches:list", () => deps.store.list());
   ipcMain.handle("gladlog:matches:get", (_e, id: string) => deps.store.get(id));
   // perf-1 lazy per-round open path + perf-2 warm-up (see MatchStore)
-  ipcMain.handle("gladlog:matches:getLazy", (_e, id: string) =>
-    deps.store.getLazy(String(id)),
-  );
+  // T93: what the last read of an id cost on this side (disk only), joined
+  // into the renderer's stage record when it reports the open.
+  const lastRead = new Map<string, OpenTraceRead>();
+  const noteRead = (key: string, read: OpenTraceRead) => {
+    lastRead.delete(key);
+    lastRead.set(key, read);
+    while (lastRead.size > 8) lastRead.delete(lastRead.keys().next().value!);
+  };
+  ipcMain.handle("gladlog:matches:getLazy", async (_e, id: string) => {
+    const t0 = performance.now();
+    const r = await deps.store.getLazy(String(id));
+    noteRead(String(id), {
+      readMs: performance.now() - t0,
+      bytes: !r
+        ? 0
+        : r.mode === "full"
+          ? r.bytes.length
+          : r.shell.length + r.round0.length,
+      mode: r?.mode ?? "miss",
+    });
+    return r;
+  });
   ipcMain.handle(
     "gladlog:matches:getRound",
-    (_e, id: string, roundIndex: number) =>
-      deps.store.getRound(String(id), Number(roundIndex)),
+    async (_e, id: string, roundIndex: number) => {
+      const t0 = performance.now();
+      const r = await deps.store.getRound(String(id), Number(roundIndex));
+      noteRead(`${String(id)}#${Number(roundIndex)}`, {
+        readMs: performance.now() - t0,
+        bytes: r?.length ?? 0,
+        mode: r ? "round" : "miss",
+      });
+      return r;
+    },
   );
+  ipcMain.handle(OPEN_TRACE_CHANNEL, (_e, rec: OpenTraceRecord) => {
+    if (!rec || typeof rec.id !== "string") return;
+    deps.logInfo?.(formatOpenTrace(rec, lastRead.get(rec.id) ?? null));
+  });
   ipcMain.handle("gladlog:matches:prefetch", (_e, id: string) =>
     deps.store.prefetch(String(id)),
   );
