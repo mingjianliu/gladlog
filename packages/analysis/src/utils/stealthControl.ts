@@ -50,7 +50,8 @@ const SHADOWMELD = "58984";
 /** Prowl and Shadowmeld break on the holder's first action — and the log
  * can lose their REMOVED (94e93f63: a 102547 Prowl applied at 13.6 s and
  * never removed): they hold until the holder's first own press or direct
- * hit after them (`holderFirstOwnActionAfterMs`, the unseen-save reading). */
+ * hit after them (`holderFirstOwnActionAfterMs`, the unseen-save reading —
+ * which lets a press Prowl allows pass, `STEALTH_KEPT_BY_ALLOWED_PRESS_IDS`). */
 const BROKEN_BY_ACTION_IDS: ReadonlySet<string> = new Set([
   "5215",
   "102547",

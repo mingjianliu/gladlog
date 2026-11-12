@@ -445,12 +445,20 @@ export function untargetableEndS(
  * end at any action. fact7 `unseenEndOpener`, the visible runs of 24 archives:
  * presses with the attribute 34 left the run going, 1 sat at its end; Sap
  * 12 / 12 and Blind 2 / 2 survived as debuffs, every opener without it (Cheap
- * Shot, Garrote, Gouge, Kidney Shot) ended the run in its own instant. Prowl
- * and Shadowmeld are not in this set: nobody measured them. Registered in
- * curatedIdRegistry.
+ * Shot, Garrote, Gouge, Kidney Shot) ended the run in its own instant.
+ * Prowl 5215 and Incarnation's Prowl 102547 (pipeline T77, GH #173 item 36):
+ * DB2 aura 16 as well; the 605 capture's runs whose REMOVED is logged
+ * (scan5 t77 `stealthVisibleRunPress`, the holder's first press in the run):
+ * with the attribute 176 left the run going and 2 sat at its end (Tiger's
+ * Fury, Wild Charge, Dash, Stampeding Roar), without it 185 ended it and 2
+ * did not. Shadowmeld 58984 is not in this set: 3 kept and 2 ended on the
+ * same capture — it also ends on movement, so its runs are short and the
+ * split does not say. Registered in curatedIdRegistry.
  */
 export const STEALTH_KEPT_BY_ALLOWED_PRESS_IDS: ReadonlySet<string> = new Set([
   "11327",
+  "5215",
+  "102547",
 ]);
 
 /**
