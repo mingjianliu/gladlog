@@ -317,6 +317,126 @@ describe("doomWindsNoPressReading", () => {
   });
 });
 
+describe("duringEndRow", () => {
+  const line = (seconds: string) =>
+    `0:10  [ENEMY DEF] 3(Healer) (monk): Obsidian Scales → 2(Target) (${seconds}s) | during it: 1(Ally) 10k on target · 100% of their enemy-player damage`;
+  const scales = (event: LogEvent, ms: number) =>
+    aura(event, ms, "363916", "Obsidian Scales");
+  const rows = (auraEvents: any[], more = {}) => [
+    unit("Ally", "1", 1),
+    unit("Target", "2", 2, {
+      auraEvents,
+      damageIn: [landed(10_100, "Ally", 10_000)],
+      ...more,
+    }),
+  ];
+  const seen = (players: any[], seconds: string) =>
+    of(scan(runDamageBasis, players, [line(seconds)]), "duringEndRow");
+
+  it("the printed length lands on the wall's REMOVED row", () => {
+    expect(
+      seen(
+        rows([
+          scales(LogEvent.SPELL_AURA_APPLIED, 10_000),
+          scales(LogEvent.SPELL_AURA_REMOVED, 22_007),
+        ]),
+        "12.0",
+      ),
+    ).toEqual([]);
+  });
+
+  it("a REMOVED with an APPLIED in its millisecond is the aura stated again, not its end (4cacc702 0:15)", () => {
+    expect(
+      seen(
+        rows([
+          scales(LogEvent.SPELL_AURA_APPLIED, 10_826),
+          scales(LogEvent.SPELL_AURA_REMOVED, 14_258),
+          scales(LogEvent.SPELL_AURA_APPLIED, 14_258),
+          scales(LogEvent.SPELL_AURA_REMOVED, 22_840),
+        ]),
+        "12.0",
+      ),
+    ).toEqual([]);
+  });
+
+  it("a second press on a holder closes the line at its REFRESH (9-3 r3 0:30, 1.0 s)", () => {
+    expect(
+      seen(
+        rows([
+          scales(LogEvent.SPELL_AURA_APPLIED, 10_461),
+          scales(LogEvent.SPELL_AURA_REFRESH, 11_502),
+          scales(LogEvent.SPELL_AURA_REMOVED, 17_272),
+        ]),
+        "1.0",
+      ),
+    ).toEqual([]);
+  });
+
+  it("an aura still up at the target's death prints the length to it", () => {
+    expect(
+      seen(
+        rows(
+          [
+            scales(LogEvent.SPELL_AURA_APPLIED, 10_903),
+            scales(LogEvent.SPELL_AURA_REMOVED, 22_910),
+          ],
+          { deathRecords: [{ timestamp: at(22_512) }] },
+        ),
+        "11.6",
+      ),
+    ).toEqual([]);
+  });
+
+  it("an aura first stated in a re-stating batch and removed early is read from that row (135 r2 2:07, 4.4 s)", () => {
+    const batch = [1, 2, 3, 4, 5].map((i) =>
+      rowOf(LogEvent.SPELL_AURA_APPLIED, 11_167, {
+        spellId: `90${i}`,
+        spellName: `Other ${i}`,
+        srcUnitId: "ext",
+        destUnitId: "Target",
+      }),
+    );
+    const players = [
+      unit("Ally", "1", 1),
+      unit("Target", "2", 2, {
+        auraEvents: [
+          ...batch,
+          {
+            ...scales(LogEvent.SPELL_AURA_APPLIED, 11_167),
+            destUnitId: "Target",
+          },
+          scales(LogEvent.SPELL_AURA_REMOVED, 15_571),
+        ],
+        damageIn: [landed(12_000, "Ally", 10_000)],
+      }),
+      unit("Healer", "3", 2, {
+        spellCastEvents: [
+          cast(10_000, "Healer", "363916", "Obsidian Scales", "Target"),
+        ],
+      }),
+    ];
+    expect(seen(players, "4.4")).toEqual([]);
+  });
+
+  it("flags a printed length no row carries", () => {
+    expect(
+      seen(
+        rows([
+          scales(LogEvent.SPELL_AURA_APPLIED, 10_000),
+          scales(LogEvent.SPELL_AURA_REMOVED, 22_007),
+        ]),
+        "8.0",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("flags a line with no opening row of the wall", () => {
+    expect(
+      seen(rows([scales(LogEvent.SPELL_AURA_REMOVED, 22_007)]), "12.0"),
+    ).toHaveLength(1);
+  });
+});
+
 describe("allyOverlapDeferral", () => {
   const lines = (printed: string) => [
     "Burst #1 — 0:10–0:30",

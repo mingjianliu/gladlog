@@ -73,6 +73,18 @@
  *    Dilation tick lands as self → self damage and a reflected spell as the
  *    victim's own. 66bd381b r0 1:40: 556k printed, 705k on the rows.
  *    Counted: every such clause.
+ *  - `duringEndRow` (later194 173.16, T96): the window `duringExternalShare`
+ *    sums over is read off the rows — the wall's APPLIED / REFRESH on the
+ *    target and the row the printed length points at (within
+ *    `PRINTED_LENGTH_MS`): its REMOVED, the REFRESH of a second press that
+ *    cut the line short, the target's death or the round's end. A line with no such pair would have its shares
+ *    checked over the printed second and the printed tenth, the line read
+ *    back to itself; it is also a printed length no row carries. A REMOVED
+ *    with an APPLIED in its millisecond is the aura stated again, not its
+ *    end (4cacc702 0:15: Obsidian Scales REMOVED + APPLIED at 3.43 s, its
+ *    end at 12.0 s): a recount that stops at the first REMOVED read 14 of
+ *    100 shares on 20 rounds wrong, the product none.
+ *    Counted: every `[ENEMY DEF]` line with a `| during it:`.
  */
 import {
   resolveMitigation,
@@ -121,6 +133,7 @@ export const CHECKS = [
   "stackedWallPrice",
   "duringLethalHit",
   "channelTookBasis",
+  "duringEndRow",
 ] as const;
 
 export const DEFERRAL_SHIELDS = new Set(["357170", "410355", "386124"]);
@@ -250,7 +263,26 @@ function duringExternalShare(ctx: IRoundCtx): void {
           ev(x) === APPLIED &&
           Math.abs(tsOf(x) - tsOf(applied)) <= 5,
       ).length >= 6;
-    const fromMs = restated ? tsOf(press) : applied ? tsOf(applied) : lo;
+    // …unless the printed length says where the product opened it: with no
+    // row of the aura before the batch and no REMOVED at the press + its
+    // length the product keeps the batch's row (`restatedAuraWasUp`; 135 r2
+    // 2:07: Blessing of Protection pressed 127.936, stated 129.167, dispelled
+    // 133.571, `4.4s`)
+    const closesFrom = (from: number): boolean =>
+      ((target.auraEvents ?? []) as any[]).some(
+        (a) =>
+          (ev(a) === REMOVED || ev(a) === REFRESH) &&
+          tsOf(a) > from &&
+          Math.abs(tsOf(a) - (from + +m[5]! * 1000)) <= PRINTED_LENGTH_MS &&
+          nameOf(a.spellId, a.spellName) === m[3],
+      );
+    const fromMs = restated
+      ? closesFrom(tsOf(press)) || !closesFrom(tsOf(applied))
+        ? tsOf(press)
+        : tsOf(applied)
+      : applied
+        ? tsOf(applied)
+        : lo;
     const printedTo = fromMs + +m[5]! * 1000;
     // the aura's own end, read from its row (a re-broadcast's REMOVED sits
     // mid-span, so the one the printed length points at)
@@ -265,13 +297,61 @@ function duringExternalShare(ctx: IRoundCtx): void {
         (a, b) => Math.abs(tsOf(a) - printedTo) - Math.abs(tsOf(b) - printedTo),
       )[0];
     const removed = removedRow === undefined ? undefined : tsOf(removedRow);
+    // a second press on a unit still holding the aura closes the first
+    // line at its REFRESH row (9-3 r3 0:30: Obsidian Scales' copy `1.0s`,
+    // the next press's REFRESH 1.041 s on, no REMOVED until both ran out)
+    const refreshed =
+      removed !== undefined &&
+      Math.abs(removed - printedTo) <= PRINTED_LENGTH_MS
+        ? undefined
+        : ((target.auraEvents ?? []) as any[])
+            .filter(
+              (a) =>
+                ev(a) === REFRESH &&
+                tsOf(a) > fromMs &&
+                Math.abs(tsOf(a) - printedTo) <= PRINTED_LENGTH_MS &&
+                nameOf(a.spellId, a.spellName) === m[3],
+            )
+            .map((a) => tsOf(a))
+            .sort(
+              (a, b) => Math.abs(a - printedTo) - Math.abs(b - printedTo),
+            )[0];
     const auraTo =
       removed !== undefined &&
       Math.abs(removed - printedTo) <= PRINTED_LENGTH_MS
         ? removed
-        : printedTo;
+        : (refreshed ?? printedTo);
     const removedIx = removedRow?.logLine?.lineIndex;
-    const wallTo = Math.min(auraTo, deathMs(target), ctx.end);
+    // the round ends at its deciding death (`roundEndMs`), the rows after it
+    // are no part of it: the line prints an aura still up there to that row
+    const cutAt = Math.min(deathMs(target), roundEndMs(ctx.legacy));
+    const wallTo = Math.min(auraTo, cutAt);
+    // the span the shares below are summed over is the rows' own: an opening
+    // row and a closing row, the printed length only choosing between closing
+    // rows. Without either the window is the print's (a whole second, a tenth
+    // of one) and the share check would be reading the line back to itself
+    ctx.bump("duringEndRow");
+    // the target's death or the round's end is a row too: the line then
+    // prints the length up to it (`still up when the round ended`)
+    const endOnRow =
+      auraTo !== printedTo ||
+      removed === printedTo ||
+      Math.abs(cutAt - printedTo) <= PRINTED_LENGTH_MS;
+    if (applied === undefined || !endOnRow)
+      ctx.violate(
+        "duringEndRow",
+        applied === undefined ? "noOpeningRow" : "noClosingRow",
+        fromMs,
+        `${m[3]}#${m[1]}:${m[2]}`,
+        `${m[3]} on ${target.name}: printed ${m[5]}s, ${
+          applied === undefined
+            ? "no APPLIED / REFRESH row of it near the printed second"
+            : removed === undefined
+              ? "no REMOVED or REFRESH row, death or round end at its end"
+              : `no REFRESH row, death or round end at its end, nearest REMOVED row ${((removed - fromMs) / 1000).toFixed(3)}s after its opening row`
+        }`,
+        line.slice(0, 200),
+      );
     for (const seg of line.slice(at + "| during it: ".length).split("; ")) {
       const s = DURING_SHARE.exec(seg);
       if (!s) continue;
