@@ -295,11 +295,14 @@ for (const f of files) {
     }
     if (
       body.startsWith("SPELL_AURA_APPLIED,") ||
+      body.startsWith("SPELL_AURA_REFRESH,") ||
       body.startsWith("SPELL_AURA_REMOVED,")
     ) {
       const p = body.split(",");
       if (DB2_INTERRUPT_DURATION_AURAS[p[9] ?? ""]) {
-        if (body.startsWith("SPELL_AURA_APPLIED,"))
+        // a REFRESH proves the aura up, as the product reads it (codex
+        // 85-tk-F-T69-1 #3)
+        if (!body.startsWith("SPELL_AURA_REMOVED,"))
           auraSet(p[5] ?? "").add(p[9]!);
         else auraSet(p[5] ?? "").delete(p[9]!);
       }

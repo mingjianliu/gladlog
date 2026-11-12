@@ -89,6 +89,32 @@ describe("KICK_LOCKOUT_VICTIM_AURAS", () => {
     ]);
     expect(kickLockoutSecondsFor(PUMMEL, both, "116", T0 + 100)).toBe(3.116);
   });
+
+  it("a Roar whose REMOVED the log never shows is over at its 10 s; Concentration Aura has no length and stays", () => {
+    const lost = victim([
+      row(LogEvent.SPELL_AURA_APPLIED, ROAR, 0),
+      row(LogEvent.SPELL_AURA_APPLIED, CONCENTRATION, 0),
+    ]);
+    expect(kickLockoutVictimAuraMultiplierAt(lost, T0 + 10_000)).toBe(
+      1.3 * 0.799,
+    );
+    expect(kickLockoutSecondsFor(PUMMEL, lost, "116", T0 + 60_000)).toBe(2.397);
+  });
+
+  it("rows out of time order: the latest row at or before the interrupt decides", () => {
+    const stepped = victim([
+      row(LogEvent.SPELL_AURA_REMOVED, CONCENTRATION, 1001),
+      row(LogEvent.SPELL_AURA_APPLIED, CONCENTRATION, 999),
+    ]);
+    expect(kickLockoutSecondsFor(PUMMEL, stepped, "116", T0 + 1000)).toBe(
+      2.397,
+    );
+    const back = victim([
+      row(LogEvent.SPELL_AURA_REMOVED, CONCENTRATION, 500),
+      row(LogEvent.SPELL_AURA_APPLIED, CONCENTRATION, 100),
+    ]);
+    expect(kickLockoutSecondsFor(PUMMEL, back, "116", T0 + 1000)).toBe(3);
+  });
 });
 
 describe("kickTextLockEndMs — one lock end for the text and the pressure window", () => {
