@@ -86,7 +86,7 @@ import {
 } from "../../utils/refusedPress";
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
 import type { RosterSides } from "../../utils/rosterSide";
-import { SOLO_SHUFFLE_BRACKET } from "../../utils/roundEnd";
+import { shuffleRoundEndMs, SOLO_SHUFFLE_BRACKET } from "../../utils/roundEnd";
 import { isOffensiveCdFor, isOffensiveLedgerCd } from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
 import {
@@ -426,6 +426,39 @@ export function mergeHealerCcWindows<
       });
   }
   return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
+}
+
+/**
+ * The round end the sync-window work cuts an enemy-healer lock at, seconds
+ * since the match start: the timeline's round end (`utils/roundEnd.ts` — a
+ * Solo Shuffle round's ending death, else the log's end), undefined when the
+ * combat states no end. One reading for the candidate
+ * (`missedSyncWindowEvents`' `roundEndS`), the reference scan
+ * (`syncWindowScan.ts`) and the calibration count (`candidateCalibration.ts`)
+ * — until pipeline T68 (GH #132) only the candidate cut the lock, so the
+ * prior was measured on locks the candidate never judges.
+ */
+export function syncWindowRoundEndS(
+  combat: { startInfo?: { bracket?: string }; startTime: number; endTime?: number },
+  units: Parameters<typeof shuffleRoundEndMs>[1],
+): number | undefined {
+  const endMs =
+    shuffleRoundEndMs(combat, units) ??
+    (typeof combat?.endTime === "number" && combat.endTime > 0
+      ? combat.endTime
+      : undefined);
+  return endMs === undefined ? undefined : (endMs - combat.startTime) / 1000;
+}
+
+/** A lock as the candidate judges it: cut at the round's end
+ * (`syncWindowRoundEndS`); undefined when it began at or after that end. */
+export function syncWindowInRound<W extends { fromSeconds: number; toSeconds: number }>(
+  w: W,
+  roundEndS: number | undefined,
+): W | undefined {
+  if (roundEndS === undefined) return w;
+  if (w.fromSeconds >= roundEndS) return undefined;
+  return { ...w, toSeconds: Math.min(w.toSeconds, roundEndS) };
 }
 
 /** Eligibility of a (merged) enemy-healer lock: rendered start ≥
@@ -1137,12 +1170,9 @@ export function missedSyncWindowEvents(
   // Kidney Shot that landed 1 s before it was a 5 s "missed sync window"
   // (`syncLockLengthFacts`' rows: `durationS=<1, endedBy=the round's end`).
   const inRound = (w: (typeof merged)[number]) =>
-    probes.roundEndS === undefined
-      ? w
-      : { ...w, toSeconds: Math.min(w.toSeconds, probes.roundEndS) };
+    syncWindowInRound(w, probes.roundEndS) ?? w;
   for (const w of merged) {
-    if (probes.roundEndS !== undefined && w.fromSeconds >= probes.roundEndS)
-      continue;
+    if (!syncWindowInRound(w, probes.roundEndS)) continue;
     if (!syncWindowEligible(inRound(w), probes.enemyDeathS)) continue;
     // readiness is read on the lock up to the round's end (codex
     // 60-POSTHOC-04b #1: a Cyclone running 0.6 s past a Shuffle round's

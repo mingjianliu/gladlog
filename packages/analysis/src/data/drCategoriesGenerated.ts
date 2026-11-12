@@ -1,11 +1,22 @@
 /**
- * Generated at: 2026-10-16T15:38:39.754Z
+ * Generated at: 2026-11-11T22:42:53.998Z
  * Build: 12.1.5.70391
- * Source: DB2 SpellCategories.DiminishType(1=root 4=stun 16=incap 32=disorient 64=silence)
- * stun:651 incapacitate:325 root:139 disorient:226 silence:61
+ * Source: DB2 SpellCategories.DiminishType(1=root 4=stun 16=incap 32=disorient 64=silence 128=disarm)
+ * stun:651 incapacitate:325 root:139 disorient:226 silence:61 disarm:9
  */
 
 export const DR_CATEGORIES_GENERATED: Record<string, string[]> = {
+  "disarm": [
+    "207777",
+    "209749",
+    "233759",
+    "236077",
+    "236236",
+    "332547",
+    "387729",
+    "395943",
+    "407032"
+  ],
   "disorient": [
     "605",
     "1513",

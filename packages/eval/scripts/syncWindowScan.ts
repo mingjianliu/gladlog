@@ -40,6 +40,8 @@ import {
   mergeHealerCcWindows,
   syncWindowCdFor,
   syncWindowEligible,
+  syncWindowInRound,
+  syncWindowRoundEndS,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
 import { GladLogParser } from "@gladlog/parser";
@@ -191,8 +193,12 @@ async function scan(): Promise<void> {
           /* torn/unparseable — skip */
         }
       }
-      for (const w of windows) {
-        if (!syncWindowEligible(w, enemyDeathS)) continue;
+      // the lock as the candidate judges it: cut at the round's end
+      // (pipeline T68 — the prior was measured on the lock as logged)
+      const roundEndS = syncWindowRoundEndS(combat, units);
+      for (const logged of windows) {
+        const w = syncWindowInRound(logged, roundEndS);
+        if (!w || !syncWindowEligible(w, enemyDeathS)) continue;
         const t = toRenderSecond(w.fromSeconds);
         const durR = toRenderSecond(w.toSeconds) - t;
         const { ready, entered } = evaluateSyncWindow(w, teamCds);

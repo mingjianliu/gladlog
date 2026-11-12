@@ -9,8 +9,10 @@
  * disorient→incap) plus 5 dead entries keyed by cast ids that never matched a
  * log line (which is why Shockwave 46968's stun DR had never worked — its real
  * aura 132168, x512 across 30 matches, is in the official set).
- * disarm/knockback have no official DiminishType field (a gap), so they stay
- * hand-written.
+ * disarm joined them 2026-11-11 (DiminishType 128, pipeline T68: the hand
+ * list lacked Faerie Swarm 209749 and Sticky Tar Bomb 407032, which
+ * SPELL_CATEGORIES already called disarms). knockback has no official
+ * DiminishType field (a gap), so it stays hand-written.
  * DB2's known quirks (Cyclone's independent DR, Incapacitating Roar actually
  * being disorient) are corrected afterwards by drAnalysis' override layer —
  * do not patch them here.
@@ -25,7 +27,9 @@ export const spellClassMap = {
     ...Object.fromEntries(
       Object.entries(DR_CATEGORIES_GENERATED).map(([c, ids]) => [c, cat(ids)]),
     ),
-    disarm: cat(["236077", "207777", "233759"]),
+    // disarm comes from DB2 too since pipeline T68 (DiminishType 128 —
+    // Faerie Swarm 209749 and Sticky Tar Bomb 407032 carry it; the hand
+    // list here had only Disarm / Dismantle / Grapple Weapon)
     knockback: cat(["51490", "132469", "108199"]),
   },
 };

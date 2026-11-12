@@ -201,7 +201,10 @@ import {
   backlashDispelWindowEvents,
 } from "./candidates/backlashDispel";
 import { burstWindowResponseEvents } from "./candidates/burstWindowResponse";
-import { saveCoversPressureOn } from "./candidates/cooldownTiming";
+import {
+  saveCoversPressureOn,
+  syncWindowRoundEndS,
+} from "./candidates/cooldownTiming";
 import {
   CD_HOARD_RESPONSE_S,
   cdHoardedEvents,
@@ -3990,16 +3993,8 @@ function teamPlayEvents(
               // a Solo Shuffle round's ending death, else the log's end) —
               // not the playable end above, which a 3v3's first friendly
               // death moves and no `[CC ON ENEMY]` line is cut at
-              roundEndS: (() => {
-                const endMs =
-                  shuffleRoundEndMs(combat, units) ??
-                  (typeof combat?.endTime === "number" && combat.endTime > 0
-                    ? combat.endTime
-                    : undefined);
-                return endMs === undefined
-                  ? undefined
-                  : (endMs - startMs) / 1000;
-              })(),
+              // (`syncWindowRoundEndS`, shared with the reference scan)
+              roundEndS: syncWindowRoundEndS(combat, units),
             }),
           );
         }

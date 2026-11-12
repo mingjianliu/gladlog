@@ -5,9 +5,13 @@
  * 32=disorient 64=silence. DR hangs off the aura id (Fear's cast spell 5782
  * has no value; its aura 118699=32), which matches the id the combat log
  * records in SPELL_AURA_APPLIED (across 10 of the user's matches: 118699
- * ×189, 5782 ×0). disarm/knockback have no official DiminishType and are
- * still supplied by the manual layer in drCategories.ts (an official data
- * gap -- do not delete it).
+ * ×189, 5782 ×0). 128=disarm (pipeline T68, 2026-11-11: the five disarm
+ * auras the corpus sees — Disarm 236077, Dismantle 207777, Grapple Weapon
+ * 233759, Faerie Swarm 209749, Sticky Tar Bomb 407032 — all carry it, with
+ * SpellMechanic 3; until then a hand list of the first three stood in for
+ * "no official DiminishType"). knockback has no official DiminishType and
+ * is still supplied by the manual layer in drCategories.ts (an official
+ * data gap -- do not delete it).
  */
 import { writeArtifact } from "./lib/emit";
 import {
@@ -23,6 +27,7 @@ const DIM_TO_CATEGORY: Record<number, string> = {
   16: "incapacitate",
   32: "disorient",
   64: "silence",
+  128: "disarm",
 };
 
 async function main() {
@@ -53,7 +58,7 @@ async function main() {
   const counts = Object.entries(byCat)
     .map(([c, ids]) => `${c}:${ids.length}`)
     .join(" ");
-  const header = `/**\n * Generated at: ${new Date().toISOString()}\n * Build: ${build}\n * Source: DB2 SpellCategories.DiminishType(1=root 4=stun 16=incap 32=disorient 64=silence)\n * ${counts}\n */\n\n`;
+  const header = `/**\n * Generated at: ${new Date().toISOString()}\n * Build: ${build}\n * Source: DB2 SpellCategories.DiminishType(1=root 4=stun 16=incap 32=disorient 64=silence 128=disarm)\n * ${counts}\n */\n\n`;
   writeArtifact(
     outPath,
     header +

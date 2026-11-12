@@ -668,11 +668,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("DISPEL_VERDICTS", "data/dispelVerdicts.ts", "aura", () =>
     keys(DISPEL_VERDICTS),
   ),
-  t("spellClassMap.disarm+knockback", "data/drCategories.ts", "aura", () =>
-    [
-      ...spellClassMap.diminishingReturns.disarm,
-      ...spellClassMap.diminishingReturns.knockback,
-    ].map((e) => e.spellId),
+  // the disarm family left this hand list for DB2 (DiminishType 128,
+  // pipeline T68); knockback is what is still hand-kept
+  t("spellClassMap.knockback", "data/drCategories.ts", "aura", () =>
+    spellClassMap.diminishingReturns.knockback.map((e) => e.spellId),
   ),
   t("CURATED_ABILITY_FACTS", "data/curatedAbilityFacts.ts", "mixed", () =>
     CURATED_ABILITY_FACTS.map((f) => f.id),

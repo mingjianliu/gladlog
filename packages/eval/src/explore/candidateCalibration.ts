@@ -47,6 +47,7 @@ import {
   threatActiveAt,
   unsyncedBurstEvents,
 } from "@gladlog/analysis";
+import { syncWindowRoundEndS } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 // Deep import, same precedent as signalSkillGradient.ts (barrel index.ts does
 // not re-export crisisDecisionPoints.ts): cd-hoarded's 2026-08-30 rewrite
 // (GH #34) scans crisisDecisionPoints directly, the same predicate
@@ -357,6 +358,11 @@ export function countsAtThresholds(
           ),
         ),
         ref: lookupSyncWindowPrior(legacy?.startInfo?.bracket ?? ""),
+        // the product's round-end cut (pipeline T68: this copy lacked it)
+        roundEndS: syncWindowRoundEndS(
+          legacy,
+          Object.values(legacy?.units ?? {}) as never,
+        ),
       };
       missedSyncWindowCapped = missedSyncWindowEvents(
         ctx.ccWindows,
