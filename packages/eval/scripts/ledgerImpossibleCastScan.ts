@@ -110,7 +110,10 @@ for (const f of files) {
       ].sort();
       for (const cd of ledger) {
         if (cd.isProcOnly || !cd.casts?.length) continue;
+        // a press the ledger itself reads as free (`freeRecast`) is not
+        // judged: it spends nothing and waits for nothing (pipeline T77)
         const times = cd.casts
+          .filter((c: { freeRecast?: boolean }) => !c.freeRecast)
           .map((c: { timeSeconds: number }) => c.timeSeconds)
           .sort((a: number, b: number) => a - b);
         const impossibleAt: number[] = [];

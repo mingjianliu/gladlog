@@ -75,7 +75,9 @@ function modelImpossibleTimes(
 ): number[] {
   if (!entry || entry.isProcOnly) return [];
   const out: number[] = [];
-  for (const pt of entry.casts.map((c) => c.timeSeconds).sort((x, y) => x - y)) {
+  for (const pt of entry.casts
+    .map((c) => c.timeSeconds)
+    .sort((x, y) => x - y)) {
     const before = {
       ...entry,
       casts: entry.casts.filter((c) => c.timeSeconds < pt),
@@ -232,7 +234,15 @@ for (const f of files) {
           const presses = entry.casts
             .map((c) => c.timeSeconds)
             .sort((x, y) => x - y);
+          // a press the model itself reads as free (`freeRecast`: Time
+          // Spiral's, GH #176) spends nothing and waits for nothing — it is
+          // no contradiction of the modelled cooldown (pipeline T77: 24 of
+          // the 36 "impossible" Preservation Hover presses on the 605 — 757 → 697 over the eight scanned movement spells)
+          const freePresses = new Set(
+            entry.casts.filter((c) => c.freeRecast).map((c) => c.timeSeconds),
+          );
           for (const pt of presses) {
+            if (freePresses.has(pt)) continue;
             const before = {
               ...entry,
               casts: entry.casts.filter((c) => c.timeSeconds < pt),
