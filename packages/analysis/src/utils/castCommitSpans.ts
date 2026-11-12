@@ -165,8 +165,9 @@ export function nextPressEndingChannelMs(
   const casts = unit.spellCastEvents ?? [];
   return [
     ...casts.filter((e) => rowIsPressEndingCast(e, casts)),
-    ...((unit as { castStartEvents?: typeof unit.spellCastEvents })
-      .castStartEvents ?? []
+    ...(
+      (unit as { castStartEvents?: typeof unit.spellCastEvents })
+        .castStartEvents ?? []
     ).filter((e) => !pressRidesAlong(e.spellId)),
   ]
     .filter((e) => e.spellId !== spellId && e.timestamp > afterMs)
@@ -526,6 +527,48 @@ export function channelSpans(
   return out;
 }
 
+/** English name → the channelled ids that carry it (`CHANNELED_SPELL_IDS`,
+ * derived, never hand-listed). */
+let channelledIdsByName: Map<string, string[]> | undefined;
+
+/**
+ * The channelled ids a press of `spellId` is carried by: a press that is not
+ * itself in the channelled table, while a channelled id of the same English
+ * name appears on the caster's own effect rows this round (damage, heal or
+ * miss rows: the log's proof that this unit's press runs that channel — a
+ * same-named spell that is a plain instant for this unit has no such row).
+ * Empty for a press in the table and for one with no such row.
+ */
+function carrierIdsOf(
+  unit: Pick<ICombatUnit, "id" | "damageOut" | "healOut"> &
+    Partial<Pick<ICombatUnit, "missesOut">>,
+  spellId: string,
+  spellName: string,
+): string[] {
+  if (CHANNELED_SPELL_IDS.has(spellId)) return [];
+  if (!channelledIdsByName) {
+    channelledIdsByName = new Map();
+    for (const id of CHANNELED_SPELL_IDS) {
+      const n = getEnglishSpellName(id, "");
+      if (n === "") continue;
+      channelledIdsByName.set(n, [...(channelledIdsByName.get(n) ?? []), id]);
+    }
+  }
+  const ids = channelledIdsByName.get(getEnglishSpellName(spellId, spellName));
+  if (!ids) return [];
+  const seen = new Set<string>();
+  for (const r of [
+    ...(unit.damageOut ?? []),
+    ...(unit.healOut ?? []),
+    ...(unit.missesOut ?? []),
+  ]) {
+    if (r.srcUnitId !== unit.id) continue;
+    const id = (r as { attackSpellId?: string }).attackSpellId ?? r.spellId;
+    if (id && ids.includes(id)) seen.add(id);
+  }
+  return [...seen];
+}
+
 /**
  * fact1215 R9 (2026-10-18): the channels `channelSpans` cannot see — an
  * officially channelled cast (`CHANNELED_SPELL_IDS`) that puts no same-id
@@ -560,14 +603,38 @@ export function tickEndedChannelSpans(
   > &
     Partial<Pick<ICombatUnit, "spec" | "info">>,
 ): IChannelSpan[] {
+  // T92: a channel pressed under one id and carried by another — Lightning
+  // Lasso's press is 305483, the channelled spell DB2 marks is 305485, the
+  // debuff held on the target. Such a press is a channel's when the caster's
+  // own effect rows carry a channelled id of the press's English name
+  // (`carrierIdsOf`); 203 Lasso presses of the 605 corpus read as free hands.
+  const carried = new Map<string, readonly string[]>();
   const casts = (unit.spellCastEvents ?? [])
-    .filter((e) => CHANNELED_SPELL_IDS.has(e.spellId))
+    .filter((e) => {
+      if (CHANNELED_SPELL_IDS.has(e.spellId)) return true;
+      const ids = carrierIdsOf(unit, e.spellId, e.spellName);
+      if (ids.length === 0) return false;
+      carried.set(e.spellId, ids);
+      return true;
+    })
     .sort((a, b) => a.timestamp - b.timestamp);
   if (casts.length === 0) return [];
   const logged = channelSpans(unit);
   const out: IChannelSpan[] = [];
   for (let i = 0; i < casts.length; i++) {
     const c = casts[i]!;
+    const carriers = carried.get(c.spellId);
+    // a carried press whose channelled row is a cast row of its own in the
+    // same instant (a companion row) is that row's channel, read above
+    if (
+      carriers &&
+      casts.some(
+        (o) =>
+          carriers.includes(o.spellId) &&
+          Math.abs(o.timestamp - c.timestamp) <= CHANNEL_AURA_LAG_MS,
+      )
+    )
+      continue;
     if (
       logged.some(
         (l) =>
@@ -577,12 +644,12 @@ export function tickEndedChannelSpans(
       )
     )
       continue;
-    const fullS = buffFullDurationForCaster(
-      c.spellId,
-      unit as never,
-      c.timestamp,
-    );
-    if (fullS === undefined || !(fullS > 0)) continue;
+    // the press's own official length, or its carrier's (the longest)
+    const lengths = [c.spellId, ...(carriers ?? [])]
+      .map((id) => buffFullDurationForCaster(id, unit as never, c.timestamp))
+      .filter((d): d is number => d !== undefined && d > 0);
+    if (lengths.length === 0) continue;
+    const fullS = Math.max(...lengths);
     const nextSame = casts.slice(i + 1).find((n) => n.spellId === c.spellId);
     const capMs = Math.min(
       c.timestamp + fullS * 1000,
@@ -593,7 +660,9 @@ export function tickEndedChannelSpans(
       (a) =>
         a.logLine.event === LogEvent.SPELL_INTERRUPT &&
         a.destUnitId === unit.id &&
-        (a as { extraSpellId?: string }).extraSpellId === c.spellId &&
+        [c.spellId, ...(carriers ?? [])].includes(
+          (a as { extraSpellId?: string }).extraSpellId ?? "",
+        ) &&
         a.logLine.timestamp >= c.timestamp &&
         a.logLine.timestamp <= capMs,
     );
