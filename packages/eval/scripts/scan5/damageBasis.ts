@@ -106,10 +106,12 @@ import {
   spellRangeYards,
 } from "@gladlog/analysis/src/data/spellReach";
 import { auraCloseRow } from "@gladlog/analysis/src/utils/auraIntervals";
+import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
 import { immunityStopsSpellSchool } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { isAutomaticCastRow } from "@gladlog/analysis/src/utils/pressRow";
+import { toRenderSecond } from "@gladlog/analysis/src/utils/renderGrid";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
@@ -459,6 +461,24 @@ const ALLY_ITEM =
 
 function allyOverlapDeferral(ctx: IRoundCtx): void {
   let burst: [number, number] | undefined;
+  // the producer's own ledger, built once and only for a round that prints
+  // an overlap: its entries carry the span each figure was summed over
+  let ledger: ReturnType<typeof analyzeBurstLedger> | undefined;
+  const ledgerOf = (): ReturnType<typeof analyzeBurstLedger> => {
+    if (ledger) return ledger;
+    try {
+      const side = ctx.players.filter(
+        (u) => u.reaction === ctx.owner.reaction,
+      );
+      const enemies = ctx.players.filter(
+        (u) => u.reaction !== ctx.owner.reaction,
+      );
+      ledger = analyzeBurstLedger(ctx.owner, side, enemies, ctx.legacy);
+    } catch {
+      ledger = [];
+    }
+    return ledger;
+  };
   for (const line of ctx.lines) {
     const h = BURST_HEAD.exec(line);
     if (h) {
@@ -490,10 +510,33 @@ function allyOverlapDeferral(ctx: IRoundCtx): void {
       // which of them is the real one the line does not say, so a span that
       // reads the printed figure with no deferral row clears the item
       const opens = [fromB, ...opened, ...press.filter((t) => t >= fromB)];
-      const spans = [
-        ...opens.map((a) => [a, a + seconds * 1000] as const),
-        [toB - seconds * 1000, toB] as const,
-      ];
+      // T94: the span the producer summed, when its ledger holds this item
+      // (same burst second, ally, cooldown, printed length and target) — the
+      // guessed spans below are a tenth of a second and a floored burst end
+      // loose, and a hit on that edge was read as "only matches with the
+      // deferral rows" (Goremaw's Bite 1.2 s, 133,692 + 1,463)
+      const summed = ledgerOf()
+        .filter((e) => toRenderSecond(e.fromSeconds) === burst![0])
+        .flatMap((e) => e.allyCDsOverlapping)
+        .filter(
+          (a) =>
+            a.playerName === ally.name &&
+            a.spellName === m[2] &&
+            a.overlapSeconds.toFixed(1) === (+m[3]!).toFixed(1) &&
+            a.topTarget?.unitName === target.name,
+        );
+      const spans = summed.length
+        ? summed.map(
+            (a) =>
+              [
+                ctx.start + a.overlapFromSeconds * 1000,
+                ctx.start + a.overlapToSeconds * 1000,
+              ] as const,
+          )
+        : [
+            ...opens.map((a) => [a, a + seconds * 1000] as const),
+            [toB - seconds * 1000, toB] as const,
+          ];
       const cleanOf = (a: number, b: number): number =>
         landedOn(target, a, b + 1, src) + absorbedOn(target, a, b + 1, src);
       if (spans.some(([a, b]) => fmtLedger(cleanOf(a, b)) === m[5])) continue;

@@ -1830,9 +1830,14 @@ function runRound(ctx: IContext): void {
             a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
             getEnglishSpellName(a.spellId, "") === im[1],
         );
+        // T94: `bFrom` is the burst's opening second floored, the burst
+        // itself opens somewhere inside it — an aura put up earlier in that
+        // same second is the "already up" one (Greater Invisibility at
+        // 1:18.448, burst open 1:18.768: reading `<= bFrom` took the press
+        // of a minute before)
         const applyRow =
           im[3] === "already up"
-            ? applies.filter((a) => a.timestamp <= bFrom).at(-1)
+            ? applies.filter((a) => a.timestamp < bFrom + 1000).at(-1)
             : applies.find(
                 (a) =>
                   Math.abs(a.timestamp - (bFrom + Number(im[4]) * 1000)) <=

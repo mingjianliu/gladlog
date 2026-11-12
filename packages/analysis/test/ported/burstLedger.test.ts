@@ -504,6 +504,8 @@ describe("burstLedger — burst grouping and audit", () => {
         playerName: "Mage",
         spellName: "Combustion",
         overlapSeconds: 10, // Combustion 13–23 s inside 10–30 s
+        overlapFromSeconds: 13,
+        overlapToSeconds: 23,
         topTarget: null,
       },
     ]);

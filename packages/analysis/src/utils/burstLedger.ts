@@ -301,6 +301,12 @@ export interface IBurstLedgerEntry {
      * instant cooldown, whose span has no length, and for spans that only
      * touch). */
     overlapSeconds: number;
+    /** The shared seconds' own endpoints (round seconds, unrounded) — the
+     * span `topTarget` is summed over, both ends included. The line prints
+     * only its length; the scan's `allyOverlapDeferral` re-sums this span
+     * instead of guessing one from the printed tenth of a second (T94). */
+    overlapFromSeconds: number;
+    overlapToSeconds: number;
     /** The enemy player that ally damaged most inside the shared seconds —
      * landed + absorbed, the measure `dominantTarget` is chosen on — or null
      * when they damaged no enemy player in them (T12 ⑦: 0e0663e6's Voidform
@@ -862,6 +868,8 @@ export function analyzeBurstLedger(
           playerName: s.playerName,
           spellName: s.spellName,
           overlapSeconds: Math.max(0, overlapTo - overlapFrom),
+          overlapFromSeconds: overlapFrom,
+          overlapToSeconds: overlapTo,
           topTarget,
         };
       });

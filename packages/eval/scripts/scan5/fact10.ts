@@ -3,9 +3,9 @@
  * fact10 (F25) class checks.
  *
  *  - pressInsideLockNotEntered (class 1, D2–D4 D31): a `missed-sync-window`
- *    menu row ("none entered the window") whose lock — from 2 s before its
- *    start (the row's own "a press up to 2 s before the lock counts as
- *    entering") to the end of its last second — holds a press, by a player
+ *    menu row ("none entered the window") whose lock — the producer's own
+ *    raw lock, from `SYNC_ENTER_LEAD_S` before its start to its end
+ *    (`syncRowPressSpanMs`, T94) — holds a press, by a player
  *    of the owner's side, of a major offensive button the roster filed as a
  *    press fact only (070c4933 2:06: Breath of Eons pressed at 2:09.572
  *    inside the Sleep Walk → Terror of the Skies lock). The id list is the
@@ -115,6 +115,11 @@
  *    Storm Bolt 20.012 s after Void Nova, 1.52 s of 3 s, printed Full).
  *    Counted: every such landing in the band with a length that says one.
  */
+import {
+  enemyHealerCcWindows,
+  mergeHealerCcWindows,
+  SYNC_ENTER_LEAD_S,
+} from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { HEALER_CC_MIN_S } from "@gladlog/analysis/src/context/observedConsequences";
 import {
   CHANNELED_SPELL_IDS,
@@ -156,6 +161,7 @@ import {
 import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { pvpTrinketUses } from "@gladlog/analysis/src/utils/pvpTrinketUses";
+import { toRenderSecond } from "@gladlog/analysis/src/utils/renderGrid";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import {
   nonPlayerUnitKill,
@@ -236,6 +242,40 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
 const SYNC_ROW =
   /id=missed-sync-window:\S+ type=missed-sync-window t=(\d+)s [^\n]*?facts=\{t=(\d+), windowEndT=(\d+),/g;
 
+/**
+ * The span (ms, [from, to)) in which a ruled button's press makes a
+ * `missed-sync-window` row wrong. With the producer's lock found — the one
+ * whose rendered start is the row's `t` — it is the producer's own "pressed
+ * in" span on the raw endpoints: `SYNC_ENTER_LEAD_S` before the lock to its
+ * end, inclusive (`castEntersWindow`). The row's floored seconds alone
+ * (−2 s / +1 s) reach up to a second past both: a Meteor 2.258 s before a
+ * lock at 242.829 and a Goremaw's Bite 0.234 s after one ending 162.595 were
+ * read as inside (T94; 5 rows / 3 facts on 605). No lock found → the row's
+ * seconds, the widest reading.
+ */
+export function syncRowPressSpanMs(
+  startMs: number,
+  rowT: number,
+  rowEndT: number,
+  locks: ReadonlyArray<{ fromSeconds: number; toSeconds: number }>,
+): { from: number; to: number } {
+  const lock = locks.find(
+    (w) =>
+      toRenderSecond(w.fromSeconds) === rowT &&
+      toRenderSecond(w.toSeconds) >= rowEndT,
+  );
+  if (!lock)
+    return {
+      from: startMs + (rowT - SYNC_ENTER_LEAD_S) * 1000,
+      to: startMs + (rowEndT + 1) * 1000,
+    };
+  return {
+    from: startMs + (lock.fromSeconds - SYNC_ENTER_LEAD_S) * 1000,
+    // inclusive end, as the producer's `<= toSeconds`
+    to: startMs + lock.toSeconds * 1000 + 1,
+  };
+}
+
 export function run(ctx: IRoundCtx): void {
   troughPastRoundEnd(ctx);
   trinketAfterAllyImmunity(ctx);
@@ -259,10 +299,20 @@ export function run(ctx: IRoundCtx): void {
   evidencePressOnRestatedAura(ctx);
   if (!ctx.owner) return;
   const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
+  // the producer's own locks (T94): the row prints the lock's floored
+  // endpoints; "entered" is judged on the raw ones, with the producer's lead
+  const enemies = ctx.players.filter((u) => u.reaction !== ctx.owner.reaction);
+  let locks: Array<{ fromSeconds: number; toSeconds: number }> = [];
+  try {
+    locks = mergeHealerCcWindows(
+      enemyHealerCcWindows(side, enemies, ctx.legacy),
+    );
+  } catch {
+    locks = [];
+  }
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
     ctx.bump("pressInsideLockNotEntered");
-    const from = ctx.start + (+m[2]! - 2) * 1000;
-    const to = ctx.start + (+m[3]! + 1) * 1000;
+    const { from, to } = syncRowPressSpanMs(ctx.start, +m[2]!, +m[3]!, locks);
     const seen = new Set<string>();
     for (const u of side) {
       const healer = isHealerSpec(u.spec);
