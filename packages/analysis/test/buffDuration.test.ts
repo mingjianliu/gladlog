@@ -73,6 +73,7 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
       "1719": 1, // Rampaging Berserker —— 语料 59/89 格是 1 级, 12×(1+0.50×1)=18 (GH #102)
       "1269042": 1, // Eternal Hunger —— 20/20 持有,补丁 14 = 9 + 5 保留为典型值(2026-09-22)
       "445584": 1, // Deadly Focus —— 23/23 持有,补丁 18 = 12 + 6 保留为典型值(2026-09-22)
+      "1267765": 1, // 风暴涌流图腾 —— 与 5672 同一对天赋,补丁 21.5 保留为典型值(T76)
       "5672": 1, // 图腾专注 +3 与辅助灌魔 +3.5 —— 补丁 21.5 = 15 + 3 + 3.5 保留为典型值(2026-09-22)
       "1282501": 1, // Dominion of Argus: Lady Sacrolash —— 补丁 14 = 10 + 4 保留为典型值(GH #102)
       "1282502": 1, // Dominion of Argus: Grand Warlock Alythess —— 补丁 14 = 10 + 4 保留为典型值(GH #102)
@@ -759,6 +760,17 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     });
     expect(buffFullDurationForCaster("5672", neither)).toBeCloseTo(15);
     expect(buffFullDurationForCaster("5672", undefined)).toBe(21.5);
+    // 风暴涌流图腾(T76):同一对天赋,同样的三档
+    const SUPPORTIVE_IMBUEMENTS = { id1: 94866, id2: 125824, count: 1 };
+    expect(buffFullDurationForCaster("1267765", tf)).toBeCloseTo(18);
+    expect(buffFullDurationForCaster("1267765", neither)).toBeCloseTo(15);
+    expect(buffFullDurationForCaster("1267765", undefined)).toBe(21.5);
+    const both = makeUnit("s-both", {
+      spec: rsham,
+      info: { talents: [TOTEMIC_FOCUS, SUPPORTIVE_IMBUEMENTS], pvpTalents: [] },
+    });
+    expect(buffFullDurationForCaster("1267765", both)).toBeCloseTo(21.5);
+    expect(buffFullDurationForCaster("5672", both)).toBeCloseTo(21.5);
   });
 
   it("读不到天赋(unknown)绝不加长 —— 与 CC 侧同一条纪律", () => {

@@ -756,6 +756,20 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Supportive Imbuements — Totemic HERO tree (Restoration): teaches the Tidecaller's Guard imbue, 'your Healing Stream Totem lasts 3 s longer'. The extension is carried by the imbue (457481, a script dummy in DB2), so no SpellMod row exists in either encoding and the milliseconds cannot be read — the +3.5 is CORPUS-MEASURED: holders 21.5 s ×1,666 of 1,942 vs non-holders 18.0 s (Totemic Focus) / 15.0 s; 15 + 3 + 3.5 = 21.5, exactly the 09-07 patch. Same standing as Sanctified Wrath (registered on corpus evidence where DB2 only partially speaks); if a future build exposes the imbue's value, replace the 3.5 with it.",
     },
   ],
+  "1267765": [
+    {
+      talentSpellId: "382201",
+      untalentedBaseSeconds: 15,
+      addSeconds: 3,
+      note: "Totemic Focus on Stormstream Totem (the Restoration totem that takes Healing Stream's place) — the same DB2 aura 219 +3000 ms SpellLabel row as 5672 (talentEffectInventory candidate 382201 → 1267765). The aura is applied by the totem, so the scans saw 0 caster cells until they read a summon as its owner (T76, 2026-11-11); on the 605 since: 132 Restoration holder cells, 92 at 21.5 s and 40 at 18 s, none at 15. The flat 21.5 s corpus patch priced those 40 cells 3.5 s long; it stays as the typical value with no caster.",
+    },
+    {
+      talentSpellId: "445033",
+      untalentedBaseSeconds: 15,
+      addSeconds: 3.5,
+      note: "Supportive Imbuements — the same corpus-measured +3.5 s as Healing Stream 5672 (the imbue is a script dummy in DB2, see that entry): 15 + 3 + 3.5 = 21.5.",
+    },
+  ],
   "264735": [
     {
       talentSpellId: "388039",

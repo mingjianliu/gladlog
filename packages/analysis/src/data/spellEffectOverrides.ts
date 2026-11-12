@@ -379,8 +379,9 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // cells — the aura ids may have moved in 12.1.5): Dominion of Argus 1282501 /
   // 1282502 ← Dominion of Argus 1276222 +4 s (a TIERED node, maxRanks 4 — rank
   // semantics unread), Lunar Beam 204066 ← The Eternal Moon 424113 +3 s, Healing
-  // Stream 5672 / Stormstream 1267765 ← Totemic Focus 382201 +3 s (15 + 3 = 18,
-  // not the 21.5 observed — a second factor is missing). Immolation Aura ←
+  // Stream 5672 / Stormstream 1267765 ← Totemic Focus 382201 +3 s and Supportive
+  // Imbuements 445033 +3.5 s are split in BUFF_DURATION_TALENT_MODIFIERS since
+  // (5672 on 2026-09-22, 1267765 with T76); the 21.5 here is the typical value. Immolation Aura ←
   // Agonizing Flames +50 % gives 9, not the observed 10, and the ownership
   // predicate found 0 holders — unexplained, patch stays. Improved Garrote
   // 392401: Subterfuge +3 s gives 9, observed 12 — unexplained, patch stays.
