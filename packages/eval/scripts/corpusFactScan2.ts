@@ -230,6 +230,7 @@ import {
   MECHANIC_LIMITED_AVOIDANCE_BUFFS,
   PHYSICAL_CC_IDS,
   REPOSITIONING_SPELL_IDS,
+  unitOwnPressOfAuraAtMs,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { IMMUNITY_SPELLS } from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
 import {
@@ -1327,6 +1328,22 @@ function createScan(): IScan<any> {
       let xUp = miss
         ? upAt(T, isXAura, ts, liOf(miss), CAPPED_UNCLOSED)
         : upDuring(T, isXAura, lineMs - 1000, lineMs + 1000, CAPPED_UNCLOSED);
+      // T64: X APPLIED in the miss row's own millisecond on a row after it,
+      // pressed by the target in that millisecond, is the miss's cause — the
+      // product's own test (`unitOwnPressOfAuraAtMs`, 129-2-732 1:46: Spider
+      // Venom IMMUNE, then Ice Block APPLIED and its SUCCESS, one ms)
+      if (miss && xUp.length === 0) {
+        const pressed = xRows.find(
+          (a: any) =>
+            ev(a) === APPLIED &&
+            tsOf(a) === ts &&
+            unitOwnPressOfAuraAtMs(T, a.spellId, a.srcUnitId, ts),
+        );
+        if (pressed) {
+          xUp = [pressed];
+          bump("immuneCause:pressedInMissMs");
+        }
+      }
       // E8: an avoidance consumed by the control is REMOVED in the ms of the
       // control's CAST, and the miss row follows up to ~0.7 s later (29-5-197
       // 1:08: Kidney Shot SUCCESS 24.460, Nullifying Shroud REMOVED 24.461,

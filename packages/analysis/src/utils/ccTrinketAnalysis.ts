@@ -415,6 +415,32 @@ export const DRUID_FORM_BUFFS = new Map<string, string>([
   ["24858", "Moonkin Form"],
 ]);
 
+/**
+ * Did `unit` itself press `auraId` in the millisecond `atMs` — its own
+ * SPELL_CAST_SUCCESS, at that timestamp, of the aura's id or of a cast whose
+ * effect the aura is? The one test for "an aura APPLIED after a SPELL_MISSED
+ * row of its own millisecond is that miss's cause" (pipeline T64: the game
+ * resolved the press first and wrote its rows later), shared by
+ * `ccAvoidanceBuffsUpAt` (`judgedIsMiss`) and corpusFactScan2's
+ * `immuneCause` check.
+ */
+export function unitOwnPressOfAuraAtMs(
+  unit: Partial<Pick<ICombatUnit, "spellCastEvents">>,
+  auraId: string,
+  srcId: string,
+  atMs: number,
+): boolean {
+  const casts = castsOfEffectAura(auraId);
+  return (unit.spellCastEvents ?? []).some(
+    (c) =>
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      c.logLine.timestamp === atMs &&
+      c.srcUnitId === srcId &&
+      !!c.spellId &&
+      (c.spellId === auraId || casts.includes(c.spellId)),
+  );
+}
+
 /** One CC-avoidance aura up on a unit at an instant (`ccAvoidanceBuffsUpAt`). */
 export interface ICcAvoidanceBuffUp {
   spellId: string;
@@ -525,19 +551,8 @@ export function ccAvoidanceBuffsUpAt(
     }
   }
   const closedAtJudged = new Set<string>();
-  /** the unit's own SUCCESS, in the judged millisecond, of this aura's id
-   * or of a cast whose effect the aura is */
-  const pressedAtJudgedMs = (auraId: string, srcId: string): boolean => {
-    const casts = castsOfEffectAura(auraId);
-    return (unit.spellCastEvents ?? []).some(
-      (c) =>
-        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        c.logLine.timestamp === atMs &&
-        c.srcUnitId === srcId &&
-        !!c.spellId &&
-        (c.spellId === auraId || casts.includes(c.spellId)),
-    );
-  };
+  const pressedAtJudgedMs = (auraId: string, srcId: string): boolean =>
+    unitOwnPressOfAuraAtMs(unit, auraId, srcId, atMs);
   /** the first row logged after the judged one: where the "closed later"
    * reading below starts */
   let laterFrom = -1;
@@ -5817,7 +5832,9 @@ export function analyzePlayerCCAndTrinket(
       };
     if (landing.fromS <= 0) return atCast;
     const pulse = pulseAssignment(enemy, cast).get(cast.logLine.timestamp);
-    return pulse ? { ms: pulse.ms, line: pulse.line, isMissRow: false } : atCast;
+    return pulse
+      ? { ms: pulse.ms, line: pulse.line, isMissRow: false }
+      : atCast;
   };
 
   /** Does a go-off row at `rowMs` (of `family`, from the caster or its
@@ -6083,7 +6100,11 @@ export function analyzePlayerCCAndTrinket(
           // player who could move (`ccAvoidedLandingDelay.test`).
           if (!isTargeted && !missRow && hardCcAuraAt(player, enemyIds, hit.ms))
             continue;
-          const activeBuff = avoidanceBuffsAt(hit.ms, hit.line, hit.isMissRow).find(
+          const activeBuff = avoidanceBuffsAt(
+            hit.ms,
+            hit.line,
+            hit.isMissRow,
+          ).find(
             (b) =>
               applicableIds.has(b.spellId) &&
               avoidanceExplainsMissType(b.spellId, loggedMissType) &&
