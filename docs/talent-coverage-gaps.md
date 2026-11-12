@@ -328,25 +328,25 @@ DB2 build 12.1.5.69594。这份清单回答一个问题:**哪些天赋效果产�
 
 DB2 在减伤光环的「减伤那一项」上的修改,以及 `mitigationTalentScan.ts` 的语料结果(预期 = 持有者承伤比)。「在带内」才会被提升进 `TALENT_MITIGATION_MODIFIERS`。
 
-| 光环                                         | 天赋                                                    | DB2 修改       | 状态                                                                   |
-| -------------------------------------------- | ------------------------------------------------------- | -------------- | ---------------------------------------------------------------------- |
-| 树皮术 / Barkskin (22812)                    | 青翠之心 / Verdant Heart (301768)                       | points#4 20    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 知识古树 / Ancient of Lore (473909)          | 旋荡星辰 / Whirling Stars (468743)                      | points#1 0     | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 知识古树 / Ancient of Lore (473909)          | 狂暴 / Berserk (343223)                                 | points#1 0     | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 树皮术 / Barkskin (22812)                    | 万华疾行 / Flower Walk (439901)                         | points#5 10    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 铁木树皮 / Ironbark (102342)                 | 石木树皮 / Stonebark (197061)                           | points#2 20    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 黑曜鳞片 / Obsidian Scales (363916)          | 黑龙军团之力 / Might of the Black Dragonflight (441705) | damage/heal 20 | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 黑曜鳞片 / Obsidian Scales (363916)          | 黑龙军团之力 / Might of the Black Dragonflight (441705) | periodic 20    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 破咒祝福 / Blessing of Spellwarding (204018) | 回响祝福 / Echoing Blessings (387801)                   | points#3 -15   | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 破咒祝福 / Blessing of Spellwarding (204018) | 回响祝福 / Echoing Blessings (387801)                   | points#2 15    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 保护祝福 / Blessing of Protection (1022)     | 福佑召唤 / Blessed Calling (469770)                     | points#4 15    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 破咒祝福 / Blessing of Spellwarding (204018) | 福佑召唤 / Blessed Calling (469770)                     | points#4 15    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 炽热防御者 / Ardent Defender (31850)         | 奋发卫士 / Inspired Guard (469439)                      | points#4 15    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 圣佑术 / Divine Protection (498)             | 奋发卫士 / Inspired Guard (469439)                      | points#2 15    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 圣佑术 / Divine Protection (403876)          | 奋发卫士 / Inspired Guard (469439)                      | points#2 15    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 炽热防御者 / Ardent Defender (31850)         | 强化炽热防御者 / Improved Ardent Defender (393114)      | points#5 20    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 防御姿态 / Defensive Stance (386208)         | 征战于烈焰 / Fight Through the Flames (452494)          | points#3 -8    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
-| 防御姿态 / Defensive Stance (386208)         | 刚毅姿态 / Unyielding Stance (1235047)                  | points#1 -6    | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |
+| 光环                                         | 天赋                                                    | DB2 修改       | 状态                                                                                     |
+| -------------------------------------------- | ------------------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------- |
+| 树皮术 / Barkskin (22812)                    | 青翠之心 / Verdant Heart (301768)                       | points#4 20    | 不接:改的是树皮术的受到治疗(aura 118,效果 #4)                                            |
+| 知识古树 / Ancient of Lore (473909)          | 旋荡星辰 / Whirling Stars (468743)                      | points#1 0     | 不接:0 点,落在变形效果位(aura 36)                                                        |
+| 知识古树 / Ancient of Lore (473909)          | 狂暴 / Berserk (343223)                                 | points#1 0     | 不接:0 点,落在变形效果位(aura 36)                                                        |
+| 树皮术 / Barkskin (22812)                    | 万华疾行 / Flower Walk (439901)                         | points#5 10    | 不接:改的是移速(aura 31,效果 #5)                                                         |
+| 铁木树皮 / Ironbark (102342)                 | 石木树皮 / Stonebark (197061)                           | points#2 20    | 不接:改的是来自施法者的治疗(aura 283,效果 #2)                                            |
+| 黑曜鳞片 / Obsidian Scales (363916)          | 黑龙军团之力 / Might of the Black Dragonflight (441705) | damage/heal 20 | 不接:按标签加黑系法术的伤害 / 治疗量(aura 218),不是鳞片的减伤                            |
+| 黑曜鳞片 / Obsidian Scales (363916)          | 黑龙军团之力 / Might of the Black Dragonflight (441705) | periodic 20    | 不接:按标签加黑系法术的伤害 / 治疗量(aura 218),不是鳞片的减伤                            |
+| 破咒祝福 / Blessing of Spellwarding (204018) | 回响祝福 / Echoing Blessings (387801)                   | points#3 -15   | 不接:op 23 指向效果 #3,破咒祝福没有这个效果位(空操作;保护祝福那一行已接)                 |
+| 破咒祝福 / Blessing of Spellwarding (204018) | 回响祝福 / Echoing Blessings (387801)                   | points#2 15    | 不接:落在 aura 79 上,不是减伤;605 实测持有者承伤比 1.053(9 个单位,带外)                  |
+| 保护祝福 / Blessing of Protection (1022)     | 福佑召唤 / Blessed Calling (469770)                     | points#4 15    | 不接:改的是移速(保护祝福效果 #4,aura 31;破咒祝福没有这个效果位)                          |
+| 破咒祝福 / Blessing of Spellwarding (204018) | 福佑召唤 / Blessed Calling (469770)                     | points#4 15    | 不接:改的是移速(保护祝福效果 #4,aura 31;破咒祝福没有这个效果位)                          |
+| 炽热防御者 / Ardent Defender (31850)         | 奋发卫士 / Inspired Guard (469439)                      | points#4 15    | 不接:改的是受到治疗(aura 118)                                                            |
+| 圣佑术 / Divine Protection (498)             | 奋发卫士 / Inspired Guard (469439)                      | points#2 15    | 不接:改的是受到治疗(aura 118)                                                            |
+| 圣佑术 / Divine Protection (403876)          | 奋发卫士 / Inspired Guard (469439)                      | points#2 15    | 不接:改的是受到治疗(aura 118)                                                            |
+| 炽热防御者 / Ardent Defender (31850)         | 强化炽热防御者 / Improved Ardent Defender (393114)      | points#5 20    | 不接:改的是耐力(aura 137,效果 #5)                                                        |
+| 防御姿态 / Defensive Stance (386208)         | 征战于烈焰 / Fight Through the Flames (452494)          | points#3 -8    | 未接:是减伤项(效果 #3,魔法 aura 87 −8);605 与 1,814 文件上持有者都是 0 个单位,无语料可验 |
+| 防御姿态 / Defensive Stance (386208)         | 刚毅姿态 / Unyielding Stance (1235047)                  | points#1 -6    | 未接:是减伤项(效果 #1,aura 87 −6);605 与 1,814 文件上持有者都是 0 个单位,无语料可验      |
 
 语料扫描(新赛季归档每 10 场,2026-09-26):
 
@@ -441,7 +441,7 @@ Fortifying Brew +Ironshell Brew expect 0.7 (without 0.8) | holders null ci90 - u
 - **FLAG** Anger Management 152278(Colossus Smash / Bladestorm / Avatar / Shockwave,605 场 40 次「不可能施放」):全部是持有者,且全部落在最早可用下限之下 —— 下限是 p2 分位,按定义放过约 2 %(Bladestorm 13 / 1,000,Colossus Smash 13 / 1,444)。不是新机制;精确建模要逐次怒气消耗账;日志的消耗字段 parser 自 2026-10-11 起存了(`casts[].powerCosts`,见下面法力一条),但它写的是百分比减免之前的消耗,不一定是实扣。没改码。
 - **FLAG** Heart of the Jade Serpent 443294 → Strike of the Windlord 392983(605 场 13 次里 12 次是同一个 Conduit of the Celestials 武僧,间隔 18.6–28.9 秒 < 30):DB2 增益 443421 的光环 148(恢复速率 +75 %)只点名充能类别 1517 / 1518 / 2198 / 2294,Strike of the Windlord 的类别与充能类别都是 0 —— 掩码腿不成立,没改码。
 - **FLAG** Aspect of the Turtle:Born To Be Wild 按级之后(`PER_RANK_COOLDOWN_TALENTS`),仍有两个 Marksmanship 2 级间隔 101.9 / 107.4 秒 < 120 秒未解释(1,814 场)。
-- **FLAG** Ascendance 114052(恢复萨满,605 场 13 次施放 4 次「不可能」,间隔 18.1 / 48.0 / 68.5 / 110.6 秒):9 条台账记录(6 个文件)全部持有 Deeply Rooted Elements 378270(触发 Ascendance),疑为触发被记成按键;未核实,没改码。
+- **已修(T77,2026-11-11)** Ascendance 114052(恢复萨满,605 场 13 次「施放」4 次「不可能」,间隔 18.1 / 48.0 / 68.5 / 110.6 秒):9 条台账记录全部持有 Deeply Rooted Elements 378270,4 次「不可能」全是没有施法行的 6 秒光环 —— 触发,不是按键(DB2 Spell 378270:「施放激流有几率激活升腾 6.0 秒」;按键是 15 秒且带施法行;触发不占冷却:两次触发相隔 18 秒,触发后 81 秒有一次真按键,冷却 120 秒)。`auraOnlyActivationSeconds` 现在按光环长度把它排除(`isTalentProcRun`):605 采集上它读成按键的 437 次里 427 次 6 秒、3 次 12.0 秒(两次触发相连)、7 次日志没有 REMOVED(仍按按键读,保守一侧)。
 - **FLAG** Ardent Defender 31850:手写 120 秒改回 DB2 的 90 秒(FT F20),语料只有一个防护骑士的三个间隔(79.8 / 84.0 / 157.2 秒,Unbreakable Spirit −30 %:手写 84 秒被 79.8 驳倒一次,官方 63 秒没被驳倒也没有地板)。
 - **FLAG** 法力消耗(FT F09a 2026-10-11;T17 2026-11-09):DB2 按百分比计价的技能,代价一律是百分比 × **基础法力 250,000**(`BASE_MANA`,`manaCostForCast`),不再乘读数的法力上限;本轮放过的技能仍先读施放行写明的消耗(`statedManaCostInRound`,两者在实测里全部相等)。实测(584 份下载日志,GH #129 Q3 的验证条件):百分比施放行写明的消耗 401,548 / 401,548 条等于百分比 × 250,000,其中 230,952 条上限 ≠ 250,000;对照实扣(下一读数的降幅加回回蓝),百分比 × 250,000 在容差内 284,775 / 352,476,百分比 × 上限 176,297;上限被抬高的施法者 163,674 vs 55,196 / 205,283;有减免的 16,872 次按键里,实扣落在 250,000 价的 5 % 整档上 13,687 次、落在上限价上 7,254 次。**还开着的一处**:施放行与 `BASE_MANA` 都是百分比减免之前的消耗,不是实扣(Echo 写 4,750、实扣 3,325;Holy Light 写 17,500、实扣 7,341;Apotheosis 下 Holy Word: Serenity 实扣约三成),有减免的玩家仍被高估。
 
