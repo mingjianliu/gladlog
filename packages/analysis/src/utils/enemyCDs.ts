@@ -1073,6 +1073,63 @@ export function observedCastEndMs(
 const PRESS_EFFECT_AURA_LEAD_MS = 1000;
 const PRESS_EFFECT_AURA_LAG_MS = 2000;
 
+/** How long after a press a damage row of its own name is still that
+ * press's delivery. Not a travel-time table: one bound for every button,
+ * and the same button's next press ends the reading first. 605 at
+ * 387cc6a70 (T72 attempt 2): 114 presses with such rows, the last one
+ * 0.2–2.38 s after the press (Meteor 2.2–2.4 s, Soul Fire 0.2–1.8 s) and
+ * none between 2.38 s and 20 s. */
+export const PRESS_DELIVERY_REACH_S = 5;
+
+/**
+ * Pipeline T72 attempt 2: when a press with no effect aura and no official
+ * length delivered — the caster's last damage row of the button's own name
+ * on a player of the other side, after the press, before the same button's
+ * next press and within `PRESS_DELIVERY_REACH_S` (Meteor's impact 2.3 s
+ * after the press, Soul Fire's hit after its flight). The press's span runs
+ * to it, for every reader of `buffEndSeconds` / `burstCastSpan`: read at
+ * the press instant, the burst ledger's window was `0:08–0:08` and the
+ * report's row said no damage was dealt beside a recap listing the impact.
+ * A differently named part of the same button (Meteor Burn) is not read:
+ * nothing in the row ties it to the press. `undefined` when the log shows
+ * no such row.
+ */
+export function pressDeliveryEndSeconds(
+  caster: ICombatUnit,
+  allUnits: readonly ICombatUnit[],
+  spellName: string,
+  pressSeconds: number,
+  nextPressSeconds: number,
+  matchStartMs: number,
+): number | undefined {
+  const pressMs = matchStartMs + pressSeconds * 1000;
+  const untilMs =
+    matchStartMs +
+    Math.min(nextPressSeconds, pressSeconds + PRESS_DELIVERY_REACH_S) * 1000;
+  const otherSide = new Set(
+    allUnits
+      .filter(
+        (u) =>
+          u.type === CombatUnitType.Player && u.reaction !== caster.reaction,
+      )
+      .map((u) => u.id),
+  );
+  let lastMs: number | undefined;
+  for (const d of caster.damageOut) {
+    const t = d.logLine.timestamp;
+    if (t <= pressMs || t > untilMs) continue;
+    if (!otherSide.has(d.destUnitId)) continue;
+    if (
+      d.spellId === undefined ||
+      d.spellId === null ||
+      getEnglishSpellName(String(d.spellId), d.spellName ?? "") !== spellName
+    )
+      continue;
+    if (lastMs === undefined || t > lastMs) lastMs = t;
+  }
+  return lastMs === undefined ? undefined : (lastMs - matchStartMs) / 1000;
+}
+
 /**
  * fact7 class 3: when a press fact's effect ended, as the log shows it — the
  * latest close of the caster's auras of the button's name that opened around
@@ -1406,6 +1463,19 @@ function reconstructEnemyCDTimelineUncached(
                 cd.deathCutAtSeconds = effectEnd.cutAtSeconds;
             }
           }
+        }
+        // pipeline T72 attempt 2: with no effect of any kind, the press runs
+        // to the delivery the log shows (`pressDeliveryEndSeconds`)
+        if (cd.buffEndSeconds <= cd.castTimeSeconds && !cd.refusedAtPress) {
+          const delivered = pressDeliveryEndSeconds(
+            enemy,
+            Object.values(combat.units ?? {}),
+            getEnglishSpellName(cd.spellId, cd.spellName),
+            cd.castTimeSeconds,
+            next?.castTimeSeconds ?? Infinity,
+            matchStartMs,
+          );
+          if (delivered !== undefined) cd.buffEndSeconds = delivered;
         }
         // fact10 D20: a length that moves with haste, its end not logged by
         // the round's end, runs as long as this unit's own completed run of

@@ -1,5 +1,9 @@
 import type { IKillWindowTargetEval } from "@gladlog/analysis";
-import { fmtTime, ON_TARGET_GOOD_PCT } from "@gladlog/analysis";
+import {
+  burstSaysNoDamage,
+  fmtTime,
+  ON_TARGET_GOOD_PCT,
+} from "@gladlog/analysis";
 import { useContext, useMemo, useState } from "react";
 
 import { classColor } from "../data/gameConstants";
@@ -151,9 +155,9 @@ export function BurstLedgerCard({
                       : ""}{" "}
                     {fmtDmg(t.damage)}
                   </span>
-                ) : (
+                ) : burstSaysNoDamage(b) ? (
                   <Chip kind="warn">未打出伤害</Chip>
-                )}
+                ) : null}
                 {immunities.map((d) => (
                   <Chip key={d.spellId} kind="bad">
                     打进免疫 {d.spellName} {d.overlapSeconds.toFixed(1)}s
@@ -197,15 +201,23 @@ export function BurstLedgerCard({
                   {fmtTime(w.windowFromSeconds)}–{fmtTime(w.windowToSeconds)}
                 </span>
                 <span>窗口目标 {w.windowTargetName}</span>
-                <Chip kind={w.onTargetPct >= ON_TARGET_GOOD_PCT || w.followedTeamFocus ? "good" : "bad"}>
+                <Chip
+                  kind={
+                    w.onTargetPct >= ON_TARGET_GOOD_PCT || w.followedTeamFocus
+                      ? "good"
+                      : "bad"
+                  }
+                >
                   命中 {w.onTargetPct}%
                 </Chip>
-                {w.topOffTarget && w.onTargetPct < ON_TARGET_GOOD_PCT && !w.followedTeamFocus && (
-                  <span className="rpt-stats-dim">
-                    最大分流 {w.topOffTarget.unitName}(
-                    {fmtDmg(w.topOffTarget.damage)})
-                  </span>
-                )}
+                {w.topOffTarget &&
+                  w.onTargetPct < ON_TARGET_GOOD_PCT &&
+                  !w.followedTeamFocus && (
+                    <span className="rpt-stats-dim">
+                      最大分流 {w.topOffTarget.unitName}(
+                      {fmtDmg(w.topOffTarget.damage)})
+                    </span>
+                  )}
                 {/* 2026-08-18 重设计:绿色「目标合理」合格证已删 —— 它与红色
                     指控出自同一个未验证的 softness 公式,61.9% 的窗口都在发。
                     现在只在有已验证依据的一种情形出面(集火对象非 prime 而
@@ -234,7 +246,9 @@ export function BurstLedgerCard({
           <span className="rpt-stats-detail-title">打断审计</span>
           {p.kicks.map((kk, k) => (
             <div key={k} className="rpt-ledger-row">
-              <span className="rpt-stats-detail-t">{fmtTime(kk.atSeconds)}</span>
+              <span className="rpt-stats-detail-t">
+                {fmtTime(kk.atSeconds)}
+              </span>
               <span>{kk.kickSpellName}</span>
               {kk.result === "landed" && (
                 <Chip kind="good">打断 {kk.interruptedSpellName}</Chip>

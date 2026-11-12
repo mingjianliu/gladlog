@@ -17,9 +17,28 @@
  *    names every team offensive cooldown ready at, back inside or pressed
  *    inside the span (`createKillWindowFactsComputer`).
  *
+ * Attempt 2 (2026-11-12, CI visual diff of scene report-synth: a burst-ledger
+ * row `0:08–0:08 Meteor [no damage dealt]` beside a recap listing Meteor
+ * 122.7k at 0:11):
+ *  - `pressOnlyDeliveryOutsideBurst`: every offensive press of the owner
+ *    whose effect span is the press instant (no effect aura: Meteor, Soul
+ *    Fire …), any spell. Log truth, rows only: the owner's damage rows on
+ *    enemy players that carry the press's own spell name, after the press and
+ *    before the same button's next press (at most `DELIVERY_REACH_S`). A
+ *    violation is a burst (`analyzeBurstLedger`) that ends before the last
+ *    such row. Kind = spell + what each reader then says: `card:no-damage`
+ *    (the desktop ledger's tag, no dominant target), `card:total` (a total
+ *    without the delivery), and the prompt's `Burst #` block:
+ *    `prompt:no-damage`, `prompt:total`, `prompt:silent`, `prompt:absent`.
+ *
  * `RULED` is the ruling's own list, not a copy of a producer table: the scan
  * asks the producer about each id.
  */
+import {
+  analyzeBurstLedger,
+  burstCastSpan,
+} from "@gladlog/analysis/src/utils/burstLedger";
+import { reconstructEnemyCDTimeline } from "@gladlog/analysis/src/utils/enemyCDs";
 import { isOffensiveCdFor } from "@gladlog/analysis/src/utils/spellDanger";
 
 import { type IRoundCtx, secOf, successesOf, tsOf } from "./ctx";
@@ -27,6 +46,7 @@ import { type IRoundCtx, secOf, successesOf, tsOf } from "./ctx";
 export const CHECKS = [
   "ruledOffensivePress",
   "killWindowRuledPressUnnamed",
+  "pressOnlyDeliveryOutsideBurst",
 ] as const;
 
 /** R19: id → the roster name the prompt prints */
@@ -41,8 +61,109 @@ export const RULED: Readonly<Record<string, string>> = {
 export const WINDOW_RE =
   /^\s+\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)/;
 
+/** how far after a press its own damage rows are looked for (the scan's
+ * reach, not a product constant: the observed delays are in the details) */
+const DELIVERY_REACH_S = 20;
+const BURST_HEAD = /^\s+Burst #\d+ — (\d+:\d\d)–(\d+:\d\d) \| (.*)$/;
+
+function deliveryCheck(ctx: IRoundCtx, start: number): void {
+  const owner = ctx.owner as any;
+  if (!owner) return;
+  const combat = ctx.legacy as any;
+  const friends = ctx.players.filter((p: any) => p.reaction === owner.reaction);
+  const enemies = ctx.players.filter((p: any) => p.reaction !== owner.reaction);
+  const enemyIds = new Set(enemies.map((e: any) => e.id));
+  const cds =
+    reconstructEnemyCDTimeline([owner], combat).players[0]?.offensiveCDs ?? [];
+  const pressOnly = cds.filter(
+    (cd) => burstCastSpan(cd).to <= cd.castTimeSeconds && !cd.refusedAtPress,
+  );
+  if (pressOnly.length === 0) return;
+  const entries = analyzeBurstLedger(owner, friends, enemies, combat);
+  for (const cd of pressOnly) {
+    ctx.bump("pressOnlyDeliveryOutsideBurst");
+    const pressMs = start + cd.castTimeSeconds * 1000;
+    const nextS = cds
+      .filter(
+        (c) =>
+          c.spellId === cd.spellId && c.castTimeSeconds > cd.castTimeSeconds,
+      )
+      .reduce((m, c) => Math.min(m, c.castTimeSeconds), Infinity);
+    const untilMs =
+      start + Math.min(nextS, cd.castTimeSeconds + DELIVERY_REACH_S) * 1000;
+    const rows = (owner.damageOut as any[]).filter(
+      (d) =>
+        enemyIds.has(d.destUnitId) &&
+        d.spellName === cd.spellName &&
+        tsOf(d) > pressMs &&
+        tsOf(d) <= untilMs,
+    );
+    if (rows.length === 0) continue;
+    const entry = entries.find(
+      (e) =>
+        e.fromSeconds <= cd.castTimeSeconds &&
+        e.toSeconds >= cd.castTimeSeconds,
+    );
+    const lastMs = Math.max(...rows.map(tsOf));
+    const firstMs = Math.min(...rows.map(tsOf));
+    if (entry && start + entry.toSeconds * 1000 >= lastMs) continue;
+    const sum = rows.reduce((a, d) => a + Math.abs(d.effectiveAmount ?? 0), 0);
+    const card = !entry
+      ? "card:absent"
+      : entry.dominantTarget
+        ? "card:total"
+        : "card:no-damage";
+    // the prompt's block for this burst, when the owner's context has one
+    let prompt = "prompt:absent";
+    if (entry) {
+      const fs = Math.floor(entry.fromSeconds);
+      for (let i = 0; i < ctx.lines.length; i++) {
+        const m = BURST_HEAD.exec(ctx.lines[i]!);
+        if (!m || secOf(m[1]!) !== fs || !m[3]!.includes(cd.spellName))
+          continue;
+        const block: string[] = [];
+        for (let j = i + 1; j < ctx.lines.length; j++) {
+          if (BURST_HEAD.test(ctx.lines[j]!) || !/^\s{4}/.test(ctx.lines[j]!))
+            break;
+          block.push(ctx.lines[j]!);
+        }
+        prompt = block.some((b) => b.includes("No damage dealt"))
+          ? "prompt:no-damage"
+          : block.some((b) => b.includes("your damage"))
+            ? "prompt:total"
+            : "prompt:silent";
+        break;
+      }
+    }
+    const ids = [...new Set(rows.map((d) => String(d.spellId)))].join("/");
+    // rows of a differently named part of the same button ("Meteor Burn"),
+    // told apart only so the count can say how much a name-exact reader
+    // leaves out
+    const kin = (owner.damageOut as any[]).filter(
+      (d) =>
+        enemyIds.has(d.destUnitId) &&
+        typeof d.spellName === "string" &&
+        d.spellName.startsWith(`${cd.spellName} `) &&
+        tsOf(d) > pressMs &&
+        tsOf(d) <= untilMs,
+    );
+    const kinNote =
+      kin.length === 0
+        ? ""
+        : `; kin rows (${[...new Set(kin.map((d) => `${d.spellName} ${d.spellId}`))].join("/")}) ${kin.length} to +${((Math.max(...kin.map(tsOf)) - pressMs) / 1000).toFixed(2)}s, ${Math.round(kin.reduce((x, d) => x + Math.abs(d.effectiveAmount ?? 0), 0))} damage`;
+    ctx.violate(
+      "pressOnlyDeliveryOutsideBurst",
+      `${cd.spellName} ${card} ${prompt}`,
+      pressMs,
+      `${owner.id}|${cd.spellId}|${pressMs}`,
+      `${cd.spellName} ${cd.spellId} pressed +${cd.castTimeSeconds.toFixed(1)}s, burst ${entry ? `${entry.fromSeconds.toFixed(1)}–${entry.toSeconds.toFixed(1)}` : "none"}; own rows (${ids}) ${rows.length} from +${((firstMs - pressMs) / 1000).toFixed(2)}s to +${((lastMs - pressMs) / 1000).toFixed(2)}s, ${Math.round(sum)} damage${kinNote}`,
+    );
+  }
+}
+
 export function run(ctx: IRoundCtx): void {
   const start = (ctx.legacy as any).startTime as number;
+  deliveryCheck(ctx, start);
   const presses = ctx.players.flatMap((u: any) =>
     successesOf(u)
       .filter((c: any) => String(c.spellId) in RULED)

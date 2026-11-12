@@ -1127,6 +1127,20 @@ function formatBurstSpells(spells: IBurstLedgerEntry["spells"]): string {
  * Times via fmtTime (floored render grid), percentages as ints — any future
  * gate re-parsing these lines re-derives the same values.
  */
+/**
+ * Whether a burst may be said to have dealt no damage: it has no damage
+ * rows AND a window damage could have fallen into. A zero-length burst (a
+ * press with no effect and no delivery row, `pressDeliveryEndSeconds`) says
+ * nothing about its damage. One reading for the prompt's `No damage dealt`
+ * line and the report card's tag (T72 attempt 2: the card tagged 108 of the
+ * 605 owner bursts whose delivery the recap listed seconds later).
+ */
+export function burstSaysNoDamage(
+  b: Pick<IBurstLedgerEntry, "dominantTarget" | "fromSeconds" | "toSeconds">,
+): boolean {
+  return b.dominantTarget === null && b.toSeconds > b.fromSeconds;
+}
+
 export function formatBurstLedgerForContext(
   bursts: IBurstLedgerEntry[],
   targeting: IWindowTargetingAudit[],
@@ -1210,7 +1224,7 @@ export function formatBurstLedgerForContext(
           `    ${what}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst${wallUpAtOpen(d) !== undefined ? ` (${wallTimingPhrase(d)})` : ""}`,
         );
       }
-    } else if (b.toSeconds > b.fromSeconds) {
+    } else if (burstSaysNoDamage(b)) {
       lines.push(`    No damage dealt to enemy players during this burst.`);
     }
     // A zero-length burst (an offensive cooldown with no tracked buff — Soul
