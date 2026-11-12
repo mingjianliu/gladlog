@@ -4481,8 +4481,9 @@ export function auraOnlyActivationSeconds(
     else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const since = upSince.get(a.spellId);
       if (
-        since === undefined ||
-        a.timestamp - since > AURA_PRESS_EXTENSION_WINDOW_S * 1000
+        (since === undefined ||
+          a.timestamp - since > AURA_PRESS_EXTENSION_WINDOW_S * 1000) &&
+        !isTalentProcRun(unit, a.spellId, a.timestamp)
       )
         out.push((a.timestamp - matchStartMs) / 1000);
       upSince.set(a.spellId, a.timestamp);
@@ -4505,6 +4506,49 @@ export function auraOnlyActivationSeconds(
   }
   return out;
 }
+
+/**
+ * Is the run of `auraId` that went up on `unit` at `appliedMs` a talent's
+ * proc, by its length? Pipeline T77 (GH #124 item 9). Restoration's
+ * Ascendance 114052 has two lengths (`buffFullDurationForCaster`, the
+ * `replaceSeconds` row): Deeply Rooted Elements' proc runs 6 s (DB2 Spell
+ * 378270: "Casting Riptide has a chance to activate Ascendance for 6.0 sec";
+ * 1,614 of 1,667 cast-less runs exactly 6.0 s), a press its 15 s — and the
+ * proc spends no cooldown (two procs 18 s apart, a press 81 s after one,
+ * under 120 s). A run with no cast row that ended short of the press's
+ * length (`AURA_PROC_LENGTH_SLACK_S`) is the proc, or procs back to back
+ * (12.0 s), not a press. The 605 capture, `auraOnlyActivationSeconds`' 437
+ * Ascendance readings: 427 ran 6 s, 3 ran 12.0 s, 7 have no REMOVED. A run
+ * the log never ends, or one a press's length long, stays a press — the
+ * careful side (a proc read as a press spends a cooldown; a press read as a
+ * proc calls it ready).
+ */
+export function isTalentProcRun(
+  unit: ICombatUnit,
+  auraId: string,
+  appliedMs: number,
+): boolean {
+  const procS = buffFullDurationForCaster(auraId, unit, appliedMs);
+  const pressS = buffFullDurationForCaster(auraId, unit, appliedMs, {
+    pressed: true,
+  });
+  if (procS === undefined || pressS === undefined || procS >= pressS)
+    return false;
+  const end = unit.auraEvents.find(
+    (a) =>
+      a.spellId === auraId &&
+      a.destUnitId === unit.id &&
+      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      a.timestamp > appliedMs,
+  );
+  if (!end) return false;
+  return (end.timestamp - appliedMs) / 1000 < pressS - AURA_PROC_LENGTH_SLACK_S;
+}
+
+/** How far short of a press's length a cast-less run must end to be read as
+ * a talent's proc (`isTalentProcRun`): a press's own run ends within a few
+ * ms of its length. */
+export const AURA_PROC_LENGTH_SLACK_S = 0.5;
 
 /** Feign Death's cast id — its press is never logged as a SUCCESS. */
 const FEIGN_DEATH_CAST_ID = "5384";
