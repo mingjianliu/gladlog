@@ -16,8 +16,10 @@
  * victim wore the shield in the audit's window
  * (`COUNTERFACTUAL_WINDOW_S` before the death's instant; an aura the
  * opposing side applied is not its mitigation) — the death block prints one
- * `Mitigation audit: <shield's name> active …` row per such run. Counted
- * per run; a violation for each run the block has no row for. The pressed
+ * `Mitigation audit: <shield's name> active …` row for the name, whatever
+ * the number of runs (several applications of one off-table aura are one
+ * row). Counted per run; a violation for each run whose name the block has
+ * no row of, and (kind `more than one row`) for a name printed twice. The pressed
  * shield 17 was the one id on the audit's whitelist: its kind is the
  * control.
  *
@@ -136,7 +138,16 @@ function deathAudit(ctx: IRoundCtx): void {
         .map((u) => u.name),
     );
     const intervals = buildAuraIntervals(victim, combat as any);
-    const left = new Map(rowsOfName);
+    for (const [name, n] of rowsOfName)
+      if (n > 1)
+        ctx.violate(
+          "deathAuditShield",
+          "more than one row",
+          diedMs,
+          `${victim.name}:${name}`,
+          `${victim.name} died at ${fmtS(deathS)}: ${n} rows of ${name} in one block`,
+          ctx.lines[at]!.trim().slice(0, 160),
+        );
     for (const id of FAMILY) {
       const name = nameOf(id);
       const runs = intervals.filter(
@@ -147,11 +158,7 @@ function deathAudit(ctx: IRoundCtx): void {
       ).length;
       for (let k = 0; k < runs; k++) {
         ctx.bump("deathAuditShield");
-        const n = left.get(name) ?? 0;
-        if (n > 0) {
-          left.set(name, n - 1);
-          continue;
-        }
+        if ((rowsOfName.get(name) ?? 0) > 0) continue;
         ctx.violate(
           "deathAuditShield",
           `${id} ${name}`,

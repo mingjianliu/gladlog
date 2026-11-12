@@ -610,6 +610,57 @@ export function computeMitigationAudit(
     rows.splice(rows.indexOf(drop), 1);
   }
 
+  // T60: an off-table aura that went up more than once inside the window is
+  // one row — every off-table row prints the one form "X active Ns in the
+  // final 10s", so two applications whose overlaps round alike printed the
+  // same line twice (605: the Holy Priest's proc shield 1246768 on a dying
+  // ally at 0.236 s and 0.228 s, two "Power Word: Shield active 0.2s" rows;
+  // 9 rows, 3 deaths). The row that stays carries the time any of them was
+  // up (the union of the overlaps, so two auras up together count once) and
+  // the summed measured absorb. A cast aura and its own effect aura are
+  // GH #201's pair above (one row per press of the two) and stay as it left
+  // them.
+  const castAndEffect = (a: string, b: string) =>
+    castsOfEffectAura(a).includes(b) || castsOfEffectAura(b).includes(a);
+  const offTableByName = new Map<string, typeof offTableRows>();
+  for (const e of offTableRows) {
+    if (!rows.includes(e.row)) continue;
+    const g = offTableByName.get(e.row.spellName);
+    if (g) g.push(e);
+    else offTableByName.set(e.row.spellName, [e]);
+  }
+  for (const group of offTableByName.values()) {
+    if (group.length < 2) continue;
+    if (
+      group.some((x) =>
+        group.some((y) => castAndEffect(x.iv.spellId, y.iv.spellId)),
+      )
+    )
+      continue;
+    const keep = group[0]!.row;
+    const spans = group
+      .map((e) => [e.iv.overlapFrom, e.iv.overlapTo] as [number, number])
+      .sort((a, b) => a[0] - b[0]);
+    let upS = 0;
+    let end = -Infinity;
+    for (const [from, to] of spans) {
+      if (to <= end) continue;
+      upS += to - Math.max(from, end);
+      end = to;
+    }
+    keep.activeOverlapS = Math.max(keep.activeOverlapS, round1(upS));
+    const absorbed = group.reduce((n, e) => n + (e.row.absorbedAmount ?? 0), 0);
+    if (group.some((e) => e.row.kind === "absorb")) {
+      keep.kind = "absorb";
+      keep.absorbedAmount = absorbed;
+      keep.absorbedPctMaxHp =
+        maxHp !== null && maxHp > 0
+          ? round1((absorbed / maxHp) * 100)
+          : undefined;
+    }
+    for (const e of group.slice(1)) rows.splice(rows.indexOf(e.row), 1);
+  }
+
   return { rows, netDamage, maxHp };
 }
 

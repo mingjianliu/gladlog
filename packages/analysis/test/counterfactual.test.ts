@@ -325,6 +325,61 @@ describe("computeMitigationAudit(A 形态)", () => {
     }
   });
 
+  // T60 (integration, scan5 auditSplitLabel 0 -> 9): two applications whose
+  // overlaps round alike printed the same off-table line twice
+  test("表外光环在窗口内上了几次只出一行:时长取并集,吸收量相加", () => {
+    const pws = { spellId: "1246768", spellName: "Power Word: Shield" };
+    const victim = mkVictim(
+      "v1",
+      [{ atS: 55, amount: 100_000, school: "0x20" }],
+      [
+        { ...pws, fromS: 52, toS: 52.236 },
+        { ...pws, fromS: 56, toS: 56.228 },
+        // the pressed shield, up over the second proc: counted once
+        {
+          spellId: "17",
+          spellName: "Power Word: Shield",
+          fromS: 56.1,
+          toS: 57,
+        },
+        { spellId: "1253593", spellName: "Void Shield", fromS: 53, toS: 54 },
+      ],
+    );
+    const rows = () =>
+      computeMitigationAudit(victim, combatOf(), 60).rows.map((r) => ({
+        spellName: r.spellName,
+        kind: r.kind,
+        activeOverlapS: r.activeOverlapS,
+        absorbedAmount: r.absorbedAmount,
+      }));
+    expect(rows()).toEqual([
+      {
+        spellName: "Power Word: Shield",
+        kind: "mechanic",
+        activeOverlapS: 1.2,
+        absorbedAmount: undefined,
+      },
+      {
+        spellName: "Void Shield",
+        kind: "mechanic",
+        activeOverlapS: 1,
+        absorbedAmount: undefined,
+      },
+    ]);
+    (victim as { absorbsIn: unknown[] }).absorbsIn = [52.1, 56.1].map((s) => ({
+      ...pws,
+      absorbedAmount: 20_000,
+      timestamp: s * 1000,
+      logLine: { event: "SPELL_ABSORBED", timestamp: s * 1000 },
+    }));
+    expect(rows()[0]).toEqual({
+      spellName: "Power Word: Shield",
+      kind: "absorb",
+      activeOverlapS: 1.2,
+      absorbedAmount: 40_000,
+    });
+  });
+
   test("arith:反推只吃激活区间∩窗口∩schoolMask 命中的观测伤害", () => {
     const victim = mkVictim(
       "v1",
