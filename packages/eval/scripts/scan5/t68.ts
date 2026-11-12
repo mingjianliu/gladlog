@@ -31,6 +31,7 @@ import {
   nameOf,
   REFRESH,
   REMOVED,
+  successesOf,
   tsOf,
 } from "./ctx";
 
@@ -38,6 +39,8 @@ export const CHECKS = ["resendPastBaseLength"] as const;
 
 /** a re-send this close to the base length is the expiry's own row order */
 const SLACK_S = 0.1;
+/** a cast this long before an aura row is the press that sent it */
+const RECAST_LEAD_MS = 3000;
 
 export function run(ctx: IRoundCtx): void {
   if (!ctx.firstOwnerOfRound) return;
@@ -49,14 +52,35 @@ export function run(ctx: IRoundCtx): void {
       if (!id || (!ccSpellIds.has(id) && !disarmSpellIds.has(id))) continue;
       const key = `${id}|${a.srcUnitId ?? ""}`;
       const e = ev(a);
-      if (e === REMOVED || /BROKEN/.test(e)) {
+      if (e === REMOVED) {
         open.delete(key);
+        continue;
+      }
+      if (/BROKEN/.test(e)) {
+        // a BROKEN row names the breaker, not the caster: it closes the
+        // aura whoever sent it (codex 85-tk-F-T68-1 #2)
+        for (const k of [...open.keys()])
+          if (k.startsWith(`${id}|`)) open.delete(k);
         continue;
       }
       if (e !== APPLIED && e !== REFRESH) continue;
       const t = tsOf(a);
       const from = open.get(key);
-      open.set(key, t);
+      // only a row with the sender's cast behind it starts a new
+      // application; a bare re-send keeps the opening it re-lists, so a
+      // chain of them cannot hide the length (codex 85-tk-F-T68-1 #1)
+      const src = byId.get(a.srcUnitId);
+      const recast =
+        src !== undefined &&
+        successesOf(src).some((c: any) => {
+          const d = t - tsOf(c);
+          return (
+            d >= 0 &&
+            d <= RECAST_LEAD_MS &&
+            (c.spellId === id || (!!c.spellName && c.spellName === a.spellName))
+          );
+        });
+      if (from === undefined || recast) open.set(key, t);
       if (from === undefined) continue;
       const base = ccFullDurationSeconds(id);
       if (base === undefined) continue;
