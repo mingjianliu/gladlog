@@ -1106,5 +1106,10 @@
  *  buttons with no use condition are major offensive cooldowns — Reaper's
  *  Mark, Odyn's Fury, Meteor, Goremaw's Bite, Mindgames. See
  *  docs/prompt-version-history.md.
+ *
+ * v528 (2026-11-12; pipeline batch B40, T38 + T52): the whole-second reach
+ *  and healer-exposure sweeps read line of sight on raw samples (GH #206);
+ *  a kick refused (IMMUNE / REFLECTED) while the target's cast bar was
+ *  running no longer reads "hit nothing". See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 527;
+export const PROMPT_VERSION = 528;

@@ -5878,8 +5878,7 @@ docstring now says so, and scan5 friendlyOffensiveTag calls the producer's
 `hasOffensiveSpellActive` / `isEnemyCdWindowSpell` instead of re-implementing
 the window: auraUntagged 482 views / 198 facts → 376 / 154 with the window
 unified (106 views were auras with no logged end the scan read as up too long)
-→ 0 / 0 under R12 (the 376 were Demonic-only occurrences); in-total kinds 0 →
-0. Batch verified on tests + codex (user 11-08); 605 / cover / wide run at the
+→ 0 / 0 under R12 (the 376 were Demonic-only occurrences); in-total kinds 0 → 0. Batch verified on tests + codex (user 11-08); 605 / cover / wide run at the
 end of the wave.
 
 v519 (2026-11-09, fact12 D4 D17; pipeline batch B31c, T16). Two event-reduction
@@ -6143,3 +6142,15 @@ baitedKicks=2`. On 605: scan5 t47 `unloggedStopNotCancel` 37 of 37 → 0;
 (`yourCancels` +48 summed, `baitedKicks` in 4); candidate ids 0 added, 0
 removed; 0 of 3,519 context files differ. Batch verified on tests + codex (user 11-08); 605 /
 cover / wide run at the end of the wave.
+
+v528 (2026-11-12; pipeline batch B40, T38 + T52). (1) T38 (GH #206) —
+`canReachTargetAt` reads raw line-of-sight samples for the unit standing at
+`from` ([ROOT], kill-window and summon reach, the burst-window delivery gate),
+and the [HEALER EXPOSURE] sweep and its gate share one exported function,
+`rawLosSweepInSight`. 605: exposure claims contradicting the raw sweep 26 /
+11,862 -> 0; 26 [HEALER EXPOSURE], 14 [ROOT] and 5 [ENEMY SUMMON] lines
+change; candidate rows 0. (2) T52 — a `missed` kick with a miss row whose
+target had a bar running at the refusal prints the miss tag alone
+(`— [IMMUNE: N]`) instead of "hit nothing", in the [KICK] line and the
+burst-ledger Kicks: row. 605: 53 / 108 tagged kick lines -> 0; candidate rows 0. The burst-window reference table is formally stale with the delivery gate
+(GH #115).
