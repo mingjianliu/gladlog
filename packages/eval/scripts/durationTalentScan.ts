@@ -61,6 +61,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 import { gunzipSync } from "zlib";
 
+import { casterUnitOf } from "./lib/auraRuns";
 import { arg } from "./lib/cli";
 
 const manifest = arg("--manifest", "");
@@ -219,9 +220,11 @@ for (const f of files) {
           if (!o || !o.clean) continue;
           const d = Math.round(((t - o.t) / 1000) * 2) / 2;
           if (d < 0 || d > 120) continue;
-          const h = hist.get(key) ?? new Map<number, number>();
+          // a summon's aura is its owner's cell (buffDurationScan's reading)
+          const cellKey = `${casterUnitOf(legacy.units as Record<string, { id: string; info?: unknown; ownerId?: string }>, e.srcUnitId)?.id ?? e.srcUnitId ?? ""}|${spellId}`;
+          const h = hist.get(cellKey) ?? new Map<number, number>();
           h.set(d, (h.get(d) ?? 0) + 1);
-          hist.set(key, h);
+          hist.set(cellKey, h);
         }
       }
     }

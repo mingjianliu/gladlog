@@ -7,7 +7,7 @@
 import { LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { cleanAuraRuns } from "../scripts/lib/auraRuns";
+import { casterUnitOf, cleanAuraRuns } from "../scripts/lib/auraRuns";
 
 const row = (event: LogEvent, s: number, src = "w") => ({
   spellId: "1719",
@@ -64,7 +64,10 @@ describe("cleanAuraRuns", () => {
   it("a BROKEN line superseded by its REMOVED does not end the run", () => {
     const rows = (breaker: string) => [
       { ...row(LogEvent.SPELL_AURA_APPLIED, 0), spellId: "122" },
-      { ...row(LogEvent.SPELL_AURA_BROKEN_SPELL, 5.5, breaker), spellId: "122" },
+      {
+        ...row(LogEvent.SPELL_AURA_BROKEN_SPELL, 5.5, breaker),
+        spellId: "122",
+      },
       { ...row(LogEvent.SPELL_AURA_REMOVED, 6), spellId: "122" },
     ];
     expect(cleanAuraRuns(rows("w"))).toEqual([
@@ -173,5 +176,22 @@ describe("cleanAuraRuns", () => {
       ),
     ).toEqual([]);
     expect(seen).toEqual([15_000]);
+  });
+});
+
+describe("casterUnitOf — a summon's aura is its owner's (T76)", () => {
+  const units: Record<
+    string,
+    { id: string; info?: unknown; ownerId?: string }
+  > = {
+    "Player-1": { id: "Player-1", info: { talents: [] } },
+    "Creature-totem": { id: "Creature-totem", ownerId: "Player-1" },
+    "Creature-wild": { id: "Creature-wild" },
+  };
+  it("a player source is itself, a totem its owner, an ownerless unit itself", () => {
+    expect(casterUnitOf(units, "Player-1")?.id).toBe("Player-1");
+    expect(casterUnitOf(units, "Creature-totem")?.id).toBe("Player-1");
+    expect(casterUnitOf(units, "Creature-wild")?.id).toBe("Creature-wild");
+    expect(casterUnitOf(units, undefined)).toBeUndefined();
   });
 });

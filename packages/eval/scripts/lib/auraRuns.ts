@@ -116,3 +116,17 @@ export function builderNewApplication(
     return d !== undefined && a.logLine.timestamp > anchorMs + d * 1000;
   };
 }
+
+/** The player behind an aura's source: the source itself, or its owner when
+ * the source is a summon — a totem's or a demon's aura is its owner's cast
+ * (T76, GH #123: Healing Stream 5672, the Dominion of Argus demons and
+ * Lunar Beam read "0 cells" on every season rescan because their source has
+ * no loadout). `talentDurationVerify.ts`'s `casterOf` reads the same owner. */
+export function casterUnitOf<U extends { info?: unknown; ownerId?: string }>(
+  units: Record<string, U>,
+  srcUnitId: string | undefined,
+): U | undefined {
+  const src = units[srcUnitId ?? ""];
+  if (src?.info) return src;
+  return src?.ownerId ? units[src.ownerId] : src;
+}

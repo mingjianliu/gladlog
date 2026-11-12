@@ -45,7 +45,11 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
-import { builderNewApplication, cleanAuraRuns } from "./lib/auraRuns";
+import {
+  builderNewApplication,
+  casterUnitOf,
+  cleanAuraRuns,
+} from "./lib/auraRuns";
 
 function parseArgs() {
   const a = process.argv.slice(2);
@@ -163,7 +167,7 @@ function perAppRuns(
       const srcId = r.srcUnitId;
       const t = r.toMs;
       const o = { t: r.fromMs };
-      const src = legacy.units[srcId];
+      const src = casterUnitOf(legacy.units, srcId);
       if (!src?.info) continue;
       const cut =
         legacy.endTime - t < 1000 ||
@@ -275,12 +279,12 @@ for (const f of files) {
           if (!o || !o.clean) continue;
           const d = Math.round(((t - o.t) / 1000) * 2) / 2;
           if (d < 0 || d > 120) continue;
-          const src = legacy.units[a.srcUnitId ?? ""];
+          const src = casterUnitOf(legacy.units, a.srcUnitId);
           if (!src?.info) continue;
           const lh = lifetimes.get(spellId) ?? new Map<number, number>();
           lh.set(d, (lh.get(d) ?? 0) + 1);
           lifetimes.set(spellId, lh);
-          const cellKey = `${spellId}|${a.srcUnitId}`;
+          const cellKey = `${spellId}|${src.id}`;
           const hist = matchCells.get(cellKey) ?? new Map<number, number>();
           hist.set(d, (hist.get(d) ?? 0) + 1);
           matchCells.set(cellKey, hist);
