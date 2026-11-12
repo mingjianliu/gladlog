@@ -456,8 +456,9 @@ function perEventExtensionSeconds(
     if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
     if (!p.qualifyingSpellIds.has(c.spellId ?? "")) continue;
     if ("landedOnly" in p && p.landedOnly && !pressLanded(caster, c)) continue;
-    ext = Math.min(p.capSeconds, ext + p.addSecondsPerEvent);
-    if (ext >= p.capSeconds) break;
+    const cap = p.capSeconds ?? Number.POSITIVE_INFINITY;
+    ext = Math.min(cap, ext + p.addSecondsPerEvent);
+    if (ext >= cap) break;
   }
   return ext;
 }
@@ -659,6 +660,7 @@ export function buffDurationRangeForCaster(
   const min = buffFullDurationForCaster(spellId, caster);
   if (min === undefined) return undefined;
   const p = caster ? perEventFor(spellId, caster) : undefined;
-  // a per-crit talent has no cap and no application here: the base
-  return { min, max: p?.event === "press" ? min + p.capSeconds : min };
+  // a per-crit talent, or a per-press one with no cap, has no upper end to
+  // print and no application here: the base
+  return { min, max: p?.event === "press" ? min + (p.capSeconds ?? 0) : min };
 }

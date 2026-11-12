@@ -263,7 +263,8 @@ interface ITooltipPerEventBase {
 /** The event is one of the caster's own presses. */
 export interface ITooltipPerPressDuration extends ITooltipPerEventBase {
   event: "press";
-  capSeconds: number;
+  /** the most the presses can add; absent when the tooltip names none */
+  capSeconds?: number;
   /** the presses that count — 「带有施法时间的法术」: the class's spells
    * whose DB2 cast time is > 0, instant or not on that press */
   qualifyingSpellIds: ReadonlySet<string>;
@@ -338,6 +339,18 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
     capSeconds: 4,
     specs: ["262", "264"],
     qualifyingSpellIds: SHAMAN_CAST_TIME_SPELLS,
+  },
+  // Capacitance 1270724 (Mountain Thane): 「在天神下凡期间，雷霆轰击会使天神
+  // 下凡的持续时间延长2秒」, read for Fury and Protection, no cap named. GH
+  // #173 D13 / T76: Arms runs are 20.0 s; Fury runs are 24 / 26 / 28 s —
+  // 20 + 2 per Thunder Blast (435222) pressed inside the growing window.
+  "107574": {
+    event: "press",
+    talentSpellId: "1270724",
+    untalentedBaseSeconds: 20,
+    addSecondsPerEvent: 2,
+    specs: ["72", "73"],
+    qualifyingSpellIds: new Set(["435222"]),
   },
   // Burn to Ash 446663: 「真理觉醒爆击时，其持续时间延长$s1秒」 (effect 0
   // dummy, bp 2) on Truth's Wake 403695, Wake of Ashes' DoT (DB2 9 s). GH

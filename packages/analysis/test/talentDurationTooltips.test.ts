@@ -75,13 +75,15 @@ describe("TOOLTIP_PER_EVENT_DURATIONS — Spiritwalker's Momentum", () => {
       const [e] = entriesOf(p.talentSpellId, aura).filter(
         (x) => x.kind === "per-event",
       );
-      expect(e).toMatchObject({
-        amount: p.addSecondsPerEvent,
-        cap: p.capSeconds,
-      });
-      expect(new Set(e!.qualifyingSpellIds)).toEqual(
-        new Set(p.qualifyingSpellIds),
-      );
+      expect(e).toMatchObject({ amount: p.addSecondsPerEvent });
+      // a tooltip that names no cap has none in the row either
+      expect(e!.cap).toBe(p.capSeconds);
+      // the generator lists the presses only for 「带有施法时间的法术」; a
+      // tooltip that names one spell (Thunder Blast) is the row's own id
+      if (e!.qualifyingSpellIds)
+        expect(new Set(e!.qualifyingSpellIds)).toEqual(
+          new Set(p.qualifyingSpellIds),
+        );
     }
   });
 });
@@ -289,5 +291,64 @@ describe("buffFullDurationForCaster — Spiritwalker's Momentum per press", () =
       min: 15,
       max: 19,
     });
+  });
+});
+
+describe("buffFullDurationForCaster — Avatar under Capacitance (T76, GH #173 D13)", () => {
+  const warrior = (spec: CombatUnitSpec, casts: ReturnType<typeof press>[]) =>
+    ({
+      spec,
+      info: { talents: [], pvpTalents: [] },
+      spellCastEvents: [press("1270724", -100), ...casts],
+    }) as never;
+  const AT = T0;
+  it("each Thunder Blast inside the growing window adds 2 s, with no cap", () => {
+    const fury = CombatUnitSpec.Warrior_Fury;
+    expect(buffFullDurationForCaster("107574", warrior(fury, []), AT)).toBe(20);
+    expect(
+      buffFullDurationForCaster(
+        "107574",
+        warrior(fury, [press("435222", 4), press("435222", 12)]),
+        AT,
+      ),
+    ).toBe(24);
+    // the fourth press lands at 25 s — inside the window the first three grew
+    expect(
+      buffFullDurationForCaster(
+        "107574",
+        warrior(
+          fury,
+          [4, 12, 19, 25].map((s) => press("435222", s)),
+        ),
+        AT,
+      ),
+    ).toBe(28);
+    // a Thunder Blast after the run ended, and a Thunder Clap, add nothing
+    expect(
+      buffFullDurationForCaster(
+        "107574",
+        warrior(fury, [press("435222", 20.5), press("6343", 3)]),
+        AT,
+      ),
+    ).toBe(20);
+  });
+
+  it("Arms is outside the tooltip's specs: 20 s", () => {
+    expect(
+      buffFullDurationForCaster(
+        "107574",
+        warrior(CombatUnitSpec.Warrior_Arms, [press("435222", 4)]),
+        AT,
+      ),
+    ).toBe(20);
+  });
+
+  it("the loadout prints the base: the tooltip names no cap", () => {
+    expect(
+      buffDurationRangeForCaster(
+        "107574",
+        warrior(CombatUnitSpec.Warrior_Fury, []),
+      ),
+    ).toEqual({ min: 20, max: 20 });
   });
 });
