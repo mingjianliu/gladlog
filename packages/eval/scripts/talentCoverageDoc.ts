@@ -51,16 +51,78 @@ const HOME =
   join(process.env.HOME ?? "", "code/gladlog-eval-private");
 const AUDIT = arg(
   "--audit",
-  join(HOME, "reports/talent-impact-audit-2026-09-27-postfix"),
+  join(HOME, "reports/talent-impact-audit-2026-11-11"),
 );
 const OUT = resolve("docs/talent-coverage-gaps.md");
 const DATA = resolve("packages/analysis/src/data");
 const read = <T>(p: string): T => JSON.parse(readFileSync(p, "utf8")) as T;
 
 /**
+ * Section 5, why each open mitigation row is open: one status per (aura,
+ * talent, DB2 modifier), read row by row from DB2 in T77 (GH #125 item 5).
+ * A row without an entry prints the default and is one nobody has read yet.
+ */
+const MITIGATION_OPEN_DEFAULT =
+  "未接(未逐条读;多数改的不是减伤那一项:受疗 / 移速 / 耐力,见 structured.json)";
+const MITIGATION_OPEN_NOTES: Record<string, string> = {
+  "22812|301768|points#4 20": "不接:改的是树皮术的受到治疗(aura 118,效果 #4)",
+  "473909|468743|points#1 0": "不接:0 点,落在变形效果位(aura 36)",
+  "473909|343223|points#1 0": "不接:0 点,落在变形效果位(aura 36)",
+  "22812|439901|points#5 10": "不接:改的是移速(aura 31,效果 #5)",
+  "102342|197061|points#2 20": "不接:改的是来自施法者的治疗(aura 283,效果 #2)",
+  "363916|441705|damage/heal 20":
+    "不接:按标签加黑系法术的伤害 / 治疗量(aura 218),不是鳞片的减伤",
+  "363916|441705|periodic 20":
+    "不接:按标签加黑系法术的伤害 / 治疗量(aura 218),不是鳞片的减伤",
+  "204018|387801|points#3 -15":
+    "不接:op 23 指向效果 #3,破咒祝福没有这个效果位(空操作;保护祝福那一行已接)",
+  "204018|387801|points#2 15":
+    "不接:落在 aura 79 上,不是减伤;605 实测持有者承伤比 1.053(9 个单位,带外)",
+  "1022|469770|points#4 15":
+    "不接:改的是移速(保护祝福效果 #4,aura 31;破咒祝福没有这个效果位)",
+  "204018|469770|points#4 15":
+    "不接:改的是移速(保护祝福效果 #4,aura 31;破咒祝福没有这个效果位)",
+  "31850|469439|points#4 15": "不接:改的是受到治疗(aura 118)",
+  "498|469439|points#2 15": "不接:改的是受到治疗(aura 118)",
+  "403876|469439|points#2 15": "不接:改的是受到治疗(aura 118)",
+  "31850|393114|points#5 20": "不接:改的是耐力(aura 137,效果 #5)",
+  "386208|452494|points#3 -8":
+    "未接:是减伤项(效果 #3,魔法 aura 87 −8);605 与 1,814 文件上持有者都是 0 个单位,无语料可验",
+  "386208|1235047|points#1 -6":
+    "未接:是减伤项(效果 #1,aura 87 −6);605 与 1,814 文件上持有者都是 0 个单位,无语料可验",
+};
+
+/**
  * Mechanism-audit items (mechanismAudit.json `n`) resolved since the audit
  * ran, with how. Everything else with a GAP / UNCLEAR verdict is open.
  */
+/** §4: scan rows with at least this many holder cells on the expected value
+ *  are listed even when no product table names their target. */
+const DURATION_EVIDENCE_MIN_NEAR = 5;
+/** §4: why a DB2 duration row is not connected, from the scan's own verdict. */
+function durationOpenReason(verdict: string | undefined): string {
+  if (!verdict) return "不在这次扫描的候选里(目标没有可量的光环)";
+  if (/value 0/.test(verdict)) return "DB2 数值是 0(脚本里算的量),读不到秒数";
+  if (/no base duration/.test(verdict))
+    return "目标在 DB2 里没有基础时长(不是有时限的光环)";
+  if (/REDUCTION-CONFIRMED/.test(verdict))
+    return "缩短,语料已证实;向下改要逐条过(只在有机制时才下调)";
+  if (/reduction/.test(verdict)) return "缩短,语料没证实;没有机制证据不下调";
+  if (/ 0 holder cells/.test(verdict)) return "605 场里没有持有者施放";
+  if (/holder cells/.test(verdict))
+    return "持有者样本不到 20 格,不够定(扫描门槛)";
+  if (/holders at base/.test(verdict))
+    return "持有者的时长停在基础值上,修改没有体现";
+  if (/holders elsewhere/.test(verdict))
+    return "持有者的时长既不在基础值也不在预期值上,另有因素";
+  if (/PROMOTE/.test(verdict)) return "语料支持,待接";
+  return verdict;
+}
+/** §4: per-pair notes ("talent|target") that override the generic reason. */
+const DURATION_OPEN_NOTES: Record<string, string> = {
+  "429639|46968":
+    "控制光环:时长走 ccFullDurationSeconds 的官方值(用户裁决),不按语料改",
+};
 const MECHANISM_RESOLVED: Record<number, string> = {
   143: "已修 18b648ea(驱散类型按天赋判断)",
   161: "已修 18b648ea(危机应对认控制施法 id)",
@@ -173,12 +235,20 @@ async function main(): Promise<void> {
   const floorSpells = new Set(Object.keys(floors).map((k) => k.split("|")[0]!));
   const durationScan = new Map<
     string,
-    { verdict: string; holders: number; non: number; measuredAura?: string }
+    {
+      verdict: string;
+      holders: number;
+      near: number;
+      non: number;
+      measuredAura?: string;
+    }
   >();
   for (const f of [
     "durationTalent.full-2026-09-14.json",
     "durationTalent.cc-every3.json",
     "durationTalent.inventory-2026-09-22.json",
+    // T76: both encodings again on the 605, summons read as their owner's
+    "durationTalent.inventory-2026-11-11.json",
   ])
     try {
       for (const r of read<{
@@ -187,13 +257,14 @@ async function main(): Promise<void> {
           target: string;
           verdict: string;
           measuredAura?: string;
-          holders: { cells: number };
+          holders: { cells: number; near?: number };
           nonHolders: { cells: number };
         }>;
       }>(join(HOME, "reports/talent-integration-2026-09-13", f)).rows)
         durationScan.set(`${r.talent}|${r.target}`, {
           verdict: r.verdict,
           holders: r.holders.cells,
+          near: r.holders.near ?? 0,
           non: r.nonHolders.cells,
           ...(r.measuredAura ? { measuredAura: r.measuredAura } : {}),
         });
@@ -250,7 +321,7 @@ async function main(): Promise<void> {
   // ---- 1. corpus: what still misfires
   h("## 1. 语料里仍然会误判的冷却(按「不可能施放」数排序)");
   L.push(
-    `\`ledgerImpossibleCastScan.ts\`:${impossible.files} 场、${impossible.totalCasts.toLocaleString()} 次施放里,产品认为「还在冷却」但玩家按出来了的 **${impossible.totalImpossible}** 次(修复前 752)。每一行都是一个没被模型解释的冷却来源;「下限兜住」是被最早可用下限归为「可能已好」的次数(不算误判)。`,
+    `\`ledgerImpossibleCastScan.ts\`:${impossible.files} 场、${impossible.totalCasts.toLocaleString()} 次施放里,产品认为「还在冷却」但玩家按出来了的 **${impossible.totalImpossible}** 次(同一切片上:修复前 752,2026-09-27 为 311,T76 分支末 222,T77 提交 424e3311f 上 197 —— 下表是 197 那一次,在 T77 的提交上量的,不含 T76 的时长改动)。每一行都是一个没被模型解释的冷却来源;「下限兜住」是被最早可用下限归为「可能已好」的次数(不算误判)。`,
     "",
     "| 技能 | 施放 | 不可能施放 | 下限兜住 | 模型冷却 | 阅读到的相关天赋(未接) |",
     "|---|---|---|---|---|---|",
@@ -350,26 +421,70 @@ async function main(): Promise<void> {
   // ---- 4. duration
   h("## 4. 持续时间修改(DB2 行,没进持续表)");
   L.push(
-    "只影响「日志缺 REMOVED 时按模型时长回退」的光环区间(约 11% 的光环应用没有 REMOVED)。扫描 = `durationTalentScan.ts` 的判定;**「0 持有者」多半是施法 id 与光环 id 对不上,不是被否决** —— 修法是补光环别名后重扫。",
+    "只影响「日志缺 REMOVED 时按模型时长回退」的光环区间(约 11% 的光环应用没有 REMOVED)。扫描 = `durationTalentScan.ts` 在 605 场上的判定(两种编码;召唤物施加的光环记在主人名下)。按 605 场里量到的施放者格数从多到少排;「为什么没接」是判定对应的原因,不是否决 —— 样本够了、方向向上的行会被扫描标成 PROMOTE。",
     "",
-    "| 天赋 | 选取率 | 目标 | 修改 | 扫描判定 | 持有者 / 非持有者样本 |",
-    "|---|---|---|---|---|---|",
+    "| 天赋 | 选取率 | 目标 | 修改 | 605 格数(持有 / 非持有) | 扫描判定 | 为什么没接 |",
+    "|---|---|---|---|---|---|---|",
   );
   const seenDur = new Set<string>();
+  const cellsOf = (k: string) => {
+    const sc = durationScan.get(k);
+    return sc ? sc.holders + sc.non : -1;
+  };
   for (const u of structured.units
     .filter((x) => x.kind === "duration" && x.status === "gap")
     .filter(
       (x) => x.targetTables.length && x.targetObserved && relevant(x.pickRate),
     )
-    .sort((a, b) => (b.pickRate ?? 0) - (a.pickRate ?? 0))) {
+    .sort(
+      (a, b) =>
+        cellsOf(`${b.talent}|${b.target}`) -
+          cellsOf(`${a.talent}|${a.target}`) ||
+        (b.pickRate ?? 0) - (a.pickRate ?? 0),
+    )) {
     if (durationCarried(u.target, u.talent)) continue;
     const k = `${u.talent}|${u.target}`;
     if (seenDur.has(k)) continue;
     seenDur.add(k);
     const sc = durationScan.get(k);
     L.push(
-      `| ${cell(u.talentName)} (${u.talent}) | ${pct(u.pickRate)} | ${cell(nm(u.target))} | ${u.pvpValue} | ${cell(sc?.verdict ?? "未扫")} | ${sc ? `${sc.holders} / ${sc.non}` : "—"} |`,
+      `| ${cell(u.talentName)} (${u.talent}) | ${pct(u.pickRate)} | ${cell(nm(u.target))} | ${u.pvpValue} | ${sc ? `${sc.holders} / ${sc.non}` : "—"} | ${cell(sc?.verdict ?? "未扫")} | ${cell(DURATION_OPEN_NOTES[k] ?? durationOpenReason(sc?.verdict))} |`,
     );
+  }
+  // scan rows with holder evidence whose target no product table names: the
+  // table above cannot show them (it lists product-read targets only)
+  const productReads = new Set(
+    structured.units
+      .filter((x) => x.kind === "duration" && x.targetTables.length)
+      .map((x) => `${x.talent}|${x.target}`),
+  );
+  const evidenced = [...durationScan.entries()]
+    .filter(([k, sc]) => {
+      const [talent, target] = k.split("|") as [string, string];
+      return (
+        sc.near >= DURATION_EVIDENCE_MIN_NEAR &&
+        sc.near * 2 >= sc.holders &&
+        talent !== target &&
+        !/reduction|REDUCTION|value 0/.test(sc.verdict) &&
+        !seenDur.has(k) &&
+        !durationCarried(target, talent)
+      );
+    })
+    .sort((a, b) => b[1].near - a[1].near);
+  if (evidenced.length) {
+    L.push(
+      "",
+      `扫描里持有者有 ≥ ${DURATION_EVIDENCE_MIN_NEAR} 格、且至少一半落在「DB2 基础 + 修改」上、但不在上表的行(目标光环没有被任何产品表点名,或选取率不到 5 %):`,
+      "",
+      "| 天赋 → 目标 | 持有者格数(落在预期值的) | 非持有者格数 | 扫描判定 | 为什么没接 |",
+      "|---|---|---|---|---|",
+    );
+    for (const [k, sc] of evidenced) {
+      const [talent, target] = k.split("|") as [string, string];
+      L.push(
+        `| ${cell(nm(talent))} → ${cell(nm(target))} | ${sc.holders} (${sc.near}) | ${sc.non} | ${cell(sc.verdict)} | ${cell(DURATION_OPEN_NOTES[k] ?? (productReads.has(k) ? `产品读这个光环;${durationOpenReason(sc.verdict)}` : "目标光环不在任何产品表里,没有读它时长的地方"))} |`,
+      );
+    }
   }
 
   // ---- 5. mitigation
@@ -385,7 +500,7 @@ async function main(): Promise<void> {
   )) {
     if (mitigationCarried(u.target, u.talent)) continue;
     L.push(
-      `| ${cell(nm(u.target))} | ${cell(u.talentName)} (${u.talent}) | ${u.opName} ${u.pvpValue} | 未接(多数改的不是减伤那一项:受疗 / 移速 / 耐力;逐条见 structured.json) |`,
+      `| ${cell(nm(u.target))} | ${cell(u.talentName)} (${u.talent}) | ${u.opName} ${u.pvpValue} | ${cell(MITIGATION_OPEN_NOTES[`${u.target}|${u.talent}|${u.opName} ${u.pvpValue}`] ?? MITIGATION_OPEN_DEFAULT)} |`,
     );
   }
   L.push("", "语料扫描(新赛季归档每 10 场,2026-09-26):", "", "```");
@@ -455,7 +570,7 @@ async function main(): Promise<void> {
     "- **FLAG** Anger Management 152278(Colossus Smash / Bladestorm / Avatar / Shockwave,605 场 40 次「不可能施放」):全部是持有者,且全部落在最早可用下限之下 —— 下限是 p2 分位,按定义放过约 2 %(Bladestorm 13 / 1,000,Colossus Smash 13 / 1,444)。不是新机制;精确建模要逐次怒气消耗账;日志的消耗字段 parser 自 2026-10-11 起存了(`casts[].powerCosts`,见下面法力一条),但它写的是百分比减免之前的消耗,不一定是实扣。没改码。",
     "- **FLAG** Heart of the Jade Serpent 443294 → Strike of the Windlord 392983(605 场 13 次里 12 次是同一个 Conduit of the Celestials 武僧,间隔 18.6–28.9 秒 < 30):DB2 增益 443421 的光环 148(恢复速率 +75 %)只点名充能类别 1517 / 1518 / 2198 / 2294,Strike of the Windlord 的类别与充能类别都是 0 —— 掩码腿不成立,没改码。",
     "- **FLAG** Aspect of the Turtle:Born To Be Wild 按级之后(`PER_RANK_COOLDOWN_TALENTS`),仍有两个 Marksmanship 2 级间隔 101.9 / 107.4 秒 < 120 秒未解释(1,814 场)。",
-    "- **FLAG** Ascendance 114052(恢复萨满,605 场 13 次施放 4 次「不可能」,间隔 18.1 / 48.0 / 68.5 / 110.6 秒):9 条台账记录(6 个文件)全部持有 Deeply Rooted Elements 378270(触发 Ascendance),疑为触发被记成按键;未核实,没改码。",
+    "- **已修(T77,2026-11-11)** Ascendance 114052(恢复萨满,605 场 13 次「施放」4 次「不可能」,间隔 18.1 / 48.0 / 68.5 / 110.6 秒):9 条台账记录全部持有 Deeply Rooted Elements 378270,4 次「不可能」全是没有施法行的 6 秒光环 —— 触发,不是按键(DB2 Spell 378270:「施放激流有几率激活升腾 6.0 秒」;按键是 15 秒且带施法行;触发不占冷却:两次触发相隔 18 秒,触发后 81 秒有一次真按键,冷却 120 秒)。`auraOnlyActivationSeconds` 现在按光环长度把它排除(`isTalentProcRun`):605 采集上它读成按键的 437 次里 427 次 6 秒、3 次 12.0 秒(两次触发相连)、7 次日志没有 REMOVED(仍按按键读,保守一侧)。",
     "- **FLAG** Ardent Defender 31850:手写 120 秒改回 DB2 的 90 秒(FT F20),语料只有一个防护骑士的三个间隔(79.8 / 84.0 / 157.2 秒,Unbreakable Spirit −30 %:手写 84 秒被 79.8 驳倒一次,官方 63 秒没被驳倒也没有地板)。",
     "- **FLAG** 法力消耗(FT F09a 2026-10-11;T17 2026-11-09):DB2 按百分比计价的技能,代价一律是百分比 × **基础法力 250,000**(`BASE_MANA`,`manaCostForCast`),不再乘读数的法力上限;本轮放过的技能仍先读施放行写明的消耗(`statedManaCostInRound`,两者在实测里全部相等)。实测(584 份下载日志,GH #129 Q3 的验证条件):百分比施放行写明的消耗 401,548 / 401,548 条等于百分比 × 250,000,其中 230,952 条上限 ≠ 250,000;对照实扣(下一读数的降幅加回回蓝),百分比 × 250,000 在容差内 284,775 / 352,476,百分比 × 上限 176,297;上限被抬高的施法者 163,674 vs 55,196 / 205,283;有减免的 16,872 次按键里,实扣落在 250,000 价的 5 % 整档上 13,687 次、落在上限价上 7,254 次。**还开着的一处**:施放行与 `BASE_MANA` 都是百分比减免之前的消耗,不是实扣(Echo 写 4,750、实扣 3,325;Holy Light 写 17,500、实扣 7,341;Apotheosis 下 Holy Word: Serenity 实扣约三成),有减免的玩家仍被高估。",
   );
@@ -464,6 +579,8 @@ async function main(): Promise<void> {
     "```bash",
     "# 1. 天赋总表(新 build 时)",
     "DATAGEN_BUILD=<build> TALENT_CATALOG_OUT=$GLADLOG_EVAL_HOME/reports/<dir>/catalog npx tsx packages/eval/scripts/talentCatalog.ts",
+    "# 1b. 选取率(只读 COMBATANT_INFO;2026-11-11 这版用的是 605 场,之前是 1,814 场切片 —— 5% 门槛附近的行会因此进出)",
+    "npx tsx packages/eval/scripts/talentPickRateScan.ts --manifest <manifest> --every 1",
     "# 2. 结构化对账 + 阅读结论合并(阅读用 method/READER.md 分包派子代理,产出 <dir>/claims/*.jsonl)",
     "npx tsx packages/eval/scripts/talentImpactAudit.ts --out $GLADLOG_EVAL_HOME/reports/<dir>",
     "npx tsx packages/eval/scripts/talentClaimsJoin.ts --out $GLADLOG_EVAL_HOME/reports/<dir>",
@@ -473,7 +590,7 @@ async function main(): Promise<void> {
     "npx tsx packages/eval/scripts/talentCoverageDoc.ts --audit $GLADLOG_EVAL_HOME/reports/<dir>",
     "```",
     "",
-    "产物(私有仓):`reports/talent-impact-audit-2026-09-26/`(修复前快照,含阅读方法与校准)、`reports/talent-impact-audit-2026-09-27-postfix/`(本文档的输入)、`runs/talent-impact-fixes-2026-09-26/`(验收采集)。",
+    "产物(私有仓):`reports/talent-impact-audit-2026-09-26/`(修复前快照,含阅读方法与校准)、`reports/talent-impact-audit-2026-09-27-postfix/`(上一版的输入)、`reports/talent-impact-audit-2026-11-11/`(本文档的输入:同一份 catalog / claims / 机制核对,对账、冷却前向检查、减伤与时长扫描按当前代码重跑)、`runs/talent-impact-fixes-2026-09-26/`(验收采集)。",
     "",
   );
   writeFileSync(OUT, L.join("\n"));
