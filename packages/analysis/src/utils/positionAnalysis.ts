@@ -75,6 +75,27 @@ import { isDeadAt } from "./unitDeath";
 // most, else the nearest), not to the nearest of any enemy at each instant.
 // The values are unchanged and the p66 / p39 placement above was measured on
 // the old quantity — it has NOT been re-measured on the new one.
+/** One burst span that passed the close-range entry gate, as the KITE /
+ * STAY thresholds below see it — before either threshold and before every
+ * later door (who moved, the melee suppression, the HP outcome). */
+export interface IPositionSpanReading {
+  /** peak distance to the span's enemy minus the start distance (what
+   * `KITE_DELTA_YARDS` is compared with) */
+  openedYards: number;
+  /** end distance minus start distance (what `STAY_DELTA_YARDS` is
+   * compared with) */
+  deltaYards: number;
+  startYards: number;
+  /** read to the span's measured enemy (FT-T12 D2), not the nearest-of-any
+   * fallback */
+  measuredEnemy: boolean;
+}
+/** Measurement hook, inert in the product: `positionSpanScan.ts` sets `sink`
+ * to read the distribution the two thresholds are placed on, from the
+ * producer's own loop (T78, GH #141 / #147). */
+export const POSITION_SPAN_PROBE: {
+  sink?: (reading: IPositionSpanReading) => void;
+} = {};
 export const CLOSE_RANGE_YARDS = 12; // "in range" of an enemy — shared with rootReachability.ts (melee reach)
 const KITE_DELTA_YARDS = 10; // distance gained that counts as a successful kite(p66,见上)
 const STAY_DELTA_YARDS = 5; // distance gained below this = stayed in(p39,见上)
@@ -1171,6 +1192,12 @@ export function computeOwnerPositionEvents(params: {
         ? []
         : forcedMovesInRenderedSpan(owner, enemies, matchStartMs, tStart, tEnd);
     const opened = maxDistance - start.distanceYards;
+    POSITION_SPAN_PROBE.sink?.({
+      openedYards: opened,
+      deltaYards: delta,
+      startYards: start.distanceYards,
+      measuredEnemy: measured !== null,
+    });
     if (opened >= KITE_DELTA_YARDS) {
       // Who moved (F13 c540): the enemy walking away from a stunned owner is
       // not a kite. Unknown owner position ⇒ no claim either way.
