@@ -1,0 +1,326 @@
+/**
+ * noHealCast.ts — the stretch before the round's first death in which the
+ * recording healer pressed no heal although nothing the log shows stopped
+ * them (T88, user ruling R27 2026-11-11: a fact line, never a candidate).
+ *
+ * Only when the round's first death is a teammate of the healer's (the 3v3
+ * first-death rule: nothing after it is reviewed), and only inside that
+ * death's window (`DEATH_WINDOW_S`, the window whose casts the timeline
+ * already prints one by one). A stretch is a run of time in which ALL of
+ * these hold, the dispel family's feasibility doors:
+ *
+ *  1. the healer is not stopped from healing: no control or silence, no kick
+ *     lockout that shuts every heal they pressed this round
+ *     (`cannotCastIntervalsForSpells` over `pressedHeals`), no cast bar of
+ *     their own running (`castBarOutcomesOf`) and no other commitment the
+ *     missed-cleanse occupancy reader counts (`occupancyIntervalsWithin`);
+ *  2. a heal is usable: one of the heals they pressed this round has no
+ *     cooldown (so only the global cooldown stands between two presses —
+ *     which is why a stretch has a minimum length, `NO_HEAL_MIN_STRETCH_MS`);
+ *  3. the teammate who dies is within that heal's reach and line of sight is
+ *     not disproven, at every whole second of the stretch
+ *     (`pairInReachAt`, the dispel sweep's own test). A second with no
+ *     position pair is not known to be in reach and ends the stretch.
+ *
+ * A heal press ends a stretch — every SUCCESS row of a spell that healed or
+ * shielded someone else this round (`healNamesOf`), triggered rows included
+ * — and so does a heal the client refused (SPELL_CAST_FAILED of one of them:
+ * a try is not idle time). A stretch that begins or ends at a refused heal
+ * while the healer's mana reads under `lowManaPct` is dropped: the log shows
+ * the press and the empty bar, which is not "free to cast".
+ *
+ * A Holy Priest who went into Spirit of Redemption before the teammate died
+ * has died first: no line for that round.
+ *
+ * NOT known here, stated rather than papered over: a low mana bar with no
+ * refused press (reads as free), a heal that heals only through damage
+ * (Atonement: the damage press is no heal press here), and the healer's own
+ * movement.
+ */
+import type { ICombatUnit } from "@gladlog/parser-compat";
+
+import { DRUID_FORM_AURA_IDS } from "../data/druidForms";
+import {
+  effectiveCooldownSeconds,
+  getEnglishSpellName,
+} from "../data/spellEffectData";
+import { DEATH_WINDOW_S } from "../data/timelineLineFlags";
+import {
+  cannotCastIntervalsForSpells,
+  enemySourceIds,
+  healNamesOf,
+  pressedHeals,
+} from "./cannotCastIntervals";
+import { castBarOutcomesOf, JUKE_LOOKBACK_MS } from "./castBarOutcomes";
+import { SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
+import { gridHpPct } from "./cooldowns";
+import { occupancyIntervalsWithin, pairInReachAt } from "./dispelAnalysis";
+import { CC_MAX_CAST_RANGE_YARDS } from "./positionSampling";
+import { manaPct, type RawStreams } from "./rawStreams";
+import { spellReachForCaster } from "./spellRange";
+
+/**
+ * The shortest stretch that is a line. Editorial, read off the 605 corpus
+ * (see the T88 preview): two global cooldowns — one press not made can be
+ * the global cooldown of another button; two in a row cannot.
+ */
+export const NO_HEAL_MIN_STRETCH_MS = 3000;
+
+/** The Tree of Life is a healing form: being in it explains no gap. */
+const NON_HEALING_FORM_IDS = [...DRUID_FORM_AURA_IDS].filter(
+  (id) => id !== "33891",
+);
+
+export interface INoHealStretch {
+  fromMs: number;
+  toMs: number;
+  /** the teammate whose death is the round's first */
+  targetName: string;
+  /** the grid HP of that teammate at the stretch's two ends */
+  hpFromPct: number | null;
+  hpToPct: number | null;
+  /** a form the healer was in for at least half of the stretch; `fromMs`
+   * null when the log holds no APPLIED row of it */
+  form?: { name: string; fromMs: number | null };
+}
+
+type Span = { from: number; to: number };
+
+function subtract(free: Span[], blocked: readonly Span[]): Span[] {
+  let out = free;
+  for (const b of blocked) {
+    const next: Span[] = [];
+    for (const f of out) {
+      if (b.to <= f.from || b.from >= f.to) {
+        next.push(f);
+        continue;
+      }
+      if (b.from > f.from) next.push({ from: f.from, to: b.from });
+      if (b.to < f.to) next.push({ from: b.to, to: f.to });
+    }
+    out = next;
+  }
+  return out;
+}
+
+function formSpans(
+  owner: Pick<ICombatUnit, "auraEvents">,
+  endMs: number,
+): Array<Span & { name: string; applied: boolean }> {
+  const out: Array<Span & { name: string; applied: boolean }> = [];
+  for (const id of NON_HEALING_FORM_IDS) {
+    let open: number | null = null;
+    let seen = false;
+    for (const a of owner.auraEvents ?? []) {
+      if (a.spellId !== id) continue;
+      const name = getEnglishSpellName(id, a.spellName ?? "");
+      const ev = a.logLine.event as string;
+      if (ev === "SPELL_AURA_APPLIED") {
+        open = a.logLine.timestamp;
+        seen = true;
+      } else if (ev === "SPELL_AURA_REMOVED") {
+        // a REMOVED with no APPLIED before it: in the form since before the log
+        out.push({
+          from: open ?? -Infinity,
+          to: a.logLine.timestamp,
+          name,
+          applied: open !== null,
+        });
+        open = null;
+        seen = true;
+      }
+    }
+    if (open !== null && seen)
+      out.push({
+        from: open,
+        to: endMs,
+        name: getEnglishSpellName(id, ""),
+        applied: true,
+      });
+  }
+  return out;
+}
+
+export function noHealStretchesBeforeFirstDeath(params: {
+  owner: ICombatUnit;
+  friends: readonly ICombatUnit[];
+  enemies: readonly ICombatUnit[];
+  /** every unit of the round (pets, totems): the sources of a control */
+  allUnits: readonly ICombatUnit[];
+  /** the round's start, epoch ms */
+  startMs: number;
+  friendlyDeaths: ReadonlyArray<{ name: string; atSeconds: number }>;
+  enemyDeaths: ReadonlyArray<{ name: string; atSeconds: number }>;
+  zoneId: string | undefined;
+  rawStreams?: RawStreams;
+  /** the shortest stretch kept */
+  minMs?: number;
+  /** the mana reading under which a refused heal is read as "no mana"
+   * (`MANA_PRESSURE_LOW_PCT`, handed in by the caller: the constant lives
+   * above this module) */
+  lowManaPct?: number;
+}): INoHealStretch[] {
+  const { owner, startMs, friendlyDeaths, enemyDeaths, zoneId } = params;
+  const minMs = params.minMs ?? NO_HEAL_MIN_STRETCH_MS;
+  if (friendlyDeaths.length === 0) return [];
+  const first = friendlyDeaths.reduce((a, b) =>
+    b.atSeconds < a.atSeconds ? b : a,
+  );
+  if (first.name === owner.name) return [];
+  if (enemyDeaths.some((d) => d.atSeconds <= first.atSeconds)) return [];
+  const target = params.friends.find((f) => f.name === first.name);
+  if (!target) return [];
+
+  // door 2: a heal with no cooldown among the heals pressed this round
+  const heals = pressedHeals(owner);
+  const healIds = [...heals.keys()];
+  const spammable = healIds.filter(
+    (id) => effectiveCooldownSeconds(id) === undefined,
+  );
+  if (spammable.length === 0) return [];
+  const reachYd = Math.max(
+    ...spammable.map(
+      (id) => spellReachForCaster(owner, id) ?? CC_MAX_CAST_RANGE_YARDS,
+    ),
+  );
+
+  const deathMs = startMs + first.atSeconds * 1000;
+  const fromMs = Math.max(startMs, deathMs - DEATH_WINDOW_S * 1000);
+  if (deathMs <= fromMs) return [];
+  // in Spirit of Redemption before that death: the healer died first
+  if (
+    (owner.auraEvents ?? []).some(
+      (a) =>
+        SPIRIT_OF_REDEMPTION_AURA_IDS.has(a.spellId ?? "") &&
+        (a.logLine.event as string) === "SPELL_AURA_APPLIED" &&
+        a.logLine.timestamp >= startMs &&
+        a.logLine.timestamp <= deathMs,
+    )
+  )
+    return [];
+
+  const blocked: Span[] = [];
+  // door 1: control, silence, a lockout that shuts every pressed heal
+  const enemyIds = enemySourceIds(params.enemies, params.allUnits);
+  for (const iv of cannotCastIntervalsForSpells(
+    owner,
+    enemyIds,
+    healIds,
+    params.allUnits,
+  ))
+    blocked.push({ from: iv.from, to: iv.to });
+  // … a cast bar of the healer's own, whatever it was
+  const failed = (params.rawStreams?.castFailed ?? []).filter(
+    (e) => e.unitGuid === owner.id,
+  );
+  const bars = castBarOutcomesOf({ unit: owner, startMs, failed });
+  bars.forEach((b, i) => {
+    const from = startMs + b.t * 1000;
+    const endS =
+      "atS" in b.end
+        ? b.end.atS
+        : Math.min(bars[i + 1]?.t ?? Infinity, b.t + JUKE_LOOKBACK_MS / 1000);
+    blocked.push({ from, to: Math.max(from, startMs + endS * 1000) });
+  });
+  // … and every other commitment the missed-cleanse occupancy reader counts
+  // (`occupancyIntervalsWithin`: channels by their aura or their last tick,
+  // an empower being held, drinking)
+  for (const o of occupancyIntervalsWithin(
+    owner,
+    enemyIds,
+    fromMs,
+    deathMs,
+    failed.map((f) => ({
+      spellId: String(f.spellId),
+      ms: startMs + f.tSeconds * 1000,
+    })),
+  ) ?? [])
+    blocked.push({ from: o.from, to: o.to });
+  // door 3: reach, on the whole seconds of the render grid
+  for (
+    let t = startMs + Math.floor((fromMs - startMs) / 1000) * 1000;
+    t < deathMs;
+    t += 1000
+  )
+    if (pairInReachAt(owner, target, t, zoneId, reachYd) !== true)
+      blocked.push({ from: t, to: t + 1000 });
+
+  // a heal press, or a refused one, ends a stretch
+  const healNames = healNamesOf(owner);
+  const isHeal = (id: string, name: string) =>
+    heals.has(id) || healNames.has(getEnglishSpellName(id, name));
+  const refusedAt = failed
+    .filter((e) => isHeal(String(e.spellId), e.spellName))
+    .map((e) => startMs + e.tSeconds * 1000);
+  const cuts = [
+    ...(owner.spellCastEvents ?? [])
+      .filter(
+        (e) =>
+          (e.logLine.event as string) === "SPELL_CAST_SUCCESS" &&
+          isHeal(e.spellId ?? "", e.spellName ?? ""),
+      )
+      .map((e) => e.logLine.timestamp),
+    ...refusedAt,
+  ];
+  for (const t of cuts) blocked.push({ from: t, to: t });
+
+  let free = subtract([{ from: fromMs, to: deathMs }], blocked);
+  // a zero-length cut splits the run it sits strictly inside
+  for (const t of cuts)
+    free = free.flatMap((f) =>
+      t > f.from && t < f.to
+        ? [
+            { from: f.from, to: t },
+            { from: t, to: f.to },
+          ]
+        : [f],
+    );
+
+  // a refused heal at either end with the mana bar low: no mana, not idle
+  const manaAt = (tMs: number): number | null => {
+    const tS = (tMs - startMs) / 1000;
+    let last: number | null = null;
+    for (const m of params.rawStreams?.manaSamples ?? []) {
+      if (m.unitGuid !== owner.id) continue;
+      if (m.tSeconds > tS) break;
+      last = manaPct(m);
+    }
+    return last;
+  };
+  const outOfMana = (f: Span) =>
+    params.lowManaPct !== undefined &&
+    refusedAt.some((t) => {
+      if (t !== f.from && t !== f.to) return false;
+      const pct = manaAt(t);
+      return pct !== null && pct < params.lowManaPct!;
+    });
+
+  const forms = formSpans(owner, deathMs);
+  return free
+    .filter((f) => f.to - f.from >= minMs && !outOfMana(f))
+    .sort((a, b) => a.from - b.from)
+    .map((f) => {
+      const form = forms
+        .map((s) => ({
+          s,
+          overlap: Math.min(s.to, f.to) - Math.max(s.from, f.from),
+        }))
+        .filter((x) => x.overlap * 2 >= f.to - f.from)
+        .sort((a, b) => b.overlap - a.overlap)[0]?.s;
+      return {
+        fromMs: f.from,
+        toMs: f.to,
+        targetName: target.name,
+        hpFromPct: gridHpPct(target, f.from),
+        hpToPct: gridHpPct(target, f.to),
+        ...(form
+          ? {
+              form: {
+                name: form.name,
+                fromMs: form.applied ? form.from : null,
+              },
+            }
+          : {}),
+      };
+    });
+}

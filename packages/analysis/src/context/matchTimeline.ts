@@ -108,6 +108,7 @@ import { emitHealerInactivityEntries } from "./timelineSections/healerInactivity
 import { emitKickEntries } from "./timelineSections/kick";
 import { emitManaContextEntries } from "./timelineSections/manaContext";
 import { emitMinorDispelEntries } from "./timelineSections/minorDispels";
+import { emitNoHealCastEntries } from "./timelineSections/noHealCast";
 import { emitOffensiveWindowEntries } from "./timelineSections/offensiveWindow";
 import { emitOffListPressEntries } from "./timelineSections/offListPress";
 import { emitOwnerCdEntries } from "./timelineSections/ownerCd";
@@ -1112,6 +1113,22 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry,
     pid,
     owner,
+  });
+
+  // ── [YOU] [NO HEAL CAST] (healer only, before a teammate's first death) ──
+  emitNoHealCastEntries({
+    isHealer,
+    owner,
+    friends,
+    enemies,
+    _allUnits,
+    matchStartMs,
+    friendlyDeaths,
+    enemyDeaths,
+    rawStreams,
+    addEntry,
+    pid,
+    zoneId: params.zoneId,
   });
 
   const {

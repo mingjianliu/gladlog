@@ -2241,6 +2241,51 @@ export function occupancyWithin(
   windowEndMs: number,
   failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>,
 ): IOccupancy | null {
+  const tagged = occupancyIntervalsWithin(
+    unit,
+    enemyIds,
+    windowStartMs,
+    windowEndMs,
+    failedCasts,
+  );
+  if (tagged === null) return null;
+  const out: IOccupancy = {
+    occupiedMs: 0,
+    startedBeforeWindow: false,
+    spellNames: [],
+    kinds: [],
+  };
+  let curFrom = -Infinity;
+  let curTo = -Infinity;
+  for (const b of tagged) {
+    const from = Math.max(b.from, windowStartMs);
+    const to = Math.min(b.to, windowEndMs);
+    if (from > curTo) {
+      if (curTo > curFrom) out.occupiedMs += curTo - curFrom;
+      curFrom = from;
+      curTo = to;
+    } else curTo = Math.max(curTo, to);
+    if (b.from < windowStartMs) out.startedBeforeWindow = true;
+    out.spellNames.push(b.spellName);
+    if (!out.kinds.includes(b.kind)) out.kinds.push(b.kind);
+  }
+  if (curTo > curFrom) out.occupiedMs += curTo - curFrom;
+  return out;
+}
+
+/**
+ * `occupancyWithin`'s intervals themselves — every counted commitment that
+ * overlaps the window, unclipped, in start order — for a reader that needs
+ * WHEN the unit was committed, not how long (T88: the no-heal stretch ends
+ * where a cast or channel begins). null like `occupancyWithin`.
+ */
+export function occupancyIntervalsWithin(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  windowStartMs: number,
+  windowEndMs: number,
+  failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>,
+): Array<IOccupancyInterval & { kind: OccupancyKind }> | null {
   const bars = hardCastBarsWithin(
     unit,
     enemyIds,
@@ -2305,7 +2350,7 @@ export function occupancyWithin(
       });
     }
   }
-  const tagged: Array<IOccupancyInterval & { kind: OccupancyKind }> = [
+  return [
     ...barItems,
     ...noBar,
     ...selfAuraIntervals(unit, CHANNEL_PROXY_IDS, windowEndMs).map((b) => ({
@@ -2321,28 +2366,6 @@ export function occupancyWithin(
       (b) => b.to > windowStartMs && b.from < windowEndMs && b.to > b.from,
     )
     .sort((a, b) => a.from - b.from);
-  const out: IOccupancy = {
-    occupiedMs: 0,
-    startedBeforeWindow: false,
-    spellNames: [],
-    kinds: [],
-  };
-  let curFrom = -Infinity;
-  let curTo = -Infinity;
-  for (const b of tagged) {
-    const from = Math.max(b.from, windowStartMs);
-    const to = Math.min(b.to, windowEndMs);
-    if (from > curTo) {
-      if (curTo > curFrom) out.occupiedMs += curTo - curFrom;
-      curFrom = from;
-      curTo = to;
-    } else curTo = Math.max(curTo, to);
-    if (b.from < windowStartMs) out.startedBeforeWindow = true;
-    out.spellNames.push(b.spellName);
-    if (!out.kinds.includes(b.kind)) out.kinds.push(b.kind);
-  }
-  if (curTo > curFrom) out.occupiedMs += curTo - curFrom;
-  return out;
 }
 
 /** What "the dispeller / purger was locked out" is asked with: the hostile
@@ -2614,6 +2637,47 @@ function intersectIntervalSets(
 }
 
 /**
+ * One caster, one target, one instant: both have a position
+ * (`LOS_SWEEP_GAP_MS`), they are within `reachYd`, and line of sight is not
+ * disproven (no geometry → range alone). null = no position pair to read.
+ * The test of feasibility gate a's sweep (`firstDispellerReachMs`), exported
+ * so a second "could the caster reach the target" reader asks the same
+ * question (T88: the no-heal stretch before a teammate's death).
+ *
+ * LoS is topological — it reads the nearest RAW samples, never the
+ * interpolated point (`losAnalysis` contract; codex review of F-C9: an
+ * interpolated position between two in-LoS samples can sit inside a pillar
+ * and wrongly exempt the window). Distance keeps interpolating. No raw
+ * sample in reach of this instant = LoS not disproven.
+ */
+export function pairInReachAt(
+  caster: ICombatUnit,
+  target: ICombatUnit,
+  tMs: number,
+  zoneId: string | undefined,
+  /** asked only once both units have a position */
+  reachYd: number | (() => number),
+): boolean | null {
+  const targetPos = getUnitPositionAtTime(target, tMs, LOS_SWEEP_GAP_MS);
+  if (!targetPos) return null;
+  const casterPos = getUnitPositionAtTime(caster, tMs, LOS_SWEEP_GAP_MS);
+  if (!casterPos) return null;
+  const reach = typeof reachYd === "number" ? reachYd : reachYd();
+  if (distanceBetween(casterPos, targetPos) > reach) return false;
+  const casterRaw = zoneId
+    ? getUnitRawPositionAtTime(caster, tMs, LOS_SWEEP_GAP_MS)
+    : null;
+  const targetRaw = zoneId
+    ? getUnitRawPositionAtTime(target, tMs, LOS_SWEEP_GAP_MS)
+    : null;
+  const los =
+    zoneId && casterRaw && targetRaw
+      ? hasLineOfSight(zoneId, casterRaw, targetRaw)
+      : null;
+  return los !== false;
+}
+
+/**
  * The sweep behind feasibility gate a: the whole-second grid from the sweep's
  * start (`dispelReachSweepStartMs`) to `toMs`, stopping at the first second
  * some dispeller and the target both have a position, are within that
@@ -2632,29 +2696,11 @@ function firstDispellerReachMs(
   const t0 = dispelReachSweepStartMs(applyTs, matchStartMs);
   let sawSamplePair = false;
   for (let t = t0; t <= toMs; t += 1000) {
-    const targetPos = getUnitPositionAtTime(target, t, LOS_SWEEP_GAP_MS);
-    if (!targetPos) continue;
     for (const d of dispellers) {
-      const dPos = getUnitPositionAtTime(d, t, LOS_SWEEP_GAP_MS);
-      if (!dPos) continue;
+      const reach = pairInReachAt(d, target, t, zoneId, () => reachOf(d));
+      if (reach === null) continue;
       sawSamplePair = true;
-      if (distanceBetween(dPos, targetPos) > reachOf(d)) continue;
-      // LoS is topological — it reads the nearest RAW samples, never the
-      // interpolated point (`losAnalysis` contract; codex review of F-C9: an
-      // interpolated position between two in-LoS samples can sit inside a
-      // pillar and wrongly exempt the window). Distance keeps interpolating.
-      // No raw sample in reach of this second = LoS not disproven.
-      const dRaw = zoneId
-        ? getUnitRawPositionAtTime(d, t, LOS_SWEEP_GAP_MS)
-        : null;
-      const targetRaw = zoneId
-        ? getUnitRawPositionAtTime(target, t, LOS_SWEEP_GAP_MS)
-        : null;
-      const los =
-        zoneId && dRaw && targetRaw
-          ? hasLineOfSight(zoneId, dRaw, targetRaw)
-          : null;
-      if (los !== false) return { atMs: t, sawSamplePair }; // in range and LoS not disproven
+      if (reach) return { atMs: t, sawSamplePair }; // in range and LoS not disproven
     }
   }
   return { atMs: null, sawSamplePair };

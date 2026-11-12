@@ -299,6 +299,23 @@ export function intervalBlocksSpell(
 }
 
 /**
+ * The names of the spells whose heal or absorb rows this unit put on SOMEONE
+ * ELSE this round — what "a heal" is to `pressedHeals` and to the no-heal
+ * stretch (`noHealCast.ts`, which cuts a stretch at every SUCCESS row of one
+ * of them, triggered rows included).
+ */
+export function healNamesOf(
+  unit: Pick<ICombatUnit, "id" | "healOut" | "absorbsOut">,
+): Set<string> {
+  return new Set(
+    [...(unit.healOut ?? []), ...(unit.absorbsOut ?? [])]
+      .filter((r) => r.destUnitId !== unit.id)
+      .map((r) => getEnglishSpellName(r.spellId ?? "", ""))
+      .filter((n) => n !== ""),
+  );
+}
+
+/**
  * The unit's own heals this round, with their presses: the spells it pressed
  * whose name is on a heal or absorb row of its own that reached another unit
  * (a press and its heal can differ in id: Penance 47540 heals as 47750).
@@ -314,15 +331,10 @@ export function intervalBlocksSpell(
  *    a SPELL_CAST_SUCCESS with the name of its heal: one Divine Hymn in a round
  *    erased every other lockout of that priest (555 lockouts).
  */
-function pressedHeals(
+export function pressedHeals(
   unit: Pick<ICombatUnit, "id" | "spellCastEvents" | "healOut" | "absorbsOut">,
 ): Map<string, number[]> {
-  const healNames = new Set(
-    [...(unit.healOut ?? []), ...(unit.absorbsOut ?? [])]
-      .filter((r) => r.destUnitId !== unit.id)
-      .map((r) => getEnglishSpellName(r.spellId ?? "", ""))
-      .filter((n) => n !== ""),
-  );
+  const healNames = healNamesOf(unit);
   const presses = new Map<string, number[]>();
   const rows = unit.spellCastEvents ?? [];
   for (const c of rows) {
