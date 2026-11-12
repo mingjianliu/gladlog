@@ -553,6 +553,15 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Improved Barkskin — DB2 aura 107 +4000 ms, Druid class tree (all 4 specs), maxRanks 1; corpus 12.0 s in 278 caster-cells (Resto 104 / Feral 91 / Balance 83) holding it 100 % vs 0 % of the 2 cells at 8.0 s; 8 + 4 = 12",
     },
   ],
+  "1253593": [
+    {
+      talentSpellId: "238135",
+      specs: ["256"], // Priest_Discipline
+      untalentedBaseSeconds: 15,
+      addSeconds: 5,
+      note: "Eternal Barrier on Void Shield (T76, GH #123) — DB2 row 369065: aura 107 SPELLMOD_DURATION +5000 ms, PvpMultiplier 1, class mask word 0 bit 1 covering Power Word: Shield 17 / 1246768 and Void Shield 1253593 / 1300008 / 1300009; single rank (COMBATANT_INFO r1 in all 12 holder cells). The tooltip names Power Word: Shield, whose row is TOOLTIP_DURATION_ROWS['17']; Void Shield is the same button under Master the Darkness, reached by the mask and by no tooltip name, so its row is here. Corpus, 605 files: clean per-application lifetimes against the 15 s the predicate read — 334 run exactly 5 s longer (20.0 s), 27 at 15 s; holder cells 20 s ×4 of 12 (the rest consumed early), the one non-holder cell consumed at 1 s. 15 + 5 = 20. The Unfolding Vision copies 1300008 / 1300009 are not added: 0 and 5 holder cells, none reaching a full life.",
+    },
+  ],
   "47788": [
     {
       talentSpellId: "440738",
