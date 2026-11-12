@@ -42,16 +42,26 @@ export function emitNoHealCastEntries(
     rawStreams: ctx.rawStreams,
     lowManaPct: MANA_PRESSURE_LOW_PCT,
   })) {
+    // inside the parenthesis, facts from the log only (R30): the mana
+    // reading when it is low, what was pressed instead, a form
+    const mana =
+      s.manaPct !== null && s.manaPct < MANA_PRESSURE_LOW_PCT
+        ? `; mana ${Math.floor(s.manaPct)}%`
+        : "";
+    const counts = new Map<string, number>();
+    for (const n of s.pressed) counts.set(n, (counts.get(n) ?? 0) + 1);
+    const pressed =
+      counts.size === 0
+        ? "; nothing else pressed"
+        : `; pressed ${[...counts].map(([n, c]) => (c > 1 ? `${n} ×${c}` : n)).join(", ")}`;
     const form = s.form
       ? `; in ${s.form.name}${s.form.fromMs === null ? "" : ` from ${fmtTime(Math.max(0, sec(s.form.fromMs)))}`}`
       : "";
-    const hp =
-      s.hpFromPct === null || s.hpToPct === null
-        ? ""
-        : ` ${Math.round(s.hpFromPct)}% → ${Math.round(s.hpToPct)}%`;
+    // both readings are known: the reader keeps only a stretch that lost HP
+    const hp = ` ${Math.round(s.hpFromPct!)}% → ${Math.round(s.hpToPct!)}%`;
     ctx.addEntry(
       sec(s.fromMs),
-      `${fmtTime(sec(s.fromMs))}–${fmtTime(sec(s.toMs))}  [YOU] [NO HEAL CAST]   ${((s.toMs - s.fromMs) / 1000).toFixed(1)}s with no heal pressed (free to cast${form}) — ${ctx.pid(s.targetName)}${hp}`,
+      `${fmtTime(sec(s.fromMs))}–${fmtTime(sec(s.toMs))}  [YOU] [NO HEAL CAST]   ${((s.toMs - s.fromMs) / 1000).toFixed(1)}s with no heal pressed (free to cast${mana}${pressed}${form}) — ${ctx.pid(s.targetName)}${hp}`,
     );
   }
 }

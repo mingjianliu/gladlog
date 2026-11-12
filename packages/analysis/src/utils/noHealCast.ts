@@ -23,7 +23,8 @@
  *     position pair is not known to be in reach and ends the stretch.
  *
  * A heal press ends a stretch — every SUCCESS row of a spell that healed or
- * shielded someone else this round (`healNamesOf`), triggered rows included
+ * shielded anyone this round, the healer included (`healNamesOf` plus the
+ * self-only heals), triggered rows included
  * — and so does a heal the client refused (SPELL_CAST_FAILED of one of them:
  * a try is not idle time). A stretch that begins or ends at a refused heal
  * while the healer's mana reads under `lowManaPct` is dropped: the log shows
@@ -32,8 +33,12 @@
  * A Holy Priest who went into Spirit of Redemption before the teammate died
  * has died first: no line for that round.
  *
+ * A stretch is a line only when the dying teammate's HP went DOWN across it
+ * (the grid reading at its end under the one at its start, both known):
+ * with no HP lost, "no heal pressed" says nothing (user ruling R30).
+ *
  * NOT known here, stated rather than papered over: a low mana bar with no
- * refused press (reads as free), a heal that heals only through damage
+ * refused press (reads as free — the line prints the reading, R30), a heal that heals only through damage
  * (Atonement: the damage press is no heal press here), and the healer's own
  * movement.
  */
@@ -52,8 +57,9 @@ import {
   pressedHeals,
 } from "./cannotCastIntervals";
 import { castBarOutcomesOf, JUKE_LOOKBACK_MS } from "./castBarOutcomes";
+import { isCompanionCastRow } from "./castPress";
 import { SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
-import { gridHpPct } from "./cooldowns";
+import { gridHpPct, isPassiveProcCast } from "./cooldowns";
 import { occupancyIntervalsWithin, pairInReachAt } from "./dispelAnalysis";
 import { CC_MAX_CAST_RANGE_YARDS } from "./positionSampling";
 import { manaPct, type RawStreams } from "./rawStreams";
@@ -82,6 +88,13 @@ export interface INoHealStretch {
   /** a form the healer was in for at least half of the stretch; `fromMs`
    * null when the log holds no APPLIED row of it */
   form?: { name: string; fromMs: number | null };
+  /** what the healer pressed inside the stretch instead, English names in
+   * press order (a spell pressed twice is there twice): every SUCCESS row
+   * that is a press of its own (no passive proc, no companion row) */
+  pressed: string[];
+  /** the healer's mana at the stretch's start, percent; null when the log
+   * holds no reading */
+  manaPct: number | null;
 }
 
 type Span = { from: number; to: number };
@@ -246,7 +259,13 @@ export function noHealStretchesBeforeFirstDeath(params: {
       blocked.push({ from: t, to: t + 1000 });
 
   // a heal press, or a refused one, ends a stretch
+  // … on anyone, the healer included: a heal pressed on oneself is a heal
+  // pressed (the line says "no heal pressed", and names every other press)
   const healNames = healNamesOf(owner);
+  for (const r of [...(owner.healOut ?? []), ...(owner.absorbsOut ?? [])]) {
+    const n = getEnglishSpellName(r.spellId ?? "", "");
+    if (n !== "") healNames.add(n);
+  }
   const isHeal = (id: string, name: string) =>
     heals.has(id) || healNames.has(getEnglishSpellName(id, name));
   const refusedAt = failed
@@ -296,31 +315,54 @@ export function noHealStretchesBeforeFirstDeath(params: {
     });
 
   const forms = formSpans(owner, deathMs);
-  return free
-    .filter((f) => f.to - f.from >= minMs && !outOfMana(f))
-    .sort((a, b) => a.from - b.from)
-    .map((f) => {
-      const form = forms
-        .map((s) => ({
-          s,
-          overlap: Math.min(s.to, f.to) - Math.max(s.from, f.from),
-        }))
-        .filter((x) => x.overlap * 2 >= f.to - f.from)
-        .sort((a, b) => b.overlap - a.overlap)[0]?.s;
-      return {
-        fromMs: f.from,
-        toMs: f.to,
-        targetName: target.name,
-        hpFromPct: gridHpPct(target, f.from),
-        hpToPct: gridHpPct(target, f.to),
-        ...(form
-          ? {
-              form: {
-                name: form.name,
-                fromMs: form.applied ? form.from : null,
-              },
-            }
-          : {}),
-      };
-    });
+  return (
+    free
+      .filter((f) => f.to - f.from >= minMs && !outOfMana(f))
+      .sort((a, b) => a.from - b.from)
+      .map((f) => {
+        const form = forms
+          .map((s) => ({
+            s,
+            overlap: Math.min(s.to, f.to) - Math.max(s.from, f.from),
+          }))
+          .filter((x) => x.overlap * 2 >= f.to - f.from)
+          .sort((a, b) => b.overlap - a.overlap)[0]?.s;
+        const casts = owner.spellCastEvents ?? [];
+        return {
+          fromMs: f.from,
+          toMs: f.to,
+          targetName: target.name,
+          hpFromPct: gridHpPct(target, f.from),
+          hpToPct: gridHpPct(target, f.to),
+          ...(form
+            ? {
+                form: {
+                  name: form.name,
+                  fromMs: form.applied ? form.from : null,
+                },
+              }
+            : {}),
+          pressed: casts
+            .filter(
+              (e) =>
+                (e.logLine.event as string) === "SPELL_CAST_SUCCESS" &&
+                e.logLine.timestamp > f.from &&
+                e.logLine.timestamp < f.to &&
+                !isPassiveProcCast(e) &&
+                !isCompanionCastRow(e, casts),
+            )
+            .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp)
+            .map((e) => getEnglishSpellName(e.spellId ?? "", e.spellName ?? ""))
+            .filter((n) => n !== ""),
+          manaPct: manaAt(f.from),
+        };
+      })
+      // R30: only a stretch across which the teammate lost HP
+      .filter(
+        (s) =>
+          s.hpFromPct !== null &&
+          s.hpToPct !== null &&
+          Math.round(s.hpToPct) < Math.round(s.hpFromPct),
+      )
+  );
 }

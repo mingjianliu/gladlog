@@ -16,14 +16,14 @@ const REJUV = "774";
 
 /** a position sample every second for 31 s; `farFrom`..`farTo` puts the unit
  * 80 yd away */
-const positions = (x: number, far?: [number, number]) =>
+const positions = (x: number, far?: [number, number], flatHp = false) =>
   Array.from({ length: 32 }, (_, s) =>
     makeAdvancedAction(
       at(s),
       far && s >= far[0] && s <= far[1] ? x + 80 : x,
       0,
       100,
-      100 - s,
+      flatHp ? 80 : 100 - s,
     ),
   );
 
@@ -33,6 +33,10 @@ function round(
     mateFar?: [number, number];
     enemyDiesAt?: number;
     presses?: number[];
+    otherPresses?: Array<[string, number]>;
+    flatHp?: boolean;
+    /** a spell id with one heal row on the healer itself */
+    selfHeal?: string;
     rawStreams?: Parameters<
       typeof noHealStretchesBeforeFirstDeath
     >[0]["rawStreams"];
@@ -47,16 +51,33 @@ function round(
   });
   const owner = makeUnit("healer", {
     name: "Healer",
-    spellCastEvents: presses.map((s) =>
-      makeSpellCastEvent(REJUV, at(s), "mate", "Mate", "healer", "Healer"),
-    ),
-    healOut: presses.map(heal),
+    spellCastEvents: [
+      ...presses.map((s) =>
+        makeSpellCastEvent(REJUV, at(s), "mate", "Mate", "healer", "Healer"),
+      ),
+      ...(opts.otherPresses ?? []).map(([id, s]) =>
+        makeSpellCastEvent(id, at(s), "enemy-1", "Enemy", "healer", "Healer"),
+      ),
+    ],
+    healOut: [
+      ...presses.map(heal),
+      ...(opts.selfHeal
+        ? [
+            {
+              ...makeHealEvent(at(24.5), "healer", 1000),
+              destUnitId: "healer",
+              spellId: opts.selfHeal,
+              spellName: "Flash of Light",
+            },
+          ]
+        : []),
+    ],
     auraEvents: opts.healerAuras ?? [],
     advancedActions: positions(0),
   });
   const mate = makeUnit("mate", {
     name: "Mate",
-    advancedActions: positions(10, opts.mateFar),
+    advancedActions: positions(10, opts.mateFar, opts.flatHp),
   });
   const enemy = makeUnit("enemy-1", {
     name: "Enemy",
@@ -89,6 +110,7 @@ describe("T88: the no-heal stretch before a teammate's first death", () => {
     expect(out[0]!.hpFromPct).toBe(79);
     expect(out[0]!.hpToPct).toBe(72);
     expect(out[0]!.form).toBeUndefined();
+    expect(out[0]!.pressed).toEqual([]);
   });
 
   it("敌人先死的回合不出行", () => {
@@ -180,5 +202,30 @@ describe("T88: the no-heal stretch before a teammate's first death", () => {
       [24_500, 28_000],
     ]);
     expect(round({ rawStreams: refused(5) })).toEqual([]);
+  });
+
+  it("空档里按的别的键按顺序列出来,治疗按键不在其中", () => {
+    const out = round({
+      otherPresses: [
+        ["8921", 22],
+        ["33786", 24],
+        ["8921", 26],
+      ],
+    });
+    expect(out[0]!.pressed).toEqual(["Moonfire", "Cyclone", "Moonfire"]);
+  });
+
+  it("R30:队友在空档里没掉血,不出行", () => {
+    expect(round({ flatHp: true })).toEqual([]);
+  });
+
+  it("只奶过自己的治疗也是一次治疗按键,切开空档", () => {
+    // 19750 Flash of Light: its only heal row this round is on the healer
+    const out = round({ otherPresses: [["19750", 24.5]], selfHeal: "19750" });
+    expect(out.map((s) => [s.fromMs - T0, s.toMs - T0])).toEqual([
+      [21_000, 24_500],
+      [24_500, 28_000],
+    ]);
+    expect(out.every((s) => s.pressed.length === 0)).toBe(true);
   });
 });
