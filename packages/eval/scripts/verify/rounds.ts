@@ -301,6 +301,19 @@ export function forEachContext(
     }
     const pidByName = new Map<string, string>();
     for (const [pid, n] of pidName) pidByName.set(n, pid);
+    // the rendered roster and this parse must name the round's units alike:
+    // every check finds a unit's lines through its name (`pidOf`), so a
+    // capture rendered by a parser that names a unit differently (T78: a
+    // player logged bare first is named in its realm form) leaves that
+    // unit's rows unchecked without a word — 605 one round, enemyDefForward
+    // checked 10 -> 0. Unmapped fails the run instead.
+    const unparsed = [...pidName].filter(([, n]) => !r.byName.has(n));
+    if (unparsed.length > 0) {
+      unmapped.push(
+        `${where} (roster unit ${unparsed.map(([pid]) => pid).join(", ")} is not a unit of this parse under that name — the capture was rendered by another parser; render it again with this code)`,
+      );
+      continue;
+    }
     visit({
       f,
       where,
