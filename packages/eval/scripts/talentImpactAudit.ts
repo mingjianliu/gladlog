@@ -18,7 +18,7 @@
  *   other ops  14/34/39 cost · 17 chain targets · 18/4/38 proc · 19 period · 37 max stacks …
  * Consumer check per kind:
  *   cooldown / charges → talentModifiers.json (CD_TALENT_MODIFIERS) has (target, talent)
- *   duration           → BUFF_DURATION_TALENT_MODIFIERS / CC_DURATION_TALENT_MODIFIERS (target, talent)
+ *   duration           → lib/durationCarried.ts (the hand tables and the tooltip tables) (target, talent)
  *   range / radius     → spellReachGenerated rangeMods / radiusMods (target, talent)
  *   value on a MITIGATION_TABLE aura → TALENT_MITIGATION_MODIFIERS (aura, talent)
  *   replace            → CD_TALENT_MODIFIERS replace_spell ∪ TALENT_REPLACES
@@ -35,14 +35,12 @@ import { join, resolve } from "node:path";
 import { CURATED_ID_TABLES } from "@gladlog/analysis/src/data/curatedIdRegistry";
 import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
 import { MITIGATION_TABLE } from "@gladlog/analysis/src/data/mitigationData";
-import {
-  BUFF_DURATION_TALENT_MODIFIERS,
-  CC_DURATION_TALENT_MODIFIERS,
-} from "@gladlog/analysis/src/data/spellEffectData";
 import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMitigationModifiers";
 import { TALENT_REPLACES } from "@gladlog/analysis/src/data/talentReplaces";
 import { TALENT_REPLACES_GENERATED } from "@gladlog/analysis/src/data/talentReplacesGenerated";
 import { CD_TALENT_MODIFIERS } from "@gladlog/analysis/src/utils/talentModifiers";
+
+import { durationPairCarriedBy } from "./lib/durationCarried";
 
 const arg = (k: string, d: string) => {
   const i = process.argv.indexOf(k);
@@ -243,10 +241,7 @@ async function main(): Promise<void> {
       (m) => m.talentSpellId === talent && (!effect || m.effect === effect),
     );
   const durHas = (target: string, talent: string) =>
-    [
-      ...(BUFF_DURATION_TALENT_MODIFIERS[target] ?? []),
-      ...(CC_DURATION_TALENT_MODIFIERS[target] ?? []),
-    ].some((m) => m.talentSpellId === talent);
+    durationPairCarriedBy(target, talent) !== undefined;
   const reachHas = (
     target: string,
     talent: string,

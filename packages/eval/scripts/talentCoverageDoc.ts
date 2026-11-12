@@ -26,10 +26,6 @@ import { join, resolve } from "node:path";
 
 import CONDITIONAL from "@gladlog/analysis/src/data/conditionalCooldownsGenerated.json";
 import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
-import {
-  BUFF_DURATION_TALENT_MODIFIERS,
-  CC_DURATION_TALENT_MODIFIERS,
-} from "@gladlog/analysis/src/data/spellEffectData";
 import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMitigationModifiers";
 import {
   EVENT_COOLDOWN_REDUCTIONS,
@@ -43,6 +39,8 @@ import {
   PER_RANK_COOLDOWN_TALENTS,
   RULED_COOLDOWN_VALUES,
 } from "@gladlog/analysis/src/utils/talentModifiers";
+
+import { durationPairCarriedBy } from "./lib/durationCarried";
 
 const arg = (k: string, d: string) => {
   const i = process.argv.indexOf(k);
@@ -175,7 +173,7 @@ async function main(): Promise<void> {
   const floorSpells = new Set(Object.keys(floors).map((k) => k.split("|")[0]!));
   const durationScan = new Map<
     string,
-    { verdict: string; holders: number; non: number }
+    { verdict: string; holders: number; non: number; measuredAura?: string }
   >();
   for (const f of [
     "durationTalent.full-2026-09-14.json",
@@ -188,6 +186,7 @@ async function main(): Promise<void> {
           talent: string;
           target: string;
           verdict: string;
+          measuredAura?: string;
           holders: { cells: number };
           nonHolders: { cells: number };
         }>;
@@ -196,6 +195,7 @@ async function main(): Promise<void> {
           verdict: r.verdict,
           holders: r.holders.cells,
           non: r.nonHolders.cells,
+          ...(r.measuredAura ? { measuredAura: r.measuredAura } : {}),
         });
     } catch {
       /* optional input */
@@ -219,11 +219,15 @@ async function main(): Promise<void> {
       ids.includes(ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent]!.spellId)) ||
     (IDLE_COOLDOWN_CREDITS[talent] &&
       ids.some((i) => IDLE_COOLDOWN_CREDITS[talent]!.targets.includes(i)));
+  // the hand tables and the tooltip tables alike; a row whose target is a
+  // cast id is carried when the aura the scan measured for it is (Rallying
+  // Cry 97462 → 97463)
   const durationCarried = (target: string, talent: string) =>
-    [
-      ...(BUFF_DURATION_TALENT_MODIFIERS[target] ?? []),
-      ...(CC_DURATION_TALENT_MODIFIERS[target] ?? []),
-    ].some((m) => m.talentSpellId === talent);
+    durationPairCarriedBy(target, talent) !== undefined ||
+    durationPairCarriedBy(
+      durationScan.get(`${talent}|${target}`)?.measuredAura ?? target,
+      talent,
+    ) !== undefined;
   const mitigationCarried = (aura: string, talent: string) =>
     TALENT_MITIGATION_MODIFIERS.some(
       (m) => m.auraSpellId === aura && m.talentSpellId === talent,
@@ -240,7 +244,7 @@ async function main(): Promise<void> {
     "",
     `DB2 build ${structured.build}。这份清单回答一个问题:**哪些天赋效果产品的逻辑没接住**。遇到「教练说技能好了但其实没好」「说能驱散但其实不能」这类现象,先在这里按天赋名或技能名搜;每条都写了证据和修它需要什么。已经接住的效果不在这里(见 \`docs/predicate-index.md\` 与各手工表)。`,
     "",
-    "判断「接住」的口径是**当前代码里的表**:冷却 / 充能看 `CD_TALENT_MODIFIERS`、`PER_RANK_COOLDOWN_TALENTS`、`RULED_COOLDOWN_VALUES`、`talentScriptedCooldowns.ts`、`conditionalCooldownsGenerated.json`、最早可用下限 `cdRecastFloorGenerated.json`;持续看 `BUFF_DURATION_TALENT_MODIFIERS` / `CC_DURATION_TALENT_MODIFIERS`;减伤看 `TALENT_MITIGATION_MODIFIERS`;机制类看逐条代码核对(`mechanismAudit.json`)。",
+    "判断「接住」的口径是**当前代码里的表**:冷却 / 充能看 `CD_TALENT_MODIFIERS`、`PER_RANK_COOLDOWN_TALENTS`、`RULED_COOLDOWN_VALUES`、`talentScriptedCooldowns.ts`、`conditionalCooldownsGenerated.json`、最早可用下限 `cdRecastFloorGenerated.json`;持续看 `BUFF_DURATION_TALENT_MODIFIERS` / `CC_DURATION_TALENT_MODIFIERS` / `TOOLTIP_DURATION_ROWS` / `TOOLTIP_PER_EVENT_DURATIONS`;减伤看 `TALENT_MITIGATION_MODIFIERS`;机制类看逐条代码核对(`mechanismAudit.json`)。",
   );
 
   // ---- 1. corpus: what still misfires

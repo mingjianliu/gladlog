@@ -12,7 +12,7 @@
  *   cooldownOnEvent / cooldownReset  cdRecastFloorGenerated has the spell (dynamic
  *                                    floor), CORPUS_COOLDOWN_PATCHES has it, or the
  *                                    talent id is referenced in product code
- *   duration                         BUFF / CC_DURATION_TALENT_MODIFIERS name the talent
+ *   duration                         BUFF / CC_DURATION_TALENT_MODIFIERS or the tooltip tables name the talent
  *   value (defensive)                TALENT_MITIGATION_MODIFIERS (aura, talent)
  *   everything else                  talent id referenced in product code
  * "referenced" means the id appears somewhere in product code — a lead that the
@@ -32,6 +32,10 @@ import {
   CC_DURATION_TALENT_MODIFIERS,
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { CORPUS_COOLDOWN_PATCHES } from "@gladlog/analysis/src/data/spellEffectOverrides";
+import {
+  TOOLTIP_DURATION_ROWS,
+  TOOLTIP_PER_EVENT_DURATIONS,
+} from "@gladlog/analysis/src/data/talentDurationTooltips";
 import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMitigationModifiers";
 import { CD_TALENT_MODIFIERS } from "@gladlog/analysis/src/utils/talentModifiers";
 
@@ -257,9 +261,15 @@ async function main(): Promise<void> {
             evidence = `corpusCooldownPatch[${pa}]`;
           }
         } else if (kind === "duration") {
-          const all = [
-            ...Object.entries(BUFF_DURATION_TALENT_MODIFIERS),
-            ...Object.entries(CC_DURATION_TALENT_MODIFIERS),
+          type DurRows = ReadonlyArray<{ talentSpellId?: string }>;
+          const all: Array<[string, DurRows]> = [
+            ...Object.entries<DurRows>(BUFF_DURATION_TALENT_MODIFIERS),
+            ...Object.entries<DurRows>(CC_DURATION_TALENT_MODIFIERS),
+            // the tooltip tables price a talent's duration effect too (T76)
+            ...Object.entries<DurRows>(TOOLTIP_DURATION_ROWS),
+            ...Object.entries(TOOLTIP_PER_EVENT_DURATIONS).map(
+              ([k, v]): [string, DurRows] => [k, [v]],
+            ),
           ];
           const hit = all.find(([, ms]) =>
             ms.some((m) => m.talentSpellId === c.id),

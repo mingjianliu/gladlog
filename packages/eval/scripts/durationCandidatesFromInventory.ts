@@ -17,18 +17,23 @@
  * {107, 108, 218, 219} with ≥ 1 resolved target becomes a (talent → target)
  * pair; 219 is reported as scan aura "107" (flat ms), 218 as "108" (pct);
  * value = basePoints × pvpMultiplier (the PvP number is the official one, user
- * ruling 2026-09-04). Pairs whose (target, talent) is already registered in
- * BUFF_DURATION_TALENT_MODIFIERS or CC_DURATION_TALENT_MODIFIERS are dropped,
- * unless the CC entry is `corpusPending` (kept, so the scan can confirm it).
+ * ruling 2026-09-04). Pairs whose (target, talent) the product already prices
+ * (lib/durationCarried.ts: the two hand tables and the two tooltip tables)
+ * are dropped, unless the CC entry is `corpusPending` (kept, so the scan can
+ * confirm it).
  * Corpus split + promotion rule stay in durationTalentScan (predeclared).
  *
  * Usage:
  *   npx tsx packages/eval/scripts/durationCandidatesFromInventory.ts <out.json>
  *   npx tsx packages/eval/scripts/durationTalentScan.ts --manifest … --candidates <out.json> --tag inventory-<date>
  */
-import { CC_DURATION_TALENT_MODIFIERS } from "@gladlog/analysis/src/data/spellEffectData";
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
+
+import {
+  durationPairCarriedBy,
+  durationPairCorpusPending,
+} from "./lib/durationCarried";
 
 const DATA = resolve("packages/analysis/src/data");
 const out = process.argv[2];
@@ -57,20 +62,14 @@ const nm = (id: string): string => {
   return typeof v === "string" ? v : (v?.en ?? "");
 };
 
-// (target aura, talent) pairs already priced by either duration hand table.
-const src = readFileSync(`${DATA}/spellEffectData.ts`, "utf8");
-const registered = new Set<string>();
-for (const block of src.matchAll(/^\s*"(\d+)": \[([\s\S]*?)^\s*\],/gm)) {
-  for (const t of block[2]!.matchAll(/talentSpellId: "(\d+)"/g))
-    registered.add(`${block[1]}|${t[1]}`);
-}
-
+// (target aura, talent) pairs the product already prices — the hand tables
+// and the tooltip tables alike (lib/durationCarried.ts) — are dropped…
 // …except an entry written on DB2 + tooltip alone (`corpusPending`, 2026-11-06):
 // it stays a candidate so the season scan measures its first holders and
 // prints them on its PENDING line.
-for (const [target, mods] of Object.entries(CC_DURATION_TALENT_MODIFIERS))
-  for (const m of mods)
-    if (m.corpusPending) registered.delete(`${target}|${m.talentSpellId}`);
+const isRegistered = (target: string, talent: string): boolean =>
+  durationPairCarriedBy(target, talent) !== undefined &&
+  !durationPairCorpusPending(target, talent);
 
 const stats = { mask: 0, label: 0, droppedRegistered: 0, noTarget: 0 };
 const seen = new Set<string>();
@@ -87,7 +86,7 @@ for (const r of inv.rows) {
   for (const tg of r.targets) {
     const target = String(tg.spellId);
     const talent = String(r.spellId);
-    if (registered.has(`${target}|${talent}`)) {
+    if (isRegistered(target, talent)) {
       stats.droppedRegistered++;
       continue;
     }
