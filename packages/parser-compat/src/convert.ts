@@ -5,6 +5,7 @@ import type {
   GladShuffle,
   GladUnit,
 } from "@gladlog/parser";
+import { isRealmFormOf } from "@gladlog/parser";
 
 import {
   CombatResult,
@@ -203,6 +204,23 @@ function isPetOrGuardian(
   return destId.startsWith("Pet-");
 }
 
+/**
+ * A row's unit name as the roster names that unit: a player's first rows of
+ * a round can carry the bare character name while the roster (and every
+ * later row) has `Name-Realm-Region` (parser `isRealmFormOf`). Analysis
+ * compares row names with unit names in dozens of places; one name per
+ * player keeps them all on the same string.
+ */
+function rowName<T extends string | null | undefined>(
+  id: string | undefined,
+  name: T,
+  allUnits: Record<string, GladUnit> | undefined,
+): T | string {
+  if (!id || !name || !allUnits) return name;
+  const canonical = allUnits[id]?.name;
+  return canonical && isRealmFormOf(id, name, canonical) ? canonical : name;
+}
+
 /** `IHpEvent.damageSchoolId` from the L3 damage event's tail school. */
 function damageSchoolField(event: { school?: number }): {
   damageSchoolId?: string;
@@ -373,30 +391,28 @@ function convertUnit(
   // D50: a bear form exit read 75 % for a druid at 98 %) — the one reading
   // the report's timeline and replay take too
   const sortedSamples = correctedAdvancedSamples(unit, allUnits);
-  const advancedActions: IAdvancedAction[] = sortedSamples.map(
-    (sample) => ({
-      advancedActorCurrentHp: sample.hp,
-      advancedActorMaxHp: sample.maxHp,
-      advancedActorPositionX: sample.x,
-      advancedActorPositionY: sample.y,
-      advanced: true,
+  const advancedActions: IAdvancedAction[] = sortedSamples.map((sample) => ({
+    advancedActorCurrentHp: sample.hp,
+    advancedActorMaxHp: sample.maxHp,
+    advancedActorPositionX: sample.x,
+    advancedActorPositionY: sample.y,
+    advanced: true,
+    timestamp: sample.timestamp,
+    advancedActorId: unit.id,
+    advancedActorPowers: (sample.powers ?? []).map((p) => ({
+      type: p.powerType as unknown as CombatUnitPowerType,
+      current: p.current,
+      max: p.max,
+    })),
+    logLine: {
+      event: "ADVANCED_SAMPLE" as const,
       timestamp: sample.timestamp,
-      advancedActorId: unit.id,
-      advancedActorPowers: (sample.powers ?? []).map((p) => ({
-        type: p.powerType as unknown as CombatUnitPowerType,
-        current: p.current,
-        max: p.max,
-      })),
-      logLine: {
-        event: "ADVANCED_SAMPLE" as const,
-        timestamp: sample.timestamp,
-        ...(sample.lineIndex !== undefined
-          ? { lineIndex: sample.lineIndex }
-          : {}),
-        parameters: [],
-      },
-    }),
-  );
+      ...(sample.lineIndex !== undefined
+        ? { lineIndex: sample.lineIndex }
+        : {}),
+      parameters: [],
+    },
+  }));
 
   const damageOut: IHpEvent[] = [
     ...unit.damageOut.map((event) => {
@@ -407,9 +423,9 @@ function convertUnit(
         timestamp: event.timestamp,
         ...unitFlagFields(event.params),
         srcUnitId: event.srcId,
-        srcUnitName: event.srcName,
+        srcUnitName: rowName(event.srcId, event.srcName, allUnits),
         destUnitId: event.destId,
-        destUnitName: event.destName,
+        destUnitName: rowName(event.destId, event.destName, allUnits),
         amount: -event.amount,
         effectiveAmount: isPetDest ? -0 : -hpLost(event),
         ...overkillField(event),
@@ -440,13 +456,13 @@ function convertUnit(
         spellName: event.spellName,
         timestamp: event.timestamp,
         srcUnitId: event.attackerId,
-        srcUnitName: event.destName,
+        srcUnitName: rowName(event.attackerId, event.destName, allUnits),
         destUnitId: victimId,
         // GladAbsorbEvent carries no victim name (srcName is the shield
         // owner, destName the attacker), so it comes from the roster.
         destUnitName:
           victimId === event.srcId
-            ? event.srcName
+            ? rowName(event.srcId, event.srcName, allUnits)
             : (allUnits?.[victimId]?.name ?? ""),
         amount: event.absorbedAmount,
         effectiveAmount: isPetDest ? 0 : event.absorbedAmount,
@@ -474,9 +490,9 @@ function convertUnit(
         timestamp: event.timestamp,
         ...unitFlagFields(event.params),
         srcUnitId: event.srcId,
-        srcUnitName: event.srcName,
+        srcUnitName: rowName(event.srcId, event.srcName, allUnits),
         destUnitId: event.destId,
-        destUnitName: event.destName,
+        destUnitName: rowName(event.destId, event.destName, allUnits),
         amount: -event.amount,
         effectiveAmount: isPetDest ? -0 : -hpLost(event),
         ...overkillField(event),
@@ -501,9 +517,9 @@ function convertUnit(
       timestamp: event.timestamp,
       ...unitFlagFields(event.params),
       srcUnitId: event.srcId,
-      srcUnitName: event.srcName,
+      srcUnitName: rowName(event.srcId, event.srcName, allUnits),
       destUnitId: event.destId,
-      destUnitName: event.destName,
+      destUnitName: rowName(event.destId, event.destName, allUnits),
       amount: event.amount,
       effectiveAmount: isPetDest ? 0 : event.effectiveAmount,
       ...(isPetDest ? { petDest: true as const } : {}),
@@ -524,9 +540,9 @@ function convertUnit(
       timestamp: event.timestamp,
       ...unitFlagFields(event.params),
       srcUnitId: event.srcId,
-      srcUnitName: event.srcName,
+      srcUnitName: rowName(event.srcId, event.srcName, allUnits),
       destUnitId: event.destId,
-      destUnitName: event.destName,
+      destUnitName: rowName(event.destId, event.destName, allUnits),
       amount: event.amount,
       effectiveAmount: isPetDest ? 0 : event.effectiveAmount,
       logLine: {
@@ -544,9 +560,9 @@ function convertUnit(
     timestamp: event.timestamp,
     ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
+    srcUnitName: rowName(event.srcId, event.srcName, allUnits),
     destUnitId: event.destId,
-    destUnitName: event.destName,
+    destUnitName: rowName(event.destId, event.destName, allUnits),
     absorbedAmount: event.absorbedAmount,
     ...attackSpellFields(event),
     logLine: {
@@ -577,9 +593,9 @@ function convertUnit(
     timestamp: event.timestamp,
     ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
+    srcUnitName: rowName(event.srcId, event.srcName, allUnits),
     destUnitId: event.destId,
-    destUnitName: event.destName,
+    destUnitName: rowName(event.destId, event.destName, allUnits),
     missType: event.missType,
     amount: event.amount,
     ...(event.crit ? { crit: true as const } : {}),
@@ -601,9 +617,9 @@ function convertUnit(
     timestamp: event.timestamp,
     ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
+    srcUnitName: rowName(event.srcId, event.srcName, allUnits),
     destUnitId: event.destId,
-    destUnitName: event.destName,
+    destUnitName: rowName(event.destId, event.destName, allUnits),
     level: event.level,
     logLine: {
       event: event.eventName as LogEvent,
@@ -626,9 +642,9 @@ function convertUnit(
       timestamp: event.timestamp,
       ...unitFlagFields(event.params),
       srcUnitId: event.srcId,
-      srcUnitName: event.srcName,
+      srcUnitName: rowName(event.srcId, event.srcName, allUnits),
       destUnitId: event.destId,
-      destUnitName: event.destName,
+      destUnitName: rowName(event.destId, event.destName, allUnits),
       logLine: {
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,
@@ -674,7 +690,7 @@ function convertUnit(
       timestamp: event.timestamp,
       ...unitFlagFields(event.params),
       srcUnitId: event.srcId,
-      srcUnitName: event.srcName,
+      srcUnitName: rowName(event.srcId, event.srcName, allUnits),
       destUnitId: event.victimId,
       destUnitName: unit.name,
       absorbedAmount: event.absorbedAmount,
@@ -695,9 +711,9 @@ function convertUnit(
     timestamp: event.timestamp,
     ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
+    srcUnitName: rowName(event.srcId, event.srcName, allUnits),
     destUnitId: event.destId,
-    destUnitName: event.destName,
+    destUnitName: rowName(event.destId, event.destName, allUnits),
     auraType: event.auraType,
     amount: event.amount,
     logLine: {
@@ -714,9 +730,9 @@ function convertUnit(
     timestamp: event.timestamp,
     ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
+    srcUnitName: rowName(event.srcId, event.srcName, allUnits),
     destUnitId: event.destId,
-    destUnitName: event.destName,
+    destUnitName: rowName(event.destId, event.destName, allUnits),
     ...powerCostFields(event),
     logLine: {
       event: event.eventName as LogEvent,
@@ -736,9 +752,9 @@ function convertUnit(
     timestamp: event.timestamp,
     ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
+    srcUnitName: rowName(event.srcId, event.srcName, allUnits),
     destUnitId: event.destId,
-    destUnitName: event.destName,
+    destUnitName: rowName(event.destId, event.destName, allUnits),
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
@@ -753,9 +769,9 @@ function convertUnit(
     timestamp: event.timestamp,
     ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
+    srcUnitName: rowName(event.srcId, event.srcName, allUnits),
     destUnitId: event.destId,
-    destUnitName: event.destName,
+    destUnitName: rowName(event.destId, event.destName, allUnits),
     ...powerCostFields(event),
     logLine: {
       event: event.eventName as LogEvent,
@@ -772,9 +788,9 @@ function convertUnit(
     timestamp: event.timestamp,
     ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
+    srcUnitName: rowName(event.srcId, event.srcName, allUnits),
     destUnitId: event.destId,
-    destUnitName: event.destName,
+    destUnitName: rowName(event.destId, event.destName, allUnits),
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
@@ -790,9 +806,9 @@ function convertUnit(
     timestamp: event.timestamp,
     ...unitFlagFields(event.params),
     srcUnitId: event.srcId,
-    srcUnitName: event.srcName,
+    srcUnitName: rowName(event.srcId, event.srcName, allUnits),
     destUnitId: event.destId,
-    destUnitName: event.destName,
+    destUnitName: rowName(event.destId, event.destName, allUnits),
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,

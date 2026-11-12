@@ -17,6 +17,26 @@ export interface RosterUnit {
   flagCounts: Map<number, number>;
 }
 
+/**
+ * One player can be logged under two name forms in a round: the first rows
+ * (auras re-listed as the arena opens) carry the bare character name, every
+ * later row `Name-Realm-Region` (3 of 7,040 player-rounds of the 605-file
+ * sample, 7–18 rows each). The unit keeps the realm form — the one the rest
+ * of the round is written in — so a reader that compares a row's name with
+ * the unit's does not lose the whole round to its first row.
+ */
+export function isRealmFormOf(
+  guid: string,
+  bare: string,
+  candidate: string,
+): boolean {
+  return (
+    guid.startsWith("Player-") &&
+    !bare.includes("-") &&
+    candidate.startsWith(`${bare}-`)
+  );
+}
+
 export function buildRoster(records: ParsedLine[]): {
   ownerId: string | null;
   units: Map<string, RosterUnit>;
@@ -53,7 +73,11 @@ export function buildRoster(records: ParsedLine[]): {
             flagCounts: new Map(),
           };
           units.set(srcGuid, srcUnit);
-        } else if (srcUnit.name === null && srcName !== null) {
+        } else if (
+          srcName !== null &&
+          (srcUnit.name === null ||
+            isRealmFormOf(srcGuid, srcUnit.name, srcName))
+        ) {
           srcUnit.name = srcName;
         }
         if (srcUnit.flagsSeen.indexOf(srcFlags) === -1) {
@@ -87,7 +111,11 @@ export function buildRoster(records: ParsedLine[]): {
             flagCounts: new Map(),
           };
           units.set(destGuid, destUnit);
-        } else if (destUnit.name === null && destName !== null) {
+        } else if (
+          destName !== null &&
+          (destUnit.name === null ||
+            isRealmFormOf(destGuid, destUnit.name, destName))
+        ) {
           destUnit.name = destName;
         }
         if (destUnit.flagsSeen.indexOf(destFlags) === -1) {

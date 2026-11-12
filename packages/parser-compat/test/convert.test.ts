@@ -844,3 +844,29 @@ describe("critical strikes reach the legacy rows (GH #183)", () => {
     ).toEqual([true]);
   });
 });
+
+describe("one player under two name forms: every row carries the roster's name (T78)", () => {
+  // the round's first rows name the player bare, the later ones with realm
+  const SEEN_BARE = `SPELL_AURA_APPLIED,Player-1-ATK,"Atk",0x548,0x80000000,Player-1-ATK,"Atk",0x548,0x80000000,21562,"Power Word: Fortitude",0x2,BUFF`;
+  const CAST_REALM = `SPELL_CAST_SUCCESS,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,8092,"Mind Blast",0x20,Player-1-ATK,0000000000000000,100,100,0,0,0,0,0,0,0,100,100,0,1.0,1.0,0,1.0,70`;
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-ATK", 0, 258, 2000),
+    CI("Player-2-VIC", 1, 257, 2380),
+    SEEN_BARE,
+    CAST_REALM,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const unit = toLegacyMatch(matches[0]!).units["Player-1-ATK"]!;
+  it("the unit is named in the realm form", () => {
+    expect(unit.name).toBe("Atk-X");
+  });
+  it("its bare-named aura rows read the same name as its casts", () => {
+    const names = new Set([
+      ...unit.auraEvents.map((e) => e.srcUnitName),
+      ...unit.auraEvents.map((e) => e.destUnitName),
+      ...unit.spellCastEvents.map((e) => e.srcUnitName),
+    ]);
+    expect([...names]).toEqual(["Atk-X"]);
+  });
+});

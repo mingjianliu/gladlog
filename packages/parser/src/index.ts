@@ -42,5 +42,6 @@ export type {
   Reaction,
   UnitKind,
 } from "./l3/model";
+export { isRealmFormOf } from "./l3/roster";
 export { SWING_TWIN_WINDOW_MS, swingLandedTwins } from "./l3/swingTwins";
 export { SLIM_PARAMS_KEEP,slimMatchParams } from "./slim";

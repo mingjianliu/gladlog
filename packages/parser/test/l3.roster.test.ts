@@ -184,3 +184,32 @@ describe("SPELL_SUMMON owner linkage (adjudication #18: totems/guardians)", () =
     expect(ele.ownerId).toBe("Player-1-A");
   });
 });
+
+describe("buildRoster — one player under two name forms (T78)", () => {
+  const aura = (name: string, i: number) =>
+    L(
+      `SPELL_AURA_APPLIED,Player-1-AAAA,"${name}",0x548,0x80000000,Player-1-AAAA,"${name}",0x548,0x80000000,21562,"Power Word: Fortitude",0x2,BUFF`,
+      i,
+    );
+  it("the unit keeps the realm form when its first rows carry the bare name", () => {
+    const r = buildRoster([aura("Somebody", 1), aura("Somebody-Realm-EU", 2)]);
+    expect(r.units.get("Player-1-AAAA")!.name).toBe("Somebody-Realm-EU");
+  });
+  it("a realm form is never traded for a bare one, nor for another player's name", () => {
+    const r = buildRoster([
+      aura("Somebody-Realm-EU", 1),
+      aura("Somebody", 2),
+      aura("Somebodyelse-Realm-EU", 3),
+    ]);
+    expect(r.units.get("Player-1-AAAA")!.name).toBe("Somebody-Realm-EU");
+  });
+  it("a pet's name is its first row's, whatever comes later", () => {
+    const pet = (name: string, i: number) =>
+      L(
+        `SPELL_AURA_APPLIED,Pet-0-1-2-3-4-0000000001,"${name}",0x1148,0x80000000,Pet-0-1-2-3-4-0000000001,"${name}",0x1148,0x80000000,136,"Mend Pet",0x8,BUFF`,
+        i,
+      );
+    const r = buildRoster([pet("Cat", 1), pet("Cat-Two", 2)]);
+    expect(r.units.get("Pet-0-1-2-3-4-0000000001")!.name).toBe("Cat");
+  });
+});
