@@ -380,6 +380,77 @@ describe("computeMitigationAudit(A 形态)", () => {
     });
   });
 
+  // codex 85-tk-H-T60-1 #1 / #2
+  const fromCaster = (victim: ICombatUnit, n: number, ids: string[]) => {
+    for (const a of victim.auraEvents as unknown as Array<{
+      spellId: string;
+      srcUnitId: string;
+      srcUnitName: string;
+      timestamp: number;
+    }>)
+      if (ids.includes(`${a.spellId}@${a.timestamp}`)) {
+        a.srcUnitId = `caster${n}`;
+        a.srcUnitName = `Caster${n}`;
+      }
+  };
+  test("合并行的吸收量:两个施法者同一个盾重叠时,一条吸收行只算一次", () => {
+    const pws = { spellId: "17", spellName: "Power Word: Shield" };
+    const victim = mkVictim(
+      "v1",
+      [{ atS: 55, amount: 100_000, school: "0x20" }],
+      [
+        { ...pws, fromS: 52, toS: 58 },
+        { ...pws, fromS: 53, toS: 57 },
+      ],
+    );
+    fromCaster(victim, 2, ["17@53000", "17@57000"]);
+    (victim as { absorbsIn: unknown[] }).absorbsIn = [
+      {
+        ...pws,
+        absorbedAmount: 50_000,
+        timestamp: 54_000,
+        logLine: { event: "SPELL_ABSORBED", timestamp: 54_000 },
+      },
+    ];
+    expect(
+      computeMitigationAudit(victim, combatOf(), 60).rows.filter(
+        (r) => r.spellName === pws.spellName,
+      ),
+    ).toMatchObject([
+      { kind: "absorb", activeOverlapS: 6, absorbedAmount: 50_000 },
+    ]);
+  });
+
+  test("合并行的时长:并进同一次按键的孪生光环也算进并集", () => {
+    const cry = (spellId: string, fromS: number, toS: number) => ({
+      spellId,
+      spellName: "Rallying Cry",
+      fromS,
+      toS,
+    });
+    const victim = mkVictim(
+      "v1",
+      [{ atS: 55, amount: 100_000, school: "0x1" }],
+      [
+        cry("97462", 52, 53),
+        cry("97463", 52.001, 55),
+        cry("97462", 57, 58),
+        cry("97463", 57.001, 59),
+      ],
+    );
+    fromCaster(victim, 2, [
+      "97462@57000",
+      "97462@58000",
+      "97463@57001",
+      "97463@59000",
+    ]);
+    const rows = computeMitigationAudit(victim, combatOf(), 60).rows.filter(
+      (r) => r.spellName === "Rallying Cry",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.activeOverlapS).toBe(5);
+  });
+
   test("arith:反推只吃激活区间∩窗口∩schoolMask 命中的观测伤害", () => {
     const victim = mkVictim(
       "v1",

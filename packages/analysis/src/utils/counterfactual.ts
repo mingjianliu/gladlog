@@ -590,6 +590,17 @@ export function computeMitigationAudit(
   // the same line: an `absorb` row stands (it carries the measured amount);
   // of two `mechanic` rows the cast's id stands. The longer overlap is kept.
   // A twin that is priced (a reduction, an immunity) keeps both rows.
+  /** the spans (and their aura ids) an off-table row stands for: its own
+   * interval, and those of the rows folded into it */
+  const cover = new Map<
+    IMitigationAuditRow,
+    Array<{ spellId: string; from: number; to: number }>
+  >();
+  for (const { row, iv } of offTableRows)
+    cover.set(row, [
+      { spellId: iv.spellId, from: iv.overlapFrom, to: iv.overlapTo },
+    ]);
+  const coverOf = (row: IMitigationAuditRow) => cover.get(row) ?? [];
   const twinOf = (a: IWindowedAuraInterval, b: IWindowedAuraInterval) =>
     a !== b &&
     a.srcUnitName === b.srcUnitName &&
@@ -607,6 +618,9 @@ export function computeMitigationAudit(
       castsOfEffectAura(iv.spellId).includes(other.iv.spellId);
     const [keep, drop] = dropThis ? [other.row, row] : [row, other.row];
     keep.activeOverlapS = Math.max(keep.activeOverlapS, drop.activeOverlapS);
+    // the row that stays stands for both auras' time (the T60 union below
+    // reads it)
+    coverOf(keep).push(...coverOf(drop));
     rows.splice(rows.indexOf(drop), 1);
   }
 
@@ -638,8 +652,13 @@ export function computeMitigationAudit(
     )
       continue;
     const keep = group[0]!.row;
-    const spans = group
-      .map((e) => [e.iv.overlapFrom, e.iv.overlapTo] as [number, number])
+    // every span the group's rows stand for — a row GH #201 folded a twin
+    // into brings the twin's (codex 85-tk-H-T60-1 #2: two presses of
+    // Rallying Cry, each kept at its longer twin's 3 s and 2 s, were
+    // unioned over the two short cast auras alone)
+    const covered = group.flatMap((e) => coverOf(e.row));
+    const spans = covered
+      .map((c) => [c.from, c.to] as [number, number])
       .sort((a, b) => a[0] - b[0]);
     let upS = 0;
     let end = -Infinity;
@@ -649,8 +668,26 @@ export function computeMitigationAudit(
       end = to;
     }
     keep.activeOverlapS = Math.max(keep.activeOverlapS, round1(upS));
-    const absorbed = group.reduce((n, e) => n + (e.row.absorbedAmount ?? 0), 0);
     if (group.some((e) => e.row.kind === "absorb")) {
+      // each absorbed row once: two casters' shields of one id up together
+      // share the rows of that id (codex #1: one 50k row under two
+      // overlapping intervals summed to 100k)
+      let absorbed = 0;
+      for (const ev of victim.absorbsIn ?? []) {
+        const ts = ev.logLine?.timestamp;
+        const amount = Math.abs(Number(ev.absorbedAmount) || 0);
+        if (typeof ts !== "number" || amount <= 0) continue;
+        // the bounds `absorbContributionsInWindow` reads a single row over
+        if (
+          covered.some(
+            (c) =>
+              c.spellId === ev.spellId &&
+              ts >= combat.startTime + c.from * 1000 &&
+              ts <= combat.startTime + c.to * 1000,
+          )
+        )
+          absorbed += amount;
+      }
       keep.kind = "absorb";
       keep.absorbedAmount = absorbed;
       keep.absorbedPctMaxHp =

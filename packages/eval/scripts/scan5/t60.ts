@@ -33,15 +33,7 @@ import { SPELL_CATEGORIES } from "@gladlog/analysis/src/data/spellCategories";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import { COUNTERFACTUAL_WINDOW_S } from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
 
-import {
-  deathMs,
-  fmtS,
-  type IRoundCtx,
-  nameOf,
-  secOf,
-  successesOf,
-  tsOf,
-} from "./ctx";
+import { fmtS, type IRoundCtx, nameOf, secOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = [
   "holyShieldRenewCastRow",
@@ -96,25 +88,42 @@ const DEATH_LINE = /^(\d+:\d\d)\s+\[DEATH\]\s+(\d+)\(/;
 const TIMED_LINE = /^(\d+:\d\d)\s/;
 
 function deathAudit(ctx: IRoundCtx): void {
+  const names = [...new Set(FAMILY.map((id) => nameOf(id)))];
+  for (const victim of ctx.players as any[]) {
+    // the audit is printed under a friendly death (`counterfactualOf`)
+    if (!ctx.owner || victim.reaction !== ctx.owner.reaction) continue;
+    const pid = ctx.pidOf(victim.name);
+    if (!pid) continue;
+    // every death the block is printed for, not the first alone (codex
+    // 85-tk-H-T60-1 #3: a second death of one player went unread)
+    const deaths = [
+      ...new Set(
+        ((victim.deathRecords ?? []) as any[]).map((d) => Number(d.timestamp)),
+      ),
+    ].filter((ms) => Number.isFinite(ms) && ms <= ctx.roundEndAt);
+    for (const diedMs of deaths) deathAuditOf(ctx, victim, pid, diedMs, names);
+  }
+}
+
+function deathAuditOf(
+  ctx: IRoundCtx,
+  victim: any,
+  pid: string,
+  diedMs: number,
+  names: string[],
+): void {
   const combat = {
     startTime: ctx.start,
     endTime: ctx.end,
     units: ctx.legacy.units,
   };
-  const names = [...new Set(FAMILY.map((id) => nameOf(id)))];
-  for (const victim of ctx.players as any[]) {
-    // the audit is printed under a friendly death (`counterfactualOf`)
-    if (!ctx.owner || victim.reaction !== ctx.owner.reaction) continue;
-    const diedMs = deathMs(victim);
-    if (!Number.isFinite(diedMs) || diedMs > ctx.roundEndAt) continue;
-    const pid = ctx.pidOf(victim.name);
-    if (!pid) continue;
+  {
     const deathS = (diedMs - ctx.start) / 1000;
     const at = ctx.lines.findIndex((l) => {
       const m = DEATH_LINE.exec(l);
       return !!m && m[2] === pid && secOf(m[1]!) === Math.floor(deathS);
     });
-    if (at < 0) continue;
+    if (at < 0) return;
     // the block's audit rows, by the shield name each prints
     const rowsOfName = new Map<string, number>();
     for (let i = at + 1; i < ctx.lines.length; i++) {
