@@ -150,7 +150,12 @@ function runRound(ctx: IContext): void {
     for (const c of u.spellCastEvents ?? []) {
       if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const ts = c.logLine.timestamp;
-      if (outOfRound(ts)) continue;
+      // the round cut reads the press where the product dates it: the
+      // Metamorphosis landing row can fall after the round-ending death its
+      // activation preceded (codex 85-tk-J-T75-1b)
+      const metaMs =
+        c.spellId === "200166" ? castRowActivationMs(u, c.spellId, ts) : ts;
+      if (outOfRound(metaMs)) continue;
       const t = at(ts);
       if (c.spellId === "363916" && c.destUnitId && c.destUnitId !== u.id) {
         const d = byId.get(c.destUnitId);
@@ -204,11 +209,7 @@ function runRound(ctx: IContext): void {
       // the Metamorphosis press is dated at its activation, not at the
       // 200166 landing row (`castRowActivationMs` — GH #203)
       if (c.spellId === "200166")
-        press(
-          "havocMeta",
-          "Metamorphosis",
-          at(castRowActivationMs(u, c.spellId, ts)),
-        );
+        press("havocMeta", "Metamorphosis", at(metaMs));
       if (
         c.spellId === "33891" &&
         (u.auraEvents ?? []).some(
