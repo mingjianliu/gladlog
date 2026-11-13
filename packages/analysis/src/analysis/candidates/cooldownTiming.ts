@@ -685,7 +685,10 @@ function syncCdReachable(
 
 /** When the press of `c` began: the owner's SPELL_CAST_START of the same
  *  spell ≤ SYNC_CAST_BAR_MAX_S before the success, else the success. */
-function syncPressStartS(cd: SyncWindowCd, successS: number): number {
+function syncPressStartS(
+  cd: Pick<SyncWindowCd, "spellId" | "owner" | "matchStartMs">,
+  successS: number,
+): number {
   const starts = cd.owner?.castStartEvents;
   if (!starts?.length || cd.matchStartMs === undefined) return successS;
   // the LATEST start of the spell before the success is this bar
@@ -819,9 +822,11 @@ export function timelinePressMsOf(
 }
 
 /** Did this press of `cd` enter the lock `w` — the ONE "entered" test
- *  (`evaluateSyncWindow`'s verdict and the `enteredNextLock` fact). */
-function castEntersWindow(
-  cd: SyncWindowCd,
+ *  (`evaluateSyncWindow`'s verdict and the `enteredNextLock` fact; eval's
+ *  scan5/fact10 `pressInsideLockNotEntered` asks it of the buttons it rules
+ *  on, T94). */
+export function castEntersWindow(
+  cd: Pick<SyncWindowCd, "spellId" | "owner" | "matchStartMs" | "castEndS">,
   c: { timeSeconds: number },
   w: { fromSeconds: number; toSeconds: number },
 ): boolean {

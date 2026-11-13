@@ -255,6 +255,7 @@ import { talentRankOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { isDeadAt } from "@gladlog/analysis/src/utils/unitDeath";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
+import { alreadyUpApplication } from "./scan5/t94Picks";
 import {
   type IContext,
   type IScan,
@@ -1834,10 +1835,47 @@ function runRound(ctx: IContext): void {
         // itself opens somewhere inside it — an aura put up earlier in that
         // same second is the "already up" one (Greater Invisibility at
         // 1:18.448, burst open 1:18.768: reading `<= bFrom` took the press
-        // of a minute before)
+        // of a minute before). But an aura still on the target when that
+        // second begins (its removal, or an unseen holder's first own
+        // action, is later) is the one already up, whatever is applied in
+        // the second (codex 85-tk-I-T94-1 #2: Vanish up from 77.9, ended by
+        // an action at 78.3, re-applied 78.8 — the re-application is the
+        // producer's "pressed 0.6s after", and taking it hid the action).
         const applyRow =
           im[3] === "already up"
-            ? applies.filter((a) => a.timestamp < bFrom + 1000).at(-1)
+            ? alreadyUpApplication(
+                applies.map((a) => {
+                  const removed = ((tgt.auraEvents ?? []) as any[]).find(
+                    (r) =>
+                      r.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+                      r.spellId === a.spellId &&
+                      r.timestamp >= a.timestamp,
+                  );
+                  const next = applies.find(
+                    (n) => n.spellId === a.spellId && n.timestamp > a.timestamp,
+                  );
+                  // the end the log shows; an unseen holder's is its first
+                  // own action (the end this check itself reads below)
+                  const endMs =
+                    removed && (!next || removed.timestamp <= next.timestamp)
+                      ? (removed.timestamp as number)
+                      : Math.min(
+                          next?.timestamp ?? Infinity,
+                          holderFirstOwnActionAfterMs(
+                            tgt,
+                            a.timestamp,
+                            String(a.spellId),
+                            units,
+                          ),
+                        );
+                  return {
+                    timestamp: a.timestamp as number,
+                    spellId: a.spellId,
+                    endMs,
+                  };
+                }),
+                bFrom,
+              )
             : applies.find(
                 (a) =>
                   Math.abs(a.timestamp - (bFrom + Number(im[4]) * 1000)) <=

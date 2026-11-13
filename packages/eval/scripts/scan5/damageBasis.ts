@@ -126,6 +126,7 @@ import {
   successesOf,
   tsOf,
 } from "./ctx";
+import { ledgerOverlapsOfItem } from "./t94Picks";
 
 export const CHECKS = [
   "duringExternalShare",
@@ -467,9 +468,7 @@ function allyOverlapDeferral(ctx: IRoundCtx): void {
   const ledgerOf = (): ReturnType<typeof analyzeBurstLedger> => {
     if (ledger) return ledger;
     try {
-      const side = ctx.players.filter(
-        (u) => u.reaction === ctx.owner.reaction,
-      );
+      const side = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
       const enemies = ctx.players.filter(
         (u) => u.reaction !== ctx.owner.reaction,
       );
@@ -486,7 +485,13 @@ function allyOverlapDeferral(ctx: IRoundCtx): void {
       continue;
     }
     if (!burst || !line.includes("Ally CDs overlapping:")) continue;
-    for (const m of line.matchAll(ALLY_ITEM)) {
+    // items of this line that print the same ally, cooldown, length and
+    // target, in print order (the ledger's order)
+    const printedTimes = new Map<string, number>();
+    const items = [...line.matchAll(ALLY_ITEM)];
+    const keyOf = (m: RegExpMatchArray) =>
+      `${m[1]}|${m[2]}|${(+m[3]!).toFixed(1)}|${m[4]}`;
+    for (const m of items) {
       const ally = ctx.byName.get(m[1]!);
       const target = ctx.byName.get(m[4]!);
       if (!ally || !target) continue;
@@ -525,8 +530,18 @@ function allyOverlapDeferral(ctx: IRoundCtx): void {
             a.overlapSeconds.toFixed(1) === (+m[3]!).toFixed(1) &&
             a.topTarget?.unitName === target.name,
         );
-      const spans = summed.length
-        ? summed.map(
+      // two overlaps of one cooldown can print alike (Soul Immolation,
+      // [11, 14.04] and [14.04, 17.08], both `3.0s` on one target): the
+      // n-th such item of the line is the n-th such ledger entry — any of
+      // them would let the second one's clean sum clear the first one's
+      // corrupted figure (codex 85-tk-I-T94-1 #1). A line and a ledger
+      // that do not count alike keep every span.
+      const nth = printedTimes.get(keyOf(m)) ?? 0;
+      printedTimes.set(keyOf(m), nth + 1);
+      const alike = items.filter((x) => keyOf(x) === keyOf(m)).length;
+      const mine = ledgerOverlapsOfItem(summed, nth, alike);
+      const spans = mine.length
+        ? mine.map(
             (a) =>
               [
                 ctx.start + a.overlapFromSeconds * 1000,

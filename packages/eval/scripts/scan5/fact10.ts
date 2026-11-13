@@ -4,8 +4,8 @@
  *
  *  - pressInsideLockNotEntered (class 1, D2–D4 D31): a `missed-sync-window`
  *    menu row ("none entered the window") whose lock — the producer's own
- *    raw lock, from `SYNC_ENTER_LEAD_S` before its start to its end
- *    (`syncRowPressSpanMs`, T94) — holds a press, by a player
+ *    raw lock, asked with the producer's own "entered" test
+ *    (`syncRowPressEnters`, T94) — holds a press, by a player
  *    of the owner's side, of a major offensive button the roster filed as a
  *    press fact only (070c4933 2:06: Breath of Eons pressed at 2:09.572
  *    inside the Sleep Walk → Terror of the Skies lock). The id list is the
@@ -116,9 +116,9 @@
  *    Counted: every such landing in the band with a length that says one.
  */
 import {
+  castEntersWindow,
   enemyHealerCcWindows,
   mergeHealerCcWindows,
-  SYNC_ENTER_LEAD_S,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { HEALER_CC_MIN_S } from "@gladlog/analysis/src/context/observedConsequences";
 import {
@@ -240,40 +240,72 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
 );
 
 const SYNC_ROW =
-  /id=missed-sync-window:\S+ type=missed-sync-window t=(\d+)s [^\n]*?facts=\{t=(\d+), windowEndT=(\d+),/g;
+  /id=missed-sync-window:\S+ type=missed-sync-window t=(\d+)s [^\n]*?facts=\{t=(\d+), windowEndT=(\d+), healer=([^,}]*)/g;
+
+/** A producer lock as the scan holds it (`mergeHealerCcWindows`). */
+export interface ISyncRowLock {
+  fromSeconds: number;
+  toSeconds: number;
+  healerName?: string;
+}
 
 /**
- * The span (ms, [from, to)) in which a ruled button's press makes a
- * `missed-sync-window` row wrong. With the producer's lock found — the one
- * whose rendered start is the row's `t` — it is the producer's own "pressed
- * in" span on the raw endpoints: `SYNC_ENTER_LEAD_S` before the lock to its
- * end, inclusive (`castEntersWindow`). The row's floored seconds alone
- * (−2 s / +1 s) reach up to a second past both: a Meteor 2.258 s before a
- * lock at 242.829 and a Goremaw's Bite 0.234 s after one ending 162.595 were
- * read as inside (T94; 5 rows / 3 facts on 605). No lock found → the row's
- * seconds, the widest reading.
+ * The producer's lock a `missed-sync-window` row was written for: the one on
+ * the row's healer whose rendered start is the row's `t`, and whose rendered
+ * end is the row's `windowEndT` — or runs past it, for a lock the round's
+ * end cut (the row prints the cut end; "entered" is read on the whole lock).
+ * Two healers locked in one second are two locks (codex 85-tk-I-T94-1 #4:
+ * healer B's 100–103 row took healer A's [100.1, 106.1] and a press at 104
+ * read as inside B's lock). `healer` undefined = a row that names none.
  */
-export function syncRowPressSpanMs(
-  startMs: number,
+export function syncRowLock(
   rowT: number,
   rowEndT: number,
-  locks: ReadonlyArray<{ fromSeconds: number; toSeconds: number }>,
-): { from: number; to: number } {
-  const lock = locks.find(
+  healer: string | undefined,
+  locks: readonly ISyncRowLock[],
+): ISyncRowLock | undefined {
+  const mine = locks.filter(
     (w) =>
       toRenderSecond(w.fromSeconds) === rowT &&
-      toRenderSecond(w.toSeconds) >= rowEndT,
+      (healer === undefined || w.healerName === healer),
   );
-  if (!lock)
-    return {
-      from: startMs + (rowT - SYNC_ENTER_LEAD_S) * 1000,
-      to: startMs + (rowEndT + 1) * 1000,
-    };
-  return {
-    from: startMs + (lock.fromSeconds - SYNC_ENTER_LEAD_S) * 1000,
-    // inclusive end, as the producer's `<= toSeconds`
-    to: startMs + lock.toSeconds * 1000 + 1,
+  return (
+    mine.find((w) => toRenderSecond(w.toSeconds) === rowEndT) ??
+    mine.find((w) => toRenderSecond(w.toSeconds) > rowEndT)
+  );
+}
+
+/**
+ * Does this press make a `missed-sync-window` row ("none entered") wrong?
+ * The producer's own "entered" test (`castEntersWindow`) on the producer's
+ * own lock: pressed — or its cast bar begun — from `SYNC_ENTER_LEAD_S`
+ * before the lock to its last millisecond, or still running when the lock
+ * began (the press plus the holder's full buff length; the scan has no CD
+ * timeline, so no observed end).
+ *
+ * The row's floored seconds alone (−2 s / +1 s) reach up to a second past
+ * both ends: a Meteor 2.258 s before a lock at 242.829 and a Goremaw's Bite
+ * 0.234 s after one ending 162.595 were read as inside (T94; 5 rows / 3
+ * facts on 605). And a fixed press interval is not the producer's test: a
+ * Ravager pressed 2.1 s before a lock and running through it entered it
+ * (codex 85-tk-I-T94-1 #3). No lock found → the row's seconds as the lock,
+ * the widest reading.
+ */
+export function syncRowPressEnters(
+  press: { spellId: string; owner: unknown; timeSeconds: number },
+  matchStartMs: number,
+  row: { t: number; endT: number; healer?: string },
+  locks: readonly ISyncRowLock[],
+): boolean {
+  const lock = syncRowLock(row.t, row.endT, row.healer, locks) ?? {
+    fromSeconds: row.t,
+    toSeconds: row.endT + 0.999,
   };
+  return castEntersWindow(
+    { spellId: press.spellId, owner: press.owner, matchStartMs },
+    { timeSeconds: press.timeSeconds },
+    lock,
+  );
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -302,7 +334,7 @@ export function run(ctx: IRoundCtx): void {
   // the producer's own locks (T94): the row prints the lock's floored
   // endpoints; "entered" is judged on the raw ones, with the producer's lead
   const enemies = ctx.players.filter((u) => u.reaction !== ctx.owner.reaction);
-  let locks: Array<{ fromSeconds: number; toSeconds: number }> = [];
+  let locks: ISyncRowLock[] = [];
   try {
     locks = mergeHealerCcWindows(
       enemyHealerCcWindows(side, enemies, ctx.legacy),
@@ -312,7 +344,7 @@ export function run(ctx: IRoundCtx): void {
   }
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
     ctx.bump("pressInsideLockNotEntered");
-    const { from, to } = syncRowPressSpanMs(ctx.start, +m[2]!, +m[3]!, locks);
+    const row = { t: +m[2]!, endT: +m[3]!, healer: m[4] || undefined };
     const seen = new Set<string>();
     for (const u of side) {
       const healer = isHealerSpec(u.spec);
@@ -322,7 +354,15 @@ export function run(ctx: IRoundCtx): void {
         if (!RULED.has(id) && !OPEN.has(id)) continue;
         if (HEALER_SPEC_PRESS.has(id) && healer) continue;
         const t = tsOf(c);
-        if (t < from || t >= to) continue;
+        if (
+          !syncRowPressEnters(
+            { spellId: id, owner: u, timeSeconds: (t - ctx.start) / 1000 },
+            ctx.start,
+            row,
+            locks,
+          )
+        )
+          continue;
         const name = nameOf(id, c.spellName);
         if (seen.has(name)) continue;
         seen.add(name);
