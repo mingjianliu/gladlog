@@ -6335,3 +6335,16 @@ screen 615-2603 ms -> frame committed 67-357 ms, first content painted
 129-453 ms. The two later commits (revisited shuffle round R1 -> R2 -> R3 ->
 R1: 6 synchronous derives -> 0) are covered by unit tests, not by a probe
 run.
+
+v538 (2026-11-13; pipeline batch B52, T61 attempt 2). Ice Cold (414658 /
+414659, the talent that replaces Ice Block) is a 70 % wall with its own
+MITIGATION_TABLE row and verdict (user ruling R25). A holder's ledger row
+is built under the kit's name (Ice Cold) and keeps the listed button for
+name-keyed lookups (CD reference, self-only defensive gate). An unpressed
+Ice Cold makes no counterfactual claim; its 6 s cover is not priced over
+the counterfactual window; a holder's row is not offered as a
+missed-cleanse self-removal (the table's rates were measured on Ice Block
+casts). The SPEC BASELINES reference row still reads "Ice Block" for such
+a holder (one cohort per listed button; benchmarks.json not regenerated).
+605: 0 of 7,048 files differ at the 2c commit (2 Ice Cold context files in
+the corpus); the two later commits were not captured.

@@ -1177,5 +1177,11 @@
  *  pipeline numbers every batch. Desktop only: opening a match commits a
  *  frame first and fills the report in stages. See
  *  docs/prompt-version-history.md.
+ *
+ * v538 (2026-11-13; pipeline batch B52, T61): Ice Cold (the talent that
+ *  replaces Ice Block) is a 70 % wall with its own verdict, named Ice Cold
+ *  wherever its holder's row is named or classified (ruling R25). An
+ *  unpressed Ice Cold makes no counterfactual claim and is not offered as
+ *  a missed-cleanse self-removal. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 537;
+export const PROMPT_VERSION = 538;
