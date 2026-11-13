@@ -1111,5 +1111,13 @@
  *  and healer-exposure sweeps read line of sight on raw samples (GH #206);
  *  a kick refused (IMMUNE / REFLECTED) while the target's cast bar was
  *  running no longer reads "hit nothing". See docs/prompt-version-history.md.
+ *
+ * v529 (2026-11-13; pipeline batch B41, T64 + T69 + T68): an immunity
+ *  pressed in the miss row's own millisecond is named as the miss's cause;
+ *  an aura on the kick victim changes the lockout length (Concentration
+ *  Aura x0.799, Oppressing Roar x1.3), with one lock end for the kick-eaten
+ *  text and the pressure window; the disarm DR family comes from DB2
+ *  (Faerie Swarm, Sticky Tar Bomb join it). See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 528;
+export const PROMPT_VERSION = 529;

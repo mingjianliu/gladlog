@@ -6154,3 +6154,24 @@ target had a bar running at the refusal prints the miss tag alone
 (`— [IMMUNE: N]`) instead of "hit nothing", in the [KICK] line and the
 burst-ledger Kicks: row. 605: 53 / 108 tagged kick lines -> 0; candidate rows 0. The burst-window reference table is formally stale with the delivery gate
 (GH #115).
+
+v529 (2026-11-13; pipeline batch B41, T64 + T69 + T68). (1) T64 — an
+immunity pressed in the miss row's own millisecond (the IMMUNE row first, the
+aura's APPLIED and the press after it) is the miss's cause; one exported test
+shared with scan2's immuneCause check. 605: immuneCauseUnnamed 3 / 148 -> 0 /
+145; 3 of 30,448 immunity / avoidance lines gain `(Ice Block was up)`;
+candidate rows 0. (2) T69 (GH #134) — an aura on the kick victim changes the
+lockout: DB2 aura 232 (mechanic duration, misc 26) with its PvpMultiplier —
+Concentration Aura x0.799, Oppressing Roar x1.3 — applied inside
+kickLockoutSecondsFor, and one lock end for the kick-eaten text and the
+pressure window. 605 raw pairs: Concentration Aura holders casting before the
+modelled end 23 / 43 -> 8 / 43, Oppressing Roar still refused after it 1 / 7
+-> 0 / 7; 39 [CONSEQ] lines, 15 [RES] lines, 6 kick-eaten rows and 3
+death-setup rows change their lockout length; candidate rows added 0, removed 0. Open FLAG kept in the table's comment: two pairs of one Warlock fit x0.7
+(the row without its PvP multiplier). (3) T68 (GH #132) — the disarm DR
+family comes from DB2 (DiminishType 128): Faerie Swarm and Sticky Tar Bomb
+join Disarm / Dismantle / Grapple Weapon and the hand list is deleted; the
+sync-window scan, its calibration copy and the candidate share one round-end
+cut. 605: 3 press lines gain `DR: Disarm Immune`, [CC BOOKMARK] +9 lines / -2
+displaced; candidate rows 0. The sync-window reference table is formally
+stale with the round-end cut (GH #115).
