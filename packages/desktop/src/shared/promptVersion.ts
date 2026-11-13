@@ -1158,5 +1158,12 @@
  *  Righteous shortens Avenging Wrath / Avenging Crusader; `N hits immune`
  *  counts the ally's pets and guardians. See
  *  docs/prompt-version-history.md.
+ *
+ * v535 (2026-11-13; pipeline batch B47, T72 attempt 2): a press-only
+ *  offensive button (Meteor, Soul Fire — no effect aura, no official
+ *  length) gets a span that reaches its own delivery
+ *  (pressDeliveryEndSeconds, PRESS_DELIVERY_REACH_S = 5 s), so its burst
+ *  window, totals and the kill-window facts include the hit. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 534;
+export const PROMPT_VERSION = 535;

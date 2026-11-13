@@ -6281,3 +6281,23 @@ hits immune` and its bins count the ally's pets and guardians through the
 one summon -> owner predicate (`foldsIntoOwner`). 605: immuneHitPetFold 313
 rows / 105 facts / 1196 -> 0; 286 [ENEMY DEF] lines in 277 context files
 change (repro: `4 hits immune` -> `17 hits immune`); candidate rows 0.
+
+v535 (2026-11-13; pipeline batch B47, T72 attempt 2). A press-only
+offensive button — a logged cast with no effect aura and no official length
+(Meteor, Soul Fire) — had a zero-length span, so its burst window was the
+press instant and the hit landed outside it (CI's report-synth scene showed
+`0:08-0:08 Meteor [no damage dealt]` beside a recap listing Meteor at
+0:11). `enemyCDs.pressDeliveryEndSeconds` (+ PRESS_DELIVERY_REACH_S = 5 s,
+one bound for every button) is written into buffEndSeconds for such a cast
+after the observed-chain, talent-aura and unclosed-aura readers, and every
+reader of burstCastSpan / buffEndSeconds shares it;
+`burstLedger.burstSaysNoDamage` is the one reading behind the prompt's `No
+damage dealt` line and the desktop card's tag. 605:
+pressOnlyDeliveryOutsideBurst 114 / 371 -> 0 / 162 (Meteor 80, Soul Fire
+34); desktop ledger rows falsely tagged no-damage 108 -> 0; burst totals
+leaving the delivery out 6 -> 0; a fully absorbed delivery counts
+(delivered-after-window 13 / 371 -> 0 / 371); 54 context files differ.
+Candidate rows +1 / -4: missed-sync-window t=242 leaves three owners' files
+of one round (the mate's Meteor landed inside the healer CC), and one
+kick-eaten row is replaced by another of the same owner under the cap.
+Visual baseline: the report-synth scene changes with this fix.
