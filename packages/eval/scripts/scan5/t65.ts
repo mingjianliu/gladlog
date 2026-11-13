@@ -33,10 +33,10 @@
  *    for ≥ 1.5 s inside the round, then ≥ 150 rows within 0.5 s. Occasion
  *    (second kind): such a catch-up burst holds a control's REMOVED row.
  *  - `envMistInvoke` (GH #123 item 16), once per round: an Enveloping Mist
- *    124682 whose last application the log shows (APPLIED or REFRESH, read
- *    on the rows) fell inside its monk's Invoke Chi-Ji / Yu'lon window.
- *    Wrong (T84): that run was left without a REMOVED row and the builder,
- *    given the casters, cut it short of the plain length + the window's
+ *    124682 run the log left without a REMOVED row, whose last application
+ *    as the builder read it (`capFromS`) fell inside its monk's Invoke
+ *    Chi-Ji / Yu'lon window. A run the log closed is not counted.
+ *    Wrong (T84): the builder, given the casters, cut it short of the plain length + the window's
  *    4 s from that application with the round still running. Occasions:
  *    such a run the cap or the round's end closed at its full length; one
  *    the monk's next application closed; a Gift of the Celestials holder's
@@ -558,10 +558,11 @@ function envMistInvoke(ctx: IRoundCtx): void {
       // re-reading of the rows: three re-readings each missed a path of
       // its normalisation (codex 85-tk-G-T84-1 #2 a REFRESH past the
       // window, 1b a re-broadcast APPLIED, 1c two pieces joined by
-      // `joinReappliedIntervals`). An interval the log closed has no cap;
-      // the window is asked of its start.
-      const anchorMs =
-        iv.capFromS !== undefined ? ctx.start + iv.capFromS * 1000 : fromMs;
+      // `joinReappliedIntervals`). An interval the log closed has no cap
+      // and is not counted (codex 1d #2: asking the window of its start
+      // mixed two populations).
+      if (!iv.inferredEnd || iv.capFromS === undefined) continue;
+      const anchorMs = ctx.start + iv.capFromS * 1000;
       const own = ((u.auraEvents ?? []) as any[]).filter(
         (a: any) =>
           String(a.spellId) === ENVELOPING_MIST && a.srcUnitId === monk.id,
@@ -577,7 +578,6 @@ function envMistInvoke(ctx: IRoundCtx): void {
       });
       if (!inside) continue;
       ctx.bump("envMistInvoke");
-      if (!iv.inferredEnd) continue;
       const id = `${monk.name}:${u.name}:${iv.fromS.toFixed(3)}`;
       const where = `${monk.name}'s Enveloping Mist on ${u.name} ${iv.fromS.toFixed(1)}–${iv.toS.toFixed(1)}s`;
       // closed by the monk's next application of it (a recast whose REMOVED

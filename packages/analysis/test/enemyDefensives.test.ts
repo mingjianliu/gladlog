@@ -1587,6 +1587,17 @@ describe("splitAtRepressRefresh — a cast-backed REFRESH is a second press (rou
     const out = splitAtRepressRefresh([iv], unit(23.64), 0, () => [12.98]);
     expect(out.map((x) => [x.fromS, x.toS])).toEqual([[12.98, 35.64]]);
   });
+  it("a piece the re-press ends carries no cap anchor; the last piece keeps the interval's (T84, codex 85-tk-G-T84-1d)", () => {
+    const open = { ...iv, inferredEnd: true, capFromS: 23.64 };
+    const out = splitAtRepressRefresh([open], unit(23.64), 0, () => [
+      12.98, 23.639,
+    ]);
+    expect(out.map((x) => [x.inferredEnd, x.capFromS])).toEqual([
+      [false, undefined],
+      [true, 23.64],
+    ]);
+    expect("capFromS" in out[0]!).toBe(false);
+  });
 });
 
 // User ruling 2026-10-20 (fact1215 retest idx 22, 「都要」): an absorb shield

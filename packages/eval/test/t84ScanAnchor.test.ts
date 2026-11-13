@@ -145,6 +145,29 @@ describe("scan5/t65 envMistInvoke — the cap's anchor (codex 85-tk-G-T84-1)", (
     }
   });
 
+  it("a run the log closed is not counted, wherever its applications fell (codex 85-tk-G-T84-1d #2)", () => {
+    for (const rows of [
+      // last application inside the window (Invoke 10–35 s)
+      [
+        [APPLIED, 8],
+        [REFRESH, 12],
+        [REMOVED, 23],
+      ],
+      // first inside, last outside
+      [
+        [APPLIED, 34],
+        [REFRESH, 36],
+        [REMOVED, 43],
+      ],
+      // all of it inside
+      [
+        [APPLIED, 12],
+        [REMOVED, 20],
+      ],
+    ] as Array<Array<[LogEvent, number]>>)
+      expect(scan(rows)).toEqual({ checked: 0, seen: [] });
+  });
+
   it("two pieces the builder joined are capped from the later one (codex 85-tk-G-T84-1c)", () => {
     // one Mist cast at 34.5 s, APPLIED at 34.5 and again at 35.1, no
     // REMOVED: the builder splits at 35.1 (the cast is within its pairing

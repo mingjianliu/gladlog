@@ -42,6 +42,41 @@ describe("Touch of Karma ends with its shield", () => {
     });
     expect(karma(buildAuraIntervals(bare, combat))).toEqual([[20, 30]]);
   });
+  it("the marker takes the shield's end whole: inferred or not, and where its cap was counted from (T84, codex 85-tk-G-T84-1d)", () => {
+    const refresh = makeAuraEvent(
+      LogEvent.SPELL_AURA_REFRESH, "122470", at(15), "monk", "monk", "BUFF",
+    );
+    // neither removal logged, only the marker refreshed: the shield caps
+    // from its own application, and the marker's end is that cap
+    const open = makeUnit("monk", {
+      auraEvents: [on("122470", 10), on("125174", 10), refresh],
+    });
+    const ivs = buildAuraIntervals(open, combat);
+    const shield = ivs.find((iv) => iv.spellId === "125174")!;
+    const marker = ivs.find((iv) => iv.spellId === "122470")!;
+    expect(shield.inferredEnd).toBe(true);
+    expect(shield.capFromS).toBe(10);
+    expect([marker.toS, marker.inferredEnd, marker.capFromS]).toEqual([
+      shield.toS, true, 10,
+    ]);
+    // a marker with no logged end, ended by a shield the log closed: no cap
+    const closed = makeUnit("monk", {
+      auraEvents: [on("122470", 20), on("125174", 20), off("125174", 23)],
+    });
+    const m2 = buildAuraIntervals(closed, combat).find(
+      (iv) => iv.spellId === "122470",
+    )!;
+    expect([m2.toS, m2.inferredEnd, "capFromS" in m2]).toEqual([23, false, false]);
+    // a logged marker shortened by an inferred shield gains the shield's anchor
+    const short = makeUnit("monk", {
+      auraEvents: [on("122470", 30), on("125174", 30), off("122470", 58)],
+    });
+    const ivs3 = buildAuraIntervals(short, combat);
+    const s3 = ivs3.find((iv) => iv.spellId === "125174")!;
+    const m3 = ivs3.find((iv) => iv.spellId === "122470")!;
+    if (s3.toS < 58)
+      expect([m3.inferredEnd, m3.capFromS]).toEqual([true, 30]);
+  });
   it("a second press pairs with its own shield", () => {
     const monk = makeUnit("monk", {
       auraEvents: [

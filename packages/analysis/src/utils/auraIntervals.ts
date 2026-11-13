@@ -775,6 +775,9 @@ function endKarmaAtItsShield(out: IAuraInterval[]): void {
     if (!shield || shield.toS >= iv.toS) continue;
     iv.toS = shield.toS;
     iv.inferredEnd = shield.inferredEnd;
+    // the end is the shield's now, and so is where its cap was counted from
+    if (shield.capFromS !== undefined) iv.capFromS = shield.capFromS;
+    else delete iv.capFromS;
     if (shield.toRow) iv.toRow = shield.toRow;
     else delete iv.toRow;
   }

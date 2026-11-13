@@ -2117,10 +2117,12 @@ export function splitAtRepressRefresh(
       .sort((a, b) => a - b);
     let from = iv.fromS;
     let inferredStart = iv.inferredStart;
+    // a piece the re-press ends has a logged end: no cap, no cap anchor
+    const { capFromS: _cap, ...closed } = iv;
     for (const cut of cuts) {
       if (cut <= from) continue;
       out.push({
-        ...iv,
+        ...closed,
         fromS: from,
         toS: cut,
         inferredStart,
