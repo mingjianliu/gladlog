@@ -319,10 +319,16 @@ export function buildPlayerLoadout(
     const realisedShortest = Math.min(
       cd.cooldownSeconds,
       ...(cd.casts ?? [])
+        // …of a press that started the cooldown: a free press (Time
+        // Spiral, Escape from Reality) carries its opener's reductions and
+        // reads what is LEFT of the opener's cooldown at its own instant
+        // (codex 85-tk-G-T55-1: Sprint pressed at 10 s, back at 125 s, a
+        // free press at 63 s read `[62–120s]`)
         .filter(
           (c) =>
-            (c.reductions?.length ?? 0) > 0 ||
-            c.idleCreditSeconds !== undefined,
+            !c.freeRecast &&
+            ((c.reductions?.length ?? 0) > 0 ||
+              c.idleCreditSeconds !== undefined),
         )
         .map((c) => cdRealisedSecondsUntilReady(cd, c.timeSeconds))
         .filter((left) => left > 0),

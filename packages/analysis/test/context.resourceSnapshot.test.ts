@@ -836,11 +836,13 @@ describe("F20 D24 / D25 — the [RES] enemy: column", () => {
   it("D25: a press inside the row's own second is spent by it (pressSpentBy), not dropped by the floored row time (1263fff6 0:11 Avenging Wrath)", () => {
     // row at 11.85 floors to 11; the press at 11.10 is in that second
     const line = row(11.85, [press("454351", "Avenging Wrath", 11.1, 35.1)]);
-    expect(line).toContain("enemy:Avenging Wrath/Devourer Demon Hunter(24s left)");
-    // a press in the next second is not
-    expect(row(10.9, [press("454351", "Avenging Wrath", 11.1, 35.1)])).not.toContain(
-      "enemy:",
+    expect(line).toContain(
+      "enemy:Avenging Wrath/Devourer Demon Hunter(24s left)",
     );
+    // a press in the next second is not
+    expect(
+      row(10.9, [press("454351", "Avenging Wrath", 11.1, 35.1)]),
+    ).not.toContain("enemy:");
   });
 });
 
@@ -950,5 +952,54 @@ describe("T55 — a kit range's low end is the return the model gives the press"
     expect(kit(15)).toContain("Incarnation: Tree of Life [80–180s");
     // no credit: the same walk from the full cooldown
     expect(kit()).toContain("Incarnation: Tree of Life [95–180s");
+  });
+
+  it("a free press is no return: Sprint under Time Spiral keeps the opener's 115 s (codex 85-tk-G-T55-1)", () => {
+    const owner = makeUnit("player-1", { name: "Player1" });
+    const rogue = makeUnit("enemy-1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Outlaw,
+    });
+    // pressed at 10 s, 5 s taken off at 20 s (back at 125 s: 115 s), then a
+    // Time Spiral free press at 63 s — the ledger copies the opener's
+    // reductions onto it, and the model's time left there (125 − 63 = 62 s)
+    // is what remains of the opener's cooldown, not a return
+    const reductions = [{ atSeconds: 20, seconds: 5 }];
+    const text = buildPlayerLoadout(
+      owner,
+      "Holy Priest",
+      [],
+      [],
+      { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
+      [rogue],
+      [
+        {
+          player: rogue,
+          cds: [
+            {
+              spellId: "2983",
+              spellName: "Sprint",
+              cooldownSeconds: 120,
+              maxChargesDetected: 1,
+              casts: [
+                // the ledger's own records (`applyEventReductions`, then
+                // the free-press pass): the opener's realised return, and
+                // the free press standing on what is left of it
+                { timeSeconds: 10, reductions, cooldownSecondsOverride: 115 },
+                {
+                  timeSeconds: 63,
+                  reductions,
+                  freeRecast: true,
+                  freeRecastOf: 10,
+                  cooldownSecondsOverride: 62,
+                },
+              ],
+              neverUsed: false,
+            } as unknown as IMajorCooldownInfo,
+          ],
+        },
+      ],
+    ).text;
+    expect(text).toContain("Sprint [115–120s");
   });
 });
