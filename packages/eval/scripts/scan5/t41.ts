@@ -99,13 +99,19 @@ export function aurasUpAtLogEnd(
       if (e === APPLIED || e === REFRESH) {
         if (t > endMs || sourceless) continue;
         const o = runs.find((r) => r.src === src && r.removedMs === undefined);
-        // a REFRESH moves the open run's length; an APPLIED on an open run
-        // (its REMOVED lost) starts a run
-        if (o && e === REFRESH) o.lastSeenMs = t;
-        else {
-          if (o) runs.splice(runs.indexOf(o), 1);
-          runs.push({ appliedMs: t, lastSeenMs: t, spellId: id, src });
-        }
+        // a REFRESH, or an APPLIED on a run still open (the log re-states an
+        // aura it never closed), is that run seen again: it keeps its place
+        // among the unit's open runs, so a source-less REMOVED still closes
+        // the oldest (codex 85-tk-G-T41-1c: moved to the back, the other
+        // caster's copy took the REMOVED and this one read never removed)
+        // …in its PLACE only: an APPLIED still starts the run's clock, as
+        // before (605: read as a mere sighting, 81 rows of real
+        // re-applications measured their length from the first one — 45
+        // `removed after the log end`, 36 `never removed`)
+        if (o) {
+          if (e === APPLIED) o.appliedMs = t;
+          o.lastSeenMs = t;
+        } else runs.push({ appliedMs: t, lastSeenMs: t, spellId: id, src });
       } else if (e === REMOVED) {
         const o = runs.find(
           (r) => r.removedMs === undefined && (sourceless || r.src === src),

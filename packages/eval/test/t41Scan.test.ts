@@ -166,6 +166,25 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
     ]);
   });
 
+  it("an aura re-stated while open keeps its place: the source-less REMOVED is still the older copy's (codex 85-tk-G-T41-1c)", () => {
+    // the holder's copy from 10 s, another caster's from 10.2 s; the log
+    // re-states the holder's at 11.1 s; a source-less REMOVED at 12 s, the
+    // other's at 17 s; slice over at 13 s — the holder's left at 12 s
+    const row = (event: LogEvent, s: number, src: string) =>
+      makeAuraEvent(event, "162264", at(s), src, "Player-4", "BUFF");
+    const u = makeUnit("Player-4", {
+      name: "Dh",
+      auraEvents: [
+        row(LogEvent.SPELL_AURA_APPLIED, 10, "Player-4"),
+        row(LogEvent.SPELL_AURA_APPLIED, 10.2, "Player-9"),
+        row(LogEvent.SPELL_AURA_APPLIED, 11.1, "Player-4"),
+        row(LogEvent.SPELL_AURA_REMOVED, 12, "0000000000000000"),
+        row(LogEvent.SPELL_AURA_REMOVED, 17, "Player-9"),
+      ],
+    });
+    expect(aurasUpAtLogEnd([u], u, "Metamorphosis", at(13))).toEqual([]);
+  });
+
   it("out of the total: a (no press) entry, and an aura past its own length", () => {
     const proc = scan(dh(39.48), 3, "Metamorphosis (no press)");
     expect(proc.seen).toHaveLength(1);
