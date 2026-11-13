@@ -6301,3 +6301,25 @@ Candidate rows +1 / -4: missed-sync-window t=242 leaves three owners' files
 of one round (the mate's Meteor landed inside the healer CC), and one
 kick-eaten row is replaced by another of the same owner under the cap.
 Visual baseline: the report-synth scene changes with this fix.
+
+v536 (2026-11-13; pipeline batch B48, T69 attempt 2 + T96 + T74 + T92). (1)
+T69 attempt 2 — the kicked `[CONSEQ]` line prints a fractional lockout with
+one decimal, the candidate rows' rounding, and leaves a whole lock bare.
+605: 31 of 5,050 kicked [CONSEQ] lines carried 2-3 decimals -> 0 (2.397 ->
+2.4 x13, 3.995 -> 4 x6, 4.794 -> 4.8 x5, 1.598 -> 1.6 x3, 1.75 -> 1.8 x2,
+1.05 -> 1.1 x2); findings byte-identical. (2) T96 (GH #173) — scan only: a
+`during it` window is checked to end on a row (duringEndRow 0 / 2417 on
+605). (3) T74 (GH #173 residues) — two product lines: `[SILENCE]` passes the
+silence's official length as its natural end, so a silence that ran its
+length no longer reads `| ended at their death` (`… Garrote - Silence … | 3s
+| ended at their death` -> `… | 3s`; naturalEndAtDeath 3 / 1312 -> 0);
+`[ROT PRESSURE] … with N active DoTs` counts SPELL_PERIODIC_MISSED ticks
+(`5 active DoTs` -> `6`). Check-side: noPressCopy 3 / 108 -> 0 / 105,
+reachStatedWholeBuff 1 / 647 -> 0, killAnchorSkippedOpener 3 / 8776 -> 0,
+rotDotCount 18 / 1976 -> 8 (3 distinct product undercounts, fixed by the
+line above). Candidate rows 0. (4) T92 — a press outside the channelled
+table is a channel's when the caster's own damage / heal / miss rows carry a
+channelled id of the same name (Lightning Lasso: pressed 305483, channelled
+305485). 605: channelUnderAnotherId 203 of 203 presses with no span -> 0;
+0 context lines differ; one missed-cleanse row changes in place
+(ownerCastingS 1.3 -> 2.0, ownerCastingSpells gains Lightning Lasso).

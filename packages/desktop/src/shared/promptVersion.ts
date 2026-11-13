@@ -1165,5 +1165,12 @@
  *  (pressDeliveryEndSeconds, PRESS_DELIVERY_REACH_S = 5 s), so its burst
  *  window, totals and the kill-window facts include the hit. See
  *  docs/prompt-version-history.md.
+ *
+ * v536 (2026-11-13; pipeline batch B48, T69 attempt 2 + T96 + T74 + T92):
+ *  a fractional kick lockout prints with one decimal on the [CONSEQ] line;
+ *  a silence that ran its length no longer reads `ended at their death`;
+ *  [ROT PRESSURE] counts DoTs whose ticks missed; a channel pressed under
+ *  one id and carried by another (Lightning Lasso) occupies the caster.
+ *  T96 is scan only. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 535;
+export const PROMPT_VERSION = 536;
