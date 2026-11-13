@@ -127,14 +127,16 @@ function runRound(ctx: IContext): void {
   const byId = new Map(units.map((u) => [u.id, u]));
   const start = legacy.startTime;
   // a Solo Shuffle round is over at its first death (`shuffleRoundEndMs`,
-  // the product's cut): a press at or after it is not in the round and has
-  // no line (GH #177 item 17: wide's one allyScales miss, an Obsidian Scales
-  // 29 ms after the round-ending death)
+  // the product's cut): a press after it is not in the round and has no
+  // line (GH #177 item 17: wide's one allyScales miss, an Obsidian Scales
+  // 29 ms after the round-ending death). One at the death's own millisecond
+  // still prints — `addEntry` drops only what is strictly later (codex
+  // 85-tk-J-T75-1 #2)
   const shuffleEnd = shuffleRoundEndMs(legacy, units);
   const outOfRound = (ts: number) =>
     ts < start ||
     ts > legacy.endTime ||
-    (shuffleEnd !== undefined && ts >= shuffleEnd);
+    (shuffleEnd !== undefined && ts > shuffleEnd);
   const at = (ts: number) => fmt((ts - start) / 1000);
   const has = (t: string, pred: (l: string) => boolean) =>
     lines.some((l) => l.startsWith(`${t}  `) && pred(l));
