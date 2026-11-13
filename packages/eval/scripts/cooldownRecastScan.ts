@@ -187,7 +187,7 @@ for (const f of files) {
       continue;
     }
     rounds++;
-    const era = logEraOf(legacy.startTime);
+    const era = logEraOf(legacy, legacy.startTime);
     const endMs = roundEndMs(legacy);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const u of Object.values(legacy.units ?? {}) as any[]) {

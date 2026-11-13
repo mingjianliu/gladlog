@@ -7,16 +7,45 @@
  * round is on the side of a cutover the product's dated rules put it on.
  */
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
-import { logIsFrom } from "@gladlog/analysis/src/utils/logEra";
+import {
+  logDatedAt,
+  logInstantOf,
+  logIsFrom,
+  PATCH_1215_ZONE_BAND_TAKES,
+} from "@gladlog/analysis/src/utils/logEra";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/talents";
 
 export const LOG_ERAS = ["pre-12.1", "12.1.0", "12.1.5"] as const;
 export type LogEra = (typeof LOG_ERAS)[number];
 
-/** the era of a round, asked with its start (`startTime`, epoch ms) */
-export function logEraOf(logEpochMs: number): LogEra {
-  if (logIsFrom(logEpochMs, PATCH_1215_GOLIVE_EPOCH_MS)) return "12.1.5";
-  if (logIsFrom(logEpochMs, PATCH_121_GOLIVE_EPOCH_MS)) return "12.1.0";
+/**
+ * The era of a round, asked as the product asks it: `match` is the converted
+ * match (it carries the clock offset its lines state), `parsedEpochMs` its
+ * start. The 12.1.5 side is the product's dated reading (`logDatedAt` on
+ * `logInstantOf`, with the go-live's own band side,
+ * `PATCH_1215_ZONE_BAND_TAKES` — what `talentsOf` asks); the 12.1 side is
+ * `logIsFrom` on the parsed epoch, as `drResetMsAt` asks it. The bare
+ * `startTime` alone put a round parsed 6 h past its stated instant on the
+ * wrong side of the go-live (codex 80-PIPE-50-B50-v1; T90 measured 125
+ * such match-cutover pairs on 605 + wide).
+ */
+export function logEraOf(
+  match: object | null | undefined,
+  parsedEpochMs: number,
+): LogEra {
+  if (
+    logDatedAt(
+      {
+        cutoverEpochMs: PATCH_1215_GOLIVE_EPOCH_MS,
+        before: false,
+        since: true,
+        zoneBandTakes: PATCH_1215_ZONE_BAND_TAKES,
+      },
+      logInstantOf(match, parsedEpochMs),
+    )
+  )
+    return "12.1.5";
+  if (logIsFrom(parsedEpochMs, PATCH_121_GOLIVE_EPOCH_MS)) return "12.1.0";
   return "pre-12.1";
 }
 
