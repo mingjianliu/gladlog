@@ -321,9 +321,17 @@ export function buildPlayerLoadout(
     // (`gridConsumedView`) and answers with what was left 0.8 s on (codex
     // 85-tk-G-T55-1b: Sprint at 10.1 s, a free one at 10.9 s, `[114–120s]`
     // for a 115 s return)
+    // …and with no free-recast window on them: the view holds no free
+    // press, so a window left on its opener would read as open and unused
+    // and the lookup would answer "ready" for the opener itself — its
+    // return dropped, the range left to the single-effect terms above
+    // (codex 85-tk-G-T55-1c: Grappling Hook with a ×3 recovery window and a
+    // finisher's reduction, `[44–55s]` for a 40 s return)
     const spending = {
       ...cd,
-      casts: (cd.casts ?? []).filter((c) => !c.freeRecast),
+      casts: (cd.casts ?? [])
+        .filter((c) => !c.freeRecast)
+        .map(({ freeRecastUntil: _window, ...c }) => c),
       ...(cd.sharedCasts
         ? { sharedCasts: cd.sharedCasts.filter((c) => !c.freeRecast) }
         : {}),

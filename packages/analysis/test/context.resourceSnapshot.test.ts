@@ -1051,4 +1051,63 @@ describe("T55 — a kit range's low end is the return the model gives the press"
     ).text;
     expect(text).toContain("Sprint [115–120s");
   });
+  it("the opener of a used free-recast window is still asked for its return (codex 85-tk-G-T55-1c)", () => {
+    const owner = makeUnit("player-1", { name: "Player1" });
+    const rogue = makeUnit("enemy-1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Outlaw,
+    });
+    // pressed at 10 s, 5 s taken off at 20 s (back at 125 s: 115 s), then a
+    // Time Spiral free press at 63 s — the ledger copies the opener's
+    // reductions onto it, and the model's time left there (125 − 63 = 62 s)
+    // is what remains of the opener's cooldown, not a return
+    const reductions = [{ atSeconds: 20, seconds: 5 }];
+    const text = buildPlayerLoadout(
+      owner,
+      "Holy Priest",
+      [],
+      [],
+      { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
+      [rogue],
+      [
+        {
+          player: rogue,
+          cds: [
+            {
+              spellId: "2983",
+              spellName: "Sprint",
+              cooldownSeconds: 120,
+              maxChargesDetected: 1,
+              casts: [
+                // the ledger's own records (`applyEventReductions`, then
+                // the free-press pass): the opener's realised return, and
+                // the free press standing on what is left of it
+                {
+                  timeSeconds: 10.1,
+                  reductions,
+                  cooldownSecondsOverride: 115,
+                  // the window the free press below used up
+                  freeRecastUntil: 13.1,
+                },
+                {
+                  timeSeconds: 10.9,
+                  reductions,
+                  freeRecast: true,
+                  freeRecastOf: 10.1,
+                  cooldownSecondsOverride: 114.2,
+                },
+              ],
+              // recovery at twice the rate for 10 s: with the 5 s taken
+              // off, only the model's own answer for the press carries both
+              rateWindows: [{ fromSeconds: 20, toSeconds: 30, mult: 2 }],
+              neverUsed: false,
+            } as unknown as IMajorCooldownInfo,
+          ],
+        },
+      ],
+    ).text;
+    // 120 − 5 − the 10 s the doubled rate recovered; each effect alone
+    // reads 115 and 110
+    expect(text).toContain("Sprint [105–120s");
+  });
 });
