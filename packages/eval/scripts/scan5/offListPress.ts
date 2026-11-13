@@ -55,6 +55,7 @@ import {
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { pressDuration } from "@gladlog/analysis/src/utils/offListPress";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
@@ -281,6 +282,9 @@ export function run(ctx: IRoundCtx): void {
         press,
         ctx.units as ICombatUnit[],
         unit.spellCastEvents ?? [],
+        // the producer's own bound (`buildMatchContext`), not the scan's
+        // end of play
+        roundEndMs(ctx.legacy as never),
       );
       let life: number | undefined;
       let removedMs: number | undefined;

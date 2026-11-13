@@ -27,6 +27,7 @@ import { NO_CAST_LOG_PRESS_IDS } from "../data/auraActivation";
 import { effectAurasOfCast } from "../data/castEffectAuras";
 import { classMetadata } from "../data/classSpells";
 import {
+  PRESS_CHAIN_HANDOVER_MS,
   PRESS_EFFECT_CHAIN_AURAS,
   PRESS_EFFECT_CHAIN_HOLDER_SOURCED,
 } from "../data/pressEffectChains";
@@ -454,13 +455,17 @@ export interface IPressChainFollowUp {
 /**
  * The follow-up auras of the series `head` starts on `unit`
  * (`PRESS_EFFECT_CHAIN_AURAS`), in order: each one's source (the press's
- * caster, or the unit itself — `PRESS_EFFECT_CHAIN_HOLDER_SOURCED`) and the
- * first APPLIED row of it logged after the row before it, before `untilMs`
- * (the caster's next press of the button). A follow-up the log does not
- * show (the series was cut, the round ended) has no row, and neither has
- * any after it. One reading for the line's length (`pressDuration`) and the
- * scans that follow the series to its end (scan5 `offListPressLine`,
- * `pressChainLasts`).
+ * caster, or the unit itself — `PRESS_EFFECT_CHAIN_HOLDER_SOURCED`) and its
+ * APPLIED row — the one logged within `PRESS_CHAIN_HANDOVER_MS` of the
+ * REMOVED that ends the aura before it (the hand-over is what makes it this
+ * series': codex 85-tk-G-T40-1b #3, an ally's own Cheetah 30 s later was
+ * read as the second phase of a copy that had ended without one), before
+ * `untilMs` (the caster's next press of the button, the round's end). A
+ * follow-up the log does not show (the series was cut, the aura before it
+ * has no logged end or was applied again first, the round ended) has no
+ * row, and neither has any after it. One reading for the line's length
+ * (`pressDuration`) and the scans that follow the series to its end (scan5
+ * `offListPressLine`, `pressChainLasts`).
  */
 export function pressChainFollowUps(
   caster: ICombatUnit,
@@ -477,19 +482,41 @@ export function pressChainFollowUps(
   let prev: ICombatUnit["auraEvents"][number] | undefined = head;
   return ids.map((spellId) => {
     const from: number = prev === undefined ? -1 : events.indexOf(prev);
-    const applied =
-      from < 0
-        ? undefined
-        : events
-            .slice(from + 1)
-            .find(
-              (a) =>
-                a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-                a.spellId === spellId &&
-                a.srcUnitId === source.id &&
-                a.destUnitId === unit.id &&
-                a.logLine.timestamp < untilMs,
-            );
+    let applied: ICombatUnit["auraEvents"][number] | undefined;
+    if (prev !== undefined && from >= 0) {
+      // the end of the aura before it: its own REMOVED, read in row order
+      // (an older instance's REMOVED in the row's millisecond sits before
+      // the row); a second APPLIED first is another application, whose end
+      // is not this one's
+      const own = (a: ICombatUnit["auraEvents"][number]) =>
+        a.spellId === prev!.spellId &&
+        a.srcUnitId === prev!.srcUnitId &&
+        a.destUnitId === unit.id;
+      const next = events
+        .slice(from + 1)
+        .find(
+          (a) =>
+            own(a) &&
+            (a.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+              a.logLine.event === LogEvent.SPELL_AURA_APPLIED),
+        );
+      const endMs =
+        next?.logLine.event === LogEvent.SPELL_AURA_REMOVED
+          ? next.logLine.timestamp
+          : undefined;
+      if (endMs !== undefined)
+        applied = events.find(
+          (a) =>
+            a !== prev &&
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.spellId === spellId &&
+            a.srcUnitId === source.id &&
+            a.destUnitId === unit.id &&
+            Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS &&
+            a.logLine.timestamp >= prev!.logLine.timestamp &&
+            a.logLine.timestamp < untilMs,
+        );
+    }
     prev = applied;
     return { spellId, source, ...(applied ? { applied } : {}) };
   });
@@ -509,6 +536,9 @@ export function pressDuration(
   },
   allUnits: readonly ICombatUnit[],
   casterRows: ICombatUnit["spellCastEvents"],
+  /** the round's end: no follow-up row of a series is read past it (codex
+   * 85-tk-G-T40-1b #2) */
+  roundEndAtMs = Infinity,
 ):
   | {
       durationSeconds: number;
@@ -653,22 +683,41 @@ export function pressDuration(
     // 85-tk-G-T40-1 #2: 38f2679e, a Roar still up when Spider Venom landed
     // and gone before Viper, 3.9 + 3.9 + 3.0 s printed `lasts 9.9s`). A
     // follow-up the log does not show runs its plain length.
-    const followUps = pressChainFollowUps(caster, unit, row, nextPressMs);
-    const len = followUps.reduce(
-      (sum, f) =>
-        sum +
-        (buffFullDurationForCaster(
+    // A Time Stop holds the phase it starts in, each observed phase read
+    // on its own (codex 85-tk-G-T40-1b #1: one in Cheetah's second phase,
+    // 3 + 9 + 5 s, printed `lasts 12s`).
+    const followUps = pressChainFollowUps(
+      caster,
+      unit,
+      row,
+      // strictly before the next press; a row AT the round's end is inside
+      Math.min(nextPressMs ?? Infinity, roundEndAtMs + 1),
+    );
+    let len = own + timeStopHeldSeconds(unit, row.logLine.timestamp, own, row);
+    for (const f of followUps) {
+      const plain =
+        buffFullDurationForCaster(
           f.spellId,
           f.source,
           (f.applied ?? row).logLine.timestamp,
           { pressed: true, onUnitId: unit.id },
-        ) ?? 0) *
-          (f.applied ? landingMult(f.spellId, f.applied) : 1),
-      own,
-    );
+        ) ?? 0;
+      if (!f.applied) {
+        len += plain;
+        continue;
+      }
+      const phase = plain * landingMult(f.spellId, f.applied);
+      len +=
+        phase +
+        timeStopHeldSeconds(
+          unit,
+          f.applied.logLine.timestamp,
+          phase,
+          f.applied,
+        );
+    }
     return {
-      durationSeconds:
-        len + timeStopHeldSeconds(unit, row.logLine.timestamp, own, row),
+      durationSeconds: len,
       floor: buffDurationIsFloorForCaster(row.spellId!, caster),
       unit,
       row,
@@ -719,7 +768,7 @@ export function extractOffListPresses(
       const entry = unitCooldownEntry(unit, combat, c.spellId);
       if (!entry) continue;
       const t = (at - combat.startTime) / 1000;
-      const dur = pressDuration(unit, c, allUnits, rows);
+      const dur = pressDuration(unit, c, allUnits, rows, roundEndAtMs);
       out.push({
         unit,
         spellId: c.spellId,

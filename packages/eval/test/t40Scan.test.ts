@@ -143,3 +143,59 @@ describe("scan5/t40 listedChainFrom (codex 85-tk-G-T40-1 #4)", () => {
     ).toBeUndefined();
   });
 });
+
+describe("scan5/t40 listedChainFrom — one aura instance at a time (codex 85-tk-G-T40-1b #4)", () => {
+  const LISTED = ["356727", "356730"];
+
+  it("第一段没记录结束、后面又按了一次:后一次的结束不算到前一次头上", () => {
+    const unit = {
+      id: "E1",
+      auraEvents: [
+        aura(0, APPLIED, "356723"),
+        // no REMOVED for the first; a whole second series from 60 s
+        aura(60000, APPLIED, "356723"),
+        aura(63000, REMOVED, "356723"),
+        aura(63000, APPLIED, "356727"),
+        aura(66000, REMOVED, "356727"),
+        aura(66000, APPLIED, "356730"),
+        aura(69000, REMOVED, "356730"),
+      ],
+    };
+    expect(
+      listedChainFrom(unit, caster(), "356723", 0, LISTED),
+    ).toBeUndefined();
+    // …nor with the re-application's row lost: the next press bounds it
+    const lost = {
+      id: "E1",
+      auraEvents: unit.auraEvents.filter((_, i) => i !== 1),
+    };
+    expect(
+      listedChainFrom(lost, caster(), "356723", 0, LISTED, 60000),
+    ).toBeUndefined();
+    // the second press reads its own series
+    expect(listedChainFrom(unit, caster(), "356723", 60000, LISTED)).toEqual({
+      endMs: 69000,
+      hops: LISTED,
+    });
+  });
+
+  it("同一毫秒里先写旧的一段结束、再写新的一段开始:结束读新的那段自己的", () => {
+    const unit = {
+      id: "E1",
+      auraEvents: [
+        aura(0, APPLIED, "356723"),
+        aura(3000, REMOVED, "356723"),
+        // an earlier press's Spider Venom leaves in this millisecond
+        aura(3000, REMOVED, "356727"),
+        aura(3000, APPLIED, "356727"),
+        aura(6000, REMOVED, "356727"),
+        aura(6000, APPLIED, "356730"),
+        aura(9000, REMOVED, "356730"),
+      ],
+    };
+    expect(listedChainFrom(unit, caster(), "356723", 0, LISTED)).toEqual({
+      endMs: 9000,
+      hops: LISTED,
+    });
+  });
+});

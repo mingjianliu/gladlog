@@ -363,6 +363,124 @@ describe("[PRESS] lasts — a series' follow-ups at their own reading (codex 85-
   });
 });
 
+describe("[PRESS] lasts — a series' rows are its own (codex 85-tk-G-T40-1b)", () => {
+  const T = 1_000_000;
+  const { SPELL_AURA_APPLIED: APPLIED, SPELL_AURA_REMOVED: REMOVED } = LogEvent;
+  const TIME_STOP = "378441";
+
+  it("#1 a Time Stop in the second phase holds that phase", () => {
+    const cast = makeSpellCastEvent("186257", T, "hun", "Hun", "hun", "Hun");
+    const self = (event: string, id: string, ms: number, src = "hun") =>
+      makeAuraEvent(event as never, id, T + ms, src, "hun", "BUFF");
+    const hun = makeUnit("hun", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        self(APPLIED, "186257", 0),
+        self(REMOVED, "186257", 3000),
+        self(APPLIED, "186258", 3000),
+        self(APPLIED, TIME_STOP, 5000, "evo"),
+        self(REMOVED, TIME_STOP, 10000, "evo"),
+      ],
+    });
+    expect(
+      pressDuration(hun, cast as any, [hun], hun.spellCastEvents)
+        ?.durationSeconds,
+    ).toBe(3 + 9 + 5);
+  });
+
+  it("#2 a follow-up row after the round's end is not read", () => {
+    const ROAR = "372048";
+    const cast = makeSpellCastEvent("356719", T, "foe", "Foe", "hun", "Hun");
+    const hun = makeUnit("hun", { spellCastEvents: [cast] });
+    const venom = (id: string, event: string, ms: number) =>
+      makeAuraEvent(event as never, id, T + ms, "hun", "foe", "DEBUFF");
+    const foe = makeUnit("foe", {
+      auraEvents: [
+        venom("356723", APPLIED, 0),
+        makeAuraEvent(APPLIED, ROAR, T + 2000, "evo", "foe", "DEBUFF"),
+        venom("356723", REMOVED, 3000),
+        venom("356727", APPLIED, 3000),
+      ],
+    });
+    const at = (roundEnd?: number) =>
+      pressDuration(
+        hun,
+        cast as any,
+        [hun, foe],
+        hun.spellCastEvents,
+        roundEnd,
+      );
+    // read: Spider Venom landed under the Roar, 3 + 3.9 + 3
+    expect(at()?.durationSeconds).toBeCloseTo(9.9, 5);
+    expect(at(T + 3000)?.durationSeconds).toBeCloseTo(9.9, 5);
+    // the round ended at 1 s: the rows after it are not this round's
+    expect(at(T + 1000)?.followUps.some((f) => f.applied)).toBe(false);
+    expect(at(T + 1000)?.durationSeconds).toBe(9);
+  });
+
+  it("#3 a second phase the holder got from its own later press is not this copy's", () => {
+    const cast = makeSpellCastEvent("186257", T, "hunA", "A", "hunA", "A");
+    const hunA = makeUnit("hunA", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "186257", T - 2, "hunA", "hunA", "BUFF"),
+      ],
+    });
+    const head = makeAuraEvent(APPLIED, "356781", T, "hunA", "hunB", "BUFF");
+    const own = (event: string, id: string, ms: number) =>
+      makeAuraEvent(event as never, id, T + ms, "hunB", "hunB", "BUFF");
+    const hunB = makeUnit("hunB", {
+      auraEvents: [
+        head,
+        // the copy ends with no second phase
+        makeAuraEvent(REMOVED, "356781", T + 1000, "hunA", "hunB", "BUFF"),
+        // B's own Cheetah 30 s later
+        own(APPLIED, "186257", 30000),
+        own(REMOVED, "186257", 33000),
+        own(APPLIED, "186258", 33000),
+        own(REMOVED, "186258", 42000),
+      ],
+    });
+    expect(pressChainFollowUps(hunA, hunB, head as never)).toEqual([
+      { spellId: "186258", source: hunB },
+    ]);
+  });
+
+  it("an aura applied again before it ends hands nothing over; an older instance's REMOVED in the row's millisecond is not its end", () => {
+    const hun = makeUnit("hun", {});
+    const venom = (id: string, event: string, ms: number) =>
+      makeAuraEvent(event as never, id, T + ms, "hun", "foe", "DEBUFF");
+    const head = venom("356723", APPLIED, 0);
+    const again = makeUnit("foe", {
+      auraEvents: [
+        head,
+        venom("356723", APPLIED, 60000),
+        venom("356723", REMOVED, 63000),
+        venom("356727", APPLIED, 63000),
+      ],
+    });
+    expect(
+      pressChainFollowUps(hun, again, head as never).some((f) => f.applied),
+    ).toBe(false);
+    const spider = venom("356727", APPLIED, 3000);
+    const viper = venom("356730", APPLIED, 6000);
+    const sameMs = makeUnit("foe", {
+      auraEvents: [
+        head,
+        venom("356723", REMOVED, 3000),
+        // the Spider Venom of an earlier press leaves in this millisecond
+        venom("356727", REMOVED, 3000),
+        spider,
+        venom("356727", REMOVED, 6000),
+        viper,
+      ],
+    });
+    expect(
+      pressChainFollowUps(hun, sameMs, head as never).map((f) => f.applied),
+    ).toEqual([spider, viper]);
+  });
+});
+
 describe("[PRESS] lasts — which aura it reads (GH #179)", () => {
   // Holy Bulwark: the cast 432459 arms its target and its caster with 432496
   const CAST = "432459";

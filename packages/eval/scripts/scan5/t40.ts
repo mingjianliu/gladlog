@@ -27,8 +27,12 @@
  *    Gaze 176 (a talent's buff when the channel ends, not the press's
  *    effect), Halo → Halo 30.
  */
-import { PRESS_EFFECT_CHAIN_AURAS } from "@gladlog/analysis/src/data/pressEffectChains";
+import {
+  PRESS_CHAIN_HANDOVER_MS,
+  PRESS_EFFECT_CHAIN_AURAS,
+} from "@gladlog/analysis/src/data/pressEffectChains";
 import { extractOffListPresses } from "@gladlog/analysis/src/utils/offListPress";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
   APPLIED,
@@ -36,6 +40,7 @@ import {
   fmtS,
   type IRoundCtx,
   nameOf,
+  REFRESH,
   REMOVED,
   successesOf,
   tsOf,
@@ -46,8 +51,9 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "pressChainLasts|nominated",
 ]);
 
-/** a follow-up starts this close to the end of the aura before it */
-export const CHAIN_GAP_MS = 150;
+/** a follow-up starts this close to the end of the aura before it — the
+ * producer's own constant (`pressChainFollowUps`) */
+export const CHAIN_GAP_MS = PRESS_CHAIN_HANDOVER_MS;
 /** a press of the caster's this close to a follow-up's start made it */
 export const NO_PRESS_MS = 300;
 /** the same slack the press scan gives a logged life past the printed one */
@@ -104,37 +110,55 @@ export function chainFrom(
  * of the end before it (by the press's caster or by the unit itself — a
  * holder-sourced series) and its REMOVED. Only the list's own auras, in the
  * list's order — an unrelated aura at the last end changes nothing (codex
- * 85-tk-G-T40-1 #4). `hops`: the follow-ups seen. */
+ * 85-tk-G-T40-1 #4). One aura INSTANCE at a time, in row order (codex
+ * 85-tk-G-T40-1b #4): an end is the first REMOVED of the id logged after
+ * the instance's own row — an older instance's REMOVED in that millisecond
+ * sits before the row — and an APPLIED / REFRESH of the id first, or a row
+ * at or past `untilMs` (the caster's next press of the button), is another
+ * application: the instance has no logged end. `hops`: the follow-ups
+ * seen. */
 export function listedChainFrom(
   unit: any,
   caster: any,
   spellId: string,
   atMs: number,
   listed: readonly string[],
+  untilMs = Infinity,
 ): IChain | undefined {
   const rows = ((unit.auraEvents ?? []) as any[]).filter(
     (a) =>
       (a.srcUnitId === caster.id || a.srcUnitId === unit.id) &&
       a.destUnitId === unit.id,
   );
-  const endAfter = (id: string, from: number): number | undefined => {
-    const r = rows.find(
-      (a) => ev(a) === REMOVED && String(a.spellId) === id && tsOf(a) > from,
-    );
-    return r ? tsOf(r) : undefined;
+  const endAfter = (id: string, fromIdx: number): number | undefined => {
+    for (let i = fromIdx + 1; i < rows.length; i++) {
+      const a = rows[i];
+      if (String(a.spellId) !== id) continue;
+      if (tsOf(a) >= untilMs) return undefined;
+      if (ev(a) === REMOVED) return tsOf(a);
+      if (ev(a) === APPLIED || ev(a) === REFRESH) return undefined;
+    }
+    return undefined;
   };
-  let endMs = endAfter(spellId, atMs);
+  const headIdx = rows.findIndex(
+    (a) =>
+      ev(a) === APPLIED && String(a.spellId) === spellId && tsOf(a) === atMs,
+  );
+  if (headIdx < 0) return undefined;
+  let endMs = endAfter(spellId, headIdx);
   if (endMs === undefined) return undefined;
   const hops: string[] = [];
   for (const id of listed) {
-    const next = rows.find(
+    const nextIdx = rows.findIndex(
       (a) =>
         ev(a) === APPLIED &&
         String(a.spellId) === id &&
+        tsOf(a) >= atMs &&
+        tsOf(a) < untilMs &&
         Math.abs(tsOf(a) - endMs!) <= CHAIN_GAP_MS,
     );
-    if (!next) break;
-    const end = endAfter(id, tsOf(next) - 1);
+    if (nextIdx < 0) break;
+    const end = endAfter(id, nextIdx);
     if (end === undefined) break;
     hops.push(id);
     endMs = end;
@@ -144,11 +168,13 @@ export function listedChainFrom(
 
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
+  // the producer's own round end (`buildMatchContext`: a series' rows are
+  // read up to it), the scan's end of play for which presses count
   const presses = extractOffListPresses(
     ctx.players as any,
     ctx.legacy as any,
-    ctx.roundEndAt,
-  );
+    roundEndMs(ctx.legacy as any),
+  ).filter((p) => ctx.start + p.timeSeconds * 1000 <= ctx.roundEndAt);
   const byId: Record<string, any> = {};
   for (const u of ctx.units as any[]) byId[u.id] = u;
   for (const p of presses) {
@@ -183,8 +209,20 @@ export function run(ctx: IRoundCtx): void {
       (c.endMs - at0) / 1000 > printed + LASTS_SLACK_S;
     // the listed series first, on its own rows
     const listed = PRESS_EFFECT_CHAIN_AURAS[p.durationAura.spellId];
+    const pressMs = ctx.start + p.timeSeconds * 1000;
+    const nextPressMs = successesOf(p.unit)
+      .filter((c: any) => String(c.spellId) === String(p.spellId))
+      .map(tsOf)
+      .find((t: number) => t > pressMs + 1);
     const own = listed
-      ? listedChainFrom(unit, p.unit, p.durationAura.spellId, at0, listed)
+      ? listedChainFrom(
+          unit,
+          p.unit,
+          p.durationAura.spellId,
+          at0,
+          listed,
+          nextPressMs,
+        )
       : undefined;
     if (tooLong(own)) {
       report("listedChain", own);

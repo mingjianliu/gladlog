@@ -42,3 +42,9 @@ export const PRESS_EFFECT_CHAIN_AURAS: Readonly<
 export const PRESS_EFFECT_CHAIN_HOLDER_SOURCED: ReadonlySet<string> = new Set([
   "356781",
 ]);
+
+/** A follow-up of a series starts this close to the end of the aura before
+ * it (605 files: every listed follow-up within it). One constant for the
+ * producer (`pressChainFollowUps`) and the scan that follows a series on the
+ * log rows (scan5 `pressChainLasts`). */
+export const PRESS_CHAIN_HANDOVER_MS = 150;
