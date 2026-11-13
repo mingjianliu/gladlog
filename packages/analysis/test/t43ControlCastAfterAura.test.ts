@@ -16,12 +16,16 @@ const RAKE = "1822";
 const RAKE_STUN = "163505";
 const SHADOW_DANCE = "185313";
 
-const stunOnE1 = (tMs: number) => ({
+const HUNT_PRESS = "1246167";
+const HUNT_IMPACT = "1246169";
+const HUNT_ROOT = "370970";
+
+const stunOnE1 = (tMs: number, spellId = RAKE_STUN) => ({
   id: "E1",
   auraEvents: [
     {
       timestamp: tMs,
-      spellId: RAKE_STUN,
+      spellId,
       srcUnitId: "F1",
       logLine: { event: "SPELL_AURA_APPLIED" },
     },
@@ -30,9 +34,10 @@ const stunOnE1 = (tMs: number) => ({
 const run = (
   casts: Array<{ spellId: string; dest: string | undefined; tMs: number }>,
   auraMs = 13_454,
+  auraId = RAKE_STUN,
 ) =>
   controlLandedResponses(
-    [stunOnE1(auraMs)],
+    [stunOnE1(auraMs, auraId)],
     new Set(["E1"]),
     (id) => (id === "F1" ? "F1" : undefined),
     casts.map((c) => ({ unitId: "F1", ...c })),
@@ -71,5 +76,37 @@ describe("T43 — the producing cast logged just after its aura times the contro
     expect(
       run([{ spellId: SHADOW_DANCE, dest: undefined, tMs: 13_460 }]),
     ).toMatchObject([{ tMs: 13_454 }]);
+  });
+
+  // codex 85-tk-H-T43-1
+  it("a press's impact row logged just after the aura never replaces the press", () => {
+    expect(
+      run(
+        [
+          { spellId: HUNT_PRESS, dest: "E1", tMs: 13_000 },
+          { spellId: HUNT_IMPACT, dest: "E1", tMs: 13_456 },
+        ],
+        13_454,
+        HUNT_ROOT,
+      ),
+    ).toMatchObject([{ spellId: HUNT_ROOT, tMs: 13_000 }]);
+  });
+
+  it("a cast of it on another enemy logged just after the aura never times it", () => {
+    expect(
+      run([
+        { spellId: PROWL, dest: undefined, tMs: 13_218 },
+        { spellId: RAKE, dest: "E2", tMs: 13_456 },
+      ]),
+    ).toMatchObject([{ tMs: 13_218 }]);
+  });
+
+  it("an earlier cast of it on another enemy does not hide the one that made the aura", () => {
+    expect(
+      run([
+        { spellId: RAKE, dest: "E2", tMs: 12_400 },
+        { spellId: RAKE, dest: "E1", tMs: 13_456 },
+      ]),
+    ).toMatchObject([{ tMs: 13_456 }]);
   });
 });

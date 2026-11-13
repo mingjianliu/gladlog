@@ -62,13 +62,27 @@ export function run(ctx: IRoundCtx): void {
     );
     if (!aura) continue;
     const at = tsOf(aura);
-    if (casts.some((c) => tsOf(c) <= at && tsOf(c) >= at - FUSE_MS)) continue;
-    const after = casts.find(
+    // casts of that name that can have made this aura: aimed at its holder
+    // or at nobody (codex 85-tk-H-T43-1: a cast of it on another enemy
+    // neither makes the aura nor excuses the line)
+    const own = casts.filter(
+      (c) =>
+        !c.destUnitId ||
+        /^0+$/.test(c.destUnitId) ||
+        c.destUnitId === holder.id,
+    );
+    const after = own.find(
       (c) => tsOf(c) > at && tsOf(c) <= at + CAST_AFTER_AURA_MS,
     );
     if (!after) continue;
+    const earlier = own.filter((c) => tsOf(c) <= at && tsOf(c) >= at - FUSE_MS);
+    // a same-id cast before the aura is an earlier press of the spell (the
+    // aura belongs to the row beside it); one under another id of the same
+    // name is the press whose impact row `after` is (The Hunt)
+    const press = earlier.filter((c) => c.spellId !== after.spellId).pop();
+    const made = press ?? after;
     ctx.bump(C);
-    const expected = (tsOf(after) - openMs) / 1000;
+    const expected = (tsOf(made) - openMs) / 1000;
     if (Math.abs(Number(m[7]) - expected) <= 0.0501) continue;
     ctx.violate(
       C,

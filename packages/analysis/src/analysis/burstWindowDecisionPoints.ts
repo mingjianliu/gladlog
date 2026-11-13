@@ -51,6 +51,7 @@ import {
   cannotCastIntervalsForSpells,
   petCastersOf,
 } from "../utils/cannotCastIntervals";
+import { PRESS_TRIGGERED_CAST_IDS } from "../utils/castMissRows";
 import { COPY_CAST_IDS } from "../utils/castPress";
 import {
   canHelpAnotherUnit,
@@ -894,13 +895,29 @@ export function controlLandedResponses(
       // control (`AIMED_CONTROL_LANDING_LEAD_MS`). Stopping at the aura
       // dropped it, and the stun was timed from the Prowl 0.24 s earlier
       // ("answered with Rake … in 0.9s" for a Rake 1.13 s after the opener).
-      // Only the cast that makes this aura is read past it.
+      // Only the cast that makes this aura is read past it — and never the
+      // impact row of a press already read (codex 85-tk-H-T43-1: The Hunt
+      // 1246167 pressed at 13.000 s roots at 13.454 s, its impact 1246169
+      // is logged at 13.456 s; the press times it), nor a cast aimed at
+      // somebody else.
+      const isImpactOf = (
+        impactId: string,
+        press: (typeof friendlyCasts)[number] | undefined,
+      ): boolean =>
+        !!press &&
+        !!PRESS_TRIGGERED_CAST_IDS.get(press.spellId)?.includes(impactId);
       for (const c of friendlyCasts) {
         if (c.tMs > a.timestamp + AIMED_CONTROL_LANDING_LEAD_MS) break;
         if (c.unitId !== unitId || c.tMs < a.timestamp - GROUND_CONTROL_FUSE_MS)
           continue;
-        if (producesAura(c.spellId)) family = c;
-        else if (c.tMs > a.timestamp) continue;
+        if (c.tMs > a.timestamp) {
+          if (
+            producesAura(c.spellId) &&
+            (isNoDest(c.dest) || c.dest === caster.id) &&
+            !isImpactOf(c.spellId, family)
+          )
+            family = c;
+        } else if (producesAura(c.spellId)) family = c;
         else if (fromPet) continue;
         else if (
           caster.id !== undefined &&
