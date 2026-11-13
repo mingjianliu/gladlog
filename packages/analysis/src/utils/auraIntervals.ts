@@ -80,6 +80,13 @@ export interface IAuraInterval {
   toS: number;
   inferredStart: boolean;
   inferredEnd: boolean;
+  /** With `inferredEnd`: the application the official-length cap was counted
+   * from — the run's last APPLIED / REFRESH / DOSE the builder read as one
+   * (`lastSeenS`), the later piece's when two pieces were joined
+   * (`joinReappliedIntervals`). What a check of the cap measures from,
+   * instead of re-reading the rows (T84, codex 85-tk-G-T84-1c: a scan that
+   * re-derived it anchored a joined interval on its first piece). */
+  capFromS?: number;
   /** The row that closed it (REMOVED / BROKEN), when one did: what was
    * logged in its millisecond BEFORE it happened under the aura (fact9 D2,
    * 03cba5ac 2:09: a Shadow Word: Madness tick under Time Dilation, logged
@@ -470,6 +477,7 @@ export function buildAuraIntervalsUncached(
           toS: d === null ? t : Math.min(t, existing.lastSeenS + d),
           inferredStart: existing.inferredStart,
           inferredEnd: true,
+          capFromS: existing.lastSeenS,
         });
         open.set(key, {
           fromS: t,
@@ -605,6 +613,7 @@ export function buildAuraIntervalsUncached(
       toS: d === null ? durationS : Math.min(durationS, o.lastSeenS + d),
       inferredStart: o.inferredStart,
       inferredEnd: true,
+      capFromS: o.lastSeenS,
     });
   }
 
@@ -680,6 +689,9 @@ export function joinReappliedIntervals(
     ) {
       prev.toS = iv.toS;
       prev.inferredEnd = iv.inferredEnd;
+      // …and is capped from where the later one was
+      if (iv.capFromS !== undefined) prev.capFromS = iv.capFromS;
+      else delete prev.capFromS;
       // the joined interval ends at the later one's closing row (codex
       // 20-F24-15 #3: fact9 D2's same-ms rows were lost on this path)
       if (iv.toRow) prev.toRow = iv.toRow;

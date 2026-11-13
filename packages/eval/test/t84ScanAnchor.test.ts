@@ -144,4 +144,21 @@ describe("scan5/t65 envMistInvoke — the cap's anchor (codex 85-tk-G-T84-1)", (
       expect(r.seen[0]!.detail).toContain("12.0–23.0s");
     }
   });
+
+  it("two pieces the builder joined are capped from the later one (codex 85-tk-G-T84-1c)", () => {
+    // one Mist cast at 34.5 s, APPLIED at 34.5 and again at 35.1, no
+    // REMOVED: the builder splits at 35.1 (the cast is within its pairing
+    // radius), joins the pieces, and caps from 35.1 — past the window
+    // (10–35 s), so the plain 7 s to 42.1 s is right and the run is not the
+    // window's. Anchored at 34.5 it read as cut without the +4 s.
+    const r = scan(
+      [
+        [APPLIED, 34.5],
+        [APPLIED, 35.1],
+      ],
+      [34.5],
+    );
+    expect(r.seen).toEqual([]);
+    expect(r.checked).toBe(0);
+  });
 });

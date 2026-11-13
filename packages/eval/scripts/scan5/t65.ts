@@ -61,7 +61,6 @@ import {
 import { setPiecesWorn } from "@gladlog/analysis/src/data/classSetBonuses";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
-import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import {
   buffFullDurationForCaster,
   TIMEWALKER_LENGTHENED_IDS,
@@ -83,7 +82,6 @@ import {
   fmtS,
   type IRoundCtx,
   nameOf,
-  REFRESH,
   REMOVED,
   secOf,
   successesOf,
@@ -535,7 +533,6 @@ function writeStall(ctx: IRoundCtx): void {
 const ENVELOPING_MIST = "124682";
 const INVOKES = ["325197", "322118"];
 const INVOKE_WINDOW_MS = 25_000;
-const DOSE = "SPELL_AURA_APPLIED_DOSE";
 const ENV_MIST_WINDOW_ADD_S = 4;
 const GIFT_OF_THE_CELESTIALS = "388212";
 
@@ -555,29 +552,20 @@ function envMistInvoke(ctx: IRoundCtx): void {
       if (!monk) continue;
       const fromMs = ctx.start + iv.fromS * 1000;
       const toMs = ctx.start + iv.toS * 1000;
-      // the monk's rows of the aura on this unit, read on the log — not the
-      // builder's interval: the cap runs from the run's LAST application
-      // (APPLIED or REFRESH), and the window is asked of that instant
-      // (codex 85-tk-G-T84-1 #2: a run applied at 34 s and refreshed at
-      // 36 s, past the window, closed rightly at 43 s and read as cut)
-      // The builder's own normalisation first: a REMOVED + APPLIED
-      // re-broadcast pair is no row (`dropAuraRebroadcasts`), and an APPLIED
-      // inside the interval is one the builder read as a re-broadcast too —
-      // it would have split the interval there otherwise — so only a
-      // REFRESH / DOSE inside moves the anchor (codex 85-tk-G-T84-1b: a
-      // re-broadcast at 16 s of a run applied at 12 s read as cut at 23 s)
-      const own = dropAuraRebroadcasts((u.auraEvents ?? []) as any[]).filter(
+      // the application the builder counted the cap from (`capFromS`: the
+      // run's last APPLIED / REFRESH / DOSE as the builder read them, the
+      // later piece's of a joined interval) — the builder's own, not a
+      // re-reading of the rows: three re-readings each missed a path of
+      // its normalisation (codex 85-tk-G-T84-1 #2 a REFRESH past the
+      // window, 1b a re-broadcast APPLIED, 1c two pieces joined by
+      // `joinReappliedIntervals`). An interval the log closed has no cap;
+      // the window is asked of its start.
+      const anchorMs =
+        iv.capFromS !== undefined ? ctx.start + iv.capFromS * 1000 : fromMs;
+      const own = ((u.auraEvents ?? []) as any[]).filter(
         (a: any) =>
           String(a.spellId) === ENVELOPING_MIST && a.srcUnitId === monk.id,
       );
-      const anchorMs = own
-        .filter(
-          (a: any) =>
-            (ev(a) === REFRESH || ev(a) === DOSE) &&
-            tsOf(a) > fromMs &&
-            tsOf(a) < toMs - 1,
-        )
-        .reduce((m: number, a: any) => Math.max(m, tsOf(a)), fromMs);
       // the window is the monk's own press of the celestial, for as long as
       // THAT monk's lasts (Gift of the Celestials: 12 s, not 25)
       const inside = successesOf(monk).some((c) => {
