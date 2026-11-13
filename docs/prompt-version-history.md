@@ -6386,3 +6386,17 @@ scan 0 violations of 16 runs with an inferred end. The Timewalker-
 lengthened runs are unchanged. Recorded, not changed: saveAuraIntervals
 and round clipping keep capFromS on an interval whose end they move; no
 reader uses it there.
+
+v541 (2026-11-13; pipeline batch B56, T40). A [PRESS] line's `lasts Ns`
+covers the press's chained auras: a press whose effect is a listed series
+of auras (pressEffectChains.ts, registered in curatedIdRegistry) prints
+the series' length, each follow-up priced at its own length and handed
+over at the previous aura's own REMOVED (Chimaeral Sting 3s -> 9s; Aspect
+of the Cheetah 12s). 605 (measured on the 4ac0040b3 base, before the
+rebases): scan5 pressChainLasts listed-chain rows Chimaeral Sting 1,002 ->
+0, Aspect of the Cheetah 817 -> 0 (0 of 55,435 presses); offListPressLine
+kinds unchanged (lastsOvershoot 6,404, lastsBeyond 47, backBeforeNextPress
+20, lastsLogStall 9). Scan side: one end-of-play bound gates every kind
+that reads an effect's life. Recorded, not changed: a listed follow-up
+applied more than 150 ms after the aura before it ended prints the plain
+length (0 on the 605).

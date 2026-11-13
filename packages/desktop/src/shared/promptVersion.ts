@@ -1194,5 +1194,10 @@
  *  inside the monk's Invoke Chi-Ji / Yu'lon window and left without a
  *  REMOVED row is cut at its length plus the window's 4 s, not the plain
  *  official length. See docs/prompt-version-history.md.
+ *
+ * v541 (2026-11-13; pipeline batch B56, T40): a [PRESS] line's `lasts Ns`
+ *  covers the press's chained auras, not only the first (Chimaeral Sting
+ *  3s -> 9s; Aspect of the Cheetah 12s). See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 540;
+export const PROMPT_VERSION = 541;
