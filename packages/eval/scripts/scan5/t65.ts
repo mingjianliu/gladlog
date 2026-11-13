@@ -51,6 +51,7 @@ import {
   mergeHealerCcWindows,
   SYNC_ENTER_LEAD_S,
   syncWindowCdFor,
+  timelinePressAt,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { setPiecesWorn } from "@gladlog/analysis/src/data/classSetBonuses";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
@@ -95,6 +96,7 @@ export const CHECKS = [
 
 const OCC_SYNC_VARIANT = "occasion: press on the timeline under another id";
 const OCC_SYNC_NONE = "occasion: no timeline press in the ms";
+const PRESS_PAIR_MS = 1500;
 const OCC_USABLE_READY = "occasion: usable-under-control cooldown ready";
 const OCC_SELF_CC_NAMED = "occasion: self-sourced control, line names one";
 const OCC_FEIGN_FRIENDLY = "occasion: friendly feign without the aura";
@@ -197,10 +199,27 @@ function syncVariantEnd(ctx: IRoundCtx): void {
       for (const c of cd.casts as Array<{ timeSeconds: number }>) {
         ctx.bump("syncVariantEnd");
         const key = Math.round(c.timeSeconds * 1000);
-        if (scd.castEndS.has(key)) continue;
-        const other = timeline.find(
-          (p) => Math.round(p.castTimeSeconds * 1000) === key,
-        );
+        // what the consumer finds for this press (`timelinePressAt`)
+        if (timelinePressAt(scd.castEndS, c.timeSeconds) !== undefined)
+          continue;
+        // the timeline's press of it, read here on its own: the nearest
+        // row within 1.5 s — the ledger stamps an activation at its aura,
+        // the timeline at its cast row (codex 85-tk-H-T65-1 #2: an
+        // exact-ms join filed the miss under "no timeline press")
+        const other = timeline
+          .map((p) => ({
+            p,
+            d: Math.abs(Math.round(p.castTimeSeconds * 1000) - key),
+          }))
+          // off the exact ms only a row of the cooldown's own name
+          .filter(
+            (x) =>
+              x.d === 0 ||
+              (x.d <= PRESS_PAIR_MS &&
+                nameOf(x.p.spellId, x.p.spellName) ===
+                  nameOf(cd.spellId, cd.spellName)),
+          )
+          .sort((x, y) => x.d - y.d)[0]?.p;
         const id = `${f.name}:${String(cd.spellId)}:${key}`;
         const where = `${f.name}: ${cd.spellName} ${String(cd.spellId)} pressed at ${fmtS(c.timeSeconds)}`;
         if (!other) {

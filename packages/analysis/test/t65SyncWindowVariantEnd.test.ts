@@ -9,7 +9,10 @@
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { syncWindowCdFor } from "../src/analysis/candidates/cooldownTiming";
+import {
+  syncWindowCdFor,
+  timelinePressAt,
+} from "../src/analysis/candidates/cooldownTiming";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
 const START = 1_000_000;
@@ -30,9 +33,8 @@ describe("T65 — a press's observed end is keyed on its cooldown", () => {
     casts: [{ timeSeconds: 20 }],
   };
   const endsOf = (owner: any) =>
-    (
-      syncWindowCdFor(row, owner, [], new Set(), START, [owner], combat) as any
-    ).castEndS as Map<number, number> | undefined;
+    (syncWindowCdFor(row, owner, [], new Set(), START, [owner], combat) as any)
+      .castEndS as Map<number, number> | undefined;
 
   it("the activation 454351 gives the 31884 row its 8 s end", () => {
     expect(endsOf(ret("454351"))?.get(20_000)).toBe(28);
@@ -41,5 +43,23 @@ describe("T65 — a press's observed end is keyed on its cooldown", () => {
   it("another cooldown's press in the same ms gives it none", () => {
     // Wake of Ashes is no press of Avenging Wrath
     expect(endsOf(ret("255937"))?.get(20_000)).toBeUndefined();
+  });
+
+  // codex 85-tk-H-T65-1 #1: the ledger stamps an activation at its aura
+  // (19.9 s), the timeline at its cast row (20.0 s)
+  describe("timelinePressAt", () => {
+    const ends = new Map([
+      [20_000, 28],
+      [80_000, 90],
+    ]);
+    it("finds the timeline press a ledger activation 0.1 s earlier stands for", () => {
+      expect(timelinePressAt(ends, 19.9)).toBe(28);
+      expect(timelinePressAt(ends, 20)).toBe(28);
+    });
+    it("takes the nearest press, and none past the cast-to-aura pairing", () => {
+      expect(timelinePressAt(ends, 79.2)).toBe(90);
+      expect(timelinePressAt(ends, 22)).toBeUndefined();
+      expect(timelinePressAt(undefined, 20)).toBeUndefined();
+    });
   });
 });

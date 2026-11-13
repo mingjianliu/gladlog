@@ -25,6 +25,7 @@ import {
   traceDecision,
 } from "../../facts/decisionTrace";
 import { isAllyCopyWallId } from "../../utils/allyCopyWall";
+import { SAVE_CAST_AURA_PAIR_S } from "../../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import { burstCastSpan } from "../../utils/burstLedger";
 import {
@@ -769,6 +770,34 @@ export function evaluateSyncWindow(
   return { ready, entered };
 }
 
+/**
+ * What a per-press map of the CD timeline (`castEndS`, `refusedAt`: keyed by
+ * the timeline's press ms) holds for the ledger's press at `timeSeconds`.
+ * The two can stamp one press differently: the ledger keeps a cooldown's
+ * ACTIVATION — its aura's APPLIED row when that is what shows the press —
+ * and the timeline its cast row (codex 85-tk-H-T65-1: Radiant Glory's
+ * 454351 aura at 19.9 s, its cast row at 20.0 s; the exact-ms key missed
+ * and the press read its official length). The nearest timeline press
+ * within `SAVE_CAST_AURA_PAIR_S`, the cast-to-aura pairing the ledger
+ * itself reads.
+ */
+export function timelinePressAt<V>(
+  byPressMs: ReadonlyMap<number, V> | undefined,
+  timeSeconds: number,
+): V | undefined {
+  if (!byPressMs) return undefined;
+  const key = Math.round(timeSeconds * 1000);
+  const exact = byPressMs.get(key);
+  if (exact !== undefined) return exact;
+  let best: { d: number; v: V } | undefined;
+  for (const [ms, v] of byPressMs) {
+    const d = Math.abs(ms - key);
+    if (d <= SAVE_CAST_AURA_PAIR_S * 1000 && (!best || d < best.d))
+      best = { d, v };
+  }
+  return best?.v;
+}
+
 /** Did this press of `cd` enter the lock `w` — the ONE "entered" test
  *  (`evaluateSyncWindow`'s verdict and the `enteredNextLock` fact). */
 function castEntersWindow(
@@ -779,7 +808,7 @@ function castEntersWindow(
   // work order 2026-10-14d Part 2 (preview): the press's OBSERVED end when
   // the CD timeline has it (`burstCastSpan` reads the same field), else the
   // official length
-  const observed = cd.castEndS?.get(Math.round(c.timeSeconds * 1000));
+  const observed = timelinePressAt(cd.castEndS, c.timeSeconds);
   const spanEnd =
     observed ??
     c.timeSeconds +
@@ -888,7 +917,7 @@ export function syncReadyTimingFacts(
     );
     if (after) {
       // T29 R15: a refused press stays a press (the intent), and says so
-      const refused = cd.refusedAt?.get(Math.round(after.timeSeconds * 1000));
+      const refused = timelinePressAt(cd.refusedAt, after.timeSeconds);
       pressedAfter.push(
         `${cd.spellName} ${signedS(after.timeSeconds - w.toSeconds)}s${refused ? ` ${refused.marker}` : ""}`,
       );
