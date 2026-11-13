@@ -142,6 +142,29 @@ describe("missedCleanseEvents — ownerSelfRemoval (WO3 #11, r1008-41)", () => {
     expect(f.ownerSelfRemoval).toBe("Cloak of Shadows");
     expect(f.ownerSelfRemovalFreeS).toBe("4.7");
   });
+  it("a replaced button is not the listed one: Ice Block is offered, an Ice Cold holder's row is not (T61, codex 85-tk-G-T61-2f)", () => {
+    const block = {
+      spellId: "45438",
+      spellName: "Ice Block",
+      cooldownSeconds: 240,
+      casts: [],
+      neverUsed: true,
+    };
+    expect(facts(w(), [block]).ownerSelfRemoval).toBe("Ice Block");
+    // the ledger row of an Ice Cold holder: same id, the kit's name and spell
+    const cold = {
+      ...block,
+      spellName: "Ice Cold",
+      kitSpellId: "414658",
+      listedSpellName: "Ice Block",
+    };
+    const f = facts(w(), [cold]);
+    expect(f.ownerSelfRemoval).toBeUndefined();
+    expect(f.ownerSelfRemovalFreeS).toBeUndefined();
+    expect(facts(w(), [cold, cloak()]).ownerSelfRemoval).toBe(
+      "Cloak of Shadows",
+    );
+  });
   it("Cloak on cooldown, the debuff on a teammate, or a type Cloak is not listed for → nothing", () => {
     expect(facts(w(), [cloak([0])]).ownerSelfRemoval).toBeUndefined();
     expect(facts(w({ targetName: "H-R-US" }), [cloak()]).ownerSelfRemoval).toBeUndefined();

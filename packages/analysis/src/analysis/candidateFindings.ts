@@ -97,6 +97,7 @@ import {
   isMeleeSpec,
   isPassiveProcCast,
   isTeamSaveCD,
+  kitSpellIdOf,
   kitSpellReadyAt,
   lockoutDebuffStopsPress,
   lockoutDebuffStopsPressAtDeath,
@@ -1118,9 +1119,13 @@ function selfRemovalFacts(
   if (ownerCanDispel || w.targetName !== owner?.name) return {};
   if (!extra?.ownerCds || occupancy?.matchStartMs === undefined) return {};
   const ids = SELF_REMOVAL_BY_TYPE[w.dispelType] ?? [];
+  // asked of the spell the button is for its holder (`kitSpellIdOf`, T61):
+  // the table's rates were measured on the listed spell's own casts, and a
+  // replaced button (Ice Cold on the Ice Block row — no immunity) has none
+  // (codex 85-tk-G-T61-2f: the fact read `Ice Block` for an Ice Cold holder)
   const ready = extra.ownerCds.filter(
     (cd) =>
-      ids.includes(cd.spellId) &&
+      ids.includes(kitSpellIdOf(cd)) &&
       cdAvailableAt(cd, w.timeSeconds) &&
       !lockoutDebuffStopsPress(
         owner,
