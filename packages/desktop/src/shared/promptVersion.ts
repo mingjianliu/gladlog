@@ -1133,5 +1133,14 @@
  *  (desktop page switching) and T81 (shared whole-round readings, the
  *  first-paint gate locked at 3.9) change no prompt text. See
  *  docs/prompt-version-history.md.
+ *
+ * v532 (2026-11-13; pipeline batch B44, T43 + T44 + T37 + T42 + T60 + T78 +
+ *  T58): [BURST WINDOW] answers are timed from the cast that produced the
+ *  control; STAYED IN reads every movement root; one press logged under two
+ *  miss types counts once in ENEMY CC KIT; a KILL ATTEMPTS line is named
+ *  for a teammate-targeted opener (Power Infusion, Bloodlust / Heroism);
+ *  the death mitigation audit knows the whole Power Word: Shield family; a
+ *  player logged under two name forms carries the realm form. T58 is scan
+ *  only. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 531;
+export const PROMPT_VERSION = 532;

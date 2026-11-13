@@ -6211,3 +6211,27 @@ whole-round readings are computed once per round and shared by every asker,
 and the CPU-calibrated first-paint gate is locked at 3.9; AI view first entry
 on a large 3v3 match 2152 ms -> 749 ms; 0 of 285 owner contexts and 0 of 285
 findings prompts differ on the 20 audited rounds.
+
+v532 (2026-11-13; pipeline batch B44, T43 + T44 + T37 + T42 + T60 + T78 +
+T58). 605 "before" counts are on the 4882aca85 base capture; where the
+"after" was measured on the repro only, the corpus number comes from the
+wave-end 605 run. (1) T43 — `[BURST WINDOW] … answered with X … in N s` is
+timed from the cast that produced the landed control, read up to
+AIMED_CONTROL_LANDING_LEAD_MS past its aura (a real line printed `in 3.7s`
+for a Rake cast 3.891 s after the opener). 605 before: 8 rows / 25 lines;
+repro 3 -> 0. (2) T44 — a STAYED IN span's root seconds read rootIntervalsOf
+(ROOT_SPELL_IDS), so a Charge or Shambling Rush root gains its `rooted`
+clause and the candidate row its rootS. 605 before: 43 / 169; repro 1 -> 0.
+(3) T37 — rows of one name within CAST_MISS_LEAD_MS are one press whatever
+their miss types (Holy Word: Chastise logs IMMUNE and MISS 1 ms apart):
+ENEMY CC KIT `aimed at them 2x` -> `1x`. 605 before: 3 rows / 823; repro
+3 -> 0. (4) T42 — a burst-anchored KILL ATTEMPTS line is named for a press
+whose cast row names a teammate (Power Infusion, PvP Bloodlust / Heroism)
+when it opened the bracket. 605 before: 285 rows / 103 facts / 7963 lines;
+repro 6 -> 0. (5) T60 (GH #202 item 1) — the death mitigation audit takes
+the Power Word: Shield family from OWN_SHIELD_RULING_FAMILY_IDS: 520 rows /
+186 deaths of 725 with such a shield and no audit row -> 0; 544 audit rows
+gained. (6) T78 — a player logged under a bare and a realm name form
+carries the realm form on the unit and every converted row (3 of 7,040
+player-rounds; 93 lines replaced one for one); candidate rows 0. (7) T58 —
+scan only: resEnemyEffectAfterDeath 2 rows -> 0.
