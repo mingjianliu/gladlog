@@ -418,4 +418,25 @@ describe("once:算一次;抛过的以后照样抛同一个错", () => {
     expect(thunk).toThrow(err);
     expect(f).toHaveBeenCalledTimes(1);
   });
+  // codex 85-tk-I-T81-2: a thunk stored inside a roundValue holder is a
+  // function, which the holder's freeze walk skips — what it computes later
+  // was left writable although every asker shares it.
+  it("冻结开关:roundValue 持有者里的惰性读数在算出来时冻住,写它就抛", () => {
+    setSharedReadingsFrozenForTest(true);
+    const c = { startTime: 0, endTime: 90_000, units: {} };
+    const holder = roundValue(c, "holder", roundFingerprint(c), () => ({
+      rows: once(() => [{ spellName: "a", casts: [1] }]),
+    }));
+    const rows = holder.rows();
+    expect(() => {
+      rows[0]!.spellName = "b";
+    }).toThrow(TypeError);
+    expect(() => rows[0]!.casts.push(2)).toThrow(TypeError);
+    expect(() => rows.pop()).toThrow(TypeError);
+    expect(holder.rows()[0]!.spellName).toBe("a");
+    setSharedReadingsFrozenForTest(false);
+    const loose = once(() => [1])();
+    loose.push(2);
+    expect(loose).toEqual([1, 2]);
+  });
 });

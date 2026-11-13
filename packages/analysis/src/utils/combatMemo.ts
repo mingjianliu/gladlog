@@ -247,7 +247,12 @@ export function mixFingerprintString(h: number, s: string | undefined): number {
 
 /** A thunk that runs `f` once and afterwards returns the same value — or
  * throws the same error: a reading that failed fails for every later asker,
- * as it did when each asker computed it. */
+ * as it did when each asker computed it.
+ *
+ * Its value is shared exactly like a `roundValue` result (the thunks live in
+ * a `roundValue` holder, whose freeze walk skips functions and so never
+ * reaches what they compute later), so it is frozen here, when it
+ * materializes, under the same switch (codex 85-tk-I-T81-2). */
 export function once<T>(f: () => T): () => T {
   let state = 0;
   let value: T | undefined;
@@ -256,6 +261,7 @@ export function once<T>(f: () => T): () => T {
     if (state === 0) {
       try {
         value = f();
+        if (freezeShared) deepFreeze(value);
         state = 1;
       } catch (e) {
         error = e;

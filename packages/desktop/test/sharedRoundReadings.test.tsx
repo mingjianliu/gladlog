@@ -11,6 +11,7 @@ import {
   setCombatMemoEnabledForTest,
   setSharedReadingsFrozenForTest,
 } from "@gladlog/analysis/src/utils/combatMemo";
+import { packRoundReadings } from "@gladlog/analysis/src/analysis/deepDive";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -104,6 +105,46 @@ describe("整局读数每回合只算一次 —— 共享的结果只读,输出�
     expect(shared.input.richContext.length).toBeGreaterThan(1000);
     expect(shared).toEqual(computed);
   }, 120_000);
+
+  // codex 85-tk-I-T81-2: the pack's own five readings are lazy thunks inside
+  // the frozen holder; they were left writable (a write to a cooldown row
+  // stuck for the next asker).
+  it("证据包自己的五个读数也冻住:写其中一行就抛,下一个调用方看到的还是原值", () => {
+    setSharedReadingsFrozenForTest(true);
+    const legacy = toLegacySafe(loadRealMatchFixture());
+    const units = Object.values(legacy.units);
+    const { friends, enemies } = sidesOf(legacy);
+    const owner = resolveOwner(legacy)!;
+    type PackArgs = Parameters<typeof packRoundReadings>;
+    const round = packRoundReadings(
+      legacy as PackArgs[0],
+      units as PackArgs[1],
+      friends as PackArgs[2],
+      enemies as PackArgs[3],
+    );
+    const ownerUnit = friends.find((u) => u.id === owner.id)! as PackArgs[2][0];
+    const readings: Record<string, unknown> = {
+      cds: round.cds(ownerUnit),
+      deathOutcome: round.deathOutcome(),
+      ownerPosition: round.ownerPosition(ownerUnit),
+      burstLedger: round.burstLedger(ownerUnit),
+      outgoingCcChains: round.outgoingCcChains(),
+    };
+    for (const [name, value] of Object.entries(readings)) {
+      if (value === null || typeof value !== "object") continue;
+      expect(Object.isFrozen(value), name).toBe(true);
+      for (const child of Object.values(value))
+        if (child !== null && typeof child === "object")
+          expect(Object.isFrozen(child), `${name} child`).toBe(true);
+    }
+    const cds = round.cds(ownerUnit);
+    expect(cds.length).toBeGreaterThan(0);
+    const before = cds[0]!.spellName;
+    expect(() => {
+      cds[0]!.spellName = "REVIEW_MUTATION";
+    }).toThrow(TypeError);
+    expect(round.cds(ownerUnit)[0]!.spellName).toBe(before);
+  });
 
   it("整份战报渲染:冻结共享结果后的 DOM 与不共享时逐字符相同", () => {
     const html = () => {

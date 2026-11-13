@@ -163,7 +163,8 @@ interface IPackRoundReadings {
   outgoingCcChains: () => IOutgoingCCChain[];
 }
 
-function packRoundReadings(
+/** Exported for the frozen-readings test (desktop sharedRoundReadings). */
+export function packRoundReadings(
   combat: PackRound,
   units: PackUnit[],
   friends: PackUnit[],
