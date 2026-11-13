@@ -1126,5 +1126,12 @@
  *  Hatefury Rituals / Absolute Corruption). T36 (scan checks) and T79
  *  (dead-code removal) change no prompt text. See
  *  docs/prompt-version-history.md.
+ *
+ * v531 (2026-11-13; pipeline batch B43, T87 + T80 + T81): Song of Chi-Ji
+ *  "can reach" is 15 yd, not the cast's 40 (ruling R26) — its entries leave
+ *  exposure / kit / contested lines when the healer was beyond 16 yd. T80
+ *  (desktop page switching) and T81 (shared whole-round readings, the
+ *  first-paint gate locked at 3.9) change no prompt text. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 530;
+export const PROMPT_VERSION = 531;

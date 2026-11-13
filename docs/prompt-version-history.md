@@ -6195,3 +6195,19 @@ pressedInsideNeverBack 961 -> 125). (3) T79 — dead code removed
 mana candidates, TIMELINE_LINE_FLAGS' non-default positions) and
 PRESS_TRIGGERED_CAST_IDS generated from DB2; 0 of 285 owner contexts and 0 of
 285 findings prompts differ on the 20 audited rounds.
+
+v531 (2026-11-13; pipeline batch B43, T87 + T80 + T81). (1) T87 (ruling R26)
+— Song of Chi-Ji "can reach" is 15 yd, not the cast's 40: one ruled table
+(CC_THREAT_REACH_RULED_YD, registered in curatedIdRegistry) read first by
+ccThreatReachYards, so the CC sampler, healer-offense, the healer-exposure
+radius and the eval scans move together; kick readers keep DB2's 40. On the
+72 Mistweaver archives of the 605 manifest (414 contexts): [HEALER EXPOSURE]
+lines naming Song 163 -> 87, ENEMY CC KIT lines naming it 117 -> 105,
+[CONTESTED] 3 -> 1; candidate rows 0. (2) T80 — desktop only: whole-match
+derive results are kept by source identity across mounts and offscreen match
+rows skip layout; returning to the matches page with a large match open 1441
+ms -> 124 ms on a 1,100-match library. (3) T81 (GH #145) — performance only:
+whole-round readings are computed once per round and shared by every asker,
+and the CPU-calibrated first-paint gate is locked at 3.9; AI view first entry
+on a large 3v3 match 2152 ms -> 749 ms; 0 of 285 owner contexts and 0 of 285
+findings prompts differ on the 20 audited rounds.
