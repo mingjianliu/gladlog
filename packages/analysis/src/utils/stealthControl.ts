@@ -100,12 +100,20 @@ function unseenEndBrokenByHit(
   ms: number,
   units: readonly ICombatUnit[],
 ): boolean {
-  const ended = (unit.auraEvents ?? []).some(
+  // this application's own end: a REMOVED before the aura next goes up (a
+  // later run's is not it — codex 85-tk-F-T77-1b #4)
+  const own = (unit.auraEvents ?? []).filter(
     (a) =>
       a.spellId === id &&
       a.destUnitId === unit.id &&
-      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
       a.logLine.timestamp > from,
+  );
+  const next = own.find((a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED)
+    ?.logLine.timestamp;
+  const ended = own.some(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      (next === undefined || a.logLine.timestamp <= next),
   );
   if (ended) return false;
   return stealthImmunityHitMs(unit, from, ms, units) !== undefined;
@@ -156,11 +164,11 @@ export function stealthControlUsableAt(
   ms: number,
   /** the round's units: who aimed a spell at a stealthed unit whose REMOVED
    * the log lost (`unseenEndBrokenByHit`); without them only swings count */
-  units: readonly ICombatUnit[] = [],
+  units: Iterable<ICombatUnit> = [],
 ): boolean {
   if (!STEALTH_ONLY_CONTROL_IDS.has(spellId)) return true;
   return (
-    stealthAuraUpAt(unit, ms, units) ||
+    stealthAuraUpAt(unit, ms, [...units]) ||
     meansInHandAt(unit, INCARNATION_ASHAMANE, ms) ||
     meansInHandAt(unit, SHADOWMELD, ms)
   );

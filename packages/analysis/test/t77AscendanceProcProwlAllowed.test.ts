@@ -93,14 +93,29 @@ describe("T77 — a cast-less Ascendance run of the proc's length is no press", 
     const u = resto([...run(30_000, 35_000), ...run(35_000, 45_000)]);
     expect(isTalentProcRun(u, ASCENDANCE, 30_000)).toBe(false);
     expect(isTalentProcRun(u, ASCENDANCE, 35_000)).toBe(false);
-    expect(auraOnlyActivationSeconds(u, ASCENDANCE, 0).length).toBeGreaterThan(
-      0,
-    );
+    // …and one press (codex 85-tk-F-T77-1b #2)
+    expect(auraOnlyActivationSeconds(u, ASCENDANCE, 0)).toEqual([30]);
     // …and a rebroadcast inside a proc leaves it a proc
     const p = resto([...run(30_000, 33_000), ...run(33_000, 36_000)]);
     expect(isTalentProcRun(p, ASCENDANCE, 30_000)).toBe(true);
     expect(isTalentProcRun(p, ASCENDANCE, 33_000)).toBe(true);
     expect(auraOnlyActivationSeconds(p, ASCENDANCE, 0)).toEqual([]);
+  });
+
+  it("a duplicate APPLIED inside a proc does not hide its end", () => {
+    // codex 85-tk-F-T77-1b #3
+    const [applied, removed] = run(30_000, 36_000);
+    const u = resto([applied!, run(33_000, null)[0]!, removed!]);
+    expect(isTalentProcRun(u, ASCENDANCE, 30_000)).toBe(true);
+    expect(auraOnlyActivationSeconds(u, ASCENDANCE, 0)).toEqual([]);
+  });
+
+  it("a run the holder's death ended is no proof of a proc, whatever its length", () => {
+    // codex 85-tk-F-T77-1b #1: REMOVED at 36.20 s, dead at 36.22 s
+    const u = resto(run(30_000, 36_200));
+    (u as { deathRecords: unknown[] }).deathRecords = [{ timestamp: 36_220 }];
+    expect(isTalentProcRun(u, ASCENDANCE, 30_000)).toBe(false);
+    expect(auraOnlyActivationSeconds(u, ASCENDANCE, 0)).toEqual([30]);
   });
 
   it("a unit without the proc talent has one length: every run is a press", () => {
@@ -163,7 +178,10 @@ describe("T77 — Prowl stays up through a press stealth allows", () => {
       },
     };
     for (const prowl of ["5215", "102547"]) {
-      const mk = (damageIn: unknown[], removedAt?: number) =>
+      const mk = (
+        damageIn: Array<ReturnType<typeof makeDamageEvent>>,
+        removedAt?: number,
+      ) =>
         makeUnit("d1", {
           spellCastEvents: [
             makeSpellCastEvent(TIGERS_FURY, T + 11_000, "d1", "d1"),
@@ -195,6 +213,28 @@ describe("T77 — Prowl stays up through a press stealth allows", () => {
       expect(stealthControlUsableAt(mk([]), RAKE, T + 60_000)).toBe(true);
       expect(stealthControlUsableAt(mk([swing]), RAKE, T + 11_500)).toBe(true);
       expect(stealthControlUsableAt(mk([swing]), RAKE, T + 60_000)).toBe(false);
+      // a later run's REMOVED is not this one's (codex 85-tk-F-T77-1b #4)
+      const later = mk([swing]);
+      later.auraEvents.push(
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          prowl,
+          T + 30_000,
+          "d1",
+          "d1",
+          "BUFF",
+        ) as never,
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          prowl,
+          T + 40_000,
+          "d1",
+          "d1",
+          "BUFF",
+        ) as never,
+      );
+      expect(stealthControlUsableAt(later, RAKE, T + 20_000)).toBe(false);
+      expect(stealthControlUsableAt(later, RAKE, T + 35_000)).toBe(true);
       // a run the log ends keeps the log's end
       expect(
         stealthControlUsableAt(mk([swing], T + 20_000), RAKE, T + 15_000),

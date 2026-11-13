@@ -4468,7 +4468,11 @@ export function auraOnlyActivationSeconds(
   // keeps a log that dropped a REMOVED from merging two real presses.
   const upSince = new Map<string, number>();
   const out: number[] = [];
-  for (const a of unit.auraEvents) {
+  // a REMOVED and an APPLIED of one millisecond are the aura re-announced,
+  // one run and one press (codex 85-tk-F-T77-1b #2: 30 s and 35 s both read)
+  for (const a of dropAuraRebroadcasts(
+    unit.auraEvents.filter((e) => !!e.spellId && auraIds.includes(e.spellId)),
+  )) {
     if (
       !a.spellId ||
       !auraIds.includes(a.spellId) ||
@@ -4526,7 +4530,8 @@ export function auraOnlyActivationSeconds(
  * row is lost, ended 4 s in by the holder's death, is no proof of a proc).
  * The run is the continuous one (`dropAuraRebroadcasts`): a REMOVED and an
  * APPLIED of one millisecond inside a press's 15 s are one run, not a 5 s
- * and a 10 s one (#3), and `appliedMs` may be any APPLIED of it.
+ * and a 10 s one (#3), and `appliedMs` may be any APPLIED of it. A run that
+ * ends in its holder's death (`DEATH_AURA_CLEANUP_S`) is no proof either.
  */
 export function isTalentProcRun(
   unit: ICombatUnit,
@@ -4549,13 +4554,16 @@ export function isTalentProcRun(
           a.logLine.event === LogEvent.SPELL_AURA_REMOVED),
     ),
   );
-  // the run `appliedMs` is in: its first APPLIED and its REMOVED, log order
+  // the run `appliedMs` is in: its first APPLIED and its REMOVED, log order.
+  // An APPLIED inside an open run is a duplicate of it, whenever it comes
+  // (codex 85-tk-F-T77-1b #3).
   let from: number | undefined;
   let to: number | undefined;
   for (const a of rows) {
     if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+      if (from !== undefined) continue;
       if (a.timestamp > appliedMs) break;
-      from ??= a.timestamp;
+      from = a.timestamp;
     } else if (from !== undefined) {
       if (a.timestamp > appliedMs) {
         to = a.timestamp;
@@ -4565,6 +4573,17 @@ export function isTalentProcRun(
     }
   }
   if (from === undefined || to === undefined) return false;
+  // a run the holder's death ended says nothing by its length (1b #1: a
+  // press with a lost cast row, dead 6.2 s in)
+  const endMs = to;
+  if (
+    (unit.deathRecords ?? []).some(
+      (d) =>
+        d.timestamp >= endMs &&
+        d.timestamp - endMs <= DEATH_AURA_CLEANUP_S * 1000,
+    )
+  )
+    return false;
   const runS = (to - from) / 1000;
   if (!(runS < pressS - AURA_PROC_LENGTH_SLACK_S)) return false;
   const procs = Math.round(runS / procS);
