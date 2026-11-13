@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { ALLY_ITEM } from "../scripts/scan5/damageBasis";
 import {
   alreadyUpApplication,
   ledgerOverlapsOfItem,
@@ -58,14 +59,28 @@ describe("alreadyUpApplication", () => {
     expect(alreadyUpApplication(applies, 161_000)).toBe(applies[1]);
   });
 
-  it("这一秒开始时没有、这一秒里也没上过:没有这样的一次", () => {
-    expect(
-      alreadyUpApplication([up(18.2, 21), up(79.5, 82)], 78_000),
-    ).toBeUndefined();
+  it("这一秒开始时没有、这一秒里也没上过:取之前最后一次,让早已结束的那次也被核对", () => {
+    // applied 70, the holder acted 75; a line claiming it "already up" at
+    // 78 must still reach the check
+    const applies = [up(18.2, 21), up(70, 75), up(79.5, 82)];
+    expect(alreadyUpApplication(applies, 78_000)).toBe(applies[1]);
+    expect(alreadyUpApplication([up(79.5, 82)], 78_000)).toBeUndefined();
   });
 
   it("这一秒里上了两次:取第一次", () => {
     const applies = [up(78.1, 78.3), up(78.8, 81)];
     expect(alreadyUpApplication(applies, 78_000)).toBe(applies[0]);
+  });
+});
+
+describe("allyOverlapDeferral 的条目读法", () => {
+  it('一行里用分号隔开的每一项都读到(生产方用 "; " 连接)', () => {
+    const line =
+      "    Ally CDs overlapping: Ally-Realm Avatar 7.6s (their top target in it: Foe-Realm 0.33M); Ally-Realm Colossus Smash 6.0s (their top target in it: Foe-Realm 0.33M); Ally-Realm Bladestorm 1.8s (their top target in it: Foe-Realm 0.21M)";
+    expect([...line.matchAll(ALLY_ITEM)].map((m) => m[2])).toEqual([
+      "Avatar",
+      "Colossus Smash",
+      "Bladestorm",
+    ]);
   });
 });

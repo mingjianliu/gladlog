@@ -99,4 +99,21 @@ describe("scan5/fact10 syncRowPressEnters", () => {
     expect(pressAt(167.861, row, locks, owner, "265187")).toBe(true);
     expect(pressAt(167.861, row, locks, {}, "265187")).toBe(false);
   });
+
+  it("有观测到的结束时刻就用它:引导在锁开始前已结束的按键不算进锁", () => {
+    // pressed 96.5, the channel's aura removed at 97; the lock starts 100.2
+    // (more than the lead after the press). A nominal 4 s length would read
+    // it as still running.
+    const locks = [{ fromSeconds: 100.2, toSeconds: 104 }];
+    const row = { t: 100, endT: 104 };
+    const enters = (castEndS: ReadonlyMap<number, number>) =>
+      syncRowPressEnters(
+        { spellId: "0", owner: {}, timeSeconds: 96.5, castEndS },
+        START,
+        row,
+        locks,
+      );
+    expect(enters(new Map([[96_500, 97]]))).toBe(false);
+    expect(enters(new Map([[96_500, 100.5]]))).toBe(true);
+  });
 });

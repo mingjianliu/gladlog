@@ -119,6 +119,7 @@ import {
   castEntersWindow,
   enemyHealerCcWindows,
   mergeHealerCcWindows,
+  syncWindowCdFor,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { HEALER_CC_MIN_S } from "@gladlog/analysis/src/context/observedConsequences";
 import {
@@ -280,8 +281,8 @@ export function syncRowLock(
  * The producer's own "entered" test (`castEntersWindow`) on the producer's
  * own lock: pressed — or its cast bar begun — from `SYNC_ENTER_LEAD_S`
  * before the lock to its last millisecond, or still running when the lock
- * began (the press plus the holder's full buff length; the scan has no CD
- * timeline, so no observed end).
+ * began (to the press's observed end, `castEndS` — the producer's own
+ * `syncWindowCdFor` builds it; without one, the holder's full buff length).
  *
  * The row's floored seconds alone (−2 s / +1 s) reach up to a second past
  * both ends: a Meteor 2.258 s before a lock at 242.829 and a Goremaw's Bite
@@ -292,7 +293,16 @@ export function syncRowLock(
  * the widest reading.
  */
 export function syncRowPressEnters(
-  press: { spellId: string; owner: unknown; timeSeconds: number },
+  press: {
+    spellId: string;
+    owner: unknown;
+    timeSeconds: number;
+    /** the producer's observed effect ends of this holder's presses of the
+     *  spell (`syncWindowCdFor(...).castEndS`); a Convoke whose channel
+     *  ended before the lock began did not enter it, whatever its nominal
+     *  length (codex 85-tk-I-T94-1b #3) */
+    castEndS?: ReadonlyMap<number, number>;
+  },
   matchStartMs: number,
   row: { t: number; endT: number; healer?: string },
   locks: readonly ISyncRowLock[],
@@ -302,7 +312,12 @@ export function syncRowPressEnters(
     toSeconds: row.endT + 0.999,
   };
   return castEntersWindow(
-    { spellId: press.spellId, owner: press.owner, matchStartMs },
+    {
+      spellId: press.spellId,
+      owner: press.owner,
+      matchStartMs,
+      ...(press.castEndS ? { castEndS: press.castEndS } : {}),
+    },
     { timeSeconds: press.timeSeconds },
     lock,
   );
@@ -342,6 +357,29 @@ export function run(ctx: IRoundCtx): void {
   } catch {
     locks = [];
   }
+  // each holder's observed press ends, built the way the producer builds
+  // them and only for a button a row asks about
+  const enemyIds = new Set(enemies.map((e) => e.id as string));
+  const endsOf = new Map<string, ReadonlyMap<number, number> | undefined>();
+  const castEndSOf = (u: any, id: string) => {
+    const key = `${u.id}|${id}`;
+    if (!endsOf.has(key))
+      endsOf.set(
+        key,
+        (
+          syncWindowCdFor(
+            { spellId: id },
+            u,
+            enemies,
+            enemyIds,
+            ctx.start,
+            ctx.units,
+            ctx.legacy,
+          ) as { castEndS?: ReadonlyMap<number, number> }
+        ).castEndS,
+      );
+    return endsOf.get(key);
+  };
   for (const m of ctx.menu.matchAll(SYNC_ROW)) {
     ctx.bump("pressInsideLockNotEntered");
     const row = { t: +m[2]!, endT: +m[3]!, healer: m[4] || undefined };
@@ -356,7 +394,12 @@ export function run(ctx: IRoundCtx): void {
         const t = tsOf(c);
         if (
           !syncRowPressEnters(
-            { spellId: id, owner: u, timeSeconds: (t - ctx.start) / 1000 },
+            {
+              spellId: id,
+              owner: u,
+              timeSeconds: (t - ctx.start) / 1000,
+              castEndS: castEndSOf(u, id),
+            },
             ctx.start,
             row,
             locks,

@@ -225,6 +225,7 @@ import {
   hpReadingMaxHp,
   hpReadingRows,
 } from "@gladlog/analysis/src/utils/advancedActions";
+import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
   CONTROL_FAILED_MISS_TYPES,
   isControlCast,
@@ -247,6 +248,7 @@ import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "@gladlog/analysis/src/utils/disp
 import {
   holderFirstOwnActionAfterMs,
   isExternalSaveId,
+  SAVE_AURA_END_UNSEEN_IDS,
   SELF_SAVE_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
@@ -1844,36 +1846,36 @@ function runRound(ctx: IContext): void {
         const applyRow =
           im[3] === "already up"
             ? alreadyUpApplication(
-                applies.map((a) => {
-                  const removed = ((tgt.auraEvents ?? []) as any[]).find(
-                    (r) =>
-                      r.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-                      r.spellId === a.spellId &&
-                      r.timestamp >= a.timestamp,
-                  );
-                  const next = applies.find(
-                    (n) => n.spellId === a.spellId && n.timestamp > a.timestamp,
-                  );
-                  // the end the log shows; an unseen holder's is its first
-                  // own action (the end this check itself reads below)
-                  const endMs =
-                    removed && (!next || removed.timestamp <= next.timestamp)
-                      ? (removed.timestamp as number)
-                      : Math.min(
-                          next?.timestamp ?? Infinity,
-                          holderFirstOwnActionAfterMs(
-                            tgt,
-                            a.timestamp,
-                            String(a.spellId),
-                            units,
-                          ),
-                        );
-                  return {
-                    timestamp: a.timestamp as number,
-                    spellId: a.spellId,
-                    endMs,
-                  };
-                }),
+                // the producer's own intervals and its own end for an
+                // unseen holder (`analyzeBurstLedger`: the builder's
+                // duration cap, cut at the holder's first own action —
+                // codex 85-tk-I-T94-1b #4)
+                buildAuraIntervals(tgt, legacy as never)
+                  .filter(
+                    (x) =>
+                      getEnglishSpellName(x.spellId, x.spellName) === im[1],
+                  )
+                  .map((x) => {
+                    const timestamp = Math.round(start + x.fromS * 1000);
+                    const builtEnd = start + x.toS * 1000;
+                    return {
+                      timestamp,
+                      spellId: x.spellId,
+                      endMs:
+                        x.inferredEnd && SAVE_AURA_END_UNSEEN_IDS.has(x.spellId)
+                          ? Math.min(
+                              builtEnd,
+                              holderFirstOwnActionAfterMs(
+                                tgt,
+                                timestamp,
+                                x.spellId,
+                                units,
+                              ),
+                            )
+                          : builtEnd,
+                    };
+                  })
+                  .sort((x, y) => x.timestamp - y.timestamp),
                 bFrom,
               )
             : applies.find(

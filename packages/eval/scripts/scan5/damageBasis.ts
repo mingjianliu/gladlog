@@ -457,8 +457,10 @@ function duringExternalShare(ctx: IRoundCtx): void {
 }
 
 const BURST_HEAD = /^\s*Burst #\d+ — (\d+):(\d\d)–(\d+):(\d\d)/;
-const ALLY_ITEM =
-  /(?:: |, )(\S+) ([^(),]+?) (\d+(?:\.\d+)?)s \(their top target in it: (\S+) ([\d.]+)M\)/g;
+// items are joined with "; " (`formatAllyOverlaps`); a ", " read only the
+// first of a line (codex 85-tk-I-T94-1b #1)
+export const ALLY_ITEM =
+  /(?:: |; )(\S+) ([^(),]+?) (\d+(?:\.\d+)?)s \(their top target in it: (\S+) ([\d.]+)M\)/g;
 
 function allyOverlapDeferral(ctx: IRoundCtx): void {
   let burst: [number, number] | undefined;

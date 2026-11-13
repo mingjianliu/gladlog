@@ -29,10 +29,12 @@ export function ledgerOverlapsOfItem<T>(
  * already up; with none, the first one applied inside the second (T94:
  * Greater Invisibility at 1:18.448 for a burst opening 1:18.768). Taking
  * the LAST application of the second let a re-application hide the action
- * that ended the first. `endMs` is the application's end as the check
- * reads it — its logged removal, or for an end the log does not show (an
- * unseen holder's) the holder's first own action: without it the press of
- * a minute before, never removed in the log, reads as still up.
+ * that ended the first. `endMs` is the application's end as the producer
+ * reads it (`buildAuraIntervals`, an unseen holder's cut at its first own
+ * action) — without it the press of a minute before, never removed in the
+ * log, reads as still up. With neither, the last application before the
+ * second: a line that claims an aura long over is still checked, against
+ * that application (codex 85-tk-I-T94-1b #2).
  */
 export function alreadyUpApplication<
   A extends { timestamp: number; endMs: number },
@@ -42,6 +44,9 @@ export function alreadyUpApplication<
     .at(-1);
   return (
     upAtSecondStart ??
-    applies.find((a) => a.timestamp > bFromMs && a.timestamp < bFromMs + 1000)
+    applies.find(
+      (a) => a.timestamp > bFromMs && a.timestamp < bFromMs + 1000,
+    ) ??
+    applies.filter((a) => a.timestamp <= bFromMs).at(-1)
   );
 }
