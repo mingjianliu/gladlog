@@ -134,6 +134,7 @@ describe("TALENT_REPLACES_GENERATED (official TraitDefinition.OverridesSpellID)"
     expect(iceBlock?.casts).toHaveLength(1);
     expect(iceBlock?.spellName).toBe("Ice Cold");
     expect(iceBlock?.kitSpellId).toBe("414658");
+    expect(iceBlock?.listedSpellName).toBe("Ice Block");
     expect(cds.some((c) => c.spellName === "Ice Block")).toBe(false);
   });
 });

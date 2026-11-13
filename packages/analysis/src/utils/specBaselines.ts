@@ -1,6 +1,6 @@
 import benchmarksJson from '../data/benchmarks.json';
 import { bracketKey } from './bracketKey';
-import { cdIsProcOnly, IMajorCooldownInfo } from './cooldowns';
+import { cdIsProcOnly, IMajorCooldownInfo, listedSpellNameOf } from './cooldowns';
 import { fmtTime } from './renderGrid';
 
 // benchmarks.json is a copy of packages/analysis/benchmarks/benchmark_data.json (collectBenchmarks.ts default --out).
@@ -107,15 +107,21 @@ export function formatSpecBaselines(
 
   // The table promises first-USE timing; a proc-only entry (Renewing Blaze —
   // its "use" is Obsidian Scales' proc) has no use to time (round 3 N5).
-  const relevantCDs = ownerCDs.filter((cd) => spec.cdUsage[cd.spellName] && !cdIsProcOnly(cd));
+  // keyed by the listed button's name (`listedSpellNameOf`): an Ice Cold
+  // holder's row is Ice Block's in the shipped table, and the line names
+  // the cohort it reports — the table's own key (T61)
+  const relevantCDs = ownerCDs.filter(
+    (cd) => spec.cdUsage[listedSpellNameOf(cd)] && !cdIsProcOnly(cd),
+  );
   if (relevantCDs.length > 0) {
     lines.push('  CD reference (% of matches used | median first use | p75 first use):');
     for (const cd of relevantCDs) {
-      const baseline = spec.cdUsage[cd.spellName];
+      const key = listedSpellNameOf(cd);
+      const baseline = spec.cdUsage[key];
       const usedPct = Math.round((1 - baseline.neverUsedRate) * 100);
       const median = baseline.medianFirstUseSeconds !== null ? fmtTime(baseline.medianFirstUseSeconds) : '—';
       const p75 = baseline.p75FirstUseSeconds !== null ? fmtTime(baseline.p75FirstUseSeconds) : '—';
-      lines.push(`    ${cd.spellName}: ${usedPct}% used | ${median} median | ${p75} p75`);
+      lines.push(`    ${key}: ${usedPct}% used | ${median} median | ${p75} p75`);
     }
   }
 

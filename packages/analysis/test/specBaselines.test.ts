@@ -61,6 +61,23 @@ describe("specBaselines — formatSpecBaselines", () => {
     // Rallying Cry has null median/p75 -> formats with "—"
   });
 
+  it("a row named as the holder's kit keeps its reference: the table is keyed by the listed button (T61, codex 85-tk-G-T61-2d #1)", () => {
+    const lines = formatSpecBaselines(
+      "Arms Warrior",
+      [
+        {
+          spellName: "Ice Cold",
+          kitSpellId: "414658",
+          listedSpellName: "Die by the Sword",
+        } as IMajorCooldownInfo,
+      ],
+      mockData,
+    );
+    expect(lines).toContain(
+      "    Die by the Sword: 85% used | 0:35 median | 1:05 p75",
+    );
+  });
+
   it("formats em dash '—' when median or p75 first use is null", () => {
     const ownerCDs = [
       { spellName: "Rallying Cry" } as IMajorCooldownInfo,

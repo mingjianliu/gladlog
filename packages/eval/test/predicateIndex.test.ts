@@ -1752,6 +1752,11 @@ const INDEX: PredicateRow[] = [
     mod: allyCopyWall,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "kitReplacementRowIdByName",
+    mod: cooldowns,
+  },
+  {
     file: `${A}/utils/allyCopyWall.ts`,
     symbol: "allyCopyClause",
     mod: allyCopyWall,

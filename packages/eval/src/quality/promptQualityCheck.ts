@@ -200,6 +200,7 @@ import {
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
   isTickBelowTrough,
+  kitReplacementRowIdByName,
   PRESS_HP_LINE_TAGS,
   PRESSURE_WINDOWS_TOP_N,
   REACTION_WINDOW_S,
@@ -8663,7 +8664,11 @@ export function checkSelfOnlyDefensiveClaims(lines: string[]): string[] {
     const name = note
       ? spellName.trim().slice(0, note.index)
       : spellName.trim();
-    const spellId = DEFENSIVE_ID_BY_NAME.get(name);
+    // …or the kit name of a replaced button (`kitReplacementRowIdByName`:
+    // "Ice Cold" is the Ice Block row, T61) — read when asked, the name
+    // table loads after this module
+    const spellId =
+      DEFENSIVE_ID_BY_NAME.get(name) ?? kitReplacementRowIdByName().get(name);
     if (!spellId) return; // 认不出的技能不报
     if (canHelpAnotherUnit(spellId)) return;
     if (note && allyReachTalentNote({ spellId, allyReach: true }) === note[1])

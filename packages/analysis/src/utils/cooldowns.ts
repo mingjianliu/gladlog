@@ -2911,6 +2911,10 @@ export interface IMajorCooldownInfo {
    * row's id, cooldown and presses stay the replaced button's; its name,
    * length and mitigation row are this spell's. Absent when not replaced. */
   kitSpellId?: string;
+  /** With `kitSpellId`: the replaced button's own English name (Ice Block)
+   * — the key of anything keyed by the listed spell's name
+   * (`listedSpellNameOf`: the shipped CD reference table). */
+  listedSpellName?: string;
   tag: string;
   cooldownSeconds: number;
   /** Observed maximum charge count. >1 when casts occur faster than a single charge allows (e.g. double Pain Suppression via PvP talent). */
@@ -4142,6 +4146,40 @@ export function kitSpellIdOf(
     getEnglishSpellName(as[0]!, cd.spellName) !== cd.spellName
     ? as[0]!
     : cd.spellId;
+}
+
+/** The listed button's English name — the row's own, or the replaced
+ * button's when the row is named as the holder's kit (`kitSpellId`). For a
+ * lookup keyed by the listed spell's name; text names the row by
+ * `spellName`. (codex 85-tk-G-T61-2d #1: the CD reference table is keyed
+ * "Ice Block" and lost its row for an Ice Cold holder — 1 reference → 0.) */
+export function listedSpellNameOf(
+  cd: Pick<IMajorCooldownInfo, "spellName" | "listedSpellName">,
+): string {
+  return cd.listedSpellName ?? cd.spellName;
+}
+
+/**
+ * English name of a pressable replacement → the id of the row it is a press
+ * of, over every such pair the model knows (`CD_TALENT_MODIFIERS`
+ * `replace_spell`, the pairs `talentReplacementsOf(...).pressedAs` gives a
+ * holder): "Ice Cold" → 45438. For a reader of rendered text that must find
+ * the row a kit name stands for (the self-only defensive gate — codex
+ * 85-tk-G-T61-2d #2: its name map had no "Ice Cold" and the claim went
+ * unchecked). A same-named replacement needs no entry.
+ */
+export function kitReplacementRowIdByName(): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  for (const [spellId, mods] of Object.entries(CD_TALENT_MODIFIERS))
+    for (const m of mods) {
+      if (m.effect !== "replace_spell" || m.isConditional) continue;
+      const replacement = String(m.value);
+      if (!((effectiveCooldownSeconds(replacement) ?? 0) > 0)) continue;
+      const listed = getEnglishSpellName(spellId, "");
+      const name = getEnglishSpellName(replacement, "");
+      if (name && name !== listed && !out.has(name)) out.set(name, spellId);
+    }
+  return out;
 }
 
 /** The name `kitSpellIdOf`'s spell prints under — the row's own when the
@@ -6875,7 +6913,9 @@ function buildCooldownEntry(
       // `kitSpellNameOf` (codex 85-tk-G-T61-2c #2: `readyCds=Ice Cold`
       // beside `pressedLate=Ice Block`, and four more rendered readers)
       spellName: kitName,
-      ...(kitId !== spell.spellId ? { kitSpellId: kitId } : {}),
+      ...(kitId !== spell.spellId
+        ? { kitSpellId: kitId, listedSpellName: spell.name }
+        : {}),
       tag: spell.tags[0] as string,
       cooldownSeconds,
       maxChargesDetected,

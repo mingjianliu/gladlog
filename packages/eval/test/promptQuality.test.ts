@@ -339,6 +339,17 @@ describe("promptQualityCheck.checkSelfOnlyDefensiveClaims (GH #28)", () => {
     expect(v[0]).toContain("19236");
   });
 
+  it("换了名字的自保按键照样认得:Ice Cold 就是 Ice Block 那一行 (T61, codex 85-tk-G-T61-2d #2)", () => {
+    const claim = (name: string) => [
+      `1:10  [DEFENSIVE AVAILABLE]  1(FMage): ${name} available but unused`,
+      "1:11  [KILL]                 2(WMonk) (Windwalker Monk) dead",
+    ];
+    expect(checkSelfOnlyDefensiveClaims(claim("Ice Block"))).toHaveLength(1);
+    const cold = checkSelfOnlyDefensiveClaims(claim("Ice Cold"));
+    expect(cold).toHaveLength(1);
+    expect(cold[0]).toContain("45438");
+  });
+
   it("队友的死 + 带天赋、能给队友的自保(on an ally — Lifecinders)→ 不报;不写天赋、或写错天赋 → 硬失败(用户 2026-10-27 裁决)", () => {
     const scales = (name: string) => [
       `1:12  [DEFENSIVE AVAILABLE]  2(PEvoker): ${name} available but unused (free to press it for the last 7.0s before the death)`,
