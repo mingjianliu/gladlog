@@ -201,6 +201,33 @@ describe("MatchReport staged fill", () => {
     await done();
     expect(root(view.container).querySelector(".rpt-skel")).toBeNull();
   });
+  it("被挤掉的回合重填到一半就切走,再回来仍然分步填 (codex 85-tk-G-T93-1g)", async () => {
+    const rounds = [fresh(), fresh(), fresh()];
+    const view = render(<MatchReport source={rounds[0]!} matchId="m" staged />);
+    const fillIs = (v: string) =>
+      waitFor(() => expect(root(view.container).dataset["fill"]).toBe(v), {
+        timeout: 20_000,
+        interval: 1,
+      });
+    const show = (i: number) =>
+      view.rerender(<MatchReport source={rounds[i]!} matchId="m" staged />);
+    await fillIs("done");
+    show(1);
+    await fillIs("done");
+    show(2);
+    await fillIs("done");
+    show(1);
+    // round 1 is evicted; its refill gets one step in, then the user leaves
+    show(0);
+    await fillIs("1");
+    show(1);
+    expect(root(view.container).dataset["fill"]).toBe("done");
+    // what is kept for round 1 is the one step: not a completed fill
+    show(0);
+    expect(root(view.container).dataset["fill"]).not.toBe("done");
+    expect(root(view.container).querySelector(".rpt-skel")).toBeTruthy();
+    await fillIs("done");
+  });
 });
 
 describe("ReportShell", () => {

@@ -29,7 +29,7 @@ import type { MeterMode } from "../derive/meterRows";
 import { deriveMistakes, timedAnchorsFromMistakes } from "../derive/mistakes";
 import { derivePressureLanes } from "../derive/pressureLanes";
 import { ensureRawStreams, getRawStreamsSync } from "../derive/rawStreamsCache";
-import { hasSourceMemo } from "../derive/sourceMemo";
+import { isSourceFilled, markSourceFilled } from "../derive/sourceMemo";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
 import {
@@ -102,13 +102,6 @@ const isFriendlyUnit = (source: ReportSource, unitId: string): boolean =>
  *   4  the leaderboard's 统计 tab
  */
 const FILL_DONE = 4;
-/** Sources whose staged fill has completed. A later mount renders in one
- * pass only while their derive results are still in sourceMemo
- * (`hasSourceMemo`): that cache keeps two sources, and a shuffle keeps all
- * its round objects, so the third round visited evicts the first while this
- * set still holds it — rendered in one pass, coming back to it would run
- * every derive inside the round switch (codex 80-PIPE-48-B48-v1). */
-const filledSources = new WeakSet<ReportSource>();
 const DEFAULT_TEAM_SIZES: readonly number[] = [3, 3];
 const NO_BANDS: ReturnType<typeof deriveVulnBands> = [];
 const NO_MISTAKES: ReturnType<typeof deriveMistakes> = [];
@@ -203,7 +196,7 @@ export function MatchReport({
   // expensive ones. Keyed by the source object: a shuffle round switch reuses
   // this component and starts over.
   const startLevel = (src: ReportSource): number =>
-    staged && !(filledSources.has(src) && hasSourceMemo(src)) ? 0 : FILL_DONE;
+    staged && !isSourceFilled(src) ? 0 : FILL_DONE;
   const [fill, setFill] = useState(() => ({
     source,
     level: startLevel(source),
@@ -215,7 +208,7 @@ export function MatchReport({
   }
   useEffect(() => {
     if (level >= FILL_DONE) {
-      filledSources.add(source);
+      markSourceFilled(source);
       return;
     }
     return afterPaint(() =>

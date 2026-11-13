@@ -55,11 +55,23 @@ export function dropSourceMemo(source: ReportSource): void {
   cache.delete(source);
 }
 
-/** Whether anything is kept for `source` right now. A peek: no recency
- * touch. MatchReport's staged fill asks it before rendering a source in one
- * pass (T93). */
-export function hasSourceMemo(source: ReportSource): boolean {
-  return cache.has(source);
+const FILLED = "\u0000filled";
+
+/** MatchReport's staged fill (T93) has run every step for `source`, so all
+ * its derive results are in the entry. The mark lives IN the entry: evicting
+ * the source drops it with the results, and an entry begun again by a later,
+ * unfinished fill does not carry it (codex 85-tk-G-T93-1g: a marker kept
+ * outside survived the eviction, and a refill abandoned at step 1 left a
+ * partial entry that read as complete). No entry (the analysis tables not
+ * loaded yet, so nothing is stored), no mark. */
+export function markSourceFilled(source: ReportSource): void {
+  cache.get(source)?.set(FILLED, true);
+}
+
+/** Whether `source`'s entry is still the one a completed fill left. A peek:
+ * no recency touch. */
+export function isSourceFilled(source: ReportSource): boolean {
+  return cache.get(source)?.has(FILLED) === true;
 }
 
 export function sourceMemo<T>(
