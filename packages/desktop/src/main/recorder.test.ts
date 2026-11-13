@@ -1622,7 +1622,7 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
         stoppedAt: null,
       });
       svc.onSegmentOpen({
-        startTime: T0 - 86_400_000,
+        startTime: T0 - 600_000, // 10 min: stale, but inside MAX_LIVE_OPEN_AGE_MS
         bracket: "3v3",
         fileKey: "old.txt",
       });
@@ -1635,6 +1635,97 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("⑫ 超过 45 分钟的历史开局连空闲定时器都不暂停(MAX_LIVE_OPEN_AGE_MS:旧日志末尾的残段不再让启动后 3 分钟不切)", async () => {
+    vi.useFakeTimers();
+    try {
+      const { svc, fb } = setupManaged(frozen());
+      svc.onWowUp();
+      await vi.advanceTimersByTimeAsync(10);
+      fb.triggerChunkOpened({
+        videoPath: "/tmp/lobby.mp4",
+        startedAt: T0,
+        stoppedAt: null,
+      });
+      svc.onSegmentOpen({
+        startTime: T0 - 86_400_000,
+        bracket: "3v3",
+        fileKey: "old.txt",
+      });
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(splits(fb.calls)).toBe(1); // the idle split still fires
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("⑬ app 在对局中途启动(开局已是 5 分钟前,结束是现在):斗内不被空闲切,结束照常切", async () => {
+    vi.useFakeTimers();
+    try {
+      let clock = T0;
+      const { svc, fb } = setupManaged({ now: () => clock });
+      svc.onWowUp();
+      await vi.advanceTimersByTimeAsync(10);
+      fb.triggerChunkOpened({
+        videoPath: "/tmp/lobby.mp4",
+        startedAt: T0,
+        stoppedAt: null,
+      });
+      svc.onSegmentOpen({ startTime: T0 - 300_000, bracket: "3v3" });
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(splits(fb.calls)).toBe(0);
+      clock = T0 + 10 * 60_000;
+      svc.onSegmentClose({ endTime: clock - 2_000, aborted: false });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(splits(fb.calls)).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("⑭ 历史开局的异常结束(endTime null)不切;新鲜开局的异常结束照常切", async () => {
+    const { svc, fb } = setupManaged(frozen());
+    svc.onWowUp();
+    await settle();
+    fb.triggerChunkOpened({
+      videoPath: "/tmp/lobby.mp4",
+      startedAt: T0,
+      stoppedAt: null,
+    });
+    svc.onSegmentOpen({ startTime: T0 - 600_000, bracket: "3v3" });
+    svc.onSegmentClose({ endTime: null, aborted: true });
+    await settle();
+    expect(splits(fb.calls)).toBe(0);
+
+    svc.onSegmentOpen({ startTime: T0 - 10_000, bracket: "3v3" }); // fresh, above the open-split gate
+    svc.onSegmentClose({ endTime: null, aborted: true });
+    await settle();
+    expect(splits(fb.calls)).toBe(1);
+  });
+
+  it("⑮ 外控模式:历史开局不去起用户自己的 OBS;新鲜开局照常起录", async () => {
+    const { svc, bypassCalls } = setupManaged({ ...frozen(), mode: "external" });
+    svc.onSegmentOpen({ startTime: T0 - 3_600_000, bracket: "3v3" });
+    svc.onSegmentClose({ endTime: T0 - 3_400_000, aborted: false });
+    await settle();
+    expect(bypassCalls).not.toContain("start");
+    svc.onSegmentOpen({ startTime: T0, bracket: "3v3" });
+    await settle();
+    expect(bypassCalls).toContain("start");
+  });
+
+  it("⑯ 外控模式:别的文件的结束不停掉正在录的这一场;本文件的结束照常停", async () => {
+    const { svc, bypassCalls } = setupManaged({ ...frozen(), mode: "external" });
+    svc.onSegmentOpen({ startTime: T0, bracket: "3v3", fileKey: "new.txt" });
+    await settle();
+    expect(bypassCalls).toContain("start");
+    svc.onSegmentClose({ endTime: null, aborted: true, fileKey: "old.txt" });
+    await settle();
+    expect(bypassCalls).not.toContain("stop");
+    svc.onSegmentClose({ endTime: T0, aborted: false, fileKey: "new.txt" });
+    await settle();
+    expect(bypassCalls).toContain("stop");
   });
 });
 

@@ -100,6 +100,8 @@ class FakeManagedObsWs implements ManagedObsWs {
     GetSceneItemId: async () => ({ sceneItemId: 7 }),
     SetSceneItemTransform: async () => ({}),
     GetSpecialInputs: async () => ({ desktop1: "Desktop Audio", mic1: null }),
+    // ensureConnected's OBS-ready poll (OBS_READY_TIMEOUT_MS): ready at once
+    GetSceneList: async () => ({ scenes: [{ sceneName: "gladlog" }] }),
   };
 
   async connect(url: string, password: string): Promise<void> {
@@ -1032,5 +1034,159 @@ describe("listAudioDevices (managed-OBS prefs, 2026-09-04)", () => {
     const callsBefore = fake.callLog.length;
     expect(await b.listAudioDevices()).toEqual({ output: [], input: [] });
     expect(fake.callLog.length).toBe(callsBefore);
+  });
+});
+
+const order = (f: FakeManagedObsWs) =>
+  f.callOrder.filter((c) => c.startsWith("call:"));
+
+describe("ensureConnected — OBS 就绪等待(NotReady 207,2026-11-12 黑屏的根因)", () => {
+  function makeBackendWithSleep() {
+    return createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => fake,
+      now,
+      sleep: async (ms) => {
+        nowMs += ms;
+      },
+    });
+  }
+
+  it("websocket 连上但 OBS 还没加载完(NotReady)时先等,就绪后才 CreateInput", async () => {
+    let notReady = 3;
+    fake.handlers.GetSceneList = async () => {
+      if (notReady-- > 0)
+        throw new Error("OBS is not ready to perform the request.");
+      return { scenes: [] };
+    };
+    // every gated request answers NotReady until the poll has drained it
+    const gated = (ok: Record<string, unknown>) => async () => {
+      if (notReady >= 0)
+        throw new Error("OBS is not ready to perform the request.");
+      return ok;
+    };
+    fake.handlers.CreateInput = gated({ inputUuid: "u" });
+    fake.handlers.GetInputSettings = gated({ inputSettings: {} });
+    const backend = makeBackendWithSleep();
+    await backend.configureSession();
+    const order = fake.callOrder.filter((c) => c.startsWith("call:"));
+    const lastPoll = order.lastIndexOf("call:GetSceneList");
+    expect(lastPoll).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("call:CreateInput")).toBeGreaterThan(lastPoll);
+    expect((await backend.probe()).ready).toBe(true);
+  });
+
+  it("30 s 内一直 NotReady:不卡死,lastError 写明没就绪", async () => {
+    fake.handlers.GetSceneList = async () => {
+      throw new Error("OBS is not ready to perform the request.");
+    };
+    const notReady = async () => {
+      throw new Error("OBS is not ready to perform the request.");
+    };
+    fake.handlers.CreateInput = notReady;
+    fake.handlers.GetInputSettings = notReady;
+    const backend = makeBackendWithSleep();
+    await backend.configureSession();
+    // polled every 500 ms for 30 s, then gave up and carried on
+    const polls = fake.callOrder.filter((c) => c === "call:GetSceneList");
+    expect(polls.length).toBeGreaterThanOrEqual(60);
+    expect(polls.length).toBeLessThanOrEqual(62);
+    const health = await backend.probe();
+    expect(health.ready).toBe(false);
+    expect(health.lastError).toBeTruthy();
+    // the never-ready connection is dropped, not kept as "connected": the
+    // next call goes back through ensureProcess and connects afresh
+    expect(fake.disconnectCalls).toBe(1);
+    expect(order(fake).includes("call:CreateInput")).toBe(false);
+    fake.handlers.GetSceneList = async () => ({ scenes: [] });
+    fake.handlers.CreateInput = async () => ({ inputUuid: "u" });
+    fake.handlers.GetInputSettings = async () => ({ inputSettings: {} });
+    await backend.configureSession();
+    expect(fake.connectCalls).toHaveLength(2);
+    expect(ensureProcess).toHaveBeenCalledTimes(2);
+    expect((await backend.probe()).ready).toBe(true);
+  });
+
+  it("一个请求挂住也不会把 30 s 的等待拖长(每个请求的超时不超过剩余预算)", async () => {
+    vi.useFakeTimers();
+    const t0 = Date.now();
+    fake.handlers.GetSceneList = async () => {
+      if (Date.now() - t0 < 29_000)
+        throw new Error("OBS is not ready to perform the request.");
+      return new Promise(() => {}); // hangs
+    };
+    const backend = createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => fake,
+      now: () => Date.now(),
+    });
+    let done = false;
+    void backend.configureSession().then(() => {
+      done = true;
+    });
+    await vi.advanceTimersByTimeAsync(31_500);
+    expect(done).toBe(true); // was 44.5 s with a fixed 15 s per request
+  });
+
+  it("配置与开录同时进来(启动装配 + onWowUp):只连一次,两边都等就绪,先建源再 StartRecord", async () => {
+    let notReady = 3;
+    let ready = false;
+    fake.handlers.GetSceneList = async () => {
+      if (notReady-- > 0)
+        throw new Error("OBS is not ready to perform the request.");
+      ready = true;
+      return { scenes: [] };
+    };
+    const gated = (ok: Record<string, unknown>) => async () => {
+      if (!ready) throw new Error("OBS is not ready to perform the request.");
+      return ok;
+    };
+    fake.handlers.CreateInput = gated({ inputUuid: "u" });
+    fake.handlers.GetInputSettings = gated({ inputSettings: {} });
+    fake.handlers.StartRecord = async () => {
+      if (!ready) throw new Error("OBS is not ready to perform the request.");
+      fake.emit("RecordStateChanged", {
+        outputActive: true,
+        outputState: "OBS_WEBSOCKET_OUTPUT_STARTED",
+        outputPath: join(recDir, "a.mp4"),
+      });
+      return {};
+    };
+    const backend = makeBackendWithSleep();
+    await Promise.all([backend.configureSession(), backend.startContinuous()]);
+    expect(fake.connectCalls).toHaveLength(1);
+    const order = fake.callOrder.filter((c) => c.startsWith("call:"));
+    const lastPoll = order.lastIndexOf("call:GetSceneList");
+    expect(order.indexOf("call:CreateInput")).toBeGreaterThan(lastPoll);
+    expect(order).toContain("call:StartRecord");
+    expect(order.indexOf("call:StartRecord")).toBeGreaterThan(lastPoll);
+  });
+
+  it("就绪超时清理后又连上了新连接:之前挂着的 shutdown 结束时不清掉新连接", async () => {
+    vi.useFakeTimers();
+    const fakeA = new FakeManagedObsWs();
+    fakeA.handlers.GetSceneList = async () => {
+      throw new Error("OBS is not ready to perform the request.");
+    };
+    fakeA.disconnect = () => new Promise<void>(() => {}); // hangs
+    const clients = [fakeA, fake];
+    const backend = createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => clients.shift()!,
+      now: () => Date.now(),
+    });
+    const first = backend.configureSession();
+    await vi.advanceTimersByTimeAsync(30_500); // readiness timed out, cleanup's disconnect pending
+    const down = backend.shutdown(); // also waits on A's hung disconnect
+    await vi.advanceTimersByTimeAsync(2_000); // cleanup gives up on A, drops it
+    await first;
+    await backend.configureSession(); // B: connects, ready, source created
+    expect((await backend.probe()).ready).toBe(true);
+    await vi.advanceTimersByTimeAsync(15_000); // the old shutdown's disconnect times out
+    await down;
+    expect((await backend.probe()).ready).toBe(true); // B survives
   });
 });

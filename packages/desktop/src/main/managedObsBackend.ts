@@ -31,6 +31,24 @@ const FIRST_CHUNK_EVENT_TIMEOUT_MS = 5_000;
  * "采集源不写进场景 JSON"),运行时用 CreateInput 现建。 */
 const GAME_CAPTURE_INPUT_NAME = "gladlog-capture";
 
+/**
+ * How long ensureConnected() waits, after the websocket connects, for OBS
+ * itself to be ready. obs-websocket starts listening in obs_module_post_load
+ * -- BEFORE the frontend has loaded the scene collection -- and answers
+ * every request except GetVersion with NotReady (207, "OBS is not ready to
+ * perform the request") until OBS_FRONTEND_EVENT_FINISHED_LOADING
+ * (obs-websocket 5.7.4 src/obs-websocket.cpp:119,
+ * src/websocketserver/WebSocketServer_Protocol.cpp:219). Our spawn readiness
+ * ("websocket started" in OBS's log) is therefore too early: this is how the
+ * Windows field run's (2026-11-12 22:05) configureSession failed before
+ * CreateInput and recorded 16 minutes of empty scene. startContinuous's
+ * re-configure guard stops the black recording; this wait stops the
+ * configure from failing in the first place. Timing-dependent, so
+ * intermittent (the launches before and after created the source fine).
+ */
+const OBS_READY_TIMEOUT_MS = 30_000;
+const OBS_READY_POLL_MS = 500;
+
 /** WoW 客户端主窗口的类名(Wow.exe / WowClassic.exe / WowT.exe 共用;
  * 2026-11-12 Windows 真机 GetClassName 实测 "waApplication Window")。 */
 export const WOW_WINDOW_CLASS = "waApplication Window";
@@ -191,6 +209,8 @@ export interface ManagedObsBackendDeps {
   micDeviceId?: string | null;
   clientFactory?: () => ManagedObsWs;
   now?: () => number;
+  /** Injectable wait for the OBS-ready poll (tests); default setTimeout. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /** One enumerable audio endpoint, as OBS reports it for a `device_id`
@@ -220,9 +240,18 @@ export function createManagedObsBackend(
 ): ManagedObsBackend {
   const nowFn = deps.now ?? Date.now;
   const makeClient = deps.clientFactory ?? realManagedObsWs;
+  const sleep =
+    deps.sleep ??
+    ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
   let client: ManagedObsWs | null = null;
   let connected = false;
+  /** The fresh connect (+ OBS-ready wait) in flight, shared by every caller
+   * that arrives meanwhile: configureSession at startup and onWowUp's
+   * startContinuous run concurrently, and without this the second one saw
+   * `connected` already true and issued its requests mid-NotReady (or, before
+   * `connected` was set, opened a second connect on the same client). */
+  let connecting: Promise<boolean> | null = null;
   let listenersAttached = false;
   let continuousActive = false;
   let sessionConfigured = false;
@@ -446,10 +475,18 @@ export function createManagedObsBackend(
    * startContinuous() 都可能是"第一个真正建立连接的调用",谁先调用谁做这份工作,
    * 幂等。 */
   async function ensureConnected(): Promise<boolean> {
-    if (connected && client) {
+    if (connected && client && !connecting) {
       attachListeners(client);
       return true;
     }
+    if (connecting) return connecting;
+    connecting = connectFresh().finally(() => {
+      connecting = null;
+    });
+    return connecting;
+  }
+
+  async function connectFresh(): Promise<boolean> {
     let proc: { wsUrl: string; wsPassword: string };
     try {
       proc = await deps.ensureProcess();
@@ -458,10 +495,11 @@ export function createManagedObsBackend(
       return false;
     }
     if (!client) client = makeClient();
-    attachListeners(client);
+    const c = client;
+    attachListeners(c);
     try {
       await withTimeout(
-        client.connect(proc.wsUrl, proc.wsPassword),
+        c.connect(proc.wsUrl, proc.wsPassword),
         CALL_TIMEOUT_MS,
         "connect",
       );
@@ -469,8 +507,59 @@ export function createManagedObsBackend(
       lastError = `连接失败: ${errMessage(err)}`;
       return false;
     }
+    if (client !== c) return false; // shutdown() ran during the connect
     connected = true;
-    return true;
+    if (await waitObsReady(c)) return client === c;
+    // Never ready: drop this connection instead of keeping it as "connected".
+    // The backend has no ConnectionClosed handling, so a socket that died
+    // during the wait (OBS crashed while loading) would otherwise be reused
+    // by every later call, forever (codex review 2026-11-13 #2). The next
+    // ensureConnected() opens a fresh connection and waits again; if OBS is
+    // really gone, that connect fails and says so in lastError instead of
+    // every call silently talking to a dead socket. (ensureProcess only
+    // re-reads the spawned process's ready handle -- it does not respawn.)
+    if (client === c) {
+      try {
+        await withTimeout(c.disconnect(), OBS_READY_POLL_MS * 4, "disconnect");
+      } catch {
+        /* best effort: the socket may already be gone */
+      }
+      if (client === c) {
+        client = null;
+        connected = false;
+        listenersAttached = false;
+      }
+    }
+    return false;
+  }
+
+  /** See OBS_READY_TIMEOUT_MS. Polls a request that obs-websocket gates on
+   * readiness (GetSceneList; GetVersion is the one it does not gate) until it
+   * succeeds. true = ready; false = gave up (timeout, recorded in lastError,
+   * or shutdown() dropped this client). Every request is bounded by the
+   * budget left, so one hung request cannot stretch the wait past
+   * OBS_READY_TIMEOUT_MS (codex review 2026-11-13 #3). */
+  async function waitObsReady(c: ManagedObsWs): Promise<boolean> {
+    const deadline = nowFn() + OBS_READY_TIMEOUT_MS;
+    let last: unknown = null;
+    for (;;) {
+      if (client !== c) return false; // shutdown() dropped this client meanwhile
+      try {
+        await withTimeout(
+          c.call("GetSceneList"),
+          Math.max(1, Math.min(CALL_TIMEOUT_MS, deadline - nowFn())),
+          "GetSceneList",
+        );
+        return true;
+      } catch (err) {
+        last = err;
+      }
+      if (nowFn() >= deadline) {
+        lastError = `OBS 在 ${OBS_READY_TIMEOUT_MS / 1000}s 内没有就绪: ${errMessage(last)}`;
+        return false;
+      }
+      await sleep(OBS_READY_POLL_MS);
+    }
   }
 
   async function startContinuous(): Promise<void> {
@@ -648,6 +737,11 @@ export function createManagedObsBackend(
         lastError = `disconnect 失败: ${errMessage(err)}`;
       }
     }
+    // A newer connection replaced `c` while that disconnect was pending (the
+    // readiness-timeout cleanup in connectFresh dropped `c`, and a later
+    // caller connected afresh): that session is not this shutdown's to clear
+    // (codex review 2026-11-13 round 2).
+    if (client !== null && client !== c) return;
     client = null;
     connected = false;
     listenersAttached = false;

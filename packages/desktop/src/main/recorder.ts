@@ -89,6 +89,25 @@ const MATCH_OPEN_SPLIT_MAX_LAG_MS = 3_000;
  * window without the chapter/split.
  */
 const STALE_SEGMENT_MS = 120_000;
+/**
+ * An OPEN older than this cannot be a match still in progress: the longest
+ * single ARENA_MATCH_START..END is a solo-shuffle lobby, 20-30 minutes (see
+ * STUCK_MATCH_MAX_CHUNK_MS). Such an open is ignored outright -- it does not
+ * even pause the idle timer. Without this, an old log ending inside an
+ * unclosed match paused idle splitting at every startup until the quiet valve
+ * closed it ~3 minutes later (Windows field run 2026-11-12: no idle split for
+ * the first 3+ minutes), so a match queued in that window opened its file
+ * with minutes of lobby. Between STALE_SEGMENT_MS and this, the "app started
+ * mid-match" protection still applies.
+ *
+ * Judged on the wall clock like STALE_SEGMENT_MS, so a system clock that
+ * jumps forward by 45+ minutes between a live match's START being written and
+ * being read would drop that match's open (codex review 2026-11-13 #1, an
+ * in-memory reproduction). Accepted: the log timestamps carry their own UTC
+ * offset, so DST changes do not move this age; only a manual or NTP
+ * correction of that size, landing inside that window, does.
+ */
+const MAX_LIVE_OPEN_AGE_MS = 45 * 60_000;
 /** Managed-mode per-chunk ceiling (design doc §5.5, 复核 I4 -- this is
  * SAFETY_STOP_MS's managed-mode reincarnation, but kept as its own constant:
  * SAFETY_STOP_MS stops the bypass recording outright on timeout, whereas this
@@ -902,6 +921,7 @@ export function createRecorderService(deps: {
         // queued just ahead of this segmentOpen could still fire and split
         // mid-match.
         const openLagMs = now() - info.startTime;
+        if (openLagMs > MAX_LIVE_OPEN_AGE_MS) return; // pure history, see MAX_LIVE_OPEN_AGE_MS
         const openStale = openLagMs > STALE_SEGMENT_MS;
         // History must never take over a LIVE window (it would steal
         // segmentOwner and the live match's own close would then be ignored).

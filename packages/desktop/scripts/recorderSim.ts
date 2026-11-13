@@ -487,8 +487,6 @@ async function cmdRun(): Promise<void> {
 
 // ------------------------------------------------------------------ verify --
 
-/** Real duration (s) of an mp4 from its own boxes: mvhd, or mvex/mehd for a
- * fragmented file whose mvhd says 0. null when neither is readable. */
 /** The managed OBS's own log that was still being written after the sim
  * started: <userData>/obs/<version>/config/obs-studio/logs/*.txt (portable
  * mode). The app usually launched OBS before `run`, so the file is picked by
@@ -515,6 +513,8 @@ function newestManagedObsLog(
   return best?.path ?? null;
 }
 
+/** Real duration (s) of an mp4 from its own boxes: mvhd, or mvex/mehd for a
+ * fragmented file whose mvhd says 0. null when neither is readable. */
 function mp4DurationS(path: string): number | null {
   let fd: number;
   try {
