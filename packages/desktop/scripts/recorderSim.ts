@@ -489,6 +489,32 @@ async function cmdRun(): Promise<void> {
 
 /** Real duration (s) of an mp4 from its own boxes: mvhd, or mvex/mehd for a
  * fragmented file whose mvhd says 0. null when neither is readable. */
+/** The managed OBS's own log that was still being written after the sim
+ * started: <userData>/obs/<version>/config/obs-studio/logs/*.txt (portable
+ * mode). The app usually launched OBS before `run`, so the file is picked by
+ * last-write time (>= the sim start), not by creation time. */
+function newestManagedObsLog(
+  userData: string | null,
+  sinceMs: number,
+): string | null {
+  if (!userData) return null;
+  const obsRoot = join(userData, "obs");
+  if (!existsSync(obsRoot)) return null;
+  let best: { path: string; mtime: number } | null = null;
+  for (const ver of readdirSync(obsRoot)) {
+    const logs = join(obsRoot, ver, "config", "obs-studio", "logs");
+    if (!existsSync(logs)) continue;
+    for (const f of readdirSync(logs)) {
+      if (!f.endsWith(".txt")) continue;
+      const p = join(logs, f);
+      const mtime = statSync(p).mtimeMs;
+      if (mtime >= sinceMs && (!best || mtime > best.mtime))
+        best = { path: p, mtime };
+    }
+  }
+  return best?.path ?? null;
+}
+
 function mp4DurationS(path: string): number | null {
   let fd: number;
   try {
@@ -620,10 +646,27 @@ function cmdVerify(): void {
     return `FAIL ${msg}`;
   };
   for (const m of man.matches) {
-    const covering = chunks.filter(
+    const overlapping = chunks.filter(
       (c) => c.startedAt <= m.endMs && (c.stoppedAt ?? Infinity) >= m.startMs,
     );
     const lines: string[] = [];
+    // The match-OPEN split can only land AFTER the start (it fires when the
+    // START line is read, and only while that read is <= OPEN_SPLIT_MAX_LAG_MS
+    // late), so the first <= 3 s of the match sit at the end of the previous
+    // chunk by design -- the Video tab shows them as "缺头 N 秒". That is the
+    // open split working, not "a split happened mid-match".
+    let covering = overlapping;
+    const openSplitIntoMatch =
+      overlapping.length > 1 &&
+      overlapping[1]!.startedAt > m.startMs &&
+      overlapping[1]!.startedAt - m.startMs <= OPEN_SPLIT_MAX_LAG_MS;
+    if (openSplitIntoMatch) {
+      covering = overlapping.slice(1);
+      lines.push(
+        `ok   open split landed ${s(covering[0]!.startedAt - m.startMs)} s after the start ` +
+          `(first seconds stay in the previous chunk, by design <= ${OPEN_SPLIT_MAX_LAG_MS / 1000} s)`,
+      );
+    }
     if (covering.length === 0)
       lines.push(flagFail("no chunk overlaps this match"));
     else if (covering.length > 1)
@@ -634,9 +677,14 @@ function cmdVerify(): void {
       );
     const c = covering[0];
     if (c) {
-      const headS = (m.startMs - c.startedAt) / 1000;
+      // with the open split absorbed above, the head of the carrying chunk is
+      // the split's own lag -- never "lobby", and not "opening missing" either
+      const headS = openSplitIntoMatch ? 0 : (m.startMs - c.startedAt) / 1000;
+      // the END is carried by the LAST covering chunk (differs from c when
+      // the match was split mid-way, which is already its own FAIL above)
+      const last = covering[covering.length - 1]!;
       const tailS =
-        c.stoppedAt === null ? null : (c.stoppedAt - m.endMs) / 1000;
+        last.stoppedAt === null ? null : (last.stoppedAt - m.endMs) / 1000;
       if (headS < 0)
         lines.push(
           flagFail(
@@ -666,10 +714,16 @@ function cmdVerify(): void {
           ),
         );
       else lines.push(`ok   chunk ends ${tailS.toFixed(1)} s after match end`);
-      if (c.matchIds.length === 0)
+      if (covering.every((k) => k.matchIds.length === 0))
         lines.push(
           flagFail(
-            "chunk has no matchIds -- not associated with the parsed match (Video tab will be empty)",
+            "no covering chunk has matchIds -- not associated with the parsed match (Video tab will be empty)",
+          ),
+        );
+      else if (c.matchIds.length === 0)
+        lines.push(
+          flagFail(
+            "the match is associated with a chunk that does not carry its start (Video tab starts late)",
           ),
         );
       if (!existsSync(c.videoPath))
@@ -691,6 +745,33 @@ function cmdVerify(): void {
     );
     for (const l of lines) console.log(`    ${l}`);
   }
+  // Picture check (Windows field run 2026-11-12 22:05: a launch whose OBS never
+  // got the capture source recorded 16 min of black video + audio, and every
+  // timing check above still passed). The managed OBS log that was being
+  // written during the sim must show the source being created and WoW hooked.
+  console.log("\nPICTURE (managed OBS log)");
+  const obsLog = newestManagedObsLog(man.userData, man.createdAt);
+  if (!obsLog) {
+    console.log("    ?    no managed OBS log written during the sim window");
+  } else {
+    const text = readFileSync(obsLog, "utf-8");
+    const created = /added source 'gladlog-capture' \(game_capture\)/.test(text);
+    const hooked =
+      /\[game-capture: 'gladlog-capture'\][^\n]*capture successful/.test(text);
+    console.log(`    log  ${obsLog}`);
+    if (!created)
+      console.log(
+        `    ${flagFail("capture source 'gladlog-capture' was never created -- the video is black")}`,
+      );
+    else if (man.fakeWow)
+      console.log("    ok   capture source created (fake WoW: nothing to hook, black is expected)");
+    else if (!hooked)
+      console.log(
+        `    ${flagFail("capture source created but WoW was never hooked -- the video is black")}`,
+      );
+    else console.log("    ok   capture source created and WoW hooked");
+  }
+
   const short = chunks.filter(
     (c) => c.stoppedAt !== null && c.stoppedAt - c.startedAt < 10_000,
   );

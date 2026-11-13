@@ -754,6 +754,41 @@ describe("RecordingsStore 分片 upsert (task-5 brief 5a)", () => {
     });
     expect(hit?.videoPath).toBe(v);
   });
+
+  it("正在录的最新分片按实际重叠排名,不输给只沾了 1 秒的已关闭邻居(Windows 真机 2026-11-12)", () => {
+    // 空闲分片落在开局后 1s(日志晚了 8s,没有开局分片):上一个分片只装着
+    // 对局的头 1s,这一场的其余部分都在仍在录的分片里。修复前 associate 把
+    // 仍在录的分片当成「重叠未知」排最后,录像页只能放 1 秒。
+    const { dir, store } = setup();
+    const prev = fakeVideo(dir, "prev.mp4");
+    const cur = fakeVideo(dir, "cur.mp4");
+    store.openChunk(prev, T0 - 61_000);
+    store.closeChunk(prev, T0 + 1_000);
+    store.openChunk(cur, T0 + 1_000); // stoppedAt null:还在录
+    const hit = store.associate({
+      id: "m2",
+      startTime: T0,
+      endTime: T0 + 119_000,
+    });
+    expect(hit?.videoPath).toBe(cur);
+  });
+
+  it("较旧的 stoppedAt:null 行(崩溃残留)仍算重叠未知,不抢已关闭的真分片", () => {
+    const { dir, store } = setup();
+    const crashed = fakeVideo(dir, "crashed.mp4");
+    const real = fakeVideo(dir, "real.mp4");
+    const newest = fakeVideo(dir, "newest.mp4");
+    store.openChunk(crashed, T0 - 5_000); // 从未关闭
+    store.openChunk(real, T0);
+    store.closeChunk(real, T0 + 200_000);
+    store.openChunk(newest, T0 + 600_000); // 对局之后才开的
+    const hit = store.associate({
+      id: "m1",
+      startTime: T0,
+      endTime: T0 + 190_000,
+    });
+    expect(hit?.videoPath).toBe(real);
+  });
 });
 
 describe("prune 孤儿宽限期 ORPHAN_GRACE_MS (task-5 brief 5a, 复核 B4)", () => {

@@ -277,8 +277,25 @@ export class RecordingsStore {
       return true;
     });
     if (candidates.length === 0) return null;
+    // The chunk being recorded right now (the newest row, stoppedAt null) is
+    // not "unknown overlap" for RANKING: associate() runs once the match has
+    // been parsed, i.e. after its END, so that chunk already runs to at least
+    // meta.endTime. Ranking it as unknown (-1) lost it to any closed
+    // neighbour that merely touched the match: Windows field run 2026-11-12,
+    // an idle split landed 1 s after a match started (its open was 8 s late
+    // in the log), and the match was bound to the chunk holding that 1 s --
+    // the Video tab played a 1-second video. Only the newest row qualifies:
+    // an older null row is a crash leftover, still "unknown".
+    const newest = entries.reduce<RecordingEntry | null>(
+      (a, e) => (a === null || e.startedAt > a.startedAt ? e : a),
+      null,
+    );
+    const rankOverlap = (e: RecordingEntry): number | null =>
+      e.stoppedAt === null && e === newest
+        ? Math.max(0, meta.endTime - Math.max(e.startedAt, meta.startTime))
+        : overlapMs(e, meta);
     const hit = candidates
-      .map((e) => ({ e, overlap: overlapMs(e, meta) }))
+      .map((e) => ({ e, overlap: rankOverlap(e) }))
       .sort((a, b) => {
         const ao = a.overlap ?? -1;
         const bo = b.overlap ?? -1;

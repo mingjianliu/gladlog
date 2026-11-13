@@ -38,6 +38,7 @@ import { pipeline } from "node:stream/promises";
 
 import OBSWebSocket from "obs-websocket-js";
 
+import { GAME_CAPTURE_SETTINGS } from "../src/main/managedObsBackend";
 import {
   type ManagedObsHandle,
   spawnManagedObs,
@@ -470,11 +471,8 @@ async function main(): Promise<void> {
         sceneName: "gladlog",
         inputName: "gc",
         inputKind: "game_capture",
-        inputSettings: {
-          capture_mode: "any_fullscreen",
-          priority: 2,
-          anti_cheat_hook: true,
-        },
+        // 与产品同一份设置(共享谓词规则):窗口模式按类名钩 WoW,不依赖前台
+        inputSettings: { ...GAME_CAPTURE_SETTINGS },
         sceneItemEnabled: true,
       }),
       CREATE_INPUT_TIMEOUT_MS,
@@ -538,9 +536,11 @@ async function main(): Promise<void> {
           "fit",
           `画布 ${canvasW}x${canvasH};源 ${srcW}x${srcH};上画布后 ${outW}x${outH};` +
             `boundsType=${String(t.boundsType)};入镜面积 ${(shownFrac * 100).toFixed(1)}%` +
-            (shownFrac > 0.999
-              ? " OK"
-              : " —— 被画布裁了,这就是「只有左上角一块」"),
+            (srcW === 0 || srcH === 0
+              ? " —— 源是 0x0:游戏捕获根本没钩上 WoW(WoW 没开 / 还在登录界面之前 / 钩子被拦),这一行判断不了裁剪"
+              : shownFrac > 0.999
+                ? " OK"
+                : " —— 被画布裁了,这就是「只有左上角一块」(注意:本脚本建的源不带产品的 fitCaptureToCanvas 边界框,产品侧以 recorder:sim 实录为准)"),
         );
       }
     } else {

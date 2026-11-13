@@ -144,9 +144,11 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       isRated: true,
       startTime: 111,
     });
+    // fileKey 一并转发:recorder 用它判断「这个 close 是不是开这扇窗的那个文件的」
     expect(deps.recorder.onSegmentOpen).toHaveBeenCalledWith({
       startTime: 111,
       bracket: "3v3",
+      fileKey: "a.txt",
     });
     handler({
       type: "segmentClose",
@@ -157,6 +159,7 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
     expect(deps.recorder.onSegmentClose).toHaveBeenCalledWith({
       endTime: 222,
       aborted: false,
+      fileKey: "a.txt",
     });
   });
 

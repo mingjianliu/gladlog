@@ -30,6 +30,33 @@ const FIRST_CHUNK_EVENT_TIMEOUT_MS = 5_000;
 /** 托管实例里 game_capture 输入的固定名字——不进场景 JSON(design doc §5.4:
  * "采集源不写进场景 JSON"),运行时用 CreateInput 现建。 */
 const GAME_CAPTURE_INPUT_NAME = "gladlog-capture";
+
+/** WoW 客户端主窗口的类名(Wow.exe / WowClassic.exe / WowT.exe 共用;
+ * 2026-11-12 Windows 真机 GetClassName 实测 "waApplication Window")。 */
+export const WOW_WINDOW_CLASS = "waApplication Window";
+
+/**
+ * 托管 OBS 的游戏采集源设置。产品(configureSession)与 obsGateCheck.ts 共用
+ * 这一份(共享谓词规则)。
+ *
+ * 窗口模式,按**类名**匹配,不再用 `any_fullscreen`(Windows 真机 2026-11-12):
+ * any_fullscreen 只钩**前台**的全屏窗口,而托管 OBS 一启动,它隐藏的主窗口
+ * 就拿走了前台(GetForegroundWindow 实测是不可见的
+ * "OBS 32.2.1 - 便携模式" 窗口)—— WoW 先开、gladlog 后开时整段录像都钩不上;
+ * 手动把 WoW 切回前台 1 秒内就钩上了。窗口模式直接钩 WoW 进程,与谁在前台、
+ * WoW 是全屏还是窗口化都无关。
+ *
+ * `window` 是 OBS 的 "标题:类名:exe" 串。`priority` 存枚举值
+ * CLASS=0/TITLE=1/EXE=2:取 0 = 按类名匹配,标题(本地化,"魔兽世界" /
+ * "World of Warcraft")与 exe(三个客户端名)都不参与匹配,所以写一个就够,
+ * Classic / PTR 同样钩得上。
+ */
+export const GAME_CAPTURE_SETTINGS = {
+  capture_mode: "window",
+  window: `World of Warcraft:${WOW_WINDOW_CLASS}:Wow.exe`,
+  priority: 0,
+  anti_cheat_hook: true,
+} as const;
 /** Throwaway inputs created by listAudioDevices() (one per audio input
  * kind), removed again in the same call. Prefixed so they can never collide
  * with the real channel sources (Desktop Audio / Mic/Aux) or the capture
@@ -450,6 +477,21 @@ export function createManagedObsBackend(
     if (continuousActive) return; // 幂等(规则 10)
     const ok = await ensureConnected();
     if (!ok) return;
+    // 没有采集源就绝不开录(Windows 真机 2026-11-12 22:05):装配层那次
+    // configureSession() 没走到 CreateInput 就静默失败了,但 watch 照样起来,
+    // onWowUp → 这里 StartRecord 了一个空场景 —— 16 分钟只有声音的黑屏,
+    // 而 recorder 的 2s 重试只会再调本函数(幂等直接返回),采集源永远补不上。
+    // 现在:会话没配好就先补配;补不上就不开录,留 lastError 给 recorder 的
+    // 重试与横幅 —— 下一次重试会再补配一次,直到成功。
+    if (!sessionConfigured) {
+      await configureSession();
+      if (!sessionConfigured) {
+        console.warn(
+          `[recorder] 托管 OBS 会话未配好(采集源没建上),暂不开录:${lastError ?? "原因未知"}`,
+        );
+        return;
+      }
+    }
 
     const firstChunkWait = currentChunk
       ? null
@@ -618,13 +660,7 @@ export function createManagedObsBackend(
   async function configureSession(): Promise<void> {
     const ok = await ensureConnected();
     if (!ok) return;
-    const gameCaptureSettings = {
-      capture_mode: "any_fullscreen",
-      // priority 存的是枚举值 CLASS=0/TITLE=1/EXE=2,不是下拉框位置——
-      // design doc §5.4;2 = 按 exe 匹配,插件默认。
-      priority: 2,
-      anti_cheat_hook: true,
-    };
+    const gameCaptureSettings = GAME_CAPTURE_SETTINGS;
     const created = await callWithTimeout("CreateInput", {
       sceneName: SCENE_NAME,
       inputName: GAME_CAPTURE_INPUT_NAME,
