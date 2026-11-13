@@ -18,6 +18,7 @@ import {
   PRESS_LINE_MIN_CD_SECONDS,
   PRESS_LINE_WHITELIST_IDS,
   PRESS_TARGET_AURA_LEAD_MS,
+  pressChainFollowUps,
   pressDuration,
   pressLineCaster,
   timeStopHeldSeconds,
@@ -254,6 +255,111 @@ describe("[PRESS] lasts — an effect that is a series of auras (pipeline T40)",
       pressDuration(hun, cast as any, [hun], hun.spellCastEvents)
         ?.durationSeconds,
     ).toBe(12);
+  });
+});
+
+describe("[PRESS] lasts — a series' follow-ups at their own reading (codex 85-tk-G-T40-1)", () => {
+  const T = 1_000_000;
+  const { SPELL_AURA_APPLIED: APPLIED, SPELL_AURA_REMOVED: REMOVED } = LogEvent;
+  const ROAR = "406971";
+
+  it("#1 Aspect of the Fox: the second phase runs 13 s for its holder, 9 s without", () => {
+    const cast = makeSpellCastEvent("186257", T, "hun", "Hun", "hun", "Hun");
+    const hunter = (pvpTalents: string[]) =>
+      makeUnit("hun", {
+        spec: CombatUnitSpec.Hunter_Marksmanship,
+        info: { talents: [], pvpTalents } as any,
+        spellCastEvents: [cast],
+        auraEvents: [makeAuraEvent(APPLIED, "186257", T, "hun", "hun", "BUFF")],
+      });
+    const lasts = (u: ReturnType<typeof hunter>) =>
+      pressDuration(u, cast as any, [u], u.spellCastEvents)?.durationSeconds;
+    expect(lasts(hunter(["1219162"]))).toBe(16);
+    expect(lasts(hunter([]))).toBe(12);
+  });
+
+  it("#2 a Roar still up when Spider Venom lands and gone before Viper: 3.9 + 3.9 + 3", () => {
+    const cast = makeSpellCastEvent("356719", T, "foe", "Foe", "hun", "Hun");
+    const hun = makeUnit("hun", { spellCastEvents: [cast] });
+    const venom = (id: string, event: string, ms: number) =>
+      makeAuraEvent(event as never, id, T + ms, "hun", "foe", "DEBUFF");
+    const head = venom("356723", APPLIED, 150);
+    const spider = venom("356727", APPLIED, 4050);
+    const viper = venom("356730", APPLIED, 7950);
+    const foe = makeUnit("foe", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, ROAR, T - 1000, "evo", "foe", "DEBUFF"),
+        head,
+        venom("356723", REMOVED, 4050),
+        spider,
+        makeAuraEvent(REMOVED, ROAR, T + 5000, "evo", "foe", "DEBUFF"),
+        venom("356727", REMOVED, 7950),
+        viper,
+      ],
+    });
+    const d = pressDuration(hun, cast as any, [hun, foe], hun.spellCastEvents);
+    expect(d?.followUps.map((f) => f.applied)).toEqual([spider, viper]);
+    expect(d?.durationSeconds).toBeCloseTo(3.9 + 3.9 + 3, 5);
+  });
+
+  it("#2 a follow-up the log does not show runs its plain length, and none after it has a row", () => {
+    const cast = makeSpellCastEvent("356719", T, "foe", "Foe", "hun", "Hun");
+    const hun = makeUnit("hun", { spellCastEvents: [cast] });
+    const head = makeAuraEvent(APPLIED, "356723", T, "hun", "foe", "DEBUFF");
+    // a Viper Venom of another hunter is not this series'
+    const stray = makeAuraEvent(
+      APPLIED,
+      "356730",
+      T + 500,
+      "hun2",
+      "foe",
+      "DEBUFF",
+    );
+    const foe = makeUnit("foe", { auraEvents: [head, stray] });
+    expect(pressChainFollowUps(hun, foe, head as never)).toEqual([
+      { spellId: "356727", source: hun },
+      { spellId: "356730", source: hun },
+    ]);
+    expect(
+      pressDuration(hun, cast as any, [hun, foe], hun.spellCastEvents)
+        ?.durationSeconds,
+    ).toBe(9);
+  });
+
+  it("#3 the ally's copy heads a series too: its second phase is the ally's own aura", () => {
+    const cast = makeSpellCastEvent("186257", T, "hun", "Hun", "hun", "Hun");
+    const hun = makeUnit("hun", {
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      info: { talents: [], pvpTalents: ["1219162"] } as any,
+      spellCastEvents: [cast],
+      // the hunter's own row, logged 2 ms ahead of the cast row
+      auraEvents: [
+        makeAuraEvent(APPLIED, "186257", T - 2, "hun", "hun", "BUFF"),
+      ],
+    });
+    const head = makeAuraEvent(APPLIED, "356781", T, "hun", "ally", "BUFF");
+    const second = makeAuraEvent(
+      APPLIED,
+      "186258",
+      T + 3000,
+      "ally",
+      "ally",
+      "BUFF",
+    );
+    const ally = makeUnit("ally", {
+      auraEvents: [
+        head,
+        makeAuraEvent(REMOVED, "356781", T + 3000, "hun", "ally", "BUFF"),
+        second,
+      ],
+    });
+    const d = pressDuration(hun, cast as any, [hun, ally], hun.spellCastEvents);
+    expect(d?.row).toBe(head);
+    expect(d?.followUps).toEqual([
+      { spellId: "186258", source: ally, applied: second },
+    ]);
+    // the ally holds no Aspect of the Fox: 3 + 9
+    expect(d?.durationSeconds).toBe(12);
   });
 });
 
@@ -700,11 +806,25 @@ describe("[PRESS] lasts — re-stated rows, Oppressing Roar, Time Stop (GH #179)
 describe("[PRESS] lasts — Prismatic Barrier shortens a harmful Magic effect only (GH #126)", () => {
   const T = 1_000_000;
   it("the barrier's own buff keeps its length under itself (codex 20-cat4A-01 #1: it read 60 → 51)", () => {
-    const cast = makeSpellCastEvent("235450", T, "mage", "Mage", "mage", "Mage");
+    const cast = makeSpellCastEvent(
+      "235450",
+      T,
+      "mage",
+      "Mage",
+      "mage",
+      "Mage",
+    );
     const mage = makeUnit("mage", {
       spellCastEvents: [cast],
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "235450", T, "mage", "mage", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "235450",
+          T,
+          "mage",
+          "mage",
+          "BUFF",
+        ),
       ],
     });
     const d = pressDuration(mage, cast as any, [mage], mage.spellCastEvents);

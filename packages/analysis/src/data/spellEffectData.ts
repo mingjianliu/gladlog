@@ -588,6 +588,16 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Catlike Reflexes — DB2 aura 107 misc 1 +2000 ms, mask 0/256/0/0 covering Aspect of the Cheetah (2097152/256); tooltip 'initial burst of speed is increased by 2 sec' (the tooltip's ${$s2/1000} reads the one effect). Corpus, 605 files: holders 5.0 s ×5 (all three specs), non-holders 3.0 s in 381 of 388",
     },
   ],
+  // pipeline T40 (codex 85-tk-G-T40-1 #1): the second phase, the series'
+  // follow-up (`PRESS_EFFECT_CHAIN_AURAS`)
+  "186258": [
+    {
+      talentSpellId: "1219162",
+      untalentedBaseSeconds: 9,
+      addSeconds: 4,
+      note: "Aspect of the Fox (PvP talent) — DB2 row 1204652, aura 219 misc 1 +4000 ms, targeting 186258 by label (talentEffectInventoryGenerated: via label). Corpus, 605 files: the hunter's own second phase ran 13.0 / 13.3 s in the two press facts of a holder (3cd1a2aa 13.006 s, COMBATANT_INFO lists the talent; af88cde7 — the two `pressChainLasts` residuals of 16.0 / 16.3 s against a printed 12), 9.0 s for the other 288 press facts",
+    },
+  ],
   // fact11 D18: the same burst's copy on the hunter's allies (DB2 3 s)
   "356781": [
     {

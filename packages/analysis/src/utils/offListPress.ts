@@ -26,7 +26,10 @@ import {
 import { NO_CAST_LOG_PRESS_IDS } from "../data/auraActivation";
 import { effectAurasOfCast } from "../data/castEffectAuras";
 import { classMetadata } from "../data/classSpells";
-import { PRESS_EFFECT_CHAIN_AURAS } from "../data/pressEffectChains";
+import {
+  PRESS_EFFECT_CHAIN_AURAS,
+  PRESS_EFFECT_CHAIN_HOLDER_SOURCED,
+} from "../data/pressEffectChains";
 import {
   effectiveCooldownSeconds,
   OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
@@ -440,6 +443,58 @@ export function timeStopHeldSeconds(
  * not the unit coming back into sight (`pressDuration`). */
 export const PRESS_RESTATE_MIN_LAG_MS = 1000;
 
+/** One follow-up aura of a listed chain: who applies it, and its APPLIED
+ * row when the log shows one. */
+export interface IPressChainFollowUp {
+  spellId: string;
+  source: ICombatUnit;
+  applied?: ICombatUnit["auraEvents"][number];
+}
+
+/**
+ * The follow-up auras of the series `head` starts on `unit`
+ * (`PRESS_EFFECT_CHAIN_AURAS`), in order: each one's source (the press's
+ * caster, or the unit itself — `PRESS_EFFECT_CHAIN_HOLDER_SOURCED`) and the
+ * first APPLIED row of it logged after the row before it, before `untilMs`
+ * (the caster's next press of the button). A follow-up the log does not
+ * show (the series was cut, the round ended) has no row, and neither has
+ * any after it. One reading for the line's length (`pressDuration`) and the
+ * scans that follow the series to its end (scan5 `offListPressLine`,
+ * `pressChainLasts`).
+ */
+export function pressChainFollowUps(
+  caster: ICombatUnit,
+  unit: ICombatUnit,
+  head: ICombatUnit["auraEvents"][number],
+  untilMs = Infinity,
+): IPressChainFollowUp[] {
+  const ids = PRESS_EFFECT_CHAIN_AURAS[head.spellId ?? ""];
+  if (!ids) return [];
+  const source = PRESS_EFFECT_CHAIN_HOLDER_SOURCED.has(head.spellId!)
+    ? unit
+    : caster;
+  const events = unit.auraEvents ?? [];
+  let prev: ICombatUnit["auraEvents"][number] | undefined = head;
+  return ids.map((spellId) => {
+    const from: number = prev === undefined ? -1 : events.indexOf(prev);
+    const applied =
+      from < 0
+        ? undefined
+        : events
+            .slice(from + 1)
+            .find(
+              (a) =>
+                a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+                a.spellId === spellId &&
+                a.srcUnitId === source.id &&
+                a.destUnitId === unit.id &&
+                a.logLine.timestamp < untilMs,
+            );
+    prev = applied;
+    return { spellId, source, ...(applied ? { applied } : {}) };
+  });
+}
+
 /** The duration a press's line prints, and the APPLIED row it is read
  * from: the first of `pressAuraCandidates` (bounded by the caster's next
  * press of the spell among `casterRows`) whose talented duration is at least
@@ -462,6 +517,9 @@ export function pressDuration(
       floor: boolean;
       unit: ICombatUnit;
       row: ICombatUnit["auraEvents"][number];
+      /** the follow-ups of the series `row` heads (`pressChainFollowUps`),
+       * their lengths in `durationSeconds`; empty for a single aura */
+      followUps: IPressChainFollowUp[];
     }
   | undefined {
   const at = cast.logLine.timestamp;
@@ -573,38 +631,48 @@ export function pressDuration(
     // same reading — a debuff only: the barrier's own buff, or any other
     // Magic buff on its holder, keeps its length; codex 20-cat4A-01 #1), and
     // a Time Stop on the unit holds it for as long as it ran
-    const roared =
-      oppressingRoarLengthens(row.spellId!) && oppressingRoarOnAt(unit, row);
-    const barred =
-      row.auraType === "DEBUFF" &&
-      prismaticBarrierShortens(row.spellId!) &&
-      prismaticBarrierOnAtMs(unit, row.logLine.timestamp);
-    const own =
-      base *
-      (roared ? OPPRESSING_ROAR_PVP_CC_DURATION_MULT : 1) *
-      (barred ? PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT : 1);
+    const landingMult = (
+      spellId: string,
+      applied: ICombatUnit["auraEvents"][number],
+    ) =>
+      (oppressingRoarLengthens(spellId) && oppressingRoarOnAt(unit, applied)
+        ? OPPRESSING_ROAR_PVP_CC_DURATION_MULT
+        : 1) *
+      (applied.auraType === "DEBUFF" &&
+      prismaticBarrierShortens(spellId) &&
+      prismaticBarrierOnAtMs(unit, applied.logLine.timestamp)
+        ? PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT
+        : 1);
+    const own = base * landingMult(row.spellId!, row);
     // pipeline T40: an effect that is a series of auras, each applied when
     // the one before it ends (`PRESS_EFFECT_CHAIN_AURAS` — Chimaeral Sting's
     // three venoms, Aspect of the Cheetah's second phase), lasts the whole
-    // series. Each follow-up at its own talented length; what sits on the
-    // unit when a follow-up lands is not this row's to say, so the two
-    // readings above stay on the first aura.
-    const followUps = (PRESS_EFFECT_CHAIN_AURAS[row.spellId!] ?? []).reduce(
-      (sum, id) =>
+    // series. Each follow-up at its own source's talented length (Aspect of
+    // the Fox's +4 s on the second phase), under what sat on the unit as
+    // ITS row landed — the two readings above, taken at that row (codex
+    // 85-tk-G-T40-1 #2: 38f2679e, a Roar still up when Spider Venom landed
+    // and gone before Viper, 3.9 + 3.9 + 3.0 s printed `lasts 9.9s`). A
+    // follow-up the log does not show runs its plain length.
+    const followUps = pressChainFollowUps(caster, unit, row, nextPressMs);
+    const len = followUps.reduce(
+      (sum, f) =>
         sum +
-        (buffFullDurationForCaster(id, caster, row.logLine.timestamp, {
-          pressed: true,
-          onUnitId: unit.id,
-        }) ?? 0),
-      0,
+        (buffFullDurationForCaster(
+          f.spellId,
+          f.source,
+          (f.applied ?? row).logLine.timestamp,
+          { pressed: true, onUnitId: unit.id },
+        ) ?? 0) *
+          (f.applied ? landingMult(f.spellId, f.applied) : 1),
+      own,
     );
-    const len = own + followUps;
     return {
       durationSeconds:
         len + timeStopHeldSeconds(unit, row.logLine.timestamp, own, row),
       floor: buffDurationIsFloorForCaster(row.spellId!, caster),
       unit,
       row,
+      followUps,
     };
   }
   return undefined;

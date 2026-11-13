@@ -285,34 +285,37 @@ export function run(ctx: IRoundCtx): void {
       let life: number | undefined;
       let removedMs: number | undefined;
       let removedClean = false;
-      if (dur) {
-        const rows = ((dur.unit.auraEvents ?? []) as any[]).filter(
-          (r) => r.srcUnitId === unit.id && r.spellId === dur.row.spellId,
+      // one aura of the effect, from its row to its REMOVED on that unit
+      const endOf = (
+        from: any,
+      ): { removedMs: number; clean: boolean } | undefined => {
+        const rows = ((dur!.unit.auraEvents ?? []) as any[]).filter(
+          (r) => r.srcUnitId === from.srcUnitId && r.spellId === from.spellId,
         );
-        const i = rows.indexOf(dur.row);
-        const start = tsOf(dur.row);
+        const i = rows.indexOf(from);
+        const start = tsOf(from);
         for (let j = i + 1; i >= 0 && j < rows.length; j++) {
           const r = rows[j];
-          if (ev(r) === REMOVED) {
-            life = (tsOf(r) - start) / 1000;
-            removedMs = tsOf(r);
-            // a REMOVED of the press's own millisecond, logged after the
-            // APPLIED, may end the previous instance (a Between the Eyes
-            // re-press re-merges): no overshoot reading off it
-            // …and none a purge or a steal took (codex 20-179d #2: those
-            // rows sit in the unit's actions, naming the aura as extraSpellId)
-            removedClean =
-              tsOf(r) > start &&
-              !((dur.unit as any).actionIn ?? []).some(
-                (x: any) =>
-                  (ev(x) === "SPELL_DISPEL" || ev(x) === "SPELL_STOLEN") &&
-                  String(x.extraSpellId) === String(dur.row.spellId) &&
-                  Math.abs(tsOf(x) - tsOf(r)) <= 50,
-              );
-            break;
-          }
+          if (ev(r) === REMOVED)
+            return {
+              removedMs: tsOf(r),
+              // a REMOVED of the press's own millisecond, logged after the
+              // APPLIED, may end the previous instance (a Between the Eyes
+              // re-press re-merges): no overshoot reading off it
+              // …and none a purge or a steal took (codex 20-179d #2: those
+              // rows sit in the unit's actions, naming the aura as
+              // extraSpellId)
+              clean:
+                tsOf(r) > start &&
+                !((dur!.unit as any).actionIn ?? []).some(
+                  (x: any) =>
+                    (ev(x) === "SPELL_DISPEL" || ev(x) === "SPELL_STOLEN") &&
+                    String(x.extraSpellId) === String(from.spellId) &&
+                    Math.abs(tsOf(x) - tsOf(r)) <= 50,
+                ),
+            };
           if (/BROKEN|DISPEL|STOLEN/.test(String(ev(r))) && tsOf(r) >= start)
-            break;
+            return undefined;
           // …or a later press stacks on it (Between the Eyes: each press a
           // stack of its own length, the aura ends with the last)
           if (
@@ -321,7 +324,25 @@ export function run(ctx: IRoundCtx): void {
               ev(r) === LogEvent.SPELL_AURA_APPLIED_DOSE) &&
             tsOf(r) > start
           )
-            break;
+            return undefined;
+        }
+        return undefined;
+      };
+      if (dur) {
+        // the row the length was read from, then the series it heads
+        // (`pressDuration` followUps — the printed length covers them, so
+        // the life does: codex 85-tk-G-T40-1 #5, a 12.0 s Cheetah read
+        // "removed after 3.0s" against `lasts 12s`). A follow-up the log
+        // shows and never closes leaves no life to read.
+        let end = endOf(dur.row);
+        for (const f of dur.followUps) {
+          if (!end || !f.applied) break;
+          end = endOf(f.applied);
+        }
+        if (end) {
+          removedMs = end.removedMs;
+          life = (end.removedMs - tsOf(dur.row)) / 1000;
+          removedClean = end.clean;
         }
       }
       // a floor (`lasts 10s+`, Timewalker) holds no life to it

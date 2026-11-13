@@ -16,8 +16,9 @@
  * whose last logged end lies more than `LASTS_SLACK_S` past the printed
  * length:
  *  - `listedChain` — the row's aura heads a series the producer lists
- *    (`PRESS_EFFECT_CHAIN_AURAS`) and the follow-ups seen are that series':
- *    the line is short of an effect the tooltip names;
+ *    (`PRESS_EFFECT_CHAIN_AURAS`) and that series, followed on its own
+ *    rows (`listedChainFrom`), ran past the printed length: the line is
+ *    short of an effect the tooltip names;
  *  - `nominated` (out of the total — a diagnostic) — any other aura that
  *    followed: mostly coincidence (a proc, another button's buff, Arena
  *    Preparation), named in the detail so a real series shows as a pair that
@@ -98,6 +99,49 @@ export function chainFrom(
   return endMs === undefined ? undefined : { endMs, hops };
 }
 
+/** when the LISTED series `spellId` heads on `unit` ended, as logged: the
+ * head's REMOVED, then each listed follow-up applied within `CHAIN_GAP_MS`
+ * of the end before it (by the press's caster or by the unit itself — a
+ * holder-sourced series) and its REMOVED. Only the list's own auras, in the
+ * list's order — an unrelated aura at the last end changes nothing (codex
+ * 85-tk-G-T40-1 #4). `hops`: the follow-ups seen. */
+export function listedChainFrom(
+  unit: any,
+  caster: any,
+  spellId: string,
+  atMs: number,
+  listed: readonly string[],
+): IChain | undefined {
+  const rows = ((unit.auraEvents ?? []) as any[]).filter(
+    (a) =>
+      (a.srcUnitId === caster.id || a.srcUnitId === unit.id) &&
+      a.destUnitId === unit.id,
+  );
+  const endAfter = (id: string, from: number): number | undefined => {
+    const r = rows.find(
+      (a) => ev(a) === REMOVED && String(a.spellId) === id && tsOf(a) > from,
+    );
+    return r ? tsOf(r) : undefined;
+  };
+  let endMs = endAfter(spellId, atMs);
+  if (endMs === undefined) return undefined;
+  const hops: string[] = [];
+  for (const id of listed) {
+    const next = rows.find(
+      (a) =>
+        ev(a) === APPLIED &&
+        String(a.spellId) === id &&
+        Math.abs(tsOf(a) - endMs!) <= CHAIN_GAP_MS,
+    );
+    if (!next) break;
+    const end = endAfter(id, tsOf(next) - 1);
+    if (end === undefined) break;
+    hops.push(id);
+    endMs = end;
+  }
+  return { endMs, hops };
+}
+
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
   const presses = extractOffListPresses(
@@ -123,25 +167,31 @@ export function run(ctx: IRoundCtx): void {
     ctx.bump("pressChainLasts");
     const unit = byId[p.durationAura.unitId];
     if (!unit) continue;
-    const chain = chainFrom(
-      unit,
-      p.unit,
-      p.durationAura.spellId,
-      p.durationAura.atMs,
-    );
-    if (!chain || chain.hops.length === 0) continue;
-    const ranS = (chain.endMs - p.durationAura.atMs) / 1000;
-    if (ranS <= printed + LASTS_SLACK_S) continue;
+    const at0 = p.durationAura.atMs;
+    const report = (kind: string, c: IChain): void =>
+      ctx.violate(
+        "pressChainLasts",
+        kind,
+        at0,
+        `${p.unit.id}|${p.spellId}|${at0}`,
+        `${name} prints lasts ${printed}s; its auras ran one after another for ${((c.endMs - at0) / 1000).toFixed(1)}s (${nameOf(p.durationAura!.spellId)} → ${c.hops.map((h) => nameOf(h)).join(" → ")})`,
+        line.trim().slice(0, 160),
+      );
+    const tooLong = (c: IChain | undefined): c is IChain =>
+      c !== undefined &&
+      c.hops.length > 0 &&
+      (c.endMs - at0) / 1000 > printed + LASTS_SLACK_S;
+    // the listed series first, on its own rows
     const listed = PRESS_EFFECT_CHAIN_AURAS[p.durationAura.spellId];
-    ctx.violate(
-      "pressChainLasts",
-      listed && chain.hops.every((h) => listed.includes(h))
-        ? "listedChain"
-        : "nominated",
-      p.durationAura.atMs,
-      `${p.unit.id}|${p.spellId}|${p.durationAura.atMs}`,
-      `${name} prints lasts ${printed}s; its auras ran one after another for ${ranS.toFixed(1)}s (${nameOf(p.durationAura.spellId)} → ${chain.hops.map((h) => nameOf(h)).join(" → ")})`,
-      line.trim().slice(0, 160),
-    );
+    const own = listed
+      ? listedChainFrom(unit, p.unit, p.durationAura.spellId, at0, listed)
+      : undefined;
+    if (tooLong(own)) {
+      report("listedChain", own);
+      continue;
+    }
+    // then whatever else followed (the diagnostic)
+    const chain = chainFrom(unit, p.unit, p.durationAura.spellId, at0);
+    if (tooLong(chain)) report("nominated", chain);
   }
 }
