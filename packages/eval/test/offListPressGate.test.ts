@@ -284,6 +284,23 @@ describe("offListPressLine — scan artefacts (GH #179)", () => {
     ]);
   });
 
+  it("a REMOVED past the round's end of play is no lastsBeyond or stall reading either (codex 80-PIPE-54-B53)", () => {
+    // the round ended at 0:15, inside the printed 8 s; the REMOVED at 0:22
+    // is a row of what came after, with the log busy or silent before it
+    expect(scan(sprinter(Infinity), sprintLine, undefined, at(15_000))).toEqual(
+      [],
+    );
+    expect(scan(sprinter(17_000), sprintLine, undefined, at(15_000))).toEqual(
+      [],
+    );
+    // a REMOVED on the round's last millisecond is still read
+    expect(
+      scan(sprinter(Infinity), sprintLine, undefined, at(22_000)).map(
+        (v) => v.kind,
+      ),
+    ).toEqual(["lastsBeyond"]);
+  });
+
   it("a REMOVED in the burst after a log silence across the printed end is a stall (5b724629 r5)", () => {
     // no row from anyone 0:17–0:22, the REMOVED in the flush at 0:22
     const seen = scan(sprinter(17_000), sprintLine);

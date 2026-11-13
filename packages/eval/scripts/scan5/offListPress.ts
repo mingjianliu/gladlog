@@ -351,11 +351,20 @@ export function run(ctx: IRoundCtx): void {
           removedClean = end.clean;
         }
       }
+      // a REMOVED past the round's end of play is a row of what came
+      // after (a Shuffle round's rows run into the next preparation, and
+      // the producer follows no series and reads no Time Stop past that
+      // end): no reading of how long the effect lasted — one bound for
+      // every kind that reads the life (codex 80-PIPE-54-B53: only the
+      // overshoot had it, and a Cheetah held 5 s after the round read
+      // "lived 17.0s" against `lasts 12s`)
+      const lifeInPlay =
+        life !== undefined && removedMs !== undefined && removedMs <= playEndMs;
       // a floor (`lasts 10s+`, Timewalker) holds no life to it
       const beyond =
         dur?.floor !== true &&
-        life !== undefined &&
-        life > Number(lasts) + LASTS_SLACK_S;
+        lifeInPlay &&
+        life! > Number(lasts) + LASTS_SLACK_S;
       // the printed end itself, as the life above measures it (from the
       // row read): the silence must open at or before it — the slack is the
       // overshoot's allowance only, never a window a silence may start in
@@ -385,22 +394,16 @@ export function run(ctx: IRoundCtx): void {
       if (
         dur?.floor !== true &&
         removedClean &&
-        life !== undefined &&
-        // a REMOVED past the round's end of play is a row of what came
-        // after (a Shuffle round's rows run into the next preparation, and
-        // the producer follows no series past that end): no reading of how
-        // long the effect would have lasted
-        removedMs !== undefined &&
-        removedMs <= playEndMs &&
-        life < Number(lasts) / 2 &&
-        life < Number(lasts) - LASTS_SLACK_S
+        lifeInPlay &&
+        life! < Number(lasts) / 2 &&
+        life! < Number(lasts) - LASTS_SLACK_S
       )
         ctx.violate(
           "offListPressLine",
           "lastsOvershoot",
           at,
           `${ctx.roundKey}|${unit.id}|${name}|${second}`,
-          `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, removed after ${life.toFixed(1)}s`,
+          `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, removed after ${life!.toFixed(1)}s`,
           line,
         );
     }
