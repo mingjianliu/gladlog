@@ -13,15 +13,20 @@
  */
 import {
   CombatUnitClass,
+  CombatUnitReaction,
   CombatUnitSpec,
   type ICombatUnit,
   LogEvent,
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { burstWindowDecisionPoints } from "../src/analysis/burstWindowDecisionPoints";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { buffFullDurationForCaster } from "../src/utils/buffDuration";
-import { reconstructEnemyCDTimeline } from "../src/utils/enemyCDs";
+import {
+  enemyEffectOwnEndSeconds,
+  reconstructEnemyCDTimeline,
+} from "../src/utils/enemyCDs";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -78,12 +83,14 @@ const combatOf = (u: ICombatUnit, endS = END_S) =>
     units: { [u.id]: u },
   }) as never;
 
-const metaEnd = (u: ICombatUnit, endS = END_S) =>
+const metaCast = (u: ICombatUnit, endS = END_S) =>
   reconstructEnemyCDTimeline(
     [u],
     combatOf(u, endS),
-  ).players[0]!.offensiveCDs.find((c) => c.spellName === "Metamorphosis")!
-    .buffEndSeconds;
+  ).players[0]!.offensiveCDs.find((c) => c.spellName === "Metamorphosis")!;
+/** the end `[RES]` counts to (`enemyEffectOwnEndSeconds`) */
+const metaEnd = (u: ICombatUnit, endS = END_S) =>
+  enemyEffectOwnEndSeconds(metaCast(u, endS));
 
 describe("T41 — an effect still up at the slice's end runs to its own end", () => {
   it("52a97230 r0: the press runs to its own official end, not the slice's", () => {
@@ -91,6 +98,67 @@ describe("T41 — an effect still up at the slice's end runs to its own end", ()
     const full = buffFullDurationForCaster("191427", u)!;
     expect(full).toBeGreaterThan(10);
     expect(metaEnd(u)).toBeCloseTo(AURA_S + full, 3);
+  });
+
+  it("every other reader keeps the end the slice shows: buffEndSeconds, and no build-time field leaves the builder (codex 80-PIPE-51-B50)", () => {
+    for (const u of [dh(AURA_S, 39.48), dh(AURA_S)]) {
+      const cast = metaCast(u);
+      expect(cast.buffEndSeconds).toBeCloseTo(END_S, 3);
+      expect(cast.ownEndSeconds).toBeGreaterThan(END_S);
+      expect("windowEndSeconds" in cast).toBe(false);
+    }
+    // an end the log shows has no own end beside it
+    const seen = metaCast(dh(AURA_S, 35));
+    expect(seen.buffEndSeconds).toBeCloseTo(35, 3);
+    expect("ownEndSeconds" in seen).toBe(false);
+  });
+
+  it("a burst window's segment, length and outcome horizon stop at the slice's end with damage rows retained past it (codex 80-PIPE-51-B50)", () => {
+    // Metamorphosis from 20 s, the slice over at 35.744 s, the friendly's
+    // damage rows running on to 36 s
+    const enemy = {
+      ...dh(20, 39.48),
+      id: "player-1",
+      reaction: CombatUnitReaction.Hostile,
+      info: { teamId: "1", specId: "577" },
+    };
+    const row = (s: number) => ({
+      timestamp: at(s),
+      srcUnitId: "player-1",
+      amount: -5,
+      effectiveAmount: -5,
+      logLine: { timestamp: at(s) },
+    });
+    const friend = makeUnit("player-2", {
+      name: "Friend",
+      class: CombatUnitClass.Druid,
+      spec: CombatUnitSpec.Druid_Balance,
+      reaction: CombatUnitReaction.Friendly,
+      info: { teamId: "0", specId: "102" } as never,
+      advancedActions: Array.from({ length: 37 }, (_, s) => ({
+        timestamp: at(s),
+        logLine: { timestamp: at(s) },
+        advancedActorId: "player-2",
+        advancedActorCurrentHp: 60,
+        advancedActorMaxHp: 100,
+        advancedActorPositionX: 0,
+        advancedActorPositionY: 0,
+      })) as never,
+      damageIn: Array.from({ length: 17 }, (_, i) => row(20 + i)) as never,
+    });
+    const points = burstWindowDecisionPoints({
+      startTime: T0,
+      endTime: at(END_S),
+      units: { [enemy.id]: enemy, [friend.id]: friend },
+      startInfo: { bracket: "3v3" },
+    } as never);
+    expect(points).toHaveLength(1);
+    const p = points[0]!;
+    expect([p.endSec, p.durationSec, p.outcomeEndSec]).toEqual([
+      35,
+      35 - p.tSec,
+      35,
+    ]);
   });
 
   it("its burst window still ends at the slice's end", () => {
@@ -149,7 +217,8 @@ describe("T41 — an effect still up at the slice's end runs to its own end", ()
       [druid],
       combatOf(druid, 121.34),
     ).players[0]!.offensiveCDs.find((c) => c.spellId === "102543")!;
-    expect(cast.buffEndSeconds).toBeCloseTo(104.21 + full, 3);
+    expect(enemyEffectOwnEndSeconds(cast)).toBeCloseTo(104.21 + full, 3);
+    expect(cast.buffEndSeconds).toBeCloseTo(121.34, 3);
   });
 
   it("an effect aura shorter than the cast's own length does not replace it (codex 85-tk-G-T41-1 #1)", () => {

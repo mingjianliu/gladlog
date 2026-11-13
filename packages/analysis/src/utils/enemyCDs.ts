@@ -147,11 +147,18 @@ export interface IEnemyCDCast {
    * official length. What the scan counts such presses by, whatever end the
    * reading gave them (codex 81-tk-G-T72-2 #2). */
   endIsDelivery?: true;
-  /** T41: the effect was still up when the analysed slice ended and
-   * `buffEndSeconds` is its own end, past the slice's. This is the end its
-   * burst window keeps — the one the window read before T41, at the slice's
-   * end (`alignedBurstWindows`: a window's damage is a rate over its span,
-   * and the span is what the slice shows). */
+  /** T41: the effect was still up when the analysed slice ended, and this
+   * is its own end, past the slice's — what `[RES]` counts `Ns left` to
+   * (`enemyEffectOwnEndSeconds`). `buffEndSeconds` stays the end every
+   * other reader had before T41 (at the slice's end, or the cast's own
+   * official one): a burst window's damage is a rate over its span and its
+   * segments, outcome horizon and kill windows are of what the slice shows
+   * (codex 80-PIPE-51-B50: with the own end in `buffEndSeconds` each reader
+   * had to opt out, and `boundedBurstSegments` had not). */
+  ownEndSeconds?: number;
+  /** Inside `reconstructEnemyCDTimeline` only — never on a returned cast:
+   * the end `buffEndSeconds` goes back to once the builder's own steps
+   * (death cut, round-end cut) have read the effect's own end. */
   windowEndSeconds?: number;
   /** T29 R14: the refusing row's miss type (`pressRefusalMissType`) */
   refusedMissType?: string;
@@ -975,6 +982,15 @@ function deathCutOfficialEnd(
       ? { deathCutAtSeconds: (cutMs - combat.startTime) / 1000 }
       : {}),
   };
+}
+
+/** Where an enemy effect ends for the `[RES]` row's `Ns left`: its own end
+ * when it was still up as the analysed slice ended (`ownEndSeconds`, T41),
+ * else `buffEndSeconds`. The one reader of the own end outside the builder. */
+export function enemyEffectOwnEndSeconds(
+  cd: Pick<IEnemyCDCast, "buffEndSeconds" | "ownEndSeconds">,
+): number {
+  return cd.ownEndSeconds ?? cd.buffEndSeconds;
 }
 
 /**
@@ -1968,6 +1984,19 @@ function reconstructEnemyCDTimelineUncached(
     }
   }
 
+  // T41: the builder's steps above read an effect still up at the slice's
+  // end on its own end; from here on `buffEndSeconds` is the end it had
+  // before, and the own end is its own field
+  for (const p of players)
+    for (const cd of [...p.offensiveCDs, ...(p.offensiveFacts ?? [])]) {
+      if (cd.windowEndSeconds === undefined) continue;
+      if (cd.buffEndSeconds > cd.windowEndSeconds) {
+        cd.ownEndSeconds = cd.buffEndSeconds;
+        cd.buffEndSeconds = cd.windowEndSeconds;
+      }
+      delete cd.windowEndSeconds;
+    }
+
   // Find aligned burst windows: clusters of 2+ casts within BURST_CLUSTER_SECONDS
   const allCastsRaw = players
     .flatMap((p) =>
@@ -1976,15 +2005,11 @@ function reconstructEnemyCDTimelineUncached(
         .filter((cd) => !cd.refusedAtPress)
         .map((cd) => ({
           time: cd.castTimeSeconds,
-          // an effect T41 found still up when the slice ended carries its
-          // own end past it (`[RES]` reads that); its window keeps the end
-          // it had (`windowEndSeconds`) — the window's damage is a RATE
-          // over the span (a Metamorphosis due 14 s past the end halved the
-          // rate of its window, `High burst` read `Moderate burst`).
-          buffEndSeconds: Math.min(
-            cd.buffEndSeconds,
-            cd.windowEndSeconds ?? Infinity,
-          ),
+          // (an effect T41 found still up when the slice ended keeps its
+          // own end in `ownEndSeconds`; the window's damage is a RATE over
+          // the span — a Metamorphosis due 14 s past the end halved the
+          // rate of its window, `High burst` read `Moderate burst`)
+          buffEndSeconds: cd.buffEndSeconds,
           playerName: p.playerName,
           spellName: cd.spellName,
           spellId: cd.spellId,

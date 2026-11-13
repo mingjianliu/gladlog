@@ -39,7 +39,7 @@ import {
 } from "../utils/cooldowns";
 import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
 import { isStunCcInstance } from "../utils/drAnalysis";
-import { IEnemyCDTimeline } from "../utils/enemyCDs";
+import { enemyEffectOwnEndSeconds, IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { logInstantOf } from "../utils/logEra";
 import { offensiveCooldownIdAt } from "../utils/overrideVariantEra";
@@ -1227,7 +1227,8 @@ function buildResourceSnapshotOnce({
       // G16). The old 30 s cap made a chain the log shows running 52 s read
       // "5s left" at 35 s (codex review): no cap. If duration is 0 (instant
       // cast), show it for 8 seconds to ensure AI has context.
-      const buffDuration = cd.buffEndSeconds - cd.castTimeSeconds;
+      // …its own end when it was still up as the slice ended (T41)
+      const buffDuration = enemyEffectOwnEndSeconds(cd) - cd.castTimeSeconds;
       // a press whose effect lives only on a talent's aura (Divine Toll →
       // Divine Resonance, GH #184 part B, user ruling 2026-11-05 option A)
       // and logged none has no span: the 8 s would state a window the log
