@@ -321,6 +321,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/renderGrid.ts`,
+    symbol: "RAW_LENGTH_LINE_TAGS",
+    mod: renderGrid,
+  },
+  {
+    file: `${A}/utils/renderGrid.ts`,
     symbol: "fmtWholeSeconds",
     mod: renderGrid,
   },

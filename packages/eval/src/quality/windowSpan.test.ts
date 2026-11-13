@@ -1,3 +1,4 @@
+import { RAW_LENGTH_LINE_TAGS } from "@gladlog/analysis/src/utils/renderGrid";
 import { describe, expect, it } from "vitest";
 
 import { checkWindowSpanConsistency } from "./promptQualityCheck";
@@ -38,5 +39,20 @@ describe("checkWindowSpanConsistency", () => {
 
   it("空输入 → 无违规", () => {
     expect(checkWindowSpanConsistency([])).toEqual([]);
+  });
+
+  it("签字例外(R37):只有 [NO HEAL CAST] 行可以印原始时长", () => {
+    expect([...RAW_LENGTH_LINE_TAGS]).toEqual(["[YOU] [NO HEAL CAST]"]);
+    expect(
+      checkWindowSpanConsistency([
+        "4:17–4:21 (3.5s)  [YOU] [NO HEAL CAST]   3.5s with no heal pressed (free to cast; nothing else pressed) — 2(Mate) 81% → 58%",
+      ]),
+    ).toEqual([]);
+    expect(
+      checkWindowSpanConsistency([
+        "4:17–4:21 (3.5s)  [YOU] [INACTIVITY]   nothing pressed",
+        "  [STACKED DEFENSIVES] 4:17–4:21 (3.5s)",
+      ]),
+    ).toHaveLength(2);
   });
 });

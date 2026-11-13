@@ -9,7 +9,7 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { MANA_PRESSURE_LOW_PCT } from "../../analysis/candidates/mana";
 import { noHealStretchesBeforeFirstDeath } from "../../utils/noHealCast";
-import { fmtTime } from "../../utils/renderGrid";
+import { fmtTime, NO_HEAL_CAST_LINE_TAG } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
 
 export function emitNoHealCastEntries(
@@ -59,9 +59,11 @@ export function emitNoHealCastEntries(
       : "";
     // both readings are known: the reader keeps only a stretch that lost HP
     const hp = ` ${Math.round(s.hpFromPct!)}% → ${Math.round(s.hpToPct!)}%`;
+    // the length is the stretch's own, to one decimal: the signed exception
+    // to `renderedWindowSeconds` (R37, `RAW_LENGTH_LINE_TAGS`)
     ctx.addEntry(
       sec(s.fromMs),
-      `${fmtTime(sec(s.fromMs))}–${fmtTime(sec(s.toMs))}  [YOU] [NO HEAL CAST]   ${((s.toMs - s.fromMs) / 1000).toFixed(1)}s with no heal pressed (free to cast${mana}${pressed}${form}) — ${ctx.pid(s.targetName)}${hp}`,
+      `${fmtTime(sec(s.fromMs))}–${fmtTime(sec(s.toMs))}  ${NO_HEAL_CAST_LINE_TAG}   ${((s.toMs - s.fromMs) / 1000).toFixed(1)}s with no heal pressed (free to cast${mana}${pressed}${form}) — ${ctx.pid(s.targetName)}${hp}`,
     );
   }
 }

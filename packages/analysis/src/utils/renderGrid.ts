@@ -66,6 +66,18 @@ export function renderedWindowSeconds(
 }
 
 /**
+ * The signed exception to `renderedWindowSeconds` (user ruling 2026-11-13,
+ * R37): the `[YOU] [NO HEAL CAST]` line prints the stretch's own length to
+ * one decimal next to its floored endpoints (`4:17–4:21 … 3.5s with no heal
+ * pressed`, the wording approved in R32) — the length is the fact the line
+ * is about, and the whole-second width of the endpoints would round a 3.5 s
+ * gap to 4. This line only; the gate (`checkWindowSpanConsistency`) exempts
+ * exactly these tags. Do not add a tag without a ruling.
+ */
+export const NO_HEAL_CAST_LINE_TAG = "[YOU] [NO HEAL CAST]";
+export const RAW_LENGTH_LINE_TAGS: readonly string[] = [NO_HEAL_CAST_LINE_TAG];
+
+/**
  * A duration or a gap printed in whole seconds: `3s`, and `<1s` for one that
  * rounds to zero.
  *

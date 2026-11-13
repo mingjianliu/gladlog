@@ -34,7 +34,8 @@
  * has died first: no line for that round.
  *
  * A stretch is a line only when the dying teammate's HP went DOWN across it
- * (the grid reading at its end under the one at its start, both known):
+ * (the grid reading of its printed end second under the one of its printed
+ * start second, both known):
  * with no HP lost, "no heal pressed" says nothing (user ruling R30).
  *
  * NOT known here, stated rather than papered over: a low mana bar with no
@@ -58,11 +59,15 @@ import {
 } from "./cannotCastIntervals";
 import { castBarOutcomesOf, JUKE_LOOKBACK_MS } from "./castBarOutcomes";
 import { isCompanionCastRow } from "./castPress";
-import { SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
+import {
+  PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
+  SPIRIT_OF_REDEMPTION_AURA_IDS,
+} from "./combatStates";
 import { gridHpPct, isPassiveProcCast } from "./cooldowns";
 import { occupancyIntervalsWithin, pairInReachAt } from "./dispelAnalysis";
 import { CC_MAX_CAST_RANGE_YARDS } from "./positionSampling";
 import { manaPct, type RawStreams } from "./rawStreams";
+import { toRenderSecond } from "./renderGrid";
 import { spellReachForCaster } from "./spellRange";
 
 /**
@@ -200,11 +205,13 @@ export function noHealStretchesBeforeFirstDeath(params: {
   const deathMs = startMs + first.atSeconds * 1000;
   const fromMs = Math.max(startMs, deathMs - DEATH_WINDOW_S * 1000);
   if (deathMs <= fromMs) return [];
-  // in Spirit of Redemption before that death: the healer died first
+  // in Spirit of Redemption before that death: the healer died first — the
+  // on-death form only; the pressed one leaves the priest alive after it
   if (
     (owner.auraEvents ?? []).some(
       (a) =>
         SPIRIT_OF_REDEMPTION_AURA_IDS.has(a.spellId ?? "") &&
+        !PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS.has(a.spellId ?? "") &&
         (a.logLine.event as string) === "SPELL_AURA_APPLIED" &&
         a.logLine.timestamp >= startMs &&
         a.logLine.timestamp <= deathMs,
@@ -213,12 +220,14 @@ export function noHealStretchesBeforeFirstDeath(params: {
     return [];
 
   const blocked: Span[] = [];
-  // door 1: control, silence, a lockout that shuts every pressed heal
+  // door 1: control, silence, a lockout that shuts every heal door 2 found
+  // usable — a heal with a cooldown in another school is not known to be
+  // off it, and opens no lockout (codex 85-tk-J-T88-2 #1)
   const enemyIds = enemySourceIds(params.enemies, params.allUnits);
   for (const iv of cannotCastIntervalsForSpells(
     owner,
     enemyIds,
-    healIds,
+    spammable,
     params.allUnits,
   ))
     blocked.push({ from: iv.from, to: iv.to });
@@ -266,6 +275,10 @@ export function noHealStretchesBeforeFirstDeath(params: {
     const n = getEnglishSpellName(r.spellId ?? "", "");
     if (n !== "") healNames.add(n);
   }
+  // (a shield that absorbed nothing all round has no row to know it by and
+  // is listed as a press: DB2's absorb flag is no test for it — it also
+  // marks Fortifying Brew, Blessing of Sacrifice and 90 more; codex
+  // 85-tk-J-T88-2 #2, synthetic, not on 605)
   const isHeal = (id: string, name: string) =>
     heals.has(id) || healNames.has(getEnglishSpellName(id, name));
   const refusedAt = failed
@@ -314,6 +327,8 @@ export function noHealStretchesBeforeFirstDeath(params: {
       return pct !== null && pct < params.lowManaPct!;
     });
 
+  const gridMs = (t: number) =>
+    startMs + toRenderSecond((t - startMs) / 1000) * 1000;
   const forms = formSpans(owner, deathMs);
   return (
     free
@@ -332,8 +347,9 @@ export function noHealStretchesBeforeFirstDeath(params: {
           fromMs: f.from,
           toMs: f.to,
           targetName: target.name,
-          hpFromPct: gridHpPct(target, f.from),
-          hpToPct: gridHpPct(target, f.to),
+          // the HP of the seconds the line prints (`fmtTime` floors)
+          hpFromPct: gridHpPct(target, gridMs(f.from)),
+          hpToPct: gridHpPct(target, gridMs(f.to)),
           ...(form
             ? {
                 form: {

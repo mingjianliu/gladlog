@@ -269,6 +269,7 @@ import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling"
 import {
   fmtTime,
   parseWholeSeconds,
+  RAW_LENGTH_LINE_TAGS,
 } from "@gladlog/analysis/src/utils/renderGrid";
 import {
   AURA_STILL_UP_AT_ROUND_END,
@@ -624,10 +625,16 @@ const WINDOW_SPAN = /(\d+):(\d+)–(\d+):(\d+)\s*\((\d+(?:\.\d+)?)s\)/g;
  * label says 19s (the label was taken from the un-rounded raw value). The
  * rendered text must be self-consistent, or the same token can be read as two
  * different numbers.
+ *
+ * Signed exception (user ruling 2026-11-13, R37): the lines of
+ * `RAW_LENGTH_LINE_TAGS` (`[YOU] [NO HEAL CAST]` only) print the stretch's
+ * raw length to one decimal and are not read here.
  */
 export function checkWindowSpanConsistency(lines: string[]): string[] {
   const violations: string[] = [];
   lines.forEach((line, i) => {
+    // the one signed exception (R37): a line that prints its raw length
+    if (RAW_LENGTH_LINE_TAGS.some((tag) => line.includes(tag))) return;
     for (const m of line.matchAll(WINDOW_SPAN)) {
       const from = Number(m[1]) * 60 + Number(m[2]);
       const to = Number(m[3]) * 60 + Number(m[4]);

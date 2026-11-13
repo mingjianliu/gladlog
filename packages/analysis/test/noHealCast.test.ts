@@ -228,4 +228,31 @@ describe("T88: the no-heal stretch before a teammate's first death", () => {
     ]);
     expect(out.every((s) => s.pressed.length === 0)).toBe(true);
   });
+  it("主动按的救赎之魂不是治疗者先死(codex 85-tk-J-T88-2 #4)", () => {
+    const pressedForm = [
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        "215769",
+        at(5),
+        "healer",
+        "healer",
+        "BUFF",
+      ),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        "215769",
+        at(11),
+        "healer",
+        "healer",
+        "BUFF",
+      ),
+    ];
+    expect(round({ healerAuras: pressedForm })).toHaveLength(1);
+  });
+
+  it("两端的血量读的是行上印出的那一秒(codex #3)", () => {
+    const out = round({ presses: [15, 21.9, 28.1] });
+    expect(out).toHaveLength(1);
+    expect([out[0]!.hpFromPct, out[0]!.hpToPct]).toEqual([79, 72]);
+  });
 });
