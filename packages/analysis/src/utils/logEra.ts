@@ -64,16 +64,20 @@ export interface ILogClock {
 }
 
 /** A log timestamp carried with the instant its own line states
- * (`logInstantOf`): exact, wherever the log is parsed. */
+ * (`logInstantOf`): the same wherever the log is parsed, and exact to the
+ * whole hours of the recorder's zone — a zone with a fractional offset
+ * writes only its whole hours and states an instant late by the fraction
+ * (`STATED_ZONE_UNCERTAINTY_MS`). */
 export interface IStatedLogInstant {
   readonly statedMs: number;
 }
 /** What a dated rule is asked with: the instant the log states
  * (`logInstantOf` of a match that carries its clock offset) — or a bare
  * parsed epoch, for a log that states no offset, a document stored before
- * the parser kept it, and a reader with no unit or match in hand. Only the
- * bare epoch is uncertain by the parsing machine's zone
- * (`LOG_ZONE_UNCERTAINTY_MS`). */
+ * the parser kept it, and a reader with no unit or match in hand. The bare
+ * epoch is uncertain by the parsing machine's zone
+ * (`LOG_ZONE_UNCERTAINTY_MS`); the stated instant only by the fraction of
+ * an hour its line cannot write (`STATED_ZONE_UNCERTAINTY_MS`). */
 export type LogInstant = number | IStatedLogInstant;
 
 /** No date at all (a unit that logged nothing): every dated rule reads its
@@ -126,9 +130,16 @@ export type ILogDatedNumber = ILogDated<number>;
  * timestamp on different sides.
  *
  * A stated instant (`logInstantOf` of a match that carries its clock
- * offset — every freshly parsed log) is on one side or the other, exactly:
- * nothing below applies to it (T90: all 1,333 archives of the 605 sample
- * and the wide set state an offset on every line).
+ * offset — every freshly parsed log; T90: all 1,333 archives of the 605
+ * sample and the wide set state an offset on every line) is on one side or
+ * the other unless it is less than `STATED_ZONE_UNCERTAINTY_MS` AFTER the
+ * cutover: there it reads as a bare timestamp inside its own band does
+ * (`zoneBandTakes`, else `uncertainTakes`), because the line of a
+ * fractional-offset zone states an instant that much too late (codex
+ * 85-tk-I-T90-1: an Adelaide line 15 min before the cutover stated 15 min
+ * after it, and Doom Winds' aura stopped standing for a press). A stated
+ * instant before the cutover is before it; the 14 h band below does not
+ * apply.
  *
  * A bare timestamp that is not a number is not a date and takes
  * `uncertainTakes` (by default the CURRENT value, `since`: the dated value
@@ -147,17 +158,26 @@ export type ILogDatedNumber = ILogDated<number>;
 export function logDatedAt<T>(dated: ILogDated<T>, at: LogInstant): T {
   const uncertain =
     dated.uncertainTakes === "before" ? dated.before : dated.since;
-  if (typeof at === "object" && at !== null)
-    return logIsFrom(at, dated.cutoverEpochMs) ? dated.since : dated.before;
+  const band = (): T =>
+    dated.zoneBandTakes !== undefined
+      ? dated.zoneBandTakes === "before"
+        ? dated.before
+        : dated.since
+      : uncertain;
+  if (typeof at === "object" && at !== null) {
+    if (!Number.isFinite(at.statedMs)) return uncertain;
+    const fromCutover = at.statedMs - dated.cutoverEpochMs;
+    if (fromCutover < 0) return dated.before;
+    if (fromCutover >= STATED_ZONE_UNCERTAINTY_MS) return dated.since;
+    return band();
+  }
   // anything that is not a number (a missing timestamp) is no date either
   const logEpochMs: number = at;
   if (!Number.isFinite(logEpochMs)) return uncertain;
   if (!logIsFrom(logEpochMs, dated.cutoverEpochMs - LOG_ZONE_UNCERTAINTY_MS))
     return dated.before;
   if (logIsFrom(logEpochMs, dated.cutoverEpochMs)) return dated.since;
-  if (dated.zoneBandTakes !== undefined)
-    return dated.zoneBandTakes === "before" ? dated.before : dated.since;
-  return uncertain;
+  return band();
 }
 
 /** `logDatedAt` of a dated number. */
@@ -175,6 +195,24 @@ export function logDatedNumberAt(
  * early by (machine − recorder) hours at most — 14.
  */
 export const LOG_ZONE_UNCERTAINTY_MS = 14 * 60 * 60 * 1000;
+
+/**
+ * How far the instant a line STATES can lie AFTER the instant it was
+ * written: the line writes its zone's offset in whole hours, so a
+ * fractional-offset zone states an instant late by its fraction. Measured
+ * (parser `l1/statedInstant.ts`): all 164 Australia/Adelaide files, UTC+9:30,
+ * write `9` — half an hour late. No file shows a :45 zone, so the bound is
+ * the largest fraction any zone has (45 min: Nepal, Chatham, Eucla).
+ *
+ * One-sided on that measurement. A fractional zone WEST of UTC
+ * (Newfoundland, Marquesas) would state an instant too EARLY if it drops
+ * its fraction the same way; no such file exists in 18,134 to show how it
+ * is written, and a band before the cutover would give the new value to
+ * every whole-hour log of its last 45 minutes (of the 1,333 archives of the
+ * 605 sample and the wide set, 2 open inside such a band — both whole-hour
+ * zones, both truly before — and none opens inside the band after).
+ */
+export const STATED_ZONE_UNCERTAINTY_MS = 45 * 60 * 1000;
 
 /** The side a log takes when its date is inside the zone uncertainty before
  * the 12.1.5 go-live (`ILogDated.zoneBandTakes`; the instant is

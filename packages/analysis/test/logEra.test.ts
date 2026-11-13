@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { STORM_CONDUIT_HOTFIX_EPOCH_MS } from "../src/data/talentScriptedCooldowns";
+import { auraStandsForPressAt } from "../src/utils/auraActivationEra";
 import {
   DR_RESET_CUTOVER_EPOCH_MS,
   DR_RESET_MS_121,
@@ -19,9 +20,13 @@ import {
   logDatedNumberAt,
   logInstantOf,
   logIsFrom,
+  STATED_ZONE_UNCERTAINTY_MS,
 } from "../src/utils/logEra";
 import { parseRawTimestamp, rawLineInstantMs } from "../src/utils/rawStreams";
-import { unitLogInstant } from "../src/utils/talents";
+import {
+  PATCH_1215_GOLIVE_EPOCH_MS,
+  unitLogInstant,
+} from "../src/utils/talents";
 
 describe("logIsFrom", () => {
   it("the cutover instant itself is already the new rule", () => {
@@ -149,8 +154,9 @@ describe("which side of a cutover a real line is on — the instant it states fo
 
 // T90: a match that carries its clock offset (parser-compat
 // `logClockOffsetMs`: the instant its lines state minus the parsed
-// timestamp) is dated by the stated instant, exactly — the zone band is for
-// a bare parsed epoch only.
+// timestamp) is dated by the stated instant — the 14 h zone band is for a
+// bare parsed epoch only; a stated instant keeps the 45 min a
+// fractional-offset zone cannot write.
 describe("logInstantOf — the stated instant, and the door without the band", () => {
   const H = 3_600_000;
   const cut = STORM_CONDUIT_HOTFIX_EPOCH_MS;
@@ -181,9 +187,61 @@ describe("logInstantOf — the stated instant, and the door without the band", (
         logDatedAt({ ...dated, zoneBandTakes: "since" }, { statedMs: at }),
       ).toBe(7);
     }
-    expect(logDatedNumberAt(dated, { statedMs: cut })).toBe(3);
+    expect(logDatedNumberAt(dated, { statedMs: cut + 0.75 * H })).toBe(3);
     expect(logIsFrom({ statedMs: cut - 1 }, cut)).toBe(false);
     expect(logIsFrom({ statedMs: cut }, cut)).toBe(true);
+  });
+
+  // codex 85-tk-I-T90-1: a fractional-offset zone writes only its whole
+  // hours (every Adelaide file, UTC+9:30, says `9`), so the instant its line
+  // states is late by the fraction. For 45 min from a cutover a stated
+  // instant is no more placed than a bare one inside its band.
+  it("a stated instant less than 45 min after the cutover reads the band side, not the side it states", () => {
+    expect(STATED_ZONE_UNCERTAINTY_MS).toBe(45 * 60_000);
+    const M = 60_000;
+    // the reviewer's line: written 15 min before the cutover at UTC+10:30,
+    // stated 15 min after it
+    for (const minutes of [0, 15, 30, 44.9]) {
+      const at = { statedMs: cut + minutes * M };
+      // default: the current value
+      expect(logDatedNumberAt(dated, at)).toBe(3);
+      // a rule whose careful side is the old one keeps the old one
+      expect(logDatedAt({ ...dated, uncertainTakes: "before" }, at)).toBe(7);
+      // a cutover that names its band side
+      expect(logDatedAt({ ...dated, zoneBandTakes: "before" }, at)).toBe(7);
+      expect(
+        logDatedAt(
+          { ...dated, uncertainTakes: "before", zoneBandTakes: "since" },
+          at,
+        ),
+      ).toBe(3);
+    }
+    // outside it, whatever the rule names
+    for (const rule of [
+      dated,
+      { ...dated, uncertainTakes: "before" as const },
+      { ...dated, zoneBandTakes: "before" as const },
+      { ...dated, zoneBandTakes: "since" as const },
+    ]) {
+      expect(logDatedAt(rule, { statedMs: cut - 1 })).toBe(7);
+      expect(logDatedAt(rule, { statedMs: cut - 45 * M })).toBe(7);
+      expect(logDatedAt(rule, { statedMs: cut + 45 * M })).toBe(3);
+    }
+    // the reviewer's line through its reader: 10/14/2026 01:15 at UTC+10:30
+    // is 14:45 UTC, before the 12.1.5 go-live; written `10`, it states
+    // 15:15 UTC. Doom Winds' aura still stands for a press (the rule's
+    // careful side), and 45 min later it does not.
+    const adelaide = rawLineInstantMs("10/14/2026 01:15:00.00010")!;
+    expect(adelaide).toBe(PATCH_1215_GOLIVE_EPOCH_MS + 15 * M);
+    expect(auraStandsForPressAt("384352", { statedMs: adelaide })).toBe(true);
+    expect(
+      auraStandsForPressAt("384352", { statedMs: adelaide + 30 * M }),
+    ).toBe(false);
+    // not a number: no date at all
+    expect(logDatedNumberAt(dated, { statedMs: Number.NaN })).toBe(3);
+    expect(
+      logDatedAt({ ...dated, uncertainTakes: "before" }, { statedMs: NaN }),
+    ).toBe(7);
   });
 
   it("a Central European log parsed on a US Eastern machine: the parsed date is past the cutover, the stated instant is not", () => {
