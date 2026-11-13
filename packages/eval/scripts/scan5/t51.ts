@@ -8,8 +8,9 @@
  *  - `immuneHitPetFold`: a segment whose printed `N hits immune` (0 when the
  *    field is absent) is below the damaging IMMUNE rows (`isImmuneHitRow`,
  *    the line's own row filter) the ally AND its summons (`foldsIntoOwner`,
- *    the parser's own fold) logged on the target strictly between the wall
- *    aura's own APPLIED and REMOVED rows (`wallAuraSpan`), before either
+ *    the parser's own fold) logged on the target from the wall aura's own
+ *    APPLIED row to its REMOVED row (`wallAuraSpan`, the line's caster's
+ *    aura; by row order inside those rows' milliseconds), before either
  *    unit's death. The line is stamped at the press and the aura can go on
  *    over a second later, so the span is read from the aura rows, never from
  *    the stamp; a line whose aura rows the log does not show is not judged.
@@ -17,6 +18,7 @@
  *    summons' rows are what is missing; `ownRows` — the ally's own rows
  *    already exceed it.
  */
+import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { isImmuneHitRow } from "@gladlog/analysis/src/utils/externalDamage";
 import { foldsIntoOwner } from "@gladlog/parser-compat";
 
@@ -42,55 +44,71 @@ const unitOfLabel = (ctx: IRoundCtx, label: string | undefined): any =>
   ctx.unitOfPid(/^(\d+)\(/.exec(label ?? "")?.[1]);
 
 /** The wall's own aura rows on the target: the APPLIED row of the line's
- *  wall within a second before / three after its stamp, and the REMOVED row
- *  that ends its run — a re-application in the same instant goes on with it
- *  (the round's end when the log has none). */
-/** REMOVED then APPLIED again this close is the same run going on */
-const REAPPLIED_SAME_RUN_MS = 200;
-
+ *  wall within a second before / three after its stamp — the line's own
+ *  caster's, the one nearest the stamp (codex 85-tk-H-T51-1b #1: two
+ *  casters' Ironbark on one target, the second line read on the first's
+ *  span) — and the REMOVED row that ends its run; a re-application within
+ *  the product's own re-broadcast gap (`AURA_REBROADCAST_GAP_MS`) goes on
+ *  with it, a later one is another line's (codex #2). `fromRow` / `toRow`
+ *  are the two rows' log positions, for a hit in either row's own
+ *  millisecond. The round's end when the log has no REMOVED. */
 export function wallAuraSpan(
   ctx: IRoundCtx,
   line: string,
   target: any,
   fromMs: number,
-): { from: number; to: number } | undefined {
-  const wallName = / \([^)]*\): (.+?) → /.exec(line)?.[1];
+): { from: number; to: number; fromRow?: number; toRow?: number } | undefined {
+  const head = /\[ENEMY DEF\] {3}(\d+)\([^)]*\) \([^)]*\): (.+?) → /.exec(line);
+  const wallName = head?.[2];
+  const casterId = ctx.unitOfPid(head?.[1])?.id;
   const auras = (target.auraEvents ?? []) as any[];
-  const k = auras.findIndex(
-    (e) =>
-      ev(e) === APPLIED &&
-      nameOf(e.spellId, e.spellName) === wallName &&
-      tsOf(e) >= fromMs - 1000 &&
-      tsOf(e) < fromMs + 3000,
-  );
-  if (k < 0) return undefined;
-  const a = auras[k];
+  const opens = auras
+    .map((e, j) => ({ e, j }))
+    .filter(
+      ({ e }) =>
+        ev(e) === APPLIED &&
+        nameOf(e.spellId, e.spellName) === wallName &&
+        tsOf(e) >= fromMs - 1000 &&
+        tsOf(e) < fromMs + 3000,
+    );
+  const ofCaster = opens.filter(({ e }) => e.srcUnitId === casterId);
+  const open = (ofCaster.length > 0 ? ofCaster : opens).sort(
+    (x, y) =>
+      Math.abs(tsOf(x.e) - fromMs) - Math.abs(tsOf(y.e) - fromMs) || x.j - y.j,
+  )[0];
+  if (!open) return undefined;
+  const a = open.e;
   const same = (b: any) =>
     b.spellId === a.spellId && b.srcUnitId === a.srcUnitId;
   // a wall taken off and put back in the same instant is one run on the
   // line (605 file 119 r1 0:46: Time Dilation REMOVED and APPLIED in one ms,
   // twice 5 s, printed as 10.4 s)
-  let at = k;
+  let at = open.j;
   let to = Infinity;
+  let toRow: number | undefined;
   for (;;) {
     const r = auras.findIndex((b, j) => j > at && same(b) && ev(b) === REMOVED);
     if (r < 0) {
       to = Infinity;
+      toRow = undefined;
       break;
     }
     to = tsOf(auras[r]);
+    toRow = auras[r].logLine?.lineIndex;
     const again = auras.findIndex(
       (b, j) =>
         j > r &&
         same(b) &&
         ev(b) === APPLIED &&
-        tsOf(b) - to <= REAPPLIED_SAME_RUN_MS,
+        tsOf(b) - to <= AURA_REBROADCAST_GAP_MS,
     );
     if (again < 0) break;
     at = again;
   }
   // a row logged after the round's end is outside every producer window
-  return { from: tsOf(a), to: Math.min(to, ctx.roundEndAt) };
+  return to <= ctx.roundEndAt
+    ? { from: tsOf(a), to, fromRow: a.logLine?.lineIndex, toRow }
+    : { from: tsOf(a), to: ctx.roundEndAt, fromRow: a.logLine?.lineIndex };
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -104,6 +122,27 @@ export function run(ctx: IRoundCtx): void {
     if (!span) continue;
     const lo = span.from;
     const hi = Math.min(span.to, deathMs(target));
+    // from the APPLIED row to the REMOVED row, both by the log's own row
+    // order inside their millisecond (codex #3: a hit in the APPLIED's ms
+    // is inside; the producer counts the hit logged before the REMOVED in
+    // its ms and not the one after). Without row positions the opening ms
+    // is in and the closing ms out
+    const rowOf = (r: any): number | undefined => r.logLine?.lineIndex;
+    const inWall = (r: any, end: number): boolean => {
+      const t = tsOf(r);
+      const ix = rowOf(r);
+      if (t < lo || t > end) return false;
+      if (t === lo && ix !== undefined && span.fromRow !== undefined)
+        if (ix < span.fromRow) return false;
+      if (t === end)
+        return (
+          end === span.to &&
+          ix !== undefined &&
+          span.toRow !== undefined &&
+          ix < span.toRow
+        );
+      return true;
+    };
     for (const seg of m[4]!.split("; ")) {
       const a = SEG_ALLY.exec(seg);
       const ally = a && unitOfLabel(ctx, a[1]);
@@ -112,10 +151,7 @@ export function run(ctx: IRoundCtx): void {
       const rowsOf = (u: any): any[] =>
         ((u.missesOut ?? []) as any[]).filter(
           (r) =>
-            isImmuneHitRow(r) &&
-            r.destUnitId === target.id &&
-            tsOf(r) > lo &&
-            tsOf(r) < end,
+            isImmuneHitRow(r) && r.destUnitId === target.id && inWall(r, end),
         );
       const own = rowsOf(ally).length;
       const pets = ctx.units
