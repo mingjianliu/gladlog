@@ -333,6 +333,47 @@ describe("buffFullDurationForCaster — Avatar under Capacitance (T76, GH #173 D
     ).toBe(20);
   });
 
+  it("a Thunder Blast logged after Avatar's REMOVED row extends nothing (codex 85-tk-G-T76-1)", () => {
+    const aura = (event: LogEvent, s: number, lineIndex: number) => ({
+      spellId: "107574",
+      srcUnitId: "w",
+      destUnitId: "w",
+      timestamp: T0 + s * 1000,
+      logLine: { event, timestamp: T0 + s * 1000, lineIndex },
+    });
+    const blast = (s: number, lineIndex: number) => ({
+      spellId: "435222",
+      logLine: {
+        event: LogEvent.SPELL_CAST_SUCCESS,
+        timestamp: T0 + s * 1000,
+        lineIndex,
+      },
+    });
+    const fury = (casts: unknown[], removedLine: number) =>
+      ({
+        id: "w",
+        spec: CombatUnitSpec.Warrior_Fury,
+        info: { talents: [], pvpTalents: [] },
+        spellCastEvents: [press("1270724", -100), ...casts],
+        auraEvents: [
+          aura(LogEvent.SPELL_AURA_APPLIED, 0, 1),
+          aura(LogEvent.SPELL_AURA_REMOVED, 20, removedLine),
+        ],
+      }) as never;
+    // the press in the REMOVED's own millisecond, logged after it
+    expect(
+      buffFullDurationForCaster("107574", fury([blast(20, 4)], 3), AT),
+    ).toBe(20);
+    // …logged before it, it is still inside the run
+    expect(
+      buffFullDurationForCaster("107574", fury([blast(20, 2)], 3), AT),
+    ).toBe(22);
+    // a press inside the run counts as it did
+    expect(
+      buffFullDurationForCaster("107574", fury([blast(4, 2)], 3), AT),
+    ).toBe(22);
+  });
+
   it("Arms is outside the tooltip's specs: 20 s", () => {
     expect(
       buffFullDurationForCaster(

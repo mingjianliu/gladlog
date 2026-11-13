@@ -423,11 +423,14 @@ function perEventExtensionSeconds(
           onUnitId,
         );
   const windowBase = baseSeconds + setBonusDurationSeconds(spellId, caster);
-  // a set bonus's walk runs on the application the log shows: readers pass
-  // the press's time, which can sit after the aura row, and a press after
-  // the aura's REMOVED extends nothing (codex 85-tk-A-T18-1 #1)
-  const run =
-    "bonusSpellId" in p ? ownAuraRunNear(caster, spellId, atMs) : undefined;
+  // the walk runs on the application the log shows: readers pass the
+  // press's time, which can sit after the aura row, and a press after the
+  // aura's REMOVED extends nothing (codex 85-tk-A-T18-1 #1, a set bonus's
+  // walk). A talent's walk reads the same run (codex 85-tk-G-T76-1: Avatar
+  // removed at 20.000 s, a Thunder Blast logged after that row in the same
+  // millisecond read 22 s); with no logged run of the aura on its caster it
+  // walks from the time it was given, as before.
+  const run = ownAuraRunNear(caster, spellId, atMs);
   const fromMs = run?.fromMs ?? atMs;
   const toMs = run?.toMs ?? Number.POSITIVE_INFINITY;
   // a press in the APPLIED's own ms but logged before it is not inside the
