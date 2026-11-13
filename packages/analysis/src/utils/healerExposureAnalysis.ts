@@ -437,7 +437,8 @@ export function analyzeHealerExposureAtBurst(
           continue;
         // a stealth-only control (Rake's stun) only with stealth up or a
         // means to it in hand (user ruling 2026-10-26)
-        if (!stealthControlUsableAt(enemy, spellId, windowMs)) continue;
+        if (!stealthControlUsableAt(enemy, spellId, windowMs, allUnits ?? []))
+          continue;
         // every ready control that reaches, not one per DR family: a ready
         // Shockwave kept a ready Storm Bolt off every list and out of the kit
         // (fact8 D25, 969a6b07: cast 8×, 0 listed). A second control of a

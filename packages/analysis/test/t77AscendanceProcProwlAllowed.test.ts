@@ -22,8 +22,10 @@ import {
   holderFirstOwnActionAfterMs,
   STEALTH_KEPT_BY_ALLOWED_PRESS_IDS,
 } from "../src/utils/enemyDefensives";
+import { stealthControlUsableAt } from "../src/utils/stealthControl";
 import {
   makeAuraEvent,
+  makeDamageEvent,
   makeSpellCastEvent,
   makeUnit,
 } from "./ported/testHelpers";
@@ -79,6 +81,28 @@ describe("T77 — a cast-less Ascendance run of the proc's length is no press", 
     expect(auraOnlyActivationSeconds(u, ASCENDANCE, 0)).toEqual([30, 200]);
   });
 
+  it("a run cut at another length is no proof of a proc (a death 4 s into a press)", () => {
+    // codex 85-tk-F-T77-1 #1
+    const u = resto(run(30_000, 34_000));
+    expect(isTalentProcRun(u, ASCENDANCE, 30_000)).toBe(false);
+    expect(auraOnlyActivationSeconds(u, ASCENDANCE, 0)).toEqual([30]);
+  });
+
+  it("a REMOVED and an APPLIED of one millisecond inside a press are one run", () => {
+    // codex 85-tk-F-T77-1 #3: 30–35 and 35–45 are one 15 s run
+    const u = resto([...run(30_000, 35_000), ...run(35_000, 45_000)]);
+    expect(isTalentProcRun(u, ASCENDANCE, 30_000)).toBe(false);
+    expect(isTalentProcRun(u, ASCENDANCE, 35_000)).toBe(false);
+    expect(auraOnlyActivationSeconds(u, ASCENDANCE, 0).length).toBeGreaterThan(
+      0,
+    );
+    // …and a rebroadcast inside a proc leaves it a proc
+    const p = resto([...run(30_000, 33_000), ...run(33_000, 36_000)]);
+    expect(isTalentProcRun(p, ASCENDANCE, 30_000)).toBe(true);
+    expect(isTalentProcRun(p, ASCENDANCE, 33_000)).toBe(true);
+    expect(auraOnlyActivationSeconds(p, ASCENDANCE, 0)).toEqual([]);
+  });
+
   it("a unit without the proc talent has one length: every run is a press", () => {
     const u = resto(run(30_000, 36_000), false);
     expect(isTalentProcRun(u, ASCENDANCE, 30_000)).toBe(false);
@@ -124,5 +148,57 @@ describe("T77 — Prowl stays up through a press stealth allows", () => {
         "58984",
       ),
     ).toBe(T + 11_000);
+  });
+
+  it("a Prowl the log never ends is over at a swing on its holder", () => {
+    // codex 85-tk-F-T77-1 #2: Prowl at 10 s, Tiger's Fury at 11 s (no end
+    // now), a swing on the druid at 12 s, no REMOVED
+    const RAKE = "1822";
+    const swing = {
+      ...makeDamageEvent(T + 12_000, 1000, "d1"),
+      logLine: {
+        event: LogEvent.SWING_DAMAGE,
+        timestamp: T + 12_000,
+        parameters: [],
+      },
+    };
+    for (const prowl of ["5215", "102547"]) {
+      const mk = (damageIn: unknown[], removedAt?: number) =>
+        makeUnit("d1", {
+          spellCastEvents: [
+            makeSpellCastEvent(TIGERS_FURY, T + 11_000, "d1", "d1"),
+          ],
+          auraEvents: [
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_APPLIED,
+              prowl,
+              T + 10_000,
+              "d1",
+              "d1",
+              "BUFF",
+            ),
+            ...(removedAt === undefined
+              ? []
+              : [
+                  makeAuraEvent(
+                    LogEvent.SPELL_AURA_REMOVED,
+                    prowl,
+                    removedAt,
+                    "d1",
+                    "d1",
+                    "BUFF",
+                  ),
+                ]),
+          ],
+          damageIn,
+        });
+      expect(stealthControlUsableAt(mk([]), RAKE, T + 60_000)).toBe(true);
+      expect(stealthControlUsableAt(mk([swing]), RAKE, T + 11_500)).toBe(true);
+      expect(stealthControlUsableAt(mk([swing]), RAKE, T + 60_000)).toBe(false);
+      // a run the log ends keeps the log's end
+      expect(
+        stealthControlUsableAt(mk([swing], T + 20_000), RAKE, T + 15_000),
+      ).toBe(true);
+    }
   });
 });

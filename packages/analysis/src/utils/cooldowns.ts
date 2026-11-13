@@ -4515,13 +4515,18 @@ export function auraOnlyActivationSeconds(
  * 378270: "Casting Riptide has a chance to activate Ascendance for 6.0 sec";
  * 1,614 of 1,667 cast-less runs exactly 6.0 s), a press its 15 s — and the
  * proc spends no cooldown (two procs 18 s apart, a press 81 s after one,
- * under 120 s). A run with no cast row that ended short of the press's
- * length (`AURA_PROC_LENGTH_SLACK_S`) is the proc, or procs back to back
- * (12.0 s), not a press. The 605 capture, `auraOnlyActivationSeconds`' 437
- * Ascendance readings: 427 ran 6 s, 3 ran 12.0 s, 7 have no REMOVED. A run
- * the log never ends, or one a press's length long, stays a press — the
- * careful side (a proc read as a press spends a cooldown; a press read as a
- * proc calls it ready).
+ * under 120 s). A run with no cast row is the proc when its length IS the
+ * proc's — one, or procs back to back (12.0 s) — within
+ * `AURA_PROC_LENGTH_SLACK_S`, and short of the press's. The 605 capture,
+ * `auraOnlyActivationSeconds`' 437 Ascendance readings: 427 ran 6 s, 3 ran
+ * 12.0 s, 7 have no REMOVED. Everything else stays a press — the careful
+ * side (a proc read as a press spends a cooldown; a press read as a proc
+ * calls it ready): a run the log never ends, one a press's length long, and
+ * one cut at any other length (codex 85-tk-F-T77-1 #1: a press whose cast
+ * row is lost, ended 4 s in by the holder's death, is no proof of a proc).
+ * The run is the continuous one (`dropAuraRebroadcasts`): a REMOVED and an
+ * APPLIED of one millisecond inside a press's 15 s are one run, not a 5 s
+ * and a 10 s one (#3), and `appliedMs` may be any APPLIED of it.
  */
 export function isTalentProcRun(
   unit: ICombatUnit,
@@ -4534,20 +4539,43 @@ export function isTalentProcRun(
   });
   if (procS === undefined || pressS === undefined || procS >= pressS)
     return false;
-  const end = unit.auraEvents.find(
-    (a) =>
-      a.spellId === auraId &&
-      a.destUnitId === unit.id &&
-      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-      a.timestamp > appliedMs,
+  if (!(procS > AURA_PROC_LENGTH_SLACK_S * 2)) return false;
+  const rows = dropAuraRebroadcasts(
+    unit.auraEvents.filter(
+      (a) =>
+        a.spellId === auraId &&
+        a.destUnitId === unit.id &&
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REMOVED),
+    ),
   );
-  if (!end) return false;
-  return (end.timestamp - appliedMs) / 1000 < pressS - AURA_PROC_LENGTH_SLACK_S;
+  // the run `appliedMs` is in: its first APPLIED and its REMOVED, log order
+  let from: number | undefined;
+  let to: number | undefined;
+  for (const a of rows) {
+    if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+      if (a.timestamp > appliedMs) break;
+      from ??= a.timestamp;
+    } else if (from !== undefined) {
+      if (a.timestamp > appliedMs) {
+        to = a.timestamp;
+        break;
+      }
+      from = undefined;
+    }
+  }
+  if (from === undefined || to === undefined) return false;
+  const runS = (to - from) / 1000;
+  if (!(runS < pressS - AURA_PROC_LENGTH_SLACK_S)) return false;
+  const procs = Math.round(runS / procS);
+  return (
+    procs >= 1 && Math.abs(runS - procs * procS) <= AURA_PROC_LENGTH_SLACK_S
+  );
 }
 
-/** How far short of a press's length a cast-less run must end to be read as
- * a talent's proc (`isTalentProcRun`): a press's own run ends within a few
- * ms of its length. */
+/** How close to the proc's own length (or a whole number of them), and how
+ * far short of a press's, a cast-less run must end to be read as a talent's
+ * proc (`isTalentProcRun`): a run ends within a few ms of its length. */
 export const AURA_PROC_LENGTH_SLACK_S = 0.5;
 
 /** Feign Death's cast id — its press is never logged as a SUCCESS. */

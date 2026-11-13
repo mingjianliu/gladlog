@@ -24,7 +24,10 @@ import { LogEvent } from "@gladlog/parser-compat";
 
 import { effectiveCooldownSeconds } from "../data/spellEffectData";
 import { playerTalentIdSets } from "./cooldowns";
-import { holderFirstOwnActionAfterMs } from "./enemyDefensives";
+import {
+  holderFirstOwnActionAfterMs,
+  stealthImmunityHitMs,
+} from "./enemyDefensives";
 
 /** Rake's press and its stun aura. Registered in curatedIdRegistry. */
 export const STEALTH_ONLY_CONTROL_IDS: ReadonlySet<string> = new Set([
@@ -51,14 +54,23 @@ const SHADOWMELD = "58984";
  * can lose their REMOVED (94e93f63: a 102547 Prowl applied at 13.6 s and
  * never removed): they hold until the holder's first own press or direct
  * hit after them (`holderFirstOwnActionAfterMs`, the unseen-save reading —
- * which lets a press Prowl allows pass, `STEALTH_KEPT_BY_ALLOWED_PRESS_IDS`). */
+ * which lets a press Prowl allows pass, `STEALTH_KEPT_BY_ALLOWED_PRESS_IDS`).
+ * A run the log never ends is also over at the first hit that makes a
+ * stealthed unit a target again (`unseenEndBrokenByHit`; codex
+ * 85-tk-F-T77-1 #2: with Tiger's Fury no longer an end, a Prowl with a lost
+ * REMOVED, swung at two seconds later, read as up for the rest of the
+ * round). A run whose REMOVED is logged keeps the log's end. */
 const BROKEN_BY_ACTION_IDS: ReadonlySet<string> = new Set([
   "5215",
   "102547",
   "58984",
 ]);
 
-function stealthAuraUpAt(unit: ICombatUnit, ms: number): boolean {
+function stealthAuraUpAt(
+  unit: ICombatUnit,
+  ms: number,
+  units: readonly ICombatUnit[],
+): boolean {
   const open = new Map<string, number>();
   for (const a of unit.auraEvents ?? []) {
     if (a.logLine.timestamp > ms) break;
@@ -70,10 +82,33 @@ function stealthAuraUpAt(unit: ICombatUnit, ms: number): boolean {
   for (const [id, from] of open)
     if (
       !BROKEN_BY_ACTION_IDS.has(id) ||
-      holderFirstOwnActionAfterMs(unit, from, id) > ms
+      (holderFirstOwnActionAfterMs(unit, from, id) > ms &&
+        !unseenEndBrokenByHit(unit, id, from, ms, units))
     )
       return true;
   return false;
+}
+
+/** A stealth run of `id` from `from` that the log never ends, with a hit on
+ * the holder before `ms` that makes a stealthed unit a target again
+ * (`stealthImmunityHitMs`, the user's 2026-11-07 ruling: a swing, or a spell
+ * aimed at it, past the first second): broken by that hit. */
+function unseenEndBrokenByHit(
+  unit: ICombatUnit,
+  id: string,
+  from: number,
+  ms: number,
+  units: readonly ICombatUnit[],
+): boolean {
+  const ended = (unit.auraEvents ?? []).some(
+    (a) =>
+      a.spellId === id &&
+      a.destUnitId === unit.id &&
+      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      a.logLine.timestamp > from,
+  );
+  if (ended) return false;
+  return stealthImmunityHitMs(unit, from, ms, units) !== undefined;
 }
 
 function meansInHandAt(
@@ -119,10 +154,13 @@ export function stealthControlUsableAt(
   unit: ICombatUnit,
   spellId: string,
   ms: number,
+  /** the round's units: who aimed a spell at a stealthed unit whose REMOVED
+   * the log lost (`unseenEndBrokenByHit`); without them only swings count */
+  units: readonly ICombatUnit[] = [],
 ): boolean {
   if (!STEALTH_ONLY_CONTROL_IDS.has(spellId)) return true;
   return (
-    stealthAuraUpAt(unit, ms) ||
+    stealthAuraUpAt(unit, ms, units) ||
     meansInHandAt(unit, INCARNATION_ASHAMANE, ms) ||
     meansInHandAt(unit, SHADOWMELD, ms)
   );
