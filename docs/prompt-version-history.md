@@ -6347,4 +6347,27 @@ missed-cleanse self-removal (the table's rates were measured on Ice Block
 casts). The SPEC BASELINES reference row still reads "Ice Block" for such
 a holder (one cohort per listed button; benchmarks.json not regenerated).
 605: 0 of 7,048 files differ at the 2c commit (2 Ice Cold context files in
-the corpus); the two later commits were not captured.
+the corpus); the three later commits were not captured.
+
+v539 (2026-11-13; pipeline batch B54, T77). Two fixes from the press /
+cooldown research left on GH #124 / #173. (1) Ascendance: the ledger's
+aura fallback read every cast-less aura as a press; Deeply Rooted
+Elements grants the aura for 6 s, a press lasts 15 / 18 s. A cast-less
+aura run is the proc when its length is within 0.5 s of the proc's length
+or a whole number of them, it ended more than 0.5 s short of the pressed
+length, and it was not ended by the holder's death (`[TEAM] [CD] ... Ascendance` + `cd:Ascendance(120s)`
+-> the existing `[PROC] ... Ascendance (no press)` line; the kit line
+reads `Ascendance [120s] [UNUSED]`); a run with no end row, a
+death-ended run and a run of any other length keep the press reading; one
+press per continuous aura run. 605: cast-less
+Ascendance auras read as a press 437 -> 9 (7 with no REMOVED, 2 cut
+runs; they stay presses on purpose). (2) Prowl: a Prowl with no REMOVED
+row was ended at the holder's first own press even when DB2 allows that
+press in stealth (measured 176 kept : 2 ended when allowed, 2 : 185
+otherwise); it is now kept, and an unended Prowl is over at a hit. No
+rendered line moves on the 605 for (2). Scan side: both cooldown scans
+skip presses the model itself flags freeRecast; new scan scan5/t77.ts.
+The other seven items were closed by count or recorded
+(docs/talent-coverage-gaps.md has each mitigation row's status). This
+entry also corrects v538's last sentence: three later commits were not
+captured, not two.

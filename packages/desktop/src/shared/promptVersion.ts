@@ -1183,5 +1183,11 @@
  *  wherever its holder's row is named or classified (ruling R25). An
  *  unpressed Ice Cold makes no counterfactual claim and is not offered as
  *  a missed-cleanse self-removal. See docs/prompt-version-history.md.
+ *
+ * v539 (2026-11-13; pipeline batch B54, T77): a proc-length Ascendance
+ *  aura (Deeply Rooted Elements, 6 s) is a [PROC] line, not a press — its
+ *  cooldown is no longer spent and the kit line reads [UNUSED]; a press
+ *  allowed while stealthed does not end a Prowl with no REMOVED row. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 538;
+export const PROMPT_VERSION = 539;
