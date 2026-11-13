@@ -705,7 +705,7 @@ const kitLandedClause = (who: "you" | "them") =>
  * IMMUNE at the owner, and a Howl of Terror IMMUNE, on no entry of a list
  * headed "threats to you".
  * Counted per press (`missPressCount`): a row that is the twin of an
- * earlier one (`isTwinMissRow`, the `[CC NOT LANDED]` reading — fact12 D30,
+ * earlier press's first row (`isTwinMissRow`, the `[CC NOT LANDED]` reading — fact12 D30,
  * ee79ddb7 r0 0:45: one Intimidation logged IMMUNE under 474421 and 24394
  * read "aimed at them 2×") is that press.
  */

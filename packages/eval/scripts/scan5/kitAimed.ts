@@ -63,7 +63,7 @@ export function run(ctx: IRoundCtx): void {
         )
         .sort((x, y) => x.timestamp - y.timestamp);
       // the producer's own press rule (`missPressCount`): a row that is the
-      // twin of an earlier one is that press
+      // twin of an earlier press's first row is that press
       const presses = missPressCount(rows, ctx.start);
       if (presses === 0 || printed === presses) continue;
       ctx.violate(

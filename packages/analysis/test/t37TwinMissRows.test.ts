@@ -115,4 +115,21 @@ describe("T37 — one press, two rows, two miss types", () => {
       ),
     ).toBe(2);
   });
+
+  // codex 85-tk-H-T37-1b: each press logs its refusal under two ids 1 ms
+  // apart; the second press's rows share a rendered second with the first
+  // press's LATER row only
+  it("two presses a second apart are never chained through a row that joined the first", () => {
+    const rows = [
+      row(STUN, "REFLECT", 29_999),
+      row(DAMAGE, "REFLECT", 30_000),
+      row(STUN, "REFLECT", 30_999),
+      row(DAMAGE, "REFLECT", 31_000),
+    ];
+    expect(missPressCount(rows, T0)).toBe(2);
+    expect(missPressCount([...rows].reverse(), T0)).toBe(2);
+    expect(missPressCount([rows[1]!, rows[3]!, rows[0]!, rows[2]!], T0)).toBe(
+      2,
+    );
+  });
 });

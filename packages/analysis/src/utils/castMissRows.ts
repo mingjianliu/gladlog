@@ -167,23 +167,27 @@ export function isTwinMissRow(
 /**
  * How many presses a set of failed-control rows of one caster, one target
  * and one control is: the rows in time order (the stored order between rows
- * of one millisecond), a row that is the twin of ANY earlier row
- * (`isTwinMissRow`) being that row's press. One function for the producer
+ * of one millisecond), a row that is the twin (`isTwinMissRow`) of the FIRST
+ * row of an earlier press being that press. One function for the producer
  * (`aimedControlsForKit`) and its scan (scan5 `kitAimedCount`), so the count
  * cannot depend on the order the rows were handed in (codex 85-tk-H-T37-1:
  * a row logged 1 ms out of order read 2× where the sorted rows read 1×).
+ * A row is never matched against a row that itself joined a press — that
+ * chained two presses into one (codex 85-tk-H-T37-1b: two Fears reflected
+ * 1 s apart, each logged under the aura id and 1 ms later under the cast id
+ * — 29.999 / 30.000 and 30.999 / 31.000 — joined through the 30.000 row's
+ * rendered second and read 1×).
  */
 export function missPressCount(
   rows: readonly IMissTwinRow[],
   matchStartMs: number,
 ): number {
   const sorted = [...rows].sort((x, y) => x.timestamp - y.timestamp);
-  let presses = 0;
-  sorted.forEach((m, i) => {
-    if (!sorted.slice(0, i).some((r) => isTwinMissRow(r, m, matchStartMs)))
-      presses++;
-  });
-  return presses;
+  const firstRows: IMissTwinRow[] = [];
+  for (const m of sorted)
+    if (!firstRows.some((r) => isTwinMissRow(r, m, matchStartMs)))
+      firstRows.push(m);
+  return firstRows.length;
 }
 
 /**
