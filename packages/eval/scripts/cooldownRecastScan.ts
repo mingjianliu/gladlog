@@ -68,6 +68,19 @@ const minCd = Number(arg("--min-cd", "8"));
 const out = arg("--out", "");
 const noGear = process.argv.includes("--no-gear");
 
+/** A press the model itself reads as free (`freeRecast`: Time Spiral's, GH
+ * #176) spends nothing and waits for nothing — it is no contradiction of the
+ * modelled cooldown (pipeline T77: 24 of the 36 "impossible" Preservation
+ * Hover presses on the 605 — 757 → 697 over the eight scanned movement
+ * spells). */
+function freePressTimes(
+  entry: NonNullable<ReturnType<typeof unitCooldownEntry>>,
+): Set<number> {
+  return new Set(
+    entry.casts.filter((c) => c.freeRecast).map((c) => c.timeSeconds),
+  );
+}
+
 /** the presses the model says were impossible (the loop below, without its
  * floor and ratio bookkeeping) */
 function modelImpossibleTimes(
@@ -75,9 +88,14 @@ function modelImpossibleTimes(
 ): number[] {
   if (!entry || entry.isProcOnly) return [];
   const out: number[] = [];
+  // a free press is no contradiction, here as in the main loop (codex
+  // 85-tk-F-T77-1 #4: judged on the --no-gear side alone, it read as gear
+  // explaining a press)
+  const free = freePressTimes(entry);
   for (const pt of entry.casts
     .map((c) => c.timeSeconds)
     .sort((x, y) => x - y)) {
+    if (free.has(pt)) continue;
     const before = {
       ...entry,
       casts: entry.casts.filter((c) => c.timeSeconds < pt),
@@ -234,13 +252,7 @@ for (const f of files) {
           const presses = entry.casts
             .map((c) => c.timeSeconds)
             .sort((x, y) => x - y);
-          // a press the model itself reads as free (`freeRecast`: Time
-          // Spiral's, GH #176) spends nothing and waits for nothing — it is
-          // no contradiction of the modelled cooldown (pipeline T77: 24 of
-          // the 36 "impossible" Preservation Hover presses on the 605 — 757 → 697 over the eight scanned movement spells)
-          const freePresses = new Set(
-            entry.casts.filter((c) => c.freeRecast).map((c) => c.timeSeconds),
-          );
+          const freePresses = freePressTimes(entry);
           for (const pt of presses) {
             if (freePresses.has(pt)) continue;
             const before = {

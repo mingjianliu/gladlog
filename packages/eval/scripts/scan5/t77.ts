@@ -104,6 +104,9 @@ export function run(ctx: IRoundCtx): void {
       u,
       ASCENDANCE_RESTO,
       ctx.start,
+      // the ledger's own bound: a cast row kept from after the round is no
+      // cast of it (codex 85-tk-F-T77-1 #5)
+      ctx.end,
     )) {
       const t = ctx.start + sec * 1000;
       if (t < ctx.start) continue;
