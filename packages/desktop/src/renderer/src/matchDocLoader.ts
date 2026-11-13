@@ -1,7 +1,12 @@
 import type { LazyDocPayload } from "../../shared/parseLazyDoc";
 import { parseLazyPayload, parseRoundBytes } from "../../shared/parseLazyDoc";
 import { bridge } from "./bridge";
-import { currentOpen, openIoArrived, openTimed } from "./openTrace";
+import {
+  currentOpen,
+  openIoArrived,
+  openTimed,
+  type OpenTraceToken,
+} from "./openTrace";
 
 /**
  * Open a stored match / one lazily loaded shuffle round (T93).
@@ -48,10 +53,14 @@ export function canOpenRound(): boolean {
 export async function openMatchRound(
   id: string,
   roundIndex: number,
+  /** the trace this request's steps belong to when they end (`openOnce`);
+   * by default the open in flight when it was asked */
+  traceOf?: () => OpenTraceToken,
 ): Promise<unknown | null> {
   const m = bridge().matches as Matches;
   if (m.getRoundRaw) {
-    const trace = currentOpen();
+    const asked = currentOpen();
+    const trace = traceOf ?? (() => asked);
     const buf = await m.getRoundRaw(id, roundIndex);
     openIoArrived(trace);
     return openTimed("parse", () => parseRoundBytes(buf), false, trace);
@@ -62,4 +71,21 @@ export async function openMatchRound(
 /** The whole doc, for the stale-sidecar fallback of a round open. */
 export function openWholeDoc(id: string): Promise<unknown | null> {
   return (bridge().matches as Matches).get(id);
+}
+
+/**
+ * The whole doc taking the place of a lazily opened one (the stale-sidecar
+ * fallback): every round of it is a newly parsed object, and a round already
+ * loaded keeps the object it had — the report on screen is keyed by it, and
+ * so are the derive caches and the open trace (codex 85-tk-G-T93-1c #2: a
+ * late fallback for round 1 tore down the report of round 2 mid-fill).
+ */
+export function keepLoadedRounds<T>(prev: unknown, full: T): T {
+  const had = (prev as { data?: { rounds?: unknown } } | null)?.data?.rounds;
+  const data = (full as { data?: { rounds?: unknown } } | null)?.data;
+  if (!Array.isArray(had) || !data || !Array.isArray(data.rounds)) return full;
+  return {
+    ...full,
+    data: { ...data, rounds: data.rounds.map((r, i) => had[i] ?? r) },
+  };
 }

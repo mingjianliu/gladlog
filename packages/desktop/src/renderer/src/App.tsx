@@ -20,6 +20,7 @@ import { StatsDashboard } from "./components/StatsDashboard";
 import { UpdateBanner } from "./components/UpdateBanner";
 import {
   canOpenRound,
+  keepLoadedRounds,
   openMatchDoc,
   openMatchRound,
   openWholeDoc,
@@ -28,11 +29,11 @@ import {
   beginOpen,
   cancelOpen,
   currentOpen,
-  openOnce,
-  type OpenTraceToken,
   openAt,
   openDocArrived,
+  openOnce,
   openPaintAt,
+  type OpenTraceToken,
 } from "./openTrace";
 import { MatchReport } from "./report/components/MatchReport";
 import {
@@ -255,7 +256,7 @@ export default function App({
       roundsInFlight.current,
       `${id}#${roundIndex}`,
       "round",
-      () => openMatchRound(id, roundIndex),
+      (traceOf) => openMatchRound(id, roundIndex, traceOf),
       (round, t, failed) => {
         // a loader that threw, or the selection moved off this match:
         // nothing of it is drawn, the trace ends here
@@ -264,13 +265,22 @@ export default function App({
           return;
         }
         if (round == null) {
-          openDocArrived(t);
+          // stale sidecar: the whole doc instead. It has arrived when IT
+          // answers (codex 1c #1: the two-frame wait for a render ran out
+          // during the read), and it brings new objects for every round —
+          // the rounds already on screen keep theirs, or the report of one
+          // would be torn down under its own open (codex 1c #2)
           void openWholeDoc(id)
             .catch(() => null)
-            .then((full) => {
-              if (selectedIdRef.current === id && full) setDoc(full);
-              // no whole doc either: nothing new mounts to end the trace
-              else cancelOpen(t);
+            .then((full: any) => {
+              if (selectedIdRef.current !== id || !full) {
+                cancelOpen(t);
+                return;
+              }
+              // the open is of the round it asked for, as the whole doc
+              // brings it
+              openDocArrived(t, full?.data?.rounds?.[roundIndex] ?? undefined);
+              setDoc((prev: unknown) => keepLoadedRounds(prev, full));
             });
           return;
         }

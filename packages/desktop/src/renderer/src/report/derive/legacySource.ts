@@ -58,7 +58,15 @@ export function toLegacySafe(source: ReportSource) {
     cache.set(source, cached);
     return cached;
   }
-  return openTimed("toLegacy", () => convert(source));
+  // timed for the open of THIS source, whoever asks (a report's render, or
+  // its raw-stream effect after another report rendered)
+  return openTimed(
+    "toLegacy",
+    () => convert(source),
+    true,
+    undefined,
+    source as object,
+  );
 }
 
 function convert(source: ReportSource) {

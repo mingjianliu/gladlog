@@ -36,8 +36,13 @@ export type OpenTraceToken = object | null;
 export function currentOpen(): OpenTraceToken {
   return active;
 }
-const mine = (of: OpenTraceToken | undefined): boolean =>
-  of === undefined || of === active;
+/** …or where to ask for it when the step is done: a request reused by a
+ * later click answers into that click's trace (`openOnce`; codex
+ * 85-tk-G-T93-1c #3: the loader kept the first click's token and its parse
+ * time fell out of the record). */
+export type OpenTraceOwner = OpenTraceToken | (() => OpenTraceToken);
+const mine = (of: OpenTraceOwner | undefined): boolean =>
+  of === undefined || (typeof of === "function" ? of() : of) === active;
 
 /** Two frames from now; a page with no animation frames (jsdom, a stub)
  * falls back to a task, as `afterPaint` does (codex #4). */
@@ -143,9 +148,16 @@ export function openTimed<T>(
   name: string,
   fn: () => T,
   reportSide = true,
-  of?: OpenTraceToken,
+  of?: OpenTraceOwner,
+  /** the report source the work is for, when it is not the render in
+   * progress (a conversion asked for from an effect — codex 1c #4) */
+  source?: object,
 ): T {
-  if (!mine(of) || (reportSide ? !owns(rendering) : !active)) return fn();
+  if (
+    !mine(of) ||
+    (reportSide ? !owns(source === undefined ? rendering : source) : !active)
+  )
+    return fn();
   const t = active!;
   const s = now();
   try {
@@ -161,7 +173,7 @@ export function openTraceActive(): boolean {
 
 /** The answer of the open's IPC call is in the page (bytes, or a parsed doc
  * on the old path): record preload's timings and the bridge crossing. */
-export function openIoArrived(of?: OpenTraceToken): void {
+export function openIoArrived(of?: OpenTraceOwner): void {
   if (!active || !mine(of) || active.io !== undefined) return;
   let io: OpenTraceIo | null = null;
   try {
@@ -269,7 +281,9 @@ export function openOnce<T>(
   inFlight: Map<string, { trace: OpenTraceToken }>,
   key: string,
   what: "match" | "round",
-  request: () => Promise<T>,
+  /** `trace`: the trace the request's own steps write to, read when each
+   * step ends */
+  request: (trace: () => OpenTraceToken) => Promise<T>,
   answer: (
     value: T | undefined,
     trace: OpenTraceToken,
@@ -289,7 +303,7 @@ export function openOnce<T>(
     inFlight.delete(key);
     return mine.trace;
   };
-  void request().then(
+  void request(() => mine.trace).then(
     (v) => answer(v, done(), false),
     () => answer(undefined, done(), true),
   );

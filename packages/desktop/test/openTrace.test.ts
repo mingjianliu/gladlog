@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { keepLoadedRounds } from "../src/renderer/src/matchDocLoader";
 import {
   beginOpen,
   cancelOpen,
@@ -224,5 +225,75 @@ describe("open trace", () => {
     expect(openTraceActive()).toBe(false);
     expect(inFlight.size).toBe(0);
     expect(observers.at(-1)!.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("1c #3 复用的请求,它自己的步骤也记到最后一次点击的那次打开上", async () => {
+    const inFlight = new Map<
+      string,
+      { trace: ReturnType<typeof currentOpen> }
+    >();
+    let finish!: () => void;
+    openOnce(
+      inFlight,
+      "m#2",
+      "round",
+      (traceOf) =>
+        new Promise<object>((r) => {
+          finish = () => {
+            // the loader's parse, timed when it ends
+            openTimed("parse", () => vi.advanceTimersByTime(7), false, traceOf);
+            r(R2);
+          };
+        }),
+      (v, t) => openDocArrived(t, v),
+    );
+    beginOpen("m#1", "round");
+    openOnce(inFlight, "m#2", "round", vi.fn(), vi.fn());
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    openReportRender(R2);
+    endOpen("settled", R2);
+    vi.advanceTimersByTime(1000);
+    const rec = traces().at(-1)!;
+    expect(rec.id).toBe("m#2");
+    expect(rec.dur["parse"]).toBe(7);
+  });
+
+  it("1c #4 给定来源的计时只进那个来源的打开,不看当前在渲染谁", () => {
+    beginOpen("m#2", "round");
+    openDocArrived(currentOpen(), R2);
+    openReportRender(R2);
+    // round 1's conversion, asked for after round 2 rendered
+    openTimed(
+      "toLegacy",
+      () => vi.advanceTimersByTime(13),
+      true,
+      undefined,
+      R1,
+    );
+    openTimed("toLegacy", () => vi.advanceTimersByTime(3), true, undefined, R2);
+    endOpen("settled", R2);
+    vi.advanceTimersByTime(1000);
+    expect(traces().at(-1)!.dur["toLegacy"]).toBe(3);
+  });
+
+  it("1c #2 整档回退不换掉已经载入的回合对象", () => {
+    const r0 = { id: "r0" };
+    const r2 = { id: "r2" };
+    const prev = { kind: "shuffle", data: { rounds: [r0, null, r2] } };
+    const full = {
+      kind: "shuffle",
+      data: { rounds: [{ id: "r0" }, { id: "r1" }, { id: "r2" }] },
+    };
+    const next = keepLoadedRounds(prev, full);
+    expect(next.data.rounds[0]).toBe(r0);
+    expect(next.data.rounds[2]).toBe(r2);
+    expect(next.data.rounds[1]).toBe(full.data.rounds[1]);
+    // nothing to keep: the whole doc as it is
+    expect(keepLoadedRounds(null, full)).toBe(full);
+    expect(keepLoadedRounds(prev, { kind: "match", data: {} })).toEqual({
+      kind: "match",
+      data: {},
+    });
   });
 });
