@@ -8,6 +8,7 @@ import { buildAnalysisInput } from "../src/renderer/src/report/derive/analysisIn
 import { deriveBurstLedger } from "../src/renderer/src/report/derive/burstLedger";
 import { deriveDeathRecaps } from "../src/renderer/src/report/derive/deathRecap";
 import { deriveKeyMoments } from "../src/renderer/src/report/derive/keyMoments";
+import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
 import { deriveMistakes } from "../src/renderer/src/report/derive/mistakes";
 import {
   resetSourceMemoForTest,
@@ -155,6 +156,30 @@ describe("整场 derive 跨挂载复用(T80 的确定性预算)", () => {
     expect(deriveStatsTable(m, { fromS: 0, toS: 10 })).not.toBe(
       deriveStatsTable(m, null),
     );
+  });
+
+  // codex 85-tk-I-T80-1: the two caches each kept their own recency order, so
+  // a round served from sourceMemo alone aged out of toLegacySafe's cache
+  // while its results still pointed into the evicted copy — three inflated
+  // matches alive under a bound of two.
+  it("sourceMemo 命中也给 legacy 副本续命:两份缓存留的是同两个 source", () => {
+    const [a, b, c] = [{ ...m }, { ...m }, { ...m }];
+    const legacyA = toLegacySafe(a);
+    sourceMemo(a, "k", () => ({ legacy: legacyA }));
+    toLegacySafe(b);
+    sourceMemo(a, "k", () => ({ legacy: legacyA })); // a hit: b is the oldest
+    toLegacySafe(c); // evicts b, not a
+    expect(toLegacySafe(a)).toBe(legacyA);
+  });
+
+  it("legacy 副本被淘汰时,sourceMemo 里那个 source 的结果一起丢", () => {
+    const [a, b, c] = [{ ...m }, { ...m }, { ...m }];
+    const compute = vi.fn(() => ({ legacy: toLegacySafe(a) }));
+    sourceMemo(a, "k", compute);
+    toLegacySafe(b);
+    toLegacySafe(c); // evicts a's copy
+    sourceMemo(a, "k", compute);
+    expect(compute).toHaveBeenCalledTimes(2);
   });
 
   it("换了锚点的滑窗重算,同一组锚点(新数组)命中", () => {

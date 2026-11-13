@@ -17,7 +17,12 @@ import type { ReportSource } from "./types";
  * legacySource.ts): a derive result may hold references into the inflated
  * legacy copy, so an entry that outlived that cache would pin gigabytes on a
  * large shuffle. The cap is the same 2 sources — "this round + the one just
- * left".
+ * left" — and the two caches are kept on one recency order rather than two
+ * that can drift: a hit here counts as a use of the source's legacy copy
+ * (`onSourceMemoUse`), and legacySource.ts drops a source's entry here the
+ * moment it evicts that source's copy (`dropSourceMemo`). Without that, a
+ * round served from this cache alone ages out of the other one and its
+ * results keep a third inflated copy alive (codex 85-tk-I-T80-1).
  *
  * Nothing is stored before the lazily loaded analysis tables are in: until
  * then a display path may fall back (spell names, talent modifiers) and is
@@ -36,6 +41,20 @@ void ensureAnalysisData().then(
   },
 );
 
+let onUse: ((source: ReportSource) => void) | undefined;
+
+/** legacySource.ts registers its LRU touch here (a hook, not an import: that
+ * module imports this one). */
+export function onSourceMemoUse(hook: (source: ReportSource) => void): void {
+  onUse = hook;
+}
+
+/** Forget everything kept for `source` — called when its legacy copy is
+ * evicted, so no result here outlives the copy it may point into. */
+export function dropSourceMemo(source: ReportSource): void {
+  cache.delete(source);
+}
+
 export function sourceMemo<T>(
   source: ReportSource,
   key: string,
@@ -43,13 +62,16 @@ export function sourceMemo<T>(
 ): T {
   let entry = cache.get(source);
   if (entry) {
-    // LRU touch
+    // LRU touch, here and on the source's legacy copy
     cache.delete(source);
     cache.set(source, entry);
+    onUse?.(source);
     if (entry.has(key)) return entry.get(key) as T;
   }
   const value = compute();
   if (!dataReady) return value;
+  // compute() may have evicted this very entry's neighbours; re-read ours
+  entry = cache.get(source);
   if (!entry) {
     entry = new Map();
     cache.set(source, entry);

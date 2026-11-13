@@ -1,6 +1,7 @@
 import type { GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
 
+import { dropSourceMemo, onSourceMemoUse } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 /** Unit event arrays that convert.ts iterates unconditionally (a trimmed doc or
@@ -31,6 +32,15 @@ const UNIT_ARRAYS = [
  * the oldest is immediately collectable. */
 const CACHE_MAX = 2;
 const cache = new Map<ReportSource, ReturnType<typeof toLegacyMatch>>();
+
+// A derive result served from sourceMemo is a use of this source's copy too:
+// the two caches share one recency order (see sourceMemo.ts).
+onSourceMemoUse((source) => {
+  const cached = cache.get(source);
+  if (!cached) return;
+  cache.delete(source);
+  cache.set(source, cached);
+});
 
 /**
  * A safe toLegacyMatch: pads missing unit event arrays with empty arrays before
@@ -65,6 +75,8 @@ export function toLegacySafe(source: ReportSource) {
   while (cache.size > CACHE_MAX) {
     const oldest = cache.keys().next().value!;
     cache.delete(oldest);
+    // nothing kept for that source may go on pointing into the copy
+    dropSourceMemo(oldest);
   }
   return result;
 }
