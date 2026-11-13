@@ -22,8 +22,10 @@
  * 122.7k at 0:11):
  *  - `pressOnlyDeliveryOutsideBurst`: every offensive press of the owner
  *    whose effect span is the press instant (no effect aura: Meteor, Soul
- *    Fire …), any spell. Log truth, rows only: the owner's damage rows on
- *    enemy players that carry the press's own spell name, after the press and
+ *    Fire …), any spell — counted whatever end the delivery reading gave
+ *    it (`endIsDelivery`). Log truth, rows only: the owner's damage rows on
+ *    enemy players that carry the press's own spell name (a shield-eaten
+ *    row by its attack spell), after the press and
  *    before the same button's next press (at most `DELIVERY_REACH_S`). A
  *    violation is a burst (`analyzeBurstLedger`) that ends before the last
  *    such row. Kind = spell + what each reader then says: `card:no-damage`
@@ -41,7 +43,7 @@ import {
 import { reconstructEnemyCDTimeline } from "@gladlog/analysis/src/utils/enemyCDs";
 import { isOffensiveCdFor } from "@gladlog/analysis/src/utils/spellDanger";
 
-import { type IRoundCtx, secOf, successesOf, tsOf } from "./ctx";
+import { ev, type IRoundCtx, secOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = [
   "ruledOffensivePress",
@@ -66,6 +68,11 @@ export const WINDOW_RE =
 const DELIVERY_REACH_S = 20;
 const BURST_HEAD = /^\s+Burst #\d+ — (\d+:\d\d)–(\d+:\d\d) \| (.*)$/;
 
+/** the spell a damage row delivers: a shield-eaten row (SPELL_ABSORBED)
+ * carries the shield in its spell fields and the attack beside them */
+const deliveredName = (d: any): unknown =>
+  ev(d) === "SPELL_ABSORBED" ? d.attackSpellName : d.spellName;
+
 function deliveryCheck(ctx: IRoundCtx, start: number): void {
   const owner = ctx.owner as any;
   if (!owner) return;
@@ -75,8 +82,15 @@ function deliveryCheck(ctx: IRoundCtx, start: number): void {
   const enemyIds = new Set(enemies.map((e: any) => e.id));
   const cds =
     reconstructEnemyCDTimeline([owner], combat).players[0]?.offensiveCDs ?? [];
+  // a press with no effect aura and no official length, whatever end the
+  // delivery reading gave it: one still at the press instant, or one the
+  // producer says it ran to its delivery (`endIsDelivery`). Not "its span is
+  // still zero" alone — that dropped every press the reading had moved, a
+  // partly read one included (codex 81-tk-G-T72-2 #2)
   const pressOnly = cds.filter(
-    (cd) => burstCastSpan(cd).to <= cd.castTimeSeconds && !cd.refusedAtPress,
+    (cd) =>
+      !cd.refusedAtPress &&
+      (cd.endIsDelivery === true || burstCastSpan(cd).to <= cd.castTimeSeconds),
   );
   if (pressOnly.length === 0) return;
   const entries = analyzeBurstLedger(owner, friends, enemies, combat);
@@ -89,12 +103,17 @@ function deliveryCheck(ctx: IRoundCtx, start: number): void {
           c.spellId === cd.spellId && c.castTimeSeconds > cd.castTimeSeconds,
       )
       .reduce((m, c) => Math.min(m, c.castTimeSeconds), Infinity);
-    const untilMs =
-      start + Math.min(nextS, cd.castTimeSeconds + DELIVERY_REACH_S) * 1000;
+    // …and inside the round: a ledger window ends at the round's end, so a
+    // row after it (s2/1-4-11: the owner dead at 2:25, the Meteor pressed
+    // at 2:23 landing 0.9 s into the next round's gap) is no window's to hold
+    const untilMs = Math.min(
+      ctx.roundEndAt,
+      start + Math.min(nextS, cd.castTimeSeconds + DELIVERY_REACH_S) * 1000,
+    );
     const rows = (owner.damageOut as any[]).filter(
       (d) =>
         enemyIds.has(d.destUnitId) &&
-        d.spellName === cd.spellName &&
+        deliveredName(d) === cd.spellName &&
         tsOf(d) > pressMs &&
         tsOf(d) <= untilMs,
     );
@@ -135,7 +154,15 @@ function deliveryCheck(ctx: IRoundCtx, start: number): void {
         break;
       }
     }
-    const ids = [...new Set(rows.map((d) => String(d.spellId)))].join("/");
+    const ids = [
+      ...new Set(
+        rows.map((d) =>
+          ev(d) === "SPELL_ABSORBED"
+            ? `absorbed ${d.attackSpellId}`
+            : String(d.spellId),
+        ),
+      ),
+    ].join("/");
     // rows of a differently named part of the same button ("Meteor Burn"),
     // told apart only so the count can say how much a name-exact reader
     // leaves out

@@ -106,6 +106,27 @@ describe("pressDeliveryEndSeconds", () => {
     expect(s.to).toBeCloseTo(11.49, 3);
   });
 
+  it("a hit a shield ate whole is the delivery, by its attack spell (codex 81-tk-G-T72-2 #1)", () => {
+    const eaten = (s: number, attackSpellId?: string, attackName?: string) => ({
+      // the row's own spell is the shield's
+      spellId: "17",
+      spellName: "Power Word: Shield",
+      attackSpellId,
+      attackSpellName: attackName,
+      srcUnitId: "u",
+      destUnitId: "v",
+      effectiveAmount: 120_000,
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: T0 + s * 1000 },
+    });
+    expect(
+      spanOf([cast(9.2)], [eaten(11.49, "351140", "Meteor")]).to,
+    ).toBeCloseTo(11.49, 3);
+    // another attack into the shield, or a swing (no attack spell): not it
+    expect(
+      spanOf([cast(9.2)], [eaten(11.49, "133", "Fireball"), eaten(11.6)]).to,
+    ).toBeCloseTo(9.2, 3);
+  });
+
   it("only rows on a player of the other side count", () => {
     const s = spanOf([cast(9.2)], [hit(11.4, "pet"), hit(11.5, "mate")]);
     expect(s.to).toBeCloseTo(9.2, 3);

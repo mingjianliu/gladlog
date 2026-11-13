@@ -142,6 +142,11 @@ export interface IEnemyCDCast {
    * cooldown is spent); no `[RES]` entry, burst window or defensive timing
    * reads it as an effect. */
   refusedAtPress?: true;
+  /** T72 attempt 2: `buffEndSeconds` is the press's delivery
+   * (`pressDeliveryEndSeconds`) — the press has no effect aura and no
+   * official length. What the scan counts such presses by, whatever end the
+   * reading gave them (codex 81-tk-G-T72-2 #2). */
+  endIsDelivery?: true;
   /** T29 R14: the refusing row's miss type (`pressRefusalMissType`) */
   refusedMissType?: string;
   /** T29 R14: the end the press had before the refusal cut it to the press
@@ -1090,6 +1095,8 @@ export const PRESS_DELIVERY_REACH_S = 5;
  * to it, for every reader of `buffEndSeconds` / `burstCastSpan`: read at
  * the press instant, the burst ledger's window was `0:08–0:08` and the
  * report's row said no damage was dealt beside a recap listing the impact.
+ * A shield-eaten hit counts by its attack spell (the ledger's own damage
+ * includes absorbs).
  * A differently named part of the same button (Meteor Burn) is not read:
  * nothing in the row ties it to the press. `undefined` when the log shows
  * no such row.
@@ -1119,10 +1126,21 @@ export function pressDeliveryEndSeconds(
     const t = d.logLine.timestamp;
     if (t <= pressMs || t > untilMs) continue;
     if (!otherSide.has(d.destUnitId)) continue;
+    // a hit a shield ate whole is a row of its own (SPELL_ABSORBED) whose
+    // spell fields are the SHIELD's; the attack rides beside them (codex
+    // 81-tk-G-T72-2 #1: 12 of 371 press-only presses on 605 delivered only
+    // such rows — a 201k Meteor into a shield read as no delivery)
+    const absorbed = (d.logLine.event as string) === LogEvent.SPELL_ABSORBED;
+    const id = absorbed
+      ? (d as { attackSpellId?: string }).attackSpellId
+      : d.spellId;
+    const name = absorbed
+      ? (d as { attackSpellName?: string }).attackSpellName
+      : d.spellName;
     if (
-      d.spellId === undefined ||
-      d.spellId === null ||
-      getEnglishSpellName(String(d.spellId), d.spellName ?? "") !== spellName
+      id === undefined ||
+      id === null ||
+      getEnglishSpellName(String(id), name ?? "") !== spellName
     )
       continue;
     if (lastMs === undefined || t > lastMs) lastMs = t;
@@ -1475,7 +1493,10 @@ function reconstructEnemyCDTimelineUncached(
             next?.castTimeSeconds ?? Infinity,
             matchStartMs,
           );
-          if (delivered !== undefined) cd.buffEndSeconds = delivered;
+          if (delivered !== undefined) {
+            cd.buffEndSeconds = delivered;
+            cd.endIsDelivery = true;
+          }
         }
         // fact10 D20: a length that moves with haste, its end not logged by
         // the round's end, runs as long as this unit's own completed run of
