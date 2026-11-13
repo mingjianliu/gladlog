@@ -240,7 +240,10 @@ function casterWindowExtensionSeconds(
     return 0;
   for (const c of caster.spellCastEvents ?? []) {
     const t = c.logLine.timestamp;
-    if (t > atMs) break;
+    // not a `break`: the rows are in log order, and a log's timestamps step
+    // back now and then (codex 85-tk-G-T84-1 #1: an Invoke stored after a
+    // cast 10 ms later was never reached)
+    if (t > atMs) continue;
     if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
     if (!row.windowCastIds.includes(c.spellId ?? "")) continue;
     const windowS = buffFullDurationForCaster(c.spellId ?? "", caster);

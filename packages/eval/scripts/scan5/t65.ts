@@ -33,12 +33,14 @@
  *    for ≥ 1.5 s inside the round, then ≥ 150 rows within 0.5 s. Occasion
  *    (second kind): such a catch-up burst holds a control's REMOVED row.
  *  - `envMistInvoke` (GH #123 item 16), once per round: an Enveloping Mist
- *    124682 applied inside its monk's Invoke Chi-Ji / Yu'lon window.
+ *    124682 whose last application the log shows (APPLIED or REFRESH, read
+ *    on the rows) fell inside its monk's Invoke Chi-Ji / Yu'lon window.
  *    Wrong (T84): that run was left without a REMOVED row and the builder,
  *    given the casters, cut it short of the plain length + the window's
- *    4 s with the round still running. Occasions: such a run the cap or
- *    the round's end closed at its full length; a Gift of the Celestials
- *    holder's (the +4 s is not priced for them).
+ *    4 s from that application with the round still running. Occasions:
+ *    such a run the cap or the round's end closed at its full length; one
+ *    the monk's next application closed; a Gift of the Celestials holder's
+ *    (the +4 s is not priced for them).
  *  - `survivalSet4` (GH #175 item 9), once per round: a Survival Hunter.
  *    Occasion: it wears 4 pieces of set 2059 (Mongoose Fury's bonus, which
  *    no product reader prices).
@@ -80,6 +82,7 @@ import {
   fmtS,
   type IRoundCtx,
   nameOf,
+  REFRESH,
   REMOVED,
   secOf,
   successesOf,
@@ -110,6 +113,8 @@ const OCC_SET4 = "occasion: wears 4 pieces of set 2059";
 const OCC_TW_LONG = "occasion: ran past the official length";
 const OCC_ENV_CAPPED =
   "occasion: left without REMOVED: the cap carries the window's +4 s, or the round ended first";
+const OCC_ENV_REPLACED =
+  "occasion: left without REMOVED: closed by the monk's next application";
 const OCC_ENV_GIFT =
   "occasion: Gift of the Celestials holder (or unreadable talents), not lengthened";
 
@@ -125,6 +130,7 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `timewalkerCap|${OCC_TW_LONG}`,
   `envMistInvoke|${OCC_ENV_CAPPED}`,
   `envMistInvoke|${OCC_ENV_GIFT}`,
+  `envMistInvoke|${OCC_ENV_REPLACED}`,
 ]);
 
 export function run(ctx: IRoundCtx): void {
@@ -545,24 +551,47 @@ function envMistInvoke(ctx: IRoundCtx): void {
       if (iv.spellId !== ENVELOPING_MIST) continue;
       const monk = (ctx.players as any[]).find((p) => p.id === iv.srcUnitId);
       if (!monk) continue;
-      const at = ctx.start + iv.fromS * 1000;
+      const fromMs = ctx.start + iv.fromS * 1000;
+      const toMs = ctx.start + iv.toS * 1000;
+      // the monk's rows of the aura on this unit, read on the log — not the
+      // builder's interval: the cap runs from the run's LAST application
+      // (APPLIED or REFRESH), and the window is asked of that instant
+      // (codex 85-tk-G-T84-1 #2: a run applied at 34 s and refreshed at
+      // 36 s, past the window, closed rightly at 43 s and read as cut)
+      const own = ((u.auraEvents ?? []) as any[]).filter(
+        (a) => String(a.spellId) === ENVELOPING_MIST && a.srcUnitId === monk.id,
+      );
+      const anchorMs = own
+        .filter(
+          (a) =>
+            (ev(a) === APPLIED || ev(a) === REFRESH) &&
+            tsOf(a) >= fromMs - 1 &&
+            tsOf(a) < toMs - 1,
+        )
+        .reduce((m, a) => Math.max(m, tsOf(a)), fromMs);
       const inside = successesOf(monk).some(
         (c) =>
           INVOKES.includes(String(c.spellId)) &&
-          at >= tsOf(c) &&
-          at <= tsOf(c) + INVOKE_WINDOW_MS,
+          anchorMs >= tsOf(c) &&
+          anchorMs <= tsOf(c) + INVOKE_WINDOW_MS,
       );
       if (!inside) continue;
       ctx.bump("envMistInvoke");
       if (!iv.inferredEnd) continue;
       const id = `${monk.name}:${u.name}:${iv.fromS.toFixed(3)}`;
       const where = `${monk.name}'s Enveloping Mist on ${u.name} ${iv.fromS.toFixed(1)}–${iv.toS.toFixed(1)}s`;
+      // closed by the monk's next application of it (a recast whose REMOVED
+      // the log lost), not by the cap: nothing to measure (codex #3)
+      if (own.some((a) => ev(a) === APPLIED && Math.abs(tsOf(a) - toMs) <= 1)) {
+        ctx.violate("envMistInvoke", OCC_ENV_REPLACED, fromMs, id, where);
+        continue;
+      }
       // the plain length with no application time: what the cap was before
       // the window's +4 s
       const plain = buffFullDurationForCaster(ENVELOPING_MIST, monk);
       const cutShort =
         plain !== undefined &&
-        iv.toS - iv.fromS < plain + ENV_MIST_WINDOW_ADD_S - 0.05 &&
+        (toMs - anchorMs) / 1000 < plain + ENV_MIST_WINDOW_ADD_S - 0.05 &&
         iv.toS < endS - 0.05;
       ctx.violate(
         "envMistInvoke",
@@ -571,7 +600,7 @@ function envMistInvoke(ctx: IRoundCtx): void {
           : talentModifierOwnershipOf(monk, GIFT_OF_THE_CELESTIALS) !== "no"
             ? OCC_ENV_GIFT
             : "left without REMOVED: cut without the window's +4 s",
-        at,
+        fromMs,
         id,
         where,
       );

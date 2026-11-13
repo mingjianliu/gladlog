@@ -95,4 +95,16 @@ describe("T84 — Enveloping Mist inside the monk's Invoke window", () => {
       ),
     ).toBe(7);
   });
+
+  it("casts stored out of time order: an Invoke after a later-stamped cast still counts (codex 85-tk-G-T84-1 #1)", () => {
+    const m = {
+      spec: "270",
+      info: { holds: [MIST_WRAP], unknown: [] },
+      spellCastEvents: [
+        makeSpellCastEvent("116670", at(10.01), "monk"),
+        makeSpellCastEvent("325197", at(10), "monk"),
+      ],
+    } as never;
+    expect(buffFullDurationForCaster(MIST, m, at(10.005))).toBe(11);
+  });
 });
