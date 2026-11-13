@@ -9,7 +9,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { specToString } from "../utils/cooldowns";
+import { listedSpellNameOf, specToString } from "../utils/cooldowns";
 import {
   annotateDefensiveTimings,
   extractMajorCooldowns,
@@ -219,7 +219,12 @@ function extractCombatStats(
     );
 
     for (const cd of cooldowns) {
-      const spellLabel = cd.spellName;
+      // the listed button's name, the key `formatSpecBaselines` reads
+      // (`listedSpellNameOf`): a row named as its holder's kit (Ice Cold)
+      // stays in the listed button's cohort — keyed by `spellName`, a
+      // regenerated table had no "Ice Block" row for the formatter to find
+      // (codex 85-tk-G-T61-2e)
+      const spellLabel = listedSpellNameOf(cd);
       if (!stats.cdFirstUse[spellLabel]) stats.cdFirstUse[spellLabel] = [];
       const firstCast = cd.neverUsed
         ? null

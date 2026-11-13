@@ -10,13 +10,19 @@
  * Nature's Swiftness classNodes 103620 / entry 127899; Ancestral Swiftness
  * heroNodes 94894 / entry 117491 (subTree 56, Farseer).
  */
-import { CombatUnitClass, CombatUnitSpec } from "@gladlog/parser-compat";
+import {
+  CombatUnitClass,
+  CombatUnitReaction,
+  CombatUnitSpec,
+} from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { createBenchmarkAccumulator } from "../src/benchmark/metrics";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { replacedSpellIds, TALENT_REPLACES } from "../src/data/talentReplaces";
 import { TALENT_REPLACES_GENERATED } from "../src/data/talentReplacesGenerated";
 import { extractMajorCooldowns } from "../src/utils/cooldowns";
+import { formatSpecBaselines } from "../src/utils/specBaselines";
 import { talentOwnershipOf } from "../src/utils/talentOwnership";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
@@ -136,6 +142,49 @@ describe("TALENT_REPLACES_GENERATED (official TraitDefinition.OverridesSpellID)"
     expect(iceBlock?.kitSpellId).toBe("414658");
     expect(iceBlock?.listedSpellName).toBe("Ice Block");
     expect(cds.some((c) => c.spellName === "Ice Block")).toBe(false);
+  });
+});
+
+describe("a kit-named row and the CD reference table: generator and formatter share the key (T61, codex 85-tk-G-T61-2e)", () => {
+  it("five Ice Cold mages generate an Ice Block row, and the formatter finds it", () => {
+    const mage = () =>
+      makeUnit("player-1", {
+        class: CombatUnitClass.Mage,
+        spec: CombatUnitSpec.Mage_Frost,
+        reaction: CombatUnitReaction.Friendly,
+        spellCastEvents: [makeSpellCastEvent("414658", T0 + 30_000, "player-1")],
+        info: {
+          talents: [
+            { id1: 62122, id2: 80181, count: 1 },
+            { id1: 62085, id2: 80141, count: 1 },
+          ],
+          pvpTalents: [],
+        } as any,
+      });
+    const acc = createBenchmarkAccumulator();
+    let cds: ReturnType<typeof extractMajorCooldowns> = [];
+    for (let i = 0; i < 5; i++) {
+      const owner = mage();
+      const enemy = makeUnit("enemy-1", {
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Arms,
+        reaction: CombatUnitReaction.Hostile,
+      });
+      const combat = {
+        startTime: T0,
+        endTime: T_END,
+        playerId: "player-1",
+        units: { "player-1": owner, "enemy-1": enemy },
+      } as unknown as import("@gladlog/parser-compat").AtomicArenaCombat;
+      acc.add(combat);
+      cds = extractMajorCooldowns(owner, combat);
+    }
+    const table = acc.finalize();
+    const usage = table.bySpec["Frost Mage"]?.cdUsage ?? {};
+    expect(Object.keys(usage)).toContain("Ice Block");
+    expect(Object.keys(usage)).not.toContain("Ice Cold");
+    const lines = formatSpecBaselines("Frost Mage", cds, table as never);
+    expect(lines.some((l) => l.includes("Ice Block: 100% used"))).toBe(true);
   });
 });
 
