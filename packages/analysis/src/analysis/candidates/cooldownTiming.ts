@@ -771,31 +771,45 @@ export function evaluateSyncWindow(
 }
 
 /**
- * What a per-press map of the CD timeline (`castEndS`, `refusedAt`: keyed by
- * the timeline's press ms) holds for the ledger's press at `timeSeconds`.
- * The two can stamp one press differently: the ledger keeps a cooldown's
- * ACTIVATION — its aura's APPLIED row when that is what shows the press —
- * and the timeline its cast row (codex 85-tk-H-T65-1: Radiant Glory's
- * 454351 aura at 19.9 s, its cast row at 20.0 s; the exact-ms key missed
- * and the press read its official length). The nearest timeline press
- * within `SAVE_CAST_AURA_PAIR_S`, the cast-to-aura pairing the ledger
- * itself reads.
+ * The CD timeline's press (its ms, the key of `castEndS` and `refusedAt`)
+ * that the ledger's press at `timeSeconds` is. The two can stamp one press
+ * differently: the ledger keeps a cooldown's ACTIVATION — its aura's APPLIED
+ * row when that is what shows the press — and the timeline its cast row
+ * (codex 85-tk-H-T65-1: Radiant Glory's 454351 aura at 19.9 s, its cast row
+ * at 20.0 s; the exact-ms key missed and the press read its official
+ * length). The exact ms, else the nearest timeline press within
+ * `SAVE_CAST_AURA_PAIR_S` (the cast-to-aura pairing the ledger itself
+ * reads) that is not ANOTHER ledger press's own ms — a second charge
+ * 0.8 s after the first, which the timeline folded away, has no timeline
+ * press and takes nobody else's (codex 85-tk-H-T65-1b). `castEndS` holds
+ * every timeline press of the cooldown, so the identity is resolved on it
+ * and `refusedAt` (the refused ones only) is read by the key found.
  */
-export function timelinePressAt<V>(
-  byPressMs: ReadonlyMap<number, V> | undefined,
+export function timelinePressMsOf(
+  cd: Pick<SyncWindowCd, "castEndS"> & {
+    casts: ReadonlyArray<{ timeSeconds: number }>;
+  },
   timeSeconds: number,
-): V | undefined {
-  if (!byPressMs) return undefined;
+): number | undefined {
   const key = Math.round(timeSeconds * 1000);
-  const exact = byPressMs.get(key);
-  if (exact !== undefined) return exact;
-  let best: { d: number; v: V } | undefined;
-  for (const [ms, v] of byPressMs) {
+  // no timeline to resolve on: the press's own ms, the key every map had
+  if (!cd.castEndS || cd.castEndS.has(key)) return key;
+  const others = new Set(
+    cd.casts
+      .map((c) => Math.round(c.timeSeconds * 1000))
+      .filter((ms) => ms !== key),
+  );
+  let best: { d: number; ms: number } | undefined;
+  for (const ms of cd.castEndS.keys()) {
     const d = Math.abs(ms - key);
-    if (d <= SAVE_CAST_AURA_PAIR_S * 1000 && (!best || d < best.d))
-      best = { d, v };
+    if (
+      d <= SAVE_CAST_AURA_PAIR_S * 1000 &&
+      !others.has(ms) &&
+      (!best || d < best.d)
+    )
+      best = { d, ms };
   }
-  return best?.v;
+  return best?.ms;
 }
 
 /** Did this press of `cd` enter the lock `w` — the ONE "entered" test
@@ -808,7 +822,9 @@ function castEntersWindow(
   // work order 2026-10-14d Part 2 (preview): the press's OBSERVED end when
   // the CD timeline has it (`burstCastSpan` reads the same field), else the
   // official length
-  const observed = timelinePressAt(cd.castEndS, c.timeSeconds);
+  const pressMs = timelinePressMsOf(cd, c.timeSeconds);
+  const observed =
+    pressMs === undefined ? undefined : cd.castEndS?.get(pressMs);
   const spanEnd =
     observed ??
     c.timeSeconds +
@@ -917,7 +933,9 @@ export function syncReadyTimingFacts(
     );
     if (after) {
       // T29 R15: a refused press stays a press (the intent), and says so
-      const refused = timelinePressAt(cd.refusedAt, after.timeSeconds);
+      const afterMs = timelinePressMsOf(cd, after.timeSeconds);
+      const refused =
+        afterMs === undefined ? undefined : cd.refusedAt?.get(afterMs);
       pressedAfter.push(
         `${cd.spellName} ${signedS(after.timeSeconds - w.toSeconds)}s${refused ? ` ${refused.marker}` : ""}`,
       );

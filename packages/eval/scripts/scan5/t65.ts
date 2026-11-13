@@ -51,7 +51,7 @@ import {
   mergeHealerCcWindows,
   SYNC_ENTER_LEAD_S,
   syncWindowCdFor,
-  timelinePressAt,
+  timelinePressMsOf,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { setPiecesWorn } from "@gladlog/analysis/src/data/classSetBonuses";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
@@ -199,9 +199,8 @@ function syncVariantEnd(ctx: IRoundCtx): void {
       for (const c of cd.casts as Array<{ timeSeconds: number }>) {
         ctx.bump("syncVariantEnd");
         const key = Math.round(c.timeSeconds * 1000);
-        // what the consumer finds for this press (`timelinePressAt`)
-        if (timelinePressAt(scd.castEndS, c.timeSeconds) !== undefined)
-          continue;
+        // what the consumer finds for this press (`timelinePressMsOf`)
+        if (timelinePressMsOf(scd, c.timeSeconds) !== undefined) continue;
         // the timeline's press of it, read here on its own: the nearest
         // row within 1.5 s — the ledger stamps an activation at its aura,
         // the timeline at its cast row (codex 85-tk-H-T65-1 #2: an

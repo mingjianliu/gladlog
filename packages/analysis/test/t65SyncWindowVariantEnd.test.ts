@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   syncWindowCdFor,
-  timelinePressAt,
+  timelinePressMsOf,
 } from "../src/analysis/candidates/cooldownTiming";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
@@ -47,19 +47,31 @@ describe("T65 — a press's observed end is keyed on its cooldown", () => {
 
   // codex 85-tk-H-T65-1 #1: the ledger stamps an activation at its aura
   // (19.9 s), the timeline at its cast row (20.0 s)
-  describe("timelinePressAt", () => {
+  describe("timelinePressMsOf", () => {
     const ends = new Map([
       [20_000, 28],
       [80_000, 90],
     ]);
+    const cd = (...casts: number[]) => ({
+      castEndS: ends,
+      casts: casts.map((timeSeconds) => ({ timeSeconds })),
+    });
     it("finds the timeline press a ledger activation 0.1 s earlier stands for", () => {
-      expect(timelinePressAt(ends, 19.9)).toBe(28);
-      expect(timelinePressAt(ends, 20)).toBe(28);
+      expect(timelinePressMsOf(cd(19.9), 19.9)).toBe(20_000);
+      expect(timelinePressMsOf(cd(20), 20)).toBe(20_000);
     });
     it("takes the nearest press, and none past the cast-to-aura pairing", () => {
-      expect(timelinePressAt(ends, 79.2)).toBe(90);
-      expect(timelinePressAt(ends, 22)).toBeUndefined();
-      expect(timelinePressAt(undefined, 20)).toBeUndefined();
+      expect(timelinePressMsOf(cd(79.2), 79.2)).toBe(80_000);
+      expect(timelinePressMsOf(cd(22), 22)).toBeUndefined();
+      // no timeline at all: the press's own ms
+      expect(timelinePressMsOf({ casts: [{ timeSeconds: 20 }] }, 20)).toBe(
+        20_000,
+      );
+    });
+    // codex 85-tk-H-T65-1b: a second charge the timeline folded away
+    it("never takes the timeline press of another ledger press", () => {
+      expect(timelinePressMsOf(cd(20, 20.8), 20.8)).toBeUndefined();
+      expect(timelinePressMsOf(cd(20, 20.8), 20)).toBe(20_000);
     });
   });
 });
