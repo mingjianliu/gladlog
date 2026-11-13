@@ -44,6 +44,8 @@ const round = (
     afterEnd?: number[];
     /** the friendly is a healer stunned from here to past the slice's end */
     stunnedFromS?: number;
+    /** …and the stun is refreshed here */
+    refreshedAtS?: number;
   } = {},
 ) => {
   const enemy = makeUnit("enemy-1", {
@@ -71,6 +73,17 @@ const round = (
               "enemy-1",
               "player-1",
             ),
+            ...(opts.refreshedAtS === undefined
+              ? []
+              : [
+                  makeAuraEvent(
+                    LogEvent.SPELL_AURA_REFRESH,
+                    "408",
+                    at(opts.refreshedAtS),
+                    "enemy-1",
+                    "player-1",
+                  ),
+                ]),
             makeAuraEvent(
               LogEvent.SPELL_AURA_REMOVED,
               "408",
@@ -149,5 +162,15 @@ describe("T91 — a burst window's rate is over the seconds the log shows", () =
     expect(
       half.dangerScore / (half.threatScore * half.damageRatio),
     ).toBeCloseTo(1 + BURST_HEALER_CC_WEIGHT / 2, 6);
+  });
+
+  it("a control refreshed inside the window keeps the seconds before the refresh", () => {
+    // stunned from 92 s, refreshed at 98 s: all 8 s the slice shows of the
+    // window, not the 2 s after the refresh
+    const w = round(92, { stunnedFromS: 92, refreshedAtS: 98 });
+    expect(w.dangerScore / (w.threatScore * w.damageRatio)).toBeCloseTo(
+      1 + BURST_HEALER_CC_WEIGHT,
+      6,
+    );
   });
 });

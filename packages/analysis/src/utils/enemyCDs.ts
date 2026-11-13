@@ -2184,7 +2184,12 @@ function reconstructEnemyCDTimelineUncached(
               a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
               a.logLine.event === LogEvent.SPELL_AURA_REFRESH
             ) {
-              ccStartBySpell.set(a.spellId, a.logLine.timestamp);
+              // a REFRESH of a control already up continues it: restarting
+              // the run there dropped the seconds before the refresh (T91,
+              // 605 scan5 burstHealerCcPastSliceEnd: one window, 6 % of the
+              // score against 41 % of the 8.4 s the log shows)
+              if (!ccStartBySpell.has(a.spellId))
+                ccStartBySpell.set(a.spellId, a.logLine.timestamp);
             } else if (
               a.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
               a.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
