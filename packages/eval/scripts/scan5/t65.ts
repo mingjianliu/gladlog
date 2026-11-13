@@ -61,6 +61,7 @@ import {
 import { setPiecesWorn } from "@gladlog/analysis/src/data/classSetBonuses";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import {
   buffFullDurationForCaster,
   TIMEWALKER_LENGTHENED_IDS,
@@ -534,6 +535,7 @@ function writeStall(ctx: IRoundCtx): void {
 const ENVELOPING_MIST = "124682";
 const INVOKES = ["325197", "322118"];
 const INVOKE_WINDOW_MS = 25_000;
+const DOSE = "SPELL_AURA_APPLIED_DOSE";
 const ENV_MIST_WINDOW_ADD_S = 4;
 const GIFT_OF_THE_CELESTIALS = "388212";
 
@@ -558,23 +560,33 @@ function envMistInvoke(ctx: IRoundCtx): void {
       // (APPLIED or REFRESH), and the window is asked of that instant
       // (codex 85-tk-G-T84-1 #2: a run applied at 34 s and refreshed at
       // 36 s, past the window, closed rightly at 43 s and read as cut)
-      const own = ((u.auraEvents ?? []) as any[]).filter(
-        (a) => String(a.spellId) === ENVELOPING_MIST && a.srcUnitId === monk.id,
+      // The builder's own normalisation first: a REMOVED + APPLIED
+      // re-broadcast pair is no row (`dropAuraRebroadcasts`), and an APPLIED
+      // inside the interval is one the builder read as a re-broadcast too —
+      // it would have split the interval there otherwise — so only a
+      // REFRESH / DOSE inside moves the anchor (codex 85-tk-G-T84-1b: a
+      // re-broadcast at 16 s of a run applied at 12 s read as cut at 23 s)
+      const own = dropAuraRebroadcasts((u.auraEvents ?? []) as any[]).filter(
+        (a: any) =>
+          String(a.spellId) === ENVELOPING_MIST && a.srcUnitId === monk.id,
       );
       const anchorMs = own
         .filter(
-          (a) =>
-            (ev(a) === APPLIED || ev(a) === REFRESH) &&
-            tsOf(a) >= fromMs - 1 &&
+          (a: any) =>
+            (ev(a) === REFRESH || ev(a) === DOSE) &&
+            tsOf(a) > fromMs &&
             tsOf(a) < toMs - 1,
         )
-        .reduce((m, a) => Math.max(m, tsOf(a)), fromMs);
-      const inside = successesOf(monk).some(
-        (c) =>
-          INVOKES.includes(String(c.spellId)) &&
-          anchorMs >= tsOf(c) &&
-          anchorMs <= tsOf(c) + INVOKE_WINDOW_MS,
-      );
+        .reduce((m: number, a: any) => Math.max(m, tsOf(a)), fromMs);
+      // the window is the monk's own press of the celestial, for as long as
+      // THAT monk's lasts (Gift of the Celestials: 12 s, not 25)
+      const inside = successesOf(monk).some((c) => {
+        if (!INVOKES.includes(String(c.spellId))) return false;
+        const windowS =
+          buffFullDurationForCaster(String(c.spellId), monk) ??
+          INVOKE_WINDOW_MS / 1000;
+        return anchorMs >= tsOf(c) && anchorMs <= tsOf(c) + windowS * 1000;
+      });
       if (!inside) continue;
       ctx.bump("envMistInvoke");
       if (!iv.inferredEnd) continue;

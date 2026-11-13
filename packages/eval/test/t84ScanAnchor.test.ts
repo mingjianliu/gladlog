@@ -23,7 +23,11 @@ import { run } from "../scripts/scan5/t65";
 
 const START = 1_700_000_000_000;
 const at = (s: number) => START + Math.round(s * 1000);
-const { SPELL_AURA_APPLIED: APPLIED, SPELL_AURA_REFRESH: REFRESH } = LogEvent;
+const {
+  SPELL_AURA_APPLIED: APPLIED,
+  SPELL_AURA_REFRESH: REFRESH,
+  SPELL_AURA_REMOVED: REMOVED,
+} = LogEvent;
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -116,5 +120,28 @@ describe("scan5/t65 envMistInvoke — the cap's anchor (codex 85-tk-G-T84-1)", (
       expect.stringMatching(/the cap carries the window's \+4 s/),
     ]);
     expect(r.seen[0]!.detail).toContain("12.0–15.0s");
+  });
+
+  it("a re-broadcast is no new anchor: REMOVED + APPLIED in one millisecond, or a bare APPLIED with no cast (codex 85-tk-G-T84-1b)", () => {
+    // applied 12 s inside the window; the cap is 12 + 11 = 23 s either way
+    for (const rows of [
+      [
+        [APPLIED, 12],
+        [REMOVED, 16],
+        [APPLIED, 16],
+      ],
+      [
+        [APPLIED, 12],
+        [APPLIED, 16],
+      ],
+    ] as Array<Array<[LogEvent, number]>>) {
+      const r = scan(rows, [12]);
+      expect(r.checked).toBe(1);
+      expect(r.seen).toHaveLength(1);
+      expect(r.seen[0]!.kind).toMatch(
+        /^occasion: left without REMOVED: the cap/,
+      );
+      expect(r.seen[0]!.detail).toContain("12.0–23.0s");
+    }
   });
 });
