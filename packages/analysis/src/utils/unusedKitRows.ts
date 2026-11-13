@@ -1,12 +1,18 @@
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
-import { extractMajorCooldowns, kitRowUnused } from "./cooldowns";
+import {
+  extractMajorCooldowns,
+  kitRowUnused,
+  kitSpellIdOf,
+  kitSpellNameOf,
+} from "./cooldowns";
 
 /**
  * The cooldowns a unit OWNS and has not pressed this round: the rows of its
  * cooldown ledger the kit line tags `[UNUSED]` (`extractMajorCooldowns(…, {
  * withBaselineOnly: true })` — the ledger the loadout renders — and
- * `kitRowUnused`, the tag's own reading), by the name the kit prints.
+ * `kitRowUnused`, the tag's own reading), by the name the kit prints and the
+ * holder's own spell for the button (`kitSpellIdOf`).
  * Memoised per (unit, round): the readers ask per attempt, per window and per
  * span of every enemy, and the answer is the round's.
  *
@@ -34,7 +40,14 @@ export function unusedKitRows(
   if (hit && hit.combat === combat) return hit.rows;
   const rows = extractMajorCooldowns(unit, combat, { withBaselineOnly: true })
     .filter((cd) => kitRowUnused(cd))
-    .map((cd) => ({ spellId: cd.spellId, name: cd.spellName }));
+    // the holder's own spell for the button (`kitSpellIdOf`: an Ice Block
+    // row is Ice Cold 414658 for its talent's holder), the id its readers
+    // classify — the kill tier's wall set, the span's roster defensives —
+    // and the name the kit line prints (codex 85-tk-G-T61-2 #1)
+    .map((cd) => ({
+      spellId: kitSpellIdOf(cd, unit),
+      name: kitSpellNameOf(cd, unit),
+    }));
   cache.set(unit, { combat, rows });
   return rows;
 }

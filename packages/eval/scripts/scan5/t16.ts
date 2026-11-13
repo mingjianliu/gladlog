@@ -19,7 +19,10 @@
  * windows, Time Spiral's free casts and its echo rows). The `[RES]` rows'
  * range low end is fact8's `resCdBeforeNextPress`.
  */
-import { unitCooldownLedger } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  kitSpellNameOf,
+  unitCooldownLedger,
+} from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx } from "./ctx";
 
@@ -57,26 +60,30 @@ function pressesOf(
   u: any,
   name: string,
 ): Array<{ spent: number[]; ready: number[] }> {
-  return unitCooldownLedger(u, ctx.legacy)
-    .filter((cd) => cd.spellName === name)
-    .map((cd) => {
-      const spent: number[] = [];
-      const ready: number[] = [];
-      for (const c of cd.casts) {
-        const ms = ctx.legacy.startTime + c.timeSeconds * 1000;
-        if (ms > ctx.roundEndAt) continue;
-        // a press timed at the latest it can have been is no anchor (the
-        // gap from it reads short), but it still proves the button back
-        if (!c.freeRecast) {
-          if (!c.timedAtLatest) spent.push(ms);
-          ready.push(ms);
-        } else if (c.unreleased) ready.push(ms);
-      }
-      return {
-        spent: spent.sort((x, y) => x - y),
-        ready: ready.sort((x, y) => x - y),
-      };
-    });
+  return (
+    unitCooldownLedger(u, ctx.legacy)
+      // by the name the kit prints for this holder (`kitSpellNameOf`: an Ice
+      // Cold holder's Ice Block row), codex 85-tk-G-T61-2 #2
+      .filter((cd) => kitSpellNameOf(cd, u) === name)
+      .map((cd) => {
+        const spent: number[] = [];
+        const ready: number[] = [];
+        for (const c of cd.casts) {
+          const ms = ctx.legacy.startTime + c.timeSeconds * 1000;
+          if (ms > ctx.roundEndAt) continue;
+          // a press timed at the latest it can have been is no anchor (the
+          // gap from it reads short), but it still proves the button back
+          if (!c.freeRecast) {
+            if (!c.timedAtLatest) spent.push(ms);
+            ready.push(ms);
+          } else if (c.unreleased) ready.push(ms);
+        }
+        return {
+          spent: spent.sort((x, y) => x - y),
+          ready: ready.sort((x, y) => x - y),
+        };
+      })
+  );
 }
 
 /** The shortest gap from a press that started the cooldown to the next

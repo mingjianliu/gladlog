@@ -6,7 +6,7 @@ import {
   TALENT_EFFECT_AURAS_OF_CAST,
 } from "../data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
-import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import { spellEffectData } from "../data/spellEffectData";
 import {
   buffDurationIsFloorForCaster,
   buffDurationRangeForCaster,
@@ -27,13 +27,14 @@ import {
   GUARDIAN_SPIRIT_SPELL_ID,
   IMajorCooldownInfo,
   kitRowUnused,
+  kitSpellIdOf,
+  kitSpellNameOf,
   lockCastsOf,
   ownPressLockout,
   type PressLockoutDebuff,
   pressSpentBy,
   readyAfterReductions,
   specToString,
-  talentReplacementsOf,
   warpClock,
 } from "../utils/cooldowns";
 import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
@@ -170,32 +171,10 @@ export function buildPlayerLoadout(
   // Cocoon covers exactly the 0:47–0:54 lockout" with no duration anywhere in
   // the prompt. No duration known → nothing rendered.
   // T61 (user ruling R25, 2026-11-11): a button a talent turned into another
-  // pressable spell (`talentReplacementsOf(...).pressedAs`: Ice Block →
-  // Ice Cold 414658 under 414659) is that spell for its holder — the kit
+  // pressable spell is that spell for its holder (`kitSpellIdOf`) — the kit
   // prints its own name and how long ITS effect lasts (`Ice Block [150s,
   // lasts 10s]` stood for a mage whose press runs 6 s at 70 %, no immunity).
   // The ledger row and its cooldown stay the replaced button's.
-  const kitSpellIdOf = (
-    cd: IMajorCooldownInfo,
-    caster?: ICombatUnit,
-  ): string => {
-    const as = caster
-      ? talentReplacementsOf(caster).pressedAs.get(cd.spellId)
-      : undefined;
-    // …a DIFFERENT spell by name only: a same-named replacement (Ultimate
-    // Sacrifice's Blessing of Sacrifice 199448) keeps the row as it was —
-    // its own length is not this ruling's (605: 29 kit lines would move)
-    return as?.length === 1 &&
-      getEnglishSpellName(as[0]!, cd.spellName) !== cd.spellName
-      ? as[0]!
-      : cd.spellId;
-  };
-  const kitNameOf = (cd: IMajorCooldownInfo, caster?: ICombatUnit): string => {
-    const id = kitSpellIdOf(cd, caster);
-    return id === cd.spellId
-      ? cd.spellName
-      : getEnglishSpellName(id, cd.spellName);
-  };
   const lastsPart = (cd: IMajorCooldownInfo, caster?: ICombatUnit): string => {
     if (cd.tag !== "Defensive") return "";
     const kitId = kitSpellIdOf(cd, caster);
@@ -354,7 +333,7 @@ export function buildPlayerLoadout(
     // entries printed seconds in front of [PASSIVE]; none does now.
     cd.isProcOnly
       ? `${cd.spellName} [PASSIVE]`
-      : `${kitNameOf(cd, caster)} [${cdSecondsLabel(cd)}${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
+      : `${kitSpellNameOf(cd, caster)} [${cdSecondsLabel(cd)}${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
           cdIsProcOnly(cd)
             ? " [PASSIVE]"
             : // `kitRowUnused`: the reading the kill-opportunity tier's "wall
@@ -720,7 +699,9 @@ function friendlyResCds(
       .map((cd) => {
         const gone = !ownerDead && petGone(cd, deaths?.ownerUnit);
         return {
-          displayName: cd.spellName,
+          // the holder's own name for the button, as its kit line prints
+          // it (`kitSpellNameOf`, codex 85-tk-G-T61-2 #2)
+          displayName: kitSpellNameOf(cd, deaths?.ownerUnit),
           cd,
           holderDead: ownerDead || gone,
           petGone: gone,
@@ -735,8 +716,8 @@ function friendlyResCds(
           const gone = !holderDead && petGone(cd, player);
           return {
             displayName: playerLabel
-              ? `${playerLabel}:${cd.spellName}`
-              : cd.spellName,
+              ? `${playerLabel}:${kitSpellNameOf(cd, player)}`
+              : kitSpellNameOf(cd, player),
             cd,
             holderDead: holderDead || gone,
             petGone: gone,
@@ -830,7 +811,11 @@ export function positionalOutOfReachNames(
           outOfReachOf.atMs,
         ) === "out-of-reach"
       )
-        out.add(label ? `${label}:${cd.spellName}` : cd.spellName);
+        out.add(
+          label
+            ? `${label}:${kitSpellNameOf(cd, unit)}`
+            : kitSpellNameOf(cd, unit),
+        );
   }
   return out;
 }
@@ -1154,7 +1139,10 @@ function buildResourceSnapshotOnce({
         roundBounds,
       );
       if (a && !a.affordable)
-        noManaTag.set(cd.spellName, `(no mana ${k(a.mana)}/${k(a.cost)})`);
+        noManaTag.set(
+          kitSpellNameOf(cd, ownerUnit),
+          `(no mana ${k(a.mana)}/${k(a.cost)})`,
+        );
     }
   }
   const rdyDisplay = (n: string) => `${n}${noManaTag.get(n) ?? ""}`;

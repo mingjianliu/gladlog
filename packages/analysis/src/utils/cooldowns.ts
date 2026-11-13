@@ -4105,6 +4105,48 @@ export function talentReplacementsOf(unit: ICombatUnit): {
 }
 
 /**
+ * T61 (user ruling R25, 2026-11-11): the spell a ledger row is for its
+ * holder. A button a talent turned into another pressable spell
+ * (`talentReplacementsOf(...).pressedAs`: Ice Block → Ice Cold 414658 under
+ * 414659) is that spell — its name, its length, its mitigation row; the
+ * ledger row and its cooldown stay the replaced button's. A DIFFERENT spell
+ * by name only: a same-named replacement (Ultimate Sacrifice's Blessing of
+ * Sacrifice 199448) keeps the row as it was — its own length is not this
+ * ruling's (605: 29 kit lines would move).
+ *
+ * One reading for every place that names or classifies the row for its
+ * holder (codex 85-tk-G-T61-2: the kit said `Ice Cold [UNUSED]` while the
+ * kill tier asked the wall set about Ice Block and `[RES]` printed
+ * `cd:Ice Block`): the kit line and `[RES]` rows (`buildPlayerLoadout`,
+ * `friendlyResCds`), the unused kit rows the kill tier and the kill-window
+ * span read (`unusedKitRows`), scan5/t16's name join.
+ */
+export function kitSpellIdOf(
+  cd: Pick<IMajorCooldownInfo, "spellId" | "spellName">,
+  caster?: ICombatUnit,
+): string {
+  const as = caster
+    ? talentReplacementsOf(caster).pressedAs.get(cd.spellId)
+    : undefined;
+  return as?.length === 1 &&
+    getEnglishSpellName(as[0]!, cd.spellName) !== cd.spellName
+    ? as[0]!
+    : cd.spellId;
+}
+
+/** The name `kitSpellIdOf`'s spell prints under — the row's own when the
+ * button is not replaced. */
+export function kitSpellNameOf(
+  cd: Pick<IMajorCooldownInfo, "spellId" | "spellName">,
+  caster?: ICombatUnit,
+): string {
+  const id = kitSpellIdOf(cd, caster);
+  return id === cd.spellId
+    ? cd.spellName
+    : getEnglishSpellName(id, cd.spellName);
+}
+
+/**
  * "Is this SPELL_CAST_SUCCESS a press of cooldown `spellId` (English name
  * `spellName`) for this unit" — the single predicate for the cooldown ledger
  * (`extractMajorCooldowns`) and deathOutcomeAnalysis' `isAvailableAt` (agy
