@@ -19,7 +19,7 @@
  * …)" for the Lava Lash press). The forward check is scan5 `t12`.
  */
 import { isNoPressRow } from "./castPress";
-import { isPassiveProcCast } from "./cooldowns";
+import { isPassiveProcCast, PRESS_EFFECT_LEAD_MS } from "./cooldowns";
 import { AUTO_ATTACK_REPLACEMENT_IDS } from "./damagePress";
 
 /** The row-level half: a cast row the game writes on its own whatever
@@ -46,4 +46,35 @@ export function isNoPlayerPressRow<
   },
 >(e: T, rows: readonly T[]): boolean {
   return isAutomaticCastRow(e) || isNoPressRow(e, rows);
+}
+
+/**
+ * One row a press, for a reader that lists what was pressed and how often:
+ * of the rows of one spell closer than `PRESS_EFFECT_LEAD_MS` to the row
+ * before — the bound main reads one press's own rows by — only the first
+ * stays (Power Infusion: a row on its target and a row on the priest).
+ * Unlike `filterRealPresses` it keeps two presses a global cooldown apart
+ * (pipeline T88: "pressed Swipe ×3" read "Swipe" through that reader, rows
+ * 1.00 s apart). The healers of the 605 archives hold 4,563 same-spell row
+ * pairs under 1.05 s once `isNoPlayerPressRow` has dropped its rows: 663 at
+ * 0–5 ms, 1,257 at 6–49 ms, 132 at 50–499 ms, 564 at 500–899 ms and 1,947
+ * at 900–1,049 ms (Smite, Chain Heal, cat Swipe at 1.0 s). Input order is
+ * preserved.
+ */
+export function foldSamePressRows<
+  T extends { spellId?: string; logLine: { timestamp: number } },
+>(events: readonly T[]): T[] {
+  const sorted = events
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => a.e.logLine.timestamp - b.e.logLine.timestamp || a.i - b.i);
+  const drop = new Set<number>();
+  const prevBySpell = new Map<string, number>();
+  for (const { e, i } of sorted) {
+    const id = String(e.spellId ?? "");
+    const t = e.logLine.timestamp;
+    const prev = prevBySpell.get(id);
+    prevBySpell.set(id, t);
+    if (prev !== undefined && t - prev < PRESS_EFFECT_LEAD_MS) drop.add(i);
+  }
+  return events.filter((_, i) => !drop.has(i));
 }

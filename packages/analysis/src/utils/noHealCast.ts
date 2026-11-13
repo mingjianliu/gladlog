@@ -58,14 +58,15 @@ import {
   pressedHeals,
 } from "./cannotCastIntervals";
 import { castBarOutcomesOf, JUKE_LOOKBACK_MS } from "./castBarOutcomes";
-import { isCompanionCastRow } from "./castPress";
+import { PRESS_LANDED_SAME_INSTANT_MS } from "./castMissRows";
 import {
   PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
   SPIRIT_OF_REDEMPTION_AURA_IDS,
 } from "./combatStates";
-import { gridHpPct, isPassiveProcCast } from "./cooldowns";
+import { gridHpPct } from "./cooldowns";
 import { occupancyIntervalsWithin, pairInReachAt } from "./dispelAnalysis";
 import { CC_MAX_CAST_RANGE_YARDS } from "./positionSampling";
+import { foldSamePressRows, isNoPlayerPressRow } from "./pressRow";
 import { manaPct, type RawStreams } from "./rawStreams";
 import { toRenderSecond } from "./renderGrid";
 import { spellReachForCaster } from "./spellRange";
@@ -281,6 +282,51 @@ export function noHealStretchesBeforeFirstDeath(params: {
   // 85-tk-J-T88-2 #2, synthetic, not on 605)
   const isHeal = (id: string, name: string) =>
     heals.has(id) || healNames.has(getEnglishSpellName(id, name));
+  // what the healer pressed, one row a press: the shared press-row reader
+  // (`isNoPlayerPressRow`), then `foldSamePressRows` — a Power Infusion logs
+  // one row on its target and one on the priest 1 ms later, and read
+  // "Power Infusion ×2" off the raw rows (codex 80-PIPE-49-B49-v1-T88). Not
+  // `filterRealPresses`: it folds presses a global cooldown apart.
+  const casts = owner.spellCastEvents ?? [];
+  const presses = foldSamePressRows(
+    casts.filter(
+      (e) =>
+        (e.logLine.event as string) === "SPELL_CAST_SUCCESS" &&
+        !isNoPlayerPressRow(e, casts),
+    ),
+  );
+  // …and a press whose heal the log writes under another name is a heal
+  // press too (user ruling 2026-11-13, R38: Divine Toll on a teammate heals
+  // as Holy Shock): a direct heal row of the healer's on the TEAMMATE the
+  // press was cast on, in the press's own instant
+  // (`PRESS_LANDED_SAME_INSTANT_MS`, the bound main reads a press's heal row
+  // on a unit by; Divine Toll's Holy Shock lands 40–90 ms after its cast row
+  // in 299 of 341 presses on a teammate, 605 archives — inside 50 ms, 77).
+  // A heal that only reached the healer does not
+  // count, nor does a periodic tick — nor a heal row on somebody the press
+  // was not cast on (user ruling 2026-11-13, R39): with any teammate's row
+  // counting, 21,077 presses of the 605 archives' healers matched, most of
+  // them next to a heal that was not theirs (Fade beside a Prayer of Mending
+  // bounce); on the pressed teammate, 4,669.
+  const mateIds = new Set(
+    params.friends.map((f) => f.id).filter((id) => id !== owner.id),
+  );
+  const mateHeals = (owner.healOut ?? []).filter(
+    (h) =>
+      h.srcUnitId === owner.id &&
+      mateIds.has(h.destUnitId) &&
+      (h.logLine.event as string) !== "SPELL_PERIODIC_HEAL",
+  );
+  const healsByEffect = presses.filter(
+    (e) =>
+      !isHeal(e.spellId ?? "", e.spellName ?? "") &&
+      mateHeals.some(
+        (h) =>
+          h.destUnitId === e.destUnitId &&
+          Math.abs(h.logLine.timestamp - e.logLine.timestamp) <=
+            PRESS_LANDED_SAME_INSTANT_MS,
+      ),
+  );
   const refusedAt = failed
     .filter((e) => isHeal(String(e.spellId), e.spellName))
     .map((e) => startMs + e.tSeconds * 1000);
@@ -292,6 +338,7 @@ export function noHealStretchesBeforeFirstDeath(params: {
           isHeal(e.spellId ?? "", e.spellName ?? ""),
       )
       .map((e) => e.logLine.timestamp),
+    ...healsByEffect.map((e) => e.logLine.timestamp),
     ...refusedAt,
   ];
   for (const t of cuts) blocked.push({ from: t, to: t });
@@ -342,7 +389,6 @@ export function noHealStretchesBeforeFirstDeath(params: {
           }))
           .filter((x) => x.overlap * 2 >= f.to - f.from)
           .sort((a, b) => b.overlap - a.overlap)[0]?.s;
-        const casts = owner.spellCastEvents ?? [];
         return {
           fromMs: f.from,
           toMs: f.to,
@@ -358,14 +404,9 @@ export function noHealStretchesBeforeFirstDeath(params: {
                 },
               }
             : {}),
-          pressed: casts
+          pressed: presses
             .filter(
-              (e) =>
-                (e.logLine.event as string) === "SPELL_CAST_SUCCESS" &&
-                e.logLine.timestamp > f.from &&
-                e.logLine.timestamp < f.to &&
-                !isPassiveProcCast(e) &&
-                !isCompanionCastRow(e, casts),
+              (e) => e.logLine.timestamp > f.from && e.logLine.timestamp < f.to,
             )
             .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp)
             .map((e) => getEnglishSpellName(e.spellId ?? "", e.spellName ?? ""))

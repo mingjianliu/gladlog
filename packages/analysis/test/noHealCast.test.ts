@@ -33,8 +33,11 @@ function round(
     mateFar?: [number, number];
     enemyDiesAt?: number;
     presses?: number[];
-    otherPresses?: Array<[string, number]>;
+    /** [spell id, second, target unit id (the enemy when left out)] */
+    otherPresses?: Array<[string, number, string?]>;
     flatHp?: boolean;
+    /** direct heal rows of the healer under another id: [id, second, dest] */
+    effectHeals?: Array<[string, number, string]>;
     /** a spell id with one heal row on the healer itself */
     selfHeal?: string;
     rawStreams?: Parameters<
@@ -55,12 +58,25 @@ function round(
       ...presses.map((s) =>
         makeSpellCastEvent(REJUV, at(s), "mate", "Mate", "healer", "Healer"),
       ),
-      ...(opts.otherPresses ?? []).map(([id, s]) =>
-        makeSpellCastEvent(id, at(s), "enemy-1", "Enemy", "healer", "Healer"),
+      ...(opts.otherPresses ?? []).map(([id, s, dest]) =>
+        makeSpellCastEvent(
+          id,
+          at(s),
+          dest ?? "enemy-1",
+          dest ? "Mate" : "Enemy",
+          "healer",
+          "Healer",
+        ),
       ),
     ],
     healOut: [
       ...presses.map(heal),
+      ...(opts.effectHeals ?? []).map(([id, sec, dest]) => ({
+        ...makeHealEvent(at(sec), "healer", 1000),
+        destUnitId: dest,
+        spellId: id,
+        spellName: "",
+      })),
       ...(opts.selfHeal
         ? [
             {
@@ -213,6 +229,61 @@ describe("T88: the no-heal stretch before a teammate's first death", () => {
       ],
     });
     expect(out[0]!.pressed).toEqual(["Moonfire", "Cyclone", "Moonfire"]);
+  });
+
+  it("一次按键写两行(给队友和自己各一行)只算一次(codex 80-PIPE-49-B49-v1-T88)", () => {
+    // 10060 Power Infusion: one row on its target, one on the priest 1 ms on
+    const out = round({
+      otherPresses: [
+        ["10060", 22],
+        ["10060", 22.001],
+        ["8921", 24],
+      ],
+    });
+    expect(out[0]!.pressed).toEqual(["Power Infusion", "Moonfire"]);
+  });
+
+  it("隔一个公共冷却的同名按键各算一次(Swipe 每秒一按)", () => {
+    const out = round({
+      otherPresses: [
+        ["106785", 22],
+        ["106785", 23],
+        ["106785", 24],
+      ],
+    });
+    expect(out[0]!.pressed).toEqual(["Swipe", "Swipe", "Swipe"]);
+  });
+
+  it("R38:治疗记在别的名字下的按键,同一刻有治疗行落在它所指的队友身上就是治疗按键", () => {
+    // 375576 Divine Toll pressed at 24.5 s; its heal logs as 20473 Holy Shock
+    const out = round({
+      otherPresses: [["375576", 24.5, "mate"]],
+      effectHeals: [["20473", 24.556, "mate"]],
+    });
+    expect(out.map((s) => [s.fromMs - T0, s.toMs - T0])).toEqual([
+      [21_000, 24_500],
+      [24_500, 28_000],
+    ]);
+    expect(out.every((s) => s.pressed.length === 0)).toBe(true);
+  });
+
+  it("R38:那条治疗行只落在治疗者自己身上、离按键太远、或按键指的不是那个队友,不算", () => {
+    // pressed on the enemy; a heal of something else lands on the mate
+    const elsewhere = round({
+      otherPresses: [["375576", 24.5]],
+      effectHeals: [["20473", 24.52, "mate"]],
+    });
+    expect(elsewhere.map((s) => s.pressed)).toEqual([["Divine Toll"]]);
+    const self = round({
+      otherPresses: [["375576", 24.5, "mate"]],
+      effectHeals: [["20473", 24.52, "healer"]],
+    });
+    expect(self.map((s) => s.pressed)).toEqual([["Divine Toll"]]);
+    const late = round({
+      otherPresses: [["375576", 24.5, "mate"]],
+      effectHeals: [["20473", 24.65, "mate"]],
+    });
+    expect(late.map((s) => s.pressed)).toEqual([["Divine Toll"]]);
   });
 
   it("R30:队友在空档里没掉血,不出行", () => {
