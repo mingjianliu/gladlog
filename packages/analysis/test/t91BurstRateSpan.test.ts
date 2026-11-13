@@ -9,15 +9,18 @@ import {
   CombatUnitReaction,
   CombatUnitSpec,
   type ICombatUnit,
+  LogEvent,
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  BURST_HEALER_CC_WEIGHT,
   burstWindowRateSpanSeconds,
   reconstructEnemyCDTimeline,
 } from "../src/utils/enemyCDs";
 import {
+  makeAuraEvent,
   makeDamageEvent,
   makeSpellCastEvent,
   makeUnit,
@@ -34,7 +37,15 @@ beforeAll(async () => {
 // a Fury Warrior presses Recklessness (12 s) and Avatar (20 s) `pressS`
 // into a 100 s slice; the friendly takes 1,000 a second throughout and
 // 4,000 a second from the press on
-const round = (pressS: number) => {
+const round = (
+  pressS: number,
+  opts: {
+    /** damage rows the unit arrays keep after the slice's end */
+    afterEnd?: number[];
+    /** the friendly is a healer stunned from here to past the slice's end */
+    stunnedFromS?: number;
+  } = {},
+) => {
   const enemy = makeUnit("enemy-1", {
     name: "Warrior",
     class: CombatUnitClass.Warrior,
@@ -47,9 +58,36 @@ const round = (pressS: number) => {
   });
   const friend = makeUnit("player-1", {
     name: "Friend",
-    damageIn: Array.from({ length: END_S }, (_, s) =>
-      makeDamageEvent(at(s + 0.5), s >= pressS ? 4000 : 1000, "player-1"),
-    ),
+    ...(opts.stunnedFromS === undefined
+      ? {}
+      : {
+          class: CombatUnitClass.Priest,
+          spec: CombatUnitSpec.Priest_Holy,
+          auraEvents: [
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_APPLIED,
+              "408",
+              at(opts.stunnedFromS),
+              "enemy-1",
+              "player-1",
+            ),
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_REMOVED,
+              "408",
+              at(END_S + 3),
+              "enemy-1",
+              "player-1",
+            ),
+          ],
+        }),
+    damageIn: [
+      ...Array.from({ length: END_S }, (_, s) =>
+        makeDamageEvent(at(s + 0.5), s >= pressS ? 4000 : 1000, "player-1"),
+      ),
+      ...(opts.afterEnd ?? []).map((s) =>
+        makeDamageEvent(at(s), 50_000, "player-1"),
+      ),
+    ],
   });
   const combat = {
     startTime: T0,
@@ -86,5 +124,30 @@ describe("T91 — a burst window's rate is over the seconds the log shows", () =
     // …where the whole 20 s span gave half of it
     expect(past.damageRatio).toBeGreaterThan((4000 * 10) / 20 / avg(90) + 0.5);
     expect(inside.damageRatio).toBeGreaterThan(1.3);
+  });
+
+  it("rows the unit arrays keep after the slice's end are in neither rate (codex 85-tk-G-T91-1 #1)", () => {
+    // a Solo Shuffle round's endTime is cut at the deciding death; the
+    // arrays keep what came after
+    const plain = round(90);
+    const withTail = round(90, { afterEnd: [100.4, 103, 108] });
+    expect(withTail.damageRatio).toBeCloseTo(plain.damageRatio, 6);
+    expect(withTail.damageInWindow).toBe(plain.damageInWindow);
+  });
+
+  it("a healer controlled for all the slice shows of the window is fully covered (codex 85-tk-G-T91-1 #2)", () => {
+    // pressed at 98 s, the healer stunned from 98 s to past the 100 s end:
+    // 2 s of 2 s, not 2 s of the window's 20
+    const w = round(98, { stunnedFromS: 98 });
+    expect(w.healerCCed).toBe(true);
+    expect(w.dangerScore / (w.threatScore * w.damageRatio)).toBeCloseTo(
+      1 + BURST_HEALER_CC_WEIGHT,
+      6,
+    );
+    // half the shown seconds: half the weight
+    const half = round(96, { stunnedFromS: 98 });
+    expect(
+      half.dangerScore / (half.threatScore * half.damageRatio),
+    ).toBeCloseTo(1 + BURST_HEALER_CC_WEIGHT / 2, 6);
   });
 });

@@ -1356,6 +1356,14 @@ function pressEffectEndSeconds(
  * window's own `toSeconds` is not cut. Never under 1 s. The one reading for
  * the window engine and scan5/t91.
  */
+/** A burst window's damage ratio is kept inside these (the engine's clamp;
+ * scan5/t91 reads the log's ratio under the same two). */
+export const BURST_DAMAGE_RATIO_MIN = 0.5;
+export const BURST_DAMAGE_RATIO_MAX = 6;
+/** What a healer controlled for the whole observed window adds to its
+ * score: `1 + coverage × this` (scan5/t91 reads the coverage back off it). */
+export const BURST_HEALER_CC_WEIGHT = 0.8;
+
 export function burstWindowRateSpanSeconds(
   fromSeconds: number,
   toSeconds: number,
@@ -2042,7 +2050,14 @@ function reconstructEnemyCDTimelineUncached(
   // Compute the match-average friendly damage RATE for ratio calculation. Rates (not fixed-width
   // sums) so windows of different spans compare fairly — the old ±10s sample around the window START
   // mis-measured the damage of 69% of windows by >25% (91% of windows outlast 10s; 2026-07-03 audit).
-  const allFriendlyDamage = (friendlies ?? []).flatMap((u) => u.damageIn);
+  // …of the slice: a Solo Shuffle round's `endTime` is cut at the deciding
+  // death while the unit arrays keep the rows after it, so both rates read
+  // the rows up to the slice's end and no further (codex 85-tk-G-T91-1 #1:
+  // 0284fcd9 r1, 57k of a window's damage fell after the end its rate's
+  // seconds stopped at — ratio 0.99 against 0.92)
+  const allFriendlyDamage = (friendlies ?? [])
+    .flatMap((u) => u.damageIn)
+    .filter((e) => e.logLine.timestamp <= combat.endTime);
   const totalFriendlyDamage = allFriendlyDamage.reduce(
     (sum, e) => sum + Math.abs(e.effectiveAmount),
     0,
@@ -2103,10 +2118,13 @@ function reconstructEnemyCDTimelineUncached(
       const damageRatio =
         avgDamageRate > 0
           ? Math.min(
-              6.0,
-              Math.max(windowDamage / windowSpan / avgDamageRate, 0.5),
+              BURST_DAMAGE_RATIO_MAX,
+              Math.max(
+                windowDamage / windowSpan / avgDamageRate,
+                BURST_DAMAGE_RATIO_MIN,
+              ),
             )
-          : 0.5;
+          : BURST_DAMAGE_RATIO_MIN;
 
       // Dampening at window start. The stack events are read on the units
       // this call was handed (unchanged); the bracket is classified on the
@@ -2139,7 +2157,15 @@ function reconstructEnemyCDTimelineUncached(
       // Hoist window timestamps here so both the healer CC block and HP sampling share the same values
       const windowStartMs = matchStartMs + windowStart * 1000;
       const windowEndMs = matchStartMs + windowEnd * 1000;
-      const windowDuration = windowEnd - windowStart;
+      // what the slice shows of the window: the healer's control is a
+      // share of THESE seconds, as the damage rate is (codex 85-tk-G-T91-1
+      // #2: a healer stunned for the 2 s the slice shows of a 20 s window
+      // read 10 % covered)
+      const observedEndMs = Math.min(windowEndMs, combat.endTime);
+      const observedDuration = Math.max(
+        (observedEndMs - windowStartMs) / 1000,
+        0,
+      );
 
       // Healer CC explicit check: find if the healer had an active CC aura during this window
       let healerCCed = false;
@@ -2168,12 +2194,12 @@ function reconstructEnemyCDTimelineUncached(
               const ccEnd = a.logLine.timestamp;
               if (
                 ccStart > 0 &&
-                ccStart < windowEndMs &&
+                ccStart < observedEndMs &&
                 ccEnd > windowStartMs
               ) {
                 ccIntervals.push({
                   start: Math.max(ccStart, windowStartMs),
-                  end: Math.min(ccEnd, windowEndMs),
+                  end: Math.min(ccEnd, observedEndMs),
                 });
               }
               ccStartBySpell.delete(a.spellId);
@@ -2183,10 +2209,10 @@ function reconstructEnemyCDTimelineUncached(
 
         // Active CCs at match end
         for (const ccStart of ccStartBySpell.values()) {
-          if (ccStart < windowEndMs && combat.endTime > windowStartMs) {
+          if (ccStart < observedEndMs && combat.endTime > windowStartMs) {
             ccIntervals.push({
               start: Math.max(ccStart, windowStartMs),
-              end: Math.min(combat.endTime, windowEndMs),
+              end: observedEndMs,
             });
           }
         }
@@ -2215,20 +2241,23 @@ function reconstructEnemyCDTimelineUncached(
         healerCCed = ccDurationMs > 0;
 
         // Fallback: pseudo-CCed (long window, cast nothing)
-        if (!healerCCed && windowDuration >= 5) {
+        if (!healerCCed && observedDuration >= 5) {
           const ownerCastsInWindow = owner.spellCastEvents.filter((e) => {
-            const t = (e.logLine.timestamp - matchStartMs) / 1000;
-            return t >= windowStart && t <= windowEnd;
+            const t = e.logLine.timestamp;
+            return t >= windowStartMs && t <= observedEndMs;
           });
           if (ownerCastsInWindow.length === 0) {
             healerCCed = true;
-            ccDurationMs = windowDuration * 1000;
+            ccDurationMs = observedDuration * 1000;
           }
         }
       }
 
-      const ccFraction = ccDurationMs / Math.max(windowDuration * 1000, 1);
-      const healerMult = 1.0 + ccFraction * 0.8;
+      const ccFraction = Math.min(
+        ccDurationMs / Math.max(observedDuration * 1000, 1),
+        1,
+      );
+      const healerMult = 1.0 + ccFraction * BURST_HEALER_CC_WEIGHT;
 
       // Threat (ex-ante: what the stacked CDs could do) is kept separate from outcome factors
       // (damageRatio, healer CC) so a perfectly-defended Critical burst still reads as Critical
