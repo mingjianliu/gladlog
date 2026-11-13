@@ -55,6 +55,13 @@ export function dropSourceMemo(source: ReportSource): void {
   cache.delete(source);
 }
 
+/** Whether anything is kept for `source` right now. A peek: no recency
+ * touch. MatchReport's staged fill asks it before rendering a source in one
+ * pass (T93). */
+export function hasSourceMemo(source: ReportSource): boolean {
+  return cache.has(source);
+}
+
 export function sourceMemo<T>(
   source: ReportSource,
   key: string,

@@ -173,6 +173,34 @@ describe("MatchReport staged fill", () => {
     expect(root(again.container).dataset["fill"]).toBe("done");
     expect(root(again.container).querySelector(".rpt-skel")).toBeNull();
   });
+  it("回合 1→2→3 再回 1:缓存只留两个来源,被挤掉的回合重新分步填 (codex 80-PIPE-48-B48-v1)", async () => {
+    // a shuffle keeps its round objects and reuses this component
+    const rounds = [fresh(), fresh(), fresh()];
+    const view = render(<MatchReport source={rounds[0]!} matchId="m" staged />);
+    const done = () =>
+      waitFor(
+        () => expect(root(view.container).dataset["fill"]).toBe("done"),
+        { timeout: 20_000, interval: 1 },
+      );
+    const show = (i: number) =>
+      view.rerender(<MatchReport source={rounds[i]!} matchId="m" staged />);
+    await done();
+    show(1);
+    await done();
+    show(2);
+    await done();
+    // round 2 is still kept: one pass, no placeholder
+    show(1);
+    expect(root(view.container).dataset["fill"]).toBe("done");
+    expect(root(view.container).querySelector(".rpt-skel")).toBeNull();
+    // round 1 was evicted by round 3: its derives are gone, so the switch
+    // commits the frame first and fills in steps again
+    show(0);
+    expect(root(view.container).dataset["fill"]).not.toBe("done");
+    expect(root(view.container).querySelector(".rpt-skel")).toBeTruthy();
+    await done();
+    expect(root(view.container).querySelector(".rpt-skel")).toBeNull();
+  });
 });
 
 describe("ReportShell", () => {
