@@ -16,9 +16,11 @@
  *    Not a press of this shape: a row inside a channel the same player
  *    pressed under a channelled id of that name (Divine Hymn's tick 64844
  *    logs a SUCCESS). Out of the total, kind `noTick`: the caster has no
- *    effect row of the carrying id before their next press — the channel
- *    was cut before its first tick, and the reader guesses no length (the
- *    11 looked at in the 605 raw logs all lost the aura within 1.1 s).
+ *    effect row of the carrying id and no kick of the channel before their
+ *    next press — the channel was cut before its first tick with no row to
+ *    end it on, and the reader guesses no length (the 11 looked at in the
+ *    605 raw logs all lost the aura within 1.1 s). Read from the log alone,
+ *    whatever span the product holds.
  */
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import {
@@ -81,9 +83,10 @@ export function run(ctx: IRoundCtx): void {
       )
         continue;
       ctx.bump(C);
-      spans ??= [...channelSpans(u), ...tickEndedChannelSpans(u)];
-      if (spans.some((s) => Math.abs(s.startMs - t) <= START_MATCH_MS))
-        continue;
+      // what the log shows of the channel's end, read before the product is
+      // asked (codex 85-tk-J-T92-1 #1: the out-of-total kind must not depend
+      // on what the reader returned): an effect row of the carrying id, or a
+      // kick of the channel, before the caster's next press
       const nextPress = Math.min(
         ...casts.map((o: any) => tsOf(o)).filter((x: number) => x > t),
         Infinity,
@@ -99,9 +102,30 @@ export function run(ctx: IRoundCtx): void {
           tsOf(r) > t &&
           tsOf(r) <= nextPress,
       );
+      const kicked = ((u.actionIn ?? []) as any[]).some(
+        (a) =>
+          ev(a) === "SPELL_INTERRUPT" &&
+          a.destUnitId === u.id &&
+          [id, carrier.id].includes(String(a.extraSpellId ?? "")) &&
+          tsOf(a) >= t &&
+          tsOf(a) <= nextPress,
+      );
+      if (!ticked && !kicked) {
+        ctx.violate(
+          C,
+          "noTick",
+          t,
+          `${u.id}#${id}#${t}`,
+          `${name} pressed as ${id}, its channel ${carrier.id} cut before a tick and with no kick row: no length to hold`,
+        );
+        continue;
+      }
+      spans ??= [...channelSpans(u), ...tickEndedChannelSpans(u)];
+      if (spans.some((s) => Math.abs(s.startMs - t) <= START_MATCH_MS))
+        continue;
       ctx.violate(
         C,
-        ticked ? name : "noTick",
+        name,
         t,
         `${u.id}#${id}#${t}`,
         `${name} pressed as ${id}, its channel ${carrier.id} went up with it; the product holds no channel span of the press`,
