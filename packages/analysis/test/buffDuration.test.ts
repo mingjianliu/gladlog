@@ -329,6 +329,19 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     // corpus: rank 1 = 18.75 s (15 runs), rank 2 = 15.0 s (1 run)
     expect(buffFullDurationForCaster("216331", holyWith(1))).toBeCloseTo(18.75);
     expect(buffFullDurationForCaster("216331", holyWith(2))).toBeCloseTo(15);
+    // codex 85-tk-H-T89-1: a node the tree cannot resolve leaves Call of the
+    // Righteous unreadable, not absent — the Sanctified Wrath this paladin is
+    // known to hold still counts (30 s and 22.5 s, never the bare 20 / 15)
+    const unresolved = makeUnit("h-cotr-unresolved", {
+      spec: CombatUnitSpec.Paladin_Holy,
+      info: {
+        talents: [SANCTIFIED_WRATH, { id1: 99999999, id2: 99999999, count: 1 }],
+        pvpTalents: [],
+      },
+    });
+    expect(talentOwnershipOf(unresolved, "1241511")).not.toBe("no");
+    expect(buffFullDurationForCaster("31884", unresolved)).toBeCloseTo(30);
+    expect(buffFullDurationForCaster("216331", unresolved)).toBeCloseTo(22.5);
   });
 
   it("多级天赋:按**语料实际观测到的级数**复现观测时长", () => {

@@ -304,19 +304,21 @@ function talentedDuration(
     // paladin with an unreadable loadout is 6 s, not the DB2 3 s), otherwise
     // the typical caster value this call site got before the talent layer.
     if (rank <= 0) {
+      // …except for a talent that only SHORTENS the aura (Call of the
+      // Righteous): the typical-caster value is no reading of it, and
+      // falling back would throw away the modifiers this caster is known to
+      // hold (codex 85-tk-H-T89-1: Sanctified Wrath read, one other node
+      // unresolved — Avenging Wrath 30 s read 20 s, a length no rank of
+      // either talent gives). Unreadable, it is left out: the aura keeps
+      // the length it had before the row existed.
+      if ((m.addSeconds ?? 0) < 0 || (m.pct ?? 0) < 0) continue;
       const fallback = paramBase ?? specBase ?? noCasterValue;
       // the gear is read whatever the talents are: a per-press set bonus
       // still walks on the fallback (codex B25 #1)
       return fallback === undefined
         ? undefined
         : fallback +
-            perEventExtensionSeconds(
-              spellId,
-              caster,
-              fallback,
-              atMs,
-              onUnitId,
-            );
+            perEventExtensionSeconds(spellId, caster, fallback, atMs, onUnitId);
     }
     // A proc-producing talent replaces the duration outright and does not
     // compose with anything (see `replaceSeconds`).
