@@ -40,6 +40,9 @@ function scan(
       pid === "1" ? unit : pid === "2" ? other : undefined,
     start: START,
     roundEndAt,
+    // the producer's bound (`roundEndMs`): no Shuffle bracket, so the
+    // parse's own end
+    legacy: { endTime: roundEndAt, units: {} },
     roundKey: "r",
     violate: (
       _c: string,
@@ -256,6 +259,24 @@ describe("offListPressLine — scan artefacts (GH #179)", () => {
   const sprintLine = [
     "0:10  [PRESS]   1(ORogue) (Outlaw Rogue): Sprint (60s cd, lasts 8s, back 1:10)",
   ];
+
+  it("a REMOVED the log wrote after the round's end of play is no overshoot reading (T40: a press 2 s before the last death)", () => {
+    const unit = {
+      id: "p1",
+      name: "Rogue",
+      spellCastEvents: [{ ...cast("2983", 10_000), destUnitId: "p1" }],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "2983", 10_000),
+        aura(LogEvent.SPELL_AURA_REMOVED, "2983", 13_000),
+      ],
+    };
+    // the round ran on: the aura ended early inside it
+    expect(scan(unit, sprintLine).map((v) => v.kind)).toEqual([
+      "lastsOvershoot",
+    ]);
+    // the round ended at 0:12: the REMOVED is a row of what came after
+    expect(scan(unit, sprintLine, undefined, at(12_000))).toEqual([]);
+  });
 
   it("a REMOVED the log wrote on time past the printed length is lastsBeyond", () => {
     expect(scan(sprinter(Infinity), sprintLine).map((v) => v.kind)).toEqual([

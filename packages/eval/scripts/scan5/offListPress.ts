@@ -39,6 +39,7 @@
  *    consumed buff, a cancel — so this is no violation on its own; it ranks
  *    the spells whose printed length the log never comes near (a toy's
  *    3,600 s, a channel read for a HoT), GH #179 batch 3d's overshoot gate.
+ *    A REMOVED past the round's end of play (`roundEndMs`) is no reading.
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
 import { NO_CAST_LOG_PRESS_IDS } from "@gladlog/analysis/src/data/auraActivation";
@@ -277,14 +278,15 @@ export function run(ctx: IRoundCtx): void {
     if (lasts) {
       // the row the line read its duration from (`pressDuration`: the
       // cast's target's first), to its REMOVED on that unit
+      // the producer's own bound (`buildMatchContext`), not the scan's
+      // end of play
+      const playEndMs = roundEndMs(ctx.legacy as never);
       const dur = pressDuration(
         unit,
         press,
         ctx.units as ICombatUnit[],
         unit.spellCastEvents ?? [],
-        // the producer's own bound (`buildMatchContext`), not the scan's
-        // end of play
-        roundEndMs(ctx.legacy as never),
+        playEndMs,
       );
       let life: number | undefined;
       let removedMs: number | undefined;
@@ -384,6 +386,12 @@ export function run(ctx: IRoundCtx): void {
         dur?.floor !== true &&
         removedClean &&
         life !== undefined &&
+        // a REMOVED past the round's end of play is a row of what came
+        // after (a Shuffle round's rows run into the next preparation, and
+        // the producer follows no series past that end): no reading of how
+        // long the effect would have lasted
+        removedMs !== undefined &&
+        removedMs <= playEndMs &&
         life < Number(lasts) / 2 &&
         life < Number(lasts) - LASTS_SLACK_S
       )
