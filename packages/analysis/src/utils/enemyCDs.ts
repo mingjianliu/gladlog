@@ -802,8 +802,21 @@ function observedEffectEnd(
       // stun's when the stun's REMOVED fell after the slice's end)
       const castFull = buffFullDurationForCaster(castSpellId, caster);
       const appliedS = pressAppliedS(best);
+      // …nor when the cast's own aura went up on that unit with the press:
+      // that aura is the effect, and the chain's (logged a millisecond
+      // ahead of it) a side one, whatever length its id reads (codex
+      // 85-tk-G-T41-1b #2: Incarnation's 252071 heading the chain, removed
+      // just past the slice's end, gave the form `30s left` against 20)
+      const castAuraOnHolder = mine.some(
+        (m) =>
+          m.destId === best.destId &&
+          m.iv.spellId === castSpellId &&
+          m.iv.fromS >= castS - EFFECT_START_BEFORE_S &&
+          m.iv.fromS <= castS + EFFECT_START_AFTER_S,
+      );
       if (
         auraFull !== undefined &&
+        !castAuraOnHolder &&
         (castFull === undefined ||
           Math.max(combatEndS, appliedS + auraFull) >
             Math.max(combatEndS, castS + castFull))
@@ -1793,8 +1806,22 @@ function reconstructEnemyCDTimelineUncached(
       }
       // its own official end (`officialEndMs` — a Demonic form's 5 s, not
       // Metamorphosis's 20, codex 20-G167-06 #1)
+      // an end nothing observed, at the slice's own end, with the holder
+      // dead by then: the slice ends on that death and the aura's REMOVED
+      // is logged in the cascade just past it — the effect is over at the
+      // death (codex 85-tk-G-T41-1 #2: a Metamorphosis whose holder died on
+      // the slice's last row read `14s left` on the death's own row), and
+      // was due to run to its official end like any death-cut one (1b #1:
+      // the row a second before the death read `1s left` against 15)
+      const atSliceEnd =
+        !o.endObserved &&
+        o.officialEndMs !== undefined &&
+        o.endMs >= combat.endTime - 1;
+      const holderDeadAtSliceEnd =
+        atSliceEnd && firstDeathMs(enemy) <= combat.endTime + DEATH_CASCADE_MS;
       const cut =
-        !o.endObserved || o.officialEndMs === undefined
+        o.officialEndMs === undefined ||
+        !(o.endObserved || holderDeadAtSliceEnd)
           ? {}
           : deathCutOfficialEnd(
               enemy,
@@ -1804,16 +1831,7 @@ function reconstructEnemyCDTimelineUncached(
               enemy,
               getEnglishSpellName(o.spellId, o.spellName),
             );
-      // …unless its holder died by then: the slice ends on that death and
-      // the aura's REMOVED is logged in the cascade just past it — the
-      // effect is over (codex 85-tk-G-T41-1 #2: a Metamorphosis whose
-      // holder died on the slice's last row read `14s left` on the death's
-      // own row)
-      const upAtSliceEnd =
-        !o.endObserved &&
-        o.officialEndMs !== undefined &&
-        o.endMs >= combat.endTime - 1 &&
-        !(firstDeathMs(enemy) <= combat.endTime + DEATH_CASCADE_MS);
+      const upAtSliceEnd = atSliceEnd && !holderDeadAtSliceEnd;
       (o.burstRole === "fact" ? offensiveFacts : offensiveCDs).push({
         ...cut,
         spellId: o.spellId,

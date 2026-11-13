@@ -194,4 +194,47 @@ describe("T41 — an effect still up at the slice's end runs to its own end", ()
     const full = buffFullDurationForCaster("191427", alive)!;
     expect(metaEnd(alive, 20)).toBeCloseTo(10 + full, 3);
   });
+
+  it("…and the rows before that death still read the time the effect was due (codex 85-tk-G-T41-1b #1)", () => {
+    const u = dh(10, 20.05);
+    (u as { deathRecords: unknown[] }).deathRecords = [{ timestamp: at(20) }];
+    const full = buffFullDurationForCaster("191427", u)!;
+    const cast = reconstructEnemyCDTimeline(
+      [u],
+      combatOf(u, 20),
+    ).players[0]!.offensiveCDs.find((c) => c.spellName === "Metamorphosis")!;
+    expect(cast.buffEndSeconds).toBeCloseTo(20, 3);
+    expect(cast.deathCutAtSeconds).toBeCloseTo(20, 3);
+    expect(cast.deathCutOfficialEndSeconds).toBeCloseTo(10 + full, 3);
+  });
+
+  it("the cast's own aura on the holder is the effect, whichever of its auras the log wrote first (codex 85-tk-G-T41-1b #2)", () => {
+    // Incarnation 102543 pressed at 10 s: its side aura 252071 logged at
+    // 10 s, its own a millisecond later; the slice over at 10.1 s, the side
+    // aura's REMOVED at 10.22 s
+    const row = (event: LogEvent, id: string, s: number) => ({
+      ...makeAuraEvent(event, id, at(s), "player-1", "player-1", "BUFF"),
+      srcUnitName: "Druid",
+    });
+    const druid = makeUnit("player-1", {
+      name: "Druid",
+      class: CombatUnitClass.Druid,
+      spec: CombatUnitSpec.Druid_Feral,
+      info: {} as never,
+      spellCastEvents: [makeSpellCastEvent("102543", at(10), "player-1")],
+      auraEvents: [
+        row(LogEvent.SPELL_AURA_APPLIED, "252071", 10),
+        row(LogEvent.SPELL_AURA_APPLIED, "102543", 10.001),
+        row(LogEvent.SPELL_AURA_REMOVED, "252071", 10.22),
+        row(LogEvent.SPELL_AURA_REMOVED, "102543", 30),
+      ],
+    });
+    const full = buffFullDurationForCaster("102543", druid)!;
+    expect(buffFullDurationForCaster("252071", druid)).toBeGreaterThan(full);
+    const cast = reconstructEnemyCDTimeline(
+      [druid],
+      combatOf(druid, 10.1),
+    ).players[0]!.offensiveCDs.find((c) => c.spellId === "102543")!;
+    expect(cast.buffEndSeconds).toBeCloseTo(10 + full, 3);
+  });
 });

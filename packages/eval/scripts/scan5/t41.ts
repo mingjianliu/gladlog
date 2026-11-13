@@ -80,31 +80,43 @@ export function aurasUpAtLogEnd(
     // on a pet or a summoned beast is applied late and loses its REMOVED
     // (Bestial Wrath's 1235388 on a beast summoned 6 s into it: 268 rows)
     if (!String(u.id).startsWith("Player-")) continue;
-    const open = new Map<string, IOpenAura>();
+    // every source's runs of the name, paired in the log's order, the
+    // holder's read at the end: a REMOVED the log wrote with no source
+    // closes the oldest open run of its id, whoever applied it, as the
+    // product's interval builder pairs it (codex 85-tk-G-T41-1 #3) — never
+    // the holder's run by default (1b #3: two casters' copies on one unit,
+    // the other's source-less REMOVED closed the holder's too)
+    const open = new Map<string, Array<IOpenAura & { src: string }>>();
     for (const a of (u.auraEvents ?? []) as any[]) {
       const e = ev(a);
-      // a REMOVED the log wrote with no source closes the open run too, as
-      // the product's interval builder pairs it (codex 85-tk-G-T41-1 #3)
-      const sourceless = !a.srcUnitId || /^0+$/.test(String(a.srcUnitId));
-      if (a.srcUnitId !== holder.id && !(e === REMOVED && sourceless)) continue;
       const id = String(a.spellId);
       if (nameOf(id, a.spellName) !== name) continue;
+      const sourceless = !a.srcUnitId || /^0+$/.test(String(a.srcUnitId));
+      const src = String(a.srcUnitId ?? "");
       const t = tsOf(a);
+      const runs = open.get(id) ?? [];
+      open.set(id, runs);
       if (e === APPLIED || e === REFRESH) {
-        if (t > endMs) continue;
-        const o = open.get(id);
+        if (t > endMs || sourceless) continue;
+        const o = runs.find((r) => r.src === src && r.removedMs === undefined);
         // a REFRESH moves the open run's length; an APPLIED on an open run
         // (its REMOVED lost) starts a run
         if (o && e === REFRESH) o.lastSeenMs = t;
-        else open.set(id, { appliedMs: t, lastSeenMs: t, spellId: id });
+        else {
+          if (o) runs.splice(runs.indexOf(o), 1);
+          runs.push({ appliedMs: t, lastSeenMs: t, spellId: id, src });
+        }
       } else if (e === REMOVED) {
-        const o = open.get(id);
+        const o = runs.find(
+          (r) => r.removedMs === undefined && (sourceless || r.src === src),
+        );
         if (!o) continue;
-        if (t <= endMs) open.delete(id);
-        else o.removedMs ??= t;
+        if (t <= endMs) runs.splice(runs.indexOf(o), 1);
+        else o.removedMs = t;
       }
     }
-    out.push(...open.values());
+    for (const runs of open.values())
+      for (const { src, ...o } of runs) if (src === holder.id) out.push(o);
   }
   return out;
 }

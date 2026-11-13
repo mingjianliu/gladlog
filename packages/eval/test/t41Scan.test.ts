@@ -18,7 +18,7 @@ import {
   makeAuraEvent,
   makeUnit,
 } from "../../analysis/test/ported/testHelpers";
-import { run } from "../scripts/scan5/t41";
+import { aurasUpAtLogEnd, run } from "../scripts/scan5/t41";
 
 const START = 1_700_000_000_000;
 const at = (s: number) => START + Math.round(s * 1000);
@@ -140,6 +140,30 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
       ),
     );
     expect(scan(other, 3).seen).toHaveLength(1);
+  });
+
+  it("a source-less REMOVED closes the oldest open copy, not the holder's by default (codex 85-tk-G-T41-1b #3)", () => {
+    // another caster's copy from 10 s, the holder's from 11 s; the first
+    // leaves at 12 s with no source, the holder's at 17 s; slice over at 13 s
+    const row = (event: LogEvent, s: number, src: string) =>
+      makeAuraEvent(event, "162264", at(s), src, "Player-4", "BUFF");
+    const u = makeUnit("Player-4", {
+      name: "Dh",
+      auraEvents: [
+        row(LogEvent.SPELL_AURA_APPLIED, 10, "Player-9"),
+        row(LogEvent.SPELL_AURA_APPLIED, 11, "Player-4"),
+        row(LogEvent.SPELL_AURA_REMOVED, 12, "0000000000000000"),
+        row(LogEvent.SPELL_AURA_REMOVED, 17, "Player-4"),
+      ],
+    });
+    expect(aurasUpAtLogEnd([u], u, "Metamorphosis", at(13))).toEqual([
+      {
+        appliedMs: at(11),
+        lastSeenMs: at(11),
+        removedMs: at(17),
+        spellId: "162264",
+      },
+    ]);
   });
 
   it("out of the total: a (no press) entry, and an aura past its own length", () => {
