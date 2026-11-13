@@ -76,8 +76,10 @@
  *  - `duringEndRow` (later194 173.16, T96): the window `duringExternalShare`
  *    sums over is read off the rows — the wall's APPLIED / REFRESH on the
  *    target and the row the printed length points at (within
- *    `PRINTED_LENGTH_MS`): its REMOVED, the REFRESH of a second press that
- *    cut the line short, the target's death or the round's end. A line with no such pair would have its shares
+ *    `PRINTED_LENGTH_MS`): its REMOVED, the REFRESH of a second press of
+ *    the same source that cut the line short (neither past the round's
+ *    end), the target's death or the round's end; the shares are summed to
+ *    that row. A line with no such pair would have its shares
  *    checked over the printed second and the printed tenth, the line read
  *    back to itself; it is also a printed length no row carries. A REMOVED
  *    with an APPLIED in its millisecond is the aura stated again, not its
@@ -148,6 +150,8 @@ const SLACK_PCT = 2;
 /** the printed length is a tenth of a second, its end within this of the row */
 const PRINTED_LENGTH_MS = 150;
 const AURA_AFTER_PRESS_MS = 3000;
+/** A REFRESH row follows the press that made it by at most this. */
+const REFRESH_AFTER_PRESS_MS = 1000;
 const fmtLedger = (n: number): string => (n / 1e6).toFixed(2);
 const POST_CC_S = 5;
 const MIN_ABSORBED = 1000;
@@ -276,8 +280,22 @@ function duringExternalShare(ctx: IRoundCtx): void {
           Math.abs(tsOf(a) - (from + +m[5]! * 1000)) <= PRINTED_LENGTH_MS &&
           nameOf(a.spellId, a.spellName) === m[3],
       );
+    // a row of the aura's own spell on the target between the press and the
+    // batch (a hit its shield absorbed, a heal or a tick of it) shows it up
+    // from the press, whatever the printed length says (codex
+    // 85-tk-H-T96-1 #1: Life Cocoon absorbing 0.5 s after its press)
+    const upBeforeBatch =
+      restated &&
+      [target.absorbsIn, target.healIn, target.damageIn].some((rows) =>
+        ((rows ?? []) as any[]).some(
+          (x) =>
+            x.spellId === applied.spellId &&
+            tsOf(x) >= tsOf(press) &&
+            tsOf(x) < tsOf(applied),
+        ),
+      );
     const fromMs = restated
-      ? closesFrom(tsOf(press)) || !closesFrom(tsOf(applied))
+      ? upBeforeBatch || closesFrom(tsOf(press)) || !closesFrom(tsOf(applied))
         ? tsOf(press)
         : tsOf(applied)
       : applied
@@ -297,46 +315,66 @@ function duringExternalShare(ctx: IRoundCtx): void {
         (a, b) => Math.abs(tsOf(a) - printedTo) - Math.abs(tsOf(b) - printedTo),
       )[0];
     const removed = removedRow === undefined ? undefined : tsOf(removedRow);
-    // a second press on a unit still holding the aura closes the first
-    // line at its REFRESH row (9-3 r3 0:30: Obsidian Scales' copy `1.0s`,
-    // the next press's REFRESH 1.041 s on, no REMOVED until both ran out)
-    const refreshed =
-      removed !== undefined &&
-      Math.abs(removed - printedTo) <= PRINTED_LENGTH_MS
-        ? undefined
-        : ((target.auraEvents ?? []) as any[])
-            .filter(
-              (a) =>
-                ev(a) === REFRESH &&
-                tsOf(a) > fromMs &&
-                Math.abs(tsOf(a) - printedTo) <= PRINTED_LENGTH_MS &&
-                nameOf(a.spellId, a.spellName) === m[3],
-            )
-            .map((a) => tsOf(a))
-            .sort(
-              (a, b) => Math.abs(a - printedTo) - Math.abs(b - printedTo),
-            )[0];
-    const auraTo =
-      removed !== undefined &&
-      Math.abs(removed - printedTo) <= PRINTED_LENGTH_MS
-        ? removed
-        : (refreshed ?? printedTo);
-    const removedIx = removedRow?.logLine?.lineIndex;
     // the round ends at its deciding death (`roundEndMs`), the rows after it
     // are no part of it: the line prints an aura still up there to that row
     const cutAt = Math.min(deathMs(target), roundEndMs(ctx.legacy));
+    const near = (ms: number): boolean =>
+      Math.abs(ms - printedTo) <= PRINTED_LENGTH_MS;
+    const removedEnds = removed !== undefined && near(removed);
+    // a second press on a unit still holding the aura closes the first
+    // line at its REFRESH row (9-3 r3 0:30: Obsidian Scales' copy `1.0s`,
+    // the next press's REFRESH 1.041 s on, no REMOVED until both ran out).
+    // The REFRESH is the same source's as the opening row and has that
+    // source's cast of the name beside it: another unit's copy refreshing,
+    // or a proc's refresh, splits nothing (codex 85-tk-H-T96-1 #2)
+    const pressBeside = (srcUnitId: string, ms: number): boolean =>
+      successesOf(ctx.players.find((p) => p.id === srcUnitId) ?? {}).some(
+        (c) =>
+          tsOf(c) >= ms - REFRESH_AFTER_PRESS_MS &&
+          tsOf(c) <= ms + PRINTED_LENGTH_MS &&
+          nameOf(c.spellId, c.spellName) === m[3],
+      );
+    const refreshed = removedEnds
+      ? undefined
+      : ((target.auraEvents ?? []) as any[])
+          .filter(
+            (a) =>
+              ev(a) === REFRESH &&
+              tsOf(a) > fromMs &&
+              near(tsOf(a)) &&
+              nameOf(a.spellId, a.spellName) === m[3] &&
+              a.srcUnitId === applied?.srcUnitId &&
+              pressBeside(a.srcUnitId, tsOf(a)),
+          )
+          .map((a) => tsOf(a))
+          .sort((a, b) => Math.abs(a - printedTo) - Math.abs(b - printedTo))[0];
+    // the closing row the printed length points at: the aura's REMOVED, the
+    // REFRESH of a second press — neither past the cut — else the cut itself
+    // (the target's death, the round's end: `still up when the round
+    // ended`). Which one was taken is kept, never read back from the
+    // instants (codex #5: a REFRESH exactly at the printed end), and the sum
+    // below runs to the row, not to the print (codex #4: a death 9 ms past
+    // the printed end)
+    const closing: number | undefined =
+      removed !== undefined && removedEnds && removed <= cutAt
+        ? removed
+        : refreshed !== undefined && refreshed <= cutAt
+          ? refreshed
+          : near(cutAt)
+            ? cutAt
+            : undefined;
+    const auraTo =
+      closing ?? (removed !== undefined && removedEnds ? removed : printedTo);
+    const removedIx = removedRow?.logLine?.lineIndex;
     const wallTo = Math.min(auraTo, cutAt);
     // the span the shares below are summed over is the rows' own: an opening
     // row and a closing row, the printed length only choosing between closing
     // rows. Without either the window is the print's (a whole second, a tenth
-    // of one) and the share check would be reading the line back to itself
+    // of one) and the share check would be reading the line back to itself.
+    // A REMOVED past the cut closes nothing (codex #3: a removal 1 s after
+    // another player's death ended the round)
     ctx.bump("duringEndRow");
-    // the target's death or the round's end is a row too: the line then
-    // prints the length up to it (`still up when the round ended`)
-    const endOnRow =
-      auraTo !== printedTo ||
-      removed === printedTo ||
-      Math.abs(cutAt - printedTo) <= PRINTED_LENGTH_MS;
+    const endOnRow = closing !== undefined;
     if (applied === undefined || !endOnRow)
       ctx.violate(
         "duringEndRow",

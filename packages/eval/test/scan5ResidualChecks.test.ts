@@ -332,6 +332,11 @@ describe("duringEndRow", () => {
   ];
   const seen = (players: any[], seconds: string) =>
     of(scan(runDamageBasis, players, [line(seconds)]), "duringEndRow");
+  // the opening row's source pressing it again
+  const secondPress = (ms: number) =>
+    unit("ext", "5", 2, {
+      spellCastEvents: [cast(ms, "ext", "363916", "Obsidian Scales")],
+    });
 
   it("the printed length lands on the wall's REMOVED row", () => {
     expect(
@@ -362,14 +367,91 @@ describe("duringEndRow", () => {
   it("a second press on a holder closes the line at its REFRESH (9-3 r3 0:30, 1.0 s)", () => {
     expect(
       seen(
-        rows([
-          scales(LogEvent.SPELL_AURA_APPLIED, 10_461),
-          scales(LogEvent.SPELL_AURA_REFRESH, 11_502),
-          scales(LogEvent.SPELL_AURA_REMOVED, 17_272),
-        ]),
+        [
+          ...rows([
+            scales(LogEvent.SPELL_AURA_APPLIED, 10_461),
+            scales(LogEvent.SPELL_AURA_REFRESH, 11_502),
+            scales(LogEvent.SPELL_AURA_REMOVED, 17_272),
+          ]),
+          secondPress(11_480),
+        ],
         "1.0",
       ),
     ).toEqual([]);
+  });
+
+  // codex 85-tk-H-T96-1 #5
+  it("a REFRESH exactly at the printed end closes the line", () => {
+    expect(
+      seen(
+        [
+          ...rows([
+            scales(LogEvent.SPELL_AURA_APPLIED, 10_000),
+            scales(LogEvent.SPELL_AURA_REFRESH, 11_000),
+            scales(LogEvent.SPELL_AURA_REMOVED, 22_000),
+          ]),
+          secondPress(10_990),
+        ],
+        "1.0",
+      ),
+    ).toEqual([]);
+  });
+
+  // codex #2
+  it("a REFRESH of another unit's copy, or one with no press beside it, closes nothing", () => {
+    const own = {
+      ...scales(LogEvent.SPELL_AURA_REFRESH, 13_960),
+      srcUnitId: "Target",
+    };
+    expect(
+      seen(
+        rows([
+          scales(LogEvent.SPELL_AURA_APPLIED, 10_000),
+          own,
+          scales(LogEvent.SPELL_AURA_REMOVED, 22_000),
+        ]),
+        "4.0",
+      ),
+    ).toHaveLength(1);
+    expect(
+      seen(
+        rows([
+          scales(LogEvent.SPELL_AURA_APPLIED, 10_000),
+          scales(LogEvent.SPELL_AURA_REFRESH, 13_960),
+          scales(LogEvent.SPELL_AURA_REMOVED, 22_000),
+        ]),
+        "4.0",
+      ),
+    ).toHaveLength(1);
+  });
+
+  // codex #3
+  it("a REMOVED after the round ended closes nothing", () => {
+    const players = rows([
+      scales(LogEvent.SPELL_AURA_APPLIED, 10_000),
+      scales(LogEvent.SPELL_AURA_REMOVED, 20_000),
+    ]);
+    const endsAt = (ms: number) =>
+      of(
+        scan(runDamageBasis, players, [line("10.0")], "", [], at(ms), at(ms)),
+        "duringEndRow",
+      );
+    expect(endsAt(600_000)).toEqual([]);
+    expect(endsAt(19_000)).toHaveLength(1);
+  });
+
+  // codex #4
+  it("the shares of a line cut at the target's death are summed to the death, not to the print", () => {
+    const players = [
+      ...rows([scales(LogEvent.SPELL_AURA_APPLIED, 10_903)], {
+        damageIn: [landed(11_000, "Ally", 10_000)],
+        deathRecords: [{ timestamp: at(22_512) }],
+      }),
+      unit("Other", "4", 2, { damageIn: [landed(22_508, "Ally", 90_000)] }),
+    ];
+    const all = scan(runDamageBasis, players, [line("11.6")]);
+    expect(of(all, "duringEndRow")).toEqual([]);
+    expect(of(all, "duringExternalShare")).toHaveLength(1);
   });
 
   it("an aura still up at the target's death prints the length to it", () => {
@@ -416,6 +498,13 @@ describe("duringEndRow", () => {
       }),
     ];
     expect(seen(players, "4.4")).toEqual([]);
+    // codex #1: a row of the aura's own spell before the batch shows it up
+    // from the press — the print is then held to the press
+    (players[1] as any).absorbsIn = [
+      absorbed(10_500, "Ally", 80_000, "363916"),
+    ];
+    expect(seen(players, "4.4")).toHaveLength(1);
+    expect(seen(players, "5.6")).toEqual([]);
   });
 
   it("flags a printed length no row carries", () => {
