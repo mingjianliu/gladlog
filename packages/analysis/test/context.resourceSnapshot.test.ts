@@ -1110,13 +1110,13 @@ describe("T55 — a kit range's low end is the return the model gives the press"
     // reads 115 and 110
     expect(text).toContain("Sprint [105–120s");
   });
-  it("a return a hair under a whole second is that second (codex 85-tk-G-T55-1d: 50.99999999999999 printed 50)", () => {
+  const kitOfReturn = (cooldownSeconds: number, returned: number) => {
     const owner = makeUnit("player-1", { name: "Player1" });
     const rogue = makeUnit("enemy-1", {
       name: "Rogue",
       spec: CombatUnitSpec.Rogue_Outlaw,
     });
-    const text = buildPlayerLoadout(
+    return buildPlayerLoadout(
       owner,
       "Holy Priest",
       [],
@@ -1130,7 +1130,7 @@ describe("T55 — a kit range's low end is the return the model gives the press"
             {
               spellId: "2983",
               spellName: "Sprint",
-              cooldownSeconds: 60,
+              cooldownSeconds,
               maxChargesDetected: 1,
               casts: [
                 // 7da6cb8d r1's shape: a 60 s cooldown with nine 1 s
@@ -1139,7 +1139,7 @@ describe("T55 — a kit range's low end is the return the model gives the press"
                 {
                   timeSeconds: 62.016,
                   reductions: [{ atSeconds: 70, seconds: 9 }],
-                  cooldownSecondsOverride: 50.99999999999999,
+                  cooldownSecondsOverride: returned,
                   freeRecastUntil: 65,
                 },
               ],
@@ -1149,6 +1149,12 @@ describe("T55 — a kit range's low end is the return the model gives the press"
         },
       ],
     ).text;
-expect(text).toContain("Sprint [51–60s");
+  };
+  it("a return a hair under a whole second is that second (codex 85-tk-G-T55-1d: 50.99999999999999 printed 50)", () => {
+    expect(kitOfReturn(60, 50.99999999999999)).toContain("Sprint [51–60s");
+  });
+  it("a real fraction under a whole second stays under it (codex 85-tk-G-T55-1e: 141 − 1/3,800,000 s is 140)", () => {
+    expect(kitOfReturn(180, 140.9999997368421)).toContain("Sprint [140–180s");
+    expect(kitOfReturn(60, 50.999)).toContain("Sprint [50–60s");
   });
 });
