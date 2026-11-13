@@ -9,15 +9,18 @@
  *    bracket's first printed second, pressed X later inside it, and that
  *    first second holds an earlier offensive-cooldown press of the team
  *    (`isEnemyCdWindowSpell`, `anchorsKillAttempt` — table lookups) whose
- *    cast row names a TEAMMATE: a buff on that teammate (Power Infusion),
- *    and on its caster when its own aura went up there too (PvP Bloodlust) —
- *    while a player it buffed hit the target between the press and the
- *    bracket's last printed second (a buff has no hit of its own, so the
- *    producer asks no more of it). Kind = the
+ *    cast row names a TEAMMATE and whose aura went onto that teammate: a
+ *    buff on it (Power Infusion), and on its caster when its own aura went
+ *    up there too (PvP Bloodlust) — while a player it buffed hit the target
+ *    between the press and the end of the kill-credit slack after the
+ *    bracket (a buff has no hit of its own, so the producer asks no more of
+ *    it). Kind = the
  *    opening press. Counted: every burst-anchored line named for a press of
  *    the team inside its bracket.
  */
 import { isHealerHeldOffensive } from "@gladlog/analysis/src/data/healerHeldOffensive";
+import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/auraIntervals";
+import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import { isEnemyCdWindowSpell } from "@gladlog/analysis/src/utils/cooldowns";
 import { anchorsKillAttempt } from "@gladlog/analysis/src/utils/killAttempts";
 
@@ -26,6 +29,7 @@ import {
   ev,
   type IRoundCtx,
   nameOf,
+  REFRESH,
   secOf,
   successesOf,
   tsOf,
@@ -35,7 +39,9 @@ export const CHECKS = ["attemptNamedLaterPress"] as const;
 
 const LINE =
   /^ {2}\[(\d+:\d{2})–(\d+:\d{2})\] on (\S+) — (.+?) burst \(no stun\)/;
-const AURA_PAIR_MS = 1000;
+// the producer's own pairing tolerance and credit slack (codex
+// 85-tk-H-T42-1 #2, #3)
+const AURA_PAIR_MS = SAVE_CAST_AURA_PAIR_S * 1000;
 
 export function run(ctx: IRoundCtx): void {
   const team = ctx.players.filter(
@@ -48,6 +54,12 @@ export function run(ctx: IRoundCtx): void {
     if (!target) continue;
     const lo = ctx.start + secOf(m[1]!) * 1000;
     const hi = ctx.start + (secOf(m[2]!) + 1) * 1000;
+    // the span the producer reads a buffed player's hits over: the bracket
+    // and the kill-credit slack after it, never past the round's end
+    const creditEnd = Math.min(
+      ctx.start + (secOf(m[2]!) + KILL_CREDIT_SLACK_S) * 1000,
+      ctx.roundEndAt,
+    );
     const presses = team
       .flatMap((u: any) => successesOf(u).map((c) => ({ u, c })))
       .filter(({ c }) => tsOf(c) >= lo && tsOf(c) < hi)
@@ -71,17 +83,23 @@ export function run(ctx: IRoundCtx): void {
         (f: any) => f.id === c.destUnitId && f.id !== u.id,
       );
       if (!ally) return false;
-      const onCaster = ((u.auraEvents ?? []) as any[]).some(
-        (a) =>
-          ev(a) === APPLIED &&
-          a.srcUnitId === u.id &&
-          nameOf(a.spellId, a.spellName) === nameOf(id, c.spellName) &&
-          Math.abs(tsOf(a) - tsOf(c)) <= AURA_PAIR_MS,
-      );
-      return (onCaster ? [ally, u] : [ally]).some((b: any) =>
+      const auraOn = (holder: any): boolean =>
+        ((holder.auraEvents ?? []) as any[]).some(
+          (a) =>
+            (ev(a) === APPLIED || ev(a) === REFRESH) &&
+            a.srcUnitId === u.id &&
+            nameOf(a.spellId, a.spellName) === nameOf(id, c.spellName) &&
+            Math.abs(tsOf(a) - tsOf(c)) <= AURA_PAIR_MS,
+        );
+      // a buff on the teammate is its aura there: a press that only names
+      // one buffs nobody
+      if (!auraOn(ally)) return false;
+      return (auraOn(u) ? [ally, u] : [ally]).some((b: any) =>
         ((b.damageOut ?? []) as any[]).some(
           (d) =>
-            d.destUnitId === target.id && tsOf(d) >= tsOf(c) && tsOf(d) < hi,
+            d.destUnitId === target.id &&
+            tsOf(d) >= tsOf(c) &&
+            tsOf(d) <= creditEnd,
         ),
       );
     });

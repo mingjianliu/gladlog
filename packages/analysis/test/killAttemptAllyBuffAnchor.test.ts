@@ -52,10 +52,15 @@ const dmg = (destUnitId: string, atS: number, amount: number): any => ({
   effectiveAmount: amount,
   logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: ms(atS), parameters: [] },
 });
-const applied = (spellId: string, src: string, atS: number): any => ({
+const applied = (
+  spellId: string,
+  src: string,
+  atS: number,
+  dest = src,
+): any => ({
   spellId,
   srcUnitId: src,
-  destUnitId: src,
+  destUnitId: dest,
   timestamp: ms(atS),
   logLine: {
     event: LogEvent.SPELL_AURA_APPLIED,
@@ -72,6 +77,8 @@ const RECK = "1719";
 function attemptsOf(o: {
   piDest?: string;
   piAuraOnCaster?: boolean;
+  /** the press leaves no aura of its own on the teammate it names */
+  noAuraOnAlly?: boolean;
   f1Damage?: any[];
   f2Damage?: any[];
 }) {
@@ -81,7 +88,13 @@ function attemptsOf(o: {
     auraEvents: o.piAuraOnCaster ? [applied(PI, "f1", 40)] : [],
     damageOut: o.f1Damage ?? [],
   });
-  const f2 = unit("f2", { damageOut: o.f2Damage ?? [] });
+  const f2 = unit("f2", {
+    damageOut: o.f2Damage ?? [],
+    auraEvents:
+      o.piDest === "f2" && !o.noAuraOnAlly
+        ? [applied(PI, "f1", 40.01, "f2")]
+        : [],
+  });
   const f3 = unit("f3", {
     spellCastEvents: [press(RECK, "Recklessness", 46)],
     damageOut: [dmg("e1", 47, 200_000)],
@@ -128,6 +141,16 @@ describe("T42 — the attempt is named for the buff that opened it", () => {
 
   it("a press on an enemy other than the target is still no buff", () => {
     const [a] = attemptsOf({ piDest: "e2", f2Damage: [dmg("e1", 42, 80_000)] });
+    expect(a!.anchorSpellName).toBe("Recklessness");
+  });
+
+  // codex 85-tk-H-T42-1 #1 (Ultimate Penitence cast at a teammate)
+  it("a press that names a teammate and leaves no aura on it is no buff on it", () => {
+    const [a] = attemptsOf({
+      piDest: "f2",
+      noAuraOnAlly: true,
+      f2Damage: [dmg("e1", 42, 80_000)],
+    });
     expect(a!.anchorSpellName).toBe("Recklessness");
   });
 });

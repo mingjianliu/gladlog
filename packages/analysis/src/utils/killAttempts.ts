@@ -869,11 +869,12 @@ export function extractKillAttempts(
       isPressHitRow(c.spellId, c.spellName, d as HitRow & typeof d);
     /** Did the press put its own aura (its id, or an effect aura of the
      * cast) on its caster — within `SAVE_CAST_AURA_PAIR_S` of the cast row? */
-    const pressAuraOnCaster = (c: TeamCast): boolean => {
+    const pressAuraOn = (c: TeamCast, holder: ICombatUnit): boolean => {
       const ids = castAndEffectIds(c.spellId);
-      return (c.caster.auraEvents ?? []).some(
+      return (holder.auraEvents ?? []).some(
         (a) =>
-          a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+          (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+            a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
           !!a.spellId &&
           ids.has(a.spellId) &&
           a.srcUnitId === c.caster.id &&
@@ -881,6 +882,8 @@ export function extractKillAttempts(
             SAVE_CAST_AURA_PAIR_S * 1000,
       );
     };
+    const pressAuraOnCaster = (c: TeamCast): boolean =>
+      pressAuraOn(c, c.caster);
     /** fact7 D4 (96fb4d42 1:25): a press on nobody — its caster's own buff,
      * no dest but its caster — goes where its caster's damage went. Avenging
      * Wrath opened the bracket and was skipped for an Ultimate Penitence 5.6 s
@@ -913,6 +916,11 @@ export function extractKillAttempts(
         !ally
       )
         return false;
+      // …and only when the press's own aura went onto that teammate: a
+      // press that names an ally and leaves no aura of its own on it buffs
+      // nobody's damage (codex 85-tk-H-T42-1 #1: Ultimate Penitence cast at
+      // a teammate was credited with that teammate's hits)
+      if (ally && !pressAuraOn(c, ally)) return false;
       const fromMs = matchStartMs + c.cast * 1000;
       const buffed = !ally
         ? [c.caster]
