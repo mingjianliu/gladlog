@@ -5786,8 +5786,39 @@ function cutHolds(
   starts.forEach((st, i) => {
     if (closed.has(`${st.spellId}\u0000${st.timestamp}`)) return;
     const next = starts.find((n, j) => j > i && n.spellId === st.spellId);
-    if (next && next.timestamp - st.timestamp <= EMPOWER_MAX_HOLD_MS)
-      out.push({ spellId: String(st.spellId), startMs: st.timestamp });
+    if (!next || next.timestamp - st.timestamp > EMPOWER_MAX_HOLD_MS) return;
+    // a second START proves the spell ready only when it is a press: a
+    // Stasis replay of the stored cast is not (`isStasisReplayCast`), and
+    // an effect of the spell landing between the two shows the first one
+    // released, its END lost (codex 85-tk-H-T85-1 #2: Dream Breath started
+    // at 10 s, healing at 11 s, replayed by Stasis at 18 s — the original
+    // read unreleased and its cooldown unspent)
+    if (isStasisReplayCast(unit, String(next.spellId), next.timestamp)) return;
+    const name = getEnglishSpellName(String(st.spellId), "");
+    // a direct row only: a tick of an earlier press's DoT / HoT under the
+    // same name says nothing of this one
+    const landedBetween = (
+      rows: ReadonlyArray<{
+        spellId?: string | null;
+        logLine: { timestamp: number; event?: string };
+      }>,
+    ) =>
+      rows.some(
+        (r) =>
+          r.logLine.timestamp > st.timestamp &&
+          r.logLine.timestamp <= next.timestamp &&
+          !!r.spellId &&
+          !String(r.logLine.event ?? "").includes("PERIODIC") &&
+          (String(r.spellId) === String(st.spellId) ||
+            (name !== "" &&
+              getEnglishSpellName(String(r.spellId), "") === name)),
+      );
+    if (
+      landedBetween(unit.healOut ?? []) ||
+      landedBetween(unit.damageOut ?? [])
+    )
+      return;
+    out.push({ spellId: String(st.spellId), startMs: st.timestamp });
   });
   for (const c of unit.spellCastEvents ?? []) {
     const id = String(c.spellId);

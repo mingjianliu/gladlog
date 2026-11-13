@@ -167,6 +167,22 @@ describe("a hold the log never closed, begun again, spent no cooldown (T85, wide
     const u = evoker([start(T0), start(T0 + 900)], [end(T0 + 1_700)]);
     expect(unreleasedHoldMs(u, SURGE, [T0, T0 + 900])).toEqual([T0]);
   });
+  // codex 85-tk-H-T85-1 #2
+  it("an effect of the spell landing before the second START shows the first released: its cooldown is spent", () => {
+    const u = evoker([start(T0), start(T0 + 8_000)], [end(T0 + 8_800)]);
+    u.damageOut.push({
+      srcUnitId: "evoker",
+      spellId: SURGE,
+      logLine: { event: "SPELL_DAMAGE", timestamp: T0 + 1_000 },
+    });
+    // the second release's own hit
+    u.damageOut.push({
+      srcUnitId: "evoker",
+      spellId: "359077",
+      logLine: { event: "SPELL_DAMAGE", timestamp: T0 + 8_900 },
+    });
+    expect(unreleasedHoldMs(u, SURGE, [T0, T0 + 8_000])).toEqual([]);
+  });
   it("the next START long after it says nothing about the first", () => {
     const u = evoker([start(T0), start(T0 + 30_000)], [end(T0 + 30_800)]);
     expect(unreleasedHoldMs(u, SURGE, [T0])).toEqual([]);

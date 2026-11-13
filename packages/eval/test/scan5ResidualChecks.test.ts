@@ -2535,6 +2535,50 @@ describe("immunityPressTag: a press's impact row is the press (codex review)", (
   });
 });
 
+describe("immunityPressTag: the tag sits on the refused press's own line (T85, codex 85-tk-H-T85-1 #5)", () => {
+  const BLAST = "999990001";
+  const priest = unit("Priest", "1", 1, {
+    spellCastEvents: [
+      cast(24_118, "Priest", BLAST, "Void Blast", "A"),
+      cast(24_837, "Priest", BLAST, "Void Blast", "B"),
+    ],
+    missesOut: [
+      rowOf(LogEvent.SPELL_MISSED, 24_837, {
+        srcUnitId: "Priest",
+        destUnitId: "B",
+        spellId: BLAST,
+        spellName: "Void Blast",
+        missType: "IMMUNE",
+      }),
+    ],
+    damageOut: [],
+  });
+  const a = unit("A", "4", 2, { auraEvents: [] });
+  const b = unit("B", "5", 2, { auraEvents: [] });
+  const kinds = (lines: string[]) =>
+    scan(runImmunity, [priest, a, b], lines)
+      .filter((x) => x.check === "immunityPressTag")
+      .map((x) => x.kind);
+
+  it("two presses in one second, the refused one tagged: no row", () => {
+    expect(
+      kinds([
+        "0:24  [YOU] [CAST]   Void Blast → 4(A)",
+        "0:24  [YOU] [CAST]   Void Blast → 5(B) [IMMUNE]",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("the tag on the landed press's line does not pass for the refused one's", () => {
+    expect(
+      kinds([
+        "0:24  [YOU] [CAST]   Void Blast → 4(A) [IMMUNE]",
+        "0:24  [YOU] [CAST]   Void Blast → 5(B)",
+      ]),
+    ).toEqual(["press line without [IMMUNE"]);
+  });
+});
+
 describe("resEnemyEffectAfterDeath: a source-less REMOVED closes the aura (T03, codex P2)", () => {
   // the Arms Warrior's Avatar up at 10 s, its REMOVED written with no
   // source at 15 s, the warrior dead at 15.04 s; the 0:15 row under its
@@ -2723,7 +2767,15 @@ describe("T28 — a Solo Shuffle round's end ends the effects it ended, a 3v3's 
       "      [RES] rdy:Δ  cd:—",
     ];
     const missing = (bracket: string) =>
-      scan(runSingles2, players(bracket), rows, "", rawLines, at(14_644), at(14_684))
+      scan(
+        runSingles2,
+        players(bracket),
+        rows,
+        "",
+        rawLines,
+        at(14_644),
+        at(14_684),
+      )
         .filter((v) => v.check === "resEnemySameSecondPressMissing")
         .map((v) => v.kind);
     expect(missing("Rated Solo Shuffle")).toEqual([]);
@@ -2923,7 +2975,12 @@ describe("unusedPressedBeforeRoundEnd — a press up before the round's end (T05
       spellCastEvents: [cast(33_809, "Dh", "191427", "Metamorphosis")],
       auraEvents: [
         {
-          ...aura(LogEvent.SPELL_AURA_APPLIED, 32_885, "162264", "Metamorphosis"),
+          ...aura(
+            LogEvent.SPELL_AURA_APPLIED,
+            32_885,
+            "162264",
+            "Metamorphosis",
+          ),
           srcUnitId: "Dh",
           destUnitId: "Dh",
         },

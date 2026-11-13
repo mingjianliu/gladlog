@@ -813,10 +813,22 @@ export function run(ctx: IRoundCtx): void {
       // two presses of one spell in one second, one landed and one refused,
       // are two lines of that second: the refused one is tagged (T85, wide
       // s2/51 r1 0:24: Void Blast hit at 24.118 s, refused at 24.837 s)
+      // …and the tag sits on the line of the press that was refused: a
+      // line that names another target (`→ N(…)`) is not this press's
+      // (codex 85-tk-H-T85-1 #5: the tag on the landed press's line passed
+      // for the refused one's). A line naming no target can be either's.
+      const targetPid = ctx.pidOf(c.destUnitName);
+      const aimedElsewhere = (l: string): boolean => {
+        const to = /→ (\d+)\(/.exec(l)?.[1];
+        return to !== undefined && targetPid !== undefined && to !== targetPid;
+      };
+      const mine = pressLines.filter((l) => !aimedElsewhere(l));
+      if (mine.length > 0) pressLines.splice(0, pressLines.length, ...mine);
       const refusedThen = successesOf(u).filter(
         (o: any) =>
           nameOf(o.spellId, o.spellName) === name &&
           fmtS(rel(tsOf(o))) === sec &&
+          o.destUnitId === c.destUnitId &&
           !isNoPressRow(o, rows) &&
           refused(u, o),
       ).length;
