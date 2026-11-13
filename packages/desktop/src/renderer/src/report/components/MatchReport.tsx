@@ -1247,7 +1247,11 @@ export function MatchReport({
             onMomentDive={handleMomentDive}
           />
         )}
-        {view === "video" && videoRec && timeline && (
+        {/* not gated on `timeline`: a round switch restarts the staged fill
+            and the player must stay mounted through it (playback, mute and
+            the loaded recording are its own state) — VideoTab takes the
+            timeline when it is there (codex 85-tk-G-T93-1 #1) */}
+        {view === "video" && videoRec && (
           <VideoTab
             url={videoRec.url}
             startedAt={videoRec.startedAt}

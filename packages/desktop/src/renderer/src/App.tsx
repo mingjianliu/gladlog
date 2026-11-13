@@ -24,7 +24,14 @@ import {
   openMatchRound,
   openWholeDoc,
 } from "./matchDocLoader";
-import { beginOpen, openAt, openDocArrived, openPaintAt } from "./openTrace";
+import {
+  beginOpen,
+  cancelOpen,
+  currentOpen,
+  openAt,
+  openDocArrived,
+  openPaintAt,
+} from "./openTrace";
 import { MatchReport } from "./report/components/MatchReport";
 import {
   ReportShell,
@@ -193,14 +200,21 @@ export default function App({
       setIsLoading(true);
       openAt("selectEffect");
       openPaintAt("loadingPainted");
+      // the trace of THIS open: a late answer of an abandoned one writes
+      // nothing into the next (codex 85-tk-G-T93-1 #2)
+      const trace = currentOpen();
       void openMatchDoc(selectedId).then((d) => {
         if (selectedIdRef.current !== selectedId) return; // 已切走
-        openDocArrived();
+        // no doc (missing / corrupt file): no report mounts to end the
+        // trace, so it ends here (codex #3)
+        if (d == null) cancelOpen(trace);
+        else openDocArrived(trace);
         setDoc(d);
         setDocId(selectedId);
         setIsLoading(false);
       });
     } else {
+      cancelOpen();
       setDoc(null);
       setIsLoading(false);
     }
@@ -231,14 +245,21 @@ export default function App({
     if (!id) return;
     if (!canOpenRound()) return;
     beginOpen(`${id}#${roundIndex}`, "round");
+    const trace = currentOpen();
     void openMatchRound(id, roundIndex).then(async (round) => {
-      openDocArrived();
+      // the selection moved off this match: nothing of it is drawn
+      if (selectedIdRef.current !== id) {
+        cancelOpen(trace);
+        return;
+      }
+      openDocArrived(trace);
       if (round == null) {
         const full = await openWholeDoc(id);
         if (selectedIdRef.current === id && full) setDoc(full);
+        // no whole doc either: nothing new mounts to end the trace
+        else cancelOpen(trace);
         return;
       }
-      if (selectedIdRef.current !== id) return;
       setDoc((prev: any) => {
         const rounds = prev?.data?.rounds;
         if (!Array.isArray(rounds) || rounds[roundIndex] != null) return prev;

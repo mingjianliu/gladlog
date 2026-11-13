@@ -1,7 +1,7 @@
 import type { LazyDocPayload } from "../../shared/parseLazyDoc";
 import { parseLazyPayload, parseRoundBytes } from "../../shared/parseLazyDoc";
 import { bridge } from "./bridge";
-import { openIoArrived, openTimed } from "./openTrace";
+import { currentOpen, openIoArrived, openTimed } from "./openTrace";
 
 /**
  * Open a stored match / one lazily loaded shuffle round (T93).
@@ -23,10 +23,17 @@ type Matches = {
 export async function openMatchDoc(id: string): Promise<unknown | null> {
   const m = bridge().matches as Matches;
   if (m.getLazyRaw) {
+    // the trace this request belongs to: its answer writes there or nowhere
+    const trace = currentOpen();
     const payload = await m.getLazyRaw(id);
-    openIoArrived();
+    openIoArrived(trace);
     if (!payload) return null;
-    const doc = openTimed("parse", () => parseLazyPayload(payload), false);
+    const doc = openTimed(
+      "parse",
+      () => parseLazyPayload(payload),
+      false,
+      trace,
+    );
     return doc ?? m.get(id);
   }
   return m.getLazy ? m.getLazy(id) : m.get(id);
@@ -44,9 +51,10 @@ export async function openMatchRound(
 ): Promise<unknown | null> {
   const m = bridge().matches as Matches;
   if (m.getRoundRaw) {
+    const trace = currentOpen();
     const buf = await m.getRoundRaw(id, roundIndex);
-    openIoArrived();
-    return openTimed("parse", () => parseRoundBytes(buf), false);
+    openIoArrived(trace);
+    return openTimed("parse", () => parseRoundBytes(buf), false, trace);
   }
   return m.getRound ? m.getRound(id, roundIndex) : null;
 }
