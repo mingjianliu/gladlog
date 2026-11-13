@@ -408,6 +408,29 @@ const WALL_CAST_TO_AURA_ID: Readonly<Record<string, string>> =
     ]),
   );
 
+/**
+ * How long the span's state machine holds "not defenseless" for a press of
+ * `spellId` by `unit` (step 1): the caster's own official buff length from
+ * the cast row — null for a press the machine does not time (not a roster
+ * defensive, or one that cannot protect its caster). The one reading for
+ * the machine and for corpusFactScan4's `defenselessExternalCaster`
+ * (codex 85-tk-J-T74-1 #1: the scan timed every press with a duration).
+ */
+export function kwTimedPressLengthS(
+  unit: ICombatUnit,
+  spellId: string,
+  castMs: number,
+): number | null {
+  if (!timesCastOf(spellId) || !cdHelpsRecipient({ spellId }, true))
+    return null;
+  const b = buffFullDurationForCaster(
+    WALL_CAST_TO_AURA_ID[spellId] ?? spellId,
+    unit,
+    castMs,
+  );
+  return b && b > 0 ? b : DEFAULT_BUFF_DURATION_S;
+}
+
 export function computeOffensiveWindows(
   enemies: ICombatUnit[],
   friendlies: ICombatUnit[],
@@ -838,13 +861,11 @@ export function computeOffensiveWindowsUncached(
         // unseen the log shows that no more than it shows the wall up. The
         // official length is the longest the wall can have lasted, so the
         // span opens no earlier than the log can support.
-        const castBuff = buffFullDurationForCaster(
-          WALL_CAST_TO_AURA_ID[spellId] ?? spellId,
+        const buffDuration = kwTimedPressLengthS(
           enemy,
+          spellId,
           matchStartMs + castTimeSeconds * 1000,
-        );
-        const buffDuration =
-          castBuff && castBuff > 0 ? castBuff : DEFAULT_BUFF_DURATION_S;
+        )!;
         events.push({
           time: castTimeSeconds,
           kind: "CD_USED",

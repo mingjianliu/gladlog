@@ -117,6 +117,7 @@ import {
   pressLandingCaster,
   pressLandingRows,
 } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
+import { kwTimedPressLengthS } from "@gladlog/analysis/src/utils/offensiveWindows";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import { isAutomaticCastRow } from "@gladlog/analysis/src/utils/pressRow";
 import { parseRawStreams } from "@gladlog/analysis/src/utils/rawStreams";
@@ -1115,9 +1116,12 @@ function runRound(ctx: IContext): void {
             !/^0+$/.test(c.destUnitId)
           )
             return false;
-          const d = official[id]?.durationSeconds ?? 0;
+          // the product's own timing of the press, null for one it does
+          // not time (an offensive cooldown is no defence that ran out)
+          const d = kwTimedPressLengthS(u, id, tsOf(c));
+          if (d === null) return false;
           const end = tsOf(c) + d * 1000;
-          return d > 0 && end >= aMs - 1500 && end < aMs + 1000;
+          return end >= aMs - 1500 && end < aMs + 1000;
         })
       )
         continue;

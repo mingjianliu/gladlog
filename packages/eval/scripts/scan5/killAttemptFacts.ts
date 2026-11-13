@@ -253,7 +253,17 @@ function run1(ctx: IRoundCtx, line: string): void {
               onTarget > 0 && [...dealt.values()].every((v) => v <= onTarget)
             );
           };
-          const hitTarget = leadsTo(toMs - 1000) && leadsTo(toMs);
+          // …and at every damage row of the caster inside that second: the
+          // lead can change hands between the two edges (codex 85-tk-J-T74-1
+          // #2), and the bracket's own end is any millisecond of it
+          const ends = [
+            toMs - 1000,
+            toMs,
+            ...((f.damageOut ?? []) as any[])
+              .map((d) => d.logLine.timestamp as number)
+              .filter((t) => t > toMs - 1000 && t < toMs),
+          ];
+          const hitTarget = ends.every(leadsTo);
           if (selfBuff && hitTarget)
             ctx.violate(
               "killAnchorSkippedOpener",
