@@ -1337,6 +1337,9 @@ function createScan(): IScan<any> {
           (a: any) =>
             ev(a) === APPLIED &&
             tsOf(a) === ts &&
+            // logged after the miss row, as the product requires: one
+            // before it is `upAt`'s to read (codex 85-tk-F-T64-2)
+            liOf(a) > liOf(miss) &&
             unitOwnPressOfAuraAtMs(T, a.spellId, a.srcUnitId, ts),
         );
         if (pressed) {
