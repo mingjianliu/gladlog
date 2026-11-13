@@ -386,6 +386,13 @@ describe("[PRESS] lasts — a series' rows are its own (codex 85-tk-G-T40-1b)", 
       pressDuration(hun, cast as any, [hun], hun.spellCastEvents)
         ?.durationSeconds,
     ).toBe(3 + 9 + 5);
+    // …one of the round's own. The round over at 4 s, that Time Stop is a
+    // row of what came after: it holds nothing of this press (codex
+    // 85-tk-G-T40-1c #1: `lasts 12s` became 17s)
+    expect(
+      pressDuration(hun, cast as any, [hun], hun.spellCastEvents, T + 4000)
+        ?.durationSeconds,
+    ).toBe(3 + 9);
   });
 
   it("#2 a follow-up row after the round's end is not read", () => {

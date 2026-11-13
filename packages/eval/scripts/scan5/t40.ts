@@ -19,6 +19,10 @@
  *    (`PRESS_EFFECT_CHAIN_AURAS`) and that series, followed on its own
  *    rows (`listedChainFrom`), ran past the printed length: the line is
  *    short of an effect the tooltip names;
+ *  - `lateHandover` (out of the total — a diagnostic) — a listed follow-up
+ *    applied between the hand-over constant and `LATE_HANDOVER_MS` after
+ *    the end before it: the producer does not follow it and prints the
+ *    plain length;
  *  - `nominated` (out of the total — a diagnostic) — any other aura that
  *    followed: mostly coincidence (a proc, another button's buff, Arena
  *    Preparation), named in the detail so a real series shows as a pair that
@@ -31,7 +35,11 @@ import {
   PRESS_CHAIN_HANDOVER_MS,
   PRESS_EFFECT_CHAIN_AURAS,
 } from "@gladlog/analysis/src/data/pressEffectChains";
-import { extractOffListPresses } from "@gladlog/analysis/src/utils/offListPress";
+import {
+  auraInstanceEndMs,
+  extractOffListPresses,
+  pressChainFollowUps,
+} from "@gladlog/analysis/src/utils/offListPress";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
@@ -40,7 +48,6 @@ import {
   fmtS,
   type IRoundCtx,
   nameOf,
-  REFRESH,
   REMOVED,
   successesOf,
   tsOf,
@@ -49,11 +56,16 @@ import {
 export const CHECKS = ["pressChainLasts"] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "pressChainLasts|nominated",
+  "pressChainLasts|lateHandover",
 ]);
 
 /** a follow-up starts this close to the end of the aura before it — the
  * producer's own constant (`pressChainFollowUps`) */
 export const CHAIN_GAP_MS = PRESS_CHAIN_HANDOVER_MS;
+/** a follow-up applied later than the hand-over but this soon after the
+ * end before it is counted (`lateHandover`): how often log lag carries a
+ * real hand-over past the constant (codex 85-tk-G-T40-1c #2) */
+export const LATE_HANDOVER_MS = 2000;
 /** a press of the caster's this close to a follow-up's start made it */
 export const NO_PRESS_MS = 300;
 /** the same slack the press scan gives a logged life past the printed one */
@@ -105,75 +117,70 @@ export function chainFrom(
   return endMs === undefined ? undefined : { endMs, hops };
 }
 
-/** when the LISTED series `spellId` heads on `unit` ended, as logged: the
- * head's REMOVED, then each listed follow-up applied within `CHAIN_GAP_MS`
- * of the end before it (by the press's caster or by the unit itself — a
- * holder-sourced series) and its REMOVED. Only the list's own auras, in the
- * list's order — an unrelated aura at the last end changes nothing (codex
- * 85-tk-G-T40-1 #4). One aura INSTANCE at a time, in row order (codex
- * 85-tk-G-T40-1b #4): an end is the first REMOVED of the id logged after
- * the instance's own row — an older instance's REMOVED in that millisecond
- * sits before the row — and an APPLIED / REFRESH of the id first, or a row
- * at or past `untilMs` (the caster's next press of the button), is another
- * application: the instance has no logged end. `hops`: the follow-ups
- * seen. */
+/** when the LISTED series `spellId` heads on `unit` ended, as logged — on
+ * the producer's own traversal, not a copy of it (codex 85-tk-G-T40-1c #3 /
+ * (e): the copy had no round-end bound and stopped at a REFRESH the
+ * producer reads through): the head's end (`auraInstanceEndMs`), then each
+ * follow-up `pressChainFollowUps` gives a row, to that row's own end.
+ * `untilMs` is the producer's bound — the caster's next press of the
+ * button, the round's end. `hops`: the follow-ups seen. `late` (a
+ * diagnostic): the first follow-up the producer gave no row was applied
+ * `LATE_HANDOVER_MS` or less after the end before it — past the hand-over
+ * constant, so the line prints its plain length where the log may show a
+ * lengthened one. */
 export function listedChainFrom(
   unit: any,
   caster: any,
   spellId: string,
   atMs: number,
-  listed: readonly string[],
   untilMs = Infinity,
-): IChain | undefined {
-  const rows = ((unit.auraEvents ?? []) as any[]).filter(
+): (IChain & { late?: { spellId: string; gapMs: number } }) | undefined {
+  const head = ((unit.auraEvents ?? []) as any[]).find(
     (a) =>
+      ev(a) === APPLIED &&
+      String(a.spellId) === spellId &&
+      tsOf(a) === atMs &&
       (a.srcUnitId === caster.id || a.srcUnitId === unit.id) &&
       a.destUnitId === unit.id,
   );
-  const endAfter = (id: string, fromIdx: number): number | undefined => {
-    for (let i = fromIdx + 1; i < rows.length; i++) {
-      const a = rows[i];
-      if (String(a.spellId) !== id) continue;
-      if (tsOf(a) >= untilMs) return undefined;
-      if (ev(a) === REMOVED) return tsOf(a);
-      if (ev(a) === APPLIED || ev(a) === REFRESH) return undefined;
-    }
-    return undefined;
-  };
-  const headIdx = rows.findIndex(
-    (a) =>
-      ev(a) === APPLIED && String(a.spellId) === spellId && tsOf(a) === atMs,
-  );
-  if (headIdx < 0) return undefined;
-  let endMs = endAfter(spellId, headIdx);
+  if (!head) return undefined;
+  let endMs = auraInstanceEndMs(unit, head);
   if (endMs === undefined) return undefined;
   const hops: string[] = [];
-  for (const id of listed) {
-    const nextIdx = rows.findIndex(
-      (a) =>
-        ev(a) === APPLIED &&
-        String(a.spellId) === id &&
-        tsOf(a) >= atMs &&
-        tsOf(a) < untilMs &&
-        Math.abs(tsOf(a) - endMs!) <= CHAIN_GAP_MS,
-    );
-    if (nextIdx < 0) break;
-    const end = endAfter(id, nextIdx);
+  let late: { spellId: string; gapMs: number } | undefined;
+  for (const f of pressChainFollowUps(caster, unit, head, untilMs)) {
+    if (!f.applied) {
+      const from = endMs;
+      const row = ((unit.auraEvents ?? []) as any[]).find(
+        (a) =>
+          ev(a) === APPLIED &&
+          String(a.spellId) === f.spellId &&
+          a.srcUnitId === f.source.id &&
+          a.destUnitId === unit.id &&
+          tsOf(a) > from + CHAIN_GAP_MS &&
+          tsOf(a) <= from + LATE_HANDOVER_MS &&
+          tsOf(a) < untilMs,
+      );
+      if (row) late = { spellId: f.spellId, gapMs: tsOf(row) - from };
+      break;
+    }
+    const end = auraInstanceEndMs(unit, f.applied);
     if (end === undefined) break;
-    hops.push(id);
+    hops.push(f.spellId);
     endMs = end;
   }
-  return { endMs, hops };
+  return { endMs, hops, ...(late ? { late } : {}) };
 }
 
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
   // the producer's own round end (`buildMatchContext`: a series' rows are
   // read up to it), the scan's end of play for which presses count
+  const roundEnd = roundEndMs(ctx.legacy as any);
   const presses = extractOffListPresses(
     ctx.players as any,
     ctx.legacy as any,
-    roundEndMs(ctx.legacy as any),
+    roundEnd,
   ).filter((p) => ctx.start + p.timeSeconds * 1000 <= ctx.roundEndAt);
   const byId: Record<string, any> = {};
   for (const u of ctx.units as any[]) byId[u.id] = u;
@@ -214,16 +221,26 @@ export function run(ctx: IRoundCtx): void {
       .filter((c: any) => String(c.spellId) === String(p.spellId))
       .map(tsOf)
       .find((t: number) => t > pressMs + 1);
+    // the producer's bound (`pressDuration`): strictly before the next
+    // press, a row AT the round's end inside
     const own = listed
       ? listedChainFrom(
           unit,
           p.unit,
           p.durationAura.spellId,
           at0,
-          listed,
-          nextPressMs,
+          Math.min(nextPressMs ?? Infinity, roundEnd + 1),
         )
       : undefined;
+    if (own?.late)
+      ctx.violate(
+        "pressChainLasts",
+        "lateHandover",
+        at0,
+        `${p.unit.id}|${p.spellId}|${at0}|late`,
+        `${name} prints lasts ${printed}s; ${nameOf(own.late.spellId)} was applied ${own.late.gapMs} ms after the aura before it ended — past the ${CHAIN_GAP_MS} ms hand-over, not followed`,
+        line.trim().slice(0, 160),
+      );
     if (tooLong(own)) {
       report("listedChain", own);
       continue;

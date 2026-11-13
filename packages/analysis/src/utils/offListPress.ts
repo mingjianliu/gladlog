@@ -394,6 +394,10 @@ export function timeStopHeldSeconds(
     srcUnitId?: string;
     logLine?: { lineIndex?: number };
   },
+  /** no Time Stop that starts at or past this instant is read (the caster's
+   * next press of the button, the round's end — codex 85-tk-G-T40-1c #1: one
+   * logged 1 s after the round turned Cheetah's `lasts 12s` into 17s) */
+  untilMs = Infinity,
 ): number {
   // a REMOVED in the aura's own millisecond ends it when it is logged after
   // the aura's row (codex 20-179a #4: consumed at once); with no line index
@@ -432,7 +436,7 @@ export function timeStopHeldSeconds(
   let endMs = fromMs + seconds * 1000;
   let held = 0;
   for (const sp of spans.sort((x, y) => x.from - y.from)) {
-    if (sp.from < fromMs || sp.from >= endMs) continue;
+    if (sp.from < fromMs || sp.from >= endMs || sp.from >= untilMs) continue;
     if (goneMs !== undefined && sp.from >= goneMs) continue;
     held += sp.to - sp.from;
     endMs += sp.to - sp.from;
@@ -450,6 +454,39 @@ export interface IPressChainFollowUp {
   spellId: string;
   source: ICombatUnit;
   applied?: ICombatUnit["auraEvents"][number];
+}
+
+/**
+ * When the aura instance `row` opened on `unit` ended, as logged: its own
+ * REMOVED (same aura, same source), read in row order from the row — an
+ * older instance's REMOVED in the row's millisecond sits before it. A second
+ * APPLIED of the aura first is another application, whose end is not this
+ * one's: undefined, as with no REMOVED at all. A REFRESH keeps the instance.
+ * The one reading of "this instance's end" for the producer's series
+ * (`pressChainFollowUps`) and the scan that follows it (scan5
+ * `pressChainLasts` — codex 85-tk-G-T40-1c: a second copy of the rule
+ * stopped at a REFRESH and at no round end).
+ */
+export function auraInstanceEndMs(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  row: ICombatUnit["auraEvents"][number],
+): number | undefined {
+  const events = unit.auraEvents ?? [];
+  const from = events.indexOf(row);
+  if (from < 0) return undefined;
+  const next = events
+    .slice(from + 1)
+    .find(
+      (a) =>
+        a.spellId === row.spellId &&
+        a.srcUnitId === row.srcUnitId &&
+        a.destUnitId === unit.id &&
+        (a.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED),
+    );
+  return next?.logLine.event === LogEvent.SPELL_AURA_REMOVED
+    ? next.logLine.timestamp
+    : undefined;
 }
 
 /**
@@ -481,29 +518,10 @@ export function pressChainFollowUps(
   const events = unit.auraEvents ?? [];
   let prev: ICombatUnit["auraEvents"][number] | undefined = head;
   return ids.map((spellId) => {
-    const from: number = prev === undefined ? -1 : events.indexOf(prev);
     let applied: ICombatUnit["auraEvents"][number] | undefined;
-    if (prev !== undefined && from >= 0) {
-      // the end of the aura before it: its own REMOVED, read in row order
-      // (an older instance's REMOVED in the row's millisecond sits before
-      // the row); a second APPLIED first is another application, whose end
-      // is not this one's
-      const own = (a: ICombatUnit["auraEvents"][number]) =>
-        a.spellId === prev!.spellId &&
-        a.srcUnitId === prev!.srcUnitId &&
-        a.destUnitId === unit.id;
-      const next = events
-        .slice(from + 1)
-        .find(
-          (a) =>
-            own(a) &&
-            (a.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
-              a.logLine.event === LogEvent.SPELL_AURA_APPLIED),
-        );
-      const endMs =
-        next?.logLine.event === LogEvent.SPELL_AURA_REMOVED
-          ? next.logLine.timestamp
-          : undefined;
+    if (prev !== undefined) {
+      // the end of the aura before it (`auraInstanceEndMs`)
+      const endMs = auraInstanceEndMs(unit, prev);
       if (endMs !== undefined)
         applied = events.find(
           (a) =>
@@ -686,14 +704,12 @@ export function pressDuration(
     // A Time Stop holds the phase it starts in, each observed phase read
     // on its own (codex 85-tk-G-T40-1b #1: one in Cheetah's second phase,
     // 3 + 9 + 5 s, printed `lasts 12s`).
-    const followUps = pressChainFollowUps(
-      caster,
-      unit,
-      row,
-      // strictly before the next press; a row AT the round's end is inside
-      Math.min(nextPressMs ?? Infinity, roundEndAtMs + 1),
-    );
-    let len = own + timeStopHeldSeconds(unit, row.logLine.timestamp, own, row);
+    // strictly before the next press; a row AT the round's end is inside
+    const untilMs = Math.min(nextPressMs ?? Infinity, roundEndAtMs + 1);
+    const followUps = pressChainFollowUps(caster, unit, row, untilMs);
+    let len =
+      own +
+      timeStopHeldSeconds(unit, row.logLine.timestamp, own, row, untilMs);
     for (const f of followUps) {
       const plain =
         buffFullDurationForCaster(
@@ -714,6 +730,7 @@ export function pressDuration(
           f.applied.logLine.timestamp,
           phase,
           f.applied,
+          untilMs,
         );
     }
     return {
