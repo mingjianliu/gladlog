@@ -46,7 +46,7 @@ export function run(ctx: IRoundCtx): void {
   if (!ctx.firstOwnerOfRound) return;
   const byId = new Map<string, any>(ctx.units.map((u: any) => [u.id, u]));
   for (const unit of ctx.players) {
-    const open = new Map<string, number>();
+    const open = new Map<string, { from: number; castMs: number }>();
     for (const a of unit.auraEvents ?? []) {
       const id = a.spellId as string | undefined;
       if (!id || (!ccSpellIds.has(id) && !disarmSpellIds.has(id))) continue;
@@ -65,29 +65,39 @@ export function run(ctx: IRoundCtx): void {
       }
       if (e !== APPLIED && e !== REFRESH) continue;
       const t = tsOf(a);
-      const from = open.get(key);
-      // only a row with the sender's cast behind it starts a new
-      // application; a bare re-send keeps the opening it re-lists, so a
-      // chain of them cannot hide the length (codex 85-tk-F-T68-1 #1)
+      const entry = open.get(key);
+      // only a row with a cast of the sender's behind it that the open
+      // application has not already used starts a new application; a bare
+      // re-send keeps the opening it re-lists, so a chain of them cannot
+      // hide the length (codex 85-tk-F-T68-1 #1, -1b #1)
       const src = byId.get(a.srcUnitId);
-      const recast =
-        src !== undefined &&
-        successesOf(src).some((c: any) => {
-          const d = t - tsOf(c);
-          return (
-            d >= 0 &&
-            d <= RECAST_LEAD_MS &&
+      let castMs = -Infinity;
+      if (src !== undefined)
+        for (const c of successesOf(src) as any[]) {
+          const ct = tsOf(c);
+          if (
+            ct <= t &&
+            t - ct <= RECAST_LEAD_MS &&
+            ct > castMs &&
             (c.spellId === id || (!!c.spellName && c.spellName === a.spellName))
-          );
-        });
-      if (from === undefined || recast) open.set(key, t);
-      if (from === undefined) continue;
+          )
+            castMs = ct;
+        }
+      const recast = entry !== undefined && castMs > entry.castMs;
+      if (entry === undefined || recast) open.set(key, { from: t, castMs });
+      if (entry === undefined) continue;
+      const from = entry.from;
       const base = ccFullDurationSeconds(id);
       if (base === undefined) continue;
       ctx.bump("resendPastBaseLength");
       const gapS = (t - from) / 1000;
       if (gapS <= base + SLACK_S) continue;
       const own = ccFullDurationForCaster(id, byId.get(a.srcUnitId)) ?? base;
+      // past both lengths the old application is over whatever the log
+      // shows (an aura cannot outlive its length): this row opens the next
+      // one, cast row or not — a trap landing 4 s after its cast, an area
+      // control with none (codex 85-tk-F-T68-1b #2)
+      if (gapS > own + SLACK_S) open.set(key, { from: t, castMs });
       ctx.violate(
         "resendPastBaseLength",
         gapS <= own + SLACK_S ? "inside-extended" : "past-both",
