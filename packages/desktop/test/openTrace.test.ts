@@ -8,7 +8,12 @@ import {
   endOpen,
   openDocArrived,
   openIoArrived,
+  openOnce,
   openPaintAt,
+  openReportAt,
+  openReportLeft,
+  openReportRender,
+  openReportShows,
   openTimed,
   openTraceActive,
 } from "../src/renderer/src/openTrace";
@@ -105,5 +110,119 @@ describe("open trace", () => {
     expect(rec.id).toBe("c");
     expect(rec.at["loadingPainted"]).toBeDefined();
     expect(rec.at["settledPainted"]).toBeDefined();
+  });
+
+  // codex 85-tk-G-T93-1b
+  const R1 = { round: 1 };
+  const R2 = { round: 2 };
+
+  it("1b #2 别的回合的报告阶段不写进这次打开的记录;它自己的才写", () => {
+    beginOpen("m#2", "round");
+    openDocArrived(currentOpen(), R2);
+    // round 1, already loaded, is what the report draws
+    openReportRender(R1);
+    openTimed("derive:x", () => vi.advanceTimersByTime(7));
+    openReportAt("fill4Committed", R1);
+    endOpen("settled", R1);
+    // then round 2 itself
+    openReportRender(R2);
+    openTimed("derive:x", () => vi.advanceTimersByTime(3));
+    openReportAt("fill4Committed", R2);
+    endOpen("settled", R2);
+    vi.advanceTimersByTime(1000);
+    const rec = traces().at(-1)!;
+    expect(rec.id).toBe("m#2");
+    expect(rec.dur["derive:x"]).toBe(3);
+    expect(rec.at["reportRenderStart"]).toBeGreaterThanOrEqual(7);
+  });
+
+  it("1b #2 到货时没有报告画它(停在别的回合 / 别的页面):记录作废,观察器断开", () => {
+    const before = traces().length;
+    beginOpen("m#2", "round");
+    openDocArrived(currentOpen(), R2);
+    openReportRender(R1);
+    openReportAt("fill4Committed", R1);
+    vi.advanceTimersByTime(1000);
+    expect(openTraceActive()).toBe(false);
+    expect(observers.at(-1)!.disconnect).toHaveBeenCalledTimes(1);
+    expect(traces().length).toBe(before);
+  });
+
+  it("1b #2 离开正在打开的回合就作废;同一份报告卸载又挂回(StrictMode)不算离开", () => {
+    beginOpen("m", "match");
+    openDocArrived(currentOpen());
+    // a match open is of the first source a report renders
+    openReportRender(R1);
+    openReportShows(R1);
+    openReportLeft(R1);
+    openReportShows(R1);
+    vi.advanceTimersByTime(1);
+    expect(openTraceActive()).toBe(true);
+    openReportLeft(R1);
+    vi.advanceTimersByTime(1);
+    expect(openTraceActive()).toBe(false);
+    expect(observers.at(-1)!.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("1b #1 同一回合的请求只发一次;回答记在最后一次点击的那次打开上", async () => {
+    const inFlight = new Map<
+      string,
+      { trace: ReturnType<typeof currentOpen> }
+    >();
+    let resolve!: (v: object) => void;
+    const request = vi.fn(() => new Promise<object>((r) => (resolve = r)));
+    const answers: Array<[unknown, boolean, boolean]> = [];
+    const answer = (
+      v: object | undefined,
+      t: ReturnType<typeof currentOpen>,
+      failed: boolean,
+    ) => {
+      answers.push([v, t === currentOpen(), failed]);
+      if (v) openDocArrived(t, v);
+    };
+    openOnce(inFlight, "m#2", "round", request, answer);
+    const first = currentOpen();
+    // still the open in flight: a second click changes nothing
+    openOnce(inFlight, "m#2", "round", request, answer);
+    expect(currentOpen()).toBe(first);
+    // round 1 is asked for meanwhile, then round 2 again
+    beginOpen("m#1", "round");
+    vi.advanceTimersByTime(50);
+    openOnce(inFlight, "m#2", "round", request, answer);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(currentOpen()).not.toBe(first);
+    vi.advanceTimersByTime(30);
+    resolve(R2);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(answers).toEqual([[R2, true, false]]);
+    expect(inFlight.size).toBe(0);
+    openReportRender(R2);
+    endOpen("settled", R2);
+    vi.advanceTimersByTime(1000);
+    const rec = traces().at(-1)!;
+    expect(rec.id).toBe("m#2");
+    // from the last click on round 2, not the first
+    expect(rec.at["docArrived"]).toBe(30);
+  });
+
+  it("1b #3 抛错的请求也收尾:回答带 failed,由调用方取消", async () => {
+    const inFlight = new Map<
+      string,
+      { trace: ReturnType<typeof currentOpen> }
+    >();
+    openOnce(
+      inFlight,
+      "m#3",
+      "round",
+      () => Promise.reject(new Error("io")),
+      (_v, t, failed) => {
+        expect(failed).toBe(true);
+        cancelOpen(t);
+      },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(openTraceActive()).toBe(false);
+    expect(inFlight.size).toBe(0);
+    expect(observers.at(-1)!.disconnect).toHaveBeenCalledTimes(1);
   });
 });

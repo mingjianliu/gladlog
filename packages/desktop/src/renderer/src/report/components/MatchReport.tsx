@@ -2,7 +2,15 @@ import { ensureAnalysisData, type RawStreams } from "@gladlog/analysis";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { bridge } from "../../bridge";
-import { endOpen, openPaintAt, openReportAt, openTimed } from "../../openTrace";
+import {
+  endOpen,
+  openPaintAt,
+  openReportAt,
+  openReportLeft,
+  openReportRender,
+  openReportShows,
+  openTimed,
+} from "../../openTrace";
 import { buildWindowAnalysisRequest } from "../derive/analysisInput";
 import { deriveAuraUptime } from "../derive/auraUptime";
 import { deriveBurstLedger } from "../derive/burstLedger";
@@ -183,7 +191,7 @@ export function MatchReport({
   // only on props, not on any hook, so computing it early affects nothing else.
   const resolvedMatchId = matchId ?? source.id;
   // T93 open-path stage marks (no-ops unless the app shell started a trace).
-  openReportAt("reportRenderStart");
+  openReportRender(source);
   // Staged fill (T93). `level` is how many FILL_STEPS have run for this
   // source; each step is one render that computes that step's derives, so the
   // page paints between them and the cheap sections do not wait for the
@@ -217,15 +225,24 @@ export function MatchReport({
   const L4 = level >= 4;
   const [rawSettled, setRawSettled] = useState<ReportSource | null>(null);
   useLayoutEffect(() => {
-    openReportAt(level === 0 ? "reportCommitted" : `fill${level}Committed`);
+    openReportAt(
+      level === 0 ? "reportCommitted" : `fill${level}Committed`,
+      source,
+    );
     if (level === 1 || (level === FILL_DONE && !staged))
-      openPaintAt("firstContentPainted", true);
-    if (level === FILL_DONE) openPaintAt("reportPainted", true);
+      openPaintAt("firstContentPainted", true, source);
+    if (level === FILL_DONE) openPaintAt("reportPainted", true, source);
   }, [source, level, staged]);
+  // the open trace is of ONE source: leaving it (another round, another
+  // match, another page) abandons its trace (codex 85-tk-G-T93-1b #2)
+  useLayoutEffect(() => {
+    openReportShows(source);
+    return () => openReportLeft(source);
+  }, [source]);
   // The open is over when the last step has run and the raw-stream re-derive
   // has landed.
   useEffect(() => {
-    if (level >= FILL_DONE && rawSettled === source) endOpen();
+    if (level >= FILL_DONE && rawSettled === source) endOpen("settled", source);
   }, [level, rawSettled, source]);
   // Intent guard (BACKLOG #26 Task 2, 意图守护): kick off the raw.txt read +
   // parse as soon as the report opens — well before the user can click

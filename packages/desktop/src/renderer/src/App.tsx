@@ -28,6 +28,8 @@ import {
   beginOpen,
   cancelOpen,
   currentOpen,
+  openOnce,
+  type OpenTraceToken,
   openAt,
   openDocArrived,
   openPaintAt,
@@ -203,7 +205,7 @@ export default function App({
       // the trace of THIS open: a late answer of an abandoned one writes
       // nothing into the next (codex 85-tk-G-T93-1 #2)
       const trace = currentOpen();
-      void openMatchDoc(selectedId).then((d) => {
+      const arrived = (d: unknown | null) => {
         if (selectedIdRef.current !== selectedId) return; // 已切走
         // no doc (missing / corrupt file): no report mounts to end the
         // trace, so it ends here (codex #3)
@@ -212,7 +214,9 @@ export default function App({
         setDoc(d);
         setDocId(selectedId);
         setIsLoading(false);
-      });
+      };
+      // a loader that throws ends like a missing doc (codex 1b #3)
+      void openMatchDoc(selectedId).then(arrived, () => arrived(null));
     } else {
       cancelOpen();
       setDoc(null);
@@ -240,35 +244,51 @@ export default function App({
   // parsed round into a fresh doc object (loaded rounds keep their identity —
   // the derive memo caches key off the round object). getRound coming back
   // null (stale sidecar) falls back to a whole-doc re-open.
+  // One request per round at a time, traced as the latest click's open
+  // (`openOnce`, codex 85-tk-G-T93-1b #1).
+  const roundsInFlight = useRef(new Map<string, { trace: OpenTraceToken }>());
   const loadRound = useCallback((roundIndex: number) => {
     const id = selectedIdRef.current;
     if (!id) return;
     if (!canOpenRound()) return;
-    beginOpen(`${id}#${roundIndex}`, "round");
-    const trace = currentOpen();
-    void openMatchRound(id, roundIndex).then(async (round) => {
-      // the selection moved off this match: nothing of it is drawn
-      if (selectedIdRef.current !== id) {
-        cancelOpen(trace);
-        return;
-      }
-      openDocArrived(trace);
-      if (round == null) {
-        const full = await openWholeDoc(id);
-        if (selectedIdRef.current === id && full) setDoc(full);
-        // no whole doc either: nothing new mounts to end the trace
-        else cancelOpen(trace);
-        return;
-      }
-      setDoc((prev: any) => {
-        const rounds = prev?.data?.rounds;
-        if (!Array.isArray(rounds) || rounds[roundIndex] != null) return prev;
-        const next = rounds.slice();
-        next[roundIndex] = round;
-        return { ...prev, data: { ...prev.data, rounds: next } };
-      });
-    });
+    openOnce(
+      roundsInFlight.current,
+      `${id}#${roundIndex}`,
+      "round",
+      () => openMatchRound(id, roundIndex),
+      (round, t, failed) => {
+        // a loader that threw, or the selection moved off this match:
+        // nothing of it is drawn, the trace ends here
+        if (failed || selectedIdRef.current !== id) {
+          cancelOpen(t);
+          return;
+        }
+        if (round == null) {
+          openDocArrived(t);
+          void openWholeDoc(id)
+            .catch(() => null)
+            .then((full) => {
+              if (selectedIdRef.current === id && full) setDoc(full);
+              // no whole doc either: nothing new mounts to end the trace
+              else cancelOpen(t);
+            });
+          return;
+        }
+        // the round object is the report's source: the trace is of it
+        openDocArrived(t, round as object);
+        setDoc((prev: any) => {
+          const rounds = prev?.data?.rounds;
+          if (!Array.isArray(rounds) || rounds[roundIndex] != null) return prev;
+          const next = rounds.slice();
+          next[roundIndex] = round;
+          return { ...prev, data: { ...prev.data, rounds: next } };
+        });
+      },
+    );
   }, []);
+  // Leaving the match page (settings, stats, the app closing) with an open
+  // in flight: no report will end it (codex 1b #3)
+  useEffect(() => () => cancelOpen(), [appView]);
 
   // Rating deltas (1e): the algorithm lives in dashboard.ts's deriveRatingDeltas
   // (single-source, shared with the stats page's "recent matches" card)
