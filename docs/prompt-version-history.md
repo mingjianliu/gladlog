@@ -6175,3 +6175,23 @@ sync-window scan, its calibration copy and the candidate share one round-end
 cut. 605: 3 press lines gain `DR: Disarm Immune`, [CC BOOKMARK] +9 lines / -2
 displaced; candidate rows 0. The sync-window reference table is formally
 stale with the round-end cut (GH #115).
+
+v530 (2026-11-13; pipeline batch B42, T48 + T36 + T79). (1) T48 (GH #123.10)
+— talents that shorten an effect reach the duration model:
+BUFF_DURATION_TALENT_MODIFIERS gains Gift of the Celestials -> Chi-Ji /
+Yu'lon -13 s, Frost Conditioning -> Hypothermia -10 s, Circle of Life and
+Death -> Rake / Thrash / Feral Frenzy / Moonfire -20 % and Rejuvenation
+-15 %, Veinripper -> Rake +25 %, Chi Wave -> Path of Resurgence -50 %,
+Hatefury Rituals -> Wither -15 % and Absolute Corruption -> Wither 24 s
+against players. 605: scan5 shortenedDuration 444 rows -> 169 (Virulent
+Plague 149 and Dread Plague 14 stay flagged: DB2's -25 % is not unconditional
+on the corpus); 93 context files differ — 66 kit lines `lasts 25s` -> `lasts
+12s`, 35 `[RES] enemy:` Feral Frenzy windows 1-2 s shorter, 12 [RES] lines
+`Ice Block(Hypothermia Ns)` 10 s shorter; candidate rows 0. (2) T36 (GH #203)
+— eval only: five scan checks consume the producer's predicate
+(castDamageIdSplit 46 -> 22 rows, wardReturnMisnamed 3 -> 0,
+pressedInsideNeverBack 961 -> 125). (3) T79 — dead code removed
+(extractShapeshiftIntervals and the NOTABLE STATES plumbing, the two retired
+mana candidates, TIMELINE_LINE_FLAGS' non-default positions) and
+PRESS_TRIGGERED_CAST_IDS generated from DB2; 0 of 285 owner contexts and 0 of
+285 findings prompts differ on the 20 audited rounds.

@@ -1119,5 +1119,12 @@
  *  text and the pressure window; the disarm DR family comes from DB2
  *  (Faerie Swarm, Sticky Tar Bomb join it). See
  *  docs/prompt-version-history.md.
+ *
+ * v530 (2026-11-13; pipeline batch B42, T48 + T36 + T79): talents that
+ *  shorten an effect reach the duration model (Gift of the Celestials,
+ *  Frost Conditioning, Circle of Life and Death, Veinripper, Chi Wave,
+ *  Hatefury Rituals / Absolute Corruption). T36 (scan checks) and T79
+ *  (dead-code removal) change no prompt text. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 529;
+export const PROMPT_VERSION = 530;
