@@ -24,15 +24,18 @@ import {
   openMatchDoc,
   openMatchRound,
   openWholeDoc,
+  withRound,
 } from "./matchDocLoader";
 import {
   beginOpen,
   cancelOpen,
+  cancelUnarrived,
   currentOpen,
   openAt,
   openDocArrived,
   openOnce,
   openPaintAt,
+  openRoundsArrived,
   type OpenTraceToken,
 } from "./openTrace";
 import { MatchReport } from "./report/components/MatchReport";
@@ -68,6 +71,10 @@ export default function App({
   // match's doc, and must show the new match's shell, not the old report
   // under the new key.
   const [docId, setDocId] = useState<string | null>(null);
+  // the doc as the round loaders left it (they read and write it between
+  // renders)
+  const docRef = useRef<any | null>(null);
+  docRef.current = doc;
   const [hasMore, setHasMore] = useState(true);
   const [filter, setFilter] = useState<ListFilter>(EMPTY_FILTER);
   // Batch-selection checkmarks (meta ids; a shuffle id selects the whole
@@ -264,35 +271,32 @@ export default function App({
           cancelOpen(t);
           return;
         }
+        // The doc these rounds go into, read and written here so that two
+        // answers in a row see each other's. The round open in flight is of
+        // the object the doc ends up holding at its index — this answer's,
+        // or one an earlier whole-doc fallback already put there (codex 1d)
+        const accept = (next: any) => {
+          docRef.current = next;
+          openRoundsArrived(id, next?.data?.rounds, t);
+          // this request's own open, if its round did not come with it
+          cancelUnarrived(t);
+          setDoc(next);
+        };
         if (round == null) {
           // stale sidecar: the whole doc instead. It has arrived when IT
           // answers (codex 1c #1: the two-frame wait for a render ran out
           // during the read), and it brings new objects for every round —
-          // the rounds already on screen keep theirs, or the report of one
+          // the rounds already loaded keep theirs, or the report of one
           // would be torn down under its own open (codex 1c #2)
           void openWholeDoc(id)
             .catch(() => null)
-            .then((full: any) => {
-              if (selectedIdRef.current !== id || !full) {
-                cancelOpen(t);
-                return;
-              }
-              // the open is of the round it asked for, as the whole doc
-              // brings it
-              openDocArrived(t, full?.data?.rounds?.[roundIndex] ?? undefined);
-              setDoc((prev: unknown) => keepLoadedRounds(prev, full));
+            .then((full) => {
+              if (selectedIdRef.current !== id || !full) cancelOpen(t);
+              else accept(keepLoadedRounds(docRef.current, full));
             });
           return;
         }
-        // the round object is the report's source: the trace is of it
-        openDocArrived(t, round as object);
-        setDoc((prev: any) => {
-          const rounds = prev?.data?.rounds;
-          if (!Array.isArray(rounds) || rounds[roundIndex] != null) return prev;
-          const next = rounds.slice();
-          next[roundIndex] = round;
-          return { ...prev, data: { ...prev.data, rounds: next } };
-        });
+        accept(withRound(docRef.current, roundIndex, round));
       },
     );
   }, []);

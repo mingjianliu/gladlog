@@ -212,6 +212,35 @@ export function openDocArrived(of?: OpenTraceToken, source?: object): void {
   );
 }
 
+/**
+ * Rounds of match `matchId` are about to be handed to React. A round open
+ * still waiting for its round is the open of whichever object the doc now
+ * holds there — its own answer, or another request's that brought the round
+ * first (a whole-doc fallback; codex 85-tk-G-T93-1d: two overlapping
+ * fallbacks bound the trace to an object the doc did not keep, and the
+ * rendered round could never end it). `own`: the trace of the request that
+ * brought these rounds; another's I/O timings are not this open's.
+ */
+export function openRoundsArrived(
+  matchId: string,
+  rounds: readonly unknown[] | undefined,
+  own?: OpenTraceToken,
+): void {
+  if (!active || active.what !== "round" || docIn()) return;
+  const m = /^(.*)#(\d+)$/.exec(active.id);
+  if (!m || m[1] !== matchId) return;
+  const round = rounds?.[Number(m[2])];
+  if (round == null) return;
+  if (own !== active && active.io === undefined) active.io = null;
+  openDocArrived(active, round as object);
+}
+
+/** Drop the open `of` if its doc has not arrived (its own request is over
+ * and brought nothing). */
+export function cancelUnarrived(of: OpenTraceToken): void {
+  if (active && of === active && !docIn()) cancelOpen(of);
+}
+
 /** The report is complete: stamp `name`, then wait for two frames and a quiet
  * task so the paint is inside, and send the record to main's log. */
 export function endOpen(name = "settled", source?: object): void {

@@ -89,3 +89,14 @@ export function keepLoadedRounds<T>(prev: unknown, full: T): T {
     data: { ...data, rounds: data.rounds.map((r, i) => had[i] ?? r) },
   };
 }
+
+/** The doc with one lazily loaded round put in; a round already there (a
+ * whole-doc fallback brought it first) stays. */
+export function withRound<T>(prev: T, roundIndex: number, round: unknown): T {
+  const data = (prev as { data?: { rounds?: unknown } } | null)?.data;
+  if (!data || !Array.isArray(data.rounds) || data.rounds[roundIndex] != null)
+    return prev;
+  const rounds = data.rounds.slice();
+  rounds[roundIndex] = round;
+  return { ...prev, data: { ...data, rounds } };
+}

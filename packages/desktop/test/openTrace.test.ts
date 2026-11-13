@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { keepLoadedRounds } from "../src/renderer/src/matchDocLoader";
+import {
+  keepLoadedRounds,
+  withRound,
+} from "../src/renderer/src/matchDocLoader";
 import {
   beginOpen,
   cancelOpen,
+  cancelUnarrived,
   currentOpen,
   endOpen,
   openDocArrived,
@@ -15,6 +19,7 @@ import {
   openReportLeft,
   openReportRender,
   openReportShows,
+  openRoundsArrived,
   openTimed,
   openTraceActive,
 } from "../src/renderer/src/openTrace";
@@ -295,5 +300,62 @@ describe("open trace", () => {
       kind: "match",
       data: {},
     });
+  });
+
+  it("1d 两个整档回退交叠:打开的记录跟着文档实际留下的回合对象走", () => {
+    // rounds 2 and 3 clicked, both fall back to the whole doc; the trace in
+    // flight is round 3's
+    beginOpen("m#2", "round");
+    const t2 = currentOpen();
+    beginOpen("m#3", "round");
+    const t3 = currentOpen();
+    const r0 = { id: "r0" };
+    let doc: { data: { rounds: Array<object | null> } } = {
+      data: { rounds: [r0, null, null, null] },
+    };
+    const whole = () => ({
+      data: {
+        rounds: [{ id: "r0" }, { id: "r1" }, { id: "r2" }, { id: "r3" }],
+      },
+    });
+    // round 2's fallback answers first and brings round 3 too
+    doc = keepLoadedRounds(doc, whole());
+    const kept = doc.data.rounds[3]!;
+    openRoundsArrived("m", doc.data.rounds, t2);
+    cancelUnarrived(t2);
+    expect(openTraceActive()).toBe(true);
+    openReportRender(kept);
+    // round 3's own fallback: new objects, the doc keeps the first ones
+    doc = keepLoadedRounds(doc, whole());
+    expect(doc.data.rounds[3]).toBe(kept);
+    openRoundsArrived("m", doc.data.rounds, t3);
+    cancelUnarrived(t3);
+    endOpen("settled", kept);
+    vi.advanceTimersByTime(1000);
+    const rec = traces().at(-1)!;
+    expect(rec.id).toBe("m#3");
+    expect(rec.at["reportRenderStart"]).toBeDefined();
+    // brought by another request: its I/O timings are not this open's
+    expect((rec as { io?: unknown }).io).toBeNull();
+  });
+
+  it("1d 自己的请求回来了、回合却没到:作废;别的对局的回合不算到货", () => {
+    beginOpen("m#2", "round");
+    const t = currentOpen();
+    openRoundsArrived("other", [null, null, { id: "x" }], t);
+    openRoundsArrived("m", [{ id: "r0" }, null, null], t);
+    expect(openTraceActive()).toBe(true);
+    cancelUnarrived(t);
+    expect(openTraceActive()).toBe(false);
+    expect(observers.at(-1)!.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("1d 载入单个回合:已经在的回合不换", () => {
+    const r1 = { id: "r1" };
+    const prev = { data: { rounds: [null, r1] } };
+    const round = { id: "r0" };
+    expect(withRound(prev, 0, round).data.rounds).toEqual([round, r1]);
+    expect(withRound(prev, 1, { id: "again" })).toBe(prev);
+    expect(withRound(null, 0, round)).toBeNull();
   });
 });
