@@ -172,6 +172,24 @@ export function listedChainFrom(
   return { endMs, hops, ...(late ? { late } : {}) };
 }
 
+/** What the listed series says of the printed length: `listedChain` — it
+ * ran more than `LASTS_SLACK_S` past it; `pastBound` — it did, but its last
+ * end is logged at or past the producer's bound and is not measured: what
+ * lengthened it there (a Time Stop after the round's end, the next press's
+ * refresh) the producer does not read (codex 85-tk-G-T40-1d: Cheetah's
+ * second phase held 5 s past the round's end read as a 17 s series against
+ * the printed 12). */
+export function listedChainVerdict(
+  c: IChain | undefined,
+  at0: number,
+  printedS: number,
+  boundMs: number,
+): "listedChain" | "pastBound" | undefined {
+  if (!c || c.hops.length === 0) return undefined;
+  if (!((c.endMs - at0) / 1000 > printedS + LASTS_SLACK_S)) return undefined;
+  return c.endMs < boundMs ? "listedChain" : "pastBound";
+}
+
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
   // the producer's own round end (`buildMatchContext`: a series' rows are
@@ -223,14 +241,9 @@ export function run(ctx: IRoundCtx): void {
       .find((t: number) => t > pressMs + 1);
     // the producer's bound (`pressDuration`): strictly before the next
     // press, a row AT the round's end inside
+    const boundMs = Math.min(nextPressMs ?? Infinity, roundEnd + 1);
     const own = listed
-      ? listedChainFrom(
-          unit,
-          p.unit,
-          p.durationAura.spellId,
-          at0,
-          Math.min(nextPressMs ?? Infinity, roundEnd + 1),
-        )
+      ? listedChainFrom(unit, p.unit, p.durationAura.spellId, at0, boundMs)
       : undefined;
     if (own?.late)
       ctx.violate(
@@ -241,10 +254,9 @@ export function run(ctx: IRoundCtx): void {
         `${name} prints lasts ${printed}s; ${nameOf(own.late.spellId)} was applied ${own.late.gapMs} ms after the aura before it ended — past the ${CHAIN_GAP_MS} ms hand-over, not followed`,
         line.trim().slice(0, 160),
       );
-    if (tooLong(own)) {
-      report("listedChain", own);
-      continue;
-    }
+    const verdict = listedChainVerdict(own, at0, printed, boundMs);
+    if (verdict === "listedChain") report("listedChain", own!);
+    if (verdict) continue;
     // then whatever else followed (the diagnostic)
     const chain = chainFrom(unit, p.unit, p.durationAura.spellId, at0);
     if (tooLong(chain)) report("nominated", chain);

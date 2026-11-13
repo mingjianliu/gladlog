@@ -5,7 +5,11 @@
 import { describe, expect, it } from "vitest";
 
 import { APPLIED, REFRESH, REMOVED, SUCCESS } from "../scripts/scan5/ctx";
-import { chainFrom, listedChainFrom } from "../scripts/scan5/t40";
+import {
+  chainFrom,
+  listedChainFrom,
+  listedChainVerdict,
+} from "../scripts/scan5/t40";
 
 const aura = (ms: number, event: string, spellId: string, src = "P1") => ({
   spellId,
@@ -249,6 +253,31 @@ describe("scan5/t40 listedChainFrom — one aura instance at a time (codex 85-tk
         hops: [],
         late: { spellId: "356727", gapMs: 151 },
       });
+    });
+
+    it("a series whose last end is logged past the bound is not measured (codex 85-tk-G-T40-1d)", () => {
+      // Cheetah 0 s, its second phase from 3 s, the round over at 4 s, the
+      // phase held by a Time Stop after it and removed at 17 s: the line
+      // prints 12 s
+      const cheetah = {
+        id: "E1",
+        auraEvents: [
+          aura(0, APPLIED, "356781"),
+          aura(3000, REMOVED, "356781"),
+          aura(3000, APPLIED, "186258", "E1"),
+          aura(17000, REMOVED, "186258", "E1"),
+        ],
+      };
+      const own = listedChainFrom(cheetah, caster(), "356781", 0, 4001);
+      expect(own).toEqual({ endMs: 17000, hops: ["186258"] });
+      expect(listedChainVerdict(own, 0, 12, 4001)).toBe("pastBound");
+      // the same rows inside the round are a violation
+      expect(listedChainVerdict(own, 0, 12, Infinity)).toBe("listedChain");
+      // inside the slack, or with no follow-up, nothing
+      expect(listedChainVerdict(own, 0, 16.5, Infinity)).toBeUndefined();
+      expect(
+        listedChainVerdict({ endMs: 17000, hops: [] }, 0, 12, Infinity),
+      ).toBeUndefined();
     });
   });
 });
