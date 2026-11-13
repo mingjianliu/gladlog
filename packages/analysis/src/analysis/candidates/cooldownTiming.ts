@@ -8,6 +8,8 @@
  * angles — was this button pressed at the moment the team's window wanted it —
  * which is why the shared window predicates live here with them.
  */
+import type { ICombatUnit } from "@gladlog/parser-compat";
+
 import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
 import { isNotMajorDefensive } from "../../data/abilityProfile";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
@@ -60,6 +62,7 @@ import {
   HP_SAMPLE_RADIUS_MS,
   type IMajorCooldownInfo,
   isHealerSpec,
+  kitSpellNameOf,
   lockCastsOf,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
@@ -442,7 +445,11 @@ export function mergeHealerCcWindows<
  * prior was measured on locks the candidate never judges.
  */
 export function syncWindowRoundEndS(
-  combat: { startInfo?: { bracket?: string }; startTime: number; endTime?: number },
+  combat: {
+    startInfo?: { bracket?: string };
+    startTime: number;
+    endTime?: number;
+  },
   units: Parameters<typeof shuffleRoundEndMs>[1],
 ): number | undefined {
   const endMs =
@@ -455,10 +462,9 @@ export function syncWindowRoundEndS(
 
 /** A lock as the candidate judges it: cut at the round's end
  * (`syncWindowRoundEndS`); undefined when it began at or after that end. */
-export function syncWindowInRound<W extends { fromSeconds: number; toSeconds: number }>(
-  w: W,
-  roundEndS: number | undefined,
-): W | undefined {
+export function syncWindowInRound<
+  W extends { fromSeconds: number; toSeconds: number },
+>(w: W, roundEndS: number | undefined): W | undefined {
   if (roundEndS === undefined) return w;
   if (w.fromSeconds >= roundEndS) return undefined;
   return { ...w, toSeconds: Math.min(w.toSeconds, roundEndS) };
@@ -1976,7 +1982,9 @@ export function ownerFreeSpan(tSec: number): { fromS: number; toS: number } {
 export function cdHoardedEvents(
   sources: ICdHoardedCrisisSource[],
   ownerCds: CdHoardCandidateCd[],
-  owner: { id: string; name: string },
+  /** the owner's unit when the caller has it: its talents name a replaced
+   * button (`kitSpellNameOf`, T61) */
+  owner: { id: string; name: string } | ICombatUnit,
   overrides?: { cap?: number },
   /** Intent guard (BACKLOG #26 Task 2), unchanged in spirit from the
    * retired predicate: a CAST_FAILED hit on any READY cooldown inside the
@@ -2101,6 +2109,7 @@ export function cdHoardedEvents(
    * callback does not gate; the response set is untouched. */
   ownerReachesEnemyTarget?: (spellId: string, tSec: number) => boolean,
 ): CandidateEvent[] {
+  const ownerUnit = "info" in owner ? owner : undefined;
   const cap = overrides?.cap ?? CD_HOARD_CAP;
   const candidates: Array<{
     crisisUnit: { id: string; name: string };
@@ -2755,7 +2764,11 @@ export function cdHoardedEvents(
         unitNames: [owner.name, crisisUnit.name],
         // Presentation only (types.ts: "for a multi-spell event only the
         // first is taken") — `facts.readyCds` carries the full list.
-        spell: ready[0]?.spellName,
+        // the owner's own name for each button, as the kit and `[RES]`
+        // print it (`kitSpellNameOf`, T61 — codex 85-tk-G-T61-2b #2: `Ice
+        // Block` named for a mage whose kit holds Ice Cold); the id stays
+        // the ledger row's
+        spell: ready[0] ? kitSpellNameOf(ready[0], ownerUnit) : undefined,
         spellId: ready[0]?.spellId,
         facts: {
           t: String(t),
@@ -2764,7 +2777,7 @@ export function cdHoardedEvents(
           dmg2sPct: String(Math.round(point.dmg2s * 100)),
           readyCds: ready
             .slice(0, 3)
-            .map((cd) => cd.spellName)
+            .map((cd) => kitSpellNameOf(cd, ownerUnit))
             .join("; "),
           own: own ? "yes" : "no",
           ...CD_HOARDED_OUTCOME_REF,

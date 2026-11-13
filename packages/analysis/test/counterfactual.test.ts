@@ -1,4 +1,8 @@
-import { ICombatUnit } from "@gladlog/parser-compat";
+import {
+  CombatUnitClass,
+  CombatUnitSpec,
+  ICombatUnit,
+} from "@gladlog/parser-compat";
 import { describe, expect, test } from "vitest";
 
 import { IPlayerCCTrinketSummary } from "../src/utils/ccTrinketAnalysis";
@@ -653,6 +657,49 @@ describe("computeUnusedSelfCounterfactuals(窄门)", () => {
     expect(hits[0].spellId).toBe("22812");
     expect(hits[0].tier).toBe("decisive");
     expect(hits[0].source).toBe("unused-self");
+  });
+
+  test("a replaced button is priced as the holder's own spell: Ice Cold's 70 %, not Ice Block's immunity (T61, codex 85-tk-G-T61-2b #1)", () => {
+    const mk = (iceCold: boolean) =>
+      Object.assign(
+        mkVictim(
+          iceCold ? "vc" : "vb",
+          [{ atS: 55, amount: 80_000, school: "0x1" }],
+          [],
+          [
+            { atS: 50, hp: 60_000, maxHp: 100_000 },
+            { atS: 60, hp: 100, maxHp: 100_000 },
+          ],
+        ),
+        {
+          class: CombatUnitClass.Mage,
+          spec: CombatUnitSpec.Mage_Frost,
+          // Ice Block (62122 / 80181) and, for a holder, Ice Cold (62085 /
+          // 80141) — the fixture of talentReplaces.test.ts
+          info: {
+            talents: [
+              { id1: 62122, id2: 80181, count: 1 },
+              ...(iceCold ? [{ id1: 62085, id2: 80141, count: 1 }] : []),
+            ],
+            pvpTalents: [],
+          },
+        },
+      ) as ICombatUnit;
+    const hitsOf = (v: ICombatUnit) =>
+      computeUnusedSelfCounterfactuals(
+        v,
+        [neverUsedCd("45438", "Ice Block")],
+        noLockoutCC,
+        combatOf(),
+        60,
+      );
+    // Ice Block: the whole 80k, decisive
+    const block = hitsOf(mk(false));
+    expect(block.map((h) => [h.spellName, h.savedAmount])).toEqual([
+      ["Ice Block", 80_000],
+    ]);
+    // Ice Cold: 56k of it — short of the decisive line, no claim
+    expect(hitsOf(mk(true))).toEqual([]);
   });
 
   test("a row owned on the spec baseline alone is never priced (Fable review of F-W6, round 8; ruling P-W6)", () => {

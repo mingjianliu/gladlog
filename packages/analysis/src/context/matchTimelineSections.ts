@@ -35,6 +35,7 @@ import {
   isHealerSpec,
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
+  kitSpellNameOf,
   lockoutDebuffStopsPressAtDeath,
   PRESSURE_WINDOWS_TOP_N,
   specToBenchmarkKey,
@@ -1202,7 +1203,8 @@ export function emitFriendlyDeathEntries<S>(params: {
             },
           ),
         )
-        .map((cd) => cd.spellName);
+        // the dying unit's own name for the button (`kitSpellNameOf`, T61)
+        .map((cd) => kitSpellNameOf(cd, dyingUnit));
 
       if (readyAtDeath.length > 0) {
         unusedDefensives = ` (Unused: ${readyAtDeath.join(", ")})`;

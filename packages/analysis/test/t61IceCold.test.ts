@@ -11,6 +11,7 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { cdHoardedEvents } from "../src/analysis/candidates/cooldownTiming";
 import {
   buildPlayerLoadout,
   computeOnCDDisplayNames,
@@ -152,5 +153,32 @@ describe("T61 — Ice Cold", () => {
         deaths(makeUnit("o", { name: "Owner" })) as never,
       ),
     ).toEqual(["2:Ice Cold"]);
+  });
+
+  it("cd-hoarded names the button as the owner's kit does (codex 85-tk-G-T61-2b #2)", () => {
+    const point = {
+      tSec: 20,
+      hpPct: 20,
+      dmg2s: 0.3,
+      attackers2s: 1,
+      enemyBurst: false,
+      inCC: false,
+      dangerous: true,
+    };
+    const unused = { ...iceBlock, casts: [], neverUsed: true };
+    const rows = (owner: ICombatUnit) =>
+      cdHoardedEvents(
+        [{ crisisUnit: owner, own: true, points: [point] }],
+        [unused as never],
+        owner,
+      );
+    const [cold] = rows(mage(true));
+    expect(cold?.spell).toBe("Ice Cold");
+    expect(cold?.facts?.readyCds).toBe("Ice Cold");
+    // the ledger key stays the replaced button's
+    expect(cold?.spellId).toBe("45438");
+    const [block] = rows(mage(false));
+    expect(block?.spell).toBe("Ice Block");
+    expect(block?.facts?.readyCds).toBe("Ice Block");
   });
 });

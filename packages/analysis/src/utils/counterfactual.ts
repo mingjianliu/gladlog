@@ -22,7 +22,11 @@ import { binarySearchClosest } from "./binarySearch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
-import { lockoutDebuffStopsPressAtDeath } from "./cooldowns";
+import {
+  kitSpellIdOf,
+  kitSpellNameOf,
+  lockoutDebuffStopsPressAtDeath,
+} from "./cooldowns";
 import {
   CD_INSTANT_SLACK_S,
   cdAvailableAt,
@@ -905,7 +909,17 @@ export function computeUnusedSelfCounterfactuals(
     // P-W6); this line has no Forbearance gate for a button never shown
     // (Fable review of F-W6, round 8)
     if (cd.baselineOnly) continue;
-    if (UNUSED_SELF_COVERAGE_UNMODELLED.has(cd.spellId)) continue;
+    // the spell the button is for this holder (`kitSpellIdOf`, T61): the
+    // ledger row answers readiness and refusals, the holder's own spell what
+    // a press would have done and under which name (codex 85-tk-G-T61-2b
+    // #1: an Ice Cold mage's unpressed button was priced as Ice Block's
+    // immunity — 80k saved, `decisive` — against 70 % for 6 s)
+    const effectId = kitSpellIdOf(cd, victim);
+    if (
+      UNUSED_SELF_COVERAGE_UNMODELLED.has(cd.spellId) ||
+      UNUSED_SELF_COVERAGE_UNMODELLED.has(effectId)
+    )
+      continue;
     if (!cdReadyInTimeAt(cd, deathS)) continue;
     // a button the game refused then (Ice Block under Hypothermia, Divine
     // Shield under Forbearance — read just before the death, where the
@@ -923,7 +937,7 @@ export function computeUnusedSelfCounterfactuals(
       continue;
     // GH #96 M3a: hypothetical ADDED protection: observed × p per component
     // (own cooldown → the victim carries it). Lower bound: "would have saved".
-    const res = resolveMitigation(cd.spellId, {
+    const res = resolveMitigation(effectId, {
       carrierIsCaster: true,
       caster: victim,
     });
@@ -934,7 +948,7 @@ export function computeUnusedSelfCounterfactuals(
         ? selfOffCooldownSinceS(cd, deathS)
         : undefined;
     const saved = savedBy(
-      cd.spellId,
+      effectId,
       res,
       victim,
       windowStartS,
@@ -944,8 +958,8 @@ export function computeUnusedSelfCounterfactuals(
       readySinceS,
     );
     const hit = decisiveHitFor(
-      cd.spellId,
-      cd.spellName,
+      effectId,
+      kitSpellNameOf(cd, victim),
       "unused-self",
       undefined,
       saved,
