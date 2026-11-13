@@ -1531,6 +1531,111 @@ describe("recorderService 托管循环 (task-5 brief 5c, Step 3)", () => {
     expect(calls).toEqual(["shutdown", "handle.stop"]);
     expect(svc.getStatus().lastError).toContain("disconnect failed");
   });
+
+  // --- 历史段 / 跨文件 close(Windows 真机 2026-11-12,STALE_SEGMENT_MS)------
+  // 启动时 worker 补读没 checkpoint 的旧日志,每场历史对局的 open/close 都走
+  // 同一条 segmentOpen/segmentClose 通路:修复前 27 秒切出 27 个 ~1s 分片。
+
+  const splits = (calls: string[]) =>
+    calls.filter((c) => c === "splitChunk").length;
+
+  it("⑧ 启动补读的历史对局(时间戳早于 2 分钟)→ 一刀不切、不打章节", async () => {
+    const { svc, fb } = setupManaged(frozen());
+    svc.onWowUp();
+    await settle();
+    fb.triggerChunkOpened({
+      videoPath: "/tmp/lobby.mp4",
+      startedAt: T0,
+      stoppedAt: null,
+    });
+    for (let i = 0; i < 5; i++) {
+      const start = T0 - 30 * 86_400_000 + i * 600_000; // 一个月前的五场
+      svc.onSegmentOpen({ startTime: start, bracket: "3v3", fileKey: "old.txt" });
+      svc.onSegmentClose({
+        endTime: start + 200_000,
+        aborted: false,
+        fileKey: "old.txt",
+      });
+    }
+    await settle();
+    expect(splits(fb.calls)).toBe(0);
+    expect(marked(fb.calls)).toHaveLength(0);
+  });
+
+  it("⑨ 别的文件的 close(旧日志的 aborted close)不结束正在进行的对局;对局自己的 END 照切", async () => {
+    vi.useFakeTimers();
+    try {
+      const { svc, fb } = setupManaged(frozen());
+      svc.onWowUp();
+      await vi.advanceTimersByTimeAsync(10);
+      fb.triggerChunkOpened({
+        videoPath: "/tmp/lobby.mp4",
+        startedAt: T0,
+        stoppedAt: null,
+      });
+      svc.onSegmentOpen({ startTime: T0, bracket: "3v3", fileKey: "live.txt" });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(splits(fb.calls)).toBe(1); // 开局那一刀
+
+      // 旧日志的静默阀合成 close(endTime null)—— 修复前这里结束了对局窗口
+      svc.onSegmentClose({ endTime: null, aborted: true, fileKey: "old.txt" });
+      await vi.advanceTimersByTimeAsync(3 * 60_000); // 跨过空闲分片窗口
+      expect(splits(fb.calls)).toBe(1); // 斗内没有空闲分片
+
+      svc.onSegmentClose({ endTime: T0, aborted: false, fileKey: "live.txt" });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(splits(fb.calls)).toBe(2); // 对局自己的结束那一刀
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("⑩ 历史 open 不能接管正在进行的对局窗口(否则对局自己的 close 会被当成别的文件)", async () => {
+    const { svc, fb } = setupManaged(frozen());
+    svc.onWowUp();
+    await settle();
+    fb.triggerChunkOpened({
+      videoPath: "/tmp/lobby.mp4",
+      startedAt: T0,
+      stoppedAt: null,
+    });
+    svc.onSegmentOpen({ startTime: T0, bracket: "3v3", fileKey: "live.txt" });
+    svc.onSegmentOpen({
+      startTime: T0 - 86_400_000,
+      bracket: "3v3",
+      fileKey: "old.txt",
+    });
+    svc.onSegmentClose({ endTime: T0, aborted: false, fileKey: "live.txt" });
+    await settle();
+    expect(splits(fb.calls)).toBe(2); // 开局 + 结束,历史 open 没插进来
+  });
+
+  it("⑪ 历史 open 先暂停空闲计时;它的 aborted close 到了以后空闲分片恢复", async () => {
+    vi.useFakeTimers();
+    try {
+      const { svc, fb } = setupManaged(frozen());
+      svc.onWowUp();
+      await vi.advanceTimersByTimeAsync(10);
+      fb.triggerChunkOpened({
+        videoPath: "/tmp/lobby.mp4",
+        startedAt: T0,
+        stoppedAt: null,
+      });
+      svc.onSegmentOpen({
+        startTime: T0 - 86_400_000,
+        bracket: "3v3",
+        fileKey: "old.txt",
+      });
+      await vi.advanceTimersByTimeAsync(2 * 60_000);
+      expect(splits(fb.calls)).toBe(0); // 暂停中(app 可能是在对局中途启动的)
+
+      svc.onSegmentClose({ endTime: null, aborted: true, fileKey: "old.txt" });
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(splits(fb.calls)).toBe(1); // 空闲分片恢复
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("recorder.ts I3: associate 负 headroom 警告只在托管模式触发 (post-review Important 修复)", () => {

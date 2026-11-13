@@ -580,6 +580,78 @@ describe("onChunkOpened — 退订生效", () => {
   });
 });
 
+describe("startContinuous — 没有采集源绝不开录(黑屏修复)", () => {
+  // Windows 真机 2026-11-12 22:05:装配层那次 configureSession 没走到
+  // CreateInput 就失败了,watch 照样起来,onWowUp → StartRecord 了一个空场景:
+  // 16 分钟只有声音的黑屏,OBS 日志里从头到尾没有 "User added source"。
+  it("configureSession failed before → startContinuous configures first, then records", async () => {
+    let failConnect = true;
+    const backend = createManagedObsBackend({
+      ensureProcess: async () => {
+        if (failConnect) throw new Error("ECONNREFUSED");
+        return { wsUrl: "ws://127.0.0.1:4466", wsPassword: "pw" };
+      },
+      recDir,
+      clientFactory: () => fake,
+      now,
+    });
+    fake.handlers.StartRecord = async () => {
+      fake.emit("RecordStateChanged", {
+        outputState: "OBS_WEBSOCKET_OUTPUT_STARTED",
+        outputPath: "/rec/chunk1.mp4",
+      });
+      return {};
+    };
+    await backend.configureSession(); // 装配层那次:连不上,静默失败
+    expect((await backend.probe()).ready).toBe(false);
+
+    failConnect = false; // OBS 随后起来了(watch 的 onWowUp 这时才到)
+    await backend.startContinuous();
+
+    const reqs = fake.callLog.map((c) => c.req);
+    const create = reqs.indexOf("CreateInput");
+    const start = reqs.indexOf("StartRecord");
+    expect(create).toBeGreaterThanOrEqual(0);
+    expect(start).toBeGreaterThan(create);
+    expect((await backend.probe()).ready).toBe(true);
+  });
+
+  it("capture source can't be created → no StartRecord at all; the next call (recorder's retry) tries again", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    fake.handlers.CreateInput = async () => {
+      throw new Error("boom");
+    };
+    fake.handlers.GetInputSettings = async () => {
+      throw new Error("No source was found");
+    };
+    const backend = makeBackend();
+    await backend.startContinuous();
+    expect(fake.callLog.some((c) => c.req === "StartRecord")).toBe(false);
+    const health = await backend.probe();
+    expect(health.ready).toBe(false);
+    expect(health.lastError).toContain("GetInputSettings");
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("托管 OBS 会话未配好"),
+    );
+
+    // 下一次重试:OBS 这回肯建源了 → 补配成功后才开录
+    fake.handlers.CreateInput = async () => ({ inputUuid: "fake-uuid" });
+    fake.handlers.StartRecord = async () => {
+      fake.emit("RecordStateChanged", {
+        outputState: "OBS_WEBSOCKET_OUTPUT_STARTED",
+        outputPath: "/rec/chunk1.mp4",
+      });
+      return {};
+    };
+    await backend.startContinuous();
+    expect(fake.callLog.filter((c) => c.req === "CreateInput")).toHaveLength(
+      2,
+    );
+    expect(fake.callLog.some((c) => c.req === "StartRecord")).toBe(true);
+    warn.mockRestore();
+  });
+});
+
 describe("configureSession — 画面适配画布(4K 裁剪修复)", () => {
   /** 真机 2026-09-05:4K 显示器上录像只有左上角 1/4。CreateInput 建出来的场景项
    * 没有 transform,OBS 按原始像素摆在 (0,0) 不缩放,1920x1080 画布把
@@ -770,11 +842,14 @@ describe("configureSession + captureProbe — 黑帧判定进 sourceActive", () 
     await backend.configureSession();
 
     const create = fake.callLog.find((c) => c.req === "CreateInput");
+    // 窗口模式按类名钩 WoW(不是 any_fullscreen:那个只钩前台窗口,而托管 OBS
+    // 隐藏的主窗口会抢前台 —— Windows 真机 2026-11-12)
     expect(create?.data).toMatchObject({
       inputKind: "game_capture",
       inputSettings: {
-        capture_mode: "any_fullscreen",
-        priority: 2,
+        capture_mode: "window",
+        window: "World of Warcraft:waApplication Window:Wow.exe",
+        priority: 0,
         anti_cheat_hook: true,
       },
     });

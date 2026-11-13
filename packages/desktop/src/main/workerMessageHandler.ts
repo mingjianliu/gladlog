@@ -49,11 +49,13 @@ export function createWorkerMessageHandler(
       deps.recorder?.onSegmentOpen({
         startTime: msg.startTime,
         bracket: msg.bracket,
+        fileKey: msg.fileKey,
       });
     } else if (msg.type === "segmentClose") {
       deps.recorder?.onSegmentClose({
         endTime: msg.endTime,
         aborted: msg.aborted,
+        fileKey: msg.fileKey,
       });
     } else if (msg.type === "status") {
       const status: LogsStatusSnapshot = {

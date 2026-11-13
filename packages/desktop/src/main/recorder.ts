@@ -61,6 +61,34 @@ const IDLE_SPLIT_MS = 60_000;
  * wrong place".
  */
 const MATCH_OPEN_SPLIT_MAX_LAG_MS = 3_000;
+/**
+ * A segment boundary whose own log timestamp is older than this is HISTORY,
+ * not a match happening now, and must not move the recorder.
+ *
+ * Every WoWCombatLog file the worker reads past its checkpoint -- the startup
+ * catch-up of logs written while the app was closed, a lost/reset checkpoint
+ * -- replays that file's ARENA_MATCH_START/END through the same
+ * segmentOpen/segmentClose path as the live tail, seconds apart. Before this
+ * gate each historical match set managedInMatch and its close ran a
+ * match-end split: Windows field run 2026-11-12 cut 27 chunks of ~1 s each in
+ * 27 s at app startup, before anything was played (the "recording only a few
+ * seconds long" symptom). In external mode each one would StartRecord /
+ * StopRecord the user's own OBS.
+ *
+ * Judged on the boundary's own timestamp against the wall clock, so it holds
+ * whatever produced the backlog. Two minutes is far above the live lag
+ * (>=2 s batch flush plus WoW's write lag, "可达 20s+", see
+ * MATCH_OPEN_SPLIT_MAX_LAG_MS) and far below how old a backlog match is.
+ * A negative lag (timestamp ahead of the clock) is never stale: that is the
+ * skew case, which keeps the old behaviour.
+ *
+ * Managed mode still pauses the idle timer for a stale OPEN (the app may have
+ * started mid-match, and an idle split inside a live match is the one thing
+ * that must never happen); it is the close that decides. A stale close
+ * (or an aborted close, endTime null, of a stale open) just leaves the match
+ * window without the chapter/split.
+ */
+const STALE_SEGMENT_MS = 120_000;
 /** Managed-mode per-chunk ceiling (design doc §5.5, 复核 I4 -- this is
  * SAFETY_STOP_MS's managed-mode reincarnation, but kept as its own constant:
  * SAFETY_STOP_MS stops the bypass recording outright on timeout, whereas this
@@ -136,8 +164,19 @@ export interface RecorderStatus {
 }
 
 export interface RecorderService {
-  onSegmentOpen(info: { startTime: number; bracket: string }): void;
-  onSegmentClose(info: { endTime: number | null; aborted: boolean }): void;
+  /** `fileKey` = the WoWCombatLog file the boundary came from (see
+   * segmentOwner). Optional only so call sites that have no file (tests)
+   * keep the single-file behaviour. */
+  onSegmentOpen(info: {
+    startTime: number;
+    bracket: string;
+    fileKey?: string;
+  }): void;
+  onSegmentClose(info: {
+    endTime: number | null;
+    aborted: boolean;
+    fileKey?: string;
+  }): void;
   associate(meta: { id: string; startTime: number; endTime: number }): void;
   getForMatch(matchId: string): RecordingEntry | null;
   getStatus(): RecorderStatus;
@@ -296,6 +335,24 @@ export function createRecorderService(deps: {
    * own doc comment for the initial-evidence-only semantics. */
   let managedSourceActive: boolean | null = null;
   let managedInMatch = false; // segmentOpen..segmentClose window: idle timer pauses here
+  /** The open of the current managed match window was already older than
+   * STALE_SEGMENT_MS when it arrived -- decides an aborted (endTime null)
+   * close of the same window. */
+  let managedOpenStale = false;
+  /**
+   * The log file whose segmentOpen opened the current match window (both
+   * modes). The worker runs one parser per WoWCombatLog file and they all
+   * feed this one recorder, so a close from ANOTHER file must not end this
+   * window. Windows field run 2026-11-12: an old log ending inside an
+   * unclosed match left a historical open behind; three minutes later the
+   * worker's quiet valve sent that file's synthetic aborted close while a
+   * live match (from the current log) was in progress -- it ended the live
+   * window, split mid-match, the idle splits resumed inside the match (5
+   * chunks for one 226 s match) and the live match's own END then found no
+   * window and cut nothing. A later open from any file takes the window
+   * over (only one match can be live). null = no window / owner unknown.
+   */
+  let segmentOwner: string | null = null;
   /** 复核 C1: MAX_CHUNK_MS fired while managedInMatch was true, so the split
    * was deferred instead of executed (never split during a match). Consumed
    * by onSegmentClose's managed branch, which logs the deferred-split fact
@@ -844,8 +901,20 @@ export function createRecorderService(deps: {
         // wait for the managed chain to drain, or an idle timeout already
         // queued just ahead of this segmentOpen could still fire and split
         // mid-match.
+        const openLagMs = now() - info.startTime;
+        const openStale = openLagMs > STALE_SEGMENT_MS;
+        // History must never take over a LIVE window (it would steal
+        // segmentOwner and the live match's own close would then be ignored).
+        if (openStale && managedInMatch && !managedOpenStale) return;
         managedInMatch = true;
+        segmentOwner = info.fileKey ?? null;
         clearManagedIdleTimer();
+        managedOpenStale = openStale;
+        if (managedOpenStale) {
+          // History replayed from a log backlog (see STALE_SEGMENT_MS): no
+          // split, no chapter. The idle pause above stays on purpose.
+          return;
+        }
         // The match-OPEN split (user ruling 2026-09-05 "开局也切", option C).
         // This is the ONE split taken inside a match window, and it does not
         // violate the invariant above: it lands on the match's own opening
@@ -853,7 +922,7 @@ export function createRecorderService(deps: {
         // enough for "now" to still BE that instant. See
         // MATCH_OPEN_SPLIT_MAX_LAG_MS for why the gate exists and why every
         // way it can fail lands on "don't split".
-        const logLagMs = now() - info.startTime;
+        const logLagMs = openLagMs;
         const splitAtOpen =
           logLagMs >= 0 && logLagMs <= MATCH_OPEN_SPLIT_MAX_LAG_MS;
         if (!splitAtOpen) {
@@ -877,6 +946,8 @@ export function createRecorderService(deps: {
         });
         return;
       }
+      if (now() - info.startTime > STALE_SEGMENT_MS) return; // history, see STALE_SEGMENT_MS
+      segmentOwner = info.fileKey ?? null;
       run(async () => {
         if (recording) return; // back-to-back / DOUBLE_START: same recording keeps covering
         try {
@@ -922,7 +993,17 @@ export function createRecorderService(deps: {
         pushStatus();
       });
     },
-    onSegmentClose() {
+    onSegmentClose(info) {
+      // Not this window's file (see segmentOwner): another log's close, e.g.
+      // the quiet valve closing a historical segment of an old file.
+      if (
+        segmentOwner !== null &&
+        info.fileKey !== undefined &&
+        info.fileKey !== segmentOwner
+      ) {
+        return;
+      }
+      segmentOwner = null;
       // Managed branch is keyed on managedInMatch (not isManagedActive()) --
       // if we entered this match via the managed markChapter path, the close
       // must mirror it regardless of any settings flicker in between; falling
@@ -930,6 +1011,19 @@ export function createRecorderService(deps: {
       // chunk (see managedSplit's comment on the same tradeoff).
       if (managedInMatch && deps.managedBackend) {
         managedInMatch = false;
+        const stale =
+          info.endTime === null
+            ? managedOpenStale
+            : now() - info.endTime > STALE_SEGMENT_MS;
+        managedOpenStale = false;
+        if (stale && !managedMaxChunkPending) {
+          // History (STALE_SEGMENT_MS): the match ended long ago, so cutting
+          // here would only chop the lobby that is being recorded now. Leave
+          // the match window and give the idle clock back.
+          clearManagedStuckTimer();
+          if (managedRunning) armManagedIdleTimer();
+          return;
+        }
         // 复核 C1: if MAX_CHUNK_MS fired while we were mid-match, the split it
         // wanted was deferred (see onManagedMaxChunkTimeout) rather than
         // dropped -- it is "consumed" here: the stuck-match escape hatch is no
@@ -1144,6 +1238,8 @@ export function createRecorderService(deps: {
             managedRecording = false;
             managedSourceActive = null;
             managedInMatch = false;
+            managedOpenStale = false;
+            segmentOwner = null;
             managedMaxChunkPending = false;
             // 复核 I6 (task-5b review round 2): pushStatus was missing here
             // entirely (unlike onWowDown, which already pushes) -- after a
@@ -1200,6 +1296,8 @@ export function createRecorderService(deps: {
       managedRecording = false;
       managedSourceActive = null;
       managedInMatch = false;
+      managedOpenStale = false;
+      segmentOwner = null;
       managedMaxChunkPending = false;
       clearManagedIdleTimer();
       clearManagedMaxChunkTimer();
