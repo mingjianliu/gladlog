@@ -87,7 +87,7 @@ import {
   kickLockoutVictimMultiplierAt,
 } from "@gladlog/analysis/src/utils/kickLockout";
 import type { LogInstant } from "@gladlog/analysis/src/utils/logEra";
-import { logIsFrom } from "@gladlog/analysis/src/utils/logEra";
+import { logDatedAt, logIsFrom } from "@gladlog/analysis/src/utils/logEra";
 import {
   parseRawTimestamp,
   rawLineInstantMs,
@@ -531,8 +531,17 @@ const sideAt = (x: SplitPair, logEpochMs: LogInstant) => {
       : "before";
 };
 /** the side the product puts the pair on: the instant the row states for
- * itself, which every freshly parsed match carries (T90, `logInstantOf`) */
-const sideOf = (x: SplitPair) => sideAt(x, { statedMs: x.statedMs });
+ * itself, which every freshly parsed match carries (T90, `logInstantOf`),
+ * through the product's own reading (`logDatedAt`: a stated instant less
+ * than 45 min after the cutover takes the rule's band side — codex
+ * 85-tk-I-T90-1b) */
+const sideOf = (x: SplitPair) =>
+  typeof x.modifier.multiplier === "number"
+    ? "undated"
+    : logDatedAt(
+        { ...x.modifier.multiplier, before: "before", since: "since" },
+        { statedMs: x.statedMs },
+      );
 /** the side the row's own stated instant is on, read off the raw line —
  * the same side since T90; a difference means the parsed match lost its
  * clock offset */

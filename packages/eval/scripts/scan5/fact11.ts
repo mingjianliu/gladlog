@@ -167,6 +167,7 @@ import {
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { ENEMY_AREA_SAVE_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { auraStandsForPressAt } from "@gladlog/analysis/src/utils/auraActivationEra";
 import {
   CHANNEL_AURA_TAIL,
   isButtonPress,
@@ -195,14 +196,13 @@ import {
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { groundingRedirects } from "@gladlog/analysis/src/utils/groundingRedirects";
 import { PRESS_ONLY_TAG } from "@gladlog/analysis/src/utils/killWindowFacts";
-import { logInstantOf, logIsFrom } from "@gladlog/analysis/src/utils/logEra";
+import { logInstantOf } from "@gladlog/analysis/src/utils/logEra";
 import { isOffListPressId } from "@gladlog/analysis/src/utils/offListPress";
 import {
   OVERRIDE_VARIANT_SHARES_BY_ERA,
   variantSharesCooldownAt,
 } from "@gladlog/analysis/src/utils/overrideVariantEra";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
-import { PATCH_1215_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/talents";
 
 import {
   ABSORBED,
@@ -425,10 +425,6 @@ function channelSpanUnrun(ctx: IRoundCtx): void {
 }
 
 function doomWindsNoPressReading(ctx: IRoundCtx): void {
-  const since1215 = logIsFrom(
-    logInstantOf(ctx.owner, ctx.start),
-    PATCH_1215_GOLIVE_EPOCH_MS,
-  );
   for (const u of ctx.players) {
     const near = (ms: number, ids: string[]) =>
       [
@@ -448,6 +444,11 @@ function doomWindsNoPressReading(ctx: IRoundCtx): void {
       const ms = tsOf(a);
       if (ms < ctx.start || ms > ctx.roundEndAt) continue;
       if (near(ms, ["384352", "114051"])) continue;
+      // the producer's own dated reading, asked as its readers ask it — of
+      // this unit at this aura's instant (codex 85-tk-I-T90-1b: a side read
+      // off `logIsFrom` at the round's start put a log inside the stated
+      // band after the go-live on the other side than the producer)
+      const since1215 = !auraStandsForPressAt("384352", logInstantOf(u, ms));
       ctx.bump("doomWindsNoPressReading");
       const s = Math.floor((ms - ctx.start) / 1000);
       const mmss = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;

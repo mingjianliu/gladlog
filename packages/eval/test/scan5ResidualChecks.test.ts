@@ -280,6 +280,43 @@ describe("duringExternalShare", () => {
   });
 });
 
+// codex 85-tk-I-T90-1b: the gate read the log's side off `logIsFrom` at the
+// round's start while the producer asks `auraStandsForPressAt` at the aura's
+// instant — a log inside the stated band after the 12.1.5 go-live (an
+// Adelaide line, UTC+9:30/+10:30, states its instant late) sat on different
+// sides for the two.
+describe("doomWindsNoPressReading", () => {
+  const GOLIVE = Date.UTC(2026, 9, 13, 15, 0, 0);
+  const enemyCd = ["0:05 [ENEMY CD] 2(Shaman) Doom Winds"];
+  const round = (statedAtAuraMs: number) => [
+    // one offset per match: stated = parsed + offset
+    unit("Owner", "1", 1, { logClockOffsetMs: statedAtAuraMs - at(5_000) }),
+    unit("Shaman", "2", 2, {
+      logClockOffsetMs: statedAtAuraMs - at(5_000),
+      auraEvents: [
+        {
+          ...aura(LogEvent.SPELL_AURA_APPLIED, 5_000, "466772", "Doom Winds"),
+          srcUnitId: "Shaman",
+          destUnitId: "Shaman",
+        },
+      ],
+    }),
+  ];
+  const seen = (statedAtAuraMs: number) =>
+    scan(runFact11, round(statedAtAuraMs), enemyCd)
+      .filter((v) => v.check === "doomWindsNoPressReading")
+      .map((v) => v.kind);
+
+  it("自述时刻落在上线后 45 分钟内:生产方读成按键,门规跟着读,不报 proc as press", () => {
+    expect(seen(GOLIVE + 15 * 60_000)).toEqual([]);
+    expect(seen(GOLIVE - 60_000)).toEqual([]);
+  });
+
+  it("上线 45 分钟以后:光环不再代表按键,[ENEMY CD] 行照旧被报", () => {
+    expect(seen(GOLIVE + 45 * 60_000)).toEqual(["proc as press"]);
+  });
+});
+
 describe("allyOverlapDeferral", () => {
   const lines = (printed: string) => [
     "Burst #1 — 0:10–0:30",
