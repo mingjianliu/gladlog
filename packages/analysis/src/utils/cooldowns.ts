@@ -4578,9 +4578,8 @@ export function isTalentProcRun(
   const endMs = to;
   if (
     (unit.deathRecords ?? []).some(
-      (d) =>
-        d.timestamp >= endMs &&
-        d.timestamp - endMs <= DEATH_AURA_CLEANUP_S * 1000,
+      // the REMOVED is logged either side of the death record (1c #1)
+      (d) => Math.abs(d.timestamp - endMs) <= DEATH_AURA_CLEANUP_S * 1000,
     )
   )
     return false;

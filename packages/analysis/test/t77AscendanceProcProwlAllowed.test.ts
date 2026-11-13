@@ -116,6 +116,10 @@ describe("T77 — a cast-less Ascendance run of the proc's length is no press", 
     (u as { deathRecords: unknown[] }).deathRecords = [{ timestamp: 36_220 }];
     expect(isTalentProcRun(u, ASCENDANCE, 30_000)).toBe(false);
     expect(auraOnlyActivationSeconds(u, ASCENDANCE, 0)).toEqual([30]);
+    // the REMOVED logged after the death record (1c #1)
+    (u as { deathRecords: unknown[] }).deathRecords = [{ timestamp: 36_180 }];
+    expect(isTalentProcRun(u, ASCENDANCE, 30_000)).toBe(false);
+    expect(auraOnlyActivationSeconds(u, ASCENDANCE, 0)).toEqual([30]);
   });
 
   it("a unit without the proc talent has one length: every run is a press", () => {
@@ -235,6 +239,27 @@ describe("T77 — Prowl stays up through a press stealth allows", () => {
       );
       expect(stealthControlUsableAt(later, RAKE, T + 20_000)).toBe(false);
       expect(stealthControlUsableAt(later, RAKE, T + 35_000)).toBe(true);
+      // nor one applied and removed in one millisecond (1c #2)
+      const blink = mk([swing]);
+      blink.auraEvents.push(
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          prowl,
+          T + 30_000,
+          "d1",
+          "d1",
+          "BUFF",
+        ) as never,
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          prowl,
+          T + 30_000,
+          "d1",
+          "d1",
+          "BUFF",
+        ) as never,
+      );
+      expect(stealthControlUsableAt(blink, RAKE, T + 20_000)).toBe(false);
       // a run the log ends keeps the log's end
       expect(
         stealthControlUsableAt(mk([swing], T + 20_000), RAKE, T + 15_000),

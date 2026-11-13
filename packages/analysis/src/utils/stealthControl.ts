@@ -100,21 +100,18 @@ function unseenEndBrokenByHit(
   ms: number,
   units: readonly ICombatUnit[],
 ): boolean {
-  // this application's own end: a REMOVED before the aura next goes up (a
-  // later run's is not it — codex 85-tk-F-T77-1b #4)
-  const own = (unit.auraEvents ?? []).filter(
+  // this application's own end: the aura's next row after it, in log order,
+  // is a REMOVED. A later run's is not it, even one applied and removed in
+  // one millisecond (codex 85-tk-F-T77-1b #4, 1c #2).
+  const next = (unit.auraEvents ?? []).find(
     (a) =>
       a.spellId === id &&
       a.destUnitId === unit.id &&
-      a.logLine.timestamp > from,
+      a.logLine.timestamp > from &&
+      (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED),
   );
-  const next = own.find((a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED)
-    ?.logLine.timestamp;
-  const ended = own.some(
-    (a) =>
-      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-      (next === undefined || a.logLine.timestamp <= next),
-  );
+  const ended = next?.logLine.event === LogEvent.SPELL_AURA_REMOVED;
   if (ended) return false;
   return stealthImmunityHitMs(unit, from, ms, units) !== undefined;
 }
