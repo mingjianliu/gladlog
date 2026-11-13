@@ -6400,3 +6400,29 @@ kinds unchanged (lastsOvershoot 6,404, lastsBeyond 47, backBeforeNextPress
 that reads an effect's life. Recorded, not changed: a listed follow-up
 applied more than 150 ms after the aura before it ended prints the plain
 length (0 on the 605).
+
+v542 (2026-11-13; pipeline batch B58, T41 + T91). T41: `[RES] enemy:
+X/<spec>(Ns left)` no longer prints the slice's end minus the row for an
+enemy effect still up when the analysed slice ends. The effect's own end
+lives in its own field (ownEndSeconds, read by [RES] only); buffEndSeconds
+is the end the cast had before, so every other reader (burst windows,
+burst spans, cooldown timing, sync windows) has the number it had. A
+holder dead by the slice's end keeps the death cut; the aura branch only
+lengthens. 605 (capture on a 987f1dce9-based tree, before the rebases):
+378 [RES] lines in 154 context files changed, every one to a longer time
+left (Metamorphosis, Colossus Smash, Avatar of Ashamane, proc-applied
+Avenging Wrath, Kingsbane, Feral Frenzy, Recklessness, The Hunt); no
+other line; finding ids 0 added, 0 removed; burst windows whose end /
+duration / outcome end differ from the base 0 of 3,802. Recorded, not
+changed: 7 burst windows carry a response whose effectEndSec is later
+than on the base (6 Rallying Cry, 1 Divine Hymn), read through
+observedEffectEndSeconds; creditedAnswer changes on 0 of the 7 and no
+rendered line differs. T91: a burst window whose last effect runs past
+the slice's end measured its damage rate over seconds the log cannot
+show; the rate, the damage and the healer-control coverage now stop where
+the window's shown seconds do, and a refreshed control on the healer
+keeps its run in the coverage. 605 (4882aca85-based capture, before the
+rebases): scan5 burstRatePastSliceEnd `label reads low` 513 rows / 209
+windows -> 0 of 1,338; 401 [HEALER EXPOSURE] lines, 29 span lines and 27
+`opened` lines change burst label, all upward. New scans scan5/t41.ts and
+scan5/t91.ts.

@@ -1199,5 +1199,12 @@
  *  covers the press's chained auras, not only the first (Chimaeral Sting
  *  3s -> 9s; Aspect of the Cheetah 12s). See
  *  docs/prompt-version-history.md.
+ *
+ * v542 (2026-11-13; pipeline batch B58, T41 + T91): an enemy effect still
+ *  up when the analysed slice ends runs to its own end in [RES] (`Ns left`
+ *  no longer counts down to the slice's end: Metamorphosis `3s left` ->
+ *  `24s left`); a burst window's damage rate is taken over the seconds the
+ *  log shows, so a window cut by the slice's end no longer reads a low
+ *  burst label. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 541;
+export const PROMPT_VERSION = 542;
