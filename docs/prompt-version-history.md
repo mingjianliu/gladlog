@@ -6371,3 +6371,18 @@ The other seven items were closed by count or recorded
 (docs/talent-coverage-gaps.md has each mitigation row's status). This
 entry also corrects v538's last sentence: three later commits were not
 captured, not two.
+
+v540 (2026-11-13; pipeline batch B55, T84). An aura left without a
+REMOVED row is cut at its official length; Enveloping Mist applied inside
+the monk's Invoke Chi-Ji / Invoke Yu'lon window lasts 4 s longer, and the
+inferred end now carries that extension (new hand table
+casterWindowDurations.ts, registered in curatedIdRegistry; the window is
+found among unordered casts). An interval with an inferred end records
+where its cap was counted from (capFromS; read by the scan only). 605
+(scans on the cached 4882aca85 capture, before the rebase): envMistInvoke
+cut-short rows 7 -> 0; buffDurationScan --per-app runs of 124682 observed
+longer than the predicate 199 -> 62, reproduced exactly 646 -> 757; final
+scan 0 violations of 16 runs with an inferred end. The Timewalker-
+lengthened runs are unchanged. Recorded, not changed: saveAuraIntervals
+and round clipping keep capFromS on an interval whose end they move; no
+reader uses it there.

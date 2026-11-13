@@ -1189,5 +1189,10 @@
  *  cooldown is no longer spent and the kit line reads [UNUSED]; a press
  *  allowed while stealthed does not end a Prowl with no REMOVED row. See
  *  docs/prompt-version-history.md.
+ *
+ * v540 (2026-11-13; pipeline batch B55, T84): an Enveloping Mist applied
+ *  inside the monk's Invoke Chi-Ji / Yu'lon window and left without a
+ *  REMOVED row is cut at its length plus the window's 4 s, not the plain
+ *  official length. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 539;
+export const PROMPT_VERSION = 540;
