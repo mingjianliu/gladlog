@@ -316,6 +316,18 @@ export function buildPlayerLoadout(
     // Life `[95–180s]` pressed 92.9 s apart (17 guardians and Control of
     // the Dream's 15 s: 80.7 s), Adrenaline Rush `[86–180s]` pressed 73.2 s
     // apart (Restless Blades on the cooldown's warped clock: 69.6 s)
+    // …asked of the spending presses alone: a free press in the opener's
+    // own rendered second is read in its place by the lookup's grid view
+    // (`gridConsumedView`) and answers with what was left 0.8 s on (codex
+    // 85-tk-G-T55-1b: Sprint at 10.1 s, a free one at 10.9 s, `[114–120s]`
+    // for a 115 s return)
+    const spending = {
+      ...cd,
+      casts: (cd.casts ?? []).filter((c) => !c.freeRecast),
+      ...(cd.sharedCasts
+        ? { sharedCasts: cd.sharedCasts.filter((c) => !c.freeRecast) }
+        : {}),
+    };
     const realisedShortest = Math.min(
       cd.cooldownSeconds,
       ...(cd.casts ?? [])
@@ -330,7 +342,7 @@ export function buildPlayerLoadout(
             ((c.reductions?.length ?? 0) > 0 ||
               c.idleCreditSeconds !== undefined),
         )
-        .map((c) => cdRealisedSecondsUntilReady(cd, c.timeSeconds))
+        .map((c) => cdRealisedSecondsUntilReady(spending, c.timeSeconds))
         .filter((left) => left > 0),
     );
     const soonest = Math.floor(

@@ -1002,4 +1002,53 @@ describe("T55 — a kit range's low end is the return the model gives the press"
     ).text;
     expect(text).toContain("Sprint [115–120s");
   });
+
+  it("a free press in the opener's own second does not answer for it (codex 85-tk-G-T55-1b)", () => {
+    const owner = makeUnit("player-1", { name: "Player1" });
+    const rogue = makeUnit("enemy-1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Outlaw,
+    });
+    // pressed at 10 s, 5 s taken off at 20 s (back at 125 s: 115 s), then a
+    // Time Spiral free press at 63 s — the ledger copies the opener's
+    // reductions onto it, and the model's time left there (125 − 63 = 62 s)
+    // is what remains of the opener's cooldown, not a return
+    const reductions = [{ atSeconds: 20, seconds: 5 }];
+    const text = buildPlayerLoadout(
+      owner,
+      "Holy Priest",
+      [],
+      [],
+      { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
+      [rogue],
+      [
+        {
+          player: rogue,
+          cds: [
+            {
+              spellId: "2983",
+              spellName: "Sprint",
+              cooldownSeconds: 120,
+              maxChargesDetected: 1,
+              casts: [
+                // the ledger's own records (`applyEventReductions`, then
+                // the free-press pass): the opener's realised return, and
+                // the free press standing on what is left of it
+                { timeSeconds: 10.1, reductions, cooldownSecondsOverride: 115 },
+                {
+                  timeSeconds: 10.9,
+                  reductions,
+                  freeRecast: true,
+                  freeRecastOf: 10.1,
+                  cooldownSecondsOverride: 114.2,
+                },
+              ],
+              neverUsed: false,
+            } as unknown as IMajorCooldownInfo,
+          ],
+        },
+      ],
+    ).text;
+    expect(text).toContain("Sprint [115–120s");
+  });
 });
