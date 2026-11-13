@@ -6261,3 +6261,23 @@ of it; a stated instant less than 45 min after a cutover reads the rule's
 band side (a half-hour zone writes whole hours). 1,333 archives: every one
 of 89,648,576 lines states a UTC offset; of 134 match-cutover pairs near a
 cutover, 125 change from since to before; candidate rows 0 on 605.
+
+v534 (2026-11-13; pipeline batch B46, T65 + T89 + T51). (1) T65 — nine
+items, one product fix (167.28): `syncWindowCdFor` reads a press's observed
+end on the cooldown's key. A Paladin's Avenging Wrath activated through
+Radiant Glory (cast and aura 454351, cooldown row 31884) was given its
+official 24 s and read as running into the healer lock; its aura is 12.0 s
+and was off 0.9-10.5 s before the lock in 9 of 9 windows. 605 candidate
+rows: missed-sync-window +21 rows (9 windows in 7 rounds of 6 archives), -3
+rows (1 window displaced by the type cap of two); no other type moves. (2)
+T89 — Dragonrage exhales Pyres at 3 enemies in one millisecond; each is its
+own use for Causality's credit (row flag `simultaneousUses`). Call of the
+Righteous shortens Avenging Wrath -4 s and Avenging Crusader -2.5 s per rank
+(Holy only, before Sanctified Wrath's x1.5), with a FLAG. Wide violating
+archives: setCooldownBack 18 rows / 6 facts -> 3 / 1; cooldownRecastScan
+impossible presses for Fire Breath / Eternity Surge 605: 6 of 887 pairs ->
+1; candidate rows 0. (3) T51 — the `[ENEMY DEF] … | during it:` segment's `N
+hits immune` and its bins count the ally's pets and guardians through the
+one summon -> owner predicate (`foldsIntoOwner`). 605: immuneHitPetFold 313
+rows / 105 facts / 1196 -> 0; 286 [ENEMY DEF] lines in 277 context files
+change (repro: `4 hits immune` -> `17 hits immune`); candidate rows 0.

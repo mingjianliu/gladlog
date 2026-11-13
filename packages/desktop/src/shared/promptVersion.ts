@@ -1150,5 +1150,13 @@
  *  registers the other Void Shield / Chi Cocoon forms; dated game rules are
  *  asked with the instant the log states. See
  *  docs/prompt-version-history.md.
+ *
+ * v534 (2026-11-13; pipeline batch B46, T65 + T89 + T51): the sync-window
+ *  reader takes a press's observed end on the cooldown's key (Radiant Glory
+ *  Avenging Wrath: 9 missed-sync-window windows gained on 605); Dragonrage's
+ *  simultaneous Pyres are separate uses for Causality; Call of the
+ *  Righteous shortens Avenging Wrath / Avenging Crusader; `N hits immune`
+ *  counts the ally's pets and guardians. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 533;
+export const PROMPT_VERSION = 534;
