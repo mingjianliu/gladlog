@@ -36,6 +36,7 @@
  * than 5 points.
  */
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { supersededAuraBreaks } from "@gladlog/analysis/src/utils/auraIntervals";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   BURST_DAMAGE_RATIO_MAX,
@@ -82,15 +83,45 @@ export function sideDamage(
   return { inSpan, total };
 }
 
+/** A window's printed ratio and label against the ratio the log gives. The
+ * label is compared first, whatever the ratios' distance: the tolerance is
+ * for a ratio a hair off that leaves the label standing, never for one that
+ * carries the score over a threshold (codex 85-tk-G-T91-1b #1: a score of
+ * 4.01 on a ratio read 1 % low is 3.97 — High printed as Moderate, inside
+ * the 2 %). */
+export function rateVerdict(
+  w: { damageRatio: number; dangerScore: number; dangerLabel: string },
+  logRatio: number,
+): { kind?: string; logLabel: string } {
+  const logLabel = dangerLabel((w.dangerScore / w.damageRatio) * logRatio);
+  if (logLabel !== w.dangerLabel)
+    return {
+      kind:
+        LABEL_RANK.indexOf(w.dangerLabel) < LABEL_RANK.indexOf(logLabel)
+          ? "label reads low"
+          : "label reads high",
+      logLabel,
+    };
+  return Math.abs(logRatio - w.damageRatio) <=
+    Math.max(logRatio, w.damageRatio) * RATIO_TOLERANCE
+    ? { logLabel }
+    : { kind: "ratio off, same label", logLabel };
+}
+
 /** the ms of [fromMs, toMs] `unit` spent under a control aura, as its rows
  * say: APPLIED / REFRESH opens a run, anything else of that aura closes it,
  * a run still open at `toMs` is closed there */
 export function controlledMs(unit: any, fromMs: number, toMs: number): number {
   const open = new Map<string, number>();
   const spans: Array<[number, number]> = [];
+  // a BROKEN row its aura's own REMOVED follows is not the end — the
+  // product's predicate, the same set (`supersededAuraBreaks`, FT-T08; codex
+  // 85-tk-G-T91-1b #2: Polymorph broken at 99.90 s and removed at 99.94 s
+  // read 80 % against the engine's 88 %)
+  const notTheEnd = supersededAuraBreaks((unit.auraEvents ?? []) as never);
   for (const a of (unit.auraEvents ?? []) as any[]) {
     const id = String(a.spellId);
-    if (!ccSpellIds.has(id)) continue;
+    if (!ccSpellIds.has(id) || notTheEnd.has(a)) continue;
     const t = tsOf(a);
     if (ev(a) === APPLIED || ev(a) === REFRESH) {
       if (!open.has(id)) open.set(id, t);
@@ -183,21 +214,11 @@ export function run(ctx: IRoundCtx): void {
       BURST_DAMAGE_RATIO_MAX,
       Math.max(inSpan / shownS / avgRate, BURST_DAMAGE_RATIO_MIN),
     );
-    if (
-      Math.abs(logRatio - w.damageRatio) <=
-      Math.max(logRatio, w.damageRatio) * RATIO_TOLERANCE
-    )
-      continue;
-    const logLabel = dangerLabel((w.dangerScore / w.damageRatio) * logRatio);
-    const low =
-      LABEL_RANK.indexOf(w.dangerLabel) < LABEL_RANK.indexOf(logLabel);
+    const { kind, logLabel } = rateVerdict(w, logRatio);
+    if (!kind) continue;
     ctx.violate(
       "burstRatePastSliceEnd",
-      logLabel === w.dangerLabel
-        ? "ratio off, same label"
-        : low
-          ? "label reads low"
-          : "label reads high",
+      kind,
       at,
       id,
       `${span}: ratio ${w.damageRatio.toFixed(2)} [${w.dangerLabel}], over the ${shownS.toFixed(1)} s the log shows ${logRatio.toFixed(2)} [${logLabel}]`,

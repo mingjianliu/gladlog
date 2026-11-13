@@ -19,7 +19,12 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "../../analysis/test/ported/testHelpers";
-import { controlledMs, run, sideDamage } from "../scripts/scan5/t91";
+import {
+  controlledMs,
+  rateVerdict,
+  run,
+  sideDamage,
+} from "../scripts/scan5/t91";
 
 const START = 1_700_000_000_000;
 const at = (s: number) => START + Math.round(s * 1000);
@@ -140,6 +145,48 @@ describe("scan5/t91 burstHealerCcPastSliceEnd", () => {
     // 2–8 s cut to 5–8, then 18–20 still open
     expect(controlledMs(u, at(5), at(20))).toBe(5000);
     expect(controlledMs(u, at(9), at(17))).toBe(0);
+  });
+
+  it("a BROKEN row its aura's REMOVED follows does not end the run (codex 85-tk-G-T91-1b #2)", () => {
+    const row = (event: LogEvent, s: number) =>
+      makeAuraEvent(event, "118", at(s), "enemy-1", "player-1");
+    const u = {
+      auraEvents: [
+        row(LogEvent.SPELL_AURA_APPLIED, 99.5),
+        row(LogEvent.SPELL_AURA_BROKEN_SPELL, 99.9),
+        row(LogEvent.SPELL_AURA_REMOVED, 99.94),
+      ],
+    };
+    expect(controlledMs(u, at(99.5), at(100))).toBe(440);
+  });
+
+  it("a label the log's ratio moves is reported inside the ratio tolerance too (codex 85-tk-G-T91-1b #1)", () => {
+    // score 4.01 (High) on a ratio the product read 1 % low: 3.97, Moderate
+    const high = rateVerdict(
+      { damageRatio: 0.99, dangerScore: 3.9699, dangerLabel: "Moderate" },
+      1,
+    );
+    expect(high).toEqual({ kind: "label reads low", logLabel: "High" });
+    // …and 1 % high the other way
+    expect(
+      rateVerdict(
+        { damageRatio: 1.01, dangerScore: 4.02, dangerLabel: "High" },
+        1,
+      ).kind,
+    ).toBe("label reads high");
+    // a hair off with the label standing is nothing; past 2 % it is
+    expect(
+      rateVerdict(
+        { damageRatio: 0.99, dangerScore: 5, dangerLabel: "High" },
+        1,
+      ).kind,
+    ).toBeUndefined();
+    expect(
+      rateVerdict(
+        { damageRatio: 0.9, dangerScore: 5, dangerLabel: "High" },
+        1,
+      ).kind,
+    ).toBe("ratio off, same label");
   });
 
   it("a healer stunned through all the slice shows of the window: counted, the score's share is the log's", () => {
