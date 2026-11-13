@@ -1172,5 +1172,10 @@
  *  [ROT PRESSURE] counts DoTs whose ticks missed; a channel pressed under
  *  one id and carried by another (Lightning Lasso) occupies the caster.
  *  T96 is scan only. See docs/prompt-version-history.md.
+ *
+ * v537 (2026-11-13; pipeline batch B49, T93): no prompt text change — the
+ *  pipeline numbers every batch. Desktop only: opening a match commits a
+ *  frame first and fills the report in stages. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 536;
+export const PROMPT_VERSION = 537;

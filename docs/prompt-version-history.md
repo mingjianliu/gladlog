@@ -6323,3 +6323,15 @@ channelled id of the same name (Lightning Lasso: pressed 305483, channelled
 305485). 605: channelUnderAnotherId 203 of 203 presses with no span -> 0;
 0 context lines differ; one missed-cleanse row changes in place
 (ownerCastingS 1.3 -> 2.0, ownerCastingSpells gains Lightning Lasso).
+
+v537 (2026-11-13; pipeline batch B49, T93). No prompt text change. Desktop
+only: opening another match commits a frame first and fills the report in
+stages, with per-open stage marks written to main.log; a source whose derive
+results were evicted from the two-source cache starts its fill from the
+beginning again (the completed mark lives in the cache entry). Electron
+probe on the built app at 77678597a, 5 matches x 5 launches: report on
+screen 615-2603 ms -> frame committed 67-357 ms, first content painted
+196-798 ms, settled 637-2627 ms -> 466-1721 ms; longest task 346-1342 ms ->
+129-453 ms. The two later commits (revisited shuffle round R1 -> R2 -> R3 ->
+R1: 6 synchronous derives -> 0) are covered by unit tests, not by a probe
+run.
