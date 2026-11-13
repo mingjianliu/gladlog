@@ -659,12 +659,12 @@ describe("computeUnusedSelfCounterfactuals(窄门)", () => {
     expect(hits[0].source).toBe("unused-self");
   });
 
-  test("a replaced button is priced as the holder's own spell: Ice Cold's 70 %, not Ice Block's immunity (T61, codex 85-tk-G-T61-2b #1)", () => {
-    const mk = (iceCold: boolean) =>
+  test("a replaced button is read as the holder's own spell: Ice Cold is no immunity, and its 6 s cover is not priced over the window (T61, codex 85-tk-G-T61-2b #1, 2c #1)", () => {
+    const mk = (iceCold: boolean, hits = [{ atS: 55, amount: 80_000, school: "0x1" }]) =>
       Object.assign(
         mkVictim(
           iceCold ? "vc" : "vb",
-          [{ atS: 55, amount: 80_000, school: "0x1" }],
+          hits,
           [],
           [
             { atS: 50, hp: 60_000, maxHp: 100_000 },
@@ -698,8 +698,16 @@ describe("computeUnusedSelfCounterfactuals(窄门)", () => {
     expect(block.map((h) => [h.spellName, h.savedAmount])).toEqual([
       ["Ice Block", 80_000],
     ]);
-    // Ice Cold: 56k of it — short of the decisive line, no claim
+    // Ice Cold: no immunity claim
     expect(hitsOf(mk(true))).toEqual([]);
+    // …and no claim from 70 % of every hit in the window either: two 60k
+    // hits 9 s apart are not both under one 6 s press (84k "decisive"
+    // before 2c #1; one press covers one hit, 42k)
+    const twoHits = [
+      { atS: 50.5, amount: 60_000, school: "0x1" },
+      { atS: 59.5, amount: 60_000, school: "0x1" },
+    ];
+    expect(hitsOf(mk(true, twoHits))).toEqual([]);
   });
 
   test("a row owned on the spec baseline alone is never priced (Fable review of F-W6, round 8; ruling P-W6)", () => {

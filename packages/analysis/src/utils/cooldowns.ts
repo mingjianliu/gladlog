@@ -2903,7 +2903,14 @@ export interface IAvailableWindow {
 
 export interface IMajorCooldownInfo {
   spellId: string;
+  /** The English name of the holder's own button: the listed spell's, or —
+   * with `kitSpellId` — the spell a talent turned it into (T61). */
   spellName: string;
+  /** T61: the pressable spell a talent of the holder's replaced this row's
+   * button with (`kitSpellIdOf`: Ice Cold 414658 on the Ice Block row). The
+   * row's id, cooldown and presses stay the replaced button's; its name,
+   * length and mitigation row are this spell's. Absent when not replaced. */
+  kitSpellId?: string;
   tag: string;
   cooldownSeconds: number;
   /** Observed maximum charge count. >1 when casts occur faster than a single charge allows (e.g. double Pain Suppression via PvP talent). */
@@ -4122,9 +4129,12 @@ export function talentReplacementsOf(unit: ICombatUnit): {
  * span read (`unusedKitRows`), scan5/t16's name join.
  */
 export function kitSpellIdOf(
-  cd: Pick<IMajorCooldownInfo, "spellId" | "spellName">,
+  cd: Pick<IMajorCooldownInfo, "spellId" | "spellName" | "kitSpellId">,
   caster?: ICombatUnit,
 ): string {
+  // a ledger row already knows (and its name is already the kit's, so the
+  // name test below would read it as not replaced)
+  if (cd.kitSpellId) return cd.kitSpellId;
   const as = caster
     ? talentReplacementsOf(caster).pressedAs.get(cd.spellId)
     : undefined;
@@ -4137,7 +4147,7 @@ export function kitSpellIdOf(
 /** The name `kitSpellIdOf`'s spell prints under — the row's own when the
  * button is not replaced. */
 export function kitSpellNameOf(
-  cd: Pick<IMajorCooldownInfo, "spellId" | "spellName">,
+  cd: Pick<IMajorCooldownInfo, "spellId" | "spellName" | "kitSpellId">,
   caster?: ICombatUnit,
 ): string {
   const id = kitSpellIdOf(cd, caster);
@@ -6848,10 +6858,24 @@ function buildCooldownEntry(
     if (from !== undefined) pushWindow(from, matchDurationSeconds);
   }
 
+  const kitId = kitSpellIdOf(
+    { spellId: spell.spellId, spellName: spell.name },
+    unit,
+  );
+  const kitName =
+    kitId === spell.spellId
+      ? spell.name
+      : getEnglishSpellName(kitId, spell.name);
   return [
     {
       spellId: spell.spellId,
-      spellName: spell.name,
+      // the holder's own button (T61): a row a talent turned into another
+      // pressable spell carries that spell's name, so every reader of the
+      // row names it as the holder's kit does — not only the ones that ask
+      // `kitSpellNameOf` (codex 85-tk-G-T61-2c #2: `readyCds=Ice Cold`
+      // beside `pressedLate=Ice Block`, and four more rendered readers)
+      spellName: kitName,
+      ...(kitId !== spell.spellId ? { kitSpellId: kitId } : {}),
       tag: spell.tags[0] as string,
       cooldownSeconds,
       maxChargesDetected,

@@ -127,9 +127,14 @@ describe("TALENT_REPLACES_GENERATED (official TraitDefinition.OverridesSpellID)"
       } as any,
     });
     const cds = extractMajorCooldowns(owner, combatOf(owner));
-    const iceBlock = cds.find((c) => c.spellName === "Ice Block");
+    // the row stays Ice Block's (id, cooldown, presses) and is named as the
+    // holder's own button (T61: one name for every reader of the row)
+    const iceBlock = cds.find((c) => c.spellId === "45438");
     expect(iceBlock, "official override lists Ice Cold → Ice Block, but pressedAs owns the pair").toBeDefined();
     expect(iceBlock?.casts).toHaveLength(1);
+    expect(iceBlock?.spellName).toBe("Ice Cold");
+    expect(iceBlock?.kitSpellId).toBe("414658");
+    expect(cds.some((c) => c.spellName === "Ice Block")).toBe(false);
   });
 });
 

@@ -874,6 +874,8 @@ function decisiveHitFor(
  * The two walls signed on 2026-09-26 stay out until coverage is modelled:
  *  - Greater Invisibility 110959: −60 % only while invisible and for 3 s after;
  *  - Retribution Divine Protection 403876: 8 s.
+ * Ice Cold 414658 (6 s) joined on 2026-11-13 under the same rule: it became a
+ * wall of its own with T61, so it is a new wall, not one priced before.
  * They still count for the cooldown ledger, crisis readiness and burst pricing.
  * The walls priced before that date keep the old model; the duration clip is
  * ledgered (GH #109) rather than silently extended to the new walls.
@@ -881,6 +883,10 @@ function decisiveHitFor(
 export const UNUSED_SELF_COVERAGE_UNMODELLED: ReadonlySet<string> = new Set([
   "110959",
   "403876",
+  // Ice Cold (T61, the holder's own effect id — `kitSpellIdOf`): −70 % for
+  // 6 s. Two 60k hits 9 s apart were both discounted: 84k "decisive" where
+  // one press covers one hit, 42k (codex 85-tk-G-T61-2c #1)
+  "414658",
 ]);
 
 /**
