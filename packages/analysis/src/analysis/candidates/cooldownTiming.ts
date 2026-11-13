@@ -826,7 +826,9 @@ export function timelinePressMsOf(
  *  scan5/fact10 `pressInsideLockNotEntered` asks it of the buttons it rules
  *  on, T94). */
 export function castEntersWindow(
-  cd: Pick<SyncWindowCd, "spellId" | "owner" | "matchStartMs" | "castEndS">,
+  cd: Pick<SyncWindowCd, "spellId" | "owner" | "matchStartMs" | "castEndS"> & {
+    casts: readonly { timeSeconds: number }[];
+  },
   c: { timeSeconds: number },
   w: { fromSeconds: number; toSeconds: number },
 ): boolean {

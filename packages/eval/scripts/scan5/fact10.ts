@@ -302,6 +302,10 @@ export function syncRowPressEnters(
      *  ended before the lock began did not enter it, whatever its nominal
      *  length (codex 85-tk-I-T94-1b #3) */
     castEndS?: ReadonlyMap<number, number>;
+    /** the holder's presses of the spell, in seconds — the producer pairs
+     *  a press with its timeline entry among them (`timelinePressMsOf`);
+     *  absent = this press alone */
+    casts?: readonly { timeSeconds: number }[];
   },
   matchStartMs: number,
   row: { t: number; endT: number; healer?: string },
@@ -316,6 +320,7 @@ export function syncRowPressEnters(
       spellId: press.spellId,
       owner: press.owner,
       matchStartMs,
+      casts: press.casts ?? [{ timeSeconds: press.timeSeconds }],
       ...(press.castEndS ? { castEndS: press.castEndS } : {}),
     },
     { timeSeconds: press.timeSeconds },
@@ -399,6 +404,9 @@ export function run(ctx: IRoundCtx): void {
               owner: u,
               timeSeconds: (t - ctx.start) / 1000,
               castEndS: castEndSOf(u, id),
+              casts: ((u.spellCastEvents ?? []) as any[])
+                .filter((x) => ev(x) === SUCCESS && String(x.spellId) === id)
+                .map((x) => ({ timeSeconds: (tsOf(x) - ctx.start) / 1000 })),
             },
             ctx.start,
             row,
