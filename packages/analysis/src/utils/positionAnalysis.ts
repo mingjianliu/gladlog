@@ -897,10 +897,16 @@ export function computeOwnerPositionEvents(params: {
   const rootInstances:
     Array<{ atSeconds: number; durationSeconds: number }> | undefined =
     ownerCCSummary?.rootInstances && owner.auraEvents
-      ? rootIntervalsOf(owner, combat).map((iv) => ({
-          atSeconds: iv.fromS,
-          durationSeconds: iv.toS - iv.fromS,
-        }))
+      ? // cut at the round's end, as the summary's are: `rootIntervalsOf`
+        // runs to the LOG's end, ~2 s past a Solo Shuffle round's (codex
+        // 85-tk-H-T44-1 #1: a root with no REMOVED read 5.3 s of a span the
+        // round left 4.6 s of, and crossed the skip rule's half)
+        rootIntervalsOf(owner, combat)
+          .filter((iv) => iv.fromS < durationSeconds)
+          .map((iv) => ({
+            atSeconds: iv.fromS,
+            durationSeconds: Math.min(iv.toS, durationSeconds) - iv.fromS,
+          }))
       : ownerCCSummary?.rootInstances;
   // The owner's OWN all-school immunities (`isOwnImmunityInterval`).
   // (bare fixtures carry no aura stream)

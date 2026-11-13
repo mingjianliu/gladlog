@@ -10,7 +10,7 @@
  *    own predicate;
  *  - position F-S5: how long of the span the owner could not cast.
  */
- 
+
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
@@ -287,8 +287,54 @@ describe("STAYED IN: CC / root seconds and the skip rule (F-S2)", () => {
     expect(stayed(run(o, [o]))[0]!.ownerRootSeconds).toBeUndefined();
   });
 
+  it("T44 (codex 85-tk-H-T44-1 #1): a root the log never closes is counted to the round's end, not the log's", () => {
+    const o = OWNER();
+    o.auraEvents = [
+      {
+        spellId: "122",
+        spellName: "Frost Nova",
+        srcUnitId: "e1",
+        srcUnitName: "Dk-R-US",
+        destUnitId: "o",
+        destUnitName: "Owner-R-US",
+        auraType: "DEBUFF",
+        timestamp: T0 + 15_500,
+        logLine: { event: "SPELL_AURA_APPLIED", timestamp: T0 + 15_500 },
+      },
+    ];
+    const dead = {
+      ...MATE(),
+      info: {},
+      deathRecords: [{ timestamp: T0 + 20_100 }],
+    };
+    const rootS = (combat: Record<string, unknown>) =>
+      stayed(
+        run(o, [o], {
+          combat,
+          burstWindows: [burst(10.8, 20.8)],
+          ownerCCSummary: { ccInstances: [], rootInstances: [] },
+        }),
+      )[0]?.ownerRootSeconds;
+    // the log runs to 22.1 s; a Solo Shuffle round is over at the 20.1 s
+    // death: 4.6 s of root, under half the span — counted to the log's end
+    // it read 5.3 s and the skip rule dropped the line
+    const shuffle = {
+      startTime: T0,
+      endTime: T0 + 22_100,
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      units: { m: dead },
+    };
+    expect(rootS(shuffle)).toBeCloseTo(4.6, 6);
+  });
+
   it("WO3 #15: an enemy snare (DB2 mechanic snared) is carried as its own seconds; a friendly one or an unknown stream is not", () => {
-    const aura = (event: string, s: number, src: string, srcName: string, spellId = "1715") => ({
+    const aura = (
+      event: string,
+      s: number,
+      src: string,
+      srcName: string,
+      spellId = "1715",
+    ) => ({
       spellId,
       spellName: "Hamstring",
       srcUnitId: src,

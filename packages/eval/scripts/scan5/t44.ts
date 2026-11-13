@@ -6,8 +6,10 @@
  * (`ROOT_SPELL_IDS` / `ROOT_DR_IDS`, table lookups).
  *
  *  - `stayedInRootUnder`: the owner carried a movement root — an aura of
- *    the root DR class, or any other root aura another unit applied — for
- *    more of the span than the line says: the merged root time inside the
+ *    the root DR class, or any other root aura another unit applied, from
+ *    its APPLIED row to its REMOVED / BROKEN row (a run the log never
+ *    closes is not judged), never past the round's end — for more of the
+ *    span than the line says: the merged root time inside the
  *    seconds wholly inside the printed span (the line prints whole seconds,
  *    the producer reads the span's own bounds) is over the printed `rooted
  *    Ns` (0 when the line has none, under 1 for `<1`) by more than half a
@@ -18,6 +20,7 @@ import {
   ROOT_DR_IDS,
   ROOT_SPELL_IDS,
 } from "@gladlog/analysis/src/data/rootSpells";
+import { LogEvent } from "@gladlog/parser-compat";
 
 import {
   APPLIED,
@@ -34,6 +37,11 @@ export const CHECKS = ["stayedInRootUnder"] as const;
 const HEADER = /^ {2}STAYED IN during enemy burst/;
 const LINE = /^ {4}(\d+:\d{2})–(\d+:\d{2}) \[[^\]]+\] .*/;
 const ROOTED = / — rooted (<1|\d+)s/;
+const ENDS = new Set<string>([
+  REMOVED,
+  LogEvent.SPELL_AURA_BROKEN,
+  LogEvent.SPELL_AURA_BROKEN_SPELL,
+]);
 
 export function run(ctx: IRoundCtx): void {
   const C = "stayedInRootUnder";
@@ -45,16 +53,21 @@ export function run(ctx: IRoundCtx): void {
     const id = String(a.spellId ?? "");
     if (ev(a) !== APPLIED || !ROOT_SPELL_IDS.has(id)) return;
     if (!ROOT_DR_IDS.has(id) && a.srcUnitId === ctx.owner.id) return;
+    // its end is the row that took it off: its REMOVED, or the row of the
+    // hit that broke it. A run the log never closes has no end on the rows
+    // (the producer caps it at the aura's length) and is not judged (codex
+    // 85-tk-H-T44-1 #2)
     const rm = auras.find(
       (b, j) =>
         j > i &&
-        ev(b) === REMOVED &&
+        ENDS.has(ev(b)) &&
         b.spellId === a.spellId &&
         b.srcUnitId === a.srcUnitId,
     );
+    if (!rm) return;
     runs.push({
       from: tsOf(a),
-      to: rm ? tsOf(rm) : ctx.end,
+      to: Math.min(tsOf(rm), ctx.roundEndAt),
       name: nameOf(id, a.spellName),
     });
   });
