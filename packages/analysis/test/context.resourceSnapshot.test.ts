@@ -1110,4 +1110,45 @@ describe("T55 — a kit range's low end is the return the model gives the press"
     // reads 115 and 110
     expect(text).toContain("Sprint [105–120s");
   });
+  it("a return a hair under a whole second is that second (codex 85-tk-G-T55-1d: 50.99999999999999 printed 50)", () => {
+    const owner = makeUnit("player-1", { name: "Player1" });
+    const rogue = makeUnit("enemy-1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Outlaw,
+    });
+    const text = buildPlayerLoadout(
+      owner,
+      "Holy Priest",
+      [],
+      [],
+      { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
+      [rogue],
+      [
+        {
+          player: rogue,
+          cds: [
+            {
+              spellId: "2983",
+              spellName: "Sprint",
+              cooldownSeconds: 60,
+              maxChargesDetected: 1,
+              casts: [
+                // 7da6cb8d r1's shape: a 60 s cooldown with nine 1 s
+                // reductions, 51 s exactly — the ledger's realised return
+                // for the press is 50.99999999999999 in floats
+                {
+                  timeSeconds: 62.016,
+                  reductions: [{ atSeconds: 70, seconds: 9 }],
+                  cooldownSecondsOverride: 50.99999999999999,
+                  freeRecastUntil: 65,
+                },
+              ],
+              neverUsed: false,
+            } as unknown as IMajorCooldownInfo,
+          ],
+        },
+      ],
+    ).text;
+expect(text).toContain("Sprint [51–60s");
+  });
 });

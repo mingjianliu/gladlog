@@ -60,6 +60,10 @@ import { resCcRemainingText } from "./resLedgerPrune";
 
 // F169: number of friendly units with an active Atonement (194384) at a given time. Disc Priest
 // healing scales with Atonement count, so this is a core throughput signal for the spec.
+/** Float error of a seconds sum, far under any duration the log can state
+ * (its rows carry milliseconds): added before a floor to whole seconds. */
+const SECONDS_FLOAT_NOISE = 1e-6;
+
 export function countActiveAtonements(
   friends: (ICombatUnit | undefined)[],
   atMs: number,
@@ -353,13 +357,17 @@ export function buildPlayerLoadout(
         .map((c) => cdRealisedSecondsUntilReady(spending, c.timeSeconds))
         .filter((left) => left > 0),
     );
+    // whole seconds, a float's hair under one read as that second: nine
+    // 1 s reductions off 60 s are 51 s and arrive as 50.99999999999999
+    // (codex 85-tk-G-T55-1d: four Deep Breath ranges on the 605 printed a
+    // second low). A real fraction still floors.
     const soonest = Math.floor(
       Math.min(
         cd.earliestCooldownSeconds ?? cd.cooldownSeconds,
         cd.cooldownSeconds - eventShortest,
         rateShortest,
         realisedShortest,
-      ),
+      ) + SECONDS_FLOAT_NOISE,
     );
     if (soonest < cd.cooldownSeconds) {
       shortenedPrinted = true;
