@@ -6235,3 +6235,29 @@ gained. (6) T78 — a player logged under a bare and a realm name form
 carries the realm form on the unit and every converted row (3 of 7,040
 player-rounds; 93 lines replaced one for one); candidate rows 0. (7) T58 —
 scan only: resEnemyEffectAfterDeath 2 rows -> 0.
+
+v533 (2026-11-13; pipeline batch B45, T85 + T86 + T90). (1) T85 — every
+wide-corpus row of 12 scan checks and 2 gates read against the raw log.
+Check artefacts fixed in the checks (they call the producer's own
+selection). Product defects fixed at the predicate: exposure / root lines
+merged into the timeline after it was built skipped the round-end cut; a
+press logged under an override-variant id lost its `[IMMUNE — …]` tag; an
+Evoker hold that was cut (EMPOWER_START with no END, started again inside
+the max hold) was charged a cooldown and a [PRESS] line; an aura re-listed
+by a resync batch printed as a second `(no press)` use; a log inside the
+14 h zone-uncertainty window before the 12.1.5 go-live reads as 12.1.0
+(`ILogDated.zoneBandTakes`). Wide subset: intoDefenseLanded 18 -> 0,
+externalAbsorbedPets 12 -> 0, enemyExternalForward 12 -> 0,
+sanctuaryKillAttempt 9 -> 0, channelOutlived 5 -> 0,
+defenselessImmunityInHand 6 -> 0. 605: 1 of 3,519 findings files differs
+(one kick-eaten row lost a phantom `enemyBurst=Combustion (no press)` fact
+and another kick of the round took its place under the cap). (2) T86 —
+SPELL_CATEGORIES registers Void Shield 1300008 / 1300009 and Chi Cocoon
+406139 as buffs_defensive (1246768 stays out, ruling R24). 605: [ENEMY
+PURGE] +6 lines, 6 [MINOR DISPELS] lines rewritten; candidate rows 0. (3) T90
+— dated game rules are asked with the instant the log states
+(`statedStartTime`, `logClockOffsetMs`), not the parsing machine's reading
+of it; a stated instant less than 45 min after a cutover reads the rule's
+band side (a half-hour zone writes whole hours). 1,333 archives: every one
+of 89,648,576 lines states a UTC offset; of 134 match-cutover pairs near a
+cutover, 125 change from since to before; candidate rows 0 on 605.

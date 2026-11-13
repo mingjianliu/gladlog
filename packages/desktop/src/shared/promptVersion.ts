@@ -1142,5 +1142,13 @@
  *  the death mitigation audit knows the whole Power Word: Shield family; a
  *  player logged under two name forms carries the realm form. T58 is scan
  *  only. See docs/prompt-version-history.md.
+ *
+ * v533 (2026-11-13; pipeline batch B45, T85 + T86 + T90): four wide-only
+ *  product defects (lines merged after the round end, a lost [IMMUNE] tag
+ *  on an override-variant press, a cut Evoker hold charged a cooldown, a
+ *  resync re-listing printed as a second `(no press)` use); the purge table
+ *  registers the other Void Shield / Chi Cocoon forms; dated game rules are
+ *  asked with the instant the log states. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 532;
+export const PROMPT_VERSION = 533;
