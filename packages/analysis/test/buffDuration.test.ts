@@ -342,6 +342,13 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(talentOwnershipOf(unresolved, "1241511")).not.toBe("no");
     expect(buffFullDurationForCaster("31884", unresolved)).toBeCloseTo(30);
     expect(buffFullDurationForCaster("216331", unresolved)).toBeCloseTo(22.5);
+    // codex 85-tk-H-T89-1b: with nothing known to keep, an unreadable
+    // shortening still falls back — Envenom's length without its combo
+    // points stays unknown, never 0 s
+    const rogue = makeUnit("r-envenom", {
+      spec: CombatUnitSpec.Rogue_Assassination,
+    });
+    expect(buffFullDurationForCaster("32645", rogue)).toBeUndefined();
   });
 
   it("多级天赋:按**语料实际观测到的级数**复现观测时长", () => {

@@ -283,6 +283,8 @@ function talentedDuration(
   if (paramBase !== null) seconds = paramBase;
 
   let mult = 1;
+  /** a talent row of this caster has been read and applied */
+  let applied = false;
   for (const m of mods) {
     if (m.talentSpellId === undefined) continue; // pure spec-base row
     // Spec gate first: a modifier for another spec must not even reach the
@@ -305,13 +307,16 @@ function talentedDuration(
     // the typical caster value this call site got before the talent layer.
     if (rank <= 0) {
       // …except for a talent that only SHORTENS the aura (Call of the
-      // Righteous): the typical-caster value is no reading of it, and
-      // falling back would throw away the modifiers this caster is known to
-      // hold (codex 85-tk-H-T89-1: Sanctified Wrath read, one other node
+      // Righteous), met after a modifier this caster is KNOWN to hold has
+      // already been applied: falling back there would throw that one away
+      // (codex 85-tk-H-T89-1: Sanctified Wrath read, one other node
       // unresolved — Avenging Wrath 30 s read 20 s, a length no rank of
-      // either talent gives). Unreadable, it is left out: the aura keeps
-      // the length it had before the row existed.
-      if ((m.addSeconds ?? 0) < 0 || (m.pct ?? 0) < 0) continue;
+      // either talent gives). Unreadable, the shortening is left out: the
+      // aura keeps the length it had before the row existed. With nothing
+      // applied yet the fallback stands as before (codex 85-tk-H-T89-1b:
+      // Envenom, whose base is its combo points — skipping there read 0 s
+      // where the length is unknown).
+      if (applied && ((m.addSeconds ?? 0) < 0 || (m.pct ?? 0) < 0)) continue;
       const fallback = paramBase ?? specBase ?? noCasterValue;
       // the gear is read whatever the talents are: a per-press set bonus
       // still walks on the fallback (codex B25 #1)
@@ -325,6 +330,7 @@ function talentedDuration(
     if (m.replaceSeconds !== undefined) return m.replaceSeconds;
     if (m.addSeconds !== undefined) seconds += m.addSeconds * rank;
     if (m.pct !== undefined) mult *= 1 + (m.pct / 100) * rank;
+    applied = true;
   }
   const fixed = seconds * mult;
   return (
