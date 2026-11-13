@@ -75,6 +75,9 @@ export default function App({
   // renders)
   const docRef = useRef<any | null>(null);
   docRef.current = doc;
+  // counts selections: what a round request was asked under
+  const openEpoch = useRef(0);
+  const roundsInFlight = useRef(new Map<string, { trace: OpenTraceToken }>());
   const [hasMore, setHasMore] = useState(true);
   const [filter, setFilter] = useState<ListFilter>(EMPTY_FILTER);
   // Batch-selection checkmarks (meta ids; a shuffle id selects the whole
@@ -205,6 +208,13 @@ export default function App({
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
   useEffect(() => {
+    // a new selection: answers to round requests of the one before are not
+    // of this doc, even for the same match selected again (codex
+    // 85-tk-G-T93-1e: a round asked before A -> B -> A answered after A's
+    // fresh doc and wrote the stale, empty doc over it)
+    openEpoch.current++;
+    roundsInFlight.current = new Map();
+    docRef.current = null;
     if (selectedId) {
       setDoc(null);
       setIsLoading(true);
@@ -219,6 +229,8 @@ export default function App({
         // trace, so it ends here (codex #3)
         if (d == null) cancelOpen(trace);
         else openDocArrived(trace);
+        // the round loaders read it before the next render
+        docRef.current = d;
         setDoc(d);
         setDocId(selectedId);
         setIsLoading(false);
@@ -254,11 +266,13 @@ export default function App({
   // null (stale sidecar) falls back to a whole-doc re-open.
   // One request per round at a time, traced as the latest click's open
   // (`openOnce`, codex 85-tk-G-T93-1b #1).
-  const roundsInFlight = useRef(new Map<string, { trace: OpenTraceToken }>());
   const loadRound = useCallback((roundIndex: number) => {
     const id = selectedIdRef.current;
     if (!id) return;
     if (!canOpenRound()) return;
+    const epoch = openEpoch.current;
+    const current = () =>
+      selectedIdRef.current === id && openEpoch.current === epoch;
     openOnce(
       roundsInFlight.current,
       `${id}#${roundIndex}`,
@@ -267,7 +281,7 @@ export default function App({
       (round, t, failed) => {
         // a loader that threw, or the selection moved off this match:
         // nothing of it is drawn, the trace ends here
-        if (failed || selectedIdRef.current !== id) {
+        if (failed || !current()) {
           cancelOpen(t);
           return;
         }
@@ -276,6 +290,11 @@ export default function App({
         // the object the doc ends up holding at its index — this answer's,
         // or one an earlier whole-doc fallback already put there (codex 1d)
         const accept = (next: any) => {
+          // no doc to put rounds into: nothing to draw
+          if (next == null) {
+            cancelOpen(t);
+            return;
+          }
           docRef.current = next;
           openRoundsArrived(id, next?.data?.rounds, t);
           // this request's own open, if its round did not come with it
@@ -291,7 +310,7 @@ export default function App({
           void openWholeDoc(id)
             .catch(() => null)
             .then((full) => {
-              if (selectedIdRef.current !== id || !full) cancelOpen(t);
+              if (!current() || !full) cancelOpen(t);
               else accept(keepLoadedRounds(docRef.current, full));
             });
           return;
