@@ -796,10 +796,19 @@ function observedEffectEnd(
         best.auraId === castSpellId
           ? undefined
           : buffFullDurationForCaster(best.auraId, caster);
-      if (auraFull !== undefined) {
-        const appliedS = pressAppliedS(best);
+      // …and only to lengthen: an effect aura shorter than the cast's own
+      // length is a side effect of the press, not its span (codex
+      // 85-tk-G-T41-1 #1: Summon Infernal's 30 s read as its 2 s landing
+      // stun's when the stun's REMOVED fell after the slice's end)
+      const castFull = buffFullDurationForCaster(castSpellId, caster);
+      const appliedS = pressAppliedS(best);
+      if (
+        auraFull !== undefined &&
+        (castFull === undefined ||
+          Math.max(combatEndS, appliedS + auraFull) >
+            Math.max(combatEndS, castS + castFull))
+      ) {
         if (out && appliedS + auraFull > combatEndS) {
-          const castFull = buffFullDurationForCaster(castSpellId, caster);
           // …where the chain read as ending before: at the clamp when a
           // side aura's REMOVED hid it, else the cast's own official end
           // (never before the slice's end). A cast with no length of its
@@ -816,14 +825,14 @@ function observedEffectEnd(
           appliedS,
         };
       }
-      const full = buffFullDurationForCaster(castSpellId, caster);
+      const full = castFull;
       if (out && sideClosedInside) out.windowEndS = combatEndS;
       return full !== undefined && castS + full < combatEndS
         ? {
             endS: combatEndS,
             holderId: best.destId,
             auraId: best.auraId,
-            appliedS: pressAppliedS(best),
+            appliedS,
           }
         : null;
     }
@@ -1795,6 +1804,16 @@ function reconstructEnemyCDTimelineUncached(
               enemy,
               getEnglishSpellName(o.spellId, o.spellName),
             );
+      // …unless its holder died by then: the slice ends on that death and
+      // the aura's REMOVED is logged in the cascade just past it — the
+      // effect is over (codex 85-tk-G-T41-1 #2: a Metamorphosis whose
+      // holder died on the slice's last row read `14s left` on the death's
+      // own row)
+      const upAtSliceEnd =
+        !o.endObserved &&
+        o.officialEndMs !== undefined &&
+        o.endMs >= combat.endTime - 1 &&
+        !(firstDeathMs(enemy) <= combat.endTime + DEATH_CASCADE_MS);
       (o.burstRole === "fact" ? offensiveFacts : offensiveCDs).push({
         ...cut,
         spellId: o.spellId,
@@ -1812,17 +1831,10 @@ function reconstructEnemyCDTimelineUncached(
         // clamp guard, F15) — T41, 52a97230 r0: Metamorphosis up at 0:32.9,
         // the slice over at 0:35.7, `3s left` at 0:33 against 24 s
         buffEndSeconds:
-          ((!o.endObserved &&
-          o.officialEndMs !== undefined &&
-          o.endMs >= combat.endTime - 1
-            ? Math.max(o.endMs, o.officialEndMs)
-            : o.endMs) -
+          ((upAtSliceEnd ? Math.max(o.endMs, o.officialEndMs!) : o.endMs) -
             matchStartMs) /
           1000,
-        ...(!o.endObserved &&
-        o.officialEndMs !== undefined &&
-        o.endMs >= combat.endTime - 1 &&
-        o.officialEndMs > o.endMs
+        ...(upAtSliceEnd && o.officialEndMs! > o.endMs
           ? { windowEndSeconds: (o.endMs - matchStartMs) / 1000 }
           : {}),
         dangerWeight: o.dangerWeight,

@@ -82,11 +82,14 @@ export function aurasUpAtLogEnd(
     if (!String(u.id).startsWith("Player-")) continue;
     const open = new Map<string, IOpenAura>();
     for (const a of (u.auraEvents ?? []) as any[]) {
-      if (a.srcUnitId !== holder.id) continue;
+      const e = ev(a);
+      // a REMOVED the log wrote with no source closes the open run too, as
+      // the product's interval builder pairs it (codex 85-tk-G-T41-1 #3)
+      const sourceless = !a.srcUnitId || /^0+$/.test(String(a.srcUnitId));
+      if (a.srcUnitId !== holder.id && !(e === REMOVED && sourceless)) continue;
       const id = String(a.spellId);
       if (nameOf(id, a.spellName) !== name) continue;
       const t = tsOf(a);
-      const e = ev(a);
       if (e === APPLIED || e === REFRESH) {
         if (t > endMs) continue;
         const o = open.get(id);

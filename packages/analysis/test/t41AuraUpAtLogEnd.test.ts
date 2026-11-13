@@ -124,8 +124,13 @@ describe("T41 — an effect still up at the slice's end runs to its own end", ()
     // 605 s0/34-2: Incarnation: Avatar of Ashamane 102543 up at 104.21 s
     // with its same-named side aura 252071 (off at 104.43 s); the slice
     // ends at 121.34 s and 102543's own REMOVED is logged at 124.21 s
-    const row = (event: LogEvent, id: string, s: number) =>
-      makeAuraEvent(event, id, at(s), "player-1", "player-1", "BUFF");
+    // the rows name their caster as the unit does: the chain reader pairs
+    // a press with its auras by that name (codex 85-tk-G-T41-1: with the
+    // helper's "Source" the test passed on the parent too)
+    const row = (event: LogEvent, id: string, s: number) => ({
+      ...makeAuraEvent(event, id, at(s), "player-1", "player-1", "BUFF"),
+      srcUnitName: "Druid",
+    });
     const druid = makeUnit("player-1", {
       name: "Druid",
       class: CombatUnitClass.Druid,
@@ -145,5 +150,48 @@ describe("T41 — an effect still up at the slice's end runs to its own end", ()
       combatOf(druid, 121.34),
     ).players[0]!.offensiveCDs.find((c) => c.spellId === "102543")!;
     expect(cast.buffEndSeconds).toBeCloseTo(104.21 + full, 3);
+  });
+
+  it("an effect aura shorter than the cast's own length does not replace it (codex 85-tk-G-T41-1 #1)", () => {
+    // Summon Infernal 1122 at 10 s, its landing stun 22703 on a player from
+    // 10 s to 12 s, the slice over at 11 s
+    const stun = (event: LogEvent, s: number) => ({
+      ...makeAuraEvent(event, "22703", at(s), "player-1", "player-2", "DEBUFF"),
+      srcUnitName: "Lock",
+    });
+    const lock = makeUnit("player-1", {
+      name: "Lock",
+      class: CombatUnitClass.Warlock,
+      spec: CombatUnitSpec.Warlock_Destruction,
+      info: {} as never,
+      spellCastEvents: [makeSpellCastEvent("1122", at(10), "player-1")],
+    });
+    const victim = makeUnit("player-2", {
+      name: "Victim",
+      auraEvents: [
+        stun(LogEvent.SPELL_AURA_APPLIED, 10),
+        stun(LogEvent.SPELL_AURA_REMOVED, 12),
+      ],
+    });
+    const full = buffFullDurationForCaster("1122", lock)!;
+    expect(full).toBeGreaterThan(2);
+    const cast = reconstructEnemyCDTimeline([lock], {
+      startTime: T0,
+      endTime: at(11),
+      units: { [lock.id]: lock, [victim.id]: victim },
+    } as never).players[0]!.offensiveCDs.find((c) => c.spellId === "1122")!;
+    expect(cast.buffEndSeconds).toBeCloseTo(10 + full, 3);
+  });
+
+  it("a holder dead on the slice's last row: the effect is over, not due (codex 85-tk-G-T41-1 #2)", () => {
+    // up at 10 s, the holder dies at 20 s where the slice ends, the aura's
+    // REMOVED logged 50 ms later in the cascade
+    const u = dh(10, 20.05);
+    (u as { deathRecords: unknown[] }).deathRecords = [{ timestamp: at(20) }];
+    expect(metaEnd(u, 20)).toBeCloseTo(20, 3);
+    // alive, the same rows leave the official end standing
+    const alive = dh(10, 20.05);
+    const full = buffFullDurationForCaster("191427", alive)!;
+    expect(metaEnd(alive, 20)).toBeCloseTo(10 + full, 3);
   });
 });

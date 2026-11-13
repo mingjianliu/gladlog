@@ -112,6 +112,36 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
     expect(r.seen).toEqual([]);
   });
 
+  it("a REMOVED written with no source inside the slice closes the aura (codex 85-tk-G-T41-1 #3)", () => {
+    const u = dh();
+    u.auraEvents.push(
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        "162264",
+        at(35),
+        "0000000000000000",
+        "Player-4",
+        "BUFF",
+      ),
+    );
+    const r = scan(u, 2);
+    expect(r.checked).toBe(0);
+    expect(r.seen).toEqual([]);
+    // another unit's REMOVED of the same aura id closes nothing
+    const other = dh();
+    other.auraEvents.push(
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        "162264",
+        at(35),
+        "Player-9",
+        "Player-4",
+        "BUFF",
+      ),
+    );
+    expect(scan(other, 3).seen).toHaveLength(1);
+  });
+
   it("out of the total: a (no press) entry, and an aura past its own length", () => {
     const proc = scan(dh(39.48), 3, "Metamorphosis (no press)");
     expect(proc.seen).toHaveLength(1);
