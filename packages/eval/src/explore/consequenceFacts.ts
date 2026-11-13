@@ -29,16 +29,16 @@ import {
 } from "@gladlog/analysis/src/data/mitigationComponents";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { analyzePlayerCCAndTrinket } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import {
-  gridHpPct,
-  isHealerSpec,
-} from "@gladlog/analysis/src/utils/cooldowns";
+import { gridHpPct, isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   wallTableIdOfAura,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
-import { kickLockoutSecondsFor } from "@gladlog/analysis/src/utils/kickLockout";
+import {
+  fmtKickLockoutSecondsBare,
+  kickLockoutSecondsFor,
+} from "@gladlog/analysis/src/utils/kickLockout";
 import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
 import { WALL_IN_HAND_MIT_IDS } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
@@ -175,14 +175,14 @@ export function buildConsequenceLines(
           return d !== null && d >= t && d <= t + lockS;
         });
         if (drops.length)
-          teamPart += `; inside the ${lockS}s lockout: ${drops.join(", ")}`;
+          teamPart += `; inside the ${fmtKickLockoutSecondsBare(lockS)}s lockout: ${drops.join(", ")}`;
         if (died.length)
           teamPart += `; died inside it: ${died.map(L).join(", ")}`;
       }
       lines.push({
         atS: t,
         kind: "kick",
-        text: `${fmtTime(t)}  [CONSEQ]   ${L(kicker)} kicked ${L(victim)}'s ${stopped} (${kick}, ${lockS}s school lockout) → that cast never landed; ${nextPart}${teamPart}`,
+        text: `${fmtTime(t)}  [CONSEQ]   ${L(kicker)} kicked ${L(victim)}'s ${stopped} (${kick}, ${fmtKickLockoutSecondsBare(lockS)}s school lockout) → that cast never landed; ${nextPart}${teamPart}`,
       });
     }
   }

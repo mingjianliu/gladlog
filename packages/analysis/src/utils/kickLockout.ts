@@ -285,12 +285,28 @@ export function kickLockoutVictimMultiplierAt(
     : logDatedNumberAt(m.multiplier, logEpochMs);
 }
 
+/** A lockout's length rounded as every line prints it: one decimal — the
+ * kick-eaten row's `lockout` fact ("3.0", "2.4"). Pipeline T69 attempt 2: a
+ * Storm Conduit holder's lock printed "2.4" there and "2.397s" on the
+ * `[CONSEQ]` line. */
+export function fmtKickLockoutSeconds(seconds: number): string {
+  return seconds.toFixed(1);
+}
+
+/** The same rounding with a whole number left bare, the `[CONSEQ]` line's
+ * `Ns school lockout`: "3s", "2.4s", and "4s" for 3.96 (coordinator
+ * 2026-11-13: only a fractional lock's text moves). The gate re-parses this
+ * text (`checkConseqHpStateConsistency`). */
+export function fmtKickLockoutSecondsBare(seconds: number): string {
+  return String(Number(fmtKickLockoutSeconds(seconds)));
+}
+
 /** The lockout `kickSpellId` puts on `victim` for interrupting
  * `interruptedSpellId` at `interruptEpochMs` (the SPELL_INTERRUPT row's own
  * log timestamp — every reader holds it): `kickLockoutSeconds` × every
  * modifier the victim holds for that spell, each as of that timestamp, in
- * whole milliseconds (3 × 0.6 is 1.7999999999999998 otherwise, and `[CONSEQ]`
- * prints the number as it is). Without a victim or an interrupted spell it
+ * whole milliseconds (3 × 0.6 is 1.7999999999999998 otherwise; printed
+ * through `fmtKickLockoutSeconds` / `fmtKickLockoutSecondsBare`). Without a victim or an interrupted spell it
  * is the kick's own lockout — times `KICK_LOCKOUT_VICTIM_AURAS` when a
  * victim is given: an aura on it at the interrupt needs no interrupted spell. */
 export function kickLockoutSecondsFor(

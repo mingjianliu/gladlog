@@ -11,6 +11,8 @@ import { describe, expect, it } from "vitest";
 
 import { kickLockoutSeconds } from "../src/data/spellEffectData";
 import {
+  fmtKickLockoutSeconds,
+  fmtKickLockoutSecondsBare,
   KICK_LOCKOUT_VICTIM_AURAS,
   kickLockoutSecondsFor,
   kickLockoutVictimAuraMultiplierAt,
@@ -146,5 +148,22 @@ describe("kickTextLockEndMs — one lock end for the text and the pressure windo
         lockEndedBySuccessS: 0.838 - 0.177,
       }),
     ).toBe(838);
+  });
+});
+
+describe("a lockout's length prints to one decimal on every line (T69 attempt 2)", () => {
+  it("the kick-eaten fact keeps its decimal; the [CONSEQ] line leaves a whole number bare", () => {
+    expect(fmtKickLockoutSeconds(2.397)).toBe("2.4");
+    expect(fmtKickLockoutSeconds(4)).toBe("4.0");
+    expect(fmtKickLockoutSecondsBare(2.397)).toBe("2.4");
+    expect(fmtKickLockoutSecondsBare(3.25)).toBe("3.3");
+    expect(fmtKickLockoutSecondsBare(1.8)).toBe("1.8");
+    expect(fmtKickLockoutSecondsBare(4)).toBe("4");
+    expect(fmtKickLockoutSecondsBare(3.96)).toBe("4");
+    // one rounding for both
+    for (const s of [0.7, 1.05, 1.598, 1.75, 2.397, 3.6, 3.995, 4.794, 6])
+      expect(Number(fmtKickLockoutSecondsBare(s))).toBe(
+        Number(fmtKickLockoutSeconds(s)),
+      );
   });
 });

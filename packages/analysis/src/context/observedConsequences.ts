@@ -54,7 +54,10 @@ import {
   isDeadAtRenderSecond,
   isHealerSpec,
 } from "../utils/cooldowns";
-import { kickLockoutSecondsFor } from "../utils/kickLockout";
+import {
+  fmtKickLockoutSecondsBare,
+  kickLockoutSecondsFor,
+} from "../utils/kickLockout";
 import { fmtTime } from "../utils/renderGrid";
 import { roundEndMs } from "../utils/roundEnd";
 
@@ -318,7 +321,7 @@ export function formatObservedConsequences(params: {
           : "a cast";
       entries.push({
         atS: t,
-        line: `${fmtTime(t)}  [CONSEQ]   ${who} ${label(victim.name)} kicked (${stopped}; ${lockS}s school lockout) → inside the lockout: ${tail}`,
+        line: `${fmtTime(t)}  [CONSEQ]   ${who} ${label(victim.name)} kicked (${stopped}; ${fmtKickLockoutSecondsBare(lockS)}s school lockout) → inside the lockout: ${tail}`,
       });
     }
   }

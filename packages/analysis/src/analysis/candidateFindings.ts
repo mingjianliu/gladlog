@@ -143,7 +143,7 @@ import {
   documentRecordsAttackSpell,
   isDeferralAbsorb,
 } from "../utils/incomingPressure";
-import { kickTextLockEndMs } from "../utils/kickLockout";
+import { fmtKickLockoutSeconds, kickTextLockEndMs } from "../utils/kickLockout";
 import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
@@ -1935,7 +1935,7 @@ export function kickEatenEvents(
         interrupted: k.interruptedSpellName,
         kick: k.kickSpellName,
         source: k.sourceName,
-        lockout: k.lockoutDurationSeconds.toFixed(1),
+        lockout: fmtKickLockoutSeconds(k.lockoutDurationSeconds),
         // Reliability audit D4(c) (2026-09-25): WHICH school the kick locked
         // (the interrupted spell's official school — the same
         // `spellSchoolMask` the switched/acted classification tests). Without
