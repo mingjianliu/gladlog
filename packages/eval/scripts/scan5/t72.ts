@@ -36,11 +36,13 @@
  * `RULED` is the ruling's own list, not a copy of a producer table: the scan
  * asks the producer about each id.
  */
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   analyzeBurstLedger,
   burstCastSpan,
 } from "@gladlog/analysis/src/utils/burstLedger";
 import { reconstructEnemyCDTimeline } from "@gladlog/analysis/src/utils/enemyCDs";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { isOffensiveCdFor } from "@gladlog/analysis/src/utils/spellDanger";
 
 import { ev, type IRoundCtx, secOf, successesOf, tsOf } from "./ctx";
@@ -70,8 +72,16 @@ const BURST_HEAD = /^\s+Burst #\d+ — (\d+:\d\d)–(\d+:\d\d) \| (.*)$/;
 
 /** the spell a damage row delivers: a shield-eaten row (SPELL_ABSORBED)
  * carries the shield in its spell fields and the attack beside them */
-const deliveredName = (d: any): unknown =>
-  ev(d) === "SPELL_ABSORBED" ? d.attackSpellName : d.spellName;
+const deliveredName = (d: any): string => {
+  const absorbed = ev(d) === "SPELL_ABSORBED";
+  const id = absorbed ? d.attackSpellId : d.spellId;
+  const name = absorbed ? d.attackSpellName : d.spellName;
+  // the English name, as the ledger's `cd.spellName` is: the row's own name
+  // is in the recording client's language (codex 81-tk-G-T72-2b #2)
+  return id === undefined || id === null
+    ? ""
+    : getEnglishSpellName(String(id), name ?? "");
+};
 
 function deliveryCheck(ctx: IRoundCtx, start: number): void {
   const owner = ctx.owner as any;
@@ -97,23 +107,27 @@ function deliveryCheck(ctx: IRoundCtx, start: number): void {
   for (const cd of pressOnly) {
     ctx.bump("pressOnlyDeliveryOutsideBurst");
     const pressMs = start + cd.castTimeSeconds * 1000;
+    const cdName = getEnglishSpellName(cd.spellId, cd.spellName);
     const nextS = cds
       .filter(
         (c) =>
           c.spellId === cd.spellId && c.castTimeSeconds > cd.castTimeSeconds,
       )
       .reduce((m, c) => Math.min(m, c.castTimeSeconds), Infinity);
-    // …and inside the round: a ledger window ends at the round's end, so a
-    // row after it (s2/1-4-11: the owner dead at 2:25, the Meteor pressed
-    // at 2:23 landing 0.9 s into the next round's gap) is no window's to hold
+    // …and inside the round, as the ledger reads it (`roundEndMs`: a Solo
+    // Shuffle round ends at its deciding death, any other bracket at the
+    // log's end — not `ctx.roundEndAt`, which stops a 3v3 at its first
+    // death while the ledger's windows run on; codex 81-tk-G-T72-2b #1). A
+    // row after it (s2/1-4-11: the owner dead at 2:25, the Meteor pressed at
+    // 2:23 landing 0.9 s later) is no window's to hold
     const untilMs = Math.min(
-      ctx.roundEndAt,
+      roundEndMs(combat),
       start + Math.min(nextS, cd.castTimeSeconds + DELIVERY_REACH_S) * 1000,
     );
     const rows = (owner.damageOut as any[]).filter(
       (d) =>
         enemyIds.has(d.destUnitId) &&
-        deliveredName(d) === cd.spellName &&
+        deliveredName(d) === cdName &&
         tsOf(d) > pressMs &&
         tsOf(d) <= untilMs,
     );
