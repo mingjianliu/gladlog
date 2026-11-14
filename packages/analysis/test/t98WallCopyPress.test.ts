@@ -142,6 +142,82 @@ describe("T98 D5 — a copy a press refreshed is a pressed wall in the burst led
     expect(hit?.noPressLogged).toBeUndefined();
     expect(wallTimingPhrase(hit)).toBe("pressed 5.5s after the burst opened");
   });
+  it("a press that opens the next interval (the copy's REMOVED lost) is not the copy's", () => {
+    // codex 85-tk-K-T98-1 #1: copy at 13.5, no REMOVED, a fresh press at 18
+    const u = makeUnit("e1", {
+      name: "Hunter",
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      auraEvents: [
+        buff(LogEvent.SPELL_AURA_APPLIED, 13.5, "e1", "e1"),
+        buff(LogEvent.SPELL_AURA_APPLIED, 18, "e1", "e1"),
+        buff(LogEvent.SPELL_AURA_REMOVED, 26, "e1", "e1"),
+      ],
+      spellCastEvents: [cast(EXHILARATION, 13.5), cast(SOTF, 18)],
+    });
+    const hits = analyzeBurstLedger(ret, [], [u], combat)[0]!
+      .dominantTarget!.defensivesHit.filter((d) => d.spellId === SOTF)
+      .sort((x, y) => (x.startOffsetMs ?? 0) - (y.startOffsetMs ?? 0));
+    expect(hits.map((h) => wallTimingPhrase(h))).toEqual([
+      "3.5s after the burst opened [no press logged]",
+      "pressed 8.0s after the burst opened",
+    ]);
+  });
+  it("a namesake's press is not the copy holder's (ids decide)", () => {
+    // codex 85-tk-K-T98-1 #2: two units named alike; the other one's
+    // external on the holder is no press of the holder's own copy
+    const PS = "33206";
+    const ps = (event: LogEvent, s: number, src: string) => ({
+      ...makeAuraEvent(event, PS, at(s), src, "e1", "BUFF"),
+      srcUnitName: "Priest",
+      spellName: "Pain Suppression",
+    });
+    const holder = makeUnit("e1", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      auraEvents: [
+        ps(LogEvent.SPELL_AURA_APPLIED, 13.5, "e1"),
+        ps(LogEvent.SPELL_AURA_APPLIED, 15.5, "e2"),
+        ps(LogEvent.SPELL_AURA_REMOVED, 21.5, "e1"),
+        ps(LogEvent.SPELL_AURA_REMOVED, 23.5, "e2"),
+      ],
+    });
+    const twin = makeUnit("e2", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      spellCastEvents: [
+        {
+          ...makeSpellCastEvent(
+            PS,
+            at(15.5),
+            "e1",
+            "Priest",
+            "e2",
+            "Priest",
+            0,
+            PS,
+          ),
+          spellName: "Pain Suppression",
+        },
+      ],
+    });
+    const hit = analyzeBurstLedger(
+      ret,
+      [],
+      [holder, twin],
+      combat,
+    )[0]!.dominantTarget?.defensivesHit.find(
+      (d) => d.spellId === PS && d.startOffsetMs === 3500,
+    );
+    expect(wallTimingPhrase(hit)).toBe(
+      "3.5s after the burst opened [no press logged]",
+    );
+  });
   it("the copy no press refreshed keeps [no press logged]", () => {
     const hit = hitOf(hunter(undefined));
     expect(hit?.noPressLogged).toBe(true);

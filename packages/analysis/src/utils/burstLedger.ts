@@ -680,7 +680,7 @@ export function analyzeBurstLedger(
        * the hunter's press 8.0 s — all 8.3 s read `[no press logged]`). */
       const pressReadingOf = (
         spellId: string,
-        srcUnitName: string,
+        src: { name: string; id?: string },
         startMs: number,
         endMs: number,
       ): { noPress: true } | { pressMs: number } | undefined => {
@@ -711,15 +711,23 @@ export function analyzeBurstLedger(
             Math.abs(e.atS - atS) <= NO_PRESS_SAME_AURA_S,
         );
         if (!copy) return undefined;
+        // the interval's own source: by id when both sides carry one (two
+        // units can share a name — codex 85-tk-K-T98-1 #2), the name else
+        const bySource = (e: { casterName: string; casterId?: string }) =>
+          src.id !== undefined && e.casterId !== undefined
+            ? e.casterId === src.id
+            : e.casterName === src.name;
+        // strictly inside: a press at the interval's end opens the next
+        // interval (a lost REMOVED, then a fresh press — codex
+        // 85-tk-K-T98-1 #1), it refreshed nothing of this one
         const press = defOnTarget
           .filter(
             (e) =>
               !e.noPress &&
               e.spellId === spellId &&
-              (e.casterName === srcUnitName ||
-                (srcUnitName === target.name && e.casterId === target.id)) &&
+              bySource(e) &&
               e.atS > copy.atS &&
-              e.atS <= endS,
+              e.atS < endS - NO_PRESS_SAME_AURA_S,
           )
           .sort((x, y) => x.atS - y.atS)[0];
         return press
@@ -736,6 +744,7 @@ export function analyzeBurstLedger(
           spellId: x.spellId,
           spellName: x.spellName,
           srcUnitName: x.srcUnitName,
+          srcUnitId: x.srcUnitId,
           startMs: combat.startTime + x.fromS * 1000,
           endMs: combat.startTime + x.toS * 1000,
           inferredEnd: x.inferredEnd,
@@ -800,7 +809,7 @@ export function analyzeBurstLedger(
               iv.startMs > fromMs
                 ? pressReadingOf(
                     iv.spellId,
-                    iv.srcUnitName,
+                    { name: iv.srcUnitName, id: iv.srcUnitId },
                     iv.startMs,
                     iv.endMs,
                   )

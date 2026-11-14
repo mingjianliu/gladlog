@@ -17,8 +17,12 @@
  *    the line's second, while in that second the unit's own pet got the
  *    cooldown's aura from the unit in the same batch (≤ 5 ms) as the unit's
  *    own copy (47a03469 r0 2:04: Exhilaration's 3 s Survival of the Fittest
- *    on the hunter and its pet read as a press). Kind = the cooldown's name.
+ *    on the hunter and its pet read as a press). A copy inside a batch that
+ *    re-states the unit (`isResyncBatchAt`) is skipped: it can be a press
+ *    lost while unseen. Kind = the cooldown's name.
  */
+import { isResyncBatchAt } from "@gladlog/analysis/src/utils/resyncBatch";
+
 import {
   APPLIED,
   ev,
@@ -140,6 +144,16 @@ function petCopy(ctx: IRoundCtx): void {
           own.some((t) => Math.abs(t - tsOf(a)) <= PAIR_MS),
       );
     if (!petRow) continue;
+    // a copy inside a batch that re-states the unit can be a press the log
+    // lost while the unit was unseen (`hiddenPressMs` reads it so): no
+    // missing cast row tells the two apart (codex 85-tk-K-T98-1 #3)
+    if (
+      own.some(
+        (t) =>
+          Math.abs(t - tsOf(petRow)) <= PAIR_MS && isResyncBatchAt(unit, t),
+      )
+    )
+      continue;
     ctx.bump(C);
     const pressed = successesOf(unit).some(
       (c) => named(c) && Math.abs(tsOf(c) - (from + 500)) <= 2500,
