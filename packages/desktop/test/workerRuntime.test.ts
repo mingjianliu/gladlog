@@ -10,18 +10,35 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 
+import { MatchStore } from "../src/main/matchStore";
+import { createWorkerMessageHandler } from "../src/main/workerMessageHandler";
 import type { MainToWorker, WorkerToMain } from "../src/shared/protocol";
 import {
   createWorkerRuntime,
   type WorkerTransport,
 } from "../src/worker/runtime";
 
-function harness() {
+/** `main` stands in for main's side of the store messages. By default every
+ * match/shuffle/matchStaged is acknowledged at once, as main does after its
+ * store; `null` drops them unacknowledged (main died before handling them). */
+function harness(
+  main: ((m: WorkerToMain, ack: () => void) => void) | null = (_m, ack) =>
+    ack(),
+) {
   const out: WorkerToMain[] = [];
   let deliver: ((m: MainToWorker) => void) | null = null;
   let fsWatchCb: ((ev: string, f: string) => void) | null = null;
   const transport: WorkerTransport = {
-    post: (m) => out.push(m),
+    post: (m) => {
+      out.push(m);
+      if (
+        main &&
+        (m.type === "match" || m.type === "shuffle" || m.type === "matchStaged")
+      )
+        main(m, () =>
+          deliver!({ type: "stored", fileKey: m.fileKey, ackId: m.ackId }),
+        );
+    },
     onMessage: (cb) => {
       deliver = cb;
     },
@@ -351,5 +368,131 @@ describe("启动时退役 WoW 不会再写的卡住文件(GH #211)", () => {
       ),
     ).toHaveLength(0);
     r2.rt.dispose();
+  });
+});
+
+// codex review of GH #211: the persisted checkpoint must never pass a match
+// main has not durably stored. Main is the real MatchStore + message handler;
+// "main died" means the worker's store messages are never handled, and the
+// next start's MatchStore.init() deletes the orphaned staging directories.
+describe("worker 发出后、main 落盘前崩溃:对局不丢且只存一次(GH #211 复审)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const at = (s: number, body: string) =>
+    `6/30/2026 14:${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}.000  ${body}\n`;
+  const OPEN = at(0, "ARENA_MATCH_START,1825,41,3v3,1") + at(1, CAST);
+  const SHUFFLE_START = "ARENA_MATCH_START,1504,40,Rated Solo Shuffle,0";
+  const OPEN_SHUFFLE =
+    at(0, SHUFFLE_START) +
+    at(1, CAST) +
+    at(60, SHUFFLE_START) +
+    at(61, CAST) +
+    at(120, SHUFFLE_START) +
+    at(121, CAST);
+
+  function world() {
+    const s = setup();
+    const config = { ...s.config, matchesDir: join(s.root, "matches") };
+    return { ...s, config };
+  }
+  function write(logsDir: string, name: string, body: string, ageS: number) {
+    const p = join(logsDir, name);
+    writeFileSync(p, body);
+    const t = Date.now() / 1000 - ageS;
+    utimesSync(p, t, t);
+  }
+  /** One app start: main's store init (which removes orphaned stagings),
+   * then the worker's startup catch-up. Main handles the worker's messages
+   * after the catch-up, as IPC delivers them, and its acks come back the
+   * same way; `mainAlive: false` = main dies before handling any of them.
+   * Returns what the store holds, how many stagings this start posted, and
+   * the persisted checkpoints once the acks are in. */
+  function launch(
+    config: ReturnType<typeof world>["config"],
+    mainAlive: boolean,
+  ) {
+    const store = new MatchStore(config.matchesDir);
+    store.init();
+    const inbox: WorkerToMain[] = [];
+    const h = harness((m) => inbox.push(m));
+    const handler = createWorkerMessageHandler({
+      store,
+      recorder: null,
+      emit: () => {},
+      setStatus: () => {},
+      logWarn: () => {},
+      ack: (fileKey, ackId) => h.send({ type: "stored", fileKey, ackId }),
+    });
+    const rt = createWorkerRuntime({
+      transport: h.transport,
+      watchFn: h.watchFn,
+    });
+    h.send({ type: "configure", config });
+    if (mainAlive) for (const m of inbox) handler(m);
+    const cps = (
+      JSON.parse(readFileSync(config.checkpointsPath, "utf-8")) as {
+        files: Record<string, { offset: number }>;
+      }
+    ).files;
+    rt.dispose();
+    return {
+      kinds: store
+        .list()
+        .map((m) => m.kind)
+        .sort(),
+      staged: inbox.filter((m) => m.type === "matchStaged").length,
+      cps,
+    };
+  }
+
+  for (const [label, body, resumeAt] of [
+    ["只有一场打完的 A(基线就有的竞态)", MATCH, Buffer.byteLength(MATCH)],
+    ["打完的 A + 没打完的 B", MATCH + OPEN, Buffer.byteLength(MATCH)],
+  ] as const) {
+    it(`最新文件:${label}`, () => {
+      const w = world();
+      const key = "WoWCombatLog-1.txt";
+      write(w.logsDir, key, body, 0);
+      const dead = launch(w.config, false);
+      expect(dead.staged).toBe(1); // A was staged, then main died
+      expect(dead.cps[key]!.offset).toBe(0); // not past unacknowledged A
+      const alive = launch(w.config, true);
+      expect(alive.kinds).toEqual(["match"]);
+      expect(alive.cps[key]!.offset).toBe(resumeAt); // the ack moved it
+      const again = launch(w.config, true);
+      expect(again.kinds).toEqual(["match"]); // stored exactly once
+      expect(again.staged).toBe(0); // not even re-read
+      expect(again.cps[key]!.offset).toBe(resumeAt);
+    });
+  }
+
+  it("已在库里的对局被重读(去重不发消息)也算确认,checkpoint 照样前进", () => {
+    const w = world();
+    const key = "WoWCombatLog-1.txt";
+    write(w.logsDir, key, MATCH, 0);
+    expect(launch(w.config, true).kinds).toEqual(["match"]);
+    // Lose the checkpoint registry: A is re-read and is already on disk.
+    writeFileSync(w.config.checkpointsPath, JSON.stringify({ files: {} }));
+    const replay = launch(w.config, true);
+    expect(replay.staged).toBe(0);
+    expect(replay.kinds).toEqual(["match"]);
+    expect(replay.cps[key]!.offset).toBe(Buffer.byteLength(MATCH));
+  });
+
+  it("退役文件的单排已完成轮次:EOF checkpoint 等 main 确认后才生效", () => {
+    const w = world();
+    const key = "WoWCombatLog-old.txt";
+    write(w.logsDir, key, OPEN_SHUFFLE, 7200);
+    write(w.logsDir, "WoWCombatLog-new.txt", "", 0);
+    const dead = launch(w.config, false);
+    expect(dead.staged).toBe(1);
+    expect(dead.cps[key]!.offset).toBe(0); // the lobby's first START
+    const alive = launch(w.config, true);
+    expect(alive.kinds).toEqual(["shuffle"]);
+    expect(alive.cps[key]!.offset).toBe(Buffer.byteLength(OPEN_SHUFFLE));
+    const again = launch(w.config, true);
+    expect(again.kinds).toEqual(["shuffle"]);
+    expect(again.staged).toBe(0);
   });
 });

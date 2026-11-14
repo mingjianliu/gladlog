@@ -152,7 +152,16 @@ export function createWorkerRuntime(opts: {
     ) {
       try {
         const staged = stageMatch(config.matchesDir, msg.payload, Date.now());
-        if (staged) post({ type: "matchStaged", fileKey: msg.fileKey, staged });
+        if (staged)
+          post({
+            type: "matchStaged",
+            fileKey: msg.fileKey,
+            staged,
+            ackId: msg.ackId,
+          });
+        // Nothing staged: the match is already on disk, so it is as good as
+        // acknowledged.
+        else pipelines.get(msg.fileKey)?.acknowledge(msg.ackId);
         return;
       } catch (e) {
         post({
@@ -293,6 +302,15 @@ export function createWorkerRuntime(opts: {
 
   opts.transport.onMessage((msg) => {
     if (msg.type === "configure") configure(msg.config);
+    else if (msg.type === "stored") {
+      // An ack for a pipeline torn down since (reconfigure, or a previous
+      // worker process) matches nothing: its checkpoint was persisted capped,
+      // so that match is simply replayed and deduped.
+      const p = pipelines.get(msg.fileKey);
+      if (!config || !p?.acknowledge(msg.ackId)) return;
+      registry.files[msg.fileKey] = p.checkpoint;
+      saveCheckpoints(config.checkpointsPath, registry);
+    }
   });
 
   return { dispose: teardown };

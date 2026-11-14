@@ -18,7 +18,13 @@ export interface WorkerConfig {
   matchesDir?: string;
 }
 
-export type MainToWorker = { type: "configure"; config: WorkerConfig };
+export type MainToWorker =
+  | { type: "configure"; config: WorkerConfig }
+  // main has durably stored (or deduped) the match/shuffle the worker sent
+  // with this ackId. Until then the worker's persisted checkpoint stays at
+  // or before that match's opening line, so a crash between the worker's
+  // post and main's commit replays it instead of losing it (GH #211 review).
+  | { type: "stored"; fileKey: string; ackId: string };
 
 export interface FileStatus {
   fileKey: string;
@@ -28,11 +34,18 @@ export interface FileStatus {
 }
 
 export type WorkerToMain =
-  | { type: "match"; fileKey: string; payload: GladMatch }
-  | { type: "shuffle"; fileKey: string; payload: GladShuffle }
+  // `ackId` on the three store messages: main answers with a `stored`
+  // message carrying it once the match is on disk (see MainToWorker)
+  | { type: "match"; fileKey: string; payload: GladMatch; ackId: string }
+  | { type: "shuffle"; fileKey: string; payload: GladShuffle; ackId: string }
   // a match/shuffle the worker already wrote to the store's staging area
   // (GH #149); main commits it with MatchStore.commitStaged
-  | { type: "matchStaged"; fileKey: string; staged: StagedMatch }
+  | {
+      type: "matchStaged";
+      fileKey: string;
+      staged: StagedMatch;
+      ackId: string;
+    }
   | { type: "diagnostic"; fileKey?: string; code: string; detail?: string }
   // Match lifecycle (drives OBS recording; a shuffle lobby gets one open/close
   // pair for the whole lobby)

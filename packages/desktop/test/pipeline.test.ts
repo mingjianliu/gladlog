@@ -163,7 +163,57 @@ describe("FilePipeline", () => {
     pipe.processFlush();
     const match = out.find((m) => m.type === "match");
     expect(match).toBeDefined();
-    expect(pipe.checkpoint.offset).toBeGreaterThan(0); // 对局闭合 → 安全边界已推进
+    // Not acknowledged yet: the persisted checkpoint must not pass the match.
+    expect(pipe.checkpoint.offset).toBe(0);
+    expect(pipe.acknowledge((match as { ackId: string }).ackId)).toBe(true);
+    expect(pipe.checkpoint.offset).toBeGreaterThan(0); // 对局闭合且已落盘 → 安全边界已推进
+  });
+
+  it("未确认落盘的对局把 checkpoint 压在它的 START;确认后放行;轮转清空(GH #211 复审)", () => {
+    const f = join(dir(), "WoWCombatLog-1.txt");
+    const at = (s: number, body: string) =>
+      `6/30/2026 12:00:${String(s).padStart(2, "0")}.000  ${body}\n`;
+    const a =
+      at(0, "ARENA_MATCH_START,1825,41,3v3,1") +
+      at(1, "ARENA_MATCH_END,1,30,1500,1501");
+    const pre = at(2, "ZONE_CHANGE,1,x,0");
+    const b =
+      at(3, "ARENA_MATCH_START,1825,41,3v3,1") +
+      at(4, "ARENA_MATCH_END,1,30,1500,1501");
+    writeFileSync(f, a + pre + b);
+    const acks: string[] = [];
+    const pipe = new FilePipeline({
+      fileKey: "k",
+      filePath: f,
+      checkpoint: null,
+      emit: (m) => {
+        if (m.type === "match") acks.push(m.ackId);
+      },
+    });
+    pipe.processFlush();
+    expect(acks).toHaveLength(2);
+    expect(pipe.checkpoint.offset).toBe(0); // A's START
+    pipe.acknowledge(acks[1]!); // B on disk, A still not
+    expect(pipe.checkpoint.offset).toBe(0);
+    pipe.acknowledge(acks[0]!);
+    expect(pipe.checkpoint.offset).toBe(Buffer.byteLength(a + pre + b));
+    expect(pipe.acknowledge(acks[0]!)).toBe(false); // already acknowledged
+
+    // B unacknowledged again after a new flush: cap at B's START.
+    appendFileSync(f, b);
+    pipe.processFlush();
+    expect(pipe.checkpoint.offset).toBe(Buffer.byteLength(a + pre + b));
+    // A rotation drops the caps: their offsets belong to the old content.
+    // Longer than the stale cap, so keeping it would show.
+    const idle = Array.from({ length: 12 }, (_, i) =>
+      at(10 + i, `ZONE_CHANGE,1,z${i},0`),
+    ).join("");
+    expect(Buffer.byteLength(idle)).toBeGreaterThan(
+      Buffer.byteLength(a + pre + b),
+    );
+    writeFileSync(f, idle);
+    pipe.processFlush();
+    expect(pipe.checkpoint.offset).toBe(Buffer.byteLength(idle));
   });
 });
 
@@ -185,11 +235,16 @@ describe("FilePipeline checkpoint at the last IDLE boundary (GH #211)", () => {
 
   function run(f: string, checkpoint: FileCheckpoint | null) {
     const out: WorkerToMain[] = [];
-    const pipe = new FilePipeline({
+    const pipe: FilePipeline = new FilePipeline({
       fileKey: "k",
       filePath: f,
       checkpoint,
-      emit: (m) => out.push(m),
+      emit: (m) => {
+        out.push(m);
+        // As main does once the match is on disk.
+        if (m.type === "match" || m.type === "shuffle")
+          pipe.acknowledge(m.ackId);
+      },
     });
     pipe.processFlush();
     const of = (t: WorkerToMain["type"]) => out.filter((m) => m.type === t);

@@ -23,6 +23,7 @@ function makeDeps(
   const emit = vi.fn();
   const setStatus = vi.fn();
   const logWarn = vi.fn();
+  const ack = vi.fn();
   const recorder = {
     associate: vi.fn(),
     onSegmentOpen: vi.fn(),
@@ -33,7 +34,7 @@ function makeDeps(
     store: vi.fn(() => storeResult),
     commitStaged: vi.fn(() => storeResult),
   };
-  return { emit, setStatus, logWarn, recorder, store };
+  return { emit, setStatus, logWarn, recorder, store, ack };
 }
 
 describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
@@ -45,11 +46,13 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       emit: deps.emit,
       setStatus: deps.setStatus,
       logWarn: deps.logWarn,
+      ack: deps.ack,
     });
     const msg: WorkerToMain = {
       type: "match",
       fileKey: "a.txt",
       payload: {} as never,
+      ackId: "k1",
     };
     handler(msg);
     expect(deps.recorder.associate).toHaveBeenCalledWith(META);
@@ -67,9 +70,10 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       emit: deps.emit,
       setStatus: deps.setStatus,
       logWarn: deps.logWarn,
+      ack: deps.ack,
     });
     const staged = { id: "m1", meta: META, stagingDir: "/x/.stage-m1-1-1" };
-    handler({ type: "matchStaged", fileKey: "a.txt", staged });
+    handler({ type: "matchStaged", fileKey: "a.txt", staged, ackId: "k1" });
     expect(deps.store.commitStaged).toHaveBeenCalledWith(staged);
     expect(deps.store.store).not.toHaveBeenCalled();
     expect(deps.recorder.associate).toHaveBeenCalledWith(META);
@@ -87,8 +91,14 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       emit: deps.emit,
       setStatus: deps.setStatus,
       logWarn: deps.logWarn,
+      ack: deps.ack,
     });
-    handler({ type: "shuffle", fileKey: "a.txt", payload: {} as never });
+    handler({
+      type: "shuffle",
+      fileKey: "a.txt",
+      payload: {} as never,
+      ackId: "k1",
+    });
     expect(deps.emit).toHaveBeenCalledWith("gladlog:logs:matchStored", {
       ...META,
       live: true,
@@ -103,10 +113,46 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       emit: deps.emit,
       setStatus: deps.setStatus,
       logWarn: deps.logWarn,
+      ack: deps.ack,
     });
-    handler({ type: "match", fileKey: "a.txt", payload: {} as never });
+    handler({
+      type: "match",
+      fileKey: "a.txt",
+      payload: {} as never,
+      ackId: "k1",
+    });
     expect(deps.emit).not.toHaveBeenCalled();
     expect(deps.recorder.associate).not.toHaveBeenCalled();
+  });
+
+  it("落盘后回 ack(入库、去重都回);store 抛错不回 ack(GH #211 复审)", () => {
+    const deps = makeDeps();
+    const handler = createWorkerMessageHandler({
+      store: deps.store,
+      recorder: deps.recorder,
+      emit: deps.emit,
+      setStatus: deps.setStatus,
+      logWarn: deps.logWarn,
+      ack: deps.ack,
+    });
+    const staged = { id: "m1", meta: META, stagingDir: "/x/.stage-m1-1-1" };
+    handler({ type: "matchStaged", fileKey: "a.txt", staged, ackId: "s1" });
+    expect(deps.ack).toHaveBeenLastCalledWith("a.txt", "s1");
+    deps.store.store.mockReturnValueOnce({ stored: false, meta: META });
+    handler({
+      type: "match",
+      fileKey: "b.txt",
+      payload: {} as never,
+      ackId: "m2",
+    });
+    expect(deps.ack).toHaveBeenLastCalledWith("b.txt", "m2");
+    deps.store.commitStaged.mockImplementationOnce(() => {
+      throw new Error("rename failed");
+    });
+    expect(() =>
+      handler({ type: "matchStaged", fileKey: "a.txt", staged, ackId: "s3" }),
+    ).toThrow();
+    expect(deps.ack).toHaveBeenCalledTimes(2);
   });
 
   it("recorder 为 null(桩场景)不炸", () => {
@@ -117,9 +163,15 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       emit: deps.emit,
       setStatus: deps.setStatus,
       logWarn: deps.logWarn,
+      ack: deps.ack,
     });
     expect(() =>
-      handler({ type: "match", fileKey: "a.txt", payload: {} as never }),
+      handler({
+        type: "match",
+        fileKey: "a.txt",
+        payload: {} as never,
+        ackId: "k1",
+      }),
     ).not.toThrow();
     expect(deps.emit).toHaveBeenCalledWith("gladlog:logs:matchStored", {
       ...META,
@@ -135,6 +187,7 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       emit: deps.emit,
       setStatus: deps.setStatus,
       logWarn: deps.logWarn,
+      ack: deps.ack,
     });
     handler({
       type: "segmentOpen",
@@ -171,6 +224,7 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       emit: deps.emit,
       setStatus: deps.setStatus,
       logWarn: deps.logWarn,
+      ack: deps.ack,
     });
     handler({
       type: "status",
@@ -194,6 +248,7 @@ describe("createWorkerMessageHandler(实时路径 live 标志)", () => {
       emit: deps.emit,
       setStatus: deps.setStatus,
       logWarn: deps.logWarn,
+      ack: deps.ack,
     });
     handler({
       type: "diagnostic",

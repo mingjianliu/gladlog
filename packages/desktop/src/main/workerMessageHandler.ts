@@ -22,6 +22,8 @@ interface WorkerMessageHandlerDeps {
   emit: (channel: string, payload: unknown) => void;
   setStatus: (s: LogsStatusSnapshot) => void;
   logWarn: (msg: string) => void;
+  /** Tell the worker a match it sent is on disk (MainToWorker `stored`). */
+  ack: (fileKey: string, ackId: string) => void;
 }
 
 export function createWorkerMessageHandler(
@@ -37,6 +39,10 @@ export function createWorkerMessageHandler(
         msg.type === "matchStaged"
           ? deps.store.commitStaged(msg.staged)
           : deps.store.store(msg.payload);
+      // On disk now (stored, or already there and deduped): the worker may
+      // persist a checkpoint past this match. A store that throws sends no
+      // ack, so the match is replayed after a restart instead of lost.
+      deps.ack(msg.fileKey, msg.ackId);
       if (r.stored && r.meta) {
         deps.recorder?.associate(r.meta);
         const live: StoredMatchMeta & { live: true } = {

@@ -505,6 +505,7 @@ const onWorkerMessage = createWorkerMessageHandler({
     lastStatus = s;
   },
   logWarn: (m) => log.warn(m),
+  ack: (fileKey, ackId) => host?.ack(fileKey, ackId),
 });
 
 function startMonitoring(s: GladlogSettings): void {

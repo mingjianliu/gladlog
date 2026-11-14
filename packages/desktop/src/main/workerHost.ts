@@ -33,6 +33,12 @@ export class WorkerHost {
     this.send({ type: "configure", config });
   }
 
+  /** A match the worker sent is on disk; see MainToWorker `stored`. Sent to
+   * whichever worker is running: one restarted since ignores the ackId. */
+  ack(fileKey: string, ackId: string): void {
+    this.send({ type: "stored", fileKey, ackId });
+  }
+
   stop(): void {
     this.stopping = true;
     this.child?.kill();

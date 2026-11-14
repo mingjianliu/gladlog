@@ -1,4 +1,5 @@
 import { GladLogParser } from "@gladlog/parser";
+import { randomUUID } from "crypto";
 
 import type { FileCheckpoint, WorkerToMain } from "../shared/protocol";
 import { initialTailState, readTail, type TailState } from "./tailReader";
@@ -13,10 +14,24 @@ export interface ParserLike {
   ): unknown;
 }
 
+/** ackIds are unique across worker restarts: an ack main sends for a match
+ * of a worker that has since died must not match an entry of its successor. */
+const ACK_RUN = randomUUID();
+let ackSeq = 0;
+
 export class FilePipeline {
   private parser!: ParserLike;
   private tail: TailState;
+  /** Where a fresh parser could resume to reach the current state: the end
+   * of the last complete line when IDLE, the opening line of the open
+   * segment otherwise. Not yet capped by `unacked` (see `checkpoint`). */
   private cp: FileCheckpoint;
+  /** Start offset of the last line pushed while the parser was IDLE: while a
+   * segment is open, the line that opened it. */
+  private idleAt: number;
+  /** ackId -> start offset of the segment of a match/shuffle that was sent to
+   * main but is not yet known to be on disk. */
+  private readonly unacked = new Map<string, number>();
   private readonly fileKey: string;
   private readonly filePath: string;
   private readonly emit: (msg: WorkerToMain) => void;
@@ -37,25 +52,40 @@ export class FilePipeline {
       (() => new GladLogParser() as unknown as ParserLike);
     this.cp = opts.checkpoint ?? { offset: 0, firstLineChecksum: null };
     this.tail = initialTailState(this.cp);
+    this.idleAt = this.cp.offset;
     this.createParser();
+  }
+
+  /** Registers a match/shuffle about to be sent. Called while its closing
+   * line (or end()) is being processed, when `idleAt` is still the opening
+   * line of its segment. Registered before the emit, so an ack that arrives
+   * synchronously (the runtime's own dedup path) finds it. */
+  private track(): string {
+    const ackId = `${ACK_RUN}-${++ackSeq}`;
+    this.unacked.set(ackId, this.idleAt);
+    return ackId;
   }
 
   private createParser(): void {
     this.parser = this.parserFactory();
-    this.parser.on("match", (payload) =>
+    this.parser.on("match", (payload) => {
+      const ackId = this.track();
       this.emit({
         type: "match",
         fileKey: this.fileKey,
         payload: payload as never,
-      }),
-    );
-    this.parser.on("shuffle", (payload) =>
+        ackId,
+      });
+    });
+    this.parser.on("shuffle", (payload) => {
+      const ackId = this.track();
       this.emit({
         type: "shuffle",
         fileKey: this.fileKey,
         payload: payload as never,
-      }),
-    );
+        ackId,
+      });
+    });
     this.parser.on("segmentOpen", (payload) => {
       const i = payload as {
         bracket: string;
@@ -92,9 +122,9 @@ export class FilePipeline {
    * this, the checkpoint simply stayed where it was, and a file ending inside
    * an unclosed match kept `{offset: 0}` forever and was re-parsed in full on
    * every launch. Every recorded offset is the start of a complete line, so
-   * the checkpoint always lands on one. */
+   * the checkpoint always lands on one. What gets persisted is further
+   * capped by the matches main has not acknowledged yet (`checkpoint`). */
   processFlush(): void {
-    let idleAt = this.cp.offset;
     const r = readTail(this.filePath, this.tail, {
       rotated: (firstLineChecksum) => {
         // A rotation discards the old parser. parser.end() is a no-op when
@@ -108,19 +138,29 @@ export class FilePipeline {
         // lives in packages/parser's Segmenter.end()).
         this.parser.end();
         this.createParser();
+        // Unacknowledged offsets point into content that no longer exists;
+        // replaying from them would land anywhere in the new content.
+        this.unacked.clear();
         // The fresh parser is IDLE, so the first new line resets idleAt.
+        this.idleAt = 0;
         this.cp = { offset: 0, firstLineChecksum };
       },
       line: (line, startOffset) => {
-        if (!this.parser.hasOpenSegment()) idleAt = startOffset;
+        if (!this.parser.hasOpenSegment()) this.idleAt = startOffset;
         this.parser.push(line);
       },
     });
     this.tail = r.state;
     this.cp = {
-      offset: this.parser.hasOpenSegment() ? idleAt : this.tail.offset,
+      offset: this.parser.hasOpenSegment() ? this.idleAt : this.tail.offset,
       firstLineChecksum: this.tail.firstLineChecksum,
     };
+  }
+
+  /** Main has the match/shuffle sent with this ackId on disk. Returns whether
+   * it was one of this pipeline's, i.e. whether `checkpoint` may have moved. */
+  acknowledge(ackId: string): boolean {
+    return this.unacked.delete(ackId);
   }
 
   /** Gives up on the open segment of a file WoW will never write again
@@ -131,11 +171,14 @@ export class FilePipeline {
    * just sent, so the recorder is never left inside that window. The parser
    * is replaced, which releases the segment's records and raw lines (~9.5
    * bytes of heap per raw character, GH #211), and the checkpoint moves to
-   * the end of the last complete line so the next launch reads nothing. */
+   * the end of the last complete line so the next launch reads nothing --
+   * once main has acknowledged a shuffle end() stored (until then
+   * `checkpoint` stays at the lobby's first START). */
   retire(): void {
     if (!this.parser.hasOpenSegment()) return;
     this.parser.end();
     this.createParser();
+    this.idleAt = this.tail.offset;
     this.cp = {
       offset: this.tail.offset,
       firstLineChecksum: this.tail.firstLineChecksum,
@@ -165,8 +208,18 @@ export class FilePipeline {
     }
   }
 
+  /** The checkpoint to persist: the resume point, but never past the opening
+   * line of a match/shuffle main has not acknowledged. Without the cap a
+   * crash after the worker posted a match and before main committed it lost
+   * the match for good: MatchStore.init() deletes the orphaned staging
+   * directory, and the restart resumed past the match (codex review of GH
+   * #211; the plain "flush ended IDLE -> end of file" path had the same race
+   * before GH #211). Replaying a match that main did store is harmless: the
+   * store dedups by id. */
   get checkpoint(): FileCheckpoint {
-    return this.cp;
+    let offset = this.cp.offset;
+    for (const at of this.unacked.values()) offset = Math.min(offset, at);
+    return offset === this.cp.offset ? this.cp : { ...this.cp, offset };
   }
   get currentOffset(): number {
     return this.tail.offset;

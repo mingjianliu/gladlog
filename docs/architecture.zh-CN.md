@@ -122,7 +122,7 @@ worker 内部(`src/worker/`):
 
 - `watcher.ts` —— 对日志目录 `fs.watch`,把文件标脏;`flushIntervalMs`(2 秒)定时器排空脏集,另外在最后一次事件后静默 `quietPeriodMs`(5 秒)再补刷一次,让最后一场的尾巴及时到位。flush 失败会把文件回插脏集,而不是杀掉 watcher。
 - `tailReader.ts` —— `readTail(filePath, state, sink)` 从 checkpoint 偏移按 8 MB 块读,按 `\n` 切(去掉行尾 `\r`),每切出一块就把其中每一行连同它的起始字节偏移交给 `sink.line`,积压的日志不会整个变成一个行数组留在内存里。**偏移只推进到最后一个完整行尾**。轮转的判据是文件变小,或首行的 sha1 变了,在第一条新行之前经 `sink.rotated` 通知。
-- `pipeline.ts` —— `FilePipeline` 每个文件持有一个 `GladLogParser`。它唯一不显然的规则:持久化的 checkpoint **绝不落在对局中间**。flush 结束时没有打开的段,就推进到最后一个完整行尾;有打开的段,就落在打开它的那一行行首,也就是 parser 处于 IDLE 时推入的最后一行(整个单排大厅算一个段),下次启动只重读这一场(GH #211)。轮转时它会先发一个合成的 aborted `segmentClose`(免得 OBS 录像那边干等 40 分钟的安全阀),再重建 parser。
+- `pipeline.ts` —— `FilePipeline` 每个文件持有一个 `GladLogParser`。它唯一不显然的规则:持久化的 checkpoint **绝不落在对局中间**。flush 结束时没有打开的段,就推进到最后一个完整行尾;有打开的段,就落在打开它的那一行行首,也就是 parser 处于 IDLE 时推入的最后一行(整个单排大厅算一个段),下次启动只重读这一场(GH #211)。持久化的 checkpoint 也绝不越过 main 还没存下的对局:每条 `match` / `shuffle` / `matchStaged` 消息带一个 `ackId`,main 把对局落盘后回一条 `stored` 消息,在此之前 checkpoint 停在那场对局的开局行,所以 worker 发出之后、main 提交之前崩溃,这场会被重读而不是丢掉。轮转时它会先发一个合成的 aborted `segmentClose`(免得 OBS 录像那边干等 40 分钟的安全阀),再重建 parser。
 - `runtime.ts` —— 启动时按 mtime 从旧到新把每个日志追平。追平后仍停在打开的段里的日志,如果它不是最近修改的那个日志,**并且**已经静默了段静默阀的 3 分钟,就被**退役**:结束 parser(单排已打完的轮次以 Unknown 结果入库,没闭合的普通对局丢弃,发出 aborted `segmentClose`),checkpoint 移到文件末尾。
 - `checkpoints.ts` —— 注册表形状是 `{ files: { [fileKey]: { offset, firstLineChecksum } } }`,用 tmp + rename 写到 `<userData>/checkpoints.json`。
 
