@@ -405,4 +405,93 @@ describe("observedEffectEndSeconds", () => {
       observedEffectEndSeconds(next.caster, AVATAR, 39, 40, next.combat),
     ).toBeNull();
   });
+
+  describe("pipeline T122: an effect laid along the press's own flight", () => {
+    // Breath of Eons 442204: the flight aura on its caster for 3.75 s, its
+    // Temporal Wound 409560 on the players it crosses (5e61152f 0:19: the
+    // first one 2.004 s after the press, the last 3.2 s, each on to 0:32+)
+    const BOE = "442204";
+    const WOUND = "409560";
+    function flight(
+      woundAtS: number,
+      woundEndS: number,
+      flightEndS = 13.75,
+    ): { caster: ReturnType<typeof makeUnit>; combat: never } {
+      const row = (
+        ev: LogEvent,
+        id: string,
+        s: number,
+        dest: string,
+        type: "BUFF" | "DEBUFF",
+      ) => ({
+        ...makeAuraEvent(ev, id, T0 + s * 1000, "c1", dest, type),
+        srcUnitName: "Caster",
+      });
+      const caster = makeUnit("c1", {
+        name: "Caster",
+        auraEvents: [
+          row(LogEvent.SPELL_AURA_APPLIED, BOE, 10, "c1", "BUFF"),
+          row(LogEvent.SPELL_AURA_REMOVED, BOE, flightEndS, "c1", "BUFF"),
+        ],
+      } as never);
+      const victim = makeUnit("v1", {
+        name: "Victim",
+        auraEvents: [
+          row(LogEvent.SPELL_AURA_APPLIED, WOUND, woundAtS, "v1", "DEBUFF"),
+          row(LogEvent.SPELL_AURA_REMOVED, WOUND, woundEndS, "v1", "DEBUFF"),
+        ],
+      } as never);
+      const combat = {
+        startTime: T0,
+        endTime: T0 + 200_000,
+        units: { c1: caster, v1: victim },
+      } as never;
+      return { caster, combat };
+    }
+
+    it("a wound that landed 2.004 s after the press, inside the flight, ends the span", () => {
+      const { caster, combat } = flight(12.004, 22.457);
+      expect(observedEffectEndSeconds(caster, BOE, 10, Infinity, combat)).toBe(
+        22.457,
+      );
+    });
+
+    it("a wound that landed after the flight ended is not this press's: the flight's end stands", () => {
+      const { caster, combat } = flight(14.2, 24.2);
+      expect(observedEffectEndSeconds(caster, BOE, 10, Infinity, combat)).toBe(
+        13.75,
+      );
+    });
+
+    it("the cast's own id on another unit gets no flight extension", () => {
+      // only an effect aura of the press rides its flight; the cast id's own
+      // aura on someone else still has to start in the press's window
+      const row = (ev: LogEvent, s: number, dest: string) => ({
+        ...makeAuraEvent(ev, BOE, T0 + s * 1000, "c1", dest, "BUFF"),
+        srcUnitName: "Caster",
+      });
+      const caster = makeUnit("c1", {
+        name: "Caster",
+        auraEvents: [
+          row(LogEvent.SPELL_AURA_APPLIED, 10, "c1"),
+          row(LogEvent.SPELL_AURA_REMOVED, 13.75, "c1"),
+        ],
+      } as never);
+      const ally = makeUnit("a1", {
+        name: "Ally",
+        auraEvents: [
+          row(LogEvent.SPELL_AURA_APPLIED, 12.5, "a1"),
+          row(LogEvent.SPELL_AURA_REMOVED, 30, "a1"),
+        ],
+      } as never);
+      const combat = {
+        startTime: T0,
+        endTime: T0 + 200_000,
+        units: { c1: caster, a1: ally },
+      } as never;
+      expect(observedEffectEndSeconds(caster, BOE, 10, Infinity, combat)).toBe(
+        13.75,
+      );
+    });
+  });
 });

@@ -559,6 +559,36 @@ export function talentEffectAuraAtPress(
   )?.spellId;
 }
 
+/**
+ * Pipeline T122: where the press's own aura — its cast id, on its caster,
+ * applied inside the press's start window — ended, in seconds from the
+ * match start; undefined when the press put none up. While it is up the
+ * press is still delivering: Breath of Eons' flight 442204 (3.75 s) lays
+ * Temporal Wound 409560 on the players it crosses, Deep Breath's flight its
+ * Deep Breath / Terror of the Skies auras (`castEffectAuraGenerated.json`:
+ * a median 1.0–1.2 s after the press). The caster's own interval
+ * builder's end, observed or capped at the official length alike — it
+ * bounds where an effect may START, never where the span ends.
+ */
+function pressOwnAuraEndS(
+  mine: ReadonlyArray<{ destId: string; iv: IAuraInterval }>,
+  casterId: string,
+  castSpellId: string,
+  castS: number,
+): number | undefined {
+  let end: number | undefined;
+  for (const { destId, iv } of mine) {
+    if (destId !== casterId || iv.spellId !== castSpellId) continue;
+    if (
+      iv.fromS < castS - EFFECT_START_BEFORE_S ||
+      iv.fromS > castS + EFFECT_START_AFTER_S
+    )
+      continue;
+    if (end === undefined || iv.toS > end) end = iv.toS;
+  }
+  return end;
+}
+
 /** `observedEffectEndSeconds` with the unit whose chain it read — the
  * effect's holder (codex 20-G167-02: Power Infusion's end is its target's,
  * not its caster's). */
@@ -627,6 +657,26 @@ function observedEffectEnd(
           castAndEffectIds(o.spellId).has(iv.spellId)),
     );
   };
+  const pressAuraEndS = pressOwnAuraEndS(mine, caster.id, castSpellId, castS);
+  /** Does an application at `fromS` of `spellId` on `destId` belong to
+   * this press: inside its start window, or — an effect aura on another
+   * unit — while the press's own aura was still up on its caster
+   * (`pressOwnAuraEndS`). Pipeline T122 (fact13 D26, 5e61152f 0:19):
+   * Breath of Eons lays Temporal Wound along its flight — 409560 on three
+   * players at +2.0 / +2.6 / +3.2 s, inside the 3.7 s flight 442204 —
+   * and the span stopped at the flight's end (0:23) while the wounds ran
+   * to 0:33. */
+  const startsForPress = (
+    fromS: number,
+    destId: string,
+    spellId: string,
+  ): boolean =>
+    fromS >= castS - EFFECT_START_BEFORE_S &&
+    (fromS <= castS + EFFECT_START_AFTER_S ||
+      (destId !== caster.id &&
+        spellId !== castSpellId &&
+        pressAuraEndS !== undefined &&
+        fromS <= pressAuraEndS));
   let best: {
     end: number;
     observed: boolean;
@@ -640,8 +690,7 @@ function observedEffectEnd(
       .map((m) => m.iv)
       .sort((a, b) => a.fromS - b.fromS);
     const startsAtPress = (iv: (typeof ivs)[number]) =>
-      iv.fromS >= castS - EFFECT_START_BEFORE_S &&
-      iv.fromS <= castS + EFFECT_START_AFTER_S;
+      startsForPress(iv.fromS, dest, iv.spellId);
     let first = ivs.findIndex(startsAtPress);
     // the aura the cast's effect lives on (`triggeredEffectAurasOfCast`)
     // over a side effect of it that went up first: The Hunt's 1.5 s root
@@ -735,8 +784,7 @@ function observedEffectEnd(
       )
         continue;
       const t = (a.logLine.timestamp - combat.startTime) / 1000;
-      if (t < castS - EFFECT_START_BEFORE_S || t > castS + EFFECT_START_AFTER_S)
-        continue;
+      if (!startsForPress(t, b.destId, b.auraId)) continue;
       if (t >= nextSameCastS) continue;
       if (at === undefined || t > at) at = t;
     }
