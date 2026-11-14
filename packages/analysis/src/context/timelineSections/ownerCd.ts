@@ -17,6 +17,10 @@ import { reachesAlly } from "../../data/spellTargeting";
 import { allyCopyClause } from "../../utils/allyCopyWall";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import {
+  enemySourceIds,
+  spellPressBlockedAt,
+} from "../../utils/cannotCastIntervals";
+import {
   channelAuraTail,
   channelEndSeconds,
   channelOverBeforeRoundEnd,
@@ -138,6 +142,14 @@ export function emitOwnerCdEntries(
     ownerStunIdsAtCast,
   } = ctx;
   const roundPlayers = [...friends, ...(enemies ?? [])];
+  // the cheaper note's press gate (T100), built on first use; `onSelf` is
+  // whether the alternative would go on the owner (`stunLetsPress`)
+  let ownerPressBlockedOnSelf:
+    | ReturnType<typeof spellPressBlockedAt>
+    | undefined;
+  let ownerPressBlockedOnAlly:
+    | ReturnType<typeof spellPressBlockedAt>
+    | undefined;
   // B3a: the round-level inputs of the school split (`saveCoversPressureOn`)
   const roundFacts = {
     sides: buildRosterSides(_allUnits),
@@ -511,6 +523,19 @@ export function emitOwnerCdEntries(
           : !castTargetIsTeammate || onlyCasterUnderFire
             ? owner
             : undefined;
+        const pressBlockedAt = castTargetIsTeammate
+          ? (ownerPressBlockedOnAlly ??= spellPressBlockedAt(
+              owner,
+              enemySourceIds(enemies ?? [], _allUnits),
+              _allUnits,
+              false,
+            ))
+          : (ownerPressBlockedOnSelf ??= spellPressBlockedAt(
+              owner,
+              enemySourceIds(enemies ?? [], _allUnits),
+              _allUnits,
+              true,
+            ));
         const cheaperAvailable = findCheaperDefensiveAlternatives(
           cd,
           ownerCDs,
@@ -518,6 +543,8 @@ export function emitOwnerCdEntries(
           {
             castTargetIsTeammate,
             onlyCasterUnderFire,
+            // T100: a silence or a kick lockout on its school holds it too
+            pressBlocked: (spellId) => pressBlockedAt(spellId, pressMs),
             coversSchool: recipient
               ? (spellId) =>
                   saveCoversPressureOn(spellId, recipient, pressMs, roundFacts)

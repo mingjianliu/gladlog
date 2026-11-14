@@ -126,6 +126,7 @@ const MODULE_FILES = [
   "t41",
   "t91",
   "t75",
+  "t100",
 ];
 await ensureAnalysisData();
 const modules: Array<IScanModule & { file: string }> = [];

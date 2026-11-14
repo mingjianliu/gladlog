@@ -502,9 +502,6 @@ export function buildMatchContext(
   );
 
   // Healer offense V1 (slack-gated facts) — healer log owners only
-  const ownerCCSummary = ccTrinketSummaries.find(
-    (s) => s.playerName === owner.name,
-  );
   // CC-received summaries for every enemy (2026-07-18 coverage fix): CC our
   // side (teammates/pets) landed on enemies used to be visible only through
   // cast lines inside the major-CD catalogue — the [CC ON ENEMY] aura lines
@@ -534,7 +531,6 @@ export function buildMatchContext(
         enemies as ICombatUnit[],
         offensiveWindows,
         enemyCDTimeline,
-        ownerCCSummary?.ccInstances ?? [],
         enemyHealerCCSummary?.ccInstances ?? [],
         ownerPurgeTimes,
         enemyHealerCCSummary?.drHistoryOnly ?? [],

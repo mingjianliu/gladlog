@@ -177,8 +177,6 @@ export function teamMinHpPctOver(
 export const SLACK_TEAM_MIN_LEGEND =
   "  `team min HP N%` on a slack or contested line below = the lowest HP any of your team had inside that span, the true minimum the log shows; the span itself is judged on the whole-second [STATE] readings (team at or above the band at every one of them), so N can sit below the band.";
 
-type CCInterval = ReadonlyArray<{ atSeconds: number; durationSeconds: number }>;
-
 function isEnemyCDActiveAt(timeline: IEnemyCDTimeline, t: number): boolean {
   return timeline.players.some((p) =>
     p.offensiveCDs.some(
@@ -187,10 +185,26 @@ function isEnemyCDActiveAt(timeline: IEnemyCDTimeline, t: number): boolean {
   );
 }
 
-function isOwnerCCdAt(ownerCC: CCInterval, t: number): boolean {
-  return ownerCC.some(
-    (cc) => cc.atSeconds <= t && t < cc.atSeconds + cc.durationSeconds,
-  );
+/** When the owner could not cast, epoch ms — `buildCannotCastIntervals`
+ * (hard CC, silences, kick lockouts). */
+type CannotCast = ReadonlyArray<{ from: number; to: number }>;
+
+/**
+ * Could the owner not cast at the whole second t (seconds since the round's
+ * start): the second's instant lies inside a cannot-cast interval. The one
+ * sampling of HEALER OFFENSE — the slack / contested sweep and a window's
+ * free seconds. T100 (fact13 D13, 54251a4b r0 2:04–2:10): the sweep read the
+ * `[CC ON TEAM]` instance list, which holds no silence and no kick lockout,
+ * so three seconds under Garrote - Silence printed as `[SLACK]` "no damage,
+ * no CC, no purge, no kick" — all four things a silence stops.
+ */
+export function ownerCannotCastAtSecond(
+  ownerCannotCast: CannotCast,
+  matchStartMs: number,
+  t: number,
+): boolean {
+  const ms = matchStartMs + t * 1000;
+  return ownerCannotCast.some((iv) => iv.from <= ms && ms < iv.to);
 }
 
 function ownerMobilityCastTimes(
@@ -217,7 +231,10 @@ export function computeSlackSegments(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
   enemyCDTimeline: IEnemyCDTimeline,
-  ownerCCInstances: CCInterval,
+  /** `buildCannotCastIntervals` of the owner (T100: not the `[CC ON TEAM]`
+   * instance list — "un-CC-d" is free to cast, and a silence or a kick
+   * lockout is not that) */
+  ownerCannotCast: CannotCast,
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
 ): { advancedLoggingAvailable: boolean; segments: ISlackSegment[] } {
   const matchStartMs = combat.startTime;
@@ -241,7 +258,7 @@ export function computeSlackSegments(
       if (hp === null || hp < SLACK_TEAM_HP_THRESHOLD) return false;
     }
     if (isEnemyCDActiveAt(enemyCDTimeline, t)) return false;
-    if (isOwnerCCdAt(ownerCCInstances, t)) return false;
+    if (ownerCannotCastAtSecond(ownerCannotCast, matchStartMs, t)) return false;
     if (mobilityTimes.some((m) => t >= m && t < m + MOBILITY_EXCLUSION_SECONDS))
       return false;
     return true;
@@ -353,7 +370,8 @@ export function computeContestedSegments(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
   enemyCDTimeline: IEnemyCDTimeline,
-  ownerCCInstances: CCInterval,
+  /** as `computeSlackSegments`'s */
+  ownerCannotCast: CannotCast,
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
 ): { advancedLoggingAvailable: boolean; segments: IContestedSegment[] } {
   const matchStartMs = combat.startTime;
@@ -382,7 +400,7 @@ export function computeContestedSegments(
     }
     if (!hasOneUnderSlackThreshold) return false;
     if (isEnemyCDActiveAt(enemyCDTimeline, t)) return false;
-    if (isOwnerCCdAt(ownerCCInstances, t)) return false;
+    if (ownerCannotCastAtSecond(ownerCannotCast, matchStartMs, t)) return false;
     if (mobilityTimes.some((m) => t >= m && t < m + MOBILITY_EXCLUSION_SECONDS))
       return false;
     return true;
@@ -1105,10 +1123,9 @@ export function computeWindowContributions(
     // second is not free when its start lies inside a cannot-cast interval.
     let blockedSeconds = 0;
     for (let t = Math.floor(fromSeconds); t < toSeconds; t++) {
-      const ms = matchStartMs + t * 1000;
       if (
-        ms >= ownerDeathMs ||
-        ownerCannotCast.some((iv) => iv.from <= ms && ms < iv.to)
+        matchStartMs + t * 1000 >= ownerDeathMs ||
+        ownerCannotCastAtSecond(ownerCannotCast, matchStartMs, t)
       )
         blockedSeconds++;
     }
@@ -1333,19 +1350,27 @@ export function buildHealerOffenseSummary(
   enemies: ICombatUnit[],
   offensiveWindows: IOffensiveWindow[],
   enemyCDTimeline: IEnemyCDTimeline,
-  ownerCCInstances: CCInterval,
   enemyHealerCCInstances: CCWithDR,
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
   /** the enemy healer summary's `drHistoryOnly` (fact6 F20) */
   enemyHealerDrHistoryOnly: CCWithDR = [],
 ): IHealerOffenseSummary {
+  // One predicate for "could not cast", built as `healingGaps` and
+  // `positionAnalysis` build it, for every reader of the section: the slack
+  // and contested sweeps (T100, until then the `[CC ON TEAM]` instance list,
+  // F-O12's scope) and a window's free seconds (F-O12).
+  const ownerCannotCast = buildCannotCastIntervals(
+    owner,
+    enemySourceIds(enemies, Object.values(combat.units ?? {})),
+    Object.values(combat.units ?? {}),
+  );
   const { advancedLoggingAvailable, segments } = computeSlackSegments(
     combat,
     owner,
     friends,
     enemies,
     enemyCDTimeline,
-    ownerCCInstances,
+    ownerCannotCast,
     ownerPurgeTimesSeconds,
   );
   if (!advancedLoggingAvailable) {
@@ -1369,7 +1394,7 @@ export function buildHealerOffenseSummary(
       friends,
       enemies,
       enemyCDTimeline,
-      ownerCCInstances,
+      ownerCannotCast,
       ownerPurgeTimesSeconds,
     ).segments,
     offensiveWindows,
@@ -1386,14 +1411,7 @@ export function buildHealerOffenseSummary(
       friends,
       enemies,
       offensiveWindows,
-      // One predicate for "could not cast", built as `healingGaps` and
-      // `positionAnalysis` build it; only the free-seconds count reads it —
-      // the slack segments above keep the CC instance list (F-O12's scope).
-      buildCannotCastIntervals(
-        owner,
-        enemySourceIds(enemies, Object.values(combat.units ?? {})),
-        Object.values(combat.units ?? {}),
-      ),
+      ownerCannotCast,
       enemyHealerCCInstances,
       createKillWindowFactsComputer(combat, friends, enemies),
       enemyHealerDrHistoryOnly,

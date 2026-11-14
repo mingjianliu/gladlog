@@ -191,13 +191,62 @@ describe("computeSlackSegments", () => {
       [owner],
       [],
       emptyEnemyTimeline(),
-      [{ atSeconds: 10, durationSeconds: 6 }], // owner CC'd 10–16s
+      [{ from: T0 + 10_000, to: T0 + 16_000 }], // owner could not cast 10–16s
       [],
     );
     for (const seg of segments) {
       expect(seg.toSeconds <= 10 || seg.fromSeconds >= 16).toBe(true); // CC exclusion
       expect(seg.toSeconds <= 60 || seg.fromSeconds >= 63).toBe(true); // mobility exclusion
     }
+  });
+
+  it("T100 (fact13 D13): a silence and a kick lockout are not slack, though neither is a CC instance", () => {
+    // Garrote - Silence 30.0–33.0, then Pummel at 70.0 (its lockout)
+    const owner = makeFriend("owner", {
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "1330",
+          T0 + 30_000,
+          "enemy-1",
+          "owner",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "1330",
+          T0 + 33_000,
+          "enemy-1",
+          "owner",
+        ),
+      ] as never,
+      actionIn: [
+        makeInterruptEvent(
+          "6552",
+          "Pummel",
+          "77472",
+          "Healing Wave",
+          T0 + 70_000,
+          "enemy-1",
+        ),
+      ] as never,
+    });
+    const enemy = makeUnit("enemy-1", { reaction: CombatUnitReaction.Hostile });
+    const summary = buildHealerOffenseSummary(
+      { ...combat, units: { owner, "enemy-1": enemy } },
+      owner,
+      [owner],
+      [enemy],
+      [],
+      emptyEnemyTimeline(),
+      [],
+      [],
+    );
+    const slackAt = (t: number) =>
+      summary.slackSegments.some((g) => g.fromSeconds <= t && t < g.toSeconds);
+    for (const t of [30, 31, 32, 70, 71]) expect(slackAt(t)).toBe(false);
+    expect(slackAt(29)).toBe(true);
+    expect(slackAt(33)).toBe(true);
+    expect(slackAt(90)).toBe(true);
   });
 
   it("drops segments shorter than 4s and fills owner activity counters", () => {
@@ -941,7 +990,6 @@ describe("buildHealerOffenseSummary + formatHealerOffenseForContext", () => {
       emptyEnemyTimeline(),
       [],
       [],
-      [],
     );
     expect(summary.advancedLoggingAvailable).toBe(false);
     expect(formatHealerOffenseForContext(summary)).toEqual([]);
@@ -1008,7 +1056,6 @@ describe("buildHealerOffenseSummary + formatHealerOffenseForContext", () => {
       enemyTimeline,
       [],
       [],
-      [],
     );
     const lines = formatHealerOffenseForContext(summary);
     const text = lines.join("\n");
@@ -1055,7 +1102,6 @@ describe("[KILL WINDOW] free seconds vs the rendered window (2026-09-30)", () =>
       emptyEnemyTimeline(),
       [],
       [],
-      [],
     );
     const line = formatHealerOffenseForContext(summary).find((l) =>
       l.includes("[KILL WINDOW]"),
@@ -1092,8 +1138,7 @@ describe("[KILL WINDOW] free seconds are castable seconds (triage other F-O12)",
       [owner],
       [enemyDk, enemyHealer],
       [makeWindow(40, 55)],
-      emptyEnemyTimeline(),
-      [], // the [CC ON TEAM] instance list sees neither lock below
+      emptyEnemyTimeline(), // the [CC ON TEAM] instance list sees neither lock below
       [],
       [],
     );
@@ -1222,7 +1267,6 @@ describe("[KILL WINDOW] `free` under half a second is `<1s`; no free second at a
       [enemyDk, enemyHealer],
       [makeWindow(40, 42.3)],
       emptyEnemyTimeline(),
-      [],
       [],
       [],
     );
@@ -1516,7 +1560,6 @@ describe("F193 V2 — contested trade facts", () => {
       emptyEnemyTimeline(),
       [],
       [],
-      [],
     );
 
     expect(summary.advancedLoggingAvailable).toBe(true);
@@ -1575,7 +1618,6 @@ describe("F193 V2 — contested trade facts", () => {
         emptyEnemyTimeline(),
         [],
         [],
-        [],
       ).contestedTradeFacts.length;
     expect(run(enemyHealer)).toBe(1);
     expect(run(far)).toBe(0);
@@ -1618,7 +1660,6 @@ describe("F193 V2 — contested trade facts", () => {
       emptyEnemyTimeline(),
       [],
       [],
-      [],
     );
     expect(summary.contestedTradeFacts.length).toBe(1);
     expect(summary.contestedTradeFacts[0].ccInterruptible).toBe("bar");
@@ -1658,7 +1699,6 @@ describe("F193 V2 — contested trade facts", () => {
       [enemyHealer],
       [],
       emptyEnemyTimeline(),
-      [],
       [],
       [],
     );
@@ -1706,7 +1746,6 @@ describe("F193 V2 — contested trade facts", () => {
       [enemyHealer],
       [],
       emptyEnemyTimeline(),
-      [],
        
       enemyHealerCCInstances as any[],
       [],
@@ -1738,7 +1777,6 @@ describe("F193 V2 — contested trade facts", () => {
       [enemyHealer],
       [],
       emptyEnemyTimeline(),
-      [],
       [],
       [],
     );
@@ -1855,7 +1893,6 @@ describe("F193 V2 — contested trade facts", () => {
       [enemy, enemyHealer],
       [makeWindow(30, 36)],
       emptyEnemyTimeline(),
-      [],
       [],
       [],
     );

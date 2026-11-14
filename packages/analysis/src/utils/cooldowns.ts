@@ -7238,6 +7238,11 @@ export function findCheaperDefensiveAlternatives(
      * (fe1a9355 4:52: Blessing of Spellwarding against 58 % physical). Absent
      * ⇒ no school gate (no known recipient, hand-built fixtures). */
     coversSchool?: (spellId: string) => boolean;
+    /** T100 (fact13 D15): could the caster not press this alternative at
+     * the cast — a silence it does not cast through, a kick lockout on its
+     * school (`spellPressBlockedAt`, built by the caller, which knows the
+     * enemies). Absent ⇒ no such gate (hand-built fixtures). */
+    pressBlocked?: (spellId: string) => boolean;
   } = {},
 ): string[] {
   // Nothing was chosen when a proc fired, so there is no "cheaper" choice to
@@ -7295,7 +7300,8 @@ export function findCheaperDefensiveAlternatives(
             other.spellId,
             opts.stunnedCaster.pvpTalentIds,
             opts.stunnedCaster.selfCastUnderStuns,
-          )),
+          )) &&
+        !(opts.pressBlocked?.(other.spellId) ?? false),
     )
     .map((other) => other.spellName);
 }

@@ -115,10 +115,13 @@ function timeline(opts: {
   mateDamageIn?: unknown[];
   /** the teammate's death, seconds from the match start */
   mateDeathS?: number;
+  /** rows done to the owner (T100: an enemy SPELL_INTERRUPT) */
+  ownerActionIn?: unknown[];
 }): string {
   const owner = mkUnit("o", {
     spellCastEvents: (opts.ownerCasts ?? []) as never,
     damageIn: (opts.ownerDamageIn ?? []) as never,
+    actionIn: (opts.ownerActionIn ?? []) as never,
   });
   const mate = mkUnit("m", {
     damageIn: (opts.mateDamageIn ?? []) as never,
@@ -464,5 +467,56 @@ describe("findCheaperDefensiveAlternatives stunnedCaster", () => {
         stunnedCaster: { pvpTalentIds: new Set() },
       }),
     ).toEqual(["Divine Protection"]);
+  });
+});
+
+describe("cheaper note under a kick lockout (T100, fact13 D15)", () => {
+  // Rebuke on the owner at 28.0 s: what it interrupted sets the locked school
+  const kick = (interruptedId: string, interruptedName: string) => ({
+    spellId: "96231",
+    spellName: "Rebuke",
+    extraSpellId: interruptedId,
+    extraSpellName: interruptedName,
+    timestamp: 28_000,
+    srcUnitId: "e",
+    srcUnitName: "e-Realm",
+    destUnitId: "o",
+    destUnitName: "o-Realm",
+    logLine: { event: LogEvent.SPELL_INTERRUPT, timestamp: 28_000, parameters: [] },
+  });
+  const cds = () => [
+    ledgerEntry(DIVINE_SHIELD, "Divine Shield", 210, [30]),
+    ledgerEntry(DIVINE_PROTECTION, "Divine Protection", 60, []),
+  ];
+
+  it("a lockout on the alternative's school takes it off the note", () => {
+    // Flash of Light is Holy, and so is Divine Protection
+    const t = timeline({
+      ownerCDs: cds(),
+      ownerActionIn: [kick("19750", "Flash of Light")],
+    });
+    const line = lineWith(t, "[YOU] [CD]", "Divine Shield");
+    expect(line).toBeDefined();
+    expect(line).not.toContain("cheaper available");
+  });
+
+  it("a lockout on another school leaves it on", () => {
+    // Shadow Word: Pain is Shadow: Divine Protection (Holy) stays pressable
+    const t = timeline({
+      ownerCDs: cds(),
+      ownerActionIn: [kick("589", "Shadow Word: Pain")],
+    });
+    expect(lineWith(t, "[YOU] [CD]", "Divine Shield")).toContain(
+      "cheaper available: Divine Protection",
+    );
+  });
+
+  it("findCheaperDefensiveAlternatives drops what pressBlocked names", () => {
+    const c = cds();
+    expect(
+      findCheaperDefensiveAlternatives(c[0]!, c, 30, {
+        pressBlocked: (id) => id === DIVINE_PROTECTION,
+      }),
+    ).toEqual([]);
   });
 });

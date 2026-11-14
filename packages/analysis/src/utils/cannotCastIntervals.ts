@@ -527,6 +527,42 @@ export function pressBlockedIntervalsForSpells(
   );
 }
 
+/**
+ * "Could `unit` press this spell at this instant?" over
+ * `pressBlockedIntervalsForSpells`, asked one spell at a time: true while an
+ * interval that stops the spell holds the instant (from ≤ atMs < to) — a
+ * silence the spell does not cast through, a kick lockout whose school holds
+ * the spell's, a disarm of a weapon spell, a stun the game does not let it
+ * through. Each spell's list is built once per reader.
+ *
+ * T100 (fact13 D15, 77310154 r0 0:46): `cheaper available: Ice Barrier,
+ * Alter Time` on a Mass Invisibility pressed 2.2 s into a Spell Lock on Frost
+ * — Ice Barrier is Frost, and the same lock refused a ready Ice Block twice.
+ * The note was gated on a stun only.
+ */
+export function spellPressBlockedAt(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  units: RoundUnits,
+  onSelf: boolean,
+): (spellId: string, atMs: number) => boolean {
+  const memo = new Map<string, NamedCannotCastInterval[]>();
+  return (spellId, atMs) => {
+    let ivs = memo.get(spellId);
+    if (!ivs) {
+      ivs = pressBlockedIntervalsForSpells(
+        unit,
+        enemyIds,
+        [spellId],
+        units,
+        onSelf,
+      );
+      memo.set(spellId, ivs);
+    }
+    return ivs.some((iv) => iv.from <= atMs && atMs < iv.to);
+  };
+}
+
 /** The disarm auras the other side put on `unit` (DB2 SpellMechanic 3,
  * `disarmSpellIds`), APPLIED → first REMOVED / BROKEN of the same spell and
  * source, a missing REMOVED at the official length. Preview. */
