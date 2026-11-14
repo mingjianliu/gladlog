@@ -33,9 +33,45 @@ export interface WorkerTransport {
  * larger than any normal in-match write gap (seconds during a fight, ~1
  * minute between shuffle rounds) and far smaller than the safety valve. It
  * only emits a signal and does not touch the parser: a late real END is still
- * stored normally, and the recorder idempotently absorbs the second close. */
+ * stored normally, and the recorder idempotently absorbs the second close.
+ * The startup catch-up reuses the same threshold, against the file's mtime,
+ * as one of the two conditions for retiring a file that ends inside an open
+ * segment (see configure()); that one does end the parser. */
 const SEGMENT_QUIET_CLOSE_MS = 3 * 60_000;
 const QUIET_CHECK_INTERVAL_MS = 30_000;
+
+function mtimeOf(path: string): number | null {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/** The startup catch-up order: oldest modification first, so matches reach
+ * the store in the order they were played. The raw names sort wrongly across
+ * a year boundary (`WoWCombatLog-MMDDYY_HHMMSS.txt`: 123126 sorts after
+ * 010127). A file that cannot be stat'ed sorts first; ties fall back to the
+ * name. */
+function startupOrder(
+  logsDir: string,
+  names: string[],
+): { name: string; mtimeMs: number }[] {
+  return names
+    .map((name) => ({
+      name,
+      mtimeMs: mtimeOf(join(logsDir, name)) ?? -Infinity,
+    }))
+    .sort((a, b) =>
+      a.mtimeMs !== b.mtimeMs
+        ? a.mtimeMs - b.mtimeMs
+        : a.name < b.name
+          ? -1
+          : a.name > b.name
+            ? 1
+            : 0,
+    );
+}
 
 export function createWorkerRuntime(opts: {
   transport: WorkerTransport;
@@ -211,7 +247,30 @@ export function createWorkerRuntime(opts: {
       postStatus(false);
       return;
     }
-    for (const name of names.sort()) flushFile(basename(name));
+    const files = startupOrder(next.logsDir, names);
+    const newestMtimeMs = files.reduce(
+      (m, f) => Math.max(m, f.mtimeMs),
+      -Infinity,
+    );
+    for (const { name } of files) {
+      const key = basename(name);
+      flushFile(key);
+      const p = pipelines.get(key);
+      if (!p?.hasOpenSegment) continue;
+      // A file that still ends inside an open segment after its catch-up is
+      // retired when WoW will never write to it again (GH #211): it must be
+      // quiet for the valve's own threshold *and* not be the most recently
+      // modified log. Both are required -- two live clients can write two
+      // files at once, and the newest file may simply be mid-match right
+      // now. Judged by mtime, never by the MMDDYY in the name. Without this
+      // the file's open segment (every round of a shuffle lobby) stayed in
+      // its parser until teardown, and its checkpoint never got past it.
+      const mtimeMs = mtimeOf(join(next.logsDir, key));
+      if (mtimeMs === null || mtimeMs >= newestMtimeMs) continue;
+      if (Date.now() - mtimeMs < quietCloseMs) continue;
+      p.retire();
+      registry.files[key] = p.checkpoint;
+    }
     saveCheckpoints(next.checkpointsPath, registry);
     watcher = startLogWatcher({
       logsDir: next.logsDir,

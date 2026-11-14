@@ -121,8 +121,9 @@ Electron 给了四个 JavaScript 上下文,gladlog 四个都用上了,外加 `wo
 worker 内部(`src/worker/`):
 
 - `watcher.ts` —— 对日志目录 `fs.watch`,把文件标脏;`flushIntervalMs`(2 秒)定时器排空脏集,另外在最后一次事件后静默 `quietPeriodMs`(5 秒)再补刷一次,让最后一场的尾巴及时到位。flush 失败会把文件回插脏集,而不是杀掉 watcher。
-- `tailReader.ts` —— `readTail(filePath, state)` 从 checkpoint 偏移按 8 MB 块读,按 `\n` 切(去掉行尾 `\r`),**偏移只推进到最后一个完整行尾**。轮转的判据是文件变小,或首行的 sha1 变了。
-- `pipeline.ts` —— `FilePipeline` 每个文件持有一个 `GladLogParser`。它唯一不显然的规则:持久化的 checkpoint **只在 `!parser.hasOpenSegment()` 时推进**。绝不在对局中途 checkpoint。轮转时它会先发一个合成的 aborted `segmentClose`(免得 OBS 录像那边干等 40 分钟的安全阀),再重建 parser。
+- `tailReader.ts` —— `readTail(filePath, state, sink)` 从 checkpoint 偏移按 8 MB 块读,按 `\n` 切(去掉行尾 `\r`),每切出一块就把其中每一行连同它的起始字节偏移交给 `sink.line`,积压的日志不会整个变成一个行数组留在内存里。**偏移只推进到最后一个完整行尾**。轮转的判据是文件变小,或首行的 sha1 变了,在第一条新行之前经 `sink.rotated` 通知。
+- `pipeline.ts` —— `FilePipeline` 每个文件持有一个 `GladLogParser`。它唯一不显然的规则:持久化的 checkpoint **绝不落在对局中间**。flush 结束时没有打开的段,就推进到最后一个完整行尾;有打开的段,就落在打开它的那一行行首,也就是 parser 处于 IDLE 时推入的最后一行(整个单排大厅算一个段),下次启动只重读这一场(GH #211)。轮转时它会先发一个合成的 aborted `segmentClose`(免得 OBS 录像那边干等 40 分钟的安全阀),再重建 parser。
+- `runtime.ts` —— 启动时按 mtime 从旧到新把每个日志追平。追平后仍停在打开的段里的日志,如果它不是最近修改的那个日志,**并且**已经静默了段静默阀的 3 分钟,就被**退役**:结束 parser(单排已打完的轮次以 Unknown 结果入库,没闭合的普通对局丢弃,发出 aborted `segmentClose`),checkpoint 移到文件末尾。
 - `checkpoints.ts` —— 注册表形状是 `{ files: { [fileKey]: { offset, firstLineChecksum } } }`,用 tmp + rename 写到 `<userData>/checkpoints.json`。
 
 回传给 main 的是 `src/shared/protocol.ts` 里的 `WorkerToMain` 联合类型:`matchStaged`、`match`、`shuffle`、`diagnostic`、`segmentOpen`、`segmentClose`、`status`。一场打完的对局正常以 `matchStaged` 到达:worker 已经把三个文件写进库根目录下的 `.stage-*` 目录(`matchStore.ts` 的 `stageMatch`),main 只把它 rename 到位(`MatchStore.commitStaged`)。`match` / `shuffle` 携带整份文档,只在暂存失败时兜底(GH #149:归档里最大的两场单排,这次克隆是 405–669 MB,main 要花 2.0–3.6 s 反序列化 + `JSON.stringify`;提交只要约 2 ms)。路由逻辑放在 `workerMessageHandler.ts` 里做成纯函数,好脱离 Electron 单测;`index.ts` 只负责把 Electron 具体的那几端注进去。
@@ -144,7 +145,7 @@ worker 内部(`src/worker/`):
 | `recordingsStore.ts`              | 录像索引及其与对局的关联(`TOLERANCE_MS = 60_000` 重叠判据);按 `recordingKeepCount` 清理                                                    | `<userData>/recordings/` NDJSON 索引 + 视频文件                      |
 | `settingsStore.ts`                | 带默认值的类型化设置、patch 净化、旧字段迁移、密钥字段用 `safeStorage` 加密                                                                | `<userData>/settings.json`                                           |
 | `workerHost.ts`                   | 拉起/重启/重配 tail 日志的 utility 进程                                                                                                    | 无                                                                   |
-| `workerMessageHandler.ts`         | `WorkerToMain` 消息的纯路由(提交或入库、通知录像、推给窗口)                                                                                      | 无                                                                   |
+| `workerMessageHandler.ts`         | `WorkerToMain` 消息的纯路由(提交或入库、通知录像、推给窗口)                                                                                | 无                                                                   |
 | `crashPolicy.ts`                  | 判定反复崩溃的日志文件何时被隔离                                                                                                           | 无(内存)                                                             |
 | `quitLifecycle.ts`                | `before-quit` 钩子:挂起退出 → 停录像(封顶 4 秒)→ 停 worker → 收掉在飞 AI → 真正退出                                                        | 无                                                                   |
 | `slimWorker.ts`                   | `worker_threads` 入口:读 → parse → `slimStoredDoc` → 原子回写 → 回报每轮行偏移                                                             | 原地重写 `match.json`                                                |
@@ -332,17 +333,17 @@ analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出�
 
 ### `src/analysis/` —— findings、prompt、审计
 
-| 模块                                                  | 职责                                                                                                                                   |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `candidateFindings.ts`                                | `extractCandidateFindings` —— 模型被允许谈论的确定性候选(冷却浪费、错失解控/驱散、被控住、吃打断、饰品浪费、死亡布置、未按自保/外抬)。 |
-| `deepDive.ts`                                         | 追问轮:围绕某条 finding 或某个选定窗口的证据包,以及它们的 prompt 与审计。                                                              |
-| `buildFindingsPrompt.ts`                              | findings prompt。                                                                                                                      |
-| `auditFindings.ts`                                    | 出模型后的审计:凡带裸数字、编造事件、或违禁因果断言的一律丢弃。                                                                        |
-| `causalLint.ts`                                       | 纯正则的强因果**措辞**检查(策略禁止),中英双语。它查的是措辞,不是真伪。                                                                 |
+| 模块                                                  | 职责                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `candidateFindings.ts`                                | `extractCandidateFindings` —— 模型被允许谈论的确定性候选(冷却浪费、错失解控/驱散、被控住、吃打断、饰品浪费、死亡布置、未按自保/外抬)。                                                                                                                                                       |
+| `deepDive.ts`                                         | 追问轮:围绕某条 finding 或某个选定窗口的证据包,以及它们的 prompt 与审计。                                                                                                                                                                                                                    |
+| `buildFindingsPrompt.ts`                              | findings prompt。                                                                                                                                                                                                                                                                            |
+| `auditFindings.ts`                                    | 出模型后的审计:凡带裸数字、编造事件、或违禁因果断言的一律丢弃。                                                                                                                                                                                                                              |
+| `causalLint.ts`                                       | 纯正则的强因果**措辞**检查(策略禁止),中英双语。它查的是措辞,不是真伪。                                                                                                                                                                                                                       |
 | `selfReview.ts`                                       | 可选的第二次调用(设置项,默认关;2026-10-15):同一后端 / 模型拿着生成它们的那份 prompt 重读审计后的 findings,逐条保留 / 更正 / 弱化 / 删除——绝不新增。由 `applySelfReview` 而非 `auditFindings` 校验(它看到的是渲染后的数字);缓存身份带 `SELF_REVIEW_PROMPT_VERSION`,与 `PROMPT_VERSION` 独立。 |
-| `spellNameZhLint.ts`                                  | 防止输出里把技能名译成中文。                                                                                                           |
-| `parseModelJson.ts`                                   | 容错的 JSON 抽取(带 markdown 围栏也认)—— `bad-json` 误杀那一类的修法。                                                                 |
-| `findingCategories.ts` / `types.ts` / `factFormat.ts` | 类别归一化与共享类型。                                                                                                                 |
+| `spellNameZhLint.ts`                                  | 防止输出里把技能名译成中文。                                                                                                                                                                                                                                                                 |
+| `parseModelJson.ts`                                   | 容错的 JSON 抽取(带 markdown 围栏也认)—— `bad-json` 误杀那一类的修法。                                                                                                                                                                                                                       |
+| `findingCategories.ts` / `types.ts` / `factFormat.ts` | 类别归一化与共享类型。                                                                                                                                                                                                                                                                       |
 
 ### `src/compare/`、`src/benchmark/`、`src/learning/`
 

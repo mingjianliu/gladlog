@@ -80,30 +80,66 @@ export class FilePipeline {
     });
   }
 
+  /** Reads and parses everything past the tail, then moves the persisted
+   * checkpoint to the last IDLE boundary (GH #211).
+   *
+   * The checkpoint must be a point a *fresh* parser can resume from and end
+   * up in the same state, so it may never sit inside a match: with a segment
+   * open at the end of the flush, it goes to the start of the line that
+   * opened it -- the last line pushed while the parser was IDLE (a shuffle
+   * lobby counts as one segment, so that is its first round's START; a
+   * DOUBLE_START does not pass through IDLE, so it is the first START). Before
+   * this, the checkpoint simply stayed where it was, and a file ending inside
+   * an unclosed match kept `{offset: 0}` forever and was re-parsed in full on
+   * every launch. Every recorded offset is the start of a complete line, so
+   * the checkpoint always lands on one. */
   processFlush(): void {
-    const r = readTail(this.filePath, this.tail);
-    if (r.rotated) {
-      // A rotation discards the old parser. parser.end() is a no-op when
-      // IDLE, and otherwise: (a) emits the aborted segmentClose the recording
-      // side needs (else it waits for the 40-minute safety valve), and (b)
-      // for a shuffle in progress, flushes shuffleCallback for the rounds
-      // that already completed before rotation, instead of silently
-      // discarding the finished rounds along with the truncated one --
-      // without this, those rounds' recording segments were permanently
-      // orphaned (BACKLOG #21.8; the underlying flush logic lives in
-      // packages/parser's Segmenter.end()).
-      this.parser.end();
-      this.createParser();
-      this.cp = { offset: 0, firstLineChecksum: r.state.firstLineChecksum };
-    }
-    for (const line of r.lines) this.parser.push(line);
+    let idleAt = this.cp.offset;
+    const r = readTail(this.filePath, this.tail, {
+      rotated: (firstLineChecksum) => {
+        // A rotation discards the old parser. parser.end() is a no-op when
+        // IDLE, and otherwise: (a) emits the aborted segmentClose the
+        // recording side needs (else it waits for the 40-minute safety
+        // valve), and (b) for a shuffle in progress, flushes shuffleCallback
+        // for the rounds that already completed before rotation, instead of
+        // silently discarding the finished rounds along with the truncated
+        // one -- without this, those rounds' recording segments were
+        // permanently orphaned (BACKLOG #21.8; the underlying flush logic
+        // lives in packages/parser's Segmenter.end()).
+        this.parser.end();
+        this.createParser();
+        // The fresh parser is IDLE, so the first new line resets idleAt.
+        this.cp = { offset: 0, firstLineChecksum };
+      },
+      line: (line, startOffset) => {
+        if (!this.parser.hasOpenSegment()) idleAt = startOffset;
+        this.parser.push(line);
+      },
+    });
     this.tail = r.state;
-    if (!this.parser.hasOpenSegment()) {
-      this.cp = {
-        offset: this.tail.offset,
-        firstLineChecksum: this.tail.firstLineChecksum,
-      };
-    }
+    this.cp = {
+      offset: this.parser.hasOpenSegment() ? idleAt : this.tail.offset,
+      firstLineChecksum: this.tail.firstLineChecksum,
+    };
+  }
+
+  /** Gives up on the open segment of a file WoW will never write again
+   * (runtime.ts decides that; see its startup loop). parser.end() is the same
+   * call a rotation makes: it stores the finished rounds of an unfinished
+   * shuffle with an Unknown result (#21.8), drops an unclosed ordinary match,
+   * and emits the aborted segmentClose that pairs the segmentOpen the replay
+   * just sent, so the recorder is never left inside that window. The parser
+   * is replaced, which releases the segment's records and raw lines (~9.5
+   * bytes of heap per raw character, GH #211), and the checkpoint moves to
+   * the end of the last complete line so the next launch reads nothing. */
+  retire(): void {
+    if (!this.parser.hasOpenSegment()) return;
+    this.parser.end();
+    this.createParser();
+    this.cp = {
+      offset: this.tail.offset,
+      firstLineChecksum: this.tail.firstLineChecksum,
+    };
   }
 
   /** Called before teardown (directory change / reconfiguration) *and* by the
