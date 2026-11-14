@@ -176,6 +176,7 @@ import {
   fmtS,
   type IRoundCtx,
   nameOf,
+  REFRESH,
   REMOVED,
   SUCCESS,
   successesOf,
@@ -1410,11 +1411,33 @@ function unusedOwnAuraOnAlly(ctx: IRoundCtx): void {
         .filter((c) => tsOf(c) >= ctx.start && tsOf(c) <= end)
         .map((c) => nameOf(c.spellId, c.spellName)),
     );
+    // T98 (fact13 D11): the unit's pet shares its owner's buff — a copy on
+    // the pet in the batch (≤ 5 ms) of the owner's own copy is the owner's
+    // copy, no press out of sight (Exhilaration's Survival of the Fittest on
+    // the hunter and its pet)
+    const pets = new Set(
+      ctx.units.filter((x) => x.ownerId === u.id).map((x) => x.id),
+    );
+    const ownCopyMs = ((u.auraEvents ?? []) as any[])
+      .filter(
+        (a) =>
+          (ev(a) === APPLIED || ev(a) === REFRESH) &&
+          a.srcUnitId === u.id &&
+          a.destUnitId === u.id,
+      )
+      .map((a) => ({ id: String(a.spellId), t: tsOf(a) }));
     const onOthers = new Map<string, number>();
     for (const x of ctx.units)
       for (const a of (x.auraEvents ?? []) as any[]) {
         if (ev(a) !== APPLIED || a.srcUnitId !== u.id) continue;
         if (a.destUnitId === u.id) continue;
+        if (
+          pets.has(a.destUnitId) &&
+          ownCopyMs.some(
+            (o) => o.id === String(a.spellId) && Math.abs(o.t - tsOf(a)) <= 5,
+          )
+        )
+          continue;
         const t = tsOf(a);
         if (t < ctx.start || t > end) continue;
         const name = nameOf(a.spellId, a.spellName);

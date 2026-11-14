@@ -4335,6 +4335,10 @@ export function spendsSharedChargeOf(
  * signal there ever was, exactly the Renewing Blaze/Avenging-Wrath-proc/
  * Ascendance-proc case this table is for.
  */
+/** One batch of rows: a buff its owner and the owner's pet get together is
+ * logged in the same millisecond (47a03469 r0: 2:04.935 on both). */
+const PET_COPY_SAME_BATCH_MS = 5;
+
 /**
  * fact2 (2026-10-20): the presses a cooldown's own effect proves when the
  * round logs no cast row of it — the APPLIED rows of its effect auras
@@ -4400,6 +4404,34 @@ export function effectEvidenceCastSeconds(
     .map((e) => e.logLine.timestamp);
   const variantsEffect = (ms: number) =>
     ownVariantPressMs.some((t) => ms >= t && ms <= t + CAST_MISS_WINDOW_MS);
+  // T98 (fact13 D11, 47a03469 r0 2:04.935): the unit's own pet shares its
+  // owner's buff — a copy on the pet that the owner got from itself in the
+  // same batch is the owner's own copy (Exhilaration's 3 s Survival of the
+  // Fittest on the hunter and its pet, no 264735 cast row in the round: the
+  // kit read a press and a spent charge). The owner's copy stays
+  // `hiddenPressMs`' reading, as `[ENEMY DEF]` reads it (`unseenPressed`).
+  const petIds = new Set(
+    units.filter((u) => u.ownerId === unit.id).map((u) => u.id),
+  );
+  const ownCopyMs = (unit.auraEvents ?? [])
+    .filter(
+      (a) =>
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+        !!a.spellId &&
+        ownIdOnOthersOf(a.spellId) &&
+        a.srcUnitId === unit.id &&
+        a.destUnitId === unit.id,
+    )
+    .map((a) => a.logLine.timestamp);
+  const petSharesOwnersCopy = (a: {
+    destUnitId: string;
+    logLine: { timestamp: number };
+  }) =>
+    petIds.has(a.destUnitId) &&
+    ownCopyMs.some(
+      (t) => Math.abs(t - a.logLine.timestamp) <= PET_COPY_SAME_BATCH_MS,
+    );
   const applied = units
     .flatMap((u) => u.auraEvents ?? [])
     .filter(
@@ -4407,7 +4439,9 @@ export function effectEvidenceCastSeconds(
         a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
         !!a.spellId &&
         (effects.includes(a.spellId) ||
-          (ownIdOnOthersOf(a.spellId) && a.destUnitId !== unit.id)) &&
+          (ownIdOnOthersOf(a.spellId) &&
+            a.destUnitId !== unit.id &&
+            !petSharesOwnersCopy(a))) &&
         sources.has(a.srcUnitId) &&
         a.logLine.timestamp >= combat.startTime &&
         !variantsEffect(a.logLine.timestamp),

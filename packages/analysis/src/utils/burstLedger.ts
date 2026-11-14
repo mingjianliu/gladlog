@@ -176,6 +176,12 @@ export interface IBurstDefensiveHit {
    *  up, a rider shield). The ledger line then drops "pressed" and carries
    *  that line's own tag. */
   noPressLogged?: true;
+  /** T98 (fact13 D5): the wall's interval began as a copy no press put up
+   * and a press of it followed inside the interval (`[ENEMY DEF]` prints the
+   * copy, then the press): raw ms
+   * from the burst's start to that press — the instant "pressed Zs after"
+   * names. Absent = the press, if any, is the interval's start. */
+  pressOffsetMs?: number;
 }
 
 /** Was the wall already up when the burst opened? One predicate for the
@@ -201,6 +207,7 @@ export function wallTimingPhrase(
         startOffsetMs?: number;
         startOffsetSeconds?: number;
         noPressLogged?: true;
+        pressOffsetMs?: number;
       }
     | undefined,
 ): string {
@@ -208,7 +215,11 @@ export function wallTimingPhrase(
   const up = wallUpAtOpen(d);
   if (up === undefined) return "";
   if (up) return "already up when the burst opened";
-  const s = d.startOffsetSeconds ?? (d.startOffsetMs ?? 0) / 1000;
+  // a copy a press then refreshed (T98): the press is when it was pressed
+  const s =
+    d.pressOffsetMs !== undefined
+      ? Math.round(d.pressOffsetMs / 100) / 10
+      : (d.startOffsetSeconds ?? (d.startOffsetMs ?? 0) / 1000);
   const after = `${s < 0.05 ? "<0.1" : s.toFixed(1)}s after the burst opened`;
   return d.noPressLogged
     ? `${after} ${ENEMY_DEF_NO_PRESS_TAG}`
@@ -584,14 +595,14 @@ export function analyzeBurstLedger(
   }
 
   const entries: IBurstLedgerEntry[] = [];
-  // every enemy's no-press `[ENEMY DEF]` events, read once for the whole
-  // ledger and only when a burst asks (T39: read per burst, it was 29 s of
-  // a 50 s ×12 report render — the events do not depend on the burst)
-  let noPressAll: ReturnType<typeof enemyDefensiveEvents> | undefined;
-  const noPressEvents = () =>
-    (noPressAll ??= enemies
-      .flatMap((e) => enemyDefensiveEvents(e, enemies, combat))
-      .filter((e) => e.noPressLogged));
+  // every enemy's `[ENEMY DEF]` events, read once for the whole ledger and
+  // only when a burst asks (T39: read per burst, it was 29 s of a 50 s ×12
+  // report render — the events do not depend on the burst)
+  let defAll: ReturnType<typeof enemyDefensiveEvents> | undefined;
+  const defEvents = () =>
+    (defAll ??= enemies.flatMap((e) =>
+      enemyDefensiveEvents(e, enemies, combat),
+    ));
   for (const group of groups) {
     const fromSeconds = group[0].castTimeSeconds;
     if (fromSeconds >= matchEndS) continue; // pressed after the round ended
@@ -646,28 +657,74 @@ export function analyzeBurstLedger(
       // T49: the auras on this target that no press put up, as the
       // `[ENEMY DEF]` line reads them — its own events, the target's and its
       // mates' (an external). Built once, for the first wall that started
-      // after the burst opened.
-      let noPressOnTarget: Array<{ spellId: string; atS: number }> | undefined;
-      const noPressPutUp = (spellId: string, startMs: number): boolean => {
-        noPressOnTarget ??= noPressEvents()
-          .filter(
-            (e) =>
-              e.noPressLogged &&
-              // by id: two enemies can carry one name (codex
-              // 85-tk-H-T49-1 #1); the name only when the event has no id
-              (e.recipientId !== undefined
-                ? e.recipientId === target.id
-                : e.casterId !== undefined
-                  ? e.casterId === target.id
-                  : e.casterName === target.name),
+      // after the burst opened. T98: with them, the presses of the same
+      // walls, to find one inside a copy's interval.
+      let defOnTarget:
+        | Array<{
+            spellId: string;
+            atS: number;
+            noPress: boolean;
+            pressS?: number;
+            casterName: string;
+            casterId?: string;
+          }>
+        | undefined;
+      /** The `[ENEMY DEF]` reading of the wall interval from `startMs` to
+       * `endMs`: undefined when its start is no copy (T49: a copy no press
+       * put up starts there); a copy, unless an `[ENEMY DEF]` press of the
+       * same wall from the same source starts inside the interval — then the
+       * interval is a pressed wall, timed at that press (T98, fact13 D5).
+       * `buildAuraIntervals` does not cut where a press refreshed the copy,
+       * so the ledger's one interval holds both lines of the timeline
+       * (1a2fabdb 1:25: Exhilaration's Survival of the Fittest copy 0.3 s,
+       * the hunter's press 8.0 s — all 8.3 s read `[no press logged]`). */
+      const pressReadingOf = (
+        spellId: string,
+        srcUnitName: string,
+        startMs: number,
+        endMs: number,
+      ): { noPress: true } | { pressMs: number } | undefined => {
+        defOnTarget ??= defEvents()
+          .filter((e) =>
+            // by id: two enemies can carry one name (codex
+            // 85-tk-H-T49-1 #1); the name only when the event has no id
+            e.recipientId !== undefined
+              ? e.recipientId === target.id
+              : e.casterId !== undefined
+                ? e.casterId === target.id
+                : e.casterName === target.name,
           )
-          .map((e) => ({ spellId: e.spellId, atS: e.atSeconds }));
+          .map((e) => ({
+            spellId: e.spellId,
+            atS: e.atSeconds,
+            noPress: e.noPressLogged === true,
+            ...(e.pressSeconds !== undefined ? { pressS: e.pressSeconds } : {}),
+            casterName: e.casterName,
+            ...(e.casterId !== undefined ? { casterId: e.casterId } : {}),
+          }));
         const atS = (startMs - combat.startTime) / 1000;
-        return noPressOnTarget.some(
+        const endS = (endMs - combat.startTime) / 1000;
+        const copy = defOnTarget.find(
           (e) =>
+            e.noPress &&
             e.spellId === spellId &&
             Math.abs(e.atS - atS) <= NO_PRESS_SAME_AURA_S,
         );
+        if (!copy) return undefined;
+        const press = defOnTarget
+          .filter(
+            (e) =>
+              !e.noPress &&
+              e.spellId === spellId &&
+              (e.casterName === srcUnitName ||
+                (srcUnitName === target.name && e.casterId === target.id)) &&
+              e.atS > copy.atS &&
+              e.atS <= endS,
+          )
+          .sort((x, y) => x.atS - y.atS)[0];
+        return press
+          ? { pressMs: combat.startTime + (press.pressS ?? press.atS) * 1000 }
+          : { noPress: true };
       };
       // a re-announced aura (APPLIED again within a second of its one press)
       // is that press: `buildAuraIntervals` joins it for every reader
@@ -738,9 +795,22 @@ export function analyzeBurstLedger(
           startOffsetSeconds: Math.round((iv.startMs - fromMs) / 100) / 10,
           startOffsetMs: iv.startMs - fromMs,
           endOffsetMs: endMs - fromMs,
-          ...(iv.startMs > fromMs && noPressPutUp(iv.spellId, iv.startMs)
-            ? { noPressLogged: true as const }
-            : {}),
+          ...(() => {
+            const r =
+              iv.startMs > fromMs
+                ? pressReadingOf(
+                    iv.spellId,
+                    iv.srcUnitName,
+                    iv.startMs,
+                    iv.endMs,
+                  )
+                : undefined;
+            return !r
+              ? {}
+              : "noPress" in r
+                ? { noPressLogged: true as const }
+                : { pressOffsetMs: r.pressMs - fromMs };
+          })(),
         });
       }
       defensivesHit.sort((a, b) => b.overlapSeconds - a.overlapSeconds);

@@ -21,6 +21,9 @@ const BURST_PRESSED =
   /^\s+(?:Target had [^:]+|⚠ Target was IMMUNE): (.+?) active ON THE TARGET [\d.]+s of this burst \(pressed (<?[\d.]+)s after the burst opened\)/;
 const ENEMY_DEF_NO_PRESS =
   /^(\d+:\d{2})\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\) \([^)]*\): (.+?)(?: \+ \d+% copy)?(?: → (\d+)\([^)]*\))? \(.*\[no press logged\]/;
+/** any `[ENEMY DEF]` line of a wall (pressed when it has no no-press tag) */
+const ENEMY_DEF_ANY =
+  /^(\d+:\d{2})\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\) \([^)]*\): (.+?)(?: \+ \d+% copy)?(?: → (\d+)\([^)]*\))? \(/;
 
 export function run(ctx: IRoundCtx): void {
   const C = "ledgerPressedNoPress";
@@ -29,9 +32,18 @@ export function run(ctx: IRoundCtx): void {
   // identifies neither, and the line is not judged (codex 85-tk-H-T49-1b #1)
   const unitsNamed = (name: string): number =>
     ctx.units.filter((u) => u.name === name).length;
+  // T98 (fact13 D5): a copy a press of its own then refreshed is two
+  // timeline lines, the copy `[no press logged]` and the press; the ledger's
+  // one interval of that aura says "pressed" at the press
+  const pressed: Array<{ at: number; holder: string; wall: string }> = [];
   for (const l of ctx.lines) {
     const m = ENEMY_DEF_NO_PRESS.exec(l);
-    if (!m) continue;
+    if (!m) {
+      const a = ENEMY_DEF_ANY.exec(l);
+      const h = a && ctx.unitOfPid(a[4] ?? a[2]);
+      if (a && h) pressed.push({ at: secOf(a[1]!), holder: h.id, wall: a[3]! });
+      continue;
+    }
     const holder = ctx.unitOfPid(m[4] ?? m[2]);
     if (holder)
       noPress.push({ at: secOf(m[1]!), holder: holder.id, wall: m[3]! });
@@ -64,6 +76,17 @@ export function run(ctx: IRoundCtx): void {
         n.at <= at + 1.05,
     );
     if (!hit) continue;
+    if (
+      pressed.some(
+        (n) =>
+          n.wall === p[1] &&
+          n.holder === targetId &&
+          n.at >= hit.at &&
+          n.at >= at - 1.05 &&
+          n.at <= at + 1.05,
+      )
+    )
+      continue;
     ctx.violate(
       C,
       p[1]!,
