@@ -5,6 +5,12 @@ import type { StagedMatch } from "../main/matchStore";
 export interface FileCheckpoint {
   offset: number; // byte offset past the last fully consumed line (safe boundary)
   firstLineChecksum: string | null; // sha1 hex of the file's first line; null for an empty file
+  /** Set when the worker gave up on an open segment of this file (retired
+   * it at startup, GH #211): where that segment opened, and how many bytes
+   * the file had then. If the file ever grows past `size`, the worker
+   * rewinds to `segmentStart` with a fresh parser, so a late END still
+   * closes the match. Absent otherwise. */
+  retired?: { segmentStart: number; size: number };
 }
 
 export interface WorkerConfig {

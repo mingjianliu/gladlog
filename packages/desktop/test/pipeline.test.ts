@@ -348,4 +348,34 @@ describe("FilePipeline checkpoint at the last IDLE boundary (GH #211)", () => {
     expect(c.of("segmentOpen")).toHaveLength(1);
     expect(c.pipe.checkpoint.offset).toBe(0);
   });
+
+  it("退役后文件被轮转:退役记录作废,之后的增长不会倒回旧偏移重读", () => {
+    const f = join(dir(), "WoWCombatLog-1.txt");
+    writeFileSync(f, START(0) + cast(1) + cast(2));
+    const out: WorkerToMain[] = [];
+    const pipe: FilePipeline = new FilePipeline({
+      fileKey: "k",
+      filePath: f,
+      checkpoint: null,
+      emit: (m) => {
+        out.push(m);
+        if (m.type === "match") pipe.acknowledge(m.ackId);
+      },
+    });
+    pipe.processFlush();
+    pipe.retire();
+    expect(pipe.checkpoint.retired).toEqual({
+      segmentStart: 0,
+      size: readFileSync(f).length,
+    });
+    // Rotated to shorter, different content, then grown past the old size.
+    writeFileSync(f, START_2V2(0) + END(1));
+    pipe.processFlush();
+    expect(pipe.checkpoint.retired).toBeUndefined();
+    appendFileSync(f, START(2) + cast(3) + END(4));
+    pipe.processFlush();
+    // Each match exactly once: nothing was re-read from the stale offset.
+    expect(out.filter((m) => m.type === "match")).toHaveLength(2);
+    expect(pipe.checkpoint.offset).toBe(readFileSync(f).length);
+  });
 });

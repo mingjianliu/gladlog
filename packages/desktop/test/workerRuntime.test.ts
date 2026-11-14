@@ -416,10 +416,13 @@ describe("worker 发出后、main 落盘前崩溃:对局不丢且只存一次(GH
     store.init();
     const inbox: WorkerToMain[] = [];
     const h = harness((m) => inbox.push(m));
+    let notified = 0;
     const handler = createWorkerMessageHandler({
       store,
       recorder: null,
-      emit: () => {},
+      emit: (ch) => {
+        if (ch === "gladlog:logs:matchStored") notified++;
+      },
       setStatus: () => {},
       logWarn: () => {},
       ack: (fileKey, ackId) => h.send({ type: "stored", fileKey, ackId }),
@@ -443,6 +446,10 @@ describe("worker 发出后、main 落盘前崩溃:对局不丢且只存一次(GH
         .sort(),
       staged: inbox.filter((m) => m.type === "matchStaged").length,
       cps,
+      notified,
+      opens: (key: string) =>
+        h.out.filter((m) => m.type === "segmentOpen" && m.fileKey === key)
+          .length,
     };
   }
 
@@ -494,5 +501,156 @@ describe("worker 发出后、main 落盘前崩溃:对局不丢且只存一次(GH
     const again = launch(w.config, true);
     expect(again.kinds).toEqual(["shuffle"]);
     expect(again.staged).toBe(0);
+  });
+});
+
+// codex re-review of GH #211: "quiet and not the newest" is a judgement a
+// second WoW client can prove wrong. A retired file that grows again is
+// replayed from the retired segment's START, so a late END still closes it.
+describe("退役后文件又长了:迟到的 END 照样闭合对局(GH #211 复审 2)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const at = (s: number, body: string) =>
+    `6/30/2026 15:${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}.000  ${body}\n`;
+  const OPEN = at(0, "ARENA_MATCH_START,1825,41,3v3,1") + at(1, CAST);
+  const END = at(30, "ARENA_MATCH_END,1,30,1500,1501");
+  const SHUFFLE_START = "ARENA_MATCH_START,1504,40,Rated Solo Shuffle,0";
+  const OPEN_SHUFFLE =
+    at(0, SHUFFLE_START) +
+    at(1, CAST) +
+    at(60, SHUFFLE_START) +
+    at(61, CAST) +
+    at(120, SHUFFLE_START) +
+    at(121, CAST);
+
+  function world() {
+    const s = setup();
+    const config = { ...s.config, matchesDir: join(s.root, "matches") };
+    const write = (name: string, body: string, ageS: number) => {
+      const p = join(s.logsDir, name);
+      writeFileSync(p, body);
+      const t = Date.now() / 1000 - ageS;
+      utimesSync(p, t, t);
+    };
+    return { ...s, config, write };
+  }
+  type Cp = {
+    offset: number;
+    retired?: { segmentStart: number; size: number };
+  };
+  /** One app start with a live main (real store + handler, acks synchronous);
+   * `during` runs while the runtime is still up. */
+  async function start(
+    config: ReturnType<typeof world>["config"],
+    during?: (h: ReturnType<typeof harness>) => Promise<void>,
+  ) {
+    const store = new MatchStore(config.matchesDir);
+    store.init();
+    let notified = 0;
+    let h: ReturnType<typeof harness> | null = null;
+    const handler = createWorkerMessageHandler({
+      store,
+      recorder: null,
+      emit: (ch) => {
+        if (ch === "gladlog:logs:matchStored") notified++;
+      },
+      setStatus: () => {},
+      logWarn: () => {},
+      ack: (fileKey, ackId) => h!.send({ type: "stored", fileKey, ackId }),
+    });
+    h = harness((m) => handler(m));
+    const rt = createWorkerRuntime({
+      transport: h.transport,
+      watchFn: h.watchFn,
+    });
+    h.send({ type: "configure", config });
+    if (during) await during(h);
+    rt.dispose();
+    const cps = (
+      JSON.parse(readFileSync(config.checkpointsPath, "utf-8")) as {
+        files: Record<string, Cp>;
+      }
+    ).files;
+    const out = h.out;
+    return {
+      kinds: store
+        .list()
+        .map((m) => m.kind)
+        .sort(),
+      notified,
+      cps,
+      reads: (key: string) =>
+        out.filter(
+          (m) =>
+            (m.type === "segmentOpen" || m.type === "matchStaged") &&
+            m.fileKey === key,
+        ).length,
+    };
+  }
+
+  it("下次启动:退役后补上 END → 这场入库且只入一次;没再长就不重读", async () => {
+    const w = world();
+    const A = "WoWCombatLog-A.txt";
+    w.write(A, MATCH + OPEN, 7200);
+    w.write("WoWCombatLog-B.txt", "", 0); // a second client's newer log
+    const first = await start(w.config);
+    expect(first.kinds).toEqual(["match"]); // only the finished one
+    expect(first.cps[A]).toMatchObject({
+      offset: Buffer.byteLength(MATCH + OPEN),
+      retired: {
+        segmentStart: Buffer.byteLength(MATCH),
+        size: Buffer.byteLength(MATCH + OPEN),
+      },
+    });
+    // No growth: nothing is re-read.
+    const idle = await start(w.config);
+    expect(idle.reads(A)).toBe(0);
+    expect(idle.kinds).toEqual(["match"]);
+
+    appendFileSync(join(w.logsDir, A), END);
+    const late = await start(w.config);
+    expect(late.kinds).toEqual(["match", "match"]);
+    expect(late.notified).toBe(1);
+    expect(late.cps[A]!.offset).toBe(Buffer.byteLength(MATCH + OPEN + END));
+    expect(late.cps[A]!.retired).toBeUndefined();
+
+    const after = await start(w.config);
+    expect(after.kinds).toEqual(["match", "match"]); // exactly once
+    expect(after.reads(A)).toBe(0);
+  });
+
+  it("同一会话里:退役后文件又写入 END → watcher 那次 flush 就闭合入库", async () => {
+    const w = world();
+    const A = "WoWCombatLog-A.txt";
+    w.write(A, OPEN, 7200);
+    w.write("WoWCombatLog-B.txt", "", 0);
+    const r = await start(w.config, async (h) => {
+      appendFileSync(join(w.logsDir, A), END);
+      h.fileEvent(A);
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(r.kinds).toEqual(["match"]);
+    expect(r.notified).toBe(1);
+  });
+
+  it("单排:退役时已存的轮次在补全后去重,不再发入库通知", async () => {
+    const w = world();
+    const A = "WoWCombatLog-A.txt";
+    w.write(A, OPEN_SHUFFLE, 7200);
+    w.write("WoWCombatLog-B.txt", "", 0);
+    const first = await start(w.config);
+    expect(first.kinds).toEqual(["shuffle"]); // the two finished rounds
+    expect(first.notified).toBe(1);
+
+    appendFileSync(
+      join(w.logsDir, A),
+      at(122, CAST) + at(150, "ARENA_MATCH_END,1,30,1500,1501"),
+    );
+    const late = await start(w.config);
+    expect(late.kinds).toEqual(["shuffle"]);
+    expect(late.notified).toBe(0);
+    expect(late.cps[A]!.offset).toBe(readFileSync(join(w.logsDir, A)).length);
+    expect(late.cps[A]!.retired).toBeUndefined();
   });
 });

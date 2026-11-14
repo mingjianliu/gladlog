@@ -1,5 +1,6 @@
 import { GladLogParser } from "@gladlog/parser";
 import { randomUUID } from "crypto";
+import { statSync } from "fs";
 
 import type { FileCheckpoint, WorkerToMain } from "../shared/protocol";
 import { initialTailState, readTail, type TailState } from "./tailReader";
@@ -12,6 +13,14 @@ export interface ParserLike {
     event: "match" | "shuffle" | "diagnostic" | "segmentOpen" | "segmentClose",
     cb: (payload: never) => void,
   ): unknown;
+}
+
+function fileSize(path: string): number {
+  try {
+    return statSync(path).size;
+  } catch {
+    return -1;
+  }
 }
 
 /** ackIds are unique across worker restarts: an ack main sends for a match
@@ -32,6 +41,9 @@ export class FilePipeline {
   /** ackId -> start offset of the segment of a match/shuffle that was sent to
    * main but is not yet known to be on disk. */
   private readonly unacked = new Map<string, number>();
+  /** The open segment retire() gave up on, kept so it can be replayed if the
+   * file grows after all (see FileCheckpoint.retired). */
+  private retired: { segmentStart: number; size: number } | null;
   private readonly fileKey: string;
   private readonly filePath: string;
   private readonly emit: (msg: WorkerToMain) => void;
@@ -50,7 +62,12 @@ export class FilePipeline {
     this.parserFactory =
       opts.parserFactory ??
       (() => new GladLogParser() as unknown as ParserLike);
-    this.cp = opts.checkpoint ?? { offset: 0, firstLineChecksum: null };
+    const cp = opts.checkpoint;
+    this.cp = {
+      offset: cp?.offset ?? 0,
+      firstLineChecksum: cp?.firstLineChecksum ?? null,
+    };
+    this.retired = cp?.retired ?? null;
     this.tail = initialTailState(this.cp);
     this.idleAt = this.cp.offset;
     this.createParser();
@@ -125,6 +142,8 @@ export class FilePipeline {
    * the checkpoint always lands on one. What gets persisted is further
    * capped by the matches main has not acknowledged yet (`checkpoint`). */
   processFlush(): void {
+    if (this.retired && fileSize(this.filePath) > this.retired.size)
+      this.unretire();
     const r = readTail(this.filePath, this.tail, {
       rotated: (firstLineChecksum) => {
         // A rotation discards the old parser. parser.end() is a no-op when
@@ -141,6 +160,7 @@ export class FilePipeline {
         // Unacknowledged offsets point into content that no longer exists;
         // replaying from them would land anywhere in the new content.
         this.unacked.clear();
+        this.retired = null;
         // The fresh parser is IDLE, so the first new line resets idleAt.
         this.idleAt = 0;
         this.cp = { offset: 0, firstLineChecksum };
@@ -173,16 +193,47 @@ export class FilePipeline {
    * bytes of heap per raw character, GH #211), and the checkpoint moves to
    * the end of the last complete line so the next launch reads nothing --
    * once main has acknowledged a shuffle end() stored (until then
-   * `checkpoint` stays at the lobby's first START). */
+   * `checkpoint` stays at the lobby's first START).
+   *
+   * "Never write again" is a judgement (quiet + not the newest log), and a
+   * second client can prove it wrong: the segment's opening offset and the
+   * file's size are kept (persisted as FileCheckpoint.retired), and a later
+   * flush that finds the file grown replays the segment (unretire()), so a
+   * late END still closes the match (codex review of GH #211). No growth, no
+   * re-read. */
   retire(): void {
     if (!this.parser.hasOpenSegment()) return;
+    const segmentStart = this.idleAt;
     this.parser.end();
     this.createParser();
+    this.retired = {
+      segmentStart,
+      size: this.tail.offset + this.tail.carry.length,
+    };
     this.idleAt = this.tail.offset;
     this.cp = {
       offset: this.tail.offset,
       firstLineChecksum: this.tail.firstLineChecksum,
     };
+  }
+
+  /** The retired file grew after all: resume from the retired segment's
+   * opening line, as if it had never been retired. The parser retire()
+   * installed is still fresh -- lines only exist past the size retire()
+   * recorded -- so it replays the segment from its START as-is.
+   * A shuffle whose finished rounds retire() already stored is stored again
+   * under the same id and deduped by the store (the worker's stageMatch finds
+   * it on disk and sends nothing). */
+  private unretire(): void {
+    const at = this.retired!.segmentStart;
+    this.retired = null;
+    this.tail = {
+      offset: at,
+      firstLineChecksum: this.tail.firstLineChecksum,
+      carry: Buffer.alloc(0),
+    };
+    this.idleAt = at;
+    this.cp = { offset: at, firstLineChecksum: this.tail.firstLineChecksum };
   }
 
   /** Called before teardown (directory change / reconfiguration) *and* by the
@@ -219,7 +270,11 @@ export class FilePipeline {
   get checkpoint(): FileCheckpoint {
     let offset = this.cp.offset;
     for (const at of this.unacked.values()) offset = Math.min(offset, at);
-    return offset === this.cp.offset ? this.cp : { ...this.cp, offset };
+    return {
+      ...this.cp,
+      offset,
+      ...(this.retired ? { retired: { ...this.retired } } : {}),
+    };
   }
   get currentOffset(): number {
     return this.tail.offset;
