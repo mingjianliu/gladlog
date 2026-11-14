@@ -196,11 +196,14 @@ export function run(ctx: IRoundCtx): void {
     const pressMs = tsOf(press);
     const roster = extractMajorCooldowns(ctx.owner, ctx.legacy);
     const pvpTalents = playerTalentIdSets(ctx.owner).pvpTalentIds;
-    for (const altName of ch[1]!.split(", ").map((s) => s.trim())) {
+    // a trailing `[UNNECESSARY …]` / `[while stunned …]` note is not part
+    // of the last alternative's name (codex 85-tk-L-T100-1b #1)
+    const alts = ch[1]!.split(" [")[0]!;
+    for (const altName of alts.split(", ").map((s) => s.trim())) {
       const alt = roster.find((cd: any) => cd.spellName === altName);
       if (!alt) continue;
       ctx.bump(C);
-      const l = locks.find(
+      const blockers = locks.filter(
         (iv) =>
           iv.from <= pressMs &&
           pressMs < iv.to &&
@@ -213,6 +216,12 @@ export function run(ctx: IRoundCtx): void {
                 )
               : intervalBlocksSpell(iv, alt.spellId)),
       );
+      // a counted blocker wins over an unjudged (non-stun) control that
+      // overlaps it (codex 85-tk-L-T100-1b #2)
+      const l =
+        blockers.find(
+          (iv) => iv.kind !== "control" || isStunDrAura(iv.spellId),
+        ) ?? blockers[0];
       if (!l) continue;
       ctx.violate(
         C,
