@@ -7,6 +7,7 @@
  * effect's own time left printed, and an aura removed inside the slice.
  */
 import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
+import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import {
   CombatUnitClass,
   CombatUnitSpec,
@@ -253,9 +254,113 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
     expect(scanAvatar(warrior(), 6)).toEqual([]);
     // the anchor: the press's own sighting, not the later REFRESH; a
     // REFRESH a press made restarts it; no press of the name, the last one
-    const o = { lastSeenMs: at(14), seenMs: [at(10), at(14)] };
-    expect(applicationAnchorMs(o, [at(10)])).toBe(at(10));
-    expect(applicationAnchorMs(o, [at(10), at(13.8)])).toBe(at(14));
-    expect(applicationAnchorMs(o, [])).toBe(at(14));
+    const o = {
+      appliedMs: at(10),
+      lastSeenMs: at(14),
+      seenMs: [at(10), at(14)],
+    };
+    expect(applicationAnchorMs(o, [at(10)], at(28))).toBe(at(10));
+    expect(applicationAnchorMs(o, [at(10), at(13.8)], at(28))).toBe(at(14));
+    expect(applicationAnchorMs(o, [], at(28))).toBe(at(14));
+    // a later press's refresh is not an earlier row's application (1d #1)
+    expect(applicationAnchorMs(o, [at(10), at(13.8)], at(12))).toBe(at(10));
+  });
+
+  const entryScan = (
+    u: any,
+    spec: string,
+    entry: string,
+    rowS: number,
+    left: number,
+    endS: number,
+  ) => {
+    const seen: string[] = [];
+    let checked = 0;
+    const mm = `${Math.floor(rowS / 60)}:${String(rowS % 60).padStart(2, "0")}`;
+    run({
+      text: [
+        `  <unit id="4" name="U" spec="${spec}" role="enemy">`,
+        `${mm}  [STATE]   friends 3(MHunter):86 / enemies 4(X):98`,
+        `      [RES] rdy:Δ  enemy:${entry}/${spec}(${left}s left)  focus:3`,
+      ].join("\n"),
+      units: [u],
+      unitOfPid: (pid: string | undefined) => (pid === "4" ? u : undefined),
+      start: START,
+      end: at(endS),
+      violate: (_c: string, kind: string, _t: number, _f: string, d: string) =>
+        seen.push(`${kind}: ${d}`),
+      bump: () => {
+        checked++;
+      },
+    } as any);
+    return { checked, seen };
+  };
+
+  it("a later press and its REFRESH do not move an earlier row's application (codex 85-tk-G-T76-1d #1)", () => {
+    // Metamorphosis' aura up at 10 s beside its press, pressed again with a
+    // REFRESH at 14 s, no REMOVED; the 12 s row counts from 10 s
+    const aura = (event: LogEvent, s: number) =>
+      makeAuraEvent(event, "162264", at(s), "Player-4", "Player-4", "BUFF");
+    const u: any = makeUnit("Player-4", {
+      name: "U",
+      class: CombatUnitClass.DemonHunter,
+      spec: CombatUnitSpec.DemonHunter_Havoc,
+      info: {} as never,
+      spellCastEvents: [
+        makeSpellCastEvent("191427", at(10), "Player-4"),
+        makeSpellCastEvent("191427", at(14), "Player-4"),
+      ],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, 10),
+        aura(LogEvent.SPELL_AURA_REFRESH, 14),
+      ],
+    });
+    const full = buffFullDurationForCaster("162264", u)!;
+    const endS = 10 + full + 1;
+    // the first application's own time left at 12 s: right, whatever the
+    // later press did
+    const r = entryScan(
+      u,
+      "Havoc Demon Hunter",
+      "Metamorphosis",
+      12,
+      Math.round(full - 2),
+      endS,
+    );
+    expect(r.seen).toEqual([]);
+  });
+
+  it("a re-broadcast pair restarts nothing and keeps the run in the check (codex 85-tk-G-T76-1d #2)", () => {
+    const aura = (event: LogEvent, s: number) =>
+      makeAuraEvent(event, "107574", at(s), "Player-4", "Player-4", "BUFF");
+    const warrior = (pairS: number): any =>
+      makeUnit("Player-4", {
+        name: "U",
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Fury,
+        info: { talents: [], pvpTalents: [] } as never,
+        spellCastEvents: [makeSpellCastEvent("107574", at(10.2), "Player-4")],
+        auraEvents: [
+          aura(LogEvent.SPELL_AURA_APPLIED, 10.2),
+          aura(LogEvent.SPELL_AURA_REMOVED, pairS),
+          aura(LogEvent.SPELL_AURA_APPLIED, pairS + 0.001),
+        ],
+      });
+    // untalented Avatar from 10.2 s ends at 30.2 s: `2s left` at 28 s is
+    // right with the pair at 11.699 s (the gate read 31.7 s)…
+    const near = entryScan(
+      warrior(11.699),
+      "Fury Warrior",
+      "Avatar",
+      28,
+      2,
+      30,
+    );
+    expect(near.checked).toBe(1);
+    expect(near.seen).toEqual([]);
+    // …and a pair far from the press leaves the run checked (was 1 → 0)
+    const far = entryScan(warrior(20), "Fury Warrior", "Avatar", 28, 0, 30);
+    expect(far.checked).toBe(1);
+    expect(far.seen).toHaveLength(1);
   });
 });

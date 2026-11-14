@@ -29,6 +29,7 @@ import {
   parseResRow,
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
+import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { buffDurationOfApplication } from "@gladlog/analysis/src/utils/buffDuration";
 import {
   EFFECT_START_AFTER_S,
@@ -94,7 +95,11 @@ export function aurasUpAtLogEnd(
     // the holder's run by default (1b #3: two casters' copies on one unit,
     // the other's source-less REMOVED closed the holder's too)
     const open = new Map<string, Array<IOpenAura & { src: string }>>();
-    for (const a of (u.auraEvents ?? []) as any[]) {
+    // re-broadcast pairs dropped first, as the product's interval builder
+    // and `pressAppliedS` do (codex 85-tk-G-T76-1d #2: a REMOVED + APPLIED
+    // 1 ms apart restarted the run's clock — a correct `2s left` flagged —
+    // and, far from the press, took the run out of the check)
+    for (const a of dropAuraRebroadcasts((u.auraEvents ?? []) as any[])) {
       const e = ev(a);
       const id = String(a.spellId);
       if (nameOf(id, a.spellName) !== name) continue;
@@ -146,27 +151,36 @@ export function aurasUpAtLogEnd(
 }
 
 /**
- * Where the application `[RES]` counts from is, as the product reads it
- * (`pressAppliedS` in enemyCDs.ts): the run's APPLIED / REFRESH inside a
- * press's start window — a press that refreshed an aura already up restarts
- * it; a REFRESH no press made does not (codex 85-tk-G-T76-1c: Avatar pressed
- * at 10 s and refreshed at 14 s by the Thunder Blast that extends it was
- * priced from 14 s, 24 s long, and a correct `6s left` at 28 s read as a
- * violation). With no press of the name, the last sighting, as before.
+ * Where the application the row's `[RES]` entry counts from is, as the
+ * product reads it (`pressAppliedS` in enemyCDs.ts): the run's APPLIED /
+ * REFRESH inside the start window of the press the row stands for — the
+ * last one at or before the row — and before the next press of the name.
+ * A press that refreshed an aura already up restarts it; a REFRESH no press
+ * made does not (codex 85-tk-G-T76-1c: Avatar pressed at 10 s and refreshed
+ * at 14 s by the Thunder Blast that extends it was priced from 14 s), and a
+ * later press's refresh is not an earlier row's application (1d #1: Soul
+ * Immolation pressed at 10 s and again at 14 s, the 12 s row's `3s left`
+ * read against 19 s). No sighting in the window: the run's own start, as
+ * the product's interval start. No press of the name: the last sighting.
  */
 export function applicationAnchorMs(
-  o: Pick<IOpenAura, "lastSeenMs" | "seenMs">,
+  o: Pick<IOpenAura, "appliedMs" | "lastSeenMs" | "seenMs">,
   pressesMs: readonly number[],
+  rowMs: number,
 ): number {
   if (pressesMs.length === 0) return o.lastSeenMs;
-  const paired = o.seenMs.filter((t) =>
-    pressesMs.some(
-      (p) =>
-        t >= p - EFFECT_START_BEFORE_S * 1000 &&
-        t <= p + EFFECT_START_AFTER_S * 1000,
-    ),
+  const sorted = [...pressesMs].sort((a, b) => a - b);
+  // the row's second is floored: a press inside it is the row's
+  const before = sorted.filter((p) => p <= rowMs + 1000);
+  const press = before.length > 0 ? before[before.length - 1]! : sorted[0]!;
+  const next = sorted.find((p) => p > press) ?? Infinity;
+  const paired = o.seenMs.filter(
+    (t) =>
+      t >= press - EFFECT_START_BEFORE_S * 1000 &&
+      t <= press + EFFECT_START_AFTER_S * 1000 &&
+      t < next,
   );
-  return paired.length > 0 ? Math.max(...paired) : o.lastSeenMs;
+  return paired.length > 0 ? Math.max(...paired) : o.appliedMs;
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -219,7 +233,7 @@ export function run(ctx: IRoundCtx): void {
         .map((o) => {
           // the product's reading: the length of that application, from
           // that application
-          const anchorMs = applicationAnchorMs(o, pressesMs);
+          const anchorMs = applicationAnchorMs(o, pressesMs, rowMs);
           const full = buffDurationOfApplication(o.spellId, holder, anchorMs);
           return {
             o,
