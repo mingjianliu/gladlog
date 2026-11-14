@@ -1057,6 +1057,36 @@ export function buildResourceSnapshot(params: ResourceSnapshotParams): string {
   return line;
 }
 
+/** The instances holding the unit at the render second `t`
+ * (`atSeconds <= t < atSeconds + length`), in their landing order. */
+function activeAt<T extends { atSeconds: number }>(
+  instances: readonly T[],
+  t: number,
+  lengthS: (i: T) => number,
+): T[] {
+  return instances.filter(
+    (i) => i.atSeconds <= t && t < i.atSeconds + lengthS(i),
+  );
+}
+
+/** Of the instances holding the unit at `t`, the one that holds it longest
+ * (fact1215 R11, 1120cb61 0:18: Blinding Sleet −<1s was printed over a
+ * Capacitor Totem stun that ran 2.3 s longer); the earliest landed wins a
+ * tie. */
+function longestHeldAt<T extends { atSeconds: number }>(
+  instances: readonly T[],
+  t: number,
+  lengthS: (i: T) => number,
+): T | undefined {
+  return activeAt(instances, t, lengthS).reduce<T | undefined>(
+    (best, i) =>
+      !best || i.atSeconds + lengthS(i) > best.atSeconds + lengthS(best)
+        ? i
+        : best,
+    undefined,
+  );
+}
+
 function buildResourceSnapshotOnce({
   timeSeconds: rawTimeSeconds,
   ownerCDs,
@@ -1419,21 +1449,11 @@ function buildResourceSnapshotOnce({
     // of the controls on the unit then, the one that holds it longest
     // (fact1215 R11, 1120cb61 0:18: Blinding Sleet −<1s was printed over a
     // Capacitor Totem stun that ran 2.3 s longer)
-    const activeCC = summary?.ccInstances
-      .filter(
-        (cc) =>
-          cc.atSeconds <= timeSeconds &&
-          timeSeconds < cc.atSeconds + cc.durationSeconds,
-      )
-      .reduce<(typeof summary.ccInstances)[number] | undefined>(
-        (best, cc) =>
-          !best ||
-          cc.atSeconds + cc.durationSeconds >
-            best.atSeconds + best.durationSeconds
-            ? cc
-            : best,
-        undefined,
-      );
+    const activeCC = longestHeldAt(
+      summary?.ccInstances ?? [],
+      timeSeconds,
+      (cc) => cc.durationSeconds,
+    );
     if (activeCC) {
       const remaining = resCcRemainingText(
         activeCC.atSeconds + activeCC.durationSeconds - timeSeconds,
@@ -1449,11 +1469,12 @@ function buildResourceSnapshotOnce({
       );
     }
 
-    // Root
-    const activeRoot = summary?.rootInstances?.find(
-      (r) =>
-        r.atSeconds <= timeSeconds &&
-        timeSeconds < r.atSeconds + r.durationSeconds,
+    // Root — the one that holds longest, as the hard-CC slot (T102,
+    // fact13 D4/D6: `.find` named the first one found)
+    const activeRoot = longestHeldAt(
+      summary?.rootInstances ?? [],
+      timeSeconds,
+      (r) => r.durationSeconds,
     );
     if (activeRoot) {
       const remaining = resCcRemainingText(
@@ -1463,10 +1484,10 @@ function buildResourceSnapshotOnce({
     }
 
     // Disarm
-    const activeDisarm = summary?.disarmInstances?.find(
-      (d) =>
-        d.atSeconds <= timeSeconds &&
-        timeSeconds < d.atSeconds + d.durationSeconds,
+    const activeDisarm = longestHeldAt(
+      summary?.disarmInstances ?? [],
+      timeSeconds,
+      (d) => d.durationSeconds,
     );
     if (activeDisarm) {
       const remaining = resCcRemainingText(
@@ -1477,19 +1498,19 @@ function buildResourceSnapshotOnce({
       );
     }
 
-    // Kick lockout
-    const activeKick = summary?.interruptInstances?.find(
-      (k) =>
-        k.atSeconds <= timeSeconds &&
-        timeSeconds < k.atSeconds + k.lockoutDurationSeconds,
-    );
-    if (activeKick) {
+    // Kick lockouts — every one active, not the first found: each locks
+    // its own school (T102, fact13 D4: 16a56b26 1:40 printed Counter Shot
+    // on Spellfrost with <1 s left and dropped a Rebuke on Nature with 2.2 s;
+    // D6: 26c4ac25 2:24 dropped a Spell Lock on Shadow with 3.8 s left)
+    for (const kick of activeAt(
+      summary?.interruptInstances ?? [],
+      timeSeconds,
+      (k) => k.lockoutDurationSeconds,
+    )) {
       const remaining = resCcRemainingText(
-        activeKick.atSeconds + activeKick.lockoutDurationSeconds - timeSeconds,
+        kick.atSeconds + kick.lockoutDurationSeconds - timeSeconds,
       );
-      ccParts.push(
-        `${pid(name)}/${activeKick.kickSpellName}-${remaining}[kick]`,
-      );
+      ccParts.push(`${pid(name)}/${kick.kickSpellName}-${remaining}[kick]`);
     }
   }
 
