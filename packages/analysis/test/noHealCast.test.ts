@@ -254,6 +254,25 @@ describe("T88: the no-heal stretch before a teammate's first death", () => {
     expect(out[0]!.pressed).toEqual(["Power Infusion"]);
   });
 
+  it("同名的两次施法相隔不到公共冷却也各算一次(读条 + 瞬发,codex 85-tk-J-T88-2d)", () => {
+    // 18703d63 r1: a Lightning Bolt lands its bar, an instant one 617 ms on;
+    // 86b19ba2 r0: two Cyclones 342 ms apart on two targets
+    const out = round({
+      otherPresses: [
+        ["188196", 22.261],
+        ["188196", 22.878],
+        ["33786", 24.093],
+        ["33786", 24.435, "enemy-2"],
+      ],
+    });
+    expect(out[0]!.pressed).toEqual([
+      "Lightning Bolt",
+      "Lightning Bolt",
+      "Cyclone",
+      "Cyclone",
+    ]);
+  });
+
   it("加速后相隔 0.72 秒的两次同名按键各算一次", () => {
     const out = round({
       otherPresses: [
