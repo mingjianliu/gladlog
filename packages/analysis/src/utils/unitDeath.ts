@@ -16,7 +16,7 @@
  * The companion on the RENDER GRID is `isDeadAtRenderSecond` (cooldowns.ts):
  * the `[STATE]` tick's "dead from floor(death) on". This file is the instant.
  */
-import type { ICombatUnit } from "@gladlog/parser-compat";
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { aliveAfterRow, KILLING_BLOW_DEATH_SLACK_MS } from "./killingBlow";
 
@@ -147,6 +147,56 @@ export function teardownOfRemoval(
   return windows.find(
     (w) => removedMs >= w.fromMs - DEATH_CASCADE_MS && removedMs <= w.deathMs,
   );
+}
+
+/**
+ * How close the unit's other aura removals must sit to a removal for it to
+ * be part of the death's strip burst. Editorial (measured, not a game
+ * constant; T101): 77310154 r0's dying mage lost 24 auras in 36 ms (19.371–
+ * .407), the stripped Terror of the Skies at .377 among them.
+ */
+export const DEATH_STRIP_BURST_MS = 50;
+/** Other removals the burst must hold beside this one (editorial, T101):
+ * one more aura ending in the same 50 ms is a coincidence a natural expiry
+ * can make; two is the strip. */
+export const DEATH_STRIP_MIN_OTHERS = 2;
+
+type WithAuras = Partial<Pick<ICombatUnit, "id" | "auraEvents">>;
+const removalTimesOf = new WeakMap<object, number[]>();
+
+/**
+ * The death teardown that stripped this aura (T101), undefined when none:
+ * the removal sits in a teardown window (`teardownOfRemoval`) AND in the
+ * strip burst — at least `DEATH_STRIP_MIN_OTHERS` of the unit's other auras
+ * were REMOVED within `DEATH_STRIP_BURST_MS` of it. The burst is the log's
+ * own mark of the strip, so no duration model decides it (codex
+ * 85-tk-L-T101-1b: a DR step, a re-broadcast's start or a talent-lengthened
+ * stun each misread a natural expiry or a strip). An aura that ran out a
+ * moment before the lethal hit has no burst around it and keeps its end.
+ */
+export function deathStripOf(
+  unit: WithAuras,
+  windows: readonly IDeathTeardown[],
+  removedMs: number,
+): IDeathTeardown | undefined {
+  const w = teardownOfRemoval(windows, removedMs);
+  if (!w) return undefined;
+  let times = removalTimesOf.get(unit);
+  if (!times) {
+    times = (unit.auraEvents ?? [])
+      .filter(
+        (a) =>
+          a.destUnitId === unit.id &&
+          a.logLine.event === LogEvent.SPELL_AURA_REMOVED,
+      )
+      .map((a) => a.timestamp);
+    removalTimesOf.set(unit, times);
+  }
+  // the removal itself is one of them
+  const near = times.filter(
+    (t) => Math.abs(t - removedMs) <= DEATH_STRIP_BURST_MS,
+  ).length;
+  return near - 1 >= DEATH_STRIP_MIN_OTHERS ? w : undefined;
 }
 
 /**

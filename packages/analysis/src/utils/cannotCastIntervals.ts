@@ -42,11 +42,10 @@ import {
   isWeaponRequiredCast,
 } from "./spellMechanics";
 import {
-  auraRanItsLength,
+  deathStripOf,
   deathTeardownWindowsMs,
   firstDeathMs,
   type IDeathTeardown,
-  teardownOfRemoval,
 } from "./unitDeath";
 
 /**
@@ -938,10 +937,6 @@ export function ownFlightIntervals(
   return out;
 }
 
-/** The lengths a diminished control can run, as fractions of its full
- * length (DR 100 / 50 / 25 %). */
-const DR_LENGTH_STEPS = [1, 0.5, 0.25] as const;
-
 export interface CastBlockingAura {
   spellId: string;
   spellName: string;
@@ -1008,27 +1003,13 @@ export function castBlockingAuraIntervals(
   // the last 0.1s before the death". It ran to the death
   // (`teardownOfRemoval` = `removedInDeathTeardown`, the `[CC ON TEAM]` "ended at their death"
   // reading).
-  // A removal at the aura's own natural end is its end, whatever died in
-  // that window (codex 85-tk-L-T101-1 #2: a 3 s Garrote silence removed at
-  // 3.0 s, 100 ms before the lethal hit, ran to the death 1.1 s later). The
-  // natural end is the official length at a DR step (100 / 50 / 25 %); a
-  // talent-lengthened control is not seen here.
+  // …and only in the strip burst (`deathStripOf`): an aura that ran out
+  // just before the lethal hit keeps its end (codex 85-tk-L-T101-1 #2 /
+  // 1b)
   let teardowns: IDeathTeardown[] | undefined;
-  const endAt = (
-    removedMs: number,
-    spellId: string,
-    applyMs: number,
-  ): number => {
+  const endAt = (removedMs: number): number => {
     teardowns ??= deathTeardownWindowsMs(unit);
-    const fullS = ccFullDurationSeconds(spellId);
-    if (
-      fullS !== undefined &&
-      DR_LENGTH_STEPS.some((f) =>
-        auraRanItsLength(removedMs, applyMs + fullS * f * 1000),
-      )
-    )
-      return removedMs;
-    const w = teardownOfRemoval(teardowns, removedMs);
+    const w = deathStripOf(unit, teardowns, removedMs);
     return w ? Math.max(removedMs, w.deathMs) : removedMs;
   };
   for (const aura of unit.auraEvents ?? []) {
@@ -1151,7 +1132,7 @@ export function castBlockingAuraIntervals(
         // a break is the aura's own end; a REMOVED in the teardown is not
         to:
           aura.logLine.event === LogEvent.SPELL_AURA_REMOVED
-            ? endAt(aura.timestamp, spellId, p.applyMs)
+            ? endAt(aura.timestamp)
             : aura.timestamp,
         removedMs: aura.timestamp,
       });

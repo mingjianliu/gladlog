@@ -15,16 +15,15 @@
  *    second after the line names it — while a control or silence an enemy
  *    put on it (APPLIED before the death, closed by its own caster's
  *    REMOVED) was REMOVED inside its death teardown
- *    (`deathTeardownWindowsMs` / `removedInDeathTeardown`) and not at its
- *    natural end (official length at a DR step). Such a control held to the
- *    death, so no stretch before it was free. A stun counts only against a
+ *    (`deathTeardownWindowsMs` / `removedInDeathTeardown`) and in its strip
+ *    burst (at least `DEATH_STRIP_MIN_OTHERS` other auras of the unit REMOVED
+ *    within `DEATH_STRIP_BURST_MS`). Such a control held to the death, so no
+ *    stretch before it was free. Kind `teardown, no strip burst` (out of the
+ *    total) counts the lines where the only such removal had no burst. A stun counts only against a
  *    spell the usable-while-stunned table does not let through, a silence
  *    only against a silenceable one. Kind = the stripped aura's name.
  */
-import {
-  ccFullDurationSeconds,
-  getEnglishSpellName,
-} from "@gladlog/analysis/src/data/spellEffectData";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   isHardCcAura,
   isSilenceEffectAura,
@@ -37,7 +36,8 @@ import {
 import { isStunDrAura } from "@gladlog/analysis/src/utils/drAnalysis";
 import { isUnsilenceableCast } from "@gladlog/analysis/src/utils/spellMechanics";
 import {
-  auraRanItsLength,
+  DEATH_STRIP_BURST_MS,
+  DEATH_STRIP_MIN_OTHERS,
   deathTeardownWindowsMs,
   removedInDeathTeardown,
 } from "@gladlog/analysis/src/utils/unitDeath";
@@ -45,6 +45,9 @@ import {
 import { APPLIED, ev, type IRoundCtx, REMOVED, secOf, tsOf } from "./ctx";
 
 export const CHECKS = ["freeAfterDeathStrip"] as const;
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "freeAfterDeathStrip|teardown, no strip burst",
+]);
 
 const AVAILABLE =
   /^\s*(\d+:\d\d)\s+\[DEFENSIVE AVAILABLE\]\s+(\d+)\([^)]*\): (.+?)(?: \([^)]*\))? available but unused \(free to press it for the last ([\d.]+)s before the death\)/;
@@ -106,6 +109,8 @@ export function run(ctx: IRoundCtx): void {
       (a) => a.destUnitId === unit.id,
     );
     let hit: string | undefined;
+    let noBurst: string | undefined;
+    const removals = auras.filter((r) => ev(r) === REMOVED).map(tsOf);
     auras.forEach((a, i) => {
       if (hit || ev(a) !== APPLIED || !enemy.has(a.srcUnitId)) return;
       if (tsOf(a) >= death) return;
@@ -129,20 +134,33 @@ export function run(ctx: IRoundCtx): void {
       const r = tsOf(end);
       // stripped by the death, whenever in its teardown: the control held
       // to the death, so no stretch before it was free, whatever else ended
-      // earlier (codex 85-tk-L-T101-1 #5) — unless the removal is its
-      // natural end at a DR step
+      // earlier (codex 85-tk-L-T101-1 #5). The strip is the burst: at least
+      // DEATH_STRIP_MIN_OTHERS of the unit's other auras REMOVED within
+      // DEATH_STRIP_BURST_MS of it (`deathStripOf`'s reading, from the rows)
       if (r > death || !removedInDeathTeardown(windows, r)) return;
-      const fullS = ccFullDurationSeconds(id);
-      if (
-        fullS !== undefined &&
-        [1, 0.5, 0.25].some((f) =>
-          auraRanItsLength(r, tsOf(a) + fullS * f * 1000),
-        )
-      )
+      const others =
+        removals.filter((t) => Math.abs(t - r) <= DEATH_STRIP_BURST_MS).length -
+        1;
+      if (others < DEATH_STRIP_MIN_OTHERS) {
+        noBurst ??= id;
         return;
+      }
       hit = id;
     });
-    if (!hit) return;
+    if (!hit) {
+      // a removal in the teardown window with no strip burst: the product
+      // keeps its end; counted, not judged
+      if (noBurst)
+        ctx.violate(
+          C,
+          "teardown, no strip burst",
+          death,
+          `${unit.id}#${spellId}#${death}`,
+          `${m[3]} free ${freeS}s; ${getEnglishSpellName(noBurst, noBurst)} removed in the teardown window without a strip burst`,
+          line.trim(),
+        );
+      return;
+    }
     ctx.violate(
       C,
       getEnglishSpellName(hit, hit),
