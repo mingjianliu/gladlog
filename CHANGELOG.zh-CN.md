@@ -6,6 +6,133 @@
 口径,release/纯文档 commit 归入「其他」)。发版流程见
 `.claude/skills/release`。
 
+## v0.1.42(2026-11-14)
+
+本版汇集三轮事实审计的修复和两波流水线,PROMPT_VERSION 478 → 547。事实审计第十、十一、十二轮都按事实类修,每个事实的所有读者一起修(F25、F25b、F26 三批,以及它们留在 GH #192–#198 上的项);同时做掉一批挂着的建模问题:45 秒以下按键的 `[PRESS]` 行、更多进攻大招、按伤害判定的外援保命、按日志日期读的游戏规则。从 PROMPT_VERSION 501 起,工作改成票据流水线 —— T01–T35(PV501–522)和 T36–T96(PV523–547)—— 每张票有自己的确定性类检查,每个组装好的批次再单独审查一次。最新的两项是给治疗的 `[YOU] [NO HEAL CAST]` 事实行,以及被天赋改动的增益时长按每次施加计价。桌面端:打开对局分阶段显示,托管 OBS 录像修了一轮。增删候选行的改动都在 605 文件采集或覆盖集上测量,并依用户裁决执行。
+
+要点:
+
+- 录制者是治疗时有 `[YOU] [NO HEAL CAST]` 事实行:队友死亡前,能施法却连续 3 秒及以上没按任何治疗的那一段。
+- 33 个冷却 45 秒以下的按键有 `[PRESS]` 行;`lasts` 读游戏对这次按键实际做了什么 —— Oppressing Roar、Time Stop、串联的光环序列(Chimaeral Sting 3s → 9s)。
+- 按用户裁决新增一批进攻大招:Breath of Eons、Frostwyrm's Fury、Ravager、Execution Sentence、惩戒的 Divine Toll、平衡和野性的 Convoke、Devourer 的 The Hunt,以及五个 45 秒按键(Reaper's Mark、Odyn's Fury、Meteor、Goremaw's Bite、Mindgames)。
+- 早就开着的外援,只有伤害表明没有它目标会死,才写成它救下了这次击杀尝试。
+- 被游戏拒绝的按键持续时间为零,事实里写明它被拒、冷却有没有交掉。
+- 宠物的打断按宠物自己判,并写成宠物的。
+- 被补丁改过的游戏规则按日志日期读(Doom Winds、Predator's Wake、惩戒的 Divine Protection);12.1 套装效果和改动增益时长的天赋进了模型。
+- 打开对局先画出战报框架,再分步填充;回到对局列表页从 1441 ms 降到 124 ms。
+
+审查:每一批事实层改动落地前都过了跨 AI(codex)审查 —— F25、F25b、F26 照旧;流水线两波里,每张票单独审一次,每个组装好的批次再审一次。各波的批次凭测试、各自的测量和审查落地;发版头再在 605 文件语料上验证 —— 对 PV522 的波次结束采集,378 项检查:29 项下降、2 项上升(都是已知并记录的,其中一项在 GH #204);候选行 7,401 → 7,449,每一条增减都归到了对应的票 —— 并跑了解析器一致性门(1,244 对,0 处新差异)。对第 12 轮那 20 局做同局复审,确认 8 处缺陷,第一波之前是 24 处、之后是 16 处,没有一处是本版引入的。wide 语料没有跑。记下没修的项留在 GitHub(#115、#158、#179 等)。
+
+### AI 分析——报告怎么说你
+
+- `19322f95d` `a4139eb2d` `06312d2e2` `52949308a` `0bedef1eb` `57eafe737` **`[YOU] [NO HEAL CAST]`**(给录制治疗的新事实行,永远不是候选;用户裁决):只在本回合第一个死的是队友、且只在那次死亡的窗口内出现 —— 治疗没被控、没被沉默、没被锁、不在读条,手里有不在冷却的治疗,队友在射程内,却连续 3 秒及以上没按治疗。行里写这段多长、这段时间按了什么(什么都没按写 `nothing else pressed`)、蓝量低,以及队友血量 `X% → Y%`。治疗到它施放目标队友的按键算治疗按键(Divine Toll 带出的 Holy Shock);一次按键记成两行只算一次。605:57 份上下文里 59 行。
+- `4d60faecf` **用户挑的 33 个 45 秒以下按键有 `[PRESS]` 行**(GH #183),连同这些数字需要的冷却和时长模型:没有释放的蓄力不耗冷却、不印行;Causality、Instability Matrix、Temporal Burst、Cycle of Hatred、Time Walk、Barrier Diffusion、Impish Instincts 进了冷却模型(留出子集,`back` 晚于下一次按键:327 → 16、443 → 5、299 → 7、233 → 3)。
+- `1c658ff3f` `9b5d334d2` `e959fd8c3` `ec4f3a94a` `a01291cda` **`[PRESS]` 的 `lasts` 和 `back`**(GH #179):`lasts` 读目标身上的 Oppressing Roar(Chimaeral Sting 3 → 3.9 秒)和持有者身上的 Time Stop(Gladiator's Badge 15 → 20 秒);什么都没打中的释放、什么都没驱掉的驱散不耗冷却、不印行;Death's Arrival 的免费 Grappling Hook 窗口就是它光环的存续期;日志漏记结束的屏障或 Alter Time 照样返还冷却;增辉唤魔师被 Timewalker 延长的光环按下限印,`lasts 10s+`(用户裁决);紧挨在施法行之前记下的光环行算这次按键自己的(605:8,712 条 `[PRESS]` 行多出 `lasts Ns`)。
+- `e5eb4687c` `243ef5dee` `66fd2f489` `753ffca1f` **`lasts` 覆盖按键串联的光环**(T40):每个后续光环按自己的时长计价,在前一个光环自己的 REMOVED 处交接 —— Chimaeral Sting 3s → 9s,Aspect of the Cheetah 12s(605 列出的串联行:Chimaeral Sting 1,002 → 0,Aspect of the Cheetah 817 → 0)。
+- `8217df8bd` `ff53cc390` `be3637d6d` **更多进攻大招**(用户裁决):Breath of Eons 和 Frostwyrm's Fury;Ravager 和 Execution Sentence;惩戒手里的 Divine Toll(窗口取日志里的 Divine Resonance),平衡或野性手里的 Convoke the Spirits(605:missed-sync-window 660 → 666,kick-eaten 1847 → 1854,position-mistake 157 → 154)。Burrow 是萨满的防御技能;Spirit Walk 移出就绪集合,按了仍算应对危机。
+- `be63eddb0` `aed235f3d` `9c3d46a80` **五个 45 秒伤害按键算进攻大招**(T72,用户裁决 R19):Reaper's Mark、Odyn's Fury、Meteor、Goremaw's Bite、Mindgames —— 原来写 `ready at 2:36: none` 的击杀窗口行现在点名 Odyn's Fury。605 候选行 7,401 → 7,430(missed-sync-window 687 → 709,kick-eaten 1,855 → 1,857,position-mistake 154 → 158,slow-defensive-response 109 → 110)。
+- `95eaf54f1` `8b0029e6a` **没有效果光环的按键持续到它的命中**(T72):Meteor 和 Soul Fire 的爆发窗口原来只有按键那一瞬,命中落在窗口外,爆发被写成 `No damage dealt`。605:命中落在爆发外 114 / 371 → 0 / 162;桌面台账行被误标无伤害 108 → 0;被盾整个吃掉的命中也算。
+- `5dc2ae0a1` **早就开着的外援,只有伤害说明是它才算击杀尝试失败的原因**(GH #146,用户裁决:严格判、逐个拿掉、吸收算数)。605,点名「早就开着的外援」的不同尝试:Pain Suppression 27 → 1,Ironbark 16 → 0,Life Cocoon 8 → 0,Anti-Magic Shell 1 → 0;失去外援归因的 62 次尝试里,24 次改写目标自己的保命,21 次 `not enough damage`,17 次 `healed through`。同一秒内对同一玩家的两次打断不再共用一个 id(GH #148)。
+- `96942b31e` `090380fff` `260b1568c` **被游戏拒绝的按键**(T29,裁决 R14、R15):在 `[RES]`、爆发、击杀序列和回放高亮里持续时间为零,施放者死亡会截短只有按键的窗口;击杀尝试和 missed-sync 事实仍然点名它,并标 `(refused: IMMUNE; cooldown spent)` —— 冷却那半句只在日志能定的地方才印。605:菜单行 7,399 → 7,401;被拒按键列成效果 28 → 0。
+- `ace34a4a1` `cfdfe9077` `938770b1e` `3865fd8d0` `6dba13b02` `39a3b76a3` `1952d026d` **宠物的打断按宠物判**(T26,GH #134,裁决 R04):读宠物自己的被控和施法锁、读条开始时它在不在场、它的原始视线,不读主人的(605:720 次宠物 Spell Lock 里有 82 次是在主人身上挂着阻断施法的光环时放出的);该行印 `kicker=<owner>'s Felhunter`,也不再说宠物打断会断掉玩家自己的读条。605 菜单行 7,393 → 7,399。
+- `eda327c53` `ff53cc390` **减伤数字:** 浩劫的 Blur 是 35 %(605:400 条 `[ENEMY DEF]` 行);没有 Translucent Image 的 Fade 不减伤;带 Shield of Vengeance 的惩戒 Divine Protection 按日志日期计价,热修前 25 %、热修起 30 %(605:987 行 20 → 25 %);Feint 和 Evasion 带 Elusiveness 的 20 %(256 条原来写「不在减伤表里」的减伤审计有了数字)。
+- `918d98054` `7fb8cd277` `1be09a33b` `5a452e4ff` `ce9740b20` `c3bbede93` **分学派的墙**(T27,GH #126,用户裁决 R07):Echoing Blessings 让 Blessing of Sacrifice 在队友一端算 15 %,它留下的 Echoing Protection 也计价;Bait and Switch 给 Evasion 单独的魔法档;分学派的行每次命中只计一次,burst-into-mitigation 读爆发实际撞上的那一档。605 菜单行不变;死亡审计多 11 行 Echoing Protection。
+- `b1fe3aed8` 分学派防御技能的死亡审计行写明学派 —— `Cloak of Shadows (magic damage)` / `(physical damage)` —— prompt 和桌面死亡卡片都写(T33;605:12 组没标的 → 0)。
+- `92c2680fe` `9b0fb2c0e` `c1d70620c` `3d62be9e4` `837b1e54d` `f9379d709` `083b71907` **Ice Cold**(T61,用户裁决 R25):替换 Ice Block 的这个天赋是一面 70 % 的墙,有自己的判定,在套件、台账、cd-hoarded 和死亡行里用自己的名字;没按的 Ice Cold 不做反事实断言,也不会被当作 missed-cleanse 的自解手段。
+- `c46515b97` `03e31ae70` `d68d7d5ab` `4106a350b` **死亡审计:** 一次按键的两个光环只印一行(T59,GH #201:Touch of Karma,9 行 → 0);读整个 Power Word: Shield 家族(T60,GH #202:725 次带这类盾的死亡里 186 次没有审计行 → 0,新增 544 条审计行);死前多次施加的表外光环合成一行。
+- `4d84af883` `91a1534a6` **没有 Survival Tactics 的 Feign Death**(GH #139,裁决 R05)在冷却台账里算一次按键(605:29 次按键;9 条 `[RES]` 行不再在它冷却时说它就绪),但永远不算没按的保命(`[DEATH] (Unused: Feign Death)` 12 → 0)。
+- `212bab83d` backlash-dispel 只读有意的驱散:Fortifying Brew 这类附带移除只结束决策、不出行(fact12 D28)。
+- `64a086d58` **被下一个读条顶掉、日志里没有任何行的读条算取消**(T47):被审计的那一回合,三条 kick-eaten 行从 `yourCancels=0, baitedKicks=0` 变成 `yourCancels=4, baitedKicks=2`;605:44 条 kick-eaten 行的事实有变,没有增删行。
+- `14ade96c4` `66a718d15` `e7c2715fc` `d3814eafa` **打断的学派锁:** 学派锁挡得住同学派里只受安抚影响的技能 —— Judgment、Blade of Justice、Hammer of Wrath(T46;605「锁挡不住的技能」分句 18 → 7);被打断者身上的光环会改变锁的长度 —— Concentration Aura ×0.799、Oppressing Roar ×1.3 —— kick-eaten 文字和它的窗口共用一个锁结束时间(T69,GH #134;39 条 `[CONSEQ]` 行、15 条 `[RES]` 行、6 条 kick-eaten 行的长度有变);带小数的锁印一位小数(2.397 → 2.4)。
+- `bc4444204` `b4f904546` `304171ab2` **同步窗口读变体按键实际观察到的结束**(T65,GH #167):经 Radiant Glory 触发的 Avenging Wrath 光环只有 12.0 秒,却按 24 秒算、被读成延续进治疗被锁的窗口。605:missed-sync-window 多 21 行(9 个窗口),因类型上限少 3 行。
+- `33fb48e5c` `24469f3b3` 击杀尝试以开启它的队友增益命名 —— Power Infusion、PvP Bloodlust / Heroism —— 前提是光环确实挂到了那个队友身上(T42)。
+- `9af5bb149` `e893e8ece` `5f2d44deb` `c5b4d8640` **Metamorphosis**(T05,裁决 R10):Solo Shuffle 回合决胜死亡之前已经开着的浩劫 Metamorphosis 算这一回合的按键,不是 `[UNUSED]`;两侧按同一个激活时刻给按键定时。605:少 5 条录制者行,全是 missed-sync-window。
+- `58a544cda` `5b7db5fd8` `574590189` `07ce140e6` `1a2f8791d` **射程与视线:** PEEL OPTIONS、`[CC BOOKMARK]`、治疗进攻行背后的可达判断,以及整秒可达扫描和 `[HEALER EXPOSURE]` 扫描,都在原始位置采样上读视线(T31、T38,GH #206;605:与原始扫描矛盾的暴露断言 26 / 11,862 → 0);Touch of Karma 的敌人必须在视线内(GH #141,用户裁决);Song of Chi-Ji 的「够得着」是 15 码,不是施法的 40 码(T87,裁决 R26;织雾归档里点名 Song 的 `[HEALER EXPOSURE]` 行 163 → 87)。
+- `47671a378` `84bd3bb97` `9c15042ff` `ebb1c0db2` `93fde4472` `5e393587f` `123ad26c0` `d2abeabcf` **改动时长或冷却的 12.1 套装效果**(T18、T35,GH #175):狂怒 2 件每次命中的 Raging Blow 给 Recklessness 延长 2 秒,最多 6 秒;射击 2 件 Explosive Shot、野性 4 件 Berserk、防护 4 件 Ravager、增辉 2 件 Upheaval、暗影 2 件 Tentacle Slam、湮灭 4 件 Causality。605:2 件持有者的 Explosive Shot 存续期完全吻合 0 → 119(共 119);模型下不可能的 Tentacle Slam 重按 67 → 0(共 134)。
+- `a8e3d5d5a` `8e037d0ac` `77788fa92` `c695de1bf` `50ac17f00` `32a2afada` **被天赋改动的增益时长,按每次施加计价**(T76):带 Capacitance 的 Avatar 每按一次 Thunder Blast 延长 2 秒,带 Eternal Barrier 的 Void Shield 持续 20 秒,Stormstream Totem 按两个图腾天赋分开;每个读者都从效果自己那次施加起算 —— 敌方带两次 Thunder Blast 的 Avatar,原来 `[BUFF FADED]` 算到 34 秒、敌方时间线算到 30 秒。605:比模型长的 Avatar 存续 181 → 2,Void Shield 455 → 0;153 条 `[RES]` 的 Avatar 条目变动 2 到 6 秒。
+- `0caea91d4` `556acc835` `1f14ae904` **缩短效果的天赋**进了时长模型(T48,GH #123):Gift of the Celestials、Frost Conditioning、Circle of Life and Death、Veinripper、Hatefury Rituals;带 Absolute Corruption 的 Wither 是 24 秒。605:66 条套件行 `lasts 25s` → `lasts 12s`。
+- `9046e98b3` `5c504b593` `a8b2a3ec1` `391622c75` 在武僧 Invoke 窗口内施加的 Enveloping Mist 多持续 4 秒(T84;605 被截短的行 7 → 0)。
+- `bcab2af12` Airborne Irritant 让 Blind 缩短 35 %,依据 DB2 和 tooltip(GH #123,用户裁决);605 里没有持有者,条目保持「待语料确认」。
+- `171a10c43` `fc044e537` `3315421d6` `a710dd742` `a79582ecf` **冷却缩减**(T16):Essence Break 计入它自己那层 Cycle of Hatred;White Out 读每一次命中的 Ice Lance 和每一层被击碎的 Freezing。
+- `f966e14aa` `539462f03` `78a1dc04e` `a96ca0e81` 同一瞬间落地的多个 Pyre 各给一次 Causality 的冷却返还;Call of the Righteous 缩短神圣的 Avenging Wrath 和 Avenging Crusader(T89;不可能的 Fire Breath / Eternity Surge 重按 6 → 1,共 887 对)。
+- `071841175` `de3a9f8af` `8cab1fc46` `238459faf` `deac8d9dd` `a4c33eeeb` **套件冷却区间的下限就是模型给这次按键的转好时间**(T55):免费重按不算转好,也不耗充能。605:9 个技能的 1,095 条套件条目有变(Nature's Swiftness 511、Force of Nature 275、Incarnation: Tree of Life 218)。
+- `d74549141` `6e8f518b4` `59c99338b` 百分比蓝耗是基础法力的份额,按游戏自己的算法取整(T17,GH #129,裁决 Q3):584 份下载日志,计价落在按键实际耗蓝容差内的 176,297 → 284,775(共 352,476 次按键);605 采集逐字节一致。
+- `911556f24` `8d4b788de` `bd44a348d` `674c58ba0` `4a790c18a` **Ascendance 和 Prowl**(T77,GH #124、#173):触发时长的 Ascendance 光环印 `[PROC] … (no press)` 行,不算按键(605:没有施法行的光环被读成按键 437 → 9);潜行中允许的按键不会结束 Prowl,没有结束行的 Prowl 在挨到一次命中时结束。
+- `4d1c94215` `d28e7ae8e` `6f79b2ac0` **带日期的游戏规则**用日志自己写明的时刻去问,不用解析机器对它的读法(T90);落在 12.1.5 上线前时区不确定窗口内的日志按 12.1.0 读(T85)。1,333 份归档:靠近切换点的 134 个「对局–切换点」对里,125 个从「之后」改成「之前」。
+- `d6d906758` `4e7bedc6f` **参照表重生成两次**(GH #115,第 6、第 7 次),用同一批语料,一次在事实轮之后,一次在第一波之后。605:因表过期而触发的参照一致性门规回到 0;第 6 次重生成时治疗的 slow-defensive-response 86 → 109、cd-hoarded 423 → 420、cd-waste 157 → 151;第 7 次不增不减任何行。
+- `0ab24c134` **PV500**(用户裁决 2026-11-07):窗口最低血量统一读一个共享谷值(GH #138;渲染谷值为 60 % 的 9 条 cd-waste 行退出菜单);Darkness 持续 8 秒,再加 Long Night 和 Cover of Darkness(89 条套件行 8 秒 → 11 秒);落在 Prismatic Barrier 或 Merely a Setback 下的魔法控制只持续 0.85 倍时长;用 Wrathguard 模型的 Felguard 就是 Felguard;Mass Dispel 和 Nature's Swiftness 的冷却天赋按热修日期分版本。
+
+### AI 分析——时间线事实
+
+- `8217df8bd` `e815385b2` `7c91b7b95` `983c73aef` `9aaef5af7` `e41162aca` `c06e93577` `913892970` `9b01f90aa` `3456b3c53` `0387de707` `bc1d59fc2` `d57d7cd2f` `01c4291f8` `dbe216f1e` `ba34f7ff1` `ef7a21890` `4b24f5cfd` `52c7b6b24` `5167186c0` `3bb1f6984` **第十轮,按事实类**(F25):在队友的控制免疫挂上的同一毫秒被移除的控制,是被它结束的,不是被之后的饰品;踢向施法者已经放弃的读条是打空,不是骗断;爆发和 `[DMG SPIKE]` 的最低血量在回合结束时停止;Wingleader 让 Breath of Eons 的冷却减半;Sacred Weapon 不是隐藏的 Holy Armaments 按键;冲锋类按键的命中行在 ABILITIES INTO 里代表这次按键;Freezing Rain 证明看不见时按过 Frozen Orb;刚过 20 秒递减重置的控制读它自己的时长,落地的控制永远不是 Immune;在脉冲前被打掉的图腾从未生效;`[CONSEQ]` 读敌方治疗被反射回自己身上的控制;解掉沉默、缴械或定身的饰品算这次击杀尝试的饰品;过期的最大血量行按新的最大值读;Time Dilation 在 ABILITIES INTO 里是延后;Angelic Bulwark 印 `[ENEMY DEF]` 事实行(用户裁决)。
+- `f8e1947ad` `5ce5061bd` `fe9fbd999` `d89a28b6a` `4b628d019` `aeab16340` **F25b**(GH #190、#191,用户裁决):递减重置带只读由游戏自己结束的时长,每条遍历都如此;`[BURST ANSWERED]` 和 STAYED IN 的谷值在回合结束时停止(605:26 → 6,覆盖集 19 → 0);敌方治疗被反射回自己身上的控制算治疗被锁;Shield Charge 是 Utility,不是防御技能。
+- `b11bfd382` `c335ad3ab` **第十一轮,第 1 批**(F26,用户裁决):引导在下一次真正的按键处结束;Doom Winds 在 12.1.5 之前是按键、之后是触发,Predator's Wake 在 12.1.5 之前是它自己的 90 秒冷却;在 IMMUNE 行同一瞬间打出过命中的按键算命中了;免疫只对它挡得住的学派算原因;Devourer 的 The Hunt 进名单。605:其实已经命中、却被写成打进防御或免疫的按键 288 → 0、223 → 0;`[PROC] Doom Winds` 行 123 → 0。
+- `e765b13fb` `79331b7cc` `3fb96172c` **第十一轮,第 3–8 类:** 神圣骑士的 Avenging Wrath 是治疗冷却,永远不算敌方爆发;Apotheosis 不是防御技能;Prismatic Barrier 和 Blazing Barrier 是台账里的保命;套件按 `[SILENCE]` 行印出的沉默计数;没有光环的沉默会打断读条;没有自己那一行的 Spell Reflection 反弹算反射;Aura Mastery 作用到 Devotion Aura 的持有者。覆盖集:治疗被读成敌方爆发 75 → 0,套件门规 420 → 0;cd-hoarded 少 10 条只有 Apotheosis 的行。
+- `88f65858e` `eda32625b` **第十一轮,第 3 批:** 治疗自己的爆发技能不进队伍就绪列表,Power Infusion 除外;没有光环记录的免疫按键印 `(immune, no aura logged)`;免疫行写出同一次按键还罩住了哪些队友;Rain from Above 印 `[PRESS]` 行;Essence Break 的减益持续 5 秒;持有者自己结束的隐形不算「逼出了一个完整免疫」;`PRIME (…; Will to Survive ready)` 点名就绪的解控种族技能。
+- `006e68d1e` **GH #188 / #179 / #173 / #167**(用户裁决 2026-11-07):伴随施法行不算按键;Violent Transformation 重置 Voidblade 和 Pierce the Veil(272 条按键行的转好时间有变);没有记录原因的 `[BUFF FADED]` 提前结束写 `(ended after N of M s — …)`(1,302 行);打进敌方 Cyclone 的治疗写 `[IMMUNE — Cyclone was up]`(57 行);每次按键都被拒的爆发起手照实写明。
+- `90009f3e2` **第十一轮遗留**(GH #192–#198,用户裁决):在下一次按键处被拒的引导读成被拒;Ultimate Penitence 的行加上 `; its aura until M:SS`;Vanish、Burrow、Mass Invisibility 开了 1 秒以后挨到的单体直击会结束免疫(`— ended by a hit`);12.1.0 的 Violent Transformation 重置 The Hunt 和 Predator's Wake;浩劫和狂徒的 4 件套。覆盖集:挨了打还读成潜行免疫 24 / 75 → 0 / 314。
+- `12fddc281` 猎人靠宠物放的按键(Master's Call、Roar of Sacrifice、Intimidation)在宠物不在时退出 `[RES]`(GH #128)。
+- `381efac31` `a4afd4038` `93194d2a3` **`[RES]` 与死亡:** 只有施放者自己的死亡或回合结束才截短敌方效果,而且要没有任何副本活过截点(605:持有者已死 764 → 23);Solo Shuffle 回合结束会结束它确实结束掉的敌方效果(T28;205 条 `[RES]` 行去掉回合结束之后的条目)。
+- `815b56c83` `c697d4582` `f779f5cdb` `46410c746` 分析切片结束时还开着的敌方效果,在 `[RES]` 里持续到它自己的结束时间(T41;605:378 行,全部是剩余时间变长;其他行不动)。
+- `94ab44c5b` `516653eb0` `f76cf7d2a` 爆发窗口的伤害速率和治疗被控覆盖,算到日志有记录的那一秒为止(T91;605:读低的标签 513 行 → 0;401 条 `[HEALER EXPOSURE]` 行的爆发标签有变,全部上调)。
+- `d1057128d` `bdf651338` **血量读数:** 跨过最大血量上涨的血量行按新的最大值读,两条血量行之间的治疗按日志的行序读(605:2093 → 0)。
+- `8c5859cb0` `b53ab168e` Spirit of Redemption 的那一秒是鬼魂,不是活着的血量:窗口印 `A% → ghost` 并保留它的谷值;`[ROT PRESSURE]` 必须有伤害才印(T07)。
+- `68fb53742` `9eb461ee8` `92021ac4b` 被沉默的目标对 `[CC BOOKMARK]` / `[PEEL OPTION]` 不算「没被控」的一秒(49 → 0);被打断的引导的 `[BUFF FADED]` 不是自然到期(18 → 0);Solo 爆发行写明治疗的 Avenging Wrath 没计入(裁决 R01;40 → 0)。
+- `9ee7153a2` `db216bc4f` 定身按它自己的召唤物 GUID 找主人(一队两个萨满);带 Assimilation 的 Anti-Magic Zone 持续 8 秒;被重新宣告的光环对每个读者都是一个区间(裁决 R06;605:13,863 → 77 处拆分,少 8 条幻影 `[ENEMY CD]` 行)。
+- `0320ddcad` `c327a8d12` **死亡收尾:** Ultimate Penitence 的「承受的伤害」计入被延后和被反射的行;在致命一击同一毫秒被剥掉的光环算死亡,不是「提前移除」;STAYED IN / KITED 区间在回合结束时停止(T08,裁决 R11;605 菜单行 7,401 → 7,398)。
+- `8bceb84c9` `7af40f708` `dce7fdc7f` **被拒的打断和控制:** `[KICK] … — hit nothing` 补上它的 `[IMMUNE: …]`(fact12 D3 D7);对着正在读的条被拒的打断只印未命中标签(T52;605:53 / 108 条带标签的打断行 → 0);在未命中行同一毫秒按下的免疫算这次未命中的原因(T64;3 行多出 `(Ice Block was up)`)。
+- `4fc80e046` 自动攻击、触发行和套装触发不算按键(T12;605:1,618 → 0;ABILITIES INTO 行 709 → 549,全是 Crusading Strikes)。
+- `7ad3f3bec` 「its bolts hit」只用于引导类保命(T02):605 上有 967 条 Blazing Barrier 行把反应性命中读成了引导的法术弹。
+- `7bb6743a9` `[DEFENSIVE AVAILABLE]` 的「可以按」时长算到技能转好为止(T32)。
+- `eb21d5bc1` `fc2660d96` `9ba32527a` `8a437f950` Ray of Frost 的引导增益证明看不见时按过;没有光环的免疫行也带 `[friendly offensive CD active]`;ENEMY CC KIT 按按键数指向性控制(Maim 2× → 1×);记在按键同一毫秒的 Nether Ward 反弹,与它后面的 REFLECT 行配对,所以「Fire Blast reflected ×2」不会再盖住一个 Pyroblast。
+- `1ebfc35b5` `993923e34` `4c3891034` 一次按键的两个效果以不同方式打空,算一次指向性按键(T37,GH #205:`aimed at them 2x` → `1x`);相隔一秒的两次按键永远不串成一次。
+- `8073446d3` `84c1ada7f` 没有按键撑起来的墙,爆发台账不再写「pressed」:`(Zs after the burst opened [no press logged])`(T49)。
+- `65b14c29c` 缴械递减家族取自 DB2 —— Faerie Swarm 和 Sticky Tar Bomb 加入 —— 同步窗口扫描和候选共用一个回合结束截点(T68,GH #132;3 条按键行多出 `DR: Disarm Immune`)。
+- `dbb242100` `411ccb0e2` `4f102dab9` `53d408243` 爆发应对从产生那个控制的施法起计时(T43);STAYED IN 读录制者的移动定身,算到回合结束(T44:Charge 的定身有了 `rooted` 分句)。
+- `33f707798` `N hits immune` 也计宠物和守护者的 IMMUNE 行(T51;605:286 条 `[ENEMY DEF]` 行,例如 `4 hits immune` → `17 hits immune`)。
+- `d19766e0c` `d0722753c` `4a6c38922` 持续满时长的沉默不算在持有者死亡时结束;被盾吃掉的 DoT 跳数让它的存续留在 `[ROT PRESSURE]` 计数里(T74,GH #173);用一个 id 按下、由另一个 id 承载的引导算引导(T92:Lightning Lasso,203 次没有区间的按键 → 0,共 203 次)。
+- `331e1e232` `0994d404a` **wide 采集抓到的四处读错**(T85):暴露行和定身行漏了回合结束截点;覆盖变体 id 下的按键丢了 `[IMMUNE — …]` 标签;被截断的唤魔师蓄力被算了冷却、印了 `[PRESS]` 行;被重同步批次重新列出的光环印成第二次 `(no press)` 使用。
+- `35844aa8f` 驱散表登记 Void Shield 的其他形态和 Chi Cocoon 的第三个 id(T86;`[ENEMY PURGE]` 多 6 行)。
+- `92b4b2a60` 日志里以两种名字形式出现的玩家,回合内保持一个名字(T78,GH #139;7,040 个玩家回合里 3 个)。
+
+### 桌面端
+
+- `888372f5b` `9ac73b2da` `ed2155faf` `7a13a161c` `051d4dba2` `9e03e8d20` `53d5c7ef4` `3f711079f` `280c8e63f` **打开对局先画出战报框架,再分步填充**(T93);画出来的区块不再移动,视频播放器在填充过程中保持挂载。构建后的应用,5 场对局 × 5 次启动:战报上屏 615–2603 ms → 框架提交 67–357 ms、首批内容绘制 196–798 ms;最长任务 346–1342 ms → 129–453 ms。
+- `99ecd1f2f` `3f930d128` 回到对局列表页不再重跑分析层,也不再给每一行列表排版(T80):1,100 场的对局库、开着一场大对局时 1441 ms → 124 ms。
+- `18cfa4cf7` `485c23a23` `e4f389b27` `ae99fe9e3` `fabdda919` `574027b74` **战报渲染开销**(T81、T39、T49;GH #145):整回合的读数只算一次、所有调用方共用 —— 大型 3v3 对局首次进入 AI 视图 2152 ms → 749 ms;性能剖析下 ×12 战报渲染 34.7 秒 → 16.7 秒。20 个审计回合的输出逐字节一致。
+- `99e5772ba` **战报的失误和 AI prompt 输入放到 Web Worker 里算,切到别的标签页时对局页保持挂载。** 生产构建、真实对局、主线程最长任务:64 MB 的 3v3 首次进入 AI 标签页 983 ms → 274 ms;回到对局列表(2,000 行)189 ms → 69 ms;再次打开同一场不再重算这两项。渲染进程内存多约 80 MB。
+- `8d72336ad` 日志 worker 自己写完成的对局,主进程只负责改名到位(GH #149)。
+- `714bfe24f` `d19de651a` `9fa6bebe9` **日志 worker 不再从头重读大日志**(GH #211):检查点落在最后一个空闲边界,WoW 不再写的日志会退役,尾部改为流式读取。209 MB 的 shuffle 日志上,第一行到达解析器时的堆 406–416 MB → 6–7 MB。检查点不会越过主进程还没存下的对局;退役后又变长的日志会重放那一段,迟到的对局结束行仍能把对局收尾。剩余的边角情况在 GH #214、#215。
+- `429d84dae` `7d857d0f9` **托管 OBS 录像:** 启动时不再有切片风暴,对局结束不再跨文件,没有采集源绝不录,不管焦点在不在都采集 WoW;应用等 OBS 加载完再配置,并忽略 45 分钟以前的开局。
+- `15f8d4bed` `recorder:sim`:不用打对局就能在 Windows 上驱动托管 OBS 录像。
+- `b1fe3aed8` `95eaf54f1` 死亡卡片写明分学派防御技能的学派;只有按键的爆发,台账卡片不再误标无伤害。
+
+### 可靠性 / 测试 / CI
+
+- `c2d3fb1f1` `9e6a3fde3` `4030feb48` `d75078e75` `c05e223af` `e950156df` `7c99b61db` 第十、十一轮的类检查读生产方自己的集合、按键和渲染形态;backlash-dispel 门规检查每个回合(605:43 / 43);施法效果光环扫描拒绝被消耗的和兄弟召唤物的同名配对(GH #169)。
+- `c1a96a99a` `d6d92a052` `4c4d841e0` `[RES]` 台账行只有一个解析器(GH #178);大防御列表由外援列表和大技能列表推导(GH #150)。
+- `41a41b5a6` `5e27a41e1` `faa6f2949` `5a958d478` `2ed6700b7` `312462200` `571e42a77` `b8f43d608` `b675f28da` `b6b4679c4` `5de38ad2d` `dbfbade82` **第一波,检查侧**(T05、T16、T17、T18、T30、T33、T35):每张票的扫描去问生产方读了哪些按键、存续和行,不再自己重推;`friendlyOffensiveTag` 读产品自己的窗口(裁决 R12:482 个视图 → 0)。
+- `5859e31de` `fc8a05816` 光环重播读法移到叶子模块;Essence Break 的 4 件套走统一的套装门。
+- `5e8363076` `685d1b119` `56023bb26` `cfed1aead` `86bc5a9f7` `c3c72dde7` `a4f8c9fd3` `042155ec5` `c92b51994` `58f0690ab` `f46999006` `ddf805eee` `938b8e64e` `676684344` `319134164` **第二波,检查侧**(T49、T64、T68、T48、T58、T78、T85、T83、T90、T51、T72):扫描检查共用产品自己的判据;十二项 wide 语料检查和两道门规逐行对照原始日志(wide 子集:18、12、12、9、5、6 行 → 0);采集的名册对某个单位的叫法与本次解析不同时,扫描直接失败。
+- `29c04ac98` 五项扫描检查跟上第一波给出的行形态(T36,GH #203:castDamageIdSplit 46 → 22,wardReturnMisnamed 3 → 0,pressedInsideNeverBack 961 → 125)。
+- `37061c000` `dac6c7d0e` `fd7258753` `dd27bce30` `d6159588c` `d7b987b31` `0e5001571` 检查 `during it` 窗口结束在某一行上(T96:0 / 2417);GH #173 的扫描残余读对了行、读对了一秒的哪一边,「这一行是谁的驱散」只有一个读法、审计读者共用(T74);no-tick 类只从日志读(T92)。
+- `4f16f76e3` `6a0f044ed` `b6da67b5e` `3e0924917` `641cd383e` `93044e47f` `85e84ddfa` `15c2602f4` T77、T84、T40、T41、T91 的新扫描模块;冷却扫描跳过模型自己标的免费按键;不从回合实际结束之后的 REMOVED 读效果存续期。
+- `5c2067e92` `2af91bb81` `e60c5821d` `f56d6e824` `6b89df1c5` `18506359c` `5ee643b34` `1f2dc730b` `55a0996c1` `fd3e50e42` **检查工具**(T75):缴械尾巴门规按减半时长读第二次缴械;走位门规检查 KITED 区间是对着谁量的;冷却扫描按游戏版本拆分计数;验证运行器按检查和类别列出覆盖缺口。
+- `c3148f248` `fef95f8f2` `f99159ba5` `b7fdfb6bb` R19 裁决之后上涨的四个扫描类逐提交归因 —— 没有一个是产品缺陷;三项检查改读生产方自己的区间(T94;605:360 项检查 357 项不变,3 项下降,0 项上涨)。
+- `ec5102c34` `993af9b88` `04bafa5ef` `23cb1ce70` `7dd2e0188` 时长缺口工具问同一个认得 tooltip 表的谓词,并把召唤物的光环读成主人的施法;`[RES]` 结束检查从产品起算的地方数一次施加(T76)。
+- `5b2a2c929` `bb6045d14` `8966e298e` `eb34da0fc` `f79012e92` 删除死代码(T79,GH #147、#150、#167):变形区间的管线、两个已退役的蓝量候选、时间线行开关、cc-held 生产者;按键触发的施法列表改由 DB2 生成。285 份录制者上下文 0 份有变。
+- `9fd936dd4` `63f544da7` 按 CPU 校准的首渲读数,先只测量,再依 36 次 CI 锁在 3.9(GH #145)。
+- `d9b44151c` `34c303dc7` 视觉基线跟上爆发台账行、report-synth 场景和对局列表。
+- `99fd2b97d` `836a4a698` `845cc6a3e` `f0be23ca9` `823cdaa7a` 测试固定项和带类型的夹具:控制采样器问它自己的控制(GH #134)、Peaceweaver 的队友行、Touch of Karma、Feign Death、Penitence、Blazing Barrier。
+
+### 其他
+
+- `387f12d18` `69643d299` `a8275564f` `1cfbaa1ab` `78d6fc66f` `cdfc3cab7` `a40609b7e` `b677f27c2` `3fdd6f0e1` `bc8c6c216` `540b6c95b` `f3c7c9f0f` `2ffeae800` `fdd1ff50c` `be75ea85c` `aeddaf5f7` `576387789` `98cca55f1` `575515cae` `c62999d3f` `0e0ca1e0c` `100893096` `11e4402f4` `4882aca85` `3c46ffea2` `f7ed865ad` `5459239ee` `387cc6a70` `b52ce3f42` `0efc7d3a9` `054fb79e5` `1f105d707` `746f2b71c` `1fb09b2d9` `87e9e60f3` `987f1dce9` `4ac0040b3` `1442b452c` `5f29baef1` `cb2a0a340` `bb5b430c7` `a396bc621` `9ff8534be` `de7536613` `896532c40` `c8d482a50` `7239cb489` `40e2de6ea` PROMPT_VERSION 升版及其历史条目:481、496,以及流水线各批次的 501–547(526 随它的重生成提交);其余版本由各自的修复提交携带。
+- `2f96cf2e0` `fb56838d4` `49f24856c` lint 回到警告上限以内;import 排序。
+- `214b64057` `84f616d31` `f8867bc88` `266f27d7d` 文档:v489 历史条目列出交叉审查的后续修正;谓词索引关闭窗口最低血量和 Feign Death 两条,并登记三个共享读法。
+- `c2fb126a3` `00df5c3ec` `7b6c8cf4a` `b63d27c5a` 源码注记:宠物打断的语料注记、Explosive Shot 2 件套的计数、T48 的证据注记、Airborne Irritant 的 105 文件测量。
+- `cc0f459bf` `d50046162` `726648bfd` `docs/talent-coverage-gaps.md` 依新扫描重新生成:Ascendance 触发已修,17 条减伤行各有状态,10 条已解决的行移除。
+
 ## v0.1.41(2026-11-03)
 
 本版汇集四轮事实审计的修复,PROMPT_VERSION 466 → 478。第七轮(15 个新回合查出 79 处)、第八轮(确认 51 处)、第九轮(33 处)都按事实类修,每个事实的所有读者一起修,修之前先在基线采集上跑过该类的确定性检查。中间穿插 GH #168 / #173 / #176 / #179 / #187 几批:中断免疫窗口统一成一个构造器;名单之外的大按键都有 `[PRESS]` 行;被天赋替换的技能不再算在套件里。验证运行器现在几分钟就能复查 117 份归档的覆盖集,第九轮各批都在它上面测量。每一处增删候选行的改动,都先在 605 文件采集上预览、经用户批准后才落地。
