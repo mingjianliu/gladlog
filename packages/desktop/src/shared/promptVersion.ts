@@ -1227,5 +1227,13 @@
  *  before a teammate's first death with no heal pressed although nothing
  *  the log shows stopped them, printed only when that teammate lost HP
  *  across it; never a candidate. See docs/prompt-version-history.md.
+ *
+ * v547 (2026-11-13; pipeline batch B64, T76): talent-changed buff
+ *  lengths — Avatar under Capacitance grows 2 s per Thunder Blast, Void
+ *  Shield runs 20 s under Eternal Barrier, Stormstream Totem is split by
+ *  its two totem talents — and every reader that knows an effect's
+ *  application instant prices it from that application
+ *  (buffDurationOfApplication), the enemy timeline and [RES] included.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 546;
+export const PROMPT_VERSION = 547;

@@ -6507,3 +6507,36 @@ against the head reviewed before R39, 62 -> 59 (3 gone, 1 shortened 5.8 s ->
 rows 0. Recorded, not fixed: a shield with no absorb row is covered by no
 reading; 50 same-spell row pairs 50–699 ms apart stay two rows, none inside
 a printed stretch.
+
+v547 (2026-11-13; pipeline batch B64, T76; GH #123 / #160 / #173 D13 /
+#179). Talent-changed buff lengths. (1) Avatar held with Capacitance grows
+2 s per Thunder Blast pressed while it is up; the per-press extension walks
+the aura run the log shows. Void Shield runs 20 s under Eternal Barrier.
+Stormstream Totem is split by the two totem talents. The tooltip generator
+reads "while X is active, its duration is extended" as a fixed extension.
+605 duration scan: Avatar runs longer than the model 181 -> 2, exact 759 ->
+938; Void Shield longer 455 -> 0, exact 27 -> 353; that step moved 5 context
+lines in 5 files, 0 findings files. (2) One entry point,
+buffDurationOfApplication(spellId, caster, appliedAtMs): the enemy
+timeline (five sites in enemyCDs.ts, the effect's own end that [RES] reads
+included), offensiveAuraOccurrences, burstWindowDecisionPoints,
+castEntersWindow, detectOverlappedDefensives and the gate twins scan5/t41
+and scan5/t65 price an effect from its own application; before, an enemy
+Avatar with two Thunder Blasts ended at 34 s for [BUFF FADED] and at 30 s
+on the enemy timeline (batch review 80-PIPE-64-B62). 605, reviewed tip ->
+fix: 54 context files differ, 0 findings files; [RES] enemy entries: Avatar
+153 changed (+2 s to +6 s) and 3 added in 38 files, Recklessness (a
+per-press set bonus with the same gap) 51 changed and 3 added in 14 files,
+no other spell; 14 lines outside [RES] (3 [OFFENSIVE WINDOW], 3 [BURST
+ANSWERED], 1 [CC BOOKMARK], the owner's Avatar / Recklessness spans in 3
+Burst headers, 2 kill-window rows and 2 lines under them). scan5
+resEnemyLeftPastLogEnd 39 facts -> 33 (5 Avatar, 1 Recklessness), none new.
+Candidate rows 0 in step (1); not counted separately for step (2) (0
+findings files differ). The captures were taken on the parent before B63
+and not retaken. docs/talent-coverage-gaps.md regenerated on the assembled
+tree (10 resolved rows gone). Kept as is: Airborne Irritant's Blind stays
+3.25 s with its corpusPending note (control keeps its official number).
+Recorded, not fixed: the time-less callers that remain (an existence test,
+the [RES] `lasts` kit statement, fixed id sets with no per-press row, the
+scans' flat columns); aurasUpAtLogEnd forgets a run's earlier sightings on
+another APPLIED.
