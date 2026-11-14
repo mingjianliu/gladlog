@@ -164,6 +164,24 @@ describe("T98 D5 — a copy a press refreshed is a pressed wall in the burst led
       "pressed 8.0s after the burst opened",
     ]);
   });
+  it("a press in the copy's last instant still refreshed it", () => {
+    // codex 85-tk-K-T98-1b #1: copy at 13.5, press at 15.46, gone at 15.48
+    const u = makeUnit("e1", {
+      name: "Hunter",
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      auraEvents: [
+        buff(LogEvent.SPELL_AURA_APPLIED, 13.5, "e1", "e1"),
+        buff(LogEvent.SPELL_AURA_REFRESH, 15.46, "e1", "e1"),
+        buff(LogEvent.SPELL_AURA_REMOVED, 15.48, "e1", "e1"),
+      ],
+      spellCastEvents: [cast(EXHILARATION, 13.5), cast(SOTF, 15.46)],
+    });
+    expect(wallTimingPhrase(hitOf(u))).toBe(
+      "pressed 5.5s after the burst opened",
+    );
+  });
   it("a namesake's press is not the copy holder's (ids decide)", () => {
     // codex 85-tk-K-T98-1 #2: two units named alike; the other one's
     // external on the holder is no press of the holder's own copy

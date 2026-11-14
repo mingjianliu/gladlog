@@ -678,6 +678,7 @@ export function analyzeBurstLedger(
        * so the ledger's one interval holds both lines of the timeline
        * (1a2fabdb 1:25: Exhilaration's Survival of the Fittest copy 0.3 s,
        * the hunter's press 8.0 s — all 8.3 s read `[no press logged]`). */
+      const targetIntervals = buildAuraIntervals(target, combat);
       const pressReadingOf = (
         spellId: string,
         src: { name: string; id?: string },
@@ -717,9 +718,20 @@ export function analyzeBurstLedger(
           src.id !== undefined && e.casterId !== undefined
             ? e.casterId === src.id
             : e.casterName === src.name;
-        // strictly inside: a press at the interval's end opens the next
-        // interval (a lost REMOVED, then a fresh press — codex
-        // 85-tk-K-T98-1 #1), it refreshed nothing of this one
+        // a press that opens another interval of the wall from the same
+        // source (a lost REMOVED, then a fresh press — codex 85-tk-K-T98-1
+        // #1) refreshed nothing of this one; a press in its last instant
+        // still did (codex 85-tk-K-T98-1b #1)
+        const opensAnother = (s: number) =>
+          targetIntervals.some(
+            (x) =>
+              x.spellId === spellId &&
+              x.fromS > copy.atS + NO_PRESS_SAME_AURA_S &&
+              Math.abs(x.fromS - s) <= NO_PRESS_SAME_AURA_S &&
+              (src.id !== undefined && x.srcUnitId !== undefined
+                ? x.srcUnitId === src.id
+                : x.srcUnitName === src.name),
+          );
         const press = defOnTarget
           .filter(
             (e) =>
@@ -727,7 +739,8 @@ export function analyzeBurstLedger(
               e.spellId === spellId &&
               bySource(e) &&
               e.atS > copy.atS &&
-              e.atS < endS - NO_PRESS_SAME_AURA_S,
+              e.atS <= endS &&
+              !opensAnother(e.atS),
           )
           .sort((x, y) => x.atS - y.atS)[0];
         return press
@@ -738,7 +751,7 @@ export function analyzeBurstLedger(
       // is that press: `buildAuraIntervals` joins it for every reader
       // (`joinReappliedIntervals`, GH #136.3; codex R6C-05 #2: one Guardian
       // Spirit read as two pressed walls)
-      for (const iv of buildAuraIntervals(target, combat)
+      for (const iv of targetIntervals
         .filter((x) => DEF_OR_IMMUNE_IDS.has(x.spellId))
         .map((x) => ({
           spellId: x.spellId,

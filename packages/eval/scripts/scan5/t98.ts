@@ -7,7 +7,8 @@
  *  - `ledgerCopyHoldsPress` (D5): a burst-ledger line `<Wall> active ON THE
  *    TARGET … (Zs after the burst opened [no press logged])` whose aura —
  *    the target's APPLIED of that wall nearest the burst start + Z (the head
- *    is printed floored: + 0–1 s), up to its next REMOVED — holds a
+ *    is printed floored: + 0–1 s), up to its next REMOVED (or next APPLIED
+ *    of it from the same source: a lost REMOVED) — holds a
  *    SPELL_CAST_SUCCESS of that wall by its holder or aimed at it. The press
  *    refreshed the copy; the interval is a pressed wall (1a2fabdb 1:25:
  *    Exhilaration's Survival of the Fittest copy at .265, the hunter's press
@@ -80,9 +81,16 @@ function ledger(ctx: IRoundCtx): void {
       .sort((a, b) => tsOf(a) - tsOf(b))[0];
     if (!app) continue;
     ctx.bump(C);
+    // up to its REMOVED — or the next APPLIED of it from the same source:
+    // with the REMOVED lost, that is a fresh aura (codex 85-tk-K-T98-1b #2)
     const end =
       rows
-        .filter((a) => ev(a) === REMOVED && tsOf(a) > tsOf(app))
+        .filter(
+          (a) =>
+            tsOf(a) > tsOf(app) &&
+            (ev(a) === REMOVED ||
+              (ev(a) === APPLIED && a.srcUnitId === app.srcUnitId)),
+        )
         .map(tsOf)
         .sort((a, b) => a - b)[0] ?? ctx.end;
     const press = ctx.players
