@@ -1235,5 +1235,11 @@
  *  application instant prices it from that application
  *  (buffDurationOfApplication), the enemy timeline and [RES] included.
  *  See docs/prompt-version-history.md.
+ *
+ * v548 (2026-11-14; pipeline batch B65, T100): the owner's "could
+ *  press" in HEALER OFFENSE ([SLACK] / [CONTESTED]) and in the
+ *  `cheaper available:` note reads the shared cannot-cast predicate
+ *  (silences and kick lockouts per school, not hard CC alone).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 547;
+export const PROMPT_VERSION = 548;

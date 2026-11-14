@@ -6540,3 +6540,21 @@ Recorded, not fixed: the time-less callers that remain (an existence test,
 the [RES] `lasts` kit statement, fixed id sets with no per-press row, the
 scans' flat columns); aurasUpAtLogEnd forgets a run's earlier sightings on
 another APPLIED.
+
+v548 (2026-11-14; pipeline batch B65, T100; round 13 audit D13, D15). The
+owner's "could press" reads the shared cannot-cast predicate in two
+readers. (1) HEALER OFFENSE: the [SLACK] and [CONTESTED] sweeps and the
+window free-seconds count read buildCannotCastIntervals through one
+whole-second sampler; before, they swept the [CC ON TEAM] instance list,
+which holds no silence and no kick lockout, so a `[SLACK] 2:04-2:10 (6s):
+no damage, no CC, no purge, no kick` segment was printed over 3 s of
+Garrote - Silence. (2) `cheaper available:` drops a defensive the owner
+could not press at that instant (silence per silenceable cast, lockout per
+school, disarm, stun unless usable while stunned); a non-stun hard CC is
+left unjudged as before. Example: `cheaper available: Ice Barrier, Alter
+Time` under a Spell Lock on Frost now lists Alter Time only. 605 (base
+capture at PV547 vs branch), new scan5/t100: slackWhileLocked 38 / 746 ->
+0 / 744 (silence 20, lockout 18); cheaperLocked 49 / 3352 -> 0 / 3303
+(lockout 40, silence 9); alternatives offered inside a non-stun hard CC,
+left unjudged and outside the total, 39 on both sides. Context files
+changed 262 of 3,519; findings files 0, candidate rows +0 -0.
