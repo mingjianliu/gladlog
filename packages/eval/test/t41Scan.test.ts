@@ -16,9 +16,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   makeAuraEvent,
+  makeSpellCastEvent,
   makeUnit,
 } from "../../analysis/test/ported/testHelpers";
-import { aurasUpAtLogEnd, run } from "../scripts/scan5/t41";
+import {
+  applicationAnchorMs,
+  aurasUpAtLogEnd,
+  run,
+} from "../scripts/scan5/t41";
 
 const START = 1_700_000_000_000;
 const at = (s: number) => START + Math.round(s * 1000);
@@ -160,6 +165,7 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
       {
         appliedMs: at(11),
         lastSeenMs: at(11),
+        seenMs: [at(11)],
         removedMs: at(17),
         spellId: "162264",
       },
@@ -193,5 +199,63 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
     const outran = scan(dh(99), 3, "Metamorphosis", 92.9);
     expect(outran.seen).toHaveLength(1);
     expect(outran.seen[0]).toMatch(/^outran its length: /);
+  });
+
+  it("a REFRESH no press made does not restart the application: Avatar refreshed by the Thunder Blast that extends it (codex 85-tk-G-T76-1c)", () => {
+    // a Capacitance holder: Avatar pressed and applied at 10 s, Thunder
+    // Blast at 14 s and 22 s, a REFRESH at 14 s, no REMOVED, the slice over
+    // at 35 s — the effect ends at 34 s and `6s left` at 28 s is right
+    const aura = (event: LogEvent, s: number) =>
+      makeAuraEvent(event, "107574", at(s), "Player-4", "Player-4", "BUFF");
+    const warrior = (refreshS?: number): any =>
+      makeUnit("Player-4", {
+        name: "War",
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Fury,
+        info: { talents: [], pvpTalents: [] } as never,
+        spellCastEvents: [
+          makeSpellCastEvent("1270724", at(1), "Player-4"),
+          makeSpellCastEvent("107574", at(10), "Player-4"),
+          makeSpellCastEvent("435222", at(14), "Player-4"),
+          makeSpellCastEvent("435222", at(22), "Player-4"),
+        ],
+        auraEvents: [
+          aura(LogEvent.SPELL_AURA_APPLIED, 10),
+          ...(refreshS === undefined
+            ? []
+            : [aura(LogEvent.SPELL_AURA_REFRESH, refreshS)]),
+        ],
+      });
+    const scanAvatar = (u: any, left: number) => {
+      const seen: string[] = [];
+      run({
+        text: [
+          `  <unit id="4" name="War" spec="Fury Warrior" role="enemy">`,
+          `0:28  [STATE]   friends 3(MHunter):86 / enemies 4(FWarrior):98`,
+          `      [RES] rdy:Δ  enemy:Avatar/Fury Warrior(${left}s left)  focus:3`,
+        ].join("\n"),
+        units: [u],
+        unitOfPid: (pid: string | undefined) => (pid === "4" ? u : undefined),
+        start: START,
+        end: at(35),
+        violate: (
+          _c: string,
+          kind: string,
+          _t: number,
+          _f: string,
+          d: string,
+        ) => seen.push(`${kind}: ${d}`),
+        bump: () => undefined,
+      } as any);
+      return seen;
+    };
+    expect(scanAvatar(warrior(14), 6)).toEqual([]);
+    expect(scanAvatar(warrior(), 6)).toEqual([]);
+    // the anchor: the press's own sighting, not the later REFRESH; a
+    // REFRESH a press made restarts it; no press of the name, the last one
+    const o = { lastSeenMs: at(14), seenMs: [at(10), at(14)] };
+    expect(applicationAnchorMs(o, [at(10)])).toBe(at(10));
+    expect(applicationAnchorMs(o, [at(10), at(13.8)])).toBe(at(14));
+    expect(applicationAnchorMs(o, [])).toBe(at(14));
   });
 });

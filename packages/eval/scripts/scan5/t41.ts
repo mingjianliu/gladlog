@@ -30,6 +30,10 @@ import {
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
 import { buffDurationOfApplication } from "@gladlog/analysis/src/utils/buffDuration";
+import {
+  EFFECT_START_AFTER_S,
+  EFFECT_START_BEFORE_S,
+} from "@gladlog/analysis/src/utils/enemyCDs";
 
 import {
   APPLIED,
@@ -62,6 +66,9 @@ export interface IOpenAura {
   /** last APPLIED / REFRESH at or before the slice's end */
   lastSeenMs: number;
   appliedMs: number;
+  /** every APPLIED / REFRESH of the run since its last APPLIED, at or
+   * before the slice's end */
+  seenMs: number[];
   /** its REMOVED, logged after the slice's end */
   removedMs?: number;
   spellId: string;
@@ -109,9 +116,20 @@ export function aurasUpAtLogEnd(
         // re-applications measured their length from the first one — 45
         // `removed after the log end`, 36 `never removed`)
         if (o) {
-          if (e === APPLIED) o.appliedMs = t;
+          if (e === APPLIED) {
+            o.appliedMs = t;
+            o.seenMs = [];
+          }
           o.lastSeenMs = t;
-        } else runs.push({ appliedMs: t, lastSeenMs: t, spellId: id, src });
+          o.seenMs.push(t);
+        } else
+          runs.push({
+            appliedMs: t,
+            lastSeenMs: t,
+            seenMs: [t],
+            spellId: id,
+            src,
+          });
       } else if (e === REMOVED) {
         const o = runs.find(
           (r) => r.removedMs === undefined && (sourceless || r.src === src),
@@ -125,6 +143,30 @@ export function aurasUpAtLogEnd(
       for (const { src, ...o } of runs) if (src === holder.id) out.push(o);
   }
   return out;
+}
+
+/**
+ * Where the application `[RES]` counts from is, as the product reads it
+ * (`pressAppliedS` in enemyCDs.ts): the run's APPLIED / REFRESH inside a
+ * press's start window — a press that refreshed an aura already up restarts
+ * it; a REFRESH no press made does not (codex 85-tk-G-T76-1c: Avatar pressed
+ * at 10 s and refreshed at 14 s by the Thunder Blast that extends it was
+ * priced from 14 s, 24 s long, and a correct `6s left` at 28 s read as a
+ * violation). With no press of the name, the last sighting, as before.
+ */
+export function applicationAnchorMs(
+  o: Pick<IOpenAura, "lastSeenMs" | "seenMs">,
+  pressesMs: readonly number[],
+): number {
+  if (pressesMs.length === 0) return o.lastSeenMs;
+  const paired = o.seenMs.filter((t) =>
+    pressesMs.some(
+      (p) =>
+        t >= p - EFFECT_START_BEFORE_S * 1000 &&
+        t <= p + EFFECT_START_AFTER_S * 1000,
+    ),
+  );
+  return paired.length > 0 ? Math.max(...paired) : o.lastSeenMs;
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -175,16 +217,13 @@ export function run(ctx: IRoundCtx): void {
       const noPress = e[1]!.endsWith(" (no press)");
       const judged = up
         .map((o) => {
-          // the product's reading: the length of that application
-          const full = buffDurationOfApplication(
-            o.spellId,
-            holder,
-            o.lastSeenMs,
-          );
+          // the product's reading: the length of that application, from
+          // that application
+          const anchorMs = applicationAnchorMs(o, pressesMs);
+          const full = buffDurationOfApplication(o.spellId, holder, anchorMs);
           return {
             o,
-            ownEndMs:
-              full === undefined ? undefined : o.lastSeenMs + full * 1000,
+            ownEndMs: full === undefined ? undefined : anchorMs + full * 1000,
           };
         })
         // seen, or due, later than the line says
