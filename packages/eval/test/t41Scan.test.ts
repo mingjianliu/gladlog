@@ -259,11 +259,29 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
       lastSeenMs: at(14),
       seenMs: [at(10), at(14)],
     };
-    expect(applicationAnchorMs(o, [at(10)], at(28))).toBe(at(10));
-    expect(applicationAnchorMs(o, [at(10), at(13.8)], at(28))).toBe(at(14));
-    expect(applicationAnchorMs(o, [], at(28))).toBe(at(14));
+    expect(applicationAnchorMs(o, [at(10)], at(28), START)).toBe(at(10));
+    expect(applicationAnchorMs(o, [at(10), at(13.8)], at(28), START)).toBe(
+      at(14),
+    );
+    expect(applicationAnchorMs(o, [], at(28), START)).toBe(at(14));
+    // a press at exactly 13 s is not the 0:12 row's; one at 12.9 s is, as
+    // the renderer counts it spent (`pressSpentBy`, codex 85-tk-G-T76-1e)
+    const o13 = {
+      appliedMs: at(10),
+      lastSeenMs: at(13),
+      seenMs: [at(10), at(13)],
+    };
+    expect(applicationAnchorMs(o13, [at(10), at(13)], at(12), START)).toBe(
+      at(10),
+    );
+    const o129 = { ...o13, lastSeenMs: at(12.9), seenMs: [at(10), at(12.9)] };
+    expect(applicationAnchorMs(o129, [at(10), at(12.9)], at(12), START)).toBe(
+      at(12.9),
+    );
     // a later press's refresh is not an earlier row's application (1d #1)
-    expect(applicationAnchorMs(o, [at(10), at(13.8)], at(12))).toBe(at(10));
+    expect(applicationAnchorMs(o, [at(10), at(13.8)], at(12), START)).toBe(
+      at(10),
+    );
   });
 
   const entryScan = (

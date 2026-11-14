@@ -31,6 +31,7 @@ import {
 } from "@gladlog/analysis/src/context/resRow";
 import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { buffDurationOfApplication } from "@gladlog/analysis/src/utils/buffDuration";
+import { pressSpentBy } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   EFFECT_START_AFTER_S,
   EFFECT_START_BEFORE_S,
@@ -154,7 +155,9 @@ export function aurasUpAtLogEnd(
  * Where the application the row's `[RES]` entry counts from is, as the
  * product reads it (`pressAppliedS` in enemyCDs.ts): the run's APPLIED /
  * REFRESH inside the start window of the press the row stands for — the
- * last one at or before the row — and before the next press of the name.
+ * last one the row counts as spent (`pressSpentBy`, the renderer's own
+ * rule: 1e — a press at exactly 13 s is not the 0:12 row's) — and before
+ * the next press of the name.
  * A press that refreshed an aura already up restarts it; a REFRESH no press
  * made does not (codex 85-tk-G-T76-1c: Avatar pressed at 10 s and refreshed
  * at 14 s by the Thunder Blast that extends it was priced from 14 s), and a
@@ -167,11 +170,13 @@ export function applicationAnchorMs(
   o: Pick<IOpenAura, "appliedMs" | "lastSeenMs" | "seenMs">,
   pressesMs: readonly number[],
   rowMs: number,
+  startMs: number,
 ): number {
   if (pressesMs.length === 0) return o.lastSeenMs;
   const sorted = [...pressesMs].sort((a, b) => a - b);
-  // the row's second is floored: a press inside it is the row's
-  const before = sorted.filter((p) => p <= rowMs + 1000);
+  const before = sorted.filter((p) =>
+    pressSpentBy((p - startMs) / 1000, (rowMs - startMs) / 1000),
+  );
   const press = before.length > 0 ? before[before.length - 1]! : sorted[0]!;
   const next = sorted.find((p) => p > press) ?? Infinity;
   const paired = o.seenMs.filter(
@@ -233,7 +238,7 @@ export function run(ctx: IRoundCtx): void {
         .map((o) => {
           // the product's reading: the length of that application, from
           // that application
-          const anchorMs = applicationAnchorMs(o, pressesMs, rowMs);
+          const anchorMs = applicationAnchorMs(o, pressesMs, rowMs, ctx.start);
           const full = buffDurationOfApplication(o.spellId, holder, anchorMs);
           return {
             o,
