@@ -301,6 +301,7 @@
     "test/syncWindowTimingFacts.test.ts",
     "test/t03Troughs.test.ts",
     "test/t106FeignDeathInHand.test.ts",
+    "test/t114WallPressRow.test.ts",
     "test/t12WindowBoundaries.test.ts",
     "test/t98WallCopyPress.test.ts",
     "test/t99PressedDuringSubSpell.test.ts",

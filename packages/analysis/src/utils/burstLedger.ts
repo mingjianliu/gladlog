@@ -17,7 +17,7 @@ import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ENEMY_IMMUNITY_TEAM_PROC_AURAS } from "../data/spellIdLists";
 import { isAllyCopyWallId } from "./allyCopyWall";
-import { buildAuraIntervals } from "./auraIntervals";
+import { buildAuraIntervals, pressSecondsOfAura } from "./auraIntervals";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import {
   canonicalSpellId,
@@ -31,12 +31,14 @@ import {
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   ALIAS_PRESS_TWIN_MS,
+  AURA_BEFORE_CAST_MAX_S,
   ENEMY_DEF_NO_PRESS_TAG,
   enemyDefensiveEvents,
   FULL_IMMUNITY_IDS,
   holderFirstOwnActionAfterMs,
   type IEnemyDefensiveEvent,
   MITIGATION_AURA_MIN_PCT,
+  PRESS_TO_AURA_MAX_S,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "./enemyDefensives";
 import {
@@ -177,11 +179,13 @@ export interface IBurstDefensiveHit {
    *  up, a rider shield). The ledger line then drops "pressed" and carries
    *  that line's own tag. */
   noPressLogged?: true;
-  /** T98 (fact13 D5): the wall's interval began as a copy no press put up
-   * and a press of it followed inside the interval (`[ENEMY DEF]` prints the
-   * copy, then the press): raw ms
-   * from the burst's start to that press — the instant "pressed Zs after"
-   * names. Absent = the press, if any, is the interval's start. */
+  /** Raw ms from the burst's start to the press of the wall — the instant
+   * "pressed Zs after" names: its cast row (T114, fact13 D22: a Spirit Link
+   * Totem pressed 4.95 s in read `pressed 6.0s`, the instant its aura
+   * settled on the target), or, for an interval that began as a copy no
+   * press put up, the `[ENEMY DEF]` press that followed inside it (T98,
+   * fact13 D5). Absent = no press row found (a proc, an aura-only wall):
+   * the interval's start. */
   pressOffsetMs?: number;
 }
 
@@ -446,6 +450,8 @@ export interface IWallDefensiveEvent {
   atS: number;
   noPress: boolean;
   pressS?: number;
+  /** an external's event is at its press; its aura's start beside */
+  auraS?: number;
   casterName: string;
   casterId?: string;
 }
@@ -470,6 +476,7 @@ export function wallDefensiveEventsOn(
       atS: e.atSeconds,
       noPress: e.noPressLogged === true,
       ...(e.pressSeconds !== undefined ? { pressS: e.pressSeconds } : {}),
+      ...(e.auraFromS !== undefined ? { auraS: e.auraFromS } : {}),
       casterName: e.casterName,
       ...(e.casterId !== undefined ? { casterId: e.casterId } : {}),
     }));
@@ -479,7 +486,9 @@ export function wallDefensiveEventsOn(
  * The `[ENEMY DEF]` reading of the wall interval from `startMs` to `endMs`
  * (the caller bounds `endMs` by the burst's end too: a press after the burst
  * is not its — batch review 80-PIPE-73-B70 #1): undefined when its start is
- * no copy (T49: a copy no press put up starts there); a copy, unless an
+ * no copy (T49: a copy no press put up starts there) and no `[ENEMY DEF]`
+ * press of its own (T114, fact13 D22: then that press, at its
+ * `pressSeconds`); a copy, unless an
  * `[ENEMY DEF]` press of the same wall from the same source starts inside
  * the interval — then the interval is a pressed wall, timed at that press
  * (T98, fact13 D5). `buildAuraIntervals` does not cut where a press
@@ -503,19 +512,33 @@ export function pressReadingOf(
 ): { noPress: true } | { pressMs: number } | undefined {
   const atS = (startMs - combatStartMs) / 1000;
   const endS = (endMs - combatStartMs) / 1000;
-  const copy = defOnTarget.find(
-    (e) =>
-      e.noPress &&
-      e.spellId === spellId &&
-      Math.abs(e.atS - atS) <= NO_PRESS_SAME_AURA_S,
-  );
-  if (!copy) return undefined;
   // the interval's own source: by id when both sides carry one (two
   // units can share a name — codex 85-tk-K-T98-1 #2), the name else
   const bySource = (e: { casterName: string; casterId?: string }) =>
     src.id !== undefined && e.casterId !== undefined
       ? e.casterId === src.id
       : e.casterName === src.name;
+  const copy = defOnTarget.find(
+    (e) =>
+      e.noPress &&
+      e.spellId === spellId &&
+      Math.abs(e.atS - atS) <= NO_PRESS_SAME_AURA_S,
+  );
+  if (!copy) {
+    // T114: a pressed wall's press is the `[ENEMY DEF]` line's own — the
+    // event of this aura (an external's event sits at its press, paired
+    // within `SAVE_CAST_AURA_PAIR_S`, with the aura's start beside it)
+    const own = defOnTarget.find(
+      (e) =>
+        !e.noPress &&
+        e.spellId === spellId &&
+        bySource(e) &&
+        Math.abs((e.auraS ?? e.atS) - atS) <= NO_PRESS_SAME_AURA_S,
+    );
+    return own
+      ? { pressMs: combatStartMs + (own.pressS ?? own.atS) * 1000 }
+      : undefined;
+  }
   // a press that opens another interval of the wall from the same
   // source (a lost REMOVED, then a fresh press — codex 85-tk-K-T98-1
   // #1) refreshed nothing of this one; a press in its last instant
@@ -544,6 +567,85 @@ export function pressReadingOf(
   return press
     ? { pressMs: combatStartMs + (press.pressS ?? press.atS) * 1000 }
     : { noPress: true };
+}
+
+/**
+ * T114 (fact13 D22, batch review 80-PIPE-73-B70 #2): the instant a summon's
+ * (a totem's) wall press is paired from — its first pulse on anyone (its own
+ * SUCCESS rows of the aura), or its first APPLIED of the wall on `target`, or
+ * `startMs`, whichever is earliest. The holder can walk into a totem's range
+ * a second or more after it went down (605: Spirit Link Totem pressed 1.1 s
+ * and 1.5 s before its holder was linked), and the totem's aura can flicker
+ * off and on before it settles (e2047b8b 2:48).
+ */
+export function summonPressAnchorMs(
+  summon: ICombatUnit,
+  target: ICombatUnit,
+  spellId: string,
+  startMs: number,
+): number {
+  return Math.min(
+    startMs,
+    ...summon.spellCastEvents
+      .filter(
+        (c) =>
+          c.spellId === spellId &&
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+      )
+      .map((c) => c.logLine.timestamp),
+    ...target.auraEvents
+      .filter(
+        (a) =>
+          a.spellId === spellId &&
+          a.srcUnitId === summon.id &&
+          a.destUnitId === target.id &&
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+      )
+      .map((a) => a.logLine.timestamp),
+  );
+}
+
+/**
+ * T114 (fact13 D22), when the `[ENEMY DEF]` events name no press of the
+ * interval (an area save's line is keyed by its cast, not by the aura on the
+ * target): the cast row (ms) of the press that put up the wall interval of
+ * `spellId` from `srcUnitId` starting at `startMs`, the way `[ENEMY DEF]`
+ * pairs a press with its aura (`pressSecondsOfAura`: the aura's own id or a
+ * cast whose effect it is, at most `PRESS_TO_AURA_MAX_S` before the anchor or
+ * `AURA_BEFORE_CAST_MAX_S` after; the nearest). A summon's aura is its
+ * owner's press — the totem's own SUCCESS rows are its pulse, not the button
+ * — anchored at `summonPressAnchorMs`. Undefined when no press row pairs.
+ */
+export function pressRowOf(
+  unitOf: (id: string) => ICombatUnit | undefined,
+  target: ICombatUnit,
+  combatStartMs: number,
+  spellId: string,
+  srcUnitId: string | undefined,
+  startMs: number,
+): number | undefined {
+  if (srcUnitId === undefined) return undefined;
+  const src = unitOf(srcUnitId);
+  if (!src) return undefined;
+  const owner =
+    src.ownerId && src.ownerId !== src.id ? unitOf(src.ownerId) : undefined;
+  const presser = owner ?? src;
+  const anchorMs = owner
+    ? summonPressAnchorMs(src, target, spellId, startMs)
+    : startMs;
+  const anchorS = (anchorMs - combatStartMs) / 1000;
+  const press = pressSecondsOfAura(
+    presser.spellCastEvents,
+    spellId,
+    combatStartMs,
+  )
+    .filter(
+      (t) =>
+        t - anchorS <= AURA_BEFORE_CAST_MAX_S &&
+        anchorS - t <= PRESS_TO_AURA_MAX_S,
+    )
+    .sort((a, b) => Math.abs(a - anchorS) - Math.abs(b - anchorS))[0];
+  return press === undefined ? undefined : combatStartMs + press * 1000;
 }
 
 /** The ledger's damage of `player` on `targetId` in [fromMs, toMs], keyed
@@ -866,11 +968,24 @@ export function analyzeBurstLedger(
                     Math.min(iv.endMs, toMs),
                   )
                 : undefined;
-            return !r
-              ? {}
-              : "noPress" in r
-                ? { noPressLogged: true as const }
-                : { pressOffsetMs: r.pressMs - fromMs };
+            if (r && "noPress" in r) return { noPressLogged: true as const };
+            const pressMs =
+              r?.pressMs ??
+              (iv.startMs > fromMs
+                ? pressRowOf(
+                    (id) => combat.units?.[id],
+                    target,
+                    combat.startTime,
+                    iv.spellId,
+                    iv.srcUnitId,
+                    iv.startMs,
+                  )
+                : undefined);
+            // a press before the opening for an aura that came after it:
+            // the aura's start stays the reading
+            return pressMs !== undefined && pressMs >= fromMs
+              ? { pressOffsetMs: pressMs - fromMs }
+              : {};
           })(),
         });
       }
