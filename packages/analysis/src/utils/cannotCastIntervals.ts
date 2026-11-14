@@ -539,6 +539,13 @@ export function pressBlockedIntervalsForSpells(
  * Alter Time` on a Mass Invisibility pressed 2.2 s into a Spell Lock on Frost
  * — Ice Barrier is Frost, and the same lock refused a ready Ice Block twice.
  * The note was gated on a stun only.
+ *
+ * A hard CC that is not a stun is left out: the game lets some spells
+ * through a fear or a disorient (DB2's "Allow While Fleeing" / "Allow While
+ * Confused", `USABLE_WHILE_CC_GENERATED`), and `stunLetsPress` reads the
+ * stun dimension only — taken here, it would drop an alternative pressable
+ * under a fear (codex 85-tk-L-T100-1 #1: Dark Pact under Fear). Stuns,
+ * silences, lockouts and disarms are judged per spell as above.
  */
 export function spellPressBlockedAt(
   unit: ICombatUnit,
@@ -556,6 +563,13 @@ export function spellPressBlockedAt(
         [spellId],
         units,
         onSelf,
+      ).filter(
+        (iv) =>
+          iv.lockout ||
+          iv.disarm ||
+          iv.self ||
+          !isHardCcAura(iv.spellId) ||
+          isStunDrAura(iv.spellId),
       );
       memo.set(spellId, ivs);
     }

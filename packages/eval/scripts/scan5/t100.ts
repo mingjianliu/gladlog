@@ -18,9 +18,10 @@
  *    naming an alternative the owner could not press at X's press: inside an
  *    owner silence the alternative does not cast through (kind `silence`),
  *    or a kick lockout whose school holds the alternative's (kind
- *    `lockout`), or a hard-CC aura (kind `control`; a stun only against a
- *    spell the usable-while-stunned table does not let through), or a
- *    disarm of a weapon spell (kind `disarm`). Per spell,
+ *    `lockout`), or a stun the usable-while-stunned table does not let the
+ *    alternative through, or a disarm of a weapon spell (kind `disarm`).
+ *    Kind `control` (a fear / incapacitate / disorient) is out of the total:
+ *    the product does not judge it. Per spell,
  *    `intervalBlocksSpell` (the DB2 school / silenceable / weapon lookup).
  *    The [SLACK] check reads silences and lockouts only: hard CC was
  *    already its gate.
@@ -53,6 +54,12 @@ import {
 } from "./ctx";
 
 export const CHECKS = ["slackWhileLocked", "cheaperLocked"] as const;
+/** a hard CC that is not a stun: the note does not judge it (no per-CC
+ * usable-while reading behind `stunLetsPress`; `spellPressBlockedAt`) —
+ * counted, kept out of the total */
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "cheaperLocked|control",
+]);
 
 interface ILock {
   from: number;
@@ -70,8 +77,12 @@ const isBroken = (e: string) => e === BROKEN || e === BROKEN_SPELL;
 
 const SEGMENT_RE =
   /^\s*\[(SLACK|CONTESTED)\] (\d+:\d{2})–(\d+:\d{2}) \(\d+s, team min HP/;
-const CHEAPER_RE =
-  /^(\d+:\d{2})\s+\[YOU\] \[CD\]\s+(.+?) \(.*\| cheaper available: (.+?)(?: \||$)/;
+const CD_LINE_RE = /^(\d+:\d{2})\s+\[YOU\] \[CD\]\s+(.+)$/;
+const CHEAPER_RE = /\| cheaper available: (.+?)(?: \||$)/;
+/** the pressed spell's name: up to its target arrow, HP part or first
+ * field (codex 85-tk-L-T100-1 #2: a line with no HP part has no "(") */
+const pressedNameOf = (rest: string): string =>
+  rest.split(/ → | \(| \| /)[0]!.trim();
 
 function ownerLocks(ctx: IRoundCtx): ILock[] {
   const owner = ctx.owner;
@@ -95,12 +106,15 @@ function ownerLocks(ctx: IRoundCtx): ILock[] {
           ? ("disarm" as const)
           : null;
     if (kind === null) return;
+    // closed by its own caster's REMOVED (codex 85-tk-L-T100-1 #3: two
+    // rogues' Garrotes overlap); a break names the breaker, so any
     const end = auras
       .slice(i + 1)
       .find(
         (r) =>
-          (ev(r) === REMOVED || isBroken(ev(r))) &&
-          String(r.spellId) === id,
+          String(r.spellId) === id &&
+          ((ev(r) === REMOVED && r.srcUnitId === a.srcUnitId) ||
+            isBroken(ev(r))),
       );
     locks.push({
       from: tsOf(a),
@@ -166,11 +180,12 @@ export function run(ctx: IRoundCtx): void {
         );
       continue;
     }
-    const ch = CHEAPER_RE.exec(line);
-    if (!ch) continue;
+    const cd = CD_LINE_RE.exec(line);
+    const ch = cd ? CHEAPER_RE.exec(cd[2]!) : null;
+    if (!cd || !ch) continue;
     const C = "cheaperLocked";
-    const sec = secOf(ch[1]!);
-    const pressed = ch[2]!.trim();
+    const sec = secOf(cd[1]!);
+    const pressed = pressedNameOf(cd[2]!);
     const press = successesOf(ctx.owner).find(
       (c) =>
         nameOf(String(c.spellId)) === pressed &&
@@ -181,7 +196,7 @@ export function run(ctx: IRoundCtx): void {
     const pressMs = tsOf(press);
     const roster = extractMajorCooldowns(ctx.owner, ctx.legacy);
     const pvpTalents = playerTalentIdSets(ctx.owner).pvpTalentIds;
-    for (const altName of ch[3]!.split(", ").map((s) => s.trim())) {
+    for (const altName of ch[1]!.split(", ").map((s) => s.trim())) {
       const alt = roster.find((cd: any) => cd.spellName === altName);
       if (!alt) continue;
       ctx.bump(C);
@@ -201,10 +216,12 @@ export function run(ctx: IRoundCtx): void {
       if (!l) continue;
       ctx.violate(
         C,
-        l.kind ?? (l.lockout ? "lockout" : "silence"),
+        l.kind === "control" && isStunDrAura(l.spellId)
+          ? "stun"
+          : (l.kind ?? (l.lockout ? "lockout" : "silence")),
         pressMs,
         `${ctx.owner.id}#${press.spellId}#${pressMs}#${alt.spellId}`,
-        `${pressed} at ${ch[1]} offers ${altName} (${alt.spellId}) inside the owner's ${nameOf(l.spellId, l.spellId)} (${l.lockout ? `kick lockout, school ${l.lockedSchoolMask}` : (l.kind ?? "silence")}, ${((pressMs - l.from) / 1000).toFixed(2)}s in)`,
+        `${pressed} at ${cd[1]} offers ${altName} (${alt.spellId}) inside the owner's ${nameOf(l.spellId, l.spellId)} (${l.lockout ? `kick lockout, school ${l.lockedSchoolMask}` : (l.kind ?? "silence")}, ${((pressMs - l.from) / 1000).toFixed(2)}s in)`,
         line.trim(),
       );
     }

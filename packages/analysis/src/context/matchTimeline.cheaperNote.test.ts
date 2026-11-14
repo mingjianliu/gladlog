@@ -117,11 +117,14 @@ function timeline(opts: {
   mateDeathS?: number;
   /** rows done to the owner (T100: an enemy SPELL_INTERRUPT) */
   ownerActionIn?: unknown[];
+  /** aura rows on the owner (T100: a fear) */
+  ownerAuras?: unknown[];
 }): string {
   const owner = mkUnit("o", {
     spellCastEvents: (opts.ownerCasts ?? []) as never,
     damageIn: (opts.ownerDamageIn ?? []) as never,
     actionIn: (opts.ownerActionIn ?? []) as never,
+    auraEvents: (opts.ownerAuras ?? []) as never,
   });
   const mate = mkUnit("m", {
     damageIn: (opts.mateDamageIn ?? []) as never,
@@ -505,6 +508,30 @@ describe("cheaper note under a kick lockout (T100, fact13 D15)", () => {
     const t = timeline({
       ownerCDs: cds(),
       ownerActionIn: [kick("589", "Shadow Word: Pain")],
+    });
+    expect(lineWith(t, "[YOU] [CD]", "Divine Shield")).toContain(
+      "cheaper available: Divine Protection",
+    );
+  });
+
+  it("a fear is not judged: some spells go through one (codex 85-tk-L-T100-1 #1)", () => {
+    const fear = (event: LogEvent, t: number) => ({
+      spellId: "5782",
+      spellName: "Fear",
+      timestamp: t,
+      srcUnitId: "e",
+      srcUnitName: "e-Realm",
+      destUnitId: "o",
+      destUnitName: "o-Realm",
+      auraType: "DEBUFF",
+      logLine: { event, timestamp: t, parameters: [] },
+    });
+    const t = timeline({
+      ownerCDs: cds(),
+      ownerAuras: [
+        fear(LogEvent.SPELL_AURA_APPLIED, 28_000),
+        fear(LogEvent.SPELL_AURA_REMOVED, 34_000),
+      ],
     });
     expect(lineWith(t, "[YOU] [CD]", "Divine Shield")).toContain(
       "cheaper available: Divine Protection",
