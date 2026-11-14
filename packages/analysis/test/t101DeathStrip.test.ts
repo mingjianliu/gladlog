@@ -10,6 +10,7 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
+import { ccFullDurationSeconds } from "../src/data/spellEffectData";
 import {
   castBlockingAuraIntervals,
   freeMsBefore,
@@ -19,6 +20,7 @@ import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
 
 const HOJ = "853";
 const ALTER_TIME = "342245";
+const GARROTE_SILENCE = "1330";
 const DEATH = 48_772;
 
 const lethal = (ms: number) => ({
@@ -81,5 +83,75 @@ describe("castBlockingAuraIntervals — a control stripped by the death (T101)",
     const [iv] = castBlockingAuraIntervals(holder(48_500), enemies);
     expect(iv!.to).toBe(48_500);
     expect(iv!.removedMs).toBe(48_500);
+  });
+
+  it("a removal at the control's natural end is its end, inside the teardown window too (codex 85-tk-L-T101-1 #2)", () => {
+    const fullS = ccFullDurationSeconds(GARROTE_SILENCE)!;
+    expect(fullS).toBeGreaterThan(0);
+    const end = 10_000 + fullS * 1000;
+    const u = makeUnit("owner", {
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          GARROTE_SILENCE,
+          10_000,
+          "enemy-1",
+          "owner",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          GARROTE_SILENCE,
+          end,
+          "enemy-1",
+          "owner",
+        ),
+      ],
+      // the lethal hit 100 ms after the natural end, the death 1 s later
+      damageIn: [lethal(end + 100)] as never,
+      deathRecords: [{ timestamp: end + 1_100 }] as never,
+    });
+    const [iv] = castBlockingAuraIntervals(u, enemies);
+    expect(iv!.to).toBe(end);
+  });
+
+  it("a merged re-broadcast keeps its last piece's logged removal (codex 85-tk-L-T101-1 #1)", () => {
+    const u = makeUnit("owner", {
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          GARROTE_SILENCE,
+          10_000,
+          "enemy-1",
+          "owner",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          GARROTE_SILENCE,
+          11_000,
+          "enemy-1",
+          "owner",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          GARROTE_SILENCE,
+          11_000,
+          "enemy-1",
+          "owner",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          GARROTE_SILENCE,
+          12_000,
+          "enemy-1",
+          "owner",
+        ),
+      ],
+    });
+    const ivs = castBlockingAuraIntervals(u, enemies);
+    expect(ivs).toHaveLength(1);
+    expect(ivs[0]!.to).toBe(12_000);
+    expect(ivs[0]!.removedMs).toBe(12_000);
   });
 });

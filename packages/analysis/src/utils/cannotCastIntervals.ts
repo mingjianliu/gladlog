@@ -42,6 +42,7 @@ import {
   isWeaponRequiredCast,
 } from "./spellMechanics";
 import {
+  auraRanItsLength,
   deathTeardownWindowsMs,
   firstDeathMs,
   type IDeathTeardown,
@@ -937,6 +938,10 @@ export function ownFlightIntervals(
   return out;
 }
 
+/** The lengths a diminished control can run, as fractions of its full
+ * length (DR 100 / 50 / 25 %). */
+const DR_LENGTH_STEPS = [1, 0.5, 0.25] as const;
+
 export interface CastBlockingAura {
   spellId: string;
   spellName: string;
@@ -1003,9 +1008,26 @@ export function castBlockingAuraIntervals(
   // the last 0.1s before the death". It ran to the death
   // (`teardownOfRemoval` = `removedInDeathTeardown`, the `[CC ON TEAM]` "ended at their death"
   // reading).
+  // A removal at the aura's own natural end is its end, whatever died in
+  // that window (codex 85-tk-L-T101-1 #2: a 3 s Garrote silence removed at
+  // 3.0 s, 100 ms before the lethal hit, ran to the death 1.1 s later). The
+  // natural end is the official length at a DR step (100 / 50 / 25 %); a
+  // talent-lengthened control is not seen here.
   let teardowns: IDeathTeardown[] | undefined;
-  const endAt = (removedMs: number): number => {
+  const endAt = (
+    removedMs: number,
+    spellId: string,
+    applyMs: number,
+  ): number => {
     teardowns ??= deathTeardownWindowsMs(unit);
+    const fullS = ccFullDurationSeconds(spellId);
+    if (
+      fullS !== undefined &&
+      DR_LENGTH_STEPS.some((f) =>
+        auraRanItsLength(removedMs, applyMs + fullS * f * 1000),
+      )
+    )
+      return removedMs;
     const w = teardownOfRemoval(teardowns, removedMs);
     return w ? Math.max(removedMs, w.deathMs) : removedMs;
   };
@@ -1129,7 +1151,7 @@ export function castBlockingAuraIntervals(
         // a break is the aura's own end; a REMOVED in the teardown is not
         to:
           aura.logLine.event === LogEvent.SPELL_AURA_REMOVED
-            ? endAt(aura.timestamp)
+            ? endAt(aura.timestamp, spellId, p.applyMs)
             : aura.timestamp,
         removedMs: aura.timestamp,
       });
@@ -1167,10 +1189,16 @@ export function castBlockingAuraIntervals(
         (m) =>
           m.spellId === iv.spellId &&
           m.srcUnitId === iv.srcUnitId &&
-          m.to === iv.from,
+          (m.removedMs ?? m.to) === iv.from,
       );
-    if (prev) prev.to = iv.to;
-    else merged.push({ ...iv });
+    if (prev) {
+      // the merged interval ends where its last piece ends, logged row
+      // included (codex 85-tk-L-T101-1 #1: a re-broadcast at 11 s, the
+      // trinket and the last REMOVED at 12 s kept `removedMs` 11 s)
+      prev.to = iv.to;
+      if (iv.removedMs === undefined) delete prev.removedMs;
+      else prev.removedMs = iv.removedMs;
+    } else merged.push({ ...iv });
   }
   return merged;
 }
