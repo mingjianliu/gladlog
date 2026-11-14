@@ -1221,5 +1221,11 @@
  *  pipeline numbers every batch. Three scan checks read the producer's
  *  own span; the burst ledger entry carries its overlap span as data. See
  *  docs/prompt-version-history.md.
+ *
+ * v546 (2026-11-13; pipeline batch B63, T88): a new fact line for the
+ *  recording healer, `[YOU] [NO HEAL CAST]` — a stretch of 3 s or more
+ *  before a teammate's first death with no heal pressed although nothing
+ *  the log shows stopped them, printed only when that teammate lost HP
+ *  across it; never a candidate. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 545;
+export const PROMPT_VERSION = 546;

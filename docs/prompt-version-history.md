@@ -6478,3 +6478,32 @@ invisAfterAction 21 of 288 -> 18 of 290; 357 of 360 checks unchanged, 3
 fell, 0 rose. Candidate rows +0 / -0. Recorded, not fixed: two
 gate-side findings of review 85-tk-I-T94-1c on synthetic inputs with no
 corpus instance.
+
+v546 (2026-11-13; pipeline batch B63, T88; rulings R27 / R30 / R37 / R38 /
+R39). A new fact line for the recording healer, never a candidate:
+`m:ss–m:ss  [YOU] [NO HEAL CAST]   N.Ns with no heal pressed (free to cast;
+pressed A, B ×2) — <teammate> X% → Y%`. Only when the round's first death is
+a teammate, only inside that death's window, and only for a stretch of
+NO_HEAL_MIN_STRETCH_MS (3 s) or more in which the healer is not controlled,
+silenced, locked out of every heal they pressed this round, mid cast bar or
+otherwise occupied, a heal they pressed has no cooldown, and the teammate is
+in that heal's reach at every whole second with line of sight not disproven.
+A heal press on anyone ends a stretch, and so does a refused heal; a stretch
+is a line only when the teammate's grid HP at its printed end is under the
+one at its printed start. The parenthesis names the healer's own presses in
+the stretch in press order (`nothing else pressed` when there are none),
+`mana N%` when low, and a druid form. The printed length is the raw stretch
+with one decimal (R37, registered as a signed exception in
+docs/predicate-index.md). A non-heal press with a direct heal row of the
+healer inside PRESS_LANDED_SAME_INSTANT_MS (100 ms) on the teammate it was
+cast on is a heal press (R39: Divine Toll's Holy Shock); presses that heal
+somebody else or only through damage stay listed as pressed. The press list
+counts one press a row pair (foldSamePressRows: same-spell rows inside
+PRESS_EFFECT_LEAD_MS, and the caster's own row of a press on another unit
+inside SAME_PRESS_SELF_ROW_MAX_GAP_MS — Power Infusion). 605 (3,519
+contexts): 59 lines in 57 contexts, 6 of them `nothing else pressed`;
+against the head reviewed before R39, 62 -> 59 (3 gone, 1 shortened 5.8 s ->
+4.5 s, 1 `Power Infusion ×2` -> `Power Infusion`, 57 identical). Candidate
+rows 0. Recorded, not fixed: a shield with no absorb row is covered by no
+reading; 50 same-spell row pairs 50–699 ms apart stay two rows, none inside
+a printed stretch.
