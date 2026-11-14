@@ -220,6 +220,27 @@ export function buffFullDurationForCaster(
 }
 
 /**
+ * The length of ONE application: `buffFullDurationForCaster` with the
+ * application's time required. A reader that prices an effect a unit put up
+ * at a known instant — an end to estimate, a span to cover — calls this, so
+ * that everything the application earned is in the number: the cast's own
+ * parameter, the window it was applied in, and the presses that extend it
+ * while it is up (Avatar under Capacitance, +2 s per Thunder Blast). The
+ * time-less call is for a statement about the kit, or an existence test
+ * (batch review 80-PIPE-64-B62: the enemy timeline priced a Capacitance
+ * holder's Avatar without its presses — 30 s against the 34 s the aura cap
+ * and `[BUFF FADED]` read).
+ */
+export function buffDurationOfApplication(
+  spellId: string,
+  caster: Parameters<typeof buffFullDurationForCaster>[1],
+  appliedAtMs: number,
+  opts?: Parameters<typeof buffFullDurationForCaster>[3],
+): number | undefined {
+  return buffFullDurationForCaster(spellId, caster, appliedAtMs, opts);
+}
+
+/**
  * T84: the seconds an aura gains because it was applied while another
  * effect of its caster was running (`CASTER_WINDOW_DURATIONS` — Enveloping
  * Mist inside Invoke Yu'lon / Chi-Ji). The window is the caster's own press

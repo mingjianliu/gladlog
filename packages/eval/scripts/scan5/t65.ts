@@ -62,6 +62,7 @@ import { setPiecesWorn } from "@gladlog/analysis/src/data/classSetBonuses";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
+  buffDurationOfApplication,
   buffFullDurationForCaster,
   TIMEWALKER_LENGTHENED_IDS,
 } from "@gladlog/analysis/src/utils/buffDuration";
@@ -255,7 +256,11 @@ function syncVariantEnd(ctx: IRoundCtx): void {
         );
         const official =
           c.timeSeconds +
-          (buffFullDurationForCaster(String(cd.spellId), f) ?? 0);
+          (buffDurationOfApplication(
+            String(cd.spellId),
+            f,
+            ctx.start + c.timeSeconds * 1000,
+          ) ?? 0);
         const w = windows.find(
           (x) =>
             c.timeSeconds < x.fromSeconds - SYNC_ENTER_LEAD_S &&

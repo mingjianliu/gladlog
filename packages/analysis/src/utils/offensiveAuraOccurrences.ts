@@ -7,7 +7,10 @@ import {
 } from "../data/spellEffectData";
 import { auraStandsForPressAt } from "./auraActivationEra";
 import { buildAuraIntervals } from "./auraIntervals";
-import { buffFullDurationForCaster } from "./buffDuration";
+import {
+  buffDurationOfApplication,
+  buffFullDurationForCaster,
+} from "./buffDuration";
 import { registerMemoInput } from "./combatMemo";
 // call-time only (cooldowns reads this module's table the same way)
 import {
@@ -453,7 +456,7 @@ export function auraOffensiveOccurrences(
     const endMs = bounds.startTime + iv.toS * 1000;
     const endObserved = !iv.inferredEnd;
     /** the aura's own official end for this caster, from its own start */
-    const auraFull = buffFullDurationForCaster(iv.spellId, unit);
+    const auraFull = buffDurationOfApplication(iv.spellId, unit, startMs);
     const auraOfficialEndMs =
       auraFull === undefined ? undefined : startMs + auraFull * 1000;
 

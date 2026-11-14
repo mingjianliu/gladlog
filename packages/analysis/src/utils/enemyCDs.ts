@@ -35,7 +35,7 @@ import {
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
-import { buffFullDurationForCaster } from "./buffDuration";
+import { buffDurationOfApplication } from "./buffDuration";
 import { channelEndSeconds, channelRefusedAtCast } from "./castCommitSpans";
 import {
   identityToken,
@@ -802,12 +802,23 @@ function observedEffectEnd(
       const auraFull =
         best.auraId === castSpellId
           ? undefined
-          : buffFullDurationForCaster(best.auraId, caster);
+          : buffDurationOfApplication(
+              best.auraId,
+              caster,
+              combat.startTime + pressAppliedS(best) * 1000,
+            );
       // …and only to lengthen: an effect aura shorter than the cast's own
       // length is a side effect of the press, not its span (codex
       // 85-tk-G-T41-1 #1: Summon Infernal's 30 s read as its 2 s landing
       // stun's when the stun's REMOVED fell after the slice's end)
-      const castFull = buffFullDurationForCaster(castSpellId, caster);
+      // each from its own application (batch review 80-PIPE-64-B62: a
+      // Capacitance holder's Avatar still up at the slice's end read 30 s
+      // for the 34 s its two Thunder Blasts made it)
+      const castFull = buffDurationOfApplication(
+        castSpellId,
+        caster,
+        combat.startTime + castS * 1000,
+      );
       const appliedS = pressAppliedS(best);
       // …nor when the cast's own aura went up on that unit with the press:
       // that aura is the effect, and the chain's (logged a millisecond
@@ -1469,7 +1480,7 @@ function reconstructEnemyCDTimelineUncached(
       // Summon Demonic Tyrant rendered 15 s while Reign of Tyranny holders run
       // 20 s (three windows 20.0 s).
       const buffDuration =
-        buffFullDurationForCaster(spellId, enemy) ??
+        buffDurationOfApplication(spellId, enemy, cast.logLine.timestamp) ??
         effectData.durationSeconds ??
         0;
 
@@ -1576,7 +1587,11 @@ function reconstructEnemyCDTimelineUncached(
         if (talentAura !== undefined && cd.buffEndSeconds <= cd.castTimeSeconds)
           cd.buffEndSeconds =
             cd.castTimeSeconds +
-            (buffFullDurationForCaster(talentAura, enemy) ??
+            (buffDurationOfApplication(
+              talentAura,
+              enemy,
+              matchStartMs + cd.castTimeSeconds * 1000,
+            ) ??
               spellEffectData[talentAura]?.durationSeconds ??
               0);
         // pipeline T72 (codex 85-tk-G-T72-1 #1): a member whose cast has no
@@ -1739,7 +1754,11 @@ function reconstructEnemyCDTimelineUncached(
       // Thorim's Invocation lengthens Doom Winds' aura, not its press) from
       // its last application (codex 20-G167-06 #2 / #3, 20-G167-11 #1); the
       // press's when the aura has none
-      const auraFull = buffFullDurationForCaster(end.auraId, enemy);
+      const auraFull = buffDurationOfApplication(
+        end.auraId,
+        enemy,
+        matchStartMs + end.appliedS * 1000,
+      );
       setObservedEnd(
         cd,
         end.endS,

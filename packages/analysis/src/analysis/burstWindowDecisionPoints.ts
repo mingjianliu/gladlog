@@ -41,7 +41,7 @@ import {
 } from "../data/spellTags";
 import { allyCopyRecipient } from "../utils/allyCopyWall";
 import { supersededAuraBreaks } from "../utils/auraIntervals";
-import { buffFullDurationForCaster } from "../utils/buffDuration";
+import { buffDurationOfApplication } from "../utils/buffDuration";
 import {
   controlTargetHitPressured,
   damageTakenBetween,
@@ -1558,7 +1558,7 @@ export function burstWindowDecisionPoints(
         if (!category) continue;
         const casterUnit = units.find((u) => u.id === c.unitId);
         const dur = casterUnit
-          ? buffFullDurationForCaster(c.spellId, casterUnit)
+          ? buffDurationOfApplication(c.spellId, casterUnit, c.tMs)
           : undefined;
         const castS = (c.tMs - start) / 1000;
         // the observed end even for a cast with no official length of its

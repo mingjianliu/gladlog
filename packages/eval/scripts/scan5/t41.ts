@@ -29,7 +29,7 @@ import {
   parseResRow,
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
-import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
+import { buffDurationOfApplication } from "@gladlog/analysis/src/utils/buffDuration";
 
 import {
   APPLIED,
@@ -175,7 +175,12 @@ export function run(ctx: IRoundCtx): void {
       const noPress = e[1]!.endsWith(" (no press)");
       const judged = up
         .map((o) => {
-          const full = buffFullDurationForCaster(o.spellId, holder);
+          // the product's reading: the length of that application
+          const full = buffDurationOfApplication(
+            o.spellId,
+            holder,
+            o.lastSeenMs,
+          );
           return {
             o,
             ownEndMs:

@@ -28,7 +28,10 @@ import {
 } from "../../facts/decisionTrace";
 import { isAllyCopyWallId } from "../../utils/allyCopyWall";
 import { SAVE_CAST_AURA_PAIR_S } from "../../utils/auraIntervals";
-import { buffFullDurationForCaster } from "../../utils/buffDuration";
+import {
+  buffDurationOfApplication,
+  buffFullDurationForCaster,
+} from "../../utils/buffDuration";
 import { burstCastSpan } from "../../utils/burstLedger";
 import {
   type ActWindowState,
@@ -841,7 +844,16 @@ export function castEntersWindow(
   const spanEnd =
     observed ??
     c.timeSeconds +
-      (cd.owner ? (buffFullDurationForCaster(cd.spellId, cd.owner) ?? 0) : 0);
+      (cd.owner
+        ? // this press's own length, when its instant is known (80-PIPE-64-B62)
+          ((cd.matchStartMs === undefined
+            ? buffFullDurationForCaster(cd.spellId, cd.owner)
+            : buffDurationOfApplication(
+                cd.spellId,
+                cd.owner,
+                cd.matchStartMs + c.timeSeconds * 1000,
+              )) ?? 0)
+        : 0);
   // a press leading the lock by ≤ SYNC_ENTER_LEAD_S (the old test), or a
   // burst still ACTIVE when the lock starts — a burst that ended before
   // the lock is not in it, however close

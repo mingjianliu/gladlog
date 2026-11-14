@@ -95,7 +95,10 @@ import {
   supersededAuraBreaks,
 } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
-import { buffFullDurationForCaster } from "./buffDuration";
+import {
+  buffDurationOfApplication,
+  buffFullDurationForCaster,
+} from "./buffDuration";
 import { EMPOWER_MAX_HOLD_MS, empowerSpans } from "./castCommitSpans";
 import {
   CAST_MISS_WINDOW_MS,
@@ -7993,9 +7996,10 @@ export function detectOverlappedDefensives(
       // table alone says. `buffFullDurationForCaster` answers the table value
       // when the loadout is unreadable, so this cannot get worse than before.
       const firstDuration =
-        buffFullDurationForCaster(
+        buffDurationOfApplication(
           first.spellId,
           unitMap.get(first.casterUnitId),
+          combat.startTime + first.timeSeconds * 1000,
         ) || OVERLAP_ASSUME_DURATION_S;
       const maxGap = firstDuration - MIN_SIMULTANEOUS_SECONDS;
       if (gapSeconds > maxGap) break;
