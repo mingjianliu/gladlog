@@ -243,6 +243,27 @@ describe("T88: the no-heal stretch before a teammate's first death", () => {
     expect(out[0]!.pressed).toEqual(["Power Infusion", "Moonfire"]);
   });
 
+  it("自己那一行晚到 56 毫秒的 Power Infusion 仍是一次按键(codex 85-tk-J-T88-2c)", () => {
+    // 648ca403 r3: the teammate's row at 130.103 s, the priest's at 130.159 s
+    const out = round({
+      otherPresses: [
+        ["10060", 22.103, "mate"],
+        ["10060", 22.159, "healer"],
+      ],
+    });
+    expect(out[0]!.pressed).toEqual(["Power Infusion"]);
+  });
+
+  it("加速后相隔 0.72 秒的两次同名按键各算一次", () => {
+    const out = round({
+      otherPresses: [
+        ["585", 22],
+        ["585", 22.72],
+      ],
+    });
+    expect(out[0]!.pressed).toEqual(["Smite", "Smite"]);
+  });
+
   it("隔一个公共冷却的同名按键各算一次(Swipe 每秒一按)", () => {
     const out = round({
       otherPresses: [

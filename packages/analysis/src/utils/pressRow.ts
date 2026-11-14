@@ -48,18 +48,30 @@ export function isNoPlayerPressRow<
   return isAutomaticCastRow(e) || isNoPressRow(e, rows);
 }
 
+/** The global cooldown's floor under haste: no player presses one spell
+ * twice inside it. */
+export const GCD_FLOOR_MS = 750;
+
+/** Rows of one spell closer than this to a press's first row are that press
+ * written again, not a second press: the global cooldown's floor less the
+ * log's own jitter (`PRESS_EFFECT_LEAD_MS`). Measured on the healers of the
+ * 605 archives, same-spell row pairs of non-heal presses once
+ * `isNoPlayerPressRow` has dropped its rows: 1,462 at 0–49 ms (Power
+ * Infusion's target row and self row, 1,435), 58 at 50–699 ms — Power
+ * Infusion's self row up to 184 ms late (8), Fire Breath's rows 400–649 ms
+ * apart (20), a trinket's (10), Lava Burst's copies (5) — and from 700 ms on
+ * the presses a global cooldown apart (15 at 700–749 ms, 54 at 750–799 ms,
+ * 876 more up to 1.05 s: Void Blast, Smite, cat Swipe at 1.0 s). */
+export const SAME_PRESS_ROWS_MAX_GAP_MS = GCD_FLOOR_MS - PRESS_EFFECT_LEAD_MS;
+
 /**
  * One row a press, for a reader that lists what was pressed and how often:
- * of the rows of one spell closer than `PRESS_EFFECT_LEAD_MS` to the row
- * before — the bound main reads one press's own rows by — only the first
- * stays (Power Infusion: a row on its target and a row on the priest).
- * Unlike `filterRealPresses` it keeps two presses a global cooldown apart
- * (pipeline T88: "pressed Swipe ×3" read "Swipe" through that reader, rows
- * 1.00 s apart). The healers of the 605 archives hold 4,563 same-spell row
- * pairs under 1.05 s once `isNoPlayerPressRow` has dropped its rows: 663 at
- * 0–5 ms, 1,257 at 6–49 ms, 132 at 50–499 ms, 564 at 500–899 ms and 1,947
- * at 900–1,049 ms (Smite, Chain Heal, cat Swipe at 1.0 s). Input order is
- * preserved.
+ * of the rows of one spell closer than `SAME_PRESS_ROWS_MAX_GAP_MS` to the
+ * first row of a press, only that first row stays (Power Infusion: a row on
+ * its target and a row on the priest, 1 ms apart as a rule, 56 ms and
+ * 184 ms in the logs read). Unlike `filterRealPresses` it keeps two presses
+ * a global cooldown apart (pipeline T88: "pressed Swipe ×3" read "Swipe"
+ * through that reader, rows 1.00 s apart). Input order is preserved.
  */
 export function foldSamePressRows<
   T extends { spellId?: string; logLine: { timestamp: number } },
@@ -68,13 +80,17 @@ export function foldSamePressRows<
     .map((e, i) => ({ e, i }))
     .sort((a, b) => a.e.logLine.timestamp - b.e.logLine.timestamp || a.i - b.i);
   const drop = new Set<number>();
-  const prevBySpell = new Map<string, number>();
+  // the first row of the spell's current press: a row is measured against
+  // it, not against the row before, so a press 1 s after another stays one
+  // however late the first press's last row came
+  const pressStartBySpell = new Map<string, number>();
   for (const { e, i } of sorted) {
     const id = String(e.spellId ?? "");
     const t = e.logLine.timestamp;
-    const prev = prevBySpell.get(id);
-    prevBySpell.set(id, t);
-    if (prev !== undefined && t - prev < PRESS_EFFECT_LEAD_MS) drop.add(i);
+    const start = pressStartBySpell.get(id);
+    if (start !== undefined && t - start < SAME_PRESS_ROWS_MAX_GAP_MS)
+      drop.add(i);
+    else pressStartBySpell.set(id, t);
   }
   return events.filter((_, i) => !drop.has(i));
 }
