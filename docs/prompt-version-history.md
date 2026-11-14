@@ -6426,3 +6426,19 @@ rebases): scan5 burstRatePastSliceEnd `label reads low` 513 rows / 209
 windows -> 0 of 1,338; 401 [HEALER EXPOSURE] lines, 29 span lines and 27
 `opened` lines change burst label, all upward. New scans scan5/t41.ts and
 scan5/t91.ts.
+
+v543 (2026-11-13; pipeline batch B59, T55). A kit range's low end is the
+return the cooldown model gives the press; a free recast is not a return
+of the press and does not spend the charge a later press's readiness is
+priced from. The low end is floored past the float error of its seconds
+sum (guard 1e-8, sized to the arithmetic, not to the log's milliseconds).
+605 (kit entries as a multiset against the base capture, 171,686 entries;
+captures on a 4e7bedc6f-based tree, not re-captured after the rebases):
+1,095 entries of 9 spells change. Lower low end: Nature's Swiftness 511,
+Force of Nature 275, Incarnation: Tree of Life 218, Convoke the Spirits
+33, Ancient of Lore 26, Adrenaline Rush 18. Up by 1 s, where the base
+printed 1 s low: Frozen Orb 8, Spiritwalker's Grace 3, Leap of Faith 3.
+Scans at the tip: kitSoonestAboveRecast 26 of 8,896, resCdBeforeNextPress
+67 of 308,086. Not changed (docs/predicate-index "Not yet unified"):
+[RES]'s cdRemainingWholeSeconds keeps a 1e-6 guard, and the off-list
+press line's `back m:ss` floors the raw float.

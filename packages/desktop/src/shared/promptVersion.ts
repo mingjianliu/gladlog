@@ -1206,5 +1206,10 @@
  *  `24s left`); a burst window's damage rate is taken over the seconds the
  *  log shows, so a window cut by the slice's end no longer reads a low
  *  burst label. See docs/prompt-version-history.md.
+ *
+ * v543 (2026-11-13; pipeline batch B59, T55): a kit line's cooldown range
+ *  `[lo-hi s]` takes its low end from the return the cooldown model gives
+ *  the press (talent and event reductions), so it no longer sits above a
+ *  logged re-press. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 542;
+export const PROMPT_VERSION = 543;
