@@ -6459,3 +6459,22 @@ coverage gap by check and kind. Five items closed by count. 605: one era
 bucket (12.1.0) holding all of ledger 46 impossible / 98,835 casts and
 recast totalModelImpossible 697, equal to the unsplit figures; rounds
 changing bucket 0 of 1,270.
+
+v545 (2026-11-13; pipeline batch B61, T94). No prompt text change. Four
+scan classes rose on main between 4882aca85 and 387cc6a70; attributed by
+rendering the 6 affected archives on each first-parent commit: all four
+come from T72 (ruling R19: five 45 s buttons became major offensive
+cooldowns), none is a product defect. Three checks now read the
+producer's own span: pressInsideLockNotEntered reads the raw lock and
+SYNC_ENTER_LEAD_S through castEntersWindow instead of the row's floored
+seconds; allyOverlapDeferral re-sums the span the ledger entry now
+carries (overlapFromSeconds / overlapToSeconds, data only); invisAfterAction
+looks for an `already up` aura before the end of the burst's opening
+second. The fourth, resCdBeforeNextPress +3, is one Lay on Hands fact on
+one more [RES] row per owner; recorded, not changed. 605 (same capture
+987f1dce9, 3,519 contexts, parent 5f29baef1 vs tip): allyOverlapDeferral
+6 of 4,592 -> 0 of 8,017, pressInsideLockNotEntered 2 of 729 -> 0 of 729,
+invisAfterAction 21 of 288 -> 18 of 290; 357 of 360 checks unchanged, 3
+fell, 0 rose. Candidate rows +0 / -0. Recorded, not fixed: two
+gate-side findings of review 85-tk-I-T94-1c on synthetic inputs with no
+corpus instance.

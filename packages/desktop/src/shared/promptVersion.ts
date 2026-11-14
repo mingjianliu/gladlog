@@ -1216,5 +1216,10 @@
  *  pipeline numbers every batch. Check tooling only (gate and scan
  *  residues of GH #167 / #177 / #141 / #160). See
  *  docs/prompt-version-history.md.
+ *
+ * v545 (2026-11-13; pipeline batch B61, T94): no prompt text change — the
+ *  pipeline numbers every batch. Three scan checks read the producer's
+ *  own span; the burst ledger entry carries its overlap span as data. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 544;
+export const PROMPT_VERSION = 545;
