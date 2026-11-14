@@ -2075,7 +2075,13 @@ function attributeFailure(
       ),
       ...silences
         .filter((x) =>
-          pressEndedSilence(x.from, x.to, use.atMs, x.spellId, target),
+          pressEndedSilence(
+            x.from,
+            x.removedMs ?? x.to,
+            use.atMs,
+            x.spellId,
+            target,
+          ),
         )
         .map((x) => ({
           spellId: x.spellId,

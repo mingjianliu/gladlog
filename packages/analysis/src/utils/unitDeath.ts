@@ -132,8 +132,19 @@ export function removedInDeathTeardown(
   removedMs: number,
   naturalEndMs?: number,
 ): boolean {
-  if (auraRanItsLength(removedMs, naturalEndMs)) return false;
-  return windows.some(
+  return teardownOfRemoval(windows, removedMs, naturalEndMs) !== undefined;
+}
+
+/** The death teardown a removal sits in (`removedInDeathTeardown`'s
+ * window), undefined when it is none — what an interval that the death
+ * stripped runs to (its `deathMs`; T101). */
+export function teardownOfRemoval(
+  windows: readonly IDeathTeardown[],
+  removedMs: number,
+  naturalEndMs?: number,
+): IDeathTeardown | undefined {
+  if (auraRanItsLength(removedMs, naturalEndMs)) return undefined;
+  return windows.find(
     (w) => removedMs >= w.fromMs - DEATH_CASCADE_MS && removedMs <= w.deathMs,
   );
 }

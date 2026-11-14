@@ -146,7 +146,9 @@ export function emitSilenceEntries(
               s.spellId,
               {
                 fromMs: s.from,
-                removedMs: s.to,
+                // the logged REMOVED, not the death a teardown strip runs
+                // the interval to (T101)
+                removedMs: s.removedMs ?? s.to,
                 // a silence that ran its length ended on its own, whatever
                 // died in that millisecond (`removedByDeath`'s natural end,
                 // as the control and wall lines give it — GH #173 item 17:
@@ -164,7 +166,7 @@ export function emitSilenceEntries(
             : trinketTimes.find((t) =>
                 pressEndedSilence(
                   s.from,
-                  s.to,
+                  s.removedMs ?? s.to,
                   matchStartMs + t * 1000,
                   s.spellId,
                   u,
@@ -183,7 +185,13 @@ export function emitSilenceEntries(
           !stillOnAtRoundEnd &&
           !dispelledEnd?.takenBy &&
           pvpTrinketUses(u).some((t) =>
-            pressEndedSilence(s.from, s.to, t.atMs, s.spellId, u),
+            pressEndedSilence(
+              s.from,
+              s.removedMs ?? s.to,
+              t.atMs,
+              s.spellId,
+              u,
+            ),
           );
         const end = trinketAt === undefined ? dispelledEnd : undefined;
         const taker = end?.takenBy;

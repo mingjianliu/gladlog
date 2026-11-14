@@ -4665,6 +4665,11 @@ const INDEX: PredicateRow[] = [
     mod: unitDeath,
   },
   {
+    file: `${A}/utils/unitDeath.ts`,
+    symbol: "teardownOfRemoval",
+    mod: unitDeath,
+  },
+  {
     file: `${A}/utils/killingBlow.ts`,
     symbol: "aliveAfterRow",
     mod: killingBlowMod,

@@ -41,7 +41,12 @@ import {
   isUnsilenceableCast,
   isWeaponRequiredCast,
 } from "./spellMechanics";
-import { firstDeathMs } from "./unitDeath";
+import {
+  deathTeardownWindowsMs,
+  firstDeathMs,
+  type IDeathTeardown,
+  teardownOfRemoval,
+} from "./unitDeath";
 
 /**
  * "When could this unit not cast?" — ONE predicate for the two consumers that
@@ -941,8 +946,13 @@ export interface CastBlockingAura {
   from: number;
   /** first REMOVED / BROKEN after the APPLIED in log order; with no REMOVED
    * the official length (`ccFullDurationSeconds`), Infinity when that is
-   * unknown */
+   * unknown. A REMOVED inside the unit's death teardown is the death
+   * stripping the aura, so `to` is the death (T101) */
   to: number;
+  /** the REMOVED / BROKEN row that closed the interval, epoch ms — what a
+   * reader asking for the end's CAUSE (a trinket press, a dispel, the
+   * death) matches against; differs from `to` only for a teardown strip */
+  removedMs?: number;
 }
 
 /**
@@ -987,6 +997,18 @@ export function castBlockingAuraIntervals(
   // throw that the caller's try/catch would turn into "no gaps at all".
   // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
   const notTheEnd = supersededAuraBreaks(unit.auraEvents ?? []);
+  // T101 (fact13 D16): a REMOVED inside the unit's death teardown is the
+  // death stripping the aura, not its end — 77310154 r0: Terror of the
+  // Skies stripped 65 ms before the UNIT_DIED read as "free to press it for
+  // the last 0.1s before the death". It ran to the death
+  // (`teardownOfRemoval` = `removedInDeathTeardown`, the `[CC ON TEAM]` "ended at their death"
+  // reading).
+  let teardowns: IDeathTeardown[] | undefined;
+  const endAt = (removedMs: number): number => {
+    teardowns ??= deathTeardownWindowsMs(unit);
+    const w = teardownOfRemoval(teardowns, removedMs);
+    return w ? Math.max(removedMs, w.deathMs) : removedMs;
+  };
   for (const aura of unit.auraEvents ?? []) {
     const spellId = aura.spellId;
     if (!spellId) continue;
@@ -1104,7 +1126,12 @@ export function castBlockingAuraIntervals(
         srcUnitId: p.srcId,
         srcUnitName: p.srcName,
         from: p.applyMs,
-        to: aura.timestamp,
+        // a break is the aura's own end; a REMOVED in the teardown is not
+        to:
+          aura.logLine.event === LogEvent.SPELL_AURA_REMOVED
+            ? endAt(aura.timestamp)
+            : aura.timestamp,
+        removedMs: aura.timestamp,
       });
     }
   }
