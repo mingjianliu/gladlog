@@ -81,6 +81,9 @@
     "rootAuraGenerated.ts": {
       "entries": 28
     },
+    "visionObscuringAuraGenerated.ts": {
+      "entries": 3
+    },
     "periodicAuraGenerated.ts": {
       "entries": 11615
     },

@@ -13,6 +13,7 @@ import {
   REJECT_WHY,
   REJECT_WHY_BAR_STOPPED,
   REJECT_WHY_UNWORDED,
+  visionObscuredWhy,
 } from "../src/context/spellOutcomeLines";
 import type { IMajorCooldownInfo } from "../src/utils/cooldowns";
 import type { IEnemyCDTimeline } from "../src/utils/enemyCDs";
@@ -92,7 +93,13 @@ describe("kitRefusedPressesOf — the refused presses of one cooldown", () => {
   it("never prints the bar-stopped wording, and every word it can print is in KIT_REFUSED_WHY_WORDS", () => {
     expect(KIT_REFUSED_WHY_WORDS).not.toContain(REJECT_WHY_BAR_STOPPED);
     expect(KIT_REFUSED_WHY_WORDS).toContain(KIT_NOT_READY_WHY);
-    for (const w of [...Object.values(REJECT_WHY), REJECT_WHY_UNWORDED])
+    for (const w of [
+      ...Object.values(REJECT_WHY),
+      REJECT_WHY_UNWORDED,
+      // T108: each cause the generated tables can name
+      visionObscuredWhy("Burrow"),
+      visionObscuredWhy("Smoke Bomb"),
+    ])
       expect(KIT_REFUSED_WHY_WORDS).toContain(w);
   });
 });
@@ -144,7 +151,7 @@ describe("formatKitUnusedNote — the text between `[UNUSED` and `]`", () => {
     // the Smoke Bomb wording carries brackets of its own
     const smoke = {
       count: 2,
-      reasons: [{ why: REJECT_WHY["vision obscured"], count: 2 }],
+      reasons: [{ why: visionObscuredWhy("Smoke Bomb"), count: 2 }],
     };
     expect(tag(formatKitUnusedNote(0, smoke)).match(re)![5]).toBe(
       "vision obscured (Smoke Bomb)",

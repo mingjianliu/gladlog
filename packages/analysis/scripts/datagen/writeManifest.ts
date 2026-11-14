@@ -195,6 +195,11 @@ export async function main(): Promise<void> {
       "rootAuraGenerated.ts": {
         entries: countQuotedIds("rootAuraGenerated.ts"),
       },
+      // pipeline T108: what obscures a target (aura 322) and the area casts
+      // that drop one (Smoke Bomb)
+      "visionObscuringAuraGenerated.ts": {
+        entries: countQuotedIds("visionObscuringAuraGenerated.ts"),
+      },
       "periodicAuraGenerated.ts": {
         entries: countQuotedIds("periodicAuraGenerated.ts"),
       },

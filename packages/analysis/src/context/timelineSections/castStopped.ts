@@ -135,7 +135,7 @@ export function castStoppedText(
   // the report's words for every reason it has words for (`refusalWhy`,
   // FT-R1014b) — work order 2026-10-14d #8: 2c6e85ec 1:21 Cyclone, raw
   // "Invalid target", still printed "(client reason not translated)"
-  const why = refusalWhy(end.row.reason);
+  const why = refusalWhy(end.row.reason, end.row.obscuredBy);
   const at = `refused ${elapsed(o.t, end.atS)} in`;
   return why === REJECT_WHY_UNWORDED
     ? `${at} ${CAST_REFUSED_OTHER_REASON}`

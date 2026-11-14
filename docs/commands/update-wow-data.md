@@ -328,6 +328,11 @@ npx tsx packages/analysis/scripts/datagen/genSummonSpells.ts
 # 6f1d. root auras (SpellEffect aura 26 / 455 on the spell itself). ROOT_SPELL_IDS = the root DR class ∪
 #      these — the DR class misses roots with no DR (Ice Nova); read by [ROOT] and the kick run budget.
 npx tsx packages/analysis/scripts/datagen/genRootAuras.ts
+# 6f1d1. vision-obscuring auras (SpellEffect aura 322 MOD_INTERFERE_TARGETTING on the spell, observed) and the
+#      area casts that drop one (Effect 179 CREATE_AREATRIGGER, observed, same SpellName as an aura-322 spell:
+#      Smoke Bomb 212182 / 359053 — its aura 212183 is never logged). What a "vision obscured" refusal names as
+#      its cause (`visionObscuredCause`); none up → the client reason alone (pipeline T108).
+npx tsx packages/analysis/scripts/datagen/genVisionObscuringAuras.ts
 # 6f1d2. periodic damage auras (SpellEffect aura 3 / 53 / 89 on the spell itself, every id). What [ROT PRESSURE]
 #      calls a DoT; `corpusFactScan5` `dotTableForward` checks both directions against the log's ticks.
 npx tsx packages/analysis/scripts/datagen/genPeriodicAuras.ts

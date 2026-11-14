@@ -195,6 +195,7 @@ import { medianFinite } from "../utils/stats";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
 import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
 import { firstDeathMs } from "../utils/unitDeath";
+import { withVisionObscuredCauses } from "../utils/visionObscured";
 import { burstWindowDecisionPoints } from "./burstWindowDecisionPoints";
 import {
   backlashDispelDecisionPoints,
@@ -583,6 +584,10 @@ export function extractCandidateFindings(
    */
   rawStreams?: RawStreams,
 ): CandidateEvent[] {
+  // pipeline T108: every vision-obscured refusal carries what obscured its
+  // target before any candidate words it (`buildMatchContext` tags the same
+  // way; a stream tagged once is passed through as it is)
+  rawStreams = withVisionObscuredCauses(rawStreams, combat);
   const out: CandidateEvent[] = [];
   const units = Object.values(combat?.units ?? {}) as any[];
   const start = combat?.startTime ?? 0;
@@ -2926,7 +2931,7 @@ function refusedForAnotherReasonText(
 ): string {
   const byWhy = new Map<string, CastFailedEvent[]>();
   for (const h of [...presses].sort((a, b) => a.tSeconds - b.tSeconds)) {
-    const why = refusalWhy(h.reason);
+    const why = refusalWhy(h.reason, h.obscuredBy);
     byWhy.set(why, [...(byWhy.get(why) ?? []), h]);
   }
   return [...byWhy]
@@ -3913,7 +3918,7 @@ function teamPlayEvents(
                             f.spellName,
                           ),
                           tS: f.tSeconds,
-                          why: refusalReasonWords(f.reason),
+                          why: refusalReasonWords(f.reason, f.obscuredBy),
                         })),
                   }
                 : {}),
@@ -4426,7 +4431,7 @@ function teamPlayEvents(
               );
               const groups = new Map<string, CastFailedEvent[]>();
               for (const f of refused) {
-                const why = refusalReasonWords(f.reason);
+                const why = refusalReasonWords(f.reason, f.obscuredBy);
                 groups.set(why, [...(groups.get(why) ?? []), f]);
               }
               // offsets from the row's facts.t (the floored start), as the

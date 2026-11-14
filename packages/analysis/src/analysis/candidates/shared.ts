@@ -45,7 +45,7 @@ export function aggregateReasonCounts(
   // has none). `checkCjkLeak` 7 of the 60 re-eval prompts until then.
   const counts = new Map<string, number>();
   for (const e of events) {
-    const why = refusalReasonWords(e.reason);
+    const why = refusalReasonWords(e.reason, e.obscuredBy);
     counts.set(why, (counts.get(why) ?? 0) + 1);
   }
   return [...counts.entries()]
@@ -272,8 +272,13 @@ export function gcdLockedUntilS(
  * own cooldown and the GCD all answer with it), else `refusalWhy`'s. The
  * `attempted` / mana `rejected` counts, msw `refusedInLock` and stayed-in
  * `refusedPresses` all read it (user ruling 2026-10-14). */
-export function refusalReasonWords(reason: string): string {
-  return NOT_READY_REASONS.has(reason) ? "not ready yet" : refusalWhy(reason);
+export function refusalReasonWords(
+  reason: string,
+  obscuredBy?: string,
+): string {
+  return NOT_READY_REASONS.has(reason)
+    ? "not ready yet"
+    : refusalWhy(reason, obscuredBy);
 }
 
 /**

@@ -18,6 +18,7 @@ import {
   REJECT_REASONS,
   REJECT_RUN_MIN,
   REJECT_WHY,
+  rejectRunWhy,
 } from "../src/context/spellOutcomeLines";
 import observed from "../src/data/observedSpellIdsGenerated.json";
 import {
@@ -129,7 +130,9 @@ describe("'vision obscured' is its own kind (X5)", () => {
   });
 
   it("is worded apart from a pillar, and does not merge with a line-of-sight run of the same spell", () => {
-    expect(REJECT_WHY["vision obscured"]).toBe("vision obscured (Smoke Bomb)");
+    // pipeline T108: no fixed cause — the client reason alone, a cause only
+    // from the row's `obscuredBy`
+    expect(REJECT_WHY["vision obscured"]).toBe("vision obscured");
     expect(REJECT_WHY["no line of sight"]).toBe("target not in line of sight");
     const runs = ownerRejectRuns(
       [
@@ -158,6 +161,42 @@ describe("'vision obscured' is its own kind (X5)", () => {
       kind: "vision obscured",
       count: 2,
     });
+  });
+
+  it("names the cause each press carries; presses of another cause, or none, are another run (T108)", () => {
+    const VO = "Your vision of the target is obscured";
+    const by = (t: number, obscuredBy?: string) => ({
+      ...f(t, VO),
+      ...(obscuredBy ? { obscuredBy } : {}),
+    });
+    const runs = ownerRejectRuns(
+      [
+        by(10, "Burrow"),
+        by(10.4, "Burrow"),
+        by(10.8, "Burrow"),
+        by(11.2, "Smoke Bomb"),
+        by(11.6, "Smoke Bomb"),
+        by(12, "Smoke Bomb"),
+        by(12.4),
+        by(12.8),
+        by(13.2),
+      ],
+      "Player-O",
+    );
+    expect(runs.map((r) => [rejectRunWhy(r), r.count])).toEqual([
+      ["vision obscured (Burrow)", 3],
+      ["vision obscured (Smoke Bomb)", 3],
+      ["vision obscured", 3],
+    ]);
+    // the cause never rides on another kind
+    expect(
+      rejectRunWhy(
+        ownerRejectRuns(
+          [0, 0.4, 0.8].map((t) => ({ ...f(t, LOS), obscuredBy: "Burrow" })),
+          "Player-O",
+        )[0]!,
+      ),
+    ).toBe("target not in line of sight");
   });
 
   it("no string sits under two kinds", () => {

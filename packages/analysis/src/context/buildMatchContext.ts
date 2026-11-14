@@ -122,6 +122,7 @@ import {
   silenceIntervalsInRound,
   unloggedSilencesOnOwner,
 } from "../utils/unloggedSilence";
+import { withVisionObscuredCauses } from "../utils/visionObscured";
 import { warlockPetFunctions, warlockPurgePetSpans } from "../utils/warlockPet";
 import { BURST_ANSWERED_POSITIONING_XREF } from "./burstAnswered";
 import { ccUseSummary, formatCcUse, ownerControlCastBars } from "./ccUse";
@@ -192,6 +193,13 @@ export function buildMatchContext(
     rawStreams?: RawStreams;
   } = {},
 ): string {
+  // pipeline T108: every vision-obscured refusal carries what obscured its
+  // target before any line words it
+  if (options.rawStreams)
+    options = {
+      ...options,
+      rawStreams: withVisionObscuredCauses(options.rawStreams, combat),
+    };
   const durationSeconds = (combat.endTime - combat.startTime) / 1000;
 
   // Find the log owner (the player who recorded the log), unless overridden

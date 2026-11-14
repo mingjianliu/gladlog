@@ -18,10 +18,7 @@ import { dropAuraRebroadcasts } from "../utils/auraIntervals";
 import { binarySearchClosest } from "../utils/binarySearch";
 import { CAST_INTERRUPTED_REASONS } from "../utils/castCancels";
 import { castControlsIn, isControlCast } from "../utils/castMissRows";
-import {
-  ccLandingStateAt,
-  ccRemainingSeconds,
-} from "../utils/ccBreakAnalysis";
+import { ccLandingStateAt, ccRemainingSeconds } from "../utils/ccBreakAnalysis";
 import { ccLengthIsDrEvidence } from "../utils/ccTrinketAnalysis";
 import { ccRecastSplitsResend } from "../utils/drAnalysis";
 import { groundingRedirects } from "../utils/groundingRedirects";
@@ -29,6 +26,10 @@ import { isDeferralAbsorb } from "../utils/incomingPressure";
 import { petCommands } from "../utils/petCommands";
 import type { CastFailedEvent } from "../utils/rawStreams";
 import { sanctuaryRemovalPairs } from "../utils/sanctuaryRemovals";
+import {
+  VISION_OBSCURED_CAUSE_NAMES,
+  VISION_OBSCURED_REASONS,
+} from "../utils/visionObscured";
 import {
   CONTROL_REJECT_WHY,
   controlRejectKindOf,
@@ -1093,25 +1094,45 @@ export const REJECT_REASONS: Readonly<Record<RejectKind, readonly string[]>> = {
     "Cible hors du champ de vision",
     "Цель вне поля зрения.",
   ],
-  "vision obscured": [
-    "Your vision of the target is obscured",
-    "你的视线被遮挡了",
-    "대상이 흐릿해서 포착할 수 없습니다.",
-    "Die Sicht auf Euer Ziel ist behindert.",
-    "Se ha oscurecido tu visión del objetivo",
-    "Sua visão do alvo está obscurecida",
-  ],
+  "vision obscured": VISION_OBSCURED_REASONS,
 };
 
-/** What a `[REJECTED]` line says after the dash, per kind. "vision obscured
- *  (Smoke Bomb)" is the user's wording (X5): the reject means the target
- *  stood in a Smoke Bomb, not behind a pillar. */
+/** What a `[REJECTED]` line says after the dash, per kind — "vision
+ *  obscured" alone when nothing in the fight explains it; with a cause,
+ *  `visionObscuredWhy`. */
 export const REJECT_WHY: Readonly<Record<RejectKind, string>> = {
   "out of range": "out of range",
   moving: "can't cast while moving",
   "no line of sight": "target not in line of sight",
-  "vision obscured": "vision obscured (Smoke Bomb)",
+  "vision obscured": "vision obscured",
 };
+
+/** A vision-obscured refusal's wording: "vision obscured (Smoke Bomb)" is
+ *  the user's wording (X5, 2026-10-06) — the reject means the target stood in
+ *  a Smoke Bomb, not behind a pillar. Pipeline T108 (fact13 D24): the
+ *  bracket names what the fight shows obscured the target
+ *  (`CastFailedEvent.obscuredBy`, `utils/visionObscured.ts` — a Burrow, or a
+ *  Smoke Bomb down), never a fixed Smoke Bomb; none found → the client's
+ *  reason alone. */
+export function visionObscuredWhy(obscuredBy?: string): string {
+  return obscuredBy
+    ? `${REJECT_WHY["vision obscured"]} (${obscuredBy})`
+    : REJECT_WHY["vision obscured"];
+}
+
+/** Every wording a vision-obscured refusal can carry: alone, and with each
+ *  cause the generated tables can name. */
+export const VISION_OBSCURED_WHY_WORDS: readonly string[] = [
+  REJECT_WHY["vision obscured"],
+  ...VISION_OBSCURED_CAUSE_NAMES.map((n) => visionObscuredWhy(n)),
+];
+
+/** What a run / refusal of `kind` says after the dash. */
+export function rejectWhyOf(kind: RejectKind, obscuredBy?: string): string {
+  return kind === "vision obscured"
+    ? visionObscuredWhy(obscuredBy)
+    : REJECT_WHY[kind];
+}
 const KIND_OF = new Map<string, RejectKind>(
   (Object.entries(REJECT_REASONS) as [RejectKind, readonly string[]][]).flatMap(
     ([k, texts]) => texts.map((t) => [t, k] as [string, RejectKind]),
@@ -1272,7 +1293,9 @@ const OTHER_REFUSAL_OF = new Map<string, string>(
 
 /**
  * The reason the log gives for one SPELL_CAST_FAILED row, in the product's
- * words: the four `REJECT_WHY` kinds, "under crowd control" / "silenced"
+ * words: the four `REJECT_WHY` kinds (a vision-obscured one with the
+ * `obscuredBy` cause its row carries, `visionObscuredWhy`), "under crowd
+ * control" / "silenced"
  * (`CONTROL_REJECT_REASONS`), a cast bar that was stopped
  * (`CAST_INTERRUPTED_REASONS`), the `OTHER_REFUSAL_REASONS` kinds, else
  * `REJECT_WHY_UNWORDED`. Not for a "not
@@ -1281,9 +1304,9 @@ const OTHER_REFUSAL_OF = new Map<string, string>(
  * first. One wording for kick-eaten's `postKick` and its gate
  * (`promptQualityCheck.checkKickEatenRefusedForAnotherReason`).
  */
-export function refusalWhy(reason: string): string {
+export function refusalWhy(reason: string, obscuredBy?: string): string {
   const kind = rejectKindOf(reason);
-  if (kind) return REJECT_WHY[kind];
+  if (kind) return rejectWhyOf(kind, obscuredBy);
   const control = controlRejectKindOf(reason);
   if (control) return CONTROL_REJECT_WHY[control];
   if (CAST_INTERRUPTED_REASONS.has(reason)) return REJECT_WHY_BAR_STOPPED;
@@ -1292,6 +1315,7 @@ export function refusalWhy(reason: string): string {
 /** Every text `refusalWhy` can return. */
 export const REFUSAL_WHY_WORDS: readonly string[] = [
   ...Object.values(REJECT_WHY),
+  ...VISION_OBSCURED_WHY_WORDS.slice(1),
   ...Object.values(CONTROL_REJECT_WHY),
   REJECT_WHY_BAR_STOPPED,
   ...Object.keys(OTHER_REFUSAL_REASONS),
@@ -1317,7 +1341,24 @@ export interface IRejectRun {
   spellId: string;
   spellName: string;
   kind: RejectKind;
+  /** a "vision obscured" run's cause, shared by every press of the run
+   * (`CastFailedEvent.obscuredBy`) — a press with another cause, or none,
+   * is a press of another kind for the run */
+  obscuredBy?: string;
   count: number;
+}
+
+/** What a `[REJECTED]` run says after the dash. */
+export function rejectRunWhy(run: IRejectRun): string {
+  return rejectWhyOf(run.kind, run.obscuredBy);
+}
+
+/** A press's vision-obscured cause, for a press of that kind only. */
+function obscuredByOf(
+  kind: RejectKind,
+  h: CastFailedEvent,
+): string | undefined {
+  return kind === "vision obscured" ? h.obscuredBy : undefined;
 }
 
 /** Runs of the same spell rejected for the same kind of reason (`castFailed`
@@ -1370,10 +1411,16 @@ export function ownerRejectRuns(
       flush(id);
       continue;
     }
+    // pipeline T108: a vision-obscured press's cause is part of its kind —
+    // a Burrow's refusals and a Smoke Bomb's are two runs, each line naming
+    // its own
+    const by = obscuredByOf(kind, h);
     const cur = open.get(id);
+    const sameAs = (r: IRejectRun, k: RejectKind, b: string | undefined) =>
+      r.kind === k && r.obscuredBy === b;
     if (
       cur &&
-      cur.kind === kind &&
+      sameAs(cur, kind, by) &&
       h.tSeconds - cur.toSeconds <= REJECT_RUN_GAP_S
     ) {
       cur.toSeconds = h.tSeconds;
@@ -1385,16 +1432,18 @@ export function ownerRejectRuns(
     // "out of range" presses read `×5` and dropped that first press. The run
     // carries on when this spell's next refusal is of the run's kind, in its
     // gap; the stray one is not counted, as any run below `REJECT_RUN_MIN`.
-    if (cur && cur.kind !== kind) {
+    if (cur && !sameAs(cur, kind, by)) {
       const next = hits.find(
         (x) =>
           x.tSeconds > h.tSeconds &&
           String(x.spellId) === id &&
           !RUN_TRANSPARENT_REASONS.has(x.reason),
       );
+      const nextKind = next && KIND_OF.get(next.reason);
       if (
         next &&
-        KIND_OF.get(next.reason) === cur.kind &&
+        nextKind &&
+        sameAs(cur, nextKind, obscuredByOf(nextKind, next)) &&
         next.tSeconds - cur.toSeconds <= REJECT_RUN_GAP_S
       )
         continue;
@@ -1406,6 +1455,7 @@ export function ownerRejectRuns(
       spellId: id,
       spellName: getEnglishSpellName(id, h.spellName),
       kind,
+      ...(by ? { obscuredBy: by } : {}),
       count: 1,
     });
   }
@@ -1433,6 +1483,7 @@ export function rejectRunStatesRow(
   return (
     String(row.spellId) === run.spellId &&
     KIND_OF.get(row.reason) === run.kind &&
+    obscuredByOf(run.kind, row) === run.obscuredBy &&
     row.tSeconds >= run.fromSeconds &&
     row.tSeconds <= run.toSeconds
   );

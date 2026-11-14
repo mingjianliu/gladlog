@@ -20,7 +20,7 @@ import {
   type IRejectRun,
   ownerRejectRuns,
   reflectedSpells,
-  REJECT_WHY,
+  rejectRunWhy,
   sanctuaryRemovals,
 } from "../spellOutcomeLines";
 import { resolveSummonOwner } from "../timelineHelpers";
@@ -156,7 +156,7 @@ export function emitSpellOutcomeEntries(
       teammateDeathSeconds,
     )) {
       if (!inMatch(run.fromSeconds)) continue;
-      const why = REJECT_WHY[run.kind];
+      const why = rejectRunWhy(run);
       const span =
         toRenderSecond(run.toSeconds) > toRenderSecond(run.fromSeconds)
           ? ` (${fmtTime(run.fromSeconds)}–${fmtTime(run.toSeconds)})`

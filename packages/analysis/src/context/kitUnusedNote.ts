@@ -112,7 +112,7 @@ export function kitRefusedPressesOf(
   for (const h of hits) {
     const why = NOT_READY_REASONS.has(h.reason)
       ? KIT_NOT_READY_WHY
-      : refusalWhy(h.reason);
+      : refusalWhy(h.reason, h.obscuredBy);
     const cur = reasons.find((r) => r.why === why);
     if (cur) cur.count++;
     else reasons.push({ why, count: 1 });

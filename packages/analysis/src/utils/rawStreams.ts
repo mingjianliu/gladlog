@@ -107,6 +107,11 @@ export interface CastFailedEvent {
   spellId: number;
   spellName: string;
   reason: string;
+  /** A vision-obscured refusal's cause, the English name of what obscured
+   * the target (`visionObscured.withVisionObscuredCauses`; pipeline T108).
+   * Never set by the raw pass itself — the analysis entry points tag it from
+   * the fight. Absent: no cause found, or another reason. */
+  obscuredBy?: string;
 }
 
 export interface RawStreams {

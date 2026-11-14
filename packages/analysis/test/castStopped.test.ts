@@ -131,7 +131,11 @@ function fixture(rejects: number[] = [113.0]) {
       fail(CYCLONE, 20.4, "Interrupted"),
       fail(CYCLONE, 30.3, "Interrupted"),
       fail(CYCLONE, 40.8, "Interrupted"),
-      fail(CYCLONE, 50.9, "Your vision of the target is obscured"),
+      // tagged as the entry points tag it (T108: a Smoke Bomb was down)
+      {
+        ...fail(CYCLONE, 50.9, "Your vision of the target is obscured"),
+        obscuredBy: "Smoke Bomb",
+      },
       fail(CYCLONE, 60.3, "Not yet recovered"),
       fail(CYCLONE, 70.02, "Another action is in progress"),
       fail(CYCLONE, 70.6, "Interrupted"),

@@ -1275,7 +1275,11 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
         new Set(),
       )!,
     );
-  const refusal = (atS: number, reason: string): CastBarEnd => ({
+  const refusal = (
+    atS: number,
+    reason: string,
+    obscuredBy?: string,
+  ): CastBarEnd => ({
     kind: "refused",
     atS,
     row: {
@@ -1284,13 +1288,17 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
       spellId: 33786,
       spellName: "Cyclone",
       reason,
+      ...(obscuredBy ? { obscuredBy } : {}),
     },
   });
   const six = [
     produced(13.2, { kind: "stopped", atS: 13.7, near: null }),
     produced(30.1, { kind: "stopped", atS: 30.6, near: "cc" }),
     produced(51.4, { kind: "stopped", atS: 51.7, near: "displaced" }),
-    produced(49.04, refusal(49.94, "Your vision of the target is obscured")),
+    produced(
+      49.04,
+      refusal(49.94, "Your vision of the target is obscured", "Smoke Bomb"),
+    ),
     produced(81.0, refusal(82.2, "Invalid target")),
     produced(118, { kind: "none" }, { roundEndS: 119.4 }),
   ];
