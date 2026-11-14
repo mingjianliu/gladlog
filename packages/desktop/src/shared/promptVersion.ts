@@ -1211,5 +1211,10 @@
  *  `[lo-hi s]` takes its low end from the return the cooldown model gives
  *  the press (talent and event reductions), so it no longer sits above a
  *  logged re-press. See docs/prompt-version-history.md.
+ *
+ * v544 (2026-11-13; pipeline batch B60, T75): no prompt text change — the
+ *  pipeline numbers every batch. Check tooling only (gate and scan
+ *  residues of GH #167 / #177 / #141 / #160). See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 543;
+export const PROMPT_VERSION = 544;

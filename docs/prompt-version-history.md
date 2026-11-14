@@ -6442,3 +6442,20 @@ Scans at the tip: kitSoonestAboveRecast 26 of 8,896, resCdBeforeNextPress
 67 of 308,086. Not changed (docs/predicate-index "Not yet unified"):
 [RES]'s cdRemainingWholeSeconds keeps a 1e-6 guard, and the off-list
 press line's `back m:ss` floors the raw float.
+
+v544 (2026-11-13; pipeline batch B60, T75). No prompt text change. Check
+tooling only; the one product file touched is positionAnalysis.ts, where
+a Math.min moved into the exported burstEvalEndSeconds so the positioning
+gate rebuilds a KITED span through the producer's own function. Seven
+items coded: the disarm-tail gate reads a second disarm inside the DR
+reset at its halved length; the DR reader check merges a
+removed-then-applied control on the product's measured gap; a re-listing
+batch is read across its milliseconds; pressFactScan stops at a Solo
+Shuffle round's end; the positioning gate checks whom a KITED span was
+measured to (scan5/t75.ts counts it); ledgerImpossibleCastScan and
+cooldownRecastScan split their counts by game version, bucketing a round
+through the product's dated door (logInstantOf); verify/run.ts lists a
+coverage gap by check and kind. Five items closed by count. 605: one era
+bucket (12.1.0) holding all of ledger 46 impossible / 98,835 casts and
+recast totalModelImpossible 697, equal to the unsplit figures; rounds
+changing bucket 0 of 1,270.
