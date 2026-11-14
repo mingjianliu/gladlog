@@ -8,11 +8,13 @@ import {
   type Finding,
   hasCoachableSignal,
   isHealerSpec,
+  type RawStreams,
   SEVERITY_RANK,
   specToString,
 } from "@gladlog/analysis";
 import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
+import { idMemo } from "./idMemo";
 import { toLegacySafe } from "./legacySource";
 import { getRawStreamsSync } from "./rawStreamsCache";
 import { sourceMemoWith } from "./sourceMemo";
@@ -71,17 +73,38 @@ export function buildAnalysisInput(
   // input on every entry. Nothing is stored before the analysis tables are
   // loaded, and an entry built against other raw streams (or none yet) is
   // rebuilt, so what a run sends is what an uncached call would build.
-  return sourceMemoWith(
-    source,
-    "buildAnalysisInput",
-    [matchId, getRawStreamsSync(source.id)],
-    () => buildAnalysisInputUncached(source, matchId),
+  const rawStreams = getRawStreamsSync(source.id);
+  const inputs = analysisInputKey(matchId, rawStreams);
+  // per object (sourceMemo), and per match across re-opens (idMemo; the raw
+  // streams are cached per source id, so a re-open hands back the same
+  // object and the slot still matches)
+  return sourceMemoWith(source, "buildAnalysisInput", inputs, () =>
+    idMemo(source, "buildAnalysisInput", inputs, () =>
+      buildAnalysisInputWith(source, matchId, rawStreams),
+    ),
   );
 }
 
-function buildAnalysisInputUncached(
+/** The sourceMemoWith inputs of buildAnalysisInput's slot: what an entry was
+ * built against. Shared with offThreadDerive.ts, which files a result built
+ * off the main thread under the same slot. */
+export function analysisInputKey(
+  matchId: string,
+  rawStreams: RawStreams | undefined,
+): readonly unknown[] {
+  return [matchId, rawStreams];
+}
+
+/**
+ * buildAnalysisInput's computation with the raw streams passed in instead of
+ * read from the page's cache — the one body both the page and the off-thread
+ * derive worker run (offThreadDerive.ts), so the two cannot diverge. The
+ * page passes `getRawStreamsSync(source.id)`.
+ */
+export function buildAnalysisInputWith(
   source: ReportSource,
   matchId: string,
+  rawStreams: RawStreams | undefined,
 ): AnalysisRunInput | null {
   try {
     const legacy = toLegacySafe(source);
@@ -89,14 +112,13 @@ function buildAnalysisInputUncached(
     if (!owner) return null;
 
     const players = Object.values(legacy.units).filter((u) => u.info);
-    // Intent guard (BACKLOG #26 Task 2): a pure, synchronous cache read —
-    // never triggers its own fetch here (see rawStreamsCache.ts's doc
-    // comment for why: this function doesn't know the correct on-disk
-    // storage id for a shuffle round 2-6, only `MatchReport.tsx`/
-    // `batchAnalysis.ts` do). A cold cache degrades to `undefined`, which
-    // `extractCandidateFindings` already treats as "no guard" (silent,
-    // Global Constraint).
-    const rawStreams = getRawStreamsSync(source.id);
+    // Intent guard (BACKLOG #26 Task 2): the caller's raw streams come from
+    // a pure, synchronous cache read that never triggers its own fetch (see
+    // rawStreamsCache.ts's doc comment for why: this function doesn't know
+    // the correct on-disk storage id for a shuffle round 2-6, only
+    // `MatchReport.tsx`/`batchAnalysis.ts` do). A cold cache degrades to
+    // `undefined`, which `extractCandidateFindings` already treats as "no
+    // guard" (silent, Global Constraint).
     const candidates = extractCandidateFindings(legacy, owner.id, rawStreams);
     const friends = players.filter((u) => u.reaction === owner.reaction);
     const enemies = players.filter((u) => u.reaction !== owner.reaction);

@@ -41,6 +41,12 @@ void ensureAnalysisData().then(
   },
 );
 
+/** Whether results may be kept yet (the analysis tables are loaded) — the
+ * gate idMemo.ts shares. */
+export function sourceMemoReady(): boolean {
+  return dataReady;
+}
+
 let onUse: ((source: ReportSource) => void) | undefined;
 
 /** legacySource.ts registers its LRU touch here (a hook, not an import: that
@@ -126,6 +132,50 @@ export function sourceMemoWith<T>(
     slot.value = compute();
   }
   return slot.value;
+}
+
+/** Whether `source` already has a value under `key` (no recency touch). */
+export function sourceMemoHas(source: ReportSource, key: string): boolean {
+  return cache.get(source)?.has(key) === true;
+}
+
+/** The value sourceMemoWith(source, key, inputs, ...) would return without
+ * computing, or undefined when that slot is absent or built against other
+ * inputs. A peek: no recency touch. */
+export function sourceMemoWithPeek<T>(
+  source: ReportSource,
+  key: string,
+  inputs: readonly unknown[],
+): T | undefined {
+  const slot = cache.get(source)?.get(key) as
+    | { inputs: readonly unknown[]; value: T }
+    | undefined;
+  if (!slot) return undefined;
+  const same =
+    slot.inputs.length === inputs.length &&
+    slot.inputs.every((v, i) => Object.is(v, inputs[i]));
+  return same ? slot.value : undefined;
+}
+
+/** File a value computed elsewhere (offThreadDerive.ts: the same function,
+ * run off the main thread) as what sourceMemo(source, key, ...) would have
+ * computed — same data gate and same bound as a computed one. */
+export function sourceMemoPut<T>(
+  source: ReportSource,
+  key: string,
+  value: T,
+): void {
+  sourceMemo(source, key, () => value);
+}
+
+/** sourceMemoPut for a sourceMemoWith slot. */
+export function sourceMemoWithPut<T>(
+  source: ReportSource,
+  key: string,
+  inputs: readonly unknown[],
+  value: T,
+): void {
+  sourceMemoWith(source, key, inputs, () => value);
 }
 
 /** Test seam: drop every entry and set the data gate. */

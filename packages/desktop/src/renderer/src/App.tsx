@@ -44,6 +44,7 @@ import {
   skeletonTeamSizes,
 } from "./report/components/ReportSkeleton";
 import { ShuffleHead, ShuffleReport } from "./report/components/ShuffleReport";
+import { MatchPageActiveContext } from "./report/pageActive";
 import { useSidebarWidth } from "./sidebarWidth";
 import { applyUiZoom } from "./uiZoom";
 
@@ -322,6 +323,26 @@ export default function App({
   // Leaving the match page (settings, stats, the app closing) with an open
   // in flight: no report will end it (codex 1b #3)
   useEffect(() => () => cancelOpen(), [appView]);
+  // The parked match page keeps its report mounted (see the layout below): a
+  // recording left playing there would go on being heard behind the other tab.
+  useEffect(() => {
+    if (appView === "matches") return;
+    layoutRef.current?.querySelectorAll("video").forEach((v) => v.pause());
+  }, [appView]);
+  // Settings (and the dev panel) can change what the open report shows — the
+  // AI language, the configured backends — and its components read them once
+  // when they mount. Coming back from there remounts the report (cheap: its
+  // derives are cached per source) while the match list stays as it was
+  // (codex review of the parked page, 2026-11-14 #4).
+  const [reportEpoch, setReportEpoch] = useState(0);
+  const prevViewRef = useRef(appView);
+  useEffect(() => {
+    const was = prevViewRef.current;
+    prevViewRef.current = appView;
+    if ((was === "settings" || was === "dev") && appView !== was)
+      setReportEpoch((n) => n + 1);
+  }, [appView]);
+  const reportKey = selectedId ? `${selectedId}#${reportEpoch}` : undefined;
 
   // Rating deltas (1e): the algorithm lives in dashboard.ts's deriveRatingDeltas
   // (single-source, shared with the stats page's "recent matches" card)
@@ -414,144 +435,161 @@ export default function App({
             setAppView("matches");
           }}
         />
-      ) : (
-        <div
-          className="app-layout"
-          ref={layoutRef}
-          style={{ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}
-        >
-          <aside className="app-sidebar">
-            <BatchAnalyzeBar
-              metas={metas}
-              selected={batchSelected}
-              onClearSelected={() => setBatchSelected(new Set())}
-            />
-            <MatchListFilter
-              metas={metas}
-              filter={filter}
-              onChange={setFilter}
-            />
-            <ul data-testid="match-list" className="match-list">
-              {grouped.flatMap((g) => [
-                <li key={`g:${g.key}`} className="mlr-group">
-                  <span>{g.label}</span>
-                  <span className="mlr-group-sum">{g.summary}</span>
-                </li>,
-                ...g.items.map((m) => (
-                  <li
-                    key={m.id}
-                    className={m.id === selectedId ? "sel" : ""}
-                    onClick={() => {
-                      if (m.id !== selectedId) beginOpen(m.id, "match");
-                      setSelectedId(m.id);
-                    }}
-                    onMouseEnter={() => prefetchMatch(m.id)}
-                  >
-                    <MatchListRow
-                      meta={m}
-                      ratingDelta={ratingDeltas.get(m.id)}
-                      checked={batchSelected.has(m.id)}
-                      onToggleCheck={() =>
-                        setBatchSelected((cur) => {
-                          const next = new Set(cur);
-                          if (next.has(m.id)) next.delete(m.id);
-                          else next.add(m.id);
-                          return next;
-                        })
-                      }
-                    />
-                  </li>
-                )),
-              ])}
-              {hasMore && <li className="loading-more">后台补载中…</li>}
-            </ul>
-          </aside>
-          {/* 第三条栅格轨必须有真实 DOM 元素:.app-layout 是
+      ) : null}
+      {
+        // The match page stays mounted while another top tab is shown, only
+        // parked out of sight: unmounting it threw away the 1,978-row list
+        // and the open report, and coming back rebuilt both (Windows field
+        // run 2026-11-14: 530-640 ms per return). Parked under its own class,
+        // not as a hidden .app-layout: `.app-container:has(.app-layout)` turns
+        // the container into a column flexbox, which narrows the stats page.
+        <MatchPageActiveContext.Provider value={appView === "matches"}>
+          <div
+            className={
+              appView === "matches" ? "app-layout" : "app-layout-parked"
+            }
+            ref={layoutRef}
+            style={
+              { "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties
+            }
+          >
+            <aside className="app-sidebar">
+              <BatchAnalyzeBar
+                metas={metas}
+                selected={batchSelected}
+                onClearSelected={() => setBatchSelected(new Set())}
+              />
+              <MatchListFilter
+                metas={metas}
+                filter={filter}
+                onChange={setFilter}
+              />
+              <ul data-testid="match-list" className="match-list">
+                {grouped.flatMap((g) => [
+                  <li key={`g:${g.key}`} className="mlr-group">
+                    <span>{g.label}</span>
+                    <span className="mlr-group-sum">{g.summary}</span>
+                  </li>,
+                  ...g.items.map((m) => (
+                    <li
+                      key={m.id}
+                      className={m.id === selectedId ? "sel" : ""}
+                      onClick={() => {
+                        if (m.id !== selectedId) beginOpen(m.id, "match");
+                        setSelectedId(m.id);
+                      }}
+                      onMouseEnter={() => prefetchMatch(m.id)}
+                    >
+                      <MatchListRow
+                        meta={m}
+                        ratingDelta={ratingDeltas.get(m.id)}
+                        checked={batchSelected.has(m.id)}
+                        onToggleCheck={() =>
+                          setBatchSelected((cur) => {
+                            const next = new Set(cur);
+                            if (next.has(m.id)) next.delete(m.id);
+                            else next.add(m.id);
+                            return next;
+                          })
+                        }
+                      />
+                    </li>
+                  )),
+                ])}
+                {hasMore && <li className="loading-more">后台补载中…</li>}
+              </ul>
+            </aside>
+            {/* 第三条栅格轨必须有真实 DOM 元素:.app-layout 是
               `var(--sidebar-w) 6px 1fr`,少了这个元素,栅格自动布局会把
               .app-main 放进那条 6px 轨,整个界面塌成 6px 宽。 */}
-          <SidebarSplitter
-            width={sidebarWidth}
-            onWidthChange={setSidebarWidth}
-            layoutRef={layoutRef}
-          />
-          <main className="app-main">
-            {doc && doc.data && docId === selectedId ? (
-              doc.kind === "shuffle" ? (
-                <ShuffleReport
-                  key={selectedId ?? undefined}
-                  shuffle={doc.data}
-                  videoMatchId={selectedId ?? undefined}
-                  ratingDelta={selectedId ? ratingDeltas.get(selectedId) : null}
-                  roundStats={selectedMeta?.roundStats}
-                  onNeedRound={loadRound}
-                  staged
-                  skeletonTeamSizes={shellTeamSizes}
-                />
-              ) : (
-                <MatchReport
-                  key={selectedId ?? undefined}
-                  source={doc.data}
-                  matchId={selectedId ?? undefined}
-                  ratingDelta={selectedId ? ratingDeltas.get(selectedId) : null}
-                  staged
-                  skeletonTeamSizes={shellTeamSizes}
-                />
-              )
-            ) : (isLoading || docId !== selectedId) && selectedMeta ? (
-              // T93: the page is never empty - from the click until the match
-              // is read, the report's own frame, drawn from the list row.
-              <MatchShell
-                meta={selectedMeta}
-                ratingDelta={ratingDeltas.get(selectedMeta.id) ?? null}
-              />
-            ) : isLoading ? (
-              <div className="empty-state">加载中...</div>
-            ) : metas.length === 0 ? (
-              <div className="onboard" data-testid="onboard">
-                <h2>欢迎使用 gladlog</h2>
-                {wowDir == null ? (
-                  <>
-                    <ol>
-                      <li>选择 WoW 安装目录(自动定位战斗日志并开始监控)</li>
-                      <li>打一场竞技场,或导入历史日志</li>
-                      <li>回来看战报、回放和 AI 分析</li>
-                    </ol>
-                    <button
-                      className="onboard-cta"
-                      onClick={() =>
-                        void bridge()
-                          .app.selectDirectory()
-                          .then((dir) => {
-                            if (dir) setWowDir(dir);
-                          })
-                      }
-                    >
-                      选择 WoW 目录…
-                    </button>{" "}
-                    <ImportButton />
-                    <p className="onboard-hint">
-                      需要开启游戏内战斗记录(高级模式);AI 分析在「设置」里配 API
-                      key,不配也能看战报与回放。
-                    </p>
-                  </>
+            <SidebarSplitter
+              width={sidebarWidth}
+              onWidthChange={setSidebarWidth}
+              layoutRef={layoutRef}
+            />
+            <main className="app-main">
+              {doc && doc.data && docId === selectedId ? (
+                doc.kind === "shuffle" ? (
+                  <ShuffleReport
+                    key={reportKey}
+                    shuffle={doc.data}
+                    videoMatchId={selectedId ?? undefined}
+                    ratingDelta={
+                      selectedId ? ratingDeltas.get(selectedId) : null
+                    }
+                    roundStats={selectedMeta?.roundStats}
+                    onNeedRound={loadRound}
+                    staged
+                    skeletonTeamSizes={shellTeamSizes}
+                  />
                 ) : (
-                  <>
-                    <p>
-                      ✅ 正在监控 <code>{wowDir}</code> —— 打一场竞技场,战报会
-                      自动出现在左侧。
-                    </p>
-                    <p>
+                  <MatchReport
+                    key={reportKey}
+                    source={doc.data}
+                    matchId={selectedId ?? undefined}
+                    ratingDelta={
+                      selectedId ? ratingDeltas.get(selectedId) : null
+                    }
+                    staged
+                    skeletonTeamSizes={shellTeamSizes}
+                  />
+                )
+              ) : (isLoading || docId !== selectedId) && selectedMeta ? (
+                // T93: the page is never empty - from the click until the match
+                // is read, the report's own frame, drawn from the list row.
+                <MatchShell
+                  meta={selectedMeta}
+                  ratingDelta={ratingDeltas.get(selectedMeta.id) ?? null}
+                />
+              ) : isLoading ? (
+                <div className="empty-state">加载中...</div>
+              ) : metas.length === 0 ? (
+                <div className="onboard" data-testid="onboard">
+                  <h2>欢迎使用 gladlog</h2>
+                  {wowDir == null ? (
+                    <>
+                      <ol>
+                        <li>选择 WoW 安装目录(自动定位战斗日志并开始监控)</li>
+                        <li>打一场竞技场,或导入历史日志</li>
+                        <li>回来看战报、回放和 AI 分析</li>
+                      </ol>
+                      <button
+                        className="onboard-cta"
+                        onClick={() =>
+                          void bridge()
+                            .app.selectDirectory()
+                            .then((dir) => {
+                              if (dir) setWowDir(dir);
+                            })
+                        }
+                      >
+                        选择 WoW 目录…
+                      </button>{" "}
                       <ImportButton />
-                    </p>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="empty-state">选择一场对局</div>
-            )}
-          </main>
-        </div>
-      )}
+                      <p className="onboard-hint">
+                        需要开启游戏内战斗记录(高级模式);AI 分析在「设置」里配
+                        API key,不配也能看战报与回放。
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p>
+                        ✅ 正在监控 <code>{wowDir}</code> —— 打一场竞技场,战报会
+                        自动出现在左侧。
+                      </p>
+                      <p>
+                        <ImportButton />
+                      </p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="empty-state">选择一场对局</div>
+              )}
+            </main>
+          </div>
+        </MatchPageActiveContext.Provider>
+      }
     </div>
   );
 }

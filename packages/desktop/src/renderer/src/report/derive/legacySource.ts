@@ -69,6 +69,15 @@ export function toLegacySafe(source: ReportSource) {
   );
 }
 
+/** Drop `source`'s legacy copy and everything sourceMemo keeps for it, now
+ * rather than when the LRU gets round to it. The off-thread derive worker
+ * calls it once it has answered for a source (offThreadDerive.ts), so a
+ * second inflated copy of a large match does not sit in the worker. */
+export function forgetSource(source: ReportSource): void {
+  cache.delete(source);
+  dropSourceMemo(source);
+}
+
 function convert(source: ReportSource) {
   const units = Object.fromEntries(
     Object.entries(source.units).map(([id, u]) => {

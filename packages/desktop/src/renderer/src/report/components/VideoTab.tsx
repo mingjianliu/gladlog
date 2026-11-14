@@ -8,8 +8,9 @@ import {
   toVideoSeconds,
 } from "../../../../shared/videoTime";
 import { bridge } from "../../bridge";
-import { buildAnalysisInput } from "../derive/analysisInput";
+import type { AnalysisRunInput } from "../derive/analysisInput";
 import { resolveJumpTarget } from "../derive/jumpTarget";
+import { useAnalysisInput } from "../derive/offThread/useAnalysisInput";
 import type { TimelineData } from "../derive/timeline";
 import type { ReportSource } from "../derive/types";
 import {
@@ -18,6 +19,7 @@ import {
   type VideoMoment,
 } from "../derive/videoMoments";
 import type { VulnBand } from "../derive/vulnWindows";
+import { useMatchPageActive } from "../pageActive";
 import { VideoBattleTimeline } from "./VideoBattleTimeline";
 import {
   advanceFeed,
@@ -119,12 +121,16 @@ export function VideoTab({
   // refresh (review 3). A ref, not state: the AI fetch effect depends only on
   // matchId and must not resubscribe/refetch just because this cache is
   // recomputed.
-  const analysisInputRef = useRef<ReturnType<typeof buildAnalysisInput>>(null);
+  // Built in the derive worker when not cached (offThreadDerive.ts); when it
+  // lands after the cached findings did, the feed is refreshed once more so
+  // the timed chips are not lost.
+  const analysisInputRef = useRef<AnalysisRunInput | null>(null);
+  const refreshRef = useRef<(() => void) | null>(null);
+  const { input: analysisInput } = useAnalysisInput(source, matchId);
   useEffect(() => {
-    analysisInputRef.current = matchId
-      ? buildAnalysisInput(source, matchId)
-      : null;
-  }, [source, matchId]);
+    analysisInputRef.current = analysisInput;
+    if (analysisInput) refreshRef.current?.();
+  }, [analysisInput]);
 
   // Single source for all playback-time arithmetic (shared/videoTime.ts) --
   // the phase-1 bug was a divergent inline copy that clamped offsetS to 0.
@@ -214,6 +220,7 @@ export function VideoTab({
         /* stub without this bridge surface */
       }
     };
+    refreshRef.current = refresh;
     refresh();
     // An analysis that finishes while this tab is open (auto-analysis or a
     // user rerun) must flow into the feed/strip without waiting for the next
@@ -230,6 +237,7 @@ export function VideoTab({
     }
     return () => {
       alive = false;
+      if (refreshRef.current === refresh) refreshRef.current = null;
       off?.();
     };
   }, [matchId]);
@@ -353,7 +361,16 @@ export function VideoTab({
   // VideoFeed's old "weak heartbeat" was meant to do but did not (the old one
   // only forced a re-render without recomputing advanceFeed, so while paused
   // items never finished expiring).
+  //
+  // Parked behind another top tab (pageActive.ts) the heartbeat stops: the
+  // hidden feed measures as zero height, and settling evictions against that
+  // stand-in capacity would drop entries that coming back cannot restore
+  // (codex review of the parked page, 2026-11-14 #3b: 10 → 6 → 6).
+  const pageActive = useMatchPageActive();
+  const pageActiveRef = useRef(pageActive);
+  pageActiveRef.current = pageActive;
   useEffect(() => {
+    if (!pageActive) return;
     const id = setInterval(() => {
       setFeed((prev) =>
         advanceFeed(
@@ -366,7 +383,7 @@ export function VideoTab({
       );
     }, FEED_OUT_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [pageActive]);
 
   const togglePlay = () => {
     const v = ref.current;
@@ -399,6 +416,9 @@ export function VideoTab({
   // render (review 2) — this callback only writes a ref and captures nothing
   // that changes across renders, so a stable reference is all it needs.
   const handleCapacityChange = useCallback((c: number) => {
+    // a parked (display:none) feed measures nothing; keep the real capacity
+    // until it is shown again and measured
+    if (!pageActiveRef.current) return;
     capacityRef.current = c;
   }, []);
 

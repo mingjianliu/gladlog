@@ -206,6 +206,12 @@ pre {
   flex: 1;
   min-height: 0;
 }
+/* 另一个顶部标签在前台时,对局页不卸载、只停放(App.tsx):换成这个类而不是
+   给 .app-layout 加 hidden —— 上面 .app-container:has(.app-layout) 会把容器
+   变成 flex 列,战绩页会被挤窄。 */
+.app-layout-parked {
+  display: none;
+}
 /* 列表自己滚,顶上的批量条与筛选条钉住不跟滚。
    顺带干掉 .match-list 上那句 calc(100vh - 60px):60px 是猜的 topbar 高度,
    实测 55px —— 本文件 160 行记着同一个坑(旧代码猜 45px,整页常驻竖滚动条)。

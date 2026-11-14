@@ -14,6 +14,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { resolveOwner } from "./analysisInput";
 import { dispelSummaryOf } from "./dispelSummary";
+import { idMemo } from "./idMemo";
 import { toLegacySafe } from "./legacySource";
 import { sourceMemo } from "./sourceMemo";
 import { type TimeRange, tInRange } from "./timeRange";
@@ -487,7 +488,9 @@ export function timedAnchorsFromMistakes(
   return mistakes.filter((mk) => mk.timed).map((mk) => mk.tS);
 }
 
-function deriveMistakesUncached(
+/** The whole computation, uncached — also what the off-thread derive worker
+ * runs (offThreadDerive.ts), so the page and the worker share one body. */
+export function deriveMistakesUncached(
   source: ReportSource,
   range?: TimeRange | null,
 ): Mistake[] {
@@ -733,5 +736,8 @@ export function deriveMistakes(
   range?: TimeRange | null,
 ): ReturnType<typeof deriveMistakesUncached> {
   if (range != null) return deriveMistakesUncached(source, range);
-  return sourceMemo(source, "deriveMistakes", () => deriveMistakesUncached(source, range));
+  // per object (sourceMemo), and per match across re-opens (idMemo)
+  return sourceMemo(source, "deriveMistakes", () =>
+    idMemo(source, "deriveMistakes", [], () => deriveMistakesUncached(source, range)),
+  );
 }

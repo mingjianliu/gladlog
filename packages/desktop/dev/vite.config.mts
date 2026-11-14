@@ -29,4 +29,6 @@ export default defineConfig({
   // while JSON.parse on the same data takes 42ms. Vite 5 defaults this to
   // false, so it must be turned on explicitly.
   json: { stringify: true },
+  // same worker format as the app (electron.vite.config.ts)
+  worker: { format: "es" },
 });

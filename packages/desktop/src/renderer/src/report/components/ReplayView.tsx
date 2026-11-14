@@ -22,6 +22,7 @@ import {
 } from "../derive/replayHighlights";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
+import { useMatchPageActive } from "../pageActive";
 import { GcdSwimlane } from "./GcdSwimlane";
 import { ReplayMapResizer } from "./ReplayMapResizer";
 import { ReplaySplitter } from "./ReplaySplitter";
@@ -202,10 +203,20 @@ export function ReplayView({
     setPlaying(false);
   }, [seekReq, startTime, endTime]);
 
+  // Parked behind another top tab (pageActive.ts): stop playing, and leave
+  // the keys to the page on screen.
+  const pageActive = useMatchPageActive();
+  const pageActiveRef = useRef(pageActive);
+  pageActiveRef.current = pageActive;
+  useEffect(() => {
+    if (!pageActive) setPlaying(false);
+  }, [pageActive]);
+
   // Keyboard: Space toggles play/pause, ←/→ seek ±5s (Shift: ±1s). We do not
   // intercept while an input control has focus.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!pageActiveRef.current) return;
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
       if (e.code === "Space") {

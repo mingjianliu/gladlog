@@ -27,6 +27,10 @@ import { deriveKickDash } from "../derive/kickDash";
 import { deriveMatchArc } from "../derive/matchArc";
 import type { MeterMode } from "../derive/meterRows";
 import { deriveMistakes, timedAnchorsFromMistakes } from "../derive/mistakes";
+import {
+  prepareAnalysisInput,
+  prepareMistakes,
+} from "../derive/offThread/offThreadDerive";
 import { derivePressureLanes } from "../derive/pressureLanes";
 import { ensureRawStreams, getRawStreamsSync } from "../derive/rawStreamsCache";
 import { isSourceFilled, markSourceFilled } from "../derive/sourceMemo";
@@ -206,17 +210,42 @@ export function MatchReport({
     level = startLevel(source);
     setFill({ source, level });
   }
+  // The mistake step (3) is the long one; for a staged open it is computed
+  // in the derive worker from the moment the report mounts, alongside steps
+  // 1-2 on this thread, and step 3 waits for it instead of computing it here
+  // (offThreadDerive.ts). null = no worker for this source: computed in
+  // place at step 3, as before.
+  const mistakesPrep = useMemo(
+    () => (staged && level < 3 ? prepareMistakes(source) : null),
+    // the level only gates the first call; later renders reuse it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, staged],
+  );
   useEffect(() => {
     if (level >= FILL_DONE) {
       markSourceFilled(source);
       return;
     }
-    return afterPaint(() =>
+    const advance = () =>
       setFill((f) =>
         f.source === source ? { source, level: f.level + 1 } : f,
-      ),
-    );
-  }, [level, source]);
+      );
+    if (level === 2 && mistakesPrep) {
+      let cancel: (() => void) | null = null;
+      let live = true;
+      // a failed worker answer falls back to computing at step 3
+      void mistakesPrep
+        .catch(() => undefined)
+        .then(() => {
+          if (live) cancel = afterPaint(advance);
+        });
+      return () => {
+        live = false;
+        cancel?.();
+      };
+    }
+    return afterPaint(advance);
+  }, [level, source, mistakesPrep]);
   const L1 = level >= 1;
   const L2 = level >= 2;
   const L3 = level >= 3;
@@ -264,6 +293,11 @@ export function MatchReport({
         if (!live) return;
         setRawStreams(rs);
         setRawSettled(source);
+        // warm the AI tab's prompt input off the main thread now that the
+        // raw streams it is built against are in (no-op without a worker)
+        void prepareAnalysisInput(source, resolvedMatchId, true)?.catch(
+          () => {},
+        );
       },
     );
     return () => {

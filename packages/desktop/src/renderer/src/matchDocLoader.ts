@@ -7,6 +7,11 @@ import {
   openTimed,
   type OpenTraceToken,
 } from "./openTrace";
+import { noteLoadedSource } from "./report/derive/idMemo";
+import {
+  adoptLazyDoc,
+  adoptRound,
+} from "./report/derive/offThread/offThreadDerive";
 
 /**
  * Open a stored match / one lazily loaded shuffle round (T93).
@@ -39,9 +44,36 @@ export async function openMatchDoc(id: string): Promise<unknown | null> {
       false,
       trace,
     );
+    if (doc != null) {
+      noteLoadedDoc(id, doc, payload);
+      // the same bytes to the derive worker, after the page's own parse
+      // (transferred, so the page does not keep a second copy)
+      adoptLazyDoc(doc, payload);
+    }
     return doc ?? m.get(id);
   }
   return m.getLazy ? m.getLazy(id) : m.get(id);
+}
+
+/** Register the sources of a doc read from the store, for the id-keyed
+ * derive cache (idMemo.ts): what was read, where in it, from how many bytes.
+ * Before adoptLazyDoc, which transfers (empties) the buffers. */
+function noteLoadedDoc(id: string, doc: unknown, payload: LazyDocPayload) {
+  const data = (doc as { data?: unknown } | null)?.data;
+  if (data == null || typeof data !== "object") return;
+  const bytes =
+    payload.mode === "full"
+      ? payload.bytes.byteLength
+      : payload.shell.byteLength + payload.round0.byteLength;
+  const rounds = (data as { rounds?: unknown }).rounds;
+  if (Array.isArray(rounds)) {
+    rounds.forEach((r, i) => {
+      if (r != null && typeof r === "object")
+        noteLoadedSource(r as object, id, `round:${i}`, bytes);
+    });
+  } else {
+    noteLoadedSource(data, id, "data", bytes);
+  }
 }
 
 /** Whether a lazily omitted round can be asked for at all. */
@@ -63,7 +95,12 @@ export async function openMatchRound(
     const trace = traceOf ?? (() => asked);
     const buf = await m.getRoundRaw(id, roundIndex);
     openIoArrived(trace);
-    return openTimed("parse", () => parseRoundBytes(buf), false, trace);
+    const round = openTimed("parse", () => parseRoundBytes(buf), false, trace);
+    if (round != null && typeof round === "object" && buf) {
+      noteLoadedSource(round, id, `round:${roundIndex}`, buf.byteLength);
+      adoptRound(round, buf);
+    }
+    return round;
   }
   return m.getRound ? m.getRound(id, roundIndex) : null;
 }

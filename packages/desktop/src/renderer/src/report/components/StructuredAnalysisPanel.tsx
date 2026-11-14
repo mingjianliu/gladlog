@@ -18,11 +18,12 @@ import type { AnalysisFallbackReason } from "../../../../shared/analysisFallback
 import { bridge } from "../../bridge";
 import { DEMO_ANALYSIS } from "../data/demoAnalysis";
 import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
-import { buildAnalysisInput, buildDeepenPacks } from "../derive/analysisInput";
+import { buildDeepenPacks } from "../derive/analysisInput";
 import { categoryLabel, severityLabel } from "../derive/findingDisplay";
 import { makeRichText } from "../derive/inlineRich";
 import { resolveJumpTarget } from "../derive/jumpTarget";
 import { deriveKeyMoments } from "../derive/keyMoments";
+import { useAnalysisInput } from "../derive/offThread/useAnalysisInput";
 import { selfReviewNote, type SelfReviewView } from "../derive/selfReviewNote";
 import { backendModelLabel, slotLabel } from "../derive/slotLabel";
 import type { ReportSource } from "../derive/types";
@@ -519,11 +520,15 @@ export function StructuredAnalysisPanel({
   }, [dataReady]);
 
   // Build logic is single-source with the batch driver (analysisInput.ts) --
-  // a DPS recorder gets the DPS perspective (D2).
-  const input = useMemo(() => {
-    if (!dataReady) return null;
-    return buildAnalysisInput(source, matchId);
-  }, [source, matchId, dataReady]);
+  // a DPS recorder gets the DPS perspective (D2). Built in the derive worker
+  // when it is not cached (a long match's first visit froze the page 6.8 s
+  // building it here, Windows field run 2026-11-14); `inputPending` until it
+  // lands.
+  const { input, pending: inputPending } = useAnalysisInput(
+    source,
+    matchId,
+    dataReady,
+  );
 
   const keyMoments = useMemo(() => deriveKeyMoments(source), [source]);
 
@@ -835,7 +840,7 @@ export function StructuredAnalysisPanel({
             onClick={handleAnalyze}
             disabled={!input || state === "running"}
           >
-            {buttonText}
+            {inputPending ? "正在准备分析数据…" : buttonText}
           </button>
           <button
             className="rpt-ai-split-arrow"

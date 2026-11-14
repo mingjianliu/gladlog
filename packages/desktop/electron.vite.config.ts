@@ -81,6 +81,10 @@ export default defineConfig({
     // firstPaint budget runs against the dev/vite build (esbuild minify by
     // default), so the two must measure the same thing.
     build: { minify: "esbuild" },
+    // The report's derive worker (report/derive/offThread) is a module
+    // worker: it shares chunks with the page and the game data module uses
+    // top-level await, neither of which the default iife worker format allows.
+    worker: { format: "es" },
     // Explicitly inject the shell's VITE_FIXTURE_MODE into the renderer
     // (otherwise electron-vite does not expose it and the fixture branch is
     // eliminated as dead code). VITE_FIXTURE_MODE=1 npm run dev gives a preview
