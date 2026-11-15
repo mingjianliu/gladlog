@@ -309,9 +309,9 @@ export function enemyHealerCcWindows(
  * (codex 85-tk-N-T110-1b #3: a reader merging every window would).
  */
 export function enemyHealerFactOnlyLocks(
-  friends: any[],
-  enemies: any[],
-  combat: any,
+  friends: Parameters<typeof enemyHealerCcWindows>[0],
+  enemies: Parameters<typeof enemyHealerCcWindows>[1],
+  combat: Parameters<typeof enemyHealerCcWindows>[2],
 ): IEnemyHealerCcWindow[] {
   const healerNames = new Set(
     enemies.filter((e) => isHealerSpec(e.spec)).map((e) => e.name as string),
