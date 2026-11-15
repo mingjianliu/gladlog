@@ -12,9 +12,10 @@
  *    to the caster — Burrow 409293 is the observed one; it interferes with
  *    its holder's enemies' targeting, so a friendly's Burrow is never what
  *    obscured the caster's target (codex 85-tk-N-T108-1), and only for a
- *    refused spell that can aim at an enemy at all (`abilityProfile`
- *    `hitsEnemy`, DB2 ImplicitTarget: a Flash Heal refused beside an enemy's
- *    Burrow was aimed at a friend; codex 85-tk-N-T108-1b) — through
+ *    refused spell that can aim at an enemy at all (`refusedSpellAimsAtEnemy`,
+ *    DB2 ImplicitTarget: a Flash Heal refused beside an enemy's Burrow was
+ *    aimed at a friend; codex 85-tk-N-T108-1b; a spell the official rows do
+ *    not show takes the aura only when no area is down, 1c) — through
  *    `buildAuraIntervals`, the one aura pairing (a lost REMOVED is capped at
  *    the official length there);
  *  - else a Smoke Bomb area (the same-name area casts, 212182 / 359053; their
@@ -30,7 +31,7 @@
  */
 import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
-import { abilityProfile } from "../data/abilityProfile";
+import { ABILITY_EFFECTS_GENERATED } from "../data/abilityEffectsGenerated";
 import { spellEffectData } from "../data/spellEffectData";
 import {
   VISION_OBSCURING_AREA_CASTS,
@@ -149,26 +150,47 @@ const opposed = (
 ): boolean =>
   a !== undefined && b !== undefined && SIDES.has(a) && SIDES.has(b) && a !== b;
 
+/** Can a press of `spellId` aim at an enemy, by the official effect rows
+ * (`ABILITY_EFFECTS_GENERATED`, DB2 SpellEffect ImplicitTarget): true for an
+ * enemy-aimed effect, false for a spell whose mined rows show none (Flash
+ * Heal: a heal on a friend), undefined for a spell with no mined row — a
+ * dummy effect + server script (Holy Shock 20473, Penance 47540, Chi Burst
+ * 123986) says nothing either way (codex 85-tk-N-T108-1c). */
+export function refusedSpellAimsAtEnemy(spellId: string): boolean | undefined {
+  const effects = ABILITY_EFFECTS_GENERATED[spellId];
+  return effects === undefined ? undefined : effects.hitsEnemy === true;
+}
+
 /** What obscured the target of a refusal of `spellId` at `tSeconds` by a
- * caster of reaction `casterReaction`: an obscuring aura up on a unit hostile
- * to the caster, when the spell can aim at an enemy (an unknown or neutral
- * side admits no aura), else a Smoke Bomb area still down; undefined for
- * neither. */
+ * caster of reaction `casterReaction`. Candidates: an obscuring aura up on a
+ * unit on the caster's other side (an unknown or neutral side admits none),
+ * and a Smoke Bomb area still down.
+ *
+ *  - a spell that can aim at an enemy (`refusedSpellAimsAtEnemy` true): the
+ *    aura first, else the area;
+ *  - a spell that cannot: the area only;
+ *  - a spell whose targeting the official rows do not show: the one
+ *    candidate when there is one; an aura and an area both up leave no
+ *    cause (the client's reason alone), since either could be it.
+ *
+ * Undefined for no cause. */
 export function visionObscuredCause(
   windows: readonly IObscuringWindow[],
   casterReaction: CombatUnitReaction | undefined,
   spellId: string,
   tSeconds: number,
 ): string | undefined {
-  let aimsAtEnemy: boolean | undefined;
-  return windows.find(
-    (w) =>
-      w.fromS <= tSeconds &&
-      tSeconds <= w.toS &&
-      (!w.onUnit ||
-        (opposed(w.holderReaction, casterReaction) &&
-          (aimsAtEnemy ??= abilityProfile(spellId).hitsEnemy))),
-  )?.name;
+  const live = (w: IObscuringWindow) =>
+    w.fromS <= tSeconds && tSeconds <= w.toS;
+  const area = windows.find((w) => !w.onUnit && live(w));
+  const aura = windows.find(
+    (w) => w.onUnit && live(w) && opposed(w.holderReaction, casterReaction),
+  );
+  if (!aura) return area?.name;
+  const aims = refusedSpellAimsAtEnemy(spellId);
+  if (aims === true) return aura.name;
+  if (aims === false) return area?.name;
+  return area ? undefined : aura.name;
 }
 
 /** Whether a SPELL_CAST_FAILED reason is the vision-obscured one. */

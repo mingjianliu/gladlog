@@ -19,6 +19,7 @@ import {
 import type { RawStreams } from "../src/utils/rawStreams";
 import {
   OBSCURING_AREA_SLACK_S,
+  refusedSpellAimsAtEnemy,
   VISION_OBSCURED_CAUSE_NAMES,
   visionObscuringWindows,
   withVisionObscuredCauses,
@@ -267,6 +268,59 @@ describe("withVisionObscuredCauses", () => {
       undefined,
       "Smoke Bomb",
       "Burrow",
+    ]);
+  });
+
+  it("a spell the official rows do not show takes the one candidate, and none of two (codex 85-tk-N-T108-1c)", () => {
+    // DB2 ImplicitTarget: Arcane Barrage aims at an enemy, Flash Heal at a
+    // friend; Holy Shock / Penance / Chi Burst are a dummy row + script
+    expect(refusedSpellAimsAtEnemy("44425")).toBe(true);
+    expect(refusedSpellAimsAtEnemy("2061")).toBe(false);
+    for (const id of ["20473", "47540", "123986"])
+      expect(refusedSpellAimsAtEnemy(id)).toBeUndefined();
+    const combat = fight();
+    const shaman = combat.units["Player-E"]!;
+    const burrowed: typeof shaman = {
+      ...shaman,
+      auraEvents: [
+        ...shaman.auraEvents,
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          BURROW,
+          T0 + 119_000,
+          "Player-E",
+          "Player-E",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          BURROW,
+          T0 + 125_000,
+          "Player-E",
+          "Player-E",
+          "BUFF",
+        ),
+      ] as typeof shaman.auraEvents,
+    };
+    const both = {
+      ...combat,
+      units: { ...combat.units, "Player-E": burrowed },
+    };
+    const shock = (t: number) => ({
+      ...row(t),
+      spellId: 20473,
+      spellName: "Holy Shock",
+    });
+    // 73 s: the Burrow alone; 121 s: the Burrow and the Smoke Bomb; 125.3 s:
+    // the Smoke Bomb alone
+    const tagged = withVisionObscuredCauses(
+      streams([shock(73), shock(121), shock(125.3)]),
+      both,
+    );
+    expect(tagged.castFailed.map((h) => h.obscuredBy)).toEqual([
+      "Burrow",
+      undefined,
+      "Smoke Bomb",
     ]);
   });
 
