@@ -135,6 +135,62 @@ describe("T118 — a root freed by a target-bound freedom cast is cleansed", () 
     );
   });
 
+  it("codex 85-tk-L-T118-1c #1: an end the loop inferred (lost REMOVED, a re-APPLIED) earns no freedom credit", () => {
+    const healer = makeUnit("h", {
+      name: "Healer",
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          TIGERS_LUST,
+          START + 13_960,
+          "m",
+          "Melee",
+          "h",
+          "Healer",
+        ),
+      ],
+    });
+    const melee = makeUnit("m", {
+      name: "Melee",
+      spec: CombatUnitSpec.Warrior_Fury,
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, 10, "m"),
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, 14, "m"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, 20, "m"),
+      ],
+    });
+    const s = reconstructDispelSummary(
+      [healer, melee] as never,
+      [
+        makeUnit("e1", {
+          reaction: CombatUnitReaction.Hostile,
+          spellCastEvents: [
+            makeSpellCastEvent(
+              FROST_NOVA,
+              START + 10_000,
+              "m",
+              "Melee",
+              "e1",
+              "Mage",
+            ),
+            makeSpellCastEvent(
+              FROST_NOVA,
+              START + 13_990,
+              "m",
+              "Melee",
+              "e1",
+              "Mage",
+            ),
+          ],
+        }),
+      ] as never,
+      combat as never,
+    );
+    expect(
+      s.lateCleanseWindows.filter((w) => Math.round(w.durationSeconds) === 4),
+    ).toEqual([]);
+  });
+
   it("only a root qualifies, and only one that did not run out", () => {
     const friends = [
       {

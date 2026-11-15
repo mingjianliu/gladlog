@@ -3710,7 +3710,7 @@ function reconstructDispelSummaryUncached(
         ts: number;
         spellName: string;
         src: string;
-        removal: { ts: number; brokenByDamage: boolean };
+        removal: { ts: number; brokenByDamage: boolean; inferred?: boolean };
       }[]
     >();
     const pending = new Map<
@@ -3724,7 +3724,7 @@ function reconstructDispelSummaryUncached(
         spellName: string;
         src: string;
       },
-      removal: { ts: number; brokenByDamage: boolean },
+      removal: { ts: number; brokenByDamage: boolean; inferred?: boolean },
     ) =>
       windows.set(open.spellId, [
         ...(windows.get(open.spellId) ?? []),
@@ -3860,6 +3860,9 @@ function reconstructDispelSummaryUncached(
               lengthS === null ? Infinity : open.applyMs + lengthS * 1000,
             ),
             brokenByDamage: false,
+            // no removal row: this end is inferred (T118 credits a cast
+            // only at a logged removal — codex 85-tk-L-T118-1c #1)
+            inferred: true,
           });
         }
         pending.set(key, {
@@ -3948,14 +3951,15 @@ function reconstructDispelSummaryUncached(
             unit.name,
             (removal.ts - combat.startTime) / 1000,
           ) ||
-            wasFreedByTargetBoundCast(
-              friends,
-              spellId,
-              unit.id,
-              applyTs,
-              removal.ts,
-              lengthOf(spellId, src, applyTs) ?? undefined,
-            ));
+            (!paired.inferred &&
+              wasFreedByTargetBoundCast(
+                friends,
+                spellId,
+                unit.id,
+                applyTs,
+                removal.ts,
+                lengthOf(spellId, src, applyTs) ?? undefined,
+              )));
 
         // CC broke from incoming damage — not a missed cleanse, but not a healer cleanse either
         if (removal.brokenByDamage) {

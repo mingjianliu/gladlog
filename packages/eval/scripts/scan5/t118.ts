@@ -17,11 +17,13 @@
  */
 import { ROOT_SPELL_IDS } from "@gladlog/analysis/src/data/rootSpells";
 import { TARGET_BOUND_MOBILITY_IDS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import { ccRecastSplitsResend } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   ALLY_DISPEL_MATCH_TOLERANCE_S,
   rootRanOutAtDrTier,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
 
+import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { ccLandingStateAtMs } from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import { ccFullDurationForApplication } from "@gladlog/analysis/src/utils/ccDuration";
 
@@ -53,7 +55,18 @@ export function run(ctx: IRoundCtx): void {
     // the row's own application (t is its APPLIED, floored to tenths) and
     // the removal that closed it, inside the round (codex 85-tk-L-T118-1
     // #2: a removal after the round's end is the round ending)
-    const rows = ((target.auraEvents ?? []) as any[])
+    // one re-broadcast is one application, as the product reads them
+    // (`dropAuraRebroadcasts` + `ccRecastSplitsResend` — codex
+    // 85-tk-L-T118-1c #2)
+    const auras = target.auraEvents ?? [];
+    const rows = (
+      dropAuraRebroadcasts(
+        auras,
+        ccRecastSplitsResend(target.id, auras, (id) =>
+          ctx.units.find((u) => u.id === id),
+        ),
+      ) as any[]
+    )
       .filter(
         (a) =>
           ROOT_SPELL_IDS.has(String(a.spellId)) &&
