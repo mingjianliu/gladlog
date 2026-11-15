@@ -15,6 +15,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   reconstructDispelSummary,
+  rootRanOutAtDrTier,
   wasFreedByTargetBoundCast,
 } from "../src/utils/dispelAnalysis";
 import {
@@ -98,34 +99,65 @@ describe("T118 — a root freed by a target-bound freedom cast is cleansed", () 
     ).toHaveLength(1);
   });
 
-  it("only a root qualifies, removed before its own end", () => {
+  it("codex 85-tk-L-T118-1b #1: a Frost Nova that ran its DR'd 3 s after an Entangling Roots was not freed", () => {
+    // the summary fixture's victim, with an Entangling Roots first
+    const healer = makeUnit("h", {
+      name: "Healer",
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          TIGERS_LUST,
+          START + 13_040,
+          "m",
+          "Melee",
+          "h",
+          "Healer",
+        ),
+      ],
+    });
+    const melee = makeUnit("m", {
+      name: "Melee",
+      spec: CombatUnitSpec.Warrior_Fury,
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "339", 1, "m"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "339", 3, "m"),
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, 10, "m"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, 13, "m"),
+      ],
+    });
+    const s = reconstructDispelSummary(
+      [healer, melee] as never,
+      [makeUnit("e1", { reaction: CombatUnitReaction.Hostile })] as never,
+      combat as never,
+    );
+    expect(s.lateCleanseWindows.map((w) => w.spellId)).not.toContain(
+      FROST_NOVA,
+    );
+  });
+
+  it("only a root qualifies, and only one that did not run out", () => {
     const friends = [
       {
         spellCastEvents: [makeSpellCastEvent(TIGERS_LUST, START + 5000, "m")],
       },
     ] as never;
-    expect(
+    const freed = (id: string, ranMs: number, lengthS: number | undefined) =>
       wasFreedByTargetBoundCast(
         friends,
-        FROST_NOVA,
+        id,
         "m",
+        START + 5000 - ranMs,
         START + 5000,
-        START + 6000,
-      ),
-    ).toBe(true);
-    // at or past its end it ran out; an unknown end credits nothing
-    for (const end of [START + 5000, undefined])
-      expect(
-        wasFreedByTargetBoundCast(friends, FROST_NOVA, "m", START + 5000, end),
-      ).toBe(false);
-    expect(
-      wasFreedByTargetBoundCast(
-        friends,
-        "118",
-        "m",
-        START + 5000,
-        START + 6000,
-      ),
-    ).toBe(false);
+        lengthS,
+      );
+    expect(freed(FROST_NOVA, 4000, 6)).toBe(true);
+    // its full length, its DR tier, an unknown length: no credit
+    expect(freed(FROST_NOVA, 6000, 6)).toBe(false);
+    expect(freed(FROST_NOVA, 3000, 6)).toBe(false);
+    expect(freed(FROST_NOVA, 4000, undefined)).toBe(false);
+    expect(freed("118", 4000, 6)).toBe(false);
+    expect(rootRanOutAtDrTier(5900, 6)).toBe(true);
+    expect(rootRanOutAtDrTier(3100, 6)).toBe(true);
+    expect(rootRanOutAtDrTier(3200, 6)).toBe(false);
   });
 });

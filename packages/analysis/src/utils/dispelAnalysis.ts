@@ -2973,6 +2973,26 @@ export function wasRemovedByAllyDispel(
  * above), shared by both removal matchers. */
 export const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
 
+/** A root's removal this close to one of its DR-tier lengths is it running
+ * out (T118). */
+export const ROOT_RAN_OUT_SLACK_MS = 150;
+
+/**
+ * T118: did a root that lasted `ranMs` run out — at or past its full
+ * `lengthS`, or at its DR tier (`drDurationFactor("50%")` of it)? Roots' DR
+ * history is not read (codex 85-tk-L-T118-1b #1: `getDRCategory` gives each
+ * root its own family, so an Entangling Roots before a Frost Nova read Full),
+ * so a root freed in the instant its DR'd length ends reads as ran out — the
+ * conservative side. Shared with scan5/t118.
+ */
+export function rootRanOutAtDrTier(ranMs: number, lengthS: number): boolean {
+  const full = lengthS * 1000;
+  return (
+    ranMs >= full - ROOT_RAN_OUT_SLACK_MS ||
+    Math.abs(ranMs - full * drDurationFactor("50%")) <= ROOT_RAN_OUT_SLACK_MS
+  );
+}
+
 /**
  * T118 (fact12 retest M3, 60bfdea9 2:16): was this ROOT removed by a
  * teammate's — or the unit's own — Blessing of Freedom / Tiger's Lust cast on
@@ -2985,20 +3005,23 @@ export const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
  * the Mistweaver the item named was filed as never cleansed. The cast row
  * names the unit and shares the removal's instant within the dispel pairing
  * tolerance; only a root qualifies (a stun ending as one is cast is no
- * freedom), and only one removed before its own end at its DR level (a root
- * that ran out as the cast went out was not freed by it).
+ * freedom), and only one that did not run out (`rootRanOutAtDrTier`: a root
+ * whose removal is its own length, or half of it, ran out as the cast went
+ * out — codex 85-tk-L-T118-1 / -1b).
  */
 export function wasFreedByTargetBoundCast(
   friends: readonly Pick<ICombatUnit, "spellCastEvents">[],
   ccSpellId: string,
   unitId: string,
+  applyMs: number,
   removalMs: number,
-  /** the application's own end at its DR level; a removal at or past it
-   * ran out (`ranFullLength`'s rule) — unknown credits nothing */
-  officialEndMs: number | undefined,
+  /** the application's caster- and landing-resolved length
+   * (`ccFullDurationForApplication`); unknown credits nothing */
+  lengthS: number | undefined,
 ): boolean {
   if (!ROOT_SPELL_IDS.has(ccSpellId)) return false;
-  if (officialEndMs === undefined || removalMs >= officialEndMs) return false;
+  if (lengthS === undefined || rootRanOutAtDrTier(removalMs - applyMs, lengthS))
+    return false;
   return friends.some((f) =>
     (f.spellCastEvents ?? []).some(
       (e) =>
@@ -3713,32 +3736,6 @@ function reconstructDispelSummaryUncached(
         enemyPlayerById.get(srcUnitId),
         ccLandingStateAtMs(unit, spellId, applyMs),
       ) ?? null;
-    // T118 (codex 85-tk-L-T118-1 #1): where the application would have run
-    // out on its own — its caster-resolved length at its DR level
-    const officialEndMsOf = (
-      spellId: string,
-      srcUnitId: string,
-      applyMs: number,
-    ): number | undefined => {
-      const lengthS = lengthOf(spellId, srcUnitId, applyMs);
-      if (lengthS === null) return undefined;
-      return (
-        applyMs +
-        lengthS *
-          1000 *
-          drDurationFactor(
-            drLevelAtApply(
-              unit,
-              spellId,
-              applyMs,
-              combat.startTime,
-              rosterUnitById,
-              roundEnd,
-            ),
-          )
-      );
-    };
-
     // A BROKEN line its aura's own REMOVED follows is not the end (FT-T08):
     // the window closes at the REMOVED, which still carries "broken by
     // damage" when a BROKEN_SPELL line from an enemy came before it — the
@@ -3955,8 +3952,9 @@ function reconstructDispelSummaryUncached(
               friends,
               spellId,
               unit.id,
+              applyTs,
               removal.ts,
-              officialEndMsOf(spellId, src, applyTs),
+              lengthOf(spellId, src, applyTs) ?? undefined,
             ));
 
         // CC broke from incoming damage — not a missed cleanse, but not a healer cleanse either

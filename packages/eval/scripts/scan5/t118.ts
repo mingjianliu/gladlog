@@ -9,17 +9,21 @@
  *  - `rootFreedReadUncleansed`: a missed-cleanse menu row with no
  *    `latencyS` whose control is a root of that name on the target
  *    (`ROOT_SPELL_IDS`). Violation: the REMOVED closing the row's own
- *    APPLIED, inside the round and short of the root's caster-resolved
- *    length at Full or half (DR), lands within
+ *    APPLIED, inside the round and not its running out
+ *    (`rootRanOutAtDrTier` on `ccFullDurationForApplication`), lands within
  *    `ALLY_DISPEL_MATCH_TOLERANCE_S` of a
  *    SPELL_CAST_SUCCESS of a freedom id on the target by a player of the
  *    target's team (the target included). Counted: every such root row.
  */
 import { ROOT_SPELL_IDS } from "@gladlog/analysis/src/data/rootSpells";
 import { TARGET_BOUND_MOBILITY_IDS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "@gladlog/analysis/src/utils/dispelAnalysis";
+import {
+  ALLY_DISPEL_MATCH_TOLERANCE_S,
+  rootRanOutAtDrTier,
+} from "@gladlog/analysis/src/utils/dispelAnalysis";
 
-import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
+import { ccLandingStateAtMs } from "@gladlog/analysis/src/utils/ccBreakAnalysis";
+import { ccFullDurationForApplication } from "@gladlog/analysis/src/utils/ccDuration";
 
 import {
   APPLIED,
@@ -36,9 +40,6 @@ export const CHECKS = ["rootFreedReadUncleansed"] as const;
 const ROW =
   /^\s*- id=\S+ type=missed-cleanse t=\S+ units=\S+ facts=\{t=([\d.]+), target=([^,]+), cc=([^,]+), duration=([\d.]+)(.*)\}\s*$/;
 const TOL_MS = ALLY_DISPEL_MATCH_TOLERANCE_S * 1000;
-/** a removal this close to the root's own length (or half of it, the DR
- * tier) is it running out */
-const EXPIRY_SLACK_MS = 150;
 
 export function run(ctx: IRoundCtx): void {
   const C = "rootFreedReadUncleansed";
@@ -73,18 +74,19 @@ export function run(ctx: IRoundCtx): void {
     );
     const removals =
       removal && tsOf(removal) <= ctx.roundEndAt ? [removal] : [];
-    // a root that ran out (its caster-resolved length, Full or half at DR
-    // level, within EXPIRY_SLACK_MS) was not freed (codex #1)
+    // a root that ran out — its own length (caster and landing modifiers:
+    // `ccFullDurationForApplication`), or the DR tier of it — was not freed
+    // (codex 85-tk-L-T118-1 #1, -1b #2): the product's `rootRanOutAtDrTier`
     if (removals.length) {
-      const full = ccFullDurationForCaster(
-        String(apply.spellId),
+      const id = String(apply.spellId);
+      const lengthS = ccFullDurationForApplication(
+        id,
         ctx.units.find((u) => u.id === apply.srcUnitId),
+        ccLandingStateAtMs(target, id, tsOf(apply)),
       );
-      const ran = tsOf(removals[0]) - tsOf(apply);
       if (
-        full === undefined ||
-        ran >= full * 1000 - EXPIRY_SLACK_MS ||
-        Math.abs(ran - full * 500) <= EXPIRY_SLACK_MS
+        lengthS === undefined ||
+        rootRanOutAtDrTier(tsOf(removals[0]) - tsOf(apply), lengthS)
       )
         removals.length = 0;
     }
