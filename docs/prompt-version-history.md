@@ -6652,3 +6652,26 @@ still running became `cc:1/Counter Shot-<1s[kick],1/Rebuke-2s[kick]`. 605
 all [RES] `cc:`; family diff 0 flags; findings files 0, candidate rows +0
 -0; gates 110 -> 110. Single producer, no gate pair, so no predicate-index
 row.
+
+v554 (2026-11-15; pipeline batch B72, T108; round 13 audit D24). A `vision
+obscured` refusal named Smoke Bomb from a fixed table. The cause is now read
+from the fight (utils/visionObscured.ts): an aura of DB2 aura type 322 up on
+a unit of the caster's other side, for a refused spell that can aim at an
+enemy (new official table refusedSpellAimGenerated.ts, ImplicitTarget on
+every row with dummy rows and one trigger hop: at enemy 1,681 spells, friend
+only 376, else not known), first; else a Smoke Bomb cast within its official
+5 s plus 0.5 s; else no cause, and the line prints the client reason alone.
+New official table visionObscuringAuraGenerated.ts (Burrow 409293; Smoke
+Bomb's area-trigger casts 212182 / 359053). The raw streams are tagged once
+(withVisionObscuredCauses) and every reader reads the tag: [REJECTED] runs
+(split on kind and cause), [CAST STOPPED], the kit [UNUSED] note, kick-eaten
+postKick, the attempted / stayed-in reason words; the gate word lists and
+the kick-eaten legend are built from the same names. Example: `[REJECTED]
+your Judgment x5 - vision obscured (Smoke Bomb)` in a match with no Rogue
+now reads `vision obscured (Burrow)`. 605 (base capture at 57989f781 vs
+branch), new scan5/t108: namedAbsent 4 / 52 -> 0 / 51; namedAbsentRound 4 /
+43 -> 0 / 42; unnamedPresent 0 / 0 -> 0 / 1. Forward check on the 320 raw
+vision-obscured rows of the 605: Smoke Bomb explains 284, Burrow 31, both
+4, neither 1. Lines changed: 4 [REJECTED] lines (three to Burrow, one to no
+cause) and the kick-eaten legend line in 929 prompts; menu rows unchanged,
+candidate rows +0 -0; every other scan5 check unchanged.

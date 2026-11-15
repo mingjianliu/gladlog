@@ -1269,5 +1269,11 @@
  *  active kick lockout on a unit (each locks its own school), and a
  *  root / disarm names the longest holder, as hard CC already did.
  *  See docs/prompt-version-history.md.
+ *
+ * v554 (2026-11-15; pipeline batch B72, T108): a `vision obscured`
+ *  refusal names its cause from the fight (an enemy's Burrow, or a
+ *  Smoke Bomb actually cast), not a fixed Smoke Bomb; with no cause
+ *  found it prints the client reason alone.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 553;
+export const PROMPT_VERSION = 554;
