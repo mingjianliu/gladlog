@@ -219,6 +219,7 @@ import * as trinketCooldown from "@gladlog/analysis/src/utils/trinketCooldown";
 import * as trinketTypeMod from "@gladlog/analysis/src/utils/trinketType";
 import * as unitDeath from "@gladlog/analysis/src/utils/unitDeath";
 import * as unloggedSilence from "@gladlog/analysis/src/utils/unloggedSilence";
+import * as visionObscuredMod from "@gladlog/analysis/src/utils/visionObscured";
 import * as warlockPet from "@gladlog/analysis/src/utils/warlockPet";
 import {
   decodeAdvanced as parserDecodeAdvanced,
@@ -5196,6 +5197,19 @@ const INDEX: PredicateRow[] = [
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKickEatenRefusedForAnotherReason",
     mod: promptQualityCheck,
+  },
+  // pipeline T108 (fact13 D24): the vision-obscured cause selection the
+  // prompt and the candidate layer tag the streams with, which scan5/t108
+  // calls; the cause names REFUSAL_WHY_WORDS lets every gate accept
+  {
+    file: `${A}/utils/visionObscured.ts`,
+    symbol: "withVisionObscuredCauses",
+    mod: visionObscuredMod,
+  },
+  {
+    file: `${A}/utils/visionObscured.ts`,
+    symbol: "VISION_OBSCURED_CAUSE_NAMES",
+    mod: visionObscuredMod,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
