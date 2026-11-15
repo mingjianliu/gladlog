@@ -130,6 +130,19 @@ describe("castBlockingAuraIntervals — a control stripped by the death (T101)",
     expect(ivs[0]!.to).toBe(13_000);
   });
 
+  it("an aura that ran out 40 ms before the strip burst keeps its end (codex 85-tk-L-T101-1c)", () => {
+    const u = unit(
+      [
+        on(LogEvent.SPELL_AURA_APPLIED, GARROTE_SILENCE, 10_000),
+        on(LogEvent.SPELL_AURA_REMOVED, GARROTE_SILENCE, 13_000),
+        ...strip(13_040),
+      ],
+      13_040,
+      14_040,
+    );
+    expect(blockingOf(u, GARROTE_SILENCE)[0]!.to).toBe(13_000);
+  });
+
   it("a REMOVED before the teardown is the control's own end", () => {
     const u = unit(
       [

@@ -152,12 +152,15 @@ export function teardownOfRemoval(
 /**
  * How close the unit's other aura removals must sit to a removal for it to
  * be part of the death's strip burst. Editorial (measured, not a game
- * constant; T101): 77310154 r0's dying mage lost 24 auras in 36 ms (19.371–
- * .407), the stripped Terror of the Skies at .377 among them.
+ * constant; T101): 77310154 r0's dying mage lost 21 auras in 7 ms (19.371–
+ * .378: 5, 4, 4, 8 per ms), the stripped Terror of the Skies at .377 among
+ * them, then 3 more at .407. A strip is that dense; an aura that ran out
+ * 40 ms before such a burst is no part of it (codex 85-tk-L-T101-1c: a
+ * 50 ms radius ran a silence that expired at 13.000 to a 14.040 death).
  */
-export const DEATH_STRIP_BURST_MS = 50;
+export const DEATH_STRIP_BURST_MS = 10;
 /** Other removals the burst must hold beside this one (editorial, T101):
- * one more aura ending in the same 50 ms is a coincidence a natural expiry
+ * one more aura ending in the same 10 ms is a coincidence a natural expiry
  * can make; two is the strip. */
 export const DEATH_STRIP_MIN_OTHERS = 2;
 
