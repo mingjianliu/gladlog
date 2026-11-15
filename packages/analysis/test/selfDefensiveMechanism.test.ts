@@ -21,6 +21,7 @@ import observed from "../src/data/observedSpellIdsGenerated.json";
 import { getEnglishSpellName } from "../src/data/spellEffectData";
 import {
   ENEMY_IMMUNITY_SAVE_AURAS,
+  ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
 } from "../src/data/spellIdLists";
 import { immunityMechanics } from "../src/data/spellSchools";
@@ -33,6 +34,7 @@ import {
 } from "../src/utils/enemyDefensives";
 import {
   carriesSelfReductionLabel,
+  redirectSavesItsCaster,
   SELF_SAVE_PURPOSE_LABEL,
   selfDefensiveLabelLegends,
   selfDefensiveLabelWords,
@@ -635,5 +637,26 @@ describe("[ENEMY DEF] — a pressed self defensive prints what it does (2026-10-
     expect(lines.map(body).filter((b) => !b.includes("("))).toEqual([
       "Renewing Blaze",
     ]);
+  });
+});
+
+describe("redirectSavesItsCaster (pipeline T109, ruling R43)", () => {
+  it("a redirect on oneself saves its caster only through a reduction, an absorb or a heal", () => {
+    // Roar of Sacrifice: its own 25 % on the carrier
+    expect(redirectSavesItsCaster("53480")).toBe(true);
+    // Master's Call, both player-cast ids: root / snare removal, no save
+    expect(redirectSavesItsCaster("272682")).toBe(false);
+    expect(redirectSavesItsCaster("1241871")).toBe(false);
+    // the ally-only grips never save their caster
+    expect(redirectSavesItsCaster("73325")).toBe(false);
+    expect(redirectSavesItsCaster("3411")).toBe(false);
+    // outside the redirect set: no answer from here
+    expect(redirectSavesItsCaster("186265")).toBe(false);
+  });
+
+  it("covers the whole redirect set — the members that save are exactly Roar", () => {
+    expect([...ENEMY_REDIRECT_SAVE_IDS].filter(redirectSavesItsCaster)).toEqual(
+      ["53480"],
+    );
   });
 });

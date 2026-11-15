@@ -182,6 +182,23 @@ export function selfDefensiveMechanism(
 }
 
 /**
+ * Whether a grip / redirect save (`ENEMY_REDIRECT_SAVE_IDS`) its caster cast
+ * on itself (or on no one) saves the caster: only when what it does on its
+ * caster (`selfDefensiveMechanism`) takes damage off or puts health back —
+ * a reduction, an absorb, a heal. A redirect on oneself redirects nothing.
+ * Roar of Sacrifice (its own 25 % reduction) does; Master's Call (root /
+ * snare removal, 1224810's 4 s) does not — pipeline T109 (fact13 D1, ruling
+ * R43, 2026-11-14: "拿掉"): cd-hoarded `crisisUnitSaved` listed a hunter's
+ * self-cast Master's Call beside Feign Death and Survival of the Fittest.
+ * The press line keeps its "(removes roots / snares)" label.
+ */
+export function redirectSavesItsCaster(spellId: string): boolean {
+  if (!ENEMY_REDIRECT_SAVE_IDS.has(spellId)) return false;
+  const kind = selfDefensiveMechanism(spellId)?.kind;
+  return kind === "reduction" || kind === "absorb" || kind === "heal";
+}
+
+/**
  * The words a mechanism's label opens with — the whole label for every kind
  * but two: an `absorb` goes on to what the shield absorbed and how long it
  * was up (`enemySaveEffectNote`), a `reduction` to how long its aura was.

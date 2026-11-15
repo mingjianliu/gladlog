@@ -181,6 +181,7 @@ import {
   shuffleRoundEndMs,
   threesDecidedMs,
 } from "../utils/roundEnd";
+import { redirectSavesItsCaster } from "../utils/selfDefensiveMechanism";
 import { isSchoolLockExemptCast } from "../utils/spellMechanics";
 import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import {
@@ -4116,7 +4117,10 @@ function teamPlayEvents(
                   name: "Alter Time (return)",
                 })),
               // fact1215 R11 (codex 20-F15-33): this unit's redirect saves
-              // — on no ledger — with whom they went to (none = itself)
+              // — on no ledger — with whom they went to (none = itself).
+              // T109 (ruling R43): one on itself is a save only when it
+              // takes damage off it (`redirectSavesItsCaster`: Roar of
+              // Sacrifice yes, Master's Call's root / snare freedom no)
               redirects: ((f.spellCastEvents ?? []) as any[])
                 .filter(
                   (e) =>
@@ -4126,11 +4130,16 @@ function teamPlayEvents(
                 .map((e) => ({
                   atS: (e.logLine.timestamp - combat.startTime) / 1000,
                   name: getEnglishSpellName(e.spellId, e.spellName),
+                  spellId: e.spellId as string,
                   onUnitId:
                     !e.destUnitId || /^0+$/.test(e.destUnitId)
                       ? f.id
                       : (e.destUnitId as string),
-                })),
+                }))
+                .filter(
+                  (r) =>
+                    r.onUnitId !== f.id || redirectSavesItsCaster(r.spellId),
+                ),
               // fix 7: the press's own aura (cast or effect id) broken on
               // this unit before that application's REMOVED
               brokenAtS: (spellId: string, castS: number) => {
