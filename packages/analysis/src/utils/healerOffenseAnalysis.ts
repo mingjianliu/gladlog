@@ -630,6 +630,8 @@ export function computeContestedTradeFacts(
   combat: {
     startTime: number;
     endTime: number;
+    /** the bracket, for the round's end (`roundEndMs`) */
+    startInfo?: { bracket?: string; zoneId?: unknown };
     /** the round's units, for "is the kicker CC'd" (F-C5b); absent = unknown */
     units?: Record<string, ICombatUnit>;
   },
@@ -727,7 +729,7 @@ export function computeContestedTradeFacts(
       matchStartMs,
       true,
     );
-    const enemyHealerTrinket = !hasPressablePvpTrinket(enemyHealer)
+    const enemyHealerTrinket = !hasPressablePvpTrinket(enemyHealer, combat)
       ? "none to press"
       : trinketAvailable
         ? "available"

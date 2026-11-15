@@ -478,7 +478,7 @@ function snapshotEnemy(
     defensivesAvailable: available,
     defensivesUnavailable: unavailable,
     trinketAvailable,
-    noPressableTrinket: !hasPressablePvpTrinket(enemy),
+    noPressableTrinket: !hasPressablePvpTrinket(enemy, combat),
     tier,
     wallsInHand,
   };

@@ -298,7 +298,14 @@ function killTierClaims(ctx: IRoundCtx): void {
     const healer = isHealerSpec(u.spec);
     const type = detectTrinketType(u);
     // the producer's own reading (pipeline T126: Adaptation is passive too)
-    if (!hasPressablePvpTrinket(u)) {
+    if (
+      !hasPressablePvpTrinket(u, {
+        startTime: ctx.start,
+        endTime: ctx.end,
+        startInfo: ctx.legacy.startInfo,
+        units: ctx.legacy.units,
+      })
+    ) {
       const N = "killTrinketUpNoTrinket";
       ctx.bump(N);
       const spent = [...Sr].some(([id, presses]) => {

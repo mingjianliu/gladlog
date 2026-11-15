@@ -1294,7 +1294,8 @@ export function extractKillAttempts(
           a.fromSeconds,
         );
       if (lockUntil !== undefined) a.trinketRacialLockUntilSeconds = lockUntil;
-      if (unit && !hasPressablePvpTrinket(unit)) a.noPressableTrinket = true;
+      if (unit && !hasPressablePvpTrinket(unit, combat))
+        a.noPressableTrinket = true;
     }
     if (a.opportunity.tier === "prime") {
       const unit = enemies.find((e) => e.id === a.targetUnitId);

@@ -15,7 +15,7 @@ import {
 
 const unitWith = (
   trinkets: string[] | null,
-  casts: string[] = [],
+  casts: Array<[string, number]> = [],
 ): ICombatUnit => {
   const equipment = trinkets
     ? Array.from({ length: 14 }, (_, i) => ({
@@ -24,9 +24,15 @@ const unitWith = (
     : undefined;
   return {
     info: equipment ? { equipment } : undefined,
-    spellCastEvents: casts.map((spellId) => ({ spellId })),
+    spellCastEvents: casts.map(([spellId, atMs]) => ({
+      spellId,
+      logLine: { timestamp: atMs },
+    })),
   } as unknown as ICombatUnit;
 };
+
+/** a round of 0–120 s (arena: the round ends at endTime) */
+const ROUND = { startTime: 0, endTime: 120_000 };
 
 const BADGE = trinketItemIds.badgeItemIds[0]!;
 const ADAPTATION = trinketItemIds.adaptationItemIds[0]!;
@@ -37,22 +43,30 @@ describe("hasPressablePvpTrinket", () => {
   it("Adaptation (badge + Adaptation, the audited slots) has nothing to press", () => {
     const u = unitWith(["270602", "270604"]);
     expect(detectTrinketType(u)).toBe("Adaptation");
-    expect(hasPressablePvpTrinket(u)).toBe(false);
-    expect(hasPressablePvpTrinket(unitWith([BADGE, ADAPTATION]))).toBe(false);
+    expect(hasPressablePvpTrinket(u, ROUND)).toBe(false);
+    expect(hasPressablePvpTrinket(unitWith([BADGE, ADAPTATION]), ROUND)).toBe(
+      false,
+    );
   });
   it("Relentless and two other trinkets have nothing to press (fact7 r5)", () => {
-    expect(hasPressablePvpTrinket(unitWith([BADGE, RELENTLESS]))).toBe(false);
-    expect(hasPressablePvpTrinket(unitWith([BADGE, "1"]))).toBe(false);
+    expect(hasPressablePvpTrinket(unitWith([BADGE, RELENTLESS]), ROUND)).toBe(
+      false,
+    );
+    expect(hasPressablePvpTrinket(unitWith([BADGE, "1"]), ROUND)).toBe(false);
   });
   it("a Medallion, or unknown equipment, can be pressed", () => {
-    expect(hasPressablePvpTrinket(unitWith([BADGE, MEDALLION]))).toBe(true);
-    expect(hasPressablePvpTrinket(unitWith(null))).toBe(true);
+    expect(hasPressablePvpTrinket(unitWith([BADGE, MEDALLION]), ROUND)).toBe(
+      true,
+    );
+    expect(hasPressablePvpTrinket(unitWith(null), ROUND)).toBe(true);
   });
-  it("a logged Medallion press overrides a stale item list", () => {
-    expect(
-      hasPressablePvpTrinket(
-        unitWith([BADGE, ADAPTATION], [MEDALLION_SPELL_ID]),
-      ),
-    ).toBe(true);
+  it("a Medallion press inside the round overrides a stale item list", () => {
+    const pressed = (atMs: number) =>
+      unitWith([BADGE, ADAPTATION], [[MEDALLION_SPELL_ID, atMs]]);
+    expect(hasPressablePvpTrinket(pressed(60_000), ROUND)).toBe(true);
+    // codex 85-tk-M-T126-1: a press after the round's end (a Solo Shuffle
+    // unit's casts run on past the deciding death) says nothing of it
+    expect(hasPressablePvpTrinket(pressed(125_000), ROUND)).toBe(false);
+    expect(hasPressablePvpTrinket(pressed(-1), ROUND)).toBe(false);
   });
 });
