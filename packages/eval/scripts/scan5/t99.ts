@@ -11,9 +11,11 @@
  *    second to its end (its `| Ns`, else its `after Ns`, else
  *    `FALLBACK_SPAN_S`, plus a second for the floor). A row is a press when
  *    its id has a cooldown of its own in DB2, or DB2 does not know it. A
- *    violation when N is more than the presses (the clause counted a row
- *    that is no button). The window is wide on purpose: a press in a
- *    neighbouring control only hides a violation, never makes one.
+ *    violation when N is more than the presses and the window holds such a
+ *    sub-spell row (the clause counted a row that is no button). The window
+ *    is wide on purpose: a press in a neighbouring control only hides a
+ *    violation, never makes one; a count the window reads short with no
+ *    sub-spell row in it is not this class.
  *    Kind = X.
  */
 import {
@@ -27,7 +29,7 @@ export const CHECKS = ["pressedDuringSubSpell"] as const;
 
 const LINE =
   /^(\d+:\d{2})\s+\[(?:CC ON TEAM|SILENCE)\]\s+.*\| pressed during it: (.+)$/;
-const ITEM = /^(.+) ×(\d+)$/;
+const ITEMS = /(.+?) ×(\d+)(?:, |$)/g;
 /** a line that prints no span of its own */
 const FALLBACK_SPAN_S = 12;
 
@@ -50,9 +52,8 @@ export function run(ctx: IRoundCtx): void {
       Number(/ after (\d+)s/.exec(l)?.[1] ?? NaN) ||
       FALLBACK_SPAN_S;
     const to = from + span + 1;
-    for (const raw of m[2]!.split(", ")) {
-      const it = ITEM.exec(raw.trim());
-      if (!it) continue;
+    // `X ×N` items; a name may hold a comma (`Invoke Chi-Ji, the Red Crane`)
+    for (const it of m[2]!.matchAll(ITEMS)) {
       const name = it[1]!;
       const n = Number(it[2]!);
       ctx.bump(C);
@@ -63,8 +64,10 @@ export function run(ctx: IRoundCtx): void {
           nameOf(String(f.spellId), f.spellName) === name,
       );
       const presses = rows.filter((f) => isButton(String(f.spellId)));
-      if (n <= presses.length) continue;
       const sub = rows.filter((f) => !isButton(String(f.spellId)));
+      // only a count the sub-spell rows explain: a window this scan reads
+      // short (a line's span is printed in whole seconds) is not this class
+      if (n <= presses.length || sub.length === 0) continue;
       ctx.violate(
         C,
         name,
