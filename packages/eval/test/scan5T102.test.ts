@@ -39,7 +39,7 @@ const aura = (
   destUnitId: "u",
 });
 
-function scan(sec: number, cc: string, unit: any): number {
+function scan(sec: number, cc: string, unit: any, roundEndS = 600): number {
   let n = 0;
   const units = [
     { id: "u", reaction: 1, ...unit },
@@ -51,6 +51,7 @@ function scan(sec: number, cc: string, unit: any): number {
   run({
     lines: [`  ${mm}:${ss}  [RES] rdy:—  cc:${cc}`],
     start: START,
+    roundEndAt: at(roundEndS),
     units,
     unitOfPid: (pid: string) => (pid === "1" ? units[0] : undefined),
     bump: () => {},
@@ -97,5 +98,30 @@ describe("resCcConcurrentDropped", () => {
       ],
     };
     expect(scan(30, "1/Frost Nova-<1s[root]", u)).toBe(0);
+  });
+
+  it("matches by the producer's rounding: a wrong `1s` does not cover the 1.8 s Nova (codex 85-tk-L-T102-1b #1)", () => {
+    const u = {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, "Frost Nova", 8, "e1"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, "Frost Nova", 11.1, "e1"),
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, "Frost Nova", 9, "e2"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, "Frost Nova", 11.8, "e2"),
+      ],
+    };
+    expect(scan(10, "1/Frost Nova-1s[root]", u)).toBe(1);
+    expect(scan(10, "1/Frost Nova-2s[root]", u)).toBe(0);
+  });
+
+  it("the round's end bounds every instance (codex 85-tk-L-T102-1b #2)", () => {
+    const u = {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, "Frost Nova", 8, "e1"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, "Frost Nova", 11.5, "e1"),
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, "Frost Nova", 9, "e2"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, "Frost Nova", 12.5, "e2"),
+      ],
+    };
+    expect(scan(10, "1/Frost Nova-1s[root]", u, 11.1)).toBe(0);
   });
 });

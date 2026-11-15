@@ -18,13 +18,16 @@
  *    entry of kind K (`[kick]` / `[root]` / `[disarm]`) for a unit while the
  *    log holds another instance of K on that unit at t that the row leaves
  *    out. Each listed entry stands for one active instance of its name
- *    (the one whose remaining is nearest the rendered one), so a second
+ *    (the one whose remaining renders as the entry's through the producer's
+ *    `resCcRemainingText`, else the nearest), so a second
  *    same-name instance is not covered by the first. For a kick, a lockout
  *    left over counts with more than 0.2 s left. For a root or a disarm,
  *    one counts when it outlasts the listed one by more than 0.2 s. A root
  *    or disarm aura with no end row runs its official length; with none it
- *    is left out. A SPELL_INTERRUPT row the log wrote twice is one. Kind = K.
+ *    is left out. Every instance ends by the round's end (`roundEndAt`), as
+ *    the analysis clips it. A SPELL_INTERRUPT row the log wrote twice is one. Kind = K.
  */
+import { resCcRemainingText } from "@gladlog/analysis/src/context/resLedgerPrune";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   disarmSpellIds,
@@ -51,9 +54,10 @@ const ENTRY_RE =
 /** an unlisted instance ending this much later than what was listed is a
  * drop; below it the log and the analysis's lengths may differ by rounding */
 const SLACK_MS = 200;
-/** the rendered remaining (`resCcRemainingText`: whole seconds, `<1s`) */
-const remainingMsOf = (t: string): number =>
-  t === "<1s" ? 500 : Number(t.slice(0, -1)) * 1000 + 500;
+/** the rendered remaining's whole seconds (`resCcRemainingText`:
+ * `Math.round`, `<1s` below one) */
+const renderedS = (t: string): number =>
+  t === "<1s" ? 0 : Number(t.slice(0, -1));
 const BROKEN = (e: string) =>
   e === "SPELL_AURA_BROKEN" || e === "SPELL_AURA_BROKEN_SPELL";
 
@@ -129,7 +133,7 @@ export function run(ctx: IRoundCtx): void {
     if (!m || sec === undefined) continue;
     const ms = ctx.start + sec * 1000;
     // listed entries per (pid, kind): name and rendered remaining
-    const listed = new Map<string, Array<{ name: string; leftMs: number }>>();
+    const listed = new Map<string, Array<{ name: string; text: string }>>();
     for (const raw of m[1]!.split(",")) {
       const e = ENTRY_RE.exec(raw.trim());
       if (!e || !e[4]) continue;
@@ -137,7 +141,7 @@ export function run(ctx: IRoundCtx): void {
       const key = `${e[1]}|${kind}`;
       listed.set(key, [
         ...(listed.get(key) ?? []),
-        { name: e[2]!, leftMs: remainingMsOf(e[3]!) },
+        { name: e[2]!, text: e[3]! },
       ]);
     }
     for (const [key, entries] of listed) {
@@ -147,23 +151,37 @@ export function run(ctx: IRoundCtx): void {
       ctx.bump(C);
       let insts = cache.get(unit.id);
       if (!insts) cache.set(unit.id, (insts = instancesOf(ctx, unit)));
-      const active = insts.filter(
-        (iv) => iv.kind === kind && iv.from <= ms && ms < iv.to,
-      );
-      // each listed entry stands for one active instance of its name, the
-      // one whose remaining is nearest its rendered one; a same-name
+      // the round's end bounds every instance, as the analysis clips them
+      // (codex 85-tk-L-T102-1b #2: a Solo Shuffle death at 11.1 s)
+      const active = insts
+        .map((iv) => ({ ...iv, to: Math.min(iv.to, ctx.roundEndAt) }))
+        .filter((iv) => iv.kind === kind && iv.from <= ms && ms < iv.to);
+      // each listed entry stands for one active instance of its name: the
+      // one whose remaining renders as the entry's (the producer's own
+      // formatter, codex 85-tk-L-T102-1b #1), else the nearest; a same-name
       // instance left over is not represented (codex 85-tk-L-T102-1 #2)
       const unmatched = [...active];
       const matched: IInst[] = [];
+      const leftS = (iv: IInst) => (iv.to - ms) / 1000;
       for (const en of entries) {
-        let best = -1;
-        for (let i = 0; i < unmatched.length; i++) {
-          if (unmatched[i]!.name !== en.name) continue;
-          const d = Math.abs(unmatched[i]!.to - ms - en.leftMs);
-          if (best < 0 || d < Math.abs(unmatched[best]!.to - ms - en.leftMs))
-            best = i;
-        }
-        if (best >= 0) matched.push(...unmatched.splice(best, 1));
+        const same = unmatched
+          .map((iv, i) => ({ iv, i }))
+          .filter((x) => x.iv.name === en.name);
+        const exact = same.find(
+          (x) => resCcRemainingText(leftS(x.iv)) === en.text,
+        );
+        const pick =
+          exact ??
+          same.reduce<(typeof same)[number] | undefined>(
+            (b, x) =>
+              !b ||
+              Math.abs(leftS(x.iv) - renderedS(en.text)) <
+                Math.abs(leftS(b.iv) - renderedS(en.text))
+                ? x
+                : b,
+            undefined,
+          );
+        if (pick) matched.push(...unmatched.splice(pick.i, 1));
       }
       // a kick: every lockout is listed; a root / disarm: the longest one
       const listedEnd = Math.max(...matched.map((iv) => iv.to));
