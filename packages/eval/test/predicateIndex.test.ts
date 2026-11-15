@@ -2509,6 +2509,14 @@ const INDEX: PredicateRow[] = [
     symbol: "ENEMY_PROC_SAVE_NAMES",
     mod: enemyDefensives,
   },
+  // pipeline T109 (ruling R43): a self-cast redirect saves its caster only
+  // through a reduction / absorb / heal — cd-hoarded crisisUnitSaved and
+  // scan5/t109 read it
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "redirectSavesItsCaster",
+    mod: selfDefensiveMechanismMod,
+  },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkEnemyDefSaveEffect",
