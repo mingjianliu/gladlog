@@ -18,7 +18,7 @@
  *
  * 2026-09-25 (reliability audit B3): the eligibility / ready / entered tests
  * are no longer copied here — the scan runs the product's own
- * `mergeHealerCcWindows` + `syncWindowEligible` + `evaluateSyncWindow`
+ * `syncWindowLocks` (merged, facts-only locks excluded — T110) + `syncWindowEligible` + `evaluateSyncWindow`
  * (cooldownTiming.ts): one continuous lock = one window (B3ii), a ready CD
  * needs an owner free for ≥ REACTION_WINDOW_S of it (B3i), and a burst still
  * active at the lock counts as entered (B3iii); the DR labels the windows are
@@ -37,10 +37,10 @@ import {
   countsAsTeamBurst,
   enemyHealerCcWindows,
   evaluateSyncWindow,
-  mergeHealerCcWindows,
   syncWindowCdFor,
   syncWindowEligible,
   syncWindowInRound,
+  syncWindowLocks,
   syncWindowRoundEndS,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
@@ -158,7 +158,7 @@ async function scan(): Promise<void> {
         .sort((a: number, b: number) => a - b);
       let windows: any[];
       try {
-        windows = mergeHealerCcWindows(
+        windows = syncWindowLocks(
           enemyHealerCcWindows(friends, enemies, combat),
         );
       } catch {

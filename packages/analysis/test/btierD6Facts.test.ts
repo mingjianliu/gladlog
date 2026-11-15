@@ -88,6 +88,22 @@ describe("missed-sync-window enteredNextLock (B2-①)", () => {
     );
   });
 
+  it("T110: a facts-only lock never bridges two real ones into a lock the search skips (codex 85-tk-N-T110-1 #1)", () => {
+    const out = missedSyncWindowEvents(
+      [
+        lock(94, 100, "Seduction"),
+        { ...lock(99.5, 102.5, "Sin and Punishment"), factOnly: true as const },
+        lock(101, 105, "Fear"),
+        lock(106, 110, "Psychic Scream"),
+      ],
+      [offensive("Kingsbane", [104.2])],
+      probes(),
+    );
+    expect(out[0]!.facts["enteredNextLock"]).toBe(
+      "Kingsbane at 104 in the 101–105 lock (Fear)",
+    );
+  });
+
   it("T110: a facts-only lock opens no row and lengthens none past the floor", () => {
     expect(
       missedSyncWindowEvents(

@@ -118,8 +118,8 @@
 import {
   castEntersWindow,
   enemyHealerCcWindows,
-  mergeHealerCcWindows,
   syncWindowCdFor,
+  syncWindowLocks,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { HEALER_CC_MIN_S } from "@gladlog/analysis/src/context/observedConsequences";
 import {
@@ -243,7 +243,7 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
 const SYNC_ROW =
   /id=missed-sync-window:\S+ type=missed-sync-window t=(\d+)s [^\n]*?facts=\{t=(\d+), windowEndT=(\d+), healer=([^,}]*)/g;
 
-/** A producer lock as the scan holds it (`mergeHealerCcWindows`). */
+/** A producer lock as the scan holds it (`syncWindowLocks`: merged, facts-only locks excluded — T110). */
 export interface ISyncRowLock {
   fromSeconds: number;
   toSeconds: number;
@@ -356,9 +356,7 @@ export function run(ctx: IRoundCtx): void {
   const enemies = ctx.players.filter((u) => u.reaction !== ctx.owner.reaction);
   let locks: ISyncRowLock[] = [];
   try {
-    locks = mergeHealerCcWindows(
-      enemyHealerCcWindows(side, enemies, ctx.legacy),
-    );
+    locks = syncWindowLocks(enemyHealerCcWindows(side, enemies, ctx.legacy));
   } catch {
     locks = [];
   }

@@ -8,13 +8,16 @@
  * Scream)".
  *
  * The healer's locks are the producer's own selection
- * (`enemyHealerCcWindows` over the round's players, merged as
- * `mergeHealerCcWindows` merges them — never replayed here):
+ * (`enemyHealerCcWindows` over the round's players, and the locks a press
+ * after a window can enter, `enteredLockCandidates` — never replayed here):
  *
  *  - `enteredNextSkipsLock`: an `enteredNextLock` entry "X at P in the A–B
  *    lock (…)" of a row whose lock ended at second E, while a producer lock on
- *    that healer begins after E and before A and the press at P lies inside
- *    it or in the 2 s before it (the entered test's lead, `SYNC_ENTER_LEAD_S`).
+ *    that healer begins after E and before A and the press lies inside it or
+ *    in the 2 s before it (the entered test's lead, `SYNC_ENTER_LEAD_S`) —
+ *    read at the press's own instant: every press of X by our side in the
+ *    printed second P (codex 85-tk-N-T110-1 #3: a 105.9 press printed 105 is
+ *    not inside a horror ending 105.1).
  *  - `healerLockOmitted` / `healerLockUnbacked`: a `[KILL WINDOW]` /
  *    `[VULNERABLE]` line's "enemy healer hard-CC'd in window" (the kill
  *    window's `healerLocked`, read off the same unmerged locks) against the
@@ -26,11 +29,11 @@
  */
 import {
   enemyHealerCcWindows,
-  mergeHealerCcWindows,
+  enteredLockCandidates,
   SYNC_ENTER_LEAD_S,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 
-import type { IRoundCtx } from "./ctx";
+import { ev, type IRoundCtx, nameOf, SUCCESS, tsOf } from "./ctx";
 
 export const CHECKS = [
   "enteredNextSkipsLock",
@@ -54,7 +57,7 @@ const secOfClock = (mss: string): number => {
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
   let raw: ReturnType<typeof enemyHealerCcWindows> | undefined;
-  let merged: ReturnType<typeof mergeHealerCcWindows> | undefined;
+  let merged: ReturnType<typeof enteredLockCandidates> | undefined;
   const rawLocks = () => {
     if (raw) return raw;
     const side = ctx.owner.reaction;
@@ -67,7 +70,21 @@ export function run(ctx: IRoundCtx): void {
     }
     return raw;
   };
-  const locks = () => (merged ??= mergeHealerCcWindows(rawLocks()));
+  const locks = () => (merged ??= enteredLockCandidates(rawLocks()));
+  // our side's presses of a button in a printed second, at their own instant
+  const side = () =>
+    ctx.players.filter((u: any) => u.reaction === ctx.owner.reaction);
+  const pressesIn = (name: string, s: number): number[] =>
+    side().flatMap((u: any) =>
+      ((u.spellCastEvents ?? []) as any[])
+        .filter(
+          (c) =>
+            ev(c) === SUCCESS &&
+            nameOf(c.spellId, c.spellName ?? "") === name &&
+            Math.floor((tsOf(c) - ctx.start) / 1000) === s,
+        )
+        .map((c) => (tsOf(c) - ctx.start) / 1000),
+    );
   for (const line of ctx.lines) {
     const k = KW_RE.exec(line);
     if (!k || !KW_FACTS_RE.test(line)) continue;
@@ -115,15 +132,21 @@ export function run(ctx: IRoundCtx): void {
       ctx.bump(C);
       const pressS = Number(e[2]);
       const namedFrom = Number(e[3]);
-      // the press is printed floored: it lies in [P, P + 1)
-      const skipped = locks().find(
-        (l) =>
-          l.healerName === healer &&
-          l.fromSeconds > endS &&
-          Math.floor(l.fromSeconds) < namedFrom &&
-          pressS + 1 > l.fromSeconds - SYNC_ENTER_LEAD_S &&
-          pressS <= l.toSeconds,
-      );
+      const presses = pressesIn(e[1]!, pressS);
+      // every press it can be was inside the skipped lock or its lead
+      const skipped =
+        presses.length === 0
+          ? undefined
+          : locks().find(
+              (l) =>
+                l.healerName === healer &&
+                l.fromSeconds > endS &&
+                Math.floor(l.fromSeconds) < namedFrom &&
+                presses.every(
+                  (t) =>
+                    t >= l.fromSeconds - SYNC_ENTER_LEAD_S && t <= l.toSeconds,
+                ),
+            );
       if (skipped)
         ctx.violate(
           C,

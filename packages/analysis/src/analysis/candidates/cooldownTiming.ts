@@ -495,6 +495,35 @@ export function mergeHealerCcWindows<
   return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
 }
 
+type LockWindow = Parameters<typeof mergeHealerCcWindows>[0][number] & {
+  factOnly?: true;
+};
+
+/** The locks a missed-sync window opens on (T110, ruling R42 A): the merged
+ * locks of the windows that are not facts-only. A facts-only lock opens no
+ * window and joins none — it could lengthen one past the eligibility floor
+ * or bridge two. `missedSyncWindowEvents`, the reference scan
+ * (`syncWindowScan`) and scan5/fact10 read this one set. */
+export function syncWindowLocks<W extends LockWindow>(
+  windows: readonly W[],
+): Array<W & MergedLockParts> {
+  return mergeHealerCcWindows(windows.filter((w) => !w.factOnly));
+}
+
+/** The locks a cooldown pressed after a window can have entered
+ * (`enteredNextLock`): the sync locks and, never merged into them, the
+ * facts-only ones (merged among themselves) — a horror bridging a Seduction
+ * and a Fear must not turn them into one lock that starts before the
+ * window's end and so is skipped (codex 85-tk-N-T110-1 #1). By start. */
+export function enteredLockCandidates<W extends LockWindow>(
+  windows: readonly W[],
+): Array<W & MergedLockParts> {
+  return [
+    ...syncWindowLocks(windows),
+    ...mergeHealerCcWindows(windows.filter((w) => w.factOnly)),
+  ].sort((a, b) => a.fromSeconds - b.fromSeconds);
+}
+
 /**
  * The round end the sync-window work cuts an enemy-healer lock at, seconds
  * since the match start: the timeline's round end (`utils/roundEnd.ts` — a
@@ -1292,8 +1321,8 @@ export function missedSyncWindowEvents(
   // T110 (ruling R42 A): a facts-only lock opens no window and joins none
   // (it could lengthen one past the eligibility floor); it is a lock a
   // cooldown can enter (`enteredNextLock`, below)
-  const merged = mergeHealerCcWindows(ccWindows.filter((w) => !w.factOnly));
-  const mergedWithFacts = mergeHealerCcWindows(ccWindows);
+  const merged = syncWindowLocks(ccWindows);
+  const nextLocks = enteredLockCandidates(ccWindows);
   const candidates: Array<{
     w: (typeof merged)[number];
     ready: string[];
@@ -1400,7 +1429,7 @@ export function missedSyncWindowEvents(
         // the Seduction, went into the Kidney Shot→Fear lock that followed.
         const afterEnd = (s: number) =>
           probes.playableEndS !== undefined && s > probes.playableEndS;
-        const next = mergedWithFacts.find((n) => n.fromSeconds > w.toSeconds);
+        const next = nextLocks.find((n) => n.fromSeconds > w.toSeconds);
         const enteredNext =
           next && !afterEnd(next.fromSeconds)
             ? readyCds.flatMap((cd) => {
