@@ -20,9 +20,15 @@
  * `NOT_READY_REASONS`, 72–78 % of all refused presses, key repeat for the most
  * part) and any reason outside the table below.
  */
-import { getEnglishSpellName } from "../data/spellEffectData";
-import { cdIsProcOnly } from "../utils/cooldowns";
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+
+import {
+  cdIsProcOnly,
+  isPressOfCooldown,
+  talentReplacementsOf,
+} from "../utils/cooldowns";
 import type { CastFailedEvent } from "../utils/rawStreams";
+import { unitLogEpochMs } from "../utils/talents";
 
 /** `control` = a loss of control (stun, fear, incapacitate, polymorph,
  *  banish, …), stated on `[CC ON TEAM]`; `silence` = stated on `[SILENCE]`
@@ -352,7 +358,7 @@ export function ownerControlPressKit(
  */
 export function ownerPressesRejectedDuring<W>(
   castFailed: readonly CastFailedEvent[],
-  ownerId: string,
+  owner: ICombatUnit,
   kit: ReadonlyMap<string, string>,
   kind: ControlRejectKind,
   windows: readonly W[],
@@ -362,6 +368,7 @@ export function ownerPressesRejectedDuring<W>(
 ): Map<W, IPressedDuringControl[]> {
   const out = new Map<W, IPressedDuringControl[]>();
   if (windows.length === 0 || kit.size === 0) return out;
+  const ownerId = owner.id;
   const ms = (s: number) => Math.round(s * 1000);
   const ordered = windows
     .map((w) => {
@@ -369,17 +376,29 @@ export function ownerPressesRejectedDuring<W>(
       return { w, fromMs: ms(span.fromSeconds), toMs: ms(span.toSeconds) };
     })
     .sort((a, b) => a.fromMs - b.fromMs);
-  // a kit cooldown by its id, else by the name the press prints: a refused
-  // press logs the button's own id, which for a variant is not the ledger's
-  // (Stasis, Alter Time, Imprison, Stampeding Roar, Lay on Hands … — 23
-  // lines short on the 605 capture, by refusedPressMechanic's two-way read)
-  const byName = new Set(kit.values());
+  // a kit cooldown's press as the ledger reads one (`isPressOfCooldown`, the
+  // kit's `[UNUSED — pressed N×, refused: …]` reading too): its own id, its
+  // canonical id, a talent's pressable replacement, or a same-named variant
+  // with a cooldown of its own — a refused press logs the button's own id,
+  // which for a variant is not the ledger's (Stasis, Alter Time, Imprison,
+  // Stampeding Roar, Lay on Hands …). A same-named triggered sub-spell with
+  // no cooldown is no press (T99, fact13 D18: The Hunt's impact 370966
+  // refused while stunned, its button 370965 had gone out).
+  const replacements = talentReplacementsOf(owner);
+  // the round's date, once (a variant's alias is dated)
+  const logEpochMs = unitLogEpochMs(owner);
+  const kitEntries = [...kit];
   const kitNameOf = (h: CastFailedEvent): string | undefined => {
     const id = String(h.spellId);
     const own = kit.get(id);
     if (own !== undefined) return own;
-    const name = getEnglishSpellName(id, h.spellName);
-    return byName.has(name) ? name : undefined;
+    const row = {
+      spellId: id,
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: logEpochMs },
+    };
+    return kitEntries.find(([cdId, cdName]) =>
+      isPressOfCooldown(row, cdId, cdName, replacements, owner),
+    )?.[1];
   };
   const hits = castFailed
     .filter(

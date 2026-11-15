@@ -111,7 +111,7 @@ export function emitTrinketCcOnTeamEntries(
       rawStreams?.available && summary.playerName === owner.name
         ? ownerPressesRejectedDuring(
             rawStreams.castFailed,
-            owner.id,
+            owner,
             ownerControlPressKit(ownerCDs),
             "control",
             // a dispel-backlash SILENCE renders as [CC ON TEAM] too, but it
@@ -135,7 +135,7 @@ export function emitTrinketCcOnTeamEntries(
       rawStreams?.available && summary.playerName === owner.name
         ? ownerPressesRejectedDuring(
             rawStreams.castFailed,
-            owner.id,
+            owner,
             ownerControlPressKit(ownerCDs),
             "silence",
             summary.ccInstances.filter(

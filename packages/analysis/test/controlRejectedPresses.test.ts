@@ -30,8 +30,10 @@ import { emitSilenceEntries } from "../src/context/timelineSections/silence";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { IPlayerCCTrinketSummary } from "../src/utils/ccTrinketAnalysis";
 import type { CastFailedEvent, RawStreams } from "../src/utils/rawStreams";
+import { makeUnit } from "./ported/testHelpers";
 
 const OWNER = "Player-57-0DFEE1C9";
+const ownerUnit = makeUnit(OWNER, { name: "Owner" });
 const STUNNED_ZH = "无法在昏迷时那样做";
 const FADE = 586;
 const SCREAM = 8122;
@@ -120,7 +122,7 @@ describe("ownerPressesRejectedDuring", () => {
   it("counts the kit's cooldowns refused for the control, in order of first press; another button (Power Word: Shield) is not a major cooldown", () => {
     const got = ownerPressesRejectedDuring(
       failed,
-      OWNER,
+      ownerUnit,
       kit,
       "control",
       [stun],
@@ -147,7 +149,7 @@ describe("ownerPressesRejectedDuring", () => {
         press(22.2, FADE, "尚未恢复"),
         press(22.4, FADE, "Out of range"),
       ],
-      OWNER,
+      ownerUnit,
       kit,
       "control",
       [stun],
@@ -159,7 +161,7 @@ describe("ownerPressesRejectedDuring", () => {
   it("one refused press is stated — there is no count threshold", () => {
     const got = ownerPressesRejectedDuring(
       [press(23, DESPERATE_PRAYER, "Can't do that while stunned")],
-      OWNER,
+      ownerUnit,
       kit,
       "control",
       [stun],
@@ -177,7 +179,7 @@ describe("ownerPressesRejectedDuring", () => {
         press(27.0, FADE, STUNNED_ZH),
         press(23, FADE, STUNNED_ZH, "Player-1-OTHER"),
       ],
-      OWNER,
+      ownerUnit,
       kit,
       "control",
       [stun],
@@ -191,7 +193,7 @@ describe("ownerPressesRejectedDuring", () => {
     const w = { from: 5.137, to: 5.137 + 0.3 };
     const got = ownerPressesRejectedDuring(
       [press(5.137, FADE, STUNNED_ZH), press(5.437, FADE, STUNNED_ZH)],
-      OWNER,
+      ownerUnit,
       kit,
       "control",
       [w],
@@ -207,7 +209,7 @@ describe("ownerPressesRejectedDuring", () => {
     ];
     const asControl = ownerPressesRejectedDuring(
       failedBoth,
-      OWNER,
+      ownerUnit,
       kit,
       "control",
       [stun],
@@ -215,7 +217,7 @@ describe("ownerPressesRejectedDuring", () => {
     );
     const asSilence = ownerPressesRejectedDuring(
       failedBoth,
-      OWNER,
+      ownerUnit,
       kit,
       "silence",
       [stun],
@@ -234,7 +236,7 @@ describe("ownerPressesRejectedDuring", () => {
         press(25, FADE, STUNNED_ZH), // inside both
         press(28, FADE, "Can't do that while fleeing"), // the fear alone
       ],
-      OWNER,
+      ownerUnit,
       kit,
       "control",
       [fear, stun],
@@ -251,7 +253,7 @@ describe("ownerPressesRejectedDuring", () => {
   it("two kit ids that print one name are one item of the clause", () => {
     const got = ownerPressesRejectedDuring(
       [press(22, 51514, STUNNED_ZH), press(23, 210873, STUNNED_ZH)],
-      OWNER,
+      ownerUnit,
       new Map([
         ["51514", "Hex"],
         ["210873", "Hex"],

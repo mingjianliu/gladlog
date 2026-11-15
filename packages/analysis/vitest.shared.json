@@ -302,6 +302,7 @@
     "test/t03Troughs.test.ts",
     "test/t12WindowBoundaries.test.ts",
     "test/t98WallCopyPress.test.ts",
+    "test/t99PressedDuringSubSpell.test.ts",
     "test/talentGrantedButtons.test.ts",
     "test/talentNames.test.ts",
     "test/talentOwnership.test.ts",

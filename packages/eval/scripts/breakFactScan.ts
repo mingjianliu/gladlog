@@ -92,6 +92,7 @@ import {
 } from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import {
+  effectiveCooldownSeconds,
   getEnglishSpellName,
   spellEffectData,
 } from "@gladlog/analysis/src/data/spellEffectData";
@@ -779,11 +780,17 @@ function runRound(ctx: IContext): void {
     // the name the kit prints a press under: the roster's own (231895 is
     // `Crusade` there and `Avenging Wrath` in getEnglishSpellName — codex
     // 20-F15-28), else the English name
-    const kitName = (x: { spellId: number | string; spellName?: string }) =>
-      [
-        spellEffectData[String(x.spellId)]?.name,
-        getEnglishSpellName(String(x.spellId), x.spellName ?? ""),
+    // — and only a button: a same-named id DB2 gives no cooldown of its own
+    // is a triggered sub-spell, no press (T99: The Hunt's impact 370966)
+    const kitName = (x: { spellId: number | string; spellName?: string }) => {
+      const id = String(x.spellId);
+      if (spellEffectData[id] && !((effectiveCooldownSeconds(id) ?? 0) > 0))
+        return undefined;
+      return [
+        spellEffectData[id]?.name,
+        getEnglishSpellName(id, x.spellName ?? ""),
       ].find((n): n is string => !!n && kit.has(n));
+    };
     for (const u of units) {
       const me = pidOf.get(u.name);
       if (!me || me.enemy || u.name !== ownerName) continue;

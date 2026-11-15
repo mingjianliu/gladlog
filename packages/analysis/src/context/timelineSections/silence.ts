@@ -111,7 +111,7 @@ export function emitSilenceEntries(
         rawStreams?.available && side === "friendly" && u.id === owner.id
           ? ownerPressesRejectedDuring(
               rawStreams.castFailed,
-              owner.id,
+              owner,
               ownerControlPressKit(ownerCDs),
               "silence",
               intervals,

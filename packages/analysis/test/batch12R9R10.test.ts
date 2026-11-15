@@ -25,6 +25,7 @@ import {
   ccEndedByCasterInterrupt,
   formatCcLoggedEnd,
 } from "../src/utils/ccTrinketAnalysis";
+import { makeUnit } from "./ported/testHelpers";
 
 const T0 = 1_000_000;
 
@@ -44,7 +45,7 @@ describe("R10 — a refused press goes to the control its reason names", () => {
   const run = (presses: any[]) =>
     ownerPressesRejectedDuring(
       presses as any,
-      "O",
+      makeUnit("O"),
       new Map([["33206", "Pain Suppression"]]),
       "control",
       [stun, poly],
@@ -77,7 +78,7 @@ describe("R10 — a refused press goes to the control its reason names", () => {
         // a button outside the kit is still not listed
         { unitGuid: "O", spellId: "8936", spellName: "Regrowth", tSeconds: 72, reason: "Can't do that while stunned" },
       ] as any,
-      "O",
+      makeUnit("O"),
       new Map([["77764", "Stampeding Roar"]]),
       "control",
       [stun],
