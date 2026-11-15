@@ -17,7 +17,10 @@
  *    the round holds no row of X at all.
  *  - `unnamedPresent`: a `[REJECTED]` line says "vision obscured" with no
  *    cause, while every one of the owner's vision-obscured refusals inside
- *    its span lies inside an obscuring aura on another unit (APPLIED → its
+ *    its span lies inside an obscuring aura on an enemy of the owner — an
+ *    aura-322 aura interferes with its holder's enemies' targeting, so an
+ *    aura row counts only on the owner's other side, here and for the two
+ *    checks above (APPLIED → its
  *    REMOVED, the official length without one) or inside a Smoke Bomb's
  *    official 5 s — a cause the line left out.
  */
@@ -46,9 +49,9 @@ export const CHECKS = [
 
 const VO = new Set(REJECT_REASONS["vision obscured"]);
 const REJECTED_RE =
-  /^(\d+:\d{2})\s+\[REJECTED\]\s+your (.+?) ×\d+ — vision obscured(?: \(([^()]+)\))?(?: \((\d+:\d{2})–(\d+:\d{2})\))?$/;
+  /^(\d+:\d{2})\s+\[REJECTED\]\s+your (.+?) ×\d+ — vision obscured(?: \(([^()0-9][^()]*)\))?(?: \((\d+:\d{2})–(\d+:\d{2})\))?$/;
 const STOPPED_RE =
-  /^(\d+:\d{2})\s+\[CAST STOPPED\]\s+.* refused ([\d.]+)s in: vision obscured \(([^()]+)\)/;
+  /^(\d+:\d{2})\s+\[CAST STOPPED\]\s+.* refused ([\d.]+)s in: vision obscured \(([^()0-9][^()]*)\)/;
 /** a cause bracket (a span bracket starts with a digit) */
 const NAMED_ANY_RE = /vision obscured \(([^()0-9][^()]*)\)/g;
 /** a findings-schema legend row of the menu prompt */
@@ -62,12 +65,19 @@ interface IMark {
   holder?: string;
 }
 
+/** both on a side (friendly 1 / hostile 2), and not the same one */
+const opposed = (a: unknown, b: unknown): boolean =>
+  (a === 1 || a === 2) && (b === 1 || b === 2) && a !== b;
+
 function marksOf(ctx: IRoundCtx): IMark[] {
   const out: IMark[] = [];
   for (const u of ctx.units) {
+    // an aura-322 aura interferes with its holder's ENEMIES' targeting: only
+    // one on the owner's other side can have obscured the owner's target
     const auras = ((u.auraEvents ?? []) as any[]).filter(
       (a) =>
         a.destUnitId === u.id &&
+        opposed(u.reaction, ctx.owner.reaction) &&
         VISION_OBSCURING_AURAS[String(a.spellId)] !== undefined,
     );
     auras.forEach((a, i) => {

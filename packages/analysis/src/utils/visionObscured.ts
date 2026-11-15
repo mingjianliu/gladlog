@@ -8,8 +8,10 @@
  * names no target, so the cause is read off the fight at the refusal's
  * instant, from official data (`visionObscuringAuraGenerated.ts`):
  *
- *  - an aura of DB2 aura 322 (MOD_INTERFERE_TARGETTING) up on a unit other
- *    than the caster — Burrow 409293 is the observed one — through
+ *  - an aura of DB2 aura 322 (MOD_INTERFERE_TARGETTING) up on a unit hostile
+ *    to the caster — Burrow 409293 is the observed one; it interferes with
+ *    its holder's enemies' targeting, so a friendly's Burrow is never what
+ *    obscured the caster's target (codex 85-tk-N-T108-1) — through
  *    `buildAuraIntervals`, the one aura pairing (a lost REMOVED is capped at
  *    the official length there);
  *  - else a Smoke Bomb area (the same-name area casts, 212182 / 359053; their
@@ -23,7 +25,7 @@
  * `extractCandidateFindings`), and `refusalWhy` / `ownerRejectRuns` read the
  * tag.
  */
-import type { ICombatUnit } from "@gladlog/parser-compat";
+import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
 import { spellEffectData } from "../data/spellEffectData";
 import {
@@ -70,6 +72,8 @@ export interface IObscuringWindow {
   name: string;
   /** the aura's holder; absent for an area, which obscures whoever is in it */
   holderId?: string;
+  /** the holder's reaction, for an aura */
+  holderReaction?: CombatUnitReaction;
   /** an aura on a unit (true) or an area cast (false) */
   onUnit: boolean;
 }
@@ -101,6 +105,7 @@ export function visionObscuringWindows(combat: CombatLike): IObscuringWindow[] {
             toS: iv.toS,
             name: VISION_OBSCURING_AURAS[iv.spellId]!,
             holderId: u.id,
+            holderReaction: u.reaction,
             onUnit: true,
           });
     for (const c of u.spellCastEvents ?? []) {
@@ -129,16 +134,31 @@ export function visionObscuringWindows(combat: CombatLike): IObscuringWindow[] {
   return out;
 }
 
-/** What obscured the target of `casterId`'s refusal at `tSeconds`: an
- * obscuring aura up on another unit, else a Smoke Bomb area still down;
- * undefined for neither. */
+const SIDES = new Set([
+  CombatUnitReaction.Friendly,
+  CombatUnitReaction.Hostile,
+]);
+/** Two units on opposite sides; a neutral or unknown reaction is neither. */
+const opposed = (
+  a: CombatUnitReaction | undefined,
+  b: CombatUnitReaction | undefined,
+): boolean =>
+  a !== undefined && b !== undefined && SIDES.has(a) && SIDES.has(b) && a !== b;
+
+/** What obscured the target of a refusal at `tSeconds` by a caster of
+ * reaction `casterReaction`: an obscuring aura up on a unit hostile to the
+ * caster (an unknown or neutral side admits no aura), else a Smoke Bomb area
+ * still down; undefined for neither. */
 export function visionObscuredCause(
   windows: readonly IObscuringWindow[],
-  casterId: string,
+  casterReaction: CombatUnitReaction | undefined,
   tSeconds: number,
 ): string | undefined {
   return windows.find(
-    (w) => w.holderId !== casterId && w.fromS <= tSeconds && tSeconds <= w.toS,
+    (w) =>
+      w.fromS <= tSeconds &&
+      tSeconds <= w.toS &&
+      (!w.onUnit || opposed(w.holderReaction, casterReaction)),
   )?.name;
 }
 
@@ -170,7 +190,11 @@ export function withVisionObscuredCauses<T extends RawStreams | undefined>(
   const windows = visionObscuringWindows(combat);
   const castFailed: CastFailedEvent[] = rawStreams.castFailed.map((h) => {
     if (!isVisionObscuredReason(h.reason)) return h;
-    const by = visionObscuredCause(windows, h.unitGuid, h.tSeconds);
+    const by = visionObscuredCause(
+      windows,
+      combat.units?.[h.unitGuid]?.reaction,
+      h.tSeconds,
+    );
     return by ? { ...h, obscuredBy: by } : h;
   });
   const out: RawStreams = { ...rawStreams, castFailed };

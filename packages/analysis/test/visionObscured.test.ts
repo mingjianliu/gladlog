@@ -157,6 +157,73 @@ describe("withVisionObscuredCauses", () => {
     ]);
   });
 
+  it("a friendly's Burrow is never the cause: the enemy Smoke Bomb is, or nothing (codex 85-tk-N-T108-1)", () => {
+    const combat = fight();
+    const ally = makeUnit("Player-F", {
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          BURROW,
+          T0 + 118_000,
+          "Player-F",
+          "Player-F",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          BURROW,
+          T0 + 130_000,
+          "Player-F",
+          "Player-F",
+          "BUFF",
+        ),
+      ],
+    });
+    const withAlly = {
+      ...combat,
+      units: { ...combat.units, [ally.id]: ally },
+    };
+    const tagged = withVisionObscuredCauses(
+      streams([row(119), row(121), row(129)]),
+      withAlly,
+    );
+    expect(tagged.castFailed.map((h) => h.obscuredBy)).toEqual([
+      undefined,
+      "Smoke Bomb",
+      undefined,
+    ]);
+  });
+
+  it("an enemy caster inside the owner's side's Burrow names it; an unknown caster names no aura", () => {
+    const combat = fight();
+    const ally = makeUnit("Player-F", {
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          BURROW,
+          T0 + 200_000,
+          "Player-F",
+          "Player-F",
+          "BUFF",
+        ),
+      ],
+    });
+    const withAlly = {
+      ...combat,
+      units: { ...combat.units, [ally.id]: ally },
+    };
+    const tagged = withVisionObscuredCauses(
+      streams([row(201, VO, "Player-E"), row(201, VO, "Creature-0-1")]),
+      withAlly,
+    );
+    expect(tagged.castFailed.map((h) => h.obscuredBy)).toEqual([
+      "Burrow",
+      undefined,
+    ]);
+  });
+
   it("copies rows, never writes them; a tagged stream passes through as it is", () => {
     const raw = streams([row(72.05)]);
     const combat = fight();
