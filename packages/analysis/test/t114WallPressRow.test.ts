@@ -230,3 +230,74 @@ describe("T114 — a wall's 'pressed Zs' is its press row", () => {
     );
   });
 });
+
+// Batch review 80-PIPE-75-B70b #1 (T114 meeting T124): Anti-Magic Zone's
+// aura 145629 is logged with no source. Burst opens 10 s, a teammate of the
+// target casts the zone at 15 s, the aura reaches the target at 19 s.
+describe("T114 — a source-less wall's press is its one caster's cast", () => {
+  const AMZ_CAST = "51052";
+  const AMZ_AURA = "145629";
+  const zoneAura = (event: LogEvent, s: number) => ({
+    ...makeAuraEvent(event, AMZ_AURA, at(s), "0000000000000000", "e1", "BUFF"),
+    srcUnitName: "nil",
+    spellName: "Anti-Magic Zone",
+  });
+  const hitWith = (casters: string[]) => {
+    const tgt = makeUnit("e1", {
+      name: "Pala",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      auraEvents: [
+        zoneAura(LogEvent.SPELL_AURA_APPLIED, 19),
+        zoneAura(LogEvent.SPELL_AURA_REMOVED, 21),
+      ],
+    });
+    const dks = casters.map((id) =>
+      makeUnit(id, {
+        name: `DK-${id}`,
+        spec: CombatUnitSpec.DeathKnight_Unholy,
+        reaction: CombatUnitReaction.Hostile,
+        info,
+        spellCastEvents: [
+          makeSpellCastEvent(
+            AMZ_CAST,
+            at(15),
+            "",
+            "",
+            id,
+            `DK-${id}`,
+            0,
+            "Anti-Magic Zone",
+          ),
+        ],
+      }),
+    );
+    const combat = {
+      startTime: T,
+      endTime: at(120),
+      units: Object.fromEntries([ret, tgt, ...dks].map((u) => [u.id, u])),
+    } as unknown as Combat;
+    return analyzeBurstLedger(
+      ret,
+      [],
+      [tgt, ...dks],
+      combat,
+    )[0]!.dominantTarget?.defensivesHit.find((d) => d.spellId === AMZ_AURA);
+  };
+  it("one teammate cast it: the press is that cast", () => {
+    expect(wallTimingPhrase(hitWith(["e3"]))).toBe(
+      "pressed 5.0s after the burst opened",
+    );
+  });
+  it("no cast resolves: no press is claimed", () => {
+    expect(wallTimingPhrase(hitWith([]))).toBe(
+      "9.0s after the burst opened [no press logged]",
+    );
+  });
+  it("two casters: no one cast resolves, no press is claimed", () => {
+    expect(wallTimingPhrase(hitWith(["e3", "e4"]))).toBe(
+      "9.0s after the burst opened [no press logged]",
+    );
+  });
+});

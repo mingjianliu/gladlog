@@ -16,7 +16,10 @@
  *    pulse) — the interval's `[ENEMY DEF]` press (`pressReadingOf`), else its
  *    cast row (`pressRowOf`, a summon's anchored at its first pulse,
  *    `summonPressAnchorMs`) — and found without the printed Z (a wrong Z
- *    must not drop out of coverage — codex 85-tk-K-T114-1). A line is
+ *    must not drop out of coverage — codex 85-tk-K-T114-1); a source-less
+ *    aura's (Anti-Magic Zone) through `sourcelessPressOf` (its one root
+ *    caster's cast), and when none resolves the line must not say
+ *    "pressed" (batch review 80-PIPE-75-B70b #1). A line is
  *    checked when one such press at or after the opening exists, and is a
  *    violation when Z is more than one rounding step off every press −
  *    opening (e2047b8b r0 2:43: Spirit Link Totem pressed 4.95 s in, its
@@ -25,8 +28,10 @@
  */
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
+  isSourcelessAura,
   pressReadingOf,
   pressRowOf,
+  sourcelessPressOf,
   wallDefensiveEventsOn,
 } from "@gladlog/analysis/src/utils/burstLedger";
 import {
@@ -46,6 +51,14 @@ import {
 } from "./ctx";
 
 export const CHECKS = ["ledgerPressedNotAtPress"] as const;
+
+/** an interval's press (`c`, its presser `u`); no `c`: a source-less aura
+ * no cast resolves for — no press */
+interface IPress {
+  app: { logLine: { timestamp: number } };
+  c?: { logLine: { timestamp: number } };
+  u?: any;
+}
 
 const BURST_HEAD =
   /^\s+Burst #\d+ — (\d+:\d{2})–(\d+:\d{2}) \| (.+?)(?: \d+:\d{2}–| \+ |$)/;
@@ -124,8 +137,31 @@ export function run(ctx: IRoundCtx): void {
           nameOf(iv.spellId, iv.spellName) === wall && ms > open && ms <= endMs
         );
       })
-      .flatMap((iv) => {
+      .flatMap((iv): IPress[] => {
         const startMs = combat.startTime + iv.fromS * 1000;
+        const app = { logLine: { timestamp: startMs } };
+        // a source-less aura (Anti-Magic Zone): its press is its one root
+        // caster's cast, else none — the line must not say "pressed" (batch
+        // review 80-PIPE-75-B70b #1)
+        if (isSourcelessAura(iv)) {
+          const sp = sourcelessPressOf(
+            Object.values(combat.units ?? {}),
+            holder as ICombatUnit,
+            combat.startTime,
+            iv.spellId,
+            startMs,
+          );
+          if ("noPress" in sp) return [{ app }];
+          if (sp.pressMs < open) return [];
+          const root = byId.get(sp.casterId);
+          return [
+            {
+              app,
+              c: { logLine: { timestamp: sp.pressMs } },
+              u: root ?? holder,
+            },
+          ];
+        }
         const r = pressReadingOf(
           defOn,
           intervals,
@@ -154,7 +190,7 @@ export function run(ctx: IRoundCtx): void {
             : undefined;
         return [
           {
-            app: { logLine: { timestamp: startMs } },
+            app,
             c: { logLine: { timestamp: pressMs } },
             u: owner ?? src ?? holder,
           },
@@ -162,9 +198,24 @@ export function run(ctx: IRoundCtx): void {
       });
     if (presses.length === 0) continue;
     ctx.bump(C);
-    const truthOf = (p: (typeof presses)[number]) => (tsOf(p.c) - open) / 1000;
-    if (presses.some((p) => Math.abs(truthOf(p) - z) <= TOLERANCE_S)) continue;
-    const worst = presses.sort(
+    const pressed = presses.filter(
+      (p): p is Required<IPress> => p.c !== undefined,
+    );
+    const truthOf = (p: Required<IPress>) => (tsOf(p.c) - open) / 1000;
+    if (pressed.some((p) => Math.abs(truthOf(p) - z) <= TOLERANCE_S)) continue;
+    if (pressed.length === 0) {
+      const app = presses[0]!.app;
+      ctx.violate(
+        C,
+        wall,
+        tsOf(app),
+        `${holder.id}#${wall}#${tsOf(app)}`,
+        `the ledger says ${wall} was pressed ${z.toFixed(1)}s after the burst opened; its aura carries no source and no one cast of its resolves (the aura arrived ${((tsOf(app) - open) / 1000).toFixed(2)}s after)`,
+        l.trim().slice(0, 300),
+      );
+      continue;
+    }
+    const worst = pressed.sort(
       (a, b) => Math.abs(truthOf(a) - z) - Math.abs(truthOf(b) - z),
     )[0]!;
     ctx.violate(

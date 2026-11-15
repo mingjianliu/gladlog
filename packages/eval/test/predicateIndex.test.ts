@@ -3218,6 +3218,21 @@ const INDEX: PredicateRow[] = [
     mod: burstLedger,
   },
   {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "isSourcelessAura",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "sourcelessPressOf",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "SOURCELESS_CAST_WINDOW_S",
+    mod: burstLedger,
+  },
+  {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "petSharesOwnersCopy",
     mod: cooldowns,

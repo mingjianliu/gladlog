@@ -648,6 +648,62 @@ export function pressRowOf(
   return press === undefined ? undefined : combatStartMs + press * 1000;
 }
 
+/** How far before a source-less aura its cast may be (the cast → effect
+ * table's own window, castEffectAuraScan `WINDOW_S`, T124). */
+export const SOURCELESS_CAST_WINDOW_S = 60;
+
+/** Does an aura interval carry no source (Anti-Magic Zone 145629: every row
+ * of it is logged with none)? */
+export function isSourcelessAura(iv: {
+  srcUnitId?: string;
+  srcUnitName: string;
+}): boolean {
+  return (
+    (!iv.srcUnitId || /^0+$/.test(iv.srcUnitId)) &&
+    (!iv.srcUnitName || iv.srcUnitName === "nil")
+  );
+}
+
+/**
+ * Batch review 80-PIPE-75-B70b #1 (T114 meeting T124): the press of a
+ * source-less wall aura on `target` starting at `startMs` — the way T124
+ * keys such an aura to its cast: the casts whose effect it is
+ * (`castsOfEffectAura`, the cast → effect table: Anti-Magic Zone 51052 →
+ * 145629) pressed by a unit of the target's side (a summon counts as its
+ * owner) in the `SOURCELESS_CAST_WINDOW_S` before the aura (or a moment
+ * after it, `AURA_BEFORE_CAST_MAX_S`). One such root caster: its latest such
+ * cast (and the caster's id). None, or several: no press — the line must not say "pressed" (a
+ * teammate's zone the target walked into 4 s after it went down read
+ * `pressed 9.0s after the burst opened`, the aura's arrival).
+ */
+export function sourcelessPressOf(
+  units: readonly ICombatUnit[],
+  target: ICombatUnit,
+  combatStartMs: number,
+  spellId: string,
+  startMs: number,
+): { pressMs: number; casterId: string } | { noPress: true } {
+  const lo = startMs - SOURCELESS_CAST_WINDOW_S * 1000;
+  const hi = startMs + AURA_BEFORE_CAST_MAX_S * 1000;
+  const byRoot = new Map<string, number[]>();
+  for (const u of units) {
+    if (u.reaction !== target.reaction) continue;
+    const root = u.ownerId && u.ownerId !== u.id ? u.ownerId : u.id;
+    for (const t of pressSecondsOfAura(
+      u.spellCastEvents,
+      spellId,
+      combatStartMs,
+    )) {
+      const ms = combatStartMs + t * 1000;
+      if (ms < lo || ms > hi) continue;
+      byRoot.set(root, [...(byRoot.get(root) ?? []), ms]);
+    }
+  }
+  if (byRoot.size !== 1) return { noPress: true };
+  const [casterId, ms] = [...byRoot][0]!;
+  return { pressMs: Math.max(...ms), casterId };
+}
+
 /** The ledger's damage of `player` on `targetId` in [fromMs, toMs], keyed
  * by the hit's school mask (decimal) — the population
  * `dominantTarget.damage` sums, split by school. A landed row reads its own
@@ -969,7 +1025,22 @@ export function analyzeBurstLedger(
                   )
                 : undefined;
             if (r && "noPress" in r) return { noPressLogged: true as const };
+            // a source-less aura (Anti-Magic Zone): its press is its one
+            // root caster's cast, else none (batch review 80-PIPE-75-B70b #1)
+            const sourceless =
+              iv.startMs > fromMs && isSourcelessAura(iv)
+                ? sourcelessPressOf(
+                    Object.values(combat.units ?? {}),
+                    target,
+                    combat.startTime,
+                    iv.spellId,
+                    iv.startMs,
+                  )
+                : undefined;
+            if (sourceless && "noPress" in sourceless)
+              return { noPressLogged: true as const };
             const pressMs =
+              sourceless?.pressMs ??
               r?.pressMs ??
               (iv.startMs > fromMs
                 ? pressRowOf(

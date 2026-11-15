@@ -176,6 +176,49 @@ const totemUnits = () => {
   ];
 };
 
+/** batch review 80-PIPE-75-B70b #1: Anti-Magic Zone's aura carries no
+ * source; a teammate casts it at 15 s (or nobody does), it reaches the
+ * holder at 19 s */
+const zoneUnits = (cast: boolean) => {
+  const aura = (event: LogEvent, s: number) => ({
+    ...makeAuraEvent(event, "145629", at(s), "0000000000000000", "e1", "BUFF"),
+    srcUnitName: "nil",
+    spellName: "Anti-Magic Zone",
+  });
+  return [
+    makeUnit("e1", {
+      name: "Pala",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, 19),
+        aura(LogEvent.SPELL_AURA_REMOVED, 21),
+      ],
+    }),
+    makeUnit("e3", {
+      name: "DK",
+      spec: CombatUnitSpec.DeathKnight_Unholy,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      spellCastEvents: cast
+        ? [
+            makeSpellCastEvent(
+              "51052",
+              at(15),
+              "",
+              "",
+              "e3",
+              "DK",
+              0,
+              "Anti-Magic Zone",
+            ),
+          ]
+        : [],
+    }),
+  ];
+};
+
 beforeAll(async () => {
   await ensureAnalysisData();
 });
@@ -205,6 +248,17 @@ describe("scan5 ledgerPressedNotAtPress — the producer's presses, not the prin
   });
   it("a totem's corrupted Z is checked and fails", () => {
     const got = scan("Spirit Link Totem", "9.0", totemUnits());
+    expect(got.checked).toBe(1);
+    expect(got.details).toHaveLength(1);
+  });
+  it("a source-less zone's press is its one caster's cast", () => {
+    expect(scan("Anti-Magic Zone", "5.0", zoneUnits(true))).toEqual({
+      checked: 1,
+      details: [],
+    });
+  });
+  it("a source-less zone no cast resolves for is no press: `pressed` fails", () => {
+    const got = scan("Anti-Magic Zone", "9.0", zoneUnits(false));
     expect(got.checked).toBe(1);
     expect(got.details).toHaveLength(1);
   });
