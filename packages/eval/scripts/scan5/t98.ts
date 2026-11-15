@@ -97,6 +97,9 @@ function ledger(ctx: IRoundCtx): void {
       .flatMap((u) => successesOf(u).map((c) => ({ c, u })))
       .find(
         ({ c, u }) =>
+          // the aura's own source: another unit's cast of the wall on the
+          // holder is its own application (codex 85-tk-K-T98-1c)
+          u.id === app.srcUnitId &&
           (u.id === holder.id || c.destUnitId === holder.id) &&
           nameOf(c.spellId, c.spellName) === wall &&
           tsOf(c) > tsOf(app) &&
