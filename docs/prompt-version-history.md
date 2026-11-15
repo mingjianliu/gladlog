@@ -6558,3 +6558,21 @@ capture at PV547 vs branch), new scan5/t100: slackWhileLocked 38 / 746 ->
 (lockout 40, silence 9); alternatives offered inside a non-stun hard CC,
 left unjudged and outside the total, 39 on both sides. Context files
 changed 262 of 3,519; findings files 0, candidate rows +0 -0.
+
+v549 (2026-11-15; pipeline batch B66, T101; round 13 audit D16). The aura
+half of every cannot-cast / press-blocked interval (castBlockingAuraIntervals)
+runs to the UNIT_DIED when the aura's REMOVED is the death's strip: inside
+the unit's death teardown window and in the strip burst, at least 2 of the
+unit's other auras REMOVED within 10 ms (deathStripOf, unitDeath.ts). No
+duration model decides it; a BROKEN row stays the aura's own end. The logged
+row is kept and the end-cause readers ([SILENCE] `ended at their death`,
+[CC ON ENEMY], kill attempts) match against it, so those lines do not move.
+Example: a mage stunned until the death (21 removals in 7 ms, the stun among
+them, the lethal row logged 31 ms later) read `Alter Time available but
+unused (free to press it for the last 0.1s before the death)`; it now reads
+0.0s. 605 (base capture at PV547 vs branch), new scan5/t101
+freeAfterDeathStrip: 4 / 156 -> 0 / 156 (2 facts); neighbouring checks
+freeToPressBelowLog 0 / 197 and cannotCastCountsAPress 0 / 277 on both
+sides. Context files changed 4 of 3,519 (4 x `last 0.1s` -> `last 0.0s`, 2 x
+a [HEALER CC] line `locked 0.5 of the last 12s` -> `0.6`); findings files 0,
+candidate rows +0 -0; gates 110 -> 110.

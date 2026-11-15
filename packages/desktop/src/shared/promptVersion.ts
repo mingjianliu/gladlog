@@ -1241,5 +1241,11 @@
  *  `cheaper available:` note reads the shared cannot-cast predicate
  *  (silences and kick lockouts per school, not hard CC alone).
  *  See docs/prompt-version-history.md.
+ *
+ * v549 (2026-11-15; pipeline batch B66, T101): a control or silence
+ *  whose REMOVED is part of the unit's death strip runs to the death
+ *  in the cannot-cast / press-blocked intervals, so KILL SEQUENCE no
+ *  longer prints `free to press it for the last 0.1s before the death`
+ *  for a stun held to the death. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 548;
+export const PROMPT_VERSION = 549;
