@@ -1264,5 +1264,10 @@
  *  — a Rallying Cry whose aura missed the pressured unit and another
  *  unit's self-only heal (Frenzied Regeneration) no longer count.
  *  See docs/prompt-version-history.md.
+ *
+ * v553 (2026-11-15; pipeline batch B71, T102): [RES] cc: lists every
+ *  active kick lockout on a unit (each locks its own school), and a
+ *  root / disarm names the longest holder, as hard CC already did.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 552;
+export const PROMPT_VERSION = 553;

@@ -6638,3 +6638,17 @@ slot. Findings files 0, candidate rows +0 -0. Recorded, not fixed (codex
 Lifebind heals a linked ally under another name (373268), so the self-only
 test would reject that answer for the ally; the scan matches the press by
 name.
+
+v553 (2026-11-15; pipeline batch B71, T102; round 13 audit D4, D6). The
+[RES] `cc:` entry collapsed concurrent controls of one kind on a unit to
+the first one found. Every active kick lockout is now listed (each locks
+its own school), deduped by source, kick spell and time (a duplicate
+SPELL_INTERRUPT row printed one kick twice); a root or disarm names the
+longest holder, the earliest winning a tie, as hard CC already did.
+Example: `cc:1/Counter Shot-<1s[kick]` with a Rebuke lockout on Nature
+still running became `cc:1/Counter Shot-<1s[kick],1/Rebuke-2s[kick]`. 605
+(base capture at PV547 vs branch), new scan5/t102 resCcConcurrentDropped:
+56 / 13922 (21 facts) -> 0 / 13922. 59 context lines in 55 files changed,
+all [RES] `cc:`; family diff 0 flags; findings files 0, candidate rows +0
+-0; gates 110 -> 110. Single producer, no gate pair, so no predicate-index
+row.
