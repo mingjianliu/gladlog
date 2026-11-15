@@ -1270,6 +1270,29 @@ export function immunityStopsSpellSchool(
   return immunityMaskStopsSchool(mask, school);
 }
 
+/** Pipeline T124: does the damage-reduction wall behind aura `auraId` (its
+ * signed `MITIGATION_TABLE` row, the aura's own or its cast's through
+ * `castKeyOfAura`; pct < 100) reduce none of `spellId`'s schools? Anti-Magic
+ * Zone (51052, runs as 145629, 0x7e) reduces magic damage only — a physical
+ * Mortal Strike landed into it at full value. True only when the row's mask
+ * leaves schools out and the spell's DB2 schools (`spellSchoolMask`) share
+ * none of them; an immunity (pct 100) is `immunityStopsSpellSchool`'s. One
+ * reading for ABILITIES INTO IMMUNITY/DR (`offensiveWasteAnalysis`) and its
+ * gates (`corpusFactScan4` abilities-into, `scan5/damageBasis`
+ * abilityIntoWallShare). */
+export function drWallMissesSpellSchool(
+  auraId: string,
+  spellId: string,
+): boolean {
+  const key = castKeyOfAura(auraId, (id) => MITIGATION_TABLE[id] !== undefined);
+  const row = key === undefined ? undefined : MITIGATION_TABLE[key];
+  if (!row || row.pct >= 100) return false;
+  const mask = row.schoolMask & ALL_SCHOOLS;
+  if (mask === ALL_SCHOOLS) return false;
+  const school = spellSchoolMask(spellId);
+  return school !== undefined && (school & mask) === 0;
+}
+
 /** Is the aura `auraId` a pct-100 wall (an immunity or a deflection,
  * `MITIGATION_TABLE` through `wallTableIdOfAura`) that stops `spellId` —
  * every school of it, as far as the masks know (`immunityStopsSpellSchool`)?

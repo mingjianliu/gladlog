@@ -108,7 +108,10 @@ import {
 import { auraCloseRow } from "@gladlog/analysis/src/utils/auraIntervals";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
-import { immunityStopsSpellSchool } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  drWallMissesSpellSchool,
+  immunityStopsSpellSchool,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { isAutomaticCastRow } from "@gladlog/analysis/src/utils/pressRow";
 import { toRenderSecond } from "@gladlog/analysis/src/utils/renderGrid";
@@ -786,6 +789,8 @@ function abilityIntoWallShare(ctx: IRoundCtx): void {
           // of a school-limited immunity: fact11 D20) goes through it:
           // Crusading Strikes (Physical) into Spellwarding (Magic)
           immunityStopsSpellSchool(wallKey, c.spellId) !== false &&
+          // nor a school a damage-reduction wall leaves out (pipeline T124)
+          !drWallMissesSpellSchool(wallKey, c.spellId) &&
           !(rangedGated && !parryStops(String(c.spellId))),
       );
       if (casts.length < WALL_MIN_CASTS) continue;

@@ -31,6 +31,7 @@ import {
 } from "./cooldowns";
 import { spellNameKey } from "./damagePress";
 import {
+  drWallMissesSpellSchool,
   immunityStopsSpellSchool,
   wallStopsEveryHit,
 } from "./enemyDefensives";
@@ -418,6 +419,11 @@ export function buildOffensiveWasteSummary(
             // of Shadows) reads its hand mask (`immunityStopsSpellSchool`)
             const covers = immunityStopsSpellSchool(window.spellId, e.spellId);
             if (covers === false) return false;
+            // pipeline T124: a school-limited damage-reduction wall reduces
+            // only its schools — a Mortal Strike into Anti-Magic Zone
+            // (magic only) landed at full value
+            if (drWallMissesSpellSchool(window.spellId, e.spellId))
+              return false;
             if (landedThroughWall(window.spellId, landings.get(e)!))
               return false;
             // B28: for immunity windows, also count high-value CC/utility spells that do no damage

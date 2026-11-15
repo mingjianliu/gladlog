@@ -1918,6 +1918,12 @@ const INDEX: PredicateRow[] = [
     symbol: "immunityStopsSpellSchool",
     mod: enemyDefensives,
   },
+  // pipeline T124: a school-limited damage-reduction wall (Anti-Magic Zone)
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "drWallMissesSpellSchool",
+    mod: enemyDefensives,
+  },
   {
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "immunityStopsDamageSpell",

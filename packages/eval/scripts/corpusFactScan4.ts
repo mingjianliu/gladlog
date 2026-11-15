@@ -100,6 +100,7 @@ import {
   KW_REDIRECT_PROTECTION_AURA_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
+  drWallMissesSpellSchool,
   holderFirstOwnActionAfterMs,
   immunityStopsSpellSchool,
   SAVE_AURA_END_UNSEEN_IDS,
@@ -509,7 +510,10 @@ function runRound(ctx: IContext): void {
           // a school the immunity does not cover landed (DB2 masks: a Frost
           // Strike into Blessing of Protection; the hand mask of one with
           // none: Cloak of Shadows, fact11 D20) — the section's own rule
-          immunityStopsSpellSchool(run.auraId, String(c.spellId)) !== false,
+          immunityStopsSpellSchool(run.auraId, String(c.spellId)) !== false &&
+          // nor a school a damage-reduction wall leaves out (pipeline T124:
+          // a Mortal Strike into Anti-Magic Zone) — the section's own rule
+          !drWallMissesSpellSchool(run.auraId, String(c.spellId)),
       );
       // an empowered spell's success row is written when the hold BEGINS:
       // it goes off at its SPELL_EMPOWER_END; a hold never ended fired
