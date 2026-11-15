@@ -8,19 +8,33 @@
  *  - `ledgerPressedNotAtPress`: a burst-ledger line `<Wall> active ON THE
  *    TARGET … (pressed Zs after the burst opened)`. The burst opens at the
  *    owner's first SUCCESS / APPLIED of the head's first cooldown in the
- *    head's second. Every APPLIED of that wall on the target from the
- *    opening to the head's end second, and each one's press, are found
- *    without the printed Z (a wrong Z must not drop out of coverage — codex
- *    85-tk-K-T114-1): the press is the latest SUCCESS of that wall's name by
- *    the aura's source — for a summon (a totem), by its owner only: the
- *    totem's own SUCCESS rows are its pulse — at most `PRESS_LOOKBACK_MS`
- *    before that APPLIED (or a moment after it), not before the opening. A
- *    line is checked when one such press exists, and is a
- *    violation when Z is more than one rounding step off every press − opening
- *    (e2047b8b r0 2:43: Spirit Link Totem pressed 4.95 s in, its aura
- *    flickered and settled at 6.0 s, the line read `pressed 6.0s`).
+ *    head's second. Every interval of that wall on the target
+ *    (`buildAuraIntervals`) that starts after the opening and by the head's
+ *    end second, and each one's press, are taken from the producer's own
+ *    selection (FIX-CONTRACT step 7; batch review 80-PIPE-73-B70 #2: a hand
+ *    lookback missed a totem whose holder was linked seconds after its first
+ *    pulse) — the interval's `[ENEMY DEF]` press (`pressReadingOf`), else its
+ *    cast row (`pressRowOf`, a summon's anchored at its first pulse,
+ *    `summonPressAnchorMs`) — and found without the printed Z (a wrong Z
+ *    must not drop out of coverage — codex 85-tk-K-T114-1). A line is
+ *    checked when one such press at or after the opening exists, and is a
+ *    violation when Z is more than one rounding step off every press −
+ *    opening (e2047b8b r0 2:43: Spirit Link Totem pressed 4.95 s in, its
+ *    aura flickered and settled at 6.0 s, the line read `pressed 6.0s`).
  *    Kind = the wall's name.
  */
+import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import {
+  pressReadingOf,
+  pressRowOf,
+  wallDefensiveEventsOn,
+} from "@gladlog/analysis/src/utils/burstLedger";
+import {
+  enemyDefensiveEvents,
+  type IEnemyDefensiveEvent,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
+import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
+
 import {
   APPLIED,
   ev,
@@ -39,11 +53,6 @@ const BURST_TARGET = /^\s+Target: (.+?) (?:\d+% → |\| )/;
 const BURST_PRESSED =
   /^\s+(?:Target had [^:]+|⚠ Target was IMMUNE): (.+?) active ON THE TARGET [\d.]+s of this burst \(pressed (<?[\d.]+)s after the burst opened\)/;
 
-/** how far before its aura a press is looked for (a totem's aura can
- * flicker on and off before it settles) */
-const PRESS_LOOKBACK_MS = 3000;
-/** a press's cast row can be logged just after its aura */
-const PRESS_AFTER_AURA_MS = 200;
 /** one rounding step of the printed tenth, and a little */
 const TOLERANCE_S = 0.15;
 
@@ -52,6 +61,7 @@ export function run(ctx: IRoundCtx): void {
   let openMs: number | undefined;
   let endMs = 0;
   let target: string | undefined;
+  const defByTeam = new Map<string, IEnemyDefensiveEvent[]>();
   for (const l of ctx.lines) {
     const h = BURST_HEAD.exec(l);
     if (h) {
@@ -90,37 +100,65 @@ export function run(ctx: IRoundCtx): void {
     const wall = p[1]!;
     const z = Number(p[2]!.replace("<", ""));
     const open = openMs;
-    // every application of the wall on the holder from the burst's opening
-    // (less a press's lookback) to its end, and each one's press — found
+    const combat = ctx.legacy as AtomicArenaCombat;
+    const team = ctx.players.filter(
+      (u) => u.reaction === holder.reaction,
+    ) as ICombatUnit[];
+    const teamKey = String(holder.reaction);
+    if (!defByTeam.has(teamKey))
+      defByTeam.set(
+        teamKey,
+        team.flatMap((e) => enemyDefensiveEvents(e, team, combat)),
+      );
+    const defOn = wallDefensiveEventsOn(defByTeam.get(teamKey)!, holder);
+    const intervals = buildAuraIntervals(holder as ICombatUnit, combat);
+    const byId = new Map(ctx.units.map((u) => [u.id as string, u]));
+    // every interval of the wall on the holder from the burst's opening to
+    // its end, and each one's press — the producer's own selection, found
     // without the printed Z, so a wrong Z cannot drop out of coverage
     // (codex 85-tk-K-T114-1)
-    const presses = ((holder.auraEvents ?? []) as any[])
-      .filter(
-        (a) =>
-          ev(a) === APPLIED &&
-          a.destUnitId === holder.id &&
-          nameOf(a.spellId, a.spellName) === wall &&
-          tsOf(a) >= open &&
-          tsOf(a) <= endMs,
-      )
-      .flatMap((app) => {
-        const src = ctx.units.find((u) => u.id === app.srcUnitId);
-        if (!src) return [];
-        // a summon's aura is its owner's press: the totem's own SUCCESS rows
-        // (its pulse) are not the button (e2047b8b: one 10 ms before the aura)
-        const owner = ctx.units.find(
-          (u) => u.id === src.ownerId && u.id !== src.id,
+    const presses = intervals
+      .filter((iv) => {
+        const ms = combat.startTime + iv.fromS * 1000;
+        return (
+          nameOf(iv.spellId, iv.spellName) === wall && ms > open && ms <= endMs
         );
-        const press = (owner ? [owner] : [src])
-          .flatMap((u) => successesOf(u).map((c) => ({ c, u })))
-          .filter(
-            ({ c }) =>
-              nameOf(c.spellId, c.spellName) === wall &&
-              tsOf(c) <= tsOf(app) + PRESS_AFTER_AURA_MS &&
-              tsOf(c) >= tsOf(app) - PRESS_LOOKBACK_MS,
-          )
-          .sort((a, b) => tsOf(b.c) - tsOf(a.c))[0];
-        return press && tsOf(press.c) >= open ? [{ app, ...press }] : [];
+      })
+      .flatMap((iv) => {
+        const startMs = combat.startTime + iv.fromS * 1000;
+        const r = pressReadingOf(
+          defOn,
+          intervals,
+          combat.startTime,
+          iv.spellId,
+          { name: iv.srcUnitName, id: iv.srcUnitId },
+          startMs,
+          Math.min(combat.startTime + iv.toS * 1000, endMs),
+        );
+        if (r && "noPress" in r) return [];
+        const pressMs =
+          r?.pressMs ??
+          pressRowOf(
+            (id) => byId.get(id) as ICombatUnit | undefined,
+            holder as ICombatUnit,
+            combat.startTime,
+            iv.spellId,
+            iv.srcUnitId,
+            startMs,
+          );
+        if (pressMs === undefined || pressMs < open) return [];
+        const src = byId.get(iv.srcUnitId ?? "");
+        const owner =
+          src && src.ownerId && src.ownerId !== src.id
+            ? byId.get(src.ownerId)
+            : undefined;
+        return [
+          {
+            app: { logLine: { timestamp: startMs } },
+            c: { logLine: { timestamp: pressMs } },
+            u: owner ?? src ?? holder,
+          },
+        ];
       });
     if (presses.length === 0) continue;
     ctx.bump(C);
