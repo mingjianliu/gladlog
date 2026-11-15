@@ -47,6 +47,19 @@ const SPAN =
   /^\s+\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+ \(([^()]+(?:\([^()]*\)[^()]*)*)\):(.*)$/;
 
 export function run(ctx: IRoundCtx): void {
+  shieldDefenseless(ctx, "allyShieldDefenseless", "same");
+}
+
+/**
+ * The check, for the shield's caster on the target's side (`same`, D37) or
+ * on the other side (`other`, T127: a shield a priest pressed on the unit it
+ * had Mind-Controlled, applied as the control ended).
+ */
+export function shieldDefenseless(
+  ctx: IRoundCtx,
+  check: string,
+  side: "same" | "other",
+): void {
   const seen = new Set<string>();
   for (const line of ctx.lines) {
     const m = SPAN.exec(line);
@@ -63,7 +76,7 @@ export function run(ctx: IRoundCtx): void {
     const key = `${u.id}:${span[0]}:${span[1]}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    ctx.bump("allyShieldDefenseless");
+    ctx.bump(check);
     const fromMs = ctx.start + (span[0]! + 1) * 1000;
     const toMs = ctx.start + span[1]! * 1000;
     for (const r of (u.absorbsIn ?? []) as any[]) {
@@ -71,7 +84,9 @@ export function run(ctx: IRoundCtx): void {
       const t = tsOf(r);
       if (t < fromMs || t > toMs || r.srcUnitId === u.id) continue;
       const caster = ctx.players.find(
-        (p: any) => p.id === r.srcUnitId && p.reaction === u.reaction,
+        (p: any) =>
+          p.id === r.srcUnitId &&
+          (p.reaction === u.reaction) === (side === "same"),
       );
       if (!caster) continue;
       const id = String(r.spellId);
@@ -141,7 +156,7 @@ export function run(ctx: IRoundCtx): void {
       );
       if (!press) continue;
       ctx.violate(
-        "allyShieldDefenseless",
+        check,
         "pressed",
         t,
         `${u.id}#${span[0]}#${id}`,

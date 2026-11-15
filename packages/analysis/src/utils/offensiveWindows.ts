@@ -614,7 +614,8 @@ export function computeOffensiveWindowsUncached(
   // …and every other own absorb shield it pressed that the log shows
   // absorbing for it, within a minute of a press of it
   // (`ownPressedShieldSpansMs`, corpusFactScan2 defenselessSaveUp / E6),
-  // and one an ally pressed on it (user ruling 2026-10-30, fact7 D37)
+  // and one an ally pressed on it (user ruling 2026-10-30, fact7 D37) — or a
+  // unit of the other side (T127)
   for (const holder of enemies) {
     for (const iv of holderIntervals(holder)) {
       if (KW_REDIRECT_PROTECTION_AURA_IDS.has(iv.spellId)) {
@@ -687,7 +688,14 @@ export function computeOffensiveWindowsUncached(
             .map((a) => a.timestamp),
         );
       }
-      const shieldCaster = enemies.find((u) => u.id === iv.srcUnitId);
+      // the caster is whoever pressed it, on either side: a shield absorbs
+      // the attackers' damage whoever cast it (T127, fact13 D35: b8a9f3e3 r0,
+      // a priest's Void Shield went onto the warlock it had Mind-Controlled
+      // in the ms the control ended, 118k, and absorbed 117k of the priest's
+      // own team's damage inside `defenseless 0:56–1:12`)
+      const shieldCaster =
+        enemies.find((u) => u.id === iv.srcUnitId) ??
+        allUnits.find((u) => u.id === iv.srcUnitId);
       const shieldSpans = shieldCaster
         ? ownPressedShieldSpansMs(
             holder,
