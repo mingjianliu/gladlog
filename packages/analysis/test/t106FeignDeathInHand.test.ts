@@ -19,7 +19,11 @@ import {
   isKillWindowMajorDefensive,
 } from "../src/data/abilityProfile";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { kwAuraReadPressesS } from "../src/utils/kwAuraReadPresses";
+import { getDefensiveStateAtTime } from "../src/utils/killWindowTargetSelection";
+import {
+  kwAuraReadPressesS,
+  kwAuraReadUnpressedInHand,
+} from "../src/utils/kwAuraReadPresses";
 import { computeOffensiveWindowsUncached } from "../src/utils/offensiveWindows";
 import {
   makeAuraEvent,
@@ -110,5 +114,33 @@ describe("T106 — a ready Feign Death keeps the hunter out of `defenseless`", (
     expect(ws.some(([f, t]) => f! < 50 && t! > 50)).toBe(false);
     expect(ws.some(([f, t]) => f! <= 45 && t! >= 44)).toBe(true);
     expect(ws.some(([f]) => f! >= 70 && f! < 73)).toBe(true);
+  });
+  // codex 85-tk-K-T106-1 #1: Feign Death is every hunter's baseline; one
+  // never pressed is in hand all round — the hunter is never defenseless
+  it("never pressed: in hand all round, no span", () => {
+    const u = hunter([]);
+    const combat = {
+      startTime: T0,
+      endTime: at(120),
+      units: { e1: u },
+    } as never;
+    expect(kwAuraReadUnpressedInHand(u, combat)).toEqual([FEIGN]);
+    expect(windowsOf(u)).toEqual([]);
+  });
+  // codex 85-tk-K-T106-1 #2: before its first press it is ready, in the kill
+  // target's defensive state as in the span
+  it("the kill target's state holds it before its first press, not after", () => {
+    const u = hunter([15]);
+    const combat = {
+      startTime: T0,
+      endTime: at(120),
+      units: { e1: u },
+    } as never;
+    expect(getDefensiveStateAtTime(u, 10, T0, combat).available).toContain(
+      "Feign Death",
+    );
+    expect(getDefensiveStateAtTime(u, 20, T0, combat).available).not.toContain(
+      "Feign Death",
+    );
   });
 });

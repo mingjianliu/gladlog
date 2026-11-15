@@ -83,7 +83,19 @@ describe("scan5 feignReadyInSpan", () => {
     expect(got.checked).toBe(1);
     expect(got.details).toHaveLength(1);
   });
-  it("a hunter the ledger never saw press it is out of the population", () => {
-    expect(scan("0:40–0:55", hunter([]))).toEqual({ checked: 0, details: [] });
+  // codex 85-tk-K-T106-1 #1: one that never pressed it holds it all round
+  it("a hunter that never pressed it holds it all round: any span is a violation", () => {
+    const got = scan("0:40–0:55", hunter([]));
+    expect(got.checked).toBe(1);
+    expect(got.details).toHaveLength(1);
+  });
+  // codex 85-tk-K-T106-1 #3: the product's spans for presses at 15 s / 70 s
+  // end on the cooldown's whole-second return — no overlap
+  it("a span ending at the cooldown's whole-second return passes", () => {
+    for (const span of ["0:17–0:45", "1:12–1:40"])
+      expect(scan(span, hunter([15, 70])), span).toEqual({
+        checked: 1,
+        details: [],
+      });
   });
 });

@@ -4247,6 +4247,11 @@ const INDEX: PredicateRow[] = [
     mod: kwAuraReadPresses,
   },
   {
+    file: `${A}/utils/kwAuraReadPresses.ts`,
+    symbol: "kwAuraReadUnpressedInHand",
+    mod: kwAuraReadPresses,
+  },
+  {
     file: `${A}/data/abilityProfile.ts`,
     symbol: "isNotMajorDefensive",
     mod: abilityProfileMod,

@@ -31,7 +31,10 @@ import {
   unitCooldownAvailableAt,
   unitCooldownOf,
 } from "./cooldowns";
-import { kwAuraReadPressesS } from "./kwAuraReadPresses";
+import {
+  kwAuraReadPressesS,
+  kwAuraReadUnpressedInHand,
+} from "./kwAuraReadPresses";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { pvpTrinketUses, trinketUseRemainingSeconds } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
@@ -271,7 +274,7 @@ export function matchMinHpPct(
  * Reconstructs whether each major defensive is available, on cooldown, or has
  * active buff at `windowStartSeconds`, by replaying the enemy's cast history.
  */
-function getDefensiveStateAtTime(
+export function getDefensiveStateAtTime(
   enemy: ICombatUnit,
   windowStartSeconds: number,
   matchStartMs: number,
@@ -313,8 +316,13 @@ function getDefensiveStateAtTime(
     : []) {
     if (castsBySpell.has(spellId)) continue;
     const before = pressS.filter((t) => t < windowStartSeconds);
-    if (before.length === 0) continue;
     const spellName = spellEffectData[spellId]!.name;
+    // not pressed yet: ready since the gates, as the span reads it (codex
+    // 85-tk-K-T106-1 #2)
+    if (before.length === 0) {
+      available.push(spellName);
+      continue;
+    }
     castsBySpell.set(
       spellId,
       before.map((castSeconds) => ({ spellId, spellName, castSeconds })),
@@ -394,6 +402,10 @@ function getDefensiveStateAtTime(
   for (const r of combat ? unusedKitRows(enemy, combat) : [])
     if (unpressedKitDefensiveInHand(r.spellId) && !castsBySpell.has(r.spellId))
       available.push(r.name);
+  // …and an aura-read baseline defensive never pressed (Feign Death,
+  // codex 85-tk-K-T106-1 #1)
+  for (const id of combat ? kwAuraReadUnpressedInHand(enemy, combat) : [])
+    available.push(spellEffectData[id]!.name);
 
   return { available, unavailable };
 }

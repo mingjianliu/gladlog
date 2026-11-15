@@ -50,7 +50,10 @@ import {
   wallTableIdOfAura,
 } from "./enemyDefensives";
 import { isDeferralAbsorb } from "./incomingPressure";
-import { kwAuraReadPressesS } from "./kwAuraReadPresses";
+import {
+  kwAuraReadPressesS,
+  kwAuraReadUnpressedInHand,
+} from "./kwAuraReadPresses";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
 import { isResyncBatchAt } from "./resyncBatch";
 import { roundEndMs } from "./roundEnd";
@@ -922,6 +925,10 @@ export function computeOffensiveWindowsUncached(
           !(castsBySpell.get(r.spellId) ?? []).some((t) => t <= roundEndS),
       )
     )
+      continue;
+    // …and so is an aura-read baseline defensive never pressed (Feign Death:
+    // no kit row, its presses only aura-read — codex 85-tk-K-T106-1 #1)
+    if (kwAuraReadUnpressedInHand(enemy, combat, roundEndS).length > 0)
       continue;
 
     // Count distinct tracked defensive spells this enemy actually used
