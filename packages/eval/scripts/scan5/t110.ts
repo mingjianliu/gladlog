@@ -7,17 +7,18 @@
  * it), and the row said "Voidform at 327 in the 336–339 lock (Psychic
  * Scream)".
  *
- * The healer's locks are the producer's own selection
- * (`enemyHealerCcWindows` over the round's players, and the locks a press
+ * The healer's locks are the producer's own selection (`enemyHealerCcWindows`
+ * and `enemyHealerFactOnlyLocks` over the round's players; the locks a press
  * after a window can enter, `enteredLockCandidates` — never replayed here):
  *
  *  - `enteredNextSkipsLock`: an `enteredNextLock` entry "X at P in the A–B
- *    lock (…)" of a row whose lock ended at second E, while a producer lock on
- *    that healer begins after E and before A and the press lies inside it or
- *    in the 2 s before it (the entered test's lead, `SYNC_ENTER_LEAD_S`) —
- *    read at the press's own instant: every press of X by our side in the
- *    printed second P (codex 85-tk-N-T110-1 #3: a 105.9 press printed 105 is
- *    not inside a horror ending 105.1).
+ *    lock (…)" of a row, while a candidate lock on that healer begins after
+ *    the row's own lock ended (its raw end: the merged lock on that healer
+ *    whose floored start is the row's `t` — codex 85-tk-N-T110-1b #1) and
+ *    before A, and the holder's first press of X after that end, printed at
+ *    P, entered it by the producer's own test (`castEntersWindow` over the
+ *    holder's `syncWindowCdFor` cooldown: lead, cast-bar start, active span
+ *    — codex 85-tk-N-T110-1 #3, 1b #2).
  *  - `healerLockOmitted` / `healerLockUnbacked`: a `[KILL WINDOW]` /
  *    `[VULNERABLE]` line's "enemy healer hard-CC'd in window" (the kill
  *    window's `healerLocked`, read off the same unmerged locks) against the
@@ -28,12 +29,16 @@
  *    surely misses.
  */
 import {
+  castEntersWindow,
   enemyHealerCcWindows,
+  enemyHealerFactOnlyLocks,
   enteredLockCandidates,
-  SYNC_ENTER_LEAD_S,
+  mergeHealerCcWindows,
+  syncWindowCdFor,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
+import { extractMajorCooldowns } from "@gladlog/analysis/src/utils/cooldowns";
 
-import { ev, type IRoundCtx, nameOf, SUCCESS, tsOf } from "./ctx";
+import { type IRoundCtx, nameOf } from "./ctx";
 
 export const CHECKS = [
   "enteredNextSkipsLock",
@@ -43,7 +48,6 @@ export const CHECKS = [
 
 const ROW_RE = /\btype=missed-sync-window t=(\d+)s/;
 const HEALER_RE = /\bhealer=([^,}]+)/;
-const END_RE = /\bwindowEndT=(\d+)/;
 const NEXT_RE = /\benteredNextLock=([^,}]+)/;
 const ENTRY_RE = /^(.+?) at (\d+) in the (\d+)–(\d+) lock \((.+)\)$/;
 const KW_RE = /\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d) on /;
@@ -56,47 +60,79 @@ const secOfClock = (mss: string): number => {
 
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
-  let raw: ReturnType<typeof enemyHealerCcWindows> | undefined;
-  let merged: ReturnType<typeof enteredLockCandidates> | undefined;
-  const rawLocks = () => {
-    if (raw) return raw;
-    const side = ctx.owner.reaction;
-    const friends = ctx.players.filter((u: any) => u.reaction === side);
-    const enemies = ctx.players.filter((u: any) => u.reaction !== side);
+  const side = ctx.players.filter(
+    (u: any) => u.reaction === ctx.owner.reaction,
+  );
+  const enemies = ctx.players.filter(
+    (u: any) => u.reaction !== ctx.owner.reaction,
+  );
+  let sync: ReturnType<typeof enemyHealerCcWindows> | undefined;
+  let factOnly: ReturnType<typeof enemyHealerFactOnlyLocks> | undefined;
+  const syncRaw = () => {
+    if (sync) return sync;
     try {
-      raw = enemyHealerCcWindows(friends, enemies, ctx.legacy);
+      sync = enemyHealerCcWindows(side, enemies, ctx.legacy);
     } catch {
-      raw = [];
+      sync = [];
     }
-    return raw;
+    return sync;
   };
-  const locks = () => (merged ??= enteredLockCandidates(rawLocks()));
-  // our side's presses of a button in a printed second, at their own instant
-  const side = () =>
-    ctx.players.filter((u: any) => u.reaction === ctx.owner.reaction);
-  const pressesIn = (name: string, s: number): number[] =>
-    side().flatMap((u: any) =>
-      ((u.spellCastEvents ?? []) as any[])
-        .filter(
-          (c) =>
-            ev(c) === SUCCESS &&
-            nameOf(c.spellId, c.spellName ?? "") === name &&
-            Math.floor((tsOf(c) - ctx.start) / 1000) === s,
-        )
-        .map((c) => (tsOf(c) - ctx.start) / 1000),
-    );
+  const factOnlyRaw = () => {
+    if (factOnly) return factOnly;
+    try {
+      factOnly = enemyHealerFactOnlyLocks(side, enemies, ctx.legacy);
+    } catch {
+      factOnly = [];
+    }
+    return factOnly;
+  };
+  // the kill window's healer locks, unmerged (`healerLocked`'s own input)
+  const rawLocks = () => [...syncRaw(), ...factOnlyRaw()];
+  let rowLocks: ReturnType<typeof mergeHealerCcWindows> | undefined;
+  let nextLocks: ReturnType<typeof enteredLockCandidates> | undefined;
+  const merged = () => (rowLocks ??= mergeHealerCcWindows(syncRaw()));
+  const candidates = () =>
+    (nextLocks ??= enteredLockCandidates(syncRaw(), factOnlyRaw()));
+  // our side's cooldowns of a button, as the producer builds them
+  const enemyIds = new Set(enemies.map((e: any) => e.id as string));
+  const cdsOf = new Map<string, any[]>();
+  const cdsNamed = (name: string): any[] => {
+    if (!cdsOf.has(name)) {
+      const out: any[] = [];
+      for (const u of side) {
+        try {
+          for (const cd of extractMajorCooldowns(u, ctx.legacy)) {
+            if (nameOf(String(cd.spellId), cd.spellName ?? "") !== name)
+              continue;
+            out.push(
+              syncWindowCdFor(
+                cd,
+                u,
+                enemies,
+                enemyIds,
+                ctx.start,
+                ctx.units,
+                ctx.legacy,
+              ),
+            );
+          }
+        } catch {
+          /* this unit's ledger not computable */
+        }
+      }
+      cdsOf.set(name, out);
+    }
+    return cdsOf.get(name)!;
+  };
   for (const line of ctx.lines) {
     const k = KW_RE.exec(line);
     if (!k || !KW_FACTS_RE.test(line)) continue;
     const F = secOfClock(k[2]!);
     const T = secOfClock(k[3]!);
     const says = line.includes(HEALER_LOCKED);
-    const sure = rawLocks().find(
-      (l) => l.fromSeconds <= T && l.toSeconds >= F + 1,
-    );
-    const maybe = rawLocks().some(
-      (l) => !(l.fromSeconds > T + 1 || l.toSeconds < F),
-    );
+    const raw = rawLocks();
+    const sure = raw.find((l) => l.fromSeconds <= T && l.toSeconds >= F + 1);
+    const maybe = raw.some((l) => !(l.fromSeconds > T + 1 || l.toSeconds < F));
     const C = says ? "healerLockUnbacked" : "healerLockOmitted";
     ctx.bump(C);
     if (!says && sure)
@@ -119,12 +155,19 @@ export function run(ctx: IRoundCtx): void {
       );
   }
   for (const row of ctx.menu.split("\n")) {
-    if (!ROW_RE.test(row)) continue;
+    const r = ROW_RE.exec(row);
+    if (!r) continue;
     const next = NEXT_RE.exec(row)?.[1];
     if (!next) continue;
     const healer = HEALER_RE.exec(row)?.[1];
-    const endS = Number(END_RE.exec(row)?.[1]);
-    if (!healer || !Number.isFinite(endS)) continue;
+    if (!healer) continue;
+    const rowT = Number(r[1]);
+    // the row's own lock, raw: the merged lock on that healer it starts at
+    const own = merged().filter(
+      (l) => l.healerName === healer && Math.floor(l.fromSeconds) === rowT,
+    );
+    if (own.length !== 1) continue;
+    const endS = own[0]!.toSeconds;
     for (const entry of next.split(/;\s*/)) {
       const e = ENTRY_RE.exec(entry.trim());
       if (!e) continue;
@@ -132,20 +175,24 @@ export function run(ctx: IRoundCtx): void {
       ctx.bump(C);
       const pressS = Number(e[2]);
       const namedFrom = Number(e[3]);
-      const presses = pressesIn(e[1]!, pressS);
-      // every press it can be was inside the skipped lock or its lead
+      // the holder's first press after the lock, printed at P
+      const firsts = cdsNamed(e[1]!).flatMap((cd) => {
+        const first = [...cd.casts]
+          .filter((c: any) => c.timeSeconds > endS)
+          .sort((a: any, b: any) => a.timeSeconds - b.timeSeconds)[0];
+        return first && Math.floor(first.timeSeconds) === pressS
+          ? [{ cd, first }]
+          : [];
+      });
       const skipped =
-        presses.length === 0
+        firsts.length === 0
           ? undefined
-          : locks().find(
+          : candidates().find(
               (l) =>
                 l.healerName === healer &&
                 l.fromSeconds > endS &&
                 Math.floor(l.fromSeconds) < namedFrom &&
-                presses.every(
-                  (t) =>
-                    t >= l.fromSeconds - SYNC_ENTER_LEAD_S && t <= l.toSeconds,
-                ),
+                firsts.every(({ cd, first }) => castEntersWindow(cd, first, l)),
             );
       if (skipped)
         ctx.violate(

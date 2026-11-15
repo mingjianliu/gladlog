@@ -16,6 +16,7 @@ import {
   cdWasteEvents,
   deathSetupEvents,
   enemyHealerCcWindows,
+  enemyHealerFactOnlyLocks,
   externalUnusedEvents,
   extractCandidateFindings,
   friendlyCrisisMomentInWindow,
@@ -4211,18 +4212,18 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
     const units = Object.values(c.units) as Array<{ reaction: number }>;
     const friends = units.filter((u) => u.reaction === 1);
     const enemies = units.filter((u) => u.reaction === 2);
-    const ccWindows = enemyHealerCcWindows(friends, enemies, c);
+    // the DR-chain windows are untouched; the horror is its own lock
     expect(
-      ccWindows.map((w) => [
+      enemyHealerCcWindows(friends, enemies, c).map((w) => w.spellName),
+    ).toEqual(["Polymorph"]);
+    expect(
+      enemyHealerFactOnlyLocks(friends, enemies, c).map((w) => [
         w.spellName,
         w.fromSeconds,
         w.toSeconds,
         w.factOnly,
       ]),
-    ).toEqual([
-      ["Polymorph", 439, 447, undefined],
-      ["Sin and Punishment", 460, 463, true],
-    ]);
+    ).toEqual([["Sin and Punishment", 460, 463, true]]);
     const before = extractCandidateFindings(syncFixture(), "h").filter(
       (e) => e.type === "missed-sync-window",
     );

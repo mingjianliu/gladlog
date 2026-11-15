@@ -166,9 +166,9 @@ export interface IEnemyHealerCcWindow {
   /** still on when the round ended (`IOutgoingCCApplication.cutByRoundEnd`)
    * — `toSeconds` is the round's end */
   cutByRoundEnd?: true;
-  /** A lock for the facts only (`isFactOnlyHealerLockAura`): it names the
-   * lock a cooldown entered and the kill window's `healerLocked`, and opens
-   * no missed-sync window and no unsynced-burst cover (ruling R42 A). */
+  /** A lock for the facts only (`isFactOnlyHealerLockAura`): only
+   * `enemyHealerFactOnlyLocks` yields it, never `enemyHealerCcWindows`
+   * (ruling R42 A). */
   factOnly?: true;
 }
 
@@ -296,8 +296,27 @@ export function enemyHealerCcWindows(
       });
     }
   }
-  // T110: the healer's facts-only locks, from the one aura pairing — one of
-  // our team's (a friendly source), inside the round
+  return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
+}
+
+/**
+ * The enemy healer's facts-only locks (`isFactOnlyHealerLockAura`), from the
+ * one aura pairing: one of our team's (a friendly source), inside the round,
+ * cut at its end. Pipeline T110 (ruling R42 A): kept apart from
+ * `enemyHealerCcWindows` — they name the lock a cooldown entered
+ * (`enteredLockCandidates`) and the kill window's `healerLocked`, and never
+ * open, lengthen or bridge a missed-sync window, nor cover an unsynced burst
+ * (codex 85-tk-N-T110-1b #3: a reader merging every window would).
+ */
+export function enemyHealerFactOnlyLocks(
+  friends: any[],
+  enemies: any[],
+  combat: any,
+): IEnemyHealerCcWindow[] {
+  const healerNames = new Set(
+    enemies.filter((e) => isHealerSpec(e.spec)).map((e) => e.name as string),
+  );
+  const out: IEnemyHealerCcWindow[] = [];
   const friendIds = new Set(friends.map((f) => f.id as string));
   const roundEnd = roundEndMs(combat);
   for (const healer of enemies) {
@@ -495,32 +514,21 @@ export function mergeHealerCcWindows<
   return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
 }
 
-type LockWindow = Parameters<typeof mergeHealerCcWindows>[0][number] & {
-  factOnly?: true;
-};
-
-/** The locks a missed-sync window opens on (T110, ruling R42 A): the merged
- * locks of the windows that are not facts-only. A facts-only lock opens no
- * window and joins none — it could lengthen one past the eligibility floor
- * or bridge two. `missedSyncWindowEvents`, the reference scan
- * (`syncWindowScan`) and scan5/fact10 read this one set. */
-export function syncWindowLocks<W extends LockWindow>(
-  windows: readonly W[],
-): Array<W & MergedLockParts> {
-  return mergeHealerCcWindows(windows.filter((w) => !w.factOnly));
-}
+type LockWindow = Parameters<typeof mergeHealerCcWindows>[0][number];
 
 /** The locks a cooldown pressed after a window can have entered
- * (`enteredNextLock`): the sync locks and, never merged into them, the
- * facts-only ones (merged among themselves) — a horror bridging a Seduction
- * and a Fear must not turn them into one lock that starts before the
- * window's end and so is skipped (codex 85-tk-N-T110-1 #1). By start. */
+ * (`enteredNextLock`): the merged sync locks and, never merged into them,
+ * the facts-only ones (`enemyHealerFactOnlyLocks`, merged among themselves)
+ * — a horror bridging a Seduction and a Fear must not turn them into one lock
+ * that starts before the window's end and so is skipped (codex
+ * 85-tk-N-T110-1 #1). By start. T110, ruling R42 A. */
 export function enteredLockCandidates<W extends LockWindow>(
   windows: readonly W[],
+  factOnlyLocks: readonly W[],
 ): Array<W & MergedLockParts> {
   return [
-    ...syncWindowLocks(windows),
-    ...mergeHealerCcWindows(windows.filter((w) => w.factOnly)),
+    ...mergeHealerCcWindows(windows),
+    ...mergeHealerCcWindows(factOnlyLocks),
   ].sort((a, b) => a.fromSeconds - b.fromSeconds);
 }
 
@@ -1255,10 +1263,13 @@ export function missedSyncWindowEvents(
     | "drLevel"
     | "endedBy"
     | "cutByRoundEnd"
-    | "factOnly"
   >[],
   offensiveCds: SyncWindowCd[],
   probes: {
+    /** The enemy healer's facts-only locks (`enemyHealerFactOnlyLocks`) —
+     * locks a press after a window can have entered (`enteredNextLock`),
+     * nothing else (T110, ruling R42 A). Absent ⇒ none. */
+    factOnlyLocks?: Parameters<typeof mergeHealerCcWindows>[0];
     /** Wired to `lowestHpTroughInEventSpan` (utils/cooldowns.ts) over the
      * enemy team in production — the lowest HP inside the lock's own span,
      * the reading its [CONSEQ] line prints. Accelerator-only, see the B8
@@ -1318,11 +1329,13 @@ export function missedSyncWindowEvents(
   // With no owner in the question (the calibration counts) nothing is cut.
   const ownerPartOnly =
     probes.ownerId !== undefined && syncRowNarrowedToOwnerPart(ref.cellKey);
-  // T110 (ruling R42 A): a facts-only lock opens no window and joins none
-  // (it could lengthen one past the eligibility floor); it is a lock a
-  // cooldown can enter (`enteredNextLock`, below)
-  const merged = syncWindowLocks(ccWindows);
-  const nextLocks = enteredLockCandidates(ccWindows);
+  const merged = mergeHealerCcWindows(ccWindows);
+  // T110 (ruling R42 A): a facts-only lock is a lock a cooldown can enter
+  // (`enteredNextLock`, below) and nothing else
+  const nextLocks = enteredLockCandidates(
+    ccWindows,
+    probes.factOnlyLocks ?? [],
+  );
   const candidates: Array<{
     w: (typeof merged)[number];
     ready: string[];
@@ -1660,10 +1673,7 @@ export function unsyncedBurstEvents(
     castTimeSeconds: number;
     cooldownSeconds: number;
   }>,
-  ccWindows: Pick<
-    IEnemyHealerCcWindow,
-    "fromSeconds" | "toSeconds" | "factOnly"
-  >[],
+  ccWindows: Pick<IEnemyHealerCcWindow, "fromSeconds" | "toSeconds">[],
   healerNames: string[],
   /** Feasibility gate (2026-08-22 corpus adjudication): did the TEAM have any
    * hard CC off cooldown when this cooldown went out? The advice is "line the
@@ -1699,9 +1709,8 @@ export function unsyncedBurstEvents(
     // 牌子才混进 teamOffensiveCds,「你的黑暗没和控制对齐」不是一句能成立的话。
     // 元素/增强萨的升腾(114050/114051)不够得着队友,照旧留在指控范围内。
     if (reachesAlly(cast.spellId)) continue;
-    // T110 (ruling R42 A): a facts-only lock is no cover for the claim
     const hasHardCc = ccWindows.some(
-      (w) => !w.factOnly && w.fromSeconds < span.to && w.toSeconds > span.from,
+      (w) => w.fromSeconds < span.to && w.toSeconds > span.from,
     );
     if (hasHardCc) continue;
     // 2026-08-22, ~278 sampled instances of the 12.1 archive: in **0%** of them

@@ -213,6 +213,7 @@ import {
   cdSpentIdleEvents,
   countsAsTeamBurst,
   enemyHealerCcWindows,
+  enemyHealerFactOnlyLocks,
   friendlyCrisisMomentInWindow,
   isDefensiveCdResponse,
   missedSyncWindowEvents,
@@ -279,6 +280,7 @@ export {
   cdHoardedEvents,
   cdSpentIdleEvents,
   enemyHealerCcWindows,
+  enemyHealerFactOnlyLocks,
   friendlyCrisisMomentInWindow,
   HARD_CC_CATEGORIES,
   type ICdHoardedCrisisSource,
@@ -3831,9 +3833,7 @@ function teamPlayEvents(
       // predicate would trivially be true for EVERY offensive cast (nothing
       // to overlap), flooding the menu with a claim sync was never even
       // possible to attempt — not the coaching point this type exists for.
-      // T110: a facts-only lock (Sin and Punishment) is no "real hard-CC
-      // window" for this gate
-      if (ccWindows.some((w) => !w.factOnly)) {
+      if (ccWindows.length > 0) {
         // B3i: enemy CC can come from a pet or totem (Capacitor Totem,
         // e9ea8a0c @298), so the owner's cannot-cast sources include them.
         const enemyAndPetIds = cannotCastSrcIds;
@@ -3886,6 +3886,9 @@ function teamPlayEvents(
           );
           out.push(
             ...missedSyncWindowEvents(ccWindows, teamOffensiveCds, {
+              // T110 (ruling R42 A): locks a press after a window can have
+              // entered, and nothing else
+              factOnlyLocks: enemyHealerFactOnlyLocks(friends, enemies, combat),
               // the lock's own span, as its [CONSEQ] line reads it
               // (`hpTroughInEventSpan`; work order 2026-10-14b fix 1)
               enemyMinHpPctAt: (from, to) =>

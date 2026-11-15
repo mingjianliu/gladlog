@@ -71,16 +71,11 @@ describe("missed-sync-window enteredNextLock (B2-①)", () => {
 
   it("T110 (ruling R42 A): a facts-only lock (Sin and Punishment) is the next lock a press can enter", () => {
     const out = missedSyncWindowEvents(
-      [
-        lock(94.2, 100.4, "Seduction"),
-        {
-          ...lock(104.3, 107.3, "Sin and Punishment"),
-          factOnly: true as const,
-        },
-        lock(110.2, 113.9, "Fear"),
-      ],
+      [lock(94.2, 100.4, "Seduction"), lock(110.2, 113.9, "Fear")],
       [offensive("Kingsbane", [103.1])],
-      probes(),
+      probes({
+        factOnlyLocks: [lock(104.3, 107.3, "Sin and Punishment")],
+      }),
     );
     expect(out).toHaveLength(1);
     expect(out[0]!.facts["enteredNextLock"]).toBe(
@@ -92,12 +87,13 @@ describe("missed-sync-window enteredNextLock (B2-①)", () => {
     const out = missedSyncWindowEvents(
       [
         lock(94, 100, "Seduction"),
-        { ...lock(99.5, 102.5, "Sin and Punishment"), factOnly: true as const },
         lock(101, 105, "Fear"),
         lock(106, 110, "Psychic Scream"),
       ],
       [offensive("Kingsbane", [104.2])],
-      probes(),
+      probes({
+        factOnlyLocks: [lock(99.5, 102.5, "Sin and Punishment")],
+      }),
     );
     expect(out[0]!.facts["enteredNextLock"]).toBe(
       "Kingsbane at 104 in the 101–105 lock (Fear)",
@@ -107,20 +103,17 @@ describe("missed-sync-window enteredNextLock (B2-①)", () => {
   it("T110: a facts-only lock opens no row and lengthens none past the floor", () => {
     expect(
       missedSyncWindowEvents(
-        [{ ...lock(94, 100, "Sin and Punishment"), factOnly: true as const }],
+        [],
         [offensive("Kingsbane", [])],
-        probes(),
+        probes({ factOnlyLocks: [lock(94, 100, "Sin and Punishment")] }),
       ),
     ).toEqual([]);
     // a 2 s stun (under the 3 s floor) the horror would carry to 5 s
     expect(
       missedSyncWindowEvents(
-        [
-          lock(94, 96, "Hammer of Justice"),
-          { ...lock(95.5, 99, "Sin and Punishment"), factOnly: true as const },
-        ],
+        [lock(94, 96, "Hammer of Justice")],
         [offensive("Kingsbane", [])],
-        probes(),
+        probes({ factOnlyLocks: [lock(95.5, 99, "Sin and Punishment")] }),
       ),
     ).toEqual([]);
   });

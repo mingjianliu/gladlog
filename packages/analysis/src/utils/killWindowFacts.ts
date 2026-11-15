@@ -26,6 +26,7 @@ import { CombatUnitClass, type ICombatUnit } from "@gladlog/parser-compat";
 import {
   countsAsTeamBurst,
   enemyHealerCcWindows,
+  enemyHealerFactOnlyLocks,
 } from "../analysis/candidates/cooldownTiming";
 import {
   castSpellName,
@@ -186,11 +187,16 @@ export function createKillWindowFactsComputer(
   try {
     // The window derivation only reads units/timestamps off `combat`; the
     // narrow structural type here is what both call sites actually hold.
-    healerWindows = enemyHealerCcWindows(
-      friends,
-      enemies,
-      combat as Parameters<typeof enemyHealerCcWindows>[2],
-    );
+    healerWindows = [
+      ...enemyHealerCcWindows(
+        friends,
+        enemies,
+        combat as Parameters<typeof enemyHealerCcWindows>[2],
+      ),
+      // T110 (ruling R42 A): a facts-only lock (Sin and Punishment) is a
+      // lock on the healer for `healerLocked`, a fact
+      ...enemyHealerFactOnlyLocks(friends, enemies, combat),
+    ];
   } catch {
     healerWindows = [];
   }
