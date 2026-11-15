@@ -14,12 +14,12 @@ import { run } from "../scripts/scan5/t118";
 const START = 1_000_000;
 const at = (s: number) => START + s * 1000;
 const NOVA = "122";
-const aura = (event: string, s: number) => ({
+const aura = (event: string, s: number, src = "e1") => ({
   timestamp: at(s),
   logLine: { event, timestamp: at(s) },
   spellId: NOVA,
   spellName: "Frost Nova",
-  srcUnitId: "e1",
+  srcUnitId: src,
   destUnitId: "m",
 });
 const lust = (s: number) => ({
@@ -80,6 +80,19 @@ describe("scan5 rootFreedReadUncleansed", () => {
           aura(LogEvent.SPELL_AURA_REMOVED, 14.5),
         ],
         14.5,
+      ),
+    ).toBe(0);
+  });
+  it("pairs a removal with its own source's application (codex 85-tk-L-T118-1e)", () => {
+    expect(
+      scan(
+        [
+          aura(LogEvent.SPELL_AURA_APPLIED, 10, "e1"),
+          aura(LogEvent.SPELL_AURA_APPLIED, 12, "e2"),
+          aura(LogEvent.SPELL_AURA_REMOVED, 14, "e2"),
+          aura(LogEvent.SPELL_AURA_REMOVED, 16, "e1"),
+        ],
+        14,
       ),
     ).toBe(0);
   });

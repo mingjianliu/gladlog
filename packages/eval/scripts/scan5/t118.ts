@@ -17,7 +17,10 @@
  */
 import { ROOT_SPELL_IDS } from "@gladlog/analysis/src/data/rootSpells";
 import { TARGET_BOUND_MOBILITY_IDS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import { ccRecastSplitsResend } from "@gladlog/analysis/src/utils/drAnalysis";
+import {
+  ccRecastSplitsResend,
+  matchPendingCcKey,
+} from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   ALLY_DISPEL_MATCH_TOLERANCE_S,
   rootRanOutAtDrTier,
@@ -79,19 +82,34 @@ export function run(ctx: IRoundCtx): void {
         Math.abs(tsOf(a) - (ctx.start + t * 1000)) <= 100 + TOL_MS,
     );
     if (!apply) continue;
-    // the removal that closes THIS application: the first later row of
-    // the spell; a re-APPLIED from the same source before any removal means
-    // the product inferred this window's end — no removal to judge (codex
-    // 85-tk-L-T118-1d; the product credits a freedom cast only at a logged
-    // removal)
-    const next = rows.find(
-      (a) =>
-        String(a.spellId) === String(apply.spellId) &&
-        tsOf(a) > tsOf(apply) &&
-        (ev(a) === REMOVED ||
-          (ev(a) === APPLIED && a.srcUnitId === apply.srcUnitId)),
-    );
-    const removal = next && ev(next) === REMOVED ? next : undefined;
+    // the removal that closes THIS application, paired as the product
+    // pairs (`matchPendingCcKey`, consuming): a REMOVED closes its source's
+    // open application, else the earliest open one; a re-APPLIED from the
+    // same source while it is open leaves the product an inferred end — no
+    // removal to judge (codex 85-tk-L-T118-1d / -1e)
+    let removal: any;
+    {
+      const id = String(apply.spellId);
+      const pending = new Map<string, { applyMs: number; row: any }>();
+      for (const r of rows) {
+        if (String(r.spellId) !== id) continue;
+        const key = `${id}:${r.srcUnitId}`;
+        if (ev(r) === APPLIED) {
+          if (pending.get(key)?.row === apply) break; // inferred end
+          pending.set(key, { applyMs: tsOf(r), row: r });
+          continue;
+        }
+        if (ev(r) !== REMOVED) continue;
+        const k = matchPendingCcKey(pending, id, key);
+        if (k === undefined) continue;
+        const closed = pending.get(k)!.row;
+        pending.delete(k);
+        if (closed === apply) {
+          removal = r;
+          break;
+        }
+      }
+    }
     const removals =
       removal && tsOf(removal) <= ctx.roundEndAt ? [removal] : [];
     // a root that ran out — its own length (caster and landing modifiers:
