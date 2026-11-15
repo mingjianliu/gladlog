@@ -11,6 +11,7 @@ import { MEDALLION_SPELL_ID } from "../src/utils/pvpTrinketUses";
 import {
   detectTrinketType,
   hasPressablePvpTrinket,
+  medallionPressedInRound,
 } from "../src/utils/trinketType";
 
 const unitWith = (
@@ -68,5 +69,26 @@ describe("hasPressablePvpTrinket", () => {
     // unit's casts run on past the deciding death) says nothing of it
     expect(hasPressablePvpTrinket(pressed(125_000), ROUND)).toBe(false);
     expect(hasPressablePvpTrinket(pressed(-1), ROUND)).toBe(false);
+  });
+  it("codex 85-tk-M-T126-1b #2: a Medallion cast outside the round makes no Medallion of two other trinkets", () => {
+    const twoOthers = (atMs: number) =>
+      unitWith([BADGE, "1"], [[MEDALLION_SPELL_ID, atMs]]);
+    expect(hasPressablePvpTrinket(twoOthers(-1), ROUND)).toBe(
+      false,
+    );
+    expect(hasPressablePvpTrinket(twoOthers(125_000), ROUND)).toBe(false);
+    expect(hasPressablePvpTrinket(twoOthers(60_000), ROUND)).toBe(true);
+  });
+  it("codex 85-tk-M-T126-1b #1: the gate's bound is the producer's (a 3v3 round runs to the log's end)", () => {
+    const u = unitWith([BADGE, ADAPTATION], [[MEDALLION_SPELL_ID, 105_000]]);
+    const threes = {
+      startTime: 0,
+      endTime: 120_000,
+      startInfo: { bracket: "3v3" },
+    };
+    expect(medallionPressedInRound(u, threes)).toBe(true);
+    expect(hasPressablePvpTrinket(u, threes)).toBe(
+      medallionPressedInRound(u, threes),
+    );
   });
 });

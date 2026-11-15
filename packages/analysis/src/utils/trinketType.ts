@@ -59,18 +59,42 @@ export function detectTrinketType(unit: ICombatUnit): TrinketType {
  * breaks a control of 5 s or more by itself (aura 336135, trigger 283167),
  * and there is nothing to press; the round's Chaos Nova of 4.0 s could not
  * trip it, yet both attempts on its holder printed `trinket up`. A logged
- * Gladiator's Medallion press still proves a trinket to press whatever the
- * slots say (a stale item list).
+ * Gladiator's Medallion press inside the round still proves a trinket to
+ * press whatever the slots say (a stale item list); a Medallion counts by its
+ * item in the slots, else by such a press.
  */
 export function hasPressablePvpTrinket(
   unit: ICombatUnit,
-  /** the round the reading is for: only a Medallion press inside it, from
-   * its start to `roundEndMs`, overrides the slots — a Solo Shuffle unit's
-   * casts run on past the deciding death (codex 85-tk-M-T126-1) */
-  round: Parameters<typeof roundEndMs>[0] & { startTime: number },
+  /** the round the reading is for (`medallionPressedInRound`) */
+  round: PvpTrinketRound,
 ): boolean {
-  const type = detectTrinketType(unit);
-  if (type === "Gladiator" || type === "Unknown") return true;
+  const slots = (unit.info?.equipment ?? []).filter((_, i) =>
+    [12, 13].includes(i),
+  );
+  // a Medallion in the slots (codex 85-tk-M-T126-1b #2: not a Medallion
+  // cast at any time — `detectTrinketType` reads one, unbounded)
+  if (
+    detectTrinketType(unit) === "Gladiator" &&
+    slots.some((e) => GLADIATOR_ITEM_IDS.has(e.id))
+  )
+    return true;
+  if (slots.length === 0) return true; // no equipment to read
+  return medallionPressedInRound(unit, round);
+}
+
+/** The round a trinket reading is for: the shape `roundEndMs` reads. */
+export type PvpTrinketRound = Parameters<typeof roundEndMs>[0] & {
+  startTime: number;
+};
+
+/** Did the unit press Gladiator's Medallion inside the round — from its start
+ * to `roundEndMs` (a Solo Shuffle unit's casts run on past the deciding
+ * death; codex 85-tk-M-T126-1)? The one bound for `hasPressablePvpTrinket`'s
+ * override and for the gate that excludes such a unit (scan5/t126). */
+export function medallionPressedInRound(
+  unit: ICombatUnit,
+  round: PvpTrinketRound,
+): boolean {
   const endMs = roundEndMs(round);
   return (unit.spellCastEvents ?? []).some(
     (e) =>

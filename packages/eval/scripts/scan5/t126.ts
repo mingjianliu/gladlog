@@ -10,8 +10,9 @@
  *
  * Log truth, per unit: its COMBATANT_INFO trinket slots (12 / 13) hold an
  * Adaptation item (`trinketItemIds.json` adaptationItemIds, a lookup) and no
- * Gladiator's Medallion 336126 SUCCESS of it is logged in the round (a press
- * would prove the item list stale).
+ * Gladiator's Medallion 336126 press of it inside the round — the producer's
+ * `medallionPressedInRound`, its round bound (a press would prove the item
+ * list stale).
  *
  *  - `adaptationTrinketWords`: every rendered trinket statement about such a
  *    unit — a KILL ATTEMPTS `opportunity:` of the locked tier (`trinket up` /
@@ -22,12 +23,12 @@
  *    when the words claim a trinket to press. Kind = the line form.
  */
 import trinketItemIdsData from "@gladlog/analysis/src/data/trinketItemIds.json";
+import { medallionPressedInRound } from "@gladlog/analysis/src/utils/trinketType";
 
-import { type IRoundCtx, successesOf, tsOf } from "./ctx";
+import { type IRoundCtx } from "./ctx";
 
 export const CHECKS = ["adaptationTrinketWords"] as const;
 
-const MEDALLION = "336126";
 const ADAPTATION_ITEMS = new Set<string>(
   (trinketItemIdsData as { adaptationItemIds: string[] }).adaptationItemIds,
 );
@@ -61,12 +62,14 @@ export function run(ctx: IRoundCtx): void {
       (_, i) => i === 12 || i === 13,
     );
     if (!slots.some((e) => ADAPTATION_ITEMS.has(String(e.id)))) continue;
-    const pressed = successesOf(u).some(
-      (c) =>
-        String(c.spellId) === MEDALLION &&
-        tsOf(c) >= ctx.start &&
-        tsOf(c) <= ctx.roundEndAt,
-    );
+    // the producer's own bound for "pressed in the round" (codex
+    // 85-tk-M-T126-1b #1: a 3v3 round runs to the log's end there)
+    const pressed = medallionPressedInRound(u, {
+      startTime: ctx.start,
+      endTime: ctx.end,
+      startInfo: ctx.legacy.startInfo,
+      units: ctx.legacy.units,
+    });
     if (!pressed) holders.set(u.name, u);
   }
   if (holders.size === 0) return;

@@ -3642,6 +3642,11 @@ const INDEX: PredicateRow[] = [
     mod: trinketTypeMod,
   },
   {
+    file: `${A}/utils/trinketType.ts`,
+    symbol: "medallionPressedInRound",
+    mod: trinketTypeMod,
+  },
+  {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "racialTrinketLockUntilSeconds",
     mod: ccTrinketAnalysis,
