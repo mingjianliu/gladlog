@@ -27,14 +27,17 @@ const row = (
   destUnitId,
 });
 
-function scan(units: any[]): { checked: number; details: string[] } {
+function scan(
+  units: any[],
+  wall = "Pain Suppression",
+): { checked: number; details: string[] } {
   let checked = 0;
   const details: string[] = [];
   run({
     lines: [
       "  Burst #1 — 0:10–0:20 | Avenging Wrath",
       "  Target: Holder 90% → 40%",
-      "  Target had a major defensive up: Pain Suppression active ON THE TARGET 8.0s of this burst (3.5s after the burst opened [no press logged])",
+      `  Target had a major defensive up: ${wall} active ON THE TARGET 8.0s of this burst (3.5s after the burst opened [no press logged])`,
     ],
     start: START,
     end: at(120),
@@ -126,6 +129,32 @@ describe("scan5 ledgerCopyHoldsPress — the press is the copy source's", () => 
     ]);
     expect(got.checked).toBe(1);
     expect(got.details).toHaveLength(1);
+  });
+  it("another id of the wall's name does not take the copy's REMOVED", () => {
+    // Survival of the Fittest: the copy 264735, another unit's 281195
+    const sotf = (event: string, s: number, src: string, id = "264735") => ({
+      ...row(event, s, src),
+      spellId: id,
+      spellName: "Survival of the Fittest",
+    });
+    const got = scan(
+      [
+        {
+          id: "H",
+          name: "Holder",
+          auraEvents: [
+            sotf(LogEvent.SPELL_AURA_APPLIED, 12, "P2", "281195"),
+            sotf(LogEvent.SPELL_AURA_APPLIED, 13.5, "H"),
+            sotf(LogEvent.SPELL_AURA_REMOVED, 15, "P2"),
+            sotf(LogEvent.SPELL_AURA_APPLIED, 16.001, "H"),
+            sotf(LogEvent.SPELL_AURA_REMOVED, 24, "H"),
+          ],
+          spellCastEvents: [sotf(LogEvent.SPELL_CAST_SUCCESS, 16, "H")],
+        },
+      ],
+      "Survival of the Fittest",
+    );
+    expect(got).toEqual({ checked: 1, details: [] });
   });
   it("the holder's own press inside the copy is one", () => {
     const got = scan([holder([cast(16, "H")])]);

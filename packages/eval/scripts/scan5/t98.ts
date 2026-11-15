@@ -87,7 +87,11 @@ function ledger(ctx: IRoundCtx): void {
     // (a REMOVED's source is often missing or inconsistent): the open state
     // is replayed over the holder's whole stream of the wall, as the
     // interval reader does (codex 85-tk-K-T98-1d / 1e / 1f)
-    const copyKey = app.srcUnitId ?? "";
+    // keyed by spell id and source, the fallback within one id — as the
+    // builder keys its intervals (codex 85-tk-K-T98-1g: two ids of one
+    // wall name)
+    const keyOf = (a: any) => `${a.spellId}:${a.srcUnitId ?? ""}`;
+    const copyKey = keyOf(app);
     let end = ctx.end;
     const open = new Map<string, true>();
     const stream = [...rows].sort(
@@ -96,7 +100,7 @@ function ledger(ctx: IRoundCtx): void {
         (a.logLine?.lineIndex ?? 0) - (b.logLine?.lineIndex ?? 0),
     );
     for (const a of stream) {
-      const key = a.srcUnitId ?? "";
+      const key = keyOf(a);
       const after = a !== app && tsOf(a) >= tsOf(app);
       if (ev(a) === APPLIED) {
         if (after && key === copyKey) {
@@ -107,7 +111,9 @@ function ledger(ctx: IRoundCtx): void {
       } else if (ev(a) === REFRESH) {
         open.set(key, true);
       } else if (ev(a) === REMOVED) {
-        const hit = open.has(key) ? key : [...open.keys()][0];
+        const hit = open.has(key)
+          ? key
+          : [...open.keys()].find((k) => k.startsWith(`${a.spellId}:`));
         if (hit === undefined) continue;
         open.delete(hit);
         if (after && hit === copyKey) {
