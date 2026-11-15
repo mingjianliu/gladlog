@@ -6692,3 +6692,20 @@ branch), new scan5/t126 adaptationTrinketWords: 92 / 92 (91 distinct, all
 KILL ATTEMPTS `trinket up`) -> 0 / 92. 44 context files changed (attempt
 lines on Adaptation holders and the legend line); findings files 0,
 candidate rows +0 -0.
+
+v556 (2026-11-15; pipeline batch B74, T105; round 13 audit D23, found by the
+codex pass). KILL ATTEMPTS `softer target then: X` could name an enemy
+inside a full immunity for the whole attempt: softerTargetAt skipped dead
+units, units in our breakable CC and locked ones, and the tier reads what a
+unit holds, so a running immunity never disqualified it. It now skips an
+enemy inside a full immunity at the attempt's start, through the shared
+fullImmunityIntervals (FULL_IMMUNITY_IDS: Divine Shield, Ice Block and the
+other every-school rows; a school-limited immunity, ruling F-K9b-B, and a
+deflection such as Aspect of the Turtle still count as a target). Existing wording only. Example: `softer target then:
+<paladin> - PRIME` for a paladin in Divine Shield 1:15.6-1:23.6 over a
+1:21-1:23 attempt now reads `no softer target`. 605 (base capture at
+57989f781 vs branch), new scan5/t105 softerTargetImmune: 37 / 9019 (13
+facts) -> 0 / 8988. 77 context lines in 46 files changed, all KILL ATTEMPTS
+(the softer-target part and the Summary's count of attempts opened while a
+softer target existed); family diff 0 flags; findings files 0, candidate
+rows +0 -0; gates 110 -> 110.

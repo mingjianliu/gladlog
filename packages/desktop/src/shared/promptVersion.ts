@@ -1281,5 +1281,10 @@
  *  ATTEMPTS and [CONTESTED] no longer say `trinket up` / `trinket
  *  available` for it; they use the `no pressable PvP trinket` wording.
  *  See docs/prompt-version-history.md.
+ *
+ * v556 (2026-11-15; pipeline batch B74, T105): KILL ATTEMPTS no
+ *  longer names as `softer target then` an enemy that is inside a full
+ *  immunity to every school (Divine Shield, Ice Block) at the attempt's
+ *  start. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 555;
+export const PROMPT_VERSION = 556;
