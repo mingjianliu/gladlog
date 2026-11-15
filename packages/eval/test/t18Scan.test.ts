@@ -211,7 +211,10 @@ describe("scan5/t18 setExtendedFade", () => {
     expect(scan(o(), [fade("0:19", "expired, estimated")])).toEqual([
       "setExtendedFade:estimatedBeforeEnd",
     ]);
-    expect(scan(o(19.5), [fade("0:19", "expired")])).toEqual([]);
+    // 0.1 s before the press-anchored end (0.8 s + its length), 0.4 s before
+    // an APPLIED-anchored one: inside the producer's slack only when
+    // anchored at the press (T103: the slack is 0.2 s)
+    expect(scan(o(20.7), [fade("0:20", "expired")])).toEqual([]);
   });
 
   // codex 85-tk-A-T18-2b #2: the producer pairs the 59.9 s REMOVED with the

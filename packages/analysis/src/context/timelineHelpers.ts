@@ -506,9 +506,12 @@ export function isChannelledPress(spellId: string): boolean {
  * (`HASTE_DURATION_SPELL_IDS`; fact8 D38, a39539f2 2:26: a full Bladestorm
  * under Bloodlust ran 4.16 s of 6, ten ticks, and read "ended early"). The
  * official length is no bound on it; `CHANNEL_STOPPED_MAX_SHARE` is. */
-function runsWithHaste(spellId: string): boolean {
+export function runsWithHaste(spellId: string): boolean {
   return (
-    CHANNELED_CD_SPELL_IDS.has(spellId) || HASTE_DURATION_SPELL_IDS.has(spellId)
+    // T103: any channel — Convoke the Spirits, Celestial Conduit, Boomstick
+    // ran 0.2–1.5 s short of their official 4 / 4 / 3 s and the 1.5 s
+    // early-end slack had hidden it
+    isChannelledPress(spellId) || HASTE_DURATION_SPELL_IDS.has(spellId)
   );
 }
 
@@ -557,9 +560,15 @@ export const ENDS_WITH_ITS_CHARGE_IDS: ReadonlySet<string> = new Set([
   "433874", // Deep Breath (Flameshaper)
 ]);
 
-// B129: a removal within this slack of the natural end still counts as a normal expiry (server-tick
-// latency); earlier than this means the buff was ended early (consumed/dispelled/cancelled).
-const BUFF_FADE_EARLY_TOLERANCE_S = 1.5;
+// B129: a removal within this slack of the natural end still counts as a normal expiry (log
+// jitter); earlier than this means the buff was ended early (consumed/dispelled/cancelled).
+// T103 (fact13 D3 / D17, measured on the 605 capture at PV547): of 19,048 logged `expired`
+// fades, 15,630 sit −0.2…+0.05 s from the full length and 88 more at 0.05–0.2 s; the 1.5 s
+// slack this was hid real early ends — Dispersion cancelled 0.8 s early, Touch of Karma's
+// shield eaten through 0.78 s early (`expired; 666k absorbed`), Ice Block / Aspect of the
+// Turtle cancelled. Haste-length buffs and channels are not judged on length at all
+// (`runsWithHaste`).
+export const BUFF_FADE_EARLY_TOLERANCE_S = 0.2;
 
 /**
  * For each owner CD cast, finds when the buff actually expired by matching to the
@@ -1239,11 +1248,30 @@ export function extractOwnerCDBuffExpiry(
         const onLastCharge =
           lastDose !== undefined &&
           doseStackCount(lastDose.logLine.parameters?.[12]) === 1;
+        // fact13 D7 (26c4ac25 r0 0:13): a one-charge application logs no
+        // dose row — Power Siphon's single stack went 7 ms after the
+        // Demonbolt that spends it. Its spender is the spell that spent a
+        // dose of the same aura elsewhere in the round (the 2:00 press's two
+        // stacks: Demonbolt, then REMOVED_DOSE).
+        const roundSpenders =
+          doseRows.length > 0
+            ? spenders
+            : new Set(
+                holder.auraEvents
+                  .filter(
+                    (a) =>
+                      a.spellId === endAuraId &&
+                      a.srcUnitId === ownerId &&
+                      (a.logLine.event as LogEvent) ===
+                        LogEvent.SPELL_AURA_REMOVED_DOSE,
+                  )
+                  .flatMap((a) => castsBefore(a.logLine.timestamp as number)),
+              );
         const finalCasts = castsBefore(span.removedMs).filter((id) => !!id);
         if (
           cause === "ended_early" &&
           finalCasts.length > 0 &&
-          (finalCasts.some((id) => spenders.has(id)) ||
+          (finalCasts.some((id) => roundSpenders.has(id)) ||
             (onLastCharge && spenders.size > 0))
         )
           cause = "charges_spent";

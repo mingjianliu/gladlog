@@ -23,10 +23,12 @@
  *  - `fullLengthMisread`: `ended after A of Bs` whose B is not the full
  *    length.
  *  - `shortRunReadExpired`: `(expired)` on a run the log ended more than
- *    1.5 s (the producer's early-end tolerance) before its full length.
+ *    `BUFF_FADE_EARLY_TOLERANCE_S` (the producer's early-end tolerance,
+ *    imported) before its full length.
  * Counted: every such line whose application is found (no REFRESH between
  * the APPLIED and the line).
  */
+import { BUFF_FADE_EARLY_TOLERANCE_S } from "@gladlog/analysis/src/context/timelineHelpers";
 import {
   SET_BONUS_PER_EVENT_DURATIONS,
   setBonusPerEventFor,
@@ -53,8 +55,6 @@ export const CHECKS = ["setExtendedFade"] as const;
 
 const FADE_LINE = /^(\d+:\d\d)\s+\[BUFF FADED\]\s+(.+?) \((.+)\)\s*$/;
 const ENDED_AFTER = /^ended after ([\d.]+) of ([\d.]+)s/;
-/** `timelineHelpers.ts` BUFF_FADE_EARLY_TOLERANCE_S */
-const EARLY_TOLERANCE_S = 1.5;
 
 /** The run's full length from the log's rows (see the header). */
 function fullLengthS(
@@ -209,7 +209,7 @@ export function run(ctx: IRoundCtx): void {
     if (
       claim.startsWith("expired") &&
       removed &&
-      (tsOf(removed) - anchor) / 1000 < full - EARLY_TOLERANCE_S
+      (tsOf(removed) - anchor) / 1000 < full - BUFF_FADE_EARLY_TOLERANCE_S
     )
       ctx.violate(
         "setExtendedFade",

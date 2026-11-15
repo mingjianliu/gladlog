@@ -122,7 +122,7 @@ describe("[BUFF FADED] — a buff removed with the druid's own form is 'form_shi
 
     it("a SPELL_DISPEL of the aura on its holder at the removal → dispelled, even inside the expiry tolerance", () => {
       const owner = druid(false);
-      // removed at 21.2 s of a 12 s Ironbark cast at 10 s → inside the 1.5 s tolerance ("expired" before)
+      // removed at 21.2 s of a 12 s Ironbark cast at 10 s → inside the old 1.5 s tolerance ("expired" before)
       const at = T0 + 21_200;
       const mate = mateWith(at, { actionIn: [dispel(LogEvent.SPELL_DISPEL, at)] as never });
       const [e] = extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, mate], T0, owner);
@@ -131,10 +131,11 @@ describe("[BUFF FADED] — a buff removed with the druid's own form is 'form_shi
         endedBy: { unitId: "enemy-1", unitName: "Shammy", spellName: "Greater Purge" },
       });
       // a dispel of ANOTHER aura, or one a second away, is not this buff's end
+      // (T103: 0.8 s early is no jitter either — it ended early, cause unnamed)
       const other = mateWith(at, { actionIn: [{ ...(dispel(LogEvent.SPELL_DISPEL, at) as object), extraSpellId: "1" }] as never });
-      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, other], T0, owner)[0]!.cause).toBe("expired");
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, other], T0, owner)[0]!.cause).toBe("ended_early");
       const far = mateWith(at, { actionIn: [dispel(LogEvent.SPELL_DISPEL, at - 1_000)] as never });
-      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, far], T0, owner)[0]!.cause).toBe("expired");
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, far], T0, owner)[0]!.cause).toBe("ended_early");
     });
 
     it("SPELL_STOLEN → stolen", () => {

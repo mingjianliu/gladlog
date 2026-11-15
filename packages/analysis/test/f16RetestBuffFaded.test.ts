@@ -92,7 +92,9 @@ describe("F16 retest — [BUFF FADED] cause of a short buff and a form-bound one
       100,
       101.1,
     );
-    expect(causeOf(u, cdOf(V, "Vanish", 100))).toEqual(["expired"]);
+    // T103: 0.4 s before its 1.5 s is no log jitter — ended early either way;
+    // the press in the removal's ms is what it reads off the log
+    expect(causeOf(u, cdOf(V, "Vanish", 100))).toEqual(["ended_early"]);
     u.spellCastEvents.push(
       makeSpellCastEvent("1833", at(101.1), "enemy-1") as never,
     );
@@ -149,7 +151,7 @@ describe("F16 retest — [BUFF FADED] cause of a short buff and a form-bound one
     ).toEqual(["expired"]);
   });
 
-  it("Frenzied Regeneration (3 s) removed 0.68 s early, 10 ms after Bear Form came off → form_shift; with no form removal → expired", () => {
+  it("Frenzied Regeneration (3 s) removed 0.68 s early, 10 ms after Bear Form came off → form_shift; with no form removal → ended_early (T103)", () => {
     const FR = "22842";
     const BEAR = "5487";
     const bearOff = makeAuraEvent(
@@ -184,7 +186,8 @@ describe("F16 retest — [BUFF FADED] cause of a short buff and a form-bound one
         ),
         cdOf(FR, "Frenzied Regeneration", 52.554),
       ),
-    ).toEqual(["expired"]);
+      // T103: 0.68 s early with no form removal is an early end, not jitter
+    ).toEqual(["ended_early"]);
   });
 
   it("fact3 D50 / user ruling 2026-10-21: Intervene runs its arena 3 s — a 3.0 s run expired", () => {
