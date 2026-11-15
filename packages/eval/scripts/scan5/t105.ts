@@ -6,9 +6,10 @@
  *
  *  - `softerTargetImmune`: X carried a FULL immunity (`FULL_IMMUNITY_IDS` —
  *    a table lookup: Divine Shield, Ice Block, Aspect of the Turtle) from its
- *    APPLIED row to the REMOVED that closes it across the whole first printed
- *    second of the bracket (e2047b8b-r0 1:21: Divine Shield up 1:15.6–1:23.6,
- *    the line named its paladin `PRIME`). Covering the whole second keeps the
+ *    APPLIED row to the REMOVED that closes it (no other APPLIED of it in
+ *    between; an application whose end the log does not show is not judged)
+ *    across the whole first printed second of the bracket (e2047b8b-r0 1:21:
+ *    Divine Shield up 1:15.6–1:23.6, the line named its paladin `PRIME`). Covering the whole second keeps the
  *    scan on the rendering grid: the producer reads the exact start instant.
  *    Counted: every line naming a softer target.
  */
@@ -19,7 +20,7 @@ import { APPLIED, ev, type IRoundCtx, REMOVED, secOf, tsOf } from "./ctx";
 export const CHECKS = ["softerTargetImmune"] as const;
 
 const LINE =
-  /^ {2}\[(\d+:\d{2})–(\d+:\d{2})\] on (\S+) — .*softer target then: (\S+) — ([A-Z]+)/;
+  /^ {2}\[(\d+:\d{2})–(\d+:\d{2})\] on (\S+) — .*softer target then: (\S+) — ([A-Za-z]+)/;
 
 export function run(ctx: IRoundCtx): void {
   for (const l of ctx.lines) {
@@ -36,29 +37,37 @@ export function run(ctx: IRoundCtx): void {
           a.destUnitId === x.id && FULL_IMMUNITY_IDS.has(String(a.spellId)),
       )
       .sort((a, b) => tsOf(a) - tsOf(b));
-    const covering = rows.find((a) => {
-      if (ev(a) !== APPLIED || tsOf(a) > lo) return false;
-      const end = rows.find(
-        (r) =>
-          ev(r) === REMOVED &&
-          String(r.spellId) === String(a.spellId) &&
-          tsOf(r) >= tsOf(a),
-      );
-      return (end ? tsOf(end) : Infinity) >= hi;
-    });
+    // the REMOVED that closes this application: the first one of the same
+    // spell after it with no other APPLIED of it in between. An application
+    // with no such row is not judged — the log does not show its end, and
+    // the producer caps it at the official length (codex 85-tk-L-T105-1 #1)
+    const closeOf = (a: any): any => {
+      for (const r of rows) {
+        if (tsOf(r) < tsOf(a) || r === a) continue;
+        if (String(r.spellId) !== String(a.spellId)) continue;
+        if (ev(r) === APPLIED) return undefined;
+        if (ev(r) === REMOVED) return r;
+      }
+      return undefined;
+    };
+    let covering: any;
+    let end: any;
+    for (const a of rows) {
+      if (ev(a) !== APPLIED || tsOf(a) > lo) continue;
+      const r = closeOf(a);
+      if (r && tsOf(r) >= hi) {
+        covering = a;
+        end = r;
+        break;
+      }
+    }
     if (!covering) continue;
-    const end = rows.find(
-      (r) =>
-        ev(r) === REMOVED &&
-        String(r.spellId) === String(covering.spellId) &&
-        tsOf(r) >= tsOf(covering),
-    );
     ctx.violate(
       "softerTargetImmune",
       String(covering.spellName ?? covering.spellId),
       lo,
       `${m[3]}:${m[1]}`,
-      `${m[4]} (${m[5]}) carried ${covering.spellName ?? covering.spellId} from ${((tsOf(covering) - ctx.start) / 1000).toFixed(1)}s to ${end ? ((tsOf(end) - ctx.start) / 1000).toFixed(1) + "s" : "the round's end"}`,
+      `${m[4]} (${m[5]}) carried ${covering.spellName ?? covering.spellId} from ${((tsOf(covering) - ctx.start) / 1000).toFixed(1)}s to ${((tsOf(end) - ctx.start) / 1000).toFixed(1)}s`,
       l,
     );
   }
