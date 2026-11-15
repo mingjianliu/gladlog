@@ -981,6 +981,23 @@ const INDEX: PredicateRow[] = [
     symbol: "enemyHealerCcWindows",
     mod: cooldownTiming,
   },
+  // pipeline T110 (ruling R42 A): the facts-only healer lock and the
+  // merged locks + entered lead scan5/t110 reads
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "isFactOnlyHealerLockAura",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "mergeHealerCcWindows",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "SYNC_ENTER_LEAD_S",
+    mod: cooldownTiming,
+  },
   {
     file: `${A}/utils/incomingPressure.ts`,
     symbol: "incomingPressureEvents",

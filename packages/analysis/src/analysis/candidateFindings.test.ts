@@ -4192,6 +4192,46 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
     expect(msw[0]!.facts["dr"]).toBe("Full");
   });
 
+  it("T110 (ruling R42 A): a Sin and Punishment on the enemy healer is a facts-only lock — a window, never a missed-sync anchor", () => {
+    const c = syncFixture();
+    const sp = (event: string, ms: number) => ({
+      logLine: { event, timestamp: ms },
+      timestamp: ms,
+      spellId: "87204",
+      spellName: "Sin and Punishment",
+      srcUnitId: "h",
+      srcUnitName: "Healer-R",
+      destUnitId: "e",
+      destUnitName: "Enemy-Healer",
+    });
+    c.units.e.auraEvents.push(
+      sp("SPELL_AURA_APPLIED", 460_000),
+      sp("SPELL_AURA_REMOVED", 463_000),
+    );
+    const units = Object.values(c.units) as Array<{ reaction: number }>;
+    const friends = units.filter((u) => u.reaction === 1);
+    const enemies = units.filter((u) => u.reaction === 2);
+    const ccWindows = enemyHealerCcWindows(friends, enemies, c);
+    expect(
+      ccWindows.map((w) => [
+        w.spellName,
+        w.fromSeconds,
+        w.toSeconds,
+        w.factOnly,
+      ]),
+    ).toEqual([
+      ["Polymorph", 439, 447, undefined],
+      ["Sin and Punishment", 460, 463, true],
+    ]);
+    const before = extractCandidateFindings(syncFixture(), "h").filter(
+      (e) => e.type === "missed-sync-window",
+    );
+    const after = extractCandidateFindings(c, "h").filter(
+      (e) => e.type === "missed-sync-window",
+    );
+    expect(after.map((e) => e.id)).toEqual(before.map((e) => e.id));
+  });
+
   it("同一 fixture 直调纯函数(用真实 analyzeOutgoingCCChains/extractMajorCooldowns 数据,不是手搭 fixture)仍产出两条——证明数据条件本身没坏,菜单接线已按「退役到零件」摘除", () => {
     const c = syncFixture();
     const units = Object.values(c.units) as any[];

@@ -16,6 +16,7 @@ import { costNormPhrase } from "../../data/curatedAbilityFacts";
 import { MITIGATION_TABLE } from "../../data/mitigationData";
 import { OFF_GCD_SPELL_IDS } from "../../data/offGcdGenerated";
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { ccSpellIds } from "../../data/spellTags";
 import { reachesAlly } from "../../data/spellTargeting";
 import {
   syncRefClearsMinContrast,
@@ -27,7 +28,10 @@ import {
   traceDecision,
 } from "../../facts/decisionTrace";
 import { isAllyCopyWallId } from "../../utils/allyCopyWall";
-import { SAVE_CAST_AURA_PAIR_S } from "../../utils/auraIntervals";
+import {
+  buildAuraIntervals,
+  SAVE_CAST_AURA_PAIR_S,
+} from "../../utils/auraIntervals";
 import {
   buffDurationOfApplication,
   buffFullDurationForCaster,
@@ -37,6 +41,7 @@ import {
   type ActWindowState,
   cannotCastIntervalsForSpells,
   couldActForMostOf,
+  isHardCcAura,
   lockedSchoolsText,
 } from "../../utils/cannotCastIntervals";
 import { ccLandingStateAtMs } from "../../utils/ccBreakAnalysis";
@@ -95,7 +100,11 @@ import {
 } from "../../utils/refusedPress";
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
 import type { RosterSides } from "../../utils/rosterSide";
-import { shuffleRoundEndMs, SOLO_SHUFFLE_BRACKET } from "../../utils/roundEnd";
+import {
+  roundEndMs,
+  shuffleRoundEndMs,
+  SOLO_SHUFFLE_BRACKET,
+} from "../../utils/roundEnd";
 import { isOffensiveCdFor, isOffensiveLedgerCd } from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
 import {
@@ -157,6 +166,25 @@ export interface IEnemyHealerCcWindow {
   /** still on when the round ended (`IOutgoingCCApplication.cutByRoundEnd`)
    * — `toSeconds` is the round's end */
   cutByRoundEnd?: true;
+  /** A lock for the facts only (`isFactOnlyHealerLockAura`): it names the
+   * lock a cooldown entered and the kill window's `healerLocked`, and opens
+   * no missed-sync window and no unsynced-burst cover (ruling R42 A). */
+  factOnly?: true;
+}
+
+/**
+ * A hard control on the enemy healer that has no DR family, so the outgoing
+ * DR chains never carry it: the dispel-backlash horror (Sin and Punishment
+ * 87204 — `isHardCcAura`, the one hard-CC aura test, holds it through
+ * `BACKLASH_AURA_CC_TYPE`; `ccSpellIds` does not). The `[CC ON ENEMY]` and
+ * `[CONSEQ]` lines already count it as a lock on the healer. Pipeline T110
+ * (fact13 D10, ruling R42, 2026-11-14: "算吧先" — option A, a lock stated as a
+ * fact, never the ground of a missed-window accusation): 36e987ca, Voidform
+ * at 5:27 went into the 5:28 Sin and Punishment, and `enteredNextLock` named
+ * the 5:36 Psychic Scream.
+ */
+export function isFactOnlyHealerLockAura(spellId: string): boolean {
+  return isHardCcAura(spellId) && !ccSpellIds.has(spellId);
 }
 
 /**
@@ -265,6 +293,36 @@ export function enemyHealerCcWindows(
         drLevel: app.drInfo.level,
         ...(endedBy ? { endedBy } : {}),
         ...(app.cutByRoundEnd ? { cutByRoundEnd: true as const } : {}),
+      });
+    }
+  }
+  // T110: the healer's facts-only locks, from the one aura pairing — one of
+  // our team's (a friendly source), inside the round
+  const friendIds = new Set(friends.map((f) => f.id as string));
+  const roundEnd = roundEndMs(combat);
+  for (const healer of enemies) {
+    if (!healerNames.has(healer.name)) continue;
+    if (
+      !(healer.auraEvents ?? []).some((a: { spellId?: string }) =>
+        isFactOnlyHealerLockAura(a.spellId ?? ""),
+      )
+    )
+      continue;
+    for (const iv of buildAuraIntervals(healer, combat)) {
+      if (!isFactOnlyHealerLockAura(iv.spellId)) continue;
+      if (!iv.srcUnitId || !friendIds.has(iv.srcUnitId)) continue;
+      const fromMs = combat.startTime + iv.fromS * 1000;
+      if (fromMs >= roundEnd) continue;
+      const cut = combat.startTime + iv.toS * 1000 > roundEnd;
+      out.push({
+        fromSeconds: iv.fromS,
+        toSeconds: cut ? (roundEnd - combat.startTime) / 1000 : iv.toS,
+        spellName: getEnglishSpellName(iv.spellId, iv.spellName),
+        spellId: iv.spellId,
+        healerName: healer.name,
+        casterName: iv.srcUnitName,
+        factOnly: true,
+        ...(cut ? { cutByRoundEnd: true as const } : {}),
       });
     }
   }
@@ -1168,6 +1226,7 @@ export function missedSyncWindowEvents(
     | "drLevel"
     | "endedBy"
     | "cutByRoundEnd"
+    | "factOnly"
   >[],
   offensiveCds: SyncWindowCd[],
   probes: {
@@ -1230,7 +1289,11 @@ export function missedSyncWindowEvents(
   // With no owner in the question (the calibration counts) nothing is cut.
   const ownerPartOnly =
     probes.ownerId !== undefined && syncRowNarrowedToOwnerPart(ref.cellKey);
-  const merged = mergeHealerCcWindows(ccWindows);
+  // T110 (ruling R42 A): a facts-only lock opens no window and joins none
+  // (it could lengthen one past the eligibility floor); it is a lock a
+  // cooldown can enter (`enteredNextLock`, below)
+  const merged = mergeHealerCcWindows(ccWindows.filter((w) => !w.factOnly));
+  const mergedWithFacts = mergeHealerCcWindows(ccWindows);
   const candidates: Array<{
     w: (typeof merged)[number];
     ready: string[];
@@ -1337,7 +1400,7 @@ export function missedSyncWindowEvents(
         // the Seduction, went into the Kidney Shot→Fear lock that followed.
         const afterEnd = (s: number) =>
           probes.playableEndS !== undefined && s > probes.playableEndS;
-        const next = merged.find((n) => n.fromSeconds > w.toSeconds);
+        const next = mergedWithFacts.find((n) => n.fromSeconds > w.toSeconds);
         const enteredNext =
           next && !afterEnd(next.fromSeconds)
             ? readyCds.flatMap((cd) => {
@@ -1568,7 +1631,10 @@ export function unsyncedBurstEvents(
     castTimeSeconds: number;
     cooldownSeconds: number;
   }>,
-  ccWindows: Pick<IEnemyHealerCcWindow, "fromSeconds" | "toSeconds">[],
+  ccWindows: Pick<
+    IEnemyHealerCcWindow,
+    "fromSeconds" | "toSeconds" | "factOnly"
+  >[],
   healerNames: string[],
   /** Feasibility gate (2026-08-22 corpus adjudication): did the TEAM have any
    * hard CC off cooldown when this cooldown went out? The advice is "line the
@@ -1604,8 +1670,9 @@ export function unsyncedBurstEvents(
     // 牌子才混进 teamOffensiveCds,「你的黑暗没和控制对齐」不是一句能成立的话。
     // 元素/增强萨的升腾(114050/114051)不够得着队友,照旧留在指控范围内。
     if (reachesAlly(cast.spellId)) continue;
+    // T110 (ruling R42 A): a facts-only lock is no cover for the claim
     const hasHardCc = ccWindows.some(
-      (w) => w.fromSeconds < span.to && w.toSeconds > span.from,
+      (w) => !w.factOnly && w.fromSeconds < span.to && w.toSeconds > span.from,
     );
     if (hasHardCc) continue;
     // 2026-08-22, ~278 sampled instances of the 12.1 archive: in **0%** of them

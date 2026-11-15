@@ -69,6 +69,46 @@ describe("missed-sync-window enteredNextLock (B2-①)", () => {
     );
   });
 
+  it("T110 (ruling R42 A): a facts-only lock (Sin and Punishment) is the next lock a press can enter", () => {
+    const out = missedSyncWindowEvents(
+      [
+        lock(94.2, 100.4, "Seduction"),
+        {
+          ...lock(104.3, 107.3, "Sin and Punishment"),
+          factOnly: true as const,
+        },
+        lock(110.2, 113.9, "Fear"),
+      ],
+      [offensive("Kingsbane", [103.1])],
+      probes(),
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.facts["enteredNextLock"]).toBe(
+      "Kingsbane at 103 in the 104–107 lock (Sin and Punishment)",
+    );
+  });
+
+  it("T110: a facts-only lock opens no row and lengthens none past the floor", () => {
+    expect(
+      missedSyncWindowEvents(
+        [{ ...lock(94, 100, "Sin and Punishment"), factOnly: true as const }],
+        [offensive("Kingsbane", [])],
+        probes(),
+      ),
+    ).toEqual([]);
+    // a 2 s stun (under the 3 s floor) the horror would carry to 5 s
+    expect(
+      missedSyncWindowEvents(
+        [
+          lock(94, 96, "Hammer of Justice"),
+          { ...lock(95.5, 99, "Sin and Punishment"), factOnly: true as const },
+        ],
+        [offensive("Kingsbane", [])],
+        probes(),
+      ),
+    ).toEqual([]);
+  });
+
   it("is absent when the first press after the lock misses the next lock — the verdict's own entered test, lead included", () => {
     // 3.1 s before the next lock: outside SYNC_ENTER_LEAD_S, and with no
     // owner there is no buff span to carry it in

@@ -3831,7 +3831,9 @@ function teamPlayEvents(
       // predicate would trivially be true for EVERY offensive cast (nothing
       // to overlap), flooding the menu with a claim sync was never even
       // possible to attempt — not the coaching point this type exists for.
-      if (ccWindows.length > 0) {
+      // T110: a facts-only lock (Sin and Punishment) is no "real hard-CC
+      // window" for this gate
+      if (ccWindows.some((w) => !w.factOnly)) {
         // B3i: enemy CC can come from a pet or totem (Capacitor Totem,
         // e9ea8a0c @298), so the owner's cannot-cast sources include them.
         const enemyAndPetIds = cannotCastSrcIds;
