@@ -19,7 +19,9 @@ import { type IRoundCtx, nameOf } from "./ctx";
 
 export const CHECKS = ["healingBlockOffHealer"] as const;
 
-const CD_LINE = /^\s*(\d+:\d\d)\s+\[YOU\] \[CD\]\s+(.+?) \(/;
+/** `m:ss  [YOU] [CD]   <spell>[ → target][ (…)]…` — the spell is read as a
+ * prefix of the body, whatever the target / HP part (codex 85-tk-L-T121-2) */
+const CD_LINE = /^\s*(\d+:\d\d)\s+\[YOU\] \[CD\]\s+(.+)$/;
 let idOfName: Map<string, string> | undefined;
 
 export function run(ctx: IRoundCtx): void {
@@ -31,8 +33,13 @@ export function run(ctx: IRoundCtx): void {
   const lines = ctx.lines;
   for (let i = 0; i < lines.length; i++) {
     const m = CD_LINE.exec(lines[i]!);
-    const id = m ? idOfName.get(m[2]!) : undefined;
-    if (!m || !id) continue;
+    if (!m) continue;
+    const body = m[2]!;
+    const name = [...idOfName.keys()].find(
+      (n) => body === n || body.startsWith(`${n} `),
+    );
+    const id = name ? idOfName.get(name) : undefined;
+    if (!name || !id) continue;
     ctx.bump(C);
     // the product's predicate (ruling R46 = A): a healer's press keeps it
     if (pressGetsHealingBlock(id, ctx.owner)) continue;
@@ -42,10 +49,10 @@ export function run(ctx: IRoundCtx): void {
     if (!healing) continue;
     ctx.violate(
       C,
-      m[2]!,
+      name,
       ctx.start,
-      `${m[2]}:${m[1]}`,
-      `${m[2]} at ${m[1]} carries a [HEALING] block; the owner is no healer`,
+      `${name}:${m[1]}`,
+      `${name} at ${m[1]} carries a [HEALING] block; the owner is no healer`,
       lines[i]!.trim(),
     );
   }
