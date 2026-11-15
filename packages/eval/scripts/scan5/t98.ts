@@ -1,18 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- legacy parse objects (units, auraEvents, spellCastEvents) */
 /**
  * scan5/t98.ts — ticket T98 (fact13 D5 / D11): a wall's talent copy is no
- * press, and a press that refreshes the copy is one. Truth is read off the
- * log rows; lookups only name things.
+ * press, and a press that refreshes the copy is one. The ledger check takes
+ * the aura's interval and its presses from the producer's own selection;
+ * the pet check reads the log rows.
  *
  *  - `ledgerCopyHoldsPress` (D5): a burst-ledger line `<Wall> active ON THE
  *    TARGET … (Zs after the burst opened [no press logged])` whose aura —
  *    the target's APPLIED of that wall nearest the burst start + Z (the head
- *    is printed floored: + 0–1 s), up to its next REMOVED (or next APPLIED
- *    of it from the same source: a lost REMOVED) — holds a
- *    SPELL_CAST_SUCCESS of that wall by its holder or aimed at it. The press
- *    refreshed the copy; the interval is a pressed wall (1a2fabdb 1:25:
- *    Exhilaration's Survival of the Fittest copy at .265, the hunter's press
- *    at .528, 8.3 s read `[no press logged]`). Kind = the wall's name.
+ *    is printed floored: + 0–1 s) — opens a `buildAuraIntervals` interval
+ *    (the producer's own selection, FIX-CONTRACT step 7) that holds a
+ *    pressed `enemyDefensiveEvents` event of that wall by the interval's
+ *    source on the target, after its start and before its end (a press at
+ *    its end opens the next one). The press refreshed the copy; the
+ *    interval is a pressed wall (1a2fabdb 1:25: Exhilaration's Survival of
+ *    the Fittest copy at .265, the hunter's press at .528, 8.3 s read
+ *    `[no press logged]`). Kind = the wall's name.
  *  - `petCopyReadAsPress` (D11): a `[YOU] [CD]` / `[TEAM] [CD]` press line of
  *    a cooldown with no SPELL_CAST_SUCCESS of it by its unit within 2 s of
  *    the line's second, while in that second the unit's own pet got the
@@ -22,7 +25,13 @@
  *    re-states the unit (`isResyncBatchAt`) is skipped: it can be a press
  *    lost while unseen. Kind = the cooldown's name.
  */
+import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import {
+  enemyDefensiveEvents,
+  type IEnemyDefensiveEvent,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import { isResyncBatchAt } from "@gladlog/analysis/src/utils/resyncBatch";
+import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import {
   APPLIED,
@@ -30,7 +39,6 @@ import {
   type IRoundCtx,
   nameOf,
   REFRESH,
-  REMOVED,
   secOf,
   successesOf,
   tsOf,
@@ -46,11 +54,14 @@ const CD_LINE =
   /^(\d+:\d{2})\s+\[(YOU|TEAM)\] \[CD\]\s+(?:(\d+)\([^)]*\) \([^)]*\): )?(.+?)(?= \(| →| \||$)/;
 
 const PAIR_MS = 5;
+/** one aura's start read on two clocks (row ms vs the builder's seconds) */
+const SAME_AURA_S = 0.05;
 
 function ledger(ctx: IRoundCtx): void {
   const C = "ledgerCopyHoldsPress";
   let head: number | undefined;
   let target: string | undefined;
+  const defByTeam = new Map<string, IEnemyDefensiveEvent[]>();
   for (const l of ctx.lines) {
     const h = BURST_HEAD.exec(l);
     if (h) {
@@ -80,60 +91,52 @@ function ledger(ctx: IRoundCtx): void {
       .filter((a) => ev(a) === APPLIED && tsOf(a) >= lo && tsOf(a) <= hi)
       .sort((a, b) => tsOf(a) - tsOf(b))[0];
     if (!app) continue;
-    ctx.bump(C);
-    // up to its REMOVED — or the next APPLIED of it from the same source:
-    // with the REMOVED lost, that is a fresh aura (codex 85-tk-K-T98-1b #2).
-    // A REMOVED closes its own source's open aura, else the first one open
-    // (a REMOVED's source is often missing or inconsistent): the open state
-    // is replayed over the holder's whole stream of the wall, as the
-    // interval reader does (codex 85-tk-K-T98-1d / 1e / 1f)
-    // keyed by spell id and source, the fallback within one id — as the
-    // builder keys its intervals (codex 85-tk-K-T98-1g: two ids of one
-    // wall name)
-    const keyOf = (a: any) => `${a.spellId}:${a.srcUnitId ?? ""}`;
-    const copyKey = keyOf(app);
-    let end = ctx.end;
-    const open = new Map<string, true>();
-    const stream = [...rows].sort(
-      (a, b) =>
-        tsOf(a) - tsOf(b) ||
-        (a.logLine?.lineIndex ?? 0) - (b.logLine?.lineIndex ?? 0),
+    // the copy's interval and the presses are the producer's own selection
+    // (FIX-CONTRACT step 7): `buildAuraIntervals` (one interval per aura,
+    // not cut at a REFRESH) and `enemyDefensiveEvents`' pressed events —
+    // a hand replay of the builder diverged from it round after round
+    // (codex 85-tk-K-T98-1c … 1h)
+    const combat = ctx.legacy as AtomicArenaCombat;
+    const appS = (tsOf(app) - combat.startTime) / 1000;
+    const iv = buildAuraIntervals(holder as ICombatUnit, combat).find(
+      (x) =>
+        x.spellId === String(app.spellId) &&
+        x.srcUnitId === app.srcUnitId &&
+        Math.abs(x.fromS - appS) <= SAME_AURA_S,
     );
-    for (const a of stream) {
-      const key = keyOf(a);
-      const after = a !== app && tsOf(a) >= tsOf(app);
-      if (ev(a) === APPLIED) {
-        if (after && key === copyKey) {
-          end = tsOf(a);
-          break;
-        }
-        open.set(key, true);
-      } else if (ev(a) === REFRESH) {
-        open.set(key, true);
-      } else if (ev(a) === REMOVED) {
-        const hit = open.has(key)
-          ? key
-          : [...open.keys()].find((k) => k.startsWith(`${a.spellId}:`));
-        if (hit === undefined) continue;
-        open.delete(hit);
-        if (after && hit === copyKey) {
-          end = tsOf(a);
-          break;
-        }
-      }
-    }
-    const press = ctx.players
-      .flatMap((u) => successesOf(u).map((c) => ({ c, u })))
-      .find(
-        ({ c, u }) =>
-          // the aura's own source: another unit's cast of the wall on the
-          // holder is its own application (codex 85-tk-K-T98-1c)
-          u.id === app.srcUnitId &&
-          (u.id === holder.id || c.destUnitId === holder.id) &&
-          nameOf(c.spellId, c.spellName) === wall &&
-          tsOf(c) > tsOf(app) &&
-          tsOf(c) < end,
+    if (!iv) continue;
+    ctx.bump(C);
+    // the ledger's own reading: every event of the holder's team, the
+    // holder's by recipient (an external sits on its caster's events)
+    const team = ctx.players.filter(
+      (u) => u.reaction === holder.reaction,
+    ) as ICombatUnit[];
+    const teamKey = String(holder.reaction);
+    if (!defByTeam.has(teamKey))
+      defByTeam.set(
+        teamKey,
+        team.flatMap((e) => enemyDefensiveEvents(e, team, combat)),
       );
+    const ev2 = defByTeam
+      .get(teamKey)!
+      .filter(
+        (e) =>
+          !e.noPressLogged &&
+          e.spellId === iv.spellId &&
+          (e.recipientId ?? e.casterId) === holder.id &&
+          e.casterId === iv.srcUnitId &&
+          e.atSeconds > iv.fromS + SAME_AURA_S &&
+          e.atSeconds < iv.toS,
+      )
+      .sort((a, b) => a.atSeconds - b.atSeconds)[0];
+    const pressS = ev2 ? (ev2.pressSeconds ?? ev2.atSeconds) : undefined;
+    const press =
+      pressS === undefined
+        ? undefined
+        : {
+            c: { logLine: { timestamp: combat.startTime + pressS * 1000 } },
+            u: ctx.units.find((u) => u.id === iv.srcUnitId) ?? holder,
+          };
     if (!press) continue;
     ctx.violate(
       C,

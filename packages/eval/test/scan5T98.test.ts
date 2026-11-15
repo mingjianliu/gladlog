@@ -1,49 +1,60 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- fake legacy parse objects, the check reads them untyped */
+/* eslint-disable @typescript-eslint/no-explicit-any -- the scan context is a fake */
 /**
- * scan5 `ledgerCopyHoldsPress` (T98, codex 85-tk-K-T98-1c): the press that
- * refreshes a copy is its own source's — another unit's cast of the wall on
- * the holder is that unit's own application.
+ * scan5 `ledgerCopyHoldsPress` (T98): the copy's interval and its presses are
+ * the producer's own selection — `buildAuraIntervals` and
+ * `enemyDefensiveEvents` — not a hand replay of the builder (eight codex
+ * rounds, 85-tk-K-T98-1c … 1h, each found a new divergence in the replay).
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
-import { LogEvent } from "@gladlog/parser-compat";
+import {
+  CombatUnitReaction,
+  CombatUnitSpec,
+  LogEvent,
+} from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import {
+  makeAuraEvent,
+  makeSpellCastEvent,
+  makeUnit,
+} from "../../analysis/test/ported/testHelpers";
 import { run } from "../scripts/scan5/t98";
 
-const START = 1_000_000;
-const at = (s: number): number => START + s * 1000;
-const PS = "33206";
-const row = (
-  event: string,
-  s: number,
-  srcUnitId: string,
-  destUnitId = "H",
-) => ({
-  timestamp: at(s),
-  logLine: { event, timestamp: at(s) },
-  spellId: PS,
-  spellName: "Pain Suppression",
-  srcUnitId,
-  destUnitId,
-});
+const T = 1_000_000;
+const at = (s: number) => T + s * 1000;
+const SOTF = "264735";
+const EXHILARATION = "109304";
+const info = { teamId: "0", specId: "x" } as unknown as NonNullable<
+  Parameters<typeof makeUnit>[1]
+>["info"];
 
-function scan(
-  units: any[],
-  wall = "Pain Suppression",
-): { checked: number; details: string[] } {
+const buff = (event: LogEvent, s: number) => ({
+  ...makeAuraEvent(event, SOTF, at(s), "e1", "e1", "BUFF"),
+  srcUnitName: "Hunter",
+  spellName: "Survival of the Fittest",
+});
+const cast = (id: string, s: number) =>
+  makeSpellCastEvent(id, at(s), "e1", "Hunter", "e1", "Hunter", 0, id);
+
+function scan(hunter: ReturnType<typeof makeUnit>): {
+  checked: number;
+  details: string[];
+} {
   let checked = 0;
   const details: string[] = [];
+  const units = [hunter];
   run({
     lines: [
       "  Burst #1 — 0:10–0:20 | Avenging Wrath",
-      "  Target: Holder 90% → 40%",
-      `  Target had a major defensive up: ${wall} active ON THE TARGET 8.0s of this burst (3.5s after the burst opened [no press logged])`,
+      "  Target: Hunter 90% → 40%",
+      "  Target had a major defensive up: Survival of the Fittest active ON THE TARGET 8.0s of this burst (3.5s after the burst opened [no press logged])",
     ],
-    start: START,
+    start: T,
     end: at(120),
+    legacy: { startTime: T, endTime: at(120), units: { e1: hunter } },
     units,
     players: units,
-    owner: units[0],
+    owner: undefined,
     unitOfPid: () => undefined,
     bump: () => checked++,
     violate: (_c: string, _k: string, _t: number, _f: string, d: string) =>
@@ -52,113 +63,58 @@ function scan(
   return { checked, details };
 }
 
+const hunter = (auraEvents: unknown[], casts: unknown[]) =>
+  makeUnit("e1", {
+    name: "Hunter",
+    spec: CombatUnitSpec.Hunter_Marksmanship,
+    reaction: CombatUnitReaction.Hostile,
+    info,
+    auraEvents: auraEvents as never,
+    spellCastEvents: [cast(EXHILARATION, 13.5), ...casts] as never,
+  });
+
 beforeAll(async () => {
   await ensureAnalysisData();
 });
 
-describe("scan5 ledgerCopyHoldsPress — the press is the copy source's", () => {
-  const holder = (casts: any[]) => ({
-    id: "H",
-    name: "Holder",
-    auraEvents: [
-      row(LogEvent.SPELL_AURA_APPLIED, 13.5, "H"),
-      row(LogEvent.SPELL_AURA_APPLIED, 15.5, "P2"),
-      row(LogEvent.SPELL_AURA_REMOVED, 21.5, "H"),
-      row(LogEvent.SPELL_AURA_REMOVED, 23.5, "P2"),
-    ],
-    spellCastEvents: casts,
-  });
-  const cast = (s: number, src: string) => ({
-    ...row(LogEvent.SPELL_CAST_SUCCESS, s, src),
-  });
-  it("another priest's cast on the holder is not the copy's press", () => {
-    const got = scan([
-      holder([]),
-      { id: "P2", name: "Other", spellCastEvents: [cast(15.5, "P2")] },
-    ]);
-    expect(got).toEqual({ checked: 1, details: [] });
-  });
-  it("another source's REMOVED does not end the copy", () => {
-    const got = scan([
-      {
-        id: "H",
-        name: "Holder",
-        auraEvents: [
-          row(LogEvent.SPELL_AURA_APPLIED, 13.5, "H"),
-          row(LogEvent.SPELL_AURA_APPLIED, 14, "P2"),
-          row(LogEvent.SPELL_AURA_REMOVED, 15, "P2"),
-          row(LogEvent.SPELL_AURA_REFRESH, 16, "H"),
-          row(LogEvent.SPELL_AURA_REMOVED, 24, "H"),
-        ],
-        spellCastEvents: [cast(16, "H")],
-      },
-    ]);
-    expect(got.checked).toBe(1);
-    expect(got.details).toHaveLength(1);
-  });
-  it("a REMOVED with no source ends the copy", () => {
-    const got = scan([
-      {
-        id: "H",
-        name: "Holder",
-        auraEvents: [
-          row(LogEvent.SPELL_AURA_APPLIED, 13.5, "H"),
-          row(LogEvent.SPELL_AURA_REMOVED, 15, ""),
-          row(LogEvent.SPELL_AURA_APPLIED, 16.001, "H"),
-          row(LogEvent.SPELL_AURA_REMOVED, 24, "H"),
-        ],
-        spellCastEvents: [cast(16, "H")],
-      },
-    ]);
-    expect(got).toEqual({ checked: 1, details: [] });
-  });
-  it("another source's aura from before the copy keeps its own REMOVED", () => {
-    const got = scan([
-      {
-        id: "H",
-        name: "Holder",
-        auraEvents: [
-          row(LogEvent.SPELL_AURA_APPLIED, 12, "P2"),
-          row(LogEvent.SPELL_AURA_APPLIED, 13.5, "H"),
-          row(LogEvent.SPELL_AURA_REMOVED, 15, "P2"),
-          row(LogEvent.SPELL_AURA_REFRESH, 16, "H"),
-          row(LogEvent.SPELL_AURA_REMOVED, 24, "H"),
-        ],
-        spellCastEvents: [cast(16, "H")],
-      },
-    ]);
-    expect(got.checked).toBe(1);
-    expect(got.details).toHaveLength(1);
-  });
-  it("another id of the wall's name does not take the copy's REMOVED", () => {
-    // Survival of the Fittest: the copy 264735, another unit's 281195
-    const sotf = (event: string, s: number, src: string, id = "264735") => ({
-      ...row(event, s, src),
-      spellId: id,
-      spellName: "Survival of the Fittest",
-    });
+describe("scan5 ledgerCopyHoldsPress — the producer's interval and presses", () => {
+  it("a press that refreshed the copy is a violation of `[no press logged]`", () => {
     const got = scan(
-      [
-        {
-          id: "H",
-          name: "Holder",
-          auraEvents: [
-            sotf(LogEvent.SPELL_AURA_APPLIED, 12, "P2", "281195"),
-            sotf(LogEvent.SPELL_AURA_APPLIED, 13.5, "H"),
-            sotf(LogEvent.SPELL_AURA_REMOVED, 15, "P2"),
-            sotf(LogEvent.SPELL_AURA_APPLIED, 16.001, "H"),
-            sotf(LogEvent.SPELL_AURA_REMOVED, 24, "H"),
-          ],
-          spellCastEvents: [sotf(LogEvent.SPELL_CAST_SUCCESS, 16, "H")],
-        },
-      ],
-      "Survival of the Fittest",
+      hunter(
+        [
+          buff(LogEvent.SPELL_AURA_APPLIED, 13.5),
+          buff(LogEvent.SPELL_AURA_REFRESH, 16),
+          buff(LogEvent.SPELL_AURA_REMOVED, 24),
+        ],
+        [cast(SOTF, 16)],
+      ),
+    );
+    expect(got.checked).toBe(1);
+    expect(got.details).toHaveLength(1);
+  });
+  it("a copy with no press passes", () => {
+    const got = scan(
+      hunter(
+        [
+          buff(LogEvent.SPELL_AURA_APPLIED, 13.5),
+          buff(LogEvent.SPELL_AURA_REMOVED, 16.5),
+        ],
+        [],
+      ),
     );
     expect(got).toEqual({ checked: 1, details: [] });
   });
-  it("the holder's own press inside the copy is one", () => {
-    const got = scan([holder([cast(16, "H")])]);
-    expect(got.checked).toBe(1);
-    expect(got.details).toHaveLength(1);
+  it("a fresh press after a lost REMOVED opens the next interval, not the copy's", () => {
+    const got = scan(
+      hunter(
+        [
+          buff(LogEvent.SPELL_AURA_APPLIED, 13.5),
+          buff(LogEvent.SPELL_AURA_APPLIED, 16.001),
+          buff(LogEvent.SPELL_AURA_REMOVED, 24),
+        ],
+        [cast(SOTF, 16)],
+      ),
+    );
+    expect(got).toEqual({ checked: 1, details: [] });
   });
 });
