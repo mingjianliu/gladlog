@@ -84,8 +84,8 @@
  * trinket has nothing to lock — `killTrinketUpNoTrinket`.
  *
  * Check `killTrinketUpNoTrinket` (fact7 r5): the same line on a unit whose
- * COMBATANT_INFO slots hold no pressable PvP trinket (`detectTrinketType`
- * None / Relentless). Kind = `<type>: <racial state>`, the racial read from the
+ * COMBATANT_INFO slots hold no pressable PvP trinket (`hasPressablePvpTrinket`:
+ * None / Relentless / Adaptation — pipeline T126 — with no Medallion press). Kind = `<type>: <racial state>`, the racial read from the
  * round's rows: `break racial spent` (a category-1166 press inside its own
  * lock), `break racial ready` (Will to Survive / Will of the Forsaken pressed
  * in the round, the log's only proof of the race, not yet at this line), `no
@@ -108,6 +108,7 @@ import {
   pvpTrinketRemainingSecondsAt,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import { hasPressablePvpTrinket } from "@gladlog/analysis/src/utils/trinketType";
 
 import { APPLIED, ev, fmtS, type IRoundCtx, successesOf, tsOf } from "./ctx";
 
@@ -296,7 +297,8 @@ function killTierClaims(ctx: IRoundCtx): void {
     const { Sr, S } = evidenceOf(ctx, u);
     const healer = isHealerSpec(u.spec);
     const type = detectTrinketType(u);
-    if (type === "None" || type === "Relentless") {
+    // the producer's own reading (pipeline T126: Adaptation is passive too)
+    if (!hasPressablePvpTrinket(u)) {
       const N = "killTrinketUpNoTrinket";
       ctx.bump(N);
       const spent = [...Sr].some(([id, presses]) => {

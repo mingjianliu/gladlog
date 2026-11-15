@@ -46,16 +46,27 @@ export function detectTrinketType(unit: ICombatUnit): TrinketType {
 }
 
 /**
- * Does the unit hold a PvP trinket it can press — the `null` of
- * `pvpTrinketRemainingSecondsAt`, read off the unit alone: Relentless is
+ * Does the unit hold a PvP trinket it can press, read off the unit alone
+ * (`pvpTrinketRemainingSecondsAt` is null for Relentless / None, and keeps
+ * Adaptation's own break-ready seconds — another fact): Relentless is
  * passive, "None" holds two other trinkets (user ruling 2026-10-31, fact7 r5:
  * 705 of 17,232 `trinket up` lines on the 605, 36 units, 247 with no break
  * racial seen). The kill tier still treats such a unit as `locked` — P-b7's
  * tier is not this fact — and only what the line says changes.
+ *
+ * Pipeline T126 (fact13 D34, 78ae1848 r0): Adaptation is passive too — it
+ * breaks a control of 5 s or more by itself (aura 336135, trigger 283167),
+ * and there is nothing to press; the round's Chaos Nova of 4.0 s could not
+ * trip it, yet both attempts on its holder printed `trinket up`. A logged
+ * Gladiator's Medallion press still proves a trinket to press whatever the
+ * slots say (a stale item list).
  */
 export function hasPressablePvpTrinket(unit: ICombatUnit): boolean {
   const type = detectTrinketType(unit);
-  return type !== "Relentless" && type !== "None";
+  if (type === "Gladiator" || type === "Unknown") return true;
+  return (unit.spellCastEvents ?? []).some(
+    (e) => e.spellId === MEDALLION_SPELL_ID,
+  );
 }
 
 /** Gladiator's Badge on-use spell (`trinketItemIds.json`). */
