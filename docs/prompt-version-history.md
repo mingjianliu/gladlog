@@ -6675,3 +6675,20 @@ vision-obscured rows of the 605: Smoke Bomb explains 284, Burrow 31, both
 4, neither 1. Lines changed: 4 [REJECTED] lines (three to Burrow, one to no
 cause) and the kick-eaten legend line in 929 prompts; menu rows unchanged,
 candidate rows +0 -0; every other scan5 check unchanged.
+
+v555 (2026-11-15; pipeline batch B73, T126; round 13 audit D34, found by the
+codex pass). hasPressablePvpTrinket answered true for Adaptation, which
+breaks a long control by itself and has nothing to press. It now answers
+true for a Medallion item in the trinket slots or for a unit with no
+equipment listed, and otherwise only when the unit pressed Gladiator's
+Medallion inside the round (medallionPressedInRound, bounded by the round's
+end in both brackets). Readers: KILL ATTEMPTS (`opportunity: trinket up`
+becomes the existing `no pressable PvP trinket` wording), the kill-window
+target rows, and [CONTESTED] (`none to press`). The kill tier is unchanged,
+and Adaptation's own break-ready seconds stay a separate fact. The gate
+scan5/trinketLock killTrinketUpNoTrinket, which replayed two trinket kinds
+by hand, calls the producer's predicate. 605 (base capture at 57989f781 vs
+branch), new scan5/t126 adaptationTrinketWords: 92 / 92 (91 distinct, all
+KILL ATTEMPTS `trinket up`) -> 0 / 92. 44 context files changed (attempt
+lines on Adaptation holders and the legend line); findings files 0,
+candidate rows +0 -0.

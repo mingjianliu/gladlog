@@ -1275,5 +1275,11 @@
  *  Smoke Bomb actually cast), not a fixed Smoke Bomb; with no cause
  *  found it prints the client reason alone.
  *  See docs/prompt-version-history.md.
+ *
+ * v555 (2026-11-15; pipeline batch B73, T126): a unit whose PvP
+ *  trinket slot holds Adaptation has nothing to press, so KILL
+ *  ATTEMPTS and [CONTESTED] no longer say `trinket up` / `trinket
+ *  available` for it; they use the `no pressable PvP trinket` wording.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 554;
+export const PROMPT_VERSION = 555;
