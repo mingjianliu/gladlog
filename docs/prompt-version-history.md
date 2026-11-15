@@ -6599,3 +6599,16 @@ fixed (codex 85-tk-M-T122-1b, scan only, synthetic): a source-less REMOVED
 on a destination another caster also holds, and a rebroadcast pair of the
 flight aura, can each misplace the run end in the scan; the product pairs
 both correctly.
+
+v551 (2026-11-15; pipeline batch B68, T109; round 13 audit D1; user ruling
+2026-11-14: take it out). A grip or redirect its caster cast on itself is
+a save of the caster only when selfDefensiveMechanism reads a reduction, an
+absorb or a heal (new predicate redirectSavesItsCaster): Roar of Sacrifice
+yes, Master's Call's root / snare removal no, ally-only grips never. The
+teammate ledger's self `redirects` entries keep only those, so cd-hoarded
+`crisisUnitSaved` no longer files a self-cast Master's Call beside Feign
+Death and Survival of the Fittest. Another unit's redirect onto the crisis
+unit (teamAnswered) is unchanged, and the press line keeps `(removes roots /
+snares)`. 605 (measured at main 86eca4bb9 vs branch), new scan5/t109
+selfRedirectListed: 4 / 7 -> 0 / 3; the facts of 4 cd-hoarded rows changed,
+no row added or removed, no context line changed.

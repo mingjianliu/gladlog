@@ -1253,5 +1253,10 @@
  *  caster belongs to that press's span (Breath of Eons' Temporal Wound
  *  lands 2.0 s after the cast), so the burst ledger no longer ends
  *  that burst at the flight's start. See docs/prompt-version-history.md.
+ *
+ * v551 (2026-11-15; pipeline batch B68, T109): cd-hoarded
+ *  crisisUnitSaved no longer lists a self-cast Master's Call (root /
+ *  snare removal, no damage reduction) as a self-save (user ruling
+ *  2026-11-14). See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 550;
+export const PROMPT_VERSION = 551;
