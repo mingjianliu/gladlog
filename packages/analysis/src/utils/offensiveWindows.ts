@@ -50,6 +50,7 @@ import {
   wallTableIdOfAura,
 } from "./enemyDefensives";
 import { isDeferralAbsorb } from "./incomingPressure";
+import { kwAuraReadPressesS } from "./kwAuraReadPresses";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
 import { isResyncBatchAt } from "./resyncBatch";
 import { roundEndMs } from "./roundEnd";
@@ -776,6 +777,8 @@ export function computeOffensiveWindowsUncached(
       });
       castDestsBySpell.set(spellId, dests);
     }
+    for (const [spellId, pressS] of kwAuraReadPressesS(enemy, combat))
+      if (!castsBySpell.has(spellId)) castsBySpell.set(spellId, pressS);
     /** did this press of `spellId` at `t` go on another unit — and put
      * nothing on its caster? A cast row can name an ally while the aura
      * lands on the caster too (codex 20-F18-02 #1, 4501dd64 0:45.4: an

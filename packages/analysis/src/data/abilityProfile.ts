@@ -275,6 +275,16 @@ export function isKillWindowMajorDefensive(spellId: string): boolean {
  */
 export const KW_IN_HAND_ONLY_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
   "342245", // Alter Time — 60 s (runs as 342246)
+  // Pipeline T106 (fact13 D14), user ruling R40 2026-11-14 「算减伤，用得好能
+  // 挡一些大技能」: a ready Feign Death keeps the hunter out of `defenseless`
+  // (5e61152f r0: `defenseless 2:05–2:15` with it back since ~2:01.6 and
+  // pressed again at 2:15.6). In hand only: its press is never logged as a
+  // success and its aura has no fixed length (`NO_FIXED_DURATION_IDS`, DB2
+  // "up to 360 s"); while it runs, the span already reads its Survival
+  // Tactics absorb (202748) as a save. Its presses come from the ledger's
+  // aura-read activations (`AURA_ACTIVATION_PROVES_BUTTON_IDS`). DB2 30 s;
+  // talents shorten it per unit (`unitCooldownOf`).
+  "5384", // Feign Death — 30 s
 ]);
 
 /**

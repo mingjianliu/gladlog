@@ -31,6 +31,7 @@ import {
   unitCooldownAvailableAt,
   unitCooldownOf,
 } from "./cooldowns";
+import { kwAuraReadPressesS } from "./kwAuraReadPresses";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { pvpTrinketUses, trinketUseRemainingSeconds } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
@@ -303,6 +304,21 @@ function getDefensiveStateAtTime(
     const existing = castsBySpell.get(spellId) ?? [];
     existing.push({ spellId, spellName, castSeconds });
     castsBySpell.set(spellId, existing);
+  }
+
+  // a press the log never writes as a success (Feign Death): the ledger's
+  // aura-read activations, as the span reads them (`kwAuraReadPressesS`)
+  for (const [spellId, pressS] of combat
+    ? kwAuraReadPressesS(enemy, combat)
+    : []) {
+    if (castsBySpell.has(spellId)) continue;
+    const before = pressS.filter((t) => t < windowStartSeconds);
+    if (before.length === 0) continue;
+    const spellName = spellEffectData[spellId]!.name;
+    castsBySpell.set(
+      spellId,
+      before.map((castSeconds) => ({ spellId, spellName, castSeconds })),
+    );
   }
 
   // For each tracked defensive, determine state at window start

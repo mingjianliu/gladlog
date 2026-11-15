@@ -185,6 +185,7 @@ import * as logEra from "@gladlog/analysis/src/utils/logEra";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as offensiveWasteAnalysis from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
+import * as kwAuraReadPresses from "@gladlog/analysis/src/utils/kwAuraReadPresses";
 import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
 import * as offListPress from "@gladlog/analysis/src/utils/offListPress";
 import * as outgoingCcChains from "@gladlog/analysis/src/utils/outgoingCcChains";
@@ -4239,6 +4240,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/abilityProfile.ts`,
     symbol: "isMajorDefenseUp",
     mod: abilityProfileMod,
+  },
+  {
+    file: `${A}/utils/kwAuraReadPresses.ts`,
+    symbol: "kwAuraReadPressesS",
+    mod: kwAuraReadPresses,
   },
   {
     file: `${A}/data/abilityProfile.ts`,
