@@ -119,6 +119,11 @@ const WHITELIST_IDS: ReadonlySet<string> = new Set<string>([
   // audit row (T60).
   ...OWN_SHIELD_RULING_FAMILY_IDS,
 ]);
+/** Whether the death's mitigation audit keys a row on this cast id — the
+ * audit's own whitelist (`scan5/t124.ts` asks it rather than copy it). */
+export const isMitigationAuditKey = (spellId: string): boolean =>
+  WHITELIST_IDS.has(spellId);
+
 /** The whitelist key an aura on the victim stands for — its own id or the
  * cast whose own effect it is (fact2 C10, `castKeyOfAura`): Rallying Cry
  * 97462 runs as 97463, Fortifying Brew 115203 as 120954, Blur 198589 as

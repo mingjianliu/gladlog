@@ -21,7 +21,12 @@
  *     389794 starts, and the button lost its own row;
  *   - per E: applications by any source, and how many of them had ANY of
  *     E's nominating casts by the same root caster in the window before them
- *     (`coveredShare`).
+ *     (`coveredShare`);
+ *   - an application with no source (`0000000000000000`: Anti-Magic Zone's
+ *     area aura 145629) counts for the one root caster that pressed one of
+ *     its nominating casts in the window before it, and for none when two
+ *     did (pipeline T124: the pair 51052 → 145629 was never verified, so
+ *     the death audit could not key the zone to its cast).
  *
  * Acceptance (`--emit`): a pair is kept when hits ≥ MIN_HITS, the effect is
  * mostly an effect of its nominating casts (coveredShare ≥ MIN_SHARE), AND
@@ -230,8 +235,26 @@ for (const f of files) {
     appliesAny = new Map();
     refreshes = new Map();
     doseSpends = new Map();
-    for (const { t, e, who, src } of apps) {
+    for (const app of apps) {
+      const { t, e } = app;
       const noms = nominators.get(e)!;
+      // pipeline T124: an aura the log writes with no source (Anti-Magic
+      // Zone's 145629, every row source-less) is the effect of the one root
+      // caster that pressed a nominating cast of it in the window before it;
+      // with two such casters it stays unattributed. Its own applier then
+      // is that caster, never a sibling summon.
+      let { who, src } = app;
+      if (who === NO_GUID) {
+        const pressers = [...recent].filter(([, l]) =>
+          l.some(
+            (r) =>
+              noms.has(r.c) && r.t <= t + 100 && r.t >= t - WINDOW_S * 1000,
+          ),
+        );
+        if (pressers.length !== 1) continue;
+        who = pressers[0]![0];
+        src = who;
+      }
       const list = recent.get(who);
       if (!list) continue;
       let covered = false;
@@ -509,7 +532,7 @@ if (args.emit) {
           manifest: args.manifest,
           every: args.every,
           filesRead: read,
-          rule: `a cast hits a nominated aura when the same root caster (summons resolved) applies it within ${WINDOW_S} s after the cast (once per cast); a pair is kept when hits >= ${MIN_HITS} the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= ${MIN_SHARE}, and >= ${MIN_FAST_SHARE} of the hits come within ${FAST_S} s of the cast or >= ${MIN_NEAR_FAST_SHARE} of the aura's applications with that cast in the window before them come within ${FAST_S} s of its nearest one (a talent-only nomination needs the latter); a name pair is refused when >= ${MAX_CONSUMED_SHARE} of its casts went out with the aura up and saw it REMOVED within ${CONSUME_MS} ms, or >= ${MAX_SIBLING_SHARE} of its nearest-cast applications came from a summon other than the one that cast`,
+          rule: `a cast hits a nominated aura when the same root caster (summons resolved; a source-less application counts for the one root caster with a nominating cast in the window) applies it within ${WINDOW_S} s after the cast (once per cast); a pair is kept when hits >= ${MIN_HITS} the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= ${MIN_SHARE}, and >= ${MIN_FAST_SHARE} of the hits come within ${FAST_S} s of the cast or >= ${MIN_NEAR_FAST_SHARE} of the aura's applications with that cast in the window before them come within ${FAST_S} s of its nearest one (a talent-only nomination needs the latter); a name pair is refused when >= ${MAX_CONSUMED_SHARE} of its casts went out with the aura up and saw it REMOVED within ${CONSUME_MS} ms, or >= ${MAX_SIBLING_SHARE} of its nearest-cast applications came from a summon other than the one that cast`,
           ...(keepNote ? { keep: keepNote } : {}),
           generatedAt: new Date().toISOString(),
         },

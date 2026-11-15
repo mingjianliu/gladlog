@@ -5,6 +5,7 @@ import {
 } from "@gladlog/parser-compat";
 import { describe, expect, test } from "vitest";
 
+import { castKeyOfAura } from "../src/data/castEffectAuras";
 import { IPlayerCCTrinketSummary } from "../src/utils/ccTrinketAnalysis";
 import { IMajorCooldownInfo } from "../src/utils/cooldowns";
 import {
@@ -14,6 +15,7 @@ import {
   COUNTERFACTUAL_WINDOW_S,
   counterfactualTier,
   DECISIVE_MARGIN_PCT,
+  isMitigationAuditKey,
 } from "../src/utils/counterfactual";
 import {
   IMissedExternal,
@@ -122,6 +124,21 @@ describe("counterfactualTier(三档谓词,量化报告同口径)", () => {
 });
 
 describe("computeMitigationAudit(A 形态)", () => {
+  test("pipeline T124: Anti-Magic Zone 51052 runs as 145629 on the players in it (always source-less) — the audit keys it by the cast", () => {
+    expect(isMitigationAuditKey("145629")).toBe(false);
+    expect(isMitigationAuditKey("51052")).toBe(true);
+    expect(castKeyOfAura("145629", isMitigationAuditKey)).toBe("51052");
+    const victim = mkVictim(
+      "v1",
+      [{ atS: 56, amount: 100_000, school: "0x20" }],
+      [{ spellId: "145629", spellName: "Anti-Magic Zone", fromS: 55, toS: 60 }],
+      [{ atS: 51, hp: 900_000, maxHp: 1_000_000 }],
+    );
+    const { rows } = computeMitigationAudit(victim, combatOf(), 60);
+    expect(rows.filter((r) => r.spellName === "Anti-Magic Zone")).toHaveLength(
+      1,
+    );
+  });
   // Synthetic: death at t=60s, window [50,60]; Barkskin (22812, 20%, 0x7f)
   // active over [52,58]; damageIn inside the window: 52.5s 100k (0x1 physical),
   // 55s 200k (0x20 shadow), 59s 300k (0x4 fire, outside the aura interval)

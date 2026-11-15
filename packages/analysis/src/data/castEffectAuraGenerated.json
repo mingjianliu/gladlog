@@ -5,9 +5,10 @@
   "manifest": "/Users/mingjianliu/code/gladlog-eval-private/corpus/manifest-archive-2026-08-28-newseason.txt",
   "every": 5,
   "filesRead": 1429,
-  "rule": "a cast hits a nominated aura when the same root caster (summons resolved) applies it within 60 s after the cast (once per cast); a pair is kept when hits >= 10 the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= 0.5, and >= 0.5 of the hits come within 3 s of the cast or >= 0.9 of the aura's applications with that cast in the window before them come within 3 s of its nearest one (a talent-only nomination needs the latter); a name pair is refused when >= 0.5 of its casts went out with the aura up and saw it REMOVED within 300 ms, or >= 0.5 of its nearest-cast applications came from a summon other than the one that cast",
+  "rule": "a cast hits a nominated aura when the same root caster (summons resolved; a source-less application counts for the one root caster with a nominating cast in the window) applies it within 60 s after the cast (once per cast); a pair is kept when hits >= 10 the aura's covered share (applications with a nominating cast by the same root caster in the window before them / all applications) >= 0.5, and >= 0.5 of the hits come within 3 s of the cast or >= 0.9 of the aura's applications with that cast in the window before them come within 3 s of its nearest one (a talent-only nomination needs the latter); a name pair is refused when >= 0.5 of its casts went out with the aura up and saw it REMOVED within 300 ms, or >= 0.5 of its nearest-cast applications came from a summon other than the one that cast",
   "keep": "additive: the 270 pairs of the table generated 2026-10-28T23:05:02.469Z (1429 files, castEffectNominationsGenerated.json (build 12.1.5.70391)) kept as they were; 0 added by this run; 5 refused by this run's consumed / sibling test dropped",
-  "generatedAt": "2026-11-05T07:18:54.956Z"
+  "generatedAt": "2026-11-05T07:18:54.956Z",
+  "t124": "pipeline T124: a source-less application counts for the one root caster with a nominating cast in the window; the two pairs that rule adds (51052 -> 145629 Anti-Magic Zone, 204331 -> 208997 Counterstrike Totem) were measured on every 5th file of the manifest (3627 files read) and added to this table as they were; no other row changed. That run also keeps 11 pairs this table lacks without the rule (a larger sample than the 1429 files above) — left for the next season refresh."
  },
  "casts": {
   "66": [
@@ -435,6 +436,17 @@
     "via": "name",
     "nearApps": 11,
     "nearWithin3s": 11
+   }
+  ],
+  "51052": [
+   {
+    "aura": "145629",
+    "casts": 750,
+    "hits": 731,
+    "hitsWithin3s": 728,
+    "medianDelayS": 0.02,
+    "coveredShare": 0.976,
+    "via": "name"
    }
   ],
   "53271": [
@@ -1292,6 +1304,17 @@
     "medianDelayS": 0,
     "coveredShare": 1,
     "via": "name+trigger"
+   }
+  ],
+  "204331": [
+   {
+    "aura": "208997",
+    "casts": 553,
+    "hits": 512,
+    "hitsWithin3s": 505,
+    "medianDelayS": 0.46,
+    "coveredShare": 0.913,
+    "via": "name"
    }
   ],
   "205636": [
