@@ -236,6 +236,27 @@ describe("T98 D5 — a copy a press refreshed is a pressed wall in the burst led
       "3.5s after the burst opened [no press logged]",
     );
   });
+  it("a press after the burst ended does not make its copy pressed", () => {
+    // batch review 80-PIPE-73-B70 #1: the copy overlaps the burst's end, the
+    // press refreshing it comes after the burst — only the unpressed copy
+    // was up during the burst
+    const toS = analyzeBurstLedger(ret, [], [hunter(undefined)], combat)[0]!
+      .toSeconds;
+    const u = makeUnit("e1", {
+      name: "Hunter",
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      auraEvents: [
+        buff(LogEvent.SPELL_AURA_APPLIED, toS - 1, "e1", "e1"),
+        buff(LogEvent.SPELL_AURA_REFRESH, toS + 1, "e1", "e1"),
+        buff(LogEvent.SPELL_AURA_REMOVED, toS + 9, "e1", "e1"),
+      ],
+      spellCastEvents: [cast(EXHILARATION, toS - 1), cast(SOTF, toS + 1)],
+    });
+    const hit = hitOf(u);
+    expect(hit?.noPressLogged).toBe(true);
+  });
   it("the copy no press refreshed keeps [no press logged]", () => {
     const hit = hitOf(hunter(undefined));
     expect(hit?.noPressLogged).toBe(true);
