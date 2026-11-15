@@ -505,6 +505,30 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
     ).toBeNull();
   });
 
+  it("T105 (fact13 D23): a softer candidate inside a full immunity (Divine Shield) is no softer target then", () => {
+    const { e1, e2, combat } = lockedScenario();
+    // e2's own Divine Shield 5–15 s, as aura rows of its own
+    e2.auraEvents = stunAuras("e2", "642", 5, 10).map((a: any) => ({
+      ...a,
+      srcUnitId: "e2",
+      srcUnitName: "e2",
+      auraType: "BUFF",
+    }));
+    expect(softerTargetAt(e1, [e1, e2], 10, combat)).toBeNull();
+    expect(softerTargetAt(e1, [e1, e2], 16, combat)?.name).toBe("e2");
+  });
+
+  it("T105: a school-limited immunity (Cloak of Shadows) does not disqualify the softer candidate", () => {
+    const { e1, e2, combat } = lockedScenario();
+    e2.auraEvents = stunAuras("e2", "31224", 5, 10).map((a: any) => ({
+      ...a,
+      srcUnitId: "e2",
+      srcUnitName: "e2",
+      auraType: "BUFF",
+    }));
+    expect(softerTargetAt(e1, [e1, e2], 10, combat)?.name).toBe("e2");
+  });
+
   it("G2 F-K6 through extractKillAttempts: our Polymorph on the softer enemy skips it; our Kidney Shot does not", () => {
     const softerWith = (spellId: string) => {
       const { f1, e1, e2 } = lockedScenario();

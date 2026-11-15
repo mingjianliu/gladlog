@@ -117,6 +117,7 @@ import {
   ENEMY_PROC_SAVE_NAMES,
   enemyDefensiveEvents,
   externalAuraOf,
+  fullImmunityIntervals,
   type IEnemyDefensiveEvent,
   immunityCountsWhenAlreadyUp,
   type ISaveAuraInterval,
@@ -491,7 +492,8 @@ const BREAKABLE_DR_CATEGORIES: ReadonlySet<string> = new Set([
 /**
  * Among the OTHER enemies still alive at `atSeconds`, the one in a strictly
  * softer tier than `target` (prime beats gated beats locked; ties break on
- * lowest HP, the betterTargetExists rule). `null` when nobody was softer.
+ * lowest HP, the betterTargetExists rule; not inside a full immunity then).
+ * `null` when nobody was softer.
  *
  * Why this exists (user ruling 2026-09-22): the [KILL ATTEMPTS] block used
  * to stamp every attempt on a trinket-up target `locked (trinket up)` and
@@ -505,6 +507,30 @@ const BREAKABLE_DR_CATEGORIES: ReadonlySet<string> = new Set([
  * attempt-into-trinket mapper so the fact block and the (now retired)
  * candidate can never disagree about who the softer target was.
  */
+/** each enemy's full-immunity intervals, read once per round and unit (the
+ * seconds count from that round's start; a unit object may sit in several
+ * rounds' views) */
+const fullImmunityByRound = new WeakMap<
+  object,
+  WeakMap<ICombatUnit, ReturnType<typeof fullImmunityIntervals>>
+>();
+const fullImmunityOf = (
+  e: ICombatUnit,
+  combat: IArenaMatch | IShuffleRound,
+): ReturnType<typeof fullImmunityIntervals> => {
+  let byUnit = fullImmunityByRound.get(combat);
+  if (!byUnit) {
+    byUnit = new WeakMap();
+    fullImmunityByRound.set(combat, byUnit);
+  }
+  let v = byUnit.get(e);
+  if (!v) {
+    v = fullImmunityIntervals(e, combat);
+    byUnit.set(e, v);
+  }
+  return v;
+};
+
 export function softerTargetAt(
   target: ICombatUnit,
   enemies: readonly ICombatUnit[],
@@ -529,6 +555,18 @@ export function softerTargetAt(
     if (e.id === target.id) continue;
     if (e.deathRecords.some((rec) => rec.timestamp <= atMs)) continue;
     if (inOurBreakableCc?.(e, atMs)) continue;
+    // T105 (fact13 D23, e2047b8b-r0 1:21): an enemy inside a FULL immunity
+    // (`fullImmunityIntervals`: Divine Shield, Ice Block, Aspect of the
+    // Turtle — a school-limited one still dies to the other schools, ruling
+    // F-K9b-B) could not be killed then. The tier reads what a unit HOLDS,
+    // so a running Divine Shield left its paladin `PRIME` and the line named
+    // it the softer target.
+    if (
+      fullImmunityOf(e, combat).some(
+        (iv) => iv.fromS <= atSeconds && atSeconds < iv.toS,
+      )
+    )
+      continue;
     const opp = killOpportunityAt(e, atSeconds, combat);
     if (opp.tier === "locked") continue;
     const rank = TIER_RANK[opp.tier];
