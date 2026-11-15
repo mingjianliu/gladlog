@@ -6576,3 +6576,26 @@ freeToPressBelowLog 0 / 197 and cannotCastCountsAPress 0 / 277 on both
 sides. Context files changed 4 of 3,519 (4 x `last 0.1s` -> `last 0.0s`, 2 x
 a [HEALER CC] line `locked 0.5 of the last 12s` -> `0.6`); findings files 0,
 candidate rows +0 -0; gates 110 -> 110.
+
+v550 (2026-11-15; pipeline batch B67, T122; round 13 audit D26, found by
+the codex pass). observedEffectEnd (enemyCDs.ts) - the one effect-span
+predicate behind the burst ledger's span and Target, kill-attempt clusters,
+kick-pressure burst, the unsynced / missed-sync windows,
+burstWindowDecisionPoints and the [RES] enemy cooldown windows - starts a
+chain for an effect aura that lands on another player while the press's own
+cast-id aura is still up on the caster, not only inside 2 s of the cast.
+Narrowed to: destination is not the caster, the aura is not the cast id,
+the press has its own aura on the caster. Breath of Eons' Temporal Wound
+lands 2.004 s after the cast and now chains. Example (the audited round,
+not in the 605): `Burst #1 - 0:19-0:23 | Breath of Eons` with a 0.18M
+Target became `0:19-0:33` with the unit that took 0.96M as Target; one
+kick-eaten row's ourBurst reads `Breath of Eons + Combustion` instead of
+`Combustion`; no row added or removed. New scan5/t122
+effectAfterFlightStart: audited log 11 violations / 8 presses -> 0 / 8. On
+the 605 the check finds no press of this shape (0 / 0 on both sides) and
+the branch capture is byte-identical to the base (3,519 owners), so the 605
+gives no before/after for this fix; candidate rows +0 -0. Recorded, not
+fixed (codex 85-tk-M-T122-1b, scan only, synthetic): a source-less REMOVED
+on a destination another caster also holds, and a rebroadcast pair of the
+flight aura, can each misplace the run end in the scan; the product pairs
+both correctly.

@@ -1247,5 +1247,11 @@
  *  in the cannot-cast / press-blocked intervals, so KILL SEQUENCE no
  *  longer prints `free to press it for the last 0.1s before the death`
  *  for a stun held to the death. See docs/prompt-version-history.md.
+ *
+ * v550 (2026-11-15; pipeline batch B67, T122): an effect a press puts
+ *  on another player while the press's own aura is still up on the
+ *  caster belongs to that press's span (Breath of Eons' Temporal Wound
+ *  lands 2.0 s after the cast), so the burst ledger no longer ends
+ *  that burst at the flight's start. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 549;
+export const PROMPT_VERSION = 550;
