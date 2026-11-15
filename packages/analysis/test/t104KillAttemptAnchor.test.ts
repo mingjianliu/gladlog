@@ -269,4 +269,31 @@ describe("T104 D12 — the bracket opens at the press it is named for", () => {
     expect(b?.targetUnitId).toBe("e1");
     expect(b!.fromSeconds).toBe(40);
   });
+
+  it("a target tied for the most inside the re-cut keeps the re-cut, whatever the team's order (codex 85-tk-L-T104-1b)", () => {
+    const lock = () =>
+      unit("f1", {
+        spec: "267",
+        spellCastEvents: [press(MALEVOLENCE, "Malevolence", 40)],
+        auraEvents: [applied(MALEVOLENCE, "f1", 40)],
+        damageOut: [
+          dmg("e2", 40.5, 30_000, MALEVOLENCE),
+          dmg("e2", 48, 300_000),
+        ],
+      });
+    const mate = () => unit("f2", { damageOut: [dmg("e1", 42, 1_000_000)] });
+    const war = () =>
+      unit("f3", {
+        spellCastEvents: [press(RECK, "Recklessness", 46)],
+        damageOut: [dmg("e1", 47, 300_000)],
+      });
+    const enemies = () => [
+      unit("e1", { reaction: 2 }),
+      unit("e2", { reaction: 2 }),
+    ];
+    const a = run([lock(), mate(), war()], enemies())[0]!;
+    const b = run([war(), mate(), lock()], enemies())[0]!;
+    expect(a.fromSeconds).toBe(46);
+    expect(b.fromSeconds).toBe(46);
+  });
 });

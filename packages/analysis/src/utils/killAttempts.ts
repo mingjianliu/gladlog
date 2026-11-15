@@ -1234,11 +1234,16 @@ export function extractKillAttempts(
       const recutHolds = (() => {
         if (!recut) return false;
         const fromMs = matchStartMs + recut.fromSeconds * 1000;
-        const top = topOf(
-          damageOver(fromMs, matchStartMs + recut.toSeconds * 1000).byEnemy,
-        );
+        // a target tied for the most stays the most-hit one, whatever the
+        // order the team's rows were summed in (codex 85-tk-L-T104-1b)
+        const inRecut = damageOver(
+          fromMs,
+          matchStartMs + recut.toSeconds * 1000,
+        ).byEnemy;
+        const onTarget = inRecut.get(target.id) ?? 0;
         return (
-          top?.unit.id === target.id &&
+          onTarget > 0 &&
+          [...inRecut.values()].every((v) => v <= onTarget) &&
           (damageOver(fromMs, creditEndMs(recut.toSeconds)).byEnemy.get(
             target.id,
           ) ?? 0) >= KW_BURST_MIN_DAMAGE
