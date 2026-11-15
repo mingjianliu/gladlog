@@ -18,7 +18,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { analyzeBurstLedger, wallTimingPhrase } from "../src/utils/burstLedger";
-import { effectEvidenceCastSeconds } from "../src/utils/cooldowns";
+import {
+  effectEvidenceCastSeconds,
+  petSharesOwnersCopy,
+} from "../src/utils/cooldowns";
 import { enemyDefensiveEvents } from "../src/utils/enemyDefensives";
 import {
   makeAuraEvent,
@@ -310,5 +313,34 @@ describe("T98 D11 — the copy on the caster's own pet is no press", () => {
     expect(effectEvidenceCastSeconds(u, SOTF, 90, combatOf(u, ally))).toEqual([
       124.935,
     ]);
+  });
+});
+
+describe("T98 — petSharesOwnersCopy, one predicate for analysis and its gate", () => {
+  // batch review 80-PIPE-73-B70 #3: Stampeding Roar self and pet rows under
+  // two variant ids, no cast row
+  const roar = (id: string, dest: string) => ({
+    ...makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      id,
+      at(20),
+      "d1",
+      dest,
+      "BUFF",
+    ),
+    spellName: "Stampeding Roar",
+  });
+  const druid = makeUnit("d1", {
+    name: "Druid",
+    auraEvents: [roar("77761", "d1")] as never,
+  });
+  const pet = { id: "pet1", ownerId: "d1" };
+  it("a variant id on the pet in the owner's batch is the owner's copy", () => {
+    const is = petSharesOwnersCopy(druid, [druid, pet], "77764");
+    expect(is(roar("77764", "pet1") as never)).toBe(true);
+  });
+  it("another unit is no pet", () => {
+    const is = petSharesOwnersCopy(druid, [druid, pet], "77764");
+    expect(is(roar("77764", "x9") as never)).toBe(false);
   });
 });

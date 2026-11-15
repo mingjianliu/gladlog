@@ -3126,6 +3126,26 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/burstLedger.ts`,
+    symbol: "pressReadingOf",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "wallDefensiveEventsOn",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "petSharesOwnersCopy",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "PET_COPY_SAME_BATCH_MS",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
     symbol: "BURST_TARGET_DAMAGE_RE_SRC",
     mod: burstLedger,
   },

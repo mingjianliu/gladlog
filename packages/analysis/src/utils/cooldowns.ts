@@ -4337,7 +4337,44 @@ export function spendsSharedChargeOf(
  */
 /** One batch of rows: a buff its owner and the owner's pet get together is
  * logged in the same millisecond (47a03469 r0: 2:04.935 on both). */
-const PET_COPY_SAME_BATCH_MS = 5;
+export const PET_COPY_SAME_BATCH_MS = 5;
+
+/**
+ * T98 (fact13 D11, 47a03469 r0 2:04.935): the unit's own pet shares its
+ * owner's buff — an aura on the pet that the owner got from itself in the
+ * same batch (`PET_COPY_SAME_BATCH_MS`) is the owner's own copy, no press
+ * out of sight (Exhilaration's 3 s Survival of the Fittest on the hunter and
+ * its pet, no 264735 cast row in the round). "The same spell" is the
+ * cooldown's id or a press variant of it (`isPressVariantOf`: Stampeding
+ * Roar 77761 / 77764). One predicate for `effectEvidenceCastSeconds` and the
+ * scan5/fact10 `unusedOwnAuraOnAlly` gate (batch review 80-PIPE-73-B70 #3).
+ */
+export function petSharesOwnersCopy(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  units: ReadonlyArray<Pick<ICombatUnit, "id" | "ownerId">>,
+  spellId: string,
+): (a: { destUnitId: string; logLine: { timestamp: number } }) => boolean {
+  const petIds = new Set(
+    units.filter((u) => u.ownerId === unit.id).map((u) => u.id),
+  );
+  if (petIds.size === 0) return () => false;
+  const ownCopyMs = (unit.auraEvents ?? [])
+    .filter(
+      (a) =>
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+        !!a.spellId &&
+        (a.spellId === spellId || isPressVariantOf(a.spellId, spellId)) &&
+        a.srcUnitId === unit.id &&
+        a.destUnitId === unit.id,
+    )
+    .map((a) => a.logLine.timestamp);
+  return (a) =>
+    petIds.has(a.destUnitId) &&
+    ownCopyMs.some(
+      (t) => Math.abs(t - a.logLine.timestamp) <= PET_COPY_SAME_BATCH_MS,
+    );
+}
 
 /**
  * fact2 (2026-10-20): the presses a cooldown's own effect proves when the
@@ -4404,34 +4441,10 @@ export function effectEvidenceCastSeconds(
     .map((e) => e.logLine.timestamp);
   const variantsEffect = (ms: number) =>
     ownVariantPressMs.some((t) => ms >= t && ms <= t + CAST_MISS_WINDOW_MS);
-  // T98 (fact13 D11, 47a03469 r0 2:04.935): the unit's own pet shares its
-  // owner's buff — a copy on the pet that the owner got from itself in the
-  // same batch is the owner's own copy (Exhilaration's 3 s Survival of the
-  // Fittest on the hunter and its pet, no 264735 cast row in the round: the
-  // kit read a press and a spent charge). The owner's copy stays
-  // `hiddenPressMs`' reading, as `[ENEMY DEF]` reads it (`unseenPressed`).
-  const petIds = new Set(
-    units.filter((u) => u.ownerId === unit.id).map((u) => u.id),
-  );
-  const ownCopyMs = (unit.auraEvents ?? [])
-    .filter(
-      (a) =>
-        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-        !!a.spellId &&
-        ownIdOnOthersOf(a.spellId) &&
-        a.srcUnitId === unit.id &&
-        a.destUnitId === unit.id,
-    )
-    .map((a) => a.logLine.timestamp);
-  const petSharesOwnersCopy = (a: {
-    destUnitId: string;
-    logLine: { timestamp: number };
-  }) =>
-    petIds.has(a.destUnitId) &&
-    ownCopyMs.some(
-      (t) => Math.abs(t - a.logLine.timestamp) <= PET_COPY_SAME_BATCH_MS,
-    );
+  // the unit's own pet shares its owner's copy (`petSharesOwnersCopy`); the
+  // owner's copy stays `hiddenPressMs`' reading, as `[ENEMY DEF]` reads it
+  // (`unseenPressed`)
+  const petCopy = petSharesOwnersCopy(unit, units, spellId);
   const applied = units
     .flatMap((u) => u.auraEvents ?? [])
     .filter(
@@ -4441,7 +4454,7 @@ export function effectEvidenceCastSeconds(
         (effects.includes(a.spellId) ||
           (ownIdOnOthersOf(a.spellId) &&
             a.destUnitId !== unit.id &&
-            !petSharesOwnersCopy(a))) &&
+            !petCopy(a))) &&
         sources.has(a.srcUnitId) &&
         a.logLine.timestamp >= combat.startTime &&
         !variantsEffect(a.logLine.timestamp),
