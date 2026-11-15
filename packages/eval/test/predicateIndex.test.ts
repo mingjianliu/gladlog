@@ -1758,6 +1758,12 @@ const INDEX: PredicateRow[] = [
     symbol: "whitelistedIntervalsInDeathWindow",
     mod: counterfactual,
   },
+  // pipeline T124: the audit's key set, asked by scan5/t124
+  {
+    file: `${A}/utils/counterfactual.ts`,
+    symbol: "isMitigationAuditKey",
+    mod: counterfactual,
+  },
   {
     file: `${A}/data/mitigationComponents.ts`,
     symbol: "resolveMitigation",
