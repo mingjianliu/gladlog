@@ -953,23 +953,31 @@ export function extractKillAttempts(
     const selfBuffNamingEnemy = (c: TeamCast): boolean => {
       if (!pressAuraOnCaster(c) || c.destId === undefined) return false;
       const nextMs = nextPressMsOf(c);
-      return ![
-        ...((c.caster.damageOut ?? []) as unknown as HitRow[]),
-        ...((c.caster.missesOut ?? []) as unknown as HitRow[]),
-      ].some((d) => {
-        const r = d as HitRow & {
-          destUnitId?: string;
-          logLine?: { timestamp: number };
-          timestamp?: number;
-        };
-        const ts = r.logLine?.timestamp ?? r.timestamp ?? -Infinity;
-        return (
-          r.destUnitId === c.destId &&
-          ts >= c.castMs &&
-          ts < nextMs &&
-          isPressHitRow(c.spellId, c.spellName, r as never)
-        );
-      });
+      // its pets' rows too: a pet's damage is merged into its owner's, its
+      // misses stay on the pet (codex 85-tk-L-T104-1 #2: Bestial Wrath's
+      // 344572 refused IMMUNE by a totem, logged on the pet)
+      const owned = Object.values(
+        (combat.units as Record<string, ICombatUnit> | undefined) ?? {},
+      ).filter((u) => u.ownerId === c.caster.id);
+      return ![c.caster, ...owned]
+        .flatMap((u) => [
+          ...((u.damageOut ?? []) as unknown as HitRow[]),
+          ...((u.missesOut ?? []) as unknown as HitRow[]),
+        ])
+        .some((d) => {
+          const r = d as HitRow & {
+            destUnitId?: string;
+            logLine?: { timestamp: number };
+            timestamp?: number;
+          };
+          const ts = r.logLine?.timestamp ?? r.timestamp ?? -Infinity;
+          return (
+            r.destUnitId === c.destId &&
+            ts >= c.castMs &&
+            ts < nextMs &&
+            isPressHitRow(c.spellId, c.spellName, r as never)
+          );
+        });
     };
     const selfBuffInto = (
       c: TeamCast,
@@ -1213,11 +1221,30 @@ export function extractKillAttempts(
       // `[1:57–2:30] … Volley burst`: a Volley opener at 1:57 the log does
       // not have. The bracket starts at the anchor's press; the sums, floor
       // and kill credit read that span.
-      const span =
+      // The re-cut span stands only while it is still a go on this target:
+      // the target is the team's most-hit enemy inside it and the burst
+      // floor holds there. A target nominated by damage the re-cut drops
+      // keeps the cluster's span (codex 85-tk-L-T104-1 #1: 1M on e1 before
+      // the Recklessness, then 300k of its go on e2 — the re-cut read 14 %
+      // focus on e1, or fell under the floor and dropped the attempt).
+      const recut =
         anchorOf.cast > formSpan.fromSeconds
           ? attemptSpanOutsideForm(formsOf(target), anchorOf.cast, clusterTo)
-          : formSpan;
-      if (!span) continue;
+          : null;
+      const recutHolds = (() => {
+        if (!recut) return false;
+        const fromMs = matchStartMs + recut.fromSeconds * 1000;
+        const top = topOf(
+          damageOver(fromMs, matchStartMs + recut.toSeconds * 1000).byEnemy,
+        );
+        return (
+          top?.unit.id === target.id &&
+          (damageOver(fromMs, creditEndMs(recut.toSeconds)).byEnemy.get(
+            target.id,
+          ) ?? 0) >= KW_BURST_MIN_DAMAGE
+        );
+      })();
+      const span = recutHolds ? recut! : formSpan;
       const { fromSeconds, toSeconds } = span;
       const spanFromMs = matchStartMs + fromSeconds * 1000;
       const spanToMs = creditEndMs(toSeconds);

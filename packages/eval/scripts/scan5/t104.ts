@@ -107,10 +107,15 @@ export function run(ctx: IRoundCtx): void {
         const next = successesOf(u)
           .filter((e) => String(e.spellId) === id && tsOf(e) > tsOf(c) + 5)
           .reduce((mn, e) => Math.min(mn, tsOf(e)), Infinity);
+        // its pets' rows too: a pet's misses stay on the pet (codex
+        // 85-tk-L-T104-1 #2)
         const rows = [
-          ...((u.damageOut ?? []) as any[]),
-          ...((u.missesOut ?? []) as any[]),
-        ];
+          u,
+          ...ctx.units.filter((p: any) => p.ownerId === u.id),
+        ].flatMap((p: any) => [
+          ...((p.damageOut ?? []) as any[]),
+          ...((p.missesOut ?? []) as any[]),
+        ]);
         return !rows.some(
           (r) =>
             r.destUnitId === c.destUnitId &&
