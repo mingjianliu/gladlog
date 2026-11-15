@@ -1502,11 +1502,17 @@ function buildResourceSnapshotOnce({
     // its own school (T102, fact13 D4: 16a56b26 1:40 printed Counter Shot
     // on Spellfrost with <1 s left and dropped a Rebuke on Nature with 2.2 s;
     // D6: 26c4ac25 2:24 dropped a Spell Lock on Shadow with 3.8 s left)
+    // …once per interrupt: a log that wrote the same SPELL_INTERRUPT twice
+    // (same source, spell and time) is one lockout (codex 85-tk-L-T102-1 #1)
+    const seenKicks = new Set<string>();
     for (const kick of activeAt(
       summary?.interruptInstances ?? [],
       timeSeconds,
       (k) => k.lockoutDurationSeconds,
     )) {
+      const kickKey = `${kick.sourceId}|${kick.kickSpellId}|${kick.atSeconds}`;
+      if (seenKicks.has(kickKey)) continue;
+      seenKicks.add(kickKey);
       const remaining = resCcRemainingText(
         kick.atSeconds + kick.lockoutDurationSeconds - timeSeconds,
       );

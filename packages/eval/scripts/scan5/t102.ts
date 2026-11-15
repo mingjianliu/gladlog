@@ -17,10 +17,15 @@
  *  - `resCcConcurrentDropped`: a `[RES]` row whose `cc:` lists at least one
  *    entry of kind K (`[kick]` / `[root]` / `[disarm]`) for a unit while the
  *    log holds another instance of K on that unit at t that the row leaves
- *    out. For a kick, a lockout on another school counts with more than
- *    0.2 s left. For a root or a disarm, the unlisted instance counts when
- *    it outlasts every listed one by at least 1 s. Kind = K.
+ *    out. Each listed entry stands for one active instance of its name
+ *    (the one whose remaining is nearest the rendered one), so a second
+ *    same-name instance is not covered by the first. For a kick, a lockout
+ *    left over counts with more than 0.2 s left. For a root or a disarm,
+ *    one counts when it outlasts the listed one by more than 0.2 s. A root
+ *    or disarm aura with no end row runs its official length; with none it
+ *    is left out. A SPELL_INTERRUPT row the log wrote twice is one. Kind = K.
  */
+import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   disarmSpellIds,
   rootSpellIds,
@@ -42,7 +47,13 @@ interface IInst {
 const TIME_RE = /^\s*(\d+):(\d\d)\s/;
 const RES_CC_RE = /\[RES\].*?\s\scc:(\S.*?)(?:\s\s|$)/;
 const ENTRY_RE =
-  /^(\d+)\/(.+?)-(?:<1s|\d+s)(?:\[stun\])?(?:\[trinketed\])?(\[root\]|\[disarm\]|\[kick\])?$/;
+  /^(\d+)\/(.+?)-(<1s|\d+s)(?:\[stun\])?(?:\[trinketed\])?(\[root\]|\[disarm\]|\[kick\])?$/;
+/** an unlisted instance ending this much later than what was listed is a
+ * drop; below it the log and the analysis's lengths may differ by rounding */
+const SLACK_MS = 200;
+/** the rendered remaining (`resCcRemainingText`: whole seconds, `<1s`) */
+const remainingMsOf = (t: string): number =>
+  t === "<1s" ? 500 : Number(t.slice(0, -1)) * 1000 + 500;
 const BROKEN = (e: string) =>
   e === "SPELL_AURA_BROKEN" || e === "SPELL_AURA_BROKEN_SPELL";
 
@@ -72,15 +83,24 @@ function instancesOf(ctx: IRoundCtx, unit: any): IInst[] {
           String(r.spellId) === id &&
           ((ev(r) === REMOVED && r.srcUnitId === a.srcUnitId) || BROKEN(ev(r))),
       );
+    // no end row: the official length bounds it; with none, its end is
+    // unknown and the instance is left out (codex 85-tk-L-T102-1 #3)
+    const lenS = spellEffectData[id]?.durationSeconds;
+    if (!end && !lenS) return;
     out.push({
       kind,
       name: nameOf(id, a.spellName),
       from: tsOf(a),
-      to: end ? tsOf(end) : Infinity,
+      to: end ? tsOf(end) : tsOf(a) + lenS! * 1000,
     });
   });
+  const seenKick = new Set<string>();
   for (const k of (unit.actionIn ?? []) as any[]) {
     if (ev(k) !== "SPELL_INTERRUPT" || !enemy.has(k.srcUnitId)) continue;
+    // a row the log wrote twice is one interrupt
+    const kk = `${k.srcUnitId}|${k.spellId}|${tsOf(k)}`;
+    if (seenKick.has(kk)) continue;
+    seenKick.add(kk);
     const lockS = kickLockoutSecondsFor(
       String(k.spellId),
       unit,
@@ -108,16 +128,19 @@ export function run(ctx: IRoundCtx): void {
     const m = RES_CC_RE.exec(line);
     if (!m || sec === undefined) continue;
     const ms = ctx.start + sec * 1000;
-    // listed entries per (pid, kind)
-    const listed = new Map<string, string[]>();
+    // listed entries per (pid, kind): name and rendered remaining
+    const listed = new Map<string, Array<{ name: string; leftMs: number }>>();
     for (const raw of m[1]!.split(",")) {
       const e = ENTRY_RE.exec(raw.trim());
-      if (!e || !e[3]) continue;
-      const kind = e[3].slice(1, -1) as Kind;
+      if (!e || !e[4]) continue;
+      const kind = e[4].slice(1, -1) as Kind;
       const key = `${e[1]}|${kind}`;
-      listed.set(key, [...(listed.get(key) ?? []), e[2]!]);
+      listed.set(key, [
+        ...(listed.get(key) ?? []),
+        { name: e[2]!, leftMs: remainingMsOf(e[3]!) },
+      ]);
     }
-    for (const [key, names] of listed) {
+    for (const [key, entries] of listed) {
       const [pid, kind] = key.split("|") as [string, Kind];
       const unit = ctx.unitOfPid(pid);
       if (!unit) continue;
@@ -127,15 +150,27 @@ export function run(ctx: IRoundCtx): void {
       const active = insts.filter(
         (iv) => iv.kind === kind && iv.from <= ms && ms < iv.to,
       );
-      const listedEnd = Math.max(
-        ...active.filter((iv) => names.includes(iv.name)).map((iv) => iv.to),
-      );
-      const dropped = active.find((iv) =>
-        names.includes(iv.name)
-          ? false
-          : kind === "kick"
-            ? iv.to - ms > 200
-            : Number.isFinite(listedEnd) && iv.to >= listedEnd + 1000,
+      // each listed entry stands for one active instance of its name, the
+      // one whose remaining is nearest its rendered one; a same-name
+      // instance left over is not represented (codex 85-tk-L-T102-1 #2)
+      const unmatched = [...active];
+      const matched: IInst[] = [];
+      for (const en of entries) {
+        let best = -1;
+        for (let i = 0; i < unmatched.length; i++) {
+          if (unmatched[i]!.name !== en.name) continue;
+          const d = Math.abs(unmatched[i]!.to - ms - en.leftMs);
+          if (best < 0 || d < Math.abs(unmatched[best]!.to - ms - en.leftMs))
+            best = i;
+        }
+        if (best >= 0) matched.push(...unmatched.splice(best, 1));
+      }
+      // a kick: every lockout is listed; a root / disarm: the longest one
+      const listedEnd = Math.max(...matched.map((iv) => iv.to));
+      const dropped = unmatched.find((iv) =>
+        kind === "kick"
+          ? iv.to - ms > SLACK_MS
+          : Number.isFinite(listedEnd) && iv.to > listedEnd + SLACK_MS,
       );
       if (!dropped) continue;
       ctx.violate(
@@ -143,7 +178,7 @@ export function run(ctx: IRoundCtx): void {
         kind,
         ms,
         `${unit.id}#${kind}#${dropped.name}#${dropped.from}`,
-        `${pid}: lists ${names.join(", ")} [${kind}] at ${sec}s, leaves out ${dropped.name} (${((dropped.to - ms) / 1000).toFixed(1)}s left)`,
+        `${pid}: lists ${entries.map((x) => x.name).join(", ")} [${kind}] at ${sec}s, leaves out ${dropped.name} (${((dropped.to - ms) / 1000).toFixed(1)}s left)`,
         line.trim(),
       );
     }

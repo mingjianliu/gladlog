@@ -72,6 +72,17 @@ describe("[RES] cc: concurrent controls of one kind (T102)", () => {
     expect(line).toContain("cc:1/Counter Shot-<1s[kick],1/Rebuke-2s[kick]");
   });
 
+  it("a SPELL_INTERRUPT the log wrote twice is one lockout (codex 85-tk-L-T102-1 #1)", () => {
+    const dup = {
+      ...kick(9, 3, "Counter Shot"),
+      sourceId: "enemy-1",
+      kickSpellId: "147362",
+    };
+    const line = snapshotAt(10, { interruptInstances: [dup, { ...dup }] });
+    expect(line).toContain("cc:1/Counter Shot-2s[kick]");
+    expect(line).not.toContain("Counter Shot-2s[kick],1/Counter Shot");
+  });
+
   it("a lockout that has run out is not listed", () => {
     const line = snapshotAt(101, {
       interruptInstances: [
