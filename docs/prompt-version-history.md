@@ -6612,3 +6612,29 @@ unit (teamAnswered) is unchanged, and the press line keeps `(removes roots /
 snares)`. 605 (measured at main 86eca4bb9 vs branch), new scan5/t109
 selfRedirectListed: 4 / 7 -> 0 / 3; the facts of 4 cd-hoarded rows changed,
 no row added or removed, no context line changed.
+
+v552 (2026-11-15; pipeline batch B69, T123; round 13 audit D31, D32, found
+by the codex pass). [BURST ANSWERED]: an answer counts for a unit only when
+its effect is on that unit. burstWindowDecisionPoints reads where a wall,
+external or healing cooldown pressed at no unit or at its caster went
+(pressEffectSpread: the caster's and its pets' aura and heal rows from
+ANSWER_EFFECT_LEAD_MS before the press to its next press or the response
+window). An answer is rejected when its own aura was logged on a player
+other than the caster but not on the pressured unit (Rallying Cry), or when
+it is officially a heal of its caster alone (officialSelfOnlyHeal) with no
+row under its name on another player (Frenzied Regeneration). Credit line
+only: `responded` and slow-defensive-response are unchanged. Examples:
+`3(AWarrior) answered with Rallying Cry in 6.0s; 1(FMage) bottomed at 2%`
+is gone (the mage never held the aura, no other answer); `2(BDruid)
+answered with Frenzied Regeneration in 3.1s; 3(HPaladin) bottomed at 23%`
+became `3(HPaladin) answered with Divine Shield in 6.4s`. 605 (base capture
+at PV547 vs branch), new scan5/t123 answerEffectNotOnPressured: 24 / 222 ->
+0 / 204 (8 distinct: Void Shield 5, Frenzied Regeneration 2, Divine Hymn
+1). 24 context files changed: 18 lines lose the credit (Void Shield 9,
+Frenzied Regeneration 6, Divine Hymn 3), 6 move it to a later Void Shield
+that reached the unit, 3 gain another window's line in the freed per-round
+slot. Findings files 0, candidate rows +0 -0. Recorded, not fixed (codex
+85-tk-M-T123-1, synthetic, 0 on the 605): Emerald Communion channelled with
+Lifebind heals a linked ally under another name (373268), so the self-only
+test would reject that answer for the ally; the scan matches the press by
+name.

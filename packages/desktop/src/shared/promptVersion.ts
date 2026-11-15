@@ -1258,5 +1258,11 @@
  *  crisisUnitSaved no longer lists a self-cast Master's Call (root /
  *  snare removal, no damage reduction) as a self-save (user ruling
  *  2026-11-14). See docs/prompt-version-history.md.
+ *
+ * v552 (2026-11-15; pipeline batch B69, T123): [BURST ANSWERED]
+ *  credits an answer for a unit only when its effect is on that unit
+ *  — a Rallying Cry whose aura missed the pressured unit and another
+ *  unit's self-only heal (Frenzied Regeneration) no longer count.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 551;
+export const PROMPT_VERSION = 552;
