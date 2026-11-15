@@ -7,29 +7,35 @@
  *
  *  - `healingBlockOffHealer`: a `[YOU] [CD]` line of a healing-amplifier
  *    spell (by English name) with a `[HEALING]` sub-line under it, the
- *    owner not a healer spec (`isHealerSpec`). Kind = the spell's name.
+ *    owner not a healer spec (`pressGetsHealingBlock`, ruling R46 = A). Kind = the spell's name.
  *    Counted: every such `[YOU] [CD]` line, any spec.
  */
-import { HEALING_AMPLIFIER_SPELL_IDS } from "@gladlog/analysis/src/context/timelineHelpers";
-import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  HEALING_AMPLIFIER_SPELL_IDS,
+  pressGetsHealingBlock,
+} from "@gladlog/analysis/src/context/timelineHelpers";
 
 import { type IRoundCtx, nameOf } from "./ctx";
 
 export const CHECKS = ["healingBlockOffHealer"] as const;
 
 const CD_LINE = /^\s*(\d+:\d\d)\s+\[YOU\] \[CD\]\s+(.+?) \(/;
-let names: Set<string> | undefined;
+let idOfName: Map<string, string> | undefined;
 
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
-  names ??= new Set([...HEALING_AMPLIFIER_SPELL_IDS].map((id) => nameOf(id)));
+  idOfName ??= new Map(
+    [...HEALING_AMPLIFIER_SPELL_IDS].map((id) => [nameOf(id), id] as const),
+  );
   const C = "healingBlockOffHealer";
   const lines = ctx.lines;
   for (let i = 0; i < lines.length; i++) {
     const m = CD_LINE.exec(lines[i]!);
-    if (!m || !names.has(m[2]!)) continue;
+    const id = m ? idOfName.get(m[2]!) : undefined;
+    if (!m || !id) continue;
     ctx.bump(C);
-    if (isHealerSpec(ctx.owner.spec)) continue;
+    // the product's predicate (ruling R46 = A): a healer's press keeps it
+    if (pressGetsHealingBlock(id, ctx.owner)) continue;
     let healing = false;
     for (let j = i + 1; j < lines.length && /^\s{6}\S/.test(lines[j]!); j++)
       if (lines[j]!.includes("[HEALING]")) healing = true;

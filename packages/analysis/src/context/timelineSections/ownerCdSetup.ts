@@ -21,7 +21,7 @@ import {
 import {
   computeHealingInWindow,
   extractOwnerCDBuffExpiry,
-  HEALING_AMPLIFIER_SPELL_IDS,
+  pressGetsHealingBlock,
   HEALING_WINDOW_EARLY_CD_SECONDS,
   HEALING_WINDOW_MIN_HPS,
 } from "../timelineHelpers";
@@ -58,7 +58,7 @@ export function prepareOwnerCdContext(
   const healingEmissionTimes = new Map<string, Set<number>>();
   const roundPlayers = [...friends, ...(enemies ?? [])];
   for (const cd of ownerCDs) {
-    if (!HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId)) continue;
+    if (!pressGetsHealingBlock(cd.spellId, owner)) continue;
     // A proc-only entry's "casts" are aura activations, not presses — no
     // [HEALING] verdict on something nobody chose (round 3 N5).
     if (cdIsProcOnly(cd)) continue;

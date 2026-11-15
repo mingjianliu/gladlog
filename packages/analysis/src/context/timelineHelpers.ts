@@ -1556,6 +1556,21 @@ export const HEALING_AMPLIFIER_SPELL_IDS = new Set([
 ]);
 
 /**
+ * T121 (ruling R46 = A, 2026-11-15): a press gets the `[HEALING]` block only
+ * when its id is a healing amplifier AND its presser is a healer spec — a
+ * Shadow Priest's Power Infusion is a damage cooldown (fcee94ea r0 0:27: 76 %
+ * of the block was the Vampiric Embrace pressed 0.25 s before it). The
+ * `[YOU] [CD]` line itself is unchanged. One predicate for the emission
+ * choice (`ownerCdSetup`), the block (`ownerCd`) and scan5/t121.
+ */
+export function pressGetsHealingBlock(
+  spellId: string,
+  presser: Pick<ICombatUnit, "spec">,
+): boolean {
+  return HEALING_AMPLIFIER_SPELL_IDS.has(spellId) && isHealerSpec(presser.spec);
+}
+
+/**
  * Cooldowns whose job is the healer's resource, not their throughput. These get
  * a `[MANA]` line — resource before → after across the buff — instead of the
  * HPS/overheal block a throughput amplifier gets.

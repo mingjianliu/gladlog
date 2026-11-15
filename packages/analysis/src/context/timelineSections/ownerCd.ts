@@ -61,6 +61,7 @@ import {
   computeHealingInWindow,
   DMG_SPIKE_THRESHOLD,
   HEALING_AMPLIFIER_SPELL_IDS,
+  pressGetsHealingBlock,
 } from "../timelineHelpers";
 import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { DeferredSnapshot } from "./ctx";
@@ -145,11 +146,9 @@ export function emitOwnerCdEntries(
   // the cheaper note's press gate (T100), built on first use; `onSelf` is
   // whether the alternative would go on the owner (`stunLetsPress`)
   let ownerPressBlockedOnSelf:
-    | ReturnType<typeof spellPressBlockedAt>
-    | undefined;
+    ReturnType<typeof spellPressBlockedAt> | undefined;
   let ownerPressBlockedOnAlly:
-    | ReturnType<typeof spellPressBlockedAt>
-    | undefined;
+    ReturnType<typeof spellPressBlockedAt> | undefined;
   // B3a: the round-level inputs of the school split (`saveCoversPressureOn`)
   const roundFacts = {
     sides: buildRosterSides(_allUnits),
@@ -259,7 +258,7 @@ export function emitOwnerCdEntries(
           : "";
 
       if (
-        HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId) &&
+        pressGetsHealingBlock(cd.spellId, owner) &&
         healingEmissionTimes.get(cd.spellId)?.has(cast.timeSeconds)
       ) {
         const duration = buffFullDurationForCaster(cd.spellId, owner);
