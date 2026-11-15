@@ -41,9 +41,12 @@ export function run(ctx: IRoundCtx): void {
     // spell after it with no other APPLIED of it in between. An application
     // with no such row is not judged — the log does not show its end, and
     // the producer caps it at the official length (codex 85-tk-L-T105-1 #1)
-    const closeOf = (a: any): any => {
-      for (const r of rows) {
-        if (tsOf(r) < tsOf(a) || r === a) continue;
+    // searched forward from the application's own row, so an earlier row of
+    // the same millisecond (a duplicate APPLIED) cannot void it (codex
+    // 85-tk-L-T105-1b)
+    const closeOf = (k: number): any => {
+      const a = rows[k];
+      for (const r of rows.slice(k + 1)) {
         if (String(r.spellId) !== String(a.spellId)) continue;
         if (ev(r) === APPLIED) return undefined;
         if (ev(r) === REMOVED) return r;
@@ -52,9 +55,9 @@ export function run(ctx: IRoundCtx): void {
     };
     let covering: any;
     let end: any;
-    for (const a of rows) {
+    for (const [k, a] of rows.entries()) {
       if (ev(a) !== APPLIED || tsOf(a) > lo) continue;
-      const r = closeOf(a);
+      const r = closeOf(k);
       if (r && tsOf(r) >= hi) {
         covering = a;
         end = r;

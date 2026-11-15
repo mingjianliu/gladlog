@@ -66,6 +66,10 @@ describe("scan5 softerTargetImmune (T105)", () => {
     expect(scan(20, "PRIME (no trinket)", [up(5), up(200), down(208)])).toBe(0);
   });
 
+  it("a duplicate APPLIED of the same millisecond does not void the application (codex 1b)", () => {
+    expect(scan(10, "PRIME (no trinket)", [up(5), up(5), down(13)])).toBe(1);
+  });
+
   it("an immunity that ended before the bracket is no violation", () => {
     expect(scan(20, "PRIME (no trinket)", [up(5), down(13)])).toBe(0);
   });
