@@ -83,29 +83,39 @@ function ledger(ctx: IRoundCtx): void {
     ctx.bump(C);
     // up to its REMOVED — or the next APPLIED of it from the same source:
     // with the REMOVED lost, that is a fresh aura (codex 85-tk-K-T98-1b #2).
-    // A REMOVED from another source closes that source's own aura when one
-    // is open (codex 85-tk-K-T98-1d), else this one: a REMOVED's source is
-    // often missing or inconsistent (the interval reader's own fallback,
-    // codex 85-tk-K-T98-1e)
-    const sourceOpenAt = (src: unknown, t: number): boolean => {
-      const last = rows
-        .filter(
-          (a) => a.srcUnitId === src && tsOf(a) < t && tsOf(a) >= tsOf(app),
-        )
-        .sort((a, b) => tsOf(b) - tsOf(a))[0];
-      return !!last && ev(last) !== REMOVED;
-    };
-    const end =
-      rows
-        .filter(
-          (a) =>
-            tsOf(a) > tsOf(app) &&
-            (a.srcUnitId === app.srcUnitId
-              ? ev(a) === REMOVED || ev(a) === APPLIED
-              : ev(a) === REMOVED && !sourceOpenAt(a.srcUnitId, tsOf(a))),
-        )
-        .map(tsOf)
-        .sort((a, b) => a - b)[0] ?? ctx.end;
+    // A REMOVED closes its own source's open aura, else the first one open
+    // (a REMOVED's source is often missing or inconsistent): the open state
+    // is replayed over the holder's whole stream of the wall, as the
+    // interval reader does (codex 85-tk-K-T98-1d / 1e / 1f)
+    const copyKey = app.srcUnitId ?? "";
+    let end = ctx.end;
+    const open = new Map<string, true>();
+    const stream = [...rows].sort(
+      (a, b) =>
+        tsOf(a) - tsOf(b) ||
+        (a.logLine?.lineIndex ?? 0) - (b.logLine?.lineIndex ?? 0),
+    );
+    for (const a of stream) {
+      const key = a.srcUnitId ?? "";
+      const after = a !== app && tsOf(a) >= tsOf(app);
+      if (ev(a) === APPLIED) {
+        if (after && key === copyKey) {
+          end = tsOf(a);
+          break;
+        }
+        open.set(key, true);
+      } else if (ev(a) === REFRESH) {
+        open.set(key, true);
+      } else if (ev(a) === REMOVED) {
+        const hit = open.has(key) ? key : [...open.keys()][0];
+        if (hit === undefined) continue;
+        open.delete(hit);
+        if (after && hit === copyKey) {
+          end = tsOf(a);
+          break;
+        }
+      }
+    }
     const press = ctx.players
       .flatMap((u) => successesOf(u).map((c) => ({ c, u })))
       .find(
