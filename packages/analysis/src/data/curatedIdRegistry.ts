@@ -41,6 +41,10 @@ import {
   MANA_COOLDOWN_SPELL_IDS,
 } from "../context/timelineHelpers";
 import { ENEMY_UTILITY_EXTRA_IDS } from "../context/timelineSections/enemyCd";
+import {
+  DARK_SIMULACRUM_COPY_BUFF_ID,
+  DARK_SIMULACRUM_ID,
+} from "../context/timelineSections/friendlyUtilityPress";
 import { CASTER_SIDE_LINK_AURA_IDS } from "../utils/brokenRowBreaker";
 import {
   NO_FIXED_DURATION_IDS,
@@ -1323,6 +1327,20 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     keys(TALENT_REPLACE_VARIANT_IDS),
   ),
   // user ruling 2026-10-30 (fact7 D19 / D26): a line, nothing else.
+  // R41 (fact13 D20): a Dark Simulacrum copy's press line — the press and
+  // the copy buff it is spent off
+  t(
+    "friendlyUtilityPress.DARK_SIMULACRUM_ID",
+    "context/timelineSections/friendlyUtilityPress.ts",
+    "cast",
+    () => [DARK_SIMULACRUM_ID],
+  ),
+  t(
+    "friendlyUtilityPress.DARK_SIMULACRUM_COPY_BUFF_ID",
+    "context/timelineSections/friendlyUtilityPress.ts",
+    "aura",
+    () => [DARK_SIMULACRUM_COPY_BUFF_ID],
+  ),
   t(
     "spellIdLists.FRIENDLY_PRESS_LINE_ONLY_IDS",
     "data/spellIdLists.ts",

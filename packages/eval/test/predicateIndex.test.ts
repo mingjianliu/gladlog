@@ -63,6 +63,7 @@ import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers"
 import * as timelineCastStopped from "@gladlog/analysis/src/context/timelineSections/castStopped";
 import * as enemyCd from "@gladlog/analysis/src/context/timelineSections/enemyCd";
 import * as friendlyCheatDeath from "@gladlog/analysis/src/context/timelineSections/friendlyCheatDeath";
+import * as friendlyUtilityPress from "@gladlog/analysis/src/context/timelineSections/friendlyUtilityPress";
 import * as healerCastGapFiller from "@gladlog/analysis/src/context/timelineSections/healerCastGapFiller";
 import * as timelineSetup from "@gladlog/analysis/src/context/timelineSections/setup";
 import * as unitLabel from "@gladlog/analysis/src/context/unitLabel";
@@ -2850,6 +2851,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/secondStagePresses.ts`,
     symbol: "secondStageCooldownNames",
     mod: secondStagePresses,
+  },
+  {
+    file: `${A}/context/timelineSections/friendlyUtilityPress.ts`,
+    symbol: "darkSimulacrumCopyCasts",
+    mod: friendlyUtilityPress,
+  },
+  {
+    file: `${A}/context/timelineSections/friendlyUtilityPress.ts`,
+    symbol: "DARK_SIMULACRUM_SPEND_MS",
+    mod: friendlyUtilityPress,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,

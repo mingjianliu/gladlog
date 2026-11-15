@@ -101,7 +101,10 @@ import {
   emitFriendlyCheatDeathEntries,
   emitFriendlyFormEntries,
 } from "./timelineSections/friendlyCheatDeath";
-import { emitFriendlyUtilityPressEntries } from "./timelineSections/friendlyUtilityPress";
+import {
+  emitDarkSimulacrumPressEntries,
+  emitFriendlyUtilityPressEntries,
+} from "./timelineSections/friendlyUtilityPress";
 import { emitGripEntries } from "./timelineSections/grip";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
 import { emitHealerInactivityEntries } from "./timelineSections/healerInactivity";
@@ -676,6 +679,18 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     owner,
     friends,
     pid,
+    addEntry,
+    matchStartMs,
+  });
+
+  // R41 (fact13 D20): a spell a friendly Death Knight cast through Dark
+  // Simulacrum — in no kit and no ledger — still gets its press line
+  emitDarkSimulacrumPressEntries({
+    owner,
+    friends,
+    pid,
+    friendlyPid,
+    enemyPid,
     addEntry,
     matchStartMs,
   });
