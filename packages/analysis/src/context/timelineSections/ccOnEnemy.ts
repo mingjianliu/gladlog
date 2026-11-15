@@ -44,10 +44,7 @@ import {
   TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "../../utils/ccTrinketAnalysis";
 import { friendlyOffensiveCdActiveAt, hpAtPress } from "../../utils/cooldowns";
-import {
-  wasFreedByTargetBoundCast,
-  wasRemovedByAllyDispel,
-} from "../../utils/dispelAnalysis";
+import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
 import { MEDALLION_SPELL_ID } from "../../utils/pvpTrinketUses";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
@@ -299,25 +296,14 @@ export function emitCcOnEnemyEntries(
       }
       for (const cc of summary.ccInstances) {
         // F148: Cleanse Success Verification — check if this CC was removed by an enemy dispel
-        // T118: or a root freed by their Blessing of Freedom / Tiger's Lust
-        // cast on the unit that logged no SPELL_DISPEL row
-        const isCleansed =
-          (enemyDispelSummary
-            ? wasRemovedByAllyDispel(
-                enemyDispelSummary.allyCleanse,
-                cc.spellId,
-                summary.playerName,
-                cc.atSeconds + cc.durationSeconds,
-              )
-            : false) ||
-          (!!enemyUnit &&
-            wasFreedByTargetBoundCast(
-              enemies ?? [],
+        const isCleansed = enemyDispelSummary
+          ? wasRemovedByAllyDispel(
+              enemyDispelSummary.allyCleanse,
               cc.spellId,
-              enemyUnit.id,
-              matchStartMs +
-                Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
-            ));
+              summary.playerName,
+              cc.atSeconds + cc.durationSeconds,
+            )
+          : false;
         // Mirror of the [CC ON TEAM] tremor note (user 2026-09-20: Tremor
         // "depending on the situation" — i.e. when it did something): the
         // ENEMY dropped Tremor Totem mid-fear and our fear ended that instant.

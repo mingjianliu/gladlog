@@ -77,6 +77,7 @@ import {
   ccRecastBetween,
   ccRecastSplitsResend,
   DR_CATEGORY_MAP,
+  drDurationFactor,
   drLevelAtLanding,
   getDRCategory,
   matchPendingCcKey,
@@ -2984,15 +2985,20 @@ export const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
  * the Mistweaver the item named was filed as never cleansed. The cast row
  * names the unit and shares the removal's instant within the dispel pairing
  * tolerance; only a root qualifies (a stun ending as one is cast is no
- * freedom).
+ * freedom), and only one removed before its own end at its DR level (a root
+ * that ran out as the cast went out was not freed by it).
  */
 export function wasFreedByTargetBoundCast(
   friends: readonly Pick<ICombatUnit, "spellCastEvents">[],
   ccSpellId: string,
   unitId: string,
   removalMs: number,
+  /** the application's own end at its DR level; a removal at or past it
+   * ran out (`ranFullLength`'s rule) — unknown credits nothing */
+  officialEndMs: number | undefined,
 ): boolean {
   if (!ROOT_SPELL_IDS.has(ccSpellId)) return false;
+  if (officialEndMs === undefined || removalMs >= officialEndMs) return false;
   return friends.some((f) =>
     (f.spellCastEvents ?? []).some(
       (e) =>
@@ -3680,6 +3686,7 @@ function reconstructDispelSummaryUncached(
       {
         ts: number;
         spellName: string;
+        src: string;
         removal: { ts: number; brokenByDamage: boolean };
       }[]
     >();
@@ -3688,12 +3695,17 @@ function reconstructDispelSummaryUncached(
       { applyMs: number; spellId: string; spellName: string; src: string }
     >();
     const closeWindow = (
-      open: { applyMs: number; spellId: string; spellName: string },
+      open: {
+        applyMs: number;
+        spellId: string;
+        spellName: string;
+        src: string;
+      },
       removal: { ts: number; brokenByDamage: boolean },
     ) =>
       windows.set(open.spellId, [
         ...(windows.get(open.spellId) ?? []),
-        { ts: open.applyMs, spellName: open.spellName, removal },
+        { ts: open.applyMs, spellName: open.spellName, src: open.src, removal },
       ]);
     const lengthOf = (spellId: string, srcUnitId: string, applyMs: number) =>
       ccFullDurationForApplication(
@@ -3701,6 +3713,31 @@ function reconstructDispelSummaryUncached(
         enemyPlayerById.get(srcUnitId),
         ccLandingStateAtMs(unit, spellId, applyMs),
       ) ?? null;
+    // T118 (codex 85-tk-L-T118-1 #1): where the application would have run
+    // out on its own — its caster-resolved length at its DR level
+    const officialEndMsOf = (
+      spellId: string,
+      srcUnitId: string,
+      applyMs: number,
+    ): number | undefined => {
+      const lengthS = lengthOf(spellId, srcUnitId, applyMs);
+      if (lengthS === null) return undefined;
+      return (
+        applyMs +
+        lengthS *
+          1000 *
+          drDurationFactor(
+            drLevelAtApply(
+              unit,
+              spellId,
+              applyMs,
+              combat.startTime,
+              rosterUnitById,
+              roundEnd,
+            ),
+          )
+      );
+    };
 
     // A BROKEN line its aura's own REMOVED follows is not the end (FT-T08):
     // the window closes at the REMOVED, which still carries "broken by
@@ -3872,7 +3909,12 @@ function reconstructDispelSummaryUncached(
     for (const [spellId, applications] of windows) {
       const priority = getPriority(spellId);
 
-      for (const { ts: applyTs, spellName, removal: paired } of applications) {
+      for (const {
+        ts: applyTs,
+        spellName,
+        src,
+        removal: paired,
+      } of applications) {
         // Triage 2026-09-29 missed-cleanse F-C3 (with cc-dr F-CI1, one round
         // end): a window ends at `roundEndMs`. A CC still up when the round
         // ended paired with a removal logged after it and read as a full-
@@ -3909,7 +3951,13 @@ function reconstructDispelSummaryUncached(
             unit.name,
             (removal.ts - combat.startTime) / 1000,
           ) ||
-            wasFreedByTargetBoundCast(friends, spellId, unit.id, removal.ts));
+            wasFreedByTargetBoundCast(
+              friends,
+              spellId,
+              unit.id,
+              removal.ts,
+              officialEndMsOf(spellId, src, applyTs),
+            ));
 
         // CC broke from incoming damage — not a missed cleanse, but not a healer cleanse either
         if (removal.brokenByDamage) {

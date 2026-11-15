@@ -36,7 +36,12 @@ const aura = (event: LogEvent, spellId: string, s: number, dest: string) => ({
 });
 const combat = { startTime: START, endTime: START + 60_000 };
 
-function summary(castAtS: number | null, castOn = "m", ccId = FROST_NOVA) {
+function summary(
+  castAtS: number | null,
+  castOn = "m",
+  ccId = FROST_NOVA,
+  removedAtS = 13.971,
+) {
   const healer = makeUnit("h", {
     name: "Healer",
     spec: CombatUnitSpec.Monk_Mistweaver,
@@ -59,7 +64,7 @@ function summary(castAtS: number | null, castOn = "m", ccId = FROST_NOVA) {
     spec: CombatUnitSpec.Warrior_Fury,
     auraEvents: [
       aura(LogEvent.SPELL_AURA_APPLIED, ccId, 10, "m"),
-      aura(LogEvent.SPELL_AURA_REMOVED, ccId, 13.971, "m"),
+      aura(LogEvent.SPELL_AURA_REMOVED, ccId, removedAtS, "m"),
     ],
   });
   const enemy = makeUnit("e1", { reaction: CombatUnitReaction.Hostile });
@@ -87,17 +92,40 @@ describe("T118 — a root freed by a target-bound freedom cast is cleansed", () 
     expect(summary(13.8).missedCleanseWindows).toHaveLength(1);
   });
 
-  it("only a root qualifies", () => {
+  it("codex 85-tk-L-T118-1 #1: a root that ran its full 6 s as the cast went out was not freed", () => {
+    expect(
+      summary(16.04, "m", FROST_NOVA, 16.0).missedCleanseWindows,
+    ).toHaveLength(1);
+  });
+
+  it("only a root qualifies, removed before its own end", () => {
     const friends = [
       {
         spellCastEvents: [makeSpellCastEvent(TIGERS_LUST, START + 5000, "m")],
       },
     ] as never;
     expect(
-      wasFreedByTargetBoundCast(friends, FROST_NOVA, "m", START + 5000),
+      wasFreedByTargetBoundCast(
+        friends,
+        FROST_NOVA,
+        "m",
+        START + 5000,
+        START + 6000,
+      ),
     ).toBe(true);
-    expect(wasFreedByTargetBoundCast(friends, "118", "m", START + 5000)).toBe(
-      false,
-    );
+    // at or past its end it ran out; an unknown end credits nothing
+    for (const end of [START + 5000, undefined])
+      expect(
+        wasFreedByTargetBoundCast(friends, FROST_NOVA, "m", START + 5000, end),
+      ).toBe(false);
+    expect(
+      wasFreedByTargetBoundCast(
+        friends,
+        "118",
+        "m",
+        START + 5000,
+        START + 6000,
+      ),
+    ).toBe(false);
   });
 });
