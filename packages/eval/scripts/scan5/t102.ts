@@ -24,8 +24,8 @@
  *    left over counts with more than 0.2 s left. For a root or a disarm,
  *    one counts when it outlasts the listed one by more than 0.2 s. A root
  *    or disarm aura with no end row runs its official length; with none it
- *    is left out. Every instance ends by the round's end (`roundEndAt`), as
- *    the analysis clips it. A SPELL_INTERRUPT row the log wrote twice is one. Kind = K.
+ *    is left out. A root or disarm ends by the analysis's `roundEndMs`, as
+ *    it clips them; a kick keeps its full lockout, as it renders. A SPELL_INTERRUPT row the log wrote twice is one. Kind = K.
  */
 import { resCcRemainingText } from "@gladlog/analysis/src/context/resLedgerPrune";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
@@ -34,6 +34,7 @@ import {
   rootSpellIds,
 } from "@gladlog/analysis/src/data/spellTags";
 import { kickLockoutSecondsFor } from "@gladlog/analysis/src/utils/kickLockout";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import { APPLIED, ev, type IRoundCtx, nameOf, REMOVED, tsOf } from "./ctx";
 
@@ -125,6 +126,7 @@ function instancesOf(ctx: IRoundCtx, unit: any): IInst[] {
 export function run(ctx: IRoundCtx): void {
   const C = "resCcConcurrentDropped";
   const cache = new Map<string, IInst[]>();
+  const roundEnd = roundEndMs(ctx.legacy as never);
   let sec: number | undefined;
   for (const line of ctx.lines) {
     const tm = TIME_RE.exec(line);
@@ -151,10 +153,14 @@ export function run(ctx: IRoundCtx): void {
       ctx.bump(C);
       let insts = cache.get(unit.id);
       if (!insts) cache.set(unit.id, (insts = instancesOf(ctx, unit)));
-      // the round's end bounds every instance, as the analysis clips them
-      // (codex 85-tk-L-T102-1b #2: a Solo Shuffle death at 11.1 s)
+      // a root / disarm ends by the round's end as the analysis clips it
+      // (its own `roundEndMs`, codex 85-tk-L-T102-1b #2 / 1c #2: a Solo
+      // Shuffle death at 11.1 s; a 3v3 round keeps the log's end); a kick
+      // renders its full lockout, unclipped (1c #3)
       const active = insts
-        .map((iv) => ({ ...iv, to: Math.min(iv.to, ctx.roundEndAt) }))
+        .map((iv) =>
+          iv.kind === "kick" ? iv : { ...iv, to: Math.min(iv.to, roundEnd) },
+        )
         .filter((iv) => iv.kind === kind && iv.from <= ms && ms < iv.to);
       // each listed entry stands for one active instance of its name: the
       // one whose remaining renders as the entry's (the producer's own
@@ -167,9 +173,14 @@ export function run(ctx: IRoundCtx): void {
         const same = unmatched
           .map((iv, i) => ({ iv, i }))
           .filter((x) => x.iv.name === en.name);
-        const exact = same.find(
-          (x) => resCcRemainingText(leftS(x.iv)) === en.text,
-        );
+        // of the instances that render as the entry, the one the producer
+        // prints: a root / disarm slot takes the longest (1c #1)
+        const exact = same
+          .filter((x) => resCcRemainingText(leftS(x.iv)) === en.text)
+          .reduce<(typeof same)[number] | undefined>(
+            (b, x) => (!b || x.iv.to > b.iv.to ? x : b),
+            undefined,
+          );
         const pick =
           exact ??
           same.reduce<(typeof same)[number] | undefined>(

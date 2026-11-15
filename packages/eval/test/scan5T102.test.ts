@@ -39,7 +39,14 @@ const aura = (
   destUnitId: "u",
 });
 
-function scan(sec: number, cc: string, unit: any, roundEndS = 600): number {
+/** a death at `deathS` ends a Solo Shuffle round; a 3v3 round keeps the
+ * log's end (`roundEndMs`) */
+function scan(
+  sec: number,
+  cc: string,
+  unit: any,
+  round: { deathS?: number; bracket?: string } = {},
+): number {
   let n = 0;
   const units = [
     { id: "u", reaction: 1, ...unit },
@@ -51,7 +58,15 @@ function scan(sec: number, cc: string, unit: any, roundEndS = 600): number {
   run({
     lines: [`  ${mm}:${ss}  [RES] rdy:—  cc:${cc}`],
     start: START,
-    roundEndAt: at(roundEndS),
+    roundEndAt: round.deathS === undefined ? at(600) : at(round.deathS),
+    legacy: {
+      endTime: at(600),
+      startInfo: { bracket: round.bracket ?? "Rated Solo Shuffle" },
+      units:
+        round.deathS === undefined
+          ? []
+          : [{ info: {}, deathRecords: [{ timestamp: at(round.deathS) }] }],
+    },
     units,
     unitOfPid: (pid: string) => (pid === "1" ? units[0] : undefined),
     bump: () => {},
@@ -122,6 +137,37 @@ describe("resCcConcurrentDropped", () => {
         aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, "Frost Nova", 12.5, "e2"),
       ],
     };
-    expect(scan(10, "1/Frost Nova-1s[root]", u, 11.1)).toBe(0);
+    expect(scan(10, "1/Frost Nova-1s[root]", u, { deathS: 11.1 })).toBe(0);
+  });
+
+  it("of two Novas that both render `2s`, the listed one is the longer (codex 85-tk-L-T102-1c #1)", () => {
+    const u = {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, "Frost Nova", 8, "e1"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, "Frost Nova", 11.6, "e1"),
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, "Frost Nova", 9, "e2"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, "Frost Nova", 12.4, "e2"),
+      ],
+    };
+    expect(scan(10, "1/Frost Nova-2s[root]", u)).toBe(0);
+  });
+
+  it("a 3v3 death does not end the round for the roots (codex 85-tk-L-T102-1c #2)", () => {
+    const u = {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, "Frost Nova", 8, "e1"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, "Frost Nova", 11.5, "e1"),
+        aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, "Frost Nova", 9, "e2"),
+        aura(LogEvent.SPELL_AURA_REMOVED, FROST_NOVA, "Frost Nova", 12.5, "e2"),
+      ],
+    };
+    const threes = { deathS: 11.1, bracket: "Rated Arena 3v3" };
+    expect(scan(10, "1/Frost Nova-2s[root]", u, threes)).toBe(1);
+    expect(scan(10, "1/Frost Nova-3s[root]", u, threes)).toBe(0);
+  });
+
+  it("a kick keeps its full lockout past the round's end (codex 85-tk-L-T102-1c #3)", () => {
+    const u = { actionIn: [kick("e1", 9.5, "116"), kick("e2", 9.9, "2061")] };
+    expect(scan(10, "1/Wind Shear-1s[kick]", u, { deathS: 10.1 })).toBe(1);
   });
 });
