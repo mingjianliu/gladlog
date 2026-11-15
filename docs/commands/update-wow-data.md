@@ -332,6 +332,9 @@ npx tsx packages/analysis/scripts/datagen/genRootAuras.ts
 #      area casts that drop one (Effect 179 CREATE_AREATRIGGER, observed, same SpellName as an aura-322 spell:
 #      Smoke Bomb 212182 / 359053 — its aura 212183 is never logged). What a "vision obscured" refusal names as
 #      its cause (`visionObscuredCause`); none up → the client reason alone (pipeline T108).
+#      Also writes refusedSpellAimGenerated.ts: whether a refused spell can aim at an enemy (ImplicitTarget on
+#      every effect row, dummy rows included, one trigger hop) — at an enemy / friend only / not known; the
+#      controls (Strike of the Windlord via its dummy row, Flash Heal, Holy Shock = not known) are asserted first.
 npx tsx packages/analysis/scripts/datagen/genVisionObscuringAuras.ts
 # 6f1d2. periodic damage auras (SpellEffect aura 3 / 53 / 89 on the spell itself, every id). What [ROT PRESSURE]
 #      calls a DoT; `corpusFactScan5` `dotTableForward` checks both directions against the log's ticks.

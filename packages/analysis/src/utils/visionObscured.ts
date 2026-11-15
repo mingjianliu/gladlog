@@ -31,7 +31,10 @@
  */
 import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
-import { ABILITY_EFFECTS_GENERATED } from "../data/abilityEffectsGenerated";
+import {
+  REFUSED_SPELL_AIMS_AT_ENEMY,
+  REFUSED_SPELL_AIMS_AT_FRIEND_ONLY,
+} from "../data/refusedSpellAimGenerated";
 import { spellEffectData } from "../data/spellEffectData";
 import {
   VISION_OBSCURING_AREA_CASTS,
@@ -150,15 +153,17 @@ const opposed = (
 ): boolean =>
   a !== undefined && b !== undefined && SIDES.has(a) && SIDES.has(b) && a !== b;
 
-/** Can a press of `spellId` aim at an enemy, by the official effect rows
- * (`ABILITY_EFFECTS_GENERATED`, DB2 SpellEffect ImplicitTarget): true for an
- * enemy-aimed effect, false for a spell whose mined rows show none (Flash
- * Heal: a heal on a friend), undefined for a spell with no mined row — a
- * dummy effect + server script (Holy Shock 20473, Penance 47540, Chi Burst
- * 123986) says nothing either way (codex 85-tk-N-T108-1c). */
+/** Can a press of `spellId` aim at an enemy, by the official targeting
+ * (`refusedSpellAimGenerated.ts`: DB2 ImplicitTarget on every effect row,
+ * dummy rows included, and one trigger hop): true for an enemy target (Strike
+ * of the Windlord's dummy row at 6 too — codex 85-tk-N-T108-1d), false for a
+ * spell that only ever targets a friend or its caster (Flash Heal),
+ * undefined for any other target or none — Holy Shock / Penance (25, any),
+ * Chi Burst (a destination): the rows do not say which side (1c). */
 export function refusedSpellAimsAtEnemy(spellId: string): boolean | undefined {
-  const effects = ABILITY_EFFECTS_GENERATED[spellId];
-  return effects === undefined ? undefined : effects.hitsEnemy === true;
+  if (REFUSED_SPELL_AIMS_AT_ENEMY.has(spellId)) return true;
+  if (REFUSED_SPELL_AIMS_AT_FRIEND_ONLY.has(spellId)) return false;
+  return undefined;
 }
 
 /** What obscured the target of a refusal of `spellId` at `tSeconds` by a

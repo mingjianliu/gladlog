@@ -271,10 +271,14 @@ describe("withVisionObscuredCauses", () => {
     ]);
   });
 
-  it("a spell the official rows do not show takes the one candidate, and none of two (codex 85-tk-N-T108-1c)", () => {
+  it("a spell the official rows do not show takes the one candidate, and none of two (codex 85-tk-N-T108-1c / 1d)", () => {
     // DB2 ImplicitTarget: Arcane Barrage aims at an enemy, Flash Heal at a
     // friend; Holy Shock / Penance / Chi Burst are a dummy row + script
     expect(refusedSpellAimsAtEnemy("44425")).toBe(true);
+    // codex 85-tk-N-T108-1d: an enemy target on a dummy row counts — Strike
+    // of the Windlord / Fists of Fury aim at an enemy only through one
+    expect(refusedSpellAimsAtEnemy("392983")).toBe(true);
+    expect(refusedSpellAimsAtEnemy("113656")).toBe(true);
     expect(refusedSpellAimsAtEnemy("2061")).toBe(false);
     for (const id of ["20473", "47540", "123986"])
       expect(refusedSpellAimsAtEnemy(id)).toBeUndefined();

@@ -200,6 +200,11 @@ export async function main(): Promise<void> {
       "visionObscuringAuraGenerated.ts": {
         entries: countQuotedIds("visionObscuringAuraGenerated.ts"),
       },
+      // …and whether a refused spell can aim at an enemy (ImplicitTarget on
+      // every row, dummy rows included; codex 85-tk-N-T108-1d)
+      "refusedSpellAimGenerated.ts": {
+        bytes: statSync(dataDir + "refusedSpellAimGenerated.ts").size,
+      },
       "periodicAuraGenerated.ts": {
         entries: countQuotedIds("periodicAuraGenerated.ts"),
       },

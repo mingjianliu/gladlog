@@ -84,6 +84,9 @@
     "visionObscuringAuraGenerated.ts": {
       "entries": 3
     },
+    "refusedSpellAimGenerated.ts": {
+      "bytes": 15035
+    },
     "periodicAuraGenerated.ts": {
       "entries": 11615
     },
