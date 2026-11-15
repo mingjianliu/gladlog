@@ -84,6 +84,7 @@ import {
   PRESSED_DURING_NOTE_RE_SRC,
   stripPressedDuringNote,
 } from "@gladlog/analysis/src/context/controlRejectedPresses";
+import { secondStageCooldownNames } from "@gladlog/analysis/src/data/secondStagePresses";
 import {
   FORCED_FOLLOWUP_CAP,
   FORCED_FOLLOWUP_MAX_GAP_S,
@@ -2891,11 +2892,14 @@ function ownerKitOf(lines: string[]): {
  * — only the recorder has refused presses — and every spell it names is an
  * entry of the owner's `<cooldowns>` kit with a button, named once, with a
  * count of at least 1. Without a `log owner` unit or its kit the ownership
- * checks say nothing.
+ * checks say nothing. The `/cancelaura` note (`SECOND_STAGE_MACRO_NOTE`,
+ * user ruling R45) may follow only an item named as a cooldown with a listed
+ * second stage (`secondStageCooldownNames`: Alter Time, Stasis).
  */
 export function checkPressedDuringControlNote(lines: string[]): string[] {
   const { ownerId, kit: kitEntries } = ownerKitOf(lines);
   const failures: string[] = [];
+  const stageNames = secondStageCooldownNames();
   lines.forEach((line, i) => {
     if (!line.includes(PRESSED_DURING_NOTE_HEAD)) return;
     const fail = (why: string) =>
@@ -2918,6 +2922,8 @@ export function checkPressedDuringControlNote(lines: string[]): string[] {
       if (seen.has(name)) fail(`${name} 列了两次`);
       seen.add(name);
       if (Number(item[2]) < 1) fail(`${name} 的次数是 ${item[2]}`);
+      if (item[3] && !stageNames.has(name))
+        fail(`${name} 带了 /cancelaura 备注,但它没有登记的第二段`);
       if (kitEntries === null) continue;
       const entry = kitEntries.get(name);
       if (entry === undefined) fail(`${name} 不在录制者的 <cooldowns> 里`);

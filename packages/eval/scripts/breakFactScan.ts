@@ -82,6 +82,7 @@ import {
   CONTROL_REJECT_MECHANIC,
   CONTROL_REJECT_REASONS,
   controlRejectKindOf,
+  PRESSED_DURING_ITEM_RE_SRC,
 } from "@gladlog/analysis/src/context/controlRejectedPresses";
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
 import {
@@ -91,6 +92,7 @@ import {
   nominatedEffectAurasOfCast,
 } from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
+import { SECOND_STAGE_PRESSES } from "@gladlog/analysis/src/data/secondStagePresses";
 import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
@@ -781,10 +783,16 @@ function runRound(ctx: IContext): void {
     // `Crusade` there and `Avenging Wrath` in getEnglishSpellName — codex
     // 20-F15-28), else the English name
     // — and only a button: a same-named id DB2 gives no cooldown of its own
-    // is a triggered sub-spell, no press (T99: The Hunt's impact 370966)
+    // is a triggered sub-spell, no press (T99: The Hunt's impact 370966),
+    // unless it is a same-button second stage (R45: Alter Time's return,
+    // Stasis' release — `SECOND_STAGE_PRESSES`)
     const kitName = (x: { spellId: number | string; spellName?: string }) => {
       const id = String(x.spellId);
-      if (spellEffectData[id] && !((effectiveCooldownSeconds(id) ?? 0) > 0))
+      if (
+        !SECOND_STAGE_PRESSES.has(id) &&
+        spellEffectData[id] &&
+        !((effectiveCooldownSeconds(id) ?? 0) > 0)
+      )
         return undefined;
       return [
         spellEffectData[id]?.name,
@@ -879,6 +887,7 @@ function runRound(ctx: IContext): void {
       if (wins.length === 0) continue;
       wins.sort((a, b) => a.from - b.from);
       const counts = new Map<string, Map<string, number>>(); // line → name → n
+      const noted = new Map<string, Set<string>>(); // line → second-stage names
       for (const x of presses) {
         const ms = start + Math.round(x.tSeconds * 1000);
         const holding = wins.filter((w) => w.from <= ms && ms <= w.to);
@@ -892,6 +901,12 @@ function runRound(ctx: IContext): void {
         const m = counts.get(w.line) ?? new Map<string, number>();
         m.set(name, (m.get(name) ?? 0) + 1);
         counts.set(w.line, m);
+        // a second-stage row: the item carries the `/cancelaura` note (R45)
+        if (SECOND_STAGE_PRESSES.has(String(x.spellId))) {
+          const n = noted.get(w.line) ?? new Set<string>();
+          n.add(name);
+          noted.set(w.line, n);
+        }
       }
       // both ways (codex 20-F15-24): every listed count is the re-read's,
       // and every re-read press is listed — a line whose clause went missing
@@ -899,11 +914,14 @@ function runRound(ctx: IContext): void {
       for (const w of new Set(wins.map((x) => x.line))) {
         const k = w.indexOf(" | pressed during it: ");
         const listed = new Map<string, number>();
+        const listedNote = new Set<string>();
         if (k >= 0)
           for (const it of w
             .slice(k + " | pressed during it: ".length)
-            .matchAll(/(.+?) ×(\d+)(?:, |$)/g))
+            .matchAll(new RegExp(PRESSED_DURING_ITEM_RE_SRC, "g"))) {
             listed.set(it[1]!, Number(it[2]));
+            if (it[3]) listedNote.add(it[1]!);
+          }
         const want = counts.get(w) ?? new Map<string, number>();
         if (listed.size === 0 && want.size === 0) continue;
         bump("refusedPressMechanic");
@@ -912,6 +930,11 @@ function runRound(ctx: IContext): void {
           const n = listed.get(name) ?? 0;
           const got = want.get(name) ?? 0;
           if (got !== n) bad.push(`${name} ×${n} (re-read ×${got})`);
+          const wantNote = noted.get(w)?.has(name) ?? false;
+          if (wantNote !== listedNote.has(name))
+            bad.push(
+              `${name} ${listedNote.has(name) ? "carries" : "lacks"} the /cancelaura note (re-read: ${wantNote ? "a second-stage row" : "no second-stage row"})`,
+            );
         }
         const wid = wins.find((x) => x.line === w)!;
         if (bad.length > 0)

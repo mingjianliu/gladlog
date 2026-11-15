@@ -288,6 +288,7 @@ import {
   SHIV_REMOVES,
   SHIV_SPELL_ID,
 } from "./scopedPurges";
+import { SECOND_STAGE_PRESSES } from "./secondStagePresses";
 import { SELF_REMOVAL_SPELL_IDS } from "./selfRemovals";
 import { SILENCE_AURAS_NOT_KICKS, SPELL_CATEGORIES } from "./spellCategories";
 import {
@@ -530,6 +531,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   // 10-20 用户裁定(fact1215 复测 idx 54):就绪的 Alter Time 算手里的大减伤,
   // 按下后不算「身上有」(R7)。
+  // T99 (user ruling R45 2026-11-15): a same-button second stage's refused
+  // row is a press of its cooldown in `pressed during it`
+  t(
+    "secondStagePresses.SECOND_STAGE_PRESSES",
+    "data/secondStagePresses.ts",
+    "cast",
+    () => [...SECOND_STAGE_PRESSES.keys()],
+  ),
   t(
     "abilityProfile.KW_IN_HAND_ONLY_DEFENSIVE_IDS",
     "data/abilityProfile.ts",
@@ -610,18 +619,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       rs.map((r) => r.talentSpellId),
     ),
   ]),
-  t(
-    "CASTER_WINDOW_DURATIONS",
-    "data/casterWindowDurations.ts",
-    "mixed",
-    () => [
-      ...Object.keys(CASTER_WINDOW_DURATIONS),
-      ...Object.values(CASTER_WINDOW_DURATIONS).flatMap((r) => [
-        ...r.windowCastIds,
-        ...(r.notWithTalentSpellId ? [r.notWithTalentSpellId] : []),
-      ]),
-    ],
-  ),
+  t("CASTER_WINDOW_DURATIONS", "data/casterWindowDurations.ts", "mixed", () => [
+    ...Object.keys(CASTER_WINDOW_DURATIONS),
+    ...Object.values(CASTER_WINDOW_DURATIONS).flatMap((r) => [
+      ...r.windowCastIds,
+      ...(r.notWithTalentSpellId ? [r.notWithTalentSpellId] : []),
+    ]),
+  ]),
   t(
     "TOOLTIP_PER_EVENT_DURATIONS",
     "data/talentDurationTooltips.ts",

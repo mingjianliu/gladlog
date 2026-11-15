@@ -22,6 +22,7 @@
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { SECOND_STAGE_PRESSES } from "../data/secondStagePresses";
 import {
   cdIsProcOnly,
   isPressOfCooldown,
@@ -311,6 +312,9 @@ export interface IPressedDuringControl {
   spellName: string;
   count: number;
   firstSeconds: number;
+  /** a refused row of it was a same-button second stage
+   *  (`SECOND_STAGE_PRESSES`): the item carries `SECOND_STAGE_MACRO_NOTE` */
+  secondStage?: boolean;
 }
 
 /** A rendered control on the owner: `[fromSeconds, toSeconds]`,
@@ -383,13 +387,18 @@ export function ownerPressesRejectedDuring<W>(
   // which for a variant is not the ledger's (Stasis, Alter Time, Imprison,
   // Stampeding Roar, Lay on Hands …). A same-named triggered sub-spell with
   // no cooldown is no press (T99, fact13 D18: The Hunt's impact 370966
-  // refused while stunned, its button 370965 had gone out).
+  // refused while stunned, its button 370965 had gone out). A same-button
+  // second stage (`SECOND_STAGE_PRESSES`: Alter Time 342247, Stasis 370564)
+  // is its first stage's press (T99, user ruling R45).
   const replacements = talentReplacementsOf(owner);
   // the round's date, once (a variant's alias is dated)
   const logEpochMs = unitLogEpochMs(owner);
   const kitEntries = [...kit];
   const kitNameOf = (h: CastFailedEvent): string | undefined => {
-    const id = String(h.spellId);
+    const refused = String(h.spellId);
+    // a same-button second stage (Alter Time's return, Stasis' release) is a
+    // press of its first stage's cooldown (T99, user ruling R45)
+    const id = SECOND_STAGE_PRESSES.get(refused)?.firstStageId ?? refused;
     const own = kit.get(id);
     if (own !== undefined) return own;
     const row = {
@@ -423,9 +432,18 @@ export function ownerPressesRejectedDuring<W>(
     // by the printed name: two kit ids that print one name are one item (the
     // gate reads names)
     const cur = list.find((p) => p.spellName === spellName);
-    if (cur) cur.count++;
-    else
-      list.push({ spellId: id, spellName, count: 1, firstSeconds: h.tSeconds });
+    const secondStage = SECOND_STAGE_PRESSES.has(id);
+    if (cur) {
+      cur.count++;
+      if (secondStage) cur.secondStage = true;
+    } else
+      list.push({
+        spellId: id,
+        spellName,
+        count: 1,
+        firstSeconds: h.tSeconds,
+        ...(secondStage ? { secondStage } : {}),
+      });
     out.set(held.w, list);
   }
   return out;
@@ -434,13 +452,25 @@ export function ownerPressesRejectedDuring<W>(
 /** The clause's fixed head — also what the legend looks for. */
 export const PRESSED_DURING_NOTE_HEAD = " | pressed during it: ";
 
+/**
+ * What an item says when a refused press of it was its button's second stage
+ * (Alter Time's return, Stasis' release — `SECOND_STAGE_PRESSES`): the stage
+ * ends an aura of the player's own, which `/cancelaura` does while controlled
+ * (user ruling R45, 2026-11-15: "advise the player to make the macro"; one
+ * fact-style note, the same words for every listed spell). Holds no `|`, `×`
+ * or `,` — the clause's separators.
+ */
+export const SECOND_STAGE_MACRO_NOTE =
+  " (second stage: a /cancelaura macro fires it under control)";
+
 /** ` | pressed during it: Desperate Prayer ×12, Fade ×3`; "" for none. Always
- *  the last clause of its line. */
+ *  the last clause of its line. An item refused as its second stage carries
+ *  `SECOND_STAGE_MACRO_NOTE` after its count. */
 export function formatPressedDuringNote(
   presses: readonly IPressedDuringControl[] | undefined,
 ): string {
   return presses?.length
-    ? `${PRESSED_DURING_NOTE_HEAD}${presses.map((p) => `${p.spellName} ×${p.count}`).join(", ")}`
+    ? `${PRESSED_DURING_NOTE_HEAD}${presses.map((p) => `${p.spellName} ×${p.count}${p.secondStage ? SECOND_STAGE_MACRO_NOTE : ""}`).join(", ")}`
     : "";
 }
 
@@ -457,6 +487,11 @@ export function stripPressedDuringNote(line: string): string {
  *  group 1 = the `Name ×N, Name ×N` list, anchored at the end of the line. A
  *  name can hold a comma (Invoke Xuen, the White Tiger), so an item ends at
  *  its ` ×N`, not at a comma. */
-export const PRESSED_DURING_NOTE_RE_SRC = String.raw` \| pressed during it: ((?:[^|×]+ ×\d+)(?:, [^|×]+ ×\d+)*)$`;
-/** One `Name ×N` item of that list: group 1 = the name, group 2 = the count. */
-export const PRESSED_DURING_ITEM_RE_SRC = String.raw`(.+?) ×(\d+)(?:, |$)`;
+const MACRO_NOTE_RE_SRC = SECOND_STAGE_MACRO_NOTE.replace(
+  /[.*+?^${}()|[\]\\/]/g,
+  "\\$&",
+);
+export const PRESSED_DURING_NOTE_RE_SRC = String.raw` \| pressed during it: ((?:[^|×]+ ×\d+(?:${MACRO_NOTE_RE_SRC})?)(?:, [^|×]+ ×\d+(?:${MACRO_NOTE_RE_SRC})?)*)$`;
+/** One `Name ×N` item of that list: group 1 = the name, group 2 = the count,
+ *  group 3 = `SECOND_STAGE_MACRO_NOTE` when the item carries it. */
+export const PRESSED_DURING_ITEM_RE_SRC = String.raw`(.+?) ×(\d+)(${MACRO_NOTE_RE_SRC})?(?:, |$)`;

@@ -1578,9 +1578,9 @@ describe("checkHitNoPlayerContradiction — [hit no enemy player] against the pr
     const breath = "0:38  [YOU] [CC]   Dragon's Breath [hit no enemy player]";
     const landed =
       "0:38  [CC ON ENEMY]   5(HDHunter) ← Dragon's Breath (by 1(AMage)) (3s) [DR: Disorient Full]";
-    expect(checkHitNoPlayerContradiction([...unit, breath, landed])).toHaveLength(
-      1,
-    );
+    expect(
+      checkHitNoPlayerContradiction([...unit, breath, landed]),
+    ).toHaveLength(1);
     expect(
       checkHitNoPlayerContradiction([
         ...unit,
@@ -1773,7 +1773,8 @@ describe("checkPeelOptionConsistency — a [PEEL OPTION] line must agree with th
     expect(checkPeelOptionConsistency([peel])).toHaveLength(1);
   });
   it("in the death's own second, a landing printed after the [DEATH] line came after it — no contradiction; before it, a contradiction (wide 240-16)", () => {
-    const at229 = "2:29  [CC ON ENEMY]   4(ARogue) ← Hammer of Justice (by 1(RPaladin)) (3s)";
+    const at229 =
+      "2:29  [CC ON ENEMY]   4(ARogue) ← Hammer of Justice (by 1(RPaladin)) (3s)";
     expect(checkPeelOptionConsistency([death, at229, peel])).toEqual([]);
     // HAS TEETH: the same landing printed before the death line
     expect(checkPeelOptionConsistency([at229, death, peel])).toHaveLength(1);
@@ -2073,7 +2074,10 @@ describe("checkWarlockPurgeFollowsPet — the purge header follows the warlock's
       ]),
     ).toHaveLength(1);
     expect(
-      checkWarlockPurgeFollowsPet([...two, `  Team purgers: Affliction Warlock`]),
+      checkWarlockPurgeFollowsPet([
+        ...two,
+        `  Team purgers: Affliction Warlock`,
+      ]),
     ).toEqual([]);
   });
   it("F16 retest idx 50: a swap's `(Felhunter out until m:ss)` suffix keeps the entry checked", () => {
@@ -2090,7 +2094,11 @@ describe("checkWarlockPurgeFollowsPet — the purge header follows the warlock's
     ).toHaveLength(1);
     expect(
       checkWarlockPurgeFollowsPet(
-        prompt("CAN offensive purge (Felhunter out until 0:17)", "none", felhunter),
+        prompt(
+          "CAN offensive purge (Felhunter out until 0:17)",
+          "none",
+          felhunter,
+        ),
       ),
     ).toEqual([]);
   });
@@ -2241,6 +2249,47 @@ describe("checkPressedDuringControlNote — `| pressed during it:` names the log
         checkPressedDuringControlNote([...roster, line]),
         line,
       ).toHaveLength(1);
+  });
+
+  it("the /cancelaura note (R45) passes on a cooldown with a listed second stage, and fails on any other", () => {
+    const kit = [
+      '  <unit id="1" name="Owner" spec="Frost Mage" role="log owner">',
+      "    <cooldowns>Alter Time [50s, lasts 10s], Ice Block [240s, lasts 10s]</cooldowns>",
+    ];
+    const staged = (spellName: string) =>
+      formatPressedDuringNote([
+        {
+          spellId: "1",
+          spellName,
+          count: 2,
+          firstSeconds: 1,
+          secondStage: true,
+        },
+        { spellId: "2", spellName: "Ice Block", count: 1, firstSeconds: 2 },
+      ]);
+    expect(
+      checkPressedDuringControlNote([
+        ...kit,
+        cc("1(FMage)", staged("Alter Time")),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkPressedDuringControlNote([
+        ...kit,
+        cc(
+          "1(FMage)",
+          formatPressedDuringNote([
+            {
+              spellId: "2",
+              spellName: "Ice Block",
+              count: 1,
+              firstSeconds: 2,
+              secondStage: true,
+            },
+          ]),
+        ),
+      ]),
+    ).toHaveLength(1);
   });
 
   it("without a log-owner unit the ownership checks say nothing; the format is still checked", () => {

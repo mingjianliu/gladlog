@@ -101,6 +101,7 @@ import * as pvpTalentReplacesGenerated from "@gladlog/analysis/src/data/pvpTalen
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
 import * as scopedPurges from "@gladlog/analysis/src/data/scopedPurges";
+import * as secondStagePresses from "@gladlog/analysis/src/data/secondStagePresses";
 import * as selfRemovals from "@gladlog/analysis/src/data/selfRemovals";
 import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
@@ -2753,6 +2754,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/context/controlRejectedPresses.ts`,
     symbol: "PRESSED_DURING_ITEM_RE_SRC",
     mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "SECOND_STAGE_MACRO_NOTE",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/data/secondStagePresses.ts`,
+    symbol: "SECOND_STAGE_PRESSES",
+    mod: secondStagePresses,
+  },
+  {
+    file: `${A}/data/secondStagePresses.ts`,
+    symbol: "secondStageCooldownNames",
+    mod: secondStagePresses,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,

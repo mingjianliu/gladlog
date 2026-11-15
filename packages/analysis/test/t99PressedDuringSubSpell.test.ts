@@ -10,6 +10,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   formatPressedDuringNote,
   ownerPressesRejectedDuring,
+  PRESSED_DURING_ITEM_RE_SRC,
+  PRESSED_DURING_NOTE_RE_SRC,
+  SECOND_STAGE_MACRO_NOTE,
 } from "../src/context/controlRejectedPresses";
 import { ensureAnalysisData } from "../src/data/ensure";
 import type { CastFailedEvent } from "../src/utils/rawStreams";
@@ -65,5 +68,60 @@ describe("T99 — a sub-spell's refused row is no press of the kit cooldown", ()
     expect(formatPressedDuringNote(got.get(stun))).toBe(
       " | pressed during it: The Hunt ×1",
     );
+  });
+});
+
+describe("T99 (R45) — a same-button second stage is a press, with the /cancelaura note", () => {
+  const atKit = new Map([
+    ["342245", "Alter Time"],
+    ["198589", "Blur"],
+  ]);
+  const run = (rows: CastFailedEvent[]) =>
+    formatPressedDuringNote(
+      ownerPressesRejectedDuring(
+        rows,
+        owner,
+        atKit,
+        "control",
+        [stun],
+        (w) => w,
+      ).get(stun),
+    );
+  it("Alter Time's return refused while stunned counts, with the note", () => {
+    expect(run([press(9.1, 342247, "Alter Time")])).toBe(
+      ` | pressed during it: Alter Time ×1${SECOND_STAGE_MACRO_NOTE}`,
+    );
+  });
+  it("a first press and a return of one button are one item, with the note", () => {
+    expect(
+      run([
+        press(9.1, 342245, "Alter Time"),
+        press(9.4, 342247, "Alter Time"),
+        press(10, 198589, "Blur"),
+      ]),
+    ).toBe(
+      ` | pressed during it: Alter Time ×2${SECOND_STAGE_MACRO_NOTE}, Blur ×1`,
+    );
+  });
+  it("a first press alone carries no note", () => {
+    expect(run([press(9.1, 342245, "Alter Time")])).toBe(
+      " | pressed during it: Alter Time ×1",
+    );
+  });
+  it("the gate's patterns read the noted item back", () => {
+    const line = `0:09  [CC ON TEAM]   1(Owner) ← Kidney Shot | 4s${run([
+      press(9.1, 342247, "Alter Time"),
+      press(10, 198589, "Blur"),
+    ])}`;
+    const m = new RegExp(PRESSED_DURING_NOTE_RE_SRC).exec(line);
+    expect(m).not.toBeNull();
+    expect(
+      [...m![1]!.matchAll(new RegExp(PRESSED_DURING_ITEM_RE_SRC, "g"))].map(
+        (x) => [x[1], x[2], !!x[3]],
+      ),
+    ).toEqual([
+      ["Alter Time", "1", true],
+      ["Blur", "1", false],
+    ]);
   });
 });
