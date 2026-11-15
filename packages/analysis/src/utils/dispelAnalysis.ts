@@ -50,7 +50,10 @@ import {
 } from "./castCommitSpans";
 import { ccLandingStateAtMs } from "./ccBreakAnalysis";
 import { ccFullDurationForApplication } from "./ccDuration";
-import { ccLengthIsDrEvidence } from "./ccTrinketAnalysis";
+import {
+  ccLengthIsDrEvidence,
+  TARGET_BOUND_MOBILITY_IDS,
+} from "./ccTrinketAnalysis";
 import { charmedThrough } from "./charmedPlayer";
 import {
   mixFingerprintString,
@@ -2970,6 +2973,40 @@ export function wasRemovedByAllyDispel(
 export const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
 
 /**
+ * T118 (fact12 retest M3, 60bfdea9 2:16): was this ROOT removed by a
+ * teammate's — or the unit's own — Blessing of Freedom / Tiger's Lust cast on
+ * it (`TARGET_BOUND_MOBILITY_IDS`) in the same instant? Those casts free
+ * their target of roots and log a SPELL_DISPEL only sometimes (Tiger's Lust:
+ * self-casts in 4cacc702 / 7edc099d / 5d145b70 do, a teammate cast in
+ * 60bfdea9 does not); with the row, `wasRemovedByAllyDispel` already counts
+ * the removal as a deliberate cleanse (`MOVEMENT_ROOT_BREAK_DISPEL_IDS`
+ * leaves them out on purpose). Without it a Frost Nova freed after 4.0 s by
+ * the Mistweaver the item named was filed as never cleansed. The cast row
+ * names the unit and shares the removal's instant within the dispel pairing
+ * tolerance; only a root qualifies (a stun ending as one is cast is no
+ * freedom).
+ */
+export function wasFreedByTargetBoundCast(
+  friends: readonly Pick<ICombatUnit, "spellCastEvents">[],
+  ccSpellId: string,
+  unitId: string,
+  removalMs: number,
+): boolean {
+  if (!ROOT_SPELL_IDS.has(ccSpellId)) return false;
+  return friends.some((f) =>
+    (f.spellCastEvents ?? []).some(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!e.spellId &&
+        TARGET_BOUND_MOBILITY_IDS.has(e.spellId) &&
+        e.destUnitId === unitId &&
+        Math.abs(e.logLine.timestamp - removalMs) <=
+          ALLY_DISPEL_MATCH_TOLERANCE_S * 1000,
+    ),
+  );
+}
+
+/**
  * One cleanse press removing several debuffs logs one SPELL_DISPEL per
  * removal at the same instant — `allyCleanse` then holds that press several
  * times. A cooldown / charge replay must count PRESSES (triage
@@ -3866,12 +3903,13 @@ function reconstructDispelSummaryUncached(
         // Was removed by a friendly dispel near that removal time?
         const removedByDispel =
           !clippedAtRoundEnd &&
-          wasRemovedByAllyDispel(
+          (wasRemovedByAllyDispel(
             allyCleanse,
             spellId,
             unit.name,
             (removal.ts - combat.startTime) / 1000,
-          );
+          ) ||
+            wasFreedByTargetBoundCast(friends, spellId, unit.id, removal.ts));
 
         // CC broke from incoming damage — not a missed cleanse, but not a healer cleanse either
         if (removal.brokenByDamage) {

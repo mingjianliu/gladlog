@@ -37,7 +37,10 @@ import {
   rendersCcOnTeamLine,
   tremorTotemBreak,
 } from "../../utils/ccTrinketAnalysis";
-import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
+import {
+  wasFreedByTargetBoundCast,
+  wasRemovedByAllyDispel,
+} from "../../utils/dispelAnalysis";
 import { getDRCategory, getDRLevel } from "../../utils/drAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
 import { ccMechanicOf } from "../../utils/spellMechanics";
@@ -254,12 +257,24 @@ export function emitTrinketCcOnTeamEntries(
         trinketNote += `${trinketNote ? ";" : " |"} ${cc.breakRacialOnCd.name}: ON CD (${cc.breakRacialOnCd.secondsLeft}s left)`;
 
       // F148: Cleanse Success Verification — check if this CC was removed by a friendly dispel
-      const isCleansed = wasRemovedByAllyDispel(
-        dispelSummary.allyCleanse,
-        cc.spellId,
-        summary.playerName,
-        cc.atSeconds + cc.durationSeconds,
-      );
+      // T118: or a root freed by a Blessing of Freedom / Tiger's Lust cast on
+      // the unit that logged no SPELL_DISPEL row
+      const ccdTarget = friends.find((f) => f.name === summary.playerName);
+      const isCleansed =
+        wasRemovedByAllyDispel(
+          dispelSummary.allyCleanse,
+          cc.spellId,
+          summary.playerName,
+          cc.atSeconds + cc.durationSeconds,
+        ) ||
+        (!!ccdTarget &&
+          wasFreedByTargetBoundCast(
+            friends,
+            cc.spellId,
+            ccdTarget.id,
+            matchStartMs +
+              Math.round((cc.atSeconds + cc.durationSeconds) * 1000),
+          ));
       const cleansedNote = isCleansed ? " [CLEANSED]" : "";
 
       // GH #100 (user 2026-09-20): a friendly Tremor Totem dropped mid-fear
