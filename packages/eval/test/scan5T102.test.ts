@@ -170,4 +170,35 @@ describe("resCcConcurrentDropped", () => {
     const u = { actionIn: [kick("e1", 9.5, "116"), kick("e2", 9.9, "2061")] };
     expect(scan(10, "1/Wind Shear-1s[kick]", u, { deathS: 10.1 })).toBe(1);
   });
+
+  it("a Frost Nova's BROKEN_SPELL hit is not its end; its REMOVED is (605 cb6f3e66 r3 2:20)", () => {
+    const u = {
+      auraEvents: [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          FROST_NOVA,
+          "Frost Nova",
+          8.807,
+          "e1",
+        ),
+        aura(LogEvent.SPELL_AURA_APPLIED, "157997", "Ice Nova", 9.943, "e1"),
+        aura(
+          LogEvent.SPELL_AURA_BROKEN_SPELL,
+          FROST_NOVA,
+          "Frost Nova",
+          11.63,
+          "e2",
+        ),
+        aura(LogEvent.SPELL_AURA_REMOVED, "157997", "Ice Nova", 11.951, "e1"),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          FROST_NOVA,
+          "Frost Nova",
+          12.134,
+          "e1",
+        ),
+      ],
+    };
+    expect(scan(10, "1/Frost Nova-2s[root]", u)).toBe(0);
+  });
 });

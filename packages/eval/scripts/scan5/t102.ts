@@ -12,7 +12,8 @@
  *  - a kick is an enemy SPELL_INTERRUPT on the unit plus its lockout
  *    (`kickLockoutSecondsFor`);
  *  - a root (`rootSpellIds`) or disarm (`disarmSpellIds`) is an enemy aura,
- *    APPLIED to the first REMOVED / BROKEN of it from that caster.
+ *    APPLIED to the first REMOVED of it from that caster, or a BROKEN line
+ *    no REMOVED supersedes (`dropSupersededAuraBreaks`).
  *
  *  - `resCcConcurrentDropped`: a `[RES]` row whose `cc:` lists at least one
  *    entry of kind K (`[kick]` / `[root]` / `[disarm]`) for a unit while the
@@ -33,6 +34,7 @@ import {
   disarmSpellIds,
   rootSpellIds,
 } from "@gladlog/analysis/src/data/spellTags";
+import { dropSupersededAuraBreaks } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { kickLockoutSecondsFor } from "@gladlog/analysis/src/utils/kickLockout";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
@@ -69,8 +71,11 @@ function instancesOf(ctx: IRoundCtx, unit: any): IInst[] {
       .map((u) => u.id as string),
   );
   const out: IInst[] = [];
-  const auras = ((unit.auraEvents ?? []) as any[]).filter(
-    (a) => a.destUnitId === unit.id,
+  // a BROKEN line its own REMOVED follows is no end — what hit the root,
+  // not its end (`dropSupersededAuraBreaks`, the one reading; Frost Nova
+  // logs a BROKEN_SPELL per damaging hit and stays ~0.5 s longer)
+  const auras = dropSupersededAuraBreaks(
+    ((unit.auraEvents ?? []) as any[]).filter((a) => a.destUnitId === unit.id),
   );
   auras.forEach((a, i) => {
     if (ev(a) !== APPLIED || !enemy.has(a.srcUnitId)) return;
