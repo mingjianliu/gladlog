@@ -20,8 +20,9 @@
  *  - `chargeSpentReadEarly`: printed `ended after` while the holder cast,
  *    ≤ `CHARGE_CAST_MS` before the removal, a spell that spent a dose of the
  *    same aura (a REMOVED_DOSE of it ≤ `CHARGE_CAST_MS` after that spell's
- *    cast) anywhere in the round. A cast before the removal with no such
- *    dose seen is out of the total (`no spender seen`).
+ *    cast, the only cast id in that window) anywhere in the round. A cast
+ *    before the removal with no such dose seen is out of the total (`no
+ *    spender seen`).
  *  - `earlyEndReadExpired`: printed `(expired)` / `(expired; …)` on a
  *    removal more than the slack (`JITTER_MS`, at most half the length, as
  *    the producer) before the full length ends. Only buffs the producer
@@ -256,7 +257,12 @@ export function run(ctx: IRoundCtx): void {
               String(a.spellId) === auraId &&
               a.srcUnitId === owner.id,
           )
-          .flatMap((a) => castsBefore(tsOf(a))),
+          // a dose row with one cast id in its window names its spender;
+          // a coincident cast is no evidence (codex 85-tk-L-T103-1 #2)
+          .flatMap((a) => {
+            const ids = new Set(castsBefore(tsOf(a)).filter((x) => x));
+            return ids.size === 1 ? [...ids] : [];
+          }),
       );
       const finals = castsBefore(removedMs).filter((x) => x);
       const spent = finals.find((x) => spenders.has(x));

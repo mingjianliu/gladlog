@@ -1042,7 +1042,9 @@ export function extractOwnerCDBuffExpiry(
       if (
         !isEstimated &&
         cause === "expired" &&
-        CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
+        // T103: every channel `runsWithHaste` now lets run past the share
+        // cut (Convoke kicked at 2.4 s of 4: codex 85-tk-L-T103-1 #1)
+        isChannelledPress(cd.spellId) &&
         ownerCC &&
         owner?.id !== undefined
       ) {
@@ -1252,7 +1254,10 @@ export function extractOwnerCDBuffExpiry(
         // dose row — Power Siphon's single stack went 7 ms after the
         // Demonbolt that spends it. Its spender is the spell that spent a
         // dose of the same aura elsewhere in the round (the 2:00 press's two
-        // stacks: Demonbolt, then REMOVED_DOSE).
+        // stacks: Demonbolt, then REMOVED_DOSE). Only a dose row with one
+        // cast id in its window names a spender: a cast that merely
+        // coincided (Blood Fury 50 ms before a Demonbolt) is no evidence
+        // (codex 85-tk-L-T103-1 #2).
         const roundSpenders =
           doseRows.length > 0
             ? spenders
@@ -1265,7 +1270,14 @@ export function extractOwnerCDBuffExpiry(
                       (a.logLine.event as LogEvent) ===
                         LogEvent.SPELL_AURA_REMOVED_DOSE,
                   )
-                  .flatMap((a) => castsBefore(a.logLine.timestamp as number)),
+                  .flatMap((a) => {
+                    const ids = new Set(
+                      castsBefore(a.logLine.timestamp as number).filter(
+                        (id) => !!id,
+                      ),
+                    );
+                    return ids.size === 1 ? [...ids] : [];
+                  }),
               );
         const finalCasts = castsBefore(span.removedMs).filter((id) => !!id);
         if (

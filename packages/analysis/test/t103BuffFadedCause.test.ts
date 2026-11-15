@@ -56,7 +56,13 @@ describe("[BUFF FADED] — a one-charge buff spent by its spender (T103 D7)", ()
   const SIPHON_BUFF = "334581";
   const DEMONBOLT = "264178";
   const SHADOW_BOLT = "686";
-  function lock(opts: { secondPressDoses: boolean; spender: string }) {
+  const BLOOD_FURY = "33702";
+  function lock(opts: {
+    secondPressDoses: boolean;
+    spender: string;
+    /** a cast that coincided with the 2:00 press's dose spend */
+    coincident?: string;
+  }) {
     return makeUnit(ME, {
       class: CombatUnitClass.Warlock,
       spec: CombatUnitSpec.Warlock_Demonology,
@@ -64,6 +70,7 @@ describe("[BUFF FADED] — a one-charge buff spent by its spender (T103 D7)", ()
         cast(SIPHON, 8.9),
         cast(opts.spender, 13.071),
         cast(SIPHON, 120),
+        ...(opts.coincident ? [cast(opts.coincident, 121.95)] : []),
         cast(DEMONBOLT, 122),
         cast(DEMONBOLT, 124),
       ],
@@ -100,6 +107,17 @@ describe("[BUFF FADED] — a one-charge buff spent by its spender (T103 D7)", ()
   it("no dose of it spent anywhere in the round: the spender is unknown, ended_early stays", () => {
     expect(
       causeAt13(lock({ secondPressDoses: false, spender: DEMONBOLT })),
+    ).toBe("ended_early");
+  });
+  it("a cast that only coincided with a dose spend is no spender (codex 85-tk-L-T103-1 #2)", () => {
+    expect(
+      causeAt13(
+        lock({
+          secondPressDoses: true,
+          spender: BLOOD_FURY,
+          coincident: BLOOD_FURY,
+        }),
+      ),
     ).toBe("ended_early");
   });
   it("the cast before the removal is no spell that spent a dose: ended_early stays", () => {
@@ -148,6 +166,35 @@ describe("[BUFF FADED] — the early-end slack is log jitter only (T103 D3 / D17
     expect(causeOf(u, CONVOKE, "Convoke the Spirits", 10)?.cause).toBe(
       "expired",
     );
+  });
+
+  it("a channel the press line reads interrupted ended early, whatever share it ran (codex 85-tk-L-T103-1 #1: Convoke kicked at 2.4 s)", () => {
+    const CONVOKE = "391528";
+    const u = makeUnit(ME, {
+      class: CombatUnitClass.Druid,
+      spec: CombatUnitSpec.Druid_Restoration,
+      spellCastEvents: [cast(CONVOKE, 10)],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, CONVOKE, 10),
+        aura(LogEvent.SPELL_AURA_REMOVED, CONVOKE, 12.4),
+      ],
+    }) as ICombatUnit;
+    const fade = (kickS?: number) =>
+      extractOwnerCDBuffExpiry(
+        cdRow(CONVOKE, "Convoke the Spirits", [10]),
+        ME,
+        [u],
+        T0,
+        u,
+        [],
+        T0 + 300_000,
+        {
+          ccInstances: [],
+          interruptInstances: kickS === undefined ? [] : [{ atSeconds: kickS }],
+        } as never,
+      )[0]?.cause;
+    expect(fade(12.4)).toBe("ended_early");
+    expect(fade()).toBe("expired");
   });
 
   it("Touch of Karma's shield removed 0.78 s early in the ms of a hit it took is used up (D3)", () => {
