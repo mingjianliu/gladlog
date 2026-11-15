@@ -79,12 +79,19 @@ export function run(ctx: IRoundCtx): void {
         Math.abs(tsOf(a) - (ctx.start + t * 1000)) <= 100 + TOL_MS,
     );
     if (!apply) continue;
-    const removal = rows.find(
+    // the removal that closes THIS application: the first later row of
+    // the spell; a re-APPLIED from the same source before any removal means
+    // the product inferred this window's end — no removal to judge (codex
+    // 85-tk-L-T118-1d; the product credits a freedom cast only at a logged
+    // removal)
+    const next = rows.find(
       (a) =>
-        ev(a) === REMOVED &&
         String(a.spellId) === String(apply.spellId) &&
-        tsOf(a) > tsOf(apply),
+        tsOf(a) > tsOf(apply) &&
+        (ev(a) === REMOVED ||
+          (ev(a) === APPLIED && a.srcUnitId === apply.srcUnitId)),
     );
+    const removal = next && ev(next) === REMOVED ? next : undefined;
     const removals =
       removal && tsOf(removal) <= ctx.roundEndAt ? [removal] : [];
     // a root that ran out — its own length (caster and landing modifiers:
