@@ -188,6 +188,7 @@ import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as offensiveWasteAnalysis from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
+import * as hasteScaledCooldowns from "@gladlog/analysis/src/data/hasteScaledCooldowns";
 import * as offListPress from "@gladlog/analysis/src/utils/offListPress";
 import * as outgoingCcChains from "@gladlog/analysis/src/utils/outgoingCcChains";
 import * as overrideVariantEra from "@gladlog/analysis/src/utils/overrideVariantEra";
@@ -1510,6 +1511,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/offListPress.ts`,
     symbol: "lineStatesPress",
     mod: offListPress,
+  },
+  {
+    file: `${A}/data/hasteScaledCooldowns.ts`,
+    symbol: "isHasteScaledCooldown",
+    mod: hasteScaledCooldowns,
+  },
+  {
+    file: `${A}/data/hasteScaledCooldowns.ts`,
+    symbol: "hasteScaledCooldownIds",
+    mod: hasteScaledCooldowns,
+  },
+  {
+    file: `${A}/data/hasteScaledCooldowns.ts`,
+    symbol: "HASTE_SCALED_COOLDOWN_NOTE",
+    mod: hasteScaledCooldowns,
   },
   {
     file: `${A}/data/talentScriptedCooldowns.ts`,

@@ -14,6 +14,10 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import {
+  HASTE_SCALED_COOLDOWN_NOTE,
+  isHasteScaledCooldown,
+} from "../../data/hasteScaledCooldowns";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import {
   INTERRUPT_SPELL_IDS,
@@ -192,8 +196,14 @@ export function emitKickEntries(
               matchStartMs) /
             1000
           : undefined;
+      // T111 / R47: a haste-scaled kick (Protection's Avenger's Shield) is
+      // back sooner than its unhasted base by an amount the log does not state
       const backSuffix =
-        backAtSeconds !== undefined ? `; back ${fmtTime(backAtSeconds)}` : "";
+        backAtSeconds === undefined
+          ? ""
+          : isHasteScaledCooldown(action.spellId ?? "", enemyKicker?.spec)
+            ? `; ${HASTE_SCALED_COOLDOWN_NOTE}`
+            : `; back ${fmtTime(backAtSeconds)}`;
       addEntry(
         atSeconds,
         `${fmtTime(atSeconds)}  [KICK]   ${kicker} interrupted ${victim}${

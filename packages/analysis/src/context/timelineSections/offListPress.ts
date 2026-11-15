@@ -8,6 +8,10 @@
  *
  * Runs after every other emitter, so the lines it checks against are all in.
  */
+import {
+  HASTE_SCALED_COOLDOWN_NOTE,
+  isHasteScaledCooldown,
+} from "../../data/hasteScaledCooldowns";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { specToString } from "../../utils/cooldowns";
 import {
@@ -26,7 +30,8 @@ export const OFF_LIST_PRESS_LEGEND = [
   "    movement, utility, defensive, throughput or offensive button (Divine Steed, Shadowmeld, Gladiator's Badge,",
   "    Holy Word: Serenity …). `Ns cd` =",
   "    that player's cooldown with their talents; `back m:ss` = when it was ready again, every reduction and reset",
-  "    included; `a charge left` = they still held one; `reset, ready again` = a talent reset it at that press;",
+  "    included; `cooldown shortens with haste` = their spec's haste cuts it below Ns, by an amount the log",
+  "    does not state; `a charge left` = they still held one; `reset, ready again` = a talent reset it at that press;",
   "    `2 equipped … another in hand` = two of the item worn, a cooldown each, the other one ready;",
   "    `free press` = a talent or an ally's Time Spiral let them press it without spending the cooldown",
   "    (`back` is then the cooldown it stands on); `lasts Ns` = how long its effect runs. A fact, not a verdict.",
@@ -95,7 +100,11 @@ export function emitOffListPressEntries(
     if (p.readyAgainAtSeconds !== null)
       parts.push(
         Math.floor(p.readyAgainAtSeconds) > sec
-          ? `back ${fmtTime(p.readyAgainAtSeconds)}`
+          ? // T111 / R47: a haste-scaled cooldown is back sooner than its
+            // unhasted base by an amount the log does not state
+            isHasteScaledCooldown(p.spellId, p.unit.spec)
+            ? HASTE_SCALED_COOLDOWN_NOTE
+            : `back ${fmtTime(p.readyAgainAtSeconds)}`
           : p.equipped
             ? "another in hand"
             : p.charges > 1

@@ -6,6 +6,7 @@ import {
   TALENT_EFFECT_AURAS_OF_CAST,
 } from "../data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
+import { isHasteScaledCooldown } from "../data/hasteScaledCooldowns";
 import { spellEffectData } from "../data/spellEffectData";
 import {
   buffDurationIsFloorForCaster,
@@ -589,9 +590,17 @@ export function chargesReadyCount(
  * cooldown, a to N s left) and `(≤Ns)` once it has (possibly already back).
  * Everything else keeps the exact `(Ns)`.
  */
-function remainingText(cd: IMajorCooldownInfo, timeSeconds: number): string {
+function remainingText(
+  cd: IMajorCooldownInfo,
+  timeSeconds: number,
+  holder: ICombatUnit | undefined,
+): string {
   const latest = cdLatestRemainingSeconds(cd, timeSeconds);
   if (cdMaybeAvailableAt(cd, timeSeconds)) return `≤${latest}s`;
+  // T111 / R47: a cooldown the holder's spec scales by haste (DB2 aura 416)
+  // is back sooner than the unhasted model by an amount the log does not
+  // state — only the upper bound is a fact
+  if (isHasteScaledCooldown(cd.spellId, holder?.spec)) return `≤${latest}s`;
   // An event-reduced press (Storm Conduit) is a cooldown combat shortens too:
   // `latest` counts the bolts cast so far, the realised return every bolt
   // before it came back — `(a–Ns)` with that as a, by the legend's own
@@ -712,6 +721,8 @@ function friendlyResCds(
   /** off cooldown, but its holder is under a debuff that refuses the press
    * (`ownPressLockout`: Forbearance, Hypothermia) until this second */
   lockout?: ResPressLockout;
+  /** whose cooldown it is (the owner only when `deaths` names it) */
+  holder: ICombatUnit | undefined;
 }> {
   // "dead before the row's second": `isDeadAt` 1 ms before it, so a death at
   // exactly 67.000 keeps the 1:07 row like one at 67.030 (codex review — the
@@ -765,6 +776,7 @@ function friendlyResCds(
           holderDead: ownerDead || gone,
           petGone: gone,
           lockout: lockoutOf(cd, deaths?.ownerUnit),
+          holder: deaths?.ownerUnit,
         };
       }),
     ...teammateCDs.flatMap(({ cds, playerLabel, player }) => {
@@ -781,6 +793,7 @@ function friendlyResCds(
             holderDead: holderDead || gone,
             petGone: gone,
             lockout: lockoutOf(cd, player),
+            holder: player,
           };
         });
     }),
@@ -1193,7 +1206,7 @@ function buildResourceSnapshotOnce({
       currentOnCDNames.push(key);
       if (prevOnCDSet === null || !prevOnCDSet.has(key))
         onCDParts.push(
-          `${displayName}(${remainingText(cd, timeSeconds)}; ${lockoutText(e.lockout!, timeSeconds)})${chargeSuffix.get(displayName) ?? ""}`,
+          `${displayName}(${remainingText(cd, timeSeconds, e.holder)}; ${lockoutText(e.lockout!, timeSeconds)})${chargeSuffix.get(displayName) ?? ""}`,
         );
       continue;
     }
@@ -1204,7 +1217,7 @@ function buildResourceSnapshotOnce({
     if (prevOnCDSet === null || !prevOnCDSet.has(key)) {
       // B114: a multi-charge CD in cd: has 0 charges ready; the "(Ns)" is time to the next charge.
       onCDParts.push(
-        `${displayName}(${remainingText(cd, timeSeconds)})${chargeSuffix.get(displayName) ?? ""}`,
+        `${displayName}(${remainingText(cd, timeSeconds, e.holder)})${chargeSuffix.get(displayName) ?? ""}`,
       );
     }
   }

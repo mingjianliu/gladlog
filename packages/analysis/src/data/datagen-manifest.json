@@ -156,6 +156,10 @@
       "pairs": 275,
       "producer": "packages/eval/scripts/castEffectAuraScan.ts --emit"
     },
+    "hasteScaledCooldownsGenerated.json": {
+      "specs": 7,
+      "producer": "packages/eval/scripts/hasteScaledCooldownGen.ts (reads talentEffectInventoryGenerated.json; --check verifies)"
+    },
     "ownShieldLinksGenerated.json": {
       "riders": 15,
       "producer": "packages/eval/scripts/ownShieldLinkScan.ts --manifest <605 S2 every-30 raw logs> --build <build> --emit"
