@@ -82,14 +82,16 @@ function ledger(ctx: IRoundCtx): void {
     if (!app) continue;
     ctx.bump(C);
     // up to its REMOVED — or the next APPLIED of it from the same source:
-    // with the REMOVED lost, that is a fresh aura (codex 85-tk-K-T98-1b #2)
+    // with the REMOVED lost, that is a fresh aura (codex 85-tk-K-T98-1b #2).
+    // Both from its own source: another unit's application of the wall is
+    // its own aura (codex 85-tk-K-T98-1d)
     const end =
       rows
         .filter(
           (a) =>
             tsOf(a) > tsOf(app) &&
-            (ev(a) === REMOVED ||
-              (ev(a) === APPLIED && a.srcUnitId === app.srcUnitId)),
+            a.srcUnitId === app.srcUnitId &&
+            (ev(a) === REMOVED || ev(a) === APPLIED),
         )
         .map(tsOf)
         .sort((a, b) => a - b)[0] ?? ctx.end;
