@@ -83,15 +83,26 @@ function ledger(ctx: IRoundCtx): void {
     ctx.bump(C);
     // up to its REMOVED — or the next APPLIED of it from the same source:
     // with the REMOVED lost, that is a fresh aura (codex 85-tk-K-T98-1b #2).
-    // Both from its own source: another unit's application of the wall is
-    // its own aura (codex 85-tk-K-T98-1d)
+    // A REMOVED from another source closes that source's own aura when one
+    // is open (codex 85-tk-K-T98-1d), else this one: a REMOVED's source is
+    // often missing or inconsistent (the interval reader's own fallback,
+    // codex 85-tk-K-T98-1e)
+    const sourceOpenAt = (src: unknown, t: number): boolean => {
+      const last = rows
+        .filter(
+          (a) => a.srcUnitId === src && tsOf(a) < t && tsOf(a) >= tsOf(app),
+        )
+        .sort((a, b) => tsOf(b) - tsOf(a))[0];
+      return !!last && ev(last) !== REMOVED;
+    };
     const end =
       rows
         .filter(
           (a) =>
             tsOf(a) > tsOf(app) &&
-            a.srcUnitId === app.srcUnitId &&
-            (ev(a) === REMOVED || ev(a) === APPLIED),
+            (a.srcUnitId === app.srcUnitId
+              ? ev(a) === REMOVED || ev(a) === APPLIED
+              : ev(a) === REMOVED && !sourceOpenAt(a.srcUnitId, tsOf(a))),
         )
         .map(tsOf)
         .sort((a, b) => a - b)[0] ?? ctx.end;

@@ -93,6 +93,22 @@ describe("scan5 ledgerCopyHoldsPress — the press is the copy source's", () => 
     expect(got.checked).toBe(1);
     expect(got.details).toHaveLength(1);
   });
+  it("a REMOVED with no source ends the copy", () => {
+    const got = scan([
+      {
+        id: "H",
+        name: "Holder",
+        auraEvents: [
+          row(LogEvent.SPELL_AURA_APPLIED, 13.5, "H"),
+          row(LogEvent.SPELL_AURA_REMOVED, 15, ""),
+          row(LogEvent.SPELL_AURA_APPLIED, 16.001, "H"),
+          row(LogEvent.SPELL_AURA_REMOVED, 24, "H"),
+        ],
+        spellCastEvents: [cast(16, "H")],
+      },
+    ]);
+    expect(got).toEqual({ checked: 1, details: [] });
+  });
   it("the holder's own press inside the copy is one", () => {
     const got = scan([holder([cast(16, "H")])]);
     expect(got.checked).toBe(1);
