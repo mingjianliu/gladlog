@@ -36,7 +36,11 @@ const buff = (event: LogEvent, s: number) => ({
 const cast = (id: string, s: number) =>
   makeSpellCastEvent(id, at(s), "e1", "Hunter", "e1", "Hunter", 0, id);
 
-function scan(hunter: ReturnType<typeof makeUnit>): {
+function scan(
+  hunter: ReturnType<typeof makeUnit>,
+  head = "0:10–0:20",
+  z = "3.5",
+): {
   checked: number;
   details: string[];
 } {
@@ -45,9 +49,9 @@ function scan(hunter: ReturnType<typeof makeUnit>): {
   const units = [hunter];
   run({
     lines: [
-      "  Burst #1 — 0:10–0:20 | Avenging Wrath",
+      `  Burst #1 — ${head} | Avenging Wrath`,
       "  Target: Hunter 90% → 40%",
-      "  Target had a major defensive up: Survival of the Fittest active ON THE TARGET 8.0s of this burst (3.5s after the burst opened [no press logged])",
+      `  Target had a major defensive up: Survival of the Fittest active ON THE TARGET 8.0s of this burst (${z}s after the burst opened [no press logged])`,
     ],
     start: T,
     end: at(120),
@@ -116,5 +120,24 @@ describe("scan5 ledgerCopyHoldsPress — the producer's interval and presses", (
       ),
     );
     expect(got).toEqual({ checked: 1, details: [] });
+  });
+  const lateCopy = (pressS: number) =>
+    hunter(
+      [
+        buff(LogEvent.SPELL_AURA_APPLIED, 21.5),
+        buff(LogEvent.SPELL_AURA_REFRESH, pressS),
+        buff(LogEvent.SPELL_AURA_REMOVED, 31),
+      ],
+      [cast(SOTF, pressS)],
+    );
+  it("a press after the burst's end is not its: `[no press logged]` passes (batch review 80-PIPE-75-B70b #2)", () => {
+    // copy 21.5 s, the burst (T122-extended) ended at 22.457 s, printed 0:22
+    expect(scan(lateCopy(23.5), "0:10–0:22", "11.5")).toEqual({
+      checked: 1,
+      details: [],
+    });
+    // codex's shape, the press at 23.0 s: inside the printed end's second,
+    // where the floored head cannot tell — not checked, never a violation
+    expect(scan(lateCopy(23), "0:10–0:22", "11.5").details).toEqual([]);
   });
 });

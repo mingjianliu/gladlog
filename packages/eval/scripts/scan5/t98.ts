@@ -12,7 +12,11 @@
  *    (the producer's own selection, FIX-CONTRACT step 7) that holds a
  *    pressed `enemyDefensiveEvents` event of that wall by the interval's
  *    source on the target, after its start and before its end (a press at
- *    its end opens the next one). The press refreshed the copy; the
+ *    its end opens the next one) — and before the burst's end: the press is
+ *    read by the producer's bounded selection, `pressReadingOf` (batch
+ *    review 80-PIPE-75-B70b #2: a press after a T122-extended burst is not
+ *    its). The burst's printed end is floored; a line whose reading differs
+ *    at the two ends of that second is not checked. The press refreshed the copy; the
  *    interval is a pressed wall (1a2fabdb 1:25: Exhilaration's Survival of
  *    the Fittest copy at .265, the hunter's press at .528, 8.3 s read
  *    `[no press logged]`). Kind = the wall's name.
@@ -26,6 +30,10 @@
  *    lost while unseen. Kind = the cooldown's name.
  */
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import {
+  pressReadingOf,
+  wallDefensiveEventsOn,
+} from "@gladlog/analysis/src/utils/burstLedger";
 import {
   enemyDefensiveEvents,
   type IEnemyDefensiveEvent,
@@ -46,7 +54,7 @@ import {
 
 export const CHECKS = ["ledgerCopyHoldsPress", "petCopyReadAsPress"] as const;
 
-const BURST_HEAD = /^\s+Burst #\d+ — (\d+:\d{2})/;
+const BURST_HEAD = /^\s+Burst #\d+ — (\d+:\d{2})(?:–(\d+:\d{2}))?/;
 const BURST_TARGET = /^\s+Target: (.+?) (?:\d+% → |\| )/;
 const BURST_COPY =
   /^\s+(?:Target had [^:]+|⚠ Target was IMMUNE): (.+?) active ON THE TARGET [\d.]+s of this burst \((<?[\d.]+)s after the burst opened \[no press logged\]\)/;
@@ -60,12 +68,14 @@ const SAME_AURA_S = 0.05;
 function ledger(ctx: IRoundCtx): void {
   const C = "ledgerCopyHoldsPress";
   let head: number | undefined;
+  let headEnd: number | undefined;
   let target: string | undefined;
   const defByTeam = new Map<string, IEnemyDefensiveEvent[]>();
   for (const l of ctx.lines) {
     const h = BURST_HEAD.exec(l);
     if (h) {
       head = secOf(h[1]!);
+      headEnd = h[2] ? secOf(h[2]) : undefined;
       target = undefined;
       continue;
     }
@@ -98,14 +108,14 @@ function ledger(ctx: IRoundCtx): void {
     // (codex 85-tk-K-T98-1c … 1h)
     const combat = ctx.legacy as AtomicArenaCombat;
     const appS = (tsOf(app) - combat.startTime) / 1000;
-    const iv = buildAuraIntervals(holder as ICombatUnit, combat).find(
+    const intervals = buildAuraIntervals(holder as ICombatUnit, combat);
+    const iv = intervals.find(
       (x) =>
         x.spellId === String(app.spellId) &&
         x.srcUnitId === app.srcUnitId &&
         Math.abs(x.fromS - appS) <= SAME_AURA_S,
     );
-    if (!iv) continue;
-    ctx.bump(C);
+    if (!iv || headEnd === undefined) continue;
     // the ledger's own reading: every event of the holder's team, the
     // holder's by recipient (an external sits on its caster's events)
     const team = ctx.players.filter(
@@ -117,24 +127,35 @@ function ledger(ctx: IRoundCtx): void {
         teamKey,
         team.flatMap((e) => enemyDefensiveEvents(e, team, combat)),
       );
-    const ev2 = defByTeam
-      .get(teamKey)!
-      .filter(
-        (e) =>
-          !e.noPressLogged &&
-          e.spellId === iv.spellId &&
-          (e.recipientId ?? e.casterId) === holder.id &&
-          e.casterId === iv.srcUnitId &&
-          e.atSeconds > iv.fromS + SAME_AURA_S &&
-          e.atSeconds < iv.toS,
-      )
-      .sort((a, b) => a.atSeconds - b.atSeconds)[0];
-    const pressS = ev2 ? (ev2.pressSeconds ?? ev2.atSeconds) : undefined;
+    const defOn = wallDefensiveEventsOn(defByTeam.get(teamKey)!, holder);
+    // the producer's bounded selection (`pressReadingOf`, the interval cut
+    // at the burst's end — batch review 80-PIPE-75-B70b #2). The burst's end
+    // is printed floored: read at both ends of that second, and a line the
+    // two readings disagree on is not checked
+    const ivEndMs = combat.startTime + iv.toS * 1000;
+    const readAt = (endS: number) =>
+      pressReadingOf(
+        defOn,
+        intervals,
+        combat.startTime,
+        iv.spellId,
+        { name: iv.srcUnitName, id: iv.srcUnitId },
+        combat.startTime + iv.fromS * 1000,
+        Math.min(ivEndMs, ctx.start + endS * 1000),
+      );
+    const atLo = readAt(headEnd);
+    const atHi = readAt(headEnd + 1);
+    const pressMsOf = (r: ReturnType<typeof readAt>) =>
+      r && "pressMs" in r ? r.pressMs : undefined;
+    if (pressMsOf(atLo) === undefined && pressMsOf(atHi) !== undefined)
+      continue;
+    ctx.bump(C);
+    const pressMs = pressMsOf(atLo);
     const press =
-      pressS === undefined
+      pressMs === undefined
         ? undefined
         : {
-            c: { logLine: { timestamp: combat.startTime + pressS * 1000 } },
+            c: { logLine: { timestamp: pressMs } },
             u: ctx.units.find((u) => u.id === iv.srcUnitId) ?? holder,
           };
     if (!press) continue;
