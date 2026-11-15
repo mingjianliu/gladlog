@@ -905,6 +905,16 @@ export function extractKillAttempts(
      * 344572 into Onlyfansgeno, every hit on it absorbed). */
     const isHitOf = (c: TeamCast, d: ICombatUnit["damageOut"][number]) =>
       isPressHitRow(c.spellId, c.spellName, d as HitRow & typeof d);
+    /** the caster's next press of the same spell (its own hits are its own) */
+    const nextPressMsOf = (c: TeamCast): number =>
+      (c.caster.spellCastEvents ?? [])
+        .filter(
+          (e) =>
+            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            e.spellId === c.spellId &&
+            e.logLine.timestamp > c.castMs + 5,
+        )
+        .reduce((m, e) => Math.min(m, e.logLine.timestamp), Infinity);
     /** Did the press put its own aura (its id, or an effect aura of the
      * cast) on its caster — within `SAVE_CAST_AURA_PAIR_S` of the cast row? */
     const pressAuraOn = (c: TeamCast, holder: ICombatUnit): boolean => {
@@ -931,6 +941,36 @@ export function extractKillAttempts(
      * the shaman's bracket went into the target; 1ceeafbe 1:28: Malevolence's
      * splash on the other two, the target still the warlock's most-hit enemy).
      * A caster who hit another enemy more stays out of it. */
+    /** T104 (fact13 D9, 36e987ca 3:17): a self-buff whose cast row names
+     * an enemy unit only because it was its caster's current target — the
+     * press put its own aura on its caster, and no damage or miss row of it
+     * (`isPressHitRow`: its ids, an effect aura's, its name) from the caster
+     * met that unit before the caster's next press of it. Voidform's row
+     * named a Grounding Totem; the totem ate the Shadow Word: Madness of the
+     * same millisecond, and the line printed `Voidform (cast into Grounding
+     * Totem)`. A press the unit took, or refused (Mindgames into the same
+     * totem: its MISSED row), stays aimed at it. */
+    const selfBuffNamingEnemy = (c: TeamCast): boolean => {
+      if (!pressAuraOnCaster(c) || c.destId === undefined) return false;
+      const nextMs = nextPressMsOf(c);
+      return ![
+        ...((c.caster.damageOut ?? []) as unknown as HitRow[]),
+        ...((c.caster.missesOut ?? []) as unknown as HitRow[]),
+      ].some((d) => {
+        const r = d as HitRow & {
+          destUnitId?: string;
+          logLine?: { timestamp: number };
+          timestamp?: number;
+        };
+        const ts = r.logLine?.timestamp ?? r.timestamp ?? -Infinity;
+        return (
+          r.destUnitId === c.destId &&
+          ts >= c.castMs &&
+          ts < nextMs &&
+          isPressHitRow(c.spellId, c.spellName, r as never)
+        );
+      });
+    };
     const selfBuffInto = (
       c: TeamCast,
       target: ICombatUnit,
@@ -951,7 +991,8 @@ export function extractKillAttempts(
         c.destId !== undefined &&
         c.destId !== "0000000000000000" &&
         c.destId !== c.caster.id &&
-        !ally
+        !ally &&
+        !selfBuffNamingEnemy(c)
       )
         return false;
       // …and only when the press's own aura went onto that teammate: a
@@ -1016,14 +1057,7 @@ export function extractKillAttempts(
     // Blessing of Spellwarding, the 2:45 press's tick on the target fell
     // inside this bracket's credit and passed for this press landing)
     const landedAnywayOn = (c: TeamCast, target: ICombatUnit, toMs: number) => {
-      const nextMs = (c.caster.spellCastEvents ?? [])
-        .filter(
-          (e) =>
-            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            e.spellId === c.spellId &&
-            e.logLine.timestamp > c.castMs + 5,
-        )
-        .reduce((m, e) => Math.min(m, e.logLine.timestamp), Infinity);
+      const nextMs = nextPressMsOf(c);
       return (c.caster.damageOut ?? []).some(
         (d) =>
           d.destUnitId === target.id &&
@@ -1038,7 +1072,7 @@ export function extractKillAttempts(
       target: ICombatUnit,
       toMs: number,
       bracketToMs: number,
-    ): { name: string; pressName: string } => {
+    ): { name: string; pressName: string; cast: number } => {
       const hitTarget = (c: TeamCast) => {
         // a press on nobody is `selfBuffInto`'s, its caster's most-hit enemy
         // (codex 06-1): a splash on the target aims it no more than one
@@ -1052,13 +1086,19 @@ export function extractKillAttempts(
       const into = cl.casts.find(
         (c) => hitTarget(c) || selfBuffInto(c, target, toMs, bracketToMs),
       );
-      if (into) return { name: into.spellName, pressName: into.spellName };
+      if (into)
+        return {
+          name: into.spellName,
+          pressName: into.spellName,
+          cast: into.cast,
+        };
       const first = cl.casts[0]!;
       // an enemy player or any unit of theirs (a pet: 691a7f31 1:13, a Ray
       // of Frost into the hunter's pet)
       const elsewhere =
         first.destId !== undefined &&
-        !friendlies.some((f) => f.id === first.destId)
+        !friendlies.some((f) => f.id === first.destId) &&
+        !selfBuffNamingEnemy(first)
           ? (combat.units as Record<string, ICombatUnit> | undefined)?.[
               first.destId
             ]
@@ -1069,6 +1109,7 @@ export function extractKillAttempts(
             ? `${first.spellName} (cast into ${elsewhere.name})`
             : first.spellName,
         pressName: first.spellName,
+        cast: first.cast,
       };
     };
     /** GH #167: every press of the anchor's spell in the cluster aimed at
@@ -1153,7 +1194,29 @@ export function extractKillAttempts(
       // kill credit and the attribution all read the cut span, as they read
       // a span cut at the round's end; a cluster left under the floor is no
       // attempt. Untouched when no form meets the span.
-      const span = attemptSpanOutsideForm(formsOf(target), cl.from, clusterTo);
+      const formSpan = attemptSpanOutsideForm(
+        formsOf(target),
+        cl.from,
+        clusterTo,
+      );
+      if (!formSpan) continue;
+      const anchorOf = anchorNameOf(
+        cl,
+        target,
+        creditEndMs(formSpan.toSeconds),
+        matchStartMs + formSpan.toSeconds * 1000,
+      );
+      // T104 (fact13 D12, 54251a4b-r0 1:57): the go on the target opens at
+      // the press the line names. A cluster opened by presses that went
+      // elsewhere (a Malevolence whose warlock hit another enemy) and named
+      // for a later press into the target (Volley, 18 s on) printed
+      // `[1:57–2:30] … Volley burst`: a Volley opener at 1:57 the log does
+      // not have. The bracket starts at the anchor's press; the sums, floor
+      // and kill credit read that span.
+      const span =
+        anchorOf.cast > formSpan.fromSeconds
+          ? attemptSpanOutsideForm(formsOf(target), anchorOf.cast, clusterTo)
+          : formSpan;
       if (!span) continue;
       const { fromSeconds, toSeconds } = span;
       const spanFromMs = matchStartMs + fromSeconds * 1000;
@@ -1190,12 +1253,6 @@ export function extractKillAttempts(
       )
         continue;
       const killed = deathMs !== undefined;
-      const anchorOf = anchorNameOf(
-        cl,
-        target,
-        spanToMs,
-        matchStartMs + toSeconds * 1000,
-      );
       const attempt: IKillAttempt = {
         targetUnitId: target.id,
         targetName: target.name,
