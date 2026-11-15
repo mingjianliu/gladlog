@@ -51,7 +51,7 @@ export function run(ctx: IRoundCtx): void {
   const ownerIn = (fromS: number, toS: number) =>
     tagged().filter(
       (h) =>
-        h.unitGuid === ctx.owner.id && h.tSeconds >= fromS && h.tSeconds < toS,
+        h.unitGuid === ctx.owner.id && h.tSeconds >= fromS && h.tSeconds <= toS,
     );
   for (const line of ctx.lines) {
     const t = line.trim();
@@ -60,15 +60,17 @@ export function run(ctx: IRoundCtx): void {
     if (!rj && !st) continue;
     const head = (rj?.[4] ?? rj?.[1] ?? st?.[1])!;
     const fromS = secOf(head);
-    const toS =
-      rj?.[5] !== undefined
-        ? secOf(rj[5])
-        : st
-          ? fromS + Math.ceil(Number(st[2]))
-          : fromS;
     const named = rj ? rj[3] : st![3];
     const atMs = ctx.start + fromS * 1000;
-    const span = ownerIn(fromS, toS + 1);
+    // a [REJECTED] run: its first second to its last; a [CAST STOPPED]
+    // refusal: the cast's floored start second plus its one-decimal
+    // "refused N s in" (codex 85-tk-N-T108-1b: start in [s, s+1), N ±0.05)
+    const span = st
+      ? ownerIn(fromS + Number(st[2]) - 0.05, fromS + Number(st[2]) + 1.05)
+      : ownerIn(
+          fromS,
+          (rj?.[5] !== undefined ? secOf(rj[5]) : fromS) + 1 - 1e-9,
+        );
     if (named !== undefined) {
       const C = "namedAbsent";
       ctx.bump(C);

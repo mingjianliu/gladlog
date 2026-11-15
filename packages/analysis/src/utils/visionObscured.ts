@@ -11,7 +11,10 @@
  *  - an aura of DB2 aura 322 (MOD_INTERFERE_TARGETTING) up on a unit hostile
  *    to the caster — Burrow 409293 is the observed one; it interferes with
  *    its holder's enemies' targeting, so a friendly's Burrow is never what
- *    obscured the caster's target (codex 85-tk-N-T108-1) — through
+ *    obscured the caster's target (codex 85-tk-N-T108-1), and only for a
+ *    refused spell that can aim at an enemy at all (`abilityProfile`
+ *    `hitsEnemy`, DB2 ImplicitTarget: a Flash Heal refused beside an enemy's
+ *    Burrow was aimed at a friend; codex 85-tk-N-T108-1b) — through
  *    `buildAuraIntervals`, the one aura pairing (a lost REMOVED is capped at
  *    the official length there);
  *  - else a Smoke Bomb area (the same-name area casts, 212182 / 359053; their
@@ -27,6 +30,7 @@
  */
 import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
+import { abilityProfile } from "../data/abilityProfile";
 import { spellEffectData } from "../data/spellEffectData";
 import {
   VISION_OBSCURING_AREA_CASTS,
@@ -145,20 +149,25 @@ const opposed = (
 ): boolean =>
   a !== undefined && b !== undefined && SIDES.has(a) && SIDES.has(b) && a !== b;
 
-/** What obscured the target of a refusal at `tSeconds` by a caster of
- * reaction `casterReaction`: an obscuring aura up on a unit hostile to the
- * caster (an unknown or neutral side admits no aura), else a Smoke Bomb area
- * still down; undefined for neither. */
+/** What obscured the target of a refusal of `spellId` at `tSeconds` by a
+ * caster of reaction `casterReaction`: an obscuring aura up on a unit hostile
+ * to the caster, when the spell can aim at an enemy (an unknown or neutral
+ * side admits no aura), else a Smoke Bomb area still down; undefined for
+ * neither. */
 export function visionObscuredCause(
   windows: readonly IObscuringWindow[],
   casterReaction: CombatUnitReaction | undefined,
+  spellId: string,
   tSeconds: number,
 ): string | undefined {
+  let aimsAtEnemy: boolean | undefined;
   return windows.find(
     (w) =>
       w.fromS <= tSeconds &&
       tSeconds <= w.toS &&
-      (!w.onUnit || opposed(w.holderReaction, casterReaction)),
+      (!w.onUnit ||
+        (opposed(w.holderReaction, casterReaction) &&
+          (aimsAtEnemy ??= abilityProfile(spellId).hitsEnemy))),
   )?.name;
 }
 
@@ -193,6 +202,7 @@ export function withVisionObscuredCauses<T extends RawStreams | undefined>(
     const by = visionObscuredCause(
       windows,
       combat.units?.[h.unitGuid]?.reaction,
+      String(h.spellId),
       h.tSeconds,
     );
     return by ? { ...h, obscuredBy: by } : h;

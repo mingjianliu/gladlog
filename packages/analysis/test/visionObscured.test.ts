@@ -224,6 +224,52 @@ describe("withVisionObscuredCauses", () => {
     ]);
   });
 
+  it("a spell that cannot aim at an enemy never blames an enemy's Burrow (codex 85-tk-N-T108-1b)", () => {
+    const combat = fight();
+    // the enemy Shaman also burrows 120 s → 125 s, under the Rogue's Smoke Bomb
+    const shaman = combat.units["Player-E"]!;
+    const burrowed: typeof shaman = {
+      ...shaman,
+      auraEvents: [
+        ...shaman.auraEvents,
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          BURROW,
+          T0 + 119_000,
+          "Player-E",
+          "Player-E",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          BURROW,
+          T0 + 125_000,
+          "Player-E",
+          "Player-E",
+          "BUFF",
+        ),
+      ] as typeof shaman.auraEvents,
+    };
+    const both = {
+      ...combat,
+      units: { ...combat.units, "Player-E": burrowed },
+    };
+    const heal = (t: number) => ({
+      ...row(t),
+      spellId: 2061,
+      spellName: "Flash Heal",
+    });
+    const tagged = withVisionObscuredCauses(
+      streams([heal(119.5), heal(121), row(121)]),
+      both,
+    );
+    expect(tagged.castFailed.map((h) => h.obscuredBy)).toEqual([
+      undefined,
+      "Smoke Bomb",
+      "Burrow",
+    ]);
+  });
+
   it("copies rows, never writes them; a tagged stream passes through as it is", () => {
     const raw = streams([row(72.05)]);
     const combat = fight();
