@@ -179,6 +179,51 @@ describe("T114 — a wall's 'pressed Zs' is its press row", () => {
     )[0]!.dominantTarget?.defensivesHit.find((d) => d.spellId === BOP);
     expect(wallTimingPhrase(hit)).toBe("pressed 5.5s after the burst opened");
   });
+  it("a holder who walked into the totem later reads the totem's press", () => {
+    // 605: Spirit Link Totem pressed 1.1–1.5 s before its holder was
+    // linked; the totem pulsed on its caster at once
+    const sham = shamanWith(15);
+    const pulsing = makeUnit("t1", {
+      name: "Spirit Link Totem",
+      ownerId: "e2",
+      spellCastEvents: [
+        makeSpellCastEvent(
+          SLT_AURA,
+          at(15.1),
+          "e2",
+          "Sham",
+          "t1",
+          "Spirit Link Totem",
+          0,
+          "Spirit Link Totem",
+        ),
+      ],
+    });
+    const late = makeUnit("e1", {
+      name: "Pala",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      reaction: CombatUnitReaction.Hostile,
+      info,
+      auraEvents: [
+        totemAura(LogEvent.SPELL_AURA_APPLIED, 16.45),
+        totemAura(LogEvent.SPELL_AURA_REMOVED, 21),
+      ],
+    });
+    const combat = {
+      startTime: T,
+      endTime: at(120),
+      units: Object.fromEntries(
+        [ret, late, sham, pulsing].map((u) => [u.id, u]),
+      ),
+    } as unknown as Combat;
+    const hit = analyzeBurstLedger(
+      ret,
+      [],
+      [late, sham],
+      combat,
+    )[0]!.dominantTarget?.defensivesHit.find((d) => d.spellId === SLT_AURA);
+    expect(wallTimingPhrase(hit)).toBe("pressed 5.0s after the burst opened");
+  });
   it("with no press row the aura's start stays the reading", () => {
     expect(wallTimingPhrase(hitOf(undefined))).toBe(
       "pressed 6.0s after the burst opened",
