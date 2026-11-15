@@ -44,26 +44,31 @@ const START_BEFORE_MS = 500;
 /** a re-application this close after a REMOVED continues the run */
 const CHAIN_GAP_MS = 500;
 
-/** `src`'s rows of `id` on `dest`, in time order */
+/** `src`'s rows of `id` on `dest`, in time order — with the source-less
+ * REMOVED rows (`0000000000000000`), which close `src`'s application as the
+ * product's interval builder reads them (codex 85-tk-M-T122-1 #1) */
 function rowsOn(dest: any, srcId: string, id: string): any[] {
   return ((dest.auraEvents ?? []) as any[])
     .filter(
       (a) =>
         String(a.spellId) === id &&
-        a.srcUnitId === srcId &&
-        a.destUnitId === dest.id,
+        a.destUnitId === dest.id &&
+        (a.srcUnitId === srcId ||
+          (ev(a) === REMOVED && (!a.srcUnitId || /^0+$/.test(a.srcUnitId)))),
     )
     .sort((x, y) => tsOf(x) - tsOf(y));
 }
 
-/** where the run that starts at `fromMs` ended: its REMOVED, carried on by
- * an APPLIED within `CHAIN_GAP_MS`; undefined when no REMOVED closes it */
+/** where the run that starts at `fromMs` ended: its first REMOVED, carried
+ * on by an APPLIED within `CHAIN_GAP_MS` (a second REMOVED with no APPLIED
+ * between is a duplicate row, codex 85-tk-M-T122-1 #2); undefined when no
+ * REMOVED closes it */
 function runEndMs(rows: any[], fromMs: number): number | undefined {
   let end: number | undefined;
   for (const r of rows) {
     const t = tsOf(r);
     if (t < fromMs) continue;
-    if (ev(r) === REMOVED) end = t;
+    if (ev(r) === REMOVED) end ??= t;
     else if (ev(r) === APPLIED && end !== undefined) {
       if (t - end > CHAIN_GAP_MS) break;
       end = undefined;
