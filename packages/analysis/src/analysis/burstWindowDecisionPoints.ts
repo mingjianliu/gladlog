@@ -29,6 +29,7 @@
  */
 import { type ICombatUnit } from "@gladlog/parser-compat";
 
+import { ABILITY_EFFECTS_GENERATED } from "../data/abilityEffectsGenerated";
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
@@ -334,6 +335,24 @@ export interface BurstResponseCast {
    * died. Credit-line only — `responded` never reads it
    * (slow-defensive-response is unchanged). Absent when it was not. */
   afterPressuredDeath?: true;
+  /** A wall / external / healing CD pressed at no unit or at its caster
+   * whose own aura (`castAndEffectIds`) went on a friendly player other than
+   * its caster: every friendly player that aura went on
+   * (`pressEffectSpread`). Pipeline T123: an aura logged per recipient
+   * proves who it reached — 77310154's untargeted Rallying Cry went on two of
+   * three teammates and was credited for the third's dip. Credit-line only —
+   * `responded` never reads it. Absent otherwise (an aura on the caster alone
+   * says nothing about its reach: Aura Mastery works through the paladin's
+   * own aura). */
+  effectOnUnitIds?: string[];
+  /** The same press, officially a heal of its caster alone
+   * (`ABILITY_EFFECTS_GENERATED` healsSelf without healsOthers), with no
+   * aura or heal row of its name on another friendly player
+   * (`pressEffectSpread`). Pipeline T123: ec49887a's Frenzied Regeneration
+   * — aura and heals on the druid — was credited for a paladin's dip.
+   * Credit-line only. Absent otherwise (Emerald Communion's overflow heal,
+   * another id under the same name, reaches allies). */
+  selfOnlyEffect?: true;
   /** A control: the enemy it was aimed at (an aimed cast) or landed on (a
    * ground / untargeted one), and the aura applications it landed as — none
    * for an interrupt, or a control that did not land. T12 ⑧ (i), second
@@ -353,6 +372,84 @@ export interface BurstResponseCast {
 export interface ControlLandingAura {
   spellId: string;
   atMs: number;
+}
+
+/** How far before a response's SPELL_CAST_SUCCESS a row of its effect may
+ * be logged and still be that press's (the log orders an aura and its cast
+ * row either way — 77310154's Rallying Cry aura is logged one row before
+ * its cast). Pipeline T123; `scan5/t123.ts` reads the same bound. */
+export const ANSWER_EFFECT_LEAD_MS = 500;
+
+/** The official profile heals the press's caster and nobody else
+ * (`ABILITY_EFFECTS_GENERATED` healsSelf without healsOthers) — pipeline
+ * T123's self-only reading (`selfOnlyEffect`); `scan5/t123.ts` asks the same
+ * function. */
+export function officialSelfOnlyHeal(spellId: string): boolean {
+  const profile = ABILITY_EFFECTS_GENERATED[spellId];
+  return !!profile?.healsSelf && !profile.healsOthers;
+}
+
+type SpreadRow = {
+  timestamp: number;
+  spellId?: string;
+  srcUnitId: string;
+  destUnitId: string;
+};
+
+/**
+ * Where one press's effect went, read off the friendly players' rows from
+ * one of `sources` (the caster, its pets) in [`fromMs`, `toMs`) — pipeline
+ * T123, an answer counts for a unit only when its effect is on that unit:
+ *  - `auraHolderIds`: the players with an APPLIED / REFRESH row of the
+ *    cast's id or one of its effect auras (`castAndEffectIds`);
+ *  - `namedOnOther`: whether a player other than `casterId` got an aura or
+ *    heal row under the cast's own name (another id of the same spell —
+ *    Emerald Communion's overflow heal).
+ * `scan5/t123.ts` reads the same rows.
+ */
+export function pressEffectSpread(
+  players: ReadonlyArray<{
+    id: string;
+    auraEvents?: ReadonlyArray<SpreadRow & { logLine: { event: string } }>;
+    healIn?: ReadonlyArray<SpreadRow>;
+  }>,
+  casterId: string,
+  sources: ReadonlySet<string>,
+  castSpellId: string,
+  fromMs: number,
+  toMs: number,
+): { auraHolderIds: string[]; namedOnOther: boolean } {
+  const ids = castAndEffectIds(castSpellId);
+  const name = getEnglishSpellName(castSpellId);
+  const inSpan = (r: SpreadRow): boolean =>
+    sources.has(r.srcUnitId) && r.timestamp >= fromMs && r.timestamp < toMs;
+  const byId = (r: SpreadRow): boolean =>
+    r.spellId !== undefined && ids.has(String(r.spellId));
+  const byName = (r: SpreadRow): boolean =>
+    r.spellId !== undefined && getEnglishSpellName(String(r.spellId)) === name;
+  const auraOn = (
+    u: (typeof players)[number],
+    match: (r: SpreadRow) => boolean,
+  ): boolean =>
+    (u.auraEvents ?? []).some(
+      (a) =>
+        (a.logLine.event === "SPELL_AURA_APPLIED" ||
+          a.logLine.event === "SPELL_AURA_REFRESH") &&
+        a.destUnitId === u.id &&
+        inSpan(a) &&
+        match(a),
+    );
+  return {
+    auraHolderIds: players.filter((u) => auraOn(u, byId)).map((u) => u.id),
+    namedOnOther: players.some(
+      (u) =>
+        u.id !== casterId &&
+        (auraOn(u, byName) ||
+          (u.healIn ?? []).some(
+            (h) => h.destUnitId === u.id && inSpan(h) && byName(h),
+          )),
+    ),
+  };
 }
 
 /** How far before an aimed control's SPELL_CAST_SUCCESS its own aura / its
@@ -1585,6 +1682,51 @@ export function burstWindowDecisionPoints(
                 c.copyOn,
               )
             : null;
+        // T123: where an untargeted / self-cast answer's effect went — its
+        // aura and heal rows, up to its next press or the response window
+        const spread =
+          category !== "control" && (isNoDest(c.dest) || c.dest === c.unitId)
+            ? (() => {
+                const nextMs = Math.min(
+                  Infinity,
+                  ...(
+                    (casterUnit?.spellCastEvents ?? []) as ReadonlyArray<{
+                      logLine?: { event?: string };
+                      spellId?: string;
+                      timestamp: number;
+                    }>
+                  )
+                    .filter(
+                      (e) =>
+                        e.logLine?.event === "SPELL_CAST_SUCCESS" &&
+                        e.spellId === c.spellId &&
+                        e.timestamp > c.tMs + 1,
+                    )
+                    .map((e) => e.timestamp),
+                );
+                const sources = new Set<string>([c.unitId]);
+                for (const [pet, owner] of ownerOfUnit)
+                  if (owner === c.unitId) sources.add(pet);
+                return pressEffectSpread(
+                  friendlies,
+                  c.unitId,
+                  sources,
+                  c.spellId,
+                  c.tMs - ANSWER_EFFECT_LEAD_MS,
+                  Math.min(nextMs, c.tMs + BURST_RESPONSE_WINDOW_MS),
+                );
+              })()
+            : undefined;
+        const effectOnUnitIds = spread?.auraHolderIds.some(
+          (id) => id !== c.unitId,
+        )
+          ? spread.auraHolderIds
+          : undefined;
+        const selfOnlyEffect =
+          spread !== undefined &&
+          effectOnUnitIds === undefined &&
+          officialSelfOnlyHeal(c.spellId) &&
+          !spread.namedOnOther;
         const preOpenerStillUp =
           category === "control" &&
           c.tMs < leadRawMs &&
@@ -1645,6 +1787,8 @@ export function burstWindowDecisionPoints(
           ...(preOpenerStillUp !== undefined ? { preOpenerStillUp } : {}),
           ...(landed !== undefined ? { landed } : {}),
           ...(controlOn ? { controlOn } : {}),
+          ...(effectOnUnitIds ? { effectOnUnitIds } : {}),
+          ...(selfOnlyEffect ? { selfOnlyEffect: true as const } : {}),
         };
         responseAtMs.set(response, c.tMs);
         responseCasts.push(response);

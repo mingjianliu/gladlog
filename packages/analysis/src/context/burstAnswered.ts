@@ -212,8 +212,13 @@ export interface BurstAnsweredEntry {
  * unit and was still up at its trough (reliability round 3: 4446 credited a
  * Guardian Spirit that went on another unit; 6954 one that expired before the
  * trough). An external must target the pressured unit; a personal wall must
- * be the pressured unit's own; healing CDs and control answer the window as a
- * whole. An effect with a known end must reach the trough second.
+ * be the pressured unit's own; control answers the window as a whole. A
+ * wall, external or healing CD pressed at no unit or at its caster counts
+ * only when its effect reached the pressured unit (pipeline T123): its
+ * per-recipient aura is on it (`effectOnUnitIds`), and an official self-only
+ * heal is its own (`selfOnlyEffect`); without either reading the old rules
+ * alone decide. An effect with a known end must reach the
+ * trough second.
  *
  * T12 ⑧ (i) (user ruling 2026-10-10): a response pressed at or after the
  * pressured unit's death — the engine's `afterPressuredDeath`, `isDeadAt` on
@@ -247,7 +252,7 @@ function answersPressured(
   // an external aimed at another unit went to the wrong unit; an
   // untargeted / ground destination (Spirit Link, Barrier — the empty GUID
   // "0000000000000000") is a group effect and may cover the pressured unit
-  // (codex review of batch 8)
+  // (codex review of batch 8) — whether it did is `effectOnUnitIds`' (T123)
   if (
     r.category === "external" &&
     r.destId !== undefined &&
@@ -267,6 +272,24 @@ function answersPressured(
   if (
     r.category === "healCd" &&
     healsOnlyItsCaster(r.spellId) &&
+    r.casterId !== undefined &&
+    r.casterId !== pr.unitId
+  )
+    return false;
+  // T123: an answer counts for a unit only when its effect is on that unit
+  // — an untargeted / self-cast press whose per-recipient aura went on
+  // others but not on it (77310154: a Rallying Cry on two of three
+  // teammates), or an official self-only heal on its caster alone
+  // (ec49887a: a Frenzied Regeneration on the druid)
+  if (
+    r.category !== "control" &&
+    r.effectOnUnitIds !== undefined &&
+    !r.effectOnUnitIds.includes(pr.unitId)
+  )
+    return false;
+  if (
+    r.category !== "control" &&
+    r.selfOnlyEffect === true &&
     r.casterId !== undefined &&
     r.casterId !== pr.unitId
   )

@@ -3266,6 +3266,22 @@ const INDEX: PredicateRow[] = [
     symbol: "AIMED_CONTROL_LANDING_LEAD_MS",
     mod: burstWindowDecisionPoints,
   },
+  // pipeline T123: the credited answer's effect reached the pressured unit
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "pressEffectSpread",
+    mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "officialSelfOnlyHeal",
+    mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "ANSWER_EFFECT_LEAD_MS",
+    mod: burstWindowDecisionPoints,
+  },
   // FT-T12 D3: which control answers a burst — one rule for `responded` and
   // the [BURST ANSWERED] credit
   {
