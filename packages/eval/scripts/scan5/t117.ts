@@ -19,7 +19,7 @@
  *    Violation: the run holds more presses than the line's ×N. Counted:
  *    every [REJECTED] line matched to a run.
  *  - `rejectRunPastRoundEnd` (batch review 80-PIPE-90-B80): a line whose ×N
- *    no run of the round's own presses (rows before `roundEndAt`) reaches,
+ *    no run of the round's own presses (rows before the producer's `roundEndMs`) reaches,
  *    while the run built with the presses at or after the round's end
  *    does. Counted: every [REJECTED] line.
  */
@@ -32,6 +32,7 @@ import {
   rejectKindOf,
   rejectWhyOf,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { withVisionObscuredCauses } from "@gladlog/analysis/src/utils/visionObscured";
 
 import { type IRoundCtx, nameOf, secOf } from "./ctx";
@@ -52,7 +53,12 @@ export function run(ctx: IRoundCtx): void {
   // the producer's rows: a vision-obscured refusal carries its cause, which
   // is part of its kind (pipeline T108 — a Burrow's refusals and a Smoke
   // Bomb's are two runs)
-  const roundEndS = (ctx.roundEndAt - ctx.start) / 1000;
+  // the producer's own round end (`roundEndMs`: a Solo Shuffle round's
+  // ending death, else the log's end — a 3v3 round runs to it), not the
+  // scan ctx's playable end (batch review 80-PIPE-90-B80 rerun: five ×1
+  // near-death lines of 3v3 rounds read as past the end)
+  const roundEndS =
+    (roundEndMs({ ...ctx.legacy, units: ctx.legacy.units }) - ctx.start) / 1000;
   const owned = (
     withVisionObscuredCauses(ctx.rawStreams(), ctx.legacy)?.castFailed ?? []
   )

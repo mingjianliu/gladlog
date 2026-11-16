@@ -29,6 +29,11 @@ function scan(
     lines,
     start: 0,
     roundEndAt,
+    legacy: {
+      endTime: roundEndAt,
+      startInfo: { bracket: "Solo Shuffle" },
+      units: {},
+    },
     rawStreams: () => ({ castFailed: rows }),
     bump: () => {},
     violate: (c: string, _k: string, _t: number, id: string) => {
