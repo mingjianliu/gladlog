@@ -6,7 +6,7 @@
  * same aura must not say it was pressed.
  *
  *  - `ledgerPressedNoPress`: a ledger line `<Wall> active ON THE TARGET …
- *    (pressed Zs after the burst opened)` while the same context's
+ *    (pressed Zs after|before the burst opened)` while the same context's
  *    `[ENEMY DEF]` line for that wall on that unit, at the second the ledger
  *    places it (burst start + Z, both printed floored: ± 1 s), carries
  *    `[no press logged]`. Kind = the wall's name.
@@ -18,7 +18,7 @@ export const CHECKS = ["ledgerPressedNoPress"] as const;
 const BURST_HEAD = /^\s+Burst #\d+ — (\d+:\d{2})/;
 const BURST_TARGET = /^\s+Target: (.+?) (?:\d+% → |\| )/;
 const BURST_PRESSED =
-  /^\s+(?:Target had [^:]+|⚠ Target was IMMUNE): (.+?) active ON THE TARGET [\d.]+s of this burst \(pressed (<?[\d.]+)s (?:after|before) the burst opened\)/;
+  /^\s+(?:Target had [^:]+|⚠ Target was IMMUNE): (.+?) active ON THE TARGET [\d.]+s of this burst \(pressed (<?[\d.]+)s (after|before) the burst opened\)/;
 const ENEMY_DEF_NO_PRESS =
   /^(\d+:\d{2})\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\) \([^)]*\): (.+?)(?: \+ \d+% copy)?(?: → (\d+)\([^)]*\))? \(.*\[no press logged\]/;
 /** any `[ENEMY DEF]` line of a wall (pressed when it has no no-press tag) */
@@ -67,7 +67,10 @@ export function run(ctx: IRoundCtx): void {
     if (unitsNamed(target) !== 1) continue;
     const targetId = ctx.units.find((u) => u.name === target)!.id;
     ctx.bump(C);
-    const at = head + Number(p[2]!.replace("<", ""));
+    // T114 (batch review 80-PIPE-94-B82): `before` places the press ahead
+    // of the burst's start
+    const z = Number(p[2]!.replace("<", ""));
+    const at = p[3] === "before" ? head - z : head + z;
     const hit = noPress.find(
       (n) =>
         n.wall === p[1] &&
@@ -92,7 +95,7 @@ export function run(ctx: IRoundCtx): void {
       p[1]!,
       ctx.start + at * 1000,
       `${target}#${p[1]}#${hit.at}`,
-      `the ledger says ${p[1]} was pressed ${p[2]}s into the burst; its [ENEMY DEF] line at ${hit.at}s says [no press logged]`,
+      `the ledger says ${p[1]} was pressed ${p[2]}s ${p[3]} the burst opened; its [ENEMY DEF] line at ${hit.at}s says [no press logged]`,
       l.trim().slice(0, 300),
     );
   }
