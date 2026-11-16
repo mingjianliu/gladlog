@@ -80,6 +80,19 @@ describe("scan5 rejectRunUndercount", () => {
     expect(scan([l], across, 600_000, P)).toEqual([]);
   });
 
+  // batch review 80-PIPE-96-B84: a press at the round's end itself is the
+  // round's — the timeline prints a line logged there
+  it("keeps a press at the round's end itself", () => {
+    const atEnd = [61.6, 61.8, 62].map((t) => f(t, R));
+    const l = "1:01  [REJECTED] your Mortal Coil ×3 — out of range (1:01–1:02)";
+    expect(scan([l], atEnd, 62_000)).toEqual([]);
+    // no line past the end; the one row at the end itself is counted (the
+    // out-of-total `rowAtRoundEnd` kind)
+    expect(scan([l], atEnd, 62_000, "rejectRunPastRoundEnd")).toEqual([
+      "Player-O#6789#62",
+    ]);
+  });
+
   it("still flags a line below its run", () => {
     expect(scan([line(4), line(3)], rows)).toEqual(["Mortal Coil:0:10"]);
   });

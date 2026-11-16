@@ -19,9 +19,9 @@
  *    Violation: the run holds more presses than the line's ×N. Counted:
  *    every [REJECTED] line matched to a run.
  *  - `rejectRunPastRoundEnd` (batch review 80-PIPE-90-B80): a line whose ×N
- *    no run of the round's own presses (rows before the producer's `roundEndMs`) reaches,
- *    while the run built with the presses at or after the round's end
- *    does. Counted: every [REJECTED] line.
+ *    no run of the round's own presses (rows not past the producer's
+ *    `roundEndMs`, `isPastRoundEnd`) reaches, while the run built with the
+ *    presses past the round's end does. Counted: every [REJECTED] line.
  */
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import {
@@ -32,12 +32,21 @@ import {
   rejectKindOf,
   rejectWhyOf,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
-import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
+import {
+  isPastRoundEnd,
+  roundEndMs,
+} from "@gladlog/analysis/src/utils/roundEnd";
 import { withVisionObscuredCauses } from "@gladlog/analysis/src/utils/visionObscured";
 
 import { type IRoundCtx, nameOf, secOf } from "./ctx";
 
 export const CHECKS = ["rejectRunUndercount", "rejectRunPastRoundEnd"] as const;
+/** batch review 80-PIPE-96-B84: an owner refusal logged at the round's end
+ * itself — the rows `isPastRoundEnd` keeps that a `<` cut dropped (a count,
+ * not a violation) */
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "rejectRunPastRoundEnd|rowAtRoundEnd",
+]);
 
 const LINE =
   /^\s*(\d+:\d{2})\s+\[REJECTED\]\s+your (.+?) ×(\d+) — (.+?)(?: \(\d+:\d{2}–\d+:\d{2}\))?$/;
@@ -65,7 +74,16 @@ export function run(ctx: IRoundCtx): void {
     .filter((f) => f.unitGuid === ctx.owner.id)
     .sort((a, b) => a.tSeconds - b.tSeconds);
   // the round's own presses, as the producer cuts them (`roundEndMs`)
-  const inRound = owned.filter((f) => f.tSeconds < roundEndS);
+  const inRound = owned.filter((f) => !isPastRoundEnd(f.tSeconds, roundEndS));
+  for (const f of inRound)
+    if (f.tSeconds === roundEndS)
+      ctx.violate(
+        "rejectRunPastRoundEnd",
+        "rowAtRoundEnd",
+        ctx.start + f.tSeconds * 1000,
+        `${ctx.owner.id}#${f.spellId}#${f.tSeconds}`,
+        `${f.spellName} refused (${f.reason}) at the round's end itself (${roundEndS.toFixed(3)}s)`,
+      );
   // B15b: a run touching the REJECT_NEAR_DEATH_S before a teammate's death
   // is printed from one press
   const deaths = ctx.players
@@ -178,7 +196,7 @@ export function run(ctx: IRoundCtx): void {
       .map((r, i) => ({ r, i }))
       .filter(({ r }) => r.sec === sec && r.why === why);
     // batch review 80-PIPE-90-B80: a line whose ×N is reached only with the
-    // presses made at or after the round's end — the run built without the
+    // presses made past the round's end — the run built without the
     // cut holds N, the round's own run holds fewer or is not printed
     ctx.bump("rejectRunPastRoundEnd");
     if (!same.some(({ r }) => r.count >= n)) {
@@ -191,7 +209,7 @@ export function run(ctx: IRoundCtx): void {
           why,
           ctx.start + sec * 1000,
           `${spell}:${m[1]}`,
-          `${spell} ×${n} at ${m[1]} counts presses at or after the round's end (${roundEndS.toFixed(1)}s); the round's own run holds ${same[0]?.r.count ?? 0}`,
+          `${spell} ×${n} at ${m[1]} counts presses past the round's end (${roundEndS.toFixed(1)}s); the round's own run holds ${same[0]?.r.count ?? 0}`,
           l.trim(),
         );
     }

@@ -2973,6 +2973,13 @@ const INDEX: PredicateRow[] = [
     symbol: "roundEndMs",
     mod: roundEnd,
   },
+  // pipeline T117 (batch review 80-PIPE-96-B84): the timeline's round-end
+  // cut, shared by addEntry, ownerRejectRuns and scan5/t117
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "isPastRoundEnd",
+    mod: roundEnd,
+  },
   {
     file: `${A}/utils/roundEnd.ts`,
     symbol: "SOLO_SHUFFLE_BRACKET",

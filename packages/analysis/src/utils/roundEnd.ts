@@ -98,6 +98,22 @@ export function shuffleRoundEndMs(
 }
 
 /**
+ * Whether an instant (seconds after the match start) is past the round's end
+ * (the same, `roundEndMs` read as seconds): the timeline's own cut —
+ * `buildMatchTimeline`'s `addEntry` drops an entry only when it is later than
+ * the end, so an event logged at the end itself still prints. One boundary for
+ * every reader that must agree with the rendered timeline (T117: a 3v3 log
+ * ending at 62.000 s with refusals at 61.6 / 61.8 / 62.0 s is a ×3 run; batch
+ * review 80-PIPE-96-B84).
+ */
+export function isPastRoundEnd(
+  tSeconds: number,
+  roundEndSeconds: number,
+): boolean {
+  return tSeconds > roundEndSeconds;
+}
+
+/**
  * The round's end, epoch ms: a Solo Shuffle round's ending death, else the
  * combat's end (`ARENA_MATCH_END`). `units` defaults to `combat.units` — the
  * round's every unit, players filtered by `info`. The one round end of cc-dr

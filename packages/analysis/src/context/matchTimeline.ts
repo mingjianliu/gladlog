@@ -53,7 +53,7 @@ import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { IHealingGap } from "../utils/healingGaps";
 import type { IOffListPress } from "../utils/offListPress";
 import type { CastFailedEvent, RawStreams } from "../utils/rawStreams";
-import { roundEndMs } from "../utils/roundEnd";
+import { isPastRoundEnd, roundEndMs } from "../utils/roundEnd";
 import type { IControlCastBar } from "./ccUse";
 import {
   emitDmgSpikeEntries,
@@ -397,7 +397,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     timeSeconds: number,
     ...lines: (string | DeferredSnapshot)[]
   ): boolean {
-    if (timeSeconds > roundEndSeconds) return false;
+    if (isPastRoundEnd(timeSeconds, roundEndSeconds)) return false;
 
     entries.push({ timeSeconds, lines: lines.filter(Boolean) });
     return true;

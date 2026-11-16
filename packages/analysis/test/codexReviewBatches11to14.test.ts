@@ -21,6 +21,7 @@ import {
 } from "../src/context/timelineHelpers";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { wallTimingPhrase, wallUpAtOpen } from "../src/utils/burstLedger";
+import { isPastRoundEnd } from "../src/utils/roundEnd";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -438,6 +439,15 @@ describe("batch 13 — outcome lines need their own evidence (codex P2)", () => 
         60,
       ).map((r) => r.count),
     ).toEqual([3]);
+    // batch review 80-PIPE-96-B84: the end itself is in the round, as the
+    // timeline's own cut (`isPastRoundEnd`) prints a line logged there — a
+    // 3v3 log ending at 62.000 s with refusals at 61.6 / 61.8 / 62.0 s is ×3
+    const atEnd = [61.6, 61.8, 62].map((t) => f(t, "Out of range"));
+    expect(
+      ownerRejectRuns(atEnd, "Player-O", [], 62).map((r) => r.count),
+    ).toEqual([3]);
+    expect(isPastRoundEnd(62, 62)).toBe(false);
+    expect(isPastRoundEnd(62.001, 62)).toBe(true);
     // codex 85-tk-L-T117-1 #1: two strays in one ms are two rows — the run
     // does not resume after the first, so it splits into ×3 and ×3
     const H = "No puedes hacer eso mientras estás horrorizado";

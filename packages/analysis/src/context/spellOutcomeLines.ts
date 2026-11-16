@@ -26,6 +26,7 @@ import { groundingRedirects } from "../utils/groundingRedirects";
 import { isDeferralAbsorb } from "../utils/incomingPressure";
 import { petCommands } from "../utils/petCommands";
 import type { CastFailedEvent } from "../utils/rawStreams";
+import { isPastRoundEnd } from "../utils/roundEnd";
 import { sanctuaryRemovalPairs } from "../utils/sanctuaryRemovals";
 import {
   VISION_OBSCURED_CAUSE_NAMES,
@@ -1371,11 +1372,14 @@ function obscuredByOf(
  *  `REJECT_NEAR_DEATH_S` before one of `friendlyDeathSeconds` (B15b; the
  *  caller passes the owner's TEAMMATES' deaths, match-relative seconds).
  *  Control rejects are not a kind here and never enter (ruling 2026-09-26,
- *  unchanged). Only rows before `roundEndSeconds` take part (the round's
- *  end, `roundEndMs`, on the same clock): a press at or after it belongs to
- *  no run and resumes none — batch review 80-PIPE-90-B80: a run opened by
- *  one press before a Solo Shuffle round's ending death stepped over a
- *  stray and counted two presses made after it. */
+ *  unchanged). Only rows the timeline's own cut keeps take part
+ *  (`isPastRoundEnd` against `roundEndSeconds`, the round's end,
+ *  `roundEndMs`, on the same clock): a press past it belongs to no run and
+ *  resumes none — batch review 80-PIPE-90-B80: a run opened by one press
+ *  before a Solo Shuffle round's ending death stepped over a stray and
+ *  counted two presses made after it; a press at the end itself still
+ *  counts, as its line still prints (80-PIPE-96-B84: a 3v3 log ending at
+ *  62.000 s, refusals at 61.6 / 61.8 / 62.0 s). */
 export function ownerRejectRuns(
   castFailed: readonly CastFailedEvent[],
   ownerId: string,
@@ -1405,7 +1409,10 @@ export function ownerRejectRuns(
   // recovered / Out of range … read as three consecutive out-of-range
   // presses)
   const hits = castFailed
-    .filter((h) => h.unitGuid === ownerId && h.tSeconds < roundEndSeconds)
+    .filter(
+      (h) =>
+        h.unitGuid === ownerId && !isPastRoundEnd(h.tSeconds, roundEndSeconds),
+    )
     .sort((a, b) => a.tSeconds - b.tSeconds);
   for (let i = 0; i < hits.length; i++) {
     const h = hits[i]!;
