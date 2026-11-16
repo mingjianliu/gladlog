@@ -33,8 +33,12 @@ import { fmtS, type IRoundCtx, secOf } from "./ctx";
 export const CHECKS = ["feignReadyInSpan"] as const;
 
 const FEIGN_DEATH = "5384";
+// the DPS renderer prints `a–b on`, the healer one `a–b (Ns) on`
+// (healerOffenseAnalysis) — batch review 80-PIPE-93-B81
 const SPAN =
-  /^\s+\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d) on [^(]+\(([^)]+)\)(.*)$/;
+  /^\s+\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\)(.*)$/;
+// DPS: `(defenseless a–b)`; healer kill window: `; target defenseless a–b`
+const DEFENSELESS = /(?:\(|; target )defenseless (\d+:\d\d)–(\d+:\d\d)/;
 
 /** Feign Death's ready stretches of `u` in round seconds, from the shared
  * cooldown model; available from the round's start until its first press */
@@ -76,7 +80,7 @@ export function run(ctx: IRoundCtx): void {
   for (const l of ctx.lines) {
     const m = SPAN.exec(l);
     if (!m) continue;
-    const dl = /\(defenseless (\d+:\d\d)–(\d+:\d\d)\)/.exec(m[5]!);
+    const dl = DEFENSELESS.exec(m[5]!);
     let a: number;
     let b: number;
     if (dl) {

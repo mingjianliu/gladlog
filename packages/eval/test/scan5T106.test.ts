@@ -45,14 +45,16 @@ const owner = makeUnit("p1", {
   reaction: CombatUnitReaction.Friendly,
 });
 
-function scan(span: string, h: ReturnType<typeof hunter>) {
+function scan(
+  span: string,
+  h: ReturnType<typeof hunter>,
+  line = `  [KILL WINDOW] ${span} on Marksmanship Hunter (Hunter): team burst 100k (defenseless ${span})`,
+) {
   let checked = 0;
   const details: string[] = [];
   const units = [owner, h];
   run({
-    lines: [
-      `  [KILL WINDOW] ${span} on Marksmanship Hunter (Hunter): team burst 100k (defenseless ${span})`,
-    ],
+    lines: [line],
     start: T,
     end: at(120),
     roundEndAt: at(120),
@@ -97,5 +99,28 @@ describe("scan5 feignReadyInSpan", () => {
         checked: 1,
         details: [],
       });
+  });
+  // batch review 80-PIPE-93-B81: the healer renderer's two forms
+  it("a healer [KILL WINDOW] line (`; target defenseless a–b`) is read", () => {
+    const line = (span: string) =>
+      `  [KILL WINDOW] ${span} on Marksmanship Hunter (Hunter): team offensive CDs ready at ${span.split("–")[0]}: none; free 12s of 12s, team min HP 57%; target defenseless ${span}.`;
+    expect(scan("0:20–0:40", hunter([15]), line("0:20–0:40"))).toEqual({
+      checked: 1,
+      details: [],
+    });
+    const got = scan("0:40–0:55", hunter([15]), line("0:40–0:55"));
+    expect(got.checked).toBe(1);
+    expect(got.details).toHaveLength(1);
+  });
+  it("a healer [VULNERABLE] line (`a–b (Ns) on`, no major defensives) is read", () => {
+    const line = (span: string) =>
+      `  [VULNERABLE] ${span} (15s) on Marksmanship Hunter (Hunter): no major defensives, never punished (team damage 0k total)`;
+    expect(scan("0:20–0:35", hunter([15]), line("0:20–0:35"))).toEqual({
+      checked: 1,
+      details: [],
+    });
+    const got = scan("0:40–0:55", hunter([15]), line("0:40–0:55"));
+    expect(got.checked).toBe(1);
+    expect(got.details).toHaveLength(1);
   });
 });
