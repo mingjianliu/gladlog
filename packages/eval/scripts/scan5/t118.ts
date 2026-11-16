@@ -16,19 +16,18 @@
  *    target's team (the target included). Counted: every such root row.
  */
 import { ROOT_SPELL_IDS } from "@gladlog/analysis/src/data/rootSpells";
+import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
+import { ccLandingStateAtMs } from "@gladlog/analysis/src/utils/ccBreakAnalysis";
+import { ccFullDurationForApplication } from "@gladlog/analysis/src/utils/ccDuration";
 import { TARGET_BOUND_MOBILITY_IDS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import {
-  ccRecastSplitsResend,
-  matchPendingCcKey,
-} from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   ALLY_DISPEL_MATCH_TOLERANCE_S,
   rootRanOutAtDrTier,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
-
-import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
-import { ccLandingStateAtMs } from "@gladlog/analysis/src/utils/ccBreakAnalysis";
-import { ccFullDurationForApplication } from "@gladlog/analysis/src/utils/ccDuration";
+import {
+  ccRecastSplitsResend,
+  matchPendingCcKey,
+} from "@gladlog/analysis/src/utils/drAnalysis";
 
 import {
   APPLIED,
