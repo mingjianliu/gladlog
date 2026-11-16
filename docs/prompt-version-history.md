@@ -6815,3 +6815,19 @@ pressedDuringSubSpell 3 / 1381 -> 0 / 1377; breakFactScan
 refusedPressMechanic wrong 16 / 1181 -> 0 / 1179; 18 items carry the note
 (Stasis 15, Alter Time 3); gates identical over 110 classes; family diff 0
 flags; menu rows 7,449 -> 7,449.
+
+v561 (2026-11-16; pipeline batch B79, T112; round 13 audit D8). A [CC
+AVOIDED?] line that rests on the log's own failed-control row printed the
+cast's second for a control with no landing window (a travelling Song of
+Chi-Ji logged IMMUNE 1.56 s after its cast). The line is stamped at the
+miss row; the avoidance aura is still read at the control's hit instant
+(moving the hit itself lost the consumed-aura cause on 81 lines); `recast
+landed +N.Ns` is measured from the line's own stamp. The cast-less miss-row
+sweep matches an instance's stamp or cast within 1 s of the SAME enemy, so
+a Command Demon's own IMMUNE rows stay the pet's one line and a second
+enemy's failed control 0.7 s later keeps its own line. 605 (base capture at
+26437252a vs branch), new scan5/t112: loggedLineOffItsRow 175 / 6472 -> 0 /
+6472; recastOffsetOffRow 6 / 42 -> 0 / 48; 708 lines moved to their
+miss-row second, 24 recast offsets corrected, no line added or removed,
+candidate ids +0 -0. The same-enemy requirement on both branches (batch
+review finding) was re-captured: 0 lines differ from the capture before it.

@@ -1313,5 +1313,10 @@
  *  same button (Stasis release, Alter Time return) is one and carries a
  *  /cancelaura note (user ruling R45).
  *  See docs/prompt-version-history.md.
+ *
+ * v561 (2026-11-16; pipeline batch B79, T112): a [CC AVOIDED?] line
+ *  resting on the log's failed-control row is stamped at that row, and
+ *  `recast landed +N.Ns` is measured from the line's own stamp.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 560;
+export const PROMPT_VERSION = 561;
