@@ -1,0 +1,134 @@
+/**
+ * Pipeline T113 (fact13 D21): the end of a stealth-kind immunity the log
+ * never shows. A Mass Invisibility at 0:11.03 with no REMOVED, its holder
+ * beginning a Polymorph bar 9.0 s in (feared off — no SUCCESS), read
+ * `immune, 10.8s — ended by a hit`: the first aimed hit, searched as far as
+ * the aura's official 12 s.
+ */
+import {
+  CombatUnitReaction,
+  CombatUnitSpec,
+  LogEvent,
+} from "@gladlog/parser-compat";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { ensureAnalysisData } from "../src/data/ensure";
+import {
+  holderFirstOwnActionAfterMs,
+  saveAuraIntervals,
+  untargetableEndS,
+} from "../src/utils/enemyDefensives";
+import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
+
+const START = 1_000_000;
+const at = (s: number) => START + Math.round(s * 1000);
+const MASS_INVIS = "414664";
+
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
+
+const barBegun = (s: number) =>
+  ({
+    spellId: "118",
+    spellName: "Polymorph",
+    timestamp: at(s),
+    srcUnitId: "e1",
+    logLine: { event: "SPELL_CAST_START", timestamp: at(s) },
+  }) as never;
+const ownHit = (s: number) =>
+  ({
+    srcUnitId: "e1",
+    spellId: "30451",
+    logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: at(s) },
+  }) as never;
+const holder = (over: Record<string, unknown>) =>
+  ({ id: "e1", spellCastEvents: [], damageOut: [], ...over }) as never;
+
+describe("the holder's first own action after an unseen-end aura (T113)", () => {
+  it("a cast bar begun is one, though no SUCCESS follows", () => {
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder({ castStartEvents: [barBegun(20.017)] }),
+        at(11.03),
+        MASS_INVIS,
+      ),
+    ).toBe(at(20.017));
+  });
+  it("a hit it dealt in the aura's first second was already on its way", () => {
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder({ damageOut: [ownHit(11.08)] }),
+        at(11.03),
+        MASS_INVIS,
+      ),
+    ).toBe(Infinity);
+    // past the first second it is the holder acting
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder({ damageOut: [ownHit(11.08), ownHit(14.5)] }),
+        at(11.03),
+        MASS_INVIS,
+      ),
+    ).toBe(at(14.5));
+  });
+  it("untargetableEndS reads the same end", () => {
+    expect(
+      untargetableEndS(
+        holder({ castStartEvents: [barBegun(20.017)] }),
+        { spellId: MASS_INVIS, fromS: 11.03, toS: 23.03, inferredEnd: true },
+        START,
+      ),
+    ).toBeCloseTo(20.017);
+  });
+});
+
+describe("saveAuraIntervals — the aimed hit that ends a stealth-kind immunity (T113)", () => {
+  const swing = (s: number) => ({
+    srcUnitId: "f1",
+    destUnitId: "e1",
+    timestamp: at(s),
+    logLine: { event: LogEvent.SWING_DAMAGE, timestamp: at(s), lineIndex: 900 },
+  });
+  const run = (castStartEvents: unknown[]) => {
+    const mage = makeUnit("e1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Arcane,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          MASS_INVIS,
+          at(11.03),
+          "e1",
+          "e1",
+          "BUFF",
+        ),
+      ],
+    });
+    Object.assign(mage, { castStartEvents, damageIn: [swing(21.83)] });
+    const friend = makeUnit("f1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+    });
+    const combat = {
+      startTime: START,
+      endTime: START + 300_000,
+      units: { e1: mage, f1: friend },
+    };
+    return saveAuraIntervals(mage, [mage], combat as never).find(
+      (iv) => iv.spellId === MASS_INVIS,
+    )!;
+  };
+  it("with no own action before it, the hit 10.8 s in is the end", () => {
+    const iv = run([]);
+    expect(iv.endedByHit).toBe(true);
+    expect(iv.toS).toBeCloseTo(21.83);
+  });
+  it("a cast bar begun 9.0 s in: the hit after it ended nothing, the end stays unshown", () => {
+    const iv = run([barBegun(20.017)]);
+    expect(iv.endedByHit).toBeUndefined();
+    expect(iv.inferredEnd).toBe(true);
+  });
+});

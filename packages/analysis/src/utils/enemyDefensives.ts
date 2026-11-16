@@ -523,7 +523,7 @@ export const STEALTH_KEPT_BY_ALLOWED_PRESS_IDS: ReadonlySet<string> = new Set([
  */
 export function holderFirstOwnActionAfterMs(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut"> &
-    Partial<Pick<ICombatUnit, "missesOut">>,
+    Partial<Pick<ICombatUnit, "missesOut" | "castStartEvents">>,
   afterMs: number,
   auraId?: string,
   units?: readonly ICombatUnit[],
@@ -544,6 +544,18 @@ export function holderFirstOwnActionAfterMs(
       if (allowed(c.spellId ?? "")) continue;
       if (t > afterMs && t < first) first = t;
     }
+  // a cast bar begun is the holder acting, whether or not the cast came off
+  // (pipeline T113, fact13 D21: a Polymorph bar begun 9.0 s into Mass
+  // Invisibility and feared off — no SUCCESS row, and the immunity read
+  // 10.8 s). Measured on the 605 capture's runs whose REMOVED is logged
+  // (scan5 t113 `visibleRunCastStart`, the holder's first own row in the
+  // run): a cast bar begun ended Mass Invisibility 16 / 16 and Greater
+  // Invisibility 45 / 45.
+  for (const c of holder.castStartEvents ?? []) {
+    if (allowed(c.spellId ?? "")) continue;
+    const t = c.timestamp;
+    if (t > afterMs && t < first) first = t;
+  }
   // a tick a shield ate is logged as a SPELL_ABSORBED row with no periodic
   // flag (its `spellId` is the shield, `attackSpellId` the hit's): the hit
   // of a spell this holder ticks this round is a tick too (codex 30-RV-01
@@ -578,6 +590,13 @@ export function holderFirstOwnActionAfterMs(
     )
       continue;
     const t = d.logLine.timestamp;
+    // a hit the holder dealt in the aura's first second was on its way
+    // before it went up — no action (pipeline T113; the incoming side's
+    // `STEALTH_IMMUNITY_IN_FLIGHT_MS`, U-KA3). Same measurement: such a hit
+    // as the run's first own row left it going 184 times and sat at its end
+    // 46 (Mass Invisibility 70 / 11, Greater Invisibility 53 / 21, Vanish
+    // 61 / 14); a later hit ended Mass Invisibility 6 / 6.
+    if (auraId && t <= afterMs + STEALTH_IMMUNITY_IN_FLIGHT_MS) continue;
     if (t > afterMs && t < first) first = t;
   }
   return units
@@ -2082,11 +2101,23 @@ export function saveAuraIntervals(
     // GH #195: a stealth-kind immunity ends at the first single-target hit
     // past its first second (`stealthImmunityHitMs`)
     if (!ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId)) return out;
+    const roundUnits = Object.values(combat.units ?? {});
+    // …searched no further than the aura can have run: an end the log never
+    // showed is over at the holder's first own action (`untargetableEndS`,
+    // the one reading the kill windows and the CC samplers share), not at
+    // the builder's official-length cap (pipeline T113, fact13 D21: a hit
+    // 10.8 s in closed a Mass Invisibility whose holder began a cast 9.0 s
+    // in). A hit after that action ended nothing; the line stays `end not
+    // logged`.
     const hitMs = stealthImmunityHitMs(
       unit,
       combat.startTime + iv.fromS * 1000,
-      combat.startTime + iv.toS * 1000,
-      Object.values(combat.units ?? {}),
+      // in whole ms: the action's own row is not before itself
+      Math.round(
+        combat.startTime +
+          untargetableEndS(unit, iv, combat.startTime, roundUnits) * 1000,
+      ),
+      roundUnits,
       iv.toRow,
     );
     if (hitMs === undefined) return out;
