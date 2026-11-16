@@ -1136,6 +1136,17 @@ const INDEX: PredicateRow[] = [
     symbol: "softerTargetAt",
     mod: killAttempts,
   },
+  // pipeline T104: a burst-anchor press naming an enemy that is its caster's self-buff, read by scan5/t104
+  {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "castAndEffectIds",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/utils/auraIntervals.ts`,
+    symbol: "SAVE_CAST_AURA_PAIR_S",
+    mod: auraIntervals,
+  },
   // R08 (b): which walls a unit has in hand — the kit's [UNUSED] and the tier
   {
     file: `${A}/utils/killWindowTargetSelection.ts`,
