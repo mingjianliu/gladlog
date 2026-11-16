@@ -73,6 +73,12 @@ export interface DeathSetupParts {
       spellName: string;
     }>;
     matchStartMs?: number;
+    /**
+     * T129: the round end the CC instances and roots are cut at
+     * (`roundEndMs`, a Solo Shuffle round's deciding death) — a `chain`
+     * entry's printed end is cut there too. Absent = uncut (fixtures).
+     */
+    roundEndMs?: number;
   };
 }
 
@@ -136,8 +142,14 @@ function lockChainFacts(
   // start times alone two runs 4.5 s apart (Hex 162.6; Polymorph 168.1) read
   // as one unbroken chain, and a root running on under the next CC read as
   // a gap
+  // T129 (CXA13 D30, 0a13e993 r0): an interval's end is cut at the round end
+  // like the CC instance's — `Freezing Trap 72.1-78.1` printed the trap's
+  // REMOVED row, logged after the round's deciding death at 75.1, while its
+  // [CC ON TEAM] line said it was still on when the round ended
+  const endCapS =
+    cc.roundEndMs === undefined ? Infinity : (cc.roundEndMs - start) / 1000;
   const span = (fromS: number, toS: number) =>
-    `${fmtFactTime(fromS)}-${fmtFactTime(toS)}`;
+    `${fmtFactTime(fromS)}-${fmtFactTime(Math.min(toS, endCapS))}`;
   const chain: Array<{ at: number; text: string }> = links.map((iv) => {
     const at = (iv.from - start) / 1000;
     return {

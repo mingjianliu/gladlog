@@ -28,6 +28,7 @@ import * as candidateFindings from "@gladlog/analysis/src/analysis/candidateFind
 import * as backlashDispel from "@gladlog/analysis/src/analysis/candidates/backlashDispel";
 import * as burstWindowResponse from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import * as cooldownTiming from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
+import * as deathCandidates from "@gladlog/analysis/src/analysis/candidates/death";
 import * as kickPriority from "@gladlog/analysis/src/analysis/candidates/kickPriority";
 import * as massDispel from "@gladlog/analysis/src/analysis/candidates/massDispel";
 import * as candidatesShared from "@gladlog/analysis/src/analysis/candidates/shared";
@@ -3539,6 +3540,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "actWindowFor",
     mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/analysis/candidates/death.ts`,
+    symbol: "deathSetupEvents",
+    mod: deathCandidates,
   },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,

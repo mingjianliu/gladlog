@@ -150,6 +150,46 @@ describe("crisis-external F-AS1 / F-D2 — the lock chain and the free time", ()
   });
 });
 
+describe("T129 — a chain entry ends at the round end, like its CC instance", () => {
+  // 0a13e993 r0 shape: Binding Shot 70.2–73.2, Freezing Trap 72.11 with its
+  // REMOVED at 78.133, the round's deciding death at 75.085
+  const base = {
+    deathT: 75.085,
+    victim,
+    healerCC: {
+      healerName: "Healer-R",
+      ccInstances: [
+        cc(70.2, 3, "Binding Shot"),
+        cc(72.11, 2.975, "Freezing Trap"),
+      ],
+      cannotCast: [
+        iv(70.2, 73.2, "117526"), // Binding Shot
+        iv(72.11, 78.133, "3355"), // Freezing Trap
+      ],
+      matchStartMs: START,
+    },
+  };
+
+  it("cuts the trap's printed end at the round end", () => {
+    const [e] = deathSetupEvents({
+      ...base,
+      healerCC: { ...base.healerCC, roundEndMs: START + 75_085 },
+    });
+    expect(e!.facts["chain"]).toBe(
+      "Binding Shot 70.2-73.2; Freezing Trap 72.1-75",
+    );
+    // the window facts were already bounded by the death
+    expect(e!.facts["freeBeforeDeathS"]).toBe("0");
+  });
+
+  it("no round end given (hand-built fixture): the raw end, as before", () => {
+    const [e] = deathSetupEvents(base);
+    expect(e!.facts["chain"]).toBe(
+      "Binding Shot 70.2-73.2; Freezing Trap 72.1-78.1",
+    );
+  });
+});
+
 describe("crisis-external F-D3 — events after the owner's death leave the menu", () => {
   const unit = (
     id: string,

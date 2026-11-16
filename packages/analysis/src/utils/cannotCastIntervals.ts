@@ -1801,7 +1801,14 @@ export function actWindowFor(
             ? { lockedSchoolMask: iv.lockedSchoolMask }
             : {}),
           fromS: (iv.from - matchStartMs) / 1000,
-          toS: (iv.to - matchStartMs) / 1000,
+          // T129: a block's end is cut at the round end, as the window is —
+          // a removal logged after the round is not time in it (605: 9 of
+          // 629 `ownerCc` blocks ran past it). An end the log never gave
+          // (Infinity, printed `(no end logged)`) stays one.
+          toS:
+            ((Number.isFinite(iv.to) ? Math.min(iv.to, roundEndMs) : iv.to) -
+              matchStartMs) /
+            1000,
         }));
       return {
         blocks,

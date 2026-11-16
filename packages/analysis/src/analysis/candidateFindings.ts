@@ -4814,6 +4814,8 @@ function extractDeathSetups(
             ),
             roots: healerSummary.rootInstances,
             matchStartMs: start,
+            // T129: the cut the CC instances and roots carry
+            roundEndMs: roundEndOf(combat),
           };
         } catch {
           /* same as above */

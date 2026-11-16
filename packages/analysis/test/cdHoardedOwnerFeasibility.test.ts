@@ -316,6 +316,16 @@ describe("cdHoardedEvents — ownerCc / ownerFreeS facts (H1)", () => {
     const act = actWindowFor(owner, new Set(["e"]), T0, at(62));
     expect(act.stateIn(58.5, 65, 60)!.freeAfterS).toBeCloseTo(1.375, 3);
   });
+
+  it("T129: a block's end stops at the round end too", () => {
+    // Blind's REMOVED is at 60.625; a round over at 60.2 cuts the block there
+    const cut = actWindowFor(owner, new Set(["e"]), T0, at(60.2));
+    expect(cut.stateIn(58.5, 65, 60)!.blocks.map((b) => b.toS)).toEqual([60.2]);
+    const whole = actWindowFor(owner, new Set(["e"]), T0, at(62));
+    expect(whole.stateIn(58.5, 65, 60)!.blocks.map((b) => b.toS)).toEqual([
+      60.625,
+    ]);
+  });
 });
 
 // I05 (user ruling 2026-10-11, option b): the owner gate counts the span
