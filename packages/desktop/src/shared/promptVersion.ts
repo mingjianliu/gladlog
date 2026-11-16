@@ -1332,5 +1332,10 @@
  *  `defenseless` span stops at a pressed absorb shield whose caster is
  *  on the other side; a shield the target stole still does not count.
  *  See docs/prompt-version-history.md.
+ *
+ * v565 (2026-11-16; pipeline batch B86, T125): Cascading Horrors is a
+ *  control with no DR family (user ruling R48): it gets [CC ON TEAM] /
+ *  [CC ON ENEMY] lines and never a DR tier.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 564;
+export const PROMPT_VERSION = 565;

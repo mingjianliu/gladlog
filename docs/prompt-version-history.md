@@ -6881,3 +6881,26 @@ crossTeamShieldDefenseless: the audited round 2 / 33 -> 0 / 33; the 605 0
 cross-side caster's no-target re-press does not split the shield's interval
 (branch review, synthetic, 0 on the 605); the same-side reading
 allyShieldDefenseless is 4 / 5205 on both sides (older than this ticket).
+
+v565 (2026-11-16; pipeline batch B86, T125; round 13 audit D29; user ruling
+R48). User ruling 2026-11-15: Cascading Horrors (358861, a Shadow Priest's
+2 s magic horror, no DR category in DB2) is a control, alone of the
+loss-of-control procs in the audit (Earthquake's knockdown and Fel Cleave's
+stun unchanged). It joins SPELL_CATEGORIES' `cc` type, so every ccSpellIds
+reader sees it (control walk, [CC ON TEAM] / [CC ON ENEMY], cannot-cast
+intervals, [CONSEQ], the CC kit, cd-hoarded ownerCc). New hasNoDrFamily
+(drAnalysis) gives it no DR tier anywhere (no incoming DR, no history, no
+DR factor in the remaining time); on the enemy healer it is a facts-only
+lock (as R42). New isNamedDrCategory gates every printed outgoing tier
+(chain line, timeline tags, deep-dive snapshot, eval explorer, desktop
+CCChainPanel). Audited round: no line at 2:01-2:04 -> `2:01 [CC ON TEAM]
+... <- Cascading Horrors (by ...) | 2s | ...` and a second one at 2:03, no
+[DR:] tag. 605 (base capture at c14bfdb04 vs branch), new scan5/t125
+lossOfControlAuraNoCcLine for Cascading Horrors: 79 -> 0 (the audited
+round 6 / 6 -> 0 / 6); +79 [CC ON TEAM] (0 with [DR:]), +139 [CC ON ENEMY],
++31 [CONSEQ], +17 [CC NOT LANDED], +14 [CC AVOIDED?]; 28 [DMG SPIKE] and 20
+[RES] lines name it; 67 context files. Three lines in other files: Sin and
+Punishment (87204, the other no-family horror) removed by Blessing of
+Sanctuary now reads `~1s of it left` instead of the DR-shortened `~0s` (it
+has had no DR since patch 4.2). Candidate rows +0 -0; one cd-hoarded row's
+ownerCc gains `Cascading Horrors +4.3...+8.6s`.
