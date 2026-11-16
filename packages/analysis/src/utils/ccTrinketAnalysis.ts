@@ -5546,13 +5546,19 @@ function analyzePlayerCCAndTrinketUncached(
   // later cast (user ruling 2026-10-27: the line says so,
   // `ccAvoidedRecastTag`; wide 182-5 2:36, a Cyclone IMMUNE under Nullifying
   // Shroud and the recast landing 0.87 s later printed in one second)
-  const recastLandedAfterS = (cast: {
-    spellId?: string | null;
-    spellName?: string | null;
-    srcUnitId?: string;
-    logLine: { timestamp: number };
-  }): number | undefined => {
-    const atMs = cast.logLine.timestamp - matchStartMs;
+  const recastLandedAfterS = (
+    cast: {
+      spellId?: string | null;
+      spellName?: string | null;
+      srcUnitId?: string;
+      logLine: { timestamp: number };
+    },
+    /** the line's own stamp (T112: its miss row, else the hit) — the
+     *  offset is read from the second the line prints, as the renderer
+     *  and the gate read it (codex 85-tk-N-T112-1 #1) */
+    fromMs: number = cast.logLine.timestamp,
+  ): number | undefined => {
+    const atMs = fromMs - matchStartMs;
     const castName = getEnglishSpellName(
       cast.spellId ?? "",
       cast.spellName ?? "",
@@ -6213,8 +6219,8 @@ function analyzePlayerCCAndTrinketUncached(
               sourceId: cast.srcUnitId || enemy.id,
               sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
               ...(loggedMissType ? { loggedMissType } : {}),
-              ...(missRow && recastLandedAfterS(cast) !== undefined
-                ? { recastLandedAfterS: recastLandedAfterS(cast) }
+              ...(missRow && recastLandedAfterS(cast, stampMs) !== undefined
+                ? { recastLandedAfterS: recastLandedAfterS(cast, stampMs) }
                 : {}),
             });
             continue; // Avoid double counting
@@ -6243,8 +6249,8 @@ function analyzePlayerCCAndTrinketUncached(
                 // resolves to "X's pet" through its GUID (`actorLabel`)
                 sourceId: cast.srcUnitId || enemy.id,
                 missMs: missRow.timestamp,
-                ...(recastLandedAfterS(cast) !== undefined
-                  ? { recastLandedAfterS: recastLandedAfterS(cast) }
+                ...(recastLandedAfterS(cast, stampMs) !== undefined
+                  ? { recastLandedAfterS: recastLandedAfterS(cast, stampMs) }
                   : {}),
               });
             continue;
@@ -6355,9 +6361,14 @@ function analyzePlayerCCAndTrinketUncached(
     const stated = [...ccAvoidedInstances, ...ccImmuneUncredited].some(
       (x) =>
         x.spellName === name &&
-        [x.atSeconds, x.castAtSeconds ?? x.atSeconds].some(
-          (s) => Math.abs(matchStartMs + s * 1000 - m.timestamp) <= 1000,
-        ),
+        (Math.abs(matchStartMs + x.atSeconds * 1000 - m.timestamp) <= 1000 ||
+          // the cast instant only for the same enemy (the instance names its
+          // owner): another caster's failed control is its own (codex
+          // 85-tk-N-T112-1 #2)
+          (x.sourceName === enemy.name &&
+            x.castAtSeconds !== undefined &&
+            Math.abs(matchStartMs + x.castAtSeconds * 1000 - m.timestamp) <=
+              1000)),
     );
     if (stated) continue;
     // the same control landed on them in that second: the IMMUNE row is one

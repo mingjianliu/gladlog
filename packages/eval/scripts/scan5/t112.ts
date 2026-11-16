@@ -10,10 +10,20 @@
  *
  *  - `loggedLineOffItsRow`: a `[CC AVOIDED?] P: X (by …) logged T` line with
  *    no T miss row of X (by its English name) on P in the line's second.
+ *  - `recastOffsetOffRow`: such a line, resting on its row, that ends
+ *    "— recast landed +N.Ns" while no X aura was APPLIED on P N.N s (± the
+ *    print's 0.05 s rounding) after any of those rows — the offset is read
+ *    from the line's own stamp (codex 85-tk-N-T112-1 #1: a Cheap Shot that
+ *    missed at 54.156 and landed at 54.564 printed "+1.0s", measured from
+ *    its cast).
  */
-import { type IRoundCtx, nameOf } from "./ctx";
+import { APPLIED, ev, type IRoundCtx, nameOf, tsOf } from "./ctx";
 
-export const CHECKS = ["loggedLineOffItsRow"] as const;
+export const CHECKS = ["loggedLineOffItsRow", "recastOffsetOffRow"] as const;
+
+const RECAST_RE = / — recast landed \+(\d+\.\d)s$/;
+/** the print rounds to 0.1 s; slack for the half step */
+const RECAST_SLACK_MS = 55;
 
 const LINE_RE =
   /^(\d+):(\d\d)\s+\[CC AVOIDED\?\]\s+(\d+)\([^)]*\): (.+?) \(by (.+?)\) logged ([A-Z]+)/;
@@ -34,7 +44,41 @@ export function run(ctx: IRoundCtx): void {
         r.missType === type && nameOf(r.spellId, r.spellName ?? "") === spell,
     );
     const secOf = (r: any) => Math.floor((r.timestamp - ctx.start) / 1000);
-    if (rows.some((r: any) => secOf(r) === lineS)) continue;
+    const own = rows.filter((r: any) => secOf(r) === lineS);
+    if (own.length > 0) {
+      const recast = RECAST_RE.exec(line.trim());
+      if (!recast) continue;
+      const R = "recastOffsetOffRow";
+      ctx.bump(R);
+      const offMs = Number(recast[1]) * 1000;
+      const landed = ((unit.auraEvents ?? []) as any[]).filter(
+        (a) =>
+          ev(a) === APPLIED && nameOf(a.spellId, a.spellName ?? "") === spell,
+      );
+      if (
+        own.some((r: any) =>
+          landed.some(
+            (a) => Math.abs(tsOf(a) - (r.timestamp + offMs)) <= RECAST_SLACK_MS,
+          ),
+        )
+      )
+        continue;
+      const first = landed
+        .map((a) => tsOf(a))
+        .filter((t) => t > own[0].timestamp)
+        .sort((x, y) => x - y)[0];
+      ctx.violate(
+        R,
+        spell,
+        own[0].timestamp,
+        `${m[3]}#${spell}#${lineS}#recast`,
+        first === undefined
+          ? `+${recast[1]}s printed; no ${spell} landed on ${m[3]} after the row`
+          : `+${recast[1]}s printed; ${spell} landed +${((first - own[0].timestamp) / 1000).toFixed(3)}s after the row`,
+        line.trim().slice(0, 300),
+      );
+      continue;
+    }
     const later = rows.find(
       (r: any) => secOf(r) > lineS && secOf(r) <= lineS + 10,
     );
