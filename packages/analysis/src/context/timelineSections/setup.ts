@@ -63,6 +63,7 @@ import {
   buildCcCategoryHistory,
   drLevelNextAt,
   getDRCategory,
+  isNamedDrCategory,
   OWNER_AOE_CC_NO_PLAYER_TAG,
 } from "../../utils/drAnalysis";
 import { observedCastEndMs } from "../../utils/enemyCDs";
@@ -531,7 +532,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
           app.spellId === spellId &&
           app.casterName === caster &&
           app.drInfo &&
-          isDrFamilyCategory(app.drInfo.category) &&
+          isNamedDrCategory(app.drInfo.category) &&
           toRenderSecond(app.atSeconds) === t
         )
           return ` [DR: ${app.drInfo.category} ${app.drInfo.level}]`;
@@ -543,10 +544,6 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
    * (`Unknown`, `spell:<id>` for a control that shares no family, e.g.
    * Infernal Awakening): round-1 retest idx 30 printed `[DR: Unknown Full]`;
    * the [CC ON TEAM] line has always had this guard */
-  function isDrFamilyCategory(category: string): boolean {
-    return category !== "Unknown" && !category.startsWith("spell:");
-  }
-
   function outgoingDrTag(
     spellId: string,
     cast: { timeSeconds: number },
@@ -583,7 +580,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         )
           continue;
         if (!app.drInfo || app.casterName !== owner.name) continue;
-        if (!isDrFamilyCategory(app.drInfo.category)) continue;
+        if (!isNamedDrCategory(app.drInfo.category)) continue;
         hits.push({
           target: chain.targetName,
           category: app.drInfo.category,

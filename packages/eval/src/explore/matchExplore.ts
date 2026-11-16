@@ -46,6 +46,7 @@ import {
   INTERP_MAX_GAP_MS,
   type IOutgoingCCApplication,
   isHealerSpec,
+  isNamedDrCategory,
   LOS_SWEEP_GAP_MS,
   MANA_PRESSURE_LOW_PCT,
   type RawStreams,
@@ -90,10 +91,7 @@ function remainingNote(cd: IMajorCooldownInfo, tt: number): string {
   // an event-reduced press (Storm Conduit) is combat-shortened too: its real
   // return is the low end, as the [RES] row prints it (codex 40-FT-82: the
   // explorer said 还剩 175s beside the row's (165–175s))
-  const realised = Math.max(
-    0,
-    Math.round(cdRealisedSecondsUntilReady(cd, tt)),
-  );
+  const realised = Math.max(0, Math.round(cdRealisedSecondsUntilReady(cd, tt)));
   const floored =
     cd.earliestCooldownSeconds === undefined
       ? realised
@@ -305,7 +303,7 @@ export function drLines(
   }
   for (const r of rows) {
     lines.push(
-      `${fmtTime(r.atTT)} ${r.casterName}(${r.casterSpec}) → ${r.targetName}(${r.targetSpec}) ${r.app.spellName} DR:${r.app.drInfo.level} 时长${r.app.durationSeconds.toFixed(1)}s`,
+      `${fmtTime(r.atTT)} ${r.casterName}(${r.casterSpec}) → ${r.targetName}(${r.targetSpec}) ${r.app.spellName} ${isNamedDrCategory(r.app.drInfo.category) ? `DR:${r.app.drInfo.level} ` : ""}时长${r.app.durationSeconds.toFixed(1)}s`,
     );
   }
   return lines;

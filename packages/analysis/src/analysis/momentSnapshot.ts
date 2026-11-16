@@ -31,7 +31,7 @@ import {
   selfCastNoopAnnotatedName,
   specToString,
 } from "../utils/cooldowns";
-import { DR_CATEGORY_MAP } from "../utils/drAnalysis";
+import { DR_CATEGORY_MAP, isNamedDrCategory } from "../utils/drAnalysis";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
 import {
   getHpPercentAtTime,
@@ -353,7 +353,12 @@ export function buildMomentSnapshotItems(
             caster: sn(ap.casterName),
             target: sn(chain.targetName),
             spell: ap.spellName,
-            drLevel: String(ap.drInfo?.level ?? ""),
+            // no tier for a control no DR family claims (T125, codex
+            // 85-tk-M-T125-2c: Cascading Horrors read "Full")
+            drLevel:
+              ap.drInfo && isNamedDrCategory(ap.drInfo.category)
+                ? String(ap.drInfo.level)
+                : "",
             durationS: String(Math.round(ap.durationSeconds)),
           },
         });
