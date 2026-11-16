@@ -19,8 +19,11 @@
  *    must not drop out of coverage — codex 85-tk-K-T114-1); a source-less
  *    aura's (Anti-Magic Zone) through `sourcelessPressOf` (its one root
  *    caster's cast), and when none resolves the line must not say
- *    "pressed" (batch review 80-PIPE-75-B70b #1). A line is
- *    checked when one such press at or after the opening exists, and is a
+ *    "pressed" (batch review 80-PIPE-75-B70b #1). A press before the
+ *    opening whose aura reached the target after it is printed `pressed Zs
+ *    before the burst opened` and read as a negative Z (batch review
+ *    80-PIPE-83-B70c: it was skipped, 0 checked). A line is
+ *    checked when one such press exists, and is a
  *    violation when Z is more than one rounding step off every press −
  *    opening (e2047b8b r0 2:43: Spirit Link Totem pressed 4.95 s in, its
  *    aura flickered and settled at 6.0 s, the line read `pressed 6.0s`).
@@ -64,7 +67,7 @@ const BURST_HEAD =
   /^\s+Burst #\d+ — (\d+:\d{2})–(\d+:\d{2}) \| (.+?)(?: \d+:\d{2}–| \+ |$)/;
 const BURST_TARGET = /^\s+Target: (.+?) (?:\d+% → |\| )/;
 const BURST_PRESSED =
-  /^\s+(?:Target had [^:]+|⚠ Target was IMMUNE): (.+?) active ON THE TARGET [\d.]+s of this burst \(pressed (<?[\d.]+)s after the burst opened\)/;
+  /^\s+(?:Target had [^:]+|⚠ Target was IMMUNE): (.+?) active ON THE TARGET [\d.]+s of this burst \(pressed (<?[\d.]+)s (after|before) the burst opened\)/;
 
 /** one rounding step of the printed tenth, and a little */
 const TOLERANCE_S = 0.15;
@@ -111,7 +114,9 @@ export function run(ctx: IRoundCtx): void {
     if (named.length !== 1) continue;
     const holder = named[0];
     const wall = p[1]!;
-    const z = Number(p[2]!.replace("<", ""));
+    // signed: a press before the opening is printed `Zs before` (batch
+    // review 80-PIPE-83-B70c)
+    const z = Number(p[2]!.replace("<", "")) * (p[3] === "before" ? -1 : 1);
     const open = openMs;
     const combat = ctx.legacy as AtomicArenaCombat;
     const team = ctx.players.filter(
@@ -152,7 +157,6 @@ export function run(ctx: IRoundCtx): void {
             startMs,
           );
           if ("noPress" in sp) return [{ app }];
-          if (sp.pressMs < open) return [];
           const root = byId.get(sp.casterId);
           return [
             {
@@ -182,7 +186,7 @@ export function run(ctx: IRoundCtx): void {
             iv.srcUnitId,
             startMs,
           );
-        if (pressMs === undefined || pressMs < open) return [];
+        if (pressMs === undefined) return [];
         const src = byId.get(iv.srcUnitId ?? "");
         const owner =
           src && src.ownerId && src.ownerId !== src.id
@@ -210,7 +214,7 @@ export function run(ctx: IRoundCtx): void {
         wall,
         tsOf(app),
         `${holder.id}#${wall}#${tsOf(app)}`,
-        `the ledger says ${wall} was pressed ${z.toFixed(1)}s after the burst opened; its aura carries no source and no one cast of its resolves (the aura arrived ${((tsOf(app) - open) / 1000).toFixed(2)}s after)`,
+        `the ledger says ${wall} was pressed ${z.toFixed(1)}s from the burst's opening; its aura carries no source and no one cast of its resolves (the aura arrived ${((tsOf(app) - open) / 1000).toFixed(2)}s after)`,
         l.trim().slice(0, 300),
       );
       continue;
@@ -223,7 +227,7 @@ export function run(ctx: IRoundCtx): void {
       wall,
       tsOf(worst.c),
       `${holder.id}#${wall}#${tsOf(worst.app)}`,
-      `the ledger says ${wall} was pressed ${z.toFixed(1)}s after the burst opened; ${worst.u.name}'s press is ${truthOf(worst).toFixed(2)}s after it (the aura went up ${((tsOf(worst.app) - open) / 1000).toFixed(2)}s after)`,
+      `the ledger says ${wall} was pressed ${z.toFixed(1)}s from the burst's opening; ${worst.u.name}'s press is ${truthOf(worst).toFixed(2)}s after it (the aura went up ${((tsOf(worst.app) - open) / 1000).toFixed(2)}s after)`,
       l.trim().slice(0, 300),
     );
   }

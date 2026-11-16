@@ -242,15 +242,15 @@ describe("T114 — a source-less wall's press is its one caster's cast", () => {
     srcUnitName: "nil",
     spellName: "Anti-Magic Zone",
   });
-  const hitWith = (casters: string[]) => {
+  const hitWith = (casters: string[], castS = 15, auraS = 19) => {
     const tgt = makeUnit("e1", {
       name: "Pala",
       spec: CombatUnitSpec.Paladin_Retribution,
       reaction: CombatUnitReaction.Hostile,
       info,
       auraEvents: [
-        zoneAura(LogEvent.SPELL_AURA_APPLIED, 19),
-        zoneAura(LogEvent.SPELL_AURA_REMOVED, 21),
+        zoneAura(LogEvent.SPELL_AURA_APPLIED, auraS),
+        zoneAura(LogEvent.SPELL_AURA_REMOVED, auraS + 2),
       ],
     });
     const dks = casters.map((id) =>
@@ -262,7 +262,7 @@ describe("T114 — a source-less wall's press is its one caster's cast", () => {
         spellCastEvents: [
           makeSpellCastEvent(
             AMZ_CAST,
-            at(15),
+            at(castS),
             "",
             "",
             id,
@@ -293,6 +293,13 @@ describe("T114 — a source-less wall's press is its one caster's cast", () => {
   it("no cast resolves: no press is claimed", () => {
     expect(wallTimingPhrase(hitWith([]))).toBe(
       "9.0s after the burst opened [no press logged]",
+    );
+  });
+  // batch review 80-PIPE-83-B70c: cast 9 s, burst opens 10 s, the aura
+  // reaches the target 11 s — the press is before the burst, not inside it
+  it("cast before the opening, aura after it: pressed before the burst", () => {
+    expect(wallTimingPhrase(hitWith(["e3"], 9, 11))).toBe(
+      "pressed 1.0s before the burst opened",
     );
   });
   it("two casters: no one cast resolves, no press is claimed", () => {

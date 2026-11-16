@@ -18,7 +18,7 @@ export const CHECKS = ["ledgerPressedNoPress"] as const;
 const BURST_HEAD = /^\s+Burst #\d+ — (\d+:\d{2})/;
 const BURST_TARGET = /^\s+Target: (.+?) (?:\d+% → |\| )/;
 const BURST_PRESSED =
-  /^\s+(?:Target had [^:]+|⚠ Target was IMMUNE): (.+?) active ON THE TARGET [\d.]+s of this burst \(pressed (<?[\d.]+)s after the burst opened\)/;
+  /^\s+(?:Target had [^:]+|⚠ Target was IMMUNE): (.+?) active ON THE TARGET [\d.]+s of this burst \(pressed (<?[\d.]+)s (?:after|before) the burst opened\)/;
 const ENEMY_DEF_NO_PRESS =
   /^(\d+:\d{2})\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\) \([^)]*\): (.+?)(?: \+ \d+% copy)?(?: → (\d+)\([^)]*\))? \(.*\[no press logged\]/;
 /** any `[ENEMY DEF]` line of a wall (pressed when it has no no-press tag) */

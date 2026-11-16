@@ -184,8 +184,9 @@ export interface IBurstDefensiveHit {
    * Totem pressed 4.95 s in read `pressed 6.0s`, the instant its aura
    * settled on the target), or, for an interval that began as a copy no
    * press put up, the `[ENEMY DEF]` press that followed inside it (T98,
-   * fact13 D5). Absent = no press row found (a proc, an aura-only wall):
-   * the interval's start. */
+   * fact13 D5). Negative = pressed before the burst opened, the aura
+   * reaching the target after it. Absent = no press row found (a proc, an
+   * aura-only wall): the interval's start. */
   pressOffsetMs?: number;
 }
 
@@ -220,6 +221,17 @@ export function wallTimingPhrase(
   const up = wallUpAtOpen(d);
   if (up === undefined) return "";
   if (up) return "already up when the burst opened";
+  // a wall pressed before the opening whose aura reached the target after
+  // it (a zone, a totem): the press is before the burst, not inside it
+  // (batch review 80-PIPE-83-B70c)
+  if (
+    d.pressOffsetMs !== undefined &&
+    d.pressOffsetMs < 0 &&
+    !d.noPressLogged
+  ) {
+    const b = Math.round(-d.pressOffsetMs / 100) / 10;
+    return `pressed ${b < 0.05 ? "<0.1" : b.toFixed(1)}s before the burst opened`;
+  }
   // a copy a press then refreshed (T98): the press is when it was pressed
   const s =
     d.pressOffsetMs !== undefined
@@ -1052,9 +1064,12 @@ export function analyzeBurstLedger(
                     iv.startMs,
                   )
                 : undefined);
-            // a press before the opening for an aura that came after it:
-            // the aura's start stays the reading
-            return pressMs !== undefined && pressMs >= fromMs
+            // a press before the opening for an aura that came after it
+            // keeps its own (negative) offset: the line says it was pressed
+            // before the burst (batch review 80-PIPE-83-B70c — an
+            // Anti-Magic Zone cast 1 s before the opening read `pressed
+            // 1.0s after`, its arrival on the target)
+            return pressMs !== undefined
               ? { pressOffsetMs: pressMs - fromMs }
               : {};
           })(),

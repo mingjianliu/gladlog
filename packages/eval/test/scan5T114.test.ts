@@ -61,7 +61,7 @@ function scan(
     lines: [
       "  Burst #1 — 0:10–0:20 | Avenging Wrath",
       "  Target: Pala 90% → 40%",
-      `  Target had a major defensive up: ${wall} active ON THE TARGET 4.4s of this burst (pressed ${printed}s after the burst opened)`,
+      `  Target had a major defensive up: ${wall} active ON THE TARGET 4.4s of this burst (pressed ${printed.replace("-", "")}s ${printed.startsWith("-") ? "before" : "after"} the burst opened)`,
     ],
     start: T,
     end: at(120),
@@ -179,7 +179,7 @@ const totemUnits = () => {
 /** batch review 80-PIPE-75-B70b #1: Anti-Magic Zone's aura carries no
  * source; a teammate casts it at 15 s (or nobody does), it reaches the
  * holder at 19 s */
-const zoneUnits = (cast: boolean) => {
+const zoneUnits = (cast: boolean, castS = 15, auraS = 19) => {
   const aura = (event: LogEvent, s: number) => ({
     ...makeAuraEvent(event, "145629", at(s), "0000000000000000", "e1", "BUFF"),
     srcUnitName: "nil",
@@ -192,8 +192,8 @@ const zoneUnits = (cast: boolean) => {
       reaction: CombatUnitReaction.Hostile,
       info,
       auraEvents: [
-        aura(LogEvent.SPELL_AURA_APPLIED, 19),
-        aura(LogEvent.SPELL_AURA_REMOVED, 21),
+        aura(LogEvent.SPELL_AURA_APPLIED, auraS),
+        aura(LogEvent.SPELL_AURA_REMOVED, auraS + 2),
       ],
     }),
     makeUnit("e3", {
@@ -205,7 +205,7 @@ const zoneUnits = (cast: boolean) => {
         ? [
             makeSpellCastEvent(
               "51052",
-              at(15),
+              at(castS),
               "",
               "",
               "e3",
@@ -256,6 +256,16 @@ describe("scan5 ledgerPressedNotAtPress — the producer's presses, not the prin
       checked: 1,
       details: [],
     });
+  });
+  // batch review 80-PIPE-83-B70c: cast 9 s, opening 10 s, aura 11 s
+  it("a press before the opening is checked: `1.0s before` passes, `1.0s after` fails", () => {
+    expect(scan("Anti-Magic Zone", "-1.0", zoneUnits(true, 9, 11))).toEqual({
+      checked: 1,
+      details: [],
+    });
+    const got = scan("Anti-Magic Zone", "1.0", zoneUnits(true, 9, 11));
+    expect(got.checked).toBe(1);
+    expect(got.details).toHaveLength(1);
   });
   it("a source-less zone no cast resolves for is no press: `pressed` fails", () => {
     const got = scan("Anti-Magic Zone", "9.0", zoneUnits(false));
