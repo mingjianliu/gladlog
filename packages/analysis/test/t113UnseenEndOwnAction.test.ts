@@ -124,11 +124,17 @@ describe("saveAuraIntervals — the aimed hit that ends a stealth-kind immunity 
   it("with no own action before it, the hit 10.8 s in is the end", () => {
     const iv = run([]);
     expect(iv.endedByHit).toBe(true);
+    expect(iv.overBeforeHit).toBeUndefined();
     expect(iv.toS).toBeCloseTo(21.83);
   });
-  it("a cast bar begun 9.0 s in: the hit after it ended nothing, the end stays unshown", () => {
+  it("a cast bar begun 9.0 s in: the interval is still cut at the hit, and says the immunity was over before it", () => {
     const iv = run([barBegun(20.017)]);
-    expect(iv.endedByHit).toBeUndefined();
+    // what every other reader of the interval had (the attackers reached
+    // the unit there)…
+    expect(iv.endedByHit).toBe(true);
+    expect(iv.toS).toBeCloseTo(21.83);
+    // …and what keeps the line from stating 10.8 s
+    expect(iv.overBeforeHit).toBe(true);
     expect(iv.inferredEnd).toBe(true);
   });
 });

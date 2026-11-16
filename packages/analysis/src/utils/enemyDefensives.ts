@@ -2102,25 +2102,29 @@ export function saveAuraIntervals(
     // past its first second (`stealthImmunityHitMs`)
     if (!ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId)) return out;
     const roundUnits = Object.values(combat.units ?? {});
-    // …searched no further than the aura can have run: an end the log never
-    // showed is over at the holder's first own action (`untargetableEndS`,
-    // the one reading the kill windows and the CC samplers share), not at
-    // the builder's official-length cap (pipeline T113, fact13 D21: a hit
+    // …unless the immunity was over before it: an end the log never showed
+    // is over at the holder's first own action (`untargetableEndS`, the one
+    // reading the kill windows and the CC samplers share), not at the
+    // builder's official-length cap (pipeline T113, fact13 D21: a hit
     // 10.8 s in closed a Mass Invisibility whose holder began a cast 9.0 s
-    // in). A hit after that action ended nothing; the line stays `end not
-    // logged`.
+    // in). The interval is still cut at the hit — the attackers reached the
+    // unit there, what every reader of the interval had (the kill attempts'
+    // "did not hold") — and carries `overBeforeHit`: the hit is not the
+    // length its `[ENEMY DEF]` line states, which stays `end not logged`.
+    const fromMs = combat.startTime + iv.fromS * 1000;
     const hitMs = stealthImmunityHitMs(
       unit,
-      combat.startTime + iv.fromS * 1000,
-      // in whole ms: the action's own row is not before itself
-      Math.round(
-        combat.startTime +
-          untargetableEndS(unit, iv, combat.startTime, roundUnits) * 1000,
-      ),
+      fromMs,
+      combat.startTime + iv.toS * 1000,
       roundUnits,
       iv.toRow,
     );
     if (hitMs === undefined) return out;
+    // in whole ms: the action's own row is not before itself
+    const overMs = Math.round(
+      combat.startTime +
+        untargetableEndS(unit, iv, combat.startTime, roundUnits) * 1000,
+    );
     // the hit ends the immunity, not the aura: an end the log never showed
     // stays unshown (`inferredEnd`, ruling P-FU-b8 — a hit does not prove
     // the aura was up until it)
@@ -2130,6 +2134,7 @@ export function saveAuraIntervals(
       ...cut,
       toS: (hitMs - combat.startTime) / 1000,
       endedByHit: true as const,
+      ...(overMs < hitMs ? { overBeforeHit: true as const } : {}),
     };
   });
 }
@@ -2250,6 +2255,11 @@ export type ISaveAuraInterval = IAuraInterval & {
   /** a stealth-kind immunity a single-target hit ended past its first
    * second (`stealthImmunityHitMs`, GH #195): `toS` is that hit */
   endedByHit?: true;
+  /** with `endedByHit`: the log never showed the aura's end and its holder
+   * acted before that hit (`untargetableEndS`, pipeline T113) — the
+   * immunity was over sooner than `toS`, by an end the log does not show,
+   * and the `[ENEMY DEF]` line reads `end not logged` */
+  overBeforeHit?: true;
 };
 
 /**
@@ -2569,7 +2579,12 @@ export function enemyDefensiveEvents(
     if (iv.endedByRepress) return { removedEarly: false };
     // GH #195: the length is up to the hit, whether or not the log shows
     // the aura's own end — the hit is the end this line states
-    if (iv.endedByHit) return { removedEarly: false, endedByHit: true };
+    // …unless the holder's own action had ended it before the hit
+    // (`overBeforeHit`, pipeline T113): the hit is no length to state
+    if (iv.endedByHit)
+      return iv.overBeforeHit
+        ? { removedEarly: false, endNotLogged: true }
+        : { removedEarly: false, endedByHit: true };
     if (iv.inferredEnd) {
       // The log has no end for this application: the interval builder closed
       // it at its official length, and that number is no observation (ruling
