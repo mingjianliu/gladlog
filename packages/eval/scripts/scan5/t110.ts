@@ -50,7 +50,9 @@ const ROW_RE = /\btype=missed-sync-window t=(\d+)s/;
 const HEALER_RE = /\bhealer=([^,}]+)/;
 const NEXT_RE = /\benteredNextLock=([^,}]+)/;
 const ENTRY_RE = /^(.+?) at (\d+) in the (\d+)–(\d+) lock \((.+)\)$/;
-const KW_RE = /\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d) on /;
+// the healer view prints the span's length between it and "on" (`healerOffenseAnalysis.ts`: `[VULNERABLE] 0:10–0:20 (10s) on …`)
+export const KW_RE =
+  /\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on /;
 const KW_FACTS_RE = /team offensive CDs ready|no team offensive CD ready/;
 const HEALER_LOCKED = "enemy healer hard-CC'd in window";
 const secOfClock = (mss: string): number => {
