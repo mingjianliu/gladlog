@@ -44,6 +44,9 @@ function kinds(lines: string[]): string[] {
 }
 
 describe("scan5 minorPartStampedEarly", () => {
+  // codex 85-tk-L-T119-1c P3: without the fold's own High / Critical skip,
+  // the High 0:10 removal would read as the part's first and hide that the
+  // Low 1:00 one is stamped 0:22
   it("a High proc the fold leaves out is not the part's removal", () => {
     const out: string[] = [];
     checkMinorParts(
@@ -62,10 +65,10 @@ describe("scan5 minorPartStampedEarly", () => {
           dispelKind: "proc",
           priority: "High",
         }),
-        e(22, { dispelSpellName: "Cleanse the Weak", dispelKind: "proc" }),
+        e(60, { dispelSpellName: "Cleanse the Weak", dispelKind: "proc" }),
       ],
     );
-    expect(out).toEqual([]);
+    expect(out).toEqual(["firstLater"]);
   });
 
   it("a passive part folded at its side-effect twin's 0:22 is stamped early", () => {
