@@ -6709,3 +6709,23 @@ facts) -> 0 / 8988. 77 context lines in 46 files changed, all KILL ATTEMPTS
 (the softer-target part and the Summary's count of attempts opened while a
 softer target existed); family diff 0 flags; findings files 0, candidate
 rows +0 -0; gates 110 -> 110.
+
+v557 (2026-11-15; pipeline batch B75, T110; round 13 audit D10; user ruling
+2026-11-14: it counts as a lock for stated facts, it opens no new
+accusation). A hard control on the enemy healer that has no DR family - the
+dispel-backlash horror Sin and Punishment (87204) - was missing from the
+healer-lock set, while [CC ON ENEMY] and [CONSEQ] counted it. Such auras
+(isFactOnlyHealerLockAura: a hard-CC aura outside the DR-mapped set) come
+from their own producer, enemyHealerFactOnlyLocks, apart from
+enemyHealerCcWindows, which is unchanged. Two readers take them:
+missed-sync-window's `enteredNextLock` and the kill window's `enemy healer
+hard-CC'd in window` clause. No sync window, unsynced-burst cover or other
+reader sees them. Example: `enteredNextLock=Voidform at 327 in the 336-339
+lock (Psychic Scream)` now reads `in the 328-331 lock (Sin and
+Punishment)`. 605 (base capture at f4bab36ef vs branch), new scan5/t110:
+enteredNextSkipsLock 5 / 298 -> 0 / 292; healerLockOmitted 47 / 3691 -> 0 /
+3644 (both line forms, the healer view's `(Ns) on` included);
+healerLockUnbacked 0 on both sides. Lines: the facts of 14
+missed-sync-window rows change, their ids are identical (candidate rows +0
+-0); 41 [KILL WINDOW] and 6 [VULNERABLE] lines gain the healer-lock clause;
+every other scan5 check unchanged.

@@ -1286,5 +1286,12 @@
  *  longer names as `softer target then` an enemy that is inside a full
  *  immunity to every school (Divine Shield, Ice Block) at the attempt's
  *  start. See docs/prompt-version-history.md.
+ *
+ * v557 (2026-11-15; pipeline batch B75, T110): a hard control on the
+ *  enemy healer with no DR family (Sin and Punishment, the horror on
+ *  whoever dispels Vampiric Touch) is a lock for the facts that state
+ *  which lock a cooldown entered and for the kill window's healer-lock
+ *  clause; it opens no missed-sync-window (user ruling 2026-11-14).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 556;
+export const PROMPT_VERSION = 557;
