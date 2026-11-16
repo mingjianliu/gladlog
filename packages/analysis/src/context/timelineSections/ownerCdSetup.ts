@@ -21,9 +21,9 @@ import {
 import {
   computeHealingInWindow,
   extractOwnerCDBuffExpiry,
-  pressGetsHealingBlock,
   HEALING_WINDOW_EARLY_CD_SECONDS,
   HEALING_WINDOW_MIN_HPS,
+  pressGetsHealingBlock,
 } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
 
