@@ -3710,7 +3710,16 @@ function reconstructDispelSummaryUncached(
         ts: number;
         spellName: string;
         src: string;
-        removal: { ts: number; brokenByDamage: boolean; inferred?: boolean };
+        removal: {
+          ts: number;
+          brokenByDamage: boolean;
+          /** the window closed on its aura's own SPELL_AURA_REMOVED row —
+           * not on a bare BROKEN row, nor on an end inferred from a later
+           * application (T118 credits a freedom cast only at a logged
+           * removal: codex 85-tk-L-T118-1c #1, batch review
+           * 80-PIPE-91-B80b #1) */
+          removedRow?: boolean;
+        };
       }[]
     >();
     const pending = new Map<
@@ -3724,7 +3733,16 @@ function reconstructDispelSummaryUncached(
         spellName: string;
         src: string;
       },
-      removal: { ts: number; brokenByDamage: boolean; inferred?: boolean },
+      removal: {
+        ts: number;
+        brokenByDamage: boolean;
+        /** the window closed on its aura's own SPELL_AURA_REMOVED row —
+         * not on a bare BROKEN row, nor on an end inferred from a later
+         * application (T118 credits a freedom cast only at a logged
+         * removal: codex 85-tk-L-T118-1c #1, batch review
+         * 80-PIPE-91-B80b #1) */
+        removedRow?: boolean;
+      },
     ) =>
       windows.set(open.spellId, [
         ...(windows.get(open.spellId) ?? []),
@@ -3860,9 +3878,7 @@ function reconstructDispelSummaryUncached(
               lengthS === null ? Infinity : open.applyMs + lengthS * 1000,
             ),
             brokenByDamage: false,
-            // no removal row: this end is inferred (T118 credits a cast
-            // only at a logged removal — codex 85-tk-L-T118-1c #1)
-            inferred: true,
+            // no removal row: this end is inferred (no `removedRow`)
           });
         }
         pending.set(key, {
@@ -3886,7 +3902,11 @@ function reconstructDispelSummaryUncached(
           auraBreaksBeforeRemoved(unit.auraEvents, aura).some(
             (b) => b.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL,
           );
-        closeWindow(open, { ts: aura.timestamp, brokenByDamage });
+        closeWindow(open, {
+          ts: aura.timestamp,
+          brokenByDamage,
+          removedRow: aura.logLine.event === LogEvent.SPELL_AURA_REMOVED,
+        });
       }
     }
     // an application never removed stays out (no removal to pair, as before)
@@ -3951,7 +3971,7 @@ function reconstructDispelSummaryUncached(
             unit.name,
             (removal.ts - combat.startTime) / 1000,
           ) ||
-            (!paired.inferred &&
+            (paired.removedRow === true &&
               wasFreedByTargetBoundCast(
                 friends,
                 spellId,

@@ -191,6 +191,50 @@ describe("T118 — a root freed by a target-bound freedom cast is cleansed", () 
     ).toEqual([]);
   });
 
+  it("batch review 80-PIPE-91-B80b #1: a window closed by a bare BROKEN row earns no freedom credit", () => {
+    const healer = makeUnit("h", {
+      name: "Healer",
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          TIGERS_LUST,
+          START + 14_000,
+          "m",
+          "Melee",
+          "h",
+          "Healer",
+        ),
+      ],
+    });
+    const run = (end: LogEvent) =>
+      reconstructDispelSummary(
+        [
+          healer,
+          makeUnit("m", {
+            name: "Melee",
+            spec: CombatUnitSpec.Warrior_Fury,
+            auraEvents: [
+              aura(LogEvent.SPELL_AURA_APPLIED, FROST_NOVA, 10, "m"),
+              aura(end, FROST_NOVA, 14, "m"),
+            ],
+          }),
+        ] as never,
+        [makeUnit("e1", { reaction: CombatUnitReaction.Hostile })] as never,
+        combat as never,
+      );
+    const broken = run(LogEvent.SPELL_AURA_BROKEN);
+    expect(broken.lateCleanseWindows).toEqual([]);
+    expect(broken.missedCleanseWindows.map((w) => w.spellId)).toEqual([
+      FROST_NOVA,
+    ]);
+    // control: the same shape on a REMOVED row is the freed root
+    const removed = run(LogEvent.SPELL_AURA_REMOVED);
+    expect(removed.missedCleanseWindows).toEqual([]);
+    expect(removed.lateCleanseWindows.map((w) => w.spellId)).toEqual([
+      FROST_NOVA,
+    ]);
+  });
+
   it("only a root qualifies, and only one that did not run out", () => {
     const friends = [
       {

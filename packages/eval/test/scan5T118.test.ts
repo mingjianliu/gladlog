@@ -31,7 +31,7 @@ const lust = (s: number) => ({
   destUnitId: "m",
 });
 
-function scan(rows: any[], lustAt: number): number {
+function scan(rows: any[], lustAt: number, novaRecastAt?: number): number {
   let n = 0;
   const m = { id: "m", name: "Melee", info: { teamId: "0" }, auraEvents: rows };
   const h = {
@@ -40,7 +40,26 @@ function scan(rows: any[], lustAt: number): number {
     info: { teamId: "0" },
     spellCastEvents: [lust(lustAt)],
   };
-  const e1 = { id: "e1", name: "Mage", info: { teamId: "1" } };
+  const e1 = {
+    id: "e1",
+    name: "Mage",
+    info: { teamId: "1" },
+    spellCastEvents:
+      novaRecastAt === undefined
+        ? []
+        : [
+            {
+              timestamp: at(novaRecastAt),
+              logLine: {
+                event: LogEvent.SPELL_CAST_SUCCESS,
+                timestamp: at(novaRecastAt),
+              },
+              spellId: NOVA,
+              srcUnitId: "e1",
+              destUnitId: "m",
+            },
+          ],
+  };
   run({
     menu: "  - id=missed-cleanse:Melee:10 type=missed-cleanse t=10.0s units=Melee facts={t=10.0, target=Melee, cc=Frost Nova, duration=4.0, worth=worth}",
     start: START,
@@ -80,6 +99,33 @@ describe("scan5 rootFreedReadUncleansed", () => {
           aura(LogEvent.SPELL_AURA_REMOVED, 14.5),
         ],
         14.5,
+        13.99,
+      ),
+    ).toBe(0);
+  });
+  // batch review 80-PIPE-91-B80b #2: a bare re-send inside the application's
+  // length with no recast is that application (`reAppliedIsSameApplication`)
+  it("keeps the application across a re-send with no recast", () => {
+    expect(
+      scan(
+        [
+          aura(LogEvent.SPELL_AURA_APPLIED, 10),
+          aura(LogEvent.SPELL_AURA_APPLIED, 12),
+          aura(LogEvent.SPELL_AURA_REMOVED, 14),
+        ],
+        14,
+      ),
+    ).toBe(1);
+  });
+  // #1: a window that closes on a bare BROKEN row has no logged removal
+  it("judges no window that closes on a bare BROKEN row", () => {
+    expect(
+      scan(
+        [
+          aura(LogEvent.SPELL_AURA_APPLIED, 10),
+          aura(LogEvent.SPELL_AURA_BROKEN, 14),
+        ],
+        14,
       ),
     ).toBe(0);
   });
