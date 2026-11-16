@@ -539,6 +539,20 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "cast",
     () => [...SECOND_STAGE_PRESSES.keys()],
   ),
+  // codex 85-tk-K-T99-2: the mapping's values are ids the readers key on too
+  // (the first press, and the aura scan5/t99 finds a release by)
+  t(
+    "secondStagePresses.SECOND_STAGE_PRESSES.firstStageId",
+    "data/secondStagePresses.ts",
+    "cast",
+    () => [...SECOND_STAGE_PRESSES.values()].map((s) => s.firstStageId),
+  ),
+  t(
+    "secondStagePresses.SECOND_STAGE_PRESSES.readyAuraId",
+    "data/secondStagePresses.ts",
+    "aura",
+    () => [...SECOND_STAGE_PRESSES.values()].map((s) => s.readyAuraId),
+  ),
   t(
     "abilityProfile.KW_IN_HAND_ONLY_DEFENSIVE_IDS",
     "data/abilityProfile.ts",
