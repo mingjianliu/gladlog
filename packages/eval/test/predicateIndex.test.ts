@@ -4596,6 +4596,18 @@ const INDEX: PredicateRow[] = [
     symbol: "checkChannelInterruptedFadeExpired",
     mod: promptQualityCheck,
   },
+  // pipeline T103: the [BUFF FADED] early-end tolerance and the haste-run
+  // lengths, read by scan5/t18 and scan5/t103
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "BUFF_FADE_EARLY_TOLERANCE_S",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "runsWithHaste",
+    mod: timelineHelpers,
+  },
   // a missed-purge window ends at the round's end: the one text for its
   // length, that text read back, and the gate that holds it to the round
   {
