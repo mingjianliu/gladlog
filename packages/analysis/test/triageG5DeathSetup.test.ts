@@ -182,6 +182,23 @@ describe("T129 — a chain entry ends at the round end, like its CC instance", (
     expect(e!.facts["freeBeforeDeathS"]).toBe("0");
   });
 
+  it("codex 85-tk-M-T129-1: an interval that starts after the round end is not listed", () => {
+    // a later death (76 s) keeps a row; Kidney Shot lands at 75.5, after the
+    // round's end at 75.085
+    const [e] = deathSetupEvents({
+      ...base,
+      deathT: 76,
+      healerCC: {
+        ...base.healerCC,
+        cannotCast: [...base.healerCC.cannotCast, iv(75.5, 79, "408")],
+        roundEndMs: START + 75_085,
+      },
+    });
+    expect(e!.facts["chain"]).toBe(
+      "Binding Shot 70.2-73.2; Freezing Trap 72.1-75",
+    );
+  });
+
   it("no round end given (hand-built fixture): the raw end, as before", () => {
     const [e] = deathSetupEvents(base);
     expect(e!.facts["chain"]).toBe(

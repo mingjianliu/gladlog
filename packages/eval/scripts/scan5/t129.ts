@@ -9,7 +9,8 @@
  *  - `deathChainPastRoundEnd`: every `name[ (tag)] a-b` entry of a death-setup
  *    `chain=`; a violation when its rendered end `b` lies past the round end
  *    the CC instances and roots are cut at (`roundEndMs`, the producer's
- *    function) on the facts grid (`fmtFactTime`, floor to 0.1 s).
+ *    function) on the facts grid (`fmtFactTime`, floor to 0.1 s), or
+ *    before the entry's own start (an entry that began after the round end).
  *  - `cdHoardedOwnerCcPastRoundEnd`: every `name … -a…+bs` block of a
  *    cd-hoarded `ownerCc=` (offsets from facts.t); a violation when `t + b`
  *    lies past the round end that row's owner gate cuts its window at
@@ -58,13 +59,15 @@ export function run(ctx: IRoundCtx): void {
         if (!m) continue;
         ctx.bump("deathChainPastRoundEnd");
         const endS = Number(m[3]);
-        if (!(endS > deathEndS + 1e-6)) continue;
+        // past the round end, or cut to before its own start (an entry that
+        // began after the round end)
+        if (!(endS > deathEndS + 1e-6) && !(endS < Number(m[2]))) continue;
         ctx.violate(
           "deathChainPastRoundEnd",
           m[1]!.replace(/ \((?:root|school lockout|own flight)\)$/, ""),
           ctx.start + Number(m[2]) * 1000,
           `${m[1]}:${m[2]}`,
-          `chain entry ${m[1]} ${m[2]}-${m[3]} ends past the round end ${deathEndS}`,
+          `chain entry ${m[1]} ${m[2]}-${m[3]} ends past the round end ${deathEndS} or before its start`,
           row.trim().slice(0, 240),
         );
       }

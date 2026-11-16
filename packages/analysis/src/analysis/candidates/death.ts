@@ -200,7 +200,11 @@ function lockChainFacts(
       });
   }
   chain.sort((a, b) => a.at - b.at);
-  const texts = [...new Set(chain.map((c) => c.text))];
+  // codex 85-tk-M-T129-1: an interval that starts at or after the round end
+  // is not in the round (a later death's row would print `75.5-75`)
+  const texts = [
+    ...new Set(chain.filter((c) => c.at < endCapS).map((c) => c.text)),
+  ];
   if (texts.length) facts.chain = texts.join("; ");
   if (runs.length)
     facts.chainFrom = fmtFactTime((runs[0]!.from - start) / 1000);
