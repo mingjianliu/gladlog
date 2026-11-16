@@ -1337,5 +1337,13 @@
  *  control with no DR family (user ruling R48): it gets [CC ON TEAM] /
  *  [CC ON ENEMY] lines and never a DR tier.
  *  See docs/prompt-version-history.md.
+ *
+ * v566 (2026-11-16; pipeline batch B87, T106 + T114 + T124): Feign
+ *  Death is a defensive (user ruling R40); the burst ledger's `pressed
+ *  Zs after the burst opened` reads the wall's press, and a press before
+ *  the burst reads `pressed Zs before the burst opened`; Anti-Magic
+ *  Zone's source-less aura is keyed to its cast; a physical cast into a
+ *  magic-only wall is not listed.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 565;
+export const PROMPT_VERSION = 566;

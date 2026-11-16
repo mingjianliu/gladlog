@@ -6904,3 +6904,45 @@ Punishment (87204, the other no-family horror) removed by Blessing of
 Sanctuary now reads `~1s of it left` instead of the DR-shortened `~0s` (it
 has had no DR since patch 4.2). Candidate rows +0 -0; one cd-hoarded row's
 ownerCc gains `Cascading Horrors +4.3...+8.6s`.
+
+v566 (2026-11-16; pipeline batch B87, T106 + T114 + T124; round 13 audit
+D14, D22, D27; user ruling R40). (1) T106. User ruling 2026-11-14: Feign
+Death is a defensive - an enemy hunter is not `defenseless` while it is
+ready. KW_IN_HAND_ONLY_DEFENSIVE_IDS gains 5384 (it counts while in hand; a
+press holds nothing). Feign Death logs no SUCCESS row, so its presses are
+read from its aura (kwAuraReadPressesS, the cooldown ledger's press seconds
+for the aura-proven buttons), and a hunter who never pressed it holds it in
+hand all round (kwAuraReadUnpressedInHand); both are read by the
+kill-window span builder, the kill-window target state and the gate. 605
+(base capture at 57989f781 vs branch), new scan5/t106 feignReadyInSpan:
+119 / 212 -> 0 / 124 (both views, the healer's `a-b (Ns) on` and `; target
+defenseless a-b` forms included); every other scan unchanged; family diff 0
+flags. Menu rows 7,449 -> 7,446, all in kick-priority (missed 40 -> 38,
+team 59 -> 58): the kill window under the kick starts later where Feign
+Death was ready (`windowFrom 2:21` -> `2:25`). (2) T124: Anti-Magic Zone
+(51052) runs as aura 145629 on the players in it and every 145629 row is
+source-less, so the cast -> aura table never kept the pair. The table
+generator counts a source-less application for the one root caster with a
+nominating cast in the 60 s before; on every 5th manifest file (3,627
+files) the rule adds exactly two pairs (51052 -> 145629, 204331 -> 208997
+Counterstrike Totem) and changes no row. 605, new scan5/t124
+nilSourceMitigationUnaudited: 12 / 12 (4 deaths) -> 0 / 12; added: 12
+`Mitigation audit: Anti-Magic Zone` rows, 111 burst-ledger / KILL ATTEMPTS
+lines for the zone, 69 ABILITIES INTO IMMUNITY/DR lines. New predicate
+drWallMissesSpellSchool: a damage-reduction wall whose school mask shares
+nothing with the spell's school is not listed for that spell - 48 physical
+casts into the magic-only zone are left out (117 -> 69 lines). (3) T114:
+the burst ledger's `pressed Zs after the burst opened` was the aura
+interval's start. It reads the holder's own [ENEMY DEF] press of the wall,
+else the press row (pressRowOf), a totem's press off its first pulse
+(summonPressAnchorMs), and for a source-less wall the cast of its one root
+caster on the holder's side within 60 s (sourcelessPressOf; none or two
+roots print `[no press logged]`). A press before the burst opened prints
+`pressed Zs before the burst opened` (the form of [BURST ANSWERED]'s `Ns
+before it opened`); the older gate t49 reads the direction. Example: Spirit
+Link Totem pressed 4.95 s into the burst, its aura on the target at 6.0 s:
+`pressed 6.0s` -> `pressed 5.0s`. 605 (base capture at c14bfdb04 vs
+branch), new scan5/t114 ledgerPressedNotAtPress: 7 / 4673 -> 0 / 4673;
+seven walls pressed before the burst now read `before the burst opened`
+(Anti-Magic Zone 6 of its 111 lines, Spirit Link Totem 1); family diff 0
+flags; menu rows unchanged by T114 and T124.
