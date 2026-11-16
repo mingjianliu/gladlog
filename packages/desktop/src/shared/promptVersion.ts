@@ -1327,5 +1327,10 @@
  *  press of a healing amplifier gets the [HEALING] block (user ruling
  *  R46); a Shadow Priest's Power Infusion keeps its [YOU] [CD] line.
  *  See docs/prompt-version-history.md.
+ *
+ * v564 (2026-11-16; pipeline batch B85, T127): a kill window's
+ *  `defenseless` span stops at a pressed absorb shield whose caster is
+ *  on the other side; a shield the target stole still does not count.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 563;
+export const PROMPT_VERSION = 564;

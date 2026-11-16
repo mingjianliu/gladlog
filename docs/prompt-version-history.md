@@ -6864,3 +6864,20 @@ scan5/t121 healingBlockOffHealer: 114 / 1088 -> 0 / 1088; the audited match
 7 / 14 -> 0 / 14; 618 context lines removed in 84 files, none added (198
 [HEALING] lines and the block legend's 5 lines in each); findings files 0
 of 3,519; gates 110 -> 110; family diff 0 flags.
+
+v564 (2026-11-16; pipeline batch B85, T127; round 13 audit D35, GH #204
+class). A `[KILL WINDOW] ... (defenseless a-b)` span ran through a pressed
+absorb shield on the target - a full Void Shield a priest of the OTHER side
+put on it as a Mind Control ended. offensiveWindows.ts looked the shield's
+caster up on the target's own side only; it now looks there first, then
+among every unit of the round. A shield the target stole (a SPELL_STOLEN
+row for that aura on it) is not a pressed shield, per the 2026-10-30 ruling
+(a spellstolen shield does not count). On the 605, 95 cross-side absorb
+auras absorbed on a kill-window target: 69 stolen, 26 pressed by the other
+side; none of them cut a defenseless span there (the captures before and
+after the stolen-shield exclusion are byte-identical). New scan5/t127
+crossTeamShieldDefenseless: the audited round 2 / 33 -> 0 / 33; the 605 0
+/ 5205 on both sides; menu rows 7,449 -> 7,449. Recorded, not fixed: a
+cross-side caster's no-target re-press does not split the shield's interval
+(branch review, synthetic, 0 on the 605); the same-side reading
+allyShieldDefenseless is 4 / 5205 on both sides (older than this ticket).
