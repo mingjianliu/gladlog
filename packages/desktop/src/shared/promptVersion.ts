@@ -1300,5 +1300,11 @@
  *  pet is no press); [BUFF FADED] early-end slack 0.2 s, every channel
  *  with haste, a spent one-stack buff reads `used up`.
  *  See docs/prompt-version-history.md.
+ *
+ * v559 (2026-11-16; pipeline batch B77, T104 + T129): a KILL ATTEMPTS
+ *  line named for a self-buff no longer reads `(cast into U)`, and its
+ *  bracket opens at the press it is named for; a death-setup chain
+ *  entry and a cd-hoarded ownerCc block end at the round end.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 558;
+export const PROMPT_VERSION = 559;

@@ -6764,3 +6764,35 @@ absorbEmptiedReadExpired 6 / 19048 -> 0 / 19003; chargeSpentReadEarly 13 /
 1334 -> 0 / 1359; 183 context lines in 151 files, all [BUFF FADED]
 (Boomstick 49, Convoke 39, Vanish 15, Power Siphon 13, Ice Block 9 and
 smaller groups); candidate rows +0 -0.
+
+v559 (2026-11-16; pipeline batch B77, T104 + T129; round 13 audit D9, D12,
+D30). (1) T104, the name of a burst-anchored KILL ATTEMPTS line
+(killAttempts.ts). A self-buff whose cast row names an enemy only because
+that was the caster's current target is a self-buff: the press put its own
+aura on its caster (castAndEffectIds within SAVE_CAST_AURA_PAIR_S) and no
+damage or miss row of it, from the caster or its pets, met that unit before
+the caster's next press - `Voidform (cast into Grounding Totem) burst` ->
+`Voidform burst`. The bracket opens at the press the line is named for: a
+cluster opened by a Malevolence that went elsewhere printed `[1:57-2:30] ...
+Volley burst` for a Volley pressed 18 s later. The re-cut bracket stands
+only while its target is (or ties for) the team's most-hit enemy inside it
+and the burst floor holds; otherwise the cluster's span is kept. Existing
+wording only. 605 (base capture at 57989f781 vs branch), new scan5/t104:
+selfBuffReadCastInto 12 / 182 -> 0 / 170; anchorPressedAfterOpen 242 / 8094
+(83 facts) -> 17 / 8136 (6 facts: Feral Frenzy, Avenging Wrath, Avatar,
+Summon Darkglare, Dark Harvest, Power Infusion) - the 17 left are lines
+whose re-cut span does not hold, so the cluster's span stays and the line
+is still named for the later press; they were not checked row by row.
+[KILL ATTEMPTS] lines change in 288 context files (attempt lines 275 ->
+308); findings files 0 of 3,519; gates 110 -> 110. (2) T129: the printed
+end of a cannot-cast interval is cut at the round end its producer already
+cuts at. Every death-setup `chain` entry (CC link, own flight, school
+lockout, root) ends at roundEndMs, and an entry starting at or after it is
+left out: `chain=Binding Shot 70.2-73.2; Freezing Trap 72.1-78.1` (the
+deciding death at 75.1) -> `... Freezing Trap 72.1-75`. Same class in
+cd-hoarded: an `ownerCc` block's end stops at the window's round end (an
+unlogged end stays `(no end logged)`). 605 (base capture at f4bab36ef vs
+branch), new scan5/t129: deathChainPastRoundEnd 207 / 1185 (69 distinct) ->
+0 / 1185; cdHoardedOwnerCcPastRoundEnd 9 / 629 -> 0 / 629; 186 death-setup
+rows and 8 cd-hoarded rows change text in chain / ownerCc only, no row
+added or removed, 0 context files.
