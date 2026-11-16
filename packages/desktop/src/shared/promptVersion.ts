@@ -1318,5 +1318,9 @@
  *  resting on the log's failed-control row is stamped at that row, and
  *  `recast landed +N.Ns` is measured from the line's own stamp.
  *  See docs/prompt-version-history.md.
+ *
+ * v562 (2026-11-16; pipeline batch B80, T118): a root a teammate's
+ *  Blessing of Freedom / Tiger's Lust removed is not a missed cleanse.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 561;
+export const PROMPT_VERSION = 562;

@@ -6831,3 +6831,21 @@ enemy's failed control 0.7 s later keeps its own line. 605 (base capture at
 miss-row second, 24 recast offsets corrected, no line added or removed,
 candidate ids +0 -0. The same-enemy requirement on both branches (batch
 review finding) was re-captured: 0 lines differ from the capture before it.
+
+v562 (2026-11-16; pipeline batch B80, T118; round 12 retest M3).
+Missed-cleanse windows (reconstructDispelSummary, dispelAnalysis.ts). A
+root removed in the instant a teammate cast Blessing of Freedom or Tiger's
+Lust on the rooted unit (TARGET_BOUND_MOBILITY_IDS; these casts log no
+SPELL_DISPEL) read as never cleansed. wasFreedByTargetBoundCast counts such
+a removal as a friendly cleanse: roots only, the cast within
+ALLY_DISPEL_MATCH_TOLERANCE_S of the root's own logged REMOVED, never an
+inferred end, and never a root that ran out at its own length at full or
+half DR (rootRanOutAtDrTier, 150 ms slack). No new wording: the menu row
+and the [UNCLEANSED DEBUFF] line no longer print. New scan5/t118
+rootFreedReadUncleansed: the audited match 3 / 3 (one fact) -> 0 (the row
+is gone). The 605 holds no menu row of this class (0 / 98 on both sides),
+so the corpus gives one audited sample and no before/after for the row;
+its effect there is 3 context lines removed in 2 files (two [UNCLEANSED
+DEBUFF] Frost Nova lines whose root such a cast freed, and one [STATE] tick
+that only printed beside one of them); findings files 0 of 3,519; gates 110
+-> 110.
