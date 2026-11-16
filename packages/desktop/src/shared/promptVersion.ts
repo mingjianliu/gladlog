@@ -1345,5 +1345,11 @@
  *  Zone's source-less aura is keyed to its cast; a physical cast into a
  *  magic-only wall is not listed.
  *  See docs/prompt-version-history.md.
+ *
+ * v567 (2026-11-16; pipeline batch B88, T117): a [REJECTED] run is
+ *  no longer cut by one refusal of the same spell for another reason,
+ *  so its `xN` counts every press of the run; a run takes only the
+ *  round's own presses.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 566;
+export const PROMPT_VERSION = 567;

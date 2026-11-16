@@ -6946,3 +6946,25 @@ branch), new scan5/t114 ledgerPressedNotAtPress: 7 / 4673 -> 0 / 4673;
 seven walls pressed before the burst now read `before the burst opened`
 (Anti-Magic Zone 6 of its 111 lines, Spirit Link Totem 1); family diff 0
 flags; menu rows unchanged by T114 and T124.
+
+v567 (2026-11-16; pipeline batch B88, T117; round 12 retest M2). [REJECTED]
+run count (ownerRejectRuns, spellOutcomeLines.ts). A refusal of the same
+spell for a reason outside the run's kind ended the run: six `out of range`
+presses with one `horrified` refusal between them printed `x4` and dropped
+two. A stray refusal is stepped over when the spell's next row (by index;
+global-cooldown and action-in-progress rows are transparent) resumes the
+run inside REJECT_RUN_GAP_S with the same kind and, for a vision-obscured
+run (T108), the same cause, and the stray is no `not ready` refusal. A run
+keeps its member rows and the state reading uses them. A run takes only
+the round's own rows: new isPastRoundEnd (utils/roundEnd.ts, strictly after
+the round end) is the one boundary for the timeline's addEntry,
+ownerRejectRuns and the gate, so a row logged at the round end itself
+still counts (in Solo Shuffle a run could carry presses after the round's
+deciding death). Existing wording only. 605, new scan5/t117:
+rejectRunUndercount 11 / 2505 -> 0 / 2545; the audited line `x4` -> `x6`;
+rejectRunPastRoundEnd 4 / 2519 (on main) -> 0 / 2545. [REJECTED] lines 25
+-> 54 in 47 context files (runs that were cut or split now print whole;
+family diff flags `[REJECTED] :: Taunt` 2 -> 6); the round-end cut changes
+4 lines that were already on main (Silence x3, Starfire x5 and Pyroblast x3
+dropped; Barbed Shot x2 -> x1); the 4 refusals logged at a round end itself
+are all `Interrupted` (outside the run kinds); gates 110 -> 110.
