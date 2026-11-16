@@ -6968,3 +6968,23 @@ family diff flags `[REJECTED] :: Taunt` 2 -> 6); the round-end cut changes
 4 lines that were already on main (Silence x3, Starfire x5 and Pyroblast x3
 dropped; Barbed Shot x2 -> x1); the 4 refusals logged at a round end itself
 are all `Interrupted` (outside the run kinds); gates 110 -> 110.
+
+v568 (2026-11-16; pipeline batch B89, T107; round 13 audit D20; user ruling
+R41). User ruling 2026-11-14: a spell a friendly Death Knight casts through
+Dark Simulacrum gets a press line. A copied spell is another class's, in no
+kit and no ledger of the caster, so its press had no line anywhere.
+darkSimulacrumCopyCasts (timelineSections/friendlyUtilityPress.ts) selects
+the casts spent off the copy buff 77616 (a SUCCESS, not Dark Simulacrum
+itself, within DARK_SIMULACRUM_SPEND_MS of the buff coming off), and each
+prints in the existing shapes - [YOU] / [TEAM] [CD], a control as [YOU] /
+[TEAM] [CC] ... cast with the same immune / miss / no-aura outcome tags as
+every [CC] cast line. A line only: no ledger row, kit entry or defensive
+value (the 2026-10-30 ruling on stolen shields stands). 605 (base capture
+vs branch), new scan5/t107 darkSimulacrumPressUnlined: 21 / 21 -> 0 / 21
+(the audited match 6 / 6 -> 0 / 6); immunityPressTag 0 / 7781; gates
+identical; family diff: `[TEAM] [CC] :: Polymorph` 0 -> 8 (the new lines);
+menu rows 7,449 -> 7,449. Recorded, not fixed (branch review, synthetic, 0
+on the 605): a native Death Knight cast beside the buff's fade would read
+as a copy (the 7 friendly copies on the 605 are Polymorph, Fire Blast,
+Shadow Word: Pain and Glacial Spike); a copied non-control spell refused by
+an immunity prints without a tag; a copied area control would print twice.

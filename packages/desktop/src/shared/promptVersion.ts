@@ -1351,5 +1351,10 @@
  *  so its `xN` counts every press of the run; a run takes only the
  *  round's own presses.
  *  See docs/prompt-version-history.md.
+ *
+ * v568 (2026-11-16; pipeline batch B89, T107): a spell a friendly
+ *  Death Knight casts through Dark Simulacrum gets a press line (user
+ *  ruling R41).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 567;
+export const PROMPT_VERSION = 568;
