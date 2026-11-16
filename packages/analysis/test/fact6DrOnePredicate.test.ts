@@ -265,6 +265,35 @@ describe("[CC BROKEN]'s remainder reads the whole DR history (D29)", () => {
   });
 });
 
+describe("T125: a control with no DR family keeps its full length at a break (codex 85-tk-M-T125-2b #1)", () => {
+  it("Cascading Horrors refreshed at 121.779 and broken at 123.163 had 0.616 s left", () => {
+    // 9bce107b r0 shape: applied 121.275, refreshed 121.779 (the refresh is
+    // the application), broken by damage 123.163 — DB2 2 s, no DR family
+    const CH = "358861";
+    const holder = makeUnit("h", {
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, CH, S(121.275), "sp", "h"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REFRESH, CH, S(121.779), "sp", "h"),
+        makeAuraEvent(LogEvent.SPELL_AURA_BROKEN, CH, S(123.163), "sp", "h"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, CH, S(123.163), "sp", "h"),
+      ],
+    });
+    const left = ccRemainingSeconds({
+      spellId: CH,
+      holder: holder as never,
+      caster: undefined,
+      applyMs: S(121.779),
+      endMs: S(123.163),
+      srcUnitId: "sp",
+      matchStartMs: T0,
+      landing: NO_CC_LANDING_STATE,
+      lengthIsDrEvidence: ccLengthIsDrEvidence,
+    });
+    // 2 s − 1.384 s held, no DR factor (it read 0 s at a fabricated tier)
+    expect(left).toBeCloseTo(0.616, 5);
+  });
+});
+
 describe("[DR CLASH] whose real predecessor is DR-only is not printed", () => {
   const app = (
     at: number,

@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 
+import { isFactOnlyHealerLockAura } from "../src/analysis/candidates/cooldownTiming";
 import { classMetadata } from "../src/data/classSpells";
 import { DR_CATEGORIES_GENERATED } from "../src/data/drCategoriesGenerated";
 import { ccSpellIds } from "../src/data/spellTags";
 import { SpellTag } from "../src/data/spellTypes";
 import {
+  computeIncomingDR,
   DR_CATEGORY_MAP,
   drCategoryIds,
   drCategoryKnown,
   drCategoryOfCast,
   getDRCategory,
   getDRLevel,
+  hasNoDrFamily,
+  isNamedDrCategory,
   isStunDrAura,
   SELF_DR_SPELL_IDS,
 } from "../src/utils/drAnalysis";
@@ -115,12 +119,17 @@ describe("drCategoryOfCast (GH #111 — cast id → the applied aura's DR)", () 
         .filter((a) => a.tags.includes(SpellTag.Control))
         .map((a) => a.spellId),
     );
-    // Disarms whose disarm aura carries no DR category in the log: the
+    // Controls whose aura carries no DR category in the log (two disarms, a
+    // proc horror): the
     // samplers read them as DR "n/a" (drCategoryKnown) and never bookmark
     // them, so no false DR claim can come of it.
     const KNOWN_UNRESOLVED = new Set([
       "209749", // Faerie Swarm
       "407028", // Sticky Tar Bomb
+      // Cascading Horrors (R48, T125): a horror with no official DR category;
+      // no button applies it (a proc of 357714 / 357715), its line prints no
+      // [DR:] tag
+      "358861",
     ]);
     const unresolved = [...new Set([...ccSpellIds, ...rosterControl])].filter(
       (id) =>
@@ -130,5 +139,51 @@ describe("drCategoryOfCast (GH #111 — cast id → the applied aura's DR)", () 
     );
     expect(unresolved).toEqual([]);
     expect(SELF_DR_SPELL_IDS.has("22703")).toBe(true);
+    // R48 (T125): Cascading Horrors is a control with no DR family and no
+    // declared self-DR — its DR reads "n/a", its line carries no [DR:] tag
+    expect(ccSpellIds.has("358861")).toBe(true);
+    expect(drCategoryKnown("358861")).toBe(false);
+    expect(SELF_DR_SPELL_IDS.has("358861")).toBe(false);
+  });
+});
+
+// T125 (ruling R48; codex 85-tk-M-T125-2 #1 / #2): a control no DR family
+// claims gets no DR tier and is a facts-only healer lock
+describe("hasNoDrFamily — Cascading Horrors 358861", () => {
+  it("is the one landing control with no DR family and no self-DR", () => {
+    expect(hasNoDrFamily("358861")).toBe(true);
+    expect(hasNoDrFamily("22703")).toBe(false); // Infernal Awakening: self-DR
+    expect(hasNoDrFamily("8122")).toBe(false); // Psychic Scream: disorient
+  });
+
+  it("computeIncomingDR states no tier for it and keeps it out of every history", () => {
+    // an application, its refresh and a third one 4 s apart: no Full / 50% /
+    // Immune; the Psychic Scream beside them still reads its own family
+    const drs = computeIncomingDR(
+      [
+        { atSeconds: 10, durationSeconds: 2, spellId: "358861" },
+        { atSeconds: 14, durationSeconds: 2, spellId: "358861" },
+        { atSeconds: 18, durationSeconds: 2, spellId: "358861" },
+        { atSeconds: 19, durationSeconds: 4, spellId: "8122" },
+      ],
+      0,
+    );
+    expect(drs.slice(0, 3)).toEqual([null, null, null]);
+    expect(drs[3]!.level).toBe("Full");
+  });
+
+  it("is a facts-only healer lock; a control with a DR family is not", () => {
+    expect(isFactOnlyHealerLockAura("358861")).toBe(true);
+    expect(isFactOnlyHealerLockAura("87204")).toBe(true); // Sin and Punishment
+    expect(isFactOnlyHealerLockAura("8122")).toBe(false);
+    expect(isFactOnlyHealerLockAura("22703")).toBe(false);
+  });
+});
+
+describe("isNamedDrCategory — the chain line and the desktop CC chain panel (T125, codex 85-tk-M-T125-2b #2)", () => {
+  it("states a tier only for a real DR family", () => {
+    expect(isNamedDrCategory("Disorient")).toBe(true);
+    expect(isNamedDrCategory("Unknown")).toBe(false);
+    expect(isNamedDrCategory(getDRCategory("358861"))).toBe(false);
   });
 });

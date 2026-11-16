@@ -78,6 +78,7 @@ import {
   DR_CATEGORY_MAP,
   drDurationFactor,
   type DRLevel,
+  hasNoDrFamily,
 } from "../../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../../utils/enemyCDs";
 import { incomingPressureBySchool } from "../../utils/incomingPressure";
@@ -184,7 +185,13 @@ export interface IEnemyHealerCcWindow {
  * the 5:36 Psychic Scream.
  */
 export function isFactOnlyHealerLockAura(spellId: string): boolean {
-  return isHardCcAura(spellId) && !ccSpellIds.has(spellId);
+  // T125 (codex 85-tk-M-T125-2 #2): a `ccSpellIds` control with no DR family
+  // (Cascading Horrors, `hasNoDrFamily`) is in no outgoing DR chain either —
+  // it would fall through both paths
+  return (
+    isHardCcAura(spellId) &&
+    (!ccSpellIds.has(spellId) || hasNoDrFamily(spellId))
+  );
 }
 
 /**

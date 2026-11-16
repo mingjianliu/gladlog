@@ -3780,6 +3780,16 @@ const INDEX: PredicateRow[] = [
     mod: drAnalysis,
   },
   {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "hasNoDrFamily",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "isNamedDrCategory",
+    mod: drAnalysis,
+  },
+  {
     file: `${A}/data/castEffectAuras.ts`,
     symbol: "effectAurasOfCast",
     mod: castEffectAuras,

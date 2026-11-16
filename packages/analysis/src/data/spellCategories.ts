@@ -128,6 +128,12 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "6358": cc(), // Seduction
   "89766": cc(), // Axe Toss
   "8122": cc(), // Psychic Scream
+  // Cascading Horrors — a Shadow Priest's 2 s magic horror (DB2 mechanic 24,
+  // AoE, applied by 357714 / 357715; no official DR category, so its line
+  // carries no [DR:] tag, the Infernal Awakening form). User ruling R48,
+  // 2026-11-15 (T125; 9bce107b r0 2:01: two teammates horrified, no
+  // [CC ON TEAM] line). Earthquake 77505 and Fel Cleave 213688 were ruled out.
+  "358861": cc(),
   "605": cc(), // Mind Control
   "9484": cc(), // Shackle Undead
   "2094": cc(), // Blind

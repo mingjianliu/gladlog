@@ -106,6 +106,7 @@ import {
   computeIncomingDR,
   drDurationFactor,
   getDRCategory,
+  hasNoDrFamily,
   IDRInfo,
   isDrHistorySource,
   matchPendingCcKey,
@@ -4084,7 +4085,7 @@ function analyzePlayerCCAndTrinketUncached(
   {
     const drCats = new Set<string>();
     for (const a of player.auraEvents)
-      if (a.spellId && ccSpellIds.has(a.spellId))
+      if (a.spellId && ccSpellIds.has(a.spellId) && !hasNoDrFamily(a.spellId))
         drCats.add(getDRCategory(a.spellId));
     const opened = new Set<(typeof ccWindows)[number]>();
     for (const cat of drCats)

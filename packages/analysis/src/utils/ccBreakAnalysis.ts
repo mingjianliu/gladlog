@@ -21,6 +21,7 @@ import {
   drDurationFactor,
   drLevelAtLanding,
   getDRCategory,
+  hasNoDrFamily,
   matchPendingCcKey,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
@@ -142,7 +143,9 @@ export function ccRemainingSeconds(p: {
   if (tableDuration === undefined) return null;
   const category = getDRCategory(p.spellId);
   let factor = 1;
-  if (category) {
+  // a control with no DR family (`hasNoDrFamily`: Cascading Horrors, T125 —
+  // codex 85-tk-M-T125-2b #1) has no DR to shorten it: its full length
+  if (category && !hasNoDrFamily(p.spellId)) {
     // the DR this application landed at (Q1, `drLevelAtLanding`) over the
     // holder's whole DR history — fact6 D29: a Sleep Walk reflected back
     // onto the holder was no history while the history read opponents

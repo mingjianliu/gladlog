@@ -957,6 +957,23 @@ export function drEffectAurasOfCast(castSpellId: string): readonly string[] {
 export const SELF_DR_SPELL_IDS: ReadonlySet<string> = new Set(["22703"]);
 
 /**
+ * A control AURA no DR family claims and that is no declared self-DR spell
+ * (`SELF_DR_SPELL_IDS`): its `getDRCategory` is the `spell:<id>` fallback key,
+ * and nothing says it diminishes at all. Cascading Horrors 358861 (ruling
+ * R48, T125): a 2 s horror with no official DR category. Such a control gets
+ * no DR tier (`computeIncomingDR` returns null for it and keeps it out of
+ * every history — codex 85-tk-M-T125-2 #1: a refresh read "50%", a third
+ * application "Immune" and lost its line) and is a facts-only healer lock
+ * (`isFactOnlyHealerLockAura`).
+ */
+export function hasNoDrFamily(auraSpellId: string): boolean {
+  return (
+    getDRCategory(auraSpellId).startsWith("spell:") &&
+    !SELF_DR_SPELL_IDS.has(auraSpellId)
+  );
+}
+
+/**
  * Is `castSpellId`'s DR category actually known? False for a `spell:<id>`
  * fallback that is not a declared self-DR spell — a consumer must then say
  * nothing about DR ("n/a"), never "Full" (reliability round 2 W1g: every
@@ -1208,7 +1225,7 @@ export function computeIncomingDR(
   const history: Map<string, CCEntry[]> = new Map();
   let nextExtra = 0;
   const extras = [...historyOnly]
-    .filter((h) => ccSpellIds.has(h.spellId))
+    .filter((h) => ccSpellIds.has(h.spellId) && !hasNoDrFamily(h.spellId))
     .sort(
       (a, b) =>
         a.applyMs - b.applyMs ||
@@ -1237,7 +1254,8 @@ export function computeIncomingDR(
       });
       history.set(hc, list);
     }
-    if (!ccSpellIds.has(cc.spellId)) return null;
+    // a control with no DR family has no tier to state (`hasNoDrFamily`)
+    if (!ccSpellIds.has(cc.spellId) || hasNoDrFamily(cc.spellId)) return null;
 
     const applyMs = matchStartMs + cc.atSeconds * 1000;
     const removeMs = applyMs + cc.durationSeconds * 1000;
@@ -1802,6 +1820,18 @@ export function detectTeammateDrClashes(
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
+/**
+ * Is `category` a DR family a reader can state a tier for — not "Unknown"
+ * (an outgoing application's unmapped id) and not the `spell:<id>` fallback
+ * key? The one test for the outgoing DR-chain line
+ * (`formatOutgoingCCChainsForContext`) and the desktop's CC chain panel
+ * (codex 85-tk-M-T125-2b #2: a Cascading Horrors application read "full
+ * duration" there).
+ */
+export function isNamedDrCategory(category: string): boolean {
+  return category !== "Unknown" && !category.startsWith("spell:");
+}
+
 export const DR_LEVEL_LABEL: Record<DRLevel, string> = {
   Full: "full duration",
   "50%": "50% DR",
@@ -1820,10 +1850,8 @@ export function formatOutgoingCCChainsForContext(
     // noisy "× Unknown" that corrupted the DR-chain breakdown the model treats as
     // ground truth. Drop them from the breakdown and the counts so the line stays
     // internally consistent; skip a chain entirely if nothing identifiable remains.
-    const apps = chain.applications.filter(
-      (a) =>
-        a.drInfo.category !== "Unknown" &&
-        !a.drInfo.category.startsWith("spell:"),
+    const apps = chain.applications.filter((a) =>
+      isNamedDrCategory(a.drInfo.category),
     );
     if (apps.length === 0) continue;
 

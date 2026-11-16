@@ -1,10 +1,9 @@
-import { DR_LEVEL_LABEL, fmtTime } from "@gladlog/analysis";
+import { DR_LEVEL_LABEL, fmtTime, isNamedDrCategory } from "@gladlog/analysis";
 import { useState } from "react";
 
 import { classColor } from "../data/gameConstants";
 import type { CCChainRow } from "../derive/ccChainDash";
 import { UnitName } from "./UnitName";
-
 
 /**
  * Enemy CC-chain panel (#10 T5): per enemy target, an aggregate of the CC
@@ -106,7 +105,10 @@ export function CCChainPanel({
                               {fmtTime(a.atSeconds)}
                             </span>{" "}
                             {a.spellName} · {a.casterName} ·{" "}
-                            {isWasted ? (
+                            {/* no DR family, no tier to state (T125) */}
+                            {!isNamedDrCategory(a.drInfo.category) ? (
+                              <span className="rpt-stats-dim">—</span>
+                            ) : isWasted ? (
                               <span className="rpt-ledger-chip rpt-ledger-chip-bad">
                                 {DR_LEVEL_LABEL[a.drInfo.level]}
                               </span>
