@@ -1322,5 +1322,10 @@
  * v562 (2026-11-16; pipeline batch B80, T118): a root a teammate's
  *  Blessing of Freedom / Tiger's Lust removed is not a missed cleanse.
  *  See docs/prompt-version-history.md.
+ *
+ * v563 (2026-11-16; pipeline batch B83, T121): only a healer spec's
+ *  press of a healing amplifier gets the [HEALING] block (user ruling
+ *  R46); a Shadow Priest's Power Infusion keeps its [YOU] [CD] line.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 562;
+export const PROMPT_VERSION = 563;

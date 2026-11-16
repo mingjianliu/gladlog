@@ -6849,3 +6849,18 @@ its effect there is 3 context lines removed in 2 files (two [UNCLEANSED
 DEBUFF] Frost Nova lines whose root such a cast freed, and one [STATE] tick
 that only printed beside one of them); findings files 0 of 3,519; gates 110
 -> 110.
+
+v563 (2026-11-16; pipeline batch B83, T121; round 13 audit; user ruling
+R46). User ruling 2026-11-15: only a healer spec's press of a healing
+amplifier (HEALING_AMPLIFIER_SPELL_IDS: Power Infusion, Ascendance) gets
+the [HEALING] block - "only a healer's HPS matters enough". New
+pressGetsHealingBlock(spellId, presser) = the table AND isHealerSpec, read
+by ownerCdSetup.ts (the block's windows) and ownerCd.ts (the block under
+the press); the `also on you` clause keeps the bare table (it is a fact
+about the aura). A Shadow Priest's Power Infusion keeps its [YOU] [CD]
+line and loses the block; when no press of the round keeps a block, the
+block's legend goes too. 605 (base capture at f4bab36ef vs branch), new
+scan5/t121 healingBlockOffHealer: 114 / 1088 -> 0 / 1088; the audited match
+7 / 14 -> 0 / 14; 618 context lines removed in 84 files, none added (198
+[HEALING] lines and the block legend's 5 lines in each); findings files 0
+of 3,519; gates 110 -> 110; family diff 0 flags.
