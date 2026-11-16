@@ -187,8 +187,61 @@ describe("F11: a rider that came with its own cast is not `(passive)`", () => {
       addEntry: ((_: number, line: string) => lines.push(line)) as never,
       _allUnits: [],
     });
+    // T119 (ruling R49 = A): the passive part states no time, so it is on
+    // its own line at its own first removal, never at the 0:22 of another
     expect(lines).toEqual([
-      "0:22  [MINOR DISPELS]   2(Druid): Incarnation: Tree of Life (side effect of the cast) x2, Incarnation: Tree of Life (passive) (low-priority, folded)",
+      "0:22  [MINOR DISPELS]   2(Druid): Incarnation: Tree of Life (side effect of the cast) x2 (low-priority, folded)",
+      "1:00  [MINOR DISPELS]   2(Druid): Incarnation: Tree of Life (passive) (low-priority, folded)",
+    ]);
+  });
+
+  it("T119 (cf63da4a r0 0:22): each non-deliberate part on its own line at its first removal; the deliberate parts share one; one rendered second, one line", () => {
+    const e = (
+      t: number,
+      spell: string,
+      over: Partial<IDispelEvent>,
+    ): IDispelEvent =>
+      ({
+        timeSeconds: t,
+        sourceName: "Monk",
+        dispelSpellName: spell,
+        removedSpellId: "9990001",
+        removedSpellName: "Earthbind",
+        priority: "Low",
+        dispelKind: "rider",
+        ...(over.dispelKind === undefined ? { riderOfOwnCast: true } : {}),
+        ...over,
+      }) as IDispelEvent;
+    const lines: string[] = [];
+    emitMinorDispelEntries({
+      dispelSummary: {
+        allyCleanse: [
+          e(22.93, "Swift Art", {}),
+          e(63.55, "Swift Art", {}),
+          e(107.74, "Swift Art", {}),
+          e(103.535, "Fortifying Brew", {}),
+          // a deliberate Detox at 0:30 and 1:20: one line at 0:30, its own
+          // times listed
+          e(30.2, "Detox", { dispelKind: "deliberate" }),
+          e(80.4, "Detox", { dispelKind: "deliberate" }),
+          // a proc in the Fortifying Brew's rendered second shares its line
+          e(103.9, "Cleanse the Weak", {
+            dispelKind: "proc",
+          }),
+        ],
+        ourPurges: [],
+        hostilePurges: [],
+      } as never,
+      pid: (n: string) => `1(${n})`,
+      enemyPid: (n: string) => `4(${n})`,
+      enemyDispelSummary: undefined,
+      addEntry: ((_: number, line: string) => lines.push(line)) as never,
+      _allUnits: [],
+    });
+    expect(lines).toEqual([
+      "0:22  [MINOR DISPELS]   1(Monk): Swift Art (side effect of the cast) x3 (low-priority, folded)",
+      "0:30  [MINOR DISPELS]   1(Monk): Detox ×2 (0:30 Earthbind; 1:20 Earthbind) (low-priority, folded)",
+      "1:43  [MINOR DISPELS]   1(Monk): Fortifying Brew (side effect of the cast), Cleanse the Weak (passive) (low-priority, folded)",
     ]);
   });
 });

@@ -1,7 +1,8 @@
 /**
  * [MINOR DISPELS] (T5 dispel coverage) — low / medium-priority dispels that do
- * not get a line each, folded by (source, dispel spell) into one counted line
- * per source, so the dispel workload stays visible at O(distinct spells) tokens.
+ * not get a line each, folded by (source, dispel spell) into counted lines
+ * per source (its deliberate parts on one line; since T119 each passive /
+ * side-effect part on its own line at its first removal), so the dispel workload stays visible at O(distinct spells) tokens.
  * Since 2026-09-30 (A18) each deliberate part lists its casts and what they
  * removed — see `formatMinorDispelPart`.
  *
@@ -126,12 +127,35 @@ export function emitMinorDispelEntries(
   }
   for (const [sourceLabel, list] of bySource) {
     list.sort((a, b) => a.firstSeconds - b.firstSeconds);
-    const firstSeconds = list[0].firstSeconds;
-    const parts = list.map(formatMinorDispelPart).join(", ");
-    addEntry(
-      firstSeconds,
-      `${fmtTime(firstSeconds)}  [MINOR DISPELS]   ${sourceLabel}: ${parts} (low-priority, folded)`,
-    );
+    // T119 (ruling R49 = A, fact12 retest cf63da4a r0 0:22): a deliberate
+    // part lists its casts with their times, so the deliberate parts share
+    // one line at the first of them; a passive / side-effect part states no
+    // time of its own, so it gets its own line at its own first removal
+    // (one Fortifying Brew removal at 1:43 read `0:22 … Fortifying Brew
+    // (side effect of the cast)` on the line of a 0:22 Swift Art). Parts
+    // whose stamp renders the same second share a line, as before.
+    const lines: Array<{ atSeconds: number; parts: MinorPart[] }> = [];
+    const lineAt = (atSeconds: number): { parts: MinorPart[] } => {
+      const at = fmtTime(atSeconds);
+      let line = lines.find((x) => fmtTime(x.atSeconds) === at);
+      if (!line) lines.push((line = { atSeconds, parts: [] }));
+      return line;
+    };
+    const deliberate = list.filter((m) => !m.passive);
+    if (deliberate.length > 0)
+      lineAt(deliberate[0]!.firstSeconds).parts.push(...deliberate);
+    for (const m of list) if (m.passive) lineAt(m.firstSeconds).parts.push(m);
+    for (const line of lines)
+      line.atSeconds = Math.min(...line.parts.map((m) => m.firstSeconds));
+    lines.sort((a, b) => a.atSeconds - b.atSeconds);
+    for (const line of lines) {
+      line.parts.sort((a, b) => a.firstSeconds - b.firstSeconds);
+      const parts = line.parts.map(formatMinorDispelPart).join(", ");
+      addEntry(
+        line.atSeconds,
+        `${fmtTime(line.atSeconds)}  [MINOR DISPELS]   ${sourceLabel}: ${parts} (low-priority, folded)`,
+      );
+    }
   }
 }
 

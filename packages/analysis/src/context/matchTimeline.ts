@@ -1052,9 +1052,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
 
   // ── [MINOR DISPELS] folded lines (T5 dispel coverage) ─────────────────────
   // low/medium dispels filtered out by F163 do not get one timeline line each,
-  // but are folded by (source, dispel spell) into a single counted line — the
-  // dispel workload and the spells used stay visible to the coach at a token
-  // cost of O(number of distinct spells).
+  // but are folded by (source, dispel spell) into counted lines (the deliberate
+  // parts on one, each passive / side-effect part at its own first removal,
+  // T119) — the dispel workload and the spells used stay visible to the coach
+  // at a token cost of O(number of distinct spells).
   emitMinorDispelEntries({
     dispelSummary,
     pid,
