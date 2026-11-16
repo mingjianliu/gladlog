@@ -8,16 +8,25 @@
  * line stamped 0:22).
  *
  *  - `minorPartStampedEarly`: per non-deliberate part of a player's line
- *    (pet / guardian lines skipped), the source's SPELL_DISPEL /
- *    SPELL_STOLEN rows of that spell name in the round, merged by
+ *    (pet / guardian lines skipped), the removals the product folds into
+ *    that part — the events of the round's two `reconstructDispelSummary`
+ *    calls (the fold's inputs) of that source and spell whose
+ *    `minorDispelPartTag` is the part's tag — merged by
  *    `MINOR_DISPEL_CAST_MERGE_S`. Violation `firstLater`: the part's first
  *    removal is in a later second than the line's stamp. Kind `foldedLater`
  *    (out of the total): the first is in the stamp's second, a later one is
  *    not — the counted `xN` fold. Counted: every such part with a row.
  */
-import { MINOR_DISPEL_CAST_MERGE_S } from "@gladlog/analysis/src/context/timelineSections/minorDispels";
+import {
+  MINOR_DISPEL_CAST_MERGE_S,
+  minorDispelPartTag,
+} from "@gladlog/analysis/src/context/timelineSections/minorDispels";
+import {
+  type IDispelEvent,
+  reconstructDispelSummary,
+} from "@gladlog/analysis/src/utils/dispelAnalysis";
 
-import { ev, fmtS, type IRoundCtx, nameOf, secOf, tsOf } from "./ctx";
+import { fmtS, type IRoundCtx, secOf } from "./ctx";
 
 export const CHECKS = ["minorPartStampedEarly"] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
@@ -27,7 +36,6 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
 const LINE =
   /^\s*(\d+:\d\d)\s+\[MINOR DISPELS\]\s+(\d+)\([^)]*\)('s \w+)?: (.*) \(low-priority, folded\)\s*$/;
 const PART = /^(.+?) \((passive|side effect of the cast)\)(?: x\d+)?$/;
-const DISPEL_ROWS = new Set(["SPELL_DISPEL", "SPELL_STOLEN"]);
 
 /** top-level `, ` split (a deliberate part's list nests `, +N`) */
 function partsOf(body: string): string[] {
@@ -50,7 +58,64 @@ function partsOf(body: string): string[] {
   return out;
 }
 
+/** the product's two dispel summaries of a round, per owner side (the
+ * calls `buildMatchContext` makes; pets of both sides) */
+const summaries = new WeakMap<object, Map<number, IDispelEvent[]>>();
+function foldedEventsOf(ctx: IRoundCtx): IDispelEvent[] {
+  const bySide = summaries.get(ctx.legacy) ?? new Map<number, IDispelEvent[]>();
+  summaries.set(ctx.legacy, bySide);
+  const side = ctx.owner.reaction as number;
+  const hit = bySide.get(side);
+  if (hit) return hit;
+  const players = ctx.players as any[];
+  const friends = players.filter((u) => u.reaction === side);
+  const enemies = players.filter((u) => u.reaction !== side);
+  const fIds = new Set(friends.map((u) => u.id));
+  const eIds = new Set(enemies.map((u) => u.id));
+  const units = Object.values(ctx.legacy.units) as any[];
+  const fPets = units.filter((u) => u.ownerId && fIds.has(u.ownerId));
+  const ePets = units.filter((u) => u.ownerId && eIds.has(u.ownerId));
+  let out: IDispelEvent[] = [];
+  try {
+    const ds = reconstructDispelSummary(
+      friends,
+      enemies,
+      ctx.legacy,
+      fPets,
+      ePets,
+    );
+    const eds = reconstructDispelSummary(
+      enemies,
+      friends,
+      ctx.legacy,
+      ePets,
+      fPets,
+    );
+    // the fold's own inputs (`emitMinorDispelEntries`)
+    out = [
+      ...ds.allyCleanse,
+      ...ds.ourPurges,
+      ...ds.hostilePurges,
+      ...eds.allyCleanse,
+    ];
+  } catch {
+    out = [];
+  }
+  bySide.set(side, out);
+  return out;
+}
+
 export function run(ctx: IRoundCtx): void {
+  if (!ctx.owner) return;
+  checkMinorParts(ctx, foldedEventsOf(ctx));
+}
+
+/** the check over a round's lines and the fold's events (exported for the
+ * unit test) */
+export function checkMinorParts(
+  ctx: Pick<IRoundCtx, "lines" | "unitOfPid" | "bump" | "violate" | "start">,
+  events: readonly IDispelEvent[],
+): void {
   const C = "minorPartStampedEarly";
   for (const l of ctx.lines) {
     const m = LINE.exec(l);
@@ -62,32 +127,39 @@ export function run(ctx: IRoundCtx): void {
       const p = PART.exec(part.trim());
       if (!p) continue;
       const name = p[1]!;
+      const tag = `(${p[2]!})`;
+      // the part's own removals: the player's (not a pet's) events of that
+      // spell carrying the part's tag (`minorDispelPartTag`, the fold's own
+      // key — codex 85-tk-L-T119-1: a passive and a side-effect part of one
+      // spell are two parts)
       const instants: number[] = [];
-      for (const t of ((unit.actionOut ?? []) as any[])
+      for (const t of events
         .filter(
-          (r) =>
-            DISPEL_ROWS.has(ev(r)) &&
-            r.srcUnitId === unit.id &&
-            nameOf(r.spellId, r.spellName) === name &&
-            tsOf(r) >= ctx.start &&
-            tsOf(r) <= ctx.roundEndAt,
+          (e) =>
+            !e.summonUnitId &&
+            // the fold's own skip: a High / Critical removal that is no
+            // rider has a line of its own (`foldMinor`)
+            !(
+              (e.priority === "Critical" || e.priority === "High") &&
+              e.dispelKind !== "rider"
+            ) &&
+            e.sourceName === unit.name &&
+            (e.dispelSpellName || "unknown") === name &&
+            minorDispelPartTag(e) === tag,
         )
-        .map(tsOf)
+        .map((e) => e.timeSeconds)
         .sort((a, b) => a - b))
-        if (
-          !instants.some(
-            (x) => Math.abs(x - t) <= MINOR_DISPEL_CAST_MERGE_S * 1000,
-          )
-        )
+        if (!instants.some((x) => Math.abs(x - t) <= MINOR_DISPEL_CAST_MERGE_S))
           instants.push(t);
       if (instants.length === 0) continue;
       ctx.bump(C);
-      const secs = instants.map((t) => Math.floor((t - ctx.start) / 1000));
+      const secs = instants.map((t) => Math.floor(t));
+      const atMs = ctx.start + instants[0]! * 1000;
       if (secs[0]! > stamp)
         ctx.violate(
           C,
           "firstLater",
-          instants[0]!,
+          atMs,
           `${unit.id}#${part}#${m[1]}`,
           `${part} first removed at ${fmtS(secs[0]!)}; the line is stamped ${m[1]}`,
           l.trim(),
@@ -96,7 +168,7 @@ export function run(ctx: IRoundCtx): void {
         ctx.violate(
           C,
           "foldedLater",
-          instants[0]!,
+          atMs,
           `${unit.id}#${part}#${m[1]}`,
           `${part} removed at ${secs.map(fmtS).join(", ")}; the line is stamped ${m[1]}`,
           l.trim(),
