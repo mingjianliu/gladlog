@@ -9,6 +9,7 @@
  */
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { NOT_READY_REASONS } from "../analysis/candidates/shared";
 import { abilityProfile } from "../data/abilityProfile";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
@@ -1346,6 +1347,9 @@ export interface IRejectRun {
    * is a press of another kind for the run */
   obscuredBy?: string;
   count: number;
+  /** the refusals it counts (codex 85-tk-L-T117-1b #1: a span holds rows
+   * of another run in its first ms) — the `castFailed` rows themselves */
+  rows?: CastFailedEvent[];
 }
 
 /** What a `[REJECTED]` run says after the dash. */
@@ -1390,14 +1394,16 @@ export function ownerRejectRuns(
     open.delete(id);
   };
   // every owner failure takes part — the same spell refused for a reason
-  // outside the three kinds ends its run instead of vanishing from between
-  // two that match
-  // (codex review of batch 13: Out of range / Not yet recovered / Out of
-  // range … read as three consecutive out-of-range presses)
+  // outside the kinds is never counted in a run, and ends it unless the
+  // run's kind resumes within the gap (`strayInRun`); a "not ready" refusal
+  // always ends it (codex review of batch 13: Out of range / Not yet
+  // recovered / Out of range … read as three consecutive out-of-range
+  // presses)
   const hits = castFailed
     .filter((h) => h.unitGuid === ownerId)
     .sort((a, b) => a.tSeconds - b.tSeconds);
-  for (const h of hits) {
+  for (let i = 0; i < hits.length; i++) {
+    const h = hits[i]!;
     const kind = KIND_OF.get(h.reason);
     const id = String(h.spellId);
     // a press refused by the global cooldown / an action in progress was
@@ -1406,18 +1412,48 @@ export function ownerRejectRuns(
     // "Out of range" with one "You can't do that yet" between them read
     // `×4` and dropped the first two)
     if (!kind && RUN_TRANSPARENT_REASONS.has(h.reason)) continue;
-    if (!kind) {
-      // the same spell refused for another reason splits its run
-      flush(id);
-      continue;
-    }
+    const cur = open.get(id);
     // pipeline T108: a vision-obscured press's cause is part of its kind —
     // a Burrow's refusals and a Smoke Bomb's are two runs, each line naming
     // its own
-    const by = obscuredByOf(kind, h);
-    const cur = open.get(id);
+    const by = kind ? obscuredByOf(kind, h) : undefined;
     const sameAs = (r: IRejectRun, k: RejectKind, b: string | undefined) =>
       r.kind === k && r.obscuredBy === b;
+    // fact8 D39 (a39539f2 5:10): one refusal of another kind inside a run is
+    // no end of it — a line-of-sight refusal after the first of six Execute
+    // "out of range" presses read `×5` and dropped that first press. T117
+    // (1d26a991 1:16): nor is one for a reason outside the kinds — a
+    // Mortal Coil "horrified" refusal among six Blade of Justice "out of
+    // range" presses cut them to `×4` and a dropped 2. The run carries on
+    // when this spell's next refusal is of the run's kind, in its gap; the
+    // stray one is not counted, as any run below `REJECT_RUN_MIN`.
+    const strayInRun = (): boolean => {
+      if (!cur || (kind && sameAs(cur, kind, by))) return false;
+      // the next row of the sorted list, not the next later timestamp: two
+      // refusals in one ms are two rows (codex 85-tk-L-T117-1 #1)
+      let next: CastFailedEvent | undefined;
+      for (let j = i + 1; j < hits.length && !next; j++) {
+        const x = hits[j]!;
+        if (String(x.spellId) === id && !RUN_TRANSPARENT_REASONS.has(x.reason))
+          next = x;
+      }
+      const nextKind = next && KIND_OF.get(next.reason);
+      return (
+        next !== undefined &&
+        nextKind !== undefined &&
+        sameAs(cur, nextKind, obscuredByOf(nextKind, next)) &&
+        next.tSeconds - cur.toSeconds <= REJECT_RUN_GAP_S
+      );
+    };
+    if (!kind) {
+      // the same spell refused for another reason splits its run, unless
+      // the run resumes right after it. A "not ready" refusal always splits
+      // it: the spell itself was not ready, so the presses around it were
+      // no run of range / sight / movement refusals (codex review of batch
+      // 13)
+      if (NOT_READY_REASONS.has(h.reason) || !strayInRun()) flush(id);
+      continue;
+    }
     if (
       cur &&
       sameAs(cur, kind, by) &&
@@ -1425,29 +1461,10 @@ export function ownerRejectRuns(
     ) {
       cur.toSeconds = h.tSeconds;
       cur.count++;
+      cur.rows?.push(h);
       continue;
     }
-    // fact8 D39 (a39539f2 5:10): one refusal of another kind inside a run is
-    // no end of it — a line-of-sight refusal after the first of six Execute
-    // "out of range" presses read `×5` and dropped that first press. The run
-    // carries on when this spell's next refusal is of the run's kind, in its
-    // gap; the stray one is not counted, as any run below `REJECT_RUN_MIN`.
-    if (cur && !sameAs(cur, kind, by)) {
-      const next = hits.find(
-        (x) =>
-          x.tSeconds > h.tSeconds &&
-          String(x.spellId) === id &&
-          !RUN_TRANSPARENT_REASONS.has(x.reason),
-      );
-      const nextKind = next && KIND_OF.get(next.reason);
-      if (
-        next &&
-        nextKind &&
-        sameAs(cur, nextKind, obscuredByOf(nextKind, next)) &&
-        next.tSeconds - cur.toSeconds <= REJECT_RUN_GAP_S
-      )
-        continue;
-    }
+    if (strayInRun()) continue;
     flush(id);
     open.set(id, {
       fromSeconds: h.tSeconds,
@@ -1457,6 +1474,7 @@ export function ownerRejectRuns(
       kind,
       ...(by ? { obscuredBy: by } : {}),
       count: 1,
+      rows: [h],
     });
   }
   for (const id of [...open.keys()]) flush(id);
@@ -1471,7 +1489,8 @@ const RUN_TRANSPARENT_REASONS: ReadonlySet<string> = new Set([
   ...OTHER_REFUSAL_REASONS["can't do that yet"]!,
 ]);
 
-/** `row` is one of the presses `run` counts: the owner's failure of that
+/** `row` is one of the presses `run` counts — its own rows when it carries
+ *  them (`ownerRejectRuns` does); else the owner's failure of that
  *  spell, for that kind of reason, inside the run's span. (A run takes every
  *  such press between its first and its last — a same-spell refusal for
  *  another reason ends it — so the span decides.) What a `[REJECTED]` line
@@ -1480,6 +1499,7 @@ export function rejectRunStatesRow(
   run: IRejectRun,
   row: CastFailedEvent,
 ): boolean {
+  if (run.rows) return run.rows.includes(row);
   return (
     String(row.spellId) === run.spellId &&
     KIND_OF.get(row.reason) === run.kind &&

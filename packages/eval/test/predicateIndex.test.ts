@@ -442,6 +442,42 @@ const INDEX: PredicateRow[] = [
     symbol: "rejectRunStatesRow",
     mod: spellOutcomeLines,
   },
+  // pipeline T117: how a [REJECTED] run is built and counted, read by scan5/t117
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "ownerRejectRuns",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REJECT_RUN_MIN",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REJECT_RUN_GAP_S",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REJECT_NEAR_DEATH_S",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "OTHER_REFUSAL_REASONS",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/analysis/candidates/shared.ts`,
+    symbol: "NOT_READY_REASONS",
+    mod: candidatesShared,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "rejectWhyOf",
+    mod: spellOutcomeLines,
+  },
   {
     file: `${A}/context/spellOutcomeLines.ts`,
     symbol: "rejectKindOf",

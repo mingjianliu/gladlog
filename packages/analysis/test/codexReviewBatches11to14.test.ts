@@ -12,6 +12,7 @@ import {
   groundedControls,
   ownerRejectRuns,
   reflectedSpells,
+  rejectRunStatesRow,
   sanctuaryRemovals,
 } from "../src/context/spellOutcomeLines";
 import {
@@ -362,6 +363,95 @@ describe("batch 13 — outcome lines need their own evidence (codex P2)", () => 
       f(12, "Out of range"),
     ];
     expect(ownerRejectRuns(alternating, "Player-O")).toHaveLength(0);
+    // T117 (1d26a991 1:16): a refusal for a reason outside the kinds that
+    // is no "not ready" (Mortal Coil's horror, es client) is stepped over —
+    // six "out of range" presses read ×6, not ×4 and a dropped 2
+    const horrified = [
+      f(76.34, "Fuera de alcance", 184575),
+      f(76.44, "Fuera de alcance", 184575),
+      f(76.56, "Fuera de alcance", 184575),
+      f(76.6, "Fuera de alcance", 184575),
+      f(76.62, "No puedes hacer eso mientras estás horrorizado", 184575),
+      f(76.81, "Fuera de alcance", 184575),
+      f(76.82, "Fuera de alcance", 184575),
+    ];
+    const runs = ownerRejectRuns(horrified, "Player-O");
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ count: 6, kind: "out of range" });
+    // T117 over pipeline T108: a vision-obscured run's cause is part of its
+    // kind — a stray is stepped over when the next refusal has the run's
+    // cause, and a refusal with another cause is itself a stray
+    const VO = "Your vision of the target is obscured";
+    const vo = (t: number, by?: string) => ({
+      ...f(t, VO),
+      ...(by ? { obscuredBy: by } : {}),
+    });
+    const smoke = ownerRejectRuns(
+      [
+        vo(20, "Smoke Bomb"),
+        vo(20.2, "Smoke Bomb"),
+        f(20.3, "No puedes hacer eso mientras estás horrorizado"),
+        vo(20.4, "Smoke Bomb"),
+        vo(20.6, "Smoke Bomb"),
+      ],
+      "Player-O",
+    );
+    expect(smoke).toHaveLength(1);
+    expect(smoke[0]).toMatchObject({ count: 4, obscuredBy: "Smoke Bomb" });
+    // the next refusal is obscured by something else: the run does not
+    // resume, the stray ends it
+    const otherCause = ownerRejectRuns(
+      [
+        vo(30, "Smoke Bomb"),
+        vo(30.2, "Smoke Bomb"),
+        vo(30.3, "Smoke Bomb"),
+        f(30.4, "No puedes hacer eso mientras estás horrorizado"),
+        vo(30.5, "Burrow"),
+        vo(30.6, "Burrow"),
+        vo(30.7, "Burrow"),
+      ],
+      "Player-O",
+    );
+    expect(otherCause.map((r) => [r.count, r.obscuredBy])).toEqual([
+      [3, "Smoke Bomb"],
+      [3, "Burrow"],
+    ]);
+    // codex 85-tk-L-T117-1 #1: two strays in one ms are two rows — the run
+    // does not resume after the first, so it splits into ×3 and ×3
+    const H = "No puedes hacer eso mientras estás horrorizado";
+    const R = "Fuera de alcance";
+    const twoStrays = [10, 10.1, 10.2]
+      .map((t) => f(t, R))
+      .concat(
+        [f(10.3, H), f(10.3, H)],
+        [10.4, 10.5, 10.6].map((t) => f(t, R)),
+      );
+    expect(ownerRejectRuns(twoStrays, "Player-O").map((r) => r.count)).toEqual([
+      3, 3,
+    ]);
+    // … and one stray in the ms of the run's next refusal is stepped over
+    const sameMs = [10, 10.1, 10.2]
+      .map((t) => f(t, R))
+      .concat([f(10.3, H), f(10.3, R), f(10.4, R)]);
+    expect(ownerRejectRuns(sameMs, "Player-O").map((r) => r.count)).toEqual([
+      5,
+    ]);
+    // codex 85-tk-L-T117-1b #1: a run states its own rows, not every row of
+    // its kind in its span — the dropped first refusal in the run's first ms
+    // keeps its [CAST STOPPED] reading
+    const split = [
+      f(10, R),
+      f(10, H),
+      f(10, H),
+      f(10, R),
+      f(10.1, R),
+      f(10.2, R),
+    ];
+    const [run] = ownerRejectRuns(split, "Player-O");
+    expect(run!.count).toBe(3);
+    expect(split.filter((row) => rejectRunStatesRow(run!, row))).toEqual(
+      split.slice(3),
+    );
     // another spell's not-ready press does not split a Mortal Coil run
     const other = [
       f(10, "Out of range"),
@@ -380,9 +470,9 @@ describe("batch 13 — outcome lines need their own evidence (codex P2)", () => 
       f(54.6, "Out of range", 360806),
       f(54.7, "Out of range", 364343),
     ];
-    expect(ownerRejectRuns(echoes, "Player-O").map((r) => [r.spellId, r.count])).toEqual([
-      ["364343", 5],
-    ]);
+    expect(
+      ownerRejectRuns(echoes, "Player-O").map((r) => [r.spellId, r.count]),
+    ).toEqual([["364343", 5]]);
   });
 
   it("reads the fr / ru / es / zh-TW clients' texts (triage position F-J1)", () => {
