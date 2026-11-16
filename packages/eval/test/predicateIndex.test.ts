@@ -65,6 +65,7 @@ import * as enemyCd from "@gladlog/analysis/src/context/timelineSections/enemyCd
 import * as friendlyCheatDeath from "@gladlog/analysis/src/context/timelineSections/friendlyCheatDeath";
 import * as friendlyUtilityPress from "@gladlog/analysis/src/context/timelineSections/friendlyUtilityPress";
 import * as healerCastGapFiller from "@gladlog/analysis/src/context/timelineSections/healerCastGapFiller";
+import * as minorDispelsSection from "@gladlog/analysis/src/context/timelineSections/minorDispels";
 import * as timelineSetup from "@gladlog/analysis/src/context/timelineSections/setup";
 import * as unitLabel from "@gladlog/analysis/src/context/unitLabel";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
@@ -2190,6 +2191,12 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/dispelKind.ts`,
     symbol: "dispelCameWithOwnCast",
     mod: dispelKind,
+  },
+  // pipeline T119: removals this close together are one cast on [MINOR DISPELS], read by scan5/t119
+  {
+    file: `${A}/context/timelineSections/minorDispels.ts`,
+    symbol: "MINOR_DISPEL_CAST_MERGE_S",
+    mod: minorDispelsSection,
   },
   // fact7 D18: a press on a teammate logged as the recipient's dispel
   {
