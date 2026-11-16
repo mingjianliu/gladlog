@@ -98,6 +98,9 @@ export function emitDarkSimulacrumPressEntries(
     | "enemyPid"
     | "addEntry"
     | "matchStartMs"
+    | "ccImmuneTagFor"
+    | "ccMissTagFor"
+    | "noCcAuraTagFor"
   >,
 ): void {
   const { owner, friends, pid, friendlyPid, enemyPid, addEntry } = ctx;
@@ -115,11 +118,16 @@ export function emitDarkSimulacrumPressEntries(
           tgt && ![...tgt].some((ch) => ch.charCodeAt(0) > 127)
             ? ` → ${tgt}`
             : "";
+        // the outcome tags every `[CC]` cast line carries (`teamCd.ts`): a
+        // copy the target was immune to says so (605 capture: a copied
+        // Polymorph refused IMMUNE printed bare — scan5 `immunityPressTag`)
+        const named = new Set<string>(dest ? [dest] : []);
+        const outcome = `${ctx.ccImmuneTagFor(unit, c.spellId!, t, named)}${ctx.ccMissTagFor(unit, c.spellId!, t) || ctx.noCcAuraTagFor(unit, c.spellId!, t)}`;
         addEntry(
           t,
           unit.id === owner.id
-            ? `${fmtTime(t)}  [YOU] [CC]   ${name}${onTgt}`
-            : `${fmtTime(t)}  [TEAM] [CC]   ${pid(unit.name)} (${specToString(unit.spec)}) cast ${name}${onTgt}`,
+            ? `${fmtTime(t)}  [YOU] [CC]   ${name}${onTgt}${outcome}`
+            : `${fmtTime(t)}  [TEAM] [CC]   ${pid(unit.name)} (${specToString(unit.spec)}) cast ${name}${onTgt}${outcome}`,
         );
         continue;
       }

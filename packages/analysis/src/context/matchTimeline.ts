@@ -693,6 +693,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyPid,
     addEntry,
     matchStartMs,
+    ccImmuneTagFor,
+    ccMissTagFor,
+    noCcAuraTagFor,
   });
 
   // WO3 #17: a friendly cheat-death proc (Cauterize / Cheat Death)

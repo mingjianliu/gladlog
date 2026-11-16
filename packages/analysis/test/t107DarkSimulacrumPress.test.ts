@@ -99,10 +99,47 @@ describe("T107 — a Dark Simulacrum copy's press", () => {
       enemyPid: () => "4(DLock)",
       addEntry: (_t: number, l: string) => out.push(l),
       matchStartMs: T0,
+      ccImmuneTagFor: () => "",
+      ccMissTagFor: () => "",
+      noCcAuraTagFor: () => "",
     } as unknown as Parameters<typeof emitDarkSimulacrumPressEntries>[0]);
     expect(out).toEqual([
       "0:39  [TEAM] [CD]   2(FDKnight) (Frost Death Knight): Pain Suppression",
       "0:50  [TEAM] [CC]   2(FDKnight) (Frost Death Knight) cast Polymorph → 4(DLock)",
     ]);
+  });
+  // 605 capture of 803de000a: a copied Polymorph the target was immune to
+  // printed bare (scan5 `immunityPressTag` 0 → 3) — the control line carries
+  // the outcome tags every `[CC]` cast line does, read for this caster, this
+  // spell and the unit the line names
+  it("a copied control carries the [CC] line's outcome tags", () => {
+    const out: string[] = [];
+    const owner = makeUnit("p1", { name: "Me" });
+    const asked: string[] = [];
+    emitDarkSimulacrumPressEntries({
+      owner,
+      friends: [owner, dk(true)],
+      pid: () => "2(FDKnight)",
+      friendlyPid: () => undefined,
+      enemyPid: () => "4(DLock)",
+      addEntry: (_t: number, l: string) => out.push(l),
+      matchStartMs: T0,
+      ccImmuneTagFor: (
+        u: { id: string },
+        id: string,
+        t: number,
+        named: ReadonlySet<string>,
+      ) => {
+        asked.push(`${u.id}|${id}|${t}|${[...named].join(",")}`);
+        return " [IMMUNE]";
+      },
+      ccMissTagFor: () => "",
+      noCcAuraTagFor: () => " [no CC aura logged]",
+    } as unknown as Parameters<typeof emitDarkSimulacrumPressEntries>[0]);
+    expect(out[1]).toBe(
+      "0:50  [TEAM] [CC]   2(FDKnight) (Frost Death Knight) cast Polymorph → 4(DLock) [IMMUNE] [no CC aura logged]",
+    );
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatch(/^p2\|118\|50(\.\d+)?\|\S+$/);
   });
 });
