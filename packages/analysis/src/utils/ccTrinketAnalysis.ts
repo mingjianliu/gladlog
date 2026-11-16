@@ -6163,6 +6163,16 @@ function analyzePlayerCCAndTrinketUncached(
           // A. Buff-Based Avoidance — read at the instant the control hit
           // the player (`controlHitInstant`), not at a delayed control's cast
           const hit = controlHitInstant(enemy, cast, missRow);
+          // …and the line is stamped at the log's own failed-control row
+          // when there is one, whatever kind of control it is (pipeline
+          // T112, fact13 D8: a Song of Chi-Ji — a travelling control, no
+          // landing window — cast at 1:38.03 logged IMMUNE on its target at
+          // 1:39.59 and was stamped 1:38, while its IMMUNE on another player
+          // printed at that row, 1:41). The avoidance is still read at
+          // `hit`: an aura the control consumed (Psychic Shroud, Phase
+          // Shift, Spell Reflection) is gone by the row of a control with no
+          // landing window
+          const stampMs = missRow ? missRow.timestamp : hit.ms;
           // fact7 D65: a control with no target and no miss row on the
           // player says nothing of them, and all the sweep can credit then
           // is a move — which a player held by a hard control did not make
@@ -6187,7 +6197,7 @@ function analyzePlayerCCAndTrinketUncached(
             if (isGroundCC && !takeGroundHit(enemy.id, hit.ms)) continue;
             if (!takeMissRow(missRow)) continue;
             ccAvoidedInstances.push({
-              atSeconds: (hit.ms - matchStartMs) / 1000,
+              atSeconds: (stampMs - matchStartMs) / 1000,
               castAtSeconds: (castTimeMs - matchStartMs) / 1000,
               spellId: cast.spellId,
               spellName: ccSpellName,
@@ -6224,7 +6234,7 @@ function analyzePlayerCCAndTrinketUncached(
               takeMissRow(missRow)
             )
               ccImmuneUncredited.push({
-                atSeconds: (hit.ms - matchStartMs) / 1000,
+                atSeconds: (stampMs - matchStartMs) / 1000,
                 castAtSeconds: (castTimeMs - matchStartMs) / 1000,
                 spellId: cast.spellId,
                 spellName: ccSpellName,
@@ -6338,10 +6348,16 @@ function analyzePlayerCCAndTrinketUncached(
     // two lines) is not stated again (`takeMissRow`)
     if (missRowsTaken.has(m)) continue;
     const name = getEnglishSpellName(m.spellId, m.spellName);
+    // … at its stamp or at its cast: a line stamped at its own miss row
+    // (T112) still states the press it came from — a Command Demon's own
+    // IMMUNE rows 0.7 s before the pet's Axe Toss cast, whose IMMUNE landed
+    // 1.0 s after it, are that one Axe Toss
     const stated = [...ccAvoidedInstances, ...ccImmuneUncredited].some(
       (x) =>
         x.spellName === name &&
-        Math.abs(matchStartMs + x.atSeconds * 1000 - m.timestamp) <= 1000,
+        [x.atSeconds, x.castAtSeconds ?? x.atSeconds].some(
+          (s) => Math.abs(matchStartMs + s * 1000 - m.timestamp) <= 1000,
+        ),
     );
     if (stated) continue;
     // the same control landed on them in that second: the IMMUNE row is one
