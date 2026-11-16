@@ -279,6 +279,31 @@ export const OWN_SHIELD_PRESS_LOOKBACK_MS = 60_000;
 export const ALLY_SHIELD_PRESS_PAIR_MS = 1000;
 /** The destination GUID of a cast row with no target. */
 export const NO_TARGET_GUID = "0000000000000000";
+/** How far a SPELL_STOLEN row may sit from the application of the aura it
+ * moved onto the thief (one batch). */
+export const STOLEN_AURA_PAIR_MS = 100;
+
+/**
+ * Did `holder` get this aura by stealing it (a SPELL_STOLEN row of its own
+ * naming the aura, beside the application)? A stolen copy keeps the source
+ * id of the unit it was stolen from, so the reader that credits a shield to
+ * its source's press would take the victim's caster's press for the thief's
+ * shield. User ruling 2026-10-30 (#167): a spellstolen shield does not end
+ * `defenseless` (pipeline T127, batch review 80-PIPE-87-B78).
+ */
+export function isStolenAuraAcquisition(
+  holder: Pick<ICombatUnit, "id" | "actionOut">,
+  spellId: string,
+  appliedMs: number,
+): boolean {
+  return (holder.actionOut ?? []).some(
+    (x) =>
+      (x.logLine.event as LogEvent) === LogEvent.SPELL_STOLEN &&
+      x.srcUnitId === holder.id &&
+      x.extraSpellId === spellId &&
+      Math.abs(x.logLine.timestamp - appliedMs) <= STOLEN_AURA_PAIR_MS,
+  );
+}
 
 /**
  * The parts of one run of an aura on `holder` (ms) during which it is an own

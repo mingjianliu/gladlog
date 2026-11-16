@@ -22,6 +22,7 @@ import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { riderCastsOfShield } from "@gladlog/analysis/src/data/ownShieldLinks";
 import {
   ALLY_SHIELD_PRESS_PAIR_MS,
+  isStolenAuraAcquisition,
   NO_TARGET_GUID,
   OWN_SHIELD_PRESS_LOOKBACK_MS,
   SAVE_CAST_AURA_PAIR_S,
@@ -109,6 +110,19 @@ export function shieldDefenseless(
         )
         .pop();
       if (!runStart) continue;
+      // a copy the target stole keeps its victim's caster as its source: a
+      // stolen shield does not end `defenseless` (user ruling 2026-10-30,
+      // #167) — the producer's own reading (batch review 80-PIPE-87-B78)
+      if (side === "other" && isStolenAuraAcquisition(u, id, tsOf(runStart))) {
+        ctx.violate(
+          check,
+          "stolen",
+          t,
+          `${u.id}#${span[0]}#${id}#stolen`,
+          `${u.name} span ${m[2]}: ${name} ${id} is a copy it stole from ${caster.name}`,
+        );
+        continue;
+      }
       // fact11 D19: the run began no later than the shield's first absorb
       // for u since the shield last came off u — an APPLIED the log wrote
       // late (u unseen, the aura re-stated when it came back) is no start

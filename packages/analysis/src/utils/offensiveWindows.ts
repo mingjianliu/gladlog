@@ -37,6 +37,7 @@ import {
   enemyDefensiveEvents,
   type ISaveAuraInterval,
   isBelowWallFloorExternal,
+  isStolenAuraAcquisition,
   KW_REDIRECT_PROTECTION_AURA_IDS,
   KW_UNTARGETABLE_AURA_IDS,
   ownPressedShieldSpansMs,
@@ -693,9 +694,17 @@ export function computeOffensiveWindowsUncached(
       // a priest's Void Shield went onto the warlock it had Mind-Controlled
       // in the ms the control ended, 118k, and absorbed 117k of the priest's
       // own team's damage inside `defenseless 0:56–1:12`)
-      const shieldCaster =
-        enemies.find((u) => u.id === iv.srcUnitId) ??
-        allUnits.find((u) => u.id === iv.srcUnitId);
+      // …but not a copy the holder stole: it keeps its victim's caster as
+      // its source, and a stolen shield does not count (user ruling
+      // 2026-10-30, #167; batch review 80-PIPE-87-B78)
+      const shieldCaster = isStolenAuraAcquisition(
+        holder,
+        iv.spellId,
+        loggedStartMs,
+      )
+        ? undefined
+        : (enemies.find((u) => u.id === iv.srcUnitId) ??
+          allUnits.find((u) => u.id === iv.srcUnitId));
       const shieldSpans = shieldCaster
         ? ownPressedShieldSpansMs(
             holder,

@@ -34,7 +34,14 @@ beforeAll(async () => {
 /** the enemy druid pressed Barkskin at 50 s (on cooldown, a span opens);
  * the priest `p1` (the other side) pressed Void Shield with no target at
  * `from + 2`, its aura on the druid to `from + 7`, absorbing at `from + 4` */
-function round(from: number | undefined, pressed: boolean) {
+function round(
+  from: number | undefined,
+  pressed: boolean,
+  /** the aura reaches the druid half a second after the press: `stolen` =
+   * by the druid's own SPELL_STOLEN row, `late` = with no such row */
+  how: "pressedOn" | "stolen" | "late" = "pressedOn",
+) {
+  const lag = how === "pressedOn" ? 0 : 0.5;
   const druid = makeUnit("e1", {
     name: "EnemyDruid",
     spec: CombatUnitSpec.Druid_Feral,
@@ -57,7 +64,7 @@ function round(from: number | undefined, pressed: boolean) {
             makeAuraEvent(
               LogEvent.SPELL_AURA_APPLIED,
               VOID_SHIELD,
-              at(from + 2),
+              at(from + 2 + lag),
               "p1",
               "e1",
               "BUFF",
@@ -71,6 +78,22 @@ function round(from: number | undefined, pressed: boolean) {
               "BUFF",
             ),
           ],
+    actionOut:
+      from !== undefined && how === "stolen"
+        ? [
+            {
+              srcUnitId: "e1",
+              destUnitId: "p9",
+              spellId: "30449",
+              extraSpellId: VOID_SHIELD,
+              timestamp: at(from + 2.5),
+              logLine: {
+                event: LogEvent.SPELL_STOLEN,
+                timestamp: at(from + 2.5),
+              },
+            },
+          ]
+        : [],
     absorbsIn:
       from === undefined
         ? []
@@ -120,6 +143,16 @@ describe("T127 — a shield the other side pressed on the target ends `defensele
         x.toSeconds <= from + 2.001 || x.fromSeconds >= from + 6.999,
         `${x.fromSeconds}–${x.toSeconds}`,
       ).toBe(true);
+  });
+  // batch review 80-PIPE-87-B78: the priest pressed a no-target Void
+  // Shield, the target STOLE a copy half a second later — the copy keeps the
+  // priest as its source, and a stolen shield does not count (user ruling
+  // 2026-10-30, #167)
+  it("a copy the target stole is no protection, though its source pressed it", () => {
+    const from = round(undefined, false)[0]!.fromSeconds;
+    expect(round(from, true, "stolen")).toEqual(round(undefined, false));
+    // the same rows without the steal: the shield counts
+    expect(round(from, true, "late")).not.toEqual(round(undefined, false));
   });
   it("…but not without the caster's press (a proc shield stays no protection)", () => {
     const from = round(undefined, false)[0]!.fromSeconds;

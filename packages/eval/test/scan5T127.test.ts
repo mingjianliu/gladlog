@@ -23,7 +23,11 @@ const T = 1_000_000;
 const at = (s: number) => T + s * 1000;
 const VOID_SHIELD = "1253593";
 
-function scan(casterReaction: CombatUnitReaction, which: typeof run) {
+function scan(
+  casterReaction: CombatUnitReaction,
+  which: typeof run,
+  stolen = false,
+) {
   const lock = makeUnit("e1", {
     name: "Lock",
     reaction: CombatUnitReaction.Hostile,
@@ -45,6 +49,17 @@ function scan(casterReaction: CombatUnitReaction, which: typeof run) {
         "BUFF",
       ),
     ],
+    actionOut: stolen
+      ? [
+          {
+            srcUnitId: "e1",
+            spellId: "30449",
+            extraSpellId: VOID_SHIELD,
+            timestamp: at(65),
+            logLine: { event: LogEvent.SPELL_STOLEN, timestamp: at(65) },
+          },
+        ]
+      : [],
     absorbsIn: [
       {
         spellId: VOID_SHIELD,
@@ -71,6 +86,7 @@ function scan(casterReaction: CombatUnitReaction, which: typeof run) {
   });
   let checked = 0;
   const details: string[] = [];
+  const other: string[] = [];
   which({
     lines: [
       "  [KILL WINDOW] 0:56–1:12 (16s) on Lock (Lock): open (defenseless 0:56–1:12)",
@@ -79,10 +95,14 @@ function scan(casterReaction: CombatUnitReaction, which: typeof run) {
     byName: new Map([["Lock", lock]]),
     players: [lock, priest],
     bump: () => checked++,
-    violate: (_c: string, _k: string, _t: number, _f: string, d: string) =>
-      details.push(d),
+    violate: (_c: string, k: string, _t: number, _f: string, d: string) => {
+      if (k === "pressed") details.push(d);
+      else other.push(k);
+    },
   } as any);
-  return { checked, n: details.length };
+  return stolen
+    ? { checked, n: details.length, other }
+    : { checked, n: details.length };
 }
 
 describe("scan5 crossTeamShieldDefenseless", () => {
@@ -90,6 +110,15 @@ describe("scan5 crossTeamShieldDefenseless", () => {
     expect(scan(CombatUnitReaction.Friendly, run)).toEqual({
       checked: 1,
       n: 1,
+    });
+  });
+  // batch review 80-PIPE-87-B78: the producer's reading — a stolen copy
+  // keeps its victim's caster as its source and does not count
+  it("a copy the target stole is counted as `stolen`, not a violation", () => {
+    expect(scan(CombatUnitReaction.Friendly, run, true)).toEqual({
+      checked: 1,
+      n: 0,
+      other: ["stolen"],
     });
   });
   it("a same-side caster's is allyShield's, not this check's", () => {

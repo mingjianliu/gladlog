@@ -3820,6 +3820,16 @@ const INDEX: PredicateRow[] = [
     mod: enemyDefensives,
   },
   {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "isStolenAuraAcquisition",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "STOLEN_AURA_PAIR_MS",
+    mod: enemyDefensives,
+  },
+  {
     file: `${A}/data/ownShieldLinks.ts`,
     symbol: "ownShieldPressCastIds",
     mod: ownShieldLinks,
