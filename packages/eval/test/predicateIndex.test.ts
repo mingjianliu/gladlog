@@ -2066,6 +2066,27 @@ const INDEX: PredicateRow[] = [
     symbol: "classifyDispel",
     mod: dispelKind,
   },
+  // pipeline T118: a root freed by a freedom cast on the unit is cleansed, read by scan5/t118
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "wasFreedByTargetBoundCast",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "rootRanOutAtDrTier",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "ALLY_DISPEL_MATCH_TOLERANCE_S",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "TARGET_BOUND_MOBILITY_IDS",
+    mod: ccTrinketAnalysis,
+  },
   // F20 D31: buffs one purge press removed / removes per tool
   {
     file: `${A}/context/timelineSections/healerCastGapFiller.ts`,
