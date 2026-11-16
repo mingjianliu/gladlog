@@ -41,6 +41,7 @@ export function emitSpellOutcomeEntries(
     | "addEntry"
     | "rawStreams"
     | "isHealer"
+    | "roundEndAtMs"
   >,
 ): {
   /** The `[REJECTED]` runs that printed — what a `[CAST STOPPED]` line must
@@ -59,6 +60,7 @@ export function emitSpellOutcomeEntries(
     enemyPid,
     addEntry,
     rawStreams,
+    roundEndAtMs,
   } = ctx;
 
   const unitLabel = (u: ICombatUnit): string =>
@@ -154,6 +156,8 @@ export function emitSpellOutcomeEntries(
       rawStreams.castFailed,
       owner.id,
       teammateDeathSeconds,
+      // only the round's own presses (`roundEndMs`)
+      (roundEndAtMs - matchStartMs) / 1000,
     )) {
       if (!inMatch(run.fromSeconds)) continue;
       const why = rejectRunWhy(run);

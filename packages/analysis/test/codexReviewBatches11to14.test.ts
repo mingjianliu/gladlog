@@ -416,6 +416,28 @@ describe("batch 13 — outcome lines need their own evidence (codex P2)", () => 
       [3, "Smoke Bomb"],
       [3, "Burrow"],
     ]);
+    // batch review 80-PIPE-90-B80: a press at or after the round's end takes
+    // part in no run — one press before a Solo Shuffle round's ending death
+    // (60.0 s), a stray, and two presses after it are no ×3
+    const acrossEnd = [
+      f(59.6, "Out of range"),
+      f(59.8, "Invalid target"),
+      f(60.2, "Out of range"),
+      f(60.4, "Out of range"),
+    ];
+    expect(ownerRejectRuns(acrossEnd, "Player-O", [], 60)).toHaveLength(0);
+    expect(ownerRejectRuns(acrossEnd, "Player-O").map((r) => r.count)).toEqual([
+      3,
+    ]);
+    // a run that reaches the minimum inside the round keeps its count there
+    expect(
+      ownerRejectRuns(
+        [59.2, 59.4, 59.6, 60.2].map((t) => f(t, "Out of range")),
+        "Player-O",
+        [],
+        60,
+      ).map((r) => r.count),
+    ).toEqual([3]);
     // codex 85-tk-L-T117-1 #1: two strays in one ms are two rows — the run
     // does not resume after the first, so it splits into ×3 and ×3
     const H = "No puedes hacer eso mientras estás horrorizado";

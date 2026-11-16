@@ -18,6 +18,10 @@
  *    order).
  *    Violation: the run holds more presses than the line's ×N. Counted:
  *    every [REJECTED] line matched to a run.
+ *  - `rejectRunPastRoundEnd` (batch review 80-PIPE-90-B80): a line whose ×N
+ *    no run of the round's own presses (rows before `roundEndAt`) reaches,
+ *    while the run built with the presses at or after the round's end
+ *    does. Counted: every [REJECTED] line.
  */
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import {
@@ -32,7 +36,7 @@ import { withVisionObscuredCauses } from "@gladlog/analysis/src/utils/visionObsc
 
 import { type IRoundCtx, nameOf, secOf } from "./ctx";
 
-export const CHECKS = ["rejectRunUndercount"] as const;
+export const CHECKS = ["rejectRunUndercount", "rejectRunPastRoundEnd"] as const;
 
 const LINE =
   /^\s*(\d+:\d{2})\s+\[REJECTED\]\s+your (.+?) ×(\d+) — (.+?)(?: \(\d+:\d{2}–\d+:\d{2}\))?$/;
@@ -48,11 +52,14 @@ export function run(ctx: IRoundCtx): void {
   // the producer's rows: a vision-obscured refusal carries its cause, which
   // is part of its kind (pipeline T108 — a Burrow's refusals and a Smoke
   // Bomb's are two runs)
-  const failed = (
+  const roundEndS = (ctx.roundEndAt - ctx.start) / 1000;
+  const owned = (
     withVisionObscuredCauses(ctx.rawStreams(), ctx.legacy)?.castFailed ?? []
   )
     .filter((f) => f.unitGuid === ctx.owner.id)
     .sort((a, b) => a.tSeconds - b.tSeconds);
+  // the round's own presses, as the producer cuts them (`roundEndMs`)
+  const inRound = owned.filter((f) => f.tSeconds < roundEndS);
   // B15b: a run touching the REJECT_NEAR_DEATH_S before a teammate's death
   // is printed from one press
   const deaths = ctx.players
@@ -68,7 +75,7 @@ export function run(ctx: IRoundCtx): void {
   >();
   // per spell id, as the product keys them (codex 85-tk-L-T117-1c: two ids
   // of one name are two runs), then joined under the name a line prints
-  const build = (spell: string) =>
+  const build = (spell: string, failed = inRound) =>
     [
       ...new Set(
         failed
@@ -76,9 +83,9 @@ export function run(ctx: IRoundCtx): void {
           .map((f) => String(f.spellId)),
       ),
     ]
-      .flatMap((id) => buildId(id))
+      .flatMap((id) => buildId(id, failed))
       .sort((a, b) => a.from - b.from);
-  const buildId = (id: string) => {
+  const buildId = (id: string, failed: typeof owned) => {
     const rows = failed.filter(
       (f) => String(f.spellId) === id && !TRANSPARENT.has(f.reason),
     );
@@ -164,6 +171,24 @@ export function run(ctx: IRoundCtx): void {
     const same = runs
       .map((r, i) => ({ r, i }))
       .filter(({ r }) => r.sec === sec && r.why === why);
+    // batch review 80-PIPE-90-B80: a line whose ×N is reached only with the
+    // presses made at or after the round's end — the run built without the
+    // cut holds N, the round's own run holds fewer or is not printed
+    ctx.bump("rejectRunPastRoundEnd");
+    if (!same.some(({ r }) => r.count >= n)) {
+      const uncut = build(spell, owned).filter(
+        (r) => r.sec === sec && r.why === why && r.count >= n,
+      );
+      if (uncut.length > 0)
+        ctx.violate(
+          "rejectRunPastRoundEnd",
+          why,
+          ctx.start + sec * 1000,
+          `${spell}:${m[1]}`,
+          `${spell} ×${n} at ${m[1]} counts presses at or after the round's end (${roundEndS.toFixed(1)}s); the round's own run holds ${same[0]?.r.count ?? 0}`,
+          l.trim(),
+        );
+    }
     if (same.length === 0) continue;
     const pick =
       same.find(({ r }) => r.count === n) ??

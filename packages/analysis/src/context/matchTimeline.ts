@@ -962,6 +962,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyPid,
     addEntry,
     rawStreams,
+    roundEndAtMs,
   });
 
   // ── [CC NOT LANDED]: our control the log says did not land, on no line ────

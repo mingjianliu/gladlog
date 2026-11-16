@@ -16,16 +16,24 @@ const f = (tSeconds: number, reason: string, spellId = 6789) => ({
   reason,
 });
 
-function scan(lines: string[], rows: ReturnType<typeof f>[]): string[] {
+function scan(
+  lines: string[],
+  rows: ReturnType<typeof f>[],
+  roundEndAt = 600_000,
+  check = "rejectRunUndercount",
+): string[] {
   const out: string[] = [];
   run({
     owner: { id: "Player-O", reaction: 1 },
     players: [],
     lines,
     start: 0,
+    roundEndAt,
     rawStreams: () => ({ castFailed: rows }),
     bump: () => {},
-    violate: (_c: string, _k: string, _t: number, id: string) => out.push(id),
+    violate: (c: string, _k: string, _t: number, id: string) => {
+      if (c === check) out.push(id);
+    },
   } as never);
   return out;
 }
@@ -48,6 +56,23 @@ describe("scan5 rejectRunUndercount", () => {
 
   it("judges each line against its own run", () => {
     expect(scan([line(5), line(3)], rows)).toEqual([]);
+  });
+
+  // batch review 80-PIPE-90-B80: a press at or after the round's end is in
+  // no run, as the producer cuts them
+  it("reads only the round's own presses", () => {
+    const across = [59.2, 59.4, 59.6, 60.2].map((t) => f(t, R));
+    const l = "0:59  [REJECTED] your Mortal Coil ×3 — out of range";
+    expect(scan([l], across, 60_000)).toEqual([]);
+    expect(scan([l], across)).toEqual(["Mortal Coil:0:59"]);
+  });
+
+  it("flags a line that counts presses past the round's end", () => {
+    const across = [59.6, 60.2, 60.4].map((t) => f(t, R));
+    const l = "0:59  [REJECTED] your Mortal Coil ×3 — out of range (0:59–1:00)";
+    const P = "rejectRunPastRoundEnd";
+    expect(scan([l], across, 60_000, P)).toEqual(["Mortal Coil:0:59"]);
+    expect(scan([l], across, 600_000, P)).toEqual([]);
   });
 
   it("still flags a line below its run", () => {

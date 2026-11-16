@@ -1371,11 +1371,16 @@ function obscuredByOf(
  *  `REJECT_NEAR_DEATH_S` before one of `friendlyDeathSeconds` (B15b; the
  *  caller passes the owner's TEAMMATES' deaths, match-relative seconds).
  *  Control rejects are not a kind here and never enter (ruling 2026-09-26,
- *  unchanged). */
+ *  unchanged). Only rows before `roundEndSeconds` take part (the round's
+ *  end, `roundEndMs`, on the same clock): a press at or after it belongs to
+ *  no run and resumes none — batch review 80-PIPE-90-B80: a run opened by
+ *  one press before a Solo Shuffle round's ending death stepped over a
+ *  stray and counted two presses made after it. */
 export function ownerRejectRuns(
   castFailed: readonly CastFailedEvent[],
   ownerId: string,
   friendlyDeathSeconds: readonly number[] = [],
+  roundEndSeconds = Infinity,
 ): IRejectRun[] {
   const runs: IRejectRun[] = [];
   // one open run PER SPELL (round-1 retest idx 2 / 37): another spell's
@@ -1400,7 +1405,7 @@ export function ownerRejectRuns(
   // recovered / Out of range … read as three consecutive out-of-range
   // presses)
   const hits = castFailed
-    .filter((h) => h.unitGuid === ownerId)
+    .filter((h) => h.unitGuid === ownerId && h.tSeconds < roundEndSeconds)
     .sort((a, b) => a.tSeconds - b.tSeconds);
   for (let i = 0; i < hits.length; i++) {
     const h = hits[i]!;
