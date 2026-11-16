@@ -2734,6 +2734,17 @@ const INDEX: PredicateRow[] = [
     symbol: "OWN_AURA_CLAUSE_PREFIX",
     mod: timelineHelpers,
   },
+  // pipeline T121 (R46): which press gets the [HEALING] block, read by scan5/t121
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "pressGetsHealingBlock",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "HEALING_AMPLIFIER_SPELL_IDS",
+    mod: timelineHelpers,
+  },
   // WP-I (FT-T16, D13 / D14): presses refused under control; the per-spell
   // landing window
   {
