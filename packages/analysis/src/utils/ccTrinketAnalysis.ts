@@ -6361,14 +6361,16 @@ function analyzePlayerCCAndTrinketUncached(
     const stated = [...ccAvoidedInstances, ...ccImmuneUncredited].some(
       (x) =>
         x.spellName === name &&
-        (Math.abs(matchStartMs + x.atSeconds * 1000 - m.timestamp) <= 1000 ||
-          // the cast instant only for the same enemy (the instance names its
-          // owner): another caster's failed control is its own (codex
-          // 85-tk-N-T112-1 #2)
-          (x.sourceName === enemy.name &&
-            x.castAtSeconds !== undefined &&
-            Math.abs(matchStartMs + x.castAtSeconds * 1000 - m.timestamp) <=
-              1000)),
+        // the same enemy's (the instance names its owner, a pet's too):
+        // another caster's failed control is its own, at the stamp as at
+        // the cast — the stamp is a miss row now, up to seconds after the
+        // cast the pre-T112 stamp was (codex 85-tk-N-T112-1 #2, batch
+        // review 80-PIPE-84-B70d: rogue A's Cheap Shot IMMUNE at 54.1,
+        // rogue B's cast-less IMMUNE at 54.8)
+        x.sourceName === enemy.name &&
+        [x.atSeconds, x.castAtSeconds ?? x.atSeconds].some(
+          (s) => Math.abs(matchStartMs + s * 1000 - m.timestamp) <= 1000,
+        ),
     );
     if (stated) continue;
     // the same control landed on them in that second: the IMMUNE row is one

@@ -179,4 +179,67 @@ describe("a travelling control's [CC AVOIDED?] instant", () => {
     expect(x?.atSeconds).toBe(54.156);
     expect(x?.recastLandedAfterS).toBe(0.4);
   });
+  it("another caster's cast-less failed control near the moved stamp keeps its own line (batch review 80-PIPE-84-B70d)", () => {
+    // rogue A: Cheap Shot cast 53.5, IMMUNE 54.1; rogue B: a cast-less
+    // Cheap Shot IMMUNE at 54.8
+    const A0 = MATCH_START + 53_500;
+    const rogueA = makeUnit("enemy-1", {
+      name: "RogueA",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "1833",
+          A0,
+          "player-1",
+          "Paladin",
+          "enemy-1",
+          "RogueA",
+        ),
+      ],
+    });
+    const rogueB = makeUnit("enemy-2", {
+      name: "RogueB",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const player = makeUnit("player-1", {
+      name: "Paladin",
+      spec: CombatUnitSpec.Paladin_Holy,
+      reaction: CombatUnitReaction.Friendly,
+    });
+    const miss = (src: string, ms: number) => ({
+      spellId: "1833",
+      spellName: "Cheap Shot",
+      srcUnitId: src,
+      destUnitId: "player-1",
+      missType: "IMMUNE",
+      timestamp: ms,
+      logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms },
+    });
+    (player as unknown as { missesIn: unknown[] }).missesIn = [
+      miss("enemy-1", A0 + 600),
+      miss("enemy-2", A0 + 1_300),
+    ];
+    const combat = {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 300_000,
+      startInfo: { zoneId: "1672" },
+      units: { "enemy-1": rogueA, "enemy-2": rogueB, "player-1": player },
+    };
+    const r = analyzePlayerCCAndTrinket(
+      player,
+      [rogueA, rogueB],
+      combat as never,
+    );
+    expect(
+      [...(r.ccImmuneUncredited ?? []), ...r.ccAvoidedInstances]
+        .filter((x) => x.spellName === "Cheap Shot")
+        .map((x) => [x.sourceName, x.atSeconds])
+        .sort(),
+    ).toEqual([
+      ["RogueA", 54.1],
+      ["RogueB", 54.8],
+    ]);
+  });
 });
