@@ -595,8 +595,16 @@ export function holderFirstOwnActionAfterMs(
     // `STEALTH_IMMUNITY_IN_FLIGHT_MS`, U-KA3). Same measurement: such a hit
     // as the run's first own row left it going 184 times and sat at its end
     // 46 (Mass Invisibility 70 / 11, Greater Invisibility 53 / 21, Vanish
-    // 61 / 14); a later hit ended Mass Invisibility 6 / 6.
-    if (auraId && t <= afterMs + STEALTH_IMMUNITY_IN_FLIGHT_MS) continue;
+    // 61 / 14); a later hit ended Mass Invisibility 6 / 6. A melee swing is
+    // never in flight: it stays the holder's action (codex 85-tk-N-T113-1;
+    // no swing was a logged run's first own row, 0 / 689).
+    if (
+      auraId &&
+      d.logLine.event !== LogEvent.SWING_DAMAGE &&
+      d.logLine.event !== LogEvent.SWING_DAMAGE_LANDED &&
+      t <= afterMs + STEALTH_IMMUNITY_IN_FLIGHT_MS
+    )
+      continue;
     if (t > afterMs && t < first) first = t;
   }
   return units

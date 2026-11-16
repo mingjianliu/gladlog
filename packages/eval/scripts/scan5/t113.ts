@@ -36,7 +36,11 @@ import {
   tsOf,
 } from "./ctx";
 
-export const CHECKS = ["hitEndPastOwnAction", "visibleRunCastStart"] as const;
+export const CHECKS = [
+  "hitEndPastOwnAction",
+  "visibleRunCastStart",
+  "applyMsCastStart",
+] as const;
 
 export const LINE_RE =
   /^(\d+):(\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\) \([^)]*\): (.+?) \(immune, (\d+(?:\.\d)?)s — ended by a hit/;
@@ -94,6 +98,34 @@ export function run(ctx: IRoundCtx): void {
       );
   }
   if (!ctx.firstOwnerOfRound) return;
+  // a cast bar begun in the very millisecond an unseen-end stealth immunity
+  // went up: which side of the APPLIED row it was logged on decides whether
+  // it is the holder's action after it
+  for (const u of ctx.players) {
+    const auras: any[] = u.auraEvents ?? [];
+    const starts: any[] = (u as any).castStartEvents ?? [];
+    for (let k = 0; k < auras.length; k++) {
+      const a = auras[k];
+      if (
+        !ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(a.spellId) ||
+        ev(a) !== APPLIED
+      )
+        continue;
+      const next = auras.slice(k + 1).find((b) => b.spellId === a.spellId);
+      if (next && ev(next) === REMOVED) continue;
+      const C = "applyMsCastStart";
+      ctx.bump(C);
+      const same = starts.filter((r) => tsOf(r) === tsOf(a));
+      if (same.length > 0)
+        ctx.violate(
+          C,
+          `${a.spellId} cast start in the APPLIED ms`,
+          tsOf(a),
+          `${u.id}:${tsOf(a)}`,
+          `${same.length} cast start(s) at the APPLIED ms of ${nameOf(a.spellId)}`,
+        );
+    }
+  }
   for (const u of ctx.players) {
     const auras: any[] = u.auraEvents ?? [];
     const casts = successesOf(u);
@@ -140,7 +172,20 @@ export function run(ctx: IRoundCtx): void {
             OWN_PRESS_ROW_MS,
           ),
         ],
-        ["hit", firstOf(hits, 0)],
+        [
+          "hit-swing",
+          firstOf(
+            hits.filter((d) => ev(d) === "SWING_DAMAGE"),
+            0,
+          ),
+        ],
+        [
+          "hit-spell",
+          firstOf(
+            hits.filter((d) => ev(d) !== "SWING_DAMAGE"),
+            0,
+          ),
+        ],
       ];
       // only the earliest kind is the run's first action
       const firsts = kinds

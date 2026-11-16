@@ -72,6 +72,20 @@ describe("the holder's first own action after an unseen-end aura (T113)", () => 
       ),
     ).toBe(at(14.5));
   });
+  it("a melee swing in the first second is never in flight: it is one", () => {
+    const swing = {
+      srcUnitId: "e1",
+      spellId: "",
+      logLine: { event: LogEvent.SWING_DAMAGE, timestamp: at(11.5) },
+    } as never;
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder({ damageOut: [swing] }),
+        at(11.03),
+        MASS_INVIS,
+      ),
+    ).toBe(at(11.5));
+  });
   it("untargetableEndS reads the same end", () => {
     expect(
       untargetableEndS(
