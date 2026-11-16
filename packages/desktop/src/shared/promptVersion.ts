@@ -1293,5 +1293,12 @@
  *  which lock a cooldown entered and for the kill window's healer-lock
  *  clause; it opens no missed-sync-window (user ruling 2026-11-14).
  *  See docs/prompt-version-history.md.
+ *
+ * v558 (2026-11-16; pipeline batch B70, T98 + T103): a talent
+ *  copy of a wall and the press that refreshes it are told apart in
+ *  the burst ledger and the cooldown ledger (a copy on the caster's own
+ *  pet is no press); [BUFF FADED] early-end slack 0.2 s, every channel
+ *  with haste, a spent one-stack buff reads `used up`.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 557;
+export const PROMPT_VERSION = 558;

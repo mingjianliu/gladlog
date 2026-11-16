@@ -6729,3 +6729,38 @@ healerLockUnbacked 0 on both sides. Lines: the facts of 14
 missed-sync-window rows change, their ids are identical (candidate rows +0
 -0); 41 [KILL WINDOW] and 6 [VULNERABLE] lines gain the healer-lock clause;
 every other scan5 check unchanged.
+
+v558 (2026-11-16; pipeline batch B70, T98 + T103; round 13 audit D5, D11,
+D3, D7, D17). (1) T98, a talent copy of a wall and the real press
+that refreshes it (Exhilaration's Survival of the Fittest). Burst ledger:
+buildAuraIntervals does not cut at a REFRESH, so a copy the holder's own
+press refreshed was tagged `[no press logged]` for the whole interval - a
+regression of T49. The ledger reads the timeline's [ENEMY DEF] events
+(pressReadingOf, wallDefensiveEventsOn): a copy at the interval start
+followed, inside the interval and inside the burst, by a pressed event of
+the same wall from the interval's own source reads `pressed Zs after the
+burst opened` at that press; a press that opens another interval of the
+wall, or one after the burst's end, is not the copy's. Cooldown ledger: a
+copy that landed on the caster's own pet was read as proof of a press and
+spent a charge for the rest of the round; petSharesOwnersCopy (the owner
+got the same spell, its id or a press variant, from itself within 5 ms)
+makes it the owner's copy, and the gate fact10 unusedOwnAuraOnAlly reads
+the same predicate. 605 (base capture at 57989f781 vs branch), new
+scan5/t98: ledgerCopyHoldsPress 1 / 25 -> 0 / 24; petCopyReadAsPress 2 /
+3632 -> 0 / 3630; family diff 0 flags; menu rows 7,449 -> 7,449. (2) T103,
+[BUFF FADED] cause. The early-end slack BUFF_FADE_EARLY_TOLERANCE_S goes
+from 1.5 s to 0.2 s: of 19,048 logged `expired` fades on the 605, 15,630
+sit within -0.2 .. +0.05 s of the full length and 88 more at 0.05 .. 0.2 s.
+A Touch of Karma eaten through 0.78 s early: `(expired; 666k absorbed)` ->
+`(used up - absorbed 666k)`; a Dispersion cancelled 0.8 s early:
+`(expired)` -> `(ended after 5.2 of 6s - no dispel logged)`. The gate
+scan5/t18 imports the constant. Every channel runs with haste (runsWithHaste
+/ isChannelledPress): Boomstick, Convoke the Spirits and Celestial Conduit
+take the channel path. A one-stack charge buff removed within 100 ms after
+a spell that spent a dose of the same aura elsewhere in the round reads
+`used up - its charges spent` (Power Siphon). 605 (base 57989f781), new
+scan5/t103: earlyEndReadExpired 77 / 17198 -> 0 / 17121;
+absorbEmptiedReadExpired 6 / 19048 -> 0 / 19003; chargeSpentReadEarly 13 /
+1334 -> 0 / 1359; 183 context lines in 151 files, all [BUFF FADED]
+(Boomstick 49, Convoke 39, Vanish 15, Power Siphon 13, Ice Block 9 and
+smaller groups); candidate rows +0 -0.
