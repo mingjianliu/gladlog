@@ -10,12 +10,26 @@ import { run } from "../scripts/scan5/t111";
 
 const START = 1_000_000;
 
-function scan(lines: string[]): { checked: number; kinds: string[] } {
+function scan(
+  lines: string[],
+  mateSpec: string = CombatUnitSpec.Paladin_Retribution,
+): { checked: number; kinds: string[] } {
   const owner = {
     id: "O",
     name: "Owner",
     spec: CombatUnitSpec.Paladin_Protection,
+    info: { teamId: "0" },
   };
+  const players = [
+    owner,
+    { id: "M", name: "Mate", spec: mateSpec, info: { teamId: "0" } },
+    {
+      id: "E",
+      name: "Enemy",
+      spec: CombatUnitSpec.DemonHunter_Devourer,
+      info: { teamId: "1" },
+    },
+  ];
   const units: Record<string, { id: string; name: string; spec: string }> = {
     "2": { id: "M", name: "Mate", spec: CombatUnitSpec.Paladin_Retribution },
     "6": { id: "E", name: "Enemy", spec: CombatUnitSpec.DemonHunter_Devourer },
@@ -32,6 +46,7 @@ function scan(lines: string[]): { checked: number; kinds: string[] } {
     start: START,
     roundEndAt: START + 600_000,
     owner,
+    players,
     unitOfPid: (pid: string | undefined) =>
       pid === undefined ? undefined : units[pid],
     bump: () => checked++,
@@ -72,6 +87,26 @@ describe("hasteScaledExactBack", () => {
     ).toEqual({ checked: 1, kinds: ["res"] });
     expect(scan(["      [RES] rdy:—  cd:Execution Sentence(≤40s)"])).toEqual({
       checked: 1,
+      kinds: [],
+    });
+  });
+  it("[KILL WINDOW] `back inside`: a friendly Devourer's Soul Immolation must read ≤m:ss; an enemy's spec does not count", () => {
+    const kw = (item: string) =>
+      `  [KILL WINDOW] 2:10–2:24 on Discipline Priest (X): team offensive CDs ready at 2:10: none (back inside: The Hunt 2:20、${item}; pressed inside: Soul Immolation 2:13)`;
+    expect(
+      scan(
+        [kw("Soul Immolation [press-only] 2:13")],
+        CombatUnitSpec.DemonHunter_Devourer,
+      ),
+    ).toEqual({ checked: 1, kinds: ["killWindow"] });
+    expect(
+      scan(
+        [kw("Soul Immolation [press-only] ≤2:13")],
+        CombatUnitSpec.DemonHunter_Devourer,
+      ),
+    ).toEqual({ checked: 1, kinds: [] });
+    expect(scan([kw("Soul Immolation [press-only] 2:13")])).toEqual({
+      checked: 0,
       kinds: [],
     });
   });

@@ -5,21 +5,27 @@
  * with haste, and a `[RES]` `cd:` entry reads `(≤Ns)`.
  */
 import {
+  type AtomicArenaCombat,
   CombatUnitClass,
   CombatUnitReaction,
   CombatUnitSpec,
 } from "@gladlog/parser-compat";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { buildResourceSnapshot } from "../src/context/resourceSnapshot";
 import { emitOffListPressEntries } from "../src/context/timelineSections/offListPress";
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
   HASTE_SCALED_COOLDOWN_NOTE,
   isHasteScaledCooldown,
 } from "../src/data/hasteScaledCooldowns";
 import type { IMajorCooldownInfo } from "../src/utils/cooldowns";
+import {
+  createKillWindowFactsComputer,
+  killWindowFactsSuffix,
+} from "../src/utils/killWindowFacts";
 import type { IOffListPress } from "../src/utils/offListPress";
-import { makeUnit } from "./ported/testHelpers";
+import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
 const PIERCE_THE_VEIL = "1245483";
 const EYE_BEAM = "198013";
@@ -177,6 +183,73 @@ describe("T111 — a [RES] cd entry of a haste-scaled cooldown reads ≤Ns", () 
   it("Retribution's: the exact 40 s", () => {
     expect(res(CombatUnitSpec.Paladin_Retribution)).toContain(
       ":Execution Sentence(40s)",
+    );
+  });
+});
+
+describe("T111 — a kill window's `back inside` is an upper bound for a haste-scaled cooldown (codex 85-tk-K-T111-2)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const START = 1_000_000;
+  const SOUL_IMMOLATION = "1241937";
+  const SMASH = "167105"; // Colossus Smash: not haste-scaled
+  const facts = (
+    spellId: string,
+    spec: CombatUnitSpec,
+    cls: CombatUnitClass,
+  ) => {
+    const f = makeUnit("P1", {
+      class: cls,
+      spec,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          spellId,
+          START + 10_000,
+          "E1",
+          "Enemy",
+          "P1",
+          "P1",
+          0,
+        ),
+      ],
+    });
+    const target = makeUnit("E1");
+    return createKillWindowFactsComputer(
+      {
+        startTime: START,
+        endTime: START + 300_000,
+        units: { P1: f, E1: target },
+      } as unknown as AtomicArenaCombat,
+      [f],
+      [target],
+    ).facts(target, 11, 250);
+  };
+  it("a Devourer's Soul Immolation back inside the span prints `≤m:ss`", () => {
+    expect(
+      isHasteScaledCooldown(
+        SOUL_IMMOLATION,
+        CombatUnitSpec.DemonHunter_Devourer,
+      ),
+    ).toBe(true);
+    const f = facts(
+      SOUL_IMMOLATION,
+      CombatUnitSpec.DemonHunter_Devourer,
+      CombatUnitClass.DemonHunter,
+    );
+    expect(f.backInside).toHaveLength(1);
+    expect(f.backInside![0]!.upperBound).toBe(true);
+    expect(killWindowFactsSuffix(f)).toMatch(/back inside: [^;)]*≤\d+:\d\d/);
+  });
+  it("an Arms warrior's Colossus Smash keeps its exact second", () => {
+    const f = facts(
+      SMASH,
+      CombatUnitSpec.Warrior_Arms,
+      CombatUnitClass.Warrior,
+    );
+    expect(f.backInside).toEqual([{ name: "Colossus Smash", atSeconds: 55 }]);
+    expect(killWindowFactsSuffix(f)).toContain(
+      "back inside: Colossus Smash 0:55",
     );
   });
 });

@@ -17,7 +17,11 @@
  *    - `kick`: a `[KICK]` line whose kicker (an enemy, `N(…) interrupted`)
  *      used the spell, with `; back m:ss`;
  *    - `res`: a `[RES]` `cd:` entry of the holder (`X(…)` for the owner,
- *      `N:X(…)` for a teammate) whose remaining is not `≤Ns`.
+ *      `N:X(…)` for a teammate) whose remaining is not `≤Ns`;
+ *    - `killWindow`: a `[KILL WINDOW]` line's `back inside:` item naming a
+ *      spell some living-or-not friendly of the owner (the producer's own
+ *      team: the owner's `teamId`) has haste-scaled, printed without `≤`
+ *      (codex 85-tk-K-T111-2: `killWindowFacts` read the unhasted return).
  */
 import {
   parseResRow,
@@ -35,6 +39,9 @@ const KICK =
   /^\s*\d+:\d\d\s+\[KICK\]\s+(\d+)\([^)]*\) interrupted .*\(([^;()]+)(?:; ([^()]*))?\)$/;
 const CD_ENTRY = /^(?:(\d+):)?(.+?)\((.*)\)(?:\[[^\]]*\])?$/;
 const BACK = /\bback \d+:\d\d\b/;
+const KILL_WINDOW = /^\s*\[KILL WINDOW\]/;
+const BACK_INSIDE = /\bback inside: ([^;)]*)/;
+const BACK_INSIDE_ITEM = /^(.+?)(?: \[press-only\])? (≤)?\d+:\d\d$/;
 
 export function run(ctx: IRoundCtx): void {
   const C = "hasteScaledExactBack";
@@ -50,7 +57,30 @@ export function run(ctx: IRoundCtx): void {
     }
     return s;
   };
+  const teamId = ctx.owner.info?.teamId;
+  const team = ctx.players.filter((u: any) => u.info?.teamId === teamId);
   ctx.lines.forEach((l, i) => {
+    if (KILL_WINDOW.test(l)) {
+      const b = BACK_INSIDE.exec(l);
+      if (!b) return;
+      for (const item of b[1]!.split("、")) {
+        const m = BACK_INSIDE_ITEM.exec(item.trim());
+        if (!m) continue;
+        const u = team.find((t: any) => hasteNames(t).has(m[1]!));
+        if (!u) continue;
+        ctx.bump(C);
+        if (m[2] === undefined)
+          ctx.violate(
+            C,
+            "killWindow",
+            ctx.start,
+            `kw#${i}#${m[1]}`,
+            `${u.name}: ${m[1]} is haste-scaled for its spec; the [KILL WINDOW] back inside prints an exact return`,
+            l.trim().slice(0, 300),
+          );
+      }
+      return;
+    }
     const p = PRESS.exec(l);
     if (p) {
       const u = p[1] !== undefined ? ctx.owner : ctx.unitOfPid(p[3]);

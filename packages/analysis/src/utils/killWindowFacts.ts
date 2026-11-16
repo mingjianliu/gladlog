@@ -28,6 +28,7 @@ import {
   enemyHealerCcWindows,
   enemyHealerFactOnlyLocks,
 } from "../analysis/candidates/cooldownTiming";
+import { isHasteScaledCooldown } from "../data/hasteScaledCooldowns";
 import {
   castSpellName,
   cdAvailableAt,
@@ -105,6 +106,10 @@ export interface IKillWindowCdAt {
   /** seconds from match start (a whole second for `backInside`; a press's own
    * instant for the `pressed…` lists — both print through `fmtTime`) */
   atSeconds: number;
+  /** T111 (ruling R47 A): a `backInside` second of a cooldown its holder's
+   * spec scales by haste (`isHasteScaledCooldown`) is only the latest it was
+   * back — it prints `≤m:ss`, as the [RES] entry prints `≤Ns`. */
+  upperBound?: true;
 }
 
 export interface IKillWindowGateFacts {
@@ -272,7 +277,13 @@ export function createKillWindowFactsComputer(
         for (let s = readyAtSecond + 1; s <= lastSecond; s++) {
           if (isDeadAt(holder, startMs + s * 1000)) break;
           if (cdAvailableAt(beforePressesOf(cd, s), s)) {
-            backInside.push({ name: label(cd), atSeconds: s });
+            backInside.push({
+              name: label(cd),
+              atSeconds: s,
+              ...(isHasteScaledCooldown(cd.spellId, holder.spec)
+                ? { upperBound: true as const }
+                : {}),
+            });
             break;
           }
         }
@@ -374,7 +385,8 @@ function maybeClause(f: IKillWindowGateFacts): string {
  * non-empty, joined by "; ":
  *   may already be back: X ≤Ns     GH #106 step 3 (F-C8)
  *   pressed at start: X M:SS       spent in the start's own second (F-C12)
- *   back inside: X M:SS            came off cooldown inside the span (F-KW1)
+ *   back inside: X M:SS            came off cooldown inside the span (F-KW1);
+ *                                  `X ≤M:SS` for a haste-scaled one (T111)
  *   pressed inside: X M:SS         pressed after the start's second (F-KW1)
  * Hand-built facts without `readyAtSecond` keep the legacy wording.
  */
@@ -388,7 +400,11 @@ export function killWindowFactsSuffix(f: IKillWindowGateFacts): string {
     );
   } else {
     const at = (list: IKillWindowCdAt[] | undefined) =>
-      (list ?? []).map((x) => `${x.name} ${fmtTime(x.atSeconds)}`).join("、");
+      (list ?? [])
+        .map(
+          (x) => `${x.name} ${x.upperBound ? "≤" : ""}${fmtTime(x.atSeconds)}`,
+        )
+        .join("、");
     const clauses = [
       ["may already be back", maybeClause(f)],
       ["pressed at start", at(f.pressedAtStart)],
