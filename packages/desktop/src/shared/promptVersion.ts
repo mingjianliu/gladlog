@@ -1306,5 +1306,12 @@
  *  bracket opens at the press it is named for; a death-setup chain
  *  entry and a cd-hoarded ownerCc block end at the round end.
  *  See docs/prompt-version-history.md.
+ *
+ * v560 (2026-11-16; pipeline batch B78, T99): `pressed during it`
+ *  reads the cooldown ledger's press identity, so a triggered
+ *  sub-spell's refused row is no press; a refused second stage of the
+ *  same button (Stasis release, Alter Time return) is one and carries a
+ *  /cancelaura note (user ruling R45).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 559;
+export const PROMPT_VERSION = 560;

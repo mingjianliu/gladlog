@@ -6796,3 +6796,22 @@ branch), new scan5/t129: deathChainPastRoundEnd 207 / 1185 (69 distinct) ->
 0 / 1185; cdHoardedOwnerCcPastRoundEnd 9 / 629 -> 0 / 629; 186 death-setup
 rows and 8 cd-hoarded rows change text in chain / ownerCc only, no row
 added or removed, 0 context files.
+
+v560 (2026-11-16; pipeline batch B78, T99; round 13 audit D18; user ruling
+R45). The `pressed during it` item of a control /
+silence line named a cooldown by a name fallback, so the refused row of a
+triggered sub-spell (The Hunt's 370966) read as a press of the cooldown. It
+now reads the cooldown ledger's press identity (isPressOfCooldown). User
+ruling 2026-11-15 (R45): the refused row of a same-button SECOND STAGE
+(Stasis release 370564, Alter Time return 342247; data/secondStagePresses.ts
+SECOND_STAGE_PRESSES, registered in curatedIdRegistry with its first-press
+and ready-aura ids) is its cooldown's press, and the item carries the note
+`(second stage: a /cancelaura macro fires it under control)`. The game fact
+is the user's; the corpus inventory agrees: on the 605, a Stasis ready aura
+ended under a control 53 times - 48 with the release's effect, 5 with none;
+Alter Time 4 times - 3 with a cast row, 1 released without one (small
+sample). 605 (base capture at 57989f781 vs branch), new scan5/t99:
+pressedDuringSubSpell 3 / 1381 -> 0 / 1377; breakFactScan
+refusedPressMechanic wrong 16 / 1181 -> 0 / 1179; 18 items carry the note
+(Stasis 15, Alter Time 3); gates identical over 110 classes; family diff 0
+flags; menu rows 7,449 -> 7,449.
