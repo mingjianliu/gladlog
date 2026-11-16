@@ -600,8 +600,7 @@ export function holderFirstOwnActionAfterMs(
     // no swing was a logged run's first own row, 0 / 689).
     if (
       auraId &&
-      d.logLine.event !== LogEvent.SWING_DAMAGE &&
-      d.logLine.event !== LogEvent.SWING_DAMAGE_LANDED &&
+      !isMeleeSwingRow(d) &&
       t <= afterMs + STEALTH_IMMUNITY_IN_FLIGHT_MS
     )
       continue;
@@ -610,6 +609,26 @@ export function holderFirstOwnActionAfterMs(
   return units
     ? holderOpenerDebuffAfterMs(holder, afterMs, first, units, allowed)
     : first;
+}
+
+/**
+ * A melee swing row of a unit's `damageOut`: `SWING_DAMAGE` /
+ * `SWING_DAMAGE_LANDED`, or a swing a shield ate whole (the parser's
+ * `SPELL_ABSORBED` row with no attacking spell). A swing is never in flight,
+ * so the in-flight first second of `holderFirstOwnActionAfterMs` does not
+ * apply to it (pipeline T113, codex 85-tk-N-T113-1 / -1b); scan5/t113 reads
+ * the same split.
+ */
+export function isMeleeSwingRow(d: {
+  logLine: { event: string };
+  attackSpellId?: string;
+}): boolean {
+  const e = d.logLine.event;
+  return (
+    e === LogEvent.SWING_DAMAGE ||
+    e === LogEvent.SWING_DAMAGE_LANDED ||
+    (e === LogEvent.SPELL_ABSORBED && !d.attackSpellId)
+  );
 }
 
 const stealthAllowsPress =

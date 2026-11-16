@@ -24,7 +24,10 @@
  */
 import { ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
-import { holderFirstOwnActionAfterMs } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  holderFirstOwnActionAfterMs,
+  isMeleeSwingRow,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 
 import {
   APPLIED,
@@ -134,8 +137,8 @@ export function run(ctx: IRoundCtx): void {
       (d) =>
         d.srcUnitId === u.id &&
         (ev(d) === "SPELL_DAMAGE" ||
-          ev(d) === "SWING_DAMAGE" ||
-          ev(d) === "RANGE_DAMAGE"),
+          ev(d) === "RANGE_DAMAGE" ||
+          isMeleeSwingRow(d)),
     );
     for (let k = 0; k < auras.length; k++) {
       const a = auras[k];
@@ -175,14 +178,14 @@ export function run(ctx: IRoundCtx): void {
         [
           "hit-swing",
           firstOf(
-            hits.filter((d) => ev(d) === "SWING_DAMAGE"),
+            hits.filter((d) => isMeleeSwingRow(d)),
             0,
           ),
         ],
         [
           "hit-spell",
           firstOf(
-            hits.filter((d) => ev(d) !== "SWING_DAMAGE"),
+            hits.filter((d) => !isMeleeSwingRow(d)),
             0,
           ),
         ],

@@ -85,6 +85,43 @@ describe("the holder's first own action after an unseen-end aura (T113)", () => 
         MASS_INVIS,
       ),
     ).toBe(at(11.5));
+    // its landed row, and a swing a shield ate whole (no attacking spell)
+    for (const row of [
+      {
+        srcUnitId: "e1",
+        spellId: "",
+        logLine: { event: LogEvent.SWING_DAMAGE_LANDED, timestamp: at(11.5) },
+      },
+      {
+        srcUnitId: "e1",
+        spellId: "",
+        logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: at(11.5) },
+      },
+    ])
+      expect(
+        holderFirstOwnActionAfterMs(
+          holder({ damageOut: [row] }),
+          at(11.03),
+          MASS_INVIS,
+        ),
+      ).toBe(at(11.5));
+    // an absorbed spell hit in the first second stays in flight
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder({
+          damageOut: [
+            {
+              srcUnitId: "e1",
+              spellId: "",
+              attackSpellId: "30451",
+              logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: at(11.5) },
+            },
+          ],
+        }),
+        at(11.03),
+        MASS_INVIS,
+      ),
+    ).toBe(Infinity);
   });
   it("untargetableEndS reads the same end", () => {
     expect(
