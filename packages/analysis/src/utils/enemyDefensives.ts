@@ -290,18 +290,34 @@ export const STOLEN_AURA_PAIR_MS = 100;
  * its source's press would take the victim's caster's press for the thief's
  * shield. User ruling 2026-10-30 (#167): a spellstolen shield does not end
  * `defenseless` (pipeline T127, batch review 80-PIPE-87-B78).
+ *
+ * `runStartMs` is the run's start as its reader takes it, `loggedStartMs`
+ * its logged APPLIED (default: the same). When the start was reconstructed
+ * earlier than the APPLIED (a resync batch re-stated it late, fact11 D19),
+ * the theft sits anywhere from the press that start pairs with
+ * (`ALLY_SHIELD_PRESS_PAIR_MS` before it) to the APPLIED: a priest's
+ * no-target press at 65.0, stolen 65.5, absorbing from 65.7, APPLIED
+ * re-stated 66.2 (batch review 80-PIPE-97-B85).
  */
 export function isStolenAuraAcquisition(
   holder: Pick<ICombatUnit, "id" | "actionOut">,
   spellId: string,
-  appliedMs: number,
+  runStartMs: number,
+  loggedStartMs: number = runStartMs,
 ): boolean {
+  const fromMs =
+    runStartMs -
+    (runStartMs < loggedStartMs
+      ? ALLY_SHIELD_PRESS_PAIR_MS
+      : STOLEN_AURA_PAIR_MS);
+  const toMs = Math.max(runStartMs, loggedStartMs) + STOLEN_AURA_PAIR_MS;
   return (holder.actionOut ?? []).some(
     (x) =>
       (x.logLine.event as LogEvent) === LogEvent.SPELL_STOLEN &&
       x.srcUnitId === holder.id &&
       x.extraSpellId === spellId &&
-      Math.abs(x.logLine.timestamp - appliedMs) <= STOLEN_AURA_PAIR_MS,
+      x.logLine.timestamp >= fromMs &&
+      x.logLine.timestamp <= toMs,
   );
 }
 

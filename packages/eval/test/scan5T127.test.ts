@@ -27,7 +27,25 @@ function scan(
   casterReaction: CombatUnitReaction,
   which: typeof run,
   stolen = false,
+  /** batch review 80-PIPE-97-B85: press 65.0 (no target), theft 65.5,
+   * absorbing from 65.7, the APPLIED re-stated at 66.2 in a six-aura resync
+   * batch */
+  resync = false,
 ) {
+  const appliedS = resync ? 66.2 : 65;
+  const stolenS = resync ? 65.5 : 65;
+  const fillers = resync
+    ? ["1126", "21562", "6673", "1459", "462854"].map((id) =>
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          id,
+          at(appliedS),
+          "x9",
+          "e1",
+          "BUFF",
+        ),
+      )
+    : [];
   const lock = makeUnit("e1", {
     name: "Lock",
     reaction: CombatUnitReaction.Hostile,
@@ -35,11 +53,12 @@ function scan(
       makeAuraEvent(
         LogEvent.SPELL_AURA_APPLIED,
         VOID_SHIELD,
-        at(65),
+        at(appliedS),
         "p1",
         "e1",
         "BUFF",
       ),
+      ...fillers,
       makeAuraEvent(
         LogEvent.SPELL_AURA_REMOVED,
         VOID_SHIELD,
@@ -55,12 +74,23 @@ function scan(
             srcUnitId: "e1",
             spellId: "30449",
             extraSpellId: VOID_SHIELD,
-            timestamp: at(65),
-            logLine: { event: LogEvent.SPELL_STOLEN, timestamp: at(65) },
+            timestamp: at(stolenS),
+            logLine: { event: LogEvent.SPELL_STOLEN, timestamp: at(stolenS) },
           },
         ]
       : [],
     absorbsIn: [
+      ...(resync
+        ? [
+            {
+              spellId: VOID_SHIELD,
+              srcUnitId: "p1",
+              absorbedAmount: 20_000,
+              timestamp: at(65.7),
+              logLine: { timestamp: at(65.7) },
+            },
+          ]
+        : []),
       {
         spellId: VOID_SHIELD,
         srcUnitId: "p1",
@@ -119,6 +149,20 @@ describe("scan5 crossTeamShieldDefenseless", () => {
       checked: 1,
       n: 0,
       other: ["stolen"],
+    });
+  });
+  // batch review 80-PIPE-97-B85: the theft is read against the
+  // reconstructed start (the first absorb), not the late-logged APPLIED
+  it("a stolen copy whose APPLIED a resync batch re-stated late is `stolen`", () => {
+    expect(scan(CombatUnitReaction.Friendly, run, true, true)).toEqual({
+      checked: 1,
+      n: 0,
+      other: ["stolen"],
+    });
+    // the same rows without the theft: the reconstructed run's press is found
+    expect(scan(CombatUnitReaction.Friendly, run, false, true)).toEqual({
+      checked: 1,
+      n: 1,
     });
   });
   it("a same-side caster's is allyShield's, not this check's", () => {

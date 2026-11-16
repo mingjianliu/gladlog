@@ -110,19 +110,6 @@ export function shieldDefenseless(
         )
         .pop();
       if (!runStart) continue;
-      // a copy the target stole keeps its victim's caster as its source: a
-      // stolen shield does not end `defenseless` (user ruling 2026-10-30,
-      // #167) — the producer's own reading (batch review 80-PIPE-87-B78)
-      if (side === "other" && isStolenAuraAcquisition(u, id, tsOf(runStart))) {
-        ctx.violate(
-          check,
-          "stolen",
-          t,
-          `${u.id}#${span[0]}#${id}#stolen`,
-          `${u.name} span ${m[2]}: ${name} ${id} is a copy it stole from ${caster.name}`,
-        );
-        continue;
-      }
       // fact11 D19: the run began no later than the shield's first absorb
       // for u since the shield last came off u — an APPLIED the log wrote
       // late (u unseen, the aura re-stated when it came back) is no start
@@ -155,6 +142,23 @@ export function shieldDefenseless(
               )
               .map(tsOf),
           );
+      // a copy the target stole keeps its victim's caster as its source: a
+      // stolen shield does not end `defenseless` (user ruling 2026-10-30,
+      // #167) — the producer's own reading, from the reconstructed start
+      // (batch reviews 80-PIPE-87-B78, 80-PIPE-97-B85)
+      if (
+        side === "other" &&
+        isStolenAuraAcquisition(u, id, startMs, tsOf(runStart))
+      ) {
+        ctx.violate(
+          check,
+          "stolen",
+          t,
+          `${u.id}#${span[0]}#${id}#stolen`,
+          `${u.name} span ${m[2]}: ${name} ${id} is a copy it stole from ${caster.name}`,
+        );
+        continue;
+      }
       const press = successesOf(caster).find(
         (c: any) =>
           tsOf(c) <= t &&

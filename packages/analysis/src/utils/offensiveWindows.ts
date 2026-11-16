@@ -697,9 +697,11 @@ export function computeOffensiveWindowsUncached(
       // …but not a copy the holder stole: it keeps its victim's caster as
       // its source, and a stolen shield does not count (user ruling
       // 2026-10-30, #167; batch review 80-PIPE-87-B78)
+      // (checked from the reconstructed start: batch review 80-PIPE-97-B85)
       const shieldCaster = isStolenAuraAcquisition(
         holder,
         iv.spellId,
+        runStartMs,
         loggedStartMs,
       )
         ? undefined

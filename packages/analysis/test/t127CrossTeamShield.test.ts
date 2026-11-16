@@ -38,10 +38,28 @@ function round(
   from: number | undefined,
   pressed: boolean,
   /** the aura reaches the druid half a second after the press: `stolen` =
-   * by the druid's own SPELL_STOLEN row, `late` = with no such row */
-  how: "pressedOn" | "stolen" | "late" = "pressedOn",
+   * by the druid's own SPELL_STOLEN row, `late` = with no such row;
+   * `resync*` = absorbing from `from + 2.7`, its APPLIED re-stated at
+   * `from + 3.2` in a six-aura resync batch, with (`resyncStolen`) or without
+   * a SPELL_STOLEN row at `from + 2.5` (batch review 80-PIPE-97-B85) */
+  how:
+    "pressedOn" | "stolen" | "late" | "resync" | "resyncStolen" = "pressedOn",
 ) {
-  const lag = how === "pressedOn" ? 0 : 0.5;
+  const resync = how === "resync" || how === "resyncStolen";
+  const lag = how === "pressedOn" ? 0 : resync ? 1.2 : 0.5;
+  const fillers =
+    from !== undefined && resync
+      ? ["1126", "21562", "6673", "1459", "462854"].map((id) =>
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            id,
+            at(from + 3.2),
+            "x9",
+            "e1",
+            "BUFF",
+          ),
+        )
+      : [];
   const druid = makeUnit("e1", {
     name: "EnemyDruid",
     spec: CombatUnitSpec.Druid_Feral,
@@ -77,9 +95,10 @@ function round(
               "e1",
               "BUFF",
             ),
+            ...fillers,
           ],
     actionOut:
-      from !== undefined && how === "stolen"
+      from !== undefined && (how === "stolen" || how === "resyncStolen")
         ? [
             {
               srcUnitId: "e1",
@@ -98,6 +117,17 @@ function round(
       from === undefined
         ? []
         : [
+            ...(resync
+              ? [
+                  {
+                    spellId: VOID_SHIELD,
+                    srcUnitId: "p1",
+                    absorbedAmount: 20_000,
+                    timestamp: at(from + 2.7),
+                    logLine: { timestamp: at(from + 2.7) },
+                  },
+                ]
+              : []),
             {
               spellId: VOID_SHIELD,
               srcUnitId: "p1",
@@ -153,6 +183,15 @@ describe("T127 — a shield the other side pressed on the target ends `defensele
     expect(round(from, true, "stolen")).toEqual(round(undefined, false));
     // the same rows without the steal: the shield counts
     expect(round(from, true, "late")).not.toEqual(round(undefined, false));
+  });
+  // batch review 80-PIPE-97-B85: the APPLIED re-stated late (resync batch)
+  // 0.7 s after the theft — the start is reconstructed to the first absorb,
+  // and the theft is read against it, not the logged APPLIED
+  it("a stolen copy whose APPLIED a resync batch re-stated late is still no protection", () => {
+    const from = round(undefined, false)[0]!.fromSeconds;
+    expect(round(from, true, "resyncStolen")).toEqual(round(undefined, false));
+    // the same rows without the steal: the reconstructed run counts
+    expect(round(from, true, "resync")).not.toEqual(round(undefined, false));
   });
   it("…but not without the caster's press (a proc shield stays no protection)", () => {
     const from = round(undefined, false)[0]!.fromSeconds;
