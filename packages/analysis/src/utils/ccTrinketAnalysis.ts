@@ -524,6 +524,9 @@ export function ccAvoidanceBuffsUpAt(
     fromMs: number,
     caster: ICombatUnit | undefined,
     srcId = "",
+    /** the opening (APPLIED / REFRESH) row's `lineIndex`: an action logged
+     * below it in its millisecond is after it (codex 85-tk-N-T113-5 #2) */
+    fromLine?: number,
   ) => {
     const s = buffFullDurationForCaster(id, caster, fromMs);
     up.delete(id);
@@ -553,6 +556,7 @@ export function ccAvoidanceBuffsUpAt(
               fromMs,
               id,
               opts.units,
+              fromLine,
             )
           : Infinity,
       ),
@@ -615,6 +619,7 @@ export function ccAvoidanceBuffsUpAt(
             a.timestamp,
             opts.casterOf?.(a.srcUnitId),
             a.srcUnitId ?? "",
+            a.logLine.lineIndex,
           );
       }
       if (laterFrom < 0) laterFrom = k;
@@ -635,6 +640,7 @@ export function ccAvoidanceBuffsUpAt(
         a.timestamp,
         opts.casterOf?.(a.srcUnitId),
         a.srcUnitId ?? "",
+        a.logLine.lineIndex,
       );
     else if (ev === LogEvent.SPELL_AURA_REMOVED && ofOpen(a)) {
       // a REMOVED in the judged row's own ms whose order the log does not

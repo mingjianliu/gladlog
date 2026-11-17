@@ -21,6 +21,7 @@ import { castingLockIntervalsOf } from "../src/utils/castingLocks";
 import { ccAvoidanceBuffsUpAt } from "../src/utils/ccTrinketAnalysis";
 import {
   stealthImmunityPressActionEndS,
+  untargetableEndS,
   withStealthActionEnds,
 } from "../src/utils/enemyDefensives";
 import { computeOffensiveWindowsUncached } from "../src/utils/offensiveWindows";
@@ -242,5 +243,79 @@ describe("T113 — batch review 80-PIPE-111-B98", () => {
   it("#2 the same action logged above the APPLIED came before it: the official length stands (25.010 s)", () => {
     const s = startsOf(sameMs(false));
     expect(s.some((f) => Math.abs(f - 25.01) < 0.01)).toBe(true);
+  });
+});
+
+describe("T113 — codex 85-tk-N-T113-5", () => {
+  it("#1 two Mass Invisibility applications of one millisecond each keep their own row: the holder's cast bar between them ends only the first", () => {
+    const MI = "414664";
+    const a = makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      MI,
+      at(20),
+      "mA",
+      "e1",
+      "BUFF",
+    );
+    const b = makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      MI,
+      at(20),
+      "mB",
+      "e1",
+      "BUFF",
+    );
+    const u = makeUnit("e1", {
+      name: "EnemyShaman",
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [],
+      auraEvents: [a, b],
+    });
+    Object.assign(u, {
+      damageIn: [],
+      castStartEvents: [
+        {
+          spellId: "8004",
+          spellName: "Healing Surge",
+          timestamp: at(20),
+          srcUnitId: "e1",
+          logLine: {
+            event: "SPELL_CAST_START",
+            timestamp: at(20),
+            lineIndex: a.logLine.lineIndex + 0.5,
+          },
+        },
+      ],
+    });
+    const iv = (src: string) => ({
+      spellId: MI,
+      srcUnitId: src,
+      fromS: 20,
+      toS: 32,
+      inferredEnd: true,
+    });
+    expect(untargetableEndS(u as never, iv("mA"), T0, [u] as never)).toBe(20);
+    expect(untargetableEndS(u as never, iv("mB"), T0, [u] as never)).toBe(32);
+  });
+  it("#2 a REFRESH's own row: a cast bar logged below the refresh in its millisecond ends the Burrow there for the CC-avoidance reading", () => {
+    const u = shaman(21);
+    const refresh = makeAuraEvent(
+      LogEvent.SPELL_AURA_REFRESH,
+      BURROW,
+      at(21),
+      "e1",
+      "e1",
+      "BUFF",
+    );
+    u.auraEvents.push(refresh as never);
+    const bar = (u as unknown as { castStartEvents: { logLine: object }[] })
+      .castStartEvents[0]!;
+    Object.assign(bar.logLine, { lineIndex: refresh.logLine.lineIndex + 1 });
+    const ids = (ms: number) =>
+      ccAvoidanceBuffsUpAt(u, ms, { units: [u] as never }).map(
+        (x) => x.spellId,
+      );
+    expect(ids(at(20.5))).toContain(BURROW);
+    expect(ids(at(23))).not.toContain(BURROW);
   });
 });

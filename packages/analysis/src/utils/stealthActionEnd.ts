@@ -56,7 +56,13 @@ export const KW_UNTARGETABLE_AURA_IDS: ReadonlySet<string> = new Set([
 export function untargetableEndS(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut"> &
     Partial<Pick<ICombatUnit, "auraEvents">>,
-  iv: { spellId?: string; fromS: number; toS: number; inferredEnd?: boolean },
+  iv: {
+    spellId?: string;
+    srcUnitId?: string;
+    fromS: number;
+    toS: number;
+    inferredEnd?: boolean;
+  },
   matchStartMs: number,
   /** the round's units (`holderFirstOwnActionAfterMs`'s stealth opener) */
   units?: readonly ICombatUnit[],
@@ -69,6 +75,9 @@ export function untargetableEndS(
     (a) =>
       a.spellId === iv.spellId &&
       a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      // the application's own source: two of one millisecond (two mages'
+      // Mass Invisibility) each keep their row (codex 85-tk-N-T113-5 #1)
+      (!iv.srcUnitId || a.srcUnitId === iv.srcUnitId) &&
       Math.abs(a.logLine.timestamp - fromMs) < 1,
   );
   const first = holderFirstOwnActionAfterMs(
