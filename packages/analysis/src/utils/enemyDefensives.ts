@@ -2125,7 +2125,10 @@ export function saveAuraIntervals(
   ).map((iv) => {
     const srcUnitId = srcIdByName.get(iv.srcUnitName);
     const out = srcUnitId === undefined ? iv : { ...iv, srcUnitId };
-    if (!SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)) return out;
+    // the stealth-kind immunities (Burrow, Vanish, Mass Invisibility): the
+    // kill windows time Greater Invisibility's wall by its official length on
+    // purpose (`computeOffensiveWindows`, ruling D6)
+    if (!ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId)) return out;
     const roundUnits = Object.values(combat.units ?? {});
     // an end the log never showed is over at the holder's own action
     // (`untargetableEndS`), hit or no hit (batch review 80-PIPE-107-B94: a
@@ -2142,7 +2145,6 @@ export function saveAuraIntervals(
         : out;
     // GH #195: a stealth-kind immunity ends at the first single-target hit
     // past its first second (`stealthImmunityHitMs`)
-    if (!ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId)) return withAction;
     // …unless the immunity was over before it: an end the log never showed
     // is over at the holder's first own action (`untargetableEndS`, the one
     // reading the kill windows and the CC samplers share), not at the

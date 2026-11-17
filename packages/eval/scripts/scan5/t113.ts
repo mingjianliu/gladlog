@@ -14,7 +14,9 @@
  *    `SLACK_MS` before the printed end.
  *  - `killWindowShutPastAction` (batch reviews 80-PIPE-104-B91 /
  *    -107-B94): the producer's own interval (`saveAuraIntervals`) of an
- *    unseen-end aura (`SAVE_AURA_END_UNSEEN_IDS`) whose holder acted before
+ *    unseen-end stealth immunity (`ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`;
+ *    Greater Invisibility's wall is timed by its official length in the
+ *    kill windows on purpose, ruling D6) whose holder acted before
  *    its end (`untargetableEndS`, the end every span reader shares) —
  *    the aimed hit that cut it, or the builder's cap with no hit — against
  *    the producer's own kill windows (`computeOffensiveWindows`) on that
@@ -36,7 +38,6 @@ import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/sp
 import {
   holderFirstOwnActionAfterMs,
   isMeleeSwingRow,
-  SAVE_AURA_END_UNSEEN_IDS,
   saveAuraIntervals,
   untargetableEndS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -239,7 +240,7 @@ function killWindowShutPastAction(ctx: IRoundCtx): void {
     // the one end every span reader shares (`untargetableEndS`), on the
     // intervals the hit cut
     const cut = saveAuraIntervals(u, team, combat as any)
-      .filter((iv) => SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId))
+      .filter((iv) => ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId))
       .map((iv) => ({
         iv,
         actS: untargetableEndS(u, iv, ctx.start, ctx.units),
