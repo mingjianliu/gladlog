@@ -23,7 +23,7 @@ import { ccLengthIsDrEvidence } from "../utils/ccTrinketAnalysis";
 import { ccRecastSplitsResend } from "../utils/drAnalysis";
 import { groundingRedirects } from "../utils/groundingRedirects";
 import { isDeferralAbsorb } from "../utils/incomingPressure";
-import { petCommands } from "../utils/petCommands";
+import { commandReflectRows, REFLECT_CAST_LEAD_MS } from "../utils/petCommands";
 import type { CastFailedEvent } from "../utils/rawStreams";
 import { isPastRoundEnd } from "../utils/roundEnd";
 import { sanctuaryRemovalPairs } from "../utils/sanctuaryRemovals";
@@ -39,6 +39,9 @@ import {
 // moved to utils/castMissRows.ts (pipeline T120: read there by the
 // failed-control row sweep, which spellOutcomeLines imports); re-exported
 export { isControlSpell, isCountedReflectRow };
+// moved to utils/petCommands.ts (pipeline T120: read by the cast sweep in
+// utils/ccTrinketAnalysis.ts, which spellOutcomeLines imports)
+export { commandReflectRows, REFLECT_CAST_LEAD_MS };
 
 // ── Grounding ────────────────────────────────────────────────────────────────
 
@@ -122,12 +125,6 @@ export interface IReflected {
    * moved to its pet keeps its owner) — `reflectLineRowKeys` */
   rowSrcIds: string[];
 }
-
-/** A REFLECT row can be logged just before its own cast's SUCCESS row
- * (47867c33: Holy Word: Chastise's 200200 REFLECT 1 ms ahead of 88625's
- * SUCCESS) — far below two presses of one spell (Fire Blast 943 ms). Two
- * rows no cast covers this close are one effect logged twice. */
-export const REFLECT_CAST_LEAD_MS = 100;
 
 /** How long after its cast a row is still that cast's: Touch of Karma's
  * 10 s (its rows run 3.3 s past the press; an Ultimate Penitence's first
@@ -430,49 +427,6 @@ export function reflectedSpellDealsDamage(
 
 /** Spell Reflection's own id (`REFLECT_OWN_DAMAGE_IDS`). */
 const SPELL_REFLECTION_ID = "23920";
-
-type ReflectMissRow = NonNullable<ICombatUnit["missesOut"]>[number];
-/** fact6 D30's reading: an owner's command to its pet (Command Demon) is the
- * pet's cast — the pet's own REFLECT row states it (`carriedOut`: the owner's
- * row is dropped); a command row no summon row carried out is the pet's,
- * once (`reflectsMovedTo`, keyed by pet id). `commandReflects` = both.
- * Read by `reflectedSpells` and scan5/t120 (pipeline T120, codex
- * 85-tk-L-T120-2f: a carried-out owner row is no fact of its own). */
-export function commandReflectRows(units: readonly ICombatUnit[]): {
-  commandReflects: Set<ReflectMissRow>;
-  carriedOut: Set<ReflectMissRow>;
-  reflectsMovedTo: Map<string, ReflectMissRow[]>;
-} {
-  const commandReflects = new Set<ReflectMissRow>();
-  const carriedOut = new Set<ReflectMissRow>();
-  const reflectsMovedTo = new Map<string, ReflectMissRow[]>();
-  for (const u of units) {
-    if (!u.info) continue;
-    const rows = (u.missesOut ?? []).filter(isCountedReflectRow);
-    if (rows.length === 0) continue;
-    const cmd = petCommands(u, { units });
-    for (const m of rows) {
-      const name = getEnglishSpellName(m.spellId!, m.spellName ?? "");
-      if (cmd.carriedOutBy(m.logLine.timestamp, name)) {
-        commandReflects.add(m);
-        carriedOut.add(m);
-        continue;
-      }
-      if (
-        !cmd.isCommandRow(m.spellId!, m.logLine.timestamp, REFLECT_CAST_LEAD_MS)
-      )
-        continue;
-      commandReflects.add(m);
-      const pet = cmd.commandPet(name);
-      if (pet)
-        reflectsMovedTo.set(pet.id, [
-          ...(reflectsMovedTo.get(pet.id) ?? []),
-          m,
-        ]);
-    }
-  }
-  return { commandReflects, carriedOut, reflectsMovedTo };
-}
 
 /**
  * Spell Reflection returns the log wrote no REFLECT row for (fact11 D9,

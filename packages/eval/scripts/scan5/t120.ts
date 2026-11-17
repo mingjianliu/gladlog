@@ -21,7 +21,6 @@
  *    such row of a player with a pid.
  */
 import {
-  commandReflectRows,
   type IReflected,
   reflectedSpells,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
@@ -32,6 +31,7 @@ import {
   controlReachesPlayers,
   isControlCast,
 } from "@gladlog/analysis/src/utils/castMissRows";
+import { commandReflectRows } from "@gladlog/analysis/src/utils/petCommands";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 
 import {
@@ -66,7 +66,7 @@ export function run(ctx: IRoundCtx): void {
   const reflectChains = (): IReflected[] =>
     (chains ??= reflectedSpells(ctx.units, ctx.start));
   // an owner's command row its pet carried out: the pet's own row is the
-  // fact, the owner's is dropped (`commandReflectRows`; codex
+  // fact, the owner's is dropped (`commandReflectRows`, utils/petCommands.ts; codex
   // 85-tk-L-T120-2f)
   const rowKey = (r: any) => `${r.srcUnitId}@${tsOf(r)}#${r.spellId}`;
   let carried: Set<string> | undefined;

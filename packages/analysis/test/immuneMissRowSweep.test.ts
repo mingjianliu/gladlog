@@ -286,4 +286,71 @@ describe("IMMUNE control rows the cast sweep never walks", () => {
       run([], row("1330", "Garrote - Silence", LogEvent.SPELL_PERIODIC_MISSED)),
     ).toEqual([]);
   });
+  it("codex 85-tk-L-T120-2g: an owner's Seduction command its pet carried out gets no line — the pet's [REFLECTED] line states it", () => {
+    const row = (spellId: string, src: string, t: number) => ({
+      spellId,
+      spellName: "Seduction",
+      srcUnitId: src,
+      destUnitId: "player-1",
+      missType: "REFLECT",
+      timestamp: t,
+      logLine: { event: LogEvent.SPELL_MISSED, timestamp: t },
+    });
+    const ownerRow = row("119909", "enemy-1", AT);
+    const petRow = row("6358", "Pet-1", AT + 440);
+    const lock = makeUnit("enemy-1", {
+      name: "Warlock",
+      spec: CombatUnitSpec.Warlock_Affliction,
+      reaction: CombatUnitReaction.Hostile,
+      // `commandReflectRows` reads a unit with its combatant info
+      info: {},
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "119909",
+          AT,
+          "player-1",
+          "Warrior",
+          "enemy-1",
+          "Warlock",
+        ),
+      ],
+    });
+    (lock as unknown as { missesOut: unknown[] }).missesOut = [ownerRow];
+    const pet = makeUnit("Pet-1", {
+      name: "Sayaad",
+      reaction: CombatUnitReaction.Hostile,
+    });
+    (pet as unknown as { ownerId: string }).ownerId = "enemy-1";
+    (pet as unknown as { missesOut: unknown[] }).missesOut = [petRow];
+    const player = makeUnit("player-1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "23920",
+          AT - 1000,
+          "player-1",
+          "player-1",
+        ),
+      ],
+    });
+    (player as unknown as { missesIn: unknown[] }).missesIn = [
+      ownerRow,
+      petRow,
+    ];
+    const combat = {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 300_000,
+      startInfo: { zoneId: "1672" },
+      units: { "enemy-1": lock, "Pet-1": pet, "player-1": player },
+    };
+    const r = analyzePlayerCCAndTrinket(player, [lock], combat as never);
+    const seduction = [
+      ...r.ccAvoidedInstances,
+      ...(r.ccImmuneUncredited ?? []),
+    ].filter((x) => x.spellName === "Seduction" && x.sourceId === "enemy-1");
+    expect(seduction).toEqual([]);
+  });
 });

@@ -474,9 +474,9 @@ const INDEX: PredicateRow[] = [
     mod: spellOutcomeLines,
   },
   {
-    file: `${A}/context/spellOutcomeLines.ts`,
+    file: `${A}/utils/petCommands.ts`,
     symbol: "commandReflectRows",
-    mod: spellOutcomeLines,
+    mod: petCommandsMod,
   },
   {
     file: `${A}/context/spellOutcomeLines.ts`,

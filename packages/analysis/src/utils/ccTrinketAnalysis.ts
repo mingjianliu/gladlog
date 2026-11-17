@@ -129,7 +129,7 @@ import {
   hasLineOfSight,
   positionSampleSpanMs,
 } from "./losAnalysis";
-import { petCommands } from "./petCommands";
+import { commandReflectRows, petCommands } from "./petCommands";
 import {
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
   INTERP_MAX_GAP_MS,
@@ -6079,6 +6079,15 @@ function analyzePlayerCCAndTrinketUncached(
     groundHitsTaken.add(key);
     return true;
   };
+  let carriedOutKeys: Set<string> | undefined;
+  const carriedOutReflectKeys = (): Set<string> =>
+    (carriedOutKeys ??= new Set(
+      [
+        ...commandReflectRows(
+          Object.values(combat.units ?? {}) as ICombatUnit[],
+        ).carriedOut,
+      ].map((r) => `${r.srcUnitId}@${r.timestamp}#${r.spellId}`),
+    ));
   for (const enemy of enemies) {
     // F134: include the enemy's pet/guardian casts so a whiffed pet CC (Water Elemental Freeze,
     // Felhunter Spell Lock, Succubus Seduction, Hunter-pet Intimidation) is credited as an avoidance.
@@ -6138,6 +6147,17 @@ function analyzePlayerCCAndTrinketUncached(
           },
           ccSpellName,
         );
+        // an owner's command its pet carried out: the pet's row is the
+        // fact, stated by the pet's [REFLECTED] line — the owner's REFLECT
+        // row is dropped, as `reflectedSpells` drops it, also when no pet
+        // cast row made it a command row above (codex 85-tk-L-T120-2g)
+        if (
+          missRow?.missType === "REFLECT" &&
+          carriedOutReflectKeys().has(
+            `${missRow.srcUnitId}@${missRow.timestamp}#${missRow.spellId}`,
+          )
+        )
+          continue;
         if (!landedOnPlayer(cast, missRow !== undefined)) {
           const loggedMissType = missRow?.missType;
           // Single-source predicate (2026-08-07, shared-predicate rule / CC

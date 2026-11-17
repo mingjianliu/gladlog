@@ -8,6 +8,7 @@
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { isCountedReflectRow } from "./castMissRows";
 
 /** How far apart an owner's press and the row of the summon that carried it
  * out can be logged (Command Demon: the Sayaad's own Seduction bar starts
@@ -51,9 +52,7 @@ export function petCommands(
 } {
   // a PET (`Pet-` GUID) carries out a command; a totem or guardian logging
   // its summoning spell's name (Capacitor Totem) is the owner's press itself
-  const summons = (
-    Object.values(combat.units ?? {}) as ICombatUnit[]
-  ).filter(
+  const summons = (Object.values(combat.units ?? {}) as ICombatUnit[]).filter(
     (u) => u.ownerId === owner.id && u.id.startsWith("Pet-"),
   );
   const petRows = summons.flatMap((u) =>
@@ -125,8 +124,55 @@ export function petCommands(
       [...petRows, ...petMissRows()].find(
         (r) => r.name === name && Math.abs(r.ms - ms) <= PET_COMMAND_MS,
       )?.u,
-    commandPet: (name) =>
-      petRows.find((r) => r.name === name)?.u ?? summons[0],
+    commandPet: (name) => petRows.find((r) => r.name === name)?.u ?? summons[0],
   };
 }
 
+/** A REFLECT row can be logged just before its own cast's SUCCESS row
+ * (47867c33: Holy Word: Chastise's 200200 REFLECT 1 ms ahead of 88625's
+ * SUCCESS) — far below two presses of one spell (Fire Blast 943 ms). Two
+ * rows no cast covers this close are one effect logged twice. */
+export const REFLECT_CAST_LEAD_MS = 100;
+
+type ReflectMissRow = NonNullable<ICombatUnit["missesOut"]>[number];
+/** fact6 D30's reading: an owner's command to its pet (Command Demon) is the
+ * pet's cast — the pet's own REFLECT row states it (`carriedOut`: the owner's
+ * row is dropped); a command row no summon row carried out is the pet's,
+ * once (`reflectsMovedTo`, keyed by pet id). `commandReflects` = both.
+ * Read by `reflectedSpells` and scan5/t120 (pipeline T120, codex
+ * 85-tk-L-T120-2f: a carried-out owner row is no fact of its own). */
+export function commandReflectRows(units: readonly ICombatUnit[]): {
+  commandReflects: Set<ReflectMissRow>;
+  carriedOut: Set<ReflectMissRow>;
+  reflectsMovedTo: Map<string, ReflectMissRow[]>;
+} {
+  const commandReflects = new Set<ReflectMissRow>();
+  const carriedOut = new Set<ReflectMissRow>();
+  const reflectsMovedTo = new Map<string, ReflectMissRow[]>();
+  for (const u of units) {
+    if (!u.info) continue;
+    const rows = (u.missesOut ?? []).filter(isCountedReflectRow);
+    if (rows.length === 0) continue;
+    const cmd = petCommands(u, { units });
+    for (const m of rows) {
+      const name = getEnglishSpellName(m.spellId!, m.spellName ?? "");
+      if (cmd.carriedOutBy(m.logLine.timestamp, name)) {
+        commandReflects.add(m);
+        carriedOut.add(m);
+        continue;
+      }
+      if (
+        !cmd.isCommandRow(m.spellId!, m.logLine.timestamp, REFLECT_CAST_LEAD_MS)
+      )
+        continue;
+      commandReflects.add(m);
+      const pet = cmd.commandPet(name);
+      if (pet)
+        reflectsMovedTo.set(pet.id, [
+          ...(reflectsMovedTo.get(pet.id) ?? []),
+          m,
+        ]);
+    }
+  }
+  return { commandReflects, carriedOut, reflectsMovedTo };
+}
