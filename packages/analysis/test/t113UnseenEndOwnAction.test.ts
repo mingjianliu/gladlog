@@ -250,3 +250,45 @@ describe("the protection ends at the holder's action for every span reader (T113
     expect(ownSaveSpanS(d, false)?.to).toBeCloseTo(22);
   });
 });
+
+describe("…with no later hit too (T113, batch review 80-PIPE-107-B94)", () => {
+  // Mass Invisibility up at 20 s, no REMOVED; a Polymorph bar begun at 22 s
+  // with no SUCCESS; no incoming hit afterwards
+  it("the [ENEMY DEF] length and the kill window's own-save span end at 22 s, not at the 12 s cap", () => {
+    const mage = makeUnit("e1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Arcane,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          MASS_INVIS,
+          at(20),
+          "e1",
+          "e1",
+          "BUFF",
+        ),
+      ],
+    });
+    Object.assign(mage, { castStartEvents: [barBegun(22)], damageIn: [] });
+    const combat = {
+      startTime: START,
+      endTime: START + 300_000,
+      units: { e1: mage },
+    };
+    const iv = saveAuraIntervals(mage, [mage], combat as never).find(
+      (x) => x.spellId === MASS_INVIS,
+    )!;
+    // no hit: the interval keeps the builder's cap, and says where the
+    // protection ended
+    expect(iv.endedByHit).toBeUndefined();
+    expect(iv.toS).toBeCloseTo(32);
+    expect(iv.untargetableToS).toBeCloseTo(22);
+    const d = enemyDefensiveEvents(mage, [mage], combat as never).find(
+      (e) => e.spellId === MASS_INVIS,
+    )!;
+    expect(d.endNotLogged).toBe(true);
+    expect(d.atSeconds + d.observedSeconds!).toBeCloseTo(22);
+    expect(ownSaveSpanS(d, false)?.to).toBeCloseTo(22);
+  });
+});

@@ -2125,10 +2125,24 @@ export function saveAuraIntervals(
   ).map((iv) => {
     const srcUnitId = srcIdByName.get(iv.srcUnitName);
     const out = srcUnitId === undefined ? iv : { ...iv, srcUnitId };
+    if (!SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)) return out;
+    const roundUnits = Object.values(combat.units ?? {});
+    // an end the log never showed is over at the holder's own action
+    // (`untargetableEndS`), hit or no hit (batch review 80-PIPE-107-B94: a
+    // Mass Invisibility with no later hit kept its 12 s cap for the kill
+    // windows while the cast bar 2 s in had ended it)
+    const actMs = Math.round(
+      combat.startTime +
+        untargetableEndS(unit, iv, combat.startTime, roundUnits) * 1000,
+    );
+    const capMs = Math.round(combat.startTime + iv.toS * 1000);
+    const withAction =
+      actMs < capMs
+        ? { ...out, untargetableToS: (actMs - combat.startTime) / 1000 }
+        : out;
     // GH #195: a stealth-kind immunity ends at the first single-target hit
     // past its first second (`stealthImmunityHitMs`)
-    if (!ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId)) return out;
-    const roundUnits = Object.values(combat.units ?? {});
+    if (!ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId)) return withAction;
     // …unless the immunity was over before it: an end the log never showed
     // is over at the holder's first own action (`untargetableEndS`, the one
     // reading the kill windows and the CC samplers share), not at the
@@ -2146,12 +2160,9 @@ export function saveAuraIntervals(
       roundUnits,
       iv.toRow,
     );
-    if (hitMs === undefined) return out;
+    if (hitMs === undefined) return withAction;
     // in whole ms: the action's own row is not before itself
-    const overMs = Math.round(
-      combat.startTime +
-        untargetableEndS(unit, iv, combat.startTime, roundUnits) * 1000,
-    );
+    const overMs = actMs;
     // the hit ends the immunity, not the aura: an end the log never showed
     // stays unshown (`inferredEnd`, ruling P-FU-b8 — a hit does not prove
     // the aura was up until it)
@@ -2583,6 +2594,15 @@ export function enemyDefensiveEvents(
     | "endedByHit"
   > => {
     const endMs = Math.round(combat.startTime + iv.toS * 1000);
+    // An end the log never showed that the holder's own action came before
+    // (`untargetableToS`, pipeline T113): every `end not logged` this
+    // returns carries that length, the one the span readers take
+    // (`ownSaveSpanS` / `ownWallSpanS` read `observedSeconds`; batch
+    // reviews 80-PIPE-104-B91, 80-PIPE-107-B94)
+    const actionEnd =
+      iv.untargetableToS !== undefined
+        ? { observedSeconds: iv.untargetableToS - iv.fromS }
+        : {};
     // The round ended before the log did (a Solo Shuffle round's ending
     // death; `roundEndAtMs`). Read against the LOG's end, an aura pressed
     // 1 s before that death printed `3.0s — still up when the round ended`
@@ -2598,14 +2618,14 @@ export function enemyDefensiveEvents(
       // unseen carrier's keeps `end not logged`, which is still what it is)
       if (startMs >= roundEndAt)
         return unseenEnd
-          ? { removedEarly: false, endNotLogged: true }
+          ? { removedEarly: false, endNotLogged: true, ...actionEnd }
           : { removedEarly: false, observedSeconds: undefined };
       // an end the log never showed, capped at or past the round's end — or
       // a REMOVED logged after it: the aura was on its holder at that
       // instant (an unseen carrier's stays `end not logged`, as below)
       if (iv.inferredEnd ? endMs >= roundEndAt : endMs > roundEndAt)
         return unseenEnd
-          ? { removedEarly: false, endNotLogged: true }
+          ? { removedEarly: false, endNotLogged: true, ...actionEnd }
           : {
               removedEarly: false,
               upAtRoundEnd: true,
@@ -2627,7 +2647,7 @@ export function enemyDefensiveEvents(
         ? {
             removedEarly: false,
             endNotLogged: true,
-            observedSeconds: (iv.untargetableToS ?? iv.toS) - iv.fromS,
+            ...actionEnd,
           }
         : { removedEarly: false, endedByHit: true };
     if (iv.inferredEnd) {
@@ -2641,7 +2661,7 @@ export function enemyDefensiveEvents(
       return endMs >= combat.endTime &&
         !SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)
         ? { removedEarly: false, upAtRoundEnd: true }
-        : { removedEarly: false, endNotLogged: true };
+        : { removedEarly: false, endNotLogged: true, ...actionEnd };
     }
     if (!removedEarly(auraId, iv.toS - iv.fromS)) {
       // Inside the slack an end the log gives a cause for is still early:

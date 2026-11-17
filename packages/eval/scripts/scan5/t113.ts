@@ -12,13 +12,15 @@
  *    own action after it went up (`holderFirstOwnActionAfterMs`, the one
  *    predicate `untargetableEndS` and the burst ledger read) comes more than
  *    `SLACK_MS` before the printed end.
- *  - `killWindowShutPastAction` (batch review 80-PIPE-104-B91): the
- *    producer's own interval (`saveAuraIntervals`) of such an aura whose
- *    holder acted before the aimed hit (`untargetableEndS`, the end every
- *    span reader shares), against the producer's own kill windows
- *    (`computeOffensiveWindows`) on that holder: one opening at the hit
- *    itself, later than the action, read the protection as lasting to the
- *    hit. Checked = those intervals (each round once).
+ *  - `killWindowShutPastAction` (batch reviews 80-PIPE-104-B91 /
+ *    -107-B94): the producer's own interval (`saveAuraIntervals`) of an
+ *    unseen-end aura (`SAVE_AURA_END_UNSEEN_IDS`) whose holder acted before
+ *    its end (`untargetableEndS`, the end every span reader shares) —
+ *    the aimed hit that cut it, or the builder's cap with no hit — against
+ *    the producer's own kill windows (`computeOffensiveWindows`) on that
+ *    holder: one opening at that end itself, later than the action, read
+ *    the protection as lasting to it. Checked = those intervals (each round
+ *    once); kind = aura, hit / no hit.
  *  - `visibleRunCastStart` (the measurement behind what counts as the
  *    holder's action): on a self-applied run of an any-action-ends aura
  *    (Mass Invisibility 414664, Greater Invisibility 110960; Vanish 11327,
@@ -34,6 +36,7 @@ import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/sp
 import {
   holderFirstOwnActionAfterMs,
   isMeleeSwingRow,
+  SAVE_AURA_END_UNSEEN_IDS,
   saveAuraIntervals,
   untargetableEndS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -236,7 +239,7 @@ function killWindowShutPastAction(ctx: IRoundCtx): void {
     // the one end every span reader shares (`untargetableEndS`), on the
     // intervals the hit cut
     const cut = saveAuraIntervals(u, team, combat as any)
-      .filter((iv) => iv.endedByHit)
+      .filter((iv) => SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId))
       .map((iv) => ({
         iv,
         actS: untargetableEndS(u, iv, ctx.start, ctx.units),
@@ -261,10 +264,10 @@ function killWindowShutPastAction(ctx: IRoundCtx): void {
       if (w)
         ctx.violate(
           C,
-          nameOf(iv.spellId, iv.spellId),
+          `${nameOf(iv.spellId, iv.spellId)} ${iv.endedByHit ? "hit" : "no hit"}`,
           ctx.start + Math.round(iv.toS * 1000),
           `${u.id}#${iv.spellId}#${Math.floor(iv.fromS)}`,
-          `${nameOf(iv.spellId)} over at ${actS.toFixed(3)} s (own action); kill window opens ${w.fromSeconds.toFixed(3)} s (the hit)`,
+          `${nameOf(iv.spellId)} over at ${actS.toFixed(3)} s (own action); kill window opens ${w.fromSeconds.toFixed(3)} s (${iv.endedByHit ? "the hit" : "the cap"})`,
         );
     }
   }
