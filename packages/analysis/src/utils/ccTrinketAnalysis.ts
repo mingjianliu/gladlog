@@ -506,6 +506,9 @@ export function ccAvoidanceBuffsUpAt(
     logStartMs?: number;
     casterOf?: (unitId: string) => ICombatUnit | undefined;
     also?: (spellId: string) => boolean;
+    /** the round's units: a stealth-kind immunity's holder acting through
+     * an opener debuff on one of them (`holderFirstOwnActionAfterMs`) */
+    units?: readonly ICombatUnit[];
   } = {},
 ): ICcAvoidanceBuffUp[] {
   const nameOf = (id: string, rowName = ""): string | undefined =>
@@ -549,6 +552,7 @@ export function ccAvoidanceBuffsUpAt(
               >,
               fromMs,
               id,
+              opts.units,
             )
           : Infinity,
       ),
@@ -5545,6 +5549,7 @@ function analyzePlayerCCAndTrinketUncached(
       : (Object.values(combat.units ?? {}) as ICombatUnit[])
     ).map((u) => [u.id, u]),
   );
+  const avoidanceUnits = [...unitsById.values()];
   const avoidanceBuffsAt = (
     atMs: number,
     atLine: number | undefined,
@@ -5556,6 +5561,7 @@ function analyzePlayerCCAndTrinketUncached(
       withForms: true,
       logStartMs: combat.startTime,
       casterOf: (id) => unitsById.get(id),
+      units: avoidanceUnits,
     });
 
   // GH #105: an "avoided" CC that nonetheless landed on the player is not an

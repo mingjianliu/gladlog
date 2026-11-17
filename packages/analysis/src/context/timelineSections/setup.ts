@@ -897,6 +897,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
           allUnits?.find((u) => u.id === id) ??
           allPlayers.find((u) => u.id === id),
         also: (id) => stopsIt(id) || stopsDamage(id),
+        units: _allUnits,
       }).filter((b) => avoidanceExplainsMissType(b.spellId, miss.missType));
       immunityName =
         up.find((b) =>
@@ -1165,6 +1166,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     const applicable = applicableCCAvoidanceIds(spellId, ccName);
     const up = ccAvoidanceBuffsUpAt(dest, t0, {
       atLine: ev.logLine.lineIndex,
+      units: _allUnits,
       casterOf: (id) =>
         allUnits?.find((u) => u.id === id) ??
         allPlayers.find((u) => u.id === id),
@@ -1223,6 +1225,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     );
     const up = ccAvoidanceBuffsUpAt(dest, missRow.timestamp, {
       atLine: missRow.logLine?.lineIndex,
+      units: _allUnits,
       judgedIsMiss: true,
     }).find(
       (b) =>

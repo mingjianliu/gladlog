@@ -222,7 +222,12 @@ export function healerCcCoverAt(
   const up = ccAvoidanceBuffsUpAt(healer, atMs, {
     withForms: true,
     logStartMs,
-    ...(unitsById ? { casterOf: (id: string) => unitsById.get(id) } : {}),
+    ...(unitsById
+      ? {
+          casterOf: (id: string) => unitsById.get(id),
+          units: [...unitsById.values()],
+        }
+      : {}),
   });
   return (ccSpellId) =>
     up.find((b) => avoidanceBuffCoversCc(b.spellId, ccSpellId))?.name;

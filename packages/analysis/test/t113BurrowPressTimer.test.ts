@@ -156,6 +156,28 @@ describe("T113 — every reader of the Burrow ends it at the shaman's action (B9
     expect(ids(at(21))).toContain(BURROW);
     expect(ids(at(23))).not.toContain(BURROW);
   });
+  it("the CC-avoidance reading also ends it at an opener debuff with no cast row (codex 85-tk-N-T113-4: Hex on another unit at 22 s)", () => {
+    const h = shaman(null);
+    const victim = makeUnit("p1", {
+      name: "Victim",
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "51514",
+          at(22),
+          "e1",
+          "p1",
+          "DEBUFF",
+        ),
+      ],
+    });
+    const ids = (ms: number, units?: never[]) =>
+      ccAvoidanceBuffsUpAt(h, ms, units ? { units } : {}).map((b) => b.spellId);
+    const units = [h, victim] as never[];
+    expect(ids(at(21), units)).toContain(BURROW);
+    expect(ids(at(23), units)).not.toContain(BURROW);
+  });
   it("the vision window ends at 22 s", () => {
     const w = visionObscuringWindows(combat).find(
       (x) => x.onUnit && x.holderId === "e1",
