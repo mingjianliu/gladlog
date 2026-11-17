@@ -15,9 +15,9 @@
  *    Kind = `<buff> vs <threat>`.
  */
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import { DR_CATEGORY_MAP } from "@gladlog/analysis/src/utils/drAnalysis";
 import { healerCcCoverAt } from "@gladlog/analysis/src/utils/healerExposureAnalysis";
-import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx, secOf } from "./ctx";
 
