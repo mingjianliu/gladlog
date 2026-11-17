@@ -78,7 +78,13 @@ export function run(ctx: IRoundCtx): void {
     let lockedS = 0;
     for (let s = 0; s < roundS; s++)
       if (
-        castBlockingAuraAt(owner, hostile, ctx.start + s * 1000, PET_SPELL_LOCK)
+        castBlockingAuraAt(
+          owner,
+          hostile,
+          ctx.start + s * 1000,
+          PET_SPELL_LOCK,
+          ctx.units,
+        )
       )
         lockedS++;
     ctx.bump("petLockOwnerLockedS", lockedS);
@@ -102,7 +108,13 @@ export function run(ctx: IRoundCtx): void {
           fact,
           `${at}: owner in casting lock ${lock.spellId} (from ${ms - lock.from} ms before)`,
         );
-      const blocked = castBlockingAuraAt(owner, hostile, ms, PET_SPELL_LOCK);
+      const blocked = castBlockingAuraAt(
+        owner,
+        hostile,
+        ms,
+        PET_SPELL_LOCK,
+        ctx.units,
+      );
       if (blocked)
         ctx.violate(
           "petKickOwnerLock",
@@ -112,7 +124,13 @@ export function run(ctx: IRoundCtx): void {
           `${at}: owner under ${blocked.spellName} (${blocked.spellId}, from ${ms - blocked.from} ms before)`,
         );
       if (pet) {
-        const pb = castBlockingAuraAt(pet, hostile, ms, PET_SPELL_LOCK);
+        const pb = castBlockingAuraAt(
+          pet,
+          hostile,
+          ms,
+          PET_SPELL_LOCK,
+          ctx.units,
+        );
         if (pb)
           ctx.violate(
             "petKickOwnerLock",

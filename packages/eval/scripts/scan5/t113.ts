@@ -38,7 +38,18 @@
  *    first second or after — kind `ended` when the run ended within
  *    `RUN_END_MS` of that row, `kept` when it went on. Checked = those
  *    first rows; a "violation" is an occasion, counted by kind.
+ *  - `openerDebuffNoUnits` (batch review 80-PIPE-111-B98 #1, a measurement):
+ *    an unseen-end stealth-kind immunity application whose holder's first
+ *    action is an opener debuff on another unit (the action end with the
+ *    round's units earlier than without them, inside the official length) —
+ *    the shape a reader that leaves the units out holds too long. Checked =
+ *    applications with no REMOVED; kind = aura.
+ *  - `sameMsActionBelowApplied` (B98 #2, a measurement): the same
+ *    applications whose holder's first action is in the APPLIED's own
+ *    millisecond, logged below it — the shape a strict `t > afterMs` missed.
+ *    Checked = those applications; kind = aura.
  */
+import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import { ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
 import { ccTargetBlockerIntervals } from "@gladlog/analysis/src/utils/ccTargetState";
@@ -68,6 +79,8 @@ export const CHECKS = [
   "ccBlockerPastAction",
   "visibleRunCastStart",
   "applyMsCastStart",
+  "openerDebuffNoUnits",
+  "sameMsActionBelowApplied",
 ] as const;
 
 export const LINE_RE =
@@ -128,6 +141,7 @@ export function run(ctx: IRoundCtx): void {
   killWindowShutPastAction(ctx);
   ccBlockerPastAction(ctx);
   if (!ctx.firstOwnerOfRound) return;
+  b98Shapes(ctx);
   // a cast bar begun in the very millisecond an unseen-end stealth immunity
   // went up: which side of the APPLIED row it was logged on decides whether
   // it is the holder's action after it
@@ -325,5 +339,55 @@ function ccBlockerPastAction(ctx: IRoundCtx): void {
           );
       }
     }
+  }
+}
+
+/** B98's two shapes over every unseen-end stealth-kind immunity of the
+ * round (once per round) */
+function b98Shapes(ctx: IRoundCtx): void {
+  for (const unit of ctx.units as any[]) {
+    const rows = ((unit.auraEvents ?? []) as any[]).filter(
+      (a) =>
+        ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(a.spellId) &&
+        a.destUnitId === unit.id,
+    );
+    rows.forEach((a, i) => {
+      if (ev(a) !== APPLIED) return;
+      const next = rows.slice(i + 1).find((b) => b.spellId === a.spellId);
+      if (next && ev(next) === REMOVED) return;
+      const id: string = a.spellId;
+      const from = tsOf(a);
+      const capMs = from + (spellEffectData[id]?.durationSeconds ?? 0) * 1000;
+      const name = nameOf(id);
+      ctx.bump("openerDebuffNoUnits");
+      const bare = holderFirstOwnActionAfterMs(unit, from, id);
+      const full = holderFirstOwnActionAfterMs(unit, from, id, ctx.units);
+      if (full < bare && full < capMs)
+        ctx.violate(
+          "openerDebuffNoUnits",
+          name,
+          from,
+          `${unit.id}#${id}#${from}`,
+          `${name} at +${from - ctx.start}ms: opener debuff ${((full - from) / 1000).toFixed(2)}s in; without the units ${Number.isFinite(bare) ? ((bare - from) / 1000).toFixed(2) + "s" : "none"}`,
+          "",
+        );
+      ctx.bump("sameMsActionBelowApplied");
+      const strict = holderFirstOwnActionAfterMs(
+        unit,
+        from,
+        id,
+        ctx.units,
+        Infinity,
+      );
+      if (full === from && strict > from)
+        ctx.violate(
+          "sameMsActionBelowApplied",
+          name,
+          from,
+          `${unit.id}#${id}#${from}`,
+          `${name} at +${from - ctx.start}ms: an own action in its APPLIED's millisecond logged below it; strict reading ${Number.isFinite(strict) ? ((strict - from) / 1000).toFixed(2) + "s" : "none"}`,
+          "",
+        );
+    });
   }
 }
