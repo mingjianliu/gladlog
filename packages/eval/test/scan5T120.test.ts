@@ -147,3 +147,65 @@ describe("scan5 failedControlNoLine", () => {
     ).toBe(0);
   });
 });
+
+// codex 85-tk-L-T120-2f: an owner's Seduction its pet carried out — the
+// owner's row is dropped by the producer (`commandReflectRows`), the pet's
+// row is stated by the pet's [REFLECTED] line
+describe("scan5 failedControlNoLine: a carried-out pet command", () => {
+  it("counts only the pet's row, stated by its line", () => {
+    const row = (spellId: string, src: string, t: number) => ({
+      spellId,
+      spellName: "Seduction",
+      srcUnitId: src,
+      destUnitId: "p1",
+      missType: "REFLECT",
+      timestamp: t,
+      logLine: { event: "SPELL_MISSED", timestamp: t },
+    });
+    const ownerRow = row("119909", "e1", 60_000);
+    const petRow = row("6358", "Pet-1", 60_440);
+    const victim = {
+      id: "p1",
+      name: "Victim",
+      reaction: 1,
+      auraEvents: [],
+      missesIn: [ownerRow, petRow],
+      missesOut: [],
+    };
+    const owner = {
+      id: "e1",
+      name: "Enemy",
+      reaction: 2,
+      info: {},
+      missesOut: [ownerRow],
+      spellCastEvents: [],
+      castStartEvents: [],
+    };
+    const pet = {
+      id: "Pet-1",
+      name: "Sayaad",
+      reaction: 2,
+      ownerId: "e1",
+      missesOut: [petRow],
+      spellCastEvents: [],
+      castStartEvents: [],
+    };
+    let checked = 0;
+    let violations = 0;
+    run({
+      firstOwnerOfRound: true,
+      lines: [
+        "1:00  [REFLECTED]   4(Enemy)'s pet's Seduction reflected by 1(Victim) (a control — sent back at the caster)",
+      ],
+      units: [victim, owner, pet],
+      players: [victim],
+      pidOf: (n: string) =>
+        n === "Victim" ? "1" : n === "Enemy" ? "4" : undefined,
+      start: 0,
+      roundEndAt: 300_000,
+      bump: () => checked++,
+      violate: () => violations++,
+    } as never);
+    expect({ checked, violations }).toEqual({ checked: 1, violations: 0 });
+  });
+});

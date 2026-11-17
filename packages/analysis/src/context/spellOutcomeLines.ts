@@ -431,6 +431,49 @@ export function reflectedSpellDealsDamage(
 /** Spell Reflection's own id (`REFLECT_OWN_DAMAGE_IDS`). */
 const SPELL_REFLECTION_ID = "23920";
 
+type ReflectMissRow = NonNullable<ICombatUnit["missesOut"]>[number];
+/** fact6 D30's reading: an owner's command to its pet (Command Demon) is the
+ * pet's cast — the pet's own REFLECT row states it (`carriedOut`: the owner's
+ * row is dropped); a command row no summon row carried out is the pet's,
+ * once (`reflectsMovedTo`, keyed by pet id). `commandReflects` = both.
+ * Read by `reflectedSpells` and scan5/t120 (pipeline T120, codex
+ * 85-tk-L-T120-2f: a carried-out owner row is no fact of its own). */
+export function commandReflectRows(units: readonly ICombatUnit[]): {
+  commandReflects: Set<ReflectMissRow>;
+  carriedOut: Set<ReflectMissRow>;
+  reflectsMovedTo: Map<string, ReflectMissRow[]>;
+} {
+  const commandReflects = new Set<ReflectMissRow>();
+  const carriedOut = new Set<ReflectMissRow>();
+  const reflectsMovedTo = new Map<string, ReflectMissRow[]>();
+  for (const u of units) {
+    if (!u.info) continue;
+    const rows = (u.missesOut ?? []).filter(isCountedReflectRow);
+    if (rows.length === 0) continue;
+    const cmd = petCommands(u, { units });
+    for (const m of rows) {
+      const name = getEnglishSpellName(m.spellId!, m.spellName ?? "");
+      if (cmd.carriedOutBy(m.logLine.timestamp, name)) {
+        commandReflects.add(m);
+        carriedOut.add(m);
+        continue;
+      }
+      if (
+        !cmd.isCommandRow(m.spellId!, m.logLine.timestamp, REFLECT_CAST_LEAD_MS)
+      )
+        continue;
+      commandReflects.add(m);
+      const pet = cmd.commandPet(name);
+      if (pet)
+        reflectsMovedTo.set(pet.id, [
+          ...(reflectsMovedTo.get(pet.id) ?? []),
+          m,
+        ]);
+    }
+  }
+  return { commandReflects, carriedOut, reflectsMovedTo };
+}
+
 /**
  * Spell Reflection returns the log wrote no REFLECT row for (fact11 D9,
  * 10244184 4:40.226): the reflector's 23920 damage (or absorbed) row on the
@@ -512,36 +555,7 @@ export function reflectedSpells(
 ): IReflected[] {
   const byId = new Map(units.map((u) => [u.id, u]));
   const out: IReflected[] = [];
-  // fact6 D30's reading: an owner's command to its pet (Command Demon) is the
-  // pet's cast — the pet's own REFLECT row states it; a command row no
-  // summon row carried out is the pet's, once (`petCommands`)
-  type MissRow = NonNullable<ICombatUnit["missesOut"]>[number];
-  const commandReflects = new Set<MissRow>();
-  const reflectsMovedTo = new Map<string, MissRow[]>();
-  for (const u of units) {
-    if (!u.info) continue;
-    const rows = (u.missesOut ?? []).filter(isCountedReflectRow);
-    if (rows.length === 0) continue;
-    const cmd = petCommands(u, { units });
-    for (const m of rows) {
-      const name = getEnglishSpellName(m.spellId!, m.spellName ?? "");
-      if (cmd.carriedOutBy(m.logLine.timestamp, name)) {
-        commandReflects.add(m);
-        continue;
-      }
-      if (
-        !cmd.isCommandRow(m.spellId!, m.logLine.timestamp, REFLECT_CAST_LEAD_MS)
-      )
-        continue;
-      commandReflects.add(m);
-      const pet = cmd.commandPet(name);
-      if (pet)
-        reflectsMovedTo.set(pet.id, [
-          ...(reflectsMovedTo.get(pet.id) ?? []),
-          m,
-        ]);
-    }
-  }
+  const { commandReflects, reflectsMovedTo } = commandReflectRows(units);
   for (const caster of units) {
     const reflects = [
       ...(caster.missesOut ?? []).filter((m) => !commandReflects.has(m)),
