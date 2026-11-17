@@ -907,19 +907,26 @@ export function computeOffensiveWindowsUncached(
           actionEndS === undefined
             ? officialS
             : Math.min(officialS, Math.max(0, actionEndS - castTimeSeconds));
+        // over at the press itself (the holder acted in its own press's
+        // millisecond): it spent the button and held nothing — a zero-length
+        // pair would sort its expiry first and leave the unit protected for
+        // the rest of the round
+        const heldNothing = buffDuration <= 0;
         events.push({
           time: castTimeSeconds,
           kind: "CD_USED",
           spellId,
           spellName: effectData.name,
           spendsLast: takeFlip(emptiedAt, castTimeSeconds),
+          ...(heldNothing ? { holdsNothing: true } : {}),
         });
-        events.push({
-          time: castTimeSeconds + buffDuration,
-          kind: "BUFF_EXPIRED",
-          spellId,
-          spellName: effectData.name,
-        });
+        if (!heldNothing)
+          events.push({
+            time: castTimeSeconds + buffDuration,
+            kind: "BUFF_EXPIRED",
+            spellId,
+            spellName: effectData.name,
+          });
       }
     }
 

@@ -118,6 +118,14 @@ describe("T113 — a timed Burrow press ends at its holder's action (B97)", () =
     ).toBeUndefined();
     expect(startsOf(u).some((f) => Math.abs(f - 25) < 0.01)).toBe(true);
   });
+  it("acting before its own cast row (bar 20.005 s, row 20.010 s): the press holds nothing and the unit is not protected for the rest of the round", () => {
+    const u = shaman(20.005);
+    const press = u.spellCastEvents.find((c) => c.spellId === BURROW)!;
+    Object.assign(press, { timestamp: at(20.01) });
+    Object.assign(press.logLine, { timestamp: at(20.01) });
+    const s = startsOf(u);
+    expect(s.some((f) => f >= 20 && f < 20.1)).toBe(true);
+  });
   it("another press a second away (Greater Invisibility 110959) is not the Burrow's: undefined (D6 keeps its official length)", () => {
     const u = shaman(22);
     expect(
