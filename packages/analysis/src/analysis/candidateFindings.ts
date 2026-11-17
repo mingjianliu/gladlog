@@ -1889,24 +1889,29 @@ export function kickEatenEvents(
   // on the player by kicker — EVERY kick passed in, the harmless ones and
   // the ones the cap drops included, so a line can say "this kicker, 7 times,
   // on these spells" when the menu lists 4 (141470d0: Counter Shot ×7).
+  // Keyed by the log's own name, as before: the printed label names a pet
+  // through its owner, so two pets of one owner share it (codex
+  // 85-tk-N-T116-1) — the label is only what the fact prints (T116)
   const byKicker = new Map<string, Map<string, number>>();
   for (const k of instances) {
-    const spells =
-      byKicker.get(k.sourceLabel ?? k.sourceName) ?? new Map<string, number>();
+    const spells = byKicker.get(k.sourceName) ?? new Map<string, number>();
     spells.set(
       k.interruptedSpellName,
       (spells.get(k.interruptedSpellName) ?? 0) + 1,
     );
-    byKicker.set(k.sourceLabel ?? k.sourceName, spells);
+    byKicker.set(k.sourceName, spells);
   }
-  const sameKickerFact = (kicker: string): Record<string, string> => {
+  const sameKickerFact = (
+    kicker: string,
+    label: string,
+  ): Record<string, string> => {
     const spells = [...(byKicker.get(kicker) ?? [])].sort(
       (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
     );
     const total = spells.reduce((n, [, c]) => n + c, 0);
     if (total < 2) return {};
     return {
-      sameKicker: `${kicker} ×${total} (${spells.map(([name, c]) => `${name} ×${c}`).join(" + ")})`,
+      sameKicker: `${label} ×${total} (${spells.map(([name, c]) => `${name} ×${c}`).join(" + ")})`,
     };
   };
   let capped = 0;
@@ -2108,7 +2113,7 @@ export function kickEatenEvents(
         ...castStartFacts(p, k.castStartS),
         ...(cancels ? castCancelFacts(cancels, k.sourceName) : {}),
         ...(cancels ? stoppedJustBeforeFact(cancels, k.castStartS) : {}),
-        ...sameKickerFact(k.sourceLabel ?? k.sourceName),
+        ...sameKickerFact(k.sourceName, k.sourceLabel ?? k.sourceName),
       },
     }));
   return suffixCollidingIds(rows);

@@ -72,4 +72,26 @@ describe("the kick-eaten row reads the label (T116)", () => {
     expect(row!.unitNames).toEqual(["Owner", "Lock-Realm-US's pet"]);
     expect(row!.facts.source).toBe("Lock-Realm-US's pet");
   });
+  it("two pets of one owner stay two kickers for sameKicker", () => {
+    const rows = kickEatenEvents(
+      [
+        { ...kick("Felhunter A", "Lock-Realm-US's pet"), atSeconds: 10 },
+        { ...kick("Felhunter B", "Lock-Realm-US's pet"), atSeconds: 30 },
+      ] as any[],
+      { id: "o", name: "Owner" },
+    );
+    expect(rows).toHaveLength(2);
+    for (const r of rows) expect(r.facts.sameKicker).toBeUndefined();
+    // one pet twice: counted, printed by its label
+    const twice = kickEatenEvents(
+      [
+        { ...kick("Felhunter A", "Lock-Realm-US's pet"), atSeconds: 10 },
+        { ...kick("Felhunter A", "Lock-Realm-US's pet"), atSeconds: 30 },
+      ] as any[],
+      { id: "o", name: "Owner" },
+    );
+    expect(twice[0]!.facts.sameKicker).toBe(
+      "Lock-Realm-US's pet ×2 (Glacial Spike ×2)",
+    );
+  });
 });
