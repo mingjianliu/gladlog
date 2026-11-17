@@ -108,15 +108,23 @@ export function run(ctx: IRoundCtx): void {
           if (chainFirst - t <= REFLECT_CHAIN_GAP_MS) chainFirst = t;
           else break;
       }
+      // the line stands at its chain's first row, at or after the walk's
+      // start: the walk may take an owner's command row the producer drops
+      // (`petCommands`' carriedOutBy) and start before it — any second from
+      // there to the row's own (codex 85-tk-L-T120-2d)
       const firstSec = Math.floor((chainFirst - ctx.start) / 1000);
-      const reflectedNamed = (bySec.get(firstSec) ?? []).some((l) => {
-        const r = parseReflectedLine(l);
-        // a summon's spell prints `N(…)'s pet's X` — the spell is X
-        return (
-          r?.reflectorPid === pid &&
-          (r.spell === name || r.spell.endsWith(`'s ${name}`))
-        );
-      });
+      const span: number[] = [];
+      for (let s = firstSec; s <= sec; s++) span.push(s);
+      const reflectedNamed = span
+        .flatMap((s) => bySec.get(s) ?? [])
+        .some((l) => {
+          const r = parseReflectedLine(l);
+          // a summon's spell prints `N(…)'s pet's X` — the spell is X
+          return (
+            r?.reflectorPid === pid &&
+            (r.spell === name || r.spell.endsWith(`'s ${name}`))
+          );
+        });
       if (m.missType === "REFLECT" && reflectedNamed) continue;
       const named = [sec - 1, sec, sec + 1]
         .flatMap((s) => bySec.get(s) ?? [])

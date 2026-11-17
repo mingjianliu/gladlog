@@ -86,6 +86,20 @@ describe("scan5 failedControlNoLine", () => {
       ]),
     ).toBe(1);
   });
+  // codex 85-tk-L-T120-2d: a row the producer drops (an owner's command
+  // row its pet carried out) can start the walk a second early
+  it("a chain whose walk starts before the printed line still finds it", () => {
+    expect(
+      scan(
+        [
+          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected ×2 by 1(Victim)",
+        ],
+        "REFLECT",
+        HOJ,
+        [59_900, 62_600],
+      ),
+    ).toBe(0);
+  });
   // codex 85-tk-L-T120-2c #2: a summon's grouped line names `pet's X`
   it("a pet's grouped `reflected ×2` line states its second row", () => {
     expect(
