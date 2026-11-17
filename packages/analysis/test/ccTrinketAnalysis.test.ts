@@ -580,6 +580,8 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       kickSpellId: "1766",
       kickSpellName: "Kick",
       sourceName: "EnemyRogue",
+      // T116: a player kicker goes by its own name
+      sourceLabel: "EnemyRogue",
       sourceId: "enemy-1",
       sourceSpec: "Subtlety Rogue",
       interruptedSpellId: "2061",

@@ -2069,6 +2069,16 @@ const INDEX: PredicateRow[] = [
     mod: summonKind,
   },
   {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "kickSourceLabel",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "summonNameThroughOwner",
+    mod: ccTrinketAnalysis,
+  },
+  {
     file: `${A}/utils/summonKind.ts`,
     symbol: "SUMMON_KIND_RE_SRC",
     mod: summonKind,

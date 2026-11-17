@@ -1768,6 +1768,7 @@ export function kickEatenEvents(
     | "kickSpellName"
     | "interruptedSpellName"
     | "sourceName"
+    | "sourceLabel"
     | "postKick"
     | "firstActionDelayS"
     | "switchSpellName"
@@ -1890,12 +1891,13 @@ export function kickEatenEvents(
   // on these spells" when the menu lists 4 (141470d0: Counter Shot ×7).
   const byKicker = new Map<string, Map<string, number>>();
   for (const k of instances) {
-    const spells = byKicker.get(k.sourceName) ?? new Map<string, number>();
+    const spells =
+      byKicker.get(k.sourceLabel ?? k.sourceName) ?? new Map<string, number>();
     spells.set(
       k.interruptedSpellName,
       (spells.get(k.interruptedSpellName) ?? 0) + 1,
     );
-    byKicker.set(k.sourceName, spells);
+    byKicker.set(k.sourceLabel ?? k.sourceName, spells);
   }
   const sameKickerFact = (kicker: string): Record<string, string> => {
     const spells = [...(byKicker.get(kicker) ?? [])].sort(
@@ -1934,7 +1936,7 @@ export function kickEatenEvents(
       id: `kick-eaten:${owner.id}:${Math.round(k.atSeconds)}`,
       type: "kick-eaten",
       t: k.atSeconds,
-      unitNames: [owner.name, k.sourceName],
+      unitNames: [owner.name, k.sourceLabel ?? k.sourceName],
       spell: k.interruptedSpellName,
       facts: {
         // Render-grid fix (2026-08-30, CLAUDE.md Shared-Predicate Rule): the
@@ -1947,7 +1949,7 @@ export function kickEatenEvents(
         t: fmtFactTime(k.atSeconds),
         interrupted: k.interruptedSpellName,
         kick: k.kickSpellName,
-        source: k.sourceName,
+        source: k.sourceLabel ?? k.sourceName,
         lockout: fmtKickLockoutSeconds(k.lockoutDurationSeconds),
         // Reliability audit D4(c) (2026-09-25): WHICH school the kick locked
         // (the interrupted spell's official school — the same
@@ -2106,7 +2108,7 @@ export function kickEatenEvents(
         ...castStartFacts(p, k.castStartS),
         ...(cancels ? castCancelFacts(cancels, k.sourceName) : {}),
         ...(cancels ? stoppedJustBeforeFact(cancels, k.castStartS) : {}),
-        ...sameKickerFact(k.sourceName),
+        ...sameKickerFact(k.sourceLabel ?? k.sourceName),
       },
     }));
   return suffixCollidingIds(rows);

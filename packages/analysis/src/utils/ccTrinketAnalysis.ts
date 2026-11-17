@@ -1783,6 +1783,14 @@ export interface IInterruptInstance {
    * wrong side. Consumers that need the owning player must resolve THIS.
    */
   sourceId: string;
+  /**
+   * The name a menu row prints for the kicker (pipeline T116): the player's
+   * own name, or for a summon `<owner>'s <kind>` (`kickSourceLabel`) — a
+   * pet's own name is client-localized and in no roster (`checkCjkLeak`),
+   * the reading `nearestKickerName` already takes. `sourceName` stays the
+   * log's name.
+   */
+  sourceLabel?: string;
   sourceSpec: string;
   postKick: PostKickBehavior;
   /** When the kicked cast's bar started, seconds since the match start; null
@@ -3507,6 +3515,37 @@ const PRE_TELEPORT_STALE_MS = 500;
  * casts land 0–3 ms before the aura). */
 const LANDED_CAST_PROVES_LOS_MS = 1_500;
 
+/**
+ * The name a kick's source goes by on a menu row (pipeline T116): a player
+ * is its own name; a summon — a Felhunter's Spell Lock — is named through
+ * its owner, `<owner>'s <kind>` (`summonKindWord`), the label
+ * `nearestKickerName` gives the same unit. A summon whose owner is not one
+ * of the enemy players keeps the log's name.
+ */
+export function kickSourceLabel(
+  srcUnitId: string,
+  srcUnitName: string,
+  enemies: readonly Pick<ICombatUnit, "id" | "name">[],
+  units: readonly ICombatUnit[],
+): string {
+  if (enemies.some((e) => e.id === srcUnitId)) return srcUnitName;
+  const unit = units.find((u) => u.id === srcUnitId);
+  const owner = unit && enemies.find((e) => e.id === unit.ownerId);
+  return owner && unit ? summonNameThroughOwner(owner, unit) : srcUnitName;
+}
+
+/**
+ * A summon named through its owner — `<owner>'s <kind>` (`summonKindWord`):
+ * a pet's own name is client-localized and in no roster (`checkCjkLeak`).
+ * One format for `kickSourceLabel` and `nearestKickerName` (pipeline T116).
+ */
+export function summonNameThroughOwner(
+  owner: Pick<ICombatUnit, "name">,
+  unit: ICombatUnit,
+): string {
+  return `${owner.name}'s ${summonKindWord(unit.id, { unit })}`;
+}
+
 export function analyzePlayerCCAndTrinket(
   player: ICombatUnit,
   enemies: ICombatUnit[],
@@ -5015,7 +5054,7 @@ function analyzePlayerCCAndTrinketUncached(
             // a pet's own name is client-localized and in no roster
             // (`checkCjkLeak`): name it through its owner
             nearestKickerName = kickerIsPet
-              ? `${enemy.name}'s ${summonKindWord(kicker.id, { unit: kicker })}`
+              ? summonNameThroughOwner(enemy, kicker)
               : enemy.name;
             nearestKickerSampleGapS = widerGapS(
               playerGapS,
@@ -5065,7 +5104,7 @@ function analyzePlayerCCAndTrinketUncached(
               // (`checkCjkLeak`): name it through its owner
               const petOwner = enemies.find((e) => e.id === petKicker.ownerId);
               nearestKickerName = petOwner
-                ? `${petOwner.name}'s ${summonKindWord(petKicker.id, { unit: petKicker })}`
+                ? summonNameThroughOwner(petOwner, petKicker)
                 : petKicker.name;
               nearestKickerSampleGapS = widerGapS(
                 playerGapS,
@@ -5133,6 +5172,12 @@ function analyzePlayerCCAndTrinketUncached(
         extraAction.extraSpellName,
       ),
       sourceName: action.srcUnitName,
+      sourceLabel: kickSourceLabel(
+        action.srcUnitId,
+        action.srcUnitName,
+        enemies,
+        roundUnits,
+      ),
       sourceId: action.srcUnitId,
       sourceSpec: enemySpecMap.get(action.srcUnitId) ?? "Unknown",
     });
