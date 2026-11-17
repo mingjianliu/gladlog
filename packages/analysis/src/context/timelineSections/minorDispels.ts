@@ -15,6 +15,7 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { BACKLASH_CC_SPELL_IDS } from "../../data/backlashCc";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import type { IDispelEvent } from "../../utils/dispelAnalysis";
+import { DISPEL_CAST_MATCH_WINDOW_MS } from "../../utils/dispelKind";
 import { fmtTime } from "../../utils/renderGrid";
 import { dispelActorLabel } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
@@ -50,16 +51,28 @@ export function emitMinorDispelEntries(
       : _allUnits?.find((u) => u.name === e.sourceName);
     if (!unit) return undefined;
     const atMs = matchStartMs + e.timeSeconds * 1000;
-    let best: number | undefined;
-    for (const c of unit.spellCastEvents ?? [])
+    // within the cast match window (`classifyDispel`'s own,
+    // DISPEL_CAST_MATCH_WINDOW_MS): the last cast at or before the removal
+    // (50 ms slack), else the first one after it — a cast row logged after
+    // its removals keeps them one press (codex T130-2). An older cast is not
+    // the press of a removal whose cast row the recorder did not write
+    // (T130, `dispelOfUnseenPress`; d7fbdf1a r4: a 1:45 Purify read as part
+    // of the 1:16 one).
+    let before: number | undefined;
+    let after: number | undefined;
+    for (const c of unit.spellCastEvents ?? []) {
       if (
-        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        c.spellId === e.dispelSpellId &&
-        c.logLine.timestamp <= atMs + MINOR_DISPEL_CAST_MERGE_S * 1000 &&
-        (best === undefined || c.logLine.timestamp > best)
+        c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+        c.spellId !== e.dispelSpellId
       )
-        best = c.logLine.timestamp;
-    return best;
+        continue;
+      const t = c.logLine.timestamp;
+      if (Math.abs(t - atMs) > DISPEL_CAST_MATCH_WINDOW_MS) continue;
+      if (t <= atMs + MINOR_DISPEL_CAST_MERGE_S * 1000) {
+        if (before === undefined || t > before) before = t;
+      } else if (after === undefined || t < after) after = t;
+    }
+    return before ?? after;
   };
 
   const minor = new Map<

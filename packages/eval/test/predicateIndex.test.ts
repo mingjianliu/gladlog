@@ -2213,6 +2213,12 @@ const INDEX: PredicateRow[] = [
     symbol: "TARGET_BOUND_MOBILITY_IDS",
     mod: ccTrinketAnalysis,
   },
+  // pipeline T130: a dispel press logged while its source was unresolved
+  {
+    file: `${A}/utils/dispelKind.ts`,
+    symbol: "dispelOfUnseenPress",
+    mod: dispelKind,
+  },
   // F20 D31: buffs one purge press removed / removes per tool
   {
     file: `${A}/context/timelineSections/healerCastGapFiller.ts`,

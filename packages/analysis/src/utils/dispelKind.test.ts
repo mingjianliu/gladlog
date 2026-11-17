@@ -157,3 +157,49 @@ describe("buildCastMatchIndex (GH #32 — shared by product and the corpus-gate 
     ).toBe("proc");
   });
 });
+
+describe("T130 — a press logged while its source was unresolved", () => {
+  // 54251a4b r0: Nature's Cure rows at 16.755 with source flags 0x528 and no
+  // cast row; the druid's Nature's Cure cast rows elsewhere in the round
+  const idx = createCastMatchIndex();
+  addCastToIndex(idx, PLAYER, "88423", "Nature's Cure", 28_940);
+  const at = (
+    srcFlags: number | undefined,
+    spellId = "88423",
+    spellName = "Nature's Cure",
+  ) =>
+    classifyDispel(idx, {
+      srcUnitId: PLAYER,
+      spellId,
+      spellName,
+      timestamp: 16_755,
+      ...(srcFlags === undefined ? {} : { srcFlags }),
+    });
+
+  it("unresolved source + a button it presses elsewhere → deliberate", () => {
+    expect(at(0x528)).toBe("deliberate");
+  });
+  it("a resolved source's missing cast row stays a proc", () => {
+    expect(at(0x548)).toBe("proc");
+    expect(at(0x10548)).toBe("proc");
+    expect(at(undefined)).toBe("proc");
+  });
+  it("a spell the source never casts stays a proc, unresolved or not", () => {
+    expect(at(0x528, "199427", "Cleanse the Weak")).toBe("proc");
+  });
+  it("a press of the same spell 4 s before makes it that press's repeat (Improved Spellsteal)", () => {
+    const i2 = createCastMatchIndex();
+    addCastToIndex(i2, PLAYER, "30449", "Spellsteal", 10_000);
+    const d = {
+      srcUnitId: PLAYER,
+      spellId: "30449",
+      spellName: "Spellsteal",
+      srcFlags: 0x528,
+    };
+    expect(classifyDispel(i2, { ...d, timestamp: 14_000 })).toBe("proc");
+    expect(classifyDispel(i2, { ...d, timestamp: 14_018 })).toBe("proc");
+    // before the press (the druid's shape) or long after: a hidden press
+    expect(classifyDispel(i2, { ...d, timestamp: 9_000 })).toBe("deliberate");
+    expect(classifyDispel(i2, { ...d, timestamp: 16_000 })).toBe("deliberate");
+  });
+});

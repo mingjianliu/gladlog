@@ -75,6 +75,7 @@ async function scanMatch(path: string): Promise<void> {
     spellId: string;
     spellName: string;
     timestamp: number;
+    srcFlags: number;
   }> = [];
   const sides = new Map<string, number>();
   const owners = new Map<string, string>();
@@ -107,6 +108,7 @@ async function scanMatch(path: string): Promise<void> {
         spellId: p[8] ?? "",
         spellName: p[9] ?? "",
         timestamp: ts,
+        srcFlags: Number.parseInt(p[2] ?? "0", 16),
       });
     }
   }

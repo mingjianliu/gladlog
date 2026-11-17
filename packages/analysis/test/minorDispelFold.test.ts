@@ -246,6 +246,92 @@ describe("F11: a rider that came with its own cast is not `(passive)`", () => {
   });
 });
 
+describe("T130 — a press with no cast row is not part of an older cast", () => {
+  it("d7fbdf1a r4: a 1:45 Purify with no cast row stays its own press beside a 1:16 cast", () => {
+    const priest = makeUnit("priest", {
+      name: "Priest",
+      spellCastEvents: [
+        makeSpellCastEvent("527", 1_000 + 76_000, "x", "X", "priest", "Priest"),
+      ],
+    });
+    const ev = (t: number, removed: string): IDispelEvent =>
+      ({
+        timeSeconds: t,
+        sourceName: "Priest",
+        dispelSpellId: "527",
+        dispelSpellName: "Purify",
+        removedSpellId: removed,
+        removedSpellName: removed === "445474" ? "Wither" : "Earthbind",
+        priority: "Low",
+        dispelKind: "deliberate",
+      }) as IDispelEvent;
+    const lines: string[] = [];
+    emitMinorDispelEntries({
+      dispelSummary: {
+        allyCleanse: [
+          ev(76.0, "116947"),
+          ev(76.0, "445474"),
+          ev(105.159, "445474"),
+        ],
+        ourPurges: [],
+        hostilePurges: [],
+      } as never,
+      pid: (n: string) => `5(${n})`,
+      enemyPid: (n: string) => `4(${n})`,
+      enemyDispelSummary: undefined,
+      addEntry: ((_: number, line: string) => lines.push(line)) as never,
+      _allUnits: [priest] as never,
+      matchStartMs: 1_000,
+    });
+    expect(lines).toEqual([
+      "1:16  [MINOR DISPELS]   5(Priest): Purify ×2 (1:16 Earthbind、Wither; 1:45 Wither) (low-priority, folded)",
+    ]);
+  });
+});
+
+describe("codex T130-2 — a cast row logged after its removals keeps them one press", () => {
+  it("Purify casts at 1.000 s and 10.200 s, removals at 10.000 s and 10.074 s → one press", () => {
+    const priest = makeUnit("priest", {
+      name: "Priest",
+      spellCastEvents: [
+        makeSpellCastEvent("527", 1_000 + 1_000, "x", "X", "priest", "Priest"),
+        makeSpellCastEvent("527", 1_000 + 10_200, "x", "X", "priest", "Priest"),
+      ],
+    });
+    const ev = (t: number, removed: string, name: string): IDispelEvent =>
+      ({
+        timeSeconds: t,
+        sourceName: "Priest",
+        dispelSpellId: "527",
+        dispelSpellName: "Purify",
+        removedSpellId: removed,
+        removedSpellName: name,
+        priority: "Low",
+        dispelKind: "deliberate",
+      }) as IDispelEvent;
+    const lines: string[] = [];
+    emitMinorDispelEntries({
+      dispelSummary: {
+        allyCleanse: [
+          ev(10.0, "116947", "Earthbind"),
+          ev(10.074, "445474", "Wither"),
+        ],
+        ourPurges: [],
+        hostilePurges: [],
+      } as never,
+      pid: (n: string) => `5(${n})`,
+      enemyPid: (n: string) => `4(${n})`,
+      enemyDispelSummary: undefined,
+      addEntry: ((_: number, line: string) => lines.push(line)) as never,
+      _allUnits: [priest] as never,
+      matchStartMs: 1_000,
+    });
+    expect(lines).toEqual([
+      "0:10  [MINOR DISPELS]   5(Priest): Purify ×1 (0:10 Earthbind、Wither) (low-priority, folded)",
+    ]);
+  });
+});
+
 describe("purgeMatchesCast (F-P1)", () => {
   it("same target within 50 ms", () => {
     const p = { targetName: "X", timeSeconds: 10 };

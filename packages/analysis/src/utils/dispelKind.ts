@@ -217,6 +217,54 @@ interface IDispelToClassify {
   spellId: string | null | undefined;
   spellName: string | null | undefined;
   timestamp: number;
+  /** the SPELL_DISPEL / SPELL_STOLEN row's own source flags (params[2]);
+   * absent = not read */
+  srcFlags?: number;
+}
+
+/** A row's source flags whose reaction is neither friendly nor hostile
+ * (0x20, neutral): the recorder had not resolved the unit yet — in an arena
+ * no player is neutral. 54251a4b r0 0:16: an enemy druid's two Nature's
+ * Cure rows at 0x528, its auras re-broadcast at 0x548 33 ms later. */
+export const isUnresolvedSourceFlags = (flags: number | undefined): boolean =>
+  flags !== undefined && (flags & 0x70) === 0x20;
+
+/**
+ * Pipeline T130 (CXA13 D33): a dispel with no cast row of its own, logged
+ * while its source was unresolved (`isUnresolvedSourceFlags`), of a spell
+ * that source logged a SPELL_CAST_SUCCESS of elsewhere in the round (same id
+ * or name) — a button it presses, whose cast row the recorder did not write
+ * while the unit was unseen. A press, not a proc. A spell nobody casts
+ * (Cleanse the Weak, Disentanglement Effect) stays a proc unresolved or not;
+ * a resolved source's missing cast row means what it meant before (605: of
+ * 15 unresolved proc rows, 11 were such buttons — Nature's Cure, Spellsteal,
+ * Greater Purge, Purify).
+ */
+/** How far back a press of the same spell by the same source makes an
+ * unresolved, cast-less removal that press's delayed effect rather than a
+ * press of its own (`dispelOfUnseenPress`): Improved Spellsteal's 4 s repeat,
+ * with a second of log slack. */
+export const UNSEEN_PRESS_REPEAT_GUARD_MS = 5000;
+
+export function dispelOfUnseenPress(
+  index: CastMatchIndex,
+  d: IDispelToClassify,
+): boolean {
+  if (!isUnresolvedSourceFlags(d.srcFlags)) return false;
+  const casts = [
+    ...(d.spellId ? (index.byId.get(`${d.srcUnitId}|${d.spellId}`) ?? []) : []),
+    ...(d.spellName
+      ? (index.byName.get(`${d.srcUnitId}|${d.spellName}`) ?? [])
+      : []),
+  ];
+  if (casts.length === 0) return false;
+  // a press of the same spell just before is the cause, not a hidden second
+  // press: Improved Spellsteal repeats the steal 4 s after the cast, logged
+  // with the mage's own GUID and 0x528 (codex T130-1: 081952f3 r1 +4.000 s,
+  // f55b2412 r5 +4.018 s)
+  return !casts.some(
+    (t) => t < d.timestamp && d.timestamp - t <= UNSEEN_PRESS_REPEAT_GUARD_MS,
+  );
 }
 
 /**
@@ -308,7 +356,9 @@ export function classifyDispel(
   // is a root-break rider, not a cleanse decision.
   if (d.spellId && MOVEMENT_ROOT_BREAK_DISPEL_IDS.has(d.spellId))
     return "rider";
-  return dispelCameWithOwnCast(index, d) ? "deliberate" : "proc";
+  return dispelCameWithOwnCast(index, d) || dispelOfUnseenPress(index, d)
+    ? "deliberate"
+    : "proc";
 }
 
 /** A removal that is a side effect of a form / movement / defensive action

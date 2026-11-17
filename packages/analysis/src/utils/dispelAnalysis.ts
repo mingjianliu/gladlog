@@ -3528,6 +3528,7 @@ function reconstructDispelSummaryUncached(
         spellId: action.spellId,
         spellName: action.spellName,
         timestamp: action.timestamp,
+        srcFlags: action.srcUnitFlags,
       };
       // a press on a teammate logged as the recipient's own dispel: the
       // presser is the actor and it is a deliberate press

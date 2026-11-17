@@ -114,6 +114,7 @@ for (const f of files) {
               spellId: a.spellId,
               spellName: a.spellName,
               timestamp: a.timestamp,
+              srcFlags: (a as { srcUnitFlags?: number }).srcUnitFlags,
             },
             (presser) => roster[presser]?.reaction === u.reaction,
           );
