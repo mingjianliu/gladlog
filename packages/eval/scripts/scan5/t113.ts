@@ -23,6 +23,12 @@
  *    holder: one opening at that end itself, later than the action, read
  *    the protection as lasting to it. Checked = those intervals (each round
  *    once); kind = aura, hit / no hit.
+ *  - `ccBlockerPastAction` (codex 85-tk-N-T113-3): the CC sampler's
+ *    blockers (`ccTargetBlockerIntervals`, for Blind / Polymorph / Kidney
+ *    Shot / Fear) on a unit that is no target (`KW_UNTARGETABLE_AURA_IDS`,
+ *    `SAVE_AURA_END_UNSEEN_IDS`): a blocker of that aura that outlives the
+ *    end the kill windows read (`untargetableEndS`) of the same
+ *    application. Checked = those blockers; kind = aura × control.
  *  - `visibleRunCastStart` (the measurement behind what counts as the
  *    holder's action): on a self-applied run of an any-action-ends aura
  *    (Mass Invisibility 414664, Greater Invisibility 110960; Vanish 11327,
@@ -35,9 +41,12 @@
  */
 import { ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
+import { ccTargetBlockerIntervals } from "@gladlog/analysis/src/utils/ccTargetState";
 import {
   holderFirstOwnActionAfterMs,
   isMeleeSwingRow,
+  KW_UNTARGETABLE_AURA_IDS,
+  SAVE_AURA_END_UNSEEN_IDS,
   saveAuraIntervals,
   untargetableEndS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -56,6 +65,7 @@ import {
 export const CHECKS = [
   "hitEndPastOwnAction",
   "killWindowShutPastAction",
+  "ccBlockerPastAction",
   "visibleRunCastStart",
   "applyMsCastStart",
 ] as const;
@@ -116,6 +126,7 @@ export function run(ctx: IRoundCtx): void {
       );
   }
   killWindowShutPastAction(ctx);
+  ccBlockerPastAction(ctx);
   if (!ctx.firstOwnerOfRound) return;
   // a cast bar begun in the very millisecond an unseen-end stealth immunity
   // went up: which side of the APPLIED row it was logged on decides whether
@@ -270,6 +281,49 @@ function killWindowShutPastAction(ctx: IRoundCtx): void {
           `${u.id}#${iv.spellId}#${Math.floor(iv.fromS)}`,
           `${nameOf(iv.spellId)} over at ${actS.toFixed(3)} s (own action); kill window opens ${w.fromSeconds.toFixed(3)} s (${iv.endedByHit ? "the hit" : "the cap"})`,
         );
+    }
+  }
+}
+
+const SAMPLED_CCS: readonly [string, string][] = [
+  ["2094", "Blind"],
+  ["118", "Polymorph"],
+  ["408", "Kidney Shot"],
+  ["5782", "Fear"],
+];
+
+function ccBlockerPastAction(ctx: IRoundCtx): void {
+  const C = "ccBlockerPastAction";
+  if (!ctx.firstOwnerOfRound) return;
+  const combat = {
+    startTime: ctx.start,
+    endTime: ctx.legacy.endTime,
+    units: ctx.legacy.units,
+  };
+  for (const u of ctx.players) {
+    for (const [ccId, ccName] of SAMPLED_CCS) {
+      const blockers = ccTargetBlockerIntervals(
+        u,
+        combat as any,
+        ccId,
+        ccName,
+      ).filter(
+        (iv) =>
+          KW_UNTARGETABLE_AURA_IDS.has(iv.spellId) ||
+          SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId),
+      );
+      for (const iv of blockers) {
+        ctx.bump(C);
+        const endS = untargetableEndS(u, iv, ctx.start, ctx.units);
+        if (iv.toS > endS + 0.001)
+          ctx.violate(
+            C,
+            `${nameOf(iv.spellId, iv.spellId)} × ${ccName}`,
+            ctx.start + iv.fromS * 1000,
+            `${u.id}#${iv.spellId}#${iv.fromS}#${ccId}`,
+            `${ccName} blocked by ${nameOf(iv.spellId, iv.spellId)} to ${iv.toS.toFixed(3)} s; the kill windows end it at ${endS.toFixed(3)} s`,
+          );
+      }
     }
   }
 }

@@ -13,6 +13,7 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
+import { ccTargetBlockerIntervals } from "../src/utils/ccTargetState";
 import {
   enemyDefensiveEvents,
   holderFirstOwnActionAfterMs,
@@ -290,5 +291,40 @@ describe("…with no later hit too (T113, batch review 80-PIPE-107-B94)", () => 
     expect(d.endNotLogged).toBe(true);
     expect(d.atSeconds + d.observedSeconds!).toBeCloseTo(22);
     expect(ownSaveSpanS(d, false)?.to).toBeCloseTo(22);
+  });
+});
+
+describe("…and the CC sampler's blockers end there too (T113, codex 85-tk-N-T113-3)", () => {
+  // Burrow up at 20 s, no REMOVED; a cast bar begun at 22 s; no hit
+  it("a Blind at 23 s is no longer blocked by the Burrow's 5 s cap", () => {
+    const shaman = makeUnit("e1", {
+      name: "Shaman",
+      spec: CombatUnitSpec.Shaman_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "409293",
+          at(20),
+          "e1",
+          "e1",
+          "BUFF",
+        ),
+      ],
+    });
+    Object.assign(shaman, { castStartEvents: [barBegun(22)], damageIn: [] });
+    const combat = {
+      startTime: START,
+      endTime: START + 300_000,
+      units: { e1: shaman },
+    };
+    const burrow = ccTargetBlockerIntervals(
+      shaman,
+      combat as never,
+      "2094",
+      "Blind",
+    ).filter((iv) => iv.spellId === "409293");
+    expect(burrow.length).toBeGreaterThan(0);
+    for (const iv of burrow) expect(iv.toS).toBeCloseTo(22);
   });
 });

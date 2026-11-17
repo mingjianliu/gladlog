@@ -264,23 +264,32 @@ export function ccTargetBlockerIntervals(
     );
   };
   const auras = buildAuraIntervals(target, combat);
+  // not a target at all — every such interval comes from the `.concat`
+  // below, ended where the kill windows end it; kept here too, the
+  // official-length copy outlived the holder's action (codex
+  // 85-tk-N-T113-3: Burrow 20 s, a cast bar at 22 s, a Blind still
+  // "target-immune" at 23 s)
+  const untargetable = (iv: IAuraInterval) =>
+    KW_UNTARGETABLE_AURA_IDS.has(iv.spellId) ||
+    SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId);
   return (
     auras
       .filter(
         (iv) =>
-          (mech !== undefined &&
+          !untargetable(iv) &&
+          ((mech !== undefined &&
             auraBlocksMechanic(iv.spellId, mech) !== false) ||
-          // an immunity form DB2 does not encode (Spirit of
-          // Redemption, both forms): fact6 D8 (c992ce75 0:47–0:55)
-          auraIsImmunityForm(iv.spellId) ||
-          // …or one the press line's `[IMMUNE — X was up]` names for this
-          // control (`applicableCCAvoidanceIds`, by school): fact4 D3
-          // (190bbc57 0:26–0:31) — Anti-Magic Shell blocks no freeze by
-          // mechanic, yet a Freezing Trap into it logged IMMUNE, and the
-          // bookmark counted those seconds "not immune"
-          (CC_AVOIDANCE_BUFF_SPELLS.has(iv.spellId) &&
-            avoidance.has(iv.spellId)) ||
-          schoolBlocked(iv.spellId),
+            // an immunity form DB2 does not encode (Spirit of
+            // Redemption, both forms): fact6 D8 (c992ce75 0:47–0:55)
+            auraIsImmunityForm(iv.spellId) ||
+            // …or one the press line's `[IMMUNE — X was up]` names for this
+            // control (`applicableCCAvoidanceIds`, by school): fact4 D3
+            // (190bbc57 0:26–0:31) — Anti-Magic Shell blocks no freeze by
+            // mechanic, yet a Freezing Trap into it logged IMMUNE, and the
+            // bookmark counted those seconds "not immune"
+            (CC_AVOIDANCE_BUFF_SPELLS.has(iv.spellId) &&
+              avoidance.has(iv.spellId)) ||
+            schoolBlocked(iv.spellId)),
       )
       // not a target at all: Mass Invisibility / Phase Shift — and a
       // holder gone unseen (`SAVE_AURA_END_UNSEEN_IDS`: Vanish, Burrow,
@@ -288,21 +297,15 @@ export function ccTargetBlockerIntervals(
       // counted usable on a rogue 0.8 s into Vanish) — to the end the kill
       // windows read (`untargetableEndS`)
       .concat(
-        auras
-          .filter(
-            (iv) =>
-              KW_UNTARGETABLE_AURA_IDS.has(iv.spellId) ||
-              SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId),
-          )
-          .map((iv) => ({
-            ...iv,
-            toS: untargetableEndS(
-              target,
-              iv,
-              combat.startTime,
-              Object.values(combat.units ?? {}),
-            ),
-          })),
+        auras.filter(untargetable).map((iv) => ({
+          ...iv,
+          toS: untargetableEndS(
+            target,
+            iv,
+            combat.startTime,
+            Object.values(combat.units ?? {}),
+          ),
+        })),
       )
   );
 }
