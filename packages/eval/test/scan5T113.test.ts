@@ -226,3 +226,103 @@ describe("scan5/t113 killWindowShutPastAction — other protection (B99 #2)", ()
     expect(seen).toEqual([]);
   });
 });
+
+describe("scan5/t113 hitEndPastOwnAction — the producer's lifecycle (B100)", () => {
+  it("Burrow 20 s, REFRESH 21 s, the holder's cast 22 s, a swing 24 s, REMOVED 25 s: the logged end stands and the line is not flagged", async () => {
+    const { saveAuraIntervals } =
+      await import("@gladlog/analysis/src/utils/enemyDefensives");
+    const BURROW = "409293";
+    const applied = makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      BURROW,
+      at(20),
+      "e1",
+      "e1",
+      "BUFF",
+    );
+    const refresh = makeAuraEvent(
+      LogEvent.SPELL_AURA_REFRESH,
+      BURROW,
+      at(21),
+      "e1",
+      "e1",
+      "BUFF",
+    );
+    const removed = makeAuraEvent(
+      LogEvent.SPELL_AURA_REMOVED,
+      BURROW,
+      at(25),
+      "e1",
+      "e1",
+      "BUFF",
+    );
+    const shaman: any = makeUnit("e1", {
+      name: "EnemyShaman",
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Enhancement,
+      reaction: CombatUnitReaction.Hostile,
+      info: { teamId: "1", talents: [], pvpTalents: [] } as never,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          BURROW,
+          at(20),
+          "e1",
+          "EnemyShaman",
+          "e1",
+          "EnemyShaman",
+        ),
+      ],
+      auraEvents: [applied, refresh, removed],
+    });
+    Object.assign(shaman, {
+      castStartEvents: [
+        {
+          spellId: "8004",
+          spellName: "Healing Surge",
+          timestamp: at(22),
+          srcUnitId: "e1",
+          logLine: { event: "SPELL_CAST_START", timestamp: at(22) },
+        },
+      ],
+      damageIn: [
+        {
+          logLine: {
+            event: LogEvent.SWING_DAMAGE,
+            timestamp: at(24),
+            lineIndex: removed.logLine.lineIndex - 0.5,
+          },
+          timestamp: at(24),
+          srcUnitId: "a1",
+          destUnitId: "e1",
+          amount: 1000,
+        },
+      ],
+    });
+    const attacker: any = makeUnit("a1", {
+      name: "Attacker",
+      reaction: CombatUnitReaction.Friendly,
+      info: { teamId: "0", talents: [], pvpTalents: [] } as never,
+      spellCastEvents: [],
+      auraEvents: [],
+    });
+    Object.assign(attacker, { damageIn: [], castStartEvents: [] });
+    // the producer: one interval, a hit-cut 20–24 with the end logged
+    const iv = saveAuraIntervals(shaman, [shaman], {
+      startTime: T0,
+      endTime: at(120),
+      units: { e1: shaman, a1: attacker },
+    }).find((x) => x.spellId === BURROW)!;
+    expect(iv.endedByHit).toBe(true);
+    expect(iv.inferredEnd).toBe(false);
+    expect(iv.toS).toBeCloseTo(24);
+    const seen = scan({
+      units: [shaman, attacker],
+      players: [shaman, attacker],
+      pids: { "1": shaman },
+      lines: [
+        "0:20  [ENEMY DEF]   1(EShaman) (Enhancement Shaman): Burrow (immune, 4.0s — ended by a hit)",
+      ],
+    }).filter((v) => v.check === "hitEndPastOwnAction");
+    expect(seen).toEqual([]);
+  });
+});

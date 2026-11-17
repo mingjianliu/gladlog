@@ -52,9 +52,11 @@
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import { ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
+import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import { ccTargetBlockerIntervals } from "@gladlog/analysis/src/utils/ccTargetState";
 import {
   holderFirstOwnActionAfterMs,
+  type ISaveAuraInterval,
   isMeleeSwingRow,
   KW_UNTARGETABLE_AURA_IDS,
   SAVE_AURA_END_UNSEEN_IDS,
@@ -71,7 +73,6 @@ import {
   ev,
   type IRoundCtx,
   nameOf,
-  REMOVED,
   successesOf,
   tsOf,
 } from "./ctx";
@@ -105,46 +106,41 @@ export function run(ctx: IRoundCtx): void {
     const unit = ctx.unitOfPid(m[3]!);
     if (!id || !unit) continue;
     const lineS = Number(m[1]) * 60 + Number(m[2]);
-    // the line's own press: the application its unit put on itself, not
-    // another caster's copy of the same second (batch review
-    // 80-PIPE-112-B99 #1: Mage A's Mass Invisibility on Mage B, B's cast bar,
-    // then B's own in the same millisecond)
-    const auras = ((unit.auraEvents ?? []) as any[]).filter(
-      (a) =>
-        a.spellId === id &&
-        a.srcUnitId === unit.id &&
-        (a.destUnitId === undefined || a.destUnitId === unit.id),
+    // the interval the line was built from (`saveAuraIntervals`): the
+    // line unit's own application of that second that a hit ended — the
+    // producer's lifecycle, REFRESH / repress / the closing row included
+    // (batch review 80-PIPE-112-B99 #1: another caster's copy of the same
+    // millisecond; 80-PIPE-113-B100: a REFRESH before the REMOVED)
+    const iv = producerIntervalsOf(ctx, unit).find(
+      (x) =>
+        x.spellId === id &&
+        x.endedByHit &&
+        isOwnApplication(x, unit) &&
+        Math.floor(x.fromS) === lineS,
     );
-    const i = auras.findIndex(
-      (a) =>
-        ev(a) === APPLIED && Math.floor((tsOf(a) - ctx.start) / 1000) === lineS,
-    );
-    if (i < 0) continue;
+    if (!iv) continue;
     // an end the log shows is the aura's own: the holder's action did not
-    // end it
-    if (auras[i + 1] && ev(auras[i + 1]) === REMOVED) continue;
+    // end it (`untargetableEndS` keeps a logged end)
+    if (!iv.inferredEnd) continue;
     const C = "hitEndPastOwnAction";
     ctx.bump(C);
-    const from = tsOf(auras[i]);
+    const from = Math.round(ctx.start + iv.fromS * 1000);
     const endMs = from + Number(m[5]) * 1000;
-    // …read from its own row, as the product reads it
-    const fromLine: number | undefined = auras[i].logLine?.lineIndex;
-    const own = holderFirstOwnActionAfterMs(
-      unit,
-      from,
-      id,
-      ctx.units,
-      fromLine,
-    );
+    // the holder's first own action, as the product reads it
+    // (`untargetableEndS` on the same interval, uncapped)
+    const actionMs = (holder: any): number => {
+      const s = untargetableEndS(
+        holder,
+        { ...iv, toS: Infinity },
+        ctx.start,
+        ctx.units,
+      );
+      return Number.isFinite(s) ? Math.round(ctx.start + s * 1000) : Infinity;
+    };
+    const own = actionMs(unit);
     // which kind of action it was: a cast bar begun, or a press / hit /
     // opener debuff (the reading without the bars)
-    const noBars = holderFirstOwnActionAfterMs(
-      { ...unit, castStartEvents: [] },
-      from,
-      id,
-      ctx.units,
-      fromLine,
-    );
+    const noBars = actionMs({ ...unit, castStartEvents: [] });
     const kind = noBars < endMs - SLACK_MS ? "press-or-hit" : "cast-start";
     const early = own - from <= 1000 ? "≤1s" : ">1s";
     if (own < endMs - SLACK_MS)
@@ -164,33 +160,25 @@ export function run(ctx: IRoundCtx): void {
   // a cast bar begun in the very millisecond an unseen-end stealth immunity
   // went up: which side of the APPLIED row it was logged on decides whether
   // it is the holder's action after it
+  // (the producer's intervals with no logged end, `saveAuraIntervals`)
   for (const u of ctx.players) {
-    const auras: any[] = u.auraEvents ?? [];
     const starts: any[] = (u as any).castStartEvents ?? [];
-    for (let k = 0; k < auras.length; k++) {
-      const a = auras[k];
-      if (
-        !ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(a.spellId) ||
-        ev(a) !== APPLIED
-      )
-        continue;
-      const next = auras.slice(k + 1).find((b) => b.spellId === a.spellId);
-      if (next && ev(next) === REMOVED) continue;
+    for (const iv of unseenEndApplicationsOf(ctx, u)) {
       const C = "applyMsCastStart";
       ctx.bump(C);
-      const same = starts.filter((r) => tsOf(r) === tsOf(a));
+      const fromMs = Math.round(ctx.start + iv.fromS * 1000);
+      const same = starts.filter((r) => tsOf(r) === fromMs);
       if (same.length > 0)
         ctx.violate(
           C,
-          `${a.spellId} cast start in the APPLIED ms`,
-          tsOf(a),
-          `${u.id}:${tsOf(a)}`,
-          `${same.length} cast start(s) at the APPLIED ms of ${nameOf(a.spellId)}`,
+          `${iv.spellId} cast start in the APPLIED ms`,
+          fromMs,
+          `${u.id}:${fromMs}`,
+          `${same.length} cast start(s) at the APPLIED ms of ${nameOf(iv.spellId)}`,
         );
     }
   }
   for (const u of ctx.players) {
-    const auras: any[] = u.auraEvents ?? [];
     const casts = successesOf(u);
     const starts: any[] = (u as any).castStartEvents ?? [];
     const hits: any[] = ((u.damageOut ?? []) as any[]).filter(
@@ -200,20 +188,19 @@ export function run(ctx: IRoundCtx): void {
           ev(d) === "RANGE_DAMAGE" ||
           isMeleeSwingRow(d)),
     );
-    for (let k = 0; k < auras.length; k++) {
-      const a = auras[k];
+    // the runs whose end the log shows: the producer's aura lifecycle
+    // (`buildAuraIntervals`, before any hit cut), the unit's own
+    // applications with a logged start and end
+    for (const a of buildAuraIntervals(u, roundCombatOf(ctx))) {
       if (
         !ANY_ACTION_ENDS.has(a.spellId) ||
-        ev(a) !== APPLIED ||
-        a.srcUnitId !== u.id
+        a.inferredStart ||
+        a.inferredEnd ||
+        !isOwnApplication(a, u)
       )
         continue;
-      const end = auras
-        .slice(k + 1)
-        .find((b) => b.spellId === a.spellId && ev(b) === REMOVED);
-      if (!end) continue;
-      const from = tsOf(a);
-      const to = tsOf(end);
+      const from = Math.round(ctx.start + a.fromS * 1000);
+      const to = Math.round(ctx.start + a.toS * 1000);
       // the first row of each kind inside the run; the aura's own press row
       // lags it (Greater Invisibility's 110959)
       const firstOf = (rows: any[], lagMs: number) =>
@@ -380,29 +367,17 @@ function ccBlockerPastAction(ctx: IRoundCtx): void {
  * round (once per round) */
 function b98Shapes(ctx: IRoundCtx): void {
   for (const unit of ctx.units as any[]) {
-    const rows = ((unit.auraEvents ?? []) as any[]).filter(
-      (a) =>
-        ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(a.spellId) &&
-        a.destUnitId === unit.id,
-    );
-    rows.forEach((a, i) => {
-      if (ev(a) !== APPLIED) return;
-      // the application's lifecycle: its REFRESH / DOSE rows go on, the
-      // next APPLIED or REMOVED ends it (codex 85-tk-N-T113-5 #3)
-      const next = rows
-        .slice(i + 1)
-        .find(
-          (b) =>
-            b.spellId === a.spellId && (ev(b) === APPLIED || ev(b) === REMOVED),
-        );
-      if (next && ev(next) === REMOVED) return;
+    // the producer's applications with no logged end (codex
+    // 85-tk-N-T113-5 #3, 80-PIPE-113-B100: read, not re-walked)
+    for (const a of unseenEndApplicationsOf(ctx, unit)) {
       const id: string = a.spellId;
-      const from = tsOf(a);
+      const from = Math.round(ctx.start + a.fromS * 1000);
       const capMs = from + (spellEffectData[id]?.durationSeconds ?? 0) * 1000;
       const name = nameOf(id);
       ctx.bump("openerDebuffNoUnits");
-      const bare = holderFirstOwnActionAfterMs(unit, from, id);
-      const full = holderFirstOwnActionAfterMs(unit, from, id, ctx.units);
+      const line = applicationLineOf(unit, a, from);
+      const bare = holderFirstOwnActionAfterMs(unit, from, id, undefined, line);
+      const full = holderFirstOwnActionAfterMs(unit, from, id, ctx.units, line);
       if (full < bare && full < capMs)
         ctx.violate(
           "openerDebuffNoUnits",
@@ -429,6 +404,75 @@ function b98Shapes(ctx: IRoundCtx): void {
           `${name} at +${from - ctx.start}ms: an own action in its APPLIED's millisecond logged below it; strict reading ${Number.isFinite(strict) ? ((strict - from) / 1000).toFixed(2) + "s" : "none"}`,
           "",
         );
-    });
+    }
   }
+}
+
+/** the round as the producer's interval readers take it */
+function roundCombatOf(ctx: IRoundCtx) {
+  return {
+    startTime: ctx.start,
+    endTime: ctx.legacy.endTime,
+    units: ctx.legacy.units,
+  };
+}
+
+/** the producer's own intervals of a unit — `saveAuraIntervals`, the reading
+ * its `[ENEMY DEF]` lines and kill windows are built from — once per unit
+ * of the round (batch review 80-PIPE-113-B100: the scan's own walk of the
+ * rows missed a REMOVED after a REFRESH) */
+const producerIvsMemo = new WeakMap<object, ISaveAuraInterval[]>();
+function producerIntervalsOf(
+  ctx: IRoundCtx,
+  u: any,
+): readonly ISaveAuraInterval[] {
+  let ivs = producerIvsMemo.get(u);
+  if (!ivs) {
+    const team = ctx.players.filter((p) => p.info?.teamId === u.info?.teamId);
+    ivs = saveAuraIntervals(u, team, roundCombatOf(ctx) as any);
+    producerIvsMemo.set(u, ivs);
+  }
+  return ivs;
+}
+
+/** an interval `u` applied itself (by id; by name when the log gave none) */
+function isOwnApplication(
+  iv: { srcUnitId?: string; srcUnitName?: string },
+  u: any,
+): boolean {
+  return iv.srcUnitId !== undefined
+    ? iv.srcUnitId === u.id
+    : iv.srcUnitName === u.name;
+}
+
+/** the stealth-kind immunity applications on `u` whose end the log never
+ * showed, as the producer's intervals have them (a repress REFRESH's piece
+ * is its press's, not a new application) */
+function unseenEndApplicationsOf(
+  ctx: IRoundCtx,
+  u: any,
+): readonly ISaveAuraInterval[] {
+  return producerIntervalsOf(ctx, u).filter(
+    (iv) =>
+      ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId) &&
+      iv.inferredEnd &&
+      !iv.inferredStart &&
+      !iv.startedByRepress,
+  );
+}
+
+/** the APPLIED row an interval starts on (its source's, at its ms) — the row
+ * `untargetableEndS` passes the predicate */
+function applicationLineOf(
+  u: any,
+  iv: { spellId: string; srcUnitId?: string },
+  fromMs: number,
+): number | undefined {
+  return ((u.auraEvents ?? []) as any[]).find(
+    (a) =>
+      a.spellId === iv.spellId &&
+      ev(a) === APPLIED &&
+      tsOf(a) === fromMs &&
+      (!iv.srcUnitId || a.srcUnitId === iv.srcUnitId),
+  )?.logLine?.lineIndex;
 }
