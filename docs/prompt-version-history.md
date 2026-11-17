@@ -7101,3 +7101,31 @@ lines in 8 rounds, all [MINOR DISPELS]; other scans 0 new violations; menu
 rows unchanged. Not changed: a resolved-source Spellsteal or Poison
 Cleansing Totem dispel with no cast row still reads as a proc (another
 mechanism).
+
+v574 (2026-11-17; pipeline batch B101, T113; round 13 audit). A stealth-kind
+immunity with no REMOVED logged (Mass Invisibility, Vanish, Burrow) printed
+`(immune, N.Ns — ended by a hit)` with the first aimed hit searched up to the
+aura's official length even after its holder had acted (audited line: a Mass
+Invisibility `immune, 10.8s` whose mage began a cast bar 9.0 s in).
+holderFirstOwnActionAfterMs (now in utils/stealthActionEnd.ts) counts a cast
+bar begun and no longer counts a hit in flight (a spell hit in the aura's
+first second; a melee swing is never in flight, isMeleeSwingRow). Measured on
+605 logged runs: a cast bar begun ended it 61/61; a first-second spell hit
+left it going 182/227. saveAuraIntervals keeps the cut at the first aimed hit
+for attribution and marks overBeforeHit when the holder acted first; that
+[ENEMY DEF] line prints `end not logged`. Every reader that times one of these
+auras ends it at the holder's action (untargetableEndS): the kill windows'
+own-save span and press timer (stealthImmunityPressActionEndS, a press reads
+only its own aura; a press its holder ended at the press holds nothing), the
+burst ledger's defensive coverage, ccTargetBlockerIntervals,
+killWindowTargetSelection, momentSnapshot, castingLocks, visionObscured and
+ccAvoidanceBuffsUpAt and the interrupt-readiness casting lock (withStealthActionEnds,
+with the round's units so an opener debuff with no cast row counts; a row in
+the application's millisecond logged below it is after it); the full routed / exempt reader
+list is in the attempt record. Greater Invisibility keeps its official length
+in the kill windows (ruling D6). 605: scan5/t113 hitEndPastOwnAction 426/530
+-> 0/83 (447 lines rewritten to `end not logged`, none removed);
+killWindowShutPastAction 0/807 -> 0/807; ccBlockerPastAction 0/24148 both;
+other scan5 violation counts unchanged; [KILL WINDOW] +108/-77 on the last
+attempt (rogue Vanish press timer), 0 menu lines. Not changed: an `end not
+logged` line does not print how long the immunity lasted (R22 wording).

@@ -1384,5 +1384,11 @@
  *  the spell in the round; a removal's press is a cast inside the match
  *  window, not any older cast.
  *  See docs/prompt-version-history.md.
+ *
+ * v574 (2026-11-17; pipeline batch B101, T113): an unseen-end stealth-kind
+ *  immunity (Mass Invisibility, Vanish, Burrow) is over at its holder's own
+ *  action for every reader; an [ENEMY DEF] line whose holder acted before
+ *  the cutting hit prints `end not logged`.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 573;
+export const PROMPT_VERSION = 574;
