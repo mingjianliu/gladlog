@@ -14,11 +14,11 @@
  *    `SLACK_MS` before the printed end.
  *  - `killWindowShutPastAction` (batch review 80-PIPE-104-B91): the
  *    producer's own interval (`saveAuraIntervals`) of such an aura whose
- *    holder acted before the aimed hit (`overBeforeHit`, its
- *    `untargetableToS`); a `[KILL WINDOW]` / `[VULNERABLE]` line on that
- *    holder opening in the hit's second, later than the action's, with none
- *    opening between them — the window stayed shut to the hit. Checked =
- *    those intervals.
+ *    holder acted before the aimed hit (`untargetableEndS`, the end every
+ *    span reader shares), against the producer's own kill windows
+ *    (`computeOffensiveWindows`) on that holder: one opening at the hit
+ *    itself, later than the action, read the protection as lasting to the
+ *    hit. Checked = those intervals (each round once).
  *  - `visibleRunCastStart` (the measurement behind what counts as the
  *    holder's action): on a self-applied run of an any-action-ends aura
  *    (Mass Invisibility 414664, Greater Invisibility 110960; Vanish 11327,
@@ -31,20 +31,20 @@
  */
 import { ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
+import { computeOffensiveWindows } from "@gladlog/analysis/src/utils/offensiveWindows";
 import {
   holderFirstOwnActionAfterMs,
   isMeleeSwingRow,
   saveAuraIntervals,
+  untargetableEndS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 
 import {
   APPLIED,
   ev,
-  fmtS,
   type IRoundCtx,
   nameOf,
   REMOVED,
-  secOf,
   successesOf,
   tsOf,
 } from "./ctx";
@@ -223,44 +223,49 @@ export function run(ctx: IRoundCtx): void {
   }
 }
 
-const KW_RE =
-  /^\s+\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d) on [^(]+\(([^)]+)\)/;
-
 function killWindowShutPastAction(ctx: IRoundCtx): void {
   const C = "killWindowShutPastAction";
-  const starts = new Map<string, number[]>();
-  for (const l of ctx.lines) {
-    const m = KW_RE.exec(l);
-    if (!m) continue;
-    const list = starts.get(m[3]!) ?? [];
-    list.push(secOf(m[1]!));
-    starts.set(m[3]!, list);
-  }
-  if (starts.size === 0) return;
+  if (!ctx.firstOwnerOfRound) return;
   const combat = {
     startTime: ctx.start,
     endTime: ctx.legacy.endTime,
     units: ctx.legacy.units,
   };
   for (const u of ctx.players) {
-    const mine = starts.get(u.name);
-    if (!mine) continue;
     const team = ctx.players.filter((p) => p.info?.teamId === u.info?.teamId);
-    for (const iv of saveAuraIntervals(u, team, combat as any)) {
-      if (!iv.overBeforeHit || iv.untargetableToS === undefined) continue;
+    // the one end every span reader shares (`untargetableEndS`), on the
+    // intervals the hit cut
+    const cut = saveAuraIntervals(u, team, combat as any)
+      .filter((iv) => iv.endedByHit)
+      .map((iv) => ({
+        iv,
+        actS: untargetableEndS(u, iv, ctx.start, ctx.units),
+      }))
+      .filter((x) => x.actS < x.iv.toS);
+    if (cut.length === 0) continue;
+    const others = ctx.players.filter((p) => p.info?.teamId !== u.info?.teamId);
+    // the producer's own windows on this unit (the one computation the
+    // kill-window lines print)
+    const windows = computeOffensiveWindows(team, others, ctx.legacy).filter(
+      (w) => w.targetName === u.name,
+    );
+    for (const { iv, actS } of cut) {
       ctx.bump(C);
-      const hitS = Math.floor(iv.toS);
-      const actS = Math.floor(iv.untargetableToS);
-      if (hitS <= actS) continue;
-      if (!mine.includes(hitS)) continue;
-      if (mine.some((s) => s >= actS && s < hitS)) continue;
-      ctx.violate(
-        C,
-        nameOf(iv.spellId, iv.spellId),
-        ctx.start + hitS * 1000,
-        `${u.id}#${iv.spellId}#${Math.floor(iv.fromS)}`,
-        `${nameOf(iv.spellId)} over at ${fmtS(actS)} (own action); kill window opens ${fmtS(hitS)} (the hit)`,
+      // a window that opens at the hit itself, later than the action: the
+      // protection was read as lasting to the hit
+      const w = windows.find(
+        (x) =>
+          Math.abs(x.fromSeconds - iv.toS) < 0.001 &&
+          x.fromSeconds > actS + 0.001,
       );
+      if (w)
+        ctx.violate(
+          C,
+          nameOf(iv.spellId, iv.spellId),
+          ctx.start + Math.round(iv.toS * 1000),
+          `${u.id}#${iv.spellId}#${Math.floor(iv.fromS)}`,
+          `${nameOf(iv.spellId)} over at ${actS.toFixed(3)} s (own action); kill window opens ${w.fromSeconds.toFixed(3)} s (the hit)`,
+        );
     }
   }
 }
