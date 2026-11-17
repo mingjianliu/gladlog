@@ -2161,7 +2161,12 @@ export function saveAuraIntervals(
       ...cut,
       toS: (hitMs - combat.startTime) / 1000,
       endedByHit: true as const,
-      ...(overMs < hitMs ? { overBeforeHit: true as const } : {}),
+      ...(overMs < hitMs
+        ? {
+            overBeforeHit: true as const,
+            untargetableToS: (overMs - combat.startTime) / 1000,
+          }
+        : {}),
     };
   });
 }
@@ -2287,6 +2292,10 @@ export type ISaveAuraInterval = IAuraInterval & {
    * immunity was over sooner than `toS`, by an end the log does not show,
    * and the `[ENEMY DEF]` line reads `end not logged` */
   overBeforeHit?: true;
+  /** with `overBeforeHit`: that action's instant, seconds since the match
+   * start (`untargetableEndS` of the interval) — where the protection ended
+   * for every span reader */
+  untargetableToS?: number;
 };
 
 /**
@@ -2608,9 +2617,18 @@ export function enemyDefensiveEvents(
     // the aura's own end — the hit is the end this line states
     // …unless the holder's own action had ended it before the hit
     // (`overBeforeHit`, pipeline T113): the hit is no length to state
+    // The protection itself ended at that action (`untargetableEndS`), the
+    // end every span reader takes — the kill windows' `ownSaveSpanS` reads
+    // this `observedSeconds`, the burst ledger and `[CC]` target state read
+    // `untargetableEndS` directly (batch review 80-PIPE-104-B91: left at the
+    // hit, a kill window stayed shut 8 s past the holder's cast bar).
     if (iv.endedByHit)
       return iv.overBeforeHit
-        ? { removedEarly: false, endNotLogged: true }
+        ? {
+            removedEarly: false,
+            endNotLogged: true,
+            observedSeconds: (iv.untargetableToS ?? iv.toS) - iv.fromS,
+          }
         : { removedEarly: false, endedByHit: true };
     if (iv.inferredEnd) {
       // The log has no end for this application: the interval builder closed

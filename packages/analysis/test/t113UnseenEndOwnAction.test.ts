@@ -14,7 +14,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  enemyDefensiveEvents,
   holderFirstOwnActionAfterMs,
+  ownSaveSpanS,
   saveAuraIntervals,
   untargetableEndS,
 } from "../src/utils/enemyDefensives";
@@ -187,5 +189,64 @@ describe("saveAuraIntervals — the aimed hit that ends a stealth-kind immunity 
     // …and what keeps the line from stating 10.8 s
     expect(iv.overBeforeHit).toBe(true);
     expect(iv.inferredEnd).toBe(true);
+  });
+});
+
+describe("the protection ends at the holder's action for every span reader (T113, batch review 80-PIPE-104-B91)", () => {
+  // Mass Invisibility up at 20 s, no REMOVED; a Polymorph bar begun at 22 s
+  // with no SUCCESS; an incoming swing at 30 s
+  it("the [ENEMY DEF] event's length and the kill window's own-save span end at 22 s, not at the hit", () => {
+    const mage = makeUnit("e1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Arcane,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          MASS_INVIS,
+          at(20),
+          "e1",
+          "e1",
+          "BUFF",
+        ),
+      ],
+    });
+    Object.assign(mage, {
+      castStartEvents: [barBegun(22)],
+      damageIn: [
+        {
+          srcUnitId: "f1",
+          destUnitId: "e1",
+          timestamp: at(30),
+          logLine: {
+            event: LogEvent.SWING_DAMAGE,
+            timestamp: at(30),
+            lineIndex: 900,
+          },
+        },
+      ],
+    });
+    const friend = makeUnit("f1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+    });
+    const combat = {
+      startTime: START,
+      endTime: START + 300_000,
+      units: { e1: mage, f1: friend },
+    };
+    const iv = saveAuraIntervals(mage, [mage], combat as never).find(
+      (x) => x.spellId === MASS_INVIS,
+    )!;
+    // the attribution cut stays at the hit
+    expect(iv.toS).toBeCloseTo(30);
+    expect(iv.untargetableToS).toBeCloseTo(22);
+    const d = enemyDefensiveEvents(mage, [mage], combat as never).find(
+      (e) => e.spellId === MASS_INVIS,
+    )!;
+    expect(d.endNotLogged).toBe(true);
+    expect(d.atSeconds + d.observedSeconds!).toBeCloseTo(22);
+    expect(ownSaveSpanS(d, false)?.to).toBeCloseTo(22);
   });
 });

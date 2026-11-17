@@ -12,6 +12,13 @@
  *    own action after it went up (`holderFirstOwnActionAfterMs`, the one
  *    predicate `untargetableEndS` and the burst ledger read) comes more than
  *    `SLACK_MS` before the printed end.
+ *  - `killWindowShutPastAction` (batch review 80-PIPE-104-B91): the
+ *    producer's own interval (`saveAuraIntervals`) of such an aura whose
+ *    holder acted before the aimed hit (`overBeforeHit`, its
+ *    `untargetableToS`); a `[KILL WINDOW]` / `[VULNERABLE]` line on that
+ *    holder opening in the hit's second, later than the action's, with none
+ *    opening between them — the window stayed shut to the hit. Checked =
+ *    those intervals.
  *  - `visibleRunCastStart` (the measurement behind what counts as the
  *    holder's action): on a self-applied run of an any-action-ends aura
  *    (Mass Invisibility 414664, Greater Invisibility 110960; Vanish 11327,
@@ -27,20 +34,24 @@ import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/sp
 import {
   holderFirstOwnActionAfterMs,
   isMeleeSwingRow,
+  saveAuraIntervals,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 
 import {
   APPLIED,
   ev,
+  fmtS,
   type IRoundCtx,
   nameOf,
   REMOVED,
+  secOf,
   successesOf,
   tsOf,
 } from "./ctx";
 
 export const CHECKS = [
   "hitEndPastOwnAction",
+  "killWindowShutPastAction",
   "visibleRunCastStart",
   "applyMsCastStart",
 ] as const;
@@ -100,6 +111,7 @@ export function run(ctx: IRoundCtx): void {
         line.trim().slice(0, 300),
       );
   }
+  killWindowShutPastAction(ctx);
   if (!ctx.firstOwnerOfRound) return;
   // a cast bar begun in the very millisecond an unseen-end stealth immunity
   // went up: which side of the APPLIED row it was logged on decides whether
@@ -206,6 +218,48 @@ export function run(ctx: IRoundCtx): void {
         first,
         `${u.id}:${from}:${first}`,
         `first own ${kind} ${((first - from) / 1000).toFixed(2)}s into ${nameOf(a.spellId)} ${a.spellId}, which ended ${((to - first) / 1000).toFixed(2)}s after it`,
+      );
+    }
+  }
+}
+
+const KW_RE =
+  /^\s+\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d) on [^(]+\(([^)]+)\)/;
+
+function killWindowShutPastAction(ctx: IRoundCtx): void {
+  const C = "killWindowShutPastAction";
+  const starts = new Map<string, number[]>();
+  for (const l of ctx.lines) {
+    const m = KW_RE.exec(l);
+    if (!m) continue;
+    const list = starts.get(m[3]!) ?? [];
+    list.push(secOf(m[1]!));
+    starts.set(m[3]!, list);
+  }
+  if (starts.size === 0) return;
+  const combat = {
+    startTime: ctx.start,
+    endTime: ctx.legacy.endTime,
+    units: ctx.legacy.units,
+  };
+  for (const u of ctx.players) {
+    const mine = starts.get(u.name);
+    if (!mine) continue;
+    const team = ctx.players.filter((p) => p.info?.teamId === u.info?.teamId);
+    for (const iv of saveAuraIntervals(u, team, combat as any)) {
+      if (!iv.overBeforeHit || iv.untargetableToS === undefined) continue;
+      ctx.bump(C);
+      const hitS = Math.floor(iv.toS);
+      const actS = Math.floor(iv.untargetableToS);
+      if (hitS <= actS) continue;
+      if (!mine.includes(hitS)) continue;
+      if (mine.some((s) => s >= actS && s < hitS)) continue;
+      ctx.violate(
+        C,
+        nameOf(iv.spellId, iv.spellId),
+        ctx.start + hitS * 1000,
+        `${u.id}#${iv.spellId}#${Math.floor(iv.fromS)}`,
+        `${nameOf(iv.spellId)} over at ${fmtS(actS)} (own action); kill window opens ${fmtS(hitS)} (the hit)`,
       );
     }
   }
