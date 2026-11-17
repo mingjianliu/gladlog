@@ -46,6 +46,7 @@ import {
   ownerControlPressKit,
   ownerPressesRejectedDuring,
 } from "../controlRejectedPresses";
+import { isCountedReflectRow } from "../spellOutcomeLines";
 import type { TimelineCtx } from "./ctx";
 
 export function emitTrinketCcOnTeamEntries(
@@ -433,10 +434,26 @@ export function emitTrinketCcOnTeamEntries(
     // the controls that landed on them; nothing when neither
     const holder = friends.find((f) => f.name === summary.playerName);
     for (const imm of summary.ccImmuneUncredited ?? []) {
+      // T120 605 run: a reflected control is stated by its own [REFLECTED]
+      // line (`reflectedSpells` prints every `isCountedReflectRow` row) —
+      // a second line here repeated all 33 such rows
+      if (
+        isCountedReflectRow({
+          missType: imm.missType,
+          spellId: imm.spellId,
+          srcUnitId: imm.sourceId,
+          destUnitId: holder?.id,
+        })
+      )
+        continue;
       // the [CC NOT LANDED] note's reading, its lost-REMOVED cap included
       // (weekly review 2026-10-24: this copy had none, so a 0:10 Cyclone
       // whose REMOVED was lost stood behind a 0:44 IMMUNE)
+      // the causes read are IMMUNE's (T120: a MISS / DODGE … row is
+      // stated bare)
+      const missType = imm.missType ?? "IMMUNE";
       const cyclone =
+        missType === "IMMUNE" &&
         holder &&
         damageImmuneControlUpAt(holder, imm.missMs, (id, src) =>
           ccFullDurationForCaster(
@@ -446,7 +463,7 @@ export function emitTrinketCcOnTeamEntries(
         );
       let cause = "";
       if (cyclone) cause = " (a Cyclone was on them)";
-      else {
+      else if (missType === "IMMUNE") {
         const category = getDRCategory(imm.spellId);
         if (!category.startsWith("spell:") && category !== "Unknown") {
           // the whole DR history (fact6 F20: `drHistoryOnly` too)
@@ -472,7 +489,7 @@ export function emitTrinketCcOnTeamEntries(
       }
       addEntry(
         imm.atSeconds,
-        `${fmtTime(imm.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${imm.spellName} (by ${actorLabel(imm.sourceName, "enemy", imm.sourceId)}${ccAvoidedCastTag(imm)}) logged IMMUNE${cause}${ccAvoidedRecastTag(imm)}`,
+        `${fmtTime(imm.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${imm.spellName} (by ${actorLabel(imm.sourceName, "enemy", imm.sourceId)}${ccAvoidedCastTag(imm)}) logged ${missType}${cause}${ccAvoidedRecastTag(imm)}`,
       );
     }
   }

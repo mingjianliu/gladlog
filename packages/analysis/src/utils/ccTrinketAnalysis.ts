@@ -3093,11 +3093,13 @@ export interface IPlayerCCTrinketSummary {
      * its logged length is DR evidence */
     drFullSeconds?: number;
   }>;
-  /** An enemy control the log wrote IMMUNE on this player with no avoidance
-   * the sweep could credit — the `[CC AVOIDED?]` line still states the miss
-   * (corpusFactScan2 immunityTableForward noLine, 2026-10-22: 427 distinct
-   * IMMUNE rows had no line at all). Not in `ccAvoidedInstances`: nothing
-   * was credited, so no avoided count reads it. Optional on old fixtures. */
+  /** An enemy control the log wrote as failed on this player (IMMUNE, or
+   * since T120 any `CONTROL_FAILED_MISS_TYPES` type — MISS, DODGE, …) with
+   * no avoidance the sweep could credit — the `[CC AVOIDED?]` line still
+   * states the miss (corpusFactScan2 immunityTableForward noLine,
+   * 2026-10-22: 427 distinct IMMUNE rows had no line at all). Not in
+   * `ccAvoidedInstances`: nothing was credited, so no avoided count reads
+   * it. Optional on old fixtures. */
   ccImmuneUncredited?: Array<{
     atSeconds: number;
     castAtSeconds: number;
@@ -3107,6 +3109,8 @@ export interface IPlayerCCTrinketSummary {
     sourceId: string;
     /** the miss row's own ms (the cause readers' instant) */
     missMs: number;
+    /** the row's miss type; absent on old fixtures (IMMUNE) */
+    missType?: string;
     /** see `ICCAvoidedInstance.recastLandedAfterS` */
     recastLandedAfterS?: number;
   }>;
@@ -6235,8 +6239,13 @@ function analyzePlayerCCAndTrinketUncached(
           if (untargetedMissOnPlayer || missRow) {
             // the IMMUNE row is still a fact the timeline states, with
             // whatever cause the log shows (the renderer's B17a reading)
+            // T120 (fact12 retest, f22d547e 1:35): every failed-control miss
+            // type, not IMMUNE alone — a Hammer of Justice logged MISS under
+            // the owner's Searing Glare on its caster had no line
             if (
-              missRow?.missType === "IMMUNE" &&
+              missRow &&
+              (missRow.missType === "IMMUNE" ||
+                missRow.logLine?.event === LogEvent.SPELL_MISSED) &&
               (!isGroundCC || takeGroundHit(enemy.id, hit.ms)) &&
               takeMissRow(missRow)
             )
@@ -6250,6 +6259,7 @@ function analyzePlayerCCAndTrinketUncached(
                 // resolves to "X's pet" through its GUID (`actorLabel`)
                 sourceId: cast.srcUnitId || enemy.id,
                 missMs: missRow.timestamp,
+                missType: missRow.missType,
                 ...(recastLandedAfterS(cast, stampMs) !== undefined
                   ? { recastLandedAfterS: recastLandedAfterS(cast, stampMs) }
                   : {}),
@@ -6335,7 +6345,19 @@ function analyzePlayerCCAndTrinketUncached(
     enemies.find((e) => e.id === srcId) ??
     enemies.find((e) => e.id === unitsById.get(srcId)?.ownerId);
   for (const m of player.missesIn ?? []) {
-    if (m.missType !== "IMMUNE" || !m.spellId) continue;
+    // T120: every failed-control miss type (`CONTROL_FAILED_MISS_TYPES`);
+    // another type than IMMUNE only off a direct SPELL_MISSED — a periodic
+    // miss is a tick of a control that landed (Lightning Lasso's MISS
+    // mid-stun; codex 85-tk-L-T120-1 #2)
+    if (!CONTROL_FAILED_MISS_TYPES.has(m.missType) || !m.spellId) continue;
+    const otherType = m.missType !== "IMMUNE";
+    if (otherType && m.logLine?.event !== LogEvent.SPELL_MISSED) continue;
+    // a reflected control has its own [REFLECTED] line (`reflectedSpells`,
+    // every `isCountedReflectRow` row — a hostile caster's row with a spell
+    // id, which every row here is): neither an uncredited line nor a new
+    // Spell Reflection credit (T120 605 re-capture: three credited REFLECT
+    // lines beside their [REFLECTED] line)
+    if (m.missType === "REFLECT") continue;
     // a control, or a silence (mechanic 9 — Garrote's 1330, Spider Venom:
     // no hard CC, but an IMMUNE row of one is the same fact)
     if (
@@ -6385,6 +6407,20 @@ function analyzePlayerCCAndTrinketUncached(
         Math.abs(matchStartMs + c.atSeconds * 1000 - m.timestamp) <= 1000,
     );
     if (landedThen) continue;
+    // T120 (codex 85-tk-L-T120-1 #1): a silence is no `ccInstances` entry —
+    // the control's own aura put on them by that side in that second is the
+    // landing, for another type than IMMUNE
+    if (
+      otherType &&
+      (player.auraEvents ?? []).some(
+        (a) =>
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+          getEnglishSpellName(a.spellId ?? "", a.spellName) === name &&
+          ownerEnemyOf(a.srcUnitId)?.id === enemy.id &&
+          Math.abs(a.timestamp - m.timestamp) <= 1000,
+      )
+    )
+      continue;
     // an avoidance the table explains is credited like the sweep's
     const applicableIds = applicableCCAvoidanceIds(m.spellId, name);
     const buff = avoidanceBuffsAt(m.timestamp, m.logLine?.lineIndex, true).find(
@@ -6421,6 +6457,7 @@ function analyzePlayerCCAndTrinketUncached(
         // resolves to "X's pet" through its GUID (`actorLabel`)
         sourceId: m.srcUnitId || enemy.id,
         missMs: m.timestamp,
+        missType: m.missType,
       });
   }
 

@@ -2121,6 +2121,19 @@ describe("checkCcAvoidedMissType — `[CC AVOIDED?] … logged <TYPE>` names a m
       ]),
     ).toHaveLength(1);
   });
+  it("T120: the uncredited form of any failed-control type passes bare; a type outside the set fails", () => {
+    expect(
+      checkCcAvoidedMissType([
+        "1:35  [CC AVOIDED?]   1(HPriest): Hammer of Justice (by 4(RPaladin)) logged MISS",
+        "1:35  [CC AVOIDED?]   1(HPriest): Kidney Shot (by 5(ARogue)) logged DODGE — recast landed +1.2s",
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcAvoidedMissType([
+        "1:35  [CC AVOIDED?]   1(HPriest): Hammer of Justice (by 4(RPaladin)) logged ABSORB",
+      ]),
+    ).toHaveLength(1);
+  });
   // the producer's own wording of the half the gate re-parses
   const line = (outcome: string) =>
     `0:40  [CC AVOIDED?]   1(BDruid): Hammer of Justice (by 5(RPaladin)) ${outcome}; Precognition (own) active`;
@@ -2163,13 +2176,16 @@ describe("checkCcAvoidedMissType — `[CC AVOIDED?] … logged <TYPE>` names a m
         bare("logged IMMUNE"),
         bare("logged IMMUNE (DR: Incapacitate Immune)"),
         bare("logged IMMUNE (a Cyclone was on them)"),
+        // T120: another failed-control type, bare
+        bare("logged MISS"),
       ]),
     ).toEqual([]);
-    // only IMMUNE ends a line there; "did not land" and another cause do not
+    // "did not land" and another cause do not end a line there, nor a
+    // cause after a type other than IMMUNE
     for (const bad of [
       "did not land",
-      "logged MISS",
       "logged IMMUNE (Ice Block was up)",
+      "logged MISS (DR: Incapacitate Immune)",
     ])
       expect(checkCcAvoidedMissType([bare(bad)]), bad).toHaveLength(1);
   });

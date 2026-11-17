@@ -54,7 +54,11 @@ const emptyDispel = {
   missedPurgeWindows: [],
 };
 
-function immuneLine(missAtS: number, cycloneRemovedAtS?: number): string {
+function immuneLine(
+  missAtS: number,
+  cycloneRemovedAtS?: number,
+  missType?: string,
+): string {
   const cyclone = [
     makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
@@ -101,6 +105,7 @@ function immuneLine(missAtS: number, cycloneRemovedAtS?: number): string {
         sourceName: "EnemyDruid",
         sourceId: "E1",
         missMs: T0 + missAtS * 1000,
+        ...(missType ? { missType } : {}),
       },
     ],
   } as unknown as IPlayerCCTrinketSummary;
@@ -129,7 +134,7 @@ function immuneLine(missAtS: number, cycloneRemovedAtS?: number): string {
     criticalWindowSeconds: new Set(),
     outgoingCCChains: [],
   } as never);
-  return text.split("\n").find((l) => l.includes("logged IMMUNE")) ?? "";
+  return text.split("\n").find((l) => l.includes("[CC AVOIDED?]")) ?? "";
 }
 
 describe("[CC AVOIDED?] logged IMMUNE: the Cyclone cause reads the shared, capped walk", () => {
@@ -143,5 +148,12 @@ describe("[CC AVOIDED?] logged IMMUNE: the Cyclone cause reads the shared, cappe
   });
   it("a logged REMOVED closes it", () => {
     expect(immuneLine(13, 12)).not.toContain("Cyclone was on them");
+  });
+  it("T120: a MISS row is stated bare — the causes read are IMMUNE's", () => {
+    const line = immuneLine(12, undefined, "MISS");
+    expect(line).toMatch(/\(by 4\([^)]*\)\) logged MISS$/);
+  });
+  it("T120: a reflected control gets no line here — its [REFLECTED] line states it", () => {
+    expect(immuneLine(12, undefined, "REFLECT")).toBe("");
   });
 });

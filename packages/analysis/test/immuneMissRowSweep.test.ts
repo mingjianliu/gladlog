@@ -112,4 +112,145 @@ describe("IMMUNE control rows the cast sweep never walks", () => {
     ]);
     expect(r.ccImmuneUncredited ?? []).toEqual([]);
   });
+  it("T120 (f22d547e 1:35): a Hammer of Justice logged MISS, nothing credited → one uncredited row of type MISS, by the cast sweep and by the row sweep", () => {
+    const HOJ = "853";
+    const miss = {
+      spellId: HOJ,
+      spellName: "Hammer of Justice",
+      srcUnitId: "enemy-1",
+      destUnitId: "player-1",
+      missType: "MISS",
+      timestamp: AT,
+      logLine: { event: LogEvent.SPELL_MISSED, timestamp: AT },
+    };
+    for (const withCast of [true, false]) {
+      const pal = makeUnit("enemy-1", {
+        name: "Paladin",
+        spec: CombatUnitSpec.Paladin_Retribution,
+        reaction: CombatUnitReaction.Hostile,
+        spellCastEvents: withCast
+          ? [
+              makeSpellCastEvent(
+                HOJ,
+                AT,
+                "player-1",
+                "Priest",
+                "enemy-1",
+                "Paladin",
+              ),
+            ]
+          : [],
+      });
+      (pal as unknown as { missesOut: unknown[] }).missesOut = [miss];
+      const player = makeUnit("player-1", {
+        name: "Priest",
+        spec: CombatUnitSpec.Priest_Holy,
+        reaction: CombatUnitReaction.Friendly,
+      });
+      (player as unknown as { missesIn: unknown[] }).missesIn = [miss];
+      const combat = {
+        startTime: MATCH_START,
+        endTime: MATCH_START + 300_000,
+        startInfo: { zoneId: "1672" },
+        units: { "enemy-1": pal, "player-1": player },
+      };
+      const r = analyzePlayerCCAndTrinket(player, [pal], combat as never);
+      expect(
+        r.ccImmuneUncredited?.map((x) => [x.spellName, x.missType]),
+        `withCast=${withCast}`,
+      ).toEqual([["Hammer of Justice", "MISS"]]);
+    }
+  });
+  it("T120 605 re-capture: a reflected control taken by the row sweep is no uncredited row and no new credit — its [REFLECTED] line states it", () => {
+    const row = {
+      spellId: "118",
+      spellName: "Polymorph",
+      srcUnitId: "enemy-1",
+      destUnitId: "player-1",
+      missType: "REFLECT",
+      timestamp: AT,
+      logLine: { event: LogEvent.SPELL_MISSED, timestamp: AT },
+    };
+    const mage = makeUnit("enemy-1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Fire,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    (mage as unknown as { missesOut: unknown[] }).missesOut = [row];
+    const player = makeUnit("player-1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Fury,
+      reaction: CombatUnitReaction.Friendly,
+    });
+    (player as unknown as { missesIn: unknown[] }).missesIn = [row];
+    const combat = {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 300_000,
+      startInfo: { zoneId: "1672" },
+      units: { "enemy-1": mage, "player-1": player },
+    };
+    const r = analyzePlayerCCAndTrinket(player, [mage], combat as never);
+    expect(r.ccImmuneUncredited ?? []).toEqual([]);
+    expect(
+      r.ccAvoidedInstances.filter((x) => x.spellName === "Polymorph"),
+    ).toEqual([]);
+  });
+  it("codex 85-tk-L-T120-1: a MISS of a silence that landed, or a periodic MISS, is no failed control", () => {
+    const rogue = makeUnit("enemy-1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Assassination,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const row = (spellId: string, name: string, event: LogEvent) => ({
+      spellId,
+      spellName: name,
+      srcUnitId: "enemy-1",
+      destUnitId: "player-1",
+      missType: "MISS",
+      timestamp: AT,
+      logLine: { event, timestamp: AT },
+    });
+    const run = (auras: unknown[], miss: unknown) => {
+      const player = makeUnit("player-1", {
+        name: "Priest",
+        spec: CombatUnitSpec.Priest_Holy,
+        reaction: CombatUnitReaction.Friendly,
+        auraEvents: auras as never,
+      });
+      (player as unknown as { missesIn: unknown[] }).missesIn = [miss];
+      const combat = {
+        startTime: MATCH_START,
+        endTime: MATCH_START + 300_000,
+        startInfo: { zoneId: "1672" },
+        units: { "enemy-1": rogue, "player-1": player },
+      };
+      return (
+        analyzePlayerCCAndTrinket(player, [rogue], combat as never)
+          .ccImmuneUncredited ?? []
+      );
+    };
+    // Garrote - Silence landed in that second
+    expect(
+      run(
+        [
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "1330",
+            AT - 200,
+            "enemy-1",
+            "player-1",
+          ),
+        ],
+        row("1330", "Garrote - Silence", LogEvent.SPELL_MISSED),
+      ),
+    ).toEqual([]);
+    // control: no aura → the MISS is stated
+    expect(
+      run([], row("1330", "Garrote - Silence", LogEvent.SPELL_MISSED)).length,
+    ).toBe(1);
+    // a periodic MISS
+    expect(
+      run([], row("1330", "Garrote - Silence", LogEvent.SPELL_PERIODIC_MISSED)),
+    ).toEqual([]);
+  });
 });

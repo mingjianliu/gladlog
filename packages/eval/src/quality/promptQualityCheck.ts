@@ -2572,12 +2572,13 @@ export function checkWarlockPurgeFollowsPet(lines: string[]): string[] {
 }
 
 const CC_AVOIDED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CC AVOIDED\?\]/;
-// the second half: `; <avoidance> active`, or — an IMMUNE row the sweep
-// could credit to nothing (corpusFactScan2 immunityTableForward, 2026-10-22)
+// the second half: `; <avoidance> active`, or — a failed-control row (IMMUNE;
+// since T120 MISS, DODGE …) the sweep could credit to nothing
+// (corpusFactScan2 immunityTableForward, 2026-10-22)
 // — the line ends at the miss, with the log's own cause when it shows one
 // (`(DR: … Immune)` / `(a Cyclone was on them)`)
 const CC_AVOIDED_OUTCOME =
-  /\) (?:(?:did not land|logged (\S+)); |logged (IMMUNE)(?: \((?:DR: [^)]+ Immune|a Cyclone was on them)\))?(?: — recast landed \+\d+\.\ds)?$)/;
+  /\) (?:(?:did not land|logged (\S+)); |logged (?:IMMUNE(?: \((?:DR: [^)]+ Immune|a Cyclone was on them)\))?|([A-Z]+))(?: — recast landed \+\d+\.\ds)?$)/;
 
 /**
  * The first half of a `[CC AVOIDED?]` line (FT-T16 D15 "3c", user approval
@@ -2604,7 +2605,12 @@ export function checkCcAvoidedMissType(lines: string[]): string[] {
       failures.push(
         `line ${i + 1}: [CC AVOIDED?] 写 logged ${m[1]},但 ${m[1]} 不是能断定控制没落地的 miss 类型 —— ${line.trim().slice(0, 140)}`,
       );
-    // m[2]: the uncredited IMMUNE form — IMMUNE is in the set by construction
+    // m[2]: the uncredited form of another failed-control type (T120) —
+    // printed bare; a cause only ever follows IMMUNE
+    else if (m[2] !== undefined && !CONTROL_FAILED_MISS_TYPES.has(m[2]))
+      failures.push(
+        `line ${i + 1}: [CC AVOIDED?] 写 logged ${m[2]},但 ${m[2]} 不是能断定控制没落地的 miss 类型 —— ${line.trim().slice(0, 140)}`,
+      );
   });
   return failures;
 }
@@ -2791,9 +2797,7 @@ export function checkDisarmTrinketTail(lines: string[]): string[] {
     disarms.set(i, {
       unit: d[3]!,
       at,
-      ...(span
-        ? { end: at + (span[1] === "<1" ? 0 : Number(span[1])) }
-        : {}),
+      ...(span ? { end: at + (span[1] === "<1" ? 0 : Number(span[1])) } : {}),
     });
   });
   const failures: string[] = [];
@@ -3897,8 +3901,7 @@ export function checkJukedKickNotAfterInterrupt(lines: string[]): string[] {
 const KICK_OWN_NOT_LANDED_LINE =
   /^\s*(\d+:\d{2})\s+\[KICK\]\s+your (.+?)(?: on .+?)? — (?:hit nothing|JUKED|\[)/;
 /** One `Kicks:` entry (burst ledger) whose verdict is "stopped nothing". */
-const KICKS_ENTRY_NOT_LANDED =
-  /^(\d+:\d{2}) (.+?) → (?:hit nothing|JUKED|\[)/;
+const KICKS_ENTRY_NOT_LANDED = /^(\d+:\d{2}) (.+?) → (?:hit nothing|JUKED|\[)/;
 
 /**
  * The owner's kick the audit calls "hit nothing" / "JUKED" (the timeline's
