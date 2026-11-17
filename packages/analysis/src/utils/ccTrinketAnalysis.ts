@@ -5043,7 +5043,13 @@ function analyzePlayerCCAndTrinketUncached(
           // 0.1 s into the cast says nothing about a kick that returned
           // 0.3 s in (Fable re-review of the batch).
           const heldAt = (ms: number) =>
-            castBlockingAuraAt(kicker, hostileToEnemies, ms, kit.spellId);
+            castBlockingAuraAt(
+              kicker,
+              hostileToEnemies,
+              ms,
+              kit.spellId,
+              roundUnits,
+            );
           if (
             late
               ? heldAt(castStartMs + cdLeft) && heldAt(action.timestamp)
@@ -5110,6 +5116,7 @@ function analyzePlayerCCAndTrinketUncached(
             hostileToEnemies,
             castStartMs,
             kickCastSpellId(kickSpellId),
+            roundUnits,
           )
         ) {
           const petPos = getUnitPositionAtTime(

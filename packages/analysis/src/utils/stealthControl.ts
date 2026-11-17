@@ -82,7 +82,7 @@ function stealthAuraUpAt(
   for (const [id, from] of open)
     if (
       !BROKEN_BY_ACTION_IDS.has(id) ||
-      (holderFirstOwnActionAfterMs(unit, from, id) > ms &&
+      (holderFirstOwnActionAfterMs(unit, from, id, units) > ms &&
         !unseenEndBrokenByHit(unit, id, from, ms, units))
     )
       return true;

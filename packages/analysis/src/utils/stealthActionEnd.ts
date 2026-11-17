@@ -54,18 +54,29 @@ export const KW_UNTARGETABLE_AURA_IDS: ReadonlySet<string> = new Set([
  * Mass Invisibility).
  */
 export function untargetableEndS(
-  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
+  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut"> &
+    Partial<Pick<ICombatUnit, "auraEvents">>,
   iv: { spellId?: string; fromS: number; toS: number; inferredEnd?: boolean },
   matchStartMs: number,
   /** the round's units (`holderFirstOwnActionAfterMs`'s stealth opener) */
   units?: readonly ICombatUnit[],
 ): number {
   if (!iv.inferredEnd) return iv.toS;
+  // the application's own row: a same-millisecond action logged below it
+  // came after it (codex 80-PIPE-111-B98 #2)
+  const fromMs = matchStartMs + iv.fromS * 1000;
+  const applied = (holder.auraEvents ?? []).find(
+    (a) =>
+      a.spellId === iv.spellId &&
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      Math.abs(a.logLine.timestamp - fromMs) < 1,
+  );
   const first = holderFirstOwnActionAfterMs(
     holder,
-    matchStartMs + iv.fromS * 1000,
+    applied ? applied.logLine.timestamp : fromMs,
     iv.spellId,
     units,
+    applied?.logLine.lineIndex,
   );
   return Math.min(iv.toS, (first - matchStartMs) / 1000);
 }
@@ -86,7 +97,8 @@ export function withStealthActionEnds<
     inferredEnd?: boolean;
   },
 >(
-  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
+  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut"> &
+    Partial<Pick<ICombatUnit, "auraEvents">>,
   ivs: readonly T[],
   combat: { startTime: number; units?: Record<string, ICombatUnit> },
 ): T[] {
@@ -158,7 +170,8 @@ export const STEALTH_KEPT_BY_ALLOWED_PRESS_IDS: ReadonlySet<string> = new Set([
 
 /**
  * The holder's first own action strictly after `afterMs` (log ms; Infinity
- * when none): a successful press, or a direct hit the holder itself dealt.
+ * when none) — or in that millisecond, logged below the application's row
+ * (`afterLine`): a successful press, or a direct hit the holder itself dealt.
  * What ends an unseen-end invisibility / stealth (`untargetableEndS`, the
  * burst ledger's `SAVE_AURA_END_UNSEEN_IDS` walls). Not an action of the
  * holder: a pet's or guardian's hit (parser-compat folds those into the
@@ -177,11 +190,33 @@ export const STEALTH_KEPT_BY_ALLOWED_PRESS_IDS: ReadonlySet<string> = new Set([
  */
 export function holderFirstOwnActionAfterMs(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut"> &
-    Partial<Pick<ICombatUnit, "missesOut" | "castStartEvents">>,
+    Partial<Pick<ICombatUnit, "missesOut" | "castStartEvents" | "auraEvents">>,
   afterMs: number,
   auraId?: string,
   units?: readonly ICombatUnit[],
+  /** the application row's `lineIndex`: a row of `afterMs` itself logged
+   * after it is after it (codex 80-PIPE-111-B98 #2: Burrow APPLIED at
+   * 20.000, a Healing Surge START below it in the same millisecond) */
+  afterLine?: number,
 ): number {
+  // unnamed, the application's row is the holder's APPLIED of `auraId` at
+  // `afterMs` itself
+  const fromLine =
+    afterLine ??
+    (auraId
+      ? (holder.auraEvents ?? []).find(
+          (a) =>
+            a.spellId === auraId &&
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.logLine.timestamp === afterMs,
+        )?.logLine.lineIndex
+      : undefined);
+  const after = (t: number, line: number | undefined): boolean =>
+    t > afterMs ||
+    (t === afterMs &&
+      fromLine !== undefined &&
+      line !== undefined &&
+      line > fromLine);
   const ownPress = auraId
     ? new Set([auraId, ...castsOfEffectAura(auraId)])
     : undefined;
@@ -196,7 +231,7 @@ export function holderFirstOwnActionAfterMs(
       )
         continue;
       if (allowed(c.spellId ?? "")) continue;
-      if (t > afterMs && t < first) first = t;
+      if (after(t, c.logLine.lineIndex) && t < first) first = t;
     }
   // a cast bar begun is the holder acting, whether or not the cast came off
   // (pipeline T113, fact13 D21: a Polymorph bar begun 9.0 s into Mass
@@ -208,7 +243,7 @@ export function holderFirstOwnActionAfterMs(
   for (const c of holder.castStartEvents ?? []) {
     if (allowed(c.spellId ?? "")) continue;
     const t = c.timestamp;
-    if (t > afterMs && t < first) first = t;
+    if (after(t, c.logLine?.lineIndex) && t < first) first = t;
   }
   // a tick a shield ate is logged as a SPELL_ABSORBED row with no periodic
   // flag (its `spellId` is the shield, `attackSpellId` the hit's): the hit
@@ -258,10 +293,10 @@ export function holderFirstOwnActionAfterMs(
       t <= afterMs + STEALTH_IMMUNITY_IN_FLIGHT_MS
     )
       continue;
-    if (t > afterMs && t < first) first = t;
+    if (after(t, d.logLine.lineIndex) && t < first) first = t;
   }
   return units
-    ? holderOpenerDebuffAfterMs(holder, afterMs, first, units, allowed)
+    ? holderOpenerDebuffAfterMs(holder, after, first, units, allowed)
     : first;
 }
 
@@ -315,7 +350,7 @@ const stealthAllowsPress =
 
 function holderOpenerDebuffAfterMs(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents">,
-  afterMs: number,
+  after: (t: number, line: number | undefined) => boolean,
   firstMs: number,
   units: readonly ICombatUnit[],
   stealthAllows: (spellId: string) => boolean,
@@ -325,7 +360,7 @@ function holderOpenerDebuffAfterMs(
     if (u.id === holder.id) continue;
     for (const a of u.auraEvents ?? []) {
       const t = a.logLine.timestamp;
-      if (!(t > afterMs && t < first)) continue;
+      if (!(after(t, a.logLine.lineIndex) && t < first)) continue;
       if (
         a.logLine.event !== LogEvent.SPELL_AURA_APPLIED ||
         a.srcUnitId !== holder.id ||
@@ -343,7 +378,7 @@ function holderOpenerDebuffAfterMs(
           !!c.spellId &&
           pressIds.has(c.spellId) &&
           (!c.destUnitId || c.destUnitId === NO_TARGET_GUID) &&
-          c.logLine.timestamp <= afterMs &&
+          !after(c.logLine.timestamp, c.logLine.lineIndex) &&
           c.logLine.timestamp +
             (spellEffectData[c.spellId]?.durationSeconds ?? 0) * 1000 >=
             t,

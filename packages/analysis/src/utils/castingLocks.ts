@@ -52,7 +52,13 @@ function isSingleTargetAttack(spellId: string): boolean {
 
 export function castingLockIntervalsOf(
   unit: ICombatUnit,
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    /** the round's units: a stealth-kind immunity's holder acting through
+     * an opener debuff on one of them (`withStealthActionEnds`) */
+    units?: Record<string, ICombatUnit>;
+  },
   /** the ability the caller asks about; omitted → every lock counts */
   forSpellId?: string,
 ): Array<{ from: number; to: number; spellId: string }> {

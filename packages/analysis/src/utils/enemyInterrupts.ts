@@ -577,7 +577,8 @@ export function computeEnemyInterruptAvailability(
     const ccd =
       hostileIds !== undefined &&
       caster !== undefined &&
-      castBlockingAuraAt(caster, hostileIds, atMs, def.spellId) !== undefined;
+      castBlockingAuraAt(caster, hostileIds, atMs, def.spellId, allUnits) !==
+        undefined;
     // whole-second for the timeline's display; the exact value lives in
     // interruptCooldownRemainingMs (kick-priority reads that one — 0.4 s left
     // is NOT ready)

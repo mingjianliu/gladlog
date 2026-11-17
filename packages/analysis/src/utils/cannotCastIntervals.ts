@@ -1245,18 +1245,21 @@ const castingLockMemo = new WeakMap<
 >();
 /** The casting-lock aura on `unit` at `tMs` for the ability `spellId`
  * (`castingLockIntervalsOf`, read over the unit's whole log), memoised per
- * unit and ability. */
+ * unit, ability and whether the round's units came along (`units`: a
+ * stealth-kind immunity's holder acting through an opener debuff on one of
+ * them — codex 80-PIPE-111-B98 #1). */
 function castingLockAuraAt(
   unit: ICombatUnit,
   tMs: number,
   spellId: string | undefined,
+  units?: readonly ICombatUnit[],
 ): CastBlockingAura | undefined {
   let byId = castingLockMemo.get(unit);
   if (!byId) {
     byId = new Map();
     castingLockMemo.set(unit, byId);
   }
-  const key = spellId ?? "";
+  const key = `${spellId ?? ""}|${units ? "units" : ""}`;
   let ivs = byId.get(key);
   if (!ivs) {
     // the unit's own logged span stands in for the round: an aura open
@@ -1278,7 +1281,13 @@ function castingLockAuraAt(
       const lastSeen = lastLoggedEventMs(unit);
       ivs = castingLockIntervalsOf(
         unit,
-        { startTime: first, endTime: openEnd },
+        {
+          startTime: first,
+          endTime: openEnd,
+          ...(units
+            ? { units: Object.fromEntries(units.map((u) => [u.id, u])) }
+            : {}),
+        },
         spellId,
       ).map((iv) =>
         iv.to >= openEnd ? { ...iv, to: Math.max(iv.from, lastSeen) } : iv,
@@ -1330,6 +1339,8 @@ export function castBlockingAuraAt(
   hostileIds: Set<string>,
   tMs: number,
   spellId?: string,
+  /** the round's units (`castingLockAuraAt`) */
+  units?: readonly ICombatUnit[],
 ): CastBlockingAura | undefined {
   const silenceStops = spellId === undefined || isSilenceableCast(spellId);
   // hard CC stops every cast, a silence a silenceable one. An aura of the
@@ -1352,7 +1363,7 @@ export function castBlockingAuraAt(
   // User ruling 2026-10-21 (F16 retest idx 11): a mage in Ice Block is no
   // ready kicker, though the block can be cancelled (0b72c44e 2:01: Vizine
   // 4.6 yd away read as the nearest kicker inside his block).
-  const lock = castingLockAuraAt(unit, tMs, spellId);
+  const lock = castingLockAuraAt(unit, tMs, spellId, units);
   if (lock) return lock;
   // …or the unit's own flying breath (work order 2026-10-14d #10: an enemy
   // Evoker inside Deep Breath read as a ready kicker)

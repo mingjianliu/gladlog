@@ -16,6 +16,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { aurasActiveAt } from "../src/analysis/momentSnapshot";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { buildAuraIntervals } from "../src/utils/auraIntervals";
+import { castBlockingAuraAt } from "../src/utils/cannotCastIntervals";
 import { castingLockIntervalsOf } from "../src/utils/castingLocks";
 import { ccAvoidanceBuffsUpAt } from "../src/utils/ccTrinketAnalysis";
 import {
@@ -191,5 +192,55 @@ describe("T113 — every reader of the Burrow ends it at the shaman's action (B9
       (x) => x.onUnit && x.holderId === "e1",
     );
     expect(w?.toS).toBeCloseTo(22);
+  });
+});
+
+describe("T113 — batch review 80-PIPE-111-B98", () => {
+  it("#1 the interrupt-readiness reader (castBlockingAuraAt) ends the Burrow at an opener debuff with no cast row (Hex on another unit at 22 s): no lock at 23 s", () => {
+    const h = shaman(null);
+    const victim = makeUnit("p1", {
+      name: "Victim",
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "51514",
+          at(22),
+          "e1",
+          "p1",
+          "DEBUFF",
+        ),
+      ],
+    });
+    const units = [h, victim] as never[];
+    const blocker = (ms: number) =>
+      castBlockingAuraAt(h, new Set(["p1"]), ms, "57994", units)?.spellId;
+    expect(blocker(at(21))).toBe(BURROW);
+    expect(blocker(at(23))).toBeUndefined();
+  });
+
+  /** Burrow APPLIED at 20.000, a Healing Surge START in the same ms logged
+   * below (`below`) or above it, the Burrow's SUCCESS row at 20.010 */
+  const sameMs = (below: boolean) => {
+    const u = shaman(20);
+    const applied = u.auraEvents.find((a) => a.spellId === BURROW)!;
+    const press = u.spellCastEvents.find((c) => c.spellId === BURROW)!;
+    Object.assign(press, { timestamp: at(20.01) });
+    Object.assign(press.logLine, { timestamp: at(20.01) });
+    const bar = (u as unknown as { castStartEvents: { logLine: object }[] })
+      .castStartEvents[0]!;
+    Object.assign(bar.logLine, {
+      lineIndex: applied.logLine.lineIndex! + (below ? 1 : -1),
+    });
+    return u;
+  };
+  it("#2 an action in the APPLIED's millisecond logged below it ends the Burrow there: a zero-length press, the window opens at 20.010 s, not 25.010 s", () => {
+    const s = startsOf(sameMs(true));
+    expect(s.some((f) => Math.abs(f - 20.01) < 0.01)).toBe(true);
+    expect(s.some((f) => Math.abs(f - 25.01) < 0.01)).toBe(false);
+  });
+  it("#2 the same action logged above the APPLIED came before it: the official length stands (25.010 s)", () => {
+    const s = startsOf(sameMs(false));
+    expect(s.some((f) => Math.abs(f - 25.01) < 0.01)).toBe(true);
   });
 });
