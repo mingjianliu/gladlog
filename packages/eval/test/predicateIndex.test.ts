@@ -446,6 +446,13 @@ const INDEX: PredicateRow[] = [
     mod: spellOutcomeLines,
   },
   // pipeline T117: how a [REJECTED] run is built and counted, read by scan5/t117
+  // pipeline T120: a REFLECT row a [REFLECTED] line states — read by
+  // reflectedSpells and the [CC AVOIDED?] emitter
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "isCountedReflectRow",
+    mod: spellOutcomeLines,
+  },
   {
     file: `${A}/context/spellOutcomeLines.ts`,
     symbol: "ownerRejectRuns",
