@@ -6988,3 +6988,24 @@ on the 605): a native Death Knight cast beside the buff's fade would read
 as a copy (the 7 friendly copies on the 605 are Polymorph, Fire Blast,
 Shadow Word: Pain and Glacial Spike); a copied non-control spell refused by
 an immunity prints without a tag; a copied area control would print twice.
+
+v569 (2026-11-16; pipeline batch B90, T111; round 13 audit; user ruling
+R47). User ruling 2026-11-15: a cooldown that a spec passive scales by
+haste (DB2 aura 416 - Pierce the Veil, Execution Sentence, Avenger's
+Shield, Consecration, Mistweaver Blackout Kick and their spec variants)
+prints no exact return; the exact reading (haste rating and the DB2 rating
+table) is GH #219. The passive puts its targets back sooner than the
+unhasted base by an amount the log does not state (Pierce the Veil, 30 s,
+re-pressed 20.8 s and 26.0 s after with no reset logged).
+isHasteScaledCooldown(spellId, spec) reads hasteScaledCooldownsGenerated.json,
+which eval/scripts/hasteScaledCooldownGen.ts derives from the talent effect
+inventory (aura 416 rows with a rate above 0, mask / label targets, keyed by
+the passive's spec; `--check` re-derives it) - no hand list. [PRESS]: `cooldown
+shortens with haste` instead of `back m:ss` (a legend clause added); an
+enemy [KICK]'s `; back m:ss` the same; a [RES] `cd:` entry reads `(<=Ns)`;
+a kill window's `back inside:` item reads `X <=m:ss`. 605 (base capture at
+f4bab36ef vs branch), new scan5/t111 hasteScaledExactBack: 483 / 574 -> 0 /
+574 ([PRESS] 363, [RES] 114, kill window 6); the 6 kill-window lines change
+in place; gates identical; family diff 0 flags; menu rows 7,449 -> 7,449.
+Recorded, not fixed (branch review, synthetic, 0 on the 605): a team with a
+Retribution and a Holy Paladin can make the scan flag a line it should not.

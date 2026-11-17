@@ -1356,5 +1356,11 @@
  *  Death Knight casts through Dark Simulacrum gets a press line (user
  *  ruling R41).
  *  See docs/prompt-version-history.md.
+ *
+ * v569 (2026-11-16; pipeline batch B90, T111): a cooldown a spec
+ *  passive scales by haste prints no exact return (user ruling R47):
+ *  [PRESS] says the cooldown shortens with haste, [RES] and a kill
+ *  window's `back inside` print an upper bound.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 568;
+export const PROMPT_VERSION = 569;
