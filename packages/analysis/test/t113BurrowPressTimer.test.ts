@@ -102,7 +102,9 @@ const startsOf = (u: ReturnType<typeof shaman>) =>
 describe("T113 — a timed Burrow press ends at its holder's action (B97)", () => {
   it("the shared reading: 22 s", () => {
     const u = shaman(22);
-    expect(stealthImmunityPressActionEndS(u, combatOf(u), 20)).toBeCloseTo(22);
+    expect(
+      stealthImmunityPressActionEndS(u, combatOf(u), 20, "409293"),
+    ).toBeCloseTo(22);
   });
   it("the window opens at 22 s, not at the 5 s official length (25 s)", () => {
     const s = startsOf(shaman(22));
@@ -111,8 +113,19 @@ describe("T113 — a timed Burrow press ends at its holder's action (B97)", () =
   });
   it("no action inside it: the official length stands", () => {
     const u = shaman(null);
-    expect(stealthImmunityPressActionEndS(u, combatOf(u), 20)).toBeUndefined();
+    expect(
+      stealthImmunityPressActionEndS(u, combatOf(u), 20, "409293"),
+    ).toBeUndefined();
     expect(startsOf(u).some((f) => Math.abs(f - 25) < 0.01)).toBe(true);
+  });
+  it("another press a second away (Greater Invisibility 110959) is not the Burrow's: undefined (D6 keeps its official length)", () => {
+    const u = shaman(22);
+    expect(
+      stealthImmunityPressActionEndS(u, combatOf(u), 20, "110959"),
+    ).toBeUndefined();
+    expect(
+      stealthImmunityPressActionEndS(u, combatOf(u), 21, "110959"),
+    ).toBeUndefined();
   });
 });
 

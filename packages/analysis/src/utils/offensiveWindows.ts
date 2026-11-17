@@ -901,6 +901,7 @@ export function computeOffensiveWindowsUncached(
           enemy,
           combat,
           castTimeSeconds,
+          spellId,
         );
         const buffDuration =
           actionEndS === undefined

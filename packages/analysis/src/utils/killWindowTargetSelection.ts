@@ -4,6 +4,10 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+// GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set.
 import {
   countsAsKillWindowDefensiveInHand,
   unpressedKitDefensiveInHand,
@@ -35,10 +39,6 @@ import { IOffensiveWindow } from "./offensiveWindows";
 import { pvpTrinketUses, trinketUseRemainingSeconds } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-// GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set.
 import { stealthImmunityPressActionEndS } from "./stealthActionEnd";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 import { hasPressablePvpTrinket } from "./trinketType";
@@ -384,7 +384,7 @@ export function getDefensiveStateAtTime(
     // kill windows' press timer; pipeline T113)
     const lastCastS = casts[casts.length - 1].castSeconds;
     const actionEndS = combat
-      ? stealthImmunityPressActionEndS(enemy, combat, lastCastS)
+      ? stealthImmunityPressActionEndS(enemy, combat, lastCastS, spellId)
       : undefined;
     const buffActive =
       Math.min(lastCastS + buffSeconds, actionEndS ?? Infinity) >

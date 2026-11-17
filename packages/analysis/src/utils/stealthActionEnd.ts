@@ -106,17 +106,23 @@ export function withStealthActionEnds<
  * length (`untargetableEndS`); undefined otherwise. The press timers read
  * it so a timed press ends where the aura's own span readers end it
  * (pipeline T113, batch review 80-PIPE-110-B97: Burrow pressed at 20 s, a
- * Healing Surge begun at 22 s, the kill window held shut to 25 s).
+ * Healing Surge begun at 22 s, the kill window held shut to 25 s). The aura
+ * must be the press's own (its id, or a cast `castsOfEffectAura` names):
+ * a Greater Invisibility pressed a second after a Mass Invisibility is not
+ * that Mass Invisibility's press, and keeps D6's official length.
  */
 export function stealthImmunityPressActionEndS(
   holder: ICombatUnit,
   combat: Parameters<typeof buildAuraIntervals>[1],
   castS: number,
+  pressSpellId: string,
 ): number | undefined {
   const units = Object.values(combat.units ?? {});
   for (const iv of buildAuraIntervals(holder, combat)) {
     if (
       !ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId) ||
+      (iv.spellId !== pressSpellId &&
+        !castsOfEffectAura(iv.spellId).includes(pressSpellId)) ||
       !iv.inferredEnd ||
       Math.abs(iv.fromS - castS) > SAVE_CAST_AURA_PAIR_S
     )
