@@ -1373,5 +1373,10 @@
  *  failed on a friendly with any miss type (not only IMMUNE) gets its
  *  [CC AVOIDED?] line; a reflected spell is left to its [REFLECTED] line.
  *  See docs/prompt-version-history.md.
+ *
+ * v572 (2026-11-17; pipeline batch B95, T128 + T116): [HEALER EXPOSURE]
+ *  drops a control the healer's up CC-avoidance aura stops; a kick-eaten
+ *  menu row names a pet kicker through its owner.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 571;
+export const PROMPT_VERSION = 572;

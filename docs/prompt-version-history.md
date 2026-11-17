@@ -7050,3 +7050,34 @@ friendly-only by design - and 1 ground Sigil of Misery on a teammate);
 +187 [CC AVOIDED?] lines (148 MISS, 24 PARRY, 15 DODGE), none removed;
 findings files 0 of 3,519; gates 110 -> 110; family diff 2 flags, both this
 change (Gnaw 0 -> 6, Infernal Awakening 3 -> 12).
+
+v572 (2026-11-17; pipeline batch B95, T128 + T116; round 13 audit).
+
+T128: [HEALER EXPOSURE] listed Full-DR threats while the healer held a
+CC-avoidance aura (Nullifying Shroud up 4.593-7.592, window 6.909, Blinding
+Light and Hammer of Justice listed). The buff half of
+applicableCCAvoidanceIds is now the shared avoidanceBuffCoversCc
+(mechanic-limited auras by DB2 mechanic, Druid forms Polymorph / Hex only,
+else school immunity then the magic-only rule; cc-avoidable unchanged).
+healerCcCoverAt reads ccAvoidanceBuffsUpAt (the `[IMMUNE - X was up]`
+reading) with it; analyzeHealerExposureAtBurst skips a covered control. A
+window whose every threat was covered stays on the round's exposure list
+(coveredWindows), so ENEMY CC KIT still states the round's controls. 605
+(base capture at c14bfdb04 vs a same-tree pick onto it), new scan5/t128
+exposureThreatUnderCover: strict 624 -> 0 (the audited match 15 -> 0),
+partial-second cases 717 -> 400; context diff 369 files, -661 / +286 lines
+([HEALER EXPOSURE], ENEMY CC KIT, the positioning `healer exposure:` label);
+no kit added where the base had none; other scans 0 new violations; menu
+rows unchanged.
+
+T116: a kick-eaten menu row printed a pet kicker's own name - client
+localized (CJK on a Chinese client), in no roster - in `units=` and
+`source=`, failing checkCjkLeak, while the [KICK] line and the row's
+`nearestKicker=` named it through its owner. The interrupt instance now
+carries sourceLabel (kickSourceLabel: a player is its own name; a summon of
+an enemy player is `<owner>'s <kind>` through summonNameThroughOwner, the
+one format nearestKickerName already used); `sameKicker` still groups by the
+log's name. 605 (base capture at 7b1f27539 vs branch), new scan5/t116
+menuCjkLeak: 12 / 7,446 -> 0 / 7,446; 196 kick-eaten rows change (12 CJK and
+184 ASCII pet names now `<owner>'s pet`), 0 candidate ids added or removed,
+0 context lines.
