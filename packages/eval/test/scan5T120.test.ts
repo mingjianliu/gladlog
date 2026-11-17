@@ -9,7 +9,7 @@ import { run } from "../scripts/scan5/t120";
 
 const HOJ = "853";
 
-function scan(lines: string[]): number {
+function scan(lines: string[], missType = "MISS", spellId = HOJ): number {
   let n = 0;
   const victim = {
     id: "p1",
@@ -18,10 +18,10 @@ function scan(lines: string[]): number {
     auraEvents: [],
     missesIn: [
       {
-        spellId: HOJ,
+        spellId,
         spellName: "Hammer of Justice",
         srcUnitId: "e1",
-        missType: "MISS",
+        missType,
         timestamp: 60_000,
         logLine: { event: "SPELL_MISSED", timestamp: 60_000 },
       },
@@ -81,6 +81,33 @@ describe("scan5 failedControlNoLine", () => {
       scan([
         "1:00  [TEAM] [CC]   4(Enemy) (Holy Paladin) cast Hammer of Justice → 1(Victim) [PARRIED by 1(Victim)]",
       ]),
+    ).toBe(1);
+  });
+  // codex 85-tk-L-T120-2 #2: a grouped return prints `reflected ×N by`
+  it("a [REFLECTED] line naming the player as reflector clears a REFLECT row, grouped or not", () => {
+    expect(
+      scan(
+        [
+          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected by 1(Victim)",
+        ],
+        "REFLECT",
+      ),
+    ).toBe(0);
+    expect(
+      scan(
+        [
+          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected ×2 by 1(Victim)",
+        ],
+        "REFLECT",
+      ),
+    ).toBe(0);
+    expect(
+      scan(
+        [
+          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected ×2 by 2(Other)",
+        ],
+        "REFLECT",
+      ),
     ).toBe(1);
   });
 });

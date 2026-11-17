@@ -14,7 +14,7 @@
  *    (kind = the miss type): no timeline line in its second ±1 names the
  *    control and the player — as its subject, or in the miss tag of the
  *    control's cast line (`[MISSED on N(…)`, `CC_MISS_TAG_WORD`) or the
- *    `[REFLECTED]` line's `reflected by N(…)`. Counted: every such row of a player
+ *    `[REFLECTED]` line's `reflected[ ×N] by N(…)` (`parseReflectedLine`). Counted: every such row of a player
  *    with a pid.
  */
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
@@ -26,7 +26,15 @@ import {
 } from "@gladlog/analysis/src/utils/castMissRows";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 
-import { APPLIED, ev, fmtS, type IRoundCtx, nameOf, tsOf } from "./ctx";
+import {
+  APPLIED,
+  ev,
+  fmtS,
+  type IRoundCtx,
+  nameOf,
+  parseReflectedLine,
+  tsOf,
+} from "./ctx";
 
 export const CHECKS = ["failedControlNoLine"] as const;
 
@@ -89,9 +97,10 @@ export function run(ctx: IRoundCtx): void {
                 l.includes(
                   `[${CC_MISS_TAG_WORD[m.missType] === "MISSED" ? "MISSED on" : CC_MISS_TAG_WORD[m.missType]} ${pid}(`,
                 )) ||
+              // a grouped return prints `reflected ×N by` (codex
+              // 85-tk-L-T120-2 #2: the shared parser)
               (m.missType === "REFLECT" &&
-                l.includes("[REFLECTED]") &&
-                l.includes(`reflected by ${pid}(`))),
+                parseReflectedLine(l)?.reflectorPid === pid)),
         );
       if (named) continue;
       ctx.violate(

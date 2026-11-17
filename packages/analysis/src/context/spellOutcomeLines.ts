@@ -12,13 +12,12 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { NOT_READY_REASONS } from "../analysis/candidates/shared";
 import { abilityProfile } from "../data/abilityProfile";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
-import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
 import { dropAuraRebroadcasts } from "../utils/auraIntervals";
 import { binarySearchClosest } from "../utils/binarySearch";
 import { CAST_INTERRUPTED_REASONS } from "../utils/castCancels";
-import { castControlsIn, isControlCast } from "../utils/castMissRows";
+import { isControlSpell, isCountedReflectRow } from "../utils/castMissRows";
 import { ccLandingStateAt, ccRemainingSeconds } from "../utils/ccBreakAnalysis";
 import { ccLengthIsDrEvidence } from "../utils/ccTrinketAnalysis";
 import { ccRecastSplitsResend } from "../utils/drAnalysis";
@@ -37,12 +36,9 @@ import {
   controlRejectKindOf,
 } from "./controlRejectedPresses";
 
-/** A control: the official hard-CC set or a root ("控制要写"). */
-export function isControlSpell(spellId: string): boolean {
-  // a press's control under its effect aura's id counts (fact2 C10:
-  // `isControlCast`, the one cast→control reading)
-  return isControlCast(spellId) || castControlsIn(spellId, ROOT_SPELL_IDS);
-}
+// moved to utils/castMissRows.ts (pipeline T120: read there by the
+// failed-control row sweep, which spellOutcomeLines imports); re-exported
+export { isControlSpell, isCountedReflectRow };
 
 // ── Grounding ────────────────────────────────────────────────────────────────
 
@@ -194,27 +190,6 @@ export function maxHpNear(unit: ICombatUnit, tMs: number): number | null {
   if (!a || a.advancedActorId !== unit.id || a.advancedActorMaxHp <= 0)
     return null;
   return a.advancedActorMaxHp;
-}
-
-/** A REFLECT row this reflect reader counts: not one whose target is its own
- * caster. 4eea3cc5 r1 1:11: two warlocks with Nether Ward up; the log wrote
- * `SPELL_MISSED Cybermooke→Cybermooke 445474 REFLECT` in the same ms as the
- * enemy's real reflect of that Wither, the self row's chain took the return
- * and the prompt read "6(DWarlock)'s Wither reflected by 6(DWarlock) (came
- * back for 166k)" while the real 172k reflect printed nothing (F20 wide
- * residual, 4 facts). A unit cannot reflect its own spell at itself; the
- * row is the copy's bounce, not a reflect of a spell it aimed. */
-export function isCountedReflectRow(m: {
-  missType?: string;
-  spellId?: string;
-  srcUnitId?: string;
-  destUnitId?: string;
-}): boolean {
-  return (
-    m.missType === "REFLECT" &&
-    !!m.spellId &&
-    !(m.srcUnitId && m.srcUnitId === m.destUnitId)
-  );
 }
 
 /** Reflects of one caster's spell by one reflector this close together are

@@ -13,6 +13,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { damageImmuneControlUpAt } from "../../analysis/candidates/massDispel";
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
+import { reflectRowStatedAsControl } from "../../utils/castMissRows";
 import { ccFullDurationForCaster } from "../../utils/ccDuration";
 import {
   CC_FROM_OWN_TEAM_TAG,
@@ -46,7 +47,6 @@ import {
   ownerControlPressKit,
   ownerPressesRejectedDuring,
 } from "../controlRejectedPresses";
-import { isCountedReflectRow } from "../spellOutcomeLines";
 import type { TimelineCtx } from "./ctx";
 
 export function emitTrinketCcOnTeamEntries(
@@ -435,10 +435,11 @@ export function emitTrinketCcOnTeamEntries(
     const holder = friends.find((f) => f.name === summary.playerName);
     for (const imm of summary.ccImmuneUncredited ?? []) {
       // T120 605 run: a reflected control is stated by its own [REFLECTED]
-      // line (`reflectedSpells` prints every `isCountedReflectRow` row) —
-      // a second line here repeated all 33 such rows
+      // line, always printed (`reflectRowStatedAsControl`) — a second line
+      // here repeated all 33 such rows; a reflected silence prints none and
+      // keeps this one (codex 85-tk-L-T120-2 #1)
       if (
-        isCountedReflectRow({
+        reflectRowStatedAsControl({
           missType: imm.missType,
           spellId: imm.spellId,
           srcUnitId: imm.sourceId,

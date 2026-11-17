@@ -71,6 +71,7 @@ import {
   controlReachesPlayers,
   isControlCast,
   missBelongsToCast,
+  reflectRowStatedAsControl,
 } from "./castMissRows";
 import { COPY_CAST_IDS } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
@@ -6352,12 +6353,12 @@ function analyzePlayerCCAndTrinketUncached(
     if (!CONTROL_FAILED_MISS_TYPES.has(m.missType) || !m.spellId) continue;
     const otherType = m.missType !== "IMMUNE";
     if (otherType && m.logLine?.event !== LogEvent.SPELL_MISSED) continue;
-    // a reflected control has its own [REFLECTED] line (`reflectedSpells`,
-    // every `isCountedReflectRow` row — a hostile caster's row with a spell
-    // id, which every row here is): neither an uncredited line nor a new
+    // a reflected control has its own [REFLECTED] line, always printed
+    // (`reflectRowStatedAsControl`): neither an uncredited line nor a new
     // Spell Reflection credit (T120 605 re-capture: three credited REFLECT
-    // lines beside their [REFLECTED] line)
-    if (m.missType === "REFLECT") continue;
+    // lines beside their [REFLECTED] line). A reflected silence prints no
+    // [REFLECTED] line and keeps its own (codex 85-tk-L-T120-2 #1).
+    if (reflectRowStatedAsControl(m)) continue;
     // a control, or a silence (mechanic 9 — Garrote's 1330, Spider Venom:
     // no hard CC, but an IMMUNE row of one is the same fact)
     if (

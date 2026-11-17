@@ -20,6 +20,7 @@ import {
   effectAuraViaName,
 } from "../data/castEffectAuras";
 import { PRESS_TRIGGERED_CAST_IDS } from "../data/pressTriggeredCastsGenerated";
+import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { toRenderSecond } from "./renderGrid";
@@ -555,3 +556,46 @@ export const CONTROL_FAILED_MISS_TYPES: ReadonlySet<string> = new Set([
   "IMMUNE",
   ...Object.keys(CC_MISS_TAG_WORD),
 ]);
+
+/** A control: the official hard-CC set or a root ("控制要写"). */
+export function isControlSpell(spellId: string): boolean {
+  // a press's control under its effect aura's id counts (fact2 C10:
+  // `isControlCast`, the one cast→control reading)
+  return isControlCast(spellId) || castControlsIn(spellId, ROOT_SPELL_IDS);
+}
+
+/** A REFLECT row this reflect reader counts: not one whose target is its own
+ * caster. 4eea3cc5 r1 1:11: two warlocks with Nether Ward up; the log wrote
+ * `SPELL_MISSED Cybermooke→Cybermooke 445474 REFLECT` in the same ms as the
+ * enemy's real reflect of that Wither, the self row's chain took the return
+ * and the prompt read "6(DWarlock)'s Wither reflected by 6(DWarlock) (came
+ * back for 166k)" while the real 172k reflect printed nothing (F20 wide
+ * residual, 4 facts). A unit cannot reflect its own spell at itself; the
+ * row is the copy's bounce, not a reflect of a spell it aimed. */
+export function isCountedReflectRow(m: {
+  missType?: string;
+  spellId?: string;
+  srcUnitId?: string;
+  destUnitId?: string;
+}): boolean {
+  return (
+    m.missType === "REFLECT" &&
+    !!m.spellId &&
+    !(m.srcUnitId && m.srcUnitId === m.destUnitId)
+  );
+}
+
+/** A REFLECT row whose `[REFLECTED]` line always prints: a counted reflect
+ * (`isCountedReflectRow`) of a control — the line's own door
+ * (`reflectedSpells`: a control always, any other spell only when enough
+ * damage came back). Pipeline T120: such a row needs no `[CC AVOIDED?]`
+ * line; a reflected silence (not a control here) keeps its own (codex
+ * 85-tk-L-T120-2 #1). */
+export function reflectRowStatedAsControl(m: {
+  missType?: string;
+  spellId?: string;
+  srcUnitId?: string;
+  destUnitId?: string;
+}): boolean {
+  return isCountedReflectRow(m) && isControlSpell(m.spellId!);
+}

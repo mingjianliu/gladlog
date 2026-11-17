@@ -195,6 +195,39 @@ describe("IMMUNE control rows the cast sweep never walks", () => {
       r.ccAvoidedInstances.filter((x) => x.spellName === "Polymorph"),
     ).toEqual([]);
   });
+  it("codex 85-tk-L-T120-2 #1: a reflected silence (no [REFLECTED] line prints for it) keeps its uncredited row", () => {
+    const row = {
+      spellId: "15487",
+      spellName: "Silence",
+      srcUnitId: "enemy-1",
+      destUnitId: "player-1",
+      missType: "REFLECT",
+      timestamp: AT,
+      logLine: { event: LogEvent.SPELL_MISSED, timestamp: AT },
+    };
+    const priest = makeUnit("enemy-1", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Shadow,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    (priest as unknown as { missesOut: unknown[] }).missesOut = [row];
+    const player = makeUnit("player-1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Fury,
+      reaction: CombatUnitReaction.Friendly,
+    });
+    (player as unknown as { missesIn: unknown[] }).missesIn = [row];
+    const combat = {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 300_000,
+      startInfo: { zoneId: "1672" },
+      units: { "enemy-1": priest, "player-1": player },
+    };
+    const r = analyzePlayerCCAndTrinket(player, [priest], combat as never);
+    expect(
+      (r.ccImmuneUncredited ?? []).map((x) => [x.spellName, x.missType]),
+    ).toEqual([["Silence", "REFLECT"]]);
+  });
   it("codex 85-tk-L-T120-1: a MISS of a silence that landed, or a periodic MISS, is no failed control", () => {
     const rogue = makeUnit("enemy-1", {
       name: "Rogue",
