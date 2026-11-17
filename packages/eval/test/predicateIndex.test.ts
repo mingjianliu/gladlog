@@ -2198,6 +2198,18 @@ const INDEX: PredicateRow[] = [
     symbol: "MINOR_DISPEL_CAST_MERGE_S",
     mod: minorDispelsSection,
   },
+  // pipeline T119 (codex 85-tk-L-T119-1): the fold part a removal belongs
+  // to and the events it folds, read by scan5/t119
+  {
+    file: `${A}/context/timelineSections/minorDispels.ts`,
+    symbol: "minorDispelPartTag",
+    mod: minorDispelsSection,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "reconstructDispelSummary",
+    mod: dispelAnalysis,
+  },
   // fact7 D18: a press on a teammate logged as the recipient's dispel
   {
     file: `${A}/utils/dispelKind.ts`,
