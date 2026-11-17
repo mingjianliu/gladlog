@@ -480,6 +480,35 @@ export function untargetableEndS(
 }
 
 /**
+ * Where the stealth-kind immunity a press put on its own holder
+ * (`ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`, up within `SAVE_CAST_AURA_PAIR_S` of
+ * the press) stopped protecting it, match seconds — only when the log never
+ * showed its end and the holder's own action came before the official
+ * length (`untargetableEndS`); undefined otherwise. The press timers read
+ * it so a timed press ends where the aura's own span readers end it
+ * (pipeline T113, batch review 80-PIPE-110-B97: Burrow pressed at 20 s, a
+ * Healing Surge begun at 22 s, the kill window held shut to 25 s).
+ */
+export function stealthImmunityPressActionEndS(
+  holder: ICombatUnit,
+  combat: Parameters<typeof buildAuraIntervals>[1],
+  castS: number,
+): number | undefined {
+  const units = Object.values(combat.units ?? {});
+  for (const iv of buildAuraIntervals(holder, combat)) {
+    if (
+      !ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId) ||
+      !iv.inferredEnd ||
+      Math.abs(iv.fromS - castS) > SAVE_CAST_AURA_PAIR_S
+    )
+      continue;
+    const end = untargetableEndS(holder, iv, combat.startTime, units);
+    if (end < iv.toS) return end;
+  }
+  return undefined;
+}
+
+/**
  * The unseen-end stealth a press allowed while stealthed leaves running
  * (`ALLOWED_WHILE_STEALTHED_SPELL_IDS`, DB2): Vanish 11327, DB2 aura 16
  * (MOD_STEALTH); Greater Invisibility and Mass Invisibility are aura 18 and

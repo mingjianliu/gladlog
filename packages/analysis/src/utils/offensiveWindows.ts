@@ -46,6 +46,7 @@ import {
   renderedExternalSpanS,
   SAVE_CAST_AURA_PAIR_S,
   saveAuraIntervals,
+  stealthImmunityPressActionEndS,
   untargetableEndS,
   wallTableIdOfAura,
 } from "./enemyDefensives";
@@ -886,11 +887,25 @@ export function computeOffensiveWindowsUncached(
         // unseen the log shows that no more than it shows the wall up. The
         // official length is the longest the wall can have lasted, so the
         // span opens no earlier than the log can support.
-        const buffDuration = kwTimedPressLengthS(
+        // …except a stealth-kind immunity (Burrow, Vanish) its holder ended
+        // with its own action before that, the log showing no end: over at
+        // the action, as its aura's span readers have it
+        // (`stealthImmunityPressActionEndS`; pipeline T113, batch review
+        // 80-PIPE-110-B97). Greater Invisibility keeps D6's official length.
+        const officialS = kwTimedPressLengthS(
           enemy,
           spellId,
           matchStartMs + castTimeSeconds * 1000,
         )!;
+        const actionEndS = stealthImmunityPressActionEndS(
+          enemy,
+          combat,
+          castTimeSeconds,
+        );
+        const buffDuration =
+          actionEndS === undefined
+            ? officialS
+            : Math.min(officialS, Math.max(0, actionEndS - castTimeSeconds));
         events.push({
           time: castTimeSeconds,
           kind: "CD_USED",

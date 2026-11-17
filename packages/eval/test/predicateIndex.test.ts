@@ -2815,6 +2815,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "stealthImmunityPressActionEndS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
     symbol: "STEALTH_KEPT_BY_ALLOWED_PRESS_IDS",
     mod: enemyDefensives,
   },
