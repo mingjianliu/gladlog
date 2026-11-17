@@ -1368,5 +1368,10 @@
  *  own first removal (user ruling R49); only a deliberate part counts as
  *  stating a press.
  *  See docs/prompt-version-history.md.
+ *
+ * v571 (2026-11-17; pipeline batch B93, T120): an enemy control that
+ *  failed on a friendly with any miss type (not only IMMUNE) gets its
+ *  [CC AVOIDED?] line; a reflected spell is left to its [REFLECTED] line.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 570;
+export const PROMPT_VERSION = 571;

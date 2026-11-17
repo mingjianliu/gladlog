@@ -7031,3 +7031,22 @@ sits in the press's own second and states it (the rule that already held
 whenever a deliberate part sat in the press second; e.g. `0:53 Mass Dispel
 x1 (0:53 ...)`, stamped 0:36 before); findings files 0 of 3,519; gates 110
 -> 110; family diff 0 flags.
+
+v571 (2026-11-17; pipeline batch B93, T120; round 12 retest). A Hammer of
+Justice logged MISS on the owner (under their Searing Glare on its caster)
+had no line: only IMMUNE rows took the uncredited [CC AVOIDED?] form. Now
+every CONTROL_FAILED_MISS_TYPES type does, bare (a cause only after IMMUNE),
+in the cast loop and the row sweep (ccTrinketAnalysis.ts); a non-IMMUNE row
+only off a direct SPELL_MISSED; a silence whose aura landed within 1 s is
+skipped; checkCcAvoidedMissType accepts the bare form. A reflected spell is
+stated by its [REFLECTED] line, decided by that line itself
+(reflectLineRowKeys): the [CC AVOIDED?] emitter skips a REFLECT row a
+printed [REFLECTED] line states; a reflected Silence with nothing back keeps
+its own line; an owner's command row its pet carried out is dropped on both
+sides (commandReflectRows, now in utils/petCommands.ts). 605 (base capture
+at dee866ccf vs branch), new scan5/t120 failedControlNoLine: 99 / 815 -> 31
+/ 815 (30 are our side's controls failing on enemies - [CC AVOIDED?] is
+friendly-only by design - and 1 ground Sigil of Misery on a teammate);
++187 [CC AVOIDED?] lines (148 MISS, 24 PARRY, 15 DODGE), none removed;
+findings files 0 of 3,519; gates 110 -> 110; family diff 2 flags, both this
+change (Gnaw 0 -> 6, Infernal Awakening 3 -> 12).
