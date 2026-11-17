@@ -4,10 +4,6 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-// GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set.
 import {
   countsAsKillWindowDefensiveInHand,
   unpressedKitDefensiveInHand,
@@ -39,6 +35,11 @@ import { IOffensiveWindow } from "./offensiveWindows";
 import { pvpTrinketUses, trinketUseRemainingSeconds } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+// GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set.
+import { stealthImmunityPressActionEndS } from "./stealthActionEnd";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 import { hasPressablePvpTrinket } from "./trinketType";
 import { unusedKitRows } from "./unusedKitRows";
@@ -378,8 +379,16 @@ export function getDefensiveStateAtTime(
       windowStartSeconds,
     );
 
+    // a timed stealth-kind immunity (Burrow, Vanish) its holder ended with
+    // its own action is over there (`stealthImmunityPressActionEndS`, the
+    // kill windows' press timer; pipeline T113)
+    const lastCastS = casts[casts.length - 1].castSeconds;
+    const actionEndS = combat
+      ? stealthImmunityPressActionEndS(enemy, combat, lastCastS)
+      : undefined;
     const buffActive =
-      casts[casts.length - 1].castSeconds + buffSeconds > windowStartSeconds;
+      Math.min(lastCastS + buffSeconds, actionEndS ?? Infinity) >
+      windowStartSeconds;
     // the shared cooldown model's answer (per-press talent effects, press
     // identification — cooldown mastery round 2026-10-20) when the round is
     // known; the cast list above only for a hand-built caller

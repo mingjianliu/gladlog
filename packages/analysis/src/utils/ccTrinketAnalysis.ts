@@ -34,6 +34,7 @@ import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
 } from "../data/spellEffectData";
+import { ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS } from "../data/spellIdLists";
 import {
   immunityCoversSpell,
   immunityMechanics,
@@ -113,7 +114,7 @@ import {
   matchPendingCcKey,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
-import { IMMUNITY_IDS } from "./enemyDefensives";
+import { holderFirstOwnActionAfterMs, IMMUNITY_IDS } from "./enemyDefensives";
 import {
   interruptCasterAt,
   interruptCooldownRemainingMs,
@@ -534,7 +535,23 @@ export function ccAvoidanceBuffsUpAt(
       name,
       srcName,
       srcId,
-      untilMs: s === undefined ? Infinity : fromMs + s * 1000,
+      untilMs: Math.min(
+        s === undefined ? Infinity : fromMs + s * 1000,
+        // a stealth-kind immunity (Burrow) the log never closes is over at
+        // its holder's own action, as its aura's span readers have it
+        // (`holderFirstOwnActionAfterMs` behind `untargetableEndS`;
+        // pipeline T113, batch review 80-PIPE-110-B97)
+        ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(id) && "id" in unit
+          ? holderFirstOwnActionAfterMs(
+              unit as unknown as Pick<
+                ICombatUnit,
+                "id" | "spellCastEvents" | "damageOut"
+              >,
+              fromMs,
+              id,
+            )
+          : Infinity,
+      ),
     });
   };
   /** a row of THIS application's source (or one written with none) */

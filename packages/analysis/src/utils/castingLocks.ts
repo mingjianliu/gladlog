@@ -3,6 +3,7 @@ import { ICombatUnit } from "@gladlog/parser-compat";
 import { abilityProfile } from "../data/abilityProfile";
 import { buildAuraIntervals } from "./auraIntervals";
 import { auraLocksCasting } from "./spellMechanics";
+import { withStealthActionEnds } from "./stealthActionEnd";
 import { talentOwnershipOf } from "./talentOwnership";
 
 /**
@@ -60,7 +61,9 @@ export function castingLockIntervalsOf(
     USABLE_IN_BLADESTORM_WITH_TALENT.has(forSpellId) &&
     talentOwnershipOf(unit, UNRELENTING_ONSLAUGHT_TALENT_ID) === "yes";
   const attack = forSpellId !== undefined && isSingleTargetAttack(forSpellId);
-  return buildAuraIntervals(unit, combat)
+  // Burrow the log never ended is over at its holder's own action
+  // (`withStealthActionEnds`, pipeline T113)
+  return withStealthActionEnds(unit, buildAuraIntervals(unit, combat), combat)
     .filter(
       (iv) =>
         auraLocksCasting(iv.spellId) ||

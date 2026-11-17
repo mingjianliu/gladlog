@@ -1033,7 +1033,9 @@ export function analyzeBurstLedger(
                     // a press after the burst ended is not this burst's:
                     // only the unpressed copy overlapped it (batch review
                     // 80-PIPE-73-B70 #1, a T122-extended burst)
-                    Math.min(iv.endMs, toMs),
+                    // (and none after the holder's own action ended an
+                    // unseen-end save: `endMs`, pipeline T113)
+                    Math.min(endMs, toMs),
                   )
                 : undefined;
             if (r && "noPress" in r) return { noPressLogged: true as const };

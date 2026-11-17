@@ -46,6 +46,7 @@ import {
 import { analyzeOutgoingCCChains } from "../utils/outgoingCcChains";
 import { INTERP_MAX_GAP_MS, LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { fmtTime } from "../utils/renderGrid";
+import { withStealthActionEnds } from "../utils/stealthActionEnd";
 import type { PackItem } from "./deepDive";
 
 /** Short name (realm stripped): same style as deepDive's `sn()`, copied here
@@ -125,7 +126,13 @@ export function aurasActiveAt(
   /** 可选:按 unitId 找光环的施法者,用于天赋加长的时长封顶(见 auraIntervals)。 */
   castersById?: ReadonlyMap<string, any>,
 ): string[] {
-  return buildAuraIntervals(unit, combat, castersById)
+  // a stealth-kind immunity the log never ended is over at its holder's
+  // action (`withStealthActionEnds`, pipeline T113)
+  return withStealthActionEnds(
+    unit,
+    buildAuraIntervals(unit, combat, castersById),
+    combat,
+  )
     .filter((iv) => iv.fromS <= t && t <= iv.toS)
     .sort((a, b) => auraPriority(a.spellId) - auraPriority(b.spellId))
     .map((iv) => iv.spellName)

@@ -618,7 +618,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("OWN_SHIELD_RIDERS", "data/ownShieldLinks.ts", "mixed", () =>
     riderShieldPairs().flatMap(([aura, cast]) => [aura, cast]),
   ),
-  t("KW_UNTARGETABLE_AURA_IDS", "utils/enemyDefensives.ts", "aura", () =>
+  t("KW_UNTARGETABLE_AURA_IDS", "utils/stealthActionEnd.ts", "aura", () =>
     set(KW_UNTARGETABLE_AURA_IDS),
   ),
   t("KW_REDIRECT_PROTECTION_AURA_IDS", "utils/enemyDefensives.ts", "aura", () =>
@@ -1036,7 +1036,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t(
     "STEALTH_KEPT_BY_ALLOWED_PRESS_IDS",
-    "utils/enemyDefensives.ts",
+    "utils/stealthActionEnd.ts",
     "aura",
     () => set(STEALTH_KEPT_BY_ALLOWED_PRESS_IDS),
   ),

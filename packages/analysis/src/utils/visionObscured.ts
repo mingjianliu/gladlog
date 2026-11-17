@@ -42,6 +42,7 @@ import {
 } from "../data/visionObscuringAuraGenerated";
 import { buildAuraIntervals } from "./auraIntervals";
 import type { CastFailedEvent, RawStreams } from "./rawStreams";
+import { withStealthActionEnds } from "./stealthActionEnd";
 
 /** The SPELL_CAST_FAILED reason texts of SPELL_FAILED_VISION_OBSCURED —
  * `spellOutcomeLines.REJECT_REASONS["vision obscured"]` is this list. */
@@ -106,7 +107,13 @@ export function visionObscuringWindows(combat: CombatLike): IObscuringWindow[] {
   const areas: IObscuringWindow[] = [];
   for (const u of Object.values(units)) {
     if ((u.auraEvents ?? []).some((e) => AURA_IDS.has(e.spellId ?? "")))
-      for (const iv of buildAuraIntervals(u, combat))
+      // Burrow the log never ended is over at its holder's own action
+      // (`withStealthActionEnds`, pipeline T113)
+      for (const iv of withStealthActionEnds(
+        u,
+        buildAuraIntervals(u, combat),
+        combat,
+      ))
         if (AURA_IDS.has(iv.spellId))
           onUnit.push({
             fromS: iv.fromS,

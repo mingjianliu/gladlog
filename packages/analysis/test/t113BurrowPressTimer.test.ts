@@ -13,9 +13,17 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { aurasActiveAt } from "../src/analysis/momentSnapshot";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { stealthImmunityPressActionEndS } from "../src/utils/enemyDefensives";
+import { buildAuraIntervals } from "../src/utils/auraIntervals";
+import { castingLockIntervalsOf } from "../src/utils/castingLocks";
+import { ccAvoidanceBuffsUpAt } from "../src/utils/ccTrinketAnalysis";
+import {
+  stealthImmunityPressActionEndS,
+  withStealthActionEnds,
+} from "../src/utils/enemyDefensives";
 import { computeOffensiveWindowsUncached } from "../src/utils/offensiveWindows";
+import { visionObscuringWindows } from "../src/utils/visionObscured";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -105,5 +113,40 @@ describe("T113 — a timed Burrow press ends at its holder's action (B97)", () =
     const u = shaman(null);
     expect(stealthImmunityPressActionEndS(u, combatOf(u), 20)).toBeUndefined();
     expect(startsOf(u).some((f) => Math.abs(f - 25) < 0.01)).toBe(true);
+  });
+});
+
+describe("T113 — every reader of the Burrow ends it at the shaman's action (B97 reader list)", () => {
+  const u = shaman(22);
+  const combat = combatOf(u);
+  it("the shared interval reading", () => {
+    const iv = withStealthActionEnds(
+      u,
+      buildAuraIntervals(u, combat),
+      combat,
+    ).find((x) => x.spellId === BURROW)!;
+    expect(iv.toS).toBeCloseTo(22);
+  });
+  it("the moment snapshot does not list it at 23 s", () => {
+    expect(aurasActiveAt(u, combat, 21)).toContain(BURROW);
+    expect(aurasActiveAt(u, combat, 23)).not.toContain(BURROW);
+  });
+  it("the casting lock ends at 22 s", () => {
+    const lock = castingLockIntervalsOf(u, combat).find(
+      (l) => l.spellId === BURROW,
+    );
+    expect(lock?.to).toBe(at(22));
+  });
+  it("the CC-avoidance reading drops it at 23 s", () => {
+    const ids = (ms: number) =>
+      ccAvoidanceBuffsUpAt(u, ms).map((b) => b.spellId);
+    expect(ids(at(21))).toContain(BURROW);
+    expect(ids(at(23))).not.toContain(BURROW);
+  });
+  it("the vision window ends at 22 s", () => {
+    const w = visionObscuringWindows(combat).find(
+      (x) => x.onUnit && x.holderId === "e1",
+    );
+    expect(w?.toS).toBeCloseTo(22);
   });
 });

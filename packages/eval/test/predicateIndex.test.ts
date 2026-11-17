@@ -213,6 +213,7 @@ import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
 import * as spellRange from "@gladlog/analysis/src/utils/spellRange";
 import * as stats from "@gladlog/analysis/src/utils/stats";
+import * as stealthActionEnd from "@gladlog/analysis/src/utils/stealthActionEnd";
 import * as summonKind from "@gladlog/analysis/src/utils/summonKind";
 import * as summonLife from "@gladlog/analysis/src/utils/summonLife";
 import * as summonOwner from "@gladlog/analysis/src/utils/summonOwner";
@@ -2814,9 +2815,14 @@ const INDEX: PredicateRow[] = [
     mod: enemyDefensives,
   },
   {
-    file: `${A}/utils/enemyDefensives.ts`,
+    file: `${A}/utils/stealthActionEnd.ts`,
     symbol: "stealthImmunityPressActionEndS",
-    mod: enemyDefensives,
+    mod: stealthActionEnd,
+  },
+  {
+    file: `${A}/utils/stealthActionEnd.ts`,
+    symbol: "withStealthActionEnds",
+    mod: stealthActionEnd,
   },
   {
     file: `${A}/utils/enemyDefensives.ts`,
