@@ -31,13 +31,13 @@
  */
 import { ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
-import { computeOffensiveWindows } from "@gladlog/analysis/src/utils/offensiveWindows";
 import {
   holderFirstOwnActionAfterMs,
   isMeleeSwingRow,
   saveAuraIntervals,
   untargetableEndS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { computeOffensiveWindows } from "@gladlog/analysis/src/utils/offensiveWindows";
 
 import {
   APPLIED,
