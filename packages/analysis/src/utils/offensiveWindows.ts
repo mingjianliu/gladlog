@@ -11,7 +11,7 @@ import {
   kwCooldownSeconds,
   unpressedKitDefensiveInHand,
 } from "../data/abilityProfile";
-import { castAndEffectIds } from "../data/castEffectAuras";
+import { castAndEffectIds, castsOfEffectAura } from "../data/castEffectAuras";
 import { SELF_WALL_AURA_TO_CAST_ID } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { spellEffectData } from "../data/spellEffectData";
@@ -454,11 +454,41 @@ export function computeOffensiveWindows(
 
 /** `computeOffensiveWindows` without the per-round memo (the equality test
  * reads both). */
+/** One application `computeOffensiveWindowsUncached` is asked to read as
+ * holding nothing — its press still spends the button. A gate's
+ * counterfactual: would the span still open where it does without it, i.e.
+ * did anything else hold the unit (scan5/t113 `killWindowShutPastAction`,
+ * batch review 80-PIPE-112-B99 #2)? Matched by holder, by the aura or a cast
+ * of it, and by a start within `SAVE_CAST_AURA_PAIR_S`. */
+export interface IKwExcludedApplication {
+  holderId: string;
+  spellId: string;
+  fromS: number;
+}
+
 export function computeOffensiveWindowsUncached(
   enemies: ICombatUnit[],
   friendlies: ICombatUnit[],
   combat: AtomicArenaCombat,
+  exclude?: IKwExcludedApplication,
 ): IOffensiveWindow[] {
+  const excludedIds = exclude
+    ? new Set([
+        exclude.spellId,
+        ...castsOfEffectAura(exclude.spellId),
+        ...castAndEffectIds(exclude.spellId),
+      ])
+    : undefined;
+  const isExcluded = (
+    holderId: string | undefined,
+    spellId: string | undefined,
+    fromS: number,
+  ): boolean =>
+    !!exclude &&
+    holderId === exclude.holderId &&
+    !!spellId &&
+    excludedIds!.has(spellId) &&
+    Math.abs(fromS - exclude.fromS) <= SAVE_CAST_AURA_PAIR_S;
   const matchStartMs = combat.startTime;
   const matchDurationSeconds = (combat.endTime - matchStartMs) / 1000;
   // T12 ① a (user ruling 2026-10-10): a kill window does not run past the
@@ -531,9 +561,11 @@ export function computeOffensiveWindowsUncached(
   const savesUpOn = new Map<string, Array<{ from: number; to: number }>>();
   const addSave = (
     holderId: string | undefined,
-    span?: { from: number; to: number },
+    span: { from: number; to: number } | undefined,
+    spellId: string,
   ) => {
     if (!holderId || !span) return;
+    if (isExcluded(holderId, spellId, span.from)) return;
     const list = savesUpOn.get(holderId) ?? [];
     list.push(span);
     savesUpOn.set(holderId, list);
@@ -587,7 +619,7 @@ export function computeOffensiveWindowsUncached(
             fromCaster,
             lifetimeS,
           ))
-            addSave(holder.id, span);
+            addSave(holder.id, span, d.spellId);
         continue;
       }
       const timed = timesCastOf(wallTableIdOfAura(d.spellId));
@@ -601,7 +633,7 @@ export function computeOffensiveWindowsUncached(
             holder.id,
             holderIntervals(holder),
           ))
-            addSave(holder.id, span);
+            addSave(holder.id, span, d.spellId);
       addSave(
         d.kind === "external" ? d.recipientId : caster.id,
         d.kind === "external"
@@ -609,6 +641,7 @@ export function computeOffensiveWindowsUncached(
           : d.kind === "self"
             ? ownWallSpanS(d, timed)
             : ownSaveSpanS(d, timed),
+        d.spellId,
       );
     }
   }
@@ -625,7 +658,7 @@ export function computeOffensiveWindowsUncached(
   for (const holder of enemies) {
     for (const iv of holderIntervals(holder)) {
       if (KW_REDIRECT_PROTECTION_AURA_IDS.has(iv.spellId)) {
-        addSave(holder.id, { from: iv.fromS, to: iv.toS });
+        addSave(holder.id, { from: iv.fromS, to: iv.toS }, iv.spellId);
         continue;
       }
       // an end the builder inferred (the official length — no REMOVED) is
@@ -722,18 +755,26 @@ export function computeOffensiveWindowsUncached(
           )
         : [];
       for (const sp of shieldSpans)
-        addSave(holder.id, {
-          from: (sp.fromMs - matchStartMs) / 1000,
-          to: (sp.toMs - matchStartMs) / 1000,
-        });
+        addSave(
+          holder.id,
+          {
+            from: (sp.fromMs - matchStartMs) / 1000,
+            to: (sp.toMs - matchStartMs) / 1000,
+          },
+          iv.spellId,
+        );
       if (shieldSpans.length > 0) continue;
       if (KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
         // round-3 q6 / fact3 D54: Mass Invisibility and Phase Shift; an end
         // the log never showed is the holder's first action after it
-        addSave(holder.id, {
-          from: iv.fromS,
-          to: untargetableEndS(holder, iv, matchStartMs, allUnits),
-        });
+        addSave(
+          holder.id,
+          {
+            from: iv.fromS,
+            to: untargetableEndS(holder, iv, matchStartMs, allUnits),
+          },
+          iv.spellId,
+        );
     }
   }
 
@@ -911,7 +952,8 @@ export function computeOffensiveWindowsUncached(
         // millisecond): it spent the button and held nothing — a zero-length
         // pair would sort its expiry first and leave the unit protected for
         // the rest of the round
-        const heldNothing = buffDuration <= 0;
+        const heldNothing =
+          buffDuration <= 0 || isExcluded(enemy.id, spellId, castTimeSeconds);
         events.push({
           time: castTimeSeconds,
           kind: "CD_USED",

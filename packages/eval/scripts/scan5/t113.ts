@@ -61,7 +61,10 @@ import {
   saveAuraIntervals,
   untargetableEndS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
-import { computeOffensiveWindows } from "@gladlog/analysis/src/utils/offensiveWindows";
+import {
+  computeOffensiveWindows,
+  computeOffensiveWindowsUncached,
+} from "@gladlog/analysis/src/utils/offensiveWindows";
 
 import {
   APPLIED,
@@ -102,8 +105,15 @@ export function run(ctx: IRoundCtx): void {
     const unit = ctx.unitOfPid(m[3]!);
     if (!id || !unit) continue;
     const lineS = Number(m[1]) * 60 + Number(m[2]);
+    // the line's own press: the application its unit put on itself, not
+    // another caster's copy of the same second (batch review
+    // 80-PIPE-112-B99 #1: Mage A's Mass Invisibility on Mage B, B's cast bar,
+    // then B's own in the same millisecond)
     const auras = ((unit.auraEvents ?? []) as any[]).filter(
-      (a) => a.spellId === id,
+      (a) =>
+        a.spellId === id &&
+        a.srcUnitId === unit.id &&
+        (a.destUnitId === undefined || a.destUnitId === unit.id),
     );
     const i = auras.findIndex(
       (a) =>
@@ -117,7 +127,15 @@ export function run(ctx: IRoundCtx): void {
     ctx.bump(C);
     const from = tsOf(auras[i]);
     const endMs = from + Number(m[5]) * 1000;
-    const own = holderFirstOwnActionAfterMs(unit, from, id, ctx.units);
+    // …read from its own row, as the product reads it
+    const fromLine: number | undefined = auras[i].logLine?.lineIndex;
+    const own = holderFirstOwnActionAfterMs(
+      unit,
+      from,
+      id,
+      ctx.units,
+      fromLine,
+    );
     // which kind of action it was: a cast bar begun, or a press / hit /
     // opener debuff (the reading without the bars)
     const noBars = holderFirstOwnActionAfterMs(
@@ -125,6 +143,7 @@ export function run(ctx: IRoundCtx): void {
       from,
       id,
       ctx.units,
+      fromLine,
     );
     const kind = noBars < endMs - SLACK_MS ? "press-or-hit" : "cast-start";
     const early = own - from <= 1000 ? "≤1s" : ">1s";
@@ -287,7 +306,22 @@ function killWindowShutPastAction(ctx: IRoundCtx): void {
           Math.abs(x.fromSeconds - iv.toS) < 0.001 &&
           x.fromSeconds > actS + 0.001,
       );
-      if (w)
+      // …unless something else held the unit to there: the producer itself,
+      // asked to read this application as holding nothing, still opens the
+      // span at the same instant (batch review 80-PIPE-112-B99 #2: an
+      // Ironbark up to 25 s over a Burrow its holder ended at 22 s)
+      const heldByOther =
+        !!w &&
+        computeOffensiveWindowsUncached(team, others, ctx.legacy, {
+          holderId: u.id,
+          spellId: iv.spellId,
+          fromS: iv.fromS,
+        }).some(
+          (x) =>
+            x.targetName === u.name &&
+            Math.abs(x.fromSeconds - w.fromSeconds) < 0.001,
+        );
+      if (w && !heldByOther)
         ctx.violate(
           C,
           `${nameOf(iv.spellId, iv.spellId)} ${iv.endedByHit ? "hit" : "no hit"}`,

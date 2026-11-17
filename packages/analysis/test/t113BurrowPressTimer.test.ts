@@ -319,3 +319,26 @@ describe("T113 — codex 85-tk-N-T113-5", () => {
     expect(ids(at(23))).not.toContain(BURROW);
   });
 });
+
+describe("T113 — the producer's counterfactual (batch review 80-PIPE-112-B99 #2)", () => {
+  it("with the Burrow read as holding nothing, the window opens at the press (20 s), not at its official end (25 s)", () => {
+    const u = shaman(null);
+    const starts = (exclude?: never) =>
+      computeOffensiveWindowsUncached(
+        [u] as never,
+        [],
+        combatOf(u),
+        exclude,
+      ).map((w) => w.fromSeconds);
+    expect(starts().some((f) => Math.abs(f - 25) < 0.01)).toBe(true);
+    const ex = starts({ holderId: "e1", spellId: BURROW, fromS: 20 } as never);
+    expect(ex.some((f) => Math.abs(f - 20) < 0.01)).toBe(true);
+    expect(ex.some((f) => Math.abs(f - 25) < 0.01)).toBe(false);
+    // another application's start: nothing excluded
+    expect(
+      starts({ holderId: "e1", spellId: BURROW, fromS: 40 } as never).some(
+        (f) => Math.abs(f - 25) < 0.01,
+      ),
+    ).toBe(true);
+  });
+});
