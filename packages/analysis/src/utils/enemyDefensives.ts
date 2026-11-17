@@ -590,14 +590,14 @@ export function holderFirstOwnActionAfterMs(
     )
       continue;
     const t = d.logLine.timestamp;
-    // a hit the holder dealt in the aura's first second was on its way
-    // before it went up — no action (pipeline T113; the incoming side's
+    // a spell hit the holder dealt in the aura's first second was on its
+    // way before it went up — no action (pipeline T113; the incoming side's
     // `STEALTH_IMMUNITY_IN_FLIGHT_MS`, U-KA3). Same measurement: such a hit
-    // as the run's first own row left it going 184 times and sat at its end
-    // 46 (Mass Invisibility 70 / 11, Greater Invisibility 53 / 21, Vanish
-    // 61 / 14); a later hit ended Mass Invisibility 6 / 6. A melee swing is
-    // never in flight: it stays the holder's action (codex 85-tk-N-T113-1;
-    // no swing was a logged run's first own row, 0 / 689).
+    // as the run's first own row left it going 182 times and sat at its end
+    // 45 (Mass Invisibility 70 / 11, Greater Invisibility 53 / 21, Vanish
+    // 59 / 13); a later spell hit ended it 19 / 30. A melee swing is never
+    // in flight (`isMeleeSwingRow`): it stays the holder's action (codex
+    // 85-tk-N-T113-1 / -1b; a first-second swing ended Vanish 5 / 9).
     if (
       auraId &&
       !isMeleeSwingRow(d) &&
