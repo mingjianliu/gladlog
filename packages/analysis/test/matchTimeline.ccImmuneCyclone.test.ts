@@ -65,6 +65,8 @@ function immuneLine(
   spellName = "Polymorph",
   /** damage the reflected spell then did to its caster (of 1M max HP) */
   backDamage = 0,
+  /** another spell reflected by them in the same ms (its own row) */
+  otherReflect?: [string, string],
 ): string {
   const cyclone = [
     makeAuraEvent(
@@ -90,24 +92,21 @@ function immuneLine(
   const enemy = unit("E1", "EnemyDruid", {
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Druid_Balance,
-    ...(reflectRow
-      ? {
-          missesOut: [
-            {
-              spellId,
-              spellName,
-              srcUnitId: "E1",
-              destUnitId: "P1",
-              missType: "REFLECT",
-              timestamp: T0 + missAtS * 1000,
-              logLine: {
-                event: LogEvent.SPELL_MISSED,
-                timestamp: T0 + missAtS * 1000,
-              },
-            },
-          ] as never,
-        }
-      : {}),
+    missesOut: [
+      ...(reflectRow ? [[spellId, spellName]] : []),
+      ...(otherReflect ? [otherReflect] : []),
+    ].map(([id, name]) => ({
+      spellId: id,
+      spellName: name,
+      srcUnitId: "E1",
+      destUnitId: "P1",
+      missType: "REFLECT",
+      timestamp: T0 + missAtS * 1000,
+      logLine: {
+        event: LogEvent.SPELL_MISSED,
+        timestamp: T0 + missAtS * 1000,
+      },
+    })) as never,
     ...(backDamage > 0
       ? {
           damageIn: [
@@ -214,6 +213,16 @@ describe("[CC AVOIDED?] logged IMMUNE: the Cyclone cause reads the shared, cappe
     expect(
       immuneLine(12, undefined, "REFLECT", true, "15487", "Silence"),
     ).toContain("logged REFLECT");
+  });
+  // codex 85-tk-L-T120-2c #1: another spell's [REFLECTED] line in the same
+  // ms states only its own row
+  it("T120: a Polymorph reflected in the same ms leaves the Silence its line", () => {
+    expect(
+      immuneLine(12, undefined, "REFLECT", true, "15487", "Silence", 0, [
+        "118",
+        "Polymorph",
+      ]),
+    ).toContain("Silence (by 4(");
   });
   it("T120: a reflected silence with damage back is stated by its [REFLECTED] line alone", () => {
     expect(

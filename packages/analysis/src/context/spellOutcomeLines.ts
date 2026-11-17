@@ -118,6 +118,9 @@ export interface IReflected {
   /** every REFLECT row's ms in the chain the line states (pipeline T120:
    * `reflectLineRowKeys`) */
   rowsMs: number[];
+  /** each of those rows' own caster (`srcUnitId`: an owner's command row
+   * moved to its pet keeps its owner) — `reflectLineRowKeys` */
+  rowSrcIds: string[];
 }
 
 /** A REFLECT row can be logged just before its own cast's SUCCESS row
@@ -555,6 +558,8 @@ export function reflectedSpells(
       last: number;
       /** every REFLECT row's ms in the chain */
       rows: number[];
+      /** each row's own caster, beside `rows` */
+      srcs: string[];
       /** every REFLECT row's spell id in the chain (a cast id and its
        *  damage id: Death Coil 47541 / 47632) */
       ids: Set<string>;
@@ -577,12 +582,14 @@ export function reflectedSpells(
       if (c && m.logLine.timestamp - c.last <= REFLECT_CHAIN_GAP_MS) {
         c.last = m.logLine.timestamp;
         c.rows.push(m.logLine.timestamp);
+        c.srcs.push(m.srcUnitId || caster.id);
         c.ids.add(m.spellId!);
       } else
         chains.push({
           first: m,
           last: m.logLine.timestamp,
           rows: [m.logLine.timestamp],
+          srcs: [m.srcUnitId || caster.id],
           ids: new Set([m.spellId!]),
         });
     }
@@ -900,6 +907,7 @@ export function reflectedSpells(
         damageBack,
         reflectCount: reflectCount(caster, m.spellId!, chain.rows),
         rowsMs: [...chain.rows],
+        rowSrcIds: [...chain.srcs],
       });
     }
   }
@@ -1526,13 +1534,16 @@ export function reflectedLines(
   return out;
 }
 
-/** `caster>reflector@ms` of a REFLECT row */
+/** `caster>reflector@ms#spell` of a REFLECT row — its own caster (a pet's
+ * or an owner's command row alike) and the English name of its spell
+ * (codex 85-tk-L-T120-2c #1: two spells reflected in one ms are two rows) */
 export function reflectRowKey(
   casterId: string,
   reflectorId: string,
   ms: number,
+  spellName: string,
 ): string {
-  return `${casterId}>${reflectorId}@${ms}`;
+  return `${casterId}>${reflectorId}@${ms}#${spellName}`;
 }
 
 /** Every REFLECT row a printed `[REFLECTED]` line states (its chain's rows).
@@ -1546,7 +1557,15 @@ export function reflectLineRowKeys(
 ): Set<string> {
   const keys = new Set<string>();
   for (const r of reflectedLines(units, matchStartMs, matchEndSeconds))
-    for (const ms of r.rowsMs)
-      keys.add(reflectRowKey(r.casterId, r.reflectorId, ms));
+    r.rowsMs.forEach((ms, i) =>
+      keys.add(
+        reflectRowKey(
+          r.rowSrcIds[i] ?? r.casterId,
+          r.reflectorId,
+          ms,
+          r.spellName,
+        ),
+      ),
+    );
   return keys;
 }

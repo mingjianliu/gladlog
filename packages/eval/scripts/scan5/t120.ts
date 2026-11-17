@@ -54,6 +54,10 @@ export function run(ctx: IRoundCtx): void {
     bySec.set(s, list);
   }
   const byId = new Map(ctx.units.map((u) => [u.id as string, u]));
+  const ownerIdOf = (id: string): string => {
+    const u = byId.get(id);
+    return (u?.ownerId as string | undefined) || id;
+  };
   for (const u of ctx.players) {
     const pid = ctx.pidOf(u.name);
     if (!pid) continue;
@@ -91,7 +95,10 @@ export function run(ctx: IRoundCtx): void {
           .filter(
             (r) =>
               r.missType === "REFLECT" &&
-              r.srcUnitId === m.srcUnitId &&
+              // one caster: a pet's rows and its owner's command rows
+              // (`petCommands` moves the latter to the pet; codex
+              // 85-tk-L-T120-2c #2)
+              ownerIdOf(r.srcUnitId) === ownerIdOf(m.srcUnitId) &&
               nameOf(String(r.spellId ?? ""), r.spellName) === name &&
               tsOf(r) < ts,
           )
@@ -104,7 +111,11 @@ export function run(ctx: IRoundCtx): void {
       const firstSec = Math.floor((chainFirst - ctx.start) / 1000);
       const reflectedNamed = (bySec.get(firstSec) ?? []).some((l) => {
         const r = parseReflectedLine(l);
-        return r?.reflectorPid === pid && r.spell === name;
+        // a summon's spell prints `N(…)'s pet's X` — the spell is X
+        return (
+          r?.reflectorPid === pid &&
+          (r.spell === name || r.spell.endsWith(`'s ${name}`))
+        );
       });
       if (m.missType === "REFLECT" && reflectedNamed) continue;
       const named = [sec - 1, sec, sec + 1]

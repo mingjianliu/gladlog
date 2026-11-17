@@ -457,7 +457,7 @@ export function emitTrinketCcOnTeamEntries(
         imm.missType === "REFLECT" &&
         holder &&
         reflectLineKeys().has(
-          reflectRowKey(imm.sourceId, holder.id, imm.missMs),
+          reflectRowKey(imm.sourceId, holder.id, imm.missMs, imm.spellName),
         )
       )
         continue;

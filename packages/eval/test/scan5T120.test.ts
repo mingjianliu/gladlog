@@ -86,6 +86,19 @@ describe("scan5 failedControlNoLine", () => {
       ]),
     ).toBe(1);
   });
+  // codex 85-tk-L-T120-2c #2: a summon's grouped line names `pet's X`
+  it("a pet's grouped `reflected ×2` line states its second row", () => {
+    expect(
+      scan(
+        [
+          "1:00  [REFLECTED]   4(Enemy)'s pet's Hammer of Justice reflected ×2 by 1(Victim)",
+        ],
+        "REFLECT",
+        HOJ,
+        [62_500],
+      ),
+    ).toBe(0);
+  });
   // codex 85-tk-L-T120-2b #2: the second row of a chain is stated by the
   // chain's first-row line
   it("a REFLECT row 2.5 s after another of the chain is stated by its `reflected ×2` line", () => {
