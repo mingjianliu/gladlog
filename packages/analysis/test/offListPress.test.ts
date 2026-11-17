@@ -116,6 +116,50 @@ describe("[PRESS] — does a line already state the press", () => {
       ),
     ).toBe(true);
   });
+  // pipeline T119 (coordinator ruling): a passive / side-effect part of a
+  // [MINOR DISPELS] line carries none of the press's facts — the [PRESS]
+  // line keeps its cooldown numbers; a deliberate part (`×N (m:ss …)`)
+  // states the press
+  it("a [MINOR DISPELS] line states a press only through a deliberate part", () => {
+    const L = (body: string) =>
+      `[MINOR DISPELS]   3(PEvoker): ${body} (low-priority, folded)`;
+    expect(
+      lineStatesPress(
+        L("Rescue (side effect of the cast)"),
+        "Rescue",
+        "3",
+        "1",
+      ),
+    ).toBe(false);
+    expect(
+      lineStatesPress(
+        L("Cauterizing Flame (passive) x2"),
+        "Cauterizing Flame",
+        "3",
+        "1",
+      ),
+    ).toBe(false);
+    expect(
+      lineStatesPress(
+        L(
+          "Cauterizing Flame ×1 (1:15 Bleeding), Rescue (side effect of the cast)",
+        ),
+        "Cauterizing Flame",
+        "3",
+        "1",
+      ),
+    ).toBe(true);
+    expect(
+      lineStatesPress(
+        L(
+          "Cauterizing Flame ×1 (1:15 Bleeding), Rescue (side effect of the cast)",
+        ),
+        "Rescue",
+        "3",
+        "1",
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("a reset between two presses keeps both (Ace Up Your Sleeve, GH #176)", () => {

@@ -1513,6 +1513,13 @@ const INDEX: PredicateRow[] = [
     symbol: "lineStatesPress",
     mod: offListPress,
   },
+  // pipeline T119: a [MINOR DISPELS] line states a press only through a
+  // deliberate part (read by lineStatesPress, so by scan5/listGap too)
+  {
+    file: `${A}/utils/offListPress.ts`,
+    symbol: "minorDispelsLineStatesSpell",
+    mod: offListPress,
+  },
   {
     file: `${A}/data/hasteScaledCooldowns.ts`,
     symbol: "isHasteScaledCooldown",

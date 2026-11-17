@@ -196,6 +196,19 @@ export function pressLineCaster(
 /** a press-tag line within this many whole seconds of the press states it */
 export const PRESS_LINE_NEAR_S = 1;
 
+/** On a `[MINOR DISPELS]` line only a deliberate part states a press: it
+ * lists the casts (`Spell ×N (m:ss …)`, `formatMinorDispelPart`). A
+ * `(passive)` / `(side effect of the cast)` part carries none of the press's
+ * facts — pipeline T119 (coordinator ruling on its 605 run): once such a part
+ * got a line of its own in the press's second, 214 `[PRESS]` lines (Rescue,
+ * Fire Breath, Mass Dispel …) lost their cooldown numbers to it. */
+export function minorDispelsLineStatesSpell(
+  text: string,
+  name: string,
+): boolean {
+  return text.includes(`${name} ×`);
+}
+
 /** Does a rendered line (time stripped) state this unit's press of `name`? */
 export function lineStatesPress(
   text: string,
@@ -206,6 +219,8 @@ export function lineStatesPress(
   return (
     text.includes(name) &&
     PRESS_LINE_TAG.test(text) &&
+    (!text.includes("[MINOR DISPELS]") ||
+      minorDispelsLineStatesSpell(text, name)) &&
     pressLineCaster(text, name, ownerNumber) === casterNumber
   );
 }
