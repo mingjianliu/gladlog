@@ -85,6 +85,7 @@ import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObser
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
 import * as druidForms from "@gladlog/analysis/src/data/druidForms";
 import * as enemyHealCds from "@gladlog/analysis/src/data/enemyHealCds";
+import * as hasteScaledCooldowns from "@gladlog/analysis/src/data/hasteScaledCooldowns";
 import * as healerHeldOffensive from "@gladlog/analysis/src/data/healerHeldOffensive";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
@@ -188,7 +189,6 @@ import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as offensiveWasteAnalysis from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
-import * as hasteScaledCooldowns from "@gladlog/analysis/src/data/hasteScaledCooldowns";
 import * as offListPress from "@gladlog/analysis/src/utils/offListPress";
 import * as outgoingCcChains from "@gladlog/analysis/src/utils/outgoingCcChains";
 import * as overrideVariantEra from "@gladlog/analysis/src/utils/overrideVariantEra";
