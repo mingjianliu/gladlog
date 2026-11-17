@@ -6354,10 +6354,12 @@ function analyzePlayerCCAndTrinketUncached(
     const otherType = m.missType !== "IMMUNE";
     if (otherType && m.logLine?.event !== LogEvent.SPELL_MISSED) continue;
     // a reflected control has its own [REFLECTED] line, always printed
-    // (`reflectRowStatedAsControl`): neither an uncredited line nor a new
-    // Spell Reflection credit (T120 605 re-capture: three credited REFLECT
-    // lines beside their [REFLECTED] line). A reflected silence prints no
-    // [REFLECTED] line and keeps its own (codex 85-tk-L-T120-2 #1).
+    // (`reflectRowStatedAsControl`): no line here (T120 605 re-capture:
+    // three credited REFLECT lines beside their [REFLECTED] line). Any other
+    // REFLECT row (a silence) is never credited to the reflect: it goes to
+    // the uncredited list, whose emitter skips it when a [REFLECTED] line
+    // states it (`reflectLineRowKeys` — a Silence with damage back), and
+    // keeps it when none does (codex 85-tk-L-T120-2 #1, 2b #1)
     if (reflectRowStatedAsControl(m)) continue;
     // a control, or a silence (mechanic 9 — Garrote's 1330, Spider Venom:
     // no hard CC, but an IMMUNE row of one is the same fact)
@@ -6424,11 +6426,14 @@ function analyzePlayerCCAndTrinketUncached(
       continue;
     // an avoidance the table explains is credited like the sweep's
     const applicableIds = applicableCCAvoidanceIds(m.spellId, name);
-    const buff = avoidanceBuffsAt(m.timestamp, m.logLine?.lineIndex, true).find(
-      (b) =>
-        applicableIds.has(b.spellId) &&
-        avoidanceExplainsMissType(b.spellId, m.missType),
-    );
+    const buff =
+      m.missType === "REFLECT"
+        ? undefined
+        : avoidanceBuffsAt(m.timestamp, m.logLine?.lineIndex, true).find(
+            (b) =>
+              applicableIds.has(b.spellId) &&
+              avoidanceExplainsMissType(b.spellId, m.missType),
+          );
     const atSeconds = (m.timestamp - matchStartMs) / 1000;
     if (buff)
       ccAvoidedInstances.push({

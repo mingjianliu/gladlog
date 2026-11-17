@@ -465,6 +465,21 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "reflectedLines",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "reflectLineRowKeys",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "reflectRowKey",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
     symbol: "ownerRejectRuns",
     mod: spellOutcomeLines,
   },

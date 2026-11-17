@@ -13,7 +13,6 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { damageImmuneControlUpAt } from "../../analysis/candidates/massDispel";
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
-import { reflectRowStatedAsControl } from "../../utils/castMissRows";
 import { ccFullDurationForCaster } from "../../utils/ccDuration";
 import {
   CC_FROM_OWN_TEAM_TAG,
@@ -47,6 +46,7 @@ import {
   ownerControlPressKit,
   ownerPressesRejectedDuring,
 } from "../controlRejectedPresses";
+import { reflectLineRowKeys, reflectRowKey } from "../spellOutcomeLines";
 import type { TimelineCtx } from "./ctx";
 
 export function emitTrinketCcOnTeamEntries(
@@ -60,6 +60,8 @@ export function emitTrinketCcOnTeamEntries(
     | "disarmLineCount"
     | "dispelSummary"
     | "matchStartMs"
+    | "matchEndSeconds"
+    | "_allUnits"
     | "friends"
     | "enemies"
     | "rosterSides"
@@ -83,6 +85,8 @@ export function emitTrinketCcOnTeamEntries(
     pid,
     dispelSummary,
     matchStartMs,
+    matchEndSeconds,
+    _allUnits,
     friends,
     enemies,
     rosterSides,
@@ -99,6 +103,15 @@ export function emitTrinketCcOnTeamEntries(
       ? undefined
       : ((allUnits ?? []).find((u) => u.id === id) ??
         (enemies ?? []).find((e) => e.id === id));
+  // the REFLECT rows a printed [REFLECTED] line states — read lazily, only
+  // a REFLECT row asks (pipeline T120)
+  let reflectKeys: Set<string> | undefined;
+  const reflectLineKeys = () =>
+    (reflectKeys ??= reflectLineRowKeys(
+      _allUnits,
+      matchStartMs,
+      matchEndSeconds,
+    ));
   // the units `[CC REMOVED]`'s Sanctuary pairing reads
   const sanctuaryUnits = allUnits ?? [...friends, ...(enemies ?? [])];
   // threaded: read from ctx, returned to the caller (GH #116)
@@ -434,17 +447,18 @@ export function emitTrinketCcOnTeamEntries(
     // the controls that landed on them; nothing when neither
     const holder = friends.find((f) => f.name === summary.playerName);
     for (const imm of summary.ccImmuneUncredited ?? []) {
-      // T120 605 run: a reflected control is stated by its own [REFLECTED]
-      // line, always printed (`reflectRowStatedAsControl`) — a second line
-      // here repeated all 33 such rows; a reflected silence prints none and
-      // keeps this one (codex 85-tk-L-T120-2 #1)
+      // T120 605 run: a reflected spell a printed [REFLECTED] line states
+      // (`reflectLineRowKeys`, the rows of that line's chain) gets no
+      // second line here — 33 such rows repeated it; one no [REFLECTED]
+      // line states (a reflected Silence with nothing back) keeps this one
+      // (codex 85-tk-L-T120-2 #1, 2b #1: a Wailing Arrow with damage back
+      // printed both)
       if (
-        reflectRowStatedAsControl({
-          missType: imm.missType,
-          spellId: imm.spellId,
-          srcUnitId: imm.sourceId,
-          destUnitId: holder?.id,
-        })
+        imm.missType === "REFLECT" &&
+        holder &&
+        reflectLineKeys().has(
+          reflectRowKey(imm.sourceId, holder.id, imm.missMs),
+        )
       )
         continue;
       // the [CC NOT LANDED] note's reading, its lost-REMOVED cap included

@@ -9,23 +9,26 @@ import { run } from "../scripts/scan5/t120";
 
 const HOJ = "853";
 
-function scan(lines: string[], missType = "MISS", spellId = HOJ): number {
+function scan(
+  lines: string[],
+  missType = "MISS",
+  spellId = HOJ,
+  extraMs: number[] = [],
+): number {
   let n = 0;
   const victim = {
     id: "p1",
     name: "Victim",
     reaction: 1,
     auraEvents: [],
-    missesIn: [
-      {
-        spellId,
-        spellName: "Hammer of Justice",
-        srcUnitId: "e1",
-        missType,
-        timestamp: 60_000,
-        logLine: { event: "SPELL_MISSED", timestamp: 60_000 },
-      },
-    ],
+    missesIn: [60_000, ...extraMs].map((t) => ({
+      spellId,
+      spellName: "Hammer of Justice",
+      srcUnitId: "e1",
+      missType,
+      timestamp: t,
+      logLine: { event: "SPELL_MISSED", timestamp: t },
+    })),
   };
   const enemy = { id: "e1", name: "Enemy", reaction: 2 };
   run({
@@ -81,6 +84,31 @@ describe("scan5 failedControlNoLine", () => {
       scan([
         "1:00  [TEAM] [CC]   4(Enemy) (Holy Paladin) cast Hammer of Justice → 1(Victim) [PARRIED by 1(Victim)]",
       ]),
+    ).toBe(1);
+  });
+  // codex 85-tk-L-T120-2b #2: the second row of a chain is stated by the
+  // chain's first-row line
+  it("a REFLECT row 2.5 s after another of the chain is stated by its `reflected ×2` line", () => {
+    expect(
+      scan(
+        [
+          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected ×2 by 1(Victim)",
+        ],
+        "REFLECT",
+        HOJ,
+        [62_500],
+      ),
+    ).toBe(0);
+    // a row 3.5 s after starts its own chain, with no line
+    expect(
+      scan(
+        [
+          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected by 1(Victim)",
+        ],
+        "REFLECT",
+        HOJ,
+        [63_500],
+      ),
     ).toBe(1);
   });
   // codex 85-tk-L-T120-2 #2: a grouped return prints `reflected ×N by`

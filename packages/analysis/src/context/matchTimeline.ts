@@ -881,6 +881,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       trinketLastUsedCount,
       dispelSummary,
       matchStartMs,
+      matchEndSeconds,
+      _allUnits,
       friends,
       enemies,
       rosterSides,

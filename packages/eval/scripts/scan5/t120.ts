@@ -17,6 +17,7 @@
  *    `[REFLECTED]` line's `reflected[ ×N] by N(…)` (`parseReflectedLine`). Counted: every such row of a player
  *    with a pid.
  */
+import { REFLECT_CHAIN_GAP_MS } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
   CC_MISS_TAG_WORD,
@@ -79,6 +80,33 @@ export function run(ctx: IRoundCtx): void {
       if (landed) continue;
       ctx.bump(C);
       const sec = Math.floor((ts - ctx.start) / 1000);
+      // a reflected row is printed at its chain's first row — the same
+      // spell's REFLECT rows from that caster on this player, each within
+      // `REFLECT_CHAIN_GAP_MS` of the one before (`reflectedSpells`' chain;
+      // codex 85-tk-L-T120-2b #2: a second Polymorph 2.5 s later is the
+      // first's `reflected ×2` line)
+      let chainFirst = ts;
+      if (m.missType === "REFLECT") {
+        const prior = ((u.missesIn ?? []) as any[])
+          .filter(
+            (r) =>
+              r.missType === "REFLECT" &&
+              r.srcUnitId === m.srcUnitId &&
+              nameOf(String(r.spellId ?? ""), r.spellName) === name &&
+              tsOf(r) < ts,
+          )
+          .map(tsOf)
+          .sort((a, b) => b - a);
+        for (const t of prior)
+          if (chainFirst - t <= REFLECT_CHAIN_GAP_MS) chainFirst = t;
+          else break;
+      }
+      const firstSec = Math.floor((chainFirst - ctx.start) / 1000);
+      const reflectedNamed = (bySec.get(firstSec) ?? []).some((l) => {
+        const r = parseReflectedLine(l);
+        return r?.reflectorPid === pid && r.spell === name;
+      });
+      if (m.missType === "REFLECT" && reflectedNamed) continue;
       const named = [sec - 1, sec, sec + 1]
         .flatMap((s) => bySec.get(s) ?? [])
         // the player as the line's subject (`[TAG]   N(…): X` / `N(…) ← X`),

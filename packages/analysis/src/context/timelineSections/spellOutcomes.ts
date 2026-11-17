@@ -19,7 +19,7 @@ import {
   groundedControls,
   type IRejectRun,
   ownerRejectRuns,
-  reflectedSpells,
+  reflectedLines,
   rejectRunWhy,
   sanctuaryRemovals,
 } from "../spellOutcomeLines";
@@ -98,8 +98,7 @@ export function emitSpellOutcomeEntries(
       `${fmtTime(g.atSeconds)}  [GROUNDED]   ${caster ? unitLabel(caster) : "?"}'s ${g.spellName} was redirected into ${totemOf}`,
     );
   }
-  for (const r of reflectedSpells(_allUnits, matchStartMs)) {
-    if (!inMatch(r.atSeconds)) continue;
+  for (const r of reflectedLines(_allUnits, matchStartMs, matchEndSeconds)) {
     const caster = byId.get(r.casterId)!;
     const reflector = byId.get(r.reflectorId)!;
     const back = r.isControl

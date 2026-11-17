@@ -58,6 +58,13 @@ function immuneLine(
   missAtS: number,
   cycloneRemovedAtS?: number,
   missType?: string,
+  /** the REFLECT row on the caster's missesOut — what `reflectedSpells`
+   * reads; without it no [REFLECTED] line states the row */
+  reflectRow = missType === "REFLECT",
+  spellId = "118",
+  spellName = "Polymorph",
+  /** damage the reflected spell then did to its caster (of 1M max HP) */
+  backDamage = 0,
 ): string {
   const cyclone = [
     makeAuraEvent(
@@ -83,6 +90,52 @@ function immuneLine(
   const enemy = unit("E1", "EnemyDruid", {
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Druid_Balance,
+    ...(reflectRow
+      ? {
+          missesOut: [
+            {
+              spellId,
+              spellName,
+              srcUnitId: "E1",
+              destUnitId: "P1",
+              missType: "REFLECT",
+              timestamp: T0 + missAtS * 1000,
+              logLine: {
+                event: LogEvent.SPELL_MISSED,
+                timestamp: T0 + missAtS * 1000,
+              },
+            },
+          ] as never,
+        }
+      : {}),
+    ...(backDamage > 0
+      ? {
+          damageIn: [
+            {
+              spellId,
+              spellName,
+              srcUnitId: "P1",
+              destUnitId: "E1",
+              effectiveAmount: -backDamage,
+              amount: -backDamage,
+              timestamp: T0 + missAtS * 1000 + 100,
+              logLine: {
+                event: LogEvent.SPELL_DAMAGE,
+                timestamp: T0 + missAtS * 1000 + 100,
+              },
+            },
+          ] as never,
+          advancedActions: [
+            {
+              advancedActorId: "E1",
+              advancedActorMaxHp: 1_000_000,
+              advancedActorCurrentHp: 900_000,
+              timestamp: T0 + missAtS * 1000,
+              logLine: { timestamp: T0 + missAtS * 1000 },
+            },
+          ] as never,
+        }
+      : {}),
   });
   const summary = {
     playerName: "Owner",
@@ -100,8 +153,8 @@ function immuneLine(
       {
         atSeconds: missAtS,
         castAtSeconds: missAtS,
-        spellId: "118",
-        spellName: "Polymorph",
+        spellId,
+        spellName,
         sourceName: "EnemyDruid",
         sourceId: "E1",
         missMs: T0 + missAtS * 1000,
@@ -152,6 +205,20 @@ describe("[CC AVOIDED?] logged IMMUNE: the Cyclone cause reads the shared, cappe
   it("T120: a MISS row is stated bare — the causes read are IMMUNE's", () => {
     const line = immuneLine(12, undefined, "MISS");
     expect(line).toMatch(/\(by 4\([^)]*\)\) logged MISS$/);
+  });
+  // codex 85-tk-L-T120-2b #1: the row's own [REFLECTED] line decides
+  it("T120: a REFLECT row no [REFLECTED] line states keeps its line", () => {
+    expect(
+      immuneLine(12, undefined, "REFLECT", false, "15487", "Silence"),
+    ).toContain("Silence (by 4(");
+    expect(
+      immuneLine(12, undefined, "REFLECT", true, "15487", "Silence"),
+    ).toContain("logged REFLECT");
+  });
+  it("T120: a reflected silence with damage back is stated by its [REFLECTED] line alone", () => {
+    expect(
+      immuneLine(12, undefined, "REFLECT", true, "15487", "Silence", 100_000),
+    ).toBe("");
   });
   it("T120: a reflected control gets no line here — its [REFLECTED] line states it", () => {
     expect(immuneLine(12, undefined, "REFLECT")).toBe("");

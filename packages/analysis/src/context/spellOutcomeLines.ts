@@ -115,6 +115,9 @@ export interface IReflected {
   /** how many casts the chain reflected (`reflectCount`) — `×N` on the
    * line when ≥ 2 (user ruling 2026-10-27) */
   reflectCount: number;
+  /** every REFLECT row's ms in the chain the line states (pipeline T120:
+   * `reflectLineRowKeys`) */
+  rowsMs: number[];
 }
 
 /** A REFLECT row can be logged just before its own cast's SUCCESS row
@@ -896,6 +899,7 @@ export function reflectedSpells(
         isControl,
         damageBack,
         reflectCount: reflectCount(caster, m.spellId!, chain.rows),
+        rowsMs: [...chain.rows],
       });
     }
   }
@@ -1494,4 +1498,55 @@ export function rejectRunStatesRow(
     row.tSeconds >= run.fromSeconds &&
     row.tSeconds <= run.toSeconds
   );
+}
+
+const reflectedLinesMemo = new WeakMap<
+  readonly ICombatUnit[],
+  Map<string, IReflected[]>
+>();
+/** The `[REFLECTED]` lines a timeline prints: `reflectedSpells` inside the
+ * match (`0 ≤ atSeconds ≤ matchEndSeconds`), memoised per unit list — read
+ * by the `[REFLECTED]` emitter and by `reflectLineRowKeys`. */
+export function reflectedLines(
+  units: readonly ICombatUnit[],
+  matchStartMs: number,
+  matchEndSeconds: number,
+): IReflected[] {
+  let byKey = reflectedLinesMemo.get(units);
+  if (!byKey) reflectedLinesMemo.set(units, (byKey = new Map()));
+  const key = `${matchStartMs}|${matchEndSeconds}`;
+  let out = byKey.get(key);
+  if (!out)
+    byKey.set(
+      key,
+      (out = reflectedSpells(units, matchStartMs).filter(
+        (r) => r.atSeconds >= 0 && r.atSeconds <= matchEndSeconds,
+      )),
+    );
+  return out;
+}
+
+/** `caster>reflector@ms` of a REFLECT row */
+export function reflectRowKey(
+  casterId: string,
+  reflectorId: string,
+  ms: number,
+): string {
+  return `${casterId}>${reflectorId}@${ms}`;
+}
+
+/** Every REFLECT row a printed `[REFLECTED]` line states (its chain's rows).
+ * Pipeline T120 (codex 85-tk-L-T120-2 #1 / 2b #1): such a row needs no
+ * `[CC AVOIDED?]` line; any other — a reflected Silence with nothing back,
+ * which `reflectedSpells`' damage door drops — keeps its own. */
+export function reflectLineRowKeys(
+  units: readonly ICombatUnit[],
+  matchStartMs: number,
+  matchEndSeconds: number,
+): Set<string> {
+  const keys = new Set<string>();
+  for (const r of reflectedLines(units, matchStartMs, matchEndSeconds))
+    for (const ms of r.rowsMs)
+      keys.add(reflectRowKey(r.casterId, r.reflectorId, ms));
+  return keys;
 }
