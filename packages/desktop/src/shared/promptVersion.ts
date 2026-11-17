@@ -1378,5 +1378,11 @@
  *  drops a control the healer's up CC-avoidance aura stops; a kick-eaten
  *  menu row names a pet kicker through its owner.
  *  See docs/prompt-version-history.md.
+ *
+ * v573 (2026-11-17; pipeline batch B96, T130): [MINOR DISPELS] files a
+ *  dispel row with an unresolved source as a press when that source casts
+ *  the spell in the round; a removal's press is a cast inside the match
+ *  window, not any older cast.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 572;
+export const PROMPT_VERSION = 573;

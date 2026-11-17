@@ -7081,3 +7081,23 @@ log's name. 605 (base capture at 7b1f27539 vs branch), new scan5/t116
 menuCjkLeak: 12 / 7,446 -> 0 / 7,446; 196 kick-eaten rows change (12 CJK and
 184 ASCII pet names now `<owner>'s pet`), 0 candidate ids added or removed,
 0 context lines.
+
+v573 (2026-11-17; pipeline batch B96, T130; round 13 audit). [MINOR
+DISPELS] filed a press as passive when its SPELL_DISPEL row had no cast row
+and an unresolved source (Nature's Cure with flags 0x528 read `Nature's Cure
+(passive)`). dispelKind: an unresolved-source row (isUnresolvedSourceFlags)
+whose source casts that spell in the round, with none of its casts in
+UNSEEN_PRESS_REPEAT_GUARD_MS (5 s) before (dispelOfUnseenPress), is
+deliberate; a press just before keeps Improved Spellsteal repeats as procs.
+reconstructDispelSummary, confidenceAudit and dispelKindScan pass the row's
+flags. minorDispels castMsOf: a removal's press is a cast within
+DISPEL_CAST_MATCH_WINDOW_MS (the last at or before, else the first after),
+not any older cast (a 1:45 Purify had merged into the 1:16 press). Audited
+line: `Nature's Cure (passive), Nature's Cure x7 (...)` -> `Nature's Cure x8
+(0:16 Wither; ...)`. 605 (base capture at c14bfdb04 vs a same-tree pick onto
+it), new scan5/t130 pressRenderedPassive: 7 -> 0 (Nature's Cure 2,
+Spellsteal 1 distinct); repeatRenderedPress 0 / 6 -> 0 / 6; context diff 22
+lines in 8 rounds, all [MINOR DISPELS]; other scans 0 new violations; menu
+rows unchanged. Not changed: a resolved-source Spellsteal or Poison
+Cleansing Totem dispel with no cast row still reads as a proc (another
+mechanism).
