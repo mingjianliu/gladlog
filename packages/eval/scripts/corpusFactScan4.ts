@@ -1490,7 +1490,12 @@ function runRound(ctx: IContext): void {
         const at = tsOf(a);
         if (at < start || at > end) continue;
         bump("unseenEndAbsorbedTick");
-        const endMs = holderFirstOwnActionAfterMs(u, at, String(a.spellId));
+        const endMs = holderFirstOwnActionAfterMs(
+          u,
+          at,
+          String(a.spellId),
+          units,
+        );
         const firstTick = Math.min(
           Infinity,
           ...tickRows.map(tsOf).filter((t: number) => t > at),

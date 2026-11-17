@@ -353,7 +353,14 @@ function b98Shapes(ctx: IRoundCtx): void {
     );
     rows.forEach((a, i) => {
       if (ev(a) !== APPLIED) return;
-      const next = rows.slice(i + 1).find((b) => b.spellId === a.spellId);
+      // the application's lifecycle: its REFRESH / DOSE rows go on, the
+      // next APPLIED or REMOVED ends it (codex 85-tk-N-T113-5 #3)
+      const next = rows
+        .slice(i + 1)
+        .find(
+          (b) =>
+            b.spellId === a.spellId && (ev(b) === APPLIED || ev(b) === REMOVED),
+        );
       if (next && ev(next) === REMOVED) return;
       const id: string = a.spellId;
       const from = tsOf(a);
