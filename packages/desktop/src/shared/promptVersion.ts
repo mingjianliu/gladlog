@@ -1362,5 +1362,11 @@
  *  [PRESS] says the cooldown shortens with haste, [RES] and a kill
  *  window's `back inside` print an upper bound.
  *  See docs/prompt-version-history.md.
+ *
+ * v570 (2026-11-16; pipeline batch B92, T119): a passive or
+ *  side-effect part of a [MINOR DISPELS] line gets its own line at its
+ *  own first removal (user ruling R49); only a deliberate part counts as
+ *  stating a press.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 569;
+export const PROMPT_VERSION = 570;

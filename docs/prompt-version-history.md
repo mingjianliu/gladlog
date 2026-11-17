@@ -7009,3 +7009,25 @@ f4bab36ef vs branch), new scan5/t111 hasteScaledExactBack: 483 / 574 -> 0 /
 in place; gates identical; family diff 0 flags; menu rows 7,449 -> 7,449.
 Recorded, not fixed (branch review, synthetic, 0 on the 605): a team with a
 Retribution and a Holy Paladin can make the scan flag a line it should not.
+
+v570 (2026-11-16; pipeline batch B92, T119; round 12 retest M5; user ruling
+R49). [MINOR DISPELS] folded every part of one source into one line at the
+source's first second; passive and side-effect parts carry no time of their
+own, so `0:22 ... Swift Art (side effect of the cast) x3, Fortifying Brew
+(side effect of the cast)` put a 1:43 Fortifying Brew removal, which set
+off a backlash, at 0:22. User ruling 2026-11-16 (option A): deliberate
+parts keep one line; each passive / side-effect part gets its own
+[MINOR DISPELS] line of the same source at its own first removal, part text
+verbatim, no new words, the backlash gate untouched. A [MINOR DISPELS] line
+counts as stating a press only through a deliberate part
+(minorDispelsLineStatesSpell, read by lineStatesPress), so a split passive
+line in a press's second no longer hides that press's [PRESS] line. 605
+(base capture at 12e8d59f1 vs branch), new scan5/t119
+minorPartStampedEarly: 4556 / 9376 -> 0 / 9367 (the audited match 45 / 96
+-> 0 / 96); [MINOR DISPELS] lines 4,184 out / 10,108 in (+0.3 % body
+lines); [PRESS] lines: +644 that a passive / side-effect mention used to
+hide; 94 no longer print because a deliberate part of the same spell now
+sits in the press's own second and states it (the rule that already held
+whenever a deliberate part sat in the press second; e.g. `0:53 Mass Dispel
+x1 (0:53 ...)`, stamped 0:36 before); findings files 0 of 3,519; gates 110
+-> 110; family diff 0 flags.
