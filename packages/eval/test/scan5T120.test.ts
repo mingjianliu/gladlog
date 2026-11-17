@@ -14,29 +14,48 @@ function scan(
   missType = "MISS",
   spellId = HOJ,
   extraMs: number[] = [],
+  /** the rows' caster: the enemy, or its pet */
+  casterId: "e1" | "pet1" = "e1",
 ): number {
   let n = 0;
+  const rows = [60_000, ...extraMs].map((t) => ({
+    spellId,
+    spellName: spellId === HOJ ? "Hammer of Justice" : "Silence",
+    srcUnitId: casterId,
+    destUnitId: "p1",
+    missType,
+    timestamp: t,
+    logLine: { event: "SPELL_MISSED", timestamp: t },
+  }));
   const victim = {
     id: "p1",
     name: "Victim",
     reaction: 1,
     auraEvents: [],
-    missesIn: [60_000, ...extraMs].map((t) => ({
-      spellId,
-      spellName: "Hammer of Justice",
-      srcUnitId: "e1",
-      missType,
-      timestamp: t,
-      logLine: { event: "SPELL_MISSED", timestamp: t },
-    })),
+    missesIn: rows,
+    missesOut: [],
   };
-  const enemy = { id: "e1", name: "Enemy", reaction: 2 };
+  // the producer's chains read the caster's own rows (`reflectedSpells`)
+  const enemy = {
+    id: "e1",
+    name: "Enemy",
+    reaction: 2,
+    missesOut: casterId === "e1" ? rows : [],
+  };
+  const pet = {
+    id: "pet1",
+    name: "Felhunter",
+    reaction: 2,
+    ownerId: "e1",
+    missesOut: casterId === "pet1" ? rows : [],
+  };
   run({
     firstOwnerOfRound: true,
     lines,
-    units: [victim, enemy],
+    units: [victim, enemy, pet],
     players: [victim],
-    pidOf: (n: string) => (n === "Victim" ? "1" : undefined),
+    pidOf: (n: string) =>
+      n === "Victim" ? "1" : n === "Enemy" ? "4" : undefined,
     start: 0,
     roundEndAt: 300_000,
     bump: () => {},
@@ -86,83 +105,45 @@ describe("scan5 failedControlNoLine", () => {
       ]),
     ).toBe(1);
   });
-  // codex 85-tk-L-T120-2d: a row the producer drops (an owner's command
-  // row its pet carried out) can start the walk a second early
-  it("a chain whose walk starts before the printed line still finds it", () => {
-    expect(
-      scan(
-        [
-          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected ×2 by 1(Victim)",
-        ],
-        "REFLECT",
-        HOJ,
-        [59_900, 62_600],
-      ),
-    ).toBe(0);
+  // a REFLECT row of a chain the producer prints is stated by that line
+  // alone (codex 85-tk-L-T120-2 #2 … 2e)
+  const REF = (by: string, n = 1, caster = "4(Enemy)'s") =>
+    `1:00  [REFLECTED]   ${caster} Hammer of Justice reflected${n >= 2 ? ` ×${n}` : ""} by ${by}`;
+  it("a reflected control's row is stated by its chain's [REFLECTED] line", () => {
+    expect(scan([REF("1(Victim)")], "REFLECT")).toBe(0);
+    // another reflector's line, or none
+    expect(scan([REF("2(Other)")], "REFLECT")).toBe(1);
+    expect(scan([], "REFLECT")).toBe(1);
   });
-  // codex 85-tk-L-T120-2c #2: a summon's grouped line names `pet's X`
-  it("a pet's grouped `reflected ×2` line states its second row", () => {
+  it("a row 2.5 s into the chain is stated by the first row's `reflected ×2` line", () => {
+    expect(scan([REF("1(Victim)", 2)], "REFLECT", HOJ, [62_500])).toBe(0);
+    // 3.5 s later starts its own chain, whose line is missing
+    expect(scan([REF("1(Victim)")], "REFLECT", HOJ, [63_500])).toBe(1);
+  });
+  it("another caster's line does not state the row", () => {
+    expect(scan([REF("1(Victim)", 1, "5(Other)'s")], "REFLECT")).toBe(1);
+  });
+  it("a pet's chain is stated by `N(owner)'s pet's X reflected ×2`", () => {
     expect(
       scan(
-        [
-          "1:00  [REFLECTED]   4(Enemy)'s pet's Hammer of Justice reflected ×2 by 1(Victim)",
-        ],
+        [REF("1(Victim)", 2, "4(Enemy)'s pet's")],
         "REFLECT",
         HOJ,
         [62_500],
+        "pet1",
       ),
     ).toBe(0);
   });
-  // codex 85-tk-L-T120-2b #2: the second row of a chain is stated by the
-  // chain's first-row line
-  it("a REFLECT row 2.5 s after another of the chain is stated by its `reflected ×2` line", () => {
+  it("a reflected Silence no [REFLECTED] line prints needs its own line", () => {
+    expect(scan([], "REFLECT", "15487")).toBe(1);
     expect(
       scan(
         [
-          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected ×2 by 1(Victim)",
+          "1:00  [CC AVOIDED?]   1(Victim): Silence (by 4(Enemy)) logged REFLECT",
         ],
         "REFLECT",
-        HOJ,
-        [62_500],
+        "15487",
       ),
     ).toBe(0);
-    // a row 3.5 s after starts its own chain, with no line
-    expect(
-      scan(
-        [
-          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected by 1(Victim)",
-        ],
-        "REFLECT",
-        HOJ,
-        [63_500],
-      ),
-    ).toBe(1);
-  });
-  // codex 85-tk-L-T120-2 #2: a grouped return prints `reflected ×N by`
-  it("a [REFLECTED] line naming the player as reflector clears a REFLECT row, grouped or not", () => {
-    expect(
-      scan(
-        [
-          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected by 1(Victim)",
-        ],
-        "REFLECT",
-      ),
-    ).toBe(0);
-    expect(
-      scan(
-        [
-          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected ×2 by 1(Victim)",
-        ],
-        "REFLECT",
-      ),
-    ).toBe(0);
-    expect(
-      scan(
-        [
-          "1:00  [REFLECTED]   4(Enemy)'s Hammer of Justice reflected ×2 by 2(Other)",
-        ],
-        "REFLECT",
-      ),
-    ).toBe(1);
   });
 });

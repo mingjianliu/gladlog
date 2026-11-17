@@ -13,11 +13,17 @@
  *    the round, the control not landing on them within 1 s. Violation
  *    (kind = the miss type): no timeline line in its second ±1 names the
  *    control and the player — as its subject, or in the miss tag of the
- *    control's cast line (`[MISSED on N(…)`, `CC_MISS_TAG_WORD`) or the
- *    `[REFLECTED]` line's `reflected[ ×N] by N(…)` (`parseReflectedLine`). Counted: every such row of a player
- *    with a pid.
+ *    control's cast line (`[MISSED on N(…)`, `CC_MISS_TAG_WORD`). A
+ *    REFLECT row of a chain the producer prints (`reflectedSpells`, the
+ *    chain its [REFLECTED] line is built from) is stated by that line
+ *    alone: at the chain's first row, its caster, spell and reflector
+ *    (`parseReflectedLine`; kind REFLECT when missing). Counted: every
+ *    such row of a player with a pid.
  */
-import { REFLECT_CHAIN_GAP_MS } from "@gladlog/analysis/src/context/spellOutcomeLines";
+import {
+  type IReflected,
+  reflectedSpells,
+} from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
   CC_MISS_TAG_WORD,
@@ -54,10 +60,10 @@ export function run(ctx: IRoundCtx): void {
     bySec.set(s, list);
   }
   const byId = new Map(ctx.units.map((u) => [u.id as string, u]));
-  const ownerIdOf = (id: string): string => {
-    const u = byId.get(id);
-    return (u?.ownerId as string | undefined) || id;
-  };
+  // the producer's reflect chains, once per round
+  let chains: IReflected[] | undefined;
+  const reflectChains = (): IReflected[] =>
+    (chains ??= reflectedSpells(ctx.units, ctx.start));
   for (const u of ctx.players) {
     const pid = ctx.pidOf(u.name);
     if (!pid) continue;
@@ -84,57 +90,58 @@ export function run(ctx: IRoundCtx): void {
       if (landed) continue;
       ctx.bump(C);
       const sec = Math.floor((ts - ctx.start) / 1000);
-      // a reflected row is printed at its chain's first row — the same
-      // spell's REFLECT rows from that caster on this player, each within
-      // `REFLECT_CHAIN_GAP_MS` of the one before (`reflectedSpells`' chain;
-      // codex 85-tk-L-T120-2b #2: a second Polymorph 2.5 s later is the
-      // first's `reflected ×2` line)
-      let chainFirst = ts;
+      // a REFLECT row the producer's [REFLECTED] line states — a row of a
+      // chain `reflectedSpells` prints (its own caster, reflector, ms and
+      // spell: the chain the line is built from, command rows its pet
+      // carried out dropped) — must have that line: at the chain's first
+      // row, naming its caster, spell and reflector (codex 85-tk-L-T120-2b
+      // #2 … 2e: every reading rebuilt beside the producer's chain missed a
+      // case). A row of no printed chain needs a line of its own (below).
       if (m.missType === "REFLECT") {
-        const prior = ((u.missesIn ?? []) as any[])
-          .filter(
-            (r) =>
-              r.missType === "REFLECT" &&
-              // one caster: a pet's rows and its owner's command rows
-              // (`petCommands` moves the latter to the pet; codex
-              // 85-tk-L-T120-2c #2)
-              ownerIdOf(r.srcUnitId) === ownerIdOf(m.srcUnitId) &&
-              nameOf(String(r.spellId ?? ""), r.spellName) === name &&
-              tsOf(r) < ts,
-          )
-          .map(tsOf)
-          .sort((a, b) => b - a);
-        for (const t of prior)
-          if (chainFirst - t <= REFLECT_CHAIN_GAP_MS) chainFirst = t;
-          else break;
-      }
-      // the line stands at its chain's first row, at or after the walk's
-      // start: the walk may take an owner's command row the producer drops
-      // (`petCommands`' carriedOutBy) and start before it — any second from
-      // there to the row's own (codex 85-tk-L-T120-2d)
-      const firstSec = Math.floor((chainFirst - ctx.start) / 1000);
-      const span: number[] = [];
-      for (let s = firstSec; s <= sec; s++) span.push(s);
-      const reflectedNamed = span
-        .flatMap((s) => bySec.get(s) ?? [])
-        .some((l) => {
-          const r = parseReflectedLine(l);
-          // a summon's spell prints `N(…)'s pet's X` — the spell is X
-          return (
-            r?.reflectorPid === pid &&
-            (r.spell === name || r.spell.endsWith(`'s ${name}`))
+        const chain = reflectChains().find(
+          (c) =>
+            c.reflectorId === u.id &&
+            c.spellName === name &&
+            c.rowsMs.some(
+              (ms, k) =>
+                ms === ts && (c.rowSrcIds[k] ?? c.casterId) === m.srcUnitId,
+            ),
+        );
+        if (chain) {
+          const at = Math.floor((chain.rowsMs[0]! - ctx.start) / 1000);
+          const casterUnit = byId.get(chain.casterId);
+          const casterPid = ctx.pidOf(
+            (casterUnit?.ownerId && byId.get(casterUnit.ownerId)?.name) ||
+              chain.casterName,
           );
-        });
-      if (m.missType === "REFLECT" && reflectedNamed) continue;
+          const stated = (bySec.get(at) ?? []).some((l) => {
+            const r = parseReflectedLine(l);
+            // a summon's spell prints `N(…)'s pet's X` — the spell is X
+            return (
+              r?.reflectorPid === pid &&
+              (casterPid === undefined || r.casterPid === casterPid) &&
+              (r.spell === name || r.spell.endsWith(`'s ${name}`))
+            );
+          });
+          if (stated) continue;
+          ctx.violate(
+            C,
+            "REFLECT",
+            ts,
+            `${u.id}#${id}#${ts}`,
+            `${fmtS(sec)} ${pid}(${u.name}) ← ${name} (by ${owner.name}) reflected; its chain's [REFLECTED] line at ${fmtS(at)} is missing`,
+          );
+          continue;
+        }
+      }
       const named = [sec - 1, sec, sec + 1]
         .flatMap((s) => bySec.get(s) ?? [])
         // the player as the line's subject (`[TAG]   N(…): X` / `N(…) ← X`),
         // never as a caster in `(by N(…))` (codex 85-tk-L-T120-1 #3); or
         // the miss stated against them: a cast line's fail tag (`[MISSED on
         // N(…)`, `[PARRIED by N(…)` — `CC_MISS_TAG_WORD`, the tag the press
-        // line of the other side's control carries) or the `[REFLECTED]`
-        // line's `reflected by N(…)` (T120 605 rerun: 243 of 276 rows were
-        // stated so)
+        // line of the other side's control carries; T120 605 rerun: most
+        // of 276 rows were stated so)
         .some(
           (l) =>
             l.includes(name) &&
@@ -143,11 +150,7 @@ export function run(ctx: IRoundCtx): void {
                 CC_MISS_TAG_WORD[m.missType] !== undefined &&
                 l.includes(
                   `[${CC_MISS_TAG_WORD[m.missType] === "MISSED" ? "MISSED on" : CC_MISS_TAG_WORD[m.missType]} ${pid}(`,
-                )) ||
-              // a grouped return prints `reflected ×N by` (codex
-              // 85-tk-L-T120-2 #2: the shared parser)
-              (m.missType === "REFLECT" &&
-                parseReflectedLine(l)?.reflectorPid === pid)),
+                ))),
         );
       if (named) continue;
       ctx.violate(
