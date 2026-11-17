@@ -1113,6 +1113,51 @@ export function immunityBreak(
 }
 
 /**
+ * Would the listed CC-avoidance buff `buffId` (`CC_AVOIDANCE_BUFF_SPELLS`)
+ * stop the control `ccSpellId`? The buff half of `applicableCCAvoidanceIds`
+ * — one predicate for "which tools would have applied" (cc-avoidable) and
+ * "is the healer covered at this instant" (`analyzeHealerExposureAtBurst`,
+ * T128: a healer under Nullifying Shroud was listed Full-DR controls).
+ * A mechanic-limited buff (`MECHANIC_LIMITED_AVOIDANCE_BUFFS`) stops only a
+ * control of one of its DB2 mechanics; the rest ask the official school
+ * immunity, then the hand magic-only rule.
+ */
+export function avoidanceBuffCoversCc(
+  buffId: string,
+  ccSpellId: string,
+  ccSpellName: string = getEnglishSpellName(ccSpellId, ""),
+): boolean {
+  // a Druid form stops Polymorph / Hex only (DB2 aura 77, mechanic 17) —
+  // the forms are no table entry; `applicableCCAvoidanceIds` offers them by
+  // the same name test
+  if (DRUID_FORM_BUFFS.has(buffId)) return /polymorph|hex/i.test(ccSpellName);
+  if (MECHANIC_LIMITED_AVOIDANCE_BUFFS.has(buffId)) {
+    const mech = ccMechanicOf(ccSpellId);
+    if (mech !== undefined && immunityMechanics(buffId)?.includes(mech))
+      return true;
+    return false;
+  }
+  const covers = immunityCoversSpell(buffId, ccSpellId);
+  if (covers === false) return false; // 官方判定:挡不住
+  if (covers === undefined) {
+    // 官方缺这个免疫的 aura39 行(反魔法护罩/法术反射/剑刃风暴/龟盾…)
+    // the control is what the shield would stop, and its school can differ
+    // from the button's: Intimidation 19577 is Nature, its stun 24394
+    // Physical (226-3-3158 0:52: Cloak of Shadows named against it), while
+    // Binding Shot's physical tether 117405 is no control, its stun 117526
+    // Arcane
+    const controls = [...castAndEffectIds(ccSpellId)].filter(
+      (id) => SPELL_CATEGORIES[id]?.type === "cc",
+    );
+    const ccIsPhysical = (controls.length > 0 ? controls : [ccSpellId]).every(
+      (id) => isPhysicalSpell(id) ?? PHYSICAL_CC_IDS.has(id),
+    );
+    if (MAGIC_ONLY_IMMUNITY_IDS.has(buffId) && ccIsPhysical) return false;
+  }
+  return true;
+}
+
+/**
  * DEFENSIVE-001 (cc-avoidable, 2026-08-07, BACKLOG #18 second batch): pure
  * derivation of "which avoidance spell ids would explain dodging this CC
  * application" — the identical gating rules the CC Avoidance Correlation
@@ -1139,7 +1184,6 @@ export function applicableCCAvoidanceIds(
 ): Set<string> {
   const out = new Set<string>();
   const isGroundCC = isGroundCc(ccSpellId);
-  const isPolyOrHex = /polymorph|hex/i.test(ccSpellName);
 
   // A. Buff-based avoidance. 官方优先(GH #29 阶段 1):学派掩码知道两边时直接
   // 判定「这个免疫挡不挡得住这个控」;官方缺数据时才回退到原来的手工单向规则。
@@ -1151,35 +1195,10 @@ export function applicableCCAvoidanceIds(
   // 回退分支里 CC 的「是不是物理」也改问官方(`isPhysicalSpell`),手工的
   // PHYSICAL_CC_IDS 只在官方没有该 id 时兜底:那 9 条本身没写错,但漏了制裁之锤
   // (神圣)、暗影之怒(暗影)、混沌新星(多学派)这些魔法控 —— 手工名单证不了全。
-  for (const buffId of CC_AVOIDANCE_BUFF_SPELLS.keys()) {
-    if (MECHANIC_LIMITED_AVOIDANCE_BUFFS.has(buffId)) {
-      const mech = ccMechanicOf(ccSpellId);
-      if (mech !== undefined && immunityMechanics(buffId)?.includes(mech))
-        out.add(buffId);
-      continue;
-    }
-    const covers = immunityCoversSpell(buffId, ccSpellId);
-    if (covers === false) continue; // 官方判定:挡不住
-    if (covers === undefined) {
-      // 官方缺这个免疫的 aura39 行(反魔法护罩/法术反射/剑刃风暴/龟盾…)
-      // the control is what the shield would stop, and its school can differ
-      // from the button's: Intimidation 19577 is Nature, its stun 24394
-      // Physical (226-3-3158 0:52: Cloak of Shadows named against it), while
-      // Binding Shot's physical tether 117405 is no control, its stun 117526
-      // Arcane
-      const controls = [...castAndEffectIds(ccSpellId)].filter(
-        (id) => SPELL_CATEGORIES[id]?.type === "cc",
-      );
-      const ccIsPhysical = (controls.length > 0 ? controls : [ccSpellId]).every(
-        (id) => isPhysicalSpell(id) ?? PHYSICAL_CC_IDS.has(id),
-      );
-      if (MAGIC_ONLY_IMMUNITY_IDS.has(buffId) && ccIsPhysical) continue;
-    }
-    out.add(buffId);
-  }
-  if (isPolyOrHex) {
-    for (const formId of DRUID_FORM_BUFFS.keys()) out.add(formId);
-  }
+  for (const buffId of CC_AVOIDANCE_BUFF_SPELLS.keys())
+    if (avoidanceBuffCoversCc(buffId, ccSpellId, ccSpellName)) out.add(buffId);
+  for (const formId of DRUID_FORM_BUFFS.keys())
+    if (avoidanceBuffCoversCc(formId, ccSpellId, ccSpellName)) out.add(formId);
   // B. Mobility-based avoidance: any repositioning spell dodges a ground CC;
   // only the TARGETED_CC_DODGE_SPELLS subset dodges a targeted CC. Druid
   // forms never count here (H14: shapeshifting does not reposition the

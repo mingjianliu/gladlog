@@ -33,6 +33,8 @@ import {
 } from "./castMissRows";
 import {
   analyzePlayerCCAndTrinket,
+  avoidanceBuffCoversCc,
+  ccAvoidanceBuffsUpAt,
   IPlayerCCTrinketSummary,
   pvpTrinketRemainingSecondsAt,
   rendersCcOnTeamLine,
@@ -190,9 +192,41 @@ export interface IHealerBurstExposure {
   alreadyIn?: { spellName: string; untilSeconds: number };
 }
 
+/** The exposure list of a round, with T128's count of burst windows whose
+ * every threat an up avoidance aura of the healer's stopped
+ * (`healerCcCoverAt`) — windows the list itself leaves out. */
+export type IHealerExposureList = IHealerBurstExposure[] & {
+  coveredWindows?: number;
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * T128 (CXA13 D28, ba2503cc r0): the healer's own CC-avoidance auras up at an
+ * instant (`ccAvoidanceBuffsUpAt`, the reading every `[IMMUNE — X was up]` /
+ * `[CC AVOIDED?]` cause uses — Druid forms too, the log's start list read
+ * from `logStartMs`) and, per control, the first of them that would stop it
+ * (`avoidanceBuffCoversCc`, cc-avoidable's buff test). A Nullifying Shroud
+ * up when an exposure window opened let Blinding Light and Hammer of
+ * Justice be listed as Full-DR threats. The exposure threat filter and
+ * scan5/t128 both ask this.
+ */
+export function healerCcCoverAt(
+  healer: ICombatUnit,
+  atMs: number,
+  logStartMs: number,
+  unitsById?: ReadonlyMap<string, ICombatUnit>,
+): (ccSpellId: string) => string | undefined {
+  const up = ccAvoidanceBuffsUpAt(healer, atMs, {
+    withForms: true,
+    logStartMs,
+    ...(unitsById ? { casterOf: (id: string) => unitsById.get(id) } : {}),
+  });
+  return (ccSpellId) =>
+    up.find((b) => avoidanceBuffCoversCc(b.spellId, ccSpellId))?.name;
+}
 
 function getTrinketStateAtSeconds(
   summary: IPlayerCCTrinketSummary,
@@ -302,13 +336,17 @@ export function analyzeHealerExposureAtBurst(
   allUnits?: Iterable<ICombatUnit>,
   /** the round, for the healer's immunity-form spans; absent = none read */
   combat?: Parameters<typeof buildAuraIntervals>[1],
-): IHealerBurstExposure[] {
+): IHealerExposureList {
   const enemyCCHistory = buildEnemyCCHistory(
     allFriendlyCCSummaries,
     enemies,
     allUnits,
   );
-  const results: IHealerBurstExposure[] = [];
+  const results: IHealerExposureList = [];
+  let coveredWindows = 0;
+  const unitsById = new Map<string, ICombatUnit>(
+    [...(allUnits ?? [])].map((u) => [u.id, u]),
+  );
   const enemyIds = new Set(enemies.map((e) => e.id));
   const ourSideIds = new Set<string>([healer.id]);
   for (const u of allUnits ?? [])
@@ -338,6 +376,8 @@ export function analyzeHealerExposureAtBurst(
     : [];
   for (const window of burstWindows) {
     const windowMs = matchStartMs + window.fromSeconds * 1000;
+    // T128: a control the healer's up avoidance aura would stop is no threat
+    const coverOf = healerCcCoverAt(healer, windowMs, matchStartMs, unitsById);
     if (
       formSpans.some(
         (iv) => iv.fromS <= window.fromSeconds && window.fromSeconds < iv.toS,
@@ -361,6 +401,7 @@ export function analyzeHealerExposureAtBurst(
     } = getTrinketStateAtSeconds(healerCCSummary, window.fromSeconds);
 
     const threats: IHealerCCThreat[] = [];
+    let covered = 0;
     const enemyPosByName = new Map<string, IPosition>();
 
     for (const enemy of enemies) {
@@ -455,6 +496,10 @@ export function analyzeHealerExposureAtBurst(
           matchStartMs,
         );
         if (healerDRLevel === "Immune") continue; // healer is immune — not a threat
+        if (coverOf(spellId)) {
+          covered++; // an up avoidance aura stops it (T128)
+          continue;
+        }
 
         threats.push({
           enemyName: enemy.name,
@@ -469,7 +514,10 @@ export function analyzeHealerExposureAtBurst(
       }
     }
 
-    if (threats.length === 0) continue;
+    if (threats.length === 0) {
+      if (covered > 0) coveredWindows++;
+      continue;
+    }
 
     const exposedThreats = threats.filter((t) => !t.losBlocked);
     const exposureLabel = computeExposureLabel(trinketState, exposedThreats);
@@ -524,6 +572,7 @@ export function analyzeHealerExposureAtBurst(
     });
   }
 
+  if (coveredWindows > 0) results.coveredWindows = coveredWindows;
   return results;
 }
 
@@ -752,7 +801,7 @@ export function aimedControlsForKit(
 }
 
 export function formatEnemyCCKitHeader(
-  exposures: IHealerBurstExposure[],
+  exposures: IHealerExposureList,
   /** cc-dr F-KT1 (ruling A17, cc-dr R3 = A): the healer's roster label when
    * the log owner is not the healer — the kit is threats to THAT healer at
    * enemy burst windows, not to the reader (33 DPS-owner rounds read "threats
@@ -803,7 +852,7 @@ export function formatEnemyCCKitHeader(
     }
   }
 
-  if (enemyOrder.length === 0) return [];
+  if (enemyOrder.length === 0 && !exposures.coveredWindows) return [];
 
   for (const l of landed ?? []) {
     let kit = kits.get(l.enemyName);
@@ -840,6 +889,12 @@ export function formatEnemyCCKitHeader(
         aimed: a.count,
       });
   }
+
+  // a round whose every burst-window threat was covered (T128: an up
+  // avoidance aura, `coveredWindows`) still states what landed and what was
+  // aimed (codex T128-1 P2); a round with no threat for any other reason
+  // keeps the kit off, as before
+  if (enemyOrder.length === 0) return [];
 
   const aimedAt = healerLabel ? "them" : "you";
   const parts = enemyOrder.map((name) => {
@@ -1493,7 +1548,7 @@ export interface IHealerExposurePre {
 export function computeHealerExposureEvents(
   combat: AtomicArenaCombat,
   pre?: IHealerExposurePre,
-): IHealerBurstExposure[] {
+): IHealerExposureList {
   const units = Object.values(combat.units ?? {}) as ICombatUnit[];
   const players = units.filter((u) => (u as { info?: unknown }).info);
   // The pre branch uses the caller's pieces exclusively, not the friends/enemies

@@ -3650,6 +3650,17 @@ const INDEX: PredicateRow[] = [
     symbol: "ccAvoidanceBuffsUpAt",
     mod: ccTrinketAnalysis,
   },
+  // pipeline T128: would an avoidance aura stop a control; the healer's cover
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "avoidanceBuffCoversCc",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/healerExposureAnalysis.ts`,
+    symbol: "healerCcCoverAt",
+    mod: healerExposureAnalysis,
+  },
   // fact1215 C10: a miss row that stands for a control; a warlock's purge pet
   {
     file: `${A}/utils/castMissRows.ts`,
