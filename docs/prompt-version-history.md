@@ -7381,3 +7381,26 @@ candidate's capture is byte-identical to its parent's (archive-relative hash
 18e54c6a94c4, 3,519 owners): Hover's cooldown is in no rendered line or menu
 row (capture checked on the Mac). Codex branch review 85-tk-CD-T137-1:
 APPROVE.
+
+v591 (2026-11-18; pipeline batch B119, T150; round 14 P09). A pressed
+offensive cooldown whose aura is listed again with no REMOVED after its
+official length (the batch that re-states a unit after it was unseen) ended
+its span at the official length although the log shows the aura up all along.
+observedEffectEnd (utils/enemyCDs.ts), the one place that decides where such a
+span ends, now follows that application: same aura, previous piece closed by
+the cap, no REMOVED / BROKEN between, no later than one official length after
+the cap, not the caster's next press's application and not one clamped from
+after the combat's end. Repro 30846f8e r5: Combustion pressed 80.65 s
+(official 10 s), listed again 92.58 s when the mage left invisibility, REMOVED
+97.06 s; span 80.65-90.65 -> 80.65-97.06, so the kick at 97.05 s carries
+enemyBurst=Combustion. Scan cooldownSpanEndsBeforeUnremovedReapply on the 605:
+16 / 227 presses -> 0 / 227. Contexts: 48 change in 13 archives ([RES],
+[OFFENSIVE WINDOW], a few [HEALER EXPOSURE] and [BURST ANSWERED]). Menu: one
+kick-eaten row in, one out, in 30846f8e r5 (the 97 s kick now carries
+enemyBurst=Combustion and enters; the later 115.2 s kick of the same rank
+leaves under the two-per-round cap): the reproduced case, an existing type,
+under R16. On the 605 the assembled candidate changes 48 contexts in 13
+archives ([RES] 249 lines, [OFFENSIVE WINDOW] 33, [HEALER EXPOSURE] 7, [BURST
+ANSWERED] 3) and one menu: in 30846f8e round 5 the 97 s kick-eaten row enters
+and the 115.2 s one leaves; candidate rows 7,446 = 7,446 (capture checked on
+the Mac). Codex branch review 85-tk-KICK-T150-1b: APPROVE.

@@ -1471,5 +1471,10 @@
  *  (Deep Breath / Breath of Eons resets a Hover charge) is modelled in
  *  Hover's cooldown.
  *  See docs/prompt-version-history.md.
+ *
+ * v591 (2026-11-18; pipeline batch B119, T150): an own offensive
+ *  cooldown's span follows a re-application past half its official duration
+ *  when the log never ended the earlier one.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 590;
+export const PROMPT_VERSION = 591;
