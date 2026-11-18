@@ -1,6 +1,9 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { effectAurasOfCast } from "../data/castEffectAuras";
+import {
+  castsOfTalentEffectAura,
+  effectAurasOfCast,
+} from "../data/castEffectAuras";
 import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
@@ -140,6 +143,11 @@ function genericCdOfAura(
   spec?: unknown,
 ): string | undefined {
   if (OFFENSIVE_AURA_EVIDENCE.has(auraSpellId)) return undefined;
+  // a talent aura a press's effect runs on (Divine Resonance) is that
+  // press's span, read from the press (`talentEffectAuraAtPress`) — never an
+  // occurrence of its own: the press pairing below knows a same-named press
+  // or a cast whose own effect the aura is, and neither holds (pipeline T155)
+  if (castsOfTalentEffectAura(auraSpellId).length > 0) return undefined;
   const cd = offensiveCdOfAura(auraSpellId, spec);
   // the enemy-CD window test on the resolved id too: a table id with no
   // cooldown is no cooldown tracker's (codex 20-F18-02 #2: Archangel 81700)

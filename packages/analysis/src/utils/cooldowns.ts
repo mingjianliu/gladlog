@@ -14,6 +14,7 @@ import {
 } from "../data/auraActivation";
 import baselineDefensivesGenerated from "../data/baselineDefensivesGenerated.json";
 import {
+  castsOfTalentEffectAura,
   castsOwningEffectAura,
   effectAuraHitShare,
   effectAurasOfCast,
@@ -1287,8 +1288,19 @@ export function offensiveCdOfAura(
   const own = offensiveEffectCdId(auraSpellId, spec);
   if (own !== undefined) return own;
   if (OFFENSIVE_AURA_EVIDENCE.has(auraSpellId)) return undefined;
-  return castsOwningEffectAura(auraSpellId).find((c) =>
-    isEnemyCdWindowSpell(c, spec),
+  return (
+    castsOwningEffectAura(auraSpellId).find((c) =>
+      isEnemyCdWindowSpell(c, spec),
+    ) ??
+    // …or the cast whose effect runs on this talent aura (pipeline T155,
+    // r13 P1: a Vanish pressed inside a Retribution's Divine Resonance had
+    // no `[friendly offensive CD active]` — the window builder, [RES] and
+    // the kill windows read the Resonance as Divine Toll's span
+    // (`effectSpanIdsOfCast`) and the aura readers did not). Spec-gated as
+    // its cast is: a Resonance whose caster's spec is unknown is nobody's.
+    castsOfTalentEffectAura(auraSpellId).find((c) =>
+      isEnemyCdWindowSpell(c, spec),
+    )
   );
 }
 

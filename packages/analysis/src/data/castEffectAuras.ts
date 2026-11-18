@@ -172,6 +172,21 @@ export const TALENT_EFFECT_AURAS_OF_CAST: Readonly<
   "375576": ["1266308"],
 };
 
+/** The casts whose effect runs on this TALENT aura
+ * (`TALENT_EFFECT_AURAS_OF_CAST`, reversed): Divine Resonance 1266308 →
+ * Divine Toll. The aura readers' half of the table (pipeline T155). */
+export function castsOfTalentEffectAura(
+  auraSpellId: string,
+): readonly string[] {
+  return TALENT_CASTS_BY_AURA.get(auraSpellId) ?? NONE;
+}
+const TALENT_CASTS_BY_AURA: ReadonlyMap<string, readonly string[]> = (() => {
+  const m = new Map<string, string[]>();
+  for (const [cast, auras] of Object.entries(TALENT_EFFECT_AURAS_OF_CAST))
+    for (const a of auras) m.set(a, [...(m.get(a) ?? []), cast]);
+  return m;
+})();
+
 /** `castAndEffectIds` plus the talent aura a press's effect may run on
  * (`TALENT_EFFECT_AURAS_OF_CAST`) — the ids an offensive press's observed
  * span reads, and nothing else (misses, control and dispel readers keep
