@@ -13,7 +13,8 @@
  *   3 -> 2   round 2 is still kept: the first frame after the click is the
  *            finished report (data-fill="done"), no placeholder ever shown;
  *   2 -> 1   round 1 was evicted by round 3: the first frame is the frame
- *            with placeholders, and the fill runs in steps.
+ *            with placeholders, and the fill runs in steps (at least one
+ *            step is painted between that frame and the finished report).
  * Exit code 1 when either reads otherwise. Each switch also records the time
  * to the finished report and the longest main-thread task after the click.
  * NEVER point it at a real library: the app writes sidecars into what it opens.
@@ -36,6 +37,11 @@ if (!userData || !outPath)
   throw new Error("usage: <userData> <out.json> [row] [launches]");
 const ROW = Number(rowArg ?? 0);
 const LAUNCHES = Number(launchesArg ?? 3);
+if (!Number.isInteger(ROW) || ROW < 0)
+  throw new Error(`row must be a non-negative integer, got ${rowArg}`);
+// no launch, no sample: a run that measured nothing must not pass
+if (!Number.isInteger(LAUNCHES) || LAUNCHES < 1)
+  throw new Error(`launches must be a positive integer, got ${launchesArg}`);
 const MAIN = resolve(
   dirname(fileURLToPath(import.meta.url)),
   process.env["T93_OUT"] ?? "../out",
@@ -48,6 +54,8 @@ type Switch = {
   firstFrame: string;
   /** a placeholder section was on screen at any frame of the switch */
   placeholderSeen: boolean;
+  /** every data-fill value a frame of the switch showed, in order */
+  fills: string[];
   doneMs: number;
   longestTaskMs: number;
 };
@@ -98,18 +106,20 @@ for (let l = 0; l < LAUNCHES; l++) {
       po.observe({ entryTypes: ["longtask"] });
       const start = performance.now();
       let firstFrame = null, placeholderSeen = false, doneAt = null;
+      const fills = [];
       tabs[${round}].click();
       function tick() {
         const now = performance.now();
         const el = document.querySelector(".rpt-shuffle .rpt-match");
         const fill = el ? el.dataset.fill : "shell";
         if (firstFrame === null) firstFrame = fill;
+        if (fills[fills.length - 1] !== fill) fills.push(fill);
         if (!el || el.querySelector(".rpt-skel")) placeholderSeen = true;
         if (fill === "done" && doneAt === null) doneAt = now - start;
         // 400 ms past the finished report: late long tasks are in
         if (doneAt !== null && now - start - doneAt > 400) {
           po.disconnect();
-          return res({ firstFrame, placeholderSeen, doneMs: doneAt, longestTaskMs: longest });
+          return res({ firstFrame, placeholderSeen, fills, doneMs: doneAt, longestTaskMs: longest });
         }
         if (now - start > 120000) return rej(new Error("timeout round ${round}"));
         requestAnimationFrame(tick);
@@ -122,9 +132,14 @@ for (let l = 0; l < LAUNCHES; l++) {
       failures.push(
         `launch ${l}: round ${round + 1} was kept and did not come back in one pass (${JSON.stringify(v)})`,
       );
-    if (kept === false && onePass)
+    // an evicted round fills in STEPS: the frame with placeholders first,
+    // and at least one step painted between it and the finished report — a
+    // build that showed "0" and then computed everything in one task would
+    // go 0 -> done (codex 85-tk-ENG-T199-1 #1)
+    const steps = v.fills.filter((f) => f !== "shell" && f !== "done");
+    if (kept === false && (onePass || v.firstFrame !== "0" || steps.length < 2))
       failures.push(
-        `launch ${l}: round ${round + 1} was evicted and rendered in one pass (${JSON.stringify(v)})`,
+        `launch ${l}: round ${round + 1} was evicted and did not fill in steps (${JSON.stringify(v)})`,
       );
     await page.waitForTimeout(600);
   }
@@ -144,13 +159,20 @@ const summary = VISITS.map(([round, kept], i) => ({
     kept === null ? "first visit" : kept ? "kept: one pass" : "evicted: steps",
   firstFrame: all.map((x) => x.visits[i]!.firstFrame).join(","),
   placeholderSeen: all.map((x) => x.visits[i]!.placeholderSeen).join(","),
+  fills: all.map((x) => x.visits[i]!.fills.join(">")).join(" | "),
   doneMs: Math.round(med(all.map((x) => x.visits[i]!.doneMs))),
   longestTaskMs: Math.round(med(all.map((x) => x.visits[i]!.longestTaskMs))),
 }));
 writeFileSync(
   outPath,
-  JSON.stringify({ userData, row: ROW, launches: LAUNCHES, summary, all, failures }, null, 1),
+  JSON.stringify(
+    { userData, row: ROW, launches: LAUNCHES, summary, all, failures },
+    null,
+    1,
+  ),
 );
+if (all.length !== LAUNCHES)
+  failures.push(`${all.length} of ${LAUNCHES} launches measured`);
 for (const s of summary) console.log(JSON.stringify(s));
 if (failures.length > 0) {
   for (const f of failures) console.error(f);
