@@ -16,7 +16,10 @@ import {
   ReportShell,
   skeletonTeamSizes,
 } from "../src/renderer/src/report/components/ReportSkeleton";
-import { resetSourceMemoForTest } from "../src/renderer/src/report/derive/sourceMemo";
+import {
+  resetSourceMemoForTest,
+  setSourceMemoReadyForTest,
+} from "../src/renderer/src/report/derive/sourceMemo";
 import type { ReportSource } from "../src/renderer/src/report/derive/types";
 import { formatOpenTrace } from "../src/shared/openTrace";
 import { parseDocBytes } from "../src/shared/parseDocBytes";
@@ -172,6 +175,58 @@ describe("MatchReport staged fill", () => {
     const again = render(<MatchReport source={source} matchId="m" staged />);
     expect(root(again.container).dataset["fill"]).toBe("done");
     expect(root(again.container).querySelector(".rpt-skel")).toBeNull();
+  });
+  // pipeline T199: under a time range the ranged derives are computed outside
+  // the whole-match cache — a fill that ran under one is not a completed fill
+  it("带时间窗填完的对局不算填全:去掉时间窗再次挂载仍然分步填,填完后才一次渲染", async () => {
+    const source = fresh();
+    const ranged = render(
+      <MatchReport
+        source={source}
+        matchId="m"
+        staged
+        initialTimeRange={{ fromS: 10, toS: 40 }}
+      />,
+    );
+    await waitFor(
+      () => expect(root(ranged.container).dataset["fill"]).toBe("done"),
+      { timeout: 20_000, interval: 1 },
+    );
+    ranged.unmount();
+    const whole = render(<MatchReport source={source} matchId="m" staged />);
+    expect(root(whole.container).dataset["fill"]).not.toBe("done");
+    expect(root(whole.container).querySelector(".rpt-skel")).toBeTruthy();
+    await waitFor(
+      () => expect(root(whole.container).dataset["fill"]).toBe("done"),
+      { timeout: 20_000, interval: 1 },
+    );
+    whole.unmount();
+    const again = render(<MatchReport source={source} matchId="m" staged />);
+    expect(root(again.container).dataset["fill"]).toBe("done");
+  });
+  it("数据表在填充中途才就绪的对局不算填全:再次挂载仍然分步填", async () => {
+    resetSourceMemoForTest(false);
+    const source = fresh();
+    const first = render(<MatchReport source={source} matchId="m" staged />);
+    await waitFor(
+      () => expect(root(first.container).dataset["fill"]).toBe("2"),
+      { timeout: 20_000, interval: 1 },
+    );
+    setSourceMemoReadyForTest(true);
+    await waitFor(
+      () => expect(root(first.container).dataset["fill"]).toBe("done"),
+      { timeout: 20_000, interval: 1 },
+    );
+    first.unmount();
+    const again = render(<MatchReport source={source} matchId="m" staged />);
+    expect(root(again.container).dataset["fill"]).not.toBe("done");
+    await waitFor(
+      () => expect(root(again.container).dataset["fill"]).toBe("done"),
+      { timeout: 20_000, interval: 1 },
+    );
+    again.unmount();
+    const third = render(<MatchReport source={source} matchId="m" staged />);
+    expect(root(third.container).dataset["fill"]).toBe("done");
   });
   it("回合 1→2→3 再回 1:缓存只留两个来源,被挤掉的回合重新分步填 (codex 80-PIPE-48-B48-v1)", async () => {
     // a shuffle keeps its round objects and reuses this component

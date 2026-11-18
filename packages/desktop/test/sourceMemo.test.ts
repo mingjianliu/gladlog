@@ -11,7 +11,11 @@ import { deriveKeyMoments } from "../src/renderer/src/report/derive/keyMoments";
 import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
 import { deriveMistakes } from "../src/renderer/src/report/derive/mistakes";
 import {
+  beginSourceFill,
+  isSourceFilled,
+  markSourceFilled,
   resetSourceMemoForTest,
+  setSourceMemoReadyForTest,
   SOURCE_MEMO_MAX,
   sourceMemo,
   sourceMemoWith,
@@ -86,6 +90,60 @@ describe("sourceMemo", () => {
     sourceMemo(a, "k", compute);
     sourceMemo(a, "k", compute);
     expect(compute).toHaveBeenCalledTimes(3);
+  });
+
+  // pipeline T199: the mark means "every result this fill computed is in the
+  // entry", not "every step has run"
+  describe("已填完标记只给真的填全的条目", () => {
+    it("全程数据表已就绪:填完即标记", () => {
+      const a = src();
+      beginSourceFill(a);
+      sourceMemo(a, "step1", () => 1);
+      sourceMemo(a, "step2", () => 2);
+      markSourceFilled(a);
+      expect(isSourceFilled(a)).toBe(true);
+    });
+
+    it("数据表在填到一半时才就绪:前面的步骤没存进去,不标记;下一次填全了才标记", () => {
+      resetSourceMemoForTest(false);
+      const a = src();
+      const step1 = vi.fn(() => 1);
+      beginSourceFill(a);
+      sourceMemo(a, "step1", step1); // computed, not kept
+      setSourceMemoReadyForTest(true);
+      sourceMemo(a, "step2", () => 2); // kept: the entry exists now
+      markSourceFilled(a);
+      expect(isSourceFilled(a)).toBe(false);
+      // the next mount fills in steps again; this time everything is kept
+      beginSourceFill(a);
+      sourceMemo(a, "step1", step1);
+      sourceMemo(a, "step2", () => 2);
+      markSourceFilled(a);
+      expect(isSourceFilled(a)).toBe(true);
+      expect(step1).toHaveBeenCalledTimes(2);
+      sourceMemo(a, "step1", step1);
+      expect(step1).toHaveBeenCalledTimes(2);
+    });
+
+    it("同一次填充里先没存、后来又算了一遍并存上的键不挡标记", () => {
+      resetSourceMemoForTest(false);
+      const a = src();
+      beginSourceFill(a);
+      sourceMemo(a, "k", () => 1);
+      setSourceMemoReadyForTest(true);
+      sourceMemo(a, "k", () => 1);
+      markSourceFilled(a);
+      expect(isSourceFilled(a)).toBe(true);
+    });
+
+    it("数据表一直没就绪:没有条目,也没有标记", () => {
+      resetSourceMemoForTest(false);
+      const a = src();
+      beginSourceFill(a);
+      sourceMemo(a, "k", () => 1);
+      markSourceFilled(a);
+      expect(isSourceFilled(a)).toBe(false);
+    });
   });
 
   it("缓存住的 undefined / null 也算命中", () => {

@@ -63,14 +63,40 @@ export function dropSourceMemo(source: ReportSource): void {
 
 const FILLED = "\u0000filled";
 
-/** MatchReport's staged fill (T93) has run every step for `source`, so all
- * its derive results are in the entry. The mark lives IN the entry: evicting
- * the source drops it with the results, and an entry begun again by a later,
- * unfinished fill does not carry it (codex 85-tk-G-T93-1g: a marker kept
- * outside survived the eviction, and a refill abandoned at step 1 left a
- * partial entry that read as complete). No entry (the analysis tables not
- * loaded yet, so nothing is stored), no mark. */
+/** Keys computed for a source since its fill began whose result was NOT kept
+ * (the analysis tables were not loaded yet). A fill that has one did not
+ * leave a complete entry behind, whatever was stored after the tables came
+ * in mid-fill (pipeline T199). */
+let unkept = new WeakMap<ReportSource, Set<string>>();
+
+/** A staged fill of `source` starts: what earlier renders failed to keep is
+ * its to compute again. */
+export function beginSourceFill(source: ReportSource): void {
+  unkept.delete(source);
+}
+
+/** MatchReport's staged fill (T93) has run every step for `source` and all
+ * the report view's whole-match derive results are in the entry. The mark
+ * lives IN the entry: evicting the source drops it with the results, and an
+ * entry begun again by a later, unfinished fill does not carry it (codex
+ * 85-tk-G-T93-1g: a marker kept outside survived the eviction, and a refill
+ * abandoned at step 1 left a partial entry that read as complete). No entry
+ * (the analysis tables not loaded yet, so nothing is stored), no mark.
+ *
+ * It is set only for a fill that left every result it computed in the entry
+ * (T199; until then it was "every step has run"):
+ *  - a result computed before the tables were loaded is not kept, so a fill
+ *    the tables arrived in the middle of has the later steps' results and
+ *    not the earlier ones' — not marked (`unkept`); the next mount fills in
+ *    steps again and is marked then;
+ *  - a render under a time range computes its ranged derives outside this
+ *    cache, so their whole-match entries are absent — the caller does not
+ *    mark while a range is selected (MatchReport).
+ * What it does not cover, by design: derives only another view asks for
+ * (the AI tab's prompt input, the replay's). A one-pass render of the report
+ * view does not ask for them either. */
 export function markSourceFilled(source: ReportSource): void {
+  if ((unkept.get(source)?.size ?? 0) > 0) return;
   cache.get(source)?.set(FILLED, true);
 }
 
@@ -94,7 +120,13 @@ export function sourceMemo<T>(
     if (entry.has(key)) return entry.get(key) as T;
   }
   const value = compute();
-  if (!dataReady) return value;
+  if (!dataReady) {
+    let missed = unkept.get(source);
+    if (!missed) unkept.set(source, (missed = new Set()));
+    missed.add(key);
+    return value;
+  }
+  unkept.get(source)?.delete(key);
   // compute() may have evicted this very entry's neighbours; re-read ours
   entry = cache.get(source);
   if (!entry) {
@@ -181,5 +213,12 @@ export function sourceMemoWithPut<T>(
 /** Test seam: drop every entry and set the data gate. */
 export function resetSourceMemoForTest(ready: boolean): void {
   cache.clear();
+  unkept = new WeakMap();
+  dataReady = ready;
+}
+
+/** Test seam: flip the data gate only — the tables arriving in the middle of
+ * a fill (entries and the fill's bookkeeping stay). */
+export function setSourceMemoReadyForTest(ready: boolean): void {
   dataReady = ready;
 }

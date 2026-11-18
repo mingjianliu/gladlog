@@ -33,7 +33,11 @@ import {
 } from "../derive/offThread/offThreadDerive";
 import { derivePressureLanes } from "../derive/pressureLanes";
 import { ensureRawStreams, getRawStreamsSync } from "../derive/rawStreamsCache";
-import { isSourceFilled, markSourceFilled } from "../derive/sourceMemo";
+import {
+  beginSourceFill,
+  isSourceFilled,
+  markSourceFilled,
+} from "../derive/sourceMemo";
 import { deriveStatsTable } from "../derive/statsTable";
 import { deriveSummary } from "../derive/summary";
 import {
@@ -199,8 +203,12 @@ export function MatchReport({
   // page paints between them and the cheap sections do not wait for the
   // expensive ones. Keyed by the source object: a shuffle round switch reuses
   // this component and starts over.
-  const startLevel = (src: ReportSource): number =>
-    staged && !isSourceFilled(src) ? 0 : FILL_DONE;
+  const startLevel = (src: ReportSource): number => {
+    if (!staged || isSourceFilled(src)) return FILL_DONE;
+    // a fill starts: what an earlier render could not keep is computed again
+    beginSourceFill(src);
+    return 0;
+  };
   const [fill, setFill] = useState(() => ({
     source,
     level: startLevel(source),
@@ -222,10 +230,8 @@ export function MatchReport({
     [source, staged],
   );
   useEffect(() => {
-    if (level >= FILL_DONE) {
-      markSourceFilled(source);
-      return;
-    }
+    // the completed mark is set below, where the time range is known
+    if (level >= FILL_DONE) return;
     const advance = () =>
       setFill((f) =>
         f.source === source ? { source, level: f.level + 1 } : f,
@@ -335,6 +341,14 @@ export function MatchReport({
   const [timeRange, setTimeRange] = useState<TimeRange | null>(
     initialTimeRange,
   );
+  // The fill is complete — the next mount of this source renders in one pass
+  // — only with no range selected: under a range the ranged derives are
+  // computed outside the whole-match cache, and a one-pass render without
+  // the range would compute every one of them in a single task (T199).
+  // Clearing the range recomputes them into the cache, and marks then.
+  useEffect(() => {
+    if (level >= FILL_DONE && timeRange === null) markSourceFilled(source);
+  }, [level, source, timeRange]);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   // Evidence-chain jump request: "replay this moment" in the AI view → switch to
   // replay and seek. The nonce prevents double consumption; the replay clock
