@@ -1400,5 +1400,10 @@
  *  605. Divine Hammer carries a hand exception: it cannot be parried,
  *  whatever DB2's parryable flag says.
  *  See docs/prompt-version-history.md.
+ *
+ * v577 (2026-11-18; pipeline batch B104, T202): no prompt change. The
+ *  kill-attempt self-buff predicate is shared with the fact2Scan anchor
+ *  check.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 576;
+export const PROMPT_VERSION = 577;

@@ -7153,3 +7153,16 @@ candidate rows +0 / -0). Verified by unit tests and mutation: removing the
 exception turns 3 tests red; forcing Blade of Justice parryable makes the t132
 scan report the 3 lines. Codex branch review 85-tk-M1-T132-1: one synthetic-
 only scan finding, recorded.
+
+v577 (2026-11-18; pipeline batch B104, T202; GH #221 group 2; first wave-4
+batch). The kill-attempt producer's self-buff reading (T104: a self-buff whose
+cast row names an enemy only because it was the caster's target) moves from a
+closure in extractKillAttempts to the exported pressIsSelfBuffNamingEnemy,
+unchanged; fact2Scan's killAnchorInto imports it, so the scan asks the
+producer's own question. killAnchorInto 30 / 2,274 -> 0 / 2,087 on the 605 (25
+Voidform, 3 Arcane Surge, 2 Feral Frenzy, all self-buffs; the 187 self-buff
+lines leave the denominator); killTargetInside 6 / 2,339 unchanged; every
+other fact2Scan check identical. No prompt change (the assembled candidate
+captured on the 605 against the e8047b053 base: capture hash 1b9390a6e308 =
+1b9390a6e308, 0 of 3,519 contexts and 0 of 3,519 menus differ, candidate rows
+7,446 = 7,446). Codex branch review 85-tk-EVAL-T202-1: APPROVE.
