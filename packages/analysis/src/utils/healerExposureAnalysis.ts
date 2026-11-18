@@ -331,6 +331,27 @@ export function buildEnemyCCHistory(
 // ---------------------------------------------------------------------------
 
 /**
+ * The control a `[HEALER EXPOSURE]` line says the healer is "already in …
+ * until m:ss" at a window's start: of the controls on at that instant, the
+ * one that ends LAST — the line states how long the healer stays controlled,
+ * and with two on at once the first one found said the earlier end (T174,
+ * round 13 P4: "already in Intimidation until 0:09" under a Freezing Trap
+ * that held until 0:13.9). Equal ends keep the earlier-listed one. Scan side
+ * `packages/eval/scripts/scan5/t174.ts`.
+ */
+export function healerControlAtWindow<
+  T extends { atSeconds: number; durationSeconds: number },
+>(ccInstances: readonly T[], windowFromSeconds: number): T | undefined {
+  let best: T | undefined;
+  for (const c of ccInstances) {
+    const end = c.atSeconds + c.durationSeconds;
+    if (c.atSeconds > windowFromSeconds || windowFromSeconds >= end) continue;
+    if (!best || end > best.atSeconds + best.durationSeconds) best = c;
+  }
+  return best;
+}
+
+/**
  * Whether the healer is dead at a burst window's rendered second — no
  * `[HEALER EXPOSURE]` line is said for it. The `[STATE]` tick's reading
  * (`isDeadAtRenderSecond` at the window's floored start); scan side
@@ -587,10 +608,9 @@ export function analyzeHealerExposureAtBurst(
         : null,
       ...(() => {
         // cc-dr F-EX1: the healer's CC active at the window start
-        const cc = healerCCSummary.ccInstances.find(
-          (c) =>
-            c.atSeconds <= window.fromSeconds &&
-            window.fromSeconds < c.atSeconds + c.durationSeconds,
+        const cc = healerControlAtWindow(
+          healerCCSummary.ccInstances,
+          window.fromSeconds,
         );
         return cc
           ? {
