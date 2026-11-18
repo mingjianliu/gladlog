@@ -42,8 +42,14 @@ const unit = (spec: string, setId: string, pieces: number): any => ({
 
 describe("the thirteen 12.1 class sets", () => {
   it("every class set is five items, read off the gear", () => {
+    // + the three 12.0 sets a row still reads (T138)
     expect(Object.keys(CLASS_SET_ITEM_IDS).sort()).toEqual(
-      Array.from({ length: 13 }, (_, i) => String(2055 + i)),
+      [
+        "1981",
+        "1987",
+        "1990",
+        ...Array.from({ length: 13 }, (_, i) => String(2055 + i)),
+      ].sort(),
     );
     for (const items of Object.values(CLASS_SET_ITEM_IDS))
       expect(new Set(items).size).toBe(5);

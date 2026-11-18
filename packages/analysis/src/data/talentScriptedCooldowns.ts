@@ -38,7 +38,11 @@ import {
 } from "../utils/logEra";
 import { isResyncBatchAt } from "../utils/resyncBatch";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "../utils/talents";
-import { type ISetBonusEventCredit, wearsSetBonus } from "./classSetBonuses";
+import {
+  type ISetBonusEventCredit,
+  setBonusHeld,
+  wearsSetBonus,
+} from "./classSetBonuses";
 import { spellEffectData } from "./spellEffectData";
 import { spellSchoolMask } from "./spellSchools";
 
@@ -208,6 +212,14 @@ export interface IEventCooldownReduction {
   /** A baseline passive of these specs, owned without a talent (Restless
    * Blades, Outlaw). */
   ownedBySpecIds?: readonly string[];
+  /** A class set bonus owns this row, not a talent: its key is the bonus
+   * spell, and the holder is a unit wearing the bonus's pieces in its spec
+   * (`setBonusHeld`, the set-bonus rows' one gate; Fury 12.0 4pc, T138). */
+  ownedBySetBonus?: {
+    itemSetId: string;
+    pieces: number;
+    specs: readonly string[];
+  };
   /** The talent that owns this row when its key is not that talent's id —
    * one talent with give-backs to several spells (Serendipity: Smite →
    * Chastise, Flash Heal → Serenity, Prayer of Healing → Sanctify). The
@@ -505,6 +517,20 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // more than 0.5 s before R, the tightest 0.0 / 0.0 / 0.17 / 0.36 s after it.
   // Every other reading fails: 1 s per use 60 of 106, players only 30, a cap
   // of 3 targets per use 12. A miss counts (shields, immunities).
+  // Fury 12.0 4pc 1264878 (set 1990, spec 72, 4 pieces — ItemSetSpell 7445;
+  // T138): 「Rampage reduces the cooldown of Odyn's Fury by ${$s1/1000}.1
+  // sec」 — effect 0 a dummy, base 2500 ms × PvpMultiplier 0.5 = 1.25 s per
+  // Rampage press. Owned by the gear (`ownedBySetBonus`), still worn in
+  // 12.1. Corpus, the 64 files of the 605 whose players wear a 12.0 set:
+  // 4-piece wearers 2 of 11 Odyn's Fury re-presses impossible on the 45 s
+  // model, 0 with the row; fewer pieces 0 of 6 either way.
+  "1264878": {
+    targets: ["385059"],
+    triggerCastIds: ["184367"],
+    seconds: 1.25,
+    ownedBySetBonus: { itemSetId: "1990", pieces: 4, specs: ["72"] },
+    note: "Fury 12.0 4pc — Rampage: Odyn's Fury −1.25 s",
+  },
   "441206": {
     targets: ["433874"],
     triggerCastIds: [],
@@ -2623,13 +2649,20 @@ export function eventReductionsFor(
   holds: (talentSpellId: string) => boolean,
   /** the unit's spec, for a baseline passive (`ownedBySpecIds`) */
   specId?: string,
+  /** the unit's gear, for a row a set bonus owns (`ownedBySetBonus`):
+   * pieces worn of a class set (`setPiecesWorn` / the `classSetPieces`
+   * snapshot). Absent: no such row applies. */
+  piecesOf?: (itemSetId: string) => number,
 ): IEventCooldownReduction[] {
   return Object.entries(EVENT_COOLDOWN_REDUCTIONS)
     .filter(
       ([key, r]) =>
         r.targets.includes(spellId) &&
-        (holds(eventReductionOwner(key, r)) ||
-          (specId !== undefined && !!r.ownedBySpecIds?.includes(specId))) &&
+        (r.ownedBySetBonus
+          ? piecesOf !== undefined &&
+            setBonusHeld(r.ownedBySetBonus, specId, piecesOf)
+          : holds(eventReductionOwner(key, r)) ||
+            (specId !== undefined && !!r.ownedBySpecIds?.includes(specId))) &&
         (r.requiresTalentId === undefined || holds(r.requiresTalentId)) &&
         (r.unlessTalentId === undefined || !holds(r.unlessTalentId)),
     )

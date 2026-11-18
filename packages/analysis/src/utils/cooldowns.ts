@@ -24,6 +24,7 @@ import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import {
   classSetPiecesOf,
   setBonusCooldownReduction,
+  setPiecesWorn,
   wearsSetBonus,
 } from "../data/classSetBonuses";
 import { classMetadata } from "../data/classSpells";
@@ -6592,6 +6593,7 @@ function buildCooldownEntry(
     spell.spellId,
     holds,
     String(specIdNum),
+    (id) => setPiecesWorn(unit, id),
   );
   const roundEndAtMs = matchStartMs + matchDurationSeconds * 1000;
   const resetAtSeconds = eventTriggersFor(

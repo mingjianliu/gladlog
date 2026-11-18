@@ -79,6 +79,13 @@
  *  - Feral 4pc 1296606 on Berserk 106951 (GH #175 row 17): the same mask
  *    covers 106951; no 4-piece Feral pressed Berserk in 605 (5 unworn
  *    lifetimes, all at 15 s). The Incarnation row above is the corpus leg.
+ *  - 12.0 sets still worn in 12.1 (T138, DB2 12.1.5.70391): Preservation
+ *    2pc 1264823 → Verdant Embrace −2 s (`SET_BONUS_COOLDOWN_ROWS`); Fury
+ *    4pc 1264878 → Odyn's Fury −1.25 s per Rampage
+ *    (`EVENT_COOLDOWN_REDUCTIONS`, `ownedBySetBonus`). Counted, not priced:
+ *    Outlaw 4pc 1264859 → Blade Rush (aura 107 misc 11, base −6000 × 0.5 =
+ *    −3 s): 4-piece wearers 0 of 19 re-presses impossible on the unworn
+ *    model, fewer pieces 0 of 13 — no corpus split to choose it by.
  * Not priced, no product reader reads the target's cooldown or duration:
  * Discipline 2pc (Penance → Mind Blast), Marksmanship 4pc (Aimed Shot /
  * Rapid Fire), Survival 4pc (Mongoose Fury), Frost DK 4pc (Freezing
@@ -203,6 +210,23 @@ export const SET_BONUS_COOLDOWN_ROWS: Readonly<
       pieces: 2,
       specs: ["1473"],
       reduceSeconds: 5,
+    },
+  ],
+  // Preservation 12.0 2pc on Verdant Embrace (T138): 1264823 (set 1981, spec
+  // 1468, 2 pieces — ItemSetSpell 7392) 「Verdant Embrace … cooldown reduced
+  // by ${$s2/-1000} sec」, effect 1 aura 453 on ChargeCategory 2471 — the
+  // category only Verdant Embrace 360995 charges on — base −2000,
+  // PvpMultiplier 1: −2 s. Corpus, the 64 files of the 605 whose players
+  // wear a 12.0 set, every Preservation there a holder: re-presses the
+  // model calls impossible in `scan5/t138`'s before / after; what is left
+  // is the haste-scaled recharge (DB2 aura 457, GH #218 item 1.5).
+  "360995": [
+    {
+      bonusSpellId: "1264823",
+      itemSetId: "1981",
+      pieces: 2,
+      specs: ["1468"],
+      reduceSeconds: 2,
     },
   ],
   // Shadow 2pc on Tentacle Slam (GH #175 row 4)

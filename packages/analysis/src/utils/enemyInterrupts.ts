@@ -1,5 +1,6 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { setPiecesWorn } from "../data/classSetBonuses";
 import kitRaw from "../data/interruptKitGenerated.json";
 import { spellEffectData } from "../data/spellEffectData";
 import {
@@ -285,6 +286,7 @@ function singleChargeReadyMs(
     spellId,
     (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
     unit.spec === undefined ? undefined : String(unit.spec),
+    (id) => setPiecesWorn(unit, id),
   );
   let readyMs =
     lastCastMs +

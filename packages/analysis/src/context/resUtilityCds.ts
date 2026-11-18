@@ -17,6 +17,7 @@
  */
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { setPiecesWorn } from "../data/classSetBonuses";
 import { effectiveCooldownSeconds } from "../data/spellEffectData";
 import {
   eventReductionsFor,
@@ -71,6 +72,7 @@ function withEventReductions(
     spellId,
     (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
     owner.spec === undefined ? undefined : String(owner.spec),
+    (id) => setPiecesWorn(owner, id),
   );
   // FT-T11c: the press's own cooldown first — an on-interrupt talent
   // (Coldthirst, Light of the Sun) shortens a press that interrupted a cast
