@@ -166,6 +166,14 @@ export const METAMORPHOSIS_PRESS_CAST_IDS: ReadonlySet<string> = new Set([
   METAMORPHOSIS_LANDING_ID,
 ]);
 export const EYE_BEAM_ID = "198013";
+/** Annihilation and Death Sweep — what Chaos Strike and Blade Dance become
+ * in demon form and only there (162264's own aura text: "Chaos Strike and
+ * Blade Dance upgraded to Annihilation and Death Sweep"): a logged cast of
+ * either is the form up at that instant (T212). */
+export const METAMORPHOSIS_FORM_CAST_IDS: ReadonlySet<string> = new Set([
+  "201427",
+  "210152",
+]);
 export const DOOM_WINDS_PRESS_ID = "384352";
 export const ASCENDANCE_ENH_ID = "114051";
 
