@@ -7510,3 +7510,21 @@ WINDOW] -84 / +49, [VULNERABLE] +1, with the section's omitted-window and off-
 target lines following), and candidate rows stay the same, as the order
 expected. Codex branch review 85-tk-WIN-T156-1 (one scan point, fixed) and
 -1b: APPROVE.
+
+v597 (2026-11-18; pipeline batch B126, T196). A kick the log refused at a
+running cast bar (an IMMUNE or REFLECT row on the unit whose bar was running)
+was worded as a plain miss (落空 / 空放) on the desktop report's card, burst-
+ledger chip and kick dashboard. Analysis now classifies a missed kick
+(missedKickKind in utils/kickAudit.ts: immune / reflected / missed, from
+refusedAtCastSpellName and the miss row's own type; `result` is unchanged, so
+counts, landed rate and candidates do not move), and the renderer has one
+wording (derive/kickText.ts missedKickLabel: 落空 / 目标免疫打断 / 被目标反射) read by
+derive/mistakes.ts, BurstLedgerCard, KickDashboard, derive/kickDash.ts and
+derive/exportReport.ts. Ruling A12 as answered by R51 (user, 2026-11-18): of
+the recorder side's 53 such kicks on the 605, the 10 REFLECT rows read 被目标反射
+and the 43 IMMUNE rows 目标免疫打断; none reads missed. scan5
+refusedKickCalledMissed 107 / 193 -> 0 / 193; an IMMUNE row on another unit
+(Grounding Totem) stays 落空 (refusedKickOtherUnit 6 -> 0). On the 605 the
+assembled candidate's capture hash equals its parent's (31abd7e1b22f): no
+context and no menu changes, as the order expected. Codex branch review 85-tk-
+ENG-T196-1 (one real-corpus point, fixed) and -1b: APPROVE.

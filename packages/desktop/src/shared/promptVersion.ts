@@ -1501,5 +1501,10 @@
  *  Magic Shell (410358) joins the kill-window major defensives: named in
  *  the burst ledger when up, and in hand it is not defenseless.
  *  See docs/prompt-version-history.md.
+ *
+ * v597 (2026-11-18; pipeline batch B126, T196): a kick refused at a
+ *  running cast reads 目标免疫打断 / 被目标反射 in the desktop report, not 落空 (desktop
+ *  wording; prompt text unchanged).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 596;
+export const PROMPT_VERSION = 597;
