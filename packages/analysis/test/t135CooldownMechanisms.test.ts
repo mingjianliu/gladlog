@@ -26,6 +26,15 @@ describe("Ranger's Finesse — a Volley that consumes the stacks: Aspect of the 
   // 20bba87d r2: Volley 71.38 s (the buff REMOVED 71.52 s) and 141.58 s
   // (REMOVED 141.74 s) consume it; the buff running out at 96.83 s does not,
   // nor does a Volley with no buff (23.37 s)
+  const stack = (event: string, atS: number, amount?: number) => ({
+    ...row(event, "408518", atS),
+    ...(amount === undefined ? {} : { amount }),
+  });
+  const built = (fromS: number) => [
+    stack("SPELL_AURA_APPLIED", fromS),
+    stack("SPELL_AURA_APPLIED_DOSE", fromS + 5, 2),
+    stack("SPELL_AURA_APPLIED_DOSE", fromS + 10, 3),
+  ];
   const hunter = {
     id: "h",
     spec: "254",
@@ -33,9 +42,14 @@ describe("Ranger's Finesse — a Volley that consumes the stacks: Aspect of the 
       row("SPELL_CAST_SUCCESS", "260243", s),
     ),
     damageOut: [],
-    auraEvents: [71.52, 96.83, 141.74].map((s) =>
-      row("SPELL_AURA_REMOVED", "408518", s),
-    ),
+    auraEvents: [
+      ...built(25.39),
+      stack("SPELL_AURA_REMOVED", 71.52),
+      ...built(73.13),
+      stack("SPELL_AURA_REMOVED", 96.83),
+      ...built(112.01),
+      stack("SPELL_AURA_REMOVED", 141.74),
+    ],
   } as never;
   it("targets the Turtle and fires once per consuming Volley", () => {
     expect(r.targets).toEqual(["186265"]);
@@ -45,6 +59,21 @@ describe("Ranger's Finesse — a Volley that consumes the stacks: Aspect of the 
       // dated at the buff's removal
       71.52, 141.74,
     ]);
+  });
+  it("a buff below its 3 stacks running out beside a Volley consumes nothing (codex 85-tk-CD-T135-1 #1)", () => {
+    for (const expiry of [59.8, 60.2]) {
+      const u = {
+        id: "h",
+        spec: "254",
+        spellCastEvents: [row("SPELL_CAST_SUCCESS", "260243", 60)],
+        damageOut: [],
+        auraEvents: [
+          stack("SPELL_AURA_APPLIED", 45),
+          stack("SPELL_AURA_REMOVED", expiry),
+        ],
+      } as never;
+      expect(eventTriggersFor(u, [r])).toEqual([]);
+    }
   });
   it("the audited pair: pressed 83.55 s on the 120 s model, back at 183.55 s — pressed again 185.51 s", () => {
     const triggers = eventTriggersFor(hunter, [r]).map((g) => ({

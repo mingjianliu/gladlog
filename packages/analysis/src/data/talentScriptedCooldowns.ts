@@ -245,6 +245,10 @@ export interface IEventCooldownReduction {
     byCastIds: readonly string[];
     withinMs: number;
     perStackOfAuraId?: string;
+    /** "After gaining N stacks … your next X": the removed buff held at
+     * least this many stacks just before — a buff below them running out
+     * beside the cast consumed nothing. */
+    minStacks?: number;
   };
   /** "Each stack of X shattered": one trigger per stack of the unit's own
    * `auraIds` on another unit lost — a REMOVED_DOSE's drop, a REMOVED's
@@ -786,7 +790,10 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // 0.5 s of the unit's own Volley 260243 — 20bba87d r2: Volley 71.38 s, the
   // buff REMOVED 71.52 s; Volley 141.58 s, REMOVED 141.74 s (those two
   // Volleys last 9 s, the one cast without the buff 6 s). The buff running
-  // out (96.83 s, 169.83 s, no Volley) consumes nothing. Turtle pressed
+  // out (96.83 s, 169.83 s, no Volley) consumes nothing, and neither does
+  // one below its 3 stacks (DB2 408518 stacks to 3; both uses above follow
+  // APPLIED + 2 doses) running out beside a Volley (`minStacks`, codex
+  // 85-tk-CD-T135-1 #1). Turtle pressed
   // 83.55 s and again 185.51 s on the 120 s model: 102.0 s apart, one use
   // between them → back at 183.55 s.
   "248443": {
@@ -796,6 +803,7 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
       auraIds: ["408518"],
       byCastIds: ["260243"],
       withinMs: 500,
+      minStacks: 3,
     },
     seconds: 20,
     note: "Ranger's Finesse — Aspect of the Turtle −20 s when a Volley consumes the stacks",
@@ -2070,6 +2078,11 @@ export function auraConsumedTriggers(
       continue;
     const t = e.logLine.timestamp;
     if (!casts.some((ct) => Math.abs(ct - t) <= c.withinMs)) continue;
+    if (
+      c.minStacks !== undefined &&
+      selfAuraStacksBefore(unit, String(e.spellId), t) < c.minStacks
+    )
+      continue;
     if (t - lastUse <= c.withinMs) continue; // one removal row per use
     lastUse = t;
     const stacks = c.perStackOfAuraId
