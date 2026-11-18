@@ -97,6 +97,7 @@ import {
   mitigationVerdictOf,
   nonMeleeMitigationVerdictOf,
 } from "@gladlog/analysis/src/data/mitigationVerdicts";
+import { HAND_UNPARRYABLE_SPELL_IDS } from "@gladlog/analysis/src/data/spellParry";
 import {
   PARRYABLE_SPELL_IDS,
   UNPARRYABLE_SPELL_IDS,
@@ -684,12 +685,16 @@ function parriedThisRound(ctx: IRoundCtx): {
 
 /** DB2's word on a press, for a spell the round holds no PARRY row of: any row
  * it landed as, then the press; an id in neither table falls to the press's
- * reach, an unknown reach reads as melee */
+ * reach, an unknown reach reads as melee. The signed hand exceptions
+ * (`HAND_UNPARRYABLE_SPELL_IDS`: Divine Hammer, user 2026-11-17) come first —
+ * corpus-counted rulings, not the DB2 rows this check audits; the round's own
+ * PARRY rows still outrank them at the call site. */
 function db2Parryable(
   pressId: string,
   rowIds: Set<string> | undefined,
 ): boolean {
   const ids = [...(rowIds ?? []), pressId];
+  if (ids.some((id) => HAND_UNPARRYABLE_SPELL_IDS.has(id))) return false;
   if (ids.some((id) => PARRYABLE_SPELL_IDS.has(id))) return true;
   if (ids.some((id) => UNPARRYABLE_SPELL_IDS.has(id))) return false;
   const reach = spellRangeYards(pressId);

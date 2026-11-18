@@ -8,7 +8,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { KILL_LIVE_HP_PCT } from "../src/data/mitigationVerdicts";
-import { parryStopsAttack } from "../src/data/spellParry";
+import {
+  HAND_UNPARRYABLE_SPELL_IDS,
+  parryStopsAttack,
+} from "../src/data/spellParry";
 import {
   PARRYABLE_SPELL_IDS,
   UNPARRYABLE_SPELL_IDS,
@@ -1175,9 +1178,36 @@ describe("parryStopsAttack — what a parry can stop (fact7 r5)", () => {
   });
 });
 
+describe("HAND_UNPARRYABLE_SPELL_IDS — Divine Hammer (T132, user 2026-11-17)", () => {
+  it("DB2 still reads the hit row parryable: the entry is what answers", () => {
+    // if a regeneration moves 198137 out of the parryable table the entry
+    // has nothing left to override — take it out with its evidence
+    expect(PARRYABLE_SPELL_IDS.has("198137")).toBe(true);
+    expect(HAND_UNPARRYABLE_SPELL_IDS.has("198137")).toBe(true);
+    // every live id of the name: the press, the hit row, the aura
+    expect([...HAND_UNPARRYABLE_SPELL_IDS].sort()).toEqual([
+      "1236942",
+      "198034",
+      "198137",
+    ]);
+  });
+
+  it("no parry stops it, by its press, its hit row, or both", () => {
+    expect(parryStopsAttack("198034")).toBe(false);
+    expect(parryStopsAttack("198137")).toBe(false);
+    expect(parryStopsAttack("1236942")).toBe(false);
+    expect(parryStopsAttack("1236942", "198137")).toBe(false);
+  });
+
+  it("the exception outranks a parryable id beside it, and only for its own ids", () => {
+    expect(parryStopsAttack("383328", "198137")).toBe(false);
+    expect(parryStopsAttack("383328")).toBe(true);
+  });
+});
+
 describe("Die by the Sword's two readings (fact7 r5)", () => {
   const start = 1_000_000;
-  const run = (spellId: string, spellName: string) => {
+  const run = (spellId: string, spellName: string, landingId?: string) => {
     const friend = makeUnit("friend-1", {
       name: "Friend",
       reaction: CombatUnitReaction.Friendly,
@@ -1187,6 +1217,12 @@ describe("Die by the Sword's two readings (fact7 r5)", () => {
           spellId,
           spellName,
         },
+        // each press's own landing row, under the id the log gives the hit
+        ...(landingId ? [11_050, 13_050] : []).map((t) => ({
+          ...makeDamageEvent(start + t, 100_000, "warrior-1"),
+          spellId: landingId,
+          spellName,
+        })),
       ],
       spellCastEvents: [11_000, 13_000].map((t) =>
         makeSpellCastEvent(
@@ -1236,6 +1272,15 @@ describe("Die by the Sword's two readings (fact7 r5)", () => {
   it("two Hammers of Wrath stay on the gated line, under its three casts", () => {
     expect(run("24275", "Hammer of Wrath")).toEqual([]);
   });
+
+  it("two Divine Hammers are not the parry line (T132): under the gated line's three casts", () => {
+    // the press 1236942 is in neither table, the hit 198137 parryable by
+    // DB2's rule
+    expect(run("1236942", "Divine Hammer", "198137")).toEqual([]);
+    // the fixture is one the landing row decides: Kill Command the same way
+    // is the parry line
+    expect(run("34026", "Kill Command", "83381")).toHaveLength(1);
+  });
 });
 
 describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
@@ -1265,7 +1310,11 @@ describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
       },
     ] as never);
     const rows = pressLandingRows([press], (p) => p.atMs, caster, []);
-    expect(rows.get(press)).toEqual({ atMs: 1_100, spellId: "83381", hit: false });
+    expect(rows.get(press)).toEqual({
+      atMs: 1_100,
+      spellId: "83381",
+      hit: false,
+    });
   });
 
   it("a guardian's same-named row is not the press landing (a Dryad's Starsurge)", () => {

@@ -323,6 +323,7 @@ import spellIdLists, {
   FRIENDLY_PRESS_LINE_ONLY_IDS,
   MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS,
 } from "./spellIdLists";
+import { HAND_UNPARRYABLE_SPELL_IDS } from "./spellParry";
 import { trinketSpellIds } from "./spellTags";
 import {
   TOOLTIP_DURATION_ROWS,
@@ -1607,4 +1608,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     ...KICKED_DAMAGE_OVERRIDE_IDS,
     ...KICKED_OTHER_OVERRIDE_IDS,
   ]),
+  // T132 (user 2026-11-17, A10): hand exceptions to DB2's parry reading — a
+  // press id, the damage rows it lands as and its aura, hence "mixed".
+  t("HAND_UNPARRYABLE_SPELL_IDS", "data/spellParry.ts", "mixed", () =>
+    set(HAND_UNPARRYABLE_SPELL_IDS),
+  ),
 ];

@@ -633,6 +633,11 @@ const INDEX: PredicateRow[] = [
     mod: spellParry,
   },
   {
+    file: `${A}/data/spellParry.ts`,
+    symbol: "HAND_UNPARRYABLE_SPELL_IDS",
+    mod: spellParry,
+  },
+  {
     file: `${A}/data/spellParryGenerated.ts`,
     symbol: "PARRYABLE_SPELL_IDS",
     mod: spellParryGenerated,
