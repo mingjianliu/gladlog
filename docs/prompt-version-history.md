@@ -7188,3 +7188,14 @@ contexts, one line each (the 5:42 Paralysis is now broken by the Affliction
 Warlock's guardian's Wrath of Nathreza instead of the context owner); menus
 byte-identical, candidate rows 7,446 = 7,446 (capture checked on the Mac).
 Codex branch review 85-tk-CC-T168-1: APPROVE (one synthetic note recorded).
+
+v580 (2026-11-18; pipeline batch B107, T197; GH #221 group 1). The desktop
+death card's cheaper-defensive hint passed no stun / silence / lockout gate:
+it could name an alternative the victim could not press. analysis
+cheaperDefensivesAtDeath now asks of each alternative what the death block
+asks of the immunity on the same pill, a free stretch to press it inside the
+lethal window (deathOptionLock, the cannot-cast branch of
+buildDeathOutcomeSummary's lockAt moved out and called by both). 605 scan
+deathCheaperUnpressable 1 / 41 -> 0 / 41; every other scan5 check identical;
+the prompt is unchanged (605 capture hash equal to the base, checked on the
+Mac). Codex branch review 85-tk-ENG-T197-1: APPROVE.
