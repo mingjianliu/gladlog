@@ -213,6 +213,14 @@ export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
     // Anti-Magic Shell stops magic only: the span times it whatever the
     // damage, and KILL ATTEMPTS credits it through `limitedAbsorbSchoolMask`.
     "48707", // Anti-Magic Shell — 60 s
+    // Pipeline T156 (fact14 D16 / D34, r13 P5): the 12.x Anti-Magic Shell id
+    // that goes on the knight or an ally (Spellwarden) is the same shield —
+    // 742 presses on the 605 files, 541 on the caster (`spellIdLists.ts`) —
+    // and was never here: 7669df4d r0 `defenseless 2:40–3:00` on a knight who
+    // pressed it at 2:51.6, and a burst's `Target had a major defensive up`
+    // left it out. Pressed on an ally it spends the button and protects the
+    // ally (`castOnAnother`); the knight's own cooldown is `unitCooldownOf`'s.
+    "410358", // Anti-Magic Shell (self or ally) — 60 s, 30 s talented
     "48743", // Death Pact — 120 s
     "49039", // Lichborne — 120 s
     "5277", // Evasion — 120 s

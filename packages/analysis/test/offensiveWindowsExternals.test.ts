@@ -15,6 +15,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   countsAsKillWindowDefensiveInHand,
   isKillWindowMajorDefensive,
+  isMajorDefenseUp,
   KW_IN_HAND_ONLY_DEFENSIVE_IDS,
   KW_MAJOR_DEFENSIVE_IDS,
   KW_UNPRESSED_NOT_IN_HAND_IDS,
@@ -24,6 +25,7 @@ import {
 import { ensureAnalysisData } from "../src/data/ensure";
 import { DEFLECTION_IDS,
   MITIGATION_WALL_IDS } from "../src/data/mitigationData";
+import { DEF_OR_IMMUNE_IDS } from "../src/utils/burstLedger";
 import {
   extractSpiritOfRedemptionIntervals,
   isGhostAtRenderSecond,
@@ -117,6 +119,17 @@ describe("kill-window roster (F-E3)", () => {
       expect(KW_MAJOR_DEFENSIVE_IDS.has(id)).toBe(true);
       expect(kwCooldownSeconds(id)).toBeGreaterThanOrEqual(30);
       expect(isKillWindowMajorDefensive(id)).toBe(true);
+    },
+  );
+
+  // Pipeline T156 (fact14 D16 / D34, r13 P5): both Anti-Magic Shell ids —
+  // 410358 (self or ally, 12.x) was missing while 48707 was a member
+  it.each(["48707", "410358"])(
+    "Anti-Magic Shell %s is a kill-window major defensive, and a defense that is up",
+    (id) => {
+      expect(isKillWindowMajorDefensive(id)).toBe(true);
+      expect(isMajorDefenseUp(id)).toBe(true);
+      expect(DEF_OR_IMMUNE_IDS.has(id)).toBe(true);
     },
   );
 
