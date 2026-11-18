@@ -32,7 +32,11 @@ const restatedAt = (s: number) =>
     srcUnitName: "Caster",
   }));
 
-function scene(auras: Array<[LogEvent, number]>, restatedS?: number) {
+function scene(
+  auras: Array<[LogEvent, number]>,
+  restatedS?: number,
+  endS = 200,
+) {
   const caster = makeUnit("c1", {
     name: "Caster",
     spellCastEvents: [makeSpellCastEvent(AVATAR, T0 + 10_000, "c1", "c1")],
@@ -56,7 +60,7 @@ function scene(auras: Array<[LogEvent, number]>, restatedS?: number) {
   } as never);
   const combat = {
     startTime: T0,
-    endTime: T0 + 200_000,
+    endTime: T0 + endS * 1000,
     units: { c1: caster },
   } as never;
   return { caster, combat };
@@ -65,8 +69,9 @@ const endOf = (
   auras: Array<[LogEvent, number]>,
   restatedS?: number,
   nextSameCastS = Infinity,
+  endS?: number,
 ) => {
-  const { caster, combat } = scene(auras, restatedS);
+  const { caster, combat } = scene(auras, restatedS, endS);
   return observedEffectEndSeconds(caster, AVATAR, 10, nextSameCastS, combat);
 };
 
@@ -108,14 +113,18 @@ describe("T150: a cooldown re-applied with no REMOVED past its official length",
   });
 
   it("an application after the combat's end, clamped onto it, continues nothing (codex #2)", () => {
+    // the combat ends at 45 s: the builder clamps the 100 s application
+    // onto it, inside one official length of the 30 s cap
     expect(
       endOf(
         [
           [LogEvent.SPELL_AURA_APPLIED, 10],
-          [LogEvent.SPELL_AURA_APPLIED, 230],
-          [LogEvent.SPELL_AURA_REMOVED, 240],
+          [LogEvent.SPELL_AURA_APPLIED, 100],
+          [LogEvent.SPELL_AURA_REMOVED, 110],
         ],
-        230,
+        100,
+        Infinity,
+        45,
       ),
     ).toBeNull();
   });
