@@ -677,6 +677,43 @@ function observedEffectEnd(
         spellId !== castSpellId &&
         pressAuraEndS !== undefined &&
         fromS <= pressAuraEndS));
+  /**
+   * Pipeline T150: the interval builder closes a run at its official length
+   * when the aura is APPLIED again with no REMOVED (a lost REMOVED must not
+   * stitch two casts into one). When that second APPLIED comes no later
+   * than one official length after the cap, with no REMOVED / BROKEN row of
+   * the aura between the run's last application and it, the effect had not
+   * ended: the run outlived the table's length and was re-applied while up
+   * — 30846f8e r5: Combustion pressed 80.65 (official 10 s), APPLIED again
+   * 92.58 with no REMOVED, REMOVED 97.064; a kick at 97.049 read no
+   * Combustion running. 605 raw logs, a player's own offensive-cooldown
+   * aura APPLIED again with no REMOVED after its official end (35 of
+   * 18,805 applications): 23 within 8.3 s of that end (Combustion 14,
+   * Avenging Wrath 4, Malevolence 2, Recklessness, Voidform, Soul
+   * Immolation), the other 12 from 16.7 s to 108 s after it — each of the
+   * 12 more than one official length late, each of the 23 less.
+   */
+  const reappliedWithNoRemoval = (
+    prev: IAuraInterval,
+    next: IAuraInterval,
+    destId: string,
+  ): boolean => {
+    if (!prev.inferredEnd || prev.capFromS === undefined) return false;
+    if (next.spellId !== prev.spellId || next.inferredStart) return false;
+    const officialS = prev.toS - prev.capFromS;
+    if (officialS <= 0 || next.fromS > prev.toS + officialS) return false;
+    const fromMs = combat.startTime + prev.capFromS * 1000;
+    const toMs = combat.startTime + next.fromS * 1000;
+    return !auraRowsOf(destId, true).some(
+      (a) =>
+        a.spellId === prev.spellId &&
+        (a.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+          a.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
+          a.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL) &&
+        a.logLine.timestamp > fromMs &&
+        a.logLine.timestamp < toMs,
+    );
+  };
   let best: {
     end: number;
     observed: boolean;
@@ -733,8 +770,13 @@ function observedEffectEnd(
     let chainEnd = ivs[first]!.toS;
     let observed = !ivs[first]!.inferredEnd;
     let lastFromS = ivs[first]!.fromS;
+    let last = ivs[first]!;
     for (const iv of ivs.slice(first + 1)) {
-      if (iv.fromS > chainEnd + EFFECT_CHAIN_GAP_S) break;
+      if (
+        iv.fromS > chainEnd + EFFECT_CHAIN_GAP_S &&
+        !reappliedWithNoRemoval(last, iv, dest)
+      )
+        break;
       // fact11 D24 / D30 / D41: a re-application the timeline lists as an
       // occurrence of its own — a cast-less `(no press)` one
       // (`auraOffensiveOccurrences`' generic branch) — is that occurrence's,
@@ -751,6 +793,7 @@ function observedEffectEnd(
         chainEnd = iv.toS;
         observed = !iv.inferredEnd;
         lastFromS = iv.fromS;
+        last = iv;
       }
     }
     if (best === null || chainEnd > best.end)
