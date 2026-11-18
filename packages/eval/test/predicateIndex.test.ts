@@ -278,6 +278,7 @@ import * as candidateDiagnostics from "../scripts/candidateDiagnostics";
 import * as abCompareStats from "../src/ab/abCompareStats";
 import * as appCandidates from "../src/corpus/appCandidates";
 import * as baselineFindings from "../src/explore/baselineFindings";
+import * as matchExplore from "../src/explore/matchExplore";
 import * as redactOutcome from "../src/halo/redactOutcome";
 import * as checkScoreProvenance from "../src/provenance/checkScoreProvenance";
 import * as positioningScan from "../src/quality/positioningScan";
@@ -613,6 +614,13 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/unloggedSilence.ts`,
     symbol: "unloggedSilenceSpansOnOwner",
     mod: unloggedSilence,
+  },
+  // …and the exploration tool's `gaps` query, which reads the same spans
+  // (T146 review fix)
+  {
+    file: `${E}/explore/matchExplore.ts`,
+    symbol: "gapLines",
+    mod: matchExplore,
   },
   // fact11 D9: a Spell Reflection return with no REFLECT row
   {
