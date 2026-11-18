@@ -24,6 +24,7 @@
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import { EVENT_COOLDOWN_REDUCTIONS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import {
+  CD_INSTANT_SLACK_S,
   cdAvailableAt,
   cdMaybeAvailableAt,
   cdSecondsUntilReady,
@@ -92,7 +93,9 @@ export function run(ctx: IRoundCtx): void {
     const prior = before(cd, t);
     if (prior.casts.length === 0) continue;
     ctx.bump("restlessBladesRefusedAfterBack");
-    if (!cdAvailableAt(prior, t - REFUSED_SLACK_S)) continue;
+    // `cdAvailableAt` reads `CD_INSTANT_SLACK_S` ahead: take it off too
+    if (!cdAvailableAt(prior, t - REFUSED_SLACK_S - CD_INSTANT_SLACK_S))
+      continue;
     const last = prior.casts[prior.casts.length - 1]!.timeSeconds;
     ctx.violate(
       "restlessBladesRefusedAfterBack",

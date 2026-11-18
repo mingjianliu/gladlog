@@ -66,6 +66,35 @@ describe("Supercharger — the first damaging finisher after Adrenaline Rush cou
   });
 });
 
+describe("Supercharger — the point in hand (codex 85-tk-CD-T136-1 #2 #3)", () => {
+  it("a finisher whose cost the log does not state still takes the point", () => {
+    const u = {
+      id: "r",
+      spellCastEvents: [
+        cast(AR, 10),
+        cast(DISPATCH, 11), // no cost stated
+        cast(DISPATCH, 13, 7),
+      ],
+      auraEvents: [],
+    };
+    expect(seconds(u, holds("470347", "470668"))).toEqual([7]);
+  });
+  it("a second Adrenaline Rush with the point unused adds another", () => {
+    const u = {
+      id: "r",
+      spellCastEvents: [
+        cast(AR, 10),
+        cast(AR, 12),
+        cast(DISPATCH, 13, 7),
+        cast(DISPATCH, 14, 7),
+        cast(DISPATCH, 15, 7),
+      ],
+      auraEvents: [],
+    };
+    expect(seconds(u, holds("470347", "470668"))).toEqual([10, 10, 7]);
+  });
+});
+
 describe("Coup de Grace — counts 5 points more than its row states", () => {
   it("441776 stating 7 gives back 12", () => {
     const u = {
@@ -77,7 +106,7 @@ describe("Coup de Grace — counts 5 points more than its row states", () => {
   });
 });
 
-describe("Dragon-Bone Dice — the Roll the Bones bonus is a tenth greater", () => {
+describe("Dragon-Bone Dice — the Roll the Bones bonus is 10 points greater", () => {
   const u = {
     id: "r",
     spellCastEvents: [cast(DISPATCH, 5, 7), cast(DISPATCH, 20, 7)],
@@ -86,14 +115,14 @@ describe("Dragon-Bone Dice — the Roll the Bones bonus is a tenth greater", () 
       aura("1214935", LogEvent.SPELL_AURA_REMOVED, 10),
     ],
   };
-  it("30 % without it, 33 % with it, only while the outcome is up", () => {
+  it("30 % without it, 40 % with it, only while the outcome is up", () => {
     expect(seconds(u, () => false)).toEqual([9.1, 7]);
-    expect(seconds(u, holds("1259481"))).toEqual([9.31, 7]);
+    expect(seconds(u, holds("1259481"))).toEqual([9.8, 7]);
   });
 });
 
 describe("the audited pair (round 14 D24)", () => {
-  it("Sprint pressed 98.39 s is back at 114.5 s — it was pressed again at 115.35 s", () => {
+  it("Sprint pressed 98.39 s is back at 112.2 s — it was pressed again at 115.35 s", () => {
     // Adrenaline Rush 99.94 s, then Dispatch 7, Kidney Shot 5, Between the
     // Eyes 7 / 6 / 5, all under Triple Threat; the holder has all three
     const u = {
@@ -114,7 +143,7 @@ describe("the audited pair (round 14 D24)", () => {
       seconds: g.seconds,
     }));
     expect(eventReducedCooldownSeconds(98.39, 60, triggers)).toBeCloseTo(
-      60 - 33 * 1.33,
+      60 - 33 * 1.4,
       6,
     );
     // without the three talents: 60 − 30 × 1.3 = 21 s, back at 119.39 s

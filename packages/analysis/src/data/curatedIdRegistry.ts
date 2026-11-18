@@ -1494,7 +1494,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         // T136: the Restless Blades modifiers' ids
         ...(r.triggerPowerSpend?.boosts ?? []).flatMap((b) => [
           ...b.whileAuraIds,
-          ...(b.greaterWith ? [b.greaterWith.talentId] : []),
+          ...(b.addWith ? [b.addWith.talentId] : []),
         ]),
         ...(r.triggerPowerSpend?.extraSpends ?? []).flatMap((x) => x.castIds),
         ...(r.triggerPowerSpend?.supercharged

@@ -282,10 +282,11 @@ export interface IPowerSpendTrigger {
   boosts?: ReadonlyArray<{
     whileAuraIds: readonly string[];
     pct: number;
-    /** A talent that makes this bonus itself `pct` % greater for its holder
+    /** A talent that adds `pct` points to this bonus for its holder
      * (Dragon-Bone Dice 1259481: 「Bonuses to Restless Blades cooldown
-     * reduction are 10% greater」 — 30 % → 33 %). */
-    greaterWith?: { talentId: string; pct: number };
+     * reduction are 10% greater」 — DB2 aura 219, a FLAT label modifier on
+     * the bonus effect (`talentInventory.ts`): 30 % → 40 %). */
+    addWith?: { talentId: string; pct: number };
   }>;
   /** Supercharged combo points (Supercharger 470347, T136): a press of
    * `byCastIds` supercharges `points` combo points; the holder's next
@@ -1291,12 +1292,13 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
       // GH #176): aura 108 +30 % on mask 0/0/8192/0 — Restless Blades' own
       // Dragon-Bone Dice 1259481 (T136): 「Bonuses to Restless Blades
       // cooldown reduction are $s3% greater」 — SpellEffect index 2, aura
-      // 219 base 10, PvpMultiplier 1: the 30 % becomes 33 %.
+      // 219 (a flat label modifier) base 10, PvpMultiplier 1: the 30 %
+      // becomes 40 % (codex 85-tk-CD-T136-1 #1).
       boosts: [
         {
           whileAuraIds: ["1214935", "1214937"],
           pct: 30,
-          greaterWith: { talentId: "1259481", pct: 10 },
+          addWith: { talentId: "1259481", pct: 10 },
         },
       ],
       // Supercharger 470347 (T136): 「Adrenaline Rush supercharges $m1 combo
@@ -1306,9 +1308,11 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
       // bonus … by $s1」, dummy 1. Round-14 audit D24 (ae1d0895): Sprint
       // pressed 98.39 s, Adrenaline Rush 99.94 s, then Dispatch 7, Kidney
       // Shot 5, Between the Eyes 7 / 6 / 5 under Triple Threat — 30 points,
-      // 39.9 s at 33 %, back 118.5 s; Sprint was pressed again at 115.35 s.
+      // 42.0 s at 40 %, back 116.4 s; Sprint was pressed again at 115.35 s.
       // With the first damaging finisher counted 3 points more (holder of
-      // both): 43.9 s, back 114.5 s.
+      // both): 46.2 s, back 112.2 s. A press while a point is still in hand
+      // adds another (Preparation resets Adrenaline Rush); a finisher whose
+      // cost the log does not state takes its point all the same.
       // Coup de Grace (Trickster, 441423; T136): 「your next Dispatch will be
       // performed as a Coup de Grace, functioning as if it had consumed $s3
       // additional combo points」 — SpellEffect index 2, a dummy, base 5,
@@ -2158,13 +2162,17 @@ export function powerSpendTriggers(
   for (const e of unit.spellCastEvents) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     const id = String(e.spellId);
-    if (sc?.byCastIds.includes(id)) charged = sc.points;
+    if (sc?.byCastIds.includes(id)) charged += sc.points;
     if (
       p.exclude?.castIds.includes(id) &&
       holderSpec !== undefined &&
       p.exclude.specIds.includes(holderSpec)
     )
       continue;
+    // a damaging finisher takes its supercharged point whether or not its
+    // cost can be read (codex 85-tk-CD-T136-1 #2)
+    const superchargedUse = !!sc && charged > 0 && sc.finisherIds.includes(id);
+    if (superchargedUse) charged--;
     const stated =
       e.powerCosts?.find((c) => c.type === p.powerType)?.cost ||
       freeSpendMax(unit, p, id, e.logLine.timestamp);
@@ -2183,10 +2191,7 @@ export function powerSpendTriggers(
     }
     for (const x of p.extraSpends ?? [])
       if (x.castIds.includes(id)) cost += x.extra;
-    if (sc && charged > 0 && sc.finisherIds.includes(id)) {
-      cost += scExtra;
-      charged--;
-    }
+    if (superchargedUse) cost += scExtra;
     let mult = 1;
     for (const b of p.boosts ?? [])
       if (
@@ -2194,10 +2199,8 @@ export function powerSpendTriggers(
       )
         mult *=
           1 +
-          (b.pct *
-            (b.greaterWith && holds?.(b.greaterWith.talentId)
-              ? 1 + b.greaterWith.pct / 100
-              : 1)) /
+          (b.pct +
+            (b.addWith && holds?.(b.addWith.talentId) ? b.addWith.pct : 0)) /
             100;
     if (cost > 0)
       out.push({ atMs: e.logLine.timestamp, seconds: (cost / units) * mult });
