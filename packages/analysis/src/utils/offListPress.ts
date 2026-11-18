@@ -586,6 +586,57 @@ export interface IPressCutShort {
 }
 
 /**
+ * The row that took `from`'s application off `holder`, when the log names
+ * one (T141): a BROKEN row of the aura, or its REMOVED with a dispel / steal
+ * naming it within `PRESS_CUT_CAUSE_PAIR_MS`. A later APPLIED / REFRESH /
+ * dose of the aura, or a REMOVED with no such row, ends the search with
+ * nothing. The one matcher: `pressEffectCutShort` and the several-holder
+ * inventory of `scan5/offListPress` both ask it.
+ */
+export function auraCutCause(
+  holder: ICombatUnit,
+  from: ICombatUnit["auraEvents"][number],
+): IPressCutShort | undefined {
+  const start = from.logLine.timestamp;
+  const rows = holder.auraEvents.filter(
+    (r) => r.srcUnitId === from.srcUnitId && r.spellId === from.spellId,
+  );
+  for (let j = rows.indexOf(from) + 1; j > 0 && j < rows.length; j++) {
+    const r = rows[j]!;
+    const t = r.logLine.timestamp;
+    if (t <= start) continue;
+    const event = r.logLine.event as string;
+    if (/BROKEN/.test(event)) return { atMs: t, cause: "broken" };
+    if (event === LogEvent.SPELL_AURA_REMOVED) {
+      const by = (holder.actionIn ?? []).find(
+        (x) =>
+          (x.logLine.event === LogEvent.SPELL_DISPEL ||
+            x.logLine.event === LogEvent.SPELL_STOLEN) &&
+          String((x as { extraSpellId?: string }).extraSpellId) ===
+            String(from.spellId) &&
+          Math.abs(x.logLine.timestamp - t) <= PRESS_CUT_CAUSE_PAIR_MS,
+      );
+      return by
+        ? {
+            atMs: t,
+            cause:
+              by.logLine.event === LogEvent.SPELL_STOLEN
+                ? "stolen"
+                : "dispelled",
+          }
+        : undefined;
+    }
+    if (
+      event === LogEvent.SPELL_AURA_APPLIED ||
+      event === LogEvent.SPELL_AURA_REFRESH ||
+      event === LogEvent.SPELL_AURA_APPLIED_DOSE
+    )
+      return undefined;
+  }
+  return undefined;
+}
+
+/**
  * T141 (round-14 D21; user rulings R57 / R59, 2026-11-18): the row that took a
  * press's effect off its holder before its printed length, when the log
  * names one — a BROKEN row of the aura, or its REMOVED with a dispel /
@@ -628,43 +679,7 @@ export function pressEffectCutShort(
     )
   )
     return undefined;
-  const rows = dur.unit.auraEvents.filter(
-    (r) => r.srcUnitId === from.srcUnitId && r.spellId === from.spellId,
-  );
-  let cut: IPressCutShort | undefined;
-  for (let j = rows.indexOf(from) + 1; j > 0 && j < rows.length; j++) {
-    const r = rows[j]!;
-    const t = r.logLine.timestamp;
-    if (t <= start) continue;
-    const event = r.logLine.event as string;
-    if (/BROKEN/.test(event)) {
-      cut = { atMs: t, cause: "broken" };
-      break;
-    }
-    if (event === LogEvent.SPELL_AURA_REMOVED) {
-      const by = (dur.unit.actionIn ?? []).find(
-        (x) =>
-          (x.logLine.event === LogEvent.SPELL_DISPEL ||
-            x.logLine.event === LogEvent.SPELL_STOLEN) &&
-          String((x as { extraSpellId?: string }).extraSpellId) ===
-            String(from.spellId) &&
-          Math.abs(x.logLine.timestamp - t) <= PRESS_CUT_CAUSE_PAIR_MS,
-      );
-      if (by)
-        cut = {
-          atMs: t,
-          cause:
-            by.logLine.event === LogEvent.SPELL_STOLEN ? "stolen" : "dispelled",
-        };
-      break;
-    }
-    if (
-      event === LogEvent.SPELL_AURA_APPLIED ||
-      event === LogEvent.SPELL_AURA_REFRESH ||
-      event === LogEvent.SPELL_AURA_APPLIED_DOSE
-    )
-      break;
-  }
+  const cut = auraCutCause(dur.unit, from);
   if (!cut || cut.atMs > roundEndAtMs) return undefined;
   // the allowance every "ran its length" reading has
   // (`BUFF_FADE_EARLY_TOLERANCE_S`)

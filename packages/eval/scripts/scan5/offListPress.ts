@@ -65,6 +65,7 @@ import {
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
+  auraCutCause,
   pressDuration,
   pressEffectCutShort,
 } from "@gladlog/analysis/src/utils/offListPress";
@@ -324,46 +325,6 @@ export function backBeforeNextPresses(ctx: IRoundCtx): IBackBeforeNext[] {
   return matched.flatMap((x) => backBeforeNext(ctx, x, freeRows) ?? []);
 }
 
-/** The row that took `from`'s aura off `holder` before its time, when the
- * log names one (T141): a BROKEN row of it, or its REMOVED with a dispel /
- * steal naming it within 50 ms. A later APPLIED / REFRESH / dose, or a
- * REMOVED with no such row, ends the search. */
-function cutShortOf(
-  holder: any,
-  from: any,
-): { atMs: number; cause: "broken" | "dispelled" | "stolen" } | undefined {
-  const rows = ((holder.auraEvents ?? []) as any[]).filter(
-    (r) => r.srcUnitId === from.srcUnitId && r.spellId === from.spellId,
-  );
-  const start = tsOf(from);
-  for (let j = rows.indexOf(from) + 1; j > 0 && j < rows.length; j++) {
-    const r = rows[j];
-    if (tsOf(r) <= start) continue;
-    if (/BROKEN/.test(String(ev(r)))) return { atMs: tsOf(r), cause: "broken" };
-    if (ev(r) === REMOVED) {
-      const by = ((holder.actionIn ?? []) as any[]).find(
-        (x) =>
-          (ev(x) === "SPELL_DISPEL" || ev(x) === "SPELL_STOLEN") &&
-          String(x.extraSpellId) === String(from.spellId) &&
-          Math.abs(tsOf(x) - tsOf(r)) <= 50,
-      );
-      return by
-        ? {
-            atMs: tsOf(r),
-            cause: ev(by) === "SPELL_STOLEN" ? "stolen" : "dispelled",
-          }
-        : undefined;
-    }
-    if (
-      ev(r) === APPLIED ||
-      ev(r) === REFRESH ||
-      ev(r) === LogEvent.SPELL_AURA_APPLIED_DOSE
-    )
-      return undefined;
-  }
-  return undefined;
-}
-
 export function run(ctx: IRoundCtx): void {
   const { matched, freeRows } = matchPressLines(ctx);
   for (const one of matched) {
@@ -550,7 +511,7 @@ export function run(ctx: IRoundCtx): void {
           );
         // inventory, out of the total: a copy of a several-holder effect
         // taken off one of them (ruling R57: not written)
-        const one = cut ? undefined : cutShortOf(dur.unit, dur.row);
+        const one = cut ? undefined : auraCutCause(dur.unit, dur.row);
         if (
           one &&
           one.atMs <= playEndMs &&
