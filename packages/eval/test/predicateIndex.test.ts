@@ -5185,6 +5185,16 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CHANNEL_STOP_NAMED_LEAD_MS",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ranFullLength",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "CC_ENDED_BY_LEAD",
     mod: ccTrinketAnalysis,
   },
@@ -5448,6 +5458,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "deathCutCcBeforeDeath",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "printsUnderCcOnTeamTag",
     mod: ccTrinketAnalysis,
   },
   {

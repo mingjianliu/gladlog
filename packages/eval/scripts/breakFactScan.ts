@@ -55,8 +55,9 @@
  *    the hit; a line there stamped `; cast m:ss` is an earlier cast's), unless
  *    another cast's miss renders in that second.
  *  - `casterKickEnd` (R9, 2026-10-18): a channelled control
- *    (`CHANNELED_SPELL_IDS`) on a player whose REMOVED sits within −50…+10 ms
- *    of a SPELL_INTERRUPT on its caster. The control's line (landing second,
+ *    (`CHANNELED_SPELL_IDS`) on a player whose REMOVED sits at a
+ *    SPELL_INTERRUPT on its caster (`channelStopAtRemoval`, the producer's
+ *    window). The control's line (landing second,
  *    name, player) must not say `ended early — cause not logged`.
  *  - `refusedPressMechanic` (R10): the recorder's refused presses
  *    (SPELL_CAST_FAILED, raw stream, `control` reasons) re-assigned to the
@@ -88,7 +89,6 @@ import {
 } from "@gladlog/analysis/src/context/controlRejectedPresses";
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
 import {
-  castsOfEffectAura,
   effectAuraHitShare,
   effectAurasOfCast,
   nominatedEffectAurasOfCast,
@@ -113,7 +113,10 @@ import {
   isSilenceOnlyAura,
 } from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { breakingHitOnHolder } from "@gladlog/analysis/src/utils/brokenRowBreaker";
-import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import {
+  CC_AVOIDANCE_BUFF_SPELLS,
+  channelStopAtRemoval,
+} from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   ccRecastBetween,
   ccRecastSplitsResend,
@@ -698,18 +701,13 @@ function runRound(ctx: IContext): void {
       if (!ccSpellIds.has(r.spellId)) continue;
       const rms = r.logLine.timestamp;
       if (rms < start || rms > roundEnd) continue;
-      const caster = byId.get(r.srcUnitId);
-      // the kick of THIS channel: its interrupted spell is the control or a
-      // cast whose effect it is (codex 20-F15-24: a Counterspell on the
-      // priest's Flash Heal is no end of Mind Control)
-      const channelIds = new Set([r.spellId, ...castsOfEffectAura(r.spellId)]);
-      const kick = ((caster?.actionIn ?? []) as ISpellEvent[]).find(
-        (a) =>
-          a.logLine?.event === LogEvent.SPELL_INTERRUPT &&
-          a.timestamp >= rms - 50 &&
-          a.timestamp <= rms + 10 &&
-          (a.extraSpellId === undefined || channelIds.has(a.extraSpellId)),
-      );
+      // the producer's own reading of the kick that stopped THIS channel
+      // (T169: its lead window is the producer's, not a copy of it)
+      const kick = channelStopAtRemoval(
+        byId.get(r.srcUnitId),
+        r.spellId,
+        rms,
+      ) as ISpellEvent | undefined;
       if (!kick) continue;
       const kicker = labelPidOf(kick.srcUnitId);
       const applied = [...auras]

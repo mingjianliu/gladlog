@@ -106,6 +106,20 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       expect(bindBreakToWindow([cyclone, legSweep], 98_813)).toBe(cyclone);
     });
 
+    it("T169 (449dd530 3:49): a control 3 ms short of its length with the press 83 ms after it came off ran out — not bound", () => {
+      const chastise: ICCBreakableWindow = {
+        applyMs: 226_115,
+        removeMs: 229_112,
+        officialEndMs: 229_115,
+      };
+      expect(bindBreakToWindow([chastise], 229_195)).toBeUndefined();
+      // a press AT the removal broke it, however little was left
+      expect(bindBreakToWindow([chastise], 229_113)).toBe(chastise);
+      // more than the jitter short: cut, and the late press is still bound
+      const cut: ICCBreakableWindow = { ...chastise, removeMs: 229_000 };
+      expect(bindBreakToWindow([cut], 229_083)).toBe(cut);
+    });
+
     it("the DR-shortened length decides: a 50 % DR Psychic Scream (3 s) loses to a full Dragon's Breath with more left", () => {
       // Dragon's Breath 22.0 (4 s at Full DR → ends 26.0); Psychic Scream 22.5
       // at 50 % DR (6 s × 0.5 → ends 25.5). Trinket at 24.4: 1.6 s vs 1.1 s left.

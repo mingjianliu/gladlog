@@ -211,11 +211,14 @@ export function emitCcOnEnemyEntries(
         if (
           applied &&
           fullS !== undefined &&
-          ranFullLength({
-            applyMs: applied.timestamp,
-            removeMs: removed.timestamp,
-            officialEndMs: applied.timestamp + fullS * 1000,
-          })
+          ranFullLength(
+            {
+              applyMs: applied.timestamp,
+              removeMs: removed.timestamp,
+              officialEndMs: applied.timestamp + fullS * 1000,
+            },
+            pressMs,
+          )
         )
           return undefined;
         if (

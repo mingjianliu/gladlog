@@ -27,6 +27,7 @@ import {
   analyzePlayerCCAndTrinket,
   ccEndedByOwnPress,
   CHANNEL_STOP_LEAD_MS,
+  CHANNEL_STOP_NAMED_LEAD_MS,
   channelStoppedAtRemoval,
 } from "../src/utils/ccTrinketAnalysis";
 import { reconstructDispelSummary } from "../src/utils/dispelAnalysis";
@@ -320,8 +321,26 @@ describe("G5 — a channel stopped at the removal ended the control", () => {
     expect(
       channelStoppedAtRemoval(priest(REMOVE_MS + 10), MIND_CONTROL, REMOVE_MS),
     ).toBe(true);
+    // T169 (3c8cd2a3 r0 1:06: Wind Shear 65 ms before): a row that NAMES
+    // the channel may sit `CHANNEL_STOP_NAMED_LEAD_MS` before the REMOVED …
+    expect(CHANNEL_STOP_NAMED_LEAD_MS).toBe(100);
     expect(
-      channelStoppedAtRemoval(priest(REMOVE_MS - 60), MIND_CONTROL, REMOVE_MS),
+      channelStoppedAtRemoval(priest(REMOVE_MS - 65), MIND_CONTROL, REMOVE_MS),
+    ).toBe(true);
+    expect(
+      channelStoppedAtRemoval(priest(REMOVE_MS - 101), MIND_CONTROL, REMOVE_MS),
+    ).toBe(false);
+    // … one that names no spell keeps the 50 ms
+    const unnamed = (interruptMs: number) => {
+      const p = priest(interruptMs);
+      delete (p.actionIn[0] as { extraSpellId?: string }).extraSpellId;
+      return p;
+    };
+    expect(
+      channelStoppedAtRemoval(unnamed(REMOVE_MS - 50), MIND_CONTROL, REMOVE_MS),
+    ).toBe(true);
+    expect(
+      channelStoppedAtRemoval(unnamed(REMOVE_MS - 60), MIND_CONTROL, REMOVE_MS),
     ).toBe(false);
     expect(
       channelStoppedAtRemoval(priest(REMOVE_MS + 11), MIND_CONTROL, REMOVE_MS),

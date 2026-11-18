@@ -999,6 +999,14 @@ export const PRESS_ENDED_CC_LAG_MS = 10;
 /** How far before a channelled CC's REMOVED its caster's interrupt may sit
  * (the interrupt row is written first). WO3 Part 2. */
 export const CHANNEL_STOP_LEAD_MS = 50;
+/** …and when the interrupt row NAMES this channel as what it stopped
+ * (`extraSpellId` the control or a cast whose effect it is), the lag a
+ * press's own row may trail its effect by (`CAST_ROW_LAG_MAX_MS`): the log
+ * wrote the cause, only the two rows sit further apart. T169 (round 14 D8,
+ * 3c8cd2a3 r0 1:06): Wind Shear on the priest's Mind Control 65 ms before
+ * it came off read `ended early — cause not logged`. A row that names no
+ * spell keeps the 50 ms. */
+export const CHANNEL_STOP_NAMED_LEAD_MS = CAST_ROW_LAG_MAX_MS;
 
 /** WO3 Part 2 (r1014-173): a CHANNELLED control whose caster was
  * interrupted at its removal ended with the channel — no press of the holder
@@ -1027,14 +1035,17 @@ export function channelStopAtRemoval(
   // Counterspell on the priest's Flash Heal 5 ms after Mind Control ended
   // was named as its end)
   const channelIds = new Set([spellId, ...castsOfEffectAura(spellId)]);
-  return (caster.actionIn ?? []).find(
-    (a) =>
-      (a.logLine?.event as string) === LogEvent.SPELL_INTERRUPT &&
-      a.timestamp >= removeMs - CHANNEL_STOP_LEAD_MS &&
-      a.timestamp <= removeMs + PRESS_ENDED_CC_LAG_MS &&
-      ((a as { extraSpellId?: string }).extraSpellId === undefined ||
-        channelIds.has((a as { extraSpellId?: string }).extraSpellId!)),
-  );
+  return (caster.actionIn ?? []).find((a) => {
+    if ((a.logLine?.event as string) !== LogEvent.SPELL_INTERRUPT) return false;
+    const stopped = (a as { extraSpellId?: string }).extraSpellId;
+    if (stopped !== undefined && !channelIds.has(stopped)) return false;
+    const lead =
+      stopped === undefined ? CHANNEL_STOP_LEAD_MS : CHANNEL_STOP_NAMED_LEAD_MS;
+    return (
+      a.timestamp >= removeMs - lead &&
+      a.timestamp <= removeMs + PRESS_ENDED_CC_LAG_MS
+    );
+  });
 }
 
 /**
@@ -1394,17 +1405,33 @@ export interface ICCBreakableWindow {
  * the time-left rule alone.
  */
 /** A control window whose removal came at or after its official end (DR
- * included): it ran out, nothing broke it. */
+ * included): it ran out, nothing broke it.
+ *
+ * With `pressMs` — the break press the caller is about to credit — a removal
+ * short of the official end by no more than the timer's jitter
+ * (`AURA_NATURAL_END_JITTER_S`) is the control running out too, when the
+ * press came later than `PRESS_ENDED_CC_LAG_MS` after it: a press that ends
+ * a control is logged within that lag of the removal, so this removal was
+ * not the press's. T169 (round 14 D9, 449dd530 3:49): a Holy Word: Chastise
+ * that ran 2.997 s of its 3 s, the Medallion 83 ms after it came off, read
+ * `used PvP trinket out of Holy Word: Chastise`. 605 capture, controls that
+ * nothing ended (no BROKEN row, dispel or Medallion near), table length:
+ * 12,328 end on or up to 50 ms past it, 3,011 are 1–10 ms short, 586 11–25,
+ * 156 26–50, 74 51–100 (scan5 t169 `naturalEndShortfall`). A press AT the
+ * removal still broke what it removed, however little was left. */
 export function ranFullLength(
   w: Pick<
     ICCBreakableWindow,
     "applyMs" | "removeMs" | "officialEndMs" | "noRemoved"
   >,
+  pressMs?: number,
 ): boolean {
+  if (w.noRemoved || w.officialEndMs === undefined) return false;
+  if (w.removeMs >= w.officialEndMs) return true;
   return (
-    !w.noRemoved &&
-    w.officialEndMs !== undefined &&
-    w.removeMs >= w.officialEndMs
+    pressMs !== undefined &&
+    pressMs - w.removeMs > PRESS_ENDED_CC_LAG_MS &&
+    w.removeMs >= w.officialEndMs - AURA_NATURAL_END_JITTER_S * 1000
   );
 }
 
@@ -1435,7 +1462,7 @@ export function bindBreakToWindow<T extends ICCBreakableWindow>(
     // binder's too (179b83ac 5:31: a Mortal Coil landing 204 ms after the
     // Medallion and lasting its 3.003 s took the press from the Dismantle it
     // removed)
-    if (ranFullLength(w)) continue;
+    if (ranFullLength(w, castTs)) continue;
     // fact2 605: one that landed AFTER the press and stayed on past the
     // tolerance was not ended by it — a length that depends on the press
     // that applied it (Maim's combo points) never reaches its table length,
@@ -2480,15 +2507,19 @@ export function ccRemovalCause(
   );
   if (broken !== null) return broken;
   const window = { applyMs, removeMs };
+  const ranOut = ranFullLength({
+    applyMs,
+    removeMs,
+    ...(officialEndMs !== undefined ? { officialEndMs } : {}),
+  });
   // a control that ran its official length ended by itself, whatever was
   // pressed in that millisecond — the break branch's test below (codex
   // R6C-13 #1: a 6.004 s Howl of Terror of 6 s, a Medallion 8 ms after it,
   // read `ended by their PvP trinket` beside the Psychic Scream that press
   // did break)
-  const trinket =
-    officialEndMs !== undefined && removeMs >= officialEndMs
-      ? undefined
-      : pvpTrinketUses(holder).find((u) => castEndedCcWindow(window, u.atMs));
+  const trinket = ranOut
+    ? undefined
+    : pvpTrinketUses(holder).find((u) => castEndedCcWindow(window, u.atMs));
   if (trinket)
     return {
       kind: "trinket",
@@ -2501,7 +2532,7 @@ export function ccRemovalCause(
     (p) =>
       castEndedCcWindow(window, p.ts) &&
       breakRemovesCc(p.spellId, spellId) &&
-      (officialEndMs === undefined || removeMs < officialEndMs),
+      !ranOut,
   );
   if (press)
     return {
@@ -3411,6 +3442,23 @@ export function rendersCcOnTeamLine(
   return cc.durationSeconds !== 0;
 }
 
+/** Does this instance print under the `[CC ON TEAM]` TAG — a line of its
+ *  own that is not a dispel-backlash silence's? That one prints as a
+ *  `[SILENCE]` line (fact3 D30: Unstable Affliction's 196364), and a
+ *  silence is no control a PvP trinket is "available" against: the
+ *  `[DEATH]` trinket tag's two readings ask this (round 14 G1, 2c47e3d5
+ *  2:07: a druid silenced by the backlash 2 s before the death read as a
+ *  bare `(PvP Trinket available)`, with no `[CC ON TEAM]` line beside it —
+ *  `checkDeathTrinketCcConsistency`). */
+export function printsUnderCcOnTeamTag(
+  cc: Pick<ICCInstance, "durationSeconds" | "spellId">,
+): boolean {
+  return (
+    rendersCcOnTeamLine(cc) &&
+    BACKLASH_AURA_CC_TYPE.get(cc.spellId) !== "silence"
+  );
+}
+
 /** The whole seconds a `[CC ON TEAM]` line prints for this instance — its
  *  `| Ns`, or the "after Ns" of a trinket / racial / Tremor break. One
  *  rounding for the line and every predicate that reads it back. Triage
@@ -3464,7 +3512,8 @@ export function renderedCcSpanSeconds(lineText: string): number | undefined {
  *  breaking was on the dying player (user ruling 2026-09-30, A28 / triage
  *  enemy-def F-E28): a `[CC ON TEAM]` instance on them whose rendered span
  *  overlaps [death − LOOKBACK, death] and whose rendered length is ≥ MIN.
- *  Silences and roots never render as `[CC ON TEAM]`, so they never count.
+ *  Silences and roots never render as `[CC ON TEAM]`, so they never count —
+ *  a dispel-backlash silence included (`printsUnderCcOnTeamTag`).
  *  Read on the render grid (the line's m:ss start + its printed seconds) so
  *  `checkDeathTrinketCcConsistency` can re-parse it. */
 export const DEATH_BREAKABLE_CC_LOOKBACK_S = 10;
@@ -3476,7 +3525,7 @@ export function breakableCcBeforeDeath(
 ): boolean {
   const deathS = Math.floor(deathAtSeconds);
   return summary.ccInstances.some((cc) => {
-    if (!rendersCcOnTeamLine(cc)) return false;
+    if (!printsUnderCcOnTeamTag(cc)) return false;
     const n = renderedCcSeconds(cc);
     const startS = Math.floor(cc.atSeconds);
     return (
@@ -3505,7 +3554,7 @@ export function deathCutCcBeforeDeath(
   const deathS = Math.floor(deathAtSeconds);
   const cut = summary.ccInstances
     .filter((cc) => {
-      if (!rendersCcOnTeamLine(cc)) return false;
+      if (!printsUnderCcOnTeamTag(cc)) return false;
       const n = renderedCcSeconds(cc);
       const startS = Math.floor(cc.atSeconds);
       return (
@@ -4401,7 +4450,7 @@ function analyzePlayerCCAndTrinketUncached(
           // the CC stays eligible. 101 of the 605 S2 files
           // (fix-KA/breakNaturalProbe.ts): of 232 bound presses none had
           // reached its official end; 2 had under 200 ms left.
-          (w.officialEndMs === undefined || w.removeMs < w.officialEndMs),
+          !ranFullLength(w),
       ),
       press.ts,
     );

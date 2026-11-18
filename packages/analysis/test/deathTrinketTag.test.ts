@@ -26,6 +26,22 @@ describe("breakableCcBeforeDeath (F-E28)", () => {
     expect(breakableCcBeforeDeath({ ccInstances: [cc(40.9, 1.5)] }, 52.99)).toBe(true);
     expect(breakableCcBeforeDeath({ ccInstances: [cc(39.9, 1.5)] }, 52.0)).toBe(false);
   });
+  it("round 14 G1 (2c47e3d5 2:07): a dispel-backlash silence prints as [SILENCE], not [CC ON TEAM] — never breakable", () => {
+    const UA_SILENCE = "196364";
+    expect(
+      breakableCcBeforeDeath(
+        { ccInstances: [{ atSeconds: 125.2, durationSeconds: 1.9, spellId: UA_SILENCE } as never] },
+        127.1,
+      ),
+    ).toBe(false);
+    // the same span of a stun is
+    expect(
+      breakableCcBeforeDeath(
+        { ccInstances: [{ atSeconds: 125.2, durationSeconds: 1.9, spellId: "408" } as never] },
+        127.1,
+      ),
+    ).toBe(true);
+  });
   it("an unrendered zero-length instance never counts", () => {
     expect(breakableCcBeforeDeath({ ccInstances: [cc(50, 0)] }, 52)).toBe(false);
   });
