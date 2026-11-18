@@ -66,7 +66,7 @@ const dh = (removedS?: number): any =>
 
 function scan(
   u: any,
-  left: number,
+  left: number | string,
   entry = "Metamorphosis",
   endS = END_S,
 ): { checked: number; seen: string[] } {
@@ -194,8 +194,14 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
 
   it("out of the total: a (no press) entry, and an aura past its own length", () => {
     const proc = scan(dh(39.48), 3, "Metamorphosis (no press)");
-    expect(proc.seen).toHaveLength(1);
-    expect(proc.seen[0]).toMatch(/^no press: /);
+    // + T140's own check on the same entry: an exact time left
+    expect(proc.seen).toHaveLength(2);
+    expect(proc.seen[0]).toMatch(/^Metamorphosis: .*prints an exact 3s left/);
+    expect(proc.seen[1]).toMatch(/^no press: /);
+    // the bounded form `(≤Ns left)` is read, counted, and owes nothing
+    const bounded = scan(dh(39.48), "≤24", "Metamorphosis (no press)");
+    expect(bounded.checked).toBeGreaterThan(0);
+    expect(bounded.seen.filter((x) => /prints an exact/.test(x))).toEqual([]);
     // still up 60 s after it went up, removed after a slice that ends there
     const outran = scan(dh(99), 3, "Metamorphosis", 92.9);
     expect(outran.seen).toHaveLength(1);
