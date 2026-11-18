@@ -7129,3 +7129,12 @@ killWindowShutPastAction 0/807 -> 0/807; ccBlockerPastAction 0/24148 both;
 other scan5 violation counts unchanged; [KILL WINDOW] +108/-77 on the last
 attempt (rogue Vanish press timer), 0 menu lines. Not changed: an `end not
 logged` line does not print how long the immunity lasted (R22 wording).
+
+v575 (2026-11-18; pipeline batch B102, T131; user ruling A11; first two-
+machine trial batch). Deletes the code behind four retired signals: attempt-
+into-trinket (with its outcome reference and gate class), teammate-crisis
+(with its prior table and scan), unsynced-burst and cd-spent-idle; missed-
+purge stays as the feasibility-gate model. 45 files, +204 / -4812. No prompt
+change: the 605 capture at the branch is byte-identical to the e8047b053 base
+(capture.sha256 equal, 0 of 3,519 files differ, candidate rows 7,446 = 7,446).
+Codex branch review 85-tk-W1-T131-1: APPROVE.

@@ -1390,5 +1390,10 @@
  *  action for every reader; an [ENEMY DEF] line whose holder acted before
  *  the cutting hit prints `end not logged`.
  *  See docs/prompt-version-history.md.
+ *
+ * v575 (2026-11-18; pipeline batch B102, T131): no prompt change. The
+ *  retired-signal code (attempt-into-trinket, teammate-crisis, unsynced-
+ *  burst, cd-spent-idle) is deleted; missed-purge stays.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 574;
+export const PROMPT_VERSION = 575;
