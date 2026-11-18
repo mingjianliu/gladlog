@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, statSync, writeFileSync } from "fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -107,6 +114,48 @@ describe("MatchStore 懒加载路径", () => {
     if (lazy?.mode !== "full") return;
     expect(parseDocBytes(lazy.bytes)).toEqual(parseDocBytes(await s.get(id)));
     expect(await s.getRound(id, 1)).toBeNull();
+  });
+
+  // T220 codex #1 (folded into T200): the sidecar is validated by a stat of
+  // the path, the file is opened after it. A self-heal that replaces
+  // match.json in between must not have its bytes read at the old offsets.
+  it("校验之后、打开之前文件被换掉:不按旧偏移读(否则读到的是另一轮的合法 JSON)", async () => {
+    const s = setup();
+    const matchDir = join(dir, id);
+    // same byte length, rounds 2 and 3 swapped: the old offsets of round 2
+    // address round 3's bytes, and they parse
+    const swapped = {
+      ...doc,
+      data: {
+        ...doc.data,
+        rounds: [doc.data.rounds[0], doc.data.rounds[2], doc.data.rounds[1]],
+      },
+    };
+    const inner = s as unknown as {
+      readRoundsIdx: (id: string) => unknown;
+    };
+    const validate = inner.readRoundsIdx.bind(s);
+    let swaps = 0;
+    inner.readRoundsIdx = (x: string) => {
+      const idx = validate(x);
+      // the heal's atomic replace lands here
+      const tmp = join(matchDir, "match.json.tmp");
+      writeFileSync(tmp, JSON.stringify(swapped));
+      const later = new Date(Date.now() + 5_000 + swaps++ * 1_000);
+      utimesSync(tmp, later, later);
+      renameSync(tmp, join(matchDir, "match.json"));
+      return idx;
+    };
+    // before the handle check this returned {"id":"r3","sequenceNumber":2,…}
+    expect(await s.getRound(id, 1)).toBeNull();
+    const lazy = await s.getLazy(id);
+    expect(lazy?.mode).toBe("full");
+    if (lazy?.mode !== "full") return;
+    // the whole document, as it is on disk now
+    const now = parseDocBytes(lazy.bytes) as typeof swapped;
+    expect(now.data.rounds.map((r) => (r as { id?: string }).id)).toEqual(
+      swapped.data.rounds.map((r) => (r as { id?: string }).id),
+    );
   });
 
   it("非 shuffle:full 模式", async () => {

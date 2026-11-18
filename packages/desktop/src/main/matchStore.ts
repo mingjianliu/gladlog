@@ -1040,18 +1040,13 @@ export class MatchStore {
       const idx = this.readRoundsIdx(id);
       if (idx && idx.rounds.length > 0) {
         try {
-          const filePath = join(this.rootDir, safeName(id), "match.json");
-          const fh = await fsp.open(filePath, "r");
-          try {
-            const readRange = async (start: number, end: number) => {
-              const out = Buffer.allocUnsafe(end - start);
-              await fh.read(out, 0, out.length, start);
-              return out;
-            };
-            const prefix = await readRange(0, idx.arrayOpenEnd);
-            const suffix = await readRange(idx.arrayClose, idx.fileSize);
-            const [r0s, r0e] = idx.rounds[0]!;
-            const round0 = await readRange(r0s, r0e);
+          const parts = await this.readIdxRanges(id, idx, [
+            [0, idx.arrayOpenEnd],
+            [idx.arrayClose, idx.fileSize],
+            idx.rounds[0]!,
+          ]);
+          if (parts) {
+            const [prefix, suffix, round0] = parts as [Buffer, Buffer, Buffer];
             const shell = Buffer.concat([
               prefix,
               Buffer.from(nullFiller(idx.rounds.length)),
@@ -1067,8 +1062,6 @@ export class MatchStore {
               round0,
               roundCount: idx.rounds.length,
             };
-          } finally {
-            await fh.close();
           }
         } catch {
           /* fall through to the whole-doc path */
@@ -1087,21 +1080,51 @@ export class MatchStore {
   async getRound(id: string, roundIndex: number): Promise<Buffer | null> {
     const idx = this.readRoundsIdx(id);
     const range = idx?.rounds[roundIndex];
-    if (!range) return null;
+    if (!idx || !range) return null;
     try {
-      const fh = await fsp.open(
-        join(this.rootDir, safeName(id), "match.json"),
-        "r",
-      );
-      try {
-        const out = Buffer.allocUnsafe(range[1] - range[0]);
-        await fh.read(out, 0, out.length, range[0]);
-        return out;
-      } finally {
-        await fh.close();
-      }
+      return (await this.readIdxRanges(id, idx, [range]))?.[0] ?? null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Read byte ranges of match.json that a validated sidecar names — from the
+   * file the sidecar was written for, or not at all.
+   *
+   * `readRoundsIdx` validates by a stat of the PATH; the file is opened after
+   * it. A self-heal that replaces match.json between the two leaves offsets
+   * that address other bytes, and those can be valid JSON of another round
+   * (rounds of equal serialized length; T220 codex #1). So the opened handle
+   * is checked against the sidecar's size and mtime — a rename cannot change
+   * what an open handle reads — and a short read is refused. Null = the
+   * caller's fallback (whole-doc path / re-open), and the sidecar is dropped.
+   */
+  private async readIdxRanges(
+    id: string,
+    idx: RoundsIdx,
+    ranges: ReadonlyArray<readonly [number, number]>,
+  ): Promise<Buffer[] | null> {
+    const fh = await fsp.open(
+      join(this.rootDir, safeName(id), "match.json"),
+      "r",
+    );
+    try {
+      const st = await fh.stat();
+      if (st.size !== idx.fileSize || st.mtimeMs !== idx.mtimeMs) {
+        this.idxCache.delete(id);
+        return null;
+      }
+      const out: Buffer[] = [];
+      for (const [start, end] of ranges) {
+        const buf = Buffer.allocUnsafe(end - start);
+        const { bytesRead } = await fh.read(buf, 0, buf.length, start);
+        if (bytesRead !== buf.length) return null;
+        out.push(buf);
+      }
+      return out;
+    } finally {
+      await fh.close();
     }
   }
 
