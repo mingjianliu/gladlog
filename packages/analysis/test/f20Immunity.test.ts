@@ -476,3 +476,66 @@ describe("F20 residual — one target-immunity reading for the control sampler a
     expect(blockedAt(ivs, 186)).toBe(false);
   });
 });
+
+describe("T216 — an IMMUNE row after the press's own aura went up is not the press refused", () => {
+  // Prayer of Mending 33076 puts up 41635; pressed at 30 s
+  const POM = "33076";
+  const casts = [ms(30)];
+  const aura = (atS: number, event = LogEvent.SPELL_AURA_APPLIED) => ({
+    spellId: "41635",
+    destUnitId: "e",
+    logLine: { event, timestamp: ms(atS) },
+  });
+  const refused = (applied?: ReturnType<typeof aura>[]) =>
+    pressImmuneMissRows(
+      [missRow("41635", "e", 31.27)],
+      POM,
+      casts,
+      ms(30),
+      undefined,
+      [],
+      applied,
+    ).length;
+
+  it("the aura up 0.4 s before the IMMUNE row: a later bounce was refused, the press landed (fact14 D35)", () => {
+    expect(refused([aura(30.875)])).toBe(0);
+  });
+  it("no application, or none handed in: the press was refused", () => {
+    expect(refused([])).toBe(1);
+    expect(refused()).toBe(1);
+  });
+  it("an application in the IMMUNE row's own instant, on another unit, or an aura's removal proves nothing", () => {
+    expect(refused([aura(31.25)])).toBe(1);
+    expect(refused([{ ...aura(30.875), destUnitId: "x" }])).toBe(1);
+    expect(refused([aura(30.875, LogEvent.SPELL_AURA_REMOVED)])).toBe(1);
+  });
+  it("a control CAST keeps its refusal when its non-control aura went up first (codex 85-tk-KICK-T216-1 #1)", () => {
+    // Binding Shot 109248: the tether 117405 goes up, the stun 117526 is
+    // refused a second later
+    expect(
+      pressImmuneMissRows(
+        [missRow("117526", "e", 31)],
+        "109248",
+        casts,
+        ms(30),
+        undefined,
+        [],
+        [{ ...aura(30.05), spellId: "117405" }],
+      ),
+    ).toHaveLength(1);
+  });
+  it("a control keeps its refusal whatever of it went up", () => {
+    // Storm Bolt 107570: the stun 132169 IMMUNE is the press refused
+    expect(
+      pressImmuneMissRows(
+        [missRow("132169", "e", 31.27)],
+        "107570",
+        casts,
+        ms(30),
+        undefined,
+        [],
+        [{ ...aura(30.5), spellId: "132169" }],
+      ),
+    ).toHaveLength(1);
+  });
+});

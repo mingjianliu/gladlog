@@ -698,6 +698,22 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   }
 
   const consumedImmuneMisses = new Set<unknown>();
+  // T216: the aura rows a unit put on the round's units — a press whose
+  // own aura was already up on a unit was not refused by a later IMMUNE
+  // there (`pressAuraLandedOn`)
+  const appliedBy = new Map<string, ICombatUnit["auraEvents"]>();
+  const aurasAppliedBy = (casterId: string) => {
+    let rows = appliedBy.get(casterId);
+    if (!rows) {
+      // every unit of the round: a press aimed at a pet is judged on the
+      // pet's rows (codex 85-tk-KICK-T216-1 #2)
+      rows = _allUnits.flatMap((p) =>
+        (p.auraEvents ?? []).filter((a) => a.srcUnitId === casterId),
+      );
+      appliedBy.set(casterId, rows);
+    }
+    return rows;
+  };
   function ownerCcImmuneTag(
     spellId: string,
     castTimeSeconds: number,
@@ -793,6 +809,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         ? { casts: unit.spellCastEvents ?? [], destUnitId: aimedAt }
         : undefined,
       [...(unit.damageOut ?? []), ...(unit.healOut ?? [])],
+      aurasAppliedBy(unit.id),
     ).filter((m) => counts(m.destUnitId) && !consumedImmuneMisses.has(m));
     let miss: (typeof candidates)[number] | undefined = candidates[0];
     let unnamedLabel = "";

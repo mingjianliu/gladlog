@@ -1090,6 +1090,9 @@ export function extractKillAttempts(
         target.id,
         c.caster.spellCastEvents ?? [],
         [...(c.caster.damageOut ?? []), ...(c.caster.healOut ?? [])],
+        // T216: the caster's own aura already up on the target — a later
+        // IMMUNE there is not this press refused
+        (target.auraEvents ?? []).filter((a) => a.srcUnitId === c.caster.id),
       );
     // …before the caster's next press of it: that press's own hits are its
     // own (GH #167, 1d9b0cbe 2:17: Fury of Elune refused tick by tick on

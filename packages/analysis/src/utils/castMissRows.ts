@@ -258,15 +258,39 @@ export function pressImmuneMissRows<T extends IPressMissRow>(
    * on a unit a non-control press landed on anyway is one component refused,
    * not the press (`pressLandedOn`, fact11 D10) */
   landed?: readonly IPressHitRow[],
+  /** the caster's aura applications on other units and itself
+   * (`pressAuraLandedOn`, pipeline T216): an IMMUNE on a unit the press's
+   * own aura had already gone up on is a later application refused — a
+   * bounce, a jump — not the press */
+  applied?: readonly IPressAuraRow[],
 ): T[] {
   if (!misses || misses.length === 0) return [];
-  const out = pressImmuneMissRowsAll(
+  const all = pressImmuneMissRowsAll(
     misses,
     spellId,
     sameSpellCastMs,
     castMs,
     followUp,
   );
+  const out =
+    // a control keeps its refusal whatever else of the press went up — by
+    // the cast (`isControlCast`: Binding Shot's tether 117405 goes up, its
+    // stun 117526 is refused; codex 85-tk-KICK-T216-1 #1), not only by the
+    // aura-keyed set
+    applied && !ccSpellIds.has(spellId) && !isControlCast(spellId)
+      ? all.filter(
+          (m) =>
+            !m.destUnitId ||
+            !pressAuraLandedOn(
+              applied,
+              spellId,
+              sameSpellCastMs,
+              castMs,
+              m.destUnitId,
+              m.timestamp,
+            ),
+        )
+      : all;
   // a control's refused control is the refusal whatever else of it landed
   // (Storm Bolt's damage into a stun immunity: the stun 132169 IMMUNE is the
   // press refused) — the landed reading is for a press whose purpose is not
@@ -301,6 +325,48 @@ export function pressImmuneMissRows<T extends IPressMissRow>(
           m.timestamp,
         ),
       ),
+  );
+}
+
+/** The fields of an aura row the aura-landed reading asks. */
+export interface IPressAuraRow {
+  spellId?: string;
+  destUnitId?: string;
+  logLine: { timestamp: number; event?: unknown };
+}
+
+/**
+ * Pipeline T216 (fact14 D35, 3c8cd2a3 r0 1:34): had the press's own aura —
+ * its cast id or an effect aura of it (`castAndEffectIds`) — already gone up
+ * on `destUnitId` when the IMMUNE row was written? An APPLIED / REFRESH of
+ * it on that unit that belongs to the press by the cast window
+ * (`missBelongsToCast`) and is logged BEFORE the refusal's own instant
+ * (`PRESS_LANDED_SAME_INSTANT_MS`: an application in the refusal's
+ * millisecond is not proof — a re-application can be written beside the
+ * refusal of another component). Prayer of Mending pressed 94.70, its 41635
+ * up on the target at 95.572, Cyclone on that target at 95.586, and the
+ * IMMUNE at 95.968 was the next bounce coming back: the line read
+ * `[IMMUNE — Cyclone was up]` for a press that landed. `rows` are the
+ * caster's applications (the reader filters them by source).
+ */
+export function pressAuraLandedOn(
+  rows: readonly IPressAuraRow[],
+  spellId: string,
+  sameSpellCastMs: readonly number[],
+  castMs: number,
+  destUnitId: string,
+  refusedAtMs: number,
+): boolean {
+  const ids = castAndEffectIds(spellId);
+  return rows.some(
+    (r) =>
+      r.destUnitId === destUnitId &&
+      !!r.spellId &&
+      ids.has(r.spellId) &&
+      (r.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        r.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+      r.logLine.timestamp < refusedAtMs - PRESS_LANDED_SAME_INSTANT_MS &&
+      missBelongsToCast(sameSpellCastMs, castMs, r.logLine.timestamp),
   );
 }
 
@@ -522,6 +588,8 @@ export function pressRefusedImmuneOn(
   casts?: readonly IPressCastRow[],
   /** the caster's damage and heal rows (`pressImmuneMissRows`' `landed`) */
   landed?: readonly IPressHitRow[],
+  /** the caster's aura applications (`pressImmuneMissRows`' `applied`) */
+  applied?: readonly IPressAuraRow[],
 ): boolean {
   return pressImmuneMissRows(
     misses,
@@ -530,6 +598,7 @@ export function pressRefusedImmuneOn(
     castMs,
     casts ? { casts, destUnitId: destId } : undefined,
     landed,
+    applied,
   ).some((m) => m.destUnitId === destId);
 }
 

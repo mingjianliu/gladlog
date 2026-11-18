@@ -570,6 +570,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/castMissRows.ts`,
+    symbol: "pressAuraLandedOn",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
     symbol: "isPressHitRow",
     mod: castMissRows,
   },

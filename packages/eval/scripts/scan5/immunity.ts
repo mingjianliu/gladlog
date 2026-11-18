@@ -92,10 +92,13 @@ import { castAndEffectIds } from "@gladlog/analysis/src/data/castEffectAuras";
 import { DR_CATEGORIES_GENERATED } from "@gladlog/analysis/src/data/drCategoriesGenerated";
 import mechanicsRaw from "@gladlog/analysis/src/data/spellMechanicsGenerated.json";
 import schoolsRaw from "@gladlog/analysis/src/data/spellSchoolsGenerated.json";
+import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
+  isControlCast,
   isPressHitRow,
   PRESS_LANDED_SAME_INSTANT_MS,
   PRESS_TRIGGERED_CAST_IDS,
+  pressAuraLandedOn,
 } from "@gladlog/analysis/src/utils/castMissRows";
 import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
 import { killAttemptAllImmuneClause } from "@gladlog/analysis/src/utils/killAttempts";
@@ -516,6 +519,26 @@ export function run(ctx: IRoundCtx): void {
           Math.abs(tsOf(d) - tsOf(m)) <= PRESS_LANDED_SAME_INSTANT_MS &&
           hitIds.some((h) => isPressHitRow(h, h === id ? pressName : "", d)),
       );
+    // T216: the press's own aura already up on that unit — the IMMUNE row
+    // is a later application refused, not the press (the product's
+    // `pressAuraLandedOn`; a control keeps its refusal)
+    const sameSpellCastMs = successesOf(caster)
+      .filter((x) => String(x.spellId) === id)
+      .map(tsOf);
+    const auraUpBefore = (m: any) =>
+      !isControlCast(id) &&
+      !ccSpellIds.has(id) &&
+      pressAuraLandedOn(
+        (
+          ((ctx.units as any[]).find((u) => u.id === m.destUnitId)
+            ?.auraEvents ?? []) as any[]
+        ).filter((a) => a.srcUnitId === caster.id),
+        id,
+        sameSpellCastMs,
+        t,
+        m.destUnitId,
+        tsOf(m),
+      );
     const miss = ((caster.missesOut ?? []) as any[]).some(
       (m) =>
         m.missType === "IMMUNE" &&
@@ -525,7 +548,8 @@ export function run(ctx: IRoundCtx): void {
         tsOf(m) >= t - PRESS_MISS_LEAD_MS &&
         tsOf(m) <= t + PRESS_MISS_WINDOW_MS &&
         !next.some((n) => n <= tsOf(m) + PRESS_MISS_LEAD_MS) &&
-        !landedAt(m),
+        !landedAt(m) &&
+        !auraUpBefore(m),
     );
     if (!miss) return false;
     return !((caster.damageOut ?? []) as any[]).some(
