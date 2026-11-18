@@ -2284,6 +2284,23 @@ describe("listGapPress — a form re-shift and a control press (T205)", () => {
     expect(LIST_GAP_OUT_OF_TOTAL.has("listGapPress|listed/enemy/kitOnly")).toBe(
       false,
     );
+    // the owner's control press owes its `[YOU] [CC]` line: in the total
+    const mine = scan(
+      runListGap,
+      [
+        unit("Owner", "1", 1, {
+          info: { teamId: "0" },
+          spec: CombatUnitSpec.Shaman_Restoration,
+          spellCastEvents: [cast(10_400, "Owner", "192058", "Capacitor Totem")],
+        }),
+      ],
+      [],
+    ).filter((v) => v.check === "listGapPress");
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.kind.startsWith("control/")).toBe(false);
+    expect(LIST_GAP_OUT_OF_TOTAL.has(`listGapPress|${mine[0]!.kind}`)).toBe(
+      false,
+    );
     expect(LIST_GAP_OUT_OF_TOTAL.has("listGapPress|offList/ally/noLine")).toBe(
       false,
     );

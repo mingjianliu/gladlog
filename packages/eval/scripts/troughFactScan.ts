@@ -340,16 +340,29 @@ for (const f of files) {
       const unit = byName.get(unitName);
       if (!unit) continue;
       count("kickLowInSpan");
-      // `t` is printed to 0.1 s (fmtFactNum): ±50 ms covers its rounding;
-      // `lockout` is printed to 0.1 s too, so the end carries both (T205:
-      // s1/56-1 t=163.2 lockout=3.0, the 19 % reading at 166.252 s — 2 ms
-      // past an end that allowed for `t` alone)
-      const m = minPct(
-        unit,
-        start,
-        start + Math.round((t - 0.05) * 1000),
-        start + Math.round((t + lock + 0.1) * 1000) + 1,
-      );
+      // the lock's own span, from the kick's logged row (codex
+      // 85-tk-EVAL-T205-1 #2: `t` is cut to 0.1 s, not rounded — the row is
+      // the kicker's SPELL_INTERRUPT in [t, t + 0.1 s)); `lockout` is
+      // rounded to 0.1 s, so the end carries 50 ms (T205: s1/56-1 t=163.2
+      // lockout=3.0, the printed 19 % read at 166.252 s). With no such row
+      // found, the widest span the two printed numbers allow.
+      const tMs = start + Math.round(t * 1000);
+      const source = facts.get("source");
+      const kickMs = (Object.values(legacy.units ?? {}) as any[])
+        .flatMap((x) => (x.actionIn ?? []) as any[])
+        .filter(
+          (k) =>
+            k.logLine?.event === "SPELL_INTERRUPT" &&
+            k.srcUnitName === source &&
+            k.logLine.timestamp >= tMs - 1 &&
+            k.logLine.timestamp < tMs + 101,
+        )
+        .map((k) => k.logLine.timestamp as number)
+        .sort((x, y) => x - y)[0];
+      const fromMs = kickMs ?? tMs;
+      const toMs =
+        (kickMs ?? tMs + 100) + Math.round((lock + 0.05) * 1000) + 1;
+      const m = minPct(unit, start, fromMs, toMs);
       if (m && pct < m.pct)
         fail(
           "kickLowInSpan",

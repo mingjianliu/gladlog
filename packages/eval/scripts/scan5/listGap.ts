@@ -16,9 +16,10 @@
  *  - `kit`: the caster's `<cooldowns>` row names it.
  *
  * Kinds: `<filled|control|listed|offList|offListUnder45>/<side>/<noLine|kitOnly>`.
- * `control` (out of the total) is a control press (`isControlCast`): its
- * lines are the landing's, not a press tag's, and a control that touched
- * nobody has none. `offListUnder45` is out of the total too.
+ * `control` (out of the total) is an enemy's control press
+ * (`isControlCast`): its lines are the landing's, not a press tag's, and a
+ * control that touched nobody has none. `offListUnder45` is out of the
+ * total too.
  * `offList` is what the class is about: on none of the roster keys, with an
  * official cooldown of `PRESS_LINE_MIN_CD_SECONDS` or more — the `[PRESS]`
  * line's (GH #176, user ruling 2026-11-02), and so is a picked button under
@@ -59,17 +60,18 @@ const SIDES = ["owner", "ally", "enemy"] as const;
 const SHOWN = ["noLine", "kitOnly"] as const;
 /** T205 — the kinds that are no gap by the product's own rules, counted but
  * out of the total: a button under the `[PRESS]` line's cooldown floor the
- * user's picks leave out (`offListUnder45`), and a control press, whose
- * lines are its landing's (`[CC ON TEAM]`, `[CC ON ENEMY]`, `[CC AVOIDED?]`,
- * `[CC NOT LANDED]` — up to seconds after a totem, a trap or a ground
- * effect is put down, and none when it touched nobody). */
-export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
-  (["offListUnder45", "control"] as const).flatMap((off) =>
-    SIDES.flatMap((side) =>
-      SHOWN.map((shown) => `listGapPress|${off}/${side}/${shown}`),
-    ),
+ * user's picks leave out (`offListUnder45`), and an ENEMY's control press,
+ * whose lines are its landing's (`[CC ON TEAM]`, `[CC AVOIDED?]` — up to
+ * seconds after a totem, a trap or a ground effect is put down, and none
+ * when it touched nobody). The owner's and an ally's control press prints a
+ * press line of its own (`[YOU] [CC]` / `[TEAM] [CC]`, landed or not) and
+ * stays in the total (codex 85-tk-EVAL-T205-1 #1). */
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  ...SIDES.flatMap((side) =>
+    SHOWN.map((shown) => `listGapPress|offListUnder45/${side}/${shown}`),
   ),
-);
+  ...SHOWN.map((shown) => `listGapPress|control/enemy/${shown}`),
+]);
 
 const LINE_AT = /^\s*(\d+):(\d\d)\s+(.*)$/;
 const TRINKET_TAG = /\[(ENEMY )?TRINKET\]/;
@@ -176,7 +178,7 @@ export function run(ctx: IRoundCtx): void {
       const off =
         OFFENSIVE_PRESS_FACT_IDS.has(id) || FILLED_HEAL_IDS.has(id)
           ? "filled"
-          : isControlCast(id)
+          : side === "enemy" && isControlCast(id)
             ? "control"
             : isRosterPressId(id)
               ? "listed"
