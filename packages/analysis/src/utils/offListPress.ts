@@ -209,18 +209,33 @@ export function minorDispelsLineStatesSpell(
   return text.includes(`${name} ×`);
 }
 
-/** Does a rendered line (time stripped) state this unit's press of `name`? */
+/** T143 (user ruling A2, 2026-11-17): a deliberate `[MINOR DISPELS]` part
+ * lists a press's time and what it removed, not its cooldown — a press with
+ * a cooldown of this many seconds or more keeps its `[PRESS]` line beside
+ * the part (`Ns cd, back m:ss`); a short-cooldown dispel stays folded. */
+export const MINOR_DISPELS_KEEPS_PRESS_CD_S = 30;
+
+/** Does a rendered line (time stripped) state this unit's press of `name`?
+ * `pressCooldownSeconds` — the unit's cooldown for the press, when the
+ * caller is deciding whether the press still needs a `[PRESS]` line: a
+ * `[MINOR DISPELS]` part does not state a press at or above
+ * `MINOR_DISPELS_KEEPS_PRESS_CD_S`. */
 export function lineStatesPress(
   text: string,
   name: string,
   casterNumber: string | undefined,
   ownerNumber: string | undefined,
+  pressCooldownSeconds?: number,
 ): boolean {
   return (
     text.includes(name) &&
     PRESS_LINE_TAG.test(text) &&
     (!text.includes("[MINOR DISPELS]") ||
-      minorDispelsLineStatesSpell(text, name)) &&
+      (minorDispelsLineStatesSpell(text, name) &&
+        !(
+          pressCooldownSeconds !== undefined &&
+          pressCooldownSeconds >= MINOR_DISPELS_KEEPS_PRESS_CD_S
+        ))) &&
     pressLineCaster(text, name, ownerNumber) === casterNumber
   );
 }
@@ -723,8 +738,7 @@ export function pressDuration(
     const untilMs = Math.min(nextPressMs ?? Infinity, roundEndAtMs + 1);
     const followUps = pressChainFollowUps(caster, unit, row, untilMs);
     let len =
-      own +
-      timeStopHeldSeconds(unit, row.logLine.timestamp, own, row, untilMs);
+      own + timeStopHeldSeconds(unit, row.logLine.timestamp, own, row, untilMs);
     for (const f of followUps) {
       const plain =
         buffFullDurationForCaster(
