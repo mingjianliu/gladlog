@@ -13,17 +13,19 @@
  * of both files. The files themselves are not rewritten: `verify/rounds.ts`
  * opens the archive by that line.
  */
-import { createHash } from "node:crypto";
+import { createHash, type Hash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** the deepest directory holding every absolute path of `archives` (with a
- * trailing `/`); "" when none is absolute. A path that is already relative
- * (a manifest read with `--archive-dir`) has no machine prefix to take off. */
+/** the deepest directory holding every path of `archives` (with a trailing
+ * `/`); "" when any of them is relative: a manifest read with
+ * `--archive-dir` has no machine prefix to take off, and in a mixed one
+ * `/a/x.gz` and a relative `x.gz` are two archives that must not read alike
+ * (codex 85-tk-EVAL-T203-1 #1). */
 export function archiveRootOf(archives: Iterable<string>): string {
   let root: string[] | undefined;
   for (const a of archives) {
-    if (!a.startsWith("/")) continue;
+    if (!a.startsWith("/")) return "";
     const dirs = a.split("/").slice(0, -1);
     if (!root) {
       root = dirs;
@@ -43,11 +45,19 @@ export function archiveKeyOf(archive: string, root: string): string {
     : archive;
 }
 
-/** a context / findings file with its first line (the archive) made relative */
-function relativeText(text: string, archive: string, key: string): string {
-  return text.startsWith(`${archive}\n`)
-    ? `${key}${text.slice(archive.length)}`
-    : text;
+/** a context / findings file's bytes into `h`, its first line (the archive)
+ * read as `key` — on the bytes, so nothing else of the file is re-encoded */
+function updateRelative(
+  h: Hash,
+  bytes: Buffer,
+  archive: string,
+  key: string,
+): void {
+  const head = Buffer.from(`${archive}\n`, "utf8");
+  if (key !== archive && bytes.subarray(0, head.length).equals(head)) {
+    h.update(key);
+    h.update(bytes.subarray(head.length - 1));
+  } else h.update(bytes);
 }
 
 export interface ICaptureHash {
@@ -61,8 +71,11 @@ export interface ICaptureHash {
   root: string;
 }
 
-/** archive + round + owner → its text, whatever shard it landed in */
-export function captureHashOf(out: string): ICaptureHash {
+/** archive + round + owner → its text, whatever shard it landed in.
+ * `archiveRoot` states the root instead of inferring it — for captures whose
+ * archives share no directory of the corpus (two corpora on two mounts), or
+ * a single-archive capture that must keep its dated directories. */
+export function captureHashOf(out: string, archiveRoot?: string): ICaptureHash {
   const rows: Array<{
     archive: string;
     round: string;
@@ -94,7 +107,12 @@ export function captureHashOf(out: string): ICaptureHash {
     }
   }
   for (let k = 0; k < perShard.length; k++) perShard[k] ??= 0;
-  const root = archiveRootOf(rows.map((r) => r.archive));
+  const root =
+    archiveRoot === undefined
+      ? archiveRootOf(rows.map((r) => r.archive))
+      : archiveRoot.endsWith("/")
+        ? archiveRoot
+        : `${archiveRoot}/`;
   const keyed = rows.map((r) => {
     const archiveKey = archiveKeyOf(r.archive, root);
     return { ...r, archiveKey, key: `${archiveKey}#${r.round}#${r.owner}` };
@@ -103,16 +121,15 @@ export function captureHashOf(out: string): ICaptureHash {
   const h = createHash("sha256");
   for (const { key, archive, archiveKey, dir, name } of keyed) {
     h.update(key);
-    h.update(
-      relativeText(
-        readFileSync(join(dir, "context", name), "utf8"),
-        archive,
-        archiveKey,
-      ),
+    updateRelative(
+      h,
+      readFileSync(join(dir, "context", name)),
+      archive,
+      archiveKey,
     );
     const menu = join(dir, "findings", name);
     if (existsSync(menu))
-      h.update(relativeText(readFileSync(menu, "utf8"), archive, archiveKey));
+      updateRelative(h, readFileSync(menu), archive, archiveKey);
     else noMenu.push(name);
   }
   return { sha: h.digest("hex"), owners: keyed.length, perShard, noMenu, root };

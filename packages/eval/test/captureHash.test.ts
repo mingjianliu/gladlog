@@ -74,6 +74,9 @@ describe("capture hash (verify/captureHash.ts)", () => {
     // a directory name that only shares a prefix is not a common directory
     expect(archiveRootOf(["/a/bc/x.gz", "/a/bd/y.gz"])).toBe("/a/");
     expect(archiveRootOf(["2026/08/x.gz"])).toBe("");
+    // a mixed manifest keeps every path as written: `/a/x.gz` and a
+    // relative `x.gz` are two archives
+    expect(archiveRootOf(["/a/x.gz", "x.gz"])).toBe("");
     expect(archiveKeyOf("/a/b/2026/08/x.gz", "/a/b/")).toBe("2026/08/x.gz");
     expect(archiveKeyOf("2026/08/x.gz", "")).toBe("2026/08/x.gz");
   });
@@ -90,6 +93,29 @@ describe("capture hash (verify/captureHash.ts)", () => {
     expect(captureHashLine(mac)).toBe(
       `${mac.sha}  4 owners  archive-relative\n`,
     );
+  });
+
+  it("a stated root: single-archive captures keep their dated directories", () => {
+    const one = (name: string, rel: string) =>
+      writeCapture(name, "/c/", 1, [{ ...OWNERS[0]!, rel }]);
+    const aug = one("aug", "2026/08/a.txt.gz");
+    const sep = one("sep", "2026/09/a.txt.gz");
+    // inferred, the root is each archive's own directory: only the name is left
+    expect(captureHashOf(aug).sha).toBe(captureHashOf(sep).sha);
+    expect(captureHashOf(aug, "/c").sha).not.toBe(
+      captureHashOf(sep, "/c/").sha,
+    );
+    expect(captureHashOf(aug, "/c").root).toBe("/c/");
+  });
+
+  it("bytes that are not the first line are hashed as they are", () => {
+    const dir = writeCapture("bytes", "/r/", 1, [OWNERS[0]!]);
+    const file = join(dir, "s0", "context", "1-1-1.txt");
+    const head = Buffer.from("/r/2026/08/13/aa.txt.gz\nA-Realm\n");
+    writeFileSync(file, Buffer.concat([head, Buffer.from([0x80])]));
+    const a = captureHashOf(dir).sha;
+    writeFileSync(file, Buffer.concat([head, Buffer.from([0x81])]));
+    expect(captureHashOf(dir).sha).not.toBe(a);
   });
 
   it("a changed context line, menu line or archive moves it", () => {

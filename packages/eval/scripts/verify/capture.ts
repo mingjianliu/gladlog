@@ -3,8 +3,9 @@
  * half-done without saying so.
  *
  *   npx tsx packages/eval/scripts/verify/capture.ts --manifest <file> --out <dir>
- *     [--shards 3] [--heap 8000] [--archive-dir <dir>]
+ *     [--shards 3] [--heap 8000] [--archive-dir <dir>] [--archive-root <dir>]
  *   npx tsx packages/eval/scripts/verify/capture.ts --rehash <captureDir> [--write]
+ *     [--archive-root <dir>]
  *
  * Splits the manifest round-robin into `s<k>/manifest.txt`, runs
  * acceptanceCapture on each and writes `s<k>/{context,findings,summary.txt,
@@ -43,11 +44,12 @@ const OUT = argOf("--out");
 const SHARDS = Number(argOf("--shards") ?? 3);
 const HEAP = argOf("--heap") ?? "8000";
 const ARCHIVE_DIR = argOf("--archive-dir");
+const ARCHIVE_ROOT = argOf("--archive-root");
 const REHASH = argOf("--rehash");
 if (REHASH) {
   // an existing capture's hash as this tree reads it (a base stamped before
-  // T203 hashed absolute paths); `--write` re-stamps its capture.sha256
-  const h = captureHashOf(REHASH);
+  // T203 hashed absolute paths)
+  const h = captureHashOf(REHASH, ARCHIVE_ROOT);
   process.stdout.write(captureHashLine(h));
   if (h.owners === 0 || h.noMenu.length > 0) {
     console.error(
@@ -55,13 +57,24 @@ if (REHASH) {
     );
     process.exit(1);
   }
-  if (process.argv.includes("--write"))
-    writeFileSync(join(REHASH, "capture.sha256"), captureHashLine(h));
+  if (process.argv.includes("--write")) {
+    // `--write` re-stamps a capture that passed — one that already carries
+    // a stamp: a capture that failed has none, and the files alone do not
+    // show that (codex 85-tk-EVAL-T203-1 #2)
+    const stamp = join(REHASH, "capture.sha256");
+    if (!existsSync(stamp)) {
+      console.error(
+        "rehash --write refused: no capture.sha256 there (the capture did not pass)",
+      );
+      process.exit(1);
+    }
+    writeFileSync(stamp, captureHashLine(h));
+  }
   process.exit(0);
 }
 if (!MANIFEST || !OUT) {
   console.error(
-    "usage: verify/capture.ts --manifest <file> --out <dir> | --rehash <captureDir> [--write]",
+    "usage: verify/capture.ts --manifest <file> --out <dir> [--archive-root <dir>] | --rehash <captureDir> [--write] [--archive-root <dir>]",
   );
   process.exit(2);
 }
@@ -154,7 +167,7 @@ async function main(): Promise<void> {
     if (!s) dead.push(`s${k}: no summary`);
     else [1, 2, 3].forEach((i) => (skipped[i - 1]! += Number(s[i])));
   }
-  const hash = captureHashOf(OUT!);
+  const hash = captureHashOf(OUT!, ARCHIVE_ROOT);
   const { sha, owners, perShard, noMenu } = hash;
   parts.forEach((p, k) => {
     if (p.length > 0 && perShard[k] === 0) dead.push(`s${k}: no owners`);
