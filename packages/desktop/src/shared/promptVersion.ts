@@ -1395,5 +1395,10 @@
  *  retired-signal code (attempt-into-trinket, teammate-crisis, unsynced-
  *  burst, cd-spent-idle) is deleted; missed-purge stays.
  *  See docs/prompt-version-history.md.
+ *
+ * v576 (2026-11-18; pipeline batch B103, T132): no prompt change on the
+ *  605. Divine Hammer carries a hand exception: it cannot be parried,
+ *  whatever DB2's parryable flag says.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 575;
+export const PROMPT_VERSION = 576;

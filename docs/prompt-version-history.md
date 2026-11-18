@@ -7138,3 +7138,18 @@ purge stays as the feasibility-gate model. 45 files, +204 / -4812. No prompt
 change: the 605 capture at the branch is byte-identical to the e8047b053 base
 (capture.sha256 equal, 0 of 3,519 files differ, candidate rows 7,446 = 7,446).
 Codex branch review 85-tk-W1-T131-1: APPROVE.
+
+v576 (2026-11-18; pipeline batch B103, T132; user ruling A10; second two-
+machine trial batch, the first from a Mac lane). Divine Hammer gets a hand
+exception over DB2's parryable flag: HAND_UNPARRYABLE_SPELL_IDS in
+spellParry.ts (press 1236942, hit 198137, aura 198034, all live in the 605 raw
+logs), asked before the DB2 tables, evidence in the comment (T77: 0 PARRY rows
+in 2,330 Divine Hammer rows; 257 misses = 234 ABSORB + 23 IMMUNE), registered
+in curatedIdRegistry; the scan's db2Parryable reads the same set. 9 files,
++293 / -47. No prompt change on the 605: the current press id was already
+outside the DB2 tables, so the 3 lines that name Divine Hammer already read it
+as unparryable (capture.sha256 equal at 63e6ef52c60d on the Mac base,
+candidate rows +0 / -0). Verified by unit tests and mutation: removing the
+exception turns 3 tests red; forcing Blade of Justice parryable makes the t132
+scan report the 3 lines. Codex branch review 85-tk-M1-T132-1: one synthetic-
+only scan finding, recorded.
