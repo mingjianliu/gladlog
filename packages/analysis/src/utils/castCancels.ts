@@ -71,6 +71,7 @@ import {
   CANCEL_CC_NEAR_S,
   DISPLACEMENT_EVIDENCE_IDS,
   feignDeathInstantsMs,
+  STOPPED_JUST_BEFORE_S,
 } from "./castStopEvidence";
 import { TARGETED_CC_DODGE_SPELLS } from "./ccTrinketAnalysis";
 import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
@@ -107,7 +108,8 @@ export interface CastCancel {
    * it. */
   cancelS: number;
   progressPct: number | null;
-  /** The bar was superseded by the owner's next cast bar with no row of its
+  /** The bar was superseded by the owner's next cast bar — or (T148) by a
+   * press a cast bar cannot outlive — with no row of its
    * own (`CastBarEnd` `none` + `superseded`, pipeline T47): a stopped bar the
    * client wrote no "Interrupted" row for. Its stop instant is not in the
    * log, so `progressPct` is null and no reader may take `cancelS` for the
@@ -295,9 +297,9 @@ export function isCancelInRound(
 /**
  * Is this bar a stop of the round that the log wrote no row for: a bar
  * begun inside the round with no row of its spell before the owner's next
- * cast bar (`none` + `superseded`), nothing that ends a cast landing on the
- * owner from its start to that next bar (`near === null`), and that next bar
- * begun before the round's end. The ledger counts it beside
+ * cast bar or the press that ended it (`none` + `superseded`), nothing that
+ * ends a cast landing on the owner from its start to that instant
+ * (`near === null`), and that instant before the round's end. The ledger counts it beside
  * `isCancelInRound`'s bars when the spell went off as itself in the round
  * (`ownerCastCancels`); it has no `[CAST STOPPED]` line (that line states
  * how long the bar ran, which the log does not say here).
@@ -336,7 +338,10 @@ export function isUnloggedCancelInRound(
  *  - a baited kick = a kickAudit "juked" kick on the owner that went out into
  *    one of those cancels;
  *  - pipeline T47: a bar the owner's next cast bar superseded with no row of
- *    its own (`isUnloggedCancelInRound`) is a cancel too, `unlogged` — when
+ *    its own (`isUnloggedCancelInRound`) is a cancel too, `unlogged` (T148:
+ *    so is one a press a cast bar cannot outlive superseded — cf909ac1 r1,
+ *    Searing Glare begun 23.83, Judgment out 24.84, the Wind Shear at 24.69
+ *    read `baitedKicks=0`) — when
  *    the round has a completed bar of the spell (begun and completed inside
  *    the round), which shows its SUCCESS is
  *    logged under the id its START carries (a spell whose two rows differ in
@@ -464,8 +469,16 @@ export function ownerCastCancels(params: {
       // the kick was aimed at that one).
       const bait = cancels.find((c) =>
         c.unlogged
-          ? // the bar the kick went out at: the last one begun before it
-            c.startS <= k.atSeconds && k.atSeconds < c.cancelS
+          ? // the bar the kick went out at: the last one begun before it.
+            // `cancelS` is the next bar's start — or (T148) the press that
+            // showed the bar over, and a kick the audit still calls juked
+            // up to `STOPPED_JUST_BEFORE_S` after that press went out at
+            // this bar (the audit's "just before": 2e45d523 r1, Polymorph
+            // begun 97.892, Counterspell out 98.917, Counter Shot 99.013;
+            // codex 85-tk-KICK-T148-1 #1)
+            c.startS <= k.atSeconds &&
+            k.atSeconds < c.cancelS + STOPPED_JUST_BEFORE_S &&
+            !starts.some((s) => s.t > c.startS && s.t <= k.atSeconds)
           : c.startS <= k.atSeconds &&
             k.atSeconds >= c.cancelS - BAIT_BEFORE_CANCEL_S &&
             k.atSeconds <= c.cancelS + BAIT_AFTER_CANCEL_S &&

@@ -18,7 +18,9 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { NOT_READY_REASONS } from "../analysis/candidates/shared";
+import { rowIsPressEndingCast } from "./castCommitSpans";
 import { CANCEL_CC_NEAR_S, forcedStopInstantsMs } from "./castStopEvidence";
+import { isStasisReplayCast } from "./combatStates";
 import type { CastFailedEvent } from "./rawStreams";
 import { medianFinite } from "./stats";
 
@@ -107,7 +109,14 @@ export function castBarStartsOf(
  *    `superseded` (pipeline T47) = the unit's NEXT cast bar began at `atS`,
  *    inside this bar's cap, and no row of this spell — no SUCCESS (a queued
  *    one included), no SPELL_INTERRUPT, no SPELL_CAST_FAILED of any reason —
- *    sits between the two starts. The next bar has to be a bar: a START
+ *    sits between the two starts. Or (T148) before any next bar the unit
+ *    pressed something a cast bar cannot outlive at `atS`
+ *    (`rowIsPressEndingCast`: a button, on the global cooldown or off it,
+ *    that does not ride along with a cast — the kick audit's open-bar
+ *    reading; 605 raw logs, 46,046 bars that reached their own SUCCESS:
+ *    15 SUCCESS rows of another on-GCD spell inside, 13 of them a Stasis
+ *    replay) — cf909ac1 r1: Searing Glare begun 23.83, Wind Shear into
+ *    nothing 24.69, Judgment out 24.84. The next bar has to be a bar: a START
  *    whose own SUCCESS follows inside `COMPLETED_BAR_MIN_S` (a pet command,
  *    an instant-made cast) supersedes nothing. A bar cannot begin over a running one, so
  *    this one had ended by `atS` with nothing saying how or when: a stop the
@@ -168,7 +177,8 @@ export interface CastBarOutcome extends CastBarStart {
  *     strings);
  *  6. else none — `superseded` when no failure row of the spell sits in the
  *     window at all and the unit's next bar's start closed it (T47), that
- *     next bar not an instant one.
+ *     next bar not an instant one, or a press a cast bar cannot outlive came
+ *     first (T148).
  *
  * `failed` = the unit's own SPELL_CAST_FAILED rows, on the clock of
  * `startMs` (`rawStreams.castFailed`); empty for a unit that did not record
@@ -228,6 +238,22 @@ export function castBarOutcomesOf(params: {
   const diedAt = (unit.deathRecords ?? []).map((d) => sec(d.timestamp));
   const othersDiedAt = (params.otherDeathMs ?? []).map(sec);
   const starts = castBarStartsOf(unit, startMs);
+  // the unit's presses a running cast bar cannot outlive, in time order. A
+  // Stasis replay is no press and goes out over a running bar (13 of the 15
+  // on-GCD rows inside a completed bar on the 605 raw logs are Dream Breath
+  // / Echo replays; codex 85-tk-KICK-T148-1 #2).
+  const pressEndingCastS = successes
+    .filter(
+      (e, _, rows) =>
+        rowIsPressEndingCast(e, rows) &&
+        !isStasisReplayCast(
+          unit as ICombatUnit,
+          e.spellId,
+          e.logLine.timestamp,
+        ),
+    )
+    .map((e) => ({ t: sec(e.logLine.timestamp), id: e.spellId }))
+    .sort((a, b) => a.t - b.t);
 
   // Reasons the client gave, IN THIS LOG, for a press made while a cast bar
   // was demonstrably still running: a failure row of the spell before the
@@ -358,7 +384,25 @@ export function castBarOutcomesOf(params: {
     // T47: no row of the spell at all, and the unit's next bar began inside
     // this one's cap — it had ended by then (`superseded`)
     const s = starts[i]!;
-    const nextS = starts[i + 1]?.t;
+    const nextBarS = starts[i + 1]?.t;
+    // T148: …or the unit pressed something a cast bar cannot outlive
+    // (`rowIsPressEndingCast`, the kick audit's open-bar reading) before
+    // that. A SUCCESS of the previous bar's spell inside the queue tolerance
+    // of this START is that bar's queued completion, no new press.
+    const prevBar = starts[i - 1];
+    const pressS = pressEndingCastS.find(
+      (p) =>
+        p.t > s.t &&
+        p.id !== s.id &&
+        !(
+          prevBar !== undefined &&
+          p.id === prevBar.id &&
+          p.t <= s.t + CAST_QUEUE_TOLERANCE_MS / 1000
+        ),
+    )?.t;
+    const byPress =
+      pressS !== undefined && (nextBarS === undefined || pressS < nextBarS);
+    const nextS = byPress ? pressS : nextBarS;
     if (fails.length > 0 || nextS === undefined || nextS >= s.t + capS)
       continue;
     // a failure row of the spell in the START's own millisecond is this
@@ -381,8 +425,10 @@ export function castBarOutcomesOf(params: {
     // command (Seduction 119909: both rows in one ms, the warlock's Unstable
     // Affliction bar running on to its SUCCESS 0.8 s later) or an
     // instant-made cast. It says nothing of the bar before it.
-    const next = outcomes[i + 1]!;
+    const next = outcomes[i + 1];
     if (
+      !byPress &&
+      next !== undefined &&
       next.end.kind === "completed" &&
       next.end.atS - next.t <= COMPLETED_BAR_MIN_S
     )

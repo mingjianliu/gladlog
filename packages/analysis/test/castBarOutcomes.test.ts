@@ -134,10 +134,18 @@ describe("castBarOutcomesOf — 读条怎么结束,六步顺序", () => {
         ],
         // Hammer of Justice landed 0.2 s after the stop → cc
         auraEvents: [
-          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "853", at(0.8), "e1", "p1"),
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "853",
+            at(0.8),
+            "e1",
+            "p1",
+          ),
         ],
         // Thunderstorm damage taken 0.1 s before the stop → displaced
-        damageIn: [{ ...makeDamageEvent(at(10.5), 100, "p1"), spellId: "51490" }],
+        damageIn: [
+          { ...makeDamageEvent(at(10.5), 100, "p1"), spellId: "51490" },
+        ],
         // the unit died 0.02 s after the stop → death
         deathRecords: [{ timestamp: at(20.52) }],
       },
@@ -267,7 +275,12 @@ describe("castBarOutcomesOf — 读条怎么结束,六步顺序", () => {
       },
       [fail("8092", 0.4, "Interrupted")],
     );
-    expect(r[0]!.end).toEqual({ kind: "none" });
+    // no end row of its own: `none` — and (T148) over by 0.5, when a spell
+    // on the global cooldown went out, which a running bar does not allow
+    expect(r[0]!.end).toEqual({
+      kind: "none",
+      superseded: { atS: 0.5, near: null },
+    });
     expect(r[0]!.earlierFailure).toBe(false);
   });
 });
@@ -288,7 +301,9 @@ describe("D6 (user 2026-10-24): completedBarMedianS — the one cast time of a s
         success(FLASH_HEAL, 15.05),
         success("2060", 22.5),
       ],
-      actionIn: [makeInterruptEvent("1766", "Kick", FLASH_HEAL, "Flash Heal", at(10.8))],
+      actionIn: [
+        makeInterruptEvent("1766", "Kick", FLASH_HEAL, "Flash Heal", at(10.8)),
+      ],
     });
     expect(COMPLETED_BAR_MIN_S).toBe(0.2);
     // 1.3 and 1.5 (the 0.05 s instant and the kicked bar out) → 1.4

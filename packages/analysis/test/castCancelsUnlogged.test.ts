@@ -343,3 +343,123 @@ describe("T47 — a bar superseded by the next cast bar, with no end row", () =>
     ]);
   });
 });
+
+describe("T148 — a bar with no end row, then a press a cast bar cannot outlive", () => {
+  // cf909ac1 r1: Searing Glare begun 23.83, an enemy Wind Shear at 24.69
+  // that interrupted nothing, Judgment (on the global cooldown) out at
+  // 24.84; the next Searing Glare 50.1, completed 51.3
+  const JUDGMENT = "275773";
+  const FIRE_BLAST = "108853"; // off the GCD, castable while casting
+  const SHADOWY_APPARITION = "341263"; // no SpellCooldowns row: no press
+  const rows = (pressId: string, pressS: number): OwnerRows => ({
+    castStartEvents: [23.83, 50.1].map((s) => start(SEARING_GLARE, s)),
+    spellCastEvents: [success(pressId, pressS), success(SEARING_GLARE, 51.3)],
+  });
+  const firstEnd = (r: OwnerRows) =>
+    castBarOutcomesOf({
+      unit: makeUnit("p1", r),
+      startMs: T0,
+      failed: streamsOf([]).castFailed,
+    })[0]!.end;
+
+  it("is a cancel of the ledger, and the kick that went out at it is a baited kick", () => {
+    const r = ledger(rows(JUDGMENT, 24.84), [24.69]);
+    expect(r.cancels).toEqual([
+      {
+        spellId: SEARING_GLARE,
+        spellName: expect.any(String),
+        startS: 23.83,
+        // the press: the stop is at or before it
+        cancelS: 24.84,
+        progressPct: null,
+        unlogged: true,
+      },
+    ]);
+    expect(r.baitedKicks.map((b) => b.atSeconds)).toEqual([24.69]);
+  });
+
+  it("codex #1: a kick just after the press, still called juked, went out at this bar", () => {
+    // 2e45d523 r1: Polymorph begun 97.892, Counterspell out 98.917, Counter
+    // Shot 99.013 — inside the audit's "just before"
+    expect(
+      ledger(rows(JUDGMENT, 24.84), [24.94]).baitedKicks.map(
+        (b) => b.atSeconds,
+      ),
+    ).toEqual([24.94]);
+    // …but not once another bar has begun in between
+    const r: OwnerRows = {
+      castStartEvents: [
+        start(SEARING_GLARE, 23.83),
+        start(FLASH_OF_LIGHT, 24.9),
+        start(SEARING_GLARE, 50.1),
+      ],
+      spellCastEvents: [success(JUDGMENT, 24.84), success(SEARING_GLARE, 51.3)],
+    };
+    const l = ledger(r, [25.0]);
+    expect(
+      l.baitedKicks.filter((b) => b.baitSpellName !== "Flash of Light"),
+    ).toEqual([]);
+  });
+
+  it("the reading: `none` with `superseded` at the press", () => {
+    expect(firstEnd(rows(JUDGMENT, 24.84))).toEqual({
+      kind: "none",
+      superseded: { atS: 24.84, near: null },
+    });
+  });
+
+  it("a press that rides along with a cast, or a row that is no button, ends nothing", () => {
+    expect(firstEnd(rows(FIRE_BLAST, 24.84))).toEqual({ kind: "none" });
+    expect(firstEnd(rows(SHADOWY_APPARITION, 24.84))).toEqual({
+      kind: "none",
+    });
+    expect(ledger(rows(FIRE_BLAST, 24.84), [24.69]).cancels).toEqual([]);
+  });
+
+  it("a press past the bar's cap says nothing of it", () => {
+    expect(firstEnd(rows(JUDGMENT, 28.5))).toEqual({ kind: "none" });
+  });
+
+  it("the earlier of the press and the next bar supersedes", () => {
+    const r: OwnerRows = {
+      castStartEvents: [
+        start(SEARING_GLARE, 23.83),
+        start(FLASH_OF_LIGHT, 24.5),
+        start(SEARING_GLARE, 50.1),
+      ],
+      spellCastEvents: [success(JUDGMENT, 25.2), success(SEARING_GLARE, 51.3)],
+    };
+    expect(firstEnd(r)).toEqual({
+      kind: "none",
+      superseded: { atS: 24.5, near: null },
+    });
+  });
+
+  it("the previous bar's queued completion just after this START is no new press", () => {
+    // Flash of Light begun 10, its SUCCESS logged 0.1 s after the next START
+    const bars = castBarOutcomesOf({
+      unit: makeUnit("p1", {
+        castStartEvents: [
+          start(FLASH_OF_LIGHT, 10),
+          start(SEARING_GLARE, 11.5),
+        ],
+        spellCastEvents: [success(FLASH_OF_LIGHT, 11.6)],
+      }),
+      startMs: T0,
+      failed: streamsOf([]).castFailed,
+    });
+    expect(bars[1]!.end).toEqual({ kind: "none" });
+  });
+
+  it("a bar with its own end row keeps it, whatever was pressed inside", () => {
+    expect(
+      firstEnd({
+        castStartEvents: [start(SEARING_GLARE, 23.83)],
+        spellCastEvents: [
+          success(JUDGMENT, 24.3),
+          success(SEARING_GLARE, 25.0),
+        ],
+      }),
+    ).toEqual({ kind: "completed", atS: 25.0 });
+  });
+});
