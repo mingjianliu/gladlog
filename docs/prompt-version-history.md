@@ -7279,3 +7279,22 @@ reviews 85-tk-CD-T134-1 and -1b (the remaining point is synthetic-only,
 recorded). Assembly review 80-PIPE-127 #1: scan5/t134 no longer counts a press
 backed by a real cast row beside the marker (eval only; the capture is
 unaffected).
+
+v586 (2026-11-18; pipeline batch B113, T170; round 14 D6, D7, D11). Two
+changes to [ROOT]'s out-of-reach claim. (1) A rooted healer's reach is the
+spec's own healing range (healerReachToAccuse, utils/spellRange.ts: the
+longest base range of the spec's core heals from DB2, plus DB2 range modifiers
+of held or unattributed talents, plus RANGE_HITBOX_SLACK_YD; floor 40 yd; 48
+yd for a priest) instead of a fixed 40 yd. (2) A cast the rooted unit landed
+on someone in a second proves that second reachable. 605 scan
+rootReachVsLandedCast 86 / 685 (31 facts) -> 0 / 519; split by cause over
+11,478 roots: landed cast only 279, healer reach only 100, both 13, and the
+reach alone adds or lengthens a claim 0 times. [ROOT] lines 685 -> 519 (172
+removed, 87 shortened, 6 name another teammate); no other line changes; menu
+rows +0 / -0 (one missed-cleanse row gains rootReachProvenS). On the 605 the
+assembled candidate changes only [ROOT] lines, 685 -> 519 in 238 contexts
+(exactly T170's own capture), and adds rootReachProvenS=5/6 to one missed-
+cleanse row (two owners); candidate rows 7,446 = 7,446 (capture checked on the
+Mac). Out of scope, recorded: the ranged-caster branch keeps a fixed 40 yd;
+melee specs' ranged spells are not modelled as reach. Codex branch reviews
+85-tk-CC-T170-1 (REQUEST_CHANGES), -1b and -1c: APPROVE.

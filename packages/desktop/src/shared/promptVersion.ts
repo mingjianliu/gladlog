@@ -1445,5 +1445,10 @@
  *  is no longer read as a press; [ENEMY DEF] says `[no press logged]` and
  *  [PROC] lines say `(no press)`.
  *  See docs/prompt-version-history.md.
+ *
+ * v586 (2026-11-18; pipeline batch B113, T170): [ROOT] reads the rooted
+ *  unit's own landed casts as proof of reach, and a rooted healer's reach
+ *  is the spec's own healing range, not a fixed 40 yd.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 585;
+export const PROMPT_VERSION = 586;
