@@ -1424,5 +1424,10 @@
  * v581 (2026-11-18; pipeline batch B108, T198): no prompt change. An E2E
  *  run writes main.log inside its temporary userData.
  *  See docs/prompt-version-history.md.
+ *
+ * v582 (2026-11-18; pipeline batch B109, T220): no prompt change. The
+ *  built app's two background workers start again (their entry paths
+ *  resolve from out/main/chunks/).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 581;
+export const PROMPT_VERSION = 582;

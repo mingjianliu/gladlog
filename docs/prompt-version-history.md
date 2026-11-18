@@ -7210,3 +7210,16 @@ transport's own path. Probe under the switch: main.log moves from
 Desktop main process only, no prompt change. Codex branch review 85-tk-
 ENG-T198-1: APPROVE (noted: optional features that still write outside
 userData under E2E stay as they are).
+
+v582 (2026-11-18; pipeline batch B109, T220; found during T200). matchStore is
+imported by two main-process build entries, so electron-vite emits it into
+out/main/chunks/, and join(import.meta.dirname, 'slimWorker.js' /
+'roundsIdxWorker.js') named files that do not exist: both background workers
+failed silently in the built app. main/mainEntryScript.ts resolves the entry
+beside the module, else one level up, and serves both spawns; every other
+module-relative path in main resolves in the build output. Built app: a
+shuffle's rounds sidecar rebuilt 0/1 -> 1/1 (its next open 108.3 MB whole
+document -> 29.0 MB per round), slimmed mark written back 0/1 -> 1/1; unit
+test. Desktop main process only, no prompt change. Codex branch review 85-tk-
+ENG-T220-1: REQUEST_CHANGES on two synthetic-only points, recorded (the stat-
+then-open race with a heal is closed by T200).
