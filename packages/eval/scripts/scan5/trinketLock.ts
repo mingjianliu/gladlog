@@ -107,7 +107,10 @@ import {
   detectTrinketType,
   pvpTrinketRemainingSecondsAt,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  cdWholeSecond,
+  isHealerSpec,
+} from "@gladlog/analysis/src/utils/cooldowns";
 import { hasPressablePvpTrinket } from "@gladlog/analysis/src/utils/trinketType";
 
 import { APPLIED, ev, fmtS, type IRoundCtx, successesOf, tsOf } from "./ctx";
@@ -273,7 +276,10 @@ function killRacialLockWords(ctx: IRoundCtx, line: string): void {
       `${u.name}: no racial in the rows`,
       line,
     );
-  else if (!running.some((end) => Math.floor((end - ctx.start) / 1000) === B))
+  // the producer's one floor of a return second (`cdWholeSecond`, T139)
+  else if (
+    !running.some((end) => cdWholeSecond((end - ctx.start) / 1000) === B)
+  )
     ctx.violate(
       C,
       "back second",
