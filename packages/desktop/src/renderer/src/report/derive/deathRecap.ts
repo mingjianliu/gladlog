@@ -1,6 +1,7 @@
 import {
   analyzePlayerCCAndTrinket,
   buildDeathOutcomeSummary,
+  cheaperDefensivesAtDeath,
   computeMissedExternalCounterfactuals,
   computeMitigationAudit,
   computeUnusedSelfCounterfactuals,
@@ -8,7 +9,6 @@ import {
   detectPanicDefensives,
   enemySourceIds,
   extractMajorCooldowns,
-  findCheaperDefensiveAlternatives,
   ICounterfactualHit,
   IDispelEvent,
   IMajorCooldownInfo,
@@ -639,7 +639,8 @@ function deriveDeathRecapsUncached(source: ReportSource): DeathRecap[] {
           rows,
           // Cheaper alternatives (#10 T5, same predicate as F166): align the
           // unpressed major to its row in the victimCds ledger by spellId and
-          // feed that to findCheaperDefensiveAlternatives to find shorter-
+          // feed that to analysis's cheaperDefensivesAtDeath
+          // (findCheaperDefensiveAlternatives at the death) to find shorter-
           // cooldown options still available at time of death -- when the
           // ledger has no such row (not recorded / not a major) we silently
           // return an empty array rather than pretending an alternative
@@ -651,7 +652,20 @@ function deriveDeathRecapsUncached(source: ReportSource): DeathRecap[] {
               spellName: i.spellName,
               wasInCC: i.wasInCC,
               cheaperAlternatives: cd
-                ? findCheaperDefensiveAlternatives(cd, victimCds, deathS, {})
+                ? cheaperDefensivesAtDeath({
+                    unit,
+                    unpressed: cd,
+                    victimCds,
+                    atSeconds: deathS,
+                    cannotCastSourceIds: enemySourceIds(
+                      unit.reaction === CombatUnitReaction.Friendly
+                        ? hostilePlayers
+                        : friendlyPlayers,
+                      allUnits,
+                    ),
+                    combat: outcomeCombat,
+                    roundUnits: allUnits,
+                  })
                 : [],
             };
           }),

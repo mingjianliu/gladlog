@@ -1127,7 +1127,35 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
     // the Turtle, which is no immunity since the user ruling of 2026-10-21.)
     const DEATH_T = 10_000_000; // ms (10000s)
 
-    function buildSource(): ReportSource {
+    /** an enemy aura on the dying paladin over the whole lethal window */
+    const heldBy = (spellId: number, spellName: string) => [
+      {
+        timestamp: DEATH_T - 8_000,
+        eventName: "SPELL_AURA_APPLIED",
+        spellId,
+        spellName,
+        srcId: "enemy1",
+        srcName: "Enemy1",
+        destId: "hunter1",
+        destName: "Hunter1",
+        params: [],
+        auraType: "DEBUFF",
+      },
+      {
+        timestamp: DEATH_T,
+        eventName: "SPELL_AURA_REMOVED",
+        spellId,
+        spellName,
+        srcId: "enemy1",
+        srcName: "Enemy1",
+        destId: "hunter1",
+        destName: "Hunter1",
+        params: [],
+        auraType: "DEBUFF",
+      },
+    ];
+
+    function buildSource(auraEvents: unknown[] = []): ReportSource {
       return {
         kind: "match",
         id: "test-cheaper-alt",
@@ -1152,6 +1180,7 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
             classId: 2, // Paladin
             specId: 65, // Holy
             info: combatantInfo(65),
+            auraEvents,
             deaths: [
               {
                 timestamp: DEATH_T,
@@ -1204,6 +1233,32 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
     it("Divine Shield 死亡时可用未按 → cheaperAlternatives 含 Divine Protection(严格更短 CD)", () => {
       const recaps = deriveDeathRecaps(buildSource());
       expect(recaps).toHaveLength(1);
+      const block = recaps[0]!.availableImmunities.find(
+        (i) => i.spellId === "642",
+      );
+      expect(block).toBeTruthy();
+      expect(block!.cheaperAlternatives).toContain("Divine Protection");
+    });
+
+    // pipeline T197 (GH #221 group 1): the alternative passes the death
+    // block's own "could it be pressed in the lethal window" reading
+    // (`deathOptionLock`), the one behind the pill's 当时被控
+    it("整个致死窗口被沉默 → Divine Protection 按不出,不再列为更省替代;Divine Shield 仍列出并标「当时被控」", () => {
+      const recaps = deriveDeathRecaps(
+        buildSource(heldBy(47476, "Strangulate")),
+      );
+      const block = recaps[0]!.availableImmunities.find(
+        (i) => i.spellId === "642",
+      );
+      expect(block).toBeTruthy();
+      expect(block!.wasInCC).toBe(true);
+      expect(block!.cheaperAlternatives).toEqual([]);
+    });
+
+    it("整个致死窗口被晕 → 晕中能按的 Divine Protection 仍是更省替代(按法术逐个判,不是一刀切)", () => {
+      const recaps = deriveDeathRecaps(
+        buildSource(heldBy(853, "Hammer of Justice")),
+      );
       const block = recaps[0]!.availableImmunities.find(
         (i) => i.spellId === "642",
       );

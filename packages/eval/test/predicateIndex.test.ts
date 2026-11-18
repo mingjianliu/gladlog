@@ -873,6 +873,16 @@ const INDEX: PredicateRow[] = [
     mod: deathOutcomeAnalysis,
   },
   {
+    file: `${A}/utils/deathOutcomeAnalysis.ts`,
+    symbol: "cheaperDefensivesAtDeath",
+    mod: deathOutcomeAnalysis,
+  },
+  {
+    file: `${A}/utils/deathOutcomeAnalysis.ts`,
+    symbol: "deathOptionLock",
+    mod: deathOutcomeAnalysis,
+  },
+  {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "cdReadyInTimeAt",
     mod: cooldowns,

@@ -25,6 +25,7 @@ import {
   cdAvailableAt,
   cdChargesAvailableAt,
   ENEMY_TARGET_DEFENSIVE_IDS,
+  findCheaperDefensiveAlternatives,
   FORBEARANCE_AURA_ID,
   forbearanceBlocks,
   HYPOTHERMIA_AURA_ID,
@@ -1064,6 +1065,94 @@ export function enemyTargetReaches(
   });
 }
 
+/**
+ * Could `unit` not press ONE named option before it died: no free stretch of
+ * `MIN_FREE_GAP_SECONDS` to press it inside the lethal window
+ * (`deathWindowFreedom`, asked for that spell: controls, silences, kick
+ * lockouts on its school, a stun the game does not let it through, time it
+ * could not pay for it). The death block's reading of a missed option — the
+ * `was in CC` of `[DEATH]`'s unused immunity and missed external — and, since
+ * pipeline T197, of the desktop death card's cheaper alternatives
+ * (`cheaperDefensivesAtDeath`).
+ */
+export function deathOptionLock(p: {
+  unit: ICombatUnit;
+  /** the other side's players and their summons (`enemySourceIds`) */
+  cannotCastSourceIds: Set<string>;
+  combat: { startTime: number; endTime?: number };
+  /** the death, seconds since the round's start */
+  atSeconds: number;
+  optionSpellId: string;
+  /** the option lands on the holder itself (the unit's own save) */
+  optionOnSelf: boolean;
+  roundUnits?: readonly ICombatUnit[];
+}): { locked: boolean; freedom?: IDeathWindowFreedom } {
+  const freedom = deathWindowFreedom(
+    p.unit,
+    p.cannotCastSourceIds,
+    p.combat.startTime,
+    p.atSeconds,
+    LETHAL_WINDOW_SECONDS,
+    p.optionSpellId,
+    p.roundUnits,
+    typeof p.combat.endTime === "number"
+      ? { startTime: p.combat.startTime, endTime: p.combat.endTime }
+      : undefined,
+    p.optionOnSelf,
+  );
+  return freedom
+    ? { locked: freedom.longestFreeS < MIN_FREE_GAP_SECONDS, freedom }
+    : { locked: false };
+}
+
+/**
+ * The shorter-cooldown saves a unit that died with `unpressed` (one of its
+ * unused immunities, a row of its own ledger `victimCds`) in hand could have
+ * pressed instead — the desktop death card's 更省替代. The list is
+ * `findCheaperDefensiveAlternatives` at the death, in a self-cast context,
+ * each alternative asked whether it could be pressed at all before the death
+ * (`deathOptionLock`). Before T197 the card asked nothing: 1 of the 41
+ * immunity pills with a ledger row on the 605 capture named a save its
+ * holder had no free moment to press (Ice Barrier beside an unused Ice
+ * Block, the mage held through the whole window). A fear or a disorient
+ * counts as holding the unit here, as it does for the immunity itself — the
+ * death block's reading, not the `cheaper available:` note's, which leaves a
+ * non-stun hard control unjudged (T100): the card may leave out an
+ * alternative the game would have let through one, and never names one that
+ * was blocked. Re-runnable check `packages/eval/scripts/scan5/t197.ts`.
+ */
+export function cheaperDefensivesAtDeath(p: {
+  unit: ICombatUnit;
+  unpressed: IMajorCooldownInfo;
+  victimCds: IMajorCooldownInfo[];
+  /** the death, seconds since the round's start */
+  atSeconds: number;
+  cannotCastSourceIds: Set<string>;
+  combat: { startTime: number; endTime?: number };
+  roundUnits?: readonly ICombatUnit[];
+}): string[] {
+  return findCheaperDefensiveAlternatives(
+    p.unpressed,
+    p.victimCds,
+    p.atSeconds,
+    {
+      // pipeline T197 (GH #221 group 1): the card passed no gate at all —
+      // one that could not be pressed before the death is no alternative,
+      // by the reading the same pill's 当时被控 comes from
+      pressBlocked: (spellId) =>
+        deathOptionLock({
+          unit: p.unit,
+          cannotCastSourceIds: p.cannotCastSourceIds,
+          combat: p.combat,
+          atSeconds: p.atSeconds,
+          optionSpellId: spellId,
+          optionOnSelf: true,
+          roundUnits: p.roundUnits,
+        }).locked,
+    },
+  );
+}
+
 export function buildDeathOutcomeSummary(
   combat: Pick<AtomicArenaCombat, "startTime"> & {
     zoneId?: string;
@@ -1125,25 +1214,15 @@ export function buildDeathOutcomeSummary(
     optionOnSelf: boolean,
   ): { locked: boolean; freedom?: IDeathWindowFreedom } => {
     if (cannotCastSourceIds) {
-      const freedom = deathWindowFreedom(
+      return deathOptionLock({
         unit,
         cannotCastSourceIds,
-        matchStartMs,
+        combat,
         atSeconds,
-        LETHAL_WINDOW_SECONDS,
         optionSpellId,
-        roundUnits,
-        typeof combat.endTime === "number"
-          ? { startTime: combat.startTime, endTime: combat.endTime }
-          : undefined,
         optionOnSelf,
-      );
-      return freedom
-        ? {
-            locked: freedom.longestFreeS < MIN_FREE_GAP_SECONDS,
-            freedom,
-          }
-        : { locked: false };
+        roundUnits,
+      });
     }
     return {
       locked: summary ? wasLockedOutThroughWindow(summary, atSeconds) : false,
