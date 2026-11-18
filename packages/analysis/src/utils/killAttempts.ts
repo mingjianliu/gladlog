@@ -593,6 +593,92 @@ function softerField(
   return softer ? { softerTarget: softer } : {};
 }
 
+/** One press as the kill-attempt anchor reads it: who pressed what, the cast
+ * row's own ms and the unit that row names. */
+export interface IKillAttemptPress {
+  caster: ICombatUnit;
+  spellId: string;
+  spellName: string;
+  castMs: number;
+  destId?: string;
+}
+
+/** the caster's next press of the same spell (its own hits are its own) */
+function nextPressMsOfPress(c: IKillAttemptPress): number {
+  return (c.caster.spellCastEvents ?? [])
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.spellId === c.spellId &&
+        e.logLine.timestamp > c.castMs + 5,
+    )
+    .reduce((m, e) => Math.min(m, e.logLine.timestamp), Infinity);
+}
+
+/** Did the press put its own aura (its id, or an effect aura of the cast) on
+ * `holder` — within `SAVE_CAST_AURA_PAIR_S` of the cast row? */
+function pressAuraOnHolder(c: IKillAttemptPress, holder: ICombatUnit): boolean {
+  const ids = castAndEffectIds(c.spellId);
+  return (holder.auraEvents ?? []).some(
+    (a) =>
+      (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+      !!a.spellId &&
+      ids.has(a.spellId) &&
+      a.srcUnitId === c.caster.id &&
+      Math.abs(a.logLine.timestamp - c.castMs) <= SAVE_CAST_AURA_PAIR_S * 1000,
+  );
+}
+
+/**
+ * T104 (fact13 D9, 36e987ca 3:17): a self-buff whose cast row names an enemy
+ * unit only because it was its caster's current target — the press put its
+ * own aura on its caster, and no damage or miss row of it (`isPressHitRow`:
+ * its ids, an effect aura's, its name) from the caster or a unit it owns met
+ * that unit before the caster's next press of it. Voidform's row named a
+ * Grounding Totem; the totem ate the Shadow Word: Madness of the same
+ * millisecond. A press the unit took, or refused (Mindgames into the same
+ * totem: its MISSED row), stays aimed at it.
+ *
+ * Module-level so the scan that checks where a `<Spell> burst` anchor went
+ * (`fact2Scan`'s `killAnchorInto`) asks the producer's own question (T202):
+ * `extractKillAttempts` never prints such a press as `(cast into X)`, and
+ * the scan does not hold it to having gone into anybody.
+ */
+export function pressIsSelfBuffNamingEnemy(
+  units: Record<string, ICombatUnit> | undefined,
+  c: IKillAttemptPress,
+): boolean {
+  if (!pressAuraOnHolder(c, c.caster) || c.destId === undefined) return false;
+  const nextMs = nextPressMsOfPress(c);
+  type HitRow = { attackSpellId?: string; attackSpellName?: string };
+  // its pets' rows too: a pet's damage is merged into its owner's, its
+  // misses stay on the pet (codex 85-tk-L-T104-1 #2: Bestial Wrath's
+  // 344572 refused IMMUNE by a totem, logged on the pet)
+  const owned = Object.values(units ?? {}).filter(
+    (u) => u.ownerId === c.caster.id,
+  );
+  return ![c.caster, ...owned]
+    .flatMap((u) => [
+      ...((u.damageOut ?? []) as unknown as HitRow[]),
+      ...((u.missesOut ?? []) as unknown as HitRow[]),
+    ])
+    .some((d) => {
+      const r = d as HitRow & {
+        destUnitId?: string;
+        logLine?: { timestamp: number };
+        timestamp?: number;
+      };
+      const ts = r.logLine?.timestamp ?? r.timestamp ?? -Infinity;
+      return (
+        r.destUnitId === c.destId &&
+        ts >= c.castMs &&
+        ts < nextMs &&
+        isPressHitRow(c.spellId, c.spellName, r as never)
+      );
+    });
+}
+
 /**
  * Extracts stun-anchored kill attempts. `friendlies` are the attackers,
  * `enemies` the potential targets — pass them exactly as the other
@@ -901,30 +987,11 @@ export function extractKillAttempts(
     const isHitOf = (c: TeamCast, d: ICombatUnit["damageOut"][number]) =>
       isPressHitRow(c.spellId, c.spellName, d as HitRow & typeof d);
     /** the caster's next press of the same spell (its own hits are its own) */
-    const nextPressMsOf = (c: TeamCast): number =>
-      (c.caster.spellCastEvents ?? [])
-        .filter(
-          (e) =>
-            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            e.spellId === c.spellId &&
-            e.logLine.timestamp > c.castMs + 5,
-        )
-        .reduce((m, e) => Math.min(m, e.logLine.timestamp), Infinity);
+    const nextPressMsOf = (c: TeamCast): number => nextPressMsOfPress(c);
     /** Did the press put its own aura (its id, or an effect aura of the
      * cast) on its caster — within `SAVE_CAST_AURA_PAIR_S` of the cast row? */
-    const pressAuraOn = (c: TeamCast, holder: ICombatUnit): boolean => {
-      const ids = castAndEffectIds(c.spellId);
-      return (holder.auraEvents ?? []).some(
-        (a) =>
-          (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-            a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-          !!a.spellId &&
-          ids.has(a.spellId) &&
-          a.srcUnitId === c.caster.id &&
-          Math.abs(a.logLine.timestamp - c.castMs) <=
-            SAVE_CAST_AURA_PAIR_S * 1000,
-      );
-    };
+    const pressAuraOn = (c: TeamCast, holder: ICombatUnit): boolean =>
+      pressAuraOnHolder(c, holder);
     const pressAuraOnCaster = (c: TeamCast): boolean =>
       pressAuraOn(c, c.caster);
     /** fact7 D4 (96fb4d42 1:25): a press on nobody — its caster's own buff,
@@ -936,44 +1003,12 @@ export function extractKillAttempts(
      * the shaman's bracket went into the target; 1ceeafbe 1:28: Malevolence's
      * splash on the other two, the target still the warlock's most-hit enemy).
      * A caster who hit another enemy more stays out of it. */
-    /** T104 (fact13 D9, 36e987ca 3:17): a self-buff whose cast row names
-     * an enemy unit only because it was its caster's current target — the
-     * press put its own aura on its caster, and no damage or miss row of it
-     * (`isPressHitRow`: its ids, an effect aura's, its name) from the caster
-     * met that unit before the caster's next press of it. Voidform's row
-     * named a Grounding Totem; the totem ate the Shadow Word: Madness of the
-     * same millisecond, and the line printed `Voidform (cast into Grounding
-     * Totem)`. A press the unit took, or refused (Mindgames into the same
-     * totem: its MISSED row), stays aimed at it. */
-    const selfBuffNamingEnemy = (c: TeamCast): boolean => {
-      if (!pressAuraOnCaster(c) || c.destId === undefined) return false;
-      const nextMs = nextPressMsOf(c);
-      // its pets' rows too: a pet's damage is merged into its owner's, its
-      // misses stay on the pet (codex 85-tk-L-T104-1 #2: Bestial Wrath's
-      // 344572 refused IMMUNE by a totem, logged on the pet)
-      const owned = Object.values(
-        (combat.units as Record<string, ICombatUnit> | undefined) ?? {},
-      ).filter((u) => u.ownerId === c.caster.id);
-      return ![c.caster, ...owned]
-        .flatMap((u) => [
-          ...((u.damageOut ?? []) as unknown as HitRow[]),
-          ...((u.missesOut ?? []) as unknown as HitRow[]),
-        ])
-        .some((d) => {
-          const r = d as HitRow & {
-            destUnitId?: string;
-            logLine?: { timestamp: number };
-            timestamp?: number;
-          };
-          const ts = r.logLine?.timestamp ?? r.timestamp ?? -Infinity;
-          return (
-            r.destUnitId === c.destId &&
-            ts >= c.castMs &&
-            ts < nextMs &&
-            isPressHitRow(c.spellId, c.spellName, r as never)
-          );
-        });
-    };
+    /** T104: `pressIsSelfBuffNamingEnemy`, over this round's units */
+    const selfBuffNamingEnemy = (c: TeamCast): boolean =>
+      pressIsSelfBuffNamingEnemy(
+        combat.units as Record<string, ICombatUnit> | undefined,
+        c,
+      );
     const selfBuffInto = (
       c: TeamCast,
       target: ICombatUnit,

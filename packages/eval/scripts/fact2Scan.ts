@@ -99,7 +99,10 @@
  *    X — <Spell> burst (no stun)` line. Some friendly cast of <Spell> in
  *    [a, b + 1) went into X (its cast row's dest, or a damage row of that
  *    spell on X); a line that names where the opener went
- *    (`(cast into …)`) is not checked.
+ *    (`(cast into …)`) is not checked, nor is one all of whose presses
+ *    naming a hostile unit are self-buffs by the producer's own reading
+ *    (`pressIsSelfBuffNamingEnemy`: Voidform's cast row names its caster's
+ *    current target).
  *  - `killTargetInside` (new): the same lines' X took the most of the team's
  *    damage (landed + absorbed, friendly `damageOut`) inside the printed
  *    bracket [a, b + 1) when that most is at least 30k.
@@ -252,6 +255,7 @@ import {
   SELF_SAVE_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
+import { pressIsSelfBuffNamingEnemy } from "@gladlog/analysis/src/utils/killAttempts";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { talentRankOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { isDeadAt } from "@gladlog/analysis/src/utils/unitDeath";
@@ -1000,30 +1004,49 @@ function runRound(ctx: IContext): void {
       );
       // (an aura-only occurrence — Demonic's Metamorphosis — has no cast row)
       if (!castsOfName.some((c) => hostile(c.destUnitId))) continue;
-      bump("killAnchorInto");
-      const into = ours.some(
-        (f) =>
-          ((f.spellCastEvents ?? []) as any[]).some(
-            (c) =>
-              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-              getEnglishSpellName(c.spellId ?? "", c.spellName) === name &&
-              c.logLine.timestamp >= a - 1000 &&
-              c.logLine.timestamp < b &&
-              c.destUnitId === target.id,
-          ) ||
-          ((f.damageOut ?? []) as any[]).some(
-            (d) =>
-              d.destUnitId === target.id &&
-              getEnglishSpellName(d.spellId ?? "", d.spellName) === name &&
-              d.logLine.timestamp >= a - 1000 &&
-              d.logLine.timestamp < b + 5000,
-          ),
+      // …and a self-buff whose cast row names an enemy only as its caster's
+      // current target (Voidform) is the producer's own reading
+      // (`pressIsSelfBuffNamingEnemy`, T104): it never prints such a press
+      // as `(cast into X)`, and the press went into nobody (T202). The
+      // line's target is still checked below.
+      const unitsById = Object.fromEntries(units.map((u) => [u.id, u]));
+      const aimed = castsOfName.some(
+        (c) =>
+          hostile(c.destUnitId) &&
+          !pressIsSelfBuffNamingEnemy(unitsById, {
+            caster: ours.find((f) => f.id === c.srcUnitId)!,
+            spellId: c.spellId,
+            spellName: c.spellName,
+            castMs: c.logLine.timestamp,
+            destId: c.destUnitId,
+          }),
       );
-      if (!into)
-        miss(
-          "killAnchorInto",
-          `${where} ${km[1]} on ${target.name}: ${name} never went into it`,
+      if (aimed) {
+        bump("killAnchorInto");
+        const into = ours.some(
+          (f) =>
+            ((f.spellCastEvents ?? []) as any[]).some(
+              (c) =>
+                c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                getEnglishSpellName(c.spellId ?? "", c.spellName) === name &&
+                c.logLine.timestamp >= a - 1000 &&
+                c.logLine.timestamp < b &&
+                c.destUnitId === target.id,
+            ) ||
+            ((f.damageOut ?? []) as any[]).some(
+              (d) =>
+                d.destUnitId === target.id &&
+                getEnglishSpellName(d.spellId ?? "", d.spellName) === name &&
+                d.logLine.timestamp >= a - 1000 &&
+                d.logLine.timestamp < b + 5000,
+            ),
         );
+        if (!into)
+          miss(
+            "killAnchorInto",
+            `${where} ${km[1]} on ${target.name}: ${name} never went into it`,
+          );
+      }
     }
     const byEnemy = new Map<string, number>();
     for (const f of ours)
