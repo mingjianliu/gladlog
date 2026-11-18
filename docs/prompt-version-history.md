@@ -7175,3 +7175,16 @@ prefix-rewritten copy had a different old hash and the same new hash,
 5c52f447294f). Bases cached before this change keep their old stamps; compare
 them with `capture.ts --rehash`. Eval tooling only, no prompt change. Codex
 branch review 85-tk-EVAL-T203-1c: APPROVE.
+
+v579 (2026-11-18; pipeline batch B106, T168; round-14 D10, D14). Who broke a
+control: when the breaking hit was fully absorbed, the breaker reader looked
+at damage rows only and fell back to the holder (Fear, Imprison in the
+round-14 matches; a guardian's Wrath of Nathreza on the 605). brokenRowBreaker
+now reads the producer's hit selection including absorbed hits; breakFactScan
+reads the same selection. Round-14 repro: 6 of 6 audited lines wrong -> 0.
+605: brokenByHolder 3 wrong (one fact, three owners) -> 0. On the 605 the
+assembled candidate differs from the base in exactly one archive: three owner
+contexts, one line each (the 5:42 Paralysis is now broken by the Affliction
+Warlock's guardian's Wrath of Nathreza instead of the context owner); menus
+byte-identical, candidate rows 7,446 = 7,446 (capture checked on the Mac).
+Codex branch review 85-tk-CC-T168-1: APPROVE (one synthetic note recorded).

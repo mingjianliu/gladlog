@@ -1410,5 +1410,10 @@
  *  capture.sha256 hashes each context by its path relative to the archive
  *  root, so two machines agree.
  *  See docs/prompt-version-history.md.
+ *
+ * v579 (2026-11-18; pipeline batch B106, T168): a control broken by a hit
+ *  that was fully absorbed names the unit that hit, not the control's
+ *  holder.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 578;
+export const PROMPT_VERSION = 579;
