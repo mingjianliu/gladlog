@@ -480,6 +480,18 @@ describe("[CC NOT LANDED] — a failed control no other line states", () => {
     expect(notLanded(lines)).toEqual([]);
   });
 
+  it("T176 (ruling A13): a silence logged MISS gets the line — Strangulate has no cast-line miss tag", () => {
+    const lines = timelineOf({
+      mate: {
+        spellCastEvents: [cast("47476", "Strangulate", 56_000, "m", "e2")],
+        missesOut: [miss("47476", "Strangulate", 56_010, "m", "e2", "MISS")],
+      } as never,
+    });
+    expect(notLanded(lines)).toEqual([
+      "0:56  [CC NOT LANDED]   Other ← Strangulate (by Mate) — logged MISS",
+    ]);
+  });
+
   it("no line for what is not a failed control on an enemy player", () => {
     const lines = timelineOf({
       mate: {

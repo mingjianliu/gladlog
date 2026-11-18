@@ -1387,10 +1387,10 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         // silence's IMMUNE row — `[CC AVOIDED?]`'s reading of the same row on
         // our side (mechanic 9; fact8 D27, 969a6b07 0:49: a Silence logged
         // IMMUNE under Spiritwalker's Aegis, no line)
-        if (
-          !missReportsControl(m.spellId) &&
-          !(m.missType === "IMMUNE" && ccMechanicOf(m.spellId) === 9)
-        )
+        // …and, since T176 (ruling A13, 2026-11-17), a silence's row of any
+        // failed type: a Strangulate or a Silence logged MISS had no line
+        // (4 + 1 on the 605; the press line of a silence carries no miss tag)
+        if (!missReportsControl(m.spellId) && ccMechanicOf(m.spellId) !== 9)
           continue;
         const target = (enemies ?? []).find((e) => e.id === m.destUnitId);
         if (!target) continue;
