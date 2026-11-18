@@ -2001,6 +2001,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/healerExposureAnalysis.ts`,
+    symbol: "healerDeadAtExposureWindow",
+    mod: healerExposureAnalysis,
+  },
+  {
+    file: `${A}/utils/healerExposureAnalysis.ts`,
     symbol: "aimedControlsForKit",
     mod: healerExposureAnalysis,
   },

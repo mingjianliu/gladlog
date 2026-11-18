@@ -43,6 +43,7 @@ import { auraIsImmunityForm } from "./combatStates";
 import {
   chargeAvailabilityTransitions,
   earliestCooldownSecondsFor,
+  isDeadAtRenderSecond,
   isHealerSpec,
   specToString,
   unitCooldownOf,
@@ -328,6 +329,24 @@ export function buildEnemyCCHistory(
 // Main analysis
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether the healer is dead at a burst window's rendered second — no
+ * `[HEALER EXPOSURE]` line is said for it. The `[STATE]` tick's reading
+ * (`isDeadAtRenderSecond` at the window's floored start); scan side
+ * `packages/eval/scripts/scan5/t173.ts`.
+ */
+export function healerDeadAtExposureWindow(
+  healer: ICombatUnit,
+  matchStartMs: number,
+  windowFromSeconds: number,
+): boolean {
+  return isDeadAtRenderSecond(
+    healer,
+    matchStartMs,
+    Math.floor(windowFromSeconds),
+  );
+}
+
 export function analyzeHealerExposureAtBurst(
   burstWindows: readonly IAlignedBurstWindow[],
   enemies: ICombatUnit[],
@@ -388,6 +407,13 @@ export function analyzeHealerExposureAtBurst(
         (iv) => iv.fromS <= window.fromSeconds && window.fromSeconds < iv.toS,
       )
     )
+      continue;
+
+    // a dead healer is exposed to nothing (T173, round 14 D18: 95d4affb
+    // 6:43, "healer trinket ready … LoS break" 1 s after the healer died in
+    // a 3v3 that went on). On the render grid, as the `[STATE]` tick prints
+    // it: dead from the death's own second (`isDeadAtRenderSecond`)
+    if (healerDeadAtExposureWindow(healer, matchStartMs, window.fromSeconds))
       continue;
 
     const healerPos = getUnitPositionAtTime(
