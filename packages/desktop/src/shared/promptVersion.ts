@@ -1496,5 +1496,10 @@
  * v595 (2026-11-18; pipeline batch B123, T152): Shadowy Apparition
  *  (341263, the talent's trigger row) is a passive proc, not a press.
  *  See docs/prompt-version-history.md.
+ *
+ * v596 (2026-11-18; pipeline batch B125, T156): a Spellwarden DK's Anti-
+ *  Magic Shell (410358) joins the kill-window major defensives: named in
+ *  the burst ledger when up, and in hand it is not defenseless.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 595;
+export const PROMPT_VERSION = 596;

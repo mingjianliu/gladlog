@@ -7485,3 +7485,28 @@ Shadowy Apparition (341263) cast row: 35 kick-eaten and 5 missed-cleanse rows
 change their named press, one kick-eaten row leaves and one enters (65-5);
 candidate rows 7,441 = 7,441 (capture checked on the Mac). Codex branch review
 85-tk-KICK-T152-1: APPROVE.
+
+v596 (2026-11-18; pipeline batch B125, T156). Anti-Magic Shell 410358, the id
+a Spellwarden death knight presses on itself or an ally, joins the kill-window
+roster KW_MAJOR_DEFENSIVE_IDS next to 48707 (data/abilityProfile.ts; every
+reader takes it through the set: isKillWindowMajorDefensive, isMajorDefenseUp
+/ DEF_OR_IMMUNE_IDS, countsAsKillWindowDefensiveInHand,
+unpressedKitDefensiveInHand). Two halves move. With the aura up, the burst
+ledger names it (`Target had a major defensive up: Anti-Magic Shell ...`):
+scan5 burstAmsNotNamed 257 / 656 -> 0 / 656, 278 lines added, none removed. In
+hand, the kill-window span machine times it like every roster defensive, so a
+Spellwarden knight whose shell is off cooldown is not defenseless, the rule
+48707 has had since fact8 D9 (user ruling 2026-11-01; confirmed for 410358 by
+ruling R50, 2026-11-18): scan5 amsInDefenselessSpan 48 / 133 -> 0 / 105; [KILL
+WINDOW] lines change in 51 contexts of 18 rounds (-84 / +49; [VULNERABLE] +1),
+e.g. 148-1, where the shell was ready 0:51-1:52 and five windows on that
+knight go. Known and kept (R50): a broken shield still holds its official 6 s
+under D76, in 4 rounds (e.g. 138-1, `2:11-2:25 ... 1005k` -> `2:16-2:25 ...
+624k`); absorb shields ending at their own REMOVED is a separate ticket. No
+menu changes. On the 605 the assembled candidate changes 187 contexts in 56
+archives and no menu: the burst ledger gains 278 `Target had a major defensive
+up: Anti-Magic Shell` lines, the kill-window section moves in 18 rounds ([KILL
+WINDOW] -84 / +49, [VULNERABLE] +1, with the section's omitted-window and off-
+target lines following), and candidate rows stay the same, as the order
+expected. Codex branch review 85-tk-WIN-T156-1 (one scan point, fixed) and
+-1b: APPROVE.
