@@ -1517,5 +1517,10 @@
  *  effect whose end the log does not show prints `(≤Ns left)` from its
  *  official end, an upper bound, not an exact time left.
  *  See docs/prompt-version-history.md.
+ *
+ * v600 (2026-11-18; pipeline batch B128, T155): Divine Resonance, the aura
+ *  a Retribution paladin's Divine Toll runs on, counts as that offensive
+ *  cooldown running, on both sides.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 599;
+export const PROMPT_VERSION = 600;

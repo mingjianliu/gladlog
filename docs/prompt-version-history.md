@@ -7587,3 +7587,32 @@ with no press, 51 only gaining `≤` before its seconds left and 107 Retribution
 Paladin Avenging Wrath entries also taking the longer bound (+10 s x76, +11
 x24, +9 x3, +1 x4). Codex branch review 85-tk-CD-T140-1 (three real points,
 fixed) and -1b: APPROVE.
+
+v600 (2026-11-18; pipeline batch B128, T155). Round 13 P1: `[friendly
+offensive CD active]` was missing on lines inside a friendly Retribution
+paladin's Divine Resonance. Divine Toll 375576 runs on a talent's aura of
+another name (Divine Resonance 1266308, TALENT_EFFECT_AURAS_OF_CAST, GH #184
+part B); the enemy-CD timeline already read the press's span from that aura,
+the aura readers of 'an offensive cooldown is running' did not. Fixed at the
+predicate: castsOfTalentEffectAura (castEffectAuras.ts, the reverse of the
+table); offensiveCdOfAura (cooldowns.ts) answers for a talent effect aura with
+its cast, under the caster's spec; genericCdOfAura
+(offensiveAuraOccurrences.ts) never files such an aura as a `(no press)`
+occurrence of its own. Readers that follow with no edit:
+friendlyOffensiveCdActiveAt (the tag on [ENEMY DEF] / [ENEMY TRINKET] / the
+shield form of [ENEMY CD]), and on the enemy side hasOffensiveSpellActive ->
+threatActiveAt, the uncleansed / missed-cleanse timing gate (a debuff window
+with no calm second is exempt, user ruling 2026-08-19). On the 605 (branch on
+e8047b053 vs base): 464 lines gain the tag ([ENEMY DEF] 344, [ENEMY TRINKET]
+118, [ENEMY CD] 2) in 220 contexts of 49 archives; scan5 resonanceTagMissing 0
+/ 1,887 and resonanceWithoutToll 0 / 836 on the branch; three [UNCLEANSED
+DEBUFF] lines inside an enemy paladin's Resonance right after its Divine Toll
+leave (169-6, 171-1, 161-5, where the base already printed that Divine Toll in
+the [OFFENSIVE WINDOW] over the same seconds: one fact, now one reading), and
+with them one missed-cleanse row (candidate rows -1 / +0). On the 605 the
+assembled candidate changes 223 contexts in 49 archives and one menu: 479
+lines only gain `[friendly offensive CD active]` ([ENEMY DEF] 350, [ENEMY
+TRINKET] 127, [ENEMY CD] 2), three [UNCLEANSED DEBUFF] lines inside an enemy
+paladin's Resonance leave, and with them one missed-cleanse row (candidate
+rows -1 / +0). Codex branch review 85-tk-WIN-T155-1, -1b (scan points, fixed)
+and -1c: APPROVE.
