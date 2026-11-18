@@ -3,8 +3,6 @@ import {
   type CompletenessCode,
   type GladMatch,
   type GladShuffle,
-  logLineInstantMs,
-  splitLine,
 } from "@gladlog/parser";
 import {
   appendFileSync,
@@ -152,13 +150,13 @@ export async function readNthLine(
  * this module is bundled into out/main/chunks/, one level below it. */
 function runSlimHealWorker(
   filePath: string,
-  /** what raw.txt's opening line states (`firstLineStatedOf`); undefined =
-   * do not touch `statedStartTime` */
-  firstLineStated?: number | null,
+  /** raw.txt beside it: the worker fills `statedStartTime` from its opening
+   * lines; undefined = do not touch the field */
+  rawPath?: string,
 ): Promise<{
   ok: boolean;
   changed?: boolean;
-  statedFilled?: boolean;
+  statedComplete?: boolean;
   roundLinesTotal?: Array<{ seq: number; lines: number }>;
 }> {
   return new Promise((resolve) => {
@@ -166,7 +164,7 @@ function runSlimHealWorker(
       const worker = new Worker(
         mainEntryScript(import.meta.dirname, "slimWorker.js"),
         {
-          workerData: { filePath, firstLineStated },
+          workerData: { filePath, rawPath },
         },
       );
       worker.on("message", (msg) => {
@@ -184,36 +182,6 @@ function runSlimHealWorker(
       resolve({ ok: false });
     }
   });
-}
-
-/** Bytes of raw.txt read for its first line: an ARENA_MATCH_START line is
- * under 100. */
-const RAW_HEAD_BYTES = 1024;
-
-/**
- * The instant raw.txt's opening line states for itself (`logLineInstantMs`,
- * the parser's own reading — what `statedStartTime` is on a document parsed
- * since T90): a number, null when the line states no offset, and undefined
- * when there is no raw.txt, or its first line is not a match's opening line
- * (nothing to say then; the document stays as it is).
- */
-export async function firstLineStatedOf(
-  rawPath: string,
-): Promise<number | null | undefined> {
-  let fh: fsp.FileHandle | undefined;
-  try {
-    fh = await fsp.open(rawPath, "r");
-    const buf = Buffer.alloc(RAW_HEAD_BYTES);
-    const { bytesRead } = await fh.read(buf, 0, RAW_HEAD_BYTES, 0);
-    const line = buf.toString("utf8", 0, bytesRead).split(/\r?\n/, 1)[0] ?? "";
-    const parts = splitLine(line);
-    if (!parts || parts.eventName !== "ARENA_MATCH_START") return undefined;
-    return logLineInstantMs(parts.datePart);
-  } catch {
-    return undefined;
-  } finally {
-    await fh?.close().catch(() => {});
-  }
 }
 
 function parseMatchFileInWorker(filePath: string): Promise<unknown | null> {
@@ -1259,34 +1227,38 @@ export class MatchStore {
   /** Dedup in-flight self-heals; once the worker finishes, set the meta flag
    * and invalidate the byte cache (which still holds the fat copy). */
   private healing = new Set<string>();
+  private statedTried = new Set<string>();
   private queueSlimHeal(id: string): void {
     if (this.healing.has(id)) return;
     this.healing.add(id);
     const dir = join(this.rootDir, safeName(id));
     const before = this.index.get(id);
-    void (async () => {
-      // T200: a document stored before the parser kept statedStartTime gets
-      // it from raw.txt's opening line, in the same pass
-      const firstLineStated = before?.statedInstant
+    // T200: a document stored before the parser kept statedStartTime gets
+    // it from raw.txt's opening lines, in the same pass
+    // (once per session: a document whose raw.txt does not have one opening
+    // line per stored round stays unmarked, and is not parsed again on every
+    // read)
+    const rawPath =
+      before?.statedInstant ||
+      this.statedTried.has(id) ||
+      !existsSync(join(dir, "raw.txt"))
         ? undefined
-        : await firstLineStatedOf(join(dir, "raw.txt"));
-      // nothing to slim and nothing to state (no raw.txt): no pass
-      if (before?.slimmed && firstLineStated === undefined) return null;
-      const res = await runSlimHealWorker(
-        join(dir, "match.json"),
-        firstLineStated,
-      );
-      return { res, stated: firstLineStated !== undefined };
-    })()
-      .then((out) => {
-        if (!out || !out.res.ok) return;
-        const { res, stated } = out;
+        : join(dir, "raw.txt");
+    if (rawPath !== undefined) this.statedTried.add(id);
+    // nothing to slim and nothing to read the instants from: no pass
+    if (before?.slimmed && rawPath === undefined) {
+      this.healing.delete(id);
+      return;
+    }
+    void runSlimHealWorker(join(dir, "match.json"), rawPath)
+      .then((res) => {
+        if (!res.ok) return;
         const meta = this.index.get(id);
         if (!meta) return;
         const next: StoredMatchMeta = {
           ...meta,
           slimmed: true,
-          ...(stated ? { statedInstant: true } : {}),
+          ...(res.statedComplete ? { statedInstant: true } : {}),
           ...(res.roundLinesTotal
             ? { roundLinesTotal: res.roundLinesTotal }
             : {}),
