@@ -17,6 +17,7 @@ import { buildResourceSnapshot } from "../src/context/resourceSnapshot";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { burstCastSpan } from "../src/utils/burstLedger";
 import {
+  cooldownEffectAuras,
   casterAuraOutlives,
   cutAtRoundEnd,
   type IEnemyCDCast,
@@ -216,7 +217,7 @@ describe("T28 — an effect the round's end ended is over from its second", () =
       units: { e2: p, e1: mate },
     };
     expect(
-      casterAuraOutlives(p, "Power Infusion", START + 15_140, combat),
+      casterAuraOutlives(p, cooldownEffectAuras(PI), START + 15_140, combat),
     ).toEqual({ any: true, outlives: false });
   });
 
@@ -251,7 +252,7 @@ describe("T28 — an effect the round's end ended is over from its second", () =
       units: { e2: p, e1: mate },
     };
     expect(
-      casterAuraOutlives(p, "Power Infusion", START + 15_040, combat),
+      casterAuraOutlives(p, cooldownEffectAuras(PI), START + 15_040, combat),
     ).toEqual({ any: false, outlives: false });
     const cd = piCast();
     cutAtRoundEnd(

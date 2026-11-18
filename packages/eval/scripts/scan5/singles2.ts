@@ -90,7 +90,10 @@ import {
   UNPURGEABLE_MAGIC_AURAS,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import { AOE_CC_LANDING_WINDOW_S } from "@gladlog/analysis/src/utils/drAnalysis";
-import { roundEndEndsEffect } from "@gladlog/analysis/src/utils/enemyCDs";
+import {
+  cooldownEffectAuras,
+  roundEndEndsEffect,
+} from "@gladlog/analysis/src/utils/enemyCDs";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -693,7 +696,22 @@ function resEnemySameSecondPressMissing(ctx: IRoundCtx, rows: IResRow[]): void {
         roundEnd !== undefined &&
         roundEnd < ctx.end &&
         Math.floor((roundEnd - ctx.start) / 1000) <= row.s &&
-        roundEndEndsEffect(u, cd.name, roundEnd, roundCombat)
+        roundEndEndsEffect(
+          u,
+          // the press's own id when its cast row is in this second — its
+          // effect auras, another name's included (`cooldownEffectAuras`)
+          cooldownEffectAuras(
+            ((u.spellCastEvents ?? []) as any[]).find(
+              (c) =>
+                c.logLine?.event === "SPELL_CAST_SUCCESS" &&
+                nameOf(c.spellId, c.spellName) === cd.name &&
+                inSec(c.logLine.timestamp),
+            )?.spellId,
+            cd.name,
+          ),
+          roundEnd,
+          roundCombat,
+        )
       )
         continue;
       ctx.bump("resEnemySameSecondPressMissing");

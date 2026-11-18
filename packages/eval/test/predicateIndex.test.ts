@@ -164,6 +164,7 @@ import * as dispelAnalysis from "@gladlog/analysis/src/utils/dispelAnalysis";
 import * as dispelKind from "@gladlog/analysis/src/utils/dispelKind";
 import * as dpsMetrics from "@gladlog/analysis/src/utils/dpsMetrics";
 import * as drAnalysis from "@gladlog/analysis/src/utils/drAnalysis";
+import * as effectHolder from "@gladlog/analysis/src/utils/effectHolder";
 import * as enemyCDs from "@gladlog/analysis/src/utils/enemyCDs";
 import * as enemyDefensives from "@gladlog/analysis/src/utils/enemyDefensives";
 import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
@@ -1476,6 +1477,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/enemyCDs.ts`,
     symbol: "casterAuraOutlives",
     mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "cooldownEffectAuras",
+    mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/effectHolder.ts`,
+    symbol: "isEffectHolderUnit",
+    mod: effectHolder,
   },
   {
     file: `${A}/utils/enemyCDs.ts`,

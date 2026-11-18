@@ -32,8 +32,10 @@ import {
   parseResRow,
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
-import { effectSpanIdsOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
-import { casterAuraOutlives } from "@gladlog/analysis/src/utils/enemyCDs";
+import {
+  casterAuraOutlives,
+  cooldownEffectAuras,
+} from "@gladlog/analysis/src/utils/enemyCDs";
 import { shuffleRoundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { DEATH_CASCADE_MS } from "@gladlog/analysis/src/utils/unitDeath";
 
@@ -71,18 +73,19 @@ function resEnemyEffectAfterDeath(ctx: IRoundCtx): void {
     units: ctx.legacy.units,
   };
   const outlives = (holder: any, name: string, untilMs: number) => {
-    // X's own name, and the names the log gives the auras X's effect runs
-    // on (the ids of the holder's presses named X, `effectSpanIdsOfCast`)
-    const names = new Set([name]);
+    // X's own name, and the auras X's effect runs on — the product's
+    // reading (`cooldownEffectAuras`, pipeline T158: the name-only cut and
+    // this scan's wider one are one predicate now), asked for each id the
+    // holder pressed under the name X
+    const pressed = new Set<string>();
     for (const c of successesOf(holder))
       if (c.spellId && nameOf(c.spellId, c.spellName ?? "") === name)
-        for (const id of effectSpanIdsOfCast(String(c.spellId))) {
-          const n = nameOf(id);
-          if (n) names.add(n);
-        }
+        pressed.add(String(c.spellId));
     let any = false;
-    for (const n of names) {
-      const r = casterAuraOutlives(holder, n, untilMs, combat);
+    for (const effect of pressed.size > 0
+      ? [...pressed].map((id) => cooldownEffectAuras(id, name))
+      : [cooldownEffectAuras(undefined, name)]) {
+      const r = casterAuraOutlives(holder, effect, untilMs, combat);
       if (r.outlives) return { any: true, outlives: true };
       any ||= r.any;
     }

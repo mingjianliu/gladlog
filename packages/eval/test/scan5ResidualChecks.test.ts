@@ -11,7 +11,11 @@ import {
   ensureAnalysisData,
   reconstructDispelSummary,
 } from "@gladlog/analysis";
-import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
+import {
+  CombatUnitSpec,
+  CombatUnitType,
+  LogEvent,
+} from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { makeUnit } from "../../analysis/test/ported/testHelpers";
@@ -3077,7 +3081,10 @@ describe("T58 — an effect is read by its press's ids, not by the entry's name 
       ],
       deathRecords: [{ timestamp: at(136_880) }],
     });
+    // a player: an effect aura under another name than the cooldown's is
+    // the effect only on a holder (`isEffectHolderUnit`, pipeline T158)
     const warr = unit("Warr", "1", 1, {
+      type: CombatUnitType.Player,
       auraEvents: [
         dot(LogEvent.SPELL_AURA_APPLIED, 136_777),
         ...(dotRemovedMs === undefined

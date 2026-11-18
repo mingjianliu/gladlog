@@ -54,6 +54,7 @@ import {
   unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
+import { isEffectHolderUnit } from "./effectHolder";
 import { pressRowsWithHidden } from "./hiddenPress";
 import { logInstantOf } from "./logEra";
 import { fmtTime } from "./renderGrid";
@@ -276,7 +277,7 @@ function auraIndexOf(combat: AtomicArenaCombat) {
   if (!idx) {
     idx = [];
     for (const u of Object.values(combat.units ?? {})) {
-      if (u.type !== CombatUnitType.Player) continue;
+      if (!isEffectHolderUnit(u)) continue;
       for (const iv of buildAuraIntervals(u, combat))
         idx.push({ destId: u.id, iv });
     }
@@ -1045,8 +1046,8 @@ function deathCutOfficialEnd(
   officialEndS: number,
   combat: AtomicArenaCombat,
   caster: ICombatUnit,
-  /** the cooldown's English name — the `[RES]` entry's */
-  name: string,
+  /** the auras the cooldown's effect runs on (`cooldownEffectAuras`) */
+  effect: ICooldownEffectAuras,
 ): Pick<IEnemyCDCast, "deathCutOfficialEndSeconds" | "deathCutAtSeconds"> {
   // the official end is read from the aura's own application (a press
   // logged after its aura, codex 20-G167-06 #3, is no cut); less than
@@ -1093,7 +1094,7 @@ function deathCutOfficialEnd(
   const cutEndsRound = cutMs === roundEndMs || near(roundEndMs);
   const endsTheEffect =
     (cutEndsRound || (holder !== undefined && holder.id === caster.id)) &&
-    !casterAuraOutlives(caster, name, cutMs + DEATH_CASCADE_MS, combat)
+    !casterAuraOutlives(caster, effect, cutMs + DEATH_CASCADE_MS, combat)
       .outlives;
   return {
     deathCutOfficialEndSeconds: officialEndS,
@@ -1122,8 +1123,8 @@ export function enemyEffectLeftIsUpperBound(
 }
 
 /**
- * T28: does a Solo Shuffle round's end (`endMs`) end `caster`'s effect of
- * English name `name`? Every aura of that name the caster put on any unit
+ * T28: does a Solo Shuffle round's end (`endMs`) end `caster`'s effect
+ * (`cooldownEffectAuras`)? Every aura of it the caster put on any unit
  * is gone by `endMs` + `DEATH_CASCADE_MS` (`casterAuraOutlives`) and at
  * least one was logged this round — with none, the log cannot say. The one
  * predicate `[RES]`'s round-end cut (`cutAtRoundEnd`) and its scans
@@ -1132,11 +1133,16 @@ export function enemyEffectLeftIsUpperBound(
  */
 export function roundEndEndsEffect(
   caster: Pick<ICombatUnit, "id">,
-  name: string,
+  effect: ICooldownEffectAuras,
   endMs: number,
   combat: Parameters<typeof casterAuraOutlives>[3],
 ): boolean {
-  const r = casterAuraOutlives(caster, name, endMs + DEATH_CASCADE_MS, combat);
+  const r = casterAuraOutlives(
+    caster,
+    effect,
+    endMs + DEATH_CASCADE_MS,
+    combat,
+  );
   return r.any && !r.outlives;
 }
 
@@ -1173,7 +1179,7 @@ export function cutAtRoundEnd(
     if (
       !roundEndEndsEffect(
         caster,
-        getEnglishSpellName(cd.spellId, cd.spellName),
+        cooldownEffectAuras(cd.spellId, cd.spellName),
         endMs,
         combat,
       )
@@ -1194,23 +1200,77 @@ export function cutAtRoundEnd(
 }
 
 /** every unit's aura intervals (pets, totems and guardians included), once
- * per combat */
-const ALL_AURA_INDEX = new WeakMap<object, IAuraInterval[]>();
+ * per combat; `holder` = the unit is one an effect runs on
+ * (`isEffectHolderUnit`) */
+const ALL_AURA_INDEX = new WeakMap<
+  object,
+  Array<{ iv: IAuraInterval; holder: boolean }>
+>();
+
+/** The auras a cooldown's effect runs on, for "is it over at this death /
+ * round end": its own id and every effect aura of the press
+ * (`effectSpanIdsOfCast` — the ids the press's observed span reads), and the
+ * English names of all of them (the log writes one effect under several ids
+ * of one name). */
+export interface ICooldownEffectAuras {
+  ids: ReadonlySet<string>;
+  names: ReadonlySet<string>;
+  /** The cooldown's own name: an aura of it may land after the cut
+   * (`EFFECT_START_AFTER_S`); an effect aura under another name has to be
+   * up at the cut already (`casterAuraOutlives`). */
+  ownName?: string;
+}
 
 /**
- * T03: does an aura of English name `name` that `caster` put on any unit — a
- * pet's copy included — run past `untilMs` (its intervals the builder's)?
+ * `ICooldownEffectAuras` of one cooldown. Pipeline T158 (GH #218 3.2): the
+ * death cut and the round-end cut asked by the cooldown's English name
+ * alone, so a press whose effect aura carries another name (Predator's Wake
+ * → The Hunt's DoT) read "no copy outlives the death" while its DoT ran on.
+ * The scan beside them (fact12 `resEnemyEffectAfterDeath`) already read the
+ * effect ids; one reading now. `spellId` undefined = a name only (an entry
+ * read back off the text with no press of it).
+ */
+export function cooldownEffectAuras(
+  spellId: string | undefined,
+  spellName?: string,
+): ICooldownEffectAuras {
+  const ids = spellId ? effectSpanIdsOfCast(spellId) : new Set<string>();
+  const names = new Set<string>();
+  const own = spellId
+    ? getEnglishSpellName(spellId, spellName ?? "")
+    : spellName;
+  if (own) names.add(own);
+  for (const id of ids) {
+    const n = getEnglishSpellName(id, "");
+    if (n) names.add(n);
+  }
+  return { ids, names, ...(own ? { ownName: own } : {}) };
+}
+
+/**
+ * T03: does an aura of `effect` (`cooldownEffectAuras`: the cooldown's name,
+ * its effect ids and their names) that `caster` put on a unit run past
+ * `untilMs` (its intervals the builder's)? An aura of the cooldown's own
+ * name counts on any unit, a pet's copy included (T03 attempt 3); an effect
+ * aura under another name only on a holder (`isEffectHolderUnit`: a player
+ * — ruling R67's reading and FT F13's).
  * Open at it, or applied up to `EFFECT_START_AFTER_S` after it and still
  * running past it (codex T28-1 #1: an Avatar pressed 50 ms before a Solo
  * Shuffle round's end, applied 150 ms after it, ran 3 s on); a later
- * application is another effect (codex T28-1b). `any`: the caster put one of that name on
+ * application is another effect (codex T28-1b). That landing lag is the
+ * cooldown's own aura racing the cut's row; an effect aura under another
+ * name counts only when it is up at the cut already (T158, batch check
+ * T158-1: a Summon Infernal pressed 0.8 s before its warlock died — the
+ * Infernal landed 0.19 s after the death, its Infernal Awakening stun kept
+ * the dead warlock's 30 s window, and a 1 s `STAYED IN` span left the
+ * owner's POSITIONING). `any`: the caster put one of that name on
  * someone this round.
  * The one predicate `[RES]`'s death cut and its scan
  * (`resEnemyEffectAfterDeath`) read.
  */
 export function casterAuraOutlives(
   caster: Pick<ICombatUnit, "id">,
-  name: string,
+  effect: ICooldownEffectAuras,
   untilMs: number,
   combat: {
     startTime: number;
@@ -1221,21 +1281,38 @@ export function casterAuraOutlives(
   let all = ALL_AURA_INDEX.get(combat);
   if (!all) {
     all = [];
-    for (const u of Object.values(combat.units ?? {}))
-      if (u.auraEvents?.length) all.push(...buildAuraIntervals(u, combat));
+    for (const u of Object.values(combat.units ?? {})) {
+      if (!u.auraEvents?.length) continue;
+      const holder = isEffectHolderUnit(u);
+      for (const iv of buildAuraIntervals(u, combat)) all.push({ iv, holder });
+    }
     ALL_AURA_INDEX.set(combat, all);
   }
   const untilS = (untilMs - combat.startTime) / 1000;
   const combatEndS = (combat.endTime - combat.startTime) / 1000;
   let any = false;
-  for (const iv of all) {
+  for (const { iv, holder } of all) {
     if (iv.srcUnitId !== caster.id) continue;
-    if (getEnglishSpellName(iv.spellId, iv.spellName ?? "") !== name) continue;
+    if (
+      !effect.ids.has(iv.spellId) &&
+      !effect.names.has(getEnglishSpellName(iv.spellId, iv.spellName ?? ""))
+    )
+      continue;
     // an application the builder clamped to the combat's end with no length
     // (applied past it) is no evidence of the effect inside the combat at all
     // (codex T28-1c: a lone APPLIED at 40 s in a combat ending at 17 s read
     // [17, 17] and let the round's end cut a press whose aura never showed)
     if (iv.toS <= iv.fromS && iv.fromS >= combatEndS) continue;
+    const own =
+      effect.ownName === undefined ||
+      getEnglishSpellName(iv.spellId, iv.spellName ?? "") === effect.ownName;
+    // an effect aura under another name is the effect only on a holder
+    // (T158: The Hunt left on hunter pets, imps and a statue kept
+    // `Predator's Wake(1s left)` after a death in two rounds); the
+    // cooldown's own-named copy on a pet keeps counting (T03 attempt 3,
+    // GH #167: 3ac1fefa, a hunter's pets held Bestial Wrath 292 ms past its
+    // death) — the two legs are registered as not unified
+    if (!own && !holder) continue;
     any = true;
     // open at the cut, or applied after it by a press's landing lag
     // (`EFFECT_START_AFTER_S`) and running past it — not a later, unrelated
@@ -1245,7 +1322,7 @@ export function casterAuraOutlives(
     if (
       iv.toS > untilS &&
       iv.toS > iv.fromS &&
-      iv.fromS <= untilS + EFFECT_START_AFTER_S
+      iv.fromS <= untilS + (own ? EFFECT_START_AFTER_S : 0)
     )
       return { any, outlives: true };
   }
@@ -1661,7 +1738,7 @@ function reconstructEnemyCDTimelineUncached(
             officialEndS,
             combat,
             enemy,
-            getEnglishSpellName(cd.spellId, cd.spellName),
+            cooldownEffectAuras(cd.spellId, cd.spellName),
           ),
         );
     };
@@ -1855,7 +1932,7 @@ function reconstructEnemyCDTimelineUncached(
         ) {
           const r = casterAuraOutlives(
             enemy,
-            getEnglishSpellName(cd.spellId, cd.spellName),
+            cooldownEffectAuras(cd.spellId, cd.spellName),
             diedMs + DEATH_CASCADE_MS,
             combat,
           );
@@ -2008,7 +2085,7 @@ function reconstructEnemyCDTimelineUncached(
               (o.officialEndMs - matchStartMs) / 1000,
               combat,
               enemy,
-              getEnglishSpellName(o.spellId, o.spellName),
+              cooldownEffectAuras(o.spellId, o.spellName),
             );
       const upAtSliceEnd = atSliceEnd && !holderDeadAtSliceEnd;
       (o.burstRole === "fact" ? offensiveFacts : offensiveCDs).push({

@@ -19,7 +19,6 @@
  */
 import {
   AtomicArenaCombat,
-  CombatUnitType,
   ICombatUnit,
   LogEvent,
 } from "@gladlog/parser-compat";
@@ -58,6 +57,7 @@ import {
   unitCooldownEntry,
   unreleasedHoldMs,
 } from "./cooldowns";
+import { isEffectHolderUnit } from "./effectHolder";
 import { SAVE_CAST_AURA_PAIR_S } from "./enemyDefensives";
 import { isResyncBatchAt } from "./hiddenPress";
 import {
@@ -688,7 +688,7 @@ export function pressEffectCutShort(
       (c) =>
         c.row.spellId === from.spellId &&
         c.unit.id !== dur.unit.id &&
-        c.unit.type === CombatUnitType.Player,
+        isEffectHolderUnit(c.unit),
     )
   )
     return undefined;
