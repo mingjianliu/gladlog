@@ -1338,22 +1338,29 @@ export function selfSaveCasts(
     const castId = a.spellId ? castOfAura.get(a.spellId) : undefined;
     if (castId === undefined) continue;
     const ms = a.logLine.timestamp;
-    // the hidden-press reading's — but for a proc's own cast, which that
-    // reading refuses (`isProcTriggeredCastAt`, T134) and this one states
-    if (isResyncBatchAt(enemy, ms) && !isProcTriggeredCastAt(enemy, castId, ms))
-      continue;
-    const presses =
-      pressMsByCast.get(castId) ??
-      pressMsByCast
-        .set(
-          castId,
-          pressMsOf(
-            new Set([...pressIdsOf(castId), ...castsOfEffectAura(a.spellId!)]),
-          ),
-        )
-        .get(castId)!;
-    if (presses.some((p) => Math.abs(p - ms) <= SAVE_CAST_AURA_PAIR_S * 1000))
-      continue;
+    // A low-HP proc's own activation (`isProcTriggeredCastAt`, T134) is
+    // stated whatever stands beside it: the hidden-press reading refuses it
+    // (a re-stating batch), and a press a second later is the player's own
+    // on top of it, with its own line (18e3feae r4: the proc 0:41 at 41 %,
+    // the press 0:42).
+    if (!isProcTriggeredCastAt(enemy, castId, ms)) {
+      if (isResyncBatchAt(enemy, ms)) continue; // the hidden-press reading's
+      const presses =
+        pressMsByCast.get(castId) ??
+        pressMsByCast
+          .set(
+            castId,
+            pressMsOf(
+              new Set([
+                ...pressIdsOf(castId),
+                ...castsOfEffectAura(a.spellId!),
+              ]),
+            ),
+          )
+          .get(castId)!;
+      if (presses.some((p) => Math.abs(p - ms) <= SAVE_CAST_AURA_PAIR_S * 1000))
+        continue;
+    }
     out.push({
       atSeconds: (ms - matchStartMs) / 1000,
       spellId: castId,

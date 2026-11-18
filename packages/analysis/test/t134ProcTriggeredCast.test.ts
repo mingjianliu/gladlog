@@ -15,6 +15,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { unitCooldownEntry } from "../src/utils/cooldowns";
 import { isAvailableAt } from "../src/utils/deathOutcomeAnalysis";
+import { selfSaveCasts } from "../src/utils/enemyDefensives";
 import { hiddenPressMs } from "../src/utils/hiddenPress";
 import {
   isProcTriggeredCastAt,
@@ -139,5 +140,25 @@ describe("hiddenPressMs", () => {
   it("…but not beside the proc's marker", () => {
     const u = druid([], [], batch(44.8, true));
     expect(hiddenPressMs(u, FR, START)).toEqual([]);
+  });
+});
+
+describe("selfSaveCasts (the enemy's [ENEMY DEF] presses)", () => {
+  const frAura = (s: number) =>
+    makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, FR, at(s), "p1", "p1", "BUFF");
+  it("18e3feae r4 shape: the proc is stated with no press, the press a second later is its own", () => {
+    const u = druid([42.8], [41.76], [frAura(41.76)]);
+    expect(
+      selfSaveCasts(u, START).map((c) => [c.atSeconds, !!c.noPressLogged]),
+    ).toEqual([
+      [41.76, true],
+      [42.8, false],
+    ]);
+  });
+  it("without the marker the aura is the press's own", () => {
+    const u = druid([42.8], [], [frAura(41.76)]);
+    expect(
+      selfSaveCasts(u, START).map((c) => [c.atSeconds, !!c.noPressLogged]),
+    ).toEqual([[42.8, false]]);
   });
 });
