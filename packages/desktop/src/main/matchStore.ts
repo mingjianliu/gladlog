@@ -23,6 +23,7 @@ import {
   renameWithRetrySync,
 } from "../shared/atomicWrite";
 import { nullFiller } from "../shared/roundOffsets";
+import { mainEntryScript } from "./mainEntryScript";
 
 /** rounds.idx.json shape (written by roundsIdxWorker; size/mtime guard the
  * offsets against any rewrite of match.json). */
@@ -145,7 +146,8 @@ export async function readNthLine(
  * The main bundle is ESM ("type":"module"), so __dirname does not exist — we
  * must use import.meta.dirname (agy review F1: with __dirname the call throws
  * ReferenceError, gets swallowed by the catch, and self-heal silently stops
- * working in production). */
+ * working in production). The entry is found through `mainEntryScript`:
+ * this module is bundled into out/main/chunks/, one level below it. */
 function runSlimHealWorker(filePath: string): Promise<{
   ok: boolean;
   changed?: boolean;
@@ -153,9 +155,10 @@ function runSlimHealWorker(filePath: string): Promise<{
 }> {
   return new Promise((resolve) => {
     try {
-      const worker = new Worker(join(import.meta.dirname, "slimWorker.js"), {
-        workerData: { filePath },
-      });
+      const worker = new Worker(
+        mainEntryScript(import.meta.dirname, "slimWorker.js"),
+        { workerData: { filePath } },
+      );
       worker.on("message", (msg) => {
         resolve(msg as { ok: boolean });
         void worker.terminate();
@@ -1105,7 +1108,7 @@ export class MatchStore {
     const p = new Promise<{ ok: boolean }>((resolve) => {
       try {
         const worker = new Worker(
-          join(import.meta.dirname, "roundsIdxWorker.js"),
+          mainEntryScript(import.meta.dirname, "roundsIdxWorker.js"),
           {
             workerData: {
               filePath: join(this.rootDir, safeName(id), "match.json"),
