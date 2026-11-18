@@ -12,21 +12,19 @@
  *    a player put on itself (the log's own APPLIED row, self → self) whose
  *    proc casts a cooldown the player's ledger carries (`unitCooldownEntry`);
  *    a violation when the ledger holds a press of that cooldown within
- *    `CRISIS_PROC_TRIGGER_TOL_MS` of the marker. Kind `<spell> | cast row`
+ *    `PROC_OWN_ACTIVATION_PAIR_MS` of the marker. Kind `<spell> | cast row`
  *    when the log has a SPELL_CAST_SUCCESS of it there, `<spell> | no cast
  *    row` when the press was read off an aura (a press made unseen).
  *    Checked = those markers.
  *  - inventory kinds (out of the total), the pairing's own measure: for each
  *    such marker, the nearest SPELL_CAST_SUCCESS of the proc's spell within
  *    3 s, by distance — `<spell> | cast row within 0 ms / 100 ms / 500 ms /
- *    1500 ms / 3000 ms` — a real press beside a proc sits in the outer
- *    buckets.
+ *    1500 ms / 3000 ms` — the proc logs no cast row of its own, so a row
+ *    beside it is the player pressing on top of it (18e3feae r4: 1.04 s).
  */
-import {
-  CRISIS_PROC_ANSWERS,
-  CRISIS_PROC_TRIGGER_TOL_MS,
-} from "@gladlog/analysis/src/data/crisisProcAnswers";
+import { CRISIS_PROC_ANSWERS } from "@gladlog/analysis/src/data/crisisProcAnswers";
 import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
+import { PROC_OWN_ACTIVATION_PAIR_MS } from "@gladlog/analysis/src/utils/procTriggeredCast";
 
 import {
   APPLIED,
@@ -85,12 +83,12 @@ export function run(ctx: IRoundCtx): void {
         const press = entry.casts.find(
           (c) =>
             Math.abs(ctx.start + c.timeSeconds * 1000 - ms) <=
-            CRISIS_PROC_TRIGGER_TOL_MS,
+            PROC_OWN_ACTIVATION_PAIR_MS,
         );
         if (!press) continue;
         ctx.violate(
           "procCastReadAsPress",
-          `${name} | ${nearest !== undefined && nearest <= CRISIS_PROC_TRIGGER_TOL_MS ? "cast row" : "no cast row"}`,
+          `${name} | ${nearest !== undefined && nearest <= PROC_OWN_ACTIVATION_PAIR_MS ? "cast row" : "no cast row"}`,
           ms,
           factId,
           `${u.spec} ${name}: ${def.name} at ${at.toFixed(2)}s, the ledger holds a press at ${press.timeSeconds.toFixed(2)}s (presses ${entry.casts.map((c) => c.timeSeconds.toFixed(1)).join(" ")})`,

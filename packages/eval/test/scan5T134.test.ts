@@ -77,14 +77,11 @@ function scan(castSeconds: number[], markerSeconds: number[]) {
 }
 
 describe("scan5 procCastReadAsPress", () => {
-  it("a proc with its cast row: measured, and the ledger holds no press of it", () => {
-    expect(scan([19.3, 44.8, 54.6], [44.8])).toEqual({
-      checked: 1,
-      kinds: ["Frenzied Regeneration | cast row within 0 ms"],
-    });
+  it("a proc (no cast row of its own) beside two presses: nothing in the ledger at the marker", () => {
+    expect(scan([19.3, 54.6], [44.8])).toEqual({ checked: 1, kinds: [] });
   });
 
-  it("a real press inside the pairing's tolerance is what the outer buckets show", () => {
+  it("a press a second after the proc is measured and stays a press", () => {
     expect(scan([46], [44.8]).kinds).toEqual([
       "Frenzied Regeneration | cast row within 1500 ms",
     ]);

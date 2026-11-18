@@ -14,16 +14,15 @@
  * 25.5 s apart. The proc spends no charge: that third press came 35.3 s after
  * the first and 9.8 s after the proc.
  *
- * One reading of the markers (`ownProcMarkers`) and one pairing
- * (`isProcTriggeredCastAt`, `CRISIS_PROC_TRIGGER_TOL_MS`) for the crisis
- * reading, the cooldown ledger, the death block's readiness, the hidden-press
- * reading and the healer timeline's `[YOU] [CD]` promotion.
+ * One reading of the markers (`ownProcMarkers`, the crisis reading's too) and
+ * one pairing (`isProcTriggeredCastAt`) for every reader of a press: the
+ * cooldown ledger, the death block's readiness, the hidden-press reading, the
+ * healer timeline's `[YOU] [CD]` promotion and the enemy self-save list.
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   CRISIS_PROC_ANSWERS,
-  CRISIS_PROC_TRIGGER_TOL_MS,
   type CrisisProcAnswer,
 } from "../data/crisisProcAnswers";
 
@@ -59,9 +58,22 @@ export function ownProcMarkers(unit: MarkerUnit): OwnProcMarker[] {
   return out;
 }
 
-/** Is a cast (or an aura-read activation) of `spellId` by `unit` at `ms` one
- * of its procs' — a marker that casts the spell, within
- * `CRISIS_PROC_TRIGGER_TOL_MS` of it? */
+/**
+ * How far from its marker the proc's own activation sits. The proc logs no
+ * cast row of its own: its aura goes up in the marker's millisecond
+ * (74f541c0 r5 2:44.822 both, 18e3feae r3 1:19.712 both). A cast row a second
+ * later is the player pressing the button on top of it — 18e3feae r4: the
+ * proc at 41.76 s, SPELL_CAST_SUCCESS + AURA_REFRESH at 42.80 s; r6: 71.28 s
+ * and 73.58 s — and spends its charge. So the press readers pair inside one
+ * log batch, not inside the crisis reading's `CRISIS_PROC_TRIGGER_TOL_MS`
+ * (1.5 s, which answers "did the proc answer this crisis", a looser
+ * question).
+ */
+export const PROC_OWN_ACTIVATION_PAIR_MS = 100;
+
+/** Is a cast (or an aura-read activation) of `spellId` by `unit` at `ms` its
+ * proc's own — a marker that casts the spell, within
+ * `PROC_OWN_ACTIVATION_PAIR_MS` of it? */
 export function isProcTriggeredCastAt(
   unit: MarkerUnit,
   spellId: string | null | undefined,
@@ -71,6 +83,6 @@ export function isProcTriggeredCastAt(
   return ownProcMarkers(unit).some(
     (m) =>
       m.triggers.has(spellId) &&
-      Math.abs(ms - m.t) <= CRISIS_PROC_TRIGGER_TOL_MS,
+      Math.abs(ms - m.t) <= PROC_OWN_ACTIVATION_PAIR_MS,
   );
 }

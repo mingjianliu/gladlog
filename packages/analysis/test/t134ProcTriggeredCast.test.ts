@@ -12,7 +12,6 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { CRISIS_PROC_TRIGGER_TOL_MS } from "../src/data/crisisProcAnswers";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { unitCooldownEntry } from "../src/utils/cooldowns";
 import { isAvailableAt } from "../src/utils/deathOutcomeAnalysis";
@@ -20,6 +19,7 @@ import { hiddenPressMs } from "../src/utils/hiddenPress";
 import {
   isProcTriggeredCastAt,
   ownProcMarkers,
+  PROC_OWN_ACTIVATION_PAIR_MS,
 } from "../src/utils/procTriggeredCast";
 import {
   makeAuraEvent,
@@ -79,10 +79,10 @@ describe("isProcTriggeredCastAt", () => {
     expect(ownProcMarkers(u).map((m) => m.t)).toEqual([at(45)]);
     expect(isProcTriggeredCastAt(u, FR, at(45))).toBe(true);
     expect(
-      isProcTriggeredCastAt(u, FR, at(45) + CRISIS_PROC_TRIGGER_TOL_MS),
+      isProcTriggeredCastAt(u, FR, at(45) + PROC_OWN_ACTIVATION_PAIR_MS),
     ).toBe(true);
     expect(
-      isProcTriggeredCastAt(u, FR, at(45) + CRISIS_PROC_TRIGGER_TOL_MS + 1),
+      isProcTriggeredCastAt(u, FR, at(45) + PROC_OWN_ACTIVATION_PAIR_MS + 1),
     ).toBe(false);
     // another spell is not the proc's
     expect(isProcTriggeredCastAt(u, "22812", at(45))).toBe(false);
@@ -114,6 +114,13 @@ describe("the cooldown ledger", () => {
     expect(
       unitCooldownEntry(u, combatOf(u), FR)!.casts.map((c) => c.timeSeconds),
     ).toEqual([19.3, 44.8]);
+  });
+
+  it("18e3feae r4 shape: a cast row a second after the proc is the player's press", () => {
+    const u = druid([42.8], [41.76]);
+    expect(
+      unitCooldownEntry(u, combatOf(u), FR)!.casts.map((c) => c.timeSeconds),
+    ).toEqual([42.8]);
   });
 });
 
