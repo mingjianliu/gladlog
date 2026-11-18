@@ -6,6 +6,76 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.43 (2026-11-17)
+
+Round 13 of the fact audit, fixed as the third pipeline wave, PROMPT_VERSION 547 → 574. The audit read 20 fresh rounds at PV547 and confirmed 25 defects in its two Claude passes (35 with the codex pass); together with the leftovers of round 12's re-audit they became 32 tickets, T98–T130, each with its own deterministic class check on the 605-file capture, landed in batches B65–B101. User rulings set the scope: Feign Death is a defensive, a spell a Death Knight casts through Dark Simulacrum gets a press line, Sin and Punishment counts as a healer lock for stated facts only, a self-cast Master's Call is no save, Cascading Horrors is a control, a haste-scaled cooldown prints no exact return, only a healer's healing-amplifier press gets the `[HEALING]` block, and a refused second stage (Stasis release, Alter Time return) is its cooldown's press. No desktop feature changes beyond one panel line.
+
+Highlights:
+
+- A stealth-kind immunity with no logged end — Mass Invisibility, Vanish, Burrow — is over at its holder's own action for every reader: the `[ENEMY DEF]` line, the kill windows, the burst ledger and the control and casting-lock readings. 605: 426 lines that printed the hit after the holder had acted → 0; 447 lines now read `end not logged`.
+- An enemy hunter is not `defenseless` while Feign Death is ready, and a shield the other side pressed on a kill-window target ends `defenseless`.
+- Cascading Horrors is a control (no DR family): 79 missing `[CC ON TEAM]` lines on the 605 now print.
+- A refusal that says `vision obscured` names what the fight shows — Burrow or Smoke Bomb — instead of always Smoke Bomb.
+- A failed control logged MISS, PARRY or DODGE gets its `[CC AVOIDED?]` line (605: 187 lines), and the line sits at the miss row's own second.
+- `[MINOR DISPELS]` places each passive or side-effect removal at its own time (605: 4,556 parts stamped early → 0).
+- `[HEALER EXPOSURE]` drops a threat the healer's up CC-avoidance aura stops (605: 624 → 0).
+- A haste-scaled cooldown says `cooldown shortens with haste` instead of an exact `back m:ss` (605: 483 lines).
+
+Review: each ticket had its own branch review by codex before hand-back, and each assembled batch a codex assembly review before landing; nothing landed without an APPROVE. The release head 4854bc5c4 was verified on the 605-file corpus against the capture at the end of the previous wave (PV547): 427 checks, 292 unchanged, 47 fell, 1 rose — killAnchorInto 0 → 30 of 2,274, judged: T104 rightly dropped a false `(cast into …)` on self-buffs such as Voidform and the check has no self-buff exemption; recorded. Candidate rows 7,449 → 7,446, all three in kick-priority from T106. Parser parity gate: 1,244 pairs aligned, 20 known diffs, 0 new, 0 errors. A same-match re-audit of round 13's 20 matches found 34 of its 35 defects fixed (the remaining one, D25, kept by user ruling) and, on the same yardstick, 11 defects (2 medium, 9 low) where round 13 had 25 — none introduced by this wave (10 were already in the PV547 prompt and unreported, 1 is unsure but predates the wave). The wide corpus was not run. What was recorded and not fixed is on GitHub (#220 re-audit, #221 wave leftovers).
+
+### AI coaching — what the report says about you
+
+- `15125f3a3` `afc63b13a` `94a84014e` `eb6dff03c` `153655556` `188c1ebee` `f76c7cce7` `21ab4d306` `0a3cb4fb0` `045411f7f` `1b957aa61` `69c4d66e2` `6442de9f2` `9587c8b83` `543e3ab72` **Stealth-kind immunities end at the holder's action** (T113): a cast bar begun counts as acting, a hit already in flight does not (605 logged runs: a cast bar ended it 61 of 61; a first-second spell hit left it going 182 of 227). The `[ENEMY DEF]` line keeps the first aimed hit for attribution but prints `end not logged` when the holder acted first; the kill windows (own-save span and press timer), the burst ledger's coverage, the control sampler, the casting locks and the CC-avoidance reading all end the immunity at that action. Greater Invisibility keeps its official length in the kill windows (ruling D6). 605: `ended by a hit` past the holder's action 426 / 530 → 0 / 83; `[KILL WINDOW]` lines on rogues move where a Vanish press ended early.
+- `e9e48ad63` `9f4b8e1d6` **A ready Feign Death keeps a hunter out of `defenseless`** (T106, user ruling): a hunter who never feigned holds it all round. 605: Feign Death ready inside a printed span 119 → 0; candidate rows 7,449 → 7,446, all kick-priority (the kill window under the kick starts later).
+- `06f44c517` `da7cbac32` `55ec406e7` **A shield the other side pressed on a kill-window target ends `defenseless`** (T127): a Void Shield a priest of the other side put on it as a Mind Control ended; a shield the target stole still does not count (2026-10-30 ruling).
+- `c93080177` `3e93ab8f5` `8c34cc269` **Sin and Punishment on the enemy healer** (T110, user ruling: a lock for stated facts, no new accusation): missed-sync-window's `enteredNextLock` and the kill window's `enemy healer hard-CC'd` clause see it; no sync window does. 605: healer lock omitted 47 → 0; 14 missed-sync rows change facts, none added or removed; 41 `[KILL WINDOW]` and 6 `[VULNERABLE]` lines gain the clause.
+- `feb7be7f3` `f9cc5f23d` `c3a13802a` **Kill attempts are named for the right press** (T104): a self-buff whose cast row names an enemy only because it was the caster's target is a self-buff (`Voidform (cast into Grounding Totem) burst` → `Voidform burst`), and the bracket opens at the press the line is named for. 605: self-buffs read as cast into 12 → 0; anchors pressed after the opening 242 → 17.
+- `d51ab1811` KILL ATTEMPTS `softer target then:` never names an enemy inside a full immunity (T105; 605: 37 → 0).
+- `9acdd0d18` `8539c62b5` `a2bda8bf9` Adaptation is a passive PvP trinket: its holder reads `no pressable PvP trinket`, not `trinket up` (T126; 605: 92 → 0).
+- `5e52773ee` **A self-cast Master's Call is no save** of its caster (T109, user ruling); a grip or redirect saves its caster only when it takes damage off it, such as Roar of Sacrifice (605: 4 cd-hoarded rows change facts, none added or removed).
+- `51b7b3a65` **`[BURST ANSWERED]` credits an answer only when its effect reached the pressured unit** (T123): a Rallying Cry the bottomed mage never held, a Frenzied Regeneration that heals only the druid (605: 24 → 0).
+- `454db74b0` `fb4d8d0da` **Haste-scaled cooldowns** (T111, user ruling): Pierce the Veil, Execution Sentence, Avenger's Shield, Consecration and Mistweaver Blackout Kick print `cooldown shortens with haste`, `(<=Ns)` in `[RES]` and `<=m:ss` in a kill window's `back inside`, instead of an exact return (605: 483 → 0; the exact reading is GH #219).
+- `385edbc2f` `6ae54e2db` `48aededb1` `91df35410` `16e2731a6` **Burst ledger walls** (T98): a talent copy of a wall that the holder's own press refreshed reads as pressed, at that press, instead of `[no press logged]`; a copy on the caster's own pet is not a press and spends no charge.
+- `e1856baa0` `0f8f21eb7` `cd06753aa` `bccac64b9` The burst ledger's `pressed Zs` reads the wall's press, not its aura start; a totem is read off its first pulse; a wall pressed before the burst says `pressed Zs before the burst opened` (T114; 605: 7 → 0).
+- `aaa5762fb` `1d47d3633` **Anti-Magic Zone reaches the death's mitigation audit** (T124): 12 audit rows and 111 burst-ledger / kill-attempt lines on the 605; a magic-only wall is not listed for a physical cast in ABILITIES INTO IMMUNITY/DR (117 → 69 lines).
+- `06a571037` `84c5b8165` A death-setup `chain` and a cd-hoarded `ownerCc` block end at the round's end (T129; 605: 207 → 0, 9 → 0; text only, no row added or removed).
+- `739d18cc9` `39187a934` **"Could press" reads the shared cannot-cast reading** (T100): HEALER OFFENSE no longer prints `[SLACK] … no kick` over a silence, and `cheaper available:` drops a defensive the owner could not press then (605: 38 → 0, 49 → 0).
+- `2f2c77834` `2eaf0b828` `68f589682` `2b34317f3` A control the death teardown strips runs to the death: `Alter Time available but unused (free … for the last 0.1s)` becomes 0.0 s (T101; 605: 4 → 0).
+- `10b760dc1` An effect aura that lands after the press's flight still belongs to its burst: Breath of Eons' Temporal Wound chains, and the burst's Target is the unit that took the damage (T122).
+- `ded01f73b` `857a25be7` `ec5c02e7b` `0fd851d9e` `26736a442` A root freed by a teammate's Blessing of Freedom or Tiger's Lust is cleansed, not a missed cleanse (T118); a root that ran out at its own length is not freed.
+- `a09a509a8` `791c93a68` A kick-eaten row names a pet kicker through its owner (`<owner>'s pet`), never by its client-localized name (T116; 605: 12 rows with CJK names → 0; 196 rows change, none added or removed).
+
+### AI coaching — the timeline facts
+
+- `1e5095b4f` `d8d5eb18e` **Cascading Horrors is a control** (T125, user ruling): `[CC ON TEAM]`, `[CC ON ENEMY]`, `[CONSEQ]` and cannot-cast intervals see it, with no DR tier anywhere; every printed outgoing tier needs a named family. 605: 79 missing control lines → 0.
+- `f709927b2` `0739e8c7f` `5d24168f3` `eec01f79e` `56d26605d` **`vision obscured` names its real cause** (T108): an obscuring aura on the other side (Burrow) or a Smoke Bomb in its window, read from the fight, else no cause; `[REJECTED]`, `[CAST STOPPED]`, the kit note and kick-eaten all read the same tag (605: names absent from the match 4 → 0).
+- `76e6a01cc` `5b05ee148` `9fc4df602` `594303739` `a7cff809d` **Every failed control type gets `[CC AVOIDED?]`** (T120): MISS, PARRY and DODGE as well as IMMUNE (605: 187 lines added); a reflected control is left to its `[REFLECTED]` line.
+- `09c3238eb` `447ffb61c` `1f65041c1` A `[CC AVOIDED?]` line resting on the log's failed-control row is stamped at that row, and `recast landed +N.Ns` is measured from it (T112; 605: 708 lines move to their own second).
+- `be281b78c` `2f047f880` **`[MINOR DISPELS]` places each passive or side-effect removal at its own time** (T119, user ruling): a 1:43 Fortifying Brew side-effect removal no longer sits on the 0:22 line; a passive part never hides a press's `[PRESS]` line (605: early parts 4,556 → 0; 644 `[PRESS]` lines return).
+- `4ca106a07` A dispel logged while its source was unresolved is a press when that source presses the button in the round (`Nature's Cure (passive)` → part of the press line), and a removal's press is a cast in its own window (T130).
+- `4e538af91` **`[HEALER EXPOSURE]` drops a control the healer's up CC-avoidance aura stops** (T128): Nullifying Shroud up, Blinding Light and Hammer of Justice no longer listed (605: 624 → 0).
+- `18e7576af` `5b42484b1` **`[BUFF FADED]` causes** (T103): an early end counts from 0.2 s, not 1.5 s (`(expired; 666k absorbed)` → `(used up - absorbed 666k)`); every channel runs with haste; a charge buff spent elsewhere reads `used up - its charges spent` (605: 77 → 0, 6 → 0, 13 → 0).
+- `fe2a60ec9` `1b76f9ee3` `[RES] cc:` lists every active kick lockout, once per interrupt, and a root or disarm names its longest holder (T102; 605: 56 → 0).
+- `a25f007e2` `7fcb69865` `1d6132a0f` **`pressed during it`** reads the cooldown ledger's press identity (T99): a triggered sub-spell is no press; a refused second stage — Stasis release, Alter Time return — is its cooldown's press, with the note `(second stage: a /cancelaura macro fires it under control)` (user ruling).
+- `3e85ff8f4` `39fa3c6eb` A spell a friendly Death Knight casts through Dark Simulacrum gets a press line, with the `[CC]` outcome tags for a control (T107, user ruling; 605: 21 → 0).
+- `6976a7cee` Only a healer spec's press of a healing amplifier (Power Infusion, Ascendance) gets the `[HEALING]` block (T121, user ruling; 605: 618 lines in 84 files removed).
+- `d39d97a09` `a2dae0fcd` `b09fb194a` A `[REJECTED]` run steps over a stray refusal of another kind and counts every press of the round (T117: `x4` → `x6`; 605: 11 → 0).
+
+### Desktop
+
+- `1e5095b4f` `d8d5eb18e` The CC chain panel prints no DR tier for a control with no DR family (Cascading Horrors, Sin and Punishment).
+
+### Reliability / tests / CI
+
+- `29dc6c561` `f1d5102c2` `94e20de79` `57b9ea238` `3a8889c84` `290696fc7` `e84f9bb8d` `822008dc7` `b84a8535c` `935b3c73f` `3140ae310` `80b024e8c` `7e7248242` `5ee45085b` `65abbb214` `e94a77a5d` `0cd06d014` `8cd8eade7` `919c30141` `70d406cd9` `ede4bb88d` `81e3ff310` `dea34a689` `02da47386` `2f18b9aed` `e75342c88` `353f33c99` `ff40e657b` `bed328ece` `163ade0a6` `c2d5d9efd` `103f4d6e8` `1d5a79e06` `13bc22153` `4507b56c8` `92fc3c7de` `c32c4c718` One deterministic class check per ticket (scan5/t98–t130), each reading the producer's own selection rather than a hand replay.
+- `ff6760006` `13982610f` `76c91abc4` `62c81df94` `354963e72` `5566fa18f` `9a30bf560` `5aee5b50b` `f9fc0ee79` `c9bc2427a` `96fecb10c` `fb6b3f680` `cdec6f088` `2cd0fbcad` The predicate index (EN and zh-CN) pins the new shared readings.
+
+### Other
+
+- `86eca4bb9` `386a7b8cd` `4e1c634e9` `913c43839` `57989f781` `f4bab36ef` `0b5a084b2` `077fe37b2` `26437252a` `0f96efbb1` `ab43e2b57` `466b18c7c` `d506bf7c3` `c14bfdb04` `11efa83f0` `c3bbd3a8c` `edeccb7f0` `3c2793491` `0285970cf` `c72fcce9b` `12e8d59f1` `dee866ccf` `77cc58fe5` `7b1f27539` `10b9378cc` `f03fb0a8c` `4854bc5c4` PROMPT_VERSION bumps 548–574 and their history entries, one per pipeline batch.
+- `827296083` `374df6626` `3222a8f3d` `d705848bd` `5bbdcbbc0` Lint and import order, warnings back under the cap.
+- `c56d87b8c` T113's measurement notes.
+
 ## v0.1.42 (2026-11-14)
 
 Three fact audits' worth of fixes and two pipeline waves, PROMPT_VERSION 478 → 547. Rounds 10, 11 and 12 of the fact audit were fixed by fact class with every reader of the fact (the F25, F25b and F26 batches, then the items they left on GH #192–#198), alongside the open modelling issues: the `[PRESS]` line for buttons under 45 s, more major offensive cooldowns, an external save decided by the damage, game rules read by the log's date. From PROMPT_VERSION 501 the work ran as a ticket pipeline — T01–T35 (PV501–522) and T36–T96 (PV523–547) — where each ticket has its own deterministic class check and each assembled batch its own review. The newest pieces are a `[YOU] [NO HEAL CAST]` fact line for healers and talent-changed buff lengths priced per application. On the desktop, a match opens in stages and managed OBS recording got a round of fixes. Changes that add or remove candidate rows were measured on the 605-file capture or the cover set and follow user rulings.

@@ -6,6 +6,76 @@
 口径,release/纯文档 commit 归入「其他」)。发版流程见
 `.claude/skills/release`。
 
+## v0.1.43(2026-11-17)
+
+本版是事实审计第十三轮的修复,作为第三波流水线完成,PROMPT_VERSION 547 → 574。审计在 PV547 上读了 20 个新回合,两遍 Claude 审计确认 25 处缺陷(加上 codex 那一遍共 35 处);连同第十二轮复审的遗留,拆成 32 张票 T98–T130,每张票在 605 文件采集上有自己的确定性类检查,分批 B65–B101 落地。范围由用户裁决划定:Feign Death 算减伤;友方死亡骑士通过 Dark Simulacrum 施放的技能印按键行;Sin and Punishment 只在陈述事实时算治疗被锁;自己放的 Master's Call 不算自救;Cascading Horrors 算控制;随急速缩短的冷却不印精确的返回时间;只有治疗专精按的治疗增幅技能才带 `[HEALING]` 段;被拒的同按钮第二段(Stasis 释放、Alter Time 回溯)算该冷却的按键。桌面端除一处面板文字外没有功能变化。
+
+要点:
+
+- 没记到结束的隐身类免疫 —— Mass Invisibility、Vanish、Burrow —— 对所有读者都在持有者自己动手时结束:`[ENEMY DEF]` 行、击杀窗口、爆发账本、控制和施法锁判断。605:持有者已动手却仍写被命中结束的 426 行 → 0;447 行改为 `end not logged`。
+- 敌方猎人的 Feign Death 就绪时不算 `defenseless`;对面给击杀窗口目标按的盾结束 `defenseless`。
+- Cascading Horrors 算控制(无递减分类):605 上缺的 79 行 `[CC ON TEAM]` 现在印出。
+- 写 `vision obscured` 的拒绝改为点名战斗里实际的原因 —— Burrow 或 Smoke Bomb —— 不再一律写 Smoke Bomb。
+- 记为 MISS、PARRY 或 DODGE 的控制失败也有 `[CC AVOIDED?]` 行(605:187 行),且这一行落在失败记录自己那一秒。
+- `[MINOR DISPELS]` 把每个被动或顺带的驱散放在它自己的时间(605:提前盖章的部分 4,556 → 0)。
+- `[HEALER EXPOSURE]` 不再列治疗身上开着的免控光环挡得住的威胁(605:624 → 0)。
+- 随急速缩短的冷却写 `cooldown shortens with haste`,不再给精确的 `back m:ss`(605:483 行)。
+
+审查:每张票交回前先由 codex 审自己的分支,每个组装好的批次落地前再过一次 codex 组装审查;没有 APPROVE 的不落地。发版提交 4854bc5c4 在 605 文件语料上对照上一波收尾(PV547)的采集做了验证:427 项检查,292 项不变、47 项下降、1 项上涨 —— killAnchorInto 0 → 30(共 2,274),已判定:T104 正确去掉了 Voidform 这类自身增益上错误的 `(cast into …)`,而这项检查没有自身增益的豁免;已记账。候选行 7,449 → 7,446,三行都在 kick-priority,来自 T106。解析器一致性检查:1,244 对对齐,20 处已知差异,0 处新差异,0 个错误。对第十三轮那 20 局的同局复审:35 处缺陷修掉 34 处(剩下的 D25 按用户裁决保持现状);用同一把尺子重审确认 11 处(2 处中等、9 处轻微),第十三轮是 25 处 —— 没有一处是这一波引入的(10 处在 PV547 的 prompt 里就有、当时没人报,1 处来源拿不准,但早于这一波)。wide 语料没有跑。记账未修的项在 GitHub(#220 复审、#221 本波遗留)。
+
+### AI 分析——报告怎么说你
+
+- `15125f3a3` `afc63b13a` `94a84014e` `eb6dff03c` `153655556` `188c1ebee` `f76c7cce7` `21ab4d306` `0a3cb4fb0` `045411f7f` `1b957aa61` `69c4d66e2` `6442de9f2` `9587c8b83` `543e3ab72` **隐身类免疫在持有者动手时结束**(T113):开始读条算动手,已经在飞的命中不算(605 有记录的样本:读条结束它 61 / 61;第一秒内的法术命中后它仍在 182 / 227)。`[ENEMY DEF]` 行仍以第一次瞄准的命中做归因,但持有者先动手时印 `end not logged`;击杀窗口(自身保命区间和按键计时)、爆发账本的覆盖、控制取样、施法锁和免控光环判断都在那次动手时结束免疫。Greater Invisibility 在击杀窗口里保持官方时长(裁决 D6)。605:持有者动手后仍写 `ended by a hit` 426 / 530 → 0 / 83;Vanish 提前结束处,盗贼的 `[KILL WINDOW]` 行随之移动。
+- `e9e48ad63` `9f4b8e1d6` **Feign Death 就绪时猎人不算 `defenseless`**(T106,用户裁决):从没假死过的猎人整回合都算握着它。605:印出的区间里 Feign Death 就绪 119 → 0;候选行 7,449 → 7,446,全在 kick-priority(打断下的击杀窗口开始得更晚)。
+- `06f44c517` `da7cbac32` `55ec406e7` **对面给击杀窗口目标按的盾结束 `defenseless`**(T127):Mind Control 结束时对面牧师给它上的 Void Shield;目标偷来的盾仍然不算(10-30 裁决)。
+- `c93080177` `3e93ab8f5` `8c34cc269` **敌方治疗身上的 Sin and Punishment**(T110,用户裁决:陈述事实时算被锁,不开新指控):missed-sync-window 的 `enteredNextLock` 和击杀窗口的 `enemy healer hard-CC'd` 子句看得到它,同步窗口看不到。605:漏掉的治疗被锁 47 → 0;14 行 missed-sync 改事实,无增删;41 行 `[KILL WINDOW]` 和 6 行 `[VULNERABLE]` 补上这个子句。
+- `feb7be7f3` `f9cc5f23d` `c3a13802a` **击杀尝试按正确的按键命名**(T104):施法记录里写着敌人、只因那是施法者当前目标的自身增益仍是自身增益(`Voidform (cast into Grounding Totem) burst` → `Voidform burst`),区间从这一行命名的那次按键开始。605:被写成打进别人的自身增益 12 → 0;锚点按键晚于开头 242 → 17。
+- `d51ab1811` KILL ATTEMPTS 的 `softer target then:` 不再点名处在全免疫里的敌人(T105;605:37 → 0)。
+- `9acdd0d18` `8539c62b5` `a2bda8bf9` Adaptation 是被动 PvP 饰品:带它的人写 `no pressable PvP trinket`,不写 `trinket up`(T126;605:92 → 0)。
+- `5e52773ee` **自己放的 Master's Call 不算自救**(T109,用户裁决);位移或转移只有替施法者挡掉伤害时才算自救,例如 Roar of Sacrifice(605:4 行 cd-hoarded 改事实,无增删)。
+- `51b7b3a65` **`[BURST ANSWERED]` 只在应对的效果到了被压的人身上时才记功**(T123):触底的法师从没拿到的 Rallying Cry、只治疗德鲁伊自己的 Frenzied Regeneration(605:24 → 0)。
+- `454db74b0` `fb4d8d0da` **随急速缩短的冷却**(T111,用户裁决):Pierce the Veil、Execution Sentence、Avenger's Shield、Consecration 和织雾的 Blackout Kick 写 `cooldown shortens with haste`,`[RES]` 里写 `(<=Ns)`,击杀窗口的 `back inside` 写 `<=m:ss`,不再给精确返回时间(605:483 → 0;精确算法见 GH #219)。
+- `385edbc2f` `6ae54e2db` `48aededb1` `91df35410` `16e2731a6` **爆发账本里的减伤**(T98):持有者自己的按键刷新过的天赋副本算按过,记在那次按键,不再写 `[no press logged]`;落在施法者自己宠物身上的副本不算按键、不扣充能。
+- `e1856baa0` `0f8f21eb7` `cd06753aa` `bccac64b9` 爆发账本的 `pressed Zs` 读减伤的按键,不读光环开始;图腾按第一次脉冲算;爆发开始前按的减伤写 `pressed Zs before the burst opened`(T114;605:7 → 0)。
+- `aaa5762fb` `1d47d3633` **Anti-Magic Zone 进入死亡的减伤核对**(T124):605 上 12 行核对、111 行爆发账本 / 击杀尝试;只减魔法的减伤不再列给物理施法(ABILITIES INTO IMMUNITY/DR 117 → 69 行)。
+- `06a571037` `84c5b8165` 死亡铺垫的 `chain` 和 cd-hoarded 的 `ownerCc` 段截在回合结束(T129;605:207 → 0、9 → 0;只改文字,无增删)。
+- `739d18cc9` `39187a934` **「能不能按」读共用的不能施法判断**(T100):HEALER OFFENSE 不再在沉默期间印 `[SLACK] … no kick`,`cheaper available:` 去掉当时按不了的减伤(605:38 → 0、49 → 0)。
+- `2f2c77834` `2eaf0b828` `68f589682` `2b34317f3` 被死亡清理拿掉的控制算到死亡为止:`Alter Time available but unused (free … for the last 0.1s)` 变成 0.0 秒(T101;605:4 → 0)。
+- `10b760dc1` 按键飞行之后才落地的效果光环仍属于它的爆发:Breath of Eons 的 Temporal Wound 能接上,爆发的 Target 是实际吃伤害的人(T122)。
+- `ded01f73b` `857a25be7` `ec5c02e7b` `0fd851d9e` `26736a442` 被队友的 Blessing of Freedom 或 Tiger's Lust 解掉的定身算已驱散,不算漏驱(T118);自己到时结束的定身不算被解。
+- `a09a509a8` `791c93a68` kick-eaten 行通过主人称呼宠物打断者(`<owner>'s pet`),不再用客户端本地化的名字(T116;605:含中日韩名字的 12 行 → 0;196 行改字,无增删)。
+
+### AI 分析——时间线事实
+
+- `1e5095b4f` `d8d5eb18e` **Cascading Horrors 算控制**(T125,用户裁决):`[CC ON TEAM]`、`[CC ON ENEMY]`、`[CONSEQ]` 和不能施法区间都看得到它,任何地方都不给递减档;每个印出的对外递减档都要有具名分类。605:缺的 79 行控制 → 0。
+- `f709927b2` `0739e8c7f` `5d24168f3` `eec01f79e` `56d26605d` **`vision obscured` 点名真实原因**(T108):从战斗里读 —— 对面身上的遮蔽光环(Burrow),或时间窗内的 Smoke Bomb,否则不写原因;`[REJECTED]`、`[CAST STOPPED]`、技能表注释和 kick-eaten 都读同一个标记(605:点名本局没有的技能 4 → 0)。
+- `76e6a01cc` `5b05ee148` `9fc4df602` `594303739` `a7cff809d` **每种控制失败都有 `[CC AVOIDED?]`**(T120):除了 IMMUNE,还有 MISS、PARRY 和 DODGE(605:新增 187 行);被反射的控制交给它的 `[REFLECTED]` 行。
+- `09c3238eb` `447ffb61c` `1f65041c1` 依据日志里控制失败记录的 `[CC AVOIDED?]` 行盖在那条记录的时间,`recast landed +N.Ns` 也从这里量(T112;605:708 行挪到自己那一秒)。
+- `be281b78c` `2f047f880` **`[MINOR DISPELS]` 把每个被动或顺带的驱散放在它自己的时间**(T119,用户裁决):1:43 Fortifying Brew 顺带的驱散不再挂在 0:22 那一行;被动部分不再遮住按键的 `[PRESS]` 行(605:提前的部分 4,556 → 0;644 行 `[PRESS]` 回来)。
+- `4ca106a07` 来源未解析时记下的驱散,如果这个来源本回合按过这个技能,就算按键(`Nature's Cure (passive)` → 并入按键行);一次驱散对应的按键是它自己时间窗内的施法(T130)。
+- `4e538af91` **`[HEALER EXPOSURE]` 不再列治疗身上开着的免控光环挡得住的控制**(T128):Nullifying Shroud 开着时,Blinding Light 和 Hammer of Justice 不再列出(605:624 → 0)。
+- `18e7576af` `5b42484b1` **`[BUFF FADED]` 的结束原因**(T103):提前结束从 0.2 秒算起,不是 1.5 秒(`(expired; 666k absorbed)` → `(used up - absorbed 666k)`);所有引导都按急速计;在别处耗掉充能的增益写 `used up - its charges spent`(605:77 → 0、6 → 0、13 → 0)。
+- `fe2a60ec9` `1b76f9ee3` `[RES] cc:` 列出每个仍在的打断锁,每次打断一条;定身或缴械点名持续最久的那个(T102;605:56 → 0)。
+- `a25f007e2` `7fcb69865` `1d6132a0f` **`pressed during it`** 读冷却账本的按键身份(T99):触发出来的子技能不算按键;被拒的第二段 —— Stasis 释放、Alter Time 回溯 —— 算该冷却的按键,并附注 `(second stage: a /cancelaura macro fires it under control)`(用户裁决)。
+- `3e85ff8f4` `39fa3c6eb` 友方死亡骑士通过 Dark Simulacrum 施放的技能有按键行,控制技能带 `[CC]` 的结果标签(T107,用户裁决;605:21 → 0)。
+- `6976a7cee` 只有治疗专精按的治疗增幅技能(Power Infusion、Ascendance)才带 `[HEALING]` 段(T121,用户裁决;605:84 个文件删去 618 行)。
+- `d39d97a09` `a2dae0fcd` `b09fb194a` `[REJECTED]` 连串跳过夹在中间的别类拒绝,并数全本回合的每次按键(T117:`x4` → `x6`;605:11 → 0)。
+
+### 桌面端
+
+- `1e5095b4f` `d8d5eb18e` 控制链面板对没有递减分类的控制(Cascading Horrors、Sin and Punishment)不显示递减档。
+
+### 可靠性 / 测试 / CI
+
+- `29dc6c561` `f1d5102c2` `94e20de79` `57b9ea238` `3a8889c84` `290696fc7` `e84f9bb8d` `822008dc7` `b84a8535c` `935b3c73f` `3140ae310` `80b024e8c` `7e7248242` `5ee45085b` `65abbb214` `e94a77a5d` `0cd06d014` `8cd8eade7` `919c30141` `70d406cd9` `ede4bb88d` `81e3ff310` `dea34a689` `02da47386` `2f18b9aed` `e75342c88` `353f33c99` `ff40e657b` `bed328ece` `163ade0a6` `c2d5d9efd` `103f4d6e8` `1d5a79e06` `13bc22153` `4507b56c8` `92fc3c7de` `c32c4c718` 每张票一个确定性类检查(scan5/t98–t130),都读产出方自己的选择,不手工重放。
+- `ff6760006` `13982610f` `76c91abc4` `62c81df94` `354963e72` `5566fa18f` `9a30bf560` `5aee5b50b` `f9fc0ee79` `c9bc2427a` `96fecb10c` `fb6b3f680` `cdec6f088` `2cd0fbcad` 谓词索引(中英两版)登记新的共用判断。
+
+### 其他
+
+- `86eca4bb9` `386a7b8cd` `4e1c634e9` `913c43839` `57989f781` `f4bab36ef` `0b5a084b2` `077fe37b2` `26437252a` `0f96efbb1` `ab43e2b57` `466b18c7c` `d506bf7c3` `c14bfdb04` `11efa83f0` `c3bbd3a8c` `edeccb7f0` `3c2793491` `0285970cf` `c72fcce9b` `12e8d59f1` `dee866ccf` `77cc58fe5` `7b1f27539` `10b9378cc` `f03fb0a8c` `4854bc5c4` PROMPT_VERSION 548–574 及其历史条目,每个流水线批次一次。
+- `827296083` `374df6626` `3222a8f3d` `d705848bd` `5bbdcbbc0` lint 与 import 顺序,警告数回到上限以下。
+- `c56d87b8c` T113 的测量说明。
+
 ## v0.1.42(2026-11-14)
 
 本版汇集三轮事实审计的修复和两波流水线,PROMPT_VERSION 478 → 547。事实审计第十、十一、十二轮都按事实类修,每个事实的所有读者一起修(F25、F25b、F26 三批,以及它们留在 GH #192–#198 上的项);同时做掉一批挂着的建模问题:45 秒以下按键的 `[PRESS]` 行、更多进攻大招、按伤害判定的外援保命、按日志日期读的游戏规则。从 PROMPT_VERSION 501 起,工作改成票据流水线 —— T01–T35(PV501–522)和 T36–T96(PV523–547)—— 每张票有自己的确定性类检查,每个组装好的批次再单独审查一次。最新的两项是给治疗的 `[YOU] [NO HEAL CAST]` 事实行,以及被天赋改动的增益时长按每次施加计价。桌面端:打开对局分阶段显示,托管 OBS 录像修了一轮。增删候选行的改动都在 605 文件采集或覆盖集上测量,并依用户裁决执行。
