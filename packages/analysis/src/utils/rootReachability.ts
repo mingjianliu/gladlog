@@ -384,8 +384,15 @@ export function computeRootReachability(
             Math.floor((c.atMs - combat.startTime) / 1000) === s,
         );
       // a healer's reach is their own: the spec's heals with the range
-      // talents they hold (or may hold) plus the hitbox slack
-      const healRange = role === "healer" ? healerReachToAccuse(X) : null;
+      // talents they hold (or may hold) plus the hitbox slack — and never
+      // under the flat bound every healer had before T170: a Preservation
+      // Evoker's core heals reach 30 yd, its Rewind 40 (codex
+      // 85-tk-CC-T170-1 #1, 27a5cf94 r0 2:13: an ally at 38 yd `could not
+      // be healed` for 3 s with Rewind ready), so the shorter core range
+      // may not add a claim the 40 yd reading did not make
+      const ownReach = role === "healer" ? healerReachToAccuse(X) : null;
+      const healRange =
+        ownReach === null ? null : Math.max(ownReach, CC_MAX_CAST_RANGE_YARDS);
       const allyBad = new Map<string, number>();
       let sampled = 0;
       let unreachable = 0;

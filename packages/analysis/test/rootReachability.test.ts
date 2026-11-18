@@ -208,6 +208,24 @@ describe("T170: a healer's own reach, and the rooted unit's landed casts", () =>
     ]);
     expect(far.unreachableSeconds).toBe(6);
   });
+  it("a healer whose core heals are shorter than 40 yd keeps the 40 yd bound (Preservation: Rewind reaches 40)", () => {
+    const evoker = unit(
+      "Evoker",
+      CombatUnitSpec.Evoker_Preservation,
+      CombatUnitReaction.Friendly,
+      0,
+      { rootedBy: "Mage" },
+    );
+    expect(healerReachToAccuse(evoker)!).toBeLessThan(40);
+    expect(
+      computeRootReachability(combat, [evoker, ally(38), mage])[0]
+        .unreachableSeconds,
+    ).toBe(0);
+    expect(
+      computeRootReachability(combat, [evoker, ally(41), mage])[0]
+        .unreachableSeconds,
+    ).toBe(6);
+  });
   it("a second in which the healer's cast landed on the ally is not a second it could not be healed", () => {
     const p = priest();
     p.spellCastEvents = [castOn("Hit", 6.3), castOn("Hit", 9.9)];
