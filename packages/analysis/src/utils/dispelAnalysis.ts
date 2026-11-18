@@ -63,6 +63,7 @@ import {
 } from "./combatMemo";
 import {
   applyCdTalentModifiers,
+  cdWholeSecond,
   chargeStateAt,
   getPressureThreshold,
   isHealerSpec,
@@ -3282,8 +3283,8 @@ export function formatMissedPurgeExemption(
   if (w.purgeReadyAtSeconds !== undefined) {
     const left = w.timeSeconds + w.durationSeconds - w.purgeReadyAtSeconds;
     out += why.onCooldownThroughout
-      ? ` | purge on cooldown for the whole buff (ready ${fmtTime(w.purgeReadyAtSeconds)}) — not actionable`
-      : ` | purge on cooldown at application — ready at ${fmtTime(w.purgeReadyAtSeconds)} (${Math.round(left)}s of the buff left)`;
+      ? ` | purge on cooldown for the whole buff (ready ${fmtTime(cdWholeSecond(w.purgeReadyAtSeconds))}) — not actionable`
+      : ` | purge on cooldown at application — ready at ${fmtTime(cdWholeSecond(w.purgeReadyAtSeconds))} (${Math.round(left)}s of the buff left)`;
   }
   return out;
 }

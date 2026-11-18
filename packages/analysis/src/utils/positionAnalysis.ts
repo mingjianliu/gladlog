@@ -22,6 +22,7 @@ import {
 } from "./cannotCastIntervals";
 import { ICCInstance } from "./ccTrinketAnalysis";
 import {
+  cdWholeSecond,
   gridHpMinInWindow,
   gridHpPct,
   hpTroughInWindow,
@@ -1944,7 +1945,7 @@ export function formatPositionEventsForContext(
           : e.ownerDefensiveAvailable
             ? ` — a defensive CD was available${blockedS >= 1 ? ` (you could not cast for ${Math.round(blockedS)}s of it)` : ""}`
             : e.ownerDefensiveBack
-              ? ` — no defensive CD available at the start (${e.ownerDefensiveBack.spellName} back at ${fmtTime(e.ownerDefensiveBack.atSeconds)})`
+              ? ` — no defensive CD available at the start (${e.ownerDefensiveBack.spellName} back at ${fmtTime(cdWholeSecond(e.ownerDefensiveBack.atSeconds))})`
               : " — no defensive CD available";
       const targetStr =
         e.burstTargetsOwner === true

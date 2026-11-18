@@ -19,6 +19,7 @@ import {
   isHasteScaledCooldown,
 } from "../../data/hasteScaledCooldowns";
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { cdWholeSecond } from "../../utils/cooldowns";
 import {
   INTERRUPT_SPELL_IDS,
   interruptBackAtMs,
@@ -203,7 +204,7 @@ export function emitKickEntries(
           ? ""
           : isHasteScaledCooldown(action.spellId ?? "", enemyKicker?.spec)
             ? `; ${HASTE_SCALED_COOLDOWN_NOTE}`
-            : `; back ${fmtTime(backAtSeconds)}`;
+            : `; back ${fmtTime(cdWholeSecond(backAtSeconds))}`;
       addEntry(
         atSeconds,
         `${fmtTime(atSeconds)}  [KICK]   ${kicker} interrupted ${victim}${

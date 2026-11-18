@@ -1046,7 +1046,7 @@
 
 **2026-11-06 记录,未结(GH #184 乙)** —— 惩戒骑手里的 Divine Toll 375576,窗口是它的 Divine Resonance 1266308 光环(`TALENT_EFFECT_AURAS_OF_CAST`,经 `effectSpanIdsOfCast` 由敌方大招时间线的观测结束读取;日志在回合内没写结束时,`talentEffectAuraAtPress` 给它光环的官方时长)。光环读者不会把 1266308 解析成 Divine Toll:`offensiveCdOfAura` 只认 `castsOwningEffectAura`,所以 `hasOffensiveSpellActive`(`[friendly offensive CD active]`、威胁门)和 `offensiveAuraOccurrences` 看不到 Divine Toll,而窗口构造、`[RES]`、击杀窗口看得到。直接在那里映射会让每次 Resonance 施加都变成一条 `(no press)`:通用的按键配对只把光环配给同名按键或「以它为自身效果」的施法,这两条都不成立。在配对逻辑接上天赋表之前,这个标签对 Divine Toll 只认按键那一刻。
 
-**2026-11-13 记录(T55),2026-11-18 统一(T139)** —— 「冷却秒数取整到渲染网格」原先有三处读法、三种浮点保护:技能组那一行的下限(`context/resourceSnapshot.ts`,加 1e-8 秒)、`[RES]` 的剩余秒数(`cdRemainingWholeSeconds`,加 1e-6 秒)、列表外按键行的 `back m:ss`(`context/timelineSections/offListPress.ts`,直接取原始浮点——回来时刻算成 52.99999999999999 秒时印成 `back 0:52`)。现在三处都走 `cdWholeSecond`(`utils/cooldowns.ts`,保护量 `CD_SECONDS_FLOAT_NOISE` = 1e-8 秒:速率窗口要做除法,真实的回来时刻可以比整秒少不到一微秒,而这类求和实测到的最大数值误差是 2.3e-9 秒)。`packages/eval/scripts/scan5/t139.ts` 统计落在旧保护量分叉区间里的数值。
+**2026-11-13 记录(T55),2026-11-18 统一(T139)** —— 「冷却秒数取整到渲染网格」原先有三处读法、三种浮点保护:技能组那一行的下限(`context/resourceSnapshot.ts`,加 1e-8 秒)、`[RES]` 的剩余秒数(`cdRemainingWholeSeconds`,加 1e-6 秒)、列表外按键行的 `back m:ss`(`context/timelineSections/offListPress.ts`,直接取原始浮点——回来时刻算成 52.99999999999999 秒时印成 `back 0:52`)。现在这三处,连同其它印「冷却回来那一秒」的行(POSITIONING 的 `back at m:ss`、打断行的 `back m:ss`、驱散窗口的 `ready at m:ss`),都走 `cdWholeSecond`(`utils/cooldowns.ts`,保护量 `CD_SECONDS_FLOAT_NOISE` = 1e-8 秒:速率窗口要做除法,真实的回来时刻可以比整秒少不到一微秒,而这类求和实测到的最大数值误差是 2.3e-9 秒)。`packages/eval/scripts/scan5/t139.ts` 统计落在旧保护量分叉区间里的数值。
 
 ## 怎么保证这页不腐烂
 

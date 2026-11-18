@@ -15,7 +15,9 @@
  *    low), `1e-8..1e-6` (a guard of 1e-6 would move it, one of 1e-8 not).
  *    Checked = those presses.
  *  - `resSecondFloatBand`: every ledger entry of every player
- *    (`extractMajorCooldowns`) at every whole second of the round — a
+ *    (`extractMajorCooldowns`, and for the log owner the utility entries
+ *    `[RES]` adds, `ownerResUtilityCds`), from its first spend — a shared
+ *    one included — at every whole second of the round — a
  *    superset of the `[RES]` rows, which sit on whole seconds — the three
  *    quantities `remainingText` floors (`cdSecondsUntilReady`,
  *    `cdRealisedSecondsUntilReady`, the `earliestCooldownSeconds` reading),
@@ -23,6 +25,7 @@
  *    lift it), `1e-8..1e-6` (only the 1e-6 guard lifts it: narrowing to
  *    1e-8 prints it a second lower). Checked = the positive values.
  */
+import { ownerResUtilityCds } from "@gladlog/analysis/src/context/resUtilityCds";
 import {
   cdRealisedSecondsUntilReady,
   cdSecondsUntilReady,
@@ -74,9 +77,16 @@ export function run(ctx: IRoundCtx): void {
     } catch {
       continue;
     }
+    // the owner's `[RES]` rows carry its utility cooldowns too (codex
+    // 85-tk-CD-T139-1 #2)
+    if (ctx.owner && u.id === (ctx.owner as any).id)
+      entries = [...entries, ...ownerResUtilityCds(u, ctx.start)];
     for (const cd of entries) {
-      if (cd.casts.length === 0) continue;
-      const first = Math.floor(cd.casts[0]!.timeSeconds);
+      const spends = [...cd.casts, ...(cd.sharedCasts ?? [])].map(
+        (c) => c.timeSeconds,
+      );
+      if (spends.length === 0) continue;
+      const first = Math.floor(Math.min(...spends));
       for (let t = first; t <= endS; t++) {
         const values: Array<[string, number]> = [
           ["latest", cdSecondsUntilReady(cd, t)],
