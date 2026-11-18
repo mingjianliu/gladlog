@@ -1056,7 +1056,24 @@ function noTeamBurstPress(ctx: IRoundCtx, name: string, atS: number): boolean {
 // on `pressed inside` (the producer's `PRESS_ONLY_TAG`): the same cooldown
 const PRESS_ONLY_SUFFIX = ` ${PRESS_ONLY_TAG}`;
 
-function pressedInsideNeverBack(ctx: IRoundCtx): void {
+/** A `pressed inside` entry of a `team offensive CDs ready at …` sentence
+ * whose cooldown the sentence names on no ready / back / at-start list. */
+export interface IPressedInsideOffList {
+  line: string;
+  /** the sentence's `ready at` second, as printed */
+  readyAt: string;
+  name: string;
+  /** the press's printed second */
+  atS: number | null;
+}
+
+/** Every `pressed inside` entry of the context that counts for
+ * `pressedInsideNeverBack`, `offList` true for the ones the check reports —
+ * the one reading of the sentence for the check and for the split of its
+ * residue (scan5/t133). */
+export function* pressedInsideEntries(
+  ctx: IRoundCtx,
+): Generator<IPressedInsideOffList & { offList: boolean }> {
   for (const l of ctx.text.split("\n")) {
     const m = TEAM_READY.exec(l);
     if (!m || !m[3]) continue;
@@ -1093,17 +1110,23 @@ function pressedInsideNeverBack(ctx: IRoundCtx): void {
       // B3iii: a healer's own offensive cooldown that is no team burst
       // (`countsAsTeamBurst`) is pressed, never on a ready / back list
       if (atS !== null && noTeamBurstPress(ctx, name, atS)) continue;
-      ctx.bump("pressedInsideNeverBack");
-      if (known.has(name)) continue;
-      ctx.violate(
-        "pressedInsideNeverBack",
-        name,
-        ctx.start + secOf(m[1]!) * 1000,
-        `${m[1]}:${name}:${l.slice(0, 40)}`,
-        `${name} pressed inside the window from ${m[1]}, on no ready / back list`,
-        l,
-      );
+      yield { line: l, readyAt: m[1]!, name, atS, offList: !known.has(name) };
     }
+  }
+}
+
+function pressedInsideNeverBack(ctx: IRoundCtx): void {
+  for (const e of pressedInsideEntries(ctx)) {
+    ctx.bump("pressedInsideNeverBack");
+    if (!e.offList) continue;
+    ctx.violate(
+      "pressedInsideNeverBack",
+      e.name,
+      ctx.start + secOf(e.readyAt) * 1000,
+      `${e.readyAt}:${e.name}:${e.line.slice(0, 40)}`,
+      `${e.name} pressed inside the window from ${e.readyAt}, on no ready / back list`,
+      e.line,
+    );
   }
 }
 

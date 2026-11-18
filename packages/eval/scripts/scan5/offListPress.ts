@@ -159,20 +159,27 @@ function auraOnlyPressRows(unit: any, name: string, ctx: IRoundCtx): any[] {
     );
 }
 
-export function run(ctx: IRoundCtx): void {
+interface IMatchedPress {
+  line: string;
+  m: RegExpExecArray;
+  second: number;
+  unit: any;
+  presses: any[];
+  press: any;
+}
+
+/** each `[PRESS]` line with its press row, and the presses whose own line
+ * states `free press` */
+function matchPressLines(ctx: IRoundCtx): {
+  matched: IMatchedPress[];
+  freeRows: Set<any>;
+} {
   // pass 1: each line's press (the k-th line of a second is its k-th press —
   // two presses in one second, Ace Up Your Sleeve's reset, print two lines in
   // log order). A Stasis replay is the stored press's copy, not a press
   // (`isStasisReplayCast`, the renderer's own exclusion).
   const seenInSecond = new Map<string, number>();
-  const matched: Array<{
-    line: string;
-    m: RegExpExecArray;
-    second: number;
-    unit: any;
-    presses: any[];
-    press: any;
-  }> = [];
+  const matched: IMatchedPress[] = [];
   /** the presses whose own line states `free press`: no readiness needed,
    * so not the "next press" a `back` is checked against */
   const freeRows = new Set<any>();
@@ -217,7 +224,74 @@ export function run(ctx: IRoundCtx): void {
     if (press && /\bfree press\b/.test(m[5]!)) freeRows.add(press);
     matched.push({ line, m, second, unit, presses, press });
   }
-  for (const { line, m, second, unit, presses, press } of matched) {
+  return { matched, freeRows };
+}
+
+/** A `[PRESS]` line's `back m:ss` and the unit's next press of the button
+ * (or of a mate on its DB2 charge pool), when that press comes more than
+ * `BACK_SLACK_MS` before the printed return. */
+export interface IBackBeforeNext {
+  line: string;
+  unit: any;
+  press: any;
+  name: string;
+  back: string;
+  atMs: number;
+  nextMs: number;
+}
+
+function backBeforeNext(
+  ctx: IRoundCtx,
+  { line, m, unit, presses, press }: IMatchedPress,
+  freeRows: Set<any>,
+): IBackBeforeNext | undefined {
+  if (!unit || !press) return undefined;
+  const at = tsOf(press);
+  const back = /back (\d+:\d\d)/.exec(m[5]!)?.[1];
+  if (!back) return undefined;
+  const backMs = ctx.start + secOf(back) * 1000;
+  // the row itself, not its time: another player's free press in the
+  // same millisecond frees nothing of this one's (codex review round 2)
+  // …or a press of a button on the same DB2 charge pool
+  // (`sharesChargePool`: Holy Bulwark / Sacred Weapon — fact10 D7, a
+  // Sacred Weapon `back 2:41` with Holy Bulwark pressed at 2:35)
+  // — the DB2 ChargeCategory itself, also when `canonicalSpellId` reads
+  // the two as one cooldown (Sacred Weapon 432472 is Holy Bulwark
+  // 432459's, so `sharesChargePool` says no); a follow-up button with a
+  // pool of its own (Voidblade → Pierce the Veil) is no mate
+  const pool = SHARED_CHARGE_CATEGORY[String(press.spellId)];
+  const mates = successesOf(unit).filter(
+    (c) =>
+      String(c.spellId) !== String(press.spellId) &&
+      pool !== undefined &&
+      SHARED_CHARGE_CATEGORY[String(c.spellId)] === pool &&
+      !isStasisReplayCast(unit, String(c.spellId), tsOf(c)),
+  );
+  const next = [...presses, ...mates]
+    .filter(
+      (r) =>
+        tsOf(r) > at + 50 &&
+        tsOf(r) <= ctx.roundEndAt &&
+        !freeRows.has(r) &&
+        !timeSpiralFreePressMs(unit, String(r.spellId), [tsOf(r)]).length,
+    )
+    .map(tsOf)
+    .sort((x, y) => x - y)[0];
+  if (next === undefined || next >= backMs - BACK_SLACK_MS) return undefined;
+  return { line, unit, press, name: m[4]!, back, atMs: at, nextMs: next };
+}
+
+/** every `backBeforeNextPress` of the context — the check's own reading,
+ * for the split of its residue (scan5/t133) */
+export function backBeforeNextPresses(ctx: IRoundCtx): IBackBeforeNext[] {
+  const { matched, freeRows } = matchPressLines(ctx);
+  return matched.flatMap((x) => backBeforeNext(ctx, x, freeRows) ?? []);
+}
+
+export function run(ctx: IRoundCtx): void {
+  const { matched, freeRows } = matchPressLines(ctx);
+  for (const one of matched) {
+    const { line, m, second, unit, press } = one;
     ctx.bump("offListPressLine");
     const name = m[4]!;
     const fields = m[5]!;
@@ -234,46 +308,16 @@ export function run(ctx: IRoundCtx): void {
       continue;
     }
     const at = tsOf(press);
-    const back = /back (\d+:\d\d)/.exec(fields)?.[1];
-    if (back) {
-      const backMs = ctx.start + secOf(back) * 1000;
-      // the row itself, not its time: another player's free press in the
-      // same millisecond frees nothing of this one's (codex review round 2)
-      // …or a press of a button on the same DB2 charge pool
-      // (`sharesChargePool`: Holy Bulwark / Sacred Weapon — fact10 D7, a
-      // Sacred Weapon `back 2:41` with Holy Bulwark pressed at 2:35)
-      // — the DB2 ChargeCategory itself, also when `canonicalSpellId` reads
-      // the two as one cooldown (Sacred Weapon 432472 is Holy Bulwark
-      // 432459's, so `sharesChargePool` says no); a follow-up button with a
-      // pool of its own (Voidblade → Pierce the Veil) is no mate
-      const pool = SHARED_CHARGE_CATEGORY[String(press.spellId)];
-      const mates = successesOf(unit).filter(
-        (c) =>
-          String(c.spellId) !== String(press.spellId) &&
-          pool !== undefined &&
-          SHARED_CHARGE_CATEGORY[String(c.spellId)] === pool &&
-          !isStasisReplayCast(unit, String(c.spellId), tsOf(c)),
+    const early = backBeforeNext(ctx, one, freeRows);
+    if (early)
+      ctx.violate(
+        "offListPressLine",
+        "backBeforeNextPress",
+        at,
+        `${ctx.roundKey}|${unit.id}|${name}|${second}`,
+        `${unit.name} ${name} at ${fmtS(second)}: back ${early.back}, pressed ${fmtS((early.nextMs - ctx.start) / 1000)}`,
+        line,
       );
-      const next = [...presses, ...mates]
-        .filter(
-          (r) =>
-            tsOf(r) > at + 50 &&
-            tsOf(r) <= ctx.roundEndAt &&
-            !freeRows.has(r) &&
-            !timeSpiralFreePressMs(unit, String(r.spellId), [tsOf(r)]).length,
-        )
-        .map(tsOf)
-        .sort((x, y) => x - y)[0];
-      if (next !== undefined && next < backMs - BACK_SLACK_MS)
-        ctx.violate(
-          "offListPressLine",
-          "backBeforeNextPress",
-          at,
-          `${ctx.roundKey}|${unit.id}|${name}|${second}`,
-          `${unit.name} ${name} at ${fmtS(second)}: back ${back}, pressed ${fmtS((next - ctx.start) / 1000)}`,
-          line,
-        );
-    }
     const lasts = /lasts ([\d.]+)s/.exec(fields)?.[1];
     if (lasts) {
       // the row the line read its duration from (`pressDuration`: the

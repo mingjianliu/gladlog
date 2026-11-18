@@ -152,6 +152,34 @@ export interface IKillWindowGateFacts {
   accountable: boolean;
 }
 
+/**
+ * T133: the cooldown came back and was pressed inside one rendered second
+ * `s` — back at s + 0.68, pressed at s + 0.88 (aff88ef9 r6, Divine Toll 30 s
+ * after its press at 0:52: `ready at 1:16: none (pressed inside: Divine Toll
+ * 1:22)`). No whole second reads it back: at s it is not yet (the D14 sample
+ * below), and from s + 1 on the press of second s has spent it. The press is
+ * the proof — asked of the model at the press's own instant, with the presses
+ * before it (`cdAvailableAt`, its slack): a press the model has no charge
+ * for stays off the list, and a free press (`freeRecast`) proves nothing.
+ */
+export function cdBackForPressInSecond(
+  cd: Parameters<typeof cdAvailableAt>[0],
+  s: number,
+): boolean {
+  return cd.casts.some((c) => {
+    if (c.freeRecast || toRenderSecond(c.timeSeconds) !== s) return false;
+    const keep = (x: { timeSeconds: number }) => x.timeSeconds < c.timeSeconds;
+    return cdAvailableAt(
+      {
+        ...cd,
+        casts: cd.casts.filter(keep),
+        ...(cd.sharedCasts ? { sharedCasts: cd.sharedCasts.filter(keep) } : {}),
+      },
+      c.timeSeconds,
+    );
+  });
+}
+
 export interface IKillWindowFactsComputer {
   facts(
     target: ICombatUnit,
@@ -276,7 +304,10 @@ export function createKillWindowFactsComputer(
       for (const { cd, holder } of notCertain)
         for (let s = readyAtSecond + 1; s <= lastSecond; s++) {
           if (isDeadAt(holder, startMs + s * 1000)) break;
-          if (cdAvailableAt(beforePressesOf(cd, s), s)) {
+          if (
+            cdAvailableAt(beforePressesOf(cd, s), s) ||
+            cdBackForPressInSecond(cd, s)
+          ) {
             backInside.push({
               name: label(cd),
               atSeconds: s,

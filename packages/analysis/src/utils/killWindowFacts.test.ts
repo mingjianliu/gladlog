@@ -230,6 +230,25 @@ describe("kill-window readiness grammar", () => {
       ]);
     });
 
+    it("T133: back and pressed inside one rendered second, after its half, reads `back inside` at that second", () => {
+      // aff88ef9 r6 shape: pressed 10.68 → back 55.68 (sampled 55.5: not
+      // yet; from 0:56 on the press of 0:55 has spent it), pressed 55.88
+      const f = factsFor([10.68, 55.88], 48.731, 60);
+      expect(f.backInside).toEqual([{ name: "Colossus Smash", atSeconds: 55 }]);
+      expect(f.pressedInside).toEqual([
+        { name: "Colossus Smash", atSeconds: 55.88 },
+      ]);
+    });
+
+    it("T133: a press the model has no charge for is no `back inside`", () => {
+      // pressed 10 → back 55; a press at 40.2 is not the cooldown back
+      const f = factsFor([10, 40.2], 30.2, 45);
+      expect(f.backInside).toEqual([]);
+      expect(f.pressedInside).toEqual([
+        { name: "Colossus Smash", atSeconds: 40.2 },
+      ]);
+    });
+
     it("a cooldown ready at the sampled second is in the certain list and has no `back inside`", () => {
       const f = factsFor([1], 48.731, 60);
       expect(f.readyOffCds).toContain("Colossus Smash");
