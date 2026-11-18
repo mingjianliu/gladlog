@@ -531,6 +531,20 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     ownedBySetBonus: { itemSetId: "1990", pieces: 4, specs: ["72"] },
     note: "Fury 12.0 4pc — Rampage: Odyn's Fury −1.25 s",
   },
+  // Slipstream (Scalecommander, 441257; T137): 「$?s403631[Breath of Eons]
+  // [Deep Breath] resets a charge of Hover」 — a dummy; the press of the
+  // breath is the trigger (357210, its Scalecommander override 433874, the
+  // Augmentation 403631 and its override 442204). One charge back
+  // (`oneCharge`), the running recharge kept. aad39190 r1: Hover 8.34 s,
+  // Deep Breath 16.25 s, Hover 20.93 s and again 30.05 s on two charges of
+  // 29.75 s — the third press had nothing in hand without the reset.
+  "441257": {
+    targets: ["358267"],
+    triggerCastIds: ["357210", "433874", "403631", "442204"],
+    seconds: Number.POSITIVE_INFINITY,
+    oneCharge: true,
+    note: "Slipstream — Deep Breath / Breath of Eons: one charge of Hover back",
+  },
   "441206": {
     targets: ["433874"],
     triggerCastIds: [],
