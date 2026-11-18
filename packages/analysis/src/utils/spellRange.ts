@@ -162,6 +162,43 @@ export function healerReachYards(
   return best ?? fallback;
 }
 
+/**
+ * How far a healer must be from a teammate before a line may say they
+ * "could not be healed" — `healerReachYards` on the accusing side: the
+ * longest of the spec's core heals (`HEALER_REACH_SPELLS`) with the range
+ * talents the healer holds AND those whose ownership is unknown (an
+ * unreadable loadout gets the longest range it could have: the claim is
+ * "could NOT reach", `spellReachToAccuse`'s direction), plus the hitbox
+ * slack every such claim adds. null when the spec is not a healer spec
+ * listed there or the table has no range for its heals. T170 (round 14 D6 /
+ * D7, 3c8cd2a3 r0): [ROOT] read a Holy Priest's reach as the flat 40 yd and
+ * called a Warrior at 41–45 yd `out of range/LoS — could not be healed`
+ * while Prayer of Mending and Divine Hymn landed on him (Phantom Reach: 46).
+ */
+export function healerReachToAccuse(
+  healer: Caster | null | undefined,
+): number | null {
+  const ids = healer ? HEALER_REACH_SPELLS[String(healer.spec)] : undefined;
+  let best: number | null = null;
+  for (const id of ids ?? []) {
+    const e = SPELLS[id];
+    if (!e || !(e.rangeYards > 0)) continue;
+    let flat = 0;
+    let pct = 0;
+    for (const m of e.rangeMods ?? []) {
+      const owned = m.specIds
+        ? holds(healer!, m)
+        : talentModifierOwnershipOf(healer!, m.talent) !== "no";
+      if (!owned) continue;
+      flat += m.flat ?? 0;
+      pct += m.pct ?? 0;
+    }
+    const r = (e.rangeYards + flat) * (1 + pct / 100);
+    if (best === null || r > best) best = r;
+  }
+  return best === null ? null : best + RANGE_HITBOX_SLACK_YD;
+}
+
 /** DB2's "Vision Range (AOI)" row (100 yd) sits on triggered auras and
  * area-trigger payloads (Binding Shot 117526, Freezing Trap 3355): it is a
  * placeholder, not a cast range. The generator (genSpellReach.ts) reads the

@@ -27,7 +27,9 @@ import {
   CC_CLOSE_IN_RANGED_YD,
   ccThreatRadiusYards,
   ccThreatReachYards,
+  healerReachToAccuse,
   healerReachYards,
+  RANGE_HITBOX_SLACK_YD,
   spellRangeForCaster,
   spellReachForCaster,
   spellReachToAccuse,
@@ -122,6 +124,25 @@ describe("spellRangeForCaster", () => {
     expect(
       spellReachToAccuse(unit("1468", [], [ARCANE_REACH]), "361469"),
     ).toBeNull();
+  });
+});
+
+describe("healerReachToAccuse (T170)", () => {
+  it("the held range talent plus the hitbox slack", () => {
+    expect(healerReachToAccuse(unit("257", [PHANTOM_REACH]))).toBe(
+      46 + RANGE_HITBOX_SLACK_YD,
+    );
+    expect(healerReachToAccuse(unit("257"))).toBe(40 + RANGE_HITBOX_SLACK_YD);
+    expect(healerReachToAccuse(unit("1468"))).toBe(30 + RANGE_HITBOX_SLACK_YD);
+  });
+  it("a range talent of unknown ownership counts as held: the claim is 'could NOT reach'", () => {
+    expect(healerReachToAccuse(unit("257", [], [PHANTOM_REACH]))).toBe(
+      46 + RANGE_HITBOX_SLACK_YD,
+    );
+  });
+  it("not a listed healer spec: null", () => {
+    expect(healerReachToAccuse(unit("71"))).toBeNull();
+    expect(healerReachToAccuse(null)).toBeNull();
   });
 });
 

@@ -48,6 +48,7 @@ import {
 import { CLOSE_RANGE_YARDS, isDeadAt } from "./positionAnalysis";
 import { CC_MAX_CAST_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { roundEndMs } from "./roundEnd";
+import { healerReachToAccuse } from "./spellRange";
 
 export { ROOT_SPELL_IDS } from "../data/rootSpells";
 
@@ -268,6 +269,59 @@ export function rootSourceOf(
   };
 }
 
+/** The unit's roots of the round, cut at its end (`roundEndMs`) — the
+ * intervals `computeRootReachability` sweeps. */
+export function rootIntervalsInRound(
+  unit: ICombatUnit,
+  combat: { startTime: number; endTime: number },
+): IAuraInterval[] {
+  const roundEndS = (roundEndMs(combat as never) - combat.startTime) / 1000;
+  return rootIntervalsOf(unit, combat)
+    .filter((iv) => iv.fromS < roundEndS)
+    .map((iv) => ({ ...iv, toS: Math.min(iv.toS, roundEndS) }));
+}
+
+/** The render-grid seconds a root's sweep reads: whole seconds [s, s+1) that
+ * overlap the root by at least half a second. */
+export function rootSweptSeconds(
+  iv: Pick<IAuraInterval, "fromS" | "toS">,
+): number[] {
+  const out: number[] = [];
+  for (let s = Math.floor(iv.fromS); s < iv.toS; s++)
+    if (Math.min(s + 1, iv.toS) - Math.max(s, iv.fromS) >= 0.5) out.push(s);
+  return out;
+}
+
+/** The rooted unit's successful targeted casts on another player inside
+ * [fromMs, toMs] — presses, not rows (fact4 D24: one Mutilate press is 1329
+ * + its off-hand 27576 — `isNoPressRow`); two quick presses of one spell
+ * stay two (Throw Glaive's second charge 1.0 s later). The `cast N spells on
+ * others` list of the [ROOT] line and the reach evidence of its sweep. */
+export function rootedCastsOnOthers(
+  X: Pick<ICombatUnit, "id" | "spellCastEvents">,
+  players: ReadonlyArray<Pick<ICombatUnit, "id">>,
+  fromMs: number,
+  toMs: number,
+): Array<{ spellName: string; destId: string; atMs: number }> {
+  const rows = X.spellCastEvents ?? [];
+  return rows
+    .filter((e) => !isNoPressRow(e, rows))
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.timestamp >= fromMs &&
+        e.timestamp <= toMs &&
+        !!e.destUnitId &&
+        e.destUnitId !== X.id &&
+        players.some((p) => p.id === e.destUnitId),
+    )
+    .map((e) => ({
+      spellName: getEnglishSpellName(e.spellId ?? "", e.spellName),
+      destId: e.destUnitId,
+      atMs: e.timestamp,
+    }));
+}
+
 export function computeRootReachability(
   combat: {
     startTime: number;
@@ -281,7 +335,6 @@ export function computeRootReachability(
 ): IRootInstance[] {
   const zoneId = combat.startInfo?.zoneId;
   const out: IRootInstance[] = [];
-  const roundEndS = (roundEndMs(combat as never) - combat.startTime) / 1000;
   for (const X of players) {
     const allies = players.filter(
       (u) => u.reaction === X.reaction && u.id !== X.id,
@@ -291,9 +344,7 @@ export function computeRootReachability(
     // the round's roots only, cut at its end (`roundEndMs` — codex
     // 62-POSTHOC-13g #2, c6710c8b: a Void Tendrils printed 4.0 s, 2.6 s of
     // it in the Shuffle round)
-    const intervals = rootIntervalsOf(X, combat)
-      .filter((iv) => iv.fromS < roundEndS)
-      .map((iv) => ({ ...iv, toS: Math.min(iv.toS, roundEndS) }));
+    const intervals = rootIntervalsInRound(X, combat);
     // U7: enemy hard CC on the rooted unit — the cannot-cast predicate's
     // auras filtered to the official hard-CC set (silences out).
     const hardCc = intervals.length
@@ -318,6 +369,23 @@ export function computeRootReachability(
               ),
             )
           : [];
+      // The rooted unit's own targeted casts that landed on another player
+      // inside the root — what the line's `cast N spells on others` lists.
+      // A second in which one landed on a unit is a second that unit was
+      // reached: the log's own verdict outranks the position samples (T170,
+      // round 14 D11, 5fc73da2 r0 0:36: an Unholy Death Knight `could not
+      // attack` for 3 s while Scourge Strike and two Necrotic Coils landed
+      // on the Evoker 13–15 yd away, one in each of those seconds).
+      const casts = rootedCastsOnOthers(X, players, fromMs, toMs);
+      const castOnAt = (unitId: string, s: number): boolean =>
+        casts.some(
+          (c) =>
+            c.destId === unitId &&
+            Math.floor((c.atMs - combat.startTime) / 1000) === s,
+        );
+      // a healer's reach is their own: the spec's heals with the range
+      // talents they hold (or may hold) plus the hitbox slack
+      const healRange = role === "healer" ? healerReachToAccuse(X) : null;
       const allyBad = new Map<string, number>();
       let sampled = 0;
       let unreachable = 0;
@@ -331,10 +399,9 @@ export function computeRootReachability(
       // Render grid: whole seconds [s, s+1) that overlap the root by at least
       // half a second, so the count can never exceed the rendered duration
       // (a 6.0 s root sweeps 6 seconds, not 7).
-      for (let s = Math.floor(iv.fromS); s < iv.toS; s++) {
+      for (const s of rootSweptSeconds(iv)) {
         const lo = Math.max(s, iv.fromS);
         const hi = Math.min(s + 1, iv.toS);
-        if (hi - lo < 0.5) continue;
         sweep.swept++;
         const a0 = combat.startTime + lo * 1000;
         const a1 = combat.startTime + hi * 1000;
@@ -349,18 +416,42 @@ export function computeRootReachability(
           continue;
         }
         sampled++;
-        const inReach = (T: ICombatUnit): boolean | null =>
-          role === "melee"
-            ? canReachTargetAt(p, T, t, zoneId, CLOSE_RANGE_YARDS, false, X)
-            : canReachTargetAt(
-                p,
-                T,
-                t,
-                zoneId,
-                CC_MAX_CAST_RANGE_YARDS,
-                true,
-                X,
-              );
+        const inReach = (T: ICombatUnit): boolean | null => {
+          if (castOnAt(T.id, s)) return true;
+          if (role === "melee")
+            return canReachTargetAt(
+              p,
+              T,
+              t,
+              zoneId,
+              CLOSE_RANGE_YARDS,
+              false,
+              X,
+            );
+          if (role === "healer") {
+            // out of reach only beyond the healer's own range; with that
+            // range unknown, only a disproven line of sight says so
+            const r = canReachTargetAt(
+              p,
+              T,
+              t,
+              zoneId,
+              healRange ?? Number.POSITIVE_INFINITY,
+              true,
+              X,
+            );
+            return healRange === null && r === true ? null : r;
+          }
+          return canReachTargetAt(
+            p,
+            T,
+            t,
+            zoneId,
+            CC_MAX_CAST_RANGE_YARDS,
+            true,
+            X,
+          );
+        };
         if (role === "healer") {
           let bad = false;
           let allTrue = true;
@@ -423,31 +514,15 @@ export function computeRootReachability(
         worstAlly: worst ? { name: worst[0], seconds: worst[1] } : undefined,
         significant: unreachable >= ROOT_UNREACHABLE_MIN_S,
         reachSweep: sweep,
-        ...(() => {
-          // cc-dr F-RT1: casts at another player inside the root
-          const fromMs = combat.startTime + iv.fromS * 1000;
-          const toMs = combat.startTime + iv.toS * 1000;
-          // presses, not rows (fact4 D24: one Mutilate press is 1329 +
-          // its off-hand 27576 — `isNoPressRow`); two quick presses of one
-          // spell stay two (Throw Glaive's second charge 1.0 s later)
-          const rows = X.spellCastEvents ?? [];
-          const casts = rows
-            .filter((e) => !isNoPressRow(e, rows))
-            .filter(
-              (e) =>
-                e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-                e.timestamp >= fromMs &&
-                e.timestamp <= toMs &&
-                !!e.destUnitId &&
-                e.destUnitId !== X.id &&
-                players.some((p) => p.id === e.destUnitId),
-            )
-            .map((e) => ({
-              spellName: getEnglishSpellName(e.spellId ?? "", e.spellName),
-              destId: e.destUnitId,
-            }));
-          return casts.length ? { castsOnOthers: casts } : {};
-        })(),
+        // cc-dr F-RT1: casts at another player inside the root
+        ...(casts.length
+          ? {
+              castsOnOthers: casts.map((c) => ({
+                spellName: c.spellName,
+                destId: c.destId,
+              })),
+            }
+          : {}),
       });
     }
   }

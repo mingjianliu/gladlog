@@ -1335,6 +1335,21 @@ const INDEX: PredicateRow[] = [
     mod: rootReachability,
   },
   {
+    file: `${A}/utils/rootReachability.ts`,
+    symbol: "rootedCastsOnOthers",
+    mod: rootReachability,
+  },
+  {
+    file: `${A}/utils/rootReachability.ts`,
+    symbol: "rootSweptSeconds",
+    mod: rootReachability,
+  },
+  {
+    file: `${A}/utils/rootReachability.ts`,
+    symbol: "rootIntervalsInRound",
+    mod: rootReachability,
+  },
+  {
     file: `${A}/utils/positionSampling.ts`,
     symbol: "LOS_SWEEP_SLACK_S",
     mod: positionSampling,
@@ -4292,6 +4307,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/spellRange.ts`,
     symbol: "healerReachYards",
+    mod: spellRange,
+  },
+  {
+    file: `${A}/utils/spellRange.ts`,
+    symbol: "healerReachToAccuse",
     mod: spellRange,
   },
   {

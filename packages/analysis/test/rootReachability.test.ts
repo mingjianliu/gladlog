@@ -9,6 +9,7 @@ import {
   ROOT_UNREACHABLE_MIN_S,
   rootReachProvenFact,
 } from "../src/utils/rootReachability";
+import { healerReachToAccuse } from "../src/utils/spellRange";
 
 const T0 = 1_000_000;
 function unit(
@@ -165,6 +166,92 @@ describe("rootReachability (GH #24)", () => {
     expect(
       formatRootReachabilityEntries([withHit], "Priest")[0].line,
     ).toContain("Hit (taking damage) out of range/LoS for 6s");
+  });
+});
+
+describe("T170: a healer's own reach, and the rooted unit's landed casts", () => {
+  const priest = () =>
+    unit("Priest", CombatUnitSpec.Priest_Holy, CombatUnitReaction.Friendly, 0, {
+      rootedBy: "Mage",
+    });
+  const mage = unit(
+    "Mage",
+    CombatUnitSpec.Mage_Frost,
+    CombatUnitReaction.Hostile,
+    20,
+  );
+  const ally = (x: number) =>
+    unit("Hit", CombatUnitSpec.Warrior_Arms, CombatUnitReaction.Friendly, x, {
+      damagedAt: [6, 7, 8],
+    });
+  const castOn = (dest: string, atS: number, spellId = "33076") => ({
+    timestamp: T0 + atS * 1000,
+    spellId,
+    spellName: spellId,
+    destUnitId: dest,
+    logLine: { event: "SPELL_CAST_SUCCESS", timestamp: T0 + atS * 1000 },
+  });
+  it("a damaged ally inside the healer's reach with its range talent and the hitbox slack is not out of range (3c8cd2a3 r0 1:25: 41–45 yd)", () => {
+    const reach = healerReachToAccuse(priest())!;
+    expect(reach).toBeGreaterThan(40);
+    const [near] = computeRootReachability(combat, [
+      priest(),
+      ally(reach - 1),
+      mage,
+    ]);
+    expect(near.unreachableSeconds).toBe(0);
+    expect(rootReachProvenFact(near)).toBe("6/6");
+    const [far] = computeRootReachability(combat, [
+      priest(),
+      ally(reach + 1),
+      mage,
+    ]);
+    expect(far.unreachableSeconds).toBe(6);
+  });
+  it("a second in which the healer's cast landed on the ally is not a second it could not be healed", () => {
+    const p = priest();
+    p.spellCastEvents = [castOn("Hit", 6.3), castOn("Hit", 9.9)];
+    const [r] = computeRootReachability(combat, [p, ally(60), mage]);
+    expect(r.unreachableSeconds).toBe(4);
+    expect(r.worstAlly).toEqual({ name: "Hit", seconds: 4 });
+    expect(r.reachSweep).toMatchObject({ swept: 6, unreachable: 4, proven: 2 });
+    // a cast on someone else proves nothing about this ally
+    p.spellCastEvents = [castOn("Mage", 6.3)];
+    expect(
+      computeRootReachability(combat, [p, ally(60), mage])[0]
+        .unreachableSeconds,
+    ).toBe(6);
+  });
+  it("a rooted melee that lands a cast on an enemy each second could attack (5fc73da2 r0 0:36)", () => {
+    const dk = unit(
+      "DK",
+      CombatUnitSpec.DeathKnight_Unholy,
+      CombatUnitReaction.Friendly,
+      0,
+      { rootedBy: "Mage" },
+    );
+    const far = unit(
+      "Mage",
+      CombatUnitSpec.Mage_Frost,
+      CombatUnitReaction.Hostile,
+      CLOSE_RANGE_YARDS + 2,
+    );
+    dk.spellCastEvents = [5.4, 6.4, 7.4, 8.4].map((s) => castOn("Mage", s));
+    const [r] = computeRootReachability(combat, [dk, far]);
+    expect(r.unreachableSeconds).toBe(2);
+    expect(r.significant).toBe(false);
+    expect(formatRootReachabilityEntries([r], "DK")).toEqual([]);
+    // a cast before the root, or on a teammate, clears nothing
+    const mate = unit(
+      "Mate",
+      CombatUnitSpec.Warrior_Arms,
+      CombatUnitReaction.Friendly,
+      3,
+    );
+    dk.spellCastEvents = [castOn("Mage", 4.5), castOn("Mate", 6.4)];
+    expect(
+      computeRootReachability(combat, [dk, mate, far])[0].unreachableSeconds,
+    ).toBe(6);
   });
 });
 
