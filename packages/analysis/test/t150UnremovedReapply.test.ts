@@ -61,9 +61,13 @@ function scene(auras: Array<[LogEvent, number]>, restatedS?: number) {
   } as never;
   return { caster, combat };
 }
-const endOf = (auras: Array<[LogEvent, number]>, restatedS?: number) => {
+const endOf = (
+  auras: Array<[LogEvent, number]>,
+  restatedS?: number,
+  nextSameCastS = Infinity,
+) => {
   const { caster, combat } = scene(auras, restatedS);
-  return observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat);
+  return observedEffectEndSeconds(caster, AVATAR, 10, nextSameCastS, combat);
 };
 
 describe("T150: a cooldown re-applied with no REMOVED past its official length", () => {
@@ -95,6 +99,23 @@ describe("T150: a cooldown re-applied with no REMOVED past its official length",
           [LogEvent.SPELL_AURA_REMOVED, 60],
         ],
         51,
+      ),
+    ).toBeNull();
+  });
+
+  it("an application just ahead of the caster's next press is that press's (codex 85-tk-KICK-T150-1 #1)", () => {
+    expect(endOf(relisted, 33, 33.001)).toBeNull();
+  });
+
+  it("an application after the combat's end, clamped onto it, continues nothing (codex #2)", () => {
+    expect(
+      endOf(
+        [
+          [LogEvent.SPELL_AURA_APPLIED, 10],
+          [LogEvent.SPELL_AURA_APPLIED, 230],
+          [LogEvent.SPELL_AURA_REMOVED, 240],
+        ],
+        230,
       ),
     ).toBeNull();
   });

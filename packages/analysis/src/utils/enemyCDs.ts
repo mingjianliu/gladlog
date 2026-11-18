@@ -702,6 +702,14 @@ function observedEffectEnd(
     if (next.spellId !== prev.spellId || next.inferredStart) return false;
     const officialS = prev.toS - prev.capFromS;
     if (officialS <= 0 || next.fromS > prev.toS + officialS) return false;
+    // the caster's next press logs its aura up to `EFFECT_START_BEFORE_S`
+    // ahead of its cast row: that application is the next press's (codex
+    // 85-tk-KICK-T150-1 #1)
+    if (next.fromS >= nextSameCastS - EFFECT_START_BEFORE_S) return false;
+    // an application after the combat's end is clamped onto that end by the
+    // interval builder — it says nothing about this run (codex #2)
+    if (combat.startTime + next.fromS * 1000 >= roundEndMs(combat))
+      return false;
     const fromMs = combat.startTime + prev.capFromS * 1000;
     const toMs = combat.startTime + next.fromS * 1000;
     return !auraRowsOf(destId, true).some(
