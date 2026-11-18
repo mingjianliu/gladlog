@@ -77,6 +77,7 @@ import {
   AURA_EVIDENCE_WINDOW_S,
   auraOffensiveOccurrences,
   GENERIC_PRESS_AFTER_MS,
+  NO_PRESS_SUFFIX,
   TWIN_CAST_BEFORE_S,
 } from "./offensiveAuraOccurrences";
 import { offensiveCooldownIdAt } from "./overrideVariantEra";
@@ -156,6 +157,12 @@ export interface IEnemyCDCast {
    * (codex 80-PIPE-51-B50: with the own end in `buffEndSeconds` each reader
    * had to opt out, and `boundedBurstSegments` had not). */
   ownEndSeconds?: number;
+  /** T140: the own end is an upper bound, not the effect's end — a
+   * `(no press)` occurrence (a talent's proc put the cooldown's aura up)
+   * still up when the slice ended: its end is the aura's official length
+   * from the application, and a proc's effect is no longer than the
+   * button's. `[RES]` prints `(≤Ns left)` (`enemyEffectLeftIsUpperBound`). */
+  ownEndIsUpperBound?: true;
   /** Inside `reconstructEnemyCDTimeline` only — never on a returned cast:
    * the end `buffEndSeconds` goes back to once the builder's own steps
    * (death cut, round-end cut) have read the effect's own end. */
@@ -1103,6 +1110,15 @@ export function enemyEffectOwnEndSeconds(
   return cd.ownEndSeconds ?? cd.buffEndSeconds;
 }
 
+/** Is the `[RES]` row's `Ns left` of this effect only an upper bound
+ * (`ownEndIsUpperBound`, T140)? The one reader, beside
+ * `enemyEffectOwnEndSeconds`. */
+export function enemyEffectLeftIsUpperBound(
+  cd: Pick<IEnemyCDCast, "ownEndIsUpperBound">,
+): boolean {
+  return cd.ownEndIsUpperBound === true;
+}
+
 /**
  * T28: does a Solo Shuffle round's end (`endMs`) end `caster`'s effect of
  * English name `name`? Every aura of that name the caster put on any unit
@@ -2015,6 +2031,11 @@ function reconstructEnemyCDTimelineUncached(
           1000,
         ...(upAtSliceEnd && o.officialEndMs! > o.endMs
           ? { windowEndSeconds: (o.endMs - matchStartMs) / 1000 }
+          : {}),
+        ...(upAtSliceEnd &&
+        o.officialEndMs! > o.endMs &&
+        o.spellName.endsWith(NO_PRESS_SUFFIX)
+          ? { ownEndIsUpperBound: true as const }
           : {}),
         dangerWeight: o.dangerWeight,
         ...(o.burstRole === "fact" ? { burstRole: "fact" as const } : {}),

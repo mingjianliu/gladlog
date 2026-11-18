@@ -41,7 +41,11 @@ import {
 } from "../utils/cooldowns";
 import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
 import { isStunCcInstance } from "../utils/drAnalysis";
-import { enemyEffectOwnEndSeconds, IEnemyCDTimeline } from "../utils/enemyCDs";
+import {
+  enemyEffectLeftIsUpperBound,
+  enemyEffectOwnEndSeconds,
+  IEnemyCDTimeline,
+} from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import { logInstantOf } from "../utils/logEra";
 import { offensiveCooldownIdAt } from "../utils/overrideVariantEra";
@@ -1303,7 +1307,14 @@ function buildResourceSnapshotOnce({
     // chain — 4caab013 0:55 Volley), in first-press order.
     const windows = new Map<
       string,
-      { spellName: string; end: number; leftEnd: number }
+      {
+        spellName: string;
+        end: number;
+        leftEnd: number;
+        /** `leftEnd` is an upper bound (T140: a proc's effect still up as
+         * the slice ended) — true only while no exact end reaches as far */
+        leftIsUpperBound: boolean;
+      }
     >();
     // fact7 class 3: a fact row runs too, the [ENEMY CD] line beside this row
     // says so — but only one with an effect span: the 8 s below is the burst
@@ -1387,14 +1398,32 @@ function buildResourceSnapshotOnce({
         cd.deathCutOfficialEndSeconds ?? end,
         prev?.leftEnd ?? end,
       );
+      // the bound belongs to the occurrence that reaches furthest; an exact
+      // end at least as late makes the entry exact
+      const ownLeftEnd = Math.max(end, cd.deathCutOfficialEndSeconds ?? end);
+      const ownUpper = enemyEffectLeftIsUpperBound(cd);
+      const leftIsUpperBound =
+        prev === undefined || ownLeftEnd > prev.leftEnd
+          ? ownUpper
+          : ownLeftEnd === prev.leftEnd
+            ? prev.leftIsUpperBound && ownUpper
+            : prev.leftIsUpperBound;
       if (prev === undefined || end > prev.end)
-        windows.set(key, { spellName: cd.spellName, end, leftEnd });
-      else prev.leftEnd = leftEnd;
+        windows.set(key, {
+          spellName: cd.spellName,
+          end,
+          leftEnd,
+          leftIsUpperBound,
+        });
+      else {
+        prev.leftEnd = leftEnd;
+        prev.leftIsUpperBound = leftIsUpperBound;
+      }
     }
     for (const w of windows.values()) {
       const remainingSeconds = Math.max(1, Math.round(w.leftEnd - timeSeconds));
       enemyActiveParts.push(
-        `${w.spellName}/${player.specName}(${remainingSeconds}s left)`,
+        `${w.spellName}/${player.specName}(${w.leftIsUpperBound ? "≤" : ""}${remainingSeconds}s left)`,
       );
     }
   }
