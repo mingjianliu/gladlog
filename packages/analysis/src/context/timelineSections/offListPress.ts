@@ -78,7 +78,9 @@ export function emitOffListPressEntries(
     for (let s = sec - PRESS_LINE_NEAR_S; s <= sec + PRESS_LINE_NEAR_S; s++)
       if (
         (bySecond.get(s) ?? []).some((text) =>
-          lineStatesPress(text, name, number, ownerNumber),
+          // a deliberate [MINOR DISPELS] part does not stand in for a
+          // 30 s+ press's line (T143, ruling A2)
+          lineStatesPress(text, name, number, ownerNumber, p.cooldownSeconds),
         )
       )
         stated = true;
