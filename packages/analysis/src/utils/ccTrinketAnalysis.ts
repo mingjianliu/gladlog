@@ -4450,7 +4450,10 @@ function analyzePlayerCCAndTrinketUncached(
           // the CC stays eligible. 101 of the 605 S2 files
           // (fix-KA/breakNaturalProbe.ts): of 232 bound presses none had
           // reached its official end; 2 had under 200 ms left.
-          !ranFullLength(w),
+          // (the plain comparison, not `ranFullLength`: a window with no
+          // REMOVED row whose inferred end reached its length is no break
+          // either — codex 85-tk-CC-T169-1 #2)
+          (w.officialEndMs === undefined || w.removeMs < w.officialEndMs),
       ),
       press.ts,
     );

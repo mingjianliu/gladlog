@@ -11,7 +11,8 @@
  *    logged`. Kind = how far the kick row sits before the REMOVED row.
  *    Checked = every such removal whose line is there. 3c8cd2a3 r0: Wind
  *    Shear on the priest's Mind Control 65 ms before it came off.
- *  - `trinketAfterRanOut`: a Gladiator's Medallion press later than
+ *  - `trinketAfterRanOut`: a Gladiator's Medallion press (`pvpTrinketUses`,
+ *    the producer's press instant) later than
  *    `PRESS_ENDED_CC_LAG_MS` after (and within
  *    `TRINKET_BREAK_AFTER_REMOVAL_MS` of) the REMOVED of a control on the
  *    presser that the log gives no other cause, where the control had run
@@ -34,8 +35,11 @@ import {
   PRESS_ENDED_CC_LAG_MS,
   TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import { MEDALLION_SPELL_ID } from "@gladlog/analysis/src/utils/pvpTrinketUses";
-import { AURA_NATURAL_END_JITTER_S } from "@gladlog/analysis/src/utils/unitDeath";
+import { pvpTrinketUses } from "@gladlog/analysis/src/utils/pvpTrinketUses";
+import {
+  AURA_NATURAL_END_JITTER_S,
+  DEATH_CASCADE_MS,
+} from "@gladlog/analysis/src/utils/unitDeath";
 import { LogEvent } from "@gladlog/parser-compat";
 
 import {
@@ -45,7 +49,6 @@ import {
   type IRoundCtx,
   nameOf,
   REMOVED,
-  SUCCESS,
   tsOf,
 } from "./ctx";
 
@@ -150,6 +153,15 @@ export function run(ctx: IRoundCtx): void {
       (a) => !a.destUnitId || a.destUnitId === u.id,
     );
 
+    // the producer's press instants (`pvpTrinketUses`: the Medallion's own
+    // aura, the cast row can trail it — codex 85-tk-CC-T169-1 #3)
+    const presses = pvpTrinketUses(u)
+      .filter((p) => p.kind === "medallion")
+      .map((p) => p.atMs);
+    const deaths = ((u.deathRecords ?? []) as any[]).map(
+      (d) => d.timestamp as number,
+    );
+
     // ── channelKickCauseNotLogged ─────────────────────────────────────────
     for (const r of auras) {
       if (ev(r) !== REMOVED || !r.spellId) continue;
@@ -192,7 +204,8 @@ export function run(ctx: IRoundCtx): void {
 
     // ── naturalEndShortfall (inventory) ───────────────────────────────────
     // how far from its table length a control ends when nothing ended it:
-    // no BROKEN row, no dispel, no Medallion within 300 ms, its holder alive
+    // no BROKEN row, no dispel, no Medallion within 300 ms, no death of its
+    // holder within the teardown lag after it
     if (ctx.firstOwnerOfRound)
       for (const r of auras) {
         if (ev(r) !== REMOVED || !r.spellId || !ccSpellIds.has(r.spellId))
@@ -219,12 +232,11 @@ export function run(ctx: IRoundCtx): void {
               x.extraSpellId === r.spellId &&
               Math.abs(tsOf(x) - rms) <= 50,
           ) ||
-          ((u.spellCastEvents ?? []) as any[]).some(
-            (c) =>
-              ev(c) === SUCCESS &&
-              c.spellId === MEDALLION_SPELL_ID &&
-              Math.abs(tsOf(c) - rms) <= 300,
-          )
+          presses.some((ms) => Math.abs(ms - rms) <= 300) ||
+          // the aura teardown of the holder's death (codex
+          // 85-tk-CC-T169-1 #1, 0179dbd4 r1: a Mortal Coil removed 7 ms
+          // before its holder's UNIT_DIED counted as 107 ms short)
+          deaths.some((d) => d >= rms && d - rms <= DEATH_CASCADE_MS)
         )
           continue;
         ctx.violate(
@@ -237,9 +249,7 @@ export function run(ctx: IRoundCtx): void {
       }
 
     // ── trinketAfterRanOut ────────────────────────────────────────────────
-    for (const c of (u.spellCastEvents ?? []) as any[]) {
-      if (ev(c) !== SUCCESS || c.spellId !== MEDALLION_SPELL_ID) continue;
-      const ts = tsOf(c);
+    for (const ts of presses) {
       if (ts < ctx.start || ts > ctx.roundEndAt) continue;
       for (const r of auras) {
         if (ev(r) !== REMOVED || !r.spellId || !ccSpellIds.has(r.spellId))
