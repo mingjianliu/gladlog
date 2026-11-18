@@ -75,6 +75,7 @@ import {
   STACKED_RATE_CARRIERS,
   timeSpiralEchoMs,
   timeSpiralFreePressMs,
+  upToCooldownPctFor,
 } from "../data/talentScriptedCooldowns";
 import {
   STUN_PURGE_GENERATED,
@@ -7131,11 +7132,24 @@ function buildCooldownEntry(
       ...(procOnly
         ? {}
         : (() => {
-            const e = earliestCooldownSecondsFor(
+            // the corpus floor of the spec, and a held "up to N %" talent
+            // (`UP_TO_COOLDOWN_REDUCTIONS`, T135): the lower of the two
+            const floor = earliestCooldownSecondsFor(
               spell.spellId,
               unit.spec,
               cooldownSeconds,
             );
+            const upToPct = upToCooldownPctFor(spell.spellId, holds);
+            const upTo =
+              upToPct > 0
+                ? Math.round(cooldownSeconds * (1 - upToPct / 100) * 10) / 10
+                : undefined;
+            const e =
+              floor === undefined
+                ? upTo
+                : upTo === undefined
+                  ? floor
+                  : Math.min(floor, upTo);
             return e !== undefined && e < cooldownSeconds
               ? { earliestCooldownSeconds: e }
               : {};

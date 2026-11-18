@@ -341,6 +341,7 @@ import {
   PER_PRESS_STACK_COOLDOWNS,
   STACKED_RATE_CARRIERS,
   TIME_SPIRAL_FREE_PRESSES,
+  UP_TO_COOLDOWN_REDUCTIONS,
 } from "./talentScriptedCooldowns";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
 
@@ -1450,6 +1451,16 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     () => [
       ...Object.keys(TIME_SPIRAL_FREE_PRESSES),
       ...Object.values(TIME_SPIRAL_FREE_PRESSES).flatMap((r) => r.spellIds),
+    ],
+  ),
+  // T135: "up to N %" cooldown talents (Healing Hands on Lay on Hands)
+  t(
+    "UP_TO_COOLDOWN_REDUCTIONS",
+    "data/talentScriptedCooldowns.ts",
+    "mixed",
+    () => [
+      ...Object.keys(UP_TO_COOLDOWN_REDUCTIONS),
+      ...Object.values(UP_TO_COOLDOWN_REDUCTIONS).flatMap((r) => r.targets),
     ],
   ),
   t(

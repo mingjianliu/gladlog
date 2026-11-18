@@ -777,6 +777,29 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     seconds: 5,
     note: "Unrelenting Onslaught — Bladestorm −5 s per Executioner stack when Sudden Death is used",
   },
+  // Ranger's Finesse (Marksmanship PvP talent, 248443; T135): "Casting Aimed
+  // Shot provides you with Ranger's Finesse. After gaining 3 stacks … your
+  // next Volley's radius and duration [are increased]. Consuming Ranger's
+  // Finesse reduces the remaining cooldown of Aspect of the Turtle by 20
+  // sec." DB2 12.1.5.70391: SpellEffect 465408 (aura 4, a dummy, no mask)
+  // base 20, PvpMultiplier 1. A use is the stack buff 408518 removed within
+  // 0.5 s of the unit's own Volley 260243 — 20bba87d r2: Volley 71.38 s, the
+  // buff REMOVED 71.52 s; Volley 141.58 s, REMOVED 141.74 s (those two
+  // Volleys last 9 s, the one cast without the buff 6 s). The buff running
+  // out (96.83 s, 169.83 s, no Volley) consumes nothing. Turtle pressed
+  // 83.55 s and again 185.51 s on the 120 s model: 102.0 s apart, one use
+  // between them → back at 183.55 s.
+  "248443": {
+    targets: ["186265"],
+    triggerCastIds: [],
+    triggerAuraConsumed: {
+      auraIds: ["408518"],
+      byCastIds: ["260243"],
+      withinMs: 500,
+    },
+    seconds: 20,
+    note: "Ranger's Finesse — Aspect of the Turtle −20 s when a Volley consumes the stacks",
+  },
   // Barrier Diffusion (Frost, 455428): "When Ice Barrier is removed, its
   // remaining cooldown is reduced by 5 sec" — dummy 5 000, PvpMultiplier
   // 0.5 → 2.5 s in the arena (5 s runs ahead of the game). Ice Barrier has
@@ -1290,6 +1313,24 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     },
     seconds: 0.1,
     note: "White Out — each Freezing stack an Ice Lance shatters: Frozen Orb −0.1 s",
+  },
+  // Glaciate (Frost, 1247798; T135): "When Ice Lance Shatters a stack of
+  // Freezing, the cooldown of Ray of Frost is reduced by 0.10 sec." DB2
+  // 12.1.5.70391: SpellEffect 1250249 (aura 4, a dummy, no mask) base 100 ms,
+  // PvpMultiplier 1. The shattered stacks are White Out's reading above — the
+  // caster's Freezing 1221389 on the struck unit dropping in the millisecond
+  // of its Ice Lance / Shatter hit there (`triggerOwnAuraStacksLost`).
+  // Ray of Frost has two charges under Hand of Frost: the give-back goes to
+  // the charge recharging (`IChargeEffects`).
+  "1247798": {
+    targets: ["205021"],
+    triggerCastIds: [],
+    triggerOwnAuraStacksLost: {
+      auraIds: ["1221389"],
+      atOwnHitIds: ["228598", "1246949"],
+    },
+    seconds: 0.1,
+    note: "Glaciate — each Freezing stack an Ice Lance shatters: Ray of Frost −0.1 s",
   },
   // Red Thirst (Blood): "Every 10 Runic Power spent reduces the cooldown of
   // Vampiric Blood by 2.0 sec" — s1 2 000, s2 10. Runic Power is ×10 in the
@@ -2649,6 +2690,53 @@ export function freeRecastWindowFor(
 }
 
 /** Event reductions on `spellId` for a holder, flattened. */
+/**
+ * A talent that shortens a cooldown by "up to N %" on a condition the log
+ * does not state at the press (T135). The model cannot price one press, so it
+ * prices the two ends: the entry keeps its full cooldown and gets
+ * `earliestCooldownSeconds` = cooldown × (1 − pct / 100) — the `[a–b s]` of
+ * the kit, the `(a–Ns)` of a [RES] row, `cdMaybeAvailableAt`.
+ *
+ *  - Healing Hands 326734: "The cooldown of Lay on Hands is reduced up to
+ *    60%, based on the target's missing health." DB2 12.1.5.70391:
+ *    SpellEffect 817890 (aura 4, a dummy, no mask) base 60, PvpMultiplier
+ *    0.5 → 30 % in the arena. 718f9d48 r1, a Retribution holder (Unbreakable
+ *    Spirit, 600 × 0.8 = 480 s): pressed 71.3 s and again 417.2 s, 345.9 s
+ *    apart — inside 480 × 0.7 = 336 s … 480 s; at the bare 60 % the floor
+ *    would be 192 s (the smaller number is the weaker claim; DB2's arena
+ *    value is the one used).
+ * Registered in curatedIdRegistry.
+ */
+export interface IUpToCooldownReduction {
+  /** spells whose cooldown the talent shortens */
+  targets: readonly string[];
+  /** the most it takes off, percent of the cooldown (the arena value) */
+  pct: number;
+  note: string;
+}
+export const UP_TO_COOLDOWN_REDUCTIONS: Readonly<
+  Record<string, IUpToCooldownReduction>
+> = {
+  "326734": {
+    targets: ["633", "471195"],
+    pct: 30,
+    note: "Healing Hands — Lay on Hands up to −30 % (60 % × PvP 0.5) by the target's missing health",
+  },
+};
+
+/** The most a held "up to N %" talent takes off `spellId`'s cooldown, in
+ * percent (0 = none held). */
+export function upToCooldownPctFor(
+  spellId: string,
+  holds: (talentSpellId: string) => boolean,
+): number {
+  let pct = 0;
+  for (const [talent, r] of Object.entries(UP_TO_COOLDOWN_REDUCTIONS))
+    if (r.targets.includes(spellId) && holds(talent))
+      pct = Math.max(pct, r.pct);
+  return pct;
+}
+
 /** The talent a row of `EVENT_COOLDOWN_REDUCTIONS` belongs to: its key, or
  * `talentSpellId` for a talent's second row. */
 export function eventReductionOwner(
