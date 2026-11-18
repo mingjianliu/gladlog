@@ -23,6 +23,7 @@ import {
 import {
   applicationAnchorMs,
   aurasUpAtLogEnd,
+  castMsOfAnchor,
   run,
 } from "../scripts/scan5/t41";
 
@@ -620,6 +621,57 @@ describe("scan5/t41 — the producer's side-aura and haste-length readings (T204
     ).toMatch(/^never removed: /);
     expect(
       rowScan(arms(true), "Arms Warrior", "Bladestorm", 122, 1, 125.4)[0],
+    ).toMatch(/^never removed: /);
+  });
+  it("…a side aura is one of the cast's own start window — a pressed-id aura from before it does not take the 252071 out (codex T204-1 #2)", () => {
+    const feral: any = makeUnit("Player-4", {
+      name: "U",
+      class: CombatUnitClass.Druid,
+      spec: CombatUnitSpec.Druid_Feral,
+      info: { talents: [], pvpTalents: [] } as never,
+      spellCastEvents: [makeSpellCastEvent("102543", at(100), "Player-4")],
+      auraEvents: [
+        aura("102543", LogEvent.SPELL_AURA_APPLIED, 98.8),
+        aura("252071", LogEvent.SPELL_AURA_APPLIED, 100),
+      ],
+    });
+    // 98.8 is outside [99.5, 102]: the 252071 run is read on its own 30 s,
+    // and `9s left` at 110 is short of it
+    expect(
+      rowScan(
+        feral,
+        "Feral Druid",
+        "Incarnation: Avatar of Ashamane",
+        110,
+        9,
+        117,
+      )[0],
+    ).toMatch(/^never removed: /);
+  });
+
+  it("…the haste sample is read at the cast: a run that ended between the cast and its application is none (codex T204-1 #3)", () => {
+    expect(castMsOfAnchor([at(100)], at(100.2))).toBe(at(100));
+    expect(castMsOfAnchor([at(100)], at(104))).toBe(at(104));
+    expect(castMsOfAnchor([], at(104))).toBe(at(104));
+    const arms: any = makeUnit("Player-4", {
+      name: "U",
+      class: CombatUnitClass.Warrior,
+      spec: CombatUnitSpec.Warrior_Arms,
+      info: { talents: [], pvpTalents: [] } as never,
+      spellCastEvents: [
+        makeSpellCastEvent("446035", at(96), "Player-4"),
+        makeSpellCastEvent("446035", at(100), "Player-4"),
+      ],
+      auraEvents: [
+        aura("446035", LogEvent.SPELL_AURA_APPLIED, 96),
+        aura("446035", LogEvent.SPELL_AURA_REMOVED, 100.1),
+        aura("446035", LogEvent.SPELL_AURA_APPLIED, 100.2),
+      ],
+    });
+    // at the cast (100 s) the 96–100.1 run is not over: the official 6 s
+    // stands, and `3s left` at 101 is short of it
+    expect(
+      rowScan(arms, "Arms Warrior", "Bladestorm", 101, 3, 103.5)[0],
     ).toMatch(/^never removed: /);
   });
 });

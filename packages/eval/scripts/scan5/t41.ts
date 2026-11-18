@@ -219,6 +219,20 @@ export function applicationAnchorMs(
   return paired.length > 0 ? Math.max(...paired) : o.appliedMs;
 }
 
+/** The cast an application's anchor stands beside (the last press whose
+ * start window holds it), or the anchor itself when no press does. */
+export function castMsOfAnchor(
+  pressesMs: readonly number[],
+  anchorMs: number,
+): number {
+  const beside = pressesMs.filter(
+    (p) =>
+      anchorMs >= p - EFFECT_START_BEFORE_S * 1000 &&
+      anchorMs <= p + EFFECT_START_AFTER_S * 1000,
+  );
+  return beside.length > 0 ? Math.max(...beside) : anchorMs;
+}
+
 export function run(ctx: IRoundCtx): void {
   const lines = ctx.text.split("\n");
   const pidsOfSpec = new Map<string, string[]>();
@@ -273,12 +287,20 @@ export function run(ctx: IRoundCtx): void {
       const up = paired.filter(
         (o) =>
           pressIds.has(o.spellId) ||
+          // …inside the start window of the cast both went up beside (codex
+          // 85-tk-EVAL-T204-1 #2: the two applications were compared with
+          // each other, and a pressed-id aura from before the cast's window
+          // took the side one out)
           !paired.some(
             (c) =>
               c.unitId === o.unitId &&
               pressIds.has(c.spellId) &&
-              Math.abs(c.appliedMs - o.appliedMs) <=
-                (EFFECT_START_BEFORE_S + EFFECT_START_AFTER_S) * 1000,
+              pressesMs.some(
+                (p) =>
+                  c.appliedMs >= p - EFFECT_START_BEFORE_S * 1000 &&
+                  c.appliedMs <= p + EFFECT_START_AFTER_S * 1000 &&
+                  Math.abs(p - o.appliedMs) <= PRESS_PAIR_MS,
+              ),
           ),
       );
       const rel = (ms: number) => ((ms - ctx.start) / 1000).toFixed(1);
@@ -338,7 +360,10 @@ export function run(ctx: IRoundCtx): void {
             ? ownCompletedRunSeconds(
                 holder,
                 o.spellId,
-                anchorMs,
+                // read at the cast, as the producer does: a run that ended
+                // between the cast and its application is no sample yet
+                // (codex 85-tk-EVAL-T204-1 #3)
+                castMsOfAnchor(pressesMs, anchorMs),
                 ctx.legacy as never,
               )
             : undefined;

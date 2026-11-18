@@ -194,7 +194,13 @@ function perAppRuns(
       // 3–4 s, read "shorter" against the 20 s press model — GH #218). The
       // builder's own reading of "pressed there" (`sourcePressedAuraNear`);
       // counted apart, never against the press model.
-      if (!sourcePressedAuraNear(src.spellCastEvents ?? [], spellId, o.t)) {
+      // …by the unit the aura names as its source: a pet's cast is on the
+      // pet, while talents and gear are its owner's (codex
+      // 85-tk-EVAL-T204-1 #1: 23 Felstorm runs of the 605 read as procs)
+      const pressUnit = legacy.units[srcId] ?? src;
+      if (
+        !sourcePressedAuraNear(pressUnit.spellCastEvents ?? [], spellId, o.t)
+      ) {
         perAppBump(
           spellId,
           `${holder} | no press at the application (a proc): ${Math.round(obs)}s`,
