@@ -7166,3 +7166,12 @@ other fact2Scan check identical. No prompt change (the assembled candidate
 captured on the 605 against the e8047b053 base: capture hash 1b9390a6e308 =
 1b9390a6e308, 0 of 3,519 contexts and 0 of 3,519 menus differ, candidate rows
 7,446 = 7,446). Codex branch review 85-tk-EVAL-T202-1: APPROVE.
+
+v578 (2026-11-18; pipeline batch B105, T203; GH #221 group 2). capture.sha256
+no longer hashes each context's absolute archive path: the hash keys on the
+path relative to the archive root (new verify/captureHash.ts), so the Mac and
+the WSL machine produce the same capture hash for the same output (605: a
+prefix-rewritten copy had a different old hash and the same new hash,
+5c52f447294f). Bases cached before this change keep their old stamps; compare
+them with `capture.ts --rehash`. Eval tooling only, no prompt change. Codex
+branch review 85-tk-EVAL-T203-1c: APPROVE.

@@ -1405,5 +1405,10 @@
  *  kill-attempt self-buff predicate is shared with the fact2Scan anchor
  *  check.
  *  See docs/prompt-version-history.md.
+ *
+ * v578 (2026-11-18; pipeline batch B105, T203): no prompt change.
+ *  capture.sha256 hashes each context by its path relative to the archive
+ *  root, so two machines agree.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 577;
+export const PROMPT_VERSION = 578;
