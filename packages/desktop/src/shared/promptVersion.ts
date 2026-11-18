@@ -1434,5 +1434,10 @@
  *  staged report marks a source complete only when every whole-match derive
  *  is in.
  *  See docs/prompt-version-history.md.
+ *
+ * v584 (2026-11-18; pipeline batch B111, T133): [KILL WINDOW] /
+ *  [VULNERABLE] lines name a cooldown that came back and was pressed inside
+ *  one rendered second as `back inside`.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 583;
+export const PROMPT_VERSION = 584;

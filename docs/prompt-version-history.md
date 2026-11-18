@@ -7237,3 +7237,20 @@ tests fail before and pass after; production-build probe (roundRevisitProbe,
 20 real matches, 3 launches) added. Desktop renderer only, no prompt change.
 Codex branch reviews 85-tk-ENG-T199-1 (REQUEST_CHANGES on three synthetic
 points: two probe fixes made, one recorded) and 85-tk-ENG-T199-2: APPROVE.
+
+v584 (2026-11-18; pipeline batch B111, T133; round 14 P03). A kill-window or
+vulnerable span's `pressed inside, never back` fact missed a cooldown that
+came back and was pressed inside the same rendered second: the whole-second
+sampling could not read the return. killWindowFacts.ts's backInside loop now
+also asks cdBackForPressInSecond, one computation for the healer's and the
+damage dealer's view; a press after the span's end within its last rendered
+second is not counted (codex 85-tk-CD-T133-1 #1). 605 scan
+pressedInsideNeverBack 123 rows / 45 facts -> 6 / 2 (43 of the 45 were this
+printing gap; the rest are model gaps: Dark Harvest, Ray of Frost maybe);
+offListPressLine / backBeforeNextPress 20 rows / 7 facts unchanged (model gaps
+no DB2 talent effect names, recorded). On the 605 the assembled candidate
+rewrites 117 [KILL WINDOW] and 3 [VULNERABLE] lines in 106 contexts (37
+archives), each gaining a `back inside` entry, and adds the [press-only]
+legend to 6 contexts; no other line changes, menus byte-identical, candidate
+rows 7,446 = 7,446 (capture checked on the Mac). Codex branch review 85-tk-
+CD-T133-1b: APPROVE.
