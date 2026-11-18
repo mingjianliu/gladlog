@@ -12,6 +12,8 @@
  *    `cooldownRecastScan` and scan5/t133 read). Kind `<spell> | <spec>`; the
  *    detail carries the gap to the press before and the seconds the model
  *    still had on it (`cdSecondsUntilReady`). Checked = the presses judged.
+ *    A proc-only entry (`isProcOnly`: Avenging Wrath under Radiant Glory)
+ *    holds procs, not presses, and is not judged.
  *    Once per round (`firstOwnerOfRound`): the ledger is the unit's, not the
  *    owner's view.
  */
@@ -47,6 +49,8 @@ export function run(ctx: IRoundCtx): void {
       continue;
     }
     for (const cd of entries) {
+      // a proc-only entry's rows are its procs, no presses of a button
+      if (cd.isProcOnly) continue;
       for (const [i, c] of cd.casts.entries()) {
         if (i === 0 || c.freeRecast) continue;
         ctx.bump("ledgerPressBeforeBack");
