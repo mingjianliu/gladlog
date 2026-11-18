@@ -1515,6 +1515,10 @@ export const PASSIVE_PROC_CAST_IDS: ReadonlyMap<string, string> = new Map([
     "289655",
     "Sanctified Ground (Holy Priest) — a talent's row: no DB2 SpellCooldowns row (`isButtonPress` false), logged 15–60 ms after a Holy Word: Serenity (fact11 D3, 0af2e488: 17 rows, one inside a Storm Bolt stun read `[YOU] [CAST] … succeeded after CC arrived`); scan5 castLineNoButton is this list's forward check",
   ],
+  [
+    "341263",
+    "Shadowy Apparition (Shadow Priest) — the Shadowy Apparitions talent's trigger row beside its hit 148859: no DB2 SpellCooldowns row (`isButtonPress` false), no target, no CAST_START; 8,710 rows by 41 priests in 58 of the 605 archives, 2,743 of them under 0.75 s after the caster's previous one (pipeline T152, fact14 D19, 95d4affb: `postKick=acted on another school 1.5s later (Shadowy Apparition; not a hard cast)` for a Mind Flay: Insanity channel begun 2 ms later)",
+  ],
 ]);
 
 /**
