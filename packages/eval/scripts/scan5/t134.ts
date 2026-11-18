@@ -12,9 +12,11 @@
  *    a player put on itself (the log's own APPLIED row, self → self) whose
  *    proc casts a cooldown the player's ledger carries (`unitCooldownEntry`);
  *    a violation when the ledger holds a press of that cooldown within
- *    `PROC_OWN_ACTIVATION_PAIR_MS` of the marker. Kind `<spell> | cast row`
- *    when the log has a SPELL_CAST_SUCCESS of it there, `<spell> | no cast
- *    row` when the press was read off an aura (a press made unseen).
+ *    `PROC_OWN_ACTIVATION_PAIR_MS` of the marker that no SPELL_CAST_SUCCESS
+ *    row backs — a press read off the proc's aura. A press the log has a
+ *    cast row for is the player's own (the product keeps it: a cast row is
+ *    always a press), so it is no violation however close the marker is; it
+ *    shows in the inventory only. Kind `<spell> | no cast row`.
  *    Checked = those markers.
  *  - inventory kinds (out of the total), the pairing's own measure: for each
  *    such marker, the nearest SPELL_CAST_SUCCESS of the proc's spell within
@@ -80,18 +82,24 @@ export function run(ctx: IRoundCtx): void {
             `${factId}|row`,
             `${u.spec} ${name}: ${def.name} at ${fmtS(at)}, a cast row ${nearest} ms from it`,
           );
-        const press = entry.casts.find(
-          (c) =>
-            Math.abs(ctx.start + c.timeSeconds * 1000 - ms) <=
-            PROC_OWN_ACTIVATION_PAIR_MS,
-        );
+        const rowMs = successesOf(u)
+          .filter((c) => String(c.spellId) === id)
+          .map((c) => tsOf(c));
+        // a ledger press at a cast row's own instant is the player's press
+        const press = entry.casts.find((c) => {
+          const pressMs = Math.round(ctx.start + c.timeSeconds * 1000);
+          return (
+            Math.abs(pressMs - ms) <= PROC_OWN_ACTIVATION_PAIR_MS &&
+            !rowMs.some((r) => Math.abs(r - pressMs) <= 1)
+          );
+        });
         if (!press) continue;
         ctx.violate(
           "procCastReadAsPress",
-          `${name} | ${nearest !== undefined && nearest <= PROC_OWN_ACTIVATION_PAIR_MS ? "cast row" : "no cast row"}`,
+          `${name} | no cast row`,
           ms,
           factId,
-          `${u.spec} ${name}: ${def.name} at ${at.toFixed(2)}s, the ledger holds a press at ${press.timeSeconds.toFixed(2)}s (presses ${entry.casts.map((c) => c.timeSeconds.toFixed(1)).join(" ")})`,
+          `${u.spec} ${name}: ${def.name} at ${at.toFixed(2)}s, the ledger holds a press at ${press.timeSeconds.toFixed(2)}s with no cast row (presses ${entry.casts.map((c) => c.timeSeconds.toFixed(1)).join(" ")})`,
         );
       }
     }

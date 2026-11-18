@@ -87,6 +87,13 @@ describe("scan5 procCastReadAsPress", () => {
     ]);
   });
 
+  it("a real cast row 50 ms before the marker is the player's press: measured, not a violation (assembly review 80-PIPE-127-B112)", () => {
+    expect(scan([44.75], [44.8])).toEqual({
+      checked: 1,
+      kinds: ["Frenzied Regeneration | cast row within 100 ms"],
+    });
+  });
+
   it("no marker, nothing checked", () => {
     expect(scan([19.3, 44.8], [])).toEqual({ checked: 0, kinds: [] });
   });
