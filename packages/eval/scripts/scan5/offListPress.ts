@@ -29,8 +29,8 @@
  *    from anyone for 2.6 s over its 4 s end, the REMOVED 0.2 s into the
  *    383-row burst after it); the end the log shows is the flush, not the
  *    aura's;
- *  - a next press after the round's end of play (`roundEndAt`) is no next
- *    press: a Solo Shuffle round's rows run into the next round's
+ *  - a next press after the round's end (`roundEndMs`, the producer's) is
+ *    no next press: a Solo Shuffle round's rows run into the next round's
  *    preparation, where Arena Preparation resets every cooldown (GH #179,
  *    c5b55e06 r1 Camouflage, 7b07c1de r1 Dream Breath);
  *  - `lastsOvershoot` (out of the total — a diagnostic): `lasts Ns`, and that
@@ -39,7 +39,7 @@
  *    consumed buff, a cancel — so this is no violation on its own; it ranks
  *    the spells whose printed length the log never comes near (a toy's
  *    3,600 s, a channel read for a HoT), GH #179 batch 3d's overshoot gate.
- *    A REMOVED past the round's end of play (`roundEndMs`) is no reading.
+ *    A REMOVED past the round's end (`roundEndMs`) is no reading.
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
 import { NO_CAST_LOG_PRESS_IDS } from "@gladlog/analysis/src/data/auraActivation";
@@ -140,7 +140,12 @@ function auraOnlyPressRows(unit: any, name: string, ctx: IRoundCtx): any[] {
   return [...NO_CAST_LOG_PRESS_IDS]
     .filter((id) => nameOf(id) === name)
     .flatMap((id) =>
-      auraOnlyActivationSeconds(unit, id, ctx.start, ctx.roundEndAt)
+      auraOnlyActivationSeconds(
+        unit,
+        id,
+        ctx.start,
+        roundEndMs(ctx.legacy as never),
+      )
         .map((t) => ctx.start + t * 1000)
         // a logged press beside it is that press
         .filter(
@@ -271,7 +276,14 @@ function backBeforeNext(
     .filter(
       (r) =>
         tsOf(r) > at + 50 &&
-        tsOf(r) <= ctx.roundEndAt &&
+        // the round's end as the producer reads it (`buildMatchContext` →
+        // `roundEndMs`): a Solo Shuffle round's first death, any other
+        // bracket's log end. One end for every kind (T204): the end of play
+        // (`ctx.roundEndAt`, a 3v3's first friendly death) bounded the next
+        // press while the lives ran to the log's end, so a 3v3 press after
+        // that death — a real press, nothing resets a cooldown there — was
+        // no next press.
+        tsOf(r) <= roundEndMs(ctx.legacy as never) &&
         !freeRows.has(r) &&
         !timeSpiralFreePressMs(unit, String(r.spellId), [tsOf(r)]).length,
     )

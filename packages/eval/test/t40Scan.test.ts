@@ -26,6 +26,27 @@ const caster = (pressAt: number[] = []) => ({
 });
 
 describe("scan5/t40 chainFrom", () => {
+  it("rows at or past the bound are not read: a follow-up after the round's end is no series (T204)", () => {
+    const unit = {
+      id: "E1",
+      auraEvents: [
+        aura(410, APPLIED, "356723"),
+        aura(3419, REMOVED, "356723"),
+        aura(3419, APPLIED, "356727"),
+        aura(6425, REMOVED, "356727"),
+      ],
+    };
+    expect(chainFrom(unit, caster(), "356723", 410, 3419)).toBeUndefined();
+    expect(chainFrom(unit, caster(), "356723", 410, 3420)).toEqual({
+      endMs: 3419,
+      hops: ["356727"],
+    });
+    expect(chainFrom(unit, caster(), "356723", 410, 6426)).toEqual({
+      endMs: 6425,
+      hops: ["356727"],
+    });
+  });
+
   it("一段结束时同一施放者接上的另一种光环算下一段,一直跟到最后一段结束", () => {
     const unit = {
       id: "E1",

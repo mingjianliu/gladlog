@@ -79,15 +79,21 @@ export interface IChain {
 }
 
 /** the chain that starts at `caster`'s `spellId` applied on `unit` at
- * `atMs`: undefined when the first aura's end is not logged */
+ * `atMs`: undefined when the first aura's end is not logged. Rows at or past
+ * `untilMs` (the producer's bound: the next press, the round's end) are not
+ * read. */
 export function chainFrom(
   unit: any,
   caster: any,
   spellId: string,
   atMs: number,
+  untilMs = Infinity,
 ): IChain | undefined {
   const rows = ((unit.auraEvents ?? []) as any[]).filter(
-    (a) => a.srcUnitId === caster.id && a.destUnitId === unit.id,
+    (a) =>
+      a.srcUnitId === caster.id &&
+      a.destUnitId === unit.id &&
+      tsOf(a) < untilMs,
   );
   const pressTimes = successesOf(caster).map(tsOf);
   const hops: string[] = [];
@@ -193,13 +199,15 @@ export function listedChainVerdict(
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
   // the producer's own round end (`buildMatchContext`: a series' rows are
-  // read up to it), the scan's end of play for which presses count
+  // read up to it, and the presses it prints are the presses that count —
+  // T204: the end of play, a 3v3's first friendly death, left the lines
+  // printed after that death unchecked)
   const roundEnd = roundEndMs(ctx.legacy as any);
   const presses = extractOffListPresses(
     ctx.players as any,
     ctx.legacy as any,
     roundEnd,
-  ).filter((p) => ctx.start + p.timeSeconds * 1000 <= ctx.roundEndAt);
+  );
   const byId: Record<string, any> = {};
   for (const u of ctx.units as any[]) byId[u.id] = u;
   for (const p of presses) {
@@ -258,7 +266,9 @@ export function run(ctx: IRoundCtx): void {
     if (verdict === "listedChain") report("listedChain", own!);
     if (verdict) continue;
     // then whatever else followed (the diagnostic)
-    const chain = chainFrom(unit, p.unit, p.durationAura.spellId, at0);
+    // …inside the same bound: a row past the round's end is the next
+    // round's preparation, not a series (T204)
+    const chain = chainFrom(unit, p.unit, p.durationAura.spellId, at0, boundMs);
     if (tooLong(chain)) report("nominated", chain);
   }
 }

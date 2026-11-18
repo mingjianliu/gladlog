@@ -35,14 +35,17 @@ import {
   parseResRow,
   splitResList,
 } from "@gladlog/analysis/src/context/resRow";
+import { HASTE_DURATION_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { buffDurationOfApplication } from "@gladlog/analysis/src/utils/buffDuration";
 import { pressSpentBy } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   EFFECT_START_AFTER_S,
   EFFECT_START_BEFORE_S,
+  ownCompletedRunSeconds,
 } from "@gladlog/analysis/src/utils/enemyCDs";
 
+import { builderNewApplication } from "../lib/auraRuns";
 import {
   APPLIED,
   ev,
@@ -83,6 +86,8 @@ export interface IOpenAura {
   /** its REMOVED, logged after the slice's end */
   removedMs?: number;
   spellId: string;
+  /** the player wearing it */
+  unitId: string;
 }
 
 /** `holder`'s auras named `name`, on any player, still up at `endMs` */
@@ -93,6 +98,14 @@ export function aurasUpAtLogEnd(
   endMs: number,
 ): IOpenAura[] {
   const out: IOpenAura[] = [];
+  const byId: Record<string, any> = {};
+  for (const u of units) byId[u.id] = u;
+  const isNewOf = new Map<string, ReturnType<typeof builderNewApplication>>();
+  const isNew = (id: string) => {
+    let f = isNewOf.get(id);
+    if (!f) isNewOf.set(id, (f = builderNewApplication(byId, id)));
+    return f;
+  };
   for (const u of units) {
     // player wearers only (the product's own span reading, FT F13): a copy
     // on a pet or a summoned beast is applied late and loses its REMOVED
@@ -126,12 +139,20 @@ export function aurasUpAtLogEnd(
         // among the unit's open runs, so a source-less REMOVED still closes
         // the oldest (codex 85-tk-G-T41-1c: moved to the back, the other
         // caster's copy took the REMOVED and this one read never removed)
-        // …in its PLACE only: an APPLIED still starts the run's clock, as
-        // before (605: read as a mere sighting, 81 rows of real
+        // …in its PLACE only: a new application still starts the run's
+        // clock (605: every APPLIED read as a mere sighting, 81 rows of real
         // re-applications measured their length from the first one — 45
         // `removed after the log end`, 36 `never removed`)
+        // T204: an APPLIED on an open run starts its clock only when the
+        // interval builder reads it as a new application (its source
+        // pressed the aura there, or it came past the open copy's official
+        // length — `builderNewApplication`, the scans' one reading of that
+        // split). Any other is the same aura re-sent: the run keeps its
+        // start and its sightings, so a run re-broadcast with no press
+        // beside it stays the press's (it left the check: its restarted
+        // `appliedMs` paired with no press).
         if (o) {
-          if (e === APPLIED) {
+          if (e === APPLIED && isNew(id)(a, o.lastSeenMs)) {
             o.appliedMs = t;
             o.seenMs = [];
           }
@@ -143,6 +164,7 @@ export function aurasUpAtLogEnd(
             lastSeenMs: t,
             seenMs: [t],
             spellId: id,
+            unitId: String(u.id),
             src,
           });
       } else if (e === REMOVED) {
@@ -224,9 +246,13 @@ export function run(ctx: IRoundCtx): void {
       // that name, or any when the holder logged no cast of the name (a
       // Havoc Metamorphosis) — a same-named aura applied apart from the
       // press (Kingsbane's stacking buff 394095) has another length
-      const pressesMs = successesOf(holder)
-        .filter((c: any) => nameOf(c.spellId, c.spellName) === name)
-        .map(tsOf);
+      const pressRows = successesOf(holder).filter(
+        (c: any) => nameOf(c.spellId, c.spellName) === name,
+      );
+      const pressesMs = pressRows.map(tsOf);
+      const pressIds = new Set<string>(
+        pressRows.map((c: any) => String(c.spellId)),
+      );
       const upAll = aurasUpAtLogEnd(
         ctx.units as any[],
         holder,
@@ -235,7 +261,26 @@ export function run(ctx: IRoundCtx): void {
       ).filter((o) => o.appliedMs <= rowMs + 1000);
       const nearPress = (o: IOpenAura) =>
         pressesMs.some((t) => Math.abs(t - o.appliedMs) <= PRESS_PAIR_MS);
-      const up = upAll.filter((o) => pressesMs.length === 0 || nearPress(o));
+      const paired = upAll.filter(
+        (o) => pressesMs.length === 0 || nearPress(o),
+      );
+      // the producer's `castAuraOnHolder` (`observedEffectEnd`): with the
+      // cast's own aura up on a unit from the press, a same-named aura of
+      // another id there is a side one, whatever length its id reads —
+      // Incarnation's 252071 (30 s in DB2) beside 102543, both removed after
+      // 20 s every time the log shows it (T204: 2 of the 3 `never removed`
+      // facts of the 605 were this id read on its own)
+      const up = paired.filter(
+        (o) =>
+          pressIds.has(o.spellId) ||
+          !paired.some(
+            (c) =>
+              c.unitId === o.unitId &&
+              pressIds.has(c.spellId) &&
+              Math.abs(c.appliedMs - o.appliedMs) <=
+                (EFFECT_START_BEFORE_S + EFFECT_START_AFTER_S) * 1000,
+          ),
+      );
       const rel = (ms: number) => ((ms - ctx.start) / 1000).toFixed(1);
       const noPress = e[1]!.endsWith(" (no press)");
       const bounded = /\(≤\d+s left\)$/.test(entry.trim());
@@ -280,7 +325,27 @@ export function run(ctx: IRoundCtx): void {
           // the product's reading: the length of that application, from
           // that application
           const anchorMs = applicationAnchorMs(o, pressesMs, rowMs, ctx.start);
-          const full = buffDurationOfApplication(o.spellId, holder, anchorMs);
+          const official = buffDurationOfApplication(
+            o.spellId,
+            holder,
+            anchorMs,
+          );
+          // …and, for a length that moves with haste, no longer than the
+          // holder's own completed run of it — the producer's reading
+          // (`reconstructEnemyCDTimeline`, fact10 D20; T204: a Bladestorm of
+          // 4.5 s read at the official 6)
+          const ownRun = HASTE_DURATION_SPELL_IDS.has(o.spellId)
+            ? ownCompletedRunSeconds(
+                holder,
+                o.spellId,
+                anchorMs,
+                ctx.legacy as never,
+              )
+            : undefined;
+          const full =
+            official !== undefined && ownRun !== undefined
+              ? Math.min(official, ownRun)
+              : official;
           return {
             o,
             ownEndMs: full === undefined ? undefined : anchorMs + full * 1000,

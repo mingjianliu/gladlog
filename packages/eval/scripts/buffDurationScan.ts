@@ -30,6 +30,7 @@
  *     [--per-app <aura>,…]   # 逐次施加:观测寿命 vs 带施加时刻的谓词,见 per-app 注释
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
+import { sourcePressedAuraNear } from "@gladlog/analysis/src/data/castEffectAuras";
 import { classSetPiecesOf } from "@gladlog/analysis/src/data/classSetBonuses";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
@@ -132,7 +133,9 @@ const detailCells = new Map<string, Map<string, Map<number, number>>>();
  * most of any set; T35), the runs read as the product reads them
  * (`perAppRuns`):
  * exact (±0.1 s, and whether the predicate went past its static length),
- * longer by a 5 s multiple, longer otherwise, shorter. Two more lines per
+ * longer by a 5 s multiple, longer otherwise, shorter. A lifetime whose
+ * source logged no cast of the aura at its application (`sourcePressedAuraNear`)
+ * is a proc: counted apart by its whole seconds, not against the press model. Two more lines per
  * split: the static length exact, and the predicate with the caster's gear
  * taken off exact (the reading before any set-bonus row — one run gives the
  * before and after of a set row, T35).
@@ -186,6 +189,18 @@ function perAppRuns(
       );
       const obs = (t - o.t) / 1000;
       const diff = obs - atApp;
+      // Game-Behaviour rule 6: an application its source did not press
+      // carries the trigger's length, not the press's (Fury's proc Avatars,
+      // 3–4 s, read "shorter" against the 20 s press model — GH #218). The
+      // builder's own reading of "pressed there" (`sourcePressedAuraNear`);
+      // counted apart, never against the press model.
+      if (!sourcePressedAuraNear(src.spellCastEvents ?? [], spellId, o.t)) {
+        perAppBump(
+          spellId,
+          `${holder} | no press at the application (a proc): ${Math.round(obs)}s`,
+        );
+        continue;
+      }
       const k =
         Math.abs(diff) <= 0.1
           ? atApp > flat

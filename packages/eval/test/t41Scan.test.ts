@@ -169,6 +169,7 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
         seenMs: [at(11)],
         removedMs: at(17),
         spellId: "162264",
+        unitId: "Player-4",
       },
     ]);
   });
@@ -436,5 +437,189 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
     const far = entryScan(warrior(20), "Fury Warrior", "Avatar", 28, 0, 30);
     expect(far.checked).toBe(1);
     expect(far.seen).toHaveLength(1);
+  });
+});
+
+describe("scan5/t41 — a re-sent APPLIED and a new application (T204)", () => {
+  const row = (event: LogEvent, s: number) =>
+    makeAuraEvent(event, "162264", at(s), "Player-4", "Player-4", "BUFF");
+  const holder = (auraEvents: any[], pressS: number[]): any =>
+    makeUnit("Player-4", {
+      name: "Dh",
+      class: CombatUnitClass.DemonHunter,
+      spec: CombatUnitSpec.DemonHunter_Havoc,
+      info: {} as never,
+      auraEvents,
+      spellCastEvents: pressS.map((s) =>
+        makeSpellCastEvent("162264", at(s), "Player-4", "Player-4"),
+      ),
+    });
+
+  it("an APPLIED of the open run with no press beside it, inside its length, is the same aura re-sent: the run keeps its start and its sightings", () => {
+    const u = holder(
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, 10),
+        row(LogEvent.SPELL_AURA_APPLIED, 14),
+        row(LogEvent.SPELL_AURA_REMOVED, 40),
+      ],
+      [10],
+    );
+    expect(aurasUpAtLogEnd([u], u, "Metamorphosis", at(30))).toEqual([
+      {
+        appliedMs: at(10),
+        lastSeenMs: at(14),
+        seenMs: [at(10), at(14)],
+        removedMs: at(40),
+        spellId: "162264",
+        unitId: "Player-4",
+      },
+    ]);
+  });
+
+  it("an APPLIED its source pressed is a new application: the clock restarts there", () => {
+    const u = holder(
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, 10),
+        row(LogEvent.SPELL_AURA_APPLIED, 14),
+        row(LogEvent.SPELL_AURA_REMOVED, 40),
+      ],
+      [10, 14],
+    );
+    expect(aurasUpAtLogEnd([u], u, "Metamorphosis", at(30))).toEqual([
+      {
+        appliedMs: at(14),
+        lastSeenMs: at(14),
+        seenMs: [at(14)],
+        removedMs: at(40),
+        spellId: "162264",
+        unitId: "Player-4",
+      },
+    ]);
+  });
+
+  it("…and so is one that came past the open copy's official length (its REMOVED was lost)", () => {
+    const full = buffFullDurationForCaster("162264", holder([], []))!;
+    const u = holder(
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, 10),
+        row(LogEvent.SPELL_AURA_APPLIED, 10 + full + 5),
+      ],
+      [10],
+    );
+    expect(
+      aurasUpAtLogEnd([u], u, "Metamorphosis", at(10 + full + 8))[0]!.appliedMs,
+    ).toBe(at(10 + full + 5));
+  });
+});
+
+describe("scan5/t41 — the producer's side-aura and haste-length readings (T204)", () => {
+  const rowScan = (
+    u: any,
+    spec: string,
+    entry: string,
+    rowS: number,
+    left: number,
+    endS: number,
+  ) => {
+    const seen: string[] = [];
+    const mm = `${Math.floor(rowS / 60)}:${String(rowS % 60).padStart(2, "0")}`;
+    run({
+      text: [
+        `  <unit id="4" name="U" spec="${spec}" role="enemy">`,
+        `${mm}  [STATE]   friends 3(MHunter):86 / enemies 4(X):98`,
+        `      [RES] rdy:Δ  enemy:${entry}/${spec}(${left}s left)  focus:3`,
+      ].join("\n"),
+      units: [u],
+      legacy: { startTime: START, endTime: at(endS), units: { [u.id]: u } },
+      unitOfPid: (pid: string | undefined) => (pid === "4" ? u : undefined),
+      start: START,
+      end: at(endS),
+      violate: (_c: string, kind: string, _t: number, _f: string, d: string) =>
+        seen.push(`${kind}: ${d}`),
+      bump: () => undefined,
+    } as any);
+    return seen;
+  };
+  const aura = (id: string, event: LogEvent, s: number) =>
+    makeAuraEvent(event, id, at(s), "Player-4", "Player-4", "BUFF");
+
+  it("Incarnation: Avatar of Ashamane — the same-named 252071 beside the cast's own 102543 is a side aura, not read at its id's 30 s", () => {
+    const feral = (withCastAura: boolean): any =>
+      makeUnit("Player-4", {
+        name: "U",
+        class: CombatUnitClass.Druid,
+        spec: CombatUnitSpec.Druid_Feral,
+        info: { talents: [], pvpTalents: [] } as never,
+        spellCastEvents: [makeSpellCastEvent("102543", at(104.3), "Player-4")],
+        auraEvents: [
+          ...(withCastAura
+            ? [aura("102543", LogEvent.SPELL_AURA_APPLIED, 104.3)]
+            : []),
+          aura("252071", LogEvent.SPELL_AURA_APPLIED, 104.3),
+        ],
+      });
+    const own = buffFullDurationForCaster("102543", feral(true))!;
+    const side = buffFullDurationForCaster("252071", feral(true))!;
+    expect(side).toBeGreaterThan(own);
+    const left = Math.round(104.3 + own - 108);
+    // the line prints the cast's own length: right
+    expect(
+      rowScan(
+        feral(true),
+        "Feral Druid",
+        "Incarnation: Avatar of Ashamane",
+        108,
+        left,
+        118.3,
+      ),
+    ).toEqual([]);
+    // negative control: with no aura of the cast's id up, the 252071 run is
+    // read on its own length and the same line is short of it
+    expect(
+      rowScan(
+        feral(false),
+        "Feral Druid",
+        "Incarnation: Avatar of Ashamane",
+        108,
+        left,
+        118.3,
+      )[0],
+    ).toMatch(/^never removed: /);
+  });
+
+  it("Bladestorm — a haste-scaled length is the holder's own completed run, not the official 6 s", () => {
+    const arms = (earlier: boolean): any =>
+      makeUnit("Player-4", {
+        name: "U",
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Arms,
+        info: { talents: [], pvpTalents: [] } as never,
+        spellCastEvents: [
+          makeSpellCastEvent("446035", at(89.5), "Player-4"),
+          makeSpellCastEvent("446035", at(121.5), "Player-4"),
+        ],
+        auraEvents: [
+          ...(earlier
+            ? [
+                aura("446035", LogEvent.SPELL_AURA_APPLIED, 89.5),
+                aura("446035", LogEvent.SPELL_AURA_REMOVED, 94.0),
+              ]
+            : []),
+          aura("446035", LogEvent.SPELL_AURA_APPLIED, 121.5),
+        ],
+      });
+    // 121.5 + 4.5 = 126.0: `4s left` at 122 is the run's own end
+    expect(
+      rowScan(arms(true), "Arms Warrior", "Bladestorm", 122, 4, 125.4),
+    ).toEqual([]);
+    // negative control: no completed run to read, the official length stands
+    // (121.5 + 6 = 127.5, past 122 + 4 + the slack) — but a line printing 2 s
+    // is short of both
+    expect(
+      rowScan(arms(false), "Arms Warrior", "Bladestorm", 122, 2, 125.4)[0],
+    ).toMatch(/^never removed: /);
+    expect(
+      rowScan(arms(true), "Arms Warrior", "Bladestorm", 122, 1, 125.4)[0],
+    ).toMatch(/^never removed: /);
   });
 });
