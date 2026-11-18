@@ -946,6 +946,50 @@ export function extractOwnerCDBuffExpiry(
           ),
         );
         if (missed && !applied) continue;
+        // T142 (round-14 D27): the press's copy went up on its holder and
+        // the log shows no REMOVED of it there, and no later press on that
+        // holder, up to the round's end — it was up when the round ended,
+        // whatever the table says its length is (bd6d44c1: Recklessness up
+        // at 4:24.9 on an 18 s table entry, the round over at 4:47.9 with
+        // no REMOVED; every other run of it that round lasted 24 s or
+        // more). The log's rows, not the estimate.
+        const endHolderId = holderId ?? owner?.id ?? ownerId;
+        const upOnHolder = friends.some(
+          (f) =>
+            f.id === endHolderId &&
+            f.auraEvents.some(
+              (a) =>
+                a.spellId === endAuraId &&
+                isOwnBuffRow(a) &&
+                a.srcUnitId === ownerId &&
+                ((a.logLine.event as LogEvent) ===
+                  LogEvent.SPELL_AURA_APPLIED ||
+                  (a.logLine.event as LogEvent) ===
+                    LogEvent.SPELL_AURA_REFRESH) &&
+                (a.logLine.timestamp as number) >=
+                  castMs - AURA_BEFORE_CAST_MAX_S * 1000 &&
+                (a.logLine.timestamp as number) <= castMs + duration * 1000,
+            ),
+        );
+        if (
+          Number.isFinite(roundEnd) &&
+          upOnHolder &&
+          !(nextOnHolderMs !== undefined && nextOnHolderMs < roundEnd) &&
+          !removals.some(
+            (r) =>
+              r.unitId === endHolderId && r.ms >= castMs && r.ms < roundEnd,
+          )
+        ) {
+          result.push({
+            spellId: cd.spellId,
+            spellName: cd.spellName,
+            castAtSeconds: cast.timeSeconds,
+            expiresAtSeconds: (roundEnd - matchStartMs) / 1000,
+            isEstimated: false,
+            cause: "round_end",
+          });
+          continue;
+        }
         expiresAtSeconds = cast.timeSeconds + duration;
         isEstimated = true;
       }

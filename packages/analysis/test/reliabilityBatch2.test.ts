@@ -306,8 +306,10 @@ describe("[BUFF FADED] — a buff removed with the druid's own form is 'form_shi
 
     it("no REMOVED in the log and the official length reaches the round's end → round_end, not 'expired, estimated'", () => {
       expect(run(shaman(null))[0]).toMatchObject({ cause: "round_end", expiresAtSeconds: 105, isEstimated: false });
-      // … but one whose official length ended inside the round is still an estimate
-      expect(run(shaman(null), [100], T0 + 130_000)[0]).toMatchObject({ cause: "expired", isEstimated: true, expiresAtSeconds: 112 });
+      // … and one whose official length ended inside the round: the log
+      // shows it going up and never coming off, so the round ended on it too
+      // (T142 — until then an estimate at the table length, 112 s)
+      expect(run(shaman(null), [100], T0 + 130_000)[0]).toMatchObject({ cause: "round_end", isEstimated: false, expiresAtSeconds: 130 });
     });
 
     it("removed inside the round → untouched; removed by the round-ending death itself → still 'death'", () => {

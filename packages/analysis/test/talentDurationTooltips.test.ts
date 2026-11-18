@@ -281,7 +281,8 @@ describe("buffFullDurationForCaster — Spiritwalker's Momentum per press", () =
       AT,
       owner,
       [],
-      AT + 300_000,
+      // no round end given: with one, an aura the log never shows coming
+      // off runs to it (T142) and no length is estimated
     );
     expect(ev[0]?.expiresAtSeconds).toBeCloseTo(19, 3);
   });
