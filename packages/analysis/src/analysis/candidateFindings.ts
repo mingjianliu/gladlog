@@ -180,7 +180,7 @@ import {
 } from "../utils/roundEnd";
 import { redirectSavesItsCaster } from "../utils/selfDefensiveMechanism";
 import { isSchoolLockExemptCast } from "../utils/spellMechanics";
-import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
+import { RANGE_HITBOX_SLACK_YD } from "../utils/spellRange";
 import {
   isCasterCentredSpell,
   PLACEHOLDER_RANGE_YD,
@@ -219,9 +219,10 @@ import {
   deathSetupEvents,
   type DeathSetupParts,
   EXTERNAL_FREE_WINDOW_S,
+  externalOutOfReachSpans,
+  externalReachYd,
   externalUnusedEvents,
   questionableExternalEvents,
-  ZONE_EXTERNAL_RADIUS_YD,
 } from "./candidates/death";
 import {
   KICK_RUN_SPEED_YD_S,
@@ -4802,54 +4803,19 @@ function extractDeathSetups(
                   sides: buildRosterSides(units),
                   recordsAttackSpell: documentRecordsAttackSpell(units),
                 }),
-              // W1f: the external must reach the victim at some sampled
-              // second of the free window — a zone external by its radius
-              // around the owner, a targeted one by its cast reach; no
-              // reach or no positions ⇒ reachable (unchanged behaviour)
-              canReachVictim: (spellId: string) => {
-                const zone = ZONE_EXTERNAL_RADIUS_YD[spellId];
-                const reach =
-                  zone !== undefined
-                    ? zone + RANGE_HITBOX_SLACK_YD
-                    : spellReachToAccuse(ownerUnit, spellId);
-                if (reach === null || reach <= RANGE_HITBOX_SLACK_YD)
-                  return true;
-                // codex review of 8513a101: reachable AND free at the same
-                // sample — near while stunned, far once free is no chance
-                // …free by the one cannot-cast reading the free-gap fact
-                // reads (codex 60-POSTHOC-04a #2: `ccInstances` leave out
-                // silences — a priest silenced 195–198 s, the ally in range
-                // only then, read external-unused with freeGapS=2)
-                let blocked: Array<{ from: number; to: number }>;
-                try {
-                  blocked = cannotCastIntervalsForSpells(
-                    ownerUnit,
-                    enemySourceIds(enemies, units),
-                    [spellId],
-                    units,
-                  );
-                } catch {
-                  blocked = [];
-                }
-                const ownerCcNow = (t: number) => {
-                  const ms = start + t * 1000;
-                  return blocked.some((b) => b.from <= ms && ms < b.to);
-                };
-                let sampled = false;
-                for (
-                  let t = Math.max(0, deathT - EXTERNAL_FREE_WINDOW_S);
-                  t <= deathT;
-                  t += 0.5
-                ) {
-                  if (ownerCcNow(t)) continue;
+              // W1f / T171: where the external could not reach the victim
+              // — a zone external by its radius around the owner, a
+              // targeted one by its cast reach — is time the owner was not
+              // free to give it; no reach ⇒ reachable throughout
+              outOfReach: (spellId: string) => {
+                const reach = externalReachYd(ownerUnit, spellId);
+                if (reach === null) return [];
+                return externalOutOfReachSpans(deathT, reach, (t) => {
                   const ms = start + t * 1000;
                   const a = getUnitPositionAtTime(ownerUnit, ms, 2000);
                   const b = getUnitPositionAtTime(u, ms, 2000);
-                  if (!a || !b) continue;
-                  sampled = true;
-                  if (distanceBetween(a, b) <= reach) return true;
-                }
-                return !sampled;
+                  return a && b ? distanceBetween(a, b) : null;
+                });
               },
             }),
           );

@@ -3862,6 +3862,16 @@ const INDEX: PredicateRow[] = [
     mod: deathCandidates,
   },
   {
+    file: `${A}/analysis/candidates/death.ts`,
+    symbol: "externalOutOfReachSpans",
+    mod: deathCandidates,
+  },
+  {
+    file: `${A}/analysis/candidates/death.ts`,
+    symbol: "externalReachYd",
+    mod: deathCandidates,
+  },
+  {
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "freeMsWithin",
     mod: cannotCastIntervals,

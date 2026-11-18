@@ -39,7 +39,13 @@ describe("Cauterizing Flame 374251 is out of the save roster (user ruling 2026-0
   });
 });
 
-import { externalUnusedEvents, ZONE_EXTERNAL_RADIUS_YD } from "../src/analysis/candidates/death";
+import {
+  externalOutOfReachSpans,
+  externalReachYd,
+  externalUnusedEvents,
+  ZONE_EXTERNAL_RADIUS_YD,
+} from "../src/analysis/candidates/death";
+import { RANGE_HITBOX_SLACK_YD } from "../src/utils/spellRange";
 
 describe("external-unused needs the external to reach the victim (round 3 W1f, 4446)", () => {
   const base = {
@@ -54,9 +60,35 @@ describe("external-unused needs the external to reach the victim (round 3 W1f, 4
     expect(ZONE_EXTERNAL_RADIUS_YD["196718"]).toBe(8);
   });
   it("unreachable → no accusation; reachable or unknown → as before", () => {
-    expect(externalUnusedEvents({ ...base, canReachVictim: () => false })).toEqual([]);
-    expect(externalUnusedEvents({ ...base, canReachVictim: () => true })).toHaveLength(1);
+    // out of reach for the whole window (86–91)
+    expect(externalUnusedEvents({ ...base, outOfReach: () => [{ atSeconds: 86, durationSeconds: 5 }] })).toEqual([]);
+    expect(externalUnusedEvents({ ...base, outOfReach: () => [] })).toHaveLength(1);
     expect(externalUnusedEvents(base)).toHaveLength(1);
+  });
+  // T171 (round 14 D20, a036aff5 r1 0:30): in reach on the death's own
+  // sample only — the free gap has to sit inside the reach
+  it("reach and freedom must overlap for the reaction allowance: one in-reach sample at the death is no chance", () => {
+    const far = (t: number) => (t >= 91 ? 5 : 30);
+    const spans = externalOutOfReachSpans(91, 10, far);
+    expect(spans).toEqual([{ atSeconds: 86, durationSeconds: 4.75 }]);
+    expect(externalUnusedEvents({ ...base, outOfReach: () => spans })).toEqual([]);
+    // in reach for the last 2 s: a 2.25 s gap, stated as such
+    const near2 = externalOutOfReachSpans(91, 10, (t) => (t >= 89 ? 5 : 30));
+    const [ev] = externalUnusedEvents({ ...base, outOfReach: () => near2 });
+    expect(ev?.facts?.freeGapS).toBe("2.3");
+    // in reach 86–88 but stunned then, far once free: no overlap
+    expect(
+      externalUnusedEvents({
+        ...base,
+        ownerCC: [{ atSeconds: 85, durationSeconds: 3.2 }],
+        outOfReach: () => externalOutOfReachSpans(91, 10, (t) => (t <= 88 ? 5 : 30)),
+      }),
+    ).toEqual([]);
+    // no positions: no reach claim, as before
+    expect(externalOutOfReachSpans(91, 10, () => null)).toEqual([]);
+  });
+  it("externalReachYd: a zone external's radius, a targeted one's cast reach, each with the hitbox slack", () => {
+    expect(externalReachYd(null, "196718")).toBe(8 + RANGE_HITBOX_SLACK_YD);
   });
   // fact3 D12 (20e0f243 5:57): Guardian Spirit "free to cast 2.2 s" while
   // the priest could not pay for it, then pressed it into a refusal

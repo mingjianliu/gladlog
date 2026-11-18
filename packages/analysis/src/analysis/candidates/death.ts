@@ -14,6 +14,10 @@ import {
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
 } from "../../utils/cooldowns";
+import {
+  RANGE_HITBOX_SLACK_YD,
+  spellReachToAccuse,
+} from "../../utils/spellRange";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import { CandidateEvent } from "../types";
 
@@ -316,6 +320,59 @@ export const ZONE_EXTERNAL_RADIUS_YD: Readonly<Record<string, number>> = {
 };
 export const EXTERNAL_FREE_MIN_GAP_S = 1.5;
 
+/** How far the owner's external reaches, for "could NOT reach" (the
+ * accusing side): a zone external's radius around its caster
+ * (`ZONE_EXTERNAL_RADIUS_YD`), else the cast's reach
+ * (`spellReachToAccuse`), each with the hitbox slack. null — no reach
+ * known, so no reach claim — when the table has none. */
+export function externalReachYd(
+  owner: Parameters<typeof spellReachToAccuse>[0],
+  spellId: string,
+): number | null {
+  const zone = ZONE_EXTERNAL_RADIUS_YD[spellId];
+  const reach =
+    zone !== undefined
+      ? zone + RANGE_HITBOX_SLACK_YD
+      : spellReachToAccuse(owner, spellId);
+  return reach === null || reach <= RANGE_HITBOX_SLACK_YD ? null : reach;
+}
+
+/** How often the reach of an external is sampled over the free window. */
+export const EXTERNAL_REACH_SAMPLE_S = 0.5;
+
+/**
+ * The spans of [deathT − EXTERNAL_FREE_WINDOW_S, deathT] in which a sample
+ * says `reachYd` did not cover the owner → victim distance: each sample of
+ * the `EXTERNAL_REACH_SAMPLE_S` grid stands for the half step either side
+ * of it. A sample with no distance (no position for one of them) is not out
+ * of reach — missing data makes no claim either way, and the row then rests
+ * on the other covers as it did before positions were read at all.
+ * `distanceAt(t)`: yards at t seconds, or null. One function for the
+ * producer and scan5 `t171.ts`.
+ */
+export function externalOutOfReachSpans(
+  deathT: number,
+  reachYd: number,
+  distanceAt: (tSeconds: number) => number | null,
+): Array<{ atSeconds: number; durationSeconds: number }> {
+  const from = Math.max(0, deathT - EXTERNAL_FREE_WINDOW_S);
+  const half = EXTERNAL_REACH_SAMPLE_S / 2;
+  const out: Array<{ atSeconds: number; durationSeconds: number }> = [];
+  const steps = Math.round((deathT - from) / EXTERNAL_REACH_SAMPLE_S);
+  for (let i = 0; i <= steps; i++) {
+    const t = Math.min(deathT, from + i * EXTERNAL_REACH_SAMPLE_S);
+    const d = distanceAt(t);
+    if (d === null || d <= reachYd) continue;
+    const a = Math.max(from, t - half);
+    const b = Math.min(deathT, t + half);
+    const last = out[out.length - 1];
+    if (last && last.atSeconds + last.durationSeconds >= a - 1e-9)
+      last.durationSeconds = b - last.atSeconds;
+    else out.push({ atSeconds: a, durationSeconds: b - a });
+  }
+  return out;
+}
+
 /**
  * external-unused: a teammate died while the owner (usually the healer) had an
  * external damage reduction available (the isAllyCastableDefensive whitelist)
@@ -338,10 +395,17 @@ export function externalUnusedEvents(input: {
   >;
   ownerCC: Array<{ atSeconds: number; durationSeconds: number }>;
   ownerAliveAt: (t: number) => boolean;
-  /** Could the owner's external reach the victim at some point of the free
-   * window (reliability round 3 W1f)? Built by the caller from positions and
-   * the external's reach; absent or unknown ⇒ reachable (the pre-W1f test). */
-  canReachVictim?: (spellId: string) => boolean;
+  /** The spans of the window in which the owner's external could NOT reach
+   * the victim (reliability round 3 W1f; `externalOutOfReachSpans`, built by
+   * the caller from positions and the external's reach). They are time the
+   * owner was not free to give it, like control and an unpaid cost: the free
+   * gap has to sit inside the reach (T171, round 14 D20, a036aff5 r1 0:30:
+   * Darkness, an 8 yd zone, read `freeGapS=5` with the owner 21–43 yd from
+   * the healer for all of it but the death's own sample). Absent or no
+   * positions ⇒ reachable throughout. */
+  outOfReach?: (
+    spellId: string,
+  ) => Array<{ atSeconds: number; durationSeconds: number }>;
   /** codex R6C-04 #1 / #2: could the owner press this external for the
    * victim at all — no lockout debuff on them just before the death
    * (`lockoutDebuffStopsPressAtDeath`: Forbearance, Hypothermia) and it
@@ -397,6 +461,7 @@ export function externalUnusedEvents(input: {
     const covers = [
       ...input.ownerCC,
       ...(input.unaffordable?.(spellId) ?? []),
+      ...(input.outOfReach?.(spellId) ?? []),
       ...(cd ? notReadyFor(cd) : []),
     ]
       .map((c) => [c.atSeconds, c.atSeconds + c.durationSeconds] as const)
@@ -414,7 +479,6 @@ export function externalUnusedEvents(input: {
   let maxGap = 0;
   const avail = input.ownerExternals.find((cd) => {
     if (!cdReadyInTimeAt(cd, deathT)) return false;
-    if (!(input.canReachVictim?.(cd.spellId) ?? true)) return false;
     if (!(input.pressable?.(cd.spellId) ?? true)) return false;
     if (input.attempted?.(cd.spellId, from, deathT)) return false;
     const gap = freeGapFor(cd.spellId, cd);
