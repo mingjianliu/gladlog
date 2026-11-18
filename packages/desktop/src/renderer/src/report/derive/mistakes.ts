@@ -15,6 +15,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { resolveOwner } from "./analysisInput";
 import { dispelSummaryOf } from "./dispelSummary";
 import { idMemo } from "./idMemo";
+import { MISSED_KICK_TEXT, missedKickLabel } from "./kickText";
 import { toLegacySafe } from "./legacySource";
 import { sourceMemo } from "./sourceMemo";
 import { type TimeRange, tInRange } from "./timeRange";
@@ -471,13 +472,20 @@ export function deriveMistakesUncached(
         // 退役时差点复现这个事故,故收窄成只取 missed 一种。
         if (k.result !== "missed") continue;
         const rule = RULE_BY_TYPE.get("missed-kick")!;
+        // A12 (user ruling 2026-11-17): a kick the log refused at a live
+        // cast stays listed, and is not called missed — the card says what
+        // the miss row says (`missedKickLabel`, the one wording the ledger
+        // chip and the kick dashboard print too)
+        const refused = missedKickLabel(k) !== MISSED_KICK_TEXT;
         out.push({
           tS: k.atSeconds,
           unitName: p.name,
           type: rule.type,
-          label: rule.label,
+          label: refused ? missedKickLabel(k) : rule.label,
           severity: rule.severity,
-          detail: `${k.kickSpellName} 空放`,
+          detail: refused
+            ? `${k.kickSpellName} 打在 ${k.refusedAtCastSpellName ?? ""} 读条上`
+            : `${k.kickSpellName} 空放`,
           seekNames: [p.name],
           isOwner: p.name === ownerName,
           timed: true, // an interrupt happens at a specific instant, not over the whole round

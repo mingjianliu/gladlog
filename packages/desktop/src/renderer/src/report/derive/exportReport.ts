@@ -85,7 +85,7 @@ export function buildReportMarkdown(
     );
     for (const r of kicks) {
       lines.push(
-        `| ${shortUnitName(r.name)} | ${r.total} | ${r.landed} | ${r.silenced} | ${r.juked} | ${r.missed} |`,
+        `| ${shortUnitName(r.name)} | ${r.total} | ${r.landed} | ${r.silenced} | ${r.juked} | ${r.missed}${r.refused > 0 ? `(含 ${r.refused} 次被免疫/反射)` : ""} |`,
       );
     }
   }

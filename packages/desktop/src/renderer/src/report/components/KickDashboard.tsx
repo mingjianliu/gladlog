@@ -4,6 +4,7 @@ import { useState } from "react";
 import { classColor } from "../data/gameConstants";
 import type { CastControlSummary } from "../derive/castControl";
 import type { KickDashRow } from "../derive/kickDash";
+import { missedKickLabel } from "../derive/kickText";
 import { UnitName } from "./UnitName";
 
 /**
@@ -96,6 +97,7 @@ export function KickDashboard({
                     ? "—"
                     : `${Math.round(r.landedRate * 100)}%`}
                   {r.silenced > 0 ? `(${r.silenced} 沉默生效)` : ""}
+                  {r.refused > 0 ? `(落空含 ${r.refused} 次被免疫/反射)` : ""}
                   {r.unknown > 0 ? `(${r.unknown} 未知)` : ""}
                 </td>
               </tr>,
@@ -119,7 +121,7 @@ export function KickDashboard({
                             (k.openCastSpellName
                               ? ` 沉默生效(${k.openCastSpellName} 读条未完成)`
                               : ` 沉默生效(未打断读条)`)}
-                          {k.result === "missed" && " 落空"}
+                          {k.result === "missed" && ` ${missedKickLabel(k)}`}
                           {k.result === "unknown" && " 旧档无读条数据"}
                           {onSeek && (
                             <button

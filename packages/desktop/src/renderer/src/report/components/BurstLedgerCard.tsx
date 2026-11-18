@@ -8,6 +8,7 @@ import { useContext, useMemo, useState } from "react";
 
 import { classColor } from "../data/gameConstants";
 import type { LedgerPlayer } from "../derive/burstLedger";
+import { missedKickLabel } from "../derive/kickText";
 import { shortUnitName, type TeamSide } from "../derive/teamSide";
 import { TeamSideContext, UnitName } from "./UnitName";
 
@@ -267,7 +268,9 @@ export function BurstLedgerCard({
                     : "沉默生效(未打断读条)"}
                 </Chip>
               )}
-              {kk.result === "missed" && <Chip kind="warn">落空</Chip>}
+              {kk.result === "missed" && (
+                <Chip kind="warn">{missedKickLabel(kk)}</Chip>
+              )}
               {kk.result === "unknown" && (
                 <Chip kind="dim">旧档无读条数据</Chip>
               )}

@@ -253,6 +253,7 @@ import * as dashboard from "../../desktop/src/renderer/src/components/dashboard"
 import * as analysisInput from "../../desktop/src/renderer/src/report/derive/analysisInput";
 import * as dispelSummary from "../../desktop/src/renderer/src/report/derive/dispelSummary";
 import * as flowSeries from "../../desktop/src/renderer/src/report/derive/flowSeries";
+import * as kickText from "../../desktop/src/renderer/src/report/derive/kickText";
 import * as meterRows from "../../desktop/src/renderer/src/report/derive/meterRows";
 import * as reportMistakes from "../../desktop/src/renderer/src/report/derive/mistakes";
 import * as teamSide from "../../desktop/src/renderer/src/report/derive/teamSide";
@@ -1532,6 +1533,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/kickAudit.ts`,
     symbol: "missedKickText",
     mod: kickAudit,
+  },
+  {
+    file: `${A}/utils/kickAudit.ts`,
+    symbol: "missedKickKind",
+    mod: kickAudit,
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/derive/kickText.ts",
+    symbol: "missedKickLabel",
+    mod: kickText,
   },
   {
     file: `${A}/utils/enemyDefensives.ts`,

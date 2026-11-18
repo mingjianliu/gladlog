@@ -176,6 +176,24 @@ export function missedKickText(
   return k.refusedAtCastSpellName ? "" : KICK_HIT_NOTHING;
 }
 
+/** What a `missed` kick is called where no miss tag is printed beside it
+ * (the desktop's mistake card, burst-ledger chip and kick dashboard — user
+ * ruling A12, 2026-11-17, pipeline T196): a kick the log refused at a live
+ * cast (`refusedAtCastSpellName`) is the target being immune to it, or
+ * reflecting it — the miss row's own type — and is not called missed. Every
+ * other `missed` kick, a miss row at no running bar included, stays
+ * `missed`. `result` does not move (nothing was stopped), so no rate and no
+ * candidate reads this. */
+export type MissedKickKind = "immune" | "reflected" | "missed";
+export function missedKickKind(
+  k: Pick<IKickAuditEntry, "kickMiss" | "refusedAtCastSpellName">,
+): MissedKickKind {
+  if (!k.refusedAtCastSpellName || !k.kickMiss) return "missed";
+  if (k.kickMiss.missType === "IMMUNE") return "immune";
+  if (k.kickMiss.missType === "REFLECT") return "reflected";
+  return "missed";
+}
+
 /** The one wording of `kickMiss`, for every rendering of the audit: the tag
  * vocabulary the control lines use (` [REFLECTED by X]`, ` [IMMUNE: X]`,
  * ` [MISSED on X]`). `label` resolves the target's roster label. */

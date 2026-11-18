@@ -1,6 +1,7 @@
 import { analyzeKickAudit, type IKickAuditEntry } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { MISSED_KICK_TEXT, missedKickLabel } from "./kickText";
 import { toLegacySafe } from "./legacySource";
 import { sourceMemo } from "./sourceMemo";
 import { type TimeRange,tInRange } from "./timeRange";
@@ -14,6 +15,11 @@ export interface KickDashRow {
   landed: number;
   juked: number;
   missed: number;
+  /** Of `missed`: the kicks the log refused at a live cast (target immune
+   *  to it, or reflecting it) — listed, not called missed (user ruling A12,
+   *  `missedKickLabel`). Still inside `missed` and the rate's denominator:
+   *  nothing was stopped. */
+  refused: number;
   /** The kick's own silence went onto a target that was not casting
    *  (Silence, Strangulate): no cast stopped, but not a miss either. */
   silenced: number;
@@ -78,6 +84,10 @@ function deriveKickDashUncached(
         landed,
         juked,
         missed,
+        refused: entries.filter(
+          (e) =>
+            e.result === "missed" && missedKickLabel(e) !== MISSED_KICK_TEXT,
+        ).length,
         silenced,
         unknown: count("unknown"),
         total: entries.length,
