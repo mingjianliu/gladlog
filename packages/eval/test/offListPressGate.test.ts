@@ -271,7 +271,10 @@ describe("offListPressLine — scan artefacts (GH #179)", () => {
       ],
     };
     // the round ran on: the aura ended early inside it
+    // …and T141's inventory of it: a plain REMOVED, the sprinter's own
+    // aura, no action of theirs in its instant
     expect(scan(unit, sprintLine).map((v) => v.kind)).toEqual([
+      "no cause row | self | other",
       "lastsOvershoot",
     ]);
     // the round ended at 0:12: the REMOVED is a row of what came after

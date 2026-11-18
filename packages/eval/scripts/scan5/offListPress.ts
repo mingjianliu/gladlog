@@ -50,6 +50,7 @@
  *    with a single aura read.
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
+import { BUFF_FADE_EARLY_TOLERANCE_S } from "@gladlog/analysis/src/context/timelineHelpers";
 import { NO_CAST_LOG_PRESS_IDS } from "@gladlog/analysis/src/data/auraActivation";
 import { SHARED_CHARGE_CATEGORY } from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
@@ -92,6 +93,9 @@ const PRESS_LINE =
 const BACK_SLACK_MS = 2000;
 /** an aura's logged life this far past the printed length is beyond it */
 const LASTS_SLACK_S = 0.65;
+/** the presser's own cast this close to an early REMOVED ended the effect
+ * (T141's `own action` split) */
+const OWN_ACTION_MS = 100;
 /** a silence of the whole log this long is a stall (6 players and their
  * pets write rows every few hundred ms) */
 const STALL_MS = 1000;
@@ -511,6 +515,43 @@ export function run(ctx: IRoundCtx): void {
             `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, ${cut.cause} after ${((cut.atMs - tsOf(dur.row)) / 1000).toFixed(1)}s`,
             line,
           );
+      }
+      // T141, the fourth way an effect ends before its printed length: a
+      // plain REMOVED with no BROKEN / dispel / steal row (Camouflage
+      // `lasts 60s`, gone 2.1 s later). The product's own allowance for
+      // "ran its length" (`BUFF_FADE_EARLY_TOLERANCE_S`). Kind = whose aura
+      // (the presser's own / an ally's / an enemy's — a debuff the press
+      // put up) and whether the presser acted in the REMOVED's instant
+      // (`OWN_ACTION_MS`: a stealth-type effect ending at its holder's
+      // action) or something else ended it.
+      if (
+        dur &&
+        dur.floor !== true &&
+        dur.followUps.length === 0 &&
+        removedClean &&
+        lifeInPlay &&
+        life! < Number(lasts) - BUFF_FADE_EARLY_TOLERANCE_S
+      ) {
+        const holder =
+          dur.unit.id === unit.id
+            ? "self"
+            : (dur.unit as any).reaction === (unit as any).reaction
+              ? "ally"
+              : "enemy";
+        const own = successesOf(unit).some(
+          (c: any) =>
+            c !== press &&
+            tsOf(c) >= removedMs! - OWN_ACTION_MS &&
+            tsOf(c) <= removedMs! + OWN_ACTION_MS,
+        );
+        ctx.violate(
+          "pressLastsCutShort",
+          `no cause row | ${holder} | ${own ? "own action" : "other"}`,
+          at,
+          `${ctx.roundKey}|${unit.id}|${name}|${second}`,
+          `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, REMOVED after ${life!.toFixed(1)}s, no cause row`,
+          line,
+        );
       }
       if (
         dur?.floor !== true &&
