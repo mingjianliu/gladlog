@@ -1506,5 +1506,11 @@
  *  running cast reads 目标免疫打断 / 被目标反射 in the desktop report, not 落空 (desktop
  *  wording; prompt text unchanged).
  *  See docs/prompt-version-history.md.
+ *
+ * v598 (2026-11-18; pipeline batch B127, T153): a healer's racial
+ *  offensive (Blood Fury / Berserking / Ancestral Call) is not an offensive
+ *  cooldown on either side (A16, R55); a Holy Paladin's Avenging Wrath
+ *  alone no longer sets [friendly offensive CD active] (round 13 P7).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 597;
+export const PROMPT_VERSION = 598;

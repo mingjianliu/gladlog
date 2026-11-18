@@ -7528,3 +7528,35 @@ refusedKickCalledMissed 107 / 193 -> 0 / 193; an IMMUNE row on another unit
 assembled candidate's capture hash equals its parent's (31abd7e1b22f): no
 context and no menu changes, as the order expected. Codex branch review 85-tk-
 ENG-T196-1 (one real-corpus point, fixed) and -1b: APPROVE.
+
+v598 (2026-11-18; pipeline batch B127, T153). One predicate,
+isHealerHeldOffensive(spellId, spec), now answers for both sides: besides the
+per-spec table (a Holy Paladin's Avenging Wrath), any healer spec's racial
+offensive window (OFFENSIVE_RACIAL_WINDOW_IDS: Blood Fury, Berserking,
+Ancestral Call) is held, not a burst cooldown. The enemy cooldown timeline,
+burst openers and followers, [OFFENSIVE WINDOW], [RES] enemy:, [HEALER
+EXPOSURE], the burst ledger's teammate spans and kick-eaten enemyBurst= /
+ourBurst= all read it; the new reader friendlyOffensiveCdActiveAt asks with
+the holder's spec. Rulings A16 (enemy side, user 2026-11-17) and R55 (our side
+the same; the racial appears on no timeline line, the roster keeps it; user
+2026-11-18). On the 605, read between the batch captures (B126 -> B127; the
+lane's own scans on its base gave 146 P7 lines, healerHeldAsEnemyBurst 465 ->
+0, and its tag scan did not count our own healers' racials): `[friendly
+offensive CD active]` leaves 237 lines and is added to none - 163 (56 facts)
+where a Holy Paladin's Avenging Wrath alone set it (round 13 P7), 24 more (8
+facts) on a Holy Paladin's Avenging Wrath pressed over 25 s before, 38 (16
+facts) where our own healer's racial alone set it (R55 b; e.g. a Restoration
+Shaman's Blood Fury at 1:56, tag on the 1:57 [ENEMY DEF] line), 12 (4 facts)
+with both; 222 [ENEMY CD] lines leave, every one an enemy healer's (Blood Fury
+203, Berserking 17, and 2 shield-form lines that only lose the tag), with the
+healers' racials leaving [RES] enemy: and the burst openers; 22 kick-eaten
+rows change burst facts only (enemyBurst= 15, ourBurst= 8, burstReady= 3,
+burstAfterCastStart= 1). Candidate rows -5 (slow-defensive-response 3, kick-
+eaten 2, each resting only on a healer's racial) / +4 (position-mistake
+stayed-in 3, where the burst window now opens at the first damage dealer's
+cooldown and its 10 s span covers the HP drop; slow-defensive-response 1, no
+longer answered by a cooldown that was not one). Existing kinds (R16). In all
+the assembled candidate changes 307 contexts in 71 archives and 27 menus, the
+offensive-window lines that followed a healer's racial moving with it (capture
+checked on the Mac, line by line). Codex branch review 85-tk-WIN-T153-1:
+APPROVE (two synthetic points recorded).
