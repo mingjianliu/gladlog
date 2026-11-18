@@ -1450,5 +1450,11 @@
  *  unit's own landed casts as proof of reach, and a rooted healer's reach
  *  is the spec's own healing range, not a fixed 40 yd.
  *  See docs/prompt-version-history.md.
+ *
+ * v587 (2026-11-18; pipeline batch B114, T136): an Outlaw Rogue's Restless
+ *  Blades cooldown recovery reads the talents that change a finisher's
+ *  spent points (Supercharger, Forced Induction, Coup de Grace, Dragon-Bone
+ *  Dice).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 586;
+export const PROMPT_VERSION = 587;

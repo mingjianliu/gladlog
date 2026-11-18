@@ -7298,3 +7298,26 @@ cleanse row (two owners); candidate rows 7,446 = 7,446 (capture checked on the
 Mac). Out of scope, recorded: the ranged-caster branch keeps a fixed 40 yd;
 melee specs' ranged spells are not modelled as reach. Codex branch reviews
 85-tk-CC-T170-1 (REQUEST_CHANGES), -1b and -1c: APPROVE.
+
+v587 (2026-11-18; pipeline batch B114, T136; round 14 P03 / D24). Restless
+Blades (EVENT_COOLDOWN_REDUCTIONS['79096']) refunds cooldown per combo point
+spent, but its triggerPowerSpend read none of the talents that change a
+finisher's points (DB2, PvpMultiplier 1 throughout): Supercharger 470347
+(Adrenaline Rush grants a charged point; the next damaging finisher counts 2
+more), Forced Induction 470668 (3 instead), Coup de Grace 441776 (5 more than
+the line's 7) and Dragon-Bone Dice 1259481 (Triple Threat / Jackpot bonus 40%,
+aura 219 additive 30 + 10, not 30%). A finisher whose cost cannot be read
+still spends charged points; a second Adrenaline Rush adds one point, it does
+not reset. New ids registered in curatedIdRegistry. Round 14 D24: `1:38 [YOU]
+[PRESS] Sprint (… back 1:58)` -> `back 1:52` (pressed again 1:55.35). Scans on
+the 605's 7 Outlaw archives plus the round-14 match (96 owners):
+restlessBladesPressBeforeBack 4 facts / 758 presses -> 1 / 758 (one other
+player's 30 s Sprint 1.2 s short, unexplained, recorded);
+restlessBladesRefusedAfterBack 0 / 39 -> 0 / 39. On the 605 the assembled
+candidate changes only the 7 archives with an Outlaw Rogue (66 contexts):
+earlier `back m:ss` / `cd:` on [PRESS] / [RES] lines, the Adrenaline Rush
+range in the cooldown list, and 5 [KILL WINDOW] / 2 [VULNERABLE] lines
+restating it; candidate rows 7,446 = 7,446, menus byte-identical (capture
+checked on the Mac). Recorded: talent 1259612 (recovery-rate window) not
+modelled. Codex branch reviews 85-tk-CD-T136-1 (four real points, fixed) and
+-1b: APPROVE (one synthetic point recorded).
