@@ -24,6 +24,7 @@ import {
   cdMaybeAvailableAt,
   cdRealisedSecondsUntilReady,
   cdRemainingWholeSeconds,
+  cdWholeSecond,
   cdSecondsUntilReady,
   GUARDIAN_SPIRIT_SPELL_ID,
   IMajorCooldownInfo,
@@ -61,16 +62,6 @@ import { resCcRemainingText } from "./resLedgerPrune";
 
 // F169: number of friendly units with an active Atonement (194384) at a given time. Disc Priest
 // healing scales with Atonement count, so this is a core throughput signal for the spec.
-/** Float error of a seconds sum, added before a floor to whole seconds.
- * Sized to the arithmetic, not to the log's millisecond rows: a rate
- * window divides, so a real return can sit a fraction of a microsecond
- * under a whole second (codex 85-tk-G-T55-1e: 141 − 1/3,800,000 s, which
- * 1e-6 printed as 141). The largest error measured in that review's stress
- * probes (10,000 reductions and windows) was 2.3e-9 s. `[RES]`'s
- * `cdRemainingWholeSeconds` keeps its own, wider 1e-6 (docs/predicate-index
- * "Not yet unified", 2026-11-13). */
-const SECONDS_FLOAT_NOISE = 1e-8;
-
 export function countActiveAtonements(
   friends: (ICombatUnit | undefined)[],
   atMs: number,
@@ -368,13 +359,13 @@ export function buildPlayerLoadout(
     // 1 s reductions off 60 s are 51 s and arrive as 50.99999999999999
     // (codex 85-tk-G-T55-1d: four Deep Breath ranges on the 605 printed a
     // second low). A real fraction still floors.
-    const soonest = Math.floor(
+    const soonest = cdWholeSecond(
       Math.min(
         cd.earliestCooldownSeconds ?? cd.cooldownSeconds,
         cd.cooldownSeconds - eventShortest,
         rateShortest,
         realisedShortest,
-      ) + SECONDS_FLOAT_NOISE,
+      ),
     );
     if (soonest < cd.cooldownSeconds) {
       shortenedPrinted = true;

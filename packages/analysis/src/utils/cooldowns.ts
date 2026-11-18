@@ -3631,11 +3631,29 @@ export function cdLatestRemainingSeconds(
   return cdRemainingWholeSeconds(cdSecondsUntilReady(cd, tSeconds));
 }
 
+/** Float error of a cooldown's seconds sum, added before a floor to whole
+ * seconds. Sized to the arithmetic, not to the log's millisecond rows: a
+ * rate window divides, so a real return can sit a fraction of a microsecond
+ * under a whole second (codex 85-tk-G-T55-1e: 141 − 1/3,800,000 s, which
+ * 1e-6 printed as 141). The largest error measured in that review's stress
+ * probes (10,000 reductions and windows) was 2.3e-9 s. */
+export const CD_SECONDS_FLOAT_NOISE = 1e-8;
+
+/** The whole second of a cooldown quantity on the render grid — the ONE
+ * floor of the kit line's low end, `[RES]`'s seconds until ready and the
+ * `[PRESS]` line's `back m:ss` (T139: they were three, with guards of 1e-8,
+ * 1e-6 and none; 605: no rendered value sits in the bands where they part,
+ * `scan5/t139`). A float's hair under a whole second reads as that second
+ * (nine 1 s reductions off 60 s arrive as 50.99999999999999); a real
+ * fraction still floors. */
+export function cdWholeSecond(seconds: number): number {
+  return Math.floor(seconds + CD_SECONDS_FLOAT_NOISE);
+}
+
 /** Seconds-until-ready as the ledger prints them: floored, never below 1.
  * The one rounding for `(Ns)`, `(≤Ns)` and both ends of `(a–Ns)`. */
 export function cdRemainingWholeSeconds(untilReadySeconds: number): number {
-  // 1e-6: a ready instant computed as 119.99999999 s away is 120
-  return Math.max(1, Math.floor(untilReadySeconds + 1e-6));
+  return Math.max(1, cdWholeSecond(untilReadySeconds));
 }
 
 /** Charges of X in hand at `tSeconds` — the [RES] `[k/N]` suffix; N is the

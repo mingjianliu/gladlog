@@ -30,6 +30,7 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import {
   cdLatestRemainingSeconds,
   cdRemainingWholeSeconds,
+  cdWholeSecond,
   FORBEARANCE_SECONDS,
   forbearanceStopsPress,
   type IMajorCooldownInfo,
@@ -98,7 +99,11 @@ describe("FT-T04 — cd: remaining is floored onto the render grid", () => {
 
   it("整数秒按下的不变;浮点误差不会把 120 读成 119", () => {
     expect(cdLatestRemainingSeconds(cd("x", "X", 120, [6]), 6)).toBe(120);
-    expect(cdRemainingWholeSeconds(119.9999999)).toBe(120);
+    // 浮点噪声(< 1e-8)读成整秒;真差出来的零头(1e-7)照旧向下取整
+    expect(cdRemainingWholeSeconds(119.999999999)).toBe(120);
+    expect(cdRemainingWholeSeconds(119.9999999)).toBe(119);
+    expect(cdWholeSecond(50.99999999999999)).toBe(51);
+    expect(cdWholeSecond(141 - 1 / 3_800_000)).toBe(140);
     expect(cdRemainingWholeSeconds(0.2)).toBe(1);
   });
 });

@@ -13,7 +13,7 @@ import {
   isHasteScaledCooldown,
 } from "../../data/hasteScaledCooldowns";
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import { specToString } from "../../utils/cooldowns";
+import { cdWholeSecond, specToString } from "../../utils/cooldowns";
 import {
   type IOffListPress,
   lineStatesPress,
@@ -99,12 +99,13 @@ export function emitOffListPressEntries(
     if (p.free) parts.push("free press");
     if (p.readyAgainAtSeconds !== null)
       parts.push(
-        Math.floor(p.readyAgainAtSeconds) > sec
+        cdWholeSecond(p.readyAgainAtSeconds) > sec
           ? // T111 / R47: a haste-scaled cooldown is back sooner than its
             // unhasted base by an amount the log does not state
             isHasteScaledCooldown(p.spellId, p.unit.spec)
             ? HASTE_SCALED_COOLDOWN_NOTE
-            : `back ${fmtTime(p.readyAgainAtSeconds)}`
+            : // the return's whole second, the ledger's one floor (T139)
+              `back ${fmtTime(cdWholeSecond(p.readyAgainAtSeconds))}`
           : p.equipped
             ? "another in hand"
             : p.charges > 1
