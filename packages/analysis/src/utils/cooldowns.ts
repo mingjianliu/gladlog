@@ -39,6 +39,7 @@ import {
   healerSaveCdRoster,
   healerSaveCdStripDefensive,
 } from "../data/healerSaveCd";
+import { HEALER_SPECS } from "../data/healerSpecs";
 import { OVERRIDE_VARIANTS_GENERATED } from "../data/overrideVariantsGenerated";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { OFFENSIVE_RACIAL_SPELL_IDS } from "../data/racialAbilities";
@@ -7903,16 +7904,6 @@ export function specToString(spec: CombatUnitSpec): string {
   return SPEC_NAMES[spec] ?? "Unknown";
 }
 
-const HEALER_SPECS = new Set([
-  CombatUnitSpec.Druid_Restoration,
-  CombatUnitSpec.Monk_Mistweaver,
-  CombatUnitSpec.Paladin_Holy,
-  CombatUnitSpec.Priest_Discipline,
-  CombatUnitSpec.Priest_Holy,
-  CombatUnitSpec.Shaman_Restoration,
-  CombatUnitSpec.Evoker_Preservation,
-]);
-
 export function isHealerSpec(spec: CombatUnitSpec): boolean {
   return HEALER_SPECS.has(spec);
 }
@@ -8243,7 +8234,14 @@ export function friendlyOffensiveCdActiveAt(
           f,
           timestampMs,
           friendlyIds,
-          isEnemyCdWindowSpell,
+          // a healer's throughput major on the offensive roster, in its own
+          // hands, is no offensive cooldown here either (r13 P7: a Holy
+          // Paladin's Avenging Wrath alone set the tag) — the enemy side's
+          // gate, `isHealerHeldOffensive`; both are self-buffs, so the
+          // holder's spec is the caster's
+          (id, spec) =>
+            isEnemyCdWindowSpell(id, spec) &&
+            !isHealerHeldOffensive(id, f.spec),
           round,
         ) || offensiveSummonActiveAt(f, timestampMs),
     ) ||

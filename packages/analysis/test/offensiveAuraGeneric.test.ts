@@ -4,7 +4,7 @@
  * occurrence, weight 0 — and codex 20-F18-02 #2 / #3: only for a cooldown the
  * enemy-CD window test admits, and ended at a later press of it.
  */
-import { LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
@@ -87,5 +87,35 @@ describe("friendlyOffensiveCdActiveAt — [friendly offensive CD active] (fact7 
       ],
     });
     expect([ask(unit, 15), ask(unit, 23)]).toEqual([true, false]);
+  });
+  // r13 P7 / user ruling A16 (2026-11-18): a healer's throughput major on
+  // the offensive roster is no offensive cooldown in that healer's hands —
+  // the enemy side's gate, `isHealerHeldOffensive`
+  const selfBuff = (id: string, spec: CombatUnitSpec) =>
+    friendly({
+      spec,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, id, at(10), "f1", "f1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, id, at(22), "f1", "f1", "BUFF"),
+      ],
+      spellCastEvents: [makeSpellCastEvent(id, at(10), "f1", "F", "f1", "F")],
+    });
+  it("a Holy Paladin's Avenging Wrath alone sets no tag; a Retribution Paladin's does", () => {
+    expect(ask(selfBuff("31884", CombatUnitSpec.Paladin_Holy), 15)).toBe(false);
+    expect(ask(selfBuff("31884", CombatUnitSpec.Paladin_Retribution), 15)).toBe(true);
+  });
+  it("a healer's Blood Fury alone sets no tag; a damage dealer's does", () => {
+    expect(ask(selfBuff("33697", CombatUnitSpec.Shaman_Restoration), 15)).toBe(false);
+    expect(ask(selfBuff("33697", CombatUnitSpec.Shaman_Enhancement), 15)).toBe(true);
+  });
+  it("Power Infusion a healer put on a teammate still counts", () => {
+    const dps = makeUnit("f1", {
+      spec: CombatUnitSpec.Mage_Fire,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "10060", at(10), "f2", "f1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "10060", at(25), "f2", "f1", "BUFF"),
+      ],
+    }) as never;
+    expect(friendlyOffensiveCdActiveAt([dps], [], new Set(["f1", "f2"]), at(15), round)).toBe(true);
   });
 });

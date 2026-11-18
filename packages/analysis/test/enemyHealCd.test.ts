@@ -14,16 +14,14 @@ import {
 } from "../src/context/timelineSections/enemyCd";
 import { abilityProfile } from "../src/data/abilityProfile";
 import { CURATED_ABILITY_FACTS } from "../src/data/curatedAbilityFacts";
-import {
-  ENEMY_HEAL_CD_IDS,
-  isEnemyHealCdFor,
-} from "../src/data/enemyHealCds";
+import { ENEMY_HEAL_CD_IDS, isEnemyHealCdFor } from "../src/data/enemyHealCds";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   HEALER_HELD_OFFENSIVE_SPEC,
   isHealerHeldOffensive,
 } from "../src/data/healerHeldOffensive";
 import { HEALER_SAVE_CD_IDS } from "../src/data/healerSaveCd";
+import { OFFENSIVE_RACIAL_WINDOW_IDS } from "../src/data/racialAbilities";
 import { TEAM_HEAL_CD_IDS } from "../src/utils/cooldowns";
 import { OFFENSIVE_CD_SPELL_IDS } from "../src/utils/spellDanger";
 
@@ -113,6 +111,30 @@ describe("G7-P3", () => {
         isHealerHeldOffensive(id, CombatUnitSpec.Paladin_Retribution),
       ).toBe(false);
     }
+  });
+  // user ruling A16 (2026-11-18, fact14 D3): an offensive racial window in
+  // any healer's hands is no burst — and no heal CD either (the heal-CD
+  // tables read `HEALER_HELD_OFFENSIVE_SPEC` alone)
+  it("a healer's offensive racial is healer-held, a damage dealer's is not, and it is no heal CD", () => {
+    for (const id of OFFENSIVE_RACIAL_WINDOW_IDS) {
+      expect(
+        isHealerHeldOffensive(id, CombatUnitSpec.Shaman_Restoration),
+        id,
+      ).toBe(true);
+      expect(isHealerHeldOffensive(id, CombatUnitSpec.Priest_Holy), id).toBe(
+        true,
+      );
+      expect(
+        isHealerHeldOffensive(id, CombatUnitSpec.Shaman_Enhancement),
+        id,
+      ).toBe(false);
+      expect(isHealerHeldOffensive(id, undefined), id).toBe(false);
+      expect(ENEMY_HEAL_CD_IDS.has(id), id).toBe(false);
+    }
+    // a non-racial offensive cooldown in a healer's hands is not covered
+    expect(
+      isHealerHeldOffensive("10060", CombatUnitSpec.Priest_Discipline),
+    ).toBe(false);
   });
   // FT F01: Time Spiral 374968 sat in the set and is a movement-ability
   // reset (5 `[ENEMY HEAL CD]` lines on the 60 re-eval prompts, 96 on the

@@ -1,5 +1,8 @@
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 
+import { HEALER_SPECS } from "./healerSpecs";
+import { OFFENSIVE_RACIAL_WINDOW_IDS } from "./racialAbilities";
+
 /**
  * An offensive-roster cooldown that, in one healer spec's hands, is that
  * healer's throughput major — an enemy's press of it is an `[ENEMY HEAL CD]`,
@@ -25,8 +28,18 @@ export const HEALER_HELD_OFFENSIVE_SPEC: Readonly<Record<string, string>> = {
 };
 
 /** Is this offensive-roster id, in this spec's hands, a healer's throughput
- * major rather than a burst? */
+ * major rather than a burst? The spec-keyed table above, and any healer's
+ * offensive racial window (`OFFENSIVE_RACIAL_WINDOW_IDS` — user ruling A16,
+ * 2026-11-18, fact14 D3: an enemy Restoration Shaman's Blood Fury was printed
+ * as an `[ENEMY CD]` and as the opener of a `[BURST ANSWERED]`; under it the
+ * shaman cast heals and dealt no damage for 8 s). A racial is not that
+ * healer's healing major either: it is in no `[ENEMY HEAL CD]` table, which
+ * read `HEALER_HELD_OFFENSIVE_SPEC` alone. */
 export function isHealerHeldOffensive(spellId: string, spec: unknown): boolean {
   const only = HEALER_HELD_OFFENSIVE_SPEC[spellId];
-  return only !== undefined && String(spec) === String(only);
+  if (only !== undefined) return String(spec) === String(only);
+  return (
+    OFFENSIVE_RACIAL_WINDOW_IDS.has(spellId) &&
+    HEALER_SPECS.has(String(spec) as CombatUnitSpec)
+  );
 }

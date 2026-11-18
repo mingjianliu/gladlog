@@ -32,6 +32,7 @@
  *  printed second 1:35 — the scan's own whole-second rule read it gone and
  *  filed the tag as Archangel's, 44333434 r1).
  */
+import { isHealerHeldOffensive } from "@gladlog/analysis/src/data/healerHeldOffensive";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   hasOffensiveSpellActive,
@@ -125,13 +126,19 @@ function offensiveAurasUp(
   // an aura whose cast is logged apart (Arcane Surge 365362, Ascendance
   // 1219480, Summon Infernal 111685, Doom Winds 466772) is that cooldown's
   // effect: `offensiveCdOfAura` leaves those to their own table
-  return [...up]
-    .map((k) => k.split("|")[0]!)
-    .map(
-      (id) =>
-        OFFENSIVE_AURA_EVIDENCE.get(id)?.cooldownId ?? offensiveCdOfAura(id),
-    )
-    .filter((id): id is string => id !== undefined);
+  return (
+    [...up]
+      .map((k) => k.split("|")[0]!)
+      .map(
+        (id) =>
+          OFFENSIVE_AURA_EVIDENCE.get(id)?.cooldownId ?? offensiveCdOfAura(id),
+      )
+      .filter((id): id is string => id !== undefined)
+      // a healer's own healing wings or racial is no offensive cooldown for
+      // the tag (`isHealerHeldOffensive`, the product's gate — ruling A16 /
+      // R55, pipeline T153; both are self-buffs, the holder is the caster)
+      .filter((id) => !isHealerHeldOffensive(id, unit.spec))
+  );
 }
 
 export function run(ctx: IRoundCtx): void {
