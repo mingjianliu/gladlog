@@ -7361,3 +7361,23 @@ later in the same rendered second. On the 605 the assembled candidate's
 capture is byte-identical to its parent's (archive-relative hash 18e54c6a94c4,
 3,519 owners): no context and no menu changes (capture checked on the Mac).
 Codex branch review 85-tk-CC-T173-1: APPROVE.
+
+v590 (2026-11-18; pipeline batch B118, T137; round 14 P03, the Hover part).
+Hover 358267 (35 s, two charges with Aerial Mastery; Blessing of the Bronze's
+rate already modelled) was pressed while the model had no charge, because
+Slipstream (Scalecommander, 441257; DB2 'Deep Breath / Breath of Eons resets a
+charge of Hover', a dummy) had no row. Added one, in the existing reset-one-
+charge shape (as Apotheosis), triggered by the breath presses 357210, 433874,
+403631 and 442204 (1236943, a Dracthyr commando creature's, excluded). GH #218
+1.6 had said these two talents did not reconcile Hover. Scans on the 605 base:
+hoverPressBeforeBack 245 / 864 -> 13 / 864 (Devastation 233 -> 1, the one left
+3.6 s short; Preservation 12 -> 12); hoverRefusedAfterBack 0 / 25 -> 0 / 25.
+Recorded: the 12 Preservation presses (10 archives, ~1 s short on a 30 s
+model) are neither Slipstream (the holders are Chronowarden without 441257)
+nor haste-scaled recharge (spec aura 356810's aura 457 covers charge
+categories 2010 and 2471, not Hover's 1948); cause unknown, to be counted
+separately. Hover's cooldown is in no rendered line: On the 605 the assembled
+candidate's capture is byte-identical to its parent's (archive-relative hash
+18e54c6a94c4, 3,519 owners): Hover's cooldown is in no rendered line or menu
+row (capture checked on the Mac). Codex branch review 85-tk-CD-T137-1:
+APPROVE.

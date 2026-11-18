@@ -1466,5 +1466,10 @@
  * v589 (2026-11-18; pipeline batch B117, T173): [HEALER EXPOSURE] no
  *  longer lists a window that starts after the healer is already dead.
  *  See docs/prompt-version-history.md.
+ *
+ * v590 (2026-11-18; pipeline batch B118, T137): Devastation's Slipstream
+ *  (Deep Breath / Breath of Eons resets a Hover charge) is modelled in
+ *  Hover's cooldown.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 589;
+export const PROMPT_VERSION = 590;
