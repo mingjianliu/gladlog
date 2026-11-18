@@ -100,9 +100,10 @@ export function schoolShareCoveredBy(
   }
   return total > 0 ? covered / total : null;
 }
-/** teammate-crisis's "an enemy burst was PRESSED this close before the
- * crossing" (its legend says pressed). The crisis point's own `enemyBurst`
- * reads a running span since fact4 D9 (`burstCastSpan`). */
+/** "An enemy burst was PRESSED this close before the crossing" — the press
+ * lookback the crisis-answer evidence scan reads (it was teammate-crisis's
+ * burst fact until that code was deleted, 2026-11-18). The crisis point's
+ * own `enemyBurst` reads a running span since fact4 D9 (`burstCastSpan`). */
 export const ENEMY_BURST_LOOKBACK_MS = 8000;
 /** Gate 2: an interrupt landing on the owner this close before the crossing
  * means the school is locked — handed to `kick-eaten`, never double-charged. */
@@ -317,8 +318,8 @@ const EXTERNAL_IDS = new Set<string>(
 );
 // 2026-09-17 (GH #95 hand-read): this module still built its OWN 34-id
 // offensive-cooldown set from classMetadata's Offensive tag, so `enemyBurst`
-// was false on 12/12 teammate-crisis-idle cards while the enemy had pressed
-// real cooldowns. The predicate index closed that divergence for every other
+// was false on 12/12 cards of the (since deleted) teammate-crisis-idle type
+// while the enemy had pressed real cooldowns. The predicate index closed that divergence for every other
 // consumer on 2026-09-02 (GH #60 tail) — this was the fourth consumer it
 // missed. One table: the canonical 47-id `OFFENSIVE_CD_SPELL_IDS`.
 const OFFENSIVE_CD_IDS: ReadonlySet<string> = OFFENSIVE_CD_SPELL_IDS;
@@ -704,10 +705,12 @@ export const CRISIS_PROC_ANSWERS: ReadonlyMap<string, CrisisProcAnswer> =
 /** a triggered cast this close to the marker application belongs to the proc */
 export const CRISIS_PROC_TRIGGER_TOL_MS = 1500;
 
-/** The three id sets above, exported under crisis-prefixed names for
- * `analysis/teammateCrisis.ts` (GH #95, 2026-09-17): a healer's answer TOWARD a
- * teammate is judged against the same external / control / enemy-burst sets
- * the teammate's own crossing was judged with. */
+/** The three id sets above, exported under crisis-prefixed names (GH #95,
+ * 2026-09-17) so a reader that judges a healer's answer TOWARD a teammate
+ * uses the same external / control / enemy-burst sets the teammate's own
+ * crossing was judged with. The product reader (`analysis/teammateCrisis.ts`)
+ * was deleted 2026-11-18; the GH #95 probe scripts in packages/eval still
+ * import them. */
 export const CRISIS_EXTERNAL_IDS: ReadonlySet<string> = EXTERNAL_IDS;
 export const CRISIS_CONTROL_IDS: ReadonlySet<string> = CONTROL_IDS;
 export const CRISIS_OFFENSIVE_CD_IDS: ReadonlySet<string> = OFFENSIVE_CD_IDS;

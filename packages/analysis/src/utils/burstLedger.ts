@@ -369,8 +369,7 @@ export function healerHeldNotCountedNote(
  * nothing more. One predicate for every reader of "is this cooldown
  * running": the burst ledger's grouping / span / ally overlap, the
  * kill-attempt burst clusters (`killAttempts.ts`), kick-eaten's
- * `enemyBurst` / `ourBurst` (`kickPressure.ts`), `unsyncedBurstEvents`'
- * effect window, missed-sync-window's `castEntersWindow` (`castEndS`, since
+ * `enemyBurst` / `ourBurst` (`kickPressure.ts`), missed-sync-window's `castEntersWindow` (`castEndS`, since
  * work order 2026-10-14d Part 2c), and the replay burst pulse (desktop
  * `replayHighlights.ts` — the pulse covers exactly the span the ledger
  * audits).

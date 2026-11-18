@@ -45,15 +45,6 @@ export interface MistakeRule {
 export const MISTAKE_RULES: readonly MistakeRule[] = [
   // juked-kick 已整体退役(2026-08-19,GH #15)—— 候选发射与本表规则同批
   // 摘除;kick 审计的统计表(landed/juked/missed 计数)不在本表体系,照常。
-  {
-    // 2026-08-18 击杀尝试重设计(GH #16):打在有徽章目标上的失败尝试,同刻
-    // 存在 prime 目标。severity 与 burst-into-mitigation 同档 —— 同一「机会
-    // 成本」框架,判据换成了已验证的三档模型。
-    type: "attempt-into-trinket",
-    label: "开晕在有徽章的目标上",
-    severity: "average",
-    source: "candidate",
-  },
   // burst-into-immunity: RETIRED 2026-08-20(GH #17,用户裁定 —— 伪影修复后
   // 按爆发归一化仍持平 7.1% vs 6.8%,#13 同形;candidateFindings 已摘发射,
   // 类型移入下方 IGNORED_CANDIDATE_TYPES 容纳缓存回合)。
@@ -108,25 +99,6 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     // uptime one.
     type: "crisis-no-response",
     label: "危机 3 秒无应对",
-    severity: "major",
-    source: "candidate",
-  },
-  {
-    // GH #95 (2026-09-17, user ruling "做一下指控"): a TEAMMATE crossed the
-    // crisis line, the healer was free / in reach / in LoS / with mana through
-    // the window and cast nothing, no carried HoT ticking. Same tier as
-    // crisis-no-response — the feasibility door makes it a real-consequence
-    // fact (teammate death 77 % vs 7–13 % answered on the archive).
-    type: "teammate-crisis-idle",
-    label: "队友危机未出手",
-    severity: "major",
-    source: "candidate",
-  },
-  {
-    // GH #95 question 4 (2026-09-17, user 「1 我觉得可以」): the healer spent
-    // the crisis window on a friendly who was NOT in crisis.
-    type: "teammate-crisis-triage",
-    label: "队友危机救错人",
     severity: "major",
     source: "candidate",
   },
@@ -224,33 +196,18 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     severity: "average",
     source: "candidate",
   },
-  // P1/P2 起爆候选(Task 9,2026-08-15,四开关默认开启上线): same "fact, not
-  // proven causation" discipline as cc-held/cd-waste above — B8 explicitly
-  // designed missed-sync-window with NO HP gate (enemyMinHpPct is an
-  // accelerator-only fact, never a proof of consequence), and unsynced-burst
-  // is documented as unsynced-burst's sibling to unconverted-burst ("two
-  // different coaching facts about the same button press") — same tier as
-  // that sibling.
+  // P1/P2 起爆候选(Task 9,2026-08-15): same "fact, not proven causation"
+  // discipline as cd-waste above — B8 explicitly designed missed-sync-window
+  // with NO HP gate (enemyMinHpPct is an accelerator-only fact, never a proof
+  // of consequence).
   {
     type: "missed-sync-window",
     label: "锁死未起爆",
     severity: "minor",
     source: "candidate",
   },
-  {
-    type: "unsynced-burst",
-    label: "起爆未同步",
-    // minor→average(2026-08-20,GH #16 severity 证据审计,用户裁定):机会
-    // 归一化未同步率 胜 34.7% vs 负 49.1%(+14.4pp,自有队列)—— 全库前三强
-    // 正向信号,不该在最低档。
-    severity: "average",
-    source: "candidate",
-  },
-  // cd-hoarded/cd-spent-idle both cite a real consequence context (a
-  // teammate's crisis HP% for cd-hoarded; the match's own medium+ threat
-  // gate for cd-spent-idle — B6 red line means it never fires in a calm
-  // match) rather than a pure uptime fact, so "average" like
-  // healing-gap/slow-defensive-response above rather than cc-held's "minor".
+  // cd-hoarded cites a real consequence context (a teammate's crisis HP%)
+  // rather than a pure uptime fact.
   {
     type: "cd-hoarded",
     label: "大 CD 囤积过久",
@@ -258,12 +215,6 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     // +25.4 / 初测两队列 +24.7、+27.1 / 正式重跑 +22.7pp)全库最强非循环
     // 信号,却被 major 档的 missed-purge 压在折叠区。
     severity: "major",
-    source: "candidate",
-  },
-  {
-    type: "cd-spent-idle",
-    label: "保命 CD 打空当",
-    severity: "average",
     source: "candidate",
   },
 ] as const;
@@ -309,9 +260,9 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
  * `packages/analysis/src/data/candidateTypeRegistry.ts`:
  *   `MENU_ONLY_TYPES` — surface "menu-only": in the prompt, never a card;
  *   `RETIRED_TYPES`   — status retired | deleted: off entirely.
- * This set is their union MINUS `CARD_TYPES` (flag-retired card types keep
- * their MISTAKE_RULES row so an A/B flag flip renders without a code change —
- * cc-held / unsynced-burst / cd-spent-idle), which is exactly the hand list it
+ * This set is their union MINUS `CARD_TYPES` (a flag-retired card type keeps
+ * its MISTAKE_RULES row so an A/B flag flip renders without a code change;
+ * none exists since 2026-11-18), which is exactly the hand list it
  * replaced, member for member (pinned in report.mistakes.test). Its only
  * consumer is that inventory test; the renderer never reads it. */
 export const IGNORED_CANDIDATE_TYPES: ReadonlySet<string> = new Set(
@@ -390,15 +341,6 @@ export function syncReadyCdsText(readyCds: string | undefined): string {
 export function candidateDetail(c: CandidateEvent): string {
   const f = c.facts as Record<string, string | undefined>;
   switch (c.type) {
-    case "attempt-into-trinket": {
-      // 语料参照(2026-08-30 结果探针)是可选字段:老缓存的回合没有这三个
-      // fact,缺一个就整句不渲染 —— 只补一句对照,不改原有措辞。
-      const ref =
-        f.refKillTrinketDown && f.refKillTrinketUp && f.refN
-          ? `;语料参照:徽章已交时 15 秒内击杀 ${f.refKillTrinketDown}%,徽章还在时 ${f.refKillTrinketUp}%(n=${f.refN} 次尝试)`
-          : "";
-      return `${f.stun ?? ""} 开在 ${f.target ?? ""} 身上(徽章还在),当时 ${f.primeAlt ?? ""} 无徽章无控中减伤;失败原因 ${f.failedBy ?? "?"}${ref}`;
-    }
     case "burst-into-mitigation":
       return `${f.spell ?? ""} 打进 ${f.target ?? ""} 的 ${f.mitSpell ?? ""}(${f.mitDefers ? `延后 ${f.mitDefers.replace(/^defers /, "")} 伤害` : `减伤 ${f.mitPct ?? "?"}%`}),当时 ${f.betterTarget ?? ""} 是更软的目标`;
     case "cd-waste":
@@ -420,12 +362,6 @@ export function candidateDetail(c: CandidateEvent): string {
           : `此状态下无应对者 ${f.refDeathNoResp ?? "?"}% 十秒内死亡,有应对者 ${f.refDeathResp ?? "?"}%`;
       return `血量 ${f.hpPct ?? "?"}% 后 3 秒无应对(${outcomeClause},出手者常见应对:${f.refTop ?? ""})`;
     }
-    case "teammate-crisis-triage":
-      return `${f.mate ?? ""} 掉到 ${f.mateHpPct ?? "?"}%(2 秒内承伤 ${f.dmg2sPct ?? "?"}%)时,你 ${f.windowFrom ?? ""}–${f.windowTo ?? ""} 在给 ${f.castOn ?? ""}(${f.castOnHpPct ?? "?"}% 血)放 ${f.castSpell ?? ""}(同类时刻目标不在危机 ${f.refDeathWrong ?? "?"}% 队友十秒内阵亡,目标也在危机 ${f.refDeathOther ?? "?"}%)`;
-    case "teammate-crisis-idle":
-      // GH #95: facts.externalsReady / facts.attackers are "; "-joined lists
-      // (", " is the facts separator); render them as-is.
-      return `${f.mate ?? ""} 掉到 ${f.mateHpPct ?? "?"}%(2 秒内承伤 ${f.dmg2sPct ?? "?"}%),你 ${f.windowFrom ?? ""}–${f.windowTo ?? ""} 什么都没放(距 ${f.distanceYd ?? "?"} 码,可用外置:${f.externalsReady ?? "none"};同类时刻治疗没出手 ${f.refDeathIdle ?? "?"}% 队友十秒内阵亡,出手了 ${f.refDeathAnswered ?? "?"}%)`;
     case "external-unused":
       return `${f.victim ?? ""} 阵亡时 ${f.external ?? ""} 可用`;
     case "questionable-external":
@@ -438,15 +374,11 @@ export function candidateDetail(c: CandidateEvent): string {
       return `${f.leadCd ?? ""}${f.extras ? `(+${f.extras})` : ""} 开启后 8 秒内全队无应对,${f.pressured ?? ""} 被打到 ${f.pressuredHpPct ?? "?"}%${f.diedInWindow === "yes" ? "、窗口内阵亡" : ""}`;
     case "missed-sync-window":
       return `${f.healer ?? ""} 被 ${f.cc ?? ""} 控 ${f.durationS ?? "?"}s,${syncReadyCdsText(f.readyCds)} 均 ready 未按`;
-    case "unsynced-burst":
-      return `${f.spell ?? ""} 起爆时 ${f.healer ?? ""} 没有硬控在身,自由治疗`;
     case "cd-hoarded":
       // 2026-08-30 决策点重写(GH #34):facts 从 lateS/crisisT/castT/unresolved
       // 换成了 t/crisisUnit/crisisHpPct/readyCds/own —— 危机时刻本身就是 t,
       // 不再有一个独立更早的"转好时刻"。
       return `${f.crisisUnit ?? ""} 在 ${f.t ?? "?"}s 掉到 ${f.crisisHpPct ?? "?"}%${f.own === "yes" ? "(自己)" : ""}时,${f.readyCds ?? ""} 均可用却 5 秒内未按`;
-    case "cd-spent-idle":
-      return `${f.spell ?? ""} 在无威胁时段打出`;
     case "backlash-dispel":
       return `${f.t ?? "?"}s 给 ${f.targetHpPct ?? "?"}% 血的 ${f.target ?? ""} 解掉 ${f.debuff ?? ""}${f.stacks && f.stacks !== "1" ? `×${f.stacks}` : ""},自己吃 ${f.backlash ?? ""},4 秒内承伤 ${f.selfDmgTrend ?? "?"}、治疗 ${f.healTrend ?? "?"}${f.cdCcSpell ? `;驱散 CD 里 ${f.cdCcTarget ?? ""} 吃了 ${f.cdCcDurationS ?? "?"}s ${f.cdCcSpell} 无人能解` : ""}`;
     case "kick-priority-missed":

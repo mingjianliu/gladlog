@@ -69,15 +69,11 @@ export type BracketKey = "2v2" | "3v3" | "solo";
  * against another registry-derived object (codex review 2026-09-12). */
 export const CANDIDATE_TYPE_FLAG_KEYS = [
   "missedSyncWindow",
-  "unsyncedBurst",
   "cdHoarded",
-  "cdSpentIdle",
-  "attemptIntoTrinket",
   "mdCycloneWindow",
   "missedPurge",
   "backlashDispel",
   "kickPriority",
-  "teammateCrisis",
 ] as const;
 export type CandidateTypeFlagKey = (typeof CANDIDATE_TYPE_FLAG_KEYS)[number];
 
@@ -108,17 +104,6 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
   Record<string, CandidateTypeEntry>
 > = {
   // ─── live, card ──────────────────────────────────────────────────────────
-  // ─── retired by flag (emitter wired, flag false; card row kept for A/B) ──
-  "attempt-into-trinket": {
-    status: "retired",
-    surface: "card",
-    origin: "candidate",
-    flag: "attemptIntoTrinket",
-    since: "2026-09-22",
-    issue: "user report 2026-09-22 (was GH #16, live 2026-08-18)",
-    reason:
-      "用户裁决 2026-09-22:「指控己方打对面的时候,会指责偷袭起手不应该打有饰品的人,这也太扯了」。徽章在手是开场默认态(进门冷却全重置),用起手晕逼徽章本身就是打法;语料参照也撑不起指控(48,335 次尝试:徽章已交时 15s 内击杀 6.8% vs 在手 3.8%,两边都是个位数)。同日 [KILL ATTEMPTS] 事实块改为只在存在更软目标时点名(softerTargetAt,与本 mapper 共用谓词),否则写 no softer target。发射器 attemptIntoTrinketEvents 与测试保留。",
-  },
   "burst-into-mitigation": {
     status: "live",
     surface: "card",
@@ -329,47 +314,7 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
       "DispelDashboard renders cleanse misses; the candidate card would double count. Three-tier dispel work took it 705→194. Kept in 2v2 with cd-hoarded.",
   },
 
-  // ─── retired by flag (emitter wired, flag false; card row kept for A/B) ──
-  "unsynced-burst": {
-    status: "retired",
-    surface: "card",
-    origin: "candidate",
-    flag: "unsyncedBurst",
-    since: "2026-08-29",
-    issue: "GH #50 (a)",
-    reason:
-      "用户逐条裁定「降级为上下文事实」。技能梯度实验(12.1 首周 10,301 场 / 23,056 回合,单排 n=15,306):触发率 62–66%(每个进攻冷却)、分段梯度 +0.1 —— 它在描述常态;被指控队伍整轮从未控过敌方治疗的占 0%,平均只差 13–18s,可行性门(3ad24bbb)只解释 9.5%。时间线上的爆发/控场事实照旧,只撤掉指控。纯函数 unsyncedBurstEvents 与其测试保留。",
-  },
-  "cd-spent-idle": {
-    status: "retired",
-    surface: "card",
-    origin: "candidate",
-    flag: "cdSpentIdle",
-    since: "2026-08-30",
-    issue: "signal outcome probe (CLAUDE.md Value-Gate rule 4)",
-    reason:
-      '19,019 个决策点(3,000 场新赛季归档)—— 威胁下按出之后 30s 内"被罚"(敌方进攻大 CD 命中且 10s 内有人阵亡)3.6%,空当按出之后仅 3.1%(Δ +0.5pp;前 10% 分段 −0.8pp;单排 −0.2pp)—— 指控没有可测量的代价。时间线冷却台账照旧;纯函数 cdSpentIdleEvents 与测试保留。数据:eval-private/reports/signal-outcomes-2026-08-30/report.md。',
-  },
-  "teammate-crisis-idle": {
-    status: "retired",
-    surface: "card",
-    origin: "candidate",
-    flag: "teammateCrisis",
-    since: "2026-09-19",
-    issue: "GH #95",
-    reason:
-      "用户 2026-09-19「这个指控感觉有一点太难定义了,现在暂时也不做了吧」。当天先按用户裁决加 priorDeath 排除(已有人阵亡不提示):全量 63,303 场干净空闲 534 → 39(3v3 490 → 1;被砍的 469 个在己方减员之后 —— 这张卡原来说的是「2v3 之后治疗不操作了」),没有格过 50 的样本门。随后 codex astra 两轮辩论(逐条核过):有应对对照组不要求「队友也没应对」而空闲组要求(对称后单排 10% → 15%);可行性门只在 t 取距离 / 视线、被控只抽查 0/1/2/3 s、无蓝量读数算通过、不要求手上有可用的救人技能 —— 只能说「没发现做不到的理由」。09-17 落地时的数字(60 个 / 11,536 回合,阵亡 77% vs 7–13%)是 priorDeath 伪影。teammateCrisisPoints、纯函数 teammateCrisisIdleEvents、参照表与第 19 类门规都保留;用户 09-13 要的「时机」形态(晚了几秒 / 提前交)未进产品。",
-  },
-  "teammate-crisis-triage": {
-    status: "retired",
-    surface: "card",
-    origin: "candidate",
-    flag: "teammateCrisis",
-    since: "2026-09-19",
-    issue: "GH #95 (question 4)",
-    reason:
-      "与 teammate-crisis-idle 同一裁决、同一开关。codex astra 2026-09-19:「救错人 vs 救对人」两臂都要求治疗没应对这个队友,差别只是另一个被治疗者当时血量 —— 比的是局面(集火一人 vs 伤害分摊)不是决策,且结果只看这一个队友死没死;治疗自己被集火时 45% 自疗、给 70% 队友驱散控制都会进「救错人」;只要求第一个被治疗者血量已知。priorDeath 后单排 71 / 60(52% vs 23%,按承伤档重加权仍差 ≈25pp,但竞争威胁 / 已有保护 / 存活时间都没控制);20–30% 档 43% vs 44%;3v3 26 / 10、2v2 21 / 10 不过门。用户:要把伤情和已有保护结合起来看,现在没有这个判断。降级成不带阵亡对比的事实行 = 待价值门(先给真实例子)。",
-  },
+  // ─── retired by flag (emitter wired, flag false) ──────────────────────────
   "missed-purge": {
     status: "retired",
     surface: "menu-only",
@@ -382,6 +327,51 @@ export const CANDIDATE_TYPE_REGISTRY: Readonly<
   },
 
   // ─── deleted (no emitter; legend / deep-dive text may remain) ────────────
+  "attempt-into-trinket": {
+    status: "deleted",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-11-18",
+    issue: "user report 2026-09-22 (was GH #16, live 2026-08-18)",
+    reason:
+      "用户裁决 2026-09-22:「指控己方打对面的时候,会指责偷袭起手不应该打有饰品的人,这也太扯了」。徽章在手是开场默认态(进门冷却全重置),用起手晕逼徽章本身就是打法;语料参照也撑不起指控(48,335 次尝试:徽章已交时 15s 内击杀 6.8% vs 在手 3.8%,两边都是个位数)。同日 [KILL ATTEMPTS] 事实块改为只在存在更软目标时点名(softerTargetAt,与本 mapper 共用谓词),否则写 no softer target。发射器 attemptIntoTrinketEvents 与测试保留。 Retired 2026-09-22; emitter, flag, legend, gate and tests deleted 2026-11-18 (user ruling A11, 2026-11-17).",
+  },
+  "unsynced-burst": {
+    status: "deleted",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-11-18",
+    issue: "GH #50 (a)",
+    reason:
+      "用户逐条裁定「降级为上下文事实」。技能梯度实验(12.1 首周 10,301 场 / 23,056 回合,单排 n=15,306):触发率 62–66%(每个进攻冷却)、分段梯度 +0.1 —— 它在描述常态;被指控队伍整轮从未控过敌方治疗的占 0%,平均只差 13–18s,可行性门(3ad24bbb)只解释 9.5%。时间线上的爆发/控场事实照旧,只撤掉指控。纯函数 unsyncedBurstEvents 与其测试保留。 Retired 2026-08-29; emitter, flag, legend, gate and tests deleted 2026-11-18 (user ruling A11, 2026-11-17).",
+  },
+  "cd-spent-idle": {
+    status: "deleted",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-11-18",
+    issue: "signal outcome probe (CLAUDE.md Value-Gate rule 4)",
+    reason:
+      '19,019 个决策点(3,000 场新赛季归档)—— 威胁下按出之后 30s 内"被罚"(敌方进攻大 CD 命中且 10s 内有人阵亡)3.6%,空当按出之后仅 3.1%(Δ +0.5pp;前 10% 分段 −0.8pp;单排 −0.2pp)—— 指控没有可测量的代价。时间线冷却台账照旧;纯函数 cdSpentIdleEvents 与测试保留。数据:eval-private/reports/signal-outcomes-2026-08-30/report.md。 Retired 2026-08-30; emitter, flag, legend, gate and tests deleted 2026-11-18 (user ruling A11, 2026-11-17).',
+  },
+  "teammate-crisis-idle": {
+    status: "deleted",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-11-18",
+    issue: "GH #95",
+    reason:
+      "用户 2026-09-19「这个指控感觉有一点太难定义了,现在暂时也不做了吧」。当天先按用户裁决加 priorDeath 排除(已有人阵亡不提示):全量 63,303 场干净空闲 534 → 39(3v3 490 → 1;被砍的 469 个在己方减员之后 —— 这张卡原来说的是「2v3 之后治疗不操作了」),没有格过 50 的样本门。随后 codex astra 两轮辩论(逐条核过):有应对对照组不要求「队友也没应对」而空闲组要求(对称后单排 10% → 15%);可行性门只在 t 取距离 / 视线、被控只抽查 0/1/2/3 s、无蓝量读数算通过、不要求手上有可用的救人技能 —— 只能说「没发现做不到的理由」。09-17 落地时的数字(60 个 / 11,536 回合,阵亡 77% vs 7–13%)是 priorDeath 伪影。teammateCrisisPoints、纯函数 teammateCrisisIdleEvents、参照表与第 19 类门规都保留;用户 09-13 要的「时机」形态(晚了几秒 / 提前交)未进产品。 Retired 2026-09-19; emitter, flag, legend, gate and tests deleted 2026-11-18 (user ruling A11, 2026-11-17).",
+  },
+  "teammate-crisis-triage": {
+    status: "deleted",
+    surface: "card",
+    origin: "candidate",
+    since: "2026-11-18",
+    issue: "GH #95 (question 4)",
+    reason:
+      "与 teammate-crisis-idle 同一裁决、同一开关。codex astra 2026-09-19:「救错人 vs 救对人」两臂都要求治疗没应对这个队友,差别只是另一个被治疗者当时血量 —— 比的是局面(集火一人 vs 伤害分摊)不是决策,且结果只看这一个队友死没死;治疗自己被集火时 45% 自疗、给 70% 队友驱散控制都会进「救错人」;只要求第一个被治疗者血量已知。priorDeath 后单排 71 / 60(52% vs 23%,按承伤档重加权仍差 ≈25pp,但竞争威胁 / 已有保护 / 存活时间都没控制);20–30% 档 43% vs 44%;3v3 26 / 10、2v2 21 / 10 不过门。用户:要把伤情和已有保护结合起来看,现在没有这个判断。降级成不带阵亡对比的事实行 = 待价值门(先给真实例子)。 Retired 2026-09-19; emitter, flag, legend, gate and tests deleted 2026-11-18 (user ruling A11, 2026-11-17).",
+  },
   "cc-held": {
     status: "deleted",
     surface: "card",

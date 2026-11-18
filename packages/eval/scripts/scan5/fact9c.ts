@@ -118,11 +118,6 @@ function heals(ctx: IRoundCtx): void {
       ctx.bump("healAsDefensive");
       const spell = /facts=\{.*?\bspell=([^,}]+)/.exec(row)?.[1];
       if (spell && lookups().heal.has(spell)) flag("cdWaste", spell, row, atMs);
-    } else if (type[1] === "cd-spent-idle") {
-      ctx.bump("healAsDefensive");
-      const spell = /facts=\{.*?\bspell=([^,}]+)/.exec(row)?.[1];
-      if (spell && lookups().heal.has(spell))
-        flag("cdSpentIdle", spell, row, atMs);
     } else if (type[1] === "cd-hoarded") {
       ctx.bump("healAsDefensive");
       const ready = /\breadyCds=([^,}]+)/.exec(row)?.[1];

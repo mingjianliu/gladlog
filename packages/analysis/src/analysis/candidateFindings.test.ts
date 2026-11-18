@@ -1,5 +1,5 @@
 import { CombatUnitClass, LogEvent } from "@gladlog/parser-compat";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   BRACKET_TYPE_ALLOWLIST,
@@ -7,12 +7,11 @@ import {
 } from "../data/candidateTypeFlags";
 import { extractMajorCooldowns } from "../utils/cooldowns";
 import type { RawStreams } from "../utils/rawStreams";
-import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
+import { matchThreatLevel } from "../utils/threatAssessment";
 import {
   ccAvoidableEvents,
   ccAvoidanceOptionsAt,
   cdHoardedEvents,
-  cdSpentIdleEvents,
   cdWasteEvents,
   deathSetupEvents,
   enemyHealerCcWindows,
@@ -29,7 +28,6 @@ import {
   missedPurgeEvents,
   missedSyncWindowEvents,
   positionMistakeEvents,
-  unsyncedBurstEvents,
 } from "./candidateFindings";
 import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
 import { crisisDecisionPoints } from "./crisisDecisionPoints";
@@ -3446,109 +3444,6 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
   });
 });
 
-describe("unsyncedBurstEvents(P1 起爆-2,2026-08-15,纯函数)", () => {
-  // Avenging Wrath(31884,cooldown 120s,spellEffectData duration 20s)在 t=200 施放。
-  const cast = {
-    ownerName: "Dps-R",
-    spellId: "31884",
-    spellName: "Avenging Wrath",
-    castTimeSeconds: 200,
-    cooldownSeconds: 120,
-  };
-
-  it("③ 爆发施放 + 窗内(生效窗)敌治疗零硬控 → 1 条", () => {
-    const evts = unsyncedBurstEvents([cast], [], ["Enemy-Healer"], () => true);
-    expect(evts).toHaveLength(1);
-    const e = evts[0]!;
-    expect(e.type).toBe("unsynced-burst");
-    expect(e.t).toBe(200);
-    expect(e.unitNames).toEqual(["Dps-R", "Enemy-Healer"]);
-    expect(e.facts["owner"]).toBe("Dps-R");
-    expect(e.facts["spell"]).toBe("Avenging Wrath");
-    expect(e.facts["healer"]).toBe("Enemy-Healer");
-  });
-
-  it("可行性门:开爆发时队伍没有任何硬控就绪 → 不产出(不能要求你花掉没有的资源)", () => {
-    // 2026-08-22 语料裁定:被判「不同步」的实例里,**整轮从未控过敌方治疗的
-    // 占 0%**(~278 例,中位偏差 13–18s)—— 指控前提一次都不成立;该类型
-    // 对 66–70% 的进攻冷却开火而技能梯度持平(−0.1pp),即在描述正常打法。
-    expect(
-      unsyncedBurstEvents([cast], [], ["Enemy-Healer"], () => false),
-    ).toEqual([]);
-  });
-
-  it("生效窗内敌治疗有硬控(与 burstCastSpan 的效果窗重叠)→ 不产出(视为已同步)", () => {
-    // burstCastSpan: [200, 220](castTime + spellEffectData duration 20s)。
-    // 205~208 落在窗口内 → 判定为已同步。
-    const evts = unsyncedBurstEvents(
-      [cast],
-      [{ fromSeconds: 205, toSeconds: 208 }],
-      ["Enemy-Healer"],
-      () => true,
-    );
-    expect(evts).toEqual([]);
-  });
-
-  it("硬控窗与生效窗不重叠(在效果窗结束之后)→ 仍视为无同步,产出", () => {
-    const evts = unsyncedBurstEvents(
-      [cast],
-      [{ fromSeconds: 230, toSeconds: 235 }], // 220 之后,不重叠
-      ["Enemy-Healer"],
-      () => true,
-    );
-    expect(evts).toHaveLength(1);
-  });
-
-  it("场上没有敌方治疗(healerNames=[])→ 不产出(无对象可谈同步)", () => {
-    expect(unsyncedBurstEvents([cast], [], [], () => true)).toEqual([]);
-  });
-
-  it("§29b:双治疗阵容,窗内零硬控 → fact 点名全部敌方治疗而非任取第一个(BACKLOG §29b,双治疗误标修复)", () => {
-    const evts = unsyncedBurstEvents(
-      [cast],
-      [],
-      ["Enemy-Healer-A", "Enemy-Healer-B"],
-      () => true,
-    );
-    expect(evts).toHaveLength(1);
-    const e = evts[0]!;
-    expect(e.unitNames).toEqual(["Dps-R", "Enemy-Healer-A", "Enemy-Healer-B"]);
-    expect(e.facts["healer"]).toBe("Enemy-Healer-A、Enemy-Healer-B");
-  });
-
-  it("按 cooldownSeconds 降序排(大 CD 优先),截 UNSYNCED_BURST_CAP=2", () => {
-    const small = {
-      ...cast,
-      spellId: "1",
-      spellName: "Small",
-      castTimeSeconds: 10,
-      cooldownSeconds: 30,
-    };
-    const big = {
-      ...cast,
-      spellId: "2",
-      spellName: "Big",
-      castTimeSeconds: 50,
-      cooldownSeconds: 180,
-    };
-    const mid = {
-      ...cast,
-      spellId: "3",
-      spellName: "Mid",
-      castTimeSeconds: 90,
-      cooldownSeconds: 90,
-    };
-    const evts = unsyncedBurstEvents(
-      [small, big, mid],
-      [],
-      ["Enemy-Healer"],
-      () => true,
-    );
-    expect(evts).toHaveLength(2);
-    expect(evts.map((e) => e.facts["spell"])).toEqual(["Big", "Mid"]);
-  });
-});
-
 describe("friendlyCrisisMomentInWindow(cd-hoarded 的危机时刻探针,渲染网格离散扫描)", () => {
   it("跨多个友方取最差血量,回带具体单位名与命中的渲染秒——不只是一个数字", () => {
     const friends = [
@@ -3946,115 +3841,19 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
   });
 });
 
-describe("cdSpentIdleEvents(P2 起爆-2,2026-08-15,圣佑盲发形态)", () => {
-  const IDLE_CD = {
-    spellId: "33206",
-    spellName: "Pain Suppression",
-    tag: "Defensive",
-    isThroughput: false,
-    casts: [{ timeSeconds: 512.7 }], // 小数秒,验证渲染网格 floor
-  };
-
-  it("① 威胁不活跃时施放 → 1 条,facts.t 落在渲染网格(不是原始小数秒),探针拿到的也是渲染网格整数", () => {
-    const evts = cdSpentIdleEvents(
-      [IDLE_CD],
-      { id: "h", name: "Healer-R" },
-      "med",
-      {
-        threatActiveAt: (t) => {
-          expect(t).toBe(512);
-          return false;
-        },
-      },
-    );
-    expect(evts).toHaveLength(1);
-    const e = evts[0];
-    expect(e.type).toBe("cd-spent-idle");
-    expect(e.t).toBe(512);
-    expect(e.facts["t"]).toBe("512");
-    expect(e.facts["spell"]).toBe("Pain Suppression");
-    expect(e.facts["costNorm"]).toBeUndefined();
-  });
-
-  it("② 施放时威胁活跃 → 0 条", () => {
-    const evts = cdSpentIdleEvents(
-      [IDLE_CD],
-      { id: "h", name: "Healer-R" },
-      "high",
-      { threatActiveAt: () => true },
-    );
-    expect(evts).toHaveLength(0);
-  });
-
-  it("红线 B6:matchThreatLevel=low 整场 → 0 条,且探针从未被调用(不是恰好都判 true——低威胁场次用 CD 就是正确打法)", () => {
-    const spy = vi.fn(() => {
-      throw new Error(
-        "threatActiveAt must not be called when matchThreat is low",
-      );
-    });
-    const evts = cdSpentIdleEvents(
-      [IDLE_CD],
-      { id: "h", name: "Healer-R" },
-      "low",
-      { threatActiveAt: spy },
-    );
-    expect(evts).toHaveLength(0);
-    expect(spy).not.toHaveBeenCalled();
-  });
-
-  it("过滤掉非防御/保命向的大 CD(isThroughput)——不是这个类型要抓的形状", () => {
-    const throughputCd = {
-      ...IDLE_CD,
-      spellId: "31884",
-      spellName: "Avenging Wrath",
-      tag: "Offensive",
-      isThroughput: true,
-    };
-    const evts = cdSpentIdleEvents(
-      [throughputCd],
-      { id: "h", name: "Healer-R" },
-      "med",
-      { threatActiveAt: () => false },
-    );
-    expect(evts).toHaveLength(0);
-  });
-
-  it("红线:cost_norm 命中(642)时 facts 必须带 costNorm", () => {
-    const cd = { ...IDLE_CD, spellId: "642", spellName: "Divine Shield" };
-    const evts = cdSpentIdleEvents([cd], { id: "h", name: "Healer-R" }, "med", {
-      threatActiveAt: () => false,
-    });
-    expect(evts).toHaveLength(1);
-    expect(evts[0].facts["costNorm"]).toBeDefined();
-    expect(evts[0].facts["costNorm"]).toContain("major cooldown");
-  });
-
-  it("按时间升序排序并按上限截断", () => {
-    const cd = {
-      ...IDLE_CD,
-      casts: [{ timeSeconds: 300 }, { timeSeconds: 100 }, { timeSeconds: 500 }],
-    };
-    const evts = cdSpentIdleEvents([cd], { id: "h", name: "Healer-R" }, "med", {
-      threatActiveAt: () => false,
-    });
-    expect(evts.map((e) => e.t)).toEqual([100, 300]);
-  });
-});
-
-describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,2026-08-15,Task 9 默认开启)", () => {
+describe("missed-sync-window 接线(extractCandidateFindings,2026-08-15,Task 9 默认开启)", () => {
   // Task 2 评审(fix round 1,2026-08-15)Critical 发现之后,Task 4 把两个新
   // 候选类型接进了 teamPlayEvents,但 CANDIDATE_TYPE_FLAGS 默认全 false,所以
   // extractCandidateFindings 在 A/B 阶段仍不吐出它们(见 git 历史里本 describe
   // 块当时的负向断言版本)。Task 9(用户裁决全量上线)把四开关翻 true —— 本块
   // 断言方向翻回"出现":复用与之前完全相同的 fixture(同一场景直调
-  // missedSyncWindowEvents/unsyncedBurstEvents 会产出 1 条,见上面两个纯函数
-  // describe 块的 ①/③ 用例)。
+  // missedSyncWindowEvents 会产出 1 条,见上面纯函数 describe 块的用例)。
   //
   // 团队编成:治疗 owner(Healer-R,团队视角,不参与同步判定本身)+ 一名友方
   // Retribution Paladin 队友(Dps-R,t=0 用过一次 Avenging Wrath,120s CD,窗口
   // 打开时早已转好)。敌方治疗(Enemy-Healer)在 439~447s(≈7:19)被 Polymorph
   // 定身 8s,期间我方没有第二次进攻大 CD 施放 —— 若已接线本应出现
-  // missed-sync-window/unsynced-burst,但今天不应该。
+  // missed-sync-window,但今天不应该。
   function syncFixture(): any {
     const polyApplied = {
       logLine: { event: "SPELL_AURA_APPLIED", timestamp: 439_000 },
@@ -4081,10 +3880,7 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
       destUnitId: "d",
       destUnitName: "Dps-R",
     };
-    // 2026-08-22:unsynced-burst 现在要求「开爆发时队伍确实有硬控就绪」——
-    // 原 fixture 的队伍一次硬控都没放过,可行性门会(正确地)拦掉整条。
-    // 补一次制裁之锤(45s CD),让场景变成本类型真正想抓的那一种:
-    // 有控可用却没压在爆发上。
+    // 队伍里有一次制裁之锤(45s CD):有控可用的场景。
     const hammerOfJusticeCast = {
       logLine: { event: "SPELL_CAST_SUCCESS", timestamp: 10_000 },
       timestamp: 10_000,
@@ -4165,21 +3961,9 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
     };
   }
 
-  it("复活默认态(2026-09-02,GH #13 撤销):missedSyncWindow 默认开,但 fixture 无 bracket → 参照查不到,门整轮静音;unsyncedBurst 仍默认关(GH #50)→ 两个类型都不产出", () => {
+  it("复活默认态(2026-09-02,GH #13 撤销):missedSyncWindow 默认开,但 fixture 无 bracket → 参照查不到,门整轮静音", () => {
     const evts = extractCandidateFindings(syncFixture(), "h");
     expect(evts.some((e) => e.type === "missed-sync-window")).toBe(false);
-    expect(evts.some((e) => e.type === "unsynced-burst")).toBe(false);
-  });
-
-  it("显式开 flag → unsynced-burst 仍可产出(纯函数与接线保留,只是默认关,GH #50)", () => {
-    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
-    CANDIDATE_TYPE_FLAGS.unsyncedBurst = true;
-    try {
-      const evts = extractCandidateFindings(syncFixture(), "h");
-      expect(evts.some((e) => e.type === "unsynced-burst")).toBe(true);
-    } finally {
-      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
-    }
   });
 
   it("bracket=3v3(真实生成表——数据耦合同 behaviorPrior.test.ts 健康测试:赛季太年轻/3v3 对比塌了会红,红了要重新裁决而不是改测试)→ missed-sync-window 产出且 facts 引用 3v3 格", () => {
@@ -4233,7 +4017,7 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
     expect(after.map((e) => e.id)).toEqual(before.map((e) => e.id));
   });
 
-  it("同一 fixture 直调纯函数(用真实 analyzeOutgoingCCChains/extractMajorCooldowns 数据,不是手搭 fixture)仍产出两条——证明数据条件本身没坏,菜单接线已按「退役到零件」摘除", () => {
+  it("同一 fixture 直调纯函数(用真实 analyzeOutgoingCCChains/extractMajorCooldowns 数据,不是手搭 fixture)仍产出一条——证明数据条件本身没坏", () => {
     const c = syncFixture();
     const units = Object.values(c.units) as any[];
     const friends = units.filter((u) => u.reaction === 1);
@@ -4261,67 +4045,14 @@ describe("missed-sync-window / unsynced-burst 接线(extractCandidateFindings,20
         },
       }),
     ).toHaveLength(1);
-
-    expect(
-      unsyncedBurstEvents(
-        awCd.casts.map((cast) => ({
-          ownerName: "Dps-R",
-          spellId: awCd.spellId,
-          spellName: awCd.spellName,
-          castTimeSeconds: cast.timeSeconds,
-          cooldownSeconds: awCd.cooldownSeconds,
-        })),
-        ccWindows,
-        ["Enemy-Healer"],
-        () => true,
-      ),
-    ).toHaveLength(1);
   });
 
-  // Task 4(2026-08-15,特性开关接线,更新于 Task 9 默认全 true 上线): 单独把
-  // 每个开关关掉,验证只有那一个类型从产出里消失、另一个仍出现——即便同一
-  // fixture 两个类型的数据条件都满足,证明两个 flag 各自独立生效而非联动。
-  // finally 里把开关复位回默认 true(Task 9 上线态),防止状态泄漏给上面的
-  // 默认开启正向测试或其它文件的默认态测试(CANDIDATE_TYPE_FLAGS 是模块级可
-  // 变单例)。
-  // Both flags default to false since 2026-08-29; the independence check now
-  // turns each ON alone and expects only that type to appear.
-  it("unsynced-burst 默认关:bracket=3v3 时只有 missed-sync-window 出现,unsynced-burst 不出现", () => {
-    const c = syncFixture();
-    c.startInfo.bracket = "3v3";
-    const evts = extractCandidateFindings(c, "h");
-    expect(evts.some((e) => e.type === "missed-sync-window")).toBe(true);
-    expect(evts.some((e) => e.type === "unsynced-burst")).toBe(false);
-  });
-
-  it("只开 unsyncedBurst → 只有 unsynced-burst 产出,missed-sync-window 不出现", () => {
-    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
-    CANDIDATE_TYPE_FLAGS.unsyncedBurst = true;
-    try {
-      const evts = extractCandidateFindings(syncFixture(), "h");
-      expect(evts.some((e) => e.type === "unsynced-burst")).toBe(true);
-      expect(evts.some((e) => e.type === "missed-sync-window")).toBe(false);
-    } finally {
-      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
-    }
-  });
 });
 
-describe("cd-hoarded / cd-spent-idle 接线(extractCandidateFindings,2026-08-15,Task 9 默认开启;2026-08-30 cd-spent-idle 下架)", () => {
-  // Task 4 把两个新 P2 类型接进了 teamPlayEvents/extractCandidateFindings 的
-  // 菜单,但 CANDIDATE_TYPE_FLAGS 默认全 false,A/B 阶段仍不出现。Task 9(用户
-  // 裁决全量上线)把四开关翻 true —— 本块用真实数据条件证明"条件满足且默认
-  // 开启 → 出现",再用同一 fixture 直调真实谓词链(extractMajorCooldowns + 真实
-  // crisisDecisionPoints/threatActiveAt/matchThreatLevel,不是手搭 stub)证明
-  // 底层数据本身是通的。
-  //
-  // cd-spent-idle 下架(2026-08-30,信号结果探针,用户裁定,CLAUDE.md 价值门
-  // 第 4 条):19,019 个决策点(3,000 场新赛季归档)—— 威胁下按出之后 30s
-  // 内"被罚"(敌方进攻大 CD 命中且 10s 内有人阵亡)3.6%,空当按出之后仅
-  // 3.1%(Δ +0.5pp;前 10% 分段 −0.8pp;单排 −0.2pp)—— 指控没有可测量的
-  // 代价。CANDIDATE_TYPE_FLAGS.cdSpentIdle 翻 false;纯函数 cdSpentIdleEvents
-  // 与其测试保留(测试自行翻 flag,同 missedSyncWindow/unsyncedBurst/
-  // missedPurge/ccHeld 先例)。cd-hoarded 不受影响,继续默认开启。
+describe("cd-hoarded 接线(extractCandidateFindings,2026-08-15,Task 9 默认开启)", () => {
+  // 本块用真实数据条件证明"条件满足且默认开启 → 出现",再用同一 fixture
+  // 直调真实谓词链(extractMajorCooldowns + 真实 crisisDecisionPoints/
+  // matchThreatLevel,不是手搭 stub)证明底层数据本身是通的。
   //
   // 团队编成:治疗 owner(Healer-R,Priest_Discipline)+ 敌方(Enemy-E)。
   // Healer-R 真实施放圣言术:屏障(62618,180s CD)两次(t=0、t≈250.4s)——
@@ -4451,13 +4182,12 @@ describe("cd-hoarded / cd-spent-idle 接线(extractCandidateFindings,2026-08-15,
     };
   }
 
-  it("默认态(cd-hoarded 默认开启;cd-spent-idle 2026-08-30 下架)→ 同一 fixture 只产出 cd-hoarded,不产出 cd-spent-idle", () => {
+  it("默认态(cd-hoarded 默认开启)→ fixture 产出 cd-hoarded", () => {
     const evts = extractCandidateFindings(p2Fixture(), "h");
     expect(evts.some((e) => e.type === "cd-hoarded")).toBe(true);
-    expect(evts.some((e) => e.type === "cd-spent-idle")).toBe(false);
   });
 
-  it("同一 fixture 直调真实谓词链(extractMajorCooldowns + 真实 crisisDecisionPoints/threatActiveAt/matchThreatLevel)仍各产出 1 条——证明底层数据/谓词本身没坏;cd-spent-idle 菜单接线已按「退役到零件」摘除(2026-08-30),cd-hoarded 菜单接线仍在", () => {
+  it("同一 fixture 直调真实谓词链(extractMajorCooldowns + 真实 crisisDecisionPoints/threatActiveAt/matchThreatLevel)仍产出 1 条——证明底层数据/谓词本身没坏", () => {
     const c = p2Fixture();
     const units = Object.values(c.units) as any[];
     const friends = units.filter((u) => u.reaction === 1);
@@ -4489,43 +4219,14 @@ describe("cd-hoarded / cd-spent-idle 接线(extractCandidateFindings,2026-08-15,
         owner,
       ),
     ).toHaveLength(1);
-
-    expect(
-      cdSpentIdleEvents([painCd], owner, threat, {
-        threatActiveAt: (t) => threatActiveAt(t, enemies, friends, c),
-      }),
-    ).toHaveLength(1);
   });
 
-  // Task 4(2026-08-15,特性开关接线,更新于 Task 9 默认全 true 上线;2026-08-30
-  // cd-spent-idle 下架后重写): 同上一 describe 块的分开开关验证。cd-hoarded
-  // 保持默认 true,cd-spent-idle 保持默认 false(下架态)——两个方向各测一条:
-  // 关掉 cd-hoarded 时 cd-spent-idle 依旧不出现(默认已关,不受影响);显式开
-  // cd-spent-idle 时它照常出现且不影响 cd-hoarded(纯函数与接线保留,只是默认
-  // 关,同 missedSyncWindow/unsyncedBurst 先例)。注意生产接线传入的是完整
-  // ownerCds(barrierCd + painCd 一起),不是上面直调测试里为了断言干净而各自
-  // 隔离传入的单元素数组,所以这里只断言"该类型消失/出现",不钉具体条数
-  // (条数取决于两个 CD 互相产生的窗口叠加,细节见实现者报告)。finally 里
-  // 复位开关回默认值,防止状态泄漏。
-  it("CANDIDATE_TYPE_FLAGS.cdHoarded=false(cd-spent-idle 保持默认 false)→ 两者都不产出", () => {
+  it("CANDIDATE_TYPE_FLAGS.cdHoarded=false → cd-hoarded 不产出", () => {
     const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.cdHoarded = false;
     try {
       const evts = extractCandidateFindings(p2Fixture(), "h");
       expect(evts.some((e) => e.type === "cd-hoarded")).toBe(false);
-      expect(evts.some((e) => e.type === "cd-spent-idle")).toBe(false);
-    } finally {
-      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
-    }
-  });
-
-  it("显式开 CANDIDATE_TYPE_FLAGS.cdSpentIdle → cd-spent-idle 仍可产出(纯函数与接线保留,只是默认关);cd-hoarded 默认 true 不受影响", () => {
-    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
-    CANDIDATE_TYPE_FLAGS.cdSpentIdle = true;
-    try {
-      const evts = extractCandidateFindings(p2Fixture(), "h");
-      expect(evts.some((e) => e.type === "cd-spent-idle")).toBe(true);
-      expect(evts.some((e) => e.type === "cd-hoarded")).toBe(true);
     } finally {
       Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }

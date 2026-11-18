@@ -2,9 +2,7 @@
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { extractCandidateFindings } from "../src/analysis/candidateFindings";
 import { isDamageImmuneControl } from "../src/analysis/candidates/massDispel";
-import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   extractSpiritOfRedemptionIntervals,
@@ -16,7 +14,6 @@ import {
 } from "../src/utils/enemyDefensives";
 import {
   anchorsKillAttempt,
-  attemptIntoTrinketEvents,
   attemptSpanOutsideForm,
   extractKillAttempts,
   formatKillAttemptsForContext,
@@ -474,8 +471,8 @@ describe("extractKillAttempts", () => {
   });
 });
 
-describe("attemptIntoTrinketEvents(候选 mapper)", () => {
-  // e1 徽章还在(locked)上的失败尝试;e2 交过徽章(prime)在场 → 出候选
+describe("softerTargetAt(更软目标谓词)", () => {
+  // e1 徽章还在(locked)上的失败尝试;e2 交过徽章(prime)在场
   function lockedScenario() {
     const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5) });
     const e2 = unit("e2", {
@@ -543,65 +540,13 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
     expect(softerWith(KIDNEY)?.name).toBe("e2");
   });
 
-  it("locked 上的失败尝试 + 场上有 prime → 出候选,facts 可验证", () => {
-    const { f1, e1, e2, combat } = lockedScenario();
-    const attempts = extractKillAttempts([f1], [e1, e2], combat);
-    const events = attemptIntoTrinketEvents(attempts);
-    expect(events).toHaveLength(1);
-    expect(events[0].type).toBe("attempt-into-trinket");
-    expect(events[0].facts.target).toBe("e1");
-    expect(events[0].facts.primeAlt).toBe("e2");
-    expect(events[0].facts.failedBy).toBe("pressure");
-  });
-
-  it("没有 prime 备选(全员 locked)→ 不指控", () => {
-    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5) });
-    const e2 = unit("e2"); // 徽章还在 → locked
-    const f1 = unit("f1", {
-      reaction: 1,
-      damageOut: [dmg("f1", "e1", 12, 50_000)],
-    });
-    const attempts = extractKillAttempts(
-      [f1],
-      [e1, e2],
-      makeCombat(f1, e1, [e2]),
-    );
-    expect(attemptIntoTrinketEvents(attempts)).toHaveLength(0);
-  });
-
-  it("尝试成功(击杀)→ 不指控", () => {
-    const { f1, e1, e2 } = lockedScenario();
-    e1.deathRecords = [{ timestamp: ms(16) }];
-    const combat = makeCombat(f1, e1, [e2]);
-    const attempts = extractKillAttempts([f1], [e1, e2], combat);
-    expect(attemptIntoTrinketEvents(attempts)).toHaveLength(0);
-  });
-
-  it("开关:默认退役(flag=false,用户裁决 2026-09-22)零产出;flag=true 时发射器仍接线", () => {
-    const { combat } = lockedScenario();
-    const has = () =>
-      extractCandidateFindings(combat, "f1").some(
-        (c) => c.type === "attempt-into-trinket",
-      );
-    expect(CANDIDATE_TYPE_FLAGS.attemptIntoTrinket).toBe(false);
-    expect(has()).toBe(false);
-    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
-    CANDIDATE_TYPE_FLAGS.attemptIntoTrinket = true;
-    try {
-      expect(has()).toBe(true);
-    } finally {
-      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
-    }
-  });
-
-  it("softerTarget 与候选共用一个谓词:prime 备选已阵亡 → 既不进事实块也不出候选", () => {
+  it("prime 备选已阵亡 → 不进事实块", () => {
     const { f1, e1, e2 } = lockedScenario();
     e2.deathRecords = [{ timestamp: ms(5) }]; // 交过徽章,但 0:05 已倒
     const combat = makeCombat(f1, e1, [e2]);
     const attempts = extractKillAttempts([f1], [e1, e2], combat);
     expect(attempts).toHaveLength(1);
     expect(attempts[0].softerTarget).toBeUndefined();
-    expect(attemptIntoTrinketEvents(attempts)).toHaveLength(0);
   });
 });
 
@@ -1029,26 +974,6 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
       damageOut: [dmg("f1", "e1", 42, 10_000)],
     });
     expect(extractKillAttempts([f1], [e1], makeCombat(f1, e1))).toHaveLength(0);
-  });
-
-  it("attemptIntoTrinketEvents 只吃晕锚:burst 锚的 locked 失败尝试不产失误候选(三档模型验证锚在晕落地)", () => {
-    const burstAttempt: any = {
-      targetUnitId: "e1",
-      targetName: "e1",
-      anchor: "burst",
-      anchorSpellName: "Recklessness",
-      fromSeconds: 40,
-      toSeconds: 50,
-      stuns: [],
-      opportunity: { tier: "locked", wallsInHand: [] },
-      teamDamageToTarget: 100_000,
-      teamDamageToTargetInBracket: 100_000,
-      teamDamageTotal: 100_000,
-      teamOnTargetPct: 100,
-      killed: false,
-      attribution: { primary: "trinketed" },
-    };
-    expect(attemptIntoTrinketEvents([burstAttempt])).toHaveLength(0);
   });
 
   it("formatter:burst 行带「burst (no stun)」,Summary 报锚定拆分", () => {

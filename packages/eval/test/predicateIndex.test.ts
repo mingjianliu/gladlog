@@ -32,7 +32,6 @@ import * as deathCandidates from "@gladlog/analysis/src/analysis/candidates/deat
 import * as kickPriority from "@gladlog/analysis/src/analysis/candidates/kickPriority";
 import * as massDispel from "@gladlog/analysis/src/analysis/candidates/massDispel";
 import * as candidatesShared from "@gladlog/analysis/src/analysis/candidates/shared";
-import * as teammateCrisisIdle from "@gladlog/analysis/src/analysis/candidates/teammateCrisisIdle";
 import * as cdTriggerPrior from "@gladlog/analysis/src/analysis/cdTriggerPrior";
 import * as crisisDecisionPoints from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import * as factFormat from "@gladlog/analysis/src/analysis/factFormat";
@@ -41,7 +40,6 @@ import * as findingsCount from "@gladlog/analysis/src/analysis/findingsCount";
 import * as hindsightLint from "@gladlog/analysis/src/analysis/hindsightLint";
 import * as momentSnapshot from "@gladlog/analysis/src/analysis/momentSnapshot";
 import * as stackedDefensives from "@gladlog/analysis/src/analysis/stackedDefensives";
-import * as teammateCrisis from "@gladlog/analysis/src/analysis/teammateCrisis";
 import * as buildExemplarLedPrompt from "@gladlog/analysis/src/compare/buildExemplarLedPrompt";
 import * as cellLookup from "@gladlog/analysis/src/compare/cellLookup";
 import * as claimChecker from "@gladlog/analysis/src/compare/claimChecker";
@@ -95,7 +93,6 @@ import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
 import * as mitigationData from "@gladlog/analysis/src/data/mitigationData";
 import * as offGcdGenerated from "@gladlog/analysis/src/data/offGcdGenerated";
-import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as overrideVariantsGenerated from "@gladlog/analysis/src/data/overrideVariantsGenerated";
 import * as ownShieldLinks from "@gladlog/analysis/src/data/ownShieldLinks";
 import * as periodicAuraGenerated from "@gladlog/analysis/src/data/periodicAuraGenerated";
@@ -124,7 +121,6 @@ import * as talentReplaces from "@gladlog/analysis/src/data/talentReplaces";
 import * as talentReplacesGenerated from "@gladlog/analysis/src/data/talentReplacesGenerated";
 import * as talentReplaceVariants from "@gladlog/analysis/src/data/talentReplaceVariants";
 import * as talentScriptedCooldowns from "@gladlog/analysis/src/data/talentScriptedCooldowns";
-import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
 import * as advancedActions from "@gladlog/analysis/src/utils/advancedActions";
 import * as allyCopyWall from "@gladlog/analysis/src/utils/allyCopyWall";
@@ -4500,11 +4496,6 @@ const INDEX: PredicateRow[] = [
     mod: killWindowFactsMod,
   },
   {
-    file: `${A}/data/outcomeRefs.ts`,
-    symbol: "ATTEMPT_INTO_TRINKET_OUTCOME_REF",
-    mod: outcomeRefs,
-  },
-  {
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,
     symbol: "burstWindowDecisionPoints",
     mod: burstWindowDecisionPoints,
@@ -4676,48 +4667,8 @@ const INDEX: PredicateRow[] = [
     symbol: "CD_PRIOR_CAP",
     mod: cdPrior,
   },
-  // GH #95 (2026-09-17): teammate crisis (healer side) + stacked defensives
-  {
-    file: `${A}/analysis/teammateCrisis.ts`,
-    symbol: "teammateCrisisPoints",
-    mod: teammateCrisis,
-  },
-  {
-    file: `${A}/analysis/teammateCrisis.ts`,
-    symbol: "TEAMMATE_CRISIS_REACH_YARDS",
-    mod: teammateCrisis,
-  },
-  {
-    file: `${A}/analysis/teammateCrisis.ts`,
-    symbol: "TEAMMATE_CRISIS_CUE_MIN_S",
-    mod: teammateCrisis,
-  },
-  {
-    file: `${A}/data/teammateCrisisPrior.ts`,
-    symbol: "lookupTeammateCrisisPriorByBin",
-    mod: teammateCrisisPriorData,
-  },
-  {
-    file: `${A}/data/teammateCrisisPrior.ts`,
-    symbol: "teammateCrisisDmgBinOf",
-    mod: teammateCrisisPriorData,
-  },
-  {
-    file: `${A}/analysis/candidates/teammateCrisisIdle.ts`,
-    symbol: "teammateCrisisIdleEvents",
-    mod: teammateCrisisIdle,
-  },
-  // GH #95 question 4 / BACKLOG #43 (2026-09-17): triage twin + burst window predicate
-  {
-    file: `${A}/analysis/candidates/teammateCrisisIdle.ts`,
-    symbol: "teammateCrisisTriageEvents",
-    mod: teammateCrisisIdle,
-  },
-  {
-    file: `${A}/data/teammateCrisisPrior.ts`,
-    symbol: "lookupTeammateCrisisTriageByBin",
-    mod: teammateCrisisPriorData,
-  },
+  // GH #95 (2026-09-17): stacked defensives
+  // BACKLOG #43 (2026-09-17): burst window predicate
   {
     file: `${A}/utils/enemyCDs.ts`,
     symbol: "isEnemyCdWindowSpell",
@@ -5733,11 +5684,6 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCdPriorCrossingHp",
-    mod: promptQualityCheck,
-  },
-  {
-    file: `${E}/quality/promptQualityCheck.ts`,
-    symbol: "checkTeammateCrisisRefConsistency",
     mod: promptQualityCheck,
   },
   {
@@ -6779,41 +6725,6 @@ describe("谓词索引:分析产出 X ⇄ 门规验证 X", () => {
     const mutatedLine = `  - id=crisis-no-response:1:42 type=crisis-no-response t=42s units=Healer-Realm-US facts={${mutatedFactsStr}}`;
     expect(
       promptQualityCheck.checkBehaviorPriorConsistency([mutatedLine]),
-    ).toHaveLength(1);
-  });
-
-  it("attempt-into-trinket 渲染出的语料参照数字,门规零违规;改一个数就被抓住(反向对照)", () => {
-    // Same constant both sides — the producer (utils/killAttempts.ts's
-    // attemptIntoTrinketEvents) renders String(...) of these exact fields and
-    // this gate re-parses them (docs/predicate-index.md's outcomeRefs row).
-    // Fuller cases live in packages/eval/test/outcomeRefGate.test.ts.
-    const REF = outcomeRefs.ATTEMPT_INTO_TRINKET_OUTCOME_REF;
-    const facts: Record<string, string> = {
-      t: "1:12",
-      target: "Enemy-Realm-US",
-      stun: "Kidney Shot",
-      stunsN: "2",
-      focusPct: "78",
-      dmgM: "1.24",
-      primeAlt: "Other-Realm-US",
-      failedBy: "pressure",
-      refN: String(REF.n),
-      refKillTrinketDown: String(REF.killPctTrinketDown),
-      refKillTrinketUp: String(REF.killPctTrinketUp),
-    };
-    const render = (f: Record<string, string>): string =>
-      `  - id=attempt-into-trinket:1:72 type=attempt-into-trinket t=1:12s units=Enemy-Realm-US/Other-Realm-US facts={${Object.entries(
-        f,
-      )
-        .map(([k, v]) => `${k}=${v}`)
-        .join(", ")}}`;
-    expect(
-      promptQualityCheck.checkOutcomeRefConsistency([render(facts)]),
-    ).toEqual([]);
-    expect(
-      promptQualityCheck.checkOutcomeRefConsistency([
-        render({ ...facts, refKillTrinketUp: "4.8" }),
-      ]),
     ).toHaveLength(1);
   });
 

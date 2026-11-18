@@ -145,10 +145,7 @@ import {
   isDeferralAbsorb,
 } from "../utils/incomingPressure";
 import { fmtKickLockoutSeconds, kickTextLockEndMs } from "../utils/kickLockout";
-import {
-  attemptIntoTrinketEvents,
-  extractKillAttempts,
-} from "../utils/killAttempts";
+import { extractKillAttempts } from "../utils/killAttempts";
 import {
   analyzeKillWindowTargetSelection,
   matchMinHpPct,
@@ -193,7 +190,6 @@ import {
 import { getSpellSchoolName } from "../utils/spellSchools";
 import { medianFinite } from "../utils/stats";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
-import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
 import { firstDeathMs } from "../utils/unitDeath";
 import { withVisionObscuredCauses } from "../utils/visionObscured";
 import { burstWindowDecisionPoints } from "./burstWindowDecisionPoints";
@@ -210,7 +206,6 @@ import {
 import {
   CD_HOARD_RESPONSE_S,
   cdHoardedEvents,
-  cdSpentIdleEvents,
   countsAsTeamBurst,
   enemyHealerCcWindows,
   enemyHealerFactOnlyLocks,
@@ -218,7 +213,6 @@ import {
   isDefensiveCdResponse,
   missedSyncWindowEvents,
   syncWindowCdFor,
-  unsyncedBurstEvents,
 } from "./candidates/cooldownTiming";
 import { crisisNoResponseEvents } from "./candidates/crisisNoResponse";
 import {
@@ -253,10 +247,6 @@ import {
   ownerPressEvents,
   refusalReasonWords,
 } from "./candidates/shared";
-import {
-  teammateCrisisIdleEvents,
-  teammateCrisisTriageEvents,
-} from "./candidates/teammateCrisisIdle";
 import { CRISIS_HP_PCT, crisisDecisionPoints } from "./crisisDecisionPoints";
 import { fmtFactTime } from "./factFormat";
 import {
@@ -268,7 +258,6 @@ import {
   type KickSidePressure,
 } from "./kickPressure";
 import { majorWallIntervals } from "./stackedDefensives";
-import { teammateCrisisPoints } from "./teammateCrisis";
 import type { CandidateEvent } from "./types";
 
 // Cooldown-timing producers moved to `candidates/cooldownTiming.ts` in the
@@ -278,7 +267,6 @@ export {
   CD_HOARD_RESPONSE_S,
   CD_HOARDED_OUTCOME_REF,
   cdHoardedEvents,
-  cdSpentIdleEvents,
   enemyHealerCcWindows,
   enemyHealerFactOnlyLocks,
   friendlyCrisisMomentInWindow,
@@ -287,7 +275,6 @@ export {
   type ICrisisMoment,
   type IEnemyHealerCcWindow,
   missedSyncWindowEvents,
-  unsyncedBurstEvents,
 } from "./candidates/cooldownTiming";
 
 // Death-anchored producers moved to `candidates/death.ts` in the 2026-08-16
@@ -3731,33 +3718,6 @@ function teamPlayEvents(
     /* dispel summary not computable → both types absent */
   }
 
-  // missed-sync-window / unsynced-burst (P1 起爆-1/-2, 2026-08-15, Task 4
-  // flag-gated wiring): team-wide sync-lens candidates — same scope as
-  // missed-cleanse/missed-purge above (not owner-specific; the whole friendly
-  // team's offensive economy against the enemy healer's hard-CC windows). See
-  // enemyHealerCcWindows' doc comment for the hard-CC category decision.
-  // Single source with buildFindingsPrompt.ts's legend gate: both read
-  // CANDIDATE_TYPE_FLAGS directly, so a flag flip can never leave a candidate
-  // in the menu with no legend (or a legend with no candidate). Both flags
-  // are ON since 2026-08-15 (Task 9, user-ruled) — the current expected value
-  // of every flag lives in docs/predicate-index.md's `Feature flag state`
-  // table, asserted against runtime by predicateIndex.test.ts.
-  // attempt-into-trinket (2026-08-18): stun-anchored kill attempts opened on
-  // a trinket-up target while a PRIME target existed. Extractor + mapper live
-  // in utils/killAttempts.ts; assembly here is flag-gated like every other
-  // new candidate type.
-  if (CANDIDATE_TYPE_FLAGS.attemptIntoTrinket) {
-    try {
-      out.push(
-        ...attemptIntoTrinketEvents(
-          extractKillAttempts(friends, enemies, combat),
-        ),
-      );
-    } catch {
-      /* same degradation policy as the other team-play sources */
-    }
-  }
-
   // GH #80 (2026-09-12, user approval "做出来看看是否对游戏建议有真正的帮助"):
   // backlash-dispel (the owner dispelled UA/VT in the archive-measured
   // net-negative stratum) and backlash-dispel-window (the owner could have
@@ -3829,17 +3789,21 @@ function teamPlayEvents(
     }
   }
 
-  if (
-    CANDIDATE_TYPE_FLAGS.missedSyncWindow ||
-    CANDIDATE_TYPE_FLAGS.unsyncedBurst
-  ) {
+  // missed-sync-window (P1 起爆-1, 2026-08-15, flag-gated wiring): a
+  // team-wide sync-lens candidate — same scope as missed-cleanse above (not
+  // owner-specific; the whole friendly team's offensive economy against the
+  // enemy healer's hard-CC windows). See enemyHealerCcWindows' doc comment
+  // for the hard-CC category decision. Single source with
+  // buildFindingsPrompt.ts's legend gate: both read CANDIDATE_TYPE_FLAGS
+  // directly, so a flag flip can never leave a candidate in the menu with no
+  // legend (or a legend with no candidate). The current expected value of
+  // every flag lives in docs/predicate-index.md's `Feature flag state` table,
+  // asserted against runtime by predicateIndex.test.ts.
+  if (CANDIDATE_TYPE_FLAGS.missedSyncWindow) {
     try {
       const ccWindows = enemyHealerCcWindows(friends, enemies, combat);
-      // Gate on at least one real hard-CC window on the enemy healer: with
-      // zero windows, unsynced-burst's "no hard CC overlapped this cast"
-      // predicate would trivially be true for EVERY offensive cast (nothing
-      // to overlap), flooding the menu with a claim sync was never even
-      // possible to attempt — not the coaching point this type exists for.
+      // With zero hard-CC windows on the enemy healer there is nothing to
+      // sync into.
       if (ccWindows.length > 0) {
         // B3i: enemy CC can come from a pet or totem (Capacitor Totem,
         // e9ea8a0c @298), so the owner's cannot-cast sources include them.
@@ -3858,9 +3822,7 @@ function teamPlayEvents(
               // Resurrection redesign (2026-09-02, GH #13): the canonical
               // offensive table (chg9) replaces `isThroughput`, which had
               // been listing Tiger's Lust / Berserker Shout / racials as
-              // "ready offensive CDs". Deliberately also narrows
-              // unsynced-burst's input (retired, flag false) — if that type
-              // ever returns it must return on the canonical table too.
+              // "ready offensive CDs".
               // B3iii (2026-09-25): a healer's own CD counts only if it is
               // Power Infusion — the shared countsAsTeamBurst.
               if (!countsAsTeamBurst(f, String(cd.spellId))) continue;
@@ -3949,49 +3911,9 @@ function teamPlayEvents(
             }),
           );
         }
-        if (CANDIDATE_TYPE_FLAGS.unsyncedBurst) {
-          const teamOffensiveCasts = teamOffensiveCds.flatMap((cd) =>
-            cd.casts.map((c) => ({
-              ownerName: cd.ownerName,
-              spellId: cd.spellId,
-              spellName: cd.spellName,
-              castTimeSeconds: c.timeSeconds,
-              cooldownSeconds: cd.cooldownSeconds,
-            })),
-          );
-          // §29b fix (2026-08-15): name EVERY enemy healer, not just the
-          // first match — enemyHealerCcWindows' hard-CC gate already spans
-          // all of them (see unsyncedBurstEvents' doc comment), so a
-          // dual-healer comp must not misattribute the "was free" fact to
-          // an arbitrary one.
-          const enemyHealerNames = enemies
-            .filter((e) => isHealerSpec(e.spec))
-            .map((e) => e.name as string);
-          // Feasibility gate input: the team's own hard-CC ledger, built from
-          // the same extractMajorCooldowns pass the offensive list uses and
-          // filtered to abilities that are hard CC (`ccSpellIds` — the official
-          // predicate since 2026-08-22).
-          const teamCcCds: IMajorCooldownInfo[] = [];
-          for (const f of friends) {
-            try {
-              for (const cd of extractMajorCooldowns(f, combat))
-                if (isControlCast(cd.spellId)) teamCcCds.push(cd);
-            } catch {
-              /* this friend's ledger not computable → their CC absent */
-            }
-          }
-          out.push(
-            ...unsyncedBurstEvents(
-              teamOffensiveCasts,
-              ccWindows,
-              enemyHealerNames,
-              (tSeconds) => teamCcCds.some((cd) => cdAvailableAt(cd, tSeconds)),
-            ),
-          );
-        }
       }
     } catch {
-      /* sync-lens analysis not computable → both types absent */
+      /* sync-lens analysis not computable → type absent */
     }
   }
 
@@ -3999,8 +3921,7 @@ function teamPlayEvents(
   // decision points from `crisisDecisionPoints` — the owner's own crises,
   // plus each OTHER friendly's as a teammate crisis (the `own` flag on each
   // source decides which help-gate `cdHoardedEvents` applies). Reuses the
-  // caller's already-computed `ownerCds` (no re-fetch), same convention as
-  // cd-spent-idle below.
+  // caller's already-computed `ownerCds` (no re-fetch).
   if (CANDIDATE_TYPE_FLAGS.cdHoarded) {
     try {
       // BACKLOG #43 proc exemption needs the crisis unit's death instants, in
@@ -4233,18 +4154,6 @@ function teamPlayEvents(
       );
     } catch {
       /* cd-hoarded not computable → type absent */
-    }
-  }
-  if (CANDIDATE_TYPE_FLAGS.cdSpentIdle) {
-    try {
-      const matchThreat = matchThreatLevel(enemies, friends, combat);
-      out.push(
-        ...cdSpentIdleEvents(ownerCds, owner, matchThreat, {
-          threatActiveAt: (t) => threatActiveAt(t, enemies, friends, combat),
-        }),
-      );
-    } catch {
-      /* cd-spent-idle not computable → type absent */
     }
   }
 
@@ -4609,26 +4518,6 @@ function teamPlayEvents(
     } catch {
       /* decision points not computable → type absent */
     }
-    // teammate-crisis-idle (GH #95, 2026-09-17): the healer-side twin — a
-    // TEAMMATE's crossing (same crisisDecisionPoints, run on the teammate),
-    // judged on what the healer did toward them; same predicate the eval
-    // reference scan uses (teammateCrisisPriorScan.ts), same lookup as the
-    // gate (lookupTeammateCrisisPriorByBin).
-    // Both accusations retired 2026-09-19 (user ruling; registry rows carry
-    // the numbers) — one flag, the predicate and producers stay.
-    if (CANDIDATE_TYPE_FLAGS.teammateCrisis)
-      try {
-        const bracket: string = combat?.startInfo?.bracket ?? "";
-        const teammatePoints = teammateCrisisPoints(owner, combat);
-        out.push(
-          ...teammateCrisisIdleEvents(teammatePoints, owner, bracket),
-          // teammate-crisis-triage (user ruling 2026-09-17): the healer spent
-          // the window on a friendly who was NOT in crisis
-          ...teammateCrisisTriageEvents(teammatePoints, owner, bracket),
-        );
-      } catch {
-        /* teammate points not computable → type absent */
-      }
   } else {
     // DPS side of the same signal (spec §1d): until the DPS behavior-prior
     // scan lands, behaviorPriorGenerated.json carries no `|dps|` cells, so
@@ -5330,8 +5219,7 @@ function dpsOwnerEvents(
   // that overlap another enemy's 80.3% of the time (37% fully covered)
   // produced 495 mutually-contradictory accusation pairs in n=300, and the
   // 50% threshold sat at p72 of a knee-less slope. The team-level replacement
-  // is the [KILL ATTEMPTS] block's per-attempt team-focus share plus the
-  // attempt-into-trinket candidate. Retirement follows the momentSnapshot
+  // is the [KILL ATTEMPTS] block's per-attempt team-focus share. Retirement follows the momentSnapshot
   // precedent — assembly unplugged here; `auditWindowTargeting` and
   // `ON_TARGET_GOOD_PCT` stay exported (BurstLedgerCard's 窗口目标纪律 section
   // still renders the per-window rows), and deepDive/findingDisplay keep

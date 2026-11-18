@@ -385,9 +385,9 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
     },
   };
 
-  it("默认态(2026-09-02 起 missedSyncWindow 复活为 true,GH #13 撤销)→ 该类型图例随事件出现;unsyncedBurst/cdSpentIdle 仍关死连图例都不出;现有图例不受影响", () => {
+  it("默认态(2026-09-02 起 missedSyncWindow 复活为 true,GH #13 撤销)→ 该类型图例随事件出现;现有图例不受影响", () => {
     // 单源门(candidateFindings 与 buildFindingsPrompt 读同一个 flag)在两头
-    // 同时生效:开的类型图例随菜单出现,关死的类型连图例都不许出现。
+    // 同时生效:开的类型图例随菜单出现。
     const p = buildFindingsPrompt(
       [...candidates, missedSyncWindowEvent, cdHoardedEvent],
       "",
@@ -395,18 +395,14 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
     );
     expect(p).toMatch(/"missed-sync-window"/);
     expect(p).toMatch(/"cd-hoarded"/);
-    expect(p).not.toMatch(/"unsynced-burst"/);
-    expect(p).not.toMatch(/"cd-spent-idle"/);
     expect(p).toMatch(/"death"/);
   });
 
-  it("单开 missedSyncWindow(其余三个显式关闭,隔离验证)→ 只有 missed-sync-window 的图例出现,同同步是门/血线是加速器不要求低血", () => {
-    // 2026-09-02 复活后默认 true(2026-08-19 至 09-02 曾默认 false)—— 本用例是纯函数隔离验证,四个开关都显式设,不依赖默认值。
+  it("单开 missedSyncWindow(cdHoarded 显式关闭,隔离验证)→ 只有 missed-sync-window 的图例出现,同同步是门/血线是加速器不要求低血", () => {
+    // 2026-09-02 复活后默认 true(2026-08-19 至 09-02 曾默认 false)—— 本用例是纯函数隔离验证,两个开关都显式设,不依赖默认值。
     const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.missedSyncWindow = true;
-    CANDIDATE_TYPE_FLAGS.unsyncedBurst = false;
     CANDIDATE_TYPE_FLAGS.cdHoarded = false;
-    CANDIDATE_TYPE_FLAGS.cdSpentIdle = false;
     try {
       const p = buildFindingsPrompt(
         [...candidates, missedSyncWindowEvent, cdHoardedEvent],
@@ -417,8 +413,6 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
       expect(p).toMatch(/Syncing with the lock is the trigger/);
       expect(p).toMatch(/do NOT require low enemy HP/);
       expect(p).not.toMatch(/"cd-hoarded"/);
-      expect(p).not.toMatch(/"unsynced-burst"/);
-      expect(p).not.toMatch(/"cd-spent-idle"/);
     } finally {
       Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }
@@ -428,11 +422,9 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
   // cd-waste legend, which printed on every prompt; cd-hoarded rows carry no
   // facts.costNorm (cost_norm abilities are kept out of readyCds), so with
   // no cd-waste row on the menu the note is absent.
-  it("单开 cdHoarded(其余三个显式关闭,隔离验证)→ 只有 cd-hoarded 的图例出现;菜单无 cd-waste 行,costNorm 说明不出现", () => {
+  it("单开 cdHoarded(missedSyncWindow 显式关闭,隔离验证)→ 只有 cd-hoarded 的图例出现;菜单无 cd-waste 行,costNorm 说明不出现", () => {
     const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.missedSyncWindow = false;
-    CANDIDATE_TYPE_FLAGS.unsyncedBurst = false;
-    CANDIDATE_TYPE_FLAGS.cdSpentIdle = false;
     try {
       const p = buildFindingsPrompt(
         [...candidates, missedSyncWindowEvent, cdHoardedEvent],
@@ -442,34 +434,6 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
       expect(p).toMatch(/"cd-hoarded"/);
       expect(p).not.toMatch(/facts\.costNorm is present/);
       expect(p).not.toMatch(/"missed-sync-window"/);
-      expect(p).not.toMatch(/"unsynced-burst"/);
-      expect(p).not.toMatch(/"cd-spent-idle"/);
-    } finally {
-      Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
-    }
-  });
-
-  it("cdSpentIdle 图例说明它只在中/高威胁对局里出现(2026-08-30 起默认关,显式开验证图例文案本身仍在)", () => {
-    const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
-    CANDIDATE_TYPE_FLAGS.cdSpentIdle = true;
-    try {
-      const p = buildFindingsPrompt(
-        [
-          ...candidates,
-          {
-            id: "cd-spent-idle:h:33206:400",
-            type: "cd-spent-idle",
-            t: 400,
-            unitNames: ["Healer-R"],
-            spell: "Pain Suppression",
-            facts: { t: "400", spell: "Pain Suppression", unit: "Healer-R" },
-          },
-        ],
-        "",
-        "Discipline Priest",
-      );
-      expect(p).toMatch(/"cd-spent-idle"/);
-      expect(p).toMatch(/at least medium overall threat/);
     } finally {
       Object.assign(CANDIDATE_TYPE_FLAGS, savedFlags);
     }

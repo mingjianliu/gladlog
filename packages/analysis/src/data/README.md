@@ -2,7 +2,7 @@
 
 _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for provenance). Generated files carry the `Generated` suffix (or are `datagen-manifest.json`) and are rewritten by the season runbook `docs/commands/update-wow-data.md`; everything else is hand-maintained and, if it is an id table, must be registered in `curatedIdRegistry.ts` (CLAUDE.md Curated-List Completeness Rule). Tests for this folder live next to the files (`*.test.ts`)._
 
-42 generated · 57 hand-maintained · 22.3 MB total (spellNames.json and talentIdMap.json are lazy-loaded, see `ensure.ts`).
+41 generated · 55 hand-maintained · 22.3 MB total (spellNames.json and talentIdMap.json are lazy-loaded, see `ensure.ts`).
 
 ## Generated (do not edit by hand)
 
@@ -55,7 +55,6 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | `syncWindowPriorGenerated.json` | 1 KB |  |
 | `talentEffectInventoryGenerated.json` | 3610 KB |  |
 | `talentMitigationGenerated.json` | 14 KB |  |
-| `teammateCrisisPriorGenerated.json` | 3 KB |  |
 | `usableWhileCcGenerated.ts` | 13 KB | datagen output |
 
 ## Hand-maintained
@@ -89,7 +88,6 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | `mitigationData.ts` | 13 KB | Damage reduction percentage, 0-100; immunities = 100. |
 | `mitigationVerdicts.ts` | 20 KB | 减伤裁定册 —— 「对面交了这个,你还该不该继续打」。 |
 | `observedSpellIds.ts` | 259 B | spellIds observed across the corpus (strings, matching the repo-wide id |
-| `outcomeRefs.ts` | 2 KB | Corpus-wide OUTCOME references for candidate types (2026-08-30 outcome |
 | `racialAbilities.ts` | 10 KB | Racial abilities (2026-08-12). The combat log carries NO race field — |
 | `specNames.ts` | 3 KB | Spec display tables shared by the desktop renderer and eval scripts. |
 | `spellCategories.ts` | 25 KB | Minimal PvP spell category dataset (a compliant replacement for |
@@ -114,7 +112,6 @@ _English-only developer index, generated 2026-09-26 (`git log -1 -- <file>` for 
 | `talentModifiers.json` | 145 KB |  |
 | `talentNames.ts` | 757 B |  |
 | `talentStrings.ts` | 4 KB | Loaded in the background rather than with a top-level await (same reason as |
-| `teammateCrisisPrior.ts` | 5 KB | Corpus reference for the `[MATE CRISIS]` observation card (GH #95, |
 | `timelineLineFlags.ts` | 3 KB | Switches for timeline lines that ship with a measured alternative, so an |
 | `trinketItemIds.json` | 831 B |  |
 | `warlockPets.ts` | 2 KB | Warlock pets by what they DO (GH #86, user ruling 2026-09-22: most summons |

@@ -67,8 +67,6 @@ import {
 import { SCHOOL_SAVE_MIN_SHARE } from "../analysis/candidates/cooldownTiming";
 import { isDamageImmuneControl } from "../analysis/candidates/massDispel";
 import { schoolShareCoveredBy } from "../analysis/crisisDecisionPoints";
-import { fmtFactTime } from "../analysis/factFormat";
-import { CandidateEvent } from "../analysis/types";
 import {
   castAndEffectIds,
   castKeyOfAura,
@@ -78,7 +76,6 @@ import {
   resolveMitigation,
   strongestComponentPct,
 } from "../data/mitigationComponents";
-import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "../data/outcomeRefs";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ENEMY_AREA_SAVE_IDS } from "../data/spellIdLists";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -503,9 +500,7 @@ const BREAKABLE_DR_CATEGORIES: ReadonlySet<string> = new Set([
  * accusation the user called absurd: forcing the trinket with the opener IS
  * the play. The tier only carries coaching information relative to the
  * alternatives, so the block now names the softer alternative when one
- * existed and says "no softer target" otherwise. Shared with the
- * attempt-into-trinket mapper so the fact block and the (now retired)
- * candidate can never disagree about who the softer target was.
+ * existed and says "no softer target" otherwise.
  */
 /** each enemy's full-immunity intervals, read once per round and unit (the
  * seconds count from that round's start; a unit object may sit in several
@@ -1888,73 +1883,6 @@ export function formatKillAttemptsForContext(
       })(),
   );
   return lines;
-}
-
-/** Per-round cap, same discipline as every other *_CAP in candidateFindings. */
-// at-cap 体检(2026-08-26,782 owner-回合,GH #34):263/485 有产出回合打到
-// 上限(54%)—— 承重梯队,真实攻击-撞-饰品事件量约为出面量的两倍以上。
-export const ATTEMPT_INTO_TRINKET_CAP = 2;
-
-/**
- * attempt-into-trinket candidate (2026-08-18 wiring, user-picked shape): a
- * FAILED stun-anchored attempt opened on a target whose trinket was still up
- * (tier "locked"), while another enemy was PRIME at that same instant — the
- * only tier comparison the corpus validation supports. Kills are excluded (it
- * worked; nothing to coach), and so are gated/prime openers. Among prime
- * alternatives the lowest-HP one is named (same rule as betterTargetExists).
- */
-export function attemptIntoTrinketEvents(
-  attempts: IKillAttempt[],
-): CandidateEvent[] {
-  const out: CandidateEvent[] = [];
-  // 仅晕锚(2026-08-20 v2 落地时的刻意选择):三档机会模型的语料验证锚在
-  // 晕落地时刻(8,791 次硬控),把它外推到大招起手时刻未经验证 —— 大招锚
-  // 尝试只进 [KILL ATTEMPTS] 事实块,不喂本失误候选。
-  // The prime alternative is the attempt's own `softerTarget` (softerTargetAt,
-  // shared with the fact block since 2026-09-22) — one predicate for "who was
-  // the softer target", so the block and this candidate can never disagree.
-  const candidates = attempts.filter(
-    (a) =>
-      a.anchor === "stun" &&
-      !a.killed &&
-      a.opportunity.tier === "locked" &&
-      a.softerTarget?.tier === "prime",
-  );
-  for (const a of candidates) {
-    const alt = a.softerTarget!;
-    const t = Math.floor(a.fromSeconds);
-    out.push({
-      id: `attempt-into-trinket:${a.targetUnitId}:${t}`,
-      type: "attempt-into-trinket",
-      t: a.fromSeconds,
-      unitNames: [a.targetName, alt.name],
-      spell: a.stuns[0].spellName,
-      facts: {
-        t: fmtFactTime(a.fromSeconds),
-        target: a.targetName,
-        stun: a.stuns[0].spellName,
-        stunsN: String(a.stuns.length),
-        focusPct: String(a.teamOnTargetPct),
-        dmgM: (a.teamDamageToTarget / 1e6).toFixed(2),
-        primeAlt: alt.name,
-        failedBy: a.attribution!.primary,
-        // Corpus outcome reference (2026-08-30 probe), rendered verbatim from
-        // data/outcomeRefs.ts — packages/eval's checkOutcomeRefConsistency
-        // re-parses these three facts and compares them against that same
-        // constant, so never format them any other way here.
-        refN: String(ATTEMPT_INTO_TRINKET_OUTCOME_REF.n),
-        refKillTrinketDown: String(
-          ATTEMPT_INTO_TRINKET_OUTCOME_REF.killPctTrinketDown,
-        ),
-        refKillTrinketUp: String(
-          ATTEMPT_INTO_TRINKET_OUTCOME_REF.killPctTrinketUp,
-        ),
-      },
-    });
-  }
-  return out
-    .sort((x, y) => Number(y.facts.dmgM ?? 0) - Number(x.facts.dmgM ?? 0))
-    .slice(0, ATTEMPT_INTO_TRINKET_CAP);
 }
 
 /** What anchored the attempt, for the bound-trinket test (F-E22 rule 1). */

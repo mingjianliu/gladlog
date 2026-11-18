@@ -1,10 +1,11 @@
 /**
- * Cooldown-timing candidate producers — `missed-sync-window`,
- * `unsynced-burst`, `cd-hoarded` and `cd-spent-idle`, plus the enemy-healer
- * CC window and friendly-crisis predicates they all key off.
+ * Cooldown-timing candidate producers — `missed-sync-window` and
+ * `cd-hoarded`, plus the enemy-healer CC window and friendly-crisis
+ * predicates they key off. (`unsynced-burst` and `cd-spent-idle` lived here
+ * until their producers were deleted on 2026-11-18, ruling A11.)
  *
  * Split out of `candidateFindings.ts` on 2026-08-16 (mechanical split by
- * theme); logic moved verbatim. All four ask the same question from different
+ * theme); logic moved verbatim. Both ask the same question from different
  * angles — was this button pressed at the moment the team's window wanted it —
  * which is why the shared window predicates live here with them.
  */
@@ -12,12 +13,10 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
 import { isNotMajorDefensive } from "../../data/abilityProfile";
-import { costNormPhrase } from "../../data/curatedAbilityFacts";
 import { MITIGATION_TABLE } from "../../data/mitigationData";
 import { OFF_GCD_SPELL_IDS } from "../../data/offGcdGenerated";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
-import { reachesAlly } from "../../data/spellTargeting";
 import {
   syncRefClearsMinContrast,
   type SyncWindowPriorRef,
@@ -36,7 +35,6 @@ import {
   buffDurationOfApplication,
   buffFullDurationForCaster,
 } from "../../utils/buffDuration";
-import { burstCastSpan } from "../../utils/burstLedger";
 import {
   type ActWindowState,
   cannotCastIntervalsForSpells,
@@ -65,14 +63,12 @@ import {
   cdHelpsRecipient,
   cdIsProcOnly,
   cdReadyInTimeAt,
-  DEFENSIVE_TAGS,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
   type IMajorCooldownInfo,
   isHealerSpec,
   kitSpellNameOf,
   lockCastsOf,
-  THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
 import {
   DR_CATEGORY_MAP,
@@ -107,7 +103,6 @@ import {
   SOLO_SHUFFLE_BRACKET,
 } from "../../utils/roundEnd";
 import { isOffensiveCdFor, isOffensiveLedgerCd } from "../../utils/spellDanger";
-import { type MatchThreatLevel } from "../../utils/threatAssessment";
 import {
   type DecisionPoint,
   DMG_WINDOW_MS,
@@ -125,8 +120,8 @@ import {
 } from "./shared";
 
 /**
- * HARD_CC_CATEGORIES (P1 sync-lens, 2026-08-15, `missedSyncWindowEvents` /
- * `unsyncedBurstEvents`): the DR categories that count as "the enemy healer
+ * HARD_CC_CATEGORIES (P1 sync-lens, 2026-08-15, `missedSyncWindowEvents`):
+ * the DR categories that count as "the enemy healer
  * is locked out of casting" — mirrors `DR_CATEGORY_MAP`'s full PvP-relevant
  * label set (drAnalysis.ts's `SCM_CATEGORY_LABELS` already excludes
  * 'taunt'/'root' at the source, "not relevant for PvP CC analysis") minus
@@ -220,11 +215,9 @@ function allyImmunityEnd(
 }
 
 /**
- * Shared "敌治疗硬控窗" extraction (CLAUDE.md shared-predicate rule): both
- * `missedSyncWindowEvents` and `unsyncedBurstEvents` consume the exact same
- * windows so a "the healer was locked" fact can never disagree between the
- * two candidate types. Built on `analyzeOutgoingCCChains` — the same
- * outgoing-CC data source `dr-clipped-cc` already reads — filtered to
+ * Shared "敌治疗硬控窗" extraction (CLAUDE.md shared-predicate rule): the
+ * windows `missedSyncWindowEvents` consumes. Built on
+ * `analyzeOutgoingCCChains` — the same outgoing-CC data source `dr-clipped-cc` already reads — filtered to
  * targets `isHealerSpec` classifies as the enemy healer, then narrowed to
  * `HARD_CC_CATEGORIES` (see its doc comment for the category decision).
  * `friends`/`enemies` decide caster/target sides exactly as every other
@@ -234,10 +227,9 @@ function allyImmunityEnd(
  *
  * Exported (review fix round 1, 2026-08-15): originally file-private, kept
  * exported so tests can call it directly instead of re-deriving its logic.
- * `missedSyncWindowEvents`/`unsyncedBurstEvents` are wired into
- * `teamPlayEvents` (candidateFindings.ts) and both flags have been ON since
- * 2026-08-15 — see docs/predicate-index.md's `Feature flag state` table for
- * the current expected value of every flag.
+ * `missedSyncWindowEvents` is wired into `teamPlayEvents`
+ * (candidateFindings.ts) — see docs/predicate-index.md's `Feature flag state`
+ * table for the current expected value of every flag.
  */
 export function enemyHealerCcWindows(
   friends: any[],
@@ -1622,145 +1614,6 @@ export function missedSyncWindowEvents(
   );
 }
 
-/** Per-match cap for unsynced-burst. <标定定稿 2026-08-15,报告
- * p1p2-calibration.md>: confirmed at 2, unchanged — same full-corpus scan as
- * `MISSED_SYNC_WINDOW_CAP` above, this type's own definition equally fixed
- * before Task 5 (no HP gate, complements `unconverted-burst` deliberately).
- * 场均条数(capped) 1.17 (raw pre-cap 1.98), inside the 0.5–2 band; 发生率
- * 69.5%, same "already-locked definition, not a Task 5 lever" caveat as
- * MISSED_SYNC_WINDOW_CAP's doc comment. 双向误差注: same shape as that
- * constant's — a lower cap drops real independent unsynced presses from an
- * already-firing round; a higher cap lets one round's raw ~2 average
- * dominate the menu further. */
-const UNSYNCED_BURST_CAP = 2; // <标定定稿 2026-08-15,报告 p1p2-calibration.md>;at-cap 体检 2026-08-26:223/393(57%)—— 承重,ba31cd05 摘 105 条净减 66 即此 cap 回填所致
-
-/**
- * unsynced-burst (P1 起爆-2, 2026-08-15, user-ruled definition): a friendly
- * offensive major cooldown was cast whose effect window contained ZERO hard
- * CC on the enemy healer — the burst went out with the enemy healer free to
- * answer it. Complements the existing `unconverted-burst` (an OUTCOME fact:
- * the target didn't die) — this type is CAUSE-level (no sync happened at
- * all) and is deliberately NOT deduped against it: the same cast can produce
- * both candidates (their `id`s/eventIds are independent) because "didn't
- * convert" and "wasn't synced" are two different coaching facts about the
- * same button press.
- *
- * Effect window: `burstCastSpan` — the exact predicate the burst ledger
- * already uses for "how long is this CD's effect active", built from
- * `spellEffectData[spellId].durationSeconds`. Since 2026-10-01 (ruling A14)
- * there is no 10 s fallback: a CD whose buff duration is unknown / instant
- * has a zero-length window.
- *
- * Severity/cap: sorted by the cooldown's own length (`cooldownSeconds`
- * descending) — the biggest-cooldown CDs are the highest-value presses to
- * burn unsynced (a 30s CD misfiring is routine; a 3-minute CD misfiring is
- * not), ties broken chronologically (stable sort). Capped per the constant's
- * doc comment above.
- *
- * `healerNames` (§29b fix, 2026-08-15): the "no hard CC overlapped this
- * cast" gate below reads `ccWindows`, which `enemyHealerCcWindows` already
- * pools across EVERY enemy healer (its `Pick<..., "fromSeconds" |
- * "toSeconds">` signature drops which healer each window belongs to on
- * purpose — this function only ever asks "was ANY enemy healer locked
- * during this span"). A pass (no window overlaps) therefore proves ALL
- * enemy healers were free, not just one — so the fact must name the full
- * set, not `enemies.find(...)`'s first match. Before this fix the wiring
- * call site passed only the first enemy healer's name, which in a
- * dual-healer comp could point at a healer who was never the one actually
- * free to answer (or omit a second healer who also was) — see BACKLOG
- * §29(b). `healerNames.length === 0` (no enemy healer on the roster) still
- * returns [] — same "no object to talk sync about" rationale the previous
- * single-name null check had.
- */
-export function unsyncedBurstEvents(
-  casts: Array<{
-    ownerName: string;
-    spellId: string;
-    spellName: string;
-    castTimeSeconds: number;
-    cooldownSeconds: number;
-  }>,
-  ccWindows: Pick<IEnemyHealerCcWindow, "fromSeconds" | "toSeconds">[],
-  healerNames: string[],
-  /** Feasibility gate (2026-08-22 corpus adjudication): did the TEAM have any
-   * hard CC off cooldown when this cooldown went out? The advice is "line the
-   * cooldown up with CC on their healer next time", which is not advice if the
-   * CC was down — you cannot spend a resource you do not have. */
-  teamCcReadyAt: (tSeconds: number) => boolean,
-  // Calibration-only override, same rationale as cdHoardedEvents' — defaults
-  // to the module constant, production call sites unaffected.
-  overrides?: { cap?: number },
-): CandidateEvent[] {
-  if (healerNames.length === 0) return [];
-  const cap = overrides?.cap ?? UNSYNCED_BURST_CAP;
-  const candidates: Array<{
-    cast: (typeof casts)[number];
-    windowEndT: number;
-  }> = [];
-  for (const cast of casts) {
-    const span = burstCastSpan({
-      castTimeSeconds: cast.castTimeSeconds,
-      // 单一谓词(2026-09-06):`casts` 是队伍的进攻施放清单,不带单位,
-      // 所以拿不到施法者;传 undefined 与原先直读同值。
-      buffEndSeconds:
-        cast.castTimeSeconds +
-        (buffFullDurationForCaster(cast.spellId, undefined) ?? 0),
-    });
-    // 2026-08-23 用户裁定「重复吧」:这条指控印的是「**你的**爆发 CD 出去时对面
-    // 治疗没被控」,而一个**给出去的** buff 不是施法者自己的爆发 —— 能量灌注是牧师
-    // 按在法师身上让**法师**爆发的,法师那一下已经被单独指控过一次,把它同时记在
-    // 牧师头上就是同一次爆发数两遍。实测(S2 归档 120 文件、治疗视角 375 条指控):
-    // 能量灌注 66 条,其中与另一条 ±3s 同窗的 8 条。
-    // 同一把尺子顺带兜住三个**根本不是爆发**的:黑暗 196718(40% 团减)、猛虎之志
-    // 116841(给队友的解控/加速)、恢复萨的升腾 114052 —— 它们只是被打了 Offensive
-    // 牌子才混进 teamOffensiveCds,「你的黑暗没和控制对齐」不是一句能成立的话。
-    // 元素/增强萨的升腾(114050/114051)不够得着队友,照旧留在指控范围内。
-    if (reachesAlly(cast.spellId)) continue;
-    const hasHardCc = ccWindows.some(
-      (w) => w.fromSeconds < span.to && w.toSeconds > span.from,
-    );
-    if (hasHardCc) continue;
-    // 2026-08-22, ~278 sampled instances of the 12.1 archive: in **0%** of them
-    // had the team failed to CC the enemy healer at all that round — every
-    // accused team did sync elsewhere (median 13-18s away), so "you don't line
-    // burst up with CC" was never the actual failure. The type fired on 66-70%
-    // of all offensive cooldowns with a flat skill gradient (-0.1pp), i.e. it
-    // was describing normal play: CC and burst cooldowns run independently and
-    // cannot always overlap. Only accuse when a hard CC was actually ready.
-    if (!teamCcReadyAt(cast.castTimeSeconds)) continue;
-    candidates.push({ cast, windowEndT: toRenderSecond(span.to) });
-  }
-  return candidates
-    .sort(
-      (a, b) =>
-        b.cast.cooldownSeconds - a.cast.cooldownSeconds ||
-        a.cast.castTimeSeconds - b.cast.castTimeSeconds,
-    )
-    .slice(0, cap)
-    .map(({ cast, windowEndT }) => {
-      const t = toRenderSecond(cast.castTimeSeconds);
-      return {
-        id: `unsynced-burst:${cast.ownerName}:${cast.spellId}:${t}`,
-        type: "unsynced-burst",
-        t,
-        unitNames: [cast.ownerName, ...healerNames],
-        spell: cast.spellName,
-        spellId: cast.spellId,
-        facts: {
-          t: String(t),
-          windowEndT: String(windowEndT),
-          owner: cast.ownerName,
-          spell: cast.spellName,
-          // §29b fix: the gate proves ALL enemy healers were free (see the
-          // function doc comment), so the fact names the full set — same
-          // "、"-joined convention missedSyncWindowEvents' readyCds uses,
-          // not an arbitrary first match.
-          healer: healerNames.join("、"),
-        },
-      };
-    });
-}
-
 /** cd-hoarded: the own-team HP floor a hoarded window's worst moment must
  * have crossed to count as a "crisis" happened during the hoard, not just
  * "someone took a scratch". Deliberately a separate number/constant from
@@ -2999,122 +2852,4 @@ export function friendlyCrisisMomentInWindow(
     }
   }
   return worst;
-}
-
-/** Per-match cap for cd-spent-idle. <标定定稿 2026-08-15,报告
- * p1p2-calibration.md>: confirmed at 2, unchanged — full-corpus scan
- * measured 场均条数(capped) only 0.14 (raw 0.15, essentially uncapped —
- * B6's red line already does almost all the limiting: 35.1% of rounds are
- * "low" threat and return `[]` before any cast is even probed), 发生率 just
- * 11.9%, the lowest of the four new types and well under every precedent.
- * 双向误差注: a lower cap has essentially no effect (raw already sits at
- * 0.15, nowhere near 2); a higher cap likewise has no effect for the same
- * reason — this type's volume is governed by the B6 threat gate, not by
- * this cap, so there is no evidence for moving it off the shared
- * per-round-cap default. */
-const CD_SPENT_IDLE_CAP = 2; // <标定定稿 2026-08-15,报告 p1p2-calibration.md>;at-cap 体检 2026-08-26:21/83(25%)
-
-/**
- * cd-spent-idle (P2 起爆-2, 2026-08-15, deep-dive-derived definition): a
- * defensive/survival major cooldown was cast at a moment with no active
- * enemy threat (圣佑/Blessing-of-Sanctuary blind-cast shape: pressing a
- * survival tool into dead air instead of holding it for the next real
- * window).
- *
- * "Defensive/survival CD" identification follows the exact filter this
- * file's own `slowDefensiveResponseEvents` wiring already uses in
- * `teamPlayEvents` (`DEFENSIVE_TAGS.has(cd.tag) && !cd.isThroughput` —
- * `DEFENSIVE_TAGS` = Defensive ∪ External spell tags, cooldowns.ts) rather
- * than inventing a second definition of "defensive".
- *
- * Threat gate is `threatAssessment.ts`'s single-source predicates, consumed
- * (never re-implemented) via injected probes:
- *  - per-cast gate: `probes.threatActiveAt(t)` false at the (render-floored)
- *    cast instant → candidate; true → no candidate.
- *  - **Red line B6** (non-negotiable, user-ruled): if `matchThreat` — the
- *    caller's already-computed `matchThreatLevel(...)` for the whole match —
- *    is `"low"`, this function returns `[]` before even looking at any cast,
- *    and `probes.threatActiveAt` is never invoked (pinned by a dedicated
- *    spy test: in a low-threat match, using CDs on cooldown is correct play,
- *    not a coaching point).
- *
- * Render-grid anchoring (CLAUDE.md): the cast instant is floored via
- * `toRenderSecond` BEFORE it is used for the threat gate or written into
- * facts — the same instant must decide both, or the fact could disagree
- * with the gate that produced it.
- *
- * Cost-norm guard (#25 precedent, same as `cdHoardedEvents` above): a
- * cost_norm ability spent into a lull still carries `costNorm` in facts so
- * the prompt can explain the "last resort only" caveat rather than reading
- * as a routine "you cast into nothing" callout.
- *
- * Severity/cap: sorted chronologically (earliest idle spend first — no
- * damage-value data is wired in here, mirroring `unsyncedBurstEvents`'
- * documented no-new-CD-logic constraint), capped at `CD_SPENT_IDLE_CAP`
- * (see that constant's own doc comment for the 2026-08-15 corpus
- * calibration).
- */
-export function cdSpentIdleEvents(
-  cds: Pick<
-    IMajorCooldownInfo,
-    "spellId" | "spellName" | "tag" | "isThroughput" | "casts"
-  >[],
-  owner: { id: string; name: string },
-  matchThreat: MatchThreatLevel,
-  probes: {
-    /** Wired to threatAssessment.ts's threatActiveAt in production. */
-    threatActiveAt: (tSeconds: number) => boolean;
-  },
-  // Calibration-only override, same rationale as cdHoardedEvents' — defaults
-  // to the module constant, production call sites unaffected.
-  overrides?: { cap?: number },
-): CandidateEvent[] {
-  if (matchThreat === "low") return []; // B6 red line — never even probes.
-  const cap = overrides?.cap ?? CD_SPENT_IDLE_CAP;
-  // GH #29 阶段 2b:这条指控是「你把**保命大 CD** 按在了没威胁的空气里」。
-  // `!isThroughput` 只等于「不是 Offensive-tagged」,挡不住那些挂着 Defensive
-  // 牌子、实为**治疗产出强化**的 CD —— 而产出 CD 本来就该在安全窗口 pump,
-  // 那是正确操作,不是浪费。签字册 kind `throughput_role` 就是这一维的单源
-  // (用户 2026-08-22 裁定:神圣显灵是治疗大技能;复仇十字军随专精,奶骑是
-  // 主要治疗)。250 场 / 312 治疗轮实测:cd-spent-idle 46 → 43,去掉的 3 条
-  // 全是复仇十字军;光环大师那 5 条**保留**(用户同日裁定 20% 全团减伤,
-  // 已进 MITIGATION_OVERRIDES,它是真墙)。
-  const defensiveCds = cds.filter(
-    (cd) =>
-      DEFENSIVE_TAGS.has(cd.tag) &&
-      !cd.isThroughput &&
-      // fact9 D17: a heal is no defensive spent idle
-      !isNotMajorDefensive(cd.spellId) &&
-      // 空放/攥着不放都是「你当时的选择」,被动触发的能力没有这个选择。
-      !cdIsProcOnly(cd) &&
-      !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId),
-  );
-  const candidates: Array<{ cd: (typeof cds)[number]; t: number }> = [];
-  for (const cd of defensiveCds) {
-    for (const cast of cd.casts) {
-      const t = toRenderSecond(cast.timeSeconds);
-      if (probes.threatActiveAt(t)) continue;
-      candidates.push({ cd, t });
-    }
-  }
-  return candidates
-    .sort((a, b) => a.t - b.t)
-    .slice(0, cap)
-    .map(({ cd, t }) => {
-      const costNorm = costNormPhrase(cd.spellId);
-      return {
-        id: `cd-spent-idle:${owner.id}:${cd.spellId}:${t}`,
-        type: "cd-spent-idle",
-        t,
-        unitNames: [owner.name],
-        spell: cd.spellName,
-        spellId: cd.spellId,
-        facts: {
-          t: String(t),
-          spell: cd.spellName,
-          unit: owner.name,
-          ...(costNorm ? { costNorm } : {}),
-        },
-      };
-    });
 }

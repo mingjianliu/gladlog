@@ -8,10 +8,10 @@ import {
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
 
 /**
- * threatAssessment.ts — P2 共用威胁谓词(单源 export),供 `cd-hoarded` /
- * `cd-spent-idle` 两个候选类型的威胁分级门消费(spec:
- * docs/superpowers/specs/2026-08-15-p1p2-distillation-design.md「威胁谓词」节,
- * B6 裁决:威胁不分级不出 cd-spent-idle)。
+ * threatAssessment.ts — P2 共用威胁谓词(单源 export)(spec:
+ * docs/superpowers/specs/2026-08-15-p1p2-distillation-design.md「威胁谓词」节)。
+ * 最初供 `cd-spent-idle` 的威胁分级门消费(该候选 2026-11-18 随裁决 A11 删除);
+ * 现存产品读者是驱散时机门(`dispelAnalysis.ts` 的 `threatActiveAt`)。
  *
  * 复用清单(先读后写,CLAUDE.md 共享谓词规则 —— 不重新发明既有压力判定):
  *  - `hasOffensiveSpellActive`(cooldowns.ts):panic-press 检测器

@@ -1,11 +1,10 @@
 /**
  * candidateCalibration.ts — Task 5 (P1/P2 distillation) corpus calibration for
- * the four new candidate-menu builders (missedSyncWindowEvents /
- * unsyncedBurstEvents / cdHoardedEvents / cdSpentIdleEvents — all four ON
- * since 2026-08-15; the current expected value of every flag lives in
- * docs/predicate-index.md's `Feature flag state` table) and
- * the shared threat predicates they/other callers consume
- * (`matchThreatLevel`/`threatActiveAt`, `utils/threatAssessment.ts`).
+ * the candidate-menu builders missedSyncWindowEvents / cdHoardedEvents (the
+ * current expected value of every flag lives in docs/predicate-index.md's
+ * `Feature flag state` table) and the match threat level
+ * (`matchThreatLevel`, `utils/threatAssessment.ts`). The unsynced-burst and
+ * cd-spent-idle halves went with their producers on 2026-11-18 (ruling A11).
  *
  * Direct-calls the REAL production builders — never a re-derived detection
  * rule (CLAUDE.md shared-predicate rule). Two consequences of that:
@@ -30,9 +29,7 @@
  * only `countsAtThresholds` (pure, cheap) runs per cell.
  */
 import {
-  cdAvailableAt,
   cdHoardedEvents,
-  cdSpentIdleEvents,
   enemyHealerCcWindows,
   extractMajorCooldowns,
   type IEnemyHealerCcWindow,
@@ -44,8 +41,6 @@ import {
   matchThreatLevel,
   missedSyncWindowEvents,
   type RawStreams,
-  threatActiveAt,
-  unsyncedBurstEvents,
 } from "@gladlog/analysis";
 import { syncWindowRoundEndS } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 // Deep import, same precedent as signalSkillGradient.ts (barrel index.ts does
@@ -54,7 +49,6 @@ import { syncWindowRoundEndS } from "@gladlog/analysis/src/analysis/candidates/c
 // crisis-no-response uses.
 import { crisisDecisionPoints } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import { lookupSyncWindowPrior } from "@gladlog/analysis/src/data/syncWindowPrior";
-import { isControlCast } from "@gladlog/analysis/src/utils/castMissRows";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { type LegacyRound, splitTeams } from "./storeAccess.js";
@@ -79,13 +73,6 @@ export interface RoundContext {
   ownerCdsWithBaseline: IMajorCooldownInfo[];
   ccWindows: IEnemyHealerCcWindow[];
   teamOffensiveCds: Array<IMajorCooldownInfo & { ownerName: string }>;
-  /** unsynced-burst 可行性门:此刻队伍有没有硬控转好(与生产同一判据)。 */
-  teamCcReadyAt: (tSeconds: number) => boolean;
-  /** §29b fix (2026-08-15, mirrors production's candidateFindings.ts wiring
-   * unchanged): every enemy healer, not just the first match — the gate
-   * `unsyncedBurstEvents` reads (`ccWindows`) already pools hard-CC across
-   * all of them, so the fact must too. */
-  enemyHealerNames: string[];
   legacy: LegacyRound;
   /** Whether `splitTeams(legacy).owner` (production's OWN `resolveOwner`
    * predicate, mirrored — see `buildRoundContext`'s doc comment) resolved —
@@ -101,9 +88,8 @@ export interface RoundContext {
    * `buildRoundContext` get `{available:false, manaSamples:[], castFailed:[]}`
    * here (mana-pressure/mana-efficiency read through this exactly like
    * production reads `available:false` — silently zero, never throws), so
-   * every pre-Task-6 call site (the cd-hoarded/cd-spent-idle/missed-sync/
-   * unsynced-burst scan this module already supported) is byte-identical to
-   * before this field existed. */
+   * every pre-Task-6 call site (the cd-hoarded / missed-sync scan this module
+   * already supported) is byte-identical to before this field existed. */
   rawStreams: RawStreams;
 }
 
@@ -188,15 +174,9 @@ export function buildRoundContext(
   const ccWindows = enemyHealerCcWindows(friends, enemies, legacy);
   const teamOffensiveCds: Array<IMajorCooldownInfo & { ownerName: string }> =
     [];
-  // 队伍硬控台账 —— unsynced-burst 的可行性门(2026-08-22)在生产接线处用
-  // `extractMajorCooldowns × cdAvailableAt × ccSpellIds` 组装;标定必须用**同一个**
-  // 判据,否则阈值扫描测的是没有这道门的旧行为(共享谓词铁律)。和进攻台账复用
-  // 同一次遍历,与 candidateFindings.ts 的接线逐字对应。
-  const teamCcCds: IMajorCooldownInfo[] = [];
   for (const f of friends) {
     try {
       for (const cd of extractMajorCooldowns(f, legacy)) {
-        if (isControlCast(cd.spellId)) teamCcCds.push(cd);
         if (!cd.isThroughput) continue;
         teamOffensiveCds.push({ ...cd, ownerName: f.name });
       }
@@ -204,10 +184,6 @@ export function buildRoundContext(
       /* this friend's CD ledger not computable -> their CDs absent */
     }
   }
-  const enemyHealerNames = enemies
-    .filter((e) => isHealerSpec(e.spec))
-    .map((e) => e.name as string);
-
   return {
     matchId,
     roundSeq,
@@ -218,9 +194,6 @@ export function buildRoundContext(
     ownerCdsWithBaseline,
     ccWindows,
     teamOffensiveCds,
-    teamCcReadyAt: (tSeconds: number) =>
-      teamCcCds.some((cd) => cdAvailableAt(cd, tSeconds)),
-    enemyHealerNames,
     legacy,
     ownerResolvable: productionOwner !== undefined,
     rawStreams: rawStreams ?? UNAVAILABLE_RAW_STREAMS,
@@ -232,12 +205,8 @@ export interface RoundCandidateCounts {
   roundSeq?: number;
   cdHoardedRaw: number;
   cdHoardedCapped: number;
-  cdSpentIdleRaw: number;
-  cdSpentIdleCapped: number;
   missedSyncWindowRaw: number;
   missedSyncWindowCapped: number;
-  unsyncedBurstRaw: number;
-  unsyncedBurstCapped: number;
   threatLevel: MatchThreatLevel;
   /** `ctx.rawStreams.available` carried through so a corpus scan can report
    * what fraction of rounds had no raw.txt (or an unparseable one) — the
@@ -257,8 +226,8 @@ export interface RoundCandidateCounts {
  * production's default thresholds exactly (each builder's own default-param
  * fallback to its module constant).
  *
- * missed-sync-window / unsynced-burst mirror `teamPlayEvents`' own gate: with
- * zero `ccWindows` (no hard CC ever landed on the enemy healer), both are
+ * missed-sync-window mirrors `teamPlayEvents`' own gate: with zero
+ * `ccWindows` (no hard CC ever landed on the enemy healer) it is
  * structurally zero — not computed, since "no window existed to test" is a
  * different fact from "windows existed and none qualified".
  */
@@ -268,8 +237,7 @@ export function countsAtThresholds(
     threatOverrides?: IThreatLevelOverrides;
   } = {},
 ): RoundCandidateCounts {
-  const { friends, enemies, owner, ownerCds, ownerCdsWithBaseline, legacy } =
-    ctx;
+  const { friends, enemies, owner, ownerCdsWithBaseline, legacy } = ctx;
 
   let threatLevel: MatchThreatLevel = "low";
   try {
@@ -317,32 +285,8 @@ export function countsAtThresholds(
     /* not computable -> 0/0 */
   }
 
-  let cdSpentIdleRaw = 0;
-  let cdSpentIdleCapped = 0;
-  try {
-    const probes = {
-      threatActiveAt: (t: number) =>
-        threatActiveAt(t, enemies, friends, legacy, {
-          damageWindowMs: opts.threatOverrides?.damageWindowMs,
-        }),
-    };
-    cdSpentIdleCapped = cdSpentIdleEvents(
-      ownerCds,
-      owner,
-      threatLevel,
-      probes,
-    ).length;
-    cdSpentIdleRaw = cdSpentIdleEvents(ownerCds, owner, threatLevel, probes, {
-      cap: UNCAPPED,
-    }).length;
-  } catch {
-    /* not computable -> 0/0 */
-  }
-
   let missedSyncWindowRaw = 0;
   let missedSyncWindowCapped = 0;
-  let unsyncedBurstRaw = 0;
-  let unsyncedBurstCapped = 0;
   if (ctx.ccWindows.length > 0) {
     try {
       const syncProbes = {
@@ -378,32 +322,6 @@ export function countsAtThresholds(
     } catch {
       /* not computable -> 0/0 */
     }
-    try {
-      const teamOffensiveCasts = ctx.teamOffensiveCds.flatMap((cd) =>
-        cd.casts.map((c) => ({
-          ownerName: cd.ownerName,
-          spellId: cd.spellId,
-          spellName: cd.spellName,
-          castTimeSeconds: c.timeSeconds,
-          cooldownSeconds: cd.cooldownSeconds,
-        })),
-      );
-      unsyncedBurstCapped = unsyncedBurstEvents(
-        teamOffensiveCasts,
-        ctx.ccWindows,
-        ctx.enemyHealerNames,
-        ctx.teamCcReadyAt,
-      ).length;
-      unsyncedBurstRaw = unsyncedBurstEvents(
-        teamOffensiveCasts,
-        ctx.ccWindows,
-        ctx.enemyHealerNames,
-        ctx.teamCcReadyAt,
-        { cap: UNCAPPED },
-      ).length;
-    } catch {
-      /* not computable -> 0/0 */
-    }
   }
 
   return {
@@ -411,12 +329,8 @@ export function countsAtThresholds(
     roundSeq: ctx.roundSeq,
     cdHoardedRaw,
     cdHoardedCapped,
-    cdSpentIdleRaw,
-    cdSpentIdleCapped,
     missedSyncWindowRaw,
     missedSyncWindowCapped,
-    unsyncedBurstRaw,
-    unsyncedBurstCapped,
     threatLevel,
     rawAvailable: ctx.rawStreams.available,
     ownerResolvable: ctx.ownerResolvable,
@@ -453,9 +367,7 @@ interface CalibrationSummary {
   roundsScanned: number;
   perType: {
     cdHoarded: TypeSummary;
-    cdSpentIdle: TypeSummary;
     missedSyncWindow: TypeSummary;
-    unsyncedBurst: TypeSummary;
   };
   threatDistributionPct: { low: number; med: number; high: number };
   /** Task 6: % of scanned rounds where `ctx.rawStreams.available` was true —
@@ -496,16 +408,10 @@ export function summarize(rows: RoundCandidateCounts[]): CalibrationSummary {
     roundsScanned: n,
     perType: {
       cdHoarded: typeSummary(rows, "cdHoardedRaw", "cdHoardedCapped"),
-      cdSpentIdle: typeSummary(rows, "cdSpentIdleRaw", "cdSpentIdleCapped"),
       missedSyncWindow: typeSummary(
         rows,
         "missedSyncWindowRaw",
         "missedSyncWindowCapped",
-      ),
-      unsyncedBurst: typeSummary(
-        rows,
-        "unsyncedBurstRaw",
-        "unsyncedBurstCapped",
       ),
     },
     threatDistributionPct:

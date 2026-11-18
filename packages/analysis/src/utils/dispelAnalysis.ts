@@ -4167,7 +4167,7 @@ function reconstructDispelSummaryUncached(
           // 时机门(规则 ③,第 3 层):situational = 「看情况」,情况就是
           // 时机 ——「平稳期(对方输出不高)该驱;承压以后再驱已经晚了」。
           // 逐渲染秒(floor,与 fmtTime 同网格)采样 threatAssessment 的
-          // `threatActiveAt`(与 cd-spent-idle 同一谓词,注入语义,绝不
+          // `threatActiveAt`(threatAssessment 的单源谓词,注入语义,绝不
           // 重写):窗口内存在平稳秒 → 有过该驱的时机,批评成立;整窗威胁
           // 覆盖 → 豁免。语料标定(n=300,接线前):situational 580 窗中
           // 362(62.4%)整窗覆盖。「关键爆发前」那半句适用于主动驱长 DoT,

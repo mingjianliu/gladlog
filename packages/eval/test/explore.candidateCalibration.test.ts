@@ -1,7 +1,7 @@
 /**
  * Task 5 (P1/P2 distillation) fixture tests for
  * `../src/explore/candidateCalibration.ts` — the corpus calibration scan for
- * the four new candidate builders + threatAssessment's predicates. Per
+ * the missed-sync-window / cd-hoarded builders + the match threat level. Per
  * CLAUDE.md ("don't leave a one-shot script"), this scanner is meant to run
  * again for future calibration passes, so its wiring/aggregation logic gets
  * real unit coverage rather than only being exercised by the (unrepeated)
@@ -10,7 +10,7 @@
  * Deliberately does NOT re-verify each builder's own filtering rules (those
  * are candidateFindings.test.ts's / threatAssessment.test.ts's job) — only
  * this module's own glue: context building, raw-vs-capped counting via the
- * `overrides` threading, the missed-sync/unsynced-burst zero-ccWindows short
+ * `overrides` threading, the missed-sync zero-ccWindows short
  * circuit, and `summarize`'s arithmetic.
  */
 import type { RawStreams } from "@gladlog/analysis";
@@ -255,10 +255,6 @@ function makeCtx(overrides: Partial<RoundContext> = {}): RoundContext {
     ownerCds: [],
     ccWindows: [],
     teamOffensiveCds: [],
-    // unsynced-burst 可行性门(2026-08-22):手搭上下文里默认「队伍有硬控可用」,
-    // 让这些用例继续只测阈值透传本身,不被新门牵连
-    teamCcReadyAt: () => true,
-    enemyHealerNames: [],
     legacy: legacyOf([friend, enemy]),
     rawStreams: { available: false, manaSamples: [], castFailed: [] },
     ownerResolvable: true,
@@ -406,37 +402,12 @@ describe("countsAtThresholds — cd-hoarded wiring", () => {
   });
 });
 
-describe("countsAtThresholds — missed-sync-window/unsynced-burst zero-ccWindows short circuit", () => {
-  it("both read 0/0 without any ccWindows, mirroring teamPlayEvents' own gate", () => {
+describe("countsAtThresholds — missed-sync-window zero-ccWindows short circuit", () => {
+  it("reads 0/0 without any ccWindows, mirroring teamPlayEvents' own gate", () => {
     const ctx = makeCtx({ ccWindows: [] });
     const counts = countsAtThresholds(ctx);
     expect(counts.missedSyncWindowCapped).toBe(0);
     expect(counts.missedSyncWindowRaw).toBe(0);
-    expect(counts.unsyncedBurstCapped).toBe(0);
-    expect(counts.unsyncedBurstRaw).toBe(0);
-  });
-});
-
-describe("countsAtThresholds — cd-spent-idle honors the threat-level red line (B6)", () => {
-  it("threatOverrides that force a 'low' match threat still gate cd-spent-idle to []", () => {
-    // No advancedActions anywhere → hasAnyHpData is false → matchThreatLevel
-    // is unconditionally "low" regardless of overrides (the documented
-    // conservative fallback) — exercises the real gate, not a mock.
-    const cd = {
-      spellId: "2",
-      spellName: "Barrier",
-      tag: "Defensive",
-      cooldownSeconds: 180,
-      maxChargesDetected: 1,
-      casts: [{ timeSeconds: 50 }],
-      availableWindows: [],
-      neverUsed: false,
-      isThroughput: false,
-    };
-    const ctx = makeCtx({ ownerCds: [cd] });
-    const counts = countsAtThresholds(ctx);
-    expect(counts.threatLevel).toBe("low");
-    expect(counts.cdSpentIdleCapped).toBe(0);
   });
 });
 
@@ -522,12 +493,8 @@ describe("summarize", () => {
       matchId: "m",
       cdHoardedRaw: 0,
       cdHoardedCapped: 0,
-      cdSpentIdleRaw: 0,
-      cdSpentIdleCapped: 0,
       missedSyncWindowRaw: 0,
       missedSyncWindowCapped: 0,
-      unsyncedBurstRaw: 0,
-      unsyncedBurstCapped: 0,
       threatLevel: "low",
       rawAvailable: false,
       ownerResolvable: true,

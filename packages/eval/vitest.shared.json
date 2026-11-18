@@ -66,7 +66,6 @@
     "test/legendCrossReferenceGate.test.ts",
     "test/menuTRenderGridGate.test.ts",
     "test/outcomeHalo.test.ts",
-    "test/outcomeRefGate.test.ts",
     "test/petFactGates.test.ts",
     "test/positioningScan.test.ts",
     "test/predicateIndex.test.ts",

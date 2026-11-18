@@ -1,7 +1,8 @@
 /**
  * P1/P2/raw-streams candidate-type A/B harness (Task 6 + Task 7,
- * raw-streams plan, 2026-08-15): missedSyncWindow/unsyncedBurst/cdHoarded/
- * cdSpentIdle/manaPressure/manaEfficiency, each vs all-flags-off. Runs the
+ * raw-streams plan, 2026-08-15): missedSyncWindow/cdHoarded/manaPressure/
+ * manaEfficiency, each vs all-flags-off (unsyncedBurst and cdSpentIdle were
+ * part of it until their code was deleted, 2026-11-18). Runs the
  * REAL production findings chain end to end — the exact same chain
  * `smokeFindingsBackends.ts` already exercises for its diversity smoke
  * (never a second implementation, CLAUDE.md shared-predicate rule):
@@ -58,15 +59,6 @@
  *   report   --type=<t>
  *     Aggregates control vs treatment `results.jsonl` into the markdown
  *     tables used by the Task 6/7 reports.
- *   overlap  (no --type — always both; P1 types only, missedSyncWindow +
- *     unsyncedBurst)
- *     Deterministic, no model calls: on the UNION of both types' eval-set
- *     items, flips BOTH flags true, recomputes candidates via the same
- *     `buildInput` wiring, and measures what fraction of unsynced-burst
- *     candidate windows overlap a missed-sync-window candidate window in the
- *     same round — the two flags are single-flag-per-arm in the A/B itself
- *     (so they cannot collide inside one prompt today), but the user needs
- *     to know the double-report risk before deciding to ship both.
  *
  * Match store: same default as every other library script in this repo
  * (`~/Library/Application Support/gladlog/matches`, `$GLADLOG_MATCH_DIR`
@@ -134,24 +126,18 @@ const DEFAULT_MANA_CALIB_ROWS = join(
 
 type PType =
   | "missedSyncWindow"
-  | "unsyncedBurst"
   | "cdHoarded"
-  | "cdSpentIdle"
   | "manaPressure"
   | "manaEfficiency";
 const ALL_TYPES: PType[] = [
   "missedSyncWindow",
-  "unsyncedBurst",
   "cdHoarded",
-  "cdSpentIdle",
   "manaPressure",
   "manaEfficiency",
 ];
 const TYPE_STR: Record<PType, string> = {
   missedSyncWindow: "missed-sync-window",
-  unsyncedBurst: "unsynced-burst",
   cdHoarded: "cd-hoarded",
-  cdSpentIdle: "cd-spent-idle",
   manaPressure: "mana-pressure",
   manaEfficiency: "mana-efficiency",
 };
@@ -162,17 +148,13 @@ const TYPE_STR: Record<PType, string> = {
 // to cap), but `> 0` means the same thing either way.
 const CAPPED_FIELD: Record<PType, string> = {
   missedSyncWindow: "missedSyncWindowCapped",
-  unsyncedBurst: "unsyncedBurstCapped",
   cdHoarded: "cdHoardedCapped",
-  cdSpentIdle: "cdSpentIdleCapped",
   manaPressure: "manaPressureCapped",
   manaEfficiency: "manaEfficiencyCount",
 };
 const DEFAULT_CALIB_ROWS_BY_TYPE: Record<PType, string> = {
   missedSyncWindow: DEFAULT_CALIB_ROWS,
-  unsyncedBurst: DEFAULT_CALIB_ROWS,
   cdHoarded: DEFAULT_CALIB_ROWS,
-  cdSpentIdle: DEFAULT_CALIB_ROWS,
   manaPressure: DEFAULT_MANA_CALIB_ROWS,
   manaEfficiency: DEFAULT_MANA_CALIB_ROWS,
 };
@@ -247,7 +229,7 @@ function cmdSelect(args: Record<string, string>): void {
   const type = args.type as PType;
   if (!ALL_TYPES.includes(type)) {
     throw new Error(
-      `select requires --type=missedSyncWindow|unsyncedBurst|cdHoarded|cdSpentIdle|manaPressure|manaEfficiency`,
+      `select requires --type=missedSyncWindow|cdHoarded|manaPressure|manaEfficiency`,
     );
   }
   const seed = args.seed ?? `p1p2-ab-${type}-2026-08-15`;
@@ -401,8 +383,7 @@ export function buildInput(
 
 // `type` is optional and only consulted to decide whether to pay the
 // raw.txt read+parse cost (`RAW_STREAMS_TYPES` above) — omitted (every
-// pre-Task-7 call site, e.g. `overlap`'s missedSyncWindow/unsyncedBurst
-// union scan) keeps today's behavior: no rawStreams loaded, byte-identical.
+// pre-Task-7 call site) keeps today's behavior: no rawStreams loaded, byte-identical.
 function loadItemInput(item: EvalItem, type?: PType) {
   const doc = JSON.parse(
     readFileSync(join(MATCH_DIR, item.matchId, "match.json"), "utf8"),
@@ -500,7 +481,7 @@ async function cmdRun(args: Record<string, string>): Promise<void> {
   const arm = args.arm as "control" | "treatment";
   if (!ALL_TYPES.includes(type)) {
     throw new Error(
-      `run requires --type=missedSyncWindow|unsyncedBurst|cdHoarded|cdSpentIdle|manaPressure|manaEfficiency`,
+      `run requires --type=missedSyncWindow|cdHoarded|manaPressure|manaEfficiency`,
     );
   }
   if (arm !== "control" && arm !== "treatment") {
@@ -807,71 +788,6 @@ function cmdReport(args: Record<string, string>): void {
 }
 
 // ---------------------------------------------------------------------------
-// overlap
-// ---------------------------------------------------------------------------
-
-function cmdOverlap(): void {
-  const msw = JSON.parse(
-    readFileSync(evalSetPath("missedSyncWindow"), "utf8"),
-  ) as EvalSet;
-  const usb = JSON.parse(
-    readFileSync(evalSetPath("unsyncedBurst"), "utf8"),
-  ) as EvalSet;
-  const seen = new Map<string, EvalItem>();
-  for (const it of [...msw.items, ...usb.items]) seen.set(itemLabel(it), it);
-  const union = Array.from(seen.values());
-
-  CANDIDATE_TYPE_FLAGS.missedSyncWindow = true;
-  CANDIDATE_TYPE_FLAGS.unsyncedBurst = true;
-  let totalUnsynced = 0;
-  let overlapping = 0;
-  let itemsWithBoth = 0;
-  let itemsProcessed = 0;
-  let itemsErrored = 0;
-  try {
-    for (const item of union) {
-      let input;
-      try {
-        input = loadItemInput(item);
-      } catch (e) {
-        itemsErrored++;
-        console.log(
-          `${itemLabel(item)}: load error (${(e as Error).message}), skipped`,
-        );
-        continue;
-      }
-      if (!input) continue;
-      itemsProcessed++;
-      const msws = input.candidates.filter(
-        (c) => c.type === "missed-sync-window",
-      );
-      const usbs = input.candidates.filter((c) => c.type === "unsynced-burst");
-      if (msws.length > 0 && usbs.length > 0) itemsWithBoth++;
-      for (const b of usbs) {
-        totalUnsynced++;
-        const bEnd = Number(b.facts.windowEndT);
-        const hit = msws.some((s) => {
-          const sEnd = Number(s.facts.windowEndT);
-          return b.t < sEnd && s.t < bEnd;
-        });
-        if (hit) overlapping++;
-      }
-    }
-  } finally {
-    CANDIDATE_TYPE_FLAGS.missedSyncWindow = false;
-    CANDIDATE_TYPE_FLAGS.unsyncedBurst = false;
-  }
-  const out =
-    `# p1p2-ab overlap (both flags on, union of both eval sets, n=${union.length} items)\n\n` +
-    `items processed: ${itemsProcessed} (load-errors: ${itemsErrored})\n` +
-    `items with >=1 candidate of BOTH types: ${itemsWithBoth}\n` +
-    `unsynced-burst candidates whose window overlaps a missed-sync-window candidate's window (same round): ${overlapping}/${totalUnsynced}\n`;
-  console.log(out);
-  mkdirSync(join(EVAL_HOME, "p1p2-ab"), { recursive: true });
-  writeFileSync(join(EVAL_HOME, "p1p2-ab", "overlap-report.md"), out);
-}
-
-// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -882,9 +798,8 @@ async function main() {
   if (cmd === "select") return cmdSelect(args);
   if (cmd === "run") return cmdRun(args);
   if (cmd === "report") return cmdReport(args);
-  if (cmd === "overlap") return cmdOverlap();
   throw new Error(
-    `usage: p1p2Ab.ts select|run|report|overlap --type=missedSyncWindow|unsyncedBurst|cdHoarded|cdSpentIdle|manaPressure|manaEfficiency ...`,
+    `usage: p1p2Ab.ts select|run|report --type=missedSyncWindow|cdHoarded|manaPressure|manaEfficiency ...`,
   );
 }
 

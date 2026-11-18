@@ -315,7 +315,7 @@ export const KW_UNPRESSED_NOT_IN_HAND_IDS: ReadonlySet<string> = new Set([
  * DEFENSIVE cooldown (fact9 D17, user rulings 2026-11-03: 「五个治疗全移」,
  * 「凡称它为防御冷却的都改」): cd-waste's "a major defensive cooldown the
  * player never successfully cast", cd-hoarded's `readyCds` (and the [CD
- * PRIOR] cohort that shares `isSpendableDefensiveCd`), cd-spent-idle,
+ * PRIOR] cohort that shares `isSpendableDefensiveCd`),
  * `[DEFENSIVE AVAILABLE]`, the `[DEATH]` "(Unused: …)" list and the NOTE's
  * "never-used self-only defensive cooldowns … correctly HELD", the
  * `[STACKED DEFENSIVES]` pairs (not cd-hoarded's protection record), the healer metrics' defensive overlaps,

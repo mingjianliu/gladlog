@@ -2,7 +2,7 @@
 
 _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` holds the shared CLI helpers, `archive/` the retired one-off probes (see `archive/README.md`). Grouped by name suffix; a script is listed once. Run any of them with `npx tsx packages/eval/scripts/<name>.ts` from the repo root (artifacts go to `$GLADLOG_EVAL_HOME`)._
 
-## Scans (re-runnable corpus scans; the season runbook ones live in `docs/commands/update-wow-data.md` §7b) — 66
+## Scans (re-runnable corpus scans; the season runbook ones live in `docs/commands/update-wow-data.md` §7b) — 65
 
 | Script | Note |
 |---|---|
@@ -69,11 +69,10 @@ _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` 
 | `syncWindowScan.ts` | syncWindowScan.ts — corpus scan for the REDESIGNED missed-sync-window |
 | `talentPickRateScan.ts` | talentPickRateScan.ts — how many players of each spec actually take each |
 | `talentScriptedTouchScan.ts` | talentScriptedTouchScan.ts — GH #96 M6 step 2: which scripted talents name a |
-| `teammateCrisisPriorScan.ts` | teammateCrisisPriorScan.ts — build the `teammate-crisis-idle` reference |
 | `totemLifetimeScan.ts` | totemLifetimeScan.ts — how long does a totem actually stand, measured by its |
 | `uwcCorpusScan.ts` | 薄壳:技能事实地基 Task 4(晕)+ 挂账清理 Task E(恐惧/心控)语料观测线 —— |
 
-## Probes (value-gate experiments, `.claude/skills/signal-value-probe`) — 29
+## Probes (value-gate experiments, `.claude/skills/signal-value-probe`) — 28
 
 | Script | Note |
 |---|---|
@@ -105,9 +104,8 @@ _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` 
 | `teammateCrisisProbe.ts` | GH #95 probe — teammate crises for a healer owner (user ruling 2026-09-13: |
 | `teammateTimingProbe.ts` | GH #95 value-gate probe — teammate crises, TIMING shapes (user ruling |
 | `trinketDisciplineProbe.ts` | GH #66 · B1 徽章纪律价值门探针 (Value-Gate Probe). |
-| `unsyncedBurstScopeProbe.ts` | `unsynced-burst` 下架依据的**口径复查**(2026-09-07)。 |
 
-## Example generators (real-match output examples for the value gate) — 13
+## Example generators (real-match output examples for the value gate) — 12
 
 | Script | Note |
 |---|---|
@@ -115,7 +113,6 @@ _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` 
 | `deepDiveOffensiveValueGen.ts` | Offensive deep-dive value A/B (generator). before = non-death findings get no |
 | `deepDivePositionValueGen.ts` | Value eval for the positioning signal (fix 3) — generator. The "before" state |
 | `externalDamageExampleGen.ts` | externalDamageExampleGen.ts — GH #91 (rule 171, split from #85) value-gate |
-| `healerReachExampleGen.ts` | healerReachExampleGen.ts — value-gate example generator for GH #83 (owner ↔ |
 | `kwV2ExampleGen.ts` | kwV2ExampleGen.ts — GH #31 ① value-gate example generator (THROWAWAY). |
 | `offcdExampleGen.ts` | offcdExampleGen.ts — value-gate example generator (2026-09-02, THROWAWAY). |
 | `psyfiendIgnoredExampleGen.ts` | psyfiendIgnoredExampleGen.ts — value-gate step 1 for the ACCUSATION half of |

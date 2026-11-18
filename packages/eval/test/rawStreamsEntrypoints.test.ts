@@ -62,7 +62,6 @@ const LEGACY_TWO_ARG = new Set<string>([
   "packages/eval/scripts/signalSkillGradientScan.ts",
   "packages/eval/scripts/teammateCrisisAnswerProbe.ts",
   "packages/eval/scripts/teammateCrisisProbe.ts",
-  "packages/eval/scripts/unsyncedBurstScopeProbe.ts",
 ]);
 
 function listSources(rel: string, out: string[]): void {

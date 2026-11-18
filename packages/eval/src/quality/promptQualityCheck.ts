@@ -146,7 +146,6 @@ import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "@gladlog/analysis/src/data/druidForms";
 import { HEALER_HELD_OFFENSIVE_SPEC } from "@gladlog/analysis/src/data/healerHeldOffensive";
 import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
-import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
 import {
   ccFullDurationSeconds,
   getEnglishSpellName,
@@ -159,12 +158,6 @@ import {
   syncRefClearsMinContrast,
   syncRefContrastPp,
 } from "@gladlog/analysis/src/data/syncWindowPrior";
-import {
-  lookupTeammateCrisisPriorByBin,
-  lookupTeammateCrisisTriageByBin,
-  type TeammateCrisisDmgBin,
-  teammateCrisisDmgBinOf,
-} from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import {
   BURST_ALLY_OVERLAP_ITEM_RE_SRC,
   BURST_ALLY_OVERLAP_LABEL,
@@ -4823,10 +4816,9 @@ const KILL_ATTEMPT_SUMMARY_TRINKET_UP = /^\s*Summary: .*trinket was still up/;
  * trinket with the opener is the play, so no attempt line may stamp its
  * target `locked` and the summary may not count "opened while the target's
  * trinket was still up". The block renders `trinket up (no softer target)`
- * or names the softer alternative (`softerTargetAt`, shared with the retired
- * attempt-into-trinket mapper); the model turned the old `locked (trinket
- * up) … FAILED` at 0:05 into "you should not have opened on someone with a
- * trinket". Structural check on the rendered text — the softer-target
+ * or names the softer alternative (`softerTargetAt`); the model turned the
+ * old `locked (trinket up) … FAILED` at 0:05 into "you should not have
+ * opened on someone with a trinket". Structural check on the rendered text — the softer-target
  * predicate itself is unit-tested in analysis.
  */
 export function checkKillAttemptFraming(lines: string[]): string[] {
@@ -6644,105 +6636,6 @@ export function checkCdPriorRefConsistency(lines: string[]): string[] {
 }
 
 /**
- * teammate-crisis-idle (GH #95, 2026-09-17): the healer-side twin of
- * `checkBehaviorPriorConsistency`, same shape and same reason — the producer
- * (`candidates/teammateCrisisIdle.ts`) renders the reference from
- * `lookupTeammateCrisisPriorByBin(bracket, bin)`; this gate re-parses the
- * menu line's facts and demands the SAME lookup return the SAME integers.
- * The bin is re-derived from the rendered `dmg2sPct` through the SAME
- * `teammateCrisisDmgBinOf`, and must also equal the bin inside `cellKey`
- * unless the line fell back to the bracket-wide `*` cell. Fails closed.
- */
-export function checkTeammateCrisisRefConsistency(lines: string[]): string[] {
-  const failures: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!;
-    // two producers, one table: the idle twin quotes the idle/answered
-    // populations, the triage twin (user ruling 2026-09-17) the two triage
-    // populations — each re-done through its own bin-keyed lookup
-    const kind = line.includes("type=teammate-crisis-idle")
-      ? "teammate-crisis-idle"
-      : line.includes("type=teammate-crisis-triage")
-        ? "teammate-crisis-triage"
-        : null;
-    if (!kind) continue;
-    const m = line.match(/facts=\{(.*)\}\s*$/);
-    if (!m) {
-      failures.push(`line ${i + 1}: ${kind} 行无 facts`);
-      continue;
-    }
-    const f = parseFactsBlock(m[1]!);
-    const dmg2s = Number(f.dmg2sPct);
-    if (!Number.isFinite(dmg2s)) {
-      failures.push(`line ${i + 1}: ${kind} 行缺 dmg2sPct`);
-      continue;
-    }
-    const parts = (f.cellKey ?? "").split("|");
-    if (parts.length !== 2) {
-      failures.push(
-        `line ${i + 1}: ${kind} 的 cellKey 形状不对 ${f.cellKey ?? ""}`,
-      );
-      continue;
-    }
-    const [bracket, keyBin] = parts as [string, string];
-    const bin = teammateCrisisDmgBinOf(dmg2s / 100);
-    if (keyBin !== "*" && keyBin !== bin) {
-      failures.push(
-        `line ${i + 1}: ${kind} cellKey 的档位 ${keyBin} 与 dmg2sPct=${dmg2s} 推出的 ${bin} 不一致`,
-      );
-      continue;
-    }
-    let expect: Record<string, string> | null = null;
-    let resolvedKey = "";
-    if (kind === "teammate-crisis-idle") {
-      const ref = lookupTeammateCrisisPriorByBin(
-        bracket,
-        bin as TeammateCrisisDmgBin,
-      );
-      if (ref) {
-        resolvedKey = ref.cellKey;
-        expect = {
-          cellKey: ref.cellKey,
-          refNIdle: String(ref.nIdle),
-          refDeathIdle: String(ref.deathIdlePct),
-          refNAnswered: String(ref.nAnswered),
-          refDeathAnswered: String(ref.deathAnsweredPct),
-          fellBack: ref.fellBack ? "yes" : "no",
-        };
-      }
-    } else {
-      const ref = lookupTeammateCrisisTriageByBin(
-        bracket,
-        bin as TeammateCrisisDmgBin,
-      );
-      if (ref) {
-        resolvedKey = ref.cellKey;
-        expect = {
-          cellKey: ref.cellKey,
-          refNWrong: String(ref.nTriageWrong),
-          refDeathWrong: String(ref.deathTriageWrongPct),
-          refNOther: String(ref.nTriageOther),
-          refDeathOther: String(ref.deathTriageOtherPct),
-          fellBack: ref.fellBack ? "yes" : "no",
-        };
-      }
-    }
-    if (!expect) {
-      failures.push(
-        `line ${i + 1}: ${kind} 引用了表里查不到/不够样本的单元格 ${f.cellKey}`,
-      );
-      continue;
-    }
-    for (const [k, v] of Object.entries(expect))
-      if (f[k] !== v)
-        failures.push(
-          `line ${i + 1}: ${kind} ${k}=${f[k]} 与参照表 ${v} 不一致(${resolvedKey})`,
-        );
-  }
-  return failures;
-}
-
-/**
  * 16th hardFailure class (GH #80, 2026-09-12): a `backlash-dispel` /
  * `backlash-dispel-window` menu line quotes corpus reference numbers from
  * data/backlashDispelPrior.ts; re-check every rendered ref* fact against the
@@ -8372,70 +8265,6 @@ export function checkCrisisStateTickPresent(lines: string[]): string[] {
   return failures;
 }
 
-/**
- * Which candidate types render a corpus-wide OUTCOME reference, and which
- * `facts.*` key carries which field of which constant. One row per type; the
- * check below is type-agnostic, so registering a new reference (the planned
- * `kick-eaten` one, for instance) is one entry here plus the producer
- * rendering the same numbers — no new gate code.
- *
- * The values are the CONSTANTS THEMSELVES, imported from
- * `@gladlog/analysis/src/data/outcomeRefs` — never re-typed literals. That is
- * the whole point of this class (CLAUDE.md shared-predicate rule): analysis
- * renders from the constant, this gate re-parses the rendered text and
- * compares against the same constant, so a drifting producer, a stale cached
- * round, or a model-edited prompt all go red.
- */
-export const OUTCOME_REF_FACTS: {
-  type: string;
-  facts: Record<string, number>;
-}[] = [
-  {
-    type: "attempt-into-trinket",
-    facts: {
-      refN: ATTEMPT_INTO_TRINKET_OUTCOME_REF.n,
-      refKillTrinketDown: ATTEMPT_INTO_TRINKET_OUTCOME_REF.killPctTrinketDown,
-      refKillTrinketUp: ATTEMPT_INTO_TRINKET_OUTCOME_REF.killPctTrinketUp,
-    },
-  },
-];
-
-/** 12th hardFailure class (2026-08-30 outcome probe wiring): every menu line
- * of a type registered in OUTCOME_REF_FACTS must render that type's reference
- * numbers exactly as the constant does. Fails closed — a registered fact that
- * is MISSING from the line is a failure too, otherwise a producer that simply
- * stopped emitting the reference would leave the legend citing facts that do
- * not exist. */
-export function checkOutcomeRefConsistency(lines: string[]): string[] {
-  const failures: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!;
-    for (const entry of OUTCOME_REF_FACTS) {
-      // `type=<t> ` — the menu renderer always follows the type with a space
-      // (`type=${c.type} ${when}`), so this cannot prefix-match a longer type.
-      if (!line.includes(`type=${entry.type} `)) continue;
-      const m = line.match(/facts=\{(.*)\}\s*$/);
-      if (!m) {
-        failures.push(`line ${i + 1}: ${entry.type} 行无 facts`);
-        continue;
-      }
-      const f = parseFactsBlock(m[1]!);
-      for (const [key, value] of Object.entries(entry.facts)) {
-        const want = String(value);
-        if (f[key] === undefined)
-          failures.push(
-            `line ${i + 1}: ${entry.type} 缺少语料参照事实 ${key}(应为 ${want})`,
-          );
-        else if (f[key] !== want)
-          failures.push(
-            `line ${i + 1}: ${entry.type} ${key}=${f[key]} 与语料参照常量 ${want} 不一致`,
-          );
-      }
-    }
-  }
-  return failures;
-}
-
 /** `95` → `1:35` — the gate's own rendering of a rendered second, only for
  * failure messages (the analysis side's `fmtTime` is the authority on the
  * text itself). */
@@ -9016,10 +8845,8 @@ export function checkMatch(
   hardFailures.push(...checkKickPriorityRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));
   hardFailures.push(...checkCdPriorCrossingHp(lines));
-  hardFailures.push(...checkTeammateCrisisRefConsistency(lines));
   hardFailures.push(...checkCrisisHpStateConsistency(lines));
   hardFailures.push(...checkCrisisStateTickPresent(lines));
-  hardFailures.push(...checkOutcomeRefConsistency(lines));
   hardFailures.push(...checkMenuTRenderGrid(lines));
   hardFailures.push(...checkCjkLeak(lines));
   hardFailures.push(...checkKickWaitedOutConsistency(lines));

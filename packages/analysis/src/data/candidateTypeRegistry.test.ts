@@ -84,20 +84,17 @@ function legendKeys(): Set<string> {
 
 describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
   it("CANDIDATE_TYPE_FLAGS equals the literal it replaced, field for field", () => {
-    // The object literal that lived in candidateTypeFlags.ts until 99cad7af.
+    // The object literal that lived in candidateTypeFlags.ts until 99cad7af,
+    // minus the four flags deleted with their code on 2026-11-18 (ruling A11:
+    // unsyncedBurst, cdSpentIdle, attemptIntoTrinket, teammateCrisis).
     expect(CANDIDATE_TYPE_FLAGS).toEqual({
       missedSyncWindow: true,
-      unsyncedBurst: false,
       cdHoarded: true,
-      cdSpentIdle: false,
-      attemptIntoTrinket: false,
       mdCycloneWindow: true,
       missedPurge: false,
       backlashDispel: true,
       // + kick-priority (GH #78, 2026-09-12) — the first flag added AFTER the derivation
       kickPriority: true,
-      // + teammate-crisis (GH #95) — added 2026-09-19 already retired (user ruling)
-      teammateCrisis: false,
     });
   });
 
@@ -143,7 +140,16 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
     // cc-held was a flag-retired card type on 2026-09-12 (so not ignored
     // then); its producer and flag were deleted 2026-11-11 (GH #150 D1), and
     // a deleted type is ignored like the other four.
-    const deletedSince = ["cc-held"];
+    // attempt-into-trinket / unsynced-burst / cd-spent-idle / teammate-crisis-*
+    // were flag-retired card types until 2026-11-18 (ruling A11), deleted then.
+    const deletedSince = [
+      "cc-held",
+      "attempt-into-trinket",
+      "unsynced-burst",
+      "cd-spent-idle",
+      "teammate-crisis-idle",
+      "teammate-crisis-triage",
+    ];
     const derived = [...MENU_ONLY_TYPES, ...RETIRED_TYPES].filter(
       (t) => !CARD_TYPES.has(t),
     );
@@ -152,17 +158,14 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
     );
   });
 
-  it("CARD_TYPES equals the desktop MISTAKE_RULES roster as of 99cad7af (19 types) + kick-priority-missed/-team (GH #78) + teammate-crisis-idle (GH #95)", () => {
+  it("CARD_TYPES equals the desktop MISTAKE_RULES roster as of 99cad7af (19 types) + kick-priority-missed/-team (GH #78), minus the types deleted since", () => {
     expect([...CARD_TYPES].sort()).toEqual(
       [
-        "attempt-into-trinket",
         "burst-into-mitigation",
         "cd-waste",
         "missed-kick",
         "missed-purge-kill-window",
         "crisis-no-response",
-        "teammate-crisis-idle",
-        "teammate-crisis-triage",
         "backlash-dispel",
         "backlash-dispel-window",
         "kick-priority-missed",
@@ -174,9 +177,7 @@ describe("candidateTypeRegistry: the 2026-09-12 derivation is a no-op", () => {
         "cc-avoidable",
         "slow-defensive-response",
         "missed-sync-window",
-        "unsynced-burst",
         "cd-hoarded",
-        "cd-spent-idle",
       ].sort(),
     );
   });

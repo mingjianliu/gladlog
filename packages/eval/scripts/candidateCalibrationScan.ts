@@ -1,9 +1,8 @@
 /**
  * candidateCalibrationScan.ts CLI — dumb shell over
  * `../src/explore/candidateCalibration.ts` for the Task 5 (P1/P2
- * distillation) corpus calibration of the four new candidate builders
- * (missedSyncWindow/unsyncedBurst/cdHoarded/cdSpentIdle) and the shared
- * threatAssessment predicates. Per the plan's global constraint, this file
+ * distillation) corpus calibration of the candidate builders
+ * (missedSyncWindow / cdHoarded) and the match threat level. Per the plan's global constraint, this file
  * writes no detection/counting logic of its own — it only walks the local
  * match library (same `storeAccess.ts` loader every other explore script
  * uses) and hands each round to `candidateCalibration.ts`.

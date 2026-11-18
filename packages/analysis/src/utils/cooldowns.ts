@@ -1232,8 +1232,8 @@ export const ENEMY_CD_MAX_SECONDS = 360;
 /**
  * "The enemy opened a cooldown" — ONE predicate for every consumer that
  * turns an enemy cast into a burst / threat fact: this builder's enemy-CD
- * windows, `crisisDecisionPoints`' `enemyBurst` and the teammate-crisis
- * cards' burst fact (2026-09-17, GH #95 hand-read). Membership in the
+ * windows and `crisisDecisionPoints`' `enemyBurst` (2026-09-17, GH #95
+ * hand-read). Membership in the
  * canonical `OFFENSIVE_CD_SPELL_IDS` is necessary but not sufficient — that
  * table also admits `debuffs_offensive` rows with no cooldown at all (Curse
  * of Weakness 702, Curse of Tongues 1714, Ignite 12654), which are not

@@ -54,17 +54,11 @@ describe("data layer", () => {
     expect(tagsOf("Power Siphon")).toEqual([SpellTag.Offensive]);
     expect(tagsOf("Power Word: Barrier")).toEqual([SpellTag.Offensive]);
   });
-  it("candidateTypeFlags(Task 9,2026-08-15 四个 P1/P2 起爆开关全量上线;2026-08-19 missedSyncWindow、2026-08-29 unsyncedBurst/missedPurge/ccHeld、2026-08-30 killReview/cdSpentIdle 下架);manaPressure/manaEfficiency 两开关已随候选退役删除(2026-08-21 管线审查第 3 条,#26 结案、后继 #33)", () => {
+  it("candidateTypeFlags(Task 9,2026-08-15 四个 P1/P2 起爆开关全量上线;2026-08-19 missedSyncWindow、2026-08-29 unsyncedBurst/missedPurge/ccHeld、2026-08-30 killReview/cdSpentIdle 下架);manaPressure/manaEfficiency 两开关已随候选退役删除(2026-08-21 管线审查第 3 条,#26 结案、后继 #33);unsyncedBurst/cdSpentIdle/attemptIntoTrinket/teammateCrisis 四开关 2026-11-18 随代码删除(裁决 A11)", () => {
     expect(CANDIDATE_TYPE_FLAGS).toEqual({
       // 2026-09-02 复活(GH #13 撤销,用户裁定,重设计版)—— 见 candidateTypeFlags.ts 注
       missedSyncWindow: true,
-      // 2026-08-29 降级为上下文事实(GH #50 (a),用户裁定)—— 见 candidateTypeFlags.ts 注
-      unsyncedBurst: false,
       cdHoarded: true,
-      // 2026-08-30 下架(信号结果探针,用户裁定)—— 见 candidateTypeFlags.ts 注
-      cdSpentIdle: false,
-      // 2026-08-18 击杀尝试重设计(GH #16):用户当日拍板接线,默认 true
-      attemptIntoTrinket: false,
       // 2026-08-21 MD 特例(GH #25):四门判据用户当日拍板,默认 true
       mdCycloneWindow: true,
       // 2026-08-29 降级为上下文事实(GH #50 (a),用户裁定);此前 missed-purge 无开关
@@ -73,7 +67,6 @@ describe("data layer", () => {
       backlashDispel: true,
       // 2026-09-12 上线(GH #78,用户裁决 1 有用 / 2 门 50% / 3 队友版带距离)
       kickPriority: true,
-      teammateCrisis: false,
     });
   });
 });
