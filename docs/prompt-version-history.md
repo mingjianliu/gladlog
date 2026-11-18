@@ -7254,3 +7254,28 @@ archives), each gaining a `back inside` entry, and adds the [press-only]
 legend to 6 contexts; no other line changes, menus byte-identical, candidate
 rows 7,446 = 7,446 (capture checked on the Mac). Codex branch review 85-tk-
 CD-T133-1b: APPROVE.
+
+v585 (2026-11-18; pipeline batch B112, T134; round 14 P01). Well-Honed
+Instincts (377847, DB2 aura 468: at 40% HP, once per 120 s) triggers Frenzied
+Regeneration with no cast row and no charge spent, and the old reading took
+its aura for a press of the 36 s button (archive 74f541c0 r5: pressed 2:19.3,
+triggered 2:44.8, pressed again 2:54.6, while the roster read [28-36s]).
+utils/procTriggeredCast.ts isProcOwnActivationAt (the unit's own
+CRISIS_PROC_ANSWERS mark within 100 ms, one log batch) now answers for
+hiddenPressMs and selfSaveCasts' no-press branch; a SPELL_CAST_SUCCESS is
+always a press. The mark table moved unchanged to the leaf module
+data/crisisProcAnswers.ts. Tree of Life's early re-presses each carry a free
+Reforestation form (392356 has only a dummy effect, no cooldown effect named):
+not modelled, recorded. 605 scans: procCastReadAsPress 17 facts under the 1.5
+s pairing first sent, 2 -> 0 under the final 100 ms rule;
+kitSoonestAboveRecast Frenzied Regeneration 2 facts -> 1 (one case with two
+real cast rows around a trigger, mechanism unknown, recorded). On the 605 the
+assembled candidate changes 29 contexts (10 archives): 6 [ENEMY DEF] lines go
+from `[pressed while unseen]` to `[no press logged]`, 9 [ENEMY DEF] `[no press
+logged]` lines and 14 [TEAM]/[YOU] [PROC] `(no press)` lines are new (with the
+[PROC] legend in 8 contexts); no other line changes, menus byte-identical,
+candidate rows 7,446 = 7,446 (capture checked on the Mac). Codex branch
+reviews 85-tk-CD-T134-1 and -1b (the remaining point is synthetic-only,
+recorded). Assembly review 80-PIPE-127 #1: scan5/t134 no longer counts a press
+backed by a real cast row beside the marker (eval only; the capture is
+unaffected).

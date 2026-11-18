@@ -1439,5 +1439,11 @@
  *  [VULNERABLE] lines name a cooldown that came back and was pressed inside
  *  one rendered second as `back inside`.
  *  See docs/prompt-version-history.md.
+ *
+ * v585 (2026-11-18; pipeline batch B112, T134): an aura a talent triggers
+ *  without a cast row (Frenzied Regeneration through Well-Honed Instincts)
+ *  is no longer read as a press; [ENEMY DEF] says `[no press logged]` and
+ *  [PROC] lines say `(no press)`.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 584;
+export const PROMPT_VERSION = 585;
