@@ -41,6 +41,7 @@ import {
 } from "./ccTrinketAnalysis";
 import { auraIsImmunityForm } from "./combatStates";
 import {
+  cdWholeSecond,
   chargeAvailabilityTransitions,
   earliestCooldownSecondsFor,
   isDeadAtRenderSecond,
@@ -1037,7 +1038,7 @@ export function formatHealerExposureEntries(
           ? "healer trinket passive"
           : e.trinketState === "none"
             ? "healer has no PvP trinket"
-            : `healer trinket on CD${e.trinketAvailableAtSeconds !== null ? ` (back ${fmtTime(e.trinketAvailableAtSeconds)})` : ""}`;
+            : `healer trinket on CD${e.trinketAvailableAtSeconds !== null ? ` (back ${fmtTime(cdWholeSecond(e.trinketAvailableAtSeconds))})` : ""}`;
 
     const trinketUnavailable =
       e.trinketState === "on_cooldown" || e.trinketState === "none";

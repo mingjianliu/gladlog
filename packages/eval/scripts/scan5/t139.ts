@@ -15,8 +15,8 @@
  *    low), `1e-8..1e-6` (a guard of 1e-6 would move it, one of 1e-8 not).
  *    Checked = those presses.
  *  - `resSecondFloatBand`: every ledger entry of every player
- *    (`extractMajorCooldowns`, and for the log owner the utility entries
- *    `[RES]` adds, `ownerResUtilityCds`), from its first spend — a shared
+ *    (`extractMajorCooldowns`, and the utility entries `[RES]` adds for
+ *    an owner, `ownerResUtilityCds`, read for every player), from its first spend — a shared
  *    one included — at every whole second of the round — a
  *    superset of the `[RES]` rows, which sit on whole seconds — the three
  *    quantities `remainingText` floors (`cdSecondsUntilReady`,
@@ -77,10 +77,10 @@ export function run(ctx: IRoundCtx): void {
     } catch {
       continue;
     }
-    // the owner's `[RES]` rows carry its utility cooldowns too (codex
-    // 85-tk-CD-T139-1 #2)
-    if (ctx.owner && u.id === (ctx.owner as any).id)
-      entries = [...entries, ...ownerResUtilityCds(u, ctx.start)];
+    // an owner's `[RES]` rows carry its utility cooldowns too (codex
+    // 85-tk-CD-T139-1 #2) — every player's here: the round is read once,
+    // whichever owner's context comes first (1b #1)
+    entries = [...entries, ...ownerResUtilityCds(u, ctx.start)];
     for (const cd of entries) {
       const spends = [...cd.casts, ...(cd.sharedCasts ?? [])].map(
         (c) => c.timeSeconds,

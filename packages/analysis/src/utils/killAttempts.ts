@@ -99,6 +99,7 @@ import {
   type ISpiritOfRedemptionInterval,
   PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
 } from "./combatStates";
+import { cdWholeSecond } from "./cooldowns";
 import {
   DRLevel,
   drResetMsAt,
@@ -1884,7 +1885,7 @@ export function formatKillAttemptsForContext(
             ? `${NO_PRESSABLE_TRINKET_WORDS} (${[...up, softer].join("; ")})`
             : a.trinketRacialLockUntilSeconds === undefined
               ? `trinket up (${[...up, softer].join("; ")})`
-              : `${TRINKET_RACIAL_LOCK_WORDS} (${[`back ${fmtTime(a.trinketRacialLockUntilSeconds)}`, ...up, softer].join("; ")})`;
+              : `${TRINKET_RACIAL_LOCK_WORDS} (${[`back ${fmtTime(cdWholeSecond(a.trinketRacialLockUntilSeconds))}`, ...up, softer].join("; ")})`;
     const outcome = failure ? `FAILED: ${failure.text}` : "KILL";
     const opener =
       a.anchor === "stun"
