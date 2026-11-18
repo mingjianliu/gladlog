@@ -161,12 +161,18 @@ export interface IKillWindowGateFacts {
  * the proof — asked of the model at the press's own instant, with the presses
  * before it (`cdAvailableAt`, its slack): a press the model has no charge
  * for stays off the list, and a free press (`freeRecast`) proves nothing.
+ * Only a press inside the span counts (`toSeconds`, `pressedInside`'s bound).
  */
 export function cdBackForPressInSecond(
   cd: Parameters<typeof cdAvailableAt>[0],
   s: number,
+  toSeconds: number,
 ): boolean {
   return cd.casts.some((c) => {
+    // the presses `pressedInside` lists, no others: one after the span's
+    // end, in its last rendered second, proves nothing about the span
+    // (codex 85-tk-CD-T133-1 #1)
+    if (c.timeSeconds > toSeconds) return false;
     if (c.freeRecast || toRenderSecond(c.timeSeconds) !== s) return false;
     const keep = (x: { timeSeconds: number }) => x.timeSeconds < c.timeSeconds;
     return cdAvailableAt(
@@ -306,7 +312,7 @@ export function createKillWindowFactsComputer(
           if (isDeadAt(holder, startMs + s * 1000)) break;
           if (
             cdAvailableAt(beforePressesOf(cd, s), s) ||
-            cdBackForPressInSecond(cd, s)
+            cdBackForPressInSecond(cd, s, toSeconds)
           ) {
             backInside.push({
               name: label(cd),

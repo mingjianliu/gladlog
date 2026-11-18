@@ -240,6 +240,13 @@ describe("kill-window readiness grammar", () => {
       ]);
     });
 
+    it("T133: a press after the span's end, in its last rendered second, is no `back inside`", () => {
+      // back 55.68, pressed 55.88; the span ends at 55.1
+      const f = factsFor([10.68, 55.88], 48.731, 55.1);
+      expect(f.backInside).toEqual([]);
+      expect(f.pressedInside).toEqual([]);
+    });
+
     it("T133: a press the model has no charge for is no `back inside`", () => {
       // pressed 10 → back 55; a press at 40.2 is not the cooldown back
       const f = factsFor([10, 40.2], 30.2, 45);
