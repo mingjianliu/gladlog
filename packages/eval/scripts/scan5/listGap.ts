@@ -15,7 +15,10 @@
  *    line of the same spell is no line of this press);
  *  - `kit`: the caster's `<cooldowns>` row names it.
  *
- * Kinds: `<filled|listed|offList|offListUnder45>/<side>/<noLine|kitOnly>`.
+ * Kinds: `<filled|control|listed|offList|offListUnder45>/<side>/<noLine|kitOnly>`.
+ * `control` (out of the total) is a control press (`isControlCast`): its
+ * lines are the landing's, not a press tag's, and a control that touched
+ * nobody has none. `offListUnder45` is out of the total too.
  * `offList` is what the class is about: on none of the roster keys, with an
  * official cooldown of `PRESS_LINE_MIN_CD_SECONDS` or more — the `[PRESS]`
  * line's (GH #176, user ruling 2026-11-02), and so is a picked button under
@@ -32,6 +35,8 @@
  * (`utils/offListPress.ts`: `isRosterPressId`, `lineStatesPress`).
  */
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
+import { isControlCast } from "@gladlog/analysis/src/utils/castMissRows";
+import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   MIN_CD_SECONDS,
   unreleasedHoldMs,
@@ -49,6 +54,22 @@ import { OFFENSIVE_PRESS_FACT_IDS } from "@gladlog/analysis/src/utils/spellDange
 import { ev, type IRoundCtx, nameOf, tsOf } from "./ctx";
 
 export const CHECKS = ["listGapPress"] as const;
+
+const SIDES = ["owner", "ally", "enemy"] as const;
+const SHOWN = ["noLine", "kitOnly"] as const;
+/** T205 — the kinds that are no gap by the product's own rules, counted but
+ * out of the total: a button under the `[PRESS]` line's cooldown floor the
+ * user's picks leave out (`offListUnder45`), and a control press, whose
+ * lines are its landing's (`[CC ON TEAM]`, `[CC ON ENEMY]`, `[CC AVOIDED?]`,
+ * `[CC NOT LANDED]` — up to seconds after a totem, a trap or a ground
+ * effect is put down, and none when it touched nobody). */
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
+  (["offListUnder45", "control"] as const).flatMap((off) =>
+    SIDES.flatMap((side) =>
+      SHOWN.map((shown) => `listGapPress|${off}/${side}/${shown}`),
+    ),
+  ),
+);
 
 const LINE_AT = /^\s*(\d+):(\d\d)\s+(.*)$/;
 const TRINKET_TAG = /\[(ENEMY )?TRINKET\]/;
@@ -134,6 +155,11 @@ export function run(ctx: IRoundCtx): void {
       // hit nothing, a cleanse that removed nothing — owns no line (the
       // renderer's own exclusion, `unreleasedHoldMs`; GH #179 batch 3b)
       if (unreleasedHoldMs(unit, id, [at]).length) continue;
+      // …and a shift back into a form whose cooldown is already running is
+      // no press of it (`isFormReshiftCast`, the ledger's own exclusion —
+      // T205: 82 Incarnation: Tree of Life facts of the 605 were re-shifts
+      // inside the Incarnation the line before them had printed)
+      if (isFormReshiftCast(unit, c)) continue;
       ctx.bump("listGapPress");
       const name = nameOf(id, c.spellName ?? "");
       const sec = Math.floor((at - ctx.start) / 1000);
@@ -150,11 +176,13 @@ export function run(ctx: IRoundCtx): void {
       const off =
         OFFENSIVE_PRESS_FACT_IDS.has(id) || FILLED_HEAL_IDS.has(id)
           ? "filled"
-          : isRosterPressId(id)
-            ? "listed"
-            : isOffListPressId(id)
-              ? "offList"
-              : "offListUnder45";
+          : isControlCast(id)
+            ? "control"
+            : isRosterPressId(id)
+              ? "listed"
+              : isOffListPressId(id)
+                ? "offList"
+                : "offListUnder45";
       const kind = `${off}/${side}/${inKit ? "kitOnly" : "noLine"}`;
       ctx.violate(
         "listGapPress",

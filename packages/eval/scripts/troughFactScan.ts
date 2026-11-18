@@ -26,6 +26,10 @@ import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import {
+  hpReadingMaxHp,
+  hpReadingRows,
+} from "@gladlog/analysis/src/utils/advancedActions";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
@@ -88,15 +92,18 @@ function minPct(
   const deaths = ((u.deathRecords ?? []) as any[]).map((d) => d.timestamp);
   const deathMs = deaths.length ? Math.max(...deaths) : Infinity;
   let best: { pct: number; ms: number } | null = null;
-  for (const a of u.advancedActions ?? []) {
+  for (const a of hpReadingRows(u)) {
     const ts = a.logLine.timestamp;
     // up to the death inclusive (codex 20-F16-07 #1): the 0-HP row is
     // skipped below
     if (ts < fromMs || ts >= toMs || ts > deathMs) continue;
     if (a.advancedActorId !== u.id || !(a.advancedActorMaxHp > 0)) continue;
     if (!(a.advancedActorCurrentHp > 0)) continue;
+    // the max HP every HP percentage of a row reads (`hpReadingMaxHp`: a
+    // stale-max row is read over its new max — T205: the scan divided by
+    // the logged max and read such a row above the number the line prints)
     const pct = Math.min(
-      Math.round((a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100),
+      Math.round((a.advancedActorCurrentHp / hpReadingMaxHp(u, a)) * 100),
       100,
     );
     if (!best || pct < best.pct) best = { pct, ms: ts };
@@ -282,7 +289,7 @@ for (const f of files) {
           if (ts >= start + cross * 1000) break;
           if (ts < start + (cross - 1) * 1000) continue;
           if (a.advancedActorId !== unit.id || !(a.advancedActorMaxHp > 0)) continue;
-          const pct = Math.round((a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100);
+          const pct = Math.round((a.advancedActorCurrentHp / hpReadingMaxHp(unit, a as never)) * 100);
           if (pct > line) dipFrom = ts + 1;
         }
         const low = minPct(unit, start, dipFrom, start + (Math.max(bottom, cross) + 1) * 1000);
@@ -333,12 +340,15 @@ for (const f of files) {
       const unit = byName.get(unitName);
       if (!unit) continue;
       count("kickLowInSpan");
-      // `t` is printed to 0.1 s (fmtFactNum): ±50 ms covers its rounding
+      // `t` is printed to 0.1 s (fmtFactNum): ±50 ms covers its rounding;
+      // `lockout` is printed to 0.1 s too, so the end carries both (T205:
+      // s1/56-1 t=163.2 lockout=3.0, the 19 % reading at 166.252 s — 2 ms
+      // past an end that allowed for `t` alone)
       const m = minPct(
         unit,
         start,
         start + Math.round((t - 0.05) * 1000),
-        start + Math.round((t + lock + 0.05) * 1000) + 1,
+        start + Math.round((t + lock + 0.1) * 1000) + 1,
       );
       if (m && pct < m.pct)
         fail(

@@ -27,7 +27,10 @@ import { run as runFact12d } from "../scripts/scan5/fact12d";
 import { run as runFriendlyOffensiveTag } from "../scripts/scan5/friendlyOffensiveTag";
 import { run as runImmunity } from "../scripts/scan5/immunity";
 import { run as runKillAttemptFacts } from "../scripts/scan5/killAttemptFacts";
-import { run as runListGap } from "../scripts/scan5/listGap";
+import {
+  OUT_OF_TOTAL as LIST_GAP_OUT_OF_TOTAL,
+  run as runListGap,
+} from "../scripts/scan5/listGap";
 import { run as runOverrideVariant } from "../scripts/scan5/overrideVariant";
 import { run as runPressFiling } from "../scripts/scan5/pressFiling";
 import { run as runSilenceKick } from "../scripts/scan5/silenceKick";
@@ -2228,6 +2231,65 @@ describe("listGapPress — a press that spent nothing (GH #179 batch 3b)", () =>
   });
 });
 
+describe("listGapPress — a form re-shift and a control press (T205)", () => {
+  const tree = (ms: number) =>
+    cast(ms, "Owner", "33891", "Incarnation: Tree of Life");
+  const incarnation = (event: string, ms: number) =>
+    rowOf(event, ms, {
+      spellId: "117679",
+      spellName: "Incarnation",
+      srcUnitId: "Owner",
+      destUnitId: "Owner",
+    });
+  const druid = (auraEvents: unknown[]) => [
+    unit("Owner", "1", 1, {
+      info: { teamId: "0" },
+      spec: CombatUnitSpec.Druid_Restoration,
+      spellCastEvents: [tree(10_200), tree(48_700)],
+      auraEvents,
+    }),
+  ];
+  const line =
+    "  0:10  [YOU] [CD]   Incarnation: Tree of Life (self: 91% HP, +1%/s, 26k DPS)";
+
+  it("a shift back into Tree of Life while its Incarnation runs is no press (`isFormReshiftCast`)", () => {
+    const up = [incarnation(LogEvent.SPELL_AURA_APPLIED, 10_203)];
+    expect(of(scan(runListGap, druid(up), [line]), "listGapPress")).toEqual([]);
+    // negative control: the Incarnation was over — the second cast is a press
+    const over = [...up, incarnation(LogEvent.SPELL_AURA_REMOVED, 40_203)];
+    expect(
+      of(scan(runListGap, druid(over), [line]), "listGapPress"),
+    ).toHaveLength(1);
+  });
+
+  it("a control press is its own kind, out of the total", () => {
+    const roster = [
+      unit("Owner", "1", 1, {
+        info: { teamId: "0" },
+        spec: CombatUnitSpec.Warrior_Arms,
+      }),
+      unit("Enemy", "4", 2, {
+        info: { teamId: "1" },
+        spec: CombatUnitSpec.Shaman_Restoration,
+        spellCastEvents: [cast(10_400, "Enemy", "192058", "Capacitor Totem")],
+      }),
+    ];
+    const seen = scan(runListGap, roster, []).filter(
+      (v) => v.check === "listGapPress",
+    );
+    expect(seen.map((v) => v.kind)).toEqual(["control/enemy/noLine"]);
+    expect(LIST_GAP_OUT_OF_TOTAL.has("listGapPress|control/enemy/noLine")).toBe(
+      true,
+    );
+    expect(LIST_GAP_OUT_OF_TOTAL.has("listGapPress|listed/enemy/kitOnly")).toBe(
+      false,
+    );
+    expect(LIST_GAP_OUT_OF_TOTAL.has("listGapPress|offList/ally/noLine")).toBe(
+      false,
+    );
+  });
+});
+
 describe("silenceFiledAsKick", () => {
   // the check reads SpellEffect from the datagen cache, which CI has not got:
   // a two-row table of its own. Silence has aura 27 and no effect 68.
@@ -2983,8 +3045,7 @@ describe("T58 — an effect is read by its press's ids, not by the entry's name 
       destUnitId: string,
       spellId: string,
       spellName: string,
-    ) =>
-      rowOf(event, ms, { srcUnitId: "DH", destUnitId, spellId, spellName });
+    ) => rowOf(event, ms, { srcUnitId: "DH", destUnitId, spellId, spellName });
     const own = (event: string, ms: number) =>
       aura(event, ms, "DH", "1259431", "Predator's Wake");
     const dot = (event: string, ms: number) =>
