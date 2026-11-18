@@ -7464,3 +7464,24 @@ byte-identical to its parent's (archive-relative hash 52984113faf9, 3,519
 owners): the [RES] threshold refactor moves no rendered line or menu row
 (capture checked on the Mac). Codex branch reviews 85-tk-CD-T139-1 to -1d:
 APPROVE at 1d.
+
+v595 (2026-11-18; pipeline batch B123, T152; round 14 D19). Shadowy Apparition
+341263 (the trigger row of the talent Shadowy Apparitions; the hit is 148859)
+joins PASSIVE_PROC_CAST_IDS (utils/cooldowns.ts), so every isPassiveProcCast
+reader follows: what-the-player-pressed listings and naming, the cooldown
+ledger, the cast timeline, cast gaps and occupancy. Evidence: DB2 has no
+SpellCooldowns row for it; the 605's raw logs have 8,710 rows from 41 priests
+in 58 archives, 0 SPELL_CAST_START, all untargeted, 2,743 within 0.75 s of the
+caster's previous row. Reviewed line (95d4affb 1:32): `postKick=acted on
+another school 1.5s later (Shadowy Apparition; not a hard cast)` -> `(Mind
+Flay: Insanity; channel)`. On the 58 archives with a 341263 cast row (409
+owners): no context file changes; 27 menu files change (kick-eaten postKick 35
+rows, no longer naming the trigger as an action or `first cast Ns later`;
+missed-cleanse ownerCastingS 5 rows, e.g. 0.1 -> 0.9, and ownerCastingSpells
+1); candidate kick-eaten +1 / -1 in one round, under R16. pressNamedRead
+(postKick) 22 / 2,031 -> 0 / 2,012. On the 605 the assembled candidate changes
+no context and 27 menus in 16 archives, all among the 58 with a player's
+Shadowy Apparition (341263) cast row: 35 kick-eaten and 5 missed-cleanse rows
+change their named press, one kick-eaten row leaves and one enters (65-5);
+candidate rows 7,441 = 7,441 (capture checked on the Mac). Codex branch review
+85-tk-KICK-T152-1: APPROVE.

@@ -1492,5 +1492,9 @@
  *  purge, healer-exposure and kill-attempt lines (no output change on the
  *  605).
  *  See docs/prompt-version-history.md.
+ *
+ * v595 (2026-11-18; pipeline batch B123, T152): Shadowy Apparition
+ *  (341263, the talent's trigger row) is a passive proc, not a press.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 594;
+export const PROMPT_VERSION = 595;
