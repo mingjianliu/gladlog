@@ -186,10 +186,14 @@ export function readRawText(
   }
 }
 
-/** The only `runQuery` subcommands that read raw.txt's parsed streams. */
+/** The only `runQuery` subcommands that read raw.txt's parsed streams.
+ * `gaps` (T146): the free-to-cast seconds of a healing gap leave out an
+ * aura-less silence the owner's refused presses prove — without the streams
+ * the query printed 6.2 s free where the prompt prints 2.4 s. */
 export const RAW_STREAM_SUBCOMMANDS: ReadonlySet<string> = new Set([
   "mana",
   "drink",
+  "gaps",
 ]);
 
 /**

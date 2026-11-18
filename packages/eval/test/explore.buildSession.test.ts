@@ -56,6 +56,16 @@ describe("makeRoundQuery", () => {
     expect(seen).toEqual([raw, raw]);
     expect(loads).toBe(1);
   });
+  it("hands gaps the raw streams too: its free seconds read the refused presses (T146)", () => {
+    const seen: Array<RawStreams | undefined> = [];
+    const q = makeRoundQuery(
+      legacy,
+      () => raw,
+      (_l, _argv, r) => (seen.push(r), []),
+    );
+    q(["gaps"]);
+    expect(seen).toEqual([raw]);
+  });
   it("never loads raw streams for the other subcommands", () => {
     let loads = 0;
     const seen: Array<RawStreams | undefined> = [];

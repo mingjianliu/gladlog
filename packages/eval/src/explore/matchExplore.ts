@@ -330,7 +330,11 @@ export function flowLines(
 // gaps
 // ---------------------------------------------------------------------------
 
-export function gapLines(legacy: LegacyRound): string[] {
+export function gapLines(
+  legacy: LegacyRound,
+  /** the round's refused presses, as the prompt's own gaps read them (T146) */
+  rawStreams?: RawStreams,
+): string[] {
   const lines = ["## gaps"];
   const { friends, enemies } = splitTeams(legacy);
   const healers = friends.filter((u) => isHealerSpec(u.spec));
@@ -340,7 +344,13 @@ export function gapLines(legacy: LegacyRound): string[] {
   }
   let any = false;
   for (const healer of healers) {
-    const gaps = detectHealingGaps(healer, friends, enemies, legacy);
+    const gaps = detectHealingGaps(
+      healer,
+      friends,
+      enemies,
+      legacy,
+      rawStreams ? { rawStreams } : {},
+    );
     if (gaps.length === 0) continue;
     any = true;
     lines.push(`-- ${healer.name}(${specToString(healer.spec)}) --`);
@@ -642,9 +652,10 @@ function flagStr(argv: string[], name: string): string | undefined {
  * individual `*Lines` functions directly — so the two never drift on how a
  * subcommand's flags are parsed or validated. Pure: no I/O of its own, never
  * exits the process; illegal input always throws `Error("usage: …")`.
- * `rawStreams` is optional and only consulted by `mana`/`drink`; both callers
- * (the CLI and `buildSession.ts`'s prescreen) load it through
- * `storeAccess.ts`'s `rawStreamsForRound` for exactly those two subcommands.
+ * `rawStreams` is optional and only consulted by `mana`/`drink`/`gaps`
+ * (`RAW_STREAM_SUBCOMMANDS`); both callers (the CLI and `buildSession.ts`'s
+ * prescreen) load it through `storeAccess.ts`'s `rawStreamsForRound` for
+ * exactly those subcommands.
  */
 export function runQuery(
   legacy: LegacyRound,
@@ -685,7 +696,7 @@ export function runQuery(
       if (fromS === undefined || toS === undefined) throw new Error(USAGE);
       return flowLines(legacy, fromS, toS);
     case "gaps":
-      return gapLines(legacy);
+      return gapLines(legacy, rawStreams);
     case "mana":
       if (!unit) throw new Error(USAGE);
       return manaLines(legacy, rawStreams, unit, fromS, toS);
