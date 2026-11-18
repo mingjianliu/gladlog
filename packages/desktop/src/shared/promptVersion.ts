@@ -1481,5 +1481,10 @@
  *  s of continuous free, ready and in-reach time; out-of-reach spans mask
  *  the gap like control and unready time.
  *  See docs/prompt-version-history.md.
+ *
+ * v593 (2026-11-18; pipeline batch B121, T146): a silence that logs no
+ *  aura but is proven by the owner's refused presses counts as cannot-cast
+ *  time in [INACTIVITY] (recorder's own rounds).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 592;
+export const PROMPT_VERSION = 593;

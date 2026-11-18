@@ -7423,3 +7423,23 @@ and 10 menus, all in archives with an external-unused row: 5 external-unused
 rows (all Darkness) are removed and 5 have a shorter freeGapS, none added or
 lengthened; candidate rows 7,446 -> 7,441 (capture checked on the Mac). Codex
 branch review 85-tk-CC-T171-1: APPROVE (3 synthetic points recorded).
+
+v593 (2026-11-18; pipeline batch B121, T146; round 14 D5, draft N07). Not
+reproduced on the 605; fixed on the reviewed match, with unit tests. A silence
+with no aura (Solar Beam's field) proven by the owner's refused presses was
+not cannot-cast time for the healing-gap readers, so [INACTIVITY] printed the
+silenced seconds as free to cast. utils/unloggedSilence.ts exports
+unloggedSilenceSpansOnOwner (from one qualifying refusal to the next, cut
+where the owner lands a silenceable spell in between; a single refusal is no
+span), sharing one private reading with unloggedSilencesOnOwner;
+detectHealingGaps adds these spans to cannot-cast time (it needs the raw
+stream, so only the recorder's own rounds). Reviewed match 3c8cd2a3 r0 0:29,
+main -> branch: `[INACTIVITY] … 6.2s of it un-CC'd/free to cast` -> `2.4s`,
+menu `freeS=6` -> `2`, no other line of its 18 contexts changes;
+inactivityFreeWhileSilenced 1 / 1 -> 0 / 1. On the 605: 0 / 170 -> 0 / 170 and
+the capture is byte-identical (25 `[SILENCE] … no aura logged` lines in 3,526
+contexts, none inside a printed gap). On the 605 the assembled candidate's
+capture is byte-identical to its parent's (archive-relative hash 52984113faf9,
+3,519 owners): no rendered line or menu row changes (capture checked on the
+Mac). Codex branch review 85-tk-KICK-T146-1: #1 fixed in b242acdda (eval
+explore tool), #2 #3 synthetic, recorded.
