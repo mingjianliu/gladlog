@@ -7646,3 +7646,19 @@ the spell could be pressed through, and four external-unused gaps lengthen
 candidate rows +0 / -0. Codex branch review 85-tk-KICK-T147-1 (fixed) and -1b:
 one synthetic scan-side point (lowest teammate changing mid-window, 0 on the
 605) recorded, not fixed.
+
+v602 (2026-11-18; pipeline batch B130, T175). No prompt change. GH #221's
+remaining exposureThreatUnderCover rows (400 / 17,060) were all `ambiguous`:
+the cover was up for part of the printed second and the text has only seconds.
+The scan (scan5/t128.ts) now asks the producer, computeHealerExposureEvents,
+for the window's exact instant and reads healerCcCoverAt there: on the 605 no
+[HEALER EXPOSURE] line has its window open under cover (0 / 17,060); the 400
+go to the inventory, cover arriving after the window opened 248 (87 facts) and
+ending before it 152 (54 facts), none undecided. E.g. `1:42 [HEALER EXPOSURE]
+... Freezing Trap`: Nullifying Shroud was up for part of 1:42, the window
+opened at 1:42.825 after it had gone (checked against the log's timestamps).
+This shows the product is self-consistent at the instant; it is not an
+independent check. The batch changes only a corpus scan, which the capture
+does not import, so on the 605 the prompts and menus are the parent's byte for
+byte. Codex branch review 85-tk-CC-T175-1: APPROVE (two synthetic points
+recorded).

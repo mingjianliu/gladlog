@@ -1526,5 +1526,9 @@
  * v601 (2026-11-18; pipeline batch B129, T147): a cooldown the game lets
  *  you press while stunned is no longer called unpressable during a stun.
  *  See docs/prompt-version-history.md.
+ *
+ * v602 (2026-11-18; pipeline batch B130, T175): no prompt change; the
+ *  healer-exposure cover scan reads the window's exact instant (GH #221).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 601;
+export const PROMPT_VERSION = 602;
