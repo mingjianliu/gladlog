@@ -7199,3 +7199,14 @@ buildDeathOutcomeSummary's lockAt moved out and called by both). 605 scan
 deathCheaperUnpressable 1 / 41 -> 0 / 41; every other scan5 check identical;
 the prompt is unchanged (605 capture hash equal to the base, checked on the
 Mac). Codex branch review 85-tk-ENG-T197-1: APPROVE.
+
+v581 (2026-11-18; pipeline batch B108, T198; GH #218 9.4). Under GLADLOG_E2E=1
+main/index.ts moved userData only, and electron-log kept writing main.log to
+Electron's logs path (on macOS ~/Library/Logs/gladlog), so E2E runs wrote into
+the developer's real log. applyE2eEnv (main/e2eEnv.ts) now applies the whole
+switch before log.initialize(): userData, the logs path and the file
+transport's own path. Probe under the switch: main.log moves from
+~/Library/Logs/gladlog to <E2E userData>/logs/main.log; unit tests 3 of 3.
+Desktop main process only, no prompt change. Codex branch review 85-tk-
+ENG-T198-1: APPROVE (noted: optional features that still write outside
+userData under E2E stay as they are).

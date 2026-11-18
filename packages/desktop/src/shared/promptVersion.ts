@@ -1420,5 +1420,9 @@
  *  desktop death card's cheaper-defensive hint names only an alternative
  *  the victim could press in the lethal window.
  *  See docs/prompt-version-history.md.
+ *
+ * v581 (2026-11-18; pipeline batch B108, T198): no prompt change. An E2E
+ *  run writes main.log inside its temporary userData.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 580;
+export const PROMPT_VERSION = 581;
