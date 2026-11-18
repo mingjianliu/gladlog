@@ -1429,5 +1429,10 @@
  *  built app's two background workers start again (their entry paths
  *  resolve from out/main/chunks/).
  *  See docs/prompt-version-history.md.
+ *
+ * v583 (2026-11-18; pipeline batch B110, T199): no prompt change. The
+ *  staged report marks a source complete only when every whole-match derive
+ *  is in.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 582;
+export const PROMPT_VERSION = 583;

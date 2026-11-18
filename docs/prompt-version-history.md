@@ -7223,3 +7223,17 @@ document -> 29.0 MB per round), slimmed mark written back 0/1 -> 1/1; unit
 test. Desktop main process only, no prompt change. Codex branch review 85-tk-
 ENG-T220-1: REQUEST_CHANGES on two synthetic-only points, recorded (the stat-
 then-open race with a heal is closed by T200).
+
+v583 (2026-11-18; pipeline batch B110, T199; GH #218 9.3). The staged report's
+completed mark (sourceMemo markSourceFilled / isSourceFilled, which lets the
+next mount render in one pass) meant 'every fill step has run', and three
+paths set it on an incomplete entry, each ending in a one-pass render that
+computed the missing whole-match derives in one main-thread task: the analysis
+tables arriving mid-fill, a fill under a time range mounted later without one,
+and an entry evicted from the two-source cache during its fill and started
+again (found by the batch review 80-PIPE-122 on a shuffle opened without a
+rounds sidecar and walked A -> B -> C). All three closed; the new behaviour
+tests fail before and pass after; production-build probe (roundRevisitProbe,
+20 real matches, 3 launches) added. Desktop renderer only, no prompt change.
+Codex branch reviews 85-tk-ENG-T199-1 (REQUEST_CHANGES on three synthetic
+points: two probe fixes made, one recorded) and 85-tk-ENG-T199-2: APPROVE.
