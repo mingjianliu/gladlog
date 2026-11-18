@@ -608,6 +608,12 @@ const INDEX: PredicateRow[] = [
     symbol: "silenceIntervalsInRound",
     mod: unloggedSilence,
   },
+  // fact14 D5 / T146: the proven span of an aura-less silence
+  {
+    file: `${A}/utils/unloggedSilence.ts`,
+    symbol: "unloggedSilenceSpansOnOwner",
+    mod: unloggedSilence,
+  },
   // fact11 D9: a Spell Reflection return with no REFLECT row
   {
     file: `${A}/context/spellOutcomeLines.ts`,

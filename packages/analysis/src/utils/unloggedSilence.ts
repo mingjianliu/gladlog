@@ -25,6 +25,7 @@ import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
 import { buildAuraIntervals } from "./auraIntervals";
 import { isSilenceEffectAura, silenceIntervals } from "./cannotCastIntervals";
 import type { RawStreams } from "./rawStreams";
+import { isSilenceableCast } from "./spellMechanics";
 
 export interface UnloggedSilenceOnOwner {
   /** epoch ms of the enemy's cast row — where the silence is placed */
@@ -38,12 +39,7 @@ export interface UnloggedSilenceOnOwner {
   refusalSpellName: string;
 }
 
-/**
- * The aura-less silences on `owner` in the round, each proven by the owner's
- * first refusal as silenced under it. Empty when the owner did not record the
- * log (`rawStreams` unavailable).
- */
-export function unloggedSilencesOnOwner(params: {
+interface UnloggedSilenceParams {
   owner: ICombatUnit;
   /** every unit of the round (the "logged on anyone" test reads them all) */
   allUnits: readonly ICombatUnit[];
@@ -52,9 +48,32 @@ export function unloggedSilencesOnOwner(params: {
   matchStartMs: number;
   roundEndAtMs: number;
   rawStreams?: RawStreams;
-}): UnloggedSilenceOnOwner[] {
+}
+
+interface UnloggedSilenceCast {
+  ms: number;
+  untilMs: number;
+  spellId: string;
+  spellName: string;
+  srcId: string;
+  srcName: string;
+}
+
+/**
+ * Every press of the owner's refused as silenced that an aura-less silence
+ * explains, by the cast that explains it, in time order — the one selection
+ * behind the `[SILENCE] … no aura logged` line (the first of each cast) and
+ * the cannot-cast spans (`unloggedSilenceSpansOnOwner`, all of them).
+ */
+function refusalsUnderUnloggedSilences(
+  params: UnloggedSilenceParams,
+): Map<UnloggedSilenceCast, Array<{ ms: number; spellName: string }>> {
+  const out = new Map<
+    UnloggedSilenceCast,
+    Array<{ ms: number; spellName: string }>
+  >();
   const { owner, allUnits, matchStartMs, roundEndAtMs, rawStreams } = params;
-  if (!rawStreams?.available) return [];
+  if (!rawStreams?.available) return out;
   const enemyIds = new Set(params.enemies.map((u) => u.id));
   for (const u of allUnits)
     if (u.ownerId && enemyIds.has(u.ownerId)) enemyIds.add(u.id);
@@ -82,14 +101,7 @@ export function unloggedSilencesOnOwner(params: {
       .map((d) => d.timestamp)
       .filter((t) => t >= matchStartMs),
   );
-  const silenceCasts: Array<{
-    ms: number;
-    untilMs: number;
-    spellId: string;
-    spellName: string;
-    srcId: string;
-    srcName: string;
-  }> = [];
+  const silenceCasts: UnloggedSilenceCast[] = [];
   for (const u of allUnits)
     if (enemyIds.has(u.id))
       for (const c of u.spellCastEvents ?? []) {
@@ -139,14 +151,14 @@ export function unloggedSilencesOnOwner(params: {
           srcName: c.srcUnitName,
         });
       }
-  const firstRefusal = new Map<
-    (typeof silenceCasts)[number],
-    { ms: number; spellName: string }
-  >();
-  for (const h of rawStreams.castFailed) {
-    if (h.unitGuid !== owner.id) continue;
-    if (controlRejectKindOf(h.reason) !== "silence") continue;
-    const ms = matchStartMs + Math.round(h.tSeconds * 1000);
+  const failed = rawStreams.castFailed
+    .filter(
+      (h) =>
+        h.unitGuid === owner.id && controlRejectKindOf(h.reason) === "silence",
+    )
+    .map((h) => ({ h, ms: matchStartMs + Math.round(h.tSeconds * 1000) }))
+    .sort((x, y) => x.ms - y.ms);
+  for (const { h, ms } of failed) {
     if (ms >= roundEndAtMs || ms >= ownerDeathMs) continue;
     if (covered.some((s) => s.from <= ms && ms <= s.to)) continue;
     // one source only: a refusal two such casts could explain (a Solar
@@ -156,21 +168,84 @@ export function unloggedSilencesOnOwner(params: {
     if (new Set(open.map((c) => `${c.srcId}:${c.spellName}`)).size !== 1)
       continue;
     const src = open.sort((a, b) => b.ms - a.ms)[0];
-    if (!src || firstRefusal.has(src)) continue;
-    firstRefusal.set(src, {
+    if (!src) continue;
+    const list = out.get(src) ?? [];
+    list.push({
       ms,
       spellName: getEnglishSpellName(String(h.spellId), h.spellName),
     });
+    out.set(src, list);
   }
-  return [...firstRefusal].map(([c, r]) => ({
-    castMs: c.ms,
-    spellId: c.spellId,
-    spellName: c.spellName,
-    srcId: c.srcId,
-    srcName: c.srcName,
-    refusalMs: r.ms,
-    refusalSpellName: r.spellName,
-  }));
+  return out;
+}
+
+/**
+ * The aura-less silences on `owner` in the round, each proven by the owner's
+ * first refusal as silenced under it. Empty when the owner did not record the
+ * log (`rawStreams` unavailable).
+ */
+export function unloggedSilencesOnOwner(
+  params: UnloggedSilenceParams,
+): UnloggedSilenceOnOwner[] {
+  return [...refusalsUnderUnloggedSilences(params)].flatMap(([c, list]) => {
+    const r = list[0];
+    return r
+      ? [
+          {
+            castMs: c.ms,
+            spellId: c.spellId,
+            spellName: c.spellName,
+            srcId: c.srcId,
+            srcName: c.srcName,
+            refusalMs: r.ms,
+            refusalSpellName: r.spellName,
+          },
+        ]
+      : [];
+  });
+}
+
+/**
+ * The time the log PROVES the owner sat in an aura-less silence: from one
+ * press refused as silenced to the next under the same cast
+ * (`refusalsUnderUnloggedSilences`), as cannot-cast spans in epoch ms. The
+ * log gives such a silence no landing row and no length (Solar Beam is an
+ * area the player can leave), so nothing before the first refusal or after
+ * the last is claimed, and a spell a silence stops (`isSilenceableCast`)
+ * going out between two refusals cuts the span there — the owner was out of
+ * it then. A lower bound on the silenced time, never an estimate of it.
+ *
+ * fact14 D5 (3c8cd2a3 r0 0:29): `[INACTIVITY] … inactive 6.2s (6.2s of it
+ * un-CC'd/free to cast)` and the menu's `freeS=6` beside `pressed but
+ * rejected (silenced×14)` — fourteen refusals from 0:31.938 to 0:35.707
+ * under a Solar Beam cast at 0:29.667.
+ */
+export function unloggedSilenceSpansOnOwner(
+  params: UnloggedSilenceParams,
+): Array<{ from: number; to: number }> {
+  const out: Array<{ from: number; to: number }> = [];
+  const wentOut = (params.owner.spellCastEvents ?? [])
+    .filter(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!c.spellId &&
+        isSilenceableCast(c.spellId),
+    )
+    .map((c) => c.logLine.timestamp);
+  for (const list of refusalsUnderUnloggedSilences(params).values()) {
+    let from: number | undefined;
+    let to = 0;
+    for (const { ms } of list) {
+      if (from !== undefined && wentOut.some((t) => to < t && t < ms)) {
+        if (to > from) out.push({ from, to });
+        from = undefined;
+      }
+      from ??= ms;
+      to = ms;
+    }
+    if (from !== undefined && to > from) out.push({ from, to });
+  }
+  return out.sort((a, b) => a.from - b.from);
 }
 
 /** The silences the timeline prints a `[SILENCE]` line for on `unit`: its

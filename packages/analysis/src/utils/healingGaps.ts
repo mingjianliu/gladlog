@@ -15,6 +15,7 @@ import {
 } from "./rawStreams";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
+import { unloggedSilenceSpansOnOwner } from "./unloggedSilence";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -155,6 +156,20 @@ export function detectHealingGaps(
   // ran past the end and was scored as idle time (e5b3534b); it is dropped
   // below, so a gap reaching the end is the tail gap and takes the tail rule.
   const matchEndMs = roundEndMs(combat);
+  // fact14 D5 (pipeline T146): a silence the log writes no aura for (Solar
+  // Beam) is cannot-cast time for as long as the healer's own refused
+  // presses prove it (`unloggedSilenceSpansOnOwner`, the `[SILENCE] … no
+  // aura logged` line's reading). Only the log's owner has refusals.
+  cannotCast.push(
+    ...unloggedSilenceSpansOnOwner({
+      owner: healer,
+      allUnits: Object.values(combat.units ?? {}) as ICombatUnit[],
+      enemies,
+      matchStartMs,
+      roundEndAtMs: matchEndMs,
+      rawStreams: opts.rawStreams,
+    }),
+  );
 
   // All timestamps where the healer produced a heal event or successfully cast a spell, sorted ascending
   const healTimestamps = healer.healOut.map((h) => h.logLine.timestamp);
