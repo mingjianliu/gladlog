@@ -14,31 +14,24 @@
  *        is) — 7669df4d r0: `defenseless 2:40–3:00`, pressed 2:05.5 and again
  *        2:51.6 on a 30 s cooldown;
  *      `up` — its own 410358 aura (the unit's press on itself) ran one whole
- *        second or more inside the span, from the log's aura rows.
+ *        second or more inside the span, by the producer's aura intervals
+ *        (`buildAuraIntervals`).
  *    The rendered span is floored on both ends: only [a + 1, b] is surely
  *    inside it.
  *  - `burstAmsNotNamed`: a burst-ledger block whose target carried a 410358
- *    aura from its own side for one whole second or more inside the burst's
+ *    aura (the ledger's own intervals, `buildAuraIntervals`) from its own side for one whole second or more inside the burst's
  *    printed span [a + 1, b] (the ledger's own floor is
  *    `MIN_DEFENSIVE_OVERLAP_S`, 0.5 s) and that does not name Anti-Magic
  *    Shell. Counted: every block whose target carried one at all in the
  *    round.
  */
+import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
   entryAvailabilityTransitions,
   unitCooldownEntry,
 } from "@gladlog/analysis/src/utils/cooldowns";
 
-import {
-  APPLIED,
-  ev,
-  fmtS,
-  type IRoundCtx,
-  REMOVED,
-  secOf,
-  successesOf,
-  tsOf,
-} from "./ctx";
+import { fmtS, type IRoundCtx, secOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = ["amsInDefenselessSpan", "burstAmsNotNamed"] as const;
 
@@ -77,28 +70,23 @@ function readyStretches(u: any, legacy: any, roundS: number): Stretch[] {
   return out;
 }
 
-/** the 410358 aura's runs on `u` in round seconds, from sources `from` */
+/** the 410358 aura's runs on `u` in round seconds, from sources `from`:
+ * the producer's own intervals (`buildAuraIntervals(unit, combat)`, the
+ * call the burst ledger makes — a run with no REMOVED capped at its
+ * official length, a REMOVED from another source, a run up since before
+ * the round; codex 85-tk-WIN-T156-1 #1: a pairing of the raw rows read a
+ * shell with no REMOVED up to the round's end) */
 function auraRuns(
   u: any,
-  from: (srcId: string) => boolean,
-  start: number,
-  roundS: number,
+  from: (src: { id?: string; name: string }) => boolean,
+  legacy: any,
 ): Stretch[] {
-  const out: Stretch[] = [];
-  const open = new Map<string, number>();
-  for (const a of ((u.auraEvents ?? []) as any[])
-    .filter((x) => String(x.spellId) === AMS && from(x.srcUnitId))
-    .sort((x, y) => tsOf(x) - tsOf(y))) {
-    const t = (tsOf(a) - start) / 1000;
-    if (ev(a) === APPLIED) {
-      if (!open.has(a.srcUnitId)) open.set(a.srcUnitId, t);
-    } else if (ev(a) === REMOVED && open.has(a.srcUnitId)) {
-      out.push({ from: open.get(a.srcUnitId)!, to: t });
-      open.delete(a.srcUnitId);
-    }
-  }
-  for (const f of open.values()) out.push({ from: f, to: roundS });
-  return out;
+  return buildAuraIntervals(u, legacy)
+    .filter(
+      (iv) =>
+        iv.spellId === AMS && from({ id: iv.srcUnitId, name: iv.srcUnitName }),
+    )
+    .map((iv) => ({ from: iv.fromS, to: iv.toS }));
 }
 
 /** a stretch that covers one whole second or more of [a + 1, b] */
@@ -141,7 +129,7 @@ export function run(ctx: IRoundCtx): void {
     if (!u || !pressed.has(u.id)) continue;
     ctx.bump("amsInDefenselessSpan");
     const up = insideOf(
-      auraRuns(u, (src) => src === u.id, ctx.start, roundS),
+      auraRuns(u, (src) => src.id === u.id || src.name === u.name, ctx.legacy),
       a,
       b,
     );
@@ -158,7 +146,8 @@ export function run(ctx: IRoundCtx): void {
     );
   }
 
-  const side = new Set<string>(enemies.map((u: any) => u.id));
+  const sideIds = new Set<string>(enemies.map((u: any) => u.id));
+  const sideNames = new Set<string>(enemies.map((u: any) => u.name));
   for (let i = 0; i < ctx.lines.length; i++) {
     const h = BURST.exec(ctx.lines[i]!);
     if (!h) continue;
@@ -171,7 +160,13 @@ export function run(ctx: IRoundCtx): void {
     const t = block.map((x) => TARGET.exec(x)).find((x) => x);
     const target = t && enemies.find((p: any) => p.name === t[1]);
     if (!target) continue;
-    const runs = auraRuns(target, (src) => side.has(src), ctx.start, roundS);
+    const runs = auraRuns(
+      target,
+      (src) =>
+        (src.id !== undefined && sideIds.has(src.id)) ||
+        sideNames.has(src.name),
+      ctx.legacy,
+    );
     if (runs.length === 0) continue;
     ctx.bump("burstAmsNotNamed");
     const a = secOf(h[1]!);
