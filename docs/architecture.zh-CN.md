@@ -163,7 +163,7 @@ worker 内部(`src/worker/`):
 | `aiDebugLog.ts`                   | 最近 10 次 AI 调用(prompt + 原始返回)的内存环形日志,供开发者页用。刻意不落盘                                                               | 无                                                                   |
 | `exportImage.ts`                  | 在离屏窗口里渲染战报并整页截图为 PNG                                                                                                       | 写用户选定的 PNG                                                     |
 | `detectWowDir.ts`                 | 仅 Windows 的 WoW 安装路径猜测,以及 `resolveLogsDir`                                                                                       | 无                                                                   |
-| `e2eEnv.ts`                       | `GLADLOG_E2E=1` 下把 `userData` 指到临时目录 —— 参数不合法时**抛错**,绝不静默回落到真实目录                                                | 无                                                                   |
+| `e2eEnv.ts`                       | `GLADLOG_E2E=1` 下把 `userData` 和 `main.log`(Electron 的 `logs` 路径)指到临时目录 —— 参数不合法时**抛错**,绝不静默回落到真实目录                                                | 无                                                                   |
 | `readNthLine`(在 `matchStore.ts`) | 流式扫 `raw.txt` 找第 n 个 `\n` 并早停,而不是为取一行整读+切分一个 12–70 MB 的文件                                                         | 无                                                                   |
 
 有三个模式反复出现,值得内化:

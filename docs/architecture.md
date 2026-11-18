@@ -163,7 +163,7 @@ Messages back to main are the `WorkerToMain` union in `src/shared/protocol.ts`: 
 | `aiDebugLog.ts`                    | In-memory ring of the last 10 AI calls (prompt + raw response) for the developer panel. Deliberately never written to disk                      | none                                                                      |
 | `exportImage.ts`                   | Renders the report in an off-screen window and captures a full-page PNG                                                                         | writes the chosen PNG                                                     |
 | `detectWowDir.ts`                  | Windows-only guesses at the WoW install path, plus `resolveLogsDir`                                                                             | none                                                                      |
-| `e2eEnv.ts`                        | Under `GLADLOG_E2E=1`, redirects `userData` to a throwaway directory — and **throws** rather than silently using the real one                   | none                                                                      |
+| `e2eEnv.ts`                        | Under `GLADLOG_E2E=1`, redirects `userData` and `main.log` (Electron's `logs` path) to a throwaway directory — and **throws** rather than silently using the real one                   | none                                                                      |
 | `readNthLine` (in `matchStore.ts`) | Streams `raw.txt` looking for the _n_-th `\n` and stops early, instead of reading and splitting a 12–70 MB file to get one line                 | none                                                                      |
 
 Three patterns recur and are worth internalising:

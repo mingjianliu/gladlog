@@ -20,7 +20,7 @@ import {
   realFsProbe,
   resolveLogsDir,
 } from "./detectWowDir";
-import { e2eUserDataDir } from "./e2eEnv";
+import { applyE2eEnv } from "./e2eEnv";
 import { exportReportImage } from "./exportImage";
 import { createIconCache } from "./iconCache";
 import { registerIpc } from "./ipc";
@@ -67,9 +67,9 @@ import { createWowProcessWatch } from "./wowProcessWatch";
 app.setName("gladlog");
 // The privileged vod:// scheme must be registered before app ready
 registerVodScheme();
-// E2E: must come before any app.getPath('userData') call (settings below is one)
-const e2eDir = e2eUserDataDir(process.env);
-if (e2eDir) app.setPath("userData", e2eDir);
+// E2E: must come before any app.getPath('userData') call (settings below is
+// one) and before log.initialize() — userData and main.log both move
+applyE2eEnv(process.env, { app, log });
 
 log.initialize();
 process.on("uncaughtException", (e) => log.error("[main] uncaught:", e));
