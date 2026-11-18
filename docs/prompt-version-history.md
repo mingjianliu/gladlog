@@ -7443,3 +7443,24 @@ capture is byte-identical to its parent's (archive-relative hash 52984113faf9,
 3,519 owners): no rendered line or menu row changes (capture checked on the
 Mac). Codex branch review 85-tk-KICK-T146-1: #1 fixed in b242acdda (eval
 explore tool), #2 #3 synthetic, recorded.
+
+v594 (2026-11-18; pipeline batch B122, T139; round 14 P06 remainder). No
+rendering defect found; the guards are now one predicate. [RES]'s kit lower
+bound lifted a second that fell a hair short of whole with its own
+SECONDS_FLOAT_NOISE (resourceSnapshot.ts, 1e-6), while every other place that
+renders a ready second used a bare floor. Now one floor: cdWholeSecond
+(utils/cooldowns.ts, CD_SECONDS_FLOAT_NOISE = 1e-8; [RES] remaining seconds
+through cdRemainingWholeSeconds), read by [RES]'s lower bound and remaining
+seconds, the off-list [PRESS] back (compare and print), POSITIONING's back at,
+the kick line's back, purge's ready at / (ready m:ss), the healer-exposure
+trinket back, the kill-attempt trinket / racial back, and eval's
+scan5/trinketLock checker. predicate-index rewrites T55's 'Not yet unified'
+entry as unified (both languages); resLedgerT04.test.ts pins the guard's edge
+(119.999999999 -> 120, 119.9999999 -> 119). The [RES] guard narrows from 1e-6
+to 1e-8; on the 605 the band between is empty. Scans on the 605:
+backSecondFloatBand 0 / 50,981; resSecondFloatBand 33 / 9,089,899, all under
+1e-8 (both guards lift them). On the 605 the assembled candidate's capture is
+byte-identical to its parent's (archive-relative hash 52984113faf9, 3,519
+owners): the [RES] threshold refactor moves no rendered line or menu row
+(capture checked on the Mac). Codex branch reviews 85-tk-CD-T139-1 to -1d:
+APPROVE at 1d.

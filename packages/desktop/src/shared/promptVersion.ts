@@ -1486,5 +1486,11 @@
  *  aura but is proven by the owner's refused presses counts as cannot-cast
  *  time in [INACTIVITY] (recorder's own rounds).
  *  See docs/prompt-version-history.md.
+ *
+ * v594 (2026-11-18; pipeline batch B122, T139): one whole-second floor for
+ *  a cooldown's return second across [RES], [PRESS], POSITIONING, kick,
+ *  purge, healer-exposure and kill-attempt lines (no output change on the
+ *  605).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 593;
+export const PROMPT_VERSION = 594;
