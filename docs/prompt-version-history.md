@@ -7560,3 +7560,30 @@ the assembled candidate changes 307 contexts in 71 archives and 27 menus, the
 offensive-window lines that followed a healer's racial moving with it (capture
 checked on the Mac, line by line). Codex branch review 85-tk-WIN-T153-1:
 APPROVE (two synthetic points recorded).
+
+v599 (2026-11-18; pipeline batch B124, T140). An enemy `(no press)` effect (a
+proc, no cast row) whose end the log does not show printed an exact `(Ns
+left)` in the [RES] enemy field. Now `(≤Ns left)`, the official end as an
+upper bound, when the occurrence was still up at the slice's end with its
+official end past it, or was cut by its holder's death
+(IEnemyCDCast.ownEndIsUpperBound, enemyEffectLeftIsUpperBound in
+utils/enemyCDs.ts; printed by context/resourceSnapshot.ts). The cast-less twin
+occurrence now carries its official end (utils/offensiveAuraOccurrences.ts):
+before, its end was the slice's end, so the printed number was the seconds to
+the slice end, not a duration; e.g. a Retribution Paladin's proc Avenging
+Wrath (454351) printed `1s left` and now prints `≤12s left` (the model's 8 s +
+Divine Wrath 2 x 2 s). On the lane's 99 archives: 156 entries change, 49 only
+gaining `≤` (Avenging Wrath 21, Kingsbane 12, Malevolence 13, Recklessness 3)
+and 107 also changing the number, all 454351 (+10 s x76, +11 x24, +9 x3, +1
+x4); in the raw logs the 26 cast-less 454351 runs with a REMOVED last 2-11 s
+(18 of them 6 s), none past 12, so the bound holds but is loose; the proc's
+own duration is a separate ticket. scan5 t41 resNoPressExactLeft (which checks
+the `≤`, not the number) 148 / 148 -> 15 / 148 (the 15 are procs a logged
+press took over, which the check misread; the eval-only checker fix 777fb420c
+counts 0 / 133). resEnemyLeftPastLogEnd 0 / 2,346 both sides; no menu changes.
+On the 605 the assembled candidate changes 128 contexts in 35 archives and no
+menu: every changed text is a [RES] enemy: entry of an offensive cooldown seen
+with no press, 51 only gaining `≤` before its seconds left and 107 Retribution
+Paladin Avenging Wrath entries also taking the longer bound (+10 s x76, +11
+x24, +9 x3, +1 x4). Codex branch review 85-tk-CD-T140-1 (three real points,
+fixed) and -1b: APPROVE.

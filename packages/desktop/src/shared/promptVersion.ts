@@ -1512,5 +1512,10 @@
  *  cooldown on either side (A16, R55); a Holy Paladin's Avenging Wrath
  *  alone no longer sets [friendly offensive CD active] (round 13 P7).
  *  See docs/prompt-version-history.md.
+ *
+ * v599 (2026-11-18; pipeline batch B124, T140): an enemy `(no press)`
+ *  effect whose end the log does not show prints `(≤Ns left)` from its
+ *  official end, an upper bound, not an exact time left.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 598;
+export const PROMPT_VERSION = 599;
