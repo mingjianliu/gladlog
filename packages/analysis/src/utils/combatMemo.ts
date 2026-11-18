@@ -161,6 +161,9 @@ export function combatMemo<T>(
   const hit = byKey?.get(key);
   if (hit && hit.fp === fp) return (hit.value as readonly T[]).slice();
   const value = compute();
+  // the rows are shared between askers: under the test switch a writer
+  // throws (the array each asker gets is its own, and stays writable)
+  if (freezeShared) deepFreeze(value);
   if (!byKey) {
     byKey = new Map();
     cache.set(combat, byKey);

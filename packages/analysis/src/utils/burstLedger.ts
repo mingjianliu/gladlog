@@ -20,6 +20,12 @@ import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals, pressSecondsOfAura } from "./auraIntervals";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import {
+  combatMemo,
+  identityToken,
+  roundFingerprint,
+  unitTokens,
+} from "./combatMemo";
+import {
   canonicalSpellId,
   ghostEndTroughInWindow,
   gridEndpointHpPct,
@@ -752,6 +758,26 @@ export function burstDamageBySchoolOn(
 }
 
 export function analyzeBurstLedger(
+  player: ICombatUnit,
+  allies: ICombatUnit[],
+  enemies: ICombatUnit[],
+  combat: AtomicArenaCombat,
+): IBurstLedgerEntry[] {
+  // One computation per round object, player and pair of sides
+  // (combatMemo.ts; pipeline T201): a prompt build asked for the owner's
+  // ledger twice (the candidate menu, then the context's <burst_ledger>
+  // block), the report three times. The entries are shared and read-only.
+  return combatMemo(
+    combat,
+    `burstLedger|${identityToken(player)}|${unitTokens(allies)}|${unitTokens(enemies)}`,
+    roundFingerprint(combat, [player], allies, enemies),
+    () => analyzeBurstLedgerUncached(player, allies, enemies, combat),
+  );
+}
+
+/** `analyzeBurstLedger` without the per-round memo (the equality test reads
+ * both). */
+export function analyzeBurstLedgerUncached(
   player: ICombatUnit,
   allies: ICombatUnit[],
   enemies: ICombatUnit[],

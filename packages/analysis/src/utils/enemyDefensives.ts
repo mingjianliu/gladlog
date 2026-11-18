@@ -63,6 +63,12 @@ import {
   SAVE_CAST_AURA_PAIR_S,
 } from "./auraIntervals";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
+import {
+  combatMemo,
+  identityToken,
+  roundFingerprint,
+  unitTokens,
+} from "./combatMemo";
 // moved to auraIntervals.ts (GH #136.3); re-exported for existing importers
 export {
   ALIAS_PRESS_TWIN_MS,
@@ -1856,6 +1862,29 @@ export function saveAuraIntervals(
     units?: Record<string, ICombatUnit>;
   },
 ): ISaveAuraInterval[] {
+  // One computation per round object, unit and team (combatMemo.ts; pipeline
+  // T201): every reader of "what save was on this unit" rebuilt the list —
+  // 0.6 s of an 11.9 s three-owner prompt build. The intervals are shared and
+  // read-only (a reader that clips one copies it).
+  return combatMemo(
+    combat,
+    `saveAuraIntervals|${identityToken(unit)}|${unitTokens(team)}`,
+    roundFingerprint(combat, [unit], team),
+    () => saveAuraIntervalsUncached(unit, team, combat),
+  );
+}
+
+/** `saveAuraIntervals` without the per-round memo (the equality test reads
+ * both). */
+export function saveAuraIntervalsUncached(
+  unit: ICombatUnit,
+  team: readonly ICombatUnit[],
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Record<string, ICombatUnit>;
+  },
+): ISaveAuraInterval[] {
   const castersById = new Map(team.map((e) => [e.id, e]));
   // The log's own id for each source name on this unit's auras. A name is not
   // a key: one player can be logged under two (138e632d: "Antagonist" in 9
@@ -2324,6 +2353,27 @@ export function immunityAlsoOn(
  * starts and spans, and clip at the round's end on their own side).
  */
 export function enemyDefensiveEvents(
+  enemy: ICombatUnit,
+  enemies: ICombatUnit[],
+  combat: { startTime: number; endTime: number },
+  roundEndAtMs?: number,
+): IEnemyDefensiveEvent[] {
+  // One computation per round object, unit, team and round end
+  // (combatMemo.ts; pipeline T201): the `[ENEMY DEF]` renderer, the burst
+  // ledger, the offensive windows and the kill attempts each asked per unit
+  // and rebuilt the team's save-aura intervals every time. The events are
+  // shared and read-only.
+  return combatMemo(
+    combat,
+    `enemyDefensiveEvents|${identityToken(enemy)}|${unitTokens(enemies)}|${roundEndAtMs ?? ""}`,
+    roundFingerprint(combat, [enemy], enemies),
+    () => enemyDefensiveEventsUncached(enemy, enemies, combat, roundEndAtMs),
+  );
+}
+
+/** `enemyDefensiveEvents` without the per-round memo (the equality test
+ * reads both). */
+export function enemyDefensiveEventsUncached(
   enemy: ICombatUnit,
   enemies: ICombatUnit[],
   combat: { startTime: number; endTime: number },

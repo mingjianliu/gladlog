@@ -112,6 +112,7 @@ import {
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 import { feignDeathUnconsciousMs } from "./castStopEvidence";
+import { combatMemo, identityToken, roundFingerprint } from "./combatMemo";
 import { isGhostAtRenderSecondOf, isStasisReplayCast } from "./combatStates";
 import { interruptPressCooldownSeconds } from "./enemyInterrupts";
 import { hiddenPressMs, isPressVariantOf } from "./hiddenPress";
@@ -5376,11 +5377,25 @@ export function extractMajorCooldowns(
   combat: AtomicArenaCombat,
   opts?: { withBaselineOnly?: boolean },
 ): IMajorCooldownInfo[] {
-  const all = extractMajorCooldownsAll(unit, combat);
+  // One computation per round object and unit (combatMemo.ts; pipeline
+  // T201): some ten readers per prompt build ask for a unit's ledger. Unlike
+  // the other kept readings a caller OWNS what it gets — the annotators write
+  // onto the rows (`[UNNECESSARY]`, the reassignment notes) — so every call
+  // is handed its own deep copy of the kept rows, as fresh as a computation.
+  const all = structuredClone(
+    combatMemo(
+      combat,
+      `majorCooldowns|${identityToken(unit)}`,
+      roundFingerprint(combat, [unit]),
+      () => extractMajorCooldownsUncached(unit, combat),
+    ),
+  );
   return opts?.withBaselineOnly ? all : all.filter((cd) => !cd.baselineOnly);
 }
 
-function extractMajorCooldownsAll(
+/** The whole ledger (baseline-only rows included) without the per-round
+ * memo (the equality test reads both). */
+export function extractMajorCooldownsUncached(
   unit: ICombatUnit,
   combat: AtomicArenaCombat,
 ): IMajorCooldownInfo[] {
