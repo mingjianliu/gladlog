@@ -24,6 +24,12 @@
  *    length, or of no known length (Void Metamorphosis), removed after it:
  *    the line's end is the slice's, the least the log shows;
  *  - `no press` — a `(no press)` entry: a proc's length is not the aura's.
+ *
+ * Check `resNoPressExactLeft` (T140): the same occasions' `(no press)`
+ * entries — the proc's aura still up when the slice ends, its own length
+ * running past it — that print an exact `(Ns left)`: the aura's official end
+ * is only an upper bound for a proc's effect, the line owes `(≤Ns left)`.
+ * Checked = those entries, exact or bounded.
  */
 import {
   parseResRow,
@@ -49,7 +55,10 @@ import {
   tsOf,
 } from "./ctx";
 
-export const CHECKS = ["resEnemyLeftPastLogEnd"] as const;
+export const CHECKS = [
+  "resEnemyLeftPastLogEnd",
+  "resNoPressExactLeft",
+] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "resEnemyLeftPastLogEnd|outran its length",
   "resEnemyLeftPastLogEnd|no press",
@@ -62,7 +71,7 @@ export const PRESS_PAIR_MS = 1500;
 
 const ROSTER =
   /<unit\s+id="(\d+)"\s+name="[^"]+"\s+spec="([^"]+)"\s+role="enemy"/;
-const ENTRY = /^(.*)\/([^/]+?)\((\d+)s left\)$/;
+const ENTRY = /^(.*)\/([^/]+?)\(≤?(\d+)s left\)$/;
 
 export interface IOpenAura {
   /** last APPLIED / REFRESH at or before the slice's end */
@@ -234,6 +243,27 @@ export function run(ctx: IRoundCtx): void {
       const dueMs = rowMs + (left + LEFT_SLACK_S) * 1000;
       const rel = (ms: number) => ((ms - ctx.start) / 1000).toFixed(1);
       const noPress = e[1]!.endsWith(" (no press)");
+      const bounded = /\(≤\d+s left\)$/.test(entry.trim());
+      if (noPress) {
+        // the proc's own aura, its length running past the slice's end
+        const open = up.find((o) => {
+          const anchorMs = applicationAnchorMs(o, pressesMs, rowMs, ctx.start);
+          const full = buffDurationOfApplication(o.spellId, holder, anchorMs);
+          return full !== undefined && anchorMs + full * 1000 > ctx.end;
+        });
+        if (open) {
+          ctx.bump("resNoPressExactLeft");
+          if (!bounded)
+            ctx.violate(
+              "resNoPressExactLeft",
+              name,
+              rowMs,
+              `${holder.id}|${name}|${open.appliedMs}`,
+              `${name} (no press): applied ${rel(open.lastSeenMs)}s, still up at the log end ${rel(ctx.end)}s; the ${atS}s row prints an exact ${left}s left`,
+              l.trim().slice(0, 220),
+            );
+        }
+      }
       const judged = up
         .map((o) => {
           // the product's reading: the length of that application, from

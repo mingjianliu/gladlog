@@ -303,7 +303,7 @@ function resChannel(ctx: IRoundCtx): void {
     const f = / {2}enemy:(.*?)(?= {2}focus:| {2}cc:| \| Atonements|$)/.exec(l);
     if (!f) continue;
     for (const e of f[1]!.split(/(?<=s left\)),/)) {
-      const x = /^(.*)\/([^/(]+)\((\d+)s left\)$/.exec(e.trim());
+      const x = /^(.*)\/([^/(]+)\(≤?(\d+)s left\)$/.exec(e.trim());
       if (!x) continue;
       const rowMs = ctx.start + s * 1000;
       for (const u of ctx.players) {

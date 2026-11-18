@@ -51,7 +51,7 @@ export function run(ctx: IRoundCtx): void {
 
 const ROSTER =
   /<unit\s+id="(\d+)"\s+name="[^"]+"\s+spec="([^"]+)"\s+role="enemy"/;
-const ENTRY = /^(.*)\/([^/]+?)\((\d+)s left\)$/;
+const ENTRY = /^(.*)\/([^/]+?)\(≤?(\d+)s left\)$/;
 
 function resEnemyEffectAfterDeath(ctx: IRoundCtx): void {
   const lines = ctx.text.split("\n");

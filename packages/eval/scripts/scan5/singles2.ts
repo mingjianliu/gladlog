@@ -475,7 +475,7 @@ export function resRows(ctx: IRoundCtx): IResRow[] {
     const entries: IResRow["entries"] = [];
     if (f)
       for (const e of f[1]!.split(/(?<=s left\)),/)) {
-        const x = /^(.*)\/([^/(]+)\((\d+)s left\)$/.exec(e.trim());
+        const x = /^(.*)\/([^/(]+)\(≤?(\d+)s left\)$/.exec(e.trim());
         if (x) entries.push({ name: x[1]!, spec: x[2]!, left: +x[3]! });
       }
     out.push({ s, anchor, entries, line: l });
