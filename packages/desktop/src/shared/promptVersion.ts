@@ -1462,5 +1462,9 @@
  *  1987, Warrior 1990): Preservation 2-piece Verdant Embrace -2 s, Fury
  *  4-piece Odyn's Fury -1.25 s per Rampage.
  *  See docs/prompt-version-history.md.
+ *
+ * v589 (2026-11-18; pipeline batch B117, T173): [HEALER EXPOSURE] no
+ *  longer lists a window that starts after the healer is already dead.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 588;
+export const PROMPT_VERSION = 589;

@@ -7344,3 +7344,20 @@ cooldown lists; 0 outside the set-wearing archives; candidate rows 7,446 =
 7,446, menus byte-identical (capture checked on the Mac). Recorded: the other
 12.0 sets (1978-1990) are not inventoried. Codex branch review 85-tk-
 CD-T138-1: APPROVE.
+
+v589 (2026-11-18; pipeline batch B117, T173; draft N24). Not reproduced on the
+605; fixed on the reviewed match, with unit tests.
+analyzeHealerExposureAtBurst's window loop never asked whether the healer was
+dead: on the reviewed match (95d4affb, rendered with main) `6:43 [HEALER
+EXPOSURE] Critical burst — healer trinket ready … LoS break ~20.5yd away` was
+printed although the healer died at 6:41.890. The new
+healerDeadAtExposureWindow skips a window whose floored start is a dead second
+(isDeadAtRenderSecond, the [STATE] tick reading); every reader of the exposure
+list goes through that loop. predicate-index gains a row (both languages). The
+scan (scan5/t173, reading the rendered lines against the log's deaths) finds 3
+/ 27 on the reviewed match before and 0 / 24 after, and 0 / 7,161 on the 605
+base. Recorded: 6 rows / 2 facts where the listed threat is an enemy who dies
+later in the same rendered second. On the 605 the assembled candidate's
+capture is byte-identical to its parent's (archive-relative hash 18e54c6a94c4,
+3,519 owners): no context and no menu changes (capture checked on the Mac).
+Codex branch review 85-tk-CC-T173-1: APPROVE.
