@@ -18,6 +18,8 @@ import {
   setSourceMemoReadyForTest,
   SOURCE_MEMO_MAX,
   sourceMemo,
+  sourceMemoHas,
+  sourceMemoPut,
   sourceMemoWith,
 } from "../src/renderer/src/report/derive/sourceMemo";
 import { deriveStatsTable } from "../src/renderer/src/report/derive/statsTable";
@@ -134,6 +136,45 @@ describe("sourceMemo", () => {
       sourceMemo(a, "k", () => 1);
       markSourceFilled(a);
       expect(isSourceFilled(a)).toBe(true);
+    });
+
+    // codex 80-PIPE-122 (T199-2): a shuffle read as one document, rounds
+    // A -> B -> C visited before the worker answered. The replies are filed
+    // with sourceMemoPut, as offThreadDerive does.
+    it("填到一半条目被淘汰、又被迟到的结果重建:只有后半段,不标记;下一次填全了才标记", () => {
+      const [a, b, c] = [src(), src(), src()];
+      const step1 = vi.fn(() => 1);
+      beginSourceFill(c);
+      sourceMemo(c, "step1", step1); // C's steps 1-2, kept
+      sourceMemo(c, "step2", () => 2);
+      sourceMemoPut(a, "mistakes", "A's reply"); // late replies of the
+      sourceMemoPut(b, "mistakes", "B's reply"); // rounds left: C is evicted
+      expect(sourceMemoHas(c, "step1")).toBe(false);
+      sourceMemoPut(c, "mistakes", "C's reply"); // starts C's entry again
+      sourceMemo(c, "step3", () => 3); // the fill goes on to its end
+      markSourceFilled(c);
+      // steps 1-2 live in the component's memo only: the entry is not whole
+      expect(sourceMemoHas(c, "step1")).toBe(false);
+      expect(isSourceFilled(c)).toBe(false);
+      // the next visit fills in steps again and leaves everything
+      beginSourceFill(c);
+      sourceMemo(c, "step1", step1);
+      sourceMemo(c, "step2", () => 2);
+      sourceMemo(c, "step3", () => 3);
+      markSourceFilled(c);
+      expect(isSourceFilled(c)).toBe(true);
+      expect(step1).toHaveBeenCalledTimes(2);
+    });
+
+    it("填充开始之前的淘汰不挡标记(正常的「被挤掉后再回来」)", () => {
+      const [a, b, c] = [src(), src(), src()];
+      sourceMemo(c, "step1", () => 1);
+      sourceMemo(a, "k", () => 1);
+      sourceMemo(b, "k", () => 1); // C evicted, no fill running
+      beginSourceFill(c);
+      sourceMemo(c, "step1", () => 1);
+      markSourceFilled(c);
+      expect(isSourceFilled(c)).toBe(true);
     });
 
     it("数据表一直没就绪:没有条目,也没有标记", () => {

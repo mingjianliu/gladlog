@@ -58,7 +58,17 @@ export function onSourceMemoUse(hook: (source: ReportSource) => void): void {
 /** Forget everything kept for `source` — called when its legacy copy is
  * evicted, so no result here outlives the copy it may point into. */
 export function dropSourceMemo(source: ReportSource): void {
-  cache.delete(source);
+  evict(source);
+}
+
+/** Sources whose entry was thrown away since their fill began. An entry
+ * started again after that (a worker reply filed late, the fill's later
+ * steps) holds only what came after the eviction: the fill's earlier results
+ * live on in the component's own memo and are not in it (pipeline T199-2). */
+let evictedInFill = new WeakSet<ReportSource>();
+
+function evict(source: ReportSource): void {
+  if (cache.delete(source)) evictedInFill.add(source);
 }
 
 const FILLED = "\u0000filled";
@@ -73,6 +83,7 @@ let unkept = new WeakMap<ReportSource, Set<string>>();
  * its to compute again. */
 export function beginSourceFill(source: ReportSource): void {
   unkept.delete(source);
+  evictedInFill.delete(source);
 }
 
 /** MatchReport's staged fill (T93) has run every step for `source` and all
@@ -89,6 +100,13 @@ export function beginSourceFill(source: ReportSource): void {
  *    the tables arrived in the middle of has the later steps' results and
  *    not the earlier ones' — not marked (`unkept`); the next mount fills in
  *    steps again and is marked then;
+ *  - an entry evicted while its fill was running and started again by what
+ *    came later has the later results only — not marked (`evictedInFill`).
+ *    Measured path (codex 80-PIPE-122): a shuffle read as one document,
+ *    rounds A -> B -> C visited before the worker answered; A's and B's
+ *    late replies evict C, C's reply starts its entry again, steps 3-4
+ *    finish, and the mark made the next visit of C compute steps 1-2 in one
+ *    render;
  *  - a render under a time range computes its ranged derives outside this
  *    cache, so their whole-match entries are absent — the caller does not
  *    mark while a range is selected (MatchReport).
@@ -97,6 +115,7 @@ export function beginSourceFill(source: ReportSource): void {
  * view does not ask for them either. */
 export function markSourceFilled(source: ReportSource): void {
   if ((unkept.get(source)?.size ?? 0) > 0) return;
+  if (evictedInFill.has(source)) return;
   cache.get(source)?.set(FILLED, true);
 }
 
@@ -132,8 +151,7 @@ export function sourceMemo<T>(
   if (!entry) {
     entry = new Map();
     cache.set(source, entry);
-    while (cache.size > SOURCE_MEMO_MAX)
-      cache.delete(cache.keys().next().value!);
+    while (cache.size > SOURCE_MEMO_MAX) evict(cache.keys().next().value!);
   }
   entry.set(key, value);
   return value;
@@ -180,8 +198,7 @@ export function sourceMemoWithPeek<T>(
   inputs: readonly unknown[],
 ): T | undefined {
   const slot = cache.get(source)?.get(key) as
-    | { inputs: readonly unknown[]; value: T }
-    | undefined;
+    { inputs: readonly unknown[]; value: T } | undefined;
   if (!slot) return undefined;
   const same =
     slot.inputs.length === inputs.length &&
@@ -214,6 +231,7 @@ export function sourceMemoWithPut<T>(
 export function resetSourceMemoForTest(ready: boolean): void {
   cache.clear();
   unkept = new WeakMap();
+  evictedInFill = new WeakSet();
   dataReady = ready;
 }
 
