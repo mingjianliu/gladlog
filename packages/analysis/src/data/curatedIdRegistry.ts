@@ -1491,6 +1491,28 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
           ...(c.whileAuraId ? [c.whileAuraId] : []),
           ...(c.talentId ? [c.talentId] : []),
         ]),
+        // T136: the Restless Blades modifiers' ids
+        ...(r.triggerPowerSpend?.boosts ?? []).flatMap((b) => [
+          ...b.whileAuraIds,
+          ...(b.greaterWith ? [b.greaterWith.talentId] : []),
+        ]),
+        ...(r.triggerPowerSpend?.extraSpends ?? []).flatMap((x) => x.castIds),
+        ...(r.triggerPowerSpend?.supercharged
+          ? [
+              r.triggerPowerSpend.supercharged.talentId,
+              ...r.triggerPowerSpend.supercharged.byCastIds,
+              ...r.triggerPowerSpend.supercharged.finisherIds,
+              ...(r.triggerPowerSpend.supercharged.extraWith
+                ? [r.triggerPowerSpend.supercharged.extraWith.talentId]
+                : []),
+            ]
+          : []),
+        ...(r.triggerPowerSpend?.freeSpendAsMax
+          ? [
+              ...r.triggerPowerSpend.freeSpendAsMax.castIds,
+              r.triggerPowerSpend.freeSpendAsMax.consumedAuraId,
+            ]
+          : []),
         ...(r.triggerHostileTaken?.notWhileSelfAuraId
           ? [r.triggerHostileTaken.notWhileSelfAuraId]
           : []),

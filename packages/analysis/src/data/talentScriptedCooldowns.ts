@@ -279,7 +279,33 @@ export interface IPowerSpendTrigger {
   /** While one of the caster's own `whileAuraIds` buffs is up at the spend,
    * the give-back is `pct` % larger (DB2 aura 108 on the talent's own class
    * mask: Triple Threat / Jackpot +30 % on Restless Blades). */
-  boosts?: ReadonlyArray<{ whileAuraIds: readonly string[]; pct: number }>;
+  boosts?: ReadonlyArray<{
+    whileAuraIds: readonly string[];
+    pct: number;
+    /** A talent that makes this bonus itself `pct` % greater for its holder
+     * (Dragon-Bone Dice 1259481: 「Bonuses to Restless Blades cooldown
+     * reduction are 10% greater」 — 30 % → 33 %). */
+    greaterWith?: { talentId: string; pct: number };
+  }>;
+  /** Supercharged combo points (Supercharger 470347, T136): a press of
+   * `byCastIds` supercharges `points` combo points; the holder's next
+   * finisher of `finisherIds` (a damaging one) consumes one and counts as
+   * `extra` more points spent (+ `extraWith.extra` for a holder of that
+   * talent). The log shows no aura of it: the press and the finisher rows
+   * are the evidence. */
+  /** A cast that counts as `extra` more points spent than its row states
+   * (Coup de Grace 441776: 「functioning as if it had consumed $s3
+   * additional combo points」). The cast is the evidence — only a holder of
+   * the talent can make it. */
+  extraSpends?: ReadonlyArray<{ castIds: readonly string[]; extra: number }>;
+  supercharged?: {
+    talentId: string;
+    byCastIds: readonly string[];
+    points: number;
+    finisherIds: readonly string[];
+    extra: number;
+    extraWith?: { talentId: string; extra: number };
+  };
   /** A finisher a proc made free logs no cost of `powerType`; the game
    * counts it as the maximum (Outlaw 12.1 4pc Fang Strike 1301405: 「your
    * next Dispatch … as if you spent the maximum combo points」, GH #198,
@@ -1263,7 +1289,44 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
       unitsPerSecond: { base: 1 },
       // Triple Threat 1214935 / Jackpot 1214937 (Roll the Bones outcomes,
       // GH #176): aura 108 +30 % on mask 0/0/8192/0 — Restless Blades' own
-      boosts: [{ whileAuraIds: ["1214935", "1214937"], pct: 30 }],
+      // Dragon-Bone Dice 1259481 (T136): 「Bonuses to Restless Blades
+      // cooldown reduction are $s3% greater」 — SpellEffect index 2, aura
+      // 219 base 10, PvpMultiplier 1: the 30 % becomes 33 %.
+      boosts: [
+        {
+          whileAuraIds: ["1214935", "1214937"],
+          pct: 30,
+          greaterWith: { talentId: "1259481", pct: 10 },
+        },
+      ],
+      // Supercharger 470347 (T136): 「Adrenaline Rush supercharges $m1 combo
+      // points. Damaging finishing moves consume a supercharged combo point
+      // to function as if they spent $m2 additional combo points」 — dummies
+      // 1 and 2, PvpMultiplier 1; Forced Induction 470668 「Increase the
+      // bonus … by $s1」, dummy 1. Round-14 audit D24 (ae1d0895): Sprint
+      // pressed 98.39 s, Adrenaline Rush 99.94 s, then Dispatch 7, Kidney
+      // Shot 5, Between the Eyes 7 / 6 / 5 under Triple Threat — 30 points,
+      // 39.9 s at 33 %, back 118.5 s; Sprint was pressed again at 115.35 s.
+      // With the first damaging finisher counted 3 points more (holder of
+      // both): 43.9 s, back 114.5 s.
+      // Coup de Grace (Trickster, 441423; T136): 「your next Dispatch will be
+      // performed as a Coup de Grace, functioning as if it had consumed $s3
+      // additional combo points」 — SpellEffect index 2, a dummy, base 5,
+      // PvpMultiplier 1. The Coup de Grace row 441776 states the 7 points it
+      // spent. 0284fcd9 r4: Blade Flurry pressed 108.50 s and again
+      // 118.12 s on the 30 s model with a Dispatch (7) and a Coup de Grace
+      // (7) between them under Jackpot — 18.6 s given back, 1.8 s short;
+      // with the 5 more, 25.3 s.
+      extraSpends: [{ castIds: ["441776"], extra: 5 }],
+      supercharged: {
+        talentId: "470347",
+        byCastIds: ["13750"],
+        points: 1,
+        // Dispatch, Between the Eyes, Killing Spree, Coup de Grace
+        finisherIds: ["2098", "315341", "51690", "441776"],
+        extra: 2,
+        extraWith: { talentId: "470668", extra: 1 },
+      },
       // GH #198 (user ruling 2026-11-07): a Fang Strike Dispatch (Outlaw
       // 12.1 4pc 1296589, buff 1301405) logs no combo-point cost; counted
       // at the maximum. 11 Outlaw logs, 39 Sprint intervals: recasts before
@@ -2082,9 +2145,20 @@ export function powerSpendTriggers(
       ? p.unitsPerSecond.bySpec?.[holderSpec]
       : undefined) ?? p.unitsPerSecond.base;
   const out: IEventTrigger[] = [];
+  // supercharged points in hand (`supercharged`); a holder unknown gets none
+  const sc =
+    p.supercharged && holds?.(p.supercharged.talentId)
+      ? p.supercharged
+      : undefined;
+  const scExtra = sc
+    ? sc.extra +
+      (sc.extraWith && holds?.(sc.extraWith.talentId) ? sc.extraWith.extra : 0)
+    : 0;
+  let charged = 0;
   for (const e of unit.spellCastEvents) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     const id = String(e.spellId);
+    if (sc?.byCastIds.includes(id)) charged = sc.points;
     if (
       p.exclude?.castIds.includes(id) &&
       holderSpec !== undefined &&
@@ -2107,12 +2181,24 @@ export function powerSpendTriggers(
       if (red.pct !== undefined) cost *= 1 - red.pct / 100;
       if (red.flat !== undefined) cost -= red.flat;
     }
+    for (const x of p.extraSpends ?? [])
+      if (x.castIds.includes(id)) cost += x.extra;
+    if (sc && charged > 0 && sc.finisherIds.includes(id)) {
+      cost += scExtra;
+      charged--;
+    }
     let mult = 1;
     for (const b of p.boosts ?? [])
       if (
         b.whileAuraIds.some((a) => selfAuraUpAt(unit, a, e.logLine.timestamp))
       )
-        mult *= 1 + b.pct / 100;
+        mult *=
+          1 +
+          (b.pct *
+            (b.greaterWith && holds?.(b.greaterWith.talentId)
+              ? 1 + b.greaterWith.pct / 100
+              : 1)) /
+            100;
     if (cost > 0)
       out.push({ atMs: e.logLine.timestamp, seconds: (cost / units) * mult });
   }
