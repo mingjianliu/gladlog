@@ -428,6 +428,7 @@ export function auraOffensiveOccurrences(
   );
   const pressIsLanding = (ms: number) => landings.has(ms);
   const eyeBeams = castTimes(unit, new Set([EYE_BEAM_ID]));
+  const formCasts = castTimes(unit, METAMORPHOSIS_FORM_CAST_IDS);
   const doomWindsPresses = castTimes(unit, new Set([DOOM_WINDS_PRESS_ID]));
   const ascendances = castTimes(unit, new Set([ASCENDANCE_ENH_ID]));
   const W = AURA_EVIDENCE_WINDOW_S * 1000;
@@ -630,7 +631,7 @@ export function auraOffensiveOccurrences(
           .map((o) => bounds.startTime + o.fromS * 1000)
           .sort((a, b) => a - b)[0] ?? bounds.endTime;
       const metaFull = buffFullDurationForCaster("191427", unit);
-      const pressEnd = endObserved
+      let pressEnd = endObserved
         ? endMs
         : Math.max(
             endMs,
@@ -640,6 +641,31 @@ export function auraOffensiveOccurrences(
               splitAt + (metaFull ?? 0) * 1000,
             ),
           );
+      // T212 (round-14 D33): with no end in the log the nominal length is
+      // only where the form was DUE to end. Later evidence of the form moves
+      // the end out, never past the next application or the round: a cast
+      // only the form allows (`METAMORPHOSIS_FORM_CAST_IDS`) is the form up
+      // at that instant, and an Eye Beam cast while it is up holds it
+      // Demonic's 5 s from there (7669df4d: form from 2:26, due off at 2:50,
+      // Death Sweep at 2:56, Eye Beam at 2:57, Annihilation at 2:58 / 2:59,
+      // the REMOVED logged after the round's end)
+      if (!endObserved) {
+        const limit = Math.min(nextStartMs, bounds.endTime);
+        const evidence = [
+          ...formCasts.map((t) => ({ t, eyeBeam: false })),
+          ...eyeBeams.map((t) => ({ t, eyeBeam: true })),
+        ]
+          .filter((e) => e.t > splitAt && e.t <= limit)
+          .sort((a, b) => a.t - b.t);
+        for (const e of evidence) {
+          if (!e.eyeBeam) pressEnd = Math.max(pressEnd, e.t);
+          else if (e.t <= pressEnd)
+            pressEnd = Math.max(
+              pressEnd,
+              Math.min(limit, e.t + DEMONIC_FORM_SECONDS * 1000),
+            );
+        }
+      }
       result.occurrences.push({
         spellId: "191427",
         spellName: "Metamorphosis",
