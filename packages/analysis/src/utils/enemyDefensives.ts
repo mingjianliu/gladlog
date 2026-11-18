@@ -83,7 +83,7 @@ import {
 import { isDeferralAbsorb } from "./incomingPressure";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
 import { CHANNEL_STOPPED_MAX_SHARE } from "./kickAudit";
-import { isProcTriggeredCastAt } from "./procTriggeredCast";
+import { isProcOwnActivationAt } from "./procTriggeredCast";
 import { toRenderSecond } from "./renderGrid";
 import {
   type SelfDefensiveMechanism,
@@ -1275,10 +1275,6 @@ export function selfSaveCasts(
     if (isExternalSaveId(cast.spellId) && cast.destUnitId !== enemy.id)
       continue;
     if (savePressMissed(enemy, cast.spellId, cast.logLine.timestamp)) continue;
-    // a low-HP proc's own cast is no press (`isProcTriggeredCastAt`, the
-    // ledger's reading — T134): its aura takes the no-press path below
-    if (isProcTriggeredCastAt(enemy, cast.spellId, cast.logLine.timestamp))
-      continue;
     out.push({
       atSeconds: (cast.logLine.timestamp - matchStartMs) / 1000,
       spellId: cast.spellId,
@@ -1314,9 +1310,7 @@ export function selfSaveCasts(
             c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
             !!c.spellId &&
             (ids.has(c.spellId) ||
-              castsOfEffectAura(c.spellId).some((x) => ids.has(x))) &&
-            // …and a proc's own cast row is no press of the save (T134)
-            !isProcTriggeredCastAt(u, c.spellId, c.logLine.timestamp),
+              castsOfEffectAura(c.spellId).some((x) => ids.has(x))),
         )
         .map((c) => c.logLine.timestamp),
     );
@@ -1324,6 +1318,21 @@ export function selfSaveCasts(
   for (const id of SELF_SAVE_IDS)
     for (const a of pressIdsOf(id))
       if (!castOfAura.has(a)) castOfAura.set(a, id);
+  // an APPLIED of an aura the unit already had up (an earlier APPLIED of it,
+  // no REMOVED since)
+  const ownRows = (enemy.auraEvents ?? []).filter(
+    (b) => b.srcUnitId === enemy.id && b.destUnitId === enemy.id,
+  );
+  const relistedWhileUp = (a: (typeof ownRows)[number]): boolean => {
+    let up = false;
+    for (const b of ownRows) {
+      if (b === a) return up;
+      if (b.spellId !== a.spellId) continue;
+      if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED) up = false;
+      else if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) up = true;
+    }
+    return false;
+  };
   const pressMsByCast = new Map<string, number[]>();
   for (const a of dropAuraRebroadcasts(enemy.auraEvents ?? [])) {
     if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
@@ -1338,12 +1347,16 @@ export function selfSaveCasts(
     const castId = a.spellId ? castOfAura.get(a.spellId) : undefined;
     if (castId === undefined) continue;
     const ms = a.logLine.timestamp;
-    // A low-HP proc's own activation (`isProcTriggeredCastAt`, T134) is
+    // A low-HP proc's own activation (`isProcOwnActivationAt`, T134) is
     // stated whatever stands beside it: the hidden-press reading refuses it
     // (a re-stating batch), and a press a second later is the player's own
     // on top of it, with its own line (18e3feae r4: the proc 0:41 at 41 %,
-    // the press 0:42).
-    if (!isProcTriggeredCastAt(enemy, castId, ms)) {
+    // the press 0:42). Once: a re-listing of the aura still up is the same
+    // activation (codex 85-tk-CD-T134-1 #1 — 4faf00ba: up at 5:04.588,
+    // re-listed with its marker at 5:06.232).
+    if (isProcOwnActivationAt(enemy, castId, ms)) {
+      if (relistedWhileUp(a)) continue;
+    } else {
       if (isResyncBatchAt(enemy, ms)) continue; // the hidden-press reading's
       const presses =
         pressMsByCast.get(castId) ??

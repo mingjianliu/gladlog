@@ -2307,7 +2307,7 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/procTriggeredCast.ts`,
-    symbol: "isProcTriggeredCastAt",
+    symbol: "isProcOwnActivationAt",
     mod: procTriggeredCast,
   },
   {
