@@ -332,6 +332,12 @@ export function computeRootReachability(
   /** every unit of the match (summons included) — for `rootSourceLabel`;
    * defaults to `players`, which labels an unowned summon `[pet]`. */
   allUnits: ICombatUnit[] = players,
+  /** Readings switched OFF, for the cause split of
+   * `packages/eval/scripts/scan5/t170.ts` (`rootReachCauseSplit`) only —
+   * production passes none. `flatHealerReach`: the healer branch reads the
+   * flat `CC_MAX_CAST_RANGE_YARDS` every healer had before T170;
+   * `noLandedCasts`: a landed targeted cast proves no second. */
+  without: { flatHealerReach?: boolean; noLandedCasts?: boolean } = {},
 ): IRootInstance[] {
   const zoneId = combat.startInfo?.zoneId;
   const out: IRootInstance[] = [];
@@ -378,6 +384,7 @@ export function computeRootReachability(
       // on the Evoker 13–15 yd away, one in each of those seconds).
       const casts = rootedCastsOnOthers(X, players, fromMs, toMs);
       const castOnAt = (unitId: string, s: number): boolean =>
+        !without.noLandedCasts &&
         casts.some(
           (c) =>
             c.destId === unitId &&
@@ -392,7 +399,11 @@ export function computeRootReachability(
       // may not add a claim the 40 yd reading did not make
       const ownReach = role === "healer" ? healerReachToAccuse(X) : null;
       const healRange =
-        ownReach === null ? null : Math.max(ownReach, CC_MAX_CAST_RANGE_YARDS);
+        role === "healer" && without.flatHealerReach
+          ? CC_MAX_CAST_RANGE_YARDS
+          : ownReach === null
+            ? null
+            : Math.max(ownReach, CC_MAX_CAST_RANGE_YARDS);
       const allyBad = new Map<string, number>();
       let sampled = 0;
       let unreachable = 0;

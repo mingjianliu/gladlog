@@ -16,8 +16,22 @@
  *    3c8cd2a3 r0 1:25: `3(AWarrior) (taking damage) out of range/LoS for 4s
  *    — could not be healed`, a 4-second sweep with Prayer of Mending landing
  *    on the Warrior in its first second.
+ *  - `rootReachCauseSplit` (per round, once): T170 changed two readings of
+ *    the sweep — (1) the healer branch reads the healer's own reach
+ *    (`healerReachToAccuse`, never under the flat 40 yd) instead of the
+ *    flat 40 yd, (2) a landed targeted cast proves its second. The producer
+ *    is run with each switched off (`computeRootReachability`'s `without`)
+ *    and every root's claim — unreachable seconds, the named ally and its
+ *    seconds — is compared with the claim under both off (the reading
+ *    before T170). Inventory kinds, not in the total: `healer reach only`,
+ *    `landed cast only`, `both` (each alone moves the claim). In the total:
+ *    `healer reach adds or lengthens` — with (1) alone on, a root claims
+ *    more unreachable seconds, or more for an ally, than before (a healer
+ *    whose own reach is under 40 yd accused where the flat bound cleared
+ *    it). Checked = the round's roots of at least `ROOT_MIN_DURATION_S`.
  */
 import {
+  computeRootReachability,
   rootedCastsOnOthers,
   rootIntervalsInRound,
   rootSweptSeconds,
@@ -25,7 +39,11 @@ import {
 
 import { type IRoundCtx, nameOf, secOf } from "./ctx";
 
-export const CHECKS = ["rootReachVsLandedCast"] as const;
+export const CHECKS = ["rootReachVsLandedCast", "rootReachCauseSplit"] as const;
+const SPLIT = "rootReachCauseSplit";
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
+  ["healer reach only", "landed cast only", "both"].map((k) => `${SPLIT}|${k}`),
+);
 
 const ROOT_LINE =
   /^(\d+:\d\d)\s+\[ROOT\]\s+(.+?) \(from .+?\) rooted (?:friendly|enemy) (?:\[YOU\] )?(\d+)\([^)]*\) \((melee|healer|ranged)\) for [\d.]+s — (.+)$/;
@@ -34,7 +52,50 @@ const HEALER_CLAIM =
 const ATTACK_CLAIM =
   /^(?:nearest enemy beyond \d+yd|no enemy in range\/LoS) for (\d+)s/;
 
+function causeSplit(ctx: IRoundCtx): void {
+  const run4 = (without: {
+    flatHealerReach?: boolean;
+    noLandedCasts?: boolean;
+  }) => computeRootReachability(ctx.legacy, ctx.players, ctx.units, without);
+  const before = run4({ flatHealerReach: true, noLandedCasts: true });
+  const reachOnly = run4({ noLandedCasts: true });
+  const castOnly = run4({ flatHealerReach: true });
+  const claim = (r: (typeof before)[number]): string =>
+    `${r.unreachableSeconds}|${r.worstAlly?.name ?? ""}|${r.worstAlly?.seconds ?? ""}`;
+  before.forEach((b, i) => {
+    const r = reachOnly[i]!;
+    const c = castOnly[i]!;
+    if (r.rootedId !== b.rootedId || c.rootedId !== b.rootedId) return;
+    ctx.bump(SPLIT);
+    const at = ctx.start + b.atSeconds * 1000;
+    const fact = `${ctx.roundKey}:${b.rootedId}:${b.atSeconds}:${b.spellId}`;
+    const moved = `${b.spellName} on ${b.rootedName} (${b.rootedRole}), claim seconds|ally|ally seconds: before ${claim(b)}, reach only ${claim(r)}, cast only ${claim(c)}`;
+    const byReach = claim(r) !== claim(b);
+    const byCast = claim(c) !== claim(b);
+    if (byReach || byCast)
+      ctx.violate(
+        SPLIT,
+        byReach && byCast
+          ? "both"
+          : byReach
+            ? "healer reach only"
+            : "landed cast only",
+        at,
+        fact,
+        moved,
+      );
+    const allyUp =
+      !!r.worstAlly &&
+      r.worstAlly.seconds >
+        (b.worstAlly?.name === r.worstAlly.name ? b.worstAlly.seconds : 0) &&
+      r.worstAlly.seconds > (b.worstAlly?.seconds ?? 0);
+    if (r.unreachableSeconds > b.unreachableSeconds || allyUp)
+      ctx.violate(SPLIT, "healer reach adds or lengthens", at, fact, moved);
+  });
+}
+
 export function run(ctx: IRoundCtx): void {
+  if (ctx.firstOwnerOfRound) causeSplit(ctx);
   for (const line of ctx.lines) {
     const m = ROOT_LINE.exec(line);
     if (!m) continue;
