@@ -211,7 +211,7 @@ export const CHECKS = [
 
 /** fact10 class 1: ruled into the roster 2026-11-04; Ravager and Execution
  * Sentence 2026-11-05 (GH #184); the five 45 s buttons 2026-11-10 (R19,
- * pipeline T72) */
+ * pipeline T72); Champion's Spear 2026-11-17 (A8, pipeline T154) */
 const RULED = new Set([
   "403631",
   "442204",
@@ -223,6 +223,7 @@ const RULED = new Set([
   "439843", // Reaper's Mark
   "426591", // Goremaw's Bite
   "375901", // Mindgames
+  "376079", // Champion's Spear
 ]);
 /** GH #184: the other press-fact-only offensive buttons of 45 s or more */
 const OPEN = new Set([
