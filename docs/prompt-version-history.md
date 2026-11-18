@@ -7404,3 +7404,22 @@ archives ([RES] 249 lines, [OFFENSIVE WINDOW] 33, [HEALER EXPOSURE] 7, [BURST
 ANSWERED] 3) and one menu: in 30846f8e round 5 the 97 s kick-eaten row enters
 and the 115.2 s one leaves; candidate rows 7,446 = 7,446 (capture checked on
 the Mac). Codex branch review 85-tk-KICK-T150-1b: APPROVE.
+
+v592 (2026-11-18; pipeline batch B120, T171; draft N22). externalUnusedEvents
+(candidates/death.ts) asked canReachVictim, which passed on any one in-reach
+sample in the last 5 s, but read the free gap over the whole window. Now
+outOfReach -> externalOutOfReachSpans(externalReachYd): spans out of reach
+mask the gap the way control, unaffordable cost and unready time do, so a row
+needs 1.5 s that are free, ready and in reach together, and freeGapS is that
+stretch. The friendly-death loop is its only reader. Real example a036aff5 r1
+0:30: `type=external-unused … external=Darkness, freeGapS=5` while the owner
+stood 21-43 yd from the healer for an 8 yd area: removed. On the 84 archives
+with an external-unused row (114 rows, 1,182 owners): rows 114 -> 109 (5
+removed, all Darkness; 5 shorter freeGapS; 0 added, 0 lengthened);
+externalUnusedOutOfReach 8 / 114 -> 0 / 109; no context file changes.
+Candidate rows +0 / -5, an existing type, under R16. predicate-index gains a
+row (both languages). On the 605 the assembled candidate changes no context
+and 10 menus, all in archives with an external-unused row: 5 external-unused
+rows (all Darkness) are removed and 5 have a shorter freeGapS, none added or
+lengthened; candidate rows 7,446 -> 7,441 (capture checked on the Mac). Codex
+branch review 85-tk-CC-T171-1: APPROVE (3 synthetic points recorded).

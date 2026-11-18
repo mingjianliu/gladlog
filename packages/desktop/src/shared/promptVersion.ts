@@ -1476,5 +1476,10 @@
  *  cooldown's span follows a re-application past half its official duration
  *  when the log never ended the earlier one.
  *  See docs/prompt-version-history.md.
+ *
+ * v592 (2026-11-18; pipeline batch B120, T171): external-unused needs 1.5
+ *  s of continuous free, ready and in-reach time; out-of-reach spans mask
+ *  the gap like control and unready time.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 591;
+export const PROMPT_VERSION = 592;
