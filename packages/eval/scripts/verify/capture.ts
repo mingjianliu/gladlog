@@ -4,6 +4,7 @@
  *
  *   npx tsx packages/eval/scripts/verify/capture.ts --manifest <file> --out <dir>
  *     [--shards 3] [--heap 8000] [--archive-dir <dir>]
+ *   npx tsx packages/eval/scripts/verify/capture.ts --rehash <captureDir> [--write]
  *
  * Splits the manifest round-robin into `s<k>/manifest.txt`, runs
  * acceptanceCapture on each and writes `s<k>/{context,findings,summary.txt,
@@ -13,12 +14,14 @@
  * silently) and a manifest listing one twice; a log that reads but does not
  * gunzip fails it afterwards. Rounds or owners that would not build are excluded
  * on both sides of a comparison: their count is printed, and `compare.ts` fails
- * if the owner count moved. `capture.sha256` exists only for a capture that passed; it hashes every owner's context and menu by archive,
- * round and owner, so it does not depend on the shard count: two runs of a tree
- * that hash alike rendered the same prompts.
+ * if the owner count moved. `capture.sha256` exists only for a
+ * capture that passed; it hashes every owner's context and menu by archive,
+ * round and owner, the archive read relative to the capture's archive root
+ * (`verify/captureHash.ts`), so it depends neither on the shard count nor on
+ * the machine: two runs of a tree that hash alike rendered the same prompts.
+ * `--rehash` prints an existing capture's hash under this reading.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   accessSync,
   closeSync,
@@ -32,6 +35,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 
+import { captureHashLine, captureHashOf } from "./captureHash";
 import { argOf } from "./scan";
 
 const MANIFEST = argOf("--manifest");
@@ -39,8 +43,26 @@ const OUT = argOf("--out");
 const SHARDS = Number(argOf("--shards") ?? 3);
 const HEAP = argOf("--heap") ?? "8000";
 const ARCHIVE_DIR = argOf("--archive-dir");
+const REHASH = argOf("--rehash");
+if (REHASH) {
+  // an existing capture's hash as this tree reads it (a base stamped before
+  // T203 hashed absolute paths); `--write` re-stamps its capture.sha256
+  const h = captureHashOf(REHASH);
+  process.stdout.write(captureHashLine(h));
+  if (h.owners === 0 || h.noMenu.length > 0) {
+    console.error(
+      `rehash refused: ${h.owners} owners, ${h.noMenu.length} with no findings file`,
+    );
+    process.exit(1);
+  }
+  if (process.argv.includes("--write"))
+    writeFileSync(join(REHASH, "capture.sha256"), captureHashLine(h));
+  process.exit(0);
+}
 if (!MANIFEST || !OUT) {
-  console.error("usage: verify/capture.ts --manifest <file> --out <dir>");
+  console.error(
+    "usage: verify/capture.ts --manifest <file> --out <dir> | --rehash <captureDir> [--write]",
+  );
   process.exit(2);
 }
 
@@ -85,40 +107,6 @@ function runShard(k: number, paths: string[]): Promise<number> {
       done(code ?? (signal ? 1 : 0));
     });
   });
-}
-
-/** archive + round + owner → its text, whatever shard it landed in */
-function captureHash(): {
-  sha: string;
-  owners: number;
-  perShard: number[];
-  noMenu: string[];
-} {
-  const keys: Array<{ key: string; dir: string; name: string }> = [];
-  const perShard: number[] = [];
-  const noMenu: string[] = [];
-  for (let k = 0; k < SHARDS; k++) {
-    const dir = join(OUT!, `s${k}`);
-    perShard[k] = 0;
-    for (const name of readdirSync(join(dir, "context"))) {
-      const m = /^\d+-(\d+)-\d+\.txt$/.exec(name);
-      if (!m) continue;
-      perShard[k]!++;
-      const text = readFileSync(join(dir, "context", name), "utf8");
-      const [archive, owner] = text.split("\n", 2);
-      keys.push({ key: `${archive}#${m[1]}#${owner}`, dir, name });
-    }
-  }
-  keys.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  const h = createHash("sha256");
-  for (const { key, dir, name } of keys) {
-    h.update(key);
-    h.update(readFileSync(join(dir, "context", name)));
-    const menu = join(dir, "findings", name);
-    if (existsSync(menu)) h.update(readFileSync(menu));
-    else noMenu.push(name);
-  }
-  return { sha: h.digest("hex"), owners: keys.length, perShard, noMenu };
 }
 
 async function main(): Promise<void> {
@@ -166,7 +154,8 @@ async function main(): Promise<void> {
     if (!s) dead.push(`s${k}: no summary`);
     else [1, 2, 3].forEach((i) => (skipped[i - 1]! += Number(s[i])));
   }
-  const { sha, owners, perShard, noMenu } = captureHash();
+  const hash = captureHashOf(OUT!);
+  const { sha, owners, perShard, noMenu } = hash;
   parts.forEach((p, k) => {
     if (p.length > 0 && perShard[k] === 0) dead.push(`s${k}: no owners`);
   });
@@ -179,7 +168,7 @@ async function main(): Promise<void> {
     console.error(`capture FAILED: ${dead.join("; ") || "no owners"}`);
     process.exit(1);
   }
-  writeFileSync(join(OUT!, "capture.sha256"), `${sha}  ${owners} owners\n`);
+  writeFileSync(join(OUT!, "capture.sha256"), captureHashLine(hash));
 }
 
 await main();
