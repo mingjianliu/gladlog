@@ -37,10 +37,10 @@ import {
 } from "../../utils/buffDuration";
 import {
   type ActWindowState,
-  cannotCastIntervalsForSpells,
   couldActForMostOf,
   isHardCcAura,
   lockedSchoolsText,
+  pressBlockedIntervalsForSpells,
 } from "../../utils/cannotCastIntervals";
 import { ccLandingStateAtMs } from "../../utils/ccBreakAnalysis";
 import {
@@ -855,11 +855,14 @@ export function evaluateSyncWindow(
     try {
       // FT-T10: a lockout counts only when it locks this cooldown's school;
       // a cooldown the owner's pet casts is asked of the pet
-      blocked = cannotCastIntervalsForSpells(
+      // T147: asked as a press of this cooldown — a stun the game lets it
+      // through does not stop it (`pressBlockedIntervalsForSpells`)
+      blocked = pressBlockedIntervalsForSpells(
         cd.owner,
         cd.ownerEnemyIds,
         [cd.spellId],
         cd.roundUnits,
+        false,
       );
     } catch {
       return true;
@@ -1069,11 +1072,12 @@ export function syncReadyTimingFacts(
         // on the holder. The fact says "the holder was hard-CC'd / silenced
         // / locked out / disarmed", so what the gate read on the holder's PET
         // (a cooldown the pet casts) is not printed here.
-        blocked = cannotCastIntervalsForSpells(
+        blocked = pressBlockedIntervalsForSpells(
           cd.owner,
           cd.ownerEnemyIds,
           [cd.spellId],
           cd.roundUnits,
+          false,
         ).filter((iv) => iv.onPetId === undefined);
       } catch {
         blocked = [];

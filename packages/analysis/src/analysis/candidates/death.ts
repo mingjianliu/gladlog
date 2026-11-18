@@ -394,6 +394,14 @@ export function externalUnusedEvents(input: {
     >
   >;
   ownerCC: Array<{ atSeconds: number; durationSeconds: number }>;
+  /** T147: the owner's cannot-PRESS time for one external — a stun does not
+   * stop an external the game lets a stunned player press (Pain
+   * Suppression), and that exemption is the asked external's alone (codex
+   * 85-tk-KICK-T147-1 #1: read over the whole set, a spent Pain Suppression
+   * freed a stunned priest's Barrier). Absent ⇒ `ownerCC`. */
+  ownerBlockedFor?: (
+    spellId: string,
+  ) => Array<{ atSeconds: number; durationSeconds: number }>;
   ownerAliveAt: (t: number) => boolean;
   /** The spans of the window in which the owner's external could NOT reach
    * the victim (reliability round 3 W1f; `externalOutOfReachSpans`, built by
@@ -459,7 +467,7 @@ export function externalUnusedEvents(input: {
     cd?: (typeof input.ownerExternals)[number],
   ): number => {
     const covers = [
-      ...input.ownerCC,
+      ...(input.ownerBlockedFor?.(spellId) ?? input.ownerCC),
       ...(input.unaffordable?.(spellId) ?? []),
       ...(input.outOfReach?.(spellId) ?? []),
       ...(cd ? notReadyFor(cd) : []),

@@ -60,6 +60,7 @@ import {
   enemySourceIds,
   healerLockIntervals,
   namedCannotCastIntervals,
+  pressBlockedIntervalsForSpells,
   stunLetsPress,
 } from "../utils/cannotCastIntervals";
 import {
@@ -4760,6 +4761,19 @@ function extractDeathSetups(
                   return ccOf(ownerUnit).ccInstances;
                 }
               })(),
+              // T147: asked as a press of THIS external — a stun the game
+              // lets it through is not time the owner could not give it
+              ownerBlockedFor: (spellId: string) =>
+                pressBlockedIntervalsForSpells(
+                  ownerUnit,
+                  enemySourceIds(enemies, units),
+                  [spellId],
+                  units,
+                  false,
+                ).map((iv) => ({
+                  atSeconds: (iv.from - start) / 1000,
+                  durationSeconds: (iv.to - iv.from) / 1000,
+                })),
               ownerAliveAt: (t) =>
                 !(ownerUnit.deathRecords ?? []).some(
                   (dr: any) => (dr.timestamp - start) / 1000 <= t,

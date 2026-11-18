@@ -49,8 +49,8 @@ import {
   hitByAttackers,
 } from "../utils/burstHit";
 import {
-  cannotCastIntervalsForSpells,
   petCastersOf,
+  pressBlockedIntervalsForSpells,
 } from "../utils/cannotCastIntervals";
 import { PRESS_TRIGGERED_CAST_IDS } from "../utils/castMissRows";
 import { COPY_CAST_IDS } from "../utils/castPress";
@@ -1491,11 +1491,14 @@ export function burstWindowDecisionPoints(
     if (!entry) {
       entry = {
         ofPet: petCastersOf(u, units, toolSpellId).length > 0,
-        intervals: cannotCastIntervalsForSpells(
+        // T147: asked as a press of this tool — a stun the game lets it
+        // through does not stop it
+        intervals: pressBlockedIntervalsForSpells(
           u,
           enemySourceIds,
           [toolSpellId],
           units,
+          false,
         ),
       };
       cannotCastByTool.set(key, entry);

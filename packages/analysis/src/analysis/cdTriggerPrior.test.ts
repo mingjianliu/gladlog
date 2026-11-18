@@ -231,22 +231,27 @@ describe("cdPriorHoldEpisodes (product side)", () => {
     expect(eps[0]!.readyFromSec).toBe(4);
   });
 
-  it("an owner locked at the crossing does not move 'ready from' — that is ownerLockedSecs", () => {
-    const enemy = unit("E", { reaction: CombatUnitReaction.Hostile });
-    const stun = (ev: string, dtMs: number) => ({
-      spellId: "853",
-      spellName: "Hammer of Justice",
+  // a control aura on the owner from 1.5 s to 4.5 s
+  const controlled = (spellId: string, spellName: string) => {
+    const row = (ev: string, dtMs: number) => ({
+      spellId,
+      spellName,
       srcUnitId: "E",
       destUnitId: "H",
       timestamp: T0 + dtMs,
       logLine: { event: ev, timestamp: T0 + dtMs },
     });
-    const me = unit("H", {
+    return unit("H", {
       auraEvents: [
-        stun("SPELL_AURA_APPLIED", 1500),
-        stun("SPELL_AURA_REMOVED", 4500),
+        row("SPELL_AURA_APPLIED", 1500),
+        row("SPELL_AURA_REMOVED", 4500),
       ],
     });
+  };
+
+  it("an owner locked at the crossing does not move 'ready from' — that is ownerLockedSecs", () => {
+    const enemy = unit("E", { reaction: CombatUnitReaction.Hostile });
+    const me = controlled("118", "Polymorph");
     const eps = cdPriorHoldEpisodes(
       me,
       combat([me, longDip(), enemy]),
@@ -256,6 +261,19 @@ describe("cdPriorHoldEpisodes (product side)", () => {
     expect(eps).toHaveLength(1);
     expect(eps[0]!.readyFromSec).toBe(eps[0]!.tSec);
     expect(eps[0]!.ownerLockedSecs).toBe(3);
+  });
+
+  it("T147: a stun does not lock a cooldown the game lets a stunned player press", () => {
+    const enemy = unit("E", { reaction: CombatUnitReaction.Hostile });
+    const me = controlled("853", "Hammer of Justice");
+    const eps = cdPriorHoldEpisodes(
+      me,
+      combat([me, longDip(), enemy]),
+      () => ref(),
+      { cds: [cd()] },
+    );
+    expect(eps).toHaveLength(1);
+    expect(eps[0]!.ownerLockedSecs).toBe(0);
   });
 
   it("reaction window: fewer than CD_PRIOR_MIN_PERSIST_S actionable seconds → no episode", () => {

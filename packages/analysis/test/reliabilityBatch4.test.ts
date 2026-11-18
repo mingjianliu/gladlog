@@ -313,3 +313,64 @@ describe("FT-T08 step 2 — an aura ends at its REMOVED; a BROKEN line before it
     expect(supersededAuraBreaks(other).size).toBe(0);
   });
 });
+
+describe("external-unused: the owner's blocked time is the asked external's own (T147)", () => {
+  // a priest stunned through the five seconds before the death; Pain
+  // Suppression goes through a stun, Power Word: Barrier does not
+  const stunned = [{ atSeconds: 86, durationSeconds: 5 }];
+  const ext = (spellId: string, spellName: string, spent = false) => ({
+    spellId,
+    spellName,
+    cooldownSeconds: 180,
+    casts: spent ? [{ timeSeconds: 80 }] : [],
+    neverUsed: !spent,
+  });
+  const input = (externals: ReturnType<typeof ext>[]) => ({
+    deathT: 91,
+    victim: { id: "h", name: "Hunter" },
+    owner: { id: "p", name: "Priest" },
+    ownerExternals: externals as never,
+    ownerCC: stunned,
+    ownerBlockedFor: (id: string) => (id === "33206" ? [] : stunned),
+    ownerAliveAt: () => true,
+  });
+  it("a ready Pain Suppression under the stun is free to give", () => {
+    const ev = externalUnusedEvents(input([ext("33206", "Pain Suppression")]));
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.facts.external).toBe("Pain Suppression");
+  });
+  it("the stun-pressable time still has to be in reach: one gap free of both (T171's reach covers)", () => {
+    const ps = [ext("33206", "Pain Suppression")];
+    // out of reach for the whole window: nothing, though no stun stops it
+    expect(
+      externalUnusedEvents({
+        ...input(ps),
+        outOfReach: () => [{ atSeconds: 86, durationSeconds: 5 }],
+      }),
+    ).toEqual([]);
+    // in reach for the last 2 s, all of it under the stun: free for 2 s
+    const ev = externalUnusedEvents({
+      ...input(ps),
+      outOfReach: () => [{ atSeconds: 86, durationSeconds: 3 }],
+    });
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.facts.freeGapS).toBe("2");
+    // Barrier in reach for the same 2 s is still stopped by the stun
+    expect(
+      externalUnusedEvents({
+        ...input([ext("62618", "Power Word: Barrier")]),
+        outOfReach: () => [{ atSeconds: 86, durationSeconds: 3 }],
+      }),
+    ).toEqual([]);
+  });
+  it("a spent Pain Suppression does not free the stunned priest's Barrier (codex 85-tk-KICK-T147-1 #1)", () => {
+    expect(
+      externalUnusedEvents(
+        input([
+          ext("33206", "Pain Suppression", true),
+          ext("62618", "Power Word: Barrier"),
+        ]),
+      ),
+    ).toEqual([]);
+  });
+});

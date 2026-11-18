@@ -39,8 +39,8 @@ import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
 import type { CdTriggerPriorRef } from "../data/cdTriggerPrior";
 import {
-  cannotCastIntervalsForSpells,
   type NamedCannotCastInterval,
+  pressBlockedIntervalsForSpells,
 } from "../utils/cannotCastIntervals";
 import {
   cdHelpsRecipient,
@@ -284,11 +284,15 @@ export function cdPriorHoldEpisodes(
     let ivs = cannotCastBySpell.get(spellId);
     if (!ivs) {
       try {
-        ivs = cannotCastIntervalsForSpells(
+        // T147: "you could not cast it" is asked of the held cooldown as a
+        // press — a stun does not stop what the game lets a stunned player
+        // press (Pain Suppression, Guardian Spirit)
+        ivs = pressBlockedIntervalsForSpells(
           owner,
           enemyIds,
           [spellId],
           roundUnits as never,
+          false,
         );
       } catch {
         ivs = [];
