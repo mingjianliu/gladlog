@@ -30,7 +30,9 @@
  *  - `brokenByHolder` (R4, 2026-10-18): a SPELL_AURA_BROKEN_SPELL row on a
  *    player whose source is that player, with a hit of the breaking spell on
  *    them from ANOTHER unit 0–100 ms before it (the log writes the holder
- *    for a guardian's Wrath of Nathreza). The control's line (its landing
+ *    for a guardian's Wrath of Nathreza) — a damage row or, for a fully
+ *    absorbed hit, its SPELL_MISSED … ABSORB row (`breakingHitOnHolder`,
+ *    the producer's selection; T168). The control's line (its landing
  *    second, its English name, on that player) must not say `broken by
  *    <the holder>'s <spell>`.
  *  - `brokenBySplitAlly` (C4): a BROKEN_SPELL row whose breaking spell is
@@ -110,6 +112,7 @@ import {
   isSilenceEffectAura,
   isSilenceOnlyAura,
 } from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import { breakingHitOnHolder } from "@gladlog/analysis/src/utils/brokenRowBreaker";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   ccRecastBetween,
@@ -257,18 +260,9 @@ function runRound(ctx: IContext): void {
       if (ts < start || ts > roundEnd) continue;
       const breakId = String(b.logLine.parameters?.[11] ?? "");
       if (!breakId) continue;
-      const hit = [...((u.damageIn ?? []) as any[])]
-        .reverse()
-        .find(
-          (d) =>
-            d.spellId === breakId &&
-            ts - d.logLine.timestamp <= 100 &&
-            (d.logLine.timestamp < ts ||
-              (d.logLine.timestamp === ts &&
-                d.logLine.lineIndex !== undefined &&
-                b.logLine.lineIndex !== undefined &&
-                d.logLine.lineIndex < b.logLine.lineIndex)),
-        );
+      // the producer's own selection of the breaking hit (T168: a fully
+      // absorbed hit's SPELL_MISSED … ABSORB row included)
+      const hit = breakingHitOnHolder(u, b) as any;
       if (!hit) continue;
       let check: Check | undefined;
       let wrongPid: string | undefined;

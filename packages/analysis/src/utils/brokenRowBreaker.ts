@@ -67,8 +67,65 @@ type AuraRow = ICombatUnit["auraEvents"][number];
 
 const isNoSource = (id: string | undefined): boolean => !id || /^0+$/.test(id);
 
+type BreakHolder = Pick<
+  ICombatUnit,
+  "id" | "name" | "auraEvents" | "damageIn"
+> &
+  Partial<Pick<ICombatUnit, "missesIn">>;
+type BreakingHit =
+  | ICombatUnit["damageIn"][number]
+  | NonNullable<ICombatUnit["missesIn"]>[number];
+
+/**
+ * The hit that broke the aura: the latest landing of the row's breaking
+ * spell on the holder before the row, inside `BREAKING_HIT_LOOKBACK_MS` — in
+ * the row's own millisecond only when both line indexes say it came first
+ * (codex 20-F15-19: without them, a hit logged after the row in that ms
+ * would be taken for the breaker). A landing is a damage row or, when a
+ * shield took all of it, the hit's `SPELL_MISSED … ABSORB` row: a fully
+ * absorbed hit breaks the control just the same and leaves no damage row
+ * (round 14 D10, 449dd530: a Wild Imp's Fel Firebolt absorbed 1 ms before
+ * the Fear's BROKEN_SPELL row naming the feared warlock; D14, 6df8aae6 r0: a
+ * Denizen of the Dream's Fey Missile into a Void Shield on the imprisoned
+ * priest). No other miss type lands anything. Shared with the gate side
+ * (`breakFactScan` `brokenByHolder` / `brokenBySplitAlly`).
+ */
+export function breakingHitOnHolder(
+  holder: Pick<BreakHolder, "damageIn" | "missesIn">,
+  brk: AuraRow,
+): BreakingHit | undefined {
+  const spellId = String(brk.logLine.parameters?.[11] ?? "");
+  if (!spellId) return undefined;
+  const atMs = brk.logLine.timestamp;
+  const line = brk.logLine.lineIndex;
+  const before = (d: BreakingHit): boolean =>
+    d.spellId === spellId &&
+    d.logLine.timestamp >= atMs - BREAKING_HIT_LOOKBACK_MS &&
+    (d.logLine.timestamp < atMs ||
+      (d.logLine.timestamp === atMs &&
+        line !== undefined &&
+        d.logLine.lineIndex !== undefined &&
+        d.logLine.lineIndex < line));
+  const last = <T extends BreakingHit>(rows: readonly T[]): T | undefined => {
+    for (let i = rows.length - 1; i >= 0; i--)
+      if (before(rows[i]!)) return rows[i];
+    return undefined;
+  };
+  const dmg = last(holder.damageIn ?? []);
+  const abs = last(
+    (holder.missesIn ?? []).filter((m) => m.missType === "ABSORB"),
+  );
+  if (!dmg || !abs) return dmg ?? abs;
+  // the later of the two, by time and then by log order
+  if (abs.logLine.timestamp !== dmg.logLine.timestamp)
+    return abs.logLine.timestamp > dmg.logLine.timestamp ? abs : dmg;
+  return (abs.logLine.lineIndex ?? -1) > (dmg.logLine.lineIndex ?? -1)
+    ? abs
+    : dmg;
+}
+
 export function breakerOfBrokenRow(
-  holder: Pick<ICombatUnit, "id" | "name" | "auraEvents" | "damageIn">,
+  holder: BreakHolder,
   brk: AuraRow,
 ): IBrokenRowBreaker | undefined {
   if (isNoSource(brk.srcUnitId)) return undefined;
@@ -76,22 +133,7 @@ export function breakerOfBrokenRow(
   const spellId = String(brk.logLine.parameters?.[11] ?? "");
   if (!spellId) return asLogged;
   const atMs = brk.logLine.timestamp;
-  const line = brk.logLine.lineIndex;
-  // the latest hit of the breaking spell on the holder before the row: in
-  // the row's own millisecond only when both line indexes say it came first
-  // (codex 20-F15-19: without them, a hit logged after the row in that ms
-  // would be taken for the breaker)
-  const hits = (holder.damageIn ?? []).filter(
-    (d) =>
-      d.spellId === spellId &&
-      d.logLine.timestamp >= atMs - BREAKING_HIT_LOOKBACK_MS &&
-      (d.logLine.timestamp < atMs ||
-        (d.logLine.timestamp === atMs &&
-          line !== undefined &&
-          d.logLine.lineIndex !== undefined &&
-          d.logLine.lineIndex < line)),
-  );
-  const hit = hits[hits.length - 1];
+  const hit = breakingHitOnHolder(holder, brk);
   const auras = holder.auraEvents ?? [];
   const before = auras.slice(0, Math.max(0, auras.indexOf(brk)));
   // damage moved onto the holder by its own link (Blessing of Sacrifice)

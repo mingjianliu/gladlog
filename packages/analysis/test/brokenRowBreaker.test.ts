@@ -100,6 +100,92 @@ describe("breakerOfBrokenRow", () => {
     const h = holderWith([brk], [hit(5000, WRATH, ["G", "Desperate Soul"])]);
     expect(breakerOfBrokenRow(h, brk)).toEqual({ unitId: "H", name: "Holder" });
   });
+  it("a fully absorbed hit breaks it too: its SPELL_MISSED ABSORB row names the breaker (T168, 449dd530 3:05)", () => {
+    const FEAR = "118699";
+    const FIREBOLT = "104318";
+    const brk = row(
+      LogEvent.SPELL_AURA_BROKEN_SPELL,
+      5001,
+      FEAR,
+      ["H", "Holder"],
+      "H",
+      [FIREBOLT, "Fel Firebolt"],
+    );
+    const absorbed = {
+      ...row("SPELL_MISSED", 5000, FIREBOLT, ["I", "Wild Imp"], "H"),
+      missType: "ABSORB",
+      amount: 900,
+    };
+    const h = {
+      ...holderWith([brk]),
+      missesIn: [absorbed],
+    };
+    expect(breakerOfBrokenRow(h, brk)).toEqual({
+      unitId: "I",
+      name: "Wild Imp",
+    });
+    // any other miss type lands nothing: the holder, as logged
+    for (const missType of ["IMMUNE", "MISS", "DODGE", "REFLECT"])
+      expect(
+        breakerOfBrokenRow(
+          { ...h, missesIn: [{ ...absorbed, missType }] },
+          brk,
+        ),
+      ).toEqual({ unitId: "H", name: "Holder" });
+    // an absorbed hit older than the look-back is not it
+    expect(
+      breakerOfBrokenRow(
+        {
+          ...h,
+          missesIn: [
+            {
+              ...absorbed,
+              logLine: {
+                ...absorbed.logLine,
+                timestamp: T0 + 5001 - BREAKING_HIT_LOOKBACK_MS - 1,
+              },
+            },
+          ],
+        },
+        brk,
+      ),
+    ).toEqual({ unitId: "H", name: "Holder" });
+  });
+  it("…of a damage row and an absorbed hit before the row, the later one broke it", () => {
+    const brk = row(
+      LogEvent.SPELL_AURA_BROKEN_SPELL,
+      5020,
+      HOWL,
+      ["H", "Holder"],
+      "H",
+      [WRATH, "Wrath of Nathreza"],
+    );
+    const dmg = hit(5000, WRATH, ["G", "Desperate Soul"]);
+    const miss = (atMs: number) => ({
+      ...row("SPELL_MISSED", atMs, WRATH, ["I", "Other Soul"], "H"),
+      missType: "ABSORB",
+      amount: 900,
+    });
+    expect(
+      breakerOfBrokenRow(
+        { ...holderWith([brk], [dmg]), missesIn: [miss(5010)] },
+        brk,
+      )?.unitId,
+    ).toBe("I");
+    expect(
+      breakerOfBrokenRow(
+        { ...holderWith([brk], [dmg]), missesIn: [miss(4990)] },
+        brk,
+      )?.unitId,
+    ).toBe("G");
+    // an absorbed hit logged after the row is not it
+    expect(
+      breakerOfBrokenRow(
+        { ...holderWith([brk], [dmg]), missesIn: [miss(5021)] },
+        brk,
+      )?.unitId,
+    ).toBe("G");
+  });
   it("a row naming the holder with no hit: the caster of the damage-over-time ticking on it", () => {
     const DOT = "1287663";
     const brk = row(

@@ -3747,6 +3747,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/brokenRowBreaker.ts`,
+    symbol: "breakingHitOnHolder",
+    mod: brokenRowBreaker,
+  },
+  {
+    file: `${A}/utils/brokenRowBreaker.ts`,
     symbol: "isCasterSideLinkAura",
     mod: brokenRowBreaker,
   },
