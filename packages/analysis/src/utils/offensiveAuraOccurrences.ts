@@ -704,6 +704,13 @@ export function auraOffensiveOccurrences(
           dangerWeight: 0,
           burstRole: "burst",
           provenance: "unresolved",
+          // the aura's own official end, as every other occurrence carries
+          // it: still up as the slice ends, `[RES]` counts to it as an
+          // upper bound (T140, codex 85-tk-CD-T140-1 #1) instead of to the
+          // slice's end as if the log had shown it
+          ...(auraOfficialEndMs !== undefined
+            ? { officialEndMs: auraOfficialEndMs }
+            : {}),
         });
       }
       continue;

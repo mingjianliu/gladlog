@@ -157,11 +157,13 @@ export interface IEnemyCDCast {
    * (codex 80-PIPE-51-B50: with the own end in `buffEndSeconds` each reader
    * had to opt out, and `boundedBurstSegments` had not). */
   ownEndSeconds?: number;
-  /** T140: the own end is an upper bound, not the effect's end — a
-   * `(no press)` occurrence (a talent's proc put the cooldown's aura up)
-   * still up when the slice ended: its end is the aura's official length
-   * from the application, and a proc's effect is no longer than the
-   * button's. `[RES]` prints `(≤Ns left)` (`enemyEffectLeftIsUpperBound`). */
+  /** T140: the end `[RES]` counts to is an upper bound, not the effect's
+   * end — a `(no press)` occurrence (a talent's proc put the cooldown's
+   * aura up) whose end the log does not show: still up when the slice
+   * ended (`ownEndSeconds`), or cut by a death (`deathCutOfficialEndSeconds`).
+   * Either is the aura's official length from the application, and a
+   * proc's effect is no longer than the button's. `[RES]` prints
+   * `(≤Ns left)` (`enemyEffectLeftIsUpperBound`). */
   ownEndIsUpperBound?: true;
   /** Inside `reconstructEnemyCDTimeline` only — never on a returned cast:
    * the end `buffEndSeconds` goes back to once the builder's own steps
@@ -2032,9 +2034,13 @@ function reconstructEnemyCDTimelineUncached(
         ...(upAtSliceEnd && o.officialEndMs! > o.endMs
           ? { windowEndSeconds: (o.endMs - matchStartMs) / 1000 }
           : {}),
-        ...(upAtSliceEnd &&
-        o.officialEndMs! > o.endMs &&
-        o.spellName.endsWith(NO_PRESS_SUFFIX)
+        // a proc's official end is a bound wherever the row counts to it:
+        // still up as the slice ended, or cut by a death before it (the
+        // death does not show the proc had that long left — codex
+        // 85-tk-CD-T140-1 #2)
+        ...(o.spellName.endsWith(NO_PRESS_SUFFIX) &&
+        ((upAtSliceEnd && o.officialEndMs! > o.endMs) ||
+          "deathCutOfficialEndSeconds" in cut)
           ? { ownEndIsUpperBound: true as const }
           : {}),
         dangerWeight: o.dangerWeight,

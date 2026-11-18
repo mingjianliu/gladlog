@@ -227,30 +227,32 @@ export function run(ctx: IRoundCtx): void {
       const pressesMs = successesOf(holder)
         .filter((c: any) => nameOf(c.spellId, c.spellName) === name)
         .map(tsOf);
-      const up = aurasUpAtLogEnd(
+      const upAll = aurasUpAtLogEnd(
         ctx.units as any[],
         holder,
         name,
         ctx.end,
-      ).filter(
-        (o) =>
-          o.appliedMs <= rowMs + 1000 &&
-          (pressesMs.length === 0 ||
-            pressesMs.some((t) => Math.abs(t - o.appliedMs) <= PRESS_PAIR_MS)),
-      );
-      if (up.length === 0) continue;
-      ctx.bump("resEnemyLeftPastLogEnd");
-      const dueMs = rowMs + (left + LEFT_SLACK_S) * 1000;
+      ).filter((o) => o.appliedMs <= rowMs + 1000);
+      const nearPress = (o: IOpenAura) =>
+        pressesMs.some((t) => Math.abs(t - o.appliedMs) <= PRESS_PAIR_MS);
+      const up = upAll.filter((o) => pressesMs.length === 0 || nearPress(o));
       const rel = (ms: number) => ((ms - ctx.start) / 1000).toFixed(1);
       const noPress = e[1]!.endsWith(" (no press)");
       const bounded = /\(≤\d+s left\)$/.test(entry.trim());
       if (noPress) {
-        // the proc's own aura, its length running past the slice's end
-        const open = up.find((o) => {
-          const anchorMs = applicationAnchorMs(o, pressesMs, rowMs, ctx.start);
-          const full = buffDurationOfApplication(o.spellId, holder, anchorMs);
-          return full !== undefined && anchorMs + full * 1000 > ctx.end;
-        });
+        // the proc's own aura — an application no press of the name sits
+        // beside, whatever other presses the holder made (codex
+        // 85-tk-CD-T140-1 #3) — its length running past the slice's end
+        const open = upAll
+          .filter((o) => !nearPress(o))
+          .find((o) => {
+            const full = buffDurationOfApplication(
+              o.spellId,
+              holder,
+              o.lastSeenMs,
+            );
+            return full !== undefined && o.lastSeenMs + full * 1000 > ctx.end;
+          });
         if (open) {
           ctx.bump("resNoPressExactLeft");
           if (!bounded)
@@ -264,6 +266,9 @@ export function run(ctx: IRoundCtx): void {
             );
         }
       }
+      if (up.length === 0) continue;
+      ctx.bump("resEnemyLeftPastLogEnd");
+      const dueMs = rowMs + (left + LEFT_SLACK_S) * 1000;
       const judged = up
         .map((o) => {
           // the product's reading: the length of that application, from

@@ -208,6 +208,30 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
     expect(outran.seen[0]).toMatch(/^outran its length: /);
   });
 
+  it("a proc beside an earlier press of the same name is still read (codex 85-tk-CD-T140-1 #3)", () => {
+    // Avenging Wrath pressed at 5 s and gone at 25 s; a cast-less
+    // application at 33 s, open when the slice ends
+    const aw = (event: LogEvent, s: number) =>
+      makeAuraEvent(event, "31884", at(s), "Player-4", "Player-4", "BUFF");
+    const ret: any = makeUnit("Player-4", {
+      name: "Ret",
+      class: CombatUnitClass.Paladin,
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info: {} as never,
+      spellCastEvents: [makeSpellCastEvent("31884", at(5), "Player-4")],
+      auraEvents: [
+        aw(LogEvent.SPELL_AURA_APPLIED, 5),
+        aw(LogEvent.SPELL_AURA_REMOVED, 25),
+        aw(LogEvent.SPELL_AURA_APPLIED, 33),
+      ],
+    });
+    const exact = scan(ret, 17, "Avenging Wrath (no press)");
+    expect(exact.seen.filter((x) => /prints an exact/.test(x))).toHaveLength(1);
+    const bounded = scan(ret, "≤17", "Avenging Wrath (no press)");
+    expect(bounded.checked).toBe(1);
+    expect(bounded.seen.filter((x) => /prints an exact/.test(x))).toEqual([]);
+  });
+
   it("a REFRESH no press made does not restart the application: Avatar refreshed by the Thunder Blast that extends it (codex 85-tk-G-T76-1c)", () => {
     // a Capacitance holder: Avatar pressed and applied at 10 s, Thunder
     // Blast at 14 s and 22 s, a REFRESH at 14 s, no REMOVED, the slice over

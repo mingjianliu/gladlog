@@ -33,19 +33,27 @@ beforeAll(async () => {
   await ensureAnalysisData();
 });
 
-const ret = (o: { pressed?: boolean; removedS?: number }): ICombatUnit =>
+const ret = (o: {
+  pressed?: boolean;
+  removedS?: number;
+  auraId?: string;
+  diedS?: number;
+}): ICombatUnit =>
   makeUnit("player-1", {
     name: "Ret",
     class: CombatUnitClass.Paladin,
     spec: CombatUnitSpec.Paladin_Retribution,
     info: {} as never,
+    ...(o.diedS === undefined
+      ? {}
+      : { deathRecords: [{ timestamp: at(o.diedS) }] as never }),
     spellCastEvents: o.pressed
       ? [makeSpellCastEvent(AW, at(35), "player-1")]
       : [],
     auraEvents: [
       makeAuraEvent(
         LogEvent.SPELL_AURA_APPLIED,
-        AW,
+        o.auraId ?? AW,
         at(35),
         "player-1",
         "player-1",
@@ -56,7 +64,7 @@ const ret = (o: { pressed?: boolean; removedS?: number }): ICombatUnit =>
         : [
             makeAuraEvent(
               LogEvent.SPELL_AURA_REMOVED,
-              AW,
+              o.auraId ?? AW,
               at(o.removedS),
               "player-1",
               "player-1",
@@ -96,5 +104,18 @@ describe("T140 — a proc's effect still up at the slice's end: the time left is
     expect(c.spellName).toBe("Avenging Wrath");
     expect(enemyEffectOwnEndSeconds(c)).toBeGreaterThan(END_S);
     expect(enemyEffectLeftIsUpperBound(c)).toBe(false);
+  });
+
+  it("the cast-less twin aura 454351 carries its official end too (codex 85-tk-CD-T140-1 #1)", () => {
+    const c = wrath(ret({ auraId: "454351" }));
+    expect(c.spellName).toBe("Avenging Wrath (no press)");
+    expect(enemyEffectOwnEndSeconds(c)).toBeGreaterThan(END_S);
+    expect(enemyEffectLeftIsUpperBound(c)).toBe(true);
+  });
+
+  it("a proc its holder's death cut: the official end the row counts to stays a bound (codex 85-tk-CD-T140-1 #2)", () => {
+    const c = wrath(ret({ diedS: END_S, removedS: END_S + 0.05 }));
+    expect(c.deathCutOfficialEndSeconds).toBeGreaterThan(END_S);
+    expect(enemyEffectLeftIsUpperBound(c)).toBe(true);
   });
 });
