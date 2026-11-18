@@ -64,7 +64,10 @@ import {
   unreleasedHoldMs,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/enemyDefensives";
-import { pressDuration } from "@gladlog/analysis/src/utils/offListPress";
+import {
+  pressDuration,
+  pressEffectCutShort,
+} from "@gladlog/analysis/src/utils/offListPress";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
@@ -85,6 +88,15 @@ export const CHECKS = ["offListPressLine", "pressLastsCutShort"] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "offListPressLine|lastsOvershoot",
   "offListPressLine|lastsLogStall",
+  "pressLastsCutShort|several holders | dispelled",
+  "pressLastsCutShort|several holders | broken",
+  "pressLastsCutShort|several holders | stolen",
+  "pressLastsCutShort|no cause row | self | own action",
+  "pressLastsCutShort|no cause row | self | other",
+  "pressLastsCutShort|no cause row | ally | own action",
+  "pressLastsCutShort|no cause row | ally | other",
+  "pressLastsCutShort|no cause row | enemy | own action",
+  "pressLastsCutShort|no cause row | enemy | other",
 ]);
 
 const PRESS_LINE =
@@ -501,18 +513,55 @@ export function run(ctx: IRoundCtx): void {
         );
       if (dur && dur.floor !== true && dur.followUps.length === 0) {
         ctx.bump("pressLastsCutShort");
-        const cut = cutShortOf(dur.unit, dur.row);
-        if (
-          cut &&
-          cut.atMs <= playEndMs &&
-          (cut.atMs - tsOf(dur.row)) / 1000 < Number(lasts) - LASTS_SLACK_S
-        )
+        // the producer's own reading (`pressEffectCutShort`: one holder,
+        // a cause row, before the length) against what the line says
+        const cut = pressEffectCutShort(
+          dur,
+          unit,
+          press,
+          ctx.units as ICombatUnit[],
+          unit.spellCastEvents ?? [],
+          playEndMs,
+        );
+        const said = / — (dispelled|broken|stolen) at (\d+:\d\d)/.exec(fields);
+        const factId = `${ctx.roundKey}|${unit.id}|${name}|${second}`;
+        if (cut && !said)
           ctx.violate(
             "pressLastsCutShort",
             cut.cause,
             at,
-            `${ctx.roundKey}|${unit.id}|${name}|${second}`,
+            factId,
             `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, ${cut.cause} after ${((cut.atMs - tsOf(dur.row)) / 1000).toFixed(1)}s`,
+            line,
+          );
+        else if (
+          said &&
+          (!cut ||
+            said[1] !== cut.cause ||
+            secOf(said[2]!) !== Math.floor((cut.atMs - ctx.start) / 1000))
+        )
+          ctx.violate(
+            "pressLastsCutShort",
+            "ending clause wrong",
+            at,
+            factId,
+            `${unit.name} ${name} at ${fmtS(second)}: says ${said[1]} at ${said[2]}, the log ${cut ? `${cut.cause} at ${fmtS((cut.atMs - ctx.start) / 1000)}` : "names no such row"}`,
+            line,
+          );
+        // inventory, out of the total: a copy of a several-holder effect
+        // taken off one of them (ruling R57: not written)
+        const one = cut ? undefined : cutShortOf(dur.unit, dur.row);
+        if (
+          one &&
+          one.atMs <= playEndMs &&
+          (one.atMs - tsOf(dur.row)) / 1000 < Number(lasts) - LASTS_SLACK_S
+        )
+          ctx.violate(
+            "pressLastsCutShort",
+            `several holders | ${one.cause}`,
+            at,
+            `${factId}|m`,
+            `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, ${one.cause} off one holder after ${((one.atMs - tsOf(dur.row)) / 1000).toFixed(1)}s`,
             line,
           );
       }

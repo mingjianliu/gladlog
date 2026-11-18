@@ -34,7 +34,9 @@ export const OFF_LIST_PRESS_LEGEND = [
   "    does not state; `a charge left` = they still held one; `reset, ready again` = a talent reset it at that press;",
   "    `2 equipped … another in hand` = two of the item worn, a cooldown each, the other one ready;",
   "    `free press` = a talent or an ally's Time Spiral let them press it without spending the cooldown",
-  "    (`back` is then the cooldown it stands on); `lasts Ns` = how long its effect runs. A fact, not a verdict.",
+  "    (`back` is then the cooldown it stands on); `lasts Ns` = how long its effect runs;",
+  "    `lasts Ns — dispelled / broken / stolen at m:ss` = the log shows that taking it off its one holder before",
+  "    then. A fact, not a verdict.",
 ];
 
 const TIME_PREFIX = /^\s*\d+:\d\d\s+/;
@@ -88,7 +90,13 @@ export function emitOffListPressEntries(
     const parts: string[] = [];
     if (p.durationSeconds !== undefined)
       parts.push(
-        `lasts ${seconds(Math.round(p.durationSeconds * 10) / 10)}${p.durationIsFloor ? "+" : ""}`,
+        `lasts ${seconds(Math.round(p.durationSeconds * 10) / 10)}${p.durationIsFloor ? "+" : ""}${
+          // T141 (ruling R57): what the log names as ending a one-holder
+          // effect before that length
+          p.cutShort
+            ? ` — ${p.cutShort.cause} at ${fmtTime(p.cutShort.atSeconds)}`
+            : ""
+        }`,
       );
     const cd = Math.round(p.cooldownSeconds * 10) / 10;
     parts.push(

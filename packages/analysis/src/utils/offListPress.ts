@@ -23,6 +23,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { BUFF_FADE_EARLY_TOLERANCE_S } from "../context/timelineHelpers";
 import { NO_CAST_LOG_PRESS_IDS } from "../data/auraActivation";
 import { effectAurasOfCast } from "../data/castEffectAuras";
 import { classMetadata } from "../data/classSpells";
@@ -262,6 +263,10 @@ export interface IOffListPress {
    * (`pressDuration`). The press scan measures the
    * life of this row, not one of its own choosing. */
   durationAura?: { unitId: string; spellId: string; atMs: number };
+  /** the log names what took the effect off its one holder before
+   * `durationSeconds` (`pressEffectCutShort`): the line prints
+   * `lasts Ns — stolen at m:ss` (T141, ruling R57) */
+  cutShort?: { cause: IPressCutShort["cause"]; atSeconds: number };
   /** the model's free press (`freeRecast` — Time Spiral, Death's Arrival,
    * Escape from Reality …): it spent no charge and restarted nothing;
    * `readyAgainAtSeconds` is the cooldown it stands on */
@@ -570,6 +575,96 @@ export function pressChainFollowUps(
   });
 }
 
+/** How close to an aura's REMOVED a dispel / steal row naming it is that
+ * removal's cause. */
+export const PRESS_CUT_CAUSE_PAIR_MS = 50;
+
+export interface IPressCutShort {
+  cause: "dispelled" | "broken" | "stolen";
+  atMs: number;
+}
+
+/**
+ * T141 (round-14 D21; user ruling R57, 2026-11-18): the row that took a
+ * press's effect off its holder before its printed length, when the log
+ * names one — a BROKEN row of the aura, or its REMOVED with a dispel /
+ * steal naming it within `PRESS_CUT_CAUSE_PAIR_MS`. Only for a
+ * single-holder effect: one aura, on one unit, no series behind it and a
+ * length that is no floor. A debuff the press put on several units and a
+ * dispel took off one stays unwritten (the ruling's second half: `lasts Ns`
+ * is still true for the others). A REMOVED with no such row, or a later
+ * APPLIED / REFRESH / dose of it, ends the search with nothing.
+ */
+export function pressEffectCutShort(
+  dur: NonNullable<ReturnType<typeof pressDuration>>,
+  caster: ICombatUnit,
+  cast: Parameters<typeof pressDuration>[1],
+  allUnits: readonly ICombatUnit[],
+  casterRows: ICombatUnit["spellCastEvents"],
+  roundEndAtMs = Infinity,
+): IPressCutShort | undefined {
+  if (dur.floor || dur.followUps.length > 0) return undefined;
+  const from = dur.row;
+  const start = from.logLine.timestamp;
+  const nextPressMs = casterRows.find(
+    (r) =>
+      r.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      r.spellId === cast.spellId &&
+      r.logLine.timestamp > cast.logLine.timestamp,
+  )?.logLine.timestamp;
+  // one holder: no copy of the aura from this press on another unit
+  if (
+    pressAuraCandidates(caster, cast, allUnits, nextPressMs).some(
+      (c) => c.row.spellId === from.spellId && c.unit.id !== dur.unit.id,
+    )
+  )
+    return undefined;
+  const rows = dur.unit.auraEvents.filter(
+    (r) => r.srcUnitId === from.srcUnitId && r.spellId === from.spellId,
+  );
+  let cut: IPressCutShort | undefined;
+  for (let j = rows.indexOf(from) + 1; j > 0 && j < rows.length; j++) {
+    const r = rows[j]!;
+    const t = r.logLine.timestamp;
+    if (t <= start) continue;
+    const event = r.logLine.event as string;
+    if (/BROKEN/.test(event)) {
+      cut = { atMs: t, cause: "broken" };
+      break;
+    }
+    if (event === LogEvent.SPELL_AURA_REMOVED) {
+      const by = (dur.unit.actionIn ?? []).find(
+        (x) =>
+          (x.logLine.event === LogEvent.SPELL_DISPEL ||
+            x.logLine.event === LogEvent.SPELL_STOLEN) &&
+          String((x as { extraSpellId?: string }).extraSpellId) ===
+            String(from.spellId) &&
+          Math.abs(x.logLine.timestamp - t) <= PRESS_CUT_CAUSE_PAIR_MS,
+      );
+      if (by)
+        cut = {
+          atMs: t,
+          cause:
+            by.logLine.event === LogEvent.SPELL_STOLEN ? "stolen" : "dispelled",
+        };
+      break;
+    }
+    if (
+      event === LogEvent.SPELL_AURA_APPLIED ||
+      event === LogEvent.SPELL_AURA_REFRESH ||
+      event === LogEvent.SPELL_AURA_APPLIED_DOSE
+    )
+      break;
+  }
+  if (!cut || cut.atMs > roundEndAtMs) return undefined;
+  // the allowance every "ran its length" reading has
+  // (`BUFF_FADE_EARLY_TOLERANCE_S`)
+  return (cut.atMs - start) / 1000 <
+    dur.durationSeconds - BUFF_FADE_EARLY_TOLERANCE_S
+    ? cut
+    : undefined;
+}
+
 /** The duration a press's line prints, and the APPLIED row it is read
  * from: the first of `pressAuraCandidates` (bounded by the caster's next
  * press of the spell among `casterRows`) whose talented duration is at least
@@ -815,6 +910,9 @@ export function extractOffListPresses(
       if (!entry) continue;
       const t = (at - combat.startTime) / 1000;
       const dur = pressDuration(unit, c, allUnits, rows, roundEndAtMs);
+      const cut = dur
+        ? pressEffectCutShort(dur, unit, c, allUnits, rows, roundEndAtMs)
+        : undefined;
       out.push({
         unit,
         spellId: c.spellId,
@@ -847,6 +945,14 @@ export function extractOffListPresses(
                 spellId: dur.row.spellId!,
                 atMs: dur.row.logLine.timestamp,
               },
+              ...(cut
+                ? {
+                    cutShort: {
+                      cause: cut.cause,
+                      atSeconds: (cut.atMs - combat.startTime) / 1000,
+                    },
+                  }
+                : {}),
             }
           : {}),
       });
