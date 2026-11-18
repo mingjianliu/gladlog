@@ -79,6 +79,7 @@ import * as ccBreakAbilities from "@gladlog/analysis/src/data/ccBreakAbilities";
 import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
 import * as channeledGenerated from "@gladlog/analysis/src/data/channeledGenerated";
 import * as classSetBonuses from "@gladlog/analysis/src/data/classSetBonuses";
+import * as crisisProcAnswers from "@gladlog/analysis/src/data/crisisProcAnswers";
 import * as curatedAbilityFacts from "@gladlog/analysis/src/data/curatedAbilityFacts";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
@@ -193,6 +194,7 @@ import * as petCommandsMod from "@gladlog/analysis/src/utils/petCommands";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
 import * as pressRowMod from "@gladlog/analysis/src/utils/pressRow";
+import * as procTriggeredCast from "@gladlog/analysis/src/utils/procTriggeredCast";
 import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
 import * as refusedPress from "@gladlog/analysis/src/utils/refusedPress";
@@ -2302,6 +2304,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/castPress.ts`,
     symbol: "isFormReshiftCast",
     mod: castPress,
+  },
+  {
+    file: `${A}/utils/procTriggeredCast.ts`,
+    symbol: "isProcTriggeredCastAt",
+    mod: procTriggeredCast,
+  },
+  {
+    file: `${A}/data/crisisProcAnswers.ts`,
+    symbol: "CRISIS_PROC_ANSWERS",
+    mod: crisisProcAnswers,
   },
   {
     file: `${A}/data/druidForms.ts`,

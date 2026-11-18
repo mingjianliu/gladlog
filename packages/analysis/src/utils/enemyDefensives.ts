@@ -83,6 +83,7 @@ import {
 import { isDeferralAbsorb } from "./incomingPressure";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
 import { CHANNEL_STOPPED_MAX_SHARE } from "./kickAudit";
+import { isProcTriggeredCastAt } from "./procTriggeredCast";
 import { toRenderSecond } from "./renderGrid";
 import {
   type SelfDefensiveMechanism,
@@ -1274,6 +1275,10 @@ export function selfSaveCasts(
     if (isExternalSaveId(cast.spellId) && cast.destUnitId !== enemy.id)
       continue;
     if (savePressMissed(enemy, cast.spellId, cast.logLine.timestamp)) continue;
+    // a low-HP proc's own cast is no press (`isProcTriggeredCastAt`, the
+    // ledger's reading — T134): its aura takes the no-press path below
+    if (isProcTriggeredCastAt(enemy, cast.spellId, cast.logLine.timestamp))
+      continue;
     out.push({
       atSeconds: (cast.logLine.timestamp - matchStartMs) / 1000,
       spellId: cast.spellId,
@@ -1309,7 +1314,9 @@ export function selfSaveCasts(
             c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
             !!c.spellId &&
             (ids.has(c.spellId) ||
-              castsOfEffectAura(c.spellId).some((x) => ids.has(x))),
+              castsOfEffectAura(c.spellId).some((x) => ids.has(x))) &&
+            // …and a proc's own cast row is no press of the save (T134)
+            !isProcTriggeredCastAt(u, c.spellId, c.logLine.timestamp),
         )
         .map((c) => c.logLine.timestamp),
     );
@@ -1331,7 +1338,10 @@ export function selfSaveCasts(
     const castId = a.spellId ? castOfAura.get(a.spellId) : undefined;
     if (castId === undefined) continue;
     const ms = a.logLine.timestamp;
-    if (isResyncBatchAt(enemy, ms)) continue; // the hidden-press reading's
+    // the hidden-press reading's — but for a proc's own cast, which that
+    // reading refuses (`isProcTriggeredCastAt`, T134) and this one states
+    if (isResyncBatchAt(enemy, ms) && !isProcTriggeredCastAt(enemy, castId, ms))
+      continue;
     const presses =
       pressMsByCast.get(castId) ??
       pressMsByCast

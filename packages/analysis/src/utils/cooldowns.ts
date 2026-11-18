@@ -127,6 +127,7 @@ import {
   ownCooldownVariantOf,
   variantSharesCooldownAt,
 } from "./overrideVariantEra";
+import { isProcTriggeredCastAt } from "./procTriggeredCast";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
@@ -6386,7 +6387,10 @@ function buildCooldownEntry(
   const castEvents = unit.spellCastEvents.filter(
     (e) =>
       isPressOfCooldown(e, spell.spellId, spell.name, replacements, unit) &&
-      !isFormReshiftCast(unit, e),
+      !isFormReshiftCast(unit, e) &&
+      // …nor is the cast a low-HP proc made (Well-Honed Instincts' Frenzied
+      // Regeneration, `isProcTriggeredCastAt` — T134): it spends no charge
+      !isProcTriggeredCastAt(unit, e.spellId, e.logLine.timestamp),
   );
 
   const isDefOrExternal = spell.tags.includes(SpellTag.Defensive);

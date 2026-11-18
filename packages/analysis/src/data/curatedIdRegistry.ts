@@ -1556,7 +1556,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     () => [...CRISIS_PROTECTIVE_ANSWER_IDS],
   ),
   // BACKLOG #43 (2026-09-17): low-HP proc marker auras + the casts they make.
-  t("CRISIS_PROC_ANSWERS", "analysis/crisisDecisionPoints.ts", "mixed", () => [
+  t("CRISIS_PROC_ANSWERS", "data/crisisProcAnswers.ts", "mixed", () => [
     ...CRISIS_PROC_ANSWERS.keys(),
     ...[...CRISIS_PROC_ANSWERS.values()].flatMap((v) => [...v.triggers]),
   ]),

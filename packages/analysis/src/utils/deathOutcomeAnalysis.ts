@@ -53,6 +53,7 @@ import {
   rawLineOfSightAt,
 } from "./losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
+import { isProcTriggeredCastAt } from "./procTriggeredCast";
 import { fmtTime } from "./renderGrid";
 import { unaffordableIntervals } from "./resourceAt";
 import { spellReachForCaster } from "./spellRange";
@@ -368,7 +369,9 @@ function pressSeconds(
     .filter(
       (e) =>
         (isPressOfCooldown(e, spellId, name, replacements, unit) &&
-          !isFormReshiftCast(unit, e)) ||
+          !isFormReshiftCast(unit, e) &&
+          // the ledger's reading: a low-HP proc's cast is no press (T134)
+          !isProcTriggeredCastAt(unit, e.spellId, e.logLine.timestamp)) ||
         spendsSharedChargeOf(e, spellId),
     )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);

@@ -35,6 +35,7 @@ import {
 } from "../../utils/dispelAnalysis";
 import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
 import { isGroundingTotemTarget } from "../../utils/groundingRedirects";
+import { isProcTriggeredCastAt } from "../../utils/procTriggeredCast";
 import { fmtTime } from "../../utils/renderGrid";
 import {
   HEALER_CAST_SPELL_ID_TO_NAME,
@@ -698,7 +699,13 @@ export function emitHealerCastGapFillerEntries(
     // cast of the cooldown's id and no press of it (`isFormReshiftCast`) —
     // it stays a [YOU] [CAST] line, like any other form shift.
     const cdSeconds = effectiveCooldownSeconds(e.spellId) ?? 0;
-    if (cdSeconds >= 30 && !isFormReshiftCast(owner, e)) {
+    // …and neither is the cast a low-HP proc made (`isProcTriggeredCastAt`,
+    // the ledger's reading — T134)
+    if (
+      cdSeconds >= 30 &&
+      !isFormReshiftCast(owner, e) &&
+      !isProcTriggeredCastAt(owner, e.spellId, e.logLine.timestamp)
+    ) {
       flushFold();
       // B112/B127: apply the same self-only override here (this promotion path is where MW/Evoker
       // throughput CDs render). B113/B130: append the role tag so the model does not invent mechanics.

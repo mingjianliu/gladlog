@@ -38,6 +38,7 @@ import { auraStandsForPressAt } from "./auraActivationEra";
 import { dropAuraRebroadcasts } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { logInstantOf } from "./logEra";
+import { isProcTriggeredCastAt } from "./procTriggeredCast";
 import {
   isResyncBatchAt,
   lowerBound,
@@ -398,6 +399,9 @@ export function hiddenPressMs(
         !pressMs.some((p) => Math.abs(p - ms) <= PRESS_ROW_PAIR_MS) &&
         !restated(i) &&
         !heraldProc(a.spellId!, ms) &&
+        // a low-HP proc's own cast, its marker beside it (Well-Honed
+        // Instincts' Frenzied Regeneration, T134): no press made unseen
+        !isProcTriggeredCastAt(unit, spellId, ms) &&
         !summonBorne(a.spellId!, ms) &&
         !formBuffUpBefore(ms) &&
         // an aura that on this log's date stands for no press (Doom Winds
