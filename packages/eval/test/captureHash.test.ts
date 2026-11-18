@@ -108,6 +108,23 @@ describe("capture hash (verify/captureHash.ts)", () => {
     expect(captureHashOf(aug, "/c").root).toBe("/c/");
   });
 
+  it("two contexts that read alike are refused, not ordered by the walk", () => {
+    const dir = writeCapture("dup", "/primary/", 2, [
+      { ...OWNERS[0]!, rel: "a.gz" },
+      { ...OWNERS[0]!, rel: "z.gz" },
+    ]);
+    // a relative `a.gz` beside `/primary/a.gz`, same round and owner
+    writeFileSync(
+      join(dir, "s1", "context", "9-1-9.txt"),
+      "a.gz\nA-Realm\nother",
+    );
+    writeFileSync(join(dir, "s1", "findings", "9-1-9.txt"), "a.gz\nA-Realm\nm");
+    expect(captureHashOf(dir).root).toBe("");
+    expect(() => captureHashOf(dir, "/primary")).toThrow(
+      /read as a\.gz#1#A-Realm/,
+    );
+  });
+
   it("bytes that are not the first line are hashed as they are", () => {
     const dir = writeCapture("bytes", "/r/", 1, [OWNERS[0]!]);
     const file = join(dir, "s0", "context", "1-1-1.txt");

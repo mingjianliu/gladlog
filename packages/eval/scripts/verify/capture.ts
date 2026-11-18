@@ -68,6 +68,15 @@ if (REHASH) {
       );
       process.exit(1);
     }
+    // …and still holds every owner it was stamped with (a shard lost in a
+    // copy would be certified at its smaller count — 1b #1)
+    const stamped = /^\S+ {2}(\d+) owners/.exec(readFileSync(stamp, "utf8"));
+    if (!stamped || Number(stamped[1]) !== h.owners) {
+      console.error(
+        `rehash --write refused: stamped ${stamped?.[1] ?? "?"} owners, ${h.owners} there now`,
+      );
+      process.exit(1);
+    }
     writeFileSync(stamp, captureHashLine(h));
   }
   process.exit(0);

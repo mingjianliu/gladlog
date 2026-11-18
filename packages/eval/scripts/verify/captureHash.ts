@@ -118,6 +118,14 @@ export function captureHashOf(out: string, archiveRoot?: string): ICaptureHash {
     return { ...r, archiveKey, key: `${archiveKey}#${r.round}#${r.owner}` };
   });
   keyed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  // two owners that read alike have no order of their own: the hash would
+  // hang on the walk (a stated root that folds `/root/a.gz` onto a relative
+  // `a.gz` — codex 85-tk-EVAL-T203-1b #2)
+  for (let i = 1; i < keyed.length; i++)
+    if (keyed[i]!.key === keyed[i - 1]!.key)
+      throw new Error(
+        `capture hash: two contexts read as ${keyed[i]!.key} (${keyed[i - 1]!.dir}/${keyed[i - 1]!.name}, ${keyed[i]!.dir}/${keyed[i]!.name})`,
+      );
   const h = createHash("sha256");
   for (const { key, archive, archiveKey, dir, name } of keyed) {
     h.update(key);
