@@ -39,14 +39,20 @@ export function openingInstantsOf(rawText: string): Array<number | null> {
   return out;
 }
 
-type Dated = { startTime?: unknown; statedStartTime?: number | null };
+type Dated = {
+  sequenceNumber?: unknown;
+  statedStartTime?: number | null;
+};
 
 /**
  * Write `statedStartTime` onto the match, or every round of the shuffle, in
  * `doc.data` that has none (`undefined`; a stored value, null included, is
- * kept). `openings` = `openingInstantsOf(raw.txt)`; the k-th opening line is
- * the k-th earliest round's. Nothing is written unless there is exactly one
- * opening line per stored round and every round has a start to order by.
+ * kept). `openings` = `openingInstantsOf(raw.txt)`. The k-th opening line is
+ * the round with `sequenceNumber` k — the order the parser cut the rounds in
+ * and wrote their lines in. Not the order of their parsed starts: a clock
+ * set back between two rounds (the autumn DST hour) reverses those (codex
+ * 85-tk-ENG-T200-1b). Nothing is written unless there is exactly one opening
+ * line per stored round and the rounds are numbered 0..n-1.
  *
  * `complete` = every match / round carries the field now (whether or not
  * this call wrote it) — what the store's `statedInstant` mark means.
@@ -59,25 +65,32 @@ export function backfillStatedStart(
   if (data == null || typeof data !== "object")
     return { changed: false, complete: false };
   const rounds = (data as { rounds?: unknown }).rounds;
-  const items: Dated[] = Array.isArray(rounds)
+  const isShuffle = Array.isArray(rounds);
+  const items: Dated[] = isShuffle
     ? rounds.filter((r): r is Dated => r != null && typeof r === "object")
     : [data as Dated];
   const carried = () =>
     items.length > 0 && items.every((x) => x.statedStartTime !== undefined);
-  const ordered =
-    items.every(
-      (x) => typeof x.startTime === "number" && Number.isFinite(x.startTime),
-    ) && new Set(items.map((x) => x.startTime)).size === items.length;
-  if (!openings || !ordered || openings.length !== items.length)
+  // which opening line is whose
+  const lineOf = (x: Dated): number =>
+    isShuffle ? (x.sequenceNumber as number) : 0;
+  const numbered =
+    !isShuffle ||
+    (items.length === (rounds as unknown[]).length &&
+      new Set(items.map((x) => x.sequenceNumber)).size === items.length &&
+      items.every(
+        (x) =>
+          Number.isInteger(x.sequenceNumber) &&
+          (x.sequenceNumber as number) >= 0 &&
+          (x.sequenceNumber as number) < items.length,
+      ));
+  if (!openings || !numbered || openings.length !== items.length)
     return { changed: false, complete: carried() };
-  const byStart = [...items].sort(
-    (a, b) => (a.startTime as number) - (b.startTime as number),
-  );
   let changed = false;
-  byStart.forEach((x, k) => {
-    if (x.statedStartTime !== undefined) return;
-    x.statedStartTime = openings[k]!;
+  for (const x of items) {
+    if (x.statedStartTime !== undefined) continue;
+    x.statedStartTime = openings[lineOf(x)]!;
     changed = true;
-  });
+  }
   return { changed, complete: carried() };
 }

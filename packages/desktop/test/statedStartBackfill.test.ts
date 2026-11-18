@@ -68,7 +68,7 @@ describe("backfillStatedStart", () => {
     expect(doc.data["statedStartTime"]).toBe(A);
   });
 
-  it("shuffle:第 k 条开局行归第 k 早的回合(存档顺序无关),不做任何外推", () => {
+  it("shuffle:第 k 条开局行归序号 k 的回合(存档顺序无关),不做任何外推", () => {
     const rounds = [
       { sequenceNumber: 1, startTime: 10_000 + 185_000 },
       { sequenceNumber: 0, startTime: 10_000 },
@@ -87,10 +87,22 @@ describe("backfillStatedStart", () => {
     ]);
   });
 
+  // codex 85-tk-ENG-T200-1b: 10/25 02:59 (+2) then 02:01 (+1) — the clock
+  // went back, the second round's PARSED start is the earlier one
+  it("时钟回拨(秋季换时):解析出的起点倒了序,仍按序号对应,不对调", () => {
+    const rounds = [
+      { sequenceNumber: 0, startTime: Date.UTC(2026, 9, 25, 2, 59) },
+      { sequenceNumber: 1, startTime: Date.UTC(2026, 9, 25, 2, 1) },
+    ] as Array<Record<string, unknown>>;
+    const stated = [Date.UTC(2026, 9, 25, 0, 59), Date.UTC(2026, 9, 25, 1, 1)];
+    backfillStatedStart({ data: { rounds } }, stated);
+    expect(rounds.map((r) => r["statedStartTime"])).toEqual(stated);
+  });
+
   it("已有字段(数字或 null)不动;全都有 → changed false、complete true", () => {
     const rounds = [
-      { startTime: 1_000, statedStartTime: 42 },
-      { startTime: 2_000, statedStartTime: null },
+      { sequenceNumber: 0, statedStartTime: 42 },
+      { sequenceNumber: 1, statedStartTime: null },
     ] as Array<Record<string, unknown>>;
     const doc = { kind: "shuffle", data: { rounds } };
     expect(backfillStatedStart(doc, [A, A + 1])).toEqual({
@@ -102,22 +114,27 @@ describe("backfillStatedStart", () => {
       changed: false,
       complete: true,
     });
-    rounds.push({ startTime: 3_000 });
+    rounds.push({ sequenceNumber: 2 });
     expect(backfillStatedStart(doc, [A, A + 1, A + 2]).changed).toBe(true);
     expect(rounds.map((r) => r["statedStartTime"])).toEqual([42, null, A + 2]);
   });
 
   it("开局行数与回合数对不上、或没有 raw.txt → 什么都不写,complete false(不打标记)", () => {
-    const doc = { data: { rounds: [{ startTime: 1 }, { startTime: 2 }] } };
+    const doc = {
+      data: { rounds: [{ sequenceNumber: 0 }, { sequenceNumber: 1 }] },
+    };
     for (const openings of [[A], [A, A, A], [], null])
       expect(backfillStatedStart(doc, openings)).toEqual({
         changed: false,
         complete: false,
       });
-    expect(doc.data.rounds).toEqual([{ startTime: 1 }, { startTime: 2 }]);
+    expect(doc.data.rounds).toEqual([
+      { sequenceNumber: 0 },
+      { sequenceNumber: 1 },
+    ]);
   });
 
-  it("回合没有可排序的起点 → 什么都不写,complete false(codex 85-tk-ENG-T200-1 #2)", () => {
+  it("回合序号不是 0..n-1(缺号、重号、没有序号)→ 什么都不写,complete false", () => {
     expect(backfillStatedStart(null, [A])).toEqual({
       changed: false,
       complete: false,
@@ -126,11 +143,18 @@ describe("backfillStatedStart", () => {
       changed: false,
       complete: false,
     });
-    const doc = { data: { rounds: [{ startTime: 1 }, { startTime: null }] } };
-    expect(backfillStatedStart(doc, [A, A + 1])).toEqual({
-      changed: false,
-      complete: false,
-    });
-    expect(doc.data.rounds[0]).toEqual({ startTime: 1 });
+    for (const rounds of [
+      [{ sequenceNumber: 0 }, { sequenceNumber: 2 }],
+      [{ sequenceNumber: 1 }, { sequenceNumber: 1 }],
+      [{ sequenceNumber: 0 }, {}],
+      [{ sequenceNumber: 0 }, null],
+    ]) {
+      const doc = { data: { rounds } };
+      expect(backfillStatedStart(doc, [A, A + 1])).toEqual({
+        changed: false,
+        complete: false,
+      });
+      expect(JSON.stringify(doc)).not.toContain("statedStartTime");
+    }
   });
 });
