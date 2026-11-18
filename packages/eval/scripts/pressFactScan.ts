@@ -34,8 +34,8 @@
  *    12–14 ms leads are real triggers), when the
  *    round has two or more such pairs. Its `[PROC]` line must read `(with
  *    Wake of Ashes)`.
- *  - `enemyUtilityPress` (C7, 2026-10-18): an enemy's SUCCESS of Champion's
- *    Spear 376079, Smoke Bomb 212182 or Tremor Totem 8143 inside the round.
+ *  - `enemyUtilityPress` (C7, 2026-10-18): an enemy's SUCCESS of Smoke Bomb
+ *    212182 or Tremor Totem 8143 inside the round.
  *    An `[ENEMY UTILITY]` line at its second (pid, name) must say it.
  *  - `auraOnlyAW` (C5): an enemy's 454351 aura APPLIED, while none is up,
  *    with no 454351 SUCCESS within ±0.5 s. An `[ENEMY CD]` line at its second must name
@@ -85,8 +85,10 @@ const fmt = (s: number): string => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 };
 
-/** Champion's Spear, Smoke Bomb, Tremor Totem (fact1215 C7) */
-const ENEMY_UTILITY_IDS = new Set(["376079", "212182", "8143"]);
+/** Smoke Bomb, Tremor Totem (fact1215 C7). Champion's Spear 376079 left
+ * with the user ruling A8 of 2026-11-17 (pipeline T154): an offensive
+ * cooldown, its press an `[ENEMY CD]` line. */
+const ENEMY_UTILITY_IDS = new Set(["212182", "8143"]);
 
 type Check =
   | "allyScales"

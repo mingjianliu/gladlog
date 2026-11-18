@@ -57,9 +57,12 @@ describe("effectiveCooldownSeconds", () => {
 // duration on the cast. Three run on their effect aura (385060, 426593,
 // 434765 — `castEffectAuraGenerated`, read by `observedEffectEndSeconds`);
 // Meteor has none and is Soul Fire's shape.
+// pipeline T154 (user ruling A8, 2026-11-17): Champion's Spear 376079 runs on
+// its effect aura 376080 (`castEffectAuraGenerated`: 2,289 of 2,398 casts).
 const KNOWN_NO_DURATION: string[] = [
   "6353",
   "153561",
+  "376079",
   "385059",
   "426591",
   "439843",

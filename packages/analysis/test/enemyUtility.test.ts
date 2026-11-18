@@ -44,19 +44,16 @@ const run = (enemies: unknown[]) => {
 };
 
 describe("[ENEMY UTILITY]", () => {
-  it("Champion's Spear ×2, Smoke Bomb, Tremor Totem: a line each", () => {
+  // Champion's Spear held the first two lines until the user ruling A8 of
+  // 2026-11-17 made it an offensive cooldown (pipeline T154): its press is an
+  // [ENEMY CD] line now, pinned below
+  it("Smoke Bomb ×2, Tremor Totem: a line each", () => {
     const { lines, out } = run([
-      {
-        name: "Eldroath",
-        class: CombatUnitClass.Warrior,
-        spec: CombatUnitSpec.Warrior_Arms,
-        spellCastEvents: [cast("376079", 36.07), cast("376079", 129.4)],
-      },
       {
         name: "Hemo",
         class: CombatUnitClass.Rogue,
         spec: CombatUnitSpec.Rogue_Subtlety,
-        spellCastEvents: [cast("212182", 23.3)],
+        spellCastEvents: [cast("212182", 23.3), cast("212182", 204.4)],
       },
       {
         name: "Sham",
@@ -66,12 +63,23 @@ describe("[ENEMY UTILITY]", () => {
       },
     ]);
     expect(lines).toEqual([
-      "0:36  [ENEMY UTILITY]   5(Eldroath) (Arms Warrior): Champion's Spear (cast 1 of 2)",
-      "2:09  [ENEMY UTILITY]   5(Eldroath) (Arms Warrior): Champion's Spear (cast 2 of 2)",
-      "0:23  [ENEMY UTILITY]   5(Hemo) (Subtlety Rogue): Smoke Bomb",
+      "0:23  [ENEMY UTILITY]   5(Hemo) (Subtlety Rogue): Smoke Bomb (cast 1 of 2)",
+      "3:24  [ENEMY UTILITY]   5(Hemo) (Subtlety Rogue): Smoke Bomb (cast 2 of 2)",
       "0:50  [ENEMY UTILITY]   5(Sham) (Restoration Shaman): Tremor Totem",
     ]);
     expect(out.utilityRendered).toBe(true);
+  });
+  it("Champion's Spear is an offensive cooldown (user ruling A8): no utility line", () => {
+    const { lines, out } = run([
+      {
+        name: "Eldroath",
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Arms,
+        spellCastEvents: [cast("376079", 36.07), cast("376079", 129.4)],
+      },
+    ]);
+    expect(lines.filter((l) => l.includes("[ENEMY UTILITY]"))).toEqual([]);
+    expect(out.utilityRendered).toBe(false);
   });
   const auraAt = (spellId: string, s: number) => ({
     spellId,
@@ -116,14 +124,14 @@ describe("[ENEMY UTILITY]", () => {
   it("a press before the gates or after the timeline's end neither prints nor counts (codex 20-F15-30)", () => {
     const { lines, out } = run([
       {
-        name: "War",
-        class: CombatUnitClass.Warrior,
-        spec: CombatUnitSpec.Warrior_Arms,
-        spellCastEvents: [cast("376079", -2), cast("376079", 40), cast("376079", 4000)],
+        name: "Rog",
+        class: CombatUnitClass.Rogue,
+        spec: CombatUnitSpec.Rogue_Subtlety,
+        spellCastEvents: [cast("212182", -2), cast("212182", 40), cast("212182", 4000)],
       },
     ]);
     expect(lines).toEqual([
-      "0:40  [ENEMY UTILITY]   5(War) (Arms Warrior): Champion's Spear",
+      "0:40  [ENEMY UTILITY]   5(Rog) (Subtlety Rogue): Smoke Bomb",
     ]);
     expect(out.utilityRendered).toBe(true);
   });

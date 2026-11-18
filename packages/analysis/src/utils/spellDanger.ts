@@ -117,6 +117,8 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  *   - Reaper's Mark, Goremaw's Bite, Execution Sentence, Tip the Scales,
  *     Champion's Spear: coPressed 67–90 % or lift < 1.5 — the scan cannot
  *     separate them from the cooldown they are pressed with.
+ *     Champion's Spear is a member since the user ruling A8 of 2026-11-17
+ *     (pipeline T154); its window is its effect aura 376080.
  *     Execution Sentence is a member since GH #184 (2026-11-05); Reaper's
  *     Mark and Goremaw's Bite since R19 (2026-11-10), with Odyn's Fury and
  *     Mindgames — the user's criterion is the button (45 s or more, no use

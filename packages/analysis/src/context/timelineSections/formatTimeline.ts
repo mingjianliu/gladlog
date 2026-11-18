@@ -674,7 +674,7 @@ export function formatTimeline(
     // fact1215 C7: an enemy's utility press, a fact line only
     ...(enemyCdRender.utilityRendered
       ? [
-          "  [ENEMY UTILITY] = an enemy pressed a utility cooldown (Champion's Spear, Smoke Bomb, Tremor Totem, …): when it",
+          "  [ENEMY UTILITY] = an enemy pressed a utility cooldown (Smoke Bomb, Tremor Totem, …): when it",
           "    was pressed, nothing more. It is not an offensive burst or a defensive and opens no [OFFENSIVE WINDOW].",
         ]
       : []),

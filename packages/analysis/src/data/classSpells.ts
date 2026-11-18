@@ -47,12 +47,13 @@ export const classMetadata: IClassSpellMetadata[] = [
       // roster row — the owner's and a teammate's press had no line, no
       // loadout row and no [RES] entry (121c7e15 round 1: the Fury owner's
       // two presses; 605-file capture: 0 press lines in 3,520 contexts).
-      // NOT an offensive registration: `offensiveCdGapScan` left it out of
-      // `OFFENSIVE_CD_SPELL_IDS` (coPressed 67–90 %, it rides the cooldown
-      // it is pressed with), so it opens no burst window and anchors no
-      // burst. `SpellTag.Utility`: the press line, the loadout and [RES],
-      // out of every role reader.
-      a("376079", "Champion's Spear", U),
+      // `offensiveCdGapScan` left it out of `OFFENSIVE_CD_SPELL_IDS`
+      // (coPressed 67–90 %, it rides the cooldown it is pressed with) and it
+      // was a `SpellTag.Utility` row until pipeline T154 (user ruling A8,
+      // 2026-11-17): an offensive cooldown — the ruling is the button's, as
+      // R19's was, not the scan's separation. Its window is its effect aura
+      // 376080 (`castEffectAuraGenerated`).
+      a("376079", "Champion's Spear", O),
       // fact5 retest r3 D2 (422ba114 r0: three presses of an enemy Arms
       // Warrior's, no kit entry, no line, no [RES]) — user 2026-10-26:
       // `SpellTag.Utility` as Champion's Spear above: the press line, the

@@ -336,7 +336,8 @@ export function emitEnemyCdEntries(
   }
   // [ENEMY UTILITY] (fact1215 C7, user ruling 2026-10-18: a new tag, a fact
   // line only): an enemy's press of a roster Utility row (`SpellTag.Utility`
-  // — Champion's Spear, Smoke Bomb, Tremor Totem) that no other enemy family
+  // — Smoke Bomb, Tremor Totem; Champion's Spear until the user ruling A8 of
+  // 2026-11-17 made it an offensive cooldown) that no other enemy family
   // prints. The friendly side has always had its press line; the enemy side
   // had none (3867e9ef 0:23 Smoke Bomb, 1120cb61 0:36 Champion's Spear). It
   // opens no window and feeds no reader: not [ENEMY CD], not [RES].

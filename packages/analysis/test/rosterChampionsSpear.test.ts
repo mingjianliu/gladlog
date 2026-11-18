@@ -47,12 +47,14 @@ describe("Warrior: Champion's Spear is on the roster (F19)", () => {
     await ensureAnalysisData();
   });
 
-  it("a Utility row under the id the corpus casts, at the ledger's floor or above", () => {
+  // user ruling A8 (2026-11-17, pipeline T154): an offensive cooldown. Until
+  // then the row was Utility and the next test pinned the opposite.
+  it("an Offensive row under the id the corpus casts, at the ledger's floor or above", () => {
     const row = classMetadata
       .find((c) => c.unitClass === CombatUnitClass.Warrior)!
       .abilities.find((a) => a.spellId === SPEAR);
     expect(row?.name).toBe("Champion's Spear");
-    expect(row?.tags).toEqual([SpellTag.Utility]);
+    expect(row?.tags).toEqual([SpellTag.Offensive]);
     expect(OBSERVED.has(SPEAR)).toBe(true);
     expect(effectiveCooldownSeconds(SPEAR)).toBe(90);
     expect(effectiveCooldownSeconds(SPEAR)!).toBeGreaterThanOrEqual(
@@ -60,14 +62,14 @@ describe("Warrior: Champion's Spear is on the roster (F19)", () => {
     );
   });
 
-  it("no offensive registration came with it: no enemy burst window, no burst anchor", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.has(SPEAR)).toBe(false);
-    expect(isEnemyCdWindowSpell(SPEAR)).toBe(false);
+  it("the offensive registration comes with the row: a member, and an enemy burst window", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.has(SPEAR)).toBe(true);
+    expect(isEnemyCdWindowSpell(SPEAR)).toBe(true);
   });
 
-  it("121c7e15: two presses → one ledger row, tagged Utility, both presses on it", () => {
+  it("121c7e15: two presses → one ledger row, tagged Offensive, both presses on it", () => {
     const row = ledger(warrior([10.5, 139.0])).find((c) => c.spellId === SPEAR);
-    expect(row?.tag).toBe("Utility");
+    expect(row?.tag).toBe("Offensive");
     expect(row?.casts.map((c) => c.timeSeconds)).toEqual([10.5, 139.0]);
     expect(row?.cooldownSeconds).toBe(90);
   });
