@@ -7616,3 +7616,33 @@ TRINKET] 127, [ENEMY CD] 2), three [UNCLEANSED DEBUFF] lines inside an enemy
 paladin's Resonance leave, and with them one missed-cleanse row (candidate
 rows -1 / +0). Codex branch review 85-tk-WIN-T155-1, -1b (scan points, fixed)
 and -1c: APPROVE.
+
+v601 (2026-11-18; pipeline batch B129, T147). The per-spell gate that asks
+whether THIS cooldown could be pressed moved from cannotCastIntervalsForSpells
+(any stun blocks everything) to pressBlockedIntervalsForSpells, which lets a
+stun through for a spell the game allows while stunned: SpellMisc
+Attributes_11 bit 26 (usable while stunned by the stun mechanic: Pain
+Suppression, Guardian Spirit, Divine Protection, Restoral) or Attributes_5 bit
+3 (usable while stunned: Barkskin, Bestial Wrath; Emerald Communion and
+Voidform carry both). Applied to Stun-mechanic auras only, never to silence,
+fear, incapacitate, lockout or pet spans; the fear / disorient bits are
+generated but not wired (out of scope). Readers that change: the [CD PRIOR]
+`(you could not cast it for Ns of that dip)` note and its actionable seconds,
+external-unused (blocked time asked per external spell), missed-sync-window's
+gate and holderCc. Deliberately unchanged, because they state the unit's state
+rather than whether a spell is pressable: kick-eaten ccInWindowS, summon
+reachability, [NO HEAL CAST] (0 changes on the 605). On the 605 (branch on
+e8047b053 vs base) only Guardian Spirit, Pain Suppression and Bestial Wrath
+move: scan cdPriorCannotCastWhilePressable 1 / 67 -> 0 / 65 (the denominator
+drops with the two notes), 3 contexts in 2 archives (two [CD PRIOR] notes go,
+one [CD PRIOR] line appears), 5 external-unused rows lengthen freeGapS (4.1 /
+4.4 / 4.5 -> 5, 1.8 -> 5, 2.0 -> 2.2), 2 missed-sync-window rows lose
+holderCc=Bestial Wrath (the holder was in Leg Sweep), candidate rows +0 / -0.
+On the 605 the assembled candidate changes 3 contexts in 2 archives and 6
+menus: two [CD PRIOR] notes that called a stun-usable save unpressable go and
+one [CD PRIOR] line appears, two missed-sync-window rows lose a holder stun
+the spell could be pressed through, and four external-unused gaps lengthen
+(4.4 / 1.8 / 4.5 -> 5, 2.0 -> 2.2) while a fifth keeps its out-of-reach cut;
+candidate rows +0 / -0. Codex branch review 85-tk-KICK-T147-1 (fixed) and -1b:
+one synthetic scan-side point (lowest teammate changing mid-window, 0 on the
+605) recorded, not fixed.
