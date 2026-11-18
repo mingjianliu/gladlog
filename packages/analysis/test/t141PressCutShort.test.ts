@@ -4,7 +4,7 @@
  * stolen before then says what ended it — `lasts 19s — stolen at 0:30`. A
  * debuff on several units with one copy dispelled is not written.
  */
-import { LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitType, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { emitOffListPressEntries } from "../src/context/timelineSections/offListPress";
@@ -123,7 +123,7 @@ describe("pressEffectCutShort (T141, ruling R57)", () => {
     ).toBeUndefined();
   });
 
-  it("a copy on a second unit: not a one-holder effect, not written", () => {
+  it("a copy on a second player: not a one-holder effect, not written; a pet's copy does not count", () => {
     const cast = makeSpellCastEvent(GRACE, T, "sh", "Sh", "sh", "Sh");
     const sh = makeUnit("sh", {
       name: "Sh",
@@ -134,24 +134,35 @@ describe("pressEffectCutShort (T141, ruling R57)", () => {
       ],
       actionIn: [took(LogEvent.SPELL_DISPEL, GRACE, T + 4_000)],
     });
-    const mate = makeUnit("mate", {
-      auraEvents: [makeAuraEvent(APPLIED, GRACE, T, "sh", "mate", "BUFF")],
-    });
-    const dur = pressDuration(
-      sh,
-      cast as never,
-      [sh, mate],
-      sh.spellCastEvents,
-    )!;
-    expect(
-      pressEffectCutShort(
+    const copyOn = (type: CombatUnitType) =>
+      ({
+        ...makeUnit("other", {
+          auraEvents: [makeAuraEvent(APPLIED, GRACE, T, "sh", "other", "BUFF")],
+        }),
+        type,
+      }) as ReturnType<typeof makeUnit>;
+    const cutWith = (other: ReturnType<typeof makeUnit>) => {
+      const dur = pressDuration(
+        sh,
+        cast as never,
+        [sh, other],
+        sh.spellCastEvents,
+      )!;
+      expect(dur.unit.id).toBe("sh");
+      return pressEffectCutShort(
         dur,
         sh,
         cast as never,
-        [sh, mate],
+        [sh, other],
         sh.spellCastEvents,
-      ),
-    ).toBeUndefined();
+      );
+    };
+    expect(cutWith(copyOn(CombatUnitType.Player))).toBeUndefined();
+    // a pet's copy is not a second holder (Camouflage: the hunter and the pet)
+    expect(cutWith(copyOn(CombatUnitType.Pet))).toEqual({
+      cause: "dispelled",
+      atMs: T + 4_000,
+    });
   });
 });
 

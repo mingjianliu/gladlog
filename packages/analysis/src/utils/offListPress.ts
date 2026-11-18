@@ -19,6 +19,7 @@
  */
 import {
   AtomicArenaCombat,
+  CombatUnitType,
   ICombatUnit,
   LogEvent,
 } from "@gladlog/parser-compat";
@@ -585,12 +586,14 @@ export interface IPressCutShort {
 }
 
 /**
- * T141 (round-14 D21; user ruling R57, 2026-11-18): the row that took a
+ * T141 (round-14 D21; user rulings R57 / R59, 2026-11-18): the row that took a
  * press's effect off its holder before its printed length, when the log
  * names one — a BROKEN row of the aura, or its REMOVED with a dispel /
  * steal naming it within `PRESS_CUT_CAUSE_PAIR_MS`. Only for a
- * single-holder effect: one aura, on one unit, no series behind it and a
- * length that is no floor. A debuff the press put on several units and a
+ * single-holder effect: one aura, on one unit on that press (R59; another
+ * player's copy makes it several, a pet's does not), no series behind it
+ * and a length that is no floor. A plain REMOVED with no cause row prints
+ * nothing (R60, withdrawn by the user after its 605 count). A debuff the press put on several units and a
  * dispel took off one stays unwritten (the ruling's second half: `lasts Ns`
  * is still true for the others). A REMOVED with no such row, or a later
  * APPLIED / REFRESH / dose of it, ends the search with nothing.
@@ -612,10 +615,16 @@ export function pressEffectCutShort(
       r.spellId === cast.spellId &&
       r.logLine.timestamp > cast.logLine.timestamp,
   )?.logLine.timestamp;
-  // one holder: no copy of the aura from this press on another unit
+  // one holder on that press (R59): no copy of the aura from this press on
+  // another PLAYER — a pet's or a guardian's copy is not a second holder
+  // (the user's reading of 2026-11-18: Camouflage sits on the hunter and
+  // the pet)
   if (
     pressAuraCandidates(caster, cast, allUnits, nextPressMs).some(
-      (c) => c.row.spellId === from.spellId && c.unit.id !== dur.unit.id,
+      (c) =>
+        c.row.spellId === from.spellId &&
+        c.unit.id !== dur.unit.id &&
+        c.unit.type === CombatUnitType.Player,
     )
   )
     return undefined;
