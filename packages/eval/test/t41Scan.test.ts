@@ -232,6 +232,32 @@ describe("scan5/t41 resEnemyLeftPastLogEnd", () => {
     expect(bounded.seen.filter((x) => /prints an exact/.test(x))).toEqual([]);
   });
 
+  it("a proc a logged press of the name took over is not read: its `Ns left` is that press (99-archive run, Malevolence 80.0 s → pressed 83.2 s)", () => {
+    const aw = (event: LogEvent, s: number) =>
+      makeAuraEvent(event, "31884", at(s), "Player-4", "Player-4", "BUFF");
+    const ret = (pressed: boolean): any =>
+      makeUnit("Player-4", {
+        name: "Ret",
+        class: CombatUnitClass.Paladin,
+        spec: CombatUnitSpec.Paladin_Retribution,
+        info: {} as never,
+        spellCastEvents: pressed
+          ? [makeSpellCastEvent("31884", at(35), "Player-4")]
+          : [],
+        auraEvents: [
+          aw(LogEvent.SPELL_AURA_APPLIED, 30),
+          aw(LogEvent.SPELL_AURA_REFRESH, 35),
+        ],
+      });
+    const exact = (r: { seen: string[] }) =>
+      r.seen.filter((x) => /prints an exact/.test(x));
+    expect(exact(scan(ret(true), 2, "Avenging Wrath (no press)"))).toEqual([]);
+    // the same rows with no press at the REFRESH: still the proc's own run
+    expect(
+      exact(scan(ret(false), 2, "Avenging Wrath (no press)")),
+    ).toHaveLength(1);
+  });
+
   it("a REFRESH no press made does not restart the application: Avatar refreshed by the Thunder Blast that extends it (codex 85-tk-G-T76-1c)", () => {
     // a Capacitance holder: Avatar pressed and applied at 10 s, Thunder
     // Blast at 14 s and 22 s, a REFRESH at 14 s, no REMOVED, the slice over

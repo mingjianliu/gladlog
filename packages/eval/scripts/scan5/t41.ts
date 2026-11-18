@@ -243,8 +243,14 @@ export function run(ctx: IRoundCtx): void {
         // the proc's own aura — an application no press of the name sits
         // beside, whatever other presses the holder made (codex
         // 85-tk-CD-T140-1 #3) — its length running past the slice's end
+        // …and none taken over by one: a press of the name at its last
+        // REFRESH starts the pressed entry there, and the `(no press)`
+        // entry's end is that logged press (99-archive run: a Malevolence
+        // proc up at 80.0 s, pressed at 83.2 s — `3s left` is the press)
+        const takenOver = (o: IOpenAura) =>
+          pressesMs.some((t) => Math.abs(t - o.lastSeenMs) <= PRESS_PAIR_MS);
         const open = upAll
-          .filter((o) => !nearPress(o))
+          .filter((o) => !nearPress(o) && !takenOver(o))
           .find((o) => {
             const full = buffDurationOfApplication(
               o.spellId,
