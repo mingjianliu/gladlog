@@ -7321,3 +7321,26 @@ restating it; candidate rows 7,446 = 7,446, menus byte-identical (capture
 checked on the Mac). Recorded: talent 1259612 (recovery-rate window) not
 modelled. Codex branch reviews 85-tk-CD-T136-1 (four real points, fixed) and
 -1b: APPROVE (one synthetic point recorded).
+
+v588 (2026-11-18; pipeline batch B116, T138; round 14 P04). The set table knew
+only the thirteen 12.1 sets, but 12.0 sets are still worn in 12.1 logs. Added
+the item lists of 1981 (Evoker), 1987 (Rogue) and 1990 (Warrior) from ItemSet
+12.1.5.70391, and two rows: Preservation 12.0 2-piece 1264823, Verdant
+Embrace's charge category -2 s (aura 453, PvpMultiplier 1); Fury 12.0 4-piece
+1264878, each Rampage reduces Odyn's Fury's cooldown by the dummy 2500 ms x
+PvpMultiplier 0.5 = 1.25 s. That row is owned by the set (new
+ownedBySetBonus), gated in eventReductionsFor by setBonusHeld; cooldowns.ts,
+enemyInterrupts.ts and resUtilityCds.ts pass the piece count. The corpus has
+two presses and cannot tell 1.25 s from 2.5 s; 1.25 s is the later-ready,
+conservative side. Counted, not priced: Outlaw 12.0 4-piece Blade Rush -3 s
+(both DB2 legs, but no impossible recast among 19 wearers or 13 non-wearers,
+so the corpus leg is missing); Survival 12.1 4-piece has no reader. Scans on
+the 605's 64 archives with >= 2 pieces (388 owners): Verdant Embrace
+impossible recasts 82 / 197 -> 57 / 197 (the rest is haste-scaled charges,
+P05); Odyn's Fury 4-piece 2 / 11 -> 0 / 11, control 0 / 6 -> 0 / 6. On the 605
+the assembled candidate changes 18 contexts, all in the one archive with a
+Fury Warrior wearing the 12.0 four-piece: Odyn's Fury on 30 [RES] lines and 15
+cooldown lists; 0 outside the set-wearing archives; candidate rows 7,446 =
+7,446, menus byte-identical (capture checked on the Mac). Recorded: the other
+12.0 sets (1978-1990) are not inventoried. Codex branch review 85-tk-
+CD-T138-1: APPROVE.

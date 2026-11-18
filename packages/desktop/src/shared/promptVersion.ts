@@ -1456,5 +1456,11 @@
  *  spent points (Supercharger, Forced Induction, Coup de Grace, Dragon-Bone
  *  Dice).
  *  See docs/prompt-version-history.md.
+ *
+ * v588 (2026-11-18; pipeline batch B116, T138): 12.0 tier-set bonuses
+ *  still worn in 12.1 logs are read for three sets (Evoker 1981, Rogue
+ *  1987, Warrior 1990): Preservation 2-piece Verdant Embrace -2 s, Fury
+ *  4-piece Odyn's Fury -1.25 s per Rampage.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 587;
+export const PROMPT_VERSION = 588;
