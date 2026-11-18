@@ -283,8 +283,10 @@ export function creditedAnswer(p: BurstWindowDecisionPoint) {
 }
 
 /** `creditedAnswer`'s rule for one response — also asked of the other burst
- * casters the credited control's own press landed on. */
-function answersPressured(
+ * casters the credited control's own press landed on. Exported for
+ * `scan5/t180.ts` (the count of windows `responded` holds on a press this
+ * rule refuses). */
+export function answersPressured(
   pr: NonNullable<BurstWindowDecisionPoint["pressured"]>,
   r: BurstResponseCast,
 ): boolean {
