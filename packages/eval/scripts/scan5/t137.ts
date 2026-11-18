@@ -8,8 +8,16 @@
  *    the model has impossible with the presses before it (`cdAvailableAt`,
  *    then `cdMaybeAvailableAt`). Kind = the holder's spec. Checked = the
  *    presses judged. Each round once.
+ *  - `hoverRefusedAfterBack` (the opposite direction): the log owner's own
+ *    not-ready refusal of Hover (`NOT_READY_REASONS`; only the owner's are
+ *    logged), no own cast success in the `GCD_S` before it, at an instant
+ *    the model has a charge certainly back (`cdAvailableAt` on the presses
+ *    before, `REFUSED_SLACK_S` after its return). Checked = the refusals
+ *    judged.
  */
+import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import {
+  CD_INSTANT_SLACK_S,
   cdAvailableAt,
   cdMaybeAvailableAt,
   cdSecondsUntilReady,
@@ -17,9 +25,16 @@ import {
   unitCooldownEntry,
 } from "@gladlog/analysis/src/utils/cooldowns";
 
-import { type IRoundCtx } from "./ctx";
+import { type IRoundCtx, successesOf, tsOf } from "./ctx";
 
-export const CHECKS = ["hoverPressBeforeBack"] as const;
+export const CHECKS = [
+  "hoverPressBeforeBack",
+  "hoverRefusedAfterBack",
+] as const;
+/** a refusal this soon after an own cast is the global cooldown's */
+const GCD_S = 1.5;
+/** the model's return must be at least this far behind the refusal */
+const REFUSED_SLACK_S = 1;
 
 const HOVER = "358267";
 const EVOKER_SPECS = new Set(["1467", "1468", "1473"]);
@@ -33,7 +48,34 @@ function before(cd: IMajorCooldownInfo, t: number): IMajorCooldownInfo {
   };
 }
 
+function refusals(ctx: IRoundCtx): void {
+  const owner = ctx.owner as any;
+  if (!owner || !EVOKER_SPECS.has(String(owner.spec))) return;
+  const cd = unitCooldownEntry(owner, ctx.legacy, HOVER);
+  if (!cd) return;
+  const own = successesOf(owner).map((c) => (tsOf(c) - ctx.start) / 1000);
+  for (const f of ctx.rawStreams().castFailed) {
+    if (f.unitGuid !== owner.id || String(f.spellId) !== HOVER) continue;
+    if (!NOT_READY_REASONS.has(f.reason)) continue;
+    const t = f.tSeconds;
+    if (own.some((s) => s <= t && t - s < GCD_S)) continue;
+    const prior = before(cd, t);
+    if (prior.casts.length === 0) continue;
+    ctx.bump("hoverRefusedAfterBack");
+    if (!cdAvailableAt(prior, t - REFUSED_SLACK_S - CD_INSTANT_SLACK_S))
+      continue;
+    ctx.violate(
+      "hoverRefusedAfterBack",
+      String(owner.spec),
+      ctx.start + t * 1000,
+      `${ctx.roundKey}|${owner.id}|refused|${Math.floor(t)}`,
+      `Hover refused at ${t.toFixed(2)}s (${f.reason}); the model has a charge back (presses ${prior.casts.map((c) => c.timeSeconds.toFixed(1)).join(" ")})`,
+    );
+  }
+}
+
 export function run(ctx: IRoundCtx): void {
+  refusals(ctx);
   if (!ctx.firstOwnerOfRound) return;
   for (const u of ctx.players as any[]) {
     if (!EVOKER_SPECS.has(String(u.spec))) continue;
