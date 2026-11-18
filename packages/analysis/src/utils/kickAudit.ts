@@ -180,15 +180,24 @@ export function missedKickText(
  * (the desktop's mistake card, burst-ledger chip and kick dashboard — user
  * ruling A12, 2026-11-17, pipeline T196): a kick the log refused at a live
  * cast (`refusedAtCastSpellName`) is the target being immune to it, or
- * reflecting it — the miss row's own type — and is not called missed. Every
- * other `missed` kick, a miss row at no running bar included, stays
- * `missed`. `result` does not move (nothing was stopped), so no rate and no
+ * reflecting it — the miss row's own type, on that unit — and is not called
+ * missed. Every other `missed` kick, a miss row at no running bar or on
+ * another unit included, stays `missed`. `result` does not move (nothing was stopped), so no rate and no
  * candidate reads this. */
 export type MissedKickKind = "immune" | "reflected" | "missed";
 export function missedKickKind(
-  k: Pick<IKickAuditEntry, "kickMiss" | "refusedAtCastSpellName">,
+  k: Pick<
+    IKickAuditEntry,
+    "kickMiss" | "refusedAtCastSpellName" | "targetId"
+  >,
 ): MissedKickKind {
   if (!k.refusedAtCastSpellName || !k.kickMiss) return "missed";
+  // the row has to be on the unit whose bar was running: a kick aimed at a
+  // caster and taken by another unit (Grounding Totem logs the IMMUNE) says
+  // nothing about the caster (codex 85-tk-ENG-T196-1 #1: 79df940a r1 4:35,
+  // a Spell Lock sent at a Greater Heal, IMMUNE on the totem). A kick with
+  // no target reads its bar off the miss row's own unit.
+  if (k.targetId && k.kickMiss.targetId !== k.targetId) return "missed";
   if (k.kickMiss.missType === "IMMUNE") return "immune";
   if (k.kickMiss.missType === "REFLECT") return "reflected";
   return "missed";

@@ -119,6 +119,14 @@ describe("A12:被拒在读条上的打断不叫落空", () => {
     expect(missedKickLabel(k("IMMUNE"))).toBe("目标免疫打断");
     expect(missedKickLabel(k("REFLECT"))).toBe("被目标反射");
     expect(missedKickLabel(k("MISS"))).toBe(MISSED_KICK_TEXT);
+    // the IMMUNE row is on another unit than the kick's target (Grounding
+    // Totem took it): nothing is said of the caster
+    expect(missedKickLabel({ ...k("IMMUNE"), targetId: "caster" })).toBe(
+      MISSED_KICK_TEXT,
+    );
+    expect(missedKickLabel({ ...k("IMMUNE"), targetId: "x" })).toBe(
+      "目标免疫打断",
+    );
     expect(missedKickLabel(k("IMMUNE", false))).toBe(MISSED_KICK_TEXT);
     expect(missedKickLabel(k(undefined, false))).toBe(MISSED_KICK_TEXT);
   });

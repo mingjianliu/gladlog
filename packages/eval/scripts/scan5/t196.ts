@@ -14,6 +14,10 @@
  *    wording for it is the plain missed one. Kind = the miss type and where
  *    it shows: `card` for the recorder's side (mistake card, ledger chip and
  *    dashboard), `dashboard` for the other side (dashboard only).
+ *  - `refusedKickOtherUnit`: the same kicks whose miss row sits on another
+ *    unit than the one the kick was aimed at (a Grounding Totem logs the
+ *    IMMUNE; the bar is the aimed unit's). Violation: the desktop says
+ *    immune / reflected of it — that would be said of the caster.
  */
 import { analyzeKickAudit } from "@gladlog/analysis/src/utils/kickAudit";
 import {
@@ -28,7 +32,10 @@ import {
 } from "../../../desktop/src/renderer/src/report/derive/kickText";
 import { fmtS, type IRoundCtx } from "./ctx";
 
-export const CHECKS = ["refusedKickCalledMissed"] as const;
+export const CHECKS = [
+  "refusedKickCalledMissed",
+  "refusedKickOtherUnit",
+] as const;
 
 export function run(ctx: IRoundCtx): void {
   if (!ctx.firstOwnerOfRound) return;
@@ -44,13 +51,30 @@ export function run(ctx: IRoundCtx): void {
       const type = k.kickMiss.missType;
       if (!k.refusedAtCastSpellName) continue;
       if (type !== "IMMUNE" && type !== "REFLECT") continue;
+      const where = friendly ? "card" : "dashboard";
+      const what = `${k.kickSpellName} at ${fmtS(k.atSeconds)} (${k.atSeconds.toFixed(2)}) logged ${type}`;
+      const fact = `${p.id}#${Math.floor(k.atSeconds * 10)}`;
+      // the row is on another unit than the one the kick was aimed at (a
+      // Grounding Totem took it): nothing is said of the caster
+      if (k.targetId && k.kickMiss.targetId !== k.targetId) {
+        ctx.bump("refusedKickOtherUnit");
+        if (missedKickLabel(k) !== MISSED_KICK_TEXT)
+          ctx.violate(
+            "refusedKickOtherUnit",
+            `${where} ${type}`,
+            ctx.start + k.atSeconds * 1000,
+            fact,
+            `${what} on ${k.kickMiss.targetName}, aimed at ${k.targetName ?? "?"} (${k.refusedAtCastSpellName} running) — the desktop says "${missedKickLabel(k)}" of the caster`,
+          );
+        continue;
+      }
       if (missedKickLabel(k) !== MISSED_KICK_TEXT) continue;
       ctx.violate(
         "refusedKickCalledMissed",
-        `${friendly ? "card" : "dashboard"} ${type}`,
+        `${where} ${type}`,
         ctx.start + k.atSeconds * 1000,
-        `${p.id}#${Math.floor(k.atSeconds * 10)}`,
-        `${k.kickSpellName} at ${fmtS(k.atSeconds)} (${k.atSeconds.toFixed(2)}) logged ${type} while ${k.refusedAtCastSpellName} was running — the desktop says "${missedKickLabel(k)}"`,
+        fact,
+        `${what} while ${k.refusedAtCastSpellName} was running — the desktop says "${missedKickLabel(k)}"`,
       );
     }
   }
