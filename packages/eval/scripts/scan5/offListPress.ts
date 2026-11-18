@@ -39,7 +39,15 @@
  *    consumed buff, a cancel — so this is no violation on its own; it ranks
  *    the spells whose printed length the log never comes near (a toy's
  *    3,600 s, a channel read for a HoT), GH #179 batch 3d's overshoot gate.
- *    A REMOVED past the round's end (`roundEndMs`) is no reading.
+ *    A REMOVED past the round's end of play (`roundEndMs`) is no reading.
+ *  - `pressLastsCutShort` (T141, round-14 D21): `lasts Ns`, a single aura
+ *    (no series), and the log shows that row's aura taken off its holder
+ *    before N − `LASTS_SLACK_S`, inside the round's play, by a row that
+ *    names the cause: kind `broken` (SPELL_AURA_BROKEN / BROKEN_SPELL of
+ *    it), `dispelled` / `stolen` (a SPELL_DISPEL / SPELL_STOLEN naming it
+ *    within 50 ms of its REMOVED). a036aff5 r1: Camouflage `lasts 60s`,
+ *    broken by a Consume Magic 2.1 s later. Checked = the `lasts` lines
+ *    with a single aura read.
  * Truth is the log's rows; the parse of the line is the only shared part.
  */
 import { NO_CAST_LOG_PRESS_IDS } from "@gladlog/analysis/src/data/auraActivation";
@@ -72,7 +80,7 @@ import {
   tsOf,
 } from "./ctx";
 
-export const CHECKS = ["offListPressLine"] as const;
+export const CHECKS = ["offListPressLine", "pressLastsCutShort"] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "offListPressLine|lastsOvershoot",
   "offListPressLine|lastsLogStall",
@@ -300,6 +308,46 @@ export function backBeforeNextPresses(ctx: IRoundCtx): IBackBeforeNext[] {
   return matched.flatMap((x) => backBeforeNext(ctx, x, freeRows) ?? []);
 }
 
+/** The row that took `from`'s aura off `holder` before its time, when the
+ * log names one (T141): a BROKEN row of it, or its REMOVED with a dispel /
+ * steal naming it within 50 ms. A later APPLIED / REFRESH / dose, or a
+ * REMOVED with no such row, ends the search. */
+function cutShortOf(
+  holder: any,
+  from: any,
+): { atMs: number; cause: "broken" | "dispelled" | "stolen" } | undefined {
+  const rows = ((holder.auraEvents ?? []) as any[]).filter(
+    (r) => r.srcUnitId === from.srcUnitId && r.spellId === from.spellId,
+  );
+  const start = tsOf(from);
+  for (let j = rows.indexOf(from) + 1; j > 0 && j < rows.length; j++) {
+    const r = rows[j];
+    if (tsOf(r) <= start) continue;
+    if (/BROKEN/.test(String(ev(r)))) return { atMs: tsOf(r), cause: "broken" };
+    if (ev(r) === REMOVED) {
+      const by = ((holder.actionIn ?? []) as any[]).find(
+        (x) =>
+          (ev(x) === "SPELL_DISPEL" || ev(x) === "SPELL_STOLEN") &&
+          String(x.extraSpellId) === String(from.spellId) &&
+          Math.abs(tsOf(x) - tsOf(r)) <= 50,
+      );
+      return by
+        ? {
+            atMs: tsOf(r),
+            cause: ev(by) === "SPELL_STOLEN" ? "stolen" : "dispelled",
+          }
+        : undefined;
+    }
+    if (
+      ev(r) === APPLIED ||
+      ev(r) === REFRESH ||
+      ev(r) === LogEvent.SPELL_AURA_APPLIED_DOSE
+    )
+      return undefined;
+  }
+  return undefined;
+}
+
 export function run(ctx: IRoundCtx): void {
   const { matched, freeRows } = matchPressLines(ctx);
   for (const one of matched) {
@@ -447,6 +495,23 @@ export function run(ctx: IRoundCtx): void {
           `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, lived ${life!.toFixed(1)}s`,
           line,
         );
+      if (dur && dur.floor !== true && dur.followUps.length === 0) {
+        ctx.bump("pressLastsCutShort");
+        const cut = cutShortOf(dur.unit, dur.row);
+        if (
+          cut &&
+          cut.atMs <= playEndMs &&
+          (cut.atMs - tsOf(dur.row)) / 1000 < Number(lasts) - LASTS_SLACK_S
+        )
+          ctx.violate(
+            "pressLastsCutShort",
+            cut.cause,
+            at,
+            `${ctx.roundKey}|${unit.id}|${name}|${second}`,
+            `${unit.name} ${name} at ${fmtS(second)}: lasts ${lasts}s printed, ${cut.cause} after ${((cut.atMs - tsOf(dur.row)) / 1000).toFixed(1)}s`,
+            line,
+          );
+      }
       if (
         dur?.floor !== true &&
         removedClean &&
