@@ -1649,5 +1649,13 @@
  *  most 10 s, never into the next window) and says `(read to m:ss)` when
  *  the low it prints lies past that end.
  *  See docs/prompt-version-history.md.
+ *
+ * v627 (2026-11-19; pipeline batch B155, T180): a slow-defensive-response
+ *  window is no longer answered by a press that cannot answer the pressured
+ *  teammate - an external aimed at another teammate, a healing CD that
+ *  healed others, a control that did not land, another teammate's self-only
+ *  healing CD, an interrupt that interrupted nothing - and the legend says
+ *  so.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 626;
+export const PROMPT_VERSION = 627;

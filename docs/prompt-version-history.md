@@ -8054,3 +8054,23 @@ in those 171 contexts; menu rows 0 added / 0 removed, 2 slow-defensive-
 response rows gain pressuredReadToT. Codex branch reviews 85-tk-CD-T183-1 to
 -1d (the last APPROVE; -1b's two points were constructed, one fixed in the
 scan).
+
+v627 (2026-11-19; pipeline batch B155, T180, ruling R75 with amendments a-c).
+A slow-defensive-response window was dropped as answered when the only presses
+in it were ones that cannot answer the pressured teammate: an external aimed
+at another teammate, a healing cooldown whose rows went on others, a control
+that did not land, another teammate's self-only healing cooldown, or an
+interrupt that interrupted nothing. Those presses are no longer an answer; the
+first three are named as presses that went elsewhere, the last two are
+ignored, and the window stays unanswered. The legend says so: '... a control
+that did not land; another teammate's self-only healing CD, or an interrupt
+that interrupted nothing, is not an answer either'. One predicate pair
+(pressWentElsewhere / pressDidNotReachPressured) feeds the responded set, the
+credit line and the table builder; scan5 respondedOnElsewherePress reads 0. On
+the 605, menus gain 16 slow-defensive-response rows and lose none: the lane's
+14, byte-identical by row id except one window ending 3 s later under T183
+(windowEndT 102 -> 105), plus 2 windows that T154 (Champion's Spear as an
+offensive cooldown) brought into judgement, each answered only by an external
+on another teammate (R75's first class); the legend clause gains the R75
+sentences in the menus carrying the row; context unchanged. Codex branch
+reviews 85-tk-CD-T180-1 to -7 (the last APPROVE).
