@@ -37,6 +37,7 @@ import {
   CC_POSITION_MAX_GAP_MS,
   type ICCInstance,
   landedCastProvesLos,
+  rendersCcOnTeamLine,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   getUnitPositionAtTime,
@@ -72,6 +73,7 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   ...SPLIT_KINDS.map((k) => `ccLineLosTag|${k}`),
 ]);
 
+const ANY_CC_LINE = /^(\d+:\d\d)\s+\[CC ON TEAM\]\s+(\d+)\([^)]*\) ← (.+?) \(/;
 const CC_LINE =
   /^(\d+:\d\d)\s+\[CC ON TEAM\]\s+(\d+)\([^)]*\) ← (.+?) \((?:by |reflected back)[^|]*\| .*?[\d.]+yd from caster(, LoS blocked)?/;
 
@@ -94,17 +96,24 @@ export function run(ctx: IRoundCtx): void {
           ctx.legacy as never,
           ctx.units.filter((u: any) => u.ownerId && oppIds.has(u.ownerId)),
         ).ccInstances,
-      ].sort((a, b) => a.atSeconds - b.atSeconds);
+      ]
+        // the instances the emitter prints a line for, its own test
+        .filter(rendersCcOnTeamLine)
+        .sort((a, b) => a.atSeconds - b.atSeconds);
       instancesByHolder.set(holder.id, list);
     }
     return list;
   };
   for (const line of ctx.lines) {
-    const m = CC_LINE.exec(line);
-    if (!m) continue;
-    const holder = ctx.unitOfPid(m[2]);
+    // every [CC ON TEAM] line takes its instance, also one that prints no
+    // distance — or it would stay behind for a later line of that name
+    // (codex 85-tk-CC-T172-2d)
+    const any = ANY_CC_LINE.exec(line);
+    if (!any) continue;
+    const holder = ctx.unitOfPid(any[2]);
     if (!holder) continue;
-    const atS = secOf(m[1]!);
+    const atS = secOf(any[1]!);
+    const m = CC_LINE.exec(line);
     // the line's own application is the producer's: the control instance
     // its line is printed from (`analyzePlayerCCAndTrinket`, the holder's
     // instances of that name on that rendered second, taken in order) —
@@ -115,10 +124,11 @@ export function run(ctx: IRoundCtx): void {
     // (codex 85-tk-CC-T172-1 #2, -2 #1, -2b, -2c).
     const instances = instancesOf(holder);
     const at = instances.findIndex(
-      (c) => Math.floor(c.atSeconds) === atS && c.spellName === m[3],
+      (c) => Math.floor(c.atSeconds) === atS && c.spellName === any[3],
     );
     if (at < 0) continue;
     const [inst] = instances.splice(at, 1);
+    if (!m) continue;
     const caster = byId.get(inst!.sourceId);
     if (!caster || caster.id === holder.id) continue;
     const applied = { spellId: inst!.spellId };
