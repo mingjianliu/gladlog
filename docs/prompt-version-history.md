@@ -7859,3 +7859,14 @@ assembled candidate's output is byte-identical: one product file changes
 and the rest of the batch is check-only. Codex branch review 85-tk-EVAL-T205-1
 (two synthetic points, fixed) and -1b (one synthetic-only point, 0 rows on the
 605, recorded).
+
+v612 (2026-11-18; pipeline batch B140, T174). When several controls overlap on
+the healer, the [HEALER EXPOSURE] line's `already in <control> until m:ss`
+named the first control, not the one that ends last (Intimidation until 0:09
+printed while Freezing Trap held to 0:13.9). It now names the latest-ending
+control: exposureAlreadyInEnd 61 / 2,048 -> 0 / 2,048. On the 605 the
+assembled candidate rewrites 154 [HEALER EXPOSURE] lines in 142 contexts, each
+only in its `already in ... until` clause (22 name another control at the same
+second, 49 end 1 s later, 83 end 2 s or more later, none earlier); no other
+line and no candidate row changes. Codex branch review 85-tk-CC-T174-1
+(APPROVE).

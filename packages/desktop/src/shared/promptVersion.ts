@@ -1572,5 +1572,10 @@
  * v611 (2026-11-18; pipeline batch B139, T205): check-only (listGap and
  *  troughFactScan residues re-read); prompts unchanged.
  *  See docs/prompt-version-history.md.
+ *
+ * v612 (2026-11-18; pipeline batch B140, T174): [HEALER EXPOSURE] `already
+ *  in <control> until m:ss` names the latest-ending of overlapping
+ *  controls.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 611;
+export const PROMPT_VERSION = 612;
