@@ -9,8 +9,8 @@
  * with the Avenging Wrath still up).
  *
  *  - `troughStopsBeforeBuffEnd`: a judged window (feasible, triaged, a
- *    pressured friendly with a trough) whose pressured unit reads LOWER on
- *    the grid in a second after the outcome horizon and no later than the
+ *    pressured friendly with a trough) whose pressured unit reads LOWER
+ *    than the printed trough (`troughHpPct`) on the grid in a second after the outcome horizon and no later than the
  *    last second one of the window's own buffs was running (the producer's
  *    `buffRunEndSec`), the unit alive, the round not over. Kind = whether a
  *    later window of the same round opens before that second, and whether
@@ -57,14 +57,18 @@ export function run(ctx: IRoundCtx): void {
         lowSec = s;
       }
     }
-    if (low === null || low >= pr.minHpPct) continue;
+    // the number the line prints: the true minimum (`troughHpPct`), which
+    // can sit below the grid's — a later tick must be below THAT
+    const printed = pr.troughHpPct ?? pr.minHpPct;
+    const printedSec = pr.troughHpSec ?? pr.minHpSec;
+    if (low === null || low >= printed) continue;
     const later = points.some((q) => q.tSec > p.tSec && q.tSec <= lowSec);
     ctx.violate(
       C,
       `${p.responded ? "answered" : "not answered"} | ${later ? "a later window opens before the lower reading" : "no later window"}`,
       ctx.start + p.tSec * 1000,
       `${ctx.roundKey}|${owner.reaction}|${p.tSec}`,
-      `window at ${p.tSec}s (${p.leadCd.spellName}), horizon to ${p.outcomeEndSec}s, buff runs to ${p.buffRunEndSec}s: trough ${pr.minHpPct}% at ${pr.minHpSec}s, grid ${low}% at ${lowSec}s (${pr.minHpPct - low} lower)`,
+      `window at ${p.tSec}s (${p.leadCd.spellName}), horizon to ${p.outcomeEndSec}s, buff runs to ${p.buffRunEndSec}s: trough ${printed}% at ${printedSec}s, grid ${low}% at ${lowSec}s (${printed - low} lower)`,
     );
   }
 }
