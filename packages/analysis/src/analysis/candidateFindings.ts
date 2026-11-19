@@ -180,7 +180,10 @@ import {
   shuffleRoundEndMs,
   threesDecidedMs,
 } from "../utils/roundEnd";
-import { redirectSavesItsCaster } from "../utils/selfDefensiveMechanism";
+import {
+  redirectSavesItsCaster,
+  selfCastRedirectIsNoSave,
+} from "../utils/selfDefensiveMechanism";
 import { isSchoolLockExemptCast } from "../utils/spellMechanics";
 import { RANGE_HITBOX_SLACK_YD } from "../utils/spellRange";
 import {
@@ -4009,6 +4012,14 @@ function teamPlayEvents(
                     e.logLine.event === "SPELL_CAST_SUCCESS" &&
                     e.spellId &&
                     ENEMY_REDIRECT_SAVE_IDS.has(e.spellId) &&
+                    // T182 (ruling A6): one on the owner itself counts only
+                    // when it takes damage off it (Roar of Sacrifice yes,
+                    // Master's Call no)
+                    !selfCastRedirectIsNoSave(
+                      e.spellId,
+                      owner.id,
+                      e.destUnitId,
+                    ) &&
                     (e.destUnitId === unitId ||
                       (unitId === owner.id &&
                         (!e.destUnitId ||

@@ -36,6 +36,7 @@ import {
   carriesSelfReductionLabel,
   redirectSavesItsCaster,
   SELF_SAVE_PURPOSE_LABEL,
+  selfCastRedirectIsNoSave,
   selfDefensiveLabelLegends,
   selfDefensiveLabelWords,
   selfDefensiveMechanism,
@@ -658,5 +659,23 @@ describe("redirectSavesItsCaster (pipeline T109, ruling R43)", () => {
     expect([...ENEMY_REDIRECT_SAVE_IDS].filter(redirectSavesItsCaster)).toEqual(
       ["53480"],
     );
+  });
+});
+
+describe("selfCastRedirectIsNoSave (pipeline T182, ruling A6)", () => {
+  it("holds for Master's Call on its caster or on no one, never on an ally", () => {
+    for (const id of ["272682", "1241871"]) {
+      expect(selfCastRedirectIsNoSave(id, "H", "H"), id).toBe(true);
+      expect(selfCastRedirectIsNoSave(id, "H", undefined), id).toBe(true);
+      expect(selfCastRedirectIsNoSave(id, "H", "0000000000000000"), id).toBe(
+        true,
+      );
+      expect(selfCastRedirectIsNoSave(id, "H", "ALLY"), id).toBe(false);
+    }
+  });
+
+  it("never holds for a redirect that saves its caster or for a spell outside the set", () => {
+    expect(selfCastRedirectIsNoSave("53480", "H", "H")).toBe(false);
+    expect(selfCastRedirectIsNoSave("186265", "H", "H")).toBe(false);
   });
 });

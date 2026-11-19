@@ -2381,7 +2381,8 @@ export function cdHoardedEvents(
         // Faith (`ownerRedirectSaves`). It is never accused (rulings A20 +
         // U3) and is outside the ledger, so the response set did not see it
         // either; keeping a save out of the accusation set must not take it
-        // out of the answers.
+        // out of the answers. T182 (ruling A6): the supplier leaves out one
+        // the owner cast on itself that saves nobody (Master's Call).
         (teamAnswers?.ownerRedirectSaves?.(src.crisisUnit.id) ?? []).some(
           inWindow,
         ) ||

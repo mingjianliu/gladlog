@@ -2864,6 +2864,13 @@ const INDEX: PredicateRow[] = [
     symbol: "redirectSavesItsCaster",
     mod: selfDefensiveMechanismMod,
   },
+  // T182 (ruling A6): a self-cast redirect that saves nobody is no answer
+  // — cd-hoarded `spent`, the burst responses and a kill attempt's `popped`
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "selfCastRedirectIsNoSave",
+    mod: selfDefensiveMechanismMod,
+  },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkEnemyDefSaveEffect",

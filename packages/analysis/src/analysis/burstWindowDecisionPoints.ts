@@ -89,6 +89,7 @@ import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import { buildRosterSides, type RosterSides } from "../utils/rosterSide";
 import { roundEndMs } from "../utils/roundEnd";
+import { selfCastRedirectIsNoSave } from "../utils/selfDefensiveMechanism";
 import {
   isOffensiveSpell,
   SPEC_GATED_OFFENSIVE_CD_IDS,
@@ -2164,7 +2165,11 @@ export function burstWindowDecisionPoints(
                     c.dest != null &&
                     answerCasterIdSet.has(c.dest)
                   ? "control"
-                  : BURST_EXTRA_ANSWER_IDS.has(c.spellId)
+                  : BURST_EXTRA_ANSWER_IDS.has(c.spellId) &&
+                      // T182 (ruling A6): a redirect on its own caster that
+                      // takes no damage off it (Master's Call) answers
+                      // nothing
+                      !selfCastRedirectIsNoSave(c.spellId, c.unitId, c.dest)
                     ? extraAnswerCategory(c)
                     : null;
         if (!category) continue;

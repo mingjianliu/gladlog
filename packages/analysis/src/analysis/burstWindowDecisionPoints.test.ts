@@ -697,6 +697,39 @@ describe("burstWindowDecisionPoints — response classification", () => {
     ]);
   });
 
+  // T182 (ruling A6): Master's Call on its own caster frees it from roots
+  // and snares and takes no damage off anyone — no answer; on the pressured
+  // friend it is still the mate's external
+  it("a self-cast Master's Call is no answer; one on the pressured friend still is", () => {
+    const hunter = friendly({
+      id: "F2",
+      name: "Hunter-R",
+      advancedActions: hpTrack("F2", 0, 40, 100),
+    });
+    for (const id of ["272682", "1241871"]) {
+      for (const dest of ["F2", undefined]) {
+        const self = burstWindowDecisionPoints(
+          combat([
+            pressuredFriend(),
+            friendly({ ...hunter, spellCastEvents: [cast(id, 14, dest)] }),
+            enemyWithBurst(),
+          ]),
+        );
+        expect(self[0]!.responseCasts, `${id} ${dest}`).toEqual([]);
+        expect(self[0]!.responded, `${id} ${dest}`).toBe(false);
+      }
+      const onMate = burstWindowDecisionPoints(
+        combat([
+          pressuredFriend(),
+          friendly({ ...hunter, spellCastEvents: [cast(id, 14, "F1")] }),
+          enemyWithBurst(),
+        ]),
+      );
+      expect(onMate[0]!.responses.external, id).toBe(true);
+      expect(onMate[0]!.responded, id).toBe(true);
+    }
+  });
+
   it("a wall pressed just BEFORE the opener still counts (pre-wall allowance)", () => {
     const pts = burstWindowDecisionPoints(
       combat([

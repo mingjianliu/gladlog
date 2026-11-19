@@ -164,6 +164,7 @@ import {
   BLESSING_OF_SANCTUARY_ID,
   sanctuaryRemovalPairs,
 } from "./sanctuaryRemovals";
+import { selfCastRedirectIsNoSave } from "./selfDefensiveMechanism";
 import { offensiveEffectCdId } from "./spellDanger";
 import { hasPressablePvpTrinket } from "./trinketType";
 
@@ -2681,6 +2682,10 @@ function attributeFailure(
     matchStartMs,
     Object.values(combat.units ?? {}) as ICombatUnit[],
   )) {
+    // T182 (ruling A6): a redirect the target cast on itself that takes no
+    // damage off it (Master's Call) is not why an attempt failed; its
+    // [ENEMY DEF] line stays (`selfSaveCasts` returns only casts on oneself)
+    if (selfCastRedirectIsNoSave(c.spellId, target.id, target.id)) continue;
     const castMs = matchStartMs + c.atSeconds * 1000;
     if (!inSave(castMs)) {
       if (castMs >= fromMs) continue; // after the span: not its cause
