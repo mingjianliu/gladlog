@@ -25,7 +25,7 @@ const at = (e: any, lineIndex: number) => {
   return e;
 };
 /** the audited instants: aura row 13.465 s, press row 1.568 s later */
-const noPressCopies = (auraLine: number, pressLine: number) => {
+const noPressCopies = (auraLine: number, pressLine: number, endLine = 9065) => {
   const dk = makeUnit("dk", {
     name: "Unholy",
     spec: CombatUnitSpec.DeathKnight_Unholy,
@@ -45,12 +45,12 @@ const noPressCopies = (auraLine: number, pressLine: number) => {
         makeAuraEvent(
           LogEvent.SPELL_AURA_REMOVED,
           ARMY,
-          START + 43_468,
+          endLine === 9065 ? START + 43_468 : START + 14_000,
           "dk",
           "dk",
           "BUFF",
         ),
-        9065,
+        endLine,
       ),
     ],
     spellCastEvents: [
@@ -72,6 +72,10 @@ describe("a press row stamped late by a log-write stall (T186)", () => {
   });
   it("the press row two lines after the aura row: one press, no (no press) copy", () => {
     expect(noPressCopies(849, 849 + PRESS_ROW_ADJACENT_LINES)).toHaveLength(0);
+  });
+  it("the aura's own end written between the two rows: another press's", () => {
+    // codex 85-tk-CD-T186-1: APPLIED, REMOVED, SUCCESS on consecutive lines
+    expect(noPressCopies(849, 851, 850)).toHaveLength(1);
   });
   it("rows of the file between the two: the aura went up with no press", () => {
     expect(noPressCopies(849, 849 + 130)).toHaveLength(1);

@@ -552,6 +552,18 @@ export function auraOffensiveOccurrences(
             line > auraLine &&
             line <= auraLine + PRESS_ROW_ADJACENT_LINES &&
             c.logLine.timestamp > startMs &&
+            // the aura the press is taken for is still up at the press
+            // row, and no row of it stands between the two (an end the
+            // file wrote before the press row: the press is another one's
+            // — codex 85-tk-CD-T186-1)
+            c.logLine.timestamp <= endMs &&
+            !events.some(
+              (a) =>
+                a.spellId === iv.spellId &&
+                a.logLine.lineIndex !== undefined &&
+                a.logLine.lineIndex > auraLine &&
+                a.logLine.lineIndex < line,
+            ) &&
             isThisButton(c)
           );
         })
