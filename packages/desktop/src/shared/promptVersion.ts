@@ -1639,5 +1639,9 @@
  *  Punishment id is removed (87204 does not diminish) and its hand layer is
  *  registered; prompts unchanged.
  *  See docs/prompt-version-history.md.
+ *
+ * v625 (2026-11-19; pipeline batch B153, T209): the mitigation scan reads
+ *  each hit against its own spell's baseline; no product change.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 624;
+export const PROMPT_VERSION = 625;

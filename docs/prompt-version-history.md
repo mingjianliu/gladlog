@@ -8011,3 +8011,24 @@ Earthquake as the one ruled exception (R48). On the 605 the output is byte-
 identical (capture of b150 and of b152 both hash a28a916d6de2, 0 differing
 files; T210 and T211 touch disjoint files). Codex branch review 85-tk-
 EVAL-T211-1 (APPROVE).
+
+v625 (2026-11-19; pipeline batch B153, T209). Check-only. The mitigation scan
+flagged three rows. Two (Blessing of Sacrifice on the ally, Echoing
+Protection) are already in the table and read in band. Evasion's 0.819 came
+from the scan's own baseline, which put armor-carrying swings beside armor-
+ignoring bleeds: the scan now reads a hit against its own spell's baseline
+where that spell has enough hits outside the aura and against the school's
+pooled baseline otherwise, and prints the split (605: own spell 388,478
+observations, fallback 58,516, 134 added, 0 dropped); Evasion reads 0.800 on
+192 units, all Elusiveness holders. Blessing of Protection with Echoing
+Blessings reads 0.820 (0.809-0.850) on 22 units with no plateau and no
+mechanism for another value, so the DB2 15 % stays; that interval lies outside
+the entry's declared band (0.810-0.890), and the entry now carries the open
+deviation as a FLAG in its note. No product table value changes. Check-only:
+the batch changes one eval scan file
+(packages/eval/scripts/mitigationTalentScan.ts) that no capture imports, and
+packages/analysis/src/data/talentMitigationModifiers.ts in a comment only (six
+comment lines), so the 605 output is unchanged by construction. Codex branch
+review 85-tk-EVAL-T209-1 (one synthetic point, recorded: 26 of 26 rows
+identical without environmental damage); assembly review 80-PIPE-167 asked for
+the FLAG and the coverage counts.
