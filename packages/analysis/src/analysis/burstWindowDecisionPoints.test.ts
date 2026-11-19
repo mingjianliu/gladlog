@@ -1838,8 +1838,29 @@ describe("controlLandedResponses — a totem's own pulse (fact11 D28)", () => {
       () => [],
       (id) => (id === TOTEM ? summonedAt : null),
     );
-  it("a totem dropped before the burst: its pulse answers nothing", () => {
-    expect(run(5_505)).toEqual([]);
+  // user ruling R90 (2026-11-19, T184) REVERSED D28's reading here: the
+  // pulse landed inside the window, so it answers, and its time is the
+  // totem's own drop however early ("7.6s before it opened"). Before R90
+  // this asserted `[]` — do not restore it.
+  it("a totem dropped before the burst whose pulse lands in the window answers it, timed at the drop (R90)", () => {
+    expect(run(5_505)).toMatchObject([
+      { unitId: "F1", tMs: 5_505, auraAtMs: 17_501 },
+    ]);
+  });
+  it("…and a pulse that lands after the window answers nothing, wherever the drop was (R90)", () => {
+    const late = (summonedAt: number) =>
+      controlLandedResponses(
+        [aura],
+        new Set(["E1"]),
+        ownerOf,
+        [],
+        5_000,
+        15_000,
+        () => [],
+        (id) => (id === TOTEM ? summonedAt : null),
+      );
+    // dropped inside the window, the root 2.5 s past its end
+    expect(late(14_000)).toEqual([]);
   });
   it("a totem dropped inside the burst: the drop is the answer, at its own instant", () => {
     expect(run(14_000)).toMatchObject([{ unitId: "F1", tMs: 14_000 }]);

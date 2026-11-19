@@ -1356,7 +1356,23 @@ export function controlLandedResponses(
       // Totem dropped at 0:05.5 rooted the priest at 0:17.5, read "answered
       // with Earthgrab in 4.4s" for a burst opened at 0:13.1)
       const tMs = cast?.tMs ?? summonAtMs ?? a.timestamp;
-      if (tMs < w0 || tMs > w1) continue;
+      // user ruling R90 (2026-11-19, T184; it supersedes R88 and REVERSES
+      // fact11 D28's "a totem dropped before the burst answers nothing" —
+      // do not restore that): for a totem's or guardian's control the two
+      // questions have two instants. Whether it answers the window is
+      // decided by the control LANDING inside the span; the time printed is
+      // the press that made the totem (its summon, or the relocation that
+      // moved it), HOWEVER long before — the user chose this over a bound
+      // having seen "14.0s before it opened" (88d301a7 r1: an Earthgrab
+      // Totem dropped at 24.8 s, its eighth pulse on the warlock at 40.8 s,
+      // Summon Darkglare at 38.8 s). An Earthgrab Totem dropped 2.02 s
+      // before a Deathmark, 51 ms outside the span, whose root went on the
+      // rogue 14 ms before he pressed is an answer ("2.0s before it
+      // opened", 8f110f66 7:44); one dropped 4.8 s after a Bestial Wrath
+      // whose root reached the hunter at 8.8 s is none (28c39eb1 r2 0:06).
+      // Every other source keeps one instant for both.
+      const memberAtMs = summonAtMs !== null ? a.timestamp : tMs;
+      if (memberAtMs < w0 || memberAtMs > w1) continue;
       out.push({
         unitId,
         spellId: sid,
