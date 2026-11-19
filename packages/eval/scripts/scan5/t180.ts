@@ -1,83 +1,70 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- the legacy parse objects are untyped */
 /**
- * scan5/t180.ts — ticket T180 (user ruling A7, PREVIEW ONLY): the
- * slow-defensive-response candidate is withheld when the window was
- * `responded`, and `responded` counts any wall / external / healing cooldown
- * / control in `responseCasts` — also a press the `[BURST ANSWERED]` credit
- * line refuses because its effect did not reach the pressured unit
- * (`answersPressured`: an external on another unit, another unit's own
- * wall, a self-only heal, an aura that went on others, a press after the
- * unit's death, an effect over before the trough, a control that did not
- * land). Nothing is changed in the product; this counts what the stricter
- * reading would do, on healer owners (the candidate's own scope).
+ * scan5/t180.ts — ticket T180 (user rulings A7 / R65 / R68): a burst window
+ * is `responded` — and slow-defensive-response withheld — on a press that
+ * went elsewhere: an external aimed at another unit, a healing cooldown
+ * that healed others and not the pressured unit, a control that did not
+ * land (the producer's `pressWentElsewhere`, which the `[BURST ANSWERED]`
+ * credit line asks too). Healer owners, the candidate's own scope.
  *
- *  - `respondedOnlyByMissedPress`: a judged window (feasible, triaged, a
- *    pressured friendly, at least `BURST_WINDOW_MIN_JUDGED_S` long) that is
- *    `responded` today and would not be if only presses `answersPressured`
- *    accepts counted (kite / attacker-moved kept as they are). Kind = why
- *    the window's first response is refused. Counted: every judged window
- *    that is `responded` today.
- *  - `candidateRowAdded`: a slow-defensive-response row the candidate
- *    builder emits under the stricter reading and not today (same builder,
- *    same reference lookup, same cap). Counted: rows emitted today.
- *  - `candidateRowRemoved`: a row emitted today that the stricter reading
- *    drops (the cap of two taken by a more dangerous window). Out of the
- *    total; same count.
- *  - `rowNotInMenu`: a row this module's call of the builder emits today
- *    that the captured menu does not carry — the module's own soundness
- *    check. Counted: rows emitted today.
+ *  - `respondedOnElsewherePress`: a judged window (feasible, triaged, a
+ *    pressured friendly, at least `BURST_WINDOW_MIN_JUDGED_S` long) with
+ *    one response or more, no kite and no attacker-moved, every response
+ *    one `pressWentElsewhere` holds for — and the engine says `responded`.
+ *    Kind = the first response's reading. Counted: every judged window
+ *    with a response.
+ *  - `respondedOnRefusedPress` (an inventory, out of the total): the same
+ *    windows where every response is one the credit line
+ *    (`answersPressured`) refuses and at least one is NOT a went-elsewhere
+ *    reading — the classes the user left as they are (another unit's own
+ *    wall, a control off before the opener, an effect over before the
+ *    trough, a press after the unit's death). Kind = the first response's
+ *    refusal.
  */
-import { burstWindowDecisionPoints } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import {
-  BURST_WINDOW_MIN_JUDGED_S,
-  burstWindowResponseEvents,
-} from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+  burstWindowDecisionPoints,
+  pressWentElsewhere,
+} from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
+import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import { answersPressured } from "@gladlog/analysis/src/context/burstAnswered";
-import { lookupBurstWindowPrior } from "@gladlog/analysis/src/data/burstWindowPrior";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx, nameOf } from "./ctx";
 
 export const CHECKS = [
-  "respondedOnlyByMissedPress",
-  "candidateRowAdded",
-  "candidateRowRemoved",
-  "rowNotInMenu",
+  "respondedOnElsewherePress",
+  "respondedOnRefusedPress",
 ] as const;
 
-export const OUT_OF_TOTAL = ["candidateRowRemoved|displaced by the cap"];
+const REFUSALS = [
+  "another unit's own wall",
+  "control off before the opener",
+  "over before the trough",
+  "pressed after the unit died",
+  "other",
+];
+export const OUT_OF_TOTAL = REFUSALS.map((r) => `respondedOnRefusedPress|${r}`);
+
+function elsewhere(r: any): string {
+  return r.category === "external"
+    ? "external aimed at another unit"
+    : r.category === "control"
+      ? "control did not land"
+      : "healing CD that healed others";
+}
 
 function refusal(pr: any, r: any): string {
   if (r.afterPressuredDeath) return "pressed after the unit died";
-  if (r.category === "control")
-    return r.landed === false
-      ? "control did not land"
-      : "control off before the opener";
-  if (
-    r.category === "external" &&
-    r.destId !== undefined &&
-    !/^0+$/.test(r.destId) &&
-    r.destId !== pr.unitId
-  )
-    return "external aimed at another unit";
-  // the credit line's wall rule looks at the caster alone: a wall-category
-  // press AIMED AT the pressured unit by a teammate is refused too — split
-  // out, it is the reading the user has to see
+  if (r.category === "control") return "control off before the opener";
   if (r.category === "wall" && r.casterId !== pr.unitId)
-    return r.destId === pr.unitId
-      ? "wall-category press by a teammate AIMED AT the unit"
-      : "another unit's own wall";
-  if (r.effectOnUnitIds !== undefined && !r.effectOnUnitIds.includes(pr.unitId))
-    return `${r.category}: aura on others, not on the unit`;
-  if (r.category === "healCd" && r.casterId !== pr.unitId)
-    return "self-only heal of another unit";
+    return "another unit's own wall";
   if (
     r.effectEndSec !== undefined &&
     pr.minHpSec !== null &&
     r.effectEndSec < pr.minHpSec
   )
-    return `${r.category}: over before the trough`;
-  return `${r.category}: other`;
+    return "over before the trough";
+  return "other";
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -91,79 +78,37 @@ export function run(ctx: IRoundCtx): void {
   } catch {
     return;
   }
-  const bracket: string = ctx.legacy?.startInfo?.bracket ?? "";
-  const probes = {
-    lookup: (id: string) => lookupBurstWindowPrior(bracket, id),
-  };
-  const strictOf = (p: (typeof points)[number]): boolean =>
-    p.pressured === null
-      ? p.responded
-      : p.responses.kite ||
-        p.responses.attackerMoved ||
-        p.responseCasts.some((r) => answersPressured(p.pressured!, r));
   for (const p of points) {
+    const pr = p.pressured;
     if (
       !p.feasible ||
       !p.triaged ||
-      p.pressured === null ||
+      pr === null ||
       p.durationSec < BURST_WINDOW_MIN_JUDGED_S ||
-      !p.responded
+      p.responseCasts.length === 0
     )
       continue;
-    ctx.bump("respondedOnlyByMissedPress");
-    if (strictOf(p)) continue;
+    ctx.bump("respondedOnElsewherePress");
+    ctx.bump("respondedOnRefusedPress");
+    if (p.responses.kite || p.responses.attackerMoved) continue;
+    const at = ctx.start + p.tSec * 1000;
+    const fact = `${ctx.roundKey}|${owner.reaction}|${p.tSec}`;
     const first = p.responseCasts[0]!;
-    ctx.violate(
-      "respondedOnlyByMissedPress",
-      refusal(p.pressured, first),
-      ctx.start + p.tSec * 1000,
-      `${ctx.roundKey}|${owner.reaction}|${p.tSec}`,
-      `window at ${p.tSec}s (${nameOf(p.leadCd.spellId, (p.leadCd as any).spellName)}), ${p.responseCasts.length} response(s), first ${nameOf(first.spellId, (first as any).spellName)}; pressured low ${p.pressured.minHpPct ?? "?"}%${p.anyFriendlyDeath ? ", a friendly died" : ""}`,
-    );
-  }
-  const today = burstWindowResponseEvents(points, owner, probes);
-  const strict = burstWindowResponseEvents(
-    points.map((p) => ({ ...p, responded: strictOf(p) })),
-    owner,
-    probes,
-  );
-  const ids = (es: typeof today) => new Set(es.map((e) => e.id));
-  const a = ids(today);
-  const b = ids(strict);
-  ctx.bump("candidateRowAdded", today.length);
-  ctx.bump("candidateRowRemoved", today.length);
-  ctx.bump("rowNotInMenu", today.length);
-  const tOf = (id: string) => Number(id.split(":").pop());
-  const describe = (id: string): string => {
-    const p = points.find((x) => x.tSec === tOf(id));
-    if (!p || !p.pressured) return id;
-    return `window at ${p.tSec}s (${nameOf(p.leadCd.spellId, (p.leadCd as any).spellName)}): responses ${p.responseCasts.map((r) => `${nameOf(r.spellId, (r as any).spellName)} [${answersPressured(p.pressured!, r) ? "reaches" : refusal(p.pressured, r)}]`).join(", ") || "none"}; pressured low ${p.pressured.minHpPct ?? "?"}%${p.anyFriendlyDeath ? ", a friendly died" : ""}`;
-  };
-  for (const id of b)
-    if (!a.has(id))
-      ctx.violate(
-        "candidateRowAdded",
-        "added",
-        ctx.start + tOf(id) * 1000,
-        `${ctx.roundKey}|${id}`,
-        describe(id),
-      );
-  for (const id of a) {
-    if (!b.has(id))
-      ctx.violate(
-        "candidateRowRemoved",
-        "displaced by the cap",
-        ctx.start + tOf(id) * 1000,
-        `${ctx.roundKey}|${id}`,
-        describe(id),
-      );
-    if (!ctx.menu.includes(`id=${id}`))
-      ctx.violate(
-        "rowNotInMenu",
-        "missing",
-        ctx.start + tOf(id) * 1000,
-        `${ctx.roundKey}|${id}`,
-        id,
-      );
+    const detail = `window at ${p.tSec}s (${nameOf(p.leadCd.spellId, (p.leadCd as any).spellName)}): ${p.responseCasts.map((r) => `${nameOf(r.spellId, (r as any).spellName)} [${pressWentElsewhere(pr, r) ? elsewhere(r) : answersPressured(pr, r) ? "reaches" : refusal(pr, r)}]`).join(", ")}; pressured low ${pr.minHpPct ?? "?"}%${p.anyFriendlyDeath ? ", a friendly died" : ""}; engine responded=${p.responded}`;
+    if (p.responseCasts.every((r) => pressWentElsewhere(pr, r))) {
+      if (p.responded)
+        ctx.violate(
+          "respondedOnElsewherePress",
+          elsewhere(first),
+          at,
+          fact,
+          detail,
+        );
+      continue;
+    }
+    if (p.responseCasts.every((r) => !answersPressured(pr, r))) {
+      const r = p.responseCasts.find((x) => !pressWentElsewhere(pr, x))!;
+      ctx.violate("respondedOnRefusedPress", refusal(pr, r), at, fact, detail);
+    }
   }
 }

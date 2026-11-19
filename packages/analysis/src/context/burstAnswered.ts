@@ -39,22 +39,13 @@ import {
   type BurstResponseCast,
   type BurstWindowDecisionPoint,
   type ControlLandingAura,
+  pressWentElsewhere,
 } from "../analysis/burstWindowDecisionPoints";
-import { HEALING_VERDICTS } from "../data/healingVerdicts";
 import {
   type IPlayerCCTrinketSummary,
   renderedCcSpan,
 } from "../utils/ccTrinketAnalysis";
 import { fmtTime } from "../utils/renderGrid";
-
-/** A healing CD whose official effect heals only its caster (Divine
- *  Protection, Exhilaration, Desperate Prayer …). Keyed on the response
- *  CATEGORY `healCd` at the call site, not on this set alone: Guardian Spirit
- *  and Life Cocoon are also `healsOthers:false` but classify as `external`
- *  first (triage sync-burst F-B7). */
-function healsOnlyItsCaster(spellId: string): boolean {
-  return HEALING_VERDICTS[spellId]?.official.healsOthers === false;
-}
 
 export const BURST_ANSWERED_TAG = "[BURST ANSWERED]";
 
@@ -291,29 +282,19 @@ export function answersPressured(
   r: BurstResponseCast,
 ): boolean {
   if (r.afterPressuredDeath) return false;
-  // an external aimed at another unit went to the wrong unit; an
-  // untargeted / ground destination (Spirit Link, Barrier — the empty GUID
-  // "0000000000000000") is a group effect and may cover the pressured unit
-  // (codex review of batch 8) — whether it did is `effectOnUnitIds`' (T123)
-  if (
-    r.category === "external" &&
-    r.destId !== undefined &&
-    !/^0+$/.test(r.destId) &&
-    r.destId !== pr.unitId
-  )
-    return false;
+  // the three "went elsewhere" readings slow-defensive-response's
+  // `responded` asks too (T180, one predicate): an external aimed at
+  // another unit — an untargeted / ground destination (Spirit Link, Barrier:
+  // the empty GUID) is a group effect and may cover the pressured unit
+  // (codex review of batch 8), whether it did is `effectOnUnitIds`' (T123);
+  // a self-only heal CD of another unit (F-B7 — 06bb9860: Qqii's Dark Pact
+  // credited for Bumbiing's dip; 3df6ccf8: Shawts' Exhilaration for
+  // Invios's); a healing CD whose aura went on others; a control that did
+  // not land (F-B1 — 9c6ab747: an Imprison with no aura; 8c5b6ec5: a Hammer
+  // of Justice into an immunity; 9d899d10: a reflected Counterspell)
+  if (pressWentElsewhere(pr, r)) return false;
   if (
     r.category === "wall" &&
-    r.casterId !== undefined &&
-    r.casterId !== pr.unitId
-  )
-    return false;
-  // F-B7: a self-only heal CD answers only its caster's own pressure — the
-  // wall rule, carried to `healCd` (06bb9860: Qqii's Dark Pact credited for
-  // Bumbiing's dip; 3df6ccf8: Shawts' Exhilaration for Invios's).
-  if (
-    r.category === "healCd" &&
-    healsOnlyItsCaster(r.spellId) &&
     r.casterId !== undefined &&
     r.casterId !== pr.unitId
   )
@@ -340,10 +321,6 @@ export function answersPressured(
   // was still on the target when the lead cast went out (95127ab4: the
   // Paralysis was trinketed 0.5 s before the Zenith).
   if (r.category === "control" && r.preOpenerStillUp === false) return false;
-  // F-B1: an aimed control that did not land answered nothing (9c6ab747:
-  // an Imprison with no aura; 8c5b6ec5: a Hammer of Justice into an
-  // immunity; 9d899d10: a reflected Counterspell).
-  if (r.category === "control" && r.landed === false) return false;
   if (
     (r.category === "external" || r.category === "wall") &&
     r.effectEndSec !== undefined &&

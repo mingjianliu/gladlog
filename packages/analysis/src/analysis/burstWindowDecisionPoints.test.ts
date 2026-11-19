@@ -33,6 +33,7 @@ import {
   burstWindowDecisionPoints,
   controlLandedResponses,
   landedPreOpenerStillUp,
+  pressWentElsewhere,
 } from "./burstWindowDecisionPoints";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 
@@ -345,6 +346,52 @@ describe("burstWindowDecisionPoints — response classification", () => {
     );
     expect(selfRoar[0]!.responses.external).toBe(false);
     expect(selfRoar[0]!.responses.wall).toBe(true);
+  });
+
+  // T180 (rulings R65 / R68): a press that went elsewhere is no answer for
+  // the pressured unit
+  it("an external aimed at another teammate, or another unit's self-only heal, does not make the window responded; the wall of another unit still does", () => {
+    const third = friendly({
+      id: "F3",
+      name: "Third-R",
+      advancedActions: hpTrack("F3", 0, 40, 100),
+    });
+    const mate = (casts: any[]) =>
+      friendly({
+        id: "F2",
+        name: "Hunter-R",
+        advancedActions: hpTrack("F2", 0, 40, 100),
+        spellCastEvents: casts,
+      });
+    const run = (casts: any[]) =>
+      burstWindowDecisionPoints(
+        combat([pressuredFriend(), mate(casts), third, enemyWithBurst()]),
+      )[0]!;
+    // Roar of Sacrifice on the third player: an external, pressed, elsewhere
+    const roar = run([cast("53480", 14, "F3")]);
+    expect(roar.pressured!.unitId).toBe("F1");
+    expect(roar.responses.external).toBe(true);
+    expect(pressWentElsewhere(roar.pressured!, roar.responseCasts[0]!)).toBe(
+      true,
+    );
+    expect(roar.responded).toBe(false);
+    // the same Roar on the pressured player answers
+    expect(run([cast("53480", 14, "F1")]).responded).toBe(true);
+    // Exhilaration: a healing CD that officially heals its caster alone
+    const exh = run([cast("109304", 14)]);
+    expect(exh.responseCasts.map((r) => r.category)).toEqual(["healCd"]);
+    expect(pressWentElsewhere(exh.pressured!, exh.responseCasts[0]!)).toBe(
+      true,
+    );
+    expect(exh.responded).toBe(false);
+    // NOT taken by the ruling: another unit's own wall keeps the window
+    // responded (Bear Form is a wall here)
+    const wall = run([cast("5487", 14)]);
+    expect(wall.responseCasts.map((r) => r.category)).toEqual(["wall"]);
+    expect(pressWentElsewhere(wall.pressured!, wall.responseCasts[0]!)).toBe(
+      false,
+    );
+    expect(wall.responded).toBe(true);
   });
 
   it("a wall pressed just BEFORE the opener still counts (pre-wall allowance)", () => {
@@ -1200,6 +1247,30 @@ describe("burstWindowDecisionPoints — where a control answer landed (T12 ⑧ i
       6,
     );
     expect(cc.durationSeconds).toBeCloseTo(3.1, 6);
+  });
+
+  // T180 (ruling R68): 03d63165 r1 — a Storm Bolt that MISSED was the
+  // window's whole answer
+  it("a control that did not land does not make the window responded; the same control landing does", () => {
+    const enemy = (auras: unknown[]) =>
+      hostile({ spellCastEvents: [cast(AR, 10)], auraEvents: auras });
+    const f = () =>
+      pressuredFriend({ spellCastEvents: [cast(STORM_BOLT, 12, "E1")] });
+    const missed = burstWindowDecisionPoints(combat([f(), enemy([])]))[0]!;
+    expect(missed.responseCasts[0]!.landed).toBe(false);
+    expect(missed.responses.control).toBe(true);
+    expect(missed.responded).toBe(false);
+    const landed = burstWindowDecisionPoints(
+      combat([
+        f(),
+        enemy([
+          aura(LogEvent.SPELL_AURA_APPLIED, STORM_BOLT_STUN, 12.3, "F1", "E1"),
+          aura(LogEvent.SPELL_AURA_REMOVED, STORM_BOLT_STUN, 15.4, "F1", "E1"),
+        ]),
+      ]),
+    )[0]!;
+    expect(landed.responseCasts[0]!.landed).toBe(true);
+    expect(landed.responded).toBe(true);
   });
 
   it("an aimed control that did not land carries its target and no application", () => {

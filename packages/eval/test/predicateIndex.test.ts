@@ -4095,6 +4095,14 @@ const INDEX: PredicateRow[] = [
     symbol: "BURST_TROUGH_READ_SUFFIX_RE_SRC",
     mod: burstAnswered,
   },
+  // T180 (rulings R65 / R68): a response that went elsewhere — one
+  // predicate for slow-defensive-response's `responded` and the [BURST
+  // ANSWERED] credit line
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "pressWentElsewhere",
+    mod: burstWindowDecisionPoints,
+  },
   {
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,
     symbol: "GROUND_CONTROL_FUSE_MS",

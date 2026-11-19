@@ -855,6 +855,64 @@ export const BURST_EXTRA_ANSWER_IDS: ReadonlySet<string> = new Set([
   ...ENEMY_REDIRECT_SAVE_IDS,
 ]);
 
+/** A healing CD whose official effect heals only its caster (Divine
+ *  Protection, Exhilaration, Desperate Prayer …). Keyed on the response
+ *  CATEGORY `healCd` at the call site, not on this set alone: Guardian Spirit
+ *  and Life Cocoon are also `healsOthers:false` but classify as `external`
+ *  first (triage sync-burst F-B7). */
+function healsOnlyItsCaster(spellId: string): boolean {
+  return HEALING_VERDICTS[spellId]?.official.healsOthers === false;
+}
+
+/**
+ * T180 (user rulings A7 / R65 / R68, 2026-11-18): a response that WENT
+ * ELSEWHERE — the three readings the user took after six real examples
+ * (attempt T180-2), and no other:
+ *  - an external aimed at another unit (310e5c6d r5: the owner's Ironbark
+ *    on a warlock at 95 % while the hunter fell to 15 %);
+ *  - a healing cooldown that healed others and not the pressured unit: an
+ *    official self-only heal of another unit, or one whose per-recipient
+ *    aura / heal rows went on others (7686e97d r1: a warlock's own Dark
+ *    Pact under a mage at 9 %);
+ *  - a control that did not land (03d63165 r1: a Storm Bolt MISSED).
+ * Such a press is no answer for that unit: `responded` (the
+ * slow-defensive-response door) does not count it, and the `[BURST
+ * ANSWERED]` credit line (`answersPressured`) never credited it — both ask
+ * this one function. NOT here, by the same ruling: another unit's own wall
+ * (the pressured unit's own tools are not all in the response list — the
+ * "unanswered" would be that list's blind spot), a control off before the
+ * opener (a projectile in flight reads as off), and a press that reached
+ * the unit but ran out before its trough (R65: not enough is not slow).
+ * Those stay credit-line rules only.
+ */
+export function pressWentElsewhere(
+  pressured: { unitId: string },
+  r: BurstResponseCast,
+): boolean {
+  if (
+    r.category === "external" &&
+    r.destId !== undefined &&
+    !/^0+$/.test(r.destId) &&
+    r.destId !== pressured.unitId
+  )
+    return true;
+  if (r.category === "healCd") {
+    const anothers =
+      r.casterId !== undefined && r.casterId !== pressured.unitId;
+    if (
+      anothers &&
+      (healsOnlyItsCaster(r.spellId) || r.selfOnlyEffect === true)
+    )
+      return true;
+    if (
+      r.effectOnUnitIds !== undefined &&
+      !r.effectOnUnitIds.includes(pressured.unitId)
+    )
+      return true;
+  }
+  return r.category === "control" && r.landed === false;
+}
+
 const INTERRUPT_IDS = new Set<string>(
   Object.entries(spellMeta)
     .filter(([, m]) => m.type === "interrupts")
@@ -2114,13 +2172,15 @@ export function burstWindowDecisionPoints(
         kite,
         attackerMoved,
       };
+      // T180 (rulings R65 / R68): a press that went elsewhere is no answer
+      // for the pressured unit (`pressWentElsewhere`); `responses` above
+      // stays what was pressed
       const responded =
-        responses.wall ||
-        responses.external ||
-        responses.healCd ||
-        responses.control ||
         responses.kite ||
-        responses.attackerMoved;
+        responses.attackerMoved ||
+        responseCasts.some(
+          (r) => !pressured || !pressWentElsewhere(pressured, r),
+        );
       const firstResponseSec = responseCasts.length
         ? Math.min(...responseCasts.map((r) => r.latencySec))
         : null;
