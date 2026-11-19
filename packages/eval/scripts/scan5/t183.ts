@@ -25,7 +25,11 @@ import {
   burstTroughReadEnd,
   burstWindowDecisionPoints,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { gridHpPct, isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  gridHpPct,
+  isDeadAtRenderSecond,
+  isHealerSpec,
+} from "@gladlog/analysis/src/utils/cooldowns";
 
 import type { IRoundCtx } from "./ctx";
 
@@ -87,6 +91,9 @@ export function run(ctx: IRoundCtx): void {
     let low: number | null = null;
     let lowSec = 0;
     for (let s = p.outcomeEndSec + 1; s <= read.toSec; s++) {
+      // the death second's tick reads the corpse; the trough keeps that
+      // second's live samples (user ruling 2026-10-20)
+      if (isDeadAtRenderSecond(unit, ctx.start, s)) break;
       const hp = gridHpPct(unit, ctx.start + s * 1000);
       if (hp !== null && (low === null || hp < low)) {
         low = hp;
