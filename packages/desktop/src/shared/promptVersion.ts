@@ -1530,5 +1530,9 @@
  * v602 (2026-11-18; pipeline batch B130, T175): no prompt change; the
  *  healer-exposure cover scan reads the window's exact instant (GH #221).
  *  See docs/prompt-version-history.md.
+ *
+ * v603 (2026-11-18; pipeline batch B131, T148): a recorder's cast bar with
+ *  no end row ends when an on-GCD press goes out, and counts as a cancel.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 602;
+export const PROMPT_VERSION = 603;

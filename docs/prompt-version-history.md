@@ -7662,3 +7662,29 @@ independent check. The batch changes only a corpus scan, which the capture
 does not import, so on the 605 the prompts and menus are the parent's byte for
 byte. Codex branch review 85-tk-CC-T175-1: APPROVE (two synthetic points
 recorded).
+
+v603 (2026-11-18; pipeline batch B131, T148). Round 13 P11: a recorder's cast
+bar that logs no end row (no SUCCESS, SPELL_INTERRUPT or CAST_FAILED) is over
+by the time an on-GCD press goes out, since no on-GCD spell can be cast during
+a cast; it now counts as a cancel in the ledger behind kick-eaten yourCancels
+and baitedKicks. The premise on the 605's raw rows: of 46,046 casts that reach
+their own SUCCESS, 15 have another on-GCD SUCCESS inside (13 of them Evoker
+Stasis replays, excluded); 831 have an off-GCD one. A review fix keeps a kick
+juked 0.1 s after the press marked baited. The new check kickEatenCancelsShort
+reads the printed yourCancels against the raw rows. A batch-review fix
+(80-PIPE-145-B131) corrects that check's bar boundary: it had taken a stop-
+and-restart's "Interrupted" row as the end of the restarted bar and left that
+round's rows unchecked; with the row given to the bar it ended (the product's
+own attribution), all 14 changed rows are read: 14 / 14 one short -> 0 / 14 on
+those 4 archives. The round in question (180-4): Arcane Surge stopped by its
+owner at 216.42 and begun again in the same millisecond, a warrior's Pummel at
+216.48 with no SPELL_INTERRUPT, Blink at 217.86 showing the second bar over,
+so cancels 13 -> 14 and the printed 216.4 Pummel is baited (the kick audit
+already judged it juked). The log cannot show when that bar stopped; only the
+count and the kick's instant print. On the 605 (branch on e8047b053 vs base):
+0 contexts; 14 kick-eaten rows change yourCancels +1, 4 of them also
+baitedKicks 0 -> 1; candidate rows +0 / -0. On the 605 the assembled candidate
+changes no context and 5 menus: 14 kick-eaten rows count one more cancel of
+the recorder's (yourCancels +1), 4 of them also one more baited kick, and
+candidate rows stay the same. Codex branch review 85-tk-KICK-T148-1 (#1 real,
+fixed) and -1b (three synthetic points recorded).
