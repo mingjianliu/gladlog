@@ -7987,3 +7987,14 @@ the assembled candidate gives 5 failed silences (logged MISS) their [CC NOT
 LANDED] line in place of a plain press line: 14 lines across the views, in 14
 contexts, 11 of them with the cause parenthesis the tag already prints; no
 candidate row changes. Codex branch review 85-tk-CC-T176-1b (APPROVE).
+
+v623 (2026-11-19; pipeline batch B151, T210). Record items from GH #218. Three
+shared predicates get their predicate-index rows (pairInReachAt,
+occupancyIntervalsWithin, healNamesOf; en + zh-CN, pinned). The Holy Priest
+reach list named Power Word: Shield, which no Holy Priest on the 605 cast (0
+of 390), so the list carries Heal instead (7,106 casts by 383 of 390) on the
+same 40 yd range row. The Chi-Ji and Recklessness evidence notes now state the
+measured numbers (pricing unchanged); talent-coverage-gaps.md is regenerated
+(one stale row gone). On the 605 the output is byte-identical (capture of b150
+and of b152 both hash a28a916d6de2, 0 differing files; T210 and T211 touch
+disjoint files). Codex branch review 85-tk-EVAL-T210-1 (APPROVE).

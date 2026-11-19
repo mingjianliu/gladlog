@@ -1629,5 +1629,10 @@
  *  land with a logged MISS (or any failed type other than IMMUNE / REFLECT
  *  / RESIST) gets its [CC NOT LANDED] line instead of a plain [PRESS].
  *  See docs/prompt-version-history.md.
+ *
+ * v623 (2026-11-19; pipeline batch B151, T210): records from GH #218
+ *  (predicate-index rows, a Holy Priest reach id that is never cast,
+ *  evidence notes); prompts unchanged.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 622;
+export const PROMPT_VERSION = 623;
