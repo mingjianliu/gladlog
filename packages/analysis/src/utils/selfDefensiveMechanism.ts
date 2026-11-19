@@ -217,6 +217,27 @@ export function redirectSavesItsCaster(spellId: string): boolean {
 }
 
 /**
+ * Pipeline T182 (user ruling A6, 2026-11-17, extending R43): a grip /
+ * redirect save its caster cast on itself (or on no one) that does not save
+ * it (`redirectSavesItsCaster` — Master's Call's root / snare freedom) is
+ * no answer anywhere: not cd-hoarded's `spent` (`ownerRedirectSaves`), not a
+ * slow-defensive-response answer or a `[BURST ANSWERED]` credit
+ * (`BURST_EXTRA_ANSWER_IDS`), not a kill attempt's `popped X` (the
+ * `SELF_SAVE_IDS` reader `selfSaveCasts` feeds). One reading for the three.
+ * The press lines (`[YOU]` / `[TEAM]` / `[ENEMY DEF]`, "(removes roots /
+ * snares)") stay; the same press on an ALLY is untouched.
+ */
+export function selfCastRedirectIsNoSave(
+  spellId: string,
+  casterId: string,
+  destUnitId: string | null | undefined,
+): boolean {
+  if (!ENEMY_REDIRECT_SAVE_IDS.has(spellId) || redirectSavesItsCaster(spellId))
+    return false;
+  return !destUnitId || /^0+$/.test(destUnitId) || destUnitId === casterId;
+}
+
+/**
  * The words a mechanism's label opens with — the whole label for every kind
  * but two: an `absorb` goes on to what the shield absorbed and how long it
  * was up (`enemySaveEffectNote`), a `reduction` to how long its aura was.
