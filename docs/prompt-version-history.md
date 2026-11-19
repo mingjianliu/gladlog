@@ -7841,3 +7841,21 @@ so 44 spells light up there, the Spear among them, and 3 go dark (Archangel,
 Shadow Dance, Doom Winds' aura id); report-* visual baselines change with it.
 No analysis file changes in that fix. Codex branch review 85-tk-WIN-T154-1 and
 -1b: APPROVE.
+
+v611 (2026-11-18; pipeline batch B139, T205). Two old check residues no one
+owned are re-run and fixed in the checks themselves; one product file changes
+without changing output (kickPressure.ts exports the lock span it already
+computed, `kickPressureSpanMs`, and reads it itself; registered in the
+predicate index with a pin). listGap now reads the form re-shift and the
+control predicates, and keeps a friendly control press in its total:
+listGapPress 42,491 rows -> 192 rows / 84 facts on the 605. troughFactScan's
+kick trough reads the product's own lock span (`kickPressureSpanMs`: kick to
+the lock's text end, capped at the round end; fix after codex 80-PIPE-153-B139
+REQUEST_CHANGES, which caught a rebuilt window 36 ms too long): its four
+checks 109 -> 0, kickRowNoInstance 0 / 698. The wide-only residues wait for
+the wave-end wide run. The 605 capture is byte-identical. On the 605 the
+assembled candidate's output is byte-identical: one product file changes
+(kickPressure.ts exports the span it already computed and reads it itself),
+and the rest of the batch is check-only. Codex branch review 85-tk-EVAL-T205-1
+(two synthetic points, fixed) and -1b (one synthetic-only point, 0 rows on the
+605, recorded).

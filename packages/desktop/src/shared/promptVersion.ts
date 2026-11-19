@@ -1568,5 +1568,9 @@
  * v610 (2026-11-18; pipeline batch B138, T154): Champion's Spear (376079)
  *  is an offensive cooldown on both sides (ruling A8).
  *  See docs/prompt-version-history.md.
+ *
+ * v611 (2026-11-18; pipeline batch B139, T205): check-only (listGap and
+ *  troughFactScan residues re-read); prompts unchanged.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 610;
+export const PROMPT_VERSION = 611;
