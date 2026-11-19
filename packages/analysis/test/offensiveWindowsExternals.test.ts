@@ -237,8 +237,9 @@ describe("computeOffensiveWindows — an external received cuts the span (F-E2)"
       combat,
     )[0]!;
     // cast at 24.4 s; the aura is logged 0.8 s later and runs 12 s. The
-    // line reads `0:24 … Ironbark → … (12.0s)`; the span must end at 0:24
-    // and the next one start at 0:36, not 0:25 / 0:37.
+    // line reads `0:24 … Ironbark → … (12.0s)`; the span must end at 0:24,
+    // and the next one starts when the aura's REMOVED is logged (37.2 s,
+    // T163) — not at the printed sum 0:36, a second before it.
     const aura = (event: LogEvent, s: number) => ({
       ...makeAuraEvent(event, IRONBARK, at(s), "e2", "e1", "BUFF"),
       srcUnitName: "EnemyHealer",
@@ -273,17 +274,33 @@ describe("computeOffensiveWindows — an external received cuts the span (F-E2)"
     expect(cut[0]!.fromSeconds).toBe(fromSeconds);
     // the rendered second, 0:24, and 24 + the printed 12.0 s
     expect(cut[0]!.toSeconds).toBe(24);
-    expect(cut[1]!.fromSeconds).toBeCloseTo(36, 6);
+    expect(cut[1]!.fromSeconds).toBeCloseTo(37.2, 6);
     expect(cut[1]!.toSeconds).toBe(toSeconds);
   });
 
-  it("a fractional length crossing a second: the span restarts where the printed facts say (codex review: 0:24 … (11.2s) → 0:35, not 0:36)", () => {
+  it("a fractional length crossing a second: the span restarts at the aura's logged end, not before it (T163: 0:24 … (11.2s) is up to 36.1 s — 0:36, not 0:35)", () => {
+    const span = renderedExternalSpanS({
+      atSeconds: 24.9,
+      observedSeconds: 11.2,
+    })!;
+    expect(span.from).toBe(24);
+    expect(span.to).toBeCloseTo(36.1, 6);
+    // a start on the second: the printed sum and the logged end are one
     expect(
-      renderedExternalSpanS({ atSeconds: 24.9, observedSeconds: 11.2 }),
-    ).toEqual({
-      from: 24,
-      to: 35.2,
-    });
+      renderedExternalSpanS({ atSeconds: 24, observedSeconds: 11.2 }),
+    ).toEqual({ from: 24, to: 35.2 });
+    // a length that prints above what was observed: the printed sum stands
+    expect(
+      renderedExternalSpanS({ atSeconds: 24, observedSeconds: 11.16 })!.to,
+    ).toBeCloseTo(35.2, 6);
+    // the paired interval's own end, when the event carries it
+    expect(
+      renderedExternalSpanS({
+        atSeconds: 24.4,
+        observedSeconds: 12,
+        auraToS: 37.2,
+      })!.to,
+    ).toBe(37.2);
     expect(renderedObservedSeconds(11.249)).toBe(11.2);
     expect(renderedExternalSpanS({ atSeconds: 24.9 })).toBeUndefined();
   });
@@ -530,7 +547,7 @@ describe("computeOffensiveWindows — the target's own 20–99 % wall cuts the s
     expect(cut[0]!.toSeconds).toBe(38.9);
     expect(
       renderedExternalSpanS({ atSeconds: 38.9, observedSeconds: 8 }),
-    ).toEqual({ from: 38, to: 46 });
+    ).toEqual({ from: 38, to: 46.9 });
     expect(
       ownWallSpanS(
         { kind: "self", atSeconds: 38.9, observedSeconds: 8 },

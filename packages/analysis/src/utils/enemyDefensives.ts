@@ -1473,6 +1473,13 @@ export function renderedObservedSeconds(observedSeconds: number): number {
  * printed facts give 0:35). Undefined when the event has no paired aura, or
  * a length that rounds to 0.0 s (codex review, 2026-10-04).
  *
+ * Since pipeline T163 the end is the LATER of that printed sum and the
+ * aura's logged end (the paired interval's `auraToS`): the printed sum alone opened
+ * `defenseless` up to a second before the log shows the external gone (605:
+ * 373 owner views of 6,030 externals had a window opening before it, 21 of
+ * them printing an earlier second). A reader adding the line's two numbers
+ * gets an end at or before the span's start, never after it.
+ *
  * An external whose end the log never showed (`endNotLogged`: the line
  * prints `end not logged`, no length) keeps its span here, at the interval
  * builder's official-length cap. The one reader cuts `[KILL WINDOW]
@@ -1480,14 +1487,29 @@ export function renderedObservedSeconds(observedSeconds: number): number {
  * aura that may still be up for all the log says cannot be read as gone.
  */
 export function renderedExternalSpanS(
-  d: Pick<IEnemyDefensiveEvent, "atSeconds" | "observedSeconds">,
+  d: Pick<IEnemyDefensiveEvent, "atSeconds" | "observedSeconds"> &
+    Partial<Pick<IEnemyDefensiveEvent, "auraToS" | "pairedToS">>,
 ): { from: number; to: number } | undefined {
   if (d.observedSeconds === undefined) return undefined;
   // a length that prints as 0.0s protected nothing the reader can see
   const length = renderedObservedSeconds(d.observedSeconds);
   if (length <= 0) return undefined;
   const from = toRenderSecond(d.atSeconds);
-  return { from, to: from + length };
+  // …and never before the aura's logged end (pipeline T163, GH #173 item
+  // 46): floor(start) + length is short of it by the start's fraction, and
+  // by the press-to-aura lag when the line is anchored on the press
+  // (8888b780: `defenseless 1:36` while Time Dilation ran to 1:37.09), and
+  // "defenseless" says nothing was up. The later of the two: the page's
+  // own sum still never lies after the span's start. The paired interval's
+  // end (`pairedToS`, or the mitigation externals' `auraToS`) when the event
+  // carries it, else start + length.
+  return {
+    from,
+    to: Math.max(
+      from + length,
+      d.pairedToS ?? d.auraToS ?? d.atSeconds + d.observedSeconds,
+    ),
+  };
 }
 
 /**
@@ -1753,6 +1775,11 @@ export interface IEnemyDefensiveEvent {
    * `externalDamageForApplication`). Undefined when no interval was paired. */
   auraFromS?: number;
   auraToS?: number;
+  /** The paired interval's end of ANY external (the immunity externals
+   * carry no `auraFromS` / `auraToS`: those switch the during-it measurement
+   * on) — the end a `defenseless` cut never stops short of
+   * (`renderedExternalSpanS`, pipeline T163). */
+  pairedToS?: number;
   auraInferredStart?: boolean;
   auraInferredEnd?: boolean;
   /** the paired interval's closing row (`IAuraInterval.toRow`) */
@@ -3047,6 +3074,10 @@ export function enemyDefensiveEventsUncached(
           }
         : {}),
       observedSeconds: observed,
+      // where the paired aura ended, for every external — the immunity ones
+      // too, which carry no `auraToS` (`renderedExternalSpanS`; codex
+      // 85-tk-WIN-T163-1 #1: a Time Stop pressed 0.8 s before its aura)
+      ...(paired ? { pairedToS: paired.toS } : {}),
       // The during-it measurement is defined for mitigation externals; an
       // immunity put on an ally reports its duration only.
       ...(paired && immunityAuraId === undefined

@@ -943,7 +943,7 @@ function collectOwnerCCSpells(
   });
 }
 
-function isCCReadyAt(spell: IOwnerCCSpell, atSeconds: number): boolean {
+export function isCCReadyAt(spell: IOwnerCCSpell, atSeconds: number): boolean {
   if (spell.cooldownSeconds <= 0) return true; // spammable CC (no CD data) is always ready
   if (spell.model)
     return cdAvailableAt(
@@ -977,6 +977,27 @@ function isCCReadyAt(spell: IOwnerCCSpell, atSeconds: number): boolean {
   return (
     lastBefore === undefined || lastBefore + spell.cooldownSeconds <= atSeconds
   );
+}
+
+/** The owner's controls for a round as the window lines read them: the
+ * kit's (pressed or not) plus every control it pressed, each with the shared
+ * cooldown model when the combat carries its units. */
+export function ownerCcSpellsOf(
+  combat: { startTime: number; units?: Record<string, ICombatUnit> },
+  owner: ICombatUnit,
+): IOwnerCCSpell[] {
+  // the kit's controls, when the caller handed a combat with its units (the
+  // ledger needs one); a bare clock keeps the cast-history reading
+  const kitControls =
+    "units" in combat && combat.units
+      ? extractMajorCooldowns(owner, combat as never, {
+          withBaselineOnly: true,
+        }).filter((cd) => isOwnerCcCast(cd.spellId))
+      : [];
+  // the round for the shared cooldown model (codex 59-POSTHOC-11d #2: only
+  // the contested facts passed it — a Capacitor Totem Storm Conduit brought
+  // back read "on cooldown" here)
+  return collectOwnerCCSpells(owner, combat.startTime, kitControls, combat);
 }
 
 type CCWithDR = ReadonlyArray<{
@@ -1013,22 +1034,9 @@ export function computeWindowContributions(
     ...enemyHealerDrHistoryOnly,
   ];
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec)) ?? null;
-  // the kit's controls, when the caller handed a combat with its units (the
-  // ledger needs one); a bare clock keeps the cast-history reading
-  const kitControls =
-    "units" in combat && combat.units
-      ? extractMajorCooldowns(owner, combat as never, {
-          withBaselineOnly: true,
-        }).filter((cd) => isOwnerCcCast(cd.spellId))
-      : [];
-  // the round for the shared cooldown model (codex 59-POSTHOC-11d #2: only
-  // the contested facts passed it — a Capacitor Totem Storm Conduit brought
-  // back read "on cooldown" here)
-  const ccSpells = collectOwnerCCSpells(
+  const ccSpells = ownerCcSpellsOf(
+    combat as { startTime: number; units?: Record<string, ICombatUnit> },
     owner,
-    matchStartMs,
-    kitControls,
-    combat as { units?: Record<string, ICombatUnit> },
   );
   // the caster evidence for a CC cast with variants in different DR
   // families (Chastise: stun / incapacitate)
@@ -1050,8 +1058,13 @@ export function computeWindowContributions(
     unpunished: boolean,
   ): IWindowContribution => {
     const ownerDeadAtStart = matchStartMs + fromSeconds * 1000 >= ownerDeathMs;
+    // what the line calls ready is read at its printed first second, the
+    // DR word below too (assembly review 80-PIPE-186-B170; the foreman
+    // 2026-11-20: same fact, same line, the rendering grid)
     const ownerCCReady = ccSpells
-      .filter((s) => !ownerDeadAtStart && isCCReadyAt(s, fromSeconds))
+      .filter(
+        (s) => !ownerDeadAtStart && isCCReadyAt(s, Math.floor(fromSeconds)),
+      )
       .map((s) => ({
         spellName: s.spellName,
         // unknown DR family → no DR said (codex 35-CD-13b), never "Full"
@@ -1060,7 +1073,12 @@ export function computeWindowContributions(
             ? getDRLevelAtTime(
                 enemyHealerDrHistory,
                 drCategoryOfCast(s.spellId, ownerApplied),
-                fromSeconds,
+                // the line prints the window's first second: the DR it names
+                // is that second's, on the rendering grid (assembly review
+                // 80-PIPE-186-B170, 58cf367b r1: a start moved to 61.810 s
+                // read Full past a reset at 61.763 s under a printed `1:01`
+                // that was Immune)
+                Math.floor(fromSeconds),
                 matchStartMs,
               )
             : null,

@@ -2,7 +2,6 @@
 import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { auraOnlyActivations } from "../src/utils/auraOnlyActivations";
 import { saveSchoolMask } from "../src/analysis/candidates/cooldownTiming";
 import { CRISIS_PROC_ANSWERS } from "../src/analysis/crisisDecisionPoints";
 import { ABILITY_EFFECTS_GENERATED } from "../src/data/abilityEffectsGenerated";
@@ -23,6 +22,7 @@ import spellIdLists, {
 } from "../src/data/spellIdLists";
 import { immunitySchoolMask } from "../src/data/spellSchools";
 import talentEffectInventory from "../src/data/talentEffectInventoryGenerated.json";
+import { auraOnlyActivations } from "../src/utils/auraOnlyActivations";
 import { AURA_ONLY_ACTIVATION_IDS } from "../src/utils/cooldowns";
 import { EXTERNAL_DEFENSIVE_SPELLS } from "../src/utils/deathOutcomeAnalysis";
 import {
@@ -47,11 +47,12 @@ import {
   limitedImmunitySchoolMask,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
-  pressSecondsOfAura,
-  REMOVED_EARLY_SLACK_S,
-  RIDER_ABSORB_SAVE_AURAS,
   ownSaveSpanS,
   ownWallSpanS,
+  pressSecondsOfAura,
+  REMOVED_EARLY_SLACK_S,
+  renderedExternalSpanS,
+  RIDER_ABSORB_SAVE_AURAS,
   SAVE_AURA_END_UNSEEN_IDS,
   SAVE_AURA_END_UNSEEN_NAMES,
   saveAuraCountsWhenAlreadyUp,
@@ -740,6 +741,30 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Guardian of the Forgot
     expect(evs[0].auraFromS).toBeUndefined();
     // the ally itself did not press anything
     expect(enemyDefensiveEvents(ally, [evoker, ally], combat)).toEqual([]);
+  });
+
+  it("T163: an immunity external carries its paired aura's end, and the defenseless cut reaches it (press 24.4 s, aura 25.2–30.2 s)", () => {
+    const evoker = unit("e1", {
+      spellCastEvents: [cast(TIME_STOP, "e2", 24.4)],
+    });
+    const ally = unit("e2", {
+      auraEvents: [
+        applied(TIME_STOP, "e1", "e2", 25.2),
+        removed(TIME_STOP, "e1", "e2", 30.2),
+      ],
+    });
+    const [ev] = enemyDefensiveEvents(evoker, [evoker, ally], combat);
+    expect(ev!.pairedToS).toBeCloseTo(30.2, 5);
+    // still no during-it interval for an immunity
+    expect(ev!.auraToS).toBeUndefined();
+    expect(renderedExternalSpanS(ev!)!.to).toBeCloseTo(30.2, 5);
+    // control: without the paired end the cut is press + length, 0.8 s short
+    expect(
+      renderedExternalSpanS({
+        atSeconds: ev!.atSeconds,
+        observedSeconds: ev!.observedSeconds,
+      })!.to,
+    ).toBeCloseTo(29.4, 5);
   });
 
   it("Guardian of the Forgotten Queen: the paladin's cast is the external, timed by the guardian's 228050 on the ally", () => {

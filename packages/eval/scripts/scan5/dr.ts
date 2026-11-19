@@ -43,8 +43,12 @@
  *    (an enemy's logged aura / cast id of that name, else the DR table).
  *  - `peelBookmark`: `[PEEL OPTION]` / `[CC BOOKMARK]` `| at m:ss: …, DR L` — Q2
  *    on the target in that second (the owner's control, family by name).
- *  - `killWindow`: `[KILL WINDOW]` / `[VULNERABLE]` `Spell (enemy healer DR: L)`
- *    — Q2 on the enemy healer in the window's first second.
+ *  - `killWindow`: `[KILL WINDOW]` / `[VULNERABLE]` `Spell (enemy healer DR: L)`,
+ *    or the single-control `CC ready (enemy healer DR: L)` under the block's
+ *    `Your CC: Spell.` header — Q2 on the enemy healer at the window's
+ *    printed first second, the grid instant the producer samples (assembly
+ *    review 80-PIPE-186-B170: the second's either end was accepted, and the
+ *    single-control wording matched nothing).
  *  - `ccBroken`: `[CC BROKEN] … broke …'s Spell on P — Ns of CC wasted` — N
  *    against `ccFullDurationForApplication` (duration lookup: DB2 + caster
  *    talents + Oppressing Roar on the holder at the landing, read here from
@@ -475,7 +479,12 @@ export function run(ctx: IRoundCtx): void {
   const theirHealer = otherSide.find((p) => isHealerSpec(p.spec));
   const DR_TAG = /\[DR: ([^\]—]+?) (Full|50%|Immune)\]/;
 
+  // the block's `Your CC: Spell.` header names the single-control lines'
+  // `CC ready (enemy healer DR: L)`
+  let singleOwnerCc: string | undefined;
   for (const l of ctx.lines) {
+    const yc = /^\s*Your CC: (.+)\.$/.exec(l);
+    if (yc) singleOwnerCc = yc[1]!;
     const tm = /^(\d+):(\d\d)\s+(.*)$/.exec(l);
     const S = tm ? Number(tm[1]) * 60 + Number(tm[2]) : NaN;
     const body = tm?.[3] ?? "";
@@ -632,10 +641,16 @@ export function run(ctx: IRoundCtx): void {
     m = /\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–/.exec(l);
     if (m && theirHealer && l.includes("enemy healer DR:")) {
       const at = secOf(m[1]!);
-      for (const k of l.matchAll(
-        /(?:: |, )([^,;:()]+?) \(enemy healer DR: (Full|50%)\)/g,
-      )) {
-        const name = k[1]!.trim();
+      const named = [
+        ...l.matchAll(
+          /(?:: |, )([^,;:()]+?) \(enemy healer DR: (Full|50%|Immune)\)/g,
+        ),
+      ].map((k) => [k[1]!.trim(), k[2]!] as const);
+      const single = /; CC ready \(enemy healer DR: (Full|50%|Immune)\)/.exec(
+        l,
+      );
+      if (single && singleOwnerCc) named.push([singleOwnerCc, single[1]!]);
+      for (const [name, level] of named) {
         const cat = familyOf(name, [ctx.owner, ...petsOf(ctx.owner)]);
         if (!cat) {
           ctx.bump(C);
@@ -649,15 +664,7 @@ export function run(ctx: IRoundCtx): void {
           );
           continue;
         }
-        judgeQ2(
-          "killWindow",
-          theirHealer,
-          cat,
-          [secStart(at), secStart(at) + 999],
-          k[2]!,
-          l,
-          name,
-        );
+        judgeQ2("killWindow", theirHealer, cat, [secStart(at)], level, l, name);
       }
       continue;
     }

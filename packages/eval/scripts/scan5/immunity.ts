@@ -731,7 +731,10 @@ export function run(ctx: IRoundCtx): void {
         // `defenseless 1:46–2:05` opens on the page's end
         const shown = renderedSpanOf(r, target);
         const upFrom = shown?.from ?? r.from;
-        const upTo = shown?.to ?? r.to;
+        // …and never before the aura's logged end (pipeline T163: the
+        // product cuts at the later of the page's sum and the logged end,
+        // `renderedExternalSpanS`) — the page's earlier end excuses nothing
+        const upTo = Math.max(shown?.to ?? r.to, r.to);
         if (
           upFrom < hi &&
           upTo > lo &&
