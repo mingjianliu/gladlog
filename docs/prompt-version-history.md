@@ -7965,3 +7965,15 @@ the producer instead of their own numbers: scan5/t169 scores a line only where
 channelStopAtRemoval returns the kick, and breakFactScan's casterKickEnd skips
 a control ccLoggedEnd answers for (check code only). Codex branch review
 85-tk-CC-T169-1 (REQUEST_CHANGES) and -1b (APPROVE).
+
+v621 (2026-11-18; pipeline batch B149, T212). A pressed Metamorphosis with no
+logged end was cut short before casts that only exist inside the form. Its end
+now extends through Annihilation / Death Sweep (form-only, per the DB2 text)
+and an in-form Eye Beam, never past the next application or the round end:
+pressedMetaEndsBeforeFormCast 8 / 36 -> 0 / 36. Enemy Metamorphosis readiness,
+offensive windows and burst blocks end later accordingly; in one archive the
+longer burst now reaches a kill, adding one KILL ATTEMPTS line. On the 605 the
+assembled candidate extends unlogged pressed Metamorphosis through its form-
+only casts in 20 contexts (8 archives), adding one kill-attempt line (3
+views); no candidate row changes. Codex branch review 85-tk-CD-T212-1 (one
+real point, fixed) and -1b (APPROVE).

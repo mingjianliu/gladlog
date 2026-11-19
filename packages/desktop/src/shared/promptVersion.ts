@@ -1618,5 +1618,11 @@
  *  kick on its caster ~65 ms before the REMOVED says so; a trinket used
  *  after the control had already expired is not a break.
  *  See docs/prompt-version-history.md.
+ *
+ * v621 (2026-11-18; pipeline batch B149, T212): a pressed Metamorphosis
+ *  whose end the log does not record lasts through the form-only spells
+ *  cast after it (Annihilation / Death Sweep, in-form Eye Beam), bounded by
+ *  the next application or the round end.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 620;
+export const PROMPT_VERSION = 621;
