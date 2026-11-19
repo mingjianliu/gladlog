@@ -116,7 +116,8 @@ describe("T128 — a healer's up avoidance aura covers the controls it stops", (
     ] as never);
     expect(out.join("\n")).toContain("Hammer of Justice");
     expect(out.join("\n")).toContain("landed 1×");
-    // no threat for any other reason: no kit, as before
+    // no threat for any other reason: the landed controls print all the
+    // same since T179 (the header promises every control that landed)
     expect(
       formatEnemyCCKitHeader([], undefined, [
         {
@@ -125,7 +126,7 @@ describe("T128 — a healer's up avoidance aura covers the controls it stops", (
           spellName: "Hammer of Justice",
           count: 1,
         },
-      ]),
-    ).toEqual([]);
+      ]).join("\n"),
+    ).toContain("Hammer of Justice (landed 1×)");
   });
 });

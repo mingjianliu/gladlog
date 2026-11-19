@@ -267,8 +267,41 @@ describe("formatEnemyCCKitHeader — burst-window threats ∪ what landed", () =
     ]);
   });
 
-  it("whether the line prints is the burst windows' alone: no threat, no line — also when controls landed", () => {
-    expect(formatEnemyCCKitHeader([], "3(RDruid)", landed)).toEqual([]);
+  // T179 (GH #221 g1): the header promises every control that landed, so
+  // the line no longer needs a burst-window threat (605: 295 contexts with
+  // [CC ON TEAM] lines on the healer and no kit)
+  it("T179: no burst-window threat — the line prints what landed", () => {
+    const out = formatEnemyCCKitHeader([], "3(RDruid)", landed);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatch(
+      /^ENEMY CC KIT \(threats to your healer 3\(RDruid\) at enemy burst windows, plus every control that landed on them this round, marked `landed N×`\): Arms Warrior \(Bibisho-Stormrage-US\): Intimidating Shout \[Disorient\] \(landed 1×\), Shockwave \[Stun\] \(landed 1×\); /,
+    );
+    // the gate's reader takes it
+    expect(parseEnemyCcKitLine(out[0]!)?.statesLanded).toBe(true);
+  });
+  it("T179: no threat and only an aimed control — the line prints it", () => {
+    const out = formatEnemyCCKitHeader(
+      [],
+      undefined,
+      [],
+      [
+        {
+          enemyName: hunter.name,
+          enemySpec: "Beast Mastery Hunter",
+          spellName: "Freezing Trap",
+          category: "Incapacitate",
+          count: 2,
+        },
+      ],
+    );
+    expect(out).toEqual([
+      "ENEMY CC KIT (threats to you, plus every control that landed on you this round, marked `landed N×`): Beast Mastery Hunter (Mikehuntzz-Tichondrius-US): Freezing Trap [Incapacitate] (aimed at you 2×, never landed)",
+    ]);
+  });
+  it("T179: no threat, nothing landed, nothing aimed — no line", () => {
+    expect(formatEnemyCCKitHeader([], "3(RDruid)", [], [])).toEqual([]);
+    // without the landed list the line is the burst windows' alone
+    expect(formatEnemyCCKitHeader([], "3(RDruid)")).toEqual([]);
   });
 
   it("without the landed controls the line and its header are the burst-window list alone", () => {

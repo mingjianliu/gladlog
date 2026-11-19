@@ -793,8 +793,9 @@ const kitLandedClause = (who: "you" | "them") =>
  * on the unit this round: an entry that landed carries `(landed N×)` — also
  * when it was a burst-window threat — and a control or an enemy the windows
  * never listed is appended, in order of first landing. The burst-window
- * entries themselves, the `(spec default, not seen)` mark and WHETHER the
- * line prints (an exposure with a threat) are untouched, and so is every
+ * entries themselves and the `(spec default, not seen)` mark are untouched —
+ * the line prints when the union has an entry (T179: a threat, a landed or
+ * an aimed control; before, only with a threat) — and so is every
  * other reader of the threat table — `[HEALER EXPOSURE]`'s `IN LoS:` list
  * states what could reach the healer at that window, not what an enemy has
  * landed.
@@ -904,7 +905,14 @@ export function formatEnemyCCKitHeader(
     }
   }
 
-  if (enemyOrder.length === 0 && !exposures.coveredWindows) return [];
+  // T179 (GH #221 g1, #218 8.1): a line that promises "every control that
+  // landed" no longer hangs on a burst-window threat — given the landed
+  // list, a round with none still states what landed and what was aimed
+  // (605: 295 contexts had [CC ON TEAM] lines on the healer and no kit).
+  // Without the landed list the line is the burst-window list alone and
+  // needs a threat, or a window whose threats were all covered (T128).
+  if (enemyOrder.length === 0 && !exposures.coveredWindows && !landed)
+    return [];
 
   for (const l of landed ?? []) {
     let kit = kits.get(l.enemyName);
@@ -942,10 +950,7 @@ export function formatEnemyCCKitHeader(
       });
   }
 
-  // a round whose every burst-window threat was covered (T128: an up
-  // avoidance aura, `coveredWindows`) still states what landed and what was
-  // aimed (codex T128-1 P2); a round with no threat for any other reason
-  // keeps the kit off, as before
+  // nothing to list — no threat, nothing landed, nothing aimed: no line
   if (enemyOrder.length === 0) return [];
 
   const aimedAt = healerLabel ? "them" : "you";
