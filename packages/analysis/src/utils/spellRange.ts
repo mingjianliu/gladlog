@@ -136,7 +136,10 @@ export function spellRangeForCaster(
 export const HEALER_REACH_SPELLS: Readonly<Record<string, readonly string[]>> =
   {
     "256": ["2061", "17"], // Discipline: Flash Heal, Power Word: Shield
-    "257": ["2061", "17"], // Holy Priest
+    // Holy Priest: Flash Heal, Heal — no Power Word: Shield (0 of 390 Holy
+    // combatants on the 605 cast it, 383 cast Heal; GH #218 8.3). The two
+    // carry the same range and the same range talent, so the reach is the same.
+    "257": ["2061", "2050"],
     "105": ["8936", "774"], // Restoration Druid: Regrowth, Rejuvenation
     "264": ["8004", "61295"], // Restoration Shaman: Healing Surge, Riptide
     "65": ["19750", "20473"], // Holy Paladin: Flash of Light, Holy Shock

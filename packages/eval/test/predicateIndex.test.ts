@@ -1977,6 +1977,21 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "pairInReachAt",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "occupancyIntervalsWithin",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "healNamesOf",
+    mod: cannotCastIntervals,
+  },
+  {
     file: `${A}/utils/allyCopyWall.ts`,
     symbol: "allyCopyClause",
     mod: allyCopyWall,

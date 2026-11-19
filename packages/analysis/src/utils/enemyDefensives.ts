@@ -1981,8 +1981,10 @@ export function saveAuraIntervalsUncached(
     // the hit ends the immunity, not the aura: an end the log never showed
     // stays unshown (`inferredEnd`, ruling P-FU-b8 — a hit does not prove
     // the aura was up until it)
-    // and the closing row is the aura's, not this end's
-    const { toRow: _auraRow, ...cut } = out;
+    // and the closing row is the aura's, not this end's — nor is the cap's
+    // anchor: `toS − capFromS` is the official length only on the end the
+    // builder capped (T210, GH #218 2.11)
+    const { toRow: _auraRow, capFromS: _capAnchor, ...cut } = out;
     return {
       ...cut,
       toS: (hitMs - combat.startTime) / 1000,
@@ -2393,8 +2395,12 @@ export function enemyDefensiveEventsUncached(
   const roundEndS = (roundEndAt - combat.startTime) / 1000;
   /** The part of an aura interval inside the round — for what a shield
    * absorbed "while up" on a line whose length stops at the round's end. */
-  const inRound = <T extends { toS: number }>(iv: T): T =>
-    iv.toS > roundEndS ? { ...iv, toS: roundEndS } : iv;
+  const inRound = <T extends { toS: number; capFromS?: number }>(iv: T): T => {
+    if (!(iv.toS > roundEndS)) return iv;
+    // a moved end is no longer the cap's: its anchor goes with it (T210)
+    const { capFromS: _capAnchor, ...rest } = iv;
+    return { ...rest, toS: roundEndS } as T;
+  };
   const intervalsByUnit = new Map<string, ISaveAuraInterval[]>();
   const intervalsOf = (u: ICombatUnit) => {
     let iv = intervalsByUnit.get(u.id);
