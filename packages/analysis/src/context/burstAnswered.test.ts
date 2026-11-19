@@ -844,6 +844,10 @@ describe("[BURST ANSWERED] — the bottom is the window's true minimum, at the s
       "bottomed at 30% at 0:20 (read to 0:25, the end of Adrenaline Rush)",
     );
     expect(dipped.lines[0]!.line).toContain("bottomed at 8% at 0:15");
+    // …and a low INSIDE the window keeps its line as it was: no suffix,
+    // although the reading ran on past the horizon (R73 as narrowed)
+    expect(dipped.lines[0]!.line).not.toContain("(read to");
+    expect(dipped.pts[0]!.pressured!.troughReadToSec).toBeUndefined();
 
     const a = base.pts[0]!.pressured!;
     const b = dipped.pts[0]!.pressured!;

@@ -17,9 +17,10 @@
  *    second of that span after the horizon. Counted: every judged window
  *    with a trough.
  *  - `troughReadPastCut` (an inventory, out of the total): the judged
- *    windows whose span runs past the horizon at all — the lines / rows
- *    that carry the `(read to m:ss…)` suffix / `pressuredReadToT`. Kind =
- *    answered or not, and what stops the reading.
+ *    windows whose span runs past the horizon at all. Kind = answered or
+ *    not, what stops the reading, and whether the low the producer prints
+ *    lies past the horizon (`troughReadToSec` set — the lines / rows that
+ *    carry the `(read to m:ss…)` suffix / `pressuredReadToT`).
  */
 import {
   burstTroughReadEnd,
@@ -39,8 +40,9 @@ export const CHECKS = [
 ] as const;
 
 const STOPS = ["buff end", "cap", "next window", "death", "round end"];
+const LOWS = ["low past the horizon", "low inside"];
 export const OUT_OF_TOTAL = ["answered", "not answered"].flatMap((a) =>
-  STOPS.map((s) => `troughReadPastCut|${a} | ${s}`),
+  STOPS.flatMap((s) => LOWS.map((l) => `troughReadPastCut|${a} | ${s} | ${l}`)),
 );
 
 export function run(ctx: IRoundCtx): void {
@@ -83,7 +85,7 @@ export function run(ctx: IRoundCtx): void {
     const printed = pr.troughHpPct ?? pr.minHpPct;
     ctx.violate(
       "troughReadPastCut",
-      `${p.responded ? "answered" : "not answered"} | ${read.stop}`,
+      `${p.responded ? "answered" : "not answered"} | ${read.stop} | ${pr.troughReadToSec !== undefined ? LOWS[0] : LOWS[1]}`,
       at,
       `${fact}|span`,
       `window at ${p.tSec}s (${p.leadCd.spellName}), horizon ${p.outcomeEndSec}s, read to ${read.toSec}s (${read.stop}; ${p.buffRunEndSpellName} runs to ${p.buffRunEndSec}s): trough ${printed}% at ${pr.troughHpSec ?? pr.minHpSec}s`,

@@ -137,8 +137,9 @@ export const BURST_ANSWERED_READ_TO_LEGEND =
  * `burstTroughReadEnd`, left on the pressured unit as `troughReadToSec` /
  * `troughReadStop`): ` (read to m:ss, the end of <buff>)` when the buff's
  * end stopped the reading, ` (read to m:ss)` for every other stop. Printed
- * whenever the reading ran past the end, whether or not the number moved:
- * it is what lets the gate check every `[STATE]` tick up to that second.
+ * only when the low the line prints lies past that end (the ruling as the
+ * user narrowed it: 472 of 1,559 windows read past it, the low moved in
+ * 25); the gate then checks every `[STATE]` tick up to the read-to second.
  * The writer and its pattern (`BURST_TROUGH_READ_SUFFIX_RE_SRC`) live
  * together; `parseBurstAnsweredLine` and the gate read the pattern.
  */

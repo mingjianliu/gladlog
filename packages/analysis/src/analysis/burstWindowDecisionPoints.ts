@@ -645,10 +645,10 @@ export interface BurstFriendlyOutcome {
    */
   troughHpPct?: number | null;
   troughHpSec?: number | null;
-  /** T183 (ruling R73): set on the PRESSURED unit when its trough was read
-   * past the window's outcome horizon (`burstTroughReadEnd`) — the last
-   * second read, and what stopped the reading there. Absent when the
-   * reading stayed inside the horizon. */
+  /** T183 (ruling R73): set on the PRESSURED unit when the trough it prints
+   * was found past the window's outcome horizon (`burstTroughReadEnd`) —
+   * the last second read, and what stopped the reading there. Absent when
+   * the low lies inside the horizon. */
   troughReadToSec?: number;
   troughReadStop?: BurstTroughReadStop;
   /**
@@ -2353,8 +2353,9 @@ export function burstWindowDecisionPoints(
       secondsPastRoundEnd(start, roundEndAtMs),
       roundClippedTroughSpan(start, p.tSec, read.toSec, roundEndAtMs),
     );
-    pr.troughReadToSec = read.toSec;
-    pr.troughReadStop = read.stop;
+    // R73 as narrowed by the user (2026-11-19): the line says where it was
+    // read to only when the low it prints lies past the horizon — a low
+    // inside the window keeps its reading and its line as they were
     if (
       trough &&
       (pr.troughHpPct === null ||
@@ -2363,6 +2364,8 @@ export function burstWindowDecisionPoints(
     ) {
       pr.troughHpPct = trough.pct;
       pr.troughHpSec = trough.atSec;
+      pr.troughReadToSec = read.toSec;
+      pr.troughReadStop = read.stop;
     }
   });
   return out;

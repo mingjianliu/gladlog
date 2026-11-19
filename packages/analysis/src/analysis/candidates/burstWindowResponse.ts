@@ -269,8 +269,8 @@ export function burstWindowResponseEvents(
         ),
         // WO3 #18 (r1008-141): where the window the trough and the death
         // read ends — the burst's own span, not the 8 s answer window
-        // T183 (ruling R73): the trough was read past the window's end, to
-        // this second (`burstTroughReadEnd`) — present only then
+        // T183 (ruling R73): the trough lies past the window's end; it was
+        // read to this second (`burstTroughReadEnd`) — present only then
         ...(p.pressured!.troughReadToSec !== undefined
           ? { pressuredReadToT: fmtFactTime(p.pressured!.troughReadToSec) }
           : {}),
