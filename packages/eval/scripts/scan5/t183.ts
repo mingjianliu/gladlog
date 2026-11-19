@@ -25,6 +25,9 @@ import {
 
 import type { IRoundCtx } from "./ctx";
 
+/** candidate caps (seconds past the horizon) the ruling is choosing between */
+const CAPS = [5, 10, 15];
+
 export const CHECKS = ["troughStopsBeforeBuffEnd"] as const;
 
 export function run(ctx: IRoundCtx): void {
@@ -48,14 +51,32 @@ export function run(ctx: IRoundCtx): void {
     if (!unit) continue;
     let low: number | null = null;
     let lowSec = 0;
+    // the next window of the round ends the reading too
+    const nextT = Math.min(
+      Infinity,
+      ...points.filter((q) => q.tSec > p.tSec).map((q) => q.tSec),
+    );
+    const capped = CAPS.map(() => ({ low: null as number | null, sec: 0 }));
     for (let s = p.outcomeEndSec + 1; s <= p.buffRunEndSec; s++) {
       if (ctx.start + s * 1000 > ctx.roundEndAt) break;
       if (isDeadAtRenderSecond(unit, ctx.start, s)) break;
       const hp = gridHpPct(unit, ctx.start + s * 1000);
-      if (hp !== null && (low === null || hp < low)) {
+      if (hp === null) continue;
+      if (low === null || hp < low) {
         low = hp;
         lowSec = s;
       }
+      CAPS.forEach((n, i) => {
+        const c = capped[i]!;
+        if (
+          s < nextT &&
+          s <= p.outcomeEndSec + n &&
+          (c.low === null || hp < c.low)
+        ) {
+          c.low = hp;
+          c.sec = s;
+        }
+      });
     }
     // the number the line prints: the true minimum (`troughHpPct`), which
     // can sit below the grid's — a later tick must be below THAT
@@ -68,7 +89,7 @@ export function run(ctx: IRoundCtx): void {
       `${p.responded ? "answered" : "not answered"} | ${later ? "a later window opens before the lower reading" : "no later window"}`,
       ctx.start + p.tSec * 1000,
       `${ctx.roundKey}|${owner.reaction}|${p.tSec}`,
-      `window at ${p.tSec}s (${p.leadCd.spellName}), horizon to ${p.outcomeEndSec}s, buff runs to ${p.buffRunEndSec}s: trough ${printed}% at ${printedSec}s, grid ${low}% at ${lowSec}s (${printed - low} lower)`,
+      `window at ${p.tSec}s (${p.leadCd.spellName}), horizon to ${p.outcomeEndSec}s, buff runs to ${p.buffRunEndSec}s: trough ${printed}% at ${printedSec}s, grid ${low}% at ${lowSec}s (${printed - low} lower); ${CAPS.map((n, i) => `cap${n}=${capped[i]!.low !== null && capped[i]!.low! < printed ? `${capped[i]!.low}%@${capped[i]!.sec}s` : "-"}`).join(" ")}; next window ${Number.isFinite(nextT) ? `${nextT}s` : "none"}`,
     );
   }
 }
