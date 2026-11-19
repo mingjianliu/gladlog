@@ -1876,6 +1876,22 @@ describe("controlLandedResponses — a totem's own pulse (fact11 D28)", () => {
   it("a totem whose summon is known is timed by its drop, never by another untargeted press in the fuse", () => {
     expect(withOtherPress(99_199)).toMatchObject([{ tMs: 99_199 }]);
   });
+  // codex 85-tk-CD-T184-1 #1, and 6 windows of the 605: a Totemic
+  // Projection that moves the totem onto the caster is the press that
+  // answered, whenever the totem was dropped
+  it("a relocation press inside the fuse times it, the totem's old drop does not", () => {
+    const r = controlLandedResponses(
+      [aura],
+      new Set(["E1"]),
+      ownerOf,
+      [{ unitId: "F1", spellId: "108287", dest: undefined, tMs: 16_000 }],
+      13_100,
+      28_100,
+      () => [],
+      (id) => (id === TOTEM ? 5_505 : null),
+    );
+    expect(r).toMatchObject([{ unitId: "F1", tMs: 16_000 }]);
+  });
   it("no summon row: the untargeted press in the fuse still times it", () => {
     expect(withOtherPress(null)).toMatchObject([{ tMs: 101_639 }]);
   });

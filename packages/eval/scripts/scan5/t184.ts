@@ -15,10 +15,14 @@
  *    unit of the answering player, and whose instant is none of: the
  *    summon's own SPELL_SUMMON second, the aura's second, the second of a
  *    cast of the owner that makes the aura (same id, cast→effect, or the
- *    same name). Kind = the aura | the owner's press at that second.
+ *    same name) or moves the totem (`TOTEM_RELOCATION_IDS`). A source with
+ *    no summon row is not judged. Kind = the aura | the owner's press at that second.
  *    Counted: every such summon-landed control response.
  */
-import { burstWindowDecisionPoints } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
+import {
+  burstWindowDecisionPoints,
+  TOTEM_RELOCATION_IDS,
+} from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { isCastOrEffect } from "@gladlog/analysis/src/data/castEffectAuras";
 import { summonedAtMs } from "@gladlog/analysis/src/utils/summonLife";
 
@@ -62,6 +66,9 @@ export function run(ctx: IRoundCtx): void {
       ctx.bump(C);
       const auraName = nameOf(landing.spellId);
       const summoned = summonedAtMs(src);
+      // no summon row: the producer keeps its untargeted-press fallback by
+      // design — nothing to hold it to (codex 85-tk-CD-T184-1 #2)
+      if (summoned === null) continue;
       const makes = (id: string): boolean =>
         id === landing.spellId ||
         isCastOrEffect(id, landing.spellId) ||
@@ -71,7 +78,10 @@ export function run(ctx: IRoundCtx): void {
         r.tSec === sec(landing.atMs) ||
         (summoned !== null && r.tSec === sec(summoned)) ||
         casts.some(
-          (c: any) => makes(String(c.spellId)) && sec(tsOf(c)) === r.tSec,
+          (c: any) =>
+            (makes(String(c.spellId)) ||
+              TOTEM_RELOCATION_IDS.has(String(c.spellId))) &&
+            sec(tsOf(c)) === r.tSec,
         )
       )
         continue;

@@ -1119,6 +1119,15 @@ const CONTROL_IDS = new Set<string>([
  */
 export const GROUND_CONTROL_FUSE_MS = 3000;
 
+/**
+ * Presses that MOVE a totem already on the ground — a relocation that puts
+ * a pulsing control totem on the burst's caster is the press that answered
+ * (T184: 6 windows of the 605 are timed by it), where the totem's own drop
+ * may be long before the window. Totemic Projection 108287. Registered in
+ * curatedIdRegistry.
+ */
+export const TOTEM_RELOCATION_IDS: ReadonlySet<string> = new Set(["108287"]);
+
 const isNoDest = (dest: string | undefined): boolean =>
   !dest || /^0+$/.test(dest);
 
@@ -1300,12 +1309,24 @@ export function controlLandedResponses(
       // death knight on its third pulse, at 6.7 s; a Crash Lightning 5.1 s
       // in was read as the answer's time). With the summon known, no other
       // untargeted press times it.
-      const made = family ?? petOwn ?? aimedControl;
+      // A totem or guardian whose summon row the log holds: only a press
+      // that makes the aura, or one that moves the totem, can time its
+      // control — never another aimed control (one round of the 605: an
+      // Earthgrab Totem dropped at 0:02 rooted at 0:18 and was timed by a
+      // Hex at 0:15, for a burst opened at 0:13), never another untargeted
+      // press.
       const summonAtMs =
-        !made && a.srcUnitId !== unitId && !fromPet
+        a.srcUnitId !== unitId && !fromPet && !family && !petOwn
           ? summonedAtOf(a.srcUnitId)
           : null;
-      const cast = made ?? (summonAtMs === null ? untargeted : undefined);
+      const relocation =
+        untargeted && TOTEM_RELOCATION_IDS.has(untargeted.spellId)
+          ? untargeted
+          : undefined;
+      const cast =
+        family ??
+        petOwn ??
+        (summonAtMs === null ? (aimedControl ?? untargeted) : relocation);
       // the cast-side test already counted an aimed control from this
       // friendly that could be this aura's cause — one that produces THIS
       // aura and was aimed at THIS aura's holder, the only case where the

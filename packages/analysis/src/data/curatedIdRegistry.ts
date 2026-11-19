@@ -22,6 +22,7 @@ import {
   SELF_SAVE_ANSWER_IDS,
   BURST_LEAD_CD_EXCLUDED_IDS,
   TEAM_HEAL_WALL_ANSWER_IDS,
+  TOTEM_RELOCATION_IDS,
 } from "../analysis/burstWindowDecisionPoints";
 import { CD_WASTE_EXCLUDED_IDS } from "../analysis/candidateFindings";
 import { HEALER_TEAM_BURST_IDS } from "../analysis/candidates/cooldownTiming";
@@ -1119,6 +1120,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "analysis/burstWindowDecisionPoints.ts",
     "cast",
     () => set(BURST_LEAD_CD_EXCLUDED_IDS),
+  ),
+  t(
+    "TOTEM_RELOCATION_IDS",
+    "analysis/burstWindowDecisionPoints.ts",
+    "cast",
+    () => set(TOTEM_RELOCATION_IDS),
   ),
   t(
     "HEALER_TEAM_BURST_IDS",
