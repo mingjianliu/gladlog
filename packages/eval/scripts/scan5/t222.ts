@@ -20,16 +20,24 @@
  *    slow-defensive-response row can go; unanswered and creditable: a
  *    `[BURST ANSWERED]` line can appear; answered: the line may name
  *    another answer). Counted: every window with a pressured friendly.
+ *  - `castlessPressCredited` (inventory): a creditable window (the credit
+ *    line's own doors, before its 2-per-round cap) whose credited answer
+ *    (`creditedAnswer`) is a castless press. None while the engine does not
+ *    read them; with it, the `[BURST ANSWERED]` lines that would name Feign
+ *    Death / Renewing Blaze. Kind = the spell | the only press / beside
+ *    other presses.
  *  - `castlessPressLogging` (inventory, once per round): for each id, the
  *    presses with a cast row and those the ledger reads from the aura
  *    alone — the forward check of "its press logs no cast row".
  */
 import {
   BURST_EXTRA_ANSWER_IDS,
+  BURST_RESPONSE_PRE_MS,
   BURST_RESPONSE_WINDOW_SEC,
   burstWindowDecisionPoints,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+import { creditedAnswer } from "@gladlog/analysis/src/context/burstAnswered";
 import { AURA_ONLY_ACTIVATION_IDS } from "@gladlog/analysis/src/data/auraActivation";
 import spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import {
@@ -40,7 +48,11 @@ import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import { type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
-export const CHECKS = ["castlessPressNotRead", "castlessPressLogging"] as const;
+export const CHECKS = [
+  "castlessPressNotRead",
+  "castlessPressLogging",
+  "castlessPressCredited",
+] as const;
 
 const WALLS = new Set<string>(spellIdLists.bigDefensiveSpellIds.map(String));
 /** the aura-only table's ids that are a self-targeted answer */
@@ -109,13 +121,38 @@ export function run(ctx: IRoundCtx): void {
     for (const id of IDS)
       for (const s of auraOnlyActivationSeconds(u, id, ctx.start, endMs))
         presses.push({ u, id, s });
+  for (const p of points) {
+    const pr = p.pressured;
+    if (!pr || !p.feasible || !p.responded) continue;
+    if (pr.minHpPct === null || pr.minHpPct > CREDIT_MAX_HP_PCT) continue;
+    const first = creditedAnswer(p);
+    if (!first || !IDS.includes(first.spellId)) continue;
+    if (
+      successesOf(
+        ctx.units.find((u: any) => u.id === first.casterId) ?? {},
+      ).some((c: any) => String(c.spellId) === first.spellId)
+    )
+      continue;
+    const others = p.responseCasts.filter((r) => r !== first);
+    ctx.violate(
+      "castlessPressCredited",
+      `${nameOf(first.spellId)} | ${others.length ? "beside other presses" : "the only press"}`,
+      ctx.start + p.tSec * 1000,
+      `${ctx.roundKey}|${owner.reaction}|${p.tSec}`,
+      `window at ${p.tSec}s (${p.leadCd?.spellName ?? "?"}): ${first.casterName} ${first.spellName} ${first.latencySec}s${others.length ? `; next press ${others[0]!.spellName} ${others[0]!.latencySec}s` : ""}; low ${pr.minHpPct}%`,
+    );
+  }
   const C = "castlessPressNotRead";
   const healer = isHealerSpec(owner.spec);
   for (const p of points) {
     if (p.pressured === null) continue;
     ctx.bump(C);
     for (const x of presses) {
-      if (x.s < p.tSec || x.s > p.tSec + 1 + BURST_RESPONSE_WINDOW_SEC)
+      // the engine's own span: [tSec − BURST_RESPONSE_PRE_MS, tSec + 8 s]
+      if (
+        x.s < p.tSec - BURST_RESPONSE_PRE_MS / 1000 ||
+        x.s > p.tSec + BURST_RESPONSE_WINDOW_SEC
+      )
         continue;
       if (
         p.responseCasts.some((r) => r.spellId === x.id && r.casterId === x.u.id)
