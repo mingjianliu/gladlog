@@ -2928,6 +2928,30 @@ describe("checkBurstAnsweredControlSpan — a credited control's length is its [
     expect(bad[0]).toContain("(2s)");
     expect(bad[0]).toContain("(5s)");
   });
+  // user ruling R90 (T184): a totem's control prints the totem's drop,
+  // however early; its landing is inside the window's span
+  it("an answer printed before the span is joined to the landing inside the span, not to an earlier application beside the drop (codex 85-tk-CD-T184-2 #2)", () => {
+    const early = rendered(2.1, { latencySec: -8 });
+    expect(early).toContain("(2s) 8.0s before it opened");
+    // the earlier application at the drop (0:37, 5 s) is not this one
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        landing("0:37", " (5s)"),
+        early,
+        landing("0:46", " (2s)"),
+      ]),
+    ).toEqual([]);
+    // and the one in the span is held to the printed length
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        landing("0:37", " (2s)"),
+        early,
+        landing("0:46", " (5s)"),
+      ]),
+    ).toHaveLength(1);
+  });
   it("reads the other forms the span takes: <1s, the round ending on it, a Tremor break", () => {
     expect(
       checkBurstAnsweredControlSpan([

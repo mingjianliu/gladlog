@@ -77,28 +77,44 @@ function printedLines(
         (unit !== undefined && !ownCastNames.has(a.spellName)));
     if (!printedIsSummon && !(credited && isLanded(credited))) continue;
     ctx.bump(C);
+    // every caster the credited press landed on. The renderer prints the
+    // ones that answer the pressured unit (`controlTargetClause`, a
+    // predicate this branch does not export), so the printed targets are
+    // held to be a non-empty SUBSET of these, each by identity
+    const engineTargets = new Set<string>(
+      p && credited
+        ? p.responseCasts
+            .filter(
+              (r) =>
+                r.controlOn &&
+                r.casterName === credited.casterName &&
+                r.spellName === credited.spellName &&
+                r.latencySec === credited.latencySec,
+            )
+            .map((r) => r.controlOn!.unitId)
+        : [],
+    );
+    const printedTargets = a.controlOn.map(
+      (t) =>
+        ctx.unitOfPid(/^(\d+)/.exec(t.target)?.[1])?.id as string | undefined,
+    );
     const kind = !p
       ? "the engine has no window at that second"
       : !credited
         ? "the engine credits no answer in that window"
         : credited.spellName !== a.spellName
           ? "the engine credits another answer"
-          : Math.abs(credited.latencySec - a.latencySec) > 0.05
-            ? "the time differs"
-            : a.controlOn.length !==
-                new Set(
-                  p.responseCasts
-                    .filter(
-                      (r) =>
-                        r.controlOn &&
-                        r.casterName === credited.casterName &&
-                        r.spellName === credited.spellName &&
-                        r.latencySec === credited.latencySec,
-                    )
-                    .map((r) => r.controlOn!.unitId),
-                ).size
-              ? "the targets differ"
-              : null;
+          : unit !== undefined && unit.name !== credited.casterName
+            ? "the answerer differs"
+            : Math.abs(credited.latencySec - a.latencySec) > 0.05
+              ? "the time differs"
+              : printedTargets.length === 0 ||
+                  printedTargets.length > engineTargets.size ||
+                  printedTargets.some(
+                    (id) => id !== undefined && !engineTargets.has(id),
+                  )
+                ? "the targets differ"
+                : null;
     if (kind === null) continue;
     ctx.violate(
       C,

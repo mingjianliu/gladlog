@@ -42,6 +42,8 @@ import {
 } from "@gladlog/analysis";
 import {
   AIMED_CONTROL_LANDING_LEAD_MS,
+  BURST_RESPONSE_PRE_MS,
+  BURST_RESPONSE_WINDOW_SEC,
   GROUND_CONTROL_FUSE_MS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import {
@@ -8347,12 +8349,23 @@ export function checkBurstAnsweredControlSpan(lines: string[]): string[] {
     const a = parseBurstAnsweredLine(line);
     if (!a || a.answerer.startsWith(`${ownerId}(`)) return;
     // the answer is in [t + N − 0.05, t + 1 + N + 0.05)
-    const lo = Math.floor(
-      a.atSec + a.latencySec - 0.05 - AIMED_CONTROL_LANDING_LEAD_MS / 1000,
-    );
-    const hi = Math.floor(
-      a.atSec + 1 + a.latencySec + 0.05 + GROUND_CONTROL_FUSE_MS / 1000,
-    );
+    // user ruling R90 (2026-11-19, T184): a totem's control is printed at
+    // the totem's drop however early, and answers by LANDING inside the
+    // window's span. A time before the span can only be such a drop: its
+    // landing is looked for in the span, not beside the printed time (an
+    // earlier application of the same totem stood there — codex
+    // 85-tk-CD-T184-2 #2).
+    const beforeSpan = a.latencySec < -BURST_RESPONSE_PRE_MS / 1000 - 0.05;
+    const lo = beforeSpan
+      ? Math.floor(a.atSec - BURST_RESPONSE_PRE_MS / 1000 - 0.05)
+      : Math.floor(
+          a.atSec + a.latencySec - 0.05 - AIMED_CONTROL_LANDING_LEAD_MS / 1000,
+        );
+    const hi = beforeSpan
+      ? Math.floor(a.atSec + 1 + BURST_RESPONSE_WINDOW_SEC + 0.05)
+      : Math.floor(
+          a.atSec + 1 + a.latencySec + 0.05 + GROUND_CONTROL_FUSE_MS / 1000,
+        );
     for (const on of a.controlOn) {
       if (on.span === undefined) continue;
       const same = landings.filter(
