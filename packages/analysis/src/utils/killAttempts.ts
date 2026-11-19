@@ -132,7 +132,6 @@ import {
   SAVE_CAST_AURA_PAIR_S,
   saveAuraCountsWhenAlreadyUp,
   saveAuraIntervals,
-  SELF_SAVE_IDS,
   selfSaveCasts,
   untargetableEndS,
   wallTableIdOfAura,
@@ -2197,9 +2196,12 @@ function attributeFailure(
   if (breakAbilityPresses(target).some((p) => inCredit(p.ts))) {
     for (const u of readings.ccSummary().breakAbilityUses ?? []) {
       if (!u.brokenCc || !inCredit(matchStartMs + u.atSeconds * 1000)) continue;
-      // a break that is also a wall or a self-save is credited as that
-      if (MITIGATION_AURA_IDS.has(u.spellId) || SELF_SAVE_IDS.has(u.spellId))
-        continue;
+      // a break that is also a wall or a self-save (Icebound Fortitude,
+      // Lichborne) is a break all the same: the legend's fixed order puts a
+      // break ability before a wall of the target's own (user rulings A17,
+      // 2026-11-17, and R85, 2026-11-19; round 14 D17 / D25 — until then it
+      // was credited as the wall, `popped Icebound Fortitude`, for a stun it
+      // took off)
       if (ofThisAttempt(u.brokenCc) && !brokeOut.includes(u.name))
         brokeOut.push(u.name);
     }

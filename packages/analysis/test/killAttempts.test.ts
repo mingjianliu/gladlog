@@ -2212,7 +2212,7 @@ describe("extractKillAttempts — broke out with a racial / class ability", () =
     expect(second.opportunity.tier).toBe("locked");
   });
 
-  it("Blink out of the stun → broke out (Blink); Icebound Fortitude stays a popped wall", async () => {
+  it("Blink out of the stun → broke out (Blink); Icebound Fortitude that took the stun off is a break too (ruling A17), a wall when it took nothing off", async () => {
     await ensureAnalysisData();
     const mage = unit("e1", {
       auraEvents: stunAuras("e1", KIDNEY, 10, 2),
@@ -2223,11 +2223,7 @@ describe("extractKillAttempts — broke out with a racial / class ability", () =
       extractKillAttempts([f1], [mage], makeCombat(f1, mage))[0].attribution
         ?.primary,
     ).toBe("broke-out");
-    const dk = unit("e1", {
-      spec: "252",
-      auraEvents: [
-        ...stunAuras("e1", KIDNEY, 10, 2),
-        {
+    const ibfAura: any = {
           spellId: "48792",
           spellName: "Icebound Fortitude",
           srcUnitId: "e1",
@@ -2241,14 +2237,32 @@ describe("extractKillAttempts — broke out with a racial / class ability", () =
             parameters: [],
           },
           auraType: "BUFF",
-        },
-      ],
-      spellCastEvents: [press("48792", 12)],
-    });
+        };
+    const dkWith = (stunS: number) =>
+      unit("e1", {
+        spec: "252",
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, stunS),
+          ibfAura,
+        ],
+        spellCastEvents: [press("48792", 12)],
+      });
+    // the stun came off at the press (12 s): the legend's order names the
+    // break before the wall it also is
     const f2 = attacker();
-    const a = extractKillAttempts([f2], [dk], makeCombat(f2, dk))[0];
-    expect(a.attribution?.brokeOut).toEqual([]);
-    expect(a.attribution?.primary).toBe("defensive");
+    const broke = dkWith(2);
+    const a = extractKillAttempts([f2], [broke], makeCombat(f2, broke))[0];
+    expect(a.attribution?.brokeOut).toEqual(["Icebound Fortitude"]);
+    expect(a.attribution?.primary).toBe("broke-out");
+    expect(formatKillAttemptsForContext([a]).join("\n")).toContain(
+      "FAILED: broke out (Icebound Fortitude)",
+    );
+    // control: the stun ran on to 15 s — the press took nothing off
+    const f3 = attacker();
+    const wall = dkWith(5);
+    const w = extractKillAttempts([f3], [wall], makeCombat(f3, wall))[0];
+    expect(w.attribution?.brokeOut).toEqual([]);
+    expect(w.attribution?.primary).toBe("defensive");
   });
 });
 
