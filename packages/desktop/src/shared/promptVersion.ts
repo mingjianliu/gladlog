@@ -1624,5 +1624,10 @@
  *  cast after it (Annihilation / Death Sweep, in-form Eye Beam), bounded by
  *  the next application or the round end.
  *  See docs/prompt-version-history.md.
+ *
+ * v622 (2026-11-18; pipeline batch B150, T176): a silence that failed to
+ *  land with a logged MISS (or any failed type other than IMMUNE / REFLECT
+ *  / RESIST) gets its [CC NOT LANDED] line instead of a plain [PRESS].
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 621;
+export const PROMPT_VERSION = 622;

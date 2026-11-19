@@ -7977,3 +7977,13 @@ assembled candidate extends unlogged pressed Metamorphosis through its form-
 only casts in 20 contexts (8 archives), adding one kill-attempt line (3
 views); no candidate row changes. Codex branch review 85-tk-CD-T212-1 (one
 real point, fixed) and -1b (APPROVE).
+
+v622 (2026-11-18; pipeline batch B150, T176, ruling A13). A silence whose
+SPELL_MISSED row carried a failed type outside IMMUNE / REFLECT / RESIST — a
+Strangulate or a Silence logged MISS — printed only a plain [PRESS] line with
+no miss tag. Every failed silence row now reaches [CC NOT LANDED], as other
+controls already did: failedControlNoLine 5 / 815 -> 0 on the 605. On the 605
+the assembled candidate gives 5 failed silences (logged MISS) their [CC NOT
+LANDED] line in place of a plain press line: 14 lines across the views, in 14
+contexts, 11 of them with the cause parenthesis the tag already prints; no
+candidate row changes. Codex branch review 85-tk-CC-T176-1b (APPROVE).
