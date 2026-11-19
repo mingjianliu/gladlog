@@ -129,7 +129,7 @@ export const BURST_ANSWERED_LEGEND = [
 /** T183 (ruling R73): printed only when a line carries the suffix. */
 export const BURST_ANSWERED_READ_TO_LEGEND =
   "    `(read to m:ss)` after it = the window's damage paused before that second while a cooldown of the window was still running: the low was read on to m:ss (at most " +
-  `${BURST_TROUGH_PAST_CUT_MAX_S} s past the pause, never into the next window; \`the end of X\` = X ran out there).`;
+  `${BURST_TROUGH_PAST_CUT_MAX_S} s past the window's own end, never into the next window; \`the end of X\` = X ran out there).`;
 
 /**
  * T183 (user ruling R73, 2026-11-19): what follows `bottomed at N% at m:ss`

@@ -30,6 +30,7 @@ import {
   BURST_ANSWERED_CAP,
   BURST_ANSWERED_CONTROL_LEGEND,
   BURST_ANSWERED_MAX_HP_PCT,
+  BURST_ANSWERED_READ_TO_LEGEND,
   BURST_ANSWERED_TAG,
   ccSpanLookup,
   formatBurstAnsweredLines,
@@ -1119,5 +1120,16 @@ describe("[BURST ANSWERED] — T12 ⑧ (i): the control's span is the [CC ON ENE
     ]);
     expect(text).toContain(`${BURST_ANSWERED_TAG}   enemy opened Deathmark`);
     expect(text).not.toContain(BURST_ANSWERED_CONTROL_LEGEND);
+  });
+});
+
+// T183 (ruling R73, wording accepted by the user 2026-11-19): the cap is
+// measured from the window's own end — its outcome horizon — not from the
+// second the damage paused
+describe("[BURST ANSWERED] — the read-to legend", () => {
+  it("states the cap from the window's own end", () => {
+    expect(BURST_ANSWERED_READ_TO_LEGEND).toContain(
+      "(at most 10 s past the window's own end, never into the next window;",
+    );
   });
 });
