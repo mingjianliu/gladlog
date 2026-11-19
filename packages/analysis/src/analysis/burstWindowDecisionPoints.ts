@@ -677,6 +677,11 @@ export interface BurstWindowDecisionPoint {
    * pressured trough, `anyFriendlyDeath` and the reference table read.
    * WO3 #18 (r1008-141): slow-defensive-response prints it, `windowEndT`. */
   outcomeEndSec: number;
+  /** T183: last whole second any of the window's own offensive buffs was
+   * still running (the timeline's `buffEndSeconds`), never before
+   * `outcomeEndSec`. The bounded window can end sooner — at a lapse in the
+   * damage — while the buff runs on. */
+  buffRunEndSec: number;
   /** `endSec - tSec` (rendered seconds, never raw) */
   durationSec: number;
   /** the CD that OPENED the window (earliest cast; a same-second tie goes to
@@ -1564,6 +1569,15 @@ export function burstWindowDecisionPoints(
       // inside 0 seconds" is not an outcome, it is a rounding artefact.
       const outcomeEndSec = Math.max(endSec, tSec + BURST_RESPONSE_WINDOW_SEC);
       const outcomeEndMs = start + outcomeEndSec * 1000;
+      const buffRunEndSec = Math.max(
+        outcomeEndSec,
+        ...seg.casts.map((c) =>
+          Math.floor(
+            facts.get(castKey(c.playerName, c.spellId, c.castSeconds))
+              ?.buffEndSeconds ?? c.castSeconds,
+          ),
+        ),
+      );
       // F-B6: the window the line prints ends at the END of its last
       // rendered second — the last ms of `outcomeEndSec`. One bound for every
       // outcome reading (who died, who the burst hit, the damage taken, the
@@ -2210,6 +2224,7 @@ export function burstWindowDecisionPoints(
         tMs,
         tSec,
         endSec,
+        buffRunEndSec,
         outcomeEndSec,
         durationSec: endSec - tSec,
         leadCd,
