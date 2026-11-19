@@ -23,8 +23,10 @@ import {
   unpressedKitDefensiveInHand,
 } from "../src/data/abilityProfile";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { DEFLECTION_IDS,
-  MITIGATION_WALL_IDS } from "../src/data/mitigationData";
+import {
+  DEFLECTION_IDS,
+  MITIGATION_WALL_IDS,
+} from "../src/data/mitigationData";
 import { DEF_OR_IMMUNE_IDS } from "../src/utils/burstLedger";
 import {
   extractSpiritOfRedemptionIntervals,
@@ -110,7 +112,6 @@ describe("subtractIntervals", () => {
 describe("kill-window roster (F-E3)", () => {
   it.each([
     ["198589", "Blur"],
-    ["110959", "Greater Invisibility"],
     ["409293", "Burrow"],
     ["378441", "Time Stop"],
   ])(
@@ -565,7 +566,9 @@ describe("computeOffensiveWindows — the target's own 20–99 % wall cuts the s
     });
     const noEnd = { kind: "self" as const, atSeconds: 99.98 };
     // no logged end: nothing past the machine's hold
-    expect(ownWallSpanS({ ...noEnd, pressSeconds: 99.9 }, true)).toBeUndefined();
+    expect(
+      ownWallSpanS({ ...noEnd, pressSeconds: 99.9 }, true),
+    ).toBeUndefined();
     // …logged 40 ms after the aura: the span ends with the aura, not the cast line
     expect(ownWallSpanS({ ...noEnd, pressSeconds: 100.02 }, true)).toEqual({
       from: 99.98,
@@ -669,10 +672,11 @@ describe("the wall slice has one source (R08 d)", () => {
       "Ancient of Lore",
       "Barkskin",
       "Blur",
-      "Greater Invisibility",
       "Fortifying Brew",
     ])
       expect(names.has(n), n).toBe(true);
+    // no wall since user ruling R58: its line is `(invisible, …)`
+    expect(names.has("Greater Invisibility")).toBe(false);
     expect(selfSaveReductionNames()).toEqual(["Roar of Sacrifice"]);
     for (const n of selfSaveReductionNames())
       expect(names.has(n), n).toBe(false);
@@ -747,9 +751,9 @@ describe("computeOffensiveWindows — an unpressed kit defensive is in hand", ()
 
   it("Barkskin is in the Restoration kit: pressed Ironbark alone opens no span", () => {
     const u = druid([[IRONBARK, 2]]);
-    expect(
-      unusedKitRows(u as never, combat).map((r) => r.spellId),
-    ).toContain(BARKSKIN);
+    expect(unusedKitRows(u as never, combat).map((r) => r.spellId)).toContain(
+      BARKSKIN,
+    );
     expect(computeOffensiveWindows([u] as never, [], combat)).toEqual([]);
   });
 
@@ -762,7 +766,10 @@ describe("computeOffensiveWindows — an unpressed kit defensive is in hand", ()
       endTime: at(120),
       startInfo: { bracket: "Rated Solo Shuffle" },
       units: {
-        m1: makeUnit("m1", { info: {}, deathRecords: [{ timestamp: at(100) }] }),
+        m1: makeUnit("m1", {
+          info: {},
+          deathRecords: [{ timestamp: at(100) }],
+        }),
       },
     } as never;
     const late = druid([
@@ -810,9 +817,12 @@ describe("unpressedKitDefensiveInHand — an unpressed heal or ally-only cooldow
     }
     for (const id of ["22812", "642", "1022", "33206", "342245"])
       expect(unpressedKitDefensiveInHand(id), id).toBe(true);
-    expect([...KW_UNPRESSED_NOT_IN_HAND_IDS].sort()).toEqual(
-      ["19236", "64843", "6940", "740"],
-    );
+    expect([...KW_UNPRESSED_NOT_IN_HAND_IDS].sort()).toEqual([
+      "19236",
+      "64843",
+      "6940",
+      "740",
+    ]);
   });
 });
 
@@ -829,15 +839,30 @@ describe("computeOffensiveWindows — an external pressed on a teammate is no pr
       ],
     });
   it("Ironbark on the druid itself holds the span off for the buff; on a teammate the span opens at the press", () => {
-    const self = computeOffensiveWindows([druidPressing("e1")] as never, [], combat);
-    const ally = computeOffensiveWindows([druidPressing("e2")] as never, [], combat);
+    const self = computeOffensiveWindows(
+      [druidPressing("e1")] as never,
+      [],
+      combat,
+    );
+    const ally = computeOffensiveWindows(
+      [druidPressing("e2")] as never,
+      [],
+      combat,
+    );
     expect(self[0]!.fromSeconds).toBeGreaterThanOrEqual(14);
     expect(ally[0]!.fromSeconds).toBeLessThan(3);
   });
   it("codex 20-F18-02 #1: a cast row naming an ally whose aura also lands on the caster still protects the caster", () => {
     const both = druidPressing("e2");
     both.auraEvents = [
-      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "102342", at(2), "e1", "e1", "BUFF"),
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        "102342",
+        at(2),
+        "e1",
+        "e1",
+        "BUFF",
+      ),
     ] as never;
     const w = computeOffensiveWindows([both] as never, [], combat);
     expect(w[0]!.fromSeconds).toBeGreaterThanOrEqual(14);

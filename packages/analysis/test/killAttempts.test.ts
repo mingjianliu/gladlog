@@ -1613,75 +1613,29 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
     expect(ended.attribution?.primary).toBe("pressure");
   });
 
-  it("rule 2 and Greater Invisibility (ruling D6, P-FU-b8 extended): pressed before the attempt it is the cause only when the log saw it end — s2/112-1-757 read `popped Greater Invisibility [up since 5:49]` on an attempt at 6:04", async () => {
+  it("Greater Invisibility is no cause of a kill attempt (user ruling R58: no wall, no immunity) — up before it, seen to end inside it, or pressed inside it", async () => {
     await ensureAnalysisData();
-    const GREATER_INVIS_AURA = "110960"; // cast 110959, the 60 % table row
+    const GREATER_INVIS_AURA = "110960"; // cast 110959; no table row
     const applied = (atS: number) =>
       auraEv(GREATER_INVIS_AURA, "e1", "e1", atS, LogEvent.SPELL_AURA_APPLIED);
-    // no REMOVED in the log: the interval builder closes the aura at its
-    // official 20 s, so by the cap alone it is "up" when the stun lands 6 s on
-    const unseen = run(
-      stunned({
-        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), applied(4)],
-      }),
-    );
-    expect(unseen.attribution?.defensivePopped).toEqual([]);
-    // …and the attempt reads its next cause in the existing order
-    expect(unseen.attribution?.primary).toBe("pressure");
-    expect(formatKillAttemptsForContext([unseen]).join("\n")).not.toContain(
-      "popped Greater Invisibility",
-    );
-    // next cause, with one present: the healing that outran the damage
-    const unseenHealed = run(
-      stunned({
-        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), applied(4)],
-        healIn: [
-          {
-            effectiveAmount: 400_000,
-            logLine: {
-              event: LogEvent.SPELL_HEAL,
-              timestamp: ms(12),
-              parameters: [],
-            },
-          },
-        ],
-      }),
-    );
-    expect(unseenHealed.attribution?.primary).toBe("outhealed");
-    // the log SAW it end after the attempt began: up at its start, the cause
-    const seen = run(
-      stunned({
-        auraEvents: [
-          ...stunAuras("e1", KIDNEY, 10, 5),
-          ...up(GREATER_INVIS_AURA, "e1", "e1", 4, 13),
-        ],
-      }),
-    );
-    expect(seen.attribution?.primary).toBe("defensive");
-    expect(formatKillAttemptsForContext([seen]).join("\n")).toContain(
-      "FAILED: popped Greater Invisibility [up since 0:04]",
-    );
-    // seen to end BEFORE the attempt: nothing, as for any wall
-    const over = run(
-      stunned({
-        auraEvents: [
-          ...stunAuras("e1", KIDNEY, 10, 5),
-          ...up(GREATER_INVIS_AURA, "e1", "e1", 4, 4.7),
-        ],
-      }),
-    );
-    expect(over.attribution?.defensivePopped).toEqual([]);
-    // pressed INSIDE the attempt its start is logged: still `popped`, with or
-    // without a logged end
-    const inside = run(
-      stunned({
-        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), applied(12)],
-      }),
-    );
-    expect(inside.attribution?.primary).toBe("defensive");
-    expect(formatKillAttemptsForContext([inside]).join("\n")).toContain(
-      "FAILED: popped Greater Invisibility",
-    );
+    for (const auraEvents of [
+      // no REMOVED in the log
+      [...stunAuras("e1", KIDNEY, 10, 5), applied(4)],
+      // the log saw it end after the attempt began (D6 called this a cause)
+      [
+        ...stunAuras("e1", KIDNEY, 10, 5),
+        ...up(GREATER_INVIS_AURA, "e1", "e1", 4, 13),
+      ],
+      // pressed inside the attempt
+      [...stunAuras("e1", KIDNEY, 10, 5), applied(12)],
+    ]) {
+      const a = run(stunned({ auraEvents }));
+      expect(a.attribution?.defensivePopped).toEqual([]);
+      expect(a.attribution?.primary).not.toBe("defensive");
+      expect(formatKillAttemptsForContext([a]).join("\n")).not.toContain(
+        "Greater Invisibility",
+      );
+    }
     // every other wall keeps the cap (P-FU-b8 names the unseen carriers only):
     // a Barkskin with no logged REMOVED is still up when the attempt begins
     const barkskinUnseen = run(
@@ -1700,10 +1654,9 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
       "Burrow",
       "Vanish",
       "Mass Invisibility",
-      "Greater Invisibility",
     ]);
     expect(KILL_ATTEMPTS_END_UNSEEN_LEGEND).toContain(
-      "  Burrow / Vanish / Mass Invisibility / Greater Invisibility: ",
+      "  Burrow / Vanish / Mass Invisibility: ",
     );
   });
 

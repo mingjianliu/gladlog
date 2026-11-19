@@ -54,6 +54,7 @@ import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
 import spellIdListsData, {
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_ONLY_SAVE_IDS,
+  isInvisibilityPress,
 } from "../data/spellIdLists";
 import { spellSchoolMask } from "../data/spellSchools";
 import { hasOfficialTargeting, reachesAlly } from "../data/spellTargeting";
@@ -8051,8 +8052,10 @@ export function detectOverlappedDefensives(
       if (action.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const spellId = action.spellId;
       if (!spellId || !ALL_MAJOR_DEFENSIVE_IDS.has(spellId)) continue;
-      // fact9 D17: a heal is no major defensive to overlap
-      if (isNotMajorDefensive(spellId)) continue;
+      // fact9 D17: a heal is no major defensive to overlap — and neither is
+      // an invisibility (user ruling R58: it reduces nothing)
+      if (isNotMajorDefensive(spellId) || isInvisibilityPress(spellId))
+        continue;
 
       // GH #150: a self-only defensive's cast row names whatever unit the
       // caster had selected — the wall is on the caster, and also on the ally

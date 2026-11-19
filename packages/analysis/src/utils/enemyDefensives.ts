@@ -45,7 +45,7 @@ import spellIdListsData, {
   ENEMY_ONLY_SAVE_IDS,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
-  ENEMY_STEALTH_WALL_AURAS,
+  ENEMY_INVISIBILITY_AURAS,
   type EnemyProcSaveEffect,
 } from "../data/spellIdLists";
 import {
@@ -92,6 +92,8 @@ import { CHANNEL_STOPPED_MAX_SHARE } from "./kickAudit";
 import { isProcOwnActivationAt } from "./procTriggeredCast";
 import { toRenderSecond } from "./renderGrid";
 import {
+  INVISIBLE_FACT_LINE_IDS,
+  INVISIBLE_MECHANISM,
   type SelfDefensiveMechanism,
   selfDefensiveMechanism,
 } from "./selfDefensiveMechanism";
@@ -540,26 +542,28 @@ export function immunityLastsItsAura(spellId: string): boolean {
  * The save auras whose CARRIER goes unseen, taking the aura's REMOVED line
  * out of the recorder's log: the three stealth-kind immunities of rulings
  * U-KA3 / U-KA3b (`ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`: Burrow, Vanish, Mass
- * Invisibility) and the stealth wall ruling D6 adds
- * (`ENEMY_STEALTH_WALL_AURAS`: Greater Invisibility). For these a missing
+ * Invisibility) and the invisibility ruling D6 added
+ * (`ENEMY_INVISIBILITY_AURAS`: Greater Invisibility — a wall then, a fact
+ * line since rulings R58 / R61). For these a missing
  * REMOVED says nothing about the aura still being up — on the 605 new-season
  * files 97 % of an opponent's Greater Invisibilities have none, while an
  * ally's is over in 0.74 s (median).
  */
 export const SAVE_AURA_END_UNSEEN_IDS: ReadonlySet<string> = new Set([
   ...ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
-  ...Object.keys(ENEMY_STEALTH_WALL_AURAS),
+  ...Object.keys(ENEMY_INVISIBILITY_AURAS),
 ]);
 
-/** The same auras by the name their `[ENEMY DEF]` line and a KILL ATTEMPTS
- * cause print — what the gate (`checkKillAttemptUpSinceEndLogged`) and the
- * KILL ATTEMPTS legend read. */
-export const SAVE_AURA_END_UNSEEN_NAMES: ReadonlySet<string> = new Set([
-  ...[...ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS].map((id) =>
+/** The ones of them that can be a KILL ATTEMPTS cause — the three
+ * immunities — by the name their `[ENEMY DEF]` line and the cause print:
+ * what the gate (`checkKillAttemptUpSinceEndLogged`) and the KILL ATTEMPTS
+ * legend read. Greater Invisibility is no cause of any attempt since user
+ * ruling R58 (2026-11-18: no wall, no immunity), so its name is not here. */
+export const SAVE_AURA_END_UNSEEN_NAMES: ReadonlySet<string> = new Set(
+  [...ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS].map((id) =>
     IMMUNITY_SAVE_AURA_NAMES.get(id)!,
   ),
-  ...Object.values(ENEMY_STEALTH_WALL_AURAS),
-]);
+);
 
 /**
  * May a save aura that was ALREADY UP when a kill attempt began count as why
@@ -899,7 +903,7 @@ export const enemyDefAlsoOnClause = (pids: string[]): string =>
   pids.length ? `; also on ${pids.join(", ")}` : "";
 
 export const ENEMY_DEF_END_NOT_LOGGED_SLOT_RE = new RegExp(
-  String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFLECTS_WORDS}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}(?:${ENEMY_DEF_ALSO_ON_RE_SRC})?\)`,
+  String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFLECTS_WORDS}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}|\d+%|invisible|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}(?:${ENEMY_DEF_ALSO_ON_RE_SRC})?\)`,
 );
 
 /** GH #173 (user 2026-11-02): Ultimate Penitence prints its shield on its
@@ -1215,7 +1219,11 @@ export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>([
       (spellIdListsData as unknown as { bigDefensiveSpellIds?: string[] })
         .bigDefensiveSpellIds ?? []
     ).map(String),
-  ].filter(hasNoOwnPercentage),
+  ]
+    .filter(hasNoOwnPercentage)
+    // …but not an invisibility (rulings R58 / R61): a fact line of its own,
+    // no cause of a kill attempt
+    .filter((id) => !(id in INVISIBLE_FACT_LINE_IDS)),
   ...ENEMY_ONLY_SAVE_IDS,
 ]);
 
@@ -2981,6 +2989,56 @@ export function enemyDefensiveEventsUncached(
           }
         : { removedEarly: false }),
     });
+  }
+
+  // Greater Invisibility (user rulings R58 + R61, 2026-11-18): no wall and no
+  // immunity — a fact line, `(invisible, <how long the log shows its aura>)`.
+  // Its own event, outside `SELF_SAVE_IDS`: KILL ATTEMPTS reads that set and
+  // the kill windows read walls / immunities / absorbs, and none counts this.
+  // Read from the unit's own aura, as the wall line was (one of 714
+  // applications on the 605 files has no cast row beside it).
+  for (const [castId, auraId] of Object.entries(INVISIBLE_FACT_LINE_IDS)) {
+    for (const own of buildAuraIntervals(enemy, combat)) {
+      // an aura up before the log's first row (`inferredStart`: only its
+      // REMOVED row is there) is an event too, as the wall line had it — at
+      // the round's start, no press beside it (T157-4: 14 `[PROC] … (no
+      // press)` lines at 0:00 went with the skip)
+      if (own.spellId !== auraId) continue;
+      if (own.srcUnitId !== undefined && own.srcUnitId !== enemy.id) continue;
+      const end = earlyEndOf(enemy, own, auraId);
+      // the press that put it up, as an aura kind pairs it (F-E11): the
+      // line's HP and its `[friendly offensive CD active]` tag are facts of
+      // the PRESS instant (codex 85-tk-WIN-T157r58-1 #1)
+      const press = (own.inferredStart ? [] : castSecondsOf(enemy.name, castId))
+        .filter((s) => Math.abs(s - own.fromS) <= SAVE_CAST_AURA_PAIR_S)
+        .sort((a, b) => Math.abs(a - own.fromS) - Math.abs(b - own.fromS))[0];
+      out.push({
+        atSeconds: own.fromS,
+        // no press beside the aura, and none made while unseen: the aura
+        // went up with no press logged, as the wall line said before R58 —
+        // our side's `[PROC] … (no press)` line reads this flag
+        // (`auraOnlyActivations`; R62 keeps every reader of our own button)
+        ...(press !== undefined
+          ? { pressSeconds: press }
+          : unseenPressed(own)
+            ? { unseenPress: true as const }
+            : { noPressLogged: true as const }),
+        spellId: castId,
+        spellName: getEnglishSpellName(castId, own.spellName ?? ""),
+        casterName: enemy.name,
+        casterId: enemy.id,
+        kind: "self-save",
+        mechanism: INVISIBLE_MECHANISM,
+        // the length the log shows, or that it shows none (`end not
+        // logged`, ruling D6: the carrier goes unseen). No end note: an
+        // invisibility a hit or the mage's own action ended is not a save
+        // "removed early"
+        ...(end.endNotLogged
+          ? { endNotLogged: true as const }
+          : { observedSeconds: end.observedSeconds ?? own.toS - own.fromS }),
+        removedEarly: false,
+      });
+    }
   }
 
   // Aura-only externals (GH #103 class F, match 44f529e3): the log can carry the

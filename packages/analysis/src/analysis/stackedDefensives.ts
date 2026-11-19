@@ -41,7 +41,7 @@ import {
 } from "../data/mitigationComponents";
 import { DEFLECTION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import spellIdLists from "../data/spellIdLists";
+import spellIdLists, { isInvisibilityPress } from "../data/spellIdLists";
 import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
 import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
 import {
@@ -57,13 +57,13 @@ export const STACKED_DEFENSIVE_MAJOR_IDS: ReadonlySet<string> = new Set<string>(
   [
     ...spellIdLists.externalDefensiveSpellIds.map(String),
     ...spellIdLists.bigDefensiveSpellIds.map(String),
-  ],
+    // an invisibility protects nobody "already" (user ruling R58)
+  ].filter((id) => !isInvisibilityPress(id)),
 );
 /** The `STACKED_DEFENSIVE_MAJOR_IDS` key an aura stands for: its own id, or
  * the cast whose own effect it is (fact2 C10, `castKeyOfAura`: Rallying Cry
  * 97462 runs as 97463, Fortifying Brew 115203 as 120954, Spirit Link Totem
- * 98008 as 325174, Greater Invisibility 110959 as 110960 — none was ever
- * "already protected"). Pricing reads the key; the line names the aura. */
+ * 98008 as 325174 — none was ever "already protected"). Pricing reads the key; the line names the aura. */
 export function stackedDefensiveKeyOf(auraSpellId: string): string | undefined {
   return castKeyOfAura(auraSpellId, (id) =>
     STACKED_DEFENSIVE_MAJOR_IDS.has(id),
@@ -200,8 +200,7 @@ export function stackedDefensivePairs(
         // (k3 recheck: 28c39eb1 r1 @157, a Desperate Prayer up on the crisis
         // unit)
         .filter(
-          (iv) =>
-            !isNotMajorDefensive(stackedDefensiveKeyOf(iv.spellId) ?? ""),
+          (iv) => !isNotMajorDefensive(stackedDefensiveKeyOf(iv.spellId) ?? ""),
         )
         .filter((iv) => iv.fromS < roundEndS)
         .map(inRound);

@@ -116,7 +116,7 @@ describe("checkNoWindowAcrossOwnWall", () => {
 
   it("every wall form is read: an aura whose end the log never showed, one still up at the round's end, one dispelled", () => {
     for (const label of [
-      "Greater Invisibility (60%, end not logged)",
+      "Barkskin (20%, end not logged)",
       "Barkskin (30%, 7.1s — still up when the round ended)",
       "Ancient of Lore (30%, 10.0s — removed early)",
       "Blur (25%, 3.2s — dispelled by 1(FMage)'s Spellsteal)",
@@ -136,6 +136,9 @@ describe("checkNoWindowAcrossOwnWall", () => {
       // rulings A20 + U3: no wall, whatever its line looks like
       own("2:04", "Roar of Sacrifice (25%, 10.0s)"),
       own("2:04", "Aspect of the Turtle (immune, 8.0s)"),
+      // rulings R58 / R61: an invisibility is no wall
+      own("2:04", "Greater Invisibility (invisible, end not logged)"),
+      own("2:04", "Greater Invisibility (invisible, 9.0s)"),
       "2:04  [ENEMY DEF]   5(RDruid) (Restoration Druid): Ironbark → 4(BMHunter) (12.0s) (target at 60% HP)",
       own("2:04", "Barkskin (20%, 12.0s)", "5(RDruid) (Restoration Druid)"),
       // went up as the round ended: no length is printed

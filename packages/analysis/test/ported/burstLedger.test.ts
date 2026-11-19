@@ -169,7 +169,16 @@ describe("burstLedger — burst grouping and audit", () => {
       spec: CombatUnitSpec.Paladin_Retribution,
       info,
       spellCastEvents: [
-        makeSpellCastEvent("31884", MATCH_START + 10_000, "p1", "Self", "p1", "Ret", 0, "Avenging Wrath"),
+        makeSpellCastEvent(
+          "31884",
+          MATCH_START + 10_000,
+          "p1",
+          "Self",
+          "p1",
+          "Ret",
+          0,
+          "Avenging Wrath",
+        ),
       ],
       damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
     } as any);
@@ -178,9 +187,20 @@ describe("burstLedger — burst grouping and audit", () => {
     const e1 = makeUnit("e1", {
       name: "Mage",
       info,
-      auraEvents: [makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "110960", MATCH_START + 5_000, "e1", "e1", "BUFF")],
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "110960",
+          MATCH_START + 5_000,
+          "e1",
+          "e1",
+          "BUFF",
+        ),
+      ],
       // the mage's own hit (the helper stamps `p1` as the source)
-      damageOut: [{ ...dmgOut(MATCH_START + 9_000, -20_000, "p1"), srcUnitId: "e1" }],
+      damageOut: [
+        { ...dmgOut(MATCH_START + 9_000, -20_000, "p1"), srcUnitId: "e1" },
+      ],
     } as any);
     const entries = analyzeBurstLedger(player, [], [e1], makeCombat());
     expect(entries[0].dominantTarget?.defensivesHit ?? []).toEqual([]);
@@ -189,23 +209,44 @@ describe("burstLedger — burst grouping and audit", () => {
   // weekly review 2026-10-24: the holder's pet hit and DoT tick ended the
   // unseen-end invisibility too (parser-compat folds pet damage into the
   // owner's damageOut), and a logged REMOVED was cut as well
-  describe("an unseen-end invisibility ends at the holder's own action only", () => {
+  // The integration of "an unseen-end stealth is over at its holder's OWN
+  // action" (round-1 retest 62fdbf2e-r0) — on Vanish 11327, an immunity the
+  // ledger still names; it was written on Greater Invisibility, no defensive
+  // of the ledger since user ruling R58.
+  describe("an unseen-end stealth immunity ends at the holder's own action only", () => {
+    const VANISH = "11327";
     const burster = () =>
       makeUnit("p1", {
         name: "Ret",
         spec: CombatUnitSpec.Paladin_Retribution,
         info,
         spellCastEvents: [
-          makeSpellCastEvent("31884", MATCH_START + 10_000, "p1", "Self", "p1", "Ret", 0, "Avenging Wrath"),
+          makeSpellCastEvent(
+            "31884",
+            MATCH_START + 10_000,
+            "p1",
+            "Self",
+            "p1",
+            "Ret",
+            0,
+            "Avenging Wrath",
+          ),
         ],
         damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
       } as any);
-    const mage = (damageOut: any[], extraAuras: any[] = []) =>
+    const rogue = (damageOut: any[], extraAuras: any[] = []) =>
       makeUnit("e1", {
-        name: "Mage",
+        name: "Rogue",
         info,
         auraEvents: [
-          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "110960", MATCH_START + 5_000, "e1", "e1", "BUFF"),
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            VANISH,
+            MATCH_START + 9_500,
+            "e1",
+            "e1",
+            "BUFF",
+          ),
           ...extraAuras,
         ],
         damageOut,
@@ -214,25 +255,103 @@ describe("burstLedger — burst grouping and audit", () => {
       const d = dmgOut(MATCH_START + at, -20_000, "p1");
       return { ...d, srcUnitId: src, logLine: { ...d.logLine, event } };
     };
-    const walls = (e1: any) =>
-      (analyzeBurstLedger(burster(), [], [e1], makeCombat())[0].dominantTarget
-        ?.defensivesHit ?? []).map((d) => d.spellId);
+    const hit = (e1: any) =>
+      (
+        analyzeBurstLedger(burster(), [], [e1], makeCombat())[0].dominantTarget
+          ?.defensivesHit ?? []
+      ).map((d) => d.spellId);
 
-    it("its Water Elemental's hit before the burst does not end it", () => {
-      expect(walls(mage([from("pet-1", 9_000)]))).toEqual(["110960"]);
+    it("its pet's hit before the burst does not end it", () => {
+      expect(hit(rogue([from("pet-1", 9_800)]))).toEqual([VANISH]);
     });
     it("its DoT tick before the burst does not end it", () => {
       expect(
-        walls(mage([from("e1", 9_000, LogEvent.SPELL_PERIODIC_DAMAGE)])),
-      ).toEqual(["110960"]);
+        hit(rogue([from("e1", 9_800, LogEvent.SPELL_PERIODIC_DAMAGE)])),
+      ).toEqual([VANISH]);
     });
-    it("its own direct hit before the burst still ends it", () => {
-      expect(walls(mage([from("e1", 9_000)]))).toEqual([]);
+    it("its own press before the burst ends it", () => {
+      const e1 = rogue([]);
+      (e1 as any).spellCastEvents = [
+        makeSpellCastEvent(
+          "1752",
+          MATCH_START + 9_800,
+          "e1",
+          "Rogue",
+          "p1",
+          "Ret",
+          0,
+          "Sinister Strike",
+        ),
+      ];
+      expect(hit(e1)).toEqual([]);
     });
     it("a logged REMOVED stands — the holder's hit inside does not cut it", () => {
-      const removed = makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "110960", MATCH_START + 15_000, "e1", "e1", "BUFF");
-      expect(walls(mage([from("e1", 9_000)], [removed]))).toEqual(["110960"]);
+      const removed = makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        VANISH,
+        MATCH_START + 10_900,
+        "e1",
+        "e1",
+        "BUFF",
+      );
+      expect(hit(rogue([from("e1", 9_800)], [removed]))).toEqual([VANISH]);
     });
+  });
+
+  // User ruling R58 (2026-11-18): Greater Invisibility reduces no damage and
+  // is no immunity — the ledger names no defensive for it, whatever its end.
+  it("Greater Invisibility on the burst's target is no defensive hit (R58)", () => {
+    const burster = makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "31884",
+          MATCH_START + 10_000,
+          "p1",
+          "Self",
+          "p1",
+          "Ret",
+          0,
+          "Avenging Wrath",
+        ),
+      ],
+      damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+    } as any);
+    for (const end of [
+      [],
+      [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "110960",
+          MATCH_START + 15_000,
+          "e1",
+          "e1",
+          "BUFF",
+        ),
+      ],
+    ]) {
+      const mage = makeUnit("e1", {
+        name: "Mage",
+        info,
+        auraEvents: [
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            "110960",
+            MATCH_START + 5_000,
+            "e1",
+            "e1",
+            "BUFF",
+          ),
+          ...end,
+        ],
+      } as any);
+      expect(
+        analyzeBurstLedger(burster, [], [mage], makeCombat())[0].dominantTarget
+          ?.defensivesHit ?? [],
+      ).toEqual([]);
+    }
   });
 
   it("flags immunity/defensive auras active on the dominant target (D1-B3)", () => {
@@ -290,15 +409,40 @@ describe("burstLedger — burst grouping and audit", () => {
       name: "Ret",
       spec: CombatUnitSpec.Paladin_Retribution,
       info,
-      spellCastEvents: [makeSpellCastEvent("31884", MATCH_START + 10_000, "p1", "Ret", "p1", "Ret", 0, "Avenging Wrath")],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "31884",
+          MATCH_START + 10_000,
+          "p1",
+          "Ret",
+          "p1",
+          "Ret",
+          0,
+          "Avenging Wrath",
+        ),
+      ],
       damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
     } as any);
     const e1 = makeUnit("e1", {
       name: "Pally",
       info,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "64844", MATCH_START + 11_000, "e2", "e1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "64844", MATCH_START + 15_000, "e2", "e1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "64844",
+          MATCH_START + 11_000,
+          "e2",
+          "e1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "64844",
+          MATCH_START + 15_000,
+          "e2",
+          "e1",
+          "BUFF",
+        ),
       ],
     } as any);
     const entries = analyzeBurstLedger(player, [], [e1], makeCombat());
@@ -956,7 +1100,10 @@ describe("burstLedger — the second target and the absorbed part (T12 ⑤)", ()
       [paladin(), warrior()],
       makeCombat(),
     );
-    expect(b.dominantTarget).toMatchObject({ damage: 404_000, absorbed: 103_000 });
+    expect(b.dominantTarget).toMatchObject({
+      damage: 404_000,
+      absorbed: 103_000,
+    });
   });
 
   it("one enemy damaged, nothing absorbed: the line is as it was", () => {

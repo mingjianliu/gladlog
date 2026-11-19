@@ -2871,13 +2871,33 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/data/spellIdLists.ts`,
-    symbol: "ENEMY_STEALTH_WALL_AURAS",
+    symbol: "ENEMY_INVISIBILITY_AURAS",
     mod: spellIdLists,
   },
   {
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "SAVE_AURA_END_UNSEEN_NAMES",
     mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/spellIdLists.ts`,
+    symbol: "INVISIBLE_FACT_LINE_IDS",
+    mod: spellIdLists,
+  },
+  {
+    file: `${A}/data/spellIdLists.ts`,
+    symbol: "isInvisibilityPress",
+    mod: spellIdLists,
+  },
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "INVISIBLE_LEGEND",
+    mod: selfDefensiveMechanismMod,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkInvisibilityIsNoDefense",
+    mod: promptQualityCheck,
   },
   {
     file: `${A}/utils/enemyDefensives.ts`,

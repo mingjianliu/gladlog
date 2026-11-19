@@ -85,7 +85,7 @@ export interface AbilityProfile {
  *  这里用文件路径直接读签字册,避免 data → utils 的反向依赖。 */
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { effectiveCooldownSeconds } from "./spellEffectData";
-import spellIdListsData from "./spellIdLists";
+import spellIdListsData, { isInvisibilityPress } from "./spellIdLists";
 const THROUGHPUT_ROLE_IDS = new Set<string>(
   CURATED_ABILITY_FACTS.filter((f) => f.kind === "throughput_role").map(
     (f) => f.id,
@@ -174,16 +174,15 @@ export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
     // Triage 2026-09-29, enemy-def F-E3 — the span stayed "defenseless"
     // through these presses (2abc9185: `defenseless 0:17–1:40` across three
     // Blurs). User rulings 2026-09-30: A24 "Blur 期间不算 defenseless,切开
-    // 窗口"; A25 (Burrow and Time Stop are immunities); the 2026-09-26
-    // kill-live-gated verdict for Greater Invisibility, kept by C2. All four
-    // are the logged CAST ids, cooldown ≥ 30 s in DB2.
+    // 窗口"; A25 (Burrow and Time Stop are immunities). All three are the
+    // logged CAST ids, cooldown ≥ 30 s in DB2. (Greater Invisibility was the
+    // fourth until user ruling R58 — see the filter below.)
     // NOT Mass Invisibility 414664 (user ruling P-b8, 2026-10-01): its aura
     // runs the full 12.0 s on 524 of 575 lines of the 605-file capture, on
     // the mage's allies too, whatever they do — in the roster it wrote
     // "Target had a major defensive up: Mass Invisibility" on 227 burst
     // lines whose target was being hit.
     "198589", // Blur — 60 s
-    "110959", // Greater Invisibility — 120 s
     "409293", // Burrow — 120 s
     "378441", // Time Stop — 45 s
     // User ruling 2026-10-20 (fact1215 retest idx 45 / 47 / 48 「都要」):
@@ -241,7 +240,13 @@ export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
       // Renewing Blaze reaches the derived list through bigDefensiveSpellIds
       // (W1g) but was never in this roster; whether it closes a span is an
       // open question on GH #150 (605: −18 window lines), kept out until ruled
-      id !== "374348",
+      id !== "374348" &&
+      // Greater Invisibility reaches the derived list through
+      // bigDefensiveSpellIds too. User ruling R58 (2026-11-18): it reduces
+      // no damage and is no immunity — it closes no span, up or in hand, and
+      // the burst ledger names no "major defensive up" for it. (It was added
+      // here by hand on 2026-09-30 for its kill-live-gated verdict.)
+      !isInvisibilityPress(id),
   ),
 );
 

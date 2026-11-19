@@ -33,10 +33,10 @@ const spellIdLists = {
     // the Fittest moved here from attributedMitigationSpellIds — it is a
     // pressed 90 s cooldown (25 %), not a held stance (1d52).
     "264735", // Survival of the Fittest (Hunter)
-    // Same scan; mitigation verdicts signed by the user 2026-09-26
-    // (kill-live-gated, see mitigationVerdicts.ts). Greater Invisibility's
-    // −60 % lives on its buff 113862, so its MITIGATION_TABLE row is a
-    // cast-keyed override (the Blur 198589 → 212800 pattern).
+    // Same scan (2026-09-26). Greater Invisibility is a defensive PRESS
+    // (invisibility) for the cooldown ledger and crisis readiness, and no
+    // mitigation: its MITIGATION_TABLE row is gone (user ruling R58,
+    // 2026-11-18).
     "110959", // Greater Invisibility (Mage)
     "403876", // Divine Protection (Retribution; 498 is Holy's)
     // 2026-08-23 用户裁定「复苏烈焰是大技能,虽然不是减伤」。它是**结构性无施法行**
@@ -196,6 +196,29 @@ export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
   // (`extractMajorCooldowns` adds it there), not the press-only path's.
   "421453",
 ]);
+
+/**
+ * The presses whose `[ENEMY DEF]` line is the fact `(invisible, …)` and
+ * nothing else (user rulings R58 + R61, 2026-11-18): Greater Invisibility
+ * 110959. It had a 60 % wall row (2026-09-26) that no evidence carried — the
+ * reduction's buff 113862 is triggered by nothing in DB2 12.1.7, has 0 rows
+ * in 605 files / 713 casts, and damage taken is 0.98x baseline. R61: "Keep a
+ * fact line with no reduction and no immunity". Cast id → the logged aura
+ * the line's length is read from (`ENEMY_INVISIBILITY_AURAS`). Not a
+ * `SELF_SAVE_IDS` member: KILL ATTEMPTS and the kill windows do not count
+ * it, and neither does any reader of "a protection was up or in hand"
+ * (`isInvisibilityPress`). Registered in `curatedIdRegistry`.
+ */
+export const INVISIBLE_FACT_LINE_IDS: Readonly<Record<string, string>> = {
+  "110959": "110960",
+};
+/** Is this press an invisibility (`INVISIBLE_FACT_LINE_IDS`) — a defensive
+ * button that reduces no damage and is no immunity? The readers of "a major
+ * defensive was up / in hand on this unit" leave it out (user ruling R58):
+ * the kill windows' roster, stacked defensives, the death audit, overlapped
+ * defensives. */
+export const isInvisibilityPress = (spellId: string): boolean =>
+  spellId in INVISIBLE_FACT_LINE_IDS;
 
 /** What a hand-labelled self defensive does
  * (`ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS`). */
@@ -485,13 +508,15 @@ export const ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The enemy WALL auras whose carrier goes unseen — the wall-side half of
- * "the log never shows this aura end" (`enemyDefensives.SAVE_AURA_END_UNSEEN_IDS`;
- * the immunity-kind half is `ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`). One entry:
- * Greater Invisibility's logged aura 110960 (cast 110959, the 60 % row of
- * `MITIGATION_TABLE`). User ruling D6 (2026-10-10): "the existing ruling
- * P-FU-b8 ('only an aura the log saw end counts') is extended to Greater
- * Invisibility".
+ * The enemy invisibility auras that are neither an immunity nor a wall, whose
+ * carrier goes unseen — the other half of "the log never shows this aura
+ * end" (`enemyDefensives.SAVE_AURA_END_UNSEEN_IDS`; the immunity-kind half is
+ * `ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`). One entry: Greater Invisibility's
+ * logged aura 110960 (cast 110959). It was "the stealth WALL" from ruling D6
+ * (2026-10-10) until user ruling R58 (2026-11-18) took Greater Invisibility
+ * out of `MITIGATION_TABLE`: no wall reader counts it now. What stays is the
+ * unseen carrier — a control's target state (`ccTargetState`), the unseen
+ * press readers — and D6's "only an aura the log saw end counts".
  *
  * Corpus, the 605 new-season raw files, split by whether the carrier is the
  * recorder's ally or opponent (fix-FT/t07-stealth-lifetimes-605.txt):
@@ -509,10 +534,10 @@ export const ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS: ReadonlySet<string> = new Set([
  * official 20 s, an order of magnitude past what the allied side shows.
  * DB2 has no row to read this from (110960 carries invisibility auras only,
  * and the generated effect tables hold no stealth flag), so it is a signed
- * list — registered in `curatedIdRegistry`. Keyed by the LOGGED AURA id → the
- * name its `[ENEMY DEF]` line prints (a test holds it to the spell data).
+ * list — registered in `curatedIdRegistry`. Keyed by the LOGGED AURA id → its
+ * English name (a test holds it to the spell data).
  */
-export const ENEMY_STEALTH_WALL_AURAS: Readonly<Record<string, string>> = {
+export const ENEMY_INVISIBILITY_AURAS: Readonly<Record<string, string>> = {
   "110960": "Greater Invisibility",
 };
 

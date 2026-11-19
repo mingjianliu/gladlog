@@ -10,7 +10,7 @@ import {
 import { DEFLECTION_IDS } from "../data/mitigationData";
 import { OWN_SHIELD_RULING_FAMILY_IDS } from "../data/ownShieldLinks";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import spellIdLists from "../data/spellIdLists";
+import spellIdLists, { isInvisibilityPress } from "../data/spellIdLists";
 import { absorbContributionsInWindow } from "./absorbShields";
 import { getSortedAdvancedActions } from "./advancedActions";
 import {
@@ -106,7 +106,10 @@ export function counterfactualTier(
 // in cooldowns.ts, which is a different semantic from the mitigation
 // counterfactual whitelist (walls that actually block damage or grant immunity).
 const WHITELIST_IDS: ReadonlySet<string> = new Set<string>([
-  ...spellIdLists.bigDefensiveSpellIds,
+  // …less an invisibility (user ruling R58: no reduction, no audit row)
+  ...spellIdLists.bigDefensiveSpellIds.filter(
+    (id) => !isInvisibilityPress(String(id)),
+  ),
   ...spellIdLists.externalDefensiveSpellIds,
   // Attribution-only mitigation (stances, ally-maintained buffs) — see the
   // list's own comment for why it is separate from the other two.
@@ -886,7 +889,6 @@ function decisiveHitFor(
  * ledgered (GH #109) rather than silently extended to the new walls.
  */
 export const UNUSED_SELF_COVERAGE_UNMODELLED: ReadonlySet<string> = new Set([
-  "110959",
   "403876",
   // Ice Cold (T61, the holder's own effect id — `kitSpellIdOf`): −70 % for
   // 6 s. Two 60k hits 9 s apart were both discounted: 84k "decisive" where

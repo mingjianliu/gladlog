@@ -53,6 +53,7 @@ import { fmtTime } from "../../utils/renderGrid";
 import type { RosterSides } from "../../utils/rosterSide";
 import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
 import {
+  invisibleLengthWords,
   selfDefensiveLabelWords,
   selfDefensiveMechanism,
 } from "../../utils/selfDefensiveMechanism";
@@ -297,7 +298,7 @@ export function emitEnemyDefEntries(
           d.effect !== undefined
             ? enemySaveEffectNote(d.effect, d.absorbedAmount, dur)
             : d.mechanism
-              ? `${selfDefensiveLabelWords(d.mechanism)}${d.mechanism.kind === "reduction" && dur ? `, ${dur}` : ""}`
+              ? `${selfDefensiveLabelWords(d.mechanism)}${d.mechanism.kind === "invisible" && dur ? `, ${invisibleLengthWords(dur)}` : d.mechanism.kind === "reduction" && dur ? `, ${dur}` : ""}`
               : "";
         const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
         // B18: a Guardian Spirit the priest put on THEMSELVES is a

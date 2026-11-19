@@ -274,6 +274,11 @@ import {
 import {
   SELF_SAVE_PURPOSE_LABEL,
   selfDefensiveLabelWords,
+  INVISIBLE_FACT_LINE_IDS,
+  INVISIBLE_ENDED_AT_ONCE,
+  INVISIBLE_LABEL_RE,
+  INVISIBLE_LEGEND,
+  INVISIBLE_MECHANISM,
   selfReductionLegend,
   statesSelfDefensiveLabel,
 } from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
@@ -5738,12 +5743,24 @@ const ENEMY_DEF_WALL_LABEL = new RegExp(
  *    lines, 424 of 1,543 Dark Pact, 313 of 1,022 Alter Time).
  * An external (`X → unit`) carries no label of its own and is not read.
  */
+/** The whole `(invisible, …)` parenthesis as rulings R61 / R64 word it, three
+ * forms: the log shows no end, it took the aura off the instant it put it up
+ * (`ended at once`), or the length it shows — never `0.0s`. */
+const INVISIBLE_LABEL_FORMS = new RegExp(
+  String.raw`^\(invisible, (?:${ENEMY_DEF_END_NOT_LOGGED}|${INVISIBLE_ENDED_AT_ONCE}|(?!0\.0s)\d+\.\ds)\)`,
+);
+
 export function checkEnemyDefSaveEffect(lines: string[]): string[] {
   const failures: string[] = [];
   const hasLegend = lines.some((l) => ENEMY_DEF_LEGEND.test(l));
   /** pressed self defensives printed with a percentage whose legend entry
    * the prompt lacks — reported once a name */
   const unexplained = new Set<string>();
+  const invisibleNames = new Set(
+    Object.keys(INVISIBLE_FACT_LINE_IDS).map((id) =>
+      getEnglishSpellName(id, ""),
+    ),
+  );
   lines.forEach((line, i) => {
     const m = ENEMY_DEF_LINE.exec(line);
     if (!m) return;
@@ -5766,6 +5783,20 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
       if (stated !== expected)
         failures.push(
           `line ${i + 1}: [ENEMY DEF] prints ${spell} as something other than its effect (${expected}): ${quoted}`,
+        );
+      return;
+    }
+    // rulings R58 / R61: Greater Invisibility is the fact `(invisible, …)`
+    // — never a percentage, never an immunity
+    if (invisibleNames.has(spell)) {
+      // exactly the two forms R61 gives — nothing may follow the word
+      // (codex 85-tk-WIN-T157r58-1 #3: `(invisible, immune, 60%)` passed)
+      if (
+        !statesSelfDefensiveLabel(after, INVISIBLE_MECHANISM) ||
+        !INVISIBLE_LABEL_FORMS.test(after)
+      )
+        failures.push(
+          `line ${i + 1}: [ENEMY DEF] prints ${spell} with a label other than \`(invisible, …)\` — it is no wall and no immunity (rulings R58 / R61): ${quoted}`,
         );
       return;
     }
@@ -5823,6 +5854,57 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
         `line ${i + 1}: [ENEMY DEF] prints ${spell} with no label the producer writes for it: ${quoted}`,
       );
   });
+  return failures;
+}
+
+/**
+ * User rulings R58 + R61 (2026-11-18): Greater Invisibility
+ * (`INVISIBLE_FACT_LINE_IDS`) is no damage reduction and no immunity — its
+ * 60 % wall row stood on a buff nothing triggers (0 rows in 605 files,
+ * damage taken 0.98x). Read off the text:
+ *  - no line gives it as a defense that was up or in hand: a burst-ledger
+ *    `Target had a major defensive up: … <name>`, a KILL ATTEMPTS cause
+ *    (`popped <name>`, `self-saved (<name>)`), an `opportunity: gated
+ *    (<name> in hand`, a kill window's `<name> in hand` / `popped`, a
+ *    `[STACKED DEFENSIVES]` member, a `Mitigation audit:` row of a death, a
+ *    menu row's `mitSpell=<name>`;
+ *  - the legend sentence of `(invisible, …)` is printed exactly when an
+ *    `[ENEMY DEF]` line carries the label.
+ * (`checkEnemyDefSaveEffect` holds the line's own label.) eee45a66 r3: a
+ * `burst-into-mitigation` row on a mage who took full damage (0.706 against
+ * 0.713 before the press) and died in that burst.
+ */
+export function checkInvisibilityIsNoDefense(lines: string[]): string[] {
+  const failures: string[] = [];
+  const names = Object.keys(INVISIBLE_FACT_LINE_IDS)
+    .map((id) => getEnglishSpellName(id, ""))
+    .filter((n) => n !== "");
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const asDefense = names.map(
+    (n) =>
+      new RegExp(
+        String.raw`Target had a major defensive up:[^|]*\b${esc(n)}\b|popped [^|;]*\b${esc(n)}\b|self-saved \([^)]*\b${esc(n)}\b|\b${esc(n)} in hand|\[STACKED DEFENSIVES\].*\b${esc(n)}\b|mitSpell=[^,}]*\b${esc(n)}\b|Mitigation audit:.*\b${esc(n)}\b`,
+      ),
+  );
+  let labelled = false;
+  let legend = -1;
+  lines.forEach((line, i) => {
+    if (ENEMY_DEF_LINE.test(line) && INVISIBLE_LABEL_RE.test(line))
+      labelled = true;
+    if (line.trim() === INVISIBLE_LEGEND) legend = i;
+    if (asDefense.some((re) => re.test(line)))
+      failures.push(
+        `line ${i + 1}: counts an invisibility as a defense that was up or in hand — it reduces no damage and is no immunity (rulings R58 / R61): "${line.trim().slice(0, 160)}"`,
+      );
+  });
+  if (labelled && legend < 0 && lines.some((l) => ENEMY_DEF_LEGEND.test(l)))
+    failures.push(
+      "an [ENEMY DEF] line carries `(invisible, …)` and the legend does not say what it is",
+    );
+  if (!labelled && legend >= 0)
+    failures.push(
+      `line ${legend + 1}: the \`(invisible, …)\` legend is printed and no [ENEMY DEF] line carries the label`,
+    );
   return failures;
 }
 
@@ -8861,6 +8943,7 @@ export function checkMatch(
   hardFailures.push(...checkKickEatenRangeFacts(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkEnemyDefSaveEffect(lines));
+  hardFailures.push(...checkInvisibilityIsNoDefense(lines));
   hardFailures.push(...checkFormCooldownPressSpacing(lines));
   hardFailures.push(...checkEnemyDefEndNotLogged(lines));
   hardFailures.push(...checkSchoolLimitedImmuneLabel(lines));

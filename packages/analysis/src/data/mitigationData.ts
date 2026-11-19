@@ -95,7 +95,12 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   // —— The mitigation aura hangs off a different id (the generation layer can't find it by cast id) ——
   "51052": { pct: 30, schoolMask: 0x7e }, // Anti-Magic Zone: DR aura 145629 (observed), aura87 −15/126 × PvpMultiplier 2 = 30 % in PvP (2026-09-04 user ruling "PvP 值为官方值", BACKLOG #41; was 15 = the PvE number); the same-named 332831 (-20) is not observed and judged not live
   "198589": { pct: 25, schoolMask: 0x7f }, // Blur 疾影术:DR aura 212800(S2 归档已观测),`aura87 pts=-25 misc=127`;cast id 198589 自己只有一条 `E64 trig=212800`,所以生成层按 cast id 找不到它。2026-08-22 用户确认「的确是减伤,而且是大技能」后补登记
-  "110959": { pct: 60, schoolMask: 0x7f }, // Greater Invisibility 强化隐形术:DR aura 113862(`aura87 pts=-60 misc=127`,PvpMultiplier 1,12.1.0.69587);cast id 110959 自己只有一条 `E64` 触发行,所以生成层按 cast id 找不到它 —— 与疾影术 198589 → 212800 同一形状。2026-09-26 用户签字 kill-live-gated 后登记(此前只在冷却账本里,ledgerGapScan 发现)。FLAG(2026-09-30,分诊 tier-C C2):113862 在 605 场 S2 采集 / 713 次施放里从未出现,日志只有光环 110960;带 110960 期间与其后 3 秒的承伤是基线的 0.98×(−60% 应读约 0.33×)。用户 2026-09-30 裁定维持 60%、不重开;`SELF_WALL_AURA_TO_CAST_ID` 因此把 110960 接到这一行
+  // NOT Greater Invisibility 110959 (user ruling R58, 2026-11-18): it had a 60 % row here from
+  // 2026-09-26 on the strength of buff 113862 (`aura87 pts=-60 misc=127`). Nothing triggers that
+  // buff (110959 triggers 110960 only, 110960 triggers nothing; DB2 12.1.7), the 110959 tooltip
+  // names no reduction, 113862 has 0 rows in 605 files / 713 casts, and damage taken with 110960
+  // up and for 3 s after is 0.98x baseline. It is not a wall; the press stays a defensive press
+  // (invisibility) for the cooldown ledger. Supersedes the 2026-09-26 row and the 2026-09-30 keep.
   "62618": { pct: 40, schoolMask: 0x7f }, // Power Word: Barrier: DR aura 81782 (observed), aura87 −20/127 × PvpMultiplier 2 = 40 % in PvP (2026-09-04 user ruling, BACKLOG #41; was 20 = the PvE number)
   "98008": { pct: 10, schoolMask: 0x7f }, // Spirit Link Totem: DR aura 325174 (observed), currently -10/127 (98007 has the same value but is not observed)
   "61336": { pct: 50, schoolMask: 0x7f }, // Survival Instincts: the cast id is dummy only (points=50); same-named 50322/236157 are both currently -50/127; stable at 50% long-term
@@ -124,6 +129,10 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
  * guards that there is no third state.
  */
 export const NO_MITIGATION_IDS: ReadonlySet<string> = new Set([
+  // Greater Invisibility: a defensive press with no reduction (user ruling
+  // R58, 2026-11-18 — see the note in MITIGATION_OVERRIDES). Not a
+  // `SELF_SAVE_IDS` member either (`INVISIBLE_FACT_LINE_IDS`, ruling R61).
+  "110959",
   "19236", // Desperate Prayer: pure healing + max health, DB2 has no aura87 row at all
   "47788", // Guardian Spirit: +60% healing received (aura118) + death prevention, no percentage mitigation (the same-named new id 1247928 has a -10 row but is not observed, see the pending-decision section note)
   "97462", // Rallying Cry: +10% max health (the actual buff is 97463), no mitigation

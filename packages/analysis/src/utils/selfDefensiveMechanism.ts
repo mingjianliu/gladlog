@@ -39,6 +39,7 @@ import {
   ENEMY_AREA_SAVE_IDS,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
+  INVISIBLE_FACT_LINE_IDS,
   type EnemySelfDefensiveHandMechanism,
   MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS,
 } from "../data/spellIdLists";
@@ -66,6 +67,10 @@ export type SelfDefensiveMechanism =
   | { kind: EnemySelfDefensiveHandMechanism }
   /** a grip / a damage redirect (rulings A20 + U3) */
   | { kind: "redirect" }
+  /** the unit went unseen — Greater Invisibility (`INVISIBLE_FACT_LINE_IDS`,
+   * user rulings R58 / R61): no reduction, no immunity, counted by no wall
+   * or immunity reader */
+  | { kind: "invisible" }
   /** an area save anchored on its cast (ruling A15) */
   | { kind: "area" };
 
@@ -224,9 +229,33 @@ export function selfDefensiveLabelWords(m: SelfDefensiveMechanism): string {
 
 /** The kinds whose label carries figures from the log after its words. */
 function carriesFigures(m: SelfDefensiveMechanism): boolean {
-  return m.kind === "absorb" || m.kind === "reduction";
+  return (
+    m.kind === "absorb" || m.kind === "reduction" || m.kind === "invisible"
+  );
 }
 
+export { INVISIBLE_FACT_LINE_IDS };
+/** The mechanism of an `INVISIBLE_FACT_LINE_IDS` press. */
+export const INVISIBLE_MECHANISM: SelfDefensiveMechanism = {
+  kind: "invisible",
+};
+/** A rendered line carries the `(invisible, …)` label. */
+export const INVISIBLE_LABEL_RE = / \(invisible, /;
+/** The legend sentence of that label (R61's text), printed only when a line
+ * carries it. */
+export const INVISIBLE_LEGEND =
+  "`(invisible, …)` = the unit went unseen; NOT one of the walls and no immunity; kill windows and KILL ATTEMPTS do not count it; `ended at once` = the log took the invisibility off the same instant it went up;";
+/** The length slot of an invisibility whose aura the log removes in the
+ * instant it applies it (user ruling R64, 2026-11-18: 5 presses on the 605
+ * files, each applied and removed in one millisecond, printed `0.0s`). */
+export const INVISIBLE_ENDED_AT_ONCE = "ended at once";
+/** The length slot of an `(invisible, …)` label from the length the line
+ * would print (`N.Ns`): a length that prints `0.0s` is `ended at once`, so no
+ * line states a zero length (R64). One predicate with the gate, which re-reads
+ * the rendered text: the rendering grid, not the raw milliseconds. */
+export function invisibleLengthWords(renderedLength: string): string {
+  return renderedLength === "0.0s" ? INVISIBLE_ENDED_AT_ONCE : renderedLength;
+}
 /**
  * Does a rendered `[ENEMY DEF]` parenthesis — the text that follows the
  * ability's name, from its `(` — state this mechanism? The gate's reader of
@@ -339,6 +368,7 @@ const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
     carried: / \(redirect\)/,
     legend: "`(redirect)` = a grip or a damage redirect;",
   },
+  { carried: INVISIBLE_LABEL_RE, legend: INVISIBLE_LEGEND },
 ];
 
 /** The legend entries for the labels these `[ENEMY DEF]` lines carry, in the

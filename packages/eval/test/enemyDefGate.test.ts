@@ -1,5 +1,9 @@
-import { selfReductionLegend } from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
-import { describe, expect, it } from "vitest";
+import { ensureAnalysisData } from "@gladlog/analysis";
+import {
+  INVISIBLE_LEGEND,
+  selfReductionLegend,
+} from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   checkBrokeOutRefConsistency,
@@ -7,11 +11,16 @@ import {
   checkEnemyDefRefConsistency,
   checkEnemyDefSaveEffect,
   checkGuardianSpiritSaveClause,
+  checkInvisibilityIsNoDefense,
   checkKarmaFedClause,
   checkKillAttemptUpSinceEndLogged,
   checkResReturnAnnounced,
   checkSchoolLimitedImmuneLabel,
 } from "../src/quality/promptQualityCheck";
+
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
 /**
  * GH #97: KILL ATTEMPTS `popped X` / `saved by external (X)` ⇒ an
@@ -973,39 +982,120 @@ describe("checkKillAttemptUpSinceEndLogged (rulings P-FU-b8 / D6)", () => {
   const D = (at: string, who: string, rest: string) =>
     `${at}  [ENEMY DEF]   ${who}: ${rest}`;
 
-  it("fails `popped Greater Invisibility [up since m:ss]` whose line there says `end not logged` — s2/112-1-757 [6:04–6:18]", () => {
-    const f = checkKillAttemptUpSinceEndLogged([
+  it("Greater Invisibility is no cause at all (rulings R58 / R61): `popped Greater Invisibility` is `checkInvisibilityIsNoDefense`'s failure, with or without `[up since]`", () => {
+    const lines = [
       LEGEND,
       ...ROSTER,
-      D("5:49", MAGE, "Greater Invisibility (60%, end not logged)"),
+      D("5:49", MAGE, "Greater Invisibility (invisible, end not logged)"),
       ATTEMPT("6:04–6:18", "popped Greater Invisibility [up since 5:49]"),
+      ATTEMPT("7:08–7:14", "popped Greater Invisibility"),
+    ];
+    const f = checkInvisibilityIsNoDefense([
+      ...lines,
+      `    ${INVISIBLE_LEGEND}`,
     ]);
-    expect(f).toHaveLength(1);
-    expect(f[0]).toContain("Greater Invisibility as up since 5:49");
+    expect(f).toHaveLength(2);
+    expect(f[0]).toContain("counts an invisibility as a defense");
   });
 
-  it("passes when the log saw it end, when it went up inside the attempt, and for a wall whose carrier stays in sight", () => {
+  it("passes for a wall whose carrier stays in sight, and for one clause of several", () => {
     expect(
       checkKillAttemptUpSinceEndLogged([
         LEGEND,
         ...ROSTER,
-        // the log saw this one end 9 s on: up when the attempt began
-        D("5:49", MAGE, "Greater Invisibility (60%, 9.0s — removed early)"),
-        ATTEMPT("5:52–5:58", "popped Greater Invisibility [up since 5:49]"),
-        // pressed inside the attempt: no `[up since]`, its start is logged
-        D("7:10", MAGE, "Greater Invisibility (60%, end not logged)"),
-        ATTEMPT("7:08–7:14", "popped Greater Invisibility"),
         // Barkskin keeps the cap (P-FU-b8 names the unseen carriers only)
         D("8:00", MAGE, "Barkskin (20%, end not logged)"),
         ATTEMPT("8:05–8:09", "popped Barkskin [up since 8:00]"),
-        // one clause of several, the named one logged
-        D("9:00", MAGE, "Greater Invisibility (60%, 12.0s — removed early)"),
+        D("9:00", MAGE, "Barkskin (20%, 12.0s)"),
         ATTEMPT(
           "9:03–9:08",
-          "popped Greater Invisibility [up since 9:00]; saved by external (Ironbark)",
+          "popped Barkskin [up since 9:00]; saved by external (Ironbark)",
         ),
       ]),
     ).toEqual([]);
+  });
+
+  describe("checkInvisibilityIsNoDefense (rulings R58 / R61)", () => {
+    const LINE = D(
+      "5:49",
+      MAGE,
+      "Greater Invisibility (invisible, end not logged) (at 17% HP)",
+    );
+    const LEG = `    ${INVISIBLE_LEGEND}`;
+    it("passes the fact line with its legend, and a prompt with neither", () => {
+      expect(
+        checkInvisibilityIsNoDefense([LEGEND, ...ROSTER, LINE, LEG]),
+      ).toEqual([]);
+      expect(checkInvisibilityIsNoDefense([LEGEND, ...ROSTER])).toEqual([]);
+      // our own mage's button is a press, not a defense that was up
+      expect(
+        checkInvisibilityIsNoDefense([
+          "2:41  [YOU] [CD]   Greater Invisibility (self: 40% HP, -9%/s, 80k DPS)",
+          "  [BUFF FADED]   Greater Invisibility (broken by 4(AWarrior)'s Rend)",
+          "2:50  [DEATH]  1(FMage) (Frost Mage — friendly) (Unused: Greater Invisibility, Alter Time)",
+          "2:41  [YOU] [CD]   Ice Block (self: 20% HP) | cheaper available: Greater Invisibility",
+        ]),
+      ).toEqual([]);
+    });
+    it("the legend is printed exactly when a line carries the label", () => {
+      expect(
+        checkInvisibilityIsNoDefense([LEGEND, ...ROSTER, LINE]),
+      ).toHaveLength(1);
+      expect(
+        checkInvisibilityIsNoDefense([LEGEND, ...ROSTER, LEG]),
+      ).toHaveLength(1);
+    });
+    it("fails every reader that counted it as a defense up or in hand", () => {
+      for (const bad of [
+        "    Target had a major defensive up: Greater Invisibility active ON THE TARGET 4.0s of this burst (pressed 11.0s after the burst opened)",
+        "  [2:20–2:26] on Mage — Storm Bolt opener (Full DR), 1 stun | opportunity: gated (Greater Invisibility in hand; no softer target)",
+        "  [KILL WINDOW] 2:20–2:26 on Fire Mage (Mage): FAILED: popped Greater Invisibility",
+        "             Mitigation audit: Greater Invisibility blocked ~40k (≈5% max HP) over 3.0s active in the final 10s",
+        "2:04  [STACKED DEFENSIVES]   1(FMage) had Guardian Spirit (from you) and Greater Invisibility (from 1(FMage)) up together",
+        "  - id=burst-into-mitigation:x:162 type=burst-into-mitigation facts={spell=Avatar, mitSpell=Greater Invisibility, mitPct=60}",
+      ])
+        expect(checkInvisibilityIsNoDefense([bad]), bad).toHaveLength(1);
+    });
+    it("the line itself: a percentage or an immunity label is `checkEnemyDefSaveEffect`'s failure", () => {
+      for (const label of [
+        "Greater Invisibility (60%, end not logged)",
+        "Greater Invisibility (immune, end not logged)",
+        // nothing may follow the word but R61's two forms
+        "Greater Invisibility (invisible, immune, 60%)",
+        "Greater Invisibility (invisible, 60%, end not logged)",
+        "Greater Invisibility (invisible, 3.0s — removed early)",
+        // R64: a zero length is `ended at once`
+        "Greater Invisibility (invisible, 0.0s)",
+        "Greater Invisibility (invisible, 0.0s) (at 66% HP)",
+      ])
+        expect(
+          checkEnemyDefSaveEffect([
+            LEGEND,
+            ...ROSTER,
+            D("5:49", MAGE, label),
+          ]).join("\n"),
+          label,
+        ).toContain("it is no wall and no immunity");
+      expect(checkEnemyDefSaveEffect([LEGEND, ...ROSTER, LINE, LEG])).toEqual(
+        [],
+      );
+      // the three forms of R61 / R64
+      for (const label of [
+        "Greater Invisibility (invisible, end not logged)",
+        "Greater Invisibility (invisible, ended at once) (at 66% HP)",
+        "Greater Invisibility (invisible, 0.7s)",
+        "Greater Invisibility (invisible, 10.0s) [friendly offensive CD active]",
+      ])
+        expect(
+          checkEnemyDefSaveEffect([
+            LEGEND,
+            ...ROSTER,
+            D("5:49", MAGE, label),
+            LEG,
+          ]),
+          label,
+        ).toEqual([]);
+    });
   });
 
   it("`forced a full immunity [up since m:ss]`: fails when the only immunity there on that unit is an unseen carrier's with no logged end", () => {

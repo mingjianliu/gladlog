@@ -20,7 +20,7 @@ import observed from "../src/data/observedSpellIdsGenerated.json";
 import { getEnglishSpellName } from "../src/data/spellEffectData";
 import {
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
-  ENEMY_STEALTH_WALL_AURAS,
+  ENEMY_INVISIBILITY_AURAS,
 } from "../src/data/spellIdLists";
 import {
   ENEMY_DEF_END_NOT_LOGGED,
@@ -32,6 +32,7 @@ import {
   SAVE_AURA_END_UNSEEN_IDS,
   wallTableIdOfAura,
 } from "../src/utils/enemyDefensives";
+import { INVISIBLE_FACT_LINE_IDS } from "../src/utils/selfDefensiveMechanism";
 
 const OBSERVED = new Set(
   (observed as unknown as Array<string | number>).map(String),
@@ -40,7 +41,7 @@ const MATCH_START = Date.UTC(2026, 9, 10);
 const ms = (s: number): number => MATCH_START + Math.round(s * 1000);
 const MASS_INVISIBILITY = "414664"; // immunity-kind, 12 s
 const VANISH_AURA = "11327"; // immunity-kind, 1.5 s
-const GREATER_INVIS_AURA = "110960"; // 60 % wall, 20 s
+const GREATER_INVIS_AURA = "110960"; // invisibility, 20 s — no wall (R58)
 const GREATER_INVIS_CAST = "110959";
 const BARKSKIN = "22812"; // wall, 12 s (8 s base + talents: read from the line)
 const DIVINE_SHIELD = "642"; // 8 s
@@ -180,18 +181,20 @@ describe("[ENEMY DEF] — an aura the log never shows end prints `end not logged
     expect(line).not.toMatch(/\d+\.\ds/);
   });
 
-  it("Greater Invisibility with no REMOVED: `(60%, end not logged)`, not `(60%, 20.0s)` — s2/112-1-757 5:49", () => {
+  it("Greater Invisibility with no REMOVED: `(invisible, end not logged)` — no percentage (R58 / R61), no official 20 s — s2/112-1-757 5:49", () => {
     const mage = unit("e1", {
       spellCastEvents: [cast(GREATER_INVIS_CAST, "e1", 49.0)],
       auraEvents: [applied(GREATER_INVIS_AURA, "e1", "e1", 49.0)],
     });
     const [d] = enemyDefensiveEvents(mage, [mage], combat);
-    expect(d.kind).toBe("self");
-    expect(d.pct).toBe(MITIGATION_TABLE[GREATER_INVIS_CAST]!.pct);
+    expect(d.kind).toBe("self-save");
+    expect(d.mechanism).toEqual({ kind: "invisible" });
+    expect(d.pct).toBeUndefined();
+    expect(MITIGATION_TABLE[GREATER_INVIS_CAST]).toBeUndefined();
     expect(d.endNotLogged).toBe(true);
-    expect(d.observedSeconds).toBeCloseTo(20, 6);
+    expect(d.observedSeconds).toBeUndefined();
     expect(body(render([mage])[0]!)).toBe(
-      "Greater Invisibility (60%, end not logged)",
+      "Greater Invisibility (invisible, end not logged)",
     );
   });
 
@@ -209,7 +212,32 @@ describe("[ENEMY DEF] — an aura the log never shows end prints `end not logged
     expect(events.map((d) => d.endNotLogged)).toEqual([undefined, undefined]);
     expect(render([mage]).map(body)).toEqual([
       "Mass Invisibility (immune, 0.7s — removed early)",
-      "Greater Invisibility (60%, 3.0s — removed early)",
+      // no end note: an invisibility that ended is not a save removed early
+      "Greater Invisibility (invisible, 3.0s)",
+    ]);
+  });
+
+  it("an invisibility the log takes off in the instant it goes up reads `ended at once`, never `0.0s` (user ruling R64)", () => {
+    const mage = unit("e1", {
+      spellCastEvents: [cast(GREATER_INVIS_CAST, "e1", 61.0)],
+      auraEvents: [
+        applied(GREATER_INVIS_AURA, "e1", "e1", 61.0),
+        removed(GREATER_INVIS_AURA, "e1", "e1", 61.0),
+      ],
+    });
+    expect(render([mage]).map(body)).toEqual([
+      "Greater Invisibility (invisible, ended at once)",
+    ]);
+    // one rendering grid: a length under the printed tenth is the same line
+    const brief = unit("e1", {
+      spellCastEvents: [cast(GREATER_INVIS_CAST, "e1", 61.0)],
+      auraEvents: [
+        applied(GREATER_INVIS_AURA, "e1", "e1", 61.0),
+        removed(GREATER_INVIS_AURA, "e1", "e1", 61.03),
+      ],
+    });
+    expect(render([brief]).map(body)).toEqual([
+      "Greater Invisibility (invisible, ended at once)",
     ]);
   });
 
@@ -289,7 +317,7 @@ describe("[ENEMY DEF] — an aura the log never shows end prints `end not logged
   it("the phrase's slot: after the strength or alone, closing the parenthesis — never with a duration or an end note", () => {
     for (const ok of [
       "Mass Invisibility (immune, end not logged) (at 100% HP)",
-      "Greater Invisibility (60%, end not logged) [friendly offensive CD active]",
+      "Greater Invisibility (invisible, end not logged) [friendly offensive CD active]",
       "Ironbark → 5(RDruid) (end not logged) (target at 40% HP)",
       "Feign Death (absorb, end not logged)",
       "Feign Death (absorb 64k, end not logged)",
@@ -316,18 +344,20 @@ describe("[ENEMY DEF] — an aura the log never shows end prints `end not logged
     expect(renderedExternalSpanS(d)).toEqual({ from: 20, to: 32 });
   });
 
-  it("the unseen-carrier set is the three ruled-in immunities plus the stealth wall, and the wall is a real table row", () => {
+  it("the unseen-carrier set is the three ruled-in immunities plus Greater Invisibility's aura, which is no wall row (R58) and the fact line's aura (R61)", () => {
     expect([...SAVE_AURA_END_UNSEEN_IDS].sort()).toEqual(
       [
         ...ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
-        ...Object.keys(ENEMY_STEALTH_WALL_AURAS),
+        ...Object.keys(ENEMY_INVISIBILITY_AURAS),
       ].sort(),
     );
-    expect(Object.keys(ENEMY_STEALTH_WALL_AURAS)).toEqual([GREATER_INVIS_AURA]);
-    for (const [id, name] of Object.entries(ENEMY_STEALTH_WALL_AURAS)) {
-      // a logged aura id that resolves to a 20–99 % wall row
-      expect(SELF_WALL_AURA_TO_CAST_ID[id], id).toBeDefined();
-      expect(MITIGATION_AURA_IDS.has(wallTableIdOfAura(id)), id).toBe(true);
+    expect(Object.keys(ENEMY_INVISIBILITY_AURAS)).toEqual([GREATER_INVIS_AURA]);
+    for (const [id, name] of Object.entries(ENEMY_INVISIBILITY_AURAS)) {
+      // a logged aura id that resolves to no wall row
+      expect(SELF_WALL_AURA_TO_CAST_ID[id], id).toBeUndefined();
+      expect(MITIGATION_AURA_IDS.has(wallTableIdOfAura(id)), id).toBe(false);
+      // …and is the aura an `(invisible, …)` line reads its length from
+      expect(Object.values(INVISIBLE_FACT_LINE_IDS), id).toContain(id);
       // the name is the one the `[ENEMY DEF]` line prints for that aura
       expect(getEnglishSpellName(id, "?"), id).toBe(name);
       // …and the id is one the corpus logs (a renumbered id never fires)
@@ -335,7 +365,7 @@ describe("[ENEMY DEF] — an aura the log never shows end prints `end not logged
     }
     expect(
       CURATED_ID_TABLES.some(
-        (t) => t.name === "spellIdLists.ENEMY_STEALTH_WALL_AURAS",
+        (t) => t.name === "spellIdLists.ENEMY_INVISIBILITY_AURAS",
       ),
     ).toBe(true);
   });

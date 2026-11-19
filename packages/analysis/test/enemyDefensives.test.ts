@@ -2,6 +2,7 @@
 import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { auraOnlyActivations } from "../src/utils/auraOnlyActivations";
 import { saveSchoolMask } from "../src/analysis/candidates/cooldownTiming";
 import { CRISIS_PROC_ANSWERS } from "../src/analysis/crisisDecisionPoints";
 import { ABILITY_EFFECTS_GENERATED } from "../src/data/abilityEffectsGenerated";
@@ -49,6 +50,8 @@ import {
   pressSecondsOfAura,
   REMOVED_EARLY_SLACK_S,
   RIDER_ABSORB_SAVE_AURAS,
+  ownSaveSpanS,
+  ownWallSpanS,
   SAVE_AURA_END_UNSEEN_IDS,
   SAVE_AURA_END_UNSEEN_NAMES,
   saveAuraCountsWhenAlreadyUp,
@@ -491,21 +494,18 @@ describe("enemyDefensiveEvents", () => {
   });
 });
 
-describe("Greater Invisibility is never double-counted (signed 2026-09-26, codex astra)", () => {
-  // The cast 110959 carries no mitigation row; its −60 % is on buff 113862.
-  // It is registered cast-keyed (the Blur 198589 → 212800 pattern). Listing
-  // 110959 in NO_MITIGATION_IDS as well would make it a self-save, and
-  // listing 113862 in the table would make its aura a wall — one activation,
-  // two defensive events (codex reproduced 0 → 2 with the real collector).
-  // This pins "no duplicate", NOT recognition: today an enemy GI yields ZERO
-  // events, because the aura branch matches buff ids and 113862 is not a key.
-  // Every cast-keyed override shares that gap (Blur, AMZ, Barrier, SLT), and
-  // so does the death-window mitigation audit (whitelisted aura ids only).
-  // It is ledgered for an explicit cast → buff link.
-  it("priced on the cast id, never as a no-mitigation self-save, the buff id unlisted", () => {
-    expect(MITIGATION_TABLE["110959"]?.pct).toBe(60);
+describe("Greater Invisibility is no mitigation (user ruling R58, 2026-11-18)", () => {
+  // It had a cast-keyed 60 % row from 2026-09-26 on the strength of buff
+  // 113862 (aura 87 −60). Nothing triggers that buff in DB2 12.1.7, it has 0
+  // rows in 605 files / 713 casts, and damage taken is 0.98x baseline. No
+  // row, no self-save membership: KILL ATTEMPTS and the kill windows do not
+  // count it. Its `[ENEMY DEF]` line is the fact `(invisible, …)` (R61).
+  it("no table row for the cast, the logged aura or the buff; not a self-save; not an immunity", () => {
+    expect(MITIGATION_TABLE["110959"]).toBeUndefined();
+    expect(MITIGATION_TABLE["110960"]).toBeUndefined();
     expect(MITIGATION_TABLE["113862"]).toBeUndefined();
     expect(SELF_SAVE_IDS.has("110959")).toBe(false);
+    expect(isImmunitySaveAura("110960")).toBe(false);
   });
 
   it("a GI cast plus its 113862 buff yields at most one enemy defensive event", () => {
@@ -1241,17 +1241,100 @@ describe("a wall keyed by its cast is found under its logged aura (F-E1a)", () =
     expect(evs[0].observedSeconds).toBeCloseTo(10, 5);
   });
 
-  it("an enemy Greater Invisibility: one self wall at the signed 60 %, from the 110960 aura", () => {
+  it("an enemy Greater Invisibility: one fact event `invisible`, its length from the 110960 aura — no wall, no percentage (rulings R58 / R61)", () => {
     const mage = unit("e1", {
       spec: "63",
       spellCastEvents: [cast(GI_CAST, "0000000000000000", 40)],
       auraEvents: [
         applied(GI_AURA, "e1", "e1", 40),
-        removed(GI_AURA, "e1", "e1", 60),
+        removed(GI_AURA, "e1", "e1", 42),
       ],
     });
     const evs = enemyDefensiveEvents(mage, [mage], combat);
-    expect(evs.map((e) => [e.kind, e.pct])).toEqual([["self", 60]]);
+    expect(evs.map((e) => [e.kind, e.pct, e.mechanism?.kind])).toEqual([
+      ["self-save", undefined, "invisible"],
+    ]);
+    expect(evs[0]!.observedSeconds).toBeCloseTo(2, 5);
+    expect(evs[0]!.removedEarly).toBe(false);
+    // no span reader cuts a kill window on it
+    expect(ownSaveSpanS(evs[0]!, false)).toBeUndefined();
+    expect(ownWallSpanS(evs[0]!, false)).toBeUndefined();
+  });
+
+  it("the event carries the press's own instant when the aura row comes after the cast row — the line's HP and offensive tag are the press's (codex 85-tk-WIN-T157r58-1 #1)", () => {
+    const mage = unit("e1", {
+      spec: "63",
+      spellCastEvents: [cast(GI_CAST, "0000000000000000", 39.8)],
+      auraEvents: [
+        applied(GI_AURA, "e1", "e1", 40),
+        removed(GI_AURA, "e1", "e1", 42),
+      ],
+    });
+    const [ev] = enemyDefensiveEvents(mage, [mage], combat);
+    expect(ev!.atSeconds).toBeCloseTo(40, 5);
+    expect(ev!.pressSeconds).toBeCloseTo(39.8, 5);
+  });
+
+  it("an invisibility aura with no press row beside it says so — our side's `[PROC] … (no press)` line reads the flag (R62: every reader of our own button stays)", () => {
+    const mage = unit("e1", {
+      spec: "63",
+      auraEvents: [
+        applied(GI_AURA, "e1", "e1", 40),
+        removed(GI_AURA, "e1", "e1", 42),
+      ],
+    });
+    const [ev] = enemyDefensiveEvents(mage, [mage], combat);
+    expect(ev!.noPressLogged).toBe(true);
+    expect(ev!.pressSeconds).toBeUndefined();
+    expect(
+      auraOnlyActivations(mage, [mage], combat.startTime, combat.endTime).map(
+        (a) => [a.family, a.spellId, a.atSeconds],
+      ),
+    ).toEqual([["save", GI_CAST, 40]]);
+    // up before the log's first row (only its REMOVED row is there): the
+    // event stands at the round's start, no press beside it — the 0:00
+    // `[PROC] … (no press)` line (T157-4: 14 such lines on the 605 files)
+    const carried = unit("e3", {
+      spec: "63",
+      auraEvents: [removed(GI_AURA, "e3", "e3", 5.72)],
+    });
+    const [early] = enemyDefensiveEvents(carried, [carried], combat);
+    expect([early!.atSeconds, early!.noPressLogged]).toEqual([0, true]);
+    expect(early!.observedSeconds).toBeCloseTo(5.72, 5);
+    expect(
+      auraOnlyActivations(
+        carried,
+        [carried],
+        combat.startTime,
+        combat.endTime,
+      ).map((a) => [a.family, a.spellId, a.atSeconds]),
+    ).toEqual([["save", GI_CAST, 0]]);
+    // a pressed one carries no flag and no such line
+    const pressed = unit("e2", {
+      spec: "63",
+      spellCastEvents: [cast(GI_CAST, "0000000000000000", 40)],
+      auraEvents: [
+        applied(GI_AURA, "e2", "e2", 40),
+        removed(GI_AURA, "e2", "e2", 42),
+      ],
+    });
+    expect(
+      enemyDefensiveEvents(pressed, [pressed], combat)[0]!.noPressLogged,
+    ).toBeUndefined();
+    expect(
+      auraOnlyActivations(pressed, [pressed], combat.startTime, combat.endTime),
+    ).toEqual([]);
+  });
+
+  it("with no end in the log the event says so, never the official 20 s", () => {
+    const mage = unit("e1", {
+      spec: "63",
+      spellCastEvents: [cast(GI_CAST, "0000000000000000", 40)],
+      auraEvents: [applied(GI_AURA, "e1", "e1", 40)],
+    });
+    const [ev] = enemyDefensiveEvents(mage, [mage], combat);
+    expect(ev!.endNotLogged).toBe(true);
+    expect(ev!.observedSeconds).toBeUndefined();
   });
 });
 
@@ -1451,15 +1534,16 @@ describe("Anti-Magic Shell routing and the school-limited save masks", () => {
       spellId,
       inferredEnd,
     });
-    // the three ruled-in immunities and the stealth wall (aura 110960)
+    // the three ruled-in immunities and Greater Invisibility's aura 110960
+    // (no wall since R58; its carrier still goes unseen)
     for (const id of ["409293", "11327", "414664", "110960"]) {
       expect(SAVE_AURA_END_UNSEEN_IDS.has(id), id).toBe(true);
       expect(saveAuraCountsWhenAlreadyUp(iv(id, false)), id).toBe(true);
       expect(saveAuraCountsWhenAlreadyUp(iv(id, true)), id).toBe(false);
     }
     expect(SAVE_AURA_END_UNSEEN_IDS.size).toBe(4);
-    // Greater Invisibility is a wall, never an immunity: the immunity test
-    // could not carry the rule to it
+    // Greater Invisibility is never an immunity: the immunity test could not
+    // carry the rule to it
     expect(isImmunitySaveAura("110960")).toBe(false);
     expect(immunityCountsWhenAlreadyUp(iv("110960", false))).toBe(false);
     // every other save keeps the cap — a wall, an external, a table
@@ -1473,12 +1557,12 @@ describe("Anti-Magic Shell routing and the school-limited save masks", () => {
           immunityLastsItsAura(id) &&
             saveAuraCountsWhenAlreadyUp(iv(id, inferredEnd)),
         );
-    // the names are the ones the lines print, in the ids' order
+    // the names a KILL ATTEMPTS cause can print, in the ids' order — not
+    // Greater Invisibility, which is no cause of any attempt (R58)
     expect([...SAVE_AURA_END_UNSEEN_NAMES]).toEqual([
       "Burrow",
       "Vanish",
       "Mass Invisibility",
-      "Greater Invisibility",
     ]);
   });
 

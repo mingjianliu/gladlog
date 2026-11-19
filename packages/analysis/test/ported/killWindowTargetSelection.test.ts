@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Mock the data first
-vi.mock("../../src/data/spellIdLists", () => ({
+vi.mock("../../src/data/spellIdLists", async (importActual) => ({
+  // the named exports stay real (`isInvisibilityPress`, the id tables the
+  // kill-window roster filters by); only the default lists are this file's
+  ...(await importActual<typeof import("../../src/data/spellIdLists")>()),
   default: {
     externalOrBigDefensiveSpellIds: ["33206"], // Pain Suppression
     externalDefensiveSpellIds: ["33206"],

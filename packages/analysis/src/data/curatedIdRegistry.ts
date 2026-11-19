@@ -319,7 +319,8 @@ import spellIdLists, {
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
   ENEMY_SELF_SAVE_ONLY_IDS,
-  ENEMY_STEALTH_WALL_AURAS,
+  ENEMY_INVISIBILITY_AURAS,
+  INVISIBLE_FACT_LINE_IDS,
   FRIENDLY_PRESS_LINE_ONLY_IDS,
   MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS,
 } from "./spellIdLists";
@@ -473,13 +474,21 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "aura",
     () => set(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS),
   ),
-  // user ruling D6: the wall aura whose carrier goes unseen (Greater
-  // Invisibility) — with the three above, "the log never shows it end"
+  // user ruling D6: the invisibility aura whose carrier goes unseen (Greater
+  // Invisibility; no wall since R58) — with the three above, "the log never
+  // shows it end"
   t(
-    "spellIdLists.ENEMY_STEALTH_WALL_AURAS",
+    "spellIdLists.ENEMY_INVISIBILITY_AURAS",
     "data/spellIdLists.ts",
     "aura",
-    () => keys(ENEMY_STEALTH_WALL_AURAS),
+    () => keys(ENEMY_INVISIBILITY_AURAS),
+  ),
+  // rulings R58 / R61: the press whose [ENEMY DEF] line is `(invisible, …)`
+  t(
+    "spellIdLists.INVISIBLE_FACT_LINE_IDS",
+    "data/spellIdLists.ts",
+    "cast",
+    () => keys(INVISIBLE_FACT_LINE_IDS),
   ),
   t("spellIdLists.ENEMY_PROC_SAVES", "data/spellIdLists.ts", "aura", () =>
     keys(ENEMY_PROC_SAVES),
