@@ -12,6 +12,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { MITIGATION_TABLE } from "../../data/mitigationData";
 import { absorbContributionsInWindow } from "../../utils/absorbShields";
 import { allyCopyClause, isAllyCopyWallId } from "../../utils/allyCopyWall";
+import { isAuraMasterySwitchWallEvent } from "../../utils/auraMasteryBranch";
 import {
   friendlyOffensiveCdActiveAt,
   guardianSpiritSaveClause,
@@ -151,6 +152,16 @@ export function emitEnemyDefEntries(
     );
     for (const d of events) {
       if (d.atSeconds < 0 || d.atSeconds > matchEndSeconds) continue;
+      // a wall a switch of auras opened has no line of its own: the press
+      // has its line (`isAuraMasterySwitchWallEvent`)
+      if (
+        isAuraMasterySwitchWallEvent(
+          enemy,
+          d,
+          matchStartMs + Math.round(d.atSeconds * 1000),
+        )
+      )
+        continue;
       const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
       // FT-T08 step 3: an early end says the cause the log gives for it
       // (`auraEndFromLog`); `removed early` is what is left when it gives

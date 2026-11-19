@@ -27,6 +27,7 @@ import {
   auraMasteryPressSwitchedToWall,
   auraMasteryPressTag,
   CONCENTRATION_AURA_ID,
+  isAuraMasterySwitchWallEvent,
   isNoWallButtonOf,
   isNoWallPress,
   kitNameCarriesNoWallTag,
@@ -34,6 +35,7 @@ import {
   kitTextWithoutNoWallTags,
   withoutImmunityBranchWalls,
 } from "../src/utils/auraMasteryBranch";
+import { auraOnlyActivations } from "../src/utils/auraOnlyActivations";
 import {
   enemyDefensiveEvents,
   ownSaveSpanS,
@@ -233,6 +235,16 @@ describe("T213 — Aura Mastery under Concentration Aura is silence / interrupt 
     expect(ls[1]).toMatchObject({ kind: "self", pct: 24, noPressLogged: true });
     expect(ls[1]!.atSeconds).toBeCloseTo(21.3);
     expect(ls[1]!.observedSeconds).toBeCloseTo(6.7);
+    // the wall has no timeline line of its own on either side (the press
+    // was spent at its own line; no tag a press-less line has is true of
+    // it) — the event above stays for the wall readers
+    expect(isAuraMasterySwitchWallEvent(u, ls[1]!, at(21.3))).toBe(true);
+    expect(isAuraMasterySwitchWallEvent(u, ls[0]!, at(20))).toBe(false);
+    expect(
+      auraOnlyActivations(u, [u], at(0), at(120)).filter(
+        (a) => a.spellId === AURA_MASTERY_ID,
+      ),
+    ).toEqual([]);
     // the plain immunity press is untouched
     const plain = paladin(CONCENTRATION_AURA_ID);
     expect(auraMasteryPressSwitchedToWall(plain, at(20))).toBe(false);

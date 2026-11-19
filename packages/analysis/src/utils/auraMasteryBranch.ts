@@ -137,6 +137,36 @@ export function auraMasteryWallFromMs(
     : undefined;
 }
 
+/** Is the Aura Mastery wall event that starts at `atMs` the wall a SWITCH
+ * opened — a press under Concentration Aura whose caster went to Devotion
+ * Aura while it ran (`auraMasteryWallFromMs`)? Such a wall has no timeline
+ * line of its own on either side (coordinator's decision on assembly review
+ * 80-PIPE-170-B156 #1): the only tags a line without a press has —
+ * `(no press)`, `[no press logged]` — say by their legends that the button
+ * was not spent or not seen, and here it was, at the press's own line. The
+ * wall itself stays for every reader of the events and the intervals. What
+ * is lost is the timeline statement that a wall began at the switch (an
+ * omission, GH #208). */
+export function isAuraMasterySwitchWallEvent(
+  caster: Rows,
+  e: { spellId: string; noPressLogged?: true },
+  atMs: number,
+): boolean {
+  if (e.spellId !== AURA_MASTERY_ID || !e.noPressLogged) return false;
+  return (caster.auraEvents ?? []).some((a) => {
+    if (
+      a.spellId !== AURA_MASTERY_ID ||
+      a.srcUnitId !== caster.id ||
+      a.destUnitId !== caster.id ||
+      a.logLine.event !== LogEvent.SPELL_AURA_APPLIED ||
+      a.logLine.timestamp > atMs
+    )
+      return false;
+    const from = auraMasteryWallFromMs(caster, a.logLine.timestamp);
+    return from !== undefined && Math.abs(from - atMs) <= 1;
+  });
+}
+
 /** Is the Aura Mastery `caster` pressed at `atMs` the immunity: its own
  * 317929 row beside it. The press is read by the aura it was pressed under
  * (assembly review 80-PIPE-170-B156 #1): a later switch to Devotion Aura

@@ -21,6 +21,7 @@ import { ENEMY_HEAL_CD_IDS, isEnemyHealCdFor } from "../data/enemyHealCds";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { AURA_PRESS_BY_ERA, auraStandsForPressAt } from "./auraActivationEra";
 import { dropAuraRebroadcasts } from "./auraIntervals";
+import { isAuraMasterySwitchWallEvent } from "./auraMasteryBranch";
 import {
   enemyDefensiveEvents,
   SAVE_CAST_AURA_PAIR_S,
@@ -120,6 +121,16 @@ export function auraOnlyActivations(
   for (const e of enemyDefensiveEvents(unit, [...units], bounds)) {
     // a passive shield (fact10 D25) is no press at all, hidden or not
     if (!e.noPressLogged || e.procSource || e.kind === "passive") continue;
+    // a wall a switch of auras opened has no line of its own: the press
+    // has its line (`isAuraMasterySwitchWallEvent`)
+    if (
+      isAuraMasterySwitchWallEvent(
+        unit,
+        e,
+        matchStartMs + Math.round(e.atSeconds * 1000),
+      )
+    )
+      continue;
     out.push({
       atSeconds: e.atSeconds,
       spellId: e.spellId,
