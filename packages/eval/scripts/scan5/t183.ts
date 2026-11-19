@@ -28,7 +28,12 @@ import type { IRoundCtx } from "./ctx";
 /** candidate caps (seconds past the horizon) the ruling is choosing between */
 const CAPS = [5, 10, 15];
 
-export const CHECKS = ["troughStopsBeforeBuffEnd"] as const;
+export const CHECKS = [
+  "troughStopsBeforeBuffEnd",
+  "troughSpanPastCut",
+] as const;
+/** an inventory: the windows whose reading would run past the cut at all */
+export const OUT_OF_TOTAL = ["troughSpanPastCut|span runs past the cut"];
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
@@ -78,6 +83,15 @@ export function run(ctx: IRoundCtx): void {
         }
       });
     }
+    ctx.bump("troughSpanPastCut");
+    if (capped[0]!.low !== null)
+      ctx.violate(
+        "troughSpanPastCut",
+        "span runs past the cut",
+        ctx.start + p.tSec * 1000,
+        `${ctx.roundKey}|${owner.reaction}|${p.tSec}|span`,
+        `window at ${p.tSec}s ${p.responded ? "answered" : "not answered"}: trough ${pr.troughHpPct ?? pr.minHpPct}%, a readable second after the horizon ${p.outcomeEndSec}s`,
+      );
     // the number the line prints: the true minimum (`troughHpPct`), which
     // can sit below the grid's — a later tick must be below THAT
     const printed = pr.troughHpPct ?? pr.minHpPct;
