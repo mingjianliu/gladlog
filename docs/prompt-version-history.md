@@ -7916,3 +7916,10 @@ every later gates baseline drops that constant. Prompts unchanged. On the 605
 the product capture is unchanged by construction; on it
 checkFindingsCountFollowsMenu goes 3,519 -> 0 and the other 107 gates are
 identical. Codex branch review 85-tk-EVAL-T221-1 (APPROVE).
+
+v617 (2026-11-18; pipeline batch B145, T207). Check-only: KITED lines are held
+to their measured enemy through the producer's burst windows (822 -> 989 held,
+unchecked 186 -> 4, violations 0); targetless refused-kick lines are now
+counted (0). Prompts unchanged. On the 605 the product capture is unchanged by
+construction and the gates are identical on it (positioningScan violations 0).
+Codex branch review 85-tk-EVAL-T207-1 (APPROVE).

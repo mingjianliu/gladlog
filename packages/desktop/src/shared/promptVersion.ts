@@ -1597,5 +1597,10 @@
  *  (checkFindingsCountFollowsMenu rebuilds the findings prompt instead of
  *  reading a line by position); prompts unchanged.
  *  See docs/prompt-version-history.md.
+ *
+ * v617 (2026-11-18; pipeline batch B145, T207): check-only (KITED lines
+ *  held to their measured enemy through the producer's burst windows);
+ *  prompts unchanged.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 616;
+export const PROMPT_VERSION = 617;
