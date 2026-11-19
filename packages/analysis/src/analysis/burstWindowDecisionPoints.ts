@@ -1250,6 +1250,11 @@ export function controlLandedResponses(
       let family: (typeof friendlyCasts)[number] | undefined;
       let aimedControl: (typeof friendlyCasts)[number] | undefined;
       let untargeted: (typeof friendlyCasts)[number] | undefined;
+      // the latest press that moves a totem, kept apart from `untargeted`:
+      // another untargeted press after it must not erase it (codex
+      // 85-tk-CD-T184-1b, dca02448 r4: Totemic Projection at 150.051 s, a
+      // Healing Stream Totem 5 ms later, the root at 150.379 s)
+      let relocation: (typeof friendlyCasts)[number] | undefined;
       // T43 (60bfdea9 0:12): the producing cast's own SUCCESS row can be
       // logged just AFTER its aura (Rake's stun 163505 at 13.454 s, Rake
       // 1822 at 13.456 s) — the lead the cast side already allows an aimed
@@ -1271,6 +1276,8 @@ export function controlLandedResponses(
         if (c.tMs > a.timestamp + AIMED_CONTROL_LANDING_LEAD_MS) break;
         if (c.unitId !== unitId || c.tMs < a.timestamp - GROUND_CONTROL_FUSE_MS)
           continue;
+        if (c.tMs <= a.timestamp && TOTEM_RELOCATION_IDS.has(c.spellId))
+          relocation = c;
         if (c.tMs > a.timestamp) {
           if (
             producesAura(c.spellId) &&
@@ -1319,10 +1326,6 @@ export function controlLandedResponses(
         a.srcUnitId !== unitId && !fromPet && !family && !petOwn
           ? summonedAtOf(a.srcUnitId)
           : null;
-      const relocation =
-        untargeted && TOTEM_RELOCATION_IDS.has(untargeted.spellId)
-          ? untargeted
-          : undefined;
       const cast =
         family ??
         petOwn ??

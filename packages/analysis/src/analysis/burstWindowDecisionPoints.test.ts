@@ -1892,6 +1892,36 @@ describe("controlLandedResponses — a totem's own pulse (fact11 D28)", () => {
     );
     expect(r).toMatchObject([{ unitId: "F1", tMs: 16_000 }]);
   });
+  // codex 85-tk-CD-T184-1b, real match dca02448 r4: Projection at
+  // 150.051 s, Healing Stream Totem at 150.056 s, the root at 150.379 s
+  it("another untargeted press after the relocation does not erase it", () => {
+    const r = controlLandedResponses(
+      [
+        {
+          id: "E1",
+          auraEvents: [
+            {
+              timestamp: 150_379,
+              spellId: EARTHGRAB_ROOT,
+              srcUnitId: TOTEM,
+              logLine: { event: "SPELL_AURA_APPLIED" },
+            },
+          ],
+        },
+      ],
+      new Set(["E1"]),
+      ownerOf,
+      [
+        { unitId: "F1", spellId: "108287", dest: undefined, tMs: 150_051 },
+        { unitId: "F1", spellId: "5394", dest: undefined, tMs: 150_056 },
+      ],
+      147_289,
+      156_789,
+      () => [],
+      (id) => (id === TOTEM ? 134_356 : null),
+    );
+    expect(r).toMatchObject([{ unitId: "F1", tMs: 150_051 }]);
+  });
   it("no summon row: the untargeted press in the fuse still times it", () => {
     expect(withOtherPress(null)).toMatchObject([{ tMs: 101_639 }]);
   });
