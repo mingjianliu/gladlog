@@ -427,7 +427,29 @@ export function emitTrinketCcOnTeamEntries(
     }
 
     if (summary.ccAvoidedInstances) {
+      const reflector = friends.find((f) => f.name === summary.playerName);
       for (const avoided of summary.ccAvoidedInstances) {
+        // T178 (GH #221 g1): a reflected control a printed [REFLECTED] line
+        // states gets no second line here, credited or not — the legend's
+        // "on a [REFLECTED] line is not repeated here", which only the
+        // uncredited list below kept (605: 100 credited `logged REFLECT;
+        // Spell Reflection (own) active` lines beside their [REFLECTED]
+        // line). The instance stays: the avoided count and the cast line's
+        // miss cause read it.
+        if (
+          avoided.loggedMissType === "REFLECT" &&
+          avoided.missMs !== undefined &&
+          reflector &&
+          reflectLineKeys().has(
+            reflectRowKey(
+              avoided.sourceId,
+              reflector.id,
+              avoided.missMs,
+              avoided.spellName,
+            ),
+          )
+        )
+          continue;
         addEntry(
           avoided.atSeconds,
           // M-g: state the observed facts (CC cast did not land; avoidance ability present),

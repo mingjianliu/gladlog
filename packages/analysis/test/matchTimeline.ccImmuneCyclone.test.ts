@@ -67,6 +67,9 @@ function immuneLine(
   backDamage = 0,
   /** another spell reflected by them in the same ms (its own row) */
   otherReflect?: [string, string],
+  /** the sweep credited the row to an aura (`ccAvoidedInstances`) instead
+   * of leaving it uncredited — T178 */
+  credited = false,
 ): string {
   const cyclone = [
     makeAuraEvent(
@@ -147,19 +150,39 @@ function immuneLine(
     rootInstances: [],
     disarmInstances: [],
     interruptInstances: [],
-    ccAvoidedInstances: [],
-    ccImmuneUncredited: [
-      {
-        atSeconds: missAtS,
-        castAtSeconds: missAtS,
-        spellId,
-        spellName,
-        sourceName: "EnemyDruid",
-        sourceId: "E1",
-        missMs: T0 + missAtS * 1000,
-        ...(missType ? { missType } : {}),
-      },
-    ],
+    ccAvoidedInstances: credited
+      ? [
+          {
+            atSeconds: missAtS,
+            castAtSeconds: missAtS,
+            spellId,
+            spellName,
+            avoidanceSpellName: "Spell Reflection",
+            avoidanceSpellId: "23920",
+            avoidanceSourceName: "Owner",
+            avoidanceSourceId: "P1",
+            sourceName: "EnemyDruid",
+            sourceId: "E1",
+            sourceSpec: "Balance Druid",
+            loggedMissType: missType,
+            missMs: T0 + missAtS * 1000,
+          },
+        ]
+      : [],
+    ccImmuneUncredited: credited
+      ? []
+      : [
+          {
+            atSeconds: missAtS,
+            castAtSeconds: missAtS,
+            spellId,
+            spellName,
+            sourceName: "EnemyDruid",
+            sourceId: "E1",
+            missMs: T0 + missAtS * 1000,
+            ...(missType ? { missType } : {}),
+          },
+        ],
   } as unknown as IPlayerCCTrinketSummary;
   const text = buildMatchTimeline({
     owner,
@@ -231,5 +254,23 @@ describe("[CC AVOIDED?] logged IMMUNE: the Cyclone cause reads the shared, cappe
   });
   it("T120: a reflected control gets no line here — its [REFLECTED] line states it", () => {
     expect(immuneLine(12, undefined, "REFLECT")).toBe("");
+  });
+  // T178 (GH #221 g1): the credited form of the same row — the cast sweep's
+  // `logged REFLECT; Spell Reflection (own) active` — repeated the
+  // [REFLECTED] line (605: 100 lines in 74 contexts)
+  it("T178: a credited reflected control gets no line here either", () => {
+    const credited = (row: boolean, id = "118", name = "Polymorph", back = 0) =>
+      immuneLine(20, 15, "REFLECT", row, id, name, back, undefined, true);
+    expect(credited(true)).toBe("");
+    // no [REFLECTED] line states the row: the credited line is its only
+    // statement and stays (a reflected silence with nothing back)
+    expect(credited(true, "15487", "Silence")).toContain(
+      "logged REFLECT; Spell Reflection (own) active",
+    );
+    expect(credited(true, "15487", "Silence", 100_000)).toBe("");
+    // another type the sweep credited is not a reflect: untouched
+    expect(
+      immuneLine(20, 15, "MISS", false, "118", "Polymorph", 0, undefined, true),
+    ).toContain("logged MISS; Spell Reflection (own) active");
   });
 });
