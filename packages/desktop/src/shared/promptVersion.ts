@@ -1608,5 +1608,10 @@
  *  ledger / death audit / stacked defensives do not count it; our-side
  *  readiness and press readers keep it.
  *  See docs/prompt-version-history.md.
+ *
+ * v619 (2026-11-18; pipeline batch B147, T208): check / tooling only
+ *  (talent detail, family diff across shard layouts, run.ts --only,
+ *  mitigation-status keys asserted); prompts unchanged.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 618;
+export const PROMPT_VERSION = 619;

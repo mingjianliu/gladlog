@@ -7940,3 +7940,11 @@ windows vanish, 11 move), and adds 11 candidate rows (kick-priority 10, burst-
 into-mitigation 1) with 1 changed; 3 approved rows' windowTo moves 2:46 ->
 2:45; 17 of 23 GI no-press lines stay (R66). Codex branch reviews on tk/T157 /
 -r58.
+
+v619 (2026-11-18; pipeline batch B147, T208). Check and tooling only: --detail
+prints both talents and the rank-2 holders; captureFamilyDiff stops counting a
+phantom duplicate across shard layouts (2 -> 0); verify/run.ts --only runs in
+2.1 min instead of 20; all 17 mitigation-status keys are asserted. Gates
+unchanged. Prompts unchanged. On the 605 the assembled candidate leaves every
+context and candidate row byte-identical (scan-only batch). Codex branch
+review 85-tk-EVAL-T208-1 (two synthetic-only points, recorded).
