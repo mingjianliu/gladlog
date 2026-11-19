@@ -50,7 +50,7 @@ import { documentRecordsAttackSpell } from "./incomingPressure";
 import {
   distanceBetween,
   getUnitPositionAtTime,
-  hasLineOfSight,
+  losBlockedOnEitherReading,
   rawLineOfSightAt,
 } from "./losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
@@ -1357,10 +1357,23 @@ export function buildDeathOutcomeSummary(
         const casterPos = getUnitPositionAtTime(teammate, deathMs);
         const casterDistance =
           dyingPos && casterPos ? distanceBetween(dyingPos, casterPos) : null;
-        if (dyingPos && casterPos && combat.zoneId) {
-          const los = hasLineOfSight(combat.zoneId, casterPos, dyingPos);
-          if (los === false) continue; // confirmed LoS blocked (null = unmapped, pass through)
-        }
+        // …on either reading inside the LoS sweep gap — the raw sample
+        // pair or the points interpolated to the death
+        // (`losBlockedOnEitherReading`; T172, GH #218 item 12.5; user
+        // ruling R72): "had <external> available" is the claim, so it is
+        // made only where no reading says the caster could not see the
+        // dying unit
+        if (
+          combat.zoneId &&
+          losBlockedOnEitherReading(
+            combat.zoneId,
+            teammate,
+            unit,
+            deathMs,
+            LOS_SWEEP_GAP_MS,
+          ) === true
+        )
+          continue;
 
         for (const [spellId, spell] of Object.entries(
           EXTERNAL_DEFENSIVE_SPELLS,

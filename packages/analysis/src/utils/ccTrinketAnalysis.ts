@@ -127,8 +127,8 @@ import { kickLockoutSecondsFor } from "./kickLockout";
 import {
   distanceBetween,
   getUnitPositionAtTime,
-  hasLineOfSight,
   positionSampleSpanMs,
+  losBlockedOnBothReadings,
 } from "./losAnalysis";
 import { commandReflectRows, petCommands } from "./petCommands";
 import {
@@ -244,7 +244,7 @@ export const TRINKET_BREAK_AFTER_REMOVAL_MS = CAST_ROW_LAG_MAX_MS;
 // full-corpus scan proved 16 fake distances, with a melee Cheap Shot labelled
 // 17-21yd). Queries near either edge, within 1.5s, remain valid; the middle of a
 // gap is always suppressed (better to make no claim than a false one).
-const CC_POSITION_MAX_GAP_MS = INTERP_MAX_GAP_MS;
+export const CC_POSITION_MAX_GAP_MS = INTERP_MAX_GAP_MS;
 // A recomputed distance above CC_MAX_PLAUSIBLE_RANGE_YARDS is bad data and that
 // distance is suppressed (100-match scan: 0:06 Sap "64.7yd", 0:11 Sleep Walk
 // "54.7yd"). The threshold itself is a single-source export from
@@ -3589,7 +3589,31 @@ const PRE_TELEPORT_STALE_MS = 500;
 /** position F-L1: a targeted cast that succeeded on the CC's holder within
  * this window before the aura proves line of sight (`probes/position/p8`:
  * casts land 0–3 ms before the aura). */
-const LANDED_CAST_PROVES_LOS_MS = 1_500;
+export const LANDED_CAST_PROVES_LOS_MS = 1_500;
+/**
+ * Whether a targeted cast of a control succeeded on its holder inside
+ * `LANDED_CAST_PROVES_LOS_MS` before the aura went on — the cast row may
+ * carry another id than the aura it applies (Fear: cast 5782, aura 118699),
+ * so the cast's own cast→effect family is asked (`castAndEffectIds`; user
+ * ruling R70). Shared with the tag's gate (`scan5/t172`).
+ */
+export function landedCastProvesLos(
+  casterCasts: readonly ICombatUnit["spellCastEvents"][number][],
+  auraSpellId: string,
+  holderId: string,
+  applyMs: number,
+): boolean {
+  return casterCasts.some(
+    (e) =>
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      !!e.spellId &&
+      e.destUnitId === holderId &&
+      e.timestamp <= applyMs &&
+      e.timestamp >= applyMs - LANDED_CAST_PROVES_LOS_MS &&
+      (e.spellId === auraSpellId ||
+        castAndEffectIds(e.spellId).has(auraSpellId)),
+  );
+}
 
 /**
  * The name a kick's source goes by on a menu row (pipeline T116): a player
@@ -4578,22 +4602,26 @@ function analyzePlayerCCAndTrinketUncached(
       // position F-L1 (the GH #83 rule): a targeted cast of this CC that
       // succeeded on this unit just before the aura proves line of sight —
       // the geometric test does not get to call it blocked.
-      const landedTargetedCast = casterCasts.some(
-        (e) =>
-          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          e.spellId === w.spellId &&
-          e.destUnitId === player.id &&
-          e.timestamp <= w.applyMs &&
-          e.timestamp >= w.applyMs - LANDED_CAST_PROVES_LOS_MS,
+      const landedTargetedCast = landedCastProvesLos(
+        casterCasts,
+        w.spellId,
+        player.id,
+        w.applyMs,
       );
+      // blocked only where the raw sample pair and the interpolated points
+      // both say so (`losBlockedOnBothReadings`, user ruling R70; T172, GH
+      // #218 item 12.5)
       const losBlocked =
-        distanceYards !== null && casterPos && targetPos
+        distanceYards !== null && casterUnit
           ? landedTargetedCast
             ? false
-            : (() => {
-                const los = hasLineOfSight(zoneId, casterPos, targetPos);
-                return los === null ? null : !los;
-              })()
+            : losBlockedOnBothReadings(
+                zoneId,
+                casterUnit,
+                player,
+                w.applyMs,
+                CC_POSITION_MAX_GAP_MS,
+              )
           : null;
 
       const expectedDurationSeconds = expectedDurationS(w, idx);

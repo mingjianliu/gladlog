@@ -1733,6 +1733,21 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/losAnalysis.ts`,
+    symbol: "losBlockedOnBothReadings",
+    mod: losAnalysis,
+  },
+  {
+    file: `${A}/utils/losAnalysis.ts`,
+    symbol: "losBlockedOnEitherReading",
+    mod: losAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "landedCastProvesLos",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/losAnalysis.ts`,
     symbol: "distanceBetween",
     mod: losAnalysis,
   },

@@ -192,6 +192,84 @@ export function rawLineOfSightAt(
 }
 
 /**
+ * Whether line of sight between two units at an instant is blocked on BOTH
+ * readings — their nearest raw samples (`rawLineOfSightAt`) and the points
+ * interpolated at the instant (`getUnitPositionAtTime`), each within
+ * `maxGapMs`. true = both say blocked; false = either says in sight; null =
+ * neither says in sight and one has no answer. The reading behind a claim
+ * that something was line-of-sight blocked — the `, LoS blocked` of a
+ * `[CC ON TEAM]` line (user ruling R70, 2026-11-18): with samples 0.1–1 s
+ * apart on a moving unit either single reading can sit on the wrong side of
+ * a pillar edge (605: the interpolated point alone called 9 landed controls
+ * blocked, the raw pair alone 6 others, two of them controls that need
+ * sight to land), so the claim is made only where the two agree. Its gate
+ * (`scan5/t172`) calls this function.
+ */
+export function losBlockedOnBothReadings(
+  zoneId: string,
+  a: ICombatUnit,
+  b: ICombatUnit,
+  timestampMs: number,
+  maxGapMs: number,
+): boolean | null {
+  const { raw, interpolated } = losTwoReadings(
+    zoneId,
+    a,
+    b,
+    timestampMs,
+    maxGapMs,
+  );
+  if (raw === true || interpolated === true) return false;
+  return raw === false && interpolated === false ? true : null;
+}
+
+/**
+ * Whether line of sight between two units at an instant is blocked on
+ * EITHER reading (the same two as above). true = one of them says blocked;
+ * false = both say in sight; null = neither says blocked and one has no
+ * answer. The reading behind a claim that needs sight — the death trace's
+ * "a teammate had <external> available" (user ruling R72, 2026-11-18:
+ * whichever side is the assertion needs both readings in support; 605: a
+ * healer passing a pillar edge 21 yd from a dying teammate, blocked on the
+ * raw pair 327 ms before the death, in sight on the point interpolated to
+ * it). Its scan (`scan5/t172`) calls this function.
+ */
+export function losBlockedOnEitherReading(
+  zoneId: string,
+  a: ICombatUnit,
+  b: ICombatUnit,
+  timestampMs: number,
+  maxGapMs: number,
+): boolean | null {
+  const { raw, interpolated } = losTwoReadings(
+    zoneId,
+    a,
+    b,
+    timestampMs,
+    maxGapMs,
+  );
+  if (raw === false || interpolated === false) return true;
+  return raw === true && interpolated === true ? false : null;
+}
+
+/** The two readings of one unit-to-unit line of sight at an instant: the
+ * nearest raw samples and the interpolated points, each within `maxGapMs`. */
+function losTwoReadings(
+  zoneId: string,
+  a: ICombatUnit,
+  b: ICombatUnit,
+  timestampMs: number,
+  maxGapMs: number,
+): { raw: boolean | null; interpolated: boolean | null } {
+  const aAt = getUnitPositionAtTime(a, timestampMs, maxGapMs);
+  const bAt = getUnitPositionAtTime(b, timestampMs, maxGapMs);
+  return {
+    raw: rawLineOfSightAt(zoneId, a, b, timestampMs, maxGapMs),
+    interpolated: aAt && bAt ? hasLineOfSight(zoneId, aAt, bAt) : null,
+  };
+}
+
+/**
  * Whether two units were in line of sight around an anchor second — the LoS
  * sweep of `[HEALER EXPOSURE]` (`IN LoS:` / `Pillar-blocked:`) and of its
  * gate (`positioningScan` G5), one function for both: the whole seconds
