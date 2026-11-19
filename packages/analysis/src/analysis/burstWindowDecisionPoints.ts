@@ -837,8 +837,13 @@ export const BURST_HEAL_CD_IDS = new Set<string>([
  * said "no friendly answered" over a mage's Alter Time at +0.8 s
  * (dd3c5ad1 1:58) and a Mass Invisibility at +6.7 s (1:24); cd-hoarded
  * accused a mage whose own return took it from 26 % to 83 % inside the
- * window (2c47e3d5 1:30). Answers only, and only for the unit that pressed
- * them: never on the accusation side. One set for both readers
+ * window (2c47e3d5 1:30). Answers only, never on the accusation side.
+ * "Only for the unit that pressed them" holds where an answer is credited
+ * to a unit — the `[BURST ANSWERED]` line (`answersPressured`, a wall is
+ * its caster's) and cd-hoarded's `spent` (the owner's own crisis) — and
+ * NOT for the engine's `responded`, where another unit's own wall keeps a
+ * window responded as every wall does (user ruling R68). One set for both
+ * readers
  * (`BURST_EXTRA_ANSWER_IDS` here, cd-hoarded's `spent` through
  * `ownerSelfSaveCastSeconds`). Registered in curatedIdRegistry.
  */
