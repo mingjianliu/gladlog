@@ -7688,3 +7688,27 @@ changes no context and 5 menus: 14 kick-eaten rows count one more cancel of
 the recorder's (yourCancels +1), 4 of them also one more baited kick, and
 candidate rows stay the same. Codex branch review 85-tk-KICK-T148-1 (#1 real,
 fixed) and -1b (three synthetic points recorded).
+
+v604 (2026-11-18; pipeline batch B132, T216). The `[IMMUNE — X was up]` tag on
+a press line said the press went into an immunity already up. When the press's
+own aura had already landed on the target, the IMMUNE row that followed was a
+later tick or hit, after the target pressed the immunity: the tag was false.
+pressAuraLandedOn (utils/castMissRows.ts), read by setup.ts and
+killAttempts.ts, now withholds the tag when the press's aura landed on that
+unit before the IMMUNE row. The four presses on the 605, from the raw rows:
+Prayer of Mending 72.76 s pressed, on the target 73.19 s, Cyclone 74.55 s,
+IMMUNE 74.68 s (the next bounce); The Hunt 151.26 s, 131k hit and both debuffs
+on at 151.30 s, Cloak of Shadows 152.61 s; Feral Frenzy 239.77 s, first two
+hits 239.98 / 240.18 s, Divine Shield 240.30 s, then three hits refused; the
+307.67 s press the same against Blessing of Protection 308.15 s. A [YOU]
+[CAST] line printed only to carry the tag leaves with it (the Prayer of
+Mending line); no stated fact goes. Wording such as 'cut short by Divine
+Shield, 2 of 5 hits landed' would be new and is left out of scope. Check
+immuneTagAfterOwnAura 4 / 210 -> 0 / 206 (it counts tagged lines; four lost
+the tag); immunityPressTag 0 / 7,766 on both sides. On the 605 (branch on
+e8047b053 vs base): 5 contexts in 3 archives, candidate rows +0 / -0. On the
+605 the assembled candidate changes 5 contexts in 3 archives and no menu: the
+four presses lose the IMMUNE tag (the Prayer of Mending line, printed only to
+carry it, leaves with it) and nothing else moves. Codex branch review 85-tk-
+KICK-T216-1 (three synthetic points fixed) and -1b (one synthetic scan-side
+point recorded).

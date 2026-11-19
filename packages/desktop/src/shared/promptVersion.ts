@@ -1534,5 +1534,10 @@
  * v603 (2026-11-18; pipeline batch B131, T148): a recorder's cast bar with
  *  no end row ends when an on-GCD press goes out, and counts as a cancel.
  *  See docs/prompt-version-history.md.
+ *
+ * v604 (2026-11-18; pipeline batch B132, T216): a press whose own aura
+ *  already landed on the target is no longer tagged as pressed into an
+ *  immunity that came up after it.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 603;
+export const PROMPT_VERSION = 604;
