@@ -4208,10 +4208,12 @@ export function listedSpellNameOf(
  * holder): "Ice Cold" → 45438. For a reader of rendered text that must find
  * the row a kit name stands for (the self-only defensive gate — codex
  * 85-tk-G-T61-2d #2: its name map had no "Ice Cold" and the claim went
- * unchecked). A same-named replacement needs no entry.
+ * unchecked). A same-named replacement needs no entry, and a name that
+ * replaces more than one row has none.
  */
 export function kitReplacementRowIdByName(): ReadonlyMap<string, string> {
   const out = new Map<string, string>();
+  const rowsOf = new Map<string, Set<string>>();
   for (const [spellId, mods] of Object.entries(CD_TALENT_MODIFIERS))
     for (const m of mods) {
       if (m.effect !== "replace_spell" || m.isConditional) continue;
@@ -4219,8 +4221,15 @@ export function kitReplacementRowIdByName(): ReadonlyMap<string, string> {
       if (!((effectiveCooldownSeconds(replacement) ?? 0) > 0)) continue;
       const listed = getEnglishSpellName(spellId, "");
       const name = getEnglishSpellName(replacement, "");
-      if (name && name !== listed && !out.has(name)) out.set(name, spellId);
+      if (!name || name === listed) continue;
+      rowsOf.set(name, (rowsOf.get(name) ?? new Set()).add(spellId));
     }
+  // a name several rows are replaced by stands for none of them: the text
+  // carries the name only, and which row it was is not in it (T208 / GH
+  // #218 10.11: "Incarnation: Chosen of Elune" is listed as the replacement
+  // of four Incarnation rows and answered with the first, Tree of Life)
+  for (const [name, rows] of rowsOf)
+    if (rows.size === 1) out.set(name, [...rows][0]!);
   return out;
 }
 

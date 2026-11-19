@@ -116,12 +116,52 @@ const PATCHED = new Set(Object.keys(CORPUS_DURATION_PATCHES));
  * SPEC is a specBaseSeconds shape; one that splits by HOLDER is a modifier
  * entry, not a flat patch.
  */
-const detail = new Map<string, string | undefined>();
+/** aura → every talent asked for it (T208 / GH #218 10.10: one slot per
+ * aura, so `A:t1,A:t2` kept t2 alone and said nothing). No talent named: one
+ * split with no holder column. */
+const detail = new Map<string, string[]>();
 for (const spec of args.detail.split(",").filter(Boolean)) {
   const [aura, talent] = spec.split(":");
-  if (aura) detail.set(aura, talent || undefined);
+  if (!aura) continue;
+  const talents = detail.get(aura) ?? [];
+  if (talent && !talents.includes(talent)) talents.push(talent);
+  detail.set(aura, talents);
 }
+/** `<aura>|<talent or "">` → split key → observed value → count */
 const detailCells = new Map<string, Map<string, Map<number, number>>>();
+/** the same splits over the casters whose lifetimes formed no cell (under 3
+ * clean runs, or no value with 60 % of them) — each clean lifetime counted.
+ * Until T208 they were not printed at all, and a talent only two casters
+ * took (the rank-2 Call of the Righteous Avenging Wraths, T89) showed no
+ * holder row. */
+const detailPartial = new Map<string, Map<string, Map<number, number>>>();
+function addDetail(
+  into: Map<string, Map<string, Map<number, number>>>,
+  spellId: string,
+  caster: unknown,
+  startTime: number,
+  values: Iterable<readonly [number, number]>,
+): void {
+  const talents = detail.get(spellId);
+  if (!talents) return;
+  for (const dTalent of talents.length > 0 ? talents : [""]) {
+    // Rank, not a boolean (Rule 4: read the rank from COMBATANT_INFO —
+    // a maxRanks-2 talent's per-rank vs total semantics is decided here).
+    const holder = dTalent
+      ? ((r) => (r > 0 ? `holder r${r}` : "non-holder"))(
+          talentRankOf(caster as never, dTalent),
+        )
+      : "-";
+    const month = new Date(startTime).toISOString().slice(0, 7);
+    const k = `${specToString((caster as { spec: never }).spec)}|${month}|${holder}`;
+    const dk = `${spellId}|${dTalent}`;
+    const byKey = into.get(dk) ?? new Map<string, Map<number, number>>();
+    const h = byKey.get(k) ?? new Map<number, number>();
+    for (const [v, n] of values) h.set(v, (h.get(v) ?? 0) + n);
+    byKey.set(k, h);
+    into.set(dk, byKey);
+  }
+}
 /**
  * `--per-app <aura>,…` (GH #175, 2026-11-09) — the half the cell mode cannot
  * see: a length that grows with the caster's presses after the application
@@ -317,10 +357,13 @@ for (const f of files) {
     for (const [cellKey, hist] of matchCells) {
       cellCount++;
       const observed = modeOf(hist);
-      if (observed === null) continue;
       const spellId = cellKey.slice(0, cellKey.indexOf("|"));
       const caster = matchCasters.get(cellKey);
       if (!caster) continue;
+      if (observed === null) {
+        addDetail(detailPartial, spellId, caster, legacy.startTime, hist);
+        continue;
+      }
       const predicted = buffFullDurationForCaster(spellId, caster as never);
       if (predicted === undefined) continue;
       const talentId = BUFF_DURATION_TALENT_MODIFIERS[spellId]?.find(
@@ -332,23 +375,9 @@ for (const f of files) {
         predicted,
         rank: talentId ? talentRankOf(caster as never, talentId) : 0,
       });
-      if (detail.has(spellId)) {
-        const dTalent = detail.get(spellId);
-        // Rank, not a boolean (Rule 4: read the rank from COMBATANT_INFO —
-        // a maxRanks-2 talent's per-rank vs total semantics is decided here).
-        const holder = dTalent
-          ? ((r) => (r > 0 ? `holder r${r}` : "non-holder"))(
-              talentRankOf(caster as never, dTalent),
-            )
-          : "-";
-        const month = new Date(legacy.startTime).toISOString().slice(0, 7);
-        const k = `${specToString(caster.spec as never)}|${month}|${holder}`;
-        const byKey = detailCells.get(spellId) ?? new Map();
-        const h = byKey.get(k) ?? new Map<number, number>();
-        h.set(observed, (h.get(observed) ?? 0) + 1);
-        byKey.set(k, h);
-        detailCells.set(spellId, byKey);
-      }
+      addDetail(detailCells, spellId, caster, legacy.startTime, [
+        [observed, 1],
+      ]);
     }
   }
 }
@@ -458,12 +487,8 @@ if (perAppCounts.size > 0) {
 
 if (detail.size > 0) {
   console.log("\n=== DETAIL:按 专精 × 月份 × 持有 拆分的观测分布(格) ===");
-  for (const [aura, byKey] of detailCells) {
-    const talent = detail.get(aura);
-    console.log(
-      `  ${aura} ${spellEffectData[aura]?.name ?? ""}${talent ? ` (holder = talentRankOf ${talent} > 0)` : ""}`,
-    );
-    const lines = [...byKey]
+  const say = (byKey: Map<string, Map<number, number>> | undefined) => {
+    const lines = [...(byKey ?? [])]
       .map(([k, h]) => {
         const tot = [...h.values()].reduce((s, n) => s + n, 0);
         const top = [...h]
@@ -478,6 +503,21 @@ if (detail.size > 0) {
       console.log(
         `    ${l.k.padEnd(44)} n=${String(l.tot).padStart(4)}  ${l.top}`,
       );
+    }
+  };
+  for (const [aura, talents] of detail) {
+    for (const talent of talents.length > 0 ? talents : [""]) {
+      console.log(
+        `  ${aura} ${spellEffectData[aura]?.name ?? ""}${talent ? ` (holder = talentRankOf ${talent} > 0)` : ""}`,
+      );
+      say(detailCells.get(`${aura}|${talent}`));
+      const partial = detailPartial.get(`${aura}|${talent}`);
+      if (partial?.size) {
+        console.log(
+          "   casters with no cell (under 3 clean runs, or no modal value) — n = clean lifetimes:",
+        );
+        say(partial);
+      }
     }
   }
 }

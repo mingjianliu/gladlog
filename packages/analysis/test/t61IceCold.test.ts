@@ -26,11 +26,13 @@ import {
 import { spellEffectData } from "../src/data/spellEffectData";
 import {
   type IMajorCooldownInfo,
+  kitReplacementRowIdByName,
   kitSpellIdOf,
   kitSpellNameOf,
 } from "../src/utils/cooldowns";
 import type { IEnemyCDTimeline } from "../src/utils/enemyCDs";
 import { unpressedWallsOwned } from "../src/utils/killWindowTargetSelection";
+import { CD_TALENT_MODIFIERS } from "../src/utils/talentModifiers";
 import { unusedKitRows } from "../src/utils/unusedKitRows";
 import { makeUnit } from "./ported/testHelpers";
 
@@ -93,6 +95,25 @@ describe("T61 — Ice Cold", () => {
 
   // codex 85-tk-G-T61-2: one identity for the row wherever its holder is
   // named or classified
+  it("a kit name stands for its row only when one row is replaced by it (T208)", () => {
+    const rows = kitReplacementRowIdByName();
+    expect(rows.get("Ice Cold")).toBe("45438");
+    // the model lists one replacement under several rows — a name the text
+    // cannot resolve answers nothing, instead of the first row found
+    const rowsByName = new Map<string, Set<string>>();
+    for (const [spellId, mods] of Object.entries(CD_TALENT_MODIFIERS))
+      for (const m of mods) {
+        if (m.effect !== "replace_spell" || m.isConditional) continue;
+        const name = spellEffectData[String(m.value)]?.name;
+        if (!name) continue;
+        rowsByName.set(name, (rowsByName.get(name) ?? new Set()).add(spellId));
+      }
+    const shared = [...rowsByName].filter(([, ids]) => ids.size > 1);
+    for (const [name] of shared) expect(rows.has(name), name).toBe(false);
+    for (const [name, id] of rows)
+      expect(rowsByName.get(name), name).toEqual(new Set([id]));
+  });
+
   it("the row is Ice Cold 414658 for its holder and Ice Block for anyone else", () => {
     expect(kitSpellIdOf(iceBlock, mage(true))).toBe("414658");
     expect(kitSpellNameOf(iceBlock, mage(true))).toBe("Ice Cold");

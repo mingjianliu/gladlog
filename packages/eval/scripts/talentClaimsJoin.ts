@@ -12,7 +12,7 @@
  *   cooldownOnEvent / cooldownReset  cdRecastFloorGenerated has the spell (dynamic
  *                                    floor), CORPUS_COOLDOWN_PATCHES has it, or the
  *                                    talent id is referenced in product code
- *   duration                         BUFF / CC_DURATION_TALENT_MODIFIERS or the tooltip tables name the talent
+ *   duration                         `durationPairCarriedBy` names a table for the talent (lib/durationCarried)
  *   value (defensive)                TALENT_MITIGATION_MODIFIERS (aura, talent)
  *   everything else                  talent id referenced in product code
  * "referenced" means the id appears somewhere in product code — a lead that the
@@ -27,17 +27,11 @@ import { join, resolve } from "node:path";
 import { CURATED_ID_TABLES } from "@gladlog/analysis/src/data/curatedIdRegistry";
 import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
 import { MITIGATION_TABLE } from "@gladlog/analysis/src/data/mitigationData";
-import {
-  BUFF_DURATION_TALENT_MODIFIERS,
-  CC_DURATION_TALENT_MODIFIERS,
-} from "@gladlog/analysis/src/data/spellEffectData";
 import { CORPUS_COOLDOWN_PATCHES } from "@gladlog/analysis/src/data/spellEffectOverrides";
-import {
-  TOOLTIP_DURATION_ROWS,
-  TOOLTIP_PER_EVENT_DURATIONS,
-} from "@gladlog/analysis/src/data/talentDurationTooltips";
 import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMitigationModifiers";
 import { CD_TALENT_MODIFIERS } from "@gladlog/analysis/src/utils/talentModifiers";
+
+import { durationAuraCarryingTalent } from "./lib/durationCarried";
 
 const arg = (k: string, d: string) => {
   const i = process.argv.indexOf(k);
@@ -261,22 +255,12 @@ async function main(): Promise<void> {
             evidence = `corpusCooldownPatch[${pa}]`;
           }
         } else if (kind === "duration") {
-          type DurRows = ReadonlyArray<{ talentSpellId?: string }>;
-          const all: Array<[string, DurRows]> = [
-            ...Object.entries<DurRows>(BUFF_DURATION_TALENT_MODIFIERS),
-            ...Object.entries<DurRows>(CC_DURATION_TALENT_MODIFIERS),
-            // the tooltip tables price a talent's duration effect too (T76)
-            ...Object.entries<DurRows>(TOOLTIP_DURATION_ROWS),
-            ...Object.entries(TOOLTIP_PER_EVENT_DURATIONS).map(
-              ([k, v]): [string, DurRows] => [k, [v]],
-            ),
-          ];
-          const hit = all.find(([, ms]) =>
-            ms.some((m) => m.talentSpellId === c.id),
-          );
-          if (hit) {
+          // the one predicate for "the product prices this duration"
+          // (`durationPairCarriedBy`), not a second walk of the tables
+          const hit = durationAuraCarryingTalent(c.id);
+          if (hit !== undefined) {
             status = "covered";
-            evidence = `durationTable[${hit[0]}]`;
+            evidence = `durationTable[${hit}]`;
           }
         } else if (kind === "value") {
           const hit = TALENT_MITIGATION_MODIFIERS.find(

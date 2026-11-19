@@ -2,8 +2,8 @@
  * verify/run.ts — every corpus scan over one walk of a capture.
  *
  *   npx tsx packages/eval/scripts/verify/run.ts <captureDir> --out <dir>
- *     [--scans corpusFactScan3,fact2Scan] [--workers N] [--archive-dir <dir>]
- *     [--files N] [--freeze] [--coverage] [--flush-mb N]
+ *     [--scans corpusFactScan3,fact2Scan] [--only <check,…>] [--workers N]
+ *     [--archive-dir <dir>] [--files N] [--freeze] [--coverage] [--flush-mb N]
  *
  * Each worker reads one contiguous run of the contexts (never cutting an
  * archive) and writes its accumulators; this process joins them in run order
@@ -103,6 +103,12 @@ const WORKERS = Number(argOf("--workers") ?? 3);
 const FILES = argOf("--files");
 const STATE = argOf("--state");
 const only = argOf("--scans")?.split(",");
+/** `--only <check,…>`: the checks a scan that takes the option keeps
+ * (`corpusFactScan5` runs only the modules that own one — T208 / GH #218
+ * 10.10: the flag was read by the scan's own CLI and dropped here, so a
+ * one-check pass still walked every module). Handed to the workers with the
+ * rest of the command line. */
+const ONLY_CHECKS = argOf("--only")?.split(",").filter(Boolean);
 const specs = SPECS.filter((s) => !only || only.includes(s.name));
 if (!DIR || !OUT) {
   console.error("usage: verify/run.ts <captureDir> --out <dir> [--scans a,b]");
@@ -121,6 +127,7 @@ const optsOf = (s: ISpec): IScanOpts => ({
   dir: DIR,
   examples: s.examples,
   ...(s.json ? { json: join(reportDir, `${s.stem}.json`) } : {}),
+  ...(ONLY_CHECKS?.length ? { only: ONLY_CHECKS } : {}),
 });
 
 async function loadScans(): Promise<Array<{ spec: ISpec; scan: IScan }>> {

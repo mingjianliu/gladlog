@@ -10,8 +10,9 @@
  * (ef24bfdfe), one IMMUNE row printed twice. This diff looks at EVERY line
  * of every context and menu of both captures (`acceptanceCapture
  * --context-dir / --findings-dir`, laid out `<dir>/s<k>/{context,findings}`
- * by cap605.sh; the two captures must share their manifest — the file names
- * are shard-local) and lists, ranked:
+ * by cap605.sh; the two captures must share their manifest, not their shard
+ * count — a file is known by its archive, round and owner, `captureFileKey`)
+ * and lists, ranked:
  *
  *  1. `family`: per (line family, spell / aura name) — the family is a line's
  *     leading tag(s) (`[ENEMY DEF]`, `[YOU] [CD]`, `[RES]`, a menu row's
@@ -40,6 +41,8 @@ import { join } from "node:path";
 
 import observedIds from "@gladlog/analysis/src/data/observedSpellIdsGenerated.json";
 import spellNames from "@gladlog/analysis/src/data/spellNames.json";
+
+import { captureFileKey } from "./verify/captureFileKey";
 
 const [baseDir, afterDir] = process.argv.slice(2, 4);
 if (!baseDir || !afterDir) {
@@ -182,8 +185,10 @@ function readSide(
       if (!existsSync(sdir)) continue;
       for (const f of readdirSync(sdir)) {
         side.files++;
-        const key = `${shard}/${sub}/${f}`;
         const text = readFileSync(join(sdir, f), "utf8");
+        // the owner's prompt, not where the capture put it: the two sides
+        // may be sharded differently (`captureFileKey`)
+        const key = captureFileKey(sub, f, text) ?? `${shard}/${sub}/${f}`;
         let section = "";
         const lineCount = new Map<string, number>();
         for (const line of text.split("\n")) {

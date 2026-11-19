@@ -64,6 +64,7 @@ const read = <T>(p: string): T => JSON.parse(readFileSync(p, "utf8")) as T;
  */
 const MITIGATION_OPEN_DEFAULT =
   "未接(未逐条读;多数改的不是减伤那一项:受疗 / 移速 / 耐力,见 structured.json)";
+const mitigationNotesUsed = new Set<string>();
 const MITIGATION_OPEN_NOTES: Record<string, string> = {
   "22812|301768|points#4 20": "不接:改的是树皮术的受到治疗(aura 118,效果 #4)",
   "473909|468743|points#1 0": "不接:0 点,落在变形效果位(aura 36)",
@@ -499,10 +500,23 @@ async function main(): Promise<void> {
     (x) => x.kind === "value" && x.status === "gap" && relevant(x.pickRate),
   )) {
     if (mitigationCarried(u.target, u.talent)) continue;
+    const noteKey = `${u.target}|${u.talent}|${u.opName} ${u.pvpValue}`;
+    mitigationNotesUsed.add(noteKey);
     L.push(
-      `| ${cell(nm(u.target))} | ${cell(u.talentName)} (${u.talent}) | ${u.opName} ${u.pvpValue} | ${cell(MITIGATION_OPEN_NOTES[`${u.target}|${u.talent}|${u.opName} ${u.pvpValue}`] ?? MITIGATION_OPEN_DEFAULT)} |`,
+      `| ${cell(nm(u.target))} | ${cell(u.talentName)} (${u.talent}) | ${u.opName} ${u.pvpValue} | ${cell(MITIGATION_OPEN_NOTES[noteKey] ?? MITIGATION_OPEN_DEFAULT)} |`,
     );
   }
+  // a status keyed on a row the table no longer prints is a note nobody
+  // reads: the DB2 value moved, the row was taken into the model, or the key
+  // was mistyped — and the row it meant prints the "nobody has read this"
+  // default instead (T208 / GH #218 10.8: nothing held the keys to the rows)
+  const staleNotes = Object.keys(MITIGATION_OPEN_NOTES).filter(
+    (k) => !mitigationNotesUsed.has(k),
+  );
+  if (staleNotes.length > 0)
+    throw new Error(
+      `talentCoverageDoc: ${staleNotes.length} MITIGATION_OPEN_NOTES key(s) match no open mitigation row — ${staleNotes.join("; ")}`,
+    );
   L.push("", "语料扫描(新赛季归档每 10 场,2026-09-26):", "", "```");
   for (const line of readFileSync(
     join(AUDIT, "mitigation-scan.txt"),
