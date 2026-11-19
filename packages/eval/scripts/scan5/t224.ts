@@ -20,7 +20,16 @@
  *    row can appear; not judged) | the wall(s). Counted: every window with
  *    a pressured friendly.
  *  - `anothersOwnWallById` (inventory): every such wall press in a window,
- *    by spell | the window's only kind of answer / beside another answer.
+ *    by spell (id) | what the code already knows of it (GH #28's
+ *    `canHelpAnotherUnit`: can help another unit / own protection only) |
+ *    whether the press has a cast row | the window's only kind of answer /
+ *    beside another answer.
+ *
+ * User ruling R93 (2026-11-19) narrows R81 to pure self-protection: a wall
+ * press that is also a healing cooldown for the team (Tree of Life, Ancient
+ * of Lore, Ultimate Penitence, a pressed Spirit of Redemption) stays an
+ * answer. `anothersOwnWallAnswers` counts under that reading: the walls it
+ * holds are the ones `canHelpAnotherUnit` says cannot help another unit.
  *  - `anothersPressCategory` (inventory): every non-control response whose
  *    caster is not the pressured unit, by spell | the engine's category —
  *    which presses the `wall` reading reaches and which it does not.
@@ -30,9 +39,12 @@ import {
   pressDidNotReachPressured,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
-import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  canHelpAnotherUnit,
+  isHealerSpec,
+} from "@gladlog/analysis/src/utils/cooldowns";
 
-import { type IRoundCtx } from "./ctx";
+import { type IRoundCtx, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = [
   "anothersOwnWallAnswers",
@@ -71,30 +83,39 @@ export function run(ctx: IRoundCtx): void {
         `window at ${p.tSec}s: ${r.casterName} ${r.spellName} ${r.latencySec}s dest ${r.destId ?? "-"}; pressured ${pr.name}`,
       );
     }
-    const walls = p.responseCasts.filter(
+    const allWalls = p.responseCasts.filter(
       (r) =>
         r.category === "wall" &&
         r.casterId !== undefined &&
         r.casterId !== pr.unitId,
     );
-    if (walls.length === 0) continue;
+    if (allWalls.length === 0) continue;
+    const walls = allWalls.filter((r) => !canHelpAnotherUnit(r.spellId));
     const others = p.responseCasts.filter(
       (r) => !walls.includes(r) && !pressDidNotReachPressured(pr, r),
     );
     const moved = p.responses.kite || p.responses.attackerMoved;
     const only = others.length === 0 && !moved;
     const fact = `${ctx.roundKey}|${owner.reaction}|${p.tSec}`;
-    for (const w of walls) {
+    for (const w of allWalls) {
       ctx.bump("anothersOwnWallById");
+      const caster = ctx.units.find((u: any) => u.id === w.casterId);
+      const castRow =
+        caster !== undefined &&
+        successesOf(caster).some(
+          (c: any) =>
+            String(c.spellId) === w.spellId &&
+            Math.floor((tsOf(c) - ctx.start) / 1000) === w.tSec,
+        );
       ctx.violate(
         "anothersOwnWallById",
-        `${w.spellName} | ${only ? "the window's only kind of answer" : "beside another answer"}`,
+        `${w.spellName} (${w.spellId}) | ${canHelpAnotherUnit(w.spellId) ? "can help another unit" : "own protection only"} | ${castRow ? "cast row" : "no cast row"} | ${only ? "the window's only kind of answer" : "beside another answer"}`,
         ctx.start + p.tSec * 1000,
         `${fact}|${w.casterId}|${w.spellId}|${w.tSec}`,
         `window at ${p.tSec}s: ${w.casterName} ${w.spellName} ${w.latencySec}s; pressured ${pr.name}`,
       );
     }
-    if (!only || !p.responded) continue;
+    if (walls.length === 0 || !only || !p.responded) continue;
     const judged =
       healer &&
       p.feasible &&
