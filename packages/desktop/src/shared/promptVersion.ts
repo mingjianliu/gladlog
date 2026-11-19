@@ -1602,5 +1602,11 @@
  *  held to their measured enemy through the producer's burst windows);
  *  prompts unchanged.
  *  See docs/prompt-version-history.md.
+ *
+ * v618 (2026-11-18; pipeline batch B146, T157): Greater Invisibility is no
+ *  wall: [ENEMY DEF] reads `(invisible, …)`, no 60 %, kill windows / burst
+ *  ledger / death audit / stacked defensives do not count it; our-side
+ *  readiness and press readers keep it.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 617;
+export const PROMPT_VERSION = 618;

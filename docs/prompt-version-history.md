@@ -7923,3 +7923,20 @@ unchecked 186 -> 4, violations 0); targetless refused-kick lines are now
 counted (0). Prompts unchanged. On the 605 the product capture is unchanged by
 construction and the gates are identical on it (positioningScan violations 0).
 Codex branch review 85-tk-EVAL-T207-1 (APPROVE).
+
+v618 (2026-11-18; pipeline batch B146, T157). Greater Invisibility leaves the
+mitigation table (R58: no damage reduction in the game). The enemy line reads
+`(invisible, end not logged)`, `(invisible, N.Ns)`, or `(invisible, ended at
+once)` when the log removes it the instant it went up (R61 / R64). Kill
+windows, KILL ATTEMPTS, the burst ledger, the death audit and stacked
+defensives no longer count it; cd-hoarded readiness, cd-waste and answered-a-
+burst keep it as a defensive press (R62). The gates read it:
+checkInvisibilityIsNoDefense 1,009 -> 0, checkEnemyDefSaveEffect 960 -> 0. The
+base's 23 GI [PROC] (no press) lines: 17 stay, and 6 at round end go because
+the log records that press 0.3-0.6 s after the round ended (R66). On the 605
+the assembled candidate stops counting Greater Invisibility as a wall in every
+context, cuts kill windows at an invisibility aura (7,872 -> 7,859 lines; 6
+windows vanish, 11 move), and adds 11 candidate rows (kick-priority 10, burst-
+into-mitigation 1) with 1 changed; 3 approved rows' windowTo moves 2:46 ->
+2:45; 17 of 23 GI no-press lines stay (R66). Codex branch reviews on tk/T157 /
+-r58.
