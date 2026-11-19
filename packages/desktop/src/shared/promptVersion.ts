@@ -1559,5 +1559,10 @@
  * v608 (2026-11-18; pipeline batch B136, T142): an aura the log never
  *  removes before the round ends no longer gets an estimated expiry line.
  *  See docs/prompt-version-history.md.
+ *
+ * v609 (2026-11-18; pipeline batch B137, T201): performance only
+ *  (candidates and context build about half the time); output byte-
+ *  identical.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 608;
+export const PROMPT_VERSION = 609;

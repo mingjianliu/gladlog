@@ -7796,3 +7796,17 @@ candidate removes the 18 estimated-expiry [BUFF FADED] lines from 17 contexts
 and changes nothing else; menus are byte-identical. Codex branch review 85-tk-
 CD-T142-1: three synthetic points, recorded; two checked on the diff (`still
 channeling when the round ended` 15 = 15; no removed line's holder had died).
+
+v609 (2026-11-18; pipeline batch B137, T201). Performance headroom, output
+byte-identical. Measured on 20 real logs with profilePipeline: candidates 33.5
+-> 18.5 s, context 100.2 -> 53.4 s; in the built app the AI tab's first-entry
+freeze 295 -> 154 ms. The 605 capture hash at the lane's base equals the
+base's (6d1de5523ed4, 3,519 owners). Two of the six #218 9.5 items are not
+taken here and get their own issues: the stats page's re-scan per entry (needs
+a cache-invalidation design) and the one-row-per-match list (a DOM change
+against the visual baselines). On the 605 the assembled candidate's output is
+byte-identical to its parent's (capture hash 427c139df55e on both, 3,519
+owners). Codex branch review 85-tk-ENG-T201-1: two synthetic-only points
+recorded (a same-length array replacement, a metadata edit after warming: the
+T81 convention combatMemo already follows); no shared-row writer; prompts
+identical cold, warm and with the memo disabled.
