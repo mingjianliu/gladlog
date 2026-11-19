@@ -159,12 +159,25 @@ describe("burstWindowDecisionPoints — which control answers a burst (FT-T12 D3
   it("a control on the opener, who is hitting the pressured unit, counts", () => {
     const [p] = points([
       friend([cast(STORM_BOLT, 12, "E1")], steady("E1")),
-      opener(),
+      opener({ auraEvents: [aura(STORM_BOLT_STUN, 12.1, "F1", "E1")] }),
     ]);
     expect(p!.pressured!.name).toBe("Friend-R");
     expect(p!.responses.control).toBe(true);
     expect(p!.responded).toBe(true);
     expect(controls(p!)).toMatchObject([{ spellId: STORM_BOLT, destId: "E1" }]);
+  });
+
+  // T180 (user ruling R75): a control that did not land — the press with no
+  // aura of it on its target — is no answer; the window is unanswered
+  it("the same control with no aura on its target did not land: not responded", () => {
+    const [p] = points([
+      friend([cast(STORM_BOLT, 12, "E1")], steady("E1")),
+      opener(),
+    ]);
+    expect(controls(p!)).toMatchObject([
+      { spellId: STORM_BOLT, destId: "E1", landed: false },
+    ]);
+    expect(p!.responded).toBe(false);
   });
 
   it("a control on an enemy healer who only pressed Power Infusion does not", () => {
@@ -189,7 +202,7 @@ describe("burstWindowDecisionPoints — which control answers a burst (FT-T12 D3
     const [p] = points([
       friend([cast(STORM_BOLT, 12, "E2")], [...steady("E1"), dmg(15, 1, "E2")]),
       opener(),
-      piHealer(),
+      piHealer({ auraEvents: [aura(STORM_BOLT_STUN, 12.1, "F1", "E2")] }),
     ]);
     expect(p!.responses.control).toBe(true);
     expect(p!.responded).toBe(true);
