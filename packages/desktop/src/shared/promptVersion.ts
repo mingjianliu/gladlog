@@ -1634,5 +1634,10 @@
  *  (predicate-index rows, a Holy Priest reach id that is never cast,
  *  evidence notes); prompts unchanged.
  *  See docs/prompt-version-history.md.
+ *
+ * v624 (2026-11-19; pipeline batch B152, T211): the DR map's dead Sin and
+ *  Punishment id is removed (87204 does not diminish) and its hand layer is
+ *  registered; prompts unchanged.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 623;
+export const PROMPT_VERSION = 624;

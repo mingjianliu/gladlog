@@ -7998,3 +7998,16 @@ measured numbers (pricing unchanged); talent-coverage-gaps.md is regenerated
 (one stale row gone). On the 605 the output is byte-identical (capture of b150
 and of b152 both hash a28a916d6de2, 0 differing files; T210 and T211 touch
 disjoint files). Codex branch review 85-tk-EVAL-T210-1 (APPROVE).
+
+v624 (2026-11-19; pipeline batch B152, T211). Data hygiene. The DR map carried
+Sin and Punishment as 323467, an id with 0 rows on the 605; the live aura is
+87204, which does not diminish on the 605 (45 of 77 repeats within 18 s ran
+the full 3.0 s, against 126 of 222 with no predecessor), so the dead id is
+removed and 87204 stays a control with no DR family, which is what its lines
+already read. The map's hand layer is now registered in curatedIdRegistry for
+the reverse check. formatHealerExposureForContext, which had no production
+caller, is deleted. A test pins AOE_CC_SPELL_IDS against the control ids with
+Earthquake as the one ruled exception (R48). On the 605 the output is byte-
+identical (capture of b150 and of b152 both hash a28a916d6de2, 0 differing
+files; T210 and T211 touch disjoint files). Codex branch review 85-tk-
+EVAL-T211-1 (APPROVE).
