@@ -190,7 +190,7 @@ describe("T213 — Aura Mastery under Concentration Aura is silence / interrupt 
     expect(d!.pct).toBeUndefined();
   });
 
-  it("a switch to Devotion Aura while the press runs: the press is the wall, interval and label alike (single-sample, cautious)", () => {
+  it("a switch to Devotion Aura while the press runs: the press stays the immunity, the wall runs from the switch (80-PIPE-170-B156 #1)", () => {
     const u = paladin(CONCENTRATION_AURA_ID);
     // 1.3 s in: the immunity aura and Concentration Aura leave, Devotion goes up
     u.auraEvents = u.auraEvents.filter(
@@ -210,24 +210,29 @@ describe("T213 — Aura Mastery under Concentration Aura is silence / interrupt 
       (iv) => iv.spellId === AURA_MASTERY_ID,
     );
     expect(walls).toHaveLength(1);
-    // kept whole, from the press (no aura that opens with no press)
-    expect(walls[0]!.fromS).toBeCloseTo(20);
+    // the wall runs from the switch, not from the press (assembly review
+    // 80-PIPE-170-B156 #1)
+    expect(walls[0]!.fromS).toBeCloseTo(21.3);
     expect(walls[0]!.toS).toBeCloseTo(28);
-    // one decision for interval and label: the press prints as a Devotion
-    // press does — the wall line alone, no immunity label, no tag
-    const ls = linesOf(u);
-    expect(ls).toHaveLength(1);
-    expect(ls[0]).toMatchObject({
-      kind: "self",
-      atSeconds: 20,
-      pressSeconds: 20,
-      pct: 24,
-    });
-    expect(ls[0]!.mechanism?.kind).not.toBe("mechanic immunity");
+    // the press is read by the aura it was pressed under: immunity
     expect(auraMasteryPressSwitchedToWall(u, at(20))).toBe(true);
-    expect(auraMasteryPressIsImmunityBranch(u, at(20))).toBe(false);
-    expect(auraMasteryPressTag(AURA_MASTERY_ID, u, at(20))).toBe("");
+    expect(auraMasteryPressIsImmunityBranch(u, at(20))).toBe(true);
+    expect(auraMasteryPressTag(AURA_MASTERY_ID, u, at(20))).toBe(
+      " (silence / interrupt immunity)",
+    );
+    // the round has a wall: the kit entry is not tagged immunity-only
+    expect(auraMasteryIsNoWallOf(u, round)).toBe(false);
     expect(auraMasteryKitTag(AURA_MASTERY_ID, u, round)).toBe("");
+    // two lines, as the log has it: the press, an immunity until the
+    // switch; then the wall, which no press of its own put up
+    const ls = linesOf(u);
+    expect(ls).toHaveLength(2);
+    expect(ls[0]).toMatchObject({ kind: "self-save", atSeconds: 20 });
+    expect(ls[0]!.mechanism?.kind).toBe("mechanic immunity");
+    expect(ls[0]!.observedSeconds).toBeCloseTo(1.3);
+    expect(ls[1]).toMatchObject({ kind: "self", pct: 24, noPressLogged: true });
+    expect(ls[1]!.atSeconds).toBeCloseTo(21.3);
+    expect(ls[1]!.observedSeconds).toBeCloseTo(6.7);
     // the plain immunity press is untouched
     const plain = paladin(CONCENTRATION_AURA_ID);
     expect(auraMasteryPressSwitchedToWall(plain, at(20))).toBe(false);

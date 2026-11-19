@@ -3543,6 +3543,51 @@ describe("cdHoardedEvents(2026-08-30 rewrite, GH #34, decision-point shape, 60ab
     );
     expect(evts).toHaveLength(0);
   });
+
+  it("③ 只给免疫的 Aura Mastery 不进指控的就绪集;按了它仍算应对(80-PIPE-170-B156 #2)", () => {
+    const run = (
+      cds: ReturnType<typeof cd>[],
+      noWall?: (spellId: string) => boolean,
+    ) =>
+      cdHoardedEvents(
+        [{ crisisUnit: OWNER, own: true, points: [point(380.6, 34)] }],
+        cds,
+        OWNER,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        noWall,
+      );
+    const isAm = (id: string) => id === "31821";
+    const both = [cd("642", "Divine Shield"), cd("31821", "Aura Mastery")];
+    // control: without the verdict both are named
+    expect(run(both)[0]!.facts["readyCds"]).toBe(
+      "Divine Shield; Aura Mastery",
+    );
+    // the immunity-only button drops out of the ready set
+    expect(run(both, isAm)[0]!.facts["readyCds"]).toBe("Divine Shield");
+    // …and a row whose only ready tool it was is no row
+    expect(run([cd("31821", "Aura Mastery")])).toHaveLength(1);
+    expect(run([cd("31821", "Aura Mastery")], isAm)).toHaveLength(0);
+    // the response set is not narrowed: pressing it still answers
+    expect(
+      run(
+        [
+          cd("642", "Divine Shield"),
+          cd("31821", "Aura Mastery", { casts: [{ timeSeconds: 383 }] }),
+        ],
+        isAm,
+      ),
+    ).toHaveLength(0);
+  });
 });
 
 describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯——2026-08-30 沿用/扩展到多技能合并)", () => {

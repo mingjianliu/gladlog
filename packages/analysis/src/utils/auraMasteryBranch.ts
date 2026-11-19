@@ -115,31 +115,39 @@ function pressAuraEndMs(caster: Rows, atMs: number): number {
 }
 
 /** Did the press at `atMs` open in the immunity branch and switch to the
- * wall while it ran (`immunityBranchWallFromMs`)? Such a press is the wall
- * for every reader — interval, label, tag, kit — as a Devotion press is. */
+ * wall while it ran (`immunityBranchWallFromMs`)? The press itself stays the
+ * immunity; its wall begins at the switch (`auraMasteryWallFromMs`). */
 export function auraMasteryPressSwitchedToWall(
   caster: Rows,
   atMs: number,
 ): boolean {
-  return (
-    pressHasImmunityRow(caster, atMs) &&
-    immunityBranchWallFromMs(caster, atMs, pressAuraEndMs(caster, atMs)) !==
-      undefined
-  );
+  return auraMasteryWallFromMs(caster, atMs) !== undefined;
 }
 
-/** Is the Aura Mastery `caster` pressed at `atMs` the immunity and no wall:
- * its own 317929 row beside it, and no switch to the wall while it ran
- * (`auraMasteryPressSwitchedToWall`)? The one decision the interval readers
- * and every label read. */
+/** The instant (ms) the Aura Mastery pressed at `atMs` in the immunity
+ * branch became the wall — the paladin's own Devotion Aura going up while
+ * the press's 31821 still ran. Undefined for a press that never switched,
+ * and for a press that was the wall from the start. */
+export function auraMasteryWallFromMs(
+  caster: Rows,
+  atMs: number,
+): number | undefined {
+  return pressHasImmunityRow(caster, atMs)
+    ? immunityBranchWallFromMs(caster, atMs, pressAuraEndMs(caster, atMs))
+    : undefined;
+}
+
+/** Is the Aura Mastery `caster` pressed at `atMs` the immunity: its own
+ * 317929 row beside it. The press is read by the aura it was pressed under
+ * (assembly review 80-PIPE-170-B156 #1): a later switch to Devotion Aura
+ * opens the wall from the switch on (`auraMasteryWallFromMs`,
+ * `withoutImmunityBranchWalls`) and leaves the press what it was. The one
+ * decision every press label reads. */
 export function auraMasteryPressIsImmunityBranch(
   caster: Rows,
   atMs: number,
 ): boolean {
-  return (
-    pressHasImmunityRow(caster, atMs) &&
-    !auraMasteryPressSwitchedToWall(caster, atMs)
-  );
+  return pressHasImmunityRow(caster, atMs);
 }
 
 /** The instant (ms) an immunity-branch Aura Mastery up over
@@ -161,9 +169,13 @@ export function auraMasteryPressIsImmunityBranch(
  * sample on the 605 files and is not handled: such a press stays the wall
  * for its whole interval.
  *
- * A press that switched is the wall on every line too — no immunity label
- * on its `[ENEMY DEF]` line, no tag on our `[CD]` line or the kit entry
- * (`auraMasteryPressSwitchedToWall`): one decision for label and interval. */
+ * The wall runs from the switch on, not from the press (assembly review
+ * 80-PIPE-170-B156 #1: c051aa9a's press at 19.815 s read as a wall for the
+ * 1.258 s before its switch at 21.073 s, and lost its immunity label): the
+ * press keeps its immunity label and tag, the 31821 interval the wall
+ * readers see starts at the switch (`withoutImmunityBranchWalls`). A unit
+ * with such a press has a wall in the round (`auraMasteryIsNoWallOf` is
+ * false for it). */
 export function immunityBranchWallFromMs(
   holder: Rows,
   fromMs: number,
@@ -184,17 +196,21 @@ export function immunityBranchWallFromMs(
 }
 
 /** `ivs` (the holder's own aura intervals, seconds since `startMs`) without
- * the Aura Mastery intervals that are no wall — for a reader that states or
- * prices the wall. A press that switched to the wall keeps its interval
- * whole (`auraMasteryPressIsImmunityBranch` is false for it). */
+ * the part of an Aura Mastery interval that is no wall — for a reader that
+ * states or prices the wall. An immunity-branch press's interval is dropped;
+ * one that switched to the wall while it ran is kept from the switch on. */
 export function withoutImmunityBranchWalls<
   T extends { spellId: string; fromS: number },
 >(holder: Rows, ivs: readonly T[], startMs: number): T[] {
-  return ivs.filter(
-    (iv) =>
-      iv.spellId !== AURA_MASTERY_ID ||
-      !auraMasteryPressIsImmunityBranch(holder, startMs + iv.fromS * 1000),
-  );
+  return ivs.flatMap((iv) => {
+    if (iv.spellId !== AURA_MASTERY_ID) return [iv];
+    const pressMs = startMs + iv.fromS * 1000;
+    if (!auraMasteryPressIsImmunityBranch(holder, pressMs)) return [iv];
+    const wallFromMs = auraMasteryWallFromMs(holder, pressMs);
+    return wallFromMs === undefined
+      ? []
+      : [{ ...iv, fromS: (wallFromMs - startMs) / 1000 }];
+  });
 }
 
 /** Is `unit`'s Aura Mastery no wall over this round — pressed or in hand? */
@@ -211,8 +227,12 @@ export function auraMasteryIsNoWallOf(
       c.logLine.timestamp <= round.endTime,
   );
   if (presses.length > 0)
-    return presses.every((c) =>
-      auraMasteryPressIsImmunityBranch(unit, c.logLine.timestamp),
+    return presses.every(
+      (c) =>
+        auraMasteryPressIsImmunityBranch(unit, c.logLine.timestamp) &&
+        // a press that switched to the wall while it ran: the round has a
+        // wall
+        !auraMasteryPressSwitchedToWall(unit, c.logLine.timestamp),
     );
   return (
     auraRowsUpAt(unit, CONCENTRATION_AURA_ID, round.endTime) &&

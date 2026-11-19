@@ -84,17 +84,20 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
     "enemyDef:unseen",
     "friendlyCd:devotion",
     "friendlyCd:unseen",
-    "enemyDef:switched",
-    "friendlyCd:switched",
+    "enemyDef:switched:stated",
+    "friendlyCd:switched:stated",
     "enemyDef:concentration:stated",
     "friendlyCd:concentration:stated",
   ]
     .map((k) => `auraMasteryBranchAsWall|${k}`)
     .concat(
-      ["cd-hoarded", "cd-waste"].flatMap((t) => [
-        `auraMasteryInAccusation|${t}:noWall`,
-        `auraMasteryInAccusation|${t}:wall`,
-      ]),
+      // a `cd-hoarded` row that names an immunity-only Aura Mastery as
+      // ready is a violation (assembly review 80-PIPE-170-B156 #2)
+      [
+        "auraMasteryInAccusation|cd-hoarded:wall",
+        "auraMasteryInAccusation|cd-waste:noWall",
+        "auraMasteryInAccusation|cd-waste:wall",
+      ],
     ),
 );
 
@@ -299,9 +302,10 @@ export function run(ctx: IRoundCtx): void {
         ),
       );
       // the press opened in the immunity branch and the paladin's own
-      // Devotion Aura went up on it while its 31821 still ran: the product
-      // keeps such a press the wall (one press on the 605 files when this
-      // was written; `switched` is its count)
+      // Devotion Aura went up on it while its 31821 still ran: the press
+      // stays the immunity on its line and its wall starts at the switch
+      // (assembly review 80-PIPE-170-B156 #1; one press on the 605 files —
+      // `switched` is its count)
       // the product's own reading of the switch, not a second calculation
       // (codex 85-tk-WIN-T213-3 #5: this scan allowed 1 s more than the
       // product and counted a correctly tagged line as a violation)
@@ -336,7 +340,7 @@ export function run(ctx: IRoundCtx): void {
       const enemy = p.reaction !== ctx.owner.reaction;
       // the product's own reading of the press (the paladin's own row)
       // against this scan's (any unit's): one fact, two readers
-      if (auraMasteryPressIsImmunityBranch(p, at) !== (immunity && !switched)) {
+      if (auraMasteryPressIsImmunityBranch(p, at) !== immunity) {
         ctx.bump("auraMasteryBranchReadDiffers");
         ctx.violate(
           "auraMasteryBranchReadDiffers",

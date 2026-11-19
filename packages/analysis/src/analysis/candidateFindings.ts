@@ -48,6 +48,7 @@ import {
 } from "../facts/decisionTrace";
 import { absorbContributionsInWindow } from "../utils/absorbShields";
 import { buildAuraIntervals } from "../utils/auraIntervals";
+import { isNoWallButtonOf } from "../utils/auraMasteryBranch";
 import { bracketKey } from "../utils/bracketKey";
 import {
   analyzeBurstLedger,
@@ -4152,6 +4153,10 @@ function teamPlayEvents(
               combat.startTime + tSec * 1000,
               combat.startInfo?.zoneId,
             ),
+          // an Aura Mastery that is the silence / interrupt immunity over
+          // this round is no damage save to be accused of holding (ruling
+          // R53; assembly review 80-PIPE-170-B156 #2)
+          (spellId: string) => isNoWallButtonOf(spellId, owner, combat),
         ),
       );
     } catch {

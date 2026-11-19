@@ -67,7 +67,6 @@ import {
   AURA_MASTERY_ID,
   AURA_MASTERY_IMMUNITY_AURA_ID,
   auraMasteryImmunityMechanics,
-  auraMasteryPressSwitchedToWall,
   withoutImmunityBranchWalls,
 } from "./auraMasteryBranch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
@@ -2839,16 +2838,6 @@ export function enemyDefensiveEventsUncached(
     if (
       iv.spellId !== AURA_MASTERY_IMMUNITY_AURA_ID ||
       !isIntervalFrom(iv, enemy)
-    )
-      continue;
-    // a press that switched to the wall while it ran is the wall's line,
-    // not this one — the interval readers' own decision
-    // (`auraMasteryPressSwitchedToWall`)
-    if (
-      auraMasteryPressSwitchedToWall(
-        enemy,
-        combat.startTime + Math.round(iv.fromS * 1000),
-      )
     )
       continue;
     const press = castSecondsOf(enemy.name, AURA_MASTERY_ID)

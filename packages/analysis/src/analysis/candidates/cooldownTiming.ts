@@ -2096,6 +2096,12 @@ export function cdHoardedEvents(
    * keeps it out of the ACCUSATION set, the own crisis included. An absent
    * callback does not gate; the response set is untouched. */
   ownerReachesEnemyTarget?: (spellId: string, tSec: number) => boolean,
+  /** Assembly review 80-PIPE-170-B156 #2 (ruling R53): is this button no
+   * damage save in the owner's hand over the round — an Aura Mastery that is
+   * the silence / interrupt immunity (`isNoWallButtonOf`)? `true` keeps it
+   * out of the ACCUSATION set; a press of it still answers through the
+   * response set, which is untouched. An absent callback does not gate. */
+  ownerButtonIsNoWall?: (spellId: string) => boolean,
 ): CandidateEvent[] {
   const ownerUnit = "info" in owner ? owner : undefined;
   const cap = overrides?.cap ?? CD_HOARD_CAP;
@@ -2223,7 +2229,8 @@ export function cdHoardedEvents(
               false) &&
           ownerForbearanceBlocks?.(cd.spellId, p.tSec, src.crisisUnit.id) !==
             true &&
-          ownerReachesEnemyTarget?.(cd.spellId, p.tSec) !== false,
+          ownerReachesEnemyTarget?.(cd.spellId, p.tSec) !== false &&
+          ownerButtonIsNoWall?.(cd.spellId) !== true,
       );
       // the owner could press THIS cooldown: free of CC, and of a lockout on
       // its school, for REACTION_WINDOW_S of `ownerFreeSpan`. I05 (c): a stun
