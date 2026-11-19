@@ -46,7 +46,11 @@ import {
   computeEnemyInterruptAvailability,
   isInterruptUsable,
 } from "./enemyInterrupts";
-import { isDeferralAbsorb, isDeferralDamageRow } from "./incomingPressure";
+import {
+  isAttackerSideAbsorb,
+  isDamageSentRow,
+  isDeferralAbsorb,
+} from "./incomingPressure";
 import {
   createKillWindowFactsComputer,
   hasPressOnlyTag,
@@ -298,7 +302,7 @@ export function computeSlackSegments(
           (d) =>
             inSeg(d.logLine.timestamp) &&
             enemyIds.has(d.destUnitId) &&
-            !isDeferralDamageRow(d),
+            isDamageSentRow(d),
         )
         // Damage events carry NEGATIVE effectiveAmount (absorbs positive);
         // max(0,·) counted absorbed-only damage — "your damage 0k" while
@@ -439,7 +443,7 @@ export function computeContestedSegments(
           (d) =>
             inSeg(d.logLine.timestamp) &&
             enemyIds.has(d.destUnitId) &&
-            !isDeferralDamageRow(d),
+            isDamageSentRow(d),
         )
         // Damage events carry NEGATIVE effectiveAmount (absorbs positive);
         // max(0,·) counted absorbed-only damage — "your damage 0k" while
@@ -1116,7 +1120,8 @@ export function computeWindowContributions(
       if (t < fromSeconds || t >= toSeconds) continue;
       if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED) {
         // a deferral shield's row is no absorb (FT-T02b, `isDeferralAbsorb`)
-        if (!isDeferralAbsorb(d))
+        // …nor is an absorb that sat on the attacker (T160)
+        if (!isDeferralAbsorb(d) && !isAttackerSideAbsorb(d))
           ownerAbsorbedOnTarget += Math.abs(d.effectiveAmount);
       } else ownerDamageOnTarget += Math.abs(d.effectiveAmount);
     }

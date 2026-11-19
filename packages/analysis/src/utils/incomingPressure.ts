@@ -132,6 +132,87 @@ export function isDeferralDamageRow(d: {
   );
 }
 
+/**
+ * Absorb auras that sit on the ATTACKER and eat what that unit deals — the
+ * `spellId` of their SPELL_ABSORBED rows. Not a shield on the row's victim:
+ * the hit took no health and met no shield of the target's (pipeline T160,
+ * round-13 retest P9: `[KILL WINDOW] … team burst 459k (+142k absorbed)` on
+ * a Shadow Priest whose "shields" were her own Mindgames on the attacker).
+ *
+ *  - Mindgames: the cast and the debuff on the attacker are 375901, the
+ *    absorb rows carry 375902, the shield's owner is the priest;
+ *  - Sanctuary (Priest PvP talent, Smite): 208771 on the enemy smitten;
+ *  - Blessed Hammer (Protection Paladin): 229976 on the enemy struck.
+ *
+ * Forward check (`scan5/t160.ts` `absorbShieldSide`, 605-file capture,
+ * 1,541,797 absorb rows on players): the rows whose aura was on the attacker
+ * at the row while the victim logged no aura event of the spell all round are
+ * these three and nothing else — 46 / 31 / 29 rows. Registered in
+ * curatedIdRegistry.
+ */
+export const ATTACKER_SIDE_ABSORB_IDS: ReadonlySet<string> = new Set([
+  "375902", // Mindgames
+  "208771", // Sanctuary
+  "229976", // Blessed Hammer
+]);
+
+/** An absorb event (its `spellId` is the absorbing aura) whose aura sat on
+ * the attacker, not on the victim: the hit never reached the victim. The
+ * offence-side readers that print what "the target's shields" ate leave it
+ * out, and so do the incoming-side ones — `incomingPressureEvents` and what
+ * reads it, `incomingPressureBySchool`, the absorbed-hit labels of
+ * `timelineHelpers`, `absorbContributionsInWindow`, the `[ENEMY DEF]`
+ * dealt sum (user ruling R84, 2026-11-19: not absorbed pressure on our
+ * unit, matching the offence side). */
+export function isAttackerSideAbsorb(a: { spellId?: string | null }): boolean {
+  return !!a.spellId && ATTACKER_SIDE_ABSORB_IDS.has(a.spellId);
+}
+
+/**
+ * The two readings of a row of an attacker's `damageOut` (pipeline T160,
+ * user ruling R87, 2026-11-19 — split by what the sentence states). Both
+ * leave out a deferral shield's own absorb row (`isDeferralDamageRow`: the
+ * hit counts when it lands); they differ on an absorb that sat on the
+ * ATTACKER (`isAttackerSideAbsorb`):
+ *
+ *  - `isDamageTakenRow` — what the row's target TOOK: health lost or eaten
+ *    by the target's own shields. An absorb on the attacker is left out —
+ *    the hit never reached the target. Read by the sentences that state
+ *    damage on a unit: a kill window's team burst, the burst ledger's `your
+ *    damage X (Y of it absorbed)`, the M figures of KILL ATTEMPTS (the 30k
+ *    floor with them), and on the incoming side `incomingPressureEvents`,
+ *    `incomingPressureBySchool`, the top-source labels,
+ *    `absorbContributionsInWindow`, the `[ENEMY DEF]` dealt sum.
+ *  - `isDamageSentRow` — where the attacker SENT its damage: every hit it
+ *    aimed, one eaten on its own side included. Read by the sentences that
+ *    state focus: the ledger's `Off-target` share and its
+ *    `followedTeamFocus`, an ally cooldown's `their top target`, KILL
+ *    ATTEMPTS `team focus P%` and the target ranking, `during it`'s `P% of
+ *    their enemy-player damage`, the healer-offence holder damage, offensive
+ *    waste. (22-3-229: a warrior swinging at the team's focus with the enemy
+ *    priest's Mindgames on him was called off-target once his eaten swings
+ *    stopped counting.)
+ *
+ * No reader re-derives either: import the one its sentence needs.
+ */
+export function isDamageTakenRow(d: {
+  spellId?: string | null;
+  logLine?: { event: string };
+}): boolean {
+  return !(
+    (d.logLine?.event as string) === LogEvent.SPELL_ABSORBED &&
+    (isDeferralAbsorb(d) || isAttackerSideAbsorb(d))
+  );
+}
+
+/** See `isDamageTakenRow`. */
+export function isDamageSentRow(d: {
+  spellId?: string | null;
+  logLine?: { event: string };
+}): boolean {
+  return !isDeferralDamageRow(d);
+}
+
 /** A deferral shield's delayed damage landing (or being eaten by a real
  * shield): the attacking spell is one of the deferred ids. */
 export function isDeferredTickId(spellId: string | null | undefined): boolean {
@@ -232,6 +313,8 @@ export function incomingPressureEvents(
     if (amount <= 0 || !Number.isFinite(amount)) continue;
     // delayed, not absorbed: it is counted as the tick that takes the health
     if (isDeferralAbsorb(a)) continue;
+    // eaten by an aura on the attacker: it never reached the unit (R84)
+    if (isAttackerSideAbsorb(a)) continue;
     // the absorbed hit's own spell and attacker (`spellId` is the shield)
     if (
       redistributed(
@@ -415,6 +498,8 @@ export function incomingPressureBySchool(
     )
       continue;
     if (isDeferredTickId(a.attackSpellId)) continue;
+    // not pressure on the unit: the aura that ate it sat on the attacker
+    if (isAttackerSideAbsorb(a)) continue;
     const mask = absorbedHitSchoolMask(a, swingWhenNoSpell);
     if (mask === undefined) continue;
     add(mask, Math.abs(Number(a.absorbedAmount) || 0));

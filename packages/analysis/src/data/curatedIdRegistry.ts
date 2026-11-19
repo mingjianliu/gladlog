@@ -175,6 +175,7 @@ import {
   SUMMON_BORNE_AURA_IDS,
 } from "../utils/hiddenPress";
 import {
+  ATTACKER_SIDE_ABSORB_IDS,
   DEFERRAL_SHIELD_DAMAGE_IDS,
   REDISTRIBUTION_DAMAGE_IDS,
 } from "../utils/incomingPressure";
@@ -1033,6 +1034,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("DEFERRAL_SHIELD_DAMAGE_IDS", "utils/incomingPressure.ts", "aura", () =>
     keys(DEFERRAL_SHIELD_DAMAGE_IDS),
+  ),
+  t("ATTACKER_SIDE_ABSORB_IDS", "utils/incomingPressure.ts", "aura", () =>
+    set(ATTACKER_SIDE_ABSORB_IDS),
   ),
   t("COMP_DEPENDENT_PURGE_TARGETS", "utils/dispelAnalysis.ts", "aura", () =>
     set(COMP_DEPENDENT_PURGE_TARGETS),

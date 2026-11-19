@@ -42,6 +42,7 @@ import {
   formatDuringExternal,
 } from "../../utils/externalDamage";
 import {
+  isAttackerSideAbsorb,
   isDeferralAbsorb,
   sumIncomingPressure,
 } from "../../utils/incomingPressure";
@@ -524,6 +525,7 @@ export function channelTargetClause(
     for (const a of f.absorbsIn ?? []) {
       if (a.timestamp < fromMs || a.timestamp > toMs) continue;
       if (isDeferralAbsorb(a)) continue; // delayed, counted when it lands
+      if (isAttackerSideAbsorb(a)) continue; // eaten on the attacker (R84)
       const amount = Math.abs(a.absorbedAmount);
       if (
         a.attackerId === enemy.id &&

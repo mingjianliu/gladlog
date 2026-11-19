@@ -159,7 +159,7 @@ import {
 import { PASSIVE_ABSORB_PROC_AURAS } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   DEFERRAL_SHIELD_DAMAGE_IDS,
-  isDeferralDamageRow,
+  isDamageTakenRow,
 } from "@gladlog/analysis/src/utils/incomingPressure";
 import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
@@ -1064,7 +1064,7 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
             d.destUnitId === target.id &&
             tsOf(d) >= fromMs &&
             tsOf(d) <= until &&
-            !isDeferralDamageRow(d),
+            isDamageTakenRow(d),
         )
         .reduce((a, d) => a + Math.abs(d.effectiveAmount ?? 0), 0) / 1e6;
     const printed = +m[2]!;

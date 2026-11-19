@@ -189,6 +189,44 @@ describe("duringExternalShare", () => {
     ).toEqual([]);
   });
 
+  it("the share is of what the ally SENT: a hit an aura on the ally itself ate still counts (T160, R87)", () => {
+    // 10k landed on the target; 10k of the ally's hit on the other enemy is
+    // eaten by Mindgames 375902 on the ally — the ally sent half its damage
+    // elsewhere, the product prints 50 %
+    const eaten = (shieldId: string) => ({
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: at(12_000) },
+      timestamp: at(12_000),
+      spellId: shieldId,
+      attackerId: "Ally",
+      absorbedAmount: 10_000,
+    });
+    const players = (shieldId: string) => [
+      unit("Ally", "1", 1),
+      unit("Target", "2", 2, {
+        auraEvents: [
+          aura(LogEvent.SPELL_AURA_APPLIED, 10_000, "116849", "Life Cocoon"),
+          aura(LogEvent.SPELL_AURA_REMOVED, 15_000, "116849", "Life Cocoon"),
+        ],
+        damageIn: [landed(11_000, "Ally", 10_000)],
+      }),
+      unit("Other", "4", 2, { damageIn: [], absorbsIn: [eaten(shieldId)] }),
+    ];
+    const line = [during("Life Cocoon", "5.0", 50)];
+    for (const shieldId of ["375902", "17"])
+      expect(
+        of(scan(runDamageBasis, players(shieldId), line), "duringExternalShare"),
+      ).toEqual([]);
+    // control: a line that left the eaten hit out of the share is wrong
+    expect(
+      of(
+        scan(runDamageBasis, players("375902"), [
+          during("Life Cocoon", "5.0", 100),
+        ]),
+        "duringExternalShare",
+      ),
+    ).toHaveLength(1);
+  });
+
   it("opens at a REFRESH: a press on a holder writes no APPLIED (cb6f3e66 r5)", () => {
     const players = team(
       [

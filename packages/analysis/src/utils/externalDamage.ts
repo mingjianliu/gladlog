@@ -81,7 +81,12 @@ import { castKeyOfAura } from "../data/castEffectAuras";
 import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
-import { hitSchoolId, isDeferralAbsorb,logSchoolMask } from "./incomingPressure";
+import {
+  hitSchoolId,
+  isAttackerSideAbsorb,
+  isDeferralAbsorb,
+  logSchoolMask,
+} from "./incomingPressure";
 
 /** Seconds before the application in which a hit on the target makes an ally
  *  "qualifying". Direct or periodic (user ruling 2026-09-30, A30 / triage
@@ -297,6 +302,7 @@ export function externalDamageForApplication(
     let nPeriodic = 0;
     let dAll = 0;
     let absorbed = 0;
+    let sentEatenOnAttacker = 0;
     let deferred = 0;
     let inSchool = 0;
     let immuneHits = 0;
@@ -344,6 +350,13 @@ export function externalDamageForApplication(
       if (!a.attackerId || !attackers.has(a.attackerId)) continue;
       const tS = (a.logLine.timestamp - startMs) / 1000;
       if (!inWindow(tS, a.logLine)) continue;
+      // an absorb that sat on the attacker is not the target's shield
+      // (T160): out of `absorbed`, kept for the share — the ally SENT it
+      // there (R87)
+      if (isAttackerSideAbsorb(a)) {
+        sentEatenOnAttacker += a.absorbedAmount;
+        continue;
+      }
       if (isDeferralAbsorb(a)) deferred += a.absorbedAmount;
       else absorbed += a.absorbedAmount;
       bins.add(binOf(tS));
@@ -395,8 +408,12 @@ export function externalDamageForApplication(
       else G = Math.max(G, ++run);
     }
     // a Fel Armor correction nets out inside `deferred`; nothing below zero
-    const dealtOnTarget = Math.max(0, nDirect + nPeriodic + absorbed + deferred);
-    dAll += absorbed + deferred + absorbedElsewhere;
+    // the share is of what the ally sent: its hits at the target that an
+    // aura on the ally itself ate count on both sides of it (R87)
+    const dealtOnTarget =
+      Math.max(0, nDirect + nPeriodic + absorbed + deferred) +
+      sentEatenOnAttacker;
+    dAll += absorbed + deferred + absorbedElsewhere + sentEatenOnAttacker;
     const base = {
       allyId: ally.id,
       allyName: ally.name,

@@ -1,5 +1,7 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
+import { isAttackerSideAbsorb } from "./incomingPressure";
+
 /**
  * Absorb shields as effective HP (2026-08-12, user-specified semantics).
  *
@@ -55,6 +57,8 @@ export function absorbContributionsInWindow(
     if (typeof ts !== "number" || ts < fromMs || ts > toMs) continue;
     const spellId = ev.spellId ?? "";
     if (!spellId) continue;
+    // an aura on the attacker is no shield of this unit's (R84)
+    if (isAttackerSideAbsorb(ev)) continue;
     const amount = Math.abs(Number(ev.absorbedAmount) || 0);
     if (amount <= 0) continue;
     const row = byShield.get(spellId);

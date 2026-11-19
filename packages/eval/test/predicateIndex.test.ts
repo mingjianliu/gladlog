@@ -1153,6 +1153,12 @@ const INDEX: PredicateRow[] = [
     symbol: "isDeferralDamageRow",
     mod: incomingPressure,
   },
+  // pipeline T160: an absorb that sat on the attacker
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "isAttackerSideAbsorb",
+    mod: incomingPressure,
+  },
   {
     file: `${A}/utils/incomingPressure.ts`,
     symbol: "isRedistributionRow",

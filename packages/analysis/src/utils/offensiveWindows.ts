@@ -56,7 +56,7 @@ import {
   untargetableEndS,
   wallTableIdOfAura,
 } from "./enemyDefensives";
-import { isDeferralAbsorb } from "./incomingPressure";
+import { isAttackerSideAbsorb, isDeferralAbsorb } from "./incomingPressure";
 import {
   kwAuraReadPressesS,
   kwAuraReadUnpressedInHand,
@@ -1216,6 +1216,9 @@ export function computeOffensiveWindowsUncached(
         // Time): counted when it lands, never as absorbed (FT-T02b,
         // `isDeferralAbsorb`; codex 20-F16-01 #2)
         if (isDeferralAbsorb(a)) continue;
+        // an absorb that sat on the attacker (Mindgames) is no shield of the
+        // target's and took none of its health: neither figure (T160)
+        if (isAttackerSideAbsorb(a)) continue;
         const t = (a.logLine.timestamp - matchStartMs) / 1000;
         if (t < vw.from || t > vw.to) continue;
         windowDmgEvents.push({

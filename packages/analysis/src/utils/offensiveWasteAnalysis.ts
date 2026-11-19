@@ -35,7 +35,7 @@ import {
   immunityStopsSpellSchool,
   wallStopsEveryHit,
 } from "./enemyDefensives";
-import { isDeferralAbsorb, isDeferralDamageRow } from "./incomingPressure";
+import { isDamageSentRow, isDeferralAbsorb } from "./incomingPressure";
 import { isAutomaticCastRow } from "./pressRow";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
@@ -236,7 +236,7 @@ export function getHighValueSpellIds(
   );
 
   for (const dmg of unit.damageOut) {
-    if (ownTeamIds.has(dmg.destUnitId) || isDeferralDamageRow(dmg)) continue;
+    if (ownTeamIds.has(dmg.destUnitId) || !isDamageSentRow(dmg)) continue;
     // An absorbed hit is a row of its own in damageOut, keyed by the SHIELD's
     // spell id (convert.ts) — not a spell of this unit.
     const absorbed = (dmg.logLine?.event as string) === LogEvent.SPELL_ABSORBED;

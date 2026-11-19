@@ -51,7 +51,8 @@ import {
 import {
   absorbedHitSchoolMask,
   hitSchoolId,
-  isDeferralDamageRow,
+  isDamageSentRow,
+  isDamageTakenRow,
   logSchoolMask,
 } from "./incomingPressure";
 import {
@@ -450,8 +451,8 @@ export function dropOnePressAuraTwins(hits: IBurstDefensiveHit[]): void {
 
 /** A row of an attacker's `damageOut` the ledger counts inside
  * [fromMs, toMs]: pets are merged into it upstream, a shield's
- * `SPELL_ABSORBED` row counts, a deferral shield's row does not
- * (`isDeferralDamageRow`). One reading for the ledger's per-target sum and
+ * `SPELL_ABSORBED` row counts, a deferral shield's row and an absorb on
+ * the attacker do not (`isDamageTakenRow`: what the target took). One reading for the ledger's per-target sum and
  * `burstDamageBySchoolOn`. */
 function isLedgerDamageRow(
   d: ICombatUnit["damageOut"][number],
@@ -459,7 +460,7 @@ function isLedgerDamageRow(
   toMs: number,
 ): boolean {
   const t = d.logLine.timestamp;
-  return t >= fromMs && t <= toMs && !isDeferralDamageRow(d);
+  return t >= fromMs && t <= toMs && isDamageTakenRow(d);
 }
 
 /** One `[ENEMY DEF]` event of a burst target, as the ledger reads it. */
@@ -1214,7 +1215,7 @@ export function analyzeBurstLedgerUncached(
         for (const d of s.ally.damageOut ?? []) {
           const ts = d.logLine.timestamp;
           if (ts < oFromMs || ts > oToMs) continue;
-          if (!enemyById.has(d.destUnitId) || isDeferralDamageRow(d)) continue;
+          if (!enemyById.has(d.destUnitId) || !isDamageSentRow(d)) continue;
           byEnemy.set(
             d.destUnitId,
             (byEnemy.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
@@ -1338,7 +1339,7 @@ export function auditWindowTargeting(
     const damageMap = new Map<string, number>();
     for (const d of player.damageOut) {
       if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs) continue;
-      if (!enemyById.has(d.destUnitId) || isDeferralDamageRow(d)) continue;
+      if (!enemyById.has(d.destUnitId) || !isDamageSentRow(d)) continue;
       damageMap.set(
         d.destUnitId,
         (damageMap.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
@@ -1367,7 +1368,7 @@ export function auditWindowTargeting(
       for (const d of u.damageOut ?? []) {
         if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs)
           continue;
-        if (!enemyById.has(d.destUnitId) || isDeferralDamageRow(d)) continue;
+        if (!enemyById.has(d.destUnitId) || !isDamageSentRow(d)) continue;
         teamDamage.set(
           d.destUnitId,
           (teamDamage.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),

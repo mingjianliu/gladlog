@@ -12,6 +12,8 @@
  * and something absorbed from the casters, and more in all (landed + absorbed,
  * any source) than the named one.
  */
+import { isAttackerSideAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
+
 import { type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = ["burstTargetAbsorbedOnly"] as const;
@@ -75,6 +77,9 @@ export function run(ctx: IRoundCtx): void {
         .reduce((n, d) => n + Math.abs(d.effectiveAmount ?? 0), 0);
     const absorbed = (f: any, src?: Set<string>) =>
       ((f.absorbsIn ?? []) as any[])
+        // pressure a friendly took: a hit the attacker's own aura ate is
+        // none (`isDamageTakenRow`, T160 / R84; codex 85-tk-WIN-T160-4 #2)
+        .filter((a) => !isAttackerSideAbsorb(a))
         .filter((a) => inSpan(a) && (!src || src.has(a.attackerId)))
         .reduce((n, a) => n + Math.abs(a.absorbedAmount ?? 0), 0);
     ctx.bump("burstTargetAbsorbedOnly");

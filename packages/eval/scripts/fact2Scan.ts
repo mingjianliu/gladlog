@@ -254,7 +254,10 @@ import {
   SAVE_AURA_END_UNSEEN_IDS,
   SELF_SAVE_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
-import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
+import {
+  isAttackerSideAbsorb,
+  isDeferralAbsorb,
+} from "@gladlog/analysis/src/utils/incomingPressure";
 import { pressIsSelfBuffNamingEnemy } from "@gladlog/analysis/src/utils/killAttempts";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { talentRankOf } from "@gladlog/analysis/src/utils/talentOwnership";
@@ -442,6 +445,8 @@ function runRound(ctx: IContext): void {
       .filter((a) => a.attackerId && ourSide.has(a.attackerId))
       // a deferral shield's row is no absorb (FT-T02b) — the product's rule
       .filter((a) => !isDeferralAbsorb(a))
+      // …nor is an absorb that sat on the attacker (T160) — the same rule
+      .filter((a) => !isAttackerSideAbsorb(a))
       .filter((a) => {
         const t = (a.logLine.timestamp - start) / 1000;
         return t >= fromS && t < toS;

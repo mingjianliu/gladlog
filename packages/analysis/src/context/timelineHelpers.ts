@@ -77,6 +77,7 @@ import {
   DEFERRAL_SHIELD_DAMAGE_IDS,
   documentRecordsAttackSpell,
   hitSchoolId,
+  isAttackerSideAbsorb,
   isDeferralAbsorb,
   isRedistributionRow,
 } from "../utils/incomingPressure";
@@ -2269,6 +2270,8 @@ export function getTopDamageSourcesInWindow(
     // part of its `(own)` entry, as the hits that landed are (15b4d4ec: a
     // Refraction 100k landed + 41k eaten by its own Prismatic Barrier read
     // `Refraction (own) (100k)`)
+    // eaten by an aura on the attacker: no hit on this unit (R84)
+    if (isAttackerSideAbsorb(a)) continue;
     if (a.attackerId === unit.id) {
       if (isDeferralAbsorb(a)) continue;
       const amt = Math.abs(a.absorbedAmount);

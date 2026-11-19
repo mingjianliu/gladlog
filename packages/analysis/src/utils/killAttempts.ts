@@ -139,7 +139,8 @@ import {
 import {
   documentRecordsAttackSpell,
   incomingPressureBySchool,
-  isDeferralDamageRow,
+  isDamageSentRow,
+  isDamageTakenRow,
 } from "./incomingPressure";
 import {
   accountedSave,
@@ -844,7 +845,10 @@ export function extractKillAttempts(
       const spanToMs = creditEndMs(toSeconds);
 
       // 3) Team damage inside the span (target + all enemies, one pass).
+      // `teamDamageToTarget` is what the target TOOK (`isDamageTakenRow`);
+      // the focus share is of what the team SENT (`isDamageSentRow`) — R87
       let teamDamageToTarget = 0;
+      let teamSentToTarget = 0;
       let teamDamageTotal = 0;
       const enemyIds = new Set(enemies.map((e) => e.id));
       for (const f of friendlies) {
@@ -853,11 +857,13 @@ export function extractKillAttempts(
           if (ts < spanFromMs || ts > spanToMs) continue;
           if (!enemyIds.has(d.destUnitId)) continue;
           // a deferral shield's SPELL_ABSORBED row only delayed the hit: it
-          // is counted when it lands (FT-T02b, `isDeferralDamageRow`)
-          if (isDeferralDamageRow(d)) continue;
+          // is counted when it lands (FT-T02b)
+          if (!isDamageSentRow(d)) continue;
           const amount = Math.abs(d.effectiveAmount);
           teamDamageTotal += amount;
-          if (d.destUnitId === target.id) teamDamageToTarget += amount;
+          if (d.destUnitId !== target.id) continue;
+          teamSentToTarget += amount;
+          if (isDamageTakenRow(d)) teamDamageToTarget += amount;
         }
       }
       // CC without real damage behind it is peel/setup, not a kill attempt —
@@ -883,7 +889,7 @@ export function extractKillAttempts(
         teamDamageTotal,
         teamOnTargetPct:
           teamDamageTotal > 0
-            ? Math.round((100 * teamDamageToTarget) / teamDamageTotal)
+            ? Math.round((100 * teamSentToTarget) / teamDamageTotal)
             : 0,
         killed,
       };
@@ -1177,8 +1183,16 @@ export function extractKillAttempts(
     const damageOver = (
       fromMs: number,
       toMs: number,
-    ): { byEnemy: Map<string, number>; total: number } => {
+    ): {
+      /** what the team SENT each enemy (`isDamageSentRow`): the ranking
+       * and the focus share */
+      byEnemy: Map<string, number>;
+      /** what each enemy TOOK (`isDamageTakenRow`): the M figure, the floor */
+      takenByEnemy: Map<string, number>;
+      total: number;
+    } => {
       const byEnemy = new Map<string, number>();
+      const takenByEnemy = new Map<string, number>();
       let total = 0;
       for (const f of friendlies) {
         for (const d of f.damageOut) {
@@ -1187,13 +1201,18 @@ export function extractKillAttempts(
           if (!enemyIds.has(d.destUnitId)) continue;
           // the burst floor's measure, as the bracket sum above reads it: a
           // deferral shield's row is no damage yet (codex 20-F16-08 #1)
-          if (isDeferralDamageRow(d)) continue;
+          if (!isDamageSentRow(d)) continue;
           const amount = Math.abs(d.effectiveAmount);
           total += amount;
           byEnemy.set(d.destUnitId, (byEnemy.get(d.destUnitId) ?? 0) + amount);
+          if (isDamageTakenRow(d))
+            takenByEnemy.set(
+              d.destUnitId,
+              (takenByEnemy.get(d.destUnitId) ?? 0) + amount,
+            );
         }
       }
-      return { byEnemy, total };
+      return { byEnemy, takenByEnemy, total };
     };
     for (const cl of clusters) {
       if (cl.from >= roundEndS) continue;
@@ -1277,7 +1296,7 @@ export function extractKillAttempts(
         return (
           onTarget > 0 &&
           [...inRecut.values()].every((v) => v <= onTarget) &&
-          (damageOver(fromMs, creditEndMs(recut.toSeconds)).byEnemy.get(
+          (damageOver(fromMs, creditEndMs(recut.toSeconds)).takenByEnemy.get(
             target.id,
           ) ?? 0) >= KW_BURST_MIN_DAMAGE
         );
@@ -1290,7 +1309,8 @@ export function extractKillAttempts(
         fromSeconds === cl.from && toSeconds === clusterTo
           ? whole
           : damageOver(spanFromMs, spanToMs);
-      const teamDamageToTarget = sums.byEnemy.get(target.id) ?? 0;
+      const teamDamageToTarget = sums.takenByEnemy.get(target.id) ?? 0;
+      const teamSentToTarget = sums.byEnemy.get(target.id) ?? 0;
       const teamDamageTotal = sums.total;
       if (teamDamageToTarget < KW_BURST_MIN_DAMAGE) continue;
       const covered = attempts.some(
@@ -1339,7 +1359,7 @@ export function extractKillAttempts(
         teamDamageTotal,
         teamOnTargetPct:
           teamDamageTotal > 0
-            ? Math.round((100 * teamDamageToTarget) / teamDamageTotal)
+            ? Math.round((100 * teamSentToTarget) / teamDamageTotal)
             : 0,
         killed,
       };
@@ -1365,21 +1385,26 @@ export function extractKillAttempts(
     const fromMs = matchStartMs + a.fromSeconds * 1000;
     const toMs = creditEndMs(a.toSeconds);
     const enemyIds = new Set(enemies.map((e) => e.id));
+    // `onTarget` = what the target took (the M figure); the share is of
+    // what the team sent (`sentOnTarget` / `total`) — R87
     let onTarget = 0;
+    let sentOnTarget = 0;
     let total = 0;
     for (const f of friendlies)
       for (const d of f.damageOut) {
         const ts = d.logLine.timestamp;
         if (ts < fromMs || ts > toMs || !enemyIds.has(d.destUnitId)) continue;
-        if (isDeferralDamageRow(d)) continue;
+        if (!isDamageSentRow(d)) continue;
         const amount = Math.abs(d.effectiveAmount);
         total += amount;
-        if (d.destUnitId === a.targetUnitId) onTarget += amount;
+        if (d.destUnitId !== a.targetUnitId) continue;
+        sentOnTarget += amount;
+        if (isDamageTakenRow(d)) onTarget += amount;
       }
-    return { onTarget, total };
+    return { onTarget, sentOnTarget, total };
   };
-  const onTargetPct = (s: { onTarget: number; total: number }) =>
-    s.total > 0 ? Math.round((100 * s.onTarget) / s.total) : 0;
+  const onTargetPct = (s: { sentOnTarget: number; total: number }) =>
+    s.total > 0 ? Math.round((100 * s.sentOnTarget) / s.total) : 0;
 
   // One death, one KILL (from the T2 session; 605 files: 44 (owner, target)
   // pairs with two or more KILL rows). Attempts credit a death anywhere in
@@ -1473,8 +1498,8 @@ export function extractKillAttempts(
         if (ts < fromMs || ts > toMs) continue;
         // same events as `teamDamageToTarget`: no deferral row (codex
         // 20-F16-08 #1: `0.07M on target inside it, 0.04M incl. the 5 s
-        // after`)
-        if (isDeferralDamageRow(d)) continue;
+        // after`) — and what the target took (`isDamageTakenRow`)
+        if (!isDamageTakenRow(d)) continue;
         if (d.destUnitId === a.targetUnitId)
           inBracket += Math.abs(d.effectiveAmount);
       }

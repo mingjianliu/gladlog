@@ -113,6 +113,7 @@ import {
   drWallMissesSpellSchool,
   immunityStopsSpellSchool,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { isAttackerSideAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { isAutomaticCastRow } from "@gladlog/analysis/src/utils/pressRow";
 import { toRenderSecond } from "@gladlog/analysis/src/utils/renderGrid";
@@ -203,6 +204,11 @@ const absorbedOn = (
     .filter((r) => inSpan(r, a, b, close) && (!src || src.has(r.attackerId)))
     .filter((r) => !DEFERRAL_SHIELDS.has(String(r.spellId)))
     .filter((r) => !REDISTRIBUTION_IDS.has(String(r.attackSpellId)))
+    // what the unit TOOK leaves out an absorb that sat on the attacker; a
+    // sum over given attackers is what THEY SENT and keeps it — the
+    // product's two readings (`isDamageTakenRow` / `isDamageSentRow`,
+    // pipeline T160, user rulings R84, R87)
+    .filter((r) => !!src || !isAttackerSideAbsorb(r))
     .reduce((n, r) => n + Math.abs(r.absorbedAmount ?? 0), 0);
 const deferredOn = (
   v: any,
@@ -984,6 +990,9 @@ function channelTookBasis(ctx: IRoundCtx): void {
         .filter((r) => tsOf(r) >= fromMs && tsOf(r) <= toMs)
         .filter((r) => !DEFERRAL_SHIELDS.has(String(r.spellId)))
         .filter((r) => !REDISTRIBUTION_IDS.has(String(r.attackSpellId)))
+        // what the victim TOOK: a hit its attacker's own aura ate is none
+        // of it (`isDamageTakenRow`, T160 / R84; codex 85-tk-WIN-T160-4 #1)
+        .filter((r) => !isAttackerSideAbsorb(r))
         .reduce((n, r) => n + Math.abs(r.absorbedAmount ?? 0), 0);
       const truthK = Math.round((landed + absorbed) / 1000);
       const printed = +c[2]!;

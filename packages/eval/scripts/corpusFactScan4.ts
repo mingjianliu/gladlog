@@ -91,7 +91,10 @@ import {
   holderFirstOwnActionAfterMs,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
-import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
+import {
+  isAttackerSideAbsorb,
+  isDeferralAbsorb,
+} from "@gladlog/analysis/src/utils/incomingPressure";
 import { WALL_IN_HAND_MIT_IDS } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
 import {
   distanceBetween,
@@ -1577,7 +1580,9 @@ function runRound(ctx: IContext): void {
             r.timestamp >= a &&
             r.timestamp < b &&
             // a deferral shield's part is printed `+Nk deferred`, apart
-            !isDeferralAbsorb(r)
+            !isDeferralAbsorb(r) &&
+            // an absorb on the attacker is not printed at all (T160)
+            !isAttackerSideAbsorb(r)
           )
             petAbs += Math.abs(Number(r.absorbedAmount) || 0);
         const half = p[2] ? (amountOf(p[2])?.half ?? 0) : 0;
