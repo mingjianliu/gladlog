@@ -1539,5 +1539,10 @@
  *  already landed on the target is no longer tagged as pressed into an
  *  immunity that came up after it.
  *  See docs/prompt-version-history.md.
+ *
+ * v605 (2026-11-18; pipeline batch B133, T143): a press with a cooldown of
+ *  30 s or more keeps its own [PRESS] line when a [MINOR DISPELS] part also
+ *  names it.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 604;
+export const PROMPT_VERSION = 605;

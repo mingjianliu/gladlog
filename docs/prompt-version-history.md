@@ -7712,3 +7712,23 @@ four presses lose the IMMUNE tag (the Prayer of Mending line, printed only to
 carry it, leaves with it) and nothing else moves. Codex branch review 85-tk-
 KICK-T216-1 (three synthetic points fixed) and -1b (one synthetic scan-side
 point recorded).
+
+v605 (2026-11-18; pipeline batch B133, T143). Ruling A2: a press whose [PRESS]
+line a deliberate [MINOR DISPELS] part replaced gets its line back. A press
+with a cooldown of 30 s or more (MINOR_DISPELS_KEEPS_PRESS_CD_S, the 30 s from
+A2's wording) keeps its own `[PRESS] ... (Ns cd, back m:ss)` line even when a
+[MINOR DISPELS] part of the same unit states it within PRESS_LINE_NEAR_S;
+short-cooldown dispels still fold. One predicate, lineStatesPress(...,
+pressCooldownSeconds?) in utils/offListPress.ts; the renderer passes the
+press's cooldown and scan5/t143 imports the same constant. For Fire Breath and
+Berserker Rage the dispel is a side effect, and the folded part was the only
+line naming the press, so the cooldown fact had been swallowed by a line about
+the side effect. On the 605 (vs the B116 capture): pressReplacedByMinorDispels
+309 / 362 -> 0 / 362 (124 facts, 85 archives), `short cd` inventory 53
+unchanged; 301 contexts change, every change an added [PRESS] line (309:
+Arcane Torrent 94, Cauterizing Flame 63, Fire Breath 61, Mass Dispel 49,
+Berserker Rage 22, Reverse Magic 20); menus byte-identical. On the 605 the
+assembled candidate adds 309 [PRESS] lines in 301 contexts / 85 archives (the
+same 309 as the lane's run) and changes nothing else; menus are byte-
+identical. Codex branch review 85-tk-CD-T143-1 (one real-sample scan point,
+fixed) and -1b: APPROVE.
