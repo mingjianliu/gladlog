@@ -8032,3 +8032,25 @@ comment lines), so the 605 output is unchanged by construction. Codex branch
 review 85-tk-EVAL-T209-1 (one synthetic point, recorded: 26 of 26 rows
 identical without environmental damage); assembly review 80-PIPE-167 asked for
 the FLAG and the coverage counts.
+
+v626 (2026-11-19; pipeline batch B154, T183, ruling R73 with two amendments).
+A burst window's [BURST ANSWERED] `bottomed at` and the slow-defensive-
+response pressured low stopped at the window's damage-lapse cut even while the
+window's own cooldown still ran, so the printed low could sit well above the
+true low inside the buff. The trough now reads on past the window's own end
+(the later of its damage-lapse cut and 8 s after the opener) while one of the
+window's buffs runs, at most 10 s past that end, stopping at a death, the
+round end or the next window; the line says `(read to m:ss, the end of
+<buff>)` or `(read to m:ss)` when the low it prints lies past that end, and
+the candidate row carries pressuredReadToT. One exported span function
+(`burstTroughReadEnd`) feeds the candidate, the credit line and scan5/t183;
+checkBurstAnsweredBottomConsistency parses the suffix through an exported
+pattern and checks every [STATE] reading to the read-to second. CLAUDE.md's
+signed exception (2) records the refinement. On the 605, 66 burst windows'
+[BURST ANSWERED] trough reads lower and later and carries `(read to m:ss)`
+(173 lines across views, 80 of them `the end of <buff>`); no suffix without a
+changed number and no changed number without one; the legend sentence appears
+in those 171 contexts; menu rows 0 added / 0 removed, 2 slow-defensive-
+response rows gain pressuredReadToT. Codex branch reviews 85-tk-CD-T183-1 to
+-1d (the last APPROVE; -1b's two points were constructed, one fixed in the
+scan).

@@ -1643,5 +1643,11 @@
  * v625 (2026-11-19; pipeline batch B153, T209): the mitigation scan reads
  *  each hit against its own spell's baseline; no product change.
  *  See docs/prompt-version-history.md.
+ *
+ * v626 (2026-11-19; pipeline batch B154, T183): a burst window's trough
+ *  reads on past the window's own end while one of its cooldowns runs (at
+ *  most 10 s, never into the next window) and says `(read to m:ss)` when
+ *  the low it prints lies past that end.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 625;
+export const PROMPT_VERSION = 626;
