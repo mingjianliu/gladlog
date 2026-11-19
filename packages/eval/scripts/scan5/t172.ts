@@ -13,8 +13,9 @@
  *    targeted cast of the control landed on the holder
  *    (`landedCastProvesLos`) — the producer's two predicates, called. Both
  *    directions are counted: a tagged line the predicates do not back, an
- *    untagged line they do. Checked = every such line whose aura row and
- *    caster are found. Out of the total, the lines where the two single
+ *    untagged line they do. Checked = every such line whose control
+ *    instance (the producer's own, `analyzePlayerCCAndTrinket`) and caster
+ *    are found. Out of the total, the lines where the two single
  *    readings disagree (each direction).
  *  - `deathExternalLos` reads the death block's `[m:ss] <unit> died —
  *    <teammate> had <external> available` lines: "available" is the claim,
@@ -31,12 +32,12 @@
  *    the reference the count is taken against.
  */
 import { arenaObstacles } from "@gladlog/analysis/src/data/arenaGeometry";
-import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
+  analyzePlayerCCAndTrinket,
   CC_POSITION_MAX_GAP_MS,
+  type ICCInstance,
   landedCastProvesLos,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import { ccRecastBetween } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   getUnitPositionAtTime,
   hasLineOfSight,
@@ -46,15 +47,7 @@ import {
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 
-import {
-  APPLIED,
-  ev,
-  type IRoundCtx,
-  nameOf,
-  REFRESH,
-  secOf,
-  tsOf,
-} from "./ctx";
+import { type IRoundCtx, secOf } from "./ctx";
 
 export const CHECKS = [
   "ccLineLosTag",
@@ -87,70 +80,50 @@ export function run(ctx: IRoundCtx): void {
   if (!zoneId || !arenaObstacles[zoneId]?.length) return;
   const byId = new Map<string, any>(ctx.units.map((u) => [u.id, u]));
 
+  const players = ctx.players as any[];
+  const instancesByHolder = new Map<string, ICCInstance[]>();
+  const instancesOf = (holder: any): ICCInstance[] => {
+    let list = instancesByHolder.get(holder.id);
+    if (!list) {
+      const opponents = players.filter((o) => o.reaction !== holder.reaction);
+      const oppIds = new Set(opponents.map((o) => o.id));
+      list = [
+        ...analyzePlayerCCAndTrinket(
+          holder,
+          opponents,
+          ctx.legacy as never,
+          ctx.units.filter((u: any) => u.ownerId && oppIds.has(u.ownerId)),
+        ).ccInstances,
+      ].sort((a, b) => a.atSeconds - b.atSeconds);
+      instancesByHolder.set(holder.id, list);
+    }
+    return list;
+  };
   for (const line of ctx.lines) {
     const m = CC_LINE.exec(line);
     if (!m) continue;
     const holder = ctx.unitOfPid(m[2]);
     if (!holder) continue;
     const atS = secOf(m[1]!);
-    // the line's own application: of the auras of that name applied in
-    // that second, the control (`ccSpellIds`) — Binding Shot's tether 117405
-    // goes on up to a second before its stun 117526 under one name (605:
-    // f55b2412 r4 1:57, the tether at +117.132 s read in sight, the stun
-    // the line prints at +117.925 s blocked)
-    // — and a recast onto a running control opens its line on the REFRESH
-    // row (the producer's windows open on a cast-backed one; codex
-    // 85-tk-CC-T172-2 #1), read when no application of that name sits in
-    // the second
-    const rowsOf = (event: string) =>
-      ((holder.auraEvents ?? []) as any[]).filter(
-        (a) =>
-          ev(a) === event &&
-          nameOf(a.spellId, a.spellName) === m[3] &&
-          Math.floor((tsOf(a) - ctx.start) / 1000) === atS,
-      );
-    const pick = (rows: any[]) =>
-      rows.find((a) => ccSpellIds.has(String(a.spellId))) ?? rows[0];
-    // of the REFRESH rows, the ones that open a line: a refresh its source
-    // cast for (`ccRecastBetween`, the producer's own test, asked from the
-    // opening of the application then running — its APPLIED or the last
-    // cast-backed REFRESH); a periodic re-broadcast stays inside its window
-    // and opens none (codex 85-tk-CC-T172-2b)
-    const opensLine = (row: any): boolean => {
-      const src = byId.get(row.srcUnitId);
-      const casters = [src, src?.ownerId ? byId.get(src.ownerId) : undefined];
-      let openedAt = -Infinity;
-      let opened = false;
-      for (const a of ((holder.auraEvents ?? []) as any[])
-        .filter(
-          (x) =>
-            x.spellId === row.spellId &&
-            x.srcUnitId === row.srcUnitId &&
-            tsOf(x) <= tsOf(row),
-        )
-        .sort((x, y) => tsOf(x) - tsOf(y))) {
-        const at = tsOf(a);
-        opened =
-          ev(a) === APPLIED ||
-          (ev(a) === REFRESH &&
-            ccRecastBetween(
-              casters,
-              String(a.spellId),
-              holder.id,
-              openedAt,
-              at,
-            ));
-        if (opened) openedAt = at;
-        if (a === row) return opened;
-      }
-      return false;
-    };
-    const applied =
-      pick(rowsOf(APPLIED)) ?? pick(rowsOf(REFRESH).filter(opensLine));
-    const caster = applied && byId.get(applied.srcUnitId);
-    if (!applied || !caster || caster.id === holder.id) continue;
+    // the line's own application is the producer's: the control instance
+    // its line is printed from (`analyzePlayerCCAndTrinket`, the holder's
+    // instances of that name on that rendered second, taken in order) —
+    // its landing ms, aura id and source. The scan paired aura rows itself
+    // before and met the producer's pairing rules one at a time: Binding
+    // Shot's tether 117405 under the stun's name (605: f55b2412 r4 1:57), a
+    // line opened on a recast's REFRESH, a periodic re-broadcast beside it
+    // (codex 85-tk-CC-T172-1 #2, -2 #1, -2b, -2c).
+    const instances = instancesOf(holder);
+    const at = instances.findIndex(
+      (c) => Math.floor(c.atSeconds) === atS && c.spellName === m[3],
+    );
+    if (at < 0) continue;
+    const [inst] = instances.splice(at, 1);
+    const caster = byId.get(inst!.sourceId);
+    if (!caster || caster.id === holder.id) continue;
+    const applied = { spellId: inst!.spellId };
+    const ms = Math.round((ctx.start + inst!.atSeconds * 1000) * 10) / 10;
     ctx.bump("ccLineLosTag");
-    const ms = tsOf(applied);
     // the producer's two predicates, called (FIX-CONTRACT §7)
     const blocked = losBlockedOnBothReadings(
       zoneId,
