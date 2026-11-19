@@ -7870,3 +7870,16 @@ only in its `already in ... until` clause (22 name another control at the same
 second, 49 end 1 s later, 83 end 2 s or more later, none earlier); no other
 line and no candidate row changes. Codex branch review 85-tk-CC-T174-1
 (APPROVE).
+
+v613 (2026-11-18; pipeline batch B141, T204). Check-only: the off-list press,
+t40 / t41 and buffDurationScan checks read the same round end, and --per-app
+reads a pet's press on the pet, so a pet's cast is no longer counted as a proc
+(Felstorm 280 runs -> 0 procs on the lane's base 6aa5f8730, 274 shorter / 6
+longer than the 5 s model; on this stack the count already read 0 before the
+batch). Felstorm's duration model reads no haste; recorded, out of scope.
+Prompts unchanged. On the 605 the product capture is unchanged by
+construction; the re-read checks move as the lane expected
+(resEnemyLeftPastLogEnd 18 -> 0, pressChainLasts nominations -458, Avatar per-
+app shorter 35 -> 1, offListPressLine and resNoPressExactLeft unchanged).
+Codex branch review 85-tk-EVAL-T204-1 (the real point and two synthetic points
+fixed) and -1b (three synthetic-only points, recorded).

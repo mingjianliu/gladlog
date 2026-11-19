@@ -1577,5 +1577,10 @@
  *  in <control> until m:ss` names the latest-ending of overlapping
  *  controls.
  *  See docs/prompt-version-history.md.
+ *
+ * v613 (2026-11-18; pipeline batch B141, T204): check-only (offListPress /
+ *  t40 / t41 / buffDurationScan read one round end; a pet's press is read
+ *  on the pet); prompts unchanged.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 612;
+export const PROMPT_VERSION = 613;
