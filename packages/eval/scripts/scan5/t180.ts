@@ -23,15 +23,19 @@
  *  - `ignoredHealCdById` (inventory, every owner): every healing-CD
  *    response by a unit other than the pressured one whose official verdict
  *    is self-only (`HEALING_VERDICTS.official.healsOthers === false`) — the
- *    ids ruling R75 ignores. Kind = the spell.
+ *    ids ruling R75 ignores. Kind = the spell's id (the name is in the
+ *    detail). Out of the total: an ignored press is the ruled behaviour,
+ *    not a failure (assembly review 80-PIPE-169b-B155).
  *  - `selfOnlyRowsHealCd` (inventory, every owner): a healing-CD response
  *    by another unit that the press's own rows show on its caster alone
  *    (`selfOnlyEffect`) while the official verdict does not say self-only.
  *    The credit line refuses it (T123); the candidate must count it
- *    (assembly review 80-PIPE-169-B155). Kind = the spell | what the
- *    candidate does with it.
+ *    (assembly review 80-PIPE-169-B155). Kind = the spell's id | what the
+ *    candidate does with it. Out of the total, every kind.
  */
 import {
+  BURST_EXTRA_ANSWER_IDS,
+  BURST_HEAL_CD_IDS,
   burstWindowDecisionPoints,
   pressDidNotReachPressured,
   pressWentElsewhere,
@@ -57,7 +61,29 @@ const REFUSALS = [
   "pressed after the unit died",
   "other",
 ];
-export const OUT_OF_TOTAL = REFUSALS.map((r) => `respondedOnRefusedPress|${r}`);
+/** what the candidate does with a press whose rows are on its caster alone */
+const SELF_ONLY_ROWS_STATES = [
+  "ignored by the candidate too",
+  "counts for the candidate, beside a creditable answer",
+  "counts for the candidate, no creditable answer in the window",
+];
+/** the ids a healing-CD response can carry; any other reads "other" */
+const HEAL_CD_KIND_IDS: ReadonlySet<string> = new Set([
+  ...Object.keys(HEALING_VERDICTS),
+  ...BURST_HEAL_CD_IDS,
+  ...BURST_EXTRA_ANSWER_IDS,
+]);
+const kindId = (spellId: string): string =>
+  HEAL_CD_KIND_IDS.has(spellId) ? spellId : "other";
+// the two inventories are counts of ruled behaviour: every kind they can
+// emit is listed, so neither ever reaches a check's total
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  ...REFUSALS.map((r) => `respondedOnRefusedPress|${r}`),
+  ...[...HEAL_CD_KIND_IDS, "other"].flatMap((id) => [
+    `ignoredHealCdById|${id}`,
+    ...SELF_ONLY_ROWS_STATES.map((st) => `selfOnlyRowsHealCd|${id} | ${st}`),
+  ]),
+]);
 
 function elsewhere(r: any): string {
   return r.category === "external"
@@ -122,7 +148,7 @@ export function run(ctx: IRoundCtx): void {
           ctx.bump("ignoredHealCdById");
           ctx.violate(
             "ignoredHealCdById",
-            name,
+            kindId(r.spellId),
             at,
             fact,
             `window at ${p.tSec}s: ${r.casterName} ${name} ${r.latencySec}s; ignored=${pressDidNotReachPressured(pr, r)}`,
@@ -138,7 +164,7 @@ export function run(ctx: IRoundCtx): void {
         ctx.bump("selfOnlyRowsHealCd");
         ctx.violate(
           "selfOnlyRowsHealCd",
-          `${name} | ${pressDidNotReachPressured(pr, r) ? "ignored by the candidate too" : others.length > 0 || p.responses.kite || p.responses.attackerMoved ? "counts for the candidate, beside a creditable answer" : "counts for the candidate, no creditable answer in the window"}`,
+          `${kindId(r.spellId)} | ${SELF_ONLY_ROWS_STATES[pressDidNotReachPressured(pr, r) ? 0 : others.length > 0 || p.responses.kite || p.responses.attackerMoved ? 1 : 2]}`,
           at,
           fact,
           `window at ${p.tSec}s: ${r.casterName} ${name} ${r.latencySec}s; responded=${p.responded}`,
