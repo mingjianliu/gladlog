@@ -172,6 +172,12 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
         "Cloak of Shadows physical + Bait and Switch: holders 0.707 (0.657–0.800), 23 units, non-holders 0.989 (222), expected 0.80 — interval wider than ±0.04 on S2 every 30 (run 2). PROMOTED on the full new-season archive 2026-09-14 (63,303 files, sharded, same band): holders 0.800 (0.795–0.800), 2,395 units / 1,811 players, non-holders 0.988 (14,793 units)",
     },
     {
+      // FLAG (known open deviation, measured 2026-11-19, pipeline T209): on
+      // the 605 new-season files the holders read 0.820 on 22 units / 14
+      // players, 90 % interval 0.809–0.850 — outside the declared band
+      // 0.810–0.890 (expected 0.85 ± 0.04), so this run does not confirm the
+      // S2 reading below. DB2's 15 % kept: the unit medians show no plateau
+      // and no mechanism supports another value (Game-Behaviour rule 7)
       auraSpellId: "1022",
       talentSpellId: "387801",
       schoolMask: 126,

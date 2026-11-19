@@ -401,6 +401,11 @@ const buckets = new Map<
   { yes: UnitHits; no: UnitHits; unknown: UnitHits }
 >();
 let rounds = 0;
+// which baseline each counted candidate hit was read against (a hit under
+// two candidates counts twice): the spell's own no-aura hits, or the school
+// aggregate when the spell has under MIN_SPELL_BASE_HITS of them. `added` /
+// `dropped` are against the aggregate-only rule this scan had before T209.
+const coverage = { ownSpell: 0, fallback: 0, added: 0, dropped: 0 };
 for (const f of files) {
   const parser = new GladLogParser();
   const items: GladMatch[] = [];
@@ -519,14 +524,14 @@ for (const f of files) {
       for (const { r, act } of tagged) {
         const ids = [...new Set(act.map((iv) => iv.spellId))];
         if (ids.length !== 1) continue;
-        const own = spellBase(r.spell);
-        const b = own ?? (r.phys ? bP : bM);
-        if (
-          !(b > 0) ||
-          (own === undefined &&
-            (r.phys ? base.phys.length : base.magic.length) < 5)
-        )
-          continue;
+        const ownBase = spellBase(r.spell);
+        const classBase = r.phys ? bP : bM;
+        const classEnough =
+          (r.phys ? base.phys.length : base.magic.length) >= 5;
+        const b = ownBase ?? classBase;
+        const counted = b > 0 && (ownBase !== undefined || classEnough);
+        const countedBefore = classBase > 0 && classEnough;
+        if (!counted && !countedBefore) continue;
         for (const c of CANDIDATES) {
           if (c.aura !== ids[0] || (c.school & r.school) === 0) continue;
           const iv = act[0]!;
@@ -549,6 +554,13 @@ for (const f of files) {
           const own = c.specIds
             ? specPassiveOwnership(c.specIds, caster.spec)
             : talentModifierOwnershipOf(caster, c.talent);
+          if (!counted) {
+            coverage.dropped++;
+            continue;
+          }
+          if (ownBase === undefined) coverage.fallback++;
+          else coverage.ownSpell++;
+          if (!countedBefore) coverage.added++;
           const key = `${candidateKey(c)}${splitSpec ? `|${caster.spec}` : ""}`;
           const bk = buckets.get(key) ?? {
             yes: new Map(),
@@ -582,6 +594,8 @@ for (const f of files) {
 type Dump = {
   files: number;
   rounds: number;
+  /** absent in a dump written before the counts existed */
+  coverage?: typeof coverage;
   buckets: Record<
     string,
     Record<"yes" | "no" | "unknown", Record<string, number[]>>
@@ -590,7 +604,7 @@ type Dump = {
 if (hitsTo) writeFileSync(hitsTo, hitRows.join("\n"));
 let scannedFiles = files.length;
 if (dumpTo) {
-  const d: Dump = { files: files.length, rounds, buckets: {} };
+  const d: Dump = { files: files.length, rounds, coverage, buckets: {} };
   for (const [k, v] of buckets)
     d.buckets[k] = {
       yes: Object.fromEntries(v.yes),
@@ -605,6 +619,8 @@ for (const path of fromDumps) {
   const d = JSON.parse(readFileSync(path, "utf8")) as Dump;
   scannedFiles += d.files;
   rounds += d.rounds;
+  for (const k of Object.keys(coverage) as Array<keyof typeof coverage>)
+    coverage[k] += d.coverage?.[k] ?? 0;
   for (const [k, v] of Object.entries(d.buckets)) {
     const bk = buckets.get(k) ?? {
       yes: new Map(),
@@ -755,9 +771,16 @@ const dir = join(
 mkdirSync(dir, { recursive: true });
 writeFileSync(
   join(dir, `mitigationTalent${tag ? `.${tag}` : ""}.json`),
-  JSON.stringify({ files: scannedFiles, rounds, candidates: out }, null, 1),
+  JSON.stringify(
+    { files: scannedFiles, rounds, coverage, candidates: out },
+    null,
+    1,
+  ),
 );
 for (const r of out)
   console.log(
     `${r.name.padEnd(34)}${r.spec ? ` [spec ${r.spec}]` : ""} +${r.talentName.padEnd(18)} expect ${r.expectedWith} (without ${r.expectedWithout}) | holders ${r.holders.median} ci90 ${r.holders.ci90 ? `${r.holders.ci90.lo}-${r.holders.ci90.hi}` : "-"} units ${r.holders.units} players ${r.holders.players} ci90-players ${r.holders.ci90Players ? `${r.holders.ci90Players.lo}-${r.holders.ci90Players.hi}` : "-"} ${r.holders.playerSensitivityInBand ? "(in band)" : "(OUT of band)"} | non ${r.nonHolders.median} units ${r.nonHolders.units} | unknown ${r.unknown.median} units ${r.unknown.units} | ${r.promoted ? "PROMOTE" : "stay unvalidated"}`,
   );
+console.log(
+  `baseline coverage (candidate hits): own spell ${coverage.ownSpell} | school aggregate (fallback) ${coverage.fallback} | added against the aggregate-only rule ${coverage.added} | dropped ${coverage.dropped}`,
+);
