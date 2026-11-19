@@ -7948,3 +7948,20 @@ phantom duplicate across shard layouts (2 -> 0); verify/run.ts --only runs in
 unchanged. Prompts unchanged. On the 605 the assembled candidate leaves every
 context and candidate row byte-identical (scan-only batch). Codex branch
 review 85-tk-EVAL-T208-1 (two synthetic-only points, recorded).
+
+v620 (2026-11-18; pipeline batch B148, T169). How a control ended. When a
+named interrupt on the control's caster lands about 65 ms before the REMOVED
+(outside the old 50 ms lead, inside the 100 ms named-channel window), the [CC
+ON ENEMY] line now says `ended by N(spec)'s <kick> on its caster`: on the 605,
+5 lines in 5 contexts (breakFactScan casterKickEnd 5 / 315 -> 0 / 315; the two
+raw cases are 67 and 66 ms). Two more false statements from the audit are
+fixed but do not occur on the 605 (0 on both sides): `ended early — cause not
+logged` after a named kick (3 / 12 -> 0 / 12 on the three audited matches),
+and a trinket used after the control had expired counted as breaking it (3 / 3
+-> 0 / 3); both are unit-tested. On the 605 the assembled candidate names the
+kick that ended 5 [CC ON ENEMY] controls on their caster; no other line and no
+candidate row changes. After batch review 80-PIPE-162-B148 the two checks ask
+the producer instead of their own numbers: scan5/t169 scores a line only where
+channelStopAtRemoval returns the kick, and breakFactScan's casterKickEnd skips
+a control ccLoggedEnd answers for (check code only). Codex branch review
+85-tk-CC-T169-1 (REQUEST_CHANGES) and -1b (APPROVE).

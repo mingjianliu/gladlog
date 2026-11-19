@@ -1613,5 +1613,10 @@
  *  (talent detail, family diff across shard layouts, run.ts --only,
  *  mitigation-status keys asserted); prompts unchanged.
  *  See docs/prompt-version-history.md.
+ *
+ * v620 (2026-11-18; pipeline batch B148, T169): a control ended by a named
+ *  kick on its caster ~65 ms before the REMOVED says so; a trinket used
+ *  after the control had already expired is not a break.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 619;
+export const PROMPT_VERSION = 620;
