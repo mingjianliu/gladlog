@@ -219,6 +219,40 @@ export function isDeferredTickId(spellId: string | null | undefined): boolean {
   return !!spellId && DEFERRED_TICK_IDS.has(spellId);
 }
 
+/**
+ * A `damageIn` row of `unit` that is health MOVED onto it by its own side
+ * (`isRedistributionRow`: Spirit Link, Void Leech, Tempered in Battle) — no
+ * hit it took. The one test of every reader that sums what a unit's side
+ * took as landed damage (pipeline T223): `incomingPressureEvents`, the
+ * aligned burst window's damage, its slice average and its pressured-unit
+ * pick (`enemyCDs.ts`), the bounded burst's per-second pressure
+ * (`burstWindowDecisionPoints.ts`), `unitUnderFireAt`
+ * (`threatAssessment.ts`) and the healing gap's pressure check
+ * (`healingGaps.ts`). The crisis's `dmg2s` (`crisisDecisionPoints.ts`) is
+ * NOT one of them: it keeps the moved health, as the crisis reference
+ * tables were generated with it (pipeline T227 changes both together). Without `sides`
+ * the row's own reaction flags decide, wrong only while someone is charmed.
+ */
+export function isRedistributedDamageRow(
+  unit: Pick<ICombatUnit, "id" | "reaction">,
+  d: {
+    spellId?: string | null;
+    srcUnitId?: string;
+    srcUnitFlags?: number;
+    destUnitFlags?: number;
+  },
+  sides?: RosterSides,
+): boolean {
+  return isRedistributionRow(
+    unit,
+    d.spellId ?? undefined,
+    d.srcUnitId,
+    d.srcUnitFlags,
+    d.destUnitFlags,
+    sides,
+  );
+}
+
 /** A `REDISTRIBUTION_DAMAGE_IDS` row from the unit's own side — moved
  * health, not an enemy hitting it. The one test every reader of incoming
  * damage applies (`incomingPressureEvents`, `incomingPressureBySchool`,
@@ -297,8 +331,7 @@ export function incomingPressureEvents(
   for (const d of unit.damageIn ?? []) {
     const amount = Math.abs(d.effectiveAmount);
     if (!Number.isFinite(amount)) continue;
-    if (redistributed(d.spellId, d.srcUnitId, d.srcUnitFlags, d.destUnitFlags))
-      continue;
+    if (isRedistributedDamageRow(unit, d, sides)) continue;
     events.push({
       timestamp: d.logLine.timestamp,
       amount,

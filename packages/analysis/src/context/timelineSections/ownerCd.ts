@@ -515,14 +515,14 @@ export function emitOwnerCdEntries(
         const onlyCasterUnderFire =
           castTargetIsTeammate &&
           !castOnTeammate &&
-          unitUnderFireAt(owner, pressMs) &&
+          unitUnderFireAt(owner, pressMs, undefined, roundFacts.sides) &&
           // a teammate who died just before the press still has his fatal
           // hits inside the ± window — nothing can be put on a corpse
           !params.friends.some(
             (f) =>
               f.id !== owner.id &&
               !isDeadAt(f, pressMs) &&
-              unitUnderFireAt(f, pressMs),
+              unitUnderFireAt(f, pressMs, undefined, roundFacts.sides),
           );
         // B3a: the unit the save went on — the named teammate, the owner for
         // a self-cast, the owner for a group save that answered only the

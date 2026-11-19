@@ -5,7 +5,9 @@ import {
   getPressureThreshold,
   hasOffensiveSpellActive,
 } from "./cooldowns";
+import { isRedistributedDamageRow } from "./incomingPressure";
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
+import { buildRosterSides, type RosterSides } from "./rosterSide";
 
 /**
  * threatAssessment.ts — P2 共用威胁谓词(单源 export)(spec:
@@ -107,7 +109,8 @@ export function threatActiveAt(
   )
     return true;
 
-  return friendlies.some((f) => unitUnderFireAt(f, tMs, windowMs));
+  const sides = buildRosterSides([...friendlies, ...enemies]);
+  return friendlies.some((f) => unitUnderFireAt(f, tMs, windowMs, sides));
 }
 
 /**
@@ -123,11 +126,21 @@ export function unitUnderFireAt(
   unit: ICombatUnit,
   tMs: number,
   windowMs: number = THREAT_DAMAGE_WINDOW_MS,
+  /** the round's roster sides: who is on whose side while someone is
+   * charmed (`isRedistributedDamageRow`; codex 85-tk-WIN-T223-1 #1) */
+  sides?: RosterSides,
 ): boolean {
   const fromMs = tMs - windowMs;
   const toMs = tMs + windowMs;
   const dmg = unit.damageIn
-    .filter((d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= toMs)
+    .filter(
+      (d) =>
+        d.logLine.timestamp >= fromMs &&
+        d.logLine.timestamp <= toMs &&
+        // health its own side moved onto it is no fire it is under
+        // (pipeline T223)
+        !isRedistributedDamageRow(unit, d, sides),
+    )
     .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
   return dmg >= getPressureThreshold(unit);
 }

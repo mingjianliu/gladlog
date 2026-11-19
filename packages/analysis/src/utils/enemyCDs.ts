@@ -74,6 +74,7 @@ import {
   dampeningForThreatWeight,
   fmtDampening,
 } from "./dampening";
+import { isRedistributedDamageRow } from "./incomingPressure";
 import {
   AURA_EVIDENCE_WINDOW_S,
   auraOffensiveOccurrences,
@@ -82,6 +83,7 @@ import {
   TWIN_CAST_BEFORE_S,
 } from "./offensiveAuraOccurrences";
 import { offensiveCooldownIdAt } from "./overrideVariantEra";
+import { buildRosterSides } from "./rosterSide";
 import {
   dangerLabel,
   OFFENSIVE_EFFECT_ACTIVATION_IDS,
@@ -2277,8 +2279,18 @@ function reconstructEnemyCDTimelineUncached(
   // the rows up to the slice's end and no further (codex 85-tk-G-T91-1 #1:
   // 0284fcd9 r1, 57k of a window's damage fell after the end its rate's
   // seconds stopped at — ratio 0.99 against 0.92)
+  // …and of what the side TOOK: health a teammate's Spirit Link, Void Leech
+  // or Tempered in Battle moved onto a unit is no hit (pipeline T223,
+  // `isRedistributedDamageRow` — the reading `[DMG SPIKE]` and every other
+  // incoming sum share; the window's damage, the slice average it is a
+  // rate against and the pressured-unit pick below all read it)
+  const rosterSides = combat.units
+    ? buildRosterSides(Object.values(combat.units))
+    : undefined;
   const allFriendlyDamage = (friendlies ?? [])
-    .flatMap((u) => u.damageIn)
+    .flatMap((u) =>
+      u.damageIn.filter((d) => !isRedistributedDamageRow(u, d, rosterSides)),
+    )
     .filter((e) => e.logLine.timestamp <= combat.endTime);
   const totalFriendlyDamage = allFriendlyDamage.reduce(
     (sum, e) => sum + Math.abs(e.effectiveAmount),
@@ -2508,7 +2520,8 @@ function reconstructEnemyCDTimelineUncached(
             .filter(
               (d) =>
                 d.logLine.timestamp >= windowStartMs &&
-                d.logLine.timestamp <= windowEndMs,
+                d.logLine.timestamp <= windowEndMs &&
+                !isRedistributedDamageRow(f, d, rosterSides),
             )
             .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
           if (dmg > topDmg) {

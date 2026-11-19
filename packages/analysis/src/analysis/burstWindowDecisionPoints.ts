@@ -81,10 +81,12 @@ import {
   reconstructEnemyCDTimeline,
   SOLO_WINDOW_MIN_WEIGHT,
 } from "../utils/enemyCDs";
+import { isRedistributedDamageRow } from "../utils/incomingPressure";
 import { LANDED_PAIR_MS } from "../utils/kickAudit";
 import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
+import { buildRosterSides, type RosterSides } from "../utils/rosterSide";
 import { roundEndMs } from "../utils/roundEnd";
 import {
   isOffensiveSpell,
@@ -1570,6 +1572,7 @@ function maxHpOf(u: any): number {
 function damagePctPerSecond(
   friendlies: any[],
   startMs: number,
+  sides: RosterSides | undefined,
 ): Map<number, number> {
   const out = new Map<number, number>();
   for (const f of friendlies) {
@@ -1578,6 +1581,8 @@ function damagePctPerSecond(
     for (const d of (f.damageIn ?? []) as any[]) {
       const ts = d.timestamp ?? d.logLine?.timestamp;
       if (ts == null) continue;
+      // health its own side moved onto it is no hit (pipeline T223)
+      if (isRedistributedDamageRow(f, d, sides)) continue;
       const s = Math.floor((ts - startMs) / 1000);
       const amt = Math.abs(d.effectiveAmount ?? d.amount ?? 0) / max;
       out.set(s, (out.get(s) ?? 0) + amt);
@@ -1617,7 +1622,11 @@ export function boundedBurstSegments(
   const timeline = reconstructEnemyCDTimeline(enemies as ICombatUnit[], combat);
   if (!timeline.alignedBurstWindows.length) return empty;
   const facts = castFactsOf(timeline);
-  const dmgPctPerSec = damagePctPerSecond(friendlies, start);
+  const dmgPctPerSec = damagePctPerSecond(
+    friendlies,
+    start,
+    buildRosterSides(Object.values(combat?.units ?? {}) as ICombatUnit[]),
+  );
   const segments: BoundedSegment[] = [];
   for (const w of timeline.alignedBurstWindows)
     for (const seg of boundBurstWindow(w, facts, dmgPctPerSec, opts))

@@ -191,6 +191,8 @@ const MODULE_FILES = [
   "t216",
   "t177",
   "t159",
+  "t223",
+  "t223readers",
   "t135",
   "t154",
   "t157",

@@ -7,6 +7,7 @@ import {
 } from "./cannotCastIntervals";
 import { isCompanionCastRow } from "./castPress";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
+import { isRedistributedDamageRow } from "./incomingPressure";
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
 import {
   type CastFailedEvent,
@@ -14,6 +15,7 @@ import {
   type RawStreams,
 } from "./rawStreams";
 import { fmtTime } from "./renderGrid";
+import { buildRosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
 import { unloggedSilenceSpansOnOwner } from "./unloggedSilence";
 
@@ -231,6 +233,9 @@ export function detectHealingGaps(
     opts.playableEndMs ?? Infinity,
   );
 
+  // who is on whose side while someone is charmed (codex
+  // 85-tk-WIN-T223-1 #1)
+  const sides = buildRosterSides([healer, ...friends, ...enemies]);
   for (const { fromMs, toMs } of rawGaps) {
     // B19: skip gaps at match start — pre-combat initialization artifact
     if (fromMs - matchStartMs < MATCH_START_GRACE_MS) continue;
@@ -255,7 +260,9 @@ export function detectHealingGaps(
         .filter(
           (d) =>
             d.logLine.timestamp >= fromMs &&
-            d.logLine.timestamp <= effectiveToMs,
+            d.logLine.timestamp <= effectiveToMs &&
+            // the shared incoming reading (pipeline T223)
+            !isRedistributedDamageRow(teammate, d, sides),
         )
         .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
 
