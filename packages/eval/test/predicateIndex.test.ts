@@ -2942,6 +2942,21 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "auraMasteryPressWallStartMs",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "isAuraMasterySwitchWallEvent",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/offensiveWindows.ts`,
+    symbol: "kwPressProtectionStartS",
+    mod: offensiveWindows,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
     symbol: "withoutImmunityBranchWalls",
     mod: auraMasteryBranch,
   },

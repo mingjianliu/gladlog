@@ -35,7 +35,7 @@ import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
   AURA_MASTERY_ID,
-  auraMasteryPressIsImmunityBranch,
+  auraMasteryPressWallStartMs,
 } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { isControlCast } from "@gladlog/analysis/src/utils/castMissRows";
 import { offensiveCdOfAura } from "@gladlog/analysis/src/utils/cooldowns";
@@ -311,10 +311,16 @@ export function buildCrisisAnswerEvidence(
     // prices nothing — the product's one decision
     // (`auraMasteryPressIsImmunityBranch`; codex 85-tk-WIN-T213-3 #4)
     const srcUnit = (atT.round.units ?? {})[iv.srcUnitId ?? ""];
+    // …and one that switched to Devotion Aura while it ran is the wall
+    // from the switch on: the product's one reading of a press's wall
+    // (`auraMasteryPressWallStartMs`; assembly review 80-PIPE-170b-B156 #2)
+    const wallStartMs =
+      iv.spellId === AURA_MASTERY_ID && !!srcUnit
+        ? auraMasteryPressWallStartMs(srcUnit, appliedMs)
+        : appliedMs;
     const noWall =
-      iv.spellId === AURA_MASTERY_ID &&
-      !!srcUnit &&
-      auraMasteryPressIsImmunityBranch(srcUnit, appliedMs);
+      wallStartMs === undefined ||
+      atT.round.startTime + tRel * 1000 < wallStartMs;
     const mit = noWall
       ? undefined
       : resolveMitigation(wallTableIdOfAura(iv.spellId), {
@@ -344,7 +350,9 @@ export function buildCrisisAnswerEvidence(
         ...base,
         kind: "mitigation",
         amount: pct,
-        text: `${nm} (${pct}% mitigation) from ${who}, applied ${relS(atT.round, appliedMs)}`,
+        // a wall that began at a switch of auras is quoted from the switch
+        atMs: [wallStartMs ?? appliedMs],
+        text: `${nm} (${pct}% mitigation) from ${who}, applied ${relS(atT.round, wallStartMs ?? appliedMs)}`,
         source: "resolveMitigation (MITIGATION_TABLE components)",
       });
       continue;

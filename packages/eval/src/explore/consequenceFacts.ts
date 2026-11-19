@@ -28,6 +28,10 @@ import {
   strongestComponentPct,
 } from "@gladlog/analysis/src/data/mitigationComponents";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  AURA_MASTERY_ID,
+  auraMasteryPressWallStartMs,
+} from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { analyzePlayerCCAndTrinket } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { gridHpPct, isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import {
@@ -385,7 +389,16 @@ export function buildConsequenceLines(
           MITIGATION_AURA_MIN_PCT
       )
         continue;
-      const t = sec(aura.logLine.timestamp);
+      // an Aura Mastery press is a wall from the product's one reading of
+      // it — the press, the switch to Devotion Aura, or never
+      // (`auraMasteryPressWallStartMs`; reader audit of assembly review
+      // 80-PIPE-170b-B156)
+      const wallAtMs =
+        aura.spellId === AURA_MASTERY_ID
+          ? auraMasteryPressWallStartMs(e, aura.logLine.timestamp)
+          : aura.logLine.timestamp;
+      if (wallAtMs === undefined) continue;
+      const t = sec(wallAtMs);
       const key = `${id}|${Math.floor(t / 5)}`; // form refreshes re-apply
       if (seenWall.has(key)) continue;
       seenWall.add(key);

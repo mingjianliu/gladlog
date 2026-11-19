@@ -2,6 +2,7 @@ import {
   CombatUnitClass,
   CombatUnitSpec,
   ICombatUnit,
+  LogEvent,
 } from "@gladlog/parser-compat";
 import { describe, expect, test } from "vitest";
 
@@ -674,6 +675,46 @@ describe("computeUnusedSelfCounterfactuals(窄门)", () => {
     expect(hits[0].spellId).toBe("22812");
     expect(hits[0].tier).toBe("decisive");
     expect(hits[0].source).toBe("unused-self");
+  });
+
+  test("an unpressed Aura Mastery under Concentration Aura would have reduced nothing; under Devotion Aura it is priced (T213 reader audit, 80-PIPE-170b-B156)", () => {
+    const mk = (runningAura: string) => {
+      const v = mkVictim(
+        `vp${runningAura}`,
+        [
+          { atS: 55, amount: 700_000, school: "0x1" },
+          { atS: 56, amount: 10_000, school: "0x20" },
+        ],
+        [],
+        [
+          { atS: 50, hp: 100_000, maxHp: 200_000 },
+          { atS: 60, hp: 100, maxHp: 200_000 },
+        ],
+      );
+      return Object.assign(v, {
+        class: CombatUnitClass.Paladin,
+        spec: CombatUnitSpec.Paladin_Holy,
+        auraEvents: [
+          {
+            spellId: runningAura,
+            srcUnitId: v.id,
+            destUnitId: v.id,
+            timestamp: 1000,
+            logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 1000 },
+          },
+        ],
+      }) as ICombatUnit;
+    };
+    const hitsOf = (runningAura: string) =>
+      computeUnusedSelfCounterfactuals(
+        mk(runningAura),
+        [neverUsedCd("31821", "Aura Mastery")],
+        noLockoutCC,
+        combatOf(),
+        60,
+      ).map((h) => h.spellId);
+    expect(hitsOf("317920")).toEqual([]); // Concentration Aura
+    expect(hitsOf("465")).toEqual(["31821"]); // Devotion Aura
   });
 
   test("a replaced button is read as the holder's own spell: Ice Cold is no immunity, and its 6 s cover is not priced over the window (T61, codex 85-tk-G-T61-2b #1, 2c #1)", () => {

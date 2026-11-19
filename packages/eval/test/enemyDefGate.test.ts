@@ -59,6 +59,27 @@ describe("checkEnemyDefRefConsistency", () => {
     expect(checkEnemyDefRefConsistency(lines("1:20"))).toHaveLength(1);
   });
 
+  it("a wall an Aura Mastery switch opened: `[up since]` the switch resolves through the press line inside the button's lifetime (pipeline T213, 80-PIPE-170b-B156 note 3)", () => {
+    // the product prints no line at the switch (`isAuraMasterySwitchWallEvent`):
+    // the press at 0:20 is the line, the wall is up since 0:24
+    const lines = (pressAt: string, kit: boolean) => [
+      LEGEND,
+      ...ROSTER,
+      '  <unit id="7" name="Pala-Archimonde-EU" spec="Holy Paladin" role="enemy">',
+      ...(kit
+        ? [
+            "    <cooldowns>Divine Shield [210s, lasts 8s], Aura Mastery [150s, lasts 8s]</cooldowns>",
+          ]
+        : []),
+      `${pressAt}  [ENEMY DEF]   7(HPaladin) (Holy Paladin): Aura Mastery (silence / interrupt immunity, 4.0s — removed early)`,
+      ATTEMPT("0:25–0:27", "popped Aura Mastery [up since 0:24]"),
+    ];
+    expect(checkEnemyDefRefConsistency(lines("0:20", true))).toEqual([]);
+    // HAS TEETH: a press whose lifetime ended before the mark is no line of it
+    expect(checkEnemyDefRefConsistency(lines("0:10", true))).toHaveLength(1);
+    expect(checkEnemyDefRefConsistency(lines("0:20", false))).toHaveLength(1);
+  });
+
   it("Ultimate Penitence's shield line is its [ENEMY CD] line (GH #173)", () => {
     const lines = (line: string) => [
       LEGEND,

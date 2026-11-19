@@ -17,7 +17,12 @@ import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { spellEffectData } from "../data/spellEffectData";
 import { SpellTag } from "../data/spellTypes";
 import { supersededAuraBreaks } from "./auraIntervals";
-import { isNoWallButtonOf, isNoWallPress } from "./auraMasteryBranch";
+import {
+  AURA_MASTERY_ID,
+  auraMasteryPressWallStartMs,
+  isNoWallButtonOf,
+  isNoWallPress,
+} from "./auraMasteryBranch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { combatMemo, roundFingerprint, unitTokens } from "./combatMemo";
@@ -414,6 +419,29 @@ const WALL_CAST_TO_AURA_ID: Readonly<Record<string, string>> =
       aura,
     ]),
   );
+
+/** From which second does the press `enemy` made of `spellId` at
+ * `castTimeSeconds` protect it in the kill-window state machine: the press
+ * itself for every spell but Aura Mastery, whose wall is read by the one
+ * reading of it (`auraMasteryPressWallStartMs`) — the switch to Devotion
+ * Aura for a press made under Concentration Aura, `undefined` for a press
+ * that was the immunity throughout (the button is spent, nothing is held;
+ * assembly review 80-PIPE-170b-B156 #1). */
+export function kwPressProtectionStartS(
+  enemy: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  castTimeSeconds: number,
+  matchStartMs: number,
+): number | undefined {
+  if (spellId !== AURA_MASTERY_ID) return castTimeSeconds;
+  const pressAtMs = Math.round(matchStartMs + castTimeSeconds * 1000);
+  const startMs = auraMasteryPressWallStartMs(enemy, pressAtMs);
+  return startMs === undefined
+    ? undefined
+    : startMs === pressAtMs
+      ? castTimeSeconds
+      : (startMs - matchStartMs) / 1000;
+}
 
 /**
  * How long the span's state machine holds "not defenseless" for a press of
@@ -815,10 +843,11 @@ export function computeOffensiveWindowsUncached(
       // nor spends the holder's defence, and its return is no `CD_READY`.
       // The unpressed half is `KW_UNPRESSED_NOT_IN_HAND_IDS`.
       if (!cdHelpsRecipient({ spellId }, true)) continue;
-      // an Aura Mastery press that reduces nothing — the immunity branch —
-      // is no defensive of this machine; asked of THIS press, whatever the
-      // round's other presses were (`isNoWallPress`, ruling R53, pipeline
-      // T213)
+      // an Aura Mastery press that reduces nothing at any moment — the
+      // immunity for its whole length — is no defensive of this machine;
+      // asked of THIS press, whatever the round's other presses were
+      // (`isNoWallPress`, ruling R53, pipeline T213). The ledger's presses
+      // put back below are asked the same question again.
       if (isNoWallPress(spellId, enemy, cast.logLine.timestamp)) continue;
       const list = castsBySpell.get(spellId) ?? [];
       list.push((cast.logLine.timestamp - matchStartMs) / 1000);
@@ -914,7 +943,23 @@ export function computeOffensiveWindowsUncached(
         // an external pressed on a teammate spends the button and protects
         // the teammate, not its caster (fact5 D9, 486b980e 4:30: Blessing
         // of Sacrifice on an ally held its paladin "protected" 12 s)
-        if (holdsNothing || castOnAnother(spellId, castTimeSeconds)) {
+        // an Aura Mastery press's wall, by the one reading of it
+        // (`auraMasteryPressWallStartMs`; assembly review
+        // 80-PIPE-170b-B156 #1 — the ledger's casts above put the immunity
+        // presses back): undefined = the immunity throughout, the button
+        // spent and nothing held; later than the press = the wall began at
+        // a switch of auras
+        const wallStartS = kwPressProtectionStartS(
+          enemy,
+          spellId,
+          castTimeSeconds,
+          matchStartMs,
+        );
+        if (
+          holdsNothing ||
+          wallStartS === undefined ||
+          castOnAnother(spellId, castTimeSeconds)
+        ) {
           events.push({
             time: castTimeSeconds,
             kind: "CD_USED",
@@ -962,14 +1007,28 @@ export function computeOffensiveWindowsUncached(
         // the rest of the round
         const heldNothing =
           buffDuration <= 0 || isExcluded(enemy.id, spellId, castTimeSeconds);
+        // a wall that began at a switch: the press spends the button and
+        // holds nothing; the wall goes up at the switch, spending nothing
+        const startsLater =
+          !heldNothing &&
+          wallStartS > castTimeSeconds &&
+          wallStartS < castTimeSeconds + buffDuration;
         events.push({
           time: castTimeSeconds,
           kind: "CD_USED",
           spellId,
           spellName: effectData.name,
           spendsLast: takeFlip(emptiedAt, castTimeSeconds),
-          ...(heldNothing ? { holdsNothing: true } : {}),
+          ...(heldNothing || startsLater ? { holdsNothing: true } : {}),
         });
+        if (startsLater)
+          events.push({
+            time: wallStartS,
+            kind: "CD_USED",
+            spellId,
+            spellName: effectData.name,
+            spendsLast: false,
+          });
         if (!heldNothing)
           events.push({
             time: castTimeSeconds + buffDuration,

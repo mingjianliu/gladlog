@@ -468,3 +468,45 @@ describe("crisisAnswerEvidence: round 2 — enemy offensive state and line of si
     expect(los.find((l) => l.phase === "at-t")!.detail?.distance).toBe(5);
   });
 });
+
+describe("crisisAnswerEvidence: an Aura Mastery press's wall (pipeline T213, 80-PIPE-170b-B156 #2)", () => {
+  const AM = "31821";
+  const IMMUNITY = "317929";
+  const CONCENTRATION = "317920";
+  const DEVOTION = "465";
+  const self = (event: string, ts: number, spellId: string) =>
+    ev(event, ts, { spellId, src: OWNER, dest: OWNER });
+  // pressed 4 s before t under Concentration Aura; `switchAt` = the switch
+  // to Devotion Aura (undefined = never)
+  const withPress = (switchAt?: number) => {
+    const r = baseRound();
+    r.units[OWNER].auraEvents = [
+      self("SPELL_AURA_APPLIED", START + 1000, CONCENTRATION),
+      self("SPELL_AURA_APPLIED", T - 4000, AM),
+      self("SPELL_AURA_APPLIED", T - 4000, IMMUNITY),
+      ...(switchAt === undefined
+        ? []
+        : [
+            self("SPELL_AURA_REMOVED", switchAt, IMMUNITY),
+            self("SPELL_AURA_REMOVED", switchAt, CONCENTRATION),
+            self("SPELL_AURA_APPLIED", switchAt, DEVOTION),
+          ]),
+      self("SPELL_AURA_REMOVED", T + 4000, AM),
+      ...(switchAt === undefined
+        ? [self("SPELL_AURA_REMOVED", T + 4000, IMMUNITY)]
+        : []),
+    ].sort((a, b) => a.timestamp - b.timestamp);
+    return atT(r).filter((i) => i.spellId === AM && i.kind === "mitigation");
+  };
+  it("the immunity throughout prices nothing", () => {
+    expect(withPress()).toEqual([]);
+  });
+  it("switched before t: the wall is evidence at t, quoted from the switch", () => {
+    const items = withPress(T - 2000);
+    expect(items).toHaveLength(1);
+    expect(items[0]!.atMs).toEqual([T - 2000]);
+  });
+  it("switched after t: no wall at t yet", () => {
+    expect(withPress(T + 1000)).toEqual([]);
+  });
+});

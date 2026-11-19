@@ -14,6 +14,7 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { buildMatchTimeline } from "../src/context/matchTimeline";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { immunityMechanics } from "../src/data/spellSchools";
 import { buildAuraIntervals } from "../src/utils/auraIntervals";
@@ -26,6 +27,7 @@ import {
   auraMasteryPressIsImmunityBranch,
   auraMasteryPressSwitchedToWall,
   auraMasteryPressTag,
+  auraMasteryPressWallStartMs,
   CONCENTRATION_AURA_ID,
   isAuraMasterySwitchWallEvent,
   isNoWallButtonOf,
@@ -42,6 +44,7 @@ import {
   ownWallSpanS,
   saveAuraIntervals,
 } from "../src/utils/enemyDefensives";
+import { kwPressProtectionStartS } from "../src/utils/offensiveWindows";
 import {
   immunityLegendsWithoutCarrier,
   selfDefensiveLabelLegends,
@@ -366,6 +369,105 @@ describe("T213 — Aura Mastery under Concentration Aura is silence / interrupt 
     expect(isNoWallPress("498", u, at(20))).toBe(false);
     // over the round the button is a wall (one press was), so no kit tag
     expect(auraMasteryKitTag(AURA_MASTERY_ID, u, round)).toBe("");
+  });
+
+  it("one reading of a press's wall for every wall reader: the press, the switch, or none (80-PIPE-170b-B156)", () => {
+    const wall = paladin(DEVOTION_AURA);
+    const immunity = paladin(CONCENTRATION_AURA_ID);
+    const switched = paladin(CONCENTRATION_AURA_ID);
+    (switched.auraEvents as unknown[]).push(
+      aura(LogEvent.SPELL_AURA_REMOVED, CONCENTRATION_AURA_ID, 21.3),
+      aura(LogEvent.SPELL_AURA_APPLIED, DEVOTION_AURA, 21.3),
+      // a later press under Devotion Aura keeps the button a tracked wall
+      aura(LogEvent.SPELL_AURA_APPLIED, AURA_MASTERY_ID, 100),
+      aura(LogEvent.SPELL_AURA_REMOVED, AURA_MASTERY_ID, 108),
+    );
+    switched.auraEvents.sort(
+      (a, b) => a.logLine.timestamp - b.logLine.timestamp,
+    );
+    expect(auraMasteryPressWallStartMs(wall, at(20))).toBe(at(20));
+    expect(auraMasteryPressWallStartMs(immunity, at(20))).toBeUndefined();
+    expect(auraMasteryPressWallStartMs(switched, at(20))).toBe(at(21.3));
+    expect(auraMasteryPressWallStartMs(switched, at(100))).toBe(at(100));
+    // the kill-window state machine: the switched press is tracked (it
+    // holds a wall), its protection starts at the switch — the 1.3 s before
+    // it are no wall — and the immunity press holds nothing
+    expect(isNoWallPress(AURA_MASTERY_ID, switched, at(20))).toBe(false);
+    expect(kwPressProtectionStartS(switched, AURA_MASTERY_ID, 20, T0)).toBe(
+      21.3,
+    );
+    expect(kwPressProtectionStartS(switched, AURA_MASTERY_ID, 100, T0)).toBe(
+      100,
+    );
+    expect(
+      kwPressProtectionStartS(immunity, AURA_MASTERY_ID, 20, T0),
+    ).toBeUndefined();
+    expect(kwPressProtectionStartS(wall, AURA_MASTERY_ID, 20, T0)).toBe(20);
+    expect(kwPressProtectionStartS(immunity, "498", 20, T0)).toBe(20);
+  });
+
+  it("rendered, the enemy side: the switched press prints its own line and no line at the switch (80-PIPE-170b-B156 note 3)", () => {
+    const foe = paladin(CONCENTRATION_AURA_ID);
+    // 4 s in: the immunity and Concentration Aura leave, Devotion goes up
+    foe.auraEvents = foe.auraEvents.filter(
+      (a) =>
+        !(
+          a.spellId === AURA_MASTERY_IMMUNITY_AURA_ID &&
+          a.logLine.event === LogEvent.SPELL_AURA_REMOVED
+        ),
+    );
+    (foe.auraEvents as unknown[]).push(
+      aura(LogEvent.SPELL_AURA_REMOVED, AURA_MASTERY_IMMUNITY_AURA_ID, 24),
+      aura(LogEvent.SPELL_AURA_REMOVED, CONCENTRATION_AURA_ID, 24),
+      aura(LogEvent.SPELL_AURA_APPLIED, DEVOTION_AURA, 24),
+    );
+    foe.auraEvents.sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+    const owner = makeUnit("PlayerYou", {
+      spec: CombatUnitSpec.Shaman_Restoration,
+    });
+    const empty = {
+      allyCleanse: [],
+      ourPurges: [],
+      hostilePurges: [],
+      missedCleanseWindows: [],
+      missedPurgeWindows: [],
+    } as never;
+    const text = buildMatchTimeline({
+      owner,
+      ownerSpec: "Restoration Shaman",
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] } as never,
+      ccTrinketSummaries: [],
+      dispelSummary: empty,
+      enemyDispelSummary: empty,
+      enemyCCSummaries: [],
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      pressureWindows: [],
+      healingGaps: [],
+      friends: [owner],
+      enemies: [foe],
+      allUnits: [owner, foe],
+      matchStartMs: T0,
+      matchEndMs: at(120),
+      isHealer: true,
+      playerIdMap: new Map([["PlayerYou", 1]]),
+      enemyIdMap: new Map([["EnemyPaladin", 4]]),
+      outgoingCCChains: [],
+      criticalWindowSeconds: new Set<number>(),
+    } as never);
+    const lines = text
+      .split("\n")
+      .filter((l) => l.includes("[ENEMY DEF]") && l.includes("Aura Mastery"));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^0:20 {2}\[ENEMY DEF\]/);
+    expect(lines[0]).toContain("silence / interrupt immunity");
+    // the immunity ended at the switch; the wall that began there has no
+    // line of its own (its press was spent here)
+    expect(lines[0]).toBe(
+      "0:20  [ENEMY DEF]   4(HPaladin) (Holy Paladin): Aura Mastery (silence / interrupt immunity, 4.0s — removed early)",
+    );
   });
 
   it("a kit text read by name loses the tag (`kitTextWithoutNoWallTags`)", () => {

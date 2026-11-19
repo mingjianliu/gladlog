@@ -225,6 +225,26 @@ export function immunityBranchWallFromMs(
     .sort((a, b) => a - b)[0];
 }
 
+/** THE reading of one Aura Mastery press for every reader that states,
+ * prices or times its WALL (assembly review 80-PIPE-170b-B156): the instant
+ * (ms) from which the press `caster` made at `pressMs` is the damage wall —
+ *  - the press itself, pressed under Devotion Aura;
+ *  - the switch to Devotion Aura, pressed under Concentration Aura and
+ *    switched while it ran (`auraMasteryWallFromMs`);
+ *  - `undefined`: the immunity for its whole length — no wall at all.
+ * The press spends the button in all three. The interval readers
+ * (`withoutImmunityBranchWalls`), the kill-window state machine
+ * (`isNoWallPress` + its restored ledger presses) and the crisis evidence
+ * (packages/eval explore) read this one function. */
+export function auraMasteryPressWallStartMs(
+  caster: Rows,
+  pressMs: number,
+): number | undefined {
+  return auraMasteryPressIsImmunityBranch(caster, pressMs)
+    ? auraMasteryWallFromMs(caster, pressMs)
+    : pressMs;
+}
+
 /** `ivs` (the holder's own aura intervals, seconds since `startMs`) without
  * the part of an Aura Mastery interval that is no wall — for a reader that
  * states or prices the wall. An immunity-branch press's interval is dropped;
@@ -235,11 +255,12 @@ export function withoutImmunityBranchWalls<
   return ivs.flatMap((iv) => {
     if (iv.spellId !== AURA_MASTERY_ID) return [iv];
     const pressMs = startMs + iv.fromS * 1000;
-    if (!auraMasteryPressIsImmunityBranch(holder, pressMs)) return [iv];
-    const wallFromMs = auraMasteryWallFromMs(holder, pressMs);
+    const wallFromMs = auraMasteryPressWallStartMs(holder, pressMs);
     return wallFromMs === undefined
       ? []
-      : [{ ...iv, fromS: (wallFromMs - startMs) / 1000 }];
+      : wallFromMs === pressMs
+        ? [iv]
+        : [{ ...iv, fromS: (wallFromMs - startMs) / 1000 }];
   });
 }
 
@@ -343,10 +364,12 @@ export function kitTextWithoutNoWallTags(kitText: string): string {
   return kitText.split(` (${auraMasteryImmunityLabelWords()}) [`).join(" [");
 }
 
-/** `auraMasteryPressIsImmunityBranch` asked of one roster spell's press:
- * true only for an Aura Mastery press that is the immunity. The per-press
- * reading — a round's other presses say nothing of this one (codex
- * 85-tk-WIN-T213-2 #3). */
+/** Is this press of a roster spell one that holds NO wall at any moment —
+ * an Aura Mastery press that is the immunity for its whole length
+ * (`auraMasteryPressWallStartMs` undefined)? A press that switched to the
+ * wall while it ran is not: it holds the wall from the switch. The
+ * per-press reading — a round's other presses say nothing of this one
+ * (codex 85-tk-WIN-T213-2 #3). */
 export function isNoWallPress(
   spellId: string,
   caster: Rows,
@@ -354,6 +377,6 @@ export function isNoWallPress(
 ): boolean {
   return (
     spellId === AURA_MASTERY_ID &&
-    auraMasteryPressIsImmunityBranch(caster, pressMs)
+    auraMasteryPressWallStartMs(caster, pressMs) === undefined
   );
 }

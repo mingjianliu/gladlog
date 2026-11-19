@@ -18,7 +18,10 @@ import {
   buildAuraIntervals,
   IAuraInterval,
 } from "./auraIntervals";
-import { withoutImmunityBranchWalls } from "./auraMasteryBranch";
+import {
+  isNoWallButtonOf,
+  withoutImmunityBranchWalls,
+} from "./auraMasteryBranch";
 import { binarySearchClosest } from "./binarySearch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -911,7 +914,13 @@ export function computeUnusedSelfCounterfactuals(
   victim: ICombatUnit,
   victimCds: IMajorCooldownInfo[],
   victimCcSummary: Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances">,
-  combat: { startTime: number; units: Record<string, ICombatUnit> },
+  combat: {
+    startTime: number;
+    /** the round's end, for the readings asked over a round
+     * (`isNoWallButtonOf`); hand-built callers may leave it out */
+    endTime?: number;
+    units: Record<string, ICombatUnit>;
+  },
   deathS: number,
 ): ICounterfactualHit[] {
   if (wasLockedOutThroughWindow(victimCcSummary, deathS)) return [];
@@ -938,6 +947,18 @@ export function computeUnusedSelfCounterfactuals(
     if (
       UNUSED_SELF_COVERAGE_UNMODELLED.has(cd.spellId) ||
       UNUSED_SELF_COVERAGE_UNMODELLED.has(effectId)
+    )
+      continue;
+    // an Aura Mastery that is no wall for this holder over the round — the
+    // silence / interrupt immunity — would have reduced nothing
+    // (`isNoWallButtonOf`, ruling R53; reader audit of assembly review
+    // 80-PIPE-170b-B156)
+    if (
+      combat.endTime !== undefined &&
+      isNoWallButtonOf(effectId, victim, {
+        startTime: combat.startTime,
+        endTime: combat.endTime,
+      })
     )
       continue;
     if (!cdReadyInTimeAt(cd, deathS)) continue;
