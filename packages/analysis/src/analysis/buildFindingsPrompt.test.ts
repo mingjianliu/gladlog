@@ -9,7 +9,10 @@ import {
   UNNECESSARY_TARGET_HP_PCT,
 } from "../utils/cooldowns";
 import { DR_CHAIN_LOOKAHEAD_S } from "../utils/dispelAnalysis";
-import { buildFindingsPrompt } from "./buildFindingsPrompt";
+import {
+  buildFindingsPrompt,
+  PRESSURED_READ_TO_LEGEND_NOTE,
+} from "./buildFindingsPrompt";
 import { LEGACY_TOPIC_TYPES } from "./candidateFindings";
 import { FINDING_CATEGORIES } from "./findingCategories";
 import type { CandidateEvent } from "./types";
@@ -193,6 +196,40 @@ describe("buildFindingsPrompt", () => {
 
     // triage 2026-09-29 F-S1 (codex review): the line's spell is the ENEMY's
     // opener, so the note must point at the owner's own defensives
+    // T183 (ruling R73): the clause about facts.pressuredReadToT is printed
+    // only in a menu where a row carries the field
+    it("slow-defensive-response's pressuredReadToT clause prints only when a row has the field", () => {
+      const legendOf = (facts: Record<string, string>) =>
+        buildFindingsPrompt(
+          [
+            ...candidates,
+            {
+              id: "slow-defensive-response:p1:39",
+              type: "slow-defensive-response",
+              t: 39,
+              unitNames: ["Me-R"],
+              spell: "Bestial Wrath",
+              facts: { t: "0:39", leadCd: "Bestial Wrath", ...facts },
+            },
+          ],
+          "",
+          "Holy Paladin",
+        )
+          .split("\n")
+          .find((l) => l.startsWith('- "slow-defensive-response":'))!;
+      const without = legendOf({ pressuredHpT: "0:53", windowEndT: "0:53" });
+      const withField = legendOf({
+        pressuredHpT: "0:55",
+        windowEndT: "0:53",
+        pressuredReadToT: "0:58",
+      });
+      expect(without).not.toContain("pressuredReadToT");
+      expect(withField).toContain(PRESSURED_READ_TO_LEGEND_NOTE);
+      expect(withField.replace(PRESSURED_READ_TO_LEGEND_NOTE, "")).toBe(
+        without,
+      );
+    });
+
     it("slow-defensive-response's note names the player's own ally defensives, not 'this ability'", () => {
       const p = buildFindingsPrompt(
         [

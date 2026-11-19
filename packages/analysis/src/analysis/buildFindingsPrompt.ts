@@ -63,6 +63,13 @@ const ATTEMPTED_LEGEND_NOTE = ` When facts.attempted is present, the player DID 
  * with the cooldown in hand — the old note forbade "held" outright. */
 const ATTEMPTED_HOARD_LEGEND_NOTE = ` When facts.attempted is present, the player DID try to press one of these cooldowns and the game rejected the cast (facts.attempted names the reason(s); facts.attemptedAt says when, as offsets from facts.t). facts.freeAfterAttemptS (when present) is how many seconds the player could still act after the last rejected press: under ${REACTION_WINDOW_S} s — or when it is absent — never phrase this as hoarding, negligence, or "you should have used it"; phrase it as the attempt being blocked and, if relevant, coach clearing that blocker sooner; ${REACTION_WINDOW_S} s or more, say both — the press was blocked, and once the player could act again the cooldown was still not spent.`;
 
+/** T183 (ruling R73): slow-defensive-response's clause for
+ * `facts.pressuredReadToT`, inside the parenthesis about pressuredHpT.
+ * Printed only in a menu where a row carries the field (`legendLines`) —
+ * 2 rows of the 605 do, and the clause sat in every menu with the type. */
+export const PRESSURED_READ_TO_LEGEND_NOTE =
+  "; when facts.pressuredReadToT is present the window's damage had paused while one of its cooldowns was still running, and the low was read on past facts.windowEndT to facts.pressuredReadToT — at most 10 s, never into the next window — so facts.pressuredHpT can be after facts.windowEndT";
+
 /** slow-defensive-response's intent-guard note (triage
  * 2026-09-29 F-S1). The line's own spell is the ENEMY's opener (facts.leadCd),
  * so "this ability" would hand the owner the enemy's cooldown (codex review);
@@ -117,7 +124,7 @@ export const CHAIN_LEGENDS: Record<string, string> = {
   // the corpus reference: it is a descriptive contrast between two
   // populations, never a prescription, and the numbers must be cited, not
   // invented.
-  "slow-defensive-response": `- "slow-defensive-response": at facts.t the enemy facts.caster (facts.casterSpec) opened facts.leadCd (+facts.extras; an extra marked "Ns later" was pressed N s after the opener, not with it, and one marked "by <enemy>" was pressed by that enemy, not by facts.caster): no friendly answered within 8 s although a tool was ready (an answer = a wall / an external / a healing CD / a kite / a control on an enemy who pressed a cooldown in that window and dealt damage to facts.pressured inside it or had a hit on them stopped by an immunity, that enemy's pets counting as that enemy — a control on any other enemy, an enemy healer who only pressed a cooldown, is not an answer, and neither is one whose target neither damaged facts.pressured nor had a hit on them stopped by an immunity in the window, even if the control is why); facts.pressured fell to facts.pressuredHpPct% inside the burst's window — facts.t to facts.windowEndT, the burst's own span, never shorter than the 8 s answer window and often longer (at second facts.pressuredHpT — the lowest HP the log shows for them there; it can sit below that second's [STATE] number; when facts.pressuredReadToT is present the window's damage had paused while one of its cooldowns was still running, and the low was read on past facts.windowEndT to facts.pressuredReadToT — at most 10 s, never into the next window — so facts.pressuredHpT can be after facts.windowEndT). facts.diedInWindow=yes = a friendly died inside that same window (facts.t to facts.windowEndT), "no" = none did — the same outcome the reference below counts; state it as what happened, and the hard rule stands: never pin that death on the missing answer. Corpus reference (n=facts.refN burst windows of cell facts.cellKey, written bracket|opener spell id; facts.fellBack=no = windows opened by facts.leadCd in this bracket; yes = too few of those were on record, so the cell is every opener in the bracket ("bracket|*") or every bracket ("*|*") and the numbers are not about facts.leadCd alone): a friendly died inside the window facts.refDeathResp% of the time when answered within 8 s vs facts.refDeathNoResp% when not — descriptive contrast, not causal proof; cite the numbers, do not invent others. facts.refTop = the most common kinds of answer in that cell's answered windows (up to three), each with the share of those windows that used it — one window can use several. facts.leadCdId is the opener's spell id, the key the cell was looked up by: never cite it or facts.cellKey as a number.${ATTEMPTED_RESPONSE_LEGEND_NOTE}`,
+  "slow-defensive-response": `- "slow-defensive-response": at facts.t the enemy facts.caster (facts.casterSpec) opened facts.leadCd (+facts.extras; an extra marked "Ns later" was pressed N s after the opener, not with it, and one marked "by <enemy>" was pressed by that enemy, not by facts.caster): no friendly answered within 8 s although a tool was ready (an answer = a wall / an external / a healing CD / a kite / a control on an enemy who pressed a cooldown in that window and dealt damage to facts.pressured inside it or had a hit on them stopped by an immunity, that enemy's pets counting as that enemy — a control on any other enemy, an enemy healer who only pressed a cooldown, is not an answer, and neither is one whose target neither damaged facts.pressured nor had a hit on them stopped by an immunity in the window, even if the control is why); facts.pressured fell to facts.pressuredHpPct% inside the burst's window — facts.t to facts.windowEndT, the burst's own span, never shorter than the 8 s answer window and often longer (at second facts.pressuredHpT — the lowest HP the log shows for them there; it can sit below that second's [STATE] number${PRESSURED_READ_TO_LEGEND_NOTE}). facts.diedInWindow=yes = a friendly died inside that same window (facts.t to facts.windowEndT), "no" = none did — the same outcome the reference below counts; state it as what happened, and the hard rule stands: never pin that death on the missing answer. Corpus reference (n=facts.refN burst windows of cell facts.cellKey, written bracket|opener spell id; facts.fellBack=no = windows opened by facts.leadCd in this bracket; yes = too few of those were on record, so the cell is every opener in the bracket ("bracket|*") or every bracket ("*|*") and the numbers are not about facts.leadCd alone): a friendly died inside the window facts.refDeathResp% of the time when answered within 8 s vs facts.refDeathNoResp% when not — descriptive contrast, not causal proof; cite the numbers, do not invent others. facts.refTop = the most common kinds of answer in that cell's answered windows (up to three), each with the share of those windows that used it — one window can use several. facts.leadCdId is the opener's spell id, the key the cell was looked up by: never cite it or facts.cellKey as a number.${ATTEMPTED_RESPONSE_LEGEND_NOTE}`,
   // crisis-no-response (spec 2026-08-29 §1b, GH #58, Task 10, further
   // amended same-day — "不管分数线", the rating line is out entirely): the
   // reference is OUTCOME-based (death-within-10s for responders vs
@@ -138,9 +145,17 @@ function legendLines(
   candidates: CandidateEvent[],
 ): string[] {
   const present = new Set(candidates.map((c) => c.type));
+  const readTo = candidates.some(
+    (c) =>
+      c.type === "slow-defensive-response" &&
+      (c.facts as Record<string, unknown> | undefined)?.pressuredReadToT !==
+        undefined,
+  );
   return Object.entries(map)
     .filter(([type]) => present.has(type))
-    .map(([, line]) => line);
+    .map(([, line]) =>
+      readTo ? line : line.replace(PRESSURED_READ_TO_LEGEND_NOTE, ""),
+    );
 }
 
 /** P1/P2 起爆候选(2026-08-15,Task 4 特性开关接线,BACKLOG #26 raw-streams

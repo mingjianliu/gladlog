@@ -11,8 +11,21 @@
  * window. The span is the producer's own (`burstTroughReadEnd`, asked here
  * with the window's own fields — never replayed).
  *
- *  - `troughStopsBeforeBuffEnd`: a judged window (healer owner; feasible,
- *    triaged, a pressured friendly with a trough) whose pressured unit
+ * THIS SCAN RE-RUNS THE ENGINE: it reads the capture's archives, not its
+ * text, so its numbers are those of the CHECKOUT it runs from, whatever
+ * capture it is pointed at. A "before" number needs the base checkout (or
+ * the engine's pass switched off); run from the head it reads 0 on any
+ * capture.
+ *
+ * Population: every owner's team, every window with a pressured friendly
+ * and a trough that is `feasible` — the windows a `[BURST ANSWERED]` line
+ * (its other doors: answered, creditable, low <= 60 %) or a
+ * slow-defensive-response row (its other doors: not answered, triaged,
+ * healer owner) can print. The first version counted healer owners'
+ * triaged windows only — the candidate's population — and so missed most
+ * of the credit line's (25 windows there, 66 printed lines on the 605).
+ *
+ *  - `troughStopsBeforeBuffEnd`: such a window whose pressured unit
  *    reads LOWER than the printed trough (`troughHpPct`) on the grid in a
  *    second of that span after the horizon. Counted: every judged window
  *    with a trough.
@@ -29,8 +42,8 @@ import {
 import {
   gridHpPct,
   isDeadAtRenderSecond,
-  isHealerSpec,
 } from "@gladlog/analysis/src/utils/cooldowns";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import type { IRoundCtx } from "./ctx";
 
@@ -47,7 +60,7 @@ export const OUT_OF_TOTAL = ["answered", "not answered"].flatMap((a) =>
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
-  if (!owner || !isHealerSpec(owner.spec)) return;
+  if (!owner) return;
   let points: ReturnType<typeof burstWindowDecisionPoints>;
   try {
     points = burstWindowDecisionPoints(ctx.legacy, {
@@ -56,13 +69,16 @@ export function run(ctx: IRoundCtx): void {
   } catch {
     return;
   }
-  const roundEndSec = Number.isFinite(ctx.roundEndAt)
-    ? Math.floor((ctx.roundEndAt - ctx.start) / 1000)
+  // the engine's own round end (`roundEndMs`), not the scan context's
+  // playable end, which stops at the first friendly death (codex
+  // 85-tk-CD-T183-1b #1)
+  const roundEndAt = roundEndMs(ctx.legacy);
+  const roundEndSec = Number.isFinite(roundEndAt)
+    ? Math.floor((roundEndAt - ctx.start) / 1000)
     : null;
   for (const p of points) {
     const pr = p.pressured;
-    if (!p.feasible || !p.triaged || pr === null || pr.minHpPct === null)
-      continue;
+    if (!p.feasible || pr === null || pr.minHpPct === null) continue;
     ctx.bump("troughStopsBeforeBuffEnd");
     ctx.bump("troughReadPastCut");
     const unit = ctx.units.find((u: any) => u.id === pr.unitId);
