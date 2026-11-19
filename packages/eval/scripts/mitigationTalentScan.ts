@@ -367,7 +367,17 @@ const tag = arg("--tag", "");
 // dilutes. `--only <aura,...>` restricts the report to those auras.
 const splitSpec = process.argv.includes("--split-spec");
 const only = new Set(arg("--only", "").split(",").filter(Boolean));
+// `--hits <file>` (T209): every counted hit of the `--only` auras, one JSON
+// row per line — candidate, holder bucket, unit, the hitting spell, its own
+// ratio and the target's baseline — so a row that reads off its expected
+// value can be split by what hit (a pooled median hides a mix of spells
+// that armor, or another reduction, treats differently).
+const hitsTo = arg("--hits", "");
+const hitRows: string[] = [];
 
+/** No-aura hits of one spell on one target before its own median is the
+ * baseline of that spell's hits (below it: the school class's). */
+const MIN_SPELL_BASE_HITS = 3;
 const median = (xs: number[]) => {
   if (!xs.length) return NaN;
   const s = [...xs].sort((x, y) => x - y);
@@ -455,6 +465,8 @@ for (const f of files) {
         phys: boolean;
         school: number;
         ratio: number;
+        spell: string;
+        periodic: boolean;
       }> = [];
       const glad = (m as any).units?.[u.id];
       for (const d of glad?.damageIn ?? []) {
@@ -474,6 +486,8 @@ for (const f of files) {
           tS: (d.timestamp - legacy.startTime) / 1000,
           phys: t.school === 1,
           school: t.school,
+          spell: String(d.spellId ?? "swing"),
+          periodic: ev === "SPELL_PERIODIC_DAMAGE",
           ratio:
             (t.amount + Math.max(t.absorbed, 0) + Math.max(t.blocked, 0)) /
             t.base,
@@ -488,11 +502,30 @@ for (const f of files) {
         if (!act.length) (r.phys ? base.phys : base.magic).push(r.ratio);
       const bP = median(base.phys),
         bM = median(base.magic);
+      // the same spell's own no-aura hits on this target, when there are
+      // enough: armor is in a physical ratio and a bleed ignores it, so a
+      // class-wide baseline reads the mix of what hit, and an aura that
+      // removes part of the mix (Evasion dodges the swings, the bleeds stay)
+      // shifted its own reading — T209: Evasion physical 0.819 was swings
+      // at 0.800 beside bleeds at 0.94–0.96 against a swing-heavy baseline
+      const bySpell = new Map<string, number[]>();
+      for (const { r, act } of tagged)
+        if (!act.length)
+          bySpell.set(r.spell, [...(bySpell.get(r.spell) ?? []), r.ratio]);
+      const spellBase = (spell: string): number | undefined => {
+        const xs = bySpell.get(spell);
+        return xs && xs.length >= MIN_SPELL_BASE_HITS ? median(xs) : undefined;
+      };
       for (const { r, act } of tagged) {
         const ids = [...new Set(act.map((iv) => iv.spellId))];
         if (ids.length !== 1) continue;
-        const b = r.phys ? bP : bM;
-        if (!(b > 0) || (r.phys ? base.phys.length : base.magic.length) < 5)
+        const own = spellBase(r.spell);
+        const b = own ?? (r.phys ? bP : bM);
+        if (
+          !(b > 0) ||
+          (own === undefined &&
+            (r.phys ? base.phys.length : base.magic.length) < 5)
+        )
           continue;
         for (const c of CANDIDATES) {
           if (c.aura !== ids[0] || (c.school & r.school) === 0) continue;
@@ -525,6 +558,19 @@ for (const f of files) {
           const unit = `${f}|${roundInFile}|${caster.id}`;
           const hits = bk[own].get(unit) ?? [];
           hits.push(r.ratio / b);
+          if (hitsTo && only.has(c.aura))
+            hitRows.push(
+              JSON.stringify({
+                key: candidateKey(c),
+                own,
+                unit,
+                spell: r.spell,
+                periodic: r.periodic,
+                school: r.school,
+                ratio: r.ratio,
+                base: b,
+              }),
+            );
           bk[own].set(unit, hits);
           buckets.set(key, bk);
         }
@@ -541,6 +587,7 @@ type Dump = {
     Record<"yes" | "no" | "unknown", Record<string, number[]>>
   >;
 };
+if (hitsTo) writeFileSync(hitsTo, hitRows.join("\n"));
 let scannedFiles = files.length;
 if (dumpTo) {
   const d: Dump = { files: files.length, rounds, buckets: {} };
