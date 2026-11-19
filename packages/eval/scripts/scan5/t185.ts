@@ -11,8 +11,9 @@
  *
  *  - `burstCdIsNoPressCopy`: an engine window (every owner) with a pressured
  *    friendly whose lead, or one of whose extras, is at that second an
- *    occurrence the timeline's own reader names `(no press)`
- *    (`auraOffensiveOccurrences`) while the engine's name for it carries no
+ *    entry the timeline's own builder names `(no press)`
+ *    (`reconstructEnemyCDTimeline`'s window list, the one the engine and
+ *    `[OFFENSIVE WINDOW]` read) while the engine's name for it carries no
  *    such mark. Kind = lead / extra | the spell | what the window is (a
  *    credit line can print; judged by the candidate; neither). Counted:
  *    every lead and extra of every such window.
@@ -20,11 +21,8 @@
 import { burstWindowDecisionPoints } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
-import {
-  auraOffensiveOccurrences,
-  NO_PRESS_SUFFIX,
-} from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
-import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
+import { reconstructEnemyCDTimeline } from "@gladlog/analysis/src/utils/enemyCDs";
+import { NO_PRESS_SUFFIX } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 
 import { type IRoundCtx } from "./ctx";
 
@@ -42,8 +40,11 @@ export function run(ctx: IRoundCtx): void {
     return;
   }
   const C = "burstCdIsNoPressCopy";
-  const bounds = { startTime: ctx.start, endTime: roundEndMs(ctx.legacy) };
   const healer = isHealerSpec(owner.spec);
+  const enemies = ctx.players.filter((u: any) => u.reaction !== owner.reaction);
+  const marked = reconstructEnemyCDTimeline(enemies, ctx.legacy)
+    .alignedBurstWindows.flatMap((w) => w.activeCDs)
+    .filter((c) => c.spellName.endsWith(NO_PRESS_SUFFIX));
   for (const p of points) {
     if (p.pressured === null) continue;
     const low = p.pressured.minHpPct;
@@ -64,15 +65,14 @@ export function run(ctx: IRoundCtx): void {
     for (const [role, cd] of cds) {
       ctx.bump(C);
       if (cd.spellName.endsWith(NO_PRESS_SUFFIX)) continue;
-      const caster = ctx.units.find(
-        (u: any) => u.info && u.name === cd.casterName,
-      );
-      if (!caster) continue;
-      const occ = auraOffensiveOccurrences(caster, bounds).occurrences.find(
+      // the timeline's own name for this cast: the entry of the builder's
+      // windows the engine read it from (an occurrence the builder folded
+      // into a press made unseen is that press, not a copy)
+      const occ = marked.find(
         (o) =>
           o.spellId === cd.spellId &&
-          o.spellName.endsWith(NO_PRESS_SUFFIX) &&
-          Math.floor((o.startMs - ctx.start) / 1000) === cd.castSec,
+          o.playerName === cd.casterName &&
+          Math.floor(o.castSeconds) === cd.castSec,
       );
       if (!occ) continue;
       ctx.violate(
