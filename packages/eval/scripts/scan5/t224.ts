@@ -21,6 +21,9 @@
  *    a pressured friendly.
  *  - `anothersOwnWallById` (inventory): every such wall press in a window,
  *    by spell | the window's only kind of answer / beside another answer.
+ *  - `anothersPressCategory` (inventory): every non-control response whose
+ *    caster is not the pressured unit, by spell | the engine's category —
+ *    which presses the `wall` reading reaches and which it does not.
  */
 import {
   burstWindowDecisionPoints,
@@ -34,6 +37,7 @@ import { type IRoundCtx } from "./ctx";
 export const CHECKS = [
   "anothersOwnWallAnswers",
   "anothersOwnWallById",
+  "anothersPressCategory",
 ] as const;
 
 export function run(ctx: IRoundCtx): void {
@@ -52,6 +56,21 @@ export function run(ctx: IRoundCtx): void {
     const pr = p.pressured;
     if (pr === null) continue;
     ctx.bump("anothersOwnWallAnswers");
+    // every press by a unit other than the pressured one, by the category
+    // the engine gave it (an inventory: which ids the `wall` reading
+    // reaches and which it does not)
+    for (const r of p.responseCasts) {
+      if (r.casterId === undefined || r.casterId === pr.unitId) continue;
+      if (r.category === "control") continue;
+      ctx.bump("anothersPressCategory");
+      ctx.violate(
+        "anothersPressCategory",
+        `${r.spellName} | ${r.category}${r.category === "external" ? (r.destId === pr.unitId ? " on the pressured unit" : " on another unit") : ""}`,
+        ctx.start + p.tSec * 1000,
+        `${ctx.roundKey}|${owner.reaction}|${p.tSec}|${r.casterId}|${r.spellId}|${r.tSec}`,
+        `window at ${p.tSec}s: ${r.casterName} ${r.spellName} ${r.latencySec}s dest ${r.destId ?? "-"}; pressured ${pr.name}`,
+      );
+    }
     const walls = p.responseCasts.filter(
       (r) =>
         r.category === "wall" &&
