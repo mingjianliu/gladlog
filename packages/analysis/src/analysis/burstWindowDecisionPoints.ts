@@ -870,11 +870,16 @@ function healsOnlyItsCaster(spellId: string): boolean {
  * (attempt T180-2), and no other:
  *  - an external aimed at another unit (310e5c6d r5: the owner's Ironbark
  *    on a warlock at 95 % while the hunter fell to 15 %);
- *  - a healing cooldown that healed others and not the pressured unit: an
- *    official self-only heal of another unit, or one whose per-recipient
- *    aura / heal rows went on others (7686e97d r1: a warlock's own Dark
- *    Pact under a mage at 9 %);
- *  - a control that did not land (03d63165 r1: a Storm Bolt MISSED).
+ *  - a healing cooldown that healed others and not the pressured unit: one
+ *    whose per-recipient aura / heal rows went on others. NOT a self-only
+ *    heal or shield pressed by another unit (ruling R75, 2026-11-19: a
+ *    warlock's own Dark Pact cannot be given to the mate, so it is not a
+ *    press that went elsewhere) — self-only by the official verdict
+ *    (`HEALING_VERDICTS.official.healsOthers === false`) or by the press's
+ *    own rows (`selfOnlyEffect`, T123's reading);
+ *  - a control that did not land (03d63165 r1: a Storm Bolt MISSED) —
+ *    control only (R75): an interrupt that interrupted nothing
+ *    (`INTERRUPT_IDS`, spellMeta's own class) is not one.
  * Such a press is no answer for that unit: `responded` (the
  * slow-defensive-response door) does not count it, and the `[BURST
  * ANSWERED]` credit line (`answersPressured`) never credited it — both ask
@@ -896,20 +901,42 @@ export function pressWentElsewhere(
     r.destId !== pressured.unitId
   )
     return true;
-  if (r.category === "healCd") {
-    const anothers =
-      r.casterId !== undefined && r.casterId !== pressured.unitId;
-    if (
-      anothers &&
-      (healsOnlyItsCaster(r.spellId) || r.selfOnlyEffect === true)
-    )
-      return true;
-    if (
-      r.effectOnUnitIds !== undefined &&
-      !r.effectOnUnitIds.includes(pressured.unitId)
-    )
-      return true;
-  }
+  if (
+    r.category === "healCd" &&
+    !healsOnlyItsCaster(r.spellId) &&
+    r.selfOnlyEffect !== true &&
+    r.effectOnUnitIds !== undefined &&
+    !r.effectOnUnitIds.includes(pressured.unitId)
+  )
+    return true;
+  return (
+    r.category === "control" &&
+    r.landed === false &&
+    !INTERRUPT_IDS.has(r.spellId)
+  );
+}
+
+/**
+ * R75's other half: the two presses the ruling took OUT of "went elsewhere"
+ * still reach nobody but their presser, so the `[BURST ANSWERED]` line goes
+ * on refusing them as the pressured unit's answer, as it did before T180 —
+ * a self-only heal / shield of another unit (06bb9860: one warlock's Dark
+ * Pact credited for another player's dip), an interrupt that interrupted
+ * nothing (9d899d10: a reflected Counterspell). They keep the window
+ * `responded`; they are never named as what answered it.
+ */
+export function pressDidNotReachPressured(
+  pressured: { unitId: string },
+  r: BurstResponseCast,
+): boolean {
+  if (pressWentElsewhere(pressured, r)) return true;
+  if (
+    r.category === "healCd" &&
+    r.casterId !== undefined &&
+    r.casterId !== pressured.unitId &&
+    (healsOnlyItsCaster(r.spellId) || r.selfOnlyEffect === true)
+  )
+    return true;
   return r.category === "control" && r.landed === false;
 }
 

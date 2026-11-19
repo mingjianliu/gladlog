@@ -39,7 +39,7 @@ import {
   type BurstResponseCast,
   type BurstWindowDecisionPoint,
   type ControlLandingAura,
-  pressWentElsewhere,
+  pressDidNotReachPressured,
 } from "../analysis/burstWindowDecisionPoints";
 import {
   type IPlayerCCTrinketSummary,
@@ -292,7 +292,9 @@ export function answersPressured(
   // Invios's); a healing CD whose aura went on others; a control that did
   // not land (F-B1 — 9c6ab747: an Imprison with no aura; 8c5b6ec5: a Hammer
   // of Justice into an immunity; 9d899d10: a reflected Counterspell)
-  if (pressWentElsewhere(pr, r)) return false;
+  // …and the two R75 took out of that reading for `responded`, which the
+  // credit line still refuses (`pressDidNotReachPressured`)
+  if (pressDidNotReachPressured(pr, r)) return false;
   if (
     r.category === "wall" &&
     r.casterId !== undefined &&

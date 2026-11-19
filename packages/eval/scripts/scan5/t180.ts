@@ -38,6 +38,8 @@ export const CHECKS = [
 
 const REFUSALS = [
   "another unit's own wall",
+  "another unit's self-only heal",
+  "interrupt that interrupted nothing",
   "control off before the opener",
   "over before the trough",
   "pressed after the unit died",
@@ -55,7 +57,15 @@ function elsewhere(r: any): string {
 
 function refusal(pr: any, r: any): string {
   if (r.afterPressuredDeath) return "pressed after the unit died";
+  if (r.category === "control" && r.landed === false)
+    return "interrupt that interrupted nothing";
   if (r.category === "control") return "control off before the opener";
+  if (
+    r.category === "healCd" &&
+    r.casterId !== pr.unitId &&
+    r.effectOnUnitIds === undefined
+  )
+    return "another unit's self-only heal";
   if (r.category === "wall" && r.casterId !== pr.unitId)
     return "another unit's own wall";
   if (

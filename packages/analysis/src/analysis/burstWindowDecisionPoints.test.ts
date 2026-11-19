@@ -33,6 +33,7 @@ import {
   burstWindowDecisionPoints,
   controlLandedResponses,
   landedPreOpenerStillUp,
+  pressDidNotReachPressured,
   pressWentElsewhere,
 } from "./burstWindowDecisionPoints";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
@@ -377,13 +378,19 @@ describe("burstWindowDecisionPoints — response classification", () => {
     expect(roar.responded).toBe(false);
     // the same Roar on the pressured player answers
     expect(run([cast("53480", 14, "F1")]).responded).toBe(true);
-    // Exhilaration: a healing CD that officially heals its caster alone
+    // Exhilaration: a healing CD that officially heals its caster alone.
+    // Ruling R75: it cannot be given to the mate, so it is NOT a press that
+    // went elsewhere — the window stays responded — and the credit line
+    // still does not name it as the pressured unit's answer
     const exh = run([cast("109304", 14)]);
     expect(exh.responseCasts.map((r) => r.category)).toEqual(["healCd"]);
     expect(pressWentElsewhere(exh.pressured!, exh.responseCasts[0]!)).toBe(
-      true,
+      false,
     );
-    expect(exh.responded).toBe(false);
+    expect(
+      pressDidNotReachPressured(exh.pressured!, exh.responseCasts[0]!),
+    ).toBe(true);
+    expect(exh.responded).toBe(true);
     // NOT taken by the ruling: another unit's own wall keeps the window
     // responded (Bear Form is a wall here)
     const wall = run([cast("5487", 14)]);
@@ -1271,6 +1278,22 @@ describe("burstWindowDecisionPoints — where a control answer landed (T12 ⑧ i
     )[0]!;
     expect(landed.responseCasts[0]!.landed).toBe(true);
     expect(landed.responded).toBe(true);
+  });
+
+  // ruling R75: "a control that did not land" is control only
+  it("an interrupt that interrupted nothing is not a press that went elsewhere", () => {
+    const PUMMEL = "6552";
+    const p = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({ spellCastEvents: [cast(PUMMEL, 12, "E1")] }),
+        hostile({ spellCastEvents: [cast(AR, 10)], auraEvents: [] }),
+      ]),
+    )[0]!;
+    const r = p.responseCasts[0]!;
+    expect([r.category, r.landed]).toEqual(["control", false]);
+    expect(pressWentElsewhere(p.pressured!, r)).toBe(false);
+    expect(pressDidNotReachPressured(p.pressured!, r)).toBe(true);
+    expect(p.responded).toBe(true);
   });
 
   it("an aimed control that did not land carries its target and no application", () => {
