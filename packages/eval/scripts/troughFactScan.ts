@@ -30,13 +30,18 @@ import {
   hpReadingMaxHp,
   hpReadingRows,
 } from "@gladlog/analysis/src/utils/advancedActions";
+import { analyzePlayerCCAndTrinket } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
 
+import { type KickInstanceLike, kickRowSpanMs } from "./lib/kickRowSpan";
+
 const dir = process.argv[2];
 if (!dir) {
-  console.error("usage: troughFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>]");
+  console.error(
+    "usage: troughFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>]",
+  );
   process.exit(2);
 }
 const exIdx = process.argv.indexOf("--examples");
@@ -55,6 +60,7 @@ type Check =
   | "killWindowTeamMin"
   | "slackTeamMin"
   | "kickLowInSpan"
+  | "kickRowNoInstance"
   | "consequenceLow"
   | "cdPriorBottom";
 const checked = new Map<Check, number>();
@@ -135,8 +141,7 @@ const SLACK =
   /^ {2}\[(SLACK|CONTESTED)\] (\d+):(\d{2})–(\d+):(\d{2}) \(\d+s, team min HP (\d+)%\)/;
 const KICK_ROW = /type=kick-eaten t=\S+ units=\S+ facts=\{(.*)\}/;
 // fact2 R1: `[CONSEQ] … for Ns → during it: <pid>(…) A% → low B% at M:SS`
-const CONSEQ =
-  /^(\d+):(\d{2}) {2}\[CONSEQ\] .* for (\d+)s → during it: (.*)$/;
+const CONSEQ = /^(\d+):(\d{2}) {2}\[CONSEQ\] .* for (\d+)s → during it: (.*)$/;
 const CONSEQ_LOW = /(\d+)\([^)]*\) \d+% → low (\d+)% at (\d+):(\d{2})/g;
 // `[CD PRIOR] … median lowest-friendly HP of L% …; <pid>(…) fell below that
 // at M:SS (N%) and bottomed at B% by M:SS`
@@ -198,6 +203,8 @@ for (const f of files) {
   );
   const pidUnit = new Map<string, any>();
   const friends: any[] = [];
+  const enemyUnits: any[] = [];
+  let ownerUnit: any;
   for (const l of lines) {
     const u = /<unit id="(\d+)" name="([^"]+)"[^>]*role="([^"]+)"/.exec(l);
     if (!u) continue;
@@ -205,6 +212,8 @@ for (const f of files) {
     if (!unit) continue;
     pidUnit.set(u[1]!, unit);
     if (u[3] !== "enemy") friends.push(unit);
+    else enemyUnits.push(unit);
+    if (u[3] === "log owner") ownerUnit = unit;
   }
   const start = legacy.startTime;
   const where = `${f.shard}/${f.name}`;
@@ -259,7 +268,12 @@ for (const f of files) {
         if (!unit) continue;
         count("consequenceLow");
         const printed = Number(m[2]);
-        const low = minPct(unit, start, start + (t + 1) * 1000, start + (t + dur - 0.5) * 1000);
+        const low = minPct(
+          unit,
+          start,
+          start + (t + 1) * 1000,
+          start + (t + dur - 0.5) * 1000,
+        );
         if (low && low.pct < printed)
           fail(
             "consequenceLow",
@@ -288,11 +302,19 @@ for (const f of files) {
           const ts = a.logLine.timestamp;
           if (ts >= start + cross * 1000) break;
           if (ts < start + (cross - 1) * 1000) continue;
-          if (a.advancedActorId !== unit.id || !(a.advancedActorMaxHp > 0)) continue;
-          const pct = Math.round((a.advancedActorCurrentHp / hpReadingMaxHp(unit, a as never)) * 100);
+          if (a.advancedActorId !== unit.id || !(a.advancedActorMaxHp > 0))
+            continue;
+          const pct = Math.round(
+            (a.advancedActorCurrentHp / hpReadingMaxHp(unit, a as never)) * 100,
+          );
           if (pct > line) dipFrom = ts + 1;
         }
-        const low = minPct(unit, start, dipFrom, start + (Math.max(bottom, cross) + 1) * 1000);
+        const low = minPct(
+          unit,
+          start,
+          dipFrom,
+          start + (Math.max(bottom, cross) + 1) * 1000,
+        );
         if (low && low.pct < printed)
           fail(
             "cdPriorBottom",
@@ -308,7 +330,12 @@ for (const f of files) {
       const printed = Number(k[5]);
       let low: { pct: number; ms: number; name: string } | null = null;
       for (const u of friends) {
-        const m = minPct(u, start, start + (from + 1) * 1000, start + to * 1000);
+        const m = minPct(
+          u,
+          start,
+          start + (from + 1) * 1000,
+          start + to * 1000,
+        );
         if (m && (!low || m.pct < low.pct)) low = { ...m, name: u.name };
       }
       if (low && low.pct < printed)
@@ -321,6 +348,32 @@ for (const f of files) {
   // kick-eaten ourLow / theirLow: a trough of the lockout's own span — no
   // reading from before the kick (user ruling 2026-10-17); the printed value
   // must not sit below every reading inside [kick, kick + lockout]
+  // the owner's kicks as the product's analyser returns them (the list
+  // `ownerKickEatenEvents` is handed), built once per context on demand
+  let instances: KickInstanceLike[] | null = null;
+  const kickInstances = (): KickInstanceLike[] => {
+    if (instances) return instances;
+    instances = [];
+    // the context's own roster: its owner and the units it calls enemies
+    if (!ownerUnit) return instances;
+    const owner = ownerUnit;
+    const enemies = enemyUnits;
+    const enemyIds = new Set(enemies.map((u) => u.id));
+    const enemyPets = (Object.values(legacy.units ?? {}) as any[]).filter(
+      (u) => u.ownerId && enemyIds.has(u.ownerId),
+    );
+    try {
+      instances = analyzePlayerCCAndTrinket(
+        owner,
+        enemies,
+        legacy as never,
+        enemyPets,
+      ).interruptInstances;
+    } catch {
+      instances = [];
+    }
+    return instances;
+  };
   for (const row of menu.split("\n")) {
     const km = KICK_ROW.exec(row);
     if (!km) continue;
@@ -330,7 +383,8 @@ for (const f of files) {
         return [kv.slice(0, i), kv.slice(i + 1)] as const;
       }),
     );
-    const t = Number(facts.get("t"));
+    const tText = facts.get("t") ?? "";
+    const t = Number(tText);
     const lock = Number(facts.get("lockout"));
     if (!Number.isFinite(t) || !Number.isFinite(lock)) continue;
     for (const side of ["our", "their"]) {
@@ -339,29 +393,24 @@ for (const f of files) {
       if (!unitName || !Number.isFinite(pct)) continue;
       const unit = byName.get(unitName);
       if (!unit) continue;
+      // the lock's own span as the product reads it (`kickPressureSpanMs`:
+      // the kick to the text's lock end, never past the round's end). The
+      // row prints `t` cut to 0.1 s and `lockout` rounded to 0.1 s; a span
+      // rebuilt from those two read up to 50 ms past the lock (B139 review:
+      // 28-2-171, lock end 56.083 s, a 34 % at 56.119 s). A row whose kick
+      // the analyser does not return is counted apart, not guessed.
+      const span = kickRowSpanMs(kickInstances(), legacy, tText);
+      if (!span) {
+        fail(
+          "kickRowNoInstance",
+          `${where} kick t=${tText}: no single interrupt instance of the owner prints this t`,
+        );
+        continue;
+      }
       count("kickLowInSpan");
-      // the lock's own span, from the kick's logged row (codex
-      // 85-tk-EVAL-T205-1 #2: `t` is cut to 0.1 s, not rounded — the row is
-      // the kicker's SPELL_INTERRUPT in [t, t + 0.1 s)); `lockout` is
-      // rounded to 0.1 s, so the end carries 50 ms (T205: s1/56-1 t=163.2
-      // lockout=3.0, the printed 19 % read at 166.252 s). With no such row
-      // found, the widest span the two printed numbers allow.
-      const tMs = start + Math.round(t * 1000);
-      const source = facts.get("source");
-      const kickMs = (Object.values(legacy.units ?? {}) as any[])
-        .flatMap((x) => (x.actionIn ?? []) as any[])
-        .filter(
-          (k) =>
-            k.logLine?.event === "SPELL_INTERRUPT" &&
-            k.srcUnitName === source &&
-            k.logLine.timestamp >= tMs - 1 &&
-            k.logLine.timestamp < tMs + 101,
-        )
-        .map((k) => k.logLine.timestamp as number)
-        .sort((x, y) => x - y)[0];
-      const fromMs = kickMs ?? tMs;
-      const toMs =
-        (kickMs ?? tMs + 100) + Math.round((lock + 0.05) * 1000) + 1;
+      const fromMs = span.fromMs;
+      // `minPct` excludes its end; the span includes its own
+      const toMs = span.toMs + 1;
       const m = minPct(unit, start, fromMs, toMs);
       if (m && pct < m.pct)
         fail(
@@ -378,6 +427,7 @@ for (const c of [
   "killWindowTeamMin",
   "slackTeamMin",
   "kickLowInSpan",
+  "kickRowNoInstance",
   "consequenceLow",
   "cdPriorBottom",
 ] as Check[]) {

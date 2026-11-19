@@ -108,7 +108,9 @@ export interface KickPressure {
 }
 
 export function sideUnderPressure(p: KickSidePressure): boolean {
-  return p.low !== undefined || p.death !== undefined || p.burstAgainst.length > 0;
+  return (
+    p.low !== undefined || p.death !== undefined || p.burstAgainst.length > 0
+  );
 }
 
 /** Both sides calm and no burst of ours ready — the kick is not listed. */
@@ -144,6 +146,32 @@ export function kickPressureTier(p: KickPressure): 0 | 1 | 2 | 3 {
  * first `KICK_EATEN_EXEMPT_CAP` of them per round). */
 export const KICK_CAP_EXEMPT_MAX_TIER = 1;
 
+/**
+ * The span a kick-eaten row's pressure facts (`ourLow*` / `theirLow*`) are
+ * read over, in epoch ms, both ends inclusive: from the kick to the end of
+ * the lock as the text reads it (`kickTextLockEndMs`), never past the
+ * round's end (`roundEndMs`). Exported so a check of those facts reads the
+ * same window (pipeline B139 review: `troughFactScan` rebuilt the end from
+ * the row's rounded `lockout` + 50 ms and read a sample 36 ms after the
+ * lock — 28-2-171, lock end 56.083 s, a 34 % at 56.119 s).
+ */
+export function kickPressureSpanMs(
+  k: {
+    atSeconds: number;
+    lockoutDurationSeconds: number;
+    lockEndedBySuccessS?: number | null;
+  },
+  combat: { startTime: number; endTime: number },
+): { fromMs: number; toMs: number } {
+  const start = combat.startTime;
+  const roundEndS = (roundEndMs(combat as never) - start) / 1000;
+  const t1 = Math.min(kickTextLockEndMs(k) / 1000, roundEndS);
+  return {
+    fromMs: start + Math.round(k.atSeconds * 1000),
+    toMs: start + Math.round(t1 * 1000),
+  };
+}
+
 export function kickPressureFor(params: {
   combat: AtomicArenaCombat;
   owner: ICombatUnit;
@@ -159,7 +187,10 @@ export function kickPressureFor(params: {
   const roundEndS = (roundEndMs(combat as never) - start) / 1000;
   const spans = (side: ICombatUnit[]) =>
     reconstructEnemyCDTimeline(side, combat).players.flatMap((pl) =>
-      pl.offensiveCDs.map((cd) => ({ ...burstCastSpan(cd), spell: cd.spellName })),
+      pl.offensiveCDs.map((cd) => ({
+        ...burstCastSpan(cd),
+        spell: cd.spellName,
+      })),
     );
   const ourSpans = spans(friends);
   const enemySpans = spans(enemies);
@@ -183,6 +214,9 @@ export function kickPressureFor(params: {
     against: Array<{ from: number; to: number; spell: string }>,
     t0: number,
     t1: number,
+    // the lockout itself, in whole ms (`kickPressureSpanMs`): the trough's
+    // samples are bounded to it
+    span: { fromMs: number; toMs: number },
   ): KickSidePressure => {
     const s0 = Math.floor(t0);
     // the seconds the lockout is PRINTED on (fmtTime floors): a tick up to
@@ -190,11 +224,6 @@ export function kickPressureFor(params: {
     // (work order 2026-10-14b Part 2: 1bad0a5c 37 vs 43 in the lock,
     // 2c6e85ec 35 vs 41.7, 3306e8ee 21 vs 49.5 — each the row's only ≤ 40)
     const s1 = Math.floor(t1);
-    // the lockout itself, in whole ms: the trough's samples are bounded to it
-    const span = {
-      fromMs: start + Math.round(t0 * 1000),
-      toMs: start + Math.round(t1 * 1000),
-    };
     let gridLow = false;
     let low: KickSidePressure["low"];
     for (const u of units) {
@@ -214,7 +243,12 @@ export function kickPressureFor(params: {
     let death: KickSidePressure["death"];
     for (const u of units) {
       const d = deathS(u);
-      if (d !== null && d >= t0 && d <= t1 + KICK_OUTCOME_S && (!death || d < death.atSec))
+      if (
+        d !== null &&
+        d >= t0 &&
+        d <= t1 + KICK_OUTCOME_S &&
+        (!death || d < death.atSec)
+      )
         death = { unit: u.name, atSec: d };
     }
     const running = against.filter((b) => b.from <= t0 && b.to > t0);
@@ -238,8 +272,9 @@ export function kickPressureFor(params: {
     // read after a Solo Shuffle round's ending death; `roundEndMs`)
     // (`kickTextLockEndMs`, the kick-eaten text's own end)
     const t1 = Math.min(kickTextLockEndMs(k) / 1000, roundEndS);
-    const ours = side(friends, enemySpans, t0, t1);
-    const theirs = side(enemies, ourSpans, t0, t1);
+    const span = kickPressureSpanMs(k, combat);
+    const ours = side(friends, enemySpans, t0, t1, span);
+    const theirs = side(enemies, ourSpans, t0, t1, span);
     const burstReady: string[] = [];
     if (!sideUnderPressure(ours) && !sideUnderPressure(theirs)) {
       const s = Math.floor(t0);
