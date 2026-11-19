@@ -18,7 +18,7 @@
  */
 import {
   type BurstWindowDecisionPoint,
-  pressWentElsewhere,
+  pressDidNotReachPressured,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 
 export interface BurstWindowPriorRow {
@@ -65,8 +65,8 @@ function cellOf(points: BurstWindowDecisionPoint[]): BurstWindowPriorCell {
   const deathRate = (ps: BurstWindowDecisionPoint[]) =>
     ps.length ? r2(ps.filter((p) => p.anyFriendlyDeath).length / ps.length) : 0;
   // T180: a kind of answer is counted for a window only when a press of
-  // that kind answered it — a kind whose every press went elsewhere
-  // (`pressWentElsewhere`, the predicate `responded` reads) is a press, not
+  // that kind answered it — a kind whose every press went elsewhere or is ignored
+  // (`pressDidNotReachPressured`, the predicate `responded` reads) is a press, not
   // an answer
   const answeredBy = (p: BurstWindowDecisionPoint, k: ResponseKey) => {
     if (!p.responses[k]) return false;
@@ -75,7 +75,7 @@ function cellOf(points: BurstWindowDecisionPoint[]): BurstWindowPriorCell {
     return !(
       pr !== null &&
       casts.length > 0 &&
-      casts.every((r) => pressWentElsewhere(pr, r))
+      casts.every((r) => pressDidNotReachPressured(pr, r))
     );
   };
   const topResponses = RESPONSE_KEYS.map(

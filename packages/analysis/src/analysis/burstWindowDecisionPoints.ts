@@ -873,17 +873,18 @@ function healsOnlyItsCaster(spellId: string): boolean {
  *  - a healing cooldown that healed others and not the pressured unit: one
  *    whose per-recipient aura / heal rows went on others. NOT a self-only
  *    heal or shield pressed by another unit (ruling R75, 2026-11-19: a
- *    warlock's own Dark Pact cannot be given to the mate, so it is not a
- *    press that went elsewhere) — self-only by the official verdict
- *    (`HEALING_VERDICTS.official.healsOthers === false`) or by the press's
- *    own rows (`selfOnlyEffect`, T123's reading);
+ *    warlock's own Dark Pact cannot be given to the mate, so it did not go
+ *    "elsewhere"; it is ignored — `pressDidNotReachPressured`) — self-only
+ *    by the official verdict (`HEALING_VERDICTS.official.healsOthers ===
+ *    false`) or by the press's own rows (`selfOnlyEffect`, T123's reading);
  *  - a control that did not land (03d63165 r1: a Storm Bolt MISSED) —
  *    control only (R75): an interrupt that interrupted nothing
- *    (`INTERRUPT_IDS`, spellMeta's own class) is not one.
+ *    (`INTERRUPT_IDS`, spellMeta's own class) is ignored the same way.
  * Such a press is no answer for that unit: `responded` (the
  * slow-defensive-response door) does not count it, and the `[BURST
  * ANSWERED]` credit line (`answersPressured`) never credited it — both ask
- * this one function. NOT here, by the same ruling: another unit's own wall
+ * `pressDidNotReachPressured`, which is this function plus R75's two
+ * ignored presses. NOT here, by the same ruling: another unit's own wall
  * (the pressured unit's own tools are not all in the response list — the
  * "unanswered" would be that list's blind spot), a control off before the
  * opener (a projectile in flight reads as off), and a press that reached
@@ -917,13 +918,15 @@ export function pressWentElsewhere(
 }
 
 /**
- * R75's other half: the two presses the ruling took OUT of "went elsewhere"
- * still reach nobody but their presser, so the `[BURST ANSWERED]` line goes
- * on refusing them as the pressured unit's answer, as it did before T180 —
+ * What `responded` and the `[BURST ANSWERED]` line both ask (T180): did
+ * this press reach the pressured unit at all? No when it went elsewhere
+ * (`pressWentElsewhere`), and no for the two presses ruling R75 IGNORES —
  * a self-only heal / shield of another unit (06bb9860: one warlock's Dark
- * Pact credited for another player's dip), an interrupt that interrupted
- * nothing (9d899d10: a reflected Counterspell). They keep the window
- * `responded`; they are never named as what answered it.
+ * Pact under another player's dip; it cannot be given to the mate) and an
+ * interrupt that interrupted nothing (9d899d10: a reflected Counterspell).
+ * An ignored press neither answers the window nor is a press that "went
+ * elsewhere": a window with nothing but ignored presses is plainly
+ * unanswered.
  */
 export function pressDidNotReachPressured(
   pressured: { unitId: string },
@@ -2199,14 +2202,16 @@ export function burstWindowDecisionPoints(
         kite,
         attackerMoved,
       };
-      // T180 (rulings R65 / R68): a press that went elsewhere is no answer
-      // for the pressured unit (`pressWentElsewhere`); `responses` above
-      // stays what was pressed
+      // T180 (rulings R65 / R68 / R75): a press that went elsewhere, and a
+      // press R75 ignores (another unit's self-only save, an interrupt that
+      // interrupted nothing), is no answer for the pressured unit
+      // (`pressDidNotReachPressured`); `responses` above stays what was
+      // pressed
       const responded =
         responses.kite ||
         responses.attackerMoved ||
         responseCasts.some(
-          (r) => !pressured || !pressWentElsewhere(pressured, r),
+          (r) => !pressured || !pressDidNotReachPressured(pressured, r),
         );
       const firstResponseSec = responseCasts.length
         ? Math.min(...responseCasts.map((r) => r.latencySec))

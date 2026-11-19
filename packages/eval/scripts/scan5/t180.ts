@@ -23,6 +23,7 @@
  */
 import {
   burstWindowDecisionPoints,
+  pressDidNotReachPressured,
   pressWentElsewhere,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
@@ -38,8 +39,6 @@ export const CHECKS = [
 
 const REFUSALS = [
   "another unit's own wall",
-  "another unit's self-only heal",
-  "interrupt that interrupted nothing",
   "control off before the opener",
   "over before the trough",
   "pressed after the unit died",
@@ -55,17 +54,18 @@ function elsewhere(r: any): string {
       : "healing CD that healed others";
 }
 
+/** the window's class: its first press that went elsewhere, or — R75 —
+ * "only ignored presses" when all it holds is another unit's self-only save
+ * or an interrupt that interrupted nothing */
+function kindOf(pr: any, casts: any[]): string {
+  const e = casts.find((r) => pressWentElsewhere(pr, r));
+  return e ? elsewhere(e) : "only ignored presses";
+}
+
 function refusal(pr: any, r: any): string {
   if (r.afterPressuredDeath) return "pressed after the unit died";
-  if (r.category === "control" && r.landed === false)
-    return "interrupt that interrupted nothing";
   if (r.category === "control") return "control off before the opener";
-  if (
-    r.category === "healCd" &&
-    r.casterId !== pr.unitId &&
-    r.effectOnUnitIds === undefined
-  )
-    return "another unit's self-only heal";
+
   if (r.category === "wall" && r.casterId !== pr.unitId)
     return "another unit's own wall";
   if (
@@ -103,13 +103,12 @@ export function run(ctx: IRoundCtx): void {
     if (p.responses.kite || p.responses.attackerMoved) continue;
     const at = ctx.start + p.tSec * 1000;
     const fact = `${ctx.roundKey}|${owner.reaction}|${p.tSec}`;
-    const first = p.responseCasts[0]!;
     const detail = `window at ${p.tSec}s (${nameOf(p.leadCd.spellId, (p.leadCd as any).spellName)}): ${p.responseCasts.map((r) => `${nameOf(r.spellId, (r as any).spellName)} [${pressWentElsewhere(pr, r) ? elsewhere(r) : answersPressured(pr, r) ? "reaches" : refusal(pr, r)}]`).join(", ")}; pressured low ${pr.minHpPct ?? "?"}%${p.anyFriendlyDeath ? ", a friendly died" : ""}; engine responded=${p.responded}`;
-    if (p.responseCasts.every((r) => pressWentElsewhere(pr, r))) {
+    if (p.responseCasts.every((r) => pressDidNotReachPressured(pr, r))) {
       if (p.responded)
         ctx.violate(
           "respondedOnElsewherePress",
-          elsewhere(first),
+          kindOf(pr, p.responseCasts),
           at,
           fact,
           detail,
@@ -117,7 +116,7 @@ export function run(ctx: IRoundCtx): void {
       continue;
     }
     if (p.responseCasts.every((r) => !answersPressured(pr, r))) {
-      const r = p.responseCasts.find((x) => !pressWentElsewhere(pr, x))!;
+      const r = p.responseCasts.find((x) => !pressDidNotReachPressured(pr, x))!;
       ctx.violate("respondedOnRefusedPress", refusal(pr, r), at, fact, detail);
     }
   }

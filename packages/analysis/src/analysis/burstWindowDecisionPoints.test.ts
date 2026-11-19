@@ -380,8 +380,7 @@ describe("burstWindowDecisionPoints — response classification", () => {
     expect(run([cast("53480", 14, "F1")]).responded).toBe(true);
     // Exhilaration: a healing CD that officially heals its caster alone.
     // Ruling R75: it cannot be given to the mate, so it is NOT a press that
-    // went elsewhere — the window stays responded — and the credit line
-    // still does not name it as the pressured unit's answer
+    // went elsewhere — it is ignored: no answer, the window is unanswered
     const exh = run([cast("109304", 14)]);
     expect(exh.responseCasts.map((r) => r.category)).toEqual(["healCd"]);
     expect(pressWentElsewhere(exh.pressured!, exh.responseCasts[0]!)).toBe(
@@ -390,7 +389,7 @@ describe("burstWindowDecisionPoints — response classification", () => {
     expect(
       pressDidNotReachPressured(exh.pressured!, exh.responseCasts[0]!),
     ).toBe(true);
-    expect(exh.responded).toBe(true);
+    expect(exh.responded).toBe(false);
     // NOT taken by the ruling: another unit's own wall keeps the window
     // responded (Bear Form is a wall here)
     const wall = run([cast("5487", 14)]);
@@ -1281,7 +1280,7 @@ describe("burstWindowDecisionPoints — where a control answer landed (T12 ⑧ i
   });
 
   // ruling R75: "a control that did not land" is control only
-  it("an interrupt that interrupted nothing is not a press that went elsewhere", () => {
+  it("an interrupt that interrupted nothing is ignored: not elsewhere, no answer", () => {
     const PUMMEL = "6552";
     const p = burstWindowDecisionPoints(
       combat([
@@ -1293,7 +1292,7 @@ describe("burstWindowDecisionPoints — where a control answer landed (T12 ⑧ i
     expect([r.category, r.landed]).toEqual(["control", false]);
     expect(pressWentElsewhere(p.pressured!, r)).toBe(false);
     expect(pressDidNotReachPressured(p.pressured!, r)).toBe(true);
-    expect(p.responded).toBe(true);
+    expect(p.responded).toBe(false);
   });
 
   it("an aimed control that did not land carries its target and no application", () => {
