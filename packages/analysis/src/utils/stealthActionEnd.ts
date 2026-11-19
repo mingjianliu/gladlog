@@ -9,7 +9,10 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { castsOfEffectAura } from "../data/castEffectAuras";
 import { spellEffectData } from "../data/spellEffectData";
-import { ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS } from "../data/spellIdLists";
+import {
+  ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
+  ENEMY_INVISIBILITY_AURAS,
+} from "../data/spellIdLists";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "../data/spellStateAttrsGenerated";
 import { buildAuraIntervals, SAVE_CAST_AURA_PAIR_S } from "./auraIntervals";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
@@ -43,6 +46,24 @@ export const STEALTH_IMMUNITY_IN_FLIGHT_MS = 1000;
 export const KW_UNTARGETABLE_AURA_IDS: ReadonlySet<string> = new Set([
   "414664",
   "408558",
+]);
+
+/**
+ * The auras a kill window's `defenseless` span is cut for while they are UP
+ * and for nothing else: `KW_UNTARGETABLE_AURA_IDS`, and the invisibility a
+ * fact line states (`ENEMY_INVISIBILITY_AURAS`: Greater Invisibility). User
+ * ruling R58 (2026-11-18) took Greater Invisibility out of the mitigation
+ * roster — it reduces no damage, is no immunity, and a ready one protects
+ * nothing — and with the roster row went the only thing that kept its
+ * seconds out of a span (batch review 80-PIPE-160-B146, 1405c83e round 2:
+ * applied 165.612 s, removed 166.205 s, inside `defenseless 158.6–166.9 s`).
+ * A unit nobody can see is no kill target while the aura is up; the end is
+ * `untargetableEndS` — the logged REMOVED, or the holder's first own action
+ * for an end the log never showed. Nothing is read from a ready button.
+ */
+export const KW_SPAN_UNSEEN_AURA_IDS: ReadonlySet<string> = new Set([
+  ...KW_UNTARGETABLE_AURA_IDS,
+  ...Object.keys(ENEMY_INVISIBILITY_AURAS),
 ]);
 
 /**

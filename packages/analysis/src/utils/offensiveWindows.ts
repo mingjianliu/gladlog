@@ -39,7 +39,7 @@ import {
   isBelowWallFloorExternal,
   isStolenAuraAcquisition,
   KW_REDIRECT_PROTECTION_AURA_IDS,
-  KW_UNTARGETABLE_AURA_IDS,
+  KW_SPAN_UNSEEN_AURA_IDS,
   ownPressedShieldSpansMs,
   ownSaveSpanS,
   ownWallSpanS,
@@ -764,9 +764,11 @@ export function computeOffensiveWindowsUncached(
           iv.spellId,
         );
       if (shieldSpans.length > 0) continue;
-      if (KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
+      if (KW_SPAN_UNSEEN_AURA_IDS.has(iv.spellId))
         // round-3 q6 / fact3 D54: Mass Invisibility and Phase Shift; an end
-        // the log never showed is the holder's first action after it
+        // the log never showed is the holder's first action after it.
+        // Greater Invisibility the same, while its aura is up and no longer
+        // (R58: no roster row, nothing in hand)
         addSave(
           holder.id,
           {

@@ -7,6 +7,11 @@
  * and died in that burst). Every reader of "a protection was up or in hand"
  * leaves it out; its `[ENEMY DEF]` line is the fact `(invisible, …)`.
  */
+import {
+  CombatUnitReaction,
+  CombatUnitSpec,
+  LogEvent,
+} from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -36,6 +41,7 @@ import {
   SAVE_AURA_END_UNSEEN_NAMES,
   SELF_SAVE_IDS,
 } from "../src/utils/enemyDefensives";
+import { computeOffensiveWindows } from "../src/utils/offensiveWindows";
 import {
   INVISIBLE_ENDED_AT_ONCE,
   INVISIBLE_LEGEND,
@@ -44,6 +50,15 @@ import {
   selfDefensiveLabelWords,
   statesSelfDefensiveLabel,
 } from "../src/utils/selfDefensiveMechanism";
+import {
+  KW_SPAN_UNSEEN_AURA_IDS,
+  KW_UNTARGETABLE_AURA_IDS,
+} from "../src/utils/stealthActionEnd";
+import {
+  makeAuraEvent,
+  makeSpellCastEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 const CAST = "110959";
 const AURA = "110960";
@@ -115,5 +130,92 @@ describe("Greater Invisibility is no defense that is up or in hand (R58)", () =>
     expect(INVISIBLE_ENDED_AT_ONCE).toBe("ended at once");
     expect(invisibleLengthWords("0.1s")).toBe("0.1s");
     expect(invisibleLengthWords("end not logged")).toBe("end not logged");
+  });
+});
+
+// Batch review 80-PIPE-160-B146 (1405c83e round 2: invisibility applied
+// 165.612 s, removed 166.205 s, inside `defenseless 158.6–166.9 s`): with the
+// roster row gone nothing kept the invisible seconds out of a kill window.
+describe("a kill window holds no second the unit is invisible (R58: aura up, nothing in hand)", () => {
+  const T0 = 1_000_000;
+  const at = (s: number) => T0 + s * 1000;
+  const combat = { startTime: T0, endTime: at(107), units: {} } as never;
+  // a unit whose only roster defensive is spent at 50 s: one span after it
+  const target = () =>
+    makeUnit("e1", {
+      name: "EnemyDruid",
+      spec: CombatUnitSpec.Druid_Feral,
+      reaction: CombatUnitReaction.Hostile,
+      info: {},
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "22812",
+          at(50),
+          "e1",
+          "EnemyDruid",
+          "e1",
+          "EnemyDruid",
+        ),
+      ],
+    });
+  const aura = (event: LogEvent, s: number) =>
+    makeAuraEvent(event, AURA, at(s), "e1", "e1", "BUFF") as never;
+
+  it("the set is the untargetable auras and the invisibility, and only the kill-window span reads it", () => {
+    expect([...KW_SPAN_UNSEEN_AURA_IDS].sort()).toEqual(
+      [...KW_UNTARGETABLE_AURA_IDS, AURA].sort(),
+    );
+    // not an untargetable-immunity member: KILL ATTEMPTS still does not count it
+    expect(KW_UNTARGETABLE_AURA_IDS.has(AURA)).toBe(false);
+  });
+
+  it("a logged aura cuts the span for exactly the time it is up", () => {
+    const base = computeOffensiveWindows([target()] as never, [], combat);
+    expect(base).toHaveLength(1);
+    const from = base[0]!.fromSeconds;
+    const u = target();
+    u.auraEvents.push(
+      aura(LogEvent.SPELL_AURA_APPLIED, from + 7),
+      aura(LogEvent.SPELL_AURA_REMOVED, from + 7.593),
+    );
+    const w = computeOffensiveWindows([u] as never, [], combat);
+    // no span holds an invisible instant…
+    for (const x of w)
+      expect(
+        x.toSeconds <= from + 7.001 || x.fromSeconds >= from + 7.592,
+        `${x.fromSeconds}–${x.toSeconds}`,
+      ).toBe(true);
+    // …and the span is back when the aura is off
+    expect(
+      w.some(
+        (x) => x.fromSeconds >= from + 7.59 && x.fromSeconds <= from + 7.6,
+      ),
+    ).toBe(true);
+  });
+
+  it("an end the log never showed is the holder's first own press — not the official length", () => {
+    const base = computeOffensiveWindows([target()] as never, [], combat);
+    const from = base[0]!.fromSeconds;
+    const u = target();
+    u.auraEvents.push(aura(LogEvent.SPELL_AURA_APPLIED, from + 2));
+    u.spellCastEvents.push(
+      makeSpellCastEvent(
+        "8921",
+        at(from + 9),
+        "x",
+        "X",
+        "e1",
+        "EnemyDruid",
+      ) as never,
+    );
+    const w = computeOffensiveWindows([u] as never, [], combat);
+    for (const x of w)
+      expect(
+        x.toSeconds <= from + 2.001 || x.fromSeconds >= from + 8.999,
+        `${x.fromSeconds}–${x.toSeconds}`,
+      ).toBe(true);
+    expect(
+      w.some((x) => x.fromSeconds >= from + 8.9 && x.fromSeconds <= from + 9.1),
+    ).toBe(true);
   });
 });

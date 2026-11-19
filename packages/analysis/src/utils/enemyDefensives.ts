@@ -447,6 +447,7 @@ export function isOwnPressedShieldRun(
 export {
   holderFirstOwnActionAfterMs,
   isMeleeSwingRow,
+  KW_SPAN_UNSEEN_AURA_IDS,
   KW_UNTARGETABLE_AURA_IDS,
   STEALTH_IMMUNITY_IN_FLIGHT_MS,
   STEALTH_KEPT_BY_ALLOWED_PRESS_IDS,
