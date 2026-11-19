@@ -137,6 +137,20 @@ export const NO_PRESS_SUFFIX = " (no press)";
  * duplicateLine). */
 export const GENERIC_PRESS_AFTER_MS = 1000;
 
+/** A press row at most this many lines of the file after the aura row is
+ * that aura's press whatever the two stamps say: with over
+ * `GENERIC_PRESS_AFTER_MS` between them the file wrote at most one row in
+ * that time — a log-write stall, the press row stamped when the batch was
+ * flushed (fact14 D13, 6df8aae6 0:13: Army of the Dead's aura row at
+ * 13.465 s, the file's next row 1.568 s later, the press row one line
+ * after that; the aura ran its exact 30.003 s from its own row). Two lines
+ * is how a press and its own aura stand in the file: 6,186 of 6,841
+ * same-name pairs on 16 archives (scan5/t186 `pressRowDistance`), the
+ * audited pair among them. 605: no `(no press)` occurrence has such a
+ * press (0 of 619; the 67 a later press follows have 68–1,030 rows
+ * between). */
+export const PRESS_ROW_ADJACENT_LINES = 2;
+
 function genericCdOfAura(
   auraSpellId: string,
   /** the unit's spec: its own buff, so the caster's (GH #184 part B) */
@@ -521,6 +535,28 @@ export function auraOffensiveOccurrences(
             effectAurasOfCast(c.spellId!).includes(iv.spellId)),
       );
       if (pressed) continue;
+      // the press row stands right after the aura row in the file, its
+      // stamp late: a log-write stall (`PRESS_ROW_ADJACENT_LINES`)
+      const auraLine = events.find(
+        (a) =>
+          a.spellId === iv.spellId &&
+          a.logLine.timestamp === startMs &&
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+      )?.logLine.lineIndex;
+      if (
+        auraLine !== undefined &&
+        successes.some((c) => {
+          const line = c.logLine.lineIndex;
+          return (
+            line !== undefined &&
+            line > auraLine &&
+            line <= auraLine + PRESS_ROW_ADJACENT_LINES &&
+            c.logLine.timestamp > startMs &&
+            isThisButton(c)
+          );
+        })
+      )
+        continue;
       // the run under way listed again, not an aura that went up: a row of
       // the batch that re-states the unit after it was unseen
       // (`isResyncBatchAt`) which re-lists a run still going

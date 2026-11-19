@@ -15,6 +15,11 @@
  *    two rows — nothing (the next row of the file after the aura row's
  *    millisecond is the batch the press is in) or rows — and the spell.
  *    Counted: every generic `(no press)` occurrence.
+ *  - `pressRowDistance` (an inventory, out of the total): for every player's
+ *    self-applied aura with a SUCCESS of the same name by that unit within
+ *    1 s after its row, how many lines of the file the press row stands
+ *    after the aura row — the measurement behind the producer's
+ *    `PRESS_ROW_ADJACENT_LINES`.
  */
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
@@ -23,9 +28,23 @@ import {
 } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
-import { type IRoundCtx, successesOf, tsOf } from "./ctx";
+import { APPLIED, ev, type IRoundCtx, successesOf, tsOf } from "./ctx";
 
-export const CHECKS = ["noPressBesideLatePress"] as const;
+export const CHECKS = ["noPressBesideLatePress", "pressRowDistance"] as const;
+const DIST_KINDS = [
+  "1-2 lines",
+  "3-4 lines",
+  "5-8 lines",
+  "9-20 lines",
+  "over 20 lines",
+  "press row first",
+];
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
+  DIST_KINDS.flatMap((k) => [
+    `pressRowDistance|${k} | same ms`,
+    `pressRowDistance|${k} | later ms`,
+  ]),
+);
 
 /** how far after the aura row a press of the button is looked for */
 const LATE_PRESS_MS = 5000;
@@ -69,6 +88,44 @@ export function run(ctx: IRoundCtx): void {
   const C = "noPressBesideLatePress";
   const bounds = { startTime: ctx.start, endTime: roundEndMs(ctx.legacy) };
   for (const u of ctx.players) {
+    const own = successesOf(u);
+    for (const a of (u.auraEvents ?? []) as any[]) {
+      if (ev(a) !== APPLIED || a.srcUnitId !== u.id || a.destUnitId !== u.id)
+        continue;
+      const al = a.logLine?.lineIndex;
+      if (al === undefined) continue;
+      const at = tsOf(a);
+      const nm = getEnglishSpellName(String(a.spellId), a.spellName ?? "");
+      const c = own.find(
+        (x) =>
+          tsOf(x) >= at &&
+          tsOf(x) <= at + 1000 &&
+          x.logLine?.lineIndex !== undefined &&
+          getEnglishSpellName(String(x.spellId), x.spellName ?? "") === nm,
+      );
+      if (!c) continue;
+      ctx.bump("pressRowDistance");
+      const d = c.logLine.lineIndex - al;
+      const k =
+        d < 0
+          ? "press row first"
+          : d <= 2
+            ? "1-2 lines"
+            : d <= 4
+              ? "3-4 lines"
+              : d <= 8
+                ? "5-8 lines"
+                : d <= 20
+                  ? "9-20 lines"
+                  : "over 20 lines";
+      ctx.violate(
+        "pressRowDistance",
+        `${k} | ${tsOf(c) === at ? "same ms" : "later ms"}`,
+        at,
+        `${ctx.roundKey}|${u.id}|${a.spellId}|${at}`,
+        `${u.name} ${nm}: press row ${d} lines after the aura row, ${tsOf(c) - at} ms later`,
+      );
+    }
     let occ: ReturnType<typeof auraOffensiveOccurrences>["occurrences"];
     try {
       occ = auraOffensiveOccurrences(u, bounds).occurrences;
