@@ -1550,5 +1550,10 @@
  *  Turtle), Healing Hands (Lay on Hands, an up-to range), Glaciate (Ray of
  *  Frost).
  *  See docs/prompt-version-history.md.
+ *
+ * v607 (2026-11-18; pipeline batch B135, T200): documents stored before
+ *  the parser kept statedStartTime get it from raw.txt's opening lines when
+ *  opened (desktop; no prompt change).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 606;
+export const PROMPT_VERSION = 607;

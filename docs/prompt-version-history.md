@@ -7763,3 +7763,18 @@ on Hands, Ray of Frost or Aspect of the Turtle or a legend line those print
 Aspect of the Turtle is now back in time (3 views of a [DEATH] line and its
 Counterfactual line). Codex branch review 85-tk-CD-T135-1 (#1 fixed) and -1b
 (one synthetic point recorded).
+
+v607 (2026-11-18; pipeline batch B135, T200). Desktop only: a stored document
+parsed before T90 carries no stated instant for its rounds. When it is opened,
+statedStartBackfill (shared/) reads each round's own opening line from
+raw.txt, matching opening lines to rounds by sequence number, and writes the
+instant back. Per-round reads check the opened file against its sidecar rather
+than its path (the T220 review's #1, with a swap test that was red before).
+Measured: on 20 real pre-T90 documents the backfill equals a fresh parse 95 /
+95; in the built app 9 old documents opened, 9 healed, 39 / 39 equal. The
+parser oracle's missing known diffs were three dead allowlist caps (L2:block-
+added MANA / REFLECTED / ABSORBED: the old side's prompt now carries those
+tags too); they are removed from the oracle baseline in eval-private, not in
+this tree. Desktop only: no file the capture imports changes, so the 605
+output is unchanged by construction. Codex branch review 85-tk-ENG-T200-1, -1b
+(both REQUEST_CHANGES, fixed) and -1c APPROVE.
