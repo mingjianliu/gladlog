@@ -18,7 +18,7 @@ import {
   effectAurasOfCast,
 } from "../data/castEffectAuras";
 import { HASTE_DURATION_SPELL_IDS } from "../data/channeledGenerated";
-import { wallDoorPct } from "../data/mitigationComponents";
+import { allSchoolsDoorPct, wallDoorPct } from "../data/mitigationComponents";
 import {
   DEFLECTION_IDS,
   hasNoOwnPercentage,
@@ -824,6 +824,14 @@ export function enemySaveEffectNote(
  * as OBSERVED"). One literal for the renderer, the legend and the gate
  * (`checkEnemyDefEndNotLogged`).
  */
+/** Presses that print a talent-reduction FACT line for a holder
+ * (`TALENT_REDUCTION_FACT_LINE_NAMES` are their printed names): Feint 1966,
+ * whose 20 % is Elusiveness' (`MITIGATION_TABLE`, `wholeReductionTalentId`).
+ * Ruling R52 (a), pipeline T214. Registered in curatedIdRegistry. */
+export const TALENT_REDUCTION_FACT_LINE_IDS: ReadonlySet<string> = new Set([
+  "1966",
+]);
+
 export const ENEMY_DEF_END_NOT_LOGGED = "end not logged";
 /** fact11 D34: an immunity press with no aura row (`immunityPressesWithoutAura`) */
 export const ENEMY_DEF_NO_AURA_LOGGED = "no aura logged";
@@ -2879,6 +2887,50 @@ export function enemyDefensiveEventsUncached(
     });
   }
 
+  // Pipeline T214 (ruling R52 (a)): a press whose whole reduction is a
+  // talent's and which is in no wall family and no self-save list (Feint
+  // with Elusiveness) — for a unit that holds the talent, a FACT line with
+  // the reduction form, `Feint (20%, 6.0s)`. Kind "self-save" with a
+  // `reduction` mechanism: no span reader, no KILL ATTEMPTS cause
+  // (`selfSaveCasts` does not list it), no table reader beyond the pricing
+  // it already had.
+  for (const cast of enemy.spellCastEvents ?? []) {
+    if (
+      cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+      !cast.spellId ||
+      !TALENT_REDUCTION_FACT_LINE_IDS.has(cast.spellId)
+    )
+      continue;
+    const pct = wallDoorPct(cast.spellId, {
+      carrierIsCaster: true,
+      caster: enemy,
+    });
+    if (!pct) continue;
+    const atSeconds = (cast.logLine.timestamp - combat.startTime) / 1000;
+    const own = auraPairedToCast(
+      cast.spellId,
+      atSeconds,
+      intervalsOf(enemy),
+      enemy.id,
+    );
+    out.push({
+      atSeconds,
+      pressSeconds: atSeconds,
+      spellId: cast.spellId,
+      spellName: getEnglishSpellName(cast.spellId, cast.spellName),
+      casterName: enemy.name,
+      casterId: enemy.id,
+      kind: "self-save",
+      mechanism: { kind: "reduction", pct },
+      ...(own
+        ? {
+            observedSeconds: own.toS - own.fromS,
+            ...earlyEndOf(enemy, own, own.spellId),
+          }
+        : { removedEarly: false }),
+    });
+  }
+
   // fact10 D25 (user 2026-11-04): a passive absorb proc — a fact line only
   // (`PASSIVE_ABSORB_PROC_AURAS`, kind "passive")
   for (const iv of intervalsOf(enemy)) {
@@ -3025,7 +3077,20 @@ export function enemyDefensiveEventsUncached(
       (combat as { units?: Record<string, ICombatUnit> }).units ?? {},
     ),
   )) {
-    const mechanism = selfDefensiveMechanism(c.spellId);
+    const classified = selfDefensiveMechanism(c.spellId);
+    // a dodge that on THIS unit also takes a percentage off all damage
+    // (Evasion for an Elusiveness holder — the table's talent-whole row,
+    // priced by the one pricing path; ruling R52 (b), pipeline T214)
+    const dodgeAllDamagePct =
+      classified?.kind === "dodge"
+        ? // what EVERY school loses, not the strongest school's (Bait and
+          // Switch adds 15 % on magic alone: 20 % physical / 32 % magic)
+          allSchoolsDoorPct(c.spellId, { carrierIsCaster: true, caster: enemy })
+        : undefined;
+    const mechanism =
+      classified?.kind === "dodge" && dodgeAllDamagePct
+        ? { ...classified, allDamagePct: dodgeAllDamagePct }
+        : classified;
     // An absorb and a percentage reduction carry what the log shows of the
     // caster's own aura of the cast's id — how long it was up, with the
     // existing end notes, and for a shield what it absorbed (Feign Death's

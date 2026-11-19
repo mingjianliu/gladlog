@@ -71,7 +71,13 @@ export type SelfDefensiveMechanism =
   | { kind: "control removal"; mechanics: readonly string[] }
   /** more movement speed, by an official percentage */
   | { kind: "movement speed"; pct: number }
-  | { kind: EnemySelfDefensiveHandMechanism }
+  | {
+      kind: EnemySelfDefensiveHandMechanism;
+      /** a dodge that, on this unit, also takes a percentage off ALL damage
+       * — Evasion for an Elusiveness holder (`MITIGATION_TABLE`'s
+       * talent-whole row, priced per unit; ruling R52 (b), pipeline T214) */
+      allDamagePct?: number;
+    }
   /** a grip / a damage redirect (rulings A20 + U3) */
   | { kind: "redirect" }
   /** the unit went unseen — Greater Invisibility (`INVISIBLE_FACT_LINE_IDS`,
@@ -230,7 +236,9 @@ export function selfDefensiveLabelWords(m: SelfDefensiveMechanism): string {
     case "movement speed":
       return `+${m.pct}% movement speed`;
     default:
-      return m.kind;
+      return "allDamagePct" in m && m.allDamagePct !== undefined
+        ? `${m.kind}, ${m.allDamagePct}% all damage`
+        : m.kind;
   }
 }
 
@@ -281,6 +289,9 @@ export function statesSelfDefensiveLabel(
   if (!parenthesis.startsWith(open)) return false;
   const rest = parenthesis.slice(open.length);
   if (rest.startsWith(")")) return true;
+  // a dodge that also takes a percentage off all damage on its unit (the
+  // text does not carry the unit's talents: either form is the dodge's)
+  if (m.kind === "dodge") return DODGE_ALL_DAMAGE_REST_RE.test(rest);
   if (!carriesFigures(m)) return false;
   return m.kind === "absorb"
     ? /^(?: (?:\d+|<1)k)?(?:, |\))/.test(rest)
@@ -342,29 +353,50 @@ export const TIMED_IMMUNITY_LABEL_RE = / \([a-z]+(?: \/ [a-z]+)* immunity, /;
 export const TIMED_IMMUNITY_LEGEND =
   "`(silence / interrupt immunity, Ts)` = immune to silences and interrupts while it is up; it reduces no damage and is not one of the walls;";
 
-/** The two immunity legends a prompt prints with no `[ENEMY DEF]` line
- * carrying their own label form — the gate's reading of "printed only when
- * a line carries it", and of "the plain sentence does not print beside the
- * timed label alone" (ruling R56). */
-export function immunityLegendsWithoutCarrier(
-  lines: readonly string[],
-): string[] {
-  const defLines = lines.filter((l) => l.includes("[ENEMY DEF]"));
-  const printed = new Set(lines.map((l) => l.trim()));
-  return (
-    [
-      [PLAIN_IMMUNITY_LABEL_RE, PLAIN_IMMUNITY_LEGEND],
-      [TIMED_IMMUNITY_LABEL_RE, TIMED_IMMUNITY_LEGEND],
-    ] as const
-  )
-    .filter(
-      ([carried, legend]) =>
-        printed.has(legend) && !defLines.some((l) => carried.test(l)),
-    )
-    .map(([, legend]) => legend);
+/**
+ * Pipeline T214 (fact14 D39 / D40, user ruling R52, 2026-11-18). Elusiveness
+ * 79008 gives a rogue's Feint a 20 % reduction of non-area damage and its
+ * Evasion a 20 % reduction of all damage (`MITIGATION_TABLE` rows 1966 /
+ * 5277, `wholeReductionTalentId`; 605 corpus split: holder 0.800, non-holder
+ * 1.000 for both).
+ *  (a) a holder's Feint prints a FACT line, `Feint (20%, 6.0s)`, that no wall
+ *      reader counts — no `defenseless` cut, no `popped Feint`, no `gated`;
+ *  (b) a holder's Evasion prints `Evasion (dodge, 20% all damage)`.
+ * The names whose `X (N%, Ts)` line is such a fact line, and what the legend
+ * says of each form.
+ */
+export const TALENT_REDUCTION_FACT_LINE_NAMES: readonly string[] = ["Feint"];
+const TALENT_REDUCTION_FACT_LINE_RE = new RegExp(
+  String.raw`: (?:${TALENT_REDUCTION_FACT_LINE_NAMES.join("|")}) \(\d+%[,)]`,
+);
+/** Does an `[ENEMY DEF]` line carry a talent-reduction fact label
+ * (`: Feint (20%, …)`)? The gate's and the scans' reading of the line. */
+export const carriesTalentReductionFactLine = (enemyDefLine: string): boolean =>
+  TALENT_REDUCTION_FACT_LINE_RE.test(enemyDefLine);
+/** Is the text after such a line's spell name the reduction form
+ * (`(N%, …)` / `(N%)`)? */
+export const statesTalentReductionFactLabel = (afterName: string): boolean =>
+  /^\(\d+%[,)]/.test(afterName);
+/** The two legend sentences are the user's (ruling R56, 2026-11-18); the
+ * closing `;` is this legend list's own separator. */
+export const TALENT_REDUCTION_FACT_LEGEND =
+  "`Feint (N%, Ts)` = NOT one of the walls: N% less non-area damage on the unit while it is up; kill windows and KILL ATTEMPTS do not count it;";
+const DODGE_ALL_DAMAGE_REST_RE = /^, \d+% all damage\)/;
+/** Does an `[ENEMY DEF]` line carry the `(dodge, N% all damage)` label? */
+export const carriesDodgeAllDamageLabel = (enemyDefLine: string): boolean =>
+  / \(dodge, \d+% all damage\)/.test(enemyDefLine);
+/** The N of a line's `(dodge, N% all damage)` label; undefined without one. */
+export function dodgeAllDamagePctOf(enemyDefLine: string): number | undefined {
+  const m = / \(dodge, (\d+)% all damage\)/.exec(enemyDefLine);
+  return m ? Number(m[1]) : undefined;
 }
+export const DODGE_ALL_DAMAGE_LEGEND =
+  "`(dodge, N% all damage)` = a dodge-chance buff that also takes N% off all damage on this unit (its Elusiveness talent) while it is up;";
 
-const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
+const LABEL_LEGENDS: ReadonlyArray<{
+  carried: { test(line: string): boolean };
+  legend: string;
+}> = [
   {
     carried: / \(heal\)/,
     legend:
@@ -403,6 +435,17 @@ const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
       "`(dodge)` = a dodge-chance buff: attacks that can be dodged are dodged while it is up — no other damage is reduced;",
   },
   {
+    // ruling R52 (b) + R56, pipeline T214: the plain `(dodge)` entry above
+    // says "no other damage is reduced", which is not this unit's Evasion —
+    // its key does not match this label, so it never prints for it
+    carried: { test: carriesDodgeAllDamageLabel },
+    legend: DODGE_ALL_DAMAGE_LEGEND,
+  },
+  {
+    carried: TALENT_REDUCTION_FACT_LINE_RE,
+    legend: TALENT_REDUCTION_FACT_LEGEND,
+  },
+  {
     carried: / \(spell reflect\)/,
     legend:
       "`(spell reflect)` = harmful spells cast at the unit are reflected while it is up;",
@@ -438,4 +481,35 @@ export function selfDefensiveLabelLegends(
       enemyDefLines.some((l) => carried.test(l)),
     ).map(({ legend }) => legend),
   ];
+}
+
+/**
+ * The label legends a prompt prints with no `[ENEMY DEF]` line carrying
+ * their label — the gate's reading of `selfDefensiveLabelLegends`' own rule
+ * ("emitted only when a line carries it"). It is what keeps a sentence from
+ * standing beside a label it does not describe: the plain `(dodge)` entry
+ * ("no other damage is reduced") must not print for a prompt whose only
+ * Evasion line is `(dodge, N% all damage)` (pipeline T214).
+ */
+export function labelLegendsWithoutCarrier(lines: readonly string[]): string[] {
+  const defLines = lines.filter((l) => l.includes("[ENEMY DEF]"));
+  const printed = new Set(lines.map((l) => l.trim()));
+  return LABEL_LEGENDS.filter(
+    ({ carried, legend }) =>
+      printed.has(legend) && !defLines.some((l) => carried.test(l)),
+  ).map(({ legend }) => legend);
+}
+
+/** The two immunity legends among them — the plain list and the timed label
+ * (pipeline T213, ruling R56: the plain sentence does not print beside the
+ * timed label alone). One carrier rule, `labelLegendsWithoutCarrier`; this
+ * names the two entries its timed-immunity gate reports. */
+export function immunityLegendsWithoutCarrier(
+  lines: readonly string[],
+): string[] {
+  const immunity: readonly string[] = [
+    PLAIN_IMMUNITY_LEGEND,
+    TIMED_IMMUNITY_LEGEND,
+  ];
+  return labelLegendsWithoutCarrier(lines).filter((l) => immunity.includes(l));
 }

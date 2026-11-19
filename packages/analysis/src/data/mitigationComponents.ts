@@ -361,3 +361,34 @@ export function wallDoorPct(
     ? strongestComponentPct(res, { includeImmunity: true })?.pctMin
     : undefined;
 }
+
+/** every school bit of a log `spellSchoolId` */
+const ALL_SCHOOLS_MASK = 0x7f;
+
+/**
+ * The % one wall application takes off damage of EVERY school: the weakest
+ * school's lower bound (an immunity counts as all of it), 0 for a school no
+ * component covers. What a label that says `N% all damage` may print —
+ * `wallDoorPct` is the strongest component, and Evasion for an Elusiveness
+ * rogue with Bait and Switch resolves to 20 % physical / 32 % magic (codex
+ * 85-tk-WIN-T214-2 #1: the line read `32% all damage`). Undefined = not a
+ * table entry.
+ */
+export function allSchoolsDoorPct(
+  spellId: string,
+  ctx: IMitigationContext,
+): number | undefined {
+  const res = resolveMitigation(spellId, ctx);
+  if (!res) return undefined;
+  let weakest = Infinity;
+  for (let bit = 1; bit <= ALL_SCHOOLS_MASK; bit <<= 1) {
+    const on = res.components.filter((c) => (c.schoolMask & bit) !== 0);
+    weakest = Math.min(
+      weakest,
+      on.length === 0
+        ? 0
+        : Math.max(...on.map((c) => (c.kind === "immunity" ? 100 : c.pctMin))),
+    );
+  }
+  return weakest;
+}

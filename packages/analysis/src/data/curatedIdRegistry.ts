@@ -156,6 +156,7 @@ import {
   RIDER_ABSORB_SAVE_AURAS,
   STEALTH_KEPT_BY_ALLOWED_PRESS_IDS,
 } from "../utils/enemyDefensives";
+import { TALENT_REDUCTION_FACT_LINE_IDS } from "../utils/enemyDefensives";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
 import { GAP_CLOSER_SPELL_IDS } from "../utils/gapClosers";
@@ -1654,6 +1655,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       CONCENTRATION_AURA_ID,
       DEVOTION_AURA_ID,
     ]),
+  ),
+  // pipeline T214: presses that print a talent-reduction fact line (Feint)
+  t("TALENT_REDUCTION_FACT_LINE_IDS", "utils/enemyDefensives.ts", "cast", () =>
+    set(TALENT_REDUCTION_FACT_LINE_IDS),
   ),
   t("CHANNEL_PROXY_IDS", "data/occupancyAuras.ts", "aura", () =>
     set(CHANNEL_PROXY_IDS),

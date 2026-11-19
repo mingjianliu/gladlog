@@ -277,16 +277,22 @@ import {
   SOLO_SHUFFLE_BRACKET,
 } from "@gladlog/analysis/src/utils/roundEnd";
 import {
+  carriesDodgeAllDamageLabel,
+  DODGE_ALL_DAMAGE_LEGEND,
   immunityLegendsWithoutCarrier,
   INVISIBLE_ENDED_AT_ONCE,
   INVISIBLE_FACT_LINE_IDS,
   INVISIBLE_LABEL_RE,
   INVISIBLE_LEGEND,
   INVISIBLE_MECHANISM,
+  labelLegendsWithoutCarrier,
   SELF_SAVE_PURPOSE_LABEL,
   selfDefensiveLabelWords,
   selfReductionLegend,
   statesSelfDefensiveLabel,
+  statesTalentReductionFactLabel,
+  TALENT_REDUCTION_FACT_LEGEND,
+  TALENT_REDUCTION_FACT_LINE_NAMES,
   TIMED_IMMUNITY_LABEL_RE,
   TIMED_IMMUNITY_LEGEND,
 } from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
@@ -5826,6 +5832,16 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
           `line ${i + 1}: [ENEMY DEF] prints ${spell} with a label other than what it does (${selfDefensiveLabelWords(mechanism)}): ${quoted}`,
         );
       else if (
+        carriesDodgeAllDamageLabel(line) &&
+        hasLegend &&
+        !unexplained.has(`${spell}|dodge`) &&
+        !lines.some((l) => l.trim() === DODGE_ALL_DAMAGE_LEGEND)
+      ) {
+        unexplained.add(`${spell}|dodge`);
+        failures.push(
+          `line ${i + 1}: [ENEMY DEF] prints ${spell} with a percentage of all damage and the legend does not explain the label: ${quoted}`,
+        );
+      } else if (
         mechanism.kind === "reduction" &&
         hasLegend &&
         !unexplained.has(spell) &&
@@ -5854,6 +5870,25 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
         unexplained.add(spell);
         failures.push(
           `line ${i + 1}: [ENEMY DEF] prints ${spell} as a timed immunity and the legend does not say it is no wall: ${quoted}`,
+        );
+      }
+      return;
+    }
+    // a talent-reduction FACT line (a holder's Feint, ruling R52 (a),
+    // pipeline T214): the reduction form, and the legend says it is no wall
+    if (TALENT_REDUCTION_FACT_LINE_NAMES.includes(spell)) {
+      if (!statesTalentReductionFactLabel(after))
+        failures.push(
+          `line ${i + 1}: [ENEMY DEF] prints ${spell} with a label other than its talent's reduction: ${quoted}`,
+        );
+      else if (
+        hasLegend &&
+        !unexplained.has(spell) &&
+        !lines.some((l) => l.trim() === TALENT_REDUCTION_FACT_LEGEND)
+      ) {
+        unexplained.add(spell);
+        failures.push(
+          `line ${i + 1}: [ENEMY DEF] prints ${spell} with a percentage, in a wall's form, and the legend does not say it is no wall: ${quoted}`,
         );
       }
       return;
@@ -5893,10 +5928,15 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
         `line ${i + 1}: [ENEMY DEF] prints ${spell} with no label the producer writes for it: ${quoted}`,
       );
   });
-  // an immunity legend is printed only beside a line of its own label form
-  for (const legend of immunityLegendsWithoutCarrier(lines))
+  // a label legend is printed only beside a line that carries its label —
+  // one carrier rule for every label form (`labelLegendsWithoutCarrier`);
+  // the two immunity legends keep their own wording (pipeline T213)
+  const immunityLegends = new Set(immunityLegendsWithoutCarrier(lines));
+  for (const legend of labelLegendsWithoutCarrier(lines))
     failures.push(
-      `[ENEMY DEF] legend explains an immunity label no line carries: "${legend.slice(0, 80)}…"`,
+      immunityLegends.has(legend)
+        ? `[ENEMY DEF] legend explains an immunity label no line carries: "${legend.slice(0, 80)}…"`
+        : `[ENEMY DEF] legend explains a label no line carries: "${legend.slice(0, 80)}…"`,
     );
   return failures;
 }

@@ -29,6 +29,8 @@
  *  - `wallHeldPastHold` (D76, user ruling 2026-10-31): `defenseless a–b` on a
  *    unit whose own wall aura, the one its `[ENEMY DEF]` line prints with a
  *    length, ran into the span: the aura's logged REMOVED lies after a + 1 s.
+ *    A talent-reduction fact line (`TALENT_REDUCTION_FACT_LINE_NAMES`, R52)
+ *    is not a wall and is not read.
  *  - `unseenEndOpener` (D59): `X active ON THE TARGET Ns` of a stealth /
  *    invisibility aura with no end row, printed longer than the gap to the
  *    first debuff its holder put on a player (a stealth opener whose cast row
@@ -60,6 +62,7 @@ import {
   SAVE_AURA_END_UNSEEN_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { INTERRUPT_SPELL_IDS } from "@gladlog/analysis/src/utils/enemyInterrupts";
+import { TALENT_REDUCTION_FACT_LINE_NAMES } from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
 import {
   auraBlocksMechanic,
   ccMechanicOf,
@@ -351,7 +354,9 @@ const ENEMY_DEF_WALL =
 function wallHeldPastHold(ctx: IRoundCtx): void {
   const walls = ctx.lines.flatMap((l) => {
     const m = ENEMY_DEF_WALL.exec(l);
-    return m
+    // a talent-reduction fact line (`Feint (20%, 6.0s)`, R52) is no wall: the
+    // span is not held by it, by ruling
+    return m && !TALENT_REDUCTION_FACT_LINE_NAMES.includes(m[3]!)
       ? [
           {
             at: secOf(m[1]!),

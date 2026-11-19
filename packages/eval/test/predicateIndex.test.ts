@@ -254,11 +254,11 @@ import * as pvpLogFetch from "../../corpus-tools/src/pvpLogFetch";
 import * as obsConfigWriter from "../../desktop/src/main/obsConfigWriter";
 import * as dashboard from "../../desktop/src/renderer/src/components/dashboard";
 import * as analysisInput from "../../desktop/src/renderer/src/report/derive/analysisInput";
+import * as reportCasts from "../../desktop/src/renderer/src/report/derive/casts";
 import * as dispelSummary from "../../desktop/src/renderer/src/report/derive/dispelSummary";
 import * as flowSeries from "../../desktop/src/renderer/src/report/derive/flowSeries";
 import * as kickText from "../../desktop/src/renderer/src/report/derive/kickText";
 import * as meterRows from "../../desktop/src/renderer/src/report/derive/meterRows";
-import * as reportCasts from "../../desktop/src/renderer/src/report/derive/casts";
 import * as reportMistakes from "../../desktop/src/renderer/src/report/derive/mistakes";
 import * as teamSide from "../../desktop/src/renderer/src/report/derive/teamSide";
 import * as reportTimeRange from "../../desktop/src/renderer/src/report/derive/timeRange";
@@ -3029,6 +3029,16 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/selfDefensiveMechanism.ts`,
     symbol: "immunityLegendsWithoutCarrier",
+    mod: selfDefensiveMechanismMod,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "TALENT_REDUCTION_FACT_LINE_IDS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "labelLegendsWithoutCarrier",
     mod: selfDefensiveMechanismMod,
   },
   {
