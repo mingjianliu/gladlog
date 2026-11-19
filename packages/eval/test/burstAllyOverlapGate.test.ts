@@ -28,7 +28,7 @@ describe("checkBurstAllyOverlap", () => {
       checkBurstAllyOverlap([
         head,
         targetLine,
-        "    Solo burst — no ally offensive CD overlapped.",
+        "    No ally offensive CD on you during this burst.",
       ]),
     ).toEqual([]);
   });

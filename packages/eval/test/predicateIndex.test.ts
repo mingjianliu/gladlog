@@ -1476,6 +1476,26 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/burstLedger.ts`,
+    symbol: "ledgerCastSpan",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "allyOverlapSpan",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "NO_ALLY_CD_ON_HOLDER",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "casterCopyEndSeconds",
+    mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
     symbol: "burstSaysNoDamage",
     mod: burstLedger,
   },

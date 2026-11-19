@@ -4,6 +4,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { effectSpanIdsOfCast } from "../data/castEffectAuras";
 import {
   castsOfEffectAura,
   ownEffectAurasKeyedBy,
@@ -35,7 +36,14 @@ import {
   isHpTroughWorthPrinting,
   windowTroughOffGhost,
 } from "./cooldowns";
-import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
+import {
+  casterCopyEndSeconds,
+  EFFECT_START_AFTER_S,
+  EFFECT_START_BEFORE_S,
+  IEnemyCDCast,
+  observedEffectEndSeconds,
+  reconstructEnemyCDTimeline,
+} from "./enemyCDs";
 import {
   ALIAS_PRESS_TWIN_MS,
   AURA_BEFORE_CAST_MAX_S,
@@ -358,6 +366,18 @@ export interface IBurstLedgerEntry {
   healerHeldOverlapping?: string[];
 }
 
+/** The burst ledger's sentence for a burst no ally offensive cooldown
+ * overlapped by the ledger's reading (`allyOverlapSpan`: a press that puts a
+ * copy on its target overlaps while that copy is on the ledger's holder).
+ * User ruling R94 (2026-11-19, pipeline T161): it read `Solo burst — no ally
+ * offensive CD overlapped`, which claimed a solo burst of a holder whose
+ * teammate was under his own Power Infusion at the time; this says only
+ * what the reading shows. "you" is the ledger's holder — the ledger is the
+ * owner's own audit in every view it prints in. One constant for the line
+ * and for the gate that reads it back (`checkBurstSoloHealerHeld`). */
+export const NO_ALLY_CD_ON_HOLDER =
+  "No ally offensive CD on you during this burst";
+
 /** The Solo-burst line's note for a healer's throughput major that
  * overlapped the burst and is not counted (user ruling R01, 2026-11-08):
  * ` (a healer's Avenging Wrath is not counted)`; empty for none. The gate
@@ -408,6 +428,83 @@ export function burstCastSpan(
   return {
     from: cd.castTimeSeconds,
     to: Math.max(cd.buffEndSeconds, cd.castTimeSeconds),
+  };
+}
+
+/**
+ * An ALLY's press as the `Ally CDs overlapping` sentence of `holderId`'s
+ * ledger reads it (T161, user ruling R89, 2026-11-19): the sentence says
+ * whether the holder's burst lined up with a teammate's cooldown, so when
+ * the press put a copy of its effect ON THE HOLDER (a Power Infusion, a
+ * Bloodlust), the overlap runs to the end of that copy — the holder was
+ * under it — and not to the end of the caster's own (a priest's copy purged
+ * at 17.6 s while the rogue's ran to 31.7 s is 14.0 s of the rogue's burst,
+ * no burst without an ally cooldown on the holder), earlier or later than the caster's. A press with no copy on the holder — the caster's
+ * alone, or one on a third teammate — keeps `ledgerCastSpan`. Never past
+ * `buffEndSeconds`, the latest copy.
+ */
+export function allyOverlapSpan(
+  cd: Pick<
+    IEnemyCDCast,
+    "spellId" | "castTimeSeconds" | "buffEndSeconds" | "casterCopyEndSeconds"
+  >,
+  ally: ICombatUnit,
+  holderId: string,
+  combat: Parameters<typeof observedEffectEndSeconds>[4],
+  nextSameCastS: number = Infinity,
+): { from: number; to: number } {
+  const own = ledgerCastSpan(cd);
+  if (holderId === ally.id) return own;
+  // the holder's copy in either direction (codex 85-tk-WIN-T161-2 #1): one
+  // purged off the holder at 16 s while the caster's ran to 21 s is no
+  // overlap with the holder's burst at 17 s
+  const onHolder = observedEffectEndSeconds(
+    ally,
+    cd.spellId,
+    cd.castTimeSeconds,
+    nextSameCastS,
+    combat,
+    holderId,
+  );
+  if (onHolder !== null && onHolder > cd.castTimeSeconds)
+    return { from: own.from, to: Math.min(onHolder, cd.buffEndSeconds) };
+  // a copy on the holder whose end the log never wrote is still a copy:
+  // it runs to the press's own end (`buffEndSeconds`, the official length
+  // at most), not to the caster's earlier one — "no ally cooldown on you"
+  // must not be said of a buff still up (codex 85-tk-WIN-T161-4 #1)
+  const holder = combat.units?.[holderId];
+  const ids = effectSpanIdsOfCast(cd.spellId);
+  const unclosedOnHolder =
+    !!holder &&
+    buildAuraIntervals(holder, combat).some(
+      (iv) =>
+        ids.has(iv.spellId) &&
+        iv.srcUnitName === ally.name &&
+        iv.inferredEnd &&
+        !iv.inferredStart &&
+        iv.fromS >= cd.castTimeSeconds - EFFECT_START_BEFORE_S &&
+        iv.fromS <= cd.castTimeSeconds + EFFECT_START_AFTER_S,
+    );
+  return unclosedOnHolder ? { from: own.from, to: cd.buffEndSeconds } : own;
+}
+
+/**
+ * `burstCastSpan` as the burst ledger reads it (T161, user ruling R83): the
+ * span ends where the press's effect ended on its CASTER
+ * (`casterCopyEndSeconds`) — a Power Infusion purged off the priest at 0:26
+ * while its copy on the hunter ran to 0:31 is a burst of the priest's to
+ * 0:26. The threat readers (`[RES]`, crisis, kick pressure, kill attempts)
+ * keep `burstCastSpan`: the buff is still running on someone.
+ */
+export function ledgerCastSpan(
+  cd: Pick<
+    IEnemyCDCast,
+    "castTimeSeconds" | "buffEndSeconds" | "casterCopyEndSeconds"
+  >,
+): { from: number; to: number } {
+  return {
+    from: cd.castTimeSeconds,
+    to: Math.max(casterCopyEndSeconds(cd), cd.castTimeSeconds),
   };
 }
 
@@ -833,7 +930,7 @@ export function analyzeBurstLedgerUncached(
               key,
         )
         .reduce((m, c) => Math.min(m, c.castTimeSeconds), Infinity);
-      const span = burstCastSpan(cd);
+      const span = allyOverlapSpan(cd, a, player.id, combat, next);
       return {
         ally: a,
         playerName: a.name,
@@ -893,7 +990,7 @@ export function analyzeBurstLedgerUncached(
         groups.push(current);
         current = [cd];
       }
-      reach = Math.max(reach, burstCastSpan(cd).to);
+      reach = Math.max(reach, ledgerCastSpan(cd).to);
     }
     if (current.length > 0) groups.push(current);
   }
@@ -911,7 +1008,7 @@ export function analyzeBurstLedgerUncached(
     const fromSeconds = group[0].castTimeSeconds;
     if (fromSeconds >= matchEndS) continue; // pressed after the round ended
     const toSeconds = Math.min(
-      Math.max(...group.map((cd) => burstCastSpan(cd).to)),
+      Math.max(...group.map((cd) => ledgerCastSpan(cd).to)),
       matchEndS,
     );
     const fromMs = matchStartMs + fromSeconds * 1000;
@@ -1258,7 +1355,7 @@ export function analyzeBurstLedgerUncached(
         spellName: cd.spellName,
         castTimeSeconds: cd.castTimeSeconds,
         // clipped like the header's own end (the round can end mid-burst)
-        spanToSeconds: Math.min(burstCastSpan(cd).to, toSeconds),
+        spanToSeconds: Math.min(ledgerCastSpan(cd).to, toSeconds),
       })),
       totalDamage,
       damageByTarget,
@@ -1611,7 +1708,7 @@ export function formatBurstLedgerForContext(
     lines.push(
       b.allyCDsOverlapping.length > 0
         ? formatAllyOverlaps(b)
-        : `    Solo burst — no ally offensive CD overlapped${healerHeldNotCountedNote(b.healerHeldOverlapping ?? [])}.`,
+        : `    ${NO_ALLY_CD_ON_HOLDER}${healerHeldNotCountedNote(b.healerHeldOverlapping ?? [])}.`,
     );
   });
 

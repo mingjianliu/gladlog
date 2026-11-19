@@ -205,7 +205,10 @@ export function BurstLedgerCard({
                     })}
                   </Chip>
                 ) : (
-                  <Chip kind="dim">{tr("report.burstLedger.solo")}</Chip>
+                  // ruling R94: an empty list says no ally cooldown was on
+                  // this player — a teammate's own may still be running, so
+                  // not "solo" (the prompt's `NO_ALLY_CD_ON_HOLDER`)
+                  <Chip kind="dim">{tr("report.burstLedger.noAllyCdOnYou")}</Chip>
                 )}
                 {t?.died && <Chip kind="kill">{tr("report.common.kill")}</Chip>}
                 <SeekBtn tS={b.fromSeconds} unitName={p.name} onSeek={onSeek} />

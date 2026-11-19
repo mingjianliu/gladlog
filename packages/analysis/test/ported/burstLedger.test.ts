@@ -1249,7 +1249,7 @@ describe("burstLedger — ally CDs overlapping: seconds and their top target (T1
     expect(ledger(priest(2, []))[0].allyCDsOverlapping).toEqual([]);
   });
 
-  it("the bare word is gone; a burst nobody overlapped still reads Solo burst", () => {
+  it("the bare word is gone; a burst nobody overlapped reads the no-ally-cooldown sentence (R94)", () => {
     const withAlly = formatBurstLedgerForContext(
       ledger(priest(13, [])),
       [],
@@ -1261,7 +1261,7 @@ describe("burstLedger — ally CDs overlapping: seconds and their top target (T1
       [],
       [],
     );
-    expect(solo).toContain("    Solo burst — no ally offensive CD overlapped.");
+    expect(solo).toContain("    No ally offensive CD on you during this burst.");
     expect(solo.join("\n")).not.toContain("Aligned");
   });
 
@@ -1293,13 +1293,13 @@ describe("burstLedger — ally CDs overlapping: seconds and their top target (T1
     expect(inside.bursts[0]!.allyCDsOverlapping).toEqual([]);
     expect(inside.bursts[0]!.healerHeldOverlapping).toEqual(["Avenging Wrath"]);
     expect(inside.lines).toContain(
-      "    Solo burst — no ally offensive CD overlapped (a healer's Avenging Wrath is not counted).",
+      "    No ally offensive CD on you during this burst (a healer's Avenging Wrath is not counted).",
     );
     // over (20 s effect) before the burst began: no note
     const before = soloOf(holy(-10));
     expect(before.bursts[0]!.healerHeldOverlapping).toBeUndefined();
     expect(before.lines).toContain(
-      "    Solo burst — no ally offensive CD overlapped.",
+      "    No ally offensive CD on you during this burst.",
     );
     // a Retribution Paladin's press stays an ally offensive CD
     const ret = makeUnit("f4", {

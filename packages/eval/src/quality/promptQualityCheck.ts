@@ -171,6 +171,7 @@ import {
   BURST_TARGET_DAMAGE_RE_SRC,
   healerHeldNotCountedNote,
   KILL_CREDIT_SLACK_S,
+  NO_ALLY_CD_ON_HOLDER,
   ON_TARGET_GOOD_PCT,
 } from "@gladlog/analysis/src/utils/burstLedger";
 import {
@@ -1378,12 +1379,15 @@ function healerHeldRenderedPairs(): Array<{ spec: string; spell: string }> {
   }));
 }
 
-const SOLO_BURST_LINE =
-  /^\s*Solo burst — no ally offensive CD overlapped(.*)\.$/;
+/** the ledger's own sentence (`NO_ALLY_CD_ON_HOLDER`, user ruling R94) */
+// (the sentence holds no pattern character)
+const SOLO_BURST_LINE = new RegExp(
+  String.raw`^\s*${NO_ALLY_CD_ON_HOLDER}(.*)\.$`,
+);
 
 /**
  * Hard invariant (user ruling R01, 2026-11-08, fact12 D22): a burst-ledger
- * `Solo burst` line that a teammate healer's Avenging Wrath (a Holy
+ * no-ally-cooldown line (`NO_ALLY_CD_ON_HOLDER`) that a teammate healer's Avenging Wrath (a Holy
  * Paladin's, `isHealerHeldOffensive` — no ally offensive CD there, fact11
  * D16, while KILL WINDOWS' `pressed inside` lists it) overlapped says so:
  * `(a healer's Avenging Wrath is not counted)` (`healerHeldNotCountedNote`).
@@ -1477,7 +1481,7 @@ export function checkBurstSoloHealerHeldNote(lines: string[]): string[] {
     ]);
     if (certain.length > 0 && note === "")
       failures.push(
-        `line ${i + 1}: Burst(line ${at}) ${fmtTime(from)}–${fmtTime(to)} 写 Solo burst,但队友治疗的 ${certain[0]!.spell} ${fmtTime(certain[0]!.p)} 与它重叠,缺注「${want.trim()}」`,
+        `line ${i + 1}: Burst(line ${at}) ${fmtTime(from)}–${fmtTime(to)} 写没有队友进攻大招在你身上,但队友治疗的 ${certain[0]!.spell} ${fmtTime(certain[0]!.p)} 与它重叠,缺注「${want.trim()}」`,
       );
     if (note !== "" && possible.length === 0)
       failures.push(

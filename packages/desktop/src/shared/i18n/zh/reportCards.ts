@@ -77,7 +77,7 @@ export const zhReportCards = {
   "report.burstLedger.intoWall": "对方减伤 {spell} {s}s",
   "report.burstLedger.synced": "协同 {names}",
   "report.burstLedger.noPress": "(自动触发)",
-  "report.burstLedger.solo": "单开",
+  "report.burstLedger.noAllyCdOnYou": "身上无队友大招",
   "report.burstLedger.noBursts": "本场无爆发窗口记录。",
   "report.burstLedger.noTargeting": "本场无窗口目标纪律记录。",
   "report.burstLedger.targeting": "窗口目标纪律",

@@ -55,6 +55,7 @@ import {
   unitCooldownOf,
 } from "./cooldowns";
 import { isEffectHolderUnit } from "./effectHolder";
+import { isStolenAuraAcquisition } from "./enemyDefensives";
 import { pressRowsWithHidden } from "./hiddenPress";
 import { logInstantOf } from "./logEra";
 import { fmtTime } from "./renderGrid";
@@ -160,6 +161,15 @@ export interface IEnemyCDCast {
    * (codex 80-PIPE-51-B50: with the own end in `buffEndSeconds` each reader
    * had to opt out, and `boundedBurstSegments` had not). */
   ownEndSeconds?: number;
+  /** T161 (user ruling R83): a press that put its aura on its caster and
+   * on a teammate has a copy on each, each with its own end;
+   * `buffEndSeconds` is the copy that ended last (a threat reader's
+   * question: is the buff still running on someone). This is the end of
+   * the CASTER's own copy when it ended first — dispelled, stolen, the
+   * caster dead — what the burst ledger's window and bookkeeping read
+   * (`casterCopyEndSeconds`). One press can so show two ends (accepted,
+   * R83; 72 presses on the 605 a second or more apart). */
+  casterCopyEndSeconds?: number;
   /** T140: the end `[RES]` counts to is an upper bound, not the effect's
    * end — a `(no press)` occurrence (a talent's proc put the cooldown's
    * aura up) whose end the log does not show: still up when the slice
@@ -1106,6 +1116,19 @@ function deathCutOfficialEnd(
   };
 }
 
+/** Where a press's effect ends ON ITS CASTER, for the burst ledger (T161,
+ * ruling R83): the caster's own copy when a teammate's copy outlived it,
+ * else `buffEndSeconds` — and never past `buffEndSeconds`, which the
+ * builder's later cuts (a death, the round's end) may have moved in. */
+export function casterCopyEndSeconds(
+  cd: Pick<IEnemyCDCast, "buffEndSeconds" | "casterCopyEndSeconds">,
+): number {
+  return Math.min(
+    cd.casterCopyEndSeconds ?? cd.buffEndSeconds,
+    cd.buffEndSeconds,
+  );
+}
+
 /** Where an enemy effect ends for the `[RES]` row's `Ns left`: its own end
  * when it was still up as the analysed slice ended (`ownEndSeconds`, T41),
  * else `buffEndSeconds`. The one reader of the own end outside the builder. */
@@ -1722,6 +1745,24 @@ function reconstructEnemyCDTimelineUncached(
     );
     /** an observed end replaces the span's; one a death cut keeps the
      * official end beside it (`deathCutOfficialEnd`) */
+    /** T161: keep the end of the caster's OWN copy of the press when it ended
+     * before the span's end (`casterCopyEndSeconds`). */
+    const setCasterCopyEnd = (
+      cd: IEnemyCDCast,
+      caster: ICombatUnit,
+      nextSameCastS: number,
+    ): void => {
+      const own = observedEffectEnd(
+        caster,
+        cd.spellId,
+        cd.castTimeSeconds,
+        nextSameCastS,
+        combat,
+        caster.id,
+      );
+      if (own !== null && own.endS < cd.buffEndSeconds)
+        cd.casterCopyEndSeconds = own.endS;
+    };
     const setObservedEnd = (
       cd: IEnemyCDCast,
       endS: number,
@@ -1944,6 +1985,10 @@ function reconstructEnemyCDTimelineUncached(
             cd.buffEndSeconds = diedS;
           }
         }
+        // T161: the latest copy has no end the log shows (the slice ends, a
+        // REMOVED is missing) while the caster's own copy has one — the
+        // ledger still reads the caster's (codex 85-tk-WIN-T161-1 #1)
+        setCasterCopyEnd(cd, enemy, next?.castTimeSeconds ?? Infinity);
         continue;
       }
       // the observed aura's own official length (this caster's talents —
@@ -1963,6 +2008,26 @@ function reconstructEnemyCDTimelineUncached(
           : end.appliedS + auraFull,
         combat.units?.[end.holderId] as ICombatUnit | undefined,
       );
+      // T161 (user ruling R83, 2026-11-19): the span above ends at the copy
+      // that ended last. When that copy sat on another unit — a TEAMMATE
+      // of the caster, or an opponent that STOLE it (the copy keeps its
+      // caster as its source; codex 85-tk-WIN-T161-1 #2) — and the caster's
+      // own copy of the press ended first (dispelled, stolen, its caster
+      // dead), the own copy's end is kept beside it: what the burst ledger
+      // reads (`casterCopyEndSeconds`). A copy on an opponent that was not
+      // stolen is the effect on its target, and stays the span's end.
+      const holder = combat.units?.[end.holderId] as ICombatUnit | undefined;
+      if (
+        end.holderId !== enemy.id &&
+        holder !== undefined &&
+        (holder.reaction === enemy.reaction ||
+          isStolenAuraAcquisition(
+            holder,
+            end.auraId,
+            matchStartMs + end.appliedS * 1000,
+          ))
+      )
+        setCasterCopyEnd(cd, enemy, next?.castTimeSeconds ?? Infinity);
     }
 
     // GH #119: effects whose only evidence is an aura (Havoc Metamorphosis —

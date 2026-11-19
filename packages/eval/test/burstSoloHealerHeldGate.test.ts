@@ -18,9 +18,9 @@ const press = (t: string, spec = "Holy Paladin") =>
   `${t}  [TEAM] [CD]   3(HPaladin) (${spec}): Avenging Wrath`;
 const head = (from: string, to: string) =>
   `  Burst #6 — ${from}–${to} | Stormkeeper`;
-const SOLO = "    Solo burst — no ally offensive CD overlapped.";
+const SOLO = "    No ally offensive CD on you during this burst.";
 const NOTED =
-  "    Solo burst — no ally offensive CD overlapped (a healer's Avenging Wrath is not counted).";
+  "    No ally offensive CD on you during this burst (a healer's Avenging Wrath is not counted).";
 
 describe("checkBurstSoloHealerHeldNote", () => {
   it("fails a bare Solo line the healer's Avenging Wrath overlapped (the 7edc099d shape)", () => {
