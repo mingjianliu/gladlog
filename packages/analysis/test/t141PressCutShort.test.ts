@@ -102,6 +102,53 @@ describe("pressEffectCutShort (T141, ruling R57)", () => {
     expect(r.cut).toEqual({ cause: "broken", atMs: T + 6_000 });
   });
 
+  // review 80-PIPE-156-B142 (f8910d3a r1): a BROKEN row's source is the
+  // BREAKER — another unit's Kill Command broke a Landslide (aura 355689,
+  // cast 358385) 11 ms before the application's own REMOVED
+  it("broken by another unit: the BROKEN row beside the application's REMOVED", () => {
+    const CAST = "358385";
+    const AURA = "355689";
+    const cast = makeSpellCastEvent(CAST, T, "ev", "Ev", "", "");
+    const ev = makeUnit("ev", { name: "Ev", spellCastEvents: [cast] });
+    const rows = (brokenAt: number | null) => [
+      makeAuraEvent(APPLIED, AURA, T + 486, "ev", "foe", "DEBUFF"),
+      ...(brokenAt === null
+        ? []
+        : [
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_BROKEN_SPELL,
+              AURA,
+              T + brokenAt,
+              "pet",
+              "foe",
+              "DEBUFF",
+            ),
+          ]),
+      makeAuraEvent(REMOVED, AURA, T + 2_953, "ev", "foe", "DEBUFF"),
+    ];
+    const cutOf = (brokenAt: number | null) => {
+      const foe = makeUnit("foe", { name: "Foe", auraEvents: rows(brokenAt) });
+      const dur = pressDuration(
+        ev,
+        cast as never,
+        [ev, foe],
+        ev.spellCastEvents,
+      )!;
+      return pressEffectCutShort(
+        dur,
+        ev,
+        cast as never,
+        [ev, foe],
+        ev.spellCastEvents,
+      );
+    };
+    expect(cutOf(2_942)).toEqual({ cause: "broken", atMs: T + 2_942 });
+    // a BROKEN row of the aura far from this application's REMOVED is not
+    // its cause; neither is no row at all
+    expect(cutOf(1_000)).toBeUndefined();
+    expect(cutOf(null)).toBeUndefined();
+  });
+
   it("a plain REMOVED, or one inside the 'ran its length' allowance: nothing", () => {
     expect(shaman(5_000).cut).toBeUndefined();
     expect(

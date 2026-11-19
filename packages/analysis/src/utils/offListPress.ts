@@ -587,8 +587,9 @@ export interface IPressCutShort {
 
 /**
  * The row that took `from`'s application off `holder`, when the log names
- * one (T141): a BROKEN row of the aura, or its REMOVED with a dispel / steal
- * naming it within `PRESS_CUT_CAUSE_PAIR_MS`. A later APPLIED / REFRESH /
+ * one (T141): a BROKEN row of the aura — the caster's own, or any unit's
+ * within `PRESS_CUT_CAUSE_PAIR_MS` of the application's REMOVED — or that
+ * REMOVED with a dispel / steal naming it within the same margin. A later APPLIED / REFRESH /
  * dose of the aura, or a REMOVED with no such row, ends the search with
  * nothing. The one matcher: `pressEffectCutShort` and the several-holder
  * inventory of `scan5/offListPress` both ask it.
@@ -608,6 +609,18 @@ export function auraCutCause(
     const event = r.logLine.event as string;
     if (/BROKEN/.test(event)) return { atMs: t, cause: "broken" };
     if (event === LogEvent.SPELL_AURA_REMOVED) {
+      // a BROKEN row carries the BREAKER as its source, so another unit's
+      // break of this application is not among `rows`: it is the BROKEN row
+      // of the aura on this holder beside this application's own REMOVED
+      // (f8910d3a r1: Kill Command breaks a Landslide 11 ms before it)
+      const broke = holder.auraEvents.find(
+        (x) =>
+          x.spellId === from.spellId &&
+          /BROKEN/.test(x.logLine.event as string) &&
+          x.logLine.timestamp > start &&
+          Math.abs(x.logLine.timestamp - t) <= PRESS_CUT_CAUSE_PAIR_MS,
+      );
+      if (broke) return { atMs: broke.logLine.timestamp, cause: "broken" };
       const by = (holder.actionIn ?? []).find(
         (x) =>
           (x.logLine.event === LogEvent.SPELL_DISPEL ||
