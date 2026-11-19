@@ -8349,23 +8349,28 @@ export function checkBurstAnsweredControlSpan(lines: string[]): string[] {
     const a = parseBurstAnsweredLine(line);
     if (!a || a.answerer.startsWith(`${ownerId}(`)) return;
     // the answer is in [t + N − 0.05, t + 1 + N + 0.05)
+    const nearLo = Math.floor(
+      a.atSec + a.latencySec - 0.05 - AIMED_CONTROL_LANDING_LEAD_MS / 1000,
+    );
+    const nearHi = Math.floor(
+      a.atSec + 1 + a.latencySec + 0.05 + GROUND_CONTROL_FUSE_MS / 1000,
+    );
     // user ruling R90 (2026-11-19, T184): a totem's control is printed at
     // the totem's drop however early, and answers by LANDING inside the
-    // window's span. A time before the span can only be such a drop: its
-    // landing is looked for in the span, not beside the printed time (an
-    // earlier application of the same totem stood there — codex
-    // 85-tk-CD-T184-2 #2).
-    const beforeSpan = a.latencySec < -BURST_RESPONSE_PRE_MS / 1000 - 0.05;
-    const lo = beforeSpan
-      ? Math.floor(a.atSec - BURST_RESPONSE_PRE_MS / 1000 - 0.05)
-      : Math.floor(
-          a.atSec + a.latencySec - 0.05 - AIMED_CONTROL_LANDING_LEAD_MS / 1000,
-        );
-    const hi = beforeSpan
-      ? Math.floor(a.atSec + 1 + BURST_RESPONSE_WINDOW_SEC + 0.05)
-      : Math.floor(
-          a.atSec + 1 + a.latencySec + 0.05 + GROUND_CONTROL_FUSE_MS / 1000,
-        );
+    // window's span — [t − PRE, t + WINDOW] from the window's whole second
+    // `t`, so the landing's second is in [floor(t − PRE), t + WINDOW]. Its
+    // landing is looked for there, not beside the printed time (an earlier
+    // application of the same totem stood there — codex 85-tk-CD-T184-2
+    // #2). N counts from the opener's RAW instant, up to a second after
+    // `t`: an ordinary press at the span's start reads as far back as
+    // PRE + 1 s, so only an N beyond that is certainly a drop. Up to there
+    // the line keeps the search beside its printed time — for a drop that
+    // close the totem's pulses inside the span are within the fuse of it
+    // anyway (codex 85-tk-CD-T184-2b #1 #2).
+    const pre = BURST_RESPONSE_PRE_MS / 1000;
+    const certainDrop = a.latencySec < -(pre + 1) - 0.05;
+    const lo = certainDrop ? Math.floor(a.atSec - pre) : nearLo;
+    const hi = certainDrop ? a.atSec + BURST_RESPONSE_WINDOW_SEC : nearHi;
     for (const on of a.controlOn) {
       if (on.span === undefined) continue;
       const same = landings.filter(

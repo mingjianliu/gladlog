@@ -104,17 +104,17 @@ function printedLines(
         ? "the engine credits no answer in that window"
         : credited.spellName !== a.spellName
           ? "the engine credits another answer"
-          : unit !== undefined && unit.name !== credited.casterName
-            ? "the answerer differs"
-            : Math.abs(credited.latencySec - a.latencySec) > 0.05
-              ? "the time differs"
-              : printedTargets.length === 0 ||
-                  printedTargets.length > engineTargets.size ||
-                  printedTargets.some(
-                    (id) => id !== undefined && !engineTargets.has(id),
-                  )
-                ? "the targets differ"
-                : null;
+          : unit === undefined || printedTargets.some((id) => id === undefined)
+            ? "a printed identity does not resolve"
+            : unit.name !== credited.casterName
+              ? "the answerer differs"
+              : Math.abs(credited.latencySec - a.latencySec) > 0.05
+                ? "the time differs"
+                : printedTargets.length === 0 ||
+                    printedTargets.length > engineTargets.size ||
+                    printedTargets.some((id) => !engineTargets.has(id!))
+                  ? "the targets differ"
+                  : null;
     if (kind === null) continue;
     ctx.violate(
       C,

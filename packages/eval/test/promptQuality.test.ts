@@ -2952,6 +2952,27 @@ describe("checkBurstAnsweredControlSpan — a credited control's length is its [
       ]),
     ).toHaveLength(1);
   });
+  it("…the span ends at the window second + 8: a landing one second later is not it (codex 85-tk-CD-T184-2b #2)", () => {
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1, { latencySec: -8 }),
+        landing("0:46", " (5s)"),
+        landing("0:54", " (2s)"),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("an ordinary press up to 2.5 s before the raw opener is not sent to the span alone: a wrong span beside it still fails (codex 85-tk-CD-T184-2b #1)", () => {
+    // opener at 0:45.9, the press at 0:43.6 (inside the span from 0:43.5)
+    const bad = checkBurstAnsweredControlSpan([
+      roster,
+      landing("0:43", " (5s)"),
+      rendered(2.1, { latencySec: -2.3 }),
+      // a later application with the printed length does not vouch for it
+      landing("0:50", " (2s)"),
+    ]);
+    expect(bad).toHaveLength(1);
+  });
   it("reads the other forms the span takes: <1s, the round ending on it, a Tremor break", () => {
     expect(
       checkBurstAnsweredControlSpan([
