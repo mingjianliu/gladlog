@@ -11,15 +11,13 @@
  * SPELL_CAST_FAILED stream (`parseRawStreams`, the log's own rows).
  *
  *  - `castDamageIdSplit` (D7 / D8): an `ABILITIES INTO IMMUNITY/DR` line
- *    `[m:ss] Spec (Name): A + B ×2 … into Target's Defense`. The player's
- *    successful casts at the target inside the defense's logged run (its
- *    aura on the target, APPLIED at the printed second → its REMOVED) whose
- *    English name is one of the player's ≥ 5 % landed-damage spells counted
- *    BY NAME: more than the line lists, the extra casts being of a spell
- *    whose cast id never appears among the player's damage ids (Execute
- *    281000 ↔ 260798). `noLine`: such a run with another player's line and
- *    the section's door of such casts by this one (2 into an unconditional
- *    defensive, 3 into a gated wall — the verdict table), no line of theirs.
+ *    `[m:ss] Spec (Name): A + B ×2 … into Target's Defense` against the
+ *    section's own selection (`buildOffensiveWasteSummary`'s trace): `short`
+ *    — the line's count is not the selection's for that player, target,
+ *    defense and second; `noLine` — a selection that reaches its door with
+ *    no line. What the selection counts (a cast keyed by its spell, not its
+ *    id — Execute 281000 ↔ 260798) is pinned by the producer's unit tests;
+ *    the check no longer counts casts a second way (T206).
  *  - `negAbsorbSum` (D26): a `[DMG SPIKE] … (X absorbed)` line whose window
  *    holds a negative SPELL_ABSORBED row on the unit (Fel Armor's
  *    correction): X sits nearer the sum of the rows' absolute values than
@@ -61,35 +59,24 @@ import {
   parseResRow,
 } from "@gladlog/analysis/src/context/resRow";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
-import {
-  castKeyOfAura,
-  effectAurasOfCast,
-} from "@gladlog/analysis/src/data/castEffectAuras";
+import { effectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
 import healerSaveCdGenerated from "@gladlog/analysis/src/data/healerSaveCdGenerated.json";
 import {
   MITIGATION_TABLE,
   NO_MITIGATION_IDS,
 } from "@gladlog/analysis/src/data/mitigationData";
-import {
-  mitigationVerdictOf,
-  nonMeleeMitigationVerdictOf,
-} from "@gladlog/analysis/src/data/mitigationVerdicts";
+import {} from "@gladlog/analysis/src/data/mitigationVerdicts";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
-import { parryStopsAttack } from "@gladlog/analysis/src/data/spellParry";
 import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/auraIntervals";
-import {
-  COPY_CAST_IDS,
-  pressImpactRow,
-} from "@gladlog/analysis/src/utils/castPress";
+import {} from "@gladlog/analysis/src/utils/castPress";
 import {
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { charmedAt } from "@gladlog/analysis/src/utils/charmedPlayer";
 import { isEnemyCdWindowSpell } from "@gladlog/analysis/src/utils/cooldowns";
-import { spellNameKey } from "@gladlog/analysis/src/utils/damagePress";
 import {
   KW_UNTARGETABLE_AURA_IDS,
   PRESS_REFRESH_PAIR_MS,
@@ -100,9 +87,7 @@ import {
   KW_REDIRECT_PROTECTION_AURA_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
-  drWallMissesSpellSchool,
   holderFirstOwnActionAfterMs,
-  immunityStopsSpellSchool,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
@@ -111,17 +96,15 @@ import {
   distanceBetween,
   getUnitPositionAtTime,
 } from "@gladlog/analysis/src/utils/losAnalysis";
-import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import {
-  getHighValueSpellIds,
-  landedThroughWall,
-  pressLandingCaster,
-  pressLandingRows,
+  buildOffensiveWasteSummary,
+  withoutDeferralTag,
 } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
+import {} from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { kwTimedPressLengthS } from "@gladlog/analysis/src/utils/offensiveWindows";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
-import { isAutomaticCastRow } from "@gladlog/analysis/src/utils/pressRow";
 import { parseRawStreams } from "@gladlog/analysis/src/utils/rawStreams";
+import { toRenderSecond } from "@gladlog/analysis/src/utils/renderGrid";
 import {
   playableEndMs,
   roundEndMs,
@@ -405,7 +388,7 @@ function runRound(ctx: IContext): void {
 
   // ── castDamageIdSplit ──
   {
-    const AB_RE = /^ {2}\[(\d+:\d\d)\] .+? \(([^)]+)\): (.+) into (.+)'s (.+)$/;
+    const AB_RE = /^ {2}\[(\d+:\d\d)\] /;
     let inSection = false;
     const printed: Array<{
       sec: number;
@@ -419,11 +402,27 @@ function runRound(ctx: IContext): void {
       if (l.startsWith("ABILITIES INTO IMMUNITY/DR")) inSection = true;
       else if (inSection && l !== "" && !l.startsWith(" ")) inSection = false;
       if (!inSection) continue;
-      const m = AB_RE.exec(l);
-      if (!m) continue;
-      const player = byName.get(m[2]!);
-      const target = byName.get(m[4]!);
+      const tm = AB_RE.exec(l);
+      if (!tm) continue;
+      // by the roster's names, not by the line's punctuation: a realm
+      // carries brackets of its own (T206: every `Aggra(Português)` line
+      // went unread — 16 rows / 6 facts of the 605 once a selection with no
+      // line counted)
+      const player = players.find((x) => l.includes(` (${x.name}): `));
+      const target = players.find((x) => l.includes(` into ${x.name}'s `));
       if (!player || !target) continue;
+      const into = ` into ${target.name}'s `;
+      const m = [
+        "",
+        tm[1]!,
+        player.name as string,
+        l.slice(
+          l.indexOf(` (${player.name}): `) + player.name.length + 5,
+          l.lastIndexOf(into),
+        ),
+        target.name as string,
+        l.slice(l.lastIndexOf(into) + into.length),
+      ];
       const count = m[3]!
         .split(" + ")
         .reduce((n, part) => n + Number(/×(\d+)$/.exec(part)?.[1] ?? 1), 0);
@@ -436,214 +435,70 @@ function runRound(ctx: IContext): void {
         line: l,
       });
     }
-    // the player's ≥ 5 % spells, the section's own basis, and the ids its
-    // damage rows carry
-    const hvCache = new Map<string, { names: Set<string>; ids: Set<string> }>();
-    const hvOf = (u: any) => {
-      let h = hvCache.get(u.id);
-      if (!h) {
-        const ids = new Set<string>();
-        for (const d of (u.damageOut ?? []) as any[]) {
-          if (ev(d) === ABSORBED) continue;
-          const id = d.spellId ? String(d.spellId) : "";
-          if (id) ids.add(id);
-        }
-        h = {
-          names: getHighValueSpellIds(
-            u,
-            new Set(
-              players.filter((x) => x.reaction === u.reaction).map((x) => x.id),
-            ),
-          ),
-          ids,
-        };
-        hvCache.set(u.id, h);
-      }
-      return h;
-    };
-    const runOf = (target: any, defense: string, sec: number) => {
-      const auras = ((target.auraEvents ?? []) as any[])
-        .filter((a) => a.destUnitId === target.id)
-        .sort((a, b) => tsOf(a) - tsOf(b));
-      const app = auras.find(
-        (a) =>
-          ev(a) === APPLIED &&
-          nameOf(String(a.spellId), a.spellName ?? "") === defense &&
-          Math.floor((tsOf(a) - start) / 1000) === sec,
-      );
-      if (!app) return undefined;
-      const rem = auras.find(
-        (a) =>
-          ev(a) === REMOVED &&
-          a.spellId === app.spellId &&
-          tsOf(a) >= tsOf(app),
-      );
-      return {
-        from: tsOf(app),
-        to: rem ? tsOf(rem) : end,
-        auraId: String(app.spellId),
-      };
-    };
-    const castsIn = (
-      player: any,
-      target: any,
-      run: { from: number; to: number; auraId: string },
-    ) => {
-      const hv = hvOf(player);
-      let rows = successesOf(player).filter(
-        (c) =>
-          c.destUnitId === target.id &&
-          tsOf(c) >= run.from - 6000 &&
-          tsOf(c) <= run.to &&
-          tsOf(c) < end &&
-          hv.names.has(spellNameKey(String(c.spellId), c.spellName ?? "")) &&
-          // a copy / tick / later stage of another press is no cast (the
-          // product's table: Mutilate's 27576, Penance's bolts)
-          !COPY_CAST_IDS.has(String(c.spellId)) &&
-          // nor an auto-attack swing or a passive proc — the producer's own
-          // `isAutomaticCastRow` (pipeline T12 / GH #203: Crusading Strikes'
-          // swings were counted here after the line stopped counting them)
-          !isAutomaticCastRow(c) &&
-          // a charge press is counted at its impact row (fact10 D28: The
-          // Hunt 1246167 → 1246169), the product's `pressImpactRow`
-          pressImpactRow(c, successesOf(player)) === undefined &&
-          // a school the immunity does not cover landed (DB2 masks: a Frost
-          // Strike into Blessing of Protection; the hand mask of one with
-          // none: Cloak of Shadows, fact11 D20) — the section's own rule
-          immunityStopsSpellSchool(run.auraId, String(c.spellId)) !== false &&
-          // nor a school a damage-reduction wall leaves out (pipeline T124:
-          // a Mortal Strike into Anti-Magic Zone) — the section's own rule
-          !drWallMissesSpellSchool(run.auraId, String(c.spellId)),
-      );
-      // an empowered spell's success row is written when the hold BEGINS:
-      // it goes off at its SPELL_EMPOWER_END; a hold never ended fired
-      // nothing (the log's own rows; codex 20-F18-03 #2)
-      const starts = ((player.empowerStarts ?? []) as any[]).map(tsOf);
-      const ends = ((player.empowerEnds ?? []) as any[])
-        .map((x) => ({ id: String(x.spellId), ms: tsOf(x) }))
-        .sort((a, b) => a.ms - b.ms);
-      const firedAt = (c: any): number | null => {
-        const t = tsOf(c);
-        if (!starts.some((st) => Math.abs(st - t) <= 500)) return t;
-        const e = ends.find(
-          (x) =>
-            x.ms >= t &&
-            nameOf(x.id) === nameOf(String(c.spellId), c.spellName ?? ""),
-        );
-        return e ? e.ms : null;
-      };
-      // the section counts what landed inside the defensive
-      const fired = rows.filter((c) => firedAt(c) !== null);
-      const landings = pressLandingRows(
-        fired,
-        (c) => firedAt(c)!,
-        pressLandingCaster(player, units),
-        players.filter((x) => x.reaction !== player.reaction),
-      );
-      rows = fired.filter((c) => {
-        const at = landings.get(c)!.atMs;
-        // a hit that went through an immunity is no cast into it (fact11
-        // D21) — the section's `landedThroughWall`
-        return (
-          at >= run.from &&
-          at <= run.to &&
-          !landedThroughWall(run.auraId, landings.get(c)!)
-        );
-      });
-      // one press written under two ids of the spell in one instant (Flame
-      // Shock 470411 + 188389) is one cast
-      return rows.filter(
-        (c, i) =>
-          !rows.some(
-            (o, j) =>
-              j < i &&
-              o.spellId !== c.spellId &&
-              Math.abs(tsOf(o) - tsOf(c)) <= 5 &&
-              nameOf(String(o.spellId), o.spellName ?? "") ===
-                nameOf(String(c.spellId), c.spellName ?? ""),
-          ),
-      );
-    };
-    const runs = new Map<
+    // What the section counted is the section's to say: its own selection
+    // (`buildOffensiveWasteSummary`'s trace — every player and wall reading
+    // it weighed, a line or not), not a second count of the casts. Until
+    // T206 the casts were counted here again, by name, and that copy had
+    // drifted from the producer five ways (605: 22 rows / 8 facts, none the
+    // product's — a wall whose kill was live prints no line ×3, Evasion
+    // stops no spell ×2, a reflected Holy Shock, and two landings paired
+    // over this target's casts alone).
+    const friends = players.filter((x) => x.reaction === owner.reaction);
+    const enemies = players.filter((x) => x.reaction !== owner.reaction);
+    const nameById = new Map(players.map((x) => [x.id as string, x.name]));
+    const keyOf = (
+      playerId: string,
+      targetId: string,
+      defense: string,
+      sec: number,
+    ) => `${playerId}|${targetId}|${defense}|${sec}`;
+    const traced = new Map<
       string,
-      {
-        from: number;
-        to: number;
-        auraId: string;
-        target: any;
-        defense: string;
-        players: Set<string>;
-      }
+      { listed: number; fromMs: number; first: string; who: string }
     >();
-    // a wall with a melee and a non-melee reading counts each apart: a
-    // printed line's count is `intoDefenseLanded`'s (scan5)
-    const twoReadings = (auraId: string) => {
-      const key =
-        castKeyOfAura(auraId, (id) => mitigationVerdictOf(id) !== null) ??
-        auraId;
-      return nonMeleeMitigationVerdictOf(key) !== mitigationVerdictOf(key);
-    };
+    buildOffensiveWasteSummary(legacy, friends, enemies, (r) => {
+      if (!r.listed) return;
+      const sec = toRenderSecond(r.window.fromSeconds);
+      const k = keyOf(r.casterId, r.window.unitId, r.window.defenseName, sec);
+      const t = traced.get(k) ?? {
+        listed: 0,
+        fromMs: start + r.window.fromSeconds * 1000,
+        first: nameOf(r.wasteCasts[0]!.spellId, r.wasteCasts[0]!.spellName),
+        who: `${nameById.get(r.casterId)} into ${nameById.get(r.window.unitId)}'s ${r.window.defenseName} at ${fmtS(sec)}`,
+      };
+      // a wall with a melee and a non-melee reading prints a line for each
+      t.listed += r.wasteCasts.length;
+      traced.set(k, t);
+    });
+    const printedBy = new Map<string, { count: number; line: string }>();
     for (const p of printed) {
-      const run = runOf(p.target, p.defense, p.sec);
-      if (!run) continue;
-      const rk = `${p.target.id}|${p.defense}|${p.sec}`;
-      if (!runs.has(rk))
-        runs.set(rk, {
-          ...run,
-          target: p.target,
-          defense: p.defense,
-          players: new Set(),
-        });
-      runs.get(rk)!.players.add(p.player.id);
       bump("castDamageIdSplit");
-      const casts = castsIn(p.player, p.target, run);
-      const ids = hvOf(p.player).ids;
-      const split = casts.filter((c) => !ids.has(String(c.spellId)));
-      if (
-        casts.length > p.count &&
-        split.length > 0 &&
-        !twoReadings(run.auraId)
-      )
+      const k = keyOf(p.player.id, p.target.id, p.defense, p.sec);
+      const x = printedBy.get(k) ?? { count: 0, line: p.line };
+      x.count += p.count;
+      printedBy.set(k, x);
+    }
+    for (const [k, p] of printedBy) {
+      const t = traced.get(k);
+      if (t?.listed === p.count) continue;
+      violate(
+        "castDamageIdSplit",
+        `short:${t?.first ?? "no selection"}`,
+        t?.fromMs ?? start,
+        k,
+        `${t?.who ?? k}: line lists ${p.count}, the section's selection ${t?.listed ?? 0}`,
+        p.line,
+      );
+    }
+    for (const [k, t] of traced)
+      if (!printedBy.has(k))
         violate(
           "castDamageIdSplit",
-          `short:${nameOf(String(split[0].spellId))}`,
-          run.from,
-          `${p.player.id}:${p.target.id}:${p.sec}`,
-          `${p.player.name} into ${p.target.name}'s ${p.defense} at ${fmtS(p.sec)}: line lists ${p.count}, ${casts.length} by name (${split.length} cast-id ≠ damage-id: ${[...new Set(split.map((c) => nameOf(String(c.spellId))))].join(", ")})`,
-          p.line,
+          `noLine:${t.first}`,
+          t.fromMs,
+          k,
+          `${t.who}: no line, the section's selection ${t.listed}`,
         );
-    }
-    const friendsOf = (u: any) =>
-      players.filter((x) => x.reaction !== u.reaction);
-    for (const r of runs.values()) {
-      for (const pl of friendsOf(r.target)) {
-        if (r.players.has(pl.id)) continue;
-        const casts = castsIn(pl, r.target, r);
-        const ids = hvOf(pl).ids;
-        const split = casts.filter((c) => !ids.has(String(c.spellId)));
-        // the section's own door: 2 casts into an unconditional defensive,
-        // 3 into a kill-live-gated wall (the verdict table, as data), each
-        // reading of a two-reading wall over its own casts
-        const key =
-          castKeyOfAura(r.auraId, (id) => mitigationVerdictOf(id) !== null) ??
-          r.auraId;
-        const doorOf = (v: unknown) => (v === "unconditional" ? 2 : 3);
-        const reachesDoor = twoReadings(r.auraId)
-          ? casts.filter((c) => parryStopsAttack(String(c.spellId))).length >=
-              doorOf(mitigationVerdictOf(key)) ||
-            casts.filter((c) => !parryStopsAttack(String(c.spellId))).length >=
-              doorOf(nonMeleeMitigationVerdictOf(key))
-          : casts.length >= doorOf(mitigationVerdictOf(key));
-        if (reachesDoor && split.length > 0)
-          violate(
-            "castDamageIdSplit",
-            `noLine:${nameOf(String(split[0].spellId))}`,
-            r.from,
-            `${pl.id}:${r.target.id}:${Math.floor((r.from - start) / 1000)}`,
-            `${pl.name} into ${r.target.name}'s ${r.defense} at ${fmtS((r.from - start) / 1000)}: no line, ${casts.length} by name (${split.length} cast-id ≠ damage-id)`,
-          );
-      }
-    }
   }
 
   // ── negAbsorbSum / friendlyRedistribution ──

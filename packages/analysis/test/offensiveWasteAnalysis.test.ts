@@ -21,6 +21,7 @@ import {
   formatOffensiveWasteForContext,
   getHighValueSpellIds,
   INTO_DEFERRAL_TAG,
+  type IOffensiveWasteTraceRow,
   pressLandingCaster,
   pressLandingRows,
   pressLandingsMs,
@@ -678,16 +679,40 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
     });
 
     // 2 casts < threshold 3
-    const summary2 = buildOffensiveWasteSummary(combat, [friend], [enemy]);
+    const traced2: IOffensiveWasteTraceRow[] = [];
+    const summary2 = buildOffensiveWasteSummary(
+      combat,
+      [friend],
+      [enemy],
+      (r) => traced2.push(r),
+    );
     expect(summary2.events).toHaveLength(0);
+    // the trace (T206) says what was weighed and why no line came of it
+    expect(
+      traced2.map((r) => [r.wasteCasts.length, r.threshold, r.listed]),
+    ).toEqual([[2, 3, false]]);
 
     // 3 casts meets threshold 3
     friend.spellCastEvents.push(
       makeSpellCastEvent("12294", matchStart + 13_000, "enemy-1") as never,
     );
-    const summary3 = buildOffensiveWasteSummary(combat, [friend], [enemy]);
+    const traced3: IOffensiveWasteTraceRow[] = [];
+    const summary3 = buildOffensiveWasteSummary(
+      combat,
+      [friend],
+      [enemy],
+      (r) => traced3.push(r),
+    );
     expect(summary3.events).toHaveLength(1);
     expect(summary3.events[0]!.verdict).toBe("kill-live-gated");
+    // a listed trace row is the event, cast for cast; the trace changes
+    // nothing of the summary
+    expect(traced3.filter((r) => r.listed)).toHaveLength(1);
+    expect(traced3[0]!.wasteCasts).toEqual(summary3.events[0]!.wasteCasts);
+    expect(traced3[0]!.killLive).toBe(false);
+    expect(buildOffensiveWasteSummary(combat, [friend], [enemy])).toEqual(
+      summary3,
+    );
   });
 
   it("fact10 D26 (915f90ae 1:13): a Time Dilation line says it is a deferral", () => {

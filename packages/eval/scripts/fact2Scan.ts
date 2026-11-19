@@ -1618,7 +1618,10 @@ function runRound(ctx: IContext): void {
       // press HP under the press's own first heal
       const pm =
         /^(\d+:\d\d) {2}\[YOU\] \[CD\] {3}(.+?) \(self: (\d+)% HP/.exec(l);
-      if (pm) {
+      // a hold that was never released healed nothing: a heal of the name
+      // beside it is another press's (T206, s0/29-3 2:09: a Dream Breath cut
+      // short after 0.2 s in the second a Stasis release put one out)
+      if (pm && !l.includes("[EMPOWER not released")) {
         const t = start + secOf(pm[1]!) * 1000;
         const succ = succOf(owner, pm[2]!, t, t + 1000);
         if (succ) {
@@ -1678,10 +1681,15 @@ function runRound(ctx: IContext): void {
             if (before) {
               // over the max the product reads the row on (`hpReadingMaxHp`:
               // a stale-max row after a max-HP grant — GH #203)
-              const want =
+              // …and never above full, as every printed HP is (T206,
+              // s2/146-4 0:41: a row at 110.9 % of the max it is read on,
+              // the line's 100 %)
+              const want = Math.min(
+                100,
                 (before.advancedActorCurrentHp /
                   hpReadingMaxHp(owner, before)) *
-                100;
+                  100,
+              );
               bump("hotPressHp");
               if (Math.abs(Number(pm[3]) - want) > 1.5)
                 miss(

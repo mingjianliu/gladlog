@@ -113,6 +113,26 @@ interface IDefenseWindow {
   unit: ICombatUnit;
 }
 
+export interface IOffensiveWasteTraceRow {
+  casterId: string;
+  window: Pick<
+    IDefenseWindow,
+    | "spellId"
+    | "defenseName"
+    | "verdict"
+    | "fromSeconds"
+    | "toSeconds"
+    | "unitId"
+  >;
+  /** the casts the section counts into this reading of the wall */
+  wasteCasts: IOffensiveWasteCast[];
+  /** the door: how many casts make a line */
+  threshold: number;
+  /** a kill-live-gated wall whose target was read low: no line */
+  killLive: boolean;
+  listed: boolean;
+}
+
 /**
  * The signed walls on each enemy, as intervals of the shared builder
  * (`buildAuraIntervals` — F15 / fact1215 R8, 2026-10-17). The hand pairing
@@ -278,6 +298,10 @@ export function buildOffensiveWasteSummary(
     Partial<Pick<AtomicArenaCombat, "units">>,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
+  /** every (player, wall reading) the section weighed, a line or not — for
+   * a verification scan to read the section's own selection instead of
+   * counting casts a second way (pipeline T206) */
+  trace?: (row: IOffensiveWasteTraceRow) => void,
 ): IOffensiveWasteSummary {
   const matchStartMs = combat.startTime;
   const defenseWindows = buildDefenseWindows(enemies, combat);
@@ -454,13 +478,31 @@ export function buildOffensiveWasteSummary(
             atSeconds: (landings.get(e)!.atMs - matchStartMs) / 1000,
           }));
 
-        if (wasteCasts.length < threshold) continue;
+        if (wasteCasts.length < threshold) {
+          trace?.({
+            casterId: friend.id,
+            window,
+            wasteCasts,
+            threshold,
+            killLive: false,
+            listed: false,
+          });
+          continue;
+        }
         // 击杀成立时顶着减伤打是正确操作 —— 只有不成立时才算该转火。
         // 无条件类不看这个:打不进去就是打不进去。
-        if (
+        const killLive =
           window.verdict === "kill-live-gated" &&
-          killWasLive(window, matchStartMs, roundEndAt)
-        ) {
+          killWasLive(window, matchStartMs, roundEndAt);
+        trace?.({
+          casterId: friend.id,
+          window,
+          wasteCasts,
+          threshold,
+          killLive,
+          listed: !killLive,
+        });
+        if (killLive) {
           continue;
         }
         {
