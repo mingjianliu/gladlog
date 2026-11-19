@@ -176,7 +176,9 @@ const LaneBody = memo(function LaneBody({
                   const members = [c, ...cl.minis];
                   const elapsed = c.t <= tQ;
                   const recent = elapsed && c.t >= tQ - GCD_MS;
-                  const major = members.some((m) => isMajorCd(m.spellId));
+                  const major = members.some((m) =>
+                    isMajorCd(m.spellId, tr.specId),
+                  );
                   // Evidence-chain gold flash: any member within ±2s of the
                   // target instant, and (no named units, or this column is
                   // named).
@@ -187,7 +189,7 @@ const LaneBody = memo(function LaneBody({
                       flash.unitNames.includes(tr.name));
                   const cls = [
                     "rpt-gcd-act",
-                    isMajorCd(c.spellId) ? "major" : "",
+                    isMajorCd(c.spellId, tr.specId) ? "major" : "",
                     playing && !elapsed ? "future" : "",
                     recent ? "recent" : "",
                     flashed ? "flash" : "",
@@ -221,7 +223,7 @@ const LaneBody = memo(function LaneBody({
                         <span
                           className="rpt-gcd-act-dot"
                           style={{
-                            background: isMajorCd(c.spellId)
+                            background: isMajorCd(c.spellId, tr.specId)
                               ? "var(--gold)"
                               : classColor(tr.classId),
                           }}
@@ -257,7 +259,7 @@ const LaneBody = memo(function LaneBody({
                           <span
                             key={j}
                             className={
-                              isMajorCd(m.spellId)
+                              isMajorCd(m.spellId, tr.specId)
                                 ? "rpt-gcd-mini major"
                                 : "rpt-gcd-mini"
                             }

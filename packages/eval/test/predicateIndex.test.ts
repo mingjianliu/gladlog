@@ -255,6 +255,7 @@ import * as dispelSummary from "../../desktop/src/renderer/src/report/derive/dis
 import * as flowSeries from "../../desktop/src/renderer/src/report/derive/flowSeries";
 import * as kickText from "../../desktop/src/renderer/src/report/derive/kickText";
 import * as meterRows from "../../desktop/src/renderer/src/report/derive/meterRows";
+import * as reportCasts from "../../desktop/src/renderer/src/report/derive/casts";
 import * as reportMistakes from "../../desktop/src/renderer/src/report/derive/mistakes";
 import * as teamSide from "../../desktop/src/renderer/src/report/derive/teamSide";
 import * as reportTimeRange from "../../desktop/src/renderer/src/report/derive/timeRange";
@@ -6007,6 +6008,13 @@ const INDEX: PredicateRow[] = [
     symbol: "dispelSummaryOf",
     mod: dispelSummary,
   },
+  // the GCD lane's major-cooldown highlight: its offensive leg is analysis's
+  // `isEnemyCdWindowSpell`, imported (R71, pipeline T154); asserted below
+  {
+    file: `${D}/derive/casts.ts`,
+    symbol: "isMajorCd",
+    mod: reportCasts,
+  },
   // where a control ends for the report's control readers: the function reads
   // the round's end off the round it is handed — each reader hands the round
   // itself, as the prompt does; asserted below
@@ -6269,6 +6277,30 @@ describe("谓词索引:无法共享 export 的配对,断言相等", () => {
     expect(readRepo("packages/eval/scripts/swingLandedScan.ts")).toMatch(
       /import \{[^}]*\bswingLandedTwins\b[^}]*\} from "@gladlog\/parser"/s,
     );
+  });
+
+  it("GCD 泳道的大招高亮:进攻一支是从 analysis 引入的 isEnemyCdWindowSpell,renderer 不再有自己的进攻类别(R71)", () => {
+    const src = readRepo(`${D}/derive/casts.ts`);
+    expect(src).toMatch(
+      /import \{[^}]*\bisEnemyCdWindowSpell,[^}]*\} from "@gladlog\/analysis";/,
+    );
+    expect(src).toMatch(
+      /if \(isEnemyCdWindowSpell\(String\(spellId\), spec\)\) return true;/,
+    );
+    // no offensive category of the renderer's own behind the highlight
+    expect(src).toMatch(
+      /const MAJOR_CD_TYPES = new Set\(\["immunities", "buffs_defensive", "disarms"\]\);/,
+    );
+    // every call in the lane hands the column's spec
+    const lane = readRepo(`${D}/components/GcdSwimlane.tsx`);
+    const calls = lane.match(/\bisMajorCd\(/g) ?? [];
+    expect(calls).toHaveLength(4);
+    expect(
+      lane.match(/\bisMajorCd\([cm]\.spellId, tr\.specId\)/g),
+    ).toHaveLength(4);
+    // the analysis predicate and the renderer's answer agree on the ruled id
+    expect(enemyCDs.isEnemyCdWindowSpell("376079")).toBe(true);
+    expect(reportCasts.isMajorCd(376079)).toBe(true);
   });
 
   it("战报驱散读者的那次调用就是 prompt 的那次:回合本身 + 两边的宠物;dispelDash / mistakes 只经 dispelSummaryOf 调 reconstructDispelSummary", () => {

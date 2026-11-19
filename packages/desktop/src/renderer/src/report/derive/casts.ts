@@ -1,5 +1,6 @@
 import {
   isCompanionCastRow,
+  isEnemyCdWindowSpell,
   SPELL_CATEGORIES,
   SPELL_ICONS_GENERATED,
 } from "@gladlog/analysis";
@@ -24,14 +25,22 @@ export function auraCategory(spellId: number): string | undefined {
 }
 
 /** Whether this cast is a major / key cooldown (immunity, defensive CD,
- * offensive CD, disarm) — used to highlight it in the GCD lane. */
-const MAJOR_CD_TYPES = new Set([
-  "immunities",
-  "buffs_defensive",
-  "buffs_offensive",
-  "disarms",
-]);
-export function isMajorCd(spellId: number): boolean {
+ * offensive CD, disarm) — used to highlight it in the GCD lane.
+ *
+ * The offensive leg is analysis's own answer, imported, not a category of
+ * this file's: `isEnemyCdWindowSpell` — the predicate that makes a press an
+ * `[ENEMY CD]` line (a member of the canonical offensive table whose official
+ * cooldown is inside the tracked band). User ruling R71 (2026-11-18, pipeline
+ * T154): the lane read `SPELL_CATEGORIES`' `buffs_offensive` rows, which
+ * never held Champion's Spear 376079 after ruling A8 made it an offensive
+ * cooldown — nor 43 other cooldown presses the prompt calls one. `spec` is
+ * the unit's (a spec-gated member — Divine Toll, Convoke the Spirits — is
+ * one only in its spec's hands). The other three kinds stay category rows.
+ * `docs/predicate-index.md` "Report UI"; the flip list is pinned in
+ * `test/report.majorcd.test.ts`. */
+const MAJOR_CD_TYPES = new Set(["immunities", "buffs_defensive", "disarms"]);
+export function isMajorCd(spellId: number, spec?: number | string): boolean {
+  if (isEnemyCdWindowSpell(String(spellId), spec)) return true;
   const c = auraCategory(spellId);
   return c != null && MAJOR_CD_TYPES.has(c);
 }
