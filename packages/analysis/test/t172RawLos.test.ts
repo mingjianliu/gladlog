@@ -178,9 +178,10 @@ describe("[CC ON TEAM] caster LoS: blocked on both readings (T172, R70)", () => 
     ).toBeNull();
   });
   it("a landed targeted cast proves sight through its cast→effect family (Fear: cast 5782, aura 118699)", () => {
-    const cast = (id: string, ms: number, dest = "v") => [
-      makeSpellCastEvent(id, T0 + ms, dest, "V", "e1", "E"),
-    ];
+    const cast = (id: string, ms: number, dest = "v") =>
+      [
+        makeSpellCastEvent(id, T0 + ms, dest, "V", "e1", "E"),
+      ] as unknown as Parameters<typeof landedCastProvesLos>[0];
     expect(
       landedCastProvesLos(cast("5782", 1190), "118699", "v", T0 + 1200),
     ).toBe(true);
