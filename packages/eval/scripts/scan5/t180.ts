@@ -20,6 +20,16 @@
  *    wall, a control off before the opener, an effect over before the
  *    trough, a press after the unit's death). Kind = the first response's
  *    refusal.
+ *  - `ignoredHealCdById` (inventory, every owner): every healing-CD
+ *    response by a unit other than the pressured one whose official verdict
+ *    is self-only (`HEALING_VERDICTS.official.healsOthers === false`) — the
+ *    ids ruling R75 ignores. Kind = the spell.
+ *  - `selfOnlyRowsHealCd` (inventory, every owner): a healing-CD response
+ *    by another unit that the press's own rows show on its caster alone
+ *    (`selfOnlyEffect`) while the official verdict does not say self-only.
+ *    The credit line refuses it (T123); the candidate must count it
+ *    (assembly review 80-PIPE-169-B155). Kind = the spell | what the
+ *    candidate does with it.
  */
 import {
   burstWindowDecisionPoints,
@@ -28,6 +38,7 @@ import {
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import { answersPressured } from "@gladlog/analysis/src/context/burstAnswered";
+import { HEALING_VERDICTS } from "@gladlog/analysis/src/data/healingVerdicts";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx, nameOf } from "./ctx";
@@ -35,6 +46,8 @@ import { type IRoundCtx, nameOf } from "./ctx";
 export const CHECKS = [
   "respondedOnElsewherePress",
   "respondedOnRefusedPress",
+  "ignoredHealCdById",
+  "selfOnlyRowsHealCd",
 ] as const;
 
 const REFUSALS = [
@@ -79,7 +92,8 @@ function refusal(pr: any, r: any): string {
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
-  if (!owner || !isHealerSpec(owner.spec)) return;
+  if (!owner) return;
+  const healer = isHealerSpec(owner.spec);
   let points: ReturnType<typeof burstWindowDecisionPoints>;
   try {
     points = burstWindowDecisionPoints(ctx.legacy, {
@@ -90,7 +104,48 @@ export function run(ctx: IRoundCtx): void {
   }
   for (const p of points) {
     const pr = p.pressured;
+    if (pr !== null)
+      for (const r of p.responseCasts) {
+        if (
+          r.category !== "healCd" ||
+          r.casterId === undefined ||
+          r.casterId === pr.unitId
+        )
+          continue;
+        const official =
+          HEALING_VERDICTS[r.spellId]?.official.healsOthers === false;
+        if (!official && r.selfOnlyEffect !== true) continue;
+        const fact = `${ctx.roundKey}|${owner.reaction}|${p.tSec}|${r.casterId}|${r.spellId}|${r.tSec}`;
+        const at = ctx.start + p.tSec * 1000;
+        const name = nameOf(r.spellId, (r as any).spellName);
+        if (official) {
+          ctx.bump("ignoredHealCdById");
+          ctx.violate(
+            "ignoredHealCdById",
+            name,
+            at,
+            fact,
+            `window at ${p.tSec}s: ${r.casterName} ${name} ${r.latencySec}s; ignored=${pressDidNotReachPressured(pr, r)}`,
+          );
+          continue;
+        }
+        // the press's own rows show it on its caster alone, the official
+        // verdict does not say self-only: the credit line refuses it, the
+        // candidate counts it
+        const others = p.responseCasts.filter(
+          (x) => x !== r && answersPressured(pr, x),
+        );
+        ctx.bump("selfOnlyRowsHealCd");
+        ctx.violate(
+          "selfOnlyRowsHealCd",
+          `${name} | ${pressDidNotReachPressured(pr, r) ? "ignored by the candidate too" : others.length > 0 || p.responses.kite || p.responses.attackerMoved ? "counts for the candidate, beside a creditable answer" : "counts for the candidate, no creditable answer in the window"}`,
+          at,
+          fact,
+          `window at ${p.tSec}s: ${r.casterName} ${name} ${r.latencySec}s; responded=${p.responded}`,
+        );
+      }
     if (
+      !healer ||
       !p.feasible ||
       !p.triaged ||
       pr === null ||

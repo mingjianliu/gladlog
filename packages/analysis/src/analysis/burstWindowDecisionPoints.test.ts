@@ -30,6 +30,7 @@ import {
   BURST_TRIAGE_MIN_HP_DROP_PP,
   burstExtrasLabel,
   burstTroughReadEnd,
+  type BurstResponseCast,
   burstWindowDecisionPoints,
   controlLandedResponses,
   landedPreOpenerStillUp,
@@ -1277,6 +1278,30 @@ describe("burstWindowDecisionPoints — where a control answer landed (T12 ⑧ i
     )[0]!;
     expect(landed.responseCasts[0]!.landed).toBe(true);
     expect(landed.responded).toBe(true);
+  });
+
+  // assembly review 80-PIPE-169-B155 (84d80c66 r1 1:45): the ignored
+  // healing CD is the official self-only verdict's (Dark Pact, Exhilaration)
+  // — not a press whose own rows merely show it on its caster
+  // (`selfOnlyEffect`): a teammate's Emerald Communion still answers
+  it("another unit's healing CD is ignored on the official self-only verdict alone: Emerald Communion with self-only rows still answers", () => {
+    const pressured = { unitId: "F1" };
+    const heal = (spellId: string, selfOnlyEffect?: true) =>
+      ({
+        category: "healCd",
+        spellId,
+        spellName: spellId,
+        casterName: "Mate-R",
+        casterId: "F2",
+        tSec: 15,
+        latencySec: 5,
+        ...(selfOnlyEffect ? { selfOnlyEffect } : {}),
+      }) as BurstResponseCast;
+    expect(pressDidNotReachPressured(pressured, heal("108416"))).toBe(true);
+    expect(pressDidNotReachPressured(pressured, heal("109304"))).toBe(true);
+    const communion = heal("370960", true);
+    expect(pressWentElsewhere(pressured, communion)).toBe(false);
+    expect(pressDidNotReachPressured(pressured, communion)).toBe(false);
   });
 
   // ruling R75: "a control that did not land" is control only

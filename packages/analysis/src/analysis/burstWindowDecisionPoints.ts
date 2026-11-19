@@ -876,7 +876,9 @@ function healsOnlyItsCaster(spellId: string): boolean {
  *    warlock's own Dark Pact cannot be given to the mate, so it did not go
  *    "elsewhere"; it is ignored — `pressDidNotReachPressured`) — self-only
  *    by the official verdict (`HEALING_VERDICTS.official.healsOthers ===
- *    false`) or by the press's own rows (`selfOnlyEffect`, T123's reading);
+ *    false`); a press whose own rows show it on its caster alone
+ *    (`selfOnlyEffect`, T123's reading) is not "elsewhere" either and is
+ *    NOT ignored — see `pressDidNotReachPressured`;
  *  - a control that did not land (03d63165 r1: a Storm Bolt MISSED) —
  *    control only (R75): an interrupt that interrupted nothing
  *    (`INTERRUPT_IDS`, spellMeta's own class) is ignored the same way.
@@ -926,7 +928,13 @@ export function pressWentElsewhere(
  * interrupt that interrupted nothing (9d899d10: a reflected Counterspell).
  * An ignored press neither answers the window nor is a press that "went
  * elsewhere": a window with nothing but ignored presses is plainly
- * unanswered.
+ * unanswered. The ignored healing CD is the official verdict's alone
+ * (`healsOthers === false`: Dark Pact, Exhilaration — R75 amendment c).
+ * T123's broader `selfOnlyEffect` (the press's own rows show it on its
+ * caster only) stays a credit-line rule (`answersPressured`): Emerald
+ * Communion sends its overhealing to an injured ally, so a teammate's
+ * Communion still answers the window (assembly review 80-PIPE-169-B155,
+ * 84d80c66 r1 1:45: answered 1 → 0 in the table builder).
  */
 export function pressDidNotReachPressured(
   pressured: { unitId: string },
@@ -937,7 +945,7 @@ export function pressDidNotReachPressured(
     r.category === "healCd" &&
     r.casterId !== undefined &&
     r.casterId !== pressured.unitId &&
-    (healsOnlyItsCaster(r.spellId) || r.selfOnlyEffect === true)
+    healsOnlyItsCaster(r.spellId)
   )
     return true;
   return r.category === "control" && r.landed === false;
