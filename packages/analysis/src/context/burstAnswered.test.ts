@@ -661,6 +661,21 @@ describe("parseBurstAnsweredLine — the producer's own reader of its line", () 
     expect(p!.latencySec).toBe(-1.1);
     expect(p!.spellName).toBe("Pain Suppression");
   });
+  it("R79: a (no press) opener and extra print with the mark and the line still reads back", () => {
+    const text = rendered({
+      leadCd: { ...point().leadCd, spellName: "Recklessness (no press)" },
+      extraCds: [
+        { ...point().leadCd, spellName: "Avatar (no press)", castSec: 45 },
+      ],
+    });
+    expect(text).toContain(
+      "enemy opened Recklessness (no press) (+Avatar (no press) 5s later) (",
+    );
+    expect(parseBurstAnsweredLine(text)).toMatchObject({
+      spellName: "Pain Suppression",
+      latencySec: 2.4,
+    });
+  });
   it("`still died` is the pressured unit's own death; another friendly's is not", () => {
     expect(
       parseBurstAnsweredLine(

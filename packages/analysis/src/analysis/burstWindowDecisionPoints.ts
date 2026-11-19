@@ -84,6 +84,7 @@ import {
 import { isRoundLandedDamageRow } from "../utils/incomingPressure";
 import { LANDED_PAIR_MS } from "../utils/kickAudit";
 import { getUnitPositionAtTime } from "../utils/losAnalysis";
+import { NO_PRESS_SUFFIX } from "../utils/offensiveAuraOccurrences";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import { buildRosterSides, type RosterSides } from "../utils/rosterSide";
@@ -1930,9 +1931,19 @@ export function burstWindowDecisionPoints(
         c: IAlignedBurstWindow["activeCDs"][number],
       ): BurstCdRef => {
         const caster = enemyByName.get(c.playerName);
+        const english = getEnglishSpellName(c.spellId, c.spellName);
         return {
           spellId: c.spellId,
-          spellName: getEnglishSpellName(c.spellId, c.spellName),
+          // user ruling R79 (2026-11-19, T185): a cast-less proc copy the
+          // timeline prints `X (no press)` keeps that mark on every burst
+          // line that names it — `enemy opened X (no press)`, `+X (no
+          // press) 5s later`, `leadCd=X (no press)` — instead of reading as
+          // a press; the window, its timing and its troughs are unchanged
+          spellName:
+            c.spellName.endsWith(NO_PRESS_SUFFIX) &&
+            !english.endsWith(NO_PRESS_SUFFIX)
+              ? `${english}${NO_PRESS_SUFFIX}`
+              : english,
           casterName: c.playerName,
           casterSpec: caster ? specToString(caster.spec) : "?",
           castSec: Math.floor(c.castSeconds),

@@ -239,6 +239,39 @@ describe("burstWindowDecisionPoints — response classification", () => {
       ...over,
     });
 
+  // T185 (fact13 retest P6, user ruling R79): a cast-less proc copy the
+  // timeline prints `X (no press)` keeps that mark where a burst line names
+  // it
+  it("a (no press) copy in the window keeps the timeline's mark on its name", () => {
+    const t = T0 + 12_000;
+    const pts = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend(),
+        hostile({
+          class: CombatUnitClass.Warrior,
+          spec: CombatUnitSpec.Warrior_Arms,
+          info: { teamId: "1", specId: "71" },
+          spellCastEvents: [cast("107574", 10)],
+          auraEvents: [
+            {
+              spellId: "1719",
+              spellName: "Recklessness",
+              srcUnitId: "E1",
+              srcUnitName: "Enemy-R",
+              destUnitId: "E1",
+              timestamp: t,
+              logLine: { event: "SPELL_AURA_APPLIED", timestamp: t },
+            },
+          ],
+        }),
+      ]),
+    );
+    expect(pts[0]!.leadCd.spellName).toBe("Avatar");
+    expect(pts[0]!.extraCds.map((c) => c.spellName)).toEqual([
+      "Recklessness (no press)",
+    ]);
+  });
+
   it("no answer inside 8 s → responded=false, firstResponseSec=null", () => {
     const pts = burstWindowDecisionPoints(
       combat([pressuredFriend(), enemyWithBurst()]),
