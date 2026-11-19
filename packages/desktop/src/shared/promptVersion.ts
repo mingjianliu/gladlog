@@ -1544,5 +1544,11 @@
  *  30 s or more keeps its own [PRESS] line when a [MINOR DISPELS] part also
  *  names it.
  *  See docs/prompt-version-history.md.
+ *
+ * v606 (2026-11-18; pipeline batch B134, T135): three DB2-named cooldown
+ *  reductions join the cooldown model: Ranger's Finesse (Aspect of the
+ *  Turtle), Healing Hands (Lay on Hands, an up-to range), Glaciate (Ray of
+ *  Frost).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 605;
+export const PROMPT_VERSION = 606;

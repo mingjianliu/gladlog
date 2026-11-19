@@ -7732,3 +7732,34 @@ assembled candidate adds 309 [PRESS] lines in 301 contexts / 85 archives (the
 same 309 as the lane's run) and changes nothing else; menus are byte-
 identical. Codex branch review 85-tk-CD-T143-1 (one real-sample scan point,
 fixed) and -1b: APPROVE.
+
+v606 (2026-11-18; pipeline batch B134, T135). Draft P02: presses the cooldown
+model called impossible, one DB2-named mechanism each
+(data/talentScriptedCooldowns.ts, utils/cooldowns.ts, registered in
+curatedIdRegistry.ts). (1) Ranger's Finesse (Marksmanship PvP talent 248443;
+SpellEffect 465408, base 20): consuming the 3-stack buff 408518 beside the
+unit's own Volley takes 20 s off Aspect of the Turtle (a review fix requires
+the 3 stacks). (2) Healing Hands (326734; SpellEffect 817890, base 60,
+PvpMultiplier 0.5, so up to 30 % in the arena, scaled by the target's missing
+health, which the log does not state at the press): Lay on Hands keeps its
+cooldown and gets the range's low end as its earliest return (new
+UP_TO_COOLDOWN_REDUCTIONS), printed as a range, e.g. `[294–420s]`,
+`(287–413s)`. (3) Glaciate (Frost 1247798; SpellEffect 1250249, 0.1 s per
+Freezing stack an Ice Lance shatters): Ray of Frost. Checks on the 605:
+ledgerPressBeforeBack 46 -> 39 / 50,553 (Ray of Frost 6 -> 1, Lay on Hands 1
+-> 0, Aspect of the Turtle 1 -> 0; the other kinds are unchanged and stay
+recorded), resCdBeforeNextPress 70 -> 38 (10 -> 7 facts),
+kitSoonestAboveRecast 26 -> 26. 1,357 contexts change and no menu: the
+cooldown text of these three spells on [RES], the kit, [UNUSED], [PASSIVE] and
+<cooldowns>, the kill-window offensive-cooldown clause, and one death
+(ab0f87c3 r4): a Marksmanship Hunter's Aspect of the Turtle, pressed at 51.98
+s, is back at 168.76 s after two 3-stack Finesse consumptions (75.82, 168.76
+s), 3.07 s before the 171.83 s death (the old model said 201.98 s), so that
+[DEATH] line now reads `(Unused: Aspect of the Turtle)` with a `Counterfactual
+(arithmetic, single-factor)` line under it. On the 605 the assembled candidate
+changes 1,357 contexts and no menu, every change on the cooldown text of Lay
+on Hands, Ray of Frost or Aspect of the Turtle or a legend line those print
+(the existing `[a–Ns]` and `[press-only]` notes), plus the one death whose
+Aspect of the Turtle is now back in time (3 views of a [DEATH] line and its
+Counterfactual line). Codex branch review 85-tk-CD-T135-1 (#1 fixed) and -1b
+(one synthetic point recorded).
