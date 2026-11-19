@@ -62,6 +62,30 @@ const META = {
 };
 
 describe("buildBurstWindowPriorTable", () => {
+  it("T180: a kind whose every press went elsewhere is not counted as an answer", () => {
+    const t = buildBurstWindowPriorTable(
+      [
+        row({
+          responded: true,
+          pressured: { unitId: "F1" },
+          responses: { wall: true, control: true },
+          responseCasts: [
+            { category: "wall", casterId: "F1", spellId: "1", latencySec: 1 },
+            {
+              category: "control",
+              casterId: "F2",
+              spellId: "2",
+              latencySec: 2,
+              landed: false,
+            },
+          ],
+        }),
+      ],
+      META,
+    );
+    expect(t.cells["3v3|13750"]!.topResponses).toEqual([["wall", 1]]);
+  });
+
   it("counts only feasible windows — an infeasible one enters neither population", () => {
     const t = buildBurstWindowPriorTable(
       [

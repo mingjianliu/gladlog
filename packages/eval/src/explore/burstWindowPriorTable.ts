@@ -16,7 +16,10 @@
  * would put "we were stunned" into the same bucket as "we did nothing"
  * (Value-Gate rule 3).
  */
-import type { BurstWindowDecisionPoint } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
+import {
+  type BurstWindowDecisionPoint,
+  pressWentElsewhere,
+} from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 
 export interface BurstWindowPriorRow {
   bracket: string;
@@ -53,6 +56,7 @@ const RESPONSE_KEYS = [
   "kite",
   "attackerMoved",
 ] as const;
+type ResponseKey = (typeof RESPONSE_KEYS)[number];
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
 function cellOf(points: BurstWindowDecisionPoint[]): BurstWindowPriorCell {
@@ -60,8 +64,22 @@ function cellOf(points: BurstWindowDecisionPoint[]): BurstWindowPriorCell {
   const no = points.filter((p) => !p.responded);
   const deathRate = (ps: BurstWindowDecisionPoint[]) =>
     ps.length ? r2(ps.filter((p) => p.anyFriendlyDeath).length / ps.length) : 0;
+  // T180: a kind of answer is counted for a window only when a press of
+  // that kind answered it — a kind whose every press went elsewhere
+  // (`pressWentElsewhere`, the predicate `responded` reads) is a press, not
+  // an answer
+  const answeredBy = (p: BurstWindowDecisionPoint, k: ResponseKey) => {
+    if (!p.responses[k]) return false;
+    const pr = p.pressured;
+    const casts = p.responseCasts.filter((r) => r.category === k);
+    return !(
+      pr !== null &&
+      casts.length > 0 &&
+      casts.every((r) => pressWentElsewhere(pr, r))
+    );
+  };
   const topResponses = RESPONSE_KEYS.map(
-    (k) => [k, resp.filter((p) => p.responses[k]).length] as const,
+    (k) => [k, resp.filter((p) => answeredBy(p, k)).length] as const,
   )
     .filter(([, c]) => c > 0)
     .sort((a, b) => b[1] - a[1])
