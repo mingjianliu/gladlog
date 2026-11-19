@@ -1564,5 +1564,9 @@
  *  (candidates and context build about half the time); output byte-
  *  identical.
  *  See docs/prompt-version-history.md.
+ *
+ * v610 (2026-11-18; pipeline batch B138, T154): Champion's Spear (376079)
+ *  is an offensive cooldown on both sides (ruling A8).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 609;
+export const PROMPT_VERSION = 610;

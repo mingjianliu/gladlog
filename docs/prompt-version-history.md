@@ -7810,3 +7810,34 @@ owners). Codex branch review 85-tk-ENG-T201-1: two synthetic-only points
 recorded (a same-length array replacement, a metadata edit after warming: the
 T81 convention combatMemo already follows); no shared-row writer; prompts
 identical cold, warm and with the memo disabled.
+
+v610 (2026-11-18; pipeline batch B138, T154). Ruling A8: Champion's Spear
+(376079) counts as an offensive cooldown, on both sides. One root moves, the
+roster category Utility -> Offensive, and every reader follows: an enemy press
+leaves [ENEMY UTILITY] for [ENEMY CD], opens or joins an enemy [OFFENSIVE
+WINDOW] (window heads re-cut, often a second or two earlier, with their
+[STATE] / [RES] snapshot at the new start), and counts in [BURST ANSWERED],
+[HEALER EXPOSURE] and the kill-window offensive-cooldown clause; ours counts
+in the friendly overlap and the missed-sync-window ready set. Checks on the
+605: spearEnemyLine 1,316 / 1,316 -> 0; spearKillWindowUnnamed 162 / 162 -> 0;
+pressInsideLockNotEntered 11 / 729 -> 0 / 726; spearOffensivePress 0 / 840 on
+both sides. 1,947 contexts change. Candidate rows 7,446 -> 7,441 on the lane's
+base: 6 pairs that change id only (a window starting earlier), 19 net removals
+(missed-sync-window 8 rows / 3 facts where our Spear was in fact pressed in or
+just before the window; slow-defensive-response 5 where Spear merged two enemy
+windows or moved a start; stayed-in 6) and 14 net additions (missed-sync-
+window 5 rows / 3 facts with Spear ready and pressed only after the window;
+slow-defensive-response 4 where an enemy Spear led Colossus Smash / Avatar by
+1-2 s; stayed-in 3; kick-eaten 2); entries whose gate was not traced are named
+in attempts/T154-1.json. On the 605 the assembled candidate changes 1,947
+contexts (Champion's Spear moving from [ENEMY UTILITY] to [ENEMY CD] and into
+the offensive-window, burst and readiness readers) and candidate rows 7,439 ->
+7,434 (-25 / +20, the same rows as the lane's run; 66 same-id rows change
+facts). A batch-review fix (80-PIPE-152-B138, ruling R71) takes the same fact
+to the desktop report: the GCD lane's major-cooldown highlight (isMajorCd) had
+its own category list, which did not hold the Spear; its offensive leg now
+reads the predicate that decides [ENEMY CD] (isEnemyCdWindowSpell, imported),
+so 44 spells light up there, the Spear among them, and 3 go dark (Archangel,
+Shadow Dance, Doom Winds' aura id); report-* visual baselines change with it.
+No analysis file changes in that fix. Codex branch review 85-tk-WIN-T154-1 and
+-1b: APPROVE.
