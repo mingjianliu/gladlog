@@ -186,6 +186,40 @@ export function run(ctx: IRoundCtx): void {
         o.end.atS < roundEndS,
     );
 
+  // A SPELL_CAST_FAILED row of the bar's spell in the bar's window is its
+  // end row — but not the row that ended the PREVIOUS bar of that spell in
+  // the very millisecond this one began (a stop-and-recast: "Interrupted"
+  // and the next START in one ms). Which bar such a row belongs to is the
+  // product's attribution (`ownerCastBarOutcomes`: the previous bar read as
+  // stopped / refused at this bar's start), not a second rule: that one row
+  // is the previous bar's, any other row is this bar's (batch review
+  // 80-PIPE-145-B131, eadf9636 r4: Arcane Surge stopped 216.421 and begun
+  // again in that millisecond — the row was taken as the new bar's end and
+  // the round's printed count went unchecked).
+  const failedOfBar = (
+    b: (typeof bars)[number],
+    prev: (typeof bars)[number] | undefined,
+    windowEndS: number,
+  ): boolean => {
+    const rows = failed.filter(
+      (f) =>
+        String(f.spellId) === b.id &&
+        f.tSeconds >= b.t &&
+        f.tSeconds <= windowEndS,
+    );
+    if (rows.length === 0) return false;
+    const prevEnd =
+      prev !== undefined && prev.id === b.id
+        ? read.find((o) => Math.abs(o.t - prev.t) <= SAME_S)?.end
+        : undefined;
+    const prevEndedHere =
+      prevEnd !== undefined &&
+      (prevEnd.kind === "stopped" || prevEnd.kind === "refused") &&
+      prevEnd.atS === b.t;
+    if (!prevEndedHere) return true;
+    const sameMs = rows.filter((f) => f.tSeconds === b.t).length;
+    return rows.length - Math.min(1, sameMs) > 0;
+  };
   const barsOverPressed: number[] = [];
   bars.forEach((b, i) => {
     if (b.t < 0 || b.t >= roundEndS) return;
@@ -217,12 +251,7 @@ export function run(ctx: IRoundCtx): void {
               ))),
       ) ||
       kicked.some((k) => k.id === b.id && k.t >= b.t && k.t <= windowEndS) ||
-      failed.some(
-        (f) =>
-          String(f.spellId) === b.id &&
-          f.tSeconds >= b.t &&
-          f.tSeconds <= windowEndS,
-      )
+      failedOfBar(b, prev, windowEndS)
     )
       return;
     if (!completesAsItself(b.id)) return;
