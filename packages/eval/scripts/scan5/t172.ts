@@ -25,8 +25,9 @@
  *    found.
  *  - `deathTraceLosSkip` (inventory of the log, all kinds out of the
  *    total): for each friendly death and each living teammate, the skip
- *    read the old way (one `getUnitPositionAtTime` point each, no gap
- *    bound) against the producer's. The old reading lives here only, as
+ *    (checked = every such pair) read the old way (one
+ *    `getUnitPositionAtTime` point each, no gap bound) against the
+ *    producer's. The old reading lives here only, as
  *    the reference the count is taken against.
  */
 import { arenaObstacles } from "@gladlog/analysis/src/data/arenaGeometry";
@@ -44,7 +45,15 @@ import {
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 
-import { APPLIED, ev, type IRoundCtx, nameOf, secOf, tsOf } from "./ctx";
+import {
+  APPLIED,
+  ev,
+  type IRoundCtx,
+  nameOf,
+  REFRESH,
+  secOf,
+  tsOf,
+} from "./ctx";
 
 export const CHECKS = [
   "ccLineLosTag",
@@ -88,14 +97,19 @@ export function run(ctx: IRoundCtx): void {
     // goes on up to a second before its stun 117526 under one name (605:
     // f55b2412 r4 1:57, the tether at +117.132 s read in sight, the stun
     // the line prints at +117.925 s blocked)
-    const sameName = ((holder.auraEvents ?? []) as any[]).filter(
-      (a) =>
-        ev(a) === APPLIED &&
-        nameOf(a.spellId, a.spellName) === m[3] &&
-        Math.floor((tsOf(a) - ctx.start) / 1000) === atS,
-    );
-    const applied =
-      sameName.find((a) => ccSpellIds.has(String(a.spellId))) ?? sameName[0];
+    // — and a recast onto a running control opens its line on the REFRESH
+    // row (the producer's windows open on both; codex 85-tk-CC-T172-2 #1),
+    // read when no application of that name sits in the second
+    const rowsOf = (event: string) =>
+      ((holder.auraEvents ?? []) as any[]).filter(
+        (a) =>
+          ev(a) === event &&
+          nameOf(a.spellId, a.spellName) === m[3] &&
+          Math.floor((tsOf(a) - ctx.start) / 1000) === atS,
+      );
+    const pick = (rows: any[]) =>
+      rows.find((a) => ccSpellIds.has(String(a.spellId))) ?? rows[0];
+    const applied = pick(rowsOf(APPLIED)) ?? pick(rowsOf(REFRESH));
     const caster = applied && byId.get(applied.srcUnitId);
     if (!applied || !caster || caster.id === holder.id) continue;
     ctx.bump("ccLineLosTag");
@@ -203,6 +217,7 @@ export function run(ctx: IRoundCtx): void {
         if (mate.id === unit.id) continue;
         if ((mate.deathRecords ?? []).some((x: any) => x.timestamp < deathMs))
           continue;
+        ctx.bump("deathTraceLosSkip");
         const pos = getUnitPositionAtTime(mate, deathMs);
         const old =
           dyingPos && pos ? hasLineOfSight(zoneId, pos, dyingPos) : null;
