@@ -32,6 +32,7 @@ import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerat
 import { ccFullDurationSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
+  channelStopAtRemoval,
   PRESS_ENDED_CC_LAG_MS,
   TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -72,7 +73,11 @@ const NATURAL_KINDS = [
   "51–100 ms short",
   "101–250 ms short",
 ];
+/** kicks outside the producer's window (`channelStopAtRemoval`): what the
+ * log holds further out, not a line the producer owes */
+const WIDE_KICK_KINDS = ["kick 101–250 ms before", "kick 251–1000 ms before"];
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  ...WIDE_KICK_KINDS.map((k) => `channelKickCauseNotLogged|${k}`),
   ...SHORT_KINDS.map((k) => `trinketAfterRanOut|${k}`),
   ...NATURAL_KINDS.map((k) => `naturalEndShortfall|${k}`),
 ]);
@@ -102,14 +107,19 @@ const BROKEN = new Set<string>([
   LogEvent.SPELL_AURA_BROKEN_SPELL,
 ]);
 
-const leadKind = (ms: number): string =>
-  ms <= 50
-    ? "kick 0–50 ms before"
-    : ms <= 100
-      ? "kick 51–100 ms before"
-      : ms <= 250
-        ? "kick 101–250 ms before"
-        : "kick 251–1000 ms before";
+/** `scored` = the producer reads this kick as the channel's stop
+ * (`channelStopAtRemoval`, its own lead window — assembly review
+ * 80-PIPE-162-B148 #1: this scan's 1,000 ms lookback scored a kick 150 ms
+ * early the producer rightly leaves `cause not logged`); the 50 ms split of
+ * the scored kinds is the display's only */
+const leadKind = (ms: number, scored: boolean): string =>
+  scored
+    ? ms <= 50
+      ? "kick 0–50 ms before"
+      : "kick 51 ms or more before, inside the producer's window"
+    : ms <= 250
+      ? WIDE_KICK_KINDS[0]!
+      : WIDE_KICK_KINDS[1]!;
 const shortKind = (ms: number): string =>
   ms <= 0
     ? "ran its full length"
@@ -187,14 +197,18 @@ export function run(ctx: IRoundCtx): void {
       const name = nameOf(r.spellId, r.spellName);
       const lines = ccLinesOf(pid, t, name);
       if (lines.length === 0) continue;
-      ctx.bump("channelKickCauseNotLogged");
+      // the producer's own reading of the kick that stopped THIS channel
+      const scored =
+        channelStopAtRemoval(byId.get(r.srcUnitId), r.spellId, rms) !==
+        undefined;
+      if (scored) ctx.bump("channelKickCauseNotLogged");
       const bad = lines.find((l) =>
         l.includes("ended early — cause not logged"),
       );
       if (bad)
         ctx.violate(
           "channelKickCauseNotLogged",
-          leadKind(rms - tsOf(kick)),
+          leadKind(rms - tsOf(kick), scored),
           rms,
           `${ctx.roundKey}:${u.id}:${r.spellId}:${rms}`,
           `${name} on ${u.name} came off ${rms - tsOf(kick)} ms after ${nameOf(kick.spellId, kick.spellName)} interrupted it on its caster`,

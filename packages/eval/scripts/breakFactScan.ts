@@ -108,13 +108,14 @@ import {
   AURA_REBROADCAST_GAP_MS,
   dropAuraRebroadcasts,
 } from "@gladlog/analysis/src/utils/auraIntervals";
+import { breakingHitOnHolder } from "@gladlog/analysis/src/utils/brokenRowBreaker";
 import {
   isSilenceEffectAura,
   isSilenceOnlyAura,
 } from "@gladlog/analysis/src/utils/cannotCastIntervals";
-import { breakingHitOnHolder } from "@gladlog/analysis/src/utils/brokenRowBreaker";
 import {
   CC_AVOIDANCE_BUFF_SPELLS,
+  ccLoggedEnd,
   channelStopAtRemoval,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
@@ -719,6 +720,25 @@ function runRound(ctx: IContext): void {
             a.logLine.timestamp <= rms,
         );
       if (!applied) continue;
+      // the renderer's precedence, called: a cause the log wrote on the
+      // holder (the damage that broke it, a dispel, its death —
+      // `ccLoggedEnd`) is printed before the caster's kick, at both render
+      // sites, so such a line owes no kick clause (assembly review
+      // 80-PIPE-162-B148 #2: Pummel on the caster 65 ms before a Purify took
+      // the Mind Control off — the line says `dispelled by`)
+      if (
+        ccLoggedEnd(
+          u,
+          {
+            spellId: r.spellId,
+            atSeconds: (applied.logLine.timestamp - start) / 1000,
+            durationSeconds: (rms - applied.logLine.timestamp) / 1000,
+            sourceId: r.srcUnitId,
+          },
+          start,
+        )
+      )
+        continue;
       const t = at(applied.logLine.timestamp);
       const name = getEnglishSpellName(r.spellId, r.spellName);
       const ccLines = lines.filter(
