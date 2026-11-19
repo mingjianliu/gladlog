@@ -84,7 +84,6 @@ import {
   PRESSED_DURING_NOTE_RE_SRC,
   stripPressedDuringNote,
 } from "@gladlog/analysis/src/context/controlRejectedPresses";
-import { secondStageCooldownNames } from "@gladlog/analysis/src/data/secondStagePresses";
 import {
   FORCED_FOLLOWUP_CAP,
   FORCED_FOLLOWUP_MAX_GAP_S,
@@ -146,6 +145,7 @@ import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "@gladlog/analysis/src/data/druidForms";
 import { HEALER_HELD_OFFENSIVE_SPEC } from "@gladlog/analysis/src/data/healerHeldOffensive";
 import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
+import { secondStageCooldownNames } from "@gladlog/analysis/src/data/secondStagePresses";
 import {
   ccFullDurationSeconds,
   getEnglishSpellName,
@@ -7979,7 +7979,9 @@ export function checkFreeOfWindowConsistency(lines: string[]): string[] {
  *  - no `[STATE]` tick of that unit from the line's second to the bottom's
  *    second reads below it (`isTickBelowTrough`) — those seconds are inside
  *    the window for sure; the window's end is not printed, so later ticks
- *    are not adjudicated.
+ *    are not adjudicated — unless the line says where its trough was read
+ *    to (`(read to m:ss…)`, T183 / ruling R73): then every tick up to that
+ *    second is, and the bottom may not sit after it.
  */
 const BURST_ANSWERED_BOTTOM =
   /^\s*(\d+):(\d{2})\s+\[BURST ANSWERED\].*;\s+(\S+) bottomed at (\d+)% at (\d+):(\d{2})/;
@@ -8036,7 +8038,16 @@ export function checkBurstAnsweredBottomConsistency(lines: string[]): string[] {
       failures.push(
         `line ${i + 1}: [BURST ANSWERED] 说 ${m[3]} 在 ${fmtTime(b)} 触底 ${pct}%,此前 [STATE] 已为 dead`,
       );
-    for (let s = t; s <= b; s++) {
+    // T183 (ruling R73): a line that says where its trough was read to
+    // (`burstTroughReadSuffix`, parsed by the producer's own reader) is
+    // checked to that second; without it the window's end is not printed
+    // and the bottom's own second is the last one adjudicated
+    const readTo = parseBurstAnsweredLine(line)?.readToSec;
+    if (readTo !== undefined && readTo < b)
+      failures.push(
+        `line ${i + 1}: [BURST ANSWERED] 触底时刻 ${fmtTime(b)} 晚于它声明读到的 ${fmtTime(readTo)}`,
+      );
+    for (let s = t; s <= Math.max(b, readTo ?? b); s++) {
       const tick = stateAt.get(s)?.get(id);
       if (typeof tick === "number" && isTickBelowTrough(tick, pct))
         failures.push(

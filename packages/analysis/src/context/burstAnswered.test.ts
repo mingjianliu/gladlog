@@ -788,7 +788,14 @@ describe("[BURST ANSWERED] — HP comes from the [STATE] tick's own sampler", ()
     );
     expect(fromStateSampler).not.toBeNull();
     expect(p.pressured!.minHpPct).toBe(Math.round(fromStateSampler!));
-    expect(lines[0]!.line).toContain(`bottomed at ${p.pressured!.minHpPct}%`);
+    // T183 (ruling R73): the fixture's HP keeps falling after the window's
+    // horizon while the Adrenaline Rush still runs, so the printed bottom
+    // is the reading at the second the trough was read to — the same
+    // sampler, one second on
+    expect(p.pressured!.troughReadToSec).toBeGreaterThan(p.outcomeEndSec);
+    expect(lines[0]!.line).toContain(
+      `bottomed at ${Math.round(gridHpPct(f as never, T0 + p.pressured!.troughHpSec! * 1000)!)}%`,
+    );
     // and the line sits on the window-start second `fmtTime` will display
     expect(lines[0]!.atSeconds).toBe(p.tSec);
     expect(Number.isInteger(lines[0]!.atSeconds)).toBe(true);
@@ -831,7 +838,11 @@ describe("[BURST ANSWERED] — the bottom is the window's true minimum, at the s
   it("a dip between two ticks is the printed bottom; the grid pair — and so every decision — is what it was", () => {
     const base = build([]);
     const dipped = build([[15.4, 8]]);
-    expect(base.lines[0]!.line).toContain("bottomed at 36% at 0:19");
+    // T183 (ruling R73): the track falls on to 30 % at 0:20, past the
+    // window's horizon (0:19) and under the Adrenaline Rush (to 0:25)
+    expect(base.lines[0]!.line).toContain(
+      "bottomed at 30% at 0:20 (read to 0:25, the end of Adrenaline Rush)",
+    );
     expect(dipped.lines[0]!.line).toContain("bottomed at 8% at 0:15");
 
     const a = base.pts[0]!.pressured!;
@@ -841,9 +852,10 @@ describe("[BURST ANSWERED] — the bottom is the window's true minimum, at the s
     expect([b.minHpPct, b.minHpSec]).toEqual([36, 19]);
     expect(dipped.pts[0]!.triaged).toBe(base.pts[0]!.triaged);
     expect(dipped.pts[0]!.responded).toBe(base.pts[0]!.responded);
-    // the printed pair did; without a dip the two pairs are one
+    // the printed pair did
     expect([b.troughHpPct, b.troughHpSec]).toEqual([8, 15]);
-    expect([a.troughHpPct, a.troughHpSec]).toEqual([36, 19]);
+    // (T183: read one second past the horizon, where the track is lower)
+    expect([a.troughHpPct, a.troughHpSec]).toEqual([30, 20]);
     // the [STATE] tick of that second still reads its own sample
     expect(gridHpPct(dipped.f as never, T0 + 15_000)).toBe(60);
   });

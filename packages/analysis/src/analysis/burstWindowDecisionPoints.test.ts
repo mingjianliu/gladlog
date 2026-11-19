@@ -29,6 +29,7 @@ import {
   BURST_RESPONSE_WINDOW_MS,
   BURST_TRIAGE_MIN_HP_DROP_PP,
   burstExtrasLabel,
+  burstTroughReadEnd,
   burstWindowDecisionPoints,
   controlLandedResponses,
   landedPreOpenerStillUp,
@@ -308,13 +309,17 @@ describe("burstWindowDecisionPoints — response classification", () => {
   it("the crisis readers' answers count: Bear Form / Frenzied Regeneration (own), Roar of Sacrifice (a mate's, on the pressured friend)", () => {
     for (const id of ["5487", "22842"]) {
       const pts = burstWindowDecisionPoints(
-        combat([pressuredFriend({ spellCastEvents: [cast(id, 13)] }), enemyWithBurst()]),
+        combat([
+          pressuredFriend({ spellCastEvents: [cast(id, 13)] }),
+          enemyWithBurst(),
+        ]),
       );
       // Bear Form a wall; Frenzied Regeneration a heal (DB2 can reach
       // others' reading), held to its caster by `answersPressured`
-      expect(pts[0]!.responseCasts.map((r) => r.category), id).toEqual([
-        id === "5487" ? "wall" : "healCd",
-      ]);
+      expect(
+        pts[0]!.responseCasts.map((r) => r.category),
+        id,
+      ).toEqual([id === "5487" ? "wall" : "healCd"]);
       expect(pts[0]!.responded, id).toBe(true);
     }
     const hunter = friendly({
@@ -1429,7 +1434,9 @@ describe("controlLandedResponses — which cast times a landed control (F-B8)", 
       40_000,
     );
     // past the fuse: the aura's own time, not the trap's press
-    expect(out).toMatchObject([{ unitId: "F1", spellId: "117526", tMs: 12_150 }]);
+    expect(out).toMatchObject([
+      { unitId: "F1", spellId: "117526", tMs: 12_150 },
+    ]);
   });
 
   it("7d1f14af: the cast that produced the aura beats an earlier untargeted press", () => {
@@ -1600,5 +1607,45 @@ describe("controlLandedResponses — which cast times a landed control (F-B8)", 
         18_000,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("burstTroughReadEnd (T183, ruling R73)", () => {
+  const w = {
+    outcomeEndSec: 20,
+    buffRunEndSec: 24,
+    nextWindowTSec: null,
+    deathSec: null,
+    roundEndSec: null,
+  };
+  it("reads to the buff's end, at most 10 s past the horizon", () => {
+    expect(burstTroughReadEnd(w)).toEqual({ toSec: 24, stop: "buff end" });
+    expect(burstTroughReadEnd({ ...w, buffRunEndSec: 30 })).toEqual({
+      toSec: 30,
+      stop: "buff end",
+    });
+    expect(burstTroughReadEnd({ ...w, buffRunEndSec: 53 })).toEqual({
+      toSec: 30,
+      stop: "cap",
+    });
+  });
+  it("stops before the next window, at the unit's death and at the round's end", () => {
+    expect(burstTroughReadEnd({ ...w, nextWindowTSec: 23 })).toEqual({
+      toSec: 22,
+      stop: "next window",
+    });
+    expect(burstTroughReadEnd({ ...w, deathSec: 22 })).toEqual({
+      toSec: 22,
+      stop: "death",
+    });
+    expect(burstTroughReadEnd({ ...w, roundEndSec: 21 })).toEqual({
+      toSec: 21,
+      stop: "round end",
+    });
+  });
+  it("nothing past the horizon: no reading", () => {
+    expect(burstTroughReadEnd({ ...w, buffRunEndSec: 20 })).toBeNull();
+    expect(burstTroughReadEnd({ ...w, nextWindowTSec: 21 })).toBeNull();
+    expect(burstTroughReadEnd({ ...w, deathSec: 19 })).toBeNull();
   });
 });

@@ -4078,6 +4078,23 @@ const INDEX: PredicateRow[] = [
     symbol: "controlLandedResponses",
     mod: burstWindowDecisionPoints,
   },
+  // T183 (ruling R73): the span a burst window's pressured trough is read
+  // over past its horizon, and the suffix that states it
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "burstTroughReadEnd",
+    mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/context/burstAnswered.ts`,
+    symbol: "burstTroughReadSuffix",
+    mod: burstAnswered,
+  },
+  {
+    file: `${A}/context/burstAnswered.ts`,
+    symbol: "BURST_TROUGH_READ_SUFFIX_RE_SRC",
+    mod: burstAnswered,
+  },
   {
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,
     symbol: "GROUND_CONTROL_FUSE_MS",

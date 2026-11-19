@@ -32,6 +32,7 @@ import { selfDefensiveLabelLegends } from "../../utils/selfDefensiveMechanism";
 import {
   BURST_ANSWERED_CONTROL_LEGEND,
   BURST_ANSWERED_LEGEND,
+  BURST_ANSWERED_READ_TO_LEGEND,
 } from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
 import { PRESSED_DURING_NOTE_HEAD } from "../controlRejectedPresses";
@@ -720,6 +721,11 @@ export function formatTimeline(
       : []),
     // Conditional: a round with no such line pays no tokens for its legend.
     ...(burstAnsweredEntries.length > 0 ? BURST_ANSWERED_LEGEND : []),
+    ...(burstAnsweredEntries.some((e) =>
+      /; \S+ bottomed at .* \(read to /.test(e.line),
+    )
+      ? [BURST_ANSWERED_READ_TO_LEGEND]
+      : []),
     ...(burstAnsweredEntries.some((e) => e.namesControlTarget)
       ? [BURST_ANSWERED_CONTROL_LEGEND]
       : []),

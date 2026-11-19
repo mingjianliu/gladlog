@@ -2603,6 +2603,46 @@ describe("checkBurstAnsweredBottomConsistency — the credit line's bottom secon
   // FT-T03 (user ruling 2026-10-10, D7): the bottom is a trough — the true
   // minimum inside the window — so the tick of its second may read ABOVE it
   // (it was red: the bottom had to be that tick). A tick below it stays red.
+  // T183 (ruling R73): a line that says where its trough was read to is
+  // checked up to that second
+  it("a `(read to m:ss)` suffix extends the check to that second", () => {
+    const later =
+      "0:58  [STATE]   friends 1(WMonk):30 / enemies 4(HDHunter):90";
+    // no suffix: a tick after the bottom's second is not adjudicated
+    expect(
+      checkBurstAnsweredBottomConsistency([roster, later, line("0:55")]),
+    ).toEqual([]);
+    for (const suffix of [
+      " (read to 1:00)",
+      " (read to 1:00, the end of The Hunt)",
+    ]) {
+      expect(
+        checkBurstAnsweredBottomConsistency([
+          roster,
+          later,
+          line("0:55") + suffix,
+        ]),
+        suffix,
+      ).toHaveLength(1);
+      // a tick after the read-to second is still not adjudicated
+      expect(
+        checkBurstAnsweredBottomConsistency([
+          roster,
+          "1:01  [STATE]   friends 1(WMonk):30 / enemies 4(HDHunter):90",
+          line("0:55") + suffix,
+        ]),
+        suffix,
+      ).toEqual([]);
+    }
+    // the bottom cannot sit after the second it was read to
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        line("0:55") + " (read to 0:50)",
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("passes when the same-second [STATE] is at or above the bottom, fails when it is below", () => {
     expect(
       checkBurstAnsweredBottomConsistency([

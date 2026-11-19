@@ -34,6 +34,7 @@
  */
 import {
   BURST_RESPONSE_WINDOW_SEC,
+  BURST_TROUGH_PAST_CUT_MAX_S,
   burstExtrasLabel,
   type BurstResponseCast,
   type BurstWindowDecisionPoint,
@@ -125,6 +126,37 @@ export const BURST_ANSWERED_LEGEND = [
   "    minimum between the ticks: it can sit below the [STATE] number of that second).",
 ];
 
+/** T183 (ruling R73): printed only when a line carries the suffix. */
+export const BURST_ANSWERED_READ_TO_LEGEND =
+  "    `(read to m:ss)` after it = the window's damage paused before that second while a cooldown of the window was still running: the low was read on to m:ss (at most " +
+  `${BURST_TROUGH_PAST_CUT_MAX_S} s past the pause, never into the next window; \`the end of X\` = X ran out there).`;
+
+/**
+ * T183 (user ruling R73, 2026-11-19): what follows `bottomed at N% at m:ss`
+ * when the trough was read past the window's own end (the engine's
+ * `burstTroughReadEnd`, left on the pressured unit as `troughReadToSec` /
+ * `troughReadStop`): ` (read to m:ss, the end of <buff>)` when the buff's
+ * end stopped the reading, ` (read to m:ss)` for every other stop. Printed
+ * whenever the reading ran past the end, whether or not the number moved:
+ * it is what lets the gate check every `[STATE]` tick up to that second.
+ * The writer and its pattern (`BURST_TROUGH_READ_SUFFIX_RE_SRC`) live
+ * together; `parseBurstAnsweredLine` and the gate read the pattern.
+ */
+export function burstTroughReadSuffix(
+  p: Pick<BurstWindowDecisionPoint, "buffRunEndSpellName">,
+  pressured: Pick<
+    NonNullable<BurstWindowDecisionPoint["pressured"]>,
+    "troughReadToSec" | "troughReadStop"
+  >,
+): string {
+  if (pressured.troughReadToSec === undefined) return "";
+  return pressured.troughReadStop === "buff end"
+    ? ` (read to ${fmtTime(pressured.troughReadToSec)}, the end of ${p.buffRunEndSpellName})`
+    : ` (read to ${fmtTime(pressured.troughReadToSec)})`;
+}
+/** groups: minutes, seconds of the read-to second */
+export const BURST_TROUGH_READ_SUFFIX_RE_SRC = String.raw` \(read to (\d+):(\d{2})(?:, the end of [^)]+)?\)`;
+
 /** The clause a line ends on when the pressured unit died in the window. */
 export const BURST_ANSWERED_STILL_DIED = "still died";
 
@@ -136,6 +168,7 @@ const BURST_ANSWERED_LINE_RE = new RegExp(
     String.raw`(?: on (${CONTROL_TARGET_RE_SRC}(?: and ${CONTROL_TARGET_RE_SRC})*))? ` +
     String.raw`(?:in (\d+\.\d)s|(\d+\.\d)s before it opened); ` +
     String.raw`(\S+) bottomed at (\d+)%(?: at (\d+):(\d{2}))?` +
+    `(?:${BURST_TROUGH_READ_SUFFIX_RE_SRC})?` +
     // `a friendly died inside it` when the dead unit has no name
     String.raw`(?: — (.+?) (${BURST_ANSWERED_STILL_DIED}|died inside it))?` +
     // WO6 #9: another friendly who died in it besides a pressured one who did
@@ -153,6 +186,9 @@ export interface ParsedBurstAnsweredLine {
   pressured: string;
   /** the line ends on `— <pressured> still died` */
   pressuredDied: boolean;
+  /** T183: the second the trough was read to, when the line says so
+   * (`burstTroughReadSuffix`) */
+  readToSec?: number;
 }
 /**
  * A rendered `[BURST ANSWERED]` line (with its `m:ss` prefix) read back — the
@@ -175,7 +211,10 @@ export function parseBurstAnsweredLine(
     }),
     latencySec: m[6] !== undefined ? Number(m[6]) : -Number(m[7]),
     pressured: m[8]!,
-    pressuredDied: m[13] === BURST_ANSWERED_STILL_DIED && m[12] === m[8],
+    pressuredDied: m[15] === BURST_ANSWERED_STILL_DIED && m[14] === m[8],
+    ...(m[12] !== undefined
+      ? { readToSec: Number(m[12]) * 60 + Number(m[13]) }
+      : {}),
   };
 }
 
@@ -505,7 +544,7 @@ export function formatBurstAnsweredLines(
           // F-B3: the bottom is the minimum over the whole bounded window (up
           // to 55 s) — its second says whether it belongs to this go. The
           // render second of the instant it happened.
-          `${bottomSec !== null ? ` at ${fmtTime(bottomSec)}` : ""}${diedPart}`,
+          `${bottomSec !== null ? ` at ${fmtTime(bottomSec)}${burstTroughReadSuffix(p, pressured)}` : ""}${diedPart}`,
       };
     })
     .sort((a, b) => a.atSeconds - b.atSeconds);

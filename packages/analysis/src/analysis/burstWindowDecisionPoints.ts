@@ -645,6 +645,12 @@ export interface BurstFriendlyOutcome {
    */
   troughHpPct?: number | null;
   troughHpSec?: number | null;
+  /** T183 (ruling R73): set on the PRESSURED unit when its trough was read
+   * past the window's outcome horizon (`burstTroughReadEnd`) — the last
+   * second read, and what stopped the reading there. Absent when the
+   * reading stayed inside the horizon. */
+  troughReadToSec?: number;
+  troughReadStop?: BurstTroughReadStop;
   /**
    * `gridHpPct` at the window START — the first whole second in
    * `[tSec, outcomeEndSec]` that has a grid sample at all (normally `tSec`
@@ -682,6 +688,8 @@ export interface BurstWindowDecisionPoint {
    * `outcomeEndSec`. The bounded window can end sooner — at a lapse in the
    * damage — while the buff runs on. */
   buffRunEndSec: number;
+  /** the printed name of the buff `buffRunEndSec` is the end of */
+  buffRunEndSpellName: string;
   /** `endSec - tSec` (rendered seconds, never raw) */
   durationSec: number;
   /** the CD that OPENED the window (earliest cast; a same-second tie goes to
@@ -1133,6 +1141,59 @@ export interface BoundedSegment {
 const castKey = (playerName: string, spellId: string, castSeconds: number) =>
   `${playerName}|${spellId}|${castSeconds}`;
 
+/** T183 (user ruling R73, 2026-11-19): how long after a burst window's
+ * outcome horizon its pressured trough may still be read while one of the
+ * window's own buffs runs. */
+export const BURST_TROUGH_PAST_CUT_MAX_S = 10;
+
+export type BurstTroughReadStop =
+  "buff end" | "cap" | "next window" | "death" | "round end";
+
+/**
+ * T183 (fact14 D23; user ruling R73, 2026-11-19): the last whole second a
+ * burst window's pressured trough is read to, when that is PAST the
+ * window's outcome horizon, and what stops the reading there. A window is
+ * cut where the damage lapses (`boundBurstWindow`), which can be well before
+ * its opener's buff ends; damage that comes back under the same buff opens
+ * no new window, so the unit's later, lower HP belonged to no window
+ * (ae1d0895 2:27: `bottomed at 55%`, 49 % ten seconds on, the Avenging
+ * Wrath still up). The reading goes on to the end of the window's own
+ * buffs, at most `BURST_TROUGH_PAST_CUT_MAX_S` past the horizon, and stops
+ * before the round's next window, at the unit's death and at the round's
+ * end. `null` = nothing to read past the horizon. Only the printed trough
+ * moves (`troughHpPct` / `troughHpSec`): the window, who died in it,
+ * `responded` and every grid reading that decides stay as they are.
+ * One reading for the engine, `scan5/t183` and — through the fields it
+ * leaves on the pressured unit — the candidate and the credit line.
+ */
+export function burstTroughReadEnd(w: {
+  outcomeEndSec: number;
+  buffRunEndSec: number;
+  /** the opening second of the round's next window, if any */
+  nextWindowTSec: number | null;
+  /** the second the unit died in, if it died after the window opened */
+  deathSec: number | null;
+  /** the round's last second, when the round's end is known */
+  roundEndSec: number | null;
+}): { toSec: number; stop: BurstTroughReadStop } | null {
+  const stops: Array<[number, BurstTroughReadStop]> = [
+    [w.buffRunEndSec, "buff end"],
+    [w.outcomeEndSec + BURST_TROUGH_PAST_CUT_MAX_S, "cap"],
+  ];
+  if (w.nextWindowTSec !== null)
+    stops.push([w.nextWindowTSec - 1, "next window"]);
+  if (w.deathSec !== null) stops.push([w.deathSec, "death"]);
+  if (w.roundEndSec !== null) stops.push([w.roundEndSec, "round end"]);
+  // the earliest stop; the buff's end wins a tie (it is listed first)
+  let [toSec, stop] = stops[0]!;
+  for (const [sec, why] of stops)
+    if (sec < toSec) {
+      toSec = sec;
+      stop = why;
+    }
+  return toSec > w.outcomeEndSec ? { toSec, stop } : null;
+}
+
 interface CastFacts {
   buffEndSeconds: number;
   dangerWeight: number;
@@ -1569,15 +1630,16 @@ export function burstWindowDecisionPoints(
       // inside 0 seconds" is not an outcome, it is a rounding artefact.
       const outcomeEndSec = Math.max(endSec, tSec + BURST_RESPONSE_WINDOW_SEC);
       const outcomeEndMs = start + outcomeEndSec * 1000;
-      const buffRunEndSec = Math.max(
-        outcomeEndSec,
-        ...seg.casts.map((c) =>
-          Math.floor(
-            facts.get(castKey(c.playerName, c.spellId, c.castSeconds))
-              ?.buffEndSeconds ?? c.castSeconds,
-          ),
-        ),
+      const buffEndSecOf = (c: IAlignedBurstWindow["activeCDs"][number]) =>
+        Math.floor(
+          facts.get(castKey(c.playerName, c.spellId, c.castSeconds))
+            ?.buffEndSeconds ?? c.castSeconds,
+        );
+      // the window's longest-running buff (the earliest cast of a tie)
+      const lastBuff = orderedAll.reduce((a, c) =>
+        buffEndSecOf(c) > buffEndSecOf(a) ? c : a,
       );
+      const buffRunEndSec = Math.max(outcomeEndSec, buffEndSecOf(lastBuff));
       // F-B6: the window the line prints ends at the END of its last
       // rendered second — the last ms of `outcomeEndSec`. One bound for every
       // outcome reading (who died, who the burst hit, the damage taken, the
@@ -2225,6 +2287,10 @@ export function burstWindowDecisionPoints(
         tSec,
         endSec,
         buffRunEndSec,
+        buffRunEndSpellName: getEnglishSpellName(
+          lastBuff.spellId,
+          lastBuff.spellName,
+        ),
         outcomeEndSec,
         durationSec: endSec - tSec,
         leadCd,
@@ -2254,5 +2320,50 @@ export function burstWindowDecisionPoints(
     }
   }
   out.sort((a, b) => a.tSec - b.tSec);
+  // T183 (ruling R73): the pressured trough reads on past the horizon while
+  // one of the window's own buffs runs (`burstTroughReadEnd`). A pass of
+  // its own: the stop at the next window needs every window's opening.
+  const roundEndSec = Number.isFinite(roundEndAtMs)
+    ? Math.floor((roundEndAtMs - start) / 1000)
+    : null;
+  out.forEach((p, i) => {
+    const pr = p.pressured;
+    if (!pr || pr.minHpPct === null) return;
+    const f = friendlies.find((u) => u.id === pr.unitId);
+    if (!f) return;
+    const deathMs = ((f.deathRecords ?? []) as Array<{ timestamp: number }>)
+      .map((d) => d.timestamp)
+      .filter((t) => t >= p.tMs)
+      .sort((a, b) => a - b)[0];
+    const read = burstTroughReadEnd({
+      outcomeEndSec: p.outcomeEndSec,
+      buffRunEndSec: p.buffRunEndSec,
+      nextWindowTSec:
+        out.slice(i + 1).find((q) => q.tSec > p.tSec)?.tSec ?? null,
+      deathSec:
+        deathMs === undefined ? null : Math.floor((deathMs - start) / 1000),
+      roundEndSec,
+    });
+    if (!read) return;
+    const trough = hpTroughInWindow(
+      f,
+      start,
+      p.tSec,
+      read.toSec,
+      secondsPastRoundEnd(start, roundEndAtMs),
+      roundClippedTroughSpan(start, p.tSec, read.toSec, roundEndAtMs),
+    );
+    pr.troughReadToSec = read.toSec;
+    pr.troughReadStop = read.stop;
+    if (
+      trough &&
+      (pr.troughHpPct === null ||
+        pr.troughHpPct === undefined ||
+        trough.pct < pr.troughHpPct)
+    ) {
+      pr.troughHpPct = trough.pct;
+      pr.troughHpSec = trough.atSec;
+    }
+  });
   return out;
 }
