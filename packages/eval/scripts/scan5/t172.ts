@@ -36,6 +36,7 @@ import {
   CC_POSITION_MAX_GAP_MS,
   landedCastProvesLos,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import { ccRecastBetween } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   getUnitPositionAtTime,
   hasLineOfSight,
@@ -98,8 +99,9 @@ export function run(ctx: IRoundCtx): void {
     // f55b2412 r4 1:57, the tether at +117.132 s read in sight, the stun
     // the line prints at +117.925 s blocked)
     // — and a recast onto a running control opens its line on the REFRESH
-    // row (the producer's windows open on both; codex 85-tk-CC-T172-2 #1),
-    // read when no application of that name sits in the second
+    // row (the producer's windows open on a cast-backed one; codex
+    // 85-tk-CC-T172-2 #1), read when no application of that name sits in
+    // the second
     const rowsOf = (event: string) =>
       ((holder.auraEvents ?? []) as any[]).filter(
         (a) =>
@@ -109,7 +111,42 @@ export function run(ctx: IRoundCtx): void {
       );
     const pick = (rows: any[]) =>
       rows.find((a) => ccSpellIds.has(String(a.spellId))) ?? rows[0];
-    const applied = pick(rowsOf(APPLIED)) ?? pick(rowsOf(REFRESH));
+    // of the REFRESH rows, the ones that open a line: a refresh its source
+    // cast for (`ccRecastBetween`, the producer's own test, asked from the
+    // opening of the application then running — its APPLIED or the last
+    // cast-backed REFRESH); a periodic re-broadcast stays inside its window
+    // and opens none (codex 85-tk-CC-T172-2b)
+    const opensLine = (row: any): boolean => {
+      const src = byId.get(row.srcUnitId);
+      const casters = [src, src?.ownerId ? byId.get(src.ownerId) : undefined];
+      let openedAt = -Infinity;
+      let opened = false;
+      for (const a of ((holder.auraEvents ?? []) as any[])
+        .filter(
+          (x) =>
+            x.spellId === row.spellId &&
+            x.srcUnitId === row.srcUnitId &&
+            tsOf(x) <= tsOf(row),
+        )
+        .sort((x, y) => tsOf(x) - tsOf(y))) {
+        const at = tsOf(a);
+        opened =
+          ev(a) === APPLIED ||
+          (ev(a) === REFRESH &&
+            ccRecastBetween(
+              casters,
+              String(a.spellId),
+              holder.id,
+              openedAt,
+              at,
+            ));
+        if (opened) openedAt = at;
+        if (a === row) return opened;
+      }
+      return false;
+    };
+    const applied =
+      pick(rowsOf(APPLIED)) ?? pick(rowsOf(REFRESH).filter(opensLine));
     const caster = applied && byId.get(applied.srcUnitId);
     if (!applied || !caster || caster.id === holder.id) continue;
     ctx.bump("ccLineLosTag");
