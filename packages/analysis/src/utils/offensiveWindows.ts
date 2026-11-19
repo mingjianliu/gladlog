@@ -799,6 +799,7 @@ export function computeOffensiveWindowsUncached(
             runStartMs,
             runEndMs,
             shieldCaster,
+            loggedStartMs,
           )
         : [];
       for (const sp of shieldSpans)

@@ -348,7 +348,8 @@ export function isStolenAuraAcquisition(
  * counting where the scan stops. [] when none.
  */
 export function ownPressedShieldSpansMs(
-  holder: Pick<ICombatUnit, "id" | "absorbsIn" | "spellCastEvents">,
+  holder: Pick<ICombatUnit, "id" | "absorbsIn" | "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "auraEvents">>,
   spellId: string,
   runStartMs: number,
   runEndMs: number,
@@ -358,6 +359,9 @@ export function ownPressedShieldSpansMs(
    * rider do not apply (user ruling 2026-10-30, fact7 D37: Enveloping Mist's
    * Chi Cocoon on the Feral) */
   caster: Pick<ICombatUnit, "id" | "spellCastEvents"> = holder,
+  /** the run's logged APPLIED, when the reader reconstructed its start
+   * earlier (`runStartMs`); default: the same */
+  loggedStartMs: number = runStartMs,
 ): Array<{ fromMs: number; toMs: number }> {
   const own = caster.id === holder.id;
   // A run the log applied and removed in one millisecond is still a shield
@@ -456,6 +460,45 @@ export function ownPressedShieldSpansMs(
       fromMs: runStartMs,
       toMs: Math.min(runEndMs, runStartMs + OWN_SHIELD_PRESS_LOOKBACK_MS),
     });
+  // Pipeline T162 (GH #218 item 7.3): a shield pressed before the log's
+  // first row has no press to pair with. When the log merely listed it again
+  // (its APPLIED sits in a re-stating batch, `isResyncBatchAt`), the holder
+  // pressed nothing that puts it up before that, and it does press the
+  // shield's own id later in the round — the log's word that this id is a
+  // button of this unit, not a passive absorb — the run stands for the
+  // unlogged press, as the unlogged rider's does. 605: Ice Barrier 11426, 8
+  // applications in 5 rounds at 0:00–0:24 read as a shield nobody pressed.
+  // (a later press inside the same run has its own span above; this one
+  // covers the stretch before it)
+  if (own && holder.auraEvents) {
+    const presses = (caster.spellCastEvents ?? []).filter(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.spellId === spellId,
+    );
+    if (
+      presses.length > 0 &&
+      presses.every(
+        (c) => c.logLine.timestamp > loggedStartMs + AURA_BEFORE_CAST_ROW_MAX_MS,
+      ) &&
+      !(caster.spellCastEvents ?? []).some(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          !!c.spellId &&
+          c.logLine.timestamp <= loggedStartMs + AURA_BEFORE_CAST_ROW_MAX_MS &&
+          (castIds.has(c.spellId) ||
+            (name !== "" && getEnglishSpellName(c.spellId, "") === name)),
+      ) &&
+      isResyncBatchAt(
+        holder as Pick<ICombatUnit, "id" | "auraEvents">,
+        loggedStartMs,
+      )
+    )
+      out.push({
+        fromMs: runStartMs,
+        toMs: Math.min(runEndMs, runStartMs + OWN_SHIELD_PRESS_LOOKBACK_MS),
+      });
+  }
   return out;
 }
 
