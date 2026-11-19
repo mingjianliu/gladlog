@@ -21,6 +21,7 @@ interface Entry {
   unsilenceable?: boolean;
   pacifyOnly?: boolean;
   weaponRequired?: boolean;
+  ctrlAura?: number[];
 }
 
 const SPELLS = (raw as unknown as { spells: Record<string, Entry | undefined> })
@@ -43,6 +44,19 @@ export const STUNNED_MECHANIC = 12;
  * depending on a talent). */
 export function ccMechanicOf(spellId: string): number | undefined {
   return SPELLS[spellId]?.mech;
+}
+
+/** Does this aura ITSELF take control of its holder: one of its own DB2
+ * effects applies MOD_CONFUSE, MOD_CHARM, MOD_FEAR or MOD_STUN. `true` /
+ * `false` from DB2, `undefined` for a spell the table does not know.
+ * `ccMechanicOf` is the label of the spell, and an aura that takes no
+ * control carries it too (Binding Shot's tether 117405 and Snowdrift's
+ * pulse 390171 are both "stunned"); a control built from another aura type
+ * (Hex, Mind Control) answers `false` here — so `false` is "not one of
+ * these four", never "no control". */
+export function auraTakesControl(spellId: string): boolean | undefined {
+  const e = SPELLS[spellId];
+  return e === undefined ? undefined : (e.ctrlAura?.length ?? 0) > 0;
 }
 
 /** True only when DB2 says the base cast time is 0. Unknown is not instant. */

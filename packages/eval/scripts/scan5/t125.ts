@@ -13,11 +13,20 @@
  *    sap), that is neither in `ccSpellIds` nor a dispel backlash aura: the
  *    timeline must print a `[CC ON TEAM] <victim> ← <aura name>` line within
  *    a second of it. Counted per application; kind = `<name> <id> (mech N)`.
+ *    The mechanic is the label of the spell, and an aura that takes no
+ *    control carries it too (T177: Binding Shot's tether 117405, a dummy
+ *    aura, and Snowdrift's pulse 390171, a periodic damage aura, were 1,656
+ *    of the 1,779 on the 605) — an aura whose own DB2 effects apply no
+ *    control (`auraTakesControl` false) is listed out of the total; so are
+ *    the ids the user ruled are not controls (`RULED_OUT`).
  */
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
-import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
+import {
+  auraTakesControl,
+  ccMechanicOf,
+} from "@gladlog/analysis/src/utils/spellMechanics";
 
 import {
   APPLIED,
@@ -41,6 +50,25 @@ const LOSS_OF_CONTROL_MECHANICS: ReadonlySet<number> = new Set([
  * Cascading Horrors) — still counted after they joined `ccSpellIds`, so the
  * count reads the same on a capture from before and after */
 const RULED_IN: ReadonlySet<string> = new Set(["358861"]);
+
+/** Real stun auras a user ruling left out of the controls — known items,
+ * listed out of the total so a later scan does not raise them as new:
+ *  - Earthquake 77505 and Fel Cleave 213688 (R48, 2026-11-15);
+ *  - Intimidation 1258508 (user ruling R76, 2026-11-19, T177): a hunter pet's
+ *    stun, DB2 build 12.1.5.70391 SpellCategories `Mechanic 12,
+ *    DiminishType 0` (no DR family; the 3 s stun 24394 has DiminishType 4),
+ *    one effect `EffectAura 12`, 0.5 s; 605: 1 fact, removed after 0.45 s. */
+export const RULED_OUT: ReadonlySet<string> = new Set([
+  "77505",
+  "213688",
+  "1258508",
+]);
+const LABEL_ONLY = "mechanic label only, the aura itself takes no control";
+export const RULED_OUT_KIND = "ruled not a control (user rulings)";
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  `lossOfControlAuraNoCcLine|${LABEL_ONLY}`,
+  `lossOfControlAuraNoCcLine|${RULED_OUT_KIND}`,
+]);
 
 const CC_LINE = /^\s*(\d+:\d\d)\s+\[CC ON TEAM\]\s+(\d+)\([^)]*\) ← (.+?) \(/;
 
@@ -92,7 +120,12 @@ export function run(ctx: IRoundCtx): void {
       )
         continue;
       const name = nameOf(id, a.spellName);
-      ctx.bump("lossOfControlAuraNoCcLine");
+      const aside = RULED_OUT.has(id)
+        ? RULED_OUT_KIND
+        : auraTakesControl(id) === false
+          ? LABEL_ONLY
+          : undefined;
+      if (!aside) ctx.bump("lossOfControlAuraNoCcLine");
       const sec = Math.floor((t - ctx.start) / 1000);
       if (
         ccLines.some(
@@ -102,7 +135,7 @@ export function run(ctx: IRoundCtx): void {
         continue;
       ctx.violate(
         "lossOfControlAuraNoCcLine",
-        `${name} ${id} (mech ${mech})`,
+        aside ?? `${name} ${id} (mech ${mech})`,
         t,
         `${u.name}:${id}:${t}`,
         `${u.name} got ${name} ${id} (DB2 mechanic ${mech}) at ${fmtS(sec)} from the other side; no [CC ON TEAM] line`,

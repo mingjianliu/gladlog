@@ -5643,6 +5643,11 @@ const INDEX: PredicateRow[] = [
     mod: spellMechanics,
   },
   {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "auraTakesControl",
+    mod: spellMechanics,
+  },
+  {
     file: `${A}/context/peelOptions.ts`,
     symbol: "peelOptionsForDeaths",
     mod: peelOptions,

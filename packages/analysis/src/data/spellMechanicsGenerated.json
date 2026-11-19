@@ -29,7 +29,10 @@
   "99": {
    "castMs": 0,
    "mech": 14,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "100": {
    "castMs": 0,
@@ -44,7 +47,10 @@
   "118": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "120": {
    "castMs": 0,
@@ -105,7 +111,10 @@
    "mech": 12,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "weaponRequired": true
+   "weaponRequired": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "453": {
    "castMs": 0,
@@ -216,6 +225,9 @@
    "castMs": 1500,
    "mech": 18,
    "silenceable": true,
+   "ctrlAura": [
+    12
+   ],
    "immuneAll": true
   },
   "740": {
@@ -262,7 +274,10 @@
   "853": {
    "castMs": 0,
    "mech": 12,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "871": {
    "castMs": 0,
@@ -356,7 +371,10 @@
   "1513": {
    "castMs": 1500,
    "mech": 5,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "1543": {
    "castMs": 0,
@@ -414,7 +432,10 @@
    "mech": 14,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "weaponRequired": true
+   "weaponRequired": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "1784": {
    "castMs": 0,
@@ -431,7 +452,10 @@
    "mech": 12,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "weaponRequired": true
+   "weaponRequired": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "1850": {
    "castMs": 0,
@@ -479,7 +503,10 @@
   "2094": {
    "castMs": 0,
    "mech": 2,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "2096": {
    "castMs": 0,
@@ -519,7 +546,10 @@
   "2637": {
    "castMs": 1500,
    "mech": 10,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "2641": {
    "castMs": 3000,
@@ -574,7 +604,10 @@
   "3355": {
    "castMs": 0,
    "mech": 13,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "3363": {
    "castMs": 1500,
@@ -642,7 +675,10 @@
    "castMs": 0,
    "mech": 12,
    "unsilenceable": true,
-   "pacifyOnly": true
+   "pacifyOnly": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "5215": {
    "castMs": 0,
@@ -663,7 +699,10 @@
   "5246": {
    "castMs": 0,
    "mech": 5,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "5277": {
    "castMs": 0,
@@ -694,7 +733,10 @@
   "5484": {
    "castMs": 0,
    "mech": 5,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "5487": {
    "castMs": 0,
@@ -764,7 +806,10 @@
   "6358": {
    "castMs": 1700,
    "mech": 10,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "6360": {
    "castMs": 0,
@@ -802,12 +847,18 @@
    "mech": 30,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "weaponRequired": true
+   "weaponRequired": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "6789": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 24
+   "mech": 24,
+   "ctrlAura": [
+    7
+   ]
   },
   "6795": {
    "castMs": 0,
@@ -878,7 +929,10 @@
   "8122": {
    "castMs": 0,
    "mech": 5,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "8143": {
    "castMs": 0,
@@ -923,7 +977,10 @@
   "9484": {
    "castMs": 1500,
    "mech": 20,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "10060": {
    "castMs": 0,
@@ -932,7 +989,10 @@
   "10326": {
    "castMs": 1500,
    "mech": 23,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "10444": {
    "castMs": 0,
@@ -1183,7 +1243,10 @@
    "castMs": 500,
    "mech": 12,
    "unsilenceable": true,
-   "pacifyOnly": true
+   "pacifyOnly": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "20572": {
    "castMs": 0,
@@ -1230,7 +1293,10 @@
   "22703": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "22719": {
    "castMs": 1500,
@@ -1368,7 +1434,10 @@
    "castMs": 0,
    "mech": 12,
    "unsilenceable": true,
-   "pacifyOnly": true
+   "pacifyOnly": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "24423": {
    "castMs": 0,
@@ -1441,12 +1510,18 @@
   "28271": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "28272": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "28730": {
    "castMs": 0,
@@ -1494,7 +1569,10 @@
   "30283": {
    "castMs": 1500,
    "mech": 12,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "30449": {
    "castMs": 0,
@@ -1527,7 +1605,10 @@
   "31661": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 2
+   "mech": 2,
+   "ctrlAura": [
+    5
+   ]
   },
   "31687": {
    "castMs": 1500,
@@ -1603,7 +1684,10 @@
   "32752": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "33076": {
    "castMs": 0,
@@ -1649,6 +1733,9 @@
    "castMs": 1700,
    "mech": 18,
    "silenceable": true,
+   "ctrlAura": [
+    12
+   ],
    "immuneAll": true
   },
   "33891": {
@@ -1927,6 +2014,9 @@
    "castMs": 0,
    "mech": 29,
    "silenceable": true,
+   "ctrlAura": [
+    12
+   ],
    "immuneAll": true,
    "locksCasting": true
   },
@@ -2611,7 +2701,10 @@
   "61305": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "61309": {
    "castMs": 1500,
@@ -2658,7 +2751,10 @@
   "61721": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "61818": {
    "castMs": 0
@@ -2945,7 +3041,10 @@
   "77505": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "77535": {
    "castMs": 0
@@ -3059,7 +3158,10 @@
   "82691": {
    "castMs": 0,
    "mech": 13,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "83242": {
    "castMs": 0,
@@ -3156,7 +3258,10 @@
   "87204": {
    "castMs": 0,
    "mech": 24,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "87840": {
    "castMs": 1500,
@@ -3214,7 +3319,10 @@
    "castMs": 0,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "89792": {
    "castMs": 0,
@@ -3264,13 +3372,19 @@
    "castMs": 0,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "91800": {
    "castMs": 0,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "91807": {
    "castMs": 0,
@@ -3545,7 +3659,10 @@
   "105421": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 2
+   "mech": 2,
+   "ctrlAura": [
+    5
+   ]
   },
   "105771": {
    "castMs": 0,
@@ -3575,7 +3692,10 @@
    "castMs": 0,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "mech": 14
+   "mech": 14,
+   "ctrlAura": [
+    12
+   ]
   },
   "107203": {
    "castMs": 1500,
@@ -3828,7 +3948,10 @@
   "115078": {
    "castMs": 0,
    "mech": 14,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "115098": {
    "castMs": 0,
@@ -4003,7 +4126,10 @@
   "117526": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "117588": {
    "castMs": 0,
@@ -4045,7 +4171,10 @@
    "castMs": 0,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "118455": {
    "castMs": 0,
@@ -4063,12 +4192,18 @@
   "118699": {
    "castMs": 0,
    "mech": 5,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "118905": {
    "castMs": 2000,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "118922": {
    "castMs": 0
@@ -4080,7 +4215,10 @@
   "119381": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "119415": {
    "castMs": 0,
@@ -4487,7 +4625,10 @@
   "130616": {
    "castMs": 0,
    "mech": 5,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "130654": {
    "castMs": 0,
@@ -4526,13 +4667,19 @@
   "132168": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "132169": {
    "castMs": 0,
    "mech": 12,
    "unsilenceable": true,
-   "weaponRequired": true
+   "weaponRequired": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "132403": {
    "castMs": 0
@@ -4927,12 +5074,18 @@
   "161353": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "161354": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "161691": {
    "castMs": 0,
@@ -4980,7 +5133,10 @@
   "163505": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "163558": {
    "castMs": 0,
@@ -5259,7 +5415,10 @@
   "179057": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "179478": {
    "castMs": 1500,
@@ -6057,7 +6216,10 @@
   "198909": {
    "castMs": 0,
    "mech": 10,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "199042": {
    "castMs": 0,
@@ -6202,7 +6364,10 @@
   "200166": {
    "castMs": 0,
    "unsilenceable": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "200174": {
    "castMs": 0,
@@ -6215,12 +6380,18 @@
   "200196": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 2
+   "mech": 2,
+   "ctrlAura": [
+    12
+   ]
   },
   "200200": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "200389": {
    "castMs": 0
@@ -6334,7 +6505,10 @@
    "castMs": 0,
    "mech": 12,
    "unsilenceable": true,
-   "pacifyOnly": true
+   "pacifyOnly": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "202246": {
    "castMs": 0,
@@ -6344,7 +6518,10 @@
   "202274": {
    "castMs": 0,
    "unsilenceable": true,
-   "mech": 14
+   "mech": 14,
+   "ctrlAura": [
+    5
+   ]
   },
   "202335": {
    "castMs": 0,
@@ -6355,7 +6532,10 @@
   "202346": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "202347": {
    "castMs": 1500,
@@ -6395,7 +6575,10 @@
    "castMs": 0,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "203173": {
    "castMs": 0,
@@ -6413,6 +6596,9 @@
    "castMs": 0,
    "mech": 13,
    "silenceable": true,
+   "ctrlAura": [
+    12
+   ],
    "immuneAll": true
   },
   "203534": {
@@ -6565,7 +6751,10 @@
   "205364": {
    "castMs": 1800,
    "mech": 1,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    6
+   ]
   },
   "205473": {
    "castMs": 0
@@ -6584,6 +6773,9 @@
    "castMs": 0,
    "mech": 12,
    "silenceable": true,
+   "ctrlAura": [
+    12
+   ],
    "immuneMech": [
     26
    ]
@@ -6677,7 +6869,10 @@
   "207167": {
    "castMs": 0,
    "mech": 2,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "207203": {
    "castMs": 0
@@ -6713,7 +6908,10 @@
   "207685": {
    "castMs": 0,
    "mech": 5,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "207693": {
    "castMs": 0,
@@ -6844,7 +7042,10 @@
   "210141": {
    "castMs": 2000,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "210152": {
    "castMs": 0,
@@ -7094,13 +7295,19 @@
   "213688": {
    "castMs": 1300,
    "unsilenceable": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "213691": {
    "castMs": 0,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "mech": 2
+   "mech": 2,
+   "ctrlAura": [
+    5
+   ]
   },
   "213708": {
    "castMs": 0
@@ -7201,7 +7408,10 @@
   "217832": {
    "castMs": 0,
    "mech": 30,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "218164": {
    "castMs": 0,
@@ -7238,6 +7448,9 @@
    "castMs": 0,
    "mech": 18,
    "silenceable": true,
+   "ctrlAura": [
+    12
+   ],
    "immuneAll": true
   },
   "221562": {
@@ -7956,7 +8169,10 @@
   "255723": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "255937": {
    "castMs": 0,
@@ -7966,7 +8182,10 @@
   "255941": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "256148": {
    "castMs": 0
@@ -8770,12 +8989,18 @@
   "277787": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "277792": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "278326": {
    "castMs": 0,
@@ -8972,7 +9197,10 @@
    "castMs": 1000,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "288438": {
    "castMs": 1500,
@@ -9216,7 +9444,10 @@
   "305485": {
    "castMs": 0,
    "mech": 12,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "305496": {
    "castMs": 0,
@@ -10195,7 +10426,10 @@
   "353084": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 14
+   "mech": 14,
+   "ctrlAura": [
+    5
+   ]
   },
   "353128": {
    "castMs": 0,
@@ -10446,7 +10680,10 @@
    "mech": 12,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "weaponRequired": true
+   "weaponRequired": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "357140": {
    "castMs": 0,
@@ -10506,7 +10743,10 @@
   "357768": {
    "castMs": 0,
    "mech": 14,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "358134": {
    "castMs": 0
@@ -10531,7 +10771,10 @@
   "358861": {
    "castMs": 0,
    "mech": 24,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "359013": {
    "castMs": 1500,
@@ -10656,7 +10899,10 @@
   "360806": {
    "castMs": 1700,
    "mech": 10,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "360823": {
    "castMs": 0,
@@ -11086,7 +11332,10 @@
   "372245": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "372470": {
    "castMs": 0,
@@ -11327,7 +11576,10 @@
   "377048": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "377066": {
    "castMs": 0,
@@ -11680,7 +11932,10 @@
   "383121": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "383169": {
    "castMs": 0
@@ -11934,7 +12189,10 @@
    "castMs": 0,
    "unsilenceable": true,
    "pacifyOnly": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "385960": {
    "castMs": 0
@@ -12237,7 +12495,10 @@
   "389831": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "389839": {
    "castMs": 0,
@@ -12438,7 +12699,10 @@
   "391622": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "391710": {
    "castMs": 0,
@@ -13165,7 +13429,10 @@
   "408544": {
    "castMs": 0,
    "unsilenceable": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "408558": {
    "castMs": 0
@@ -13810,7 +14077,10 @@
   "427773": {
    "castMs": 0,
    "mech": 2,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "427777": {
    "castMs": 1500,
@@ -16277,7 +16547,10 @@
   "460392": {
    "castMs": 1700,
    "mech": 17,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    5
+   ]
   },
   "460475": {
    "castMs": 0,
@@ -17555,7 +17828,10 @@
   "1234195": {
    "castMs": 0,
    "silenceable": true,
-   "mech": 12
+   "mech": 12,
+   "ctrlAura": [
+    12
+   ]
   },
   "1234303": {
    "castMs": 1500,
@@ -19146,7 +19422,10 @@
    "castMs": 0,
    "mech": 12,
    "unsilenceable": true,
-   "pacifyOnly": true
+   "pacifyOnly": true,
+   "ctrlAura": [
+    12
+   ]
   },
   "1258534": {
    "castMs": 0,
@@ -19502,7 +19781,10 @@
   "1261704": {
    "castMs": 4000,
    "mech": 5,
-   "silenceable": true
+   "silenceable": true,
+   "ctrlAura": [
+    7
+   ]
   },
   "1261710": {
    "castMs": 0,
@@ -20187,7 +20469,10 @@
    "unsilenceable": true
   },
   "1266468": {
-   "castMs": 0
+   "castMs": 0,
+   "ctrlAura": [
+    12
+   ]
   },
   "1266486": {
    "castMs": 0

@@ -69,6 +69,19 @@
  *                    and was never refused (whole lock 10 / 0), so the bit
  *                    alone does not decide and 6 gets no flag. 4 alone
  *                    (Barkskin, Dispersion) 0 / 2 (0 / 9): too thin, no flag.
+ *   · ctrlAura     — the loss-of-control aura types the spell's OWN effects
+ *                    apply: `EffectAura` 5 (MOD_CONFUSE), 6 (MOD_CHARM), 7
+ *                    (MOD_FEAR), 12 (MOD_STUN). `mech` is the label of the
+ *                    spell — an aura that takes no control carries it too
+ *                    (Binding Shot's tether 117405: mechanic 12, a dummy
+ *                    aura; Snowdrift's pulse 390171: mechanic 12, a periodic
+ *                    damage aura) — so "does this aura itself take control"
+ *                    is asked here (pipeline T177: of 1,779 auras the
+ *                    mechanic called loss-of-control and no control line
+ *                    printed, 1,656 were those two). A control whose aura
+ *                    is of another type (Hex: transform + pacify-silence;
+ *                    Mind Control: possess) has no flag: absence is "not
+ *                    one of these four types", never "no control".
  *
  * Universe = observedSpellIdsGenerated.json (every id the corpus has seen), so
  * the table cannot be incomplete relative to what a log can contain. An id
@@ -91,6 +104,8 @@ const AURA_MECHANIC_IMMUNITY_MASK = "147";
 const AURA_SCHOOL_IMMUNITY = "39";
 const AURA_MOD_PACIFY_SILENCE = "60";
 const AURA_DISABLE_CASTING_EXCEPT_ABILITIES = "263";
+/** MOD_CONFUSE, MOD_CHARM, MOD_FEAR, MOD_STUN */
+const CONTROL_AURA_TYPES = new Set([5, 6, 7, 12]);
 const ALL_SCHOOLS = 127;
 /** SpellCategories.PreventionType bit 1: the cast is prevented by silence. */
 const PREVENTION_TYPE_SILENCE = 1;
@@ -115,6 +130,7 @@ interface Entry {
   unsilenceable?: true;
   pacifyOnly?: true;
   weaponRequired?: true;
+  ctrlAura?: number[];
 }
 
 async function main() {
@@ -235,6 +251,11 @@ async function main() {
           LOSS_OF_CONTROL_MECHANICS.has(mech)))
     )
       e.mech = mech;
+    const auraType = Number(r.EffectAura);
+    if (CONTROL_AURA_TYPES.has(auraType))
+      e.ctrlAura = [...new Set([...(e.ctrlAura ?? []), auraType])].sort(
+        (a, b) => a - b,
+      );
     const misc0 = Number(r.EffectMiscValue_0);
     switch (r.EffectAura) {
       case AURA_MECHANIC_IMMUNITY:
@@ -357,6 +378,18 @@ async function main() {
     "Judgment 20271 and Blade of Justice 184575 are pacify-only (PreventionType 2)",
   );
   expect(
+    !!out["117526"]?.ctrlAura?.includes(12) && !out["117405"]?.ctrlAura,
+    "Binding Shot: the stun 117526 is a stun aura, the tether 117405 is not",
+  );
+  expect(
+    !!out["389831"]?.ctrlAura?.includes(12) && !out["390171"]?.ctrlAura,
+    "Snowdrift: the stun 389831 is a stun aura, the pulse 390171 is not",
+  );
+  expect(
+    !!out["358861"]?.ctrlAura?.includes(7),
+    "Cascading Horrors 358861 is a fear aura",
+  );
+  expect(
     !out["345228"]?.pacifyOnly && !out["22812"]?.pacifyOnly,
     "Gladiator's Badge 345228 (6) and Barkskin 22812 (4) are not pacify-only",
   );
@@ -380,7 +413,7 @@ async function main() {
       `immuneMech ${count((e) => !!e.immuneMech)}, mask ${count((e) => e.immuneMechMask !== undefined)}, ` +
       `immuneAll ${count((e) => !!e.immuneAll)}, locksCasting ${count((e) => !!e.locksCasting)}, ` +
       `silenceable ${count((e) => !!e.silenceable)}, unsilenceable ${count((e) => !!e.unsilenceable)}, ` +
-      `pacifyOnly ${count((e) => !!e.pacifyOnly)}`,
+      `pacifyOnly ${count((e) => !!e.pacifyOnly)}, ctrlAura ${count((e) => !!e.ctrlAura)}`,
   );
 }
 
