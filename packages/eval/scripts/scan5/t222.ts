@@ -26,6 +26,13 @@
  *    read them; with it, the `[BURST ANSWERED]` lines that would name Feign
  *    Death / Renewing Blaze. Kind = the spell | the only press / beside
  *    other presses.
+ *  - `answeredOnlyByAnothersWall` (inventory, for ruling R68 — every wall,
+ *    not only the castless ones): a window the candidate would judge
+ *    (healer owner; feasible, triaged, long enough, no kite / attacker
+ *    moved) that is `responded` and whose every press is a wall pressed by
+ *    a unit other than the pressured one. Kind = the wall(s). These are the
+ *    slow-defensive-response rows that would exist if another unit's own
+ *    wall did not answer.
  *  - `castlessPressLogging` (inventory, once per round): for each id, the
  *    presses with a cast row and those the ledger reads from the aura
  *    alone — the forward check of "its press logs no cast row".
@@ -52,6 +59,7 @@ export const CHECKS = [
   "castlessPressNotRead",
   "castlessPressLogging",
   "castlessPressCredited",
+  "answeredOnlyByAnothersWall",
 ] as const;
 
 const WALLS = new Set<string>(spellIdLists.bigDefensiveSpellIds.map(String));
@@ -142,6 +150,33 @@ export function run(ctx: IRoundCtx): void {
       `window at ${p.tSec}s (${p.leadCd?.spellName ?? "?"}): ${first.casterName} ${first.spellName} ${first.latencySec}s${others.length ? `; next press ${others[0]!.spellName} ${others[0]!.latencySec}s` : ""}; low ${pr.minHpPct}%`,
     );
   }
+  if (isHealerSpec(owner.spec))
+    for (const p of points) {
+      const pr = p.pressured;
+      if (
+        !pr ||
+        !p.responded ||
+        !p.feasible ||
+        !p.triaged ||
+        p.durationSec < BURST_WINDOW_MIN_JUDGED_S ||
+        p.responses.kite ||
+        p.responses.attackerMoved ||
+        p.responseCasts.length === 0 ||
+        !p.responseCasts.every(
+          (r) => r.category === "wall" && r.casterId !== pr.unitId,
+        )
+      )
+        continue;
+      ctx.violate(
+        "answeredOnlyByAnothersWall",
+        [...new Set(p.responseCasts.map((r) => r.spellName))]
+          .sort()
+          .join(" + "),
+        ctx.start + p.tSec * 1000,
+        `${ctx.roundKey}|${owner.reaction}|${p.tSec}`,
+        `window at ${p.tSec}s (${p.leadCd?.spellName ?? "?"}): ${p.responseCasts.map((r) => `${r.casterName} ${r.spellName} ${r.latencySec}s`).join(", ")}; pressured ${pr.name} low ${pr.minHpPct ?? "?"}%${p.anyFriendlyDeath ? ", a friendly died" : ""}`,
+      );
+    }
   const C = "castlessPressNotRead";
   const healer = isHealerSpec(owner.spec);
   for (const p of points) {
