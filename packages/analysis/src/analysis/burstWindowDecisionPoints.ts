@@ -30,6 +30,7 @@
 import { type ICombatUnit } from "@gladlog/parser-compat";
 
 import { ABILITY_EFFECTS_GENERATED } from "../data/abilityEffectsGenerated";
+import { AURA_ONLY_ACTIVATION_IDS } from "../data/auraActivation";
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
@@ -55,6 +56,7 @@ import {
 import { PRESS_TRIGGERED_CAST_IDS } from "../utils/castMissRows";
 import { COPY_CAST_IDS } from "../utils/castPress";
 import {
+  auraOnlyActivationSeconds,
   canHelpAnotherUnit,
   cdHelpsRecipient,
   cdIsProcOnly,
@@ -353,6 +355,12 @@ export interface BurstResponseCast {
    * Credit-line only. Absent otherwise (Emerald Communion's overflow heal,
    * another id under the same name, reaches allies). */
   selfOnlyEffect?: true;
+  /** The press logged no cast row and was read from its aura
+   * (`CASTLESS_SELF_ANSWER_IDS`: Feign Death, a castless Renewing Blaze).
+   * It answers the window; the `[BURST ANSWERED]` line never names it
+   * (user ruling R80, 2026-11-19: a self-only save counts as an answer and
+   * the credit lines stay as they were). */
+  castless?: true;
   /** A control: the enemy it was aimed at (an aimed cast) or landed on (a
    * ground / untargeted one), and the aura applications it landed as — none
    * for an interrupt, or a control that did not land. T12 ⑧ (i), second
@@ -889,6 +897,17 @@ export const BURST_EXTRA_ANSWER_IDS: ReadonlySet<string> = new Set([
   ...SELF_SAVE_ANSWER_IDS,
 ]);
 
+/**
+ * The self-targeted answers whose press can leave no cast row: the ids of
+ * the ledger's aura-only table (`AURA_ONLY_ACTIVATION_IDS`) that are a
+ * personal wall or one of the extra answers above — Feign Death, Renewing
+ * Blaze. Derived, not a third list. `auraOnlyActivationSeconds` returns
+ * nothing for a unit whose press does log a cast row, so no press is read
+ * twice.
+ */
+export const CASTLESS_SELF_ANSWER_IDS: readonly string[] = Object.keys(
+  AURA_ONLY_ACTIVATION_IDS,
+).filter((id) => PERSONAL_WALL_IDS.has(id) || BURST_EXTRA_ANSWER_IDS.has(id));
 /**
  * A healing CD whose official effect heals only its caster (Dark Pact,
  * Exhilaration, Desperate Prayer …). Keyed on the response CATEGORY
@@ -1595,6 +1614,8 @@ export function burstWindowDecisionPoints(
     /** the one recipient whose copy this entry reads its end from (a
      * talent-shared press split into its caster's and its ally's) */
     copyOn?: string;
+    /** read from the aura, the press logging no cast row */
+    castless?: true;
   }
   const friendlyCasts: FriendlyCast[] = [];
   for (const u of friendlies)
@@ -1634,6 +1655,26 @@ export function burstWindowDecisionPoints(
           copyOn: allyCopy.id,
         });
     }
+  // T222 (found by T182's capture, 7f107afb 2:24): a self-targeted answer whose
+  // press logs no cast row at all — Feign Death (its Survival Tactics aura /
+  // `unconscious=1` row), a castless Renewing Blaze — is a press all the
+  // same. The cooldown ledger's own reader says when (`[TEAM] [CD] Feign
+  // Death` is printed from it); the engine read `spellCastEvents` alone, so
+  // Feign Death, in the answer set since the 2026-09-30 ruling, never
+  // answered a window: three hunters who feigned 3.0–7.4 s after the opener
+  // were told nobody answered within 8 s once their own Master's Call
+  // stopped standing in.
+  for (const u of friendlies)
+    for (const sid of CASTLESS_SELF_ANSWER_IDS)
+      for (const atS of auraOnlyActivationSeconds(u, sid, start, roundEndAtMs))
+        friendlyCasts.push({
+          unitId: u.id,
+          unitName: u.name,
+          spellId: sid,
+          dest: u.id,
+          tMs: start + atS * 1000,
+          castless: true,
+        });
   friendlyCasts.sort((a, b) => a.tMs - b.tMs);
 
   // per-friendly ledgers, computed once per round (not per window).
@@ -2031,6 +2072,7 @@ export function burstWindowDecisionPoints(
           ...(controlOn ? { controlOn } : {}),
           ...(effectOnUnitIds ? { effectOnUnitIds } : {}),
           ...(selfOnlyEffect ? { selfOnlyEffect: true as const } : {}),
+          ...(c.castless ? { castless: true as const } : {}),
         };
         responseAtMs.set(response, c.tMs);
         responseCasts.push(response);

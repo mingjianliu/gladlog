@@ -467,6 +467,35 @@ describe("burstWindowDecisionPoints — response classification", () => {
     expect(both.responded).toBe(true);
   });
 
+  // T222 (found by T182's capture, 7f107afb 2:24): Feign Death logs no cast
+  // row — the press is its Survival Tactics aura — and never answered a
+  // window
+  it("a press that logs no cast row is read from its aura: Feign Death answers, flagged castless", () => {
+    const t = T0 + 13_000;
+    const pts = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({
+          auraEvents: [
+            {
+              spellId: "202748",
+              spellName: "Survival Tactics",
+              srcUnitId: "F1",
+              srcUnitName: "F1",
+              destUnitId: "F1",
+              timestamp: t,
+              logLine: { event: "SPELL_AURA_APPLIED", timestamp: t },
+            },
+          ],
+        }),
+        enemyWithBurst(),
+      ]),
+    );
+    expect(pts[0]!.responded).toBe(true);
+    expect(pts[0]!.responseCasts).toMatchObject([
+      { spellId: "5384", casterId: "F1", category: "wall", castless: true },
+    ]);
+  });
+
   it("a wall pressed just BEFORE the opener still counts (pre-wall allowance)", () => {
     const pts = burstWindowDecisionPoints(
       combat([

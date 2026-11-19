@@ -259,6 +259,27 @@ describe("triage sync-burst F-B7 / F-B4 — which answer is credited", () => {
       "Me-R answered with Pain Suppression in 2.4s",
     );
   });
+  it("R80: a castless self-save (Feign Death) answers the window and is never named", () => {
+    const feign = {
+      category: "wall" as const,
+      spellId: "5384",
+      spellName: "Feign Death",
+      casterName: "Mate-R",
+      casterId: "f2",
+      tSec: 42,
+      latencySec: 2.1,
+      castless: true as const,
+    };
+    expect(
+      formatBurstAnsweredLines([point({ responseCasts: [feign] })]),
+    ).toEqual([]);
+    const both = formatBurstAnsweredLines([
+      point({ responseCasts: [feign, ...point().responseCasts] }),
+    ]);
+    expect(both[0]!.line).toContain(
+      "Me-R answered with Pain Suppression in 2.4s",
+    );
+  });
   it("F-B4: a pre-opener aimed control whose aura was gone at the lead cast is skipped", () => {
     const ctl = (still: boolean) => ({
       category: "control" as const,

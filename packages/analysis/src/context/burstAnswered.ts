@@ -292,6 +292,10 @@ export function answersPressured(
   // and the credit line never names it: the line names the next answer, or
   // does not print
   if (SELF_SAVE_ANSWER_IDS.has(r.spellId)) return false;
+  // user ruling R80 (2026-11-19): a self-only save the engine reads from
+  // its aura (Feign Death) answers the window and is never named here —
+  // the line names the next answer, or does not print
+  if (r.castless) return false;
   // the three "went elsewhere" readings slow-defensive-response's
   // `responded` asks too (T180, one predicate): an external aimed at
   // another unit — an untargeted / ground destination (Spirit Link, Barrier:
