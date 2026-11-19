@@ -657,13 +657,25 @@ export function auraOffensiveOccurrences(
         ]
           .filter((e) => e.t > splitAt && e.t <= limit)
           .sort((a, b) => a.t - b.t);
-        for (const e of evidence) {
-          if (!e.eyeBeam) pressEnd = Math.max(pressEnd, e.t);
-          else if (e.t <= pressEnd)
-            pressEnd = Math.max(
-              pressEnd,
-              Math.min(limit, e.t + DEMONIC_FORM_SECONDS * 1000),
-            );
+        // to a fixed point: a form cast AFTER an Eye Beam shows the form
+        // was up at that Eye Beam too, so its 5 s count (codex
+        // 85-tk-CD-T212-1 #2: in 7669df4d the Eye Beam at 2:57 sits between
+        // the Death Sweep at 2:56 and the Annihilations at 2:58 / 2:59 —
+        // read in one pass it was skipped and the form ended at 2:59, not
+        // at the round's end)
+        for (let moved = true; moved;) {
+          moved = false;
+          for (const e of evidence) {
+            const to = !e.eyeBeam
+              ? e.t
+              : e.t <= pressEnd
+                ? Math.min(limit, e.t + DEMONIC_FORM_SECONDS * 1000)
+                : pressEnd;
+            if (to > pressEnd) {
+              pressEnd = to;
+              moved = true;
+            }
+          }
         }
       }
       result.occurrences.push({

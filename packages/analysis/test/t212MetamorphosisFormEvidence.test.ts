@@ -70,6 +70,23 @@ describe("a pressed Metamorphosis with no logged end (T212)", () => {
     expect(late.endMs).toBe(s(due));
   });
 
+  it("an Eye Beam between two form casts past the nominal end counts: the later cast shows the form at the Eye Beam (the audited order)", () => {
+    // 7669df4d: Death Sweep, Eye Beam 1.1 s later, Annihilation 1.1 s and
+    // 2.4 s after that; the round ends 2 s after the last cast
+    const u = havoc(
+      [
+        ...press,
+        cast("210152", due + 5.9),
+        cast("198013", due + 7),
+        cast("201427", due + 8.1),
+        cast("201427", due + 9.4),
+      ],
+      up,
+    );
+    expect(pressOf(u, 170).endMs).toBe(s(due + 7 + DEMONIC_FORM_SECONDS));
+    expect(pressOf(u, due + 11.4).endMs).toBe(s(due + 11.4));
+  });
+
   it("never past the round's end or the next application of the form", () => {
     // Demonic's 5 s from an Eye Beam 1 s before the nominal end, in a round
     // that ends 2 s after it
