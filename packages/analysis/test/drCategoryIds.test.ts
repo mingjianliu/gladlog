@@ -7,6 +7,7 @@ import { ccSpellIds } from "../src/data/spellTags";
 import { SpellTag } from "../src/data/spellTypes";
 import {
   computeIncomingDR,
+  DR_CATEGORY_HAND_IDS,
   DR_CATEGORY_MAP,
   drCategoryIds,
   drCategoryKnown,
@@ -23,13 +24,23 @@ import { ccMechanicOf } from "../src/utils/spellMechanics";
 // GH #33: the per-category id set must be the product's view (override layer
 // applied), not the raw DB2 arrays.
 describe("drCategoryIds (GH #33 — inverse of DR_CATEGORY_MAP)", () => {
-  it("applies the override layer: Sin and Punishment (blank in DB2) is Horror", () => {
+  it("applies the override layer: Champion's Spear (blank in DB2) is Stun", () => {
     expect(
       Object.values(DR_CATEGORIES_GENERATED).some((ids) =>
-        ids.includes("323467"),
+        ids.includes("376077"),
       ),
     ).toBe(false);
-    expect(drCategoryIds("Horror").has("323467")).toBe(true);
+    expect(drCategoryIds("Stun").has("376077")).toBe(true);
+    expect(DR_CATEGORY_HAND_IDS.has("376077")).toBe(true);
+  });
+  // T211 (GH #221 g5): this test pinned 323467 as "Horror" — an id with 0
+  // rows on the 605. The aura the log writes is 87204, and it does not
+  // diminish (45 of 77 repeats inside 18 s ran the full 3.0 s).
+  it("Sin and Punishment is in no DR family: neither the dead id nor the live aura", () => {
+    expect(DR_CATEGORY_MAP["323467"]).toBeUndefined();
+    expect(DR_CATEGORY_MAP["87204"]).toBeUndefined();
+    expect(drCategoryIds("Horror").size).toBe(0);
+    expect(hasNoDrFamily("87204")).toBe(true);
   });
 
   // Reliability audit C5 (2026-09-25): the two overrides this test used to

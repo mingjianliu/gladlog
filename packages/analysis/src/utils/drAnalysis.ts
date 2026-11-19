@@ -95,7 +95,7 @@ const SCM_CATEGORY_LABELS: Record<string, string> = {
  * Maps spell ID → DR category name.
  * Generated from spellClassMap.json (DB2 DiminishType data) plus a manual supplement
  * for spells absent from DB2: racials/pets not resolvable to player specs, silences
- * missing the DB2 flag, and DR categories that don't exist in DB2 (Cyclone, Horror).
+ * missing the DB2 flag, and ids DB2's DiminishType leaves blank.
  *
  * DB2 overrides are applied last to correct known Blizzard data errors:
  *   - Cyclone (33786): DB2 groups with Disorient; WoW gives it its own DR category
@@ -104,6 +104,15 @@ const SCM_CATEGORY_LABELS: Record<string, string> = {
  * To update after a patch: re-run `generateSpellClassMap` (packages/tools), then verify
  * the supplement below is still accurate.
  */
+const drHandLayerIds = new Set<string>();
+/**
+ * The ids `DR_CATEGORY_MAP` holds from its hand supplement and not from DB2
+ * (`spellClassMap.diminishingReturns`) — the hand layer of a mixed table, the
+ * part `curatedIdRegistry` lists. Unregistered until T211: 323467 (an id of
+ * Sin and Punishment with 0 rows on the 605) sat in it unseen by the reverse
+ * check.
+ */
+export const DR_CATEGORY_HAND_IDS: ReadonlySet<string> = drHandLayerIds;
 export const DR_CATEGORY_MAP: Record<string, string> = (() => {
   const map: Record<string, string> = {};
 
@@ -118,6 +127,7 @@ export const DR_CATEGORY_MAP: Record<string, string> = (() => {
       map[entry.spellId] = label;
     }
   }
+  const fromDb2 = new Set(Object.keys(map));
 
   // 2026-08-21 S2 corpus scan (10,682 matches): removed Psychic Horror 64044, Mesmerize 115268, Intimidating Shout 316593/316595 — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
   // Supplement: racials and pet abilities not resolvable to player specs in DB2
@@ -144,8 +154,14 @@ export const DR_CATEGORY_MAP: Record<string, string> = (() => {
   map["81261"] = "Silence"; // Solar Beam (Druid) — zone silence
   map["204490"] = "Silence"; // Sigil of Silence (Demon Hunter)
 
-  // Supplement: DR categories absent from DB2 DiminishType system
-  map["323467"] = "Horror"; // Sin and Punishment (Shadow Priest)
+  // Supplement: ids DB2's DiminishType leaves blank
+  // No entry for Sin and Punishment (T211, GH #221 g5). This block filed
+  // 323467 under "Horror": that id has 0 rows on the 605, the aura the log
+  // writes is 87204 (301 applications), and 87204 does not diminish — of its
+  // 299 ended lifetimes, 45 of 77 that began within 18 s of the unit's
+  // previous one ran the full 3.0 s (2 at 1.5 s) against 126 of 222 with
+  // none before (10 at 1.5 s). It stays a control with no DR family
+  // (`hasNoDrFamily`), the reading its lines already have.
   map["376077"] = "Stun"; // Champion's Spear (Warrior/Evoker-adjacent)
   map["30283"] = "Stun"; // Shadowfury (Warlock) — missing DiminishType; shares Stun DR
   // Ursol's Vortex (102793, Druid) is a knockback/displacement with no tracked DR family
@@ -178,12 +194,14 @@ export const DR_CATEGORY_MAP: Record<string, string> = (() => {
   // (Gemini adversarial review, 2026-07-15).
   map["207685"] = "Disorient";
 
+  for (const id of Object.keys(map))
+    if (!fromDb2.has(id)) drHandLayerIds.add(id);
   return map;
 })();
 
 /**
  * Every spell id the product files under one DR category label ("Stun",
- * "Disorient", "Incapacitate", "Horror", …) — the inverse view of
+ * "Disorient", "Incapacitate", …) — the inverse view of
  * `DR_CATEGORY_MAP`, override layer included. The single source for any
  * consumer that needs a per-category id SET rather than a per-id lookup:
  * eval's `uwcCorpusScan --category` used to read `DR_CATEGORIES_GENERATED`

@@ -1146,26 +1146,6 @@ export function formatHealerExposureEntries(
   });
 }
 
-/** Block form used by the critical-moments path: kit stated once, one line per window. */
-export function formatHealerExposureForContext(
-  exposures: IHealerBurstExposure[],
-): string[] {
-  if (exposures.length === 0) return [];
-
-  const lines: string[] = ["HEALER EXPOSURE DURING ENEMY BURST WINDOWS:"];
-  formatEnemyCCKitHeader(exposures).forEach((l) => lines.push(`  ${l}`));
-  lines.push("");
-
-  for (const entry of formatHealerExposureEntries(exposures)) {
-    const body = entry.line.startsWith(EXPOSURE_ENTRY_TAG)
-      ? entry.line.slice(EXPOSURE_ENTRY_TAG.length)
-      : entry.line;
-    lines.push(`  [${fmtTime(entry.atSeconds)}] ${body}`);
-  }
-
-  return lines;
-}
-
 // ─── Healer CC avoidance (#7) ──────────────────────────────────────────────
 
 interface IAvoidanceSpell {

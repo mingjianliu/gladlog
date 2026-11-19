@@ -8,11 +8,17 @@ import {
   formatEnemyCCKitHeader,
   formatHealerCCReceivedForContext,
   formatHealerExposureEntries,
-  formatHealerExposureForContext,
 } from '../../src/utils/healerExposureAnalysis';
 import { makeAdvancedAction, makeAuraEvent, makeSpellCastEvent, makeUnit } from './testHelpers';
 
 const MATCH_START = 1_000_000;
+
+// T211: `formatHealerExposureForContext` had no production caller and is
+// gone; these tests read the two formatters the prompt builder calls.
+const exposureLines = (x: Parameters<typeof formatHealerExposureEntries>[0]) => [
+  ...formatEnemyCCKitHeader(x),
+  ...formatHealerExposureEntries(x).map((e) => e.line),
+];
 
 describe('healerExposureAnalysis — exposure calculation', () => {
   it('returns empty when no burst windows provided', () => {
@@ -127,7 +133,7 @@ describe('healerExposureAnalysis — exposure calculation', () => {
     const res = analyzeHealerExposureAtBurst(windows, [enemy], healer, healerCCSummary, [], '1505', MATCH_START);
     expect(res[0].exposureLabel).toBe('Exposed');
 
-    const lines = formatHealerExposureForContext(res);
+    const lines = exposureLines(res);
     expect(lines.join('\n')).toContain('Full-DR CC in LoS; healer trinket up (sole CC counter)');
   });
 
@@ -565,7 +571,7 @@ describe('healerExposureAnalysis — pillar proximity (F15 P2)', () => {
     const far = { ...base, atSeconds: 20, losBreak: { repositionYards: 48, blocksEnemyName: 'M1' } };
     const unmapped = { ...base, atSeconds: 30, losBreak: null };
 
-    const text = formatHealerExposureForContext([near, far, unmapped]).join('\n');
+    const text = exposureLines([near, far, unmapped]).join('\n');
     expect(text).toContain('LoS break ~6.4yd away (pillar-blocks M1)');
     expect(text).not.toContain('~48yd');
     expect((text.match(/LoS break/g) ?? []).length).toBe(1);
@@ -796,7 +802,7 @@ describe('healerExposureAnalysis — compact per-window entries', () => {
 });
 
 describe('healerExposureAnalysis — formatting', () => {
-  it('formatHealerExposureForContext produces compact block: kit header once + one line per window', () => {
+  it('the kit header is stated once and each window is one line', () => {
     const exposure = makeExposure({
       trinketState: 'on_cooldown',
       trinketAvailableAtSeconds: 40,
@@ -812,19 +818,18 @@ describe('healerExposureAnalysis — formatting', () => {
         }),
       ],
     });
-    const lines = formatHealerExposureForContext([exposure]);
+    const lines = exposureLines([exposure]);
     const text = lines.join('\n');
-    expect(lines[0]).toBe('HEALER EXPOSURE DURING ENEMY BURST WINDOWS:');
     // Kit is stated once, with full Spec (Name) references
-    expect(lines[1]).toBe(
-      '  ENEMY CC KIT (threats to you): Frost Mage (M1): Polymorph [Incapacitate]; Arms Warrior (W1): Intimidating Shout [Disorient]',
+    expect(lines[0]).toBe(
+      'ENEMY CC KIT (threats to you): Frost Mage (M1): Polymorph [Incapacitate]; Arms Warrior (W1): Intimidating Shout [Disorient]',
     );
     expect(text).toContain('exposure: Full DR, trinket on CD');
     expect(text).not.toContain('⚠');
     expect(text).not.toContain('CRITICAL');
     expect(text).toContain('healer trinket on CD (back 0:40)');
     // Per-window line is compact: spec-only refs, no per-window kit re-enumeration
-    const windowLines = lines.filter((l) => l.startsWith('  [0:10]'));
+    const windowLines = lines.filter((l) => l.startsWith('[HEALER EXPOSURE]'));
     expect(windowLines).toHaveLength(1);
     expect(windowLines[0]).toContain('IN LoS: Frost Mage: Polymorph Full DR');
     expect(windowLines[0]).toContain('| Pillar-blocked: Arms Warrior');

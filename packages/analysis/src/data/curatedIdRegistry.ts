@@ -136,7 +136,11 @@ import {
   UNPURGEABLE_MAGIC_AURAS,
 } from "../utils/dispelAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
-import { AOE_CC_LANDING_WINDOW_S, AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
+import {
+  AOE_CC_LANDING_WINDOW_S,
+  AOE_CC_SPELL_IDS,
+  DR_CATEGORY_HAND_IDS,
+} from "../utils/drAnalysis";
 import {
   AURA_EMPOWERING_WALLS,
   KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
@@ -1213,6 +1217,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("AOE_CC_SPELL_IDS", "utils/drAnalysis.ts", "cast", () =>
     set(AOE_CC_SPELL_IDS),
+  ),
+  // T211: the hand supplement of DR_CATEGORY_MAP (the DB2 part is generated).
+  // Aura ids — a DR is read off the aura the log writes.
+  t("DR_CATEGORY_MAP (hand layer)", "utils/drAnalysis.ts", "aura", () =>
+    set(DR_CATEGORY_HAND_IDS),
   ),
   // FT-T16 (D14, 2026-10-10): cast id → when its control lands. A hand table
   // since 2026-10-09 and unregistered until the enemy-cast pairing

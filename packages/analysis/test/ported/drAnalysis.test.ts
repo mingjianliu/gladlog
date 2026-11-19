@@ -97,8 +97,11 @@ describe("getDRCategory", () => {
       expect(getDRCategory("217832")).toBe("Incapacitate");
     });
 
-    it("identifies Sin and Punishment as a Horror", () => {
-      expect(getDRCategory("323467")).toBe("Horror");
+    // T211: this pinned 323467 as "Horror" — an id with 0 rows on the 605.
+    // The aura the log writes is 87204 and it does not diminish.
+    it("files Sin and Punishment under no DR family (its live aura 87204)", () => {
+      expect(getDRCategory("87204")).toBe("spell:87204");
+      expect(getDRCategory("323467")).toBe("spell:323467");
     });
 
     it("identifies Polymorph variants as Incapacitate", () => {
