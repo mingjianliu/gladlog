@@ -1292,7 +1292,20 @@ export function controlLandedResponses(
             (!petOwn || c.tMs > petOwn.tMs)
           )
             petOwn = c;
-      const cast = family ?? petOwn ?? aimedControl ?? untargeted;
+      // T184 (fact14 D26, bd6d44c1 1:36): a totem or guardian whose summon
+      // row the log holds was made by that press and by no other. A totem
+      // that pulses for longer than the fuse left its own drop outside it,
+      // and the owner's unrelated untargeted press inside the fuse took its
+      // place (an Earthgrab Totem dropped 2.7 s after the opener rooted the
+      // death knight on its third pulse, at 6.7 s; a Crash Lightning 5.1 s
+      // in was read as the answer's time). With the summon known, no other
+      // untargeted press times it.
+      const made = family ?? petOwn ?? aimedControl;
+      const summonAtMs =
+        !made && a.srcUnitId !== unitId && !fromPet
+          ? summonedAtOf(a.srcUnitId)
+          : null;
+      const cast = made ?? (summonAtMs === null ? untargeted : undefined);
       // the cast-side test already counted an aimed control from this
       // friendly that could be this aura's cause — one that produces THIS
       // aura and was aimed at THIS aura's holder, the only case where the
@@ -1318,11 +1331,7 @@ export function controlLandedResponses(
       // — the press that answered is the one that summoned it (an Earthgrab
       // Totem dropped at 0:05.5 rooted the priest at 0:17.5, read "answered
       // with Earthgrab in 4.4s" for a burst opened at 0:13.1)
-      const summonedAt =
-        !cast && a.srcUnitId !== unitId && !fromPet
-          ? summonedAtOf(a.srcUnitId)
-          : null;
-      const tMs = cast?.tMs ?? summonedAt ?? a.timestamp;
+      const tMs = cast?.tMs ?? summonAtMs ?? a.timestamp;
       if (tMs < w0 || tMs > w1) continue;
       out.push({
         unitId,

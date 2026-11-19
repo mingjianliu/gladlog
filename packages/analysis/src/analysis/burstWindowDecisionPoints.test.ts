@@ -1847,6 +1847,38 @@ describe("controlLandedResponses — a totem's own pulse (fact11 D28)", () => {
   it("no summon row in the log: the aura's own instant, as before", () => {
     expect(run(null)).toMatchObject([{ tMs: 17_501 }]);
   });
+  // T184 (fact14 D26, bd6d44c1 1:36): the totem dropped 2.7 s after the
+  // opener, its third pulse rooted the death knight at 6.7 s, and an
+  // unrelated untargeted Crash Lightning sat inside the fuse before it
+  const withOtherPress = (summonedAt: number | null) =>
+    controlLandedResponses(
+      [
+        {
+          id: "E1",
+          auraEvents: [
+            {
+              timestamp: 103_216,
+              spellId: EARTHGRAB_ROOT,
+              srcUnitId: TOTEM,
+              logLine: { event: "SPELL_AURA_APPLIED" },
+            },
+          ],
+        },
+      ],
+      new Set(["E1"]),
+      ownerOf,
+      [{ unitId: "F1", spellId: "187874", dest: undefined, tMs: 101_639 }],
+      95_028,
+      104_528,
+      () => [],
+      (id) => (id === TOTEM ? summonedAt : null),
+    );
+  it("a totem whose summon is known is timed by its drop, never by another untargeted press in the fuse", () => {
+    expect(withOtherPress(99_199)).toMatchObject([{ tMs: 99_199 }]);
+  });
+  it("no summon row: the untargeted press in the fuse still times it", () => {
+    expect(withOtherPress(null)).toMatchObject([{ tMs: 101_639 }]);
+  });
 });
 
 describe("controlLandedResponses — which cast times a landed control (F-B8)", () => {
