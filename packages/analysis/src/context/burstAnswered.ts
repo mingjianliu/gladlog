@@ -40,6 +40,7 @@ import {
   type BurstWindowDecisionPoint,
   type ControlLandingAura,
   pressDidNotReachPressured,
+  SELF_SAVE_ANSWER_IDS,
 } from "../analysis/burstWindowDecisionPoints";
 import {
   type IPlayerCCTrinketSummary,
@@ -282,6 +283,11 @@ export function answersPressured(
   r: BurstResponseCast,
 ): boolean {
   if (r.afterPressuredDeath) return false;
+  // user ruling R80 (2026-11-19): a self-save (Alter Time, Mass
+  // Invisibility) answers the window — `responded`, the candidate tables —
+  // and the credit line never names it: the line names the next answer, or
+  // does not print
+  if (SELF_SAVE_ANSWER_IDS.has(r.spellId)) return false;
   // the three "went elsewhere" readings slow-defensive-response's
   // `responded` asks too (T180, one predicate): an external aimed at
   // another unit — an untargeted / ground destination (Spirit Link, Barrier:

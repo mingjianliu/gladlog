@@ -237,6 +237,28 @@ describe("triage sync-burst F-B7 / F-B4 — which answer is credited", () => {
     ]);
     expect(own[0]!.line).toContain("f2 answered with Dark Pact in 6.3s");
   });
+  it("R80: the pressured unit's own Alter Time answers the window and is never named", () => {
+    const alter = {
+      category: "wall" as const,
+      spellId: "342245",
+      spellName: "Alter Time",
+      casterName: "Mate-R",
+      casterId: "f2",
+      tSec: 41,
+      latencySec: 0.8,
+    };
+    // the only press: no credit line
+    expect(
+      formatBurstAnsweredLines([point({ responseCasts: [alter] })]),
+    ).toEqual([]);
+    // beside a later answer: the line names that answer, as before T181
+    const both = formatBurstAnsweredLines([
+      point({ responseCasts: [alter, ...point().responseCasts] }),
+    ]);
+    expect(both[0]!.line).toContain(
+      "Me-R answered with Pain Suppression in 2.4s",
+    );
+  });
   it("F-B4: a pre-opener aimed control whose aura was gone at the lead cast is skipped", () => {
     const ctl = (still: boolean) => ({
       category: "control" as const,
