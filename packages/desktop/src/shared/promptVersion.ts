@@ -1555,5 +1555,9 @@
  *  the parser kept statedStartTime get it from raw.txt's opening lines when
  *  opened (desktop; no prompt change).
  *  See docs/prompt-version-history.md.
+ *
+ * v608 (2026-11-18; pipeline batch B136, T142): an aura the log never
+ *  removes before the round ends no longer gets an estimated expiry line.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 607;
+export const PROMPT_VERSION = 608;

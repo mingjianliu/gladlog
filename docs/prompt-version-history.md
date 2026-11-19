@@ -7778,3 +7778,21 @@ tags too); they are removed from the oracle baseline in eval-private, not in
 this tree. Desktop only: no file the capture imports changes, so the 605
 output is unchanged by construction. Codex branch review 85-tk-ENG-T200-1, -1b
 (both REQUEST_CHANGES, fixed) and -1c APPROVE.
+
+v608 (2026-11-18; pipeline batch B136, T142). A `[BUFF FADED] <spell>
+(expired, estimated)` line put an expiry at the table duration for an aura
+that had no REMOVED row before the round ended. The log does not say it
+expired, so the line asserted an instant nothing logged; it is no longer
+printed for such an aura. Check fadedEstimatedNeverRemoved 18 / 29 -> 0 / 11.
+On the 605 (lane's full cycle on 139c39347): 17 contexts lose 18 lines, add
+none and reword none, every one such a line (Combustion 5, Dark Transformation
+4, Breath of Sindragosa 2, Malevolence 2, Arcane Surge, Incarnation: Chosen of
+Elune, Obsidian Scales, Pillar of Frost and Recklessness 1 each); menus
+unchanged. 16 of the 18 sat within about 10 s of the round's end; the two
+Malevolence lines did not (5:07 in a round to 5:19, 1:50 in a round to 2:27):
+the log kept the aura past its 12 s table duration with no REMOVED. That
+mismatch is recorded with #224 and not traced here. On the 605 the assembled
+candidate removes the 18 estimated-expiry [BUFF FADED] lines from 17 contexts
+and changes nothing else; menus are byte-identical. Codex branch review 85-tk-
+CD-T142-1: three synthetic points, recorded; two checked on the diff (`still
+channeling when the round ended` 15 = 15; no removed line's holder had died).
