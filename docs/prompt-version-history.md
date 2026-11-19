@@ -7908,3 +7908,11 @@ buildOffensiveWasteSummary that changes no output (22 rows / 8 facts -> 0 of
 the 605 the assembled candidate's capture is byte-identical to its parent's
 (hash 760874a8bfc2): the trace callback changes no output. Codex branch review
 85-tk-EVAL-T206-1 (APPROVE).
+
+v616 (2026-11-18; pipeline batch B144, T221). Check-only:
+checkFindingsCountFollowsMenu rebuilds the findings prompt the product builds
+instead of reading a line by position (3,519 -> 0; the other 107 gates 0 / 0);
+every later gates baseline drops that constant. Prompts unchanged. On the 605
+the product capture is unchanged by construction; on it
+checkFindingsCountFollowsMenu goes 3,519 -> 0 and the other 107 gates are
+identical. Codex branch review 85-tk-EVAL-T221-1 (APPROVE).

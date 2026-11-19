@@ -1592,5 +1592,10 @@
  *  (castDamageIdSplit / hotPressHp read the producer's selection through an
  *  output-neutral trace callback); prompts unchanged.
  *  See docs/prompt-version-history.md.
+ *
+ * v616 (2026-11-18; pipeline batch B144, T221): check-only
+ *  (checkFindingsCountFollowsMenu rebuilds the findings prompt instead of
+ *  reading a line by position); prompts unchanged.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 615;
+export const PROMPT_VERSION = 616;
