@@ -829,6 +829,26 @@ export const BURST_HEAL_CD_IDS = new Set<string>([
 ]);
 
 /**
+ * T181 (round-14 D2 / D28 / D29): self-saves that are no percentage wall
+ * and so sat in none of the answer lists — Alter Time (the press 342245 and
+ * its return 342247, the heal back to the press's health; `spellIdLists`'
+ * `rewind` mechanism) and Mass Invisibility 414664 (the unit cannot be hit
+ * while it holds, `ENEMY_IMMUNITY_SAVE_AURAS`). slow-defensive-response
+ * said "no friendly answered" over a mage's Alter Time at +0.8 s
+ * (dd3c5ad1 1:58) and a Mass Invisibility at +6.7 s (1:24); cd-hoarded
+ * accused a mage whose own return took it from 26 % to 83 % inside the
+ * window (2c47e3d5 1:30). Answers only, and only for the unit that pressed
+ * them: never on the accusation side. One set for both readers
+ * (`BURST_EXTRA_ANSWER_IDS` here, cd-hoarded's `spent` through
+ * `ownerSelfSaveCastSeconds`). Registered in curatedIdRegistry.
+ */
+export const SELF_SAVE_ANSWER_IDS: ReadonlySet<string> = new Set([
+  "342245", // Alter Time (the press)
+  "342247", // Alter Time (the return)
+  "414664", // Mass Invisibility
+]);
+
+/**
  * F16 retest (2026-10-21, idx 51): presses that answer a crisis on the
  * crisis side but sat in none of the three lists above, so
  * slow-defensive-response said "no friendly answered within 8 s" over a

@@ -18,7 +18,10 @@
  * spell ids anywhere in this package, add an entry — the registry is the
  * index, and the rule has never been the missing piece (CLAUDE.md).
  */
-import { BURST_LEAD_CD_EXCLUDED_IDS } from "../analysis/burstWindowDecisionPoints";
+import {
+  SELF_SAVE_ANSWER_IDS,
+  BURST_LEAD_CD_EXCLUDED_IDS,
+} from "../analysis/burstWindowDecisionPoints";
 import { CD_WASTE_EXCLUDED_IDS } from "../analysis/candidateFindings";
 import { HEALER_TEAM_BURST_IDS } from "../analysis/candidates/cooldownTiming";
 import { ZONE_EXTERNAL_RADIUS_YD } from "../analysis/candidates/death";
@@ -1607,6 +1610,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   // GH #96 M4, user ruling 2026-09-14: healer crisis answers outside the
   // wall / external lists (crisis-no-response "responded").
+  // T181: self-saves that are no percentage wall, answers for their presser
+  t(
+    "SELF_SAVE_ANSWER_IDS",
+    "analysis/burstWindowDecisionPoints.ts",
+    "cast",
+    () => [...SELF_SAVE_ANSWER_IDS],
+  ),
   t(
     "CRISIS_PROTECTIVE_ANSWER_IDS",
     "analysis/crisisDecisionPoints.ts",
