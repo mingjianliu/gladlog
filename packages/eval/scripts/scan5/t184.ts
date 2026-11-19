@@ -18,17 +18,98 @@
  *    same name) or moves the totem (`TOTEM_RELOCATION_IDS`). A source with
  *    no summon row is not judged. Kind = the aura | the owner's press at that second.
  *    Counted: every such summon-landed control response.
+ *  - `printedSummonControlAnswerDiffers`: a printed `[BURST ANSWERED]` line
+ *    whose answer is a totem / guardian-landed control — in print (a
+ *    control answer under a name the answering player never cast, or one
+ *    the engine holds as a landed control in the round) or in the engine's
+ *    credited answer for that window — and whose answer, time or targets
+ *    are not what the checkout's engine credits. The first check re-reads
+ *    the engine alone and so is 0 from the fixing checkout on any capture;
+ *    this one reads the capture's own lines: non-zero on a capture taken
+ *    before the fix, 0 on one taken with it. Kind = what differs.
+ *    Counted: every such printed line.
  */
 import {
   burstWindowDecisionPoints,
   TOTEM_RELOCATION_IDS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
+import {
+  creditedAnswer,
+  parseBurstAnsweredLine,
+} from "@gladlog/analysis/src/context/burstAnswered";
 import { isCastOrEffect } from "@gladlog/analysis/src/data/castEffectAuras";
 import { summonedAtMs } from "@gladlog/analysis/src/utils/summonLife";
 
 import { APPLIED, ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
-export const CHECKS = ["summonControlTimedByOtherPress"] as const;
+export const CHECKS = [
+  "summonControlTimedByOtherPress",
+  "printedSummonControlAnswerDiffers",
+] as const;
+
+function printedLines(
+  ctx: IRoundCtx,
+  points: ReturnType<typeof burstWindowDecisionPoints>,
+): void {
+  const C = "printedSummonControlAnswerDiffers";
+  const isLanded = (r: any) =>
+    r.category === "control" && r.landed === undefined;
+  const landedNames = new Set<string>(
+    points.flatMap((p) =>
+      p.responseCasts.filter(isLanded).map((r) => r.spellName),
+    ),
+  );
+  for (const line of ctx.lines) {
+    if (!line.includes("[BURST ANSWERED]")) continue;
+    const a = parseBurstAnsweredLine(line);
+    if (!a) continue;
+    const p = points.find((x) => x.tSec === a.atSec);
+    const credited = p ? creditedAnswer(p) : undefined;
+    const unit = ctx.unitOfPid(/^(\d+)/.exec(a.answerer)?.[1]);
+    const ownCastNames = new Set<string>(
+      unit
+        ? successesOf(unit).map((c: any) => nameOf(c.spellId, c.spellName))
+        : [],
+    );
+    const printedIsSummon =
+      a.controlOn.length > 0 &&
+      (landedNames.has(a.spellName) ||
+        (unit !== undefined && !ownCastNames.has(a.spellName)));
+    if (!printedIsSummon && !(credited && isLanded(credited))) continue;
+    ctx.bump(C);
+    const kind = !p
+      ? "the engine has no window at that second"
+      : !credited
+        ? "the engine credits no answer in that window"
+        : credited.spellName !== a.spellName
+          ? "the engine credits another answer"
+          : Math.abs(credited.latencySec - a.latencySec) > 0.05
+            ? "the time differs"
+            : a.controlOn.length !==
+                new Set(
+                  p.responseCasts
+                    .filter(
+                      (r) =>
+                        r.controlOn &&
+                        r.casterName === credited.casterName &&
+                        r.spellName === credited.spellName &&
+                        r.latencySec === credited.latencySec,
+                    )
+                    .map((r) => r.controlOn!.unitId),
+                ).size
+              ? "the targets differ"
+              : null;
+    if (kind === null) continue;
+    ctx.violate(
+      C,
+      kind,
+      ctx.start + a.atSec * 1000,
+      `${ctx.roundKey}|${ctx.owner.reaction}|${a.atSec}`,
+      `printed: ${a.answerer} ${a.spellName} ${a.latencySec}s on ${a.controlOn.map((t) => t.target).join(" and ") || "-"}; engine: ${credited ? `${credited.casterName} ${credited.spellName} ${credited.latencySec}s` : "none"}`,
+      line.trim(),
+    );
+  }
+}
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
@@ -41,6 +122,7 @@ export function run(ctx: IRoundCtx): void {
   } catch {
     return;
   }
+  printedLines(ctx, points);
   const C = "summonControlTimedByOtherPress";
   const sec = (ms: number): number => Math.floor((ms - ctx.start) / 1000);
   for (const p of points)
