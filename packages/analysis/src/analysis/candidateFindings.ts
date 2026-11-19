@@ -194,7 +194,10 @@ import { medianFinite } from "../utils/stats";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
 import { firstDeathMs } from "../utils/unitDeath";
 import { withVisionObscuredCauses } from "../utils/visionObscured";
-import { burstWindowDecisionPoints } from "./burstWindowDecisionPoints";
+import {
+  burstWindowDecisionPoints,
+  SELF_SAVE_ANSWER_IDS,
+} from "./burstWindowDecisionPoints";
 import {
   backlashDispelDecisionPoints,
   backlashDispelEvents,
@@ -4015,6 +4018,16 @@ function teamPlayEvents(
                 .map(
                   (e: any) => (e.logLine.timestamp - combat.startTime) / 1000,
                 ),
+            // T181: the owner's self-saves that are no ledger wall (one set
+            // with slow-defensive-response's answers)
+            ownerSelfSaveCastSeconds: (owner.spellCastEvents ?? [])
+              .filter(
+                (e: any) =>
+                  e.logLine.event === "SPELL_CAST_SUCCESS" &&
+                  e.spellId &&
+                  SELF_SAVE_ANSWER_IDS.has(e.spellId),
+              )
+              .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000),
             teamSaveCastSeconds: friends.flatMap((f: any) =>
               (f.spellCastEvents ?? [])
                 .filter(

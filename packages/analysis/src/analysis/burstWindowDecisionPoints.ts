@@ -873,6 +873,7 @@ export const BURST_EXTRA_ANSWER_IDS: ReadonlySet<string> = new Set([
     (f) => f.kind === "save_role" && f.responseOnly,
   ).map((f) => f.id),
   ...ENEMY_REDIRECT_SAVE_IDS,
+  ...SELF_SAVE_ANSWER_IDS,
 ]);
 
 /** A healing CD whose official effect heals only its caster (Divine
@@ -1824,11 +1825,19 @@ export function burstWindowDecisionPoints(
       const extraAnswerCategory = (
         c: FriendlyCast,
       ): BurstResponseCast["category"] =>
-        c.dest && c.dest !== c.unitId && friendlies.some((f) => f.id === c.dest)
-          ? "external"
-          : isNoDest(c.dest) && canHelpAnotherUnit(c.spellId)
-            ? "healCd"
-            : "wall";
+        // T181: a self-save answers for its presser alone — a `wall`, which
+        // `answersPressured` holds to its caster (Mass Invisibility's
+        // official targets are a friendly area; whom it covered is not
+        // read here)
+        SELF_SAVE_ANSWER_IDS.has(c.spellId)
+          ? "wall"
+          : c.dest &&
+              c.dest !== c.unitId &&
+              friendlies.some((f) => f.id === c.dest)
+            ? "external"
+            : isNoDest(c.dest) && canHelpAnotherUnit(c.spellId)
+              ? "healCd"
+              : "wall";
       for (const c of friendlyCasts) {
         if (c.tMs < w0) continue;
         if (c.tMs > w1) break;

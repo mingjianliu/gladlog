@@ -2012,6 +2012,12 @@ export function cdHoardedEvents(
     /** fact1215 R11: the owner's redirect-save presses for a unit
      * (`ownerRedirectSaveFor`) */
     ownerRedirectSaves?: (unitId: string) => readonly number[];
+    /** T181 (round-14 D2): the owner's own presses of
+     * `SELF_SAVE_ANSWER_IDS` — Alter Time's return is on no ledger
+     * (2c47e3d5 1:30: a mage's return took it from 26 % to 83 % inside the
+     * window and the row accused it of holding everything). They answer
+     * the owner's OWN crisis only. */
+    ownerSelfSaveCastSeconds?: readonly number[];
   },
   /** Triage 2026-09-29 H1: what the owner gate saw — `actWindowFor(...)
    * .stateIn` over the SAME inputs as `ownerCouldRespond`. The gate passes an
@@ -2378,7 +2384,11 @@ export function cdHoardedEvents(
         // out of the answers.
         (teamAnswers?.ownerRedirectSaves?.(src.crisisUnit.id) ?? []).some(
           inWindow,
-        );
+        ) ||
+        // T181: the owner's own self-save that is no ledger wall (Alter
+        // Time's return), in the owner's own crisis
+        (src.own &&
+          (teamAnswers?.ownerSelfSaveCastSeconds ?? []).some(inWindow));
       if (spent) {
         if (tracing)
           trace.push({

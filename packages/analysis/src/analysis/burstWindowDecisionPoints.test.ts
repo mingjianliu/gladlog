@@ -401,6 +401,26 @@ describe("burstWindowDecisionPoints — response classification", () => {
     expect(wall.responded).toBe(true);
   });
 
+  // T181 (round-14 D28 / D29): dd3c5ad1 — a mage's Alter Time at +0.8 s
+  // and its Mass Invisibility at +6.7 s under two openers read "no friendly
+  // answered"
+  it("a self-save that is no percentage wall is the pressured unit's own answer: Alter Time (press, return), Mass Invisibility", () => {
+    for (const id of ["342245", "342247", "414664"]) {
+      const pts = burstWindowDecisionPoints(
+        combat([
+          pressuredFriend({ spellCastEvents: [cast(id, 13)] }),
+          enemyWithBurst(),
+        ]),
+      );
+      expect(
+        pts[0]!.responseCasts.map((r) => r.category),
+        id,
+      ).toEqual(["wall"]);
+      expect(pts[0]!.responseCasts[0]!.casterId, id).toBe("F1");
+      expect(pts[0]!.responded, id).toBe(true);
+    }
+  });
+
   it("a wall pressed just BEFORE the opener still counts (pre-wall allowance)", () => {
     const pts = burstWindowDecisionPoints(
       combat([
