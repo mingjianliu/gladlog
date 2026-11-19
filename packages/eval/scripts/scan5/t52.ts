@@ -42,6 +42,13 @@ const MISS_AFTER_S = 2.5;
  * follows the dash */
 const KICK_REFUSED =
   /^(\d+):(\d\d)\s+\[KICK\]\s+your (.+?) on (\d+)\([^)]*\) — (.*)$/;
+/** the same line with no ` on <target>` at all (a kick on a totem names
+ * its owner's totem and is no such line): 3 = the kick, 4 = what follows */
+const KICK_NO_TARGET =
+  /^(\d+):(\d\d)\s+\[KICK\]\s+your ((?:(?! on )[^—])+?) — (.*)$/;
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "refusedKickLiveCast|noTarget",
+]);
 const MISS_TAG =
   /\[(IMMUNE|MISSED on|REFLECTED|PARRIED|DODGED|EVADED|DEFLECTED|RESISTED)\b/;
 
@@ -63,6 +70,19 @@ export function run(ctx: IRoundCtx): void {
     .flatMap((x) => x.split(" | "));
   for (const line of ctx.lines) {
     const k = KICK_REFUSED.exec(line);
+    // a refused kick whose line names no target (the audit had none: a
+    // kick with no dest) cannot be held to a target's cast bar — counted,
+    // so the gap shows (T207 / GH #218 10.9: 0 such lines on the 605)
+    const bare = k ? null : KICK_NO_TARGET.exec(line);
+    if (bare && MISS_TAG.test(bare[4]!))
+      ctx.violate(
+        "refusedKickLiveCast",
+        "noTarget",
+        ctx.start + (Number(bare[1]) * 60 + Number(bare[2])) * 1000,
+        `${ctx.roundKey}|${bare[1]}:${bare[2]}|${bare[3]}`,
+        `${bare[3]} at ${bare[1]}:${bare[2]}: the line names no target`,
+        line,
+      );
     if (!k) continue;
     const tag = MISS_TAG.exec(k[5]!);
     if (!tag) continue;

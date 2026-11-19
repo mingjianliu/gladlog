@@ -11,14 +11,20 @@
  *    every KITED line of the context. Counted: a line the gate could rebuild
  *    a span for and whose span has a measured enemy. Violation `named`: the
  *    line names another enemy (or carries a second one at its peak).
+ *    A line whose second prints no single `[OFFENSIVE WINDOW]` header gets
+ *    its span from the producer's own windows (`alignedBurstWindows`, the
+ *    list `computeOwnerPositionEvents` walks; T207) — held like the others
+ *    and counted a second time under `kitedMeasuredEnemyByProducerWindow`.
  *    Out of the total, counted as kinds for the report: `noHeader` (no
- *    `[OFFENSIVE WINDOW]` header starts in the line's second, or two do —
+ *    single header and no single producer span for the line's second —
  *    the line stays unchecked) and `fallback` (the span has no measured
  *    enemy: no enemy damage, a tie, or no distance at an end — the line is
  *    on the nearest-enemy rule and names no one the gate can hold it to).
  *
  * This module runs the gate; it derives nothing of its own.
  */
+import { reconstructEnemyCDTimeline } from "@gladlog/analysis/src/utils/enemyCDs";
+import { toRenderSecond } from "@gladlog/analysis/src/utils/renderGrid";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
@@ -27,7 +33,10 @@ import {
 } from "../../src/quality/positioningScan";
 import { type IRoundCtx } from "./ctx";
 
-export const CHECKS = ["kitedMeasuredEnemy"] as const;
+export const CHECKS = [
+  "kitedMeasuredEnemy",
+  "kitedMeasuredEnemyByProducerWindow",
+] as const;
 const C = "kitedMeasuredEnemy";
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `${C}|noHeader`,
@@ -38,15 +47,39 @@ const KITED_LINE = /^ +\d+:\d{2} \[[^\]]+ burst\] opened /;
 
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner || !ctx.lines.some((l) => KITED_LINE.test(l))) return;
-  const { claims, unitIdMap } = extractGeoClaims(ctx.lines.join("\n"));
+  const friends = ctx.players.filter((u) => u.reaction === ctx.owner.reaction);
+  const enemies = ctx.players.filter((u) => u.reaction !== ctx.owner.reaction);
+  // the windows the position reading walked (`buildMatchContext` hands
+  // `computeOwnerPositionEvents` this list), by rendered start second
+  const producerEnds = new Map<number, number[]>();
+  for (const w of reconstructEnemyCDTimeline(
+    enemies,
+    ctx.legacy,
+    ctx.owner,
+    friends,
+  ).alignedBurstWindows) {
+    const from = toRenderSecond(w.fromSeconds);
+    producerEnds.set(from, [
+      ...(producerEnds.get(from) ?? []),
+      toRenderSecond(w.toSeconds),
+    ]);
+  }
+  const text = ctx.lines.join("\n");
+  // the lines the text alone carries a span for (the gate's reach)
+  const byHeader = new Set(
+    extractGeoClaims(text)
+      .claims.filter((c) => c.kind === "MEASURED_ENEMY")
+      .map((c) => c.lineNo),
+  );
+  const { claims, unitIdMap } = extractGeoClaims(text, producerEnds);
   const identity = claims.filter(
     (c) => c.kind === "MEASURED_ENEMY" && KITED_LINE.test(c.raw),
   );
   const rebuilt = new Set(identity.map((c) => c.lineNo));
   const geo = {
     owner: ctx.owner,
-    friends: ctx.players.filter((u) => u.reaction === ctx.owner.reaction),
-    enemies: ctx.players.filter((u) => u.reaction !== ctx.owner.reaction),
+    friends,
+    enemies,
     zoneId: String(ctx.legacy.startInfo?.zoneId ?? ""),
     matchStartMs: ctx.start,
     unitIdMap,
@@ -69,6 +102,8 @@ export function run(ctx: IRoundCtx): void {
       return;
     }
     ctx.bump(C);
+    // counted apart, in the total: a span only the producer's windows gave
+    if (!byHeader.has(i + 1)) ctx.bump(`${C}ByProducerWindow`);
     for (const v of r.violations)
       ctx.violate(C, "named", ms, fact, v.detail, l);
   });

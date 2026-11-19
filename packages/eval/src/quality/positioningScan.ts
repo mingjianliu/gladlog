@@ -184,7 +184,16 @@ interface GeoExtraction {
 }
 
 /** Extract geometric claims + the unit id map from the prompt text. */
-export function extractGeoClaims(promptText: string): GeoExtraction {
+export function extractGeoClaims(
+  promptText: string,
+  /** the burst windows by start second → their end seconds, from the
+   * producer's own list (`alignedBurstWindows`), for a caller that has the
+   * match: a KITED line whose second prints no single `[OFFENSIVE WINDOW]`
+   * header (the timeline lists fewer windows than the position reading
+   * walks) gets its span from there (T207 — 186 of 1,078 KITED lines of the
+   * 605 stayed unchecked). The text alone — the gate — reads headers only. */
+  producerBurstEnds?: ReadonlyMap<number, readonly number[]>,
+): GeoExtraction {
   const claims: GeoClaim[] = [];
   const unitIdMap = new Map<number, string>();
   const lines = promptText.split("\n");
@@ -296,7 +305,19 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
         // G4d on a KITED line: the span is the burst window's evaluated
         // part, the window being the header that starts in this second
         const from = parseTime(m[1]);
-        const headerEnds = burstHeaderEnds.get(from) ?? [];
+        const printedEnds = burstHeaderEnds.get(from) ?? [];
+        // …or, with no single header, the producer's windows of that second
+        // when they all end the evaluated span at one second
+        const headerEnds =
+          printedEnds.length === 1
+            ? printedEnds
+            : [
+                ...new Set(
+                  (producerBurstEnds?.get(from) ?? []).map((to) =>
+                    burstEvalEndSeconds(from, to),
+                  ),
+                ),
+              ];
         if (headerEnds.length === 1)
           claims.push({
             kind: "MEASURED_ENEMY",

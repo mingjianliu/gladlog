@@ -489,6 +489,28 @@ describe("G4d MEASURED_ENEMY — a STAYED span is measured to the enemy that hit
         `1:20  [OFFENSIVE WINDOW]   1:20–1:50 | no spike | CDs: X@1:20\n${kited}`,
       ),
     ).toEqual([]);
+    // T207: with the match in hand (scan5/t75), the producer's own windows
+    // of that second give the span the text does not
+    const viaProducer = (text: string, ends: number[]) =>
+      extractGeoClaims(text, new Map([[81, ends]])).claims.filter(
+        (c) => c.kind === "MEASURED_ENEMY",
+      );
+    expect(viaProducer(kited, [110])).toEqual([
+      expect.objectContaining({ atSeconds: 81, toSeconds: 91 }),
+    ]);
+    // two windows that end the evaluated span at one second are one span…
+    expect(
+      viaProducer(
+        `${header("1:21–1:50")}\n${header("1:21–1:59")}\n${kited}`,
+        [110, 119],
+      ),
+    ).toEqual([expect.objectContaining({ toSeconds: 91 })]);
+    // …two that do not leave the line unchecked, and a printed single
+    // header is read before the producer's list
+    expect(viaProducer(kited, [110, 87])).toEqual([]);
+    expect(viaProducer(`${header("1:21–1:27")}\n${kited}`, [110])).toEqual([
+      expect.objectContaining({ toSeconds: 87 }),
+    ]);
     // the named enemy must be the one that hit the owner most over 1:21–1:31
     expect(codes(`${header("1:21–1:50")}\n${kited}`, mk(hits))).toEqual([]);
     expect(

@@ -12,7 +12,7 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "../../analysis/test/ported/testHelpers";
-import { run } from "../scripts/scan5/t52";
+import { OUT_OF_TOTAL, run } from "../scripts/scan5/t52";
 
 const START = 1_000_000;
 const at = (s: number) => START + s * 1000;
@@ -120,6 +120,31 @@ describe("scan5/t52 — a kick refused at a live cast", () => {
       checked: { refusedKickLiveCast: 1 },
       seen: [],
     });
+  });
+
+  it("T207: a refused kick whose line names no target is counted apart (out of the total), not skipped in silence", () => {
+    const r = scan(
+      ["0:43  [KICK]   your Solar Beam — hit nothing [IMMUNE: 5(FMage)]"],
+      43.744,
+    );
+    expect(r.checked).toEqual({});
+    expect(r.seen).toEqual([
+      "refusedKickLiveCast|noTarget: Solar Beam at 0:43: the line names no target",
+    ]);
+    expect(OUT_OF_TOTAL.has("refusedKickLiveCast|noTarget")).toBe(true);
+    // a kick on a totem names a target: not this kind
+    expect(
+      scan(
+        [
+          "0:43  [KICK]   your Mind Freeze on 5(FMage)'s totem — hit nothing [IMMUNE: 5(FMage)'s totem]",
+        ],
+        43.744,
+      ).seen,
+    ).toEqual([]);
+    // a kick that was not refused has no miss tag: no row
+    expect(
+      scan(["0:43  [KICK]   your Solar Beam — hit nothing"], 43.744).seen,
+    ).toEqual([]);
   });
 
   it("`hit nothing` stays right when the bar had gone off before the kick, or never went off", () => {
