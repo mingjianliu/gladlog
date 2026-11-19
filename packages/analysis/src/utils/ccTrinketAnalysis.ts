@@ -2104,9 +2104,12 @@ export interface ICCAvoidedInstance {
    * land`; nothing else about the instance changes.
    */
   loggedMissType?: string;
-  /** The ms of that SPELL_MISSED row — with `sourceId`, the row a printed
-   * `[REFLECTED]` line is asked about (`reflectLineRowKeys`, T178). */
+  /** The ms and the source GUID of that SPELL_MISSED row — the row a printed
+   * `[REFLECTED]` line is asked about (`reflectLineRowKeys`, T178). The
+   * row's own source, not `sourceId`: an owner's command whose pet logged
+   * the miss is keyed by the pet (codex 85-tk-CC-T178-1 #1). */
   missMs?: number;
+  missSrcId?: string;
   /** a logged failure the same caster's next cast of the control answered
    * with a landing this many seconds later, inside the window (user ruling
    * 2026-10-27; `ccAvoidedRecastTag`) */
@@ -6428,7 +6431,12 @@ function analyzePlayerCCAndTrinketUncached(
               sourceId: cast.srcUnitId || enemy.id,
               sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
               ...(loggedMissType ? { loggedMissType } : {}),
-              ...(missRow ? { missMs: missRow.timestamp } : {}),
+              ...(missRow
+                ? {
+                    missMs: missRow.timestamp,
+                    missSrcId: missRow.srcUnitId,
+                  }
+                : {}),
               ...(missRow && recastLandedAfterS(cast, stampMs) !== undefined
                 ? { recastLandedAfterS: recastLandedAfterS(cast, stampMs) }
                 : {}),

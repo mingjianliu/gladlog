@@ -37,7 +37,10 @@ export function run(ctx: IRoundCtx): void {
     const twin = reflected.find(
       (r) =>
         r.reflectorPid === m[2] &&
-        r.spell === m[3] &&
+        // a summon's reflect prints `N(…)'s pet's X` / `'s guardian's X`:
+        // the qualifier is the caster's, not the spell's (codex
+        // 85-tk-CC-T178-1 #2)
+        r.spell.replace(/^(?:pet|guardian)'s /, "") === m[3] &&
         Math.abs(r.sec - sec) <= 1,
     );
     const holder = ctx.unitOfPid(m[2]!);

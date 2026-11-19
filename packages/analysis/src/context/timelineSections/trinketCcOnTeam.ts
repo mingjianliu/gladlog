@@ -442,7 +442,7 @@ export function emitTrinketCcOnTeamEntries(
           reflector &&
           reflectLineKeys().has(
             reflectRowKey(
-              avoided.sourceId,
+              avoided.missSrcId ?? avoided.sourceId,
               reflector.id,
               avoided.missMs,
               avoided.spellName,
