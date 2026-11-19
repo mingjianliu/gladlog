@@ -39,8 +39,8 @@ import {
   ENEMY_AREA_SAVE_IDS,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
-  INVISIBLE_FACT_LINE_IDS,
   type EnemySelfDefensiveHandMechanism,
+  INVISIBLE_FACT_LINE_IDS,
   MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS,
 } from "../data/spellIdLists";
 import { immunityMechanics } from "../data/spellSchools";
@@ -58,7 +58,14 @@ export type SelfDefensiveMechanism =
   /** more healing received, by an official percentage */
   | { kind: "healing received"; pct: number; periodicOnly: boolean }
   /** immunity to the named control mechanics while it is up */
-  | { kind: "mechanic immunity"; mechanics: readonly string[] }
+  | {
+      kind: "mechanic immunity";
+      mechanics: readonly string[];
+      /** its label goes on to how long the log shows it up — Aura Mastery
+       * under Concentration Aura (`auraMasteryBranch`, ruling R53): the
+       * immunity is the press's whole effect, and its aura is logged */
+      timed?: true;
+    }
   /** the named controls removed at the press, no immunity claimed
    * (`MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS`) */
   | { kind: "control removal"; mechanics: readonly string[] }
@@ -230,7 +237,10 @@ export function selfDefensiveLabelWords(m: SelfDefensiveMechanism): string {
 /** The kinds whose label carries figures from the log after its words. */
 function carriesFigures(m: SelfDefensiveMechanism): boolean {
   return (
-    m.kind === "absorb" || m.kind === "reduction" || m.kind === "invisible"
+    m.kind === "absorb" ||
+    m.kind === "reduction" ||
+    m.kind === "invisible" ||
+    (m.kind === "mechanic immunity" && m.timed === true)
   );
 }
 
@@ -319,6 +329,41 @@ export function carriesSelfReductionLabel(
  * pressed self defensive has `selfReductionLegend`. The legend
  * states the mechanism the label names, nothing about when to press it.
  */
+const PLAIN_IMMUNITY_LABEL_RE = / \([a-z]+(?: \/ [a-z]+)* immunity\)/;
+const PLAIN_IMMUNITY_LEGEND =
+  "`(charm / fear / sleep immunity)` (or another list of controls) = the unit cannot be put under those controls while it is up, and one already on it is removed — no damage is reduced;";
+/** The timed immunity label — `Aura Mastery (silence / interrupt immunity,
+ * 8.0s)`, a press under Concentration Aura (`auraMasteryBranch`, ruling
+ * R53) — and its legend sentence, the user's (ruling R56, 2026-11-18; the
+ * closing `;` is this list's own separator). The plain entry's key ends at
+ * the parenthesis, so its "one already on it is removed" never prints for
+ * this label. */
+export const TIMED_IMMUNITY_LABEL_RE = / \([a-z]+(?: \/ [a-z]+)* immunity, /;
+export const TIMED_IMMUNITY_LEGEND =
+  "`(silence / interrupt immunity, Ts)` = immune to silences and interrupts while it is up; it reduces no damage and is not one of the walls;";
+
+/** The two immunity legends a prompt prints with no `[ENEMY DEF]` line
+ * carrying their own label form — the gate's reading of "printed only when
+ * a line carries it", and of "the plain sentence does not print beside the
+ * timed label alone" (ruling R56). */
+export function immunityLegendsWithoutCarrier(
+  lines: readonly string[],
+): string[] {
+  const defLines = lines.filter((l) => l.includes("[ENEMY DEF]"));
+  const printed = new Set(lines.map((l) => l.trim()));
+  return (
+    [
+      [PLAIN_IMMUNITY_LABEL_RE, PLAIN_IMMUNITY_LEGEND],
+      [TIMED_IMMUNITY_LABEL_RE, TIMED_IMMUNITY_LEGEND],
+    ] as const
+  )
+    .filter(
+      ([carried, legend]) =>
+        printed.has(legend) && !defLines.some((l) => carried.test(l)),
+    )
+    .map(([, legend]) => legend);
+}
+
 const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
   {
     carried: / \(heal\)/,
@@ -336,9 +381,12 @@ const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
       "`(+N% healing received)` = the unit takes that much more healing while it is up (Guardian Spirit also refuses one killing blow — `| save triggered` says when it did);",
   },
   {
-    carried: / \([a-z]+(?: \/ [a-z]+)* immunity\)/,
-    legend:
-      "`(charm / fear / sleep immunity)` (or another list of controls) = the unit cannot be put under those controls while it is up, and one already on it is removed — no damage is reduced;",
+    carried: PLAIN_IMMUNITY_LABEL_RE,
+    legend: PLAIN_IMMUNITY_LEGEND,
+  },
+  {
+    carried: TIMED_IMMUNITY_LABEL_RE,
+    legend: TIMED_IMMUNITY_LEGEND,
   },
   {
     carried: / \(removes [a-z]+s(?: \/ [a-z]+s)*\)/,

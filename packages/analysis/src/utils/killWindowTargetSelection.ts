@@ -19,6 +19,7 @@ import {
   spellEffectData,
 } from "../data/spellEffectData";
 import { getSortedAdvancedActions } from "./advancedActions";
+import { isNoWallButtonOf } from "./auraMasteryBranch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
   cdHelpsRecipient,
@@ -295,6 +296,9 @@ export function getDefensiveStateAtTime(
     // F20 D1: an external that cannot target its caster is never its
     // holder's save in hand — the span's reading (`computeOffensiveWindows`)
     if (!cdHelpsRecipient({ spellId }, true)) continue;
+    // …nor is an Aura Mastery that reduces nothing (`isNoWallButtonOf`,
+    // ruling R53, pipeline T213)
+    if (combat && isNoWallButtonOf(spellId, enemy, combat)) continue;
 
     const castSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
     if (castSeconds >= windowStartSeconds) continue; // after our snapshot time
@@ -409,7 +413,11 @@ export function getDefensiveStateAtTime(
   // round (user ruling 2026-10-20, fact1215 retest idx 60 — the span's
   // reading, `computeOffensiveWindows`)
   for (const r of combat ? unusedKitRows(enemy, combat) : [])
-    if (unpressedKitDefensiveInHand(r.spellId) && !castsBySpell.has(r.spellId))
+    if (
+      unpressedKitDefensiveInHand(r.spellId) &&
+      !castsBySpell.has(r.spellId) &&
+      !isNoWallButtonOf(r.spellId, enemy, combat!)
+    )
       available.push(r.name);
   // …and an aura-read baseline defensive never pressed (Feign Death,
   // codex 85-tk-K-T106-1 #1)
@@ -587,7 +595,13 @@ export function unpressedWallsOwned(
   const rows = unusedKitRows(unit, combat);
   let walls = unpressedWallsCache.get(rows);
   if (!walls) {
-    walls = rows.filter((r) => WALL_IN_HAND_MIT_IDS.has(r.spellId));
+    // an Aura Mastery in a Concentration-Aura paladin's hand is no wall
+    // (`isNoWallButtonOf`, ruling R53: no `gated (Aura Mastery in hand)`)
+    walls = rows.filter(
+      (r) =>
+        WALL_IN_HAND_MIT_IDS.has(r.spellId) &&
+        !isNoWallButtonOf(r.spellId, unit, combat),
+    );
     unpressedWallsCache.set(rows, walls);
   }
   return walls;
@@ -647,6 +661,7 @@ function wallsInHandAt(
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     const { spellId } = cast;
     if (!spellId || !WALL_IN_HAND_MIT_IDS.has(spellId)) continue;
+    if (isNoWallButtonOf(spellId, enemy, combat)) continue;
     const arr = castsBySpell.get(spellId) ?? [];
     arr.push({
       timeSeconds: (cast.logLine.timestamp - matchStartMs) / 1000,

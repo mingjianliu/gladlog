@@ -15,6 +15,7 @@
 import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
 import { reachesAlly } from "../../data/spellTargeting";
 import { allyCopyClause } from "../../utils/allyCopyWall";
+import { auraMasteryPressTag } from "../../utils/auraMasteryBranch";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import {
   enemySourceIds,
@@ -629,7 +630,9 @@ export function emitOwnerCdEntries(
       // a mechanic (e.g. "Restoral breaks stuns") for a CD it otherwise sees only as a [YOU] [CD] cast.
       const ownerRole = cdRoleTag(cd.spellId);
       const roleSuffix = ownerRole ? ` [${ownerRole}]` : "";
-      const displayNameWithChannel = `${castSpellName(cd, cast)}${roleSuffix}${channelSuffix}`;
+      // an Aura Mastery pressed under Concentration Aura says what it gave
+      // (`auraMasteryPressTag`, ruling R53, pipeline T213)
+      const displayNameWithChannel = `${castSpellName(cd, cast)}${auraMasteryPressTag(cd.spellId, owner, matchStartMs + cast.timeSeconds * 1000)}${roleSuffix}${channelSuffix}`;
 
       // B128: for the owner's CHANNELED CDs, state whether any enemy had an interrupt available at the
       // cast — so the model can decide "was this a lockout reaction" and "would this have been kicked"

@@ -20,6 +20,7 @@
  *    the kit read `Metamorphosis [120s] [UNUSED]` while `0:32 [ENEMY CD]`
  *    printed the press. Counted: every kit entry with such a press.
  */
+import { kitTextWithoutNoWallTags } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import {
   castRowActivationMs,
   METAMORPHOSIS_PRESS_CAST_IDS,
@@ -100,7 +101,7 @@ function unusedPressedBeforeRoundEnd(ctx: IRoundCtx): void {
       });
     }
     if (late.size === 0) continue;
-    for (const m of cds.matchAll(
+    for (const m of kitTextWithoutNoWallTags(cds).matchAll(
       /(?:^|, )([^,[]+?) \[[^\]]*\]( \[UNUSED\])?(?=,|$| \[)/g,
     )) {
       const name = m[1]!;

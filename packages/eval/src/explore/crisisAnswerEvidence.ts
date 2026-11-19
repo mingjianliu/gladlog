@@ -33,6 +33,10 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import { MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import {
+  AURA_MASTERY_ID,
+  auraMasteryPressIsImmunityBranch,
+} from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { isControlCast } from "@gladlog/analysis/src/utils/castMissRows";
 import { offensiveCdOfAura } from "@gladlog/analysis/src/utils/cooldowns";
 import { wallTableIdOfAura } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -301,9 +305,21 @@ export function buildCrisisAnswerEvidence(
       spellId: iv.spellId,
       srcName: src,
     };
-    const mit = resolveMitigation(wallTableIdOfAura(iv.spellId), {
-      carrierIsCaster: fromSelf,
-    });
+    // an Aura Mastery pressed under Concentration Aura is the silence /
+    // interrupt immunity and no wall (ruling R53, pipeline T213): its own
+    // 317929 interval is quoted as the immunity below, the 31821 interval
+    // prices nothing — the product's one decision
+    // (`auraMasteryPressIsImmunityBranch`; codex 85-tk-WIN-T213-3 #4)
+    const srcUnit = (atT.round.units ?? {})[iv.srcUnitId ?? ""];
+    const noWall =
+      iv.spellId === AURA_MASTERY_ID &&
+      !!srcUnit &&
+      auraMasteryPressIsImmunityBranch(srcUnit, appliedMs);
+    const mit = noWall
+      ? undefined
+      : resolveMitigation(wallTableIdOfAura(iv.spellId), {
+          carrierIsCaster: fromSelf,
+        });
     const prof = abilityProfile(iv.spellId);
     const srcIsEnemy = [...enemyIds].some((id) => nameById.get(id) === src);
     if (

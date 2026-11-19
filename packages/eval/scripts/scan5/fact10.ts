@@ -134,6 +134,7 @@ import {
   rootSpellIds,
 } from "@gladlog/analysis/src/data/spellTags";
 import { staleMaxHpRows } from "@gladlog/analysis/src/utils/advancedActions";
+import { kitNameWithoutNoWallTag } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import {
@@ -1437,7 +1438,7 @@ function unusedOwnAuraOnAlly(ctx: IRoundCtx): void {
     for (const m of cds.matchAll(
       /(?:^|, )([^,[]+?) \[[^\]]*\]( \[UNUSED\])?(?=,|$| \[)/g,
     )) {
-      const name = m[1]!;
+      const name = kitNameWithoutNoWallTag(m[1]!);
       const t = onOthers.get(name);
       if (t === undefined || cast.has(name)) continue;
       ctx.bump("unusedOwnAuraOnAlly");

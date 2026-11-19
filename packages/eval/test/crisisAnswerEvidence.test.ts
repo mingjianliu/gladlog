@@ -249,6 +249,28 @@ describe("crisisAnswerEvidence: counterexample fixtures", () => {
     expect(Object.keys(e)).not.toContain("verdict");
   });
 
+  it("an Aura Mastery pressed under Concentration Aura prices nothing (ruling R53; codex 85-tk-WIN-T213-3 #4) — under Devotion it is the wall", () => {
+    const press = (immunity: boolean) => {
+      const r = baseRound();
+      const row = (spellId: string, spellName: string) =>
+        ev("SPELL_AURA_APPLIED", T - 3000, {
+          src: OWNER,
+          dest: OWNER,
+          spellId,
+          spellName,
+          auraType: "BUFF",
+        });
+      r.units[OWNER].auraEvents.push(row("31821", "Aura Mastery"));
+      if (immunity)
+        r.units[OWNER].auraEvents.push(row("317929", "Aura Mastery"));
+      return evidence(r).items.filter(
+        (i) => i.kind === "mitigation" && i.spellId === "31821",
+      );
+    };
+    expect(press(true)).toEqual([]);
+    expect(press(false)).toHaveLength(1);
+  });
+
   it("attackers retreating is not the owner moving", () => {
     const e = evidence(baseRound());
     const mv = e.items.find((i) => i.kind === "movement")!;

@@ -108,6 +108,7 @@ import {
   AURA_REBROADCAST_GAP_MS,
   dropAuraRebroadcasts,
 } from "@gladlog/analysis/src/utils/auraIntervals";
+import { kitTextWithoutNoWallTags } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { breakingHitOnHolder } from "@gladlog/analysis/src/utils/brokenRowBreaker";
 import {
   isSilenceEffectAura,
@@ -781,9 +782,9 @@ function runRound(ctx: IContext): void {
     );
     const ownerName = /name="([^"]+)"/.exec(lines[ownerRow] ?? "")?.[1];
     const kit = new Set(
-      (
+      kitTextWithoutNoWallTags(
         /<cooldowns>(.*)<\/cooldowns>/.exec(lines[ownerRow + 1] ?? "")?.[1] ??
-        ""
+          "",
       )
         // an entry ends at its last `[…]` tag; a name may hold a comma
         // (`Invoke Chi-Ji, the Red Crane`)

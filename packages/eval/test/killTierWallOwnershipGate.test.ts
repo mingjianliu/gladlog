@@ -55,6 +55,32 @@ describe("checkKillTierWallOwnership", () => {
     );
   });
 
+  it("R74: a kit entry tagged as no wall (Aura Mastery under Concentration Aura) is not in hand; the plain entry is", () => {
+    const kit = (entry: string) => [
+      '  <unit id="6" name="Paladin-Realm-US" spec="Holy Paladin" role="enemy">',
+      `    <cooldowns>Divine Protection [42s, lasts 8s] [UNUSED], ${entry}</cooldowns>`,
+      "  </unit>",
+    ];
+    const line = attempt(
+      "Paladin-Realm-US",
+      "gated (Divine Protection in hand; no softer target)",
+    );
+    expect(
+      checkKillTierWallOwnership([
+        ...kit(
+          "Aura Mastery (silence / interrupt immunity) [150s, lasts 8s] [UNUSED]",
+        ),
+        line,
+      ]),
+    ).toEqual([]);
+    const fails = checkKillTierWallOwnership([
+      ...kit("Aura Mastery [150s, lasts 8s] [UNUSED]"),
+      line,
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("Aura Mastery 标着 [UNUSED]");
+  });
+
   it("fails: the target itself printed PRIME, and a gated list that leaves the `[UNUSED]` wall out", () => {
     const fails = checkKillTierWallOwnership([
       ...KIT,

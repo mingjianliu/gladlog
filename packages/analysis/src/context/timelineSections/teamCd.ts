@@ -16,6 +16,7 @@
  */
 import { reachesAlly } from "../../data/spellTargeting";
 import { allyCopyClause } from "../../utils/allyCopyWall";
+import { auraMasteryPressTag } from "../../utils/auraMasteryBranch";
 import { isControlCast } from "../../utils/castMissRows";
 import {
   castSpellName,
@@ -208,7 +209,7 @@ export function emitTeamCdEntries(
                   ? cast.targetName
                   : player.name,
               );
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${castSpellName(cd, cast)}${castProcWith ? ` (with ${castProcWith})` : ""}${recipientPart}${groundingNote}${immunePart}${saveNote}${unnecessaryNote}`;
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${castSpellName(cd, cast)}${auraMasteryPressTag(cd.spellId, player, matchStartMs + cast.timeSeconds * 1000)}${castProcWith ? ` (with ${castProcWith})` : ""}${recipientPart}${groundingNote}${immunePart}${saveNote}${unnecessaryNote}`;
         }
         addEntry(
           cast.timeSeconds,

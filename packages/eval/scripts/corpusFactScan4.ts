@@ -70,6 +70,7 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/auraIntervals";
+import { kitTextWithoutNoWallTags } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import {} from "@gladlog/analysis/src/utils/castPress";
 import {
   applicableCCAvoidanceIds,
@@ -1594,7 +1595,9 @@ function runRound(ctx: IContext): void {
   // R6C-06 #2: an Anti-Magic Zone 0.6 s after the death took it away)
   {
     const roundEnd = roundEndMs(legacy as never);
-    const kitLine = lines.find((l) => /^\s+<cooldowns>/.test(l)) ?? "";
+    const kitLine = kitTextWithoutNoWallTags(
+      lines.find((l) => /^\s+<cooldowns>/.test(l)) ?? "",
+    );
     if (roundEnd < end && kitLine) {
       const late = successesOf(owner).filter(
         (c) => tsOf(c) >= roundEnd && tsOf(c) <= end,

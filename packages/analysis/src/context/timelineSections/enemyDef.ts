@@ -298,7 +298,7 @@ export function emitEnemyDefEntries(
           d.effect !== undefined
             ? enemySaveEffectNote(d.effect, d.absorbedAmount, dur)
             : d.mechanism
-              ? `${selfDefensiveLabelWords(d.mechanism)}${d.mechanism.kind === "invisible" && dur ? `, ${invisibleLengthWords(dur)}` : d.mechanism.kind === "reduction" && dur ? `, ${dur}` : ""}`
+              ? `${selfDefensiveLabelWords(d.mechanism)}${d.mechanism.kind === "invisible" && dur ? `, ${invisibleLengthWords(dur)}` : (d.mechanism.kind === "reduction" || (d.mechanism.kind === "mechanic immunity" && d.mechanism.timed)) && dur ? `, ${dur}` : ""}`
               : "";
         const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
         // B18: a Guardian Spirit the priest put on THEMSELVES is a

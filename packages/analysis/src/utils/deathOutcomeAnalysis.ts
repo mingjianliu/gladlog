@@ -8,6 +8,7 @@ import {
 import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { isNoWallButtonOf } from "./auraMasteryBranch";
 import {
   cannotCastIntervalsForSpells,
   pressBlockedIntervalsForSpells,
@@ -1392,6 +1393,18 @@ export function buildDeathOutcomeSummary(
           // predicate, so the everCast case above stays covered. Per-round
           // unit (Solo Shuffle talents change between rounds).
           if (talentOwnershipOf(teammate, spellId) === "no") continue;
+          // an Aura Mastery that is no wall in this teammate's hand
+          // (Concentration Aura: silence / interrupt immunity, no reduction)
+          // is no missed external — nothing for the death audit to price
+          // (`isNoWallButtonOf`, ruling R53; codex 85-tk-WIN-T213-2 #1)
+          if (
+            combat.endTime !== undefined &&
+            isNoWallButtonOf(spellId, teammate, {
+              startTime: combat.startTime,
+              endTime: combat.endTime,
+            })
+          )
+            continue;
           // Prefer the **resolved** cooldown (same source as the [RES] ledger,
           // talent modifiers included); only fall back to this table's
           // constant when it is unavailable. See the root-cause note at this

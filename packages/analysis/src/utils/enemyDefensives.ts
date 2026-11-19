@@ -42,10 +42,10 @@ import spellIdListsData, {
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_IMMUNITY_TEAM_PROC_AURAS,
+  ENEMY_INVISIBILITY_AURAS,
   ENEMY_ONLY_SAVE_IDS,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
-  ENEMY_INVISIBILITY_AURAS,
   type EnemyProcSaveEffect,
 } from "../data/spellIdLists";
 import {
@@ -62,6 +62,14 @@ import {
   pressSecondsOfAura,
   SAVE_CAST_AURA_PAIR_S,
 } from "./auraIntervals";
+import {
+  AURA_MASTERY_BRANCH_PAIR_MS,
+  AURA_MASTERY_ID,
+  AURA_MASTERY_IMMUNITY_AURA_ID,
+  auraMasteryImmunityMechanics,
+  auraMasteryPressSwitchedToWall,
+  withoutImmunityBranchWalls,
+} from "./auraMasteryBranch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import {
   combatMemo,
@@ -1608,6 +1616,9 @@ export function areaSaveSpansOnS(
  * caster's own wall), it cut only the paladin's spans: the Balance Druid
  * under the paladin's Devotion Aura read `defenseless 0:44–1:12` through
  * Aura Mastery's 0:42.6–0:50.6. Registered in curatedIdRegistry.
+ * Under Concentration Aura the same press is no wall at all
+ * (`auraMasteryBranch.ts`, ruling R53): its 31821 interval never reaches
+ * this map's readers.
  */
 export const AURA_EMPOWERING_WALLS: ReadonlyMap<string, string> = new Map([
   ["31821", "465"],
@@ -1931,7 +1942,15 @@ export function saveAuraIntervalsUncached(
   // a re-announced aura is already one interval (`joinReappliedIntervals`
   // runs inside `buildAuraIntervals`, GH #136.3)
   return splitAtRepressRefresh(
-    buildAuraIntervals(unit, combat, castersById),
+    // an Aura Mastery that took the immunity branch is no wall: its 31821
+    // interval is out for every reader of these — the wall line, the
+    // `defenseless` cut, KILL ATTEMPTS (`withoutImmunityBranchWalls`,
+    // ruling R53, pipeline T213); its line is the immunity aura's
+    withoutImmunityBranchWalls(
+      unit,
+      buildAuraIntervals(unit, combat, castersById),
+      combat.startTime,
+    ),
     unit,
     combat.startTime,
     castSecondsOf,
@@ -2807,6 +2826,67 @@ export function enemyDefensiveEventsUncached(
             ...earlyEndOf(enemy, shield, shield.spellId),
           }
         : { removedEarly: false }),
+    });
+  }
+
+  // Pipeline T213 (ruling R53): an Aura Mastery pressed under Concentration
+  // Aura — silence / interrupt immunity for as long as the log shows its
+  // aura 317929 on the paladin, no reduction. A fact line of the press
+  // (kind "self-save" with a mechanism that is no absorb: no span reader
+  // counts it); a 317929 with no press beside it is a copy on a unit that
+  // walked back into the aura, not a line.
+  for (const iv of intervalsOf(enemy)) {
+    if (
+      iv.spellId !== AURA_MASTERY_IMMUNITY_AURA_ID ||
+      !isIntervalFrom(iv, enemy)
+    )
+      continue;
+    // a press that switched to the wall while it ran is the wall's line,
+    // not this one — the interval readers' own decision
+    // (`auraMasteryPressSwitchedToWall`)
+    if (
+      auraMasteryPressSwitchedToWall(
+        enemy,
+        combat.startTime + Math.round(iv.fromS * 1000),
+      )
+    )
+      continue;
+    const press = castSecondsOf(enemy.name, AURA_MASTERY_ID)
+      .filter(
+        (t) =>
+          Math.abs(Math.round(t * 1000) - Math.round(iv.fromS * 1000)) <=
+          AURA_MASTERY_BRANCH_PAIR_MS,
+      )
+      .sort((a, b) => Math.abs(a - iv.fromS) - Math.abs(b - iv.fromS))[0];
+    // no cast row: a press made while the paladin was unseen still put its
+    // own 31821 up beside the immunity aura (`hiddenPressMs`, fact3 D35; the
+    // wall readers' intervals no longer hold it) — the line the wall reading
+    // printed `[pressed while unseen]` stays
+    const unseen =
+      press === undefined &&
+      hiddenPressMs(enemy, AURA_MASTERY_ID, combat.startTime).some(
+        (ms) =>
+          Math.abs(ms - combat.startTime - Math.round(iv.fromS * 1000)) <=
+          AURA_MASTERY_BRANCH_PAIR_MS,
+      );
+    if (press === undefined && !unseen) continue;
+    out.push({
+      atSeconds: iv.fromS,
+      ...(press !== undefined
+        ? { pressSeconds: press }
+        : { unseenPress: true as const }),
+      spellId: AURA_MASTERY_ID,
+      spellName: getEnglishSpellName(AURA_MASTERY_ID, iv.spellName),
+      casterName: enemy.name,
+      casterId: enemy.id,
+      kind: "self-save",
+      mechanism: {
+        kind: "mechanic immunity",
+        mechanics: auraMasteryImmunityMechanics(),
+        timed: true,
+      },
+      observedSeconds: iv.toS - iv.fromS,
+      ...earlyEndOf(enemy, iv, iv.spellId),
     });
   }
 

@@ -18,6 +18,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { ENEMY_IMMUNITY_TEAM_PROC_AURAS } from "../data/spellIdLists";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals, pressSecondsOfAura } from "./auraIntervals";
+import { withoutImmunityBranchWalls } from "./auraMasteryBranch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import {
   combatMemo,
@@ -962,7 +963,13 @@ export function analyzeBurstLedgerUncached(
       // after the burst opened. T98: with them, the presses of the same
       // walls, to find one inside a copy's interval.
       let defOnTarget: IWallDefensiveEvent[] | undefined;
-      const targetIntervals = buildAuraIntervals(target, combat);
+      // an Aura Mastery that took the immunity branch is no defensive up
+      // (`withoutImmunityBranchWalls`, ruling R53, pipeline T213)
+      const targetIntervals = withoutImmunityBranchWalls(
+        target,
+        buildAuraIntervals(target, combat),
+        combat.startTime,
+      );
       const pressReadingOfWall = (
         spellId: string,
         src: { name: string; id?: string },

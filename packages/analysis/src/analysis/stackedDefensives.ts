@@ -43,6 +43,7 @@ import { DEFLECTION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists, { isInvisibilityPress } from "../data/spellIdLists";
 import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
+import { withoutImmunityBranchWalls } from "../utils/auraMasteryBranch";
 import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
 import {
   isDeferralAbsorb,
@@ -143,7 +144,13 @@ export function majorWallIntervals(
       : undefined;
     return ownerName && friendNames.has(ownerName) ? ownerName : null;
   };
-  return buildAuraIntervals(target, combat, playersById)
+  // an Aura Mastery that took the immunity branch is no defensive in the
+  // stack (`withoutImmunityBranchWalls`, ruling R53, pipeline T213)
+  return withoutImmunityBranchWalls(
+    target,
+    buildAuraIntervals(target, combat, playersById),
+    combat?.startTime ?? 0,
+  )
     .flatMap((iv) => {
       const caster = friendlyCasterOf(iv);
       return caster === null ? [] : [{ ...iv, srcUnitName: caster }];

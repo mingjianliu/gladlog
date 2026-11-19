@@ -18,6 +18,7 @@ import {
   buildAuraIntervals,
   IAuraInterval,
 } from "./auraIntervals";
+import { withoutImmunityBranchWalls } from "./auraMasteryBranch";
 import { binarySearchClosest } from "./binarySearch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -361,7 +362,13 @@ export function whitelistedIntervalsInDeathWindow(
       )
       .map((u) => u.name),
   );
-  for (const iv of buildAuraIntervals(victim, combat, selfCaster)) {
+  // an Aura Mastery that took the immunity branch reduced nothing
+  // (`withoutImmunityBranchWalls`, ruling R53, pipeline T213)
+  for (const iv of withoutImmunityBranchWalls(
+    victim,
+    buildAuraIntervals(victim, combat, selfCaster),
+    combat.startTime,
+  )) {
     if (whitelistKeyOf(iv.spellId) === undefined) continue;
     if (opposing.has(iv.srcUnitName)) continue;
     // fact2 C4 (2026-10-20): a damage-transfer external's link on its own

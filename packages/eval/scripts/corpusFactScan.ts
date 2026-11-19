@@ -133,6 +133,7 @@ import {
 } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { kitTextWithoutNoWallTags } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import {
   HERALD_PROC_BUNDLE_IDS,
@@ -461,7 +462,10 @@ function runRound(ctx: IContext): void {
   // ── 1. hiddenPressUnused ──
   for (let i = 0; i < lines.length; i++) {
     const um = /<unit id="(\d+)" name="([^"]+)"/.exec(lines[i]!);
-    const kit = lines[i + 1];
+    const kit =
+      lines[i + 1] === undefined
+        ? undefined
+        : kitTextWithoutNoWallTags(lines[i + 1]!);
     if (!um || !kit?.includes("<cooldowns>")) continue;
     const u = byName.get(um[2]!);
     if (!u) continue;

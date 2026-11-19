@@ -8,6 +8,7 @@ import {
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
 import { isHasteScaledCooldown } from "../data/hasteScaledCooldowns";
 import { spellEffectData } from "../data/spellEffectData";
+import { auraMasteryKitTag } from "../utils/auraMasteryBranch";
 import {
   buffDurationIsFloorForCaster,
   buffDurationRangeForCaster,
@@ -24,8 +25,8 @@ import {
   cdMaybeAvailableAt,
   cdRealisedSecondsUntilReady,
   cdRemainingWholeSeconds,
-  cdWholeSecond,
   cdSecondsUntilReady,
+  cdWholeSecond,
   GUARDIAN_SPIRIT_SPELL_ID,
   IMajorCooldownInfo,
   kitRowUnused,
@@ -388,7 +389,8 @@ export function buildPlayerLoadout(
     // entries printed seconds in front of [PASSIVE]; none does now.
     cd.isProcOnly
       ? `${cd.spellName} [PASSIVE]`
-      : `${kitSpellNameOf(cd, caster)} [${cdSecondsLabel(cd)}${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
+      : // an Aura Mastery that is no wall for this unit says so (R74)
+        `${kitSpellNameOf(cd, caster)}${caster && roundMs ? auraMasteryKitTag(cd.spellId, caster, roundMs) : ""} [${cdSecondsLabel(cd)}${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
           cdIsProcOnly(cd)
             ? " [PASSIVE]"
             : // `kitRowUnused`: the reading the kill-opportunity tier's "wall

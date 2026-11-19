@@ -45,6 +45,12 @@ import {
   DARK_SIMULACRUM_COPY_BUFF_ID,
   DARK_SIMULACRUM_ID,
 } from "../context/timelineSections/friendlyUtilityPress";
+import {
+  AURA_MASTERY_ID,
+  AURA_MASTERY_IMMUNITY_AURA_ID,
+  CONCENTRATION_AURA_ID,
+  DEVOTION_AURA_ID,
+} from "../utils/auraMasteryBranch";
 import { CASTER_SIDE_LINK_AURA_IDS } from "../utils/brokenRowBreaker";
 import {
   NO_FIXED_DURATION_IDS,
@@ -319,13 +325,13 @@ import spellIdLists, {
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_IMMUNITY_TEAM_PROC_AURAS,
+  ENEMY_INVISIBILITY_AURAS,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
   ENEMY_SELF_SAVE_ONLY_IDS,
-  ENEMY_INVISIBILITY_AURAS,
-  INVISIBLE_FACT_LINE_IDS,
   FRIENDLY_PRESS_LINE_ONLY_IDS,
+  INVISIBLE_FACT_LINE_IDS,
   MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS,
 } from "./spellIdLists";
 import { HAND_UNPARRYABLE_SPELL_IDS } from "./spellParry";
@@ -1638,6 +1644,16 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("AURA_EMPOWERING_WALLS", "utils/enemyDefensives.ts", "aura", () =>
     set([...AURA_EMPOWERING_WALLS.keys(), ...AURA_EMPOWERING_WALLS.values()]),
+  ),
+  // pipeline T213: Aura Mastery, the immunity aura its Concentration branch
+  // applies, and the two paladin auras that decide the branch
+  t("AURA_MASTERY_BRANCH_IDS", "utils/auraMasteryBranch.ts", "aura", () =>
+    set([
+      AURA_MASTERY_ID,
+      AURA_MASTERY_IMMUNITY_AURA_ID,
+      CONCENTRATION_AURA_ID,
+      DEVOTION_AURA_ID,
+    ]),
   ),
   t("CHANNEL_PROXY_IDS", "data/occupancyAuras.ts", "aura", () =>
     set(CHANNEL_PROXY_IDS),

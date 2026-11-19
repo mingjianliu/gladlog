@@ -129,6 +129,7 @@ import * as allyCopyWall from "@gladlog/analysis/src/utils/allyCopyWall";
 import * as auraActivationEra from "@gladlog/analysis/src/utils/auraActivationEra";
 import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
+import * as auraMasteryBranch from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import * as auraOnlyActivationsMod from "@gladlog/analysis/src/utils/auraOnlyActivations";
 import * as auraRebroadcast from "@gladlog/analysis/src/utils/auraRebroadcast";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
@@ -2928,6 +2929,61 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "isMeleeSwingRow",
     mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "auraMasteryPressIsImmunityBranch",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "auraMasteryPressSwitchedToWall",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "withoutImmunityBranchWalls",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "isNoWallButtonOf",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "auraMasteryPressTag",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "auraMasteryKitTag",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "kitNameCarriesNoWallTag",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "kitNameWithoutNoWallTag",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "kitTextWithoutNoWallTags",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/auraMasteryBranch.ts`,
+    symbol: "isNoWallPress",
+    mod: auraMasteryBranch,
+  },
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "immunityLegendsWithoutCarrier",
+    mod: selfDefensiveMechanismMod,
   },
   {
     file: `${A}/utils/stealthActionEnd.ts`,

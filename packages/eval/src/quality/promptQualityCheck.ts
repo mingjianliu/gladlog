@@ -159,6 +159,11 @@ import {
   syncRefContrastPp,
 } from "@gladlog/analysis/src/data/syncWindowPrior";
 import {
+  AURA_MASTERY_ID,
+  kitNameCarriesNoWallTag,
+  kitNameWithoutNoWallTag,
+} from "@gladlog/analysis/src/utils/auraMasteryBranch";
+import {
   BURST_ALLY_OVERLAP_ITEM_RE_SRC,
   BURST_ALLY_OVERLAP_LABEL,
   BURST_TARGET_DAMAGE_RE_SRC,
@@ -272,15 +277,18 @@ import {
   SOLO_SHUFFLE_BRACKET,
 } from "@gladlog/analysis/src/utils/roundEnd";
 import {
-  SELF_SAVE_PURPOSE_LABEL,
-  selfDefensiveLabelWords,
-  INVISIBLE_FACT_LINE_IDS,
+  immunityLegendsWithoutCarrier,
   INVISIBLE_ENDED_AT_ONCE,
+  INVISIBLE_FACT_LINE_IDS,
   INVISIBLE_LABEL_RE,
   INVISIBLE_LEGEND,
   INVISIBLE_MECHANISM,
+  SELF_SAVE_PURPOSE_LABEL,
+  selfDefensiveLabelWords,
   selfReductionLegend,
   statesSelfDefensiveLabel,
+  TIMED_IMMUNITY_LABEL_RE,
+  TIMED_IMMUNITY_LEGEND,
 } from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
 import {
   PLACEHOLDER_RANGE_YD,
@@ -2862,7 +2870,13 @@ function unitKitsOf(lines: string[]): Array<{
               kit
                 .split(/\](?:, )/)
                 .map(
-                  (e) => [e.slice(0, e.indexOf(" [")), e] as [string, string],
+                  (e) =>
+                    [
+                      // by the spell's own name (R74: a no-wall tag may
+                      // stand between the name and its bracket)
+                      kitNameWithoutNoWallTag(e.slice(0, e.indexOf(" ["))),
+                      e,
+                    ] as [string, string],
                 ),
             ),
     });
@@ -2974,7 +2988,9 @@ export function checkKitUnusedNote(lines: string[]): string[] {
     for (const entry of kit.split(/\](?:, )/)) {
       const at = entry.indexOf("[UNUSED");
       if (at < 0) continue;
-      const name = entry.slice(0, entry.indexOf(" ["));
+      const name = kitNameWithoutNoWallTag(
+        entry.slice(0, entry.indexOf(" [")),
+      );
       const fail = (why: string) =>
         failures.push(
           `line ${i + 1}: <cooldowns> 的 ${name} [UNUSED…] ${why} —— ${entry.slice(at, at + 140)}`,
@@ -5124,7 +5140,7 @@ function kitLifetimesById(
     for (const e of line.matchAll(
       /(?:<cooldowns>|, )([^,[\]<]+?) \[[^\]]*?lasts (?:[\d.]+–)?([\d.]+)s\+?\]/g,
     ))
-      kit.set(e[1]!.trim(), Number(e[2]));
+      kit.set(kitNameWithoutNoWallTag(e[1]!.trim()), Number(e[2]));
     out.set(unitId, kit);
     unitId = undefined;
   }
@@ -5579,6 +5595,9 @@ export function checkKillTierWallOwnership(lines: string[]): string[] {
         .split(/\](?:, )/)
         .filter((e) => / \[UNUSED/.test(e))
         .map((e) => e.slice(0, e.indexOf(" [")))
+        // an entry tagged as no wall for this unit (`auraMasteryKitTag`,
+        // R74) is not in its hand as one; the plain entry stays checked
+        .filter((name) => !kitNameCarriesNoWallTag(name))
         .filter((name) => wallNames.has(name)),
     );
   });
@@ -5819,6 +5838,26 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
       }
       return;
     }
+    // a timed immunity label (Aura Mastery under Concentration Aura, ruling
+    // R53, pipeline T213): only that press prints it, and the legend says
+    // what it is (R56)
+    if (TIMED_IMMUNITY_LABEL_RE.test(` ${after}`)) {
+      if (spell !== getEnglishSpellName(AURA_MASTERY_ID, ""))
+        failures.push(
+          `line ${i + 1}: [ENEMY DEF] gives ${spell} a timed immunity label it has no claim to: ${quoted}`,
+        );
+      else if (
+        hasLegend &&
+        !unexplained.has(spell) &&
+        !lines.some((l) => l.trim() === TIMED_IMMUNITY_LEGEND)
+      ) {
+        unexplained.add(spell);
+        failures.push(
+          `line ${i + 1}: [ENEMY DEF] prints ${spell} as a timed immunity and the legend does not say it is no wall: ${quoted}`,
+        );
+      }
+      return;
+    }
     // a deflection (Aspect of the Turtle, fact4 D6) reads the producer's
     // deflect words, and only a deflection does
     const deflectLabel = after.startsWith(`(${ENEMY_DEF_DEFLECTS_WORDS}`);
@@ -5854,6 +5893,11 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
         `line ${i + 1}: [ENEMY DEF] prints ${spell} with no label the producer writes for it: ${quoted}`,
       );
   });
+  // an immunity legend is printed only beside a line of its own label form
+  for (const legend of immunityLegendsWithoutCarrier(lines))
+    failures.push(
+      `[ENEMY DEF] legend explains an immunity label no line carries: "${legend.slice(0, 80)}…"`,
+    );
   return failures;
 }
 

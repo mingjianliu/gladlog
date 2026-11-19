@@ -17,6 +17,7 @@ import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { spellEffectData } from "../data/spellEffectData";
 import { SpellTag } from "../data/spellTypes";
 import { supersededAuraBreaks } from "./auraIntervals";
+import { isNoWallButtonOf, isNoWallPress } from "./auraMasteryBranch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { combatMemo, roundFingerprint, unitTokens } from "./combatMemo";
@@ -814,6 +815,11 @@ export function computeOffensiveWindowsUncached(
       // nor spends the holder's defence, and its return is no `CD_READY`.
       // The unpressed half is `KW_UNPRESSED_NOT_IN_HAND_IDS`.
       if (!cdHelpsRecipient({ spellId }, true)) continue;
+      // an Aura Mastery press that reduces nothing — the immunity branch —
+      // is no defensive of this machine; asked of THIS press, whatever the
+      // round's other presses were (`isNoWallPress`, ruling R53, pipeline
+      // T213)
+      if (isNoWallPress(spellId, enemy, cast.logLine.timestamp)) continue;
       const list = castsBySpell.get(spellId) ?? [];
       list.push((cast.logLine.timestamp - matchStartMs) / 1000);
       castsBySpell.set(spellId, list);
@@ -989,6 +995,7 @@ export function computeOffensiveWindowsUncached(
       unusedKitRows(enemy, combat).some(
         (r) =>
           unpressedKitDefensiveInHand(r.spellId) &&
+          !isNoWallButtonOf(r.spellId, enemy, combat) &&
           !(castsBySpell.get(r.spellId) ?? []).some((t) => t <= roundEndS),
       )
     )

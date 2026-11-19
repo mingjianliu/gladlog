@@ -19,6 +19,7 @@
  * windows, Time Spiral's free casts and its echo rows). The `[RES]` rows'
  * range low end is fact8's `resCdBeforeNextPress`.
  */
+import { kitNameWithoutNoWallTag } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import {
   kitSpellNameOf,
   unitCooldownLedger,
@@ -116,7 +117,10 @@ export function run(ctx: IRoundCtx): void {
     if (!unit) continue;
     for (const e of kit[1]!.matchAll(KIT_RANGE)) {
       if (/Charges/.test(e[4]!)) continue;
-      const name = e[1]!.trim();
+      // the kit name without the product's no-wall tag (ruling R74; codex
+      // 85-tk-WIN-T213-3 #6: the tagged entry matched no ledger name and the
+      // check went silent)
+      const name = kitNameWithoutNoWallTag(e[1]!.trim());
       const soonest = Number(e[2]);
       let recast: { gapMs: number; at: number } | undefined;
       for (const p of pressesOf(ctx, unit, name)) {
