@@ -1582,5 +1582,10 @@
  *  t40 / t41 / buffDurationScan read one round end; a pet's press is read
  *  on the pet); prompts unchanged.
  *  See docs/prompt-version-history.md.
+ *
+ * v614 (2026-11-18; pipeline batch B142, T141): a [PRESS] line's `lasts
+ *  Ns` says what the log shows ended the effect early on its one holder
+ *  (dispelled / broken / stolen at m:ss).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 613;
+export const PROMPT_VERSION = 614;

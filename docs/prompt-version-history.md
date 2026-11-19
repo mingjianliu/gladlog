@@ -7883,3 +7883,20 @@ construction; the re-read checks move as the lane expected
 app shorter 35 -> 1, offListPressLine and resNoPressExactLeft unchanged).
 Codex branch review 85-tk-EVAL-T204-1 (the real point and two synthetic points
 fixed) and -1b (three synthetic-only points, recorded).
+
+v614 (2026-11-18; pipeline batch B142, T141). A [PRESS] line prints `lasts Ns`
+for the press's effect; when the log names what took that effect off its one
+holder before then, the line now says so, e.g. `Spell (lasts 19s — stolen at
+0:30, 120s cd, back 2:21)` (R57 / R59). One predicate, pressEffectCutShort,
+serves the renderer and scan5's pressLastsCutShort (653 lines / 252 presses ->
+0 / 52,841). The user saw 428 lines at approval; 83 more are presses whose
+other copy is only on a pet or guardian, which the user ruled is not a second
+holder (R67), and 142 more (Camouflage 83, Landslide 59) are effects broken by
+another unit: SPELL_AURA_BROKEN(_SPELL) names the breaker, not the caster, so
+the holder's BROKEN row is now paired by holder and aura instance (fix after
+codex 80-PIPE-156-B142 REQUEST_CHANGES). An early plain REMOVED with no cause
+row prints nothing (R60 withdrawn). On the 605 the assembled candidate adds
+what ended the effect to 653 [PRESS] lines in 462 contexts (dispelled 489,
+broken 158, stolen 6; pressLastsCutShort -> 0 / 52,841) and one legend
+sentence to every context; no other line and no candidate row changes. Codex
+branch review 85-tk-CD-T141-1b (APPROVE).
