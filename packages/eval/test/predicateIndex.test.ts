@@ -38,6 +38,7 @@ import * as factFormat from "@gladlog/analysis/src/analysis/factFormat";
 import * as findingCategories from "@gladlog/analysis/src/analysis/findingCategories";
 import * as findingsCount from "@gladlog/analysis/src/analysis/findingsCount";
 import * as hindsightLint from "@gladlog/analysis/src/analysis/hindsightLint";
+import * as kickPressure from "@gladlog/analysis/src/analysis/kickPressure";
 import * as momentSnapshot from "@gladlog/analysis/src/analysis/momentSnapshot";
 import * as stackedDefensives from "@gladlog/analysis/src/analysis/stackedDefensives";
 import * as buildExemplarLedPrompt from "@gladlog/analysis/src/compare/buildExemplarLedPrompt";
@@ -4462,6 +4463,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/kickLockout.ts`,
     symbol: "kickTextLockEndMs",
     mod: kickLockout,
+  },
+  {
+    file: `${A}/analysis/kickPressure.ts`,
+    symbol: "kickPressureSpanMs",
+    mod: kickPressure,
   },
   {
     file: `${A}/utils/kickLockout.ts`,
