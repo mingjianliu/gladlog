@@ -7900,3 +7900,11 @@ what ended the effect to 653 [PRESS] lines in 462 contexts (dispelled 489,
 broken 158, stolen 6; pressLastsCutShort -> 0 / 52,841) and one legend
 sentence to every context; no other line and no candidate row changes. Codex
 branch review 85-tk-CD-T141-1b (APPROVE).
+
+v615 (2026-11-18; pipeline batch B143, T206). Check-only: castDamageIdSplit
+reads the producer's selection through a trace callback on
+buildOffensiveWasteSummary that changes no output (22 rows / 8 facts -> 0 of
+6,030, all the check's own re-count); hotPressHp 2 -> 0. Prompts unchanged. On
+the 605 the assembled candidate's capture is byte-identical to its parent's
+(hash 760874a8bfc2): the trace callback changes no output. Codex branch review
+85-tk-EVAL-T206-1 (APPROVE).

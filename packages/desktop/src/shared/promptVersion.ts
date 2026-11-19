@@ -1587,5 +1587,10 @@
  *  Ns` says what the log shows ended the effect early on its one holder
  *  (dispelled / broken / stolen at m:ss).
  *  See docs/prompt-version-history.md.
+ *
+ * v615 (2026-11-18; pipeline batch B143, T206): check-only
+ *  (castDamageIdSplit / hotPressHp read the producer's selection through an
+ *  output-neutral trace callback); prompts unchanged.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 614;
+export const PROMPT_VERSION = 615;
