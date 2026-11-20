@@ -125,7 +125,9 @@ export function makeAuraEvent(
   auraType: "BUFF" | "DEBUFF" = "DEBUFF",
 ): AnyObj {
   const parameters: (string | number)[] = [];
-  parameters[11] = auraType;
+  // the marker follows the spell triple; on SPELL_AURA_BROKEN_SPELL the
+  // breaking spell's triple comes first (the real row layout, T219)
+  parameters[event === LogEvent.SPELL_AURA_BROKEN_SPELL ? 14 : 11] = auraType;
   return {
     logLine: { event, timestamp, parameters, lineIndex: lineIndex() },
     auraType,

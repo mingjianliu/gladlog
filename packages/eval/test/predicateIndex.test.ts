@@ -2381,6 +2381,12 @@ const INDEX: PredicateRow[] = [
     symbol: "isPurgeableMagicBuff",
     mod: dispelAnalysis,
   },
+  // pipeline T219: an aura row's BUFF / DEBUFF marker and its field
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "getAuraType",
+    mod: dispelAnalysis,
+  },
   {
     file: `${A}/utils/dispelAnalysis.ts`,
     symbol: "PURGE_PRESS_REMOVALS_TEXT",

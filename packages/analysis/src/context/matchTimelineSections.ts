@@ -57,6 +57,7 @@ import {
   wasLockedOutThroughWindow,
 } from "../utils/deathOutcomeAnalysis";
 import { TIME_DILATION_ID } from "../utils/deferralShield";
+import { getAuraType } from "../utils/dispelAnalysis";
 import {
   ENEMY_DEF_DEFLECTS_WORDS,
   immunitySchoolWords,
@@ -140,7 +141,7 @@ function extractPlayerDotIntervals(
     (e) =>
       e.logLine.timestamp <= matchEndMs &&
       isDotAura(e.spellId ?? "") &&
-      e.logLine.parameters[11] !== "BUFF",
+      getAuraType(e) !== "BUFF",
   );
   const runs = buildAuraIntervals(
     { ...player, auraEvents: dots } as ICombatUnit,

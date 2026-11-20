@@ -1076,16 +1076,46 @@ export function purgeableBuffCountAt(
   return ids.size;
 }
 
+/** Where an aura row carries its BUFF / DEBUFF marker (0-based combat-log
+ * parameter): right after the spell triple, except on SPELL_AURA_BROKEN_SPELL,
+ * whose breaking spell's triple (id, name, school) comes first — the layout
+ * the parser decodes (`parseLine.ts`: `decodeAura(params, 14)` beside
+ * `decodeExtraSpell(params, 11)`). */
+export const AURA_MARKER_PARAM = 11;
+export const AURA_MARKER_PARAM_BROKEN_SPELL = 14;
+
 /**
- * Extracts the BUFF/DEBUFF marker from an aura event's raw log line.
- * Combat-log parameter index 11 holds this for SPELL_AURA_APPLIED, SPELL_AURA_REMOVED,
- * and SPELL_AURA_BROKEN(_SPELL). Returns null when the marker is absent (older fixtures
- * or edge log lines) so callers can decide how to treat unknowns.
+ * The BUFF / DEBUFF marker of an aura row; null when the row carries none
+ * (older fixtures, edge log lines), so a caller decides how to treat an
+ * unknown. The one reading of the marker for every consumer that keeps the
+ * "unknown" case.
+ *
+ * Pipeline T219 (round-14 D41, e7a3569f r0 0:39): this read parameter 11 on
+ * every row. On SPELL_AURA_BROKEN_SPELL that field is the breaking spell's
+ * id, so every such row read "no marker" and `purgeableBuffIntervals`' same-
+ * side fallback admitted a DEBUFF its holder broke out of as a buff of its
+ * own: our mage's Frost Nova, broken by the monk it was on, counted as that
+ * monk's third purgeable buff (`1 of 3 purgeable buffs on it`).
+ *
+ * The BROKEN_SPELL marker is read from the parser's decoded `auraType`: the
+ * stored params keep only positions 0–12 (`SLIM_PARAMS_KEEP` in
+ * packages/parser/src/slim.ts — the production path slims every event), so
+ * parameter 14 is gone on every real row and survives only in an unslimmed
+ * fixture. The decoded field defaults an absent marker to BUFF, so it is
+ * read only on that event, where the parser saw position 14 before slimming;
+ * every other row keeps the raw parameter 11 (kept by the slimming) and its
+ * null for "no marker".
  */
-function getAuraType(aura: {
-  logLine: { parameters: (string | number)[] };
+export function getAuraType(aura: {
+  auraType?: string;
+  logLine: { event?: string; parameters: (string | number)[] };
 }): "BUFF" | "DEBUFF" | null {
-  const raw = aura.logLine.parameters[11];
+  const isBrokenSpell =
+    aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL;
+  const raw =
+    aura.logLine.parameters[
+      isBrokenSpell ? AURA_MARKER_PARAM_BROKEN_SPELL : AURA_MARKER_PARAM
+    ] ?? (isBrokenSpell ? aura.auraType : undefined);
   if (raw === "BUFF" || raw === "DEBUFF") return raw;
   return null;
 }
