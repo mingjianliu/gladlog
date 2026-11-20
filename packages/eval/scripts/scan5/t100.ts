@@ -20,15 +20,25 @@
  *    or a kick lockout whose school holds the alternative's (kind
  *    `lockout`), or a stun the usable-while-stunned table does not let the
  *    alternative through, or a disarm of a weapon spell (kind `disarm`).
- *    Kind `control` (a fear / incapacitate / disorient) is out of the total:
- *    the product does not judge it. Per spell,
+ *    Kind `control` (a fear / incapacitate / disorient — T187): an offer
+ *    inside a hard CC that is not a stun and that the game does not let the
+ *    alternative through (`hardCcLetsPress`: DB2's "Allow While Fleeing" /
+ *    "Allow While Confused" per the aura's own mechanic). An offer the
+ *    table lets through is counted out of the total (`control let through
+ *    | <state>`). Per spell,
  *    `intervalBlocksSpell` (the DB2 school / silenceable / weapon lookup).
  *    The [SLACK] check reads silences and lockouts only: hard CC was
  *    already its gate.
+ *  - `castInsideNonStunCc` (inventory, T187 — the forward check of the two
+ *    usable-while tables): a SPELL_CAST_SUCCESS of the owner at least
+ *    300 ms inside an enemy fear / horror / disorient on it and 300 ms
+ *    before its end, by state | spell (id) | whether the table lets it
+ *    through. A row "not in the table" with many casts is a table gap.
  */
 import { spellSchoolMask } from "@gladlog/analysis/src/data/spellSchools";
 import { disarmSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
+  hardCcLetsPress,
   intervalBlocksSpell,
   isHardCcAura,
   isSilenceEffectAura,
@@ -40,7 +50,11 @@ import {
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { isStunDrAura } from "@gladlog/analysis/src/utils/drAnalysis";
 import { kickLockoutSecondsFor } from "@gladlog/analysis/src/utils/kickLockout";
-import { isWeaponRequiredCast } from "@gladlog/analysis/src/utils/spellMechanics";
+import {
+  ccMechanicOf,
+  isWeaponRequiredCast,
+  mechanicStateOf,
+} from "@gladlog/analysis/src/utils/spellMechanics";
 
 import {
   APPLIED,
@@ -53,13 +67,26 @@ import {
   tsOf,
 } from "./ctx";
 
-export const CHECKS = ["slackWhileLocked", "cheaperLocked"] as const;
-/** a hard CC that is not a stun: the note does not judge it (no per-CC
- * usable-while reading behind `stunLetsPress`; `spellPressBlockedAt`) —
- * counted, kept out of the total */
+export const CHECKS = [
+  "slackWhileLocked",
+  "cheaperLocked",
+  "castInsideNonStunCc",
+] as const;
+/** an offer inside a fear / disorient the game lets the alternative
+ * through: a right offer, counted and kept out of the total */
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
-  "cheaperLocked|control",
+  "cheaperLocked|control let through | feared",
+  "cheaperLocked|control let through | confused",
+  // the tables' forward check is an inventory: the spell is in the detail
+  "castInsideNonStunCc|feared | in the table",
+  "castInsideNonStunCc|feared | NOT in the table",
+  "castInsideNonStunCc|confused | in the table",
+  "castInsideNonStunCc|confused | NOT in the table",
 ]);
+const stateOfAura = (auraId: string) => {
+  const mech = ccMechanicOf(auraId);
+  return mech === undefined ? null : mechanicStateOf(mech);
+};
 
 interface ILock {
   from: number;
@@ -150,6 +177,33 @@ function ownerLocks(ctx: IRoundCtx): ILock[] {
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
   let locks: ILock[] | undefined;
+  {
+    const C = "castInsideNonStunCc";
+    const EDGE_MS = 300;
+    const ccs = ownerLocks(ctx).filter(
+      (iv) => iv.kind === "control" && stateOfAura(iv.spellId) !== null,
+    );
+    if (ccs.length > 0)
+      for (const c of successesOf(ctx.owner)) {
+        const ms = tsOf(c);
+        const cc = ccs.find(
+          (iv) =>
+            !isStunDrAura(iv.spellId) &&
+            iv.from + EDGE_MS <= ms &&
+            ms + EDGE_MS <= iv.to,
+        );
+        if (!cc) continue;
+        ctx.bump(C);
+        const id = String(c.spellId);
+        ctx.violate(
+          C,
+          `${stateOfAura(cc.spellId)} | ${hardCcLetsPress({ ...cc }, id) ? "in the table" : "NOT in the table"}`,
+          ms,
+          `${ctx.roundKey}|${ctx.owner.id}|${id}|${ms}`,
+          `${nameOf(id)} (${id}) cast ${((ms - cc.from) / 1000).toFixed(1)}s into ${nameOf(cc.spellId, cc.spellId)}`,
+        );
+      }
+  }
   for (const line of ctx.lines) {
     const seg = SEGMENT_RE.exec(line);
     if (seg) {
@@ -210,24 +264,28 @@ export function run(ctx: IRoundCtx): void {
           (iv.kind === "disarm"
             ? isWeaponRequiredCast(alt.spellId)
             : iv.kind === "control"
-              ? !(
-                  isStunDrAura(iv.spellId) &&
-                  usableWhileStunned(alt.spellId, pvpTalents)
-                )
+              ? isStunDrAura(iv.spellId)
+                ? !usableWhileStunned(alt.spellId, pvpTalents)
+                : true
               : intervalBlocksSpell(iv, alt.spellId)),
       );
+      const stops = (iv: ILock): boolean =>
+        iv.kind !== "control" ||
+        isStunDrAura(iv.spellId) ||
+        !hardCcLetsPress(iv, alt.spellId);
       // a counted blocker wins over an unjudged (non-stun) control that
       // overlaps it (codex 85-tk-L-T100-1b #2)
-      const l =
-        blockers.find(
-          (iv) => iv.kind !== "control" || isStunDrAura(iv.spellId),
-        ) ?? blockers[0];
+      // a blocker that stops the alternative wins over a fear / disorient
+      // the game lets it through
+      const l = blockers.find(stops) ?? blockers[0];
       if (!l) continue;
       ctx.violate(
         C,
         l.kind === "control" && isStunDrAura(l.spellId)
           ? "stun"
-          : (l.kind ?? (l.lockout ? "lockout" : "silence")),
+          : l.kind === "control" && !stops(l)
+            ? `control let through | ${stateOfAura(l.spellId)}`
+            : (l.kind ?? (l.lockout ? "lockout" : "silence")),
         pressMs,
         `${ctx.owner.id}#${press.spellId}#${pressMs}#${alt.spellId}`,
         `${pressed} at ${cd[1]} offers ${altName} (${alt.spellId}) inside the owner's ${nameOf(l.spellId, l.spellId)} (${l.lockout ? `kick lockout, school ${l.lockedSchoolMask}` : (l.kind ?? "silence")}, ${((pressMs - l.from) / 1000).toFixed(2)}s in)`,

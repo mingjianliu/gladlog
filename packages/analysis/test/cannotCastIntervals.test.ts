@@ -7,8 +7,10 @@ import {
   coveredMsWithin,
   deathLockChain,
   enemySourceIds,
+  hardCcLetsPress,
   healerLockIntervals,
   silenceIntervals,
+  spellPressBlockedAt,
 } from "../src/utils/cannotCastIntervals";
 import { unitCooldownOf } from "../src/utils/cooldowns";
 
@@ -703,5 +705,76 @@ describe("fact7 D1: a lockout that leaves a heal is no lock on the healer", () =
     expect(healerLockIntervals(u, [lockAt(2, 100_000, 104_000)])).toHaveLength(
       0,
     );
+  });
+});
+
+// T187: the cheaper-defensive note's press check judges a hard CC that is
+// not a stun per spell, from the aura's own DB2 mechanic and the official
+// "Allow While Fleeing" / "Allow While Confused" tables
+describe("hardCcLetsPress / spellPressBlockedAt — a fear or a disorient lets through what DB2 says (T187)", () => {
+  const FEAR = "118699";
+  const SCREAM = "8122";
+  const BLIND = "2094";
+  const POLYMORPH = "118";
+  const PARALYSIS = "115078";
+  const DARK_PACT = "108416";
+  const BARKSKIN = "22812";
+  const OBSIDIAN_SCALES = "363916";
+  const iv = (spellId: string) => ({ spellId, lockout: false });
+
+  it("a fear lets through a spell carrying Allow While Fleeing, and nothing else", () => {
+    for (const cc of [FEAR, SCREAM]) {
+      expect(hardCcLetsPress(iv(cc), DARK_PACT), cc).toBe(true);
+      expect(hardCcLetsPress(iv(cc), BARKSKIN), cc).toBe(true);
+      expect(hardCcLetsPress(iv(cc), OBSIDIAN_SCALES), cc).toBe(false);
+    }
+  });
+  it("a disorient reads the confused table, not the feared one", () => {
+    expect(hardCcLetsPress(iv(BLIND), DARK_PACT)).toBe(true);
+    // Barkskin goes through a fear, not through a Blind
+    expect(hardCcLetsPress(iv(BLIND), BARKSKIN)).toBe(false);
+  });
+  it("an incapacitate or polymorph has no such attribute: nothing goes through; nor through a lockout or a pet's interval", () => {
+    for (const cc of [POLYMORPH, PARALYSIS])
+      expect(hardCcLetsPress(iv(cc), DARK_PACT), cc).toBe(false);
+    expect(hardCcLetsPress({ spellId: FEAR, lockout: true }, DARK_PACT)).toBe(
+      false,
+    );
+    expect(
+      hardCcLetsPress(
+        { spellId: FEAR, lockout: false, onPetId: "Pet-1" },
+        DARK_PACT,
+      ),
+    ).toBe(false);
+  });
+  it("spellPressBlockedAt: under a Fear, Dark Pact is pressable and Obsidian Scales is not; under a Polymorph neither", () => {
+    const aura = (spellId: string, event: LogEvent, t: number) => ({
+      spellId,
+      srcUnitId: "Enemy-1",
+      destUnitId: "Player-1",
+      timestamp: t,
+      logLine: { event, timestamp: t, parameters: [] },
+    });
+    const unit = (cc: string) =>
+      ({
+        id: "Player-1",
+        auraEvents: [
+          aura(cc, LogEvent.SPELL_AURA_APPLIED, 10_000),
+          aura(cc, LogEvent.SPELL_AURA_REMOVED, 16_000),
+        ],
+        actionIn: [],
+      }) as unknown as ICombatUnit;
+    const enemies = new Set(["Enemy-1"]);
+    const feared = spellPressBlockedAt(unit(FEAR), enemies, undefined, true);
+    expect(feared(DARK_PACT, 12_000)).toBe(false);
+    expect(feared(OBSIDIAN_SCALES, 12_000)).toBe(true);
+    expect(feared(OBSIDIAN_SCALES, 17_000)).toBe(false);
+    const sheeped = spellPressBlockedAt(
+      unit(POLYMORPH),
+      enemies,
+      undefined,
+      true,
+    );
+    expect(sheeped(DARK_PACT, 12_000)).toBe(true);
   });
 });

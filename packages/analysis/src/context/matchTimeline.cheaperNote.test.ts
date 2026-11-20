@@ -518,7 +518,11 @@ describe("cheaper note under a kick lockout (T100, fact13 D15)", () => {
     );
   });
 
-  it("a fear is not judged: some spells go through one (codex 85-tk-L-T100-1 #1)", () => {
+  // T187: a fear is judged per spell from DB2's "Allow While Fleeing" —
+  // Divine Protection does not carry it, so the note drops it (before T187
+  // a fear was left unjudged and the note kept it). What a fear lets
+  // through (Dark Pact, Barkskin) is pinned on `hardCcLetsPress` itself.
+  it("a fear takes an alternative the game does not let through it off the note (T187)", () => {
     const fear = (event: LogEvent, t: number) => ({
       spellId: "5782",
       spellName: "Fear",
@@ -537,9 +541,9 @@ describe("cheaper note under a kick lockout (T100, fact13 D15)", () => {
         fear(LogEvent.SPELL_AURA_REMOVED, 34_000),
       ],
     });
-    expect(lineWith(t, "[YOU] [CD]", "Divine Shield")).toContain(
-      "cheaper available: Divine Protection",
-    );
+    const line = lineWith(t, "[YOU] [CD]", "Divine Shield");
+    expect(line).toBeDefined();
+    expect(line).not.toContain("cheaper available");
   });
 
   it("findCheaperDefensiveAlternatives drops what pressBlocked names", () => {

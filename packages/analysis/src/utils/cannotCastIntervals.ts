@@ -26,6 +26,8 @@ import {
   playerTalentIdSets,
   REACTION_WINDOW_S,
   unitCooldownOf,
+  USABLE_WHILE_CONFUSED_SPELL_IDS,
+  USABLE_WHILE_FEARED_SPELL_IDS,
   usableWhileStunned,
 } from "./cooldowns";
 import {
@@ -36,10 +38,12 @@ import {
 } from "./drAnalysis";
 import { kickLockoutSecondsFor } from "./kickLockout";
 import {
+  ccMechanicOf,
   isSchoolLockExemptCast,
   isSilenceableCast,
   isUnsilenceableCast,
   isWeaponRequiredCast,
+  mechanicStateOf,
 } from "./spellMechanics";
 import {
   deathStripOf,
@@ -438,6 +442,34 @@ export function stunLetsPress(
 }
 
 /**
+ * Does the game let the unit press `spellId` THROUGH a hard CC that is not
+ * a stun? Read per CC from the aura's own DB2 mechanic
+ * (`ccMechanicOf` → `mechanicStateOf`): under a fear / horror only a spell
+ * carrying "Allow While Fleeing" (`USABLE_WHILE_FEARED_SPELL_IDS`), under a
+ * disorient only one carrying "Allow While Confused"
+ * (`USABLE_WHILE_CONFUSED_SPELL_IDS`) — the tables `ccTargetState`'s
+ * break-tool reading already uses. An incapacitate, polymorph, sap or sleep
+ * has no such official attribute and lets nothing through; nor does an aura
+ * with no mechanic on record, a kick lockout, or an interval on a pet.
+ * Pipeline T187: `stunLetsPress` knows the stun dimension only, so the
+ * cheaper-defensive note left every non-stun hard CC unjudged (605: 39
+ * offers printed inside one).
+ */
+export function hardCcLetsPress(
+  iv: Pick<NamedCannotCastInterval, "lockout" | "spellId" | "onPetId">,
+  spellId: string,
+): boolean {
+  if (iv.lockout || iv.onPetId !== undefined) return false;
+  const mech = ccMechanicOf(iv.spellId);
+  const state = mech === undefined ? null : mechanicStateOf(mech);
+  return state === "feared"
+    ? USABLE_WHILE_FEARED_SPELL_IDS.has(spellId)
+    : state === "confused"
+      ? USABLE_WHILE_CONFUSED_SPELL_IDS.has(spellId)
+      : false;
+}
+
+/**
  * FT-T10: "when could this unit cast NONE of these spells" — the one reading
  * for a reader that knows which spell(s) it is asking about. No spell to ask
  * about (undefined / empty) → every interval of the unit, the unasked
@@ -545,12 +577,12 @@ export function pressBlockedIntervalsForSpells(
  * — Ice Barrier is Frost, and the same lock refused a ready Ice Block twice.
  * The note was gated on a stun only.
  *
- * A hard CC that is not a stun is left out: the game lets some spells
- * through a fear or a disorient (DB2's "Allow While Fleeing" / "Allow While
- * Confused", `USABLE_WHILE_CC_GENERATED`), and `stunLetsPress` reads the
- * stun dimension only — taken here, it would drop an alternative pressable
- * under a fear (codex 85-tk-L-T100-1 #1: Dark Pact under Fear). Stuns,
- * silences, lockouts and disarms are judged per spell as above.
+ * A hard CC that is not a stun is judged per spell too (T187): it stops
+ * the spell unless the game lets it through that CC (`hardCcLetsPress` —
+ * DB2's "Allow While Fleeing" / "Allow While Confused"; Dark Pact under
+ * Fear stays an alternative, codex 85-tk-L-T100-1 #1). `stunLetsPress`
+ * reads the stun dimension only and has already been applied by
+ * `pressBlockedIntervalsForSpells`.
  */
 export function spellPressBlockedAt(
   unit: ICombatUnit,
@@ -574,7 +606,8 @@ export function spellPressBlockedAt(
           iv.disarm ||
           iv.self ||
           !isHardCcAura(iv.spellId) ||
-          isStunDrAura(iv.spellId),
+          isStunDrAura(iv.spellId) ||
+          !hardCcLetsPress(iv, spellId),
       );
       memo.set(spellId, ivs);
     }
