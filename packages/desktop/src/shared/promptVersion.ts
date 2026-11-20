@@ -1681,5 +1681,10 @@
  *  out where either reading is blocked, and a control whose own directed
  *  cast landed on its holder carries no label.
  *  See docs/prompt-version-history.md.
+ *
+ * v631 (2026-11-19; pipeline batch B159, T178): a reflected control that
+ *  its [REFLECTED] line states prints no second `[CC AVOIDED?] ... logged
+ *  REFLECT` line.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 630;
+export const PROMPT_VERSION = 631;

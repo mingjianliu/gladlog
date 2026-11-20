@@ -8158,3 +8158,14 @@ lose `, LoS blocked` (no line gains it) and the death block loses 3 lines
 branch reviews 85-tk-CC-T172-1 to -2e (the last APPROVE; the scan rounds moved
 the check onto the producer's own control instances, its LoS verdict staying
 its own).
+
+v631 (2026-11-19; pipeline batch B159, T178). A reflected control was stated
+twice: a `[CC AVOIDED?] ... logged REFLECT; <aura> active` line beside the
+[REFLECTED] line of the same press (T120 dropped the repeat only for
+uncredited rows). The cast sweep now asks the emitter's own reflectLineRowKeys
+which REFLECT rows a [REFLECTED] line states, and prints no [CC AVOIDED?] line
+for them; the question is asked with the miss row's own source (a pet that
+logged the reflect, not its owner). On the 605, 100 `[CC AVOIDED?] ... logged
+REFLECT` lines that repeated a [REFLECTED] line of the same press are removed
+in 74 contexts; nothing added; menus unchanged. Codex branch reviews 85-tk-
+CC-T178-1 to -1c (the last APPROVE).
