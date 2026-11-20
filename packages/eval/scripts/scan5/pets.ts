@@ -71,6 +71,32 @@ import {
   tsOf,
 } from "./ctx";
 
+/**
+ * The instants a summon's landed control may be printed at
+ * (`petControlTiming`). A press that made the control — the owner's own of
+ * that name, else the summon's own — inside the fuse before the aura is its
+ * time, and nothing else is accepted beside it. Only with no such press is
+ * the control the summon's own pulse: then the aura's instant and, for a
+ * totem / guardian with a summon row (user ruling R90, T184), the summon
+ * and every relocation since — however early. Codex 85-tk-CD-T184-3: with
+ * the summon accepted unconditionally, a guardian summoned at 90 s whose
+ * owner pressed the control at 101 s (landing 102 s) let a printed
+ * "10.0s before it opened" pass against a 100 s opener.
+ */
+export function acceptedControlInstants(x: {
+  auraMs: number;
+  ownerPressMs?: number;
+  sourcePressMs?: number;
+  summonedMs: number | null;
+  relocationMs: readonly number[];
+}): number[] {
+  const press = x.ownerPressMs ?? x.sourcePressMs;
+  if (press !== undefined) return [press];
+  return x.summonedMs === null
+    ? [x.auraMs]
+    : [x.auraMs, x.summonedMs, ...x.relocationMs];
+}
+
 export const CHECKS = [
   "kickOnSummon",
   "petControlTiming",
@@ -232,7 +258,9 @@ export function run(ctx: IRoundCtx): void {
     if (landings.length === 0) continue; // a player's own control: out of class
     ctx.bump("petControlTiming");
     const named = (c: any) => nameOf(c.spellId, c.spellName) === a.spellName;
-    const truths = landings.map((g) => {
+    const latOf = (at: number) =>
+      Math.round(((at - lead) / 1000 + Number.EPSILON) * 10) / 10;
+    const truths = landings.flatMap((g) => {
       const inFuse = (c: any) =>
         tsOf(c) <= g.ms && tsOf(c) >= g.ms - CONTROL_LOOKBACK_MS;
       const press = ((answerer.spellCastEvents ?? []) as any[])
@@ -243,39 +271,29 @@ export function run(ctx: IRoundCtx): void {
         .filter((c) => c.logLine?.event === SUCCESS && named(c) && inFuse(c))
         .map(tsOf)
         .sort((x, y) => y - x)[0];
-      const at = press ?? own ?? g.ms;
-      return {
-        g,
-        at,
-        lat: Math.round(((at - lead) / 1000 + Number.EPSILON) * 10) / 10,
-      };
-    });
-    // T184 (user ruling R90): a totem's or guardian's own pulse — no press
-    // of its owner made it — is printed at the totem's SUMMON, or at the
-    // owner's press that moved it since, however early. Those instants are
-    // truths too (before T184 the line printed an unrelated press and this
-    // kind measured the distance to the aura).
-    for (const g of landings) {
       const src = g.src;
-      if (!src || String(src.id).startsWith("Pet-")) continue;
-      const summoned = summonedAtMs(src);
-      if (summoned === null) continue;
-      const moved = ((answerer.spellCastEvents ?? []) as any[])
-        .filter(
-          (c) =>
-            c.logLine?.event === SUCCESS &&
-            TOTEM_RELOCATION_IDS.has(String(c.spellId)) &&
-            tsOf(c) >= summoned &&
-            tsOf(c) <= g.ms,
-        )
-        .map(tsOf);
-      for (const at of [summoned, ...moved])
-        truths.push({
-          g,
-          at,
-          lat: Math.round(((at - lead) / 1000 + Number.EPSILON) * 10) / 10,
-        });
-    }
+      const summoned =
+        src && !String(src.id).startsWith("Pet-") ? summonedAtMs(src) : null;
+      const moved =
+        summoned === null
+          ? []
+          : ((answerer.spellCastEvents ?? []) as any[])
+              .filter(
+                (c) =>
+                  c.logLine?.event === SUCCESS &&
+                  TOTEM_RELOCATION_IDS.has(String(c.spellId)) &&
+                  tsOf(c) >= summoned &&
+                  tsOf(c) <= g.ms,
+              )
+              .map(tsOf);
+      return acceptedControlInstants({
+        auraMs: g.ms,
+        ownerPressMs: press,
+        sourcePressMs: own,
+        summonedMs: summoned,
+        relocationMs: moved,
+      }).map((at) => ({ g, at, lat: latOf(at) }));
+    });
     if (truths.some((x) => Math.abs(x.lat - a.latencySec) <= 0.1 + 1e-9))
       continue;
     const best = truths[0]!;
