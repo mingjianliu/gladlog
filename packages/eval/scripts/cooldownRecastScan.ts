@@ -45,6 +45,7 @@
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { classSetPiecesOf } from "@gladlog/analysis/src/data/classSetBonuses";
+import { FREE_RECAST_WINDOWS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   CD_INSTANT_SLACK_S,
@@ -85,6 +86,35 @@ function freePressTimes(
   return new Set(
     entry.casts.filter((c) => c.freeRecast).map((c) => c.timeSeconds),
   );
+}
+
+/** the spells a talent's free-recast window covers (`FREE_RECAST_WINDOWS`) */
+const WINDOW_SPELLS = new Set(
+  Object.values(FREE_RECAST_WINDOWS).map((w) => w.spellId),
+);
+
+type FreeSource = "unreleased" | "window" | "spiral";
+
+/** Each press the model reads as free, with the reason it is free (T195,
+ * GH #218 item 1.9): `unreleased` — a hold or release the model reads as
+ * never gone out (`unreleased`: an interrupted empower, a release that hit
+ * nothing, a cleanse that removed nothing); `window` — a spell a held
+ * talent's free-recast window covers; `spiral` — Time Spiral's free press. */
+function freePressesBySource(
+  entry: ReturnType<typeof unitCooldownEntry>,
+  spellId: string,
+): Array<{ t: number; by: FreeSource }> {
+  if (!entry) return [];
+  return entry.casts
+    .filter((c) => c.freeRecast)
+    .map((c) => ({
+      t: Math.round(c.timeSeconds * 10) / 10,
+      by: c.unreleased
+        ? ("unreleased" as const)
+        : WINDOW_SPELLS.has(spellId)
+          ? ("window" as const)
+          : ("spiral" as const),
+    }));
 }
 
 /** the presses the model says were impossible (the loop below, without its
@@ -145,6 +175,10 @@ interface Agg {
   modelFloorExplained: number;
   modelRatios: number[];
   modelChargeRatios: number[];
+  /** the model's presses of this spell, and those it reads as free by
+   * source (`freePressesBySource`; T195, GH #218 item 1.9) */
+  modelPresses: number;
+  free: Record<FreeSource, number>;
   eras: Partial<Record<LogEra, IEraCounts>>;
   eraMinModelRatio: Partial<Record<LogEra, number>>;
 }
@@ -238,6 +272,8 @@ for (const f of files) {
           modelFloorExplained: 0,
           modelRatios: [],
           modelChargeRatios: [],
+          modelPresses: 0,
+          free: { unreleased: 0, window: 0, spiral: 0 },
           eras: {},
           eraMinModelRatio: {},
         };
@@ -331,6 +367,9 @@ for (const f of files) {
         a.modelFloorExplained += modelFloorExplained;
         a.modelRatios.push(...modelRatios);
         a.modelChargeRatios.push(...modelChargeRatios);
+        const freeAt = freePressesBySource(entry, id);
+        for (const x of freeAt) a.free[x.by]++;
+        a.modelPresses += entry?.casts.length ?? 0;
         a.records++;
         a.impossible += impossibleAt.length;
         const eraCounts: IEraCounts = {
@@ -367,6 +406,8 @@ for (const f of files) {
             casts: t.map((x) => Math.round(x * 10) / 10),
             impossibleAt,
             modelImpossibleAt,
+            freeAt,
+            modelPresses: entry?.casts.length ?? 0,
             ...(noGearImpossibleAt ? { noGearImpossibleAt } : {}),
             modelFloorExplained,
             modelMinRatio: modelRatios.length
@@ -431,6 +472,13 @@ console.log(
       totalModelFloorExplained: rows.reduce(
         (s, r) => s + r.modelFloorExplained,
         0,
+      ),
+      totalFree: rows.reduce(
+        (s, r) => {
+          for (const k of Object.keys(s) as FreeSource[]) s[k] += r.free[k];
+          return s;
+        },
+        { unreleased: 0, window: 0, spiral: 0 },
       ),
       eras: eraTotals,
       spells: rows,
