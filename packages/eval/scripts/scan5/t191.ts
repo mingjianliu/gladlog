@@ -83,7 +83,9 @@ export function run(ctx: IRoundCtx): void {
     spellName: string;
   }> = [];
   for (const l of ctx.rawLines) {
-    const isEnd = l.includes("SPELL_AURA_REMOVED");
+    // an end is a REMOVED or (review 85-tk-CD-T191-2 #1) a REFRESH row
+    const isEnd =
+      l.includes("SPELL_AURA_REMOVED") || l.includes("SPELL_AURA_REFRESH");
     if (!isEnd && !l.includes("SPELL_STOLEN") && !l.includes("SPELL_DISPEL"))
       continue;
     const parts = splitRawLine(l);
