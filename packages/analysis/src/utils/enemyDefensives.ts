@@ -360,6 +360,23 @@ export function ownPressedShieldSpansMs(
   caster: Pick<ICombatUnit, "id" | "spellCastEvents"> = holder,
 ): Array<{ fromMs: number; toMs: number }> {
   const own = caster.id === holder.id;
+  // A run the log applied and removed in one millisecond is still a shield
+  // that was up when its ABSORBED row says it ate a hit in that millisecond:
+  // the instant comes from the absorb row, not from the run's length (user
+  // ruling R99, pipeline T164 — d5c8aca1 r1 41.723 s: a Prayer of Mending's
+  // Power Word: Shield applied, emptied by one Mortal Strike for 31,091 and
+  // removed, all in one millisecond, inside `defenseless 0:34–0:59`). Its
+  // span is that one instant (`fromMs === toMs`); a one-millisecond run
+  // with no absorb row is no shield that was up — for ruling (1)'s ids too.
+  const pointRun =
+    runStartMs === runEndMs &&
+    (holder.absorbsIn ?? []).some(
+      (a) =>
+        a.spellId === spellId &&
+        a.srcUnitId === caster.id &&
+        a.timestamp === runStartMs,
+    );
+  if (runStartMs === runEndMs && !pointRun) return [];
   if (own && KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(spellId))
     return [{ fromMs: runStartMs, toMs: runEndMs }];
   if (!abilityProfile(spellId).absorbs) return [];
@@ -389,7 +406,15 @@ export function ownPressedShieldSpansMs(
         (noTarget &&
           c.logLine.timestamp > runStartMs + ALLY_SHIELD_PRESS_PAIR_MS) ||
         c.logLine.timestamp < runStartMs - ALLY_SHIELD_PRESS_PAIR_MS ||
-        c.logLine.timestamp > runEndMs
+        // a press after the run cannot have put it up — unless the log wrote
+        // the aura before its cast row: up to `AURA_BEFORE_CAST_ROW_MAX_MS`
+        // after the run's start, the same lag the span below allows (a
+        // shield eaten in the millisecond it went up ends before that row:
+        // codex 85-tk-WIN-T164-4 #2). Not the 1 s pairing tolerance: a later
+        // press puts up a run of its own (codex 85-tk-WIN-T164-5 #2: a proc
+        // shield 30.0–30.8 s claimed by a Prayer of Mending pressed at 30.9)
+        c.logLine.timestamp >
+          Math.max(runEndMs, runStartMs + AURA_BEFORE_CAST_ROW_MAX_MS)
       )
         continue;
     }
@@ -405,7 +430,8 @@ export function ownPressedShieldSpansMs(
       runEndMs,
       c.logLine.timestamp + OWN_SHIELD_PRESS_LOOKBACK_MS,
     );
-    if (fromMs < toMs) out.push({ fromMs, toMs });
+    if (fromMs < toMs || (pointRun && fromMs === toMs))
+      out.push({ fromMs, toMs });
   }
   // A rider whose holder logged no cast of any of its carrying presses this
   // round: the log cannot show the press, so the rider's own application

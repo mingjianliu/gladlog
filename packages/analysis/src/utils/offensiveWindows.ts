@@ -376,19 +376,34 @@ function flipKey(t: number): number {
  * overlap each other). Pieces keep their order. */
 export function subtractIntervals(
   spans: ReadonlyArray<{ from: number; to: number }>,
-  cuts: ReadonlyArray<{ from: number; to: number }>,
+  cuts: ReadonlyArray<{ from: number; to: number; point?: true }>,
 ): Array<{ from: number; to: number }> {
   let out = spans.map((s) => ({ ...s }));
   for (const c of cuts) {
-    // an empty cut removes nothing — it must not split a span in two
-    if (!(c.to > c.from)) continue;
+    // an empty cut removes nothing — it must not split a span in two…
+    // …unless it is a `point`: protection that was up for one instant (a
+    // pressed shield applied, hit and removed in one millisecond, user
+    // ruling R99) breaks the span there. The instant itself belongs to the
+    // piece that BEGINS there, as the end of a positive cut does (the hit
+    // that takes a shield off at `c.to` is the later piece's): the earlier
+    // piece stops a millisecond short, so the two pieces share no instant —
+    // the per-window sums read `[from, to]` closed, and a shared endpoint
+    // counted the hit that ate the shield in both (codex 85-tk-WIN-T164-4
+    // #1: d5c8aca1 r1, the Mortal Strike at 41.723 s, 26,501 landed and
+    // 31,091 absorbed, twice)
+    if (!(c.to > c.from) && !(c.point && c.to === c.from)) continue;
     const next: Array<{ from: number; to: number }> = [];
     for (const s of out) {
       if (c.to <= s.from || c.from >= s.to) {
         next.push(s);
         continue;
       }
-      if (c.from > s.from) next.push({ from: s.from, to: c.from });
+      const pointCut = c.to === c.from;
+      if (c.from > s.from)
+        next.push({
+          from: s.from,
+          to: pointCut ? (flipKey(c.from) - 1) / 1000 : c.from,
+        });
       if (c.to < s.to) next.push({ from: c.to, to: s.to });
     }
     out = next;
@@ -587,10 +602,13 @@ export function computeOffensiveWindowsUncached(
   // it too (`ownSaveSpanS`), and an area save cuts every unit that carries
   // its aura (`areaSaveSpanOnS`) — a Vanish, a 494k Anti-Magic Shell, a
   // Rallying Cry sat inside spans that said nothing was up.
-  const savesUpOn = new Map<string, Array<{ from: number; to: number }>>();
+  const savesUpOn = new Map<
+    string,
+    Array<{ from: number; to: number; point?: true }>
+  >();
   const addSave = (
     holderId: string | undefined,
-    span: { from: number; to: number } | undefined,
+    span: { from: number; to: number; point?: true } | undefined,
     spellId: string,
   ) => {
     if (!holderId || !span) return;
@@ -789,6 +807,8 @@ export function computeOffensiveWindowsUncached(
           {
             from: (sp.fromMs - matchStartMs) / 1000,
             to: (sp.toMs - matchStartMs) / 1000,
+            // a shield eaten in the millisecond it went up (R99)
+            ...(sp.fromMs === sp.toMs ? { point: true as const } : {}),
           },
           iv.spellId,
         );

@@ -18,6 +18,7 @@
  * since it last came off (fact11 D19: an APPLIED re-stated late, after the
  * target was unseen).
  */
+import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { riderCastsOfShield } from "@gladlog/analysis/src/data/ownShieldLinks";
 import {
@@ -25,7 +26,9 @@ import {
   isStolenAuraAcquisition,
   NO_TARGET_GUID,
   OWN_SHIELD_PRESS_LOOKBACK_MS,
+  ownPressedShieldSpansMs,
   SAVE_CAST_AURA_PAIR_S,
+  saveAuraIntervals,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { isResyncBatchAt } from "@gladlog/analysis/src/utils/resyncBatch";
 
@@ -44,11 +47,60 @@ import {
 
 export const CHECKS = ["allyShieldDefenseless"] as const;
 
+/**
+ * Inventory, each round once, out of the total (pipeline T164, user ruling
+ * R99): every run of a DB2 absorb aura on a player that the PRODUCT's
+ * intervals (`saveAuraIntervals`) hold with no length — applied and removed
+ * in one millisecond — by whether an ABSORBED row of that aura from its
+ * source sits in that millisecond, and by whether the product then reads it
+ * as a pressed shield (`ownPressedShieldSpansMs` asked for that instant).
+ */
+const ONE_MS = {
+  pressed: "one-ms run: absorbed, a pressed shield (cuts)",
+  notPressed: "one-ms run: absorbed, no press of it (does not cut)",
+  noAbsorb: "one-ms run: no absorb row (does not cut)",
+} as const;
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
+  Object.values(ONE_MS).map((k) => `allyShieldDefenseless|${k}`),
+);
+
 const SPAN =
   /^\s+\[(KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+ \(([^()]+(?:\([^()]*\)[^()]*)*)\):(.*)$/;
 
 export function run(ctx: IRoundCtx): void {
   shieldDefenseless(ctx, "allyShieldDefenseless", "same");
+  if (!ctx.firstOwnerOfRound) return;
+  const C = "allyShieldDefenseless";
+  const units = Object.values(ctx.legacy.units) as any[];
+  for (const u of ctx.players as any[]) {
+    const team = (ctx.players as any[]).filter(
+      (p) => p.reaction === u.reaction,
+    );
+    for (const iv of saveAuraIntervals(u, team, ctx.legacy as never)) {
+      if (iv.toS !== iv.fromS || !abilityProfile(iv.spellId).absorbs) continue;
+      const ms = ctx.start + iv.fromS * 1000;
+      const absorbed = ((u.absorbsIn ?? []) as any[]).some(
+        (a) =>
+          String(a.spellId) === iv.spellId &&
+          a.srcUnitId === iv.srcUnitId &&
+          tsOf(a) === ms,
+      );
+      const caster = units.find((x) => x.id === iv.srcUnitId);
+      const kind = !absorbed
+        ? ONE_MS.noAbsorb
+        : caster &&
+            ownPressedShieldSpansMs(u, iv.spellId, ms, ms, caster).length > 0
+          ? ONE_MS.pressed
+          : ONE_MS.notPressed;
+      ctx.violate(
+        C,
+        kind,
+        ms,
+        `${u.id}#${iv.spellId}#${ms}#onems`,
+        `${u.name}: ${nameOf(iv.spellId, iv.spellName)} ${iv.spellId} from ${caster?.name ?? iv.srcUnitId}${caster ? (caster.id === u.id ? " (own)" : caster.reaction === u.reaction ? " (ally)" : " (other side)") : ""} at +${ms - ctx.start}ms`,
+      );
+    }
+  }
 }
 
 /**
