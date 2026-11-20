@@ -2359,6 +2359,12 @@ const INDEX: PredicateRow[] = [
     symbol: "dispelIsDelayedRepeat",
     mod: dispelKind,
   },
+  // pipeline T215: a tick of a channel the source pressed
+  {
+    file: `${A}/utils/dispelKind.ts`,
+    symbol: "channelPressOfTickDispel",
+    mod: dispelKind,
+  },
   // F20 D31: buffs one purge press removed / removes per tool
   {
     file: `${A}/context/timelineSections/healerCastGapFiller.ts`,

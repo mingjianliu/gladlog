@@ -189,6 +189,10 @@ export async function main(): Promise<void> {
       "pressTriggeredCastsGenerated.ts": {
         edges: countMapEntries("pressTriggeredCastsGenerated.ts"),
       },
+      // pipeline T215: pressed aura → periodic dispel spell (aura 23)
+      "channelTickDispelsGenerated.ts": {
+        edges: countMapEntries("channelTickDispelsGenerated.ts"),
+      },
       "summonGenerated.ts": {
         entries: countQuotedIds("summonGenerated.ts"),
       },

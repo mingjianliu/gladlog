@@ -289,6 +289,53 @@ describe("T130 — a press with no cast row is not part of an older cast", () =>
   });
 });
 
+describe("T215 — a channel's ticks are listed under its press", () => {
+  it("ae1d0895 r0: three Kleptomania channels read as three presses with what each stole", () => {
+    const mage = makeUnit("mage", {
+      name: "Mage",
+      spellCastEvents: [52_400, 82_405, 106_372].map((t) =>
+        makeSpellCastEvent("198100", 1_000 + t, "x", "X", "mage", "Mage"),
+      ),
+    });
+    const ev = (t: number, name: string): IDispelEvent =>
+      ({
+        timeSeconds: t,
+        sourceName: "Mage",
+        dispelSpellId: "1231112",
+        dispelSpellName: "Spellsteal",
+        removedSpellId: name,
+        removedSpellName: name,
+        priority: "Low",
+        dispelKind: "deliberate",
+        isSpellSteal: true,
+      }) as IDispelEvent;
+    const lines: string[] = [];
+    emitMinorDispelEntries({
+      dispelSummary: {
+        allyCleanse: [],
+        ourPurges: [
+          ev(52.41, "Lifebloom"),
+          ev(52.76, "Rejuvenation"),
+          ev(53.11, "Mark of the Wild"),
+          ev(82.75, "Regrowth"),
+          ev(107.1, "Eternal Flame"),
+          ev(109.9, "Rejuvenation"),
+        ],
+        hostilePurges: [],
+      } as never,
+      pid: (n: string) => `5(${n})`,
+      enemyPid: (n: string) => `4(${n})`,
+      enemyDispelSummary: undefined,
+      addEntry: ((_: number, line: string) => lines.push(line)) as never,
+      _allUnits: [mage] as never,
+      matchStartMs: 1_000,
+    });
+    expect(lines).toEqual([
+      "0:52  [MINOR DISPELS]   5(Mage): Spellsteal ×3 (0:52 Lifebloom、Rejuvenation、Mark of the Wild; 1:22 Regrowth; 1:47 Eternal Flame、Rejuvenation) (low-priority, folded)",
+    ]);
+  });
+});
+
 describe("codex T130-2 — a cast row logged after its removals keeps them one press", () => {
   it("Purify casts at 1.000 s and 10.200 s, removals at 10.000 s and 10.074 s → one press", () => {
     const priest = makeUnit("priest", {

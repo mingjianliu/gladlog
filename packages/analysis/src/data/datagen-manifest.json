@@ -75,6 +75,9 @@
     "pressTriggeredCastsGenerated.ts": {
       "edges": 5
     },
+    "channelTickDispelsGenerated.ts": {
+      "edges": 1
+    },
     "summonGenerated.ts": {
       "entries": 185
     },

@@ -4,6 +4,7 @@ import {
   addCastToIndex,
   addRepeatEndToIndex,
   buildCastMatchIndex,
+  channelPressOfTickDispel,
   classifyDispel,
   createCastMatchIndex,
   DISPEL_CAST_MATCH_WINDOW_MS,
@@ -301,5 +302,49 @@ describe("T191: a delayed re-steal is the earlier press's, never a press of its 
     expect(
       dispelIsDelayedRepeat(idx, { ...steal(50_000), spellId: "1231112" }),
     ).toBe(false);
+  });
+});
+
+describe("T215 — a tick of a pressed channel is that press (Kleptomania 198100 → Spellsteal 1231112)", () => {
+  const tick = (timestamp: number, srcUnitId = PLAYER) => ({
+    srcUnitId,
+    spellId: "1231112",
+    spellName: "Spellsteal",
+    timestamp,
+  });
+  const idx = createCastMatchIndex();
+  addCastToIndex(idx, PLAYER, "198100", "Kleptomania", 52_400);
+
+  it("ae1d0895 r0: every steal inside the 4 s channel is deliberate, not only the one at the press", () => {
+    for (const t of [52_410, 52_760, 53_800, 56_400, 57_400])
+      expect(classifyDispel(idx, tick(t))).toBe("deliberate");
+  });
+
+  it("past the aura's official duration plus the match window, before the press, or from another source → proc", () => {
+    expect(
+      classifyDispel(idx, tick(56_400 + DISPEL_CAST_MATCH_WINDOW_MS + 1)),
+    ).toBe("proc");
+    expect(classifyDispel(idx, tick(52_300))).toBe("proc");
+    expect(classifyDispel(idx, tick(53_000, "Player-1-OTHER"))).toBe("proc");
+  });
+
+  it("a spell no pressed aura fires stays what the cast match says", () => {
+    expect(
+      classifyDispel(idx, {
+        srcUnitId: PLAYER,
+        spellId: "199427",
+        spellName: "Cleanse the Weak",
+        timestamp: 53_000,
+      }),
+    ).toBe("proc");
+  });
+
+  it("the press is the last channel at or before the tick", () => {
+    const casts = (id: string) =>
+      id === "198100" ? [52_400, 82_405, 106_372] : undefined;
+    expect(channelPressOfTickDispel(casts, "1231112", 83_000)).toBe(82_405);
+    expect(channelPressOfTickDispel(casts, "1231112", 106_372)).toBe(106_372);
+    expect(channelPressOfTickDispel(casts, "1231112", 70_000)).toBeUndefined();
+    expect(channelPressOfTickDispel(casts, "30449", 83_000)).toBeUndefined();
   });
 });

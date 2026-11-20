@@ -37,6 +37,9 @@
  */
 import { LogEvent } from "@gladlog/parser-compat";
 
+import { CHANNEL_TICK_DISPEL_IDS } from "../data/channelTickDispelsGenerated";
+import { spellEffectData } from "../data/spellEffectData";
+
 export type DispelKind = "deliberate" | "proc" | "rider";
 
 /** ±window between the cast and the dispel it produced. Same-GCD in practice;
@@ -375,6 +378,46 @@ export function dispelOfUnseenPress(
   );
 }
 
+/** Dispel spell id → the pressed auras whose periodic trigger casts it
+ * (`CHANNEL_TICK_DISPEL_IDS`, official: SpellEffect aura 23), inverted. */
+const CHANNELS_OF_TICK_DISPEL: ReadonlyMap<string, readonly string[]> = (() => {
+  const m = new Map<string, string[]>();
+  for (const [press, ticks] of CHANNEL_TICK_DISPEL_IDS)
+    for (const tick of ticks) m.set(tick, [...(m.get(tick) ?? []), press]);
+  return m;
+})();
+
+/**
+ * Pipeline T215 (round-14 D31, ae1d0895 r0): the press a periodic removal is
+ * a tick of — the source's last cast, at or before the removal, of a spell
+ * whose aura fires this dispel spell on a period
+ * (`CHANNEL_TICK_DISPEL_IDS`: Kleptomania 198100 → Spellsteal 1231112, every
+ * 0.5 s for 4 s), no longer ago than that aura's official duration plus the
+ * cast-match window. The log writes one SPELL_STOLEN per tick and no cast
+ * row of the tick's own id, so the same-id / same-name match saw ten
+ * removals of three pressed channels as eight procs and two riders. Haste
+ * and an interrupt only shorten the aura: the official duration is the upper
+ * bound. Undefined for every other dispel spell.
+ */
+export function channelPressOfTickDispel(
+  /** the source's SPELL_CAST_SUCCESS timestamps (epoch ms) of a spell id */
+  castsOf: (spellId: string) => readonly number[] | undefined,
+  dispelSpellId: string | null | undefined,
+  atMs: number,
+): number | undefined {
+  if (!dispelSpellId) return undefined;
+  let found: number | undefined;
+  for (const press of CHANNELS_OF_TICK_DISPEL.get(dispelSpellId) ?? []) {
+    const lastsMs = (spellEffectData[press]?.durationSeconds ?? 0) * 1000;
+    for (const t of castsOf(press) ?? []) {
+      if (t > atMs + DISPEL_RIDES_PRESS_MS) continue;
+      if (atMs - t > lastsMs + DISPEL_CAST_MATCH_WINDOW_MS) continue;
+      if (found === undefined || t > found) found = t;
+    }
+  }
+  return found;
+}
+
 /**
  * Did the dispel's own source log a cast of the dispelling spell (same id or
  * same name) inside `DISPEL_CAST_MATCH_WINDOW_MS` — the cast-match half of
@@ -404,7 +447,14 @@ export function dispelCameWithOwnCast(
     !!owner &&
     !!d.spellName &&
     within(index.byName.get(`${owner}|${d.spellName}`), d.timestamp);
-  return idHit || nameHit || ownerHit;
+  // a tick of a channel the source pressed (T215)
+  const channelHit =
+    channelPressOfTickDispel(
+      (id) => index.byId.get(`${d.srcUnitId}|${id}`),
+      d.spellId,
+      d.timestamp,
+    ) !== undefined;
+  return idHit || nameHit || ownerHit || channelHit;
 }
 
 /**

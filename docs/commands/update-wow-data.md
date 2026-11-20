@@ -309,6 +309,11 @@ npx tsx packages/analysis/scripts/datagen/genExcludeCaster.ts
 #      (castMissRows.ts / castPress.ts; GH #167.21). A new edge changes which follow-up row is read as the
 #      press's impact: read the diff, do not just commit it.
 npx tsx packages/analysis/scripts/datagen/genPressTriggeredCasts.ts
+# 6f1a3. pressed aura → the dispel / steal spell its periodic trigger casts (SpellEffect aura 23
+#      PERIODIC_TRIGGER_SPELL whose EffectTriggerSpell has Effect 38 / 126, both ends observed) —
+#      `CHANNEL_TICK_DISPEL_IDS` (dispelKind.ts `channelPressOfTickDispel`; pipeline T215). A new edge makes
+#      that spell's removals inside the press's duration deliberate: read the diff, do not just commit it.
+npx tsx packages/analysis/scripts/datagen/genChannelTickDispels.ts
 # 6f1b. shared charge pools (SpellCategories.ChargeCategory shared by ≥ 2 observed spells with charges;
 #      Blessing of Protection ↔ Spellwarding, Holy Bulwark ↔ Sacred Weapon …). A press of one spends the
 #      other's charge in the ledger (spendsSharedChargeOf, reliability round 2 W1e).

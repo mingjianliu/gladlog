@@ -15,7 +15,10 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { BACKLASH_CC_SPELL_IDS } from "../../data/backlashCc";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import type { IDispelEvent } from "../../utils/dispelAnalysis";
-import { DISPEL_CAST_MATCH_WINDOW_MS } from "../../utils/dispelKind";
+import {
+  channelPressOfTickDispel,
+  DISPEL_CAST_MATCH_WINDOW_MS,
+} from "../../utils/dispelKind";
 import { fmtTime } from "../../utils/renderGrid";
 import { dispelActorLabel } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
@@ -72,7 +75,21 @@ export function emitMinorDispelEntries(
         if (before === undefined || t > before) before = t;
       } else if (after === undefined || t < after) after = t;
     }
-    return before ?? after;
+    if (before !== undefined || after !== undefined) return before ?? after;
+    // a tick of a channel the dispeller pressed is that channel's press
+    // (T215: Kleptomania's Spellsteal rows carry no cast row of their own)
+    return channelPressOfTickDispel(
+      (id) =>
+        (unit.spellCastEvents ?? [])
+          .filter(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              c.spellId === id,
+          )
+          .map((c) => c.logLine.timestamp),
+      e.dispelSpellId,
+      atMs,
+    );
   };
 
   const minor = new Map<

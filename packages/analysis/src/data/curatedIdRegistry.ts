@@ -262,6 +262,7 @@ import {
   AURA_KEYED_BREAK_RACIALS,
   CLASS_CC_BREAK_ABILITIES,
 } from "./ccBreakAbilities";
+import { CHANNEL_TICK_DISPEL_IDS } from "./channelTickDispelsGenerated";
 import {
   SET_BONUS_COOLDOWN_ROWS,
   SET_BONUS_DURATION_ROWS,
@@ -1278,6 +1279,20 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     () => [
       ...PRESS_TRIGGERED_CAST_IDS.keys(),
       ...[...PRESS_TRIGGERED_CAST_IDS.values()].flat(),
+    ],
+  ),
+  // pipeline T215: pressed aura → the dispel spell its periodic trigger casts
+  // (DB2 SpellEffect aura 23; genChannelTickDispels.ts). Generated, and
+  // registered for the same reason as PRESS_TRIGGERED_CAST_IDS: both ends are
+  // ids a renumbering leaves behind until the next datagen run. The tick id
+  // is never cast (it shows as a SPELL_STOLEN / SPELL_DISPEL spell): "mixed".
+  t(
+    "CHANNEL_TICK_DISPEL_IDS",
+    "data/channelTickDispelsGenerated.ts",
+    "mixed",
+    () => [
+      ...CHANNEL_TICK_DISPEL_IDS.keys(),
+      ...[...CHANNEL_TICK_DISPEL_IDS.values()].flat(),
     ],
   ),
   // Triage G3 (2026-10-02, ruling A10 = both): the one cast id → effect aura
