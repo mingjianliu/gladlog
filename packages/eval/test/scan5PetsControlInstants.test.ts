@@ -23,13 +23,25 @@ describe("scan5 pets acceptedControlInstants", () => {
     expect(got).toEqual([101_000]);
     expect(got).not.toContain(90_000);
   });
-  it("the summon's own cast of the control, with no owner press, is the time", () => {
+  it("the summon's own cast row is not a press: summon and relocations stay accepted beside it (581d783f r1 4:50)", () => {
+    // Earthgrab Totem dropped at 288.997 s (its own `Earthgrab` cast row
+    // 9 ms later), Totemic Projection at 290.301 s, root lands 290.999 s
+    const got = acceptedControlInstants({
+      auraMs: 290_999,
+      sourcePressMs: 289_006,
+      summonedMs: 288_997,
+      relocationMs: [290_301],
+    });
+    expect(got).toContain(290_301);
+    expect(got).toContain(288_997);
+  });
+  it("no summon row: the source's own cast is the time", () => {
     expect(
       acceptedControlInstants({
         auraMs: 102_000,
         sourcePressMs: 101_500,
-        summonedMs: 90_000,
-        relocationMs: [95_000],
+        summonedMs: null,
+        relocationMs: [],
       }),
     ).toEqual([101_500]);
   });

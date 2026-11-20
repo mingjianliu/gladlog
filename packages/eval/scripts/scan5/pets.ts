@@ -73,15 +73,18 @@ import {
 
 /**
  * The instants a summon's landed control may be printed at
- * (`petControlTiming`). A press that made the control — the owner's own of
- * that name, else the summon's own — inside the fuse before the aura is its
- * time, and nothing else is accepted beside it. Only with no such press is
- * the control the summon's own pulse: then the aura's instant and, for a
- * totem / guardian with a summon row (user ruling R90, T184), the summon
- * and every relocation since — however early. Codex 85-tk-CD-T184-3: with
- * the summon accepted unconditionally, a guardian summoned at 90 s whose
- * owner pressed the control at 101 s (landing 102 s) let a printed
- * "10.0s before it opened" pass against a 100 s opener.
+ * (`petControlTiming`). A press of the OWNER that made the control inside
+ * the fuse before the aura is its time, and nothing else is accepted
+ * beside it (codex 85-tk-CD-T184-3: a guardian summoned at 90 s whose
+ * owner pressed the control at 101 s, landing 102 s, must not pass printed
+ * at the summon). With no owner press the control is the summon's own
+ * pulse: the aura's instant, the summon's own cast row of it, and — for a
+ * totem / guardian with a summon row (user ruling R90, T184) — the summon
+ * and every relocation since, however early. The summon's own cast row is
+ * NOT a press: an Earthgrab Totem logs `Earthgrab` 64695 itself at every
+ * pulse (581d783f r1 4:50 — totem dropped 1.4 s before the opener, moved
+ * with Totemic Projection 0.1 s before it, root landed 0.6 s after; the
+ * line's "0.1s before it opened" is the relocation, R90's printed time).
  */
 export function acceptedControlInstants(x: {
   auraMs: number;
@@ -90,11 +93,13 @@ export function acceptedControlInstants(x: {
   summonedMs: number | null;
   relocationMs: readonly number[];
 }): number[] {
-  const press = x.ownerPressMs ?? x.sourcePressMs;
-  if (press !== undefined) return [press];
+  if (x.ownerPressMs !== undefined) return [x.ownerPressMs];
+  const own = x.sourcePressMs === undefined ? [] : [x.sourcePressMs];
   return x.summonedMs === null
-    ? [x.auraMs]
-    : [x.auraMs, x.summonedMs, ...x.relocationMs];
+    ? own.length > 0
+      ? own
+      : [x.auraMs]
+    : [x.auraMs, ...own, x.summonedMs, ...x.relocationMs];
 }
 
 export const CHECKS = [
@@ -256,6 +261,24 @@ export function run(ctx: IRoundCtx): void {
       }
     }
     if (landings.length === 0) continue; // a player's own control: out of class
+    // …and so is a line that prints the player's OWN cast of that name
+    // when a summon repeats it later (a priest's Psychic Scream at 4 s,
+    // the Incessant Screams shadow's at 8 s — 20bba87d r3 0:09): the
+    // printed answer is the player's control, the summon's is another event
+    if (
+      ((answerer.spellCastEvents ?? []) as any[]).some(
+        (c) =>
+          c.logLine?.event === SUCCESS &&
+          nameOf(c.spellId, c.spellName) === a.spellName &&
+          Math.abs(
+            Math.round(((tsOf(c) - lead) / 1000 + Number.EPSILON) * 10) / 10 -
+              a.latencySec,
+          ) <=
+            0.1 + 1e-9 &&
+          landings.every((g) => tsOf(c) < g.ms - 1000),
+      )
+    )
+      continue;
     ctx.bump("petControlTiming");
     const named = (c: any) => nameOf(c.spellId, c.spellName) === a.spellName;
     const latOf = (at: number) =>
