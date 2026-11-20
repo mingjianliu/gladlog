@@ -1674,5 +1674,12 @@
  *  a player at the death (Predator's Wake, whose DoT the log names The
  *  Hunt, no longer vanishes while it ticks).
  *  See docs/prompt-version-history.md.
+ *
+ * v630 (2026-11-19; pipeline batch B158, T172): a control's `, LoS
+ *  blocked` label is printed only where both line-of-sight readings are
+ *  blocked, the death trace's `had <external> available` leaves a teammate
+ *  out where either reading is blocked, and a control whose own directed
+ *  cast landed on its holder carries no label.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 629;
+export const PROMPT_VERSION = 630;

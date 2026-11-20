@@ -8144,3 +8144,17 @@ Predator's Wake at the round-ending death in 4 rounds (31-6, 121-2, 121-4,
 125-6) and drops a Divine Toll pressed after the deciding death in 4-5; 18
 lines change in 15 contexts; menus unchanged. Codex branch reviews 85-tk-
 WIN-T158-1 to -3 (the last two findings constructed and recorded).
+
+v630 (2026-11-19; pipeline batch B158, T172, rulings R70 / R72 / R77). A
+control's `, LoS blocked` label and the death trace's `had <external>
+available` read line of sight on one reading (an interpolated point or a raw
+pair). Now the label is printed only where both readings are blocked, and a
+teammate is left out of the death line where either reading is blocked
+(whichever side is the claim needs both readings in support); a control whose
+own directed cast landed on its holder carries no label (the game checked
+sight at the cast; projectiles included). On the 605, 88 [CC ON TEAM] lines
+lose `, LoS blocked` (no line gains it) and the death block loses 3 lines
+(152-1 `had Guardian Spirit available`, 3 views); menus unchanged. Codex
+branch reviews 85-tk-CC-T172-1 to -2e (the last APPROVE; the scan rounds moved
+the check onto the producer's own control instances, its LoS verdict staying
+its own).
