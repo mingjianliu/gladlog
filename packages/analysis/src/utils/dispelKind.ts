@@ -86,7 +86,24 @@ export interface CastMatchIndex {
   /** `${destUnitId}|${spellName}` → the presses aimed at that unit (fact7
    * D18, `dispelPressedBy`) */
   aimedAt: Map<string, Array<{ srcUnitId: string; timestamp: number }>>;
+  /** `${srcUnitId}|${debuffName}` → when a delayed-repeat debuff that
+   * source put out ended (`DELAYED_REPEAT_DEBUFF_IDS`), on whichever unit
+   * (pipeline T191, `dispelIsDelayedRepeat`) */
+  repeatEnds: Map<string, number[]>;
 }
+
+/**
+ * Pipeline T191 (GH #173.45 / #221): debuffs a dispel press leaves whose END
+ * makes the same press remove again, logged under the press's own spell.
+ * Improved Spellsteal: the press applies 1270828 "Spellsteal" (DEBUFF) on the
+ * target — on the mage himself when the target reflects it — and when it ends
+ * ~4 s later a SPELL_STOLEN of Spellsteal (30449) from the mage lands at the
+ * same ms (605: 125 of 125 re-steals within 14 ms of the end). Registered in
+ * curatedIdRegistry.
+ */
+export const DELAYED_REPEAT_DEBUFF_IDS: ReadonlySet<string> = new Set([
+  "1270828", // Spellsteal (Improved Spellsteal's repeat debuff)
+]);
 
 export function createCastMatchIndex(): CastMatchIndex {
   return {
@@ -94,7 +111,41 @@ export function createCastMatchIndex(): CastMatchIndex {
     byName: new Map(),
     bySource: new Map(),
     aimedAt: new Map(),
+    repeatEnds: new Map(),
   };
+}
+
+/** One delayed-repeat debuff's end (`DELAYED_REPEAT_DEBUFF_IDS`): its
+ * source, its name, when. For a raw-row reader building its own index. */
+export function addRepeatEndToIndex(
+  index: CastMatchIndex,
+  srcUnitId: string,
+  debuffName: string,
+  timestamp: number,
+): void {
+  const k = `${srcUnitId}|${debuffName}`;
+  const list = index.repeatEnds.get(k) ?? [];
+  if (!list.includes(timestamp)) list.push(timestamp);
+  index.repeatEnds.set(k, list);
+}
+
+/**
+ * Pipeline T191: a removal at the instant (`DISPEL_RIDES_PRESS_MS`) one of
+ * its source's delayed-repeat debuffs of the same name ended — the earlier
+ * press's delayed effect, never a press of its own, whatever its source
+ * flags and whichever press lands near it (7686e97d r3 2:24: the re-steal
+ * 0.67 s before the mage's next Spellsteal was read as that press, and
+ * [MISSED PURGE] said the press took the re-steal's Renew). The #221 reading
+ * stands: a repeated steal is `(passive)`.
+ */
+export function dispelIsDelayedRepeat(
+  index: CastMatchIndex,
+  d: Pick<IDispelToClassify, "srcUnitId" | "spellName" | "timestamp">,
+): boolean {
+  if (!d.spellName) return false;
+  return (index.repeatEnds.get(`${d.srcUnitId}|${d.spellName}`) ?? []).some(
+    (t) => Math.abs(t - d.timestamp) <= DISPEL_RIDES_PRESS_MS,
+  );
 }
 
 export function addCastToIndex(
@@ -143,8 +194,12 @@ export const DISPEL_RIDES_PRESS_MS = 50;
  */
 export function dispelRodeOwnPress(
   index: CastMatchIndex,
-  d: Pick<IDispelToClassify, "srcUnitId" | "timestamp">,
+  d: Pick<IDispelToClassify, "srcUnitId" | "spellName" | "timestamp">,
 ): boolean {
+  // a delayed repeat is the earlier press's, whatever else the source
+  // pressed at its instant (T191: b81efd46 r2 0:48 read "side effect of the
+  // cast")
+  if (dispelIsDelayedRepeat(index, d)) return false;
   return (index.bySource.get(d.srcUnitId) ?? []).some(
     (t) => Math.abs(t - d.timestamp) <= DISPEL_RIDES_PRESS_MS,
   );
@@ -175,10 +230,26 @@ export function buildCastMatchIndex(
       spellName?: string | null;
       timestamp: number;
     }>;
+    auraEvents?: ReadonlyArray<{
+      logLine: { event: string };
+      srcUnitId?: string;
+      spellId?: string | null;
+      spellName?: string | null;
+      timestamp: number;
+    }>;
   }>,
 ): CastMatchIndex {
   const index = createCastMatchIndex();
   for (const u of units) {
+    for (const a of u.auraEvents ?? [])
+      if (
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+        a.spellId &&
+        DELAYED_REPEAT_DEBUFF_IDS.has(a.spellId) &&
+        a.srcUnitId &&
+        a.spellName
+      )
+        addRepeatEndToIndex(index, a.srcUnitId, a.spellName, a.timestamp);
     for (const c of u.spellCastEvents) {
       if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       addCastToIndex(
@@ -356,6 +427,7 @@ export function classifyDispel(
   // is a root-break rider, not a cleanse decision.
   if (d.spellId && MOVEMENT_ROOT_BREAK_DISPEL_IDS.has(d.spellId))
     return "rider";
+  if (dispelIsDelayedRepeat(index, d)) return "proc";
   return dispelCameWithOwnCast(index, d) || dispelOfUnseenPress(index, d)
     ? "deliberate"
     : "proc";

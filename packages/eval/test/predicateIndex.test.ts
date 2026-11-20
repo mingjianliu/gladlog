@@ -2353,6 +2353,12 @@ const INDEX: PredicateRow[] = [
     symbol: "dispelOfUnseenPress",
     mod: dispelKind,
   },
+  // pipeline T191: a delayed repeat (re-steal) is the earlier press's
+  {
+    file: `${A}/utils/dispelKind.ts`,
+    symbol: "dispelIsDelayedRepeat",
+    mod: dispelKind,
+  },
   // F20 D31: buffs one purge press removed / removes per tool
   {
     file: `${A}/context/timelineSections/healerCastGapFiller.ts`,

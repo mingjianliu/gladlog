@@ -146,7 +146,10 @@ import {
   STELLAR_PROTECTION_PENALIZED_SPELLS,
   UNPURGEABLE_MAGIC_AURAS,
 } from "../utils/dispelAnalysis";
-import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
+import {
+  DELAYED_REPEAT_DEBUFF_IDS,
+  MOVEMENT_ROOT_BREAK_DISPEL_IDS,
+} from "../utils/dispelKind";
 import {
   AOE_CC_LANDING_WINDOW_S,
   AOE_CC_SPELL_IDS,
@@ -1007,6 +1010,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // casts, others (Phantasm) only ever appear as the SPELL_DISPEL source spell.
   t("MOVEMENT_ROOT_BREAK_DISPEL_IDS", "utils/dispelKind.ts", "mixed", () =>
     set(MOVEMENT_ROOT_BREAK_DISPEL_IDS),
+  ),
+  // pipeline T191: debuffs whose end makes their press remove again
+  // (Improved Spellsteal's 1270828)
+  t("DELAYED_REPEAT_DEBUFF_IDS", "utils/dispelKind.ts", "aura", () =>
+    set(DELAYED_REPEAT_DEBUFF_IDS),
   ),
   t("DRUID_FORM_AURA_IDS", "data/druidForms.ts", "aura", () =>
     set(DRUID_FORM_AURA_IDS),

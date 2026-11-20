@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   addCastToIndex,
+  addRepeatEndToIndex,
   buildCastMatchIndex,
   classifyDispel,
   createCastMatchIndex,
   DISPEL_CAST_MATCH_WINDOW_MS,
+  dispelRodeOwnPress,
   MOVEMENT_ROOT_BREAK_DISPEL_IDS,
 } from "./dispelKind";
 
@@ -201,5 +203,69 @@ describe("T130 — a press logged while its source was unresolved", () => {
     // before the press (the druid's shape) or long after: a hidden press
     expect(classifyDispel(i2, { ...d, timestamp: 9_000 })).toBe("deliberate");
     expect(classifyDispel(i2, { ...d, timestamp: 16_000 })).toBe("deliberate");
+  });
+});
+
+describe("T191: a delayed re-steal is the earlier press's, never a press of its own", () => {
+  const steal = (timestamp: number, srcFlags = 0x511) => ({
+    srcUnitId: PLAYER,
+    spellId: "30449",
+    spellName: "Spellsteal",
+    timestamp,
+    srcFlags,
+  });
+
+  it("7686e97d r3 2:24: the re-steal at the debuff's end, 672 ms before the next press, reads proc; the press stays deliberate", () => {
+    const idx = createCastMatchIndex();
+    addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 140_117);
+    addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 144_798);
+    // without the debuff's end the name match takes the next press
+    expect(classifyDispel(idx, steal(144_126))).toBe("deliberate");
+    addRepeatEndToIndex(idx, PLAYER, "Spellsteal", 144_125);
+    expect(classifyDispel(idx, steal(144_126))).toBe("proc");
+    expect(classifyDispel(idx, steal(144_798))).toBe("deliberate");
+  });
+
+  it("an unresolved source (T130's path) reads proc too, and another press at its instant does not make it a side effect", () => {
+    const idx = createCastMatchIndex();
+    addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 64_337);
+    addCastToIndex(idx, PLAYER, "133", "Fireball", 68_355);
+    addRepeatEndToIndex(idx, PLAYER, "Spellsteal", 68_341);
+    expect(classifyDispel(idx, steal(68_355, 0x528))).toBe("proc");
+    expect(dispelRodeOwnPress(idx, steal(68_355))).toBe(false);
+  });
+
+  it("the debuff's end beyond 50 ms is no repeat", () => {
+    const idx = createCastMatchIndex();
+    addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 10_500);
+    addRepeatEndToIndex(idx, PLAYER, "Spellsteal", 10_000 - 51);
+    expect(classifyDispel(idx, steal(10_000))).toBe("deliberate");
+  });
+
+  it("buildCastMatchIndex reads the end from any unit's aura rows — the target's, or the mage's own after a reflect", () => {
+    const removed = (destId: string, timestamp: number) => ({
+      logLine: { event: "SPELL_AURA_REMOVED" },
+      srcUnitId: PLAYER,
+      destUnitId: destId,
+      spellId: "1270828",
+      spellName: "Spellsteal",
+      timestamp,
+    });
+    const idx = buildCastMatchIndex([
+      {
+        id: PLAYER,
+        spellCastEvents: [],
+        auraEvents: [removed(PLAYER, 20_000)],
+      },
+      {
+        id: "Player-2-T",
+        spellCastEvents: [],
+        auraEvents: [removed("Player-2-T", 30_000)],
+      },
+    ]);
+    addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 20_300);
+    addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 30_300);
+    expect(classifyDispel(idx, steal(20_000))).toBe("proc");
+    expect(classifyDispel(idx, steal(30_000))).toBe("proc");
   });
 });
