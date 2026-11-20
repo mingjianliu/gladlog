@@ -8179,3 +8179,14 @@ is added in 304 contexts that carried landed or aimed controls but no kit
 line; none removed; menus unchanged. Codex branch review 85-tk-CC-T179-1
 APPROVE. The header's 'threats ... plus every control that landed' wording on
 lines with no threat entry is left to the structural legend work (GH #208).
+
+v633 (2026-11-19; pipeline batch B161, T177; output unchanged). The control-
+aura scan read a spell's mechanic label instead of what its aura does: 1,656
+of its 1,779 flags were Binding Shot's tether and Snowdrift's pulse, which
+carry a stun / incapacitate label and take no control. A new data column
+(ctrlAura: the spell's own EffectAura 5 / 6 / 7 / 12) and lookup
+auraTakesControl let t125 and the new forward check scan5/t177
+controlAuraNoCcLine ask what the aura does; R48's two and R76's Intimidation
+1258508 are named known items. On the 605: 0 other flags of 64,381 for those
+four aura types (pacify-silence and possess are T225). On the 605, nothing a
+reader sees changes: the capture is byte-identical to B160's.

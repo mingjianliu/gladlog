@@ -1691,5 +1691,10 @@
  *  prints whenever its unit has a threat, a landed or an aimed control, not
  *  only in a round with a burst-window threat.
  *  See docs/prompt-version-history.md.
+ *
+ * v633 (2026-11-19; pipeline batch B161, T177): no line changes - the
+ *  control-aura scan now asks DB2 what a spell's aura itself does (a new
+ *  generated column, ctrlAura), not its mechanic label.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 632;
+export const PROMPT_VERSION = 633;
