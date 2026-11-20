@@ -10,7 +10,11 @@
  * Re-steals are found from the raw rows alone: a SPELL_DISPEL / SPELL_STOLEN
  * of the round whose source's SPELL_AURA_REMOVED of a
  * `DELAYED_REPEAT_DEBUFF_IDS` debuff of the same name lands within
- * `DISPEL_RIDES_PRESS_MS` (on any unit). Each is then read with the
+ * `DISPEL_RIDES_PRESS_MS` (on any unit) — or, when the next press REFRESHED
+ * the debuff at its scheduled end (review 85-tk-CD-T191-1 #1), a removal
+ * from the refreshed unit strictly after the refresh's ms (≤
+ * `DISPEL_RIDES_PRESS_MS`; the one in its own ms is the refreshing press's).
+ * Each is then read with the
  * producer's own index (`buildCastMatchIndex` over the round's units) and
  * predicates:
  *  - `restealReadAsPress`: `classifyDispel` calls it deliberate — a press
@@ -20,7 +24,8 @@
  *    call it a side effect of a cast (b81efd46 r2 0:48) instead of #221's
  *    `(passive)`;
  *  - `restealShape` (inventory, not in the total): every re-steal by where
- *    its debuff ended (target / caster / another unit) and source flags
+ *    its debuff ended (target / caster / another unit / after a refresh) and
+ *    source flags
  *    (resolved / unresolved).
  * Rows of one source, spell and millisecond count once.
  */
@@ -45,7 +50,12 @@ export const CHECKS = [
   "restealShape",
 ] as const;
 
-const SIDES = ["on the target", "on the caster", "on another unit"] as const;
+const SIDES = [
+  "on the target",
+  "on the caster",
+  "on another unit",
+  "after a refresh",
+] as const;
 const FLAGS = ["resolved", "unresolved"] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
   SIDES.flatMap((s) => FLAGS.map((f) => `restealShape|${s} | ${f}`)),
@@ -56,6 +66,7 @@ interface IEnd {
   src: string;
   dest: string;
   name: string;
+  refresh: boolean;
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -79,9 +90,18 @@ export function run(ctx: IRoundCtx): void {
     if (ms === null || ms < ctx.start || ms > ctx.roundEndAt + 1000) continue;
     const p = parts.params;
     const name = (p[9] ?? "").replace(/^"|"$/g, "");
-    if (parts.eventName === "SPELL_AURA_REMOVED") {
+    if (
+      parts.eventName === "SPELL_AURA_REMOVED" ||
+      parts.eventName === "SPELL_AURA_REFRESH"
+    ) {
       if (DELAYED_REPEAT_DEBUFF_IDS.has(p[8] ?? ""))
-        ends.push({ ms, src: p[0] ?? "", dest: p[4] ?? "", name });
+        ends.push({
+          ms,
+          src: p[0] ?? "",
+          dest: p[4] ?? "",
+          name,
+          refresh: parts.eventName === "SPELL_AURA_REFRESH",
+        });
     } else if (
       parts.eventName === "SPELL_STOLEN" ||
       parts.eventName === "SPELL_DISPEL"
@@ -104,14 +124,23 @@ export function run(ctx: IRoundCtx): void {
       (e) =>
         e.src === r.src &&
         e.name === r.spellName &&
-        Math.abs(e.ms - r.ms) <= DISPEL_RIDES_PRESS_MS,
+        (e.refresh
+          ? e.dest === r.dest &&
+            r.ms > e.ms &&
+            r.ms - e.ms <= DISPEL_RIDES_PRESS_MS
+          : Math.abs(e.ms - r.ms) <= DISPEL_RIDES_PRESS_MS),
     );
     if (!end) continue;
     const key = `${r.src}|${r.spellId}|${r.ms}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const side =
-      end.dest === r.dest ? SIDES[0] : end.dest === r.src ? SIDES[1] : SIDES[2];
+    const side = end.refresh
+      ? SIDES[3]
+      : end.dest === r.dest
+        ? SIDES[0]
+        : end.dest === r.src
+          ? SIDES[1]
+          : SIDES[2];
     const flags = isUnresolvedSourceFlags(r.flags) ? FLAGS[1] : FLAGS[0];
     const d = {
       srcUnitId: r.src,
