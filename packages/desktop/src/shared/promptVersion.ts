@@ -1657,5 +1657,15 @@
  *  healing CD, an interrupt that interrupted nothing - and the legend says
  *  so.
  *  See docs/prompt-version-history.md.
+ *
+ * v628 (2026-11-19; pipeline batch B156, T213): Aura Mastery pressed under
+ *  Concentration Aura reads as the 8 s silence / interrupt immunity and is
+ *  no wall for any reader (the [ENEMY DEF] line, our press lines and kit
+ *  entry, the defenseless cut, the kill-window tier, the death audit, cd-
+ *  hoarded's ready tools, the `cheaper available:` / `(Unused: ...)` /
+ *  [DEFENSIVE AVAILABLE] names); an immunity press carries no `cheaper
+ *  available:` note; a press later switched to Devotion Aura keeps its
+ *  immunity reading and its wall counts from the switch.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 627;
+export const PROMPT_VERSION = 628;

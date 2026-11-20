@@ -8074,3 +8074,59 @@ offensive cooldown) brought into judgement, each answered only by an external
 on another teammate (R75's first class); the legend clause gains the R75
 sentences in the menus carrying the row; context unchanged. Codex branch
 reviews 85-tk-CD-T180-1 to -7 (the last APPROVE).
+
+v628 (2026-11-19; pipeline batch B156, T213, rulings R53 / R56 / R74). Aura
+Mastery pressed under Concentration Aura is the 8 s silence / interrupt
+immunity and no wall, yet the readers of 'a wall was up or in hand' counted it
+as the 24 % reduction. One decision per press
+(auraMasteryPressIsImmunityBranch: the press's own immunity aura row) is now
+read by every reader: the [ENEMY DEF] line reads `Aura Mastery (silence /
+interrupt immunity, 8.0s)`, our press lines and the kit entry carry `(silence
+/ interrupt immunity)`, and no wall reader counts it (defenseless cut, popped
+/ gated tier, `Target had a major defensive up`, the death audit's 24 % and
+missed-external list, stacked defensives, counterfactual, cd-hoarded's ready
+tools - the response set is not narrowed). A press under Devotion stays the
+wall. A press under Concentration that is switched to Devotion while it runs
+keeps its immunity reading; its wall counts from the switch instant
+(auraMasteryWallFromMs) for every wall reader and prints no line of its own (a
+coordinator reading - the rulings are silent on switches; the missing line is
+recorded for the prompt-layer rework, GH #208). On the 605, Aura Mastery
+pressed under Concentration Aura reads `(silence / interrupt immunity, 8.0s)`
+in 49 [ENEMY DEF] lines and 21 friendly press lines gain the immunity tag;
+101-5 gains 3 [KILL WINDOW] lines; the kill-attempt / kit / legend block moves
++171 / -130 across 77 contexts; one cd-hoarded row drops Aura Mastery from its
+ready tools (197-3 0:52); the one press switched to Devotion Aura (88-1 0:19)
+keeps its immunity tag, its wall counting from the switch with no line of its
+own. One function, auraMasteryPressWallStartMs, now answers when a press's
+wall begins (at the press, at the switch, or never) for every reader that
+reads Aura Mastery as a wall - found by walking every exported table that
+holds the spell and each of its consumers, not only the ids: the kill-window
+state machine and the eval crisis-answer evidence (which read the switched
+press's first 1.3 s as wall or its whole aura as no wall), the unused-cooldown
+counterfactual (it priced an unpressed Aura Mastery as a 24 % wall whatever
+the aura), the overlap and panic detectors, and the scans that walked the raw
+aura rows. Three printed readers follow the same reading: a ready Aura Mastery
+that is no wall this round is no longer named under `cheaper available:`,
+`[DEATH] ... (Unused: ...)` or `[DEFENSIVE AVAILABLE]`, and a press that is
+the immunity carries no `cheaper available:` note of its own (a coordinator
+scope note on R53: pricing an immunity press against cheaper mitigation reads
+it as a wall). The reader list is in the commit message and registered in
+docs/predicate-index. Not migrated, by decision: reading Aura Mastery as an
+ANSWER to a burst window (the response set; on the 605 none of the 11
+`answered with Aura Mastery` lines is an immunity press - recorded as T229)
+and the [CD PRIOR] cohort reference, which pools both kinds of press (T230,
+with the reference-table regeneration). On the 605, Aura Mastery pressed under
+Concentration Aura reads `(silence / interrupt immunity, 8.0s)` in 49 [ENEMY
+DEF] lines and 21 friendly press lines gain the immunity tag; 101-5 gains 3
+[KILL WINDOW] lines; the kill-attempt / kit / legend block moves +171 / -130
+across 77 contexts; one cd-hoarded row drops Aura Mastery from its ready tools
+(197-3 0:52); a no-wall Aura Mastery is no longer offered as a cheaper option
+(2 [YOU] [CD] lines, 14-1) and an immunity press is no longer compared with
+cheaper mitigation (3 [YOU] [CD] lines: 88-1, 197-1, 68-1); the one press
+switched to Devotion Aura (88-1 0:19) keeps its immunity tag, its wall
+counting from the switch with no line of its own. Codex branch reviews 85-tk-
+WIN-T213-1 to -4 (the last APPROVE; -3's findings recorded, one of them - the
+switched press - turned out to be a real round and is fixed here); assembly
+reviews 80-PIPE-170 (the switched press's reading, the cd-hoarded ready set)
+170b (the two remaining readers of the switched press) and 170c (a scan still
+reading the raw aura, which led to the table-wide sweep).
