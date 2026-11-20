@@ -46,6 +46,15 @@ import {
 
 import { type IRoundCtx, successesOf, tsOf } from "./ctx";
 
+/** Incarnation: Tree of Life, Ancient of Lore, Ultimate Penitence, Spirit
+ * of Redemption (the pressed PvP id) — sizing only, see `run` */
+const R93_NAMED_TEAM_HEAL: ReadonlySet<string> = new Set([
+  "33891",
+  "473909",
+  "421453",
+  "215769",
+]);
+
 export const CHECKS = [
   "anothersOwnWallAnswers",
   "anothersOwnWallById",
@@ -90,7 +99,11 @@ export function run(ctx: IRoundCtx): void {
         r.casterId !== pr.unitId,
     );
     if (allWalls.length === 0) continue;
-    const walls = allWalls.filter((r) => !canHelpAnotherUnit(r.spellId));
+    // SIZING ONLY (ruling R93): the family the user named as answers — the
+    // code's own `canHelpAnotherUnit` does not separate it (it keeps the
+    // self-cast extras and drops these four), so the count is taken on the
+    // named ids until the predicate is settled
+    const walls = allWalls.filter((r) => !R93_NAMED_TEAM_HEAL.has(r.spellId));
     const others = p.responseCasts.filter(
       (r) => !walls.includes(r) && !pressDidNotReachPressured(pr, r),
     );
