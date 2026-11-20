@@ -18,6 +18,7 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { ENEMY_HEAL_CD_IDS } from "../data/enemyHealCds";
 import { ensureAnalysisData } from "../data/ensure";
 import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
 import { extractMajorCooldowns } from "../utils/cooldowns";
@@ -29,13 +30,15 @@ import {
   BURST_RESPONSE_WINDOW_MS,
   BURST_TRIAGE_MIN_HP_DROP_PP,
   burstExtrasLabel,
-  burstTroughReadEnd,
   type BurstResponseCast,
+  burstTroughReadEnd,
   burstWindowDecisionPoints,
+  canBeWallResponse,
   controlLandedResponses,
   landedPreOpenerStillUp,
   pressDidNotReachPressured,
   pressWentElsewhere,
+  TEAM_HEAL_WALL_ANSWER_IDS,
 } from "./burstWindowDecisionPoints";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 
@@ -352,7 +355,7 @@ describe("burstWindowDecisionPoints — response classification", () => {
 
   // T180 (rulings R65 / R68): a press that went elsewhere is no answer for
   // the pressured unit
-  it("an external aimed at another teammate, or another unit's self-only heal, does not make the window responded; the wall of another unit still does", () => {
+  it("an external aimed at another teammate, or another unit's self-only heal, does not make the window responded; nor does another unit's own self-protection wall (R81)", () => {
     const third = friendly({
       id: "F3",
       name: "Third-R",
@@ -391,14 +394,80 @@ describe("burstWindowDecisionPoints — response classification", () => {
       pressDidNotReachPressured(exh.pressured!, exh.responseCasts[0]!),
     ).toBe(true);
     expect(exh.responded).toBe(false);
-    // NOT taken by the ruling: another unit's own wall keeps the window
-    // responded (Bear Form is a wall here)
+    // user ruling R81 (2026-11-19) changed R68 here: another unit's own
+    // self-protection wall (Bear Form is a wall here) is ignored too — not
+    // elsewhere, no answer. Before R81 this window was responded.
     const wall = run([cast("5487", 14)]);
     expect(wall.responseCasts.map((r) => r.category)).toEqual(["wall"]);
     expect(pressWentElsewhere(wall.pressured!, wall.responseCasts[0]!)).toBe(
       false,
     );
-    expect(wall.responded).toBe(true);
+    expect(
+      pressDidNotReachPressured(wall.pressured!, wall.responseCasts[0]!),
+    ).toBe(true);
+    expect(wall.responded).toBe(false);
+  });
+
+  // T224: R81 ignores another teammate's self-protection wall; R93 keeps
+  // the four walls that are a healing cooldown for the team as answers
+  it("another unit's self-protection wall is ignored, its team-heal wall answers, the pressured unit's own wall answers (R81 / R93)", () => {
+    const mate = (id: string) =>
+      friendly({
+        id: "F2",
+        name: "Mate-R",
+        advancedActions: hpTrack("F2", 0, 40, 100),
+        spellCastEvents: [cast(id, 13)],
+      });
+    const run = (id: string) =>
+      burstWindowDecisionPoints(
+        combat([pressuredFriend(), mate(id), enemyWithBurst()]),
+      )[0]!;
+    // Fade, Divine Shield, Ice Block, Barkskin: the presser's own protection
+    for (const id of ["586", "642", "45438", BARKSKIN]) {
+      const p = run(id);
+      expect(
+        p.responseCasts.map((r) => r.category),
+        id,
+      ).toEqual(["wall"]);
+      expect(p.responded, id).toBe(false);
+    }
+    // Tree of Life, Ancient of Lore, Ultimate Penitence, pressed Spirit of
+    // Redemption: walls by category, answers by R93
+    for (const id of TEAM_HEAL_WALL_ANSWER_IDS) {
+      const p = run(id);
+      expect(
+        p.responseCasts.map((r) => r.category),
+        id,
+      ).toEqual(["wall"]);
+      expect(
+        pressDidNotReachPressured(p.pressured!, p.responseCasts[0]!),
+        id,
+      ).toBe(false);
+      expect(p.responded, id).toBe(true);
+    }
+    // the pressured unit's own Barkskin still answers
+    const own = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({ spellCastEvents: [cast(BARKSKIN, 13)] }),
+        enemyWithBurst(),
+      ]),
+    )[0]!;
+    expect(own.responded).toBe(true);
+  });
+
+  // R93's table is the whole kept side, and a healing major the enemy's
+  // lines know (`ENEMY_HEAL_CD_IDS`) that can be a wall here must be in it:
+  // adding one there without deciding it here turns this red
+  it("the team-heal walls are exactly the four R93 signed, and hold every wall-capable id of ENEMY_HEAL_CD_IDS", () => {
+    expect([...TEAM_HEAL_WALL_ANSWER_IDS].sort()).toEqual(
+      ["215769", "33891", "421453", "473909"].sort(),
+    );
+    for (const id of TEAM_HEAL_WALL_ANSWER_IDS)
+      expect(canBeWallResponse(id), id).toBe(true);
+    const drift = [...ENEMY_HEAL_CD_IDS].filter(
+      (id) => canBeWallResponse(id) && !TEAM_HEAL_WALL_ANSWER_IDS.has(id),
+    );
+    expect(drift).toEqual([]);
   });
 
   // T181 (round-14 D28 / D29): dd3c5ad1 — a mage's Alter Time at +0.8 s
@@ -426,7 +495,7 @@ describe("burstWindowDecisionPoints — response classification", () => {
   // through a mage's Alter Time return. R80 speaks of the unit's OWN: for
   // any other unit these three ids are ignored — and do not come back in
   // as "another unit's own wall" (R68), which Barkskin still does
-  it("another unit's Alter Time (press, return) or Mass Invisibility does not answer the pressured unit's window; its Barkskin still does (R68)", () => {
+  it("another unit's Alter Time (press, return) or Mass Invisibility does not answer the pressured unit's window; nor does its Barkskin (R81)", () => {
     const mate = (id: string) =>
       friendly({
         id: "F2",
@@ -452,10 +521,11 @@ describe("burstWindowDecisionPoints — response classification", () => {
       );
       expect(p.responded, id).toBe(false);
     }
+    // R81 (T224) changed R68: the teammate's Barkskin is ignored as well
     const wall = burstWindowDecisionPoints(
       combat([pressuredFriend(), mate(BARKSKIN), enemyWithBurst()]),
     )[0]!;
-    expect(wall.responded).toBe(true);
+    expect(wall.responded).toBe(false);
     // …and the pressed unit's own, beside a teammate's, still answers
     const both = burstWindowDecisionPoints(
       combat([
@@ -465,6 +535,100 @@ describe("burstWindowDecisionPoints — response classification", () => {
       ]),
     )[0]!;
     expect(both.responded).toBe(true);
+  });
+
+  // user ruling R97 (T224): a teammate's Mass Invisibility answers the
+  // pressured unit's window when that press's aura landed on the pressured
+  // unit, however short. The "landed" side has corpus examples (605: 21 of
+  // 24 presses; 7a4d43c8 2:21, 0.7 s of aura). The "did NOT land" side is
+  // CONSTRUCTED: no 605 window is answered only by a Mass Invisibility
+  // that missed the pressured unit (the 3 no-aura presses sit beside
+  // another answer), so this case has no real-match fixture.
+  it("R97: a teammate's Mass Invisibility answers when its aura landed on the pressured unit, and not when it did not (constructed)", () => {
+    const t = T0 + 13_000;
+    const invis = (dest: string, endMs?: number) => [
+      {
+        spellId: "414664",
+        spellName: "Mass Invisibility",
+        srcUnitId: "F2",
+        srcUnitName: "Mage-R",
+        destUnitId: dest,
+        timestamp: t,
+        logLine: { event: "SPELL_AURA_APPLIED", timestamp: t },
+      },
+      ...(endMs === undefined
+        ? []
+        : [
+            {
+              spellId: "414664",
+              spellName: "Mass Invisibility",
+              srcUnitId: "F2",
+              srcUnitName: "Mage-R",
+              destUnitId: dest,
+              timestamp: endMs,
+              logLine: { event: "SPELL_AURA_REMOVED", timestamp: endMs },
+            },
+          ]),
+    ];
+    const mage = () =>
+      friendly({
+        id: "F2",
+        name: "Mage-R",
+        advancedActions: hpTrack("F2", 0, 40, 100),
+        spellCastEvents: [cast("414664", 13)],
+        auraEvents: invis("F2"),
+      });
+    // landed on the pressured unit, broken 0.2 s later: an answer
+    const landed = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({ auraEvents: invis("F1", t + 200) }),
+        mage(),
+        enemyWithBurst(),
+      ]),
+    )[0]!;
+    expect(landed.pressured!.unitId).toBe("F1");
+    expect(landed.responseCasts[0]!.effectOnUnitIds).toContain("F1");
+    expect(
+      pressDidNotReachPressured(landed.pressured!, landed.responseCasts[0]!),
+    ).toBe(false);
+    expect(landed.responded).toBe(true);
+    // CONSTRUCTED: the aura is on the mage and a third friendly, not on
+    // the pressured unit — ignored
+    const missed = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend(),
+        mage(),
+        friendly({
+          id: "F3",
+          name: "Third-R",
+          advancedActions: hpTrack("F3", 0, 40, 100),
+          auraEvents: invis("F3"),
+        }),
+        enemyWithBurst(),
+      ]),
+    )[0]!;
+    expect(missed.pressured!.unitId).toBe("F1");
+    expect(
+      pressDidNotReachPressured(missed.pressured!, missed.responseCasts[0]!),
+    ).toBe(true);
+    expect(missed.responded).toBe(false);
+    // …and Alter Time has no such reading: an Alter Time aura on the
+    // pressured unit from another mage does not make it an answer
+    const alter = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({
+          auraEvents: invis("F1").map((a) => ({ ...a, spellId: "342245" })),
+        }),
+        friendly({
+          id: "F2",
+          name: "Mage-R",
+          advancedActions: hpTrack("F2", 0, 40, 100),
+          spellCastEvents: [cast("342245", 13)],
+        }),
+        enemyWithBurst(),
+      ]),
+    )[0]!;
+    expect(alter.responded).toBe(false);
   });
 
   // T222 (found by T182's capture, 7f107afb 2:24): Feign Death logs no cast

@@ -29,7 +29,10 @@
  * press that is also a healing cooldown for the team (Tree of Life, Ancient
  * of Lore, Ultimate Penitence, a pressed Spirit of Redemption) stays an
  * answer. `anothersOwnWallAnswers` counts under that reading: the walls it
- * holds are the ones `canHelpAnotherUnit` says cannot help another unit.
+ * holds are every `wall` response of another unit except R93's signed
+ * table (`TEAM_HEAL_WALL_ANSWER_IDS`) and — user ruling R97 — a teammate's
+ * Mass Invisibility whose aura landed on the pressured unit. 0 on the
+ * fixing checkout.
  *  - `anothersPressCategory` (inventory): every non-control response whose
  *    caster is not the pressured unit, by spell | the engine's category —
  *    which presses the `wall` reading reaches and which it does not.
@@ -37,6 +40,7 @@
 import {
   burstWindowDecisionPoints,
   pressDidNotReachPressured,
+  TEAM_HEAL_WALL_ANSWER_IDS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import {
@@ -45,15 +49,6 @@ import {
 } from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx, successesOf, tsOf } from "./ctx";
-
-/** Incarnation: Tree of Life, Ancient of Lore, Ultimate Penitence, Spirit
- * of Redemption (the pressed PvP id) — sizing only, see `run` */
-const R93_NAMED_TEAM_HEAL: ReadonlySet<string> = new Set([
-  "33891",
-  "473909",
-  "421453",
-  "215769",
-]);
 
 export const CHECKS = [
   "anothersOwnWallAnswers",
@@ -99,11 +94,18 @@ export function run(ctx: IRoundCtx): void {
         r.casterId !== pr.unitId,
     );
     if (allWalls.length === 0) continue;
-    // SIZING ONLY (ruling R93): the family the user named as answers — the
-    // code's own `canHelpAnotherUnit` does not separate it (it keeps the
-    // self-cast extras and drops these four), so the count is taken on the
-    // named ids until the predicate is settled
-    const walls = allWalls.filter((r) => !R93_NAMED_TEAM_HEAL.has(r.spellId));
+    // the walls R81 ignores: not R93's signed team-heal walls
+    // (`TEAM_HEAL_WALL_ANSWER_IDS`), and not a Mass Invisibility whose aura
+    // landed on the pressured unit (ruling R97, read from the response's
+    // own per-recipient holders)
+    const walls = allWalls.filter(
+      (r) =>
+        !TEAM_HEAL_WALL_ANSWER_IDS.has(r.spellId) &&
+        !(
+          r.spellId === "414664" &&
+          r.effectOnUnitIds?.includes(pr.unitId) === true
+        ),
+    );
     const others = p.responseCasts.filter(
       (r) => !walls.includes(r) && !pressDidNotReachPressured(pr, r),
     );

@@ -21,6 +21,7 @@
 import {
   SELF_SAVE_ANSWER_IDS,
   BURST_LEAD_CD_EXCLUDED_IDS,
+  TEAM_HEAL_WALL_ANSWER_IDS,
 } from "../analysis/burstWindowDecisionPoints";
 import { CD_WASTE_EXCLUDED_IDS } from "../analysis/candidateFindings";
 import { HEALER_TEAM_BURST_IDS } from "../analysis/candidates/cooldownTiming";
@@ -1650,6 +1651,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       ...TALENT_MITIGATION_MODIFIERS.map((m) => m.auraSpellId),
       ...TALENT_MITIGATION_MODIFIERS.map((m) => m.talentSpellId),
     ],
+  ),
+  // T224 (user ruling R93): the walls that are a healing cooldown for the
+  // team — another teammate's press of one answers a burst window
+  t(
+    "TEAM_HEAL_WALL_ANSWER_IDS",
+    "analysis/burstWindowDecisionPoints.ts",
+    "cast",
+    () => set(TEAM_HEAL_WALL_ANSWER_IDS),
   ),
   t("ENEMY_HEAL_CD_IDS", "data/enemyHealCds.ts", "cast", () =>
     set(ENEMY_HEAL_CD_IDS),

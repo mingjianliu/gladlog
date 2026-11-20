@@ -815,6 +815,41 @@ const EXTERNAL_IDS = new Set<string>(
   spellIdLists.externalDefensiveSpellIds.map(String),
 );
 /**
+ * Walls that are a healing cooldown FOR THE TEAM — user ruling R93
+ * (2026-11-19, pipeline T224), every entry signed by it. A `wall` response
+ * of a unit other than the pressured one is its presser's self-protection
+ * and is ignored for that window (R81); these four are officially
+ * self-targeted too, but pressing one is how its caster heals the team
+ * through the burst, so another teammate's press of one stays an answer:
+ *   "Tree of Life / Ancient of Lore / Ultimate Penitence are answers when
+ *    pressed by another teammate: healing CDs aimed at the team, not
+ *    self-only walls"; the pressed Spirit of Redemption "对自己来说是非常好的
+ *    防守技能，对队友加血也是一个大技能".
+ * A hand table on purpose (coordinator's call): no official field shows the
+ * help — the targeting is the caster — and `canHelpAnotherUnit` splits the
+ * walls the other way round (it keeps a self-cast Power Word: Shield and
+ * drops these; 605: 69 against 192 presses). `ENEMY_HEAL_CD_IDS` holds two
+ * of them for the enemy's lines; a unit test keeps every wall-capable id
+ * there inside this table, so a change there cannot change answers
+ * silently. Registered in curatedIdRegistry.
+ */
+export const TEAM_HEAL_WALL_ANSWER_IDS: ReadonlySet<string> = new Set([
+  "33891", // Incarnation: Tree of Life (R93)
+  "473909", // Ancient of Lore — Tree of Life's talent replacement (R93)
+  "421453", // Ultimate Penitence (R93)
+  "215769", // Spirit of Redemption, the pressed PvP id (R93; 605: 114 of 114 presses have a cast row)
+]);
+/** The engine can give this id the `wall` category (the order
+ * `burstWindowDecisionPoints` classifies a friendly press in). */
+export function canBeWallResponse(spellId: string): boolean {
+  return (
+    PERSONAL_WALL_IDS.has(spellId) ||
+    (!EXTERNAL_IDS.has(spellId) &&
+      !BURST_HEAL_CD_IDS.has(spellId) &&
+      BURST_EXTRA_ANSWER_IDS.has(spellId))
+  );
+}
+/**
  * "A major healing cooldown" — composed from two tables that are ALREADY
  * hand-maintained and already registered in `data/curatedIdRegistry.ts`
  * (`TEAM_HEAL_CD_IDS` and `HEALING_VERDICTS`), rather than a third hand list:
@@ -863,10 +898,12 @@ export const BURST_HEAL_CD_IDS = new Set<string>([
  * (`BURST_EXTRA_ANSWER_IDS` here, cd-hoarded's `spent` through
  * `ownerSelfSaveCastSeconds`). Registered in curatedIdRegistry.
  */
+/** Mass Invisibility — the one self-save that reaches teammates (R97). */
+const MASS_INVISIBILITY_ID = "414664";
 export const SELF_SAVE_ANSWER_IDS: ReadonlySet<string> = new Set([
   "342245", // Alter Time (the press)
   "342247", // Alter Time (the return)
-  "414664", // Mass Invisibility
+  MASS_INVISIBILITY_ID,
 ]);
 
 /**
@@ -1018,12 +1055,33 @@ export function pressDidNotReachPressured(
   )
     return true;
   // T181: a self-save (Alter Time, Mass Invisibility) answers for its
-  // presser alone — another unit's is ignored, and so never reaches R68's
-  // "another unit's own wall keeps the window responded"
+  // presser alone — another unit's is ignored…
   if (
     SELF_SAVE_ANSWER_IDS.has(r.spellId) &&
     r.casterId !== undefined &&
     r.casterId !== pressured.unitId
+  )
+    // …except (user ruling R97, 2026-11-19, T224) a teammate's Mass
+    // Invisibility whose invisibility aura LANDED on the pressured unit:
+    // that press answers, however soon the aura is broken — "being broken
+    // is the enemy's play". No aura row on the pressured unit → ignored.
+    // 605: 24 such presses, the aura on the pressured unit in 21.
+    return !(
+      r.spellId === MASS_INVISIBILITY_ID &&
+      r.effectOnUnitIds?.includes(pressured.unitId) === true
+    );
+  // user ruling R81 (2026-11-19, changing R68), narrowed by R93: another
+  // teammate's own self-protection wall is ignored like its self-only
+  // healing CD — 605: 133 distinct windows were `responded` through such a
+  // wall alone, a hunter's Feign Death standing as the answer to a monk's
+  // burst. The pressured unit's own wall still answers; so does another
+  // teammate's wall that is a healing cooldown for the team
+  // (`TEAM_HEAL_WALL_ANSWER_IDS`).
+  if (
+    r.category === "wall" &&
+    r.casterId !== undefined &&
+    r.casterId !== pressured.unitId &&
+    !TEAM_HEAL_WALL_ANSWER_IDS.has(r.spellId)
   )
     return true;
   return r.category === "control" && r.landed === false;
