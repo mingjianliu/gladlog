@@ -838,10 +838,17 @@ export const BURST_HEAL_CD_IDS = new Set<string>([
  * (dd3c5ad1 1:58) and a Mass Invisibility at +6.7 s (1:24); cd-hoarded
  * accused a mage whose own return took it from 26 % to 83 % inside the
  * window (2c47e3d5 1:30). Answers only, never on the accusation side.
- * "Only for the unit that pressed them" holds in cd-hoarded's `spent`
- * (the owner's own crisis) and NOT for the engine's `responded`, where
- * another unit's own wall keeps a window responded as every wall does
- * (user ruling R68). The `[BURST ANSWERED]` line never names one (user
+ * "Only for the unit that pressed them" holds for both readers: cd-hoarded's
+ * `spent` reads the owner's own presses, and the engine's `responded`
+ * counts one only when its presser is the pressured unit — another unit's
+ * press of these ids is ignored (`pressDidNotReachPressured`; R80's "the
+ * unit's own", coordinator's call 2026-11-19 after the B163 batch check:
+ * a rogue's window turned answered through a teammate mage's Mass
+ * Invisibility, 7a4d43c8 2:21, and a paladin's through another mage's
+ * Alter Time return). Whether a teammate's Mass Invisibility that put its
+ * aura on the pressured unit is an answer is not ruled; until it is, such
+ * a press is as on the tree before T181: not in the response list's count.
+ * The `[BURST ANSWERED]` line never names one (user
  * ruling R80, 2026-11-19: the window is answered, the credit lines stay as
  * they were — `answersPressured` refuses these ids). One set for both
  * readers
@@ -973,6 +980,15 @@ export function pressDidNotReachPressured(
     r.casterId !== undefined &&
     r.casterId !== pressured.unitId &&
     healsOnlyItsCaster(r.spellId)
+  )
+    return true;
+  // T181: a self-save (Alter Time, Mass Invisibility) answers for its
+  // presser alone — another unit's is ignored, and so never reaches R68's
+  // "another unit's own wall keeps the window responded"
+  if (
+    SELF_SAVE_ANSWER_IDS.has(r.spellId) &&
+    r.casterId !== undefined &&
+    r.casterId !== pressured.unitId
   )
     return true;
   return r.category === "control" && r.landed === false;

@@ -421,6 +421,52 @@ describe("burstWindowDecisionPoints — response classification", () => {
     }
   });
 
+  // batch check B163: T181 had made a rogue's window answered through a
+  // teammate mage's Mass Invisibility (7a4d43c8 2:21) and another unit's
+  // through a mage's Alter Time return. R80 speaks of the unit's OWN: for
+  // any other unit these three ids are ignored — and do not come back in
+  // as "another unit's own wall" (R68), which Barkskin still does
+  it("another unit's Alter Time (press, return) or Mass Invisibility does not answer the pressured unit's window; its Barkskin still does (R68)", () => {
+    const mate = (id: string) =>
+      friendly({
+        id: "F2",
+        name: "Mage-R",
+        advancedActions: hpTrack("F2", 0, 40, 100),
+        spellCastEvents: [cast(id, 13)],
+      });
+    for (const id of ["342245", "342247", "414664"]) {
+      const p = burstWindowDecisionPoints(
+        combat([pressuredFriend(), mate(id), enemyWithBurst()]),
+      )[0]!;
+      expect(p.pressured!.unitId, id).toBe("F1");
+      expect(
+        p.responseCasts.map((r) => r.casterId),
+        id,
+      ).toEqual(["F2"]);
+      expect(
+        pressDidNotReachPressured(p.pressured!, p.responseCasts[0]!),
+        id,
+      ).toBe(true);
+      expect(pressWentElsewhere(p.pressured!, p.responseCasts[0]!), id).toBe(
+        false,
+      );
+      expect(p.responded, id).toBe(false);
+    }
+    const wall = burstWindowDecisionPoints(
+      combat([pressuredFriend(), mate(BARKSKIN), enemyWithBurst()]),
+    )[0]!;
+    expect(wall.responded).toBe(true);
+    // …and the pressed unit's own, beside a teammate's, still answers
+    const both = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({ spellCastEvents: [cast("342245", 12)] }),
+        mate("414664"),
+        enemyWithBurst(),
+      ]),
+    )[0]!;
+    expect(both.responded).toBe(true);
+  });
+
   it("a wall pressed just BEFORE the opener still counts (pre-wall allowance)", () => {
     const pts = burstWindowDecisionPoints(
       combat([
