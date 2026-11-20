@@ -7,6 +7,7 @@ import {
   classifyDispel,
   createCastMatchIndex,
   DISPEL_CAST_MATCH_WINDOW_MS,
+  dispelIsDelayedRepeat,
   dispelRodeOwnPress,
   MOVEMENT_ROOT_BREAK_DISPEL_IDS,
 } from "./dispelKind";
@@ -267,5 +268,29 @@ describe("T191: a delayed re-steal is the earlier press's, never a press of its 
     addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 30_300);
     expect(classifyDispel(idx, steal(20_000))).toBe("proc");
     expect(classifyDispel(idx, steal(30_000))).toBe("proc");
+  });
+  it("review 85-tk-CD-T191-1 #1 (7a4d43c8): the next press REFRESHES the debuff at its scheduled end — its own steal in the refresh's ms is a press, the repeat 12 ms later is the earlier press's", () => {
+    const idx = buildCastMatchIndex([
+      {
+        id: "Player-2-T",
+        spellCastEvents: [],
+        auraEvents: [
+          {
+            logLine: { event: "SPELL_AURA_REFRESH" },
+            srcUnitId: PLAYER,
+            spellId: "1270828",
+            spellName: "Spellsteal",
+            timestamp: 69_188,
+          },
+        ],
+      },
+    ]);
+    addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 69_179);
+    expect(classifyDispel(idx, steal(69_188))).toBe("deliberate");
+    expect(classifyDispel(idx, steal(69_200))).toBe("proc");
+    expect(dispelIsDelayedRepeat(idx, steal(69_200))).toBe(true);
+    expect(dispelIsDelayedRepeat(idx, steal(69_188))).toBe(false);
+    // more than DISPEL_RIDES_PRESS_MS after the refresh: no repeat
+    expect(dispelIsDelayedRepeat(idx, steal(69_239))).toBe(false);
   });
 });

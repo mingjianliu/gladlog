@@ -90,6 +90,10 @@ export interface CastMatchIndex {
    * source put out ended (`DELAYED_REPEAT_DEBUFF_IDS`), on whichever unit
    * (pipeline T191, `dispelIsDelayedRepeat`) */
   repeatEnds: Map<string, number[]>;
+  /** `${srcUnitId}|${debuffName}` → when a later press REFRESHED such a
+   * debuff at its scheduled end instead of letting it end (review
+   * 85-tk-CD-T191-1 #1): the earlier press's repeat fires just after */
+  repeatRefreshes: Map<string, number[]>;
 }
 
 /**
@@ -98,8 +102,11 @@ export interface CastMatchIndex {
  * Improved Spellsteal: the press applies 1270828 "Spellsteal" (DEBUFF) on the
  * target — on the mage himself when the target reflects it — and when it ends
  * ~4 s later a SPELL_STOLEN of Spellsteal (30449) from the mage lands at the
- * same ms (605: 125 of 125 re-steals within 14 ms of the end). Registered in
- * curatedIdRegistry.
+ * same ms (605: 169 re-steals, all within 14 ms of the REMOVED; its life is
+ * 4.00–4.05 s). When the next press lands at that scheduled end it REFRESHES
+ * the debuff — no REMOVED — and steals in the refresh's own ms; the earlier
+ * press's repeat follows 12–23 ms later (605: 3 refreshes 3,991–4,003 ms after
+ * the previous application). Registered in curatedIdRegistry.
  */
 export const DELAYED_REPEAT_DEBUFF_IDS: ReadonlySet<string> = new Set([
   "1270828", // Spellsteal (Improved Spellsteal's repeat debuff)
@@ -112,6 +119,7 @@ export function createCastMatchIndex(): CastMatchIndex {
     bySource: new Map(),
     aimedAt: new Map(),
     repeatEnds: new Map(),
+    repeatRefreshes: new Map(),
   };
 }
 
@@ -122,11 +130,14 @@ export function addRepeatEndToIndex(
   srcUnitId: string,
   debuffName: string,
   timestamp: number,
+  /** a SPELL_AURA_REFRESH: the next press took over at the scheduled end */
+  refreshed = false,
 ): void {
   const k = `${srcUnitId}|${debuffName}`;
-  const list = index.repeatEnds.get(k) ?? [];
+  const map = refreshed ? index.repeatRefreshes : index.repeatEnds;
+  const list = map.get(k) ?? [];
   if (!list.includes(timestamp)) list.push(timestamp);
-  index.repeatEnds.set(k, list);
+  map.set(k, list);
 }
 
 /**
@@ -136,15 +147,26 @@ export function addRepeatEndToIndex(
  * flags and whichever press lands near it (7686e97d r3 2:24: the re-steal
  * 0.67 s before the mage's next Spellsteal was read as that press, and
  * [MISSED PURGE] said the press took the re-steal's Renew). The #221 reading
- * stands: a repeated steal is `(passive)`.
+ * stands: a repeated steal is `(passive)`. After a REFRESH the repeat is a
+ * removal strictly after the refresh's ms (≤ `DISPEL_RIDES_PRESS_MS`): the
+ * removal in the refresh's own ms is the refreshing press's (7a4d43c8: Mark of
+ * the Wild at the refresh, the repeat's Rejuvenation 12 ms later). Two steals
+ * in the refresh's own ms (47867c33, once on the 605) cannot be told apart by
+ * time and both stay the press's.
  */
 export function dispelIsDelayedRepeat(
   index: CastMatchIndex,
   d: Pick<IDispelToClassify, "srcUnitId" | "spellName" | "timestamp">,
 ): boolean {
   if (!d.spellName) return false;
-  return (index.repeatEnds.get(`${d.srcUnitId}|${d.spellName}`) ?? []).some(
-    (t) => Math.abs(t - d.timestamp) <= DISPEL_RIDES_PRESS_MS,
+  const k = `${d.srcUnitId}|${d.spellName}`;
+  return (
+    (index.repeatEnds.get(k) ?? []).some(
+      (t) => Math.abs(t - d.timestamp) <= DISPEL_RIDES_PRESS_MS,
+    ) ||
+    (index.repeatRefreshes.get(k) ?? []).some(
+      (t) => d.timestamp > t && d.timestamp - t <= DISPEL_RIDES_PRESS_MS,
+    )
   );
 }
 
@@ -243,13 +265,20 @@ export function buildCastMatchIndex(
   for (const u of units) {
     for (const a of u.auraEvents ?? [])
       if (
-        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+        (a.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
         a.spellId &&
         DELAYED_REPEAT_DEBUFF_IDS.has(a.spellId) &&
         a.srcUnitId &&
         a.spellName
       )
-        addRepeatEndToIndex(index, a.srcUnitId, a.spellName, a.timestamp);
+        addRepeatEndToIndex(
+          index,
+          a.srcUnitId,
+          a.spellName,
+          a.timestamp,
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH,
+        );
     for (const c of u.spellCastEvents) {
       if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       addCastToIndex(
