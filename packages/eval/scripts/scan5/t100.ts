@@ -38,6 +38,8 @@
 import { spellSchoolMask } from "@gladlog/analysis/src/data/spellSchools";
 import { disarmSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
+  castBlockingAuraIntervals,
+  enemySourceIds,
   hardCcLetsPress,
   intervalBlocksSpell,
   isHardCcAura,
@@ -125,10 +127,11 @@ function ownerLocks(ctx: IRoundCtx): ILock[] {
   auras.forEach((a, i) => {
     if (ev(a) !== APPLIED || !enemy.has(a.srcUnitId)) return;
     const id = String(a.spellId ?? "");
+    // hard CC is read from the producer's own intervals below
     const kind = isSilenceEffectAura(id)
       ? undefined
       : isHardCcAura(id)
-        ? ("control" as const)
+        ? null
         : disarmSpellIds.has(id)
           ? ("disarm" as const)
           : null;
@@ -151,6 +154,28 @@ function ownerLocks(ctx: IRoundCtx): ILock[] {
       ...(kind ? { kind } : {}),
     });
   });
+  // hard CC: the producer's own cast-blocking intervals
+  // (`castBlockingAuraIntervals` — its ends, a missing REMOVED capped at
+  // the aura's duration, and its admission of a reflected or
+  // friendly-sourced control; codex 85-tk-CD-T187-1 #1 #2: this scan's own
+  // open-ended, enemy-only reading counted an expired Fear and missed a
+  // priest's reflected Psychic Scream)
+  for (const a of castBlockingAuraIntervals(
+    owner,
+    enemySourceIds(
+      ctx.units.filter((u) => u.info && u.reaction !== owner.reaction),
+      ctx.units,
+    ),
+  )) {
+    if (!isHardCcAura(a.spellId) || isSilenceEffectAura(a.spellId)) continue;
+    locks.push({
+      from: a.from,
+      to: a.to,
+      spellId: a.spellId,
+      lockout: false,
+      kind: "control",
+    });
+  }
   for (const k of (owner.actionIn ?? []) as any[]) {
     if (ev(k) !== "SPELL_INTERRUPT" || !enemy.has(k.srcUnitId)) continue;
     const lockMs =
