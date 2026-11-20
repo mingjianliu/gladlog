@@ -32,7 +32,7 @@ export const CHECKS = [
 ] as const;
 
 const PRESSED_LATE_RE = /\bpressedLate=(.*?)(?:, [a-zA-Z]+=|\}\s*$)/;
-const ITEM_RE = /^(.+?) → (.+?) \+\d+(?:\.\d)?s$/;
+const ITEM_RE = /^(.+?) → (.+?) \+(\d+(?:\.\d)?)s$/;
 
 /** the owner's own cast id of a spell name, from its SUCCESS rows */
 function ownerCastIdsOf(ctx: IRoundCtx, spellName: string): Set<string> {
@@ -59,7 +59,12 @@ export function run(ctx: IRoundCtx): void {
     for (const item of late.split("; ")) {
       const m = ITEM_RE.exec(item.trim());
       if (!m) continue;
-      const [, spell, who] = m as unknown as [string, string, string];
+      const [, spell, who, offS] = m as unknown as [
+        string,
+        string,
+        string,
+        string,
+      ];
       ctx.bump("pressedLateNamesEnemy");
       ctx.bump("pressedLateSelfOnlyDestination");
       const unit = ctx.byName.get(who);
@@ -73,14 +78,27 @@ export function run(ctx: IRoundCtx): void {
           row.trim().slice(0, 300),
         );
       const ids = ownerCastIdsOf(ctx, spell);
-      const ledgerRow = (
+      // the producer's row is the one whose press printed: same name (or
+      // the owner's SUCCESS id) with a cast at t + the printed offset (t is
+      // the floored crisis second, so within 1.1 s); two rows of one name
+      // (Anti-Magic Shell 48707 self-only beside 410358 that reaches an
+      // ally — codex 85-tk-CD-T238-1b #1) are told apart by that cast, and
+      // when still ambiguous the press counts as self-only only if every
+      // candidate is
+      const t = Number(/\bt=(\d+)/.exec(row)?.[1] ?? NaN);
+      const at = t + Number(offS);
+      const named = (
         extractMajorCooldowns(ctx.owner, ctx.legacy, {
           withBaselineOnly: true,
         }) as any[]
-      ).find((cd) => cd.spellName === spell || ids.has(String(cd.spellId)));
+      ).filter((cd) => cd.spellName === spell || ids.has(String(cd.spellId)));
+      const pressed = named.filter((cd) =>
+        (cd.casts ?? []).some((c: any) => Math.abs(c.timeSeconds - at) <= 1.1),
+      );
+      const rows = pressed.length > 0 ? pressed : named;
       if (
-        ledgerRow
-          ? !cdCanHelpAnotherUnit(ledgerRow)
+        rows.length > 0
+          ? rows.every((cd) => !cdCanHelpAnotherUnit(cd))
           : ids.size > 0 &&
             [...ids].every((spellId) => !cdCanHelpAnotherUnit({ spellId }))
       )
