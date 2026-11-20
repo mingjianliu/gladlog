@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- the producer ledger rows are read untyped */
 /**
  * scan5/t238.ts — pipeline T238: cd-hoarded's `pressedLate` (`X → whom +Ns`)
  * printed the cast row's destination for every late press, and a self-only
@@ -12,9 +13,16 @@
  *   roster `reaction`, not the product's reading);
  * - `pressedLateSelfOnlyDestination`: the press is a self-only cooldown — its
  *   spell id taken from the owner's own SPELL_CAST_SUCCESS row of that name in
- *   the log, judged by the producer's predicate `cdCanHelpAnotherUnit`.
+ *   the log, judged by the producer's predicate `cdCanHelpAnotherUnit` on the
+ *   owner's own ledger row of that spell (`extractMajorCooldowns`: it carries
+ *   the player's talent reach, `allyReach` — Obsidian Scales with its
+ *   ally-copy talent reaches an ally; codex 85-tk-CD-T238-1 #1). With no
+ *   ledger row the bare id is judged.
  */
-import { cdCanHelpAnotherUnit } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  cdCanHelpAnotherUnit,
+  extractMajorCooldowns,
+} from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx } from "./ctx";
 
@@ -65,9 +73,16 @@ export function run(ctx: IRoundCtx): void {
           row.trim().slice(0, 300),
         );
       const ids = ownerCastIdsOf(ctx, spell);
+      const ledgerRow = (
+        extractMajorCooldowns(ctx.owner, ctx.legacy, {
+          withBaselineOnly: true,
+        }) as any[]
+      ).find((cd) => cd.spellName === spell || ids.has(String(cd.spellId)));
       if (
-        ids.size > 0 &&
-        [...ids].every((spellId) => !cdCanHelpAnotherUnit({ spellId }))
+        ledgerRow
+          ? !cdCanHelpAnotherUnit(ledgerRow)
+          : ids.size > 0 &&
+            [...ids].every((spellId) => !cdCanHelpAnotherUnit({ spellId }))
       )
         ctx.violate(
           "pressedLateSelfOnlyDestination",
