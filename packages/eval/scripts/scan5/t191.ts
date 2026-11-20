@@ -9,7 +9,8 @@
  *
  * Re-steals are found from the raw rows alone: a SPELL_DISPEL / SPELL_STOLEN
  * of the round whose source's SPELL_AURA_REMOVED of a
- * `DELAYED_REPEAT_DEBUFF_IDS` debuff of the same name lands within
+ * `DELAYED_REPEAT_DEBUFF_IDS` debuff whose press spell the removal carries
+ * (1270828 → Spellsteal 30449) lands within
  * `DISPEL_RIDES_PRESS_MS` (on any unit) — or, when the next press REFRESHED
  * the debuff at its scheduled end (review 85-tk-CD-T191-1 #1), a removal
  * from the refreshed unit strictly after the refresh's ms (≤
@@ -65,7 +66,8 @@ interface IEnd {
   ms: number;
   src: string;
   dest: string;
-  name: string;
+  /** the press spell the debuff repeats */
+  press: string;
   refresh: boolean;
 }
 
@@ -94,12 +96,13 @@ export function run(ctx: IRoundCtx): void {
       parts.eventName === "SPELL_AURA_REMOVED" ||
       parts.eventName === "SPELL_AURA_REFRESH"
     ) {
-      if (DELAYED_REPEAT_DEBUFF_IDS.has(p[8] ?? ""))
+      const press = DELAYED_REPEAT_DEBUFF_IDS.get(p[8] ?? "");
+      if (press)
         ends.push({
           ms,
           src: p[0] ?? "",
           dest: p[4] ?? "",
-          name,
+          press,
           refresh: parts.eventName === "SPELL_AURA_REFRESH",
         });
     } else if (
@@ -123,7 +126,7 @@ export function run(ctx: IRoundCtx): void {
     const end = ends.find(
       (e) =>
         e.src === r.src &&
-        e.name === r.spellName &&
+        e.press === r.spellId &&
         (e.refresh
           ? e.dest === r.dest &&
             r.ms > e.ms &&
