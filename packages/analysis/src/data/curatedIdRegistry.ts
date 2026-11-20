@@ -1014,7 +1014,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // pipeline T191: debuffs whose end makes their press remove again
   // (Improved Spellsteal's 1270828)
   t("DELAYED_REPEAT_DEBUFF_IDS", "utils/dispelKind.ts", "aura", () =>
-    set(DELAYED_REPEAT_DEBUFF_IDS),
+    set(DELAYED_REPEAT_DEBUFF_IDS.keys()),
   ),
   t("DRUID_FORM_AURA_IDS", "data/druidForms.ts", "aura", () =>
     set(DRUID_FORM_AURA_IDS),

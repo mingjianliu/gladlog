@@ -222,7 +222,7 @@ describe("T191: a delayed re-steal is the earlier press's, never a press of its 
     addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 144_798);
     // without the debuff's end the name match takes the next press
     expect(classifyDispel(idx, steal(144_126))).toBe("deliberate");
-    addRepeatEndToIndex(idx, PLAYER, "Spellsteal", 144_125);
+    addRepeatEndToIndex(idx, PLAYER, "30449", 144_125);
     expect(classifyDispel(idx, steal(144_126))).toBe("proc");
     expect(classifyDispel(idx, steal(144_798))).toBe("deliberate");
   });
@@ -231,7 +231,7 @@ describe("T191: a delayed re-steal is the earlier press's, never a press of its 
     const idx = createCastMatchIndex();
     addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 64_337);
     addCastToIndex(idx, PLAYER, "133", "Fireball", 68_355);
-    addRepeatEndToIndex(idx, PLAYER, "Spellsteal", 68_341);
+    addRepeatEndToIndex(idx, PLAYER, "30449", 68_341);
     expect(classifyDispel(idx, steal(68_355, 0x528))).toBe("proc");
     expect(dispelRodeOwnPress(idx, steal(68_355))).toBe(false);
   });
@@ -239,7 +239,7 @@ describe("T191: a delayed re-steal is the earlier press's, never a press of its 
   it("the debuff's end beyond 50 ms is no repeat", () => {
     const idx = createCastMatchIndex();
     addCastToIndex(idx, PLAYER, "30449", "Spellsteal", 10_500);
-    addRepeatEndToIndex(idx, PLAYER, "Spellsteal", 10_000 - 51);
+    addRepeatEndToIndex(idx, PLAYER, "30449", 10_000 - 51);
     expect(classifyDispel(idx, steal(10_000))).toBe("deliberate");
   });
 
@@ -292,5 +292,14 @@ describe("T191: a delayed re-steal is the earlier press's, never a press of its 
     expect(dispelIsDelayedRepeat(idx, steal(69_188))).toBe(false);
     // more than DISPEL_RIDES_PRESS_MS after the refresh: no repeat
     expect(dispelIsDelayedRepeat(idx, steal(69_239))).toBe(false);
+  });
+
+  it("keyed on the press's spell id, not its name: a Kleptomania tick (1231112, also named Spellsteal) at the debuff's end is no repeat (pipeline T215)", () => {
+    const idx = createCastMatchIndex();
+    addRepeatEndToIndex(idx, PLAYER, "30449", 50_000);
+    expect(dispelIsDelayedRepeat(idx, steal(50_000))).toBe(true);
+    expect(
+      dispelIsDelayedRepeat(idx, { ...steal(50_000), spellId: "1231112" }),
+    ).toBe(false);
   });
 });

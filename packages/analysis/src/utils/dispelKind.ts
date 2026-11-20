@@ -86,11 +86,11 @@ export interface CastMatchIndex {
   /** `${destUnitId}|${spellName}` → the presses aimed at that unit (fact7
    * D18, `dispelPressedBy`) */
   aimedAt: Map<string, Array<{ srcUnitId: string; timestamp: number }>>;
-  /** `${srcUnitId}|${debuffName}` → when a delayed-repeat debuff that
+  /** `${srcUnitId}|${pressSpellId}` → when a delayed-repeat debuff that
    * source put out ended (`DELAYED_REPEAT_DEBUFF_IDS`), on whichever unit
    * (pipeline T191, `dispelIsDelayedRepeat`) */
   repeatEnds: Map<string, number[]>;
-  /** `${srcUnitId}|${debuffName}` → when a later press REFRESHED such a
+  /** `${srcUnitId}|${pressSpellId}` → when a later press REFRESHED such a
    * debuff at its scheduled end instead of letting it end (review
    * 85-tk-CD-T191-1 #1): the earlier press's repeat fires just after */
   repeatRefreshes: Map<string, number[]>;
@@ -106,10 +106,13 @@ export interface CastMatchIndex {
  * 4.00–4.05 s). When the next press lands at that scheduled end it REFRESHES
  * the debuff — no REMOVED — and steals in the refresh's own ms; the earlier
  * press's repeat follows 12–23 ms later (605: 3 refreshes 3,991–4,003 ms after
- * the previous application). Registered in curatedIdRegistry.
+ * the previous application). Keyed debuff id → the press's spell id, which
+ * the repeat's row carries (605: 171 of 171 re-steal rows are 30449, in six
+ * client languages) — not the name: Kleptomania's channel tick 1231112 is
+ * also named Spellsteal (pipeline T215). Registered in curatedIdRegistry.
  */
-export const DELAYED_REPEAT_DEBUFF_IDS: ReadonlySet<string> = new Set([
-  "1270828", // Spellsteal (Improved Spellsteal's repeat debuff)
+export const DELAYED_REPEAT_DEBUFF_IDS: ReadonlyMap<string, string> = new Map([
+  ["1270828", "30449"], // Improved Spellsteal's debuff → Spellsteal
 ]);
 
 export function createCastMatchIndex(): CastMatchIndex {
@@ -124,16 +127,16 @@ export function createCastMatchIndex(): CastMatchIndex {
 }
 
 /** One delayed-repeat debuff's end (`DELAYED_REPEAT_DEBUFF_IDS`): its
- * source, its name, when. For a raw-row reader building its own index. */
+ * source, the press spell it repeats, when. For a raw-row reader building its own index. */
 export function addRepeatEndToIndex(
   index: CastMatchIndex,
   srcUnitId: string,
-  debuffName: string,
+  pressSpellId: string,
   timestamp: number,
   /** a SPELL_AURA_REFRESH: the next press took over at the scheduled end */
   refreshed = false,
 ): void {
-  const k = `${srcUnitId}|${debuffName}`;
+  const k = `${srcUnitId}|${pressSpellId}`;
   const map = refreshed ? index.repeatRefreshes : index.repeatEnds;
   const list = map.get(k) ?? [];
   if (!list.includes(timestamp)) list.push(timestamp);
@@ -142,7 +145,7 @@ export function addRepeatEndToIndex(
 
 /**
  * Pipeline T191: a removal at the instant (`DISPEL_RIDES_PRESS_MS`) one of
- * its source's delayed-repeat debuffs of the same name ended — the earlier
+ * its source's delayed-repeat debuffs of this press spell ended — the earlier
  * press's delayed effect, never a press of its own, whatever its source
  * flags and whichever press lands near it (7686e97d r3 2:24: the re-steal
  * 0.67 s before the mage's next Spellsteal was read as that press, and
@@ -156,10 +159,13 @@ export function addRepeatEndToIndex(
  */
 export function dispelIsDelayedRepeat(
   index: CastMatchIndex,
-  d: Pick<IDispelToClassify, "srcUnitId" | "spellName" | "timestamp">,
+  d: Pick<
+    IDispelToClassify,
+    "srcUnitId" | "spellId" | "spellName" | "timestamp"
+  >,
 ): boolean {
-  if (!d.spellName) return false;
-  const k = `${d.srcUnitId}|${d.spellName}`;
+  if (!d.spellId) return false;
+  const k = `${d.srcUnitId}|${d.spellId}`;
   return (
     (index.repeatEnds.get(k) ?? []).some(
       (t) => Math.abs(t - d.timestamp) <= DISPEL_RIDES_PRESS_MS,
@@ -216,7 +222,10 @@ export const DISPEL_RIDES_PRESS_MS = 50;
  */
 export function dispelRodeOwnPress(
   index: CastMatchIndex,
-  d: Pick<IDispelToClassify, "srcUnitId" | "spellName" | "timestamp">,
+  d: Pick<
+    IDispelToClassify,
+    "srcUnitId" | "spellId" | "spellName" | "timestamp"
+  >,
 ): boolean {
   // a delayed repeat is the earlier press's, whatever else the source
   // pressed at its instant (T191: b81efd46 r2 0:48 read "side effect of the
@@ -269,13 +278,12 @@ export function buildCastMatchIndex(
           a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
         a.spellId &&
         DELAYED_REPEAT_DEBUFF_IDS.has(a.spellId) &&
-        a.srcUnitId &&
-        a.spellName
+        a.srcUnitId
       )
         addRepeatEndToIndex(
           index,
           a.srcUnitId,
-          a.spellName,
+          DELAYED_REPEAT_DEBUFF_IDS.get(a.spellId)!,
           a.timestamp,
           a.logLine.event === LogEvent.SPELL_AURA_REFRESH,
         );
