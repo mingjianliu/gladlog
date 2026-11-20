@@ -111,8 +111,12 @@ export function emitCleanseEntries(
     // — a Magic purge that could have taken this buff (both Magic purge
     // targets, `purgeableOnTarget`): a Shiv on an Enrage is no such pick
     // (codex 20-F15-33)
+    // — a removal pressed at that instant: a delayed repeat (Improved
+    // Spellsteal's re-steal) is the earlier press's, and the press it would
+    // stand in for took something else (pipeline T191, 7686e97d r3 2:24)
     const tookOther = dispelSummary.ourPurges.find(
       (p) =>
+        !p.delayedRepeat &&
         miss.purgeableOnTarget !== undefined &&
         p.purgeableOnTarget !== undefined &&
         p.targetName === miss.enemyName &&

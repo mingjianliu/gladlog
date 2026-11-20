@@ -119,6 +119,7 @@ import {
   buildCastMatchIndex,
   dispelAsPressed,
   dispelCameWithOwnCast,
+  dispelIsDelayedRepeat,
   type DispelKind,
   dispelRodeOwnPress,
   isRiderDispel,
@@ -1497,6 +1498,11 @@ export interface IDispelEvent {
    * Weak …); rider = side effect of a movement/form action. One predicate,
    * utils/dispelKind.ts — the desktop counts and the prompt fold read this. */
   dispelKind: DispelKind;
+  /** pipeline T191: the delayed repeat of an earlier press
+   * (`dispelIsDelayedRepeat` — Improved Spellsteal's re-steal as its debuff
+   * ends): no press of its own at this instant, so a line naming "the press
+   * at T" never cites it. Absent otherwise. */
+  delayedRepeat?: true;
   /** A `rider` whose own source logged the cast of the dispelling spell at
    * the removal (`dispelCameWithOwnCast`), or (fact2 C5) any non-deliberate
    * removal its source made with a press of another button at that instant
@@ -3601,6 +3607,9 @@ function reconstructDispelSummaryUncached(
           ? { summonUnitId: isPetUnit ? unit.id : action.srcUnitId }
           : {}),
         dispelKind,
+        ...(dispelIsDelayedRepeat(castIndex, dispelToClassify)
+          ? { delayedRepeat: true as const }
+          : {}),
         // a removal a press of its source made: the dispelling spell's own
         // cast, or (fact2 C5) any press at that instant — a talent's rider
         // on a differently named button
