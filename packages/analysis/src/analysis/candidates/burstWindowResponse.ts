@@ -66,6 +66,43 @@ export const BURST_WINDOW_RESPONSE_CAP = 2;
  */
 export const BURST_WINDOW_MIN_JUDGED_S = BURST_RESPONSE_WINDOW_SEC;
 
+/**
+ * User ruling R103 (2026-11-20, pipeline T234): a window that is short
+ * because the PRESSURED unit itself died inside it is judged all the same —
+ * dying to an unanswered burst is the outcome the line is about, not a window
+ * too short to answer — provided the death came at least this many seconds
+ * after the window opened. A new number the user chose (3 s, over reusing
+ * `REACTION_WINDOW_S` = 1 s): a death sooner than that left no time to
+ * answer. A window short for any other reason keeps the 8 s rule.
+ *
+ * The case that asked: once the bounded segments stop reading damage at the
+ * round's end (T234), a burst opened 4 s before the pressured unit's death
+ * — the round's deciding death — is a 4 s window (605: an unanswered
+ * Ascendance, the pressured hunter dead 4 s in).
+ */
+export const BURST_WINDOW_MIN_JUDGED_DEATH_S = 3;
+
+/** Is the window long enough to hold "nobody answered within 8 s" against
+ * the team: `BURST_WINDOW_MIN_JUDGED_S` of window, or (R103) the pressured
+ * unit's own death inside the window's rendered span at least
+ * `BURST_WINDOW_MIN_JUDGED_DEATH_S` after it opened. Render-grid seconds on
+ * both sides, as `durationSec` is. ONE predicate for the candidate, its
+ * decision trace and the offline opportunity counts. */
+export function burstWindowLongEnoughToJudge(
+  p: Pick<
+    BurstWindowDecisionPoint,
+    "durationSec" | "tSec" | "endSec" | "pressured"
+  >,
+): boolean {
+  if (p.durationSec >= BURST_WINDOW_MIN_JUDGED_S) return true;
+  const diedSec = p.pressured?.diedSec;
+  return (
+    diedSec !== undefined &&
+    diedSec <= p.endSec &&
+    diedSec - p.tSec >= BURST_WINDOW_MIN_JUDGED_DEATH_S
+  );
+}
+
 export function burstWindowResponseEvents(
   points: BurstWindowDecisionPoint[],
   owner: { id: string; name: string },
@@ -106,7 +143,7 @@ export function burstWindowResponseEvents(
         p.triaged &&
         !p.responded &&
         p.pressured !== null &&
-        p.durationSec >= BURST_WINDOW_MIN_JUDGED_S,
+        burstWindowLongEnoughToJudge(p),
     )
     .map((p) => ({ p, ref: probes.lookup(p.leadCd.spellId) }))
     // no baseline → no accusation; a flat/reversed baseline → no accusation
@@ -167,7 +204,7 @@ export function burstWindowResponseEvents(
           reason: "responded",
           candidateIds: [],
         });
-      else if (p.durationSec < BURST_WINDOW_MIN_JUDGED_S)
+      else if (!burstWindowLongEnoughToJudge(p))
         trace.push({
           ...base,
           verdict: "ineligible",

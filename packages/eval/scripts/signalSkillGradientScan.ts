@@ -26,7 +26,7 @@ import {
   spellIdLists,
 } from "@gladlog/analysis";
 import { burstWindowDecisionPoints } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import { crisisDecisionPoints } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import {
   burstRefClearsMinContrast,
@@ -260,11 +260,7 @@ function exposureOf(legacy: any, owner: any, friends: any[]): RoundExposure {
     e.burstWindowOpportunities = burstWindowDecisionPoints(legacy, {
       friendlyReaction: owner.reaction,
     }).filter((p) => {
-      if (
-        !p.feasible ||
-        !p.triaged ||
-        p.durationSec < BURST_WINDOW_MIN_JUDGED_S
-      )
+      if (!p.feasible || !p.triaged || !burstWindowLongEnoughToJudge(p))
         return false;
       // 2026-09-01: a window whose reference cell is missing or under the
       // minimum-contrast door can NEVER convert into a finding, so counting

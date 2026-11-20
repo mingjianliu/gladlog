@@ -25,7 +25,7 @@ import {
   officialSelfOnlyHeal,
   pressDidNotReachPressured,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import { HEALING_VERDICTS } from "@gladlog/analysis/src/data/healingVerdicts";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 
@@ -78,10 +78,7 @@ export function run(ctx: IRoundCtx): void {
     );
     if (others.length > 0) continue;
     const judged =
-      healer &&
-      p.feasible &&
-      p.triaged &&
-      p.durationSec >= BURST_WINDOW_MIN_JUDGED_S;
+      healer && p.feasible && p.triaged && burstWindowLongEnoughToJudge(p);
     ctx.violate(
       "anothersSelfOnlyHealCdAnswers",
       `${judged ? "judged by the candidate" : "not judged"} | ${[...new Set(live.map((r) => r.spellName))].sort().join(" + ")}`,

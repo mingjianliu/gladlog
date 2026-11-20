@@ -74,7 +74,7 @@ import {
   dampeningForThreatWeight,
   fmtDampening,
 } from "./dampening";
-import { isRedistributedDamageRow } from "./incomingPressure";
+import { isRoundLandedDamageRow } from "./incomingPressure";
 import {
   AURA_EVIDENCE_WINDOW_S,
   auraOffensiveOccurrences,
@@ -2293,10 +2293,8 @@ function reconstructEnemyCDTimelineUncached(
    * window's end, past the round's, and named a unit by what it took after
    * the deciding death). */
   const roundDamageOf = (u: ICombatUnit) =>
-    u.damageIn.filter(
-      (d) =>
-        !isRedistributedDamageRow(u, d, rosterSides) &&
-        d.logLine.timestamp <= combat.endTime,
+    u.damageIn.filter((d) =>
+      isRoundLandedDamageRow(u, d, rosterSides, combat.endTime),
     );
   const allFriendlyDamage = (friendlies ?? []).flatMap(roundDamageOf);
   const totalFriendlyDamage = allFriendlyDamage.reduce(

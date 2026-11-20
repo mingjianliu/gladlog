@@ -34,7 +34,11 @@ import {
   type BurstWindowDecisionPoint,
   burstWindowDecisionPoints,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+import {
+  BURST_WINDOW_MIN_JUDGED_DEATH_S,
+  BURST_WINDOW_MIN_JUDGED_S,
+  burstWindowLongEnoughToJudge,
+} from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import { CRISIS_HP_PCT_RENDERED } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import {
   BURST_REF_MIN_CONTRAST_PP,
@@ -497,7 +501,7 @@ function report(): void {
   // built over `feasible` and never reads `triaged` (pinned by a unit test).
   lines.push(`## the two 2026-09-01 doors\n`);
   lines.push(
-    `Fire = feasible ∧ unanswered ∧ (pressured min HP ≤ ${CRISIS_HP_PCT_RENDERED}% or a death) ∧ durationSec ≥ ${BURST_WINDOW_MIN_JUDGED_S} — i.e. exactly what the producer emits before its per-round cap. "quoted contrast" is the reference cell the line would cite, after fallback resolution (lookupBurstWindowPrior).\n`,
+    `Fire = feasible ∧ unanswered ∧ (pressured min HP ≤ ${CRISIS_HP_PCT_RENDERED}% or a death) ∧ (durationSec ≥ ${BURST_WINDOW_MIN_JUDGED_S} or the pressured unit died in it ≥ ${BURST_WINDOW_MIN_JUDGED_DEATH_S} s in, R103) — i.e. exactly what the producer emits before its per-round cap. "quoted contrast" is the reference cell the line would cite, after fallback resolution (lookupBurstWindowPrior).\n`,
   );
   const dropOf = (r: Row): number | null => {
     const p = r.point.pressured;
@@ -509,7 +513,7 @@ function report(): void {
   const baseFire = feas.filter(
     (r) =>
       !r.point.responded &&
-      r.point.durationSec >= BURST_WINDOW_MIN_JUDGED_S &&
+      burstWindowLongEnoughToJudge(r.point) &&
       ((r.point.pressured?.minHpPct != null &&
         r.point.pressured.minHpPct <= CRISIS_HP_PCT_RENDERED) ||
         r.point.deathsInWindow > 0),
@@ -1219,7 +1223,7 @@ function overreact(): void {
  *
  * Denominator: the candidate's exact opportunity population — a bounded
  * window that is `feasible` AND `triaged` AND at least
- * `BURST_WINDOW_MIN_JUDGED_S` long AND whose resolved reference cell clears
+ * long enough to judge (`burstWindowLongEnoughToJudge`, R103) AND whose resolved reference cell clears
  * the minimum-contrast door (the same four doors `burstWindowResponseEvents`
  * applies before its per-round cap, read off the scan rows the shared engine
  * produced). Trigger: such a window going unanswered within 8 s. The rate is
@@ -1263,7 +1267,7 @@ function gradient(): void {
   for (const r of rows) {
     const p = r.point;
     if (!p.feasible || !p.triaged) continue;
-    if (p.durationSec < BURST_WINDOW_MIN_JUDGED_S) continue;
+    if (!burstWindowLongEnoughToJudge(p)) continue;
     const ref = lookupBurstWindowPrior(r.bracket, p.leadCd.spellId);
     if (ref === null || !burstRefClearsMinContrast(ref)) continue;
     const pct = pctOf.get(r.matchId);
@@ -1284,7 +1288,7 @@ function gradient(): void {
     `# slow-defensive-response — skill gradient on the NEW denominator (2026-09-02)\n`,
   );
   L.push(
-    `Denominator: feasible ∧ triaged ∧ ≥ ${BURST_WINDOW_MIN_JUDGED_S}s ∧ contrast-door windows (the candidate's own opportunity population). Trigger: unanswered within 8 s. Rate per window. Rank: rating percentile within (bracket, ISO week).\n`,
+    `Denominator: feasible ∧ triaged ∧ long enough to judge (≥ ${BURST_WINDOW_MIN_JUDGED_S}s, or the pressured unit died ≥ ${BURST_WINDOW_MIN_JUDGED_DEATH_S}s in) ∧ contrast-door windows (the candidate's own opportunity population). Trigger: unanswered within 8 s. Rate per window. Rank: rating percentile within (bracket, ISO week).\n`,
   );
   L.push(
     `rounds ${rounds.length}, opportunity windows ${opps.length + noRank}, of which ${noRank} without a ledger rank (excluded).\n`,

@@ -81,7 +81,7 @@ import {
   reconstructEnemyCDTimeline,
   SOLO_WINDOW_MIN_WEIGHT,
 } from "../utils/enemyCDs";
-import { isRedistributedDamageRow } from "../utils/incomingPressure";
+import { isRoundLandedDamageRow } from "../utils/incomingPressure";
 import { LANDED_PAIR_MS } from "../utils/kickAudit";
 import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
@@ -679,6 +679,10 @@ export interface BurstFriendlyOutcome {
   /** the whole second `startHpPct` was read at */
   startHpSec: number | null;
   died: boolean;
+  /** the rendered second of that death (the first one inside the outcome
+   * window); absent when `died` is false. `burstWindowLongEnoughToJudge`
+   * reads it (user ruling R103). */
+  diedSec?: number;
 }
 
 export interface BurstWindowDecisionPoint {
@@ -1573,6 +1577,8 @@ function damagePctPerSecond(
   friendlies: any[],
   startMs: number,
   sides: RosterSides | undefined,
+  /** `combat.endTime`: rows after it are not the round's damage */
+  roundEndAtMs: number | undefined,
 ): Map<number, number> {
   const out = new Map<number, number>();
   for (const f of friendlies) {
@@ -1581,8 +1587,12 @@ function damagePctPerSecond(
     for (const d of (f.damageIn ?? []) as any[]) {
       const ts = d.timestamp ?? d.logLine?.timestamp;
       if (ts == null) continue;
-      // health its own side moved onto it is no hit (pipeline T223)
-      if (isRedistributedDamageRow(f, d, sides)) continue;
+      // health its own side moved onto it is no hit (pipeline T223), and
+      // a row after the round's end is not the round's damage (pipeline
+      // T234: the last burst's segment ran 1–5 s past the deciding death
+      // on the rows the unit arrays keep after it) — the aligned window's
+      // own bound, `isRoundLandedDamageRow`
+      if (!isRoundLandedDamageRow(f, d, sides, roundEndAtMs)) continue;
       const s = Math.floor((ts - startMs) / 1000);
       const amt = Math.abs(d.effectiveAmount ?? d.amount ?? 0) / max;
       out.set(s, (out.get(s) ?? 0) + amt);
@@ -1626,6 +1636,7 @@ export function boundedBurstSegments(
     friendlies,
     start,
     buildRosterSides(Object.values(combat?.units ?? {}) as ICombatUnit[]),
+    typeof combat?.endTime === "number" ? combat.endTime : undefined,
   );
   const segments: BoundedSegment[] = [];
   for (const w of timeline.alignedBurstWindows)
@@ -2269,9 +2280,11 @@ export function burstWindowDecisionPoints(
         // segment ends at the death, which falls in the fractional part of
         // the floored `outcomeEndSec` (0777a8e0 1:19: death at 88.892, end
         // second 88). Render-grid reading, no new threshold.
-        const died = ((f.deathRecords ?? []) as any[]).some(
-          (d) => d.timestamp >= tMs && d.timestamp <= outcomeLastMs,
-        );
+        const deathInWindowMs = ((f.deathRecords ?? []) as any[])
+          .map((d) => d.timestamp as number)
+          .filter((ms) => ms >= tMs && ms <= outcomeLastMs)
+          .sort((a, b) => a - b)[0];
+        const died = deathInWindowMs !== undefined;
         return {
           unitId: f.id,
           name: f.name,
@@ -2282,6 +2295,9 @@ export function burstWindowDecisionPoints(
           startHpPct,
           startHpSec,
           died,
+          ...(deathInWindowMs !== undefined
+            ? { diedSec: Math.floor((deathInWindowMs - start) / 1000) }
+            : {}),
         };
       });
       const damageTakenIn = (f: any): number =>

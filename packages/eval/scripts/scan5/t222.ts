@@ -43,7 +43,7 @@ import {
   BURST_RESPONSE_WINDOW_SEC,
   burstWindowDecisionPoints,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import { creditedAnswer } from "@gladlog/analysis/src/context/burstAnswered";
 import { AURA_ONLY_ACTIVATION_IDS } from "@gladlog/analysis/src/data/auraActivation";
 import spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
@@ -158,7 +158,7 @@ export function run(ctx: IRoundCtx): void {
         !p.responded ||
         !p.feasible ||
         !p.triaged ||
-        p.durationSec < BURST_WINDOW_MIN_JUDGED_S ||
+        !burstWindowLongEnoughToJudge(p) ||
         p.responses.kite ||
         p.responses.attackerMoved ||
         p.responseCasts.length === 0 ||
@@ -199,10 +199,7 @@ export function run(ctx: IRoundCtx): void {
         ? p.feasible && low !== null && low <= CREDIT_MAX_HP_PCT
           ? "answered, credit line possible"
           : "answered, no credit line"
-        : healer &&
-            p.feasible &&
-            p.triaged &&
-            p.durationSec >= BURST_WINDOW_MIN_JUDGED_S
+        : healer && p.feasible && p.triaged && burstWindowLongEnoughToJudge(p)
           ? "unanswered, judged by the candidate"
           : p.feasible && low !== null && low <= CREDIT_MAX_HP_PCT
             ? "unanswered, creditable low"

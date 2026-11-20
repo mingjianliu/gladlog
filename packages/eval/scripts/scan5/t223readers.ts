@@ -291,6 +291,12 @@ export function run(ctx: IRoundCtx): void {
         if (max <= 0) continue;
         const s = src.get(f.id)!;
         for (let i = 0; i < s.t.length; i++) {
+          // no row after the round's end, raw or shared: the product's
+          // per-second floor reads `isRoundLandedDamageRow` against
+          // `combat.endTime` (pipeline T234; B175 stack check, 0 -> 210
+          // qualified segments while this map still read the rows the
+          // unit arrays keep after the deciding death)
+          if (s.t[i]! > combat.endTime) continue;
           const sec = Math.floor((s.t[i]! - ctx.start) / 1000);
           out.set(
             sec,

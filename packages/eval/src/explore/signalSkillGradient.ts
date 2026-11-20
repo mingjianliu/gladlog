@@ -166,7 +166,7 @@ export interface RoundExposure {
   /** bounded enemy burst windows that were feasible for the pressured friendly
    * AND triaged — slow-defensive-response's own opportunity gate
    * (`burstWindowDecisionPoints(legacy).filter(p => p.feasible && p.triaged
-   * && p.durationSec >= BURST_WINDOW_MIN_JUDGED_S)`),
+   * && burstWindowLongEnoughToJudge(p))`),
    * i.e. every window the candidate could have fired on had the team not
    * answered (2026-09-01, GH #60 phase 2) */
   burstWindowOpportunities: number;

@@ -1170,6 +1170,11 @@ const INDEX: PredicateRow[] = [
     mod: incomingPressure,
   },
   {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "isRoundLandedDamageRow",
+    mod: incomingPressure,
+  },
+  {
     file: `${A}/utils/damagePress.ts`,
     symbol: "isSameSpell",
     mod: damagePress,

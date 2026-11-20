@@ -8,7 +8,8 @@
  * credit line asks too). Healer owners, the candidate's own scope.
  *
  *  - `respondedOnElsewherePress`: a judged window (feasible, triaged, a
- *    pressured friendly, at least `BURST_WINDOW_MIN_JUDGED_S` long) with
+ *    pressured friendly, long enough to judge — `burstWindowLongEnoughToJudge`,
+ *    user ruling R103) with
  *    one response or more, no kite and no attacker-moved, every response
  *    one `pressWentElsewhere` holds for — and the engine says `responded`.
  *    Kind = the first response's reading. Counted: every judged window
@@ -40,7 +41,7 @@ import {
   pressDidNotReachPressured,
   pressWentElsewhere,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import { answersPressured } from "@gladlog/analysis/src/context/burstAnswered";
 import { HEALING_VERDICTS } from "@gladlog/analysis/src/data/healingVerdicts";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
@@ -175,7 +176,7 @@ export function run(ctx: IRoundCtx): void {
       !p.feasible ||
       !p.triaged ||
       pr === null ||
-      p.durationSec < BURST_WINDOW_MIN_JUDGED_S ||
+      !burstWindowLongEnoughToJudge(p) ||
       p.responseCasts.length === 0
     )
       continue;

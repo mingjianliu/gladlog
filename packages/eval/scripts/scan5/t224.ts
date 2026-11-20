@@ -42,7 +42,7 @@ import {
   pressDidNotReachPressured,
   TEAM_HEAL_WALL_ANSWER_IDS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import {
   canHelpAnotherUnit,
   isHealerSpec,
@@ -132,10 +132,7 @@ export function run(ctx: IRoundCtx): void {
     }
     if (walls.length === 0 || !only || !p.responded) continue;
     const judged =
-      healer &&
-      p.feasible &&
-      p.triaged &&
-      p.durationSec >= BURST_WINDOW_MIN_JUDGED_S;
+      healer && p.feasible && p.triaged && burstWindowLongEnoughToJudge(p);
     ctx.violate(
       "anothersOwnWallAnswers",
       `${judged ? "judged by the candidate" : "not judged"} | ${[...new Set(walls.map((r) => r.spellName))].sort().join(" + ")}`,

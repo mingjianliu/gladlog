@@ -253,6 +253,31 @@ export function isRedistributedDamageRow(
   );
 }
 
+/**
+ * Is this `damageIn` row damage the unit took IN THE ROUND: a landed hit (no
+ * moved health, `isRedistributedDamageRow`) logged no later than the round's
+ * end (`combat.endTime` — a Solo Shuffle round ends at its deciding death and
+ * the unit arrays keep the seconds after it; those rows are the same round's
+ * tail, not this round's pressure). ONE bound for the aligned burst window's
+ * total, slice average and pressured-unit pick (`enemyCDs.ts`, pipeline
+ * T228) and for the bounded segments' per-second damage
+ * (`burstWindowDecisionPoints.ts`, pipeline T234). `roundEndAtMs` undefined
+ * (a hand-built combat with no end) bounds nothing.
+ */
+export function isRoundLandedDamageRow(
+  unit: Pick<ICombatUnit, "id" | "reaction">,
+  d: Parameters<typeof isRedistributedDamageRow>[1] & {
+    timestamp?: number;
+    logLine?: { timestamp: number };
+  },
+  sides: RosterSides | undefined,
+  roundEndAtMs: number | undefined,
+): boolean {
+  if (isRedistributedDamageRow(unit, d, sides)) return false;
+  const ts = d.logLine?.timestamp ?? d.timestamp;
+  return roundEndAtMs === undefined || ts === undefined || ts <= roundEndAtMs;
+}
+
 /** A `REDISTRIBUTION_DAMAGE_IDS` row from the unit's own side — moved
  * health, not an enemy hitting it. The one test every reader of incoming
  * damage applies (`incomingPressureEvents`, `incomingPressureBySchool`,
