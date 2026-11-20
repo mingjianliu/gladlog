@@ -83,21 +83,41 @@ export function foldMissedPurges(
   const cdPurgeAnnotations = new Map<IEnemyCDCast, string>();
   const consumedMissedPurges = new Set<IMissedPurgeWindow>();
 
+  // Rule C's match of a window to an interval of its unit: one rendered
+  // second, one buff
+  const missMatchesInterval = (
+    miss: IMissedPurgeWindow,
+    interval: IEnemyBuffInterval,
+  ): boolean =>
+    toRenderSecond(miss.timeSeconds) ===
+      toRenderSecond(interval.startSeconds) &&
+    (miss.spellName === interval.spellName ||
+      miss.spellId === interval.spellId);
+  const missStartGap = (
+    miss: IMissedPurgeWindow,
+    interval: IEnemyBuffInterval,
+  ): number => Math.abs(miss.timeSeconds - interval.startSeconds);
+
   for (const [enemyName, intervals] of enemyBuffIntervals) {
     for (const interval of intervals) {
       // Step 1: Check if there is a matching missed purge window for this buff (Rule C)
       let matchedMiss: IMissedPurgeWindow | undefined;
       for (const miss of qualifyingMissedPurges) {
         if (consumedMissedPurges.has(miss)) continue;
-        if (
-          toRenderSecond(miss.timeSeconds) !==
-          toRenderSecond(interval.startSeconds)
-        )
-          continue;
+        if (!missMatchesInterval(miss, interval)) continue;
         if (!sameEnemyUnit(miss.enemyName, enemyName)) continue;
+        // T217 (round-14 D32, 7cadec17 r0 2:18): two casters' applications
+        // of one buff in one rendered second are two intervals — the window
+        // belongs to the one that started at its own instant, not to the
+        // first in the list (a 0.47 s Power Infusion carried the 15 s
+        // window of the one that replaced it)
         if (
-          miss.spellName !== interval.spellName &&
-          miss.spellId !== interval.spellId
+          intervals.some(
+            (o) =>
+              o !== interval &&
+              missMatchesInterval(miss, o) &&
+              missStartGap(miss, o) < missStartGap(miss, interval),
+          )
         )
           continue;
         matchedMiss = miss;
