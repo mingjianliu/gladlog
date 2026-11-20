@@ -1667,5 +1667,12 @@
  *  available:` note; a press later switched to Devotion Aura keeps its
  *  immunity reading and its wall counts from the switch.
  *  See docs/prompt-version-history.md.
+ *
+ * v629 (2026-11-19; pipeline batch B157, T158): at a death the [RES] enemy
+ *  list reads a cooldown's effect auras by id as well as its own aura - a
+ *  differently named effect aura keeps the entry only when it is already on
+ *  a player at the death (Predator's Wake, whose DoT the log names The
+ *  Hunt, no longer vanishes while it ticks).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 628;
+export const PROMPT_VERSION = 629;

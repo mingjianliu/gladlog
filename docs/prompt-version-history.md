@@ -8130,3 +8130,17 @@ switched press - turned out to be a real round and is fixed here); assembly
 reviews 80-PIPE-170 (the switched press's reading, the cd-hoarded ready set)
 170b (the two remaining readers of the switched press) and 170c (a scan still
 reading the raw aura, which led to the table-wide sweep).
+
+v629 (2026-11-19; pipeline batch B157, T158). The [RES] enemy list cut an
+enemy cooldown at a death when no aura of the cooldown's name outlived it, so
+Predator's Wake -- whose effect is the DoT the log names The Hunt -- vanished
+at every death inside its 6 s while the DoT still ticked on a player. The
+death cut now reads a cooldown's effect auras by id as well as its own aura: a
+differently named effect aura keeps the entry only when it is already on a
+player at the death (a summon's impact applied after the death, a copy only on
+pets or a statue, does not; R67, FT F13); the cooldown's same-named own aura
+keeps its T03 reading (GH #167). On the 605, the [RES] enemy list keeps
+Predator's Wake at the round-ending death in 4 rounds (31-6, 121-2, 121-4,
+125-6) and drops a Divine Toll pressed after the deciding death in 4-5; 18
+lines change in 15 contexts; menus unchanged. Codex branch reviews 85-tk-
+WIN-T158-1 to -3 (the last two findings constructed and recorded).
