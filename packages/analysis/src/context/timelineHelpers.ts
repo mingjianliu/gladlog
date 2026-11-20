@@ -1955,16 +1955,32 @@ export function parseTopSourceEntries(
 export const TOP_SOURCE_MIXED_SCHOOL_LEGEND =
   "  `[A + B]` after an ability in a `Top sources` / `Top damage` list = its damage there came in both schools (largest first); the entry is their sum.";
 
+/**
+ * `buildSummonOwnerNames`' map: summon GUID → owner's full name, and beside
+ * it each summon's kind word read with the unit's own evidence
+ * (`summonKindOf(id, unit)`: its SPELL_SUMMON row). The damage rows
+ * (`summonLabel`) get the map and not the unit, so the kind rides on it —
+ * pipeline T218 (round-14 D36, 3c8cd2a3 r0 2:49): a Counterstrike Totem,
+ * whose npc no table lists, read `4(EShaman)'s guardian — Counterstrike`
+ * beside the same prompt's `'s totem` on its control lines.
+ */
+export class SummonOwnerNames extends Map<string, string> {
+  readonly kinds = new Map<string, SummonKindWord>();
+}
+
 /** summon GUID → owner's full name, for every unit that carries an owner. */
 export function buildSummonOwnerNames(
   allUnits: readonly ICombatUnit[],
-): Map<string, string> {
+): SummonOwnerNames {
   const byId = new Map(allUnits.map((u) => [u.id, u]));
-  const out = new Map<string, string>();
+  const out = new SummonOwnerNames();
   for (const u of allUnits) {
     if (!u.ownerId || u.ownerId === "0000000000000000") continue;
     const owner = byId.get(u.ownerId);
-    if (owner && owner.id !== u.id) out.set(u.id, owner.name);
+    if (owner && owner.id !== u.id) {
+      out.set(u.id, owner.name);
+      out.kinds.set(u.id, summonKindOf(u.id, u));
+    }
   }
   return out;
 }
@@ -2010,16 +2026,22 @@ function summonLabel(
       : fs !== undefined
         ? playerIdMap
         : enemyIdMap;
-  return `${rosterLabelOfId(map, id)}'s ${summonKindOf(d.srcUnitId || undefined, undefined, srcType)}`;
+  // the kind read with the unit's own summon row when the map carries it
+  // (T218); a bare map (a document without units) keeps the GUID reading
+  const kind =
+    (summonOwners instanceof SummonOwnerNames
+      ? summonOwners.kinds.get(d.srcUnitId)
+      : undefined) ?? summonKindOf(d.srcUnitId || undefined, undefined, srcType);
+  return `${rosterLabelOfId(map, id)}'s ${kind}`;
 }
 
 /** `summonKindWord` with both kinds of evidence the timeline has: the unit's
  * own SPELL_SUMMON line and its npc's listed name (a Static Field Totem is
  * in the log with no summon line of its own). The one call every `X's
  * <kind>` label on the timeline goes through. The damage rows (`summonLabel`)
- * have the source's GUID but not its unit, so there a totem is recognised by
- * its listed npc only — an unlisted totem that deals damage reads
- * `guardian` (0 such rows in the 605-file capture, 2026-10-09). */
+ * have the source's GUID but not its unit: they read the kind
+ * `buildSummonOwnerNames` took with the unit (`SummonOwnerNames.kinds`,
+ * T218 — an unlisted totem that deals damage read `guardian`). */
 export function summonKindOf(
   sourceId: string | undefined,
   unit?: Pick<ICombatUnit, "actionIn">,
