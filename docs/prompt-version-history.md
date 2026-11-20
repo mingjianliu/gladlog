@@ -8272,3 +8272,15 @@ gates' reader of a [BURST ANSWERED] line split a spell name holding ' on ' (63
 lines on the 605, all Lay on Hands, read as 'Lay' on target 'Hands'); the
 target clause is now a roster label only. All 109 line gates are byte-
 identical with both readers -- no line was failing or being skipped wrongly.
+
+v640 (2026-11-20; pipeline batch B169, T222; user ruling R80). Feign Death and
+a castless Renewing Blaze log no cast row (605: 1,534 and 321 presses, all
+aura-only), and the burst engine built a window's answers from cast rows alone
+(7f107afb 2:24). It now reads those presses from the cooldown ledger's aura-
+only table. User ruling R80: the window is answered, the credit line never
+names such a save. 605 (Mac, B163 capture -> head): castless presses not read
+-> 0 of 10,949 windows; context 0 lines; menu -6 slow-defensive-response rows,
++0 (a seventh candidate sits in a 2v2 match, where the menu never shows this
+type). 2 of the 6 rest on the pressured unit's own Feign Death; 4 on another
+unit's -- those four stand under R68 and return with T224 (R81), net -2
+printed after both.

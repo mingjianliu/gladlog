@@ -1736,5 +1736,12 @@
  *  gates read a [BURST ANSWERED] line whose answer is a multi-word spell
  *  name (Lay on Hands) correctly.
  *  See docs/prompt-version-history.md.
+ *
+ * v640 (2026-11-20; pipeline batch B169, T222): A hunter's Feign Death
+ *  (and a Renewing Blaze that logs no cast) now counts as the hunter's
+ *  answer to a burst on them: a 'slow defensive response' row no longer
+ *  appears for a window they answered that way. The `[BURST ANSWERED]`
+ *  lines do not change -- a self-only save is never named there.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 639;
+export const PROMPT_VERSION = 640;
