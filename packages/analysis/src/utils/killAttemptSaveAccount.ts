@@ -42,11 +42,13 @@ import {
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { TIME_DILATION_ID } from "./deferralShield";
 import { wallTableIdOfAura } from "./enemyDefensives";
+import { isRedistributedDamageRow } from "./incomingPressure";
 import {
   absorbedHitSchoolMask,
   hitSchoolId,
   logSchoolMask,
 } from "./incomingPressure";
+import type { RosterSides } from "./rosterSide";
 
 /**
  * Saves whose table row or shield rows do not measure what they prevent,
@@ -147,6 +149,10 @@ export function wouldHaveDiedWithout(
   fromMs: number,
   toMs: number,
   removed: readonly IAccountedSave[],
+  /** the round's roster sides: a teammate's moved health (Spirit Link …)
+   * is no hit a removed reduction would have let through
+   * (`isRedistributedDamageRow`, T231) */
+  sides?: RosterSides,
 ): boolean {
   if (!removed.length) return false;
   const inWindow = (ts: number) => ts >= fromMs && ts <= toMs;
@@ -168,6 +174,7 @@ export function wouldHaveDiedWithout(
   for (const d of target.damageIn) {
     const ts = d.logLine.timestamp;
     if (!inWindow(ts) || d.logLine.event === LogEvent.SPELL_ABSORBED) continue;
+    if (isRedistributedDamageRow(target, d, sides)) continue;
     const v = Math.abs(d.effectiveAmount);
     if (v > 0)
       evs.push({
@@ -274,6 +281,7 @@ export function judgeAlreadyUpExternals(
   toMs: number,
   externals: readonly (IAccountedSave | undefined)[],
   ownUp: readonly IAccountedSave[],
+  sides?: RosterSides,
 ): AlreadyUpExternalVerdict[] {
   // no HP reading of the target's own inside the window (a log without
   // advanced logging): nothing to account with — every external is named
@@ -288,7 +296,7 @@ export function judgeAlreadyUpExternals(
   )
     return externals.map(() => ({ kind: "unaccounted" }));
   const died = (r: readonly IAccountedSave[]) =>
-    wouldHaveDiedWithout(target, matchStartMs, fromMs, toMs, r);
+    wouldHaveDiedWithout(target, matchStartMs, fromMs, toMs, r, sides);
   const accounted = externals.filter((e): e is IAccountedSave => !!e);
   const all = [...accounted, ...ownUp];
   const alone = new Map(accounted.map((e) => [e, died([e])]));

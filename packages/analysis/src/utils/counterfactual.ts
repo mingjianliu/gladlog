@@ -48,7 +48,9 @@ import { TIME_DILATION_ID, timeDilationPendingAt } from "./deferralShield";
 import {
   DEFERRAL_SHIELD_DAMAGE_IDS,
   incomingPressureBySchool,
+  isRedistributedDamageRow,
 } from "./incomingPressure";
+import { buildRosterSides, type RosterSides } from "./rosterSide";
 
 /**
  * counterfactual.ts — mitigation counterfactual accounting (#17b): the
@@ -209,11 +211,15 @@ export function windowDamage(
   toS: number,
   schoolMask: number,
   matchStartMs: number,
+  /** the round's roster sides: a teammate's moved health is no hit
+   * (`isRedistributedDamageRow`, T231; codex 85-tk-WIN-T231-1 #1) */
+  sides?: RosterSides,
 ): number {
   const bySchool = incomingPressureBySchool(
     unit,
     matchStartMs + fromS * 1000,
     matchStartMs + toS * 1000,
+    sides,
   );
   let sum = 0;
   for (const [mask, amount] of Object.entries(bySchool))
@@ -232,11 +238,13 @@ function windowDamageOfComponent(
   res: NonNullable<ReturnType<typeof resolveMitigation>>,
   comp: IResolvedMitigationComponent,
   matchStartMs: number,
+  sides?: RosterSides,
 ): number {
   const bySchool = incomingPressureBySchool(
     unit,
     matchStartMs + fromS * 1000,
     matchStartMs + toS * 1000,
+    sides,
   );
   let sum = 0;
   for (const [mask, amount] of Object.entries(bySchool))
@@ -423,6 +431,9 @@ export function computeMitigationAudit(
     deathS,
   );
 
+  // the hits each row prices: a teammate's moved health is none (T231;
+  // codex 85-tk-WIN-T231-1 #1)
+  const sides = buildRosterSides(Object.values(combat.units));
   const rows: IMitigationAuditRow[] = [];
   /** the off-table rows (`mechanic`, `absorb` — one line form, "X active Ns
    * … (not in the mitigation table …)") and the interval each stands for */
@@ -547,6 +558,7 @@ export function computeMitigationAudit(
         res,
         comp,
         combat.startTime,
+        sides,
       );
 
       if (pct >= 100) {
@@ -563,6 +575,7 @@ export function computeMitigationAudit(
           overlapTo,
           0x7f,
           combat.startTime,
+          sides,
         );
         rows.push({
           spellId: iv.spellId,
@@ -729,8 +742,13 @@ function savedByComponents(
   victim: ICombatUnit,
   windowStartS: number,
   deathS: number,
-  combat: { startTime: number },
+  combat: { startTime: number; units?: Record<string, ICombatUnit> },
 ): number {
+  // a teammate's moved health is no hit the save would have met (T231;
+  // codex 85-tk-WIN-T231-1 #1 — the Time Dilation path already read sides)
+  const sides = combat.units
+    ? buildRosterSides(Object.values(combat.units))
+    : undefined;
   let saved = 0;
   for (const comp of res.components) {
     const observed = windowDamageOfComponent(
@@ -740,6 +758,7 @@ function savedByComponents(
       res,
       comp,
       combat.startTime,
+      sides,
     );
     saved += (observed * comp.pctMin) / 100;
   }
@@ -766,9 +785,15 @@ function savedByTimeDilation(
   victim: ICombatUnit,
   pressS: number,
   deathS: number,
-  combat: { startTime: number },
+  combat: { startTime: number; units?: Record<string, ICombatUnit> },
   caster: ICombatUnit | undefined,
 ): number {
+  // the shield defers a share of what HIT the unit: a teammate's moved
+  // health is no hit (`isRedistributedDamageRow`, T231; batch review
+  // 85-tk-WIN-T223-2 #1)
+  const sides = combat.units
+    ? buildRosterSides(Object.values(combat.units))
+    : undefined;
   const share =
     Math.min(100, Math.max(...res.components.map((c) => c.pctMin))) / 100;
   const durS = buffFullDurationForCaster(TIME_DILATION_ID, caster) ?? 0;
@@ -780,7 +805,8 @@ function savedByTimeDilation(
       (d) =>
         d.logLine.timestamp >= fromMs &&
         d.logLine.timestamp < expiresMs &&
-        d.logLine.timestamp <= deathMs,
+        d.logLine.timestamp <= deathMs &&
+        !isRedistributedDamageRow(victim, d, sides),
     )
     .map((d) => ({
       tsMs: d.logLine.timestamp,
@@ -824,7 +850,7 @@ function savedBy(
   victim: ICombatUnit,
   windowStartS: number,
   deathS: number,
-  combat: { startTime: number },
+  combat: { startTime: number; units?: Record<string, ICombatUnit> },
   caster: ICombatUnit | undefined,
   offCooldownSinceS?: number,
 ): number {

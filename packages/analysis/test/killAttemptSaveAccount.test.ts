@@ -5,7 +5,11 @@
  * what it absorbed, strictly at or below zero HP.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+import {
+  CombatUnitReaction,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
@@ -67,6 +71,28 @@ describe("wouldHaveDiedWithout", () => {
     // 240k landed under 20 % → 300k before it: 60k more
     const mk = (left: number) =>
       target({ damageIn: [hit(5, 240_000)], advancedActions: [hp(5, left)] });
+    expect(died(mk(60_000), [pct("Ironbark", 20)])).toBe(true);
+    expect(died(mk(60_001), [pct("Ironbark", 20)])).toBe(false);
+  });
+
+  it("a teammate's moved health is no hit the removed reduction let through (T231)", () => {
+    // 240k landed under 20 % → 60k more without it; a 400k Void Leech row
+    // from the target's own side in the window adds nothing to that
+    const moved = {
+      ...hit(4, 400_000),
+      spellId: "451963",
+      spellName: "Void Leech",
+      srcUnitId: "mate",
+      srcUnitFlags: 0x511,
+    };
+    const mk = (left: number) => ({
+      ...target({
+        damageIn: [moved, hit(5, 240_000)],
+        advancedActions: [hp(5, left)],
+      }),
+      // the row's source side is read against the target's own
+      reaction: CombatUnitReaction.Friendly,
+    });
     expect(died(mk(60_000), [pct("Ironbark", 20)])).toBe(true);
     expect(died(mk(60_001), [pct("Ironbark", 20)])).toBe(false);
   });

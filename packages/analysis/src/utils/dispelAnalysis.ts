@@ -3646,18 +3646,30 @@ function reconstructDispelSummaryUncached(
         if (penaltyDesc !== undefined) {
           // Measure backlash: damage to the dispeller in the window before and after
           const ts = action.timestamp;
+          // what the dispeller TOOK: a teammate's moved health is no hit
+          // on it (`isRedistributedDamageRow`, rulings R84 / R87, T231)
           event.penaltyDamageTaken = targetUnitForPenalty.damageIn
             .filter(
               (d) =>
                 d.logLine.timestamp >= ts &&
-                d.logLine.timestamp <= ts + PENALTY_WINDOW_MS,
+                d.logLine.timestamp <= ts + PENALTY_WINDOW_MS &&
+                !isRedistributedDamageRow(
+                  targetUnitForPenalty,
+                  d,
+                  rosterSides,
+                ),
             )
             .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
           event.penaltyDamageBaseline = targetUnitForPenalty.damageIn
             .filter(
               (d) =>
                 d.logLine.timestamp >= ts - PENALTY_WINDOW_MS &&
-                d.logLine.timestamp < ts,
+                d.logLine.timestamp < ts &&
+                !isRedistributedDamageRow(
+                  targetUnitForPenalty,
+                  d,
+                  rosterSides,
+                ),
             )
             .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
         }

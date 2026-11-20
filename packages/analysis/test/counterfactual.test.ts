@@ -1,5 +1,6 @@
 import {
   CombatUnitClass,
+  CombatUnitReaction,
   CombatUnitSpec,
   ICombatUnit,
   LogEvent,
@@ -718,7 +719,10 @@ describe("computeUnusedSelfCounterfactuals(窄门)", () => {
   });
 
   test("a replaced button is read as the holder's own spell: Ice Cold is no immunity, and its 6 s cover is not priced over the window (T61, codex 85-tk-G-T61-2b #1, 2c #1)", () => {
-    const mk = (iceCold: boolean, hits = [{ atS: 55, amount: 80_000, school: "0x1" }]) =>
+    const mk = (
+      iceCold: boolean,
+      hits = [{ atS: 55, amount: 80_000, school: "0x1" }],
+    ) =>
       Object.assign(
         mkVictim(
           iceCold ? "vc" : "vb",
@@ -957,6 +961,38 @@ describe("时间膨胀按「死时还压着多少」定价(2026-10-30)", () => {
     expect(hits).toHaveLength(1);
     expect(hits[0].savedAmount).toBe(225_000);
     expect(hits[0].pressedWhenReady).toBeUndefined();
+  });
+  test("队友转移过来的血量不是打在它身上的伤害,时间膨胀不推迟它 (T231)", () => {
+    // the same 600k at 57.5 s, plus 400k of a teammate's Void Leech at 58 s:
+    // still 225k held back at the death, not 225k + a share of the 400k
+    const victim = mkVictim(
+      "v21b",
+      [{ atS: 57.5, amount: 600_000, school: "0x1" }],
+      [],
+      hp,
+    );
+    // the side of the row's source is read against the victim's own
+    (victim as { reaction: number }).reaction = CombatUnitReaction.Friendly;
+    const first = victim.damageIn[0]!;
+    victim.damageIn.push({
+      ...first,
+      logLine: { ...first.logLine, timestamp: 58_000 },
+      timestamp: 58_000,
+      amount: -400_000,
+      effectiveAmount: -400_000,
+      spellId: "451963",
+      spellName: "Void Leech",
+      srcUnitId: "mate",
+      srcUnitFlags: 0x511,
+    } as never);
+    const hits = computeMissedExternalCounterfactuals(
+      missed,
+      victim,
+      { startTime: 0 },
+      60,
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0].savedAmount).toBe(225_000);
   });
   test("冷却 58 秒才转好 → 57.5 秒那一下按不出来,不算省下(codex 审查)", () => {
     const victim = mkVictim(

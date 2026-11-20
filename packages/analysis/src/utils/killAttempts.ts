@@ -2638,6 +2638,7 @@ function attributeFailure(
         creditToMs,
         upCands.map((c) => c.account),
         ownUpAccounts,
+        readings.sides(),
       )
     : [];
   const verdictOf = new Map(

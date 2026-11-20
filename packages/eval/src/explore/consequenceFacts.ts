@@ -39,6 +39,7 @@ import {
   MITIGATION_AURA_MIN_PCT,
   wallTableIdOfAura,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { isRedistributedDamageRow } from "@gladlog/analysis/src/utils/incomingPressure";
 import {
   fmtKickLockoutSecondsBare,
   kickLockoutSecondsFor,
@@ -46,6 +47,7 @@ import {
 import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
 import { WALL_IN_HAND_MIT_IDS } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
+import { buildRosterSides } from "@gladlog/analysis/src/utils/rosterSide";
 import { LogEvent } from "@gladlog/parser-compat";
 
 /** Experiment default; the report sweeps 30/40/50/60/70. */
@@ -100,6 +102,12 @@ export function buildConsequenceLines(
   const byId = new Map(players.map((u) => [u.id, u]));
   const sec = (ms: number): number => (ms - start) / 1000;
   const lines: ConsequenceLine[] = [];
+  // a teammate's moved health is no damage the unit took (T231)
+  const sides = buildRosterSides(
+    Object.values(combat.units ?? {}).length
+      ? (Object.values(combat.units) as any[])
+      : players,
+  );
   const teamOf = (u: any): any[] =>
     friends.some((f) => f.id === u.id) ? friends : enemies;
   /** Damage taken in [t-3, t] as % of max HP (max HP from the nearest
@@ -116,7 +124,12 @@ export function buildConsequenceLines(
     let dmg = 0;
     for (const d of (u.damageIn ?? []) as any[]) {
       const ts = d.logLine.timestamp;
-      if (ts >= toMs - 3000 && ts <= toMs) dmg += Math.abs(d.effectiveAmount);
+      if (
+        ts >= toMs - 3000 &&
+        ts <= toMs &&
+        !isRedistributedDamageRow(u, d, sides)
+      )
+        dmg += Math.abs(d.effectiveAmount);
     }
     return (100 * dmg) / maxHp;
   };
