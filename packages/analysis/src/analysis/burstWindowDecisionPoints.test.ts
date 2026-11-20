@@ -1370,6 +1370,37 @@ describe("burstWindowDecisionPoints — where a control answer landed (T12 ⑧ i
     expect(pressDidNotReachPressured(pressured, communion)).toBe(false);
   });
 
+  // T226 (user ruling R92): the signed register holds only the
+  // Defensive-tagged healing cooldowns, so an extra answer it does not list
+  // is read from the official profile itself — another druid's Frenzied
+  // Regeneration (22842, heals its caster alone) is ignored like Dark Pact;
+  // the druid's own still answers his window; Emerald Communion, official
+  // self-only too, stays an answer through the signed team-heal registry
+  it("another unit's Frenzied Regeneration is ignored on the official profile; the caster's own answers; Emerald Communion stays (T226)", () => {
+    const heal = (casterId: string, spellId: string) =>
+      ({
+        category: "healCd",
+        spellId,
+        spellName: spellId,
+        casterName: casterId,
+        casterId,
+        tSec: 15,
+        latencySec: 5,
+      }) as BurstResponseCast;
+    expect(
+      pressDidNotReachPressured({ unitId: "F1" }, heal("F2", "22842")),
+    ).toBe(true);
+    expect(pressWentElsewhere({ unitId: "F1" }, heal("F2", "22842"))).toBe(
+      false,
+    );
+    expect(
+      pressDidNotReachPressured({ unitId: "F2" }, heal("F2", "22842")),
+    ).toBe(false);
+    expect(
+      pressDidNotReachPressured({ unitId: "F1" }, heal("F2", "370960")),
+    ).toBe(false);
+  });
+
   // ruling R75: "a control that did not land" is control only
   it("an interrupt that interrupted nothing is ignored: not elsewhere, no answer", () => {
     const PUMMEL = "6552";

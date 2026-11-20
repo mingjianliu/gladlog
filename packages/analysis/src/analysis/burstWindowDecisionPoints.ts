@@ -889,13 +889,29 @@ export const BURST_EXTRA_ANSWER_IDS: ReadonlySet<string> = new Set([
   ...SELF_SAVE_ANSWER_IDS,
 ]);
 
-/** A healing CD whose official effect heals only its caster (Divine
- *  Protection, Exhilaration, Desperate Prayer …). Keyed on the response
- *  CATEGORY `healCd` at the call site, not on this set alone: Guardian Spirit
- *  and Life Cocoon are also `healsOthers:false` but classify as `external`
- *  first (triage sync-burst F-B7). */
+/**
+ * A healing CD whose official effect heals only its caster (Dark Pact,
+ * Exhilaration, Desperate Prayer …). Keyed on the response CATEGORY
+ * `healCd` at the call site, not on this alone: Guardian Spirit and Life
+ * Cocoon are also `healsOthers:false` but classify as `external` first
+ * (triage sync-burst F-B7).
+ *
+ * Two sources, the signed one first (pipeline T226, user ruling R92):
+ *  1. the signed register's official fact, where the spell is in it;
+ *  2. for a spell the register does not hold — it lists the
+ *     Defensive-TAGGED healing cooldowns only, and an extra answer such as
+ *     Frenzied Regeneration carries no such tag — the same official DB2
+ *     profile the register copies its fact from (`officialSelfOnlyHeal`),
+ *     unless the signed team-heal registry says the press reaches the team
+ *     by another id (`TEAM_HEAL_CD_IDS`: Emerald Communion's overheal is
+ *     re-cast on allies as 370984 — user ruling 2026-09-30).
+ * Before T226 only source 1 was asked, so another druid's Frenzied
+ * Regeneration answered a teammate's burst window (605: 4 presses).
+ */
 function healsOnlyItsCaster(spellId: string): boolean {
-  return HEALING_VERDICTS[spellId]?.official.healsOthers === false;
+  const signed = HEALING_VERDICTS[spellId]?.official.healsOthers;
+  if (signed !== undefined) return signed === false;
+  return officialSelfOnlyHeal(spellId) && !TEAM_HEAL_CD_IDS.has(spellId);
 }
 
 /**
