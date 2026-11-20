@@ -1743,5 +1743,15 @@
  *  appears for a window they answered that way. The `[BURST ANSWERED]`
  *  lines do not change -- a self-only save is never named there.
  *  See docs/prompt-version-history.md.
+ *
+ * v641 (2026-11-20; pipeline batch B170, T163): When a teammate's external
+ *  defensive on a target ends, that target's 'defenseless' span now starts
+ *  when the log shows the aura ending, not up to a second earlier at its
+ *  summed duration. [KILL WINDOW] / [VULNERABLE] spans after an external
+ *  start up to 1 s later; a 5-second span can fall under the minimum and
+ *  disappear. The enemy healer's DR word and the owner's ready-CC list on
+ *  those lines are read at the printed first second, not at the span's raw
+ *  start.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 640;
+export const PROMPT_VERSION = 641;

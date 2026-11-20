@@ -8284,3 +8284,22 @@ names such a save. 605 (Mac, B163 capture -> head): castless presses not read
 type). 2 of the 6 rest on the pressured unit's own Feign Death; 4 on another
 unit's -- those four stand under R68 and return with T224 (R81), net -2
 printed after both.
+
+v641 (2026-11-20; pipeline batch B170, T163; assembly review 80-PIPE-186). An
+external's defenseless cut ended at the printed sum of its duration, up to 1 s
+before the aura's logged REMOVED; it now ends at the later of the two. Review
+186 found that the moved start exposed a raw-instant read on the same line:
+the enemy healer's DR word (58cf367b r1 printed `DR: Full` at 1:01 for a reset
+at 61.763 s; Immune at 61.000) and the owner's ready-CC list were sampled at
+the span's raw start; both now read the printed first second (Math.floor).
+`ownerDeadAtStart` stays on the raw instant (an owner dead at 61.81 has no
+control at that moment). 605 (WSL stack capture, B169 -> this batch), window
+lines in 320 contexts: [KILL WINDOW] 155 numbers only, 20 start later by <= 1
+s (none earlier, none more), 51 change only the DR word, 84 only the ready-CC
+list (with the `Your CC: X.` header where exactly one control is ever ready),
+16 lose a 5 s window under the minimum or the 30k burst floor; [VULNERABLE] 4
+DR word, 8 ready list, +3 / -1 from the kill-window swap and the 6-line cap;
+one [CONTESTED] span no longer overlaps a kill window and prints. Menus: 3
+kick-priority rows' windowFrom 1:40 -> 1:41. Scans: immunityDefenseless 6 ->
+0, DR killWindow 38 -> 0, killWindowReadyGrid 82 -> 0, no check rises; gates
+0.
