@@ -70,7 +70,7 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/auraIntervals";
-import { kitTextWithoutNoWallTags } from "@gladlog/analysis/src/utils/auraMasteryBranch";
+import { isNoWallPress, kitTextWithoutNoWallTags, wallStartOfRowMs } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import {} from "@gladlog/analysis/src/utils/castPress";
 import {
   applicableCCAvoidanceIds,
@@ -924,6 +924,9 @@ function runRound(ctx: IContext): void {
         if (ev(x) !== APPLIED || x.destUnitId !== u.id) continue;
         const id = String(x.spellId ?? "");
         if (id === String(ext.spellId)) continue; // its own link copy
+        // a row that is no wall by the product's one reading of it protects
+        // nothing here (`wallStartOfRowMs`; 80-PIPE-170c-B156)
+        if (wallStartOfRowMs(id, u, tsOf(x)) === undefined) continue;
         const row = MITIGATION_TABLE[id];
         // a wall / immunity of ≥ 20 %, or a shield / redirect the span
         // rulings count (own Power Word: Shield / Void Shield, Intervene,
@@ -1414,6 +1417,9 @@ function runRound(ctx: IContext): void {
       const press = successesOf(u).find(
         (c) =>
           WALL_IN_HAND_MIT_IDS.has(String(c.spellId)) &&
+          // a press that is no wall at any moment proves no wall in hand
+          // (`isNoWallPress`; 80-PIPE-170c-B156)
+          !isNoWallPress(String(c.spellId), u, tsOf(c)) &&
           tsOf(c) >= a &&
           tsOf(c) < a + 1000 &&
           !successesOf(u).some(

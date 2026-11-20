@@ -56,6 +56,7 @@ import {
 } from "@gladlog/analysis/src/data/mitigationData";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import { withoutImmunityBranchWalls } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { talentOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { GladLogParser, type GladMatch, parseLine } from "@gladlog/parser";
 import { type ICombatUnit, toLegacyMatch } from "@gladlog/parser-compat";
@@ -204,9 +205,14 @@ for (const f of files) {
     const combat = { startTime: legacy.startTime, endTime: legacy.endTime };
     const { friends, enemies } = splitTeams(legacy);
     for (const u of [...friends, ...enemies] as ICombatUnit[]) {
-      const ivs = buildAuraIntervals(u, combat).filter(
-        (iv) => arithIds.has(iv.spellId) || iv.spellId === CLOAK,
-      );
+      // an Aura Mastery interval is a wall from the product's one reading
+      // of it (`withoutImmunityBranchWalls`; 80-PIPE-170c-B156: 13 hits of
+      // c051aa9a r1 sat in an Aura Mastery bucket before its wall began)
+      const ivs = withoutImmunityBranchWalls(
+        u,
+        buildAuraIntervals(u, combat),
+        combat.startTime,
+      ).filter((iv) => arithIds.has(iv.spellId) || iv.spellId === CLOAK);
       // decode every hit once
       const rows: Array<{
         tS: number;

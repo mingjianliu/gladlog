@@ -27,6 +27,7 @@ import {
   dropAuraRebroadcasts,
   officialDurationS,
 } from "../utils/auraIntervals";
+import { isNoWallButtonOf } from "../utils/auraMasteryBranch";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import {
   deathLockChain,
@@ -2657,6 +2658,17 @@ export function buildKillSequenceBlock(params: {
             if (cd.tag !== "Defensive") return false;
             // fact9 D17: a heal is no defensive left unused
             if (isNotMajorDefensive(cd.spellId)) return false;
+            // an Aura Mastery that is no wall in its holder's hand this round
+            // — the silence / interrupt immunity — is no defensive left
+            // unused at a death (`isNoWallButtonOf`, ruling R53; assembly
+            // review 80-PIPE-170c-B156, the reader sweep)
+            if (
+              isNoWallButtonOf(cd.spellId, player, {
+                startTime: matchStartMs,
+                endTime: matchStartMs + matchEndSeconds * 1000,
+              })
+            )
+              return false;
 
             // Relevant if it was the dying player's OWN cooldown, or it can
             // actually reach them.

@@ -33,6 +33,7 @@ import {
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import { withoutImmunityBranchWalls } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
 import { readFileSync, writeFileSync } from "fs";
@@ -139,7 +140,13 @@ for (const f of files) {
           (x) => x.advancedActorMaxHp ?? 0,
         ),
       );
-      const ivs = buildAuraIntervals(target, legacy, byId)
+      // an Aura Mastery interval is a wall from the product's one reading
+      // of it (`withoutImmunityBranchWalls`; 80-PIPE-170c-B156)
+      const ivs = withoutImmunityBranchWalls(
+        target,
+        buildAuraIntervals(target, legacy, byId),
+        legacy.startTime,
+      )
         .filter((iv) => MAJOR.has(iv.spellId) && friends.has(iv.srcUnitName))
         .sort((x, y) => x.fromS - y.fromS);
       const samples = hpSamples(target);

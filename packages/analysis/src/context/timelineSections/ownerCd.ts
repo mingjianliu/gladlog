@@ -15,7 +15,10 @@
 import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
 import { reachesAlly } from "../../data/spellTargeting";
 import { allyCopyClause } from "../../utils/allyCopyWall";
-import { auraMasteryPressTag } from "../../utils/auraMasteryBranch";
+import {
+  auraMasteryPressTag,
+  isNoWallButtonOf,
+} from "../../utils/auraMasteryBranch";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import {
   enemySourceIds,
@@ -545,6 +548,13 @@ export function emitOwnerCdEntries(
             onlyCasterUnderFire,
             // T100: a silence or a kick lockout on its school holds it too
             pressBlocked: (spellId) => pressBlockedAt(spellId, pressMs),
+            // an Aura Mastery that is no wall in the owner's hand this round
+            // is no cheaper defensive (`isNoWallButtonOf`, ruling R53)
+            isNoWall: (spellId) =>
+              isNoWallButtonOf(spellId, owner, {
+                startTime: matchStartMs,
+                endTime: params.matchEndMs,
+              }),
             coversSchool: recipient
               ? (spellId) =>
                   saveCoversPressureOn(spellId, recipient, pressMs, roundFacts)

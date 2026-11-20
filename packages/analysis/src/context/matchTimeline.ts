@@ -506,6 +506,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemies: enemies ?? [],
     zoneId: params.zoneId,
     matchStartMs,
+    matchEndMs,
     pid,
     playerIdMap,
     enemyIdMap,

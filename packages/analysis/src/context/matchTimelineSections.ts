@@ -7,6 +7,7 @@ import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { PERIODIC_DAMAGE_AURA_IDS } from "../data/periodicAuraGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
+import { isNoWallButtonOf } from "../utils/auraMasteryBranch";
 import {
   breakableCcBeforeDeath,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
@@ -1006,6 +1007,9 @@ export function emitFriendlyDeathEntries<S>(params: {
   /** Arena zone id — `enemyTargetReaches`' line-of-sight test (GH #141). */
   zoneId?: string;
   matchStartMs: number;
+  /** the round's end, for the readings asked over a round
+   * (`isNoWallButtonOf`); a caller without it gets no such filter */
+  matchEndMs?: number;
   pid: (name: string) => string;
   playerIdMap?: Map<string, number>;
   enemyIdMap?: Map<string, number>;
@@ -1057,6 +1061,7 @@ export function emitFriendlyDeathEntries<S>(params: {
     enemies = [],
     zoneId,
     matchStartMs,
+    matchEndMs,
     pid,
     playerIdMap,
     enemyIdMap,
@@ -1202,6 +1207,18 @@ export function emitFriendlyDeathEntries<S>(params: {
               recordsAttackSpell: documentRecordsAttackSpell(allUnits),
             },
           ),
+        )
+        // an Aura Mastery that is no wall in the dying unit's hand this
+        // round — the silence / interrupt immunity — would have reduced
+        // nothing (`isNoWallButtonOf`, ruling R53; assembly review
+        // 80-PIPE-170c-B156, the reader sweep)
+        .filter(
+          (cd) =>
+            matchEndMs === undefined ||
+            !isNoWallButtonOf(cd.spellId, dyingUnit, {
+              startTime: matchStartMs,
+              endTime: matchEndMs,
+            }),
         )
         // the dying unit's own name for the button (`kitSpellNameOf`, T61)
         .map((cd) => kitSpellNameOf(cd, dyingUnit));

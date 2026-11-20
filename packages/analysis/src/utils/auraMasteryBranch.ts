@@ -245,6 +245,23 @@ export function auraMasteryPressWallStartMs(
     : pressMs;
 }
 
+/** `auraMasteryPressWallStartMs` for a reader that walks a unit's RAW aura
+ * or cast rows of any spell by id (a table of walls, a set of major
+ * defensives): the instant the row's wall began — the row's own millisecond
+ * for every spell but Aura Mastery, the switch for an Aura Mastery pressed
+ * under Concentration Aura, `undefined` for one that was the immunity
+ * throughout. Assembly review 80-PIPE-170c-B156: readers that took the raw
+ * 31821 row as a wall are the class this closes. */
+export function wallStartOfRowMs(
+  spellId: string,
+  caster: Rows,
+  rowMs: number,
+): number | undefined {
+  return spellId === AURA_MASTERY_ID
+    ? auraMasteryPressWallStartMs(caster, rowMs)
+    : rowMs;
+}
+
 /** `ivs` (the holder's own aura intervals, seconds since `startMs`) without
  * the part of an Aura Mastery interval that is no wall — for a reader that
  * states or prices the wall. An immunity-branch press's interval is dropped;

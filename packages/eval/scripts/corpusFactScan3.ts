@@ -62,6 +62,7 @@ import {
   getEnglishSpellName,
 } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
+import { wallStartOfRowMs } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { isEnemyCdWindowSpell } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   drCategoryOfCast,
@@ -307,6 +308,11 @@ function runRound(ctx: IContext): void {
       if (!row || row.pct < MITIGATION_WALL_MIN_PCT) continue;
       const ts = tsOf(a);
       if (ts < start || ts > end || ts >= dies) continue;
+      // only a row whose wall begins at the row has a wall line at its
+      // second (`wallStartOfRowMs`: an Aura Mastery that is the immunity,
+      // or that became the wall at a later switch, has none there —
+      // 80-PIPE-170c-B156)
+      if (wallStartOfRowMs(id, e, ts) !== ts) continue;
       const sec = Math.floor((ts - start) / 1000);
       const k = `${id}@${sec}`;
       if (seen.has(k)) continue;

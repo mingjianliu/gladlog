@@ -99,6 +99,7 @@ import {
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
+import { AURA_MASTERY_ID, auraMasteryPressWallStartMs } from "./auraMasteryBranch";
 import { binarySearchClosest } from "./binarySearch";
 import {
   buffDurationOfApplication,
@@ -7366,6 +7367,12 @@ export function findCheaperDefensiveAlternatives(
      * school (`spellPressBlockedAt`, built by the caller, which knows the
      * enemies). Absent ⇒ no such gate (hand-built fixtures). */
     pressBlocked?: (spellId: string) => boolean;
+    /** Is this ready button no damage wall in its holder's hand over the
+     * round (an Aura Mastery under Concentration Aura: the silence /
+     * interrupt immunity — `isNoWallButtonOf`, ruling R53)? Such a button is
+     * no cheaper DEFENSIVE to have pressed (assembly review
+     * 80-PIPE-170c-B156, the reader sweep). */
+    isNoWall?: (spellId: string) => boolean;
   } = {},
 ): string[] {
   // Nothing was chosen when a proc fired, so there is no "cheaper" choice to
@@ -7388,6 +7395,7 @@ export function findCheaperDefensiveAlternatives(
         // available:` mentions on the 605 files, which that ruling did not
         // decide — left for the user.
         !RESPONSE_ONLY_DEFENSIVE_IDS.has(other.spellId) &&
+        opts.isNoWall?.(other.spellId) !== true &&
         // User ruling P-FU-b7-DS (2026-10-06): Divine Shield is never the
         // "cheaper" choice — the cost-norm sign-off book says it (and Ice
         // Block, the same entry) is "too costly to coach as a routine
@@ -7664,6 +7672,11 @@ export function annotateDefensiveTimings(
         cast.timingContext = `damage spike appeared to peak before cast (${Math.round(dmgBefore / 1000)}k in 3s before vs ${Math.round(dmgAfter / 1000)}k after)`;
       } else if (
         EXTERNAL_DEFENSIVE_IDS.has(cd.spellId) &&
+        // an Aura Mastery press with no wall at any moment was pressed for
+        // its immunity: a target's HP says nothing of whether it was needed
+        // (`auraMasteryPressWallStartMs`; 80-PIPE-170c-B156, reader sweep)
+        (cd.spellId !== AURA_MASTERY_ID ||
+          auraMasteryPressWallStartMs(unit, castMs) !== undefined) &&
         cast.targetHpPct !== undefined &&
         cast.targetHpPct >= UNNECESSARY_TARGET_HP_PCT
       ) {
@@ -8065,6 +8078,16 @@ export function detectOverlappedDefensives(
       // an invisibility (user ruling R58: it reduces nothing)
       if (isNotMajorDefensive(spellId) || isInvisibilityPress(spellId))
         continue;
+      // an Aura Mastery press is a wall from the one reading of it
+      // (`auraMasteryPressWallStartMs`: the press, the switch to Devotion
+      // Aura, or never — assembly review 80-PIPE-170c-B156): a press that
+      // was the immunity throughout is no defensive to overlap, and one
+      // that switched protects from the switch
+      const wallStartMs =
+        spellId === AURA_MASTERY_ID
+          ? auraMasteryPressWallStartMs(unit, action.timestamp)
+          : action.timestamp;
+      if (wallStartMs === undefined) continue;
 
       // GH #150: a self-only defensive's cast row names whatever unit the
       // caster had selected — the wall is on the caster, and also on the ally
@@ -8086,7 +8109,7 @@ export function detectOverlappedDefensives(
       for (const r of recipients) {
         if (!friendlyIds.has(r.id)) continue;
         casts.push({
-          timeSeconds: (action.timestamp - combat.startTime) / 1000,
+          timeSeconds: (wallStartMs - combat.startTime) / 1000,
           castMs: action.timestamp,
           casterUnitId: unit.id,
           casterName: unit.name,
@@ -8116,12 +8139,15 @@ export function detectOverlappedDefensives(
       // (Barkskin 8 → 12 with Improved Barkskin) overlaps for longer than the
       // table alone says. `buffFullDurationForCaster` answers the table value
       // when the loadout is unreadable, so this cannot get worse than before.
+      // the buff runs from its press; a wall that began later (an Aura
+      // Mastery switch) has that much less of it left
       const firstDuration =
-        buffDurationOfApplication(
+        (buffDurationOfApplication(
           first.spellId,
           unitMap.get(first.casterUnitId),
-          combat.startTime + first.timeSeconds * 1000,
-        ) || OVERLAP_ASSUME_DURATION_S;
+          first.castMs,
+        ) || OVERLAP_ASSUME_DURATION_S) -
+        (combat.startTime + first.timeSeconds * 1000 - first.castMs) / 1000;
       const maxGap = firstDuration - MIN_SIMULTANEOUS_SECONDS;
       if (gapSeconds > maxGap) break;
       if (first.targetUnitId !== second.targetUnitId) continue;
@@ -8612,6 +8638,16 @@ export function detectPanicDefensives(
       if (!spellId || !MAJOR_DEFENSIVE_IDS.has(spellId)) continue;
       // fact9 D17: a heal is no "major defensive used with no threat"
       if (isNotMajorDefensive(spellId)) continue;
+      // an Aura Mastery press that was the silence / interrupt immunity
+      // throughout is no damage defensive to have pressed "with no threat";
+      // one that switched to the wall is judged at the switch, where the
+      // wall went up (`auraMasteryPressWallStartMs`; assembly review
+      // 80-PIPE-170c-B156)
+      const wallStartMs =
+        spellId === AURA_MASTERY_ID
+          ? auraMasteryPressWallStartMs(unit, action.timestamp)
+          : action.timestamp;
+      if (wallStartMs === undefined) continue;
       // GH #150: a self-only defensive protects its caster whatever unit the
       // cast row names (the caster's selection) — and, alongside the caster,
       // the ally its aura events prove a talent copied it to (Lifecinders
@@ -8627,8 +8663,10 @@ export function detectPanicDefensives(
         recipients = dest ? [dest] : [];
       }
 
-      const castMs = action.timestamp;
-      const castTimeSeconds = (castMs - combat.startTime) / 1000;
+      // the instant the protection began (the press, for every spell but a
+      // switched Aura Mastery); the entry keeps the press's own second
+      const castMs = wallStartMs;
+      const castTimeSeconds = (action.timestamp - combat.startTime) / 1000;
       const targetUnit: ICombatUnit | undefined = recipients[0];
 
       // 1. Enemy self-buffs: Combustion, Recklessness, etc. — never a

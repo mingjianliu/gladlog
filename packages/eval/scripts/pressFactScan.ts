@@ -52,6 +52,7 @@ import { PROC_TRIGGER_LEAD_MS } from "@gladlog/analysis/src/context/timelineSect
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraIntervals";
+import { wallStartOfRowMs } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import {
   AURA_BEFORE_CAST_MAX_S,
@@ -278,6 +279,13 @@ function runRound(ctx: IContext): void {
         }
         const tableId = wallTableIdOfAura(a.spellId);
         if (!MITIGATION_AURA_IDS.has(tableId)) continue;
+        // only a row whose wall begins at the row is a wall application
+        // (`wallStartOfRowMs`; 80-PIPE-170c-B156)
+        if (
+          wallStartOfRowMs(a.spellId, u, a.logLine.timestamp) !==
+          a.logLine.timestamp
+        )
+          continue;
         // an application that continues an aura already up — no REMOVED
         // since the last APPLIED, or one within the re-send gap — is that
         // aura's, which its own line speaks for (2:52 Barkskin press, the

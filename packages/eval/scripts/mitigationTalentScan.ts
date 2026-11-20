@@ -25,6 +25,7 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { MITIGATION_TABLE } from "@gladlog/analysis/src/data/mitigationData";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import { withoutImmunityBranchWalls } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { specPassiveOwnership } from "@gladlog/analysis/src/utils/talentModifiers";
 import { talentModifierOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { GladLogParser, type GladMatch, parseLine } from "@gladlog/parser";
@@ -462,9 +463,13 @@ for (const f of files) {
     const players = [...friends, ...enemies] as ICombatUnit[];
     const byName = new Map(players.map((p) => [p.name, p]));
     for (const u of players) {
-      const ivs = buildAuraIntervals(u, combat).filter((iv) =>
-        TRACK.has(iv.spellId),
-      );
+      // an Aura Mastery interval is a wall from the product's one reading
+      // of it (`withoutImmunityBranchWalls`; 80-PIPE-170c-B156)
+      const ivs = withoutImmunityBranchWalls(
+        u,
+        buildAuraIntervals(u, combat),
+        combat.startTime,
+      ).filter((iv) => TRACK.has(iv.spellId));
       const rows: Array<{
         tS: number;
         phys: boolean;

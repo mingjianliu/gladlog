@@ -16,6 +16,7 @@
  */
 import { MITIGATION_TABLE } from "@gladlog/analysis/src/data/mitigationData";
 import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMitigationModifiers";
+import { wallStartOfRowMs } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import { parseLine } from "@gladlog/parser";
 
 import { APPLIED, ev, type IRoundCtx, nameOf, REMOVED, tsOf } from "./ctx";
@@ -39,7 +40,11 @@ function runsOf(unit: any, ids: ReadonlySet<string>): [number, number][] {
     if (!ids.has(a.spellId) || a.destUnitId !== unit.id) continue;
     if (ev(a) === APPLIED && open === undefined) open = tsOf(a);
     else if (ev(a) === REMOVED && open !== undefined) {
-      out.push([open, tsOf(a)]);
+      // a run is a wall from the product's one reading of it
+      // (`wallStartOfRowMs`: an Aura Mastery run from its switch to
+      // Devotion Aura, or not at all — 80-PIPE-170c-B156)
+      const from = wallStartOfRowMs(String(a.spellId), unit, open);
+      if (from !== undefined && from < tsOf(a)) out.push([from, tsOf(a)]);
       open = undefined;
     }
   }

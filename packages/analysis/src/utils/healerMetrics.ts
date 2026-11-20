@@ -6,6 +6,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { isNotMajorDefensive } from "../data/abilityProfile";
+import { isNoWallPress } from "./auraMasteryBranch";
 import { isControlCast } from "./castMissRows";
 import { isCompanionCastRow } from "./castPress";
 import {
@@ -180,7 +181,10 @@ export function computeHealerMetrics(
       MAJOR_DEFENSIVE_IDS.has(String(e.spellId)) &&
       // the overlap count leaves the heals out (fact9 D17); so does its
       // denominator (codex 20-F24-08 #3)
-      !isNotMajorDefensive(String(e.spellId)),
+      !isNotMajorDefensive(String(e.spellId)) &&
+      // …and an Aura Mastery press that was no wall at any moment, as the
+      // overlap count does (`isNoWallPress`; 80-PIPE-170c-B156)
+      !isNoWallPress(String(e.spellId), healerUnit, e.logLine.timestamp),
   ).length;
   const defensiveOverlapRatio = myOverlapCount / (myTotalDefensives + 1);
 

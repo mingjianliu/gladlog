@@ -485,7 +485,11 @@ describe("cheaper note under a kick lockout (T100, fact13 D15)", () => {
     srcUnitName: "e-Realm",
     destUnitId: "o",
     destUnitName: "o-Realm",
-    logLine: { event: LogEvent.SPELL_INTERRUPT, timestamp: 28_000, parameters: [] },
+    logLine: {
+      event: LogEvent.SPELL_INTERRUPT,
+      timestamp: 28_000,
+      parameters: [],
+    },
   });
   const cds = () => [
     ledgerEntry(DIVINE_SHIELD, "Divine Shield", 210, [30]),
@@ -545,5 +549,79 @@ describe("cheaper note under a kick lockout (T100, fact13 D15)", () => {
         pressBlocked: (id) => id === DIVINE_PROTECTION,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("an Aura Mastery under Concentration Aura is no damage save (ruling R53; assembly review 80-PIPE-170c-B156, the reader sweep)", () => {
+  const AURA_MASTERY = "31821";
+  const CONCENTRATION = "317920";
+  const DEVOTION = "465";
+  const row = (
+    event: LogEvent,
+    spellId: string,
+    tS: number,
+    dest = "o",
+  ): unknown => ({
+    spellId,
+    spellName: spellId,
+    timestamp: tS * 1000,
+    srcUnitId: "o",
+    srcUnitName: "o-Realm",
+    destUnitId: dest,
+    destUnitName: `${dest}-Realm`,
+    auraType: "BUFF",
+    logLine: { event, timestamp: tS * 1000, parameters: [] },
+  });
+  const hit = (tS: number) => ({
+    logLine: {
+      event: LogEvent.SPELL_DAMAGE,
+      timestamp: tS * 1000,
+      parameters: [],
+    },
+    timestamp: tS * 1000,
+    effectiveAmount: -2_000_000,
+    amount: -2_000_000,
+    spellId: "1",
+    srcUnitId: "e",
+  });
+  /** the owner's standing aura over the round */
+  const standing = (aura: string) => [
+    row(LogEvent.SPELL_AURA_APPLIED, aura, 1),
+  ];
+
+  describe("in hand (class A): a ready Aura Mastery that is no wall this round is no cheaper defensive", () => {
+    const ledger = [
+      ledgerEntry(SPELLWARDING, "Blessing of Spellwarding", 300, [30]),
+      ledgerEntry(AURA_MASTERY, "Aura Mastery", 180, []),
+    ];
+    const line = (aura: string) =>
+      lineWith(
+        timeline({
+          ownerCDs: ledger,
+          ownerAuras: standing(aura),
+          mateDamageIn: [hit(31)],
+        }),
+        "[YOU] [CD]",
+        "Blessing of Spellwarding",
+      );
+    it("under Concentration Aura all round: not named", () => {
+      expect(line(CONCENTRATION)).toBeDefined();
+      expect(line(CONCENTRATION)).not.toContain("Aura Mastery");
+    });
+    it("对照:under Devotion Aura it is named", () => {
+      expect(line(DEVOTION)).toMatch(/cheaper available: [^|]*Aura Mastery/);
+    });
+    it("findCheaperDefensiveAlternatives: `isNoWall` removes exactly that button", () => {
+      const opts = { castTargetIsTeammate: true };
+      expect(
+        findCheaperDefensiveAlternatives(ledger[0]!, ledger, 30, opts),
+      ).toEqual(["Aura Mastery"]);
+      expect(
+        findCheaperDefensiveAlternatives(ledger[0]!, ledger, 30, {
+          ...opts,
+          isNoWall: (id) => id === AURA_MASTERY,
+        }),
+      ).toEqual([]);
+    });
   });
 });
