@@ -1696,5 +1696,11 @@
  *  control-aura scan now asks DB2 what a spell's aura itself does (a new
  *  generated column, ctrlAura), not its mechanic label.
  *  See docs/prompt-version-history.md.
+ *
+ * v634 (2026-11-19; pipeline batch B162, T214): an Elusiveness rogue's
+ *  Feint now prints a fact line in [ENEMY DEF], `Feint (20%, 6.0s)`, which
+ *  is not a wall; Evasion reads `Evasion (dodge, 20% all damage)` instead
+ *  of `(dodge)`.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 633;
+export const PROMPT_VERSION = 634;

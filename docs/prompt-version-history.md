@@ -8190,3 +8190,17 @@ controlAuraNoCcLine ask what the aura does; R48's two and R76's Intimidation
 1258508 are named known items. On the 605: 0 other flags of 64,381 for those
 four aura types (pacify-silence and possess are T225). On the 605, nothing a
 reader sees changes: the capture is byte-identical to B160's.
+
+v634 (2026-11-19; pipeline batch B162, T214). A rogue with Elusiveness had no
+[ENEMY DEF] line for Feint at all, and its Evasion read `(dodge)` with a
+legend saying it reduced no other damage. Feint now prints a fact line `Feint
+(20%, 6.0s)` -- not a wall: it does not cut `defenseless` and is never
+`popped` / `gated` -- and Evasion reads `Evasion (dodge, 20% all damage)`
+(with Bait and Switch the all-school 20, not 32). On the 605, an Elusiveness
+rogue's Feint gains a `Feint (20%, 6.0s)` [ENEMY DEF] line at all 3,630
+presses and Evasion's 677 lines read `Evasion (dodge, 20% all damage)`, across
+719 contexts with their legend; kill windows, kill attempts and menus
+unchanged. Codex branch reviews 85-tk-WIN-T214-1 to -4 (the last two APPROVE);
+the merge with T213's legend / gate code (selfDefensiveMechanism,
+enemyDefensives, promptQualityCheck, curatedIdRegistry, predicate-index) is
+named in the batch review.
