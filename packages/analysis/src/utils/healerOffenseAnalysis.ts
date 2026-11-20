@@ -56,6 +56,7 @@ import {
   hasPressOnlyTag,
   type IKillWindowFactsComputer,
   type IKillWindowGateFacts,
+  cdBackForPressInSecond,
   killWindowAcquittal,
   killWindowFactsSuffix,
   PRESS_ONLY_LEGEND,
@@ -70,6 +71,7 @@ import {
   fmtTime,
   fmtWholeSecondsOrZero,
   renderedWindowSeconds,
+  toRenderSecond,
 } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 import { type InterruptibleCast, interruptibleCastOf } from "./spellMechanics";
@@ -845,6 +847,12 @@ export interface IWindowContribution {
   /** Owner CC spells off cooldown at window start (cast-history replay). Empty when the owner cast no CC all match. */
   ownerCCReady: Array<{ spellName: string; enemyHealerDR: DRLevel | null }>;
   ownerCastCCInWindow: boolean;
+  /** Owner CC on cooldown at the window's start that is back inside it
+   * (T50: `your CC on cooldown` over a 7 s window whose Hammer of Justice
+   * came back in its second second) — `ownerCcBackSecond`, the whole second
+   * it reads ready from, printed as `(back inside: <Spell> m:ss)` (user
+   * rulings R21 + A1). Absent = none came back. */
+  ownerCCBack?: Array<{ spellName: string; atSeconds: number }>;
   /** The health the WINDOW'S TARGET lost to the owner's hits inside the
    * rendered span — the measure of the line's own `team damage … total`
    * (hits on `targetName`, absorbed part not counted). Until T12 ⑤ this was
@@ -864,7 +872,7 @@ export interface IWindowContribution {
   gateFacts: IKillWindowGateFacts;
 }
 
-interface IOwnerCCSpell {
+export interface IOwnerCCSpell {
   spellId: string;
   spellName: string;
   cooldownSeconds: number;
@@ -1000,6 +1008,63 @@ export function ownerCcSpellsOf(
   return collectOwnerCCSpells(owner, combat.startTime, kitControls, combat);
 }
 
+/** For a control on cooldown at the window's start: the first whole second
+ * after the window's first rendered second, up to its last, at which it
+ * reads ready (`isCCReadyAt`, the window-start predicate, with the presses
+ * before that second), or the second it came back and was pressed in
+ * (`ccBackForPressInSecond`) — the rendered grid, so a gate recomputes it from the
+ * line's own `a–b`. `undefined` = not back inside the window, or the owner
+ * dead by then. */
+export function ownerCcBackSecond(
+  spell: IOwnerCCSpell,
+  fromSeconds: number,
+  toSeconds: number,
+  /** the owner's death, in match seconds (Infinity = alive) */
+  ownerDeadFromSeconds = Infinity,
+): number | undefined {
+  // the line's own rendered end bounds the press too: a gate re-parsing
+  // `a–b` has only the floored b (codex 85-tk-WIN-T167-2: window 121–122.9,
+  // a press at 122.85 read `2:02` here and nothing from the rendered `2:02`)
+  const lastS = Math.floor(toSeconds);
+  for (let t = Math.floor(fromSeconds) + 1; t <= lastS; t++) {
+    if (t >= ownerDeadFromSeconds) return undefined;
+    if (isCCReadyAt(spell, t) || ccBackForPressInSecond(spell, t, lastS))
+      return t;
+  }
+  return undefined;
+}
+
+/** The control came back and was pressed inside one rendered second `s`:
+ * no whole second reads it ready (at `s` not yet, from `s + 1` the press has
+ * spent it), and the press is the proof — asked at the press's own instant,
+ * with the presses before it (codex 85-tk-WIN-T167-1: Hammer of Justice
+ * back at 2:02.75 and pressed at 2:02.85). The team half's
+ * `cdBackForPressInSecond` (T133), on the owner's control. */
+function ccBackForPressInSecond(
+  spell: IOwnerCCSpell,
+  s: number,
+  toSeconds: number,
+): boolean {
+  if (spell.model) return cdBackForPressInSecond(spell.model, s, toSeconds);
+  return spell.castTimesSeconds.some(
+    (p) => p <= toSeconds && toRenderSecond(p) === s && isCCReadyAt(spell, p),
+  );
+}
+
+/** ` (back inside: Hammer of Justice 2:03)` after `your CC on cooldown`: the
+ * controls back inside the window, each at its `ownerCcBackSecond` — the
+ * teammate half's `back inside: X M:SS` clause (`formatKillWindowFacts`),
+ * its wording and its "、" join (user rulings R21 2026-11-10 and A1
+ * 2026-11-17, pipeline T167). */
+export function ownerCcBackClause(w: {
+  ownerCCBack?: ReadonlyArray<{ spellName: string; atSeconds: number }>;
+}): string {
+  const back = w.ownerCCBack ?? [];
+  return back.length === 0
+    ? ""
+    : ` (back inside: ${back.map((c) => `${c.spellName} ${fmtTime(c.atSeconds)}`).join("、")})`;
+}
+
 type CCWithDR = ReadonlyArray<{
   atSeconds: number;
   durationSeconds: number;
@@ -1083,6 +1148,19 @@ export function computeWindowContributions(
               )
             : null,
       }));
+
+    // T50: window-start readiness printed as the whole window's state — a
+    // control that comes back inside the window is named with its second
+    const ownerDeadFromSeconds = (ownerDeathMs - matchStartMs) / 1000;
+    const ownerCCBack = ccSpells.flatMap((s) => {
+      const atSeconds =
+        ownerDeadAtStart || isCCReadyAt(s, fromSeconds)
+          ? undefined
+          : ownerCcBackSecond(s, fromSeconds, toSeconds, ownerDeadFromSeconds);
+      return atSeconds === undefined
+        ? []
+        : [{ spellName: s.spellName, atSeconds }];
+    });
 
     // F16 retest (2026-10-21, idx 26): a control the owner's press applied
     // under an id the cast→effect table does not tie to it — Deep Breath's
@@ -1194,6 +1272,7 @@ export function computeWindowContributions(
       enemyHealerName: enemyHealer?.name ?? null,
       enemyHealerSpec: enemyHealer ? specToString(enemyHealer.spec) : null,
       ownerCCReady,
+      ...(ownerCCBack.length > 0 ? { ownerCCBack } : {}),
       ownerCastCCInWindow,
       ownerDamageOnTarget,
       ownerAbsorbedOnTarget,
@@ -1588,7 +1667,7 @@ export function formatHealerOffenseForContext(
           // directly-constructed summaries without the field.
           (summary.ownerCCSpellsObserved?.length ?? ownerCCSpellNames.length) >
             0
-          ? "your CC on cooldown"
+          ? `your CC on cooldown${ownerCcBackClause(w)}`
           : "no owner CC observed this match";
     const cast = w.ownerCastCCInWindow
       ? "you cast CC in this window"

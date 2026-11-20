@@ -1292,7 +1292,13 @@ describe("[KILL WINDOW] `free` under half a second is `<1s`; no free second at a
   });
 });
 
-import { MAX_KILL_WINDOW_LINES } from "../../src/utils/healerOffenseAnalysis";
+import {
+  type IWindowContribution,
+  MAX_KILL_WINDOW_LINES,
+  ownerCcBackClause,
+  ownerCcBackSecond,
+  ownerCcSpellsOf,
+} from "../../src/utils/healerOffenseAnalysis";
 
 // GH #31 ① test stub: an always-accountable facts computer so pre-existing
 // window tests keep exercising their own concern; gate behaviour has its own
@@ -1904,5 +1910,108 @@ describe("F193 V2 — contested trade facts", () => {
     const lines = formatHealerOffenseForContext(summary);
     const text = lines.join("\n");
     expect(text).toContain("your CC ready:");
+  });
+});
+
+describe("T50: 窗口开始时在冷却、窗口内回来的控制写出回来的秒", () => {
+  const enemyHealer = makeUnit("enemy-h", {
+    advancedActions: fullHpActions() as any[],
+    reaction: CombatUnitReaction.Hostile,
+    spec: CombatUnitSpec.Shaman_Restoration,
+    name: "Rsham",
+  });
+  const enemyDk = makeUnit("enemy-1", {
+    reaction: CombatUnitReaction.Hostile,
+    name: "Edk",
+  });
+  // Psychic Scream 8122: 40 s (spellEffectData)
+  const ownerPressedAt = (seconds: number[], deaths: number[] = []) =>
+    makeFriend("owner", {
+      spellCastEvents: seconds.map((s) =>
+        makeSpellCastEvent(
+          "8122",
+          T0 + s * 1000,
+          "enemy-h",
+          "Rsham",
+          "owner",
+          "Owner",
+        ),
+      ),
+      deathRecords: deaths.map((s) => ({ timestamp: T0 + s * 1000 })) as any[],
+    });
+  const windowOf = (
+    owner: ICombatUnit,
+    from: number,
+    to: number,
+  ): IWindowContribution =>
+    computeWindowContributions(
+      combat,
+      owner,
+      [owner],
+      [enemyDk, enemyHealer],
+      [makeWindow(from, to)],
+      [],
+      [],
+      stubFactsComputer,
+    )[0]!;
+  const lineOf = (w: IWindowContribution): string =>
+    formatHealerOffenseForContext({
+      advancedLoggingAvailable: true,
+      slackSegments: [],
+      windowContributions: [w],
+      windowCreationFacts: [],
+      contestedTradeFacts: [],
+      ownerCCSpellsObserved: ["Psychic Scream"],
+    } as never).find((l) => l.includes("[KILL WINDOW]"))!;
+
+  it("按在 2.25 s、窗口 41–48:42.25 回来 → 第一个读到就绪的整秒", () => {
+    const w = windowOf(ownerPressedAt([2.25]), 41.4, 48.2);
+    expect(w.ownerCCReady).toEqual([]);
+    expect(w.ownerCCBack).toEqual([
+      { spellName: "Psychic Scream", atSeconds: 43 },
+    ]);
+    expect(lineOf(w)).toContain(
+      "; your CC on cooldown (back inside: Psychic Scream 0:43); you cast no CC;",
+    );
+  });
+
+  it("窗口内没回来:措辞不变,字段缺省", () => {
+    const w = windowOf(ownerPressedAt([20]), 41, 48);
+    expect(w.ownerCCBack).toBeUndefined();
+    expect(lineOf(w)).toContain("; your CC on cooldown; you cast no CC;");
+  });
+
+  it("窗口开始时已就绪的不算回来", () => {
+    const w = windowOf(ownerPressedAt([0.5]), 41, 48);
+    expect(w.ownerCCReady.map((c) => c.spellName)).toEqual(["Psychic Scream"]);
+    expect(w.ownerCCBack).toBeUndefined();
+  });
+
+  it("回来之前 owner 已死:不写", () => {
+    const w = windowOf(ownerPressedAt([2.25], [42]), 41, 48);
+    expect(w.ownerCCBack).toBeUndefined();
+  });
+
+  it("ownerCcBackSecond 只读整秒格 a+1 … b", () => {
+    const [spell] = ownerCcSpellsOf(combat, ownerPressedAt([2.25]));
+    expect(ownerCcBackSecond(spell!, 41, 48)).toBe(43);
+    expect(ownerCcBackSecond(spell!, 41.9, 48.9)).toBe(43);
+    expect(ownerCcBackSecond(spell!, 36, 42)).toBeUndefined();
+    expect(ownerCcBackSecond(spell!, 41, 48, 43)).toBeUndefined();
+    expect(ownerCcBackClause({})).toBe("");
+  });
+
+  it("同一秒里回来又按掉:按键就是证据,写回来的那一秒 (codex 85-tk-WIN-T167-1,合成)", () => {
+    // back at 42.25, pressed again at 42.5: no whole second reads it ready
+    const [spell] = ownerCcSpellsOf(combat, ownerPressedAt([2.25, 42.5]));
+    expect(ownerCcBackSecond(spell!, 41, 48)).toBe(42);
+    // a press after the window's end proves nothing about the window
+    expect(ownerCcBackSecond(spell!, 36, 42.4)).toBeUndefined();
+    // …nor one inside the last rendered second past its floor: the gate
+    // re-parses `0:36–0:42` (codex 85-tk-WIN-T167-2, 合成)
+    expect(ownerCcBackSecond(spell!, 36, 42.9)).toBeUndefined();
+    expect(ownerCcBackSecond(spell!, 36, 42.9)).toBe(
+      ownerCcBackSecond(spell!, 36, 42),
+    );
   });
 });

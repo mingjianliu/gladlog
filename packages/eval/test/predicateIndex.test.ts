@@ -2065,6 +2065,11 @@ const INDEX: PredicateRow[] = [
     mod: classSetBonuses,
   },
   {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "ownerCcBackSecond",
+    mod: healerOffenseAnalysis,
+  },
+  {
     file: `${A}/context/spellOutcomeLines.ts`,
     symbol: "pairNetherWardReturns",
     mod: spellOutcomeLines,
