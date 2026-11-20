@@ -47,6 +47,30 @@ export const CHECKS = [
   "printedSummonControlAnswerDiffers",
 ] as const;
 
+/** A unit as the prompt labels it: `5(RPaladin)`. */
+const UNIT_LABEL = /^\d+\([^)]*\)$/;
+
+/**
+ * The printed answer of a `[BURST ANSWERED]` line. The producer's reader
+ * takes ` on <target>` for a control's target clause, and a spell whose own
+ * name holds " on " reads the same way (`answered with Lay on Hands in
+ * 3.2s` → spell "Lay", target "Hands"). A target clause is unit labels
+ * only, so anything else is put back into the name (Mac job T184-2: 65
+ * such lines read as "the engine credits another answer").
+ */
+export function readPrintedAnswer(line: string) {
+  const a = parseBurstAnsweredLine(line);
+  if (!a) return null;
+  if (a.controlOn.every((t) => UNIT_LABEL.test(t.target))) return a;
+  return {
+    ...a,
+    spellName: `${a.spellName} on ${a.controlOn
+      .map((t) => `${t.target}${t.span !== undefined ? ` (${t.span})` : ""}`)
+      .join(" and ")}`,
+    controlOn: [],
+  };
+}
+
 function printedLines(
   ctx: IRoundCtx,
   points: ReturnType<typeof burstWindowDecisionPoints>,
@@ -61,7 +85,7 @@ function printedLines(
   );
   for (const line of ctx.lines) {
     if (!line.includes("[BURST ANSWERED]")) continue;
-    const a = parseBurstAnsweredLine(line);
+    const a = readPrintedAnswer(line);
     if (!a) continue;
     const p = points.find((x) => x.tSec === a.atSec);
     const credited = p ? creditedAnswer(p) : undefined;

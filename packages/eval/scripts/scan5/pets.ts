@@ -57,7 +57,9 @@
  *    owner or the owner's summon inside the attempt: more than one is a
  *    violation. Kind = the tag.
  */
+import { TOTEM_RELOCATION_IDS } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
+import { summonedAtMs } from "@gladlog/analysis/src/utils/summonLife";
 
 import {
   fmtS,
@@ -248,6 +250,32 @@ export function run(ctx: IRoundCtx): void {
         lat: Math.round(((at - lead) / 1000 + Number.EPSILON) * 10) / 10,
       };
     });
+    // T184 (user ruling R90): a totem's or guardian's own pulse — no press
+    // of its owner made it — is printed at the totem's SUMMON, or at the
+    // owner's press that moved it since, however early. Those instants are
+    // truths too (before T184 the line printed an unrelated press and this
+    // kind measured the distance to the aura).
+    for (const g of landings) {
+      const src = g.src;
+      if (!src || String(src.id).startsWith("Pet-")) continue;
+      const summoned = summonedAtMs(src);
+      if (summoned === null) continue;
+      const moved = ((answerer.spellCastEvents ?? []) as any[])
+        .filter(
+          (c) =>
+            c.logLine?.event === SUCCESS &&
+            TOTEM_RELOCATION_IDS.has(String(c.spellId)) &&
+            tsOf(c) >= summoned &&
+            tsOf(c) <= g.ms,
+        )
+        .map(tsOf);
+      for (const at of [summoned, ...moved])
+        truths.push({
+          g,
+          at,
+          lat: Math.round(((at - lead) / 1000 + Number.EPSILON) * 10) / 10,
+        });
+    }
     if (truths.some((x) => Math.abs(x.lat - a.latencySec) <= 0.1 + 1e-9))
       continue;
     const best = truths[0]!;
