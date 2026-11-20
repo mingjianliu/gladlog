@@ -1753,5 +1753,13 @@
  *  those lines are read at the printed first second, not at the span's raw
  *  start.
  *  See docs/prompt-version-history.md.
+ *
+ * v642 (2026-11-20; pipeline batch B171, T224): Another unit's self-only
+ *  save (a Divine Protection, a Feign Death, a Bear Form) no longer counts
+ *  as the answer to a burst on a teammate: a 'slow defensive response' row
+ *  now appears for a window that only such a save 'answered' (user ruling
+ *  R81; a team healing wall and a Mass Invisibility that reached the
+ *  pressured unit still do, R93 / R97).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 641;
+export const PROMPT_VERSION = 642;

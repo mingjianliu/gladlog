@@ -8303,3 +8303,17 @@ one [CONTESTED] span no longer overlaps a kill window and prints. Menus: 3
 kick-priority rows' windowFrom 1:40 -> 1:41. Scans: immunityDefenseless 6 ->
 0, DR killWindow 38 -> 0, killWindowReadyGrid 82 -> 0, no check rises; gates
 0.
+
+v642 (2026-11-20; pipeline batch B171, T224; user rulings R68 / R81). A burst
+window answered only by another unit's own wall or self-save is no longer
+answered; a team healing wall (Tree of Life / Ancient of Lore, R93) and a
+teammate's Mass Invisibility that landed on the pressured unit (R97) still
+answer. 605 (WSL stack capture, B170 -> this batch): menus +38 / -1 slow-
+defensive-response rows. 37 of the +38 are T224-1's ids (40 engine candidates;
+three sit in 2v2 matches where the type is never shown); 4 of them are rows
+T222 (B169) removed, net -2 printed after both batches. The 38th is unanswered
+only once B166's self-only-heal rule (R92) and this batch combine: its two
+Bear Forms are another unit's own walls and its Frenzied Regeneration a self-
+only heal (2a2e57bf r2). Contexts 0; legends follow the menus. Scans:
+answeredOnlyByAnothersWall 46 -> 6, respondedOnRefusedPress 174 -> 117, no
+check rises; gates 0.
