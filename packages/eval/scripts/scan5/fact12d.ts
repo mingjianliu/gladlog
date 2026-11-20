@@ -35,6 +35,7 @@ import {
   gridEndpointHpPct,
   isGhostEndWindow,
 } from "@gladlog/analysis/src/utils/cooldowns";
+import { buildRosterSides } from "@gladlog/analysis/src/utils/rosterSide";
 
 import { type IRoundCtx, secOf } from "./ctx";
 
@@ -152,7 +153,12 @@ export function run(ctx: IRoundCtx): void {
       const toMs = ctx.start + t * 1000;
       // the producer's own sum (codex B9 #3: a zero-amount row is no damage)
       const { totalDmg } = u
-        ? rotPressureDamageInWindow(u, fromMs, toMs)
+        ? rotPressureDamageInWindow(
+            u,
+            fromMs,
+            toMs,
+            buildRosterSides(ctx.players as never),
+          )
         : { totalDmg: 0 };
       if (totalDmg <= 0)
         ctx.violate(

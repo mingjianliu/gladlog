@@ -85,7 +85,11 @@ import {
   PATCH_121_GOLIVE_EPOCH_MS,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
-import { sumAbsorbedPressure, sumLandedPressure } from "./incomingPressure";
+import {
+  isRedistributedDamageRow,
+  sumAbsorbedPressure,
+  sumLandedPressure,
+} from "./incomingPressure";
 import { logIsFrom } from "./logEra";
 import {
   distanceBetween,
@@ -4797,13 +4801,22 @@ function reconstructDispelSummaryUncached(
                 applyTs + POST_CC_PRESSURE_WINDOW_S * 1000,
                 windowEndMs,
               );
+              const purgePressureSides = buildRosterSides([
+                ...friends,
+                ...enemies,
+                ...friendlyPets,
+                ...enemyPets,
+              ]);
               const teamUnderPressure = friends.some((f) => {
                 const threshold = getPressureThreshold(f);
                 const dmg = f.damageIn
                   .filter(
                     (d) =>
                       d.logLine.timestamp >= applyTs &&
-                      d.logLine.timestamp <= pressureWindowEndMs,
+                      d.logLine.timestamp <= pressureWindowEndMs &&
+                      // moved health is no pressure (pipeline T223; codex
+                      // 85-tk-WIN-T223-1 #3)
+                      !isRedistributedDamageRow(f, d, purgePressureSides),
                   )
                   .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
                 return dmg >= threshold;

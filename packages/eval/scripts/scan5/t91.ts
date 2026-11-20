@@ -45,6 +45,11 @@ import {
   burstWindowRateSpanSeconds,
   reconstructEnemyCDTimeline,
 } from "@gladlog/analysis/src/utils/enemyCDs";
+import { isRedistributedDamageRow } from "@gladlog/analysis/src/utils/incomingPressure";
+import {
+  buildRosterSides,
+  type RosterSides,
+} from "@gladlog/analysis/src/utils/rosterSide";
 import { dangerLabel } from "@gladlog/analysis/src/utils/spellDanger";
 
 import { APPLIED, ev, fmtS, type IRoundCtx, REFRESH, tsOf } from "./ctx";
@@ -62,13 +67,18 @@ const COVERAGE_TOLERANCE = 0.05;
 const LABEL_RANK = ["Low", "Moderate", "High", "Critical"];
 
 /** the side's damage taken in [fromS, toS] of the slice, and over the
- * slice [0, sliceEndS] — no row after its end */
+ * slice [0, sliceEndS] — no row after its end, and no row of health a
+ * teammate moved onto the unit (`isRedistributedDamageRow`, the product's
+ * own test since pipeline T223: B172 stack check, 0 -> 15 label rows — the
+ * log truth still summed the Spirit Link / Void Leech / Tempered in Battle
+ * rows the window's damage and the slice average leave out) */
 export function sideDamage(
   side: readonly any[],
   startMs: number,
   fromS: number,
   toS: number,
   sliceEndS: number,
+  sides?: RosterSides,
 ): { inSpan: number; total: number } {
   let inSpan = 0;
   let total = 0;
@@ -76,6 +86,7 @@ export function sideDamage(
     for (const e of (u.damageIn ?? []) as any[]) {
       const t = (e.logLine.timestamp - startMs) / 1000;
       if (t > sliceEndS) continue;
+      if (isRedistributedDamageRow(u, e, sides)) continue;
       const amount = Math.abs(e.effectiveAmount ?? 0);
       total += amount;
       if (t >= fromS && t <= toS) inSpan += amount;
@@ -162,6 +173,11 @@ export function run(ctx: IRoundCtx): void {
   };
   const sliceEndS = (ctx.end - ctx.start) / 1000;
   if (!(sliceEndS > 0)) return;
+  // the product's own sides: `reconstructEnemyCDTimeline` builds them from
+  // `combat.units`
+  const sides = combat.units
+    ? buildRosterSides(Object.values(combat.units) as never)
+    : undefined;
   const timeline = reconstructEnemyCDTimeline(
     enemies as never,
     combat as never,
@@ -202,6 +218,7 @@ export function run(ctx: IRoundCtx): void {
       w.fromSeconds,
       sliceEndS,
       sliceEndS,
+      sides,
     );
     const avgRate = total / sliceEndS;
     if (!(avgRate > 0) || !(w.damageRatio > 0)) continue;

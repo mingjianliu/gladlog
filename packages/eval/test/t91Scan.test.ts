@@ -110,6 +110,25 @@ describe("scan5/t91 burstRatePastSliceEnd", () => {
     });
   });
 
+  it("leaves out the health a teammate moved onto a unit (pipeline T223, the product's own test)", () => {
+    const link: any = {
+      ...makeDamageEvent(at(9), 70),
+      spellId: "98021",
+      srcUnitId: "Player-ally",
+      srcUnitFlags: 0x511,
+      destUnitFlags: 0x511,
+    };
+    const u: any = {
+      id: "Player-u",
+      reaction: 1,
+      damageIn: [makeDamageEvent(at(1), 10), makeDamageEvent(at(9), 30), link],
+    };
+    expect(sideDamage([u], START, 5, 10, 10)).toEqual({
+      inSpan: 30,
+      total: 40,
+    });
+  });
+
   it("a window inside the slice is not counted", () => {
     expect(scan(40)).toEqual({ checked: 0, cc: 0, seen: [] });
   });

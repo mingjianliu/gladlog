@@ -118,7 +118,10 @@ import { combatMemo, identityToken, roundFingerprint } from "./combatMemo";
 import { isGhostAtRenderSecondOf, isStasisReplayCast } from "./combatStates";
 import { interruptPressCooldownSeconds } from "./enemyInterrupts";
 import { hiddenPressMs, isPressVariantOf } from "./hiddenPress";
-import { incomingPressureEvents } from "./incomingPressure";
+import {
+  incomingPressureEvents,
+  isRedistributedDamageRow,
+} from "./incomingPressure";
 import type { LogInstant } from "./logEra";
 import { UNDATED_LOG_INSTANT } from "./logEra";
 import { logInstantOf } from "./logEra";
@@ -135,7 +138,7 @@ import {
   variantSharesCooldownAt,
 } from "./overrideVariantEra";
 import { fmtTime, toRenderSecond } from "./renderGrid";
-import { buildRosterSides } from "./rosterSide";
+import { buildRosterSides, type RosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
 import {
   isSpecGatedOffensiveFor,
@@ -7498,14 +7501,22 @@ export const TIMING_SPIKE_THRESHOLD = 50_000;
  * [fromMs, toMs). Shared window-sum arithmetic for both the Reactive spike check (caster's
  * damageIn) and the Unnecessary no-pressure check (target's damageIn, or the caster's as a
  * fallback) — same predicate, only the unit and window position differ.
+ * Health the unit's own side moved onto it is no damage it took
+ * (`isRedistributedDamageRow`, pipeline T223; codex 85-tk-WIN-T223-1 #2).
  */
 function sumDamageInWindow(
-  damageIn: ICombatUnit["damageIn"],
+  unit: Pick<ICombatUnit, "id" | "reaction" | "damageIn">,
   fromMs: number,
   toMs: number,
+  sides?: RosterSides,
 ): number {
-  return damageIn
-    .filter((d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp < toMs)
+  return unit.damageIn
+    .filter(
+      (d) =>
+        d.logLine.timestamp >= fromMs &&
+        d.logLine.timestamp < toMs &&
+        !isRedistributedDamageRow(unit, d, sides),
+    )
     .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
 }
 
@@ -7562,6 +7573,7 @@ export function annotateDefensiveTimings(
   enemyCDTimeline: IEnemyCDTimelineForTiming,
 ): IMajorCooldownInfo[] {
   const matchStartMs = combat.startTime;
+  const timingSides = buildRosterSides(Object.values(combat.units ?? {}));
 
   // a press the game refused (T29) ran no effect to time a defensive against
   const allSingleCDs = enemyCDTimeline.players.flatMap((p) =>
@@ -7660,8 +7672,13 @@ export function annotateDefensiveTimings(
       const castMs = matchStartMs + t * 1000;
       const windowFromMs = castMs - TIMING_DAMAGE_WINDOW_S * 1000;
       const windowToMs = castMs + TIMING_DAMAGE_WINDOW_S * 1000;
-      const dmgBefore = sumDamageInWindow(unit.damageIn, windowFromMs, castMs);
-      const dmgAfter = sumDamageInWindow(unit.damageIn, castMs, windowToMs);
+      const dmgBefore = sumDamageInWindow(
+        unit,
+        windowFromMs,
+        castMs,
+        timingSides,
+      );
+      const dmgAfter = sumDamageInWindow(unit, castMs, windowToMs, timingSides);
 
       if (
         dmgBefore > TIMING_SPIKE_THRESHOLD &&
@@ -7701,14 +7718,16 @@ export function annotateDefensiveTimings(
         let fallbackNote = "";
         if (targetUnit) {
           spikeBefore = sumDamageInWindow(
-            targetUnit.damageIn,
+            targetUnit,
             windowFromMs,
             castMs,
+            timingSides,
           );
           spikeAfter = sumDamageInWindow(
-            targetUnit.damageIn,
+            targetUnit,
             castMs,
             windowToMs,
+            timingSides,
           );
         } else {
           fallbackNote = " (caster-side fallback)";
@@ -8628,6 +8647,7 @@ export function detectPanicDefensives(
   const friendlyIds = new Set(friends.map((u) => u.id));
   const enemyIds = new Set(enemies.map((u) => u.id));
   const unitMap = new Map(friends.map((u) => [u.id, u]));
+  const panicSides = buildRosterSides([...friends, ...enemies]);
   const results: IPanicDefensive[] = [];
 
   for (const unit of friends) {
@@ -8687,7 +8707,11 @@ export function detectPanicDefensives(
       const damageIn = (u: ICombatUnit | undefined, from: number, to: number) =>
         (u?.damageIn ?? [])
           .filter(
-            (d) => d.logLine.timestamp > from && d.logLine.timestamp <= to,
+            (d) =>
+              d.logLine.timestamp > from &&
+              d.logLine.timestamp <= to &&
+              // moved health is no pressure (pipeline T223)
+              !isRedistributedDamageRow(u!, d, panicSides),
           )
           .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
       const threatened = (u: ICombatUnit | undefined): boolean => {
@@ -8703,7 +8727,8 @@ export function detectPanicDefensives(
           .filter(
             (d) =>
               d.logLine.timestamp >= castMs - PANIC_PRESS_PRE_CAST_WINDOW_MS &&
-              d.logLine.timestamp < castMs,
+              d.logLine.timestamp < castMs &&
+              !isRedistributedDamageRow(u!, d, panicSides),
           )
           .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
         if (preCastDamage >= pressureThreshold) return true;

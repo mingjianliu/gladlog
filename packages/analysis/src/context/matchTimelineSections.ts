@@ -69,6 +69,7 @@ import {
 } from "../utils/healAbsorbSave";
 import {
   documentRecordsAttackSpell,
+  isRedistributedDamageRow,
   sumAbsorbedPressure,
 } from "../utils/incomingPressure";
 import { executeKillingBlowOf } from "../utils/killingBlow";
@@ -79,7 +80,7 @@ import {
   toRenderSecond,
 } from "../utils/renderGrid";
 import { type ManaFallback, manaReadingAt } from "../utils/resourceAt";
-import type { RosterSides } from "../utils/rosterSide";
+import { buildRosterSides, type RosterSides } from "../utils/rosterSide";
 import { benchmarks } from "../utils/specBaselines";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import {
@@ -261,6 +262,7 @@ export function emitRotPressureEntries(params: {
     labelOf,
     addEntry,
   } = params;
+  const rotSides = buildRosterSides(allPlayers);
 
   const casters = new Map(allPlayers.map((u) => [u.id, u]));
   for (const player of allPlayers) {
@@ -317,6 +319,7 @@ export function emitRotPressureEntries(params: {
             player,
             windowStartMs,
             windowEndMs,
+            rotSides,
           );
 
           // no damage at all is no "at least half of it periodic" (T07,
@@ -349,13 +352,18 @@ export function emitRotPressureEntries(params: {
  * periodic row is a row, not damage).
  */
 export function rotPressureDamageInWindow(
-  player: Pick<ICombatUnit, "damageIn">,
+  player: Pick<ICombatUnit, "id" | "reaction" | "damageIn">,
   windowStartMs: number,
   windowEndMs: number,
+  /** the round's roster sides (`buildRosterSides` over the players) */
+  sides?: RosterSides,
 ): { periodicDmg: number; totalDmg: number } {
   let periodicDmg = 0;
   let totalDmg = 0;
   for (const dmg of player.damageIn) {
+    // health the player's own side moved onto it is no damage to take a
+    // periodic share of (pipeline T223; codex 85-tk-WIN-T223-1 #4)
+    if (isRedistributedDamageRow(player, dmg, sides)) continue;
     if (dmg.timestamp >= windowStartMs && dmg.timestamp <= windowEndMs) {
       const amount = Math.abs(dmg.effectiveAmount || dmg.amount);
       totalDmg += amount;
