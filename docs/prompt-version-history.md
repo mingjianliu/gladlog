@@ -8204,3 +8204,21 @@ unchanged. Codex branch reviews 85-tk-WIN-T214-1 to -4 (the last two APPROVE);
 the merge with T213's legend / gate code (selfDefensiveMechanism,
 enemyDefensives, promptQualityCheck, curatedIdRegistry, predicate-index) is
 named in the batch review.
+
+v635 (2026-11-19; pipeline batch B163, T181; user ruling R80). A unit that
+saved itself with Alter Time or Mass Invisibility still drew slow-defensive-
+response or cd-hoarded rows, as if nothing answered its window. These self-
+saves now count as the answer for the unit's own window and crisis
+(SELF_SAVE_ANSWER_IDS), while the [BURST ANSWERED] credit line still never
+names them (R80: no rename, no new line). Only the unit's own press counts: a
+teammate's Alter Time or Mass Invisibility is not this unit's self-save (the
+teammate Mass Invisibility case is ruled in R97 and lands with T224). On the
+605, 23 accusation rows standing over a unit that saved itself with its own
+Alter Time or Mass Invisibility are removed (cd-hoarded 16, slow-defensive-
+response 7) and one holder's next cd-hoarded candidate takes a freed slot
+(55-1, the row at 147 s); a teammate's Alter Time or Mass Invisibility does
+not answer; context lines unchanged. Codex branch reviews 85-tk-CD-T181-1 to
+-4 (-3 the rebase onto batch B155, -4 the narrowing to the unit's own press;
+both APPROVE). Review -1's case of a teammate's self-save answering the window
+was first recorded as having no instance on the 605; the batch check found
+two, which is why the narrowing is here.

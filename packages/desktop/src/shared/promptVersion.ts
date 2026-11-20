@@ -1702,5 +1702,12 @@
  *  is not a wall; Evasion reads `Evasion (dodge, 20% all damage)` instead
  *  of `(dodge)`.
  *  See docs/prompt-version-history.md.
+ *
+ * v635 (2026-11-19; pipeline batch B163, T181): the unit's own Alter Time
+ *  (press or return) or Mass Invisibility now answers its burst window and
+ *  its own crisis, so slow-defensive-response and cd-hoarded no longer
+ *  stand over it; a teammate's does not; the [BURST ANSWERED] line never
+ *  names such a self-save.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 634;
+export const PROMPT_VERSION = 635;
