@@ -554,8 +554,10 @@ describe("cheaper note under a kick lockout (T100, fact13 D15)", () => {
 
 describe("an Aura Mastery under Concentration Aura is no damage save (ruling R53; assembly review 80-PIPE-170c-B156, the reader sweep)", () => {
   const AURA_MASTERY = "31821";
+  const IMMUNITY = "317929";
   const CONCENTRATION = "317920";
   const DEVOTION = "465";
+  const SACRIFICE = "6940";
   const row = (
     event: LogEvent,
     spellId: string,
@@ -588,6 +590,48 @@ describe("an Aura Mastery under Concentration Aura is no damage save (ruling R53
   const standing = (aura: string) => [
     row(LogEvent.SPELL_AURA_APPLIED, aura, 1),
   ];
+  /** an Aura Mastery pressed at 30 s under `aura` */
+  const pressed = (aura: string) => [
+    ...standing(aura),
+    row(LogEvent.SPELL_AURA_APPLIED, AURA_MASTERY, 30),
+    ...(aura === CONCENTRATION
+      ? [
+          row(LogEvent.SPELL_AURA_APPLIED, IMMUNITY, 30),
+          row(LogEvent.SPELL_AURA_REMOVED, IMMUNITY, 38),
+        ]
+      : []),
+    row(LogEvent.SPELL_AURA_REMOVED, AURA_MASTERY, 38),
+  ];
+
+  describe("the press itself (class C): a press tagged as the immunity is not weighed against cheaper damage saves", () => {
+    const ledger = [
+      ledgerEntry(AURA_MASTERY, "Aura Mastery", 180, [30]),
+      ledgerEntry(SACRIFICE, "Blessing of Sacrifice", 120, []),
+    ];
+    const line = (aura: string) =>
+      lineWith(
+        timeline({
+          ownerCDs: ledger,
+          ownerCasts: [castSuccess(AURA_MASTERY, "Aura Mastery", 30_000)],
+          ownerAuras: pressed(aura),
+          mateDamageIn: [hit(31)],
+        }),
+        "[YOU] [CD]",
+        "Aura Mastery",
+      );
+    it("under Concentration Aura: tagged, and no cheaper note", () => {
+      expect(line(CONCENTRATION)).toContain(
+        "Aura Mastery (silence / interrupt immunity)",
+      );
+      expect(line(CONCENTRATION)).not.toContain("cheaper available");
+    });
+    it("对照:under Devotion Aura the wall keeps its note", () => {
+      expect(line(DEVOTION)).not.toContain("immunity");
+      expect(line(DEVOTION)).toContain(
+        "cheaper available: Blessing of Sacrifice",
+      );
+    });
+  });
 
   describe("in hand (class A): a ready Aura Mastery that is no wall this round is no cheaper defensive", () => {
     const ledger = [

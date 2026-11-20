@@ -485,7 +485,16 @@ export function emitOwnerCdEntries(
         !isProc &&
         cd.tag === "Defensive" &&
         !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId) &&
-        !spiritCarriesHymn(cd.spellId, cast.timeSeconds)
+        !spiritCarriesHymn(cd.spellId, cast.timeSeconds) &&
+        // an Aura Mastery pressed as the silence / interrupt immunity is no
+        // damage save to weigh cheaper defensives against (the press's own
+        // classification, `auraMasteryPressTag`; assembly review
+        // 80-PIPE-170c-B156, the reader sweep)
+        auraMasteryPressTag(
+          cd.spellId,
+          owner,
+          matchStartMs + cast.timeSeconds * 1000,
+        ) === ""
       ) {
         // B142: a team/raid heal (Divine Hymn, Tranquility, …) covers an injured ALLY, so a
         // self-only tool (Desperate Prayer, Frenzied Regeneration) can't substitute for it — treat it
