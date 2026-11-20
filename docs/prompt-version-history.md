@@ -8222,3 +8222,15 @@ not answer; context lines unchanged. Codex branch reviews 85-tk-CD-T181-1 to
 both APPROVE). Review -1's case of a teammate's self-save answering the window
 was first recorded as having no instance on the 605; the batch check found
 two, which is why the narrowing is here.
+
+v636 (2026-11-19; pipeline batch B164, T165; rulings A17 and R85). A Death
+Knight who broke the attempt's stun with Icebound Fortitude or Lichborne was
+filed as `FAILED: popped <spell>`, a wall, although the legend says a break-
+out reads `broke out`. Both now read `FAILED: broke out (<spell>)` through one
+predicate. On the 605, 235 kill-attempt lines in 199 contexts change; by the
+existing break precedence 40 of them no longer name a co-occurring external
+and 24 drop other walls popped beside it (user ruling R98: ship, and name
+externals beside every break in T235). Legend sentences no longer used are
+dropped. Codex branch reviews 85-tk-WIN-T165-1 to -3 (all findings
+constructed; the scan-side ones fixed, the last - a second stun inside the
+same second can carry a corrupted result the scan cannot catch - recorded).

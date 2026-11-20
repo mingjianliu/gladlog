@@ -1709,5 +1709,12 @@
  *  stand over it; a teammate's does not; the [BURST ANSWERED] line never
  *  names such a self-save.
  *  See docs/prompt-version-history.md.
+ *
+ * v636 (2026-11-19; pipeline batch B164, T165): An Icebound Fortitude or
+ *  Lichborne that breaks the attempt's stun files the kill attempt as
+ *  `FAILED: broke out (<spell>)`, as the legend orders, not as `popped
+ *  <spell>`; like every break, it names an immunity beside it but not an
+ *  external (naming externals beside a break is T235).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 635;
+export const PROMPT_VERSION = 636;
