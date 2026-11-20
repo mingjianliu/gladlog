@@ -8266,3 +8266,9 @@ contexts change in 26 line pairs, all numeric only (absorbed and damage
 figures on 4 [YOU] [CD] lines and 22 burst / kill-window lines); the menu does
 not change; gates 0. Scan: 106 unlisted attacker-side absorb rows of 1,541,797
 -> 0; full scan5 unchanged.
+
+v639 (2026-11-20; pipeline batch B168, T232). No prompt line changes. The
+gates' reader of a [BURST ANSWERED] line split a spell name holding ' on ' (63
+lines on the 605, all Lay on Hands, read as 'Lay' on target 'Hands'); the
+target clause is now a roster label only. All 109 line gates are byte-
+identical with both readers -- no line was failing or being skipped wrongly.

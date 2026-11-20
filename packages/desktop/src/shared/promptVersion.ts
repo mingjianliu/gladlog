@@ -1731,5 +1731,10 @@
  *  those rows; where a line says where damage was SENT (team focus %,
  *  target ranking, Off-target share) the eaten hit still counts.
  *  See docs/prompt-version-history.md.
+ *
+ * v639 (2026-11-20; pipeline batch B168, T232): No change to the page: the
+ *  gates read a [BURST ANSWERED] line whose answer is a multi-word spell
+ *  name (Lay on Hands) correctly.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 638;
+export const PROMPT_VERSION = 639;
