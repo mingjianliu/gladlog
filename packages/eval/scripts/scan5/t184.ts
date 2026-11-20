@@ -31,9 +31,12 @@
  */
 import {
   burstWindowDecisionPoints,
+  GROUND_CONTROL_FUSE_MS,
+  latestTotemRelocationMs,
   TOTEM_RELOCATION_IDS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import {
+  answersPressured,
   creditedAnswer,
   parseBurstAnsweredLine,
 } from "@gladlog/analysis/src/context/burstAnswered";
@@ -45,7 +48,14 @@ import { APPLIED, ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 export const CHECKS = [
   "summonControlTimedByOtherPress",
   "printedSummonControlAnswerDiffers",
+  "b167Reading",
 ] as const;
+/** inventory of what batch review 80-PIPE-181-B167's two engine findings
+ * change (#1 ranking, #3 relocation lifetime) — counted, never a failure */
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "b167Reading|credited answer differs from the drop-ranked reading",
+  "b167Reading|printed at a relocation older than the fuse",
+]);
 
 /** A unit as the prompt labels it: `5(RPaladin)`. */
 const UNIT_LABEL = /^\d+\([^)]*\)$/;
@@ -163,6 +173,26 @@ export function run(ctx: IRoundCtx): void {
     return;
   }
   printedLines(ctx, points);
+  // b167Reading: the window's credited answer, and the same list ranked by
+  // printed latency (the pre-fix reading, a stable sort)
+  for (const p of points) {
+    const pr = p.pressured;
+    if (!pr) continue;
+    const now = creditedAnswer(p);
+    const old = [...p.responseCasts]
+      .sort((a, b) => a.latencySec - b.latencySec)
+      .find((r) => answersPressured(pr, r));
+    if (!now && !old) continue;
+    ctx.bump("b167Reading");
+    if (now !== old)
+      ctx.violate(
+        "b167Reading",
+        "credited answer differs from the drop-ranked reading",
+        ctx.start + p.tSec * 1000,
+        `${ctx.roundKey}|${owner.reaction}|${p.tSec}`,
+        `window at ${p.tSec}s: now ${now ? `${now.casterName} ${now.spellName} ${now.latencySec}s` : "-"}; drop-ranked ${old ? `${old.casterName} ${old.spellName} ${old.latencySec}s` : "-"}`,
+      );
+  }
   const C = "summonControlTimedByOtherPress";
   const sec = (ms: number): number => Math.floor((ms - ctx.start) / 1000);
   for (const p of points)
@@ -191,6 +221,31 @@ export function run(ctx: IRoundCtx): void {
       // no summon row: the producer keeps its untargeted-press fallback by
       // design — nothing to hold it to (codex 85-tk-CD-T184-1 #2)
       if (summoned === null) continue;
+      const casterCasts = successesOf(caster)
+        .map((c: any) => ({
+          unitId: String(caster.id),
+          spellId: String(c.spellId),
+          tMs: tsOf(c),
+        }))
+        .sort((x: any, y: any) => x.tMs - y.tMs);
+      const moved = latestTotemRelocationMs(
+        casterCasts,
+        String(caster.id),
+        summoned,
+        landing.atMs,
+      );
+      if (
+        moved !== undefined &&
+        landing.atMs - moved > GROUND_CONTROL_FUSE_MS &&
+        r.tSec === sec(moved)
+      )
+        ctx.violate(
+          "b167Reading",
+          "printed at a relocation older than the fuse",
+          landing.atMs,
+          `${ctx.roundKey}|${owner.reaction}|${p.tSec}|${caster.id}|${landing.atMs}|reloc`,
+          `window at ${p.tSec}s: ${auraName} landed ${((landing.atMs - ctx.start) / 1000).toFixed(1)}s, summoned ${((summoned - ctx.start) / 1000).toFixed(1)}s, moved ${((moved - ctx.start) / 1000).toFixed(1)}s; latency ${r.latencySec}s`,
+        );
       const makes = (id: string): boolean =>
         id === landing.spellId ||
         isCastOrEffect(id, landing.spellId) ||

@@ -24,14 +24,21 @@
  *    from a summon of A (an APPLIED / REFRESH of English name C on T, source
  *    owned by A, in [lead − 3 s, lead + 20 s]). Lead = E's first
  *    SPELL_CAST_SUCCESS of X in the line's second. The control's instant =
- *    A's own press of name C (a command / Intimidation-type press) in the
- *    3 s before the aura, else the summon's own SUCCESS of C in those 3 s,
- *    else the aura's own instant — never another press of A's. Violation:
- *    the rendered latency is more than 0.1 s off every such landing. Kind
- *    `petAura` (a `Pet-` source, counted); `summonAura` (totem / guardian —
- *    the owner's summon press is the documented cause, open ruling Q3)
- *    is measured, not counted. Lines whose control came from a player are
- *    out of class (no bump).
+ *    the ONE instant the engine prints for that landing
+ *    (`landedControlInstantMs`, imported — batch review 80-PIPE-181-B167
+ *    #2: a list of accepted instants let a wrong drop and the aura's own
+ *    time pass beside the right relocation), fed from the log's rows: A's
+ *    SUCCESS that makes the aura (`castMakesControlAura`) in the fuse
+ *    before it (or `AIMED_CONTROL_LANDING_LEAD_MS` after it, untargeted or
+ *    at the holder); for a `Pet-` source its own SUCCESS of it in the fuse;
+ *    for a totem / guardian with a SPELL_SUMMON row the latest relocation
+ *    of it since the summon (`latestTotemRelocationMs`), else the summon
+ *    (user ruling R90). Violation: the rendered latency is more than 0.1 s
+ *    off that instant for every landing. Kind `petAura` (a `Pet-` source,
+ *    counted); `summonAura` (totem / guardian) measured, not counted; a
+ *    guardian with no summon row is timed by an untargeted press this scan
+ *    does not model — listed, not judged. Lines whose control came from a
+ *    player are out of class (no bump).
  *  - `petKillCredit` (D22): `[UNIT DESTROYED] … killed by: <credits>` and
  *    `[KILL] … (killing blow: <credit>`. Victim: the player label of a
  *    `[KILL]` line; for `[UNIT DESTROYED]` the non-player unit (of that owner
@@ -57,7 +64,13 @@
  *    owner or the owner's summon inside the attempt: more than one is a
  *    violation. Kind = the tag.
  */
-import { TOTEM_RELOCATION_IDS } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
+import {
+  AIMED_CONTROL_LANDING_LEAD_MS,
+  castMakesControlAura,
+  GROUND_CONTROL_FUSE_MS,
+  landedControlInstantMs,
+  latestTotemRelocationMs,
+} from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 import { summonedAtMs } from "@gladlog/analysis/src/utils/summonLife";
 
@@ -71,37 +84,6 @@ import {
   tsOf,
 } from "./ctx";
 
-/**
- * The instants a summon's landed control may be printed at
- * (`petControlTiming`). A press of the OWNER that made the control inside
- * the fuse before the aura is its time, and nothing else is accepted
- * beside it (codex 85-tk-CD-T184-3: a guardian summoned at 90 s whose
- * owner pressed the control at 101 s, landing 102 s, must not pass printed
- * at the summon). With no owner press the control is the summon's own
- * pulse: the aura's instant, the summon's own cast row of it, and — for a
- * totem / guardian with a summon row (user ruling R90, T184) — the summon
- * and every relocation since, however early. The summon's own cast row is
- * NOT a press: an Earthgrab Totem logs `Earthgrab` 64695 itself at every
- * pulse (581d783f r1 4:50 — totem dropped 1.4 s before the opener, moved
- * with Totemic Projection 0.1 s before it, root landed 0.6 s after; the
- * line's "0.1s before it opened" is the relocation, R90's printed time).
- */
-export function acceptedControlInstants(x: {
-  auraMs: number;
-  ownerPressMs?: number;
-  sourcePressMs?: number;
-  summonedMs: number | null;
-  relocationMs: readonly number[];
-}): number[] {
-  if (x.ownerPressMs !== undefined) return [x.ownerPressMs];
-  const own = x.sourcePressMs === undefined ? [] : [x.sourcePressMs];
-  return x.summonedMs === null
-    ? own.length > 0
-      ? own
-      : [x.auraMs]
-    : [x.auraMs, ...own, x.summonedMs, ...x.relocationMs];
-}
-
 export const CHECKS = [
   "kickOnSummon",
   "petControlTiming",
@@ -110,6 +92,7 @@ export const CHECKS = [
 ] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "petControlTiming|summonAura",
+  "petControlTiming|guardian with no summon row (not judged)",
 ]);
 
 const INTERRUPT = "SPELL_INTERRUPT";
@@ -246,18 +229,27 @@ export function run(ctx: IRoundCtx): void {
       .sort((x, y) => x - y)[0];
     if (lead === undefined) continue;
     const summons = new Set(ownedBy(answerer).map((u) => u.id));
-    const landings: Array<{ src: any; ms: number }> = [];
+    const landings: Array<{
+      src: any;
+      ms: number;
+      auraId: string;
+      holderId: string;
+    }> = [];
     for (const on of a.controlOn) {
       const t = labelUnit(on.target);
       for (const e of (t?.auraEvents ?? []) as any[]) {
-        const evn = e.logLine?.event;
-        if (evn !== "SPELL_AURA_APPLIED" && evn !== "SPELL_AURA_REFRESH")
-          continue;
+        // the engine reads an application only (`controlLandedResponses`)
+        if (e.logLine?.event !== "SPELL_AURA_APPLIED") continue;
         if (!summons.has(e.srcUnitId)) continue;
         if (nameOf(e.spellId, e.spellName) !== a.spellName) continue;
         const ms = tsOf(e);
         if (ms < lead - CONTROL_LOOKBACK_MS || ms > lead + 20_000) continue;
-        landings.push({ src: unitById.get(e.srcUnitId), ms });
+        landings.push({
+          src: unitById.get(e.srcUnitId),
+          ms,
+          auraId: String(e.spellId ?? ""),
+          holderId: t.id,
+        });
       }
     }
     if (landings.length === 0) continue; // a player's own control: out of class
@@ -279,44 +271,83 @@ export function run(ctx: IRoundCtx): void {
       )
     )
       continue;
-    ctx.bump("petControlTiming");
-    const named = (c: any) => nameOf(c.spellId, c.spellName) === a.spellName;
     const latOf = (at: number) =>
       Math.round(((at - lead) / 1000 + Number.EPSILON) * 10) / 10;
+    const ownCasts = ((answerer.spellCastEvents ?? []) as any[])
+      .filter((c) => c.logLine?.event === SUCCESS && c.spellId)
+      .map((c) => ({
+        unitId: String(answerer.id),
+        spellId: String(c.spellId),
+        tMs: tsOf(c),
+        dest: String(c.destUnitId ?? ""),
+      }))
+      .sort((x, y) => x.tMs - y.tMs);
+    const unsummoned: number[] = [];
     const truths = landings.flatMap((g) => {
-      const inFuse = (c: any) =>
-        tsOf(c) <= g.ms && tsOf(c) >= g.ms - CONTROL_LOOKBACK_MS;
-      const press = ((answerer.spellCastEvents ?? []) as any[])
-        .filter((c) => c.logLine?.event === SUCCESS && named(c) && inFuse(c))
-        .map(tsOf)
-        .sort((x, y) => y - x)[0];
-      const own = ((g.src?.spellCastEvents ?? []) as any[])
-        .filter((c) => c.logLine?.event === SUCCESS && named(c) && inFuse(c))
-        .map(tsOf)
-        .sort((x, y) => y - x)[0];
       const src = g.src;
-      const summoned =
-        src && !String(src.id).startsWith("Pet-") ? summonedAtMs(src) : null;
-      const moved =
-        summoned === null
-          ? []
-          : ((answerer.spellCastEvents ?? []) as any[])
+      const fromPet = String(src?.id ?? "").startsWith("Pet-");
+      const makes = (castId: string) => castMakesControlAura(castId, g.auraId);
+      let familyMs: number | undefined;
+      for (const c of ownCasts) {
+        if (c.tMs > g.ms + AIMED_CONTROL_LANDING_LEAD_MS) break;
+        if (c.tMs < g.ms - GROUND_CONTROL_FUSE_MS || !makes(c.spellId))
+          continue;
+        if (
+          c.tMs > g.ms &&
+          !(!c.dest || /^0+$/.test(c.dest) || c.dest === g.holderId)
+        )
+          continue;
+        familyMs = c.tMs;
+      }
+      const petOwnMs =
+        fromPet && familyMs === undefined
+          ? ((src?.spellCastEvents ?? []) as any[])
               .filter(
                 (c) =>
                   c.logLine?.event === SUCCESS &&
-                  TOTEM_RELOCATION_IDS.has(String(c.spellId)) &&
-                  tsOf(c) >= summoned &&
-                  tsOf(c) <= g.ms,
+                  tsOf(c) <= g.ms &&
+                  tsOf(c) >= g.ms - GROUND_CONTROL_FUSE_MS &&
+                  makes(String(c.spellId ?? "")),
               )
-              .map(tsOf);
-      return acceptedControlInstants({
+              .map(tsOf)
+              .sort((x, y) => y - x)[0]
+          : undefined;
+      const summonedMs =
+        !fromPet && familyMs === undefined && src ? summonedAtMs(src) : null;
+      if (!fromPet && familyMs === undefined && summonedMs === null) {
+        unsummoned.push(g.ms);
+        return [];
+      }
+      const relocationMs =
+        summonedMs === null
+          ? undefined
+          : latestTotemRelocationMs(
+              ownCasts,
+              String(answerer.id),
+              summonedMs,
+              g.ms,
+            );
+      const at = landedControlInstantMs({
         auraMs: g.ms,
-        ownerPressMs: press,
-        sourcePressMs: own,
-        summonedMs: summoned,
-        relocationMs: moved,
-      }).map((at) => ({ g, at, lat: latOf(at) }));
+        ...(familyMs !== undefined ? { familyMs } : {}),
+        ...(petOwnMs !== undefined ? { petOwnMs } : {}),
+        summonedMs,
+        ...(relocationMs !== undefined ? { relocationMs } : {}),
+      });
+      return [{ g, at, lat: latOf(at) }];
     });
+    if (truths.length === 0) {
+      ctx.violate(
+        "petControlTiming",
+        "guardian with no summon row (not judged)",
+        unsummoned[0]!,
+        `${a.answerer}|${a.spellName}|${lead}`,
+        `${a.answerer} ${a.spellName}: rendered ${a.latencySec}s`,
+        l,
+      );
+      continue;
+    }
+    ctx.bump("petControlTiming");
     if (truths.some((x) => Math.abs(x.lat - a.latencySec) <= 0.1 + 1e-9))
       continue;
     const best = truths[0]!;
