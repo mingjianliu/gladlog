@@ -2287,11 +2287,18 @@ function reconstructEnemyCDTimelineUncached(
   const rosterSides = combat.units
     ? buildRosterSides(Object.values(combat.units))
     : undefined;
-  const allFriendlyDamage = (friendlies ?? [])
-    .flatMap((u) =>
-      u.damageIn.filter((d) => !isRedistributedDamageRow(u, d, rosterSides)),
-    )
-    .filter((e) => e.logLine.timestamp <= combat.endTime);
+  /** A unit's rows the windows read: landed (no moved health) and inside
+   * the round — ONE bound for the window's total, the slice average and the
+   * pressured-unit pick (pipeline T228: the pick alone read on to the
+   * window's end, past the round's, and named a unit by what it took after
+   * the deciding death). */
+  const roundDamageOf = (u: ICombatUnit) =>
+    u.damageIn.filter(
+      (d) =>
+        !isRedistributedDamageRow(u, d, rosterSides) &&
+        d.logLine.timestamp <= combat.endTime,
+    );
+  const allFriendlyDamage = (friendlies ?? []).flatMap(roundDamageOf);
   const totalFriendlyDamage = allFriendlyDamage.reduce(
     (sum, e) => sum + Math.abs(e.effectiveAmount),
     0,
@@ -2516,12 +2523,11 @@ function reconstructEnemyCDTimelineUncached(
         let topUnit: ICombatUnit | null = null;
         let topDmg = 0;
         for (const f of friendlies) {
-          const dmg = f.damageIn
+          const dmg = roundDamageOf(f)
             .filter(
               (d) =>
                 d.logLine.timestamp >= windowStartMs &&
-                d.logLine.timestamp <= windowEndMs &&
-                !isRedistributedDamageRow(f, d, rosterSides),
+                d.logLine.timestamp <= windowEndMs,
             )
             .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
           if (dmg > topDmg) {
