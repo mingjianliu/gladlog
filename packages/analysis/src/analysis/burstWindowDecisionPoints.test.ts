@@ -464,6 +464,8 @@ describe("burstWindowDecisionPoints — response classification", () => {
     );
     for (const id of TEAM_HEAL_WALL_ANSWER_IDS)
       expect(canBeWallResponse(id), id).toBe(true);
+    // a copy row is never a press, so never a wall (Divine Hymn's tick)
+    expect(canBeWallResponse("64844")).toBe(false);
     const drift = [...ENEMY_HEAL_CD_IDS].filter(
       (id) => canBeWallResponse(id) && !TEAM_HEAL_WALL_ANSWER_IDS.has(id),
     );

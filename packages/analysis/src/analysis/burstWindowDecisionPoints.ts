@@ -840,8 +840,11 @@ export const TEAM_HEAL_WALL_ANSWER_IDS: ReadonlySet<string> = new Set([
   "215769", // Spirit of Redemption, the pressed PvP id (R93; 605: 114 of 114 presses have a cast row)
 ]);
 /** The engine can give this id the `wall` category (the order
- * `burstWindowDecisionPoints` classifies a friendly press in). */
+ * `burstWindowDecisionPoints` classifies a friendly press in). A copy row
+ * (`COPY_CAST_IDS`: a channel tick, a proc copy — Divine Hymn's 64844) is
+ * no press there and so never a wall (codex 85-tk-CD-T224-1). */
 export function canBeWallResponse(spellId: string): boolean {
+  if (COPY_CAST_IDS.has(spellId)) return false;
   return (
     PERSONAL_WALL_IDS.has(spellId) ||
     (!EXTERNAL_IDS.has(spellId) &&
