@@ -35,7 +35,9 @@ import {
   burstWindowDecisionPoints,
   canBeWallResponse,
   controlLandedResponses,
+  landedControlInstantMs,
   landedPreOpenerStillUp,
+  latestTotemRelocationMs,
   pressDidNotReachPressured,
   pressWentElsewhere,
   TEAM_HEAL_WALL_ANSWER_IDS,
@@ -1945,6 +1947,106 @@ describe("controlLandedResponses — a totem's own pulse (fact11 D28)", () => {
   });
   it("no summon row: the untargeted press in the fuse still times it", () => {
     expect(withOtherPress(null)).toMatchObject([{ tMs: 101_639 }]);
+  });
+  // batch review 80-PIPE-181-B167 #3, real match 0284fcd9 r4: Earthgrab
+  // Totem summoned at 2.816 s, moved by Totemic Projection at 4.658 s, its
+  // root on the mage at 14.815 s — the move is outside the fuse and is still
+  // the press that put the totem there
+  const relocatedEarly = (casts: Array<{ tMs: number }>, summonedAt: number) =>
+    controlLandedResponses(
+      [
+        {
+          id: "E1",
+          auraEvents: [
+            {
+              timestamp: 14_815,
+              spellId: EARTHGRAB_ROOT,
+              srcUnitId: TOTEM,
+              logLine: { event: "SPELL_AURA_APPLIED" },
+            },
+          ],
+        },
+      ],
+      new Set(["E1"]),
+      ownerOf,
+      casts.map((c) => ({
+        unitId: "F1",
+        spellId: "108287",
+        dest: undefined,
+        tMs: c.tMs,
+      })),
+      12_000,
+      22_000,
+      () => [],
+      (id) => (id === TOTEM ? summonedAt : null),
+    );
+  it("a relocation more than the fuse before the landing still times the totem's control", () => {
+    expect(relocatedEarly([{ tMs: 4_658 }], 2_816)).toMatchObject([
+      { tMs: 4_658, orderAtMs: 14_815 },
+    ]);
+  });
+  it("a relocation before this totem's summon moved an earlier totem", () => {
+    expect(relocatedEarly([{ tMs: 2_000 }], 2_816)).toMatchObject([
+      { tMs: 2_816, orderAtMs: 14_815 },
+    ]);
+  });
+});
+
+describe("landedControlInstantMs — the one printed instant of a landed control (T184, batch review 80-PIPE-181-B167 #2)", () => {
+  it("the press that made the aura wins over the summon", () => {
+    expect(
+      landedControlInstantMs({
+        auraMs: 102_000,
+        familyMs: 101_000,
+        summonedMs: 90_000,
+      }),
+    ).toBe(101_000);
+  });
+  it("a totem with a summon row: the latest relocation, else the summon — never the aura, never another press (581d783f r1 4:50)", () => {
+    expect(
+      landedControlInstantMs({
+        auraMs: 290_999,
+        summonedMs: 288_997,
+        relocationMs: 290_301,
+        otherPressMs: 290_500,
+      }),
+    ).toBe(290_301);
+    expect(
+      landedControlInstantMs({
+        auraMs: 40_799,
+        summonedMs: 24_812,
+        otherPressMs: 39_000,
+      }),
+    ).toBe(24_812);
+  });
+  it("a pet: its own cast row; no summon row: the other press, else the aura", () => {
+    expect(
+      landedControlInstantMs({
+        auraMs: 102_000,
+        petOwnMs: 101_500,
+        summonedMs: null,
+      }),
+    ).toBe(101_500);
+    expect(
+      landedControlInstantMs({
+        auraMs: 12_000,
+        summonedMs: null,
+        otherPressMs: 11_000,
+      }),
+    ).toBe(11_000);
+    expect(landedControlInstantMs({ auraMs: 12_000, summonedMs: null })).toBe(
+      12_000,
+    );
+  });
+  it("latestTotemRelocationMs reads the totem's life and stops at the landing", () => {
+    const casts = [
+      { unitId: "F1", spellId: "108287", tMs: 1_000 },
+      { unitId: "F1", spellId: "108287", tMs: 4_000 },
+      { unitId: "F2", spellId: "108287", tMs: 5_000 },
+      { unitId: "F1", spellId: "108287", tMs: 9_000 },
+    ];
+    expect(latestTotemRelocationMs(casts, "F1", 2_000, 8_000)).toBe(4_000);
+    expect(latestTotemRelocationMs(casts, "F1", 5_000, 8_000)).toBeUndefined();
   });
 });
 

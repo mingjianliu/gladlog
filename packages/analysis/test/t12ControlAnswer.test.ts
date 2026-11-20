@@ -433,6 +433,48 @@ describe("[BURST ANSWERED] reads the same list (FT-T12 D3)", () => {
   });
 });
 
+describe("a totem's control ranks by its landing, prints at its drop (T184, batch review 80-PIPE-181-B167 #1)", () => {
+  // 0284fcd9 r2: Cheap Shot landed at 22.0 s, an Earthgrab Totem dropped at
+  // 6.8 s rooted at 24.8 s and took the credit. Here: a Capacitor Totem
+  // dropped at 0:05 (5 s before the opener), its stun on the opener at
+  // 0:14; a Storm Bolt on the opener landed at 0:12.1
+  const totem = {
+    id: "T1",
+    name: "Capacitor Totem",
+    ownerId: "F1",
+    reaction: CombatUnitReaction.Friendly,
+    spellCastEvents: [],
+    auraEvents: [],
+    actionIn: [
+      {
+        timestamp: T0 + 5_000,
+        logLine: { event: LogEvent.SPELL_SUMMON, timestamp: T0 + 5_000 },
+      },
+    ],
+  };
+  it("the answer that reached the caster first is credited; the totem keeps its printed drop", () => {
+    const units = [
+      friend(
+        [cast(CAPACITOR, 5, "0000000000000000"), cast(STORM_BOLT, 12, "E1")],
+        steady("E1"),
+      ),
+      totem,
+      opener({
+        auraEvents: [
+          aura(STORM_BOLT_STUN, 12.1, "F1", "E1"),
+          aura(STATIC_CHARGE, 14, "T1", "E1"),
+        ],
+      }),
+    ];
+    const [p] = points(units);
+    expect(controls(p!).map((r: any) => [r.spellId, r.latencySec])).toEqual([
+      [STORM_BOLT, 2],
+      [STATIC_CHARGE, -5],
+    ]);
+    expect(creditedAnswer(p!)!.spellId).toBe(STORM_BOLT);
+  });
+});
+
 describe("the legends say what counts as a control answer (FT-T12 D3)", () => {
   it("[BURST ANSWERED]: the rule is part of the legend every credit line brings, limit included", () => {
     expect(BURST_ANSWERED_LEGEND).toContain(BURST_ANSWERED_CONTROL_RULE_LEGEND);

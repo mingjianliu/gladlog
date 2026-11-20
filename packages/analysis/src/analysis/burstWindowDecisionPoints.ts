@@ -1154,7 +1154,16 @@ const isNoDest = (dest: string | undefined): boolean =>
 export interface LandedControlResponse {
   unitId: string;
   spellId: string;
+  /** the instant the answer is PRINTED at (`landedControlInstantMs`) */
   tMs: number;
+  /** the instant the answer is ORDERED at among a window's answers, when it
+   * is not `tMs`: a totem's or guardian's control is printed at the press
+   * that made the totem (user ruling R90) but arrived when it LANDED —
+   * an earlier-dropped totem must not displace an answer that reached the
+   * caster first (batch review 80-PIPE-181-B167 #1, 0284fcd9 r2: Cheap
+   * Shot landed at 22.0 s, the Earthgrab Totem dropped at 6.8 s rooted at
+   * 24.8 s and took the credit). Absent = `tMs`. */
+  orderAtMs?: number;
   holderId?: string;
   auraSrcId?: string;
   auraAtMs?: number;
@@ -1176,6 +1185,77 @@ export function landedPreOpenerStillUp(
   if (r.auraAtMs === undefined || r.auraAtMs >= leadMs || !r.auraSrcId)
     return undefined;
   return aimedControlUpAt(holder, r.auraSrcId, r.spellId, r.auraAtMs, leadMs);
+}
+
+/**
+ * Does a cast of `castId` make the control aura `auraSpellId` — its own
+ * spell, its cast id through the cast→effect table (Ring of Frost 113724 →
+ * 82691, Lasso 305483 → 305485, Capacitor Totem → Static Charge), or the
+ * same English name. The one reading `controlLandedResponses` and the
+ * summon-timing scan (scan5/pets.ts) share.
+ */
+export function castMakesControlAura(
+  castId: string,
+  auraSpellId: string,
+): boolean {
+  if (castId === auraSpellId || isCastOrEffect(castId, auraSpellId))
+    return true;
+  const auraName = getEnglishSpellName(auraSpellId, "");
+  return auraName !== "" && getEnglishSpellName(castId, "") === auraName;
+}
+
+/**
+ * The instant a landed control is PRINTED at, from what the log holds about
+ * it — the one choice `controlLandedResponses` makes and the summon-timing
+ * scan (scan5/pets.ts) checks the printed line against (batch review
+ * 80-PIPE-181-B167 #2: the scan accepted every candidate at once).
+ * In order: the press of the answering player that made the aura
+ * (`familyMs`); for a `Pet-` source, the pet's own cast row of it
+ * (`petOwnMs`); for a totem or guardian whose SPELL_SUMMON row the log
+ * holds, the latest relocation of it (`relocationMs`), else that summon
+ * (`summonedMs`) — user ruling R90, however long before; otherwise the
+ * player's aimed control or untargeted press inside the fuse
+ * (`otherPressMs`); else the aura itself.
+ */
+export function landedControlInstantMs(x: {
+  auraMs: number;
+  familyMs?: number;
+  petOwnMs?: number;
+  summonedMs: number | null;
+  relocationMs?: number;
+  otherPressMs?: number;
+}): number {
+  if (x.familyMs !== undefined) return x.familyMs;
+  if (x.petOwnMs !== undefined) return x.petOwnMs;
+  if (x.summonedMs !== null) return x.relocationMs ?? x.summonedMs;
+  return x.otherPressMs ?? x.auraMs;
+}
+
+/**
+ * The latest relocation (`TOTEM_RELOCATION_IDS`) by `unitId` of a totem
+ * summoned at `summonedMs` before its control landed at `auraMs` — over the
+ * totem's whole life, not the ground-control fuse (batch review
+ * 80-PIPE-181-B167 #3, 0284fcd9 r4: an Earthgrab Totem summoned at 2.8 s,
+ * moved at 4.7 s, rooted at 14.8 s printed its drop). A relocation before
+ * the summon moved an earlier totem. `casts` in time order.
+ */
+export function latestTotemRelocationMs(
+  casts: ReadonlyArray<{ unitId: string; spellId: string; tMs: number }>,
+  unitId: string,
+  summonedMs: number,
+  auraMs: number,
+): number | undefined {
+  let at: number | undefined;
+  for (const c of casts) {
+    if (c.tMs > auraMs) break;
+    if (
+      c.unitId === unitId &&
+      c.tMs >= summonedMs &&
+      TOTEM_RELOCATION_IDS.has(c.spellId)
+    )
+      at = c.tMs;
+  }
+  return at;
 }
 
 export function controlLandedResponses(
@@ -1224,11 +1304,8 @@ export function controlLandedResponses(
       // untargeted press 1.9 s earlier while the aimed cast came 40 ms
       // before the aura. Codex review: a non-control cast aimed at the target
       // (a Frostbolt between Ring of Frost and its aura) never times it.
-      const sidName = getEnglishSpellName(sid, "");
       const producesAura = (castId: string): boolean =>
-        castId === sid ||
-        isCastOrEffect(castId, sid) ||
-        (sidName !== "" && getEnglishSpellName(castId, "") === sidName);
+        castMakesControlAura(castId, sid);
       // fact2 (2026-10-20): an untargeted press that makes a control of its
       // own (its cast→effect family holds a control aura — Freezing Trap
       // 187650 → 3355) is that control's cause, never this one's
@@ -1250,11 +1327,6 @@ export function controlLandedResponses(
       let family: (typeof friendlyCasts)[number] | undefined;
       let aimedControl: (typeof friendlyCasts)[number] | undefined;
       let untargeted: (typeof friendlyCasts)[number] | undefined;
-      // the latest press that moves a totem, kept apart from `untargeted`:
-      // another untargeted press after it must not erase it (codex
-      // 85-tk-CD-T184-1b, dca02448 r4: Totemic Projection at 150.051 s, a
-      // Healing Stream Totem 5 ms later, the root at 150.379 s)
-      let relocation: (typeof friendlyCasts)[number] | undefined;
       // T43 (60bfdea9 0:12): the producing cast's own SUCCESS row can be
       // logged just AFTER its aura (Rake's stun 163505 at 13.454 s, Rake
       // 1822 at 13.456 s) — the lead the cast side already allows an aimed
@@ -1276,8 +1348,6 @@ export function controlLandedResponses(
         if (c.tMs > a.timestamp + AIMED_CONTROL_LANDING_LEAD_MS) break;
         if (c.unitId !== unitId || c.tMs < a.timestamp - GROUND_CONTROL_FUSE_MS)
           continue;
-        if (c.tMs <= a.timestamp && TOTEM_RELOCATION_IDS.has(c.spellId))
-          relocation = c;
         if (c.tMs > a.timestamp) {
           if (
             producesAura(c.spellId) &&
@@ -1326,10 +1396,18 @@ export function controlLandedResponses(
         a.srcUnitId !== unitId && !fromPet && !family && !petOwn
           ? summonedAtOf(a.srcUnitId)
           : null;
-      const cast =
-        family ??
-        petOwn ??
-        (summonAtMs === null ? (aimedControl ?? untargeted) : relocation);
+      // the latest press that moves the totem, read apart from
+      // `untargeted` (another untargeted press after it must not erase it,
+      // codex 85-tk-CD-T184-1b, dca02448 r4) and over the totem's life
+      const relocationMs =
+        summonAtMs === null
+          ? undefined
+          : latestTotemRelocationMs(
+              friendlyCasts,
+              unitId,
+              summonAtMs,
+              a.timestamp,
+            );
       // the cast-side test already counted an aimed control from this
       // friendly that could be this aura's cause — one that produces THIS
       // aura and was aimed at THIS aura's holder, the only case where the
@@ -1355,7 +1433,16 @@ export function controlLandedResponses(
       // — the press that answered is the one that summoned it (an Earthgrab
       // Totem dropped at 0:05.5 rooted the priest at 0:17.5, read "answered
       // with Earthgrab in 4.4s" for a burst opened at 0:13.1)
-      const tMs = cast?.tMs ?? summonAtMs ?? a.timestamp;
+      const tMs = landedControlInstantMs({
+        auraMs: a.timestamp,
+        ...(family ? { familyMs: family.tMs } : {}),
+        ...(petOwn ? { petOwnMs: petOwn.tMs } : {}),
+        summonedMs: summonAtMs,
+        ...(relocationMs !== undefined ? { relocationMs } : {}),
+        ...((aimedControl ?? untargeted)
+          ? { otherPressMs: (aimedControl ?? untargeted)!.tMs }
+          : {}),
+      });
       // user ruling R90 (2026-11-19, T184; it supersedes R88 and REVERSES
       // fact11 D28's "a totem dropped before the burst answers nothing" —
       // do not restore that): for a totem's or guardian's control the two
@@ -1377,6 +1464,7 @@ export function controlLandedResponses(
         unitId,
         spellId: sid,
         tMs,
+        ...(memberAtMs !== tMs ? { orderAtMs: memberAtMs } : {}),
         ...(caster.id !== undefined ? { holderId: caster.id } : {}),
         auraSrcId: a.srcUnitId,
         auraAtMs: a.timestamp,
@@ -2039,6 +2127,9 @@ export function burstWindowDecisionPoints(
       // the raw instant each response counts at (its `latencySec` origin) —
       // read once more below, against the pressured friendly's death
       const responseAtMs = new Map<BurstResponseCast, number>();
+      // the latency a response is ORDERED by when it is not its printed
+      // `latencySec` (a summon's control: its landing, `orderAtMs`)
+      const orderLatencyOf = new Map<BurstResponseCast, number>();
       // a press on another friendly is an external; an untargeted press
       // that can reach others (Tree of Life, Ancient of Lore) a group heal;
       // one on its caster — or on an enemy (Ultimate Penitence) — a wall
@@ -2289,9 +2380,20 @@ export function burstWindowDecisionPoints(
             Math.round(((r.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) / 10,
         };
         responseAtMs.set(response, r.tMs);
+        if (r.orderAtMs !== undefined)
+          orderLatencyOf.set(
+            response,
+            Math.round(
+              ((r.orderAtMs - leadRawMs) / 1000 + Number.EPSILON) * 10,
+            ) / 10,
+          );
         responseCasts.push(response);
       }
-      responseCasts.sort((a, b) => a.latencySec - b.latencySec);
+      // first answer first, by the instant it reached the caster (R90
+      // decides what a summon's control PRINTS, not where it ranks)
+      const orderLat = (r: BurstResponseCast): number =>
+        orderLatencyOf.get(r) ?? r.latencySec;
+      responseCasts.sort((a, b) => orderLat(a) - orderLat(b));
       // ── outcomes per friendly, and the ONE pressured friendly ────────────
       // Computed before the kite/feasibility/triage work below, because all
       // three ask about the same unit (see `pressured`).
