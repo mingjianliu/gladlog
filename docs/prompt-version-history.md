@@ -8169,3 +8169,13 @@ logged the reflect, not its owner). On the 605, 100 `[CC AVOIDED?] ... logged
 REFLECT` lines that repeated a [REFLECTED] line of the same press are removed
 in 74 contexts; nothing added; menus unchanged. Codex branch reviews 85-tk-
 CC-T178-1 to -1c (the last APPROVE).
+
+v632 (2026-11-19; pipeline batch B160, T179). The ENEMY CC KIT header printed
+only when a burst-window threat existed, so a context whose kit unit had only
+landed or aimed controls carried no kit line, though the header promises every
+control that landed. The kit line now prints when its union (threats, landed,
+aimed) has any entry. On the 605, an ENEMY CC KIT line (with its blank line)
+is added in 304 contexts that carried landed or aimed controls but no kit
+line; none removed; menus unchanged. Codex branch review 85-tk-CC-T179-1
+APPROVE. The header's 'threats ... plus every control that landed' wording on
+lines with no threat entry is left to the structural legend work (GH #208).

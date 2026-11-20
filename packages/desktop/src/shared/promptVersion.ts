@@ -1686,5 +1686,10 @@
  *  its [REFLECTED] line states prints no second `[CC AVOIDED?] ... logged
  *  REFLECT` line.
  *  See docs/prompt-version-history.md.
+ *
+ * v632 (2026-11-19; pipeline batch B160, T179): the ENEMY CC KIT line
+ *  prints whenever its unit has a threat, a landed or an aimed control, not
+ *  only in a round with a burst-window threat.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 631;
+export const PROMPT_VERSION = 632;
