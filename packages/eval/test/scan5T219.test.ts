@@ -46,4 +46,22 @@ describe("scan5/t219 — 行上印出的 N purgeable buffs", () => {
       ),
     ).toEqual([]);
   });
+
+  it("codex #1 真实形态:一行里有不带计数的条目,逐条读,不并成一个名字", () => {
+    expect(
+      printedPurgeableCounts(
+        "0:39  [PURGE]   2(FMage) purged Divine Shield off 6(HPaladin), Power Word: Shield off 4(SPriest) (1 of 5 purgeable buffs on it) (Mass Dispel)",
+      ),
+    ).toEqual([
+      { s: 39, targetPid: "4", buff: "Power Word: Shield", n: 5, row: "removal" },
+    ]);
+    expect(
+      printedPurgeableCounts(
+        "0:39  [PURGE]   2(FMage) purged Divine Shield off 6(HPaladin) (1 of 2 purgeable buffs on it), Power Word: Shield off 4(SPriest) (1 of 1 purgeable buff on it) (Mass Dispel)",
+      ).map((c) => [c.targetPid, c.buff, c.n]),
+    ).toEqual([
+      ["6", "Divine Shield", 2],
+      ["4", "Power Word: Shield", 1],
+    ]);
+  });
 });

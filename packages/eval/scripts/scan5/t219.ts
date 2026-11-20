@@ -66,9 +66,18 @@ export function printedPurgeableCounts(line: string): IPrintedCount[] {
   const out: IPrintedCount[] = [];
   const pm = PURGE_RE.exec(line);
   if (pm) {
-    for (const part of pm[2]!.split(/(?<=on it\)), /)) {
-      const e = /^(.+?) off (\d+)\([^)]*\) \(\d+ of (\d+) purgeable/.exec(part);
-      if (e)
+    // one entry per removed effect, `<buff> off <pid>(Spec)`, each with or
+    // without its own `(k of N purgeable buffs on it)` — a line can mix
+    // both (codex 85-tk-KICK-T219-1 #1: 38f35d92 r0 0:39 `Divine Shield off
+    // 6(HPaladin), Power Word: Shield off 4(SPriest) (1 of 5 …)` was read
+    // as one buff named `Divine Shield off 6(HPaladin), Power Word: Shield`)
+    const entry =
+      /(.+?) off (\d+)\([^)]*\)(?: \(\d+ of (\d+) purgeable buffs? on it\))?(?:, |$)/y;
+    const list = pm[2]!;
+    entry.lastIndex = 0;
+    let e: RegExpExecArray | null;
+    while (entry.lastIndex < list.length && (e = entry.exec(list))) {
+      if (e[3] !== undefined)
         out.push({
           s: secOf(pm[1]!),
           targetPid: e[2]!,
