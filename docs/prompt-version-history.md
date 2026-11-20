@@ -8248,3 +8248,21 @@ contrast door. Emerald Communion still answers under the user's 2026-09-30
 ruling (7 presses / 3 facts, unchanged). No prompt line changes on the 605. On
 the 605, nothing a reader sees changes: the capture is byte-identical to
 B164's. Codex branch review 85-tk-CD-T226-1 APPROVE (no findings).
+
+v638 (2026-11-20; pipeline batch B167, T160; user rulings R84 / R87). An
+absorb row whose aura sits on the attacker -- Mindgames 375902 (debuff 375901
+on the attacker), Sanctuary 208771, Blessed Hammer 229976 -- was read as the
+victim's shield eating the hit: the audited kill window printed `team burst
+459k (+142k absorbed)` on a Shadow Priest whose own shields ate nothing
+(round-13 P9). One predicate, `isAttackerSideAbsorb` (table
+`ATTACKER_SIDE_ABSORB_IDS`, registered in curatedIdRegistry), and two named
+readings of a row: `isDamageTakenRow` -- what the unit took, the attacker-side
+absorb left out (kill window, burst ledger, KILL ATTEMPTS' M figures and 30k
+floor, `during it` absorbed, and the incoming side: [DMG SPIKE], top sources)
+-- and `isDamageSentRow` -- where the attacker sent its damage, the eaten hit
+still counted (team focus %, target ranking, Off-target, `during it` share,
+healer-offence, offensive waste). Stack capture against B166 (605, WSL): 16
+contexts change in 26 line pairs, all numeric only (absorbed and damage
+figures on 4 [YOU] [CD] lines and 22 burst / kill-window lines); the menu does
+not change; gates 0. Scan: 106 unlisted attacker-side absorb rows of 1,541,797
+-> 0; full scan5 unchanged.

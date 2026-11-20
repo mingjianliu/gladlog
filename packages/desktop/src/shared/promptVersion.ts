@@ -1722,5 +1722,14 @@
  *  burst window; on the 605 one window turns unanswered and no row prints
  *  for it.
  *  See docs/prompt-version-history.md.
+ *
+ * v638 (2026-11-20; pipeline batch B167, T160): An absorb whose aura sits
+ *  on the ATTACKER (Mindgames, Sanctuary, Blessed Hammer) is no longer
+ *  counted in what the unit it hit took: kill-window and kill-attempt
+ *  damage figures, [DMG SPIKE] amounts and `(N absorbed)`, `Top sources`
+ *  absorbed, `during it` absorbed and `your damage ... absorbed` drop by
+ *  those rows; where a line says where damage was SENT (team focus %,
+ *  target ranking, Off-target share) the eaten hit still counts.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 637;
+export const PROMPT_VERSION = 638;
