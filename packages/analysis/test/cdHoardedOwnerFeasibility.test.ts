@@ -840,6 +840,33 @@ describe("cdHoardedEvents — signed 09-30 facts", () => {
     expect(emit(70.5)[0]!.facts!.pressedLate).toBeUndefined();
   });
 
+  it("T238: a self-only cooldown pressed late names no recipient — its cast row's target is the caster's enemy target", () => {
+    const u = stunned(50, 51);
+    const act = actWindowFor(u, new Set(["e"]), T0);
+    // 69915cc5 r1: Survival of the Fittest's cast row logs the enemy
+    // Discipline Priest the hunter was targeting
+    const sotf = {
+      spellId: "264735",
+      spellName: "Survival of the Fittest",
+      tag: "Defensive",
+      cooldownSeconds: 90,
+      casts: [{ timeSeconds: 65.3, targetName: "EnemyPriest-R" }],
+      neverUsed: false,
+    };
+    const [row] = cdHoardedEvents(
+      [{ crisisUnit: OWNER, own: true, points: [point(60)] }],
+      [sotf],
+      OWNER,
+      undefined,
+      undefined,
+      [],
+      act.couldRespond,
+      undefined,
+      act.stateIn,
+    );
+    expect(row!.facts!.pressedLate).toBe("Survival of the Fittest +5.3s");
+  });
+
   it("fix 7 (work order 2026-10-14b): Alter Time's return is listed, and a save broken right after is marked", () => {
     const save = (spellId: string, spellName: string, s: number) => ({
       spellId,

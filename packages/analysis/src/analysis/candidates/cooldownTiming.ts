@@ -2656,7 +2656,11 @@ export function cdHoardedEvents(
       // late, not never (0068182d @152: Mass Invisibility reached the
       // crisis unit at +5.8 s, the row said nothing; 3 of 22 rows of the 51
       // had such a press). The first press in (window end, window end +
-      // CD_HOARD_RESPONSE_S], with whom it was aimed at.
+      // CD_HOARD_RESPONSE_S], with whom it was aimed at. T238: only a
+      // cooldown that can reach another unit (`cdCanHelpAnotherUnit`, the
+      // predicate `pressedFor` reads) names a recipient — a self-only
+      // button's cast row logs the caster's current target, an enemy
+      // (Survival of the Fittest → the enemy Discipline Priest, 69915cc5 r1).
       const pressedLate = ready
         .slice(0, 3)
         .flatMap((cd) => {
@@ -2667,7 +2671,7 @@ export function cdHoardedEvents(
           );
           return c
             ? [
-                `${cd.spellName}${c.targetName ? ` → ${c.targetName}` : ""} ${off(c.timeSeconds)}s`,
+                `${cd.spellName}${c.targetName && cdCanHelpAnotherUnit(cd) ? ` → ${c.targetName}` : ""} ${off(c.timeSeconds)}s`,
               ]
             : [];
         })
