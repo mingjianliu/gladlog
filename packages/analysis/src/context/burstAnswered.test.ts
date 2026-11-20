@@ -568,6 +568,52 @@ describe("parseBurstAnsweredLine — the producer's own reader of its line", () 
     });
     return `0:40  ${e!.line}`;
   };
+  // T232: the target clause is unit labels only, so a spell name that
+  // holds " on " is one name (605: 63 lines read "Lay" on target "Hands")
+  it("a multi-word answer name holding ' on ' is not split into a control target", () => {
+    const p = parseBurstAnsweredLine(
+      "1:12  [BURST ANSWERED]   enemy opened Avenging Wrath (5(RPaladin)): 2(HPaladin) answered with Lay on Hands in 3.2s; 1(FMage) bottomed at 12% at 1:18 — 1(FMage) still died",
+    )!;
+    expect(p.spellName).toBe("Lay on Hands");
+    expect(p.controlOn).toEqual([]);
+    expect(p).toMatchObject({
+      atSec: 72,
+      answerer: "2(HPaladin)",
+      latencySec: 3.2,
+      pressured: "1(FMage)",
+      pressuredDied: true,
+    });
+    // before the opener, no target
+    expect(
+      parseBurstAnsweredLine(
+        "0:40  [BURST ANSWERED]   enemy opened Deathmark (4(ARogue)): 2(HPaladin) answered with Lay on Hands 0.4s before it opened; 1(FMage) bottomed at 30% at 0:44",
+      ),
+    ).toMatchObject({
+      spellName: "Lay on Hands",
+      controlOn: [],
+      latencySec: -0.4,
+    });
+    // a real control clause still reads: one target with a span, two targets
+    expect(
+      parseBurstAnsweredLine(
+        "0:11  [BURST ANSWERED]   enemy opened Blood Fury (4(UDKnight)): 1(ARogue) answered with Cheap Shot on 5(HDHunter) (1s) in 0.6s; 3(BDruid) bottomed at 30% at 0:15",
+      ),
+    ).toMatchObject({
+      spellName: "Cheap Shot",
+      controlOn: [{ target: "5(HDHunter)", span: "1s" }],
+    });
+    expect(
+      parseBurstAnsweredLine(
+        "0:20  [BURST ANSWERED]   enemy opened Recklessness (4(FWarrior)): 1(AMage) answered with Ring of Frost on 6(FWarrior) and 5(EShaman) (<1s) in 3.6s; 2(RDruid) bottomed at 41% at 0:25",
+      ),
+    ).toMatchObject({
+      spellName: "Ring of Frost",
+      controlOn: [
+        { target: "6(FWarrior)" },
+        { target: "5(EShaman)", span: "<1s" },
+      ],
+    });
+  });
   it("reads the answer, its latency and the pressured unit back", () => {
     expect(parseBurstAnsweredLine(rendered())).toEqual({
       atSec: 40,

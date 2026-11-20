@@ -154,8 +154,12 @@ export const BURST_TROUGH_READ_SUFFIX_RE_SRC = String.raw` \(read to (\d+):(\d{2
 export const BURST_ANSWERED_STILL_DIED = "still died";
 
 /** One control target as the line prints it: `5(RPaladin)` or
- * `5(RPaladin) (2s)`. */
-const CONTROL_TARGET_RE_SRC = String.raw`\S+(?: \([^)]*\))?`;
+ * `5(RPaladin) (2s)`. Anchored to the unit label (`<pid>(<spec>)`), the
+ * only form `controlTargetClause` prints: with a bare `\S+` the lazy spell
+ * name split a name that holds " on " — `answered with Lay on Hands in
+ * 3.2s` read as spell "Lay" on target "Hands" (pipeline T232; 605: 63 of
+ * 4,367 lines, all Lay on Hands). */
+const CONTROL_TARGET_RE_SRC = String.raw`\d+\([^)]*\)(?: \([^)]*\))?`;
 const BURST_ANSWERED_LINE_RE = new RegExp(
   String.raw`^\s*(\d+):(\d{2})\s+\[BURST ANSWERED\].*: (\S+) answered with (.+?)` +
     String.raw`(?: on (${CONTROL_TARGET_RE_SRC}(?: and ${CONTROL_TARGET_RE_SRC})*))? ` +

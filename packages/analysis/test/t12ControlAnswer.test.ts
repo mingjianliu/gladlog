@@ -424,9 +424,12 @@ describe("[BURST ANSWERED] reads the same list (FT-T12 D3)", () => {
     // WO6 #2: the healer is named as the extra's caster, never as a target
     expect(l).not.toContain(" on Healer-R");
     expect(l).toContain("by Healer-R");
-    expect(parseBurstAnsweredLine(`0:10  ${l}`)!.controlOn).toEqual([
-      { target: "Opener-R" },
-    ]);
+    // the reader takes a target as the timeline prints it — a roster label
+    // (T232); this fixture renders bare names, so label the line first
+    expect(
+      parseBurstAnsweredLine(`0:10  ${l!.replaceAll("Opener-R", "4(ORogue)")}`)!
+        .controlOn,
+    ).toEqual([{ target: "4(ORogue)" }]);
   });
 });
 
