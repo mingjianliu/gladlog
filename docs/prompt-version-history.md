@@ -8234,3 +8234,17 @@ externals beside every break in T235). Legend sentences no longer used are
 dropped. Codex branch reviews 85-tk-WIN-T165-1 to -3 (all findings
 constructed; the scan-side ones fixed, the last - a second stun inside the
 same second can carry a corrupted result the scan cannot catch - recorded).
+
+v637 (2026-11-19; pipeline batch B166, T226). A teammate's self-only healing
+cooldown no longer answers another unit's burst window: Frenzied Regeneration
+is now ignored like Dark Pact and Exhilaration (ruling R92). No id was added:
+the signed healing register lists only the Defensive-tagged healing cooldowns,
+so a spell it does not hold is read from the official DB2 profile the register
+copies its fact from (heals its caster and nobody else), unless the signed
+team-heal registry holds it. On the 605 one window turns unanswered; no row
+prints because its reference cell (Solo Shuffle, Touch of the Magi) shows the
+same death rate with and without a response -- 7 % vs 7 %, under the 3-point
+contrast door. Emerald Communion still answers under the user's 2026-09-30
+ruling (7 presses / 3 facts, unchanged). No prompt line changes on the 605. On
+the 605, nothing a reader sees changes: the capture is byte-identical to
+B164's. Codex branch review 85-tk-CD-T226-1 APPROVE (no findings).

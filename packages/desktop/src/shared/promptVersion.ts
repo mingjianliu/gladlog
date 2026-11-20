@@ -1716,5 +1716,11 @@
  *  <spell>`; like every break, it names an immunity beside it but not an
  *  external (naming externals beside a break is T235).
  *  See docs/prompt-version-history.md.
+ *
+ * v637 (2026-11-19; pipeline batch B166, T226): No line changes: Frenzied
+ *  Regeneration, a druid's self-only heal, no longer answers a teammate's
+ *  burst window; on the 605 one window turns unanswered and no row prints
+ *  for it.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 636;
+export const PROMPT_VERSION = 637;
