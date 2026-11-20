@@ -8172,7 +8172,23 @@ export function detectOverlappedDefensives(
       if (first.targetUnitId !== second.targetUnitId) continue;
       if (first.casterUnitId === second.casterUnitId) continue;
 
-      const simultaneousSeconds = firstDuration - gapSeconds;
+      // …and no longer than the second wall itself is still up: its own
+      // length from its press, less what had run before its wall began (a
+      // switched Aura Mastery as the SECOND wall: batch review
+      // 80-PIPE-170d-B156 note 2)
+      const secondRemaining =
+        (buffDurationOfApplication(
+          second.spellId,
+          unitMap.get(second.casterUnitId),
+          second.castMs,
+        ) || OVERLAP_ASSUME_DURATION_S) -
+        (combat.startTime + second.timeSeconds * 1000 - second.castMs) / 1000;
+      const simultaneousSeconds = Math.min(
+        firstDuration - gapSeconds,
+        secondRemaining,
+      );
+      // the admission is the time both were up, as it is for the first wall
+      if (simultaneousSeconds < MIN_SIMULTANEOUS_SECONDS) continue;
 
       overlaps.push({
         timeSeconds: first.timeSeconds,

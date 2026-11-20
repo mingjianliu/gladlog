@@ -1140,6 +1140,16 @@ export function cheaperDefensivesAtDeath(p: {
       // pipeline T197 (GH #221 group 1): the card passed no gate at all —
       // one that could not be pressed before the death is no alternative,
       // by the reading the same pill's 当时被控 comes from
+      // an Aura Mastery that is no wall in the unit's hand this round is no
+      // cheaper save — the `cheaper available:` note's reading
+      // (`isNoWallButtonOf`; batch review 80-PIPE-170d-B156 note 3). A
+      // caller with no round end gets no such filter.
+      isNoWall: (spellId) =>
+        typeof p.combat.endTime === "number" &&
+        isNoWallButtonOf(spellId, p.unit, {
+          startTime: p.combat.startTime,
+          endTime: p.combat.endTime,
+        }),
       pressBlocked: (spellId) =>
         deathOptionLock({
           unit: p.unit,

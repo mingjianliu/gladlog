@@ -2988,6 +2988,11 @@ const INDEX: PredicateRow[] = [
     mod: auraMasteryBranch,
   },
   {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "externalsInHandOf",
+    mod: candidateFindings,
+  },
+  {
     file: `${A}/utils/auraMasteryBranch.ts`,
     symbol: "wallStartOfRowMs",
     mod: auraMasteryBranch,

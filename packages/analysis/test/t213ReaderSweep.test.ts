@@ -11,6 +11,7 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { externalsInHandOf } from "../src/analysis/candidateFindings";
 import { emitFriendlyDeathEntries } from "../src/context/matchTimelineSections";
 import { buildKillSequenceBlock } from "../src/context/timelineHelpers";
 import { ensureAnalysisData } from "../src/data/ensure";
@@ -26,6 +27,7 @@ import {
   detectPanicDefensives,
   extractMajorCooldowns,
 } from "../src/utils/cooldowns";
+import { cheaperDefensivesAtDeath } from "../src/utils/deathOutcomeAnalysis";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -317,5 +319,81 @@ describe("T213 reader sweep — the [UNNECESSARY] external label", () => {
   it("对照:a Devotion press at full HP with no pressure is Unnecessary; the immunity is not", () => {
     expect(labelOf(DEVOTION_AURA)).toBe("Unnecessary");
     expect(labelOf(CONCENTRATION_AURA_ID)).not.toBe("Unnecessary");
+  });
+});
+
+describe("T233 — three readers the 170c sweep missed (batch review 80-PIPE-170d-B156)", () => {
+  const round = { startTime: T0, endTime: at(120) };
+  const row = (
+    spellId: string,
+    spellName: string,
+    cooldownSeconds: number,
+  ) => ({
+    spellId,
+    spellName,
+    tag: "Defensive",
+    cooldownSeconds,
+    maxChargesDetected: 1,
+    casts: [],
+    availableWindows: [
+      { fromSeconds: 0, toSeconds: 120, durationSeconds: 120 },
+    ],
+    neverUsed: true,
+  });
+  const AM = row(AURA_MASTERY_ID, "Aura Mastery", 180);
+
+  it("external-unused: a ready Aura Mastery that is no wall this round is no external left unused; the Devotion one is", () => {
+    const BOP = row("1022", "Blessing of Protection", 300);
+    expect(
+      externalsInHandOf([AM, BOP], paladin(DEVOTION_AURA), round).map(
+        (c) => c.spellName,
+      ),
+    ).toEqual(["Aura Mastery", "Blessing of Protection"]);
+    expect(
+      externalsInHandOf([AM, BOP], paladin(CONCENTRATION_AURA_ID), round).map(
+        (c) => c.spellName,
+      ),
+    ).toEqual(["Blessing of Protection"]);
+  });
+
+  it("the desktop death card's cheaper saves: the same button is not offered; the Devotion one is", () => {
+    const DS = row("642", "Divine Shield", 300);
+    const offered = (running: string) =>
+      cheaperDefensivesAtDeath({
+        unit: paladin(running),
+        unpressed: DS as never,
+        victimCds: [DS, AM] as never,
+        atSeconds: 60,
+        cannotCastSourceIds: new Set(),
+        combat: round,
+      });
+    expect(offered(DEVOTION_AURA)).toEqual(["Aura Mastery"]);
+    expect(offered(CONCENTRATION_AURA_ID)).toEqual([]);
+  });
+
+  it("overlap: a switched Aura Mastery as the SECOND wall overlaps only while it is still up, and under 2 s not at all", () => {
+    // Pain Suppression on the paladin at 20 s (8 s); its own Aura Mastery
+    // pressed at 19 s under Concentration Aura, a wall from the switch at
+    // 26 s to its end at 27 s: 1 s together, not the 2 s left of the first
+    const priest = makeUnit("priest", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Discipline,
+      spellCastEvents: [
+        makeSpellCastEvent("33206", at(20), "pal", "Pal-R", "priest", "Priest"),
+      ],
+    } as never);
+    const [o] = detectOverlappedDefensives(
+      [paladin(CONCENTRATION_AURA_ID, 19, 26), priest],
+      { startTime: T0 } as never,
+    ).filter((x) => x.secondSpellId === AURA_MASTERY_ID);
+    // under the 2 s both must be up for: no overlap is reported
+    expect(o).toBeUndefined();
+    // switched at 24 s it is up with the first for 3 s (24–27), not the 4 s
+    // the first has left at the switch
+    const [longer] = detectOverlappedDefensives(
+      [paladin(CONCENTRATION_AURA_ID, 19, 24), priest],
+      { startTime: T0 } as never,
+    ).filter((x) => x.secondSpellId === AURA_MASTERY_ID);
+    expect(longer!.simultaneousSeconds).toBeCloseTo(3, 3);
   });
 });

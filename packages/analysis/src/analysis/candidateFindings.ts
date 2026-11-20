@@ -4635,6 +4635,25 @@ function teamPlayEvents(
   return out;
 }
 
+/**
+ * The owner's cooldowns `external-unused` may name at a teammate's death:
+ * the ally-castable defensives, less an Aura Mastery that is no wall in the
+ * owner's hand this round — the silence / interrupt immunity would have
+ * reduced nothing (`isNoWallButtonOf`, ruling R53; batch review
+ * 80-PIPE-170d-B156 note 1).
+ */
+export function externalsInHandOf<T extends { spellId: string }>(
+  cds: readonly T[],
+  owner: Parameters<typeof isNoWallButtonOf>[1],
+  round: { startTime: number; endTime: number },
+): T[] {
+  return cds.filter(
+    (cd) =>
+      isAllyCastableDefensive(cd.spellId) &&
+      !isNoWallButtonOf(cd.spellId, owner, round),
+  );
+}
+
 /** death-setup integration: assemble parts for each friendly death (summaries
  * are computed lazily, once per victim). */
 function extractDeathSetups(
@@ -4754,8 +4773,10 @@ function extractDeathSetups(
               deathT,
               victim: { id: u.id, name: u.name },
               owner: { id: ownerUnit.id, name: ownerUnit.name },
-              ownerExternals: cdsOf(ownerUnit).filter((cd) =>
-                isAllyCastableDefensive(cd.spellId),
+              ownerExternals: externalsInHandOf(
+                cdsOf(ownerUnit),
+                ownerUnit,
+                combat,
               ),
               // work order 2026-10-14d Part 2 (preview): the owner's
               // cannot-cast time for the externals they hold — the shared
