@@ -349,9 +349,11 @@ function channelOutlived(ctx: IRoundCtx, line: string): void {
 /** the kill target is the one the window header names (`[KILL WINDOW] a–b
  * [(Ns)] on <Spec> (<name>):`), never a later ` on cooldown (back inside: …)`
  * (batch review 80-PIPE-202-B184 #2: the greedy ` on ` took T167's clause as
- * the target and the check never saw the line) */
+ * the target and the check never saw the line); a realm with its own
+ * parentheses (`Duibz-Aggra(Português)-EU`) is one name, as promptQualityCheck
+ * reads it (lane review 85-tk-WIN-T167-3) */
 export const KILL_WINDOW_ON =
-  /\[(?:KILL WINDOW|VULNERABLE)\] \d+:\d\d–\d+:\d\d(?: \(\d+s\))? on [^:(]*\(([^)]+)\):.*defenseless (\d+:\d\d)–(\d+:\d\d)/;
+  /\[(?:KILL WINDOW|VULNERABLE)\] \d+:\d\d–\d+:\d\d(?: \(\d+s\))? on [^(]+ \(([^()]+(?:\([^()]*\)[^()]*)*)\):.*defenseless (\d+:\d\d)–(\d+:\d\d)/;
 const ENEMY_DEF_WALL =
   /^\s*(\d+:\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\)(?: \([^)]*\))?: (.+?) \((?:\d+%), (\d+\.\d)s/;
 

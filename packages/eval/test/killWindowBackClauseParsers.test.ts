@@ -54,5 +54,19 @@ describe("kill-window parsers read T167's back-inside clause", () => {
       ).replace("[KILL WINDOW] 2:25–2:39", "[VULNERABLE] 2:25–2:39 (14s)"),
     )!;
     expect(vuln[1]).toBe("Krevs-Proudmoore-US");
+    const paren = KILL_WINDOW_ON.exec(
+      line(
+        "2:25–2:39",
+        "your CC on cooldown (back inside: Hammer of Justice 2:31)",
+      ).replace(
+        "Holy Priest (Krevs-Proudmoore-US)",
+        "Arms Warrior (Duibz-Aggra(Português)-EU)",
+      ),
+    )!;
+    expect([paren[1], paren[2], paren[3]]).toEqual([
+      "Duibz-Aggra(Português)-EU",
+      "2:13",
+      "2:47",
+    ]);
   });
 });
