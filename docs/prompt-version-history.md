@@ -8427,3 +8427,17 @@ printedSummonControlAnswerDiffers 0 of 1,330, summonControlTimedByOtherPress 0
 of 558, petControlTiming summonAura (out of the total) 36 -> 0; scan5/t184b
 reads R103's burstWindowLongEnoughToJudge (assembly, scan-only); no check
 rises; gates 0.
+
+v652 (2026-11-21; pipeline batch B181, T182; user ruling A6). A Master's Call
+its caster cast on itself (or on no one) frees roots and slows and reduces no
+damage, so it is no answer (redirectSavesItsCaster false): cd-hoarded, the
+burst responses and the kill attempt no longer read it as a save. 605 (WSL
+stack check on B180): 118 kill-attempt lines lose Master's Call from the
+FAILED clause (-118 / +118) and 9 contexts drop the 'already up since' legend
+no line uses any more; the 25 [BURST ANSWERED] lines that credited Master's
+Call move the credit to the next answer or go (-25 / +19), 4 contexts lose the
+burst-answered legend and 3 gain the control-answer legend; menus +1 cd-
+hoarded row (Player-11-0E9BF2A5:35, 69915cc5 r1), approved by the user
+2026-11-20 - the lane's forecast of 0 menu changes missed the cd-hoarded
+reader. selfRedirectPoppedInKillAttempt 0 of 6,789, selfRedirectAnswersBurst 0
+of 1,197; no check rises; gates 0.

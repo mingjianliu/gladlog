@@ -1821,5 +1821,13 @@
  *  credited at the time it was dropped or last moved; an earlier-landing
  *  answer keeps the credit.
  *  See docs/prompt-version-history.md.
+ *
+ * v652 (2026-11-21; pipeline batch B181, T182): A hunter's Master's Call
+ *  cast on themselves no longer counts as a save or a burst answer (it
+ *  removes roots and slows, it reduces no damage): kill-attempt failure
+ *  reasons and burst credit lines stop naming it, and a crisis where it was
+ *  the only 'answer' can now show held defensives (user ruling,
+ *  2026-11-14).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 651;
+export const PROMPT_VERSION = 652;
