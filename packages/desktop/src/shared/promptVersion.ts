@@ -1878,5 +1878,10 @@
  *  counts among an enemy's purgeable buffs, so some `N purgeable buffs`
  *  counts drop by one.
  *  See docs/prompt-version-history.md.
+ *
+ * v661 (2026-11-21; pipeline batch B190, T195): No change to the page
+ *  (scan-only batch): the cooldown-recast scan splits flags by source and
+ *  labels free-recast anchors by role.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 660;
+export const PROMPT_VERSION = 661;

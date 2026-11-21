@@ -8534,3 +8534,12 @@ signed Shared-Predicate exception and into docs/rule-history.md (docs commit
 purgeable buffs on it then` and 1 [YOU] [CAST] `[removed: … k of N]` each N-1,
 nothing else, menus 0, as the lane measured; the audited match 3 -> 0; gates
 0.
+
+v661 (2026-11-21; pipeline batch B190, T195). No prompt line changes (capture
+hash-equal). The cooldown-recast scan now separates flagged recasts by source
+and labels a free-recast anchor by role (a Leap of Faith can be both a free-
+recast window and a Time Spiral target). Measured on the 605 and, once (user-
+approved), on the 12.1.5 wide subset: every free recast has a documented
+mechanism on both patches; the Ravager set bonus is untestable (0 SUCCESS
+presses anywhere). Model-longer-than-game drift and standing gaps are T241;
+Rushing Wind Kick is T240.
