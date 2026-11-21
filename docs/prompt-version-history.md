@@ -8317,3 +8317,24 @@ Bear Forms are another unit's own walls and its Frenzied Regeneration a self-
 only heal (2a2e57bf r2). Contexts 0; legends follow the menus. Scans:
 answeredOnlyByAnothersWall 46 -> 6, respondedOnRefusedPress 174 -> 117, no
 check rises; gates 0.
+
+v643 (2026-11-20; pipeline batch B172, T223; user ruling R91). Five readers of
+a unit's raw damage rows leave a teammate's redistribution (moved health) out
+through one exported predicate, isRedistributedDamageRow: the aligned burst
+window's damage / slice average / pressured-unit pick, the bounded segments'
+per-second damage, unitUnderFireAt and the healing-gap pressure check; the
+crisis dmg2s reader stays for T227 (GH #115). 605 (WSL stack capture, B171 ->
+this batch): menus -2 slow-defensive-response rows (Player-163-0A971B0A:57, an
+Avenging Wrath window, and Player-1403-0B045738:92, an Avatar window; both
+lows on their last second, nobody died) and 3 rows whose windowEndT ends one
+second earlier; contexts in 101 files: 83 [HEALER EXPOSURE] lines change the
+burst tier word, [BURST ANSWERED] -17 / +21 as windows re-bound (two windows
+lose their `still died` line in each of 3 views, accepted, R91), [ROT
+PRESSURE] -5 / +14 (a window's periodic share can only rise without the moved
+rows, so a stretch prints at an earlier passing second or for the first time;
+none later), one [YOU] [CD] line loses `cheaper available: Blessing of
+Sacrifice`; legends follow. Scans (lane, 605): burst label differs 100 -> 0,
+pressured unit differs 12 -> 0, segment no piece of the shared reading 120 ->
+0, under-fire team-second flips 188 -> 0; on the stack every new check of the
+layer is 0 and none rises (scan5/t91 reads the same predicate; T159's count-
+first scan rides along); gates 0.

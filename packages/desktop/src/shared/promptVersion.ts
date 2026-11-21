@@ -1761,5 +1761,13 @@
  *  R81; a team healing wall and a Mass Invisibility that reached the
  *  pressured unit still do, R93 / R97).
  *  See docs/prompt-version-history.md.
+ *
+ * v643 (2026-11-20; pipeline batch B172, T223): A teammate's redistributed
+ *  damage (moved health) no longer counts as damage a unit took: a burst
+ *  window's damage, its slice average and its pressured-unit pick, the
+ *  bounded segments' per-second damage, the 'under fire' reading and the
+ *  healing-gap pressure check all leave it out through one shared predicate
+ *  (user ruling R91).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 642;
+export const PROMPT_VERSION = 643;
