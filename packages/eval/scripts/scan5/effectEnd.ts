@@ -346,8 +346,12 @@ function channelOutlived(ctx: IRoundCtx, line: string): void {
     );
 }
 
-const KILL_WINDOW_ON =
-  /\[(?:KILL WINDOW|VULNERABLE)\].* on [^:]*?\(([^)]+)\).*defenseless (\d+:\d\d)–(\d+:\d\d)/;
+/** the kill target is the one the window header names (`[KILL WINDOW] a–b
+ * [(Ns)] on <Spec> (<name>):`), never a later ` on cooldown (back inside: …)`
+ * (batch review 80-PIPE-202-B184 #2: the greedy ` on ` took T167's clause as
+ * the target and the check never saw the line) */
+export const KILL_WINDOW_ON =
+  /\[(?:KILL WINDOW|VULNERABLE)\] \d+:\d\d–\d+:\d\d(?: \(\d+s\))? on [^:(]*\(([^)]+)\):.*defenseless (\d+:\d\d)–(\d+:\d\d)/;
 const ENEMY_DEF_WALL =
   /^\s*(\d+:\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\)(?: \([^)]*\))?: (.+?) \((?:\d+%), (\d+\.\d)s/;
 

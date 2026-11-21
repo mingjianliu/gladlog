@@ -69,8 +69,12 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `${R}|owner dies in the printed second`,
 ]);
 
-const READY_LINE_RE =
-  /^\s+\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–\d+:\d\d.*?; (your CC ready: [^;]*|CC ready(?: \(enemy healer DR: [^)]*\))?|your CC on cooldown)[;.]/;
+/** the owner's ready clause of a kill-window line: `your CC ready: …`, the
+ * single-control `CC ready (…)`, or `your CC on cooldown` with or without
+ * T167's ` (back inside: X m:ss、…)` (batch review 80-PIPE-202-B184 #1: the
+ * clause made every such line skip this check) */
+export const READY_LINE_RE =
+  /^\s+\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–\d+:\d\d.*?; (your CC ready: [^;]*|CC ready(?: \(enemy healer DR: [^)]*\))?|your CC on cooldown)(?: \(back inside: [^)]*\))?[;.]/;
 
 function readyGrid(ctx: IRoundCtx): void {
   const owner = ctx.owner;
