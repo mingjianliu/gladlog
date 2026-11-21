@@ -1848,5 +1848,11 @@
  *  kill-window line now says when: `your CC on cooldown (back inside:
  *  Hammer of Justice 2:02)` (user ruling R21, the teammate half's form).
  *  See docs/prompt-version-history.md.
+ *
+ * v656 (2026-11-21; pipeline batch B185, T217): When two players put the
+ *  same buff on an enemy in the same second, the missed-purge note
+ *  `unpurged for Ns` now attaches to the application that started the
+ *  window, not the other one.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 655;
+export const PROMPT_VERSION = 656;

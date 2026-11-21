@@ -8483,3 +8483,11 @@ wallHeldPastHold, its target anchored to the window header and a realm's own
 parentheses read, checked 6,546 (old 6,239 / 6,236), 0 violations; gates 0.
 Recorded (constructed only): a control on a 40 s fallback cooldown can still
 be in neither the ready list nor the clause.
+
+v656 (2026-11-21; pipeline batch B185, T217; round-14 D32). When two casters
+put the same buff on one enemy in the same second, the missed-purge `unpurged
+for Ns` note now attaches to the application whose window it measures. 605
+(Mac stack check on B184): 1 context, 2 [ENEMY BUFF] lines - `unpurged for
+15s; 5 purgeable buffs on it then` moves from one of two same-second Power
+Infusion applications to the other; menus 0; the ticket's archive 1 -> 0 of
+830 (lane); the round-14 audited match 3 -> 0; gates 0.
