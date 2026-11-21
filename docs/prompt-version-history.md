@@ -8523,3 +8523,14 @@ of 'side effect' and 'passive' counts. No prompt line changes on the 605
 (capture hash-equal: 0 Kleptomania tick dispels to re-attribute); the audited
 match outside the 605 goes from `Spellsteal (side effect of the cast) x2,
 Spellsteal (passive) x8` to `Spellsteal ×3 (…)`; gates 0.
+
+v660 (2026-11-21; pipeline batch B189, T219; user ruling R104). An aura broken
+by damage is classified by the aura type its decoded row records, not a
+slimmed-away parameter, so a debuff no longer counts among an enemy's
+purgeable buffs. The purgeable count stays read at the raw instant of the
+decision: user ruling R104 (2026-11-20), written into CLAUDE.md as the fifth
+signed Shared-Predicate exception and into docs/rule-history.md (docs commit
+8e643ee09). 605 (Mac stack check on B188): 13 contexts - 12 [MISSED PURGE] `N
+purgeable buffs on it then` and 1 [YOU] [CAST] `[removed: … k of N]` each N-1,
+nothing else, menus 0, as the lane measured; the audited match 3 -> 0; gates
+0.

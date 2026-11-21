@@ -1872,5 +1872,11 @@
  *  that started the channel: the minor-dispels line lists each press and
  *  what it took, instead of 'side effect' and 'passive' counts.
  *  See docs/prompt-version-history.md.
+ *
+ * v660 (2026-11-21; pipeline batch B189, T219): An aura broken by damage
+ *  is now classified by the aura type the log records; a debuff no longer
+ *  counts among an enemy's purgeable buffs, so some `N purgeable buffs`
+ *  counts drop by one.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 659;
+export const PROMPT_VERSION = 660;
