@@ -8359,3 +8359,22 @@ change exactly 4 backlash-dispel rows' selfDmgTrend (Player-3675-0AF4F930:27
 19k -> 0k, :50 63k -> 43k, :66 35k -> 16k; Player-47-0986A04E:47 125k ->
 108k); contexts 0. Scans: cleansePenaltyRedistribution 16 -> 0 of 588,
 killAttemptRedistribution 0 of 7,849, no check rises; gates 0.
+
+v646 (2026-11-20; pipeline batch B175, T234; user ruling R103). The bounded
+burst segments' per-second damage stops at the round's end through
+isRoundLandedDamageRow (landed, not moved health, logged no later than
+combat.endTime), which roundDamageOf (T228) now reads too; a window cut short
+because the pressured unit itself died in it is judged when the death came >=
+3 s after the opener (burstWindowLongEnoughToJudge). 605 (WSL stack capture,
+B174 -> this batch): menus +10 slow-defensive-response rows - the 9 R103 rows
+of the approved preview, each diedInWindow=yes, and Player-3676-0EDA8E6D:77
+(32b6a359 r1, Malevolence; the pressured unit died 4 s in), unanswered only
+once R81 (B171) and R103 combine: its one answer was another unit's own Divine
+Protection; 5 rows' windowEndT now end inside the round
+(Player-2073-0A84EF72:80 90 -> 88, the preview's, and four more of the same
+round-end bound: Player-11-0E7A9984:105 120 -> 116, Player-1301-0A0CF992:111
+123 -> 119, Player-1427-0D128D5C:10 32 -> 31, Player-52-0DE8A4E3:130 147 ->
+144); legends and headers follow; contexts 0. Scans: burstSegmentPastRoundEnd
+144 -> 0 of 8,100 (lane), every new check of the layer 0 on the stack, no
+check rises (scan5 t222 / t224 / t223readers read the new predicates; no
+change on the 605); gates 0.

@@ -1781,5 +1781,12 @@
  *  sums behind a backlash dispel's damage trend, the already-up external
  *  account, the Time Dilation counterfactual and an offline probe.
  *  See docs/prompt-version-history.md.
+ *
+ * v646 (2026-11-20; pipeline batch B175, T234): Burst segments stop
+ *  reading damage at the round's end; a burst window cut short because the
+ *  pressured teammate died in it is now judged when the death came at least
+ *  3 s after the opener (user ruling R103), so a 'slow defensive response'
+ *  row can appear for it.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 645;
+export const PROMPT_VERSION = 646;
