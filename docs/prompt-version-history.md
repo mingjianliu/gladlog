@@ -8491,3 +8491,11 @@ for Ns` note now attaches to the application whose window it measures. 605
 15s; 5 purgeable buffs on it then` moves from one of two same-second Power
 Infusion applications to the other; menus 0; the ticket's archive 1 -> 0 of
 830 (lane); the round-14 audited match 3 -> 0; gates 0.
+
+v657 (2026-11-21; pipeline batch B186, T218). A Counterstrike Totem was named
+by summonKindOf from its npc id alone, so its hits read `'s guardian —
+Counterstrike` while the same prompt calls that shaman's other totems `totem`.
+605 (Mac stack check on B185): exactly 29 lines in 19 contexts change `'s
+guardian — Counterstrike` -> `'s totem — Counterstrike` ([DMG SPIKE] top
+sources and death top damage); nothing else, menus 0; the lane's corrected
+scan 19 of 470 -> 0; the round-14 audited match 6 -> 0; gates 0.

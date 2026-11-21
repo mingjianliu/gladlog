@@ -1854,5 +1854,10 @@
  *  `unpurged for Ns` now attaches to the application that started the
  *  window, not the other one.
  *  See docs/prompt-version-history.md.
+ *
+ * v657 (2026-11-21; pipeline batch B186, T218): A Counterstrike Totem's
+ *  hits are now named as a totem's (`'s totem — Counterstrike`), not a
+ *  guardian's.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 656;
+export const PROMPT_VERSION = 657;
