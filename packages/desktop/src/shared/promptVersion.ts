@@ -1815,5 +1815,11 @@
  *  overlap, the desktop's cheaper-defensive list at a death) now share the
  *  'Aura Mastery switched to its no-wall form' predicate.
  *  See docs/prompt-version-history.md.
+ *
+ * v651 (2026-11-21; pipeline batch B180, T184): A standing totem's control
+ *  (Earthgrab) now counts as an answer to a burst it rooted an attacker in,
+ *  credited at the time it was dropped or last moved; an earlier-landing
+ *  answer keeps the credit.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 650;
+export const PROMPT_VERSION = 651;

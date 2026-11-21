@@ -8413,3 +8413,17 @@ wall Aura Mastery, the overlap of two walls is capped by the second wall's own
 remaining time, and the desktop's cheaperDefensivesAtDeath takes the isNoWall
 callback. Corrects B156's 'every reader' history line. Double-wall overlap
 inventory 1,371 on both trees; 419 shorter, 0 dropped.
+
+v651 (2026-11-21; pipeline batch B180, T184; user ruling R90). A standing
+totem's control (Earthgrab and the other summon-landed controls) now answers
+the burst it rooted an attacker in: the answer is ranked by its landing and
+printed at the totem's drop or its latest relocation over the totem's
+lifetime, an earlier-landing answer keeps the credit, and the targets are
+listed in landing order. 605 (WSL stack check on B179, the ticket's whole
+effect): [BURST ANSWERED] -28 / +31 lines in 31 contexts, legend +2; menus: 1
+slow-defensive-response row removed (Player-11-0EB8E617:15, 874ef46e,
+Deathmark 0:15), now answered, its header / legend follow. Scans:
+printedSummonControlAnswerDiffers 0 of 1,330, summonControlTimedByOtherPress 0
+of 558, petControlTiming summonAura (out of the total) 36 -> 0; scan5/t184b
+reads R103's burstWindowLongEnoughToJudge (assembly, scan-only); no check
+rises; gates 0.
