@@ -1775,5 +1775,11 @@
  *  total and average (a Solo Shuffle round keeps the rows after its
  *  deciding death).
  *  See docs/prompt-version-history.md.
+ *
+ * v645 (2026-11-20; pipeline batch B174, T231): Four more readers of what
+ *  a unit took leave a teammate's moved health out: the cleanse penalty
+ *  sums behind a backlash dispel's damage trend, the already-up external
+ *  account, the Time Dilation counterfactual and an offline probe.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 644;
+export const PROMPT_VERSION = 645;

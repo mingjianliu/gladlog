@@ -8347,3 +8347,15 @@ the window's total and slice average stop at combat.endTime; one row filter
 round's end, 2 windows x 3 views, print the same unit); scan
 burstSumRedistribution `the pick reads rows after the round's end` 6 -> 0, no
 check rises; gates 0.
+
+v645 (2026-11-20; pipeline batch B174, T231). The cleanse penalty sums
+(dispelAnalysis.ts), the already-up external account
+(killAttemptSaveAccount.ts), the Time Dilation counterfactual
+(counterfactual.ts) and the eval probe's dmg3sPct leave a teammate's moved
+health out through isRedistributedDamageRow; `outhealed` (R100) and the three
+desktop damage-taken readers (R101) are kept by ruling and registered as
+deliberately not shared. 605 (WSL stack capture, B173 -> this batch): menus
+change exactly 4 backlash-dispel rows' selfDmgTrend (Player-3675-0AF4F930:27
+19k -> 0k, :50 63k -> 43k, :66 35k -> 16k; Player-47-0986A04E:47 125k ->
+108k); contexts 0. Scans: cleansePenaltyRedistribution 16 -> 0 of 588,
+killAttemptRedistribution 0 of 7,849, no check rises; gates 0.
