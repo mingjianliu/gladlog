@@ -1866,5 +1866,11 @@
  *  passive, and a missed-purge line no longer names the buff that delayed
  *  theft took as the press's choice.
  *  See docs/prompt-version-history.md.
+ *
+ * v659 (2026-11-21; pipeline batch B188, T215): A Spellsteal that keeps
+ *  stealing while channelled (Kleptomania) is now credited to the press
+ *  that started the channel: the minor-dispels line lists each press and
+ *  what it took, instead of 'side effect' and 'passive' counts.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 658;
+export const PROMPT_VERSION = 659;

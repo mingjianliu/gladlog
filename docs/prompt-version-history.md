@@ -8515,3 +8515,11 @@ menus 0. restealReadAsPress 4 -> 0 of 171, restealSideEffect 10 -> 0 (lane);
 gates 0. Recorded limit (constructed): a genuine press stealing from another
 target in the very ms of the debuff's REMOVED would read as the repeat; the
 605 has 0 same-source casts within 50 ms of a re-steal.
+
+v659 (2026-11-21; pipeline batch B188, T215). A Spellsteal that keeps stealing
+while channelled (Kleptomania) is credited to the press that started the
+channel, so the minor-dispels line lists each press and what it took instead
+of 'side effect' and 'passive' counts. No prompt line changes on the 605
+(capture hash-equal: 0 Kleptomania tick dispels to re-attribute); the audited
+match outside the 605 goes from `Spellsteal (side effect of the cast) x2,
+Spellsteal (passive) x8` to `Spellsteal ×3 (…)`; gates 0.
