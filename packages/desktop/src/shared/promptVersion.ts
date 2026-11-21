@@ -1796,5 +1796,12 @@
  *  feared / confused' flag, and an incapacitate (polymorph, sap, sleep,
  *  paralysis and the like) lets none through.
  *  See docs/prompt-version-history.md.
+ *
+ * v648 (2026-11-21; pipeline batch B177, T185): An enemy cooldown the
+ *  timeline already marks `(no press)` (seen only as an aura, never pressed
+ *  in the log) now carries that mark on the burst-answer lines and the
+ *  slow-defensive-response facts too, so the coach is not told the enemy
+ *  pressed it.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 647;
+export const PROMPT_VERSION = 648;

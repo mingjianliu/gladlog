@@ -8391,3 +8391,11 @@ let them through; nothing added, no other line changes; menus 0; scan
 cheaperLocked|control 39 -> 0. Forward check of the two tables: of 255 casts
 by a feared / confused holder, 236 are in the table and the 19 others are
 follow-on rows of an earlier press.
+
+v648 (2026-11-21; pipeline batch B177, T185; user ruling R79 = A). A cooldown
+reference the timeline builder marks `(no press)` lost that mark on 8 readers
+in refOf; it now keeps it everywhere. Windows unchanged. 605 (WSL stack check
+on B176): 146 [BURST ANSWERED] lines in 126 contexts and 5 slow-defensive-
+response rows gain ' (no press)', nothing else changes (T185-1 on its own
+base: 143 / 123 / 4; the stack's B172-B175 rows add the rest);
+burstCdIsNoPressCopy 0 of 34,416.
