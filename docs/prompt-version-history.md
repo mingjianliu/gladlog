@@ -8405,3 +8405,11 @@ v649 (2026-11-21; pipeline batch B178, T186). No prompt line changes on the
 press row within 2 log lines; the 67 a later press follows are 68-1,030 rows
 apart and stay). The fix covers the audited match outside the 605 where a
 press logged beside its aura was printed as `(no press)`.
+
+v650 (2026-11-21; pipeline batch B179, T233). No prompt line changes on the
+605 (capture byte-identical). Three Aura Mastery readers the B156 sweep missed
+now read the shared no-wall predicate: external-unused no longer offers a no-
+wall Aura Mastery, the overlap of two walls is capped by the second wall's own
+remaining time, and the desktop's cheaperDefensivesAtDeath takes the isNoWall
+callback. Corrects B156's 'every reader' history line. Double-wall overlap
+inventory 1,371 on both trees; 419 shorter, 0 dropped.

@@ -1809,5 +1809,11 @@
  *  press row sits right beside it in the log (seen only in an audited log
  *  outside the corpus).
  *  See docs/prompt-version-history.md.
+ *
+ * v650 (2026-11-21; pipeline batch B179, T233): No change to the page on
+ *  the 605: three more readers (an unused-external note, the double-wall
+ *  overlap, the desktop's cheaper-defensive list at a death) now share the
+ *  'Aura Mastery switched to its no-wall form' predicate.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 649;
+export const PROMPT_VERSION = 650;
