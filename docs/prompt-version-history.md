@@ -8460,3 +8460,26 @@ exactly 2 cd-hoarded facts lose a false enemy destination (Touch of Karma,
 7fec77eb r1; Survival of the Fittest, 69915cc5 r1, the row B181 added); rows 0
 / 0; pressedLateNamesEnemy 0 of 48, pressedLateSelfOnlyDestination 0 of 48;
 gates 0. The desktop GcdSwimlane tooltip reader is T239 (next wave).
+
+v655 (2026-11-21; pipeline batch B184, T167; user ruling R21, ruling A1).
+`your CC on cooldown` was a half-truth when a control came back inside the
+window; it now carries `(back inside: <Spell> m:ss[、<Spell> m:ss])`, the form
+the teammate half already prints, including a control back and pressed in the
+same rendered second. Assembly (product change, deecfe19): the clause skips
+exactly the controls the ready list names, both read at the window's printed
+first second (T163's flooring, B170), so a control is in one or the other,
+never both (and in neither nowhere on the 605). 605 (Mac stack check on B183):
+T167 adds the clause on 241 lines in 177 contexts (KILL WINDOW 221, VULNERABLE
+20; T167-1 counted 243 / 179 on its own base, before T163's flooring);
+aligning its first second with T163's ready list (deecfe19) changes 13 more
+lines in 13 contexts - 5 clauses gain a control back inside the first second,
+8 lines gain the clause - for 249 lines in 180 contexts over the batch;
+nothing else changes, menus 0. killWindowCcBack (T167's new check) 0 (13 on
+T167 without deecfe19); a control in both the ready list and the clause 0; Two
+scan-only commits in this batch make the parsers read the clause (batch review
+80-PIPE-202-B184, lane review 85-tk-WIN-T167-3 / -3b): killWindowReadyGrid
+checked 2,735 rows per layer (the old parser 2,494 / 2,486), 0 violations;
+wallHeldPastHold, its target anchored to the window header and a realm's own
+parentheses read, checked 6,546 (old 6,239 / 6,236), 0 violations; gates 0.
+Recorded (constructed only): a control on a 40 s fallback cooldown can still
+be in neither the ready list nor the clause.

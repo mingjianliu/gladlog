@@ -1842,5 +1842,11 @@
  *  given to the enemy (the cast row's destination is the caster's current
  *  target).
  *  See docs/prompt-version-history.md.
+ *
+ * v655 (2026-11-21; pipeline batch B184, T167): When your crowd control is
+ *  on cooldown at the start of a kill window but comes back inside it, the
+ *  kill-window line now says when: `your CC on cooldown (back inside:
+ *  Hammer of Justice 2:02)` (user ruling R21, the teammate half's form).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 654;
+export const PROMPT_VERSION = 655;
