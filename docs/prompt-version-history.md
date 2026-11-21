@@ -8338,3 +8338,12 @@ pressured unit differs 12 -> 0, segment no piece of the shared reading 120 ->
 0, under-fire team-second flips 188 -> 0; on the stack every new check of the
 layer is 0 and none rises (scan5/t91 reads the same predicate; T159's count-
 first scan rides along); gates 0.
+
+v644 (2026-11-20; pipeline batch B173, T228). The aligned burst window's
+pressured-unit pick summed each friendly unit's rows to the window's end while
+the window's total and slice average stop at combat.endTime; one row filter
+(roundDamageOf, enemyCDs.ts) now feeds all three. 605 (WSL stack capture, B172
+-> this batch): byte-identical (the six windows whose pick read rows after the
+round's end, 2 windows x 3 views, print the same unit); scan
+burstSumRedistribution `the pick reads rows after the round's end` 6 -> 0, no
+check rises; gates 0.

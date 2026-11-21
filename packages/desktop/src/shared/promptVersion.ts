@@ -1769,5 +1769,11 @@
  *  healing-gap pressure check all leave it out through one shared predicate
  *  (user ruling R91).
  *  See docs/prompt-version-history.md.
+ *
+ * v644 (2026-11-20; pipeline batch B173, T228): A burst window's
+ *  pressured-unit pick stops at the round's end, like the window's damage
+ *  total and average (a Solo Shuffle round keeps the rows after its
+ *  deciding death).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 643;
+export const PROMPT_VERSION = 644;
