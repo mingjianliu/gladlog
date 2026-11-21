@@ -45,7 +45,6 @@
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { classSetPiecesOf } from "@gladlog/analysis/src/data/classSetBonuses";
-import { FREE_RECAST_WINDOWS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   CD_INSTANT_SLACK_S,
@@ -88,30 +87,36 @@ function freePressTimes(
   );
 }
 
-/** the spells a talent's free-recast window covers (`FREE_RECAST_WINDOWS`) */
-const WINDOW_SPELLS = new Set(
-  Object.values(FREE_RECAST_WINDOWS).map((w) => w.spellId),
-);
-
 type FreeSource = "unreleased" | "window" | "spiral";
 
 /** Each press the model reads as free, with the reason it is free (T195,
  * GH #218 item 1.9): `unreleased` — a hold or release the model reads as
  * never gone out (`unreleased`: an interrupted empower, a release that hit
- * nothing, a cleanse that removed nothing); `window` — a spell a held
- * talent's free-recast window covers; `spiral` — Time Spiral's free press. */
+ * nothing, a cleanse that removed nothing); `window` — inside a held
+ * talent's free-recast window: the model anchored it (`freeRecastOf`) on an
+ * opener whose `freeRecastUntil` covers it; `spiral` — any other free press,
+ * Time Spiral's (anchored on the last press that was not free). Read from the
+ * model's own anchor, not the spell: Leap of Faith is both a window spell
+ * (Save the Day) and a Time Spiral one (review 85-tk-CD-T195-1). */
 function freePressesBySource(
   entry: ReturnType<typeof unitCooldownEntry>,
-  spellId: string,
 ): Array<{ t: number; by: FreeSource }> {
   if (!entry) return [];
+  const inWindow = (c: (typeof entry.casts)[number]): boolean =>
+    c.freeRecastOf !== undefined &&
+    entry.casts.some(
+      (o) =>
+        o.freeRecastUntil !== undefined &&
+        o.timeSeconds === c.freeRecastOf &&
+        c.timeSeconds <= o.freeRecastUntil,
+    );
   return entry.casts
     .filter((c) => c.freeRecast)
     .map((c) => ({
       t: Math.round(c.timeSeconds * 10) / 10,
       by: c.unreleased
         ? ("unreleased" as const)
-        : WINDOW_SPELLS.has(spellId)
+        : inWindow(c)
           ? ("window" as const)
           : ("spiral" as const),
     }));
@@ -367,7 +372,7 @@ for (const f of files) {
         a.modelFloorExplained += modelFloorExplained;
         a.modelRatios.push(...modelRatios);
         a.modelChargeRatios.push(...modelChargeRatios);
-        const freeAt = freePressesBySource(entry, id);
+        const freeAt = freePressesBySource(entry);
         for (const x of freeAt) a.free[x.by]++;
         a.modelPresses += entry?.casts.length ?? 0;
         a.records++;
