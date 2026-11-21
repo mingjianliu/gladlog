@@ -8378,3 +8378,16 @@ round-end bound: Player-11-0E7A9984:105 120 -> 116, Player-1301-0A0CF992:111
 144 -> 0 of 8,100 (lane), every new check of the layer 0 on the stack, no
 check rises (scan5 t222 / t224 / t223readers read the new predicates; no
 change on the 605); gates 0.
+
+v647 (2026-11-21; pipeline batch B176, T187). The cheaper-defensive note
+judged stuns, silences, lockouts and disarms per alternative but left a fear /
+disorient / incapacitate on the owner unjudged. It now reads the control
+aura's DB2 mechanic: feared -> the 'Allow While Fleeing' table, confused ->
+the 'Allow While Confused' table, anything else lets nothing through (no id
+added). 605 (WSL stack check on B175): 29 [YOU] [CD] lines lose 39
+alternatives (Time Dilation 13, Obsidian Scales 11, Frenzied Regeneration 10,
+Tip the Scales 4, Dark Pact 1), all offered under a control the table does not
+let them through; nothing added, no other line changes; menus 0; scan
+cheaperLocked|control 39 -> 0. Forward check of the two tables: of 255 casts
+by a feared / confused holder, 236 are in the table and the 19 others are
+follow-on rows of an earlier press.

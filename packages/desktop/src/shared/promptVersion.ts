@@ -1788,5 +1788,13 @@
  *  3 s after the opener (user ruling R103), so a 'slow defensive response'
  *  row can appear for it.
  *  See docs/prompt-version-history.md.
+ *
+ * v647 (2026-11-21; pipeline batch B176, T187): The `cheaper available`
+ *  note on a [YOU] [CD] press no longer offers an alternative the owner
+ *  could not press under the control they were in: under a fear or a
+ *  disorient each alternative is judged by the game's own 'usable while
+ *  feared / confused' flag, and an incapacitate (polymorph, sap, sleep,
+ *  paralysis and the like) lets none through.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 646;
+export const PROMPT_VERSION = 647;
