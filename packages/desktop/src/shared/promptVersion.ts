@@ -1835,5 +1835,12 @@
  *  'defenseless' span it interrupted, as a longer shield does (user ruling
  *  R99).
  *  See docs/prompt-version-history.md.
+ *
+ * v654 (2026-11-21; pipeline batch B183, T238): A held-defensive (cd-
+ *  hoarded) fact no longer names a destination for a defensive that cannot
+ *  be given to anyone else: `Survival of the Fittest -> <enemy>` read as if
+ *  given to the enemy (the cast row's destination is the caster's current
+ *  target).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 653;
+export const PROMPT_VERSION = 654;

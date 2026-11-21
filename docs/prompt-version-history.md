@@ -8451,3 +8451,12 @@ span each, plus one Off-target line; 966e13d9 r5's 3:26-3:31 goes (its pieces
 are under 5 s); menus 0. allyShieldDefenseless 4 -> 0; one-ms-run inventory
 (out of the total): 48 pressed shields cut, 2,734 absorbs with no press of the
 shield and 1,415 with no absorb row do not; no check rises; gates 0.
+
+v654 (2026-11-21; pipeline batch B183, T238). A cd-hoarded fact's pressedLate
+destination now passes the same cdCanHelpAnotherUnit gate as pressedFor, so a
+defensive that cannot be given to anyone names no recipient (the cast row's
+destination is the caster's current target). 605 (WSL stack check on B182):
+exactly 2 cd-hoarded facts lose a false enemy destination (Touch of Karma,
+7fec77eb r1; Survival of the Fittest, 69915cc5 r1, the row B181 added); rows 0
+/ 0; pressedLateNamesEnemy 0 of 48, pressedLateSelfOnlyDestination 0 of 48;
+gates 0. The desktop GcdSwimlane tooltip reader is T239 (next wave).
