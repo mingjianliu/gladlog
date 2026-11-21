@@ -19,7 +19,7 @@
  *    their landing.
  */
 import { burstWindowDecisionPoints } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { BURST_WINDOW_MIN_JUDGED_S } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import {
   BURST_ANSWERED_MAX_HP_PCT,
   creditedAnswer,
@@ -114,11 +114,7 @@ export function run(ctx: IRoundCtx): void {
       JSON.stringify({
         r: p.responded,
         r0: p.responseCasts.length > 0 || moved,
-        j:
-          healer &&
-          p.feasible &&
-          p.triaged &&
-          p.durationSec >= BURST_WINDOW_MIN_JUDGED_S,
+        j: healer && p.feasible && p.triaged && burstWindowLongEnoughToJudge(p),
         c: p.feasible && low !== null && low <= BURST_ANSWERED_MAX_HP_PCT,
         cr: cred(p.responseCasts),
         n: p.responseCasts.length,
