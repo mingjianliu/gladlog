@@ -1153,8 +1153,11 @@ export function computeWindowContributions(
     // control that comes back inside the window is named with its second
     const ownerDeadFromSeconds = (ownerDeathMs - matchStartMs) / 1000;
     const ownerCCBack = ccSpells.flatMap((s) => {
+      // the same printed first second the ready list above reads (B184
+      // assembly, T163 x T167): a control is either in that list or, if it
+      // comes back later, in this clause — never in both, never in neither
       const atSeconds =
-        ownerDeadAtStart || isCCReadyAt(s, fromSeconds)
+        ownerDeadAtStart || isCCReadyAt(s, Math.floor(fromSeconds))
           ? undefined
           : ownerCcBackSecond(s, fromSeconds, toSeconds, ownerDeadFromSeconds);
       return atSeconds === undefined
