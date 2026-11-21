@@ -1883,5 +1883,11 @@
  *  (scan-only batch): the cooldown-recast scan splits flags by source and
  *  labels free-recast anchors by role.
  *  See docs/prompt-version-history.md.
+ *
+ * v662 (2026-11-21; pipeline batch B191, T162): No change to the page on
+ *  the 605: an own absorb shield pressed before the log starts and re-
+ *  stated by a resync batch now counts as pressed when its holder presses
+ *  it again later in the round.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 661;
+export const PROMPT_VERSION = 662;

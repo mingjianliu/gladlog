@@ -8543,3 +8543,14 @@ approved), on the 12.1.5 wide subset: every free recast has a documented
 mechanism on both patches; the Ravager set bonus is untestable (0 SUCCESS
 presses anywhere). Model-longer-than-game drift and standing gaps are T241;
 Rushing Wind Kick is T240.
+
+v662 (2026-11-21; pipeline batch B191, T162). An own absorb shield pressed
+before the log starts and re-stated by a resync batch now stands for its
+unlogged press (ownPressedShieldSpansMs) when its APPLIED is inside a re-
+stating batch, nothing put it up earlier and the holder presses its id later
+in the round. No prompt line changes on the 605 (capture hash-equal: no
+defenseless window overlaps such a run while it absorbs). Scans (Mac stack
+check, layer below vs this): iceBarrierNoPress resync-no-span 8 -> 2, resync-
+pressed-span 9 -> 15; new iceBarrierUnpressedRun 8 (ate nothing 4; ate hits,
+no window over them 4); ownAbsorbDefenseless unchanged (pressed 6); gates 0.
+This layer check serves as the lane's remote job T162-1.
