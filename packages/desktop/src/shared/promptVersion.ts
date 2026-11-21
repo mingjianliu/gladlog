@@ -1803,5 +1803,11 @@
  *  slow-defensive-response facts too, so the coach is not told the enemy
  *  pressed it.
  *  See docs/prompt-version-history.md.
+ *
+ * v649 (2026-11-21; pipeline batch B178, T186): No change to the page on
+ *  the 605: a `(no press)` mark is no longer printed for a cooldown whose
+ *  press row sits right beside it in the log (seen only in an audited log
+ *  outside the corpus).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 648;
+export const PROMPT_VERSION = 649;

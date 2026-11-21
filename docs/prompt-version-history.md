@@ -8399,3 +8399,9 @@ on B176): 146 [BURST ANSWERED] lines in 126 contexts and 5 slow-defensive-
 response rows gain ' (no press)', nothing else changes (T185-1 on its own
 base: 143 / 123 / 4; the stack's B172-B175 rows add the rest);
 burstCdIsNoPressCopy 0 of 34,416.
+
+v649 (2026-11-21; pipeline batch B178, T186). No prompt line changes on the
+605 (capture byte-identical: 0 of 619 generic `(no press)` occurrences have a
+press row within 2 log lines; the 67 a later press follows are 68-1,030 rows
+apart and stay). The fix covers the audited match outside the 605 where a
+press logged beside its aura was printed as `(no press)`.
