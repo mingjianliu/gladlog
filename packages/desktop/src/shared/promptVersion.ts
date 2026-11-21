@@ -1829,5 +1829,11 @@
  *  the only 'answer' can now show held defensives (user ruling,
  *  2026-11-14).
  *  See docs/prompt-version-history.md.
+ *
+ * v653 (2026-11-21; pipeline batch B182, T164): A teammate's pressed
+ *  absorb shield that soaked a hit for a single millisecond now splits the
+ *  'defenseless' span it interrupted, as a longer shield does (user ruling
+ *  R99).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 652;
+export const PROMPT_VERSION = 653;

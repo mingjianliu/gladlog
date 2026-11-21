@@ -8441,3 +8441,13 @@ hoarded row (Player-11-0E9BF2A5:35, 69915cc5 r1), approved by the user
 2026-11-20 - the lane's forecast of 0 menu changes missed the cd-hoarded
 reader. selfRedirectPoppedInKillAttempt 0 of 6,789, selfRedirectAnswersBurst 0
 of 1,197; no check rises; gates 0.
+
+v653 (2026-11-21; pipeline batch B182, T164; user ruling R99). A teammate's
+pressed absorb shield eaten in the millisecond it went up now cuts the
+defenseless span at that instant, as a longer shield does. 605 (WSL stack
+check on B181): 6 contexts - d5c8aca1 r1's [KILL WINDOW] pair 0:34-0:40 /
+0:40-0:59 under defenseless 0:34-0:59 becomes 0:34-0:41 / 0:41-0:59 with a
+span each, plus one Off-target line; 966e13d9 r5's 3:26-3:31 goes (its pieces
+are under 5 s); menus 0. allyShieldDefenseless 4 -> 0; one-ms-run inventory
+(out of the total): 48 pressed shields cut, 2,734 absorbs with no press of the
+shield and 1,415 with no absorb row do not; no check rises; gates 0.
