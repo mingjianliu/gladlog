@@ -8499,3 +8499,19 @@ Counterstrike` while the same prompt calls that shaman's other totems `totem`.
 guardian — Counterstrike` -> `'s totem — Counterstrike` ([DMG SPIKE] top
 sources and death top damage); nothing else, menus 0; the lane's corrected
 scan 19 of 470 -> 0; the round-14 audited match 6 -> 0; gates 0.
+
+v658 (2026-11-21; pipeline batch B187, T191). Improved Spellsteal's delayed
+second theft (the debuff the first theft leaves ends and the mage steals
+again, in the same ms as its REMOVED, or just after a refresh) is the earlier
+press's repeat, never a press of its own, and a missed-purge line no longer
+names what that repeat took as the press's choice. 605 (Mac stack check on
+B186): 40 contexts, 126 lines, exactly the lane's - [MINOR DISPELS] -68 / +50
+(Spellsteal only: 26 `side effect of the cast` gone, passive counts merged, 4
+press lists drop a re-stolen buff), [MISSED PURGE] -4 / +4: 7686e97d `took
+Renew` -> `took Body and Soul` (forecast) and 47867c33 r4 2:07 dropping
+`Spellsteal at 2:09 took Eternal Flame instead` (not forecast, same class:
+2:09 is the delayed repeat of the 2:05 press; accepted by the coordinator);
+menus 0. restealReadAsPress 4 -> 0 of 171, restealSideEffect 10 -> 0 (lane);
+gates 0. Recorded limit (constructed): a genuine press stealing from another
+target in the very ms of the debuff's REMOVED would read as the repeat; the
+605 has 0 same-source casts within 50 ms of a re-steal.

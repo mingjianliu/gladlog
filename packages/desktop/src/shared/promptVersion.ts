@@ -1859,5 +1859,12 @@
  *  hits are now named as a totem's (`'s totem — Counterstrike`), not a
  *  guardian's.
  *  See docs/prompt-version-history.md.
+ *
+ * v658 (2026-11-21; pipeline batch B187, T191): A Spellsteal's delayed
+ *  second theft (the debuff it leaves ending and stealing again four
+ *  seconds later) is no longer read as a press of its own: it counts as
+ *  passive, and a missed-purge line no longer names the buff that delayed
+ *  theft took as the press's choice.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 657;
+export const PROMPT_VERSION = 658;
