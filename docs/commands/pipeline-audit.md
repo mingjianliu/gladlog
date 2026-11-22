@@ -32,7 +32,7 @@ Artifacts are written to `$GLADLOG_EVAL_HOME/runs/<YYYY-MM-DD-slug>`.
 ## Two-Layer Structure
 
 - **Layer A — Deterministic prompt-vs-log** (full corpus). Raw logs are too large to feed into LLMs; the prompt→log direction must be checked programmatically: oracle (`coverageManifest.ts`, built independently from raw parser events, intentionally bypassing prompt builders) + gate scripts.
-- **Layer B — LLM evaluation of response-vs-prompt** + seeded defect calibration + cross-AI family peer review.
+- **Layer B — LLM evaluation of response-vs-prompt** + seeded defect calibration.
 
 ## Layer A Steps
 
@@ -58,7 +58,8 @@ Green = CJK 0, death-trace 0, geometry 0 violations, qualityCheck 0 hard failure
 
 1. `/calibrate-judge` (seed 7 defect types, TOL=1; halo defense = dimension independence rules in eval-baseline.md Step 3). Proceed only on 5/7+.
 2. Response generation + scoring: Follow eval-baseline.md Step 2/3, **generate match-by-match** (Iron Rule 4), resumable (skips if output file exists).
-3. Cross-AI (when quota permits): `node audit/agyRun.mjs judge <run> "<model>" <outdir> <conc>` (eval repo)—idempotent, skips existing, auto-counts quota 429s. Quota ladder: Claude primary judge → Gemini/GPT-OSS cross-evaluation; separate quota pool per provider, rolling windows (Gemini ~hourly, GPT-OSS ~2.5h), harvesting loop = 1 round per window + sleep. Cross-evaluation is a **calibration sample, not a match-by-match gate**—~300 pairings are sufficient for stable family bias statistics; no need to chase the full corpus.
+
+There is no cross-family judge: the agy cross-evaluation step was removed (user ruling 2026-11-22) and no replacement has been chosen. Seeded-defect calibration is the only check on the judge, and the report says so.
 
 ## Iron Rules (Each corresponds to a real-world failure)
 
@@ -71,6 +72,6 @@ Green = CJK 0, death-trace 0, geometry 0 violations, qualityCheck 0 hard failure
 
 ## Sign-off
 
-- Report (run directory `PIPELINE-AUDIT-REPORT.md`): TL;DR, Layer A findings, calibration, scoring, cross-AI, fix checklist (with SHAs), **sign-off gate table (pre-fix → post-fix @ SHA)**, open items.
+- Report (run directory `PIPELINE-AUDIT-REPORT.md`): TL;DR, Layer A findings, calibration, scoring, fix checklist (with SHAs), **sign-off gate table (pre-fix → post-fix @ SHA)**, open items.
 - `ledger.md` append line (append-only); auto-memory update; fixes submitted via PR.
 - After fixing, must **rebuild full corpus at branch head** and re-run all three gates before claiming sign-off (Iron Rule 3).

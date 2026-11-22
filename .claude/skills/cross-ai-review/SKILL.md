@@ -6,7 +6,7 @@ description: Cross-AI review of a feature diff — codex only (gpt-6.2-astra by 
 # 跨 AI 复核工作流(code review)
 
 用户裁决(2026-11-10,11-22 确认照此改文档):agy 停用,复核**只走 codex**;额度用完就**排队等重置**,
-不换审查者,过审之前不推。命令一律带 `--backend codex`(`cross-run.mjs` 默认的 `auto` 仍会转给 agy;
+不换审查者,过审之前不推。命令一律带 `--backend codex`(别依赖 `cross-run.mjs` 的默认值:各机器不一样,`auto` 会转给 agy;
 用法和失败语义见全局 `cross-ai` skill)。每个非平凡 feature push 前跑一轮。
 
 型号分档(用户 2026-11-22,两档都是 6.2;规则全文在 `.claude/knowledge/review-tiering.md`):动共享谓词 /
