@@ -164,6 +164,11 @@ const files = readFileSync(manifest, "utf8")
   .map((s) => s.trim())
   .filter(Boolean)
   .filter((_, i) => i % every === 0);
+// 2026-11-20 (T195 wide): a manifest filtered down to 0 files ran, wrote an empty summary and exited 0.
+if (files.length === 0) {
+  console.error(`cooldownRecastScan: ${manifest} lists no files`);
+  process.exit(1);
+}
 writeFileSync(out, "");
 
 interface Agg {

@@ -351,6 +351,12 @@ function report(): void {
   }
   for (const u of loadFailures) say(u);
   if (loadFailures.length > 0) process.exitCode = 1;
+  // A scan over nothing must not read as a clean pass (2026-11-20: a wide pass whose file filter kept 0 files
+  // exited 0 and was nearly reported as a measurement).
+  if (contexts === 0) {
+    say(`corpusFactScan5: no contexts read under ${resolve(dir)}`);
+    process.exitCode = 1;
+  }
 }
 
 const stateful = modules.filter((m) => m.state);
