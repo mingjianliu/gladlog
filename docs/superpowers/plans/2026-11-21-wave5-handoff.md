@@ -79,8 +79,8 @@ Most of these were recorded and deliberately left alone. Apply the wave rules:
 
 ### 2.E Needs a ruling before any code
 
-- **T159**: `damageInWindow` counts damage from any source in the danger score. Count first (`utils/enemyCDs.ts`, `utils/offensiveWindows.ts`, `candidates/burstWindowResponse.ts`), then ask whether only damage aimed at the unit should count.
-- **T161**: an effect's span and a burst's end are read from another unit's copy of the aura. Example: the hunter's Power Infusion copy ran on after the owner's was purged (`observedEffectEnd` in `utils/enemyCDs.ts`). Ask with the example.
+- **T159**: closed 2026-11-22 (no ruling was needed; its defect shipped with T223). The one residue, Refraction 1309786 deferred self-damage, is **T251** (ready): `timelineHelpers.ts` says Refraction is self-damage but not deferred, which contradicts T159-1. Gather Game-Behaviour evidence first (live 12.1.5 DB2 + tooltip, corpus split by unit-round), then change the table or correct T159-1.
+- **T161**: no longer a ruling question. It was ruled 2026-11-19 (R83 = A, R89, R94, R95), and its patch is attempt T161-2 on `tk/T161` (patch-ready since 2026-11-22). It is 175 commits behind main: rebase before batching. Its last review (85-tk-WIN-T161-5) was REQUEST_CHANGES with two CONSTRUCTED-only findings, so they are recorded and not fixed. Remote job T161-4 measured it, but nobody has hand-classified that measurement yet.
 
 ### 2.F The GH #115 regeneration batch (do last, once)
 
@@ -144,5 +144,5 @@ When you ask, the maintainer reads Chinese:
 3. Scans and generated tables: T225 → T192 → T194.
 4. The press-HP family: T188 (rebase the WIP; the CLAUDE.md sentence needs approval) → T189 → the #225-B Leap of Faith bullet.
 5. #225-B kit identity class and the remaining B items, then #225-C (#222 residue) and the fixable #226 items.
-6. T237 once the maintainer has answered. T159 / T161 / #225-A as answers arrive.
+6. T237 once the maintainer has answered. #225-A as answers arrive; T161 batches like any patch-ready ticket (rebase first).
 7. The #115 regeneration batch (§2.F), once, at the end.
