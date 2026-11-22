@@ -1,6 +1,6 @@
 # Wave 5 handoff (2026-11-21)
 
-Handoff for the next fix wave, to be worked by codex. It packages everything wave 4 left open plus GH #225.
+Handoff for the next fix wave. It packages everything wave 4 left open plus GH #225 and GH #227. Fix lanes run on Claude Fable 5.2 (maintainer, 2026-11-21); codex fills in only while Claude quota is short. Reviews stay with codex. From this wave the WSL foreman assembles and pushes batches itself (eval-private `pipeline/PROTOCOL.md`).
 
 ## 0. Where things stand
 
@@ -46,6 +46,7 @@ Handoff for the next fix wave, to be worked by codex. It packages everything wav
 | T239   | Desktop `GcdSwimlane` tooltip (~L203) prints a self-only buff's raw cast destination: Survival of the Fittest shows an enemy target (match `69915cc5` r1). It is the same false target T238 fixed in the prompt, in another reader. Gate it with `cdCanHelpAnotherUnit` or the spell's self-only flag.                                                                                                                              |
 | T240   | Rushing Wind Kick (467307, Mistweaver) cooldown model: on 12.1.0, 1,107 of 1,574 recasts on the 605 are impossible under the 12 s model. Find the reduction or charge mechanism in DB2 + talents before touching the number.                                                                                                                                                                                                        |
 | T241   | 12.1.5 cooldown models are longer than the game (from the T195 wide read). Impossible recasts: Voidblade 1480 57 / 225 (min ratio 0.637), Tiger's Fury 14 / 283, Eye Beam 14 / 582, Harpoon 10 / 99, Demonic Circle 3 / 57. Standing gaps on both patches: Discipline Penance (two charges) and Swiftmend. Patch only upward, and only with a mechanism. Check every reader that prints a `back at` / ready time from these models. |
+| T242   | Range models measured short against the game (GH #227, re-measured 2026-11-21 on the 12.1.x wide set and the 605). Casts accepted beyond model + 5 yd: Sap 28.5 % (Assassination, 10 yd) / 16.5 % (Subtlety, 15 yd), Hammer of Justice ~9 % (Holy / Retribution, 10 yd), Scatter Shot 8.7 % (Marksmanship, 20 yd), Blind 4–6 % (15 yd), Prescience 13.8 % (25 yd). Also 29 placeholder ranges (≥ 100 yd) on pet kicks / CC (Spell Lock 119910, Seduction 119909, Axe Toss 119914, Intimidation 19577, Skull Bash 93985, …): first find which product readers use them, since a 50000 yd range makes "could reach" always true. DB2 mechanism first (Game-Behaviour Rule), fix in datagen, re-run `spellRangeGroundTruth.ts`, capture before / after. Line of sight needs no change (false "blocked" ≤ 0.96 % on 14 of 15 maps). |
 
 ### 2.C GH #225: audit-method pilot findings (new, from the maintainer)
 
@@ -137,7 +138,7 @@ When you ask, the maintainer reads Chinese:
 ## 4. Suggested order
 
 1. Small, self-contained fixes: T190 → T239 → #225-B Heroic Leap alias / guardian label / Capacitor window / Solar Beam → T235 → T166.
-2. Game behaviour: T193 → T240 → T241 → #226-10 (Felstorm).
+2. Game behaviour: T193 → T240 → T241 → T242 (ranges, GH #227) → #226-10 (Felstorm).
 3. Scans and generated tables: T225 → T192 → T194.
 4. The press-HP family: T188 (rebase the WIP; the CLAUDE.md sentence needs approval) → T189 → the #225-B Leap of Faith bullet.
 5. #225-B kit identity class and the remaining B items, then #225-C (#222 residue) and the fixable #226 items.
