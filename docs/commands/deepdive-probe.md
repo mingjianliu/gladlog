@@ -152,7 +152,7 @@ cat "$GLADLOG_EVAL_HOME/review-sessions/<name>.answers.json"   # Raw item-by-ite
 
 The conclusions of this layer **cannot** be used to rule "deep dive won / lost" — it is just to leave some circumstantial evidence for the ledger in Step 5. The true ruling power lies in your hands (the blind review in Step 3).
 
-**A second AI independently reviews the deep dive findings once** (checks if the evidence chain holds up, without looking at your annotations) — codex gpt-6-astra, falling back to agy only when codex is out of quota; the output's header line records which backend actually ran:
+**A second AI independently reviews the deep dive findings once** (checks if the evidence chain holds up, without looking at your annotations) — codex gpt-6.2-astra, falling back to agy only when codex is out of quota; the output's header line records which backend actually ran:
 
 ```bash
 node ~/.claude/skills/cross-ai/scripts/cross-run.mjs review \

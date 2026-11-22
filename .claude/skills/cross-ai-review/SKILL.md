@@ -1,13 +1,18 @@
 ---
 name: cross-ai-review
-description: Cross-AI review of a feature diff — codex gpt-6-astra first, agy only when codex is out of quota. Use after completing any non-trivial feature/fix before push — export diff, run the review with a focused prompt, triage findings, apply fixes. Codifies output-truncation traps and adopt/reject criteria.
+description: Cross-AI review of a feature diff — codex gpt-6.2-astra first, agy only when codex is out of quota. Use after completing any non-trivial feature/fix before push — export diff, run the review with a focused prompt, triage findings, apply fixes. Codifies output-truncation traps and adopt/reject criteria.
 ---
 
 # 跨 AI 复核工作流(code review)
 
-用户 standing 偏好(2026-09-12 起):复核**先走 codex `gpt-6-astra`,只有 codex 额度不够才
+用户 standing 偏好(2026-09-12 起):复核**先走 codex `gpt-6.2-astra`,只有 codex 额度不够才
 fallback 到 agy**。路由由 `cross-run.mjs` 自己做(用法、回退语义、两边各自的失败模式见全局
 `cross-ai` skill)。每个非平凡 feature push 前跑一轮。
+
+型号分档(用户 2026-11-22,两档都是 6.2;规则全文在 `.claude/knowledge/review-tiering.md`):动共享谓词 /
+门规 / 指控或菜单候选 / parser 的(菜单 id 没变、但措辞改动增删了指控也算)、方案 / 辩论 / 根因、
+拿不准的,用默认 `gpt-6.2-astra`。这些都不沾、只改 id / 措辞 / 测试夹具且 605 菜单 id 差为空的小 diff
+才加 `--codex-model gpt-6.2-sol`。提交和汇报写明用的哪档。
 
 ## 跑法
 
