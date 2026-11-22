@@ -23,4 +23,8 @@ renderer minify、main 不再启动即载大表(按需 import)、Timeline 降采
 
 spellNames 收敛到观测宇宙(会改可用法术名,做前需语料实证);React.lazy 路由分割;worker 解析完自己写盘只回传 meta(消掉约 90 MB IPC 克隆)。动手前沿用审计数字、同判据对比。
 
+## 评测采集读不了解压后超过约 512 MB 的日志(2026-11-21,GH #228)
+
+`acceptanceCapture.ts` 用 `gunzipSync(raw).toString()` 把整份日志读成一个字符串,超过 Node 单字符串上限(536,870,888 字节)就报 unreadable,换哪台机器都一样(一份 12.1.x 日志解压 569,766,147 字节)。桌面导入按流切行(`importLogs.ts`),产品不受影响。修法是采集也按流 / 按 Buffer 切行;在那之前大日志从 wide 清单里拿掉并在报告里注明。
+
 相关:[desktop-ui.md](desktop-ui.md)、[test-build-ci.md](test-build-ci.md)

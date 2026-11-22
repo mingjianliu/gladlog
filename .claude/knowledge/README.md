@@ -4,7 +4,7 @@
 
 ## 方法论
 
-- [verification.md](verification.md) — 「修好了」要同判据前后数字;机制 ≠ 因果;检查器 / 探针 / 测试自己先验证
+- [verification.md](verification.md) — 「修好了」要同判据前后数字;机制 ≠ 因果;检查器 / 探针 / 测试自己先验证;扫描「违规数」不是错误数
 - [predicates-and-gates.md](predicates-and-gates.md) — 渲染网格与 raw t 例外、指控集 vs 回应集、候选门被富上下文绕过、三态可行性门
 - [metrics-and-discrimination.md](metrics-and-discrimination.md) — 判别力按机会归一化、尺度压缩 ≠ 一致性、bracket 分层、小样本外推
 - [official-data-first.md](official-data-first.md) — 官方 DB2 优先但要双向实测、真值集必须双向、语料清洗必须确定性、种族只能被动确立
@@ -13,7 +13,7 @@
 - [llm-eval-method.md](llm-eval-method.md) — 判官噪声与盲区、A/B 预注册、prompt 逐行探针结论、用本地 CLI 验证、评测模型选择
 - [prompt-honesty.md](prompt-honesty.md) — 确定性门 > 调措辞;范例数字、占位符 smoke、JSON 容错、causalLint
 - [batch-fix-workflow.md](batch-fix-workflow.md) — 小批修 + 集中回归、采集对照的坑、PV 撞号、参照表攒着重跑、收尾报告
-- [review-tiering.md](review-tiering.md) — 高 / 低风险审查分级、何时找审查、委派机械活给第二个 AI 的做法
+- [review-tiering.md](review-tiering.md) — 高 / 低风险审查分级、何时找审查、委派机械活给第二个 AI 的做法;按分量选模型档
 - [shell-and-git-traps.md](shell-and-git-traps.md) — 管道吞退出码、zsh 语义、共享 checkout、worktree、子代理、整机负载
 
 ## 领域知识
@@ -26,11 +26,11 @@
 - [cooldown-model.md](cooldown-model.md) — 容差单源、proc 不算按键、三态就绪 + 动态 CDR、进攻大招追踪
 - [dispel-cc-mitigation.md](dispel-cc-mitigation.md) — 驱散两半、DR / 定身、减伤表 positional 契约、签字册、反事实
 - [talent-data.md](talent-data.md) — 天赋接入架构、所有权判定、两种修正编码、覆盖缺口文档
-- [range-los.md](range-los.md) — 射程 / 视野的日志真值、hold-out 教训、reach 表所有权
+- [range-los.md](range-los.md) — 射程 / 视野的日志真值、hold-out 教训、reach 表所有权;12.1.x 重测结论
 - [signal-research-conclusions.md](signal-research-conclusions.md) — 已退役 / 负结果信号的原因,救人 CD 名单判据
 - [coaching-rulings.md](coaching-rulings.md) — 用户裁过的指控口径:伤害看需求、3v3 首死、身份准确性、击杀与饰品
 - [fact-layer-rulings-2026-10.md](fact-layer-rulings-2026-10.md) — 事实层工单(PV192 → PV406)的裁决按主题:回合末、光环生命周期、真最低点、免疫措辞、能不能按、击杀窗口、爆发回应、踢、驱散、账本所有权、伤害读数、语言、流程
-- [perf.md](perf.md) — 大 JSON 走 JSON.parse、对局库规模与无上限路径
+- [perf.md](perf.md) — 大 JSON 走 JSON.parse、对局库规模与无上限路径;采集的单字符串上限
 - [desktop-ui.md](desktop-ui.md) — renderer 架构模式、布局坑、测试台、功能定论、有意偏离
 - [test-build-ci.md](test-build-ci.md) — ensureAnalysisData、工作区依赖外部化、vitest、flaky、CI 判读、视觉基线、打包
 - [obs-recording.md](obs-recording.md) — 外控 / 托管 OBS 的设计与真机 bug
