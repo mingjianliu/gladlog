@@ -6,6 +6,132 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.44 (2026-11-21)
+
+The fourth pipeline wave, PROMPT_VERSION 574 → 662: 88 batches between B102 and B191, one ticket per batch. The tickets came from round 14 of the fact audit, round 13's same-match re-audit and the leftovers of the earlier waves; each fact fix carries its own deterministic class check on the 605-file capture. User rulings set the scope: Champion's Spear is an offensive cooldown; Greater Invisibility reduces no damage; Aura Mastery under Concentration Aura is a silence / interrupt immunity, not a wall; a burst window is answered only by a press that reached the pressured unit — another unit's own self-only wall or healing cooldown is not an answer, nor is a self-cast Master's Call; a burst window cut short by the pressured unit's own death is judged when the death is 3 s or more after it opens; and the `N purgeable buffs on it then` count is read at its own instant, not on the rendered second — a fifth signed exception to the Shared-Predicate Rule. On the desktop, the built app's two background workers run again, documents stored by an older parser get their round start instants back, and the AI tab's first entry freezes about half as long.
+
+Highlights:
+
+- Champion's Spear is an offensive cooldown on both sides: it moves from `[ENEMY UTILITY]` to `[ENEMY CD]`, opens offensive windows and counts in the burst, exposure and kill-window readers; the report's GCD lane lights it as a major cooldown. 605: 1,947 contexts change; Spear on a utility line 1,316 → 0.
+- Greater Invisibility is no wall: the enemy line reads `(invisible, …)`, and no kill window, kill attempt, burst ledger or death audit counts it as protection (605: 1,009 → 0).
+- A burst window is answered only by something that reached the pressured unit: an external on another teammate, another unit's own wall or self-only heal, a control that did not land and a self-cast Master's Call no longer count; a unit's own Alter Time or Mass Invisibility does.
+- A `[PRESS]` line says what cut its effect short — dispelled, broken or stolen (605: 653 lines).
+- A burst window's trough reads on while the window's own cooldown runs, up to 10 s, and says `(read to m:ss)` (605: 66 windows).
+- Kill windows name what came back inside them: a cooldown back and pressed inside one second (605: 120 lines) and `your CC on cooldown (back inside: …)` (605: 249 lines).
+- Aura Mastery under Concentration Aura reads as a silence / interrupt immunity everywhere and never as a wall (605: 49 `[ENEMY DEF]` lines, 21 press lines).
+- An Elusiveness rogue's Feint prints `Feint (20%, 6.0s)` (605: 3,630 presses) and its Evasion reads `20% all damage`; a Spellwarden's Anti-Magic Shell is a major defensive (605: 278 burst-ledger lines name it).
+
+Review: each ticket had its lane's codex branch review before hand-back, and each assembled batch a codex assembly review before landing; nothing landed without an APPROVE. Batches were verified on the 605-file corpus layer by layer in stacks: each layer's capture diffed against the one below it, each layer's own class checks run, gates 0. What was recorded and not fixed goes to the next wave: T239 (a desktop GCD-lane tooltip that can name a false recipient for a late press), T240 (Rushing Wind Kick's cooldown model) and T241 (cooldown model drift on 12.1.5).
+
+### AI coaching — what the report says about you
+
+- `18a7e5dc3` `e9b7fb669` `2d6fd8e6a` `460e28ab8` **Champion's Spear is an offensive cooldown** (T154, user ruling): an enemy press leaves `[ENEMY UTILITY]` for `[ENEMY CD]` and opens or joins an `[OFFENSIVE WINDOW]`, and it counts in `[BURST ANSWERED]`, `[HEALER EXPOSURE]`, the kill-window offensive-cooldown clause and the missed-sync-window ready set. 605: Spear on a utility line 1,316 → 0; Spear unnamed in a kill window 162 → 0; 1,947 contexts change; candidate rows -25 / +20.
+- `762bf8c1c` `839bb02d5` **Greater Invisibility is no wall** (T157, user ruling): the enemy line reads `(invisible, end not logged)`, `(invisible, N.Ns)` or `(invisible, ended at once)`; kill windows, KILL ATTEMPTS, the burst ledger, the death audit and stacked defensives no longer count it, while cd-hoarded readiness and cd-waste keep it as a defensive press, and a kill window holds no second its target is invisible. 605: invisibility read as a defence 1,009 → 0; 6 kill windows go, 11 move; 11 candidate rows added.
+- `4cf4bfb52` `8d48694b2` `7ac3d310d` `2de33cc08` `8453c7d75` `d5c7a68a7` **Aura Mastery under Concentration Aura is an immunity, not a wall** (T213, user rulings): the `[ENEMY DEF]` line reads `Aura Mastery (silence / interrupt immunity, 8.0s)`, our press lines carry `(silence / interrupt immunity)`, and no reader counts it as the 24 % wall — the defenseless cut, `Target had a major defensive up`, the death audit, stacked defensives, the counterfactual, `cheaper available:`; a press switched to Devotion Aura while it runs counts as a wall from the switch. 605: 49 `[ENEMY DEF]` lines and 21 press lines; 3 `[KILL WINDOW]` lines added; one cd-hoarded row drops it from the ready tools.
+- `b94e90996` Three more Aura Mastery readers follow: external-unused no longer offers a no-wall Aura Mastery, and an overlap of two walls is capped by the second wall's remaining time (T233; no line changes on the 605).
+- `925dbdde4` `148f5e0cb` **A Spellwarden's Anti-Magic Shell (410358) is a major defensive** (T156): the burst ledger names it while it is up (605: unnamed 257 / 656 → 0; 278 lines added), and a knight whose shell is ready is not `defenseless` (605: 48 → 0; `[KILL WINDOW]` lines -84 / +49 in 18 rounds).
+- `6fca9b112` `bb3accd0d` `3b3bca210` `b8d53b97e` `f2a599536` **A unit's own Alter Time or Mass Invisibility answers its own burst window and crisis** (T181, user ruling): the `[BURST ANSWERED]` line still never names it, and a teammate's does not count. 605: 23 rows removed (cd-hoarded 16, slow-defensive-response 7).
+- `91a1ec5e5` `f98b4e050` `2d503f172` `23342db5e` `31cbb888c` `077f21c71` `87da602de` `6a48d5a11` `33a0e7925` `63ef01cf9` **A press that went elsewhere is no answer** (T180, user ruling): an external aimed at another teammate, a healing cooldown whose heals went to others or a control that did not land leaves a slow-defensive-response window unanswered, and the legend says so; another teammate's self-only healing cooldown and an interrupt that hit nothing are ignored. 605: 16 slow-defensive-response rows added, none removed.
+- `5a1251070` `84f6ccffc` Frenzied Regeneration, and any healing cooldown the official data says heals only its caster, no longer answers another unit's burst (T226, user ruling; no line changes on the 605).
+- `5a936e1a0` `f01227995` `96815bf89` `428a61346` `e8bbc7de5` `0f355285d` **Another teammate's own self-protection wall no longer answers a burst window** (T224, user ruling); a team healing wall (Tree of Life, Ancient of Lore) and a teammate's Mass Invisibility that landed on the pressured unit still do. 605: slow-defensive-response rows +38 / -1.
+- `a84019ee5` `6ff8f5d8a` `c0dd72454` `9bf7a6dbd` Feign Death and a castless Renewing Blaze, which log no cast row, answer a burst window from their aura; the credit line never names them (T222, user ruling; 605: 6 slow-defensive-response rows removed).
+- `298043f30` `63452ad1b` **A self-cast Master's Call is no answer** (T182, user ruling): cd-hoarded, the burst responses and the kill attempt no longer read it as a save. 605: 118 kill-attempt lines drop it from the FAILED clause; 25 `[BURST ANSWERED]` lines move the credit to the next answer or go; one cd-hoarded row added.
+- `d1fd5c8e0` `15de59292` `bc01200d5` `53a381bf4` `6b7e58434` `59b4a848d` `ebf380ef1` `522dbe092` `db3fe1f53` `c531cb6de` `37c6ea427` `4defaa084` `104f8c997` `63754fa3a` `796680dd2` **A totem's control answers the burst it lands in** (T184, user ruling): Earthgrab and other summon-landed controls are ranked by their landing and printed at the totem's drop or latest relocation. 605: `[BURST ANSWERED]` -28 / +31 lines; one slow-defensive-response row now answered.
+- `3418d8663` `bfe783907` `843c9a48f` A burst line marks a proc copy that has no press `(no press)`, as the timeline does (T185, user ruling; 605: 146 `[BURST ANSWERED]` lines and 5 rows).
+- `26f44d913` `e9b7cc158` `647d0fa9d` `b6c13e862` `fba709ba6` `ae63c1d61` `86357c85c` `e71b04584` `8c071c60b` `982f7a41a` `b2a5fabd2` `baaf2d14d` `3d5f6681f` **A burst window's trough reads on while its own cooldown runs** (T183, user ruling): `bottomed at` and the slow-defensive-response low read up to 10 s past the window's end while one of its buffs runs, stopping at a death, the round end or the next window, and the line says `(read to m:ss, the end of <buff>)`. 605: 66 windows read lower and later (173 lines across views); 2 rows gain the read-to time.
+- `a8c39614e` **A burst window cut short by the pressured unit's own death is judged** when the death comes 3 s or more after it opens, and the burst segments stop reading damage at the round's end (T234, user ruling; 605: 10 slow-defensive-response rows added, 5 windows now end inside the round; segments past the round end 144 → 0).
+- `2245623ed` `6c3f3af64` `20ae2d1e9` **A teammate's redistributed damage is not damage the unit took** (T223, user ruling): the aligned burst window's damage and pressured-unit pick, the burst segments, the under-fire reading and the healing-gap pressure check leave moved health out. 605: 2 slow-defensive-response rows removed; 83 `[HEALER EXPOSURE]` lines change their burst tier; `[BURST ANSWERED]` -17 / +21, `[ROT PRESSURE]` -5 / +14.
+- `e3581901e` Four more readers leave moved health out — the cleanse penalty, the already-up external account and the Time Dilation counterfactual among them (T231; 605: 4 backlash-dispel rows change their damage trend).
+- `e91d690f9` The burst window's pressured-unit pick stops at the round's end, like the window's total (T228; no line changes on the 605; picks that read rows past the end 6 → 0).
+- `99a0e8d5c` **An absorb that sat on the attacker is not the target's shield** (T160, user rulings): Mindgames, Sanctuary and Blessed Hammer no longer count as absorbed on the victim in kill windows, the burst ledger, KILL ATTEMPTS or `[DMG SPIKE]` (605: 26 lines in 16 contexts, numbers only).
+- `90de59558` An external's defenseless cut ends at the aura's logged end, not up to 1 s before it, and the window's DR word and ready-CC list read its printed first second (T163; 605: window lines in 320 contexts; DR word off the grid 38 → 0; ready list off the grid 82 → 0).
+- `ee8748803` A teammate's shield eaten in the millisecond it went up breaks `defenseless` at that instant (T164, user ruling; 605: 4 → 0, 6 contexts).
+- `ba85b42bb` An own absorb shield pressed before the log's first row counts as pressed (T162; no line changes on the 605).
+- `c4cbc2d85` `c4c28cb54` **`back inside` for a cooldown back and pressed inside one rendered second** (T133): 605: pressed inside, never back 123 rows → 6; 117 `[KILL WINDOW]` and 3 `[VULNERABLE]` lines gain a `back inside` entry.
+- `398713e07` `f98bc244c` `3aaaca609` `71aac1f78` **`your CC on cooldown` names a control that came back inside the window** — `(back inside: <Spell> m:ss)`, as the teammate half already does, never a control the ready list names (T167, user ruling; 605: 249 lines in 180 contexts).
+- `c54d75912` A Death Knight who broke the attempt's stun with Icebound Fortitude or Lichborne reads `FAILED: broke out (<spell>)`, not `popped` (T165, user ruling; 605: 235 kill-attempt lines).
+- `41ddcaf5b` external-unused needs 1.5 s that are free, ready and in reach together (T171; 605: 5 rows removed, all Darkness out of reach, 5 shorter; candidate rows 7,446 → 7,441).
+- `1c7205d12` **A save the game lets a stunned player press is pressable under a stun** (T147): Pain Suppression, Guardian Spirit, Divine Protection, Barkskin, Bestial Wrath and the others DB2 marks; `[CD PRIOR]`'s `could not cast it` note, external-unused and missed-sync-window follow (605: 2 notes go, 2 missed-sync rows lose a holder stun, 4 external-unused gaps lengthen).
+- `f882eb1c6` `b38188876` The cheaper-defensive note judges a fear, disorient or incapacitate per alternative from DB2 (T187; 605: 29 `[YOU] [CD]` lines lose 39 alternatives offered under such a control).
+- `04e9718f3` `e40795ed2` `1242768a9` `1bc7f0b9c` cd-hoarded `pressedLate` names a recipient only for a cooldown that can reach another unit (T238; 605: 2 facts lose a false enemy destination).
+- `e6ad7193a` `965c53fe3` A recorder's cast bar with no end row is over once an on-GCD press goes out: kick-eaten counts it as a cancel, and a kick it juked as baited (T148; 605: 14 rows count one more cancel, 4 of them one more baited kick).
+- `9a114cb7b` **A healer's racial offensive — Blood Fury, Berserking, Ancestral Call — is no offensive cooldown** on either side (T153, user rulings): 605: `[friendly offensive CD active]` leaves 237 lines; 222 enemy healers' `[ENEMY CD]` lines go; candidate rows -5 / +4.
+
+### AI coaching — the timeline facts
+
+- `0f1564d1b` **An Elusiveness rogue's Feint and Evasion** (T214, user rulings): Feint prints `Feint (20%, 6.0s)` as a fact line — not a wall — and Evasion reads `Evasion (dodge, 20% all damage)` (605: 3,630 Feint lines, 677 Evasion lines).
+- `d8d68f518` Divine Resonance reads as Divine Toll's running cooldown: lines inside a friendly Retribution paladin's Resonance gain `[friendly offensive CD active]` (T155; 605: 479 lines; 3 `[UNCLEANSED DEBUFF]` lines and one missed-cleanse row go).
+- `f733950cd` The `[RES]` enemy list keeps a cooldown whose differently named effect is still on a player at a death — Predator's Wake through The Hunt's DoT (T158; 605: 18 lines in 15 contexts).
+- `f5e496947` `57554a692` `36aefa3c2` `02cf55dd1` `cf6696ecb` `6abf89551` **`LoS blocked` needs both line-of-sight readings** (T172, user rulings): a `[CC ON TEAM]` label prints only where both readings are blocked, a control whose own cast landed carries none, and the death trace drops `had <external> available` where either is blocked (605: 88 labels removed, 3 death lines).
+- `bf88c266b` `d055fea70` `9cb90039d` `4599b5413` A reflected control that its `[REFLECTED]` line states gets no `[CC AVOIDED?]` line beside it (T178; 605: 100 lines removed).
+- `3076e789b` A silence logged MISS gets its `[CC NOT LANDED]` line (T176, user ruling; 605: 5 → 0).
+- `03eea4208` `c8fb8aaf8` `35190a210` **How a control ended** (T169): a named kick on the caster about 65 ms before the end reads `ended by … on its caster` (605: 5 lines), and a control that ran out before a trinket is not broken by it.
+- `00873a4e9` A fully absorbed hit that broke a control names its own source (T168; 605: 3 → 0).
+- `040c6069a` ENEMY CC KIT prints whenever its unit landed or aimed a control, not only with a burst-window threat (T179; 605: 304 contexts gain the line).
+- `26dbfe1bc` `[HEALER EXPOSURE]`'s `already in <control> until` names the control that ends last (T174; 605: 61 → 0; 154 lines).
+- `549e00d6b` No `[HEALER EXPOSURE]` window for a dead healer (T173; not on the 605, fixed on the audited match).
+- `61ac8a087` `8e40dc503` `d7fd7b56d` **`[ROOT]` reach** (T170): a rooted healer's reach is its spec's own healing range, not a flat 40 yd, and a cast the rooted unit landed proves that second reachable (605: `[ROOT]` lines 685 → 519; contradicted by a landed cast 86 → 0).
+- `822ac4891` `39fc7546b` `179683634` A silence with no aura, proven by refused presses, is not free-to-cast time in `[INACTIVITY]` (T146; not on the 605; the audited match `6.2s` → `2.4s`).
+- `a205b6c11` The `[IMMUNE — X was up]` tag is withheld when the press's own aura had landed before the immunity (T216; 605: 4 → 0).
+- `3066f35a8` Divine Hammer cannot be parried (T132, user ruling; no line changes on the 605).
+- `26be845a6` Two same-second applications of one buff: the missed-purge note goes to the one whose window it measures (T217; 605: 2 lines).
+- `bacb31948` A Counterstrike Totem's hits read `'s totem`, not `'s guardian` (T218; 605: 29 lines).
+- `4cdb6915f` `908bc6c23` `1f6da05ab` `123765632` `d786f683f` `fcdb53c92` `d1812e320` `a1c05a091` **Improved Spellsteal's delayed re-steal is the earlier press's**, never a press of its own, and a missed-purge line no longer cites it (T191; 605: 126 lines in 40 contexts; re-steal read as a press 4 → 0).
+- `53a662676` A channelled Spellsteal's periodic steals (Kleptomania) belong to the press that started the channel (T215; not on the 605).
+- `97c89e91e` `7caeeb370` `aaf81af61` **A debuff is no purgeable buff** (T219, user ruling): a broken aura is classified by the type its row records, and `N purgeable buffs on it then` stays read at its own instant — the fifth signed Shared-Predicate exception (605: 13 counts one lower).
+
+### AI coaching — cooldowns and presses
+
+- `149ab9e7d` `3e36ffcb7` `9787cd617` `a1098496b` `510e7b769` `b504d0e90` **A `[PRESS]` line says what cut its effect short** (T141, user rulings): `(lasts 19s — stolen at 0:30, …)` — dispelled, broken or stolen, with a break read off the holder's own row; a pet's copy is no second holder. 605: 653 lines in 462 contexts (dispelled 489, broken 158, stolen 6).
+- `0c6349f9a` `8a7812ded` A press with a cooldown of 30 s or more keeps its `[PRESS]` line beside a `[MINOR DISPELS]` part (T143, user ruling; 605: 309 lines return — Arcane Torrent, Cauterizing Flame, Fire Breath, Mass Dispel, Berserker Rage, Reverse Magic).
+- `942d9cc87` `83354991c` No `(expired, estimated)` `[BUFF FADED]` line for an owner buff the log never shows ending (T142; 605: 18 lines removed).
+- `d5c987751` `e14d344c1` `bcb101e36` `7a11e6f36` `eeb30980f` `36c11101b` `db9c58ccf` **A low-HP proc's cast is no press** (T134): Well-Honed Instincts' Frenzied Regeneration reads as a proc, not a press of the 36 s button (605: 6 `[ENEMY DEF]` lines `[pressed while unseen]` → `[no press logged]`; 14 `[PROC] (no press)` lines).
+- `900fd3955` Shadowy Apparition's trigger row is no press (T152; 605: 35 kick-eaten rows name the real follow-up action).
+- `6bf6647bb` `661195ef6` `a3929ec03` A press row a log-write stall stamped late is its aura's press, not `(no press)` (T186; not on the 605).
+- `51efe7b91` `31241074c` `d93ede113` An offensive cooldown listed again with no REMOVED past its official length was up all along — Combustion through a mage's invisibility (T150; 605: 16 → 0; 48 contexts).
+- `eee1b3b2e` `a2f77709f` `d0275355d` A pressed Metamorphosis with no logged end lasts as long as its form-only casts show (T212; 605: 8 → 0; one kill-attempt line added).
+- `cbb57b824` `f203c50ab` `9b858338a` `f7d50a4c6` `30ea0eedd` `[RES]` prints `(≤Ns left)` for an enemy proc still up at the slice's end (T140; 605: 128 contexts).
+- `1cb3a96b0` `a5a61cc02` `c7d9e9be5` `fd5f4e669` **Three DB2-named cooldown mechanisms** (T135): Ranger's Finesse takes 20 s off Aspect of the Turtle, Healing Hands gives Lay on Hands a range (`[294–420s]`), Glaciate shortens Ray of Frost. 605: 1,357 contexts; one death now reads `(Unused: Aspect of the Turtle)`.
+- `00389a33f` `ccb6bb4fc` `8da651ae9` Restless Blades reads Supercharger, Forced Induction, Coup de Grace and Dragon-Bone Dice (T136; the 605's 7 Outlaw archives read earlier returns; presses before the model's return 4 → 1).
+- `2cd4675b7` `bd3b5561c` Two 12.0 set bonuses still worn in 12.1 shorten their cooldowns — Preservation's Verdant Embrace, Fury's Odyn's Fury (T138; 605: 18 contexts).
+- `a561f5eae` `a206bf87c` `41ea32922` Slipstream gives back a Hover charge at a breath (T137; impossible Hover presses 245 → 13; Hover's cooldown is in no rendered line).
+
+### Desktop
+
+- `d3986516c` The death card's cheaper alternative has to be pressable before the death (T197; 605: 1 → 0).
+- `730fbdd29` `3c8b1d934` A kick refused by an immunity or a reflect at a live cast reads immune or reflected — not missed — on the card, the burst-ledger chip and the kick dashboard (T196, user ruling; 605: 107 → 0).
+- `460e28ab8` `7808ffe08` The GCD lane's major-cooldown highlight reads the analysis predicate: Champion's Spear lights up among 44 spells, and Archangel, Shadow Dance and one aura id go dark (T154).
+- `b94e90996` The death card's cheaper alternative skips a no-wall Aura Mastery (T233).
+- `b26801e6a` The built app finds its two background workers again: a shuffle's round sidecar is rebuilt, and its next open reads 29.0 MB per round instead of the 108.3 MB whole document (T220).
+- `eff36a324` `ba669cefc` `7d3b8be70` `3093fdce0` A document stored by an older parser gets each round's start instant back from raw.txt when it is opened (T200; 20 old documents: 95 / 95 equal to a fresh parse).
+- `263c1d620` `c51f6b6ea` `4c0f0c809` The staged report marks an entry complete only when every fill step kept its result, so a revisit no longer freezes on a one-pass render (T199).
+- `8fd4cb4fa` The burst ledger, enemy defensive events, save-aura intervals and the cooldown ledger are computed once per round: on 20 real logs candidates 33.5 → 18.5 s and context 100.2 → 53.4 s; the AI tab's first-entry freeze 295 → 154 ms (T201; output byte-identical).
+
+### Reliability / tests / CI
+
+- `b72d5e110` An E2E run writes main.log inside its temporary user data, not into the developer's real log (T198).
+- `9753ee756` fact2Scan's killAnchorInto asks the producer's own self-buff question (T202; 30 → 0).
+- `39ad96526` `388c27af5` `e37fe2377` The capture hash reads archive paths relative to the archive root, so both machines get the same hash for the same output (T203).
+- `5b1127620` `e4cd33e1c` `c2692c05d` `dfcc27286` `dfae13e04` One floor for a cooldown's whole second across every return-second line (T139; output unchanged).
+- `e60b42c95` The healer-exposure cover check reads the producer's window instant (T175; 400 ambiguous rows → 0).
+- `e77f104b3` `95d427a99` `61b9cfd2d` `51931d7d0` Old check residues re-run: listGap and the kick-trough scan read the product's own predicates (T205; 42,491 → 192 rows; 109 → 0).
+- `70f925b0a` `c365d12dc` The off-list press, t40 / t41 and buff-duration checks read one round end and a pet's press on the pet (T204).
+- `27d1f968d` castDamageIdSplit reads the producer's selection; hotPressHp skips an unreleased hold (T206; 22 → 0, 2 → 0).
+- `15d7bca06` The findings-count gate rebuilds the prompt the product builds (T221; 3,519 → 0).
+- `c42621ef9` KITED lines are held to the producer's burst windows (T207; unchecked 186 → 4, violations 0).
+- `c56c5400d` Scan tooling: `--detail` keeps every talent, captures pair by owner, `run.ts --only` runs in 2.1 min instead of 20 (T208).
+- `ac57bbbf7` `3d3e9a47c` The mitigation scan reads a hit against its own spell's baseline; Blessing of Protection with Echoing Blessings stays flagged as an open deviation (T209; no table value changes).
+- `8754465cd` The control-aura scan asks DB2 what the aura itself does (T177; 1,656 false flags gone).
+- `84e3f4750` The gates' `[BURST ANSWERED]` reader takes a spell name holding ` on ` (Lay on Hands) as one name (T232).
+- `b642a86fc` `21d416cca` The cooldown-recast scan splits free presses by source; run once on the 12.1.5 wide subset, every free recast has a documented mechanism (T195).
+
+### Other
+
+- `15e005648` The code behind four retired signals is removed — attempt-into-trinket, teammate-crisis, unsynced-burst, cd-spent-idle (T131, user ruling; output unchanged).
+- `79ea0d70c` Predicate-index rows, measured Chi-Ji and Recklessness notes, and the Holy Priest reach list reads Heal instead of Power Word: Shield (T210; output unchanged).
+- `98d0c893e` The DR map drops a dead Sin and Punishment id and registers its hand layer; an uncalled formatter goes (T211; output unchanged).
+- `0bc00c04a` `6aa5f8730` `7c3729ba5` `3e3cac538` `11668faf8` `f16cdfc4c` `6c9fcfc43` `df1e66150` `2e39e4ff3` `a0fa1edea` `3e93157e2` `c402a8235` `139c39347` `695a041d2` `ebca75feb` `f41d05d7a` `bd0970027` `683428fd9` `a20082a6c` `749ab6ffd` `84efa1c5f` `b1015c49b` `50762a41d` `d5e939551` `cea1c6a93` `281efd3bf` `eb6c2efd5` `a7c24d22a` `262f62736` `df6765897` `e92dfd89a` `ec4cf23e9` `bc42756d1` `96aaa172a` `9f98f4a55` `e8b514cf4` `f642695d8` `1140d0017` `8c5061a38` `0e120c480` `7e15f84a7` `2dd440c56` `f085836a0` `35616cf8d` `4dfe337b4` `0de528f3c` `25aa63013` `6055e3607` `b362504fb` `d3a16ed9f` `c89592ead` `7a9f88f44` `1d08f4de3` `886b9b126` `b83c0f3f2` `a565f24f0` `c0fc9d22e` `c15e65d8d` `2824e4845` `e3f380223` `130032428` `8990815ac` `a9daea25f` `f1d7d611e` `939a3b396` `3f7a50e8d` `bd7106ac0` `9961a19fe` `cbbb83587` `90e6e9daa` `185144e4e` `c9eb0c0fb` `b75d83e8c` `b53c5680f` `9ef99d668` `6a491a76c` `ce66c6d93` `37376be5d` `41a9bbc82` `7546c81ee` `bc5744896` `669d88030` `a8ca32fee` `0e8e21550` `a333dd350` `1fa8ccc71` `4238492ba` `c8e808ecb` PROMPT_VERSION bumps 575–662 and their history entries, one per pipeline batch.
+
 ## v0.1.43 (2026-11-17)
 
 Round 13 of the fact audit, fixed as the third pipeline wave, PROMPT_VERSION 547 → 574. The audit read 20 fresh rounds at PV547 and confirmed 25 defects in its two Claude passes (35 with the codex pass); together with the leftovers of round 12's re-audit they became 32 tickets, T98–T130, each with its own deterministic class check on the 605-file capture, landed in batches B65–B101. User rulings set the scope: Feign Death is a defensive, a spell a Death Knight casts through Dark Simulacrum gets a press line, Sin and Punishment counts as a healer lock for stated facts only, a self-cast Master's Call is no save, Cascading Horrors is a control, a haste-scaled cooldown prints no exact return, only a healer's healing-amplifier press gets the `[HEALING]` block, and a refused second stage (Stasis release, Alter Time return) is its cooldown's press. No desktop feature changes beyond one panel line.
