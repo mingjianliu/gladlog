@@ -1,13 +1,13 @@
 ---
 name: cross-ai-review
-description: Cross-AI review of a feature diff — codex gpt-6.2-astra first, agy only when codex is out of quota. Use after completing any non-trivial feature/fix before push — export diff, run the review with a focused prompt, triage findings, apply fixes. Codifies output-truncation traps and adopt/reject criteria.
+description: Cross-AI review of a feature diff — codex only (gpt-6.2-astra by default); out of quota means wait for the reset. Use after completing any non-trivial feature/fix before push — export diff, run the review with a focused prompt, triage findings, apply fixes. Codifies output-truncation traps and adopt/reject criteria.
 ---
 
 # 跨 AI 复核工作流(code review)
 
-用户 standing 偏好(2026-09-12 起):复核**先走 codex `gpt-6.2-astra`,只有 codex 额度不够才
-fallback 到 agy**。路由由 `cross-run.mjs` 自己做(用法、回退语义、两边各自的失败模式见全局
-`cross-ai` skill)。每个非平凡 feature push 前跑一轮。
+用户裁决(2026-11-10,11-22 确认照此改文档):agy 停用,复核**只走 codex**;额度用完就**排队等重置**,
+不换审查者,过审之前不推。命令一律带 `--backend codex`(`cross-run.mjs` 默认的 `auto` 仍会转给 agy;
+用法和失败语义见全局 `cross-ai` skill)。每个非平凡 feature push 前跑一轮。
 
 型号分档(用户 2026-11-22,两档都是 6.2;规则全文在 `.claude/knowledge/review-tiering.md`):动共享谓词 /
 门规 / 指控或菜单候选 / parser 的(菜单 id 没变、但措辞改动增删了指控也算)、方案 / 辩论 / 根因、
@@ -18,21 +18,19 @@ fallback 到 agy**。路由由 `cross-run.mjs` 自己做(用法、回退语义�
 
 ```bash
 git diff <base>^..HEAD > "$SCRATCHPAD/feat-diff.patch"
-node ~/.claude/skills/cross-ai/scripts/cross-run.mjs review \
+node ~/.claude/skills/cross-ai/scripts/cross-run.mjs review --backend codex \
   --files "$SCRATCHPAD/feat-diff.patch"[,相关 spec 文件] \
   "<聚焦 prompt>" > "$SCRATCHPAD/xai-review.out" 2>&1
 ```
 
 - 真实 diff 的 astra review 要几分钟:用 `run_in_background` 跑,完事读文件。
-- **先看头行 `backend=`**:`codex` 还是 `agy`(前面会有一行 `codex quota exhausted … fell
-back to agy`)。结论要按实际后端采信和署名。exit 2 = 复核没发生,不许当通过。
+- **先看头行 `model=` 和退出码**:按实际型号署名。exit 2 = 复核没发生(额度用完也是它),不许当通过;
+  额度用完就告诉用户(报错里有恢复时间就带上),等重置后重跑。
 - **输出必须重定向到文件再读**,不要 `| tail -N` —— findings 会被截断
-  (agy 时代同一天丢过两次第 1 条,还要再花一轮调用找回)。
+  (同一天丢过两次第 1 条,还要再花一轮调用找回)。
 - prompt 要点名怀疑面:时间单位混用、React key/重渲、谓词是否单源、
   与 spec 的偏差点。泛泛的 "review this" 出不了好结论。
 - 大输入先裁剪(只给 diff + spec,别塞整个文件树)。
-- 让别的 AI **实现**(不是复核)仍走 `agy-run.mjs exec`,易超时:任务书写明「每完成一项
-  立刻 commit」,超时后查 `git log`/`git status` 接续,别重头再来。
 
 ## 采纳/驳回标准(踩过的线)
 
@@ -42,13 +40,10 @@ back to agy`)。结论要按实际后端采信和署名。exit 2 = 复核没发�
   浏览器行为)、体量不匹配的性能担忧(N≤6 的循环)、纯风格偏好。驳回要在
   提交/汇报里写明理由,不静默忽略。
 - astra 会夸大范围/计数(「均已退役」实测只有一部分):它报的数自己复算再采纳。
-- 修正提交信息注明实际后端 + 采纳条数,可追溯:「codex astra 复核,采纳 N 条」或
-  「agy flash 复核(codex 额度耗尽),采纳 N 条」。
+- 修正提交信息注明实际型号 + 采纳条数,可追溯:「codex 6.2-astra 复核,采纳 N 条」。
 
 ## 结论被截断 / 要追问时
 
 - codex:`cross-run ask` 不能续上下文;要追问就用头行的 `conversation=codex:<id>`
-  走 `debate-reply --conversation codex:<id> "复述第 N 条 finding 的原文与失败场景"`。
+  走 `debate-reply --backend codex --conversation codex:<id> "复述第 N 条 finding 的原文与失败场景"`。
   原始会话记录在 `~/.codex/sessions/<日期>/rollout-*<id>.jsonl`。
-- agy(fallback 时):`debate-reply --conversation agy:<id>` 同理,或直接读
-  `~/.gemini/antigravity-cli/brain/<conversation>/…/transcript.jsonl`。
