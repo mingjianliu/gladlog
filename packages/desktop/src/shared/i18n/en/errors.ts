@@ -1,3 +1,5 @@
+import type { MessageParams } from "../index";
+
 // English dictionary for the `errors.*` namespace. Must mirror zh/errors.ts
 // key-for-key (enforced by `satisfies Messages` in en/index.ts).
 export const enErrors = {
@@ -25,4 +27,38 @@ export const enErrors = {
     "OBS authentication state unknown (a config field is missing or its format changed), so a password may be needed; tried connecting with the password that was found",
   "errors.update.installerDidNotTakeOver":
     "The update installer did not take over. Quit gladlog manually, then open it again.",
+  "errors.recorder.obsNotInstalled":
+    'OBS is not installed — click "Download and enable" on the Settings page',
+  "errors.recorder.managedNotReady": "managed backend not ready",
+  "errors.obs.timeout": "{label} timed out ({ms}ms)",
+  "errors.obs.bmpInvalid":
+    "Not a valid BMP (missing the 'BM' magic number, or the file is too short)",
+  "errors.obs.bmpUnsupported":
+    "Unsupported BMP format (bitCount={bitCount}, compression={compression}); captureProbe only requests uncompressed 24bpp",
+  "errors.obs.requestNotConnected": "{req} failed: not connected",
+  "errors.obs.requestFailed": "{req} failed: {error}",
+  "errors.obs.ensureProcessFailed": "ensureProcess failed: {error}",
+  "errors.obs.connectFailed": "Connection failed: {error}",
+  "errors.obs.notReady": "OBS was not ready within {seconds}s: {error}",
+  "errors.obs.recordNotStarted":
+    "OBS did not actually start recording (StartRecord returned, but GetRecordStatus reports the output inactive) — most likely the output failed to start (encoder / recording folder / disk); the OBS log has the exact reason",
+  "errors.obs.firstChunkUnknown":
+    "First chunk path unknown: the STARTED event carried no outputPath and {dir} holds no mp4 written by this recording",
+  "errors.obs.splitNotConnected": "splitChunk: not connected",
+  "errors.obs.splitTimeout":
+    "SplitRecordFile: timed out waiting for RecordFileChanged ({ms}ms)",
+  "errors.obs.disconnectFailed": "disconnect failed: {error}",
+  "errors.obs.probeNotConnected": "captureProbe: not connected",
+  "errors.obs.probeDecodeFailed":
+    "captureProbe: failed to read/decode the screenshot: {error}",
+  "errors.obs.portableOff":
+    "OBS portable mode did not take effect ({line}); check portable_mode.txt",
+  "errors.obs.noLog":
+    "OBS produced no log (no new file appeared in {dir} within {ms}ms of spawning)",
+  "errors.obs.readyTimeout": (p: MessageParams) =>
+    `OBS readiness timed out (${p.ms}ms). Last ${Number(p.n) === 1 ? "line" : `${p.n} lines`} of the new log:\n${p.tail}`,
+  "errors.obs.exited":
+    "The OBS process exited (code={code}, signal={signal}) before readiness was confirmed",
+  "errors.obs.spawnFailed":
+    "Failed to spawn the OBS process (it never started, as opposed to failing to connect): {error}",
 };

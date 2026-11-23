@@ -3,12 +3,7 @@
 // Shrink-only: a migration task removes a file once its strings are in the
 // dictionary (the test fails while a listed file has no hit left). Never add
 // a file here — move its text into src/shared/i18n/ instead.
-export const PENDING_FILES: readonly string[] = [
-  "packages/desktop/src/main/managedAssembly.ts",
-  "packages/desktop/src/main/managedObsBackend.ts",
-  "packages/desktop/src/main/managedObsProcess.ts",
-  "packages/desktop/src/main/recorder.ts",
-];
+export const PENDING_FILES: readonly string[] = [];
 
 // The 92-file list as first generated (Task 4). Frozen: never edit it.
 // The test asserts PENDING_FILES ⊆ INITIAL_PENDING_FILES, so the pending list

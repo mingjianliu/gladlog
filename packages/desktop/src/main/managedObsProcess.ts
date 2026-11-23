@@ -2,6 +2,8 @@ import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { type Language, translate } from "../shared/i18n/index";
+
 /**
  * Spawns and supervises the managed portable OBS process (design doc §5.4/
  * §5.6). Readiness is decided from OBS's OWN LOG, never a bare TCP probe —
@@ -76,6 +78,9 @@ export interface SpawnManagedObsSpec {
    * win32-only elsewhere). Never throws in the default impl — best effort,
    * the process may already be gone. */
   killTreeImpl?: (pid: number) => void;
+  /** UI language for the readiness errors (they end up in the recorder's
+   * lastError via ensureProcess; default zh). */
+  lang?: Language;
 }
 
 const DEFAULT_READINESS_TIMEOUT_MS = 30_000;
@@ -112,6 +117,7 @@ export function spawnManagedObs(spec: SpawnManagedObsSpec): ManagedObsHandle {
   // vitest's fake timers already patch those directly in tests.
   const timeoutMs = spec.readinessTimeoutMs ?? DEFAULT_READINESS_TIMEOUT_MS;
   const killTreeImpl = spec.killTreeImpl ?? defaultKillTree;
+  const lang = spec.lang ?? "zh";
 
   const bin = join(spec.obsRoot, "bin", "64bit");
   const exePath = join(bin, "obs64.exe");
@@ -204,7 +210,9 @@ export function spawnManagedObs(spec: SpawnManagedObsSpec): ManagedObsHandle {
     if (settled) return;
     if (PORTABLE_FALSE_RE.test(line)) {
       settleReject(
-        new Error(`OBS 便携模式未生效(${line.trim()});检查 portable_mode.txt`),
+        new Error(
+          translate(lang, "errors.obs.portableOff", { line: line.trim() }),
+        ),
       );
       return;
     }
@@ -254,13 +262,17 @@ export function spawnManagedObs(spec: SpawnManagedObsSpec): ManagedObsHandle {
     if (!sawAnyNewFile) {
       settleReject(
         new Error(
-          `OBS 未产出日志(spawn 后 ${timeoutMs}ms 内 ${logsDir} 下没有出现新文件)`,
+          translate(lang, "errors.obs.noLog", { ms: timeoutMs, dir: logsDir }),
         ),
       );
     } else {
       settleReject(
         new Error(
-          `OBS 就绪超时(${timeoutMs}ms)。新日志尾部 ${tailLines.length} 行:\n${tailLines.join("\n")}`,
+          translate(lang, "errors.obs.readyTimeout", {
+            ms: timeoutMs,
+            n: tailLines.length,
+            tail: tailLines.join("\n"),
+          }),
         ),
       );
     }
@@ -292,7 +304,10 @@ export function spawnManagedObs(spec: SpawnManagedObsSpec): ManagedObsHandle {
     if (!settled) {
       settleReject(
         new Error(
-          `OBS 进程已退出(code=${code ?? "null"}, signal=${signal ?? "null"})且未确认就绪`,
+          translate(lang, "errors.obs.exited", {
+            code: code ?? "null",
+            signal: signal ?? "null",
+          }),
         ),
       );
     }
@@ -300,7 +315,9 @@ export function spawnManagedObs(spec: SpawnManagedObsSpec): ManagedObsHandle {
 
   child.on("error", (err) => {
     settleReject(
-      new Error(`OBS 进程 spawn 失败(不是连不上,是根本没起来):${String(err)}`),
+      new Error(
+        translate(lang, "errors.obs.spawnFailed", { error: String(err) }),
+      ),
     );
     // Review fix (task-3, Important): Node does NOT emit "exit" when spawn
     // itself fails (obs64.exe missing after SKIP-list pruning, Defender

@@ -207,7 +207,8 @@ function resolveManagedWsPassword(): string {
 async function ensureManagedAssembly(): Promise<void> {
   await assembleManagedRecording({
     state: managedAssemblyState,
-    getSettings: () => settings.get(),
+    // Effective language resolved: assembly's status text follows the UI.
+    getSettings: effectiveSettings,
     getWsPassword: resolveManagedWsPassword,
     defaultRecDir: defaultRecordingsDir(),
     assets: managedAssets,
@@ -648,7 +649,8 @@ else {
       () => resolveRecordingDir(defaultRecordingsDir(), settings.get()),
     );
     recorder = createRecorderService({
-      getSettings: () => settings.get(),
+      // Effective language resolved: the recorder's status text follows the UI.
+      getSettings: effectiveSettings,
       recordings,
       clientFactory: realObsClient,
       emit: (ch, payload) => {

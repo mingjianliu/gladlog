@@ -3,6 +3,7 @@ import {
   managedObsPrefsChanged,
   resolveRecordingDir,
 } from "../shared/managedObsPrefs";
+import { type Language, translate } from "../shared/i18n/index";
 import { MANAGED_WS_PORT } from "../shared/obsAsset";
 import type { CaptureBackend } from "./captureBackend";
 import type {
@@ -70,7 +71,10 @@ export interface ManagedAssemblyState {
  * three managed-OBS prefs. index.ts passes the full GladlogSettings; tests
  * build the minimal shape. */
 export type AssemblySettings = Parameters<typeof isManagedActive>[0] &
-  ManagedObsPrefs;
+  ManagedObsPrefs & {
+    /** UI language for the status text assembly emits (absent = zh). */
+    language?: Language | null;
+  };
 
 export function createManagedAssemblyState(): ManagedAssemblyState {
   return {
@@ -203,7 +207,10 @@ async function doAssemble(deps: AssembleManagedRecordingDeps): Promise<void> {
       enabled: s.recordingEnabled,
       connected: false,
       recording: false,
-      lastError: "OBS 未安装 —— 请在设置页点击「下载并启用」",
+      lastError: translate(
+        s.language ?? "zh",
+        "errors.recorder.obsNotInstalled",
+      ),
       sourceActive: null,
     });
     return;
@@ -229,6 +236,7 @@ async function doAssemble(deps: AssembleManagedRecordingDeps): Promise<void> {
     handle = deps.spawnManagedObs({
       obsRoot: deps.assets.root,
       wsPort: MANAGED_WS_PORT,
+      lang: s.language ?? "zh",
     });
     deps.state.handle = handle;
     deps.setRecorderManagedProcessStop(() => handle.stop());
@@ -247,6 +255,9 @@ async function doAssemble(deps: AssembleManagedRecordingDeps): Promise<void> {
       // snapshot, so a save landing mid-assembly cannot split them.
       desktopAudioDeviceId: s.managedDesktopAudioDevice,
       micDeviceId: s.managedMicDevice,
+      // Read fresh at failure time, so a language switch applies to the next
+      // error without restarting OBS.
+      lang: () => deps.getSettings().language ?? "zh",
     });
     deps.state.backend = backend;
     deps.setRecorderManagedBackend(backend);
@@ -281,7 +292,9 @@ async function doAssemble(deps: AssembleManagedRecordingDeps): Promise<void> {
         enabled: s.recordingEnabled,
         connected: false,
         recording: false,
-        lastError: health.lastError ?? "managed backend 未就绪",
+        lastError:
+          health.lastError ??
+          translate(s.language ?? "zh", "errors.recorder.managedNotReady"),
         sourceActive: health.sourceActive,
       });
     }

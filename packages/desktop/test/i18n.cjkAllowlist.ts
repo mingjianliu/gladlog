@@ -87,6 +87,66 @@ export const CJK_ALLOWLIST: ReadonlyArray<{
       "developer-only assert for the dummy-release test feed env var; end users never set it",
   },
   {
+    file: "packages/desktop/src/main/managedObsBackend.ts",
+    snippet: "托管 OBS 会话未配好",
+    reason:
+      "console.warn in the main process (recorder diagnostics); developer log only, never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/managedObsBackend.ts",
+    snippet: "原因未知",
+    reason:
+      "fallback inside the same console.warn template (managed session not configured); developer log only",
+  },
+  {
+    file: "packages/desktop/src/main/recorder.ts",
+    snippet: "推迟到对局结束后分片",
+    reason:
+      "console.warn in the main process (recorder diagnostics); developer log only, never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/recorder.ts",
+    snippet: "仍未结束(疑似卡死/日志流中断)",
+    reason:
+      "console.warn in the main process (recorder diagnostics); developer log only, never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/recorder.ts",
+    snippet: "未产出新分片,跳过",
+    reason:
+      "console.warn in the main process (recorder diagnostics); developer log only, never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/recorder.ts",
+    snippet: "单分片超 40 分钟,已强制分片",
+    reason:
+      "console.warn in the main process (recorder diagnostics); developer log only, never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/recorder.ts",
+    snippet: "开局分片跳过",
+    reason:
+      "console.warn in the main process (recorder diagnostics); developer log only, never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/recorder.ts",
+    snippet: "的开手留在上一个文件里",
+    reason:
+      "console.warn in the main process (recorder diagnostics); developer log only, never rendered (continuation of the match-open split message)",
+  },
+  {
+    file: "packages/desktop/src/main/recorder.ts",
+    snippet: "执行此前因 MAX_CHUNK_MS 推迟的分片",
+    reason:
+      "console.warn in the main process (recorder diagnostics); developer log only, never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/recorder.ts",
+    snippet: "负 headroom",
+    reason:
+      "console.warn in the main process (recorder diagnostics); developer log only, never rendered",
+  },
+  {
     file: "packages/desktop/src/main/analysis.ts",
     snippet: "回退到 settings 默认后端",
     reason:

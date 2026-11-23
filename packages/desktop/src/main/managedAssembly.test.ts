@@ -194,6 +194,16 @@ describe("assembleManagedRecording (task-5b Step 1 测试矩阵)", () => {
     expect(h.statuses[0]!.connected).toBe(false);
   });
 
+  it("界面语言为 en 时「未安装」状态是英文", async () => {
+    const h = new Harness({ installed: false });
+    const base = h.deps.getSettings;
+    h.deps.getSettings = () => ({ ...base(), language: "en" });
+    await assembleManagedRecording(h.deps);
+    expect(h.statuses[0]!.lastError).toBe(
+      'OBS is not installed — click "Download and enable" on the Settings page',
+    );
+  });
+
   it("② 已安装 → 配置写入→spawn→configureSession→watch 启动的顺序;watcher 恰好启动一次", async () => {
     const h = new Harness({ installed: true });
     await assembleManagedRecording(h.deps);

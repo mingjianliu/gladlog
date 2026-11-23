@@ -23,4 +23,34 @@ export const zhErrors = {
     "OBS 鉴权状态未知(配置字段缺失或格式有变),可能需要密码;已尝试携带读到的密码连接",
   "errors.update.installerDidNotTakeOver":
     "更新安装器未能接管,请手动退出 gladlog 后重新打开",
+  "errors.recorder.obsNotInstalled":
+    "OBS 未安装 —— 请在设置页点击「下载并启用」",
+  "errors.recorder.managedNotReady": "managed backend 未就绪",
+  "errors.obs.timeout": "{label} 超时({ms}ms)",
+  "errors.obs.bmpInvalid": "不是有效的 BMP(缺 'BM' 幻数或文件过短)",
+  "errors.obs.bmpUnsupported":
+    "不支持的 BMP 格式(bitCount={bitCount}, compression={compression});captureProbe 只请求 24bpp 无压缩",
+  "errors.obs.requestNotConnected": "{req} 失败: 未连接",
+  "errors.obs.requestFailed": "{req} 失败: {error}",
+  "errors.obs.ensureProcessFailed": "ensureProcess 失败: {error}",
+  "errors.obs.connectFailed": "连接失败: {error}",
+  "errors.obs.notReady": "OBS 在 {seconds}s 内没有就绪: {error}",
+  "errors.obs.recordNotStarted":
+    "OBS 没有真正开始录制(StartRecord 已返回,但 GetRecordStatus 报告输出未激活)——多半是输出启动失败(编码器/录制目录/磁盘),OBS 日志里有确切原因",
+  "errors.obs.firstChunkUnknown":
+    "首个分片路径未知:STARTED 事件未带 outputPath 且 {dir} 下没有本次录制写出的 mp4 文件",
+  "errors.obs.splitNotConnected": "splitChunk: 未连接",
+  "errors.obs.splitTimeout":
+    "SplitRecordFile: 等待 RecordFileChanged 超时({ms}ms)",
+  "errors.obs.disconnectFailed": "disconnect 失败: {error}",
+  "errors.obs.probeNotConnected": "captureProbe: 未连接",
+  "errors.obs.probeDecodeFailed": "captureProbe: 读取/解码截图失败: {error}",
+  "errors.obs.portableOff": "OBS 便携模式未生效({line});检查 portable_mode.txt",
+  "errors.obs.noLog":
+    "OBS 未产出日志(spawn 后 {ms}ms 内 {dir} 下没有出现新文件)",
+  "errors.obs.readyTimeout": "OBS 就绪超时({ms}ms)。新日志尾部 {n} 行:\n{tail}",
+  "errors.obs.exited":
+    "OBS 进程已退出(code={code}, signal={signal})且未确认就绪",
+  "errors.obs.spawnFailed":
+    "OBS 进程 spawn 失败(不是连不上,是根本没起来):{error}",
 };

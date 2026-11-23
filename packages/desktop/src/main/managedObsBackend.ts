@@ -3,6 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { BlackFrameJudgment, judgeBlackFrame } from "../shared/blackFrame";
+import {
+  type Language,
+  type MessageKey,
+  type MessageParams,
+  translate,
+} from "../shared/i18n/index";
 import { PINNED_ENCODER } from "../shared/obsAsset";
 import type {
   BackendHealth,
@@ -104,10 +110,15 @@ function errMessage(err: unknown): string {
 /** 给一个 promise 包 15s(或调用方指定)超时——超时/失败都不让异常越过这层抛给
  * CaptureBackend 的调用方(brief 规则 7:"recording failures never throw into
  * the caller")。 */
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+function withTimeoutIn<T>(
+  lang: Language,
+  p: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`${label} 超时(${ms}ms)`));
+      reject(new Error(translate(lang, "errors.obs.timeout", { label, ms })));
     }, ms);
     p.then(
       (v) => {
@@ -161,9 +172,9 @@ function scanNewestMp4(dir: string, minMtimeMs: number): string | null {
  * 字节定长、像素按行倒序排列、行按 4 字节对齐补零,几十行就能吃透,SaveSourceScreenshot
  * 的 imageFormat 参数本来就允许任意 Qt 支持的格式,bmp 在列。
  */
-function decodeBmpLuminance(buf: Buffer): number[] {
+function decodeBmpLuminance(buf: Buffer, lang: Language): number[] {
   if (buf.length < 54 || buf[0] !== 0x42 || buf[1] !== 0x4d) {
-    throw new Error("不是有效的 BMP(缺 'BM' 幻数或文件过短)");
+    throw new Error(translate(lang, "errors.obs.bmpInvalid"));
   }
   const dataOffset = buf.readUInt32LE(10);
   const width = buf.readInt32LE(18);
@@ -172,7 +183,7 @@ function decodeBmpLuminance(buf: Buffer): number[] {
   const compression = buf.readUInt32LE(30);
   if (bitCount !== 24 || compression !== 0) {
     throw new Error(
-      `不支持的 BMP 格式(bitCount=${bitCount}, compression=${compression});captureProbe 只请求 24bpp 无压缩`,
+      translate(lang, "errors.obs.bmpUnsupported", { bitCount, compression }),
     );
   }
   const height = Math.abs(heightRaw);
@@ -211,6 +222,9 @@ export interface ManagedObsBackendDeps {
   now?: () => number;
   /** Injectable wait for the OBS-ready poll (tests); default setTimeout. */
   sleep?: (ms: number) => Promise<void>;
+  /** UI language for the `lastError` text the settings page shows (read at
+   * failure time; default zh). */
+  lang?: () => Language;
 }
 
 /** One enumerable audio endpoint, as OBS reports it for a `device_id`
@@ -239,10 +253,20 @@ export function createManagedObsBackend(
   deps: ManagedObsBackendDeps,
 ): ManagedObsBackend {
   const nowFn = deps.now ?? Date.now;
+  const uiLang = (): Language => deps.lang?.() ?? "zh";
+  const t = (key: MessageKey, params?: MessageParams): string =>
+    translate(uiLang(), key, params);
+  /** Module-level withTimeoutIn with this backend's UI language. */
+  function withTimeout<T>(
+    p: Promise<T>,
+    ms: number,
+    label: string,
+  ): Promise<T> {
+    return withTimeoutIn(uiLang(), p, ms, label);
+  }
   const makeClient = deps.clientFactory ?? realManagedObsWs;
   const sleep =
-    deps.sleep ??
-    ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
   let client: ManagedObsWs | null = null;
   let connected = false;
@@ -460,13 +484,16 @@ export function createManagedObsBackend(
     data?: Record<string, unknown>,
   ): Promise<Record<string, unknown> | null> {
     if (!client) {
-      lastError = `${req} 失败: 未连接`;
+      lastError = t("errors.obs.requestNotConnected", { req });
       return null;
     }
     try {
       return await withTimeout(client.call(req, data), CALL_TIMEOUT_MS, req);
     } catch (err) {
-      lastError = `${req} 失败: ${errMessage(err)}`;
+      lastError = t("errors.obs.requestFailed", {
+        req,
+        error: errMessage(err),
+      });
       return null;
     }
   }
@@ -491,7 +518,9 @@ export function createManagedObsBackend(
     try {
       proc = await deps.ensureProcess();
     } catch (err) {
-      lastError = `ensureProcess 失败: ${errMessage(err)}`;
+      lastError = t("errors.obs.ensureProcessFailed", {
+        error: errMessage(err),
+      });
       return false;
     }
     if (!client) client = makeClient();
@@ -504,7 +533,7 @@ export function createManagedObsBackend(
         "connect",
       );
     } catch (err) {
-      lastError = `连接失败: ${errMessage(err)}`;
+      lastError = t("errors.obs.connectFailed", { error: errMessage(err) });
       return false;
     }
     if (client !== c) return false; // shutdown() ran during the connect
@@ -555,7 +584,10 @@ export function createManagedObsBackend(
         last = err;
       }
       if (nowFn() >= deadline) {
-        lastError = `OBS 在 ${OBS_READY_TIMEOUT_MS / 1000}s 内没有就绪: ${errMessage(last)}`;
+        lastError = t("errors.obs.notReady", {
+          seconds: OBS_READY_TIMEOUT_MS / 1000,
+          error: errMessage(last),
+        });
         return false;
       }
       await sleep(OBS_READY_POLL_MS);
@@ -606,9 +638,7 @@ export function createManagedObsBackend(
         const status = await callWithTimeout("GetRecordStatus");
         if (status !== null && status["outputActive"] !== true) {
           continuousActive = false;
-          lastError =
-            "OBS 没有真正开始录制(StartRecord 已返回,但 GetRecordStatus 报告输出未激活)——" +
-            "多半是输出启动失败(编码器/录制目录/磁盘),OBS 日志里有确切原因";
+          lastError = t("errors.obs.recordNotStarted");
           return;
         }
         // 兜底扫描只认这次 StartRecord 之后写过的文件:上一场遗留的 mp4 是
@@ -618,7 +648,7 @@ export function createManagedObsBackend(
         if (scanned) {
           openFirstChunk(scanned);
         } else {
-          lastError = `首个分片路径未知:STARTED 事件未带 outputPath 且 ${deps.recDir} 下没有本次录制写出的 mp4 文件`;
+          lastError = t("errors.obs.firstChunkUnknown", { dir: deps.recDir });
         }
       }
     }
@@ -662,7 +692,7 @@ export function createManagedObsBackend(
 
   async function doSplitOnce(): Promise<CaptureChunk | null> {
     if (!client || !connected) {
-      lastError = "splitChunk: 未连接";
+      lastError = t("errors.obs.splitNotConnected");
       return null;
     }
     // Review fix (Important #2, correlation half): capture what THIS split
@@ -680,7 +710,9 @@ export function createManagedObsBackend(
     }
     const closed = await wait.promise;
     if (closed === undefined) {
-      lastError = `SplitRecordFile: 等待 RecordFileChanged 超时(${SPLIT_EVENT_TIMEOUT_MS}ms)`;
+      lastError = t("errors.obs.splitTimeout", {
+        ms: SPLIT_EVENT_TIMEOUT_MS,
+      });
       return null;
     }
     return closed;
@@ -734,7 +766,9 @@ export function createManagedObsBackend(
       try {
         await withTimeout(c.disconnect(), CALL_TIMEOUT_MS, "disconnect");
       } catch (err) {
-        lastError = `disconnect 失败: ${errMessage(err)}`;
+        lastError = t("errors.obs.disconnectFailed", {
+          error: errMessage(err),
+        });
       }
     }
     // A newer connection replaced `c` while that disconnect was pending (the
@@ -921,7 +955,7 @@ export function createManagedObsBackend(
 
   async function captureProbe(): Promise<{ shotPath: string; black: boolean }> {
     if (!client || !connected) {
-      lastError = "captureProbe: 未连接";
+      lastError = t("errors.obs.probeNotConnected");
       sourceActive = false;
       return { shotPath: "", black: true };
     }
@@ -937,10 +971,12 @@ export function createManagedObsBackend(
     }
     let judgment: BlackFrameJudgment;
     try {
-      const luminances = decodeBmpLuminance(readFileSync(shotPath));
+      const luminances = decodeBmpLuminance(readFileSync(shotPath), uiLang());
       judgment = judgeBlackFrame(luminances);
     } catch (err) {
-      lastError = `captureProbe: 读取/解码截图失败: ${errMessage(err)}`;
+      lastError = t("errors.obs.probeDecodeFailed", {
+        error: errMessage(err),
+      });
       sourceActive = false;
       return { shotPath, black: true };
     }

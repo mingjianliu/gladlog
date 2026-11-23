@@ -1,3 +1,4 @@
+import { type Language, translate } from "../shared/i18n/index";
 import { DEFAULT_OBS_WS_URL, OBS_PASSWORD_REDACTED } from "../shared/protocol";
 import type {
   BackendHealth,
@@ -244,6 +245,9 @@ interface RecorderSettings {
    * (previously a structural/optional handoff type per task-5 brief 复核
    * NEW-2 -- that comment now goes, this is the real field). */
   recordingMode: "managed" | "external";
+  /** UI language for the status text this service produces (null / absent
+   * = zh; production passes settings with the effective language). */
+  language?: Language | null;
 }
 
 /** Single-source managed-mode gate (task-5 brief 复核 B2/NEW-2): every entry
@@ -682,7 +686,13 @@ export function createRecorderService(deps: {
     } else {
       managedConnected = false;
       managedRecording = false;
-      lastError = health?.lastError ?? lastError ?? "managed backend 未就绪";
+      lastError =
+        health?.lastError ??
+        lastError ??
+        translate(
+          deps.getSettings().language ?? "zh",
+          "errors.recorder.managedNotReady",
+        );
       if (!isRetry) armManagedStartRetry();
     }
     pushStatus();
