@@ -14,7 +14,7 @@ import {
   toSlottedDoc,
 } from "../shared/analysisCache";
 import { CHAT_STOPPED_MESSAGE } from "../shared/chatProtocol";
-import type { Language } from "../shared/i18n/index";
+import { type Language, translate } from "../shared/i18n/index";
 import { PROMPT_VERSION } from "../shared/promptVersion";
 import {
   type AiLanguage,
@@ -151,7 +151,11 @@ export function createCoachChatService(deps: {
   matchesDir: string;
   /** Test injection; production uses the real localAiBackends function. */
   chatRunner?: typeof continueCliChat;
-  seedClient?: (backend: CliChatBackend, cmd?: string) => AnthropicLike;
+  seedClient?: (
+    backend: CliChatBackend,
+    cmd?: string,
+    lang?: Language,
+  ) => AnthropicLike;
 }): {
   getState(matchId: string): Promise<ChatState>;
   send(input: {
@@ -164,7 +168,7 @@ export function createCoachChatService(deps: {
   const inFlight = new Map<string, AbortController>();
   const factories: Record<
     CliChatBackend,
-    (o: { cmd?: string }) => AnthropicLike
+    (o: { cmd?: string; lang?: Language }) => AnthropicLike
   > = {
     claudeCli: claudeCliClientFactory,
     agy: agyClientFactory,
@@ -173,7 +177,8 @@ export function createCoachChatService(deps: {
   };
   const seedClient =
     deps.seedClient ??
-    ((backend: CliChatBackend, cmd?: string) => factories[backend]({ cmd }));
+    ((backend: CliChatBackend, cmd?: string, lang?: Language) =>
+      factories[backend]({ cmd, lang }));
   const chatRunner = deps.chatRunner ?? continueCliChat;
 
   const ctx = () => {
@@ -224,7 +229,7 @@ export function createCoachChatService(deps: {
         : []),
       `The user now asks: ${p.question}`,
     ].join("\n");
-    const client = seedClient(p.backend, p.cmd);
+    const client = seedClient(p.backend, p.cmd, p.lang);
     const hint = p.backend === "claudeCli" ? randomUUID() : undefined;
     let reply = "";
     let sessionId: string | undefined;
@@ -248,7 +253,8 @@ export function createCoachChatService(deps: {
       if (ev.delta) reply += ev.delta;
       if (ev.sessionId) sessionId = ev.sessionId;
     }
-    if (!sessionId) throw new Error("播种未捕获到会话 id");
+    if (!sessionId)
+      throw new Error(translate(p.lang, "errors.chat.seedNoSession"));
     return { sessionId, reply };
   }
 
@@ -346,6 +352,7 @@ export function createCoachChatService(deps: {
               question: input.question,
               model: thread.model,
               signal: ac.signal,
+              lang,
             });
           } catch {
             if (ac.signal.aborted)

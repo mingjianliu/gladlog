@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { agyCliModelName, type CliAiBackend } from "../shared/aiModels";
+import { type Language, translate } from "../shared/i18n/index";
 import type { AnthropicLike } from "./ai";
 import {
   cliSpawnEnv,
@@ -324,7 +325,7 @@ export const defaultRun: Runner = (file, args, stdin, opts) =>
  * time, which users could not interpret at all. The error now points straight
  * at the settings page.
  */
-async function requireCli(tool: LocalCliTool): Promise<string> {
+async function requireCli(tool: LocalCliTool, lang: Language): Promise<string> {
   const path = await detectLocalCliCached(tool);
   if (path) return path;
   // A missing node must not point users at the "command path" field: that
@@ -332,13 +333,9 @@ async function requireCli(tool: LocalCliTool): Promise<string> {
   // it be treated as a direct agy binary, so node gets launched with --print
   // and immediately errors on the argument (agy flash review #5).
   if (tool === "node") {
-    throw new Error(
-      "未检测到 node(.mjs 包装脚本模式需要 Node.js):请安装 Node.js,或清空命令路径改用自动检测的 agy 直调",
-    );
+    throw new Error(translate(lang, "errors.ai.nodeNotFound"));
   }
-  throw new Error(
-    `未检测到 ${tool} 命令:请先安装,或在 设置 → AI 分析 → 命令路径 填写完整路径`,
-  );
+  throw new Error(translate(lang, "errors.ai.cliNotFound", { tool }));
 }
 
 /**
@@ -349,10 +346,11 @@ async function requireCli(tool: LocalCliTool): Promise<string> {
  */
 async function resolveCliWithVersionProbe(
   tool: LocalCliTool,
-  explicitCmd?: string,
+  explicitCmd: string | undefined,
+  lang: Language,
 ): Promise<{ cmd: string; versionProbe: Promise<CliVersionProbe> | null }> {
   if (explicitCmd) return { cmd: explicitCmd, versionProbe: null };
-  const cmd = await requireCli(tool);
+  const cmd = await requireCli(tool, lang);
   return { cmd, versionProbe: probeCliVersionCached(tool, cmd) };
 }
 
@@ -373,6 +371,7 @@ export async function withVersionHint<T>(
   fn: () => Promise<T>,
   tool: LocalCliTool,
   versionProbe: Promise<CliVersionProbe> | null,
+  lang: Language = "zh",
 ): Promise<T> {
   try {
     return await fn();
@@ -392,9 +391,14 @@ export async function withVersionHint<T>(
     if (!versionProbe) throw e instanceof Error ? e : new Error(msg);
     const probe = await versionProbe;
     const hint = probe.ok
-      ? `检测到的 ${tool} 版本 ${probe.version}`
-      : "版本探测失败";
-    throw new Error(`${msg}(${hint},可能版本不兼容)`);
+      ? translate(lang, "errors.ai.versionDetected", {
+          tool,
+          version: probe.version,
+        })
+      : translate(lang, "errors.ai.versionProbeFailed");
+    throw new Error(
+      translate(lang, "errors.ai.versionHint", { message: msg, hint }),
+    );
   }
 }
 
@@ -434,13 +438,17 @@ const joinPrompt = (params: {
 export function claudeCliClientFactory(opts?: {
   cmd?: string;
   run?: Runner;
+  /** UI language for the errors this client throws (default zh). */
+  lang?: Language;
 }): AnthropicLike {
   const run = opts?.run ?? defaultRun;
+  const lang = opts?.lang ?? "zh";
   return {
     async *stream(params) {
       const { cmd, versionProbe } = await resolveCliWithVersionProbe(
         "claude",
         opts?.cmd,
+        lang,
       );
       const sessionArgs = params.sessionIdHint
         ? ["--session-id", params.sessionIdHint]
@@ -528,6 +536,7 @@ export function claudeCliClientFactory(opts?: {
           ),
         "claude",
         versionProbe,
+        lang,
       );
       runPromise.then(
         (out) => {
@@ -567,7 +576,12 @@ export function claudeCliClientFactory(opts?: {
         if (sawStreamJson || msg === "aborted" || msg.startsWith("aborted("))
           throw runErr;
         // 兜底 1:老版本 CLI 不认 stream-json 相关 flag —— 回退整段文本模式
-        const out = await withVersionHint(legacyCall, "claude", versionProbe);
+        const out = await withVersionHint(
+          legacyCall,
+          "claude",
+          versionProbe,
+          lang,
+        );
         yield { delta: out };
         if (params.sessionIdHint) yield { sessionId: params.sessionIdHint };
         return;
@@ -613,13 +627,17 @@ export function claudeCliClientFactory(opts?: {
 export function codexClientFactory(opts?: {
   cmd?: string;
   run?: Runner;
+  /** UI language for the errors this client throws (default zh). */
+  lang?: Language;
 }): AnthropicLike {
   const run = opts?.run ?? defaultRun;
+  const lang = opts?.lang ?? "zh";
   return {
     async *stream(params) {
       const { cmd, versionProbe } = await resolveCliWithVersionProbe(
         "codex",
         opts?.cmd,
+        lang,
       );
       ensureSpillDirSwept(CODEX_OUT_SPILL_DIR);
       const outFile = join(
@@ -654,6 +672,7 @@ export function codexClientFactory(opts?: {
             ),
           "codex",
           versionProbe,
+          lang,
         );
         let delta = params.captureSession ? "" : stdout;
         try {
@@ -849,8 +868,11 @@ export const CODEBUDDY_SAFETY_ARGS = [
 export function codebuddyClientFactory(opts?: {
   cmd?: string;
   run?: Runner;
+  /** UI language for the errors this client throws (default zh). */
+  lang?: Language;
 }): AnthropicLike {
   const run = opts?.run ?? defaultRun;
+  const lang = opts?.lang ?? "zh";
   // (可执行文件名为 cbc,见 BACKEND_CLI_TOOL.codebuddy;LocalCliTool 类型用 "cbc")
   const SAFETY_ARGS = CODEBUDDY_SAFETY_ARGS;
   return {
@@ -858,6 +880,7 @@ export function codebuddyClientFactory(opts?: {
       const { cmd, versionProbe } = await resolveCliWithVersionProbe(
         "cbc",
         opts?.cmd,
+        lang,
       );
       const prompt = joinPrompt(params);
 
@@ -880,6 +903,7 @@ export function codebuddyClientFactory(opts?: {
             ),
           "cbc",
           versionProbe,
+          lang,
         );
         const env = parseCodebuddyJsonEnvelope(out);
         if (env) {
@@ -915,6 +939,7 @@ export function codebuddyClientFactory(opts?: {
           ),
         "cbc",
         versionProbe,
+        lang,
       );
       yield { delta: out };
     },
@@ -1003,11 +1028,12 @@ function assertWinPromptFits(
   platform: NodeJS.Platform,
   file: string,
   prompt: string,
+  lang: Language,
 ): void {
   const limit = winPromptLimit(platform, file);
   if (limit !== null && prompt.length > limit) {
     throw new Error(
-      `agy 后端经命令行传入 prompt,本次 ${prompt.length} 字符超出 Windows 命令行上限(约 32K):请改用 Claude CLI 或 Anthropic API 后端`,
+      translate(lang, "errors.ai.agyPromptTooLong", { length: prompt.length }),
     );
   }
 }
@@ -1034,8 +1060,11 @@ export function agyClientFactory(opts?: {
   run?: Runner;
   /** Test injection; production uses process.platform. */
   platform?: NodeJS.Platform;
+  /** UI language for the errors this client throws (default zh). */
+  lang?: Language;
 }): AnthropicLike {
   const run = opts?.run ?? defaultRun;
+  const lang = opts?.lang ?? "zh";
   const legacyScript =
     opts?.script || (opts?.cmd?.endsWith(".mjs") ? opts.cmd : undefined);
   return {
@@ -1045,8 +1074,8 @@ export function agyClientFactory(opts?: {
       if (legacyScript) {
         // The wrapper mode also passes the prompt via argv, so the guard must
         // not cover the direct-spawn branch only (agy flash review #3).
-        const node = opts?.node || (await requireCli("node"));
-        assertWinPromptFits(platform, node, prompt);
+        const node = opts?.node || (await requireCli("node", lang));
+        assertWinPromptFits(platform, node, prompt, lang);
         const out = await run(
           node,
           [
@@ -1069,6 +1098,7 @@ export function agyClientFactory(opts?: {
       const { cmd, versionProbe } = await resolveCliWithVersionProbe(
         "agy",
         opts?.cmd,
+        lang,
       );
       // On win32, over the command-line limit or on .cmd/.bat (constantly 0,
       // see winPromptLimit): spill the prompt into the dedicated subdirectory
@@ -1128,13 +1158,16 @@ export function agyClientFactory(opts?: {
             ),
           "agy",
           versionProbe,
+          lang,
         );
         // With captureSession, try to parse the envelope
         if (params.captureSession) {
           const env = parseAgyJsonEnvelope(out);
           if (env) {
             if (env.status && env.status !== "SUCCESS") {
-              throw new Error(`agy 返回 status=${env.status}`);
+              throw new Error(
+                translate(lang, "errors.ai.agyStatus", { status: env.status }),
+              );
             }
             yield { delta: env.response };
             if (env.conversationId) yield { sessionId: env.conversationId };
@@ -1184,13 +1217,17 @@ export async function continueCliChat(input: {
   model: string;
   signal?: AbortSignal;
   run?: Runner;
+  /** UI language for the errors this call throws (default zh). */
+  lang?: Language;
 }): Promise<string> {
   const run = input.run ?? defaultRun;
+  const lang = input.lang ?? "zh";
   const opts = { signal: input.signal };
   if (input.backend === "claudeCli") {
     const { cmd, versionProbe } = await resolveCliWithVersionProbe(
       "claude",
       input.cmd,
+      lang,
     );
     return withVersionHint(
       () =>
@@ -1211,12 +1248,14 @@ export async function continueCliChat(input: {
         ),
       "claude",
       versionProbe,
+      lang,
     );
   }
   if (input.backend === "agy") {
     const { cmd, versionProbe } = await resolveCliWithVersionProbe(
       "agy",
       input.cmd,
+      lang,
     );
     // The question can exceed the win argv limit too: reuse the spill path
     // (the same guard as seeding)
@@ -1260,6 +1299,7 @@ export async function continueCliChat(input: {
           ),
         "agy",
         versionProbe,
+        lang,
       );
       return stripAgyHeader(out);
     } finally {
@@ -1276,6 +1316,7 @@ export async function continueCliChat(input: {
     const { cmd, versionProbe } = await resolveCliWithVersionProbe(
       "cbc",
       input.cmd,
+      lang,
     );
     return withVersionHint(
       () =>
@@ -1296,12 +1337,14 @@ export async function continueCliChat(input: {
         ),
       "cbc",
       versionProbe,
+      lang,
     );
   }
   // codex
   const { cmd, versionProbe } = await resolveCliWithVersionProbe(
     "codex",
     input.cmd,
+    lang,
   );
   ensureSpillDirSwept(CODEX_OUT_SPILL_DIR);
   const outFile = join(
@@ -1333,6 +1376,7 @@ export async function continueCliChat(input: {
         ),
       "codex",
       versionProbe,
+      lang,
     );
     try {
       return readFileSync(outFile, "utf-8");

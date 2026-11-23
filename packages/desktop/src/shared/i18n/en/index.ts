@@ -2,6 +2,7 @@ import type { MessageKey, Messages } from "../index";
 import { enBatch } from "./batch";
 import { enCommon } from "./common";
 import { enDev } from "./dev";
+import { enErrors } from "./errors";
 import { enMatchList } from "./matchList";
 import { enNav } from "./nav";
 import { enRecorder } from "./recorder";
@@ -24,6 +25,7 @@ export const enMessages = {
   ...enRecorder,
   ...enDev,
   ...enStats,
+  ...enErrors,
   ...enReportDerive,
   ...enReportCards,
   ...enReportReplay,

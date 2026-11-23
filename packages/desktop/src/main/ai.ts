@@ -102,6 +102,8 @@ interface AiClientSettings {
    * settings snapshot, so the field shapes should match).
    */
   aiModels?: AiModelSelection | null;
+  /** UI language: the local / DeepSeek clients throw their errors in it. */
+  language?: Language | null;
 }
 
 /**
@@ -115,17 +117,18 @@ export function resolveAiClient(
 ): AnthropicLike | null {
   const backend = settings.aiBackend ?? "anthropic";
   const cmd = settings.aiBackendCommand || undefined;
-  if (backend === "claudeCli") return claudeCliClientFactory({ cmd });
+  const lang = settings.language ?? "zh";
+  if (backend === "claudeCli") return claudeCliClientFactory({ cmd, lang });
   // When cmd ends in .mjs, agyClientFactory internally uses the legacy wrapper-
   // script compatibility mode
-  if (backend === "agy") return agyClientFactory({ cmd });
-  if (backend === "codex") return codexClientFactory({ cmd });
-  if (backend === "codebuddy") return codebuddyClientFactory({ cmd });
+  if (backend === "agy") return agyClientFactory({ cmd, lang });
+  if (backend === "codex") return codexClientFactory({ cmd, lang });
+  if (backend === "codebuddy") return codebuddyClientFactory({ cmd, lang });
   // Official DeepSeek API: same semantics as anthropic -- no key -> null ->
   // deterministic fallback
   if (backend === "deepseek")
     return settings.deepseekApiKey
-      ? deepseekClientFactory(settings.deepseekApiKey)
+      ? deepseekClientFactory(settings.deepseekApiKey, fetch, lang)
       : null;
   if (!settings.anthropicApiKey) return null;
   return (anthropicFactory ?? realClientFactory)(settings.anthropicApiKey);

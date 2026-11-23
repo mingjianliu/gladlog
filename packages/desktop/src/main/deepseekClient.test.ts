@@ -243,6 +243,19 @@ describe("deepseekClientFactory", () => {
     );
   });
 
+  it("界面语言为 en 时提前断连的报错是英文", async () => {
+    const client = deepseekClientFactory(
+      "k",
+      fakeFetch({
+        chunks: ['data: {"choices":[{"delta":{"content":"x"}}]}\n'],
+      }),
+      "en",
+    );
+    await expect(collect(client)).rejects.toThrow(
+      "DeepSeek stream ended early (no [DONE]): the server disconnected and the output may be truncated, so it was treated as a failure",
+    );
+  });
+
   it("残留 data: [DONE] 没有换行符收尾:按正常结束处理,不报错(reviewer 补测)", async () => {
     const client = deepseekClientFactory(
       "k",

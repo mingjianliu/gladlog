@@ -11,10 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { CJK_LEAK } from "@gladlog/analysis/src/utils/localizedText";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type AnthropicLike,resolveAiClient } from "./ai";
-import type { CliVersionProbe } from "./cliDetect";
+import { type AnthropicLike, resolveAiClient } from "./ai";
+import { type CliVersionProbe, detectLocalCliCached } from "./cliDetect";
 import {
   AGY_PROMPT_SPILL_DIR,
   agyClientFactory,
@@ -55,6 +56,16 @@ vi.mock("node:child_process", async (importOriginal) => {
       child.kill = () => {};
       return child;
     }),
+  };
+});
+
+// Wrap the cached detector (real behaviour by default) so a test can make one
+// lookup come back empty and exercise the "command not found" error.
+vi.mock("./cliDetect", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./cliDetect")>();
+  return {
+    ...actual,
+    detectLocalCliCached: vi.fn(actual.detectLocalCliCached),
   };
 });
 
@@ -882,6 +893,21 @@ describe("withVersionHint(#21 item6:版本探测结果 threading 进错误提示
     ).rejects.toThrow(/boom.*版本探测失败.*可能版本不兼容/s);
   });
 
+  it("界面语言为 en 时版本提示是英文", async () => {
+    const err = await withVersionHint(
+      async () => {
+        throw new Error("claude exited 1: boom");
+      },
+      "claude",
+      Promise.resolve<CliVersionProbe>({ ok: true, version: "1.2.3" }),
+      "en",
+    ).catch((e: Error) => e);
+    expect((err as Error).message).toBe(
+      "claude exited 1: boom (detected claude version 1.2.3; the version may be incompatible)",
+    );
+    expect(CJK_LEAK.test((err as Error).message)).toBe(false);
+  });
+
   it("失败 + versionProbe 为 null(手填命令路径,未走自动检测)→ 原始错误不附加任何提示", async () => {
     await expect(
       withVersionHint(
@@ -1458,5 +1484,38 @@ describe("codebuddy factory / continueCliChat(PR #35 review #1:argv 形状与 st
       "--max-turns",
       "1",
     ]);
+  });
+});
+
+describe("找不到命令的报错跟随界面语言", () => {
+  async function notFoundMessage(
+    settings: Parameters<typeof resolveAiClient>[0],
+  ): Promise<string> {
+    vi.mocked(detectLocalCliCached).mockResolvedValueOnce(null);
+    const client = resolveAiClient(settings)!;
+    const err = await collect(client).catch((e: Error) => e);
+    return (err as Error).message;
+  }
+
+  it("设置为 en 时,「找不到命令」的报错不含中文", async () => {
+    const msg = await notFoundMessage({
+      anthropicApiKey: null,
+      aiBackend: "claudeCli",
+      language: "en",
+    });
+    expect(msg).toBe(
+      "claude command not found: install it first, or enter its full path under Settings → AI analysis → Command path",
+    );
+    expect(CJK_LEAK.test(msg)).toBe(false);
+  });
+
+  it("设置为 zh(或缺省)时仍是原来的中文", async () => {
+    const msg = await notFoundMessage({
+      anthropicApiKey: null,
+      aiBackend: "codex",
+    });
+    expect(msg).toBe(
+      "未检测到 codex 命令:请先安装,或在 设置 → AI 分析 → 命令路径 填写完整路径",
+    );
   });
 });

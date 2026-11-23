@@ -4,14 +4,10 @@
 // dictionary (the test fails while a listed file has no hit left). Never add
 // a file here — move its text into src/shared/i18n/ instead.
 export const PENDING_FILES: readonly string[] = [
-  "packages/desktop/src/main/ai.ts",
-  "packages/desktop/src/main/coachChat.ts",
   "packages/desktop/src/main/corpusLoader.ts",
-  "packages/desktop/src/main/deepseekClient.ts",
   "packages/desktop/src/main/e2eEnv.ts",
   "packages/desktop/src/main/exportImage.ts",
   "packages/desktop/src/main/ipc.ts",
-  "packages/desktop/src/main/localAiBackends.ts",
   "packages/desktop/src/main/managedAssembly.ts",
   "packages/desktop/src/main/managedObsBackend.ts",
   "packages/desktop/src/main/managedObsProcess.ts",

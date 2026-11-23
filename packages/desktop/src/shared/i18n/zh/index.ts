@@ -1,6 +1,7 @@
 import { zhBatch } from "./batch";
 import { zhCommon } from "./common";
 import { zhDev } from "./dev";
+import { zhErrors } from "./errors";
 import { zhMatchList } from "./matchList";
 import { zhNav } from "./nav";
 import { zhRecorder } from "./recorder";
@@ -24,6 +25,7 @@ export const zhMessages = {
   ...zhRecorder,
   ...zhDev,
   ...zhStats,
+  ...zhErrors,
   ...zhReportDerive,
   ...zhReportCards,
   ...zhReportReplay,

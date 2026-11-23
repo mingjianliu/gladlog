@@ -1,3 +1,4 @@
+import { type Language, translate } from "../shared/i18n/index";
 import type { AnthropicLike } from "./ai";
 
 /** Official DeepSeek API backend (OpenAI-compatible chat/completions, SSE
@@ -77,6 +78,7 @@ async function raceAgainstWatchdogs<T>(
   overallDeadline: number,
   stallMs: number,
   stage: "connect" | "stream",
+  lang: Language,
 ): Promise<T> {
   work.catch(() => {});
   const overallMs = Math.max(0, overallDeadline - Date.now());
@@ -85,7 +87,11 @@ async function raceAgainstWatchdogs<T>(
   const overallPromise = new Promise<never>((_, reject) => {
     overallTimer = setTimeout(() => {
       reject(
-        new Error(`DeepSeek 超时:请求整体超过 ${TIMEOUT_MS / 1000}s 未完成`),
+        new Error(
+          translate(lang, "errors.deepseek.timeout", {
+            seconds: TIMEOUT_MS / 1000,
+          }),
+        ),
       );
     }, overallMs);
   });
@@ -93,9 +99,13 @@ async function raceAgainstWatchdogs<T>(
     stallTimer = setTimeout(() => {
       reject(
         new Error(
-          stage === "connect"
-            ? `DeepSeek 流停滞:连接阶段超过 ${stallMs / 1000}s 未收到响应`
-            : `DeepSeek 流停滞:超过 ${stallMs / 1000}s 未收到新数据`,
+          translate(
+            lang,
+            stage === "connect"
+              ? "errors.deepseek.stallConnect"
+              : "errors.deepseek.stallStream",
+            { seconds: stallMs / 1000 },
+          ),
         ),
       );
     }, stallMs);
@@ -130,6 +140,8 @@ export function abortAllDeepSeekStreams(): void {
 export function deepseekClientFactory(
   key: string,
   fetchImpl: typeof fetch = fetch,
+  /** UI language for the errors this client throws. */
+  lang: Language = "zh",
 ): AnthropicLike {
   return {
     async *stream(params) {
@@ -173,6 +185,7 @@ export function deepseekClientFactory(
           overallDeadline,
           STALL_MS,
           "connect",
+          lang,
         );
       } catch (e) {
         controller.abort();
@@ -205,6 +218,7 @@ export function deepseekClientFactory(
             overallDeadline,
             STALL_MS,
             "stream",
+            lang,
           );
           if (done) {
             // First call decoder.decode() with no argument as a final flush:
@@ -244,9 +258,7 @@ export function deepseekClientFactory(
               else if (parsed.delta) yield { delta: parsed.delta };
             }
             if (!sawDone) {
-              throw new Error(
-                "DeepSeek 流异常提前结束(未收到 [DONE]):服务端提前断连,输出可能被截断,已按失败处理",
-              );
+              throw new Error(translate(lang, "errors.deepseek.earlyEnd"));
             }
             return;
           }
