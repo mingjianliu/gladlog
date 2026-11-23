@@ -143,7 +143,8 @@ export const enReportCards = {
   "report.deathCard.panicTitle":
     "Panic press: no clear enemy threat, or pressed while the target was not under pressure",
   "report.deathCard.panic": "⚠Panic",
-  "report.deathCard.ticks": " ×{ticks} ticks/{s}s",
+  "report.deathCard.ticks": (p: MessageParams) =>
+    ` ×${p.ticks} ${plural(p.ticks, "tick", "ticks")}/${p.s}s`,
   "report.deathCard.foldExpand": "Expand the folded small events",
   "report.deathCard.foldCollapse": "Collapse the folded small events",
   "report.deathCard.foldLabel": (p: MessageParams) =>

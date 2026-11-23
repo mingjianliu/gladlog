@@ -3,6 +3,18 @@ import type { MessageParams } from "../index";
 const plural = (n: string | number, one: string, many: string): string =>
   Number(n) === 1 ? one : many;
 
+/** English ordinal: 1st 2nd 3rd 4th … 11th 12th 13th … 21st 22nd 23rd … 101st
+ * 111th. A non-integer value keeps a plain "th". */
+const ordinal = (n: string | number): string => {
+  const v = Number(n);
+  if (!Number.isInteger(v)) return `${n}th`;
+  const abs = Math.abs(v);
+  const lastTwo = abs % 100;
+  if (lastTwo >= 11 && lastTwo <= 13) return `${n}th`;
+  const suffix = ["th", "st", "nd", "rd"][abs % 10] ?? "th";
+  return `${n}${suffix}`;
+};
+
 // English dictionary for the report's derive layer (`report.*`). Severity,
 // category, finding-type and kick-outcome wording is the glossary's
 // (src/shared/i18n/glossary.ts).
@@ -56,7 +68,7 @@ export const enReportDerive = {
     "CLI backends return in one piece with no mid-run progress — this usually takes a few minutes",
 
   // ── cohortDims.ts ──
-  "report.cohort.percentile": "{n}th",
+  "report.cohort.percentile": (p: MessageParams) => ordinal(p.n),
   "report.cohort.aboveMedian": "above this cohort's median",
   "report.cohort.belowMedian": "below this cohort's median",
   "report.cohort.atMedian": "at this cohort's median",
@@ -277,8 +289,8 @@ export const enReportDerive = {
     "At {t}s {healer} hardcast {heal} ({castS}s) on kill target {target} at {targetHpPct}% HP (+{healK}k{healCasts}); you could not kick it ({ownerWhy}), {teammates} could, and nobody did",
   "report.mistakes.backlashWindowImmune":
     "At {t}s {debuff} on {target} ({targetHpPct}%) was dispellable: you had {immuneBuff}, so the backlash CC could not land",
-  "report.mistakes.backlashWindowWorth":
-    "At {t}s {debuff} on {target} ({targetHpPct}%, {dots} DoTs) was worth dispelling; they took another {k}k over the next 15 s",
+  "report.mistakes.backlashWindowWorth": (p: MessageParams) =>
+    `At ${p.t}s ${p.debuff} on ${p.target} (${p.targetHpPct}%, ${p.dots} ${plural(p.dots, "DoT", "DoTs")}) was worth dispelling; they took another ${p.k}k over the next 15 s`,
   "report.mistakes.kickRefused": "{kick} went into {castSpell}'s cast",
   "report.mistakes.kickMissed": "{kick} missed",
   "report.mistakes.purgeMissed":

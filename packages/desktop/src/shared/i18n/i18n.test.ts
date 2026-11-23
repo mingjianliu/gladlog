@@ -19,6 +19,50 @@ import {
   zhMessages,
 } from "./index";
 
+describe("en 序数与复数(final review 1/2)", () => {
+  it("百分位序数后缀:st/nd/rd/th,11–13 一律 th;zh 不变", () => {
+    const cases: Array<[number, string]> = [
+      [1, "1st"],
+      [2, "2nd"],
+      [3, "3rd"],
+      [4, "4th"],
+      [11, "11th"],
+      [12, "12th"],
+      [13, "13th"],
+      [21, "21st"],
+      [22, "22nd"],
+      [23, "23rd"],
+      [101, "101st"],
+      [111, "111th"],
+    ];
+    for (const [n, want] of cases)
+      expect(translate("en", "report.cohort.percentile", { n })).toBe(want);
+    expect(translate("zh", "report.cohort.percentile", { n: 22 })).toBe(
+      "第 22 百分位",
+    );
+  });
+
+  it("backlash 窗口的 DoT 数与死亡回顾的跳数按 n 单复数", () => {
+    const worth = (dots: number) =>
+      translate("en", "report.mistakes.backlashWindowWorth", {
+        t: 30,
+        debuff: "Unstable Affliction",
+        target: "Warr",
+        targetHpPct: 40,
+        dots,
+        k: 120,
+      });
+    expect(worth(1)).toContain("(40%, 1 DoT)");
+    expect(worth(2)).toContain("(40%, 2 DoTs)");
+    expect(translate("en", "report.deathCard.ticks", { ticks: 1, s: 3 })).toBe(
+      " ×1 tick/3s",
+    );
+    expect(translate("en", "report.deathCard.ticks", { ticks: 2, s: 3 })).toBe(
+      " ×2 ticks/3s",
+    );
+  });
+});
+
 describe("translate", () => {
   it("按语言取普通文案", () => {
     expect(translate("zh", "common.save")).toBe("保存");

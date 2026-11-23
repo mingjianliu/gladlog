@@ -159,7 +159,7 @@ describe("i18n: 战报 derive 层英文模式不出中文", () => {
     expect(cjkStrings(out)).toEqual([]);
   });
 
-  it("失误:缓存的 zh 列表换成 en 与直接按 en 算的一致,且不重复计算", () => {
+  it("失误:en 结果与不走缓存直接按 en 算的相同;同一语言再调返回同一个缓存对象,zh / en 各存一份;踢断 / 驱散行按自带的文本输入出英文", () => {
     const m = sample();
     const zh = deriveMistakes(m);
     const en = deriveMistakes(m, undefined, "en");

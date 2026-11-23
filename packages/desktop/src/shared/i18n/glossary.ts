@@ -13,7 +13,7 @@ export const GLOSSARY: ReadonlyArray<{
   en: string;
   source: string;
 }> = [
-  // ── Finding / candidate types (findingDisplay.ts TYPE_LABEL; slug = candidate type) ──
+  // ── Finding / candidate types (findingDisplay.ts TYPE_LABEL_KEY; slug = candidate type) ──
   {
     id: "type.death",
     zh: "死亡",
