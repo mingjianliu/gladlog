@@ -13,6 +13,8 @@ export const zhSettings = {
   "settings.language.pickerTitle": "选择语言",
   "settings.language.pickerHint": "以后可以在设置页最上面修改",
   "settings.language.saveFailed": "语言设置没能保存,只在本次运行有效",
+  "settings.language.pickerSaveFailed":
+    "语言设置没能保存。再选一次即可进入，只在本次运行有效",
   "settings.title": "设置",
   "settings.loading": "加载中…",
   "settings.chooseFolder": "选择目录…",

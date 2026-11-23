@@ -51,14 +51,6 @@ export function useT(): LangContextValue {
 
 type Phase = "loading" | "ready" | "unavailable";
 
-/**
- * Reads `settings.language` once on mount and renders nothing until it has
- * it, so consumers never see a language flip after mounting (a flip would
- * re-run per-language effects such as the AI card's cache query — the GH #26
- * shape). While the stored language is null the effective language is the
- * browser locale's, matching main's `app.getLocale()` fallback, and the
- * first-run picker is shown instead of the app (`firstRunPicker`).
- */
 /** Stores the language; true when it was persisted. */
 async function persistLanguage(l: Language): Promise<boolean> {
   try {
@@ -74,6 +66,14 @@ async function persistLanguage(l: Language): Promise<boolean> {
   }
 }
 
+/**
+ * Reads `settings.language` once on mount and renders nothing until it has
+ * it, so consumers never see a language flip after mounting (a flip would
+ * re-run per-language effects such as the AI card's cache query — the GH #26
+ * shape). While the stored language is null the effective language is the
+ * browser locale's, matching main's `app.getLocale()` fallback, and the
+ * first-run picker is shown instead of the app (`firstRunPicker`).
+ */
 export function LangProvider({
   children,
   firstRunPicker = true,

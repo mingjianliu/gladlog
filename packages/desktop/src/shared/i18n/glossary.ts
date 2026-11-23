@@ -4,8 +4,8 @@
  * prompt / analysis slugs / docs/user-guide.md already use wherever one exists;
  * `source` records where each English term was taken from.
  *
- * Draft — submitted for user review before the bulk string migration starts.
- * Not wired into any lookup yet; the dictionaries quote these values.
+ * Reviewed by the user on 2026-11-23 before the string migration. Not wired
+ * into any lookup; the dictionaries quote these values.
  */
 export const GLOSSARY: ReadonlyArray<{
   id: string;

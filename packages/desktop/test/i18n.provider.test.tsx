@@ -147,7 +147,7 @@ describe("LangProvider / 首启语言选择框(spec §6.3 §6.7)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "English" }));
     const notice = await screen.findByTestId("language-picker-save-failed");
     expect(notice.textContent).toBe(
-      "语言设置没能保存,只在本次运行有效 / Couldn't save the language setting; it applies to this session only",
+      "语言设置没能保存。再选一次即可进入，只在本次运行有效 / Couldn't save the language setting. Pick again to continue; it will apply to this session only.",
     );
     expect(screen.queryByTestId("probe")).toBeNull();
     expect(

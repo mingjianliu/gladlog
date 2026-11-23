@@ -14,6 +14,8 @@ export const enSettings = {
     "You can change this later at the top of Settings",
   "settings.language.saveFailed":
     "Couldn't save the language setting; it applies to this session only",
+  "settings.language.pickerSaveFailed":
+    "Couldn't save the language setting. Pick again to continue; it will apply to this session only.",
   "settings.title": "Settings",
   "settings.loading": "Loading…",
   "settings.chooseFolder": "Choose folder…",

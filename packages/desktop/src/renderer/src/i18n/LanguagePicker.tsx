@@ -71,7 +71,7 @@ export function LanguagePicker({
             role="alert"
             data-testid="language-picker-save-failed"
           >
-            {bilingual("settings.language.saveFailed")}
+            {bilingual("settings.language.pickerSaveFailed")}
           </p>
         )}
         <p className="settings-note">
