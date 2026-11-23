@@ -32,7 +32,7 @@ function stubBridge(opts: {
     .fn()
     .mockResolvedValue({ cached: opts.analysisCached ?? null, running: false });
   (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
-    settings: { get: vi.fn().mockResolvedValue({ aiLanguage: "zh" }) },
+    settings: { get: vi.fn().mockResolvedValue({ language: "zh" }) },
     analysis: { getState: analysisGetState },
     compare: {
       getState: vi.fn().mockResolvedValue(opts.compareState ?? null),

@@ -8,6 +8,7 @@ import {
   isKnownModel,
 } from "../shared/aiModels";
 import { atomicWriteFileSync } from "../shared/atomicWrite";
+import { type Language, LANGUAGES } from "../shared/i18n/index";
 import {
   MANAGED_OBS_PREF_DEFAULTS,
   MANAGED_OBS_PREF_KEYS,
@@ -15,9 +16,9 @@ import {
 } from "../shared/managedObsPrefs";
 import { clampUiZoom, UI_ZOOM_DEFAULT } from "../shared/uiZoom";
 
-export type { AiBackend, AiModelSelection };
-export type AiLanguage = "zh" | "en";
-const AI_LANGUAGES: AiLanguage[] = ["zh", "en"];
+export type { AiBackend, AiModelSelection, Language };
+/** Kept as an alias of Language so existing call sites need not change. */
+export type AiLanguage = Language;
 
 export interface GladlogSettings {
   wowDirectory: string | null;
@@ -31,9 +32,13 @@ export interface GladlogSettings {
   // Debug: route LLM calls to a local CLI instead of the Anthropic API.
   aiBackend: AiBackend;
   aiBackendCommand: string | null;
-  /** Output language of coach replies (backlog #1); defaults to Chinese, to
-   * match the UI. */
-  aiLanguage: AiLanguage;
+  /** UI language, which is also the AI reply language (spec 2026-11-23 §6.1).
+   * null = the user has not chosen yet: main falls back to the OS locale
+   * (main/language.ts effectiveLanguage) and the renderer shows the first-run
+   * picker. Only an explicit choice writes a non-null value. Replaces the old
+   * `aiLanguage` field, which is deliberately not migrated and is dropped from
+   * disk on the next save. */
+  language: Language | null;
   /** Auto-analyze new matches (2026-08-01): once a live-watched new match is
    * stored, analyze it automatically with the current default model;
    * historical imports do not trigger it (the discriminator is the `live`
@@ -112,7 +117,9 @@ const DEFAULTS: GladlogSettings = {
   aiModels: {},
   aiBackend: "anthropic",
   aiBackendCommand: null,
-  aiLanguage: "zh",
+  // Must stay null: save() writes the full settings object, so a non-null
+  // default would silently persist as if the user had chosen it (§6.1).
+  language: null,
   autoAnalyzeNew: false,
   aiSelfReview: false,
   recordingEnabled: false,
@@ -233,8 +240,14 @@ export function sanitizeSettingsPatch(
     const { aiBackend: _bad, ...rest } = out;
     out = rest;
   }
-  if (out.aiLanguage !== undefined && !AI_LANGUAGES.includes(out.aiLanguage)) {
-    const { aiLanguage: _bad, ...rest } = out;
+  // null is legal (back to "not chosen"); anything else must be a known
+  // language.
+  if (
+    out.language !== undefined &&
+    out.language !== null &&
+    !LANGUAGES.includes(out.language)
+  ) {
+    const { language: _bad, ...rest } = out;
     out = rest;
   }
   // Same treatment as recordingKeepCount: an out-of-range or non-numeric zoom
@@ -308,6 +321,9 @@ const NOOP_SAFE_STORAGE: SafeStorageLike = {
     throw new Error("safeStorage unavailable");
   },
 };
+
+/** Pre-2026-11-23 key for the AI reply language; superseded by `language`. */
+const RETIRED_AI_LANGUAGE = "aiLanguage";
 
 const SECRET_FIELDS = [
   "anthropicApiKey",
@@ -430,6 +446,10 @@ export class SettingsStore {
       ...(raw as Partial<GladlogSettings>),
       ...migrateLegacyModel(raw as Partial<GladlogSettings> & LegacySettings),
     } as GladlogSettings;
+    // The retired aiLanguage field is never read (no migration, §6.1 step 2);
+    // strip it so it neither leaks to consumers nor rides back to disk via
+    // save()'s `{ ...current }`.
+    delete (merged as unknown as Record<string, unknown>)[RETIRED_AI_LANGUAGE];
     for (const field of SECRET_FIELDS) {
       merged[field] = this.decryptSecret(raw[field], field);
     }
@@ -438,6 +458,10 @@ export class SettingsStore {
     // every consumer unchecked. `...DEFAULTS` only covers the *missing* case;
     // a present-but-dirty 0/-1/NaN needs this line.
     merged.uiZoom = clampUiZoom(merged.uiZoom);
+    // Same for language: a hand-edited unknown value reads as "not chosen"
+    // rather than reaching consumers (it keys AI cache file names).
+    if (merged.language !== null && !LANGUAGES.includes(merged.language))
+      merged.language = null;
     return merged;
   }
   save(partial: Partial<GladlogSettings>): GladlogSettings {
@@ -457,6 +481,7 @@ export class SettingsStore {
         onDisk[field] = rawOnDisk[field] ?? null;
       }
     }
+    delete onDisk[RETIRED_AI_LANGUAGE];
     mkdirSync(dirname(this.filePath), { recursive: true });
     atomicWriteFileSync(this.filePath, JSON.stringify(onDisk, null, 2));
     return next;

@@ -247,7 +247,7 @@ export const defaultRun: Runner = (file, args, stdin, opts) =>
     // `+= d.toString()` decodes each half into U+FFFD garbage when a
     // multi-byte UTF-8 character (Chinese and friends) is split across a chunk
     // boundary (hit for real in a 300-match agy simulation; production
-    // aiLanguage defaults to zh).
+    // the UI language is often zh).
     const outChunks: Buffer[] = [];
     const errChunks: Buffer[] = [];
     // onStdoutLine 的行装配缓冲:未凑齐换行的字节先攒着(见 Runner 注释)。

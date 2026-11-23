@@ -10,7 +10,7 @@ const m = loadRealMatchFixture();
 beforeEach(() => {
   (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
     settings: {
-      get: vi.fn().mockResolvedValue({ aiLanguage: "zh" }),
+      get: vi.fn().mockResolvedValue({ language: "zh" }),
       save: vi.fn().mockResolvedValue({}),
     },
     analysis: {

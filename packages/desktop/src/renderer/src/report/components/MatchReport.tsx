@@ -801,8 +801,8 @@ export function MatchReport({
     void (async () => {
       try {
         const s = await bridge().settings.get();
-        if (s?.aiLanguage === "en" || s?.aiLanguage === "zh")
-          setAiLang(s.aiLanguage);
+        if (s?.language === "en" || s?.language === "zh")
+          setAiLang(s.language);
       } catch {
         /* default zh */
       }

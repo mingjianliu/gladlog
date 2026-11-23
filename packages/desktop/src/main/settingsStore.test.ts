@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   type SafeStorageLike,
+  sanitizeSettingsPatch,
   SettingsStore,
   type SettingsStoreWarning,
 } from "./settingsStore";
@@ -209,5 +210,50 @@ describe("SettingsStore + safeStorage", () => {
     const onDisk = JSON.parse(readFileSync(path, "utf-8"));
     expect(onDisk.anthropicApiKey).toBe("sk-secret");
     expect(store.get().anthropicApiKey).toBe("sk-secret");
+  });
+});
+
+describe("SettingsStore.language(UI 语言,§6.1)", () => {
+  it("磁盘上只有旧的 aiLanguage → language 是 null(不迁移)", () => {
+    const path = tmpPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify({ aiLanguage: "en" }));
+    const store = new SettingsStore(path);
+    expect(store.get().language).toBeNull();
+  });
+
+  it("保存无关字段后:落盘 language 为 null,且不再有 aiLanguage 这个 key", () => {
+    const path = tmpPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify({ aiLanguage: "en" }));
+    const store = new SettingsStore(path);
+    store.save({ wowDirectory: "/x" });
+    const onDisk = JSON.parse(readFileSync(path, "utf-8"));
+    expect(onDisk.language).toBeNull();
+    expect(onDisk).not.toHaveProperty("aiLanguage");
+    expect(store.get()).not.toHaveProperty("aiLanguage");
+  });
+
+  it("磁盘上手改成非法语言 → 读出 null(不让 fr 流进缓存文件名)", () => {
+    const path = tmpPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify({ language: "fr" }));
+    expect(new SettingsStore(path).get().language).toBeNull();
+  });
+
+  it("save({ language: \"en\" }) 之后 get().language === \"en\"", () => {
+    const store = new SettingsStore(tmpPath());
+    store.save({ language: "en" });
+    expect(store.get().language).toBe("en");
+  });
+
+  it("sanitizeSettingsPatch:非法语言丢弃,null 保留(回到「未选择」)", () => {
+    expect(sanitizeSettingsPatch({ language: "fr" as never })).toEqual({});
+    expect(sanitizeSettingsPatch({ language: null })).toEqual({
+      language: null,
+    });
+    expect(sanitizeSettingsPatch({ language: "zh" })).toEqual({
+      language: "zh",
+    });
   });
 });

@@ -201,7 +201,7 @@ describe("sessionId 捕获(coach chat Task 4)", () => {
           anthropicApiKey: null,
           wowDirectory: null,
           aiBackend: "claudeCli" as const,
-          aiLanguage: "zh" as const,
+          language: "zh" as const,
         }),
         matchesDir: dir,
         emit: () => {},
@@ -276,7 +276,7 @@ describe("AI 语言(backlog #1)", () => {
       getSettings: () => ({
         anthropicApiKey: "k",
         wowDirectory: null,
-        aiLanguage: lang,
+        language: lang,
       }),
       clientFactory: () => ({
         async *stream(params: { system?: string }) {
@@ -413,7 +413,7 @@ describe("跨场聚合(phase3 #3b)", () => {
       getSettings: () => ({
         anthropicApiKey: null,
         wowDirectory: null,
-        aiLanguage: "zh",
+        language: "zh",
       }),
       matchesDir: dir,
       emit: () => {},
@@ -506,7 +506,7 @@ describe("listAnalyzed(批量分析的跳过谓词)", () => {
       getSettings: () => ({
         anthropicApiKey: null,
         wowDirectory: null,
-        aiLanguage: "zh",
+        language: "zh",
       }),
       matchesDir: dir,
       emit: () => {},
@@ -520,7 +520,7 @@ describe("listAnalyzed(批量分析的跳过谓词)", () => {
       getSettings: () => ({
         anthropicApiKey: null,
         wowDirectory: null,
-        aiLanguage: "zh",
+        language: "zh",
       }),
       matchesDir: "/tmp/nope-" + Math.random(),
       emit: () => {},
@@ -807,7 +807,7 @@ describe("notebook(错题本跨场分组)", () => {
     );
 
     const s2 = createAnalysisService({
-      getSettings: () => ({ aiLanguage: "zh" }) as never,
+      getSettings: () => ({ language: "zh" }) as never,
       matchesDir: dir,
       clientFactory: () => null as never,
       emit: () => {},
@@ -1609,7 +1609,7 @@ describe("分槽落盘(多模型对比)", () => {
       getSettings: () => ({
         anthropicApiKey: null,
         wowDirectory: null,
-        aiLanguage: "zh",
+        language: "zh",
       }),
       matchesDir: dir,
       emit: () => {},

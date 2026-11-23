@@ -32,6 +32,7 @@ import {
 import { join } from "path";
 
 import { type AiModelSelection,resolveAiModel } from "../shared/aiModels";
+import type { Language } from "../shared/i18n/index";
 import {
   type AiBackend,
   type AiLanguage,
@@ -145,7 +146,7 @@ export function createCompareService(deps: {
     wowDirectory: string | null;
     aiBackend?: AiBackend;
     aiBackendCommand?: string | null;
-    aiLanguage?: AiLanguage;
+    language?: Language | null;
   };
   clientFactory?: (key: string) => AnthropicLike;
   loadCorpus: () => ReferenceCorpus | null;
@@ -224,7 +225,7 @@ export function createCompareService(deps: {
       return;
     }
     const settings = deps.getSettings();
-    const lang: AiLanguage = settings.aiLanguage ?? "zh";
+    const lang: AiLanguage = settings.language ?? "zh";
     /** 磁盘缓存的唯一写入口(读侧是 getCached,判据共用
      *  isCacheableCompareResult)。best-effort:写不进去也还有内存终态兜着。 */
     const writeCache = (result: CompareResult) => {
@@ -477,7 +478,7 @@ export function createCompareService(deps: {
         if (doc.promptVersion !== COMPARE_PROMPT_VERSION) return null;
         // Language is part of the cache key: change the commentary language
         // and it regenerates (older caches have no language field → invalid)
-        const lang = deps.getSettings().aiLanguage ?? "zh";
+        const lang = deps.getSettings().language ?? "zh";
         if (doc.language !== lang) return null;
         const result = doc.result as CompareResult;
         // 读写同谓词:老版本写下的 NO_API_KEY 缓存(结论只反映当时的设置)在

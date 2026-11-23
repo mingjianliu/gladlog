@@ -54,7 +54,7 @@ const result = {
 beforeEach(() => {
   (window as any).__gladlogFixture = {
     settings: {
-      get: vi.fn().mockResolvedValue({ aiLanguage: "zh" }),
+      get: vi.fn().mockResolvedValue({ language: "zh" }),
       save: vi.fn().mockResolvedValue({}),
     },
     analysis: {
@@ -145,7 +145,7 @@ describe("StructuredAnalysisPanel", () => {
     expect(screen.queryByTestId("self-review-note")).toBeNull();
   });
 
-  it("语言切换:点 EN 持久化 aiLanguage 并重查缓存(backlog #1)", async () => {
+  it("语言切换:点 EN 持久化 language 并重查缓存(backlog #1)", async () => {
     render(
       <StructuredAnalysisPanel
         source={{ units: {}, startInfo: {} } as any}
@@ -157,7 +157,7 @@ describe("StructuredAnalysisPanel", () => {
     const callsBefore = fx.analysis.getState.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
     await screen.findByText(/第30秒阵亡/); // re-rendered after the re-query
-    expect(fx.settings.save).toHaveBeenCalledWith({ aiLanguage: "en" });
+    expect(fx.settings.save).toHaveBeenCalledWith({ language: "en" });
     expect(fx.analysis.getState.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 
@@ -222,7 +222,7 @@ describe("演示分析(UI review #7)", () => {
       "演示数据",
     );
     await act(async () => {
-      resolveSettings({ aiLanguage: "zh" });
+      resolveSettings({ language: "zh" });
     });
     expect(screen.getByTestId("ai-demo-banner")).toBeTruthy();
     expect(screen.getByText("被集火秒杀")).toBeTruthy();
@@ -249,7 +249,7 @@ describe("演示分析(UI review #7)", () => {
     const fx = (window as any).__gladlogFixture;
     fx.settings.get = vi
       .fn()
-      .mockResolvedValue({ aiLanguage: "zh", anthropicApiKey: "sk-x" });
+      .mockResolvedValue({ language: "zh", anthropicApiKey: "sk-x" });
     fx.analysis.getState = vi
       .fn()
       .mockResolvedValue({ cached: null, running: false });
@@ -809,7 +809,7 @@ describe("split 箭头:选用其他模型分析(Task 4)", () => {
   }) {
     const fx = (window as any).__gladlogFixture;
     fx.settings.get = vi.fn().mockResolvedValue({
-      aiLanguage: "zh",
+      language: "zh",
       aiBackend: "anthropic",
       aiModels: {},
       anthropicApiKey: "sk-set",

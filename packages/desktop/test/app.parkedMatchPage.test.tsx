@@ -73,7 +73,7 @@ describe("对局页切走后停放,不卸载", () => {
       },
       logs: { onMatchStored: () => () => {} },
       settings: {
-        get: async () => ({ wowDirectory: null, aiLanguage: "zh" }),
+        get: async () => ({ wowDirectory: null, language: "zh" }),
       },
     };
     const { container } = render(<App />);

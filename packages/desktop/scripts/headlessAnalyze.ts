@@ -61,7 +61,7 @@ async function main() {
     process.exit(2);
   }
   console.log(
-    `backend=${settings.aiBackend} model=${JSON.stringify(settings.aiModels)} lang=${settings.aiLanguage} selfReview=${settings.aiSelfReview === true} dir=${MATCH_DIR}`,
+    `backend=${settings.aiBackend} model=${JSON.stringify(settings.aiModels)} lang=${settings.language ?? "zh"} selfReview=${settings.aiSelfReview === true} dir=${MATCH_DIR}`,
   );
   const svc = createAnalysisService({
     getSettings: () => settings,
@@ -115,7 +115,7 @@ async function main() {
         spec: specToString(owner.spec),
         rosterSpecs: players.map((u) => String(u.spec)),
       });
-      const lang = settings.aiLanguage ?? "zh";
+      const lang = settings.language ?? "zh";
       const cache = join(MATCH_DIR, matchId, `analysis-v2.${lang}.json`);
       let n = "?";
       try {

@@ -266,7 +266,7 @@ export function StructuredAnalysisPanel({
       void bridge()
         .settings.get()
         .then((s) => {
-          setLang((s as { aiLanguage?: "zh" | "en" }).aiLanguage ?? "zh");
+          setLang((s as { language?: "zh" | "en" | null }).language ?? "zh");
           setAiSettings(
             s as {
               anthropicApiKey?: string | null;
@@ -287,7 +287,7 @@ export function StructuredAnalysisPanel({
     setLang(next);
     setLangSwitches((n) => n + 1); // re-runs the cache query (per-language cache key on the main side)
     try {
-      await bridge().settings.save({ aiLanguage: next });
+      await bridge().settings.save({ language: next });
     } catch {
       /* no settings facet (test stub): switch locally only */
     }

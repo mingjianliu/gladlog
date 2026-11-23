@@ -13,6 +13,7 @@ import {
   splitSlotKey,
   toSlottedDoc,
 } from "../shared/analysisCache";
+import type { Language } from "../shared/i18n/index";
 import { PROMPT_VERSION } from "../shared/promptVersion";
 import {
   type AiLanguage,
@@ -143,7 +144,7 @@ export function createCoachChatService(deps: {
     aiBackend?: AiBackend;
     aiBackendCommand?: string | null;
     aiModels?: AiModelSelection | null;
-    aiLanguage?: AiLanguage;
+    language?: Language | null;
     aiSelfReview?: boolean;
   };
   matchesDir: string;
@@ -180,7 +181,7 @@ export function createCoachChatService(deps: {
     return {
       s,
       backend,
-      lang: (s.aiLanguage ?? "zh") as AiLanguage,
+      lang: s.language ?? "zh",
       selfReviewOn: s.aiSelfReview === true,
       cmd: s.aiBackendCommand || undefined,
       // Single-source predicate (final review F3): shares the same

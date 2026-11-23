@@ -24,6 +24,7 @@ import { applyE2eEnv } from "./e2eEnv";
 import { exportReportImage } from "./exportImage";
 import { createIconCache } from "./iconCache";
 import { registerIpc } from "./ipc";
+import { readInstallerLanguage, withEffectiveLanguage } from "./language";
 import { createLearningService } from "./learning";
 import {
   assembleManagedRecording,
@@ -163,6 +164,24 @@ process.on("exit", () => managedAssemblyState.handle?.killSync());
 // app.getPath("userData") is already called at module scope above (the
 // SettingsStore construction), so this is equally safe pre-whenReady.
 const managedAssets = createObsAssets({ userDataDir: userData() });
+
+/** Settings as main-side AI services see them: `language` resolved to a
+ * concrete value (stored choice, else the OS locale -- never written back),
+ * spec 2026-11-23 §6.1. The renderer still gets the raw settings (null =
+ * not chosen yet) so it can show the first-run picker. */
+function effectiveSettings() {
+  return withEffectiveLanguage(settings.get(), app.getLocale());
+}
+
+/** §6.1 step 3 / §6.6: on Windows, adopt the language picked in the NSIS
+ * installer -- only while the user has not chosen one. A missing or invalid
+ * file leaves the setting null (the renderer then asks). */
+function adoptInstallerLanguage(): void {
+  if (settings.get().language !== null) return;
+  if (process.platform !== "win32") return;
+  const language = readInstallerLanguage(dirname(app.getPath("exe")));
+  if (language) settings.save({ language });
+}
 
 /** Task-5b brief step 2: `settings.managedWsPassword ?? generate 32 hex
  * random → save`. Task 6 landed `managedWsPassword` as a real (secret,
@@ -539,6 +558,7 @@ const single = app.requestSingleInstanceLock();
 if (!single) app.quit();
 else {
   app.whenReady().then(() => {
+    adoptInstallerLanguage();
     store = new MatchStore(join(userData(), "matches"));
     const initialMetas = store.init();
     win = createWindow();
@@ -580,7 +600,7 @@ else {
     ];
 
     const compare = createCompareService({
-      getSettings: () => settings.get(),
+      getSettings: effectiveSettings,
       matchesDir: join(userData(), "matches"),
       loadCorpus: loadBundledCorpus(
         corpusPaths,
@@ -595,21 +615,21 @@ else {
       emit: (ch, payload) => win?.webContents.send(ch, payload),
     });
     const learning = createLearningService({
-      getSettings: () => settings.get(),
+      getSettings: effectiveSettings,
       matchesDir: join(userData(), "matches"),
       learningDir: join(userData(), "learning"),
       clientFactory: realClientFactory,
       emit: (ch, payload) => win?.webContents.send(ch, payload),
     });
     const analysis = createAnalysisService({
-      getSettings: () => settings.get(),
+      getSettings: effectiveSettings,
       matchesDir: join(userData(), "matches"),
       clientFactory: realClientFactory,
       emit: (ch, payload) => win?.webContents.send(ch, payload),
       onFindings: (e) => learning.recordAnalysis(e),
     });
     const coachChat = createCoachChatService({
-      getSettings: () => settings.get(),
+      getSettings: effectiveSettings,
       matchesDir: join(userData(), "matches"),
     });
     const icons = createIconCache({

@@ -41,7 +41,7 @@ function seedAnalysisCache(
 const settings = () => ({
   aiBackend: "claudeCli" as const,
   aiBackendCommand: null,
-  aiLanguage: "zh" as const,
+  language: "zh" as const,
 });
 
 it("门槛:API 后端 unsupported;无分析 session not-ready;有则 ready", async () => {

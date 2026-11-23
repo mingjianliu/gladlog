@@ -101,8 +101,8 @@ export function ProComparisonVerified({
     void (async () => {
       try {
         const s = await bridge().settings.get();
-        if (s?.aiLanguage === "en" || s?.aiLanguage === "zh")
-          setLang(s.aiLanguage);
+        if (s?.language === "en" || s?.language === "zh")
+          setLang(s.language);
         const cfg = s as {
           aiBackend?: AiBackend | null;
           aiModels?: AiModelSelection | null;

@@ -38,7 +38,7 @@ beforeAll(async () => {
 beforeEach(() => {
   resetSourceMemoForTest(true);
   (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
-    settings: { get: vi.fn().mockResolvedValue({ aiLanguage: "zh" }) },
+    settings: { get: vi.fn().mockResolvedValue({ language: "zh" }) },
   };
 });
 afterEach(cleanup);

@@ -39,6 +39,7 @@ import { join } from "path";
 
 import { type AiModelSelection,resolveAiModel } from "../shared/aiModels";
 import { resolveActiveSlot, toSlottedDoc } from "../shared/analysisCache";
+import type { Language } from "../shared/i18n/index";
 import {
   type AiBackend,
   type AiLanguage,
@@ -70,7 +71,7 @@ export function createLearningService(deps: {
     wowDirectory: string | null;
     aiBackend?: AiBackend;
     aiBackendCommand?: string | null;
-    aiLanguage?: AiLanguage;
+    language?: Language | null;
   };
   clientFactory?: (key: string) => AnthropicLike;
   matchesDir: string;
@@ -272,7 +273,7 @@ export function createLearningService(deps: {
       // by a misbehaving model, leaving the whole round unpersisted (the
       // spec's core invariant).
       const settings = deps.getSettings();
-      const lang: AiLanguage = settings.aiLanguage ?? "zh";
+      const lang: AiLanguage = settings.language ?? "zh";
       const need = rules.filter((r) => !r.description[lang]);
       let distilled = 0;
       let droppedByAudit = 0;

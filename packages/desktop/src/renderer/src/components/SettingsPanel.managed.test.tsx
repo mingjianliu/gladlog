@@ -28,7 +28,7 @@ const baseSettings: Settings = {
   aiModels: {},
   aiBackend: "anthropic",
   aiBackendCommand: null,
-  aiLanguage: "zh",
+  language: "zh",
   autoAnalyzeNew: false,
   aiSelfReview: false,
   recordingEnabled: false,

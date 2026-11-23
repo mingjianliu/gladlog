@@ -1,0 +1,46 @@
+// Effective UI language for the main process (spec 2026-11-23 §6.1 / §6.6).
+// Electron-free so it can be unit tested in plain node: callers pass in
+// app.getLocale() and the exe directory.
+import { readFileSync } from "fs";
+import { join } from "path";
+
+import {
+  type Language,
+  LANGUAGES,
+  localeToLanguage,
+} from "../shared/i18n/index";
+
+/** The stored choice if there is one, otherwise a guess from the OS locale.
+ * The guess is never written back to settings. */
+export function effectiveLanguage(
+  s: { language?: Language | null },
+  systemLocale: string,
+): Language {
+  return s.language ?? localeToLanguage(systemLocale);
+}
+
+/** Settings with `language` resolved to a concrete value -- what main-side
+ * services receive from their `getSettings` dependency. */
+export function withEffectiveLanguage<T extends { language: Language | null }>(
+  s: T,
+  systemLocale: string,
+): Omit<T, "language"> & { language: Language } {
+  return { ...s, language: effectiveLanguage(s, systemLocale) };
+}
+
+/** File the Windows NSIS installer writes next to the exe on an interactive
+ * install (build/installer.nsh, §6.6). */
+export const INSTALLER_LANGUAGE_FILE = "installer-language.txt";
+
+/** Language picked in the Windows installer, or null when the file is missing,
+ * unreadable or holds anything other than `zh` / `en`. Never throws. */
+export function readInstallerLanguage(exeDir: string): Language | null {
+  try {
+    const v = readFileSync(join(exeDir, INSTALLER_LANGUAGE_FILE), "utf-8")
+      .replace(/^\uFEFF/, "")
+      .trim();
+    return (LANGUAGES as readonly string[]).includes(v) ? (v as Language) : null;
+  } catch {
+    return null;
+  }
+}

@@ -16,7 +16,7 @@ function mockBridge(
     anthropicModel: null,
     aiBackend: "anthropic",
     aiBackendCommand: null,
-    aiLanguage: "zh",
+    language: "zh",
     autoAnalyzeNew: false,
     aiSelfReview: false,
     autoCheckUpdates: true,
@@ -80,7 +80,7 @@ describe("设置页(phase3 #2a)", () => {
     fireEvent.click(screen.getByRole("button", { name: "清除" }));
     expect(save).toHaveBeenCalledWith({ anthropicApiKey: null });
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
-    expect(save).toHaveBeenCalledWith({ aiLanguage: "en" });
+    expect(save).toHaveBeenCalledWith({ language: "en" });
   });
 
   it("自动分析新对局:关时按钮显示启用,点击后调用 save 打开开关", async () => {

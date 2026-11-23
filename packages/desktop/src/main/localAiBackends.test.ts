@@ -86,7 +86,7 @@ describe("defaultRun 累积 child process 输出(300 盘 agy 模拟发现的乱�
     };
   }
 
-  it("stdout 多字节 UTF-8 字符跨 chunk 边界不产生 U+FFFD 乱码(产线 aiLanguage 默认 zh)", async () => {
+  it("stdout 多字节 UTF-8 字符跨 chunk 边界不产生 U+FFFD 乱码(产线界面语言常为 zh)", async () => {
     const promise = defaultRun("some-cli", [], "");
     const child = lastSpawnedChild();
     // "减" = E5 87 8F; deliberately split mid-character into two chunks to

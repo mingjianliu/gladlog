@@ -45,7 +45,7 @@ beforeEach(() => {
   life.unmounts = 0;
   resetSourceMemoForTest(true);
   (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
-    settings: { get: vi.fn().mockResolvedValue({ aiLanguage: "zh" }) },
+    settings: { get: vi.fn().mockResolvedValue({ language: "zh" }) },
     recorder: {
       getForMatch: vi
         .fn()

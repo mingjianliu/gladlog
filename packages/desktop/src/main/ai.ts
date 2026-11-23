@@ -55,7 +55,8 @@ export interface AnthropicLike {
   }): AsyncIterable<{ delta?: string; sessionId?: string }>;
 }
 
-export type AiLanguage = "zh" | "en";
+/** Alias of the UI language: the coach replies in the language the UI shows. */
+export type AiLanguage = Language;
 
 /**
  * Coach system prompt (backlog #1): persona plus output language. The language
@@ -86,6 +87,7 @@ export function buildCoachSystemPrompt(
 
 export type { AiBackend } from "../shared/aiModels";
 import type { AiBackend, AiModelSelection } from "../shared/aiModels";
+import type { Language } from "../shared/i18n/index";
 
 interface AiClientSettings {
   anthropicApiKey: string | null;

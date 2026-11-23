@@ -570,8 +570,8 @@ export function SettingsPanel() {
             {(["zh", "en"] as AiLanguage[]).map((l) => (
               <button
                 key={l}
-                className={settings.aiLanguage === l ? "active" : ""}
-                onClick={() => void save({ aiLanguage: l }, "语言已切换")}
+                className={(settings.language ?? "zh") === l ? "active" : ""}
+                onClick={() => void save({ language: l }, "语言已切换")}
               >
                 {l === "zh" ? "中文" : "EN"}
               </button>

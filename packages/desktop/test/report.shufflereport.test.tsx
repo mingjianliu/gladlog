@@ -22,7 +22,7 @@ function installFixtureBridge(recorder?: {
 }) {
   (window as any).__gladlogFixture = {
     settings: {
-      get: vi.fn().mockResolvedValue({ aiLanguage: "zh" }),
+      get: vi.fn().mockResolvedValue({ language: "zh" }),
       save: vi.fn().mockResolvedValue({}),
     },
     analysis: {
