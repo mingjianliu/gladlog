@@ -685,6 +685,18 @@ export function MatchReport({
     const pool = friendly.length > 0 ? friendly : all;
     setRecap(pool.reduce((a, b) => (b.deathS > a.deathS ? b : a)));
   }, [deathRecaps, source]);
+  // The open recap is a pick (unit + death), not a frozen copy: when the
+  // list is derived again — a language switch, or the English spell names
+  // (namesVersion) landing — the card shows the same death from the new list.
+  const shownRecap = useMemo(
+    () =>
+      recap
+        ? (deathRecaps?.find(
+            (r) => r.unitId === recap.unitId && r.deathS === recap.deathS,
+          ) ?? recap)
+        : null,
+    [recap, deathRecaps],
+  );
   // Replay cursor projection (1c): show the last position when switching back
   // from replay to the report
   const [lastReplayT, setLastReplayT] = useState<number | null>(null);
@@ -1254,13 +1266,13 @@ export function MatchReport({
                     <SkelRecap />
                   ) : (
                     <div className="rpt-recap-col">
-                      {recap ? (
+                      {shownRecap ? (
                         <DeathRecapCard
-                          recap={recap}
+                          recap={shownRecap}
                           // Enemy death (fallback when no friendly died, or the
                           // user clicked an enemy ✕): the title switches to
                           // "finish"
-                          enemy={!isFriendlyUnit(source, recap.unitId)}
+                          enemy={!isFriendlyUnit(source, shownRecap.unitId)}
                           onClose={() => setRecap(null)}
                           onJump={(tSeconds, unitNames) => {
                             handleSeekEvent(tSeconds, unitNames);

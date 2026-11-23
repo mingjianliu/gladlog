@@ -1,4 +1,4 @@
-import { ensureAnalysisData } from "@gladlog/analysis";
+import { ensureAnalysisData, getEnglishSpellName } from "@gladlog/analysis";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { spellLabel } from "./spellLabel";
@@ -24,6 +24,12 @@ describe("spellLabel(§8 第 1 条:英文模式下的技能名)", () => {
 
   it("en:日志名为空时回落到英文表(和 displaySpellName 同一条)", () => {
     expect(spellLabel("17", "", "en")).toBe("Power Word: Shield");
+  });
+
+  it("en:名字表里英文名为空串的 id 也算查不到,返回日志名", () => {
+    // 230508 is one of the ids spellNames.json maps to ""
+    expect(getEnglishSpellName("230508", null)).toBe("");
+    expect(spellLabel("230508", "某个技能", "en")).toBe("某个技能");
   });
 
   it("接受数字 id", () => {

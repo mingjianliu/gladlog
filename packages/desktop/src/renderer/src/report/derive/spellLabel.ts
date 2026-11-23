@@ -28,7 +28,9 @@ export function spellLabel(
   const id = spellId == null ? "" : String(spellId);
   if (id === "") return name;
   // `null` fallback: a miss comes back as the id itself, which is how a miss
-  // is told apart from a hit (no English name equals its numeric id).
+  // is told apart from a hit (no English name equals its numeric id). The
+  // table also holds a few ids whose name is "" (9 in the current build):
+  // those count as misses too.
   const en = getEnglishSpellName(id, null);
-  return en === id ? name : en;
+  return en && en !== id ? en : name;
 }

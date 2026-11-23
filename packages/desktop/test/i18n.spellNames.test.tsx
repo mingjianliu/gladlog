@@ -19,10 +19,16 @@ import { LangProvider } from "../src/renderer/src/i18n/LangProvider";
 import { AuraUptimeCard } from "../src/renderer/src/report/components/AuraUptimeCard";
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
 import type { AuraUptime } from "../src/renderer/src/report/derive/auraUptime";
+import { deriveCcBreakDash } from "../src/renderer/src/report/derive/ccBreakDash";
+import { deriveDeathRecaps } from "../src/renderer/src/report/derive/deathRecap";
+import { deriveDetailBreakdown } from "../src/renderer/src/report/derive/detailBreakdown";
+import { deriveDispelDash } from "../src/renderer/src/report/derive/dispelDash";
+import { deriveEventRows } from "../src/renderer/src/report/derive/eventsView";
 import {
   resetSourceMemoForTest,
   setSourceMemoReadyForTest,
 } from "../src/renderer/src/report/derive/sourceMemo";
+import { deriveStatsTable } from "../src/renderer/src/report/derive/statsTable";
 import type { ReportSource } from "../src/renderer/src/report/derive/types";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
 
@@ -185,7 +191,119 @@ function sample(): ReportSource {
     destName: victim.name,
     unconscious: false,
   });
+  injectDispelAndBreak(m, t);
   return m;
+}
+
+type RawUnit = {
+  id: string;
+  name: string;
+  kind?: string;
+  reaction?: string;
+  info?: unknown;
+  casts: Array<Record<string, unknown>>;
+  auraEvents: Array<Record<string, unknown>>;
+  actionsOut?: Array<Record<string, unknown>>;
+};
+
+/** Log-shaped rows (raw `params` as parser-compat's convert.ts reads them)
+ * with marker names, so the dispel and CC-break dashboards and the events
+ * table's extra-spell column (`extraSpellId` / `params[11..12]`) have
+ * something to word: a friendly Purify removing Shadow Word: Pain from a
+ * teammate, and a friendly Polymorph on an enemy broken by a teammate's
+ * Shadow Word: Pain. */
+function injectDispelAndBreak(m: ReportSource, deathMs: number): void {
+  const units = Object.values(m.units) as unknown as RawUnit[];
+  const players = units.filter((u) => u.kind === "Player" && u.info);
+  const friends = players.filter((u) => u.reaction === "Friendly");
+  const enemy = players.find((u) => u.reaction === "Hostile")!;
+  const [me, ally] = [friends[0]!, friends[1]!];
+  const t0 = Math.min(m.startTime + 20_000, deathMs - 10_000);
+  const params = (
+    src: RawUnit,
+    dest: RawUnit,
+    spell: [number, string],
+    extra?: [number, string],
+  ) => [
+    src.id,
+    src.name,
+    "0x511",
+    "0x0",
+    dest.id,
+    dest.name,
+    "0x512",
+    "0x0",
+    String(spell[0]),
+    spell[1],
+    "0x2",
+    ...(extra ? [String(extra[0]), extra[1], "0x20", "DEBUFF"] : []),
+  ];
+  const row = (
+    eventName: string,
+    ts: number,
+    src: RawUnit,
+    dest: RawUnit,
+    spell: [number, string],
+    extra?: [number, string],
+  ) => ({
+    timestamp: ts,
+    eventName,
+    srcId: src.id,
+    srcName: src.name,
+    destId: dest.id,
+    destName: dest.name,
+    spellId: spell[0],
+    spellName: spell[1],
+    ...(extra ? { extraSpellId: extra[0], extraSpellName: extra[1] } : {}),
+    params: params(src, dest, spell, extra),
+  });
+  const purify: [number, string] = [527, "技527"];
+  const swp: [number, string] = [589, "技589"];
+  const poly: [number, string] = [118, "技118"];
+  me.actionsOut = [
+    ...(me.actionsOut ?? []),
+    row("SPELL_DISPEL", t0, me, ally, purify, swp),
+  ];
+  me.casts = [...me.casts, row("SPELL_CAST_SUCCESS", t0, me, ally, purify)];
+  enemy.auraEvents = [
+    ...enemy.auraEvents,
+    {
+      ...row("SPELL_AURA_APPLIED", t0 + 1000, me, enemy, poly),
+      auraType: "DEBUFF",
+    },
+    {
+      ...row("SPELL_AURA_BROKEN_SPELL", t0 + 3000, ally, enemy, poly, swp),
+      auraType: "DEBUFF",
+    },
+  ].sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
+}
+
+/** Every marked spell name inside a derive's output, with its path. */
+function markedStrings(value: unknown, path = ""): string[] {
+  if (typeof value === "string")
+    return MARK.test(value) ? [`${path}: ${value}`] : [];
+  if (value && typeof value === "object")
+    return Object.entries(value).flatMap(([k, v]) =>
+      markedStrings(v, `${path}.${k}`),
+    );
+  return [];
+}
+
+/** Each migrated derive, run on a fresh sample in `lang`. */
+function deriveAll(lang: "zh" | "en") {
+  const m = sample();
+  return {
+    deathRecap: deriveDeathRecaps(m, lang),
+    statsTable: deriveStatsTable(m, undefined, lang),
+    detailBreakdown: Object.values(m.units).flatMap((u) =>
+      (["damage", "healing", "taken"] as const).map(
+        (mode) => deriveDetailBreakdown(m, u.id, mode, undefined, lang).rows,
+      ),
+    ),
+    eventsView: deriveEventRows(m, lang),
+    dispelDash: deriveDispelDash(m, undefined, lang),
+    ccBreakDash: deriveCcBreakDash(m, undefined, lang),
+  };
 }
 
 /** Every marked spell name on screen: text plus tooltip attributes. */
@@ -287,6 +405,64 @@ describe("i18n: 英文模式下的技能名(§8 第 1 条)", () => {
     await waitFor(() => expect(markedNames(container)).toEqual([]));
     // same report, not a remount
     expect(panel.isConnected).toBe(true);
+  });
+
+  it("derive 层:en 下各 derive 不留日志技能名,zh 下照旧是日志名", () => {
+    const en = deriveAll("en");
+    const zh = deriveAll("zh");
+    // the injected rows really reach the dashboards
+    expect(en.dispelDash.rows.some((r) => r.events.length > 0)).toBe(true);
+    expect(en.ccBreakDash.friendly.length).toBeGreaterThan(0);
+    expect(en.deathRecap.length).toBeGreaterThan(0);
+    // the events table's extra-spell column, both languages
+    const dispelRow = (rows: typeof en.eventsView) =>
+      rows.find((r) => r.kind === "dispel")!.detail;
+    expect(dispelRow(zh.eventsView)).toContain("技589");
+    expect(dispelRow(en.eventsView)).toContain("Shadow Word: Pain");
+    const count = (o: Record<string, unknown>) =>
+      Object.fromEntries(
+        Object.entries(o).map(([k, v]) => [k, markedStrings(v).length]),
+      );
+    expect(count(en)).toEqual({
+      deathRecap: 0,
+      statsTable: 0,
+      detailBreakdown: 0,
+      eventsView: 0,
+      dispelDash: 0,
+      ccBreakDash: 0,
+    });
+    const zhCount = count(zh);
+    // log names stay as recorded in zh
+    expect(zhCount.deathRecap).toBeGreaterThan(0);
+    expect(zhCount.statsTable).toBeGreaterThan(0);
+    expect(zhCount.detailBreakdown).toBeGreaterThan(0);
+    expect(zhCount.eventsView).toBeGreaterThan(0);
+    // the dispel and CC-break dashboards print analysis's names, which are
+    // the English table's in both languages (`getEnglishSpellName` in
+    // dispelAnalysis / ccBreakAnalysis): no marker in zh either
+    expect(zhCount.dispelDash).toBe(0);
+    expect(zhCount.ccBreakDash).toBe(0);
+  });
+
+  it("死亡回顾(MatchReport memo 路径)在名字表加载完后不重新挂载就换成英文名", async () => {
+    const source = sample();
+    gate.reset();
+    resetSourceMemoForTest(false);
+    const { container } = await renderReport("en", source);
+    const card = await screen.findByTestId(
+      "death-recap",
+      {},
+      { timeout: 10000 },
+    );
+    expect(markedNames(card).length).toBeGreaterThan(0);
+    await act(async () => {
+      gate.resolve();
+      setSourceMemoReadyForTest(true);
+      await gate.promise;
+    });
+    await waitFor(() => expect(markedNames(card)).toEqual([]));
+    expect(card.isConnected).toBe(true);
+    expect(container.contains(card)).toBe(true);
   });
 
   it("zh 模式下照旧显示日志名", async () => {
