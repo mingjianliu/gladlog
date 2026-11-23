@@ -3,7 +3,35 @@ import {
   type FlowMetric,
   forEachContribution,
   petsOf,
+  smoothRate,
 } from "../src/renderer/src/report/derive/flowSeries";
+
+describe("smoothRate(流量曲线的居中滑动平均)", () => {
+  it("居中窗口:单次尖峰摊到前后各 2 秒,内部积分守恒", () => {
+    const out = smoothRate([0, 0, 0, 0, 10, 0, 0, 0, 0], 5);
+    expect(out).toEqual([0, 0, 2, 2, 2, 2, 2, 0, 0]);
+    expect(out.reduce((a, b) => a + b, 0)).toBe(10);
+  });
+  it("边缘按实际存在的桶数取平均,不当成补零(首尾不出现假下凹)", () => {
+    expect(smoothRate([6, 6, 6, 6], 5)).toEqual([6, 6, 6, 6]);
+    // 第 0 秒窗口只有 3 个桶 → 9/3;第 1 秒 4 个 → 9/4;第 2 秒满窗 → 9/5
+    expect(smoothRate([9, 0, 0, 0, 0, 0], 5)).toEqual([
+      3,
+      9 / 4,
+      9 / 5,
+      0,
+      0,
+      0,
+    ]);
+  });
+  it("窗口 ≤1 或空序列原样返回(拷贝,不共享引用)", () => {
+    const b = [1, 2, 3];
+    const out = smoothRate(b, 1);
+    expect(out).toEqual(b);
+    expect(out).not.toBe(b);
+    expect(smoothRate([], 5)).toEqual([]);
+  });
+});
 import {
   type MeterMode,
   meterValue,
@@ -34,7 +62,7 @@ describe("deriveFlowSeries", () => {
     }
   });
 
-  it("单位按 teamId → name 排序(堆叠柱里同队连续)", () => {
+  it("单位按 teamId → name 排序(图例里同队连续)", () => {
     const f = deriveFlowSeries(m, "damage");
     const keys = f.units.map((u) => [u.teamId, u.name] as const);
     const sorted = [...keys].sort(
@@ -43,10 +71,10 @@ describe("deriveFlowSeries", () => {
     expect(keys).toEqual(sorted);
   });
 
-  // 谓词单源(CLAUDE.md):曲线柱子的积分必须等于同一页面上榜单条的数字。
+  // 谓词单源(CLAUDE.md):每秒桶的积分必须等于同一页面上榜单条的数字。
   // forEachContribution 是两边共享的事件选择器,这里钉住的是 METRIC_BASES 的
   // 组合口径(尤其是「治疗含吸收」)不会单边漂移。
-  it.each(SHARED)("柱子求和 == 榜单 %s 条(同源断言)", (metric, mode) => {
+  it.each(SHARED)("每秒桶求和 == 榜单 %s 条(同源断言)", (metric, mode) => {
     const f = deriveFlowSeries(m, metric);
     const rows = deriveSummary(m);
     for (const u of f.units) {

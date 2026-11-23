@@ -642,10 +642,23 @@ pre {
   padding: 0 0 4px 34px;
   font-size: 11px;
 }
-/* Per-second flow bars: slightly translucent so the pressure / dampening lanes
-   and the window highlight drawn over them stay readable. */
-.rpt-tl-bar {
-  opacity: 0.88;
+/* Flow curves (伤害/治疗/承伤/被治疗): one overlaid line per unit, same weight
+   as the crisp HP runs. No plateau fade here — a rate is never "pinned". */
+.rpt-tl-flow {
+  stroke-width: 1.75;
+}
+/* Hover marker where the cursor crosses each flow curve. */
+.rpt-tl-flow-dot {
+  stroke: var(--bg);
+  stroke-width: 1;
+  pointer-events: none;
+}
+/* Legend doubles as the flow hover readout: rate at the cursor per unit. */
+.rpt-tl-legend-val {
+  margin-left: 4px;
+  color: var(--mute);
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
 }
 .rpt-tl-empty {
   fill: var(--mute);

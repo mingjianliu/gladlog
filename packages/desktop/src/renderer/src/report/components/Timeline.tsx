@@ -7,7 +7,9 @@ import {
   CURVE_METRIC_LABEL,
   CURVE_METRIC_ORDER,
   type CurveMetric,
+  FLOW_SMOOTH_S,
   type FlowSeriesData,
+  smoothRate,
 } from "../derive/flowSeries";
 import { abbrevAmount } from "../derive/meterRows";
 import type { ExposureMark, PressureBand } from "../derive/pressureLanes";
@@ -44,9 +46,6 @@ export const TIMELINE_VIEW = { W, H, PAD } as const;
  * amount formatter — abbrevAmount, shared with the meters leaderboard — and
  * leaves the HP view pixel-identical to before. */
 const FLOW_PAD_L = 46;
-/** Gap shaved off each per-second bar so a dense match still reads as bars
- * rather than one solid area; floored so a long match keeps them visible. */
-const BAR_GAP = 0.6;
 /** Height of the pressure lane (#4): a thin strip drawn along the bottom edge
  * inside the plot area — H is unchanged and the curves are not squeezed. */
 const LANE_H = 8;
@@ -152,7 +151,8 @@ export function Timeline({
   dampening?: Array<{ tS: number; pct: number }>;
   /** What the chart plots. "hp" (the default, and what every caller that
    * predates the dropdown gets) draws the per-unit HP-ratio curves; any other
-   * value draws `flow` as per-second stacked bars instead. */
+   * value draws `flow` as one smoothed per-second-rate curve per unit instead
+   * (overlaid, not stacked — each player's own line is the point). */
   metric?: CurveMetric;
   /** Provided = the metric dropdown is shown. */
   onMetric?: (m: CurveMetric) => void;
@@ -187,27 +187,37 @@ export function Timeline({
   const y = scaleLinear()
     .domain([0, 1])
     .range([H - PAD.b, PAD.t]);
-  // Flow view: visible units only (the legend / meter-row toggles apply to bars
-  // exactly as they do to curves), plus the per-second stacked totals that set
-  // the axis scale and back the hover readout.
+  // Flow view: every unit's smoothed rate (computed once per flow, so hiding a
+  // unit does not re-smooth the rest), then the visible subset (the legend /
+  // meter-row toggles apply exactly as they do to the HP curves) and their
+  // peak, which sets the axis.
+  const smoothed = useMemo(
+    () =>
+      isFlow && flow
+        ? new Map(
+            flow.units.map((u) => [
+              u.unitId,
+              smoothRate(u.buckets, FLOW_SMOOTH_S),
+            ]),
+          )
+        : null,
+    [isFlow, flow],
+  );
   const flowView = useMemo(() => {
-    if (!isFlow || !flow) return null;
-    const units = hidden
-      ? flow.units.filter((u) => !hidden.has(u.unitId))
-      : flow.units;
-    const totals = new Array<number>(flow.bucketCount).fill(0);
-    for (const u of units)
-      for (let i = 0; i < flow.bucketCount; i++)
-        totals[i] = (totals[i] ?? 0) + (u.buckets[i] ?? 0);
+    if (!isFlow || !flow || !smoothed) return null;
+    const units = flow.units.filter(
+      (u) => !hidden?.has(u.unitId) && u.total > 0,
+    );
     let max = 0;
-    for (const v of totals) if (v > max) max = v;
+    for (const u of units)
+      for (const v of smoothed.get(u.unitId) ?? []) if (v > max) max = v;
     // Scaled to the visible units, not to everything: hiding the top damage
-    // dealer is how you get to read the rest of the stack.
-    return { units, totals, max };
-  }, [isFlow, flow, hidden]);
+    // dealer is how you get to read the rest at full height.
+    return { units, max };
+  }, [isFlow, flow, smoothed, hidden]);
   const flowMax = flowView?.max ?? 0;
-  /** Bar tops share the HP curve's y scale, expressed as a fraction of the
-   * per-second peak — one scale for the whole chart, so the 0/½/max gridlines
+  /** Flow curves share the HP curve's y scale, expressed as a fraction of the
+   * smoothed peak — one scale for the whole chart, so the 0/½/max gridlines
    * sit exactly where they do in HP mode. */
   const yFlow = (v: number): number => y(flowMax > 0 ? v / flowMax : 0);
   // The `d` string of each path is the most expensive product of this whole
@@ -238,36 +248,23 @@ export function Timeline({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [series, data, padL],
   );
-  // Same reason as linePaths, and then some: a 5-minute match is ~300 buckets ×
-  // 6 units, which as <rect> elements would be ~1800 nodes re-laid-out on every
-  // mousemove. Each unit collapses to ONE path whose `d` concatenates its
-  // rectangles, and the whole thing is memoized off the data dimension.
-  const barPaths = useMemo(() => {
-    if (!isFlow || !flow || !flowView || flowView.max <= 0) return [];
-    // Running stack offset per bucket; units come out team-then-name ordered
-    // (deriveFlowSeries), so each team's contribution stays contiguous.
-    const stack = new Array<number>(flow.bucketCount).fill(0);
+  // Same reason as linePaths: one smoothed path per unit, memoized off the data
+  // dimension so a mousemove re-render does not rebuild any `d`. Each point
+  // sits at its bucket's centre — the rate it carries is that second's.
+  const flowPaths = useMemo(() => {
+    if (!isFlow || !flow || !flowView || !smoothed || flowView.max <= 0)
+      return [];
     return flowView.units.map((u) => {
-      let d = "";
-      for (let i = 0; i < flow.bucketCount; i++) {
-        const v = u.buckets[i] ?? 0;
-        if (v <= 0) continue;
-        const base = stack[i] ?? 0;
-        const x0 = x(flow.start + i * flow.bucketMs);
-        const w = Math.max(
-          0.8,
-          x(flow.start + (i + 1) * flow.bucketMs) - x0 - BAR_GAP,
-        );
-        const yBot = yFlow(base);
-        const yTop = yFlow(base + v);
-        stack[i] = base + v;
-        d += `M${x0.toFixed(1)},${yBot.toFixed(1)}h${w.toFixed(1)}V${yTop.toFixed(1)}h${(-w).toFixed(1)}Z`;
-      }
-      return { u, d };
+      const vals = smoothed.get(u.unitId) ?? [];
+      const pts = vals.map((v, i) => ({
+        x: x(flow.start + (i + 0.5) * flow.bucketMs),
+        y: yFlow(v),
+      }));
+      return { u, d: smoothPath(pts, PAD.t, H - PAD.b) };
     });
     // x/yFlow are rebuilt every render but are fully determined by these
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFlow, flow, flowView, data, padL]);
+  }, [isFlow, flow, flowView, smoothed, data, padL]);
   const relSec = (t: number) => ((t - data.start) / 1000).toFixed(1);
 
   // Dampening lane (#10 T2): the dense per-second series is first merged into
@@ -325,14 +322,27 @@ export function Timeline({
       )
     );
   });
-  /** Hover readout in flow mode: the stacked total of the second under the
-   * cursor, abbreviated exactly as the axis and the meters leaderboard do. */
-  const hoverAmount = (px: number): string => {
-    if (!isFlow || !flow || !flowView || flowView.max <= 0) return "";
-    const raw = Math.floor((x.invert(px) - flow.start) / flow.bucketMs);
-    const i = Math.min(flow.bucketCount - 1, Math.max(0, raw));
-    return ` · ${abbrevAmount(flowView.totals[i] ?? 0)}`;
-  };
+  /** Flow-mode hover: the bucket under the cursor (null outside the plot or
+   * when nothing is drawn). Its per-unit rates are marked on each curve and
+   * read out in the legend, abbreviated as the axis and meters do. */
+  const hoverBucket: number | null =
+    isFlow &&
+    flow &&
+    flowView &&
+    flowView.max > 0 &&
+    cursor !== null &&
+    cursor >= padL &&
+    cursor <= W - PAD.r
+      ? Math.min(
+          flow.bucketCount - 1,
+          Math.max(
+            0,
+            Math.floor((x.invert(cursor) - flow.start) / flow.bucketMs),
+          ),
+        )
+      : null;
+  const rateAt = (unitId: string): number =>
+    hoverBucket === null ? 0 : (smoothed?.get(unitId)?.[hoverBucket] ?? 0);
   const legendUnits: Array<{ unitId: string; name: string; classId: number }> =
     isFlow ? (flow?.units ?? []) : data.series;
   const sideOf = (unitId: string): TeamSide =>
@@ -356,7 +366,7 @@ export function Timeline({
             aria-label="曲线指标"
             value={activeMetric}
             onChange={(e) => onMetric(e.target.value as CurveMetric)}
-            title="血量画曲线;伤害/治疗/承伤/被治疗按每秒堆叠柱显示(全场口径,时间窗只高亮不裁剪)"
+            title={`每人一条曲线;伤害/治疗/承伤/被治疗为每秒量的 ${FLOW_SMOOTH_S} 秒滑动平均(全场口径,时间窗只高亮不裁剪)`}
           >
             {CURVE_METRIC_ORDER.map((k) => (
               <option key={k} value={k}>
@@ -454,24 +464,6 @@ export function Timeline({
             </rect>
           );
         })}
-        {/* Flow bars (per-second stacked columns) go here — after the bands,
-            before the lanes — so the pressure / dampening strips, death ✕,
-            ⚠ marks, window selection and replay cursor all stay legible on top
-            of them instead of being buried. */}
-        {barPaths.map(({ u, d }) => (
-          <path
-            key={u.unitId}
-            className="rpt-tl-bar"
-            data-testid="tl-flow-bar"
-            fill={classColor(u.classId)}
-            stroke="none"
-            style={{ cursor: onSelectUnit ? "pointer" : undefined }}
-            onClick={() => onSelectUnit?.(u.unitId)}
-            d={d}
-          >
-            <title>{`${shortUnitName(u.name)} — 全场${CURVE_METRIC_LABEL[activeMetric]} ${abbrevAmount(u.total)}`}</title>
-          </path>
-        ))}
         {isFlow && flowMax <= 0 && (
           <text
             x={(padL + W - PAD.r) / 2}
@@ -575,6 +567,33 @@ export function Timeline({
               height={H - PAD.t - PAD.b}
             />
           )}
+        {/* Flow curves: one smoothed rate line per unit, overlaid — styled
+            like the HP curves (class colour, enemy dashed, hover focus dims
+            the rest) so the two modes read the same way. */}
+        {flowPaths.map(({ u, d }) => {
+          const enemy = sideOf(u.unitId) === "enemy";
+          const dim = focusUnitId != null && focusUnitId !== u.unitId;
+          return (
+            <path
+              key={u.unitId}
+              className={`rpt-tl-flow${enemy ? " rpt-tl-line-enemy" : ""}${dim ? " rpt-tl-dim" : ""}`}
+              data-testid="tl-flow-line"
+              d={d}
+              fill="none"
+              stroke={classColor(u.classId)}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              style={{ cursor: onSelectUnit ? "pointer" : undefined }}
+              onClick={() => onSelectUnit?.(u.unitId)}
+              onMouseEnter={() => setFocusUnitId(u.unitId)}
+              onMouseLeave={() => setFocusUnitId(null)}
+            >
+              <title>{`${shortUnitName(u.name)} — 全场${CURVE_METRIC_LABEL[activeMetric]} ${abbrevAmount(u.total)}`}</title>
+            </path>
+          );
+        })}
         {(isFlow ? [] : linePaths).map(({ s, d, segs }) => {
           const enemy = sideOf(s.unitId) === "enemy";
           const dim = focusUnitId != null && focusUnitId !== s.unitId;
@@ -735,8 +754,28 @@ export function Timeline({
               className="rpt-tl-cursor"
             />
             <text x={cursor + 4} y={PAD.t - 4} className="rpt-tl-axis">
-              {relSec(x.invert(cursor))}s{hoverAmount(cursor)}
+              {relSec(x.invert(cursor))}s
             </text>
+            {/* Flow hover: a dot where the cursor crosses each curve (the
+                values themselves are read out in the legend) */}
+            {hoverBucket !== null &&
+              flow &&
+              flowView &&
+              flowView.units.map((u) => (
+                <circle
+                  key={u.unitId}
+                  data-testid="tl-flow-dot"
+                  className={
+                    focusUnitId != null && focusUnitId !== u.unitId
+                      ? "rpt-tl-flow-dot rpt-tl-dim"
+                      : "rpt-tl-flow-dot"
+                  }
+                  cx={x(flow.start + (hoverBucket + 0.5) * flow.bucketMs)}
+                  cy={yFlow(rateAt(u.unitId))}
+                  r={3}
+                  fill={classColor(u.classId)}
+                />
+              ))}
           </g>
         ) : null}
       </svg>
@@ -797,12 +836,12 @@ export function Timeline({
             <TeamDot side={sideOf(s.unitId)} />
             <span
               className={
-                sideOf(s.unitId) === "enemy" && !isFlow
+                sideOf(s.unitId) === "enemy"
                   ? "rpt-tl-legend-swatch dashed"
                   : "rpt-tl-legend-swatch"
               }
               style={
-                sideOf(s.unitId) === "enemy" && !isFlow
+                sideOf(s.unitId) === "enemy"
                   ? {
                       // Mirror the curve's dash so the legend reads the same
                       // way the chart does.
@@ -812,6 +851,13 @@ export function Timeline({
               }
             />
             {shortUnitName(s.name)}
+            {/* Flow hover readout: this unit's smoothed rate at the cursor.
+                Hidden units show nothing — they have no curve to read. */}
+            {hoverBucket !== null && !hidden?.has(s.unitId) && (
+              <span className="rpt-tl-legend-val" data-testid="tl-legend-val">
+                {abbrevAmount(rateAt(s.unitId))}/s
+              </span>
+            )}
           </button>
         ))}
       </div>

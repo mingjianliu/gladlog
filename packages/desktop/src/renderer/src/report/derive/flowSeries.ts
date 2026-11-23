@@ -5,7 +5,9 @@ type Unit = ReportSource["units"][string];
 /**
  * Flow metrics for the 战报 curve (the four the dropdown adds next to 血量).
  * HP is a *level* and is drawn as a curve (derive/timeline.ts); these four are
- * *flows* and are drawn as per-second stacked bars.
+ * *flows*: bucketed per second here, then drawn as one smoothed per-unit
+ * curve each (Timeline, via smoothRate) — stacked bars made a single player's
+ * share unreadable once several were on screen.
  */
 export type FlowMetric = "damage" | "healing" | "taken" | "healed";
 /** What the curve is showing: the HP ratio, or one of the flow metrics. */
@@ -145,8 +147,8 @@ export interface FlowSeriesData {
 const BUCKET_MS = 1000;
 
 /**
- * Per-second flow buckets, one row per player, sorted team-then-name so a
- * stacked column keeps each team's contribution contiguous.
+ * Per-second flow buckets, one row per player, sorted team-then-name so the
+ * legend lists each team contiguously.
  *
  * Whole-match basis on purpose: the curve, window list, death recap and burst
  * ledger all stay on the whole match while a time window only re-scopes the
@@ -200,4 +202,35 @@ export function deriveFlowSeries(
     bucketCount,
     units,
   };
+}
+
+/** Width of the centred moving average the flow curves are drawn from — the
+ * finest that stays readable (user: "尽量细", 2026-11-23). Compared on a 5.5-min
+ * 3v3 (dev:ui stress sample, 治疗): at 1 s a single 511k second set the axis
+ * and flattened every other unit into the bottom third; 3 s brings the peak to
+ * ~206k and keeps each big heal a separate, attributable peak; 5 s merged
+ * neighbouring heals into plateaus. Odd, so the window is centred on its own
+ * second. */
+export const FLOW_SMOOTH_S = 3;
+
+/**
+ * Per-second rate smoothed with a centred `windowS`-bucket moving average.
+ * Edge buckets average over the part of the window that exists (not over
+ * zero-padding), so the first and last seconds do not read as an artificial
+ * dip. Display only: totals stay on FlowSeriesUnit.total, whose equality with
+ * the leaderboard is what report.flowseries.test.ts pins.
+ */
+export function smoothRate(buckets: number[], windowS: number): number[] {
+  const n = buckets.length;
+  const half = Math.max(0, Math.floor(windowS / 2));
+  if (half === 0 || n === 0) return buckets.slice();
+  const prefix = new Array<number>(n + 1).fill(0);
+  for (let i = 0; i < n; i++) prefix[i + 1] = prefix[i]! + (buckets[i] ?? 0);
+  const out = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    const lo = Math.max(0, i - half);
+    const hi = Math.min(n, i + half + 1);
+    out[i] = (prefix[hi]! - prefix[lo]!) / (hi - lo);
+  }
+  return out;
 }

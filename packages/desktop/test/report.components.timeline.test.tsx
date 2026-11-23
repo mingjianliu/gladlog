@@ -1,12 +1,21 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { Timeline } from "../src/renderer/src/report/components/Timeline";
+import { scaleLinear } from "d3-scale";
+
+import {
+  Timeline,
+  TIMELINE_VIEW,
+} from "../src/renderer/src/report/components/Timeline";
 import { deriveDampeningSeries } from "../src/renderer/src/report/derive/dampeningSeries";
 import {
   deriveFlowSeries,
+  FLOW_SMOOTH_S,
   type FlowMetric,
+  smoothRate,
 } from "../src/renderer/src/report/derive/flowSeries";
+import { abbrevAmount } from "../src/renderer/src/report/derive/meterRows";
+import type { TeamSide } from "../src/renderer/src/report/derive/teamSide";
 import {
   activeRuns,
   deriveTimeline,
@@ -156,7 +165,7 @@ describe("Timeline", () => {
   });
 });
 
-describe("Timeline 指标下拉(每秒堆叠柱)", () => {
+describe("Timeline 指标下拉(每人一条平滑曲线)", () => {
   const data = deriveTimeline(m);
   const flowOf = (metric: FlowMetric) => deriveFlowSeries(m, metric);
 
@@ -180,7 +189,7 @@ describe("Timeline 指标下拉(每秒堆叠柱)", () => {
     expect(onMetric).toHaveBeenCalledWith("taken");
   });
 
-  it("切到流量指标:血量曲线消失,每个有数据的单位一条柱子 path", () => {
+  it("切到流量指标:血量曲线消失,每个有数据的单位一条曲线 path", () => {
     const flow = flowOf("damage");
     const withData = flow.units.filter((u) => u.total > 0);
     expect(withData.length).toBeGreaterThan(0);
@@ -188,12 +197,14 @@ describe("Timeline 指标下拉(每秒堆叠柱)", () => {
       <Timeline data={data} metric="damage" onMetric={() => {}} flow={flow} />,
     );
     expect(container.querySelectorAll("path.rpt-tl-line")).toHaveLength(0);
-    // A unit with no damage contributes no rectangles at all — an empty `d`
+    // A unit with no damage gets no curve at all — an empty `d`
     // would still be a node, so the count is over units that actually have data
-    const bars = Array.from(
-      container.querySelectorAll<SVGPathElement>("[data-testid='tl-flow-bar']"),
+    const lines = Array.from(
+      container.querySelectorAll<SVGPathElement>(
+        "[data-testid='tl-flow-line']",
+      ),
     ).filter((p) => (p.getAttribute("d") ?? "").length > 0);
-    expect(bars).toHaveLength(withData.length);
+    expect(lines).toHaveLength(withData.length);
     // 轴换成金额刻度(与榜单同一个缩写函数),不再是百分比
     const axis = Array.from(container.querySelectorAll(".rpt-tl-axis")).map(
       (t) => t.textContent,
@@ -202,7 +213,7 @@ describe("Timeline 指标下拉(每秒堆叠柱)", () => {
     expect(axis.filter((t) => t && t !== "0").length).toBeGreaterThan(0);
   });
 
-  it("隐藏单位:柱子随之消失,纵轴按剩下的单位重新缩放", () => {
+  it("隐藏单位:曲线随之消失,纵轴按剩下的单位重新缩放", () => {
     const flow = flowOf("damage");
     const top = [...flow.units].sort((a, b) => b.total - a.total)[0]!;
     const axisOf = (el: HTMLElement) =>
@@ -221,11 +232,11 @@ describe("Timeline 指标下拉(每秒堆叠柱)", () => {
         hidden={new Set([top.unitId])}
       />,
     );
-    const barsOf = (el: HTMLElement) =>
+    const linesOf = (el: HTMLElement) =>
       Array.from(
-        el.querySelectorAll<SVGPathElement>("[data-testid='tl-flow-bar']"),
+        el.querySelectorAll<SVGPathElement>("[data-testid='tl-flow-line']"),
       ).filter((p) => (p.getAttribute("d") ?? "").length > 0).length;
-    expect(barsOf(less)).toBe(barsOf(all) - 1);
+    expect(linesOf(less)).toBe(linesOf(all) - 1);
     expect(axisOf(less)).not.toBe(axisOf(all));
     // 图例仍列出全部单位(否则隐藏了就再也点不回来)
     expect(less.querySelectorAll(".rpt-tl-legend-item")).toHaveLength(
@@ -247,9 +258,88 @@ describe("Timeline 指标下拉(每秒堆叠柱)", () => {
       <Timeline data={data} metric="healed" onMetric={() => {}} flow={blank} />,
     );
     expect(
-      container.querySelectorAll("[data-testid='tl-flow-bar']"),
+      container.querySelectorAll("[data-testid='tl-flow-line']"),
     ).toHaveLength(0);
     expect(screen.getByTestId("tl-flow-empty").textContent).toContain("被治疗");
+  });
+
+  it("叠加不堆叠:hover 时每条曲线上的点、图例读数都是该单位自己的平滑速率", () => {
+    const flow = flowOf("damage");
+    const withData = flow.units.filter((u) => u.total > 0);
+    expect(withData.length).toBeGreaterThan(1);
+    const { container } = render(
+      <Timeline data={data} metric="damage" onMetric={() => {}} flow={flow} />,
+    );
+    const svg = screen.getByTestId("rpt-timeline");
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      width: TIMELINE_VIEW.W,
+      height: TIMELINE_VIEW.H,
+    } as DOMRect);
+    // 不 hover 时图例没有读数
+    expect(
+      container.querySelectorAll("[data-testid='tl-legend-val']"),
+    ).toHaveLength(0);
+    const px = 600;
+    fireEvent.mouseMove(svg, { clientX: px });
+    // Same projection the component uses (flow mode widens the left pad to 46)
+    const x = scaleLinear()
+      .domain([data.start, data.end])
+      .range([46, TIMELINE_VIEW.W - TIMELINE_VIEW.PAD.r]);
+    const i = Math.floor((x.invert(px) - flow.start) / flow.bucketMs);
+    const smoothedPeak = Math.max(
+      ...withData.flatMap((u) => smoothRate(u.buckets, FLOW_SMOOTH_S)),
+    );
+    expect(
+      container.querySelectorAll("[data-testid='tl-flow-dot']"),
+    ).toHaveLength(withData.length);
+    const vals = Array.from(
+      container.querySelectorAll("[data-testid='tl-legend-val']"),
+    ).map((e) => e.textContent);
+    expect(vals).toEqual(
+      flow.units.map(
+        (u) =>
+          `${abbrevAmount(smoothRate(u.buckets, FLOW_SMOOTH_S)[i] ?? 0)}/s`,
+      ),
+    );
+    // HAS TEETH:纵轴顶 = 单人平滑峰值,不是各人每秒合计的峰值(堆叠口径)
+    const stackedPeak = Math.max(
+      ...Array.from({ length: flow.bucketCount }, (_, k) =>
+        withData.reduce((a, u) => a + (u.buckets[k] ?? 0), 0),
+      ),
+    );
+    expect(smoothedPeak).toBeLessThan(stackedPeak);
+    const axis = Array.from(container.querySelectorAll(".rpt-tl-axis")).map(
+      (t) => t.textContent,
+    );
+    expect(axis).toContain(abbrevAmount(smoothedPeak));
+  });
+
+  it("敌方流量曲线画虚线,图例色块同样是虚线", () => {
+    const flow = flowOf("damage");
+    const enemy = flow.units.find((u) => u.total > 0)!;
+    const sides = new Map<string, TeamSide>(
+      flow.units.map((u) => [
+        u.unitId,
+        u.unitId === enemy.unitId ? "enemy" : "friendly",
+      ]),
+    );
+    const { container } = render(
+      <Timeline
+        data={data}
+        metric="damage"
+        onMetric={() => {}}
+        flow={flow}
+        teamSides={sides}
+      />,
+    );
+    expect(
+      container.querySelectorAll("path.rpt-tl-flow.rpt-tl-line-enemy"),
+    ).toHaveLength(1);
+    expect(
+      container.querySelectorAll(".rpt-tl-legend-swatch.dashed"),
+    ).toHaveLength(1);
   });
 
   it("没有 advanced logging(HP 序列为空)时,流量图与图例照样有内容", () => {
@@ -262,7 +352,7 @@ describe("Timeline 指标下拉(每秒堆叠柱)", () => {
     expect(
       Array.from(
         container.querySelectorAll<SVGPathElement>(
-          "[data-testid='tl-flow-bar']",
+          "[data-testid='tl-flow-line']",
         ),
       ).filter((p) => (p.getAttribute("d") ?? "").length > 0).length,
     ).toBeGreaterThan(0);

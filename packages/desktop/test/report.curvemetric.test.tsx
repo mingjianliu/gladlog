@@ -12,9 +12,9 @@ const metricSelect = (): HTMLSelectElement =>
   screen.getByTestId("tl-metric") as HTMLSelectElement;
 const meterMode = (c: HTMLElement): string | null =>
   c.querySelector(".rpt-mode-seg button.active")?.textContent ?? null;
-const barCount = (c: HTMLElement): number =>
+const lineCount = (c: HTMLElement): number =>
   Array.from(
-    c.querySelectorAll<SVGPathElement>("[data-testid='tl-flow-bar']"),
+    c.querySelectorAll<SVGPathElement>("[data-testid='tl-flow-line']"),
   ).filter((p) => (p.getAttribute("d") ?? "").length > 0).length;
 
 describe("战报曲线指标下拉 × 榜单联动", () => {
@@ -24,16 +24,16 @@ describe("战报曲线指标下拉 × 榜单联动", () => {
     expect(
       container.querySelectorAll("path.rpt-tl-line").length,
     ).toBeGreaterThan(0);
-    expect(barCount(container)).toBe(0);
+    expect(lineCount(container)).toBe(0);
     expect(meterMode(container)).toBe("伤害");
   });
 
-  it("切到治疗:曲线换成每秒堆叠柱,榜单跟着切到治疗", () => {
+  it("切到治疗:曲线换成每人一条平滑曲线,榜单跟着切到治疗", () => {
     const { container } = render(<MatchReport source={m} matchId="t" />);
     fireEvent.change(metricSelect(), { target: { value: "healing" } });
     expect(metricSelect().value).toBe("healing");
     expect(container.querySelectorAll("path.rpt-tl-line")).toHaveLength(0);
-    expect(barCount(container)).toBeGreaterThan(0);
+    expect(lineCount(container)).toBeGreaterThan(0);
     expect(meterMode(container)).toBe("治疗");
   });
 
@@ -71,14 +71,14 @@ describe("战报曲线指标下拉 × 榜单联动", () => {
     // case below stops testing the empty path and must be re-pointed
     expect("healIn" in Object.values(m.units)[0]!).toBe(false);
     fireEvent.change(metricSelect(), { target: { value: "healed" } });
-    expect(barCount(container)).toBe(0);
+    expect(lineCount(container)).toBe(0);
     expect(screen.getByTestId("tl-flow-empty").textContent).toContain("被治疗");
   });
 
-  it("时间窗只高亮不裁剪柱子:选窗口后柱子数量不变,榜单数字变", () => {
+  it("时间窗只高亮不裁剪曲线:选窗口后曲线数量不变,榜单数字变", () => {
     const { container } = render(<MatchReport source={m} matchId="t" />);
     fireEvent.change(metricSelect(), { target: { value: "damage" } });
-    const before = barCount(container);
+    const before = lineCount(container);
     const fullMeters = container.querySelector(".rpt-meters")!.textContent;
     const rangeSelect = screen
       .getByTestId("time-range-bar")
@@ -86,7 +86,7 @@ describe("战报曲线指标下拉 × 榜单联动", () => {
     expect(rangeSelect.querySelectorAll("option").length).toBeGreaterThan(1);
     fireEvent.change(rangeSelect, { target: { value: "0" } });
     expect(screen.getByTestId("tl-range")).toBeTruthy();
-    expect(barCount(container)).toBe(before);
+    expect(lineCount(container)).toBe(before);
     expect(container.querySelector(".rpt-meters")!.textContent).not.toBe(
       fullMeters,
     );
