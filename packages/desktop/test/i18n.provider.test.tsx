@@ -3,7 +3,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SettingsPanel } from "../src/renderer/src/components/SettingsPanel";
-import { formatDateTime, formatNumber } from "../src/renderer/src/i18n/format";
+import {
+  formatDateTime,
+  formatNumber,
+  formatTime,
+} from "../src/renderer/src/i18n/format";
 import { LangProvider, useT } from "../src/renderer/src/i18n/LangProvider";
 import { StructuredAnalysisPanel } from "../src/renderer/src/report/components/StructuredAnalysisPanel";
 
@@ -265,5 +269,11 @@ describe("format.ts", () => {
     expect(formatDateTime(t, "en", timeOnly)).toBe(
       new Date(t).toLocaleTimeString("en-US"),
     );
+  });
+
+  it("formatTime 只出时刻,与 toLocaleTimeString(locale) 一致", () => {
+    const t = Date.UTC(2026, 10, 23, 15, 4, 5);
+    expect(formatTime(t, "zh")).toBe(new Date(t).toLocaleTimeString("zh-CN"));
+    expect(formatTime(t, "en")).toBe(new Date(t).toLocaleTimeString("en-US"));
   });
 });

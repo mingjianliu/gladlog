@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { StoredMatchMeta } from "../../../main/matchStore";
 import type { DiagnosticEntry, LogsStatusSnapshot } from "../../../preload/api";
+import type { MessageKey } from "../../../shared/i18n";
 import { anonymizeMatchDoc } from "../../../shared/anonymizeFixture";
 import {
   type DiagnosticLevel,
   diagnosticLevel,
 } from "../../../shared/diagnosticLevel";
 import { bridge } from "../bridge";
-import { formatDateTime, TIME_OF_DAY } from "../i18n/format";
+import { formatDateTime, formatTime } from "../i18n/format";
 import { useT } from "../i18n/LangProvider";
 import {
   ancestorPaths,
@@ -20,11 +21,11 @@ import { JsonTree } from "./dev/JsonTree";
 
 type DevZone = "watch" | "inspect" | "ai" | "diag";
 
-const ZONE_LABEL: Record<DevZone, string> = {
-  watch: "监控状态",
-  inspect: "对局检查器",
-  ai: "AI 调用",
-  diag: "诊断",
+const ZONE_KEY: Record<DevZone, MessageKey> = {
+  watch: "dev.zone.watch",
+  inspect: "dev.zone.inspect",
+  ai: "dev.zone.ai",
+  diag: "dev.zone.diag",
 };
 
 interface AiCall {
@@ -142,6 +143,7 @@ function DevRail({
   aiCount: number;
   diagCount: number;
 }) {
+  const { t } = useT();
   const badge: Partial<Record<DevZone, number>> = {
     ai: aiCount,
     diag: diagCount,
@@ -150,10 +152,10 @@ function DevRail({
     <nav
       className="dev-rail"
       data-testid="dev-rail"
-      aria-label="开发者工具分区"
+      aria-label={t("dev.railAria")}
     >
       <ul>
-        {(Object.keys(ZONE_LABEL) as DevZone[]).map((z) => (
+        {(Object.keys(ZONE_KEY) as DevZone[]).map((z) => (
           <li key={z}>
             <button
               type="button"
@@ -162,7 +164,7 @@ function DevRail({
               aria-current={z === zone ? "page" : undefined}
               onClick={() => setZone(z)}
             >
-              <span className="dev-nav-label">{ZONE_LABEL[z]}</span>
+              <span className="dev-nav-label">{t(ZONE_KEY[z])}</span>
               {badge[z] ? <span className="dev-badge">{badge[z]}</span> : null}
             </button>
           </li>
@@ -179,6 +181,7 @@ function DevRail({
  * for several minutes the UI gave no feedback and no sense of where it was.
  */
 function RebuildButton() {
+  const { t } = useT();
   const [st, setSt] = useState<RebuildState>({
     running: false,
     i: 0,
@@ -212,15 +215,18 @@ function RebuildButton() {
         disabled={st.running}
         onClick={run}
       >
-        重建对局索引
+        {t("dev.rebuild.button")}
       </button>
       {(st.running || st.done) && (
         <p className="dev-rebuild-progress" data-testid="dev-rebuild-progress">
           {st.running
             ? st.n > 0
               ? `${st.i}/${st.n}`
-              : "准备中…"
-            : `已更新 ${st.done!.updated},失败 ${st.done!.failed}`}
+              : t("dev.rebuild.preparing")
+            : t("dev.rebuild.done", {
+                updated: st.done!.updated,
+                failed: st.done!.failed,
+              })}
         </p>
       )}
     </div>
@@ -236,6 +242,7 @@ function StatusBar({
   status: LogsStatusSnapshot | null;
   onClick(): void;
 }) {
+  const { t } = useT();
   const files = status?.files ?? [];
   const quarantined = files.some((f) => f.quarantined);
   // "Current tail file" = the last non-quarantined file: the worker advances
@@ -250,7 +257,7 @@ function StatusBar({
       onClick={onClick}
     >
       <span className="dev-sb-dot">
-        {status?.watching ? "● watching" : "○ 未监控"}
+        {status?.watching ? "● watching" : t("dev.status.notWatching")}
       </span>
       {tail && (
         <>
@@ -260,7 +267,9 @@ function StatusBar({
           </span>
         </>
       )}
-      {quarantined && <span className="dev-sb-q">🧪 有隔离文件</span>}
+      {quarantined && (
+        <span className="dev-sb-q">{t("dev.status.quarantined")}</span>
+      )}
     </button>
   );
 }
@@ -276,6 +285,7 @@ function WatchZone({
   wowDir: string | null;
   setWowDir(d: string): void;
 }) {
+  const { t } = useT();
   const pick = async () => {
     const dir = await safe(() => bridge().app.selectDirectory(), null);
     if (dir) setWowDir(dir);
@@ -284,32 +294,34 @@ function WatchZone({
 
   return (
     <section className="dev-zone" data-testid="dev-zone-watch">
-      <h2>{ZONE_LABEL.watch}</h2>
+      <h2>{t(ZONE_KEY.watch)}</h2>
       <div className="dev-kv">
-        <span>WoW 目录</span>
-        <span className="dev-mono">{wowDir ?? "未设置"}</span>
+        <span>{t("dev.watch.wowDir")}</span>
+        <span className="dev-mono">{wowDir ?? t("dev.watch.notSet")}</span>
         <button type="button" onClick={() => void pick()}>
-          选择目录…
+          {t("dev.watch.pickDir")}
         </button>
       </div>
       <div className="dev-kv">
-        <span>监控</span>
+        <span>{t("dev.watch.watching")}</span>
         <span className="dev-mono">
           {status
             ? status.watching
               ? `✅ ${status.logsDir}`
-              : `⛔ 未监控(${status.logsDir || "无目录"})`
-            : "worker 未启动"}
+              : t("dev.watch.notWatching", {
+                  dir: status.logsDir || t("dev.watch.noDir"),
+                })
+            : t("dev.watch.noWorker")}
         </span>
       </div>
       <table className="dev-table">
         <thead>
           <tr>
-            <th>文件</th>
+            <th>{t("dev.watch.colFile")}</th>
             <th>offset</th>
             <th>size</th>
-            <th>进度</th>
-            <th>状态</th>
+            <th>{t("dev.watch.colProgress")}</th>
+            <th>{t("dev.watch.colStatus")}</th>
           </tr>
         </thead>
         <tbody>
@@ -327,16 +339,13 @@ function WatchZone({
           {files.length === 0 && (
             <tr>
               <td colSpan={5} className="rpt-dim">
-                无监控中的文件
+                {t("dev.watch.noFiles")}
               </td>
             </tr>
           )}
         </tbody>
       </table>
-      <p className="rpt-dim">
-        AI 后端与模型在「设置」页配置(那里是单源,还含 DeepSeek
-        等本页曾漏掉的后端)。
-      </p>
+      <p className="rpt-dim">{t("dev.watch.aiHint")}</p>
     </section>
   );
 }
@@ -351,7 +360,7 @@ function matchHaystack(m: StoredMatchMeta): string {
 }
 
 function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
-  const { lang } = useT();
+  const { lang, t } = useT();
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<unknown>(null);
@@ -415,13 +424,19 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
       setAutoExpand(r.paths.flatMap((p) => [...ancestorPaths(p), p]));
       setSearchNote(
         r.paths.length === 0
-          ? `无命中(已扫描 ${r.scanned} 个节点${r.truncated ? ",到达上限" : ""})`
+          ? t("dev.inspect.noHits", {
+              scanned: r.scanned,
+              capped: r.truncated ? t("dev.inspect.capped") : "",
+            })
           : r.truncated
-            ? `命中 ${r.paths.length} 处(已扫描 ${r.scanned} 个节点到达上限,结果可能不全)`
-            : `命中 ${r.paths.length} 处`,
+            ? t("dev.inspect.hitsTruncated", {
+                n: r.paths.length,
+                scanned: r.scanned,
+              })
+            : t("dev.inspect.hits", { n: r.paths.length }),
       );
     },
-    [query, detail],
+    [query, detail, t],
   );
 
   const meta = metas.find((m) => m.id === selected) ?? null;
@@ -429,15 +444,15 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
   const copyNode = async () => {
     try {
       await navigator.clipboard.writeText(stringifyNode(nodeValue));
-      setAction("已复制当前节点");
+      setAction(t("dev.inspect.copied"));
     } catch {
-      setAction("复制失败(剪贴板不可用)");
+      setAction(t("dev.inspect.copyFailed"));
     }
   };
 
   const exportFixture = async () => {
     if (detail == null || !selected) return;
-    setAction("脱敏中…");
+    setAction(t("dev.inspect.anonymizing"));
     const { text, players } = anonymizeMatchDoc(detail);
     const saved = await safe(
       () =>
@@ -447,7 +462,11 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
         }),
       null,
     );
-    setAction(saved ? `已导出(脱敏 ${players} 人):${saved}` : "已取消");
+    setAction(
+      saved
+        ? t("dev.inspect.exported", { players, path: saved })
+        : t("dev.inspect.cancelled"),
+    );
   };
 
   return (
@@ -457,8 +476,8 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
           type="search"
           className="dev-input"
           data-testid="dev-match-filter"
-          placeholder="筛选:kind / bracket / zone / result"
-          aria-label="筛选对局"
+          placeholder={t("dev.inspect.filterPlaceholder")}
+          aria-label={t("dev.inspect.filterAria")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -482,7 +501,10 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
           ))}
         </ul>
         <p className="dev-match-count" data-testid="dev-match-count">
-          {metas.length} 场 · 筛出 {filtered.length}
+          {t("dev.inspect.count", {
+            total: metas.length,
+            shown: filtered.length,
+          })}
         </p>
       </div>
 
@@ -496,17 +518,17 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
             type="search"
             className="dev-input"
             data-testid="dev-json-search"
-            placeholder="key path(rounds[5].deaths)或键名"
-            aria-label="搜索节点"
+            placeholder={t("dev.inspect.searchPlaceholder")}
+            aria-label={t("dev.inspect.searchAria")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <button type="submit">搜索</button>
+          <button type="submit">{t("dev.inspect.search")}</button>
         </form>
         {searchNote && <p className="rpt-dim dev-search-note">{searchNote}</p>}
-        {loading && <p className="rpt-dim">载入中…</p>}
+        {loading && <p className="rpt-dim">{t("dev.inspect.loading")}</p>}
         {!loading && detail == null && (
-          <p className="rpt-dim">从左侧选一场对局</p>
+          <p className="rpt-dim">{t("dev.inspect.pickMatch")}</p>
         )}
         {!loading && detail != null && (
           <JsonTree
@@ -531,11 +553,16 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
               data-testid="dev-open-dir"
               onClick={() => {
                 void safe(() => bridge().matches.openDir(selected), false).then(
-                  (ok) => setAction(ok ? "已打开目录" : "打开失败"),
+                  (ok) =>
+                    setAction(
+                      ok
+                        ? t("dev.inspect.dirOpened")
+                        : t("dev.inspect.openFailed"),
+                    ),
                 );
               }}
             >
-              打开 matches/&lt;id&gt;/
+              {t("dev.inspect.openDir")}
             </button>
             <button
               type="button"
@@ -543,21 +570,25 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
               disabled={nodeValue == null && nodePath === ""}
               onClick={() => void copyNode()}
             >
-              复制当前节点 JSON
+              {t("dev.inspect.copyNode")}
             </button>
             <button
               type="button"
               data-testid="dev-reparse"
               onClick={() => {
-                setAction("重新解析中…");
+                setAction(t("dev.inspect.reparsing"));
                 void safe(() => bridge().matches.reparse(selected), {
                   ok: false,
                 }).then((r) =>
-                  setAction(r.ok ? "已重新解析并回填 meta" : "重新解析失败"),
+                  setAction(
+                    r.ok
+                      ? t("dev.inspect.reparsed")
+                      : t("dev.inspect.reparseFailed"),
+                  ),
                 );
               }}
             >
-              重新解析此对局
+              {t("dev.inspect.reparse")}
             </button>
             <button
               type="button"
@@ -565,7 +596,7 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
               disabled={detail == null}
               onClick={() => void exportFixture()}
             >
-              导出脱敏 fixture
+              {t("dev.inspect.exportFixture")}
             </button>
             {action && (
               <p
@@ -583,7 +614,7 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
             />
           </div>
         ) : (
-          <p className="rpt-dim">未选中对局</p>
+          <p className="rpt-dim">{t("dev.inspect.noSelection")}</p>
         )}
       </div>
     </section>
@@ -606,6 +637,7 @@ function DocFacts({
   loadMs: number | null;
   nodePath: string;
 }) {
+  const { t } = useT();
   const facts = useMemo(() => {
     const d = (detail ?? {}) as Record<string, unknown>;
     // On-disk shape is {schemaVersion, kind, data}; shuffle fields live in
@@ -629,11 +661,11 @@ function DocFacts({
 
   return (
     <dl className="dev-facts" data-testid="dev-doc-facts">
-      <dt>载入耗时</dt>
+      <dt>{t("dev.facts.loadTime")}</dt>
       <dd>{loadMs == null ? "—" : `${loadMs}ms`}</dd>
-      <dt>顶层键</dt>
+      <dt>{t("dev.facts.topKeys")}</dt>
       <dd>{facts.topKeys}</dd>
-      <dt>日志行(总/丢弃)</dt>
+      <dt>{t("dev.facts.lines")}</dt>
       <dd>
         {String(facts.linesTotal ?? "—")}/{String(facts.linesDropped ?? "—")}
       </dd>
@@ -641,26 +673,28 @@ function DocFacts({
           computing it would walk the whole 62MB, exactly the long task the
           lazy tree exists to kill. A missing field means an old row that was
           never counted; do not render it as 0. */}
-      <dt>事件数</dt>
+      <dt>{t("dev.facts.events")}</dt>
       <dd data-testid="dev-fact-events">
-        {meta?.eventCount == null ? "—(可重建索引)" : meta.eventCount}
+        {meta?.eventCount == null
+          ? t("dev.facts.eventsMissing")
+          : meta.eventCount}
       </dd>
-      <dt>高级日志</dt>
+      <dt>{t("dev.facts.advanced")}</dt>
       <dd>{facts.advanced === undefined ? "—" : String(facts.advanced)}</dd>
       {/* Storage shape. The spec's "parser version" is deliberately skipped:
           the on-disk doc has no such field, and the parser package version has
           sat at 0.0.1 forever without bumping on changes, so showing it would
           be a constant masquerading as provenance. These two items are what
           actually answer "how was this document stored". */}
-      <dt>存储</dt>
+      <dt>{t("dev.facts.storage")}</dt>
       <dd>
         schema {String(facts.schemaVersion ?? "—")} ·{" "}
-        {meta?.slimmed ? "slim" : "未 slim"}
+        {meta?.slimmed ? "slim" : t("dev.facts.notSlim")}
       </dd>
-      <dt>时长</dt>
+      <dt>{t("dev.facts.duration")}</dt>
       <dd>{meta?.durationS == null ? "—" : `${meta.durationS}s`}</dd>
-      <dt>当前节点</dt>
-      <dd className="dev-mono">{nodePath || "(根)"}</dd>
+      <dt>{t("dev.facts.node")}</dt>
+      <dd className="dev-mono">{nodePath || t("dev.facts.root")}</dd>
     </dl>
   );
 }
@@ -668,7 +702,7 @@ function DocFacts({
 /* ────────────────────────── AI call zone ────────────────────────── */
 
 function AiZone({ calls, refresh }: { calls: AiCall[]; refresh(): void }) {
-  const { lang } = useT();
+  const { lang, t } = useT();
   const [open, setOpen] = useState<number | null>(null);
   const copy = (text: string) => {
     try {
@@ -681,42 +715,38 @@ function AiZone({ calls, refresh }: { calls: AiCall[]; refresh(): void }) {
   return (
     <section className="dev-zone" data-testid="dev-zone-ai">
       <h2>
-        {ZONE_LABEL.ai}({calls.length}){" "}
+        {t(ZONE_KEY.ai)}({calls.length}){" "}
         <button type="button" onClick={refresh}>
-          刷新
+          {t("dev.ai.refresh")}
         </button>
       </h2>
-      {calls.length === 0 && (
-        <p className="rpt-dim">
-          无记录 —— 跑一次 AI 分析/对比后点「刷新」。仅保留最近 10
-          次,存内存不落盘。
-        </p>
-      )}
+      {calls.length === 0 && <p className="rpt-dim">{t("dev.ai.empty")}</p>}
       <ul className="dev-ai-rows" data-testid="dev-ai-list">
         {calls.map((c, i) => (
           <li key={i} data-testid="dev-ai-row">
             <div className="dev-ai-head">
-              <span className="dev-ai-t">
-                {formatDateTime(c.at, lang, TIME_OF_DAY)}
-              </span>
+              <span className="dev-ai-t">{formatTime(c.at, lang)}</span>
               <span className="dev-ai-kind">[{c.kind}]</span>
               <span className="dev-mono">{c.matchId}</span>
               <span className="dev-ai-model">{c.model}</span>
               <span className="dev-ai-size">
-                prompt {c.prompt.length} 字 → 返回 {c.raw.length} 字
+                {t("dev.ai.size", {
+                  prompt: c.prompt.length,
+                  raw: c.raw.length,
+                })}
               </span>
               <span className="dev-ai-ops">
                 <button
                   type="button"
                   onClick={() => setOpen(open === i ? null : i)}
                 >
-                  {open === i ? "收起" : "查看"}
+                  {open === i ? t("dev.ai.collapse") : t("dev.ai.view")}
                 </button>
                 <button type="button" onClick={() => copy(c.prompt)}>
-                  复制 prompt
+                  {t("dev.ai.copyPrompt")}
                 </button>
                 <button type="button" onClick={() => copy(c.raw)}>
-                  复制返回
+                  {t("dev.ai.copyReply")}
                 </button>
               </span>
             </div>
@@ -724,7 +754,7 @@ function AiZone({ calls, refresh }: { calls: AiCall[]; refresh(): void }) {
               <div className="dev-ai-body">
                 <h4>Prompt</h4>
                 <pre>{c.prompt}</pre>
-                <h4>返回文本</h4>
+                <h4>{t("dev.ai.replyText")}</h4>
                 <pre>{c.raw}</pre>
               </div>
             )}
@@ -737,10 +767,14 @@ function AiZone({ calls, refresh }: { calls: AiCall[]; refresh(): void }) {
 
 /* ────────────────────────── Diagnostics zone ────────────────────────── */
 
-const LEVEL_FILTERS: Array<{ key: "all" | DiagnosticLevel; label: string }> = [
-  { key: "all", label: "全部" },
-  { key: "warn", label: "warn" },
-  { key: "error", label: "error" },
+// "warn" / "error" are the diagnostic level names themselves, not copy.
+const LEVEL_FILTERS: Array<{
+  key: "all" | DiagnosticLevel;
+  label: MessageKey | null;
+}> = [
+  { key: "all", label: "dev.diag.all" },
+  { key: "warn", label: null },
+  { key: "error", label: null },
 ];
 
 function DiagZone({
@@ -750,7 +784,7 @@ function DiagZone({
   diags: DiagnosticEntry[];
   clear(): void;
 }) {
-  const { lang } = useT();
+  const { lang, t } = useT();
   const [level, setLevel] = useState<"all" | DiagnosticLevel>("all");
   const [text, setText] = useState("");
   const [paused, setPaused] = useState(false);
@@ -787,7 +821,7 @@ function DiagZone({
 
   return (
     <section className="dev-zone dev-diag" data-testid="dev-zone-diag">
-      <h2>{ZONE_LABEL.diag}</h2>
+      <h2>{t(ZONE_KEY.diag)}</h2>
       <div className="dev-diag-bar">
         {LEVEL_FILTERS.map((f) => (
           <button
@@ -798,15 +832,15 @@ function DiagZone({
             aria-pressed={level === f.key}
             onClick={() => setLevel(f.key)}
           >
-            {f.label} {counts[f.key]}
+            {f.label ? t(f.label) : f.key} {counts[f.key]}
           </button>
         ))}
         <input
           type="search"
           className="dev-input"
           data-testid="dev-diag-filter"
-          placeholder="过滤 code / 文件 / 详情"
-          aria-label="过滤诊断"
+          placeholder={t("dev.diag.filterPlaceholder")}
+          aria-label={t("dev.diag.filterAria")}
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
@@ -817,10 +851,10 @@ function DiagZone({
           className={paused ? "active" : ""}
           onClick={() => setPaused((p) => !p)}
         >
-          {paused ? "▶ 继续" : "⏸ 暂停"}
+          {paused ? t("dev.diag.resume") : t("dev.diag.pause")}
         </button>
         <button type="button" data-testid="dev-diag-clear" onClick={clear}>
-          清空
+          {t("dev.diag.clear")}
         </button>
       </div>
       <ul className="dev-diag-rows" data-testid="dev-diag-list" ref={listRef}>
@@ -828,9 +862,7 @@ function DiagZone({
           const lv = diagnosticLevel(d.code);
           return (
             <li key={i} data-testid="dev-diag-row" className={`lv-${lv}`}>
-              <span className="dev-diag-t">
-                {formatDateTime(d.at, lang, TIME_OF_DAY)}
-              </span>
+              <span className="dev-diag-t">{formatTime(d.at, lang)}</span>
               <span className={`dev-diag-lv lv-${lv}`}>{lv}</span>
               <span className="dev-diag-code">{d.code}</span>
               <span className="dev-mono">{d.fileKey ?? ""}</span>
@@ -846,7 +878,8 @@ function DiagZone({
         })}
         {rows.length === 0 && (
           <li className="rpt-dim">
-            无诊断{diags.length > 0 ? "(被筛掉了)" : ""}
+            {t("dev.diag.empty")}
+            {diags.length > 0 ? t("dev.diag.filteredOut") : ""}
           </li>
         )}
       </ul>

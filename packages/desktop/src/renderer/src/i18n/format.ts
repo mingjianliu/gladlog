@@ -19,12 +19,10 @@ export function formatDateTime(
   return new Date(ms).toLocaleString(intlLocale(lang), opts);
 }
 
-/** Time-of-day options equivalent to `toLocaleTimeString()`'s defaults. */
-export const TIME_OF_DAY: Intl.DateTimeFormatOptions = {
-  hour: "numeric",
-  minute: "2-digit",
-  second: "2-digit",
-};
+/** Time of day only: `new Date(ms).toLocaleTimeString(locale)`. */
+export function formatTime(ms: number, lang: Language): string {
+  return new Date(ms).toLocaleTimeString(intlLocale(lang));
+}
 
 export function formatNumber(
   n: number,
