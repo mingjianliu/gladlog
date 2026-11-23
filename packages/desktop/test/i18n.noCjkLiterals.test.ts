@@ -2,6 +2,13 @@
 // string goes through the dictionary (src/shared/i18n/); the only exceptions
 // are the permanent ones in CJK_ALLOWLIST (one reason each). The migration's
 // pending-file list is gone: every file is migrated (Task 7).
+//
+// CJK_ALLOWLIST is shrink-only (§6.9 只允许减少), enforced mechanically: every
+// entry must appear in FROZEN_CJK_ALLOWLIST, whose sorted
+// `file + "\u0000" + snippet` list is pinned by a sha256 below. Removing an
+// entry passes; adding one fails until someone appends it to the frozen list
+// and updates the hash on purpose.
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
@@ -9,7 +16,7 @@ import { CJK_LEAK } from "@gladlog/analysis/src/utils/localizedText";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { CJK_ALLOWLIST } from "./i18n.cjkAllowlist";
+import { CJK_ALLOWLIST, FROZEN_CJK_ALLOWLIST } from "./i18n.cjkAllowlist";
 
 const REPO_ROOT = join(__dirname, "../../..");
 const DESKTOP_SRC = "packages/desktop/src";
@@ -151,6 +158,27 @@ describe("i18n: 源码里不许写死中文(§6.9 第 1 条)", () => {
     }
     // Move the text into the dictionary (src/shared/i18n/) and read it via t().
     expect(offenders).toEqual([]);
+  });
+
+  it("CJK_ALLOWLIST 只能减少:每条都在冻结清单里", () => {
+    const frozen = new Set(
+      FROZEN_CJK_ALLOWLIST.map(([file, snippet]) => `${file}\u0000${snippet}`),
+    );
+    const added = CJK_ALLOWLIST.filter(
+      (a) => !frozen.has(`${a.file}\u0000${a.snippet}`),
+    ).map((a) => `${a.file} ${a.snippet}`);
+    // A new entry needs the frozen list and the hash below updated on purpose.
+    expect(added).toEqual([]);
+  });
+
+  it("冻结清单本身没被改过(已排序、不重复、哈希固定)", () => {
+    const keys = FROZEN_CJK_ALLOWLIST.map(
+      ([file, snippet]) => `${file}\u0000${snippet}`,
+    );
+    expect(keys).toEqual([...new Set(keys)].sort());
+    expect(createHash("sha256").update(keys.join("\n")).digest("hex")).toBe(
+      "79468eb593d3d9a5c66800934ec1569c562a9ace5490abc52494a986bf7ac504",
+    );
   });
 
   it("CJK_ALLOWLIST 每条都有理由且仍然命中", () => {
