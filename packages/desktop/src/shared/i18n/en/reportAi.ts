@@ -117,4 +117,11 @@ export const enReportAi = {
   "report.finding.none": "No findings for this match.",
   "report.ai.heroFindings": (p: MessageParams) =>
     `${p.n} ${plural(p.n, "finding", "findings")}`,
+
+  // ── ContentLangBadge.tsx / StructuredAnalysisPanel.tsx (spec §6.13) ──
+  "report.contentLang.otherZh": "Analyzed in Chinese",
+  "report.contentLang.otherEn": "Analyzed in English",
+  "report.contentLang.title":
+    "This analysis was generated in another language. Re-analyze it in the current language to use deep dive, span analysis and Ask the coach.",
+  "report.contentLang.reanalyze": "Re-analyze in English",
 };

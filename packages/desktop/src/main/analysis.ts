@@ -37,7 +37,7 @@ import {
   renameSync,
   writeFileSync,
 } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
 
 import {
   AI_BACKENDS,
@@ -104,6 +104,14 @@ export type AnalysisResult = {
    * selfReviewMatches. */
   selfReview?: SelfReviewRecord;
 };
+
+/**
+ * A cached result as the read side hands it out: the stored AnalysisResult
+ * plus the language it was generated in (spec §6.13). `contentLang` is never
+ * persisted -- it is derived from the cache file's name
+ * (contentLangOfCacheFile), so it cannot disagree with where the result lives.
+ */
+export type CachedAnalysisResult = AnalysisResult & { contentLang: Language };
 
 export type SelfReviewRecord = {
   /** SELF_REVIEW_PROMPT_VERSION the run used. */
@@ -175,12 +183,47 @@ function resolveSlot<T>(
 }
 
 /**
+ * Language a cache file's content was generated in, from its name alone (spec
+ * §6.13): `analysis-v2.zh.json` is zh; `analysis-v2.en.json` and the legacy
+ * unkeyed `analysis-v2.json` are en (the legacy file predates the language
+ * system prompt, so the model answered in English -- the same convention
+ * slottedDocCandidatePaths uses). Accepts a bare name or a full path.
+ */
+export function contentLangOfCacheFile(fileName: string): Language {
+  return basename(fileName) === "analysis-v2.zh.json" ? "zh" : "en";
+}
+
+/** Parse the first existing file of `paths` into the v2 shape, tagged with the
+ * language its name says. null when none exists or the first one is corrupt. */
+function readFirstSlottedDoc(
+  paths: string[],
+  legacySlotKey: string,
+): { doc: AnalysisCacheDocV2<AnalysisResult>; contentLang: Language } | null {
+  const fp = paths.find((p) => existsSync(p));
+  if (!fp) return null;
+  try {
+    const raw = JSON.parse(readFileSync(fp, "utf-8"));
+    const doc = toSlottedDoc<AnalysisResult>(raw, legacySlotKey);
+    return doc ? { doc, contentLang: contentLangOfCacheFile(fp) } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Shared read-side entry point for getCached/getState: locate the file
  * (language-keyed + en-only legacy fallback, same source as the write-side
  * analysisCachePath), parse it, and normalize to the v2 shape via
  * toSlottedDoc. legacySlotKey is currentSlotKey(settings) -- an old v1 file
  * has no record of which backend/model produced it, so the best we can do is
  * book it under "whatever the current settings select".
+ *
+ * Other-language fallback (spec §6.13): only when the current language's
+ * files give no hit (currentSlot for `slotKey`, with the self-review gate)
+ * does it read the other language's files, and only to display them --
+ * nothing here ever writes. When neither hits, the current language's doc (if
+ * any, e.g. one whose slots are all stale) is returned so getState can still
+ * list its slots.
  */
 function readSlottedDoc(
   matchesDir: string,
@@ -191,18 +234,22 @@ function readSlottedDoc(
     aiModels?: AiModelSelection | null;
     aiSelfReview?: boolean;
   },
-): AnalysisCacheDocV2<AnalysisResult> | null {
+  slotKey?: string,
+): { doc: AnalysisCacheDocV2<AnalysisResult>; contentLang: Language } | null {
   const lang: Language = settings.language ?? "zh";
-  const fp = slottedDocCandidatePaths(matchesDir, matchId, lang).find((p) =>
-    existsSync(p),
+  const legacySlotKey = currentSlotKey(settings);
+  const selfReviewOn = settings.aiSelfReview === true;
+  const own = readFirstSlottedDoc(
+    slottedDocCandidatePaths(matchesDir, matchId, lang),
+    legacySlotKey,
   );
-  if (!fp) return null;
-  try {
-    const raw = JSON.parse(readFileSync(fp, "utf-8"));
-    return toSlottedDoc<AnalysisResult>(raw, currentSlotKey(settings));
-  } catch {
-    return null;
-  }
+  if (own && currentSlot(own.doc, slotKey, selfReviewOn)) return own;
+  const other = readFirstSlottedDoc(
+    slottedDocCandidatePaths(matchesDir, matchId, lang === "zh" ? "en" : "zh"),
+    legacySlotKey,
+  );
+  if (other && currentSlot(other.doc, slotKey, selfReviewOn)) return other;
+  return own;
 }
 
 /**
@@ -283,6 +330,9 @@ type AnalyzedMatchDir = {
   dir: string;
   /** The active slot, already checked against PROMPT_VERSION. */
   slot: AnalysisSlot<AnalysisResult>;
+  /** Language the slot was generated in (contentLangOfCacheFile of the file
+   * that was read). */
+  contentLang: Language;
   /** findingFlags.json, `{}` when absent or unreadable. */
   flags: Record<string, string>;
   /** meta.json, null when absent or unreadable. */
@@ -366,7 +416,13 @@ async function readAnalyzedMatchDirs(
         } catch {
           /* no meta: callers fall back to the directory name */
         }
-        return { dir, slot, flags, meta };
+        return {
+          dir,
+          slot,
+          contentLang: contentLangOfCacheFile(file),
+          flags,
+          meta,
+        };
       } catch {
         /* skip corrupt files */
         return null;
@@ -709,10 +765,13 @@ export function createAnalysisService(deps: {
       // should match the activeKey its own getState refresh returns), not as
       // the sole basis for the owner judgment (see the onDone comment in
       // StructuredAnalysisPanel.tsx).
+      // contentLang: the language pinned at the start of this run (Review
+      // Focus 4) -- a settings switch mid-run does not relabel the result.
       deps.emit("gladlog:analysis:done", {
         matchId: input.matchId,
         result,
         slotKey,
+        contentLang: lang,
       });
       if (record) {
         try {
@@ -1153,6 +1212,7 @@ export function createAnalysisService(deps: {
         deps.emit("gladlog:analysis:done", {
           matchId: input.matchId,
           result: { findings, dropped: 0, hadNarration: true, deepened: true },
+          contentLang: lang,
         });
         return;
       }
@@ -1179,6 +1239,7 @@ export function createAnalysisService(deps: {
           matchId: input.matchId,
           result: merged,
           slotKey: doc.lastSlotKey,
+          contentLang: lang,
         });
       } catch {
         // Disk write failed: emit the in-memory result only, **without
@@ -1193,6 +1254,7 @@ export function createAnalysisService(deps: {
         deps.emit("gladlog:analysis:done", {
           matchId: input.matchId,
           result: { findings, dropped: 0, hadNarration: true, deepened: true },
+          contentLang: lang,
         });
       }
     };
@@ -1624,6 +1686,7 @@ export function createAnalysisService(deps: {
           title: string;
           severity: string;
           createdAt: number;
+          contentLang: Language;
         }>;
       }>
     > {
@@ -1644,10 +1707,11 @@ export function createAnalysisService(deps: {
             title: string;
             severity: string;
             createdAt: number;
+            contentLang: Language;
           }>;
         }
       >();
-      for (const { dir, slot, flags, meta } of rows) {
+      for (const { dir, slot, contentLang, flags, meta } of rows) {
         const findings: Array<{
           category: string;
           title: string;
@@ -1677,6 +1741,7 @@ export function createAnalysisService(deps: {
             title: f.title,
             severity: f.severity,
             createdAt: slot.createdAt,
+            contentLang,
           });
           byCategory.set(cat, agg);
         }
@@ -1715,6 +1780,7 @@ export function createAnalysisService(deps: {
           zoneId?: string;
           result?: string;
           bracket?: string;
+          contentLang: Language;
         }>;
       }>
     > {
@@ -1735,9 +1801,10 @@ export function createAnalysisService(deps: {
         zoneId?: string;
         result?: string;
         bracket?: string;
+        contentLang: Language;
       };
       const byCategory = new Map<string, Entry[]>();
-      for (const { dir, slot, flags, meta: metaOrNull } of rows) {
+      for (const { dir, slot, contentLang, flags, meta: metaOrNull } of rows) {
         const findings: Array<{
           category: string;
           title: string;
@@ -1761,6 +1828,7 @@ export function createAnalysisService(deps: {
             zoneId: meta.zoneId,
             result: meta.result,
             bracket: meta.bracket,
+            contentLang,
           });
           byCategory.set(f.category, list);
         }
@@ -1846,7 +1914,11 @@ export function createAnalysisService(deps: {
         .map(({ dir, meta }) => meta?.id ?? dir);
     },
     async getState(matchId: string): Promise<{
-      cached: AnalysisResult | null;
+      cached: CachedAnalysisResult | null;
+      /** The language this state was resolved for (the current effective
+       * language). `cached.contentLang !== lang` means `cached` is the other
+       * language's result, read back for display only (spec §6.13). */
+      lang: Language;
       running: boolean;
       /** 在跑一轮的起跑时间与实际后端/模型(含 backendOverride)+ 是否已进
        * bad-json 重试轮;不在跑时 null。见 runningMeta 的注释。 */
@@ -1869,10 +1941,12 @@ export function createAnalysisService(deps: {
       const meta = runningNow ? (runningMeta.get(matchId) ?? null) : null;
       const cached = await this.getCached(matchId);
       const settings = deps.getSettings();
-      const doc = readSlottedDoc(deps.matchesDir, matchId, settings);
+      const lang: Language = settings.language ?? "zh";
+      const doc = readSlottedDoc(deps.matchesDir, matchId, settings)?.doc;
       if (!doc)
         return {
           cached,
+          lang,
           running: runningNow,
           runningMeta: meta,
           slots: [],
@@ -1895,21 +1969,30 @@ export function createAnalysisService(deps: {
         .sort((a, b) => a.createdAt - b.createdAt);
       return {
         cached,
+        lang,
         running: runningNow,
         runningMeta: meta,
         slots,
         activeKey: doc.lastSlotKey,
       };
     },
+    /** The slot's result tagged with the language it was generated in. With
+     * no hit in the current language this is the other language's result,
+     * read-only (spec §6.13); callers that act on the content (deep dive,
+     * batch, coach reseed) compare `contentLang` with the current language. */
     async getCached(
       matchId: string,
       slotKey?: string,
-    ): Promise<AnalysisResult | null> {
+    ): Promise<CachedAnalysisResult | null> {
       const settings = deps.getSettings();
-      const doc = readSlottedDoc(deps.matchesDir, matchId, settings);
-      const slot = currentSlot(doc, slotKey, settings.aiSelfReview === true);
-      if (!slot) return null;
-      return slot.result;
+      const read = readSlottedDoc(deps.matchesDir, matchId, settings, slotKey);
+      const slot = currentSlot(
+        read?.doc ?? null,
+        slotKey,
+        settings.aiSelfReview === true,
+      );
+      if (!read || !slot?.result) return null;
+      return { ...slot.result, contentLang: read.contentLang };
     },
   };
 }

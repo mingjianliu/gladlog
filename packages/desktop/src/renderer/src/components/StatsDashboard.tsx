@@ -16,10 +16,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { LearningState } from "../../../main/learning";
 import type { StoredMatchMeta } from "../../../main/matchStore";
-import type { MessageKey } from "../../../shared/i18n";
+import type { Language, MessageKey } from "../../../shared/i18n";
 import { bridge } from "../bridge";
 import { formatDateTime } from "../i18n/format";
 import { useT } from "../i18n/LangProvider";
+import { ContentLangBadge } from "../report/components/ContentLangBadge";
 import { specName } from "../report/data/gameConstants";
 import { categoryLabel, severityLabel } from "../report/derive/findingDisplay";
 import { shortUnitName } from "../report/derive/teamSide";
@@ -260,6 +261,9 @@ interface NotebookEntry {
   zoneId?: string;
   result?: string;
   bracket?: string;
+  /** Language the finding was generated in (spec §6.13); absent from older
+   * stubs, read as the current language. */
+  contentLang?: Language;
 }
 interface NotebookGroup {
   category: string;
@@ -852,9 +856,17 @@ export function StatsDashboard({
                               <span
                                 className="dash-nb-title"
                                 title={e.explanation}
+                                data-content-lang={
+                                  e.contentLang && e.contentLang !== lang
+                                    ? e.contentLang
+                                    : undefined
+                                }
                               >
                                 {e.title}
                               </span>
+                              <ContentLangBadge
+                                contentLang={e.contentLang ?? lang}
+                              />
                               <span className="dash-nb-actions">
                                 <button
                                   className={e.flag === "done" ? "active" : ""}

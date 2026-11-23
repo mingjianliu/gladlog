@@ -10,6 +10,7 @@ import type { RecorderStatus } from "../main/recorder";
 import type { GladlogSettings } from "../main/settingsStore";
 import type { UpdateState } from "../main/updater";
 import type { AiBackend } from "../shared/aiModels";
+import type { Language } from "../shared/i18n/index";
 import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
 import type { OpenTraceIo, OpenTraceRecord } from "../shared/openTrace";
 import type { LazyDocPayload } from "../shared/parseLazyDoc";
@@ -203,7 +204,11 @@ export interface GladlogApi {
      * of all slots. Asking in two separate calls would miss the run that
      * finished right in between. */
     getState(matchId: string): Promise<{
+      /** Carries `contentLang` (spec §6.13): with no hit in the current
+       * language this is the other language's result, for display only. */
       cached: unknown | null;
+      /** The current effective language the state was resolved for. */
+      lang: Language;
       running: boolean;
       /** 在跑一轮的起跑时间与实际后端/模型(含 backendOverride)+ 是否已进
        * bad-json 重试轮;不在跑时 null。renderer 用它在重挂载后仍显示真实
@@ -225,7 +230,9 @@ export interface GladlogApi {
     }>;
     /** No slotKey = use activeKey (current behavior); passing slotKey = read
      * that specific slot (used by the multi-model comparison tab switch). The
-     * version gate applies either way. */
+     * version gate applies either way. The result carries `contentLang`; with
+     * no hit in the current language it is the other language's result,
+     * read-only (spec §6.13). */
     getCached(matchId: string, slotKey?: string): Promise<unknown | null>;
     getFlags(matchId: string): Promise<Record<string, string>>;
     /** For batch analysis: ids of matches that already have a valid cache
@@ -244,6 +251,7 @@ export interface GladlogApi {
           title: string;
           severity: string;
           createdAt: number;
+          contentLang: Language;
         }>;
       }>
     >;
@@ -266,6 +274,7 @@ export interface GladlogApi {
           zoneId?: string;
           result?: string;
           bracket?: string;
+          contentLang: Language;
         }>;
       }>
     >;
@@ -337,7 +346,13 @@ export interface GladlogApi {
      * freshly queried activeKey. It may be absent on old-cache/exception
      * fallback paths, hence optional. */
     onDone(
-      cb: (d: { matchId: string; result: unknown; slotKey?: string }) => void,
+      cb: (d: {
+        matchId: string;
+        result: unknown;
+        slotKey?: string;
+        /** Language the round ran in (pinned at its start). */
+        contentLang?: Language;
+      }) => void,
     ): () => void;
     onError(cb: (d: { matchId: string; message: string }) => void): () => void;
   };

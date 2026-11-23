@@ -41,7 +41,7 @@ export function CoachChatCard({
    * as Markdown, just without icons. */
   rich?: (text?: string | null) => ReactNode;
 }) {
-  const { t } = useT();
+  const { lang, t } = useT();
   const [chatState, setChatState] = useState<ChatState | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -116,9 +116,14 @@ export function CoachChatCard({
         const input = buildAnalysisInput(source, matchId);
         const cached = (await bridge().analysis.getCached(matchId)) as {
           findings?: Array<{ title: string; explanation?: string }>;
+          contentLang?: string;
         } | null;
+        // getCached may hand back the other language's result for display
+        // (spec §6.13); a coach thread in this language must not be seeded
+        // with it.
+        const sameLang = (cached?.contentLang ?? lang) === lang;
         const findingsSummary =
-          (cached?.findings ?? [])
+          ((sameLang ? cached?.findings : undefined) ?? [])
             .map((f, i) => `${i + 1}. ${f.title} — ${f.explanation ?? ""}`)
             .join("\n") || "(none)";
         if (!input) {

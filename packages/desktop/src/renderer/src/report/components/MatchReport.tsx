@@ -628,6 +628,12 @@ export function MatchReport({
   // fix: folding all of them in previously made the opening window look
   // "already covered").
   const [aiFindingAnchors, setAiFindingAnchors] = useState<number[]>([]);
+  // Spec §6.13 / plan Review Focus 3: the AI card is showing a result
+  // generated in the other language (reported by StructuredAnalysisPanel).
+  // Only "re-analyze in the current language" is offered on it, so the AI
+  // view hides the coach chat and the span analysis of uncovered highlights,
+  // whose anchors would come from those findings.
+  const [aiFallback, setAiFallback] = useState(false);
   const uncoveredAnchors = useMemo(
     () => [
       ...aiFindingAnchors,
@@ -803,6 +809,7 @@ export function MatchReport({
     // window where "the new match de-duplicates against the old match's
     // anchors" (same motivation as clearing timeRange/winAi).
     setAiFindingAnchors([]);
+    setAiFallback(false);
   }, [resolvedMatchId]);
 
   // The click flow already awaits ensureAnalysisData() (see runWindowAi), so by
@@ -1340,11 +1347,13 @@ export function MatchReport({
                 chat.getState fetch on mount, and sending a message) happen while
                 the user is already looking at the top, so nothing below is
                 yanked away. */}
-              <CoachChatCard
-                source={source}
-                matchId={resolvedMatchId}
-                rich={rich}
-              />
+              {!aiFallback && (
+                <CoachChatCard
+                  source={source}
+                  matchId={resolvedMatchId}
+                  rich={rich}
+                />
+              )}
               <StructuredAnalysisPanel
                 source={source}
                 matchId={resolvedMatchId}
@@ -1352,11 +1361,14 @@ export function MatchReport({
                 onInspectEvents={handleInspectEvents}
                 onRunAll={() => setAiRunNonce((n) => n + 1)}
                 onFindingsAnchors={setAiFindingAnchors}
+                onFallbackContent={setAiFallback}
               />
-              <UncoveredHighlightsCard
-                highlights={uncoveredHighlights}
-                onAnalyze={handleAnalyzeHighlight}
-              />
+              {!aiFallback && (
+                <UncoveredHighlightsCard
+                  highlights={uncoveredHighlights}
+                  onAnalyze={handleAnalyzeHighlight}
+                />
+              )}
               {/* Result card after clicking a highlight: the same winAi
                 state/component as the one below the report view's toolbar.
                 Clicking a highlight inside the AI view must show the result

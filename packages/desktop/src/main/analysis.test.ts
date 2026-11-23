@@ -32,7 +32,7 @@ import { join } from "path";
 import { PROMPT_VERSION } from "./ai";
 import { listAiDebug } from "./aiDebugLog";
 import { findingKey } from "../shared/findingKey";
-import { createAnalysisService } from "./analysis";
+import { contentLangOfCacheFile, createAnalysisService } from "./analysis";
 
 const candidates: CandidateEvent[] = [
   {
@@ -303,19 +303,20 @@ describe("AI 语言(backlog #1)", () => {
     expect(existsSync(join(dir, "m1", "analysis-v2.zh.json"))).toBe(true);
     expect(await zh.s.getCached("m1")).not.toBeNull();
 
-    // Same dir, switch to English: zh cache invisible (miss); generates then writes the en key
+    // Same dir, switch to English: no en hit, so the zh cache is read back
+    // read-only as other-language content (spec §6.13); running writes the en key
     const en = langSvc("en", dir);
-    expect(await en.s.getCached("m1")).toBeNull();
+    expect((await en.s.getCached("m1"))?.contentLang).toBe("zh");
     await en.s.run(input);
     expect(en.captured[0]!.system).toContain("Respond in English");
     expect(en.captured[0]!.system).not.toContain("Simplified Chinese");
     expect(existsSync(join(dir, "m1", "analysis-v2.en.json"))).toBe(true);
-    expect(await en.s.getCached("m1")).not.toBeNull();
+    expect((await en.s.getCached("m1"))?.contentLang).toBe("en");
     // zh key still present; switching back to zh hits directly
-    expect(await zh.s.getCached("m1")).not.toBeNull();
+    expect((await zh.s.getCached("m1"))?.contentLang).toBe("zh");
   });
 
-  it("旧缓存(无语言键)只在请求英文时兜底命中;缺省语言为 zh", async () => {
+  it("旧缓存(无语言键)算英文:英文直接命中,中文(缺省)只当另一种语言的内容读出", async () => {
     const { mkdtempSync, mkdirSync, writeFileSync } = await import("fs");
     const { tmpdir } = await import("os");
     const { join } = await import("path");
@@ -331,9 +332,9 @@ describe("AI 语言(backlog #1)", () => {
       }),
     );
     const en = langSvc("en", dir);
-    expect(await en.s.getCached("m1")).not.toBeNull();
+    expect((await en.s.getCached("m1"))?.contentLang).toBe("en");
     const zhDefault = langSvc(undefined, dir); // default → zh
-    expect(await zhDefault.s.getCached("m1")).toBeNull();
+    expect((await zhDefault.s.getCached("m1"))?.contentLang).toBe("en");
   });
 });
 
@@ -1645,6 +1646,7 @@ describe("getState 原子查询(周度复核 P2#5)", () => {
     const s = await mk();
     expect(await s.getState("m1")).toEqual({
       cached: null,
+      lang: "zh", // no language in settings → the zh default
       running: false,
       runningMeta: null,
       slots: [],
@@ -1680,6 +1682,7 @@ describe("getState 原子查询(周度复核 P2#5)", () => {
     const mid = await s.getState("m1");
     expect(mid).toEqual({
       cached: null,
+      lang: "zh",
       running: true,
       // 状态行数据源(2026-08-05):在跑时必须能拿到起点与实际后端/模型,
       // renderer 重挂载后靠它显示真实已耗时
@@ -2630,5 +2633,188 @@ describe("analyzeWindow 审计全灭反馈重试(SDD 2026-08-06)", () => {
     // all, but here the first call did, it just failed the audit.
     expect(r.status).toBe("audit-empty");
     expect(n).toBe(2);
+  });
+});
+
+describe("另一种语言的 AI 内容(§6.13)", () => {
+  const finding = JSON.stringify([
+    {
+      eventIds: ["death:a:30"],
+      severity: "high",
+      category: "survival",
+      title: "Death",
+      explanation: "You died at {{t}}s.",
+    },
+  ]);
+  const doc = (title: string, promptVersion = PROMPT_VERSION) =>
+    JSON.stringify({
+      schemaVersion: 1,
+      promptVersion,
+      createdAt: 1,
+      result: {
+        findings: [
+          {
+            eventIds: ["death:a:30"],
+            severity: "high",
+            category: "survival",
+            title,
+            explanation: "x",
+          },
+        ],
+        dropped: 0,
+        hadNarration: true,
+      },
+    });
+  function service(
+    dir: string,
+    settings: { language: "zh" | "en" | null },
+    stream?: () => AsyncIterable<{ delta: string }>,
+  ) {
+    const emitted: Array<{ ch: string; p: any }> = [];
+    const s = createAnalysisService({
+      getSettings: () => ({
+        anthropicApiKey: "k",
+        wowDirectory: null,
+        language: settings.language,
+      }),
+      clientFactory: () => ({
+        stream:
+          stream ??
+          async function* () {
+            yield { delta: finding };
+          },
+      }),
+      matchesDir: dir,
+      emit: (ch, p) => emitted.push({ ch, p }),
+    });
+    return { s, emitted };
+  }
+
+  it("contentLangOfCacheFile:zh 文件是 zh,en 文件和旧的无语言键文件是 en", () => {
+    expect(contentLangOfCacheFile("analysis-v2.zh.json")).toBe("zh");
+    expect(contentLangOfCacheFile("analysis-v2.en.json")).toBe("en");
+    expect(contentLangOfCacheFile("analysis-v2.json")).toBe("en");
+    expect(contentLangOfCacheFile("/a/b/m1/analysis-v2.zh.json")).toBe("zh");
+  });
+
+  it("只有 zh 缓存、设置为 en:getCached / getState 只读回退到 zh,带 contentLang;不写 en 文件", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-"));
+    mkdirSync(join(dir, "m1"));
+    writeFileSync(join(dir, "m1", "analysis-v2.zh.json"), doc("死亡A"));
+    const { s } = service(dir, { language: "en" });
+    const cached = await s.getCached("m1");
+    expect(cached?.contentLang).toBe("zh");
+    expect(cached?.findings[0]!.title).toBe("死亡A");
+    const state = await s.getState("m1");
+    expect(state.cached?.contentLang).toBe("zh");
+    expect(state.lang).toBe("en");
+    expect(state.slots).toHaveLength(1);
+    // read-only: the fallback read never creates the current language's file
+    expect(existsSync(join(dir, "m1", "analysis-v2.en.json"))).toBe(false);
+  });
+
+  it("当前语言有命中时不读另一种语言;当前语言的文件过期才回退", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-hit-"));
+    mkdirSync(join(dir, "m1"));
+    writeFileSync(join(dir, "m1", "analysis-v2.zh.json"), doc("死亡A"));
+    writeFileSync(join(dir, "m1", "analysis-v2.en.json"), doc("Death A"));
+    mkdirSync(join(dir, "m2"));
+    writeFileSync(join(dir, "m2", "analysis-v2.zh.json"), doc("死亡B"));
+    writeFileSync(
+      join(dir, "m2", "analysis-v2.en.json"),
+      doc("Death B", PROMPT_VERSION - 1),
+    );
+    const { s } = service(dir, { language: "en" });
+    const m1 = await s.getCached("m1");
+    expect(m1?.contentLang).toBe("en");
+    expect(m1?.findings[0]!.title).toBe("Death A");
+    const m2 = await s.getCached("m2");
+    expect(m2?.contentLang).toBe("zh");
+    expect(m2?.findings[0]!.title).toBe("死亡B");
+  });
+
+  it("只有 zh 缓存时,listAnalyzed 在 en 设置下不把它算作已分析(按语言判断不变)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-la-"));
+    mkdirSync(join(dir, "m1"));
+    writeFileSync(join(dir, "m1", "analysis-v2.zh.json"), doc("死亡A"));
+    const { s } = service(dir, { language: "en" });
+    expect(await s.getCached("m1")).not.toBeNull(); // the panel shows it…
+    expect(await s.listAnalyzed()).toEqual([]); // …but the batch still re-runs it
+  });
+
+  it("zh 设置下发起的一轮,跑到一半把设置改成 en:结果仍写进 analysis-v2.zh.json(Review Focus 4)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-pin-"));
+    const settings: { language: "zh" | "en" | null } = { language: "zh" };
+    let release!: () => void;
+    const parked = new Promise<void>((r) => (release = r));
+    let reached!: () => void;
+    const atGate = new Promise<void>((r) => (reached = r));
+    const { s, emitted } = service(dir, settings, async function* () {
+      yield { delta: finding };
+      reached();
+      await parked;
+      yield { delta: "" };
+    });
+    const p = s.run(input);
+    await atGate;
+    settings.language = "en"; // the user switches language in Settings mid-run
+    release();
+    await p;
+    expect(existsSync(join(dir, "m1", "analysis-v2.zh.json"))).toBe(true);
+    expect(existsSync(join(dir, "m1", "analysis-v2.en.json"))).toBe(false);
+    const done = emitted.find((e) => e.ch === "gladlog:analysis:done")!;
+    expect(done.p.contentLang).toBe("zh");
+    // the result is not persisted with the label: it comes from the file name
+    const onDisk = JSON.parse(
+      readFileSync(join(dir, "m1", "analysis-v2.zh.json"), "utf-8"),
+    );
+    expect(JSON.stringify(onDisk)).not.toContain("contentLang");
+  });
+
+  it("zh 设置下发起的深挖,跑到一半改成 en:合并结果仍写回 zh 文件", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-deep-"));
+    mkdirSync(join(dir, "m1"));
+    writeFileSync(join(dir, "m1", "analysis-v2.zh.json"), doc("死亡A"));
+    const settings: { language: "zh" | "en" | null } = { language: "zh" };
+    const { s, emitted } = service(dir, settings);
+    // no packs → deepen marks the zh slot deepened without a model call; the
+    // language is read once at the start, so flipping it right after the
+    // call starts must not redirect the write
+    const p = s.deepen({ matchId: "m1", findings: [], packs: [], spec: "x" });
+    settings.language = "en";
+    await p;
+    expect(existsSync(join(dir, "m1", "analysis-v2.en.json"))).toBe(false);
+    const zhDoc = JSON.parse(
+      readFileSync(join(dir, "m1", "analysis-v2.zh.json"), "utf-8"),
+    );
+    const slot = zhDoc.slots[zhDoc.lastSlotKey];
+    expect(slot.result.deepened).toBe(true);
+    const done = emitted.find((e) => e.ch === "gladlog:analysis:done")!;
+    expect(done.p.contentLang).toBe("zh");
+  });
+
+  it("汇总的 recent[] 和笔记本条目各带 contentLang(按读到的文件)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-agg-"));
+    mkdirSync(join(dir, "m1"));
+    writeFileSync(join(dir, "m1", "analysis-v2.zh.json"), doc("死亡A"));
+    mkdirSync(join(dir, "m2"));
+    writeFileSync(join(dir, "m2", "analysis-v2.en.json"), doc("Death B"));
+    mkdirSync(join(dir, "m3"));
+    writeFileSync(join(dir, "m3", "analysis-v2.json"), doc("Death C"));
+    const { s } = service(dir, { language: "en" });
+    const agg = await s.aggregate();
+    const byTitle = Object.fromEntries(
+      agg.flatMap((c) => c.recent).map((r) => [r.title, r.contentLang]),
+    );
+    expect(byTitle).toEqual({ 死亡A: "zh", "Death B": "en", "Death C": "en" });
+    const nb = await s.notebook();
+    const nbByTitle = Object.fromEntries(
+      nb.flatMap((g) => g.entries).map((e) => [e.title, e.contentLang]),
+    );
+    expect(nbByTitle).toEqual({
+      死亡A: "zh",
+      "Death B": "en",
+      "Death C": "en",
+    });
   });
 });

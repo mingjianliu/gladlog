@@ -102,4 +102,11 @@ export const zhReportAi = {
   "report.finding.evidence": "证据",
   "report.finding.none": "本场没有失误。",
   "report.ai.heroFindings": (p: MessageParams) => `${p.n} 条失误`,
+
+  // ── ContentLangBadge.tsx / StructuredAnalysisPanel.tsx (spec §6.13) ──
+  "report.contentLang.otherZh": "中文分析",
+  "report.contentLang.otherEn": "英文分析",
+  "report.contentLang.title":
+    "这份分析是用另一种语言生成的。用当前语言重新分析后，才能深挖、选段分析和问教练",
+  "report.contentLang.reanalyze": "用中文重新分析",
 };

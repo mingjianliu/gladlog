@@ -15,6 +15,7 @@ import {
   resolveAiModel,
 } from "../../../../shared/aiModels";
 import type { AnalysisFallbackReason } from "../../../../shared/analysisFallback";
+import type { Language } from "../../../../shared/i18n/index";
 import { bridge } from "../../bridge";
 import { useT } from "../../i18n/LangProvider";
 import { DEMO_ANALYSIS, DEMO_ANALYSIS_EN } from "../data/demoAnalysis";
@@ -29,6 +30,7 @@ import { selfReviewNote, type SelfReviewView } from "../derive/selfReviewNote";
 import { backendModelLabel, slotLabel } from "../derive/slotLabel";
 import type { ReportSource } from "../derive/types";
 import { zeroFindingText } from "../derive/zeroFindingText";
+import { ContentLangBadge } from "./ContentLangBadge";
 import { ExportButtons } from "./ExportButtons";
 import { FindingsList } from "./FindingsList";
 import { KeyMomentAxis } from "./KeyMomentAxis";
@@ -41,6 +43,9 @@ type AnalysisResult = {
   fallbackReason?: AnalysisFallbackReason;
   deepened?: boolean;
   selfReview?: SelfReviewView;
+  /** Language the result was generated in (main's getCached / done event,
+   * spec §6.13). Absent (older stubs) = the current UI language. */
+  contentLang?: Language;
 };
 
 type State = "idle" | "running" | "done" | "error";
@@ -52,6 +57,7 @@ export function StructuredAnalysisPanel({
   onInspectEvents,
   onRunAll,
   onFindingsAnchors,
+  onFallbackContent,
 }: {
   source: ReportSource;
   matchId: string;
@@ -69,6 +75,11 @@ export function StructuredAnalysisPanel({
    * re-invokes this; an empty array means "no anchors right now" (rather than
    * not calling at all). */
   onFindingsAnchors?: (anchors: number[]) => void;
+  /** Spec §6.13 / plan Review Focus 3: true while the card shows a result
+   * generated in the other language (read back because the current language
+   * has no hit). The parent hides the entry points that act on it (coach
+   * chat, span analysis of uncovered highlights); false otherwise. */
+  onFallbackContent?: (fallback: boolean) => void;
 }) {
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -177,7 +188,12 @@ export function StructuredAnalysisPanel({
   // This match's goals (D3 loop): top categories flagged "still recurring"
   // across matches, used as observation goals for this match.
   const [goals, setGoals] = useState<
-    Array<{ category: string; recurring: number; lastTitle?: string }>
+    Array<{
+      category: string;
+      recurring: number;
+      lastTitle?: string;
+      lastLang?: Language;
+    }>
   >([]);
   // Cross-match habit badges (spec §4): rule ledger, matched against audited
   // findings; no AI call.
@@ -214,6 +230,7 @@ export function StructuredAnalysisPanel({
                 category: c.category,
                 recurring: c.recurring,
                 lastTitle: c.recent?.[0]?.title,
+                lastLang: c.recent?.[0]?.contentLang,
               })),
           ),
         )
@@ -382,7 +399,12 @@ export function StructuredAnalysisPanel({
         setReviewing(true);
       });
       offDone = ai.onDone(
-        (d: { matchId: string; result: unknown; slotKey?: string }) => {
+        (d: {
+          matchId: string;
+          result: unknown;
+          slotKey?: string;
+          contentLang?: Language;
+        }) => {
           if (d.matchId !== matchId) return;
           resultForRef.current = matchId;
           // Invariant (Task 4 handover fix -- the original comment assumed
@@ -398,7 +420,13 @@ export function StructuredAnalysisPanel({
           // newest slot", regardless of which model ran it, so owner is
           // constantly "active" here; no branching on d.slotKey.
           resultOwnerRef.current = "active";
-          setResult(d.result as AnalysisResult);
+          // contentLang rides on the event, not inside the stored result: a
+          // round started before a language switch finishes in the language
+          // it started in (Review Focus 4) and is labelled as such.
+          setResult({
+            ...(d.result as AnalysisResult),
+            ...(d.contentLang ? { contentLang: d.contentLang } : {}),
+          });
           setState("done");
           setError("");
           setRunMeta(null);
@@ -562,6 +590,10 @@ export function StructuredAnalysisPanel({
     // during that interim state (a race found in agy flash review, eliminated
     // by resultOwnerRef).
     if (resultOwnerRef.current !== "active") return;
+    // Other-language content (spec §6.13, Review Focus 3): never deep-dive it
+    // -- main's deepen writes into the current language's cache, so it would
+    // merge the other language's findings into it.
+    if ((result.contentLang ?? lang) !== lang) return;
     if (!result.hadNarration || result.deepened) return;
     if (result.findings.length === 0) return;
     try {
@@ -591,7 +623,7 @@ export function StructuredAnalysisPanel({
     // Re-running is harmless: the main-side idempotency guard plus the
     // deepened flag are a double safeguard.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result, matchId, input]);
+  }, [result, matchId, input, lang]);
 
   // The split predicate is single-source with buildFindingsPrompt's whole-round
   // decision: a missing facts.t means a whole-match observation (cd-waste etc.)
@@ -809,12 +841,25 @@ export function StructuredAnalysisPanel({
     void runAnalyze({ backend, model });
   };
 
+  // Spec §6.13: the shown result came from the other language's cache (main
+  // reads it back only when the current language has no hit). On it the card
+  // offers one action -- re-analyze in the current language -- and nothing
+  // that acts on the content (deep dive, model picker, slot tabs, export,
+  // follow-up flags; the parent hides coach chat and span analysis).
+  const contentLang: Language = result?.contentLang ?? lang;
+  const fallback = result != null && contentLang !== lang;
+  useEffect(() => {
+    onFallbackContent?.(fallback);
+  }, [fallback, onFallbackContent]);
+
   const buttonText =
     state === "running"
       ? t("report.common.analyzing")
-      : state === "done"
-        ? t("report.ai.reanalyze")
-        : t("report.view.ai");
+      : fallback
+        ? t("report.contentLang.reanalyze")
+        : state === "done"
+          ? t("report.ai.reanalyze")
+          : t("report.view.ai");
 
   return (
     <div className="rpt-ai-panel">
@@ -835,51 +880,55 @@ export function StructuredAnalysisPanel({
           >
             {inputPending ? t("report.ai.preparing") : buttonText}
           </button>
-          <button
-            className="rpt-ai-split-arrow"
-            data-testid="analysis-model-picker"
-            aria-label={t("report.ai.pickModel")}
-            aria-haspopup="menu"
-            aria-expanded={modelMenuOpen}
-            // Disabled by run state only (per the brief: "disable the whole
-            // split while running"); do not also gate on !input -- browsing
-            // "which models are available" does not require input to be ready,
-            // and when an analysis is actually dispatched runAnalyze still
-            // short-circuits on !input (same guard as the primary button, a
-            // double safeguard).
-            disabled={state === "running"}
-            onClick={() => {
-              if (!modelMenuOpen) probeCliOnce();
-              setModelMenuOpen((o) => !o);
-            }}
-          >
-            ▾
-          </button>
-          {modelMenuOpen && (
-            <div
-              className="rpt-ai-model-menu"
-              data-testid="analysis-model-menu"
-              role="menu"
-            >
-              {AI_BACKENDS.filter(isBackendAvailable).map((b) => (
-                <div key={b} className="rpt-ai-model-group" role="group">
-                  {AI_MODELS[b].map((m) => {
-                    const isDefault =
-                      b === defaultBackend && m.id === defaultModel;
-                    return (
-                      <button
-                        key={m.id}
-                        role="menuitem"
-                        onClick={() => handleSelectModel(b, m.id)}
-                      >
-                        {slotLabel(`${b}:${m.id}`, lang)}
-                        {isDefault ? t("report.ai.default") : ""}
-                      </button>
-                    );
-                  })}
+          {!fallback && (
+            <>
+              <button
+                className="rpt-ai-split-arrow"
+                data-testid="analysis-model-picker"
+                aria-label={t("report.ai.pickModel")}
+                aria-haspopup="menu"
+                aria-expanded={modelMenuOpen}
+                // Disabled by run state only (per the brief: "disable the whole
+                // split while running"); do not also gate on !input -- browsing
+                // "which models are available" does not require input to be ready,
+                // and when an analysis is actually dispatched runAnalyze still
+                // short-circuits on !input (same guard as the primary button, a
+                // double safeguard).
+                disabled={state === "running"}
+                onClick={() => {
+                  if (!modelMenuOpen) probeCliOnce();
+                  setModelMenuOpen((o) => !o);
+                }}
+              >
+                ▾
+              </button>
+              {modelMenuOpen && (
+                <div
+                  className="rpt-ai-model-menu"
+                  data-testid="analysis-model-menu"
+                  role="menu"
+                >
+                  {AI_BACKENDS.filter(isBackendAvailable).map((b) => (
+                    <div key={b} className="rpt-ai-model-group" role="group">
+                      {AI_MODELS[b].map((m) => {
+                        const isDefault =
+                          b === defaultBackend && m.id === defaultModel;
+                        return (
+                          <button
+                            key={m.id}
+                            role="menuitem"
+                            onClick={() => handleSelectModel(b, m.id)}
+                          >
+                            {slotLabel(`${b}:${m.id}`, lang)}
+                            {isDefault ? t("report.ai.default") : ""}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
         {!result && state === "idle" && !anyBackend && !demo && (
@@ -915,6 +964,9 @@ export function StructuredAnalysisPanel({
           </span>
         )}
         {result && displayEmpty !== "stale" && (
+          <ContentLangBadge contentLang={contentLang} />
+        )}
+        {result && displayEmpty !== "stale" && !fallback && (
           <span className="rpt-ai-export">
             <ExportButtons
               findings={result.findings}
@@ -929,11 +981,22 @@ export function StructuredAnalysisPanel({
         <div className="rpt-ai-goals" data-testid="ai-goals">
           <span className="rpt-ai-goals-title">{t("report.ai.goals")}</span>
           {goals.map((g) => (
-            <span key={g.category} className="rpt-ai-goal">
+            <span
+              key={g.category}
+              className="rpt-ai-goal"
+              data-content-lang={
+                g.lastTitle && g.lastLang && g.lastLang !== lang
+                  ? g.lastLang
+                  : undefined
+              }
+            >
               ↻{g.recurring} {categoryLabel(g.category, lang)}
               {g.lastTitle
                 ? t("report.ai.goalLast", { title: g.lastTitle })
                 : ""}
+              {g.lastTitle && g.lastLang && (
+                <ContentLangBadge contentLang={g.lastLang} />
+              )}
             </span>
           ))}
         </div>
@@ -970,10 +1033,15 @@ export function StructuredAnalysisPanel({
       )}
 
       {result && (
-        <div className="rpt-ai-body">
+        <div
+          className="rpt-ai-body"
+          // Marks the other-language region (spec §6.13): its text is stored
+          // AI output, shown as-is under the language label.
+          data-content-lang={fallback ? contentLang : undefined}
+        >
           {/* Multi-model slot tab bar (Task 3): only appears with >=2 slots, so
               single-model users see no change at all. */}
-          {slots.length >= 2 && (
+          {slots.length >= 2 && !fallback && (
             <div className="rpt-slot-tabs" data-testid="analysis-slot-tabs">
               {slots.map((slot) => (
                 <button
@@ -1051,7 +1119,7 @@ export function StructuredAnalysisPanel({
                 onSeek={onSeekEvent}
                 onSelectEvidence={setActiveEventIds}
                 flags={flags}
-                onFlag={handleFlag}
+                onFlag={fallback ? undefined : handleFlag}
                 lang={lang}
                 habitOf={habitOf}
                 rich={rich}
@@ -1069,7 +1137,7 @@ export function StructuredAnalysisPanel({
                     onInspect={onInspectEvents}
                     candidates={input?.candidates ?? []}
                     flags={flags}
-                    onFlag={handleFlag}
+                    onFlag={fallback ? undefined : handleFlag}
                     lang={lang}
                     habitOf={habitOf}
                     rich={rich}

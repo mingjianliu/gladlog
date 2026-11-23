@@ -352,11 +352,14 @@ export function ProComparisonVerified({
       let hasAnalysis = false;
       try {
         const a = (await bridge().analysis.getState(matchId)) as {
-          cached: unknown;
+          cached: { contentLang?: string } | null;
         } | null;
         // getState's `cached` is the analysis panel's own "an analysis exists"
-        // judgment (active slot content, single source on the main side).
-        hasAnalysis = a?.cached != null;
+        // judgment (active slot content, single source on the main side) --
+        // in the current language: the other language's result is only read
+        // back for display (spec §6.13) and does not start a comparison.
+        hasAnalysis =
+          a?.cached != null && (a.cached.contentLang ?? lang) === lang;
       } catch {
         // Stub bridge without the analysis surface (test bed / fixtures):
         // keep the old do-nothing behavior.

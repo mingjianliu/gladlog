@@ -31,6 +31,9 @@ type CachedResult = {
   findings: Finding[];
   hadNarration: boolean;
   deepened?: boolean;
+  /** Language the result was generated in (spec §6.13); absent from older
+   * stubs, read as the current language. */
+  contentLang?: string;
 } | null;
 
 const status: BatchStatus = {
@@ -123,10 +126,21 @@ async function processSource(
   storageId: string,
 ): Promise<"ok" | "skipped" | "failed"> {
   const ai = bridge().analysis;
-  const { cached, running } = (await ai.getState(matchId)) as {
+  const {
+    cached: anyLangCached,
+    running,
+    lang,
+  } = (await ai.getState(matchId)) as {
     cached: CachedResult;
     running: boolean;
+    lang?: string;
   };
+  // getState hands back the other language's result when the current one has
+  // no hit (display only, spec §6.13). For the batch it is "not analyzed" --
+  // the same per-language judgment as listAnalyzed.
+  const inCurrentLang = (r: CachedResult): CachedResult =>
+    r && (lang === undefined || (r.contentLang ?? lang) === lang) ? r : null;
+  const cached = inCurrentLang(anyLangCached);
   // Running elsewhere (the user clicked it manually): never double-run,
   // whatever the mode — two concurrent runs on one match id would race the
   // same cache file.
@@ -149,7 +163,9 @@ async function processSource(
     return "failed";
   }
   if (status.cancelled) return "failed";
-  const result = (await ai.getCached(matchId)) as CachedResult;
+  // A failed run leaves no current-language cache; the other language's
+  // result getCached may fall back to must not be counted, or deep-dived.
+  const result = inCurrentLang((await ai.getCached(matchId)) as CachedResult);
   // No cache = error path or cancelled; run already emitted the error, this
   // only counts it
   if (!result) return "failed";

@@ -177,6 +177,11 @@ export function VideoTab({
           .analysis?.getCached(matchId)
           .then((cached) => {
             if (!alive || !cached) return;
+            // The other language's result, read back for display only (spec
+            // §6.13), carries no label here -- keep it off the recording.
+            const contentLang = (cached as { contentLang?: string })
+              .contentLang;
+            if (contentLang && contentLang !== lang) return;
             const findings =
               (cached as { findings?: Finding[] }).findings ?? [];
             const deepDiveChips = findings.flatMap(
@@ -244,7 +249,7 @@ export function VideoTab({
       if (refreshRef.current === refresh) refreshRef.current = null;
       off?.();
     };
-  }, [matchId]);
+  }, [matchId, lang]);
 
   useEffect(() => {
     const v = ref.current;

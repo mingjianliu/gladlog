@@ -47,6 +47,10 @@ function stubBridge(opts: {
   runningIds?: string[];
   failIds?: string[];
   rejectStateIds?: string[];
+  /** Spec §6.13: ids whose only cache is the other language's result (zh
+   * while the current language is en) -- getState / getCached hand it back
+   * tagged `contentLang: "zh"`. */
+  otherLangIds?: string[];
   docs: Record<string, { kind: string; data: unknown }>;
   onRun?: (matchId: string) => Promise<void> | void;
 }): Calls {
@@ -59,6 +63,12 @@ function stubBridge(opts: {
     analysis: {
       getState: async (matchId: string) => {
         if (opts.rejectStateIds?.includes(matchId)) throw new Error("ipc boom");
+        if (opts.otherLangIds?.includes(matchId))
+          return {
+            cached: { findings: [], contentLang: "zh" },
+            lang: "en",
+            running: false,
+          };
         return {
           cached: opts.cachedIds?.includes(matchId) ? { findings: [] } : null,
           running: opts.runningIds?.includes(matchId) ?? false,
@@ -72,7 +82,13 @@ function stubBridge(opts: {
       getCached: async (matchId: string) =>
         done.has(matchId)
           ? { findings: [{ severity: "high" }], hadNarration: true }
-          : null,
+          : opts.otherLangIds?.includes(matchId)
+            ? {
+                findings: [{ severity: "high" }],
+                hadNarration: true,
+                contentLang: "zh",
+              }
+            : null,
       deepen: async (input: { matchId: string }) => {
         calls.deepen.push(input.matchId);
       },
@@ -94,6 +110,29 @@ beforeEach(() => {
 });
 
 describe("批量分析驱动器", () => {
+  it("只有另一种语言的缓存不算已分析:照跑;跑失败时不拿回退内容去深挖(§6.13)", async () => {
+    const calls = stubBridge({
+      otherLangIds: ["z", "zf"],
+      failIds: ["zf"],
+      docs: {
+        z: { kind: "match", data: src },
+        zf: { kind: "match", data: src },
+      },
+    });
+    await startBatch([
+      { id: "z", label: "Z" },
+      { id: "zf", label: "ZF" },
+    ]);
+    const st = getBatchStatus();
+    expect([...calls.run].sort()).toEqual(["z", "zf"]);
+    expect(calls.deepen).toEqual(["z"]);
+    expect({ ok: st.ok, skipped: st.skipped, failed: st.failed }).toEqual({
+      ok: 1,
+      skipped: 0,
+      failed: 1,
+    });
+  });
+
   it("已缓存跳过、正常场跑 run+deepen、失败场计 failed(并发下顺序不定,比集合)", async () => {
     const calls = stubBridge({
       cachedIds: ["a"],
