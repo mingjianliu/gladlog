@@ -141,7 +141,7 @@ export const GLOSSARY: ReadonlyArray<{
       "candidate type `kick-priority-team`; prompt legend (kick available on a teammate)",
   },
 
-  // ── Finding categories (findingDisplay.ts CATEGORY_ZH; analysis FINDING_CATEGORIES) ──
+  // ── Finding categories (findingDisplay.ts CATEGORY_KEY; analysis FINDING_CATEGORIES) ──
   {
     id: "category.survival",
     zh: "生存",
@@ -193,7 +193,7 @@ export const GLOSSARY: ReadonlyArray<{
     source: "FindingCategory slug `offense`",
   },
 
-  // ── Severity (findingDisplay.ts SEV_ZH; Finding.severity enum high|med|low) ──
+  // ── Severity (findingDisplay.ts SEVERITY_KEY; Finding.severity enum high|med|low) ──
   {
     id: "severity.high",
     zh: "高",
@@ -213,7 +213,7 @@ export const GLOSSARY: ReadonlyArray<{
     source: "Finding.severity enum `low`",
   },
 
-  // ── Kick outcomes (kickText.ts MISSED_KICK_TEXT / REFUSED_KICK_TEXT; analysis MissedKickKind) ──
+  // ── Kick outcomes (kickText.ts KICK_TEXT_KEY; analysis MissedKickKind) ──
   {
     id: "kick.missed",
     zh: "落空",

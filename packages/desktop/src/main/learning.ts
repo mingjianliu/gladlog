@@ -37,12 +37,11 @@ import {
 } from "fs";
 import { join } from "path";
 
-import { type AiModelSelection,resolveAiModel } from "../shared/aiModels";
+import { type AiModelSelection, resolveAiModel } from "../shared/aiModels";
 import { resolveActiveSlot, toSlottedDoc } from "../shared/analysisCache";
 import type { Language } from "../shared/i18n/index";
 import {
   type AiBackend,
-  type AiLanguage,
   type AnthropicLike,
   buildCoachSystemPrompt,
   PROMPT_VERSION,
@@ -166,7 +165,7 @@ export function createLearningService(deps: {
    * the analysis cache of the evidence matches (<=3 of them). */
   const collectExamples = (
     rules: LearnedRule[],
-    lang: AiLanguage,
+    lang: Language,
   ): Record<string, string[]> => {
     const out: Record<string, string[]> = {};
     for (const r of rules) {
@@ -273,7 +272,7 @@ export function createLearningService(deps: {
       // by a misbehaving model, leaving the whole round unpersisted (the
       // spec's core invariant).
       const settings = deps.getSettings();
-      const lang: AiLanguage = settings.language ?? "zh";
+      const lang: Language = settings.language ?? "zh";
       const need = rules.filter((r) => !r.description[lang]);
       let distilled = 0;
       let droppedByAudit = 0;

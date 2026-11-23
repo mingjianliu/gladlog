@@ -453,7 +453,9 @@ export function SettingsPanel() {
               <span className="settings-k">Anthropic API key</span>
               <span className="settings-key-cell">
                 {keySet ? (
-                  <span className="settings-pill-ok">{t("settings.key.set")}</span>
+                  <span className="settings-pill-ok">
+                    {t("settings.key.set")}
+                  </span>
                 ) : (
                   <span className="settings-v">
                     {t("settings.anthropicKey.unset")}
@@ -461,7 +463,9 @@ export function SettingsPanel() {
                 )}
                 <input
                   type="password"
-                  placeholder={keySet ? t("settings.key.replacePlaceholder") : "sk-ant-…"}
+                  placeholder={
+                    keySet ? t("settings.key.replacePlaceholder") : "sk-ant-…"
+                  }
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                 />
@@ -483,7 +487,10 @@ export function SettingsPanel() {
                   <button
                     className="settings-danger"
                     onClick={() =>
-                      void save({ anthropicApiKey: null }, t("settings.key.cleared"))
+                      void save(
+                        { anthropicApiKey: null },
+                        t("settings.key.cleared"),
+                      )
                     }
                   >
                     {t("settings.key.clear")}
@@ -498,7 +505,9 @@ export function SettingsPanel() {
               <span className="settings-k">DeepSeek API key</span>
               <span className="settings-key-cell">
                 {dsKeySet ? (
-                  <span className="settings-pill-ok">{t("settings.key.set")}</span>
+                  <span className="settings-pill-ok">
+                    {t("settings.key.set")}
+                  </span>
                 ) : (
                   <span className="settings-v">
                     {t("settings.deepseekKey.unset")}
@@ -506,7 +515,9 @@ export function SettingsPanel() {
                 )}
                 <input
                   type="password"
-                  placeholder={dsKeySet ? t("settings.key.replacePlaceholder") : "sk-…"}
+                  placeholder={
+                    dsKeySet ? t("settings.key.replacePlaceholder") : "sk-…"
+                  }
                   value={dsKeyInput}
                   onChange={(e) => setDsKeyInput(e.target.value)}
                 />
@@ -529,7 +540,10 @@ export function SettingsPanel() {
                   <button
                     className="settings-danger"
                     onClick={() =>
-                      void save({ deepseekApiKey: null }, t("settings.key.cleared"))
+                      void save(
+                        { deepseekApiKey: null },
+                        t("settings.key.cleared"),
+                      )
                     }
                   >
                     {t("settings.key.clear")}
@@ -819,10 +833,14 @@ export function SettingsPanel() {
               />
               <span />
 
-              <span className="settings-k">{t("recorder.ws.passwordLabel")}</span>
+              <span className="settings-k">
+                {t("recorder.ws.passwordLabel")}
+              </span>
               <span className="settings-key-cell">
                 {settings.obsWebsocketPassword === OBS_PASSWORD_REDACTED ? (
-                  <span className="settings-pill-ok">{t("settings.key.set")}</span>
+                  <span className="settings-pill-ok">
+                    {t("settings.key.set")}
+                  </span>
                 ) : (
                   <span className="settings-v">
                     {t("recorder.ws.passwordUnset")}

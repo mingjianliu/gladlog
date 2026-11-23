@@ -11,7 +11,7 @@ export const enBatch = {
     "By default takes the N newest matches; check rows in the list below to analyze only those (checking a shuffle selects all 6 rounds). Up to three run in parallel, with the same output as analyzing each match by hand (deep dive included).",
   "batch.empty.selected": "All checked matches are already analyzed",
   "batch.empty.recent": "No unanalyzed matches",
-  "batch.running": "Batch analyzing {done}/{total}",
+  "batch.running": "Analyzing {done}/{total}",
   "batch.cancel": "Cancel",
   "batch.cancelledPrefix": "Cancelled: ",
   "batch.finishedPrefix": "Batch done: ",

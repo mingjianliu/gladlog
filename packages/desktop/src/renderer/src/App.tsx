@@ -506,7 +506,9 @@ export default function App({
                     </li>
                   )),
                 ])}
-                {hasMore && <li className="loading-more">{t("matchList.loadingMore")}</li>}
+                {hasMore && (
+                  <li className="loading-more">{t("matchList.loadingMore")}</li>
+                )}
               </ul>
             </aside>
             {/* 第三条栅格轨必须有真实 DOM 元素:.app-layout 是

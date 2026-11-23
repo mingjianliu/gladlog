@@ -60,7 +60,6 @@ import { findingKey } from "../shared/findingKey";
 import type { Language } from "../shared/i18n/index";
 import {
   type AiBackend,
-  type AiLanguage,
   type AnthropicLike,
   buildCoachSystemPrompt,
   PROMPT_VERSION,
@@ -193,7 +192,7 @@ function readSlottedDoc(
     aiSelfReview?: boolean;
   },
 ): AnalysisCacheDocV2<AnalysisResult> | null {
-  const lang: AiLanguage = settings.language ?? "zh";
+  const lang: Language = settings.language ?? "zh";
   const fp = slottedDocCandidatePaths(matchesDir, matchId, lang).find((p) =>
     existsSync(p),
   );
@@ -219,7 +218,7 @@ function readSlottedDoc(
 function slottedDocCandidatePaths(
   matchesDir: string,
   matchId: string,
-  lang: AiLanguage,
+  lang: Language,
 ): string[] {
   const paths = [analysisCachePath(matchesDir, matchId, lang)];
   if (lang === "en") paths.push(join(matchesDir, matchId, "analysis-v2.json"));
@@ -385,7 +384,7 @@ async function readAnalyzedMatchDirs(
 function crossMatchCandidatePaths(
   matchesDir: string,
   dir: string,
-  lang: AiLanguage,
+  lang: Language,
 ): string[] {
   const base = join(matchesDir, dir);
   return [
@@ -631,7 +630,7 @@ export function createAnalysisService(deps: {
       reapGeneration(input.matchId);
     };
     const settings = deps.getSettings();
-    const lang: AiLanguage = settings.language ?? "zh";
+    const lang: Language = settings.language ?? "zh";
     // Multi-model comparison (spec 2026-08-01): when backendOverride is
     // present the whole call chain (client resolution, the model value
     // actually sent, the persisted slot key) must switch with it. All three
@@ -1074,7 +1073,7 @@ export function createAnalysisService(deps: {
   async function deepenInner(input: DeepenInput): Promise<void> {
     const myGen = nextGen(input.matchId);
     const settings = deps.getSettings();
-    const lang: AiLanguage = settings.language ?? "zh";
+    const lang: Language = settings.language ?? "zh";
     // Path converged onto analysisCachePath (single-source predicate; this
     // used to hand-concatenate the string).
     const cachedPath = analysisCachePath(deps.matchesDir, input.matchId, lang);
@@ -1320,7 +1319,7 @@ export function createAnalysisService(deps: {
     }
   }
 
-  const windowCachePath = (matchId: string, lang: AiLanguage) =>
+  const windowCachePath = (matchId: string, lang: Language) =>
     join(deps.matchesDir, matchId, `windowAnalysis.${lang}.json`);
 
   /**
@@ -1340,7 +1339,7 @@ export function createAnalysisService(deps: {
     // the "key says one thing, the run does another" predicate silently
     // splits again.
     const settings = deps.getSettings();
-    const lang: AiLanguage = settings.language ?? "zh";
+    const lang: Language = settings.language ?? "zh";
     // Important audit fix (#16, second of three): backend + model are part of
     // the cache key. The original key was just fromS-toS, so after switching
     // backend/model, rerunning the same window silently returned the old
@@ -1628,7 +1627,7 @@ export function createAnalysisService(deps: {
         }>;
       }>
     > {
-      const lang: AiLanguage = deps.getSettings().language ?? "zh";
+      const lang: Language = deps.getSettings().language ?? "zh";
       const rows = await readAnalyzedMatchDirs(
         deps.matchesDir,
         (dir) => crossMatchCandidatePaths(deps.matchesDir, dir, lang),
@@ -1719,7 +1718,7 @@ export function createAnalysisService(deps: {
         }>;
       }>
     > {
-      const lang: AiLanguage = deps.getSettings().language ?? "zh";
+      const lang: Language = deps.getSettings().language ?? "zh";
       const rows = await readAnalyzedMatchDirs(
         deps.matchesDir,
         (dir) => crossMatchCandidatePaths(deps.matchesDir, dir, lang),
@@ -1833,7 +1832,7 @@ export function createAnalysisService(deps: {
      */
     async listAnalyzed(): Promise<string[]> {
       const settings = deps.getSettings();
-      const lang: AiLanguage = settings.language ?? "zh";
+      const lang: Language = settings.language ?? "zh";
       const rows = await readAnalyzedMatchDirs(
         deps.matchesDir,
         (dir) => slottedDocCandidatePaths(deps.matchesDir, dir, lang),

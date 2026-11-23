@@ -31,11 +31,10 @@ import {
 } from "fs";
 import { join } from "path";
 
-import { type AiModelSelection,resolveAiModel } from "../shared/aiModels";
+import { type AiModelSelection, resolveAiModel } from "../shared/aiModels";
 import type { Language } from "../shared/i18n/index";
 import {
   type AiBackend,
-  type AiLanguage,
   type AnthropicLike,
   buildCoachSystemPrompt,
   resolveAiClient,
@@ -225,7 +224,7 @@ export function createCompareService(deps: {
       return;
     }
     const settings = deps.getSettings();
-    const lang: AiLanguage = settings.language ?? "zh";
+    const lang: Language = settings.language ?? "zh";
     /** 磁盘缓存的唯一写入口(读侧是 getCached,判据共用
      *  isCacheableCompareResult)。best-effort:写不进去也还有内存终态兜着。 */
     const writeCache = (result: CompareResult) => {

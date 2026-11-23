@@ -40,16 +40,6 @@ export function curveMetricLabel(
   return translate(lang, CURVE_METRIC_KEY[m]);
 }
 
-/** The zh labels, for callers that do not take the UI language yet; new code
- * uses `curveMetricLabel(m, lang)`. */
-export const CURVE_METRIC_LABEL: Record<CurveMetric, string> = {
-  hp: curveMetricLabel("hp"),
-  damage: curveMetricLabel("damage"),
-  healing: curveMetricLabel("healing"),
-  taken: curveMetricLabel("taken"),
-  healed: curveMetricLabel("healed"),
-};
-
 /**
  * The event bases a metric is made of. Each basis names one "which events
  * count, at what amount, for whom" rule — see forEachContribution, the single

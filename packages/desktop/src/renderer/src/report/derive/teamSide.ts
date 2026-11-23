@@ -25,14 +25,6 @@ export function teamSideLabel(side: TeamSide, lang: Language = "zh"): string {
   return translate(lang, TEAM_SIDE_KEY[side]);
 }
 
-/** The zh labels, for callers that do not take the UI language yet; new code
- * uses `teamSideLabel(side, lang)`. */
-export const TEAM_SIDE_LABEL: Record<TeamSide, string> = {
-  friendly: teamSideLabel("friendly"),
-  enemy: teamSideLabel("enemy"),
-  unknown: teamSideLabel("unknown"),
-};
-
 /**
  * The predicate itself. Three call sites used to answer this question
  * independently — MatchReport's `isFriendlyUnit`, an inline

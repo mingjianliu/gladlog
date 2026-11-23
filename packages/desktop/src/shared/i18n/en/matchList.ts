@@ -41,4 +41,6 @@ export const enMatchList = {
   "matchList.import.doneFailed": (p: MessageParams) =>
     `, ${Number(p.failed) === 1 ? "1 file" : `${p.failed} files`} failed`,
   "matchList.import.failed": "Import failed: {error}",
+  "matchList.partial.badge": "partial",
+  "matchList.partial.title": "Incomplete: {issues}",
 };

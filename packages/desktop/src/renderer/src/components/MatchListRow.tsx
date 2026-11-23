@@ -12,7 +12,6 @@ import {
   specName,
 } from "../report/data/gameConstants";
 
-
 const fmtWhen = (t: number, lang: Language): string => formatDateTime(t, lang);
 
 const fmtHHMM = (t: number): string => {
@@ -135,9 +134,11 @@ export function MatchListRow({
         {meta.structuralIssues && meta.structuralIssues.length > 0 && (
           <span
             className="mlr-partial"
-            title={`Incomplete: ${meta.structuralIssues.join(", ")}`}
+            title={t("matchList.partial.title", {
+              issues: meta.structuralIssues.join(", "),
+            })}
           >
-            partial
+            {t("matchList.partial.badge")}
           </span>
         )}
         {meta.durationS != null && (

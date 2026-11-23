@@ -77,6 +77,7 @@ export const zhRecorder = {
   "recorder.prefs.audio.savedDevice": "已保存的设备({id})",
   "recorder.prefs.audio.none": "不录",
   "recorder.prefs.directory.label": "录像目录",
-  "recorder.prefs.directory.default": "默认(应用数据目录下的 recordings 文件夹)",
+  "recorder.prefs.directory.default":
+    "默认(应用数据目录下的 recordings 文件夹)",
   "recorder.prefs.directory.reset": "恢复默认",
 };

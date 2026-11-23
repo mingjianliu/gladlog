@@ -30,4 +30,6 @@ export const zhMatchList = {
     "完成:{files} 个文件,新入库 {stored} 场,重复跳过 {dup}{failedPart}",
   "matchList.import.doneFailed": ",失败 {failed} 个文件",
   "matchList.import.failed": "导入失败:{error}",
+  "matchList.partial.badge": "不完整",
+  "matchList.partial.title": "不完整:{issues}",
 };

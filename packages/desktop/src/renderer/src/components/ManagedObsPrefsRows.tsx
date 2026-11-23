@@ -14,10 +14,6 @@ import { useT } from "../i18n/LangProvider";
  * null, which an option value cannot be. */
 const NONE = "__none__";
 
-/** The save note every prefs row uses (`recorder.prefs.savedNote`): honest
- * about WHEN it applies (user ruling 2026-09-04 — restart now, or after the
- * current recording). */
-
 interface Props {
   settings: Pick<GladlogSettings, keyof ManagedObsPrefs>;
   save: (partial: Partial<ManagedObsPrefs>, note: string) => Promise<void>;
@@ -66,6 +62,8 @@ function audioOptions(
  */
 export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
   const { t } = useT();
+  // The save note every prefs row uses: honest about WHEN it applies (user
+  // ruling 2026-09-04 — restart now, or after the current recording).
   const prefsSavedNote = t("recorder.prefs.savedNote");
   const [devices, setDevices] = useState<{
     output: ObsAudioDevice[];
@@ -175,13 +173,11 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
           devices.output,
           settings.managedDesktopAudioDevice,
           t,
-        ).map(
-          (o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ),
-        )}
+        ).map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </select>
       <span />
 
@@ -206,9 +202,7 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
       </select>
       <span />
 
-      <span className="settings-k">
-        {t("recorder.prefs.directory.label")}
-      </span>
+      <span className="settings-k">{t("recorder.prefs.directory.label")}</span>
       <span className="settings-v">
         {settings.recordingDirectory ?? t("recorder.prefs.directory.default")}
       </span>
