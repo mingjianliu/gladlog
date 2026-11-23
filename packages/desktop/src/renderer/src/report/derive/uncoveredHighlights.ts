@@ -124,10 +124,10 @@ export interface UncoveredHighlight {
  * its own local copy with different wording, inconsistent with the one
  * `buildWindowAnchorFinding` uses to compose the prompt body). */
 function summarizeKinds(items: readonly PackItem[], lang: Language): string {
+  const words = lang === "en" ? PACK_ITEM_KIND_EN : PACK_ITEM_KIND_ZH;
   const order: string[] = [];
   const counts = new Map<string, number>();
   for (const item of items) {
-    const words = lang === "en" ? PACK_ITEM_KIND_EN : PACK_ITEM_KIND_ZH;
     const label = words[item.kind] ?? item.kind;
     if (!counts.has(label)) order.push(label);
     counts.set(label, (counts.get(label) ?? 0) + 1);

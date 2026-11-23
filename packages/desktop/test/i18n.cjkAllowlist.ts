@@ -4,6 +4,12 @@
 // `snippet`, and must say why it is not user-facing. Shrink-only (§6.9 只允许
 // 减少): the test fails on an entry that no longer matches anything, and on
 // an entry missing from FROZEN_CJK_ALLOWLIST below.
+//
+// Removing an entry: when you delete an entry from CJK_ALLOWLIST (its literal
+// moved into the dictionary or went away), also prune the same [file, snippet]
+// pair from FROZEN_CJK_ALLOWLIST and re-pin the sha256 in
+// i18n.noCjkLiterals.test.ts. Otherwise the frozen list keeps a dead pair, and
+// the literal could later come back under that pair without failing the test.
 export const CJK_ALLOWLIST: ReadonlyArray<{
   file: string;
   snippet: string;

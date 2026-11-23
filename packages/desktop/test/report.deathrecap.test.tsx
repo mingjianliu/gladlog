@@ -104,6 +104,30 @@ describe("死亡回顾(backlog #6)", () => {
     expect(jumped[0]![0]).toBeCloseTo(Math.max(0, recaps[0]!.deathS - 8), 3);
   });
 
+  it("同一次死亡的回顾重新算出(新对象)时,已展开的「显示全部」保持展开;换到另一次死亡才复位", () => {
+    const first = deriveDeathRecaps(m)[0]!;
+    const { container, rerender } = render(
+      <DeathRecapCard recap={first} onClose={() => {}} />,
+    );
+    const toggle = () =>
+      container.querySelector<HTMLButtonElement>(".rpt-recap-showall")!;
+    fireEvent.click(toggle());
+    expect(toggle().getAttribute("aria-pressed")).toBe("true");
+    // Recomputed list: a fresh object for the same death (deriveDeathRecaps
+    // memoizes per source, so copy to model a re-derive)
+    const again = { ...first, events: [...first.events] };
+    rerender(<DeathRecapCard recap={again} onClose={() => {}} />);
+    expect(toggle().getAttribute("aria-pressed")).toBe("true");
+    // Another death (different deathS): the card resets
+    rerender(
+      <DeathRecapCard
+        recap={{ ...again, deathS: again.deathS + 1 }}
+        onClose={() => {}}
+      />,
+    );
+    expect(toggle().getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("P1-3:进战报默认展开最近一次死亡回顾;✕ 关闭后本场不再自动打开", () => {
     render(<MatchReport source={m} matchId="t" />);
     // The mount effect expands it automatically (no click needed); the content

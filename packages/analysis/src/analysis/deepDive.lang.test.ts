@@ -356,7 +356,7 @@ describe("deepDive 跟随界面语言(en)", () => {
       .toMatchInlineSnapshot(`
         [
           "cc | Fear → Owner(4.0s)",
-          "enemy-cd | Enemy Icy Veins(Emage)",
+          "enemy-cd | Enemy Icy Veins (Emage)",
           "defensive | Pain Suppression(Owner)",
           "hp | Warr HP 42%",
           "dispel | Purify removed Polymorph",
@@ -366,8 +366,8 @@ describe("deepDive 跟随界面语言(en)", () => {
           "position | Positioning: Avenging Wrath out of range",
           "position | Positioning: cooldown out of range",
           "hp | Warr HP 42%",
-          "immunity-available | Divine Shield ready, not pressed(Warr)",
-          "external-available | Blessing of Sacrifice ready, not given(Owner→Warr)",
+          "immunity-available | Divine Shield ready, not pressed (Warr)",
+          "external-available | Blessing of Sacrifice ready, not given (Owner→Warr)",
         ]
       `);
   });

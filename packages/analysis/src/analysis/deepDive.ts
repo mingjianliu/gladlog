@@ -88,11 +88,11 @@ const PACK_LABELS: Record<
     cdOutOfRange: (spell) => `走位:${spell ?? "大招"}空放`,
   },
   en: {
-    enemyCd: (spell, player) => `Enemy ${spell}(${player})`,
+    enemyCd: (spell, player) => `Enemy ${spell} (${player})`,
     dispel: (dispel, removed) => `${dispel} removed ${removed}`,
-    immunityAvailable: (spell, unit) => `${spell} ready, not pressed(${unit})`,
+    immunityAvailable: (spell, unit) => `${spell} ready, not pressed (${unit})`,
     externalAvailable: (spell, holder, unit) =>
-      `${spell} ready, not given(${holder}→${unit})`,
+      `${spell} ready, not given (${holder}→${unit})`,
     stayedIn: "Positioning: stayed in under pressure",
     missedPush: "Positioning: drifted out of range",
     cdOutOfRange: (spell) => `Positioning: ${spell ?? "cooldown"} out of range`,

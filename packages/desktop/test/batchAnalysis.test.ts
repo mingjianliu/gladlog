@@ -35,6 +35,7 @@ import {
   startBatch,
   subscribeBatch,
 } from "../src/renderer/src/batch/batchAnalysis";
+import { buildDeepenPacks } from "../src/renderer/src/report/derive/analysisInput";
 
 type Calls = {
   run: string[];
@@ -145,6 +146,42 @@ describe("批量分析驱动器", () => {
       skipped: 0,
       failed: 0,
     });
+  });
+
+  it("深挖 chips 的语言取结果自己的 contentLang(不回退到 zh),并把它带给 deepen", async () => {
+    // getState carries no `lang` (older stub shape), so the fallback would be
+    // "zh": only reading the result's own contentLang yields "en" here.
+    const deepenInputs: Array<{ matchId: string; contentLang?: string }> = [];
+    let ran = false;
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      matches: { get: async () => ({ kind: "match", data: src }) },
+      analysis: {
+        getState: async () => ({ cached: null, running: false }),
+        run: async () => {
+          ran = true;
+        },
+        getCached: async () =>
+          ran
+            ? {
+                findings: [{ severity: "high" }],
+                hadNarration: true,
+                contentLang: "en",
+              }
+            : null,
+        deepen: async (input: { matchId: string; contentLang?: string }) => {
+          deepenInputs.push(input);
+        },
+        cancel: async () => {},
+      },
+    };
+    const packsMock = vi.mocked(buildDeepenPacks);
+    packsMock.mockClear();
+    await startBatch([{ id: "cl", label: "CL" }]);
+    expect(packsMock).toHaveBeenCalledTimes(1);
+    expect(packsMock.mock.calls[0][4]).toBe("en");
+    expect(deepenInputs.map((d) => [d.matchId, d.contentLang])).toEqual([
+      ["cl", "en"],
+    ]);
   });
 
   it("只有另一种语言的缓存不算已分析:照跑;跑失败时不拿回退内容去深挖(§6.13)", async () => {

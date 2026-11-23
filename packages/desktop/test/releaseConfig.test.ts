@@ -169,11 +169,64 @@ describe("Windows 安装器语言(spec 2026-11-23 §6.6)", () => {
     expect(code).toMatch(/"en"/);
   });
 
+  /** True when every File* line (FileOpen / FileWrite / FileClose) sits
+   * inside the `${IfNot} ${Silent}` … matching `${EndIf}` block, matched by
+   * LogicLib nesting depth (`${If}` / `${IfNot}` / `${Unless}` open,
+   * `${EndIf}` closes; `${Else}` / `${ElseIf}` keep the depth). Order alone is
+   * not enough: a write after the guard's `${EndIf}` still runs on /S. */
+  const fileOpsInsideSilentGuard = (code: string): boolean => {
+    const lines = code.split("\n").map((l) => l.trim());
+    const start = lines.findIndex((l) =>
+      /^\$\{IfNot\}\s+\$\{Silent\}$/.test(l),
+    );
+    if (start < 0) return false;
+    let depth = 0;
+    let end = -1;
+    for (let i = start; i < lines.length; i++) {
+      if (/^\$\{(If|IfNot|Unless)\}/.test(lines[i]!)) depth++;
+      else if (/^\$\{EndIf\}/.test(lines[i]!)) depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+    if (end < 0) return false;
+    const ops = lines.flatMap((l, i) =>
+      /^File(Open|Write|Close)\b/.test(l) ? [i] : [],
+    );
+    return ops.length > 0 && ops.every((i) => i > start && i < end);
+  };
+
   it("静默安装(自动更新)不写文件 —— 静默时 $LANGUAGE 是没人选过的默认值", () => {
-    const code = nshCode();
-    const guard = code.search(/\$\{IfNot\}\s+\$\{Silent\}|IfSilent/);
-    const write = code.indexOf("FileOpen");
-    expect(guard).toBeGreaterThanOrEqual(0);
-    expect(write).toBeGreaterThan(guard);
+    expect(fileOpsInsideSilentGuard(nshCode())).toBe(true);
+  });
+
+  it("静默守卫判据的变异自检:写文件挪到 ${EndIf} 之后 / 没有守卫 / 守卫没闭合 都判不过", () => {
+    const ok = [
+      "${IfNot} ${Silent}",
+      "  ${If} $LANGUAGE == 2052",
+      '    StrCpy $0 "zh"',
+      "  ${Else}",
+      '    StrCpy $0 "en"',
+      "  ${EndIf}",
+      '  FileOpen $1 "$INSTDIR\\x.txt" w',
+      "  ${IfNot} ${Errors}",
+      "    FileWrite $1 $0",
+      "    FileClose $1",
+      "  ${EndIf}",
+      "${EndIf}",
+    ];
+    expect(fileOpsInsideSilentGuard(ok.join("\n"))).toBe(true);
+    // FileOpen moved below the guard's closing ${EndIf}: still after the
+    // guard in text order (the old check passed this), but it runs on /S.
+    const movedOut = [...ok.slice(0, 6), ...ok.slice(7), ok[6]!];
+    expect(fileOpsInsideSilentGuard(movedOut.join("\n"))).toBe(false);
+    // The whole write block after the guard closes early.
+    const closedEarly = [...ok.slice(0, 6), "${EndIf}", ...ok.slice(6, 11)];
+    expect(fileOpsInsideSilentGuard(closedEarly.join("\n"))).toBe(false);
+    // No guard at all.
+    expect(fileOpsInsideSilentGuard(ok.slice(1, 11).join("\n"))).toBe(false);
+    // Guard never closed.
+    expect(fileOpsInsideSilentGuard(ok.slice(0, 11).join("\n"))).toBe(false);
   });
 });

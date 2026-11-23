@@ -191,14 +191,17 @@ export function DeathRecapCard({
 }) {
   // Condensed view (issue #11) vs 显示全部 (the raw, every-tick stream); the
   // fold bucket has its own expand toggle. Both reset when the card moves to
-  // another death.
+  // another death — keyed on the death's identity, not on the recap object,
+  // so a recomputed list (e.g. a language switch re-deriving recaps) keeps an
+  // expanded card expanded.
   const { t } = useT();
   const [showAll, setShowAll] = useState(false);
   const [foldOpen, setFoldOpen] = useState(false);
+  const deathKey = `${recap.unitId}:${recap.deathS}`;
   useEffect(() => {
     setShowAll(false);
     setFoldOpen(false);
-  }, [recap]);
+  }, [deathKey]);
 
   const eventRow = (
     e: DeathRecapEvent,
