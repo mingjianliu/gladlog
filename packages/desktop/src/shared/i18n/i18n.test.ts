@@ -13,6 +13,7 @@ import {
   type MessageKey,
   type MessageParams,
   type MessageValue,
+  placeholderNames,
   translate,
   zhMessages,
 } from "./index";
@@ -112,7 +113,6 @@ describe("GLOSSARY", () => {
 const IDENTICAL_OK: Partial<Record<MessageKey, string>> = {};
 
 const KEYS = Object.keys(zhMessages) as MessageKey[];
-const TEMPLATE_PLACEHOLDER = /\{(\w+)\}/g;
 
 /**
  * Call a function-valued entry with sample params: `n` (and every other
@@ -145,7 +145,7 @@ function inspect(value: MessageValue): {
   if (typeof value === "function") return runWithSamples(value);
   return {
     outputs: [value],
-    params: new Set([...value.matchAll(TEMPLATE_PLACEHOLDER)].map((m) => m[1])),
+    params: new Set(placeholderNames(value)),
   };
 }
 

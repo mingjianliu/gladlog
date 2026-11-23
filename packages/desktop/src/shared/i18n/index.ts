@@ -20,6 +20,11 @@ const DICTIONARIES: Record<Language, Messages> = {
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 
+/** The `{name}` placeholder names in a template, in order (duplicates kept); the same regex `interpolate` replaces. */
+export function placeholderNames(template: string): string[] {
+  return [...template.matchAll(PLACEHOLDER)].map((m) => m[1]);
+}
+
 /** Replace `{name}` placeholders; a placeholder with no matching param is kept verbatim. */
 function interpolate(
   template: string,

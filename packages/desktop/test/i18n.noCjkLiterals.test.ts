@@ -2,6 +2,7 @@
 // string goes through the dictionary (src/shared/i18n/); the files that still
 // hold CJK literals are listed in PENDING_FILES (shrink-only) and the
 // permanent exceptions in CJK_ALLOWLIST (one reason each).
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
@@ -10,7 +11,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { CJK_ALLOWLIST } from "./i18n.cjkAllowlist";
-import { PENDING_FILES, PENDING_FILES_CEILING } from "./i18n.pendingFiles";
+import { INITIAL_PENDING_FILES, PENDING_FILES } from "./i18n.pendingFiles";
 
 const REPO_ROOT = join(__dirname, "../../..");
 const DESKTOP_SRC = "packages/desktop/src";
@@ -163,10 +164,23 @@ describe("i18n: 源码里不许写死中文(§6.9 第 1 条)", () => {
     expect(stale).toEqual([]);
   });
 
-  it("PENDING_FILES 只能减少:不重复、已排序、不超过上限", () => {
+  it("PENDING_FILES 只能减少:不重复、已排序、是初始清单的子集", () => {
     expect(new Set(PENDING_FILES).size).toBe(PENDING_FILES.length);
     expect([...PENDING_FILES]).toEqual([...PENDING_FILES].sort());
-    expect(PENDING_FILES.length).toBeLessThanOrEqual(PENDING_FILES_CEILING);
+    const initial = new Set(INITIAL_PENDING_FILES);
+    // A file not in the frozen initial list can never become pending; move
+    // its text into the dictionary instead.
+    expect(PENDING_FILES.filter((f) => !initial.has(f))).toEqual([]);
+  });
+
+  it("INITIAL_PENDING_FILES 冻结不改(92 个文件,内容哈希固定)", () => {
+    // Pins the frozen list so adding a file to both lists also goes red.
+    expect(INITIAL_PENDING_FILES.length).toBe(92);
+    expect(
+      createHash("sha256")
+        .update(INITIAL_PENDING_FILES.join("\n"))
+        .digest("hex"),
+    ).toBe("67cd19aaeb0cf8f3689b0c9b8981da719bfa80c33ab53f6e1db95b34f447943b");
   });
 
   it("CJK_ALLOWLIST 每条都有理由且仍然命中", () => {
