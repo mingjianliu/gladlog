@@ -1,4 +1,5 @@
-import { TEAM_SIDE_LABEL, type TeamSide } from "../derive/teamSide";
+import { useT } from "../../i18n/LangProvider";
+import { type TeamSide, teamSideLabel } from "../derive/teamSide";
 
 /**
  * The team marker: one small dot before a unit's name, green for our side, red
@@ -8,7 +9,7 @@ import { TEAM_SIDE_LABEL, type TeamSide } from "../derive/teamSide";
  * the meter bars and the legend swatches — that is WoW convention and people
  * read specs off it — so team identity cannot be expressed by recolouring any
  * of that. A dot composes everywhere a name appears, including a table row
- * whose 来源 and 目标 belong to opposite teams, which a row-level accent could
+ * whose source and target belong to opposite teams, which a row-level accent could
  * never express.
  *
  * `unknown` renders nothing at all rather than a neutral dot: an imported log
@@ -16,7 +17,9 @@ import { TEAM_SIDE_LABEL, type TeamSide } from "../derive/teamSide";
  * team.
  */
 export function TeamDot({ side }: { side: TeamSide }) {
+  const { lang } = useT();
   if (side === "unknown") return null;
+  const label = teamSideLabel(side, lang);
   return (
     <span
       className={`rpt-team-dot rpt-team-dot-${side}`}
@@ -25,8 +28,8 @@ export function TeamDot({ side }: { side: TeamSide }) {
       // The colour is the whole signal, so it needs a text equivalent for
       // screen readers and for anyone who cannot separate the two hues.
       role="img"
-      aria-label={TEAM_SIDE_LABEL[side]}
-      title={TEAM_SIDE_LABEL[side]}
+      aria-label={label}
+      title={label}
     />
   );
 }

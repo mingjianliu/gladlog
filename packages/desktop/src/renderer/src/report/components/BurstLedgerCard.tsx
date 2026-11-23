@@ -6,6 +6,7 @@ import {
 } from "@gladlog/analysis";
 import { useContext, useMemo, useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
 import type { LedgerPlayer } from "../derive/burstLedger";
 import { missedKickLabel } from "../derive/kickText";
@@ -34,11 +35,12 @@ function SeekBtn({
   unitName: string;
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   if (!onSeek) return null;
   return (
     <button
       className="rpt-stats-detail-jump"
-      title="回放此刻"
+      title={t("report.common.replayHere")}
       onClick={() => onSeek(Math.max(0, tS - 3), [unitName])}
     >
       ▶
@@ -74,6 +76,7 @@ export function BurstLedgerCard({
       ),
     [players],
   );
+  const { t: tr, lang } = useT();
   const [idx, setIdx] = useState(defaultIdx);
   const sides = useContext(TeamSideContext);
   /** Ring colour for the class dot. "unknown" keeps the class colour, i.e. no
@@ -96,9 +99,11 @@ export function BurstLedgerCard({
     return (
       <div className="rpt-ledger" data-testid="burst-ledger">
         <div className="rpt-ledger-head">
-          <span className="rpt-ledger-title">爆发账本</span>
+          <span className="rpt-ledger-title">
+            {tr("report.burstLedger.title")}
+          </span>
         </div>
-        <p className="rpt-ledger-empty">本场无爆发窗口数据。</p>
+        <p className="rpt-ledger-empty">{tr("report.burstLedger.noData")}</p>
       </div>
     );
   const p = players[Math.min(idx, players.length - 1)];
@@ -106,7 +111,9 @@ export function BurstLedgerCard({
   return (
     <div className="rpt-ledger" data-testid="burst-ledger">
       <div className="rpt-ledger-head">
-        <span className="rpt-ledger-title">爆发账本</span>
+        <span className="rpt-ledger-title">
+          {tr("report.burstLedger.title")}
+        </span>
         <div className="rpt-ledger-tabs">
           {players.map((pl, i) => (
             <button
@@ -134,7 +141,9 @@ export function BurstLedgerCard({
 
       {p.bursts.length > 0 && (
         <div className="rpt-ledger-section">
-          <span className="rpt-stats-detail-title">爆发对齐</span>
+          <span className="rpt-stats-detail-title">
+            {tr("report.burstLedger.alignment")}
+          </span>
           {p.bursts.map((b, k) => {
             const t = b.dominantTarget;
             const immunities =
@@ -157,27 +166,36 @@ export function BurstLedgerCard({
                     {fmtDmg(t.damage)}
                   </span>
                 ) : burstSaysNoDamage(b) ? (
-                  <Chip kind="warn">未打出伤害</Chip>
+                  <Chip kind="warn">{tr("report.burstLedger.noDamage")}</Chip>
                 ) : null}
                 {immunities.map((d) => (
                   <Chip key={d.spellId} kind="bad">
-                    打进免疫 {d.spellName} {d.overlapSeconds.toFixed(1)}s
+                    {tr("report.burstLedger.intoImmunity", {
+                      spell: d.spellName,
+                      s: d.overlapSeconds.toFixed(1),
+                    })}
                   </Chip>
                 ))}
                 {walls.map((d) => (
                   <Chip key={d.spellId} kind="warn">
-                    对方减伤 {d.spellName} {d.overlapSeconds.toFixed(1)}s
+                    {tr("report.burstLedger.intoWall", {
+                      spell: d.spellName,
+                      s: d.overlapSeconds.toFixed(1),
+                    })}
                   </Chip>
                 ))}
                 {b.allyCDsOverlapping.length > 0 ? (
                   <Chip kind="good">
-                    协同{" "}
-                    {b.allyCDsOverlapping.map((a) => a.playerName).join("、")}
+                    {tr("report.burstLedger.synced", {
+                      names: b.allyCDsOverlapping
+                        .map((a) => a.playerName)
+                        .join(tr("report.common.listSep")),
+                    })}
                   </Chip>
                 ) : (
-                  <Chip kind="dim">单开</Chip>
+                  <Chip kind="dim">{tr("report.burstLedger.solo")}</Chip>
                 )}
-                {t?.died && <Chip kind="kill">击杀</Chip>}
+                {t?.died && <Chip kind="kill">{tr("report.common.kill")}</Chip>}
                 <SeekBtn tS={b.fromSeconds} unitName={p.name} onSeek={onSeek} />
               </div>
             );
@@ -186,14 +204,18 @@ export function BurstLedgerCard({
       )}
 
       {p.bursts.length === 0 && (
-        <p className="rpt-ledger-empty">本场无爆发窗口记录。</p>
+        <p className="rpt-ledger-empty">{tr("report.burstLedger.noBursts")}</p>
       )}
 
       {p.targeting.length === 0 ? (
-        <p className="rpt-ledger-empty">本场无窗口目标纪律记录。</p>
+        <p className="rpt-ledger-empty">
+          {tr("report.burstLedger.noTargeting")}
+        </p>
       ) : (
         <div className="rpt-ledger-section">
-          <span className="rpt-stats-detail-title">窗口目标纪律</span>
+          <span className="rpt-stats-detail-title">
+            {tr("report.burstLedger.targeting")}
+          </span>
           {p.targeting.map((w, k) => {
             const targetEval = targetEvalByFrom.get(w.windowFromSeconds);
             return (
@@ -201,7 +223,11 @@ export function BurstLedgerCard({
                 <span className="rpt-stats-detail-t">
                   {fmtTime(w.windowFromSeconds)}–{fmtTime(w.windowToSeconds)}
                 </span>
-                <span>窗口目标 {w.windowTargetName}</span>
+                <span>
+                  {tr("report.burstLedger.windowTarget", {
+                    name: w.windowTargetName,
+                  })}
+                </span>
                 <Chip
                   kind={
                     w.onTargetPct >= ON_TARGET_GOOD_PCT || w.followedTeamFocus
@@ -209,14 +235,16 @@ export function BurstLedgerCard({
                       : "bad"
                   }
                 >
-                  命中 {w.onTargetPct}%
+                  {tr("report.burstLedger.onTarget", { pct: w.onTargetPct })}
                 </Chip>
                 {w.topOffTarget &&
                   w.onTargetPct < ON_TARGET_GOOD_PCT &&
                   !w.followedTeamFocus && (
                     <span className="rpt-stats-dim">
-                      最大分流 {w.topOffTarget.unitName}(
-                      {fmtDmg(w.topOffTarget.damage)})
+                      {tr("report.burstLedger.topOffTarget", {
+                        name: w.topOffTarget.unitName,
+                        dmg: fmtDmg(w.topOffTarget.damage),
+                      })}
                     </span>
                   )}
                 {/* 2026-08-18 重设计:绿色「目标合理」合格证已删 —— 它与红色
@@ -225,8 +253,10 @@ export function BurstLedgerCard({
                     场上存在 prime 目标),其余不下判断。 */}
                 {targetEval?.betterTargetExists && (
                   <Chip kind="bad">
-                    该打 {targetEval.betterTargetName}(
-                    {targetEval.betterTargetSpec})
+                    {tr("report.burstLedger.betterTarget", {
+                      name: targetEval.betterTargetName ?? "",
+                      spec: targetEval.betterTargetSpec ?? "",
+                    })}
                   </Chip>
                 )}
                 <SeekBtn
@@ -241,10 +271,12 @@ export function BurstLedgerCard({
       )}
 
       {p.kicks.length === 0 ? (
-        <p className="rpt-ledger-empty">本场无打断记录。</p>
+        <p className="rpt-ledger-empty">{tr("report.burstLedger.noKicks")}</p>
       ) : (
         <div className="rpt-ledger-section">
-          <span className="rpt-stats-detail-title">打断审计</span>
+          <span className="rpt-stats-detail-title">
+            {tr("report.burstLedger.kickAudit")}
+          </span>
           {p.kicks.map((kk, k) => (
             <div key={k} className="rpt-ledger-row">
               <span className="rpt-stats-detail-t">
@@ -252,27 +284,37 @@ export function BurstLedgerCard({
               </span>
               <span>{kk.kickSpellName}</span>
               {kk.result === "landed" && (
-                <Chip kind="good">打断 {kk.interruptedSpellName}</Chip>
+                <Chip kind="good">
+                  {tr("report.kicks.landed", {
+                    spell: kk.interruptedSpellName ?? "",
+                  })}
+                </Chip>
               )}
               {kk.result === "juked" && (
                 <Chip kind="bad">
                   {kk.jukedChannelStoppedAgoS !== undefined
-                    ? `被骗掉(${kk.jukedBySpellName} 引导刚停)`
-                    : `被假读条骗掉(${kk.jukedBySpellName})`}
+                    ? tr("report.kicks.jukedChannel", {
+                        spell: kk.jukedBySpellName ?? "",
+                      })
+                    : tr("report.kicks.jukedFake", {
+                        spell: kk.jukedBySpellName ?? "",
+                      })}
                 </Chip>
               )}
               {kk.result === "silenced" && (
                 <Chip kind="dim">
                   {kk.openCastSpellName
-                    ? `沉默生效(${kk.openCastSpellName} 读条未完成)`
-                    : "沉默生效(未打断读条)"}
+                    ? tr("report.kicks.silencedOpen", {
+                        spell: kk.openCastSpellName,
+                      })
+                    : tr("report.kicks.silenced")}
                 </Chip>
               )}
               {kk.result === "missed" && (
-                <Chip kind="warn">{missedKickLabel(kk)}</Chip>
+                <Chip kind="warn">{missedKickLabel(kk, lang)}</Chip>
               )}
               {kk.result === "unknown" && (
-                <Chip kind="dim">旧档无读条数据</Chip>
+                <Chip kind="dim">{tr("report.kicks.unknown")}</Chip>
               )}
               <SeekBtn tS={kk.atSeconds} unitName={p.name} onSeek={onSeek} />
             </div>

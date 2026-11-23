@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { classColor, classGlyph } from "../data/gameConstants";
 import {
   auraCategory,
@@ -18,7 +19,7 @@ import {
 } from "../derive/casts";
 import { clusterGcdCasts } from "../derive/gcdCluster";
 import type { ReplayTrack } from "../derive/replay";
-import { shortUnitName } from "../derive/teamSide";
+import { shortUnitName, teamSideLabel } from "../derive/teamSide";
 import type { ReportSource } from "../derive/types";
 import type { VulnBand } from "../derive/vulnWindows";
 import { SpellIcon } from "./SpellIcon";
@@ -139,6 +140,7 @@ const LaneBody = memo(function LaneBody({
   onDeath: (unitId: string, tMs: number) => void;
   yFor: (ts: number) => number;
 }) {
+  const { t: tt } = useT();
   const fmtT = (ms: number) => {
     const sec = Math.max(0, (ms - startTime) / 1000);
     return fmtTime(sec);
@@ -202,7 +204,10 @@ const LaneBody = memo(function LaneBody({
                         (m) =>
                           `${fmtT(m.t)} ${m.spellName}${m.targetName ? ` → ${m.targetName}` : ""}`,
                       )
-                      .join("\n") + (hasSeek ? "\n(点击定位)" : "");
+                      .join("\n") +
+                    (hasSeek
+                      ? `\n${tt("report.common.clickToSeek").trim()}`
+                      : "");
                   const visMinis = cl.minis.slice(0, MAX_MINIS);
                   const extra = cl.minis.length - visMinis.length;
                   return (
@@ -305,9 +310,13 @@ const LaneBody = memo(function LaneBody({
                         ? () => onDeath(tr.unitId, tr.deathT!)
                         : undefined
                     }
-                    title={hasDeathClick ? "点击看死亡回顾" : undefined}
+                    title={
+                      hasDeathClick
+                        ? tt("report.common.clickDeathRecap")
+                        : undefined
+                    }
                   >
-                    阵亡
+                    {tt("report.common.died")}
                   </div>
                 )}
               </div>
@@ -366,6 +375,7 @@ export function GcdSwimlane({
   compact?: boolean;
   onCompactChange?: (v: boolean) => void;
 }) {
+  const { t: tt, lang } = useT();
   const durationSec = Math.max(1, (endTime - startTime) / 1000);
   const laneH = durationSec * PX_PER_SEC;
   // useCallback: the layout useMemo depends on this; a bare arrow function
@@ -535,14 +545,14 @@ export function GcdSwimlane({
   return (
     <div className="rpt-gcd">
       <div className="rpt-gcd-head">
-        <span className="rpt-card-label">GCD 模式 · 每 GCD 谁做了什么</span>
-        <span className="rpt-gcd-legend">▮ 大招</span>
+        <span className="rpt-card-label">{tt("report.gcd.title")}</span>
+        <span className="rpt-gcd-legend">{tt("report.gcd.legendMajor")}</span>
         {onCompactChange && (
           <span className="rpt-mode-seg rpt-gcd-density">
             {(
               [
-                [false, "标准"],
-                [true, "紧凑"],
+                [false, tt("report.gcd.density.standard")],
+                [true, tt("report.gcd.density.compact")],
               ] as const
             ).map(([v, label]) => (
               <button
@@ -555,7 +565,7 @@ export function GcdSwimlane({
             ))}
           </span>
         )}
-        <span className="rpt-gcd-sub">与地图共享时间轴</span>
+        <span className="rpt-gcd-sub">{tt("report.gcd.sharedAxis")}</span>
       </div>
 
       {/* Player chips grouped by team (user feedback 2026-08-05): two labeled
@@ -565,8 +575,8 @@ export function GcdSwimlane({
       <div className="rpt-gcd-chips">
         {(
           [
-            ["friendly", "我方"],
-            ["enemy", "敌方"],
+            ["friendly", teamSideLabel("friendly", lang)],
+            ["enemy", teamSideLabel("enemy", lang)],
           ] as const
         ).map(([side, label]) => {
           const group = orderedTracks.filter((tr) =>
@@ -613,11 +623,15 @@ export function GcdSwimlane({
                 key={i}
                 className="rpt-gcd-band-chip"
                 onClick={() => onSeekT(fromMs)}
-                title="点击定位(地图同步)"
+                title={tt("report.gcd.bandChipTitle")}
               >
                 {fmtTime(Math.max(0, (fromMs - startTime) / 1000))}{" "}
-                {b.kind === "burst" ? "击杀尝试" : "脆弱"} →{" "}
-                {shortUnitName(b.targetName)}
+                {tt(
+                  b.kind === "burst"
+                    ? "report.common.burstWindow"
+                    : "report.common.vulnWindow",
+                )}{" "}
+                → {shortUnitName(b.targetName)}
               </button>
             );
           })}
@@ -632,7 +646,7 @@ export function GcdSwimlane({
         // only be scrolled with a mouse — keyboard users cannot reach it
         tabIndex={0}
         role="group"
-        aria-label="GCD 泳道(可滚动)"
+        aria-label={tt("report.gcd.scrollAria")}
       >
         <div className="rpt-gcd-body" style={{ height: contentH + HEAD_H }}>
           {/* Timeline axis */}

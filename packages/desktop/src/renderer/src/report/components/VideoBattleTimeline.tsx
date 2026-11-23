@@ -1,5 +1,6 @@
 import { useRef } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { shortUnitName } from "../derive/teamSide";
 import type { TimelineData } from "../derive/timeline";
 import type { VulnBand } from "../derive/vulnWindows";
@@ -41,6 +42,7 @@ export function VideoBattleTimeline({
    * not respond to seeks. */
   disabled?: boolean;
 }) {
+  const { t } = useT();
   const durS = Math.max(1, (data.end - data.start) / 1000);
   const dragging = useRef(false);
   const x = (s: number) =>
@@ -62,7 +64,7 @@ export function VideoBattleTimeline({
       className={disabled ? "rpt-video-bt-svg disabled" : "rpt-video-bt-svg"}
       data-testid="video-battle-timeline"
       role="slider"
-      aria-label="战斗时间轴(点击或拖动定位录像)"
+      aria-label={t("report.video.battleTimelineAria")}
       aria-valuemin={0}
       aria-valuemax={Math.round(durS)}
       aria-valuenow={curBattleS != null ? Math.round(curBattleS) : 0}

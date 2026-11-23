@@ -1,6 +1,8 @@
 import { fmtTime } from "@gladlog/analysis";
 import { useMemo, useState } from "react";
 
+import type { MessageKey } from "../../../../shared/i18n";
+import { useT } from "../../i18n/LangProvider";
 import type {
   Mistake,
   MistakeMoment,
@@ -13,11 +15,13 @@ import {
 } from "../derive/mistakes";
 import { UnitName } from "./UnitName";
 
-
-const SEVERITY_CHIP: Record<MistakeSeverity, { cls: string; label: string }> = {
-  major: { cls: "bad", label: "重大" },
-  average: { cls: "warn", label: "一般" },
-  minor: { cls: "dim", label: "轻微" },
+const SEVERITY_CHIP: Record<
+  MistakeSeverity,
+  { cls: string; label: MessageKey }
+> = {
+  major: { cls: "bad", label: "report.mistakeSev.major" },
+  average: { cls: "warn", label: "report.mistakeSev.average" },
+  minor: { cls: "dim", label: "report.mistakeSev.minor" },
 };
 
 /**
@@ -54,6 +58,7 @@ export function MistakesCard({
   mistakes: Mistake[];
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   const { own, teammates } = useMemo(
     () => splitMistakesByOwner(mistakes),
     [mistakes],
@@ -82,9 +87,13 @@ export function MistakesCard({
     return (
       <div className="rpt-ledger" data-testid="mistakes-card">
         <div className="rpt-ledger-head">
-          <span className="rpt-ledger-title">失误清单</span>
+          <span className="rpt-ledger-title">
+            {t("report.mistakesCard.title")}
+          </span>
         </div>
-        <p className="rpt-ledger-empty">本场未检出失误 —— 干净局。</p>
+        <p className="rpt-ledger-empty">
+          {t("report.mistakesCard.emptyMatch")}
+        </p>
       </div>
     );
 
@@ -98,13 +107,15 @@ export function MistakesCard({
   return (
     <div className="rpt-ledger" data-testid="mistakes-card">
       <div className="rpt-ledger-head">
-        <span className="rpt-ledger-title">失误清单</span>
+        <span className="rpt-ledger-title">
+          {t("report.mistakesCard.title")}
+        </span>
         <div className="rpt-ledger-tabs rpt-mistakes-filter">
           <button
             className={sel === null ? "active" : ""}
             onClick={() => setSel(null)}
           >
-            全部 {ownMoments.length}
+            {t("report.mistakesCard.allN", { n: ownMoments.length })}
           </button>
           {(Object.keys(SEVERITY_CHIP) as MistakeSeverity[]).map((s) => (
             <button
@@ -112,17 +123,17 @@ export function MistakesCard({
               className={sel === s ? "active" : ""}
               onClick={() => setSel((cur) => (cur === s ? null : s))}
             >
-              {SEVERITY_CHIP[s].label} {counts[s]}
+              {t(SEVERITY_CHIP[s].label)} {counts[s]}
             </button>
           ))}
         </div>
-        <span className="rpt-stats-dim">确定性规则直出</span>
+        <span className="rpt-stats-dim">{t("report.mistakesCard.source")}</span>
       </div>
 
       {ownMoments.length === 0 ? (
         // owner 自己干净、但队友有 —— 不能只剩一排 0 和一个折叠按钮,那看起来
         // 像「什么都没检出」。零失误是**正面信号**,要说出来。
-        <p className="rpt-ledger-empty">你本人未检出失误 —— 干净局。</p>
+        <p className="rpt-ledger-empty">{t("report.mistakesCard.emptyOwn")}</p>
       ) : (
         visible.map((moment, i) => (
           <MomentRow key={i} moment={moment} onSeek={onSeek} />
@@ -135,7 +146,7 @@ export function MistakesCard({
           onClick={() => setShowAll(true)}
           data-testid="mistakes-show-all"
         >
-          +{hidden} 个时刻已折叠 —— 点击展开
+          {t("report.mistakesCard.folded", { n: hidden })}
         </button>
       )}
 
@@ -146,7 +157,14 @@ export function MistakesCard({
             onClick={() => setShowMates((v) => !v)}
             data-testid="mistakes-toggle-mates"
           >
-            队友 {mateMoments.length} 个时刻 {showMates ? "▲ 收起" : "▼ 展开"}
+            {t("report.mistakesCard.mates", {
+              n: mateMoments.length,
+              toggle: t(
+                showMates
+                  ? "report.mistakesCard.collapse"
+                  : "report.mistakesCard.expand",
+              ),
+            })}
           </button>
           {showMates &&
             mateMoments.map((moment, i) => (
@@ -166,23 +184,27 @@ function MomentRow({
   moment: MistakeMoment;
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   const [head, ...rest] = moment.items;
   if (!head) return null;
   const chip = SEVERITY_CHIP[moment.severity];
   return (
     <div className="rpt-ledger-row">
       <span className="rpt-stats-detail-t">
-        {moment.timed && moment.tS > 0 ? fmtTime(moment.tS) : "全场"}
+        {moment.timed && moment.tS > 0
+          ? fmtTime(moment.tS)
+          : t("report.common.wholeMatch")}
       </span>
       <span className={`rpt-ledger-chip rpt-ledger-chip-${chip.cls}`}>
-        {chip.label}
+        {t(chip.label)}
       </span>
       <span>
         <UnitName name={head.unitName} /> · {head.label}
         {rest.length > 0 && (
           <span className="rpt-stats-dim">
-            {" "}
-            ＋同一波:{rest.map((r) => r.label).join("、")}
+            {t("report.mistakesCard.sameWave", {
+              list: rest.map((r) => r.label).join(t("report.common.listSep")),
+            })}
           </span>
         )}
       </span>
@@ -190,7 +212,7 @@ function MomentRow({
       {onSeek && moment.timed && moment.tS > 0 && (
         <button
           className="rpt-stats-detail-jump"
-          title="回放此刻"
+          title={t("report.common.replayHere")}
           onClick={() => onSeek(Math.max(0, moment.tS - 3), head.seekNames)}
         >
           ▶

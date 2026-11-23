@@ -8,6 +8,7 @@ import {
   toVideoSeconds,
 } from "../../../../shared/videoTime";
 import { bridge } from "../../bridge";
+import { useT } from "../../i18n/LangProvider";
 import type { AnalysisRunInput } from "../derive/analysisInput";
 import { resolveJumpTarget } from "../derive/jumpTarget";
 import { useAnalysisInput } from "../derive/offThread/useAnalysisInput";
@@ -30,7 +31,7 @@ import {
   VideoFeed,
 } from "./VideoFeed";
 import { VideoMomentList } from "./VideoMomentList";
-import { type StripMark,VideoMomentStrip } from "./VideoMomentStrip";
+import { type StripMark, VideoMomentStrip } from "./VideoMomentStrip";
 
 /** Remembered tab of the right-hand card (2a: the feed toggle became three
  * tabs, the old FEED_PREF_KEY is retired). Written only when the user clicks a
@@ -76,6 +77,7 @@ export function VideoTab({
   timeline?: TimelineData;
   bands?: VulnBand[];
 }) {
+  const { t, lang } = useT();
   const ref = useRef<HTMLVideoElement | null>(null);
   const [durationS, setDurationS] = useState(0);
   const [aiChips, setAiChips] = useState<AiChipLike[]>([]);
@@ -145,8 +147,10 @@ export function VideoTab({
   const startBoundS = win.windowStartS; // playback / scrubber lower bound
 
   const moments: VideoMoment[] = useMemo(
-    () => deriveVideoMoments(source, aiChips),
-    [source, aiChips],
+    // Same per-language key-moments slot as the AI panel's axis
+    // (deriveKeyMoments(source, undefined, lang)): computed once per language.
+    () => deriveVideoMoments(source, aiChips, lang),
+    [source, aiChips, lang],
   );
   useEffect(() => {
     momentsRef.current = moments;
@@ -348,7 +352,6 @@ export function VideoTab({
     // neither of which should remount this effect — a remount re-seeks and
     // snaps playback back to offsetS, and neither input has anything to do
     // with which second the player should be at.
-     
   }, [source, startedAt, offsetS, endS, startBoundS]);
 
   // Feed eviction heartbeat: an item pushed out is first marked `out` to play
@@ -430,13 +433,14 @@ export function VideoTab({
         <div className="rpt-video-tab-main">
           {win.missingHeadS > 0.5 && (
             <div className="rpt-video-note">
-              缺头 {Math.round(win.missingHeadS)} 秒 ——
-              录像比开场晚,这段没有画面
+              {t("report.video.missingHead", {
+                s: Math.round(win.missingHeadS),
+              })}
             </div>
           )}
           {playbackFailed && (
             <div className="rpt-video-note rpt-video-note--error">
-              无法播放该录像(建议 OBS 录制格式设为 Hybrid MP4)
+              {t("report.video.playbackFailed")}
             </div>
           )}
           {/* The video element stays mounted across the noFootage state (the
@@ -451,20 +455,21 @@ export function VideoTab({
           />
           {noFootage ? (
             <p className="rpt-dim rpt-video-tab-empty">
-              本轮不在这段录像范围内(录像已经结束,比如 OBS 提前停录)——
-              没有画面可放。下方战斗时间轴与右侧时刻清单来自战斗日志,仍可查看。
+              {t("report.video.noFootage")}
             </p>
           ) : (
             <>
               <div
                 className="rpt-video-controls"
                 role="group"
-                aria-label="录像播放控制"
+                aria-label={t("report.video.controlsAria")}
               >
                 <button
                   type="button"
                   className="rpt-video-ctrl-play"
-                  aria-label={playing ? "暂停" : "播放"}
+                  aria-label={t(
+                    playing ? "report.video.pause" : "report.video.play",
+                  )}
                   onClick={togglePlay}
                 >
                   {playing ? "⏸" : "▶"}
@@ -483,7 +488,7 @@ export function VideoTab({
                   <input
                     type="range"
                     className="rpt-video-ctrl-range"
-                    aria-label="播放进度(本轮范围内)"
+                    aria-label={t("report.video.progressAria")}
                     min={startBoundS}
                     max={endS}
                     step={0.1}
@@ -523,7 +528,9 @@ export function VideoTab({
                 <button
                   type="button"
                   className="rpt-video-ctrl-mute"
-                  aria-label={muted ? "取消静音" : "静音"}
+                  aria-label={t(
+                    muted ? "report.video.unmute" : "report.video.mute",
+                  )}
                   onClick={toggleMute}
                 >
                   {muted ? "🔇" : "🔊"}
@@ -531,8 +538,8 @@ export function VideoTab({
                 <button
                   type="button"
                   className="rpt-video-ctrl-mute"
-                  aria-label="全屏"
-                  title="全屏"
+                  aria-label={t("report.video.fullscreen")}
+                  title={t("report.video.fullscreen")}
                   onClick={() => {
                     try {
                       void ref.current?.requestFullscreen();
@@ -549,7 +556,7 @@ export function VideoTab({
           {timeline && (
             <div className="rpt-video-bt" data-testid="video-bt-card">
               <span className="rpt-card-label">
-                战斗时间轴 —— 点/拖定位录像
+                {t("report.video.battleTimeline")}
               </span>
               <VideoBattleTimeline
                 data={timeline}
@@ -581,28 +588,28 @@ export function VideoTab({
               className={sideTab === "feed" ? "active" : ""}
               onClick={() => pickSideTab("feed")}
             >
-              播放 feed
+              {t("report.video.tab.feed")}
             </button>
             <button
               data-testid="video-side-all"
               className={sideTab === "all" ? "active" : ""}
               onClick={() => pickSideTab("all")}
             >
-              全部时刻 {moments.length}
+              {t("report.video.tab.all", { n: moments.length })}
             </button>
             <button
               data-testid="video-side-ai"
               className={sideTab === "ai" ? "active" : ""}
               onClick={() => pickSideTab("ai")}
             >
-              AI 发现 {moments.filter((m) => m.kind === "ai").length}
+              {t("report.video.tab.ai", {
+                n: moments.filter((m) => m.kind === "ai").length,
+              })}
             </button>
           </div>
           {sideTab === "feed" &&
             (noFootage ? (
-              <p className="rpt-engage-empty">
-                无画面可播 —— 看「全部时刻」清单。
-              </p>
+              <p className="rpt-engage-empty">{t("report.video.feedEmpty")}</p>
             ) : (
               <VideoFeed
                 items={feed.items}
@@ -626,7 +633,9 @@ export function VideoTab({
                     }
               }
               emptyText={
-                source.kind === "shuffleRound" ? "本轮无记录。" : "本场无记录。"
+                source.kind === "shuffleRound"
+                  ? t("report.common.thisRoundNoRecords")
+                  : t("report.common.thisMatchNoRecords")
               }
             />
           )}
@@ -646,15 +655,12 @@ export function VideoTab({
                       v.currentTime = seekTargetS(battleS, win);
                     }
               }
-              emptyText="尚无 AI 发现 —— 跑一次 AI 分析后,时间轴 finding 会出现在这里。"
+              emptyText={t("report.video.aiEmpty")}
             />
           )}
         </div>
       </div>
-      <p className="rpt-dim rpt-video-tab-hint">
-        标记条:金带 = 爆发窗,✕ = 死亡,⚠ = 失误,✦ = AI 发现,点击定位;
-        战斗时间轴是主 seek 面,控制条细进度条做精确微调。
-      </p>
+      <p className="rpt-dim rpt-video-tab-hint">{t("report.video.hint")}</p>
     </div>
   );
 }

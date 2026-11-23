@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
+
 /**
  * ⋯ overflow for workflow actions (UI review 2026-08-21 #1): copy / export /
  * report-a-bug are things you do after reading, not while — they leave the
@@ -17,6 +19,7 @@ export function ReportOverflowMenu({
     onClick: () => void;
   }>;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -41,8 +44,8 @@ export function ReportOverflowMenu({
         type="button"
         className="rpt-btn rpt-overflow-btn"
         data-testid="rpt-overflow-btn"
-        aria-label="更多操作"
-        title="更多操作:复制 Markdown / 导出图片 / 报告问题"
+        aria-label={t("report.overflow.more")}
+        title={t("report.overflow.moreTitle")}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

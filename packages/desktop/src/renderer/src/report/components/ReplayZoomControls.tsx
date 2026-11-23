@@ -1,3 +1,5 @@
+import { useT } from "../../i18n/LangProvider";
+
 /**
  * Zoom overlay in the bottom-right corner of the map. The class names are a
  * contract with report.replayzoom.test.tsx — do not rename them.
@@ -8,18 +10,19 @@ export function ReplayZoomControls(props: {
   onZoomOut: () => void;
   onReset: () => void;
 }) {
+  const { t } = useT();
   return (
     <span className="rpt-replay-zoom-group">
       <button
         className="rpt-replay-zoom-btn"
-        title="放大(也可 ⌘/Ctrl+滚轮;放大后普通滚轮即可继续缩放,拖拽平移)"
+        title={t("report.zoom.inTitle")}
         onClick={props.onZoomIn}
       >
         +
       </button>
       <button
         className="rpt-replay-zoom-btn"
-        title="缩小"
+        title={t("report.zoom.outTitle")}
         onClick={props.onZoomOut}
       >
         −
@@ -27,10 +30,10 @@ export function ReplayZoomControls(props: {
       {props.zoomLevel != null && (
         <button
           className="rpt-replay-zoom-reset"
-          title="复位缩放(或双击地图)"
+          title={t("report.zoom.resetTitle")}
           onClick={props.onReset}
         >
-          ⤢ {props.zoomLevel}× 复位
+          {t("report.zoom.reset", { z: props.zoomLevel })}
         </button>
       )}
     </span>

@@ -1,9 +1,9 @@
 import { fmtTime } from "@gladlog/analysis";
 
+import { useT } from "../../i18n/LangProvider";
 import { shortUnitName } from "../derive/teamSide";
 import type { TimeRange } from "../derive/timeRange";
 import type { VulnBand } from "../derive/vulnWindows";
-
 
 /**
  * Time-window toolbar (phase 4 ①; a combination of WCL's phase dropdown and
@@ -27,6 +27,7 @@ export function TimeRangeBar({
   // them (measured: 36.734 shows as 0:36), so the round-trip match uses a 1s
   // tolerance — adjacent windows' start times differ by far more than 1s, so
   // there is no mismatch risk.
+  const { t } = useT();
   const selectedIdx = range
     ? bands.findIndex(
         (b) =>
@@ -36,7 +37,7 @@ export function TimeRangeBar({
     : -1;
   return (
     <div className="rpt-trb" data-testid="time-range-bar">
-      <span className="rpt-card-label">时间窗</span>
+      <span className="rpt-card-label">{t("report.timeRange.label")}</span>
       <select
         value={selectedIdx >= 0 ? String(selectedIdx) : ""}
         onChange={(e) => {
@@ -44,15 +45,15 @@ export function TimeRangeBar({
           const b = bands[idx];
           onChange(b ? { fromS: b.fromS, toS: b.toS } : null);
         }}
-        title="选一个窗口(或在曲线上拖选)"
+        title={t("report.timeRange.pickTitle")}
       >
-        <option value="">全场</option>
+        <option value="">{t("report.common.wholeMatch")}</option>
         {bands.map((b, i) => (
           <option key={i} value={String(i)}>
             {fmtTime(b.fromS)}–{fmtTime(b.toS)}{" "}
             {b.kind === "burst"
-              ? `击杀尝试 → ${shortUnitName(b.targetName)}`
-              : `${shortUnitName(b.targetName)} 脆弱`}
+              ? t("report.band.burstTo", { name: shortUnitName(b.targetName) })
+              : t("report.band.vuln", { name: shortUnitName(b.targetName) })}
           </option>
         ))}
       </select>
@@ -63,11 +64,13 @@ export function TimeRangeBar({
             {Math.round(range.toS - range.fromS)}s)
           </span>
           <button className="rpt-trb-clear" onClick={() => onChange(null)}>
-            清除
+            {t("report.common.clear")}
           </button>
         </>
       )}
-      {!range && <span className="rpt-trb-hint">在曲线上拖选可聚焦时间段</span>}
+      {!range && (
+        <span className="rpt-trb-hint">{t("report.timeRange.hint")}</span>
+      )}
     </div>
   );
 }

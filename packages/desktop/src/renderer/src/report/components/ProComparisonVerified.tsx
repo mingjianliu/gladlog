@@ -81,7 +81,7 @@ export function ProComparisonVerified({
   const [error, setError] = useState<string>("");
   // UI language, which is also the coach reply language: decides the
   // panel/table copy language (spec §6.12).
-  const { lang } = useT();
+  const { lang, t } = useT();
   /** The mount check (getState → getCached) came back with nothing in flight
    * and nothing cached — the precondition for the auto-run backfill below. */
   const [emptyChecked, setEmptyChecked] = useState(false);
@@ -294,11 +294,7 @@ export function ProComparisonVerified({
     // just return, setting neither an error nor a state. The panel stayed blank
     // and neither the user nor a developer got any clue. Now it says so.
     if (!input) {
-      setError(
-        lang === "zh"
-          ? "无法从本场日志推出对比所需的指标(找不到记录者/指标计算失败),暂无法对比。"
-          : "Cannot derive comparison metrics from this match (no owner found or metrics failed).",
-      );
+      setError(t("report.pro.noInput"));
       setState("error");
       return;
     }
@@ -379,17 +375,17 @@ export function ProComparisonVerified({
 
   const buttonText =
     state === "running"
-      ? "对比中…"
+      ? t("report.pro.running")
       : state === "done"
-        ? "重新对比"
-        : "vs 高分群体";
+        ? t("report.pro.again")
+        : t("report.pro.run");
 
   return (
     <div className="rpt-ai-panel">
       {error && <div className="rpt-ai-error">{error}</div>}
       {result && result.cellMeta && (
         <div className="rpt-ai-body">
-          <h3>{lang === "zh" ? "vs 同水平高手" : "vs your cohort"}</h3>
+          <h3>{t("report.pro.heading")}</h3>
           <p
             style={{
               color: "var(--ink-2)",
@@ -398,26 +394,25 @@ export function ProComparisonVerified({
             }}
           >
             {result.cellMeta.enemyComp
-              ? lang === "zh"
-                ? `对阵同阵容(${result.cellMeta.enemyComp})的高手场 · `
-                : `vs same comp (${result.cellMeta.enemyComp}) · `
+              ? t("report.pro.sameComp", { comp: result.cellMeta.enemyComp })
               : ""}
             {lang === "zh"
               ? specZh(result.cellMeta.spec)
               : result.cellMeta.spec}{" "}
             · {result.cellMeta.bracket} · {result.cellMeta.archetype} ·{" "}
             {result.cellMeta.buildGroup} build ·{" "}
-            {lang === "zh"
-              ? `样本 ${result.cellMeta.sampleN} 场`
-              : `N=${result.cellMeta.sampleN}`}
+            {t("report.pro.sampleN", { n: result.cellMeta.sampleN })}
             {result.cellMeta.enemyComp &&
               result.cellMeta.durationP50 != null && (
                 <>
-                  {" · 时长中位 "}
+                  {t("report.pro.durationMedian")}
                   {Math.floor(result.cellMeta.durationP50 / 60)}:
                   {String(result.cellMeta.durationP50 % 60).padStart(2, "0")}
                   {result.cellMeta.firstKillTop
-                    ? ` · ${result.cellMeta.firstKillTop.pct}% 先杀 ${result.cellMeta.firstKillTop.spec}`
+                    ? t("report.pro.firstKill", {
+                        pct: result.cellMeta.firstKillTop.pct,
+                        spec: result.cellMeta.firstKillTop.spec,
+                      })
                     : ""}
                 </>
               )}
@@ -439,13 +434,11 @@ export function ProComparisonVerified({
                   fontStyle: "italic",
                 }}
               >
-                {lang === "zh"
-                  ? "仅展示实测数据(AI 解说未生成)"
-                  : "Showing measured numbers only"}
+                {t("report.pro.measuredOnly")}
               </p>
               {result.droppedReason && (
                 <p style={{ color: "var(--mute)", fontSize: "11px" }}>
-                  {lang === "zh" ? "原因:" : "Reason: "}
+                  {t("report.pro.reason")}
                   {result.droppedReason}
                 </p>
               )}
@@ -456,9 +449,7 @@ export function ProComparisonVerified({
       {result && !result.cellMeta && (
         <div className="rpt-ai-body">
           <p style={{ color: "var(--ink-2)", fontSize: "12px" }}>
-            {lang === "zh"
-              ? "该专精/阵容的高手参照样本还不够,暂无法对比。"
-              : "Not enough cohort data for this build and comp yet."}
+            {t("report.pro.notEnough")}
           </p>
         </div>
       )}
@@ -476,31 +467,21 @@ export function ProComparisonVerified({
           result). */}
       {!result && !error && (
         <div className="rpt-ai-body">
-          <h3>{lang === "zh" ? "vs 同水平高手" : "vs your cohort"}</h3>
+          <h3>{t("report.pro.heading")}</h3>
           <p className="rpt-ai-none" data-testid="cohort-empty">
             {state === "running"
               ? [
-                  lang === "zh"
-                    ? "正在与同水平高手对比…"
-                    : "Comparing against your cohort…",
+                  t("report.pro.comparing"),
                   aiCfg ? backendModelLabel(aiCfg.backend, aiCfg.model) : null,
                   elapsedS != null
-                    ? lang === "zh"
-                      ? `已 ${fmtElapsed(elapsedS)}`
-                      : `${fmtElapsed(elapsedS)} elapsed`
+                    ? t("report.pro.elapsed", { t: fmtElapsed(elapsedS) })
                     : null,
                   cliWaitHint(aiCfg?.backend, lang),
-                  autoRan
-                    ? lang === "zh"
-                      ? "本场已有 AI 分析但缺对比,已自动补跑"
-                      : "auto-run: this match had an analysis but no comparison"
-                    : null,
+                  autoRan ? t("report.pro.autoRan") : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")
-              : lang === "zh"
-                ? "本场还没有群体对比结果 —— 点上方「AI 分析」一键同跑,或点下面的按钮单独对比。"
-                : "No cohort comparison for this match yet — run the AI analysis above, or compare on its own below."}
+              : t("report.pro.empty")}
           </p>
         </div>
       )}
@@ -515,9 +496,10 @@ export function ProComparisonVerified({
             marginTop: "4px",
           }}
         >
-          {lang === "zh"
-            ? `本场治疗空窗 ${(input.healerMetrics.healingGapSeconds ?? 0).toFixed(1)}s · ${input.healerMetrics.healingGapCount} 次`
-            : `Healing gaps this match: ${(input.healerMetrics.healingGapSeconds ?? 0).toFixed(1)}s over ${input.healerMetrics.healingGapCount} gap(s)`}
+          {t("report.pro.healingGaps", {
+            s: (input.healerMetrics.healingGapSeconds ?? 0).toFixed(1),
+            n: input.healerMetrics.healingGapCount,
+          })}
         </p>
       )}
       {/* hideActions means "once there is a result, don't put a duplicate

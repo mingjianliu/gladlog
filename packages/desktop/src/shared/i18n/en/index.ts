@@ -5,7 +5,10 @@ import { enDev } from "./dev";
 import { enMatchList } from "./matchList";
 import { enNav } from "./nav";
 import { enRecorder } from "./recorder";
+import { enReportAi } from "./reportAi";
+import { enReportCards } from "./reportCards";
 import { enReportDerive } from "./reportDerive";
+import { enReportReplay } from "./reportReplay";
 import { enSettings } from "./settings";
 import { enUpdate } from "./update";
 
@@ -20,6 +23,9 @@ export const enMessages = {
   ...enRecorder,
   ...enDev,
   ...enReportDerive,
+  ...enReportCards,
+  ...enReportReplay,
+  ...enReportAi,
 } satisfies Messages;
 
 // Excess-property checks do not apply to spread members, so `satisfies` alone

@@ -1,6 +1,7 @@
 import { fmtTime } from "@gladlog/analysis";
 import type { ReactNode } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { ChipIcon } from "./SpellInline";
 
 /** Same shape as the deep-dive chips (matching deepDive.chips in
@@ -51,6 +52,7 @@ export function WindowAnalysisCard({
   onJumpT: (tSeconds: number, unitNames: string[]) => void;
   onRetry: () => void;
 }) {
+  const { t } = useT();
   return (
     <div
       className="rpt-finding rpt-finding-low rpt-window-ai"
@@ -58,16 +60,22 @@ export function WindowAnalysisCard({
     >
       <div className="rpt-finding-head">
         <span className="rpt-finding-title">
-          选段分析 {fmtTime(range.fromS)}–{fmtTime(range.toS)}
+          {t("report.windowAi.title", {
+            from: fmtTime(range.fromS),
+            to: fmtTime(range.toS),
+          })}
         </span>
         {state.phase === "result" && state.fromCache && (
-          <span className="rpt-finding-habit" title="本窗口的分析结果来自缓存">
-            (缓存)
+          <span
+            className="rpt-finding-habit"
+            title={t("report.windowAi.cachedTitle")}
+          >
+            {t("report.windowAi.cached")}
           </span>
         )}
       </div>
       {state.phase === "loading" && (
-        <p className="rpt-finding-body">分析中…(约 10–30s)</p>
+        <p className="rpt-finding-body">{t("report.windowAi.loading")}</p>
       )}
       {state.phase === "result" &&
         state.entries.map((e, i) => (
@@ -98,36 +106,32 @@ export function WindowAnalysisCard({
           </div>
         ))}
       {state.phase === "none" && (
-        <p className="rpt-finding-body">
-          这段未检出可教信号(无受控/防御施放/敌方爆发/HP 骤降等)。
-        </p>
+        <p className="rpt-finding-body">{t("report.windowAi.none")}</p>
       )}
       {state.phase === "audit-empty" && (
         <>
-          <p className="rpt-finding-body">模型输出未通过审计。</p>
+          <p className="rpt-finding-body">{t("report.windowAi.auditEmpty")}</p>
           <button className="rpt-finding-toggle" onClick={onRetry}>
-            重试
+            {t("report.common.retry")}
           </button>
         </>
       )}
       {state.phase === "error" && (
         <>
-          <p className="rpt-finding-body">分析失败(网络或服务异常)。</p>
+          <p className="rpt-finding-body">{t("report.windowAi.error")}</p>
           <button className="rpt-finding-toggle" onClick={onRetry}>
-            重试
+            {t("report.common.retry")}
           </button>
         </>
       )}
       {state.phase === "no-client" && (
-        <p className="rpt-finding-body">未配置 AI(设置里填 API Key 后可用)。</p>
+        <p className="rpt-finding-body">{t("report.windowAi.noClient")}</p>
       )}
       {state.phase === "busy" && (
         <>
-          <p className="rpt-finding-body">
-            该窗口的分析仍在进行中——稍候点重试查看结果。
-          </p>
+          <p className="rpt-finding-body">{t("report.windowAi.busy")}</p>
           <button className="rpt-finding-toggle" onClick={onRetry}>
-            重试
+            {t("report.common.retry")}
           </button>
         </>
       )}

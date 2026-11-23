@@ -1,6 +1,7 @@
 import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import type { AuraUptime } from "../derive/auraUptime";
 import type { CastControlSummary } from "../derive/castControl";
 import type { CcBreakDash, CcBreakRow } from "../derive/ccBreakDash";
@@ -15,6 +16,9 @@ import { KickDashboard } from "./KickDashboard";
 
 type Tab = "kick" | "dispel" | "aura" | "cc" | "break";
 
+/** "Label N" when the count is positive, else the bare label. */
+const withCount = (label: string, n: number): string =>
+  n > 0 ? `${label} ${n}` : label;
 
 /** CC-break row list (shared by self-inflicted and enemy-mistake sections; same
  * row shape as DispelDashboard.InstanceList). */
@@ -25,16 +29,16 @@ function CcBreakList({
   items: CcBreakRow[];
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   return (
     <div className="rpt-stats-detail-group">
       {items.map((i, k) => (
         <span key={k} className="rpt-stats-detail-item">
-          <span className="rpt-stats-detail-t">{fmtTime(i.tS)}</span>{" "}
-          {i.label}
+          <span className="rpt-stats-detail-t">{fmtTime(i.tS)}</span> {i.label}
           {onSeek && (
             <button
               className="rpt-stats-detail-jump"
-              title="回放此刻"
+              title={t("report.common.replayHere")}
               onClick={() => onSeek(Math.max(0, i.tS - 3), [i.unitName])}
             >
               ▶
@@ -87,6 +91,7 @@ export function EngagementPanel({
    * "this match" (agy review #8). */
   roundish?: boolean;
 }) {
+  const { t } = useT();
   const [tabLocal, setTabLocal] = useState<Tab>("kick");
   const tab = tabProp ?? tabLocal;
   const setTab = onTab ?? setTabLocal;
@@ -104,22 +109,31 @@ export function EngagementPanel({
   const breakHasAnything = !!ccBreak && breakN + ccBreak.rootBreakCount > 0;
 
   const TABS: { key: Tab; label: string }[] = [
-    { key: "kick", label: kickN > 0 ? `打断 ${kickN}` : "打断" },
-    { key: "dispel", label: dispelN > 0 ? `驱散 ${dispelN}` : "驱散" },
-    { key: "aura", label: "光环" },
-    { key: "cc", label: ccN > 0 ? `CC链 ${ccN}` : "CC链" },
+    { key: "kick", label: withCount(t("report.engage.tab.kick"), kickN) },
+    {
+      key: "dispel",
+      label: withCount(t("report.engage.tab.dispel"), dispelN),
+    },
+    { key: "aura", label: t("report.engage.tab.aura") },
+    { key: "cc", label: withCount(t("report.engage.tab.cc"), ccN) },
     ...(ccBreak
       ? [
           {
             key: "break" as Tab,
-            label: breakN > 0 ? `破控 ${breakN}` : "破控",
+            label: withCount(t("report.engage.tab.break"), breakN),
           },
         ]
       : []),
   ];
 
   const empty = (
-    <p className="rpt-engage-empty">{roundish ? "本轮" : "本场"}无记录。</p>
+    <p className="rpt-engage-empty">
+      {t(
+        roundish
+          ? "report.common.thisRoundNoRecords"
+          : "report.common.thisMatchNoRecords",
+      )}
+    </p>
   );
 
   return (
@@ -128,14 +142,14 @@ export function EngagementPanel({
           no ARIA tab roles: ShuffleReport's round pills are the page's only
           tablist, so don't pollute getAllByRole counts */}
       <div className="rpt-mode-seg rpt-engage-tabs">
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <button
-            key={t.key}
-            data-testid={`engage-tab-${t.key}`}
-            className={tab === t.key ? "active" : ""}
-            onClick={() => setTab(t.key)}
+            key={tb.key}
+            data-testid={`engage-tab-${tb.key}`}
+            className={tab === tb.key ? "active" : ""}
+            onClick={() => setTab(tb.key)}
           >
-            {t.label}
+            {tb.label}
           </button>
         ))}
       </div>
@@ -175,8 +189,9 @@ export function EngagementPanel({
               {ccBreak.friendly.length > 0 && (
                 <>
                   <p className="rpt-ccbreak-head rpt-ccbreak-bad">
-                    资敌打破 —— 己方伤害打断了挂在敌人身上的控制(
-                    {ccBreak.friendly.length})
+                    {t("report.engage.friendlyBreaks", {
+                      n: ccBreak.friendly.length,
+                    })}
                   </p>
                   <CcBreakList items={ccBreak.friendly} onSeek={onSeek} />
                 </>
@@ -184,16 +199,18 @@ export function EngagementPanel({
               {ccBreak.enemy.length > 0 && (
                 <>
                   <p className="rpt-ccbreak-head rpt-ccbreak-good">
-                    敌方自误 —— 对面自己打断了给我方上的控制(
-                    {ccBreak.enemy.length},正面信号)
+                    {t("report.engage.enemyBreaks", {
+                      n: ccBreak.enemy.length,
+                    })}
                   </p>
                   <CcBreakList items={ccBreak.enemy} onSeek={onSeek} />
                 </>
               )}
               {ccBreak.rootBreakCount > 0 && (
                 <p className="rpt-ccbreak-foot">
-                  另有定身(root)被打破 {ccBreak.rootBreakCount} 次 ——
-                  定身常被刻意打破换位置,单列不计教学。
+                  {t("report.engage.rootBreaks", {
+                    n: ccBreak.rootBreakCount,
+                  })}
                 </p>
               )}
             </div>

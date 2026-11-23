@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
-import { TEAM_SIDE_LABEL } from "../derive/teamSide";
+import type { MessageKey } from "../../../../shared/i18n";
+import { useT } from "../../i18n/LangProvider";
+import { teamSideLabel } from "../derive/teamSide";
 import { ReportHeader, type ReportHeaderFacts } from "./ReportHeader";
 import { TeamDot } from "./TeamDot";
 import { TIMELINE_VIEW } from "./Timeline";
@@ -65,13 +67,19 @@ export function SkelArcLine() {
 
 /** KPI chips: the chips that always exist, with their real labels. */
 export function SkelKpiRow() {
+  const { t } = useT();
+  const kpis: MessageKey[] = [
+    "report.kpi.findings",
+    "report.kpi.kicks",
+    "report.kpi.dispels",
+  ];
   return (
     <div className="rpt-kpi-row rpt-skel" aria-hidden="true">
-      {["失误", "打断", "驱散"].map((k) => (
+      {kpis.map((k) => (
         <span className="rpt-kpi" key={k}>
-          <span className="rpt-kpi-k">{k}</span>
+          <span className="rpt-kpi-k">{t(k)}</span>
           <span className="rpt-kpi-v">
-            <SkelBar w={k === "失误" ? 38 : 10} />
+            <SkelBar w={k === "report.kpi.findings" ? 38 : 10} />
           </span>
         </span>
       ))}
@@ -81,10 +89,11 @@ export function SkelKpiRow() {
 
 /** Time-window toolbar: the label is static, the control is not there yet. */
 export function SkelToolbar() {
+  const { t } = useT();
   return (
     <div className="rpt-toolbar-row rpt-skel" aria-hidden="true">
       <div className="rpt-trb">
-        <span className="rpt-card-label">时间窗</span>
+        <span className="rpt-card-label">{t("report.timeRange.label")}</span>
         <SkelBar w={58} h={24} className="rpt-skel-ctl" />
       </div>
     </div>
@@ -94,12 +103,13 @@ export function SkelToolbar() {
 /** The chart card: the real viewBox (so the real height at any width) with
  * the HP grid and its axis labels - those do not depend on the match. */
 export function SkelChart() {
+  const { t } = useT();
   const { W, H, PAD } = TIMELINE_VIEW;
   const y = (p: number) => H - PAD.b - p * (H - PAD.t - PAD.b);
   return (
     <div className="rpt-timeline-wrap rpt-skel" aria-hidden="true">
       <div className="rpt-tl-head">
-        <span className="rpt-card-label">曲线</span>
+        <span className="rpt-card-label">{t("report.timeline.label")}</span>
         <SkelBar w={64} h={24} className="rpt-skel-ctl" />
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="rpt-timeline">
@@ -138,19 +148,20 @@ export function SkelWindows() {
 
 /** Leaderboard card: real head and team headings, one row per player. */
 export function SkelMeters({ teamSizes }: { teamSizes: readonly number[] }) {
+  const { t: tr, lang } = useT();
   const widths = [86, 72, 34, 80, 46, 30];
   let n = 0;
   return (
     <div className="rpt-meters-card rpt-skel" aria-hidden="true">
       <div className="rpt-meters-head">
-        <span className="rpt-card-label">榜单模式</span>
+        <span className="rpt-card-label">{tr("report.meters.modeLabel")}</span>
         <SkelBar w={196} h={28} className="rpt-skel-ctl" />
       </div>
       <div className="rpt-meters">
         {teamSizes.flatMap((size, t) => [
           <div className="rpt-team-head" key={`h${t}`}>
             <TeamDot side={t === 0 ? "friendly" : "enemy"} />
-            {TEAM_SIDE_LABEL[t === 0 ? "friendly" : "enemy"]}
+            {teamSideLabel(t === 0 ? "friendly" : "enemy", lang)}
           </div>,
           ...Array.from({ length: size }, (_, i) => {
             const w = widths[n++ % widths.length]!;
@@ -178,13 +189,22 @@ export function SkelMeters({ teamSizes }: { teamSizes: readonly number[] }) {
 }
 
 /** Engagement card: the five tabs are static; the table is not. */
+const ENGAGE_TABS: MessageKey[] = [
+  "report.engage.tab.kick",
+  "report.engage.tab.dispel",
+  "report.engage.tab.aura",
+  "report.engage.tab.cc",
+  "report.engage.tab.break",
+];
+
 export function SkelEngage() {
+  const { t } = useT();
   return (
     <div className="rpt-engage rpt-skel" aria-hidden="true">
       <div className="rpt-mode-seg rpt-engage-tabs rpt-skel-seg">
-        {["打断", "驱散", "光环", "CC链", "破控"].map((t, i) => (
-          <span key={t} className={i === 0 ? "active" : ""}>
-            {t}
+        {ENGAGE_TABS.map((k, i) => (
+          <span key={k} className={i === 0 ? "active" : ""}>
+            {t(k)}
           </span>
         ))}
       </div>
@@ -256,6 +276,7 @@ export function ReportBodySkeleton({
 }: {
   teamSizes: readonly number[];
 }) {
+  const { t } = useT();
   return (
     <div className="rpt-body" data-testid="rpt-body-skeleton">
       <SkelKpiRow />
@@ -270,12 +291,12 @@ export function ReportBodySkeleton({
             <SkelMeters teamSizes={teamSizes} />
             <SkelEngage />
           </div>
-          <SkelLedger title="爆发账本" lines={3} />
+          <SkelLedger title={t("report.burstLedger.title")} lines={3} />
         </div>
         <div className="rpt-col-side">
           <div className="rpt-mode-seg rpt-side-seg rpt-skel-seg">
-            <span className="active">回顾</span>
-            <span>问教练</span>
+            <span className="active">{t("report.side.recap")}</span>
+            <span>{t("report.side.chat")}</span>
           </div>
           {/* No mistake-list placeholder under the recap: the recap's height
               is not known until its derive has run, and nothing is drawn
@@ -289,7 +310,12 @@ export function ReportBodySkeleton({
   );
 }
 
-const TAB_LABELS = ["战报", "回放", "事件", "AI 分析"];
+const TAB_LABELS: MessageKey[] = [
+  "report.view.report",
+  "report.view.replay",
+  "report.view.events",
+  "report.view.ai",
+];
 
 /**
  * The report shell: what the page shows from the click until the match is in.
@@ -302,7 +328,7 @@ export function ReportShell({
   roundLabel,
   ratingDelta = null,
   teamSizes,
-  status = "读取对局…",
+  status,
   children,
 }: {
   facts: ReportHeaderFacts;
@@ -313,6 +339,7 @@ export function ReportShell({
   /** Rendered above the shell (the shuffle's pill strip). */
   children?: ReactNode;
 }) {
+  const { t } = useT();
   return (
     <>
       {children}
@@ -324,13 +351,13 @@ export function ReportShell({
       >
         <div className="rpt-head-row rpt-head-row-busy">
           <div className="rpt-view-tabs rpt-head-tabs">
-            {TAB_LABELS.map((t, i) => (
-              <button key={t} className={i === 0 ? "active" : ""} disabled>
-                {t}
+            {TAB_LABELS.map((k, i) => (
+              <button key={k} className={i === 0 ? "active" : ""} disabled>
+                {t(k)}
               </button>
             ))}
           </div>
-          <FillStatus label={status} />
+          <FillStatus label={status ?? t("report.shell.loadingMatch")} />
         </div>
         <ReportHeader
           source={facts}

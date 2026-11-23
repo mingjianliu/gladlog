@@ -1,11 +1,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
+import type { MessageKey } from "../../../../shared/i18n";
 import { useT } from "../../i18n/LangProvider";
 import { deriveDetailBreakdown } from "../derive/detailBreakdown";
 import { meterGroups, type MeterMode, meterRows } from "../derive/meterRows";
 import type { StatsRow } from "../derive/statsTable";
 import type { UnitTotals } from "../derive/summary";
-import { TEAM_SIDE_LABEL, type TeamSide } from "../derive/teamSide";
+import { type TeamSide, teamSideLabel } from "../derive/teamSide";
 import type { TimeRange } from "../derive/timeRange";
 import type { ReportSource } from "../derive/types";
 import { BreakdownTable } from "./BreakdownTable";
@@ -13,11 +14,11 @@ import { MeterUnitRow } from "./MeterUnitRow";
 import { StatsTable } from "./StatsTable";
 import { TeamDot } from "./TeamDot";
 
-const MODE_LABEL: Record<MeterMode, string> = {
-  damage: "伤害",
-  healing: "治疗",
-  taken: "承伤",
-  stats: "统计",
+const MODE_LABEL: Record<MeterMode, MessageKey> = {
+  damage: "report.meters.mode.damage",
+  healing: "report.meters.mode.healing",
+  taken: "report.meters.mode.taken",
+  stats: "report.meters.mode.stats",
 };
 
 export function Meters({
@@ -57,7 +58,7 @@ export function Meters({
    * `<Meters rows mode />` bare) = exactly the previous flat list. */
   teamSides?: Map<string, TeamSide>;
 }) {
-  const { lang } = useT();
+  const { lang, t } = useT();
   // Inline detail expansion: only one unit expanded at a time; switching mode
   // collapses it
   const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null);
@@ -78,9 +79,10 @@ export function Meters({
             expandedUnitId,
             mode as "damage" | "healing" | "taken",
             range,
+            lang,
           )
         : null,
-    [expandable, source, expandedUnitId, mode, range],
+    [expandable, source, expandedUnitId, mode, range, lang],
   );
   const items = meterRows(rows, mode === "stats" ? "damage" : mode, lang);
   const sideOf = (unitId: string): TeamSide =>
@@ -94,7 +96,7 @@ export function Meters({
   return (
     <div className="rpt-meters-card">
       <div className="rpt-meters-head">
-        <span className="rpt-card-label">榜单模式</span>
+        <span className="rpt-card-label">{t("report.meters.modeLabel")}</span>
         <div className="rpt-mode-seg">
           {modes.map((k) => (
             <button
@@ -102,7 +104,7 @@ export function Meters({
               className={k === mode ? "active" : ""}
               onClick={() => onMode?.(k)}
             >
-              {MODE_LABEL[k]}
+              {t(MODE_LABEL[k])}
             </button>
           ))}
         </div>
@@ -122,7 +124,7 @@ export function Meters({
               {groups.length > 1 && (
                 <div className="rpt-team-head" data-testid="meter-team-head">
                   <TeamDot side={g.side} />
-                  {TEAM_SIDE_LABEL[g.side]}
+                  {teamSideLabel(g.side, lang)}
                 </div>
               )}
               {/* Row markup lives in MeterUnitRow (UI review #6): one identity

@@ -2,7 +2,9 @@ import { ensureAnalysisData } from "@gladlog/analysis";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
+import { CHAT_STOPPED_MESSAGE } from "../../../../shared/chatProtocol";
 import { bridge } from "../../bridge";
+import { useT } from "../../i18n/LangProvider";
 import { buildAnalysisInput } from "../derive/analysisInput";
 import { renderMarkdown } from "../derive/markdown";
 import type { ReportSource } from "../derive/types";
@@ -39,6 +41,7 @@ export function CoachChatCard({
    * as Markdown, just without icons. */
   rich?: (text?: string | null) => ReactNode;
 }) {
+  const { t } = useT();
   const [chatState, setChatState] = useState<ChatState | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -149,7 +152,7 @@ export function CoachChatCard({
         // refresh() landing then merely refreshes chatState early and cannot
         // fight a separately maintained optimistic array.
         await refresh();
-      } else if (r.status === "error" && r.message === "已停止") {
+      } else if (r.status === "error" && r.message === CHAT_STOPPED_MESSAGE) {
         // Fix for cancels being mislabeled as failures (final review F6b):
         // pressing "stop" is a neutral action, not a failure — it must not
         // enter the failed+retry UI; we just drop this pending bubble. When the
@@ -172,14 +175,14 @@ export function CoachChatCard({
   if (chatState.status === "unsupported") {
     return (
       <div className="coach-chat-card" data-testid="coach-chat-card">
-        <div className="coach-chat-empty">对话教练需要本地 CLI 后端</div>
+        <div className="coach-chat-empty">{t("report.chat.needsCli")}</div>
       </div>
     );
   }
   if (chatState.status === "not-ready") {
     return (
       <div className="coach-chat-card" data-testid="coach-chat-card">
-        <div className="coach-chat-empty">开始 AI 分析后才能对话</div>
+        <div className="coach-chat-empty">{t("report.chat.notReady")}</div>
       </div>
     );
   }
@@ -189,7 +192,7 @@ export function CoachChatCard({
   // literal characters. The user's own turn stays plain text — what they typed
   // is what they should see, not something re-interpreted as markup.
   const renderCoachReply = (content: string) =>
-    renderMarkdown(content, rich ? (t: string) => rich(t) : undefined);
+    renderMarkdown(content, rich ? (s: string) => rich(s) : undefined);
 
   return (
     <div className="coach-chat-card" data-testid="coach-chat-card">
@@ -214,18 +217,20 @@ export function CoachChatCard({
         )}
         {pending && (
           <div className="coach-chat-msg coach-chat-msg--coach coach-chat-thinking">
-            教练思考中…
+            {t("report.chat.thinking")}
           </div>
         )}
         {failed && (
           <div className="coach-chat-msg coach-chat-msg--user coach-chat-failed">
             {failed}
-            <span className="coach-chat-fail-text">发送失败 · </span>
+            <span className="coach-chat-fail-text">
+              {t("report.chat.sendFailed")}
+            </span>
             <button
               className="coach-chat-retry"
               onClick={() => void doSend(failed, false)}
             >
-              重试
+              {t("report.common.retry")}
             </button>
           </div>
         )}
@@ -237,12 +242,12 @@ export function CoachChatCard({
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="问教练…"
-          aria-label="向教练提问"
+          placeholder={t("report.chat.placeholder")}
+          aria-label={t("report.chat.inputAria")}
         />
         {pending ? (
           <button onClick={() => void bridge().chat.cancel(matchId)}>
-            停止
+            {t("report.chat.stop")}
           </button>
         ) : (
           <button
@@ -252,11 +257,11 @@ export function CoachChatCard({
               if (q) void doSend(q, true);
             }}
           >
-            发送
+            {t("report.chat.send")}
           </button>
         )}
       </div>
-      <div className="coach-chat-disclaimer">回答基于日志推理,可能有误</div>
+      <div className="coach-chat-disclaimer">{t("report.chat.disclaimer")}</div>
     </div>
   );
 }

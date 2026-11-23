@@ -1,12 +1,14 @@
 import { fmtTime } from "@gladlog/analysis";
 import type { IMatchArcPhase } from "@gladlog/analysis/src/context/matchNarrative";
 
-const PHASE_ZH: Record<IMatchArcPhase["phase"], string> = {
-  early: "早期",
-  mid: "中期",
-  late: "后期",
-};
+import type { MessageKey } from "../../../../shared/i18n";
+import { useT } from "../../i18n/LangProvider";
 
+const PHASE_KEY: Record<IMatchArcPhase["phase"], MessageKey> = {
+  early: "report.arc.early",
+  mid: "report.arc.mid",
+  late: "report.arc.late",
+};
 
 /**
  * Match-tempo header line (#10 T4). Consumes the structured phases from T1's
@@ -35,13 +37,14 @@ export function MatchArcLine({
   phases: IMatchArcPhase[];
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   if (phases.length === 0) return null;
   return (
     <div className="rpt-arc-line" data-testid="match-arc-line">
       {phases.map((p, i) => (
         <span className="rpt-arc-phase" key={`${p.phase}-${p.fromS}`}>
           <span className="rpt-arc-phase-label">
-            {PHASE_ZH[p.phase]} {fmtTime(p.fromS)}–{fmtTime(p.toS)}
+            {t(PHASE_KEY[p.phase])} {fmtTime(p.fromS)}–{fmtTime(p.toS)}
           </span>
           {/* When onSeek is absent, don't render a dead button that looks
               clickable but does nothing -- if we can't seek, don't pretend. */}
@@ -49,14 +52,18 @@ export function MatchArcLine({
             <button
               type="button"
               className="rpt-arc-turning"
-              aria-label={`跳转到转折点 ${fmtTime(p.turningPoint.tS)}`}
+              aria-label={t("report.arc.jumpTurningPoint", {
+                t: fmtTime(p.turningPoint.tS),
+              })}
               title={p.turningPoint.label}
               onClick={() => onSeek(p.turningPoint!.tS, [])}
             >
               ⟶ {fmtTime(p.turningPoint.tS)}
             </button>
           )}
-          {i < phases.length - 1 && <span className="rpt-arc-sep"> ｜ </span>}
+          {i < phases.length - 1 && (
+            <span className="rpt-arc-sep">{t("report.arc.sep")}</span>
+          )}
         </span>
       ))}
     </div>

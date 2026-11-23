@@ -1,6 +1,7 @@
 import { DR_LEVEL_LABEL, fmtTime, isNamedDrCategory } from "@gladlog/analysis";
 import { useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
 import type { CCChainRow } from "../derive/ccChainDash";
 import { UnitName } from "./UnitName";
@@ -21,6 +22,7 @@ export function CCChainPanel({
   rows: CCChainRow[];
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   // Keep the card shell on empty data (P1-1): the feature stays discoverable
   // in short rounds with no CC chains
@@ -28,25 +30,22 @@ export function CCChainPanel({
     return (
       <div className="rpt-ledger" data-testid="cc-chain-dash">
         <div className="rpt-ledger-head">
-          <span className="rpt-ledger-title">敌方 CC 链</span>
+          <span className="rpt-ledger-title">{t("report.ccChain.title")}</span>
         </div>
-        <p className="rpt-ledger-empty">
-          本场未对敌方造成过控制链 —— 长局中此处显示每个敌方目标的控制链长度/
-          总时长与 DR 降级情况。
-        </p>
+        <p className="rpt-ledger-empty">{t("report.ccChain.empty")}</p>
       </div>
     );
   return (
     <div className="rpt-ledger" data-testid="cc-chain-dash">
       <div className="rpt-ledger-head">
-        <span className="rpt-ledger-title">敌方 CC 链</span>
+        <span className="rpt-ledger-title">{t("report.ccChain.title")}</span>
       </div>
       <table className="rpt-stats">
         <thead>
           <tr>
-            <th>目标</th>
-            <th>链长</th>
-            <th>总控时长</th>
+            <th>{t("report.common.target")}</th>
+            <th>{t("report.ccChain.col.chainLen")}</th>
+            <th>{t("report.ccChain.col.totalCc")}</th>
             <th>DR</th>
           </tr>
         </thead>
@@ -81,7 +80,7 @@ export function CCChainPanel({
                 <td>
                   {r.wasted ? (
                     <span className="rpt-ledger-chip rpt-ledger-chip-bad">
-                      浪费
+                      {t("report.ccChain.wasted")}
                     </span>
                   ) : (
                     <span className="rpt-stats-dim">—</span>
@@ -118,7 +117,7 @@ export function CCChainPanel({
                             {onSeek && (
                               <button
                                 className="rpt-stats-detail-jump"
-                                title="回放此刻"
+                                title={t("report.common.replayHere")}
                                 onClick={(ev) => {
                                   ev.stopPropagation();
                                   onSeek(Math.max(0, a.atSeconds - 3), [

@@ -1,9 +1,9 @@
 import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
 import type { StatsInstance, StatsRow } from "../derive/statsTable";
-
 
 function DetailGroup({
   title,
@@ -16,6 +16,7 @@ function DetailGroup({
   unitName: string;
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   if (items.length === 0) return null;
   return (
     <div className="rpt-stats-detail-group">
@@ -26,7 +27,7 @@ function DetailGroup({
           {onSeek && (
             <button
               className="rpt-stats-detail-jump"
-              title="回放此刻"
+              title={t("report.common.replayHere")}
               onClick={() => onSeek(Math.max(0, i.tS - 3), [unitName])}
             >
               ▶
@@ -57,6 +58,7 @@ export function StatsTable({
    * review). */
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const perMin = (n: number): string =>
     ((n * 60) / Math.max(1, durationS)).toFixed(1);
@@ -64,12 +66,12 @@ export function StatsTable({
     <table className="rpt-stats" data-testid="stats-table">
       <thead>
         <tr>
-          <th>玩家</th>
-          <th colSpan={2}>打断施放</th>
-          <th>被打断</th>
-          <th colSpan={2}>被控</th>
-          <th>驱散</th>
-          <th>偷/purge</th>
+          <th>{t("report.common.player")}</th>
+          <th colSpan={2}>{t("report.statsTable.kicksCast")}</th>
+          <th>{t("report.statsTable.kicksTaken")}</th>
+          <th colSpan={2}>{t("report.statsTable.ccTaken")}</th>
+          <th>{t("report.statsTable.dispels")}</th>
+          <th>{t("report.statsTable.purges")}</th>
         </tr>
       </thead>
       <tbody>
@@ -122,19 +124,19 @@ export function StatsTable({
               <tr key={`${r.unitId}-d`} className="rpt-stats-detail-row">
                 <td colSpan={8}>
                   <DetailGroup
-                    title="打断施放"
+                    title={t("report.statsTable.kicksCast")}
                     items={r.detail.kicksCast}
                     unitName={r.name}
                     onSeek={onSeek}
                   />
                   <DetailGroup
-                    title="被打断"
+                    title={t("report.statsTable.kicksTaken")}
                     items={r.detail.kicksTaken}
                     unitName={r.name}
                     onSeek={onSeek}
                   />
                   <DetailGroup
-                    title="被控"
+                    title={t("report.statsTable.ccTaken")}
                     items={r.detail.ccTaken}
                     unitName={r.name}
                     onSeek={onSeek}

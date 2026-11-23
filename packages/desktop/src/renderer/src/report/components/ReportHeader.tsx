@@ -1,5 +1,7 @@
 import { fmtTime, zoneMetadata } from "@gladlog/analysis";
 
+import type { MessageKey } from "../../../../shared/i18n";
+import { useT } from "../../i18n/LangProvider";
 import { shortUnitName } from "../derive/teamSide";
 
 /** What the hero line reads off a match. The report passes the match itself;
@@ -18,11 +20,11 @@ function fmtDuration(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-const RESULT_LABEL: Record<string, string> = {
-  win: "胜利",
-  loss: "败北",
-  lose: "败北",
-  draw: "平局",
+const RESULT_LABEL: Record<string, MessageKey> = {
+  win: "report.header.result.win",
+  loss: "report.header.result.loss",
+  lose: "report.header.result.loss",
+  draw: "report.header.result.draw",
 };
 
 /**
@@ -60,12 +62,14 @@ export function ReportHeader({
   turningPoint?: { tS: number; label: string } | null;
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   const res = source.result.toLowerCase();
+  const resultKey = RESULT_LABEL[res];
   return (
     <div className="rpt-hero" data-testid="rpt-hero">
       <div className="rpt-head-left">
         <span className={`rpt-head-result rpt-result-${res}`}>
-          {RESULT_LABEL[res] ?? source.result}
+          {resultKey ? t(resultKey) : source.result}
         </span>
         {/* Order per spec 1a: bracket · round · map · duration · rating change */}
         <span className="rpt-head-meta">
@@ -94,10 +98,10 @@ export function ReportHeader({
           type="button"
           className="rpt-hero-fact"
           data-testid="hero-finisher"
-          title="跳到终结时刻回放"
+          title={t("report.header.finisherTitle")}
           onClick={() => onSeek(Math.max(0, finisher.tS - 3), [finisher.name])}
         >
-          <span className="rpt-kpi-k">终结</span>
+          <span className="rpt-kpi-k">{t("report.header.finisher")}</span>
           <span className="rpt-kpi-v">
             {shortUnitName(finisher.name)} · {fmtTime(finisher.tS)}
           </span>
@@ -109,10 +113,12 @@ export function ReportHeader({
           className="rpt-hero-fact"
           data-testid="hero-turning"
           title={turningPoint.label}
-          aria-label={`跳转到转折点 ${fmtTime(turningPoint.tS)}`}
+          aria-label={t("report.arc.jumpTurningPoint", {
+            t: fmtTime(turningPoint.tS),
+          })}
           onClick={() => onSeek(turningPoint.tS, [])}
         >
-          <span className="rpt-kpi-k">转折</span>
+          <span className="rpt-kpi-k">{t("report.header.turning")}</span>
           <span className="rpt-kpi-v">{fmtTime(turningPoint.tS)}</span>
         </button>
       )}

@@ -5,6 +5,8 @@ import {
 } from "@gladlog/analysis";
 import { Fragment, useEffect, useState } from "react";
 
+import type { MessageKey, TFn } from "../../../../shared/i18n";
+import { useT } from "../../i18n/LangProvider";
 import {
   DEATH_RECAP_WINDOW_S,
   type DeathRecap,
@@ -15,69 +17,85 @@ import { UnitName } from "./UnitName";
 
 const fmtK = (n: number): string => `${(n / 1000).toFixed(1)}k`;
 
-const KIND_LABEL: Record<string, string> = {
-  dmg: "伤害",
-  heal: "治疗",
-  cc: "控制",
-  def_used: "防御",
-  dispel: "驱散",
+const KIND_LABEL_KEY: Record<DeathRecapEvent["kind"], MessageKey> = {
+  dmg: "report.deathCard.kind.dmg",
+  heal: "report.deathCard.kind.heal",
+  cc: "report.deathCard.kind.cc",
+  def_used: "report.deathCard.kind.def_used",
+  dispel: "report.deathCard.kind.dispel",
+};
+
+/** School words (`immunitySchoolWords`) → dictionary keys. */
+const SCHOOL_KEY: Record<string, MessageKey> = {
+  physical: "report.deathCard.school.physical",
+  magic: "report.deathCard.school.magic",
+  holy: "report.deathCard.school.holy",
+  fire: "report.deathCard.school.fire",
+  nature: "report.deathCard.school.nature",
+  frost: "report.deathCard.school.frost",
+  shadow: "report.deathCard.school.shadow",
+  arcane: "report.deathCard.school.arcane",
 };
 
 /**
- * One-line text for the mitigation audit (form A, #17b Task4) — the Chinese card
- * version. Numbers are taken straight from IMitigationAuditRow (the return value
- * of Task1's computeMitigationAudit) and never re-derived.
+ * One-line text for the mitigation audit (form A, #17b Task4). Numbers are
+ * taken straight from IMitigationAuditRow (the return value of Task1's
+ * computeMitigationAudit) and never re-derived.
  */
-const SCHOOL_ZH: Record<string, string> = {
-  physical: "物理",
-  magic: "魔法",
-  holy: "神圣",
-  fire: "火焰",
-  nature: "自然",
-  frost: "冰霜",
-  shadow: "暗影",
-  arcane: "奥术",
-};
-
-function mitigationText(row: DeathRecap["mitigationAudit"][number]): string {
+function mitigationText(
+  row: DeathRecap["mitigationAudit"][number],
+  t: TFn,
+): string {
   const overlap = row.activeOverlapS.toFixed(1);
   // a split entry's component rows name the school each prices — the
-  // prompt's own words (`immunitySchoolWords`), in Chinese (T33, ruling R07)
+  // prompt's own words (`immunitySchoolWords`), in the UI language (T33,
+  // ruling R07)
   const name =
     row.schoolMask !== undefined
-      ? `${row.spellName}(${immunitySchoolWords(row.schoolMask)
-          .split("/")
-          .map((w) => SCHOOL_ZH[w] ?? w)
-          .join("/")}伤害)`
+      ? t("report.deathCard.schoolName", {
+          spell: row.spellName,
+          schools: immunitySchoolWords(row.schoolMask)
+            .split("/")
+            .map((w) => (SCHOOL_KEY[w] ? t(SCHOOL_KEY[w]) : w))
+            .join("/"),
+        })
       : row.spellName;
+  const pctOf = (pct: number | undefined): string =>
+    pct !== undefined ? t("report.deathCard.mit.pctMaxHp", { pct }) : "";
   if (row.kind === "arith") {
     const blockedK = Math.round((row.blockedAmount ?? 0) / 1000);
-    const pctPart =
-      row.blockedPctMaxHp !== undefined
-        ? `(≈${row.blockedPctMaxHp}% maxHp)`
-        : "";
-    return `${name} 挡了 ~${blockedK}k${pctPart},覆盖 ${overlap}s`;
+    return t("report.deathCard.mit.arith", {
+      name,
+      k: blockedK,
+      pct: pctOf(row.blockedPctMaxHp),
+      s: overlap,
+    });
   }
   if (row.kind === "deferred") {
     // A deferral shield (Time Dilation, Stretch Time) holds damage back (Time
     // Dilation counts as 50 % mitigation — user rulings 2026-07-30 /
     // 2026-10-20); the amount is the log's own record of what it held back.
     const deferredK = Math.round((row.deferredAmount ?? 0) / 1000);
-    const pctPart =
-      row.deferredPctMaxHp !== undefined
-        ? `(≈${row.deferredPctMaxHp}% maxHp)`
-        : "";
-    return `${row.spellName} 暂时挡下 ~${deferredK}k${pctPart},覆盖 ${overlap}s(之后以自身伤害落地)`;
+    return t("report.deathCard.mit.deferred", {
+      name: row.spellName,
+      k: deferredK,
+      pct: pctOf(row.deferredPctMaxHp),
+      s: overlap,
+    });
   }
   if (row.kind === "immunity") {
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
-    return `${name} 免疫覆盖 ${overlap}s(期内观测承伤 ~${dmgK}k)`;
+    return t("report.deathCard.mit.immunity", { name, s: overlap, k: dmgK });
   }
   if (row.kind === "deflection") {
     // fact9 D3: Aspect of the Turtle deflects direct attacks, damage over
     // time still lands — no immunity (user ruling 2026-10-21)
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
-    return `${name} 偏转直接攻击 ${overlap}s(持续伤害照常落地;期内观测承伤 ~${dmgK}k)`;
+    return t("report.deathCard.mit.deflection", {
+      name,
+      s: overlap,
+      k: dmgK,
+    });
   }
   if (row.kind === "absorb") {
     // Absorb shields are effective HP measured from the log's own absorb
@@ -85,13 +103,14 @@ function mitigationText(row: DeathRecap["mitigationAudit"][number]): string {
     // window — a shield that expired unconsumed reports nothing rather than
     // its nominal size (absorbShields.ts).
     const absorbedK = Math.round((row.absorbedAmount ?? 0) / 1000);
-    const pctPart =
-      row.absorbedPctMaxHp !== undefined
-        ? `(≈${row.absorbedPctMaxHp}% maxHp)`
-        : "";
-    return `${row.spellName} 吸收 ~${absorbedK}k${pctPart},覆盖 ${overlap}s`;
+    return t("report.deathCard.mit.absorb", {
+      name: row.spellName,
+      k: absorbedK,
+      pct: pctOf(row.absorbedPctMaxHp),
+      s: overlap,
+    });
   }
-  return `${row.spellName} 激活 ${overlap}s,机制特殊,不参与缺口算术`;
+  return t("report.deathCard.mit.other", { name: row.spellName, s: overlap });
 }
 
 /** A mitigation audit row: ChipIcon (the id is known; a missing table entry
@@ -101,10 +120,11 @@ function MitigationLine({
 }: {
   row: DeathRecap["mitigationAudit"][number];
 }) {
+  const { t } = useT();
   return (
     <>
       <ChipIcon spellId={row.spellId} />
-      {mitigationText(row)}
+      {mitigationText(row, t)}
     </>
   );
 }
@@ -117,12 +137,19 @@ function MitigationLine({
  */
 function counterfactualText(
   hit: DeathRecap["counterfactuals"][number],
+  t: TFn,
 ): string {
   const subject =
     hit.source === "missed-external" && hit.casterName
-      ? `${hit.casterName} 的 ${hit.spellName}`
+      ? t("report.deathCard.cf.subject", {
+          caster: hit.casterName,
+          spell: hit.spellName,
+        })
       : hit.spellName;
-  return `若${subject}覆盖此窗,该段伤害约降至致死线下(余量 >${DECISIVE_MARGIN_PCT}% 最大血量)——算术口径,单因素`;
+  return t("report.deathCard.cf.line", {
+    subject,
+    margin: DECISIVE_MARGIN_PCT,
+  });
 }
 
 /** A decisive counterfactual row: ChipIcon (the id is known) + the text, wired
@@ -132,10 +159,11 @@ function CounterfactualLine({
 }: {
   hit: DeathRecap["counterfactuals"][number];
 }) {
+  const { t } = useT();
   return (
     <>
       <ChipIcon spellId={hit.spellId} />
-      {counterfactualText(hit)}
+      {counterfactualText(hit, t)}
     </>
   );
 }
@@ -164,6 +192,7 @@ export function DeathRecapCard({
   // Condensed view (issue #11) vs 显示全部 (the raw, every-tick stream); the
   // fold bucket has its own expand toggle. Both reset when the card moves to
   // another death.
+  const { t } = useT();
   const [showAll, setShowAll] = useState(false);
   const [foldOpen, setFoldOpen] = useState(false);
   useEffect(() => {
@@ -183,16 +212,16 @@ export function DeathRecapCard({
         className={`rpt-recap-row rpt-recap-${e.kind}${extraClass ? ` ${extraClass}` : ""}`}
       >
         <td className="rpt-recap-t">{fmtTime(e.tS)}</td>
-        <td className="rpt-recap-kind">{KIND_LABEL[e.kind]}</td>
+        <td className="rpt-recap-kind">{t(KIND_LABEL_KEY[e.kind])}</td>
         <td className="rpt-recap-spell">
           <ChipIcon spellId={e.spellId} />
           {e.spell}
           {e.kind === "def_used" && e.panic && (
             <span
               className="rpt-recap-panic-badge"
-              title="恐慌性使用:未见明显敌方威胁/目标未受压下按下"
+              title={t("report.deathCard.panicTitle")}
             >
-              ⚠恐慌
+              {t("report.deathCard.panic")}
             </span>
           )}
         </td>
@@ -262,13 +291,17 @@ export function DeathRecapCard({
                     className={`rpt-recap-row rpt-recap-${row.kind} rpt-recap-subtotal`}
                   >
                     <td className="rpt-recap-t">{fmtTime(row.fromS)}</td>
-                    <td className="rpt-recap-kind">{KIND_LABEL[row.kind]}</td>
+                    <td className="rpt-recap-kind">
+                      {t(KIND_LABEL_KEY[row.kind])}
+                    </td>
                     <td className="rpt-recap-spell">
                       <ChipIcon spellId={row.spellId} />
                       {row.spell}
                       <span className="rpt-recap-subtotal-note">
-                        {" "}
-                        ×{row.ticks} 跳/{spanS}s
+                        {t("report.deathCard.ticks", {
+                          ticks: row.ticks,
+                          s: spanS,
+                        })}
                       </span>
                     </td>
                     <td
@@ -300,10 +333,21 @@ export function DeathRecapCard({
                         // amounts ("… 伤害 / … 治疗"), which would collide
                         // with role-button name queries for the meters' 伤害/
                         // 治疗 toggles (and reads badly in a screen reader).
-                        aria-label={`${foldOpen ? "收起" : "展开"}被折叠的小额事件`}
+                        aria-label={t(
+                          foldOpen
+                            ? "report.deathCard.foldCollapse"
+                            : "report.deathCard.foldExpand",
+                        )}
                         onClick={() => setFoldOpen((v) => !v)}
                       >
-                        {`${foldOpen ? "▾" : "▸"} 已折叠 ${row.count} 行小额事件(合计 ${fmtK(row.dmgTotal)} 伤害 / ${fmtK(row.healTotal)} 治疗)`}
+                        {`${foldOpen ? "▾" : "▸"} ${t(
+                          "report.deathCard.foldLabel",
+                          {
+                            n: row.count,
+                            dmg: fmtK(row.dmgTotal),
+                            heal: fmtK(row.healTotal),
+                          },
+                        )}`}
                       </button>
                     </td>
                   </tr>
@@ -317,7 +361,7 @@ export function DeathRecapCard({
         {(showAll ? recap.events.length : rows.length) === 0 && (
           <tr>
             <td colSpan={6} className="rpt-recap-empty">
-              死前 {DEATH_RECAP_WINDOW_S}s 无记录事件。
+              {t("report.deathCard.empty", { s: DEATH_RECAP_WINDOW_S })}
             </td>
           </tr>
         )}
@@ -329,17 +373,17 @@ export function DeathRecapCard({
     <div className="rpt-recap" data-testid="death-recap">
       <div className="rpt-recap-head">
         <span className="rpt-recap-title">
-          {enemy ? "终结回顾" : "死亡回顾"} — {recap.unitName} @{" "}
-          {fmtTime(recap.deathS)}
+          {t(enemy ? "report.deathCard.titleEnemy" : "report.deathCard.title")}{" "}
+          — {recap.unitName} @ {fmtTime(recap.deathS)}
         </span>
         <span className="rpt-recap-actions">
           <button
             className={`rpt-recap-showall${showAll ? " rpt-recap-showall-on" : ""}`}
             aria-pressed={showAll}
-            title="逐跳原始事件流(不过滤不合并)"
+            title={t("report.deathCard.showAllTitle")}
             onClick={() => setShowAll((v) => !v)}
           >
-            显示全部
+            {t("report.deathCard.showAll")}
           </button>
           {onJump && (
             <button
@@ -348,7 +392,7 @@ export function DeathRecapCard({
                 onJump(Math.max(0, recap.deathS - 8), [recap.unitName])
               }
             >
-              ▶ 回放此刻
+              {t("report.deathCard.replayHere")}
             </button>
           )}
           <button className="rpt-recap-close" onClick={onClose}>
@@ -359,16 +403,19 @@ export function DeathRecapCard({
 
       {recap.availableImmunities.length > 0 && (
         <p className="rpt-recap-verdictish">
-          死亡时可用而未按:
+          {t("report.deathCard.unpressed")}
           {recap.availableImmunities.map((i, k) => (
             <span key={k} className="rpt-recap-pill">
               <ChipIcon spellId={i.spellId} />
               {i.spellName}
-              {i.wasInCC ? "(当时被控)" : ""}
+              {i.wasInCC ? t("report.deathCard.wasInCc") : ""}
               {i.cheaperAlternatives.length > 0 && (
                 <span className="rpt-recap-cheaper">
-                  {" "}
-                  · 更省替代:{i.cheaperAlternatives.join("、")}
+                  {t("report.deathCard.cheaper", {
+                    list: i.cheaperAlternatives.join(
+                      t("report.common.listSep"),
+                    ),
+                  })}
                 </span>
               )}
             </span>
@@ -377,13 +424,16 @@ export function DeathRecapCard({
       )}
       {recap.missedExternals.length > 0 && (
         <p className="rpt-recap-verdictish">
-          队友可给未给:
+          {t("report.deathCard.missedExternals")}
           {recap.missedExternals.map((m, k) => (
             <span key={k} className="rpt-recap-pill">
               <ChipIcon spellId={m.spellId} />
-              {m.casterName}:{m.spellName}
-              {m.casterWasInCC ? "(被控)" : ""}
-              {m.casterCouldNotPay ? "(蓝不够)" : ""}
+              {t("report.deathCard.casterSpell", {
+                caster: m.casterName,
+                spell: m.spellName,
+              })}
+              {m.casterWasInCC ? t("report.deathCard.casterCc") : ""}
+              {m.casterCouldNotPay ? t("report.deathCard.casterOom") : ""}
             </span>
           ))}
         </p>
@@ -392,7 +442,7 @@ export function DeathRecapCard({
       {recap.mitigationAudit.length > 0 && (
         <div className="rpt-recap-mitigation" data-testid="recap-mitigation">
           <p className="rpt-recap-mitigation-title">
-            减伤核算(死亡窗内已激活,逐条独立口径,不建模叠加):
+            {t("report.deathCard.mitTitle")}
           </p>
           <ul className="rpt-recap-mitigation-list">
             {recap.mitigationAudit.map((row, k) => (
@@ -434,7 +484,7 @@ export function DeathRecapCard({
         className="rpt-recap-scroll"
         tabIndex={0}
         role="region"
-        aria-label="死前事件时间线(可滚动)"
+        aria-label={t("report.deathCard.timelineAria")}
       >
         {table}
       </div>

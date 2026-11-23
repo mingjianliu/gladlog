@@ -8,7 +8,9 @@ import {
   useState,
 } from "react";
 
+import type { MessageKey } from "../../../../shared/i18n";
 import { bridge } from "../../bridge";
+import { useT } from "../../i18n/LangProvider";
 import {
   DEFAULT_EVENT_KINDS,
   DEFAULT_EVENT_SORT,
@@ -17,6 +19,7 @@ import {
   EMPTY_EVENTS_FILTER,
   EVENT_KIND_LABEL,
   type EventKind,
+  eventKindLabel,
   eventNameOptions,
   type EventRow,
   type EventSort,
@@ -53,13 +56,13 @@ function EvtSpell({ spellId, name }: { spellId?: string; name: string }) {
 
 /** The six data columns, in render order. `sort` names the key each header
  * sorts by; the trailing actions column has no header and no filter. */
-const COLUMNS: Array<{ sort: EventSortKey; label: string }> = [
-  { sort: "time", label: "时间" },
-  { sort: "kind", label: "类型" },
-  { sort: "src", label: "来源" },
-  { sort: "dest", label: "目标" },
-  { sort: "spell", label: "技能" },
-  { sort: "amount", label: "详情" },
+const COLUMNS: Array<{ sort: EventSortKey; label: MessageKey }> = [
+  { sort: "time", label: "report.eventsPanel.col.time" },
+  { sort: "kind", label: "report.eventsPanel.col.kind" },
+  { sort: "src", label: "report.eventsPanel.col.src" },
+  { sort: "dest", label: "report.eventsPanel.col.dest" },
+  { sort: "spell", label: "report.eventsPanel.col.spell" },
+  { sort: "amount", label: "report.eventsPanel.col.amount" },
 ];
 
 /** Clickable column header. First click sorts ascending, clicking the active
@@ -71,10 +74,12 @@ function SortTh({
   sort,
   onSort,
 }: {
-  col: { sort: EventSortKey; label: string };
+  col: { sort: EventSortKey; label: MessageKey };
   sort: EventSort;
   onSort: (k: EventSortKey) => void;
 }) {
+  const { t } = useT();
+  const label = t(col.label);
   const active = sort.key === col.sort;
   return (
     <th
@@ -90,9 +95,9 @@ function SortTh({
         className="rpt-events-sort-btn"
         data-testid={`events-sort-${col.sort}`}
         onClick={() => onSort(col.sort)}
-        title={`按${col.label}排序`}
+        title={t("report.eventsPanel.sortBy", { col: label })}
       >
-        {col.label}
+        {label}
         <span className="rpt-events-sort-arrow" aria-hidden="true">
           {active ? (sort.dir === "asc" ? "↑" : "↓") : ""}
         </span>
@@ -118,6 +123,7 @@ function KindFilter({
   onToggle: (k: EventKind) => void;
   onClear: () => void;
 }) {
+  const { t, lang } = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -138,12 +144,12 @@ function KindFilter({
   }, [open]);
   const label =
     kinds.length === 0
-      ? "全部"
+      ? t("report.common.all")
       : sameKinds(kinds, DEFAULT_EVENT_KINDS)
-        ? "关键"
+        ? t("report.eventsPanel.key")
         : kinds.length === 1
-          ? EVENT_KIND_LABEL[kinds[0]!]
-          : `${EVENT_KIND_LABEL[kinds[0]!]}+${kinds.length - 1}`;
+          ? eventKindLabel(kinds[0]!, lang)
+          : `${eventKindLabel(kinds[0]!, lang)}+${kinds.length - 1}`;
   return (
     <div className="rpt-events-kindfilter" ref={ref}>
       <button
@@ -151,7 +157,7 @@ function KindFilter({
         className={kinds.length ? "rpt-events-fbtn active" : "rpt-events-fbtn"}
         data-testid="events-kind-filter"
         aria-expanded={open}
-        aria-label="类型过滤"
+        aria-label={t("report.eventsPanel.kindAria")}
         onClick={() => setOpen((o) => !o)}
       >
         {label} ▾
@@ -175,7 +181,7 @@ function KindFilter({
                 onClick={() => onToggle(k)}
               >
                 <span className={`rpt-events-kind-dot ${k}`} />
-                {EVENT_KIND_LABEL[k]}
+                {eventKindLabel(k, lang)}
                 <span className="rpt-events-kind-cnt">{n}</span>
               </button>
             );
@@ -186,7 +192,7 @@ function KindFilter({
               className="rpt-events-kindpop-clear"
               onClick={onClear}
             >
-              清除
+              {t("report.common.clear")}
             </button>
           )}
         </div>
@@ -243,6 +249,7 @@ export function EventsPanel({
   // offset into the whole raw.txt is accumulated on the main side from the
   // preceding rounds' linesTotal (matchStore.rawLine), so we only pass
   // sequenceNumber here.
+  const { t, lang } = useT();
   const roundSeq =
     source.kind === "shuffleRound" ? source.sequenceNumber : null;
   const [rawView, setRawView] = useState<{
@@ -277,7 +284,7 @@ export function EventsPanel({
       setRawView({ key, text: null, fileLine: null });
     }
   };
-  const allRows = useMemo(() => deriveEventRows(source), [source]);
+  const allRows = useMemo(() => deriveEventRows(source, lang), [source, lang]);
   // Short name → side. These cells only ever hold a display name, and 来源 and
   // 目标 on one row routinely belong to opposite teams — which is exactly why
   // the marker is per-name and not per-row.
@@ -569,7 +576,6 @@ export function EventsPanel({
       }
     });
     return out;
-     
   }, [sorted, expandedGroups]);
 
   const winFrom = Math.max(0, Math.floor(scrollAnchor / ROW_H) - OVERSCAN_ROWS);
@@ -610,12 +616,12 @@ export function EventsPanel({
         }
       >
         <td className="rpt-stats-detail-t">{fmtTime(r.tS)}</td>
-        <td>{EVENT_KIND_LABEL[r.kind]}</td>
+        <td>{eventKindLabel(r.kind, lang)}</td>
         <td>{nameCell(r.srcName)}</td>
         <td>{nameCell(r.destName)}</td>
         <td>
           {r.kind === "death" ? (
-            "阵亡"
+            t("report.common.died")
           ) : (
             <EvtSpell spellId={r.spellId} name={r.spellName} />
           )}
@@ -626,12 +632,12 @@ export function EventsPanel({
           ) : r.kind === "death" && onOpenRecap && r.destId ? (
             <button
               className="rpt-stats-detail-jump"
-              title="打开死亡回顾"
+              title={t("report.eventsPanel.openRecapTitle")}
               onClick={() =>
                 onOpenRecap(r.destId!, source.startTime + r.tS * 1000)
               }
             >
-              ▶ 死亡回顾
+              {t("report.eventsPanel.openRecap")}
             </button>
           ) : (
             r.detail
@@ -641,7 +647,7 @@ export function EventsPanel({
           {matchId && r.lineIndex != null && (
             <button
               className="rpt-stats-detail-jump"
-              title="查看原始日志行"
+              title={t("report.eventsPanel.rawTitle")}
               onClick={() => void toggleRaw(r, i)}
             >
               ㏒
@@ -650,7 +656,7 @@ export function EventsPanel({
           {onSeek && (
             <button
               className="rpt-stats-detail-jump"
-              title="回放此刻"
+              title={t("report.common.replayHere")}
               onClick={() =>
                 onSeek(
                   Math.max(0, r.tS - 3),
@@ -677,7 +683,7 @@ export function EventsPanel({
               </code>
             ) : (
               <span className="rpt-stats-dim">
-                原始行不可用(旧档无行号或 raw.txt 缺失)
+                {t("report.eventsPanel.rawUnavailable")}
               </span>
             )}
           </td>
@@ -692,7 +698,11 @@ export function EventsPanel({
         {/* Presets (UI review #5): each carries its live row count so nothing
             is hidden silently. 关键 is the baseline; 全部 counts as a filter
             that 清除筛选 undoes. */}
-        <span className="rpt-events-presets" role="group" aria-label="事件预设">
+        <span
+          className="rpt-events-presets"
+          role="group"
+          aria-label={t("report.eventsPanel.presetsAria")}
+        >
           <button
             type="button"
             className={
@@ -702,14 +712,15 @@ export function EventsPanel({
             }
             data-testid="events-preset-key"
             aria-pressed={sameKinds(kinds, DEFAULT_EVENT_KINDS)}
-            title="伤害 · 打断 · 驱散 · 死亡"
+            title={t("report.eventsPanel.keyTitle")}
             onClick={() => setKinds(DEFAULT_EVENT_KINDS)}
           >
-            关键{" "}
-            {DEFAULT_EVENT_KINDS.reduce(
-              (a, k) => a + (countsByKind.get(k) ?? 0),
-              0,
-            )}
+            {t("report.eventsPanel.keyN", {
+              n: DEFAULT_EVENT_KINDS.reduce(
+                (a, k) => a + (countsByKind.get(k) ?? 0),
+                0,
+              ),
+            })}
           </button>
           <button
             type="button"
@@ -720,7 +731,7 @@ export function EventsPanel({
             aria-pressed={kinds.length === 0}
             onClick={() => setKinds([])}
           >
-            全部 {allRows.length}
+            {t("report.eventsPanel.allN", { n: allRows.length })}
           </button>
         </span>
         <select
@@ -728,25 +739,35 @@ export function EventsPanel({
           onChange={(e) => {
             setAnchor(e.target.value);
           }}
-          title="窗口锚定:全场,或跳到一个已经算好的窗口(与下面「时间」列的输入框是同一个窗口)"
+          title={t("report.eventsPanel.anchorTitle")}
           data-testid="events-anchor"
         >
-          <option value="all">全场</option>
+          <option value="all">{t("report.common.wholeMatch")}</option>
           {customRange && (
             <option value="custom">
-              自定义 {fmtTime(customRange.fromS)}–{fmtTime(customRange.toS)}
+              {t("report.eventsPanel.custom", {
+                from: fmtTime(customRange.fromS),
+                to: fmtTime(customRange.toS),
+              })}
             </option>
           )}
           {globalRange && (
             <option value="global">
-              全局时间窗 {fmtTime(globalRange.fromS)}–{fmtTime(globalRange.toS)}
+              {t("report.eventsPanel.global", {
+                from: fmtTime(globalRange.fromS),
+                to: fmtTime(globalRange.toS),
+              })}
             </option>
           )}
           {bands.map((b, i) => (
             <option key={i} value={`band:${i}`}>
               {fmtTime(b.fromS)}–{fmtTime(b.toS)}{" "}
-              {b.kind === "burst" ? "击杀尝试" : "脆弱"} ·{" "}
-              {shortUnitName(b.targetName)}
+              {t(
+                b.kind === "burst"
+                  ? "report.common.burstWindow"
+                  : "report.common.vulnWindow",
+              )}{" "}
+              · {shortUnitName(b.targetName)}
             </option>
           ))}
         </select>
@@ -754,11 +775,11 @@ export function EventsPanel({
             target"), so it shows here as a chip you can see and dismiss. */}
         {unitName && (
           <span className="rpt-trb-chip" data-testid="events-unit-chip">
-            溯源 {unitName}(来源或目标)
+            {t("report.eventsPanel.trace", { name: unitName })}
             <button
               type="button"
               className="rpt-events-chip-x"
-              aria-label="清除溯源单位过滤"
+              aria-label={t("report.eventsPanel.traceClear")}
               onClick={() => setUnitName(null)}
             >
               ✕
@@ -772,11 +793,14 @@ export function EventsPanel({
             data-testid="events-clear-filters"
             onClick={clearFilters}
           >
-            清除筛选({activeFilterCount})
+            {t("report.eventsPanel.clearFilters", { n: activeFilterCount })}
           </button>
         )}
         <span className="rpt-stats-dim">
-          {filtered.matched} / {allRows.length} 条
+          {t("report.eventsPanel.count", {
+            matched: filtered.matched,
+            total: allRows.length,
+          })}
         </span>
       </div>
       <div className="rpt-events-scroll" ref={scrollRef} onScroll={onScroll}>
@@ -795,13 +819,13 @@ export function EventsPanel({
                 <input
                   className={rangeText.ok ? "" : "bad"}
                   data-testid="events-f-time"
-                  aria-label="时间窗过滤,例如 0:30-1:10"
+                  aria-label={t("report.eventsPanel.timeAria")}
                   placeholder="0:30-1:10"
                   value={rangeText.text}
                   onChange={(e) => {
                     onRangeText(e.target.value);
                   }}
-                  title="留空 = 全场。也可以用上面的窗口下拉挑一个算好的窗口。"
+                  title={t("report.eventsPanel.timeTitle")}
                 />
               </th>
               <th>
@@ -815,13 +839,13 @@ export function EventsPanel({
               <th>
                 <select
                   data-testid="events-f-src"
-                  aria-label="来源过滤"
+                  aria-label={t("report.eventsPanel.srcAria")}
                   value={srcName ?? ""}
                   onChange={(e) => {
                     setSrcName(e.target.value || null);
                   }}
                 >
-                  <option value="">全部</option>
+                  <option value="">{t("report.common.all")}</option>
                   {nameOptions.src.map((n) => (
                     <option key={n} value={n}>
                       {n}
@@ -832,13 +856,13 @@ export function EventsPanel({
               <th>
                 <select
                   data-testid="events-f-dest"
-                  aria-label="目标过滤"
+                  aria-label={t("report.eventsPanel.destAria")}
                   value={destName ?? ""}
                   onChange={(e) => {
                     setDestName(e.target.value || null);
                   }}
                 >
-                  <option value="">全部</option>
+                  <option value="">{t("report.common.all")}</option>
                   {nameOptions.dest.map((n) => (
                     <option key={n} value={n}>
                       {n}
@@ -850,8 +874,8 @@ export function EventsPanel({
                 <input
                   type="search"
                   data-testid="events-f-spell"
-                  aria-label="技能名过滤"
-                  placeholder="技能名…"
+                  aria-label={t("report.eventsPanel.spellAria")}
+                  placeholder={t("report.eventsPanel.spellPlaceholder")}
                   value={spellQuery}
                   onChange={(e) => {
                     setSpellQuery(e.target.value);
@@ -863,14 +887,14 @@ export function EventsPanel({
                   type="number"
                   min={0}
                   data-testid="events-f-amount"
-                  aria-label="数值下限"
-                  placeholder="≥ 数值"
+                  aria-label={t("report.eventsPanel.amountAria")}
+                  placeholder={t("report.eventsPanel.amountPlaceholder")}
                   value={minAmount ?? ""}
                   onChange={(e) => {
                     const v = e.target.value.trim();
                     setMinAmount(v === "" ? null : Number(v));
                   }}
-                  title="只看数值不小于该值的行;施放/光环/死亡这类没有数值的行会被排除"
+                  title={t("report.eventsPanel.amountTitle")}
                 />
               </th>
               <th />
@@ -902,7 +926,7 @@ export function EventsPanel({
                 return (
                   <tr className="rpt-events-group" key={item.key}>
                     <td className="rpt-stats-detail-t">{fmtTime(d.tS)}</td>
-                    <td>{EVENT_KIND_LABEL.aura}</td>
+                    <td>{eventKindLabel("aura", lang)}</td>
                     <td />
                     <td>{nameCell(d.destName)}</td>
                     <td colSpan={2}>
@@ -911,10 +935,13 @@ export function EventsPanel({
                         onClick={() => toggleGroup(gk)}
                       >
                         {caret}
-                        {d.destName} {d.count} 个光环同时消失
+                        {t("report.eventsPanel.auraFlood", {
+                          name: d.destName,
+                          n: d.count,
+                        })}
                         {d.deathClear && (
                           <span className="rpt-events-group-chip">
-                            死亡清场
+                            {t("report.eventsPanel.deathClear")}
                           </span>
                         )}
                       </button>
@@ -926,7 +953,7 @@ export function EventsPanel({
               return (
                 <tr className="rpt-events-group" key={item.key}>
                   <td className="rpt-stats-detail-t">{fmtTime(d.tS)}</td>
-                  <td>{EVENT_KIND_LABEL[d.rowKind]}</td>
+                  <td>{eventKindLabel(d.rowKind, lang)}</td>
                   <td>{nameCell(d.srcName)}</td>
                   <td>{nameCell(d.destName)}</td>
                   <td>

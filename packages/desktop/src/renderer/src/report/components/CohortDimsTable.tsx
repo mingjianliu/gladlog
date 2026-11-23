@@ -1,3 +1,4 @@
+import { makeT } from "../../../../shared/i18n";
 import type { CohortDimRow } from "../derive/cohortDims";
 
 /** Cursor / verdict color by direction-corrected score: good --win / bad
@@ -24,6 +25,7 @@ export function CohortDimsTable({
   lang?: "en" | "zh";
 }) {
   if (rows.length === 0) return null;
+  const t = makeT(lang);
   const overall = Math.round(
     rows.reduce((a, r) => a + r.score, 0) / rows.length,
   );
@@ -34,29 +36,14 @@ export function CohortDimsTable({
       <div className="rpt-cohort-summary" data-testid="cohort-summary">
         {/* With a single dimension, skip strongest/weakest (it would compare a
             dimension against itself, P3-1) */}
-        {lang === "zh" ? (
-          <>
-            综合评分 <b>{overall}</b>
-            {rows.length > 1 && (
-              <>
-                {" "}
-                · 最强:{best.keyLabel}({best.score})· 最弱:
-                {worst.keyLabel}({worst.score})
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            Overall score <b>{overall}</b>
-            {rows.length > 1 && (
-              <>
-                {" "}
-                · strongest: {best.keyLabel} ({best.score}) · weakest:{" "}
-                {worst.keyLabel} ({worst.score})
-              </>
-            )}
-          </>
-        )}
+        {t("report.cohortTable.overall")} <b>{overall}</b>
+        {rows.length > 1 &&
+          t("report.cohortTable.bestWorst", {
+            best: best.keyLabel,
+            bestScore: best.score,
+            worst: worst.keyLabel,
+            worstScore: worst.score,
+          })}
       </div>
       {rows.map((dim) => {
         const color = cursorColor(dim.score);
@@ -73,7 +60,12 @@ export function CohortDimsTable({
                 midpoint tick is the cohort-median reference (50 points) */}
             <span
               className="rpt-cohort-dist"
-              title={`评分 ${dim.score}(方向修正)· p10 ${dim.p10} · p50 ${dim.p50} · p90 ${dim.p90}`}
+              title={t("report.cohortTable.scoreTitle", {
+                score: dim.score,
+                p10: dim.p10,
+                p50: dim.p50,
+                p90: dim.p90,
+              })}
             >
               <span
                 className="rpt-cohort-scorebar"
@@ -91,7 +83,9 @@ export function CohortDimsTable({
             <span
               className="rpt-cohort-value"
               style={{ color }}
-              title={`实测 ${dim.valueLabel}`}
+              title={t("report.cohortTable.measured", {
+                value: dim.valueLabel,
+              })}
             >
               {dim.displayLabel}
             </span>

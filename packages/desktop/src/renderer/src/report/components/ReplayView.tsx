@@ -1,6 +1,8 @@
 import { arenaObstacles, fmtTime } from "@gladlog/analysis";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import type { MessageKey } from "../../../../shared/i18n";
+import { useT } from "../../i18n/LangProvider";
 import arenaFloorsJson from "../data/arenaFloors.json";
 import { arenaMap, arenaPx, arenaToPx } from "../data/arenaMaps";
 import { classColor, classGlyph, specIconName } from "../data/gameConstants";
@@ -28,7 +30,7 @@ import { ReplayMapResizer } from "./ReplayMapResizer";
 import { ReplaySplitter } from "./ReplaySplitter";
 import { ReplayZoomControls } from "./ReplayZoomControls";
 import { useIconDataUrls } from "./useIconDataUrl";
-import { type ReplayLayoutMode,useReplayLayout } from "./useReplayLayout";
+import { type ReplayLayoutMode, useReplayLayout } from "./useReplayLayout";
 import { useReplayZoom } from "./useReplayZoom";
 
 const FALLBACK_VW = 520;
@@ -36,15 +38,10 @@ const FALLBACK_VH = 520;
 const PAD = 46;
 const GRID = 4;
 const SPEEDS = [0.5, 1, 2, 4] as const;
-/** Hotkey / legend copy (P1-7: the two hint lines fold into the "?" button). */
-const HINT_KEYS =
-  "空格 播放/暂停 · ← → ±5s · Shift ±1s · ⌘/Ctrl+滚轮 缩放(放大后滚轮可继续)· 双击复位 · 分隔条可拖(聚焦后 ← →)";
-const HINT_LEGEND =
-  "虚线空心 = 该时刻日志里还没有此人坐标(跑动不进战斗日志,要等他施法、挨打或被治疗才会暴露位置)";
-const LAYOUT_MODES: readonly (readonly [ReplayLayoutMode, string])[] = [
-  ["split", "地图 + GCD"],
-  ["map", "纯地图"],
-  ["gcd", "纯 GCD"],
+const LAYOUT_MODES: readonly (readonly [ReplayLayoutMode, MessageKey])[] = [
+  ["split", "report.replay.layout.split"],
+  ["map", "report.replay.layout.map"],
+  ["gcd", "report.replay.layout.gcd"],
 ];
 
 const sideRing = (side: string): string =>
@@ -127,6 +124,10 @@ export function ReplayView({
   // Burst glow + same-second focus fire (DPS D1): the predicates live in
   // analysis/derive; here we only look up the current t
   const burstAuras = useMemo(() => deriveBurstAuras(source), [source]);
+  const { t: tt } = useT();
+  /** Hotkey / legend copy (P1-7: the two hint lines fold into the "?" button). */
+  const hintKeys = tt("report.replay.hintKeys");
+  const hintLegend = tt("report.replay.hintLegend");
   const focusFire = useMemo(() => deriveFocusFire(source), [source]);
   // CC state on the map (user request 2026-08-14): same predicate as the
   // prompt's [CC ON TEAM] / death recap (analyzePlayerCCAndTrinket)
@@ -257,9 +258,7 @@ export function ReplayView({
   if (tracks.length === 0) {
     return (
       <div className="rpt-replay rpt-replay-empty">
-        <p className="rpt-dim">
-          无位置数据 —— 该场没有高级战斗日志(advancedSamples),无法回放走位。
-        </p>
+        <p className="rpt-dim">{tt("report.replay.noPositions")}</p>
       </div>
     );
   }
@@ -382,7 +381,7 @@ export function ReplayView({
             className={mode === value ? "active" : ""}
             onClick={() => setMode(value)}
           >
-            {label}
+            {tt(label)}
           </button>
         ))}
       </div>
@@ -639,7 +638,7 @@ export function ReplayView({
                         >
                           ✕
                         </text>
-                        <title>{`${tr.name} 阵亡${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
+                        <title>{`${tt("report.replay.deathTitle", { name: tr.name })}${onDeathClick ? tt("report.replay.deathClick") : ""}`}</title>
                       </g>
                     );
                   })}
@@ -701,7 +700,12 @@ export function ReplayView({
                               r={19 * k}
                               className="rpt-replay-burst-ring"
                             >
-                              <title>{`${tr.name} 爆发中:${span.spellName}`}</title>
+                              <title>
+                                {tt("report.replay.bursting", {
+                                  name: tr.name,
+                                  spell: span.spellName,
+                                })}
+                              </title>
                             </circle>
                           );
                         })()}
@@ -718,7 +722,12 @@ export function ReplayView({
                               r={16 * k}
                               className="rpt-replay-focus-ring"
                             >
-                              <title>{`集火:${n} 人同秒打击 ${tr.name}`}</title>
+                              <title>
+                                {tt("report.replay.focusFire", {
+                                  n,
+                                  name: tr.name,
+                                })}
+                              </title>
                             </circle>
                           );
                         })()}
@@ -748,7 +757,18 @@ export function ReplayView({
                                     : "rpt-replay-cc-ring"
                                 }
                               >
-                                <title>{`${tr.name} ${root ? "被定身" : "被控制"}:${cc.spellName}(剩 ${remainS.toFixed(1)}s)`}</title>
+                                <title>
+                                  {tt(
+                                    root
+                                      ? "report.replay.rooted"
+                                      : "report.replay.ccd",
+                                    {
+                                      name: tr.name,
+                                      spell: cc.spellName,
+                                      s: remainS.toFixed(1),
+                                    },
+                                  )}
+                                </title>
                               </circle>
                               <g
                                 className={
@@ -778,7 +798,10 @@ export function ReplayView({
                                   y={cy + 37 * k}
                                   className="rpt-replay-cc-text"
                                 >
-                                  {cc.spellName} 剩{remainS.toFixed(1)}s
+                                  {tt("report.replay.ccLeft", {
+                                    spell: cc.spellName,
+                                    s: remainS.toFixed(1),
+                                  })}
                                 </text>
                               </g>
                             </g>
@@ -810,7 +833,7 @@ export function ReplayView({
                           })()}
                         {!known && (
                           <title>
-                            {`${tr.name}:该时刻日志里还没有他的坐标(跑动不产生战斗日志记录)。圆点画在他首次卷入战斗的位置,不代表他此刻在这儿。`}
+                            {tt("report.replay.unknownPos", { name: tr.name })}
                           </title>
                         )}
                         <circle
@@ -913,7 +936,7 @@ export function ReplayView({
                                     : "var(--loss)"
                                 }
                               />
-                              <title>{`读条:${bar.spellName}${bar.outcome === "cut" ? "(被掐)" : ""}`}</title>
+                              <title>{`${tt("report.replay.castBar", { spell: bar.spellName })}${bar.outcome === "cut" ? tt("report.replay.castCut") : ""}`}</title>
                             </g>
                           );
                         })()}
@@ -1016,12 +1039,16 @@ export function ReplayView({
                             <span className="rpt-frame-name">
                               {tr.name}
                               {bursting && !dead && (
-                                <span className="rpt-frame-burst">爆发</span>
+                                <span className="rpt-frame-burst">
+                                  {tt("report.replay.burstTag")}
+                                </span>
                               )}
                             </span>
                             {dead ? (
                               <span className="rpt-frame-dead">
-                                ✝ 阵亡 {relTime(tr.deathT!, startTime)}
+                                {tt("report.replay.dead", {
+                                  t: relTime(tr.deathT!, startTime),
+                                })}
                               </span>
                             ) : (
                               <span className="rpt-frame-bar">
@@ -1090,7 +1117,13 @@ export function ReplayView({
             setPlaying((p) => !p);
           }}
         >
-          {playing ? "⏸ 暂停" : atEnd ? "↻ 重放" : "▶ 播放"}
+          {tt(
+            playing
+              ? "report.replay.pause"
+              : atEnd
+                ? "report.replay.replayAgain"
+                : "report.replay.play",
+          )}
         </button>
         <span className="rpt-replay-time">
           {relTime(t, startTime)} / {relTime(endTime, startTime)}
@@ -1119,10 +1152,15 @@ export function ReplayView({
                     setPlaying(false);
                   }}
                   title={
-                    (b.kind === "burst"
-                      ? `击杀尝试 on ${b.targetName}(团队伤害 ${(b.damage / 1000).toFixed(0)}k)`
-                      : `${b.targetName} 无大防御且未被惩罚(团队伤害仅 ${(b.damage / 1000).toFixed(0)}k)`) +
-                    "(点击定位)"
+                    tt(
+                      b.kind === "burst"
+                        ? "report.replay.bandBurst"
+                        : "report.replay.bandVuln",
+                      {
+                        name: b.targetName,
+                        k: (b.damage / 1000).toFixed(0),
+                      },
+                    ) + tt("report.common.clickToSeek")
                   }
                 />
               );
@@ -1130,7 +1168,7 @@ export function ReplayView({
           </div>
           <input
             type="range"
-            aria-label="回放时间轴"
+            aria-label={tt("report.replay.scrubAria")}
             className="rpt-replay-scrub"
             min={startTime}
             max={endTime}
@@ -1142,8 +1180,11 @@ export function ReplayView({
         {(() => {
           const d = dampeningAt(dampSeries, (t - source.startTime) / 1000);
           return d != null && d > 0 ? (
-            <span className="rpt-replay-damp" title="治疗衰减(dampening)">
-              衰减 {d}%
+            <span
+              className="rpt-replay-damp"
+              title={tt("report.replay.dampTitle")}
+            >
+              {tt("report.replay.damp", { pct: d })}
             </span>
           ) : null;
         })()}
@@ -1164,17 +1205,17 @@ export function ReplayView({
         <button
           className="rpt-btn rpt-replay-moment-dive"
           data-testid="moment-dive"
-          title="对当前时刻前后 10s 做一次 AI 深挖(密集快照)"
+          title={tt("report.replay.diveTitle")}
           onClick={() => onMomentDive?.((t - source.startTime) / 1000)}
         >
-          深挖此刻
+          {tt("report.replay.dive")}
         </button>
         {/* Hotkeys / legend folded away (P1-7): a "?" button with a permanent
             tooltip plus a one-shot card on click */}
         <button
           className="rpt-replay-help"
-          title={`${HINT_KEYS}\n${HINT_LEGEND}`}
-          aria-label="快捷键与图例说明"
+          title={`${hintKeys}\n${hintLegend}`}
+          aria-label={tt("report.replay.helpAria")}
           onClick={() => setShowHelp((v) => !v)}
         >
           ?
@@ -1184,8 +1225,8 @@ export function ReplayView({
             className="rpt-replay-help-pop"
             onClick={() => setShowHelp(false)}
           >
-            <p>{HINT_KEYS}</p>
-            <p>{HINT_LEGEND}</p>
+            <p>{hintKeys}</p>
+            <p>{hintLegend}</p>
           </div>
         )}
       </div>

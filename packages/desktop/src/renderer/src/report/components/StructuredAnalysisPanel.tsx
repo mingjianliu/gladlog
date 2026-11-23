@@ -17,7 +17,7 @@ import {
 import type { AnalysisFallbackReason } from "../../../../shared/analysisFallback";
 import { bridge } from "../../bridge";
 import { useT } from "../../i18n/LangProvider";
-import { DEMO_ANALYSIS } from "../data/demoAnalysis";
+import { DEMO_ANALYSIS, DEMO_ANALYSIS_EN } from "../data/demoAnalysis";
 import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
 import { buildDeepenPacks } from "../derive/analysisInput";
 import { categoryLabel, severityLabel } from "../derive/findingDisplay";
@@ -145,7 +145,7 @@ export function StructuredAnalysisPanel({
   // getState's cached answer overwrote the done payload. LangProvider renders
   // its children only once the language is known, so this value is stable
   // from the first render and changes only on a real user switch.
-  const { lang } = useT();
+  const { lang, t } = useT();
   // Settings snapshot for the split-button menu (Task 4): only the sentinel
   // fields (key truthiness) and the current global default backend/model.
   const [aiSettings, setAiSettings] = useState<{
@@ -810,7 +810,11 @@ export function StructuredAnalysisPanel({
   };
 
   const buttonText =
-    state === "running" ? "分析中…" : state === "done" ? "重新分析" : "AI 分析";
+    state === "running"
+      ? t("report.common.analyzing")
+      : state === "done"
+        ? t("report.ai.reanalyze")
+        : t("report.view.ai");
 
   return (
     <div className="rpt-ai-panel">
@@ -829,12 +833,12 @@ export function StructuredAnalysisPanel({
             onClick={handleAnalyze}
             disabled={!input || state === "running"}
           >
-            {inputPending ? "正在准备分析数据…" : buttonText}
+            {inputPending ? t("report.ai.preparing") : buttonText}
           </button>
           <button
             className="rpt-ai-split-arrow"
             data-testid="analysis-model-picker"
-            aria-label="选用其他模型分析"
+            aria-label={t("report.ai.pickModel")}
             aria-haspopup="menu"
             aria-expanded={modelMenuOpen}
             // Disabled by run state only (per the brief: "disable the whole
@@ -869,7 +873,7 @@ export function StructuredAnalysisPanel({
                         onClick={() => handleSelectModel(b, m.id)}
                       >
                         {slotLabel(`${b}:${m.id}`)}
-                        {isDefault ? " (默认)" : ""}
+                        {isDefault ? t("report.ai.default") : ""}
                       </button>
                     );
                   })}
@@ -883,10 +887,10 @@ export function StructuredAnalysisPanel({
             type="button"
             className="rpt-btn"
             data-testid="ai-demo-btn"
-            title="用一份演示数据看看分析长什么样(与本场无关)"
+            title={t("report.ai.demoTitle")}
             onClick={() => setDemo(true)}
           >
-            看一个演示分析
+            {t("report.ai.demoBtn")}
           </button>
         )}
         {/* Status + Export follow the placeholder state, not the underlying
@@ -897,14 +901,16 @@ export function StructuredAnalysisPanel({
             other slot's findings under this slot's tab. */}
         {result && displayEmpty === "stale" && (
           <span className="rpt-ai-status" data-testid="ai-status">
-            旧版本槽 · 无可用结果
+            {t("report.ai.staleSlot")}
           </span>
         )}
         {result && displayEmpty !== "stale" && (
           <span className="rpt-ai-status" data-testid="ai-status">
-            已缓存 · {result.findings.length} 条 findings
+            {t("report.ai.cached", { n: result.findings.length })}
             {result.findings[0]?.severity
-              ? ` · 最高严重度 ${severityLabel(result.findings[0].severity, lang)}`
+              ? t("report.ai.maxSeverity", {
+                  sev: severityLabel(result.findings[0].severity, lang),
+                })
               : ""}
           </span>
         )}
@@ -919,13 +925,13 @@ export function StructuredAnalysisPanel({
       </div>
       {goals.length > 0 && (
         <div className="rpt-ai-goals" data-testid="ai-goals">
-          <span className="rpt-ai-goals-title">
-            本场目标 —— 你标记过「还在犯」的问题:
-          </span>
+          <span className="rpt-ai-goals-title">{t("report.ai.goals")}</span>
           {goals.map((g) => (
             <span key={g.category} className="rpt-ai-goal">
               ↻{g.recurring} {categoryLabel(g.category, lang)}
-              {g.lastTitle ? `(上次:${g.lastTitle})` : ""}
+              {g.lastTitle
+                ? t("report.ai.goalLast", { title: g.lastTitle })
+                : ""}
             </span>
           ))}
         </div>
@@ -939,22 +945,21 @@ export function StructuredAnalysisPanel({
             data-testid="ai-demo-banner"
             role="note"
           >
-            <span>
-              演示数据 · 与本场无关 · 在「设置 → AI 分析」配置 API key 或本地
-              CLI 后即可分析本场
-            </span>
+            <span>{t("report.ai.demoBanner")}</span>
             <button
               type="button"
               className="rpt-btn"
               onClick={() => setDemo(false)}
             >
-              关闭
+              {t("report.common.close")}
             </button>
           </div>
           {/* No onJump / onJumpT / onInspect: the chips point at events that
               do not exist in this match. */}
           <FindingsList
-            findings={DEMO_ANALYSIS.findings}
+            findings={
+              (lang === "en" ? DEMO_ANALYSIS_EN : DEMO_ANALYSIS).findings
+            }
             onSelect={() => {}}
             lang={lang}
             rich={rich}
@@ -975,7 +980,11 @@ export function StructuredAnalysisPanel({
                   onClick={() => handleSelectSlot(slot.key)}
                 >
                   {slotLabel(slot.key)}
-                  {slot.stale && <span className="rpt-slot-stale">旧版</span>}
+                  {slot.stale && (
+                    <span className="rpt-slot-stale">
+                      {t("report.ai.staleTag")}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -1000,8 +1009,7 @@ export function StructuredAnalysisPanel({
             // these are the new slot's own findings). `result` itself is not
             // cleared, it is just not rendered here.
             <p className="rpt-slot-stale-note" data-testid="slot-stale-note">
-              该槽为旧版本分析(提示词已升级,或 AI
-              自查设置已切换),重新分析后可查看
+              {t("report.ai.staleNote")}
             </p>
           ) : result.hadNarration === false ? (
             <div>
@@ -1048,7 +1056,9 @@ export function StructuredAnalysisPanel({
               />
               {splitFindings.wholeRound.length > 0 && (
                 <>
-                  <h4 className="rpt-axis-wholeround-label">整场观察</h4>
+                  <h4 className="rpt-axis-wholeround-label">
+                    {t("report.ai.wholeRound")}
+                  </h4>
                   <FindingsList
                     findings={splitFindings.wholeRound}
                     onSelect={setActiveEventIds}
@@ -1080,9 +1090,13 @@ export function StructuredAnalysisPanel({
         >
           {[
             runMeta?.backend && runMeta?.model
-              ? `${backendModelLabel(runMeta.backend, runMeta.model)} 分析中`
-              : "分析中",
-            elapsedS != null ? `已 ${fmtElapsed(elapsedS)}` : null,
+              ? t("report.ai.runningWith", {
+                  model: backendModelLabel(runMeta.backend, runMeta.model),
+                })
+              : t("report.ai.running"),
+            elapsedS != null
+              ? t("report.pro.elapsed", { t: fmtElapsed(elapsedS) })
+              : null,
             cliWaitHint(runMeta?.backend, lang),
           ]
             .filter(Boolean)
@@ -1090,13 +1104,13 @@ export function StructuredAnalysisPanel({
           {retrying && (
             <>
               <br />
-              首轮输出解析失败,已自动重试一次(总时长会翻倍)
+              {t("report.ai.retrying")}
             </>
           )}
           {reviewing && (
             <>
               <br />
-              首轮已出结果,正在 AI 自查(多一次 AI 调用)
+              {t("report.ai.reviewing")}
             </>
           )}
         </p>

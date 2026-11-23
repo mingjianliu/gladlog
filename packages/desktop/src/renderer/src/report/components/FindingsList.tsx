@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 
 import { findingKey } from "../../../../shared/findingKey";
+import { makeT } from "../../../../shared/i18n";
 import {
   candidateShortLabel,
   categoryLabel,
@@ -52,6 +53,7 @@ export function FindingsList({
   rich?: (text?: string | null) => ReactNode;
 }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
+  const t = makeT(lang);
 
   if (findings.length === 0) {
     return (
@@ -81,7 +83,7 @@ export function FindingsList({
                 return habit ? (
                   <span
                     className="rpt-finding-habit"
-                    title="跨对局稳定模式(确定性统计,非 AI 判断)"
+                    title={t("report.finding.habitTitle")}
                   >
                     {habit}
                   </span>
@@ -99,7 +101,9 @@ export function FindingsList({
             </p>
             {f.deepDive && (
               <div className="rpt-finding-deep" data-testid="finding-deepdive">
-                <span className="rpt-finding-deep-tag">深挖</span>
+                <span className="rpt-finding-deep-tag">
+                  {t("report.finding.deepTag")}
+                </span>
                 <p className="rpt-finding-deep-text">
                   {rich ? rich(f.deepDive.text) : f.deepDive.text}
                 </p>
@@ -124,7 +128,11 @@ export function FindingsList({
                 className="rpt-finding-toggle"
                 onClick={() => setOpen((o) => ({ ...o, [i]: !o[i] }))}
               >
-                {expanded ? "收起 ▴" : "展开全文 ▾"}
+                {t(
+                  expanded
+                    ? "report.finding.collapse"
+                    : "report.finding.expand",
+                )}
               </button>
             )}
             {f.eventIds && f.eventIds.length > 0 && (
@@ -145,7 +153,9 @@ export function FindingsList({
                         // When there is a spell, put its name in the tooltip:
                         // the icon alone carries no meaning
                         (c.spell ? `${c.spell} · ` : "") +
-                        (onJump ? `跳到 ${fmtTime(c.t)} 的回放` : fmtTime(c.t))
+                        (onJump
+                          ? t("report.finding.jumpTo", { t: fmtTime(c.t) })
+                          : fmtTime(c.t))
                       }
                       onClick={onJump ? () => onJump([c.id]) : undefined}
                     >
@@ -158,7 +168,7 @@ export function FindingsList({
                     className="rpt-finding-jump"
                     onClick={() => onJump(f.eventIds)}
                   >
-                    ▶ 回放此刻
+                    {t("report.finding.replayHere")}
                   </button>
                 )}
                 {onInspect &&
@@ -175,10 +185,10 @@ export function FindingsList({
                     return (
                       <button
                         className="rpt-finding-jump"
-                        title="在事件视图里查看该时刻的原始事件"
+                        title={t("report.finding.inspectTitle")}
                         onClick={() => onInspect(first.t, first.unitNames)}
                       >
-                        ⛏ 原始事件
+                        {t("report.finding.inspect")}
                       </button>
                     );
                   })()}
@@ -194,21 +204,21 @@ export function FindingsList({
                   <span className="rpt-finding-flags">
                     <button
                       className={cur === "done" ? "active" : ""}
-                      title="标记为已改进"
+                      title={t("report.finding.markDone")}
                       onClick={() =>
                         onFlag(key, cur === "done" ? null : "done")
                       }
                     >
-                      ✓ 已跟进
+                      {t("report.finding.done")}
                     </button>
                     <button
                       className={cur === "recurring" ? "active rec" : ""}
-                      title="标记为还在犯"
+                      title={t("report.finding.markRecurring")}
                       onClick={() =>
                         onFlag(key, cur === "recurring" ? null : "recurring")
                       }
                     >
-                      ↻ 还在犯
+                      {t("report.finding.recurring")}
                     </button>
                   </span>
                 );

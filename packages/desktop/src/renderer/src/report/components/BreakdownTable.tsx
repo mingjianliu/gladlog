@@ -22,9 +22,13 @@ export function BreakdownTable({
   critAvailable: boolean;
   mode: "damage" | "healing" | "taken";
 }) {
-  const { lang } = useT();
+  const { lang, t } = useT();
   if (rows.length === 0)
-    return <div className="rpt-breakdown rpt-breakdown-empty">无数据</div>;
+    return (
+      <div className="rpt-breakdown rpt-breakdown-empty">
+        {t("report.breakdown.empty")}
+      </div>
+    );
   const top = rows.slice(0, TOP_N);
   const rest = rows.slice(TOP_N);
   const restTotal = rest.reduce((a, r) => a + r.total, 0);
@@ -34,13 +38,13 @@ export function BreakdownTable({
     <table className="rpt-breakdown">
       <thead>
         <tr>
-          <th>技能</th>
-          <th>总量</th>
-          <th>占比</th>
-          <th>次数</th>
-          {critAvailable && <th>暴击</th>}
-          {showOverheal && <th>过量</th>}
-          <th>最大一击</th>
+          <th>{t("report.breakdown.col.spell")}</th>
+          <th>{t("report.breakdown.col.total")}</th>
+          <th>{t("report.breakdown.col.share")}</th>
+          <th>{t("report.breakdown.col.hits")}</th>
+          {critAvailable && <th>{t("report.breakdown.col.crit")}</th>}
+          {showOverheal && <th>{t("report.breakdown.col.overheal")}</th>}
+          <th>{t("report.breakdown.col.maxHit")}</th>
         </tr>
       </thead>
       <tbody>
@@ -52,7 +56,11 @@ export function BreakdownTable({
                 label={r.label}
               />{" "}
               {r.label}
-              {r.isAbsorb && <span className="rpt-breakdown-tag">吸收</span>}
+              {r.isAbsorb && (
+                <span className="rpt-breakdown-tag">
+                  {t("report.breakdown.absorb")}
+                </span>
+              )}
             </td>
             <td title={fmt(r.total, lang)}>{abbrevAmount(r.total, lang)}</td>
             <td>{r.sharePct.toFixed(0)}%</td>
@@ -68,7 +76,7 @@ export function BreakdownTable({
         ))}
         {rest.length > 0 && (
           <tr className="rpt-breakdown-rest">
-            <td>其余 {rest.length} 个(合计)</td>
+            <td>{t("report.breakdown.rest", { n: rest.length })}</td>
             <td title={fmt(restTotal, lang)}>
               {abbrevAmount(restTotal, lang)}
             </td>

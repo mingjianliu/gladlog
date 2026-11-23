@@ -4,7 +4,10 @@ import { zhDev } from "./dev";
 import { zhMatchList } from "./matchList";
 import { zhNav } from "./nav";
 import { zhRecorder } from "./recorder";
+import { zhReportAi } from "./reportAi";
+import { zhReportCards } from "./reportCards";
 import { zhReportDerive } from "./reportDerive";
+import { zhReportReplay } from "./reportReplay";
 import { zhSettings } from "./settings";
 import { zhUpdate } from "./update";
 
@@ -20,4 +23,7 @@ export const zhMessages = {
   ...zhRecorder,
   ...zhDev,
   ...zhReportDerive,
+  ...zhReportCards,
+  ...zhReportReplay,
+  ...zhReportAi,
 };

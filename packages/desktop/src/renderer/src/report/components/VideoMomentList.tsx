@@ -1,6 +1,7 @@
 import { fmtTime } from "@gladlog/analysis";
 import { useEffect, useRef } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import type { VideoMoment } from "../derive/videoMoments";
 import { MARK_STYLE } from "./VideoMomentStrip";
 
@@ -29,6 +30,7 @@ export function VideoMomentList({
    * an ordinary, clickable moment (design doc §4.1). */
   unreachableBeforeBattleS?: number;
 }) {
+  const { t } = useT();
   // Current row = the last moment already passed (the playhead sits on it;
   // none before the first moment is reached)
   const curIdx =
@@ -64,7 +66,11 @@ export function VideoMomentList({
             type="button"
             className={cls.join(" ")}
             onClick={() => onSeek?.(m.tS)}
-            title={unreachable ? "该时刻在录像开始之前" : "定位到该时刻"}
+            title={t(
+              unreachable
+                ? "report.video.beforeRecording"
+                : "report.video.seekMoment",
+            )}
           >
             <span className="rpt-video-feed-t">{fmtTime(m.tS)}</span>
             <span className={`rpt-video-moment-icon ${style.cls}`}>

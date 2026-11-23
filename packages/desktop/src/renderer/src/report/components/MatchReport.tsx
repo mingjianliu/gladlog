@@ -1,6 +1,7 @@
 import { ensureAnalysisData, type RawStreams } from "@gladlog/analysis";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import type { MessageKey } from "../../../../shared/i18n";
 import { bridge } from "../../bridge";
 import { useT } from "../../i18n/LangProvider";
 import {
@@ -134,12 +135,12 @@ function afterPaint(fn: () => void): () => void {
   };
 }
 
-const VIEW_LABEL: Record<View, string> = {
-  report: "战报",
-  replay: "回放",
-  events: "事件",
-  video: "录像",
-  ai: "AI 分析",
+const VIEW_LABEL: Record<View, MessageKey> = {
+  report: "report.view.report",
+  replay: "report.view.replay",
+  events: "report.view.events",
+  video: "report.view.video",
+  ai: "report.view.ai",
 };
 
 export function MatchReport({
@@ -197,6 +198,9 @@ export function MatchReport({
   // be able to read the current value before the closure is created — depends
   // only on props, not on any hook, so computing it early affects nothing else.
   const resolvedMatchId = matchId ?? source.id;
+  // UI language, which is also the coach reply language (spec §6.3). Read
+  // before the derive memos below: every derive whose output is text takes it.
+  const { lang, t } = useT();
   // T93 open-path stage marks (no-ops unless the app shell started a trace).
   openReportRender(source);
   // Staged fill (T93). `level` is how many FILL_STEPS have run for this
@@ -432,10 +436,10 @@ export function MatchReport({
     () =>
       L4
         ? openTimed("derive:deriveStatsTable", () =>
-            deriveStatsTable(source, timeRange),
+            deriveStatsTable(source, timeRange, lang),
           )
         : undefined,
-    [source, timeRange, L4],
+    [source, timeRange, L4, lang],
   );
   // Step 1, with the curve: the kill-window list sits between the curve and
   // the leaderboard and its height (0-108 px) is not known before this runs,
@@ -451,10 +455,10 @@ export function MatchReport({
     () =>
       L2
         ? openTimed("derive:derivePressureLanes", () =>
-            derivePressureLanes(source),
+            derivePressureLanes(source, lang),
           )
         : undefined,
-    [source, L2],
+    [source, L2, lang],
   );
   const dampening = useMemo(
     () =>
@@ -478,9 +482,11 @@ export function MatchReport({
   const deathRecaps = useMemo(
     () =>
       L2
-        ? openTimed("derive:deriveDeathRecaps", () => deriveDeathRecaps(source))
+        ? openTimed("derive:deriveDeathRecaps", () =>
+            deriveDeathRecaps(source, lang),
+          )
         : undefined,
-    [source, L2],
+    [source, L2, lang],
   );
   // Compute the whole-match basis first (KPI chips always use it); when
   // timeRange is empty the windowed version just reuses that reference instead
@@ -524,9 +530,11 @@ export function MatchReport({
   const dispelFull = useMemo(
     () =>
       L2
-        ? openTimed("derive:deriveDispelDash", () => deriveDispelDash(source))
+        ? openTimed("derive:deriveDispelDash", () =>
+            deriveDispelDash(source, undefined, lang),
+          )
         : undefined,
-    [source, L2],
+    [source, L2, lang],
   );
   // Hero line facts (UI review #1): finisher = the last real player death —
   // the same predicate KpiChips used (timeline.deaths already excludes
@@ -544,20 +552,20 @@ export function MatchReport({
         ? undefined
         : timeRange
           ? openTimed("derive:deriveDispelDash", () =>
-              deriveDispelDash(source, timeRange),
+              deriveDispelDash(source, timeRange, lang),
             )
           : dispelFull,
-    [source, timeRange, dispelFull, L2],
+    [source, timeRange, dispelFull, L2, lang],
   );
   // CC-break stats (2026-08-02): the "break" tab of the engagement panel
   const ccBreakDash = useMemo(
     () =>
       L1
         ? openTimed("derive:deriveCcBreakDash", () =>
-            deriveCcBreakDash(source, timeRange),
+            deriveCcBreakDash(source, timeRange, lang),
           )
         : undefined,
-    [source, timeRange, L1],
+    [source, timeRange, L1, lang],
   );
   const auraUptime = useMemo(
     () =>
@@ -593,9 +601,11 @@ export function MatchReport({
   const mistakesAll = useMemo(
     () =>
       L3
-        ? openTimed("derive:deriveMistakes", () => deriveMistakes(source))
+        ? openTimed("derive:deriveMistakes", () =>
+            deriveMistakes(source, undefined, lang),
+          )
         : undefined,
-    [source, L3],
+    [source, L3, lang],
   );
   const mistakes = useMemo(
     () =>
@@ -641,9 +651,10 @@ export function MatchReport({
             source,
             rangeDurationS(source),
             uncoveredAnchors,
+            lang,
           )
         : [],
-    [source, uncoveredAnchors, view, mistakesAll],
+    [source, uncoveredAnchors, view, mistakesAll, lang],
   );
   const [recap, setRecap] = useState<DeathRecap | null>(null);
   // P1-3: on entering a report / switching matches, expand the most recent death
@@ -794,8 +805,6 @@ export function MatchReport({
     setAiFindingAnchors([]);
   }, [resolvedMatchId]);
 
-  // UI language, which is also the coach reply language (spec §6.3).
-  const { lang } = useT();
   // The click flow already awaits ensureAnalysisData() (see runWindowAi), so by
   // the time results render the name index is guaranteed ready — no need for
   // StructuredAnalysisPanel's dataReady gate here.
@@ -999,11 +1008,13 @@ export function MatchReport({
                   className={k === view ? "active" : ""}
                   onClick={() => setView(k)}
                 >
-                  {VIEW_LABEL[k]}
+                  {t(VIEW_LABEL[k])}
                 </button>
               ))}
           </div>
-          {level < FILL_DONE && <FillStatus label="分析中…" />}
+          {level < FILL_DONE && (
+            <FillStatus label={t("report.common.analyzing")} />
+          )}
         </div>
         {/* Hero line (UI review 2026-08-21 #1): result · meta · 终结 · 转折 in
           one line under the tabs, on every view. */}
@@ -1059,10 +1070,10 @@ export function MatchReport({
                       <button
                         className="rpt-btn"
                         data-testid="window-ai-btn"
-                        title="对当前选段做一次 AI 深挖(无可教信号时不调用模型)"
+                        title={t("report.match.windowAiTitle")}
                         onClick={() => void runWindowAi(timeRange)}
                       >
-                        AI 分析此段
+                        {t("report.common.analyzeSpan")}
                       </button>
                     )}
                     {/* Workflow actions live in the ⋯ menu (UI review #1):
@@ -1071,17 +1082,17 @@ export function MatchReport({
                       items={[
                         {
                           key: "md",
-                          label: "复制 Markdown",
-                          title: "导出当前(窗口)口径的战报 Markdown",
+                          label: t("report.match.copyMd"),
+                          title: t("report.match.copyMdTitle"),
                           onClick: () =>
                             void navigator.clipboard.writeText(
-                              buildReportMarkdown(source, timeRange),
+                              buildReportMarkdown(source, timeRange, lang),
                             ),
                         },
                         {
                           key: "img",
-                          label: "导出图片",
-                          title: "导出战报图片(离屏渲染同一页面后整页截图)",
+                          label: t("report.match.exportImg"),
+                          title: t("report.match.exportImgTitle"),
                           onClick: () => {
                             try {
                               void bridge().matches.exportImage({
@@ -1099,9 +1110,8 @@ export function MatchReport({
                         },
                         {
                           key: "bug",
-                          label: "报告问题",
-                          title:
-                            "打包本场原始 log + AI 调用记录 + 你的描述,生成报告包",
+                          label: t("report.match.reportBug"),
+                          title: t("report.match.reportBugTitle"),
                           testId: "bug-report-btn",
                           onClick: () => {
                             setBugOpen(true);
@@ -1197,7 +1207,7 @@ export function MatchReport({
                     onSeek={handleSeekEvent}
                   />
                 ) : (
-                  <SkelLedger title="爆发账本" lines={3} />
+                  <SkelLedger title={t("report.burstLedger.title")} lines={3} />
                 )}
               </div>
               {/* Right column: persistent death recap + mistake list (1a) */}
@@ -1205,8 +1215,8 @@ export function MatchReport({
                 <div className="rpt-mode-seg rpt-side-seg">
                   {(
                     [
-                      ["recap", "回顾"],
-                      ["chat", "问教练"],
+                      ["recap", t("report.side.recap")],
+                      ["chat", t("report.side.chat")],
                     ] as const
                   ).map(([k, label]) => (
                     <button
@@ -1244,7 +1254,7 @@ export function MatchReport({
                         />
                       ) : (
                         <div className="rpt-recap-placeholder">
-                          点击曲线上的 ✕ 查看死亡回顾
+                          {t("report.match.recapPlaceholder")}
                         </div>
                       )}
                     </div>
@@ -1259,7 +1269,10 @@ export function MatchReport({
                       onSeek={handleSeekEvent}
                     />
                   ) : deathRecaps ? (
-                    <SkelLedger title="失误清单" lines={2} />
+                    <SkelLedger
+                      title={t("report.mistakesCard.title")}
+                      lines={2}
+                    />
                   ) : null}
                 </div>
                 <div
@@ -1383,28 +1396,25 @@ export function MatchReport({
             <div
               className="dash-modal rpt-bug-modal"
               role="dialog"
-              aria-label="报告问题"
+              aria-label={t("report.match.reportBug")}
               onClick={(e) => e.stopPropagation()}
             >
               <span className="dash-card-head">
-                <span className="rpt-card-label">报告问题 —— 本场</span>
+                <span className="rpt-card-label">{t("report.bug.title")}</span>
                 <button
                   type="button"
                   className="dash-modal-close"
-                  aria-label="关闭"
+                  aria-label={t("report.common.close")}
                   onClick={() => setBugOpen(false)}
                 >
                   ✕
                 </button>
               </span>
-              <p className="rpt-dim rpt-bug-hint">
-                会打包:本场原始 log、最近 AI 调用的 prompt 与返回、下面这段
-                描述。落在 gladlog-sync 同步盘时会自动上传。
-              </p>
+              <p className="rpt-dim rpt-bug-hint">{t("report.bug.hint")}</p>
               <textarea
                 className="rpt-bug-comment"
                 data-testid="bug-comment"
-                placeholder="哪里不对?比如:教练怪我没驱散龙息,但我当时被变形了"
+                placeholder={t("report.bug.placeholder")}
                 value={bugComment}
                 onChange={(e) => setBugComment(e.target.value)}
                 rows={4}
@@ -1416,20 +1426,26 @@ export function MatchReport({
                   disabled={bugState.phase === "sending"}
                   onClick={() => void submitBugReport()}
                 >
-                  {bugState.phase === "sending" ? "打包中…" : "生成报告包"}
+                  {t(
+                    bugState.phase === "sending"
+                      ? "report.bug.sending"
+                      : "report.bug.submit",
+                  )}
                 </button>
                 {bugState.phase === "done" && (
                   <span className="rpt-bug-result">
-                    已生成
-                    {bugState.synced
-                      ? "(在同步盘,会自动上传)"
-                      : "(本地保存,已在文件管理器打开)"}
+                    {t("report.bug.done")}
+                    {t(
+                      bugState.synced
+                        ? "report.bug.synced"
+                        : "report.bug.local",
+                    )}
                     :{bugState.dir}
                   </span>
                 )}
                 {bugState.phase === "error" && (
                   <span className="rpt-bug-result rpt-bug-error">
-                    生成失败 —— 稍后再试
+                    {t("report.bug.error")}
                   </span>
                 )}
               </div>

@@ -50,3 +50,48 @@ export const DEMO_ANALYSIS = {
   // Prevents the deep-dive follow-up from triggering a loop in fixture mode.
   deepened: true,
 };
+
+/**
+ * The English twin of DEMO_ANALYSIS, shown by the same button when the UI
+ * language is en (an English user must not get Chinese findings). Same shape
+ * and the same three findings, worded in English with the glossary's terms.
+ * The visual baseline keeps using the zh object.
+ */
+export const DEMO_ANALYSIS_EN: typeof DEMO_ANALYSIS = {
+  findings: [
+    {
+      eventIds: ["e1"],
+      severity: "high",
+      category: "survival",
+      title: "Focused down",
+      explanation:
+        "When both enemy DPS lined up their offensive cooldowns, you lost 82% HP in 1.4s with no defensive or movement ability used and died; before that you had been standing in the open, far from cover.",
+      deepDive: {
+        text: "At 2:08 your healer ate a 4-second Fear with their trinket on cooldown; at 2:10 the enemy Warrior pressed Avatar; your HP fell from 86% at T-15s to 41% at T-5s. Next time your healer is CC'd with no way out, press a wall or move to a pillar one GCD earlier.",
+        chips: [
+          { t: 128, label: "Fear → healer (4.0s)", unitNames: ["Healer"] },
+          { t: 130, label: "Enemy Avatar (Warr)", unitNames: ["Warr"] },
+        ],
+      },
+    },
+    {
+      eventIds: ["e2"],
+      severity: "med",
+      category: "cooldowns",
+      title: "Defensive held: Tranquility never used",
+      explanation:
+        "You held Tranquility all match and died without using it. After the enemy Restoration Druid gave up Ironbark at 0:33, you should have held the damage window with Power Word: Shield or Renew's healing over time and channelled Tranquility.",
+    },
+    {
+      eventIds: ["e3"],
+      severity: "low",
+      category: "positioning",
+      title: "Standing in the open",
+      explanation:
+        "You spent most of the match in the open middle of the arena and rarely used pillars to break line of sight.",
+    },
+  ] as unknown as Finding[],
+  dropped: 0,
+  hadNarration: true,
+  deepened: true,
+};

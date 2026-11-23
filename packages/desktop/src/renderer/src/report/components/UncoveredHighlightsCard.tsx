@@ -1,5 +1,6 @@
 import { fmtTime } from "@gladlog/analysis";
 
+import { useT } from "../../i18n/LangProvider";
 import type { TimeRange } from "../derive/timeRange";
 import type { UncoveredHighlight } from "../derive/uncoveredHighlights";
 
@@ -21,11 +22,14 @@ export function UncoveredHighlightsCard({
   highlights: UncoveredHighlight[];
   onAnalyze: (range: TimeRange) => void;
 }) {
+  const { t } = useT();
   if (highlights.length === 0) return null;
   return (
     <div className="rpt-ledger" data-testid="uncovered-highlights-card">
       <div className="rpt-ledger-head">
-        <span className="rpt-ledger-title">未覆盖亮点</span>
+        <span className="rpt-ledger-title">
+          {t("report.uncoveredCard.title")}
+        </span>
       </div>
       <div className="rpt-ledger-section">
         {highlights.map((h, i) => (
@@ -42,7 +46,7 @@ export function UncoveredHighlightsCard({
               data-testid={`uncovered-highlight-btn-${i}`}
               onClick={() => onAnalyze(h.range)}
             >
-              AI 分析此段
+              {t("report.common.analyzeSpan")}
             </button>
           </div>
         ))}

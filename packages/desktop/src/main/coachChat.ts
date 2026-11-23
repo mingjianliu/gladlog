@@ -13,6 +13,7 @@ import {
   splitSlotKey,
   toSlottedDoc,
 } from "../shared/analysisCache";
+import { CHAT_STOPPED_MESSAGE } from "../shared/chatProtocol";
 import type { Language } from "../shared/i18n/index";
 import { PROMPT_VERSION } from "../shared/promptVersion";
 import {
@@ -348,11 +349,12 @@ export function createCoachChatService(deps: {
             });
           } catch {
             if (ac.signal.aborted)
-              return { status: "error", message: "已停止" };
+              return { status: "error", message: CHAT_STOPPED_MESSAGE };
             return { status: "need-reseed" }; // the renderer builds a seed and calls again
           }
         }
-        if (ac.signal.aborted) return { status: "error", message: "已停止" };
+        if (ac.signal.aborted)
+          return { status: "error", message: CHAT_STOPPED_MESSAGE };
         const now = Date.now();
         thread.messages = [
           ...thread.messages,

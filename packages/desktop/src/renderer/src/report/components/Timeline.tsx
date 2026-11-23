@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
 import {
-  CURVE_METRIC_LABEL,
   CURVE_METRIC_ORDER,
   type CurveMetric,
   FLOW_SMOOTH_S,
@@ -165,7 +164,7 @@ export function Timeline({
    * nothing is drawn rather than something that might be wrong. */
   teamSides?: Map<string, TeamSide>;
 }) {
-  const { lang } = useT();
+  const { lang, t } = useT();
   const [cursor, setCursor] = useState<number | null>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   // Hover focus (UI review #2): transient, local — never lifted (same rule as
@@ -362,17 +361,17 @@ export function Timeline({
     <div className="rpt-timeline-wrap">
       {onMetric && (
         <div className="rpt-tl-head">
-          <span className="rpt-card-label">曲线</span>
+          <span className="rpt-card-label">{t("report.timeline.label")}</span>
           <select
             data-testid="tl-metric"
-            aria-label="曲线指标"
+            aria-label={t("report.timeline.metricAria")}
             value={activeMetric}
             onChange={(e) => onMetric(e.target.value as CurveMetric)}
             title={`每人一条曲线;伤害/治疗/承伤/被治疗为每秒量的 ${FLOW_SMOOTH_S} 秒滑动平均(全场口径,时间窗只高亮不裁剪)`}
           >
             {CURVE_METRIC_ORDER.map((k) => (
               <option key={k} value={k}>
-                {CURVE_METRIC_LABEL[k]}
+                {curveMetricLabel(k, lang)}
               </option>
             ))}
           </select>
@@ -459,9 +458,12 @@ export function Timeline({
             >
               <title>
                 {(b.kind === "burst"
-                  ? `击杀尝试 on ${b.targetName}(团队伤害 ${(b.damage / 1000).toFixed(0)}k)`
-                  : `${b.targetName} 脆弱且未被惩罚`) +
-                  (onBandClick ? "(点击回放)" : "")}
+                  ? t("report.timeline.bandBurst", {
+                      name: b.targetName,
+                      k: (b.damage / 1000).toFixed(0),
+                    })
+                  : t("report.timeline.bandVuln", { name: b.targetName })) +
+                  (onBandClick ? t("report.timeline.clickReplay") : "")}
               </title>
             </rect>
           );
@@ -474,7 +476,9 @@ export function Timeline({
             className="rpt-tl-empty"
             data-testid="tl-flow-empty"
           >
-            本场无「{CURVE_METRIC_LABEL[activeMetric]}」数据
+            {t("report.timeline.flowEmpty", {
+              metric: curveMetricLabel(activeMetric, lang),
+            })}
           </text>
         )}
         {/* Dampening lane (#10 T2): its own thin strip directly above the
@@ -524,7 +528,13 @@ export function Timeline({
               }
               style={{ cursor: onRangeSelect ? "pointer" : undefined }}
             >
-              <title>{`${fmtTime(s.fromS)}–${fmtTime(s.toS)} ${shortUnitName(s.targetName)} 承压 ${dmgM}M(${s.dpsK}k DPS)${onRangeSelect ? "(点击设为时间窗)" : ""}`}</title>
+              <title>{`${t("report.timeline.pressure", {
+                from: fmtTime(s.fromS),
+                to: fmtTime(s.toS),
+                name: shortUnitName(s.targetName),
+                m: dmgM,
+                k: s.dpsK,
+              })}${onRangeSelect ? t("report.timeline.pressureClick") : ""}`}</title>
             </rect>
           );
         })}
@@ -677,7 +687,10 @@ export function Timeline({
                 {shortUnitName(d.name)} {relSec(d.t)}s
               </text>
             )}
-            <title>{`${d.name} 死亡 @ ${relSec(d.t)}s${onDeathClick ? " — 点击看死亡回顾" : ""}`}</title>
+            <title>{`${t("report.timeline.death", {
+              name: d.name,
+              s: relSec(d.t),
+            })}${onDeathClick ? t("report.replay.deathClick") : ""}`}</title>
           </g>
         ))}
         {/* Mistake ⚠ markers (phase four ③): small triangles along the top,
@@ -742,7 +755,7 @@ export function Timeline({
               className="rpt-tl-axis"
               fill="var(--accent)"
             >
-              回放 {relSec(cursorT)}s
+              {t("report.timeline.cursor", { s: relSec(cursorT) })}
             </text>
           </g>
         )}
@@ -801,8 +814,8 @@ export function Timeline({
             aria-pressed={friendlyOnly}
             title={
               friendlyOnly
-                ? "显示全部单位的曲线"
-                : "只保留我方曲线(敌方仍可单独点开)"
+                ? t("report.timeline.showAllTitle")
+                : t("report.timeline.friendlyOnlyTitle")
             }
             onClick={() => {
               const next = new Set(hidden ?? []);
@@ -818,7 +831,9 @@ export function Timeline({
               onSetHidden(next);
             }}
           >
-            {friendlyOnly ? "全部" : "只看我方"}
+            {friendlyOnly
+              ? t("report.common.all")
+              : t("report.timeline.friendlyOnly")}
           </button>
         )}
         {legendUnits.map((s) => (

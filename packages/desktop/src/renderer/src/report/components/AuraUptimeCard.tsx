@@ -1,13 +1,13 @@
 import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
 import type { AuraUptime, AuraUptimeRow } from "../derive/auraUptime";
 import type { TimeRange } from "../derive/timeRange";
 import { UnitName } from "./UnitName";
 
 const BAR_W = 420;
-
 
 /**
  * Aura uptime card (phase 4 ④): grouped by unit (P1-2) — a group header (class
@@ -26,6 +26,7 @@ export function AuraUptimeCard({
   data: AuraUptime;
   range?: TimeRange | null;
 }) {
+  const { t } = useT();
   const { groups, durationS } = data;
   const [openUnits, setOpenUnits] = useState<Set<string>>(new Set());
   if (groups.length === 0) return null;
@@ -82,8 +83,8 @@ export function AuraUptimeCard({
             >
               <title>
                 {`${r.spellName} ${iv.fromS.toFixed(1)}–${iv.toS.toFixed(1)}s` +
-                  (iv.inferredStart ? "(开局前已挂,推断)" : "") +
-                  (iv.inferredEnd ? "(未见掉落,推断至场终)" : "")}
+                  (iv.inferredStart ? t("report.aura.inferredStart") : "") +
+                  (iv.inferredEnd ? t("report.aura.inferredEnd") : "")}
               </title>
             </rect>
           ))}
@@ -92,7 +93,7 @@ export function AuraUptimeCard({
       <td className="rpt-aura-pct">
         {r.uptimePct}%<span className="rpt-stats-dim"> ×{r.applications}</span>
         {r.hasInferred && (
-          <span className="rpt-stats-dim" title="含推断段(虚线)">
+          <span className="rpt-stats-dim" title={t("report.aura.hasInferred")}>
             {" "}
             ⌁
           </span>
@@ -104,18 +105,20 @@ export function AuraUptimeCard({
   return (
     <div className="rpt-ledger" data-testid="aura-uptime">
       <div className="rpt-ledger-head">
-        <span className="rpt-ledger-title">光环 uptime</span>
+        <span className="rpt-ledger-title">{t("report.aura.title")}</span>
         {range && (
           <span className="rpt-stats-dim">
-            占比按窗口 {Math.round(range.toS - range.fromS)}s 口径
+            {t("report.aura.windowBasis", {
+              s: Math.round(range.toS - range.fromS),
+            })}
           </span>
         )}
         <span className="rpt-aura-legend">
           {(
             [
-              ["offense", "进攻"],
-              ["defense", "防御"],
-              ["cc", "控制"],
+              ["offense", t("report.aura.kind.offense")],
+              ["defense", t("report.aura.kind.defense")],
+              ["cc", t("report.aura.kind.cc")],
             ] as const
           ).map(([k, label]) => (
             <span key={k} className="rpt-aura-legend-item">
@@ -176,7 +179,7 @@ export function AuraUptimeCard({
                         setOpenUnits((cur) => new Set(cur).add(g.unitId))
                       }
                     >
-                      +{g.hiddenRows.length} 更低占比光环
+                      {t("report.aura.moreRows", { n: g.hiddenRows.length })}
                     </button>
                   </td>
                 </tr>

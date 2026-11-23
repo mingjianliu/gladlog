@@ -1,8 +1,8 @@
 import { fmtTime } from "@gladlog/analysis";
 
+import { useT } from "../../i18n/LangProvider";
 import { shortUnitName } from "../derive/teamSide";
 import type { VulnBand } from "../derive/vulnWindows";
-
 
 /**
  * Window list (1c): below the HP curve, one row per kill/vulnerability window;
@@ -17,6 +17,7 @@ export function WindowList({
   bands: VulnBand[];
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   if (bands.length === 0) return null;
   return (
     // After the 1a compaction this is a scroll region (max-height + overflow):
@@ -27,7 +28,7 @@ export function WindowList({
       data-testid="window-list"
       tabIndex={0}
       role="region"
-      aria-label="击杀/脆弱窗口列表"
+      aria-label={t("report.windows.aria")}
     >
       {bands.map((b, i) => (
         <div
@@ -46,23 +47,35 @@ export function WindowList({
           </span>
           <span className="rpt-window-title">
             {b.kind === "burst"
-              ? `击杀尝试 → ${shortUnitName(b.targetName)}`
-              : `${shortUnitName(b.targetName)} 脆弱且未被惩罚`}
+              ? t("report.band.burstTo", { name: shortUnitName(b.targetName) })
+              : t("report.band.vulnUnpunished", {
+                  name: shortUnitName(b.targetName),
+                })}
           </span>
           <span className="rpt-window-detail">
-            团队伤害{b.kind === "burst" ? "" : "仅"}{" "}
-            {(b.damage / 1000).toFixed(0)}k
+            {t(
+              b.kind === "burst"
+                ? "report.windows.teamDamage"
+                : "report.windows.teamDamageOnly",
+              { k: (b.damage / 1000).toFixed(0) },
+            )}
             {(b.absorbed / 1000).toFixed(0) !== "0" &&
-              ` (+${(b.absorbed / 1000).toFixed(0)}k 被吸收)`}
+              t("report.windows.absorbed", {
+                k: (b.absorbed / 1000).toFixed(0),
+              })}
           </span>
           {/* Trailing duration + kill-result chip (P3-2) */}
           <span className="rpt-ledger-chip rpt-ledger-chip-dim">
             {Math.round(b.toS - b.fromS)}s
           </span>
           {b.targetDied && (
-            <span className="rpt-ledger-chip rpt-ledger-chip-kill">击杀</span>
+            <span className="rpt-ledger-chip rpt-ledger-chip-kill">
+              {t("report.common.kill")}
+            </span>
           )}
-          {onSeek && <span className="rpt-window-go">▶ 回放</span>}
+          {onSeek && (
+            <span className="rpt-window-go">{t("report.windows.replay")}</span>
+          )}
         </div>
       ))}
     </div>

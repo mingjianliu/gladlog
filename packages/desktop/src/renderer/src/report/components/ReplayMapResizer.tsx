@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { MAP_HEIGHT_MAX, MAP_HEIGHT_MIN } from "./useReplayLayout";
 
 /** Step size per arrow-key press (px). */
@@ -30,6 +31,7 @@ export function ReplayMapResizer({
   onHeightChange: (h: number) => void;
   cellRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const { t } = useT();
   const draggingRef = useRef(false);
 
   const onPointerMove = useCallback(
@@ -94,7 +96,7 @@ export function ReplayMapResizer({
       className="rpt-replay-map-resizer"
       role="separator"
       aria-orientation="horizontal"
-      aria-label="调整地图高度"
+      aria-label={t("report.replay.resizeMap")}
       data-testid="rpt-replay-map-resizer"
       tabIndex={0}
       aria-valuenow={Math.round(mapHeight)}

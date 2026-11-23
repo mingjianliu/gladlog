@@ -1,3 +1,4 @@
+import { useT } from "../../i18n/LangProvider";
 import type { VideoMoment } from "../derive/videoMoments";
 
 /** The alignment marker strip below the video (brainstorm A, final): gold
@@ -50,6 +51,7 @@ export function VideoMomentStrip({
    * existing drop behaviour verbatim. */
   unreachableBeforeBattleS?: number;
 }) {
+  const { t } = useT();
   if (!Number.isFinite(durationS) || durationS <= 0) return null;
   const winStart = windowStartS ?? 0;
   const winEnd = windowEndS ?? durationS;
@@ -78,7 +80,7 @@ export function VideoMomentStrip({
             left: `${pct(m.videoS)}%`,
             width: `${Math.max(0.4, pct(m.toVideoS ?? m.videoS + 1) - pct(m.videoS))}%`,
           }}
-          title={`${m.moment.label}(点击定位)`}
+          title={t("report.video.clickToSeek", { label: m.moment.label })}
           onClick={() => onSeek(m.videoS)}
         />
       ))}
@@ -95,8 +97,8 @@ export function VideoMomentStrip({
             style={{ left: `${pct(m.videoS)}%` }}
             title={
               unreachable
-                ? "该时刻在录像开始之前"
-                : `${m.moment.label}(点击定位)`
+                ? t("report.video.beforeRecording")
+                : t("report.video.clickToSeek", { label: m.moment.label })
             }
             onClick={() => onSeek(m.videoS)}
           >

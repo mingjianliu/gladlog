@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { SPLIT_MAX, SPLIT_MIN } from "./useReplayLayout";
 
 /** Adjustment step per arrow-key press (WAI-ARIA Window Splitter convention). */
@@ -24,6 +25,7 @@ export function ReplaySplitter({
   onRatioChange: (r: number) => void;
   stageRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const { t } = useT();
   const draggingRef = useRef(false);
 
   const onPointerMove = useCallback(
@@ -114,7 +116,7 @@ export function ReplaySplitter({
       className="rpt-replay-splitter"
       role="separator"
       aria-orientation="vertical"
-      aria-label="调整地图与 GCD 泳道的宽度"
+      aria-label={t("report.replay.resizeSplit")}
       tabIndex={0}
       aria-valuenow={Math.round(ratio * 100)}
       aria-valuemin={Math.round(SPLIT_MIN * 100)}

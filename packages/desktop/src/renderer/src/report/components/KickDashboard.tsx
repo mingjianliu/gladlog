@@ -1,6 +1,7 @@
 import { fmtTime } from "@gladlog/analysis";
 import { useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
 import type { CastControlSummary } from "../derive/castControl";
 import type { KickDashRow } from "../derive/kickDash";
@@ -25,6 +26,7 @@ export function KickDashboard({
   castControl?: CastControlSummary | null;
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t, lang } = useT();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const castStrip = castControl ? (
     <CastControlStrip c={castControl} onSeek={onSeek} />
@@ -35,28 +37,26 @@ export function KickDashboard({
     return (
       <div className="rpt-ledger" data-testid="kick-dash">
         <div className="rpt-ledger-head">
-          <span className="rpt-ledger-title">打断面板</span>
+          <span className="rpt-ledger-title">{t("report.kickDash.title")}</span>
         </div>
-        <p className="rpt-ledger-empty">
-          本场双方 0 次打断施放 —— 长局中此处显示两队打断命中/被骗/落空审计。
-        </p>
+        <p className="rpt-ledger-empty">{t("report.kickDash.empty")}</p>
         {castStrip}
       </div>
     );
   return (
     <div className="rpt-ledger" data-testid="kick-dash">
       <div className="rpt-ledger-head">
-        <span className="rpt-ledger-title">打断面板</span>
+        <span className="rpt-ledger-title">{t("report.kickDash.title")}</span>
       </div>
       <table className="rpt-stats">
         <thead>
           <tr>
-            <th>玩家</th>
-            <th>施放</th>
-            <th>打断</th>
-            <th>被骗</th>
-            <th>落空</th>
-            <th>命中率</th>
+            <th>{t("report.common.player")}</th>
+            <th>{t("report.kickDash.col.casts")}</th>
+            <th>{t("report.kickDash.col.landed")}</th>
+            <th>{t("report.kickDash.col.juked")}</th>
+            <th>{t("report.kickDash.col.missed")}</th>
+            <th>{t("report.kickDash.col.rate")}</th>
           </tr>
         </thead>
         <tbody>
@@ -96,9 +96,15 @@ export function KickDashboard({
                   {r.landedRate === null
                     ? "—"
                     : `${Math.round(r.landedRate * 100)}%`}
-                  {r.silenced > 0 ? `(${r.silenced} 沉默生效)` : ""}
-                  {r.refused > 0 ? `(落空含 ${r.refused} 次被免疫/反射)` : ""}
-                  {r.unknown > 0 ? `(${r.unknown} 未知)` : ""}
+                  {r.silenced > 0
+                    ? t("report.kickDash.silencedN", { n: r.silenced })
+                    : ""}
+                  {r.refused > 0
+                    ? t("report.kickDash.refusedN", { n: r.refused })
+                    : ""}
+                  {r.unknown > 0
+                    ? t("report.kickDash.unknownN", { n: r.unknown })
+                    : ""}
                 </td>
               </tr>,
               expanded ? (
@@ -112,21 +118,33 @@ export function KickDashboard({
                           </span>{" "}
                           {k.kickSpellName}
                           {k.result === "landed" &&
-                            ` 打断 ${k.interruptedSpellName ?? ""}`}
+                            ` ${t("report.kicks.landed", { spell: k.interruptedSpellName ?? "" })}`}
                           {k.result === "juked" &&
-                            (k.jukedChannelStoppedAgoS !== undefined
-                              ? ` 被骗掉(${k.jukedBySpellName ?? ""} 引导刚停)`
-                              : ` 被假读条骗掉(${k.jukedBySpellName ?? ""})`)}
+                            ` ${
+                              k.jukedChannelStoppedAgoS !== undefined
+                                ? t("report.kicks.jukedChannel", {
+                                    spell: k.jukedBySpellName ?? "",
+                                  })
+                                : t("report.kicks.jukedFake", {
+                                    spell: k.jukedBySpellName ?? "",
+                                  })
+                            }`}
                           {k.result === "silenced" &&
-                            (k.openCastSpellName
-                              ? ` 沉默生效(${k.openCastSpellName} 读条未完成)`
-                              : ` 沉默生效(未打断读条)`)}
-                          {k.result === "missed" && ` ${missedKickLabel(k)}`}
-                          {k.result === "unknown" && " 旧档无读条数据"}
+                            ` ${
+                              k.openCastSpellName
+                                ? t("report.kicks.silencedOpen", {
+                                    spell: k.openCastSpellName,
+                                  })
+                                : t("report.kicks.silenced")
+                            }`}
+                          {k.result === "missed" &&
+                            ` ${missedKickLabel(k, lang)}`}
+                          {k.result === "unknown" &&
+                            ` ${t("report.kicks.unknown")}`}
                           {onSeek && (
                             <button
                               className="rpt-stats-detail-jump"
-                              title="回放此刻"
+                              title={t("report.common.replayHere")}
                               onClick={() =>
                                 onSeek(Math.max(0, k.atSeconds - 3), [r.name])
                               }
@@ -163,18 +181,26 @@ function CastControlStrip({
   c: CastControlSummary;
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   return (
     <div className="rpt-stats-detail-group" data-testid="cast-control">
       <span className="rpt-stats-detail-item">
-        <UnitName name={c.name} full /> 读条 {c.hardcasts} 次 · 自己停手{" "}
-        {c.cancels.length} 次
-        {c.medianCancelPct !== null && `(中位读到 ${c.medianCancelPct}%)`} ·
-        被打断 {c.kicked} 次 · 骗掉对方打断 {c.baitedKicks.length} 次
+        <UnitName name={c.name} full />
+        {t("report.castControl.line", {
+          hardcasts: c.hardcasts,
+          cancels: c.cancels.length,
+          median:
+            c.medianCancelPct !== null
+              ? t("report.castControl.median", { pct: c.medianCancelPct })
+              : "",
+          kicked: c.kicked,
+          baited: c.baitedKicks.length,
+        })}
         {c.baitedKicks.length > 0 && (
           <button
             className="rpt-stats-detail-jump"
-            title="展开被骗掉的打断"
+            title={t("report.castControl.expand")}
             onClick={() => setOpen((o) => !o)}
           >
             {open ? "▾" : "▸"}
@@ -185,12 +211,15 @@ function CastControlStrip({
         c.baitedKicks.map((b, i) => (
           <span key={i} className="rpt-stats-detail-item">
             <span className="rpt-stats-detail-t">{fmtTime(b.atSeconds)}</span>{" "}
-            <UnitName name={b.kickerName} /> 的 {b.kickSpellName} 被你停手的{" "}
-            {b.baitSpellName} 骗掉
+            <UnitName name={b.kickerName} />
+            {t("report.castControl.baited", {
+              kick: b.kickSpellName,
+              bait: b.baitSpellName,
+            })}
             {onSeek && (
               <button
                 className="rpt-stats-detail-jump"
-                title="回放此刻"
+                title={t("report.common.replayHere")}
                 onClick={() =>
                   onSeek(Math.max(0, b.atSeconds - 3), [c.name, b.kickerName])
                 }

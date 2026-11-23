@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import type { StoredShuffle } from "../derive/types";
 import { MatchReport } from "./MatchReport";
 import { ReportShell } from "./ReportSkeleton";
@@ -35,8 +36,13 @@ export function ShuffleReport({
   staged?: boolean;
   skeletonTeamSizes?: readonly number[];
 }) {
+  const { t } = useT();
   const [active, setActive] = useState(0);
   const round = shuffle.rounds[active] ?? null;
+  const roundLabel = t("report.shuffle.roundOf", {
+    i: active + 1,
+    n: shuffle.rounds.length,
+  });
   // Lazy round placeholder: request it once per switch; when the round lands,
   // the doc object is replaced at the App layer and this re-renders.
   useEffect(() => {
@@ -73,7 +79,7 @@ export function ShuffleReport({
       {round ? (
         <MatchReport
           source={round}
-          roundLabel={`回合 ${active + 1}/${shuffle.rounds.length}`}
+          roundLabel={roundLabel}
           matchId={round.id}
           videoMatchId={videoMatchId}
           staged={staged}
@@ -96,9 +102,9 @@ export function ShuffleReport({
             startTime: 0,
             endTime: null,
           }}
-          roundLabel={`回合 ${active + 1}/${shuffle.rounds.length}`}
+          roundLabel={roundLabel}
           teamSizes={skeletonTeamSizes ?? [3, 3]}
-          status="读取回合…"
+          status={t("report.shell.loadingRound")}
         />
       )}
     </div>
@@ -124,10 +130,11 @@ export function ShuffleHead({
   onSelect?: (i: number) => void;
   onMove?: (delta: number) => void;
 }) {
+  const { t } = useT();
   return (
     <div className="rpt-shuffle-head">
       <span className="rpt-shuffle-title">
-        Solo Shuffle · {roundCount} 回合 · {result}
+        {t("report.shuffle.title", { n: roundCount, result })}
       </span>
       <span className="rpt-shuffle-seq" role="tablist">
         {wins.map((win, i) => {
@@ -136,8 +143,10 @@ export function ShuffleHead({
               key={i}
               role="tab"
               aria-selected={i === active}
-              aria-label={`回合 ${i + 1}${
-                win == null ? "" : win ? " · 胜" : " · 负"
+              aria-label={`${t("report.shuffle.round", { i: i + 1 })}${
+                win == null
+                  ? ""
+                  : t(win ? "report.shuffle.won" : "report.shuffle.lost")
               }`}
               tabIndex={i === active ? 0 : -1}
               className={[
@@ -152,7 +161,7 @@ export function ShuffleHead({
                 if (e.key === "ArrowLeft") onMove?.(-1);
                 else if (e.key === "ArrowRight") onMove?.(1);
               }}
-              title={`回合 ${i + 1}`}
+              title={t("report.shuffle.round", { i: i + 1 })}
               style={onSelect ? { cursor: "pointer" } : undefined}
             >
               {/* UI review 2026-08-21 #4: under 640px of container width

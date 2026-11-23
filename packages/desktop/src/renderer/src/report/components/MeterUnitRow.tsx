@@ -1,11 +1,12 @@
 import { memo } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { classGlyph, specIconName, specName } from "../data/gameConstants";
 import type { MeterRow } from "../derive/meterRows";
 import {
   shortUnitName,
-  TEAM_SIDE_LABEL,
   type TeamSide,
+  teamSideLabel,
 } from "../derive/teamSide";
 import { useIconDataUrl } from "./useIconDataUrl";
 
@@ -36,10 +37,12 @@ function MeterIdent({
   side: TeamSide;
   off: boolean;
 }) {
+  const { lang } = useT();
   const { dataUrl } = useIconDataUrl(specIconName(row.specId));
-  const title = `${specName(row.specId) || classGlyph(row.classId)} · ${
-    TEAM_SIDE_LABEL[side]
-  }`;
+  const title = `${specName(row.specId) || classGlyph(row.classId)} · ${teamSideLabel(
+    side,
+    lang,
+  )}`;
   const ring = { borderColor: sideRing(side) };
   if (dataUrl) {
     return (

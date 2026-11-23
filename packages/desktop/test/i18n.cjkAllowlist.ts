@@ -128,4 +128,16 @@ export const CJK_ALLOWLIST: ReadonlyArray<{
     reason:
       "canned demo AI analysis (a stand-in for a model reply: finding explanation), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
   },
+  {
+    file: "packages/desktop/src/renderer/src/report/components/StructuredAnalysisPanel.tsx",
+    snippet: "刷新后 activeKey",
+    reason:
+      "developer-only console.warn for a broken main-side invariant (onDone slotKey != refreshed activeKey); never rendered to the user",
+  },
+  {
+    file: "packages/desktop/src/shared/chatProtocol.ts",
+    snippet: "已停止",
+    reason:
+      "protocol sentinel: the coach-chat result message main returns on a user cancel, compared by CoachChatCard to tell a cancel from a failure; never rendered (the card drops the bubble instead)",
+  },
 ];

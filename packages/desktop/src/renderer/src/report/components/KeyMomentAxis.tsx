@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
 import { findingKey } from "../../../../shared/findingKey";
+import { makeT, type MessageKey } from "../../../../shared/i18n";
 import {
   candidateShortLabel,
   categoryLabel,
@@ -31,14 +32,14 @@ const KIND_ICON: Record<KeyMoment["kind"], string> = {
   position: "⇄",
 };
 
-const KIND_ZH: Record<KeyMoment["kind"], string> = {
-  death: "死亡",
-  "burst-band": "爆发",
-  defensive: "防御",
-  dispel: "驱散",
-  cc: "控制",
-  "heal-gap": "空窗",
-  position: "走位",
+const KIND_LABEL: Record<KeyMoment["kind"], MessageKey> = {
+  death: "report.axis.kind.death",
+  "burst-band": "report.axis.kind.burst-band",
+  defensive: "report.axis.kind.defensive",
+  dispel: "report.axis.kind.dispel",
+  cc: "report.axis.kind.cc",
+  "heal-gap": "report.axis.kind.heal-gap",
+  position: "report.axis.kind.position",
 };
 
 type Entry =
@@ -89,6 +90,7 @@ export function KeyMomentAxis({
    * default. */
   rich?: (text?: string | null) => ReactNode;
 }) {
+  const t = makeT(lang);
   const byId = useMemo(
     () => new Map(candidates.map((c) => [c.id, c])),
     [candidates],
@@ -201,7 +203,9 @@ export function KeyMomentAxis({
       key={key}
       className={`rpt-axis-node-minor k-${m.kind} s-${m.side}`}
       data-testid="axis-node-minor"
-      title={onSeek ? `跳到 ${fmtTime(m.jumpT)} 的回放` : undefined}
+      title={
+        onSeek ? t("report.finding.jumpTo", { t: fmtTime(m.jumpT) }) : undefined
+      }
       onClick={onSeek ? () => onSeek(m.jumpT, m.unitNames) : undefined}
     >
       <span className="rpt-axis-icon">{KIND_ICON[m.kind]}</span>
@@ -224,7 +228,8 @@ export function KeyMomentAxis({
       >
         <span className="rpt-axis-icon">{KIND_ICON[e.mkind]}</span>
         <span className="rpt-axis-title">
-          {KIND_ZH[e.mkind]} ×{e.ms.length}:{titles.slice(0, 2).join(" · ")}
+          {t(KIND_LABEL[e.mkind])} ×{e.ms.length}:
+          {titles.slice(0, 2).join(" · ")}
           {titles.length > 2 ? " …" : ""}
         </span>
       </button>
@@ -241,7 +246,11 @@ export function KeyMomentAxis({
           key={e.key}
           className={`rpt-axis-node k-${e.m.kind} s-${e.m.side}`}
           data-testid="axis-node"
-          title={onSeek ? `跳到 ${fmtTime(e.m.jumpT)} 的回放` : undefined}
+          title={
+            onSeek
+              ? t("report.finding.jumpTo", { t: fmtTime(e.m.jumpT) })
+              : undefined
+          }
           onClick={onSeek ? () => onSeek(e.m.jumpT, e.m.unitNames) : undefined}
         >
           <span className="rpt-axis-icon">{KIND_ICON[e.m.kind]}</span>
@@ -273,7 +282,7 @@ export function KeyMomentAxis({
             return habit ? (
               <span
                 className="rpt-finding-habit"
-                title="跨对局稳定模式(确定性统计,非 AI 判断)"
+                title={t("report.finding.habitTitle")}
               >
                 {habit}
               </span>
@@ -285,7 +294,9 @@ export function KeyMomentAxis({
         </p>
         {e.f.deepDive && (
           <div className="rpt-finding-deep" data-testid="finding-deepdive">
-            <span className="rpt-finding-deep-tag">深挖</span>
+            <span className="rpt-finding-deep-tag">
+              {t("report.finding.deepTag")}
+            </span>
             <p className="rpt-finding-deep-text">
               {rich ? rich(e.f.deepDive.text) : e.f.deepDive.text}
             </p>
@@ -319,7 +330,9 @@ export function KeyMomentAxis({
                 className="rpt-finding-evt"
                 title={
                   (c.spell ? `${c.spell} · ` : "") +
-                  (onSeek ? `跳到 ${fmtTime(c.t)} 的回放` : fmtTime(c.t))
+                  (onSeek
+                    ? t("report.finding.jumpTo", { t: fmtTime(c.t) })
+                    : fmtTime(c.t))
                 }
                 onClick={onSeek ? () => onSeek(c.t, c.unitNames) : undefined}
               >
@@ -336,7 +349,7 @@ export function KeyMomentAxis({
                 onSeek(e.at, [...new Set(evs.flatMap((c) => c.unitNames))]);
               }}
             >
-              ▶ 回放此刻
+              {t("report.finding.replayHere")}
             </button>
           )}
           {onFlag &&
@@ -347,19 +360,19 @@ export function KeyMomentAxis({
                 <span className="rpt-finding-flags">
                   <button
                     className={cur === "done" ? "active" : ""}
-                    title="标记为已改进"
+                    title={t("report.finding.markDone")}
                     onClick={() => onFlag(key, cur === "done" ? null : "done")}
                   >
-                    ✓ 已跟进
+                    {t("report.finding.done")}
                   </button>
                   <button
                     className={cur === "recurring" ? "active rec" : ""}
-                    title="标记为还在犯"
+                    title={t("report.finding.markRecurring")}
                     onClick={() =>
                       onFlag(key, cur === "recurring" ? null : "recurring")
                     }
                   >
-                    ↻ 还在犯
+                    {t("report.finding.recurring")}
                   </button>
                 </span>
               );
@@ -379,7 +392,7 @@ export function KeyMomentAxis({
           <div key={e.key} className="rpt-axis-item">
             {gap !== null && (
               <div className="rpt-axis-gap" data-testid="axis-gap">
-                ⏱ {Math.round(gap)}s 无关键事件 — 折叠
+                {t("report.axis.gap", { s: Math.round(gap) })}
               </div>
             )}
             <span className="rpt-axis-t">{fmtTime(e.at)}</span>
@@ -407,7 +420,7 @@ export function KeyMomentAxis({
                         })
                       }
                     >
-                      − 收起次要时刻
+                      {t("report.axis.collapseMinor")}
                     </button>
                   </span>
                 ) : (
@@ -418,12 +431,13 @@ export function KeyMomentAxis({
                       setOpenSegs((cur) => new Set(cur).add(e.key))
                     }
                   >
-                    +
-                    {e.items.reduce(
-                      (s, it) => s + (it.kind === "cluster" ? it.ms.length : 1),
-                      0,
-                    )}{" "}
-                    次要时刻
+                    {t("report.axis.moreMinor", {
+                      n: e.items.reduce(
+                        (s, it) =>
+                          s + (it.kind === "cluster" ? it.ms.length : 1),
+                        0,
+                      ),
+                    })}
                   </button>
                 )
               ) : (

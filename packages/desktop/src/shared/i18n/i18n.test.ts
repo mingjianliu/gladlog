@@ -212,3 +212,37 @@ describe("词典完整性检查的变异测试", () => {
     expect(inspect(enFn).outputs.some((o) => CJK_LEAK.test(o))).toBe(true);
   });
 });
+
+describe("namespace files", () => {
+  // One prefix (report.common.*) is split across two namespace files, so a key
+  // defined twice would silently resolve to whichever spread comes last. The
+  // merged dictionary must be exactly the disjoint union of its files.
+  it.each(["zh", "en"] as const)(
+    "%s: no key is defined in two namespace files",
+    async (lang) => {
+      const { readdirSync } = await import("fs");
+      const { join } = await import("path");
+      const dir = join(__dirname, lang);
+      const files = readdirSync(dir).filter(
+        (f) => f.endsWith(".ts") && f !== "index.ts" && !f.includes(".test."),
+      );
+      const seen = new Map<string, string>();
+      const dupes: string[] = [];
+      for (const f of files) {
+        const mod = (await import(
+          `./${lang}/${f.replace(/\.ts$/, "")}`
+        )) as Record<string, Record<string, unknown>>;
+        for (const ns of Object.values(mod)) {
+          for (const k of Object.keys(ns)) {
+            const prev = seen.get(k);
+            if (prev) dupes.push(`${k}: ${prev} + ${f}`);
+            seen.set(k, f);
+          }
+        }
+      }
+      expect(dupes).toEqual([]);
+      const merged = lang === "zh" ? zhMessages : enMessages;
+      expect(seen.size).toBe(Object.keys(merged).length);
+    },
+  );
+});

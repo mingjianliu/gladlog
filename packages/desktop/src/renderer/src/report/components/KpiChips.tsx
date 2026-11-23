@@ -1,3 +1,4 @@
+import { useT } from "../../i18n/LangProvider";
 import type { DispelDash } from "../derive/dispelDash";
 import type { KickDashRow } from "../derive/kickDash";
 import type { Mistake } from "../derive/mistakes";
@@ -25,6 +26,7 @@ export function KpiChips({
   /** Whole-match dispels (deriveDispelDash(source) without a range). */
   dispelDash: DispelDash;
 }) {
+  const { t } = useT();
   const major = mistakes.filter((m) => m.severity === "major").length;
   const rest = mistakes.length - major;
 
@@ -41,35 +43,42 @@ export function KpiChips({
   return (
     <div className="rpt-kpi-row" data-testid="kpi-chips">
       <span className="rpt-kpi">
-        <span className="rpt-kpi-k">失误</span>
+        <span className="rpt-kpi-k">{t("report.kpi.findings")}</span>
         <span className="rpt-kpi-v">
-          {major > 0 && <span className="rpt-kpi-major">{major} 重大</span>}
+          {major > 0 && (
+            <span className="rpt-kpi-major">
+              {t("report.kpi.majorN", { n: major })}
+            </span>
+          )}
           {major > 0 && rest > 0 && " · "}
-          {(rest > 0 || major === 0) && `${rest} 一般`}
+          {(rest > 0 || major === 0) && t("report.kpi.restN", { n: rest })}
         </span>
       </span>
       {bursts.length > 0 && (
         <span className="rpt-kpi">
-          <span className="rpt-kpi-k">爆发窗</span>
+          <span className="rpt-kpi-k">{t("report.kpi.bursts")}</span>
           <span className="rpt-kpi-v">
-            {converted}/{bursts.length} 转化
+            {t("report.kpi.converted", {
+              done: converted,
+              total: bursts.length,
+            })}
           </span>
         </span>
       )}
       <span className="rpt-kpi">
-        <span className="rpt-kpi-k">打断</span>
+        <span className="rpt-kpi-k">{t("report.kpi.kicks")}</span>
         <span className="rpt-kpi-v">{kicksLanded}</span>
       </span>
       <span className="rpt-kpi" data-testid="kpi-dispel">
-        <span className="rpt-kpi-k">驱散</span>
+        <span className="rpt-kpi-k">{t("report.kpi.dispels")}</span>
         <span className="rpt-kpi-v">
           {friendlyDeliberate}
           {friendlyPassive > 0 && (
             <span
               className="rpt-kpi-passive"
-              title="被动触发 / 位移附带的驱散,不计入决策"
+              title={t("report.common.passiveDispelTitle")}
             >
-              +{friendlyPassive} 被动
+              {t("report.kpi.passiveN", { n: friendlyPassive })}
             </span>
           )}
         </span>
