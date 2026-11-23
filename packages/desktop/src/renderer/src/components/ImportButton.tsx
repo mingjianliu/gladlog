@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { bridge } from "../bridge";
+import { useT } from "../i18n/LangProvider";
 
 /**
  * Historical log import button (phase3 #2c): file dialog → progress → summary.
@@ -8,6 +9,7 @@ import { bridge } from "../bridge";
  * needed.
  */
 export function ImportButton() {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string>("");
 
@@ -15,13 +17,21 @@ export function ImportButton() {
     try {
       return bridge().logs.onImportProgress((p) =>
         setProgress(
-          `解析 ${p.i}/${p.n}:${p.file}(新入库 ${p.stored}${p.dup ? `,重复 ${p.dup}` : ""})`,
+          t("matchList.import.progress", {
+            i: p.i,
+            n: p.n,
+            file: p.file,
+            stored: p.stored,
+            dupPart: p.dup
+              ? t("matchList.import.progressDup", { dup: p.dup })
+              : "",
+          }),
         ),
       );
     } catch {
       return undefined;
     }
-  }, []);
+  }, [t]);
 
   const run = async () => {
     setBusy(true);
@@ -32,11 +42,22 @@ export function ImportButton() {
         setProgress("");
       } else {
         setProgress(
-          `完成:${r.files} 个文件,新入库 ${r.stored} 场,重复跳过 ${r.dup}${r.failed ? `,失败 ${r.failed} 个文件` : ""}`,
+          t("matchList.import.done", {
+            files: r.files,
+            stored: r.stored,
+            dup: r.dup,
+            failedPart: r.failed
+              ? t("matchList.import.doneFailed", { failed: r.failed })
+              : "",
+          }),
         );
       }
     } catch (e) {
-      setProgress(`导入失败:${e instanceof Error ? e.message : String(e)}`);
+      setProgress(
+        t("matchList.import.failed", {
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
     } finally {
       setBusy(false);
     }
@@ -45,7 +66,7 @@ export function ImportButton() {
   return (
     <span className="import-btn">
       <button disabled={busy} onClick={() => void run()}>
-        {busy ? "导入中…" : "导入历史日志…"}
+        {busy ? t("matchList.import.busy") : t("matchList.import.button")}
       </button>
       {progress && <span className="import-progress">{progress}</span>}
     </span>

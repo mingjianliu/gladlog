@@ -1,3 +1,5 @@
+import { type Language, translate } from "../../../../shared/i18n";
+
 /**
  * Pure logic layer of the dev page's JSON inspector (plan 5a, item 3.7).
  *
@@ -78,9 +80,16 @@ export function isContainer(kind: JsonNodeKind): boolean {
  * Inline text for a leaf. Over-long strings are truncated and annotated
  * with their original length — a single raw field can be tens of KB.
  */
-export function leafPreview(v: unknown, cap = LEAF_PREVIEW_CAP): string {
+export function leafPreview(
+  v: unknown,
+  cap = LEAF_PREVIEW_CAP,
+  lang: Language = "zh",
+): string {
   if (typeof v === "string" && v.length > cap) {
-    return `${JSON.stringify(v.slice(0, cap))}… (${v.length} 字符)`;
+    return translate(lang, "dev.json.truncated", {
+      preview: JSON.stringify(v.slice(0, cap)),
+      n: v.length,
+    });
   }
   const s = JSON.stringify(v);
   return s === undefined ? "null" : s;
@@ -102,6 +111,7 @@ function toChild(
   value: unknown,
   base: string,
   parentIsArray: boolean,
+  lang: Language,
 ): JsonChild {
   const kind = kindOf(value);
   const container = isContainer(kind);
@@ -110,7 +120,7 @@ function toChild(
     path: joinPath(base, key, parentIsArray),
     value,
     kind,
-    preview: container ? null : leafPreview(value),
+    preview: container ? null : leafPreview(value, LEAF_PREVIEW_CAP, lang),
     summary: container ? containerSummary(value, kind) : null,
   };
 }
@@ -124,6 +134,7 @@ export function childrenOf(
   value: unknown,
   basePath: string,
   page = 0,
+  lang: Language = "zh",
 ): ChildPage {
   const kind = kindOf(value);
   if (kind === "array") {
@@ -135,14 +146,16 @@ export function childrenOf(
     const to = Math.min(total, from + ARRAY_PAGE_SIZE);
     const children: JsonChild[] = [];
     for (let i = from; i < to; i++) {
-      children.push(toChild(String(i), arr[i], basePath, true));
+      children.push(toChild(String(i), arr[i], basePath, true, lang));
     }
     return { children, total, pages, page: p };
   }
   if (kind === "object") {
     const entries = Object.entries(value as Record<string, unknown>);
     return {
-      children: entries.map(([k, v]) => toChild(k, v, basePath, false)),
+      children: entries.map(([k, v]) =>
+        toChild(k, v, basePath, false, lang),
+      ),
       total: entries.length,
       pages: 1,
       page: 0,

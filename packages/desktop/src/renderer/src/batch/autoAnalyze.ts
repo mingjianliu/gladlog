@@ -1,4 +1,5 @@
 import type { StoredMatchMeta } from "../../../main/matchStore";
+import { type Language, localeToLanguage } from "../../../shared/i18n";
 import { bridge } from "../bridge";
 import {
   type BatchItem,
@@ -6,6 +7,7 @@ import {
   startBatch,
   subscribeBatch,
 } from "./batchAnalysis";
+import { batchItemLabel } from "./itemLabel";
 
 type LiveStoredMatchMeta = StoredMatchMeta & { live?: boolean };
 
@@ -32,14 +34,12 @@ const pendingLabels = new Map<string, string>();
  * several subscribeBatch listeners for the same pending batch. */
 let waitingForIdle: (() => void) | null = null;
 
-/** Same style as BatchAnalyzeBar.labelFor; with no valid startTime it degrades
- * to the first eight characters of the id. */
-function labelFor(meta: StoredMatchMeta): string {
-  const d = new Date(meta.startTime);
-  if (Number.isNaN(d.getTime())) return meta.id.slice(0, 8);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm} · ${meta.bracket}`;
+/** Same label as the batch bar (batchItemLabel); with no valid startTime it
+ * degrades to the first eight characters of the id. */
+function labelFor(meta: StoredMatchMeta, lang: Language): string {
+  if (Number.isNaN(new Date(meta.startTime).getTime()))
+    return meta.id.slice(0, 8);
+  return batchItemLabel(meta.startTime, meta.bracket, lang);
 }
 
 function drain(): void {
@@ -66,25 +66,32 @@ function drain(): void {
   void startBatch(items);
 }
 
-function enqueue(meta: StoredMatchMeta): void {
+function enqueue(meta: StoredMatchMeta, lang: Language): void {
   // Deduplicate: repeated notifications for the same match queue only once
   if (pending.includes(meta.id)) return;
   pending.push(meta.id);
-  pendingLabels.set(meta.id, labelFor(meta));
+  pendingLabels.set(meta.id, labelFor(meta, lang));
   drain();
 }
 
 async function handleMatchStored(meta: LiveStoredMatchMeta): Promise<void> {
   // Iron rule: the import path carries no live flag and is blocked right here
   if (!meta.live) return;
-  let settings: { autoAnalyzeNew: boolean };
+  let settings: { autoAnalyzeNew: boolean; language?: Language | null };
   try {
     settings = await bridge().settings.get();
   } catch {
     return; // stub without a settings surface (some test beds / fixtures)
   }
   if (!settings.autoAnalyzeNew) return;
-  enqueue(meta);
+  // The UI language, resolved the way LangProvider does when it is unset.
+  const lang =
+    settings.language === "zh" || settings.language === "en"
+      ? settings.language
+      : localeToLanguage(
+          typeof navigator === "undefined" ? undefined : navigator.language,
+        );
+  enqueue(meta, lang);
 }
 
 /**

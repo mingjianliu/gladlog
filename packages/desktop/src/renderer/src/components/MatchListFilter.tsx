@@ -2,6 +2,7 @@ import { zoneMetadata } from "@gladlog/analysis";
 import { useMemo } from "react";
 
 import type { StoredMatchMeta } from "../../../main/matchStore";
+import { useT } from "../i18n/LangProvider";
 import { useIconDataUrls } from "../report/components/useIconDataUrl";
 import { specIconName, specName } from "../report/data/gameConstants";
 
@@ -89,6 +90,7 @@ export function MatchListFilter({
   filter: ListFilter;
   onChange: (f: ListFilter) => void;
 }) {
+  const { t } = useT();
   const brackets = useMemo(
     () => [...new Set(metas.map((m) => m.bracket))].sort(),
     [metas],
@@ -123,16 +125,20 @@ export function MatchListFilter({
             className={filter.result === r ? "active" : ""}
             onClick={() => onChange({ ...filter, result: r })}
           >
-            {r === "all" ? "全部" : r === "win" ? "胜" : "负"}
+            {r === "all"
+              ? t("matchList.filter.all")
+              : r === "win"
+                ? t("matchList.filter.win")
+                : t("matchList.filter.loss")}
           </button>
         ))}
       </div>
       <select
         value={filter.bracket}
         onChange={(e) => onChange({ ...filter, bracket: e.target.value })}
-        title="赛制"
+        title={t("matchList.filter.bracketTitle")}
       >
-        <option value="all">全部赛制</option>
+        <option value="all">{t("matchList.filter.allBrackets")}</option>
         {brackets.map((b) => (
           <option key={b} value={b}>
             {b}
@@ -147,10 +153,12 @@ export function MatchListFilter({
             if (!e.target.value || filter.specIds.includes(id)) return;
             onChange({ ...filter, specIds: [...filter.specIds, id] });
           }}
-          title="加一个专精(选多个 = 同队组合检索)"
+          title={t("matchList.filter.specTitle")}
         >
           <option value="">
-            {filter.specIds.length === 0 ? "全部专精" : "+ 专精(同队)"}
+            {filter.specIds.length === 0
+              ? t("matchList.filter.allSpecs")
+              : t("matchList.filter.addSpec")}
           </option>
           {specIds
             .filter((id) => !filter.specIds.includes(id))
@@ -165,7 +173,7 @@ export function MatchListFilter({
         <button
           key={id}
           className="mlf-chip"
-          title={`移除 ${specName(id)}`}
+          title={t("matchList.filter.removeSpec", { spec: specName(id) })}
           onClick={() =>
             onChange({
               ...filter,
@@ -186,7 +194,7 @@ export function MatchListFilter({
       {filter.zoneId !== null && (
         <button
           className="mlf-chip"
-          title="移除地图筛选"
+          title={t("matchList.filter.removeZone")}
           onClick={() => onChange({ ...filter, zoneId: null })}
         >
           {zoneMetadata[filter.zoneId]?.name ?? `zone ${filter.zoneId}`} ✕
@@ -201,7 +209,7 @@ export function MatchListFilter({
           onChange={(e) =>
             onChange({ ...filter, dateFrom: e.target.value || null })
           }
-          title="起始日期"
+          title={t("matchList.filter.dateFrom")}
         />
         <span className="mlf-datesep">–</span>
         <input
@@ -210,12 +218,12 @@ export function MatchListFilter({
           onChange={(e) =>
             onChange({ ...filter, dateTo: e.target.value || null })
           }
-          title="结束日期"
+          title={t("matchList.filter.dateTo")}
         />
       </span>
       {active && (
         <button className="mlf-clear" onClick={() => onChange(EMPTY_FILTER)}>
-          清除
+          {t("matchList.filter.clear")}
         </button>
       )}
     </div>

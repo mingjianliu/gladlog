@@ -81,22 +81,22 @@ export function MatchListRow({
   checked?: boolean;
   onToggleCheck?: () => void;
 }) {
-  const { lang } = useT();
+  const { lang, t } = useT();
   const checkbox =
     onToggleCheck != null ? (
       <label
         className="mlr-check"
         title={
           meta.kind === "shuffle"
-            ? "勾选整场 shuffle(全部 6 盘)加入批量分析"
-            : "勾选加入批量分析"
+            ? t("matchList.check.shuffle")
+            : t("matchList.check.match")
         }
         onClick={(e) => e.stopPropagation()}
       >
         <input
           type="checkbox"
           data-testid="mlr-check"
-          aria-label="勾选加入批量分析"
+          aria-label={t("matchList.check.match")}
           checked={checked ?? false}
           onChange={() => onToggleCheck()}
         />

@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import {
   ARRAY_PAGE_SIZE,
   childrenOf,
@@ -116,7 +117,8 @@ interface RowsProps {
 
 function Rows(props: RowsProps) {
   const { value, basePath, depth, expanded, pages } = props;
-  const page = childrenOf(value, basePath, pages.get(basePath) ?? 0);
+  const { lang } = useT();
+  const page = childrenOf(value, basePath, pages.get(basePath) ?? 0, lang);
 
   return (
     <>
@@ -155,6 +157,7 @@ function Row({
   selectedPath,
   onSelect,
 }: RowsProps & { child: JsonChild }) {
+  const { t } = useT();
   const container = isContainer(child.kind);
   const open = expanded.has(child.path);
   const cls = [
@@ -180,7 +183,9 @@ function Row({
           type="button"
           className="dev-node-toggle"
           aria-expanded={open}
-          aria-label={`${open ? "折叠" : "展开"} ${child.path}`}
+          aria-label={t(open ? "dev.json.collapse" : "dev.json.expand", {
+            path: child.path,
+          })}
           onClick={() => toggle(child.path)}
         >
           {open ? "▾" : "▸"}

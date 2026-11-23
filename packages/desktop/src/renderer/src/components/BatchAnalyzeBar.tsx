@@ -9,14 +9,9 @@ import {
   startBatch,
   subscribeBatch,
 } from "../batch/batchAnalysis";
+import { batchItemLabel } from "../batch/itemLabel";
 import { bridge } from "../bridge";
-
-const labelFor = (m: StoredMatchMeta): string => {
-  const d = new Date(m.startTime);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm} · ${m.bracket}`;
-};
+import { useT } from "../i18n/LangProvider";
 
 /**
  * Entry point for batch AI analysis (top of the match-list sidebar). Two ways
@@ -40,6 +35,7 @@ export function BatchAnalyzeBar({
   selected?: Set<string>;
   onClearSelected?: () => void;
 }) {
+  const { t, lang } = useT();
   const [st, setSt] = useState<BatchStatus>(getBatchStatus);
   const [n, setN] = useState(10);
   const [skipAnalyzed, setSkipAnalyzed] = useState(true);
@@ -73,9 +69,14 @@ export function BatchAnalyzeBar({
       selCount > 0
         ? metas.filter((m) => selected!.has(m.id) && preFilter(m))
         : metas.filter(preFilter).slice(0, Math.max(1, n))
-    ).map((m) => ({ id: m.id, label: labelFor(m) }));
+    ).map((m) => ({
+      id: m.id,
+      label: batchItemLabel(m.startTime, m.bracket, lang),
+    }));
     if (items.length === 0) {
-      setNote(selCount > 0 ? "勾选的对局都已分析" : "没有未分析的对局");
+      setNote(
+        selCount > 0 ? t("batch.empty.selected") : t("batch.empty.recent"),
+      );
       return;
     }
     void startBatch(items, { skipAnalyzed });
@@ -88,11 +89,11 @@ export function BatchAnalyzeBar({
     return (
       <div className="batch-bar" data-testid="batch-bar">
         <span className="batch-progress">
-          批量分析中 {st.done}/{st.total}
+          {t("batch.running", { done: st.done, total: st.total })}
           {st.currentLabel ? ` · ${st.currentLabel}` : ""}
         </span>
         <button className="batch-cancel" onClick={() => cancelBatch()}>
-          取消
+          {t("batch.cancel")}
         </button>
       </div>
     );
@@ -102,12 +103,18 @@ export function BatchAnalyzeBar({
     return (
       <div className="batch-bar" data-testid="batch-bar">
         <span className="batch-summary">
-          {st.cancelled ? "已取消:" : "批量完成:"}
-          成功 {st.ok} · 跳过 {st.skipped} · 失败 {st.failed}
+          {st.cancelled
+            ? t("batch.cancelledPrefix")
+            : t("batch.finishedPrefix")}
+          {t("batch.summary", {
+            ok: st.ok,
+            skipped: st.skipped,
+            failed: st.failed,
+          })}
         </span>
         <button
           className="batch-dismiss"
-          aria-label="关闭小结"
+          aria-label={t("batch.dismissAria")}
           onClick={() => dismissBatchSummary()}
         >
           ×
@@ -120,17 +127,17 @@ export function BatchAnalyzeBar({
     <div className="batch-bar" data-testid="batch-bar">
       <span
         className="batch-title"
-        title="默认从最新往旧取 N 场;在下方列表勾选后改为只分析勾选的对局(shuffle 一勾整场 6 盘)。最多三路并行,输出与手动逐场分析一致(含深挖)。"
+        title={t("batch.titleHint")}
       >
-        批量 AI 分析
+        {t("batch.title")}
       </span>
       {selCount > 0 ? (
         <span className="batch-sel" data-testid="batch-sel">
-          已勾选 {selCount} 场
+          {t("batch.selected", { n: selCount })}
           <button
             className="batch-sel-clear"
-            aria-label="清除勾选"
-            title="清除勾选"
+            aria-label={t("batch.clearSelection")}
+            title={t("batch.clearSelection")}
             onClick={() => onClearSelected?.()}
           >
             ✕
@@ -138,7 +145,7 @@ export function BatchAnalyzeBar({
         </span>
       ) : (
         <label className="batch-n">
-          最近
+          {t("batch.recentBefore")}
           <input
             type="number"
             min={1}
@@ -149,12 +156,12 @@ export function BatchAnalyzeBar({
               if (Number.isFinite(v)) setN(Math.floor(v));
             }}
           />
-          场
+          {t("batch.recentAfter")}
         </label>
       )}
       <label
         className="batch-skip"
-        title="勾选(默认):已有分析缓存的对局跳过,不重复花钱。取消勾选:重新分析并覆盖旧结果(与单场面板的「重新分析」一致);正在分析中的对局任何模式下都不会重复跑。"
+        title={t("batch.skipHint")}
       >
         <input
           type="checkbox"
@@ -162,10 +169,12 @@ export function BatchAnalyzeBar({
           checked={skipAnalyzed}
           onChange={(e) => setSkipAnalyzed(e.target.checked)}
         />
-        跳过已分析
+        {t("batch.skip")}
       </label>
       <button className="batch-start" onClick={() => void start()}>
-        {selCount > 0 ? `分析勾选的 ${selCount} 场` : "开始"}
+        {selCount > 0
+          ? t("batch.startSelected", { n: selCount })
+          : t("batch.start")}
       </button>
       {note && <span className="batch-note">{note}</span>}
     </div>

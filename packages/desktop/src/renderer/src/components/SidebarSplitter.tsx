@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 
+import { useT } from "../i18n/LangProvider";
 import { SIDEBAR_MAX, SIDEBAR_MIN } from "../sidebarWidth";
 
 /** Adjustment step per arrow-key press, in px (WAI-ARIA Window Splitter). */
@@ -29,6 +30,7 @@ export function SidebarSplitter({
   onWidthChange: (w: number) => void;
   layoutRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const { t } = useT();
   const draggingRef = useRef(false);
 
   const onPointerMove = useCallback(
@@ -81,7 +83,7 @@ export function SidebarSplitter({
       className="app-sidebar-splitter"
       role="separator"
       aria-orientation="vertical"
-      aria-label="调整对局列表宽度"
+      aria-label={t("matchList.splitterAria")}
       tabIndex={0}
       aria-valuenow={Math.round(width)}
       aria-valuemin={SIDEBAR_MIN}

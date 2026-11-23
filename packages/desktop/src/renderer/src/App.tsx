@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { StoredMatchMeta } from "../../main/matchStore";
+import type { MessageKey } from "../../shared/i18n";
 import { startAutoAnalyzeListener } from "./batch/autoAnalyze";
 import { bridge } from "./bridge";
 import { BatchAnalyzeBar } from "./components/BatchAnalyzeBar";
@@ -18,6 +19,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { SidebarSplitter } from "./components/SidebarSplitter";
 import { StatsDashboard } from "./components/StatsDashboard";
 import { UpdateBanner } from "./components/UpdateBanner";
+import { useT } from "./i18n/LangProvider";
 import {
   canOpenRound,
   keepLoadedRounds,
@@ -49,11 +51,11 @@ import { useSidebarWidth } from "./sidebarWidth";
 import { applyUiZoom } from "./uiZoom";
 
 type AppView = "matches" | "stats" | "settings" | "dev";
-const APP_VIEW_LABEL: Record<AppView, string> = {
-  matches: "对局",
-  stats: "战绩",
-  settings: "设置",
-  dev: "开发者",
+const APP_VIEW_LABEL: Record<AppView, MessageKey> = {
+  matches: "nav.tab.matches",
+  stats: "nav.tab.stats",
+  settings: "nav.tab.settings",
+  dev: "nav.tab.dev",
 };
 
 export default function App({
@@ -64,6 +66,7 @@ export default function App({
   /** For visual-regression scenes: jump straight to one zone of the dev page. */
   initialDevZone?: "watch" | "inspect" | "ai" | "diag";
 } = {}) {
+  const { t } = useT();
   const [appView, setAppView] = useState<AppView>(initialAppView);
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -376,9 +379,12 @@ export default function App({
         a.getMonth() === b.getMonth() &&
         a.getDate() === b.getDate();
       const yesterday = new Date(today.getTime() - 86_400_000);
-      if (sameDay(d, today)) return "今天";
-      if (sameDay(d, yesterday)) return "昨天";
-      return `${d.getMonth() + 1}月${d.getDate()}日`;
+      if (sameDay(d, today)) return t("matchList.group.today");
+      if (sameDay(d, yesterday)) return t("matchList.group.yesterday");
+      return t("common.monthDay", {
+        month: d.getMonth() + 1,
+        day: d.getDate(),
+      });
     };
     for (const m of list) {
       const d = new Date(m.startTime);
@@ -391,10 +397,14 @@ export default function App({
       const wins = g.items.filter((m) =>
         m.result.toLowerCase().startsWith("win"),
       ).length;
-      g.summary = `${g.items.length} 场 · ${wins}-${g.items.length - wins}`;
+      g.summary = t("matchList.group.summary", {
+        n: g.items.length,
+        wins,
+        losses: g.items.length - wins,
+      });
     }
     return groups;
-  }, [metas, filter]);
+  }, [metas, filter, t]);
 
   return (
     <div className="app-container">
@@ -407,14 +417,14 @@ export default function App({
               className={v === appView ? "active" : ""}
               onClick={() => setAppView(v)}
             >
-              {APP_VIEW_LABEL[v]}
+              {t(APP_VIEW_LABEL[v])}
             </button>
           ))}
         </div>
         <UpdateBanner />
       </header>
       {recWarn && (
-        <div className="app-rec-warn">录像未连接:这一场不会被录下</div>
+        <div className="app-rec-warn">{t("recorder.notConnectedBanner")}</div>
       )}
       {appView === "dev" ? (
         <DevPanel initialZone={initialDevZone} />
@@ -496,7 +506,7 @@ export default function App({
                     </li>
                   )),
                 ])}
-                {hasMore && <li className="loading-more">后台补载中…</li>}
+                {hasMore && <li className="loading-more">{t("matchList.loadingMore")}</li>}
               </ul>
             </aside>
             {/* 第三条栅格轨必须有真实 DOM 元素:.app-layout 是
@@ -542,16 +552,16 @@ export default function App({
                   ratingDelta={ratingDeltas.get(selectedMeta.id) ?? null}
                 />
               ) : isLoading ? (
-                <div className="empty-state">加载中...</div>
+                <div className="empty-state">{t("nav.loading")}</div>
               ) : metas.length === 0 ? (
                 <div className="onboard" data-testid="onboard">
-                  <h2>欢迎使用 gladlog</h2>
+                  <h2>{t("nav.onboard.welcome")}</h2>
                   {wowDir == null ? (
                     <>
                       <ol>
-                        <li>选择 WoW 安装目录(自动定位战斗日志并开始监控)</li>
-                        <li>打一场竞技场,或导入历史日志</li>
-                        <li>回来看战报、回放和 AI 分析</li>
+                        <li>{t("nav.onboard.step1")}</li>
+                        <li>{t("nav.onboard.step2")}</li>
+                        <li>{t("nav.onboard.step3")}</li>
                       </ol>
                       <button
                         className="onboard-cta"
@@ -563,19 +573,17 @@ export default function App({
                             })
                         }
                       >
-                        选择 WoW 目录…
+                        {t("nav.onboard.pickDir")}
                       </button>{" "}
                       <ImportButton />
-                      <p className="onboard-hint">
-                        需要开启游戏内战斗记录(高级模式);AI 分析在「设置」里配
-                        API key,不配也能看战报与回放。
-                      </p>
+                      <p className="onboard-hint">{t("nav.onboard.hint")}</p>
                     </>
                   ) : (
                     <>
                       <p>
-                        ✅ 正在监控 <code>{wowDir}</code> —— 打一场竞技场,战报会
-                        自动出现在左侧。
+                        {t("nav.onboard.watchingBefore")}
+                        <code>{wowDir}</code>
+                        {t("nav.onboard.watchingAfter")}
                       </p>
                       <p>
                         <ImportButton />
@@ -584,7 +592,7 @@ export default function App({
                   )}
                 </div>
               ) : (
-                <div className="empty-state">选择一场对局</div>
+                <div className="empty-state">{t("nav.selectMatch")}</div>
               )}
             </main>
           </div>
@@ -604,6 +612,7 @@ function MatchShell({
   meta: StoredMatchMeta;
   ratingDelta: number | null;
 }) {
+  const { t } = useT();
   const teamSizes = skeletonTeamSizes(meta.teams, meta.bracket);
   if (meta.kind !== "shuffle")
     return (
@@ -624,7 +633,11 @@ function MatchShell({
           startTime: meta.startTime,
           endTime: null,
         }}
-        roundLabel={stats.length > 0 ? `回合 1/${stats.length}` : undefined}
+        roundLabel={
+          stats.length > 0
+            ? t("matchList.roundLabel", { i: 1, n: stats.length })
+            : undefined
+        }
         teamSizes={teamSizes}
       >
         {stats.length > 0 && (

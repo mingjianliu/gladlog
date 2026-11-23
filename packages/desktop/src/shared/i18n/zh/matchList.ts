@@ -1,0 +1,33 @@
+// Baseline (zh) dictionary for the `matchList.*` namespace: the match-list
+// sidebar (date groups, rows, filter bar, import button, splitter).
+export const zhMatchList = {
+  "matchList.group.today": "今天",
+  "matchList.group.yesterday": "昨天",
+  "matchList.group.summary": "{n} 场 · {wins}-{losses}",
+  "matchList.loadingMore": "后台补载中…",
+  "matchList.roundLabel": "回合 {i}/{n}",
+  "matchList.check.shuffle": "勾选整场 shuffle(全部 6 盘)加入批量分析",
+  "matchList.check.match": "勾选加入批量分析",
+  "matchList.splitterAria": "调整对局列表宽度",
+  "matchList.filter.all": "全部",
+  "matchList.filter.win": "胜",
+  "matchList.filter.loss": "负",
+  "matchList.filter.bracketTitle": "赛制",
+  "matchList.filter.allBrackets": "全部赛制",
+  "matchList.filter.specTitle": "加一个专精(选多个 = 同队组合检索)",
+  "matchList.filter.allSpecs": "全部专精",
+  "matchList.filter.addSpec": "+ 专精(同队)",
+  "matchList.filter.removeSpec": "移除 {spec}",
+  "matchList.filter.removeZone": "移除地图筛选",
+  "matchList.filter.dateFrom": "起始日期",
+  "matchList.filter.dateTo": "结束日期",
+  "matchList.filter.clear": "清除",
+  "matchList.import.button": "导入历史日志…",
+  "matchList.import.busy": "导入中…",
+  "matchList.import.progress": "解析 {i}/{n}:{file}(新入库 {stored}{dupPart})",
+  "matchList.import.progressDup": ",重复 {dup}",
+  "matchList.import.done":
+    "完成:{files} 个文件,新入库 {stored} 场,重复跳过 {dup}{failedPart}",
+  "matchList.import.doneFailed": ",失败 {failed} 个文件",
+  "matchList.import.failed": "导入失败:{error}",
+};

@@ -1,5 +1,9 @@
 import type { MessageKey, Messages } from "../index";
+import { enBatch } from "./batch";
 import { enCommon } from "./common";
+import { enDev } from "./dev";
+import { enMatchList } from "./matchList";
+import { enNav } from "./nav";
 import { enRecorder } from "./recorder";
 import { enSettings } from "./settings";
 import { enUpdate } from "./update";
@@ -8,8 +12,12 @@ import { enUpdate } from "./update";
 export const enMessages = {
   ...enCommon,
   ...enSettings,
+  ...enNav,
+  ...enMatchList,
+  ...enBatch,
   ...enUpdate,
   ...enRecorder,
+  ...enDev,
 } satisfies Messages;
 
 // Excess-property checks do not apply to spread members, so `satisfies` alone
