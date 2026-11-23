@@ -15,30 +15,6 @@ export const CJK_ALLOWLIST: ReadonlyArray<{
       "model instruction, zh prompt bytes frozen (§7): the coach system prompt's zh language sentence, sent to the model, never rendered",
   },
   {
-    file: "packages/desktop/src/main/localAiBackends.ts",
-    snippet: "内部错误:传给",
-    reason:
-      "developer-only assert (assertNoWindowsCmdMetacharacters): an argv invariant that is expected to always pass; it guards gladlog's own spawn wrapper, not user input",
-  },
-  {
-    file: "packages/desktop/src/main/localAiBackends.ts",
-    snippet: "元字符(& | ^ % < > 之一)",
-    reason:
-      "continuation of the developer-only assertNoWindowsCmdMetacharacters message (same assert as above)",
-  },
-  {
-    file: "packages/desktop/src/main/localAiBackends.ts",
-    snippet: "语法而非字面文本,已拒绝执行",
-    reason:
-      "continuation of the developer-only assertNoWindowsCmdMetacharacters message (same assert as above)",
-  },
-  {
-    file: "packages/desktop/src/main/localAiBackends.ts",
-    snippet: "双引号——cmd.exe 重新解析时",
-    reason:
-      "continuation of the developer-only assertNoWindowsCmdMetacharacters message (unbalanced-quote branch, same assert as above)",
-  },
-  {
     file: "packages/desktop/src/main/corpusLoader.ts",
     snippet: "形状粗验失败",
     reason:

@@ -14,6 +14,10 @@ export const enErrors = {
   "errors.ai.agyPromptTooLong":
     "The agy backend passes the prompt on the command line, and this one ({length} characters) exceeds the Windows command-line limit (about 32K): switch to the Claude CLI or Anthropic API backend",
   "errors.ai.agyStatus": "agy returned status={status}",
+  "errors.ai.cmdMetachar":
+    "Internal error: an argument passed to {file} (a .cmd/.bat run through cmd.exe) contains a cmd.exe metacharacter (one of & | ^ % < >). cmd.exe would re-parse it as command syntax rather than literal text, so it was not run. Content like this must be written to a file first, with only the file path passed in argv.",
+  "errors.ai.cmdUnbalancedQuote":
+    "Internal error: an argument passed to {file} (a .cmd/.bat run through cmd.exe) contains an unbalanced double quote. cmd.exe would shift every following argument boundary when re-parsing it, so it was not run.",
   "errors.deepseek.timeout":
     "DeepSeek timed out: the request did not finish within {seconds}s",
   "errors.deepseek.stallConnect":

@@ -12,6 +12,10 @@ export const zhErrors = {
   "errors.ai.agyPromptTooLong":
     "agy 后端经命令行传入 prompt,本次 {length} 字符超出 Windows 命令行上限(约 32K):请改用 Claude CLI 或 Anthropic API 后端",
   "errors.ai.agyStatus": "agy 返回 status={status}",
+  "errors.ai.cmdMetachar":
+    "内部错误:传给 {file}(经 cmd.exe 执行的 .cmd/.bat)的参数含 cmd.exe 元字符(& | ^ % < > 之一)——cmd.exe 重新解析 argv 时会把它当命令 语法而非字面文本,已拒绝执行。这类内容必须先落盘,argv 只传文件路径。",
+  "errors.ai.cmdUnbalancedQuote":
+    "内部错误:传给 {file}(经 cmd.exe 执行的 .cmd/.bat)的参数含不平衡的 双引号——cmd.exe 重新解析时会让后续参数边界整体错位,已拒绝执行。",
   "errors.deepseek.timeout": "DeepSeek 超时:请求整体超过 {seconds}s 未完成",
   "errors.deepseek.stallConnect":
     "DeepSeek 流停滞:连接阶段超过 {seconds}s 未收到响应",

@@ -128,7 +128,12 @@ export type Runner = (
   file: string,
   args: string[],
   stdin: string,
-  opts?: { signal?: AbortSignal; onStdoutLine?: (line: string) => void },
+  opts?: {
+    signal?: AbortSignal;
+    onStdoutLine?: (line: string) => void;
+    /** UI language for errors defaultRun itself throws (default zh). */
+    lang?: Language;
+  },
 ) => Promise<string>;
 
 // On win32, if the resolved CLI binary is a .cmd/.bat (the usual shim shape
@@ -177,22 +182,21 @@ const WIN_CMD_METACHAR_RE = /[&|^%<>]/;
 
 /** See the large comment above: argv backstop check for defaultRun's manual
  * cmd.exe wrapping. */
+// The messages are user-visible: the error flows through the client stream to
+// the AI panel, and the argv carries tmpdir() paths, so a Windows username
+// containing one of these characters trips the guard.
 export function assertNoWindowsCmdMetacharacters(
   args: string[],
   file: string,
+  lang: Language = "zh",
 ): void {
   for (const arg of args) {
     if (WIN_CMD_METACHAR_RE.test(arg)) {
-      throw new Error(
-        `内部错误:传给 ${file}(经 cmd.exe 执行的 .cmd/.bat)的参数含 cmd.exe ` +
-          `元字符(& | ^ % < > 之一)——cmd.exe 重新解析 argv 时会把它当命令 ` +
-          `语法而非字面文本,已拒绝执行。这类内容必须先落盘,argv 只传文件路径。`,
-      );
+      throw new Error(translate(lang, "errors.ai.cmdMetachar", { file }));
     }
     if ((arg.match(/"/g) ?? []).length % 2 !== 0) {
       throw new Error(
-        `内部错误:传给 ${file}(经 cmd.exe 执行的 .cmd/.bat)的参数含不平衡的 ` +
-          `双引号——cmd.exe 重新解析时会让后续参数边界整体错位,已拒绝执行。`,
+        translate(lang, "errors.ai.cmdUnbalancedQuote", { file }),
       );
     }
   }
@@ -230,7 +234,7 @@ export const defaultRun: Runner = (file, args, stdin, opts) =>
       return;
     }
     const isWinBatch = isWindowsBatchFile(file);
-    if (isWinBatch) assertNoWindowsCmdMetacharacters(args, file);
+    if (isWinBatch) assertNoWindowsCmdMetacharacters(args, file, opts?.lang);
     // cliSpawnEnv: a Dock-launched app's PATH lacks /opt/homebrew/bin, and
     // these CLIs are `#!/usr/bin/env node` scripts — without the augmented
     // PATH the child dies 127 before reading stdin (see cliDetect.ts).
@@ -469,7 +473,7 @@ export function claudeCliClientFactory(opts?: {
             ...sessionArgs,
           ],
           prompt,
-          { signal: params.signal },
+          { signal: params.signal, lang },
         );
 
       // 行解析状态 + 生成器与 onStdoutLine 之间的手写队列(回调是同步世界,
@@ -532,7 +536,7 @@ export function claudeCliClientFactory(opts?: {
               ...CLAUDE_CLI_ISOLATION_ARGS,
             ],
             prompt,
-            { signal: params.signal, onStdoutLine },
+            { signal: params.signal, onStdoutLine, lang },
           ),
         "claude",
         versionProbe,
@@ -668,7 +672,7 @@ export function codexClientFactory(opts?: {
               joinPrompt(params),
               // Final review F1: as in claudeCliClientFactory, forward the
               // seeding-phase signal.
-              { signal: params.signal },
+              { signal: params.signal, lang },
             ),
           "codex",
           versionProbe,
@@ -899,7 +903,7 @@ export function codebuddyClientFactory(opts?: {
                 ...SAFETY_ARGS,
               ],
               prompt,
-              { signal: params.signal },
+              { signal: params.signal, lang },
             ),
           "cbc",
           versionProbe,
@@ -935,7 +939,7 @@ export function codebuddyClientFactory(opts?: {
               ...SAFETY_ARGS,
             ],
             prompt,
-            { signal: params.signal },
+            { signal: params.signal, lang },
           ),
         "cbc",
         versionProbe,
@@ -1090,7 +1094,7 @@ export function agyClientFactory(opts?: {
           "",
           // Final review F1: the legacy .mjs wrapper mode must forward the
           // seeding-phase signal too.
-          { signal: params.signal },
+          { signal: params.signal, lang },
         );
         yield { delta: stripAgyHeader(out) };
         return;
@@ -1154,7 +1158,7 @@ export function agyClientFactory(opts?: {
               "",
               // Final review F1: the direct-spawn mode forwards the
               // seeding-phase signal too.
-              { signal: params.signal },
+              { signal: params.signal, lang },
             ),
           "agy",
           versionProbe,
@@ -1222,7 +1226,7 @@ export async function continueCliChat(input: {
 }): Promise<string> {
   const run = input.run ?? defaultRun;
   const lang = input.lang ?? "zh";
-  const opts = { signal: input.signal };
+  const opts = { signal: input.signal, lang };
   if (input.backend === "claudeCli") {
     const { cmd, versionProbe } = await resolveCliWithVersionProbe(
       "claude",

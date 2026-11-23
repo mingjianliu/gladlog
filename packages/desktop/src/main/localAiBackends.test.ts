@@ -177,6 +177,21 @@ describe("assertNoWindowsCmdMetacharacters(defaultRun 的 cmd.exe argv 兜底守
     ).toThrow(/双引号/);
   });
 
+  it("界面语言为 en 时报错是英文(用户名含 & 的临时路径会撞上它)", () => {
+    for (const arg of ["C:\\Users\\A&B\\AppData\\Local\\Temp\\x.txt", 'a "x']) {
+      let msg = "";
+      try {
+        assertNoWindowsCmdMetacharacters([arg], "C:\\npm\\agy.cmd", "en");
+      } catch (e) {
+        msg = (e as Error).message;
+      }
+      expect(msg).toMatch(
+        /^Internal error: an argument passed to C:\\npm\\agy\.cmd/,
+      );
+      expect(msg).not.toMatch(CJK_LEAK);
+    }
+  });
+
   it("闭合的双引号(偶数个)不受影响", () => {
     expect(() =>
       assertNoWindowsCmdMetacharacters(['a "balanced"'], "C:\\npm\\agy.cmd"),
@@ -298,6 +313,35 @@ describe("defaultRun abort 行为直测(终审 F2:直接练 defaultRun 的 signa
     // sleep — the sleep process was really SIGKILLed and produced no result.
     expect(elapsed).toBeLessThan(2000);
   }, 10_000);
+});
+
+describe("cmd.exe argv 守卫的报错跟随界面语言(经 defaultRun 到 AI 面板)", () => {
+  const originalPlatform = process.platform;
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform });
+  });
+
+  it("win32 上 .cmd + 含 & 的参数 + lang en → defaultRun 拒绝,报错是英文", async () => {
+    Object.defineProperty(process, "platform", { value: "win32" });
+    const err = await defaultRun(
+      "C:\\npm\\agy.cmd",
+      ["--add-dir", "C:\\Users\\A&B\\AppData\\Local\\Temp\\gladlog-agy"],
+      "",
+      { lang: "en" },
+    ).catch((e: unknown) => e as Error);
+    expect((err as Error).message).toMatch(/^Internal error:/);
+    expect((err as Error).message).not.toMatch(CJK_LEAK);
+  });
+
+  it("工厂把 lang 交给 Runner(defaultRun 才拿得到)", async () => {
+    let gotLang: string | undefined;
+    const run: Runner = async (_file, _args, _stdin, opts) => {
+      gotLang = opts?.lang;
+      return "OK";
+    };
+    await collect(claudeCliClientFactory({ cmd: "claude", run, lang: "en" }));
+    expect(gotLang).toBe("en");
+  });
 });
 
 describe("local AI backends", () => {
