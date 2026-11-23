@@ -127,7 +127,26 @@ describe("LangProvider / 首启语言选择框(spec §6.3 §6.7)", () => {
     expect(seen!.lang).toBe("zh");
     expect(seen!.namesVersion).toBe(0);
     expect(seen!.t("common.save")).toBe("保存");
-    await expect(seen!.setLang("en")).resolves.toBeUndefined();
+    // Nothing to persist to outside a provider: reported as not saved.
+    await expect(seen!.setLang("en")).resolves.toBe(false);
+  });
+
+  it("setLang 返回是否已持久化:save 成功 → true,save 失败 → false", async () => {
+    const { save } = mockBridge({ language: "zh" });
+    let seen: ReturnType<typeof useT> | null = null;
+    function Grab() {
+      seen = useT();
+      return null;
+    }
+    render(
+      <LangProvider>
+        <Grab />
+      </LangProvider>,
+    );
+    await waitFor(() => expect(seen).not.toBeNull());
+    await expect(seen!.setLang("en")).resolves.toBe(true);
+    save.mockRejectedValueOnce(new Error("disk full"));
+    await expect(seen!.setLang("zh")).resolves.toBe(false);
   });
 
   it("设置页点「中文」→ useT().lang 立即变成 zh,不需要重新挂载", async () => {

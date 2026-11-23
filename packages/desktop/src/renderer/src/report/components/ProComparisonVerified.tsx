@@ -135,6 +135,8 @@ export function ProComparisonVerified({
   // we do not burn another round of tokens.
   // When the getState surface is missing (fixture stub / older preload) we fall
   // back to getCached silently.
+  // `lang` is a dependency too: main keys the compare cache by language, so a
+  // language switch must re-read it (same as StructuredAnalysisPanel).
   useEffect(() => {
     let cancelled = false;
     setResult(null);
@@ -185,7 +187,7 @@ export function ProComparisonVerified({
     return () => {
       cancelled = true;
     };
-  }, [matchId]);
+  }, [matchId, lang]);
 
   // Subscribe to the (verified) done + error events. We deliberately do NOT
   // display onDelta text: streamed deltas are interpolated but not yet

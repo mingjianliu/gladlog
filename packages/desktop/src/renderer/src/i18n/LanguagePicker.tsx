@@ -1,5 +1,6 @@
 import {
   bilingual,
+  htmlLang,
   type Language,
   LANGUAGES,
   translate,
@@ -25,7 +26,7 @@ export function LanguageSegment({
         <button
           key={l}
           type="button"
-          lang={l === "zh" ? "zh-CN" : "en"}
+          lang={htmlLang(l)}
           className={value === l ? "active" : ""}
           aria-pressed={value === l}
           autoFocus={autoFocus && value === l}

@@ -22,8 +22,10 @@ export interface LangContextValue {
   t: TFn;
   lang: Language;
   /** Switch the UI language: updates every consumer at once (no remount) and
-   *  persists `settings.language`. */
-  setLang(l: Language): Promise<void>;
+   *  persists `settings.language`. Resolves true when the choice was saved,
+   *  false when it applies to this session only (no settings facet, or the
+   *  save failed). */
+  setLang(l: Language): Promise<boolean>;
   /** Bumped when the spell-name tables a language needs finish loading;
    *  constant 0 for now. */
   namesVersion: number;
@@ -34,7 +36,7 @@ export interface LangContextValue {
 const FALLBACK: LangContextValue = {
   t: makeT("zh"),
   lang: "zh",
-  setLang: async () => {},
+  setLang: async () => false,
   namesVersion: 0,
 };
 
@@ -98,14 +100,20 @@ export function LangProvider({
     document.documentElement.lang = htmlLang(lang);
   }, [lang]);
 
-  const setLang = useCallback(async (l: Language) => {
+  const setLang = useCallback(async (l: Language): Promise<boolean> => {
     // Context first, so every consumer switches immediately; then persist.
     setChosen(l);
     document.documentElement.lang = htmlLang(l);
     try {
-      await bridge().settings.save({ language: l });
+      const next = (await bridge().settings.save({ language: l })) as {
+        language?: Language | null;
+      } | null;
+      // A returned document that carries a different language means the
+      // patch was dropped (sanitized away) rather than persisted.
+      return next?.language === undefined || next.language === l;
     } catch {
-      /* no settings facet: switch for this session only */
+      // No settings facet, or the save failed: this session only.
+      return false;
     }
   }, []);
 
