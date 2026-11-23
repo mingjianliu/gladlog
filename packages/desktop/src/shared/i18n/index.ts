@@ -59,6 +59,19 @@ export function localeToLanguage(locale: string | null | undefined): Language {
   return locale && /^zh/i.test(locale) ? "zh" : "en";
 }
 
+/**
+ * The UI language in effect: the stored choice when it is `zh` / `en`,
+ * otherwise a guess from the OS / browser locale (never written back). The one
+ * rule both processes use -- main via main/language.ts, the renderer via
+ * LangProvider and the auto-analyze listener.
+ */
+export function effectiveLanguage(
+  stored: Language | null | undefined,
+  locale: string | null | undefined,
+): Language {
+  return stored === "zh" || stored === "en" ? stored : localeToLanguage(locale);
+}
+
 /** Value for `<html lang>`. */
 export function htmlLang(lang: Language): "zh-CN" | "en" {
   return lang === "zh" ? "zh-CN" : "en";

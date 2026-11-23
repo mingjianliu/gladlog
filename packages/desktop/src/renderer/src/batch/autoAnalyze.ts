@@ -1,5 +1,5 @@
 import type { StoredMatchMeta } from "../../../main/matchStore";
-import { type Language, localeToLanguage } from "../../../shared/i18n";
+import { effectiveLanguage, type Language } from "../../../shared/i18n";
 import { bridge } from "../bridge";
 import {
   type BatchItem,
@@ -84,13 +84,11 @@ async function handleMatchStored(meta: LiveStoredMatchMeta): Promise<void> {
     return; // stub without a settings surface (some test beds / fixtures)
   }
   if (!settings.autoAnalyzeNew) return;
-  // The UI language, resolved the way LangProvider does when it is unset.
-  const lang =
-    settings.language === "zh" || settings.language === "en"
-      ? settings.language
-      : localeToLanguage(
-          typeof navigator === "undefined" ? undefined : navigator.language,
-        );
+  // The UI language, resolved by the same rule LangProvider uses.
+  const lang = effectiveLanguage(
+    settings.language,
+    typeof navigator === "undefined" ? undefined : navigator.language,
+  );
   enqueue(meta, lang);
 }
 

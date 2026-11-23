@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { GLOSSARY } from "./glossary";
 import {
   bilingual,
+  effectiveLanguage,
   enMessages,
   htmlLang,
   intlLocale,
@@ -71,6 +72,20 @@ describe("localeToLanguage", () => {
     expect(localeToLanguage(undefined)).toBe("en");
     expect(localeToLanguage(null)).toBe("en");
     expect(localeToLanguage("")).toBe("en");
+  });
+});
+
+describe("effectiveLanguage", () => {
+  it("存了 zh / en 就用存的,不看 locale", () => {
+    expect(effectiveLanguage("en", "zh-CN")).toBe("en");
+    expect(effectiveLanguage("zh", "en-US")).toBe("zh");
+  });
+
+  it("没存或存了无效值时按 locale 推断", () => {
+    expect(effectiveLanguage(null, "zh-TW")).toBe("zh");
+    expect(effectiveLanguage(undefined, "en-US")).toBe("en");
+    expect(effectiveLanguage("fr" as never, "zh-CN")).toBe("zh");
+    expect(effectiveLanguage(null, undefined)).toBe("en");
   });
 });
 

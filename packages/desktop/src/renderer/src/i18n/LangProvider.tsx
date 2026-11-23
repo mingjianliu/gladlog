@@ -9,9 +9,9 @@ import {
 } from "react";
 
 import {
+  effectiveLanguage,
   htmlLang,
   type Language,
-  localeToLanguage,
   makeT,
   type TFn,
 } from "../../../shared/i18n";
@@ -63,11 +63,11 @@ export function LangProvider({
   children: ReactNode;
   firstRunPicker?: boolean;
 }) {
-  const [localeLang] = useState<Language>(() =>
-    localeToLanguage(
-      typeof navigator === "undefined" ? undefined : navigator.language,
-    ),
+  const [locale] = useState<string | undefined>(() =>
+    typeof navigator === "undefined" ? undefined : navigator.language,
   );
+  // The picker's preselection: what the locale alone says.
+  const localeLang = effectiveLanguage(null, locale);
   const [chosen, setChosen] = useState<Language | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
 
@@ -94,7 +94,7 @@ export function LangProvider({
     };
   }, []);
 
-  const lang = chosen ?? localeLang;
+  const lang = effectiveLanguage(chosen, locale);
 
   useEffect(() => {
     document.documentElement.lang = htmlLang(lang);

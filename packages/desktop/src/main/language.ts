@@ -5,9 +5,9 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 import {
+  effectiveLanguage as resolveLanguage,
   type Language,
   LANGUAGES,
-  localeToLanguage,
 } from "../shared/i18n/index";
 
 /** The stored choice if there is one, otherwise a guess from the OS locale.
@@ -16,7 +16,7 @@ export function effectiveLanguage(
   s: { language?: Language | null },
   systemLocale: string,
 ): Language {
-  return s.language ?? localeToLanguage(systemLocale);
+  return resolveLanguage(s.language, systemLocale);
 }
 
 /** Settings with `language` resolved to a concrete value -- what main-side
@@ -39,7 +39,9 @@ export function readInstallerLanguage(exeDir: string): Language | null {
     const v = readFileSync(join(exeDir, INSTALLER_LANGUAGE_FILE), "utf-8")
       .replace(/^\uFEFF/, "")
       .trim();
-    return (LANGUAGES as readonly string[]).includes(v) ? (v as Language) : null;
+    return (LANGUAGES as readonly string[]).includes(v)
+      ? (v as Language)
+      : null;
   } catch {
     return null;
   }
