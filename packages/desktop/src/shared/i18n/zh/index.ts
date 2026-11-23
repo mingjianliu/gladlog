@@ -9,6 +9,7 @@ import { zhReportCards } from "./reportCards";
 import { zhReportDerive } from "./reportDerive";
 import { zhReportReplay } from "./reportReplay";
 import { zhSettings } from "./settings";
+import { zhStats } from "./stats";
 import { zhUpdate } from "./update";
 
 // The zh dictionary is the baseline: its keys define `MessageKey`.
@@ -22,6 +23,7 @@ export const zhMessages = {
   ...zhUpdate,
   ...zhRecorder,
   ...zhDev,
+  ...zhStats,
   ...zhReportDerive,
   ...zhReportCards,
   ...zhReportReplay,

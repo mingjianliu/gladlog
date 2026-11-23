@@ -10,6 +10,7 @@ import { enReportCards } from "./reportCards";
 import { enReportDerive } from "./reportDerive";
 import { enReportReplay } from "./reportReplay";
 import { enSettings } from "./settings";
+import { enStats } from "./stats";
 import { enUpdate } from "./update";
 
 // `satisfies Messages` fails typecheck on a missing key (or a wrongly typed value).
@@ -22,6 +23,7 @@ export const enMessages = {
   ...enUpdate,
   ...enRecorder,
   ...enDev,
+  ...enStats,
   ...enReportDerive,
   ...enReportCards,
   ...enReportReplay,

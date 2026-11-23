@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { LearningState } from "../../../main/learning";
 import type { StoredMatchMeta } from "../../../main/matchStore";
+import type { MessageKey } from "../../../shared/i18n";
 import { bridge } from "../bridge";
 import { formatDateTime } from "../i18n/format";
 import { useT } from "../i18n/LangProvider";
@@ -34,10 +35,10 @@ import {
 } from "./dashboard";
 import { MatchListRow, SpecDot } from "./MatchListRow";
 
-const PERIOD_LABEL: Record<DashPeriod, string> = {
-  today: "今天",
-  week: "7 天",
-  all: "全部",
+const PERIOD_KEY: Record<DashPeriod, MessageKey> = {
+  today: "stats.period.today",
+  week: "stats.period.week",
+  all: "stats.period.all",
 };
 
 const SERIES_COLORS = ["#d9a842", "#60a5fa", "#34d399", "#f472b6"];
@@ -80,13 +81,13 @@ function RatingCurve({
 }: {
   series: ReturnType<typeof deriveDashboard>["ratingSeries"];
 }) {
-  const { lang } = useT();
+  const { lang, t } = useT();
   const W = 760;
   const H = 160;
   const PAD = { l: 44, r: 10, t: 10, b: 16 };
   const all = series.flatMap((s) => s.points);
   if (all.length < 2) {
-    return <p className="dash-empty">评分数据不足(需要含评分的对局 ≥2 场)。</p>;
+    return <p className="dash-empty">{t("stats.curve.notEnough")}</p>;
   }
   const [t0, t1] = minMax(all.map((p) => p.t));
   const [r0, r1] = minMax(all.map((p) => p.rating));
@@ -279,7 +280,7 @@ export function StatsDashboard({
   /** Clicking a recent instance under "most frequent mistakes" opens that match. */
   onOpenMatch?: (matchId: string) => void;
 }) {
-  const { lang } = useT();
+  const { lang, t } = useT();
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [period, setPeriod] = useState<DashPeriod>("week");
   // Character filter (separates records for multi-character players;
@@ -303,8 +304,9 @@ export function StatsDashboard({
   // loop.
   const [rebuild, setRebuild] = useState<{
     running: boolean;
-    msg: string | null;
-  }>({ running: false, msg: null });
+    /** Outcome of the last run, rendered in the current language. */
+    done: { updated: number; failed: number } | "error" | null;
+  }>({ running: false, done: null });
   // Unmount guard: a rebuild takes minutes, so the component may be long gone
   // by the time it resolves (agy review #1)
   const aliveRef = useRef(true);
@@ -316,7 +318,7 @@ export function StatsDashboard({
   }, []);
   const runRebuild = () => {
     if (rebuild.running) return;
-    setRebuild({ running: true, msg: null });
+    setRebuild({ running: true, done: null });
     void (async () => {
       try {
         const r = await bridge().matches.rebuildIndex();
@@ -327,11 +329,10 @@ export function StatsDashboard({
         setMetas(all);
         setRebuild({
           running: false,
-          msg: `已重建:更新 ${r.updated} 场${r.failed > 0 ? `,失败 ${r.failed}` : ""}`,
+          done: { updated: r.updated, failed: r.failed },
         });
       } catch {
-        if (aliveRef.current)
-          setRebuild({ running: false, msg: "重建失败 —— 可在开发者视图重试" });
+        if (aliveRef.current) setRebuild({ running: false, done: "error" });
       }
     })();
   };
@@ -494,21 +495,21 @@ export function StatsDashboard({
     <div className="dash" data-testid="stats-dashboard">
       {/* Title row (1h): record + character chips + period control on the right */}
       <div className="dash-head">
-        <span className="dash-title">战绩</span>
+        <span className="dash-title">{t("stats.title")}</span>
         {characters.length >= 2 && (
           <div className="dash-chars" data-testid="dash-chars">
             <button
               className={character === undefined ? "active" : ""}
               onClick={() => setCharacter(undefined)}
             >
-              全部角色
+              {t("stats.allCharacters")}
             </button>
             {characters.map((c) => (
               <button
                 key={c.name}
                 className={c.name === character ? "active" : ""}
                 onClick={() => setCharacter(c.name)}
-                title={`${c.games} 场`}
+                title={t("common.matchCountPlural", { n: c.games })}
               >
                 {shortUnitName(c.name)}
                 <span className="dash-chars-n">{c.games}</span>
@@ -517,13 +518,13 @@ export function StatsDashboard({
           </div>
         )}
         <div className="rpt-mode-seg dash-period">
-          {(Object.keys(PERIOD_LABEL) as DashPeriod[]).map((p) => (
+          {(Object.keys(PERIOD_KEY) as DashPeriod[]).map((p) => (
             <button
               key={p}
               className={p === period ? "active" : ""}
               onClick={() => setPeriod(p)}
             >
-              {PERIOD_LABEL[p]}
+              {t(PERIOD_KEY[p])}
             </button>
           ))}
         </div>
@@ -535,7 +536,7 @@ export function StatsDashboard({
         <div className="dash-kpi-col" data-testid="dash-band">
           <div className="dash-kpi-card">
             <span className="dash-kpi-v">{dash.games}</span>
-            <span className="dash-kpi-k">场次</span>
+            <span className="dash-kpi-k">{t("stats.kpi.games")}</span>
           </div>
           {(() => {
             // Small-N honesty (UI review #8): below RATE_MIN_N_TOTAL the
@@ -560,10 +561,11 @@ export function StatsDashboard({
                   {r.primary}
                 </span>
                 <span className="dash-kpi-k">
-                  胜率{r.secondary ? ` · ${r.secondary}` : ""}
-                  {dash.rateGames !== dash.games ? "(按回合)" : ""}
+                  {t("stats.kpi.winRate")}
+                  {r.secondary ? ` · ${r.secondary}` : ""}
+                  {dash.rateGames !== dash.games ? t("stats.kpi.byRound") : ""}
                   {r.belowFloor && dash.rateGames > 0
-                    ? ` · 样本 <${RATE_MIN_N_TOTAL}`
+                    ? t("stats.kpi.smallSample", { n: RATE_MIN_N_TOTAL })
                     : ""}
                 </span>
               </div>
@@ -587,7 +589,9 @@ export function StatsDashboard({
               )}
             </span>
             <span className="dash-kpi-k">
-              当前评分{cur ? `(${cur.bracket})` : ""}
+              {cur
+                ? t("stats.kpi.currentRatingBracket", { bracket: cur.bracket })
+                : t("stats.kpi.currentRating")}
             </span>
             {cur &&
               (() => {
@@ -599,8 +603,8 @@ export function StatsDashboard({
                   <button
                     type="button"
                     className="dash-spark-btn"
-                    title="点开评分曲线大图"
-                    aria-label="展开评分曲线大图"
+                    title={t("stats.kpi.sparkTitle")}
+                    aria-label={t("stats.kpi.sparkAria")}
                     onClick={() => setCurveOpen(true)}
                   >
                     <RatingSparkline
@@ -617,7 +621,7 @@ export function StatsDashboard({
                 ? fmtTime(dash.medianDurationS)
                 : "—"}
             </span>
-            <span className="dash-kpi-k">时长中位</span>
+            <span className="dash-kpi-k">{t("stats.kpi.medianDuration")}</span>
           </div>
         </div>
         <div className="dash-main-col">
@@ -625,7 +629,7 @@ export function StatsDashboard({
             <div className="dash-card" data-testid="dash-practice">
               <span className="dash-card-head">
                 <span className="rpt-card-label">
-                  这周该练什么 —— 错题本 + 长期规律(1e 合卡)
+                  {t("stats.practice.title")}
                 </span>
                 {(rulesDoc || learnState) && (
                   <>
@@ -644,7 +648,9 @@ export function StatsDashboard({
                         }
                       }}
                     >
-                      {learnState?.consolidating ? "整合中…" : "重新整合"}
+                      {learnState?.consolidating
+                        ? t("stats.learning.consolidating")
+                        : t("stats.learning.consolidate")}
                     </button>
                   </>
                 )}
@@ -658,23 +664,48 @@ export function StatsDashboard({
                 <div data-testid="dash-learning">
                   <p className="dash-learning-meta">
                     {learnState?.backfill?.running
-                      ? `回填历史分析中… ${learnState.backfill.scanned}/${learnState.backfill.total}`
-                      : `台账 ${learnState?.ledgerMatches ?? 0} 场` +
+                      ? t("stats.learning.backfill", {
+                          scanned: learnState.backfill.scanned,
+                          total: learnState.backfill.total,
+                        })
+                      : t("stats.learning.ledger", {
+                          n: learnState?.ledgerMatches ?? 0,
+                        }) +
                         (learnState?.lastConsolidatedAt
-                          ? ` · 上次整合 ${formatDateTime(learnState.lastConsolidatedAt, lang)}`
-                          : " · 尚未整合")}
+                          ? t("stats.learning.lastConsolidated", {
+                              when: formatDateTime(
+                                learnState.lastConsolidatedAt,
+                                lang,
+                              ),
+                            })
+                          : t("stats.learning.notConsolidated"))}
                     {learnState && learnState.badLines > 0
-                      ? ` · ${learnState.badLines} 坏行已跳过`
+                      ? t("stats.learning.badLines", { n: learnState.badLines })
                       : ""}
                     {distillError
-                      ? ` · AI 提炼失败(仅缺文本):${distillError}`
+                      ? t("stats.learning.distillFailed", {
+                          error: distillError,
+                        })
                       : ""}
-                    {learnError ? ` · 整合失败:${learnError}` : ""}
+                    {learnError
+                      ? t("stats.learning.consolidateFailed", {
+                          error: learnError,
+                        })
+                      : ""}
                   </p>
                   {(rulesDoc?.rules ?? []).map((r: LearnedRule) => {
                     const facts = distillFacts(r.stats);
-                    const desc = r.description.zh ?? r.description.en;
-                    const adv = r.advice.zh ?? r.advice.en;
+                    // Model-written text. en shows only the en version (a
+                    // missing one waits for the next consolidation, see
+                    // LearnedRule.description); zh keeps its en fallback.
+                    const desc =
+                      lang === "en"
+                        ? r.description.en
+                        : (r.description.zh ?? r.description.en);
+                    const adv =
+                      lang === "en"
+                        ? r.advice.en
+                        : (r.advice.zh ?? r.advice.en);
                     const max = Math.max(1, ...r.stats.trend);
                     return (
                       <div key={r.ruleId} className="dash-learning-rule">
@@ -682,29 +713,37 @@ export function StatsDashboard({
                           className={`dash-learning-status ${r.status}`}
                           title={
                             r.status === "improved"
-                              ? "近期已明显减少 —— 进步证据,继续保持"
-                              : "仍在活跃发生"
+                              ? t("stats.rule.improvedTitle")
+                              : t("stats.rule.activeTitle")
                           }
                         >
-                          {r.status === "improved" ? "已改进" : "活跃"}
+                          {r.status === "improved"
+                            ? t("stats.rule.improved")
+                            : t("stats.rule.active")}
                         </span>
                         <span className="dash-learning-cat">
-                          {categoryLabel(r.category, "zh")}
+                          {categoryLabel(r.category, lang)}
                           {r.eventTypes.length > 0
                             ? ` · ${r.eventTypes.join("+")}`
                             : ""}
                           {r.condition?.enemySpec
-                            ? `(对位 spec ${r.condition.enemySpec})`
+                            ? t("stats.rule.vsSpec", {
+                                spec: r.condition.enemySpec,
+                              })
                             : r.condition?.zoneId
-                              ? `(地图 ${r.condition.zoneId})`
+                              ? t("stats.rule.onMap", {
+                                  zone: r.condition.zoneId,
+                                })
                               : ""}
                         </span>
                         <span className="dash-learning-count">
-                          {habitBadgeText(r, "zh")}
+                          {habitBadgeText(r, lang)}
                         </span>
                         <span
                           className="dash-learning-trend"
-                          title={`每 ${TREND_BUCKET_MATCHES} 场命中数,旧→新`}
+                          title={t("stats.rule.trendTitle", {
+                            n: TREND_BUCKET_MATCHES,
+                          })}
                         >
                           {r.stats.trend.map((h, i) => (
                             <i
@@ -717,7 +756,7 @@ export function StatsDashboard({
                         <p className="dash-learning-desc">
                           {desc
                             ? interpolate(desc, facts)
-                            : "(描述待下次整合生成)"}
+                            : t("stats.rule.noDescription")}
                         </p>
                         {adv && (
                           <p className="dash-learning-advice">
@@ -727,7 +766,7 @@ export function StatsDashboard({
                         <span className="dash-learning-evidence">
                           {r.evidence.map((id) => (
                             <button key={id} onClick={() => onOpenMatch?.(id)}>
-                              查看战例
+                              {t("stats.rule.viewExample")}
                             </button>
                           ))}
                         </span>
@@ -737,9 +776,10 @@ export function StatsDashboard({
                   {(rulesDoc?.rules ?? []).length === 0 &&
                     !learnState?.backfill?.running && (
                       <p className="dash-learning-empty">
-                        还没有稳定模式 —— 分析的对局多了(同类问题近{" "}
-                        {PATTERN_WINDOW_MATCHES} 场出现 {PATTERN_MIN_HITS}{" "}
-                        次以上)会自动出现在这里。
+                        {t("stats.rule.empty", {
+                          window: PATTERN_WINDOW_MATCHES,
+                          hits: PATTERN_MIN_HITS,
+                        })}
                       </p>
                     )}
                 </div>
@@ -766,7 +806,7 @@ export function StatsDashboard({
                               (enum slugs and legacy free-form words are both
                               normalized); the aggregation key is untouched */}
                           <span className="dash-nb-cat">
-                            {categoryLabel(g.category, "zh")}
+                            {categoryLabel(g.category, lang)}
                           </span>
                           <span className="dash-nb-count">×{g.count}</span>
                           {g.recurring > 0 && (
@@ -795,7 +835,7 @@ export function StatsDashboard({
                                     "")
                                   : (e.bracket ?? "")}
                                 {e.result
-                                  ? ` · ${e.result.toLowerCase() === "win" ? "胜" : "负"}`
+                                  ? ` · ${e.result.toLowerCase() === "win" ? t("stats.result.win") : t("stats.result.loss")}`
                                   : ""}
                               </span>
                               <span
@@ -814,7 +854,7 @@ export function StatsDashboard({
                               <span className="dash-nb-actions">
                                 <button
                                   className={e.flag === "done" ? "active" : ""}
-                                  title="标记为已改进"
+                                  title={t("stats.notebook.markFixed")}
                                   onClick={() => flagEntry(e, "done")}
                                 >
                                   ✓
@@ -823,7 +863,7 @@ export function StatsDashboard({
                                   className={
                                     e.flag === "recurring" ? "active rec" : ""
                                   }
-                                  title="标记为还在犯"
+                                  title={t("stats.notebook.markRecurring")}
                                   onClick={() => flagEntry(e, "recurring")}
                                 >
                                   ↻
@@ -833,7 +873,7 @@ export function StatsDashboard({
                                     className="dash-issue-recent"
                                     onClick={() => onOpenMatch(e.matchId)}
                                   >
-                                    打开该场 →
+                                    {t("stats.notebook.openMatch")}
                                   </button>
                                 )}
                               </span>
@@ -849,7 +889,7 @@ export function StatsDashboard({
 
           <div className="dash-tables">
             <div className="dash-card">
-              <span className="rpt-card-label">对阵敌方阵容</span>
+              <span className="rpt-card-label">{t("stats.comps.title")}</span>
               <div className="dash-comps">
                 {dash.comps.slice(0, 12).map((c) => {
                   const pct = c.games > 0 ? (100 * c.wins) / c.games : 0;
@@ -886,7 +926,9 @@ export function StatsDashboard({
                         style={{ color: barColor }}
                       >
                         {r.primary}
-                        <span className="dash-comp-games"> · {c.games}场</span>
+                        <span className="dash-comp-games">
+                          {t("stats.row.games", { n: c.games })}
+                        </span>
                       </span>
                     </div>
                   );
@@ -895,7 +937,7 @@ export function StatsDashboard({
                   <div className="dash-empty">
                     {dash.games > 0 ? (
                       <>
-                        无阵容数据 —— 旧对局还没建阵容索引。
+                        {t("stats.comps.noIndex")}
                         <button
                           className="rpt-btn dash-rebuild"
                           data-testid="dash-rebuild"
@@ -903,39 +945,53 @@ export function StatsDashboard({
                           onClick={runRebuild}
                         >
                           {rebuild.running
-                            ? "重建中…(全库逐场解析,可能要几分钟)"
-                            : "重建索引回填"}
+                            ? t("stats.rebuild.runningLong")
+                            : t("stats.rebuild.button")}
                         </button>
                       </>
                     ) : (
-                      "无阵容数据。"
+                      t("stats.comps.empty")
                     )}
                   </div>
                 )}
               </div>
               <div className="dash-comp-foot">
-                {dash.comps.length > 0 && "点击行回列表筛选该阵容"}
+                {dash.comps.length > 0 && t("stats.comps.clickHint")}
                 {dash.legacyRows > 0 && dash.comps.length > 0 && (
                   <>
-                    {` · 另有 ${dash.legacyRows} 场旧数据无阵容 `}
+                    {t("stats.comps.legacy", { n: dash.legacyRows })}
                     <button
                       className="dash-rebuild-inline"
                       data-testid="dash-rebuild"
                       disabled={rebuild.running}
                       onClick={runRebuild}
                     >
-                      {rebuild.running ? "重建中…" : "重建索引回填"}
+                      {rebuild.running
+                        ? t("stats.rebuild.running")
+                        : t("stats.rebuild.button")}
                     </button>
                   </>
                 )}
-                {rebuild.msg && (
-                  <span className="dash-rebuild-msg">{rebuild.msg}</span>
+                {rebuild.done && (
+                  <span className="dash-rebuild-msg">
+                    {rebuild.done === "error"
+                      ? t("stats.rebuild.failed")
+                      : t("stats.rebuild.done", {
+                          updated: rebuild.done.updated,
+                          failedPart:
+                            rebuild.done.failed > 0
+                              ? t("stats.rebuild.doneFailed", {
+                                  failed: rebuild.done.failed,
+                                })
+                              : "",
+                        })}
+                  </span>
                 )}
               </div>
             </div>
 
             <div className="dash-card">
-              <span className="rpt-card-label">分地图</span>
+              <span className="rpt-card-label">{t("stats.zones.title")}</span>
               {/* Row layout (spec 2-3, decided by the user): name + win-rate
                   bar + n%·x matches; clicking returns to the list with the zone
                   filter — same row structure and color bands as the comp card */}
@@ -969,17 +1025,21 @@ export function StatsDashboard({
                         style={{ color: barColor }}
                       >
                         {r.primary}
-                        <span className="dash-comp-games"> · {z.games}场</span>
+                        <span className="dash-comp-games">
+                          {t("stats.row.games", { n: z.games })}
+                        </span>
                       </span>
                     </div>
                   );
                 })}
                 {dash.zones.length === 0 && (
-                  <div className="dash-empty">无地图数据。</div>
+                  <div className="dash-empty">{t("stats.zones.empty")}</div>
                 )}
               </div>
               {dash.zones.length > 0 && onZoneClick && (
-                <div className="dash-comp-foot">点击行回列表筛选该地图</div>
+                <div className="dash-comp-foot">
+                  {t("stats.zones.clickHint")}
+                </div>
               )}
             </div>
           </div>
@@ -989,7 +1049,7 @@ export function StatsDashboard({
               clicking goes straight to the report. */}
           {dash.recent.length > 0 && (
             <div className="dash-card" data-testid="dash-recent">
-              <span className="rpt-card-label">最近对局</span>
+              <span className="rpt-card-label">{t("stats.recent.title")}</span>
               <div className="dash-recent-list">
                 {/* div role=button rather than <button>: MatchListRow is a
                     block-level div and a button may only contain phrasing
@@ -1001,7 +1061,7 @@ export function StatsDashboard({
                     role="button"
                     tabIndex={0}
                     className="dash-recent-row"
-                    title="打开战报"
+                    title={t("stats.recent.open")}
                     onClick={onOpenMatch ? () => onOpenMatch(m.id) : undefined}
                     onKeyDown={
                       onOpenMatch
@@ -1036,16 +1096,16 @@ export function StatsDashboard({
           <div
             className="dash-modal"
             role="dialog"
-            aria-label="评分曲线"
+            aria-label={t("stats.curve.title")}
             onClick={(e) => e.stopPropagation()}
           >
             <span className="dash-card-head">
               <span className="rpt-card-label">
-                评分曲线(
                 {character
-                  ? `${shortUnitName(character)} 本人`
-                  : "本人评分,旧数据回退队均"}
-                )
+                  ? t("stats.curve.headingCharacter", {
+                      name: shortUnitName(character),
+                    })
+                  : t("stats.curve.headingAll")}
               </span>
               <span className="dash-legend">
                 {dash.ratingSeries.map((sr, i) => (
@@ -1061,7 +1121,7 @@ export function StatsDashboard({
               <button
                 type="button"
                 className="dash-modal-close"
-                aria-label="关闭"
+                aria-label={t("stats.close")}
                 onClick={() => setCurveOpen(false)}
               >
                 ✕
