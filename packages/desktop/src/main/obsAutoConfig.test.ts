@@ -124,6 +124,11 @@ describe("authUnknownHint(#21 item5 unknown 态失败提示)", () => {
   it("unknown + 连接失败 → 给出人话提示", () => {
     expect(authUnknownHint("unknown", false)).toMatch(/未知/);
   });
+  it("界面语言为 en 时提示是英文", () => {
+    expect(authUnknownHint("unknown", false, "en")).toBe(
+      "OBS authentication state unknown (a config field is missing or its format changed), so a password may be needed; tried connecting with the password that was found",
+    );
+  });
   it("unknown + 连接成功 → 不需要提示", () => {
     expect(authUnknownHint("unknown", true)).toBeUndefined();
   });

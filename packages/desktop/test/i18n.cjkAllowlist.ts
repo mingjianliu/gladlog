@@ -39,6 +39,54 @@ export const CJK_ALLOWLIST: ReadonlyArray<{
       "continuation of the developer-only assertNoWindowsCmdMetacharacters message (unbalanced-quote branch, same assert as above)",
   },
   {
+    file: "packages/desktop/src/main/corpusLoader.ts",
+    snippet: "形状粗验失败",
+    reason:
+      "skip reason for a broken corpus file; only reaches log.warn via onSkipped (main/index.ts), never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/e2eEnv.ts",
+    snippet: "GLADLOG_E2E=1 需要",
+    reason:
+      "developer-only startup assert for the E2E test switch (GLADLOG_E2E env vars); end users never set it",
+  },
+  {
+    file: "packages/desktop/src/main/recordingsStore.ts",
+    snippet: "个未入索引文件",
+    reason:
+      "recordings visibility log line (this.log → main.log); developer log only, never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/recordingsStore.ts",
+    snippet: "可能是 OBS 崩溃孤儿或用户手动录像",
+    reason:
+      "continuation of the same recordings visibility log line; developer log only",
+  },
+  {
+    file: "packages/desktop/src/main/recordingsStore.ts",
+    snippet: "个过期录像,释放",
+    reason:
+      "retention prune log line (this.log → main.log); developer log only, never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/settingsStore.ts",
+    snippet: "密钥/密码将以明文存储",
+    reason:
+      "SettingsStoreWarning.detail; onWarn only writes it to log.warn (main/index.ts onSettingsWarn), never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/settingsStore.ts",
+    snippet: "无法解密",
+    reason:
+      "SettingsStoreWarning.detail; onWarn only writes it to log.warn (main/index.ts onSettingsWarn), never rendered",
+  },
+  {
+    file: "packages/desktop/src/main/updater.ts",
+    snippet: "GLADLOG_UPDATER_TEST_FEED 需要",
+    reason:
+      "developer-only assert for the dummy-release test feed env var; end users never set it",
+  },
+  {
     file: "packages/desktop/src/main/analysis.ts",
     snippet: "回退到 settings 默认后端",
     reason:

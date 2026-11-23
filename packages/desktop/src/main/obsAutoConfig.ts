@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
+import { type Language, translate } from "../shared/i18n/index";
 import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
 
 /** OBS (28+, with obs-websocket built in) stores its server configuration in a
@@ -327,8 +328,9 @@ export function importedPrefsPatch(
 export function authUnknownHint(
   authRequired: ObsWsDetected["authRequired"],
   ok: boolean,
+  lang: Language = "zh",
 ): string | undefined {
   return authRequired === "unknown" && !ok
-    ? "OBS 鉴权状态未知(配置字段缺失或格式有变),可能需要密码;已尝试携带读到的密码连接"
+    ? translate(lang, "errors.obs.authUnknown")
     : undefined;
 }

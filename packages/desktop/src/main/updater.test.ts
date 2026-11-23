@@ -476,6 +476,27 @@ describe("createUpdaterService:状态机", () => {
    * to "ready" out from under the watchdog's error. Only the latch stands
    * between that and a second installer over the same directory.
    */
+  it("install():界面语言为 en 时看门狗的报错是英文", async () => {
+    svc.dispose();
+    svc = createUpdaterService({
+      autoUpdater: backend,
+      env: winEnv(),
+      now: () => 1_700_000_000_000,
+      emit: (s) => emitted.push(s),
+      shutdown: shutdown as unknown as () => Promise<void>,
+      isAutoCheckEnabled: () => autoCheckEnabled,
+      getLanguage: () => "en",
+    });
+    backend.fire("update-downloaded", { version: "0.1.20" });
+    await svc.install();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(svc.getState()).toEqual({
+      phase: "error",
+      message:
+        "The update installer did not take over. Quit gladlog manually, then open it again.",
+    });
+  });
+
   it("install():看门狗落 error 后即使 phase 被顶回 ready,闩锁依旧不放开", async () => {
     backend.fire("update-downloaded", { version: "0.1.20" });
     await svc.install();

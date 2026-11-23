@@ -19,4 +19,8 @@ export const zhErrors = {
   "errors.deepseek.earlyEnd":
     "DeepSeek 流异常提前结束(未收到 [DONE]):服务端提前断连,输出可能被截断,已按失败处理",
   "errors.chat.seedNoSession": "播种未捕获到会话 id",
+  "errors.obs.authUnknown":
+    "OBS 鉴权状态未知(配置字段缺失或格式有变),可能需要密码;已尝试携带读到的密码连接",
+  "errors.update.installerDidNotTakeOver":
+    "更新安装器未能接管,请手动退出 gladlog 后重新打开",
 };

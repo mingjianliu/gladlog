@@ -21,4 +21,8 @@ export const enErrors = {
   "errors.deepseek.earlyEnd":
     "DeepSeek stream ended early (no [DONE]): the server disconnected and the output may be truncated, so it was treated as a failure",
   "errors.chat.seedNoSession": "Seeding did not capture a session id",
+  "errors.obs.authUnknown":
+    "OBS authentication state unknown (a config field is missing or its format changed), so a password may be needed; tried connecting with the password that was found",
+  "errors.update.installerDidNotTakeOver":
+    "The update installer did not take over. Quit gladlog manually, then open it again.",
 };

@@ -2,6 +2,8 @@ import { writeFileSync } from "node:fs";
 
 import { BrowserWindow, dialog } from "electron";
 
+import { type Language, translate } from "../shared/i18n/index";
+
 /**
  * C3 image export: an offscreen window loads **the same renderer** (hash
  * routing into the export page), waits for the page to report itself ready,
@@ -23,6 +25,8 @@ const READY_POLL_MS = 200;
 const SETTLE_MS = 250;
 
 interface ExportImageOptions {
+  /** UI language for the save dialog's title. */
+  lang: Language;
   matchId: string;
   roundSeq?: number | null;
   range?: { fromS: number; toS: number } | null;
@@ -44,7 +48,7 @@ export async function exportReportImage(
   let savePath = opts.savePath ?? null;
   if (!savePath) {
     const dialogOpts = {
-      title: "导出战报图片",
+      title: translate(opts.lang, "dialogs.exportImage"),
       defaultPath: `gladlog-${opts.matchId.slice(0, 8)}.png`,
       filters: [{ name: "PNG", extensions: ["png"] }],
     };

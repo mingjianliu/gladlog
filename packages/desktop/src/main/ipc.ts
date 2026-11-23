@@ -13,6 +13,7 @@ import { detectCliForBackend } from "./cliDetect";
 import type { createCoachChatService } from "./coachChat";
 import type { CompareService } from "./compare";
 import { importLogFiles } from "./importLogs";
+import { effectiveLanguage } from "./language";
 import type { LearningService } from "./learning";
 import type { MatchStore } from "./matchStore";
 import type { RecorderService } from "./recorder";
@@ -31,6 +32,7 @@ import {
   type OpenTraceRead,
   type OpenTraceRecord,
 } from "../shared/openTrace";
+import { type Language, translate } from "../shared/i18n/index";
 import { vodUrl } from "../shared/vod";
 import type { ObsAudioDevice } from "./managedObsBackend";
 import type { ObsInstallProgress } from "./obsAssets";
@@ -101,6 +103,9 @@ export function registerIpc(deps: {
     savePath?: string;
   }) => Promise<{ path: string; width: number; height: number } | null>;
 }): void {
+  /** The UI language for main-side copy (dialog titles, hints). */
+  const uiLang = (): Language =>
+    effectiveLanguage(deps.settings.get(), app.getLocale());
   ipcMain.handle("gladlog:logs:getStatus", () => deps.getStatus());
   ipcMain.handle("gladlog:icon:get", (_e, name: string) =>
     deps.icons.get(String(name)),
@@ -242,7 +247,7 @@ export function registerIpc(deps: {
     const win = deps.getWindow();
     if (!win) return null;
     const r = await dialog.showOpenDialog(win, {
-      title: "选择 WoWCombatLog 文件",
+      title: translate(uiLang(), "dialogs.importLogs"),
       properties: ["openFile", "multiSelections"],
       filters: [{ name: "Combat Log", extensions: ["txt", "log"] }],
     });
@@ -309,7 +314,7 @@ export function registerIpc(deps: {
       const win = deps.getWindow();
       if (!win) return null;
       const r = await dialog.showSaveDialog(win, {
-        title: "保存文件",
+        title: translate(uiLang(), "dialogs.saveFile"),
         defaultPath: String(opts?.defaultName ?? "export.json"),
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
@@ -382,7 +387,7 @@ export function registerIpc(deps: {
     });
     if (!d.enabled) return { found: true, enabled: false, ok: false };
     const r = await deps.recorder.testConnection({ url, password });
-    const hint = authUnknownHint(d.authRequired, r.ok);
+    const hint = authUnknownHint(d.authRequired, r.ok, uiLang());
     const error = hint ? (r.error ? `${r.error};${hint}` : hint) : r.error;
     return { found: true, enabled: true, ok: r.ok, error };
   });
@@ -425,7 +430,7 @@ export function registerIpc(deps: {
     const win = deps.getWindow();
     if (!win) return null;
     const r = await dialog.showOpenDialog(win, {
-      title: "选择录像保存目录",
+      title: translate(uiLang(), "dialogs.recordingDir"),
       properties: ["openDirectory", "createDirectory"],
     });
     if (r.canceled || r.filePaths.length === 0) return null;

@@ -4,18 +4,10 @@
 // dictionary (the test fails while a listed file has no hit left). Never add
 // a file here — move its text into src/shared/i18n/ instead.
 export const PENDING_FILES: readonly string[] = [
-  "packages/desktop/src/main/corpusLoader.ts",
-  "packages/desktop/src/main/e2eEnv.ts",
-  "packages/desktop/src/main/exportImage.ts",
-  "packages/desktop/src/main/ipc.ts",
   "packages/desktop/src/main/managedAssembly.ts",
   "packages/desktop/src/main/managedObsBackend.ts",
   "packages/desktop/src/main/managedObsProcess.ts",
-  "packages/desktop/src/main/obsAutoConfig.ts",
   "packages/desktop/src/main/recorder.ts",
-  "packages/desktop/src/main/recordingsStore.ts",
-  "packages/desktop/src/main/settingsStore.ts",
-  "packages/desktop/src/main/updater.ts",
 ];
 
 // The 92-file list as first generated (Task 4). Frozen: never edit it.

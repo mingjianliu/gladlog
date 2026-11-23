@@ -24,7 +24,11 @@ import { applyE2eEnv } from "./e2eEnv";
 import { exportReportImage } from "./exportImage";
 import { createIconCache } from "./iconCache";
 import { registerIpc } from "./ipc";
-import { readInstallerLanguage, withEffectiveLanguage } from "./language";
+import {
+  effectiveLanguage,
+  readInstallerLanguage,
+  withEffectiveLanguage,
+} from "./language";
 import { createLearningService } from "./learning";
 import {
   assembleManagedRecording,
@@ -406,6 +410,7 @@ async function initUpdater(): Promise<void> {
     // installer is spawned.
     shutdown: () => quitLifecycle.shutdown(),
     isAutoCheckEnabled: () => settings.get().autoCheckUpdates,
+    getLanguage: () => effectiveLanguage(settings.get(), app.getLocale()),
   });
   log.info(
     `[updater] armed${
@@ -698,6 +703,7 @@ else {
       exportImage: (opts) =>
         exportReportImage({
           ...opts,
+          lang: effectiveLanguage(settings.get(), app.getLocale()),
           parent: win,
           preloadPath: join(import.meta.dirname, "../preload/index.cjs"),
           rendererUrl: process.env["ELECTRON_RENDERER_URL"] ?? null,

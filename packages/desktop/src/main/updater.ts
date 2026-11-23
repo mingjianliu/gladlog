@@ -7,6 +7,7 @@
  * tested under vitest without launching electron. Same reasoning as the header
  * of quitLifecycle.ts. */
 
+import { type Language, translate } from "../shared/i18n/index";
 import {
   CHECK_INTERVAL_MS,
   FIRST_CHECK_DELAY_MS,
@@ -144,6 +145,9 @@ interface UpdaterDeps {
   /** quitLifecycle.shutdown */
   shutdown: () => Promise<void>;
   isAutoCheckEnabled: () => boolean;
+  /** UI language for the error text this service puts in its state
+   * (default zh). */
+  getLanguage?: () => Language;
 }
 
 export interface UpdaterService {
@@ -306,7 +310,10 @@ export function createUpdaterService(deps: UpdaterDeps): UpdaterService {
         installWatchdog = null;
         setState({
           phase: "error",
-          message: "更新安装器未能接管,请手动退出 gladlog 后重新打开",
+          message: translate(
+            deps.getLanguage?.() ?? "zh",
+            "errors.update.installerDidNotTakeOver",
+          ),
         });
       }, INSTALL_WATCHDOG_MS);
     } catch (err) {
