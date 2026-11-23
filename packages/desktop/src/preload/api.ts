@@ -305,6 +305,9 @@ export interface GladlogApi {
       spec: string;
       ownerName?: string;
       force?: boolean;
+      /** Language the pack's chip labels were built in; main refuses the
+       * request when it differs from the language it pins (spec §6.5). */
+      contentLang?: Language;
       /** Moment deep dive (2026-08-05): main does not rebuild the pack from
        * this flag (the renderer already folded it into `pack`) -- it only
        * affects the cache key (`:snap` windowKey suffix) and max_tokens. */

@@ -204,6 +204,9 @@ async function processSource(
       result.findings,
       input.candidates,
       input.ownerName,
+      // the chips' language = the language main's deepen pins (inLang above
+      // guarantees the result is in langNow)
+      result.contentLang ?? (langNow === "en" ? "en" : "zh"),
     );
     try {
       await ai.deepen({

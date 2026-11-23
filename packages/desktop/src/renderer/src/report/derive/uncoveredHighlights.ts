@@ -2,6 +2,7 @@ import {
   buildWindowPack,
   type CandidateEvent,
   extractCandidateFindings,
+  PACK_ITEM_KIND_EN,
   PACK_ITEM_KIND_ZH,
   type PackItem,
 } from "@gladlog/analysis";
@@ -118,18 +119,16 @@ export interface UncoveredHighlight {
   itemCount: number;
 }
 
-/** kind→Chinese uses the single-source `PACK_ITEM_KIND_ZH` table from
- * `@gladlog/analysis` (review-round fix: this file used to keep its own local
- * copy with different wording, inconsistent with the one
+/** kind→word uses the single-source `PACK_ITEM_KIND_ZH` / `PACK_ITEM_KIND_EN`
+ * tables from `@gladlog/analysis` (review-round fix: this file used to keep
+ * its own local copy with different wording, inconsistent with the one
  * `buildWindowAnchorFinding` uses to compose the prompt body). */
 function summarizeKinds(items: readonly PackItem[], lang: Language): string {
   const order: string[] = [];
   const counts = new Map<string, number>();
   for (const item of items) {
-    // en: the kind slug until analysis has an English kind table (ui-language
-    // plan Task 10 adds PACK_ITEM_KIND_EN next to PACK_ITEM_KIND_ZH).
-    const label =
-      lang === "zh" ? (PACK_ITEM_KIND_ZH[item.kind] ?? item.kind) : item.kind;
+    const words = lang === "en" ? PACK_ITEM_KIND_EN : PACK_ITEM_KIND_ZH;
+    const label = words[item.kind] ?? item.kind;
     if (!counts.has(label)) order.push(label);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }

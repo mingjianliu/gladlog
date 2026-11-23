@@ -1,10 +1,12 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { CJK_LEAK } from "@gladlog/analysis/src/utils/localizedText";
 import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   buildAnalysisInput,
   buildDeepenPacks,
+  buildWindowAnalysisRequest,
   resolveOwner,
 } from "../src/renderer/src/report/derive/analysisInput";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
@@ -40,6 +42,16 @@ describe("buildAnalysisInput(panel 与批量共享的输入构建)", () => {
     expect(buildDeepenPacks(m, [], input.candidates, input.ownerName)).toEqual(
       [],
     );
+  });
+});
+
+describe("pack 的 chip label 跟随传入的语言(spec §6.5)", () => {
+  it("选段请求:zh 带「敌 …」,en 无中文", () => {
+    const zh = buildWindowAnalysisRequest(m, 0, 90)!;
+    const en = buildWindowAnalysisRequest(m, 0, 90, "en")!;
+    expect(zh.pack.items.some((i) => i.label.startsWith("敌 "))).toBe(true);
+    expect(en.pack.items.filter((i) => CJK_LEAK.test(i.label))).toEqual([]);
+    expect(en.pack.facts).toEqual(zh.pack.facts);
   });
 });
 
@@ -155,4 +167,3 @@ describe("resolveOwner", () => {
     expect(resolveOwner(legacy)).toBeUndefined();
   });
 });
-

@@ -14,6 +14,7 @@ import {
 } from "@gladlog/analysis";
 import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
+import type { Language } from "../../../../shared/i18n";
 import { idMemo } from "./idMemo";
 import { toLegacySafe } from "./legacySource";
 import { getRawStreamsSync } from "./rawStreamsCache";
@@ -157,6 +158,9 @@ export function buildDeepenPacks(
   findings: Finding[],
   candidates: AnalysisRunInput["candidates"],
   ownerName?: string,
+  /** Language of the packs' chip labels: the language main's deepen pins
+   * (the findings' contentLang), so the chips match the cache they land in. */
+  lang: Language = "zh",
 ): DeepDivePack[] {
   try {
     const legacy = toLegacySafe(source);
@@ -174,7 +178,15 @@ export function buildDeepenPacks(
     const survivalPacks: DeepDivePack[] = [];
     for (const { f, i } of ranked) {
       if (survivalPacks.length >= DEEP_DIVE_MAX) break;
-      const pack = buildDeepDivePack(legacy, f, i, candidates, ownerName);
+      const pack = buildDeepDivePack(
+        legacy,
+        f,
+        i,
+        candidates,
+        ownerName,
+        undefined,
+        lang,
+      );
       // Coachable-signal gate: do not deep-dive a clean window, which would
       // only produce boilerplate
       if (pack && hasCoachableSignal(pack.items)) survivalPacks.push(pack);
@@ -193,6 +205,9 @@ export function buildWindowAnalysisRequest(
   source: ReportSource,
   fromS: number,
   toS: number,
+  /** Language of the pack's chip labels (the UI language at request time;
+   * sent along as the request's contentLang). */
+  lang: Language = "zh",
 ): {
   pack: DeepDivePack;
   kind: "survival" | "offensive";
@@ -230,6 +245,7 @@ export function buildWindowAnalysisRequest(
       clampedToS,
       candidates,
       owner.name,
+      lang,
     );
     if (!r) return null;
     return {

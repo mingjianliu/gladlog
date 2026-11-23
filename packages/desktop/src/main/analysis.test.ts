@@ -2996,3 +2996,81 @@ describe("另一种语言的 AI 内容(§6.13)", () => {
     });
   });
 });
+
+describe("analyzeWindow 选段锚点跟随固定下来的语言(spec §6.5)", () => {
+  const PACK = {
+    findingIndex: 0,
+    anchorFrom: 30,
+    anchorTo: 60,
+    items: [
+      {
+        key: "p1",
+        kind: "cc" as const,
+        t: 40,
+        label: "Fear → O",
+        unitNames: ["O-R"],
+        facts: { t: "40", spell: "Fear" },
+      },
+    ],
+    facts: { "p1.t": "40", "p1.spell": "Fear" },
+  };
+  const run = async (
+    language: "zh" | "en",
+    contentLang?: "zh" | "en",
+  ): Promise<{ status: string; prompts: string[] }> => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-win-lang-"));
+    mkdirSync(join(dir, "m1"), { recursive: true });
+    const prompts: string[] = [];
+    const s = createAnalysisService({
+      getSettings: () => ({
+        anthropicApiKey: "k",
+        wowDirectory: null,
+        language,
+      }),
+      clientFactory: () => ({
+        stream: (args: { messages: Array<{ content: string }> }) => {
+          prompts.push(args.messages[0]!.content);
+          return (async function* () {
+            yield { delta: "[]" };
+          })();
+        },
+      }),
+      matchesDir: dir,
+      emit: () => {},
+    });
+    const r = await s.analyzeWindow({
+      matchId: "m1",
+      fromS: 30,
+      toS: 60,
+      pack: PACK as never,
+      kind: "survival",
+      spec: "Holy Paladin",
+      ownerName: "O-Realm",
+      ...(contentLang ? { contentLang } : {}),
+    });
+    return { status: r.status, prompts };
+  };
+
+  it("zh:锚点是原来的中文;en:锚点是英文", async () => {
+    const zh = await run("zh", "zh");
+    expect(zh.prompts[0]).toContain(
+      "SELECTED WINDOW 0: 用户选段 0:30–1:00 — 该窗口由用户手动选取。窗口内证据:受控×1。",
+    );
+    const en = await run("en", "en");
+    expect(en.prompts[0]).toContain(
+      "SELECTED WINDOW 0: User-selected window 0:30–1:00 — The user selected this window manually. Evidence in the window: CC taken×1.",
+    );
+    // only the anchor line differs (the rest of the user prompt is shared)
+    const zl = zh.prompts[0]!.split("\n");
+    const el = en.prompts[0]!.split("\n");
+    expect(el.filter((l, i) => l !== zl[i])).toEqual([el[2]]);
+  });
+
+  it("pack 的语言与 main 固定的语言不一致 → 拒绝,不调模型", async () => {
+    const r = await run("en", "zh");
+    expect(r.status).toBe("error");
+    expect(r.prompts).toEqual([]);
+    // absent = older callers: no check
+    expect((await run("en")).prompts).toHaveLength(1);
+  });
+});

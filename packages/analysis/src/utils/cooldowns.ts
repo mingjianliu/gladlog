@@ -99,7 +99,10 @@ import {
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
-import { AURA_MASTERY_ID, auraMasteryPressWallStartMs } from "./auraMasteryBranch";
+import {
+  AURA_MASTERY_ID,
+  auraMasteryPressWallStartMs,
+} from "./auraMasteryBranch";
 import { binarySearchClosest } from "./binarySearch";
 import {
   buffDurationOfApplication,
@@ -7278,13 +7281,19 @@ export const SELF_CAST_NOOP_EXTERNAL_IDS: ReadonlySet<string> = new Set([
  * consuming the set directly; every ledger-style renderer takes its display
  * name from here so the annotation cannot drift per surface.
  */
-export function selfCastNoopAnnotatedName(cd: {
-  spellId: string;
-  spellName: string;
-}): string {
-  return SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
-    ? `${cd.spellName}(仅可施于队友,不可自保)`
-    : cd.spellName;
+export function selfCastNoopAnnotatedName(
+  cd: {
+    spellId: string;
+    spellName: string;
+  },
+  /** UI language (spec 6.5). Every current caller (momentSnapshot's ledger
+   * facts, eval explore) is a data path and keeps the zh default. */
+  lang: "zh" | "en" = "zh",
+): string {
+  if (!SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)) return cd.spellName;
+  return lang === "en"
+    ? `${cd.spellName} (ally-only, cannot self-cast)`
+    : `${cd.spellName}(仅可施于队友,不可自保)`;
 }
 
 /**

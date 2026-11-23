@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { ensureAnalysisData } from "@gladlog/analysis";
+import { ensureAnalysisData, PACK_ITEM_KIND_EN } from "@gladlog/analysis";
+import { CJK_LEAK } from "@gladlog/analysis/src/utils/localizedText";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { LangProvider } from "../src/renderer/src/i18n/LangProvider";
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
 import { UncoveredHighlightsCard } from "../src/renderer/src/report/components/UncoveredHighlightsCard";
 import { loadRealMatchFixtureWithUncoveredWindow } from "./fixtures/loadFixture";
@@ -21,10 +23,13 @@ beforeAll(async () => {
   await ensureAnalysisData();
 });
 
-function installFixtureBridge(analyzeWindow = vi.fn()) {
+function installFixtureBridge(
+  analyzeWindow = vi.fn(),
+  language: "zh" | "en" = "zh",
+) {
   (window as any).__gladlogFixture = {
     settings: {
-      get: vi.fn().mockResolvedValue({ language: "zh" }),
+      get: vi.fn().mockResolvedValue({ language }),
       save: vi.fn().mockResolvedValue({}),
     },
     analysis: {
@@ -101,5 +106,35 @@ describe("UncoveredHighlightsCard 点击链路(BACKLOG #13)", () => {
       <UncoveredHighlightsCard highlights={[]} onAnalyze={() => {}} />,
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it("en:摘要用 PACK_ITEM_KIND_EN 的英文词(不是 kind slug),卡片无中文;点击发出 contentLang=en", async () => {
+    const analyzeWindow = installFixtureBridge(
+      vi.fn().mockResolvedValue({ status: "audit-empty" }),
+      "en",
+    );
+    const { findByTestId } = render(
+      <LangProvider firstRunPicker={false}>
+        <MatchReport source={m} matchId="uh-en" initialView="ai" />
+      </LangProvider>,
+    );
+    const card = await findByTestId("uncovered-highlights-card");
+    expect(CJK_LEAK.test(card.textContent ?? "")).toBe(false);
+    const words = new Set(Object.values(PACK_ITEM_KIND_EN));
+    const summaries = [...card.querySelectorAll(".rpt-ledger-spells")].map(
+      (el) => el.textContent ?? "",
+    );
+    expect(summaries.length).toBeGreaterThan(0);
+    for (const summary of summaries)
+      for (const part of summary.split(" · ")) {
+        const label = /^\d+× (.+)$/.exec(part)?.[1];
+        expect(label && words.has(label), part).toBe(true);
+      }
+    fireEvent.click(await findByTestId("uncovered-highlight-btn-0"));
+    await waitFor(() => expect(analyzeWindow).toHaveBeenCalledTimes(1));
+    const call = analyzeWindow.mock.calls[0]![0];
+    expect(call.contentLang).toBe("en");
+    const labels = call.pack.items.map((i: { label: string }) => i.label);
+    expect(labels.filter((l: string) => CJK_LEAK.test(l))).toEqual([]);
   });
 });

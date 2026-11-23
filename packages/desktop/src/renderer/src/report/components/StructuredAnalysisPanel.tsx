@@ -603,6 +603,7 @@ export function StructuredAnalysisPanel({
         result.findings,
         input.candidates,
         input.ownerName,
+        result.contentLang ?? lang,
       );
       void bridge()
         .analysis.deepen({

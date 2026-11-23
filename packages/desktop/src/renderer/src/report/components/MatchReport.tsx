@@ -862,7 +862,12 @@ export function MatchReport({
     await ensureAnalysisData();
     // Window changed/cleared: drop it, don't resurrect the collapsed card
     if (!isCurrent()) return;
-    const req = buildWindowAnalysisRequest(source, range.fromS, range.toS);
+    const req = buildWindowAnalysisRequest(
+      source,
+      range.fromS,
+      range.toS,
+      lang,
+    );
     if (!req) {
       setWinAi({ range, state: { phase: "none" } }); // gate failed, no IPC sent
       return;
@@ -883,6 +888,9 @@ export function MatchReport({
         kind: req.kind,
         spec: req.spec,
         ownerName: req.ownerName,
+        // the language the pack's chips were built in: main refuses a request
+        // whose language is no longer the one it pins
+        contentLang: lang,
         // #21 item11 review-round fix: an explicit retry after audit-empty must
         // bypass the cache and hit the model again (the cache only protects
         // "re-selecting the same window"; it must not swallow a user's retry).

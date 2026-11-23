@@ -8,12 +8,17 @@ import { createHash } from "node:crypto";
 import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it, vi } from "vitest";
 
+import { selfCastNoopAnnotatedName } from "../utils/cooldowns";
+import { CJK_LEAK } from "../utils/localizedText";
 import {
   buildDeepDivePack,
   buildDeepDivePrompt,
+  buildOffensiveDeepDivePack,
   buildWindowAnchorFinding,
   buildWindowPack,
   type DeepDivePack,
+  PACK_ITEM_KIND_EN,
+  PACK_ITEM_KIND_ZH,
   type PackItem,
 } from "./deepDive";
 import type { CandidateEvent, Finding } from "./types";
@@ -320,5 +325,198 @@ describe("deepDive 中文输出钉死(界面语言改造前)", () => {
     expect(sha(deepenPrompt)).toMatchInlineSnapshot(
       `"2aca7b47084866102b720b351b702d68da3d242b245c20ef90a0929b056cf928"`,
     );
+  });
+});
+
+describe("deepDive 跟随界面语言(en)", () => {
+  const enPack = () =>
+    buildDeepDivePack(
+      mkCombat(),
+      finding,
+      0,
+      candidates,
+      "Owner-Area52",
+      undefined,
+      "en",
+    )!;
+
+  it("en 包:label 不含中文,facts 与 zh 逐项相同(facts 进 prompt)", () => {
+    const en = enPack();
+    const zh = buildDeepDivePack(
+      mkCombat(),
+      finding,
+      0,
+      candidates,
+      "Owner-Area52",
+    )!;
+    expect(en.items.filter((i) => CJK_LEAK.test(i.label))).toEqual([]);
+    expect(en.facts).toEqual(zh.facts);
+    expect(en.items.map((i) => i.kind)).toEqual(zh.items.map((i) => i.kind));
+    expect(en.items.map((i) => `${i.kind} | ${i.label}`))
+      .toMatchInlineSnapshot(`
+        [
+          "cc | Fear → Owner(4.0s)",
+          "enemy-cd | Enemy Icy Veins(Emage)",
+          "defensive | Pain Suppression(Owner)",
+          "hp | Warr HP 42%",
+          "dispel | Purify removed Polymorph",
+          "position | Positioning: stayed in under pressure",
+          "hp | Warr HP 42%",
+          "position | Positioning: drifted out of range",
+          "position | Positioning: Avenging Wrath out of range",
+          "position | Positioning: cooldown out of range",
+          "hp | Warr HP 42%",
+          "immunity-available | Divine Shield ready, not pressed(Warr)",
+          "external-available | Blessing of Sacrifice ready, not given(Owner→Warr)",
+        ]
+      `);
+  });
+
+  it("显式传 zh 与默认逐字节相同", () => {
+    const dflt = buildDeepDivePack(
+      mkCombat(),
+      finding,
+      0,
+      candidates,
+      "Owner-Area52",
+    )!;
+    const zh = buildDeepDivePack(
+      mkCombat(),
+      finding,
+      0,
+      candidates,
+      "Owner-Area52",
+      undefined,
+      "zh",
+    )!;
+    expect(zh).toEqual(dflt);
+    const wZh = buildWindowPack(
+      mkCombat(),
+      70,
+      105,
+      candidates,
+      "Owner-Area52",
+      "zh",
+    )!;
+    expect(wZh).toEqual(
+      buildWindowPack(mkCombat(), 70, 105, candidates, "Owner-Area52")!,
+    );
+    expect(
+      buildWindowAnchorFinding(everyKindPack, 36.7, 59.2, "survival", "zh"),
+    ).toEqual(buildWindowAnchorFinding(everyKindPack, 36.7, 59.2, "survival"));
+  });
+
+  it("buildWindowPack 把 en 传到 label", () => {
+    const r = buildWindowPack(
+      mkCombat(),
+      70,
+      105,
+      candidates,
+      "Owner-Area52",
+      "en",
+    )!;
+    expect(r.kind).toBe("survival");
+    expect(r.pack.items.filter((i) => CJK_LEAK.test(i.label))).toEqual([]);
+  });
+
+  it("buildOffensiveDeepDivePack 接受 lang(label 本来就不带语言词)", () => {
+    const zh = buildOffensiveDeepDivePack(
+      mkCombat(),
+      finding,
+      0,
+      candidates,
+      "Owner-Area52",
+      { fromS: 70, toS: 105 },
+    );
+    const en = buildOffensiveDeepDivePack(
+      mkCombat(),
+      finding,
+      0,
+      candidates,
+      "Owner-Area52",
+      { fromS: 70, toS: 105 },
+      "en",
+    );
+    expect(en).toEqual(zh);
+  });
+
+  it("en 锚点:20 类 kind 都有英文词,不含中文", () => {
+    const f = buildWindowAnchorFinding(
+      everyKindPack,
+      36.7,
+      59.2,
+      "survival",
+      "en",
+    );
+    expect(CJK_LEAK.test(f.title + f.explanation)).toBe(false);
+    expect(f).toMatchInlineSnapshot(`
+      {
+        "category": "window",
+        "eventIds": [],
+        "explanation": "The user selected this window manually. Evidence in the window: CC taken×1, defensive cast×1, enemy offensive CD×1, HP trajectory×1, dispel×1, external available×1, immunity available×1, positioning×1, target HP×1, enemy defensive×1, enemy immunity×1, our CC×1, our offensive CD×1, cooldown ledger×1, aura snapshot×1, position snapshot×1, DR level×1, healing gap×1, activity gap×1, HP snapshot×1.",
+        "severity": "low",
+        "title": "User-selected window 0:36–0:59",
+      }
+    `);
+  });
+
+  it("PACK_ITEM_KIND_EN 与 PACK_ITEM_KIND_ZH 同键、无中文、无 slug 原样", () => {
+    expect(Object.keys(PACK_ITEM_KIND_EN).sort()).toEqual(
+      Object.keys(PACK_ITEM_KIND_ZH).sort(),
+    );
+    expect(Object.keys(PACK_ITEM_KIND_EN).sort()).toEqual(
+      [...ALL_KINDS].sort(),
+    );
+    for (const v of Object.values(PACK_ITEM_KIND_EN))
+      expect(CJK_LEAK.test(v)).toBe(false);
+  });
+
+  it("en 选段 prompt:只有 SELECTED WINDOW 行变,其余逐行同 zh", () => {
+    const p = buildDeepDivePack(
+      mkCombat(),
+      finding,
+      0,
+      candidates,
+      "Owner-Area52",
+    )!;
+    const prompt = (lang: "zh" | "en") =>
+      buildDeepDivePrompt(
+        [p],
+        [buildWindowAnchorFinding(p, 70, 105, "survival", lang)],
+        "Discipline Priest",
+        "Owner-Area52",
+        "window",
+      ).split("\n");
+    const zh = prompt("zh");
+    const en = prompt("en");
+    expect(en.length).toBe(zh.length);
+    const changed = en
+      .map((l, i) => (l === zh[i] ? null : i))
+      .filter((i) => i !== null);
+    expect(changed).toEqual([2]);
+    expect(en.filter((l) => CJK_LEAK.test(l))).toEqual(
+      zh.filter((l, i) => i !== 2 && CJK_LEAK.test(l)),
+    );
+    expect(en[2]).toMatchInlineSnapshot(
+      `"SELECTED WINDOW 0: User-selected window 1:10–1:45 — The user selected this window manually. Evidence in the window: CC taken×1, enemy offensive CD×1, defensive cast×1, HP trajectory×3, dispel×1, positioning×4, immunity available×1, external available×1."`,
+    );
+  });
+});
+
+describe("selfCastNoopAnnotatedName 语言", () => {
+  const bos = { spellId: "6940", spellName: "Blessing of Sacrifice" };
+  it("zh 默认不变;en 后缀英文", () => {
+    expect(selfCastNoopAnnotatedName(bos)).toBe(
+      "Blessing of Sacrifice(仅可施于队友,不可自保)",
+    );
+    expect(selfCastNoopAnnotatedName(bos, "zh")).toBe(
+      selfCastNoopAnnotatedName(bos),
+    );
+    expect(selfCastNoopAnnotatedName(bos, "en")).toBe(
+      "Blessing of Sacrifice (ally-only, cannot self-cast)",
+    );
+    expect(
+      selfCastNoopAnnotatedName({ spellId: "1", spellName: "X" }, "en"),
+    ).toBe("X");
   });
 });

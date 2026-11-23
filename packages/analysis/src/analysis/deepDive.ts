@@ -57,6 +57,48 @@ const PACK_MAX_ITEMS = 14;
  * chips' unitNames keep the full name for replay lookup. */
 const sn = (name: string) => name.split("-")[0] ?? name;
 
+/** UI language of the words this file writes itself (spec 6.5): chip labels
+ * and the selected-window anchor. Local on purpose — the analysis package
+ * never imports the desktop dictionaries. Facts never carry these words, so
+ * the evidence the model reads is the same in both languages. */
+export type PackLang = "zh" | "en";
+
+/** Chip label wording per language. zh is byte-for-byte the pre-i18n text
+ * (pinned in deepDive.lang.test.ts); en follows the prompt's own terms. */
+const PACK_LABELS: Record<
+  PackLang,
+  {
+    enemyCd: (spell: string, player: string) => string;
+    dispel: (dispel: string, removed: string) => string;
+    immunityAvailable: (spell: string, unit: string) => string;
+    externalAvailable: (spell: string, holder: string, unit: string) => string;
+    stayedIn: string;
+    missedPush: string;
+    cdOutOfRange: (spell: string | undefined) => string;
+  }
+> = {
+  zh: {
+    enemyCd: (spell, player) => `敌 ${spell}(${player})`,
+    dispel: (dispel, removed) => `${dispel} 解 ${removed}`,
+    immunityAvailable: (spell, unit) => `${spell} 可用未按(${unit})`,
+    externalAvailable: (spell, holder, unit) =>
+      `${spell} 可用未给(${holder}→${unit})`,
+    stayedIn: `走位:停留承压`,
+    missedPush: `走位:脱节`,
+    cdOutOfRange: (spell) => `走位:${spell ?? "大招"}空放`,
+  },
+  en: {
+    enemyCd: (spell, player) => `Enemy ${spell}(${player})`,
+    dispel: (dispel, removed) => `${dispel} removed ${removed}`,
+    immunityAvailable: (spell, unit) => `${spell} ready, not pressed(${unit})`,
+    externalAvailable: (spell, holder, unit) =>
+      `${spell} ready, not given(${holder}→${unit})`,
+    stayedIn: "Positioning: stayed in under pressure",
+    missedPush: "Positioning: drifted out of range",
+    cdOutOfRange: (spell) => `Positioning: ${spell ?? "cooldown"} out of range`,
+  },
+};
+
 export interface PackItem {
   /** Placeholder namespace (p1, p2, …): narrative references it as {{p1.t}}. */
   key: string;
@@ -307,7 +349,10 @@ export function buildDeepDivePack(
    * no -30/+10 padding — what the user framed is what they want to see; in
    * this mode finding.eventIds is not relied on. */
   windowOverride?: WindowOverride,
+  /** Language of the chip labels (display only; facts are unaffected). */
+  lang: PackLang = "zh",
 ): DeepDivePack | null {
+  const L = PACK_LABELS[lang];
   const byId = new Map(candidates.map((c) => [c.id, c]));
   const ts = (finding.eventIds ?? [])
     .map((id) => byId.get(id))
@@ -409,7 +454,7 @@ export function buildDeepDivePack(
           kind: "enemy-cd",
           spellId: cd.spellId,
           t: cd.castTimeSeconds,
-          label: `敌 ${cd.spellName}(${p.playerName.split("-")[0]})`,
+          label: L.enemyCd(cd.spellName, p.playerName.split("-")[0]!),
           unitNames: [p.playerName],
           facts: {
             t: fmtFactTime(cd.castTimeSeconds),
@@ -484,7 +529,7 @@ export function buildDeepDivePack(
         kind: "dispel",
         spellId: e.dispelSpellId,
         t: e.timeSeconds,
-        label: `${e.dispelSpellName} 解 ${e.removedSpellName}`,
+        label: L.dispel(e.dispelSpellName, e.removedSpellName),
         unitNames: [e.sourceName, e.targetName],
         facts: {
           t: fmtFactTime(e.timeSeconds),
@@ -518,7 +563,7 @@ export function buildDeepDivePack(
           kind: "immunity-available",
           spellId: imm.spellId,
           t: ev.atSeconds,
-          label: `${imm.spellName} 可用未按(${sn(ev.deadPlayer)})`,
+          label: L.immunityAvailable(imm.spellName, sn(ev.deadPlayer)),
           unitNames: [ev.deadPlayer],
           facts: {
             t: fmtFactTime(ev.atSeconds),
@@ -534,7 +579,11 @@ export function buildDeepDivePack(
           kind: "external-available",
           spellId: ext.spellId,
           t: ev.atSeconds,
-          label: `${ext.spellName} 可用未给(${sn(ext.casterName)}→${sn(ev.deadPlayer)})`,
+          label: L.externalAvailable(
+            ext.spellName,
+            sn(ext.casterName),
+            sn(ev.deadPlayer),
+          ),
           unitNames: [ext.casterName, ev.deadPlayer],
           facts: {
             t: fmtFactTime(ev.atSeconds),
@@ -603,10 +652,10 @@ export function buildDeepDivePack(
         if (e.type === "CD_OUT_OF_RANGE" && e.spellName) f.spell = e.spellName;
         const label =
           e.type === "STAYED_IN"
-            ? `走位:停留承压`
+            ? L.stayedIn
             : e.type === "MISSED_PUSH"
-              ? `走位:脱节`
-              : `走位:${e.spellName ?? "大招"}空放`;
+              ? L.missedPush
+              : L.cdOutOfRange(e.spellName);
         raw.push({
           kind: "position",
           t: e.atSeconds,
@@ -788,6 +837,9 @@ export function buildOffensiveDeepDivePack(
   /** User-selected window (#16): same as buildDeepDivePack — the override is
    * used as-is and finding.eventIds is not relied on. */
   windowOverride?: WindowOverride,
+  /** Accepted for symmetry with buildDeepDivePack: the offensive labels are
+   * spell / unit names and "HP" only, the same in both languages. */
+  _lang: PackLang = "zh",
 ): DeepDivePack | null {
   const byId = new Map(candidates.map((c) => [c.id, c]));
   const cands = (finding.eventIds ?? [])
@@ -1385,6 +1437,8 @@ export function buildWindowPack(
   toS: number,
   candidates: CandidateEvent[],
   ownerName?: string,
+  /** Language of the chip labels (display only; the gate reads kinds). */
+  lang: PackLang = "zh",
 ): { pack: DeepDivePack; kind: "survival" | "offensive" } | null {
   const inWinIds = candidates
     .filter((c) => Number.isFinite(c.t) && c.t >= fromS && c.t <= toS)
@@ -1397,7 +1451,15 @@ export function buildWindowPack(
     explanation: "",
   };
   const win = { fromS, toS };
-  const surv = buildDeepDivePack(combat, synth, 0, candidates, ownerName, win);
+  const surv = buildDeepDivePack(
+    combat,
+    synth,
+    0,
+    candidates,
+    ownerName,
+    win,
+    lang,
+  );
   if (surv && hasCoachableSignal(surv.items))
     return { pack: surv, kind: "survival" };
   const off = buildOffensiveDeepDivePack(
@@ -1407,6 +1469,7 @@ export function buildWindowPack(
     candidates,
     ownerName,
     win,
+    lang,
   );
   if (off && hasOffensiveCoachableSignal(off.items))
     return { pack: off, kind: "offensive" };
@@ -1450,6 +1513,32 @@ export const PACK_ITEM_KIND_ZH: Record<PackItem["kind"], string> = {
   "hp-snap": "HP 快照",
 };
 
+/** PackItem.kind → English summary word: the en twin of PACK_ITEM_KIND_ZH
+ * (same consumers — the window anchor sent to the model in en mode, and the
+ * uncovered-highlights card in the en UI). */
+export const PACK_ITEM_KIND_EN: Record<PackItem["kind"], string> = {
+  cc: "CC taken",
+  defensive: "defensive cast",
+  "enemy-cd": "enemy offensive CD",
+  hp: "HP trajectory",
+  dispel: "dispel",
+  "external-available": "external available",
+  "immunity-available": "immunity available",
+  position: "positioning",
+  "target-hp": "target HP",
+  "enemy-defensive": "enemy defensive",
+  immunity: "enemy immunity",
+  "our-cc": "our CC",
+  "our-cd": "our offensive CD",
+  "cd-ledger": "cooldown ledger",
+  "aura-snap": "aura snapshot",
+  "pos-snap": "position snapshot",
+  "dr-state": "DR level",
+  "healing-gap": "healing gap",
+  "activity-gap": "activity gap",
+  "hp-snap": "HP snapshot",
+};
+
 /** Neutral anchor (one of #16's three compensating layers): title/explanation
  * are generated deterministically from pack statistics, with no built-in
  * "something went wrong" presumption; times are floored to the rendered second
@@ -1460,18 +1549,27 @@ export function buildWindowAnchorFinding(
   fromS: number,
   toS: number,
   kind: "survival" | "offensive",
+  /** Prompt instruction layer (spec 6.5): follows the UI language; zh is
+   * byte-for-byte the pre-i18n anchor. */
+  lang: PackLang = "zh",
 ): Finding {
+  const words = lang === "en" ? PACK_ITEM_KIND_EN : PACK_ITEM_KIND_ZH;
   const counts = new Map<string, number>();
   for (const it of pack.items)
     counts.set(it.kind, (counts.get(it.kind) ?? 0) + 1);
   const summary = [...counts.entries()]
-    .map(([k, n]) => `${PACK_ITEM_KIND_ZH[k as PackItem["kind"]] ?? k}×${n}`)
-    .join("、");
+    .map(([k, n]) => `${words[k as PackItem["kind"]] ?? k}×${n}`)
+    .join(lang === "en" ? ", " : "、");
+  const range = `${fmtTime(fromS)}–${fmtTime(toS)}`;
   return {
     eventIds: [],
     severity: "low",
     category: kind === "offensive" ? "window-offensive" : "window",
-    title: `用户选段 ${fmtTime(fromS)}–${fmtTime(toS)}`,
-    explanation: `该窗口由用户手动选取。窗口内证据:${summary}。`,
+    title:
+      lang === "en" ? `User-selected window ${range}` : `用户选段 ${range}`,
+    explanation:
+      lang === "en"
+        ? `The user selected this window manually. Evidence in the window: ${summary}.`
+        : `该窗口由用户手动选取。窗口内证据:${summary}。`,
   };
 }

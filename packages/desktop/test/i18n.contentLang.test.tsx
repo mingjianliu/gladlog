@@ -328,6 +328,8 @@ describe("单局卡片显示另一种语言的回退内容(Review Focus 3)", () 
     expect(screen.getByTestId("analysis-model-picker")).toBeTruthy();
     expect(screen.getByTestId("analysis-slot-tabs")).toBeTruthy();
     await waitFor(() => expect(calls.deepen).toHaveBeenCalledTimes(1));
+    // the packs' chip labels are built in the findings' language (spec §6.5)
+    expect(vi.mocked(buildDeepenPacks).mock.calls[0]![4]).toBe("en");
   });
 
   it("老 stub 没有 contentLang:当作当前语言(不出标签)", async () => {

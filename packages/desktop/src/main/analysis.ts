@@ -476,6 +476,12 @@ type WindowAnalyzeInput = {
   kind: "survival" | "offensive";
   spec: string;
   ownerName?: string;
+  /** Language the pack's chip labels were built in (the renderer's UI
+   * language at request time). analyzeWindow refuses a mismatch with the
+   * language it pins (spec §6.13, same guard as DeepenInput.contentLang): the
+   * entries would land in that language's cache carrying the other
+   * language's chips. Absent = older callers, no check. */
+  contentLang?: Language;
   /**
    * Review-round fix (#21 item11 addendum): an explicit retry must bypass
    * the cache and hit the model again -- it must not be swallowed by the
@@ -1421,6 +1427,11 @@ export function createAnalysisService(deps: {
     // splits again.
     const settings = deps.getSettings();
     const lang: Language = settings.language ?? "zh";
+    // The language switched between the renderer building the pack and this
+    // call: no model call, no cache write (the renderer remounts the report on
+    // a language switch, so nothing is waiting for this answer).
+    if (input.contentLang !== undefined && input.contentLang !== lang)
+      return { status: "error" };
     // Important audit fix (#16, second of three): backend + model are part of
     // the cache key. The original key was just fromS-toS, so after switching
     // backend/model, rerunning the same window silently returned the old
@@ -1499,11 +1510,14 @@ export function createAnalysisService(deps: {
         import("@gladlog/analysis/src/data/ensure"),
       ]);
       await ensureAnalysisData();
+      // The anchor is the prompt's instruction layer (spec §6.5): it follows
+      // the language pinned above; zh stays byte-for-byte the old anchor.
       const anchor = buildWindowAnchorFinding(
         input.pack,
         input.fromS,
         input.toS,
         input.kind,
+        lang,
       );
       prompt = buildDeepDivePrompt(
         [input.pack],
