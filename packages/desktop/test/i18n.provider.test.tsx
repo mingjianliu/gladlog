@@ -135,6 +135,44 @@ describe("LangProvider / 首启语言选择框(spec §6.3 §6.7)", () => {
     await expect(seen!.setLang("en")).resolves.toBe(false);
   });
 
+  it("首启选择框:保存失败 → 选择框不关、显示一行双语失败提示、高亮所选;再点一次 → 按所选语言进入(仅本次有效)", async () => {
+    const { save } = mockBridge({ language: null });
+    save.mockRejectedValueOnce(new Error("disk full"));
+    save.mockRejectedValueOnce(new Error("disk full"));
+    render(
+      <LangProvider>
+        <LangProbe />
+      </LangProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "English" }));
+    const notice = await screen.findByTestId("language-picker-save-failed");
+    expect(notice.textContent).toBe(
+      "语言设置没能保存,只在本次运行有效 / Couldn't save the language setting; it applies to this session only",
+    );
+    expect(screen.queryByTestId("probe")).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "English" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    expect(await screen.findByTestId("probe")).toBeTruthy();
+    expect(screen.getByTestId("probe").textContent).toBe("en|Save");
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it("首启选择框:保存成功不显示失败提示", async () => {
+    mockBridge({ language: null });
+    render(
+      <LangProvider>
+        <LangProbe />
+      </LangProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "中文" }));
+    expect(await screen.findByTestId("probe")).toBeTruthy();
+    expect(screen.queryByTestId("language-picker-save-failed")).toBeNull();
+  });
+
   it("setLang 返回是否已持久化:save 成功 → true,save 失败 → false", async () => {
     const { save } = mockBridge({ language: "zh" });
     let seen: ReturnType<typeof useT> | null = null;

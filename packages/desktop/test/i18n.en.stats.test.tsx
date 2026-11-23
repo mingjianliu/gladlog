@@ -218,3 +218,62 @@ describe("错题本条目的严重度走词典", () => {
     ).toBe("高");
   });
 });
+
+describe("学到的规则:zh 模式回退到英文描述时标语言(§6.13)", () => {
+  it("只有 en 描述/建议 → 两处各带「英文分析」标签;有 zh 的不带", async () => {
+    install(async () => [meta({ id: "m1", startTime: Date.now() - H })], "zh");
+    const { container } = render(
+      <LangProvider>
+        <StatsDashboard onOpenMatch={() => {}} onZoneClick={() => {}} />
+      </LangProvider>,
+    );
+    await screen.findByText(/Died to 4 kill windows/);
+    const desc = container.querySelector(".dash-learning-desc")!;
+    const adv = container.querySelector(".dash-learning-advice")!;
+    expect(desc.getAttribute("data-content-lang")).toBe("en");
+    expect(
+      desc.querySelector("[data-testid=content-lang-badge]")?.textContent,
+    ).toBe("英文分析");
+    expect(
+      adv.querySelector("[data-testid=content-lang-badge]"),
+    ).not.toBeNull();
+  });
+
+  it("有 zh 描述时不标;en 模式只显示 en,不标", async () => {
+    install(async () => [meta({ id: "m1", startTime: Date.now() - H })], "zh");
+    const prev = { ...rule.description };
+    const prevAdv = { ...rule.advice };
+    Object.assign(rule.description, { zh: "被击杀窗口打死 {{hits}} 次" });
+    Object.assign(rule.advice, { zh: "早交饰品" });
+    try {
+      const { container } = render(
+        <LangProvider>
+          <StatsDashboard onOpenMatch={() => {}} onZoneClick={() => {}} />
+        </LangProvider>,
+      );
+      await screen.findByText(/被击杀窗口打死 4 次/);
+      expect(
+        container.querySelectorAll("[data-testid=content-lang-badge]"),
+      ).toHaveLength(0);
+      cleanup();
+      install(
+        async () => [meta({ id: "m1", startTime: Date.now() - H })],
+        "en",
+      );
+      const en = render(
+        <LangProvider>
+          <StatsDashboard onOpenMatch={() => {}} onZoneClick={() => {}} />
+        </LangProvider>,
+      );
+      await screen.findByText("Died to 4 kill windows");
+      expect(
+        en.container.querySelector(
+          ".dash-learning-desc [data-testid=content-lang-badge]",
+        ),
+      ).toBeNull();
+    } finally {
+      rule.description = prev as typeof rule.description;
+      rule.advice = prevAdv as typeof rule.advice;
+    }
+  });
+});

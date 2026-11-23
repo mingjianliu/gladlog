@@ -40,13 +40,17 @@ export function LanguageSegment({
 }
 
 /** Shown before the main UI while `settings.language` is still null;
- *  `defaultLang` (from the OS locale) is the highlighted option. */
+ *  `defaultLang` (from the OS locale) is the highlighted option.
+ *  `saveFailed`: the last pick could not be stored — a one-line notice in
+ *  both languages (picking again continues for this session). */
 export function LanguagePicker({
   defaultLang,
   onPick,
+  saveFailed = false,
 }: {
   defaultLang: Language;
   onPick: (l: Language) => void;
+  saveFailed?: boolean;
 }) {
   return (
     <div className="dash-modal-backdrop lang-picker-backdrop">
@@ -61,6 +65,15 @@ export function LanguagePicker({
           {bilingual("settings.language.pickerTitle")}
         </h2>
         <LanguageSegment value={defaultLang} onPick={onPick} autoFocus />
+        {saveFailed && (
+          <p
+            className="settings-note settings-saved-failed"
+            role="alert"
+            data-testid="language-picker-save-failed"
+          >
+            {bilingual("settings.language.saveFailed")}
+          </p>
+        )}
         <p className="settings-note">
           {translate("zh", "settings.language.pickerHint")}
           <br />

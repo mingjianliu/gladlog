@@ -15,11 +15,11 @@
 
 gladlog runs in Chinese or English, and one setting decides which.
 
-- **Choosing it**: the Windows installer asks for a language and the app starts in it. Otherwise — on macOS, or after an automatic update — the app asks once at first launch (the choice your system language suggests is highlighted). Upgrading from an older version asks once too: the old "Coach reply language" setting is not carried over.
+- **Choosing it**: the Windows installer asks for a language and the app starts in it. Otherwise — on macOS, or when the app updates itself automatically from a version that had no language setting — the app asks once at first launch (the choice your system language suggests is highlighted). Upgrading from an older version asks once too: the old "Coach reply language" setting is not carried over.
 - **Changing it**: **Language** sits at the very top of the settings page. A click takes effect at once; no restart.
 - **What follows it**: the whole interface, error messages and dialogs, and the AI's replies (structured analysis, window analysis, Ask the coach). In English, spell names logged by a Chinese game client are shown under their official English names; a spell the English table doesn't know keeps the name from the log.
 - **What doesn't**: the match data the AI reads is always in English, whatever the language — so switching never changes what the model is told about the match. In Chinese, some short analysis phrases inside the report's sentences are still in English for now (tracked as a GitHub issue). Player names stay as they are.
-- **AI results from the other language**: results are cached per language. A result generated in the other language is still shown, with a label ("Analyzed in Chinese" in English, "英文分析" in Chinese); a match's analysis card also offers a **Re-analyze in English** (or 用中文重新分析) button, which runs a fresh analysis in the current language. Lists that mix many matches (statistics, notebook, learned rules, coach chat history) only carry the label.
+- **AI results from the other language**: results are cached per language. A result generated in the other language is still shown, with a label ("Analyzed in Chinese" in English, "英文分析" in Chinese); a match's analysis card also offers a **Re-analyze in English** (or 用中文重新分析) button, which runs a fresh analysis in the current language. On the statistics page, notebook entries and learned rules from the other language carry the label only, with no button. Ask the coach keeps a separate history per language, so a conversation held in the other language is not shown.
 
 ## Match list
 

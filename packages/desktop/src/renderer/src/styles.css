@@ -5785,6 +5785,10 @@ button.rpt-kpi:hover {
   padding: 6px 22px;
   font-size: 13px;
 }
+/* 首启选择框:语言没能保存时的一行双语提示 */
+.lang-picker .settings-saved-failed {
+  color: var(--loss);
+}
 .dash-modal-close {
   margin-left: auto;
   background: none;

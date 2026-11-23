@@ -59,6 +59,21 @@ type Phase = "loading" | "ready" | "unavailable";
  * browser locale's, matching main's `app.getLocale()` fallback, and the
  * first-run picker is shown instead of the app (`firstRunPicker`).
  */
+/** Stores the language; true when it was persisted. */
+async function persistLanguage(l: Language): Promise<boolean> {
+  try {
+    const next = (await bridge().settings.save({ language: l })) as {
+      language?: Language | null;
+    } | null;
+    // A returned document that carries a different language means the
+    // patch was dropped (sanitized away) rather than persisted.
+    return next?.language === undefined || next.language === l;
+  } catch {
+    // No settings facet, or the save failed: this session only.
+    return false;
+  }
+}
+
 export function LangProvider({
   children,
   firstRunPicker = true,
@@ -127,18 +142,27 @@ export function LangProvider({
     // Context first, so every consumer switches immediately; then persist.
     setChosen(l);
     document.documentElement.lang = htmlLang(l);
-    try {
-      const next = (await bridge().settings.save({ language: l })) as {
-        language?: Language | null;
-      } | null;
-      // A returned document that carries a different language means the
-      // patch was dropped (sanitized away) rather than persisted.
-      return next?.language === undefined || next.language === l;
-    } catch {
-      // No settings facet, or the save failed: this session only.
-      return false;
-    }
+    return persistLanguage(l);
   }, []);
+
+  // First-run picker: save first, and only enter the app once the choice is
+  // stored. A failed save keeps the picker open with a bilingual notice and
+  // the picked language highlighted; the next pick retries the save and
+  // enters the app either way (that session's language is then session-only,
+  // as the notice says).
+  const [pickFailed, setPickFailed] = useState<Language | null>(null);
+  const pick = useCallback(
+    async (l: Language) => {
+      const saved = await persistLanguage(l);
+      if (!saved && pickFailed === null) {
+        setPickFailed(l);
+        return;
+      }
+      setChosen(l);
+      document.documentElement.lang = htmlLang(l);
+    },
+    [pickFailed],
+  );
 
   const value = useMemo<LangContextValue>(
     () => ({ t: makeT(lang), lang, setLang, namesVersion }),
@@ -149,8 +173,9 @@ export function LangProvider({
   if (phase === "ready" && chosen === null && firstRunPicker)
     return (
       <LanguagePicker
-        defaultLang={localeLang}
-        onPick={(l) => void setLang(l)}
+        defaultLang={pickFailed ?? localeLang}
+        onPick={(l) => void pick(l)}
+        saveFailed={pickFailed !== null}
       />
     );
   return <LangContext.Provider value={value}>{children}</LangContext.Provider>;

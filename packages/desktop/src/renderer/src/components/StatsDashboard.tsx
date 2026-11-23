@@ -702,7 +702,8 @@ export function StatsDashboard({
                     const facts = distillFacts(r.stats);
                     // Model-written text. en shows only the en version (a
                     // missing one waits for the next consolidation, see
-                    // LearnedRule.description); zh keeps its en fallback.
+                    // LearnedRule.description); zh keeps its en fallback,
+                    // labelled as English content (spec §6.13).
                     const desc =
                       lang === "en"
                         ? r.description.en
@@ -711,6 +712,9 @@ export function StatsDashboard({
                       lang === "en"
                         ? r.advice.en
                         : (r.advice.zh ?? r.advice.en);
+                    const descFallback =
+                      lang === "zh" && !r.description.zh && !!desc;
+                    const advFallback = lang === "zh" && !r.advice.zh && !!adv;
                     const max = Math.max(1, ...r.stats.trend);
                     return (
                       <div key={r.ruleId} className="dash-learning-rule">
@@ -758,14 +762,26 @@ export function StatsDashboard({
                             />
                           ))}
                         </span>
-                        <p className="dash-learning-desc">
+                        <p
+                          className="dash-learning-desc"
+                          data-content-lang={descFallback ? "en" : undefined}
+                        >
                           {desc
                             ? interpolate(desc, facts)
                             : t("stats.rule.noDescription")}
+                          {descFallback && (
+                            <ContentLangBadge contentLang="en" />
+                          )}
                         </p>
                         {adv && (
-                          <p className="dash-learning-advice">
+                          <p
+                            className="dash-learning-advice"
+                            data-content-lang={advFallback ? "en" : undefined}
+                          >
                             💡 {interpolate(adv, facts)}
+                            {advFallback && (
+                              <ContentLangBadge contentLang="en" />
+                            )}
                           </p>
                         )}
                         <span className="dash-learning-evidence">
