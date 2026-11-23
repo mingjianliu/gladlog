@@ -1,0 +1,458 @@
+You previously analyzed this Discipline Priest match and produced these findings:
+1. [high] survival: Death at 0:30
+
+Full match context:
+ARENA MATCH — ANALYSIS REQUEST
+
+MATCH FACTS
+  Spec: Discipline Priest (Healer)  |  Bracket: 3v3  |  Result: Win  |  Duration: 1:30  |  Map: Mugambala
+  My team: Retribution Paladin (Player1-Test), Discipline Priest (Player3-Test), Marksmanship Hunter (Player6-Test)
+  Enemy team: Discipline Priest (Player2-Test), Frost Mage (Player4-Test), Assassination Rogue (Player5-Test)
+
+PURGE RESPONSIBILITY
+  Log owner (Discipline Priest): CAN offensive purge
+  Team purgers: Marksmanship Hunter
+
+SPEC BASELINES — Discipline Priest at ≥2100 personal rating (n=438) — your personal rating in this bracket is 2400:
+  Defensive timing: Optimal 54% | Early 7% | Late 13% | Reactive 2% | Unknown 25%
+  CD reference (% of matches used | median first use | p75 first use):
+    Pain Suppression: 93% used | 0:33 median | 0:53 p75
+    Desperate Prayer: 21% used | 0:45 median | 1:36 p75
+    Power Infusion: 97% used | 0:21 median | 0:31 p75
+    Psychic Scream: 87% used | 0:35 median | 1:02 p75
+    Ultimate Penitence: 72% used | 1:05 median | 1:41 p75
+
+INCOMING DAMAGE BASELINES (per 10s window, ≥2100 personal rating):
+  (health lost to hits in fixed, back-to-back 10 s windows — absorbed damage is not in it; a [DMG SPIKE] total also counts absorbed damage and is the worst sliding 10 s, so it reads higher)
+  Retribution Paladin (n=156): p50 237k | p90 646k
+  Discipline Priest (n=438): p50 15k | p90 184k
+  Marksmanship Hunter (n=166): p50 221k | p90 693k
+
+DAMPENING (3v3): started at 10%, ended at 10% at match end
+
+<healer_offense>
+HEALER OFFENSE (each line states the condition it holds under):
+  Slack time (team ≥85% HP, no enemy offensive CDs active, you un-CC-d): 15s across 2 segment(s); 5s with zero offensive output.
+  Note: healing under pressure always outranks offense.
+</healer_offense>
+
+<player_loadout>
+  NOTE: each unit's kit below lists only abilities there is evidence this player actually has THIS round (talent selection, PvP talents, casts, or a defensive every player of that spec owns without a talent). Do not base coaching on class/spec abilities absent from these lists — talents differ per player and, in Solo Shuffle, per round.
+  <unit id="1" name="Player3-Test" spec="Discipline Priest" role="log owner">
+    <cooldowns>Pain Suppression [123–180s, 2 Charges, lasts 8s], Desperate Prayer [70s, lasts 20s] [UNUSED], Power Infusion [120s], Psychic Scream [30s] [UNUSED], Ultimate Penitence [240s, lasts 6.5s] [UNUSED], Evangelism [45s]</cooldowns>
+    <pvp_toolkit>Phase Shift (Fade → ~1s untargetable / CC dodge)</pvp_toolkit>
+  </unit>
+  <unit id="2" name="Player1-Test" spec="Retribution Paladin" role="teammate">
+    <cooldowns>Divine Shield [210s, lasts 8s], Blessing of Spellwarding [300s, lasts 6s] [UNUSED], Blessing of Sacrifice [60s, lasts 12s] [UNUSED], Divine Protection [63s, lasts 8s], Lay on Hands [294–420s] [UNUSED], Divine Toll [60s], Execution Sentence [60s], Avenging Wrath [60s], Hammer of Justice [30s], Blinding Light [90s]</cooldowns>
+  </unit>
+  <unit id="3" name="Player6-Test" spec="Marksmanship Hunter" role="teammate">
+    <cooldowns>Volley [45s], Aspect of the Turtle [120s, lasts 8s] [UNUSED], Exhilaration [60s] [UNUSED], Feign Death [20s], Survival of the Fittest [90s, 2 Charges, lasts 8s] [UNUSED], Trueshot [90s], Freezing Trap [25s], Intimidation [40s], Binding Shot [45s], Roar of Sacrifice [120s], Master's Call [45s]</cooldowns>
+  </unit>
+  <unit id="4" name="Player2-Test" spec="Discipline Priest" role="enemy">
+    <cooldowns>Pain Suppression [123–180s, 2 Charges, lasts 8s], Desperate Prayer [90s, lasts 20s] [UNUSED], Power Infusion [120s], Psychic Scream [30s], Ultimate Penitence [240s, lasts 6.5s] [UNUSED], Evangelism [45s]</cooldowns>
+  </unit>
+  <unit id="5" name="Player4-Test" spec="Frost Mage" role="enemy">
+    <cooldowns>Snowdrift [45s] [UNUSED], Ice Block [120s, 2 Charges, lasts 10s] [UNUSED], Ice Barrier [25–30s, 2 Charges, lasts 4s], Greater Invisibility [60s], Alter Time [50s, lasts 10s] [UNUSED], Mass Invisibility [120s, lasts 12s] [UNUSED], Dragon's Breath [40s] [UNUSED], Ring of Frost [40s], Ray of Frost [49–60s, 2 Charges], Frozen Orb [44–60s]</cooldowns>
+  </unit>
+  <unit id="6" name="Player5-Test" spec="Assassination Rogue" role="enemy">
+    <cooldowns>Kingsbane [60s], Cloak of Shadows [120s, lasts 5s], Evasion [120s, lasts 10s] [UNUSED], Deathmark [120s], Blind [120s], Kidney Shot [30s], Smoke Bomb [180s] [UNUSED], Vanish [120s, 2 Charges], Dismantle [45s], Crimson Vial [30s]</cooldowns>
+  </unit>
+  NOTE: `[a–Ns]` on a kit = a cooldown that combat shortens (a talent like Anger Management, or presses this round brought back early by events): it is back N s after a press at the latest, and has been seen back after a s at the soonest — the same range the [RES] rows print.
+</player_loadout>
+
+ENEMY CC KIT (threats to you, plus every control that landed on you this round, marked `landed N×`): Frost Mage (Player4-Test): Ring of Frost [Incapacitate] (landed 1×), Polymorph [Incapacitate] (landed 2×); Assassination Rogue (Player5-Test): Cheap Shot [Stun] (landed 2×), Blind [Disorient] (landed 1×), Sap [Incapacitate] (landed 1×), Garrote - Silence [Silence] (landed 1×); Discipline Priest (Player2-Test): Psychic Scream [Disorient] (landed 1×)
+
+MATCH TIMELINE
+  Units: M = Million damage (1,000,000), k = Thousand damage (1,000)
+  [DR: <category> <level>] on CC lines = diminishing returns state when it LANDED:
+    Full = NO diminishing returns yet (full duration — the best time to land CC);
+    50% = duration reduced to half; Immune = DR'd to zero.
+  [n/m] after a spell = CHARGES REMAINING / total (so [1/2] = one charge left, one on cooldown); `[a–b/m]` =
+    a to b charges left on a cooldown combat shortens.
+  [RES] lists TRACKED major cooldowns (plus your own interrupt and Death Grip) — an ability absent from both `rdy:` and `cd:`
+    is one this ledger does not track, NOT one that was unavailable. Other sections may still cite it.
+  [RES] = the ledger at its second m:ss: a press anywhere in that second is already spent on it (the row printed under a press shows that press on cooldown), while a cooldown is ready on it when it is back by half a second into that second — one coming back later in that second is not yet ready on it.
+    `cc:N/<spell>-Rs` = friendly N was under that control then, about R s of it left (`[stun]` a stun, `[trinketed]` a stun
+    they pressed a PvP trinket within 1 s of, `[root]` a root — they could still cast, `[disarm]` a disarm, `[kick]` a school
+    lockout); several are comma-separated.
+  [RES] rdy: = abilities READY then. `rdy:Δ` = unchanged since the previous [RES], but for its tokens (`~X[k/N]` = X is still ready, now k of N charges);
+    a leading `-<spell>` marks one that just LEFT the ready set. `cd:<spell>(Ns)` = seconds until it returns.
+    `cd:<spell>(a–Ns)` = a cooldown that combat shortens: back in a to N s. `cd:<spell>(≤Ns)` = back in at
+    most N s and it MAY ALREADY BE BACK — never state that such a spell was certainly unavailable.
+  A `rdy:Δ  cd:—` row is printed only when it carries a fact no other line states (a focus target no
+    surviving [RES] shows, a CC no [CC ON …] line covers at that second, an enemy CD with no [ENEMY CD] line);
+    a `rdy:Δ  cd:—` row whose facts are all stated elsewhere is omitted, so its absence means nothing changed.
+  [STATE] `m:ss … unit:N` = that unit's HP % at the START of second m:ss (the last log reading at or before m:ss.0; with none in the 3 s before it, the first one after). The other lines
+    printed under the same `m:ss` happen during that second, AFTER the tick: a hit or a heal inside it is not in the tick's
+    number. A later tick shows where the unit ended up; a `low N%` on a window line is the lowest point in between.
+    A unit missing from a printed half is at full health or has no HP reading within 3 s of that second — not necessarily at
+    100%. `unit:dead` = the unit died during second m:ss or before it: the second a unit dies in reads dead from its start, so
+    a line under that same second from before the death (a press, a hit) can still show the unit alive with HP left.
+    A tick with no `enemies` half says nothing about the enemies.
+  [DMG SPIKE] `START–END` = the window's bounds in whole seconds (each rounded down; the damage is summed over the
+    unrounded window); its `A% -> B% HP` = the [STATE] readings of those two seconds.
+    `low N% @m:ss` = the lowest HP the log shows for that unit anywhere inside the window, at the second it happened — printed when it is 10+ points
+    under both A and B. It is the true minimum between the ticks, so it can sit below every [STATE] number of that window.
+    A window is 10 s, cut short where that unit died (`B` then reads 0%) or the round ended.
+    Only the round's 5 largest windows are listed — ranked by `N` across your whole team, no two of one unit's overlapping — and only those of 0.30M or more.
+    Its `N in Ks` = the health that unit lost to hits in the window plus what its shields absorbed (`(X absorbed)` is
+    that part). Damage a Time Dilation / Stretch Time held back counts when it lands (a `deferred …` source), not as absorbed.
+  HP printed on your own press lines (the lines tagged [YOU]) — `(self: N% HP …)`, `→ X (N% HP …)`, `lowest ally N% HP`,
+    `(N% HP)` — is that unit's HP at the moment of the press (just before the press's own heal), not the [STATE]
+    reading of that second; the two can differ, and inside one second the press value is the one to quote about the press.
+    The `at N% HP` inside a cooldown line's unnecessary-press note is the same press reading — on your own lines
+    and on a teammate's cooldown line alike.
+  Window durations `(Ns)` are computed from the displayed start/end timestamps, so they always match what you see.
+  [ROOT] = a root that left its target unable to reach anyone (melee: no enemy in melee range; healer: a damaged
+    ally out of range/LoS; ranged: no enemy in range/LoS) for the stated seconds — only such roots are listed; roots
+    that changed nothing are omitted. Roots have no DR tier and are not hard CC (the rooted player can still cast).
+  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);
+    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window.
+    Each listed [DMG SPIKE] is credited to ONE offensive window — the one its sub-window overlaps longest on the displayed
+    seconds (the earlier window on a tie) — and never to a window it does not overlap; `peak spike` = the largest one credited
+    to this window. `(runs past window)` = that sub-window ends after the offensive window; it can also begin before it — read
+    the printed bounds. `no listed [DMG SPIKE] credited to it` = none of this timeline's [DMG SPIKE] lines overlaps the window, or the
+    one that does overlaps another window longer — a statement about the listed lines, not that no damage landed.
+    The full [RES] row under an [OFFENSIVE WINDOW] header = what your team had ready at the whole second the window opened (a press of your team's inside that second is already spent on it).
+  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction (with the
+    caster's own talents where the log shows them) and the OBSERVED duration in this round;
+    `end not logged` in place of Ts = the log never shows that aura end (an enemy who goes invisible takes the
+    line with them) — how long it lasted is unknown: it is NOT the full duration, and the unit may have been hit seconds later.
+    `immune` = full immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);
+    `deflects direct attacks; periodic damage still lands` = Aspect of the Turtle: no immunity — attacks and spells aimed at the unit are deflected, damage already ticking on it lands;
+    `defers Nk` = Time Dilation: it held back Nk of the damage while it was up (half of each hit) — no reduction: that damage lands on the unit later as its own `deferred Time Dilation` ticks, from about 1 s after the first hit it held, and counts when it lands;
+    `immune to magic` / `immune to physical` = an immunity to those schools only — the other school still hits (Cloak of Shadows, Blessing of Protection, Blessing of Spellwarding);
+    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no
+    figure = the log shows none; a bare `(absorb)` states the mechanism only). `(heal proc)` = Nature's Guardian
+    healed its owner; `(cheat-death proc)` = Cheat Death / Cauterize refused a killing blow — passives nobody pressed,
+    and the unit can still be hit. KILL ATTEMPTS counts an `immune` line as a forced immunity (an `immune to …` one only against a go in its schools), names the three procs
+    `self-saved (X)` and words a unit's own press of anything else here `popped X`.
+    An aura that ended before its full duration says why when the log does: `— dispelled by X's Spell` /
+    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);
+    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);
+    `[no press logged]` = the aura went up with no press of it in the log — a copy a talent or proc put up (Exhilaration's 3 s
+    Survival of the Fittest, Ancient of Lore), a shield that rides another press (Shield of Vengeance with Divine Protection),
+    or a passive shield that went up by itself (Angelic Bulwark at low HP — a fact only: KILL ATTEMPTS never names it);
+    a copy's length is its own, so it never reads `— removed early` on length alone.
+    `[pressed while unseen]` = pressed while the unit was out of the log's sight (the press row is lost); the line stands where
+    the log showed the aura again, the latest the press can have been.
+    `— still up when the round ended` = the round ended before it did;
+    `— its bolts hit X: Nk of the Mk damage they took over it` = a save that is a channel whose damage landed on our
+    player X (Ultimate Penitence; several units, largest first): Nk = what the channel dealt X, landed plus absorbed;
+    Mk = everything X took while it ran; `(its cast row names Y)` = the cast row's target was someone else — the log
+    shows where the damage went, not whether the channel was re-aimed;
+    `X + N% copy → unit` = X stayed on its caster at full strength; a talent put an N% copy on that ally.
+    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /
+    redirect (Leap of Faith, Intervene, Roar of Sacrifice); `(area)` = an area save pressed at that
+    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.
+    Any other word in that parenthesis = what the ability does, from the game's data — not why it was pressed, and not
+    that it saved anyone.
+    `(heal)` = it heals the unit that pressed it, at once or over a few seconds — no damage is reduced;
+    `Feint (N%, Ts)` = NOT one of the walls: N% less non-area damage on the unit while it is up; kill windows and KILL ATTEMPTS do not count it;
+    `(invisible, …)` = the unit went unseen; NOT one of the walls and no immunity; kill windows and KILL ATTEMPTS do not count it; `ended at once` = the log took the invisibility off the same instant it went up;
+    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at the instant of the press.
+    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the press (just before the press's own
+    heal), not the [STATE] reading of that second.
+    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each
+    friendly who had hit that unit in the 3 s before the external kept doing while it was up — from the aura going up to its removal (damage on it, share of
+    their damage on enemy players — what landed, what shields absorbed and what was held back, on both sides of the share — seconds with damage; `(+Ak absorbed)` = eaten by the target's shields;
+    `+Dk deferred` = held back by a Time Dilation / Stretch Time on the target — it lands later as that unit's
+    own damage; for a school-limited wall, how much of it was in the wall's school; `N hits immune` = hits the
+    target was immune to).
+    A measurement, not a verdict — the team's CC lines say whether they could act.
+  [SILENCE] = that player was silenced from that second for the stated time: no spell a silence stops — most spells;
+    the abilities the game data marks as not stopped by a silence (many melee strikes, forms, some defensives and
+    racials) still go out (the [CC ON TEAM] / [CC ON ENEMY] lines do not include silences). `trinket broke this silence` =
+    a PvP trinket ended it early.
+  [DISARM] = a disarm on a player of your team: weapon abilities are locked, spells are not. `trinket broke this disarm` = a PvP trinket ended it early.
+  `the round ended` on any line (`still up …`, `still on them …`, `still channeling …`, `no end logged; …`) = one instant:
+    the end of the log, the second the timeline's last line (MATCH END) prints.
+  [PRESS] = a player pressed a button that no other line names — one with a cooldown of 45 s or more, or one of
+    a few shorter ones picked for what they do (Fade, Grounding Totem, Shimmer, Thunder Focus Tea, Eye Beam …): a
+    movement, utility, defensive, throughput or offensive button (Divine Steed, Shadowmeld, Gladiator's Badge,
+    Holy Word: Serenity …). `Ns cd` =
+    that player's cooldown with their talents; `back m:ss` = when it was ready again, every reduction and reset
+    included; `cooldown shortens with haste` = their spec's haste cuts it below Ns, by an amount the log
+    does not state; `a charge left` = they still held one; `reset, ready again` = a talent reset it at that press;
+    `2 equipped … another in hand` = two of the item worn, a cooldown each, the other one ready;
+    `free press` = a talent or an ally's Time Spiral let them press it without spending the cooldown
+    (`back` is then the cooldown it stands on); `lasts Ns` = how long its effect runs;
+    `lasts Ns — dispelled / broken / stolen at m:ss` = the log shows that taking it off its one holder before
+    then. A fact, not a verdict.
+  `[no CC aura logged]` = your team's aimed control went off, but the log shows no control aura and no miss row on that target; `— X was up` names an avoidance aura the target had at the cast. `— hit X` = an area control that reached those enemy players (its damage, or a miss row of it) and put no control on anyone; `DR: <family> Immune` = they were at immune diminishing returns for it.
+  `N purgeable buffs on it then` / `k of N purgeable buffs on it` (purge and missed-purge lines) = how many Magic buffs a
+    purge could remove were on that enemy at that moment, the named one included (raid buffs count); k = how many of them
+    that press removed. One press removes a fixed number of them (1 for most purges, 2 for Fire Breath and Greater Purge) and the player does
+    not pick which: with N on the target, a press that removes r takes a given buff about r times in N. Read a missed
+    purge, and a purge that took the buff you wanted, with that in mind.
+  [ENEMY TRINKET] = an enemy used PvP trinket; `out of <spell> (by <source>)` indicates breaking out of that CC.
+    `used <ability>` in place of `PvP trinket` = a racial press (Will to Survive, Will of the Forsaken, Stoneform and
+    Fireblood also lock the trinket for 30–90 s; Escape Artist locks nothing) or a class ability (Blink, Berserker
+    Shout, Icebound Fortitude …) that removed that CC.
+    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at the instant of the press.
+    `(target at N% HP)` reflects the target's HP at the press, not the [STATE] reading of that second.
+  `(cast k of N)` on [ENEMY CD] / [ENEMY HEAL CD] / [ENEMY UTILITY] = the k-th of N casts of that spell this round (not charges); a variant sharing its cooldown counts with it under its own name (The Hunt / Predator's Wake).
+  [ENEMY HEAL CD] = an enemy pressed a major healing / throughput cooldown (Divine Hymn, Apotheosis,
+    Avenging Crusader, …); it is not an offensive burst and opens no [OFFENSIVE WINDOW].
+  `next spike in Ns on X` on a [YOU] [CD] line = the next damage spike after that press, known only in hindsight —
+    the player could not see it coming.
+  [HEALING] under one of your own throughput-cooldown presses = YOUR OWN healing over that buff's full duration from the
+    press, in 5 s buckets: `a–bs` = seconds after the press, HPS = your effective healing per second (overheal left
+    out); `Overheal` = the share of your healing in the whole span that was overheal. At most two presses of a spell get
+    the block: the first, and of the later ones the one with the most overheal and the lowest peak bucket — that
+    spell's weakest later use, not a typical one. A press in the first 10 s with every bucket under 1k HPS gets none. A
+    press without the block was not measured.
+  `| also on you for Ns` on one of your own throughput-cooldown lines = that press went to a teammate and the log shows
+    the same buff applied to you by it as well, on you for N s (`end not logged` = the log has no removal for it). A
+    healing block under such a line is your own healing with the buff on you too; a press on a teammate without the
+    clause = the log shows no such aura on you.
+  [YOU] [CAST] lines inside the 10s before a friendly death are printed per cast with the target's HP
+    at the press, even for spells that are folded `(xN over Ns)` elsewhere; the fold still counts them.
+  [STACKED DEFENSIVES] = two major defensives from two different players were up on the same friendly at once; the line says who cast each and what the later one blocked (a Time Dilation / Stretch Time: what it held back, which lands later) — a fact about the stack, not a verdict (the later aura often keeps working after the first expires).
+    At most 2 per round.
+[PROC] = an automatically applied effect (a passive or a talent-replaced button; `(no press)` = a cooldown's aura a talent or another spell put up, the button not spent); no button of ITS OWN was pressed at that second. `(with X)` = it went out in the same millisecond as that player's press of X, as it did again and again this round (Radiant Glory's Avenging Wrath with Wake of Ashes) — its timing is X's press; without it, it is never a timing or choice to judge. `(cheat-death proc)` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.
+
+[PERSPECTIVE: Log Owner - Discipline Priest]
+(You are the Discipline Priest in this match. Your actions and effects on you are marked with [YOU].)
+
+0:01  [ENEMY DEF]   5(FMage) (Frost Mage): Greater Invisibility (invisible, end not logged)
+0:01  [PRESS]   3(MHunter) (Marksmanship Hunter): Camouflage (lasts 60s, 60s cd, back 1:01)
+0:02  [YOU] [CAST]   Flash Heal → 3(MHunter)
+0:02  [YOU] [CAST]   Void Shield
+0:05  [YOU] [CAST]   Penance → self
+0:07  [YOU] [CAST]   Power Word: Fortitude → self
+0:08  [CC ON TEAM]   2(RPaladin) ← Sap (by 6(ARogue)) | 6s [DR: Incapacitate Full]
+0:09  [STATE]   enemies 4(DPriest):97
+0:10  [YOU] [CAST]   Penance → self
+0:12  [CC ON TEAM]   1(DPriest) ← Cheap Shot (by 6(ARogue)) | 1s [DR: Stun Full] | ended by 2(RPaladin)'s Blessing of Sanctuary
+0:13  [OFFENSIVE WINDOW]   0:13–0:42 | peak spike 0.63M on 2(RPaladin) (Retribution Paladin) over 0:29–0:39 | CDs: Power Infusion@0:13 + Ray of Frost@0:16 + Frozen Orb@0:27
+      [RES] rdy:Pain Suppression[2/2],Desperate Prayer,Power Infusion,Psychic Scream,Ultimate Penitence,Evangelism,2:Divine Shield,2:Blessing of Spellwarding,2:Blessing of Sacrifice,2:Divine Protection,2:Lay on Hands,2:Divine Toll,2:Execution Sentence,2:Avenging Wrath,2:Hammer of Justice,2:Blinding Light,3:Volley,3:Aspect of the Turtle,3:Exhilaration,3:Feign Death,3:Survival of the Fittest[2/2],3:Trueshot,3:Freezing Trap,3:Binding Shot,3:Roar of Sacrifice,3:Master's Call  cd:3:Intimidation(40s) | Atonements: 3  enemy:Power Infusion/Discipline Priest(15s left)  cc:1/Cheap Shot-1s[stun],2/Sap-1s
+0:13  [ENEMY CD]   4(DPriest) (Discipline Priest): Power Infusion (purgeable; unpurged for 15s; 5 purgeable buffs on it then)
+0:13  [ENEMY BUFF]   5(FMage): Power Infusion (purgeable; unpurged for 10s; purgers were CC'd/locked out for 7.2s of it — not actionable; 5 purgeable buffs on it then)
+0:13  [TEAM] [CC]   3(MHunter) (Marksmanship Hunter) cast Intimidation → 6(ARogue)
+0:13  [CC ON ENEMY]   6(ARogue) ← Intimidation (by 3(MHunter)) (1s) [DR: Stun Full] | ended by their PvP trinket
+0:13  [HEALER EXPOSURE]   Critical burst — healer trinket ready — healer already in Cheap Shot until 0:14 (the DR levels count it) — exposure: Full DR, trinket ready | IN LoS: Frost Mage: Ring of Frost Full DR | → Full-DR CC in LoS; healer trinket up (sole CC counter)
+0:14  [PRESS]   5(FMage) (Frost Mage): Shimmer (2 charges, 28.5s cd, a charge left)
+0:14  [CC REMOVED]   2(RPaladin)'s Blessing of Sanctuary removed 6(ARogue)'s Cheap Shot from 1(DPriest) after 1s (~3s of it left)
+0:14  [PRESS]   2(RPaladin) (Retribution Paladin): Blessing of Sanctuary (lasts 5s, 60s cd, back 1:14)
+0:14  [CC ON TEAM]   1(DPriest) ← Polymorph (by 5(FMage)) | 6s [DR: Incapacitate Full] | 17.9yd from caster
+0:14  [ENEMY TRINKET]   6(ARogue) used PvP trinket out of Intimidation (by 3(MHunter)) (target at 100% HP)
+0:14  [SILENCE]   2(RPaladin) ← Garrote - Silence (by 6(ARogue)) | 3s
+0:15  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Feint (20%, 6.0s) (at 100% HP)
+0:15  [PRESS]   3(MHunter) (Marksmanship Hunter): Chimaeral Sting (lasts 9s, 60s cd, back 1:15)
+0:16  [ENEMY CD]   5(FMage) (Frost Mage): Ray of Frost
+0:16  [PRESS]   3(MHunter) (Marksmanship Hunter): Aspect of the Cheetah (lasts 12s, 150s cd, back 2:46)
+0:16  [CC ON TEAM]   2(RPaladin) ← Kidney Shot (by 6(ARogue)) | 5s [DR: Stun Full] | 2.3yd from caster
+0:17  [STATE]   enemies 6(ARogue):98
+0:17  [TEAM] [CC]   3(MHunter) (Marksmanship Hunter) cast Binding Shot
+      [RES] rdy:Δ -3:Binding Shot  cd:3:Binding Shot(45s) | Atonements: 3  enemy:Power Infusion/Discipline Priest(11s left),Ray of Frost/Frost Mage(2s left)  cc:1/Polymorph-4s,2/Kidney Shot-5s[stun]
+0:17  [PRESS]   4(DPriest) (Discipline Priest): Fade (lasts 10s, 20s cd, back 0:37)
+0:18  [STATE]   friends 2(RPaladin):84 / enemies 6(ARogue):99
+0:18  [TEAM] [PROC]   2(RPaladin) (Retribution Paladin): Shield of Vengeance (no press)
+0:18  [TEAM] [CD]   2(RPaladin) (Retribution Paladin): Divine Protection
+0:18  [CC ON TEAM]   2(RPaladin) ← Psychic Scream (by 4(DPriest)) | 1s [DR: Disorient Full] | 7.3yd from caster
+0:18  [CC ON TEAM]   1(DPriest) ← Psychic Scream (by 4(DPriest)) | 2s [DR: Disorient Full] | 3yd from caster
+0:18  [SILENCE]   5(FMage) ← Spider Venom (by 3(MHunter)) | 3s
+0:20  [SILENCE]   2(RPaladin) ← Garrote - Silence (by 6(ARogue)) | 2s
+0:21  [YOU] [CAST]   Void Shield
+0:22  [STATE]   friends 2(RPaladin):81 / enemies 5(FMage):91
+0:22  [ENEMY HEAL CD]   4(DPriest) (Discipline Priest): Evangelism
+0:22  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Feint (20%, 6.0s) (at 100% HP)
+0:22  [TEAM] [CC]   2(RPaladin) (Retribution Paladin) cast Hammer of Justice → 4(DPriest)
+      [RES] rdy:Δ -2:Divine Protection -2:Hammer of Justice -3:Roar of Sacrifice  cd:2:Divine Protection(59s),2:Hammer of Justice(30s),3:Roar of Sacrifice(120s) | Atonements: 3  enemy:Power Infusion/Discipline Priest(6s left)
+0:22  [CC ON ENEMY]   4(DPriest) ← Hammer of Justice (by 2(RPaladin)) (5s) [DR: Stun Full]
+0:22  [TEAM] [CD]   3(MHunter) (Marksmanship Hunter): Roar of Sacrifice → 2(RPaladin)
+0:22  [ENEMY DEF]   5(FMage) (Frost Mage): Ice Barrier (absorb, 3.6s) (at 95% HP)
+0:23  [STATE]   friends 2(RPaladin):81 / enemies 5(FMage):95
+0:23  [YOU] [CD]   Power Infusion → 2(RPaladin) (81% HP, 0%/s, 0k DPS) | also on you for 15.0s | dampening: 10%, next spike in 7s on 2(RPaladin)
+      [HEALING]    0–5s: 23.1k HPS | 5–10s: 15.7k HPS | 10–15s: 31.2k HPS | 15–15.001s: 7.0k HPS | Overheal: 70%
+0:23  [YOU] [CD]   Evangelism → 2(RPaladin) (81% HP, 0%/s, 0k DPS) | dampening: 10%, next spike in 7s on 2(RPaladin)
+0:23  [ENEMY BUFF END]   5(FMage): Power Infusion
+0:23  [TEAM] [CD]   2(RPaladin) (Retribution Paladin): Avenging Wrath
+0:24  [STATE]   friends 2(RPaladin):93 / enemies 4(DPriest):99 5(FMage):95 6(ARogue):93
+0:24  [TEAM] [CD]   2(RPaladin) (Retribution Paladin): Execution Sentence
+0:24  [YOU] [CAST]   Shadow Word: Pain → 5(FMage)
+0:24  [TEAM] [CC]   3(MHunter) (Marksmanship Hunter) cast Freezing Trap
+      [RES] rdy:Δ -Power Infusion -Evangelism -2:Execution Sentence -2:Avenging Wrath -3:Freezing Trap  cd:Power Infusion(119s),Evangelism(44s),2:Execution Sentence(60s),2:Avenging Wrath(59s),3:Freezing Trap(25s) | Atonements: 3  enemy:Power Infusion/Discipline Priest(4s left)
+0:25  [PRESS]   2(RPaladin) (Retribution Paladin): Wake of Ashes (lasts 9s, 30s cd, back 0:55)
+0:25  [CC ON ENEMY]   6(ARogue) ← Binding Shot (by 3(MHunter)) (2s) [DR: Stun 50%]
+0:25  [CC ON ENEMY]   4(DPriest) ← Freezing Trap (by 3(MHunter)) (1s) [DR: Incapacitate Full]
+0:26  [STATE]   friends 2(RPaladin):97 / enemies 4(DPriest):91 5(FMage):95 6(ARogue):86
+0:26  [TEAM] [CD]   3(MHunter) (Marksmanship Hunter): Trueshot
+0:26  [YOU] [CAST]   Mind Blast → 5(FMage)
+0:26  [YOU] [CAST]   Dispel Magic → 5(FMage)
+0:26  [CC BROKEN]   2(RPaladin)'s  broke own team's Freezing Trap on 4(DPriest) — 5.2s of CC wasted
+0:27  [STATE]   enemies 4(DPriest):87 5(FMage):95 6(ARogue):84
+0:27  [ENEMY CD]   5(FMage) (Frost Mage): Frozen Orb (cast 1 of 2)
+0:27  [YOU] [CAST]   Dispel Magic → 5(FMage)
+0:28  [STATE]   enemies 4(DPriest):98 5(FMage):95 6(ARogue):94
+0:28  [PRESS]   5(FMage) (Frost Mage): Shimmer (2 charges, 28.5s cd, back 0:42)
+0:28  [ENEMY BUFF END]   4(DPriest): Power Infusion
+0:28  [TEAM] [CD]   2(RPaladin) (Retribution Paladin): Divine Toll
+      [RES] rdy:Δ -2:Divine Toll -3:Trueshot  cd:2:Divine Toll(60s),3:Trueshot(88s) | Atonements: 3  enemy:Power Infusion/Discipline Priest(1s left),Frozen Orb/Frost Mage(14s left)
+0:28  [ENEMY DEF]   4(DPriest) (Discipline Priest): Pain Suppression → 5(FMage) (8.0s) [friendly offensive CD active] (target at 58% HP) | during it: 2(RPaladin) 147k on target · 30% of their enemy-player damage · direct 123k / periodic 24k · damage in 2 of 9 s · longest gap 4 s; 1(DPriest) 7k on target · 19% of their enemy-player damage · direct 6k / periodic 1k · damage in 3 of 9 s · longest gap 4 s; 3(MHunter) 6k on target · 12% of their enemy-player damage · direct 1k / periodic 5k · damage in 2 of 9 s · longest gap 4 s
+0:28  [YOU] [CAST]   Penance → 5(FMage)
+0:29  [STATE]   enemies 4(DPriest):85 5(FMage):57 6(ARogue):82
+0:29  [PRESS]   3(MHunter) (Marksmanship Hunter): Explosive Shot (lasts 3s, 30s cd, back 0:59)
+0:29–0:39  [DMG SPIKE]   2(RPaladin) (Retribution Paladin): 0.63M in 10s (63k DPS) (100% -> 52% HP, -5%/s) | no enemy CC in window
+                 Top sources: 5(FMage) — Shatter (203k), 5(FMage) — Frozen Orb (132k), 5(FMage) — Flurry (76k)
+0:30  [ENEMY DEF]   5(FMage) (Frost Mage): Ice Barrier (absorb, 4.0s) [friendly offensive CD active] (at 45% HP)
+0:30  [DISARM]   3(MHunter) ← Dismantle (by 6(ARogue)) | 5s
+0:32  [STATE]   friends 2(RPaladin):93 / enemies 4(DPriest):87 5(FMage):72 6(ARogue):62
+0:32  [TEAM] [CD]   3(MHunter) (Marksmanship Hunter): Master's Call
+      [RES] rdy:Δ -3:Master's Call  cd:3:Master's Call(45s) | Atonements: 3  enemy:Frozen Orb/Frost Mage(10s left)  focus:2  cc:3/Dismantle-4s[disarm]
+0:32  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Crimson Vial (heal) [friendly offensive CD active] (at 45% HP)
+0:33  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Cloak of Shadows (immune to magic, 5.0s) [friendly offensive CD active] (at 37% HP)
+0:33  [YOU] [CAST]   Power Word: Shield → 2(RPaladin)
+0:33  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Feint (20%, 6.0s) [friendly offensive CD active] (at 50% HP)
+0:35  [YOU] [CAST]   Penance (x2) → 2(RPaladin)
+0:38  [BUFF FADED]   Power Infusion (expired)
+0:39  [YOU] [CAST]   Void Shield
+0:42  [YOU] [CAST]   Flash Heal → 2(RPaladin)
+0:42  [YOU] [CAST]   Angelic Feather
+0:44  [STATE]   enemies 5(FMage):97
+0:44  [YOU] [CAST]   Purify → 2(RPaladin)
+0:45  [YOU] [CAST]   Shadow Word: Pain → 6(ARogue)
+0:47  [STATE]   friends 2(RPaladin):85 / enemies 5(FMage):99
+0:47  [PRESS]   2(RPaladin) (Retribution Paladin): Divine Steed (lasts 6s, 2 charges, 45s cd, a charge left)
+0:47  [CC ON TEAM]   2(RPaladin) ← Kidney Shot (by 6(ARogue)) [DR: Stun Full] | 8yd from caster | Will to Survive broke this CC after 1s (cut short — it had not expired); PvP trinket NOT used
+0:48  [STATE]   friends 2(RPaladin):79
+0:48  [YOU] [CAST]   Shadow Word: Pain → 5(FMage) [cast succeeded before CC landed]
+0:48–0:58  [DMG SPIKE]   2(RPaladin) (Retribution Paladin): 0.45M in 10s (45k DPS) (79% -> 33% HP, -5%/s, low 20% @0:58) | enemy CC in window: Kidney Shot→the target@0:47 (1s), Blind→you@0:49 (5s), Sap→you@0:55 (4s)
+                 Top sources: 6(ARogue) — Implacable Strikes (69k), 5(FMage) — Flurry (69k), 5(FMage) — Shatter (54k)
+0:48  [TRINKET]   2(RPaladin) used Will to Survive out of Kidney Shot (by 6(ARogue))
+0:49  [STATE]   friends 2(RPaladin):77 / enemies 5(FMage):97
+0:49  [CC ON TEAM]   1(DPriest) ← Blind (by 6(ARogue)) | 5s [DR: Disorient Full] | 9.1yd from caster
+0:50  [STATE]   friends 2(RPaladin):75 / enemies 5(FMage):97
+0:50  [TEAM] [CC]   2(RPaladin) (Retribution Paladin) cast Blinding Light
+      [RES] rdy:Δ +3:Freezing Trap -2:Blinding Light  cd:2:Blinding Light(90s) | Atonements: 3  focus:2  cc:1/Blind-4s
+0:50  [CC ON ENEMY]   6(ARogue) ← Blinding Light (by 2(RPaladin)) (4s) [DR: Disorient Full]
+0:50  [CC ON ENEMY]   4(DPriest) ← Blinding Light (by 2(RPaladin)) (4s) [DR: Disorient Full]
+0:53  [STATE]   friends 2(RPaladin):66 / enemies 5(FMage):91
+0:53  [TEAM] [CC]   3(MHunter) (Marksmanship Hunter) cast Freezing Trap
+      [RES] rdy:Δ +2:Hammer of Justice -3:Freezing Trap  cd:3:Freezing Trap(25s) | Atonements: 3  focus:2  cc:1/Blind-1s
+0:54  [STATE]   friends 2(RPaladin):64 / enemies 5(FMage):84
+0:54  [CC ON ENEMY]   4(DPriest) ← Freezing Trap (by 3(MHunter)) (1s) [DR: Incapacitate Full] | ended by their PvP trinket
+0:54  [TEAM] [CD]   3(MHunter) (Marksmanship Hunter): Volley
+0:54  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Vanish (immune, end not logged) [friendly offensive CD active] (at 100% HP)
+0:55  [STATE]   friends 2(RPaladin):63 / enemies 5(FMage):84
+0:55  [CC ON TEAM]   1(DPriest) ← Sap (by 6(ARogue)) | 4s [DR: Incapacitate Full] | 11.7yd from caster
+0:55  [ENEMY TRINKET]   4(DPriest) used PvP trinket out of Freezing Trap (by 3(MHunter)) [friendly offensive CD active] (target at 100% HP)
+0:56  [SILENCE]   2(RPaladin) ← Garrote - Silence (by 6(ARogue)) | 2s
+0:57  [STATE]   friends 2(RPaladin):59 / enemies 5(FMage):78
+0:57  [ENEMY CD]   6(ARogue) (Assassination Rogue): Kingsbane
+0:57  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Feint (20%, 6.0s) [friendly offensive CD active] (at 96% HP)
+0:58  [STATE]   friends 2(RPaladin):33 / enemies 5(FMage):78 6(ARogue):93
+0:58  [TEAM] [CD]   2(RPaladin) (Retribution Paladin): Divine Shield
+      [RES] rdy:Δ +3:Intimidation -2:Divine Shield -3:Volley  cd:2:Divine Shield(210s),3:Volley(41s) | Atonements: 3  enemy:Kingsbane/Assassination Rogue(13s left)  focus:2  cc:1/Sap-1s
+0:59  [ENEMY DEF]   4(DPriest) (Discipline Priest): Pain Suppression → 5(FMage) (8.0s) [friendly offensive CD active] (target at 56% HP) | during it: 2(RPaladin) 0k on target · 0% of their enemy-player damage · direct 0k / periodic 0k · damage in 0 of 9 s · longest gap 9 s; 1(DPriest) 1k on target · 17% of their enemy-player damage · direct 0k / periodic 1k · damage in 1 of 9 s · longest gap 5 s; 3(MHunter) 28k on target · 55% of their enemy-player damage · direct 22k / periodic 6k · damage in 4 of 9 s · longest gap 3 s
+0:59  [SILENCE]   1(DPriest) ← Garrote - Silence (by 6(ARogue)) | 3s
+0:59  [PRESS]   4(DPriest) (Discipline Priest): Fade (lasts 10s, 20s cd, back 1:19)
+1:00  [STATE]   friends 2(RPaladin):48 / enemies 5(FMage):56 6(ARogue):73
+1:00  [ENEMY DEF]   5(FMage) (Frost Mage): Ice Barrier (absorb, 4.0s) [friendly offensive CD active] (at 56% HP)
+1:00  [TEAM] [CC]   2(RPaladin) (Retribution Paladin) cast Hammer of Justice → 4(DPriest) [no CC aura logged — Phase Shift was up]
+1:00  [CC ON TEAM]   3(MHunter) ← Psychic Scream (by 4(DPriest)) | 6s [DR: Disorient Full] | 6.4yd from caster
+1:01  [PRESS]   5(FMage) (Frost Mage): Shimmer (2 charges, 28.5s cd, back 1:11)
+1:02  [STATE]   friends 2(RPaladin):50 / enemies 5(FMage):56 6(ARogue):74
+1:02  [CC ON TEAM]   1(DPriest) ← Polymorph (by 5(FMage)) | 3s [DR: Incapacitate 50%] | 19.5yd from caster
+1:05  [STATE]   friends 2(RPaladin):50 3(MHunter):99 / enemies 4(DPriest):99 5(FMage):61 6(ARogue):95
+1:05  [YOU] [CAST]   Power Word: Shield → 2(RPaladin)
+1:05  [PRESS]   4(DPriest) (Discipline Priest): Mass Dispel (120s cd, back 3:05)
+1:06  [YOU] [CAST]   Penance → 2(RPaladin)
+1:07  [SILENCE]   2(RPaladin) ← Garrote - Silence (by 6(ARogue)) | 2s
+1:08  [STATE]   friends 2(RPaladin):67 3(MHunter):99 / enemies 5(FMage):71 6(ARogue):95
+1:08  [PRESS]   3(MHunter) (Marksmanship Hunter): Explosive Shot (lasts 3s, 30s cd, back 1:38)
+1:08  [YOU] [CAST]   Shadow Word: Pain → 6(ARogue)
+1:10  [YOU] [CAST]   Penance → 2(RPaladin)
+1:11  [STATE]   friends 2(RPaladin):78 3(MHunter):97 / enemies 5(FMage):81
+1:11  [CC ON TEAM]   3(MHunter) ← Polymorph (by 5(FMage)) | 1s [DR: Incapacitate Full] | 22.3yd from caster
+1:11  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Crimson Vial (heal) (at 100% HP)
+1:12  [YOU] [CAST]   Purify → 3(MHunter)
+1:14  [STATE]   friends 2(RPaladin):86 / enemies 5(FMage):95
+1:14  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Feint (20%, 6.0s) (at 100% HP)
+1:14  [TEAM] [CD]   3(MHunter) (Marksmanship Hunter): Feign Death
+      [RES] rdy:Pain Suppression[2/2],Desperate Prayer,Psychic Scream,Ultimate Penitence,Evangelism,2:Blessing of Spellwarding,2:Blessing of Sacrifice,2:Lay on Hands,3:Aspect of the Turtle,3:Exhilaration,3:Survival of the Fittest[2/2],3:Intimidation,3:Binding Shot  cd:Power Infusion(69s),2:Divine Shield(194s),2:Divine Protection(7s),2:Divine Toll(14s),2:Execution Sentence(10s),2:Avenging Wrath(9s),2:Hammer of Justice(16s),2:Blinding Light(66s),3:Volley(25s),3:Feign Death(20s),3:Trueshot(42s),3:Freezing Trap(4s),3:Roar of Sacrifice(68s),3:Master's Call(3s) | Atonements: 1  focus:2
+1:15  [PRESS]   2(RPaladin) (Retribution Paladin): Wake of Ashes (lasts 9s, 30s cd, back 1:45)
+1:16  [YOU] [CAST]   Power Word: Shield → 2(RPaladin) (82% HP)
+1:16  [ENEMY DEF]   5(FMage) (Frost Mage): Ice Barrier (absorb, 4.0s) (at 89% HP)
+1:17  [YOU] [CAST]   Purify → 2(RPaladin) (82% HP)
+1:18  [YOU] [CAST]   Shadow Word: Pain (59% HP)
+1:20  [STATE]   friends 2(RPaladin):84
+1:20  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Feint (20%, 6.0s) (at 100% HP)
+1:20  [ENEMY CD]   5(FMage) (Frost Mage): Frozen Orb (cast 2 of 2)
+1:20  [HEALER EXPOSURE]   High burst — healer trinket ready — exposure: Full DR, trinket ready — LoS break ~20.5yd away (pillar-blocks 6(ARogue)) — that enemy only | IN LoS: Assassination Rogue: Cheap Shot Full DR | → Full-DR CC in LoS; healer trinket up (sole CC counter)
+1:21  [YOU] [CAST]   Shadow Word: Pain → 6(ARogue) (99% HP)
+1:22  [STATE]   friends 1(DPriest):99 2(RPaladin):85 3(MHunter):98 / enemies 5(FMage):99 6(ARogue):99
+1:22  [TEAM] [CC]   3(MHunter) (Marksmanship Hunter) cast Intimidation → 4(DPriest)
+      [RES] rdy:Δ +2:Divine Protection +3:Freezing Trap +3:Master's Call -3:Intimidation  cd:3:Intimidation(40s) | Atonements: 1  enemy:Frozen Orb/Frost Mage(14s left)
+1:22  [CC ON ENEMY]   4(DPriest) ← Intimidation (by 3(MHunter)) (3s) [DR: Stun Full]
+1:22  [YOU] [CAST]   Penance → 6(ARogue) (96% HP)
+1:23  [STATE]   friends 2(RPaladin):88 3(MHunter):95 / enemies 6(ARogue):93
+1:23  [CC ON TEAM]   2(RPaladin) ← Kidney Shot (by 6(ARogue)) | 5s [DR: Stun Full] | 6.8yd from caster | trinket: ON CD (56s left); Will to Survive: ON CD (146s left)
+1:23  [TEAM] [CC]   3(MHunter) (Marksmanship Hunter) cast Freezing Trap
+1:24  [STACKED DEFENSIVES]   2(RPaladin) had Pain Suppression (from you) and Divine Protection (from 2(RPaladin)) up together 1:24–1:30 (6s); the later one, Divine Protection, blocked ~0% of their max HP during the overlap (~0% over its full 5s run) — a fact about the stack, not a verdict
+1:24  [STATE]   friends 2(RPaladin):dead 3(MHunter):94 / enemies 6(ARogue):87
+1:24  [YOU] [CD]   Pain Suppression → 2(RPaladin) (75% HP, -5%/s, 58k DPS) | dampening: 10% | cheaper available: Evangelism
+1:24  [DEATH]  2(RPaladin) (Retribution Paladin — friendly) | dampening: 10%
+      [RES] rdy:Pain Suppression[1/2],Desperate Prayer,Psychic Scream,Ultimate Penitence,Evangelism,2:Blessing of Spellwarding,2:Blessing of Sacrifice,2:Lay on Hands,2:Execution Sentence,2:Avenging Wrath,3:Aspect of the Turtle,3:Exhilaration,3:Survival of the Fittest[2/2],3:Binding Shot,3:Master's Call  cd:Power Infusion(59s),2:Divine Shield(184s),2:Divine Protection(63s),2:Divine Toll(4s),2:Hammer of Justice(6s),2:Blinding Light(56s),3:Volley(15s),3:Feign Death(10s),3:Trueshot(32s),3:Freezing Trap(24s),3:Intimidation(38s),3:Roar of Sacrifice(58s) | Atonements: 1  enemy:Frozen Orb/Frost Mage(12s left)  focus:2  cc:2/Kidney Shot-4s[stun]
+               HP (T = 1:24, the death line's second): 77% at T-15s → 86% at T-10s → 83% at T-5s → 85% at T-3s → 85% at T-2s → 88% at T-1s → dead
+               Top damage in final 10s: 5(FMage) — Shatter (61k), 5(FMage) — Flurry (34k), 6(ARogue) — Rupture (18k)
+               Mitigation audit note: each row below is an independent single-technique estimate — no stacking/interaction across rows is modeled
+               Mitigation audit: Power Word: Shield active 7.3s in the final 10s (not in the mitigation table — not modeled in the arithmetic)
+               Mitigation audit: Pain Suppression blocked ~0k (≈0% max HP) over 0.1s active in the final 10s
+1:24  [YOU] [CAST]   Power Word: Shield → 2(RPaladin) [cast succeeded before CC landed]
+1:24  [PRESS]   6(ARogue) (Assassination Rogue): Sprint (lasts 12s, 60s cd, back 2:24)
+1:24  [TEAM] [PROC]   2(RPaladin) (Retribution Paladin): Shield of Vengeance (no press)
+1:24  [TEAM] [CD]   2(RPaladin) (Retribution Paladin): Divine Protection
+1:24  [ENEMY DEF]   6(ARogue) (Assassination Rogue): Vanish (immune, end not logged) (at 85% HP)
+1:25  [STATE]   friends 2(RPaladin):dead 3(MHunter):92 / enemies 6(ARogue):85
+1:25  [CC ON ENEMY]   4(DPriest) ← Freezing Trap (by 3(MHunter)) (still on them when the round ended, 5s in) [DR: Incapacitate Full]
+1:25  [CC ON TEAM]   1(DPriest) ← Cheap Shot (by 6(ARogue)) | 4s [DR: Stun Full] | 9.6yd from caster
+1:26  [SILENCE]   2(RPaladin) ← Garrote - Silence (by 6(ARogue)) | 3s
+1:27  [PRESS]   5(FMage) (Frost Mage): Shimmer (2 charges, 28.5s cd, back 1:39)
+1:28  [STATE]   friends 2(RPaladin):dead 3(MHunter):92 / enemies 6(ARogue):83
+1:28  [ENEMY CD]   6(ARogue) (Assassination Rogue): Deathmark
+1:28  [CC ON TEAM]   1(DPriest) ← Ring of Frost (by 5(FMage)) | still on them when the round ended, 2s in [DR: Incapacitate Full] | 7.9yd from caster
+1:29  [STATE]   friends 2(RPaladin):dead 3(MHunter):92 / enemies 6(ARogue):79
+1:29  [SILENCE]   2(RPaladin) ← Garrote - Silence (by 6(ARogue)) | still on them when the round ended, 1s in
+1:29  [CC ON TEAM]   2(RPaladin) ← Ring of Frost (by 5(FMage)) | still on them when the round ended, <1s in [DR: Incapacitate Full] | 3.5yd from caster | trinket: ON CD (50s left); Will to Survive: ON CD (140s left)
+
+1:30  [MATCH END]   damp: 10%
+  friends 1(DPriest):100% 2(RPaladin):dead(1:24) 3(MHunter):92% / enemies 4(DPriest):? 5(FMage):100% 6(ARogue):54%
+
+DEATHS WITH MISSED OPTIONS
+  [1:24] Player1-Test died — Player3-Test had Pain Suppression available, caster's longest stretch free to cast it 5.0s of the last 5s
+
+KILL ATTEMPTS — team kill attempts (a stun chain, or an offensive-cooldown burst, with real team damage behind it):
+  Trinket up is the default state (cooldowns reset at the gates): a stun on a trinket-up target is how the trinket gets forced, not a targeting error. Only a line naming a softer target raises a targeting question.
+  `(A M on target inside it, B M incl. the 5 s after)` = the team's damage on the target — what landed plus what the target's shields absorbed: A inside the printed bracket, B over the bracket and the 5 s after it (never past the round's end). A death in those 5 s is still this attempt's KILL, and `team focus P%`, `healed through` and `not enough damage` are read over that longer span (B), not over the bracket alone.
+  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall of its own, an external (an ally's wall on it counts here), another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external already up when the attempt began is named only when the log's damage shows the target would have died without it (its percentage put back on the hits it reduced, or what its shield absorbed, inside the attempt and the next 5 s); `X [up since m:ss] + Y together` = no one of them would have, all of them together would. An already-up external that is neither a percentage nor a shield (Guardian Spirit, Blessing of Sacrifice, Time Dilation, Rallying Cry …) is named as up. An external under the 20% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. A teammate's area save whose aura was on the target (Spirit Link Totem, Anti-Magic Zone, Darkness, Rallying Cry, Power Word: Barrier) is named as an external. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).
+  `popped X` = X went up on the target from the target itself: a wall (a percentage damage reduction), or another defensive it pressed on itself — a shield, a heal, a dodge, a control immunity … (the timeline line of that press, where there is one, says which; a wall a talent or proc put up with no press of it reads `[no press logged]` on its [ENEMY DEF] line). The word states that it went up — not why, and not that it saved anyone.
+  `X already up since m:ss` inside `opportunity: …` = X was on the target when the attempt began — the `[up since m:ss]` of the same line's FAILED clause, said where the tier is. The tier beside it (PRIME / gated / trinket up) is about what the target still HELD: something already running is not "in hand", and it is not what made the target PRIME or not.
+  Burrow / Vanish / Mass Invisibility: an enemy who goes unseen takes the aura's end out of the log, so one of these pressed BEFORE an attempt is its cause (`[up since m:ss]`) only when the log shows it end after the attempt began — otherwise how long it lasted is unknown and the attempt reads its next cause. Pressed inside the attempt it counts as any other save.
+  [0:13–0:27] on Player5-Test — Intimidation opener (Full DR), 2 stuns | opportunity: trinket up (no softer target) | team focus 34% (0.11M on target inside it, 0.35M incl. the 5 s after) | FAILED: target trinketed out
+  [0:22–0:27] on Player2-Test — Hammer of Justice opener (Full DR), 1 stun | opportunity: trinket up (softer target then: Player5-Test — PRIME) | team focus 21% (0.09M on target inside it, 0.20M incl. the 5 s after) | FAILED: not enough damage
+  [0:23–0:48] on Player4-Test — Power Infusion burst (no stun) | opportunity: trinket up (Ice Barrier already up since 0:22; softer target then: Player5-Test — PRIME) | team focus 53% (0.72M on target inside it, 0.79M incl. the 5 s after) | FAILED: saved by external (Pain Suppression); popped Ice Barrier [up since 0:22]
+  [0:54–1:03] on Player4-Test — Volley burst (no stun) | opportunity: trinket up (no softer target) | team focus 58% (0.35M on target inside it, 0.35M incl. the 5 s after) | FAILED: saved by external (Pain Suppression); popped Ice Barrier
+  Summary: 4 attempts (2 stun-anchored, 2 burst-anchored; 0 on PRIME targets), 0 kills inside an attempt; 2 opened while a softer target existed.
+
+OBSERVED CONSEQUENCES — what the log shows happened to a team's HP while its healer was kicked (inside the school lockout) or CC'd. `A% → low B% at m:ss` = that unit's HP when the kick or control landed (the last reading at or before that instant — it can differ from the [STATE] tick of that second, which may be read before it; for a unit the log did not read near that instant, its first reading inside the span), and the lowest HP the log shows for it inside the span, at the second it happened (the true minimum between the ticks: it can sit below every [STATE] number of the span). `no teammate dropped 10% or more (…)` lists those readings for every teammate. Measurements, not verdicts: they say what happened, not why the round went the way it did.
+0:14  [CONSEQ]   friendly healer 1(DPriest) in Polymorph for 6s → during it: 2(RPaladin) 100% → low 81% at 0:18
+0:18  [CONSEQ]   friendly healer 1(DPriest) in Psychic Scream for 2s → during it: no teammate dropped 10% or more (2(RPaladin) 81% → low 81% at 0:19, 3(MHunter) 100% → low 100% at 0:19)
+0:22  [CONSEQ]   enemy healer 4(DPriest) in Hammer of Justice for 5s → during it: 6(ARogue) 100% → low 83% at 0:26
+0:49  [CONSEQ]   friendly healer 1(DPriest) in Blind for 5s → during it: 2(RPaladin) 77% → low 63% at 0:54
+0:50  [CONSEQ]   enemy healer 4(DPriest) in Blinding Light for 4s → during it: 5(FMage) 97% → low 84% at 0:54
+0:55  [CONSEQ]   friendly healer 1(DPriest) in Sap for 4s → during it: 2(RPaladin) 63% → low 20% at 0:58
+0:59  [CONSEQ]   friendly healer 1(DPriest) in Garrote - Silence (silence) for 3s → during it: no teammate dropped 10% or more (2(RPaladin) 48% → low 48% at 0:59, 3(MHunter) 100% → low 99% at 1:02)
+1:02  [CONSEQ]   friendly healer 1(DPriest) in Polymorph for 3s → during it: no teammate dropped 10% or more (2(RPaladin) 50% → low 50% at 1:03, 3(MHunter) 99% → low 99% at 1:02)
+1:22  [CONSEQ]   enemy healer 4(DPriest) in Intimidation for 3s → during it: 6(ARogue) 97% → low 85% at 1:24
+1:25  [CONSEQ]   enemy healer 4(DPriest) in Freezing Trap for 5s → during it: 6(ARogue) 85% → low 54% at 1:29
+1:25  [CONSEQ]   friendly healer 1(DPriest) in Cheap Shot for 4s → during it: no teammate dropped 10% or more (3(MHunter) 92% → low 92% at 1:25)
+
+PEEL OPTIONS — before a friendly death: an INSTANT crowd control a teammate (or the victim) had ready on the enemy who did most of the victim's damage in the 10 s before the death, and did not use. Every counted second had: the CC reaction-ready, its owner free to act, the target in range and line of sight, not already CC'd, not immune, not at Immune DR, and no ready ability of the target's own that breaks that kind of CC. Enemy dispels are not considered. Distance, DR and the target's PvP trinket are read at the first usable second ('at m:ss'); they can change later in the span (DR resets, trinket comes up), but every counted second passed every check above. Use it only as an extra way the player could have taken pressure off, in your own words; never say using it would have saved the teammate, and never call not using it a mistake.
+1:15–1:24  [PEEL OPTION]  3(MHunter) Binding Shot → 5(FMage): usable 10 s, not used | 5(FMage) did 77% of 2(RPaladin)'s damage taken in the 10 s before dying at 1:24 | at 1:15: 26.5yd, DR Full, 5(FMage) PvP trinket ready
+
+CC USE — your control cooldowns this round. `cast N×` counts completed casts. `cast bar started N×, went off M×` is printed for a control with a cast time when fewer casts went off than cast bars were started (otherwise its entry is the plain `cast N×`): N counts every cast bar you began, a kicked one included, and M the casts that finished (`first m:ss` = the first of them) — `went off` means the cast bar completed and the spell was cast, NOT that the control landed (a cast that went off can still miss or hit an immune target), and the counts do not say why a started bar did not go off. A [CC BOOKMARK] marks a moment worth a look, not a missed cast: on every second of its span the CC was ready and not cast, you were not CC'd or in a casting lockout, and the named enemy was in range, with no detected LoS obstruction, not CC'd, not immune, at Full DR, and with no known ready self-breaker of their own. The distance, DR and trinket state after `at m:ss` are as of the span's first second. Enemy dispels are not considered, and nothing here says whether casting was the better play — or whether you had a free global then: say "you weren't CC'd", never "you were free". Use a bookmark only to point the player at that moment, in your own words; never say they should have cast it, never count it as a mistake, and never judge the player as passive or aggressive from the counts.
+  Counts: Psychic Scream not cast
+
+The user now asks: 我这场为什么输了?
