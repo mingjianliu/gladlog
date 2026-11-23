@@ -108,8 +108,33 @@ export function combatToRecords(
   return out;
 }
 
+/**
+ * A deep copy whose strings no longer point into the source log. V8 cuts a
+ * substring of a large string as a slice that keeps the whole parent alive, so
+ * one spec or spell name carried out of a parsed line pins that log's full
+ * text (tens of MB for a Solo Shuffle log) for as long as the record lives.
+ * buildCorpus keeps every record of hundreds of logs: on 2026-11-23 the
+ * Solo Shuffle reference-vector build took a 26 GB machine down to 570 MB
+ * free by its 400th log (a 60-log probe: 5.1 GB and still climbing, flat at
+ * about 2 GB once detached). The memory is the text's, outside the JS heap,
+ * so --max-old-space-size does not stop it. JSON.parse of a JSON string builds
+ * a fresh flat string; numbers (NaN included), booleans, null and undefined
+ * pass through unchanged.
+ */
+export function detachStrings<T>(v: T): T {
+  if (typeof v === "string") return JSON.parse(JSON.stringify(v)) as T;
+  if (Array.isArray(v)) return v.map(detachStrings) as T;
+  if (v !== null && typeof v === "object") {
+    const o: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v)) o[k] = detachStrings(x);
+    return o as T;
+  }
+  return v;
+}
+
 /** One log → parse → per-match records. A thin shell; the real parsing
- *  integration is verified in the T8 live run. */
+ *  integration is verified in the T8 live run. The records are detached from
+ *  `logText` (see detachStrings) so a caller can keep many logs' records. */
 export function buildPerMatchRecords(
   logText: string,
   gates: KeystoneGate[],
@@ -123,5 +148,5 @@ export function buildPerMatchRecords(
   });
   for (const line of logText.split("\n")) parser.push(line);
   parser.end();
-  return combats.flatMap((c) => combatToRecords(c, gates));
+  return combats.flatMap((c) => combatToRecords(c, gates)).map(detachStrings);
 }

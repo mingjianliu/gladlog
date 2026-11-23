@@ -3,7 +3,7 @@ import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import type { KeystoneGate } from "./keystoneGates";
-import { combatToRecords } from "./perMatchRecord";
+import { combatToRecords, detachStrings } from "./perMatchRecord";
 
 const SHAMAN = CombatUnitSpec.Shaman_Restoration;
 const WARRIOR = CombatUnitSpec.Warrior_Arms;
@@ -167,5 +167,23 @@ describe("combatToRecords buildGroup", () => {
     combat.units.h1.info.talents.push({ id1: 90000, id2: 123290, count: 1 });
     const recs = combatToRecords(combat, [discGate]);
     expect(recs[0].buildGroup).toBe("Oracle");
+  });
+});
+
+describe("detachStrings", () => {
+  it("返回结构相同的深拷贝:NaN、undefined、null、布尔、嵌套数组都原样保留", () => {
+    const text = "x".repeat(64) + "Restoration Shaman" + "y".repeat(64);
+    const rec = {
+      spec: text.slice(64, 82),
+      metrics: { a: NaN, b: 0, c: -1.5, d: undefined, e: null, f: true },
+      crisisEvents: [text.slice(10, 40), "short"],
+      rotations: { opener: [], coreSequences: [[text.slice(0, 20)]] },
+    };
+    const out = detachStrings(rec);
+    expect(out).toStrictEqual(rec);
+    expect(out).not.toBe(rec);
+    expect(out.metrics).not.toBe(rec.metrics);
+    expect(Number.isNaN(out.metrics.a)).toBe(true);
+    expect(Object.keys(out.metrics)).toEqual(Object.keys(rec.metrics));
   });
 });
