@@ -44,7 +44,7 @@
 2. On the **Settings** page at the top:
    - **Backend** → choose **Claude CLI (local)**. No API key needed.
    - Leave the command blank (it runs `where claude` for you); only fill in a full path if you installed it somewhere unusual.
-   - **Coach reply language** → Chinese or English, your choice.
+   - **Language** (the first item on the page) → Chinese or English. You already picked one in the installer; change it here any time.
 
 ## 4. Turn on combat logging in-game (critical!)
 

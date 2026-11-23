@@ -6,6 +6,16 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## Unreleased
+
+### Desktop
+
+- **One language setting for the whole app** (Chinese / English): the interface, error messages and dialogs, and the AI replies all follow it, and switching takes effect at once. It sits at the top of the settings page; the Windows installer asks for it, and otherwise the app asks once at first launch.
+- **Existing users are asked to choose a language once** on the first launch after upgrading: the old "Coach reply language" setting is not carried over. (An install run by hand from the installer uses the language picked there.)
+- The language toggle on the report's AI card is gone; the card follows the app language. An AI result generated in the other language is still shown, labelled, and a match's analysis card offers to re-analyze it in the current language.
+- In English, spell names from a Chinese game client are shown under their official English names.
+- The match data sent to the model is unchanged and stays in English in both languages; in Chinese mode every prompt is byte-for-byte what it was. Some analysis phrases inside the Chinese report's sentences are still in English (tracked as a GitHub issue).
+
 ## v0.1.44 (2026-11-21)
 
 The fourth pipeline wave, PROMPT_VERSION 574 → 662: 88 batches between B102 and B191, one ticket per batch. The tickets came from round 14 of the fact audit, round 13's same-match re-audit and the leftovers of the earlier waves; each fact fix carries its own deterministic class check on the 605-file capture. User rulings set the scope: Champion's Spear is an offensive cooldown; Greater Invisibility reduces no damage; Aura Mastery under Concentration Aura is a silence / interrupt immunity, not a wall; a burst window is answered only by a press that reached the pressured unit — another unit's own self-only wall or healing cooldown is not an answer, nor is a self-cast Master's Call; a burst window cut short by the pressured unit's own death is judged when the death is 3 s or more after it opens; and the `N purgeable buffs on it then` count is read at its own instant, not on the rendered second — a fifth signed exception to the Shared-Predicate Rule. On the desktop, the built app's two background workers run again, documents stored by an older parser get their round start instants back, and the AI tab's first entry freezes about half as long.

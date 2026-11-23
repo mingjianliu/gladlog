@@ -67,7 +67,7 @@ Cross-match self-learning. Every analysis result is recorded in a local learning
 It needs history: aggregation only starts once you have analyzed more than 5 matches, and confirming a pattern requires 5 occurrences within the last 20. Being empty on a fresh install is expected — analyze a few more matches.
 
 **Can it reply in English?**
-Yes. Use the CN/EN toggle next to the analyze button; results for each language are cached separately.
+Yes. Set **Language** to English at the top of the settings page: the interface and the AI replies both switch. Results for each language are cached separately (see the [user guide](user-guide.md#language)).
 
 ## Privacy
 

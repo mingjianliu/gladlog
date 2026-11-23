@@ -11,6 +11,16 @@
 
 **Importing historical logs**: use **Import historical logs…** on the settings page or in the first-run wizard → select as many old `WoWCombatLog*.txt` files as you like → they are parsed into the library automatically. Re-importing is safe; matches are deduplicated.
 
+## Language
+
+gladlog runs in Chinese or English, and one setting decides which.
+
+- **Choosing it**: the Windows installer asks for a language and the app starts in it. Otherwise — on macOS, or after an automatic update — the app asks once at first launch (the choice your system language suggests is highlighted). Upgrading from an older version asks once too: the old "Coach reply language" setting is not carried over.
+- **Changing it**: **Language** sits at the very top of the settings page. A click takes effect at once; no restart.
+- **What follows it**: the whole interface, error messages and dialogs, and the AI's replies (structured analysis, window analysis, Ask the coach). In English, spell names logged by a Chinese game client are shown under their official English names; a spell the English table doesn't know keeps the name from the log.
+- **What doesn't**: the match data the AI reads is always in English, whatever the language — so switching never changes what the model is told about the match. In Chinese, some short analysis phrases inside the report's sentences are still in English for now (tracked as a GitHub issue). Player names stay as they are.
+- **AI results from the other language**: results are cached per language. A result generated in the other language is still shown, with a label ("Analyzed in Chinese" in English, "英文分析" in Chinese); a match's analysis card also offers a **Re-analyze in English** (or 用中文重新分析) button, which runs a fresh analysis in the current language. Lists that mix many matches (statistics, notebook, learned rules, coach chat history) only carry the label.
+
 ## Match list
 
 Each row shows the win/loss, the arena name, the duration, the average team rating, and the spec icons for both teams. The filter bar at the top filters by win/loss, bracket, and spec (matching either team).
@@ -40,7 +50,7 @@ The arena is on the left (real minimap, movement trails, obstacles), the GCD swi
 
 **Every finding is verifiable**: "Evidence" highlights the events it cites on the timeline, and "▶ replay this moment" jumps straight to that second in the replay. The AI is only allowed to cite events that actually occurred in the match; findings with citations that don't check out are discarded automatically.
 
-- **Language**: the CN/EN toggle next to the analyze button. Results for each language are cached separately, so switching is instant.
+- **Language**: AI replies follow the app language (see [Language](#language)); the toggle that used to sit next to the analyze button is gone. Results for each language are cached separately.
 - **Follow-up marks**: each finding can be marked "✓ fixed" or "↻ still doing it". The "most frequent mistakes" section on the statistics page aggregates these marks.
 
 ## Statistics view
@@ -52,8 +62,8 @@ Three time ranges — today / 7 days / all: match count and win rate, rating cur
 - **WoW folder**: changing it restarts the watcher.
 - **AI backend**: five options — the Anthropic API and the DeepSeek API (both need a key), and the Claude, agy, and Codex CLIs (local, no key; the command path is auto-detected, and you can enter it by hand if it lives somewhere unusual). Each backend has its own model dropdown.
 - **API key**: keys are encrypted on disk and the UI never shows more than "configured". You can clear one at any time. Note that with an API backend the match summary goes to that provider's servers, whereas the local CLIs keep the call on your machine (apart from whatever the CLI itself does).
-- **Coach reply language**: Chinese or English.
-- **AI self-review** (off by default): after an analysis, the same model checks its own findings once more against the match data — it corrects or removes statements the data does not support and never adds new ones. It costs one extra AI call per analysis (roughly double the AI usage, 1–2 minutes longer). A result that went through it says "已 AI 自查" above the findings; if the check fails, you get the original findings marked "未自查". Turning it on or off makes already-analyzed matches show as not analyzed until you re-run them.
+- **Language** (top of the page): Chinese or English, for the interface and the AI replies alike (see [Language](#language)).
+- **AI self-review** (off by default): after an analysis, the same model checks its own findings once more against the match data — it corrects or removes statements the data does not support and never adds new ones. It costs one extra AI call per analysis (roughly double the AI usage, 1–2 minutes longer). A result that went through it says "AI self-reviewed" above the findings; if the check fails, you get the original findings marked "Not self-reviewed". Turning it on or off makes already-analyzed matches show as not analyzed until you re-run them.
 
 ## Troubleshooting
 

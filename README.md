@@ -10,7 +10,7 @@ A desktop app for analyzing World of Warcraft arena combat logs: it parses your 
 
 - **Match report** — damage / healing / damage-taken meters, whole-team HP curves, and tables for interrupts, crowd control, and dispels. Click a death marker for a 10-second recap of what killed you (the incoming damage stream, defensives you had available but never pressed, externals your teammates never sent).
 - **2D replay** — positioning replayed on the real arena minimap: health bars with HP numbers, true cast bars (gold = completed, red = kicked), obstacles, a dampening indicator, and GCD swimlanes (one lane of ability usage per player, with spell icons). Drive it with space and the arrow keys, at 0.5×–4× speed.
-- **AI review** (optional) — structured findings where every conclusion cites a verifiable match event. Click "replay this moment" to jump straight to that second and see it for yourself. Replies in Chinese or English; each finding can be marked "fixed" or "still doing it".
+- **AI review** (optional) — structured findings where every conclusion cites a verifiable match event. Click "replay this moment" to jump straight to that second and see it for yourself. Replies in Chinese or English, following the app's language setting (the whole interface is available in both); each finding can be marked "fixed" or "still doing it".
 - **Statistics** — across matches: win rate, rating curve, win rate against each enemy composition, win rate by map, and an aggregate of your most frequent mistakes.
 - **Honesty is a hard requirement** — from the parser differential oracle, through the prompt coverage gates, to the UI data-faithfulness tests, the whole chain has deterministic verification (see the [verifiability roadmap](docs/verifiability-roadmap.md)).
 
