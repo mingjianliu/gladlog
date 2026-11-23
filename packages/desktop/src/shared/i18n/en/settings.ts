@@ -59,6 +59,11 @@ export const enSettings = {
     "Local CLIs (Claude/agy/Codex/CodeBuddy) don't go through the network; DeepSeek is the official API: it needs a key and data leaves your machine",
   "settings.model.label": "Model",
   "settings.model.saved": "Model saved",
+  "settings.model.option.hy3": "Hy3 (free)",
+  "settings.model.option.glm5vTurbo": "GLM-5v-Turbo (x0.71, vision)",
+  "settings.model.option.deepseekV4Flash": "DeepSeek-V4-Flash (x0.17, fast)",
+  "settings.model.option.deepseekChat": "DeepSeek V3 (chat, fast)",
+  "settings.model.option.deepseekReasoner": "DeepSeek R1 (reasoner, slow)",
   "settings.command.label": "Command path",
   "settings.command.placeholderAgy":
     "Leave empty to auto-detect, or enter the full path to the agy executable (.mjs uses the old wrapper script)",

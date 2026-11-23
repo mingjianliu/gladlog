@@ -54,6 +54,12 @@ export const zhSettings = {
     "本地 CLI(Claude/agy/Codex/CodeBuddy)不走网络;DeepSeek 为官方 API,需 key 且数据出机",
   "settings.model.label": "模型",
   "settings.model.saved": "模型已保存",
+  // Model option labels that carry a translatable note (shared/aiModels.ts).
+  "settings.model.option.hy3": "Hy3(免费)",
+  "settings.model.option.glm5vTurbo": "GLM-5v-Turbo(x0.71,视觉)",
+  "settings.model.option.deepseekV4Flash": "DeepSeek-V4-Flash(x0.17,快)",
+  "settings.model.option.deepseekChat": "DeepSeek V3(chat,快)",
+  "settings.model.option.deepseekReasoner": "DeepSeek R1(reasoner,慢)",
   "settings.command.label": "命令路径",
   "settings.command.placeholderAgy":
     "留空自动检测;或填 agy 可执行文件完整路径(.mjs 走旧包装脚本)",

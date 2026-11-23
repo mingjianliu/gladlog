@@ -1,10 +1,15 @@
-import { AI_MODELS, type AiBackend } from "../../../../shared/aiModels";
+import {
+  AI_MODELS,
+  type AiBackend,
+  modelLabel,
+} from "../../../../shared/aiModels";
 // Must be imported from analysisSlots (zero fs/path dependencies), never from
 // analysisCache — that module starts with `import { join } from "path"`, so
 // importing it from the renderer drags a Node built-in into the browser bundle
 // and only blows up at electron-vite build time (see the header comment in
 // analysisCache.ts; presubmit caught this once).
 import { splitSlotKey } from "../../../../shared/analysisSlots";
+import type { Language } from "../../../../shared/i18n";
 
 /**
  * Slot key → backend display name. This lives in its own small module (rather
@@ -32,10 +37,10 @@ const BACKEND_LABELS: Record<AiBackend, string> = {
  * unknown values through unchanged (hand-edited config or a future model must
  * not break).
  */
-export function slotLabel(key: string): string {
+export function slotLabel(key: string, lang: Language = "zh"): string {
   const split = splitSlotKey(key);
   if (!split) return key;
-  return backendModelLabel(split.backend, split.model);
+  return backendModelLabel(split.backend, split.model, lang);
 }
 
 /**
@@ -44,10 +49,12 @@ export function slotLabel(key: string): string {
  * 生产反馈) show "which backend/model is running right now" and share this
  * exact lookup with slotLabel — one fact, one predicate.
  */
-export function backendModelLabel(backend: string, model: string): string {
+export function backendModelLabel(
+  backend: string,
+  model: string,
+  lang: Language = "zh",
+): string {
   const backendLabel = BACKEND_LABELS[backend as AiBackend] ?? backend;
-  const modelLabel =
-    AI_MODELS[backend as AiBackend]?.find((m) => m.id === model)?.label ??
-    model;
-  return `${backendLabel} · ${modelLabel}`;
+  const option = AI_MODELS[backend as AiBackend]?.find((m) => m.id === model);
+  return `${backendLabel} · ${option ? modelLabel(option, lang) : model}`;
 }

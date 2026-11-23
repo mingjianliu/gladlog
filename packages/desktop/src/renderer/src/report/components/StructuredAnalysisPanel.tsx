@@ -872,7 +872,7 @@ export function StructuredAnalysisPanel({
                         role="menuitem"
                         onClick={() => handleSelectModel(b, m.id)}
                       >
-                        {slotLabel(`${b}:${m.id}`)}
+                        {slotLabel(`${b}:${m.id}`, lang)}
                         {isDefault ? t("report.ai.default") : ""}
                       </button>
                     );
@@ -981,7 +981,7 @@ export function StructuredAnalysisPanel({
                   className={slot.key === displayedSlotKey ? "active" : ""}
                   onClick={() => handleSelectSlot(slot.key)}
                 >
-                  {slotLabel(slot.key)}
+                  {slotLabel(slot.key, lang)}
                   {slot.stale && (
                     <span className="rpt-slot-stale">
                       {t("report.ai.staleTag")}
@@ -1093,7 +1093,11 @@ export function StructuredAnalysisPanel({
           {[
             runMeta?.backend && runMeta?.model
               ? t("report.ai.runningWith", {
-                  model: backendModelLabel(runMeta.backend, runMeta.model),
+                  model: backendModelLabel(
+                    runMeta.backend,
+                    runMeta.model,
+                    lang,
+                  ),
                 })
               : t("report.ai.running"),
             elapsedS != null

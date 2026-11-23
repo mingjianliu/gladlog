@@ -5,6 +5,7 @@ import type { GladlogSettings } from "../../../main/settingsStore";
 import type { UpdateState } from "../../../main/updater";
 import {
   AI_MODELS,
+  modelLabel,
   type AiBackend,
   BACKEND_CLI_TOOL,
   resolveAiModel,
@@ -600,7 +601,7 @@ export function SettingsPanel() {
           >
             {AI_MODELS[settings.aiBackend ?? "anthropic"].map((m) => (
               <option key={m.id} value={m.id}>
-                {m.label}
+                {modelLabel(m, lang)}
               </option>
             ))}
           </select>

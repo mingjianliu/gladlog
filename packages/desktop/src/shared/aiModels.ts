@@ -11,6 +11,7 @@
  * from renderer into main/* drags fs/path into the renderer bundle (the v0.0.4
  * packaging incident), and it only blows up under electron-vite build.
  */
+import { type Language, type MessageKey, translate } from "./i18n/index";
 
 export type AiBackend =
   "anthropic" | "claudeCli" | "agy" | "codex" | "codebuddy" | "deepseek";
@@ -27,7 +28,10 @@ interface AiModelOption {
   /** The actual value handed to the backend: the Anthropic API `model`, or the
    * CLI's --model argument. */
   id: string;
-  label: string;
+  /** Display name: a plain string when it reads the same in every UI
+   * language (brand + version), a dictionary key when it carries a
+   * translatable note. Read it through `modelLabel`. */
+  label: string | { key: MessageKey };
   /**
    * The full name `--model` requires when invoking agy directly (matching the
    * `agy models` listing verbatim). label is display-only and may be changed
@@ -109,7 +113,7 @@ export const AI_MODELS: Record<AiBackend, AiModelOption[]> = {
   // 直接传给 --model;label 后缀的 (xN) 是该模型相对基础模型的 credits 倍率,
   // 仅供用户选型参考,不影响调用。
   codebuddy: [
-    { id: "hy3", label: "Hy3(免费)" },
+    { id: "hy3", label: { key: "settings.model.option.hy3" } },
     { id: "hy3-x", label: "Hy3-X(x0.05)" },
     // hy4 系列 2026-08 上线,credits 倍率待 /model 选择器确认,故 label 暂不标注 (xN)。
     { id: "hy4-preview", label: "Hy4-Preview" },
@@ -117,22 +121,42 @@ export const AI_MODELS: Record<AiBackend, AiModelOption[]> = {
     { id: "glm-5.3", label: "GLM-5.3(x0.79)" },
     { id: "glm-5.2", label: "GLM-5.2(x0.79)" },
     { id: "glm-5.1", label: "GLM-5.1(x0.79)" },
-    { id: "glm-5v-turbo", label: "GLM-5v-Turbo(x0.71,视觉)" },
+    {
+      id: "glm-5v-turbo",
+      label: { key: "settings.model.option.glm5vTurbo" },
+    },
     { id: "minimax-m3", label: "MiniMax-M3(x0.25)" },
     { id: "minimax-m2.7", label: "MiniMax-M2.7(x0.19)" },
     { id: "kimi-k3-1", label: "Kimi-K3(x1.62)" },
     { id: "kimi-k2.7", label: "Kimi-K2.7-Code(x0.57)" },
     { id: "kimi-k2.6", label: "Kimi-K2.6(x0.52)" },
     { id: "deepseek-v4-pro", label: "DeepSeek-V4-Pro(x0.51)" },
-    { id: "deepseek-v4-flash", label: "DeepSeek-V4-Flash(x0.17,快)" },
+    {
+      id: "deepseek-v4-flash",
+      label: { key: "settings.model.option.deepseekV4Flash" },
+    },
   ],
   // DeepSeek's official API (OpenAI-compatible; not local — data leaves the
   // machine). id = the API model name.
   deepseek: [
-    { id: "deepseek-chat", label: "DeepSeek V3(chat,快)" },
-    { id: "deepseek-reasoner", label: "DeepSeek R1(reasoner,慢)" },
+    {
+      id: "deepseek-chat",
+      label: { key: "settings.model.option.deepseekChat" },
+    },
+    {
+      id: "deepseek-reasoner",
+      label: { key: "settings.model.option.deepseekReasoner" },
+    },
   ],
 };
+
+/** A model option's display name in the given UI language. */
+export function modelLabel(
+  m: Pick<AiModelOption, "label">,
+  lang: Language = "zh",
+): string {
+  return typeof m.label === "string" ? m.label : translate(lang, m.label.key);
+}
 
 /** Per-backend default when no model has been explicitly selected.
  * Anthropic backends default to Opus 5.5 since 2026-09-23 (user ruling after the

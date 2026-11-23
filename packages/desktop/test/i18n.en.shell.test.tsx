@@ -129,9 +129,6 @@ function leaks(root: Element): string[] {
   // The language row is bilingual by design (§6.11b): "语言 / Language" and
   // each option's endonym.
   clone.querySelector('[data-testid="settings-language"]')?.remove();
-  // Model option labels come from shared/aiModels.ts (AI_MODELS, still in
-  // PENDING_FILES; shared with the AI panel and migrated with it).
-  clone.querySelector('select[aria-label="Model"]')?.remove();
   if (CJK_LEAK.test(clone.textContent ?? ""))
     out.push(`text: ${clone.textContent}`);
   for (const el of clone.querySelectorAll("*")) {
@@ -274,6 +271,22 @@ describe("英文模式:设置页不漏中文(语言行除外)", () => {
       expect(leaks(container)).toEqual([]);
     });
   }
+
+  it("模型下拉的标注走词典(DeepSeek)", async () => {
+    install({ aiBackend: "deepseek" });
+    render(
+      <LangProvider>
+        <SettingsPanel />
+      </LangProvider>,
+    );
+    const select = (await screen.findByRole("combobox", {
+      name: "Model",
+    })) as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      "DeepSeek V3 (chat, fast)",
+      "DeepSeek R1 (reasoner, slow)",
+    ]);
+  });
 
   it("托管 OBS 未安装:下载说明", async () => {
     install(

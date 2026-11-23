@@ -5,6 +5,7 @@ import {
   AI_DEFAULT_MODEL,
   AI_MODELS,
   isKnownModel,
+  modelLabel,
   resolveAiModel,
 } from "./aiModels";
 
@@ -21,6 +22,17 @@ describe("aiModels catalog", () => {
       const ids = AI_MODELS[backend].map((m) => m.id);
       expect(new Set(ids).size).toBe(ids.length);
     }
+  });
+});
+
+describe("modelLabel", () => {
+  it("纯字符串标签两种语言相同;带标注的走词典,zh 原样", () => {
+    const opus = AI_MODELS.anthropic.find((m) => m.id === "claude-opus-5-5")!;
+    expect(modelLabel(opus, "zh")).toBe("Claude Opus 5.5");
+    expect(modelLabel(opus, "en")).toBe("Claude Opus 5.5");
+    const chat = AI_MODELS.deepseek.find((m) => m.id === "deepseek-chat")!;
+    expect(modelLabel(chat)).toBe("DeepSeek V3(chat,快)");
+    expect(modelLabel(chat, "en")).toBe("DeepSeek V3 (chat, fast)");
   });
 });
 

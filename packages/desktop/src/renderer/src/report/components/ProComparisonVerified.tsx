@@ -472,7 +472,9 @@ export function ProComparisonVerified({
             {state === "running"
               ? [
                   t("report.pro.comparing"),
-                  aiCfg ? backendModelLabel(aiCfg.backend, aiCfg.model) : null,
+                  aiCfg
+                    ? backendModelLabel(aiCfg.backend, aiCfg.model, lang)
+                    : null,
                   elapsedS != null
                     ? t("report.pro.elapsed", { t: fmtElapsed(elapsedS) })
                     : null,

@@ -22,7 +22,6 @@ export const PENDING_FILES: readonly string[] = [
   "packages/desktop/src/main/updater.ts",
   "packages/desktop/src/renderer/src/components/DevPanel.tsx",
   "packages/desktop/src/renderer/src/components/StatsDashboard.tsx",
-  "packages/desktop/src/shared/aiModels.ts",
 ];
 
 // The 92-file list as first generated (Task 4). Frozen: never edit it.
