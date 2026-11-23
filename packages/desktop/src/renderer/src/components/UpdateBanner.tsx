@@ -4,6 +4,7 @@ import type { UpdateState } from "../../../main/updater";
 import type { GladlogApi } from "../../../preload/api";
 import { getBatchStatus, subscribeBatch } from "../batch/batchAnalysis";
 import { bridge } from "../bridge";
+import { useT } from "../i18n/LangProvider";
 import {
   dismissVersionNotice,
   fetchUpdateState,
@@ -52,6 +53,7 @@ function recorderSurface(): GladlogApi["recorder"] | undefined {
  * hand-copied predicate CLAUDE.md forbids.
  */
 export function UpdateBanner() {
+  const { t } = useT();
   const [state, setState] = useState<UpdateState | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -87,9 +89,9 @@ export function UpdateBanner() {
   );
 
   const busyReason = recording
-    ? "正在录制,退出时会自动更新"
+    ? t("update.busy.recording")
     : analyzing
-      ? "正在分析,退出时会自动更新"
+      ? t("update.busy.analyzing")
       : null;
 
   const [installRequested, setInstallRequested] = useState(false);
@@ -147,11 +149,11 @@ export function UpdateBanner() {
           clearUpdatedTo();
         }}
       >
-        已更新到 {updatedTo} · 更新内容
+        {t("update.updatedTo", { version: updatedTo })}
       </button>
       <button
         className="upd-x"
-        aria-label="关闭更新提示"
+        aria-label={t("update.dismissAria")}
         onClick={clearUpdatedTo}
       >
         ✕
@@ -162,16 +164,19 @@ export function UpdateBanner() {
   const live =
     state?.phase === "downloading" ? (
       <span className="upd-line">
-        正在下载 {state.version} · {Math.round(state.percent)}%
+        {t("update.downloading", {
+          version: state.version,
+          percent: Math.round(state.percent),
+        })}
       </span>
     ) : state?.phase === "ready" ? (
       dismissed ? (
         <button className="upd-chip" onClick={() => setDismissed(false)}>
-          新版 {state.version} 已就绪
+          {t("update.ready", { version: state.version })}
         </button>
       ) : (
         <span className="upd-banner" role="status">
-          <span>新版 {state.version} 已就绪</span>
+          <span>{t("update.ready", { version: state.version })}</span>
           <button
             className="upd-primary"
             // installRequested also disables the button, not just busyReason:
@@ -187,13 +192,13 @@ export function UpdateBanner() {
               void requestUpdateInstall();
             }}
           >
-            立即重启
+            {t("update.restartNow")}
           </button>
-          <button onClick={() => setDismissed(true)}>稍后</button>
+          <button onClick={() => setDismissed(true)}>
+            {t("update.later")}
+          </button>
           {installRequested ? (
-            <span className="upd-note">
-              正在安装,请稍候;长时间无反应请手动退出 gladlog 后重新打开
-            </span>
+            <span className="upd-note">{t("update.installing")}</span>
           ) : (
             busyReason && <span className="upd-note">{busyReason}</span>
           )}

@@ -9,7 +9,12 @@ import {
   BACKEND_CLI_TOOL,
   resolveAiModel,
 } from "../../../shared/aiModels";
-import { bilingual, type Language, translate } from "../../../shared/i18n";
+import {
+  bilingual,
+  type Language,
+  type TFn,
+  translate,
+} from "../../../shared/i18n";
 import { OBS_ZIP_BYTES, OBS_ZIP_URL } from "../../../shared/obsAsset";
 import {
   API_KEY_REDACTED,
@@ -46,12 +51,14 @@ type SettingsGroup = "general" | "game" | "ui" | "ai" | "recording" | "about";
  *  .setFixedTime) but pins neither the timezone nor the locale, so an absolute
  *  timestamp would drift between environments while a relative one only
  *  depends on the pinned clock. */
-function relTime(at: number, now: number): string {
+function relTime(at: number, now: number, t: TFn): string {
   const d = Math.max(0, now - at);
-  if (d < 60_000) return "刚刚";
-  if (d < 3_600_000) return `${Math.floor(d / 60_000)} 分钟前`;
-  if (d < 86_400_000) return `${Math.floor(d / 3_600_000)} 小时前`;
-  return `${Math.floor(d / 86_400_000)} 天前`;
+  if (d < 60_000) return t("update.rel.justNow");
+  if (d < 3_600_000)
+    return t("update.rel.minutes", { n: Math.floor(d / 60_000) });
+  if (d < 86_400_000)
+    return t("update.rel.hours", { n: Math.floor(d / 3_600_000) });
+  return t("update.rel.days", { n: Math.floor(d / 86_400_000) });
 }
 
 /** One line of copy per update state. An exhaustive switch: a new phase in
@@ -60,20 +67,24 @@ function describeUpdate(
   s: UpdateState,
   checkedOnce: boolean,
   now: number,
+  t: TFn,
 ): string {
   switch (s.phase) {
     case "disabled":
       return s.reason === "platform"
-        ? "仅 Windows 安装版支持自动更新"
+        ? t("update.disabled.platform")
         : s.reason === "portable"
-          ? "绿色版(zip)不自动更新,请改用安装版"
-          : "开发模式不检查更新";
+          ? t("update.disabled.portable")
+          : t("update.disabled.dev");
     case "checking":
-      return "正在检查…";
+      return t("update.checking");
     case "downloading":
-      return `正在下载 ${s.version} · ${Math.round(s.percent)}%`;
+      return t("update.downloading", {
+        version: s.version,
+        percent: Math.round(s.percent),
+      });
     case "ready":
-      return `新版 ${s.version} 已就绪,退出时安装`;
+      return t("update.readyOnQuit", { version: s.version });
     case "error":
       // No "检查失败:" prefix: this message also covers the install watchdog
       // (src/main/updater.ts's "更新安装器未能接管…"), which is not a check
@@ -81,8 +92,11 @@ function describeUpdate(
       return s.message;
     case "idle":
       return s.lastCheckedAt == null
-        ? "从未检查"
-        : `${checkedOnce ? "已是最新 · " : ""}上次检查:${relTime(s.lastCheckedAt, now)}`;
+        ? t("update.neverChecked")
+        : (checkedOnce ? t("update.upToDatePrefix") : "") +
+            t("update.lastChecked", {
+              when: relTime(s.lastCheckedAt, now, t),
+            });
   }
 }
 
@@ -105,6 +119,8 @@ export function SettingsPanel() {
   const [saved, setSaved] = useState<{
     group: SettingsGroup;
     note: string;
+    /** The save did not persist: shown as an error, not a ✓. */
+    failed?: boolean;
   } | null>(null);
   const [version, setVersion] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateState | null>(null);
@@ -174,7 +190,7 @@ export function SettingsPanel() {
     try {
       const r = await bridge().recorder.installObs();
       if (!r.ok) {
-        setInstallError(r.error ?? "安装失败");
+        setInstallError(r.error ?? t("recorder.install.failed"));
         return;
       }
       const state = await bridge().recorder.getObsInstallState();
@@ -191,22 +207,22 @@ export function SettingsPanel() {
     connected: boolean;
     recording: boolean;
   }): string {
-    if (!s.enabled) return "未启用";
-    if (s.recording) return "正在录制";
-    if (!s.connected) return "未连接";
-    return "已就绪";
+    if (!s.enabled) return t("recorder.status.disabled");
+    if (s.recording) return t("recorder.status.recording");
+    if (!s.connected) return t("recorder.status.notConnected");
+    return t("recorder.status.ready");
   }
 
   function installPhaseLabel(phase: ObsInstallProgress["phase"]): string {
     switch (phase) {
       case "downloading":
-        return "下载中";
+        return t("recorder.install.phase.downloading");
       case "verifying":
-        return "校验中";
+        return t("recorder.install.phase.verifying");
       case "extracting":
-        return "解压中";
+        return t("recorder.install.phase.extracting");
       case "done":
-        return "完成";
+        return t("recorder.install.phase.done");
     }
   }
 
@@ -260,7 +276,7 @@ export function SettingsPanel() {
     return subscribeUpdateState(setUpdate);
   }, []);
 
-  if (!settings) return <div className="settings">加载中…</div>;
+  if (!settings) return <div className="settings">{t("settings.loading")}</div>;
 
   const save = async (
     partial: Partial<GladlogSettings>,
@@ -276,11 +292,15 @@ export function SettingsPanel() {
   const pickLang = async (l: Language) => {
     // Through the provider: every consumer switches at once, and setLang
     // persists the choice itself.
-    await setLang(l);
-    setSettings((s) => (s ? { ...s, language: l } : s));
+    const persisted = await setLang(l);
+    if (persisted) setSettings((s) => (s ? { ...s, language: l } : s));
     setSaved({
       group: "general",
-      note: translate(l, "settings.language.saved"),
+      note: translate(
+        l,
+        persisted ? "settings.language.saved" : "settings.language.saveFailed",
+      ),
+      failed: !persisted,
     });
     setTimeout(() => setSaved(null), 2000);
   };
@@ -309,29 +329,37 @@ export function SettingsPanel() {
   const groupHead = (label: string, group: SettingsGroup) => (
     <span className="settings-group-head">
       <span className="rpt-card-label">{label}</span>
-      {saved?.group === group && (
-        <span className="settings-saved-inline">✓ {saved.note}</span>
-      )}
+      {saved?.group === group &&
+        (saved.failed ? (
+          <span className="settings-saved-inline settings-saved-failed">
+            ✗ {saved.note}
+          </span>
+        ) : (
+          <span className="settings-saved-inline">✓ {saved.note}</span>
+        ))}
     </span>
   );
 
   const updateAvailable = hasUpdateSurface();
   const updateNote = !updateAvailable
-    ? "此环境不提供自动更新"
+    ? t("settings.update.unavailable")
     : update == null
       ? "…"
-      : describeUpdate(update, checkedOnce, Date.now());
+      : describeUpdate(update, checkedOnce, Date.now(), t);
   // Computed from the single source of truth (shared/updateSchedule.ts) rather
   // than hand-written numbers: renderer may only *value*-import a leaf module,
   // because main/updater.ts is a main-process module and renderer code must
   // stay on its side of that layer boundary — and main/updater.ts builds its
   // setTimeout/setInterval pair from these same two constants — so this
   // sentence can never drift from what the timer actually does.
-  const scheduleNote = `启动 ${FIRST_CHECK_DELAY_MS / 1000} 秒后检查一次,之后每 ${CHECK_INTERVAL_MS / 3_600_000} 小时一次;下载在后台进行,退出时安装。`;
+  const scheduleNote = t("settings.update.schedule", {
+    delayS: FIRST_CHECK_DELAY_MS / 1000,
+    hours: CHECK_INTERVAL_MS / 3_600_000,
+  });
 
   return (
     <div className="settings" data-testid="settings-panel">
-      <h2>设置</h2>
+      <h2>{t("settings.title")}</h2>
 
       {/* Language sits on top as a general setting (spec §6.11b); its label
           and options read in both languages so a user who landed in the
@@ -352,11 +380,11 @@ export function SettingsPanel() {
       </section>
 
       <section className="dash-card">
-        {groupHead("游戏", "game")}
+        {groupHead(t("settings.group.game"), "game")}
         <div className="settings-grid">
-          <span className="settings-k">WoW 目录</span>
+          <span className="settings-k">{t("settings.wowDir.label")}</span>
           <span className="settings-v" title={settings.wowDirectory ?? ""}>
-            {settings.wowDirectory ?? "未设置 —— 选择后自动开始监控战斗日志"}
+            {settings.wowDirectory ?? t("settings.wowDir.unset")}
           </span>
           <button
             onClick={() =>
@@ -368,29 +396,26 @@ export function SettingsPanel() {
                 })
             }
           >
-            选择目录…
+            {t("settings.chooseFolder")}
           </button>
 
-          <span className="settings-k">历史日志</span>
-          <span className="settings-v">重复导入按场次自动去重</span>
+          <span className="settings-k">{t("settings.history.label")}</span>
+          <span className="settings-v">{t("settings.history.note")}</span>
           <ImportButton />
         </div>
       </section>
 
       <section className="dash-card">
-        {groupHead("界面", "ui")}
+        {groupHead(t("settings.group.ui"), "ui")}
         <div className="settings-grid">
-          <span className="settings-k">界面缩放</span>
+          <span className="settings-k">{t("settings.uiZoom.label")}</span>
           {/* Deliberately short: .settings-v is nowrap + ellipsis, and at the
               1280 tier this column is only ~265px, so a longer sentence is
               simply cut off. title restores the rest on hover — same reason
               the 更新 row below carries one. The "why zoom and not a rem
               migration" reasoning belongs in shared/uiZoom.ts, not in copy. */}
-          <span
-            className="settings-v"
-            title="文字与布局同比放大,点击即生效,无需重启。"
-          >
-            文字与布局同比放大,4K/高分屏按需调大
+          <span className="settings-v" title={t("settings.uiZoom.hint")}>
+            {t("settings.uiZoom.note")}
           </span>
           <span className="settings-actions">
             <div className="rpt-mode-seg settings-seg">
@@ -409,7 +434,7 @@ export function SettingsPanel() {
                     // sanitizeSettingsPatch can never drop it and leave the
                     // window zoomed to something that was not persisted.
                     applyUiZoom(z);
-                    void save({ uiZoom: z }, "界面缩放已保存", "ui");
+                    void save({ uiZoom: z }, t("settings.uiZoom.saved"), "ui");
                   }}
                 >
                   {Math.round(z * 100)}%
@@ -421,22 +446,22 @@ export function SettingsPanel() {
       </section>
 
       <section className="dash-card">
-        {groupHead("AI 分析", "ai")}
+        {groupHead(t("settings.group.ai"), "ai")}
         <div className="settings-grid">
           {settings.aiBackend === "anthropic" && (
             <>
               <span className="settings-k">Anthropic API key</span>
               <span className="settings-key-cell">
                 {keySet ? (
-                  <span className="settings-pill-ok">已设置</span>
+                  <span className="settings-pill-ok">{t("settings.key.set")}</span>
                 ) : (
                   <span className="settings-v">
-                    未设置(没有 key 时分析走确定性回退)
+                    {t("settings.anthropicKey.unset")}
                   </span>
                 )}
                 <input
                   type="password"
-                  placeholder={keySet ? "输入以更换" : "sk-ant-…"}
+                  placeholder={keySet ? t("settings.key.replacePlaceholder") : "sk-ant-…"}
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                 />
@@ -447,21 +472,21 @@ export function SettingsPanel() {
                   onClick={() => {
                     void save(
                       { anthropicApiKey: keyInput.trim() },
-                      "API key 已保存",
+                      t("settings.anthropicKey.saved"),
                     );
                     setKeyInput("");
                   }}
                 >
-                  保存
+                  {t("common.save")}
                 </button>
                 {keySet && (
                   <button
                     className="settings-danger"
                     onClick={() =>
-                      void save({ anthropicApiKey: null }, "已清除 key")
+                      void save({ anthropicApiKey: null }, t("settings.key.cleared"))
                     }
                   >
-                    清除
+                    {t("settings.key.clear")}
                   </button>
                 )}
               </span>
@@ -473,77 +498,77 @@ export function SettingsPanel() {
               <span className="settings-k">DeepSeek API key</span>
               <span className="settings-key-cell">
                 {dsKeySet ? (
-                  <span className="settings-pill-ok">已设置</span>
+                  <span className="settings-pill-ok">{t("settings.key.set")}</span>
                 ) : (
                   <span className="settings-v">
-                    未设置(没有 key 时分析走确定性回退;数据会发送到
-                    api.deepseek.com)
+                    {t("settings.deepseekKey.unset")}
                   </span>
                 )}
                 <input
                   type="password"
-                  placeholder={dsKeySet ? "输入以更换" : "sk-…"}
+                  placeholder={dsKeySet ? t("settings.key.replacePlaceholder") : "sk-…"}
                   value={dsKeyInput}
                   onChange={(e) => setDsKeyInput(e.target.value)}
                 />
               </span>
               <span className="settings-actions">
                 <button
-                  aria-label="保存 DeepSeek key"
+                  aria-label={t("settings.deepseekKey.saveAria")}
                   disabled={!dsKeyInput.trim()}
                   onClick={() => {
                     void save(
                       { deepseekApiKey: dsKeyInput.trim() },
-                      "DeepSeek key 已保存",
+                      t("settings.deepseekKey.saved"),
                     );
                     setDsKeyInput("");
                   }}
                 >
-                  保存
+                  {t("common.save")}
                 </button>
                 {dsKeySet && (
                   <button
                     className="settings-danger"
                     onClick={() =>
-                      void save({ deepseekApiKey: null }, "已清除 key")
+                      void save({ deepseekApiKey: null }, t("settings.key.cleared"))
                     }
                   >
-                    清除
+                    {t("settings.key.clear")}
                   </button>
                 )}
               </span>
             </>
           )}
 
-          <span className="settings-k">后端</span>
+          <span className="settings-k">{t("settings.backend.label")}</span>
           <span>
             <select
-              aria-label="AI 后端"
+              aria-label={t("settings.backend.aria")}
               value={settings.aiBackend}
               onChange={(e) =>
                 void save(
                   { aiBackend: e.target.value as AiBackend },
-                  "后端已切换",
+                  t("settings.backend.saved"),
                 )
               }
             >
               <option value="anthropic">Anthropic API</option>
-              <option value="claudeCli">Claude CLI(本地)</option>
-              <option value="agy">agy / Gemini(本地)</option>
-              <option value="codex">Codex(本地)</option>
-              <option value="codebuddy">CodeBuddy CLI(本地)</option>
+              <option value="claudeCli">
+                {t("settings.backend.claudeCli")}
+              </option>
+              <option value="agy">{t("settings.backend.agy")}</option>
+              <option value="codex">{t("settings.backend.codex")}</option>
+              <option value="codebuddy">
+                {t("settings.backend.codebuddy")}
+              </option>
               <option value="deepseek">DeepSeek API</option>
             </select>
-            <span className="settings-note">
-              本地 CLI(Claude/agy/Codex/CodeBuddy)不走网络;DeepSeek 为官方
-              API,需 key 且数据出机
-            </span>
+            <span className="settings-note">{t("settings.backend.note")}</span>
           </span>
           <span />
 
-          <span className="settings-k">模型</span>
+          <span className="settings-k">{t("settings.model.label")}</span>
           <select
-            aria-label="模型"
+            aria-label={t("settings.model.label")}
             value={resolveAiModel(settings)}
             onChange={(e) =>
               void save(
@@ -555,7 +580,7 @@ export function SettingsPanel() {
                     [settings.aiBackend]: e.target.value,
                   },
                 },
-                "模型已保存",
+                t("settings.model.saved"),
               )
             }
           >
@@ -569,20 +594,22 @@ export function SettingsPanel() {
 
           {BACKEND_CLI_TOOL[settings.aiBackend] != null && (
             <>
-              <span className="settings-k">命令路径</span>
+              <span className="settings-k">{t("settings.command.label")}</span>
               <span>
                 <input
                   placeholder={
                     settings.aiBackend === "agy"
-                      ? "留空自动检测;或填 agy 可执行文件完整路径(.mjs 走旧包装脚本)"
-                      : `留空自动检测;或填 ${BACKEND_CLI_TOOL[settings.aiBackend]} 可执行文件完整路径`
+                      ? t("settings.command.placeholderAgy")
+                      : t("settings.command.placeholder", {
+                          tool: BACKEND_CLI_TOOL[settings.aiBackend] ?? "",
+                        })
                   }
                   value={cmdInput}
                   onChange={(e) => setCmdInput(e.target.value)}
                   onBlur={() =>
                     void save(
                       { aiBackendCommand: cmdInput.trim() || null },
-                      "命令路径已保存",
+                      t("settings.command.saved"),
                     )
                   }
                 />
@@ -590,8 +617,12 @@ export function SettingsPanel() {
                   detected?.backend === settings.aiBackend && (
                     <span className="settings-note">
                       {detected.path
-                        ? `已检测到:${detected.path}`
-                        : `未检测到 ${BACKEND_CLI_TOOL[settings.aiBackend]},请安装后重开设置页,或填写完整路径`}
+                        ? t("settings.command.detected", {
+                            path: detected.path,
+                          })
+                        : t("settings.command.notDetected", {
+                            tool: BACKEND_CLI_TOOL[settings.aiBackend] ?? "",
+                          })}
                     </span>
                   )}
               </span>
@@ -599,48 +630,50 @@ export function SettingsPanel() {
             </>
           )}
 
-          <span className="settings-k">自动分析新对局</span>
-          <span className="settings-v">
-            实时监听到新对局入库后,自动用当前默认模型分析(历史导入不触发)。
-          </span>
+          <span className="settings-k">{t("settings.autoAnalyze.label")}</span>
+          <span className="settings-v">{t("settings.autoAnalyze.note")}</span>
           <span className="settings-actions">
             <button
-              aria-label="自动分析新对局"
+              aria-label={t("settings.autoAnalyze.label")}
               onClick={() =>
                 void save(
                   { autoAnalyzeNew: !settings.autoAnalyzeNew },
-                  settings.autoAnalyzeNew ? "已停用自动分析" : "已启用自动分析",
+                  settings.autoAnalyzeNew
+                    ? t("settings.autoAnalyze.offSaved")
+                    : t("settings.autoAnalyze.onSaved"),
                 )
               }
             >
-              {settings.autoAnalyzeNew ? "停用" : "启用"}
+              {settings.autoAnalyzeNew
+                ? t("settings.toggle.disable")
+                : t("settings.toggle.enable")}
             </button>
           </span>
 
-          <span className="settings-k">AI 自查</span>
-          <span className="settings-v">
-            分析出结果后,让同一个模型对照本场数据再核对一遍:改正或删掉没有依据的说法,不新增结论。每次分析多一次
-            AI 调用,用量约翻倍,多等 1–2 分钟。离线实测(Opus,51
-            场):说错的句子少约三分之二。默认关闭;切换后已分析的对局需要重新分析。
-          </span>
+          <span className="settings-k">{t("settings.selfReview.label")}</span>
+          <span className="settings-v">{t("settings.selfReview.note")}</span>
           <span className="settings-actions">
             <button
-              aria-label="AI 自查"
+              aria-label={t("settings.selfReview.label")}
               onClick={() =>
                 void save(
                   { aiSelfReview: !settings.aiSelfReview },
-                  settings.aiSelfReview ? "已关闭 AI 自查" : "已开启 AI 自查",
+                  settings.aiSelfReview
+                    ? t("settings.selfReview.offSaved")
+                    : t("settings.selfReview.onSaved"),
                 )
               }
             >
-              {settings.aiSelfReview ? "关闭" : "开启"}
+              {settings.aiSelfReview
+                ? t("settings.toggle.turnOff")
+                : t("settings.toggle.turnOn")}
             </button>
           </span>
         </div>
       </section>
 
       <section className="dash-card">
-        {groupHead("对局录像(OBS)", "recording")}
+        {groupHead(t("settings.group.recording"), "recording")}
         <div className="settings-grid">
           {recStatus && (
             <div className="set-rec-status">
@@ -660,11 +693,11 @@ export function SettingsPanel() {
             </div>
           )}
 
-          <span className="settings-k">录像模式</span>
+          <span className="settings-k">{t("recorder.mode.label")}</span>
           <div
             className="rpt-mode-seg settings-seg"
             role="radiogroup"
-            aria-label="录像模式"
+            aria-label={t("recorder.mode.label")}
           >
             <button
               type="button"
@@ -672,17 +705,21 @@ export function SettingsPanel() {
               aria-checked={recMode === "managed"}
               className={recMode === "managed" ? "active" : ""}
               disabled={!platformSupported}
-              title={platformSupported ? undefined : "托管录像仅支持 Windows"}
+              title={
+                platformSupported
+                  ? undefined
+                  : t("recorder.mode.managedWindowsOnly")
+              }
               onClick={() =>
                 platformSupported &&
                 void save(
                   { recordingMode: "managed" },
-                  "已切换为托管 OBS",
+                  t("recorder.mode.managedSaved"),
                   "recording",
                 )
               }
             >
-              自动下载并管理 OBS,无需安装
+              {t("recorder.mode.managed")}
             </button>
             <button
               type="button"
@@ -692,28 +729,30 @@ export function SettingsPanel() {
               onClick={() =>
                 void save(
                   { recordingMode: "external" },
-                  "已切换为自有 OBS",
+                  t("recorder.mode.externalSaved"),
                   "recording",
                 )
               }
             >
-              使用我自己的 OBS
+              {t("recorder.mode.external")}
             </button>
           </div>
           <span />
           {!platformSupported && (
             <>
               <span />
-              <span className="settings-note">托管录像仅支持 Windows</span>
+              <span className="settings-note">
+                {t("recorder.mode.managedWindowsOnly")}
+              </span>
               <span />
             </>
           )}
 
-          <span className="settings-k">自动录像</span>
+          <span className="settings-k">{t("recorder.autoRecord.label")}</span>
           <span className="settings-v">
             {recMode === "managed"
-              ? "托管 OBS 由 gladlog 自动下载、配置并跟随对局开关录制,无需手动设置。"
-              : "需 OBS 28+ 并开启 WebSocket 服务器(工具 → WebSocket 服务器设置);录制格式建议 Hybrid MP4。开场自动起录、结束自动停录并关联到对局。"}
+              ? t("recorder.autoRecord.managedNote")
+              : t("recorder.autoRecord.externalNote")}
           </span>
           <span className="settings-actions">
             <button
@@ -721,23 +760,25 @@ export function SettingsPanel() {
                 void save(
                   { recordingEnabled: !settings.recordingEnabled },
                   settings.recordingEnabled
-                    ? "已停用自动录像"
-                    : "已启用自动录像",
+                    ? t("recorder.autoRecord.offSaved")
+                    : t("recorder.autoRecord.onSaved"),
                   "recording",
                 )
               }
             >
-              {settings.recordingEnabled ? "停用" : "启用"}
+              {settings.recordingEnabled
+                ? t("settings.toggle.disable")
+                : t("settings.toggle.enable")}
             </button>
             {recMode === "external" && (
               <button
-                title="读取本机 OBS 的 WebSocket 配置,自动填好地址与密码并试连"
+                title={t("recorder.autoConfig.hint")}
                 onClick={() =>
                   void bridge()
                     .recorder.autoConfig()
                     .then(async (r) => {
                       if (!r.found) {
-                        setObsTest("✗ 未找到本机 OBS 配置(装了 OBS 28+ 吗?)");
+                        setObsTest(t("recorder.autoConfig.notFound"));
                         return;
                       }
                       // Address/password are already persisted on the main side —
@@ -747,65 +788,67 @@ export function SettingsPanel() {
                       setObsUrlInput(next.obsWebsocketUrl ?? "");
                       setObsTest(
                         !r.enabled
-                          ? "已读到配置并保存;但 OBS 的 WebSocket 服务器未启用 —— 去 OBS:工具 → WebSocket 服务器设置 → 勾选启用,再点测试连接"
+                          ? t("recorder.autoConfig.wsDisabled")
                           : r.ok
-                            ? "✓ 已自动配置并连接成功"
-                            : `✗ ${r.error ?? "连接失败"}`,
+                            ? t("recorder.autoConfig.ok")
+                            : `✗ ${r.error ?? t("recorder.connectFailed")}`,
                       );
                     })
                 }
               >
-                自动检测 OBS
+                {t("recorder.autoConfig.button")}
               </button>
             )}
           </span>
 
           {recMode === "external" && (
             <>
-              <span className="settings-k">WebSocket 地址</span>
+              <span className="settings-k">{t("recorder.ws.urlLabel")}</span>
               <input
-                aria-label="OBS WebSocket 地址"
+                aria-label={t("recorder.ws.urlAria")}
                 placeholder={DEFAULT_OBS_WS_URL}
                 value={obsUrlInput}
                 onChange={(e) => setObsUrlInput(e.target.value)}
                 onBlur={() =>
                   void save(
                     { obsWebsocketUrl: obsUrlInput.trim() || null },
-                    "地址已保存",
+                    t("recorder.ws.urlSaved"),
                     "recording",
                   )
                 }
               />
               <span />
 
-              <span className="settings-k">WebSocket 密码</span>
+              <span className="settings-k">{t("recorder.ws.passwordLabel")}</span>
               <span className="settings-key-cell">
                 {settings.obsWebsocketPassword === OBS_PASSWORD_REDACTED ? (
-                  <span className="settings-pill-ok">已设置</span>
+                  <span className="settings-pill-ok">{t("settings.key.set")}</span>
                 ) : (
-                  <span className="settings-v">未设置(OBS 未开鉴权则留空)</span>
+                  <span className="settings-v">
+                    {t("recorder.ws.passwordUnset")}
+                  </span>
                 )}
                 <input
                   type="password"
-                  placeholder="输入以更换"
+                  placeholder={t("settings.key.replacePlaceholder")}
                   value={obsPwInput}
                   onChange={(e) => setObsPwInput(e.target.value)}
                 />
               </span>
               <span className="settings-actions">
                 <button
-                  aria-label="保存 OBS 密码"
+                  aria-label={t("recorder.ws.passwordSaveAria")}
                   disabled={!obsPwInput.trim()}
                   onClick={() => {
                     void save(
                       { obsWebsocketPassword: obsPwInput.trim() },
-                      "密码已保存",
+                      t("recorder.ws.passwordSaved"),
                       "recording",
                     );
                     setObsPwInput("");
                   }}
                 >
-                  保存
+                  {t("common.save")}
                 </button>
                 <button
                   onClick={() =>
@@ -822,12 +865,14 @@ export function SettingsPanel() {
                       })
                       .then((r) =>
                         setObsTest(
-                          r.ok ? "✓ 连接成功" : `✗ ${r.error ?? "连接失败"}`,
+                          r.ok
+                            ? t("recorder.test.ok")
+                            : `✗ ${r.error ?? t("recorder.connectFailed")}`,
                         ),
                       )
                   }
                 >
-                  测试连接
+                  {t("recorder.test.button")}
                 </button>
               </span>
 
@@ -843,11 +888,11 @@ export function SettingsPanel() {
 
           {recMode === "managed" && (
             <>
-              <span className="settings-k">托管 OBS</span>
+              <span className="settings-k">{t("recorder.managed.label")}</span>
               {obsInstall?.installed ? (
                 <>
                   <span className="settings-v">
-                    已安装并自动管理,录制状态见上方状态行。
+                    {t("recorder.managed.installed")}
                   </span>
                   <span />
                   <ManagedObsPrefsRows
@@ -862,7 +907,9 @@ export function SettingsPanel() {
               ) : (
                 <>
                   <span className="settings-v">
-                    首次启用需下载 OBS Studio(约 {OBS_DOWNLOAD_MB}MB,来自{" "}
+                    {t("recorder.managed.downloadBefore", {
+                      mb: OBS_DOWNLOAD_MB,
+                    })}{" "}
                     <button
                       type="button"
                       className="settings-link"
@@ -870,9 +917,9 @@ export function SettingsPanel() {
                         void bridge().app.openExternal(OBS_ZIP_URL)
                       }
                     >
-                      obsproject 官方发布页
+                      {t("recorder.managed.downloadLink")}
                     </button>
-                    ,GPL-2.0)。
+                    {t("recorder.managed.downloadAfter")}
                   </span>
                   <span className="settings-actions">
                     <button
@@ -881,10 +928,10 @@ export function SettingsPanel() {
                       onClick={() => void runInstall()}
                     >
                       {installing
-                        ? "下载中…"
+                        ? t("recorder.install.downloadingButton")
                         : installError
-                          ? "重试"
-                          : "下载并启用"}
+                          ? t("recorder.install.retry")
+                          : t("recorder.install.downloadAndEnable")}
                     </button>
                   </span>
                 </>
@@ -921,11 +968,11 @@ export function SettingsPanel() {
             </>
           )}
 
-          <span className="settings-k">保留录像</span>
+          <span className="settings-k">{t("recorder.keep.label")}</span>
           <span>
             <input
               type="number"
-              aria-label="保留录像场数"
+              aria-label={t("recorder.keep.aria")}
               min={0}
               style={{ width: "5em" }}
               value={keepInput}
@@ -937,28 +984,25 @@ export function SettingsPanel() {
                 setKeepInput(String(n));
                 void save(
                   { recordingKeepCount: n },
-                  "保留策略已保存",
+                  t("recorder.keep.saved"),
                   "recording",
                 );
               }}
             />
-            <span className="settings-note">
-              最近 N 场。设为 0 只关闭场数上限,总容量上限(默认
-              80GB)仍然生效,超限时连视频文件一并删除。
-            </span>
+            <span className="settings-note">{t("recorder.keep.note")}</span>
           </span>
           <span />
         </div>
       </section>
 
       <section className="dash-card">
-        {groupHead("关于", "about")}
+        {groupHead(t("settings.group.about"), "about")}
         <div className="settings-grid">
-          <span className="settings-k">版本</span>
+          <span className="settings-k">{t("settings.version.label")}</span>
           <span className="settings-v">{version ?? "…"}</span>
           <span />
 
-          <span className="settings-k">更新</span>
+          <span className="settings-k">{t("settings.update.label")}</span>
           {/* title: CSS(.settings-v) truncates this with an ellipsis, and
               for an error phase updateNote is the only place the user can
               see the failure reason — hover restores the full text. */}
@@ -977,27 +1021,31 @@ export function SettingsPanel() {
                   void requestUpdateCheck();
                 }}
               >
-                {update?.phase === "checking" ? "检查中…" : "检查更新"}
+                {update?.phase === "checking"
+                  ? t("settings.update.checking")
+                  : t("settings.update.check")}
               </button>
             )}
           </span>
 
-          <span className="settings-k">自动检查更新</span>
+          <span className="settings-k">{t("settings.autoCheck.label")}</span>
           <span className="settings-v">{scheduleNote}</span>
           <span className="settings-actions">
             <button
-              aria-label="自动检查更新"
+              aria-label={t("settings.autoCheck.label")}
               onClick={() =>
                 void save(
                   { autoCheckUpdates: !settings.autoCheckUpdates },
                   settings.autoCheckUpdates
-                    ? "已停用自动检查"
-                    : "已启用自动检查",
+                    ? t("settings.autoCheck.offSaved")
+                    : t("settings.autoCheck.onSaved"),
                   "about",
                 )
               }
             >
-              {settings.autoCheckUpdates ? "停用" : "启用"}
+              {settings.autoCheckUpdates
+                ? t("settings.toggle.disable")
+                : t("settings.toggle.enable")}
             </button>
           </span>
         </div>

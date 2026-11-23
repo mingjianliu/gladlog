@@ -2,20 +2,21 @@ import { useEffect, useState } from "react";
 
 import type { ObsAudioDevice } from "../../../main/managedObsBackend";
 import type { GladlogSettings } from "../../../main/settingsStore";
+import type { TFn } from "../../../shared/i18n";
 import {
   DEFAULT_AUDIO_DEVICE_ID,
   type ManagedObsPrefs,
 } from "../../../shared/managedObsPrefs";
 import { bridge } from "../bridge";
+import { useT } from "../i18n/LangProvider";
 
 /** `<select>` value for "don't record this channel" — settings store it as
  * null, which an option value cannot be. */
 const NONE = "__none__";
 
-/** The save note every prefs row uses: honest about WHEN it applies (user
- * ruling 2026-09-04 — restart now, or after the current recording). */
-const PREFS_SAVED_NOTE =
-  "已保存,托管 OBS 重启后生效(正在录制则本场结束后自动重启)";
+/** The save note every prefs row uses (`recorder.prefs.savedNote`): honest
+ * about WHEN it applies (user ruling 2026-09-04 — restart now, or after the
+ * current recording). */
 
 interface Props {
   settings: Pick<GladlogSettings, keyof ManagedObsPrefs>;
@@ -31,9 +32,13 @@ interface Props {
 function audioOptions(
   devices: ObsAudioDevice[],
   current: string | null,
+  t: TFn,
 ): Array<{ value: string; label: string }> {
   const opts: Array<{ value: string; label: string }> = [
-    { value: DEFAULT_AUDIO_DEVICE_ID, label: "系统默认设备" },
+    {
+      value: DEFAULT_AUDIO_DEVICE_ID,
+      label: t("recorder.prefs.audio.systemDefault"),
+    },
   ];
   for (const d of devices) {
     if (d.id === DEFAULT_AUDIO_DEVICE_ID) continue;
@@ -44,9 +49,12 @@ function audioOptions(
     current !== DEFAULT_AUDIO_DEVICE_ID &&
     !devices.some((d) => d.id === current)
   ) {
-    opts.push({ value: current, label: `已保存的设备(${current})` });
+    opts.push({
+      value: current,
+      label: t("recorder.prefs.audio.savedDevice", { id: current }),
+    });
   }
-  opts.push({ value: NONE, label: "不录" });
+  opts.push({ value: NONE, label: t("recorder.prefs.audio.none") });
   return opts;
 }
 
@@ -57,6 +65,8 @@ function audioOptions(
  * OBS". Each row is label | control | action, matching the parent grid.
  */
 export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
+  const { t } = useT();
+  const prefsSavedNote = t("recorder.prefs.savedNote");
   const [devices, setDevices] = useState<{
     output: ObsAudioDevice[];
     input: ObsAudioDevice[];
@@ -91,17 +101,25 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
     try {
       const r = await bridge().recorder.importObsPrefs();
       if (!r.found) {
-        setImportMsg("✗ 未找到本机 OBS 配置(装了 OBS 吗?)");
+        setImportMsg(t("recorder.prefs.import.notFound"));
         return;
       }
       await reload();
       const parts: string[] = [];
       const a = r.applied ?? {};
-      if ("recordingDirectory" in a) parts.push("录像目录");
-      if ("managedDesktopAudioDevice" in a) parts.push("桌面声音");
-      if ("managedMicDevice" in a) parts.push("麦克风");
+      if ("recordingDirectory" in a)
+        parts.push(t("recorder.prefs.import.part.directory"));
+      if ("managedDesktopAudioDevice" in a)
+        parts.push(t("recorder.prefs.import.part.desktopAudio"));
+      if ("managedMicDevice" in a)
+        parts.push(t("recorder.prefs.import.part.mic"));
       setImportMsg(
-        `✓ 已导入 ${parts.join("、") || "(无变化)"};${PREFS_SAVED_NOTE}`,
+        t("recorder.prefs.import.done", {
+          items:
+            parts.join(t("recorder.prefs.import.listSeparator")) ||
+            t("recorder.prefs.import.nothing"),
+          note: prefsSavedNote,
+        }),
       );
     } catch (e) {
       setImportMsg(`✗ ${e instanceof Error ? e.message : String(e)}`);
@@ -120,14 +138,13 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
 
   return (
     <>
-      <span className="settings-k">导入配置</span>
-      <span className="settings-v">
-        把你自己 OBS 里当前 profile
-        的录像目录、桌面声音和麦克风设备复制过来(只读取,不改动你的 OBS)。
-      </span>
+      <span className="settings-k">{t("recorder.prefs.import.label")}</span>
+      <span className="settings-v">{t("recorder.prefs.import.note")}</span>
       <span className="settings-actions">
         <button disabled={importing} onClick={() => void runImport()}>
-          {importing ? "导入中…" : "从本机 OBS 导入"}
+          {importing
+            ? t("recorder.prefs.import.busy")
+            : t("recorder.prefs.import.button")}
         </button>
       </span>
       {importMsg && (
@@ -138,9 +155,11 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
         </>
       )}
 
-      <span className="settings-k">桌面声音</span>
+      <span className="settings-k">
+        {t("recorder.prefs.desktopAudio.label")}
+      </span>
       <select
-        aria-label="桌面声音设备"
+        aria-label={t("recorder.prefs.desktopAudio.aria")}
         value={desktopValue}
         onChange={(e) =>
           void save(
@@ -148,11 +167,15 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
               managedDesktopAudioDevice:
                 e.target.value === NONE ? null : e.target.value,
             },
-            PREFS_SAVED_NOTE,
+            prefsSavedNote,
           )
         }
       >
-        {audioOptions(devices.output, settings.managedDesktopAudioDevice).map(
+        {audioOptions(
+          devices.output,
+          settings.managedDesktopAudioDevice,
+          t,
+        ).map(
           (o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -162,20 +185,20 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
       </select>
       <span />
 
-      <span className="settings-k">麦克风</span>
+      <span className="settings-k">{t("recorder.prefs.mic.label")}</span>
       <select
-        aria-label="麦克风设备"
+        aria-label={t("recorder.prefs.mic.aria")}
         value={micValue}
         onChange={(e) =>
           void save(
             {
               managedMicDevice: e.target.value === NONE ? null : e.target.value,
             },
-            PREFS_SAVED_NOTE,
+            prefsSavedNote,
           )
         }
       >
-        {audioOptions(devices.input, settings.managedMicDevice).map((o) => (
+        {audioOptions(devices.input, settings.managedMicDevice, t).map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
@@ -183,20 +206,23 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
       </select>
       <span />
 
-      <span className="settings-k">录像目录</span>
+      <span className="settings-k">
+        {t("recorder.prefs.directory.label")}
+      </span>
       <span className="settings-v">
-        {settings.recordingDirectory ??
-          "默认(应用数据目录下的 recordings 文件夹)"}
+        {settings.recordingDirectory ?? t("recorder.prefs.directory.default")}
       </span>
       <span className="settings-actions">
-        <button onClick={() => void pickDirectory()}>选择目录…</button>
+        <button onClick={() => void pickDirectory()}>
+          {t("settings.chooseFolder")}
+        </button>
         {settings.recordingDirectory && (
           <button
             onClick={() =>
-              void save({ recordingDirectory: null }, PREFS_SAVED_NOTE)
+              void save({ recordingDirectory: null }, prefsSavedNote)
             }
           >
-            恢复默认
+            {t("recorder.prefs.directory.reset")}
           </button>
         )}
       </span>

@@ -3703,6 +3703,9 @@ pre {
   color: var(--win);
   font-size: 11px;
 }
+.settings-saved-inline.settings-saved-failed {
+  color: var(--loss);
+}
 /* 三列 grid:标签 | 值/输入 | 操作(1i) */
 .settings-grid {
   display: grid;

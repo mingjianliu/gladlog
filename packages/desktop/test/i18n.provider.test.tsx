@@ -149,6 +149,41 @@ describe("LangProvider / 首启语言选择框(spec §6.3 §6.7)", () => {
     await expect(seen!.setLang("zh")).resolves.toBe(false);
   });
 
+  it("设置页:语言没保存成功 → 显示失败提示而不是「已切换」", async () => {
+    const { save } = mockBridge({ language: "zh" });
+    save.mockRejectedValueOnce(new Error("disk full"));
+    render(
+      <LangProvider>
+        <SettingsPanel />
+      </LangProvider>,
+    );
+    const section = await screen.findByTestId("settings-language");
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    await waitFor(() =>
+      expect(section.textContent).toContain(
+        "Couldn't save the language setting",
+      ),
+    );
+    expect(section.querySelector(".settings-saved-failed")).toBeTruthy();
+    expect(section.textContent).not.toContain("Language changed");
+    expect(section.textContent).not.toContain("✓");
+  });
+
+  it("设置页:语言保存成功 → 显示「已切换」", async () => {
+    mockBridge({ language: "zh" });
+    render(
+      <LangProvider>
+        <SettingsPanel />
+      </LangProvider>,
+    );
+    const section = await screen.findByTestId("settings-language");
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    await waitFor(() =>
+      expect(section.textContent).toContain("✓ Language changed"),
+    );
+    expect(section.querySelector(".settings-saved-failed")).toBeNull();
+  });
+
   it("设置页点「中文」→ useT().lang 立即变成 zh,不需要重新挂载", async () => {
     const { save } = mockBridge({ language: "en" });
     render(
