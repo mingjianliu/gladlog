@@ -1,8 +1,7 @@
 // §6.9 check 1: no hard-coded CJK text in desktop source. Every user-visible
-// string goes through the dictionary (src/shared/i18n/); the files that still
-// hold CJK literals are listed in PENDING_FILES (shrink-only) and the
-// permanent exceptions in CJK_ALLOWLIST (one reason each).
-import { createHash } from "node:crypto";
+// string goes through the dictionary (src/shared/i18n/); the only exceptions
+// are the permanent ones in CJK_ALLOWLIST (one reason each). The migration's
+// pending-file list is gone: every file is migrated (Task 7).
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
@@ -11,7 +10,6 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { CJK_ALLOWLIST } from "./i18n.cjkAllowlist";
-import { INITIAL_PENDING_FILES, PENDING_FILES } from "./i18n.pendingFiles";
 
 const REPO_ROOT = join(__dirname, "../../..");
 const DESKTOP_SRC = "packages/desktop/src";
@@ -124,7 +122,6 @@ describe("i18n: 源码里不许写死中文(§6.9 第 1 条)", () => {
     const hits = findCjkLiterals(f);
     if (hits.length > 0) hitsByFile.set(f, hits);
   }
-  const pending = new Set(PENDING_FILES);
 
   it("扫描范围非空,排除项都存在", () => {
     expect(files.length).toBeGreaterThan(100);
@@ -143,10 +140,9 @@ describe("i18n: 源码里不许写死中文(§6.9 第 1 条)", () => {
     }
   });
 
-  it("含中文字面量的文件都在 PENDING_FILES 里,或命中在 CJK_ALLOWLIST 里", () => {
+  it("每条中文字面量都在 CJK_ALLOWLIST 里", () => {
     const offenders: string[] = [];
     for (const [file, hits] of hitsByFile) {
-      if (pending.has(file)) continue;
       for (const h of hits) {
         if (!isAllowlisted(file, h.text)) {
           offenders.push(`${file}:${h.line} ${JSON.stringify(h.text)}`);
@@ -155,32 +151,6 @@ describe("i18n: 源码里不许写死中文(§6.9 第 1 条)", () => {
     }
     // Move the text into the dictionary (src/shared/i18n/) and read it via t().
     expect(offenders).toEqual([]);
-  });
-
-  it("PENDING_FILES 里每个文件都还有未豁免的命中(迁完就删掉)", () => {
-    const stale = PENDING_FILES.filter(
-      (f) => !(hitsByFile.get(f) ?? []).some((h) => !isAllowlisted(f, h.text)),
-    );
-    expect(stale).toEqual([]);
-  });
-
-  it("PENDING_FILES 只能减少:不重复、已排序、是初始清单的子集", () => {
-    expect(new Set(PENDING_FILES).size).toBe(PENDING_FILES.length);
-    expect([...PENDING_FILES]).toEqual([...PENDING_FILES].sort());
-    const initial = new Set(INITIAL_PENDING_FILES);
-    // A file not in the frozen initial list can never become pending; move
-    // its text into the dictionary instead.
-    expect(PENDING_FILES.filter((f) => !initial.has(f))).toEqual([]);
-  });
-
-  it("INITIAL_PENDING_FILES 冻结不改(92 个文件,内容哈希固定)", () => {
-    // Pins the frozen list so adding a file to both lists also goes red.
-    expect(INITIAL_PENDING_FILES.length).toBe(92);
-    expect(
-      createHash("sha256")
-        .update(INITIAL_PENDING_FILES.join("\n"))
-        .digest("hex"),
-    ).toBe("67cd19aaeb0cf8f3689b0c9b8981da719bfa80c33ab53f6e1db95b34f447943b");
   });
 
   it("CJK_ALLOWLIST 每条都有理由且仍然命中", () => {
