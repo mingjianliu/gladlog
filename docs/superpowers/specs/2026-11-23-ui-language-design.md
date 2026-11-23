@@ -91,7 +91,7 @@ packages/desktop/src/shared/i18n/
 ```
 
 - 命名空间按界面区域划分:`common`、`nav`、`settings`、`matchList`、`report.*`(下面再按卡片划分:`report.mistakes`、`report.deathRecap`、`report.events` …)、`stats`、`batch`、`update`、`recorder`、`dev`、`errors`(main 的报错)、`dialogs`(main 的对话框标题)。
-- `Key` 是由 `zh` 推导出的点路径联合类型(模板字面量类型),所以 `t("settigns.x")` 这种拼写错误在 typecheck 阶段就会报出来。
+- (Claude 的决定，实施计划阶段)词典用**扁平的点号 key**(`"settings.language.label": "语言"`),不用嵌套对象，每个命名空间一个文件，zh 和 en 目录一一对应。`Key = keyof typeof zh`,所以 `t("settigns.x")` 这种拼写错误在 typecheck 阶段就会报出来;grep 完整 key 字符串就能同时找到词典和所有用到它的地方，也不会遇到递归模板类型拖慢 tsc 的问题。
 - 值的形式：普通字符串，支持 `{name}` 插值。需要复数或语序变化时，值可以写成 `(p) => string`,zh 和 en 两侧各自实现。
 - `translate` 是纯函数，没有副作用，放在 `shared/`,main 和 renderer 都能 import(符合 desktop-dev「跨进程共用的放 src/shared/」)。
 - 现有 derive 里的私有映射表(`SEV_ZH`、`CATEGORY_ZH`、`TYPE_LABEL` 等)迁到词典里;derive 的 `lang` 参数保留，内部改成调用 `translate`。
@@ -125,7 +125,7 @@ packages/desktop/src/shared/i18n/
 ### 6.6 Windows 安装器
 
 - electron-builder `nsis`:`multiLanguageInstaller: true`,`installerLanguages: ["en_US", "zh_CN"]`。安装器一开始会让用户选语言，安装器自己的界面也会变成对应语言。
-- 新增 `build/installer.nsh`,在 `customInstall` 宏里按 `$LANGUAGE`(2052 → zh,其余 → en)写入 `HKCU\Software\gladlog\InstallerLanguage`。main 在 §6.1 第 3 步读取它(只在 win32 上读，读失败当作不存在)。
+- 新增 `build/installer.nsh`,在 `customInstall` 宏里按 `$LANGUAGE`(2052 → zh,其余 → en)把 `zh` 或 `en` 写进 `$INSTDIR\installer-language.txt`(Claude 的决定，实施计划阶段：用文件代替注册表，读取时不需要调用 `reg.exe`,卸载时会一起删掉)。main 在 §6.1 第 3 步从 exe 所在目录读取它(只在 win32 上读，读失败当作不存在)。下文提到「写注册表」的地方，一律指写这个文件。
 - **静默安装(自动更新)时不写注册表**(在 `customInstall` 里用 `${If} ${Silent}` 跳过),否则 `$LANGUAGE` 会取一个用户没选过的默认值，静默地替老用户做了决定。只有交互式安装才写。
 - 即使注册表里有值，§6.1 也只在 settings 的 `language` 为 null 时才读它，所以已经选过语言的用户以后再覆盖安装也不受影响。
 - builder 负责确认 electron-builder 当前版本里这些选项的名字和宏的写法，并在 Windows 打包产物上实际安装验证(§7)。
