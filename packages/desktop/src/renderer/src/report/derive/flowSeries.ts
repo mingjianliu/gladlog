@@ -1,3 +1,8 @@
+import {
+  type Language,
+  type MessageKey,
+  translate,
+} from "../../../../shared/i18n";
 import type { ReportSource } from "./types";
 
 type Unit = ReportSource["units"][string];
@@ -20,12 +25,29 @@ export const CURVE_METRIC_ORDER: CurveMetric[] = [
   "taken",
   "healed",
 ];
+const CURVE_METRIC_KEY: Record<CurveMetric, MessageKey> = {
+  hp: "report.curveMetric.hp",
+  damage: "report.curveMetric.damage",
+  healing: "report.curveMetric.healing",
+  taken: "report.curveMetric.taken",
+  healed: "report.curveMetric.healed",
+};
+
+export function curveMetricLabel(
+  m: CurveMetric,
+  lang: Language = "zh",
+): string {
+  return translate(lang, CURVE_METRIC_KEY[m]);
+}
+
+/** The zh labels, for callers that do not take the UI language yet; new code
+ * uses `curveMetricLabel(m, lang)`. */
 export const CURVE_METRIC_LABEL: Record<CurveMetric, string> = {
-  hp: "血量",
-  damage: "伤害",
-  healing: "治疗",
-  taken: "承伤",
-  healed: "被治疗",
+  hp: curveMetricLabel("hp"),
+  damage: curveMetricLabel("damage"),
+  healing: curveMetricLabel("healing"),
+  taken: curveMetricLabel("taken"),
+  healed: curveMetricLabel("healed"),
 };
 
 /**

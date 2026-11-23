@@ -6,10 +6,11 @@ import {
   type PackItem,
 } from "@gladlog/analysis";
 
+import { type Language, translate } from "../../../../shared/i18n";
 import { resolveOwner } from "./analysisInput";
 import { toLegacySafe } from "./legacySource";
 import { getRawStreamsSync } from "./rawStreamsCache";
-import { sourceMemoWith } from "./sourceMemo";
+import { langMemoKey, sourceMemoWith } from "./sourceMemo";
 import type { TimeRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
@@ -106,7 +107,8 @@ const TOP_N = 3;
 
 export interface UncoveredHighlight {
   range: TimeRange;
-  /** zh signal summary, e.g. "2 次 HP 轨迹 · 1 次防御施放" (counts per kind,
+  /** Signal summary in the UI language, e.g. zh "2 次 HP 轨迹 · 1 次防御施放"
+   * (counts per kind,
    * ordered by first appearance — not re-sorted alphabetically or by
    * frequency, so it matches the time order of items and reads like a
    * timeline; for the kind→Chinese wording table see `PACK_ITEM_KIND_ZH` in
@@ -120,15 +122,25 @@ export interface UncoveredHighlight {
  * `@gladlog/analysis` (review-round fix: this file used to keep its own local
  * copy with different wording, inconsistent with the one
  * `buildWindowAnchorFinding` uses to compose the prompt body). */
-function summarizeKinds(items: readonly PackItem[]): string {
+function summarizeKinds(items: readonly PackItem[], lang: Language): string {
   const order: string[] = [];
   const counts = new Map<string, number>();
   for (const item of items) {
-    const label = PACK_ITEM_KIND_ZH[item.kind] ?? item.kind;
+    // en: the kind slug until analysis has an English kind table (ui-language
+    // plan Task 10 adds PACK_ITEM_KIND_EN next to PACK_ITEM_KIND_ZH).
+    const label =
+      lang === "zh" ? (PACK_ITEM_KIND_ZH[item.kind] ?? item.kind) : item.kind;
     if (!counts.has(label)) order.push(label);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  return order.map((label) => `${counts.get(label)} 次${label}`).join(" · ");
+  return order
+    .map((label) =>
+      translate(lang, "report.uncovered.kindCount", {
+        n: counts.get(label) ?? 0,
+        label,
+      }),
+    )
+    .join(" · ");
 }
 
 interface RawHit {
@@ -174,15 +186,16 @@ export function deriveUncoveredHighlights(
   source: ReportSource,
   durationS: number,
   anchors: readonly number[],
+  lang: Language = "zh",
 ): UncoveredHighlight[] {
   // Kept across mounts (sourceMemo.ts): re-entering the AI view with the same
   // anchors does not sweep the match again. The anchors are compared by value
   // (the caller rebuilds the array); the raw streams feed the candidates.
   return sourceMemoWith(
     source,
-    "deriveUncoveredHighlights",
+    langMemoKey("deriveUncoveredHighlights", lang),
     [durationS, anchors.join(","), getRawStreamsSync(source.id)],
-    () => deriveUncoveredHighlightsUncached(source, durationS, anchors),
+    () => deriveUncoveredHighlightsUncached(source, durationS, anchors, lang),
   );
 }
 
@@ -190,6 +203,7 @@ function deriveUncoveredHighlightsUncached(
   source: ReportSource,
   durationS: number,
   anchors: readonly number[],
+  lang: Language,
 ): UncoveredHighlight[] {
   if (!(durationS > 0)) return [];
   const ctx = sweepContextOf(source);
@@ -236,7 +250,7 @@ function deriveUncoveredHighlightsUncached(
       if (!r) return null;
       return {
         range: { fromS: m.fromS, toS: m.toS },
-        summary: summarizeKinds(r.pack.items),
+        summary: summarizeKinds(r.pack.items, lang),
         itemCount: r.pack.items.length,
       };
     })

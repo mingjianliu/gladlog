@@ -1,5 +1,6 @@
 import { decodeHpTail } from "@gladlog/parser";
 
+import { type Language, translate } from "../../../../shared/i18n";
 import { petsOf } from "./flowSeries";
 import { shortUnitName } from "./teamSide";
 import { eventInRange, type TimeRange } from "./timeRange";
@@ -116,7 +117,9 @@ export function deriveDetailBreakdown(
   /** Time-window linkage ①: filtered by the same predicate as deriveSummary, so
    * the breakdown total still equals meterValue exactly. */
   range?: TimeRange | null,
+  lang: Language = "zh",
 ): { rows: BreakdownRow[]; critAvailable: boolean } {
+  const melee = translate(lang, "report.spell.melee");
   const units = Object.values(source.units) as unknown as UnitLike[];
   const self = units.find((u) => u.id === unitId);
   if (!self) return { rows: [], critAvailable: false };
@@ -142,7 +145,7 @@ export function deriveDetailBreakdown(
       const key = `${full}:${e.spellId}`;
       addHp(
         acc(map, key, {
-          label: `${src}:${e.spellName || "近战"}`,
+          label: `${src}:${e.spellName || melee}`,
           spellId: String(e.spellId ?? 0),
         }),
         e,
@@ -162,7 +165,7 @@ export function deriveDetailBreakdown(
         const key = `${prefix}${e.spellId}`;
         addHp(
           acc(map, key, {
-            label: `${prefix}${e.spellName || "近战"}`,
+            label: `${prefix}${e.spellName || melee}`,
             spellId: String(e.spellId ?? 0),
           }),
           e,
@@ -172,7 +175,7 @@ export function deriveDetailBreakdown(
         for (const e of (unit.absorbsOut ?? []).filter(inR)) {
           const key = `ab:${prefix}${e.spellId}`;
           const a = acc(map, key, {
-            label: `${prefix}${e.spellName || "吸收"}`,
+            label: `${prefix}${e.spellName || translate(lang, "report.spell.absorb")}`,
             spellId: String(e.spellId ?? 0),
             isAbsorb: true,
           });

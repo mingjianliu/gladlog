@@ -11,18 +11,24 @@ import {
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { type Language, translate } from "../../../../shared/i18n";
 import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
-import { sourceMemo } from "./sourceMemo";
+import { langMemoKey, sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
-import { type TimeRange,tInRange } from "./timeRange";
+import { type TimeRange, tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
-/** fact2: the measured blocked seconds behind a "被控/被锁" tag — the same
+/** fact2: the measured blocked seconds behind a "CC'd / locked out" tag — the same
  * number the prompt's exemption prints (`blockedSecondsText`). */
-function lockedSecondsSuffix(blockedS: number | undefined): string {
+function lockedSecondsSuffix(
+  blockedS: number | undefined,
+  lang: Language,
+): string {
   const s = blockedSecondsText(blockedS);
-  return s === undefined ? "" : ` ${s} 秒`;
+  return s === undefined
+    ? ""
+    : translate(lang, "report.dispel.blockedSeconds", { s });
 }
 
 /** One dispel / missed-dispel instance (used by row expansion and lists);
@@ -93,11 +99,14 @@ const fmtName = (id: string, fallback: string): string =>
  * gate read the reaction window). */
 function noReachNote(
   w: Pick<IMissedPurgeWindow, "losReachable" | "reachFromSeconds">,
+  lang: Language,
 ): string {
   if (w.losReachable !== false) return "";
   return w.reachFromSeconds === undefined
-    ? "(无视线/超射程)"
-    : `(${fmtTime(w.reachFromSeconds)} 前无视线/超射程)`;
+    ? translate(lang, "report.dispel.noReach")
+    : translate(lang, "report.dispel.noReachUntil", {
+        t: fmtTime(w.reachFromSeconds),
+      });
 }
 
 /**
@@ -115,6 +124,7 @@ export function scopedMissedPurgeInstances(
   range?: TimeRange | null,
   /** the round's units, for a warlock's pet (the prompt's reading) */
   units?: Parameters<typeof missedPurgesFor>[2],
+  lang: Language = "zh",
 ): DispelInstance[] {
   const out: DispelInstance[] = [];
   for (const f of friends) {
@@ -135,13 +145,25 @@ export function scopedMissedPurgeInstances(
         why.onCooldownThroughout;
       out.push({
         tS: w.timeSeconds,
-        label: `${fmtName(w.spellId, w.spellName)} 挂在 ${w.enemyName} 身上 ${Math.round(
-          w.durationSeconds,
-        )}s 未被打掉 · 可用 ${w.viaScopedTool.name}(${f.name})${
-          why.lockedOut ? `(持有者被控/被锁${lockedSecondsSuffix(w.purgersBlockedS)})` : ""
-        }${noReachNote(w)}${
-          why.onCooldownThroughout ? "(技能全程在 CD)" : ""
-        }${notActionable ? " · 当时做不到" : ""}`,
+        label: translate(lang, "report.dispel.scopedMissed", {
+          spell: fmtName(w.spellId, w.spellName),
+          enemy: w.enemyName,
+          s: Math.round(w.durationSeconds),
+          tool: w.viaScopedTool.name,
+          holder: f.name,
+          locked: why.lockedOut
+            ? translate(lang, "report.dispel.holderLocked", {
+                blocked: lockedSecondsSuffix(w.purgersBlockedS, lang),
+              })
+            : "",
+          reach: noReachNote(w, lang),
+          cd: why.onCooldownThroughout
+            ? translate(lang, "report.dispel.toolOnCdThroughout")
+            : "",
+          notActionable: notActionable
+            ? translate(lang, "report.dispel.notActionable")
+            : "",
+        }),
         unitName: w.enemyName,
         passive: false,
         ...(notActionable ? { notActionable: true } : {}),
@@ -165,7 +187,8 @@ export function scopedMissedPurgeInstances(
  * active the component labels it as whole-match scope. */
 function deriveDispelDashUncached(
   source: ReportSource,
-  range?: TimeRange | null,
+  range: TimeRange | null | undefined,
+  lang: Language,
 ): DispelDash {
   try {
     const legacy = toLegacySafe(source);
@@ -192,11 +215,21 @@ function deriveDispelDashUncached(
       d.dispelKind === "deliberate";
     const toInstance = (d: IDispelEvent): DispelInstance => ({
       tS: d.timeSeconds,
-      label: `${fmtName(d.dispelSpellId, d.dispelSpellName)} ${
-        d.isSpellSteal ? "偷走" : "驱散"
-      } ${fmtName(d.removedSpellId, d.removedSpellName)}(${d.targetName})${
-        d.wasFatal ? " ☠致命" : ""
-      }${isDeliberate(d) ? "" : "(被动)"}`,
+      label: translate(lang, "report.dispel.instance", {
+        dispelSpell: fmtName(d.dispelSpellId, d.dispelSpellName),
+        verb: translate(
+          lang,
+          d.isSpellSteal
+            ? "report.dispel.verbSteal"
+            : "report.dispel.verbDispel",
+        ),
+        removed: fmtName(d.removedSpellId, d.removedSpellName),
+        target: d.targetName,
+        fatal: d.wasFatal ? translate(lang, "report.dispel.fatal") : "",
+        passive: isDeliberate(d)
+          ? ""
+          : translate(lang, "report.dispel.passive"),
+      }),
       unitName: d.sourceName,
       passive: !isDeliberate(d),
     });
@@ -250,13 +283,21 @@ function deriveDispelDashUncached(
       .filter((w) => tInRange(w.timeSeconds, range))
       .map((w) => ({
         tS: w.timeSeconds,
-        label: `${fmtName(w.spellId, w.spellName)} 挂在 ${w.enemyName} 身上 ${Math.round(
-          w.durationSeconds,
-        )}s 未被驱散${w.duringKillWindow ? "(我方击杀窗口内)" : ""}${
-          w.purgeWasOnCD ? "(驱散在 CD)" : ""
-        }${w.purgersLockedOut ? `(驱散者被控/被锁${lockedSecondsSuffix(w.purgersBlockedS)})` : ""}${
-          noReachNote(w)
-        }`,
+        label: translate(lang, "report.dispel.missedPurge", {
+          spell: fmtName(w.spellId, w.spellName),
+          enemy: w.enemyName,
+          s: Math.round(w.durationSeconds),
+          killWindow: w.duringKillWindow
+            ? translate(lang, "report.dispel.inKillWindow")
+            : "",
+          cd: w.purgeWasOnCD ? translate(lang, "report.dispel.purgeOnCd") : "",
+          locked: w.purgersLockedOut
+            ? translate(lang, "report.dispel.dispellersLocked", {
+                blocked: lockedSecondsSuffix(w.purgersBlockedS, lang),
+              })
+            : "",
+          reach: noReachNote(w, lang),
+        }),
         unitName: w.enemyName,
         passive: false,
       }));
@@ -266,6 +307,7 @@ function deriveDispelDashUncached(
         ours.scopedMissedPurgeWindows ?? [],
         range,
         Object.values(legacy.units),
+        lang,
       ),
     );
     missedPurges.sort((a, b) => a.tS - b.tS);
@@ -274,15 +316,21 @@ function deriveDispelDashUncached(
       .filter((w) => tInRange(w.timeSeconds, range))
       .map((w) => ({
         tS: w.timeSeconds,
-        label: `${w.targetName} 挂 ${fmtName(w.spellId, w.spellName)} ${Math.round(
-          w.durationSeconds,
-        )}s 未被解${w.cleanseWasOnCD ? "(解法在 CD)" : ""}${
-          w.dispellersLockedOut
-            ? `(驱散者被控/被锁${lockedSecondsSuffix(w.dispellersBlockedS)})`
-            : ""
-        }${noReachNote(w)}${
-          w.drChainRisk ? "(对方 DR 未递减,解了易被续控)" : ""
-        }`,
+        label: translate(lang, "report.dispel.missedCleanse", {
+          target: w.targetName,
+          spell: fmtName(w.spellId, w.spellName),
+          s: Math.round(w.durationSeconds),
+          cd: w.cleanseWasOnCD
+            ? translate(lang, "report.dispel.cleanseOnCd")
+            : "",
+          locked: w.dispellersLockedOut
+            ? translate(lang, "report.dispel.dispellersLocked", {
+                blocked: lockedSecondsSuffix(w.dispellersBlockedS, lang),
+              })
+            : "",
+          reach: noReachNote(w, lang),
+          dr: w.drChainRisk ? translate(lang, "report.dispel.drChainRisk") : "",
+        }),
         unitName: w.targetName,
         passive: false,
       }))
@@ -305,7 +353,10 @@ function deriveDispelDashUncached(
 export function deriveDispelDash(
   source: ReportSource,
   range?: TimeRange | null,
+  lang: Language = "zh",
 ): ReturnType<typeof deriveDispelDashUncached> {
-  if (range != null) return deriveDispelDashUncached(source, range);
-  return sourceMemo(source, "deriveDispelDash", () => deriveDispelDashUncached(source, range));
+  if (range != null) return deriveDispelDashUncached(source, range, lang);
+  return sourceMemo(source, langMemoKey("deriveDispelDash", lang), () =>
+    deriveDispelDashUncached(source, range, lang),
+  );
 }

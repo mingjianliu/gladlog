@@ -19,7 +19,6 @@ const CLUSTER_GAP_S = 5;
  * "+N minor moments" row by default. */
 const VALVE_MAX_ENTRIES = 40;
 
-
 /** Unified text glyphs (no emoji: 🛡♱ render inconsistently across
  * platforms). */
 const KIND_ICON: Record<KeyMoment["kind"], string> = {
@@ -324,7 +323,7 @@ export function KeyMomentAxis({
                 }
                 onClick={onSeek ? () => onSeek(c.t, c.unitNames) : undefined}
               >
-                ⏱ {fmtTime(c.t)} {candidateShortLabel(c)}
+                ⏱ {fmtTime(c.t)} {candidateShortLabel(c, lang)}
               </button>
             ))}
           {onSeek && (

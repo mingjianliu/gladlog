@@ -2,6 +2,7 @@ import { ensureAnalysisData } from "@gladlog/analysis";
 import { useEffect, useState } from "react";
 
 import { bridge } from "../bridge";
+import { useT } from "../i18n/LangProvider";
 import { MatchReport } from "./components/MatchReport";
 import type { TimeRange } from "./derive/timeRange";
 import type { ReportSource, StoredMatch, StoredShuffle } from "./derive/types";
@@ -45,8 +46,16 @@ export function ExportReportPage({
   roundSeq: number | null;
   range: TimeRange | null;
 }) {
+  const { t } = useT();
   const [source, setSource] = useState<ReportSource | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Kept as data and worded at render, so the load effect does not depend on
+  // the UI language.
+  const [error, setError] = useState<
+    | { kind: "notFound" }
+    | { kind: "noRounds" }
+    | { kind: "thrown"; text: string }
+    | null
+  >(null);
 
   useEffect(() => {
     let alive = true;
@@ -64,7 +73,7 @@ export function ExportReportPage({
         } | null;
         if (!alive) return;
         if (!doc?.data) {
-          setError(`对局 ${matchId} 不存在`);
+          setError({ kind: "notFound" });
           return;
         }
         if (doc.kind === "shuffle") {
@@ -73,7 +82,7 @@ export function ExportReportPage({
             s.rounds.find((r) => r.sequenceNumber === (roundSeq ?? 0)) ??
             s.rounds[0];
           if (!round) {
-            setError("shuffle 无回合数据");
+            setError({ kind: "noRounds" });
             return;
           }
           setSource(round);
@@ -81,7 +90,7 @@ export function ExportReportPage({
           setSource(doc.data as StoredMatch);
         }
       } catch (e) {
-        if (alive) setError(String(e));
+        if (alive) setError({ kind: "thrown", text: String(e) });
       }
     })();
     return () => {
@@ -114,8 +123,20 @@ export function ExportReportPage({
     };
   }, [source, error]);
 
-  if (error) return <div className="rpt-export-error">{error}</div>;
-  if (!source) return <div className="rpt-export-loading">加载中…</div>;
+  if (error)
+    return (
+      <div className="rpt-export-error">
+        {error.kind === "notFound"
+          ? t("report.exportPage.notFound", { matchId })
+          : error.kind === "noRounds"
+            ? t("report.exportPage.noRounds")
+            : error.text}
+      </div>
+    );
+  if (!source)
+    return (
+      <div className="rpt-export-loading">{t("report.exportPage.loading")}</div>
+    );
   return (
     <div className="rpt-export-page">
       <MatchReport

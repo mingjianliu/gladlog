@@ -5,7 +5,7 @@ import { describe, expect, it, test } from "vitest";
 import type { RichDeps } from "../derive/inlineRich";
 import { makeRichText } from "../derive/inlineRich";
 import type { ReportSource } from "../derive/types";
-import { findingKey,FindingsList } from "./FindingsList";
+import { findingKey, FindingsList } from "./FindingsList";
 
 const findings = [
   {
@@ -33,11 +33,11 @@ describe("FindingsList", () => {
     // the Chinese high/med/low labels and the Chinese category vocabulary
     expect(screen.getByText(/高 · 生存/)).toBeTruthy();
   });
-  it("EN 回复模式 severity 保持英文", () => {
+  it("EN 模式 severity / category 是英文(术语表:High / Survival)", () => {
     render(
       <FindingsList findings={findings as any} onSelect={() => {}} lang="en" />,
     );
-    expect(screen.getByText(/high · survival/)).toBeTruthy();
+    expect(screen.getByText(/High · Survival/)).toBeTruthy();
   });
   it("renders an empty state when there are no findings", () => {
     render(<FindingsList findings={[]} onSelect={() => {}} />);

@@ -6,16 +6,23 @@ import {
   computeOffensiveWindows,
   extractCandidateFindings,
   MENU_ONLY_TYPES,
+  type MissedKickKind,
+  missedKickKind,
   missedPurgeNotActionable,
   RETIRED_TYPES,
 } from "@gladlog/analysis";
 import { parseSyncReadyCdEntry } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import {
+  type Language,
+  type MessageKey,
+  translate,
+} from "../../../../shared/i18n";
 import { resolveOwner } from "./analysisInput";
 import { dispelSummaryOf } from "./dispelSummary";
 import { idMemo } from "./idMemo";
-import { MISSED_KICK_TEXT, missedKickLabel } from "./kickText";
+import { kickKindLabel } from "./kickText";
 import { toLegacySafe } from "./legacySource";
 import { sourceMemo } from "./sourceMemo";
 import { type TimeRange, tInRange } from "./timeRange";
@@ -38,10 +45,20 @@ export type MistakeSeverity = "minor" | "average" | "major";
 
 export interface MistakeRule {
   type: string;
+  /** Dictionary key of the card label (`report.mistakes.rule.<type>`). */
+  labelKey: MessageKey;
+  /** The zh label (`translate("zh", labelKey)`). */
   label: string;
   severity: MistakeSeverity;
   source: "candidate" | "kick" | "dispel";
 }
+
+const ruleLabel = (
+  labelKey: MessageKey,
+): Pick<MistakeRule, "labelKey" | "label"> => ({
+  labelKey,
+  label: translate("zh", labelKey),
+});
 
 export const MISTAKE_RULES: readonly MistakeRule[] = [
   // juked-kick 已整体退役(2026-08-19,GH #15)—— 候选发射与本表规则同批
@@ -55,7 +72,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     // softer target existed at that same moment. Same opportunity-cost framing
     // as burst-into-immunity, one tier down (mitigation is not full immunity).
     type: "burst-into-mitigation",
-    label: "爆发打进大减伤",
+    ...ruleLabel("report.mistakes.rule.burst-into-mitigation"),
     severity: "average",
     source: "candidate",
   },
@@ -69,19 +86,19 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
   // 的逐尝试结果/归因替代;candidateFindings 已摘发射,类型不再抵达)。
   {
     type: "cd-waste",
-    label: "保命 CD 整场未用",
+    ...ruleLabel("report.mistakes.rule.cd-waste"),
     severity: "minor",
     source: "candidate",
   },
   {
     type: "missed-kick",
-    label: "打断空放",
+    ...ruleLabel("report.mistakes.rule.missed-kick"),
     severity: "minor",
     source: "kick",
   },
   {
     type: "missed-purge-kill-window",
-    label: "击杀窗口内漏 purge",
+    ...ruleLabel("report.mistakes.rule.missed-purge-kill-window"),
     // major→average(2026-08-20,GH #19,用户裁定):12.1 正式重跑判别力仅
     // +2.6pp(弱正,#21 保留裁定口径),却占 major 桶 92%(1129 回合里
     // 1429 条 vs external-unused 81 / death-unused-defensive 43),把第一屏
@@ -99,7 +116,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     // and free-to-act gate make this a real-consequence fact, not a pure
     // uptime one.
     type: "crisis-no-response",
-    label: "危机 3 秒无应对",
+    ...ruleLabel("report.mistakes.rule.crisis-no-response"),
     severity: "major",
     source: "candidate",
   },
@@ -111,7 +128,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
   // discrimination has not been measured yet — not "major".
   {
     type: "backlash-dispel",
-    label: "解反噬 DoT 得不偿失",
+    ...ruleLabel("report.mistakes.rule.backlash-dispel"),
     severity: "average",
     source: "candidate",
   },
@@ -120,7 +137,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
   // An alternative-line suggestion, so the lowest tier.
   {
     type: "backlash-dispel-window",
-    label: "可解的反噬 DoT 没解",
+    ...ruleLabel("report.mistakes.rule.backlash-dispel-window"),
     severity: "minor",
     source: "candidate",
   },
@@ -131,7 +148,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
   // until its discrimination is measured.
   {
     type: "kick-priority-missed",
-    label: "该踢的治疗没踢",
+    ...ruleLabel("report.mistakes.rule.kick-priority-missed"),
     severity: "average",
     source: "candidate",
   },
@@ -139,13 +156,13 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
   // call-out, so the lowest tier.
   {
     type: "kick-priority-team",
-    label: "队友能踢的治疗没人踢",
+    ...ruleLabel("report.mistakes.rule.kick-priority-team"),
     severity: "minor",
     source: "candidate",
   },
   {
     type: "external-unused",
-    label: "队友阵亡时外减可用未给",
+    ...ruleLabel("report.mistakes.rule.external-unused"),
     severity: "major",
     source: "candidate",
   },
@@ -154,7 +171,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
   // 已摘发射,类型移入下方 IGNORED_CANDIDATE_TYPES 容纳缓存回合)。
   {
     type: "questionable-external",
-    label: "无压力窗口交出外减",
+    ...ruleLabel("report.mistakes.rule.questionable-external"),
     // average→minor(2026-08-20,GH #16 severity 证据审计,用户裁定):判别力
     // 反向(赢 1.7% vs 输 1.1%)且样本显示在指控 burst 前 6.7–10.7s 的预判性
     // 外减 —— 证据最弱的档位不该居中档。
@@ -164,13 +181,13 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
   // Signal-expansion batch 1 (2026-08-06, BACKLOG #18 second batch).
   {
     type: "healing-gap",
-    label: "治疗空窗",
+    ...ruleLabel("report.mistakes.rule.healing-gap"),
     severity: "average",
     source: "candidate",
   },
   {
     type: "position-mistake",
-    label: "走位失误",
+    ...ruleLabel("report.mistakes.rule.position-mistake"),
     severity: "average",
     source: "candidate",
   },
@@ -181,7 +198,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     // availability, not a proven "this would have saved you" claim — see the
     // no-causation guard on this type's prompt legend, buildFindingsPrompt.ts).
     type: "cc-avoidable",
-    label: "规避手段可用未用",
+    ...ruleLabel("report.mistakes.rule.cc-avoidable"),
     severity: "minor",
     source: "candidate",
   },
@@ -193,7 +210,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
     // consequence context is attached (unlike cc-held's pure uptime fact),
     // hence "average" rather than "minor" — same tier as healing-gap.
     type: "slow-defensive-response",
-    label: "敌方开大应对迟缓",
+    ...ruleLabel("report.mistakes.rule.slow-defensive-response"),
     severity: "average",
     source: "candidate",
   },
@@ -203,7 +220,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
   // of consequence).
   {
     type: "missed-sync-window",
-    label: "锁死未起爆",
+    ...ruleLabel("report.mistakes.rule.missed-sync-window"),
     severity: "minor",
     source: "candidate",
   },
@@ -211,7 +228,7 @@ export const MISTAKE_RULES: readonly MistakeRule[] = [
   // rather than a pure uptime fact.
   {
     type: "cd-hoarded",
-    label: "大 CD 囤积过久",
+    ...ruleLabel("report.mistakes.rule.cd-hoarded"),
     // average→major(2026-08-20,GH #19,用户裁定):四次测量(12.1 前
     // +25.4 / 初测两队列 +24.7、+27.1 / 正式重跑 +22.7pp)全库最强非循环
     // 信号,却被 major 档的 missed-purge 压在折叠区。
@@ -308,44 +325,150 @@ export interface Mistake {
    * inside the tolerance of the sliding window's first window).
    */
   timed: boolean;
+  /**
+   * The language-neutral inputs `label` and `detail` were written from, so a
+   * list derived (and cached, possibly off the main thread) in zh can be
+   * re-worded in another UI language without running the engine again
+   * (`localizeMistakes`). Absent on hand-built rows, which keep their text.
+   */
+  text?: MistakeText;
 }
 
+/** What a mistake row's label and detail say, before wording. */
+export type MistakeText =
+  | {
+      kind: "candidate";
+      facts: Record<string, string | undefined>;
+    }
+  | {
+      kind: "kick";
+      /** analysis `missedKickKind`: a kick the log refused (immune /
+       * reflected) is worded as the miss row says, a plain miss by its rule. */
+      kickKind: MissedKickKind;
+      kickSpell: string;
+      castSpell: string;
+    }
+  | { kind: "purge"; spell: string; enemy: string; durationS: number };
+
 const RULE_BY_TYPE = new Map(MISTAKE_RULES.map((r) => [r.type, r]));
+
+/** A row's label in `lang`: a refused kick says what the miss row says
+ * (`kickKindLabel`, the wording `missedKickLabel` prints), everything else
+ * its rule's label. */
+function mistakeLabel(
+  rule: MistakeRule,
+  text: MistakeText,
+  lang: Language,
+): string {
+  if (text.kind === "kick" && text.kickKind !== "missed")
+    return kickKindLabel(text.kickKind, lang);
+  return translate(lang, rule.labelKey);
+}
+
+/** A row's detail sentence in `lang`. */
+function mistakeDetail(
+  type: string,
+  text: MistakeText,
+  lang: Language,
+): string {
+  switch (text.kind) {
+    case "candidate":
+      return candidateDetail({ type, facts: text.facts }, lang);
+    case "kick":
+      return text.kickKind !== "missed"
+        ? translate(lang, "report.mistakes.kickRefused", {
+            kick: text.kickSpell,
+            castSpell: text.castSpell,
+          })
+        : translate(lang, "report.mistakes.kickMissed", {
+            kick: text.kickSpell,
+          });
+    case "purge":
+      return translate(lang, "report.mistakes.purgeMissed", {
+        spell: text.spell,
+        enemy: text.enemy,
+        s: Math.round(text.durationS),
+      });
+  }
+}
 
 /** kick-priority: "N 次施法合计" beside the kill target's heal amount — only
  *  when that amount is not zero (a heal that went to another unit sums in
  *  `healedWhom`, which this card does not print). */
-const healCastsNote = (f: Record<string, string | undefined>): string =>
-  f.healCasts && f.healK !== "0" ? `,${f.healCasts} 次施法合计` : "";
+const healCastsNote = (
+  f: Record<string, string | undefined>,
+  lang: Language,
+): string =>
+  f.healCasts && f.healK !== "0"
+    ? translate(lang, "report.mistakes.healCasts", { n: f.healCasts })
+    : "";
 
 /**
  * missed-sync-window's `readyCds` for the card. The row states whose each
  * cooldown is in the prompt's words — `The Hunt (Name-Realm's)`,
- * `Touch of the Magi (yours)` (`syncReadyCdEntry`) — and the card is a Chinese
- * sentence: each entry is read back with the producer's own
- * `parseSyncReadyCdEntry` and the holder said in the card's language. The
+ * `Touch of the Magi (yours)` (`syncReadyCdEntry`) — and the card is a
+ * sentence in the UI language: each entry is read back with the producer's
+ * own `parseSyncReadyCdEntry` and the holder said in the card's language. The
  * spell and the unit name stay as the row has them, like every other name on
  * these cards; an entry that states no holder is the bare name.
  */
-export function syncReadyCdsText(readyCds: string | undefined): string {
+export function syncReadyCdsText(
+  readyCds: string | undefined,
+  lang: Language = "zh",
+): string {
   if (!readyCds) return "";
-  return readyCds
-    .split("、")
-    .map((entry) => {
-      const e = parseSyncReadyCdEntry(entry);
-      if (e.yours) return `${e.spell}(你的)`;
-      return e.holder ? `${e.spell}(${e.holder} 的)` : e.spell;
-    })
-    .join("、");
+  return (
+    readyCds
+      // the producer's entry separator: data, written whatever the UI language
+      .split("、")
+      .map((entry) => {
+        const e = parseSyncReadyCdEntry(entry);
+        if (e.yours)
+          return translate(lang, "report.mistakes.syncYours", {
+            spell: e.spell,
+          });
+        return e.holder
+          ? translate(lang, "report.mistakes.syncHolder", {
+              spell: e.spell,
+              holder: e.holder,
+            })
+          : e.spell;
+      })
+      .join(translate(lang, "report.mistakes.listSep"))
+  );
 }
 
-export function candidateDetail(c: CandidateEvent): string {
-  const f = c.facts as Record<string, string | undefined>;
+/**
+ * A candidate's card sentence in `lang`. Only the sentence frame is
+ * translated: the facts (spell / unit names, the analysis layer's English
+ * phrases such as `mitDefers`, `refTop`, `ownerWhy`, `othersFeasible`,
+ * `selfDmgTrend`, `extras`) are embedded as they are (spec §6.14).
+ */
+export function candidateDetail(
+  c: {
+    type: CandidateEvent["type"];
+    facts: Readonly<Record<string, string | undefined>>;
+  },
+  lang: Language = "zh",
+): string {
+  const f = c.facts;
+  const t = (key: MessageKey, params?: Record<string, string | number>) =>
+    translate(lang, key, params);
   switch (c.type) {
     case "burst-into-mitigation":
-      return `${f.spell ?? ""} 打进 ${f.target ?? ""} 的 ${f.mitSpell ?? ""}(${f.mitDefers ? `延后 ${f.mitDefers.replace(/^defers /, "")} 伤害` : `减伤 ${f.mitPct ?? "?"}%`}),当时 ${f.betterTarget ?? ""} 是更软的目标`;
+      return t("report.mistakes.burstIntoMitigation", {
+        spell: f.spell ?? "",
+        target: f.target ?? "",
+        mitSpell: f.mitSpell ?? "",
+        mit: f.mitDefers
+          ? t("report.mistakes.mitDefers", {
+              amount: f.mitDefers.replace(/^defers /, ""),
+            })
+          : t("report.mistakes.mitPct", { pct: f.mitPct ?? "?" }),
+        betterTarget: f.betterTarget ?? "",
+      });
     case "cd-waste":
-      return `${f.spell ?? ""} 整场未按`;
+      return t("report.mistakes.cdWaste", { spell: f.spell ?? "" });
     case "crisis-no-response": {
       // spec §1c: Solo Shuffle's reference counts ANY friendly death within
       // 15 s; everything else counts the owner's own death within 10 s —
@@ -357,47 +480,142 @@ export function candidateDetail(c: CandidateEvent): string {
       // cached round produced before refOutcomeKey existed (pre-PROMPT_VERSION
       // 40), where refOutcome was still the bare enum token.
       const outcomeKey = f.refOutcomeKey ?? f.refOutcome;
-      const outcomeClause =
+      const outcome = t(
         outcomeKey === "teamDeath15s"
-          ? `此状态下无应对者 ${f.refDeathNoResp ?? "?"}% 十五秒内我方有人阵亡,有应对者 ${f.refDeathResp ?? "?"}%`
-          : `此状态下无应对者 ${f.refDeathNoResp ?? "?"}% 十秒内死亡,有应对者 ${f.refDeathResp ?? "?"}%`;
-      return `血量 ${f.hpPct ?? "?"}% 后 3 秒无应对(${outcomeClause},出手者常见应对:${f.refTop ?? ""})`;
+          ? "report.mistakes.crisisOutcomeTeam"
+          : "report.mistakes.crisisOutcomeOwn",
+        { noResp: f.refDeathNoResp ?? "?", resp: f.refDeathResp ?? "?" },
+      );
+      return t("report.mistakes.crisisNoResponse", {
+        hpPct: f.hpPct ?? "?",
+        outcome,
+        refTop: f.refTop ?? "",
+      });
     }
     case "external-unused":
-      return `${f.victim ?? ""} 阵亡时 ${f.external ?? ""} 可用`;
+      return t("report.mistakes.externalUnused", {
+        victim: f.victim ?? "",
+        external: f.external ?? "",
+      });
     case "questionable-external":
-      return `${f.spell ?? ""} 给 ${f.target ?? ""}(${f.targetHp ?? "?"}% HP,距最近爆发窗 ${f.nearestBurstGapS ?? "?"}s)`;
+      return t("report.mistakes.questionableExternal", {
+        spell: f.spell ?? "",
+        target: f.target ?? "",
+        targetHp: f.targetHp ?? "?",
+        gap: f.nearestBurstGapS ?? "?",
+      });
     case "slow-defensive-response":
-      // 2026-09-01 决策点重写(GH #60 phase 2):facts 从
-      // enemyCds/reacted/delayS/damageK/dmgRatio 换成了
-      // leadCd/extras/pressured/pressuredHpPct/diedInWindow —— 判据从「owner
-      // 反应慢」变成「整队 8 秒内没人应对承压的那个人」。
-      return `${f.leadCd ?? ""}${f.extras ? `(+${f.extras})` : ""} 开启后 8 秒内全队无应对,${f.pressured ?? ""} 被打到 ${f.pressuredHpPct ?? "?"}%${f.diedInWindow === "yes" ? "、窗口内阵亡" : ""}`;
+      // 2026-09-01 decision-point rewrite (GH #60 phase 2): the facts moved
+      // from enemyCds/reacted/delayS/damageK/dmgRatio to
+      // leadCd/extras/pressured/pressuredHpPct/diedInWindow — the criterion
+      // went from "the owner reacted slowly" to "nobody on the team answered
+      // the pressured unit within 8 s".
+      return t("report.mistakes.slowDefensiveResponse", {
+        leadCd: f.leadCd ?? "",
+        extras: f.extras
+          ? t("report.mistakes.extras", { extras: f.extras })
+          : "",
+        pressured: f.pressured ?? "",
+        hpPct: f.pressuredHpPct ?? "?",
+        died: f.diedInWindow === "yes" ? t("report.mistakes.diedInWindow") : "",
+      });
     case "missed-sync-window":
-      return `${f.healer ?? ""} 被 ${f.cc ?? ""} 控 ${f.durationS ?? "?"}s,${syncReadyCdsText(f.readyCds)} 均 ready 未按`;
+      return t("report.mistakes.missedSyncWindow", {
+        healer: f.healer ?? "",
+        cc: f.cc ?? "",
+        durationS: f.durationS ?? "?",
+        readyCds: syncReadyCdsText(f.readyCds, lang),
+      });
     case "cd-hoarded":
-      // 2026-08-30 决策点重写(GH #34):facts 从 lateS/crisisT/castT/unresolved
-      // 换成了 t/crisisUnit/crisisHpPct/readyCds/own —— 危机时刻本身就是 t,
-      // 不再有一个独立更早的"转好时刻"。
-      return `${f.crisisUnit ?? ""} 在 ${f.t ?? "?"}s 掉到 ${f.crisisHpPct ?? "?"}%${f.own === "yes" ? "(自己)" : ""}时,${f.readyCds ?? ""} 均可用却 5 秒内未按`;
+      // 2026-08-30 decision-point rewrite (GH #34): the facts moved from
+      // lateS/crisisT/castT/unresolved to t/crisisUnit/crisisHpPct/readyCds/own
+      // — the crisis moment itself is t; there is no separate, earlier
+      // "came off cooldown" moment any more.
+      return t("report.mistakes.cdHoarded", {
+        crisisUnit: f.crisisUnit ?? "",
+        t: f.t ?? "?",
+        hpPct: f.crisisHpPct ?? "?",
+        own: f.own === "yes" ? t("report.mistakes.ownSelf") : "",
+        readyCds: f.readyCds ?? "",
+      });
     case "backlash-dispel":
-      return `${f.t ?? "?"}s 给 ${f.targetHpPct ?? "?"}% 血的 ${f.target ?? ""} 解掉 ${f.debuff ?? ""}${f.stacks && f.stacks !== "1" ? `×${f.stacks}` : ""},自己吃 ${f.backlash ?? ""},4 秒内承伤 ${f.selfDmgTrend ?? "?"}、治疗 ${f.healTrend ?? "?"}${f.cdCcSpell ? `;驱散 CD 里 ${f.cdCcTarget ?? ""} 吃了 ${f.cdCcDurationS ?? "?"}s ${f.cdCcSpell} 无人能解` : ""}`;
+      return t("report.mistakes.backlashDispel", {
+        t: f.t ?? "?",
+        targetHpPct: f.targetHpPct ?? "?",
+        target: f.target ?? "",
+        debuff: f.debuff ?? "",
+        stacks: f.stacks && f.stacks !== "1" ? `×${f.stacks}` : "",
+        backlash: f.backlash ?? "",
+        selfDmgTrend: f.selfDmgTrend ?? "?",
+        healTrend: f.healTrend ?? "?",
+        cdCc: f.cdCcSpell
+          ? t("report.mistakes.backlashCdCc", {
+              target: f.cdCcTarget ?? "",
+              durationS: f.cdCcDurationS ?? "?",
+              spell: f.cdCcSpell,
+            })
+          : "",
+      });
     case "kick-priority-missed":
-      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k${healCastsNote(f)}),你的 ${f.kick ?? ""} 空着、${
-        // 近战踢是按「读条期间跑得到」放行的,不是站在射程里(分诊 kick-priority F-P3)
-        // 宠物的踢(法术封锁):距离是宠物的(T26 codex B10 #4)
-        f.kicker
-          ? `${f.kicker} ${f.kickerYd ?? "?"} 码内`
+      return t("report.mistakes.kickPriorityMissed", {
+        t: f.t ?? "?",
+        healer: f.healer ?? "",
+        castS: f.castS ?? "?",
+        heal: f.heal ?? "",
+        targetHpPct: f.targetHpPct ?? "?",
+        target: f.target ?? "",
+        healK: f.healK ?? "?",
+        healCasts: healCastsNote(f, lang),
+        kick: f.kick ?? "",
+        // A melee kick is let through on "could run into range during the
+        // cast", not on standing in range (triage kick-priority F-P3); a
+        // pet's kick (Spell Lock) has the pet's distance (T26 codex B10 #4).
+        reach: f.kicker
+          ? t("report.mistakes.reachPet", {
+              kicker: f.kicker,
+              yd: f.kickerYd ?? "?",
+            })
           : f.reachYd
-            ? `距离 ${f.distanceYd ?? "?"} 码(近战踢 ${f.kickRangeYd ?? "?"} 码,读条期间跑得到)`
-            : `${f.distanceYd ?? "?"} 码内`
-      },没踢${f.othersFeasible && f.othersFeasible !== "none" ? `;${f.othersFeasible} 也能踢` : ""}`;
+            ? t("report.mistakes.reachMelee", {
+                yd: f.distanceYd ?? "?",
+                range: f.kickRangeYd ?? "?",
+              })
+            : t("report.mistakes.reachInRange", { yd: f.distanceYd ?? "?" }),
+        others:
+          f.othersFeasible && f.othersFeasible !== "none"
+            ? t("report.mistakes.othersFeasible", { others: f.othersFeasible })
+            : "",
+      });
     case "kick-priority-team":
-      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k${healCastsNote(f)}),你踢不了(${f.ownerWhy ?? ""}),${f.teammates ?? ""} 能踢,没人踢`;
+      return t("report.mistakes.kickPriorityTeam", {
+        t: f.t ?? "?",
+        healer: f.healer ?? "",
+        castS: f.castS ?? "?",
+        heal: f.heal ?? "",
+        targetHpPct: f.targetHpPct ?? "?",
+        target: f.target ?? "",
+        healK: f.healK ?? "?",
+        healCasts: healCastsNote(f, lang),
+        ownerWhy: f.ownerWhy ?? "",
+        teammates: f.teammates ?? "",
+      });
     case "backlash-dispel-window":
       return f.reason === "immune"
-        ? `${f.t ?? "?"}s ${f.target ?? ""}(${f.targetHpPct ?? "?"}%)身上的 ${f.debuff ?? ""} 可解:你当时有 ${f.immuneBuff ?? ""},反噬控制无效`
-        : `${f.t ?? "?"}s ${f.target ?? ""}(${f.targetHpPct ?? "?"}%,${f.dots ?? "?"} 个 DoT)身上的 ${f.debuff ?? ""} 值得解,之后 15 秒又吃了 ${f.casterDmgAfterK ?? "?"}k`;
+        ? t("report.mistakes.backlashWindowImmune", {
+            t: f.t ?? "?",
+            target: f.target ?? "",
+            targetHpPct: f.targetHpPct ?? "?",
+            debuff: f.debuff ?? "",
+            immuneBuff: f.immuneBuff ?? "",
+          })
+        : t("report.mistakes.backlashWindowWorth", {
+            t: f.t ?? "?",
+            target: f.target ?? "",
+            targetHpPct: f.targetHpPct ?? "?",
+            dots: f.dots ?? "?",
+            debuff: f.debuff ?? "",
+            k: f.casterDmgAfterK ?? "?",
+          });
     default:
       return "";
   }
@@ -426,6 +644,7 @@ export function timedAnchorsFromMistakes(
 export function deriveMistakesUncached(
   source: ReportSource,
   range?: TimeRange | null,
+  lang: Language = "zh",
 ): Mistake[] {
   try {
     const legacy = toLegacySafe(source);
@@ -449,16 +668,21 @@ export function deriveMistakesUncached(
         if (!rule || rule.source !== "candidate") continue;
         if (seen.has(c.id)) continue;
         seen.add(c.id);
+        const text: MistakeText = {
+          kind: "candidate",
+          facts: { ...(c.facts as Record<string, string | undefined>) },
+        };
         out.push({
           tS: c.t,
           unitName: c.unitNames[0] ?? p.name,
           type: c.type,
-          label: rule.label,
+          label: mistakeLabel(rule, text, lang),
           severity: rule.severity,
-          detail: candidateDetail(c),
+          detail: mistakeDetail(c.type, text, lang),
           seekNames: c.unitNames.slice(0, 1),
           isOwner: (c.unitNames[0] ?? p.name) === ownerName,
           timed: c.facts.t !== undefined,
+          text,
         });
       }
     }
@@ -474,21 +698,25 @@ export function deriveMistakesUncached(
         const rule = RULE_BY_TYPE.get("missed-kick")!;
         // A12 (user ruling 2026-11-17): a kick the log refused at a live
         // cast stays listed, and is not called missed — the card says what
-        // the miss row says (`missedKickLabel`, the one wording the ledger
-        // chip and the kick dashboard print too)
-        const refused = missedKickLabel(k) !== MISSED_KICK_TEXT;
+        // the miss row says (`kickKindLabel` — `missedKickLabel`'s wording,
+        // the one the ledger chip and the kick dashboard print too)
+        const text: MistakeText = {
+          kind: "kick",
+          kickKind: missedKickKind(k),
+          kickSpell: k.kickSpellName,
+          castSpell: k.refusedAtCastSpellName ?? "",
+        };
         out.push({
           tS: k.atSeconds,
           unitName: p.name,
           type: rule.type,
-          label: refused ? missedKickLabel(k) : rule.label,
+          label: mistakeLabel(rule, text, lang),
           severity: rule.severity,
-          detail: refused
-            ? `${k.kickSpellName} 打在 ${k.refusedAtCastSpellName ?? ""} 读条上`
-            : `${k.kickSpellName} 空放`,
+          detail: mistakeDetail(rule.type, text, lang),
           seekNames: [p.name],
           isOwner: p.name === ownerName,
           timed: true, // an interrupt happens at a specific instant, not over the whole round
+          text,
         });
       }
     }
@@ -513,13 +741,20 @@ export function deriveMistakesUncached(
       const why = missedPurgeNotActionable(w);
       if (why.lockedOut || why.noReach || why.onCooldownThroughout) continue;
       const rule = RULE_BY_TYPE.get("missed-purge-kill-window")!;
+      const text: MistakeText = {
+        kind: "purge",
+        spell: w.spellName,
+        enemy: w.enemyName,
+        durationS: w.durationSeconds,
+      };
       out.push({
         tS: w.timeSeconds,
         unitName: w.enemyName,
         type: rule.type,
-        label: rule.label,
+        label: mistakeLabel(rule, text, lang),
         severity: rule.severity,
-        detail: `${w.spellName} 挂在 ${w.enemyName} 身上 ${Math.round(w.durationSeconds)}s 未被驱散`,
+        detail: mistakeDetail(rule.type, text, lang),
+        text,
         seekNames: [w.enemyName],
         // 漏剥离是整队责任、不归属某个友方 —— 归到 owner 侧,否则它会掉进
         // 「队友」折叠区里消失(unitName 是敌人名,不是任何友方)。
@@ -674,10 +909,50 @@ export function splitMistakesByOwner(mistakes: readonly Mistake[]): {
 export function deriveMistakes(
   source: ReportSource,
   range?: TimeRange | null,
+  lang: Language = "zh",
 ): ReturnType<typeof deriveMistakesUncached> {
-  if (range != null) return deriveMistakesUncached(source, range);
-  // per object (sourceMemo), and per match across re-opens (idMemo)
-  return sourceMemo(source, "deriveMistakes", () =>
-    idMemo(source, "deriveMistakes", [], () => deriveMistakesUncached(source, range)),
+  if (range != null) return deriveMistakesUncached(source, range, lang);
+  // per object (sourceMemo), and per match across re-opens (idMemo). The
+  // cached list is the zh one — the one the off-thread worker fills
+  // (prepareMistakes) — and another language re-words it (localizeMistakes).
+  const zh = sourceMemo(source, "deriveMistakes", () =>
+    idMemo(source, "deriveMistakes", [], () =>
+      deriveMistakesUncached(source, range),
+    ),
   );
+  return localizeMistakes(zh, lang);
+}
+
+const localized = new WeakMap<readonly Mistake[], Map<Language, Mistake[]>>();
+
+/**
+ * `mistakes` with each row's label and detail re-worded in `lang` from the
+ * row's `text` (rows without one keep theirs). zh returns the list itself —
+ * every list is derived in zh first; other languages are kept per list, so
+ * the same list always yields the same array.
+ */
+export function localizeMistakes(
+  mistakes: Mistake[],
+  lang: Language,
+): Mistake[] {
+  if (lang === "zh") return mistakes;
+  let byLang = localized.get(mistakes);
+  if (!byLang) {
+    byLang = new Map();
+    localized.set(mistakes, byLang);
+  }
+  let out = byLang.get(lang);
+  if (!out) {
+    out = mistakes.map((m) => {
+      const rule = RULE_BY_TYPE.get(m.type);
+      if (!m.text || !rule) return m;
+      return {
+        ...m,
+        label: mistakeLabel(rule, m.text, lang),
+        detail: mistakeDetail(m.type, m.text, lang),
+      };
+    });
+    byLang.set(lang, out);
+  }
+  return out;
 }

@@ -1,8 +1,13 @@
 import { fmtTime } from "@gladlog/analysis";
 
+import {
+  type Language,
+  type MessageKey,
+  translate,
+} from "../../../../shared/i18n";
 import { displaySpellName } from "./spellDisplay";
 import { shortUnitName } from "./teamSide";
-import { type TimeRange,tInRange } from "./timeRange";
+import { type TimeRange, tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
 /**
@@ -16,15 +21,39 @@ import type { ReportSource } from "./types";
 export type EventKind =
   "damage" | "heal" | "cast" | "aura" | "dispel" | "interrupt" | "death";
 
-export const EVENT_KIND_LABEL: Record<EventKind, string> = {
-  damage: "伤害",
-  heal: "治疗",
-  cast: "施放",
-  aura: "光环",
-  dispel: "驱散",
-  interrupt: "打断",
-  death: "死亡",
+const EVENT_KIND_KEY: Record<EventKind, MessageKey> = {
+  damage: "report.eventKind.damage",
+  heal: "report.eventKind.heal",
+  cast: "report.eventKind.cast",
+  aura: "report.eventKind.aura",
+  dispel: "report.eventKind.dispel",
+  interrupt: "report.eventKind.interrupt",
+  death: "report.eventKind.death",
 };
+
+export function eventKindLabel(kind: EventKind, lang: Language = "zh"): string {
+  return translate(lang, EVENT_KIND_KEY[kind]);
+}
+
+/** The zh labels, for callers that do not take the UI language yet; new code
+ * uses `eventKindLabel(kind, lang)`. Key order is the filter chips' order. */
+export const EVENT_KIND_LABEL: Record<EventKind, string> = {
+  damage: eventKindLabel("damage"),
+  heal: eventKindLabel("heal"),
+  cast: eventKindLabel("cast"),
+  aura: eventKindLabel("aura"),
+  dispel: eventKindLabel("dispel"),
+  interrupt: eventKindLabel("interrupt"),
+  death: eventKindLabel("death"),
+};
+
+/** Whether an aura row's detail says the aura was lost — in either language,
+ * so grouping works on rows derived in any UI language. */
+const AURA_LOST_DETAILS: ReadonlySet<string> = new Set(
+  (["zh", "en"] as const).map((l) => translate(l, "report.events.auraLost")),
+);
+const isAuraLost = (r: EventRow): boolean =>
+  r.kind === "aura" && AURA_LOST_DETAILS.has(r.detail);
 
 export interface EventRow {
   tS: number;
@@ -185,7 +214,10 @@ const spellNameOf = (e: RawEvent): string =>
 
 /** Flatten + sort (done once, expensive); filtering happens in
  * filterEventRows (cheap, safe to run at high frequency). */
-export function deriveEventRows(source: ReportSource): EventRow[] {
+export function deriveEventRows(
+  source: ReportSource,
+  lang: Language = "zh",
+): EventRow[] {
   try {
     const startMs = source.startTime;
     const rel = (ts: number) => Math.round(((ts - startMs) / 1000) * 10) / 10;
@@ -225,20 +257,30 @@ export function deriveEventRows(source: ReportSource): EventRow[] {
       }
       for (const e of u.auraEvents ?? []) {
         const ev = e.eventName ?? "";
-        if (ev === "SPELL_AURA_APPLIED") push(e, "aura", "+获得");
-        else if (ev === "SPELL_AURA_REMOVED") push(e, "aura", "−失去");
+        if (ev === "SPELL_AURA_APPLIED")
+          push(e, "aura", translate(lang, "report.events.auraGained"));
+        else if (ev === "SPELL_AURA_REMOVED")
+          push(e, "aura", translate(lang, "report.events.auraLost"));
       }
       for (const e of u.actionsOut ?? []) {
         const ev = e.eventName ?? "";
         const extra = e.extraSpellName ?? e.params?.[12] ?? "";
         if (ev === "SPELL_DISPEL" || ev === "SPELL_STOLEN")
-          push(e, "dispel", `驱掉 ${extra}`);
+          push(
+            e,
+            "dispel",
+            translate(lang, "report.events.dispelled", { spell: extra }),
+          );
         else if (ev === "SPELL_INTERRUPT")
-          push(e, "interrupt", `打断 ${extra}`);
+          push(
+            e,
+            "interrupt",
+            translate(lang, "report.events.interrupted", { spell: extra }),
+          );
       }
       for (const e of u.deaths ?? []) {
         if (!e.unconscious)
-          push(e, "death", "死亡", {
+          push(e, "death", translate(lang, "report.events.died"), {
             destOverride: shortUnitName(u.name),
             destId: u.id,
           });
@@ -297,12 +339,11 @@ export function groupEventRows(rows: EventRow[]): DisplayRow[] {
   let i = 0;
   while (i < rows.length) {
     const r = rows[i]!;
-    if (r.kind === "aura" && r.detail === "−失去") {
+    if (isAuraLost(r)) {
       let j = i + 1;
       while (
         j < rows.length &&
-        rows[j]!.kind === "aura" &&
-        rows[j]!.detail === "−失去" &&
+        isAuraLost(rows[j]!) &&
         rows[j]!.destName === r.destName &&
         rows[j]!.tS - r.tS <= AURA_FLOOD_SPAN_S
       )

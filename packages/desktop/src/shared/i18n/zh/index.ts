@@ -4,6 +4,7 @@ import { zhDev } from "./dev";
 import { zhMatchList } from "./matchList";
 import { zhNav } from "./nav";
 import { zhRecorder } from "./recorder";
+import { zhReportDerive } from "./reportDerive";
 import { zhSettings } from "./settings";
 import { zhUpdate } from "./update";
 
@@ -18,4 +19,5 @@ export const zhMessages = {
   ...zhUpdate,
   ...zhRecorder,
   ...zhDev,
+  ...zhReportDerive,
 };

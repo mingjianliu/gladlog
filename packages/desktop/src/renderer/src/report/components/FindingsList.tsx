@@ -12,7 +12,6 @@ import {
 import { ChipIcon } from "./SpellInline";
 export { findingKey };
 
-
 export function FindingsList({
   findings,
   onSelect,
@@ -151,7 +150,7 @@ export function FindingsList({
                       onClick={onJump ? () => onJump([c.id]) : undefined}
                     >
                       <ChipIcon spellId={c.spellId} />⏱ {fmtTime(c.t)}{" "}
-                      {candidateShortLabel(c)}
+                      {candidateShortLabel(c, lang)}
                     </button>
                   ))}
                 {onJump && (

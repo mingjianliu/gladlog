@@ -1,11 +1,12 @@
 import { analyzeCcBreaks, type ICcBreakEvent } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { type Language, translate } from "../../../../shared/i18n";
 import { toLegacySafe } from "./legacySource";
-import { sourceMemo } from "./sourceMemo";
+import { langMemoKey, sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
 import { shortUnitName } from "./teamSide";
-import { type TimeRange,tInRange } from "./timeRange";
+import { type TimeRange, tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
 /** A single CC-break instance; tS = relative seconds. */
@@ -30,11 +31,15 @@ export interface CcBreakDash {
 
 const EMPTY: CcBreakDash = { friendly: [], enemy: [], rootBreakCount: 0 };
 
-const fmtName = (id: string, fallback: string): string =>
-  id ? displaySpellName(id, fallback) : "近战";
+const fmtName = (id: string, fallback: string, lang: Language): string =>
+  id ? displaySpellName(id, fallback) : translate(lang, "report.spell.melee");
 
-const remainTag = (e: ICcBreakEvent): string =>
-  e.remainingSeconds !== null ? `(剩 ${e.remainingSeconds.toFixed(1)}s)` : "";
+const remainTag = (e: ICcBreakEvent, lang: Language): string =>
+  e.remainingSeconds !== null
+    ? translate(lang, "report.ccBreak.remaining", {
+        s: e.remainingSeconds.toFixed(1),
+      })
+    : "";
 
 /**
  * CC-break statistics (2026-08-02 user request): every judgment is consumed
@@ -45,7 +50,8 @@ const remainTag = (e: ICcBreakEvent): string =>
  */
 function deriveCcBreakDashUncached(
   source: ReportSource,
-  range?: TimeRange | null,
+  range: TimeRange | null | undefined,
+  lang: Language,
 ): CcBreakDash {
   try {
     const legacy = toLegacySafe(source);
@@ -81,7 +87,14 @@ function deriveCcBreakDashUncached(
       .filter((e) => tInRange(e.atSeconds, range))
       .map((e) => ({
         tS: e.atSeconds,
-        label: `${shortUnitName(e.breakerName)} 的 ${fmtName(e.breakSpellId, e.breakSpellName)} 打破了 ${shortUnitName(e.casterName)} 给 ${shortUnitName(e.holderName)} 上的 ${fmtName(e.ccSpellId, e.ccSpellName)}${remainTag(e)}`,
+        label: translate(lang, "report.ccBreak.friendly", {
+          breaker: shortUnitName(e.breakerName),
+          breakSpell: fmtName(e.breakSpellId, e.breakSpellName, lang),
+          caster: shortUnitName(e.casterName),
+          holder: shortUnitName(e.holderName),
+          ccSpell: fmtName(e.ccSpellId, e.ccSpellName, lang),
+          remain: remainTag(e, lang),
+        }),
         unitName: e.breakerName,
       }));
 
@@ -89,7 +102,13 @@ function deriveCcBreakDashUncached(
       .filter((e) => tInRange(e.atSeconds, range))
       .map((e) => ({
         tS: e.atSeconds,
-        label: `敌方 ${shortUnitName(e.breakerName)} 的 ${fmtName(e.breakSpellId, e.breakSpellName)} 提前打破了 ${shortUnitName(e.holderName)} 身上的 ${fmtName(e.ccSpellId, e.ccSpellName)}${remainTag(e)}`,
+        label: translate(lang, "report.ccBreak.enemy", {
+          breaker: shortUnitName(e.breakerName),
+          breakSpell: fmtName(e.breakSpellId, e.breakSpellName, lang),
+          holder: shortUnitName(e.holderName),
+          ccSpell: fmtName(e.ccSpellId, e.ccSpellName, lang),
+          remain: remainTag(e, lang),
+        }),
         unitName: e.holderName,
       }));
 
@@ -104,7 +123,10 @@ function deriveCcBreakDashUncached(
 export function deriveCcBreakDash(
   source: ReportSource,
   range?: TimeRange | null,
+  lang: Language = "zh",
 ): ReturnType<typeof deriveCcBreakDashUncached> {
-  if (range != null) return deriveCcBreakDashUncached(source, range);
-  return sourceMemo(source, "deriveCcBreakDash", () => deriveCcBreakDashUncached(source, range));
+  if (range != null) return deriveCcBreakDashUncached(source, range, lang);
+  return sourceMemo(source, langMemoKey("deriveCcBreakDash", lang), () =>
+    deriveCcBreakDashUncached(source, range, lang),
+  );
 }

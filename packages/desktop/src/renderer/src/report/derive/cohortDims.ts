@@ -1,5 +1,7 @@
 import { metricLabel, metricScore, verdictLabel } from "@gladlog/analysis";
 
+import { type Language, translate } from "../../../../shared/i18n";
+
 export interface CohortDim {
   key: string;
   value: number | null;
@@ -35,23 +37,27 @@ export interface CohortDimRow {
 
 export function cohortDims(
   dims: CohortDim[],
-  lang: "en" | "zh" = "en",
+  lang: Language = "en",
 ): CohortDimRow[] {
   return dims.map((d) => {
     const valueLabel = d.value !== null ? String(d.value) : "N/A";
-    const percentileLabel =
-      lang === "zh" ? `第 ${d.percentile} 百分位` : `${d.percentile}th`;
+    const percentileLabel = translate(lang, "report.cohort.percentile", {
+      n: d.percentile,
+    });
     // The zh verdict is derived deterministically from the percentile
     // (analysis's verdict is a free-form string, and anything outside the
     // vocabulary leaks through as English sitting alongside — "bottom
     // quartile" was observed leaking); en keeps the original wording.
     const vLabel =
       lang === "zh"
-        ? d.percentile > 50
-          ? "高于本分档中位"
-          : d.percentile < 50
-            ? "低于本分档中位"
-            : "处于本分档中位"
+        ? translate(
+            lang,
+            d.percentile > 50
+              ? "report.cohort.aboveMedian"
+              : d.percentile < 50
+                ? "report.cohort.belowMedian"
+                : "report.cohort.atMedian",
+          )
         : verdictLabel(d.verdict, lang);
     return {
       key: d.key,

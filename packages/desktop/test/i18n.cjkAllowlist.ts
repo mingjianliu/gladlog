@@ -74,4 +74,58 @@ export const CJK_ALLOWLIST: ReadonlyArray<{
     reason:
       "fixture-mode stand-in for a coach-chat reply (model output); VITE_FIXTURE_MODE only",
   },
+  {
+    file: "packages/desktop/src/renderer/src/report/data/demoAnalysis.ts",
+    snippet: "被集火秒杀",
+    reason:
+      "canned demo AI analysis (a stand-in for a model reply: finding title), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/data/demoAnalysis.ts",
+    snippet: "敌方双 DPS 进攻 CD 对齐时",
+    reason:
+      "canned demo AI analysis (a stand-in for a model reply: finding explanation), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/data/demoAnalysis.ts",
+    snippet: "在 2:08 你的治疗吃了 4 秒恐惧",
+    reason:
+      "canned demo AI analysis (a stand-in for a model reply: deep-dive text), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/data/demoAnalysis.ts",
+    snippet: "恐惧 → 治疗",
+    reason:
+      "canned demo AI analysis (a stand-in for a model reply: deep-dive evidence chip label), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/data/demoAnalysis.ts",
+    snippet: "敌 天神下凡",
+    reason:
+      "canned demo AI analysis (a stand-in for a model reply: deep-dive evidence chip label), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/data/demoAnalysis.ts",
+    snippet: "防御 CD 留手",
+    reason:
+      "canned demo AI analysis (a stand-in for a model reply: finding title), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/data/demoAnalysis.ts",
+    snippet: "整场保留了 Tranquility 未用即阵亡",
+    reason:
+      "canned demo AI analysis (a stand-in for a model reply: finding explanation), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/data/demoAnalysis.ts",
+    snippet: "站位偏开阔",
+    reason:
+      "canned demo AI analysis (a stand-in for a model reply: finding title), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/data/demoAnalysis.ts",
+    snippet: "多数时间停留在中场开阔区",
+    reason:
+      "canned demo AI analysis (a stand-in for a model reply: finding explanation), shown by the AI card's demo button and served as the report-ai visual-baseline payload; data, not UI copy",
+  },
 ];

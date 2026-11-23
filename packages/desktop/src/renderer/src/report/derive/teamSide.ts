@@ -1,3 +1,8 @@
+import {
+  type Language,
+  type MessageKey,
+  translate,
+} from "../../../../shared/i18n";
 import type { ReportSource } from "./types";
 
 /**
@@ -10,10 +15,22 @@ import type { ReportSource } from "./types";
  */
 export type TeamSide = "friendly" | "enemy" | "unknown";
 
+const TEAM_SIDE_KEY: Record<TeamSide, MessageKey> = {
+  friendly: "report.teamSide.friendly",
+  enemy: "report.teamSide.enemy",
+  unknown: "report.teamSide.unknown",
+};
+
+export function teamSideLabel(side: TeamSide, lang: Language = "zh"): string {
+  return translate(lang, TEAM_SIDE_KEY[side]);
+}
+
+/** The zh labels, for callers that do not take the UI language yet; new code
+ * uses `teamSideLabel(side, lang)`. */
 export const TEAM_SIDE_LABEL: Record<TeamSide, string> = {
-  friendly: "我方",
-  enemy: "敌方",
-  unknown: "未知",
+  friendly: teamSideLabel("friendly"),
+  enemy: teamSideLabel("enemy"),
+  unknown: teamSideLabel("unknown"),
 };
 
 /**

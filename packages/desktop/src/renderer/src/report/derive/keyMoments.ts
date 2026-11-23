@@ -23,9 +23,10 @@ import {
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { type Language, translate } from "../../../../shared/i18n";
 import { resolveOwner } from "./analysisInput";
 import { toLegacySafe } from "./legacySource";
-import { sourceMemo } from "./sourceMemo";
+import { langMemoKey, sourceMemo } from "./sourceMemo";
 import { shortUnitName } from "./teamSide";
 import type { ReportSource } from "./types";
 
@@ -84,7 +85,8 @@ const drSuffix = (drInfo: IDRInfo | null): string =>
  */
 function deriveKeyMomentsUncached(
   source: ReportSource,
-  ownerId?: string,
+  ownerId: string | undefined,
+  lang: Language,
 ): KeyMoment[] {
   const out: Array<Omit<KeyMoment, "weight">> = [];
   let legacy: ReturnType<typeof toLegacySafe>;
@@ -137,7 +139,12 @@ function deriveKeyMomentsUncached(
           t: rel(d.timestamp),
           kind: "death",
           side,
-          title: side === "friendly" ? "阵亡" : "击杀",
+          title: translate(
+            lang,
+            side === "friendly"
+              ? "report.keyMoment.died"
+              : "report.keyMoment.kill",
+          ),
           unitNames: [u.name],
           jumpT: rel(d.timestamp),
         });
@@ -160,7 +167,12 @@ function deriveKeyMomentsUncached(
           toT: b.toSeconds,
           kind: "burst-band",
           side: "friendly",
-          title: converted ? "爆发(已转化)" : "爆发(未转化)",
+          title: translate(
+            lang,
+            converted
+              ? "report.keyMoment.burstConverted"
+              : "report.keyMoment.burstUnconverted",
+          ),
           detail: t
             ? `${(t.damage / 1_000_000).toFixed(2)}M → ${shortUnitName(t.unitName)}`
             : undefined,
@@ -182,7 +194,7 @@ function deriveKeyMomentsUncached(
         toT: w.toSeconds,
         kind: "burst-band",
         side: "enemy",
-        title: "敌方爆发",
+        title: translate(lang, "report.keyMoment.enemyBurst"),
         detail: w.activeCDs.map((c) => c.spellName).join(" + "),
         unitNames: [...new Set(w.activeCDs.map((c) => c.playerName))],
         jumpT: w.fromSeconds,
@@ -219,7 +231,12 @@ function deriveKeyMomentsUncached(
             side: "friendly",
             title: cd.spellName,
             detail:
-              [cast.timingLabel, isPanic ? "恐慌性使用" : undefined]
+              [
+                cast.timingLabel,
+                isPanic
+                  ? translate(lang, "report.keyMoment.panicUse")
+                  : undefined,
+              ]
                 .filter(Boolean)
                 .join(" · ") || undefined,
             spellId: cd.spellId,
@@ -236,7 +253,7 @@ function deriveKeyMomentsUncached(
           t: rel(use.atMs),
           kind: "defensive",
           side: "friendly",
-          title: "交饰品",
+          title: translate(lang, "report.keyMoment.trinket"),
           spellId:
             use.kind === "adaptation"
               ? ADAPTATION_TRIGGER_AURA_ID
@@ -266,7 +283,9 @@ function deriveKeyMomentsUncached(
         kind: "dispel",
         side: "friendly",
         title: `${e.dispelSpellName}(${e.priority})`,
-        detail: `解掉 ${e.removedSpellName}`,
+        detail: translate(lang, "report.keyMoment.dispelled", {
+          spell: e.removedSpellName,
+        }),
         unitNames: [e.sourceName, e.targetName],
         jumpT: e.timeSeconds,
       });
@@ -288,9 +307,13 @@ function deriveKeyMomentsUncached(
           t: cc.atSeconds,
           kind: "cc",
           side: "enemy",
-          title: `被控:${cc.spellName}`,
+          title: translate(lang, "report.keyMoment.ccTaken", {
+            spell: cc.spellName,
+          }),
           detail: `${cc.durationSeconds.toFixed(0)}s${
-            cc.trinketState === "used" ? " · 交饰品解" : ""
+            cc.trinketState === "used"
+              ? translate(lang, "report.keyMoment.trinketedOut")
+              : ""
           }${drSuffix(cc.drInfo)}`,
           // Both caster and victim go into unitNames so the replay can
           // highlight the enemy caster too
@@ -307,7 +330,9 @@ function deriveKeyMomentsUncached(
           t: cc.atSeconds,
           kind: "cc",
           side: "friendly",
-          title: `控制成功:${cc.spellName}`,
+          title: translate(lang, "report.keyMoment.ccLanded", {
+            spell: cc.spellName,
+          }),
           detail: `${cc.durationSeconds.toFixed(0)}s → ${shortUnitName(e.name)}${drSuffix(cc.drInfo)}`,
           unitNames: [cc.sourceName, e.name],
           jumpT: cc.atSeconds,
@@ -329,8 +354,14 @@ function deriveKeyMomentsUncached(
           toT: g.toSeconds,
           kind: "heal-gap",
           side: "friendly",
-          title: `治疗空窗 ${g.durationSeconds.toFixed(1)}s`,
-          detail: `${g.mostDamagedSpec}(${shortUnitName(g.mostDamagedName)})承受 ${Math.round(g.mostDamagedAmount / 1000)}k`,
+          title: translate(lang, "report.keyMoment.healGap", {
+            s: g.durationSeconds.toFixed(1),
+          }),
+          detail: translate(lang, "report.keyMoment.healGapDetail", {
+            spec: g.mostDamagedSpec,
+            name: shortUnitName(g.mostDamagedName),
+            k: Math.round(g.mostDamagedAmount / 1000),
+          }),
           unitNames: [owner.name],
           jumpT: g.fromSeconds,
         });
@@ -382,26 +413,40 @@ function deriveKeyMomentsUncached(
         ) {
           continue;
         }
-        const title =
+        const title = translate(
+          lang,
           e.type === "STAYED_IN"
-            ? "顶着爆发硬扛"
+            ? "report.keyMoment.stayedIn"
             : e.type === "MISSED_PUSH"
-              ? "该压没压"
-              : "CD 距离外";
+              ? "report.keyMoment.missedPush"
+              : "report.keyMoment.outOfRange",
+        );
         const detail =
           e.type === "STAYED_IN"
-            ? `${e.startDistanceYards}→${e.endDistanceYards}yd 贴 ${shortUnitName(e.nearestEnemyName ?? "")}${
-                e.dangerLabel ? ` · ${e.dangerLabel}爆发` : ""
-              }${
+            ? translate(lang, "report.keyMoment.stayedInDetail", {
+                from: `${e.startDistanceYards}`,
+                to: `${e.endDistanceYards}`,
+                enemy: shortUnitName(e.nearestEnemyName ?? ""),
+                danger: e.dangerLabel
+                  ? translate(lang, "report.keyMoment.danger", {
+                      label: e.dangerLabel,
+                    })
+                  : "",
                 // the true trough, as the prompt prints it (codex R6C-01 #4)
-                e.ownerHpStartPct != null &&
-                (e.ownerHpLowPct ?? e.ownerHpMinPct) != null
-                  ? ` · HP ${e.ownerHpStartPct}%→${e.ownerHpLowPct ?? e.ownerHpMinPct}%`
-                  : ""
-              }`
+                hp:
+                  e.ownerHpStartPct != null &&
+                  (e.ownerHpLowPct ?? e.ownerHpMinPct) != null
+                    ? ` · HP ${e.ownerHpStartPct}%→${e.ownerHpLowPct ?? e.ownerHpMinPct}%`
+                    : "",
+              })
             : e.type === "MISSED_PUSH"
-              ? `>${e.startDistanceYards}yd 脱节`
-              : `${e.spellName ?? ""} · ${e.startDistanceYards}yd 外`;
+              ? translate(lang, "report.keyMoment.missedPushDetail", {
+                  yd: `${e.startDistanceYards}`,
+                })
+              : translate(lang, "report.keyMoment.outOfRangeDetail", {
+                  spell: e.spellName ?? "",
+                  yd: `${e.startDistanceYards}`,
+                });
         out.push({
           t: e.atSeconds,
           toT: e.toSeconds,
@@ -429,8 +474,14 @@ function deriveKeyMomentsUncached(
 
 /** deriveKeyMomentsUncached, kept per source object and owner across mounts (see
  * sourceMemo.ts). */
-export function deriveKeyMoments(source: ReportSource, ownerId?: string): ReturnType<typeof deriveKeyMomentsUncached> {
-  return sourceMemo(source, `deriveKeyMoments:${ownerId ?? ""}`, () =>
-    deriveKeyMomentsUncached(source, ownerId),
+export function deriveKeyMoments(
+  source: ReportSource,
+  ownerId?: string,
+  lang: Language = "zh",
+): ReturnType<typeof deriveKeyMomentsUncached> {
+  return sourceMemo(
+    source,
+    langMemoKey(`deriveKeyMoments:${ownerId ?? ""}`, lang),
+    () => deriveKeyMomentsUncached(source, ownerId, lang),
   );
 }

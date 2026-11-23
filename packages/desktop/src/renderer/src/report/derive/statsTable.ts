@@ -1,9 +1,10 @@
 import { analyzePlayerCCAndTrinket, isKickSpellId } from "@gladlog/analysis";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
+import { type Language, translate } from "../../../../shared/i18n";
 import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
-import { sourceMemo } from "./sourceMemo";
+import { langMemoKey, sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
 import {
   eventInRange,
@@ -61,7 +62,8 @@ export interface StatsRow {
  * durations clipped by overlap. Predicates live in derive/timeRange.ts. */
 function deriveStatsTableUncached(
   source: ReportSource,
-  range?: TimeRange | null,
+  range: TimeRange | null | undefined,
+  lang: Language,
 ): StatsRow[] {
   try {
     const legacy = toLegacySafe(source);
@@ -159,7 +161,11 @@ function deriveStatsTableUncached(
           kicksTaken: kicksTakenInWindow
             .map((i) => ({
               tS: i.atSeconds,
-              label: `${i.kickSpellName} 打断 ${i.interruptedSpellName}(${i.sourceName})`,
+              label: translate(lang, "report.stats.kickTaken", {
+                kick: i.kickSpellName,
+                spell: i.interruptedSpellName,
+                source: i.sourceName,
+              }),
             }))
             .sort((a, b) => a.tS - b.tS),
           ccTaken: ccInWindow
@@ -188,7 +194,10 @@ function deriveStatsTableUncached(
 export function deriveStatsTable(
   source: ReportSource,
   range?: TimeRange | null,
+  lang: Language = "zh",
 ): ReturnType<typeof deriveStatsTableUncached> {
-  if (range != null) return deriveStatsTableUncached(source, range);
-  return sourceMemo(source, "deriveStatsTable", () => deriveStatsTableUncached(source, range));
+  if (range != null) return deriveStatsTableUncached(source, range, lang);
+  return sourceMemo(source, langMemoKey("deriveStatsTable", lang), () =>
+    deriveStatsTableUncached(source, range, lang),
+  );
 }

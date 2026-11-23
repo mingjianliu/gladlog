@@ -5,8 +5,9 @@ import {
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { type Language, translate } from "../../../../shared/i18n";
 import { toLegacySafe } from "./legacySource";
-import { sourceMemo } from "./sourceMemo";
+import { langMemoKey, sourceMemo } from "./sourceMemo";
 import type { ReportSource } from "./types";
 
 export interface PressureBand {
@@ -21,8 +22,8 @@ export interface PressureBand {
 export interface ExposureMark {
   tS: number;
   label: "Critical" | "Exposed" | "Pressured"; // Safe does not enter the lane
-  /** Hover text (Chinese, assembled in derive): threat count / trinket state /
-   *  LoS cover distance. */
+  /** Hover text (in the UI language, assembled in derive): threat count /
+   *  trinket state / LoS cover distance. */
   title: string;
 }
 
@@ -31,7 +32,10 @@ export interface ExposureMark {
  * computePressureWindows' default arguments), so every segment the prompt has
  * must also appear in the lane. Exposure goes through the single entry point
  * computeHealerExposureEvents, which degrades gracefully without coordinates. */
-function derivePressureLanesUncached(source: ReportSource): {
+function derivePressureLanesUncached(
+  source: ReportSource,
+  lang: Language,
+): {
   spikes: PressureBand[];
   exposures: ExposureMark[];
 } {
@@ -64,20 +68,29 @@ function derivePressureLanesUncached(source: ReportSource): {
       .filter((e) => e.exposureLabel !== "Safe")
       .map((e) => {
         const exposed = e.threats.filter((t) => !t.losBlocked).length;
-        const trinket =
+        const trinket = translate(
+          lang,
           e.trinketState === "available"
-            ? "饰品在手"
+            ? "report.pressure.trinketAvailable"
             : e.trinketState === "passive"
-              ? "被动饰品"
-              : "饰品转 CD";
+              ? "report.pressure.trinketPassive"
+              : "report.pressure.trinketOnCd",
+        );
         const los =
           e.losBreak && e.losBreak.repositionYards <= 30
-            ? `;LoS 掩体 ~${e.losBreak.repositionYards} 码`
+            ? translate(lang, "report.pressure.losCover", {
+                yd: e.losBreak.repositionYards,
+              })
             : "";
         return {
           tS: e.atSeconds,
           label: e.exposureLabel as ExposureMark["label"],
-          title: `治疗暴露(${e.exposureLabel})· ${exposed} 威胁在 LoS · ${trinket}${los}`,
+          title: translate(lang, "report.pressure.exposureTitle", {
+            label: e.exposureLabel,
+            n: exposed,
+            trinket,
+            los,
+          }),
         };
       });
 
@@ -88,6 +101,11 @@ function derivePressureLanesUncached(source: ReportSource): {
 }
 
 /** derivePressureLanesUncached, kept per source object across mounts (see sourceMemo.ts). */
-export function derivePressureLanes(source: ReportSource): ReturnType<typeof derivePressureLanesUncached> {
-  return sourceMemo(source, "derivePressureLanes", () => derivePressureLanesUncached(source));
+export function derivePressureLanes(
+  source: ReportSource,
+  lang: Language = "zh",
+): ReturnType<typeof derivePressureLanesUncached> {
+  return sourceMemo(source, langMemoKey("derivePressureLanes", lang), () =>
+    derivePressureLanesUncached(source, lang),
+  );
 }

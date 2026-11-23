@@ -517,7 +517,10 @@ export function StructuredAnalysisPanel({
     dataReady,
   );
 
-  const keyMoments = useMemo(() => deriveKeyMoments(source), [source]);
+  const keyMoments = useMemo(
+    () => deriveKeyMoments(source, undefined, lang),
+    [source, lang],
+  );
 
   // #15 inline icons: built once per match / per language; rebuilt once
   // dataReady flips true (the index goes from null to usable and the display
@@ -753,7 +756,6 @@ export function StructuredAnalysisPanel({
   const anyBackend = AI_BACKENDS.some(isBackendAvailable);
   useEffect(() => {
     if (aiSettings) probeCliOnce();
-     
   }, [aiSettings]);
 
   const defaultBackend: AiBackend = aiSettings?.aiBackend ?? "anthropic";
@@ -980,7 +982,7 @@ export function StructuredAnalysisPanel({
           )}
           {displayEmpty !== "stale" &&
             (() => {
-              const note = selfReviewNote(result);
+              const note = selfReviewNote(result, lang);
               return note ? (
                 <p
                   className="rpt-self-review-note"
@@ -1021,7 +1023,7 @@ export function StructuredAnalysisPanel({
                   marginBottom: "12px",
                 }}
               >
-                {zeroFindingText(result)}
+                {zeroFindingText(result, lang)}
               </p>
               <FindingsList
                 findings={[]}
@@ -1081,7 +1083,7 @@ export function StructuredAnalysisPanel({
               ? `${backendModelLabel(runMeta.backend, runMeta.model)} 分析中`
               : "分析中",
             elapsedS != null ? `已 ${fmtElapsed(elapsedS)}` : null,
-            cliWaitHint(runMeta?.backend, "zh"),
+            cliWaitHint(runMeta?.backend, lang),
           ]
             .filter(Boolean)
             .join(" · ")}

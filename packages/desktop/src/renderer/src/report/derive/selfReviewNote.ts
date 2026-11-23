@@ -1,4 +1,5 @@
 import { findingKey } from "../../../../shared/findingKey";
+import { type Language, translate } from "../../../../shared/i18n";
 
 type NoteFinding = {
   category: string;
@@ -22,13 +23,16 @@ export type SelfReviewView = {
  * severity differs from the first round's; dropped = first-round findings no
  * longer shown. null = nothing to say (review off, or nothing to review).
  */
-export function selfReviewNote(result: {
-  findings: NoteFinding[];
-  selfReview?: SelfReviewView;
-}): string | null {
+export function selfReviewNote(
+  result: {
+    findings: NoteFinding[];
+    selfReview?: SelfReviewView;
+  },
+  lang: Language = "zh",
+): string | null {
   const r = result.selfReview;
   if (!r || r.status === "skipped") return null;
-  if (r.status === "failed") return "未自查 · AI 自查没有成功,显示的是原始结果";
+  if (r.status === "failed") return translate(lang, "report.selfReview.failed");
   const original = r.original ?? [];
   const shown = new Map(result.findings.map((f) => [findingKey(f), f]));
   let changed = 0;
@@ -43,11 +47,16 @@ export function selfReviewNote(result: {
     )
       changed++;
   }
-  if (changed === 0 && dropped === 0) return "已 AI 自查 · 没有改动";
+  if (changed === 0 && dropped === 0)
+    return translate(lang, "report.selfReview.noChanges");
   return [
-    "已 AI 自查",
-    changed > 0 ? `${changed} 条结论有改动` : null,
-    dropped > 0 ? `删去 ${dropped} 条` : null,
+    translate(lang, "report.selfReview.reviewed"),
+    changed > 0
+      ? translate(lang, "report.selfReview.changed", { n: changed })
+      : null,
+    dropped > 0
+      ? translate(lang, "report.selfReview.dropped", { n: dropped })
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");

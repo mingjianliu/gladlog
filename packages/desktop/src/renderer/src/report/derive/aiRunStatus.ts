@@ -1,4 +1,5 @@
 import { isCliAiBackend } from "../../../../shared/aiModels";
+import { type Language, translate } from "../../../../shared/i18n";
 
 /**
  * 「分析中/对比中」状态行的纯函数(2026-08-05 生产反馈:CLI 后端假流式,
@@ -20,10 +21,8 @@ export function fmtElapsed(seconds: number): string {
  */
 export function cliWaitHint(
   backend: string | null | undefined,
-  lang: "zh" | "en",
+  lang: Language,
 ): string | null {
   if (!backend || !isCliAiBackend(backend)) return null;
-  return lang === "zh"
-    ? "CLI 后端整段返回、无中途进度,通常需要一到几分钟"
-    : "CLI backends return in one piece with no mid-run progress — this usually takes a few minutes";
+  return translate(lang, "report.aiRun.cliWaitHint");
 }

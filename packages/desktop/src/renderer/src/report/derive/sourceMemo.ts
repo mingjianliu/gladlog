@@ -1,5 +1,6 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 
+import type { Language } from "../../../../shared/i18n";
 import type { ReportSource } from "./types";
 
 /**
@@ -182,6 +183,16 @@ export function sourceMemoWith<T>(
     slot.value = compute();
   }
   return slot.value;
+}
+
+/**
+ * The memo key of a derive whose output text follows the UI language: zh keeps
+ * the bare key (the one the off-thread prewarm and the tests name), any other
+ * language gets its own slot so a language switch never serves the other
+ * language's strings.
+ */
+export function langMemoKey(key: string, lang: Language): string {
+  return lang === "zh" ? key : `${key}@${lang}`;
 }
 
 /** Whether `source` already has a value under `key` (no recency touch). */

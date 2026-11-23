@@ -1,6 +1,7 @@
 import type { Finding } from "@gladlog/analysis";
 import { fmtTime } from "@gladlog/analysis";
 
+import { type Language, translate } from "../../../../shared/i18n";
 import { deriveKickDash } from "./kickDash";
 import { meterValue } from "./meterRows";
 import { deriveMistakes } from "./mistakes";
@@ -28,25 +29,32 @@ import type { ReportSource } from "./types";
  * predicate — see docs/predicate-index.md.
  */
 
-
 export function buildReportMarkdown(
   source: ReportSource,
   range?: TimeRange | null,
+  lang: Language = "zh",
 ): string {
   const lines: string[] = [];
   const durS = Math.round(rangeDurationS(source, range));
   lines.push(
-    `# gladlog 战报 — ${source.bracket} · ${source.result}` +
+    translate(lang, "report.export.title", {
+      bracket: source.bracket,
+      result: source.result,
+    }) +
       (range
-        ? ` · 窗口 ${fmtTime(range.fromS)}–${fmtTime(range.toS)}(${durS}s)`
+        ? translate(lang, "report.export.window", {
+            from: fmtTime(range.fromS),
+            to: fmtTime(range.toS),
+            s: durS,
+          })
         : ""),
   );
 
   lines.push(
     "",
-    "## 输出/治疗",
+    translate(lang, "report.export.outputHeading"),
     "",
-    "| 玩家 | 伤害 | 治疗 | 承伤 | 死亡 |",
+    translate(lang, "report.export.outputHeader"),
     "| --- | ---: | ---: | ---: | ---: |",
   );
   for (const r of deriveSummary(source, range)) {
@@ -58,13 +66,13 @@ export function buildReportMarkdown(
     );
   }
 
-  const stats = deriveStatsTable(source, range);
+  const stats = deriveStatsTable(source, range, lang);
   if (stats.length > 0) {
     lines.push(
       "",
-      "## 统计",
+      translate(lang, "report.export.statsHeading"),
       "",
-      "| 玩家 | 打断施放 | 被打断 | 被控秒 | 驱散 | purge |",
+      translate(lang, "report.export.statsHeader"),
       "| --- | ---: | ---: | ---: | ---: | ---: |",
     );
     for (const r of stats) {
@@ -78,24 +86,29 @@ export function buildReportMarkdown(
   if (kicks.length > 0) {
     lines.push(
       "",
-      "## 打断",
+      translate(lang, "report.export.kicksHeading"),
       "",
-      "| 玩家 | 施放 | 打断 | 沉默生效 | 被骗 | 落空 |",
+      translate(lang, "report.export.kicksHeader"),
       "| --- | ---: | ---: | ---: | ---: | ---: |",
     );
     for (const r of kicks) {
       lines.push(
-        `| ${shortUnitName(r.name)} | ${r.total} | ${r.landed} | ${r.silenced} | ${r.juked} | ${r.missed}${r.refused > 0 ? `(含 ${r.refused} 次被免疫/反射)` : ""} |`,
+        `| ${shortUnitName(r.name)} | ${r.total} | ${r.landed} | ${r.silenced} | ${r.juked} | ${r.missed}${r.refused > 0 ? translate(lang, "report.export.refused", { n: r.refused }) : ""} |`,
       );
     }
   }
 
-  const mistakes = deriveMistakes(source, range);
+  const mistakes = deriveMistakes(source, range, lang);
   if (mistakes.length > 0) {
-    lines.push("", `## 失误清单(${mistakes.length} 条,确定性规则直出)`, "");
+    lines.push(
+      "",
+      translate(lang, "report.export.mistakesHeading", { n: mistakes.length }),
+      "",
+    );
+    const wholeRound = translate(lang, "report.export.wholeRound");
     for (const mk of mistakes) {
       lines.push(
-        `- ${mk.tS > 0 ? fmtTime(mk.tS) : "全场"} [${mk.severity}] ${shortUnitName(mk.unitName)} · ${mk.label}${mk.detail ? ` — ${mk.detail}` : ""}`,
+        `- ${mk.tS > 0 ? fmtTime(mk.tS) : wholeRound} [${mk.severity}] ${shortUnitName(mk.unitName)} · ${mk.label}${mk.detail ? ` — ${mk.detail}` : ""}`,
       );
     }
   }

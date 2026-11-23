@@ -20,8 +20,9 @@ import {
 } from "@gladlog/analysis";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
+import { type Language, translate } from "../../../../shared/i18n";
 import { toLegacySafe } from "./legacySource";
-import { sourceMemo } from "./sourceMemo";
+import { langMemoKey, sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
 import type { ReportSource } from "./types";
 
@@ -162,7 +163,10 @@ const DEF_TYPES = new Set(["immunities", "buffs_defensive"]);
  * render layer does not rebuild death judgements; that is the lesson from the
  * duplicate-predicate disease found in the audit.
  */
-function deriveDeathRecapsUncached(source: ReportSource): DeathRecap[] {
+function deriveDeathRecapsUncached(
+  source: ReportSource,
+  lang: Language,
+): DeathRecap[] {
   try {
     const legacy = toLegacySafe(source);
     const matchStartMs = legacy.startTime;
@@ -497,16 +501,22 @@ function deriveDeathRecapsUncached(source: ReportSource): DeathRecap[] {
             d.removedSpellId,
             d.removedSpellName,
           );
-          const verb = d.isSpellSteal ? "偷走" : "驱散";
           events.push({
             tS: d.timeSeconds,
             kind: "dispel",
-            spell:
+            spell: translate(
+              lang,
               isSource && isTarget
-                ? `${removed}(自解)`
+                ? "report.deathRecap.selfDispel"
                 : isTarget
-                  ? `${removed}(被${verb})`
-                  : `${removed}(${verb} ${d.targetName})`,
+                  ? d.isSpellSteal
+                    ? "report.deathRecap.stolenFromVictim"
+                    : "report.deathRecap.dispelledOffVictim"
+                  : d.isSpellSteal
+                    ? "report.deathRecap.victimStole"
+                    : "report.deathRecap.victimDispelled",
+              { removed, target: d.targetName },
+            ),
             spellId: d.removedSpellId,
             srcName: d.sourceName,
           });
@@ -674,7 +684,9 @@ function deriveDeathRecapsUncached(source: ReportSource): DeathRecap[] {
             spellId: m.spellId,
             spellName: m.spellName,
             casterWasInCC: m.casterWasInCC,
-            ...(m.casterCouldNotPay ? { casterCouldNotPay: true as const } : {}),
+            ...(m.casterCouldNotPay
+              ? { casterCouldNotPay: true as const }
+              : {}),
           })),
           mitigationAudit,
           counterfactuals,
@@ -688,6 +700,11 @@ function deriveDeathRecapsUncached(source: ReportSource): DeathRecap[] {
 }
 
 /** deriveDeathRecapsUncached, kept per source object across mounts (see sourceMemo.ts). */
-export function deriveDeathRecaps(source: ReportSource): ReturnType<typeof deriveDeathRecapsUncached> {
-  return sourceMemo(source, "deriveDeathRecaps", () => deriveDeathRecapsUncached(source));
+export function deriveDeathRecaps(
+  source: ReportSource,
+  lang: Language = "zh",
+): ReturnType<typeof deriveDeathRecapsUncached> {
+  return sourceMemo(source, langMemoKey("deriveDeathRecaps", lang), () =>
+    deriveDeathRecapsUncached(source, lang),
+  );
 }

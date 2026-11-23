@@ -1,3 +1,4 @@
+import type { Language } from "../../../../shared/i18n";
 import { deriveKeyMoments, type KeyMomentKind } from "./keyMoments";
 import { deriveMistakes } from "./mistakes";
 import { shortUnitName } from "./teamSide";
@@ -27,10 +28,11 @@ export interface AiChipLike {
 export function deriveVideoMoments(
   source: ReportSource,
   aiChips?: AiChipLike[],
+  lang: Language = "zh",
 ): VideoMoment[] {
   const out: VideoMoment[] = [];
   try {
-    for (const k of deriveKeyMoments(source)) {
+    for (const k of deriveKeyMoments(source, undefined, lang)) {
       out.push({
         tS: k.t,
         toS: k.toT,
@@ -44,7 +46,7 @@ export function deriveVideoMoments(
     /* one failing source must not take the rest down */
   }
   try {
-    for (const mk of deriveMistakes(source)) {
+    for (const mk of deriveMistakes(source, undefined, lang)) {
       out.push({
         tS: mk.tS,
         kind: "mistake",

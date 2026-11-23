@@ -4,6 +4,12 @@ import {
   missedKickKind,
 } from "@gladlog/analysis";
 
+import {
+  type Language,
+  type MessageKey,
+  translate,
+} from "../../../../shared/i18n";
+
 /**
  * The one wording of a `missed` kick for the report UI's per-kick renderings
  * (mistake card, burst-ledger chip, kick dashboard entry — and the count the
@@ -19,20 +25,26 @@ import {
  * their row on another unit than the one whose bar was running (a Grounding
  * Totem took the kick): those say nothing of the caster and stay 落空.
  * Re-runnable check: `packages/eval/scripts/scan5/t196.ts`.
+ *
+ * The wording lives in the dictionary (`report.kick.*`). `MISSED_KICK_TEXT`
+ * stays the zh value on purpose (spec §6.5b): t196 keeps checking the Chinese
+ * wording, and `missedKickLabel(k) !== MISSED_KICK_TEXT` (default zh) is how
+ * callers ask "was this kick refused".
  */
-export const MISSED_KICK_TEXT = "落空";
-const REFUSED_KICK_TEXT: Readonly<
-  Record<Exclude<MissedKickKind, "missed">, string>
-> = {
-  immune: "目标免疫打断",
-  reflected: "被目标反射",
+export const MISSED_KICK_TEXT = translate("zh", "report.kick.missed");
+const KICK_TEXT_KEY: Readonly<Record<MissedKickKind, MessageKey>> = {
+  missed: "report.kick.missed",
+  immune: "report.kick.immune",
+  reflected: "report.kick.reflected",
 };
+/** The wording of a kick outcome kind in `lang` — what `missedKickLabel`
+ * prints, for a caller that kept the kind rather than the kick. */
+export function kickKindLabel(kind: MissedKickKind, lang: Language): string {
+  return translate(lang, KICK_TEXT_KEY[kind]);
+}
 export function missedKickLabel(
-  k: Pick<
-    IKickAuditEntry,
-    "kickMiss" | "refusedAtCastSpellName" | "targetId"
-  >,
+  k: Pick<IKickAuditEntry, "kickMiss" | "refusedAtCastSpellName" | "targetId">,
+  lang: Language = "zh",
 ): string {
-  const kind = missedKickKind(k);
-  return kind === "missed" ? MISSED_KICK_TEXT : REFUSED_KICK_TEXT[kind];
+  return kickKindLabel(missedKickKind(k), lang);
 }
