@@ -8,6 +8,14 @@
 // `file + "\u0000" + snippet` list is pinned by a sha256 below. Removing an
 // entry passes; adding one fails until someone appends it to the frozen list
 // and updates the hash on purpose.
+//
+// Matching is exact: an entry allows the literal whose whole text (a template's
+// whole source, `${…}` included) equals its snippet, nothing that merely
+// contains it — so a new message cannot ride on an old entry. Hash re-pinned
+// 2026-11-23 (final review) when matching switched from substring to exact:
+// every frozen pair's snippet was replaced by the one full literal it matched,
+// and the substring pair "（fixture）" (fixtureBridge.ts) was split into the two
+// literals it covered. No literal was added to what the list allows.
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -118,8 +126,8 @@ export function findCjkLiterals(
   return hits;
 }
 
-function isAllowlisted(file: string, text: string): boolean {
-  return CJK_ALLOWLIST.some((a) => a.file === file && text.includes(a.snippet));
+export function isAllowlisted(file: string, text: string): boolean {
+  return CJK_ALLOWLIST.some((a) => a.file === file && text === a.snippet);
 }
 
 describe("i18n: 源码里不许写死中文(§6.9 第 1 条)", () => {
@@ -177,7 +185,7 @@ describe("i18n: 源码里不许写死中文(§6.9 第 1 条)", () => {
     );
     expect(keys).toEqual([...new Set(keys)].sort());
     expect(createHash("sha256").update(keys.join("\n")).digest("hex")).toBe(
-      "79468eb593d3d9a5c66800934ec1569c562a9ace5490abc52494a986bf7ac504",
+      "8f371ff7185056dc44dcb84a4aecc9ef37cab35cf3bb3e7405f3f7d7cb307e58",
     );
   });
 
@@ -187,10 +195,22 @@ describe("i18n: 源码里不许写死中文(§6.9 第 1 条)", () => {
       expect(a.snippet, a.file).toMatch(/\S/);
       const hits = hitsByFile.get(a.file) ?? [];
       expect(
-        hits.some((h) => h.text.includes(a.snippet)),
+        hits.some((h) => h.text === a.snippet),
         `stale allowlist entry: ${a.file} ${a.snippet}`,
       ).toBe(true);
     }
+  });
+});
+
+describe("allowlist 精确匹配的变异测试", () => {
+  it("整条字面量相同才放行;只是包含已登记文本的新字面量不放行", () => {
+    const f = "packages/desktop/src/shared/chatProtocol.ts";
+    expect(isAllowlisted(f, "已停止")).toBe(true);
+    expect(isAllowlisted(f, "已停止了")).toBe(false);
+    expect(isAllowlisted(f, "（已停止）")).toBe(false);
+    expect(isAllowlisted("packages/desktop/src/main/ai.ts", "已停止")).toBe(
+      false,
+    );
   });
 });
 
