@@ -26,7 +26,7 @@ import { createIconCache } from "./iconCache";
 import { registerIpc } from "./ipc";
 import {
   effectiveLanguage,
-  readInstallerLanguage,
+  installerLanguageToAdopt,
   withEffectiveLanguage,
 } from "./language";
 import { createLearningService } from "./learning";
@@ -181,9 +181,11 @@ function effectiveSettings() {
  * installer -- only while the user has not chosen one. A missing or invalid
  * file leaves the setting null (the renderer then asks). */
 function adoptInstallerLanguage(): void {
-  if (settings.get().language !== null) return;
-  if (process.platform !== "win32") return;
-  const language = readInstallerLanguage(dirname(app.getPath("exe")));
+  const language = installerLanguageToAdopt(
+    process.platform,
+    settings.get().language,
+    () => dirname(app.getPath("exe")),
+  );
   if (language) settings.save({ language });
 }
 

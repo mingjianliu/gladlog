@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { INSTALLER_LANGUAGE_FILE } from "../src/main/language";
+
 /**
  * Release-side config gate for auto-update.
  *
@@ -26,7 +28,13 @@ interface DesktopPackageJson {
   devDependencies: Record<string, string>;
   build: {
     publish?: { provider?: string; owner?: string; repo?: string };
-    nsis?: { artifactName?: string };
+    nsis?: {
+      artifactName?: string;
+      multiLanguageInstaller?: boolean;
+      installerLanguages?: string[];
+      displayLanguageSelector?: boolean;
+      include?: string;
+    };
   };
 }
 
@@ -123,5 +131,49 @@ describe("发布端配置门规(自动更新的地基)", () => {
     expect(wf).not.toContain("dist-app/*.yml");
     expect(wf).not.toContain(".y*ml");
     expect(wf).not.toContain(".yaml");
+  });
+});
+
+describe("Windows 安装器语言(spec 2026-11-23 §6.6)", () => {
+  const nshPath = join(desktopDir, "build/installer.nsh");
+  // Comments stripped so a commented-out line cannot satisfy an assertion.
+  const nshCode = (): string =>
+    readFileSync(nshPath, "utf-8")
+      .split(/\r?\n/)
+      .map((l) => l.replace(/^\s*[;#].*$/, ""))
+      .join("\n");
+
+  it("build.nsis 开多语言安装器、只带 en_US / zh_CN、启动时让用户选语言、引入 installer.nsh", () => {
+    // Option names checked against app-builder-lib 26.15.3
+    // (out/targets/nsis/nsisOptions.d.ts: include / displayLanguageSelector /
+    // installerLanguages / multiLanguageInstaller; nsisLang.js LangConfigurator).
+    const nsis = readPkg().build.nsis;
+    expect(nsis?.multiLanguageInstaller).toBe(true);
+    expect(nsis?.installerLanguages).toEqual(["en_US", "zh_CN"]);
+    // Without it NSIS silently picks the OS language and never asks
+    // (installer.nsi only runs MUI_LANGDLL_DISPLAY under DISPLAY_LANG_SELECTOR).
+    expect(nsis?.displayLanguageSelector).toBe(true);
+    expect(nsis?.include).toBe("build/installer.nsh");
+    expect(existsSync(nshPath)).toBe(true);
+  });
+
+  it("installer.nsh 在 customInstall 宏里把语言写进 $INSTDIR 下 main 读取的那个文件名", () => {
+    const code = nshCode();
+    expect(code).toMatch(/!macro\s+customInstall\b/);
+    expect(code).toMatch(/!macroend/);
+    // Same file name main reads (readInstallerLanguage) -- one source.
+    expect(code).toContain(`"$INSTDIR\\${INSTALLER_LANGUAGE_FILE}"`);
+    // 2052 = zh-CN LCID → "zh"; everything else → "en".
+    expect(code).toMatch(/\$LANGUAGE\s*==?\s*2052/);
+    expect(code).toMatch(/"zh"/);
+    expect(code).toMatch(/"en"/);
+  });
+
+  it("静默安装(自动更新)不写文件 —— 静默时 $LANGUAGE 是没人选过的默认值", () => {
+    const code = nshCode();
+    const guard = code.search(/\$\{IfNot\}\s+\$\{Silent\}|IfSilent/);
+    const write = code.indexOf("FileOpen");
+    expect(guard).toBeGreaterThanOrEqual(0);
+    expect(write).toBeGreaterThan(guard);
   });
 });

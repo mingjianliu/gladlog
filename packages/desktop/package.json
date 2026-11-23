@@ -95,7 +95,14 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "${productName}.Setup.${version}.${ext}"
+      "artifactName": "${productName}.Setup.${version}.${ext}",
+      "multiLanguageInstaller": true,
+      "installerLanguages": [
+        "en_US",
+        "zh_CN"
+      ],
+      "displayLanguageSelector": true,
+      "include": "build/installer.nsh"
     }
   }
 }

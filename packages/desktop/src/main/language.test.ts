@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   effectiveLanguage,
+  INSTALLER_LANGUAGE_FILE,
+  installerLanguageToAdopt,
   readInstallerLanguage,
   withEffectiveLanguage,
 } from "./language";
@@ -39,7 +41,7 @@ describe("withEffectiveLanguage", () => {
 });
 
 describe("readInstallerLanguage", () => {
-  it("文件内容 \"en\\r\\n\" → en", () => {
+  it('文件内容 "en\\r\\n" → en', () => {
     const dir = tmpDir();
     writeFileSync(join(dir, "installer-language.txt"), "en\r\n");
     expect(readInstallerLanguage(dir)).toBe("en");
@@ -60,5 +62,41 @@ describe("readInstallerLanguage", () => {
   it("文件不存在 → null,不抛异常", () => {
     expect(readInstallerLanguage(tmpDir())).toBeNull();
     expect(readInstallerLanguage(join(tmpDir(), "nope"))).toBeNull();
+  });
+});
+
+describe("installerLanguageToAdopt", () => {
+  const dirWith = (content: string) => {
+    const dir = tmpDir();
+    writeFileSync(join(dir, INSTALLER_LANGUAGE_FILE), content);
+    return dir;
+  };
+
+  it("win32 且设置里还没选语言时,采用安装器写的值", () => {
+    const dir = dirWith("zh");
+    expect(installerLanguageToAdopt("win32", null, () => dir)).toBe("zh");
+  });
+
+  it("已经选过语言时不看安装器文件(覆盖安装不改设置)", () => {
+    const dir = dirWith("zh");
+    let asked = false;
+    const exeDir = () => {
+      asked = true;
+      return dir;
+    };
+    expect(installerLanguageToAdopt("win32", "en", exeDir)).toBeNull();
+    expect(asked).toBe(false);
+  });
+
+  it("非 win32 平台不读", () => {
+    const dir = dirWith("zh");
+    expect(installerLanguageToAdopt("darwin", null, () => dir)).toBeNull();
+    expect(installerLanguageToAdopt("linux", null, () => dir)).toBeNull();
+  });
+
+  it("文件缺失或内容无效时当作不存在", () => {
+    expect(installerLanguageToAdopt("win32", null, tmpDir)).toBeNull();
+    const bad = dirWith("fr");
+    expect(installerLanguageToAdopt("win32", null, () => bad)).toBeNull();
   });
 });

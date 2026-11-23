@@ -46,3 +46,17 @@ export function readInstallerLanguage(exeDir: string): Language | null {
     return null;
   }
 }
+
+/** §6.1 step 3: the installer's language to adopt into settings, or null.
+ * Only on Windows, and only while the user has not chosen a language -- an
+ * existing choice survives any later reinstall. `exeDir` is called only when
+ * the file is actually read. */
+export function installerLanguageToAdopt(
+  platform: NodeJS.Platform,
+  current: Language | null,
+  exeDir: () => string,
+): Language | null {
+  if (current !== null) return null;
+  if (platform !== "win32") return null;
+  return readInstallerLanguage(exeDir());
+}
