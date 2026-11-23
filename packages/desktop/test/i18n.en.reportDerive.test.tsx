@@ -50,6 +50,7 @@ import { deriveVideoMoments } from "../src/renderer/src/report/derive/videoMomen
 import { zeroFindingText } from "../src/renderer/src/report/derive/zeroFindingText";
 import { ExportReportPage } from "../src/renderer/src/report/ExportReportPage";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
+import { FACTS, VARIANTS } from "./support/mistakeDetailMatrix";
 
 /** Deep copy with every CJK string replaced by a stable ASCII token. */
 function asciiLog<T>(value: T): T {
@@ -118,74 +119,6 @@ function sample(): ReportSource {
   actor.actionsOut = [row("SPELL_DISPEL"), row("SPELL_INTERRUPT")];
   return m;
 }
-
-const FACTS: Record<string, string> = Object.fromEntries(
-  [
-    "spell",
-    "target",
-    "mitSpell",
-    "mitPct",
-    "betterTarget",
-    "refDeathNoResp",
-    "refDeathResp",
-    "hpPct",
-    "refTop",
-    "victim",
-    "external",
-    "targetHp",
-    "nearestBurstGapS",
-    "leadCd",
-    "extras",
-    "pressured",
-    "pressuredHpPct",
-    "healer",
-    "cc",
-    "durationS",
-    "crisisUnit",
-    "t",
-    "crisisHpPct",
-    "targetHpPct",
-    "debuff",
-    "backlash",
-    "selfDmgTrend",
-    "healTrend",
-    "cdCcSpell",
-    "cdCcTarget",
-    "cdCcDurationS",
-    "castS",
-    "heal",
-    "healK",
-    "healCasts",
-    "kick",
-    "kicker",
-    "kickerYd",
-    "distanceYd",
-    "kickRangeYd",
-    "othersFeasible",
-    "ownerWhy",
-    "teammates",
-    "immuneBuff",
-    "dots",
-    "casterDmgAfterK",
-  ].map((k) => [k, `x${k}`]),
-);
-/** Branch toggles, so every alternative fragment is worded at least once. */
-const VARIANTS: Array<Record<string, string | undefined>> = [
-  {},
-  {
-    mitDefers: "defers 12k",
-    refOutcomeKey: "teamDeath15s",
-    diedInWindow: "yes",
-    own: "yes",
-    stacks: "3",
-    reason: "immune",
-    kicker: undefined,
-    reachYd: "20",
-    healCasts: "1",
-  },
-  { kicker: undefined, othersFeasible: "none" },
-  { readyCds: "The Hunt (A-Realm's)、Touch of the Magi (yours)、Avatar" },
-];
 
 describe("i18n: 战报 derive 层英文模式不出中文", () => {
   beforeAll(async () => {
