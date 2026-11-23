@@ -410,7 +410,7 @@ function deriveDeathRecapsUncached(
           const ev: DeathRecapEvent = {
             tS,
             kind: "dmg",
-            spell: displaySpellName(d.spellId ?? "", d.spellName ?? ""),
+            spell: displaySpellName(d.spellId ?? "", d.spellName ?? "", lang),
             spellId: d.spellId,
             amount: Math.abs(d.effectiveAmount),
             srcName: nameOf(d.srcUnitId),
@@ -437,7 +437,7 @@ function deriveDeathRecapsUncached(
           const ev: DeathRecapEvent = {
             tS,
             kind: "heal",
-            spell: displaySpellName(h.spellId ?? "", h.spellName ?? ""),
+            spell: displaySpellName(h.spellId ?? "", h.spellName ?? "", lang),
             spellId: h.spellId,
             amount: h.effectiveAmount,
             srcName: nameOf(h.srcUnitId),
@@ -459,7 +459,7 @@ function deriveDeathRecapsUncached(
           events.push({
             tS,
             kind: "cc",
-            spell: displaySpellName(a.spellId ?? "", a.spellName ?? ""),
+            spell: displaySpellName(a.spellId ?? "", a.spellName ?? "", lang),
             spellId: a.spellId,
             srcName: nameOf(a.srcUnitId),
           });
@@ -483,7 +483,7 @@ function deriveDeathRecapsUncached(
           events.push({
             tS,
             kind: "def_used",
-            spell: displaySpellName(c.spellId ?? "", c.spellName ?? ""),
+            spell: displaySpellName(c.spellId ?? "", c.spellName ?? "", lang),
             spellId: c.spellId,
             srcName: unit.name,
             ...(panic ? { panic: true } : {}),
@@ -500,6 +500,7 @@ function deriveDeathRecapsUncached(
           const removed = displaySpellName(
             d.removedSpellId,
             d.removedSpellName,
+            lang,
           );
           events.push({
             tS: d.timeSeconds,

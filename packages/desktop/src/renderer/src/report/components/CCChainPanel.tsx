@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
 import type { CCChainRow } from "../derive/ccChainDash";
+import { spellLabel } from "../derive/spellLabel";
 import { UnitName } from "./UnitName";
 
 /**
@@ -22,7 +23,9 @@ export function CCChainPanel({
   rows: CCChainRow[];
   onSeek?: (tSeconds: number, unitNames: string[]) => void;
 }) {
-  const { t } = useT();
+  // lang / namesVersion: a context consumer, so the spell names re-render
+  // when the language or the English name table changes
+  const { t, lang } = useT();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   // Keep the card shell on empty data (P1-1): the feature stays discoverable
   // in short rounds with no CC chains
@@ -103,7 +106,8 @@ export function CCChainPanel({
                             <span className="rpt-stats-detail-t">
                               {fmtTime(a.atSeconds)}
                             </span>{" "}
-                            {a.spellName} · {a.casterName} ·{" "}
+                            {spellLabel(a.spellId, a.spellName, lang)} ·{" "}
+                            {a.casterName} ·{" "}
                             {/* no DR family, no tier to state (T125) */}
                             {!isNamedDrCategory(a.drInfo.category) ? (
                               <span className="rpt-stats-dim">—</span>

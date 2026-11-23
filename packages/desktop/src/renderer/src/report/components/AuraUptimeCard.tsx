@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
 import type { AuraUptime, AuraUptimeRow } from "../derive/auraUptime";
+import { spellLabel } from "../derive/spellLabel";
 import type { TimeRange } from "../derive/timeRange";
 import { UnitName } from "./UnitName";
 
@@ -26,81 +27,90 @@ export function AuraUptimeCard({
   data: AuraUptime;
   range?: TimeRange | null;
 }) {
-  const { t } = useT();
+  // lang / namesVersion: a context consumer, so the spell names re-render
+  // when the language or the English name table changes
+  const { t, lang } = useT();
   const { groups, durationS } = data;
   const [openUnits, setOpenUnits] = useState<Set<string>>(new Set());
   if (groups.length === 0) return null;
   const x = (s: number) => (s / durationS) * BAR_W;
 
-  const auraRow = (r: AuraUptimeRow) => (
-    <tr
-      key={`${r.unitId}:${r.spellId}`}
-      className={r.reaction === "Hostile" ? "rpt-stats-enemy" : ""}
-    >
-      <td className="rpt-aura-spell rpt-aura-indent">{r.spellName}</td>
-      <td className="rpt-aura-bar-cell">
-        <svg
-          viewBox={`0 0 ${BAR_W} 12`}
-          className="rpt-aura-bar"
-          preserveAspectRatio="none"
-        >
-          <rect
-            x={0}
-            y={0}
-            width={BAR_W}
-            height={12}
-            className="rpt-aura-track"
-          />
-          <line
-            x1={BAR_W / 2}
-            y1={0}
-            x2={BAR_W / 2}
-            y2={12}
-            className="rpt-aura-midline"
-          />
-          {range && (
+  const auraRow = (r: AuraUptimeRow) => {
+    const spell = spellLabel(r.spellId, r.spellName, lang);
+    return (
+      <tr
+        key={`${r.unitId}:${r.spellId}`}
+        className={r.reaction === "Hostile" ? "rpt-stats-enemy" : ""}
+      >
+        <td className="rpt-aura-spell rpt-aura-indent">{spell}</td>
+        <td className="rpt-aura-bar-cell">
+          <svg
+            viewBox={`0 0 ${BAR_W} 12`}
+            className="rpt-aura-bar"
+            preserveAspectRatio="none"
+          >
             <rect
-              x={x(range.fromS)}
+              x={0}
               y={0}
-              width={Math.max(1, x(range.toS) - x(range.fromS))}
+              width={BAR_W}
               height={12}
-              className="rpt-aura-window"
+              className="rpt-aura-track"
             />
-          )}
-          {r.intervals.map((iv, k) => (
-            <rect
-              key={k}
-              x={x(iv.fromS)}
-              y={2}
-              width={Math.max(1.5, x(iv.toS) - x(iv.fromS))}
-              height={8}
-              className={[
-                `rpt-aura-seg rpt-aura-${r.kind}`,
-                iv.inferredStart || iv.inferredEnd ? "rpt-aura-inferred" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+            <line
+              x1={BAR_W / 2}
+              y1={0}
+              x2={BAR_W / 2}
+              y2={12}
+              className="rpt-aura-midline"
+            />
+            {range && (
+              <rect
+                x={x(range.fromS)}
+                y={0}
+                width={Math.max(1, x(range.toS) - x(range.fromS))}
+                height={12}
+                className="rpt-aura-window"
+              />
+            )}
+            {r.intervals.map((iv, k) => (
+              <rect
+                key={k}
+                x={x(iv.fromS)}
+                y={2}
+                width={Math.max(1.5, x(iv.toS) - x(iv.fromS))}
+                height={8}
+                className={[
+                  `rpt-aura-seg rpt-aura-${r.kind}`,
+                  iv.inferredStart || iv.inferredEnd ? "rpt-aura-inferred" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <title>
+                  {`${spell} ${iv.fromS.toFixed(1)}–${iv.toS.toFixed(1)}s` +
+                    (iv.inferredStart ? t("report.aura.inferredStart") : "") +
+                    (iv.inferredEnd ? t("report.aura.inferredEnd") : "")}
+                </title>
+              </rect>
+            ))}
+          </svg>
+        </td>
+        <td className="rpt-aura-pct">
+          {r.uptimePct}%
+          <span className="rpt-stats-dim"> ×{r.applications}</span>
+          {r.hasInferred && (
+            <span
+              className="rpt-stats-dim"
+              title={t("report.aura.hasInferred")}
             >
-              <title>
-                {`${r.spellName} ${iv.fromS.toFixed(1)}–${iv.toS.toFixed(1)}s` +
-                  (iv.inferredStart ? t("report.aura.inferredStart") : "") +
-                  (iv.inferredEnd ? t("report.aura.inferredEnd") : "")}
-              </title>
-            </rect>
-          ))}
-        </svg>
-      </td>
-      <td className="rpt-aura-pct">
-        {r.uptimePct}%<span className="rpt-stats-dim"> ×{r.applications}</span>
-        {r.hasInferred && (
-          <span className="rpt-stats-dim" title={t("report.aura.hasInferred")}>
-            {" "}
-            ⌁
-          </span>
-        )}
-      </td>
-    </tr>
-  );
+              {" "}
+              ⌁
+            </span>
+          )}
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="rpt-ledger" data-testid="aura-uptime">

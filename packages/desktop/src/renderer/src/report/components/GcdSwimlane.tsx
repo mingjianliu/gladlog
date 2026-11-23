@@ -19,6 +19,7 @@ import {
 } from "../derive/casts";
 import { clusterGcdCasts } from "../derive/gcdCluster";
 import type { ReplayTrack } from "../derive/replay";
+import { spellLabel } from "../derive/spellLabel";
 import { shortUnitName, teamSideLabel } from "../derive/teamSide";
 import type { ReportSource } from "../derive/types";
 import type { VulnBand } from "../derive/vulnWindows";
@@ -140,7 +141,11 @@ const LaneBody = memo(function LaneBody({
   onDeath: (unitId: string, tMs: number) => void;
   yFor: (ts: number) => number;
 }) {
-  const { t: tt } = useT();
+  // a context consumer: re-renders through memo() when the language or the
+  // English name table (namesVersion) changes, so the names below follow
+  const { t: tt, lang } = useT();
+  const name = (m: { spellId: number; spellName: string }) =>
+    spellLabel(m.spellId, m.spellName, lang);
   const fmtT = (ms: number) => {
     const sec = Math.max(0, (ms - startTime) / 1000);
     return fmtTime(sec);
@@ -202,7 +207,7 @@ const LaneBody = memo(function LaneBody({
                     members
                       .map(
                         (m) =>
-                          `${fmtT(m.t)} ${m.spellName}${m.targetName ? ` → ${m.targetName}` : ""}`,
+                          `${fmtT(m.t)} ${name(m)}${m.targetName ? ` → ${m.targetName}` : ""}`,
                       )
                       .join("\n") +
                     (hasSeek
@@ -219,11 +224,7 @@ const LaneBody = memo(function LaneBody({
                       title={title}
                     >
                       {c.icon ? (
-                        <SpellIcon
-                          icon={c.icon}
-                          label={c.spellName}
-                          size={14}
-                        />
+                        <SpellIcon icon={c.icon} label={name(c)} size={14} />
                       ) : (
                         <span
                           className="rpt-gcd-act-dot"
@@ -237,7 +238,7 @@ const LaneBody = memo(function LaneBody({
                       {/* Compact density: names move into the title, minis
                           fold into an ×N count */}
                       {!compact && (
-                        <span className="rpt-gcd-act-name">{c.spellName}</span>
+                        <span className="rpt-gcd-act-name">{name(c)}</span>
                       )}
                       {/* Cast target (user request 2026-08-14): full density
                           shows every non-self target; compact keeps only
@@ -268,17 +269,17 @@ const LaneBody = memo(function LaneBody({
                                 ? "rpt-gcd-mini major"
                                 : "rpt-gcd-mini"
                             }
-                            title={`${fmtT(m.t)} ${m.spellName}`}
+                            title={`${fmtT(m.t)} ${name(m)}`}
                           >
                             {m.icon ? (
                               <SpellIcon
                                 icon={m.icon}
-                                label={m.spellName}
+                                label={name(m)}
                                 size={12}
                               />
                             ) : (
                               <span className="rpt-gcd-mini-letter">
-                                {m.spellName.slice(0, 1)}
+                                {name(m).slice(0, 1)}
                               </span>
                             )}
                           </span>

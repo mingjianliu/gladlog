@@ -6,6 +6,7 @@ import {
   translate,
 } from "../../../../shared/i18n";
 import { displaySpellName } from "./spellDisplay";
+import { spellLabel } from "./spellLabel";
 import { shortUnitName } from "./teamSide";
 import { type TimeRange, tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
@@ -182,6 +183,7 @@ interface RawEvent {
   destName?: string;
   amount?: number;
   effectiveAmount?: number;
+  extraSpellId?: number | string;
   extraSpellName?: string;
   params?: string[];
   unconscious?: boolean;
@@ -209,8 +211,8 @@ const fmtAmt = (n: number): string =>
  * convention as the inline detail column). */
 export const fmtEventAmt = fmtAmt;
 
-const spellNameOf = (e: RawEvent): string =>
-  displaySpellName(String(e.spellId ?? ""), e.spellName);
+const spellNameOf = (e: RawEvent, lang: Language): string =>
+  displaySpellName(String(e.spellId ?? ""), e.spellName, lang);
 
 /** Flatten + sort (done once, expensive); filtering happens in
  * filterEventRows (cheap, safe to run at high frequency). */
@@ -234,7 +236,7 @@ export function deriveEventRows(
         srcName: shortUnitName(e.srcName),
         destName: shortUnitName(extra?.destOverride ?? e.destName),
         spellId: String(e.spellId ?? ""),
-        spellName: spellNameOf(e),
+        spellName: spellNameOf(e, lang),
         detail,
         amount: extra?.amount,
         destId: extra?.destId,
@@ -264,7 +266,11 @@ export function deriveEventRows(
       }
       for (const e of u.actionsOut ?? []) {
         const ev = e.eventName ?? "";
-        const extra = e.extraSpellName ?? e.params?.[12] ?? "";
+        const extra = spellLabel(
+          e.extraSpellId ?? e.params?.[11],
+          e.extraSpellName ?? e.params?.[12] ?? "",
+          lang,
+        );
         if (ev === "SPELL_DISPEL" || ev === "SPELL_STOLEN")
           push(
             e,

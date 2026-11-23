@@ -6,6 +6,7 @@ import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
 import { langMemoKey, sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
+import { spellLabel } from "./spellLabel";
 import {
   eventInRange,
   overlapSeconds,
@@ -155,7 +156,7 @@ function deriveStatsTableUncached(
           kicksCast: kickCastEvents
             .map((e) => ({
               tS: (e.logLine.timestamp - legacy.startTime) / 1000,
-              label: displaySpellName(e.spellId ?? "", e.spellName ?? ""),
+              label: displaySpellName(e.spellId ?? "", e.spellName ?? "", lang),
             }))
             .sort((a, b) => a.tS - b.tS),
           kicksTaken: kicksTakenInWindow
@@ -171,7 +172,7 @@ function deriveStatsTableUncached(
           ccTaken: ccInWindow
             .map((i) => ({
               tS: i.atSeconds,
-              label: `${i.spellName} ${i.durationSeconds.toFixed(1)}s(${i.sourceName})`,
+              label: `${spellLabel(i.spellId, i.spellName, lang)} ${i.durationSeconds.toFixed(1)}s(${i.sourceName})`,
             }))
             .sort((a, b) => a.tS - b.tS),
         },

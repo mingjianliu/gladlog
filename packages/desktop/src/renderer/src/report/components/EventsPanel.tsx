@@ -249,7 +249,7 @@ export function EventsPanel({
   // offset into the whole raw.txt is accumulated on the main side from the
   // preceding rounds' linesTotal (matchStore.rawLine), so we only pass
   // sequenceNumber here.
-  const { t, lang } = useT();
+  const { t, lang, namesVersion } = useT();
   const roundSeq =
     source.kind === "shuffleRound" ? source.sequenceNumber : null;
   const [rawView, setRawView] = useState<{
@@ -284,7 +284,12 @@ export function EventsPanel({
       setRawView({ key, text: null, fileLine: null });
     }
   };
-  const allRows = useMemo(() => deriveEventRows(source, lang), [source, lang]);
+  // namesVersion: the English spell names (en) arrive after first paint
+  const allRows = useMemo(
+    () => deriveEventRows(source, lang),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, lang, namesVersion],
+  );
   // Short name → side. These cells only ever hold a display name, and 来源 and
   // 目标 on one row routinely belong to opposite teams — which is exactly why
   // the marker is per-name and not per-row.

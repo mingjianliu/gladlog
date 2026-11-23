@@ -200,7 +200,9 @@ export function MatchReport({
   const resolvedMatchId = matchId ?? source.id;
   // UI language, which is also the coach reply language (spec §6.3). Read
   // before the derive memos below: every derive whose output is text takes it.
-  const { lang, t } = useT();
+  // namesVersion: the derives below that print log spell names re-run when
+  // the English name table (en) lands after first paint
+  const { lang, t, namesVersion } = useT();
   // T93 open-path stage marks (no-ops unless the app shell started a trace).
   openReportRender(source);
   // Staged fill (T93). `level` is how many FILL_STEPS have run for this
@@ -439,7 +441,8 @@ export function MatchReport({
             deriveStatsTable(source, timeRange, lang),
           )
         : undefined,
-    [source, timeRange, L4, lang],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, timeRange, L4, lang, namesVersion],
   );
   // Step 1, with the curve: the kill-window list sits between the curve and
   // the leaderboard and its height (0-108 px) is not known before this runs,
@@ -486,7 +489,8 @@ export function MatchReport({
             deriveDeathRecaps(source, lang),
           )
         : undefined,
-    [source, L2, lang],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, L2, lang, namesVersion],
   );
   // Compute the whole-match basis first (KPI chips always use it); when
   // timeRange is empty the windowed version just reuses that reference instead
@@ -534,7 +538,8 @@ export function MatchReport({
             deriveDispelDash(source, undefined, lang),
           )
         : undefined,
-    [source, L2, lang],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, L2, lang, namesVersion],
   );
   // Hero line facts (UI review #1): finisher = the last real player death —
   // the same predicate KpiChips used (timeline.deaths already excludes
@@ -555,7 +560,8 @@ export function MatchReport({
               deriveDispelDash(source, timeRange, lang),
             )
           : dispelFull,
-    [source, timeRange, dispelFull, L2, lang],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, timeRange, dispelFull, L2, lang, namesVersion],
   );
   // CC-break stats (2026-08-02): the "break" tab of the engagement panel
   const ccBreakDash = useMemo(
@@ -565,7 +571,8 @@ export function MatchReport({
             deriveCcBreakDash(source, timeRange, lang),
           )
         : undefined,
-    [source, timeRange, L1, lang],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, timeRange, L1, lang, namesVersion],
   );
   const auraUptime = useMemo(
     () =>

@@ -91,8 +91,8 @@ const EMPTY: DispelDash = {
   ccEfficiency: [],
 };
 
-const fmtName = (id: string, fallback: string): string =>
-  displaySpellName(id, fallback);
+const fmtName = (id: string, fallback: string, lang: Language): string =>
+  displaySpellName(id, fallback, lang);
 
 /** The reach note of a missed window, the prompt's exemption in the panel's
  * words: `reachFromSeconds` = a dispeller came in reach later (fact7 D66, the
@@ -146,7 +146,7 @@ export function scopedMissedPurgeInstances(
       out.push({
         tS: w.timeSeconds,
         label: translate(lang, "report.dispel.scopedMissed", {
-          spell: fmtName(w.spellId, w.spellName),
+          spell: fmtName(w.spellId, w.spellName, lang),
           enemy: w.enemyName,
           s: Math.round(w.durationSeconds),
           tool: w.viaScopedTool.name,
@@ -216,14 +216,14 @@ function deriveDispelDashUncached(
     const toInstance = (d: IDispelEvent): DispelInstance => ({
       tS: d.timeSeconds,
       label: translate(lang, "report.dispel.instance", {
-        dispelSpell: fmtName(d.dispelSpellId, d.dispelSpellName),
+        dispelSpell: fmtName(d.dispelSpellId, d.dispelSpellName, lang),
         verb: translate(
           lang,
           d.isSpellSteal
             ? "report.dispel.verbSteal"
             : "report.dispel.verbDispel",
         ),
-        removed: fmtName(d.removedSpellId, d.removedSpellName),
+        removed: fmtName(d.removedSpellId, d.removedSpellName, lang),
         target: d.targetName,
         fatal: d.wasFatal ? translate(lang, "report.dispel.fatal") : "",
         passive: isDeliberate(d)
@@ -284,7 +284,7 @@ function deriveDispelDashUncached(
       .map((w) => ({
         tS: w.timeSeconds,
         label: translate(lang, "report.dispel.missedPurge", {
-          spell: fmtName(w.spellId, w.spellName),
+          spell: fmtName(w.spellId, w.spellName, lang),
           enemy: w.enemyName,
           s: Math.round(w.durationSeconds),
           killWindow: w.duringKillWindow
@@ -318,7 +318,7 @@ function deriveDispelDashUncached(
         tS: w.timeSeconds,
         label: translate(lang, "report.dispel.missedCleanse", {
           target: w.targetName,
-          spell: fmtName(w.spellId, w.spellName),
+          spell: fmtName(w.spellId, w.spellName, lang),
           s: Math.round(w.durationSeconds),
           cd: w.cleanseWasOnCD
             ? translate(lang, "report.dispel.cleanseOnCd")

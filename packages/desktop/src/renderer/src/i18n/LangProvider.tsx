@@ -1,3 +1,4 @@
+import { ensureSpellNames, spellNamesReady } from "@gladlog/analysis";
 import {
   createContext,
   type ReactNode,
@@ -26,8 +27,10 @@ export interface LangContextValue {
    *  false when it applies to this session only (no settings facet, or the
    *  save failed). */
   setLang(l: Language): Promise<boolean>;
-  /** Bumped when the spell-name tables a language needs finish loading;
-   *  constant 0 for now. */
+  /** Bumped when the spell-name table a language needs finishes loading (en:
+   *  the English names `spellLabel` reads, which stream in after first
+   *  paint). Every memo or effect that calls `spellLabel` keys on it, so the
+   *  English names replace the log's own without a remount. */
   namesVersion: number;
 }
 
@@ -100,6 +103,26 @@ export function LangProvider({
     document.documentElement.lang = htmlLang(lang);
   }, [lang]);
 
+  // en reads English spell names from the 12 MB table analysis loads in the
+  // background; until it lands `spellLabel` shows the log's own names. zh
+  // never reads it. Already loaded: nothing to wait for, no extra render.
+  const [namesVersion, setNamesVersion] = useState(0);
+  useEffect(() => {
+    if (lang !== "en" || spellNamesReady()) return;
+    let cancelled = false;
+    void ensureSpellNames().then(
+      () => {
+        if (!cancelled) setNamesVersion((v) => v + 1);
+      },
+      () => {
+        /* never loads: the log names stay */
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [lang]);
+
   const setLang = useCallback(async (l: Language): Promise<boolean> => {
     // Context first, so every consumer switches immediately; then persist.
     setChosen(l);
@@ -118,8 +141,8 @@ export function LangProvider({
   }, []);
 
   const value = useMemo<LangContextValue>(
-    () => ({ t: makeT(lang), lang, setLang, namesVersion: 0 }),
-    [lang, setLang],
+    () => ({ t: makeT(lang), lang, setLang, namesVersion }),
+    [lang, setLang, namesVersion],
   );
 
   if (phase === "loading") return null;

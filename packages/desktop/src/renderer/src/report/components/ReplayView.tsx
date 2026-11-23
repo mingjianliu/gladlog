@@ -22,6 +22,7 @@ import {
   deriveCcSpans,
   deriveFocusFire,
 } from "../derive/replayHighlights";
+import { spellLabel } from "../derive/spellLabel";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { useMatchPageActive } from "../pageActive";
@@ -124,7 +125,9 @@ export function ReplayView({
   // Burst glow + same-second focus fire (DPS D1): the predicates live in
   // analysis/derive; here we only look up the current t
   const burstAuras = useMemo(() => deriveBurstAuras(source), [source]);
-  const { t: tt } = useT();
+  // lang / namesVersion: a context consumer, so a language switch or the
+  // English name table landing re-renders the spell names below
+  const { t: tt, lang } = useT();
   /** Hotkey / legend copy (P1-7: the two hint lines fold into the "?" button). */
   const hintKeys = tt("report.replay.hintKeys");
   const hintLegend = tt("report.replay.hintLegend");
@@ -764,7 +767,11 @@ export function ReplayView({
                                       : "report.replay.ccd",
                                     {
                                       name: tr.name,
-                                      spell: cc.spellName,
+                                      spell: spellLabel(
+                                        cc.spellId,
+                                        cc.spellName,
+                                        lang,
+                                      ),
                                       s: remainS.toFixed(1),
                                     },
                                   )}
@@ -799,7 +806,11 @@ export function ReplayView({
                                   className="rpt-replay-cc-text"
                                 >
                                   {tt("report.replay.ccLeft", {
-                                    spell: cc.spellName,
+                                    spell: spellLabel(
+                                      cc.spellId,
+                                      cc.spellName,
+                                      lang,
+                                    ),
                                     s: remainS.toFixed(1),
                                   })}
                                 </text>
@@ -936,7 +947,7 @@ export function ReplayView({
                                     : "var(--loss)"
                                 }
                               />
-                              <title>{`${tt("report.replay.castBar", { spell: bar.spellName })}${bar.outcome === "cut" ? tt("report.replay.castCut") : ""}`}</title>
+                              <title>{`${tt("report.replay.castBar", { spell: spellLabel(bar.spellId, bar.spellName, lang) })}${bar.outcome === "cut" ? tt("report.replay.castCut") : ""}`}</title>
                             </g>
                           );
                         })()}
@@ -961,7 +972,7 @@ export function ReplayView({
                               y={cy - (30 + dodge) * k}
                               className="rpt-replay-castflash"
                             >
-                              ✦ {last.spellName}
+                              ✦ {spellLabel(last.spellId, last.spellName, lang)}
                             </text>
                           );
                         })()}

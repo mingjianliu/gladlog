@@ -32,7 +32,9 @@ export interface CcBreakDash {
 const EMPTY: CcBreakDash = { friendly: [], enemy: [], rootBreakCount: 0 };
 
 const fmtName = (id: string, fallback: string, lang: Language): string =>
-  id ? displaySpellName(id, fallback) : translate(lang, "report.spell.melee");
+  id
+    ? displaySpellName(id, fallback, lang)
+    : translate(lang, "report.spell.melee");
 
 const remainTag = (e: ICcBreakEvent, lang: Language): string =>
   e.remainingSeconds !== null

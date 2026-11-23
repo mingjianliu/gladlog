@@ -58,7 +58,7 @@ export function Meters({
    * `<Meters rows mode />` bare) = exactly the previous flat list. */
   teamSides?: Map<string, TeamSide>;
 }) {
-  const { lang, t } = useT();
+  const { lang, t, namesVersion } = useT();
   // Inline detail expansion: only one unit expanded at a time; switching mode
   // collapses it
   const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null);
@@ -70,7 +70,8 @@ export function Meters({
   );
   const expandable = source != null && mode !== "stats";
   // Memoize the expanded data: Meters re-renders at high frequency (e.g. with
-  // every replay tick), so it must not re-aggregate on every frame
+  // every replay tick), so it must not re-aggregate on every frame.
+  // namesVersion: the English spell names (en) arrive after first paint.
   const expandedData = useMemo(
     () =>
       expandable && expandedUnitId
@@ -82,7 +83,8 @@ export function Meters({
             lang,
           )
         : null,
-    [expandable, source, expandedUnitId, mode, range, lang],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [expandable, source, expandedUnitId, mode, range, lang, namesVersion],
   );
   const items = meterRows(rows, mode === "stats" ? "damage" : mode, lang);
   const sideOf = (unitId: string): TeamSide =>
