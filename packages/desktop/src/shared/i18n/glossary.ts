@@ -391,7 +391,7 @@ export const GLOSSARY: ReadonlyArray<{
   },
   {
     id: "report.finding",
-    zh: "发现",
+    zh: "失误",
     en: "Finding",
     source: 'user-guide § AI analysis view ("findings"); prompt `Finding`',
   },
