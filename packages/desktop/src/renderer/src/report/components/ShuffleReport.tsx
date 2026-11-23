@@ -169,7 +169,13 @@ export function ShuffleHead({
                   spans); the full label stays in aria-label/title. */}
               <span className="rpt-shuffle-pill-full">
                 R{i + 1}
-                {win == null ? "" : ` · ${win ? "W" : "L"}`}
+                {win == null
+                  ? ""
+                  : t(
+                      win
+                        ? "report.shuffle.pillWin"
+                        : "report.shuffle.pillLoss",
+                    )}
               </span>
               <span className="rpt-shuffle-pill-short" aria-hidden="true">
                 {i + 1}

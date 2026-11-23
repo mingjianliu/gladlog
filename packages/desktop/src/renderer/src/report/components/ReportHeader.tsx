@@ -75,7 +75,8 @@ export function ReportHeader({
         <span className="rpt-head-meta">
           {source.bracket}
           {roundLabel ? ` · ${roundLabel}` : ""} ·{" "}
-          {zoneMetadata[String(source.zoneId)]?.name ?? `zone ${source.zoneId}`}{" "}
+          {zoneMetadata[String(source.zoneId)]?.name ??
+            t("report.header.zone", { id: String(source.zoneId) })}{" "}
           ·{" "}
           {source.endTime == null
             ? "–:––"

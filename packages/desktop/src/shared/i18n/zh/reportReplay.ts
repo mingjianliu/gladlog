@@ -150,4 +150,6 @@ export const zhReportReplay = {
     "尚无 AI 发现 —— 跑一次 AI 分析后,时间轴 finding 会出现在这里。",
   "report.video.hint":
     "标记条:金带 = 爆发窗,✕ = 死亡,⚠ = 失误,✦ = AI 发现,点击定位; 战斗时间轴是主 seek 面,控制条细进度条做精确微调。",
+  // ── fix round 1: English left in migrated files ──
+  "report.eventsPanel.ticks": "×{n} 跳",
 };

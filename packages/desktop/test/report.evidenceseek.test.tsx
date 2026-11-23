@@ -37,7 +37,7 @@ describe("证据链跳转(evidence → replay seek)", () => {
   it("FindingsList:不传 onJump 时没有跳转按钮(旧行为不变)", () => {
     render(<FindingsList findings={findings as never} onSelect={() => {}} />);
     expect(screen.queryByRole("button", { name: /回放此刻/ })).toBeNull();
-    expect(screen.getByRole("button", { name: /Evidence/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /证据/ })).toBeTruthy();
   });
 
   it("ReplayView:seekReq 定位时钟到目标时刻并暂停(时间显示为目标 mm:ss)", () => {

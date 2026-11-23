@@ -316,7 +316,7 @@ export function KeyMomentAxis({
         )}
         <div className="rpt-finding-ev">
           <button onClick={() => onSelectEvidence(e.f.eventIds)}>
-            Evidence
+            {t("report.finding.evidence")}
           </button>
           {/* One chip per evidence item with its timestamp + short label (same
               as FindingsList; each one is individually clickable to jump) */}

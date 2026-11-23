@@ -308,4 +308,9 @@ export const enReportCards = {
   "report.bug.synced": " (in the sync folder, will upload automatically)",
   "report.bug.local": " (saved locally, opened in the file manager)",
   "report.bug.error": "Could not create it — try again later",
+  // ── fix round 1: English left in migrated files ──
+  "report.dispelCard.col.purges": "Purges",
+  "report.header.zone": "Zone {id}",
+  "report.shuffle.pillWin": " · W",
+  "report.shuffle.pillLoss": " · L",
 };

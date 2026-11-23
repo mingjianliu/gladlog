@@ -964,7 +964,7 @@ export function EventsPanel({
                       {caret}
                       <EvtSpell spellId={d.spellId} name={d.spellName} />
                       <span className="rpt-events-group-chip">
-                        ×{d.count} tick
+                        {t("report.eventsPanel.ticks", { n: d.count })}
                       </span>
                     </button>
                   </td>

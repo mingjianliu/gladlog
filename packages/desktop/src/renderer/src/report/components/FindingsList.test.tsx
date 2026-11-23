@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { describe, expect, it, test } from "vitest";
 
 import type { RichDeps } from "../derive/inlineRich";
@@ -41,7 +47,10 @@ describe("FindingsList", () => {
   });
   it("renders an empty state when there are no findings", () => {
     render(<FindingsList findings={[]} onSelect={() => {}} />);
-    expect(screen.getByText(/no findings|nothing/i)).toBeTruthy();
+    expect(screen.getByText("本场没有失误。")).toBeTruthy();
+    cleanup();
+    render(<FindingsList findings={[]} onSelect={() => {}} lang="en" />);
+    expect(screen.getByText(/no findings/i)).toBeTruthy();
   });
   it("long explanation clamps to 2 lines with 展开全文/收起 toggle", () => {
     const long = [

@@ -165,4 +165,7 @@ export const enReportReplay = {
     "No AI findings yet — run an AI analysis and the timeline findings show up here.",
   "report.video.hint":
     "Marker strip: gold band = burst window, ✕ = death, ⚠ = finding, ✦ = AI finding; click to seek. The battle timeline is the main seek surface; the thin bar in the controls is for fine adjustment.",
+  // ── fix round 1: English left in migrated files ──
+  "report.eventsPanel.ticks": (p: MessageParams) =>
+    `×${p.n} ${plural(p.n, "tick", "ticks")}`,
 };

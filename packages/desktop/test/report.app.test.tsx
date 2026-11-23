@@ -127,11 +127,11 @@ describe("ShuffleReport", () => {
     expect(seq).toBeTruthy();
     const pills = seq.querySelectorAll("[role=tab]");
     expect(pills.length).toBe(6);
-    // Narrow-width text is the round number alone; full text keeps R6 · W/L
+    // Narrow-width text is the round number alone; full text keeps R6 · 胜/负
     // (fixture playerTeamId=0, round 6 → winningTeamId 1 → loss)
     const last = pills[5]!;
     expect(last.querySelector(".rpt-shuffle-pill-full")!.textContent).toBe(
-      "R6 · L",
+      "R6 · 负",
     );
     expect(last.querySelector(".rpt-shuffle-pill-short")!.textContent).toBe(
       "6",

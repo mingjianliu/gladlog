@@ -112,4 +112,9 @@ export const enReportAi = {
 
   // ── StructuredAnalysisPanel.tsx (running status) ──
   "report.ai.running": "Analyzing",
+  // ── fix round 1: English left in migrated files ──
+  "report.finding.evidence": "Evidence",
+  "report.finding.none": "No findings for this match.",
+  "report.ai.heroFindings": (p: MessageParams) =>
+    `${p.n} ${plural(p.n, "finding", "findings")}`,
 };

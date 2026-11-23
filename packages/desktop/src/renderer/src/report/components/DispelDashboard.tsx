@@ -76,7 +76,7 @@ export function DispelDashboard({
             <tr>
               <th>{t("report.common.player")}</th>
               <th>{t("report.dispelCard.col.cleanses")}</th>
-              <th>purge</th>
+              <th>{t("report.dispelCard.col.purges")}</th>
               <th>{t("report.dispelCard.col.steals")}</th>
               <th title={t("report.common.passiveDispelTitle")}>
                 {t("report.dispelCard.col.passive")}

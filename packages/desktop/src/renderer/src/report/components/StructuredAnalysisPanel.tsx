@@ -918,7 +918,9 @@ export function StructuredAnalysisPanel({
           <span className="rpt-ai-export">
             <ExportButtons
               findings={result.findings}
-              heroText={`${result.findings.length} findings`}
+              heroText={t("report.ai.heroFindings", {
+                n: result.findings.length,
+              })}
             />
           </span>
         )}

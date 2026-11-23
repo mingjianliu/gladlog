@@ -58,7 +58,7 @@ export function FindingsList({
   if (findings.length === 0) {
     return (
       <div className="rpt-ai-body">
-        <p className="rpt-ai-none">No findings for this match.</p>
+        <p className="rpt-ai-none">{t("report.finding.none")}</p>
       </div>
     );
   }
@@ -137,7 +137,9 @@ export function FindingsList({
             )}
             {f.eventIds && f.eventIds.length > 0 && (
               <div className="rpt-finding-ev">
-                <button onClick={() => onSelect(f.eventIds)}>Evidence</button>
+                <button onClick={() => onSelect(f.eventIds)}>
+                  {t("report.finding.evidence")}
+                </button>
                 {/* When each piece of evidence happened: each one jumps to
                     that moment in the replay */}
                 {(candidates ?? [])

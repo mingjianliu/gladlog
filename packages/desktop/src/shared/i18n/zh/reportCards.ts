@@ -291,4 +291,9 @@ export const zhReportCards = {
   "report.bug.synced": "(在同步盘,会自动上传)",
   "report.bug.local": "(本地保存,已在文件管理器打开)",
   "report.bug.error": "生成失败 —— 稍后再试",
+  // ── fix round 1: English left in migrated files ──
+  "report.dispelCard.col.purges": "驱散",
+  "report.header.zone": "地图 {id}",
+  "report.shuffle.pillWin": " · 胜",
+  "report.shuffle.pillLoss": " · 负",
 };

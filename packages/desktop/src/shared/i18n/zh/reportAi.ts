@@ -1,3 +1,5 @@
+import type { MessageParams } from "../index";
+
 // Baseline (zh) dictionary for the match report's components
 // (src/renderer/src/report/components/*), `report.<card>.*` keys. Text moved
 // verbatim from the components.
@@ -96,4 +98,8 @@ export const zhReportAi = {
 
   // ── StructuredAnalysisPanel.tsx (running status) ──
   "report.ai.running": "分析中",
+  // ── fix round 1: English left in migrated files ──
+  "report.finding.evidence": "证据",
+  "report.finding.none": "本场没有失误。",
+  "report.ai.heroFindings": (p: MessageParams) => `${p.n} 条失误`,
 };
