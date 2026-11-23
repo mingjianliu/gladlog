@@ -16,6 +16,7 @@ import {
 } from "../../../../shared/aiModels";
 import type { AnalysisFallbackReason } from "../../../../shared/analysisFallback";
 import { bridge } from "../../bridge";
+import { useT } from "../../i18n/LangProvider";
 import { DEMO_ANALYSIS } from "../data/demoAnalysis";
 import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
 import { buildDeepenPacks } from "../derive/analysisInput";
@@ -76,10 +77,11 @@ export function StructuredAnalysisPanel({
   // switch; its findings render with no seek handlers (fake events).
   const [demo, setDemo] = useState(false);
   // Reset on match switch only — NOT in the cache-query effect below. (That
-  // effect used to key on `lang`, so the initial settings.get() flip re-ran it
-  // and would have wiped a demo opened before settings arrived — CI-only race,
-  // 2026-08-22. Since 2026-09-02 the effect keys on user language switches
-  // only, see `langSwitches`.)
+  // effect used to key on a `lang` state that flipped once after mount, when
+  // settings.get() resolved, and so wiped a demo opened before settings
+  // arrived — CI-only race, 2026-08-22. Since 2026-11-23 `lang` comes from
+  // LangProvider, which only renders once the language is known, so it never
+  // flips after mount; it changes only on a real user switch.)
   useEffect(() => setDemo(false), [matchId]);
   // matchId the result belongs to: at the instant of a match switch, result is
   // still the old match's data; the deep-dive trigger must verify ownership,
@@ -132,22 +134,20 @@ export function StructuredAnalysisPanel({
   // slot's result.findings into the active slot during that interim state.
   const resultOwnerRef = useRef<"active" | "other">("active");
   const displayedSlotKey = selectedSlotKey ?? activeKey;
-  // Coach reply language (backlog #1): persisted in settings; the main side
-  // injects it into the system prompt and caches per language key; here we only
-  // need to re-query the cache after switching.
-  const [lang, setLang] = useState<"zh" | "en" | null>(null);
-  // Counts *user* language switches; the cache query effect keys on this, not
-  // on `lang`. GH #26 root cause (2026-09-02): keying on `lang` made the
-  // initial settings.get() flip (null → "zh") re-run the query on every mount
-  // — setResult(null), resultForRef = null, a second getState — and an onDone
-  // landing between the first result's commit and that effect's passive flush
-  // was swallowed by the match-switch guard (ref already null) while the
-  // second getState's cached answer overwrote the done payload. The main side
-  // resolves the language itself, so the initial flip never needed a re-query.
-  const [langSwitches, setLangSwitches] = useState(0);
+  // UI language, which is also the coach reply language (spec §6.12): the main
+  // side injects it into the system prompt and caches per language key, so the
+  // cache query below re-runs when it changes. GH #26 root cause (2026-09-02):
+  // the old local `lang` state flipped null → "zh" once after mount (when
+  // settings.get() resolved), and keying the query on it re-ran the query on
+  // every mount — setResult(null), resultForRef = null, a second getState — so
+  // an onDone landing between the first result's commit and that effect's
+  // passive flush was swallowed by the match-switch guard while the second
+  // getState's cached answer overwrote the done payload. LangProvider renders
+  // its children only once the language is known, so this value is stable
+  // from the first render and changes only on a real user switch.
+  const { lang } = useT();
   // Settings snapshot for the split-button menu (Task 4): only the sentinel
-  // fields (key truthiness) and the current global default backend/model; no
-  // extra request — reuses the settings.get() call made for lang below.
+  // fields (key truthiness) and the current global default backend/model.
   const [aiSettings, setAiSettings] = useState<{
     anthropicApiKey?: string | null;
     deepseekApiKey?: string | null;
@@ -259,14 +259,12 @@ export function StructuredAnalysisPanel({
   };
 
   useEffect(() => {
-    // Test stubs / legacy fixture bridges may lack the settings facet — fall
-    // back silently to Chinese as the default. The same settings.get() call
-    // also fetches the fields the split menu needs (Task 4); no extra request.
+    // Test stubs / legacy fixture bridges may lack the settings facet — the
+    // split menu then just has no settings snapshot.
     try {
       void bridge()
         .settings.get()
         .then((s) => {
-          setLang((s as { language?: "zh" | "en" | null }).language ?? "zh");
           setAiSettings(
             s as {
               anthropicApiKey?: string | null;
@@ -276,22 +274,11 @@ export function StructuredAnalysisPanel({
             },
           );
         })
-        .catch(() => setLang("zh"));
+        .catch(() => {});
     } catch {
-      setLang("zh");
+      /* test stub lacks this facet */
     }
   }, []);
-
-  const switchLang = async (next: "zh" | "en") => {
-    if (next === lang || state === "running") return;
-    setLang(next);
-    setLangSwitches((n) => n + 1); // re-runs the cache query (per-language cache key on the main side)
-    try {
-      await bridge().settings.save({ language: next });
-    } catch {
-      /* no settings facet (test stub): switch locally only */
-    }
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -370,7 +357,7 @@ export function StructuredAnalysisPanel({
     return () => {
       cancelled = true;
     };
-  }, [matchId, langSwitches]);
+  }, [matchId, lang]);
 
   useEffect(() => {
     // After persistent mounting this effect runs in every view; a missing
@@ -447,7 +434,7 @@ export function StructuredAnalysisPanel({
                   // 2026-09-02 deterministic reproduction printed
                   // `resultFor=null matchId=m1` here, which named the mover of
                   // the ref: the cache-query effect re-running on the initial
-                  // `lang` flip (fixed — see `langSwitches`). Kept as the
+                  // `lang` flip (fixed — see `useT()` above). Kept as the
                   // genuine match-switch trace. console.info, not warn (the
                   // invariant test spies on warn).
                   // eslint-disable-next-line no-console -- match-switch trace; must not be warn (spied by the test)
@@ -536,7 +523,7 @@ export function StructuredAnalysisPanel({
   // dataReady flips true (the index goes from null to usable and the display
   // path heals itself -- the ensure contract).
   const rich = useMemo(
-    () => makeRichText(source, lang ?? "zh"),
+    () => makeRichText(source, lang),
     [source, lang, dataReady],
   );
 
@@ -550,7 +537,7 @@ export function StructuredAnalysisPanel({
       const hit = rules.find((r) =>
         ruleAppliesToFinding(r, f, input.candidates, meta),
       );
-      return hit ? habitBadgeText(hit, lang ?? "zh") : null;
+      return hit ? habitBadgeText(hit, lang) : null;
     };
   }, [rules, input, lang]);
 
@@ -825,8 +812,8 @@ export function StructuredAnalysisPanel({
 
   return (
     <div className="rpt-ai-panel">
-      {/* Action row on top (1g): primary button + language segmented control +
-          status text + export at the right end.
+      {/* Action row on top (1g): primary button + status text + export at the
+          right end (the language toggle moved to Settings, spec §6.12).
           Before any analysis (no result) the primary button is a prominent
           centered CTA; once results exist it falls back to a compact row. */}
       <div
@@ -889,18 +876,6 @@ export function StructuredAnalysisPanel({
             </div>
           )}
         </div>
-        <div className="rpt-ai-lang" title="教练回复语言">
-          {(["zh", "en"] as const).map((l) => (
-            <button
-              key={l}
-              className={l === lang ? "active" : ""}
-              disabled={state === "running"}
-              onClick={() => void switchLang(l)}
-            >
-              {l === "zh" ? "中文" : "EN"}
-            </button>
-          ))}
-        </div>
         {!result && state === "idle" && !anyBackend && !demo && (
           <button
             type="button"
@@ -927,7 +902,7 @@ export function StructuredAnalysisPanel({
           <span className="rpt-ai-status" data-testid="ai-status">
             已缓存 · {result.findings.length} 条 findings
             {result.findings[0]?.severity
-              ? ` · 最高严重度 ${severityLabel(result.findings[0].severity, lang ?? "zh")}`
+              ? ` · 最高严重度 ${severityLabel(result.findings[0].severity, lang)}`
               : ""}
           </span>
         )}
@@ -947,7 +922,7 @@ export function StructuredAnalysisPanel({
           </span>
           {goals.map((g) => (
             <span key={g.category} className="rpt-ai-goal">
-              ↻{g.recurring} {categoryLabel(g.category, lang ?? "zh")}
+              ↻{g.recurring} {categoryLabel(g.category, lang)}
               {g.lastTitle ? `(上次:${g.lastTitle})` : ""}
             </span>
           ))}
@@ -979,7 +954,7 @@ export function StructuredAnalysisPanel({
           <FindingsList
             findings={DEMO_ANALYSIS.findings}
             onSelect={() => {}}
-            lang={lang ?? "zh"}
+            lang={lang}
             rich={rich}
           />
         </div>
@@ -1034,7 +1009,7 @@ export function StructuredAnalysisPanel({
                 candidates={input?.candidates ?? []}
                 onSeek={onSeekEvent}
                 onSelectEvidence={setActiveEventIds}
-                lang={lang ?? "zh"}
+                lang={lang}
                 habitOf={habitOf}
                 rich={rich}
               />
@@ -1065,7 +1040,7 @@ export function StructuredAnalysisPanel({
                 onSelectEvidence={setActiveEventIds}
                 flags={flags}
                 onFlag={handleFlag}
-                lang={lang ?? "zh"}
+                lang={lang}
                 habitOf={habitOf}
                 rich={rich}
               />
@@ -1081,7 +1056,7 @@ export function StructuredAnalysisPanel({
                     candidates={input?.candidates ?? []}
                     flags={flags}
                     onFlag={handleFlag}
-                    lang={lang ?? "zh"}
+                    lang={lang}
                     habitOf={habitOf}
                     rich={rich}
                   />

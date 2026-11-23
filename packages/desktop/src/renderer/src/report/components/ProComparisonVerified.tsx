@@ -19,6 +19,7 @@ import {
   resolveAiModel,
 } from "../../../../shared/aiModels";
 import { bridge } from "../../bridge";
+import { useT } from "../../i18n/LangProvider";
 import { SPEC_NAMES_ZH } from "../data/specNames";
 import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
 import { resolveOwner } from "../derive/analysisInput";
@@ -78,7 +79,9 @@ export function ProComparisonVerified({
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<CompareResult | null>(null);
   const [error, setError] = useState<string>("");
-  const [lang, setLang] = useState<"en" | "zh">("zh");
+  // UI language, which is also the coach reply language: decides the
+  // panel/table copy language (spec §6.12).
+  const { lang } = useT();
   /** The mount check (getState → getCached) came back with nothing in flight
    * and nothing cached — the precondition for the auto-run backfill below. */
   const [emptyChecked, setEmptyChecked] = useState(false);
@@ -96,13 +99,10 @@ export function ProComparisonVerified({
   const elapsedS = useElapsedSince(state === "running" ? startedAt : null);
 
   useEffect(() => {
-    // The coach reply language also decides the panel/table copy language; the
-    // bridge surface may be missing (fixture stub)
+    // The bridge surface may be missing (fixture stub)
     void (async () => {
       try {
         const s = await bridge().settings.get();
-        if (s?.language === "en" || s?.language === "zh")
-          setLang(s.language);
         const cfg = s as {
           aiBackend?: AiBackend | null;
           aiModels?: AiModelSelection | null;
@@ -110,7 +110,7 @@ export function ProComparisonVerified({
         if (cfg?.aiBackend)
           setAiCfg({ backend: cfg.aiBackend, model: resolveAiModel(cfg) });
       } catch {
-        /* default zh */
+        /* no settings facet: no backend/model label */
       }
     })();
   }, []);

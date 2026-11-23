@@ -1,3 +1,5 @@
+import type { Language } from "../../../../shared/i18n";
+import { formatNumber } from "../../i18n/format";
 import { classColor } from "../data/gameConstants";
 import type { UnitTotals } from "./summary";
 import type { TeamSide } from "./teamSide";
@@ -16,7 +18,7 @@ export interface MeterRow {
   value: number;
   widthPct: number;
   label: string;
-  /** The exact full value (toLocaleString); backs the abbreviated label's
+  /** The exact full value (formatNumber); backs the abbreviated label's
    *  title. */
   exactLabel: string;
   color: string;
@@ -24,10 +26,10 @@ export interface MeterRow {
 
 /** Tiered abbreviation for meter values (P2-2): ≥1e6 → x.xxM, ≥1e5 → xxxk,
  *  everything else in full. */
-export function abbrevAmount(v: number): string {
+export function abbrevAmount(v: number, lang: Language = "zh"): string {
   if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
   if (v >= 1e5) return `${Math.round(v / 1e3)}k`;
-  return Math.round(v).toLocaleString("en-US");
+  return formatNumber(Math.round(v), lang);
 }
 
 export function meterValue(r: UnitTotals, mode: MeterMode): number {
@@ -38,7 +40,11 @@ export function meterValue(r: UnitTotals, mode: MeterMode): number {
       : r.damageTaken;
 }
 
-export function meterRows(rows: UnitTotals[], mode: MeterMode): MeterRow[] {
+export function meterRows(
+  rows: UnitTotals[],
+  mode: MeterMode,
+  lang: Language = "zh",
+): MeterRow[] {
   const sorted = [...rows].sort(
     (a, b) => meterValue(b, mode) - meterValue(a, mode),
   );
@@ -53,10 +59,10 @@ export function meterRows(rows: UnitTotals[], mode: MeterMode): MeterRow[] {
       teamId: r.teamId,
       value,
       widthPct: (value / max) * 100,
-      label: abbrevAmount(value),
+      label: abbrevAmount(value, lang),
       /** The exact full value (kept for the row title, alongside the
        *  abbreviated label). */
-      exactLabel: Math.round(value).toLocaleString("en-US"),
+      exactLabel: formatNumber(Math.round(value), lang),
       color: classColor(r.classId),
     };
   });

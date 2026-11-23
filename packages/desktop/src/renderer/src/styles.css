@@ -2760,32 +2760,14 @@ pre {
   white-space: nowrap;
 }
 
-/* ── AI 回复语言切换(backlog #1)── */
+/* ── AI 卡片操作行(语言切换 2026-11-23 移到设置页最上面)── */
 .rpt-ai-actions {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.rpt-ai-lang {
-  display: inline-flex;
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.rpt-ai-lang button {
-  font-size: 11px;
-  padding: 3px 10px;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ink-2);
-}
-.rpt-ai-lang button.active {
-  background: var(--surface-2);
-  color: var(--accent);
-}
 
-/* ── 多模型分析槽 tab 切换(Task 3)—— 观感复用上面的语言段控 ── */
+/* ── 多模型分析槽 tab 切换(Task 3)—— 观感沿用原 AI 卡片语言段控 ── */
 .rpt-slot-tabs {
   display: inline-flex;
   flex-wrap: wrap;
@@ -5769,6 +5751,23 @@ button.rpt-kpi:hover {
   border-radius: 10px;
   padding: 16px 18px;
   width: min(880px, 92vw);
+}
+/* 首启语言选择框(spec §6.7):主界面出来之前的小窗口,双语 */
+.lang-picker {
+  width: min(360px, 92vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.lang-picker h2 {
+  margin: 0;
+  font-size: 15px;
+}
+.lang-picker .rpt-mode-seg button {
+  padding: 6px 22px;
+  font-size: 13px;
 }
 .dash-modal-close {
   margin-left: auto;

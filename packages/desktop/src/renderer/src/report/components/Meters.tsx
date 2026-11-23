@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { deriveDetailBreakdown } from "../derive/detailBreakdown";
 import { meterGroups, type MeterMode, meterRows } from "../derive/meterRows";
 import type { StatsRow } from "../derive/statsTable";
@@ -56,6 +57,7 @@ export function Meters({
    * `<Meters rows mode />` bare) = exactly the previous flat list. */
   teamSides?: Map<string, TeamSide>;
 }) {
+  const { lang } = useT();
   // Inline detail expansion: only one unit expanded at a time; switching mode
   // collapses it
   const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function Meters({
         : null,
     [expandable, source, expandedUnitId, mode, range],
   );
-  const items = meterRows(rows, mode === "stats" ? "damage" : mode);
+  const items = meterRows(rows, mode === "stats" ? "damage" : mode, lang);
   const sideOf = (unitId: string): TeamSide =>
     teamSides?.get(unitId) ?? "unknown";
   // Ordering comes from the derive, not from here — see meterGroups' note about

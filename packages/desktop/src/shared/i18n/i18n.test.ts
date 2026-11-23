@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { GLOSSARY } from "./glossary";
 import {
+  bilingual,
   enMessages,
   htmlLang,
   intlLocale,
@@ -43,6 +44,15 @@ describe("translate", () => {
     expect(t("common.save")).toBe("Save");
     expect(t("common.matchCount", { n: 5 })).toBe("5 matches");
     expect(makeT("zh")("common.save")).toBe("保存");
+  });
+});
+
+describe("bilingual", () => {
+  it("中文在前、英文在后,各取自己的词典", () => {
+    expect(bilingual("settings.language.label")).toBe("语言 / Language");
+    expect(bilingual("settings.language.pickerTitle")).toBe(
+      "选择语言 / Choose language",
+    );
   });
 });
 

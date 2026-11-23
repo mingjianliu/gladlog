@@ -2,6 +2,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { LangProvider } from "./i18n/LangProvider";
 import { ExportReportPage, parseExportHash } from "./report/ExportReportPage";
 import "./styles.css";
 
@@ -17,13 +18,18 @@ const exportReq = parseExportHash(window.location.hash);
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     {exportReq ? (
-      <ExportReportPage
-        matchId={exportReq.matchId}
-        roundSeq={exportReq.roundSeq}
-        range={exportReq.range}
-      />
+      // Off-screen export window: follow the saved language, never ask.
+      <LangProvider firstRunPicker={false}>
+        <ExportReportPage
+          matchId={exportReq.matchId}
+          roundSeq={exportReq.roundSeq}
+          range={exportReq.range}
+        />
+      </LangProvider>
     ) : (
-      <App />
+      <LangProvider>
+        <App />
+      </LangProvider>
     )}
   </React.StrictMode>,
 );

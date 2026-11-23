@@ -1,6 +1,9 @@
 import { fmtTime, zoneMetadata } from "@gladlog/analysis";
 
 import type { StoredMatchMeta } from "../../../main/matchStore";
+import type { Language } from "../../../shared/i18n";
+import { formatDateTime } from "../i18n/format";
+import { useT } from "../i18n/LangProvider";
 import { useIconDataUrl } from "../report/components/useIconDataUrl";
 import {
   classColor,
@@ -10,7 +13,7 @@ import {
 } from "../report/data/gameConstants";
 
 
-const fmtWhen = (t: number): string => new Date(t).toLocaleString();
+const fmtWhen = (t: number, lang: Language): string => formatDateTime(t, lang);
 
 const fmtHHMM = (t: number): string => {
   const d = new Date(t);
@@ -78,6 +81,7 @@ export function MatchListRow({
   checked?: boolean;
   onToggleCheck?: () => void;
 }) {
+  const { lang } = useT();
   const checkbox =
     onToggleCheck != null ? (
       <label
@@ -113,7 +117,7 @@ export function MatchListRow({
       <div className={`mlr ${resCls}`}>
         {checkbox}
         <span className={`badge badge-${meta.kind}`}>[{meta.kind}]</span>{" "}
-        {meta.bracket} · {fmtWhen(meta.startTime)} · {meta.result}
+        {meta.bracket} · {fmtWhen(meta.startTime, lang)} · {meta.result}
       </div>
     );
   }

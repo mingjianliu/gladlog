@@ -16,6 +16,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { LearningState } from "../../../main/learning";
 import type { StoredMatchMeta } from "../../../main/matchStore";
 import { bridge } from "../bridge";
+import { formatDateTime } from "../i18n/format";
+import { useT } from "../i18n/LangProvider";
 import { specName } from "../report/data/gameConstants";
 import { categoryLabel } from "../report/derive/findingDisplay";
 import { shortUnitName } from "../report/derive/teamSide";
@@ -78,6 +80,7 @@ function RatingCurve({
 }: {
   series: ReturnType<typeof deriveDashboard>["ratingSeries"];
 }) {
+  const { lang } = useT();
   const W = 760;
   const H = 160;
   const PAD = { l: 44, r: 10, t: 10, b: 16 };
@@ -144,7 +147,7 @@ function RatingCurve({
             />
             {s.points.map((p, j) => (
               <circle key={j} cx={x(p.t)} cy={y(p.rating)} r={2} fill={color}>
-                <title>{`${s.bracket} · ${Math.round(p.rating)} · ${new Date(p.t).toLocaleString()}`}</title>
+                <title>{`${s.bracket} · ${Math.round(p.rating)} · ${formatDateTime(p.t, lang)}`}</title>
               </circle>
             ))}
             {/* Endpoint dot + current-rating label */}
@@ -276,6 +279,7 @@ export function StatsDashboard({
   /** Clicking a recent instance under "most frequent mistakes" opens that match. */
   onOpenMatch?: (matchId: string) => void;
 }) {
+  const { lang } = useT();
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [period, setPeriod] = useState<DashPeriod>("week");
   // Character filter (separates records for multi-character players;
@@ -657,7 +661,7 @@ export function StatsDashboard({
                       ? `回填历史分析中… ${learnState.backfill.scanned}/${learnState.backfill.total}`
                       : `台账 ${learnState?.ledgerMatches ?? 0} 场` +
                         (learnState?.lastConsolidatedAt
-                          ? ` · 上次整合 ${new Date(learnState.lastConsolidatedAt).toLocaleString()}`
+                          ? ` · 上次整合 ${formatDateTime(learnState.lastConsolidatedAt, lang)}`
                           : " · 尚未整合")}
                     {learnState && learnState.badLines > 0
                       ? ` · ${learnState.badLines} 坏行已跳过`

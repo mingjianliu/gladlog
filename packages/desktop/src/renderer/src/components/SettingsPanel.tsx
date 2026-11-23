@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { ObsInstallProgress } from "../../../main/obsAssets";
-import type { AiLanguage, GladlogSettings } from "../../../main/settingsStore";
+import type { GladlogSettings } from "../../../main/settingsStore";
 import type { UpdateState } from "../../../main/updater";
 import {
   AI_MODELS,
@@ -9,6 +9,7 @@ import {
   BACKEND_CLI_TOOL,
   resolveAiModel,
 } from "../../../shared/aiModels";
+import { bilingual, type Language, translate } from "../../../shared/i18n";
 import { OBS_ZIP_BYTES, OBS_ZIP_URL } from "../../../shared/obsAsset";
 import {
   API_KEY_REDACTED,
@@ -22,6 +23,8 @@ import {
   FIRST_CHECK_DELAY_MS,
 } from "../../../shared/updateSchedule";
 import { bridge } from "../bridge";
+import { useT } from "../i18n/LangProvider";
+import { LanguageSegment } from "../i18n/LanguagePicker";
 import { applyUiZoom } from "../uiZoom";
 import {
   fetchUpdateState,
@@ -36,7 +39,7 @@ import { ManagedObsPrefsRows } from "./ManagedObsPrefsRows";
 // elsewhere in this codebase (index.ts/obsAssets.ts comments); brief point 7.
 const OBS_DOWNLOAD_MB = Math.round(OBS_ZIP_BYTES / 1024 / 1024);
 
-type SettingsGroup = "game" | "ui" | "ai" | "recording" | "about";
+type SettingsGroup = "general" | "game" | "ui" | "ai" | "recording" | "about";
 
 /** Relative wall-clock text. Deliberately NOT toLocaleString(): the visual
  *  baseline pins Date.now() (qa/visual/scenes.spec.ts:62 page.clock
@@ -90,6 +93,7 @@ function describeUpdate(
  * the API key.
  */
 export function SettingsPanel() {
+  const { t, lang, setLang } = useT();
   const [settings, setSettings] = useState<GladlogSettings | null>(null);
   const [keyInput, setKeyInput] = useState("");
   const [dsKeyInput, setDsKeyInput] = useState("");
@@ -269,6 +273,18 @@ export function SettingsPanel() {
     setTimeout(() => setSaved(null), 2000);
   };
 
+  const pickLang = async (l: Language) => {
+    // Through the provider: every consumer switches at once, and setLang
+    // persists the choice itself.
+    await setLang(l);
+    setSettings((s) => (s ? { ...s, language: l } : s));
+    setSaved({
+      group: "general",
+      note: translate(l, "settings.language.saved"),
+    });
+    setTimeout(() => setSaved(null), 2000);
+  };
+
   const keySet =
     settings.anthropicApiKey === API_KEY_REDACTED ||
     (!!settings.anthropicApiKey && settings.anthropicApiKey.length > 0);
@@ -316,6 +332,24 @@ export function SettingsPanel() {
   return (
     <div className="settings" data-testid="settings-panel">
       <h2>设置</h2>
+
+      {/* Language sits on top as a general setting (spec §6.11b); its label
+          and options read in both languages so a user who landed in the
+          wrong one can still find it. */}
+      <section className="dash-card" data-testid="settings-language">
+        {groupHead(t("settings.group.general"), "general")}
+        <div className="settings-grid">
+          <span className="settings-k">
+            {bilingual("settings.language.label")}
+          </span>
+          <span className="settings-v" title={t("settings.language.hint")}>
+            {t("settings.language.hint")}
+          </span>
+          <span className="settings-actions">
+            <LanguageSegment value={lang} onPick={(l) => void pickLang(l)} />
+          </span>
+        </div>
+      </section>
 
       <section className="dash-card">
         {groupHead("游戏", "game")}
@@ -564,20 +598,6 @@ export function SettingsPanel() {
               <span />
             </>
           )}
-
-          <span className="settings-k">教练回复语言</span>
-          <div className="rpt-mode-seg settings-seg">
-            {(["zh", "en"] as AiLanguage[]).map((l) => (
-              <button
-                key={l}
-                className={(settings.language ?? "zh") === l ? "active" : ""}
-                onClick={() => void save({ language: l }, "语言已切换")}
-              >
-                {l === "zh" ? "中文" : "EN"}
-              </button>
-            ))}
-          </div>
-          <span />
 
           <span className="settings-k">自动分析新对局</span>
           <span className="settings-v">

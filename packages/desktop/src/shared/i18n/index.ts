@@ -63,3 +63,12 @@ export function htmlLang(lang: Language): "zh-CN" | "en" {
 export function intlLocale(lang: Language): "zh-CN" | "en-US" {
   return lang === "zh" ? "zh-CN" : "en-US";
 }
+
+/**
+ * "zh / en" for the few strings that must read in both languages whatever the
+ * current one is (the settings-page language label, the first-run picker):
+ * each half comes from its own dictionary, so en stays CJK-free.
+ */
+export function bilingual(key: MessageKey, params?: MessageParams): string {
+  return `${translate("zh", key, params)} / ${translate("en", key, params)}`;
+}

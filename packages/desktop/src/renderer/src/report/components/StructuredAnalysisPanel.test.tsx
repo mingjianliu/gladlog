@@ -59,8 +59,7 @@ beforeEach(() => {
     },
     analysis: {
       // Panel remount goes through getState (cache + running read atomically
-      // in one call); getCached is kept on the stub because the
-      // language-switch case asserts on the re-query itself.
+      // in one call); getCached backs the slot-tab cases.
       // Single slot (slots.length === 1): the tab bar must not render — the
       // counterpart to the "multi-slot tab switching" cases.
       getState: vi.fn().mockResolvedValue({
@@ -143,22 +142,6 @@ describe("StructuredAnalysisPanel", () => {
     );
     await screen.findByText(/第30秒阵亡/);
     expect(screen.queryByTestId("self-review-note")).toBeNull();
-  });
-
-  it("语言切换:点 EN 持久化 language 并重查缓存(backlog #1)", async () => {
-    render(
-      <StructuredAnalysisPanel
-        source={{ units: {}, startInfo: {} } as any}
-        matchId="m1"
-      />,
-    );
-    await screen.findByText(/第30秒阵亡/);
-    const fx = (window as any).__gladlogFixture;
-    const callsBefore = fx.analysis.getState.mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "EN" }));
-    await screen.findByText(/第30秒阵亡/); // re-rendered after the re-query
-    expect(fx.settings.save).toHaveBeenCalledWith({ language: "en" });
-    expect(fx.analysis.getState.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 
   it("0 条 findings:模型回了空数组(empty-reply)的结果说「分析已完成…」,不说旧版本缓存;没有原因的旧缓存结果仍说旧版本缓存", async () => {
@@ -682,6 +665,8 @@ describe("多模型槽 tab 切换(Task 3)", () => {
    * swallowed) and the second getState's cached result overwrote the done
    * payload. testing-library's waitFor opens that window (MutationObserver
    * observe + setTimeout(0) drain vs React's setImmediate passive flush).
+   * Since 2026-11-23 the language comes from LangProvider's useT(), which is
+   * stable from the first render, so there is no mount-time flip at all.
    *
    * These two tests enter the window on purpose: render outside act, observe
    * the first result through a MutationObserver, fire onDone inside act right

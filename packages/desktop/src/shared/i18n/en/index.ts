@@ -1,9 +1,11 @@
 import type { MessageKey, Messages } from "../index";
 import { enCommon } from "./common";
+import { enSettings } from "./settings";
 
 // `satisfies Messages` fails typecheck on a missing key (or a wrongly typed value).
 export const enMessages = {
   ...enCommon,
+  ...enSettings,
 } satisfies Messages;
 
 // Excess-property checks do not apply to spread members, so `satisfies` alone

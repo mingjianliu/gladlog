@@ -2,6 +2,7 @@ import { ensureAnalysisData, type RawStreams } from "@gladlog/analysis";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { bridge } from "../../bridge";
+import { useT } from "../../i18n/LangProvider";
 import {
   endOpen,
   openPaintAt,
@@ -770,7 +771,7 @@ export function MatchReport({
   // - recap: already recomputed by a separate effect keyed on
   //   `source.startTime:source.endTime` (see autoRecapKey above); does not
   //   depend on this.
-  // - aiLang/aiRunNonce/videoRec: aiLang is a global setting unrelated to the
+  // - lang/aiRunNonce/videoRec: lang is a global setting unrelated to the
   //   match; videoRec is queried by resolvedVideoId (videoMatchId, shared across
   //   shuffle rounds, does not change with matchId) so it must not and will not
   //   be cleared; aiRunNonce is just a trigger counter carrying no match
@@ -793,27 +794,14 @@ export function MatchReport({
     setAiFindingAnchors([]);
   }, [resolvedMatchId]);
 
-  // Coach reply language (same settings.get pattern as ProComparisonVerified):
-  // the bridge surface may be missing (fixture stub / test bed), so try/catch
-  // falls back to the zh default.
-  const [aiLang, setAiLang] = useState<"zh" | "en">("zh");
-  useEffect(() => {
-    void (async () => {
-      try {
-        const s = await bridge().settings.get();
-        if (s?.language === "en" || s?.language === "zh")
-          setAiLang(s.language);
-      } catch {
-        /* default zh */
-      }
-    })();
-  }, []);
+  // UI language, which is also the coach reply language (spec §6.3).
+  const { lang } = useT();
   // The click flow already awaits ensureAnalysisData() (see runWindowAi), so by
   // the time results render the name index is guaranteed ready — no need for
   // StructuredAnalysisPanel's dataReady gate here.
   const rich = useMemo(
-    () => openTimed("derive:makeRichText", () => makeRichText(source, aiLang)),
-    [source, aiLang],
+    () => openTimed("derive:makeRichText", () => makeRichText(source, lang)),
+    [source, lang],
   );
 
   const runWindowAi = async (range: TimeRange, opts?: { force?: boolean }) => {

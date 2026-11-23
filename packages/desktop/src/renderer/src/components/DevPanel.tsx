@@ -8,6 +8,8 @@ import {
   diagnosticLevel,
 } from "../../../shared/diagnosticLevel";
 import { bridge } from "../bridge";
+import { formatDateTime, TIME_OF_DAY } from "../i18n/format";
+import { useT } from "../i18n/LangProvider";
 import {
   ancestorPaths,
   resolvePath,
@@ -349,6 +351,7 @@ function matchHaystack(m: StoredMatchMeta): string {
 }
 
 function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
+  const { lang } = useT();
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<unknown>(null);
@@ -472,7 +475,7 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
                   [{m.kind}] {m.bracket} · zone {m.zoneId}
                 </span>
                 <span className="dev-mr-2">
-                  {new Date(m.startTime).toLocaleString()} · {m.result}
+                  {formatDateTime(m.startTime, lang)} · {m.result}
                 </span>
               </button>
             </li>
@@ -665,6 +668,7 @@ function DocFacts({
 /* ────────────────────────── AI call zone ────────────────────────── */
 
 function AiZone({ calls, refresh }: { calls: AiCall[]; refresh(): void }) {
+  const { lang } = useT();
   const [open, setOpen] = useState<number | null>(null);
   const copy = (text: string) => {
     try {
@@ -693,7 +697,7 @@ function AiZone({ calls, refresh }: { calls: AiCall[]; refresh(): void }) {
           <li key={i} data-testid="dev-ai-row">
             <div className="dev-ai-head">
               <span className="dev-ai-t">
-                {new Date(c.at).toLocaleTimeString()}
+                {formatDateTime(c.at, lang, TIME_OF_DAY)}
               </span>
               <span className="dev-ai-kind">[{c.kind}]</span>
               <span className="dev-mono">{c.matchId}</span>
@@ -746,6 +750,7 @@ function DiagZone({
   diags: DiagnosticEntry[];
   clear(): void;
 }) {
+  const { lang } = useT();
   const [level, setLevel] = useState<"all" | DiagnosticLevel>("all");
   const [text, setText] = useState("");
   const [paused, setPaused] = useState(false);
@@ -824,7 +829,7 @@ function DiagZone({
           return (
             <li key={i} data-testid="dev-diag-row" className={`lv-${lv}`}>
               <span className="dev-diag-t">
-                {new Date(d.at).toLocaleTimeString()}
+                {formatDateTime(d.at, lang, TIME_OF_DAY)}
               </span>
               <span className={`dev-diag-lv lv-${lv}`}>{lv}</span>
               <span className="dev-diag-code">{d.code}</span>

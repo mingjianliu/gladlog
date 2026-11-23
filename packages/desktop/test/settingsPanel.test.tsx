@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { vi } from "vitest";
 
 import { API_KEY_REDACTED } from "../src/main/settingsStore";
 import type { UpdateState } from "../src/main/updater";
 import { SettingsPanel } from "../src/renderer/src/components/SettingsPanel";
+import { LangProvider } from "../src/renderer/src/i18n/LangProvider";
 
 function mockBridge(
   over: Record<string, unknown> = {},
@@ -73,14 +80,31 @@ describe("设置页(phase3 #2a)", () => {
     expect(save).toHaveBeenCalledWith({ anthropicApiKey: "sk-ant-xyz" });
   });
 
-  it("key 已设置(哨兵)→ 显示已设置 + 清除按钮;语言切换持久化", async () => {
+  it("key 已设置(哨兵)→ 显示已设置 + 清除按钮", async () => {
     const { save } = mockBridge({ anthropicApiKey: API_KEY_REDACTED });
     render(<SettingsPanel />);
     expect(await screen.findByText("已设置")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "清除" }));
     expect(save).toHaveBeenCalledWith({ anthropicApiKey: null });
-    fireEvent.click(screen.getByRole("button", { name: "EN" }));
-    expect(save).toHaveBeenCalledWith({ language: "en" });
+  });
+
+  it("语言选项在最上面,点 English 经 LangProvider 持久化(spec §6.11b)", async () => {
+    const { save } = mockBridge();
+    render(
+      <LangProvider>
+        <SettingsPanel />
+      </LangProvider>,
+    );
+    const section = await screen.findByTestId("settings-language");
+    expect(section.textContent).toContain("语言 / Language");
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ language: "en" }));
+    // The page itself follows at once (no remount): the hint is now English.
+    await waitFor(() =>
+      expect(screen.getByTestId("settings-language").textContent).toContain(
+        "Used for the interface",
+      ),
+    );
   });
 
   it("自动分析新对局:关时按钮显示启用,点击后调用 save 打开开关", async () => {

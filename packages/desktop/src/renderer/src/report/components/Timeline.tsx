@@ -2,6 +2,7 @@ import { fmtTime } from "@gladlog/analysis";
 import { scaleLinear } from "d3-scale";
 import { useMemo, useState } from "react";
 
+import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
 import {
   CURVE_METRIC_LABEL,
@@ -164,6 +165,7 @@ export function Timeline({
    * nothing is drawn rather than something that might be wrong. */
   teamSides?: Map<string, TeamSide>;
 }) {
+  const { lang } = useT();
   const [cursor, setCursor] = useState<number | null>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   // Hover focus (UI review #2): transient, local — never lifted (same rule as
@@ -435,7 +437,7 @@ export function Timeline({
               {!isFlow
                 ? `${Math.round(p * 100)}%`
                 : flowMax > 0
-                  ? abbrevAmount(p * flowMax)
+                  ? abbrevAmount(p * flowMax, lang)
                   : ""}
             </text>
           </g>
