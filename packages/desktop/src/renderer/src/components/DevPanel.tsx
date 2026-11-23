@@ -257,7 +257,9 @@ function StatusBar({
       onClick={onClick}
     >
       <span className="dev-sb-dot">
-        {status?.watching ? "● watching" : t("dev.status.notWatching")}
+        {status?.watching
+          ? t("dev.status.watching")
+          : t("dev.status.notWatching")}
       </span>
       {tail && (
         <>
@@ -333,7 +335,7 @@ function WatchZone({
               <td className="dev-num">
                 {f.size > 0 ? `${Math.round((f.offset / f.size) * 100)}%` : "—"}
               </td>
-              <td>{f.quarantined ? "🧪 quarantined" : ""}</td>
+              <td>{f.quarantined ? t("dev.watch.quarantined") : ""}</td>
             </tr>
           ))}
           {files.length === 0 && (

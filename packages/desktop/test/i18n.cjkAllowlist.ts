@@ -69,12 +69,6 @@ export const CJK_ALLOWLIST: ReadonlyArray<{
       "console.warn in the main process (recorder diagnostics); developer log only, never rendered",
   },
   {
-    file: "packages/desktop/src/main/managedObsBackend.ts",
-    snippet: "原因未知",
-    reason:
-      "fallback inside the same console.warn template (managed session not configured); developer log only",
-  },
-  {
     file: "packages/desktop/src/main/recorder.ts",
     snippet: "推迟到对局结束后分片",
     reason:

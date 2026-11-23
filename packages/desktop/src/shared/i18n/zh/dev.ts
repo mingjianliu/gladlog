@@ -12,6 +12,7 @@ export const zhDev = {
   "dev.rebuild.button": "重建对局索引",
   "dev.rebuild.preparing": "准备中…",
   "dev.rebuild.done": "已更新 {updated},失败 {failed}",
+  "dev.status.watching": "● 监控中",
   "dev.status.notWatching": "○ 未监控",
   "dev.status.quarantined": "🧪 有隔离文件",
   "dev.watch.wowDir": "WoW 目录",
@@ -25,6 +26,7 @@ export const zhDev = {
   "dev.watch.colProgress": "进度",
   "dev.watch.colStatus": "状态",
   "dev.watch.noFiles": "无监控中的文件",
+  "dev.watch.quarantined": "🧪 已隔离",
   "dev.watch.aiHint":
     "AI 后端与模型在「设置」页配置(那里是单源,还含 DeepSeek 等本页曾漏掉的后端)。",
   "dev.inspect.noHits": "无命中(已扫描 {scanned} 个节点{capped})",

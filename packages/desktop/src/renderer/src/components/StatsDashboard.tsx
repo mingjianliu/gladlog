@@ -1,3 +1,4 @@
+import type { Finding } from "@gladlog/analysis";
 import { fmtTime, zoneMetadata } from "@gladlog/analysis";
 import { interpolate } from "@gladlog/analysis/src/compare/claimChecker";
 import { distillFacts } from "@gladlog/analysis/src/learning/distillRules";
@@ -20,7 +21,7 @@ import { bridge } from "../bridge";
 import { formatDateTime } from "../i18n/format";
 import { useT } from "../i18n/LangProvider";
 import { specName } from "../report/data/gameConstants";
-import { categoryLabel } from "../report/derive/findingDisplay";
+import { categoryLabel, severityLabel } from "../report/derive/findingDisplay";
 import { shortUnitName } from "../report/derive/teamSide";
 import {
   type DashPeriod,
@@ -842,7 +843,10 @@ export function StatsDashboard({
                                 className={`dash-nb-sev rpt-finding-${e.severity}`}
                               >
                                 <span className="rpt-finding-sev">
-                                  {e.severity}
+                                  {severityLabel(
+                                    e.severity as Finding["severity"],
+                                    lang,
+                                  )}
                                 </span>
                               </span>
                               <span

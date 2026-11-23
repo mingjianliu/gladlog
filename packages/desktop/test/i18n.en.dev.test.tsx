@@ -71,6 +71,7 @@ describe("英文模式:开发者页不漏中文", () => {
     );
     await screen.findByText("Watch status", { selector: "h2" });
     await screen.findByText("⛔ Not watching (no folder)");
+    await screen.findByText("🧪 quarantined");
     fireEvent.click(screen.getByTestId("dev-rebuild"));
     await screen.findByText("Updated 1, failed 0");
     expect(leaks(container)).toEqual([]);

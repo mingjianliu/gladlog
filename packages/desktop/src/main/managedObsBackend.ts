@@ -608,7 +608,7 @@ export function createManagedObsBackend(
       await configureSession();
       if (!sessionConfigured) {
         console.warn(
-          `[recorder] 托管 OBS 会话未配好(采集源没建上),暂不开录:${lastError ?? "原因未知"}`,
+          `[recorder] 托管 OBS 会话未配好(采集源没建上),暂不开录:${lastError ?? "unknown"}`,
         );
         return;
       }

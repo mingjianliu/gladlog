@@ -18,6 +18,7 @@ export const enDev = {
   "dev.rebuild.button": "Rebuild match index",
   "dev.rebuild.preparing": "Preparing…",
   "dev.rebuild.done": "Updated {updated}, failed {failed}",
+  "dev.status.watching": "● watching",
   "dev.status.notWatching": "○ not watching",
   "dev.status.quarantined": "🧪 quarantined files",
   "dev.watch.wowDir": "WoW folder",
@@ -31,6 +32,7 @@ export const enDev = {
   "dev.watch.colProgress": "Progress",
   "dev.watch.colStatus": "Status",
   "dev.watch.noFiles": "No files being watched",
+  "dev.watch.quarantined": "🧪 quarantined",
   "dev.watch.aiHint":
     "AI backends and models are configured on the Settings page (the single source, which also covers backends this page used to miss, such as DeepSeek).",
   "dev.inspect.noHits": (p: MessageParams) =>

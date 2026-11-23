@@ -96,7 +96,7 @@ describe("底部状态条:全区共用", () => {
       },
     });
     const bar = view.container.querySelector("[data-testid=dev-statusbar]")!;
-    expect(bar.textContent).toContain("watching");
+    expect(bar.textContent).toContain("● 监控中");
     expect(bar.textContent).toContain("WoWCombatLog-1.txt");
     expect(bar.textContent).toContain("120");
   });
@@ -121,6 +121,9 @@ describe("底部状态条:全区共用", () => {
         .querySelector("[data-testid=dev-statusbar]")!
         .className.includes("warn"),
     ).toBe(true);
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("🧪 已隔离"),
+    );
   });
 
   it("点状态条跳到监控区", async () => {

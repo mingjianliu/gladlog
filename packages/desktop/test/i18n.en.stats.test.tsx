@@ -61,10 +61,13 @@ const rule = {
   distillModel: "x",
 };
 
-function install(list: () => Promise<StoredMatchMeta[]>) {
+function install(
+  list: () => Promise<StoredMatchMeta[]>,
+  language: "zh" | "en" = "en",
+) {
   (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
     settings: {
-      get: async () => ({ language: "en" }),
+      get: async () => ({ language }),
       save: async (p: unknown) => p,
     },
     matches: {
@@ -155,6 +158,9 @@ describe("英文模式:统计页不漏中文", () => {
     // Open a notebook group so its entries render too.
     fireEvent.click(await screen.findByText("Survival"));
     await screen.findByText("Died in the open");
+    expect(
+      container.querySelector(".dash-nb-sev .rpt-finding-sev")!.textContent,
+    ).toBe("High");
     const text = container.textContent ?? "";
     for (const s of [
       "Matches",
@@ -194,5 +200,21 @@ describe("英文模式:统计页不漏中文", () => {
       ),
     );
     expect(leaks(container)).toEqual([]);
+  });
+});
+
+describe("错题本条目的严重度走词典", () => {
+  it("中文模式显示「高」而不是 high", async () => {
+    install(async () => [meta({ id: "m1", startTime: Date.now() - H })], "zh");
+    const { container } = render(
+      <LangProvider>
+        <StatsDashboard onOpenMatch={() => {}} onZoneClick={() => {}} />
+      </LangProvider>,
+    );
+    fireEvent.click(await screen.findByText("生存"));
+    await screen.findByText("Died in the open");
+    expect(
+      container.querySelector(".dash-nb-sev .rpt-finding-sev")!.textContent,
+    ).toBe("高");
   });
 });
