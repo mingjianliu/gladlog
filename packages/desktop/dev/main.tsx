@@ -17,6 +17,7 @@ import { resolveScene, type SceneName } from "./scenes";
 import type { StoredMatchMeta } from "../src/main/matchStore";
 import App from "../src/renderer/src/App";
 import { installFixtureBridge } from "../src/renderer/src/fixtureBridge";
+import { LangProvider } from "../src/renderer/src/i18n/LangProvider";
 import {
   heavyMatch,
   installAppShellFixture,
@@ -563,19 +564,45 @@ if (scene === "video") {
 // firstPaint budget is measured through this same entry point and measures "the
 // report's first render once ready", matching the semantics of the production
 // report page.
-void ensureAnalysisData().then(() => {
+//
+// ?lang=en|zh (scene / loading modes): wrap the root in the app's LangProvider
+// and store that language in the fixture settings first, so the test bed can
+// show the English UI (spec 2026-11-23 §7 checks it). Without the param the
+// tree is unwrapped and renders in the zh default, as the visual baselines
+// expect.
+const langParam = new URLSearchParams(window.location.search).get("lang");
+const uiLang = langParam === "en" || langParam === "zh" ? langParam : null;
+void ensureAnalysisData().then(async () => {
+  if (uiLang) {
+    try {
+      await (
+        window as unknown as {
+          __gladlogFixture?: {
+            settings?: { save: (p: { language: string }) => Promise<unknown> };
+          };
+        }
+      ).__gladlogFixture?.settings?.save({ language: uiLang });
+    } catch {
+      /* no settings facet: LangProvider falls back to the browser locale */
+    }
+  }
+  const tree = loadingMode ? (
+    <div className="scene-root scene-appshell">
+      <App />
+    </div>
+  ) : scene ? (
+    <Scene name={scene} />
+  ) : review ? (
+    <ReviewMode name={review} />
+  ) : (
+    <Harness />
+  );
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      {loadingMode ? (
-        <div className="scene-root scene-appshell">
-          <App />
-        </div>
-      ) : scene ? (
-        <Scene name={scene} />
-      ) : review ? (
-        <ReviewMode name={review} />
+      {uiLang ? (
+        <LangProvider firstRunPicker={false}>{tree}</LangProvider>
       ) : (
-        <Harness />
+        tree
       )}
     </React.StrictMode>,
   );

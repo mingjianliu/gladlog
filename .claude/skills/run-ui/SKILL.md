@@ -46,6 +46,18 @@ player's HP curve), `.rpt-timeline`, `[data-testid=rpt-replay-field]`,
 `.rpt-replay-unit`, `.rpt-gcd`, `.rpt-gcd-chip` (toggle a GCD column),
 `.rpt-finding` (AI cards).
 
+## English UI
+
+Add `&lang=en` (or `lang=zh`) to a scene URL, e.g.
+`http://localhost:5199/?scene=report-ai&lang=en`: the root is wrapped in the
+app's `LangProvider` with that language stored in the fixture settings. Without
+the param the bed renders the zh default (what the visual baselines shoot).
+The fixture's cached AI analysis (`DEMO_ANALYSIS`) and coach-chat history are
+Chinese and carry no `contentLang`, so they stay Chinese in en — fixture data,
+not a UI leak. For a headless pass, build + `vite preview` (see the config's
+comment on why dev mode is slow) and drive it with Playwright from
+`node_modules/playwright-core`.
+
 ## Fixtures
 
 Top-bar `<select>` switches the match feeding `<MatchReport>`:
