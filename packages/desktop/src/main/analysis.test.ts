@@ -2771,17 +2771,89 @@ describe("另一种语言的 AI 内容(§6.13)", () => {
     expect(JSON.stringify(onDisk)).not.toContain("contentLang");
   });
 
-  it("zh 设置下发起的深挖,跑到一半改成 en:合并结果仍写回 zh 文件", async () => {
+  // v2 documents with explicit slots (keyed reads, stale slots)
+  const slotOf = (title: string, promptVersion = PROMPT_VERSION) => ({
+    promptVersion,
+    createdAt: 1,
+    result: {
+      findings: [
+        {
+          eventIds: ["death:a:30"],
+          severity: "high",
+          category: "survival",
+          title,
+          explanation: "x",
+        },
+      ],
+      dropped: 0,
+      hadNarration: true,
+    },
+  });
+  const v2 = (
+    language: string,
+    slots: Record<string, ReturnType<typeof slotOf>>,
+    lastSlotKey: string,
+  ) => JSON.stringify({ schemaVersion: 2, language, slots, lastSlotKey });
+  const deepPack = {
+    findingIndex: 0,
+    anchorFrom: 100,
+    anchorTo: 150,
+    items: [
+      {
+        key: "p1",
+        kind: "cc" as const,
+        t: 128,
+        label: "Fear → Healer(4.0s)",
+        unitNames: ["Healer-R"],
+        facts: { t: "128", spell: "Fear", duration: "4.0" },
+      },
+    ],
+    facts: { "p1.t": "128", "p1.spell": "Fear", "p1.duration": "4.0" },
+  };
+  const goodDive = JSON.stringify([
+    {
+      findingIndex: 0,
+      deepDive: "At {{p1.t}}s the healer ate {{p1.spell}}. Swap earlier.",
+      citedKeys: ["p1"],
+    },
+  ]);
+
+  it("zh 设置下发起的深挖,模型调用挂起时改成 en:合并结果仍写回 zh 文件", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-cl-deep-"));
     mkdirSync(join(dir, "m1"));
-    writeFileSync(join(dir, "m1", "analysis-v2.zh.json"), doc("死亡A"));
+    const key = "anthropic:claude-opus-5-5";
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.zh.json"),
+      v2("zh", { [key]: slotOf("死亡A") }, key),
+    );
     const settings: { language: "zh" | "en" | null } = { language: "zh" };
-    const { s, emitted } = service(dir, settings);
-    // no packs → deepen marks the zh slot deepened without a model call; the
-    // language is read once at the start, so flipping it right after the
-    // call starts must not redirect the write
-    const p = s.deepen({ matchId: "m1", findings: [], packs: [], spec: "x" });
+    let release!: () => void;
+    const parked = new Promise<void>((r) => (release = r));
+    let reached!: () => void;
+    const atGate = new Promise<void>((r) => (reached = r));
+    const { s, emitted } = service(dir, settings, async function* () {
+      yield { delta: goodDive };
+      reached();
+      await parked;
+      yield { delta: "" };
+    });
+    const p = s.deepen({
+      matchId: "m1",
+      findings: [
+        {
+          eventIds: ["death:a:30"],
+          severity: "high",
+          category: "survival",
+          title: "死亡A",
+          explanation: "x",
+        },
+      ] as never,
+      packs: [deepPack] as never,
+      spec: "Frost Mage",
+    });
+    await atGate; // the deep-dive model call is in flight
     settings.language = "en";
+    release();
     await p;
     expect(existsSync(join(dir, "m1", "analysis-v2.en.json"))).toBe(false);
     const zhDoc = JSON.parse(
@@ -2789,8 +2861,114 @@ describe("另一种语言的 AI 内容(§6.13)", () => {
     );
     const slot = zhDoc.slots[zhDoc.lastSlotKey];
     expect(slot.result.deepened).toBe(true);
+    expect(slot.result.findings[0].deepDive.text).toContain(
+      "At 128s the healer ate Fear",
+    );
     const done = emitted.find((e) => e.ch === "gladlog:analysis:done")!;
     expect(done.p.contentLang).toBe("zh");
+  });
+
+  it("深挖的 findings 语言和当前语言不同:拒绝,不写任何缓存、不发 done,也不打断在跑的一轮", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-deep-refuse-"));
+    mkdirSync(join(dir, "m1"));
+    const key = "anthropic:claude-opus-5-5";
+    const enBefore = v2("en", { [key]: slotOf("Death A") }, key);
+    writeFileSync(join(dir, "m1", "analysis-v2.en.json"), enBefore);
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.zh.json"),
+      v2("zh", { [key]: slotOf("死亡A") }, key),
+    );
+    let calls = 0;
+    const { s, emitted } = service(dir, { language: "en" }, async function* () {
+      calls++;
+      yield { delta: goodDive };
+    });
+    const zhBefore = readFileSync(
+      join(dir, "m1", "analysis-v2.zh.json"),
+      "utf-8",
+    );
+    await s.deepen({
+      matchId: "m1",
+      findings: JSON.parse(zhBefore).slots[key].result.findings,
+      packs: [deepPack] as never,
+      spec: "Frost Mage",
+      contentLang: "zh",
+    });
+    expect(calls).toBe(0);
+    expect(emitted.filter((e) => e.ch === "gladlog:analysis:done")).toEqual([]);
+    expect(readFileSync(join(dir, "m1", "analysis-v2.en.json"), "utf-8")).toBe(
+      enBefore,
+    );
+    expect(readFileSync(join(dir, "m1", "analysis-v2.zh.json"), "utf-8")).toBe(
+      zhBefore,
+    );
+    // refused before the generation bump: nothing for this match was touched
+    expect(s.__generationCount()).toBe(0);
+    // matching language still deep-dives
+    await s.deepen({
+      matchId: "m1",
+      findings: JSON.parse(enBefore).slots[key].result.findings,
+      packs: [deepPack] as never,
+      spec: "Frost Mage",
+      contentLang: "en",
+    });
+    expect(calls).toBe(1);
+    const done = emitted.find((e) => e.ch === "gladlog:analysis:done")!;
+    expect(done.p.contentLang).toBe("en");
+  });
+
+  it("按槽读取(分槽标签)不回退到另一种语言:当前语言里过期的槽 K 读成 null", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-keyed-"));
+    mkdirSync(join(dir, "m1"));
+    const A = "anthropic:claude-opus-4-8";
+    const K = "anthropic:claude-opus-5-5";
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.en.json"),
+      v2(
+        "en",
+        { [A]: slotOf("Death A"), [K]: slotOf("Death K", PROMPT_VERSION - 1) },
+        A,
+      ),
+    );
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.zh.json"),
+      v2("zh", { [K]: slotOf("死亡K") }, K),
+    );
+    const { s } = service(dir, { language: "en" });
+    expect(await s.getCached("m1", K)).toBeNull(); // stale tab → placeholder
+    const active = await s.getCached("m1");
+    expect(active?.contentLang).toBe("en");
+    expect(active?.findings[0]!.title).toBe("Death A");
+    const state = await s.getState("m1");
+    expect(state.slots.map((x) => [x.key, x.stale])).toEqual([
+      [A, false],
+      [K, true],
+    ]);
+  });
+
+  it("getState:当前语言的激活槽过期、另一种语言有命中 → 整个状态取自另一种语言的文档", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-shape-"));
+    mkdirSync(join(dir, "m1"));
+    const A = "anthropic:claude-opus-4-8";
+    const Z = "anthropic:claude-opus-5-5";
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.en.json"),
+      v2("en", { [A]: slotOf("Death A", PROMPT_VERSION - 1) }, A),
+    );
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.zh.json"),
+      v2("zh", { [Z]: slotOf("死亡Z") }, Z),
+    );
+    const { s } = service(dir, { language: "en" });
+    const state = await s.getState("m1");
+    expect(state).toEqual({
+      cached: { ...slotOf("死亡Z").result, contentLang: "zh" },
+      lang: "en",
+      running: false,
+      runningMeta: null,
+      slots: [{ key: Z, createdAt: 1, stale: false }],
+      activeKey: Z,
+    });
   });
 
   it("汇总的 recent[] 和笔记本条目各带 contentLang(按读到的文件)", async () => {

@@ -287,6 +287,9 @@ export interface GladlogApi {
       packs: unknown[];
       spec: string;
       ownerName?: string;
+      /** Language the findings were generated in; main refuses the deep dive
+       * when it differs from the current language (spec §6.13). */
+      contentLang?: Language;
     }): Promise<void>;
     /** Window analysis (#16): the pack is built deterministically in the
      * renderer; single request-response, no emit.

@@ -122,6 +122,6 @@ export const enReportAi = {
   "report.contentLang.otherZh": "Analyzed in Chinese",
   "report.contentLang.otherEn": "Analyzed in English",
   "report.contentLang.title":
-    "This analysis was generated in another language. Re-analyze it in the current language to use deep dive, span analysis and Ask the coach.",
+    "This analysis was generated in another language. Re-analyze it in the current language to unlock deep dive, analyzing with another model and switching slots on this card.",
   "report.contentLang.reanalyze": "Re-analyze in English",
 };

@@ -107,6 +107,6 @@ export const zhReportAi = {
   "report.contentLang.otherZh": "中文分析",
   "report.contentLang.otherEn": "英文分析",
   "report.contentLang.title":
-    "这份分析是用另一种语言生成的。用当前语言重新分析后，才能深挖、选段分析和问教练",
+    "这份分析是用另一种语言生成的。用当前语言重新分析后，这张卡片上才能深挖、选用其他模型分析和切换槽。",
   "report.contentLang.reanalyze": "用中文重新分析",
 };

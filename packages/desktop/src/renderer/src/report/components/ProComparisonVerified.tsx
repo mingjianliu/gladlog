@@ -374,7 +374,7 @@ export function ProComparisonVerified({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emptyChecked, state, result, input, matchId]);
+  }, [emptyChecked, state, result, input, matchId, lang]);
 
   const buttonText =
     state === "running"

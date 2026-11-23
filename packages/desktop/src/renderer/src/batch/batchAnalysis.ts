@@ -1,5 +1,6 @@
 import { ensureAnalysisData, type Finding } from "@gladlog/analysis";
 
+import type { Language } from "../../../shared/i18n/index";
 import { bridge } from "../bridge";
 import {
   buildAnalysisInput,
@@ -33,8 +34,16 @@ type CachedResult = {
   deepened?: boolean;
   /** Language the result was generated in (spec §6.13); absent from older
    * stubs, read as the current language. */
-  contentLang?: string;
+  contentLang?: Language;
 } | null;
+
+/** `r` when it was generated in `lang` (spec §6.13), else null. An unknown
+ * `lang` (older stubs) or a result without `contentLang` passes. */
+function inLang(r: CachedResult, lang: string | undefined): CachedResult {
+  return r && (lang === undefined || (r.contentLang ?? lang) === lang)
+    ? r
+    : null;
+}
 
 const status: BatchStatus = {
   running: false,
@@ -138,9 +147,7 @@ async function processSource(
   // getState hands back the other language's result when the current one has
   // no hit (display only, spec §6.13). For the batch it is "not analyzed" --
   // the same per-language judgment as listAnalyzed.
-  const inCurrentLang = (r: CachedResult): CachedResult =>
-    r && (lang === undefined || (r.contentLang ?? lang) === lang) ? r : null;
-  const cached = inCurrentLang(anyLangCached);
+  const cached = inLang(anyLangCached, lang);
   // Running elsewhere (the user clicked it manually): never double-run,
   // whatever the mode — two concurrent runs on one match id would race the
   // same cache file.
@@ -163,12 +170,31 @@ async function processSource(
     return "failed";
   }
   if (status.cancelled) return "failed";
-  // A failed run leaves no current-language cache; the other language's
-  // result getCached may fall back to must not be counted, or deep-dived.
-  const result = inCurrentLang((await ai.getCached(matchId)) as CachedResult);
-  // No cache = error path or cancelled; run already emitted the error, this
-  // only counts it
-  if (!result) return "failed";
+  // Read the result, *then* the language again: the user may have switched
+  // language while the round ran (main pins the start language, so the round
+  // wrote that language's cache). Under the new language getCached falls back
+  // to exactly that fresh result, and deep-diving it would write it into the
+  // new language's cache (main also refuses that, see deepenInner). Reading
+  // the language after the result means a switch in between can only make
+  // the check stricter.
+  const anyLangResult = (await ai.getCached(matchId)) as CachedResult;
+  let langNow = lang;
+  try {
+    langNow = ((await ai.getState(matchId)) as { lang?: string }).lang ?? lang;
+  } catch {
+    /* keep the pre-run language */
+  }
+  const result = inLang(anyLangResult, langNow);
+  if (!result) {
+    // The round finished in the language it started in, which is no longer
+    // the current one: counted, but no deep dive in the wrong language.
+    if (anyLangResult && langNow !== lang && inLang(anyLangResult, lang))
+      return "ok";
+    // No cache = error path or cancelled; run already emitted the error, this
+    // only counts it. (A failed run leaves no current-language cache; the
+    // other language's result getCached falls back to is not counted.)
+    return "failed";
+  }
 
   // Deep-dive round: same trigger conditions as the panel (narration present,
   // findings present, not yet deepened)
@@ -183,6 +209,8 @@ async function processSource(
       await ai.deepen({
         matchId,
         findings: result.findings,
+        // main refuses the deep dive when this is not its current language
+        ...(result.contentLang ? { contentLang: result.contentLang } : {}),
         packs,
         spec: input.spec,
         ownerName: input.ownerName,

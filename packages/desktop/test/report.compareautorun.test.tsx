@@ -2,6 +2,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { LangProvider } from "../src/renderer/src/i18n/LangProvider";
 import { ProComparisonVerified } from "../src/renderer/src/report/components/ProComparisonVerified";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
 
@@ -26,13 +27,16 @@ function stubBridge(opts: {
   analysisCached?: unknown;
   compareCached?: unknown;
   compareState?: unknown;
+  language?: "zh" | "en";
 }) {
   const run = vi.fn().mockResolvedValue(undefined);
   const analysisGetState = vi
     .fn()
     .mockResolvedValue({ cached: opts.analysisCached ?? null, running: false });
   (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
-    settings: { get: vi.fn().mockResolvedValue({ language: "zh" }) },
+    settings: {
+      get: vi.fn().mockResolvedValue({ language: opts.language ?? "zh" }),
+    },
     analysis: { getState: analysisGetState },
     compare: {
       getState: vi.fn().mockResolvedValue(opts.compareState ?? null),
@@ -84,6 +88,33 @@ describe("同水平对比自动补跑", () => {
     await new Promise((r) => setTimeout(r, 20));
     // …and decided against running.
     expect(run).not.toHaveBeenCalled();
+  });
+
+  it("en 模式下分析缓存是回退来的 zh 结果(§6.13)→ 不自动跑;对照:en 结果照跑", async () => {
+    const zh = stubBridge({
+      analysisCached: { findings: [], contentLang: "zh" },
+      language: "en",
+    });
+    const first = render(
+      <LangProvider firstRunPicker={false}>
+        <ProComparisonVerified source={m} matchId="m-zh" hideActions />
+      </LangProvider>,
+    );
+    await waitFor(() => expect(zh.analysisGetState).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(zh.run).not.toHaveBeenCalled();
+    first.unmount();
+
+    const en = stubBridge({
+      analysisCached: { findings: [], contentLang: "en" },
+      language: "en",
+    });
+    render(
+      <LangProvider firstRunPicker={false}>
+        <ProComparisonVerified source={m} matchId="m-en" hideActions />
+      </LangProvider>,
+    );
+    await waitFor(() => expect(en.run).toHaveBeenCalledTimes(1));
   });
 
   it("对比已有缓存 → 渲染缓存,不再跑", async () => {

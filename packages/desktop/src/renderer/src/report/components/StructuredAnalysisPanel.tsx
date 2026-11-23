@@ -611,6 +611,7 @@ export function StructuredAnalysisPanel({
           packs,
           spec: input.spec,
           ownerName: input.ownerName,
+          contentLang: result.contentLang ?? lang,
         })
         .catch(() => {});
     } catch {

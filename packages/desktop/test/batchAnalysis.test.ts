@@ -110,6 +110,43 @@ beforeEach(() => {
 });
 
 describe("批量分析驱动器", () => {
+  it("跑到一半把语言从 zh 切到 en:跑完读回的是刚写的 zh 结果(回退),不深挖、不写 en(§6.13)", async () => {
+    let lang = "zh";
+    const deepened: string[] = [];
+    let wroteZh = false;
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      matches: { get: async () => ({ kind: "match", data: src }) },
+      analysis: {
+        getState: async () => ({ cached: null, lang, running: false }),
+        run: async () => {
+          lang = "en"; // the user switches language while the round runs
+          wroteZh = true; // main pinned zh at the start: the zh cache is written
+        },
+        // under en, getCached falls back to the fresh zh result
+        getCached: async () =>
+          wroteZh
+            ? {
+                findings: [{ severity: "high" }],
+                hadNarration: true,
+                contentLang: "zh",
+              }
+            : null,
+        deepen: async (input: { matchId: string }) => {
+          deepened.push(input.matchId);
+        },
+        cancel: async () => {},
+      },
+    };
+    await startBatch([{ id: "s", label: "S" }]);
+    const st = getBatchStatus();
+    expect(deepened).toEqual([]);
+    expect({ ok: st.ok, skipped: st.skipped, failed: st.failed }).toEqual({
+      ok: 1,
+      skipped: 0,
+      failed: 0,
+    });
+  });
+
   it("只有另一种语言的缓存不算已分析:照跑;跑失败时不拿回退内容去深挖(§6.13)", async () => {
     const calls = stubBridge({
       otherLangIds: ["z", "zf"],

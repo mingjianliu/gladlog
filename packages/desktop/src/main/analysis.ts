@@ -218,12 +218,16 @@ function readFirstSlottedDoc(
  * has no record of which backend/model produced it, so the best we can do is
  * book it under "whatever the current settings select".
  *
- * Other-language fallback (spec §6.13): only when the current language's
- * files give no hit (currentSlot for `slotKey`, with the self-review gate)
- * does it read the other language's files, and only to display them --
- * nothing here ever writes. When neither hits, the current language's doc (if
- * any, e.g. one whose slots are all stale) is returned so getState can still
- * list its slots.
+ * Other-language fallback (spec §6.13): only for the unkeyed read (the
+ * active slot, what getState / a plain getCached show) and only when the
+ * current language's files give no hit (currentSlot, with the self-review
+ * gate) does it read the other language's files, and only to display them --
+ * nothing here ever writes. A keyed read (`slotKey`, the slot tabs) never
+ * falls back: the tabs list the current language's doc, so a stale tab there
+ * must read as stale (the panel's placeholder), not be answered with the
+ * other language's same-named slot. When neither hits, the current
+ * language's doc (if any, e.g. one whose slots are all stale) is returned so
+ * getState can still list its slots.
  */
 function readSlottedDoc(
   matchesDir: string,
@@ -243,12 +247,13 @@ function readSlottedDoc(
     slottedDocCandidatePaths(matchesDir, matchId, lang),
     legacySlotKey,
   );
-  if (own && currentSlot(own.doc, slotKey, selfReviewOn)) return own;
+  if (slotKey !== undefined) return own;
+  if (own && currentSlot(own.doc, undefined, selfReviewOn)) return own;
   const other = readFirstSlottedDoc(
     slottedDocCandidatePaths(matchesDir, matchId, lang === "zh" ? "en" : "zh"),
     legacySlotKey,
   );
-  if (other && currentSlot(other.doc, slotKey, selfReviewOn)) return other;
+  if (other && currentSlot(other.doc, undefined, selfReviewOn)) return other;
   return own;
 }
 
@@ -456,6 +461,12 @@ type DeepenInput = {
   packs: DeepDivePack[];
   spec: string;
   ownerName?: string;
+  /** Language `findings` were generated in (the caller's
+   * CachedAnalysisResult.contentLang). deepenInner refuses a mismatch with
+   * the language it pins (spec §6.13): it writes into that language's cache,
+   * and must never merge the other language's findings into it. Absent =
+   * older callers, no check. */
+  contentLang?: Language;
 };
 type WindowAnalyzeInput = {
   matchId: string;
@@ -1130,9 +1141,17 @@ export function createAnalysisService(deps: {
   }
 
   async function deepenInner(input: DeepenInput): Promise<void> {
-    const myGen = nextGen(input.matchId);
     const settings = deps.getSettings();
     const lang: Language = settings.language ?? "zh";
+    // Defence in depth (spec §6.13): findings from the other language (e.g. a
+    // batch whose language was switched mid-run, reading back the fallback)
+    // would be written into this language's cache, stamped with the current
+    // PROMPT_VERSION -- an unlabelled "current" hit in the wrong language.
+    // Refuse outright: no write, and no done event carrying a wrong label.
+    // Checked before nextGen, so a refused call never aborts an in-flight
+    // round of this match.
+    if (input.contentLang !== undefined && input.contentLang !== lang) return;
+    const myGen = nextGen(input.matchId);
     // Path converged onto analysisCachePath (single-source predicate; this
     // used to hand-concatenate the string).
     const cachedPath = analysisCachePath(deps.matchesDir, input.matchId, lang);
