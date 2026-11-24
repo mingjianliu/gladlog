@@ -16,6 +16,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { spellSchoolMask } from "../src/data/spellSchools";
 import {
+  CONSUMED_BUFF_PRESS_COOLDOWNS,
+  consumedBuffPressCooldownFor,
+  consumedBuffPressMs,
   EVENT_COOLDOWN_REDUCTIONS,
   eventReducedCooldownSeconds,
   eventReductionsFor,
@@ -74,23 +77,24 @@ const triggers = () =>
   }));
 
 describe("T240 Mistweaver kick cooldown", () => {
-  it("a Mistweaver holding both talents gets the three rows, on either kick id", () => {
+  it("a Mistweaver holding both talents gets the two rows, on either kick id", () => {
     expect(new Set(rows())).toEqual(
       new Set([
-        EVENT_COOLDOWN_REDUCTIONS["116680:kick"],
         EVENT_COOLDOWN_REDUCTIONS["173841"],
         EVENT_COOLDOWN_REDUCTIONS["1277302"],
       ]),
     );
     expect(
       eventReductionsFor("107428", (t) => HOLDER.has(t), "270"),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
   });
-  it("a Windwalker gets none of them; a Mistweaver without the talents only the tea's own row", () => {
+  it("a Windwalker gets none of them, and no tea row", () => {
     expect(rows("269", new Set())).toEqual([]);
-    expect(rows("270", new Set()).map((r) => r.note)).toEqual([
-      EVENT_COOLDOWN_REDUCTIONS["116680:kick"]!.note,
-    ]);
+    expect(consumedBuffPressCooldownFor(KICK, "269")).toBeUndefined();
+    expect(consumedBuffPressCooldownFor(KICK, "270")?.seconds).toBe(9);
+    expect(consumedBuffPressCooldownFor("107428", "270")).toBe(
+      CONSUMED_BUFF_PRESS_COOLDOWNS[KICK],
+    );
   });
   it("the tea press resets the kick; Renewing Mist takes 1 s", () => {
     // 42.262 + 12 = 54.262; Renewing Mist 45.0 → 53.262; tea 48.308 → back then
@@ -99,16 +103,44 @@ describe("T240 Mistweaver kick cooldown", () => {
       3,
     );
   });
-  it("the kick that spends a tea stack is back 3 s later; the stack an Enveloping Mist spends gives nothing", () => {
-    expect(triggers().filter((g) => g.seconds === 9)).toEqual([
-      { atSeconds: 48.536, seconds: 9 },
-    ]);
-    expect(eventReducedCooldownSeconds(48.519, 12, triggers())).toBeCloseTo(
-      3,
-      3,
-    );
-    // the kick after it spent nothing: the full 12 s
-    expect(eventReducedCooldownSeconds(51.938, 12, triggers())).toBe(12);
+  it("the stack belongs to the kick whose row is the last before its removal; an Enveloping Mist's stack is not a kick's", () => {
+    const row250 = CONSUMED_BUFF_PRESS_COOLDOWNS[KICK]!;
+    expect(consumedBuffPressMs(monk, KICK, row250)).toEqual([T0 + 48_519]);
+  });
+  it("Life Cocoon's dose 230 ms before a kick is not the kick's; the kick's own removal 1 ms after it is (6e8d3ba4)", () => {
+    const u = {
+      id: "m",
+      spellCastEvents: [
+        row("SPELL_CAST_SUCCESS", "116849", 26.3),
+        row("SPELL_CAST_SUCCESS", KICK, 26.53),
+      ],
+      auraEvents: [
+        row("SPELL_AURA_REMOVED_DOSE", TEA, 26.3),
+        row("SPELL_AURA_REMOVED", TEA, 26.531),
+      ],
+    } as unknown as Parameters<typeof consumedBuffPressMs>[0];
+    expect(
+      consumedBuffPressMs(u, KICK, CONSUMED_BUFF_PRESS_COOLDOWNS[KICK]!),
+    ).toEqual([T0 + 26_530]);
+    // only the Life Cocoon dose: nothing for the kick
+    const v = {
+      ...u,
+      auraEvents: [row("SPELL_AURA_REMOVED_DOSE", TEA, 26.3)],
+    } as unknown as Parameters<typeof consumedBuffPressMs>[0];
+    expect(
+      consumedBuffPressMs(v, KICK, CONSUMED_BUFF_PRESS_COOLDOWNS[KICK]!),
+    ).toEqual([]);
+  });
+  it("a removal 156 ms after the kick's row is its own (85a6cad9); one 300 ms after is not", () => {
+    const u = (afterS: number) =>
+      ({
+        id: "m",
+        spellCastEvents: [row("SPELL_CAST_SUCCESS", KICK, 30.855)],
+        auraEvents: [row("SPELL_AURA_REMOVED", TEA, 30.855 + afterS)],
+      }) as unknown as Parameters<typeof consumedBuffPressMs>[0];
+    const r = CONSUMED_BUFF_PRESS_COOLDOWNS[KICK]!;
+    expect(consumedBuffPressMs(u(0.156), KICK, r)).toEqual([T0 + 30_855]);
+    expect(consumedBuffPressMs(u(0.3), KICK, r)).toEqual([]);
   });
 });
 
@@ -221,9 +253,90 @@ describe("T240 two kicks inside 2 s, each spending a tea stack, are two presses 
     expect(e.casts.map((c) => c.timeSeconds)).toEqual([101.481, 103.278]);
     expect(pressReadyAgainAtSeconds(e, 103.278)).toBeCloseTo(106.278, 2);
   });
+  it("each kick keeps its own 9 s: the first is back 3 s after it, not at the second's removal (1b #1)", () => {
+    const e = entryOf(unit(true));
+    expect(pressReadyAgainAtSeconds(e, 101.481)).toBeCloseTo(104.481, 2);
+  });
   it("without them the second row stays folded into the first press", () => {
     expect(entryOf(unit(false)).casts.map((c) => c.timeSeconds)).toEqual([
       101.481,
     ]);
+  });
+});
+
+describe("T240 review round 2 on real orderings", () => {
+  const aura = (event: LogEvent, atMs: number) => ({
+    spellId: TEA,
+    srcUnitId: "m",
+    destUnitId: "m",
+    timestamp: T0 + atMs,
+    logLine: { event, timestamp: T0 + atMs },
+  });
+  const mwOf = (
+    casts: ReadonlyArray<[string, number]>,
+    auraEvents: unknown[],
+  ) =>
+    makeUnit("m", {
+      class: CombatUnitClass.Monk,
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      info: {
+        talents: [{ id1: 101125, id2: 124909, count: 1 }],
+        pvpTalents: [],
+      },
+      // makeSpellCastEvent numbers the rows in creation order: the log order
+      spellCastEvents: casts.map(([id, ms]) =>
+        makeSpellCastEvent(id, T0 + ms, ""),
+      ),
+      auraEvents,
+    } as unknown as Parameters<typeof makeUnit>[1]);
+  const entryOf = (u: ReturnType<typeof makeUnit>) =>
+    unitCooldownEntry(
+      u,
+      {
+        startTime: T0,
+        endTime: T0 + 300_000,
+        units: { m: u },
+      } as unknown as AtomicArenaCombat,
+      KICK,
+    )!;
+  it("the kick after one that spent the last stack is a press of its own (1b #2, e0d4b250)", () => {
+    const e = entryOf(
+      mwOf(
+        [
+          [KICK, 129_052],
+          [KICK, 130_924],
+        ],
+        [aura(LogEvent.SPELL_AURA_REMOVED, 129_053)],
+      ),
+    );
+    expect(e.casts.map((c) => c.timeSeconds)).toEqual([129.052, 130.924]);
+    // the second spent nothing: its full 12 s
+    expect(pressReadyAgainAtSeconds(e, 130.924)).toBeCloseTo(142.924, 2);
+  });
+  it("tea then kick in one millisecond: the reset was the old cooldown's, the kick is back 3 s later (1b #4, d0c5a35d)", () => {
+    const e = entryOf(
+      mwOf(
+        [
+          [KICK, 50_000],
+          [TEA, 54_923],
+          [KICK, 54_923],
+        ],
+        [aura(LogEvent.SPELL_AURA_REMOVED_DOSE, 54_924)],
+      ),
+    );
+    expect(pressReadyAgainAtSeconds(e, 50)).toBeCloseTo(54.923, 3);
+    expect(pressReadyAgainAtSeconds(e, 54.923)).toBeCloseTo(57.923, 3);
+  });
+  it("kick then tea in one millisecond: the tea resets that kick", () => {
+    const e = entryOf(
+      mwOf(
+        [
+          [KICK, 54_923],
+          [TEA, 54_923],
+        ],
+        [],
+      ),
+    );
+    expect(pressReadyAgainAtSeconds(e, 54.923)).toBeCloseTo(54.923, 3);
   });
 });

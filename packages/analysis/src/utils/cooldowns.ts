@@ -63,7 +63,8 @@ import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { replacedSpellIds } from "../data/talentReplaces";
 import { TALENT_REPLACE_VARIANT_IDS } from "../data/talentReplaceVariants";
 import {
-  auraConsumedTriggers,
+  consumedBuffPressCooldownFor,
+  consumedBuffPressMs,
   eventReducedCooldownSeconds,
   eventReductionsFor,
   eventTriggersFor,
@@ -1318,6 +1319,10 @@ export function offensiveCdOfAura(
 /** Two presses of a multi-charge spell closer than this are one press logged
  *  twice, not two charges (extractMajorCooldowns' 2 s dedupe; W1e). */
 const MULTI_CHARGE_MIN_GAP_S = 0.05;
+/** How far before a press a trigger cast of its own millisecond is dated
+ * when the log has it first (`buildCooldownEntry`): under any clock
+ * resolution, enough to order the two. */
+const TRIGGER_BEFORE_PRESS_S = 1e-6;
 
 export const GUARDIAN_SPIRIT_SPELL_ID = "47788";
 /** Guardian Angel — the talent that makes Guardian Spirit's recovery depend on
@@ -6786,26 +6791,24 @@ function buildCooldownEntry(
     .map((g) => (g.atMs - matchStartMs) / 1000);
   const resetBetween = (from: number, to: number) =>
     resetAtSeconds.some((r) => r >= from && r <= to);
-  // A press that spent a stack of its own of a buff — a `triggerAuraConsumed`
-  // row whose consuming cast is this very spell — is genuine however close
-  // to the press before it: the stack's removal is a second row of the log
-  // that a duplicate cast row does not have (pipeline T240, codex
-  // 85-tk-L3-T240-1 #1, e0d4b250: Rushing Wind Kick 101.48 s and 103.28 s,
-  // each with a Thunder Focus Tea stack removed beside it — folded into one
-  // press, the second kick's 9 s went to the first).
-  const ownStackUses = reductions
-    .filter((r) => r.triggerAuraConsumed?.byCastIds.includes(spell.spellId))
-    .flatMap((r) =>
-      auraConsumedTriggers(unit, r).map((g) => ({
-        atSeconds: (g.atMs - matchStartMs) / 1000,
-        withinSeconds: r.triggerAuraConsumed!.withinMs / 1000,
-      })),
-    );
-  const spentOwnStackApartFrom = (c: ICooldownCast, last: ICooldownCast) =>
-    ownStackUses.some(
-      (u) =>
-        Math.abs(u.atSeconds - c.timeSeconds) <= u.withinSeconds &&
-        Math.abs(u.atSeconds - last.timeSeconds) > u.withinSeconds,
+  // A press that spent a stack of a buff that shortens its own cooldown
+  // (`CONSUMED_BUFF_PRESS_COOLDOWNS`, pipeline T240): the stack's removal is
+  // a second row of the log that a duplicate cast row does not have, so two
+  // such presses are two presses however close (codex 85-tk-L3-T240-1 #1,
+  // e0d4b250: Rushing Wind Kick 101.48 s and 103.28 s, a Thunder Focus Tea
+  // stack removed beside each), and so is the row after one — its cooldown
+  // was the short one (1b #2, same log: the kick 129.05 s spent the last
+  // stack and the kick 130.92 s dealt damage of its own).
+  const buffPressCd =
+    baselineCharges <= 1
+      ? consumedBuffPressCooldownFor(spell.spellId, String(specIdNum))
+      : undefined;
+  const buffPressMs = buffPressCd
+    ? consumedBuffPressMs(unit, spell.spellId, buffPressCd)
+    : [];
+  const spentBuffStack = (c: ICooldownCast) =>
+    buffPressMs.some(
+      (ms) => Math.abs(matchStartMs + c.timeSeconds * 1000 - ms) < 1,
     );
   // Time Spiral (GH #176): the cast rows that consumed the unit's aura — a
   // press that neither spends a charge nor restarts the cooldown
@@ -6873,7 +6876,8 @@ function buildCooldownEntry(
       ((baselineCharges > 1 && pressesInWindow < baselineCharges) ||
         (freeWindow !== undefined && pressesInWindow < 2) ||
         resetBetween(last.timeSeconds, c.timeSeconds) ||
-        spentOwnStackApartFrom(c, last) ||
+        spentBuffStack(c) ||
+        spentBuffStack(last) ||
         // a retry after a hold never released (GH #183 codex review: Fire
         // Breath cut at 10.3 s, pressed again at 11.5 s and released)
         last.unreleased === true ||
@@ -6982,6 +6986,19 @@ function buildCooldownEntry(
       );
     }
 
+  // A press that spent a stack of a buff that shortens its own cooldown
+  // (`CONSUMED_BUFF_PRESS_COOLDOWNS`: the tea-empowered kick): the base the
+  // event reductions start from; with none to apply, the press's override
+  if (buffPressCd)
+    for (const c of casts) {
+      if (c.cooldownSecondsOverride !== undefined || !spentBuffStack(c))
+        continue;
+      c.baseCooldownSeconds = Math.max(
+        0,
+        (c.baseCooldownSeconds ?? cooldownSeconds) - buffPressCd.seconds,
+      );
+    }
+
   // Batch C rate rows (conditionalCooldownsGenerated.json) are read below;
   // snapshot rows price a press made under one of the unit's own buffs
   // (single-charge spells): the base the event reductions start from, and
@@ -7046,6 +7063,33 @@ function buildCooldownEntry(
   }
   let chargeEffects: IChargeEffects | undefined;
   if ((reductions.length || idleCap > 0) && baselineCharges <= 1) {
+    // A trigger cast logged BEFORE a press of this spell in the press's own
+    // millisecond happened before it: it acts on the cooldown that was
+    // running, not on the one that press starts (pipeline T240, codex
+    // 85-tk-L3-T240-1b #4, d0c5a35d: Thunder Focus Tea then Rushing Wind
+    // Kick, both 54.923 s — the reset read as the new kick's and the kick
+    // was "back" the instant it was pressed). A trigger in the press's
+    // millisecond logged after it still counts (`eventReducedCooldownSeconds`).
+    const triggerCastIds = new Set(reductions.flatMap((r) => r.triggerCastIds));
+    const successRows = triggerCastIds.size
+      ? unit.spellCastEvents.filter(
+          (e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+        )
+      : [];
+    const pressLineAtMs = new Map<number, number>();
+    for (const e of successRows)
+      if (String(e.spellId) === spell.spellId)
+        pressLineAtMs.set(e.logLine.timestamp, e.logLine.lineIndex ?? 0);
+    const beforeItsPressMs = new Set(
+      successRows
+        .filter(
+          (e) =>
+            triggerCastIds.has(String(e.spellId)) &&
+            (e.logLine.lineIndex ?? 0) <
+              (pressLineAtMs.get(e.logLine.timestamp) ?? -1),
+        )
+        .map((e) => e.logLine.timestamp),
+    );
     applyEventReductions(
       casts.filter((c) => !spiralFree.has(c)),
       cooldownSeconds,
@@ -7057,7 +7101,9 @@ function buildCooldownEntry(
         roundEndAtMs,
         otherUnitById,
       ).map((g) => ({
-        atSeconds: (g.atMs - matchStartMs) / 1000,
+        atSeconds:
+          (g.atMs - matchStartMs) / 1000 -
+          (beforeItsPressMs.has(g.atMs) ? TRIGGER_BEFORE_PRESS_S : 0),
         seconds: g.seconds,
       })),
       idleCap,

@@ -1190,36 +1190,15 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // inside that 12 s. Three logged mechanisms, DB2 12.1.0.69587 and
   // 12.1.5.70391 alike (dummy rows, aura 4, no mask — the tooltips name
   // Rising Sun Kick), read off the press before each of the 1,107:
-  //  - 493: it spent a Thunder Focus Tea stack (below);
+  //  - 493: it spent a Thunder Focus Tea stack (`CONSUMED_BUFF_PRESS_COOLDOWNS`);
   //  - 266: a Thunder Focus Tea press came between (the reset further down);
   //  - 348 neither: 125 with a Blackout Kick between (Teachings of the
   //    Monastery 116645, "a 12 % chance to reset" — no row in the log) and
   //    223 at 0.7–0.9 of the cooldown, which is haste (GH #219: no haste is
   //    read). Not modelled, so the number still errs long for those.
   //
-  // Thunder Focus Tea 116680, effect 0 (−9000): "Rising Sun Kick: Cooldown
-  // reduced by 9 sec" for the kick the buff empowers. A use is the buff
-  // REMOVED (or a dose of it — Focused Thunder holds two) within 0.25 s of
-  // the unit's own kick: cc0a95d4 r411, kick 48.52 s on a tea pressed
-  // 48.31 s, the next kick 51.94 s. The 64 files' 1,214 tea removals: 909
-  // follow a kick's cast row — 907 inside 50 ms, one at 50–100 ms, one at
-  // 156 ms (85a6cad9, 1 ms after the kick's damage landed; codex
-  // 85-tk-L3-T240-1 #3) — none precedes one, and the other 305 follow
-  // another spell's row by more than a global cooldown or run out. Baseline
-  // for the spec.
-  "116680:kick": {
-    targets: ["107428", "467307"],
-    talentSpellId: "116680",
-    ownedBySpecIds: ["270"],
-    triggerCastIds: [],
-    triggerAuraConsumed: {
-      auraIds: ["116680"],
-      byCastIds: ["107428", "467307"],
-      withinMs: 250,
-    },
-    seconds: 9,
-    note: "Thunder Focus Tea — the kick it empowers has 9 s less cooldown",
-  },
+  // The tea-empowered kick's own 9 s is not a row here: it belongs to the
+  // press that spent the stack (`CONSUMED_BUFF_PRESS_COOLDOWNS`).
   // Pool of Mists (173841, effect 2: 1000):
   // "Renewing Mist … reduces the remaining cooldown of Rising Sun Kick by
   // 1 sec." Held by all 126 Mistweaver rounds with a re-pressed kick.
@@ -2778,6 +2757,119 @@ export const PER_PRESS_STACK_COOLDOWNS: Readonly<
  * aura is still that press's (`ownDoseCounts`): the 1214887 dose row comes
  * 0–60 ms after Essence Break's SUCCESS (61 presses, 584 logs). */
 export const PER_PRESS_OWN_DOSE_MS = 100;
+
+/**
+ * A buff that shortens the OWN cooldown of the press that spends it — keyed
+ * by the spell pressed (pipeline T240). Thunder Focus Tea 116680, effect 0
+ * (−9000, a dummy, DB2 12.1.0.69587 and 12.1.5.70391): "Rising Sun Kick:
+ * Cooldown reduced by 9 sec" for the kick the buff empowers; Rushing Wind
+ * Kick 467307 replaces Rising Sun Kick and spends the same charge category
+ * (1518). Baseline for the Mistweaver.
+ *
+ * The press that spent a stack is the one whose cast row is the unit's last
+ * before the buff's REMOVED (or a dose of it — Focused Thunder holds two),
+ * at most `withinMs` earlier (`consumedBuffPressMs`): cc0a95d4 r411, kick
+ * 48.52 s on a tea pressed 48.31 s, the next kick 51.94 s. The 64 files of
+ * the 605 with a re-pressed kick, 1,214 tea removals: 909 follow a kick's
+ * cast row — 907 inside 50 ms, one at 50–100 ms, one at 156 ms (85a6cad9,
+ * 1 ms after the kick's damage landed) — and the other 305 follow another
+ * spell's row (Enveloping Mist 257, Renewing Mist 23, Life Cocoon 16) or
+ * run out. A removal is one press's: not a time off whatever kick is
+ * cooling down (codex 85-tk-L3-T240-1b #1: 267 removals had shortened two
+ * kicks; #3, 6e8d3ba4: Life Cocoon's dose 230 ms before a kick is Life
+ * Cocoon's).
+ */
+export interface IConsumedBuffPressCooldown {
+  /** the spell that grants the buff — what the registry and the coverage
+   * doc call the owner */
+  ownerSpellId: string;
+  /** baseline for these specs */
+  ownedBySpecIds: readonly string[];
+  auraId: string;
+  /** off the cooldown of the press that spent a stack */
+  seconds: number;
+  withinMs: number;
+  note: string;
+}
+const TEA_EMPOWERED_KICK: IConsumedBuffPressCooldown = {
+  ownerSpellId: "116680",
+  ownedBySpecIds: ["270"],
+  auraId: "116680",
+  seconds: 9,
+  withinMs: 250,
+  note: "Thunder Focus Tea — the kick it empowers has 9 s less cooldown",
+};
+export const CONSUMED_BUFF_PRESS_COOLDOWNS: Readonly<
+  Record<string, IConsumedBuffPressCooldown>
+> = {
+  "107428": TEA_EMPOWERED_KICK,
+  "467307": TEA_EMPOWERED_KICK,
+};
+
+/** The row of `spellId` a unit of `specId` owns, if any. */
+export function consumedBuffPressCooldownFor(
+  spellId: string,
+  specId: string | undefined,
+): IConsumedBuffPressCooldown | undefined {
+  const r = CONSUMED_BUFF_PRESS_COOLDOWNS[spellId];
+  return r && specId !== undefined && r.ownedBySpecIds.includes(specId)
+    ? r
+    : undefined;
+}
+
+/**
+ * The instants (ms) of the unit's presses of `spellId` that spent a stack of
+ * its own `auraId`: in log order (timestamp, then `lineIndex`), the removal
+ * row — SPELL_AURA_REMOVED or a REMOVED_DOSE on the unit itself — whose last
+ * cast row of the unit before it is that press, at most `withinMs` earlier.
+ * One removal credits one press and a press is credited once.
+ */
+export function consumedBuffPressMs(
+  unit: Pick<ICombatUnit, "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
+  spellId: string,
+  r: Pick<IConsumedBuffPressCooldown, "auraId" | "withinMs">,
+): number[] {
+  type Row = {
+    spellId?: string | null;
+    logLine: { timestamp: number; lineIndex?: number };
+  };
+  const rows: Array<{ row: Row; cast: boolean }> = [
+    ...unit.spellCastEvents
+      .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+      .map((row) => ({ row, cast: true })),
+    ...(unit.auraEvents ?? [])
+      .filter(
+        (e) =>
+          (e.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+            e.logLine.event === LogEvent.SPELL_AURA_REMOVED_DOSE) &&
+          String(e.spellId) === r.auraId &&
+          (unit.id === undefined || e.destUnitId === unit.id),
+      )
+      .map((row) => ({ row, cast: false })),
+  ].sort(
+    (a, b) =>
+      a.row.logLine.timestamp - b.row.logLine.timestamp ||
+      (a.row.logLine.lineIndex ?? 0) - (b.row.logLine.lineIndex ?? 0),
+  );
+  const out: number[] = [];
+  let lastCast: Row | undefined;
+  for (const { row, cast } of rows) {
+    if (cast) {
+      lastCast = row;
+      continue;
+    }
+    if (
+      lastCast &&
+      String(lastCast.spellId) === spellId &&
+      row.logLine.timestamp - lastCast.logLine.timestamp <= r.withinMs
+    ) {
+      out.push(lastCast.logLine.timestamp);
+      lastCast = undefined; // one removal a press
+    }
+  }
+  return out;
+}
 
 /** Stacks of `unit`'s own `auraId` strictly before `atMs`, a restated
  * APPLIED (no REMOVED since the last one) keeping the count. */

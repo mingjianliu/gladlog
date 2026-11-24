@@ -20,8 +20,8 @@
  */
 import {
   ANTI_MAGIC_SHELL_ANSWER_IDS,
-  SELF_SAVE_ANSWER_IDS,
   BURST_LEAD_CD_EXCLUDED_IDS,
+  SELF_SAVE_ANSWER_IDS,
   TEAM_HEAL_WALL_ANSWER_IDS,
   TOTEM_RELOCATION_IDS,
 } from "../analysis/burstWindowDecisionPoints";
@@ -357,6 +357,7 @@ import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { TALENT_REPLACES } from "./talentReplaces";
 import { TALENT_REPLACE_VARIANT_IDS } from "./talentReplaceVariants";
 import {
+  CONSUMED_BUFF_PRESS_COOLDOWNS,
   EVENT_COOLDOWN_REDUCTIONS,
   eventReductionOwner,
   FREE_RECAST_WINDOWS,
@@ -1527,9 +1528,21 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "mixed",
     () => [
       ...Object.keys(UNPRICED_COOLDOWN_TALENTS),
-      ...Object.values(UNPRICED_COOLDOWN_TALENTS).map(
-        (r) => r.talentSpellId,
-      ),
+      ...Object.values(UNPRICED_COOLDOWN_TALENTS).map((r) => r.talentSpellId),
+    ],
+  ),
+  // pipeline T240: the spells pressed (casts), and the buff each spends —
+  // Thunder Focus Tea is its own cast and its own aura
+  t(
+    "CONSUMED_BUFF_PRESS_COOLDOWNS",
+    "data/talentScriptedCooldowns.ts",
+    "mixed",
+    () => [
+      ...Object.keys(CONSUMED_BUFF_PRESS_COOLDOWNS),
+      ...Object.values(CONSUMED_BUFF_PRESS_COOLDOWNS).flatMap((r) => [
+        r.ownerSpellId,
+        r.auraId,
+      ]),
     ],
   ),
   t("STACKED_RATE_CARRIERS", "data/talentScriptedCooldowns.ts", "aura", () =>

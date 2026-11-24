@@ -28,6 +28,7 @@ import CONDITIONAL from "@gladlog/analysis/src/data/conditionalCooldownsGenerate
 import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
 import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMitigationModifiers";
 import {
+  CONSUMED_BUFF_PRESS_COOLDOWNS,
   EVENT_COOLDOWN_REDUCTIONS,
   eventReductionOwner,
   FREE_RECAST_WINDOWS,
@@ -286,6 +287,9 @@ async function main(): Promise<void> {
       ([k, r]) =>
         eventReductionOwner(k, r) === talent &&
         ids.some((i) => r.targets.includes(i)),
+    ) ||
+    ids.some(
+      (i) => CONSUMED_BUFF_PRESS_COOLDOWNS[i]?.ownerSpellId === talent,
     ) ||
     (ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent] &&
       ids.includes(ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent]!.spellId)) ||
